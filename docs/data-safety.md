@@ -27,8 +27,10 @@ The box moved to Oracle Cloud on 2026-10-11 (docs/hosting.md): one 50 GB boot vo
 (deploy/backup-loop.sh), into $MEIOLOL_BACKUPS (host.env). It never runs migrations:
 under the write lock they starve the crawler on a slow host.
 
-- `state/state-YYYY-MM-DD.db`: players, ladder_pages, match_queue, timeline_queue,
-  mastery, champions, forgotten. 7 daily + the newest of 4 weeks
+- `state/state-YYYY-MM-DD.db`: match_queue, timeline_queue, mastery, champions,
+  forgotten. 7 daily + the newest of 4 weeks. Not players or ladder_pages (2026-10-11):
+  crawl state, ~3 GB at ~9M players, re-seeded from the ladders within a day of a
+  restore, which then rescans everyone's match ids
 - `segments/NNNNNN.db`: matches, participants and bans of matches stored since the last
   segment (by matches rowid), and compact timelines likewise (timelines rowid). Stored
   rows never change, so segments are append-only and never rotated
@@ -56,7 +58,7 @@ Measured 2026-10-11 (8,117 matches, 1.13M players): state 146 MB, segment 23 MB,
 3. Stop the crawler and loops, `mv data data.broken && mv data.restored data`, copy back
    anything outside the databases (daily/, export/, site/), start again
 
-Raw tables come back empty; the crawler refills them. Restore re-applies `forgotten`.
+Raw tables, players and ladder_pages come back empty; the crawler refills them. Restore re-applies `forgotten`.
 
 Restore test, 2026-10-11 on the box: backup of the live data into backups/test, restore
 into backups/restore-test, `meiolol status` on both: every count equal (players

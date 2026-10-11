@@ -1,7 +1,7 @@
 //! Backups (`meiolol backup`, `meiolol restore`). docs/data-safety.md has the why.
 //!
 //! Two kinds of file, both plain SQLite, so `meiolol forget --backups` can scrub them:
-//! - state/state-YYYY-MM-DD.db: the mutable tables (players, queues, mastery, ...),
+//! - state/state-YYYY-MM-DD.db: the mutable tables (queues, mastery, forgotten, ...),
 //!   rotated (7 daily + 4 weekly by default)
 //! - segments/NNNNNN.db: matches, participants and bans of matches stored since the last
 //!   segment, and compact timelines likewise. These rows never change once stored, so
@@ -21,8 +21,16 @@ const Db = store.Db;
 const Io = std.Io;
 const log = std.log.scoped(.backup);
 
+/// Not players or ladder_pages: crawl state the crawler re-seeds from Riot's ladders
+/// within a day of a restore (at the cost of rescanning everyone's match ids). At ~9M
+/// players they are ~3 GB per snapshot, more than the box's disk holds 11 times over, and
+/// millions of PUUIDs kept out of backups
 pub const state_tables = [_][]const u8{
-    "players", "ladder_pages", "match_queue", "timeline_queue", "mastery", "champions", "forgotten",
+    "match_queue",
+    "timeline_queue",
+    "mastery",
+    "champions",
+    "forgotten",
 };
 
 pub const Options = struct {
@@ -446,7 +454,7 @@ test "backup then restore round trip, incremental segments, scrub" {
     }
     const scrubbed = try scrub(arena, io, out, "p1", day);
     try testing.expectEqual(2, scrubbed.participants);
-    try testing.expectEqual(3, scrubbed.players); // three state snapshots
+    try testing.expectEqual(0, scrubbed.players); // not backed up
 
     // A restore from the older state still ends without p1: forgotten comes from the
     // newest snapshot, so take one more
@@ -460,7 +468,7 @@ test "backup then restore round trip, incremental segments, scrub" {
         defer db.close();
         try testing.expectEqual(@as(?i64, 3), try db.scalar("SELECT count(*) FROM participants", .{}));
         try testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM participants WHERE puuid = 'p1'", .{}));
-        try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM players", .{}));
+        try testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM players", .{}));
         try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM bans", .{}));
         try testing.expect(try forget.isForgotten(db, "p1"));
     }
