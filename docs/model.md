@@ -80,6 +80,16 @@ Train 5335 games (27 Sep to 8 Oct), test 1334 (8 to 11 Oct, all 16.20).
 - `--test-platform EUW1`: test on one region, compare training on it alone with every
   scanned platform pooled (all-regions data from 2026-10-11)
 
+- Role inference with pair evidence (log lift of two teammates' co-occurrence in those
+  roles over play-rate independence, added to the brute-force score): 88.8% of
+  champions right vs 91.6%, 75.8% of teams vs 81.5%. Sparse pairs add noise; reverted.
+  Retry with pair shrinkage at volume
+- All platforms (15, 7.9k games after the all-regions deploy), test EUW1: base-only and
+  EB ~0.692, current 0.6936; training on EUW only vs pooled within noise. Lane gold
+  section (lanegold.zig) waits for 500 train and 100 test games with timelines
+- From 2026-10-11 the box appends a line a day to data/eval-history.tsv
+  (deploy/web-loop.sh): the accuracy-vs-data curve
+
 Why: a champion-role has ~60 games here, so its winrate is known to about ±6 pp, while
 real differences between champions are 1-3 pp. Pair cells have a handful of games.
 The data is the bottleneck, not the model form; the all-regions crawl (~135k games/day)
