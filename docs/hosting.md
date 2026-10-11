@@ -8,13 +8,21 @@ accounts may use Always Free only in the home region).
 
 | alias | what | shape | disk |
 |---|---|---|---|
-| meiolol-cloud | the box: crawler, site build + upload, backups, health | stopgap VM.Standard.E2.1.Micro (1/8 OCPU, 1 GB + 2 GB swap), 141.147.117.32 | 50 GB boot |
+| meiolol-cloud | the box: crawler, site build + upload, backups, health | A1 `meiolol`, VM.Standard.A1.Flex 2 OCPU / 12 GB (aarch64), AD-1, 140.238.101.20 | 50 GB boot |
+| meiolol-micro | old box, services stopped and disabled, kept as a fallback | E2.1.Micro, 141.147.117.32 | 50 GB boot |
 | (jomify) | nginx: site, Your games service, jomove | E2.1.Micro, 193.123.180.81 | 47 GB boot |
 
-- Target: A1 `meiolol` launched 2026-10-11 12:29Z by the retry loop, VM.Standard.A1.Flex
-  2 OCPU / 12 GB, AD-1, 50 GB boot (free up to 1500 OCPU-h + 9000 GB-h a month = 2/12).
-  Not in use yet: move the box there (stop services, rsync data, `deploy/box.sh start`
-  etc.), terminate the micro, delete the April volume, grow the A1 boot volume
+- Box on the A1 since 2026-10-11 ~15:55Z (launched 12:29Z by the retry loop; free up
+  to 1500 OCPU-h + 9000 GB-h a month = 2/12). Move: data rsynced micro -> A1 over the
+  private network (10.0.0.152 -> 10.0.0.3, temporary key ~/.ssh/move_a1 on the micro,
+  in the A1's authorized_keys: remove both once the micro goes), ~6 MB/s (micro
+  network); crawler down 15:51-15:55Z. Still to do, with Jacob's OK: terminate the
+  micro, delete the April volume, raise the AD-1 quota, grow the A1 boot volume (also
+  more disk throughput: balanced volumes scale with size, 50 GB is ~24 MB/s)
+- The Ubuntu image's /etc/fstab mounts / with online `discard`: every delete queued a
+  trim that took ~75 s on this volume, and after the copy the backlog held the disk at
+  ~90% pressure and starved the crawler's commits. Dropped from fstab and remounted
+  `nodiscard` (16:20Z); fstrim.timer trims weekly instead. Do the same on any new host
 - Account on Pay As You Go since 2026-10-11 (Jacob's card; limits jumped to 250 A1
   OCPUs). Guards: quota policy `free-tier-guard` (other compute shapes zero, A1 2/12,
   E2 micro 2, block storage per AD summing to 200 GB: AD-1 56, AD-2 97, AD-3 47 as
