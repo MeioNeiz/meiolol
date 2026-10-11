@@ -83,7 +83,9 @@ statistics sites, we collect only what the game exposes, we publish only aggrega
 never contact players, build advertising profiles or sell data, and anyone can object.
 
 **Where.** On a computer in the United Kingdom run by us. The public website is served
-from Oracle Cloud in London.
+from Oracle Cloud in London. Backups are kept on our own machines, rotated within five
+weeks, and erasures are applied to them at the same time as to the live data. Raw
+records from Riot are not backed up, so the limits below apply to backups too.
 
 **How long.**
 - Raw match records from Riot (which contain Riot IDs): 30 days; raw timelines: 7 days
@@ -147,11 +149,12 @@ own the Riot ID (the same profile icon check) and reply within one month. If you
 unhappy with our answer, you can complain to the UK Information Commissioner's Office
 (ico.org.uk) or, in the EU, to your local data protection authority.
 
-Removing your data takes your identifier out of our stored matches and stops us showing
-your games. To keep it that way we keep one thing: your encrypted identifier on a "do not
-collect" list, so the crawler skips you in future. It cannot remove your games from
-statistics already published, which hold no identity. It also does not affect Riot Games
-or other sites: Riot's own privacy requests go through Riot.
+Removing your data takes your identifier out of our stored matches, deletes our raw
+copies of your games and stops us showing your games. To keep it that way we keep one
+thing: your encrypted identifier on a "do not collect" list, so the crawler skips you in
+future. It cannot remove your games from statistics already published, which hold no
+identity. It also does not affect Riot Games or other sites: Riot's own privacy requests
+go through Riot.
 
 ## Changes
 

@@ -29,14 +29,15 @@ objection model (C12), ICO on objections (C9).
      challenges per Riot ID per hour, per-IP rate limit. Riot's profile update can lag
      by a minute or two, so say that
 5. **Act, at once,** in one transaction:
-   - Add the PUUID to a `do_not_collect` table (PUUID, platform, date). The crawler
-     checks it before queueing a player, and stores that player's participant rows
-     with a blank PUUID from then on
-   - Delete the `players` and `mastery` rows; blank the PUUID in `participants` (as
-     `meiolol rekey` does)
-   - Delete raw summaries and timelines that contain the PUUID (they are a cache;
-     parsed tables already hold the anonymous match). Simpler alternative: let them age
-     out (30 and 7 days) and say "within 30 days" in the copy
+   Implemented on branch worktree-data-safety (de62e5b; docs/data-safety.md "Erasure"):
+   - Add the PUUID to the `forgotten (puuid, forgotten_at)` table (plain PUUID, needed
+     for rekey translation). The crawler skips forgotten players and stores their
+     participant rows with a blank PUUID from then on
+   - Delete the `players` and `mastery` rows; blank the PUUID in `participants` (match
+     stats stay, unlinked)
+   - Delete raw summaries and raw timelines of the player's games at once
+   - Backups: every backup file on the box is scrubbed at once; the Mac mirror follows
+     within a day of its next sync. A restore re-applies `forgotten`
    - Your games cache: delete. Squads: remove from every squad
    - Daily Draft puzzles hold no identity: nothing to do
    - Log the request as (date, hash of PUUID, "objection"), no Riot ID, as proof we acted
@@ -49,7 +50,7 @@ objection model (C12), ICO on objections (C9).
 **Gotcha: PUUIDs are per app.** When the production key arrives, every PUUID changes
 (docs/architecture.md, rekey). Either Riot links the production app's encryption to the
 personal app (already planned in the application), or `meiolol rekey` must translate
-`do_not_collect` too: old PUUID to Riot ID with the old key (account-v1 by-puuid), then
+`forgotten` too: old PUUID to Riot ID with the old key (account-v1 by-puuid), then
 to the new PUUID with the new key. Don't lose this table in a rekey.
 
 **Fallback:** someone who can't change their icon (banned, lost account, Riot ID
@@ -97,8 +98,9 @@ reach Riot's servers; try Check again shortly."
 
 You're removed. Reference: [REF]
 
-- We've deleted your rank and champion mastery, and removed your identifier from every
-  match we hold. The matches themselves stay in the statistics, with no link to you
+- We've deleted your rank and champion mastery, removed your identifier from every
+  match we hold, and deleted our raw copies of your games. The matches themselves stay
+  in the statistics, with no link to you. Our backups are updated at the same time
 - We won't collect your games again: your encrypted identifier stays on a "do not
   collect" list, and that's all we keep
 - *(when live)* Your games can no longer be looked up on meiolol, and you've left any
