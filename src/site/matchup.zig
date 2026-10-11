@@ -24,6 +24,13 @@ pub const thin_games = 200;
 const min_minute_games = 10;
 /// Matchup links on a champion page, per role
 const links_shown = 12;
+/// Minimum games choices on the matchup index; shows everything by default
+const index_floors = [_]u32{ 1, 5, 10, 20, 50, 100, thin_games };
+
+/// A thinner matchup (greyed out anyway) draws minutes while all its games are going
+fn minuteFloor(v: View) u32 {
+    return @max(1, @min(min_minute_games, v.games()));
+}
 
 pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
     return std.fmt.allocPrint(a, "matchup/{s}/{s}-vs-{s}.html", .{ root.roleSlug(r), x.slug, y.slug });
@@ -64,10 +71,11 @@ pub fn writeIndex(site: *const Site, curves: ?*const Curves) !void {
         \\
     );
     const c = curves orelse {
-        try w.writeAll("<p class=\"note\">Curves need match timelines, which are being collected now. A matchup gets its page once it has 20 games; under 200 it is shown greyed out as \"more data needed\".</p>\n");
+        try w.writeAll("<p class=\"note\">Curves need match timelines, which are being collected now. Every matchup gets a page; under 200 games it is shown greyed out as \"more data needed\".</p>\n");
         try html.foot(w, p);
         return site.write("matchup/index.html", aw.written());
     };
+    try html.minGames(w, "../", "matchups", &index_floors, index_floors[0], 0);
     const Entry = struct { x: Champ, y: Champ, games: u32 };
     for (Role.all) |r| {
         var list: std.ArrayList(Entry) = .empty;
@@ -83,14 +91,18 @@ pub fn writeIndex(site: *const Site, curves: ?*const Curves) !void {
                 return p_.games > q.games;
             }
         }.f);
-        try w.print("<h2>{s} <span class=\"muted\">{d} matchups</span></h2>\n", .{ root.roleName(r), list.items.len });
+        const slug = root.roleSlug(r);
+        try w.print("<h2>{s} <span class=\"muted\"><span id=\"n-{s}\">{d}</span> matchups</span></h2>\n", .{
+            root.roleName(r), slug, list.items.len,
+        });
         if (list.items.len == 0) {
             try w.writeAll("<p class=\"muted\">More data needed.</p>\n");
             continue;
         }
-        try w.writeAll("<ul class=\"matchup-list\">\n");
+        try w.print("<ul class=\"matchup-list\" data-min-list data-count=\"n-{s}\">\n", .{slug});
         for (list.items) |e| {
-            try w.print("<li{s}><a href=\"{s}\">{f} vs {f}</a> <span class=\"muted\">{d} games</span></li>\n", .{
+            try w.print("<li data-games=\"{d}\"{s}><a href=\"{s}\">{f} vs {f}</a> <span class=\"muted\">{d} games</span></li>\n", .{
+                e.games,
                 if (e.games < thin_games) " class=\"thin\"" else "",
                 (try path(a, r, e.x, e.y))["matchup/".len..],
                 esc(e.x.name),
@@ -192,7 +204,7 @@ fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
     const lane = v.lane();
     try w.writeAll("<p class=\"lead\">");
     const m = v.minute(curvesfile.lane_minute - 1);
-    if (m.n >= min_minute_games) {
+    if (m.n >= minuteFloor(v)) {
         try w.print("At {d} minutes {f} is typically ", .{ curvesfile.lane_minute, esc(x.name) });
         try amount(w, m.gold.p50, "gold");
         try w.print(" against {f} (middle half of games: {d} to {d}), and leads in gold in ", .{
@@ -238,7 +250,7 @@ fn chart(
     var max_abs: u32 = 0;
     for (0..v.minutes()) |i| {
         const m = v.minute(i);
-        if (m.n < min_minute_games) break;
+        if (m.n < minuteFloor(v)) break;
         last = i + 1;
         const q = @field(m, field);
         max_abs = @max(max_abs, @abs(@as(i32, q.p25)), @abs(@as(i32, q.p75)));
@@ -375,7 +387,7 @@ fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
         try w.print("<tr{s}><td>{s}</td><td class=\"num\">{d}</td><td class=\"num\">", .{
             if (v.games() < thin_games) " class=\"thin\"" else "", b.label(), v.games(),
         });
-        if (m.n >= min_minute_games) {
+        if (m.n >= minuteFloor(v)) {
             try w.print("{s}{d}", .{ if (m.gold.p50 > 0) "+" else "", m.gold.p50 });
         } else try w.writeAll("-");
         try w.writeAll("</td><td class=\"num\">");

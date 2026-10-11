@@ -56,6 +56,9 @@ const matchups_shown = 6;
 const min_pair_games = 400;
 /// Below this a champion's role win rate is marked as few games
 const min_role_games = 300;
+/// Champion-page minimum games choices (html.minGames); the last is the default, where a
+/// pair must also clear chance. Below it pairs are greyed out
+const pair_floors = [_]u32{ 1, 10, 20, 50, 100, 200, min_pair_games };
 const duos_shown = 6;
 
 pub const Champ = struct {
@@ -198,6 +201,7 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
         try site.write("data/learning.json", aw.written());
     }
     try site.write("pool.js", @embedFile("static/pool.js"));
+    try site.write("min-games.js", @embedFile("static/min-games.js"));
     if (opts.riot_txt) |t| try site.write("riot.txt", t);
     try site.write("robots.txt", if (opts.public) "User-agent: *\nAllow: /\n" else "User-agent: *\nDisallow: /\n");
 
@@ -504,10 +508,44 @@ fn writeIndex(site: *const Site) !void {
     try site.write("index.html", aw.written());
 }
 
-const Pair = struct { other: usize, role: Role, pp: f64, games: u32, wins: u32 };
+const Pair = struct {
+    other: usize,
+    role: Role,
+    pp: f64,
+    games: u32,
+    wins: u32,
+    clear: bool,
+
+    fn passes(p: Pair, floor: u32) bool {
+        return p.games >= floor and (floor < min_pair_games or p.clear);
+    }
+};
 
 fn byPpDesc(_: void, a: Pair, b: Pair) bool {
     return a.pp > b.pp;
+}
+
+fn byPpAsc(_: void, a: Pair, b: Pair) bool {
+    return a.pp < b.pp;
+}
+
+/// The pairs a card shows at any of pair_floors (the first `n` passing at
+/// each), in order
+fn shownAtAnyFloor(a: std.mem.Allocator, pairs: []const Pair, n: usize) ![]const Pair {
+    const keep = try a.alloc(bool, pairs.len);
+    @memset(keep, false);
+    for (pair_floors) |floor| {
+        var shown: usize = 0;
+        for (pairs, keep) |p, *k| {
+            if (shown == n) break;
+            if (!p.passes(floor)) continue;
+            k.* = true;
+            shown += 1;
+        }
+    }
+    var out: std.ArrayList(Pair) = .empty;
+    for (pairs, keep) |p, k| if (k) try out.append(a, p);
+    return out.items;
 }
 
 fn writeChampion(site: *const Site, ch: Champ) !void {
@@ -536,6 +574,7 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
     }
     std.mem.sort(Role, roles[0..n_roles], RoleGames{ .st = st, .c = ch.c }, RoleGames.more);
     if (n_roles == 0) try w.writeAll("<p>No games yet this patch.</p>\n");
+    if (n_roles > 0) try html.minGames(w, "../", "pairs", &pair_floors, min_pair_games, min_pair_games);
 
     for (roles[0..n_roles]) |r| {
         const cr = st.champRole(r, ch.c);
@@ -549,51 +588,49 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
         try pct(w, ch.banned, site.games);
         try w.print("</b><span>Ban rate</span></div><div><b>{d}</b><span>Games</span></div></div>\n", .{cr.games});
 
-        var lane: std.ArrayList(Pair) = .empty;
+        var best: std.ArrayList(Pair) = .empty;
+        var worst: std.ArrayList(Pair) = .empty;
         var duos: std.ArrayList(Pair) = .empty;
         for (site.champs) |other| {
             if (other.c == ch.c) continue;
             const e = st.enemy(r, r, ch.c, other.c);
             const pp = score.matchupPp(st, site.score_opts, r, ch.c, r, other.c);
-            if (clearEdge(pp, e.games)) try lane.append(a, .{
+            if (e.games > 0 and pp != 0) try (if (pp > 0) &best else &worst).append(a, .{
                 .other = other.c,
                 .role = r,
                 .pp = pp,
                 .games = e.games,
                 .wins = e.wins,
+                .clear = clearEdge(pp, e.games),
             });
             for (Role.all) |ar| {
                 if (ar == r) continue;
                 const d = st.ally(r, ar, ch.c, other.c);
                 const duo_pp = score.duoPp(st, site.score_opts, r, ch.c, ar, other.c);
-                if (!clearEdge(duo_pp, d.games)) continue;
+                if (d.games == 0 or duo_pp <= 0) continue;
                 try duos.append(a, .{
                     .other = other.c,
                     .role = ar,
                     .pp = duo_pp,
                     .games = d.games,
                     .wins = d.wins,
+                    .clear = clearEdge(duo_pp, d.games),
                 });
             }
         }
-        std.mem.sort(Pair, lane.items, {}, byPpDesc);
+        std.mem.sort(Pair, best.items, {}, byPpDesc);
+        std.mem.sort(Pair, worst.items, {}, byPpAsc);
         std.mem.sort(Pair, duos.items, {}, byPpDesc);
-        var n_good: usize = 0;
-        while (n_good < lane.items.len and lane.items[n_good].pp > 0) n_good += 1;
-        const best_lane = lane.items[0..@min(n_good, matchups_shown)];
-        const worst_lane = lane.items[@max(n_good, lane.items.len -| matchups_shown)..];
         try w.writeAll("<div class=\"grid\">\n");
-        try pairCard(site, w, "Higher win rate against", "in lane", best_lane, false, false);
-        try pairCard(site, w, "Lower win rate against", "in lane", worst_lane, true, false);
-        var n_duos: usize = 0;
-        while (n_duos < @min(duos.items.len, duos_shown) and duos.items[n_duos].pp > 0) n_duos += 1;
-        try pairCard(site, w, "Higher win rate with", "on the same team", duos.items[0..n_duos], false, true);
+        try pairCard(site, w, "Higher win rate against", "in lane", best.items, matchups_shown, false);
+        try pairCard(site, w, "Lower win rate against", "in lane", worst.items, matchups_shown, false);
+        try pairCard(site, w, "Higher win rate with", "on the same team", duos.items, duos_shown, true);
         try w.writeAll("</div>\n");
         if (site.curves) |*c| try matchup.links(site, w, c, ch, r);
     }
     try pool_page.section(site, w, &site.pool, ch);
     try learning_page.section(w, &site.learning, ch);
-    try w.print("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts. A pair is listed only with {d}+ games and an edge larger than chance alone would give at that size. <a href=\"../method.html\">Method</a>.</p>\n", .{min_pair_games});
+    try w.print("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts. By default a pair is listed only with {d}+ games and an edge larger than chance alone would give at that size; a lower minimum shows thinner pairs, greyed out. <a href=\"../method.html\">Method</a>.</p>\n", .{min_pair_games});
     try html.foot(w, p);
     try site.write(try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug}), aw.written());
 }
@@ -611,21 +648,27 @@ fn clearEdge(pp: f64, games: u32) bool {
     return @abs(pp) > 98 / @sqrt(@as(f64, @floatFromInt(games)));
 }
 
-fn pairCard(site: *const Site, w: *Writer, title: []const u8, sub: []const u8, pairs: []const Pair, reverse: bool, show_role: bool) !void {
-    try w.print("<div class=\"card\"><h3>{s} <span class=\"muted\">{s}</span></h3><ul>\n", .{ title, sub });
-    if (pairs.len == 0) try w.writeAll("<li class=\"muted\">More data needed</li>\n");
-    var i: usize = 0;
-    while (i < pairs.len) : (i += 1) {
-        const pr = pairs[if (reverse) pairs.len - 1 - i else i];
+/// `pairs` best first; the first `n` passing the chosen minimum games are shown
+fn pairCard(site: *const Site, w: *Writer, title: []const u8, sub: []const u8, pairs: []const Pair, n: usize, show_role: bool) !void {
+    try w.print("<div class=\"card\"><h3>{s} <span class=\"muted\">{s}</span></h3><ul data-min-list data-show=\"{d}\">\n", .{ title, sub, n });
+    var shown: usize = 0;
+    for (try shownAtAnyFloor(site.arena, pairs, n)) |pr| {
         const other = site.champs[site.by_c[pr.other].?];
-        try w.writeAll("<li><span>");
+        const by_default = shown < n and pr.passes(min_pair_games);
+        if (by_default) shown += 1;
+        try w.print("<li data-games=\"{d}\" data-clear=\"{d}\"{s}{s}><span>", .{
+            pr.games,
+            @intFromBool(pr.clear),
+            if (pr.passes(min_pair_games)) "" else " class=\"thin\"",
+            if (by_default) "" else " hidden",
+        });
         try site.champLink(w, other, "../");
         if (show_role) try w.print("<span class=\"role\">{s}</span>", .{roleName(pr.role)});
         try w.print("</span><span class=\"num {s}\" title=\"{d} games, {d} won\">{s}{d:.1}</span></li>\n", .{
             if (pr.pp >= 0) "good" else "bad", pr.games, pr.wins, if (pr.pp >= 0) "+" else "", pr.pp,
         });
     }
-    try w.writeAll("</ul></div>\n");
+    try w.print("<li class=\"muted empty\"{s}>More data needed</li>\n</ul></div>\n", .{if (shown > 0) " hidden" else ""});
 }
 
 test "slug" {

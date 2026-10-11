@@ -51,7 +51,7 @@ const usage =
     \\              --patch P        as for stats
     \\              --platform P     as for stats
     \\              --out FILE       default DIR/export/curves-<patch>.bin
-    \\              --min-games N    leave out matchups with fewer games (default 20)
+    \\              --min-games N    leave out matchups with fewer games (default 1: all)
     \\  pool        write what players of each champion also play (pool.zig), as JSON
     \\              --patch P        as for stats (matchups); pools use every patch
     \\              --platform P     as for stats
@@ -143,7 +143,7 @@ pub fn main(init: std.process.Init) !u8 {
     var budget: ?[]const u8 = null;
     var cors: ?[]const u8 = null;
     var exchange: ?[]const u8 = null;
-    var min_games: u32 = 20;
+    var min_games: u32 = 1;
     var eval_opts: eval.Options = .{};
     var history: ?[]const u8 = null;
     var keep_daily: usize = 7;

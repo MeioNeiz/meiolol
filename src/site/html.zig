@@ -121,3 +121,13 @@ test "escape" {
     try w.print("{f}", .{esc("Nunu & Willump <Kai'Sa>")});
     try std.testing.expectEqualStrings("Nunu &amp; Willump &lt;Kai&#39;Sa&gt;", w.buffered());
 }
+
+/// Minimum games selector, as on lolalytics (static/min-games.js): lists marked
+/// data-min-list hide rows whose data-games is under the choice. From `strict` up a row
+/// must also clear chance (data-clear="1"); 0 for never. Hidden without JS, so the page
+/// must already render the `default` choice.
+pub fn minGames(w: *Writer, root: []const u8, key: []const u8, choices: []const u32, default: u32, strict: u32) Writer.Error!void {
+    try w.print("<p class=\"min-games\" hidden><label>Min games <select data-key=\"{s}\" data-strict=\"{d}\">", .{ key, strict });
+    for (choices) |c| try w.print("<option{s}>{d}</option>", .{ if (c == default) " selected" else "", c });
+    try w.print("</select></label></p>\n<script src=\"{s}min-games.js\" defer></script>\n", .{root});
+}

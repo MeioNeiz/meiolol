@@ -118,7 +118,7 @@ games with no remake, a winner and all ten positions count.
 
 ## Lane curves (src/curves.zig, src/core/curvesfile.zig, src/site/matchup.zig)
 
-`meiolol curves` (same --patch/--platform as stats, --min-games default 20) reads every
+`meiolol curves` (same --patch/--platform as stats, --min-games default 1: all) reads every
 ranked solo game with a timeline and writes data/export/curves-<patch>.bin. Per lane
 matchup (role, champion pair) and bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
 median visible tier of the game's players, never MMR): per minute 1..25 the p25/p50/p75
@@ -137,11 +137,13 @@ with an all-ranks curve (matchup/<role>/<a>-vs-<b>.html, lower id first), three 
 charts (median line, middle-half band; patch, tier and n in every caption), a lane and
 game table, comeback odds (src/site/comeback.zig: win rate per gold bucket at 10/15
 min beside the role baseline, one fact line), a by-rank table, and "Lane curves" links
-on champion pages. Under 200 games
-charts and rows are grey with "more data needed". Not yet: first-item timing (needs an
+on champion pages. Every matchup gets a page, as on lolalytics; under 200 games charts
+and rows are grey with "more data needed", and a chart draws minutes with at least
+min(10, games) still going. Size: 816 pages, 14 MB with .gz, from 191 games; raise
+--min-games if the upload grows too big. The index has a min games selector
+(html.minGames, static/min-games.js; default 1). Not yet: first-item timing (needs an
 item list from Data Dragon), experienced-players filter (mastery), core-item split,
-region filter. Curves are not built by the web loop yet: run `meiolol curves` (daily is
-plenty) before `meiolol site`.
+region filter. deploy/web-loop.sh rebuilds curves daily and on a new patch.
 
 ## Pool (src/pool.zig, src/site/pool.zig, static/pool.js)
 
@@ -187,7 +189,9 @@ docs/model.md.
 lane" for the production review (docs/concept.md "Application wording": no tier list,
 draft helper, best pick or recommend wording): landing page, matchup index and pages,
 Daily Draft, a page per role (role/<role>.html, most played first, no tier grades), a
-page per champion (lane opponents and teammates by edge, lane curve links), method,
+page per champion (lane opponents and teammates by edge, lane curve links; a min games
+selector, default 400 plus clearing chance, lower shows thinner pairs greyed: each card
+carries the top 6 for every choice, hidden unless chosen), method,
 download (desktop app, in development), privacy, terms, robots.txt, optional riot.txt,
 data/stats.bin (for the app) + data/champions.json, meiolol.wasm (core.recommend in the
 browser, for pages that score drafts). Champion icons hotlink Data Dragon. Edges use the
