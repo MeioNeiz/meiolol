@@ -59,11 +59,8 @@ pub const Options = struct {
 const min_pick_rate = 0.004;
 /// And below this share of the champion's own games, as a role it rarely plays
 const min_role_share = 0.1;
-/// Champion page: lane opponents with fewer games are listed on request
+/// Champion page: lane opponents with fewer games are faded and listed last
 const min_opponent_games = 10;
-/// Hardest and easiest lanes: opponents with at least this many games
-const lane_card_games = 20;
-const lane_cards_shown = 7;
 
 pub const Champ = struct {
     /// Index in the stats file
@@ -543,32 +540,40 @@ fn side(iv: [2]f64) []const u8 {
 }
 
 /// Win rate cell: the interval as a bar on an axis 50% ± `span` with the rate as a dot,
-/// then the rate and its ±. data-v for sorting
+/// then the rate and its ±, coloured by wrColour. data-v for sorting
 fn winRateCell(w: *Writer, wins: u32, games: u32, span: f64) !void {
     const iv = wilson(wins, games);
     const p = ratio(wins, games);
-    const s = side(iv);
     const at = struct {
         fn f(x: f64, half: f64) f64 {
             return 100 * (std.math.clamp(x, 0.5 - half, 0.5 + half) - (0.5 - half)) / (2 * half);
         }
     }.f;
     try w.print(
-        "<td data-v=\"{d:.4}\"><span class=\"wr\"><span class=\"ci\" title=\"95%: {d:.1}% to {d:.1}%, {d} games\">" ++
-            "<i class=\"r {s}\" style=\"left:{d:.1}%;width:{d:.1}%\"></i><i class=\"d {s}\" style=\"left:{d:.1}%\"></i></span>" ++
-            "<b class=\"{s}\">{d:.1}%</b><small>±{d:.1}</small></span></td>",
+        "<td data-v=\"{d:.4}\"><span class=\"wr\" style=\"--c:oklch(0.76 0.15 {d:.0})\"><span class=\"ci\" title=\"95%: {d:.1}% to {d:.1}%, {d} games\">" ++
+            "<i class=\"r\" style=\"left:{d:.1}%;width:{d:.1}%\"></i><i class=\"d\" style=\"left:{d:.1}%\"></i></span>" ++
+            "<b>{d:.1}%</b><small>±{d:.1}</small></span></td>",
         .{
-            p,           100 * iv[0],     100 * iv[1],                       games,
-            s,           at(iv[0], span), at(iv[1], span) - at(iv[0], span), s,
-            at(p, span), s,               100 * p,                           50 * (iv[1] - iv[0]),
+            p,       wrHue(p, span),       100 * iv[0],                       100 * iv[1],
+            games,   at(iv[0], span),      at(iv[1], span) - at(iv[0], span), at(p, span),
+            100 * p, 50 * (iv[1] - iv[0]),
         },
     );
+}
+
+/// Oklch hue for a win rate: red through amber to green, full red or green at 50% ± 40%
+/// of the bar's `span` (±5 points on the champions table, ±10 against an opponent)
+fn wrHue(p: f64, span: f64) f64 {
+    const red = 25;
+    const green = 150;
+    const t = std.math.clamp((p - 0.5) / (0.4 * span), -1, 1);
+    return red + (green - red) * (t + 1) / 2;
 }
 
 fn earlyNote(site: *const Site, w: *Writer) !void {
     if (site.games >= 50_000) return;
     try w.print(
-        "<p class=\"note\">Early data: {d} games so far ({s}). Each bar shows where a win rate likely is (95%); bars narrow as games come in, and a rate is coloured only once its whole bar is above or below 50%.</p>\n",
+        "<p class=\"note\">Early data: {d} games so far ({s}). Each bar shows where a win rate likely is (95%) and narrows as games come in. Colour runs from red (low) through amber to green (high).</p>\n",
         .{ site.games, site.when },
     );
 }
@@ -797,7 +802,6 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
             if (e.games == 0) continue;
             try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins, .iv = wilson(e.wins, e.games) });
         }
-        try laneCards(site, w, opps.items);
         try builds_page.link(site, w, ch, r, path);
         try opponentTable(site, w, ch, r, opps.items);
         try w.writeAll("</section>\n");
@@ -810,57 +814,33 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
     try site.write(path, aw.written());
 }
 
-/// Hardest and easiest lanes: opponents with lane_card_games+ games, ranked by how sure
-/// we are (the interval's high end for the hardest, its low end for the easiest), so a
-/// few lucky games don't top the list
-fn laneCards(site: *const Site, w: *Writer, opps: []Opponent) !void {
-    var list: std.ArrayList(Opponent) = .empty;
-    for (opps) |o| if (o.games >= lane_card_games) try list.append(site.arena, o);
-    if (list.items.len == 0) return;
-    const cards = [_]struct { []const u8, bool }{ .{ "Hardest lanes", true }, .{ "Easiest lanes", false } };
-    try w.writeAll("<div class=\"lanes\">");
-    for (cards) |card| {
-        std.mem.sort(Opponent, list.items, card[1], struct {
-            fn f(hardest: bool, x: Opponent, y: Opponent) bool {
-                return if (hardest) x.iv[1] < y.iv[1] else x.iv[0] > y.iv[0];
-            }
-        }.f);
-        try w.print("<div class=\"lane-card\"><h3>{s} <span class=\"muted\">{d}+ games</span></h3><div class=\"lane-chips\">", .{ card[0], lane_card_games });
-        for (list.items[0..@min(list.items.len, lane_cards_shown)]) |o| {
-            try w.print(
-                "<a href=\"{s}.html\" title=\"{f}: {d:.1}% to {d:.1}%\"><img src=\"{s}\" alt=\"{f}\" loading=\"lazy\" width=\"40\" height=\"40\"><b class=\"{s}\">{d:.0}%</b><small>{d} games</small></a>",
-                .{
-                    o.other.slug,      esc(o.other.name), 100 * o.iv[0],                100 * o.iv[1], site.icon(o.other),
-                    esc(o.other.name), side(o.iv),        100 * ratio(o.wins, o.games), o.games,
-                },
-            );
-        }
-        try w.writeAll("</div></div>");
-    }
-    try w.writeAll("</div>\n");
-}
-
 /// Every lane opponent: win rate with its interval and the lane curve's gold difference at
-/// lane_minute, linking to the matchup page. Under min_opponent_games hidden until asked
+/// lane_minute, linking to the matchup page. Hardest first; under min_opponent_games faded
+/// and last, by games, so a few lucky games don't top the list
 fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Opponent) !void {
     if (opps.len == 0) return;
     std.mem.sort(Opponent, opps, {}, struct {
         fn f(_: void, x: Opponent, y: Opponent) bool {
-            return x.games > y.games;
+            const x_thin = x.games < min_opponent_games;
+            const y_thin = y.games < min_opponent_games;
+            if (x_thin != y_thin) return y_thin;
+            if (x_thin) return x.games > y.games;
+            return ratio(x.wins, x.games) < ratio(y.wins, y.games);
         }
     }.f);
     try w.print(
-        \\<h3 class="opp-h">Lane opponents</h3>
+        \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{d}, hardest first</span></h3>
+        \\<input type="search" placeholder="Search opponent" data-filter aria-label="Search opponent"></div>
         \\<div class="tl-wrap"><table class="tl" data-sortable>
-        \\<thead><tr><th class="l" data-sort="text">Opponent</th><th data-sort="num">{f}'s win rate</th><th data-sort="num" title="Lane curve estimate: {f} minus the opponent">Gold at {d}</th><th data-sort="num" aria-sort="descending">Games</th></tr></thead>
+        \\<thead><tr><th class="l" data-sort="text">Opponent</th><th data-sort="num">{f}'s win rate</th><th data-sort="num" title="Lane curve estimate: {f} minus the opponent">Gold at {d}</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
-    , .{ esc(ch.name), esc(ch.name), core.curvesfile.lane_minute });
+    , .{ opps.len, esc(ch.name), esc(ch.name), core.curvesfile.lane_minute });
     var few: usize = 0;
     for (opps) |o| {
         const thin = o.games < min_opponent_games;
         if (thin) few += 1;
-        try w.print("<tr{s}><td class=\"l\">", .{if (thin) " data-rare hidden" else ""});
+        try w.print("<tr data-name=\"{f}\"{s}><td class=\"l\">", .{ esc(o.other.name), if (thin) " class=\"thin\"" else "" });
         try site.champLink(w, o.other, "../");
         try w.writeAll("</td>");
         try winRateCell(w, o.wins, o.games, 0.25);
@@ -869,7 +849,7 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Oppo
     }
     try w.writeAll("</tbody></table></div>\n");
     if (few > 0) try w.print(
-        "<p class=\"tl-more\">{d} opponents with under {d} games hidden. <button class=\"link\" data-show-rare>Show them</button></p>\n",
+        "<p class=\"tl-more\">Faded: the last {d} opponents, under {d} games each, too few to read much into.</p>\n",
         .{ few, min_opponent_games },
     );
 }

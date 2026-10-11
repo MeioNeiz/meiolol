@@ -293,6 +293,8 @@ b.down, a.down, .down { color: var(--bad); }
 .ci .up { background: var(--good); }
 .ci .down { background: var(--bad); }
 .ci .even { background: var(--muted); }
+.wr b { color: var(--c); }
+.wr .ci i { background: var(--c); }
 a.gold { color: var(--text); font-weight: 500; }
 a.gold.up { color: var(--good); }
 a.gold.down { color: var(--bad); }
@@ -303,19 +305,9 @@ a.gold.down { color: var(--bad); }
 .tiles span { display: block; color: var(--muted); font-size: 12px; }
 .tiles b { display: block; font-size: 21px; font-weight: 700; margin: 1px 0; }
 .tiles small { color: var(--faint); font-size: 12px; }
-.lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 12px; }
-.lane-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-.lane-card h3 { font-size: 14px; margin: 0 0 10px; }
-.lane-card h3 .muted { font-weight: 400; font-size: 12px; }
-.lane-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.lane-chips a { display: flex; flex-direction: column; align-items: center; width: 60px; color: var(--text); font-size: 12px; white-space: nowrap; }
-.lane-chips a:hover { text-decoration: none; }
-.lane-chips img { width: 40px; height: 40px; border-radius: 8px; }
-.lane-chips b { margin-top: 3px; }
-.lane-chips b.even { color: var(--text); }
-.lane-chips small { color: var(--faint); font-size: 11px; }
 section > h2 { margin-top: 28px; }
-h3.opp-h { margin: 18px 0 8px; font-size: 15px; }
+h3.opp-h { margin: 0; font-size: 15px; }
+h3.opp-h .muted { font-weight: 400; font-size: 13px; }
 @media (max-width: 760px) {
   .ci, table.tl .opt { display: none; }
   .tl-bar input { flex: 1 1 100%; }
