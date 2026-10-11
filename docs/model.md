@@ -90,6 +90,27 @@ Train 5335 games (27 Sep to 8 Oct), test 1334 (8 to 11 Oct, all 16.20).
 - From 2026-10-11 the box appends a line a day to data/eval-history.tsv
   (deploy/web-loop.sh): the accuracy-vs-data curve
 
+- Player experience (experience.zig, eval "Player experience"): a term per bin on top of
+  the out-of-fold draft terms, every known player (upper bound) vs one player per game
+  (the user, what the app can know), from crawled history game numbers (learning.zig
+  bins) and mastery points (snapshot after the match: flattering). First run 2026-10-11
+  after the rekey: 585 train / 0 test games with a crawled history, 0 with mastery;
+  skipped (needs 300 / 100)
+
+## Next steps
+
+- Experience term: rerun once the daily eval shows 300+ train and 100+ test games per
+  variant. If "user only" beats the no-experience model beyond its interval, wire it into
+  recommend() as the "your pool" reason (wasm `pool` field) with the measured per-bin pp
+- Lane gold (lanegold.zig): reports from 500 train / 100 test games with timelines
+  (865 timelines at last check); if it wins, store champion and pair gold in the model
+  file (statsfile v2) and tell meiolol-b5 and meiolol-de
+- Daily history chart: data/eval-history.tsv on the box; with a few days of lines, a
+  "Model accuracy vs data" chart on the site's method page (meiolol-b5)
+- Switch defaults to empiricalPriors once eval shows a gain at volume; retry pair
+  evidence for role inference with shrinkage; comp features (damage mix, frontline)
+  and rank brackets (participants.tier) when data allows
+
 Why: a champion-role has ~60 games here, so its winrate is known to about ±6 pp, while
 real differences between champions are 1-3 pp. Pair cells have a handful of games.
 The data is the bottleneck, not the model form; the all-regions crawl (~135k games/day)

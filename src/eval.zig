@@ -17,6 +17,7 @@ const core = @import("core");
 const stats = @import("stats.zig");
 const logreg = @import("logreg.zig");
 const lanegold = @import("lanegold.zig");
+const experience = @import("experience.zig");
 const score = core.score;
 const Role = core.Role;
 
@@ -171,6 +172,8 @@ pub fn run(
     const gold = try laneGoldSection(gpa, db, patches, platforms, champs, &full.stats, train, tests, opts.folds, &.{
         base_only, model, empirical, joint,
     }, w);
+
+    try experienceSection(gpa, db, platforms, champs, &full.stats, train, tests, opts.folds, w);
 
     var line: History = .{
         .platforms = platforms.len,
@@ -365,6 +368,161 @@ fn laneGoldSection(
         .log_loss = stacked.m.log_loss,
         .auc = stacked.m.auc,
     };
+}
+
+/// Fewer train or test games with a known player and a variant is skipped
+const min_experience_train = 300;
+const min_experience_test = 100;
+
+const ExperienceSource = enum { history, mastery };
+
+/// Player experience (experience.zig) as a term on top of the draft: every known player
+/// (an upper bound) and one player per game (the user, all the app can know)
+fn experienceSection(
+    gpa: std.mem.Allocator,
+    db: store.Db,
+    platforms: []const []const u8,
+    champs: []const core.statsfile.Champion,
+    full: *const core.Stats,
+    train: []const Game,
+    tests: []const Game,
+    folds: u32,
+    w: *std.Io.Writer,
+) !void {
+    var map = try experience.load(gpa, db, platforms);
+    defer map.deinit(gpa);
+    try w.writeAll("\n## Player experience\n\nA term per experience bin on top of the draft's " ++
+        "base and lane terms (out-of-fold, empirical-Bayes priors), against the same model " ++
+        "without it, on test games with a known player. Effects in percentage points vs a " ++
+        "player of unknown experience, in an otherwise even game. History bins are game " ++
+        "numbers on the champion (1-5, 6-20, 21-50, 51+, crawled history only); mastery bins " ++
+        "points (<10k, 10-50k, 50-200k, 200k+; snapshot after the match, so flattering).\n\n");
+
+    const oof = try oofTerms(gpa, champs, train, folds);
+    defer gpa.free(oof);
+    const eb = score.empiricalPriors(full, eb_min_games).apply(.{});
+
+    try w.writeAll("| source | players | train | test | log loss without | with | difference | " ++
+        "AUC with | effect per bin (pp) |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
+    for ([_]ExperienceSource{ .history, .mastery }) |source| for ([_]bool{ false, true }) |user_only| {
+        try w.print("| {t} | {s} |", .{ source, if (user_only) "user only" else "all known" });
+        var rows_with: std.ArrayList(logreg.Row) = .empty;
+        defer rows_with.deinit(gpa);
+        var rows_without: std.ArrayList(logreg.Row) = .empty;
+        defer rows_without.deinit(gpa);
+        for (train, oof) |g, t| {
+            const e = map.get(g.id) orelse continue;
+            const r = experienceRow(t, blueWon(g), e, source, user_only) orelse continue;
+            try rows_with.append(gpa, r);
+            try rows_without.append(gpa, experienceRow(t, blueWon(g), null, source, user_only).?);
+        }
+        var test_games: std.ArrayList(Game) = .empty;
+        defer test_games.deinit(gpa);
+        for (tests) |g| {
+            const e = map.get(g.id) orelse continue;
+            if (experienceRow(.{}, 0, e, source, user_only) != null) try test_games.append(gpa, g);
+        }
+        if (rows_with.items.len < min_experience_train or test_games.items.len < min_experience_test) {
+            try w.print(" {d} | {d} | too few (need {d} and {d}) | | | | |\n", .{
+                rows_with.items.len, test_games.items.len, min_experience_train, min_experience_test,
+            });
+            continue;
+        }
+        const d = 3 + @max(experience.history_bins, experience.mastery_bins);
+        const ww = try logreg.fit(gpa, d, rows_with.items, 1);
+        defer gpa.free(ww);
+        const wo = try logreg.fit(gpa, d, rows_without.items, 1);
+        defer gpa.free(wo);
+
+        const p_with = try gpa.alloc(f64, test_games.items.len);
+        defer gpa.free(p_with);
+        const p_without = try gpa.alloc(f64, test_games.items.len);
+        defer gpa.free(p_without);
+        for (test_games.items, p_with, p_without) |g, *pw, *po| {
+            const t = score.draftTerms(full, eb, g.teams);
+            const e = map.get(g.id).?;
+            pw.* = sigmoid(experienceRow(t, 0, e, source, user_only).?.dot(ww));
+            po.* = sigmoid(experienceRow(t, 0, null, source, user_only).?.dot(wo));
+        }
+        const m_with = try metrics(gpa, p_with, test_games.items);
+        const m_without = try metrics(gpa, p_without, test_games.items);
+        const diff = pairedDiff(p_with, p_without, test_games.items);
+        try w.print(" {d} | {d} | {d:.4} | {d:.4} | {s}{d:.4} ± {d:.4} | {d:.3} |", .{
+            rows_with.items.len, test_games.items.len, m_without.log_loss, m_with.log_loss,
+            if (diff.mean >= 0) "+" else "", diff.mean, diff.ci, m_with.auc,
+        });
+        const bins = switch (source) {
+            .history => experience.history_bins,
+            .mastery => experience.mastery_bins,
+        };
+        for (ww[3..][0..bins]) |b| try w.print(" {d:.1}", .{100 * (sigmoid(b) - 0.5)});
+        try w.writeAll(" |\n");
+    };
+}
+
+/// Draft terms of each train game from a model built without its fold, under the
+/// fold model's empirical-Bayes priors
+fn oofTerms(
+    gpa: std.mem.Allocator,
+    champs: []const core.statsfile.Champion,
+    train: []const Game,
+    folds: u32,
+) ![]score.DraftTerms {
+    const out = try gpa.alloc(score.DraftTerms, train.len);
+    errdefer gpa.free(out);
+    for (0..folds) |k| {
+        var m: Model = try .build(gpa, champs, train, .{ .k = k, .folds = folds });
+        defer m.deinit(gpa);
+        const o = score.empiricalPriors(&m.stats, eb_min_games).apply(.{});
+        for (train, out, 0..) |g, *t, i| if (i % folds == k) {
+            t.* = score.draftTerms(&m.stats, o, g.teams);
+        };
+    }
+    return out;
+}
+
+/// Features: intercept, base, lane, then one per experience bin (+1 blue, -1 red) for
+/// the players in scope. Null when no player in scope has a known bin; `e` null for the
+/// same row without experience
+fn experienceRow(
+    t: score.DraftTerms,
+    y: f64,
+    e: ?experience.Game,
+    source: ExperienceSource,
+    user_only: bool,
+) ?logreg.Row {
+    var r: logreg.Row = .{ .y = y };
+    r.add(0, 1);
+    r.add(1, t.base);
+    r.add(2, t.lane);
+    const game = e orelse return r;
+    var known = false;
+    for (game, 0..) |team, s| for (team) |p| {
+        if (user_only and known) break;
+        const bin = switch (source) {
+            .history => p.history,
+            .mastery => p.mastery,
+        } orelse continue;
+        r.add(3 + @as(u32, bin), if (s == 0) 1 else -1);
+        known = true;
+    };
+    return if (known) r else null;
+}
+
+const Paired = struct { mean: f64, ci: f64 };
+
+/// Mean per-game log loss of `a` minus `b`, with a 95% interval
+fn pairedDiff(a: []const f64, b: []const f64, games: []const Game) Paired {
+    var sum: f64 = 0;
+    var sq: f64 = 0;
+    for (a, b, games) |x, y, g| {
+        const d = logLoss(x, blueWon(g)) - logLoss(y, blueWon(g));
+        sum += d;
+        sq += d * d;
+    }
+    const n: f64 = @floatFromInt(games.len);
+    const mean = sum / n;
+    return .{ .mean = mean, .ci = 1.96 * @sqrt(@max(sq / n - mean * mean, 0) / n) };
 }
 
 /// intercept, base and lane terms (opts), champion gold, pair gold
