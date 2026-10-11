@@ -16,6 +16,7 @@ const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
 const logreg = @import("logreg.zig");
+const lanegold = @import("lanegold.zig");
 const score = core.score;
 const Role = core.Role;
 
@@ -167,6 +168,10 @@ pub fn run(
         }
     }
 
+    try laneGoldSection(gpa, db, patches, platforms, champs, &full.stats, train, tests, opts.folds, &.{
+        base_only, model, empirical, joint,
+    }, w);
+
     try w.writeAll("\n## Pick metric\n\n");
     try w.writeAll("Each held-out pick hidden in turn, the other nine known with roles; " ++
         "percentile of the champion actually picked among candidates (1 = model's top).\n\n");
@@ -205,6 +210,96 @@ pub fn run(
         try w.print(" {d:.3} |\n", .{eb_auc});
         if (n == train.len) break;
     }
+}
+
+/// Fewer train games with lane gold and the section is skipped
+const min_gold_games = 500;
+
+/// Lane gold at 14 minutes (lanegold.zig) stacked with the draft's terms, on the test
+/// games that have timelines
+fn laneGoldSection(
+    gpa: std.mem.Allocator,
+    db: store.Db,
+    patches: []const []const u8,
+    platforms: []const []const u8,
+    champs: []const core.statsfile.Champion,
+    full: *const core.Stats,
+    train: []const Game,
+    tests: []const Game,
+    folds: u32,
+    others: []const Predictor,
+    w: *std.Io.Writer,
+) !void {
+    var map = try lanegold.load(gpa, db, patches, platforms);
+    defer map.deinit(gpa);
+    var train_gold: usize = 0;
+    for (train) |g| train_gold += @intFromBool(map.contains(g.id));
+    var tests_gold: std.ArrayList(Game) = .empty;
+    defer tests_gold.deinit(gpa);
+    for (tests) |g| if (map.contains(g.id)) try tests_gold.append(gpa, g);
+    try w.print("\n## Lane gold at {d} minutes\n\nGames with a timeline: {d} of {d} train, {d} of " ++
+        "{d} test.", .{ lanegold.minute, train_gold, train.len, tests_gold.items.len, tests.len });
+    if (train_gold < min_gold_games or tests_gold.items.len < 100) {
+        try w.print(" Too few (need {d} train, 100 test); skipped.\n", .{min_gold_games});
+        return;
+    }
+
+    // Out-of-fold features for the stack's weights
+    var xs: std.ArrayList(Weights) = .empty;
+    defer xs.deinit(gpa);
+    var ys: std.ArrayList(f64) = .empty;
+    defer ys.deinit(gpa);
+    for (0..folds) |k| {
+        var m: Model = try .build(gpa, champs, train, .{ .k = k, .folds = folds });
+        defer m.deinit(gpa);
+        var gm: lanegold.Model = try .build(gpa, &m.stats, train, &map, .{ .k = k, .folds = folds });
+        defer gm.deinit(gpa);
+        const o = score.empiricalPriors(&m.stats, eb_min_games).apply(.{});
+        for (train, 0..) |g, i| if (i % folds == k and map.contains(g.id)) {
+            try xs.append(gpa, goldFeatures(&m.stats, o, &gm, g));
+            try ys.append(gpa, blueWon(g));
+        };
+    }
+    const weights = fitLogistic(xs.items, ys.items, 1.0);
+
+    var gm: lanegold.Model = try .build(gpa, full, train, &map, null);
+    defer gm.deinit(gpa);
+    const o = score.empiricalPriors(full, eb_min_games).apply(.{});
+    try w.print(" Gold sd by role (top..support):", .{});
+    for (gm.sd) |sd| try w.print(" {d:.0}", .{sd});
+    try w.writeAll("; prior games, champion:");
+    for (gm.champ_prior) |k| try w.print(" {f}", .{Prior{ .games = k }});
+    try w.writeAll(", pair:");
+    for (gm.pair_prior) |k| try w.print(" {f}", .{Prior{ .games = k }});
+    try w.print(". Stack weights (out-of-fold): intercept {d:.3}, base {d:.3}, lane winrate " ++
+        "{d:.3}, champion gold {d:.3}, pair gold {d:.3}\n\n", .{
+        weights[0], weights[1], weights[2], weights[3], weights[4],
+    });
+
+    var list: std.ArrayList(Predictor) = .empty;
+    defer list.deinit(gpa);
+    try list.appendSlice(gpa, others);
+    try list.append(gpa, .{ .label = "EB + lane gold (stacked)", .kind = .{ .gold = .{
+        .opts = o,
+        .gm = &gm,
+        .w = weights,
+    } } });
+    var gold_only = weights;
+    gold_only[1] = 0;
+    gold_only[2] = 0;
+    try list.append(gpa, .{ .label = "lane gold terms only", .kind = .{ .gold = .{
+        .opts = o,
+        .gm = &gm,
+        .w = gold_only,
+    } } });
+    try fullDraft(gpa, full, tests_gold.items, list.items, 1, w);
+}
+
+/// intercept, base and lane terms (opts), champion gold, pair gold
+fn goldFeatures(st: *const core.Stats, opts: score.Options, gm: *const lanegold.Model, g: Game) Weights {
+    const t = score.draftTerms(st, opts, g.teams);
+    const f = gm.features(st, g.teams);
+    return .{ 1, t.base, t.lane, f[0], f[1] };
 }
 
 /// Joint champion-role ratings: feature 0 the intercept (blue side), then one per
@@ -292,6 +387,8 @@ const Predictor = struct {
         empirical,
         /// Weights from fitJoint
         joint: []const f64,
+        /// Draft terms plus lane gold, weighted (goldStack)
+        gold: struct { opts: score.Options, gm: *const lanegold.Model, w: Weights },
     },
 
     /// Per stats file: empirical priors become concrete options
@@ -305,6 +402,7 @@ const Predictor = struct {
         return switch (p.kind) {
             .empirical => unreachable,
             .joint => |jw| sigmoid(jointRow(st, g).dot(jw)),
+            .gold => |x| sigmoid(dot(x.w, goldFeatures(st, x.opts, x.gm, g))),
             .coin => 0.5,
             .side => |rate| rate,
             .base => |o| sigmoid(score.draftTerms(st, o, g.teams).base),
@@ -757,7 +855,7 @@ test "auc and logistic fit" {
     const gpa = testing.allocator;
     var games: [4]Game = undefined;
     for (&games, [_]u1{ 1, 0, 1, 0 }) |*g, won| {
-        g.* = .{ .start = 0, .patch = 0, .platform = 0, .teams = @splat(@splat(0)), .winner = won };
+        g.* = .{ .id = 0, .start = 0, .patch = 0, .platform = 0, .teams = @splat(@splat(0)), .winner = won };
     }
     // Blue won games 1 and 3; perfectly ranked, then one swap
     try testing.expectEqual(1.0, try auc(gpa, &.{ 0.1, 0.9, 0.2, 0.8 }, &games));

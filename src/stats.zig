@@ -46,6 +46,8 @@ const BuilderSink = struct {
 
 /// A valid game from `scan`
 pub const Row = struct {
+    /// matchId hashed (matchKey), to join other per-match data
+    id: u64,
     /// Unix ms
     start: i64,
     /// See patchKey
@@ -55,6 +57,10 @@ pub const Row = struct {
     teams: [2][5]u32,
     winner: u1,
 };
+
+pub fn matchKey(match_id: []const u8) u64 {
+    return std.hash.Wyhash.hash(0, match_id);
+}
 
 fn platformIndex(platforms: []const []const u8, platform: []const u8) u8 {
     for (platforms, 0..) |p, i| if (std.mem.eql(u8, p, platform)) return @intCast(i);
@@ -104,6 +110,7 @@ pub fn scan(
             current.clearRetainingCapacity();
             try current.appendSlice(gpa, id);
             game = .{
+                .id = matchKey(id),
                 .winning_team = q.int(1),
                 .start = q.int(2),
                 .patch = patchKey(q.bytes(3)),
@@ -140,6 +147,7 @@ pub fn freeChampions(gpa: std.mem.Allocator, champs: []const statsfile.Champion)
 
 /// One match's participants as they arrive from the query
 const Game = struct {
+    id: u64 = 0,
     winning_team: i64 = 0,
     start: i64 = 0,
     patch: u32 = 0,
@@ -181,7 +189,14 @@ const Game = struct {
             summary.skipped += 1;
             return;
         }
-        try sink.add(.{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .winner = winner.? });
+        try sink.add(.{
+            .id = g.id,
+            .start = g.start,
+            .patch = g.patch,
+            .platform = g.platform,
+            .teams = g.teams,
+            .winner = winner.?,
+        });
         summary.games += 1;
     }
 };
