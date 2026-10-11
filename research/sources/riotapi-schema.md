@@ -3,7 +3,7 @@ title: 'riotapi-schema: OpenAPI spec of the Riot Games API'
 url: https://github.com/MingweiSamuel/riotapi-schema
 kind: spec
 commit: b5a159ab1d65e8e400eaaa1184d4179d877ee29f
-for: [riot-api-data-depth, identity-and-privacy]
+for: [riot-api-data-depth]
 looked: 2026-10-11
 depth: code (gh-pages openapi-3.0.0.yml, match-v5, mastery, challenges, spectator, clash, league-exp)
 relevance: high
@@ -91,16 +91,6 @@ challenges, spectator, clash, league-exp), without scraping Riot's JS reference 
   > summary: 'Get all the league entries.'
 - [data] Checked, not there: no rate limits in the spec; method limits come only from
   response headers (see riot-timeline-measured). ^f16
-
-- [privacy] [data] Checked, not there: no third-party-code path (summoner ownership
-  check) in this spec; summoner-v4 and account-v1 only offer lookups plus RSO `/me`. ^f17
-- [privacy] [data] summoner-v4 returns profileIconId, and revisionDate changes on an
-  icon change, so an app can see when a player sets a given icon. ^f18
-  > description: 'ID of the summoner icon associated with the summoner.'
-  > The following events will update this timestamp: profile icon change, playing the tutorial or advanced tutorial, finishing a game, summoner name change.
-- [privacy] [data] account-v1 resolves any Riot ID (game name plus tag line) to an
-  account, with no player consent step. `/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}` ^f19
-  > summary: 'Get account by riot id'
 
 ## Read
 

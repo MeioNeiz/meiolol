@@ -15,16 +15,18 @@ Researched 2026-10-11. Production key details: production-key.md.
 - Timelines (`/matches/{id}/timeline`): 1 frame/min, ~730 KB JSON / ~60-70 KB gz, one
   extra call per match. With timelines a match costs ~2.13 calls (incl. ids), so ~33k
   matches/day per region, ~135k/day total (was ~60k EUW summaries only). Stored compact
-  (docs/architecture.md, Storage); raw kept 7 days
+  (docs/architecture.md, Storage); raw kept 7 days, raw summaries 30 days
 - Summary-only alternative (`--timelines 0`): ~63k matches/day per region
-- EUW alone plays ~150-170k ranked solo games/day (lolalytics counts); the europe
-  bucket's ~33k/day now spans EUW, EUNE, TR, RU and ME (in proportion to their
-  players), so a much smaller share of EUW than the old ~35-40%
+- EUW is the priority (Jacob): the europe bucket scans EUW players first, so its ~33k
+  matches/day are nearly all EUW (~20% of EUW's ~150-170k ranked solo games/day,
+  lolalytics counts). EUNE, TR, RU and ME get only what EUW leaves (in practice a few
+  matches EUW accounts played there)
 - Match data kept 2 years (timelines 1 year); a player's match list holds their last
   ~1000 games, older ones only reachable by match id
 - Metas differ by region (KR especially): matches.platform lets stats pool or split
 - Not available anywhere: pick order (ban `pickTurn` is slot order, not real order),
-  rank at match time (we snapshot the ladder), mastery at match time
+  rank at match time (participants.tier is the ladder rank when we stored the match),
+  mastery at match time
 - Production key: 3-8 month review, needs a live site; default limits may be no higher
   than personal. Only worth it for the public app
 - One developer account per person and no key sharing (API Terms); one product per key

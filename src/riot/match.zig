@@ -41,12 +41,47 @@ const Participant = struct {
     champLevel: ?i64 = null,
     summoner1Id: ?i64 = null,
     summoner2Id: ?i64 = null,
+    item0: ?i64 = null,
+    item1: ?i64 = null,
+    item2: ?i64 = null,
+    item3: ?i64 = null,
+    item4: ?i64 = null,
+    item5: ?i64 = null,
+    item6: ?i64 = null,
     perks: ?struct {
+        statPerks: ?struct { offense: ?i64 = null, flex: ?i64 = null, defense: ?i64 = null } = null,
         styles: []const struct {
             style: i64,
             selections: []const struct { perk: i64 } = &.{},
         } = &.{},
     } = null,
+
+    const Runes = struct {
+        primary_style: ?i64 = null,
+        secondary_style: ?i64 = null,
+        /// keystone, three primary, two secondary
+        perks: [6]?i64 = @splat(null),
+        shards: [3]?i64 = @splat(null),
+    };
+
+    fn runes(p: Participant) Runes {
+        var r: Runes = .{};
+        const perks = p.perks orelse return r;
+        if (perks.styles.len > 0) {
+            r.primary_style = perks.styles[0].style;
+            for (perks.styles[0].selections[0..@min(4, perks.styles[0].selections.len)], 0..) |s, i| {
+                r.perks[i] = s.perk;
+            }
+        }
+        if (perks.styles.len > 1) {
+            r.secondary_style = perks.styles[1].style;
+            for (perks.styles[1].selections[0..@min(2, perks.styles[1].selections.len)], 4..) |s, i| {
+                r.perks[i] = s.perk;
+            }
+        }
+        if (perks.statPerks) |s| r.shards = .{ s.offense, s.flex, s.defense };
+        return r;
+    }
 };
 
 const Team = struct {
@@ -80,6 +115,63 @@ pub fn isRemake(doc: Doc) bool {
     return false;
 }
 
+/// Every participants column but tier and division, in insert order
+const participant_columns = [_][]const u8{
+    "match_id",
+    "slot",
+    "team_id",
+    "puuid",
+    "champion_id",
+    "position",
+    "individual_position",
+    "win",
+    "kills",
+    "deaths",
+    "assists",
+    "gold",
+    "damage_to_champions",
+    "damage_taken",
+    "vision_score",
+    "cs",
+    "champ_level",
+    "summoner1",
+    "summoner2",
+    "keystone",
+    "secondary_style",
+    "item0",
+    "item1",
+    "item2",
+    "item3",
+    "item4",
+    "item5",
+    "item6",
+    "primary_style",
+    "perk1",
+    "perk2",
+    "perk3",
+    "perk4",
+    "perk5",
+    "shard_offense",
+    "shard_flex",
+    "shard_defense",
+};
+
+/// A re-store (rebuild) updates the match's facts but keeps puuid (NULL after a
+/// rekey) and the rank snapshot taken when the match was first stored
+const insert_participant = blk: {
+    var cols: []const u8 = participant_columns[0];
+    var marks: []const u8 = "?";
+    var sets: []const u8 = "";
+    for (participant_columns[1..]) |c| {
+        cols = cols ++ ", " ++ c;
+        marks = marks ++ ", ?";
+        if (std.mem.eql(u8, c, "slot") or std.mem.eql(u8, c, "puuid")) continue;
+        sets = sets ++ (if (sets.len == 0) "" else ", ") ++ c ++ " = excluded." ++ c;
+    }
+    break :blk "INSERT INTO participants (" ++ cols ++ ") VALUES (" ++ marks ++
+        ") ON CONFLICT (match_id, slot) DO UPDATE SET " ++ sets;
+};
+
 /// Replace this match's rows. Caller holds the transaction.
 pub fn storeRows(db: store.Db, doc: Doc, source: []const u8) !void {
     const info = doc.info;
@@ -97,7 +189,8 @@ pub fn storeRows(db: store.Db, doc: Doc, source: []const u8) !void {
     const remake = isRemake(doc);
 
     const platform_id = info.platformId orelse id[0 .. std.mem.indexOfScalar(u8, id, '_') orelse id.len];
-    try db.run("DELETE FROM participants WHERE match_id = ?", .{id});
+    const existed = (try db.scalar("SELECT count(*) FROM participants WHERE match_id = ?", .{id}) orelse 0) > 0;
+    try db.run("DELETE FROM participants WHERE match_id = ? AND slot >= ?", .{ id, info.participants.len });
     try db.run("DELETE FROM bans WHERE match_id = ?", .{id});
     try db.run("INSERT OR REPLACE INTO matches VALUES (?,?,?,?,?,?,?,?,?,?)", .{
         id,                                               source,                    platform_id,
@@ -106,35 +199,90 @@ pub fn storeRows(db: store.Db, doc: Doc, source: []const u8) !void {
         remake,
     });
 
-    var ins = try db.prepare("INSERT INTO participants VALUES " ++
-        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    var ins = try db.prepare(insert_participant);
     defer ins.deinit();
     for (info.participants, 0..) |p, slot| {
-        var keystone: ?i64 = null;
-        var secondary: ?i64 = null;
-        if (p.perks) |perks| {
-            if (perks.styles.len > 0 and perks.styles[0].selections.len > 0) {
-                keystone = perks.styles[0].selections[0].perk;
-            }
-            if (perks.styles.len > 1) secondary = perks.styles[1].style;
-        }
+        const r = p.runes();
         const cs = (p.totalMinionsKilled orelse 0) + (p.neutralMinionsKilled orelse 0);
         try ins.exec(.{
-            id,                             slot,               p.teamId,
-            p.puuid,                        p.championId,       nonEmpty(p.teamPosition),
-            nonEmpty(p.individualPosition), p.win,              p.kills,
-            p.deaths,                       p.assists,          p.goldEarned,
-            p.totalDamageDealtToChampions,  p.totalDamageTaken, p.visionScore,
-            cs,                             p.champLevel,       p.summoner1Id,
-            p.summoner2Id,                  keystone,           secondary,
+            id,
+            slot,
+            p.teamId,
+            p.puuid,
+            p.championId,
+            nonEmpty(p.teamPosition),
+            nonEmpty(p.individualPosition),
+            p.win,
+            p.kills,
+            p.deaths,
+            p.assists,
+            p.goldEarned,
+            p.totalDamageDealtToChampions,
+            p.totalDamageTaken,
+            p.visionScore,
+            cs,
+            p.champLevel,
+            p.summoner1Id,
+            p.summoner2Id,
+            r.perks[0],
+            r.secondary_style,
+            p.item0,
+            p.item1,
+            p.item2,
+            p.item3,
+            p.item4,
+            p.item5,
+            p.item6,
+            r.primary_style,
+            r.perks[1],
+            r.perks[2],
+            r.perks[3],
+            r.perks[4],
+            r.perks[5],
+            r.shards[0],
+            r.shards[1],
+            r.shards[2],
         });
     }
+    if (!existed) try db.run(
+        \\UPDATE participants SET (tier, division) =
+        \\    (SELECT tier, division FROM players p WHERE p.puuid = participants.puuid)
+        \\WHERE match_id = ?
+    , .{id});
 
     var ban = try db.prepare("INSERT INTO bans VALUES (?,?,?,?)");
     defer ban.deinit();
     for (info.teams) |t| for (t.bans) |b| {
         if (b.championId > 0) try ban.exec(.{ id, t.teamId, b.pickTurn, b.championId });
     };
+}
+
+/// Re-parse every raw summary still kept into the normalised tables, after a parser or
+/// schema change. Returns how many were stored
+pub fn rebuild(gpa: std.mem.Allocator, db: store.Db) !usize {
+    var q = try db.prepare("SELECT key, body FROM raw.raw_docs WHERE source = 'riot_match'");
+    defer q.deinit();
+    try q.bind(.{});
+    var stored: usize = 0;
+    try db.begin();
+    errdefer db.rollback();
+    while (try q.step()) {
+        var arena: std.heap.ArenaAllocator = .init(gpa);
+        defer arena.deinit();
+        const body = try store.raw.decompress(arena.allocator(), q.bytes(1));
+        const doc = parse(arena.allocator(), body) catch |err| {
+            std.log.warn("match {s} did not parse: {t}", .{ q.bytes(0), err });
+            continue;
+        };
+        try storeRows(db, doc, "riot");
+        stored += 1;
+        if (stored % 1000 == 0) {
+            try db.commit();
+            try db.begin();
+        }
+    }
+    try db.commit();
+    return stored;
 }
 
 const testing = std.testing;
@@ -157,6 +305,33 @@ test "parse and store the fixture" {
     try testing.expectEqual(@as(?i64, 1620), try db.scalar("SELECT duration_s FROM matches", .{}));
     try testing.expectEqual(@as(?i64, 5), try db.scalar(
         "SELECT count(DISTINCT position) FROM participants",
+        .{},
+    ));
+    try testing.expectEqual(@as(?i64, 10), try db.scalar(
+        "SELECT count(*) FROM participants WHERE item6 > 0 AND perk5 > 0 AND shard_defense > 0 " ++
+            "AND primary_style <> secondary_style",
+        .{},
+    ));
+}
+
+test "re-storing after a rekey keeps rank and blanked puuids" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const doc = try parse(arena.allocator(), @embedFile("testdata/match.json"));
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.run("INSERT INTO players (puuid, tier, division, source) VALUES (?, 'GOLD', 'II', 'ladder')", .{
+        doc.info.participants[0].puuid,
+    });
+    try storeRows(db, doc, "riot");
+    try store.schema.rekey(db);
+    try storeRows(db, doc, "riot");
+    try testing.expectEqual(@as(?i64, 1), try db.scalar(
+        "SELECT count(*) FROM participants WHERE slot = 0 AND tier = 'GOLD' AND division = 'II'",
+        .{},
+    ));
+    try testing.expectEqual(@as(?i64, 10), try db.scalar(
+        "SELECT count(*) FROM participants WHERE puuid IS NULL AND item6 IS NOT NULL",
         .{},
     ));
 }

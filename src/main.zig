@@ -26,6 +26,12 @@ const usage =
     \\              --timelines PCT  share of matches that also get a timeline
     \\                               (default 100, 0 for none)
     \\              --raw-timeline-days N  keep raw timeline JSON N days (default 7)
+    \\              --raw-match-days N     keep raw match JSON N days (default 30,
+    \\                                     0 forever)
+    \\              --priority P     platforms whose players come first in their
+    \\                               region (default EUW1, "none" for none)
+    \\              --reserve PCT    leave PCT of each rate limit to other processes
+    \\                               on the key (default 0)
     \\  stats       write the model file the app reads (ranked solo, no remakes)
     \\              --patch P        patch to include, repeatable or comma separated
     \\                               (default: the newest patch)
@@ -50,6 +56,9 @@ const usage =
     \\              --port P         default 8080
     \\              --out DIR        site directory to serve
     \\  status      row counts and crawl queue state
+    \\  rebuild     re-parse kept raw match JSON into the normalised tables
+    \\  rekey       after switching to another app's key (new PUUIDs): forget
+    \\              players, ladder and mastery, keep matches; run rebuild first
     \\  champions   refresh champion ids and names from Data Dragon
     \\
     \\options for all commands:
@@ -73,6 +82,9 @@ pub fn main(init: std.process.Init) !u8 {
     var regions: std.ArrayList(riot.endpoints.Region) = .empty;
     var timeline_percent: u8 = 100;
     var raw_timeline_days: u32 = 7;
+    var raw_match_days: u32 = 30;
+    var priority: ?[]const []const u8 = null;
+    var reserve_pct: u8 = 0;
     var out_path: ?[]const u8 = null;
     var contact: ?[]const u8 = null;
     var riot_txt: ?[]const u8 = null;
@@ -117,6 +129,18 @@ pub fn main(init: std.process.Init) !u8 {
             if (timeline_percent > 100) return usageError(a);
         } else if (std.mem.eql(u8, a, "--raw-timeline-days")) {
             raw_timeline_days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--raw-match-days")) {
+            raw_match_days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--reserve")) {
+            reserve_pct = std.fmt.parseInt(u8, v, 10) catch return usageError(a);
+            if (reserve_pct > 90) return usageError(a);
+        } else if (std.mem.eql(u8, a, "--priority")) {
+            var list: std.ArrayList([]const u8) = .empty;
+            var it = std.mem.tokenizeScalar(u8, v, ',');
+            while (it.next()) |p| {
+                if (!std.mem.eql(u8, p, "none")) try list.append(arena, p);
+            }
+            priority = list.items;
         } else if (std.mem.eql(u8, a, "--out")) {
             out_path = v;
         } else if (std.mem.eql(u8, a, "--contact")) {
@@ -149,6 +173,9 @@ pub fn main(init: std.process.Init) !u8 {
             .regions = if (regions.items.len > 0) regions.items else std.enums.values(riot.endpoints.Region),
             .timeline_percent = timeline_percent,
             .raw_timeline_days = raw_timeline_days,
+            .raw_match_days = raw_match_days,
+            .priority = priority orelse &.{"EUW1"},
+            .reserve_pct = reserve_pct,
         } };
         crawler.run() catch |err| switch (err) {
             error.KeyRejected => return 3,
@@ -189,6 +216,19 @@ pub fn main(init: std.process.Init) !u8 {
     }
     if (std.mem.eql(u8, cmd, "status")) {
         try status(init.gpa, init.io, data_dir);
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "rebuild")) {
+        const db = try store.open(init.gpa, data_dir);
+        defer db.close();
+        std.log.info("{d} matches rebuilt", .{try riot.match.rebuild(init.gpa, db)});
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "rekey")) {
+        const db = try store.open(init.gpa, data_dir);
+        defer db.close();
+        try store.schema.rekey(db);
+        std.log.info("players, ladder and mastery cleared; matches kept", .{});
         return 0;
     }
     if (std.mem.eql(u8, cmd, "champions")) {

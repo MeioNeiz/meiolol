@@ -3,7 +3,7 @@ title: Riot Games API Terms and Conditions (last updated 2013-12-09)
 url: https://developer.riotgames.com/terms
 kind: docs
 commit:
-for: [riot-production-key, identity-and-privacy]
+for: [riot-production-key]
 looked: 2026-10-11
 depth: docs (whole page)
 relevance: high
@@ -60,12 +60,6 @@ Why: what the API licence says about data use, storage, retention and AI/ML mode
 - [policy] [data] Checked, not there: no mention of AI, machine learning, model training,
   datasets, data storage limits or a retention period (other than delete on
   termination). ^f12
-
-- [privacy] [policy] Apps must not violate anyone's privacy rights or applicable laws. ^f13
-  > Using the Riot Games API for any Application to violate anyone's privacy rights
-- [privacy] Riot treats API data as possibly GDPR personal data and applies GDPR
-  standards globally. ^f14
-  > While GDPR is a European Union regulation Riot Games has committed to following the standards put forth in the regulation globally. As a developer using the Riot Games API, you may have access to personal data subject to the GDPR.
 
 ## Read
 

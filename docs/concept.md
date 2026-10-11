@@ -42,23 +42,14 @@ aggregate facts only; never other players; never "the best pick".
    - Weekly roll-up and per-matchup trend over months ("gold at 10 vs Renekton: -400 to
      -150 since August"): patterns, not single-game anecdotes
    - Tier means visible rank, never inferred MMR (prohibited)
-   - Any Riot ID, on legitimate interests (League policy has no consent rule for ranked
-     or normal history); an objection/removal form gated by a profile-icon check (set a
-     given starter icon, we re-read it). RSO once the production key allows
-     (research: identity-and-privacy)
 2. **Matchup curves** (website; the benchmark and the public, indexable pages)
    - Every lane matchup: typical gold/XP/CS difference by minute with spread band, kill
      and death chance by phase, level 6 and first-item timing per side, wins lane vs wins
      game. Summaries generated from the numbers and shown next to them
    - Filters: tier bracket, patch (pooled while thin), region (pooled by default),
      experienced players only (by mastery), core item where builds split
-   - Every chart shows tier, patch, n and spread; greyed out as "more data needed" below
-     ~200 games or when the estimate is mostly the champions' baseline (trust, and the
-     honest case for more volume)
-   - Method (research: curve-statistics-method): champion baselines plus a matchup effect
-     shrunk by k pseudo-games (method of moments), smoothed across minutes; after minute
-     15 labelled "among games still running"; spread band and uncertainty of the mean
-     shown separately; k per role published as "games to stabilise" on the method page
+   - Every chart shows tier, patch, n and spread; below ~200 games greyed out as "more
+     data needed" (trust, and the honest case for more volume)
 3. **Daily Draft** (website; the hook and the traffic)
    - One real anonymised ranked draft a day, same for everyone: guess the winner, or which
      of four champions was picked last; the reveal explains with curves and stats
@@ -66,9 +57,8 @@ aggregate facts only; never other players; never "the best pick".
    - No Riot IDs, match IDs or exact dates; reveal is "what happened and why", never "the
      correct pick". Reuses the current recommender as the scoring engine
 4. **Squads** (website; friends, and the coach roster)
-   - A group of Riot IDs, each member opting in by proving their ID with the icon check
-     (consent). Friends: weekly recap of games played together in ranked, normals, ARAM,
-     Arena and rotating modes (not ARAM Mayhem: private in the API), awards measured against the curves ("biggest fall
+   - A group of Riot IDs, each member opting in themselves. Friends: weekly recap of games
+     played together in any queue, awards measured against the curves ("biggest fall
      below the curve", "best comeback minute"), squad Daily Draft board, Discord image.
      Coaches: the same list as a student roster with one-click weekly reviews and chart
      export (PNG/SVG with tier, patch, n)
@@ -135,10 +125,7 @@ second.
 
 ## Open
 
-- Settled: match-v5 serves 420/440/400, ARAM 450, Arena 1700/1750, ARURF 900, Clash, all
-  with timelines; ARAM Mayhem (2400) and Brawl are private (research: match-v5-queues)
-- Draft model on ~6.5k EUW games is no better than a coin flip (docs/model.md, branch
-  worktree-draft-model): data is the bottleneck; recheck as all-regions data lands
+- Does match-v5 serve ARAM Mayhem and other rotating modes (queue ids)? Squads want them
 - Gold-diff spread per role unmeasured: n = 400 is a binomial assumption
 - How much regions differ per matchup (pooling bias): measure once all regions crawl
 - Incumbents could add curves cheaply; the moat is the personal loop, squads, the puzzle

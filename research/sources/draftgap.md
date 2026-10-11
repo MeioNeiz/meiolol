@@ -3,9 +3,9 @@ title: DraftGap (vigovlugt/draftgap) README, FAQ and data pipeline
 url: https://github.com/vigovlugt/draftgap
 kind: project
 commit: 872c6d5cebfec186fdebb14005fd42b2bf84ad22
-for: [riot-production-key, curve-statistics-method]
+for: [riot-production-key]
 looked: 2026-10-11
-depth: code (README, FAQ dialog, dataset riot.ts and lolalytics; issue list; core draft analysis, ratings, risk level)
+depth: code (README, FAQ dialog, dataset riot.ts and lolalytics; issue list)
 relevance: medium
 grade: B/fair
 description: Open-source stats-based champ select pick recommender (web + Tauri desktop, LCU sync); data from Lolalytics, not Riot API
@@ -36,38 +36,8 @@ Why: closest open-source precedent to meiolol (desktop app syncing with champ se
 - [method] Explicitly stats-only, no opinions; not ML. `FAQDialog.tsx` ^f6
   > using just data is the most objective way to make a decision.
 
-- [stats] [method] Matchup expectation is additive on an Elo-like logit scale:
-  expected rating = rating(A's role win rate) - rating(B's role win rate), with
-  rating(w) = -400 log10(1/w - 1). `packages/core/src/draft/analysis.ts`,
-  `packages/core/src/rating/ratings.ts` ^f7
-  > export function winrateToRating(w: number) {
-  > return -400 * Math.log10(1 / w - 1);
-- [stats] [method] Thin matchups are shrunk with pseudo-games: priorGames games at the
-  additive expected win rate are added to the observed wins and games, then the
-  matchup's rating is reported as the deviation from that expectation.
-  `packages/core/src/draft/analysis.ts` ^f8
-  > wins: priorGames * expectedWinrate,
-  > const rating = actualRating - expectedRating;
-- [stats] Both directions of a matchup are averaged (A's wins vs B, B's losses vs A)
-  before shrinking. `packages/core/src/draft/analysis.ts` ^f9
-  > const wins = (matchupStats.wins + enemyLosses) / 2;
-- [stats] [ux] Prior strength is a user setting ("risk level"): 3000, 2000, 1000
-  (medium), 500 or 250 pseudo-games; fixed constants, not estimated from data.
-  `packages/core/src/risk/risk-level.ts` ^f10
-  > export const priorGamesByRiskLevel: Record<RiskLevel, number> = {
-- [ux] FAQ frames prior strength as trust in small samples versus finding niche
-  counters. `FAQDialog.tsx` ^f11
-  > The risk level is a measure of how much to trust small
-  > sample sizes in the data.
-- [stats] (inferred) A 1000-game prior means a matchup needs about 1000 games before its
-  own data counts as much as the additive baseline: far stronger than Lolalytics' 100
-  game display floor ([[lolalytics-counters-threshold#^f1]]), and close to what Tango's
-  k = luck variance / talent variance gives for small win-rate effects (inferred:
-  sd of true matchup deviation 1.5 points gives k = 0.25 / 0.015^2, about 1100). ^f12
-
 ## Read
 
-- `packages/core/src/draft/analysis.ts` (analyzeMatchups), `rating/ratings.ts`, `risk/risk-level.ts`
 - `README.md`, `FAQDialog.tsx`, `apps/dataset/src/riot.ts`, `lolalytics/index.ts` head; titles of all 16 issues, bodies of #8, #12, #20 (technical, nothing on policy)
 
 ## Not read

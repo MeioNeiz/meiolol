@@ -83,14 +83,7 @@ with no work behind them) and hands out work, not just the next plan step.
 - Dynamic service (Your games, Squads): on the jomove server beside the static site
 - Name/domain: live on meiolol.jomify.lol (subdomain of Jacob's jomify.lol, Namecheap).
   "lol" in name and TLD is a mild Riot-trademark risk; revisit if the concept renames
-- GUI library: research says dvui (DX11) pinned to a commit, zgui fallback; settle after
-  a real run on the Windows PC (research: zig-gui-options)
-- Zig 0.17.0 shipped 2026-10-01 and libraries follow it: plan the move from 0.16 in a
-  quiet window (touches every session's code)
-- Before the production review (research: identity-and-privacy): privacy policy with a
-  legitimate interests assessment, ToS, objection/removal form, UK ICO fee (~52 GBP/yr),
-  probably an EEA representative (open); honour Riot's erasure lists and refresh stored
-  players every 30 days
+- GUI library
 
 ## Personal key registration
 

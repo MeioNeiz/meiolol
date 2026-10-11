@@ -3,7 +3,7 @@ title: Riot Developer Portal General Policies (updated 2025-05-29)
 url: https://developer.riotgames.com/policies/general
 kind: docs
 commit:
-for: [riot-production-key, identity-and-privacy]
+for: [riot-production-key]
 looked: 2026-10-11
 depth: docs (whole page)
 relevance: high
@@ -45,12 +45,6 @@ Why: which policy lines a champ select pick recommender must satisfy for a produ
   > Do not use a Production API key to run multiple projects (one product per key)
   > Do not include your API key in your code, especially if you plan on distributing a binary
 - [policy] Checked, not there: no mention of machine learning, AI, model training, or data retention on this page. ^f9
-
-- [privacy] [policy] No de-anonymising players who cannot reasonably be identified from
-  visible information. ^f10
-  > Products cannot de-anonymize players who cannot reasonably be identified from visible information.
-- [privacy] Checked, not there: no rule on player consent, opt-in, ownership checks,
-  retention or deletion requests on this page. ^f11
 
 ## Read
 

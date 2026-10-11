@@ -30,25 +30,35 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
 
 ## Storage (on the box, ~/ml/meiolol/data)
 
-- `raw.db`: every fetched document (match JSON, mastery) as compressed JSON keyed by
-  (source, key). gzip for new rows; early rows from the retired Python crawler are
-  zstd. std decompresses both, compresses only deflate; told apart by magic bytes.
-  Also `timeline_docs`: raw timeline JSON (gzip, ~70 KB each), pruned hourly after
-  `--raw-timeline-days` (default 7) so a parser fix can re-extract recent ones
+- `raw.db`: fetched JSON, gzip (early rows from the retired Python crawler are zstd;
+  std decompresses both, compresses only deflate; told apart by magic bytes). Rolling,
+  pruned hourly by the crawler: `raw_docs` match summaries 30 days
+  (`--raw-match-days`), `timeline_docs` timelines 7 days (`--raw-timeline-days`; ones
+  that failed to parse are kept). `meiolol rebuild` re-parses kept summaries into the
+  tables after a parser or schema change. Mastery is not kept raw
 - `timeline.db`: `timelines`, one compact blob per match (src/riot/timeline.zig: per
   minute per participant gold, xp, level, CS, position, damage, CC; events: kills
   with position, items, skills, wards, buildings, plates, monsters, transforms). ~8.6
-  KB vs ~60 KB raw gz; `timeline.decode` reads it. Participant id = slot + 1
+  KB vs ~60 KB raw gz, lossless for those fields; `timeline.decode` reads it.
+  Participant id = slot + 1. Kept forever
 - `meiolol.db`: crawl state (players, ladder_pages, match_queue, timeline_queue) and
-  normalised tables (matches, participants, bans, mastery, champions)
+  tables kept forever: matches, participants (incl. final items, full rune page, and
+  tier/division = rank snapshot when the match was stored), bans, mastery (one
+  compact blob per player, src/riot/mastery.zig, ~0.7 KB), champions. Text-keyed
+  tables are WITHOUT ROWID (no second copy of the key in an index)
 - Match ID is the permanent key and carries the platform (EUW1_, KR_); matches.platform
-  and players.platform/region let stats pool or split regions. PUUIDs are global but
-  encrypted per API key: a new key (eg personal -> production) gives new PUUIDs
-- Schema changes: `schema.zig` migrate() adds columns in place (checks inside the write
-  lock, so concurrent opens are safe); pre-multi-region rows became EUW1/europe
-- Scale at full rate (4 regions, ~135k matches/day): kept forever ~1.7 GB/day raw
-  summaries + ~1.2 GB/day compact timelines + rows, ~1.1 TB/year; raw timelines a
-  rolling ~66 GB. 945 GB free on the box
+  and players.platform/region let stats pool or split regions
+- PUUIDs are encrypted per app: switching app (dev -> personal -> production) gives
+  new PUUIDs. `meiolol rebuild` then `meiolol rekey` forgets players, ladder and
+  mastery (re-seeded from the ladders) and blanks old PUUIDs in participants; matches,
+  timelines and rank snapshots stay. Re-storing a match keeps its PUUIDs and rank
+- Schema changes: `schema.zig` migrate() alters or rebuilds tables in place (checks
+  inside the write lock, so concurrent opens are safe). Back up before a first run
+- Scale at full rate (4 regions, ~135k matches/day): kept forever ~8.6 KB timeline +
+  ~3 KB rows per match, ~1.6 GB/day, ~570 GB/year; rolling raw ~50 GB summaries + ~60
+  GB timelines; mastery ~1 KB per ranked player, bounded. Real headroom ~250 GB: the
+  WSL disk (df shows a 1 TB cap) lives on C: with ~250 GB free, so ~3 months at full
+  rate until it moves to the 2 TB NVMe
 
 ## Crawler (src/riot/crawl.zig)
 
@@ -64,12 +74,15 @@ to region map: `platforms` in src/riot/endpoints.zig.
   default all, picked by match id hash). Queues are FIFO per region; ids refill only
   under 300 pending. Timeline batches (60) outsize match batches (40) so a backlog
   drains. Per match ~2.13 calls (match + timeline + ids), so ~33k matches/day/region
-- main thread: per-region report every minute, raw timeline pruning hourly. On first
-  start with an empty timeline_queue, queues timelines for already crawled matches
+- main thread: per-region report every minute, raw pruning hourly. On first start with
+  an empty timeline_queue, queues timelines for already crawled matches
 
 Players are scanned in PUUID order (effectively random): no rank or activity bias.
-Only Riot's key errors, OOM and SQLite errors stop the crawler; a bad page, player or
-match is logged and skipped.
+`--priority` platforms (default EUW1) are scanned before the rest of their region, so
+EUW gets the whole europe bucket while it has players due. `--reserve PCT` leaves part
+of every bucket to other processes on the key (the Your games service).
+Only Riot's key errors, OOM and SQLite errors outside a match stop the crawler; a bad
+page, player or match (including one SQLite cannot store) is logged and skipped.
 Limits come from Riot's headers (X-App/Method-Rate-Limit and their -Count, which also
 corrects for requests made by another process); 429s honour Retry-After. Exit code 3
 when Riot rejects the key; deploy/box.sh's restart loop stops on it.
