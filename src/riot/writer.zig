@@ -57,8 +57,9 @@ pub const Kind = union(enum) {
     mastery: struct { puuid: []const u8, platform: []const u8, t: i64, champions: usize, blob: ?[]const u8 },
     match_ids: struct { ids: []const []const u8, discovered_at: i64, region: ep.Region },
     checked: struct { puuid: []const u8, t: i64 },
-    /// id: the queue's, in case Riot's document names another
-    match: struct { region: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64 },
+    /// id: the queue's, in case Riot's document names another. timeline false: an older
+    /// patch's match under --patch-only, stored without one
+    match: struct { region: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64, timeline: bool = true },
     timeline: struct { region: ep.Region, id: []const u8, raw: ?[]const u8, compact: ?crawl.Compact, t: i64 },
     queue: struct { which: Queue, id: []const u8, status: Status },
     /// Barrier only: lets a worker wait for what it queued so far
@@ -313,7 +314,7 @@ pub const Writer = struct {
             },
             .match_ids => |q| for (q.ids) |id| try s.match_queue.exec(.{ id, q.discovered_at, @tagName(q.region) }),
             .checked => |ch| try s.checked.exec(.{ ch.t, ch.puuid }),
-            .match => |m| try wr.storeMatch(db, s, m.region, m.id, m.doc, m.raw, m.t),
+            .match => |m| try wr.storeMatch(db, s, m.region, m.id, m.doc, m.raw, m.t, m.timeline),
             .timeline => |t| try wr.storeTimeline(s, t.id, t.raw, t.compact, t.t),
             .queue => |q| switch (q.which) {
                 .match => switch (q.status) {
@@ -328,7 +329,7 @@ pub const Writer = struct {
         }
     }
 
-    fn storeMatch(wr: *Writer, db: store.Db, s: *Stmts, r: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64) !void {
+    fn storeMatch(wr: *Writer, db: store.Db, s: *Stmts, r: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64, want_timeline: bool) !void {
         const stored_id = doc.metadata.matchId;
         const existed = try s.exists(stored_id);
         var any_forgotten = false;
@@ -358,7 +359,7 @@ pub const Writer = struct {
         // After the ranks above. Once per match: a re-stored one has its row already,
         // unless it still awaits the backfill
         if (!existed or try s.drafts.taken(stored_id)) _ = try s.drafts.write(stored_id);
-        if (!match.isRemake(doc) and wr.c.wantTimeline(id)) try s.timeline_queue.exec(.{ id, @tagName(r), t });
+        if (want_timeline and !match.isRemake(doc) and wr.c.wantTimeline(id)) try s.timeline_queue.exec(.{ id, @tagName(r), t });
         try s.match_done.exec(.{id});
     }
 

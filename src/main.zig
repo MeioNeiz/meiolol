@@ -32,6 +32,8 @@ const usage =
     \\  crawl       crawl ranked solo games (needs RIOT_API_KEY in env or .env)
     \\              --hours H        stop after H hours (default: run until stopped)
     \\              --since-days N   how far back to collect match ids (default 14)
+    \\              --patch-only     match ids only from each platform's newest patch;
+    \\                               older patches' matches get no timeline
     \\              --no-mastery     skip champion mastery
     \\              --ladder-refresh-days N  refetch ladder pages after N days
     \\                               (default 7)
@@ -332,6 +334,8 @@ fn cmdCrawl(c: *Cmd) !u8 {
             o.hours = try c.float();
         } else if (c.is("--since-days")) {
             o.since_days = try c.int(i64);
+        } else if (c.is("--patch-only")) {
+            o.patch_only = true;
         } else if (c.is("--ladder-refresh-days")) {
             o.ladder_refresh_s = try c.int(i64) * std.time.s_per_day;
         } else if (c.is("--ladder-per-hour")) {

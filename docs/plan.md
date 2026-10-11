@@ -148,6 +148,12 @@ next steps land here.
   timeline picking (only matches with an under-sampled lane matchup that can reach 100+
   games this patch) simulated on 16.19-16.20 EUW picks: 77-95% of matches still need
   one, so only +2-12% matches; revisit with the production key, when matchups saturate
+- Newest patch only (Jacob, 2026-10-12): `--patch-only` starts match ids at each
+  platform's first game seen on its newest patch; older-patch matches get no timeline.
+  Before: ~2/3 of fetched matches were 16.19 four days into 16.20 (first scans take 14
+  days). Next, early in a patch: 54% of 90 random EUW Plat+ ladder players had 0 games
+  on 16.20 after 5 days (active ones ~6.4): scan players whose ladder wins+losses grew
+  since their last check first (ladder pages use the idle platform buckets)
 - Box ops loose ends (meiolol-5a): cut crawl.args raw windows once disk matters, after
   the writer fix (first prune is heavy on the micro); one-off `meiolol rebuild` for the
   gold10/14/15 migration, not run (do it on A1); once on A1 remove the dynamic group

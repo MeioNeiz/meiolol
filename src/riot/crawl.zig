@@ -37,6 +37,9 @@ pub const Options = struct {
     data_dir: []const u8,
     key: []const u8,
     since_days: i64 = 14,
+    /// Match ids only from the first game seen on each platform's newest patch (still
+    /// at most since_days back); matches of older patches get no timeline
+    patch_only: bool = false,
     ladder_refresh_s: i64 = 7 * 24 * 3600,
     /// Ladder pages each platform thread fetches per hour at most; 0 = no cap. A page
     /// is ~600 random page writes into players: on a slow disk an uncapped ladder fills
@@ -101,6 +104,8 @@ pub const Crawler = struct {
     failure_lock: std.Io.Mutex = .init,
     /// Set up by run()
     writer: writer.Writer = undefined,
+    /// From the database at start; each RegionCrawler keeps its own copy up to date
+    patches: Patches = .{},
 
     pub fn run(c: *Crawler) !void {
         // Opening once here migrates the schema before the threads connect
@@ -108,6 +113,10 @@ pub const Crawler = struct {
         defer db.close();
         try c.backfillTimelines(db);
         try dropDoneRows(db);
+        if (c.opts.patch_only) {
+            c.patches = try .load(c.gpa, db);
+            c.patches.log();
+        }
 
         c.writer = .{ .c = c };
         defer c.writer.deinit();
@@ -409,16 +418,94 @@ fn column(db: store.Db, arena: std.mem.Allocator, sql: []const u8, args: anytype
     return out.items;
 }
 
+/// Each platform's newest patch and the start of its first game seen (s). The first
+/// game we see trails the real rollout by however long it took to find one: games in
+/// between are missed, never an older patch's
+pub const Patches = struct {
+    of: [ep.platforms.len]Start = @splat(.{}),
+
+    const Start = struct { patch: u32 = 0, start_s: i64 = 0 };
+
+    /// "16.20" -> 16020; 0 when not a patch
+    fn code(patch: []const u8) u32 {
+        const dot = std.mem.indexOfScalar(u8, patch, '.') orelse return 0;
+        const major = std.fmt.parseInt(u32, patch[0..dot], 10) catch return 0;
+        const minor = std.fmt.parseInt(u32, patch[dot + 1 ..], 10) catch return 0;
+        return major * 1000 + minor;
+    }
+
+    fn index(platform: []const u8) ?usize {
+        for (ep.platforms, 0..) |p, i| if (std.mem.eql(u8, p.id, platform)) return i;
+        return null;
+    }
+
+    /// A stored or fetched game. False when it is from an older patch than the
+    /// platform's newest
+    fn see(ps: *Patches, platform: []const u8, patch: []const u8, start_s: i64) bool {
+        const s = &ps.of[index(platform) orelse return true];
+        const p = code(patch);
+        if (p == 0) return true;
+        if (p > s.patch) {
+            s.* = .{ .patch = p, .start_s = start_s };
+        } else if (p == s.patch) {
+            s.start_s = @min(s.start_s, start_s);
+        }
+        return p >= s.patch;
+    }
+
+    /// When the platform's newest patch began, null before any of its games
+    fn start(ps: *const Patches, platform: []const u8) ?i64 {
+        const s = ps.of[index(platform) orelse return null];
+        return if (s.patch == 0) null else s.start_s;
+    }
+
+    /// The two newest patches overall, so a platform still on the older one (rollouts
+    /// differ by a day or so) has its start too
+    fn load(gpa: std.mem.Allocator, db: store.Db) !Patches {
+        var arena: std.heap.ArenaAllocator = .init(gpa);
+        defer arena.deinit();
+        var newest: [2][]const u8 = .{ "", "" };
+        for (try column(db, arena.allocator(), "SELECT DISTINCT patch FROM matches", .{})) |p| {
+            if (code(p) > code(newest[0])) {
+                newest[1] = newest[0];
+                newest[0] = p;
+            } else if (code(p) > code(newest[1])) newest[1] = p;
+        }
+        var ps: Patches = .{};
+        var q = try db.prepare("SELECT platform, min(game_start) / 1000 FROM matches " ++
+            "WHERE patch = ? GROUP BY platform");
+        defer q.deinit();
+        for (newest) |patch| {
+            if (patch.len == 0) continue;
+            try q.bind(.{patch});
+            while (try q.step()) _ = ps.see(q.bytes(0), patch, q.int(1));
+        }
+        return ps;
+    }
+
+    fn log(ps: *const Patches) void {
+        for (ep.platforms, ps.of) |p, s| {
+            if (s.patch == 0) continue;
+            std.log.scoped(.crawl).info("{s} patch {d}.{d} since {d}", .{ p.id, s.patch / 1000, s.patch % 1000, s.start_s });
+        }
+    }
+};
+
 /// Match ids, match details and timelines for one regional route
 const RegionCrawler = struct {
     b: Bucket,
     region: ep.Region,
+    patches: Patches,
 
     const Of = ep.Region;
 
     fn init(c: *Crawler, r: ep.Region) !RegionCrawler {
         const requests = &c.counters.region[@intFromEnum(r)].requests;
-        return .{ .b = try .init(c, @tagName(r), c.isPriorityRegion(r), requests), .region = r };
+        return .{
+            .b = try .init(c, @tagName(r), c.isPriorityRegion(r), requests),
+            .region = r,
+            .patches = c.patches,
+        };
     }
 
     fn counters(rc: *RegionCrawler) *RegionCounters {
@@ -477,7 +564,7 @@ const RegionCrawler = struct {
     ;
 
     const scan_players =
-        \\SELECT puuid, matches_checked_at FROM players
+        \\SELECT puuid, matches_checked_at, platform FROM players
         \\WHERE region = ?1 AND (?2 IS NULL OR platform = ?2)
         \\    AND (matches_checked_at IS NULL OR matches_checked_at < ?3)
         \\    AND (?5 IS NULL OR instr(?5, '|' || tier || '|') > 0)
@@ -502,7 +589,7 @@ const RegionCrawler = struct {
         var s = try rc.b.db.prepare(scan_players);
         defer s.deinit();
         const floor = try tierFloor(arena.allocator(), c.opts.min_tier);
-        const Player = struct { puuid: []const u8, checked_at: ?i64 };
+        const Player = struct { puuid: []const u8, checked_at: ?i64, platform: []const u8 };
         var players: std.ArrayList(Player) = .empty;
         var filters: std.ArrayList(?[]const u8) = .empty;
         for (c.opts.priority) |id| {
@@ -518,12 +605,13 @@ const RegionCrawler = struct {
                 try players.append(arena.allocator(), .{
                     .puuid = try arena.allocator().dupe(u8, s.bytes(0)),
                     .checked_at = s.optInt(1),
+                    .platform = try arena.allocator().dupe(u8, s.bytes(2)),
                 });
             }
         }
         for (players.items) |p| {
             try rc.b.check();
-            rc.scanPlayer(p.puuid, p.checked_at) catch |err| {
+            rc.scanPlayer(p.puuid, p.checked_at, p.platform) catch |err| {
                 if (fatal(err)) return err;
                 log.warn("{t} match ids: {t}", .{ rc.region, err });
             };
@@ -537,10 +625,11 @@ const RegionCrawler = struct {
         return @intCast(players.items.len);
     }
 
-    fn scanPlayer(rc: *RegionCrawler, puuid: []const u8, checked_at: ?i64) !void {
+    fn scanPlayer(rc: *RegionCrawler, puuid: []const u8, checked_at: ?i64, platform: []const u8) !void {
         const c = rc.b.c;
         const end = rc.b.now();
-        const start_time = @max(checked_at orelse 0, end - c.opts.since_days * 86400);
+        var start_time = @max(checked_at orelse 0, end - c.opts.since_days * 86400);
+        if (c.opts.patch_only) start_time = @max(start_time, rc.patches.start(platform) orelse 0);
         var start: u32 = 0;
         while (true) : (start += 100) {
             const got = try ep.matchIds(&rc.b.client, rc.region, puuid, start_time, end, start);
@@ -576,12 +665,16 @@ const RegionCrawler = struct {
             job.kind = .{ .queue = .{ .which = .match, .id = try a.dupe(u8, id), .status = .failed } };
             return rc.b.submit(job);
         };
+        const platform = doc.info.platformId orelse if (ep.platformOf(id)) |p| p.id else "";
+        const start_ms = doc.info.gameStartTimestamp orelse doc.info.gameCreation;
+        const current = rc.patches.see(platform, match.patchOf(doc.info.gameVersion), @divFloor(start_ms, 1000));
         job.kind = .{ .match = .{
             .region = rc.region,
             .id = try a.dupe(u8, id),
             .doc = doc,
             .raw = try store.raw.compress(a, body),
             .t = rc.b.now(),
+            .timeline = current or !rc.b.c.opts.patch_only,
         } };
         try rc.b.submit(job);
     }
@@ -875,6 +968,30 @@ test "scan pool: players below --min-tier are not scanned" {
         try std.testing.expectEqual(c[1].len, got.len);
         for (c[1], got) |e, g| try std.testing.expectEqualStrings(e, g);
     }
+}
+
+test "patches: newest per platform, from its first game seen" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec(
+        \\INSERT INTO matches (match_id, source, platform, queue_id, patch, game_version,
+        \\    game_start, duration_s, remake) VALUES
+        \\    ('EUW1_1', 'riot', 'EUW1', 420, '16.9', '16.9.1', 1000, 1, 0),
+        \\    ('EUW1_2', 'riot', 'EUW1', 420, '16.10', '16.10.1', 9000, 1, 0),
+        \\    ('EUW1_3', 'riot', 'EUW1', 420, '16.10', '16.10.1', 8000, 1, 0),
+        \\    ('KR_1', 'riot', 'KR', 420, '16.9', '16.9.1', 2000, 1, 0),
+        \\    ('NA1_1', 'riot', 'NA1', 420, '16.8', '16.8.1', 3000, 1, 0);
+    );
+    var ps: Patches = try .load(std.testing.allocator, db);
+    try std.testing.expectEqual(@as(?i64, 8), ps.start("EUW1"));
+    try std.testing.expectEqual(@as(?i64, 2), ps.start("KR"));
+    // Only the two newest patches load
+    try std.testing.expectEqual(null, ps.start("NA1"));
+    try std.testing.expect(!ps.see("EUW1", "16.9", 50));
+    try std.testing.expect(ps.see("EUW1", "16.10", 7));
+    try std.testing.expectEqual(@as(?i64, 7), ps.start("EUW1"));
+    try std.testing.expect(ps.see("KR", "16.10", 20));
+    try std.testing.expectEqual(@as(?i64, 20), ps.start("KR"));
 }
 
 test "timelines: every priority match, a share of the rest" {
