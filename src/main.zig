@@ -14,6 +14,7 @@ pub const learn = @import("learn.zig");
 pub const curves = @import("curves.zig");
 pub const pool = @import("pool.zig");
 pub const learning = @import("learning.zig");
+pub const patchday = @import("patchday.zig");
 pub const eval = @import("eval.zig");
 pub const api = @import("api/root.zig");
 
