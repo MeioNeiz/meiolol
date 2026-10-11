@@ -103,7 +103,9 @@ ranked solo game with a timeline and writes data/export/curves-<patch>.bin. Per 
 matchup (role, champion pair) and bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
 median visible tier of the game's players, never MMR): per minute 1..25 the p25/p50/p75
 of gold, XP and CS (lane + jungle) difference with n still playing; who leads in gold at
-14 min and how often each side then wins; games where each takes part in killing the
+14 min and how often each side then wins; comeback odds (games and wins by lane gold
+lead at 10 and 15 min in five buckets, plus a role baseline record a = b = 0 counting
+every lane from both sides); games where each takes part in killing the
 other before 6, 6-14 and after 14 min; median level 6 time. Pairs are stored once (lower
 champion id first, a mirror from blue's side); `Curves.get(role, bracket, me, them)`
 returns a View from `me`'s side that negates and swaps quartiles. Format at the top of
