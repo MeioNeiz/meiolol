@@ -55,21 +55,15 @@ pub const Options = struct {
     builds: [html.View.count]?[]const u8 = @splat(null),
 };
 
-/// Below this share of all games a champion is left out of a role's page
+/// Below this share of all games a champion's row is a rare pick, listed on request
 const min_pick_rate = 0.004;
 /// And below this share of the champion's own games, as a role it rarely plays
 const min_role_share = 0.1;
-const matchups_shown = 6;
-/// Win rates, edges and draft ratings are noisy at today's volume (draft model eval:
-/// level with a coin flip on 6k games). A pair edge is shown only with this many games
-/// and when it clears chance (|pp| > 1.96 SE, SE = 50 / sqrt(n) points)
-const min_pair_games = 400;
-/// Below this a champion's role win rate is marked as few games
-const min_role_games = 300;
-/// Champion-page minimum games choices (html.minGames); the last is the default, where a
-/// pair must also clear chance. Below it pairs are greyed out
-const pair_floors = [_]u32{ 1, 10, 20, 50, 100, 200, min_pair_games };
-const duos_shown = 6;
+/// Champion page: lane opponents with fewer games are listed on request
+const min_opponent_games = 10;
+/// Hardest and easiest lanes: opponents with at least this many games
+const lane_card_games = 20;
+const lane_cards_shown = 7;
 
 pub const Champ = struct {
     /// Index in the stats file
@@ -279,6 +273,7 @@ fn generateView(
         try site.writeShared("daily.js", @embedFile("static/daily.js"));
         try site.writeShared("your.js", @embedFile("static/your.js"));
         try site.writeShared("learn.js", @embedFile("static/learn.js"));
+        try site.writeShared("table.js", @embedFile("static/table.js"));
         try site.writeShared("meiolol.wasm", @embedFile("draft.wasm"));
         if (opts.riot_txt) |t| try site.writeShared("riot.txt", t);
         try site.writeShared("robots.txt", if (opts.public) "User-agent: *\nAllow: /\n" else "User-agent: *\nDisallow: /\n");
@@ -328,7 +323,8 @@ fn generateView(
     }
 
     try writeIndex(&site);
-    for (Role.all) |r| try writeRole(&site, r);
+    try writeTierList(&site, null);
+    for (Role.all) |r| try writeTierList(&site, r);
     for (site.champs) |ch| try writeChampion(&site, ch);
     if (site.curves) |*c| try matchup.writeAll(&site, c);
     try matchup.writeIndex(&site, if (site.curves) |*c| c else null);
@@ -485,24 +481,31 @@ fn writeChampionsJson(site: *const Site) !void {
 
 const Row = struct {
     ch: Champ,
+    role: Role,
     games: u32,
     wins: u32,
+    /// Under min_pick_rate or min_role_share: listed only on request
+    rare: bool,
 };
 
-/// Champions played enough in `r`, most played first. Not ranked by win rate: the site
-/// describes champions, it does not grade picks (docs/concept.md)
-fn roleRows(site: *const Site, r: Role) ![]Row {
+/// Every champion's games in `role`, or in each role it plays when null. Most played
+/// first; the browser sorts by any column (static/table.js)
+fn tierRows(site: *const Site, role: ?Role) ![]Row {
     var rows: std.ArrayList(Row) = .empty;
-    for (site.champs) |ch| {
-        const cr = site.stats.champRole(r, ch.c);
-        if (cr.games == 0) continue;
-        const share = @as(f64, @floatFromInt(cr.games)) / @as(f64, @floatFromInt(@max(ch.games, 1)));
-        if (site.pickRate(cr.games) < min_pick_rate or share < min_role_share) continue;
-        try rows.append(site.arena, .{
-            .ch = ch,
-            .games = cr.games,
-            .wins = cr.wins,
-        });
+    for (Role.all) |r| {
+        if (role != null and role.? != r) continue;
+        for (site.champs) |ch| {
+            const cr = site.stats.champRole(r, ch.c);
+            if (cr.games == 0) continue;
+            const share = @as(f64, @floatFromInt(cr.games)) / @as(f64, @floatFromInt(@max(ch.games, 1)));
+            try rows.append(site.arena, .{
+                .ch = ch,
+                .role = r,
+                .games = cr.games,
+                .wins = cr.wins,
+                .rare = site.pickRate(cr.games) < min_pick_rate or share < min_role_share,
+            });
+        }
     }
     std.mem.sort(Row, rows.items, {}, struct {
         fn f(_: void, a: Row, b: Row) bool {
@@ -517,16 +520,64 @@ fn pct(w: *Writer, part: u64, whole: u64) !void {
     try w.print("{d:.1}%", .{100 * @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole))});
 }
 
+fn ratio(part: u64, whole: u64) f64 {
+    return if (whole == 0) 0 else @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole));
+}
+
+/// Wilson 95% interval of a win rate: where the true rate likely is, given the games
+pub fn wilson(wins: u32, games: u32) [2]f64 {
+    if (games == 0) return .{ 0, 1 };
+    const z = 1.96;
+    const n: f64 = @floatFromInt(games);
+    const p = @as(f64, @floatFromInt(wins)) / n;
+    const d = 1 + z * z / n;
+    const c = (p + z * z / (2 * n)) / d;
+    const h = z * @sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
+    return .{ c - h, c + h };
+}
+
+/// Coloured only when the whole interval is on one side of 50%: no grades, and no
+/// pulling small samples toward 50% either
+fn side(iv: [2]f64) []const u8 {
+    return if (iv[0] > 0.5) "up" else if (iv[1] < 0.5) "down" else "even";
+}
+
+/// Win rate cell: the interval as a bar on an axis 50% ± `span` with the rate as a dot,
+/// then the rate and its ±. data-v for sorting
+fn winRateCell(w: *Writer, wins: u32, games: u32, span: f64) !void {
+    const iv = wilson(wins, games);
+    const p = ratio(wins, games);
+    const s = side(iv);
+    const at = struct {
+        fn f(x: f64, half: f64) f64 {
+            return 100 * (std.math.clamp(x, 0.5 - half, 0.5 + half) - (0.5 - half)) / (2 * half);
+        }
+    }.f;
+    try w.print(
+        "<td data-v=\"{d:.4}\"><span class=\"wr\"><span class=\"ci\" title=\"95%: {d:.1}% to {d:.1}%, {d} games\">" ++
+            "<i class=\"r {s}\" style=\"left:{d:.1}%;width:{d:.1}%\"></i><i class=\"d {s}\" style=\"left:{d:.1}%\"></i></span>" ++
+            "<b class=\"{s}\">{d:.1}%</b><small>±{d:.1}</small></span></td>",
+        .{
+            p,           100 * iv[0],     100 * iv[1],                       games,
+            s,           at(iv[0], span), at(iv[1], span) - at(iv[0], span), s,
+            at(p, span), s,               100 * p,                           50 * (iv[1] - iv[0]),
+        },
+    );
+}
+
 fn earlyNote(site: *const Site, w: *Writer) !void {
     if (site.games >= 50_000) return;
     try w.print(
-        "<p class=\"note\">Early data: {d} games so far ({s}). Numbers settle as more games come in; champions with few games are pulled toward 50%.</p>\n",
+        "<p class=\"note\">Early data: {d} games so far ({s}). Each bar shows where a win rate likely is (95%); bars narrow as games come in, and a rate is coloured only once its whole bar is above or below 50%.</p>\n",
         .{ site.games, site.when },
     );
 }
 
+/// All roles (champions.html) and one per role (role/<slug>.html)
 fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
-    try w.writeAll("<nav class=\"tabs\">");
+    try w.print("<nav class=\"tabs\"><a href=\"{s}champions.html\"{s}>All roles</a>", .{
+        root, if (current == null) " aria-current=\"page\"" else "",
+    });
     for (Role.all) |r| {
         try w.print("<a href=\"{s}role/{s}.html\"{s}>{s}</a>", .{
             root,                                               roleSlug(r),
@@ -556,36 +607,74 @@ pub fn roleName(r: Role) []const u8 {
     };
 }
 
-fn writeRole(site: *const Site, r: Role) !void {
-    const a = site.arena;
-    var aw: Writer.Allocating = .init(a);
-    const w = &aw.writer;
-    const title = try std.fmt.allocPrint(a, "{s} lane champions, {s} | meiolol", .{ roleName(r), site.when });
-    const desc = try std.fmt.allocPrint(a, "{s} lane champions in ranked solo queue {s}, {s}: games, win, pick and ban rates.", .{ roleName(r), site.view.region.in(), site.when });
-    const path = try std.fmt.allocPrint(a, "role/{s}.html", .{roleSlug(r)});
-    const p = site.page(title, desc, path, .champions);
-    try html.head(w, p);
-    try w.print("<h1>{s} lane champions</h1>\n<p class=\"muted\">Ranked solo/duo {s}, {s}, all ranks. Most played first; greyed under {d} games.</p>\n", .{ roleName(r), site.view.region.in(), site.when, min_role_games });
-    try roleTabs(w, r, "../");
-    try earlyNote(site, w);
+/// Champions table: win rate with its interval, its low end ("at least"), pick and ban
+/// rate, games. Rows sorted by win rate; rare picks hidden until asked for
+fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void {
+    const rows = try tierRows(site, role);
+    std.mem.sort(Row, rows, {}, struct {
+        fn f(_: void, a: Row, b: Row) bool {
+            return ratio(a.wins, a.games) > ratio(b.wins, b.games);
+        }
+    }.f);
+    try w.writeAll("<div class=\"tl-bar\">");
+    try roleTabs(w, role, root);
     try w.writeAll(
-        \\<div class="table-scroll"><table>
-        \\<thead><tr><th>Champion</th><th class="num">Games</th><th class="num">Win rate</th><th class="num">Pick rate</th><th class="num">Ban rate</th></tr></thead>
+        \\<input type="search" placeholder="Search champion" data-filter aria-label="Search champion"></div>
+        \\<div class="tl-wrap"><table class="tl" data-sortable>
+        \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>
+    );
+    if (role == null) try w.writeAll("<th class=\"l\" data-sort=\"text\">Role</th>");
+    try w.writeAll(
+        \\<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" title="The low end of the bar: the win rate is very likely at least this">At least</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
     );
-    for (try roleRows(site, r)) |row| {
-        try w.print("<tr{s}><td>", .{if (row.games < min_role_games) " class=\"thin\"" else ""});
-        try site.champLink(w, row.ch, "../");
-        try w.print("</td><td class=\"num\">{d}</td><td class=\"num\">", .{row.games});
-        try pct(w, row.wins, row.games);
-        try w.writeAll("</td><td class=\"num\">");
+    var rare: usize = 0;
+    var n: usize = 0;
+    for (rows) |row| {
+        if (row.rare) rare += 1 else n += 1;
+        try w.print("<tr data-name=\"{f}\"{s}><td class=\"rank\">{d}</td><td class=\"l\">", .{
+            esc(row.ch.name), if (row.rare) " data-rare hidden" else "", n,
+        });
+        try site.champLink(w, row.ch, root);
+        try w.writeAll("</td>");
+        if (role == null) try w.print("<td class=\"l role\" data-v=\"{s}\">{s}</td>", .{ roleName(row.role), roleName(row.role) });
+        try winRateCell(w, row.wins, row.games, 0.12);
+        const lo = wilson(row.wins, row.games)[0];
+        try w.print("<td class=\"dim\" data-v=\"{d:.4}\">{d:.1}%</td><td class=\"opt\" data-v=\"{d}\">", .{ lo, 100 * lo, row.games });
         try pct(w, row.games, site.games);
-        try w.writeAll("</td><td class=\"num\">");
+        try w.print("</td><td class=\"opt\" data-v=\"{d}\">", .{row.ch.banned});
         try pct(w, row.ch.banned, site.games);
-        try w.writeAll("</td></tr>\n");
+        try w.print("</td><td class=\"dim\" data-v=\"{d}\">{d}</td></tr>\n", .{ row.games, row.games });
     }
     try w.writeAll("</tbody></table></div>\n");
+    if (rare > 0) try w.print(
+        "<p class=\"tl-more\">{d} rare picks (under {d:.1}% pick rate, or a role the champion seldom plays) hidden. <button class=\"link\" data-show-rare>Show them</button></p>\n",
+        .{ rare, 100 * min_pick_rate },
+    );
+    try w.print("<script src=\"{s}{s}table.js\" defer></script>\n", .{ root, site.view.up() });
+}
+
+fn writeTierList(site: *const Site, role: ?Role) !void {
+    const a = site.arena;
+    var aw: Writer.Allocating = .init(a);
+    const w = &aw.writer;
+    const name = if (role) |r| roleName(r) else "All";
+    const title = if (role) |r|
+        try std.fmt.allocPrint(a, "{s} lane champions, {s} | meiolol", .{ roleName(r), site.when })
+    else
+        try std.fmt.allocPrint(a, "Champions, {s} | meiolol", .{site.when});
+    const desc = try std.fmt.allocPrint(a, "{s} champions in ranked solo queue {s}, {s}: win rate with how sure it is, pick and ban rates.", .{ name, site.view.region.in(), site.when });
+    const path = if (role) |r| try std.fmt.allocPrint(a, "role/{s}.html", .{roleSlug(r)}) else "champions.html";
+    const root = site.toRoot(path);
+    const p = site.page(title, desc, path, .champions);
+    try html.head(w, p);
+    if (role) |r| {
+        try w.print("<h1>{s} lane champions</h1>\n", .{roleName(r)});
+    } else try w.writeAll("<h1>Champions</h1>\n");
+    try w.print("<p class=\"muted\"><b>{d}</b> ranked solo/duo games {s}, {s}, all ranks.</p>\n", .{ site.games, site.view.region.in(), site.when });
+    try earlyNote(site, w);
+    try tierTable(site, w, role, root);
     try html.foot(w, p);
     try site.write(path, aw.written());
 }
@@ -638,74 +727,30 @@ fn writeIndex(site: *const Site) !void {
         \\</div>
         \\
     , .{site.view.up()});
+    try w.print("<h2>Champions</h2>\n<p class=\"muted\"><b>{d}</b> ranked solo/duo games {s}, {s}, all ranks. <a href=\"{s}method.html\">How the numbers are made</a></p>\n", .{ site.games, site.view.region.in(), site.when, site.view.up() });
     try earlyNote(site, w);
-    try w.writeAll("<h2>Champions</h2>\n");
-    try roleTabs(w, null, "");
-    try w.writeAll("<p>");
-    for (site.champs, 0..) |ch, i| {
-        if (i > 0) try w.writeAll(" · ");
-        try w.print("<a href=\"champion/{s}.html\">{f}</a>", .{ ch.slug, esc(ch.name) });
-    }
-    try w.print("</p>\n<p class=\"muted\"><a href=\"{s}method.html\">How the numbers are made</a></p>\n", .{site.view.up()});
+    try tierTable(site, w, null, "");
     try html.foot(w, p);
     try site.write("index.html", aw.written());
 }
 
-const Pair = struct {
-    other: usize,
-    role: Role,
-    pp: f64,
+const Opponent = struct {
+    other: Champ,
     games: u32,
     wins: u32,
-    clear: bool,
-
-    fn passes(p: Pair, floor: u32) bool {
-        return p.games >= floor and (floor < min_pair_games or p.clear);
-    }
+    iv: [2]f64,
 };
-
-fn byPpDesc(_: void, a: Pair, b: Pair) bool {
-    return a.pp > b.pp;
-}
-
-fn byPpAsc(_: void, a: Pair, b: Pair) bool {
-    return a.pp < b.pp;
-}
-
-/// The pairs a card shows at any of pair_floors (the first `n` passing at
-/// each), in order
-fn shownAtAnyFloor(a: std.mem.Allocator, pairs: []const Pair, n: usize) ![]const Pair {
-    const keep = try a.alloc(bool, pairs.len);
-    @memset(keep, false);
-    for (pair_floors) |floor| {
-        var shown: usize = 0;
-        for (pairs, keep) |p, *k| {
-            if (shown == n) break;
-            if (!p.passes(floor)) continue;
-            k.* = true;
-            shown += 1;
-        }
-    }
-    var out: std.ArrayList(Pair) = .empty;
-    for (pairs, keep) |p, k| if (k) try out.append(a, p);
-    return out.items;
-}
 
 fn writeChampion(site: *const Site, ch: Champ) !void {
     const a = site.arena;
     const st = &site.stats;
     var aw: Writer.Allocating = .init(a);
     const w = &aw.writer;
-    const title = try std.fmt.allocPrint(a, "{s} lane opponents, teammates and curves, {s} | meiolol", .{ ch.name, site.when });
-    const desc = try std.fmt.allocPrint(a, "{s} in ranked solo queue {s}, {s}: games, win rate, lane opponents, teammates and lane curves.", .{ ch.name, site.view.region.in(), site.when });
+    const title = try std.fmt.allocPrint(a, "{s} win rate, lane opponents and curves, {s} | meiolol", .{ ch.name, site.when });
+    const desc = try std.fmt.allocPrint(a, "{s} in ranked solo queue {s}, {s}: win rate with how sure it is, every lane opponent and lane curves.", .{ ch.name, site.view.region.in(), site.when });
     const path = try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug});
-    const p = site.page(title, desc, path, .none);
+    const p = site.page(title, desc, path, .champions);
     try html.head(w, p);
-    try w.print(
-        "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><div><h1>{f}</h1><p class=\"muted\">Ranked solo/duo {s}, {s}, all ranks.</p></div></div>\n",
-        .{ site.icon(ch), esc(ch.name), site.view.region.in(), site.when },
-    );
-    try earlyNote(site, w);
 
     var roles: [Role.count]Role = undefined;
     var n_roles: usize = 0;
@@ -717,67 +762,128 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
         }
     }
     std.mem.sort(Role, roles[0..n_roles], RoleGames{ .st = st, .c = ch.c }, RoleGames.more);
-    if (n_roles == 0) try w.writeAll("<p>No games yet this patch.</p>\n");
-    if (n_roles > 0) try html.minGames(w, "../", "pairs", &pair_floors, min_pair_games, min_pair_games);
+    try w.print(
+        "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"64\" height=\"64\"><div><h1>{f}</h1><p class=\"muted\">Ranked solo/duo {s}, {s}, all ranks.",
+        .{ site.icon(ch), esc(ch.name), site.view.region.in(), site.when },
+    );
+    if (n_roles > 1) {
+        try w.writeAll(" Plays ");
+        for (roles[0..n_roles], 0..) |r, i| {
+            if (i > 0) try w.writeAll(if (i + 1 == n_roles) " and " else ", ");
+            try w.print("<a href=\"#{s}\">{s}</a>", .{ roleSlug(r), roleName(r) });
+        }
+        try w.writeAll(".");
+    }
+    try w.writeAll("</p></div></div>\n");
+    try earlyNote(site, w);
+    if (n_roles == 0) try w.writeAll("<p>No games yet.</p>\n");
 
     for (roles[0..n_roles]) |r| {
         const cr = st.champRole(r, ch.c);
-        try w.print("<h2>{s}</h2>\n<div class=\"stats\">", .{roleName(r)});
-        const few = cr.games < min_role_games;
-        try w.print("<div><b{s}>", .{if (few) " class=\"muted\"" else ""});
+        const iv = wilson(cr.wins, cr.games);
+        try w.print("<section id=\"{s}\"><h2>{s}</h2>\n<div class=\"tiles\">", .{ roleSlug(r), roleName(r) });
+        try w.print("<div><span>Win rate</span><b class=\"{s}\">", .{side(iv)});
         try pct(w, cr.wins, cr.games);
-        try w.print("</b><span>Win rate{s}</span></div><div><b>", .{if (few) ", few games" else ""});
+        try w.print("</b><small>{d:.1}% to {d:.1}%</small></div><div><span>Pick rate</span><b>", .{ 100 * iv[0], 100 * iv[1] });
         try pct(w, cr.games, site.games);
-        try w.writeAll("</b><span>Pick rate</span></div><div><b>");
+        try w.writeAll("</b><small>of games</small></div><div><span>Ban rate</span><b>");
         try pct(w, ch.banned, site.games);
-        try w.print("</b><span>Ban rate</span></div><div><b>{d}</b><span>Games</span></div></div>\n", .{cr.games});
+        try w.print("</b><small>of games</small></div><div><span>Games</span><b>{d}</b><small>{s} lane</small></div></div>\n", .{ cr.games, roleName(r) });
 
-        var best: std.ArrayList(Pair) = .empty;
-        var worst: std.ArrayList(Pair) = .empty;
-        var duos: std.ArrayList(Pair) = .empty;
+        var opps: std.ArrayList(Opponent) = .empty;
         for (site.champs) |other| {
             if (other.c == ch.c) continue;
             const e = st.enemy(r, r, ch.c, other.c);
-            const pp = score.matchupPp(st, site.score_opts, r, ch.c, r, other.c);
-            if (e.games > 0 and pp != 0) try (if (pp > 0) &best else &worst).append(a, .{
-                .other = other.c,
-                .role = r,
-                .pp = pp,
-                .games = e.games,
-                .wins = e.wins,
-                .clear = clearEdge(pp, e.games),
-            });
-            for (Role.all) |ar| {
-                if (ar == r) continue;
-                const d = st.ally(r, ar, ch.c, other.c);
-                const duo_pp = score.duoPp(st, site.score_opts, r, ch.c, ar, other.c);
-                if (d.games == 0 or duo_pp <= 0) continue;
-                try duos.append(a, .{
-                    .other = other.c,
-                    .role = ar,
-                    .pp = duo_pp,
-                    .games = d.games,
-                    .wins = d.wins,
-                    .clear = clearEdge(duo_pp, d.games),
-                });
-            }
+            if (e.games == 0) continue;
+            try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins, .iv = wilson(e.wins, e.games) });
         }
-        std.mem.sort(Pair, best.items, {}, byPpDesc);
-        std.mem.sort(Pair, worst.items, {}, byPpAsc);
-        std.mem.sort(Pair, duos.items, {}, byPpDesc);
-        try w.writeAll("<div class=\"grid\">\n");
-        try pairCard(site, w, "Higher win rate against", "in lane", best.items, matchups_shown, false);
-        try pairCard(site, w, "Lower win rate against", "in lane", worst.items, matchups_shown, false);
-        try pairCard(site, w, "Higher win rate with", "on the same team", duos.items, duos_shown, true);
-        try w.writeAll("</div>\n");
+        try laneCards(site, w, opps.items);
         try builds_page.link(site, w, ch, r, path);
-        if (site.curves) |*c| try matchup.links(site, w, c, ch, r);
+        try opponentTable(site, w, ch, r, opps.items);
+        try w.writeAll("</section>\n");
     }
     try pool_page.section(site, w, &site.pool, ch);
     try learning_page.section(w, &site.learning, ch);
-    try w.print("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts. By default a pair is listed only with {d}+ games and an edge larger than chance alone would give at that size; a lower minimum shows thinner pairs, greyed out. <a href=\"{s}method.html\">Method</a>.</p>\n", .{ min_pair_games, site.toShared(path) });
+    try w.print("<p class=\"muted small\">Win rates are raw: no pulling toward 50%. Bars are 95% Wilson intervals. Gold at {d} min is the lane curve's estimate (± two standard errors). <a href=\"{s}method.html\">Method</a>.</p>\n", .{ core.curvesfile.lane_minute, site.toShared(path) });
+    try w.print("<script src=\"../{s}table.js\" defer></script>\n", .{site.view.up()});
     try html.foot(w, p);
-    try site.write(try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug}), aw.written());
+    try site.write(path, aw.written());
+}
+
+/// Hardest and easiest lanes: opponents with lane_card_games+ games, ranked by how sure
+/// we are (the interval's high end for the hardest, its low end for the easiest), so a
+/// few lucky games don't top the list
+fn laneCards(site: *const Site, w: *Writer, opps: []Opponent) !void {
+    var list: std.ArrayList(Opponent) = .empty;
+    for (opps) |o| if (o.games >= lane_card_games) try list.append(site.arena, o);
+    if (list.items.len == 0) return;
+    const cards = [_]struct { []const u8, bool }{ .{ "Hardest lanes", true }, .{ "Easiest lanes", false } };
+    try w.writeAll("<div class=\"lanes\">");
+    for (cards) |card| {
+        std.mem.sort(Opponent, list.items, card[1], struct {
+            fn f(hardest: bool, x: Opponent, y: Opponent) bool {
+                return if (hardest) x.iv[1] < y.iv[1] else x.iv[0] > y.iv[0];
+            }
+        }.f);
+        try w.print("<div class=\"lane-card\"><h3>{s} <span class=\"muted\">{d}+ games</span></h3><div class=\"lane-chips\">", .{ card[0], lane_card_games });
+        for (list.items[0..@min(list.items.len, lane_cards_shown)]) |o| {
+            try w.print(
+                "<a href=\"{s}.html\" title=\"{f}: {d:.1}% to {d:.1}%\"><img src=\"{s}\" alt=\"{f}\" loading=\"lazy\" width=\"40\" height=\"40\"><b class=\"{s}\">{d:.0}%</b><small>{d} games</small></a>",
+                .{
+                    o.other.slug,      esc(o.other.name), 100 * o.iv[0],                100 * o.iv[1], site.icon(o.other),
+                    esc(o.other.name), side(o.iv),        100 * ratio(o.wins, o.games), o.games,
+                },
+            );
+        }
+        try w.writeAll("</div></div>");
+    }
+    try w.writeAll("</div>\n");
+}
+
+/// Every lane opponent: win rate with its interval and the lane curve's gold difference at
+/// lane_minute, linking to the matchup page. Under min_opponent_games hidden until asked
+fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Opponent) !void {
+    if (opps.len == 0) return;
+    std.mem.sort(Opponent, opps, {}, struct {
+        fn f(_: void, x: Opponent, y: Opponent) bool {
+            return x.games > y.games;
+        }
+    }.f);
+    try w.print(
+        \\<h3 class="opp-h">Lane opponents</h3>
+        \\<div class="tl-wrap"><table class="tl" data-sortable>
+        \\<thead><tr><th class="l" data-sort="text">Opponent</th><th data-sort="num">{f}'s win rate</th><th data-sort="num" title="Lane curve estimate: {f} minus the opponent">Gold at {d}</th><th data-sort="num" aria-sort="descending">Games</th></tr></thead>
+        \\<tbody>
+        \\
+    , .{ esc(ch.name), esc(ch.name), core.curvesfile.lane_minute });
+    var few: usize = 0;
+    for (opps) |o| {
+        const thin = o.games < min_opponent_games;
+        if (thin) few += 1;
+        try w.print("<tr{s}><td class=\"l\">", .{if (thin) " data-rare hidden" else ""});
+        try site.champLink(w, o.other, "../");
+        try w.writeAll("</td>");
+        try winRateCell(w, o.wins, o.games, 0.25);
+        try goldCell(site, w, ch, o.other, r);
+        try w.print("<td class=\"dim\" data-v=\"{d}\">{d}</td></tr>\n", .{ o.games, o.games });
+    }
+    try w.writeAll("</tbody></table></div>\n");
+    if (few > 0) try w.print(
+        "<p class=\"tl-more\">{d} opponents with under {d} games hidden. <button class=\"link\" data-show-rare>Show them</button></p>\n",
+        .{ few, min_opponent_games },
+    );
+}
+
+fn goldCell(site: *const Site, w: *Writer, ch: Champ, other: Champ, r: Role) !void {
+    const curves = if (site.curves) |*c| c else return w.writeAll("<td class=\"dim\" data-v=\"\"></td>");
+    const v = curves.get(r, .all, ch.id, other.id) orelse return w.writeAll("<td class=\"dim\" data-v=\"\"></td>");
+    const e = v.estimate(.gold, core.curvesfile.lane_minute - 1);
+    const margin = 2 * @as(i32, e.se);
+    const s = if (e.mean > margin) "up" else if (e.mean < -margin) "down" else "even";
+    const x, const y = if (ch.id < other.id) .{ ch, other } else .{ other, ch };
+    try w.print("<td data-v=\"{d}\"><a class=\"gold {s}\" href=\"../{s}\" title=\"Lane curves\">{s}{d}</a><small>±{d}</small></td>", .{
+        e.mean, s, try matchup.path(site.arena, r, x, y), if (e.mean > 0) "+" else "", e.mean, margin,
+    });
 }
 
 const RoleGames = struct {
@@ -787,34 +893,6 @@ const RoleGames = struct {
         return ctx.st.champRole(a, ctx.c).games > ctx.st.champRole(b, ctx.c).games;
     }
 };
-
-fn clearEdge(pp: f64, games: u32) bool {
-    if (games < min_pair_games) return false;
-    return @abs(pp) > 98 / @sqrt(@as(f64, @floatFromInt(games)));
-}
-
-/// `pairs` best first; the first `n` passing the chosen minimum games are shown
-fn pairCard(site: *const Site, w: *Writer, title: []const u8, sub: []const u8, pairs: []const Pair, n: usize, show_role: bool) !void {
-    try w.print("<div class=\"card\"><h3>{s} <span class=\"muted\">{s}</span></h3><ul data-min-list data-show=\"{d}\">\n", .{ title, sub, n });
-    var shown: usize = 0;
-    for (try shownAtAnyFloor(site.arena, pairs, n)) |pr| {
-        const other = site.champs[site.by_c[pr.other].?];
-        const by_default = shown < n and pr.passes(min_pair_games);
-        if (by_default) shown += 1;
-        try w.print("<li data-games=\"{d}\" data-clear=\"{d}\"{s}{s}><span>", .{
-            pr.games,
-            @intFromBool(pr.clear),
-            if (pr.passes(min_pair_games)) "" else " class=\"thin\"",
-            if (by_default) "" else " hidden",
-        });
-        try site.champLink(w, other, "../");
-        if (show_role) try w.print("<span class=\"role\">{s}</span>", .{roleName(pr.role)});
-        try w.print("</span><span class=\"num {s}\" title=\"{d} games, {d} won\">{s}{d:.1}</span></li>\n", .{
-            if (pr.pp >= 0) "good" else "bad", pr.games, pr.wins, if (pr.pp >= 0) "+" else "", pr.pp,
-        });
-    }
-    try w.print("<li class=\"muted empty\"{s}>More data needed</li>\n</ul></div>\n", .{if (shown > 0) " hidden" else ""});
-}
 
 test "slug" {
     const a = std.testing.allocator;
@@ -896,10 +974,10 @@ test "views: a tree each, switches between them, shared pages once" {
         "<a href=\"../../champion/a.html\">EUW</a>",
         "href=\"../../style.css\"",
         "href=\"../../daily.html\"",
-        "href=\"../role/top.html\"",
+        "href=\"../champions.html\"",
     }) |s| try std.testing.expect(std.mem.indexOf(u8, champ, s) != null);
     const shared_page = try read(arena, out, "daily.html");
-    try std.testing.expect(std.mem.indexOf(u8, shared_page, "<a href=\"role/top.html\" data-view>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shared_page, "<a href=\"champions.html\" data-view>") != null);
     try std.testing.expectError(error.FileNotFound, read(arena, out, "all/daily.html"));
     try std.testing.expectError(error.FileNotFound, read(arena, out, "patch/style.css"));
 }

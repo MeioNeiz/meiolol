@@ -90,6 +90,9 @@ test "fixture games to stats, curves and the website" {
     });
     for ([_][]const u8{
         "index.html",
+        "champions.html",
+        "role/top.html",
+        "table.js",
         "patch/index.html",
         "all/patch/index.html",
         "data/stats.bin",
@@ -110,6 +113,10 @@ test "fixture games to stats, curves and the website" {
     const pages = [_]struct { []const u8, []const []const u8 }{
         .{ "patch/build/darius-top.html", &.{ "Conqueror", "few games", "Doran&#39;s Shield", "More data needed" } },
         .{ "patch/champion/darius.html", &.{"href=\"../build/darius-top.html\""} },
+        // Champion table and page: raw win rate with its interval, every lane opponent
+        // with the curve's gold at 14 linking to the matchup page
+        .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "At least" } },
+        .{ "champion/darius.html", &.{ "Lane opponents", "href=\"../matchup/top/mordekaiser-vs-darius.html\"", "Gold at 14" } },
         .{ "champion/darius.html", &.{"href=\"../patch/build/darius-top.html\""} },
         .{ "all/champion/darius.html", &.{"href=\"../../all/patch/build/darius-top.html\""} },
         // Lane curves: the estimate (curvefit.zig) on the page, k on the method page

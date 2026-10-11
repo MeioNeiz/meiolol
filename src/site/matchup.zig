@@ -25,7 +25,6 @@ const min_minute_games = 10;
 /// Experienced-only curves with fewer games are not offered
 const min_experienced = 10;
 /// Matchup links on a champion page, per role
-const links_shown = 12;
 /// Minimum games choices on the matchup index; shows everything by default
 const index_floors = [_]u32{ 1, 5, 10, 20, 50, 100, thin_games };
 
@@ -133,32 +132,6 @@ pub fn writeIndex(site: *const Site, curves: ?*const Curves) !void {
 pub fn champ(site: *const Site, id: u32) ?Champ {
     const c = site.stats.index(id) orelse return null;
     return site.champs[site.by_c[c] orelse return null];
-}
-
-/// Champion page: links to `ch`'s matchup pages in `r`, most games first
-pub fn links(site: *const Site, w: *Writer, curves: *const Curves, ch: Champ, r: Role) !void {
-    const Link = struct { other: Champ, games: u32 };
-    var list: std.ArrayList(Link) = .empty;
-    for (curves.curves) |c| {
-        const h = c.header;
-        if (h.bracket != @intFromEnum(Bracket.all) or h.role != @intFromEnum(r)) continue;
-        const other_id = if (h.a == ch.id) h.b else if (h.b == ch.id) h.a else continue;
-        const other = champ(site, other_id) orelse continue;
-        try list.append(site.arena, .{ .other = other, .games = h.games });
-    }
-    if (list.items.len == 0) return;
-    std.mem.sort(Link, list.items, {}, struct {
-        fn f(_: void, p: Link, q: Link) bool {
-            return p.games > q.games;
-        }
-    }.f);
-    try w.writeAll("<p class=\"curves-links\"><b>Lane curves:</b> ");
-    for (list.items[0..@min(list.items.len, links_shown)], 0..) |l, i| {
-        if (i > 0) try w.writeAll(" · ");
-        const x, const y = if (ch.id < l.other.id) .{ ch, l.other } else .{ l.other, ch };
-        try w.print("<a href=\"../{s}\">vs {f}</a>", .{ try path(site.arena, r, x, y), esc(l.other.name) });
-    }
-    try w.writeAll("</p>\n");
 }
 
 /// Under thin_games games, or when most of the estimate is the champions' baseline

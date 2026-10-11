@@ -126,9 +126,15 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\<ul>
         \\<li><b>Win, pick and ban rate</b>: games won with the champion in that role, share
         \\of games with it in that role, share of games where it was banned.</li>
-        \\<li><b>Lane opponents and teammates</b>: how much better or worse a pairing does
-        \\than the two champions' own win rates predict, in percentage points. Pairs with
-        \\few games are pulled toward zero until the data supports them.</li>
+        \\<li><b>How sure a win rate is</b>: every win rate is the raw share of games won,
+        \\never pulled toward 50%. Its bar is the 95% Wilson interval: where the true rate
+        \\likely is given the games so far. "At least" is the bar's low end. A rate is
+        \\coloured only when the whole bar is above or below 50%; with few games the bar is
+        \\wide and the rate stays grey.</li>
+        \\<li><b>Lane opponents</b>: the champion's win rate against each lane opponent, with
+        \\its interval, and the lane curve's gold difference at 14 minutes. Hardest and
+        \\easiest lanes rank opponents with 20+ games by the interval's high and low end,
+        \\so a few lucky games don't top the list.</li>
         \\</ul>
         \\<h2 id="builds">Builds</h2>
         \\<ul>

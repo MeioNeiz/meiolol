@@ -141,7 +141,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         .{ .daily, "daily.html", "Daily Draft", false },
         .{ .learn, "learn.html", "Learn", false },
         .{ .pool, "pool.html", "Champion pool", true },
-        .{ .champions, "role/top.html", "Champions", true },
+        .{ .champions, "champions.html", "Champions", true },
         .{ .method, "method.html", "Method", false },
     };
     for (items) |it| {

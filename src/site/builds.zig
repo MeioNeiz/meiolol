@@ -21,7 +21,7 @@ const esc = html.esc;
 
 /// Below this a row shows no win rate: ±10 points at 100 games, wider below
 pub const rate_games = 100;
-/// Below this a row is greyed out, as champion-page pairs (root.min_pair_games)
+/// Below this a row is greyed out
 pub const solid_games = 400;
 const rows_shown = 6;
 /// A role gets a page when it has this share of the champion's games in the file

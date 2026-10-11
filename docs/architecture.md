@@ -251,8 +251,8 @@ below that the role's middle half drawn around the line, said in the caption; ±
 14 min, period, tier and n in every caption; a dotted line at 15 min, surrender, and the
 share of games ended by 20 and 25 min), a lane and game table (incl. first finished item
 times), comeback odds (src/site/comeback.zig: win rate per gold bucket at 10/15 min
-beside the role baseline, one fact line), a by-rank table (estimate ±2 SE), and "Lane
-curves" links on champion pages. "Games counted" radios (all games, X or Y players with
+beside the role baseline, one fact line), a by-rank table (estimate ±2 SE); champion
+pages link each lane opponent's gold at 14 to its page. "Games counted" radios (all games, X or Y players with
 100k+ mastery, offered from 10 such games) switch charts and table by CSS :has, no
 script. Every matchup gets a page, as on lolalytics; under 200 games or with own < 0.5
 ("mostly the champions' baseline") charts and rows are grey, and a chart draws minutes
