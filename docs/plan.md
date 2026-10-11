@@ -47,9 +47,9 @@ next steps land here.
   landing, matchup curve pages (empty until timelines accumulate), Daily Draft, Learn
   (lessons + practice drafts), Pool, learning curves, comeback odds, method page. Win-rate
   edges gated by game counts (draft-model thresholds)
-- Built, not deployed: Your games service (`meiolol api`, docs/your-games.md), Patch day
-  core (src/patchday.zig, not wired); data safety (`meiolol backup|restore|forget`,
-  deploy/health.sh) merged, loops not yet started on the box
+- Your games live on jomove in preview (`meiolol api`, /api/ behind basic auth, 30-day
+  retention; docs/your-games.md). Built, not wired: Patch day core (src/patchday.zig); data safety (`meiolol backup|restore|forget`,
+  deploy/health.sh) running on the box (meiolol-backup, meiolol-health)
 - Draft model (docs/model.md): at ~8k games nothing beats champion base rates beyond
   noise; daily eval on the box appends data/eval-history.tsv
 - Legal drafts: docs/legal/ (privacy, terms, LIA, objection form), waiting on Jacob
@@ -63,7 +63,8 @@ next steps land here.
 ### Ops and data (was meiolol-de, data-safety-af)
 
 - Data safety is on main (fad705a; docs/data-safety.md): start the box backup loop (D:)
-  and health loop (ntfy); first backup + restore test. Mac launchd notifier: Jacob's call
+  and health loop (ntfy): running on the box since ~04:20. Mac launchd notifier: Jacob's
+  call
 - Backup loop: pull exchange/forgotten.txt from jomove, push box-forgotten.txt
 - Measure real per-match sizes after a day; recheck disk runway
 - Rekey translation for `forgotten` (old PUUID -> Riot ID -> new PUUID) before the
@@ -74,10 +75,8 @@ next steps land here.
 
 ### Your games and Squads (was your-games-e0)
 
-- Deploy `meiolol api` on jomove (docs/your-games.md steps 1-9, needs Jacob's go), then
-  crawler `--reserve 20`, and the index "Your games" card becomes a link
-- Privacy paragraph for Your games before /api/ is reachable
-- Scrub Riot IDs from 429 warning paths in src/riot/client.zig before public
+- Done 2026-10-11: jomove deploy, basic auth on /api/, crawler --reserve 20 default,
+  index link, privacy section, Riot IDs out of client logs
 - Extras: experienced-players curve, flex/normal once curves cover them, rank at game time
 - Squads (concept part 4), design agreed: join by profile-icon challenge (purpose=join),
   leave any time; api.db squads/members; private invite-link pages, noindex, Riot IDs
@@ -147,9 +146,7 @@ flashcards with spaced repetition; season "lane story" share cards.
 - Legal: controller name, privacy contact (suggested privacy@jomify.lol ->
   jombirds@gmail.com), ICO fee (52 GBP/yr, 47 by direct debit), EEA representative,
   retention periods (docs/legal/privacy.md top)
-- Your games: go for the jomove deploy (systemd, nginx /api/, key on jomove); /api/
-  gating in preview (recommended: auth_basic) or unlinked; 90-day retention OK; Squads as
-  private invite-link pages with Riot IDs shown to members only
+- Squads as private invite-link pages with Riot IDs shown to members only
 - Disk: move WSL to the 2 TB NVMe (673 GB unallocated) before ~20 Nov, at the PC
 - Budget for EUNE/TR/RU/ME in the europe bucket (EUW takes it all while it has players due)
 - Patch day movers bar: z 1.96 or 2.58
