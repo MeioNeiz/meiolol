@@ -12,11 +12,12 @@ accounts may use Always Free only in the home region).
 | (jomify) | nginx: site, Your games service, jomove | E2.1.Micro, 193.123.180.81 | 47 GB boot |
 
 - Target: VM.Standard.A1.Flex 2 OCPU / 12 GB (the account's limit; "LIMITED_FREE", free
-  up to 3000 OCPU-h + 18000 GB-h a month). London has been out of A1 capacity; a retry
+  up to 1500 OCPU-h + 9000 GB-h a month). London has been out of A1 capacity; a retry
   loop launches it (2/12, else 1/6; AD-1 and AD-2; 50 GB boot to fit the quota). Then
   move the box there (stop services, rsync data, `deploy/box.sh start` etc.), terminate
-  the micro and grow the A1 boot volume. Pay-as-you-go (Jacob, card) reportedly gets A1
-  capacity sooner and allows paid disk; still free within the limits
+  the micro and grow the A1 boot volume. Pay-as-you-go (Jacob, card) gets A1
+  capacity sooner (reported, not promised) and allows paid disk; still free within the
+  limits (research/questions/oci-payg-upgrade.md)
 - Block storage: 200 GB free in total. In use: jomify boot 47, micro boot 50, and an
   unattached 47 GB "Jomify (Boot Volume)" from April (reclaim with Jacob's OK)
 - Ssh: `meiolol-cloud` in ~/.ssh/config (user ubuntu, key oci_instance-20260714-1317).
