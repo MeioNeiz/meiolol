@@ -25,7 +25,7 @@ else
     fi
     total=$(grep -oE ' [0-9]+m ' <<< "$report" | awk '{ s += $1 } END { print s + 0 }')
     state=${HEALTH_STATE:-data/health.state}
-    read -r last_total last_progress < "$state" 2>/dev/null || last_progress=$now
+    read -r last_total last_progress 2> /dev/null < "$state" || last_progress=$now
     if [[ "${total:-0}" != "${last_total:-}" ]]; then last_progress=$now; fi
     echo "${total:-0} $last_progress" > "$state"
     if (( now - last_progress > STALL_H * 3600 )); then
