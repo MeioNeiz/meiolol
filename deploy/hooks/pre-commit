@@ -1,0 +1,9 @@
+#!/bin/sh
+# zig fmt on the staged content of staged .zig files (not the working tree: other
+# sessions share it). Fix with `zig build fmt`. Skip once: git commit --no-verify
+bad=0
+for f in $(git diff --cached --name-only --diff-filter=ACM -- '*.zig' '*.zon'); do
+    git show ":$f" | zig fmt --stdin --check > /dev/null 2>&1 || { echo "not formatted: $f"; bad=1; }
+done
+[ $bad = 0 ] || echo "run: zig build fmt"
+exit $bad

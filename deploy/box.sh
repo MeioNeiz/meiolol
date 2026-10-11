@@ -18,6 +18,7 @@ sync() {
     target=$(ssh "$HOST" uname -m)-linux-musl
     tree=$(mktemp -d)
     git -C "$ROOT" worktree add -q --detach "$tree" "$rev"
+    # shellcheck disable=SC2064 # expand now: tree is local to sync
     trap "git -C '$ROOT' worktree remove --force '$tree'" EXIT
     (cd "$tree" && zig build -Dtarget="$target" -Doptimize=ReleaseSafe \
         --prefix zig-out/box)

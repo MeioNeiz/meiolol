@@ -448,8 +448,14 @@ fn experienceSection(
         const m_without = try metrics(gpa, p_without, test_games.items);
         const diff = pairedDiff(p_with, p_without, test_games.items);
         try w.print(" {d} | {d} | {d:.4} | {d:.4} | {s}{d:.4} ± {d:.4} | {d:.3} |", .{
-            rows_with.items.len, test_games.items.len, m_without.log_loss, m_with.log_loss,
-            if (diff.mean >= 0) "+" else "", diff.mean, diff.ci, m_with.auc,
+            rows_with.items.len,
+            test_games.items.len,
+            m_without.log_loss,
+            m_with.log_loss,
+            if (diff.mean >= 0) "+" else "",
+            diff.mean,
+            diff.ci,
+            m_with.auc,
         });
         const bins = switch (source) {
             .history => experience.history_bins,

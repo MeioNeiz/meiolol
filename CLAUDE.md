@@ -6,8 +6,15 @@ patch, EUW first. All Zig (0.16, pinned in build.zig); no Python.
 **Current goal: get a Riot production key** (more rate limit). Plan and next steps:
 docs/plan.md. Read it first.
 
-- Build: `zig build`, `zig build test`, `zig build -Dtarget=x86_64-windows` (app ships
-  on Windows, developed on macOS; both must compile)
+- Work on main only: no branches or worktrees (one developer). Other sessions share the
+  checkout, so commit by explicit path (`git commit -m ... -- <paths>`)
+- Build: `zig build`; `zig build test` (`-Dtest-filter=NAME`; a test that logs a
+  warning fails); `zig build fmt`; `zig build ci` = fmt check, tests, Windows and Linux
+  builds, shellcheck, JS syntax. Hooks in deploy/hooks (`git config core.hooksPath
+  deploy/hooks`): pre-commit fmt, pre-push `zig build ci` on a clean checkout of the
+  pushed commit, since every push deploys
+- src/pipeline_test.zig: fixture games through stats, curves and the whole site; extend
+  it when adding a pipeline step or page
 - Two executables: `meiolol` (backend: crawl, stats, site, status, champions; runs on
   the box, an Oracle Cloud server) and `meiolol-app` (player tool: suggest, watch, session, get)
 - Website: https://meiolol.jomify.lol, static nginx on the jomove server

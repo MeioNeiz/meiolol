@@ -596,7 +596,7 @@ fn writeIndex(site: *const Site) !void {
         \\main's hardest lanes, and what they play when it is banned.</p></div>
         \\</div>
         \\
-       , .{site.view.up()});
+    , .{site.view.up()});
     try earlyNote(site, w);
     try w.writeAll("<h2>Champions</h2>\n");
     try roleTabs(w, null, "");

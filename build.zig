@@ -12,19 +12,77 @@ comptime {
     }
 }
 
+/// Where the code must keep compiling besides the host: the app ships on Windows, the
+/// box is Linux (x86_64 micro now, aarch64 A1 later; deploy/box.sh builds for its CPU)
+const ci_targets = [_]std.Target.Query{
+    .{ .cpu_arch = .x86_64, .os_tag = .windows },
+    .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
+    .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
+};
+
+const fmt_paths = [_][]const u8{ "build.zig", "build.zig.zon", "src" };
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const test_filters = b.option(
+        []const []const u8,
+        "test-filter",
+        "Run only tests whose name contains this (repeatable)",
+    ) orelse &.{};
+
+    const m = modules(b, target, optimize);
+    const exes = [_]struct { name: []const u8, mod: *std.Build.Module, about: []const u8 }{
+        .{ .name = "meiolol", .mod = m.backend, .about = "backend: crawl, stats" },
+        .{ .name = "meiolol-app", .mod = m.app, .about = "player tool: suggest, watch" },
+    };
+    const test_step = b.step("test", "Run unit tests (-Dtest-filter=NAME for some)");
+    for (exes) |e| {
+        const exe = b.addExecutable(.{ .name = e.name, .root_module = e.mod });
+        b.installArtifact(exe);
+        const run = b.addRunArtifact(exe);
+        if (b.args) |args| run.addArgs(args);
+        b.step(e.name, b.fmt("Run {s} ({s})", .{ e.name, e.about })).dependOn(&run.step);
+    }
+    for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store }) |mod| {
+        const t = b.addTest(.{ .root_module = mod, .filters = test_filters });
+        test_step.dependOn(&b.addRunArtifact(t).step);
+    }
+
+    b.step("fmt", "Format the Zig sources").dependOn(&b.addFmt(.{ .paths = &fmt_paths }).step);
+
+    // What the pre-push hook runs (deploy/hooks/pre-push): every push to main deploys
+    const ci = b.step("ci", "Everything before a push: fmt, tests, cross-builds, scripts");
+    ci.dependOn(&b.addFmt(.{ .paths = &fmt_paths, .check = true }).step);
+    ci.dependOn(test_step);
+    for (ci_targets) |q| {
+        const cm = modules(b, b.resolveTargetQuery(q), .Debug);
+        for ([_]*std.Build.Module{ cm.backend, cm.app }, [_][]const u8{ "meiolol", "meiolol-app" }) |mod, name| {
+            ci.dependOn(&b.addExecutable(.{ .name = name, .root_module = mod }).step);
+        }
+    }
+    ci.dependOn(lint(b, "shellcheck", "shellcheck -S warning deploy/*.sh deploy/hooks/*"));
+    ci.dependOn(lint(b, "node", "for f in src/site/static/*.js; do node --check \"$f\" || exit 1; done"));
+}
+
+const Modules = struct {
+    core: *std.Build.Module,
+    store: *std.Build.Module,
+    backend: *std.Build.Module,
+    app: *std.Build.Module,
+};
+
+fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) Modules {
     const sqlite = b.dependency("sqlite", .{});
 
     // Pure: std only, shared by backend and app (draft model, stats file, scoring)
-    const core = b.addModule("core", .{
+    const core = b.createModule(.{
         .root_source_file = b.path("src/core/root.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const store = b.addModule("store", .{
+    const store = b.createModule(.{
         .root_source_file = b.path("src/store/root.zig"),
         .target = target,
         .optimize = optimize,
@@ -69,20 +127,17 @@ pub fn build(b: *std.Build) void {
     wasm.rdynamic = true;
     backend.addAnonymousImport("draft.wasm", .{ .root_source_file = wasm.getEmittedBin() });
 
-    const exes = [_]struct { name: []const u8, mod: *std.Build.Module, about: []const u8 }{
-        .{ .name = "meiolol", .mod = backend, .about = "backend: crawl, stats" },
-        .{ .name = "meiolol-app", .mod = app, .about = "player tool: suggest, watch" },
+    return .{ .core = core, .store = store, .backend = backend, .app = app };
+}
+
+/// A non-Zig check run from the repo root. A missing tool fails the step, not the
+/// build script, so `zig build test` works without it
+fn lint(b: *std.Build, tool: []const u8, script: []const u8) *std.Build.Step {
+    _ = b.findProgram(&.{tool}, &.{}) catch {
+        return &b.addFail(b.fmt("{s} not found: install it to run `zig build ci`", .{tool})).step;
     };
-    const test_step = b.step("test", "Run unit tests");
-    for (exes) |e| {
-        const exe = b.addExecutable(.{ .name = e.name, .root_module = e.mod });
-        b.installArtifact(exe);
-        const run = b.addRunArtifact(exe);
-        if (b.args) |args| run.addArgs(args);
-        b.step(e.name, b.fmt("Run {s} ({s})", .{ e.name, e.about })).dependOn(&run.step);
-        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = e.mod })).step);
-    }
-    for ([_]*std.Build.Module{ core, store }) |m| {
-        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = m })).step);
-    }
+    const run = b.addSystemCommand(&.{ "sh", "-c", script });
+    run.setCwd(b.path("."));
+    run.setName(tool);
+    return &run.step;
 }

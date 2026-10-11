@@ -13,12 +13,12 @@ time, so keep building and keep the site up. Don't edit the application while it
 
 ## How we work
 
-Several Claude sessions in parallel, coordinated by one. Code sessions use git worktrees
-and hand branches to the coordinator, who merges in the main checkout, checks build +
-test + windows on a clean checkout of the merge, and pushes. In the shared main checkout
-commit only by explicit path (`git commit -m ... -- <paths>`): the index may hold another
-session's staged work. Every push to main deploys to the box (deploy/box.sh builds from a
-clean checkout of the commit; history in ml/meiolol/DEPLOYED).
+Several Claude sessions in parallel, all on main in the one checkout (Jacob,
+2026-10-11: no more branches or worktrees). Commit only by explicit path (`git commit -m
+... -- <paths>`): the index may hold another session's staged work. Every push to main
+deploys to the box (deploy/box.sh builds from a clean checkout of the commit; history in
+ml/meiolol/DEPLOYED), so the pre-push hook runs `zig build ci` on a clean checkout of the
+pushed commit first (CLAUDE.md).
 
 Until the site goes public (Jacob, 2026-10-11): sessions merge, push and redeploy the
 preview site and box binary without asking. Still ask first: anything irreversible

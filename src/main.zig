@@ -503,8 +503,14 @@ fn forgetPlayers(init: std.process.Init, arena: std.mem.Allocator, data_dir: []c
     if (ids.len > 0) {
         std.log.info("{d} of {d} erased, {d} already forgotten; live rows: players {d}, " ++
             "mastery {d}, participants blanked {d}, raw matches {d}, raw timelines {d}", .{
-            ids.len - unresolved - already, ids.len, already, live.players, live.mastery,
-            live.participants, live.raw_matches, live.raw_timelines,
+            ids.len - unresolved - already,
+            ids.len,
+            already,
+            live.players,
+            live.mastery,
+            live.participants,
+            live.raw_matches,
+            live.raw_timelines,
         });
     }
     if (api_db != null and ids.len > 0) std.log.info("Your games cache: erased and blocked", .{});
@@ -771,4 +777,5 @@ fn logFn(
 
 test {
     std.testing.refAllDecls(@This());
+    _ = @import("pipeline_test.zig");
 }
