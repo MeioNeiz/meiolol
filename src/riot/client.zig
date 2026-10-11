@@ -53,6 +53,7 @@ pub const Client = struct {
             const res = c.once(uri, method, backoff) catch |err| switch (err) {
                 error.OutOfMemory => return err,
                 else => {
+                    c.limiter.unsync();
                     log.warn("{s} on {s}, retrying", .{ @errorName(err), shown });
                     try c.io.sleep(.fromSeconds(backoff), .awake);
                     continue;

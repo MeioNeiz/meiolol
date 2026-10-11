@@ -166,9 +166,11 @@ writes). This replaced a gate on europe's measured slack (2026-10-11), which too
 
 Each bucket's limiter paces requests evenly (one per window / limit) instead of filling
 a window in a burst, and `--reserve PCT` (box: 20) only applies while another process
-uses the key: Riot's -Count headers show requests we did not send (ignored for one
-window after start, when they are a previous run's), then for 10 minutes the crawler
-keeps under 100 - PCT of the limit. The log says "another process is using the key".
+uses the key: Riot counts in fixed windows (its -Count falls back to 1 when one starts),
+so the limiter counts its own requests in Riot's current window and anything over that
+is another process's. Not judged until a Riot window restarts after start (a previous
+run's requests) or after an answer without counts (service 429s, dropped connections).
+Then for 10 minutes the crawler keeps under 100 - PCT of the limit. The log says "another process is using the key".
 So the crawler takes the whole key unless the Your games service is busy.
 Only Riot's key errors, OOM and SQLite errors outside a match stop the crawler; a bad
 page, player or match (including one SQLite cannot store) is logged and skipped.

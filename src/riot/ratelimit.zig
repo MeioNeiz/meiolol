@@ -15,6 +15,12 @@ pub const Window = struct {
     seconds: u32,
     /// Send times in ns, oldest first
     hits: std.Deque(i96) = .empty,
+    /// Riot counts in fixed windows (its count falls back to 1 when one starts), so
+    /// another process shows as Riot's count over how many of that window's were ours
+    riot_count: u32 = 0,
+    ours: u32 = 0,
+    /// Seen Riot's window restart: until then its count holds a previous run's requests
+    synced: bool = false,
 
     fn span(w: Window) i96 {
         return @as(i96, w.seconds) * std.time.ns_per_s + margin_ns;
@@ -57,12 +63,6 @@ pub const Bucket = struct {
         return wait;
     }
 
-    fn longestSpan(b: *const Bucket) i96 {
-        var span: i96 = 0;
-        for (b.windows.items) |w| span = @max(span, w.span());
-        return span;
-    }
-
     /// Replace limits from a spec like "20:1,100:120", keeping hits of windows whose
     /// length is unchanged
     fn setSpec(b: *Bucket, gpa: Allocator, spec: []const u8) !void {
@@ -102,11 +102,12 @@ pub const Bucket = struct {
         b.windows = next;
     }
 
-    /// Riot's X-*-Rate-Limit-Count ("3:1,57:120"): when Riot has seen more requests
-    /// than we sent (a restart, another process), pad our windows at `now`. The most
-    /// padded in any window: requests someone else sent
+    /// Riot's X-*-Rate-Limit-Count ("3:1,57:120") on the answer to one of our requests:
+    /// when Riot has seen more requests than we sent (a restart, another process), pad
+    /// our windows at `now`. Returns the most requests someone else sent in any of
+    /// Riot's current windows, 0 until one has restarted
     fn syncCounts(b: *Bucket, gpa: Allocator, counts: []const u8, now: i96) !u32 {
-        var padded: u32 = 0;
+        var foreign: u32 = 0;
         var parts = std.mem.tokenizeScalar(u8, counts, ',');
         while (parts.next()) |part| {
             const colon = std.mem.indexOfScalar(u8, part, ':') orelse continue;
@@ -114,11 +115,17 @@ pub const Bucket = struct {
             const secs = std.fmt.parseInt(u32, std.mem.trim(u8, part[colon + 1 ..], " "), 10) catch continue;
             for (b.windows.items) |*w| {
                 if (w.seconds != secs) continue;
-                padded = @max(padded, seen -| @as(u32, @intCast(w.hits.len)));
+                if (seen <= w.riot_count) {
+                    w.synced = true;
+                    w.ours = 0;
+                }
+                w.ours += 1;
+                w.riot_count = seen;
+                if (w.synced) foreign = @max(foreign, seen -| w.ours);
                 while (w.hits.len < seen) try w.hits.pushBack(gpa, now);
             }
         }
-        return padded;
+        return foreign;
     }
 };
 
@@ -133,8 +140,6 @@ pub const Limiter = struct {
     shared_until: i96 = 0,
     /// Even spacing in every window (Window.waitNs)
     paced: bool = false,
-    /// For a window after this, Riot still counts a previous process's requests
-    started: i96 = 0,
 
     pub const app_default = "20:1,100:120";
     /// A Your games lookup is ~23 calls over a few minutes, and the page refreshes
@@ -143,7 +148,6 @@ pub const Limiter = struct {
     pub fn init(gpa: Allocator, io: std.Io) !Limiter {
         var l: Limiter = .{ .gpa = gpa, .io = io };
         try l.app.setSpec(gpa, app_default);
-        l.started = l.now();
         return l;
     }
 
@@ -152,6 +156,12 @@ pub const Limiter = struct {
     /// caps our share
     pub fn setReserve(l: *Limiter, pct: u8) void {
         l.reserve_pct = pct;
+    }
+
+    /// A request Riot may have counted without telling us (no count header, no answer):
+    /// our share of its window is unknown until the next one starts
+    pub fn unsync(l: *Limiter) void {
+        for (l.app.windows.items) |*w| w.synced = false;
     }
 
     /// Another process used the key lately, so the reserve applies
@@ -211,10 +221,8 @@ pub const Limiter = struct {
         if (h.app_limit) |spec| try l.app.setSpec(l.gpa, spec);
         if (h.app_count) |counts| {
             const foreign = try l.app.syncCounts(l.gpa, counts, t);
-            if (foreign > 0 and t - l.started > l.app.longestSpan()) {
-                l.shared_until = t + shared_hold_s * std.time.ns_per_s;
-            }
-        }
+            if (foreign > 0) l.shared_until = t + shared_hold_s * std.time.ns_per_s;
+        } else l.unsync();
         if (h.method_limit) |spec| try m.setSpec(l.gpa, spec);
         if (h.method_count) |counts| _ = try m.syncCounts(l.gpa, counts, t);
     }
@@ -260,21 +268,33 @@ test "acquire waits once a window is full" {
     try testing.expect(elapsed_ms >= 1000 and elapsed_ms < 2500);
 }
 
-test "reserve applies once Riot's counts show another process, not just after a start" {
+test "reserve applies once Riot's counts show another process, not after a start" {
     var l = try Limiter.init(testing.allocator, testing.io);
     defer l.deinit();
     l.setReserve(20);
-    const t = l.now();
-    for (0..85) |_| try l.app.windows.items[1].hits.pushBack(testing.allocator, t);
-    try testing.expectEqual(@as(i96, 0), l.app.waitNs(t, 0, false));
-    // A previous process's requests, still counted just after start
-    try l.update("m", .{ .app_count = "0:1,90:120" });
+    // A previous run's requests in Riot's window: not another process
+    try l.update("m", .{ .app_count = "1:1,90:120" });
+    try l.update("m", .{ .app_count = "1:1,91:120" });
     try testing.expect(!l.sharing());
-    l.started -= 200 * std.time.ns_per_s;
-    try l.update("m", .{ .app_count = "1:1,95:120" });
+    // Riot's window restarts; ours, ours, then one we did not send
+    try l.update("m", .{ .app_count = "1:1,1:120" });
+    try l.update("m", .{ .app_count = "1:1,2:120" });
+    try testing.expect(!l.sharing());
+    try l.update("m", .{ .app_count = "2:1,4:120" });
     try testing.expect(l.sharing());
-    // 95 hits against 80 of 100
+    // 91 padded hits against 80 of 100
     try testing.expect(l.app.waitNs(l.now(), l.reserve_pct, false) > 100 * std.time.ns_per_s);
+}
+
+test "an answer without counts leaves the window unjudged until Riot's next one" {
+    var l = try Limiter.init(testing.allocator, testing.io);
+    defer l.deinit();
+    l.setReserve(20);
+    try l.update("m", .{ .app_count = "1:1,5:120" });
+    try l.update("m", .{ .app_count = "1:1,1:120" });
+    try l.update("m", .{});
+    try l.update("m", .{ .app_count = "1:1,3:120" });
+    try testing.expect(!l.sharing());
 }
 
 test "paced windows space requests evenly" {
