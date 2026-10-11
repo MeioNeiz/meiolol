@@ -59,7 +59,9 @@ const usage =
     \\              --folds K        folds for tuning inside train (default 5)
     \\              --test-platform P  test on P's games only; compares training on P
     \\                               alone with every --platform pooled
-    \\  site        write the public website (static files)
+    \\              --history FILE   append one TSV line (date, sizes, log loss and AUC
+    \\                               per model) for the accuracy-vs-data curve
+    \\  site       write the public website (static files)
     \\              --patch P        as for stats
     \\              --platform P     as for stats (pages say EUW: reword before others)
     \\              --out DIR        default DIR/site
@@ -109,6 +111,7 @@ pub fn main(init: std.process.Init) !u8 {
     var port: u16 = 8080;
     var min_games: u32 = 20;
     var eval_opts: eval.Options = .{};
+    var history: ?[]const u8 = null;
     var i: usize = 2;
     while (i < args.len) : (i += 1) {
         const a = args[i];
@@ -177,6 +180,8 @@ pub fn main(init: std.process.Init) !u8 {
             if (!(eval_opts.test_share > 0 and eval_opts.test_share < 1)) return usageError(a);
         } else if (std.mem.eql(u8, a, "--test-platform")) {
             eval_opts.test_platform = v;
+        } else if (std.mem.eql(u8, a, "--history")) {
+            history = v;
         } else if (std.mem.eql(u8, a, "--folds")) {
             eval_opts.folds = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
             if (eval_opts.folds < 2) return usageError(a);
@@ -230,8 +235,13 @@ pub fn main(init: std.process.Init) !u8 {
         const chosen = if (patches.items.len > 0) patches.items else try stats.patches(arena, db, platforms.items);
         var buf: [64 * 1024]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
-        try eval.run(init.gpa, db, chosen, platforms.items, eval_opts, &stdout.interface);
+        const line = try eval.run(init.gpa, db, chosen, platforms.items, eval_opts, &stdout.interface);
         try stdout.interface.flush();
+        if (history) |path| {
+            const now: eval.Day = .{ .ms = std.Io.Clock.real.now(init.io).toMilliseconds() };
+            const date = try std.fmt.allocPrint(arena, "{f}", .{now});
+            try eval.appendHistory(init.io, path, line, date);
+        }
         return 0;
     }
     if (std.mem.eql(u8, cmd, "site")) {

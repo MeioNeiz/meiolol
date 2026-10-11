@@ -7,13 +7,22 @@
 # meiolol.jomify.lol. Riot's verification string, if any, lives in riot.txt beside bin/.
 # Lane curves (`meiolol curves`, a pass over every timeline of the patch) are rebuilt daily
 # and when the patch changes; a fresh curves file forces an upload.
+# Daily, `meiolol eval` (docs/model.md) appends a line to data/eval-history.tsv (model
+# accuracy vs data volume) and leaves its report in data/eval-latest.md. Read-only on the
+# DB; in the background at low priority, so a slow run never delays uploads.
 set -u
 contact=$1
 cd "$(dirname "$0")/.." || exit 1
 last_patch='' last_games=0 last_upload=0
-patch='' curves_patch='' last_curves=0 fresh_curves=0
+patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0
 while true; do
     now=$(date +%s)
+    if (( now - last_eval >= 86400 )); then
+        (nice -n 10 bin/meiolol eval --platform all --test-platform EUW1 \
+            --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
+            && mv data/eval-latest.md.new data/eval-latest.md) &
+        last_eval=$now
+    fi
     if (( now - last_curves >= 86400 )) || [[ "$patch" != "$curves_patch" ]]; then
         # Fails harmlessly (logged) until there are timelines for the patch
         if c=$(bin/meiolol curves 2>&1); then fresh_curves=1; fi

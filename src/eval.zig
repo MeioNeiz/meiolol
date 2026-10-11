@@ -46,7 +46,7 @@ pub fn run(
     platforms: []const []const u8,
     opts: Options,
     w: *std.Io.Writer,
-) !void {
+) !History {
     const champs = try stats.champions(gpa, db);
     defer stats.freeChampions(gpa, champs);
     var list: GameList = .{ .gpa = gpa };
@@ -168,9 +168,23 @@ pub fn run(
         }
     }
 
-    try laneGoldSection(gpa, db, patches, platforms, champs, &full.stats, train, tests, opts.folds, &.{
+    const gold = try laneGoldSection(gpa, db, patches, platforms, champs, &full.stats, train, tests, opts.folds, &.{
         base_only, model, empirical, joint,
     }, w);
+
+    var line: History = .{
+        .platforms = platforms.len,
+        .test_platform = opts.test_platform orelse "",
+        .games = games.len,
+        .train = train.len,
+        .tests = tests.len,
+        .gold = gold,
+    };
+    for ([_]Predictor{ predictors[0], base_only, model, empirical, joint }, &line.results) |p, *out| {
+        const r = try evaluate(gpa, &full.stats, tests, p);
+        defer gpa.free(r.p);
+        out.* = .{ .log_loss = r.m.log_loss, .auc = r.m.auc };
+    }
 
     try w.writeAll("\n## Pick metric\n\n");
     try w.writeAll("Each held-out pick hidden in turn, the other nine known with roles; " ++
@@ -210,6 +224,53 @@ pub fn run(
         try w.print(" {d:.3} |\n", .{eb_auc});
         if (n == train.len) break;
     }
+    return line;
+}
+
+const Result = struct { log_loss: f64, auc: f64 };
+
+/// One run, for the history file (data/eval-history.tsv on the box, deploy/web-loop.sh)
+pub const History = struct {
+    platforms: usize,
+    test_platform: []const u8,
+    games: usize,
+    train: usize,
+    tests: usize,
+    /// coin flip, base only, current, empirical Bayes, joint ratings
+    results: [5]Result = undefined,
+    /// EB + lane gold on the test games with timelines; null when too few
+    gold: ?GoldResult,
+
+    pub const header = "date\tplatforms\ttest_platform\tgames\ttrain\ttest\t" ++
+        "ll_coin\tll_base\tll_current\tll_eb\tll_joint\t" ++
+        "auc_base\tauc_current\tauc_eb\tauc_joint\t" ++
+        "gold_test\tll_eb_gold_subset\tll_gold\tauc_gold\n";
+
+    pub fn write(h: History, w: *std.Io.Writer, date: []const u8) !void {
+        try w.print("{s}\t{d}\t{s}\t{d}\t{d}\t{d}", .{
+            date, h.platforms, h.test_platform, h.games, h.train, h.tests,
+        });
+        for (h.results) |r| try w.print("\t{d:.5}", .{r.log_loss});
+        for (h.results[1..]) |r| try w.print("\t{d:.4}", .{r.auc});
+        if (h.gold) |g| {
+            try w.print("\t{d}\t{d:.5}\t{d:.5}\t{d:.4}\n", .{ g.tests, g.eb_log_loss, g.log_loss, g.auc });
+        } else try w.writeAll("\t0\t\t\t\n");
+    }
+};
+
+pub const GoldResult = struct { tests: usize, eb_log_loss: f64, log_loss: f64, auc: f64 };
+
+/// Appends `h` to the TSV at `path`, with a header when the file is new
+pub fn appendHistory(io: std.Io, path: []const u8, h: History, date: []const u8) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
+    defer file.close(io);
+    const len = try file.length(io);
+    var buf: [1024]u8 = undefined;
+    var fw = file.writer(io, &buf);
+    try fw.seekTo(len);
+    if (len == 0) try fw.interface.writeAll(History.header);
+    try h.write(&fw.interface, date);
+    try fw.interface.flush();
 }
 
 /// Fewer train games with lane gold and the section is skipped
@@ -229,7 +290,7 @@ fn laneGoldSection(
     folds: u32,
     others: []const Predictor,
     w: *std.Io.Writer,
-) !void {
+) !?GoldResult {
     var map = try lanegold.load(gpa, db, patches, platforms);
     defer map.deinit(gpa);
     var train_gold: usize = 0;
@@ -241,7 +302,7 @@ fn laneGoldSection(
         "{d} test.", .{ lanegold.minute, train_gold, train.len, tests_gold.items.len, tests.len });
     if (train_gold < min_gold_games or tests_gold.items.len < 100) {
         try w.print(" Too few (need {d} train, 100 test); skipped.\n", .{min_gold_games});
-        return;
+        return null;
     }
 
     // Out-of-fold features for the stack's weights
@@ -293,6 +354,17 @@ fn laneGoldSection(
         .w = gold_only,
     } } });
     try fullDraft(gpa, full, tests_gold.items, list.items, 1, w);
+
+    const eb = try evaluate(gpa, full, tests_gold.items, .{ .label = "", .kind = .empirical });
+    defer gpa.free(eb.p);
+    const stacked = try evaluate(gpa, full, tests_gold.items, list.items[others.len]);
+    defer gpa.free(stacked.p);
+    return .{
+        .tests = tests_gold.items.len,
+        .eb_log_loss = eb.m.log_loss,
+        .log_loss = stacked.m.log_loss,
+        .auc = stacked.m.auc,
+    };
 }
 
 /// intercept, base and lane terms (opts), champion gold, pair gold
@@ -838,7 +910,7 @@ const Prior = struct {
 };
 
 /// Unix ms as YYYY-MM-DD (UTC)
-const Day = struct {
+pub const Day = struct {
     ms: i64,
 
     pub fn format(d: Day, w: *std.Io.Writer) std.Io.Writer.Error!void {
