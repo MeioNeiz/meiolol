@@ -105,7 +105,8 @@ MB after a checkpoint. Why: on the 1/8-OCPU micro 19 writing threads waited on t
 (holders descheduled mid-transaction, gzip inside it), and per-row commits with 2 MB
 caches wrote 43 GB and read 32 GB in 4 hours for ~2k matches.
 
-- platform (euw1, kr, na1, ...): league-exp ladder pages for every tier (players +
+- platform (euw1, kr, na1, ...): league-exp ladder pages from Challenger down to
+  `--min-tier` (default every tier; players +
   rank snapshot, refreshed weekly: `--ladder-refresh-days`; unchanged players are not
   rewritten), then champion mastery with spare budget (`--no-mastery` to skip)
 - regional (americas, asia, europe, sea): match ids per player of its platforms (last
@@ -127,7 +128,12 @@ a clone of box-sized databases with `--fake-api` (fixture answers, no network or
 limits, so it runs with `--priority none`); micro mode runs the process 1 slice in 8 at
 background QoS, a rough stand-in for the micro.
 
-Players are scanned in PUUID order (effectively random): no rank or activity bias.
+Players are scanned in PUUID order (effectively random): no activity bias. The pool is
+rank biased by design: the ladder walks top down and the box sets `--min-tier PLATINUM`
+(Jacob: Platinum IV and up are the games wanted), so lower tiers are neither walked nor
+scanned. Ladder pages use the platform buckets, so the floor costs no match volume;
+`--ladder-per-hour` must cover a week's refresh of the walked tiers (EUW Platinum IV+
+is ~5,500 pages, ~33 an hour) or the walk restarts at the top before reaching the floor.
 `--priority` platforms (default EUW1) are scanned before the rest of their region, so
 EUW gets the whole europe bucket while it has players due. They also get the machine
 first: a priority region's thread counts its slack (time waiting on the rate limit, or

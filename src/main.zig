@@ -54,6 +54,9 @@ const usage =
     \\                               region; other regions, mastery and extra ladder
     \\                               pause while it is short of the machine
     \\                               (default EUW1, "none" for none)
+    \\              --min-tier T     lowest tier walked on the ladder and scanned for
+    \\                               matches (e.g. PLATINUM: Platinum IV and up;
+    \\                               default IRON, everyone)
     \\              --reserve PCT    leave PCT of each rate limit to other processes
     \\                               on the key (default 0)
     \\  stats       write the model file the app reads (ranked solo, no remakes)
@@ -331,6 +334,11 @@ fn cmdCrawl(c: *Cmd) !u8 {
                 try priority.append(c.arena, p);
             }
             o.priority = priority.items;
+        } else if (c.is("--min-tier")) {
+            const tier = try c.value();
+            o.min_tier = for (store.schema.tiers, 0..) |t, i| {
+                if (std.ascii.eqlIgnoreCase(t, tier)) break i;
+            } else return error.Usage;
         } else if (c.is("--reserve")) {
             o.reserve_pct = try c.int(u8);
             if (o.reserve_pct > 90) return error.Usage;

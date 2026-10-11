@@ -638,3 +638,4 @@
 {"t": "search", "date": "2026-10-11", "where": "web", "query": "Hetzner cloud servers currently unavailable 2026", "for": "free-hosting-storage", "new": 2}
 {"t": "lead", "date": "2026-10-11", "url": "https://pingoru.io/providers/hetzner/incidents/1006802", "why": "Hetzner status: limited cloud instance availability since 2026-04-28, random restriction of new servers", "for": "free-hosting-storage", "key": "pingoru.io/providers/hetzner/incidents/1006802"}
 {"t": "lead", "date": "2026-10-11", "url": "https://www.vincentschmalbach.com/hetzner-cheap-cloud-unavailable-price-increases/", "why": "Sep 2026: all CX/CAX unavailable, CPX still orderable", "for": "free-hosting-storage", "key": "vincentschmalbach.com/hetzner-cheap-cloud-unavailable-price-increases"}
+{"t": "skip", "date": "2026-10-11", "url": "https://www.hetzner.com/cloud/", "reason": "prices load via a JS POST the read-only browser blocks; use docs price-adjustment page", "key": "hetzner.com/cloud"}

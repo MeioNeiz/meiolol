@@ -20,11 +20,8 @@ const Job = writer.Job;
 
 const log = std.log.scoped(.crawl);
 
-const tiers = [_][]const u8{
-    "CHALLENGER", "GRANDMASTER", "MASTER", "DIAMOND", "EMERALD",
-    "PLATINUM",   "GOLD",        "SILVER", "BRONZE",  "IRON",
-};
-const divisions = [_][]const u8{ "I", "II", "III", "IV" };
+const tiers = store.schema.tiers;
+const divisions = store.schema.divisions;
 const pending_low = 300;
 const detail_batch = 40;
 /// When the match queue runs short, so a timeline backlog drains in quiet spells
@@ -68,6 +65,9 @@ pub const Options = struct {
     /// get its whole budget while they have players due. Their regions also get the
     /// machine first: other work pauses while they are short of it (Crawler.others)
     priority: []const []const u8 = &.{"EUW1"},
+    /// Lowest tier the ladder walks and the scan pool takes, an index into `tiers`
+    /// (PLATINUM: Platinum IV and up); the last tier takes everyone
+    min_tier: usize = tiers.len - 1,
     /// Share of each bucket left to other processes on the key (the Your games service)
     reserve_pct: u8 = 0,
     fake: ?*const @import("fake.zig").Fake = null,
@@ -469,7 +469,7 @@ const Worker = struct {
 
     fn seedLadder(w: *Worker, p: ep.Platform) !u32 {
         var fetched: u32 = 0;
-        for (tiers) |tier| {
+        for (tiers[0 .. w.c.opts.min_tier + 1]) |tier| {
             const apex = std.mem.eql(u8, tier, "MASTER") or std.mem.eql(u8, tier, "GRANDMASTER") or
                 std.mem.eql(u8, tier, "CHALLENGER");
             for (if (apex) divisions[0..1] else divisions[0..]) |division| {
@@ -639,20 +639,30 @@ const Worker = struct {
         \\LIMIT ?3
     ;
 
+    const scan_players =
+        \\SELECT puuid, matches_checked_at FROM players
+        \\WHERE region = ?1 AND (?2 IS NULL OR platform = ?2)
+        \\    AND (matches_checked_at IS NULL OR matches_checked_at < ?3)
+        \\    AND (?5 IS NULL OR instr(?5, '|' || tier || '|') > 0)
+        \\ORDER BY matches_checked_at, puuid
+        \\LIMIT ?4
+    ;
+
+    /// "|CHALLENGER|...|PLATINUM|" for scan_players, null when every tier is in
+    fn tierFloor(a: std.mem.Allocator, min_tier: usize) !?[]const u8 {
+        if (min_tier + 1 >= tiers.len) return null;
+        return try std.fmt.allocPrint(a, "|{s}|", .{try std.mem.join(a, "|", tiers[0 .. min_tier + 1])});
+    }
+
     /// Priority platforms' players first, then the region's. Within those, never
     /// scanned (NULL sorts first), then the stalest. PUUIDs are random, so ordering by
     /// them samples players without favouring any rank or activity.
     fn scanPlayers(w: *Worker, r: ep.Region, n: u32) !u32 {
         var arena: std.heap.ArenaAllocator = .init(w.c.gpa);
         defer arena.deinit();
-        var s = try w.db.prepare(
-            \\SELECT puuid, matches_checked_at FROM players
-            \\WHERE region = ?1 AND (?2 IS NULL OR platform = ?2)
-            \\    AND (matches_checked_at IS NULL OR matches_checked_at < ?3)
-            \\ORDER BY matches_checked_at, puuid
-            \\LIMIT ?4
-        );
+        var s = try w.db.prepare(scan_players);
         defer s.deinit();
+        const floor = try tierFloor(arena.allocator(), w.c.opts.min_tier);
         const Player = struct { puuid: []const u8, checked_at: ?i64 };
         var players: std.ArrayList(Player) = .empty;
         var filters: std.ArrayList(?[]const u8) = .empty;
@@ -664,7 +674,7 @@ const Worker = struct {
         for (filters.items) |platform| {
             const want = n - players.items.len;
             if (want == 0) break;
-            try s.bind(.{ @tagName(r), platform, w.now() - w.c.opts.recheck_s, want });
+            try s.bind(.{ @tagName(r), platform, w.now() - w.c.opts.recheck_s, want, floor });
             while (try s.step()) {
                 try players.append(arena.allocator(), .{
                     .puuid = try arena.allocator().dupe(u8, s.bytes(0)),
@@ -874,6 +884,32 @@ test "queues: priority platforms first, matches oldest first, timelines newest" 
     };
     for (want) |c| {
         const got = try w.column(arena.allocator(), c[0], .{ "europe", "[\"EUW1\"]", 10 });
+        try std.testing.expectEqual(c[1].len, got.len);
+        for (c[1], got) |e, g| try std.testing.expectEqualStrings(e, g);
+    }
+}
+
+test "scan pool: players below --min-tier are not scanned" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec(
+        \\INSERT INTO players (puuid, tier, source, platform, region) VALUES
+        \\    ('d', 'DIAMOND', 'ladder', 'EUW1', 'europe'), ('g', 'GOLD', 'ladder', 'EUW1', 'europe'),
+        \\    ('n', NULL, 'participant', 'EUW1', 'europe'), ('p', 'PLATINUM', 'ladder', 'EUW1', 'europe');
+    );
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var w: Worker = undefined;
+    w.db = db;
+    const plat = try Worker.tierFloor(arena.allocator(), 5);
+    try std.testing.expectEqualStrings("|CHALLENGER|GRANDMASTER|MASTER|DIAMOND|EMERALD|PLATINUM|", plat.?);
+    try std.testing.expectEqual(null, try Worker.tierFloor(arena.allocator(), tiers.len - 1));
+    const want = [_]struct { ?[]const u8, []const []const u8 }{
+        .{ plat, &.{ "d", "p" } },
+        .{ null, &.{ "d", "g", "n", "p" } },
+    };
+    for (want) |c| {
+        const got = try w.column(arena.allocator(), Worker.scan_players, .{ "europe", null, 0, 10, c[0] });
         try std.testing.expectEqual(c[1].len, got.len);
         for (c[1], got) |e, g| try std.testing.expectEqualStrings(e, g);
     }

@@ -109,12 +109,21 @@ next steps land here.
   ~9 r/s, <1% util (was ~360 r/s); europe ~34k/day (at cap), others on, each ~20k/day,
   total ~95k/day; slack swings 16-30% (120 s window), gate never re-closed. Disk
   runway: ~1.1 GB/day kept at this rate x --keep-days 60 = ~65 GB vs 37 GB free on the
-  micro: full around early November unless A1, PAYG disk or a shorter --keep-days Not tested yet: --no-participant-players and
+  micro: full around early November unless A1, PAYG disk or a shorter --keep-days.
+  11:09-11:33Z: all four regions at the key's cap (~31-33k/day each, ~128k total),
+  load 0.08: the key is the bottleneck now. Not tested yet: --no-participant-players and
   dropping the participants_puuid index (only `forget` reads it): bench round
   scratch-only, rerun deploy/bench-crawl.sh with --no-mastery for pages/match.
   Before ~2026-11-25 (first matches pass --keep-days 60): per-patch aggregates kept
   forever and Pool learning curves on them, or raise/drop --keep-days. `meiolol status`
   still counts whole tables and takes the write lock (store.open): slow on the micro
+- Tier floor (Jacob, 2026-10-11): only Platinum IV and up, every region. `--min-tier
+  PLATINUM` stops the ladder walk and filters the scan pool; ladder cap raised 20 -> 40
+  an hour so the weekly refresh reaches Platinum IV (at 20 it restarted at the top
+  around Platinum II). Sub-Platinum players rows expire via the 30-day prune. Smart
+  timeline picking (only matches with an under-sampled lane matchup that can reach 100+
+  games this patch) simulated on 16.19-16.20 EUW picks: 77-95% of matches still need
+  one, so only +2-12% matches; revisit with the production key, when matchups saturate
 - Box ops loose ends (meiolol-5a): cut crawl.args raw windows once disk matters, after
   the writer fix (first prune is heavy on the micro); one-off `meiolol rebuild` for the
   gold10/14/15 migration, not run (do it on A1); once on A1 remove the dynamic group
