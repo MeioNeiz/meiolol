@@ -40,7 +40,7 @@ const preview_banner =
     \\
 ;
 
-pub const Nav = enum { matchups, daily, pool, champions, method, none };
+pub const Nav = enum { matchups, daily, learn, pool, champions, method, none };
 
 pub const Page = struct {
     title: []const u8,
@@ -85,6 +85,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
     const items = [_]struct { Nav, []const u8, []const u8 }{
         .{ .matchups, "matchup/index.html", "Matchups" },
         .{ .daily, "daily.html", "Daily Draft" },
+        .{ .learn, "learn.html", "Learn" },
         .{ .pool, "pool.html", "Champion pool" },
         .{ .champions, "role/top.html", "Champions" },
         .{ .method, "method.html", "Method" },

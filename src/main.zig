@@ -10,6 +10,7 @@ pub const stats = @import("stats.zig");
 pub const site = @import("site/root.zig");
 pub const serve = @import("serve.zig");
 pub const daily = @import("daily.zig");
+pub const learn = @import("learn.zig");
 pub const curves = @import("curves.zig");
 pub const pool = @import("pool.zig");
 pub const learning = @import("learning.zig");
