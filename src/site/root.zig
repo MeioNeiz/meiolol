@@ -43,6 +43,12 @@ const min_pick_rate = 0.004;
 /// And below this share of the champion's own games, as a role it rarely plays
 const min_role_share = 0.1;
 const matchups_shown = 6;
+/// Win rates, edges and draft ratings are noisy at today's volume (draft model eval:
+/// level with a coin flip on 6k games). A pair edge is shown only with this many games
+/// and when it clears chance (|pp| > 1.96 SE, SE = 50 / sqrt(n) points)
+const min_pair_games = 400;
+/// Below this a champion's role win rate is marked as few games
+const min_role_games = 300;
 const duos_shown = 6;
 
 pub const Champ = struct {
@@ -375,7 +381,7 @@ fn writeRole(site: *const Site, r: Role) !void {
     const desc = try std.fmt.allocPrint(a, "{s} lane champions in EUW ranked solo queue on patch {s}: games, win, pick and ban rates.", .{ roleName(r), site.patch });
     const p = site.page(title, desc, "../", .champions);
     try html.head(w, p);
-    try w.print("<h1>{s} lane champions</h1>\n<p class=\"muted\">Patch {s}, EUW ranked solo/duo, all ranks. Most played first.</p>\n", .{ roleName(r), site.patch });
+    try w.print("<h1>{s} lane champions</h1>\n<p class=\"muted\">Patch {s}, EUW ranked solo/duo, all ranks. Most played first; greyed under {d} games.</p>\n", .{ roleName(r), site.patch, min_role_games });
     try roleTabs(w, r, "../");
     try earlyNote(site, w);
     try w.writeAll(
@@ -385,7 +391,7 @@ fn writeRole(site: *const Site, r: Role) !void {
         \\
     );
     for (try roleRows(site, r)) |row| {
-        try w.writeAll("<tr><td>");
+        try w.print("<tr{s}><td>", .{if (row.games < min_role_games) " class=\"thin\"" else ""});
         try site.champLink(w, row.ch, "../");
         try w.print("</td><td class=\"num\">{d}</td><td class=\"num\">", .{row.games});
         try pct(w, row.wins, row.games);
@@ -494,9 +500,10 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
     for (roles[0..n_roles]) |r| {
         const cr = st.champRole(r, ch.c);
         try w.print("<h2>{s}</h2>\n<div class=\"stats\">", .{roleName(r)});
-        try w.writeAll("<div><b>");
+        const few = cr.games < min_role_games;
+        try w.print("<div><b{s}>", .{if (few) " class=\"muted\"" else ""});
         try pct(w, cr.wins, cr.games);
-        try w.writeAll("</b><span>Win rate</span></div><div><b>");
+        try w.print("</b><span>Win rate{s}</span></div><div><b>", .{if (few) ", few games" else ""});
         try pct(w, cr.games, site.games);
         try w.writeAll("</b><span>Pick rate</span></div><div><b>");
         try pct(w, ch.banned, site.games);
@@ -507,21 +514,23 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
         for (site.champs) |other| {
             if (other.c == ch.c) continue;
             const e = st.enemy(r, r, ch.c, other.c);
-            if (e.games > 0) try lane.append(a, .{
+            const pp = score.matchupPp(st, site.score_opts, r, ch.c, r, other.c);
+            if (clearEdge(pp, e.games)) try lane.append(a, .{
                 .other = other.c,
                 .role = r,
-                .pp = score.matchupPp(st, site.score_opts, r, ch.c, r, other.c),
+                .pp = pp,
                 .games = e.games,
                 .wins = e.wins,
             });
             for (Role.all) |ar| {
                 if (ar == r) continue;
                 const d = st.ally(r, ar, ch.c, other.c);
-                if (d.games == 0) continue;
+                const duo_pp = score.duoPp(st, site.score_opts, r, ch.c, ar, other.c);
+                if (!clearEdge(duo_pp, d.games)) continue;
                 try duos.append(a, .{
                     .other = other.c,
                     .role = ar,
-                    .pp = score.duoPp(st, site.score_opts, r, ch.c, ar, other.c),
+                    .pp = duo_pp,
                     .games = d.games,
                     .wins = d.wins,
                 });
@@ -542,7 +551,7 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
         try w.writeAll("</div>\n");
         if (site.curves) |*c| try matchup.links(site, w, c, ch, r);
     }
-    try w.writeAll("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts; pairs with few games stay near zero. <a href=\"../method.html\">Method</a>.</p>\n");
+    try w.print("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts. A pair is listed only with {d}+ games and an edge larger than chance alone would give at that size. <a href=\"../method.html\">Method</a>.</p>\n", .{min_pair_games});
     try html.foot(w, p);
     try site.write(try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug}), aw.written());
 }
@@ -555,9 +564,14 @@ const RoleGames = struct {
     }
 };
 
+fn clearEdge(pp: f64, games: u32) bool {
+    if (games < min_pair_games) return false;
+    return @abs(pp) > 98 / @sqrt(@as(f64, @floatFromInt(games)));
+}
+
 fn pairCard(site: *const Site, w: *Writer, title: []const u8, sub: []const u8, pairs: []const Pair, reverse: bool, show_role: bool) !void {
     try w.print("<div class=\"card\"><h3>{s} <span class=\"muted\">{s}</span></h3><ul>\n", .{ title, sub });
-    if (pairs.len == 0) try w.writeAll("<li class=\"muted\">Not enough games yet</li>\n");
+    if (pairs.len == 0) try w.writeAll("<li class=\"muted\">More data needed</li>\n");
     var i: usize = 0;
     while (i < pairs.len) : (i += 1) {
         const pr = pairs[if (reverse) pairs.len - 1 - i else i];

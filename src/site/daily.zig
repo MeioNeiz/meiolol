@@ -40,9 +40,10 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<h3>The four options in this draft</h3>
         \\<ul id="option-notes" class="card notes"></ul>
         \\<p class="muted">Points are percentage points of win chance, estimated from this
-        \\patch's games. Pairs with few games stay near zero, and lanes under 200 games are
-        \\greyed out. The numbers describe how drafts like this tend to go; they are not a
-        \\verdict on anyone's pick. <a href="method.html">Method</a>.</p>
+        \\patch's games. A lane edge is shown only with 400+ games and when it is larger than
+        \\chance alone would give; the rest say "more data needed". The numbers describe how
+        \\drafts like this tend to go; they are not a verdict on anyone's pick.
+        \\<a href="method.html">Method</a>.</p>
         \\</section>
         \\<h2>Archive</h2>
         \\<ul id="archive" class="archive"></ul>
