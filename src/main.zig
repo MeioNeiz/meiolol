@@ -14,6 +14,7 @@ pub const curves = @import("curves.zig");
 pub const pool = @import("pool.zig");
 pub const learning = @import("learning.zig");
 pub const eval = @import("eval.zig");
+pub const api = @import("api/root.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
 
@@ -70,6 +71,13 @@ const usage =
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8080
     \\              --out DIR        site directory to serve
+    \\  api         the "Your games" service: JSON at /api/ (src/api/root.zig; needs
+    \\              RIOT_API_KEY). Cache in DIR/api.db
+    \\              --host H         default 127.0.0.1 (local only)
+    \\              --port P         default 8090
+    \\              --curves DIR     curves-<patch>.bin files (default DIR/export)
+    \\              --budget SPEC    Riot calls per route, Riot's format (default 20:120)
+    \\              --cors ORIGIN    allow a page on ORIGIN (local testing)
     \\  status      row counts and crawl queue state
     \\  rebuild     re-parse kept raw match JSON into the normalised tables
     \\  rekey       after switching to another app's key (new PUUIDs): forget
@@ -105,7 +113,10 @@ pub fn main(init: std.process.Init) !u8 {
     var riot_txt: ?[]const u8 = null;
     var public = false;
     var host: []const u8 = "127.0.0.1";
-    var port: u16 = 8080;
+    var port: ?u16 = null;
+    var curves_dir: ?[]const u8 = null;
+    var budget: ?[]const u8 = null;
+    var cors: ?[]const u8 = null;
     var min_games: u32 = 20;
     var eval_opts: eval.Options = .{};
     var i: usize = 2;
@@ -175,6 +186,12 @@ pub fn main(init: std.process.Init) !u8 {
         } else if (std.mem.eql(u8, a, "--folds")) {
             eval_opts.folds = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
             if (eval_opts.folds < 2) return usageError(a);
+        } else if (std.mem.eql(u8, a, "--curves")) {
+            curves_dir = v;
+        } else if (std.mem.eql(u8, a, "--budget")) {
+            budget = v;
+        } else if (std.mem.eql(u8, a, "--cors")) {
+            cors = v;
         } else if (std.mem.eql(u8, a, "--riot-txt")) {
             riot_txt = v;
         } else return usageError(a);
@@ -249,7 +266,23 @@ pub fn main(init: std.process.Init) !u8 {
     }
     if (std.mem.eql(u8, cmd, "serve")) {
         const dir = out_path orelse try std.fs.path.join(arena, &.{ data_dir, "site" });
-        try serve.run(init.gpa, init.io, dir, host, port);
+        try serve.run(init.gpa, init.io, dir, host, port orelse 8080);
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "api")) {
+        const key = try apiKey(init, arena) orelse {
+            std.log.err("RIOT_API_KEY not set (env or .env)", .{});
+            return 1;
+        };
+        try api.run(init.gpa, init.io, .{
+            .db_path = try std.fmt.allocPrintSentinel(arena, "{s}/api.db", .{data_dir}, 0),
+            .curves_dir = curves_dir orelse try std.fs.path.join(arena, &.{ data_dir, "export" }),
+            .key = key,
+            .host = host,
+            .port = port orelse 8090,
+            .cors = cors,
+            .fetch = .{ .budget = budget orelse "20:120" },
+        });
         return 0;
     }
     if (std.mem.eql(u8, cmd, "status")) {

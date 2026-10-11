@@ -1,0 +1,178 @@
+//! api.db: looked-up accounts and players, the refresh queue, and matches cached by id.
+//! Own file, separate from the crawler's databases: the service runs on the web server.
+
+const std = @import("std");
+const store = @import("store");
+
+const Db = store.Db;
+
+pub const schema =
+    \\PRAGMA journal_mode = WAL;
+    \\
+    \\-- Riot ID (lower case "name#tag") -> PUUID; puuid NULL when Riot has no such account
+    \\CREATE TABLE IF NOT EXISTS accounts (
+    \\    riot_id TEXT PRIMARY KEY,
+    \\    puuid TEXT,
+    \\    checked INTEGER NOT NULL
+    \\) WITHOUT ROWID;
+    \\
+    \\-- Looked-up players only. Name and tag as Riot spells them; tier is the visible solo
+    \\-- queue rank at the last refresh (never MMR)
+    \\CREATE TABLE IF NOT EXISTS players (
+    \\    puuid TEXT PRIMARY KEY,
+    \\    game_name TEXT NOT NULL,
+    \\    tag_line TEXT NOT NULL,
+    \\    platform TEXT NOT NULL,
+    \\    tier TEXT,
+    \\    division TEXT,
+    \\    lp INTEGER,
+    \\    refreshed INTEGER NOT NULL DEFAULT 0,
+    \\    looked_up INTEGER NOT NULL DEFAULT 0,
+    \\    error TEXT
+    \\) WITHOUT ROWID;
+    \\
+    \\-- Work for the fetcher: a lower case Riot ID to resolve, or a PUUID to refresh.
+    \\-- pending/total: games still to fetch, for the page's progress line
+    \\CREATE TABLE IF NOT EXISTS jobs (
+    \\    key TEXT PRIMARY KEY,
+    \\    requested INTEGER NOT NULL,
+    \\    pending INTEGER,
+    \\    total INTEGER
+    \\) WITHOUT ROWID;
+    \\
+    \\CREATE TABLE IF NOT EXISTS player_games (
+    \\    puuid TEXT NOT NULL,
+    \\    match_id TEXT NOT NULL,
+    \\    start_ms INTEGER NOT NULL,
+    \\    slot INTEGER NOT NULL,
+    \\    PRIMARY KEY (puuid, match_id)
+    \\) WITHOUT ROWID;
+    \\
+    \\-- Objections (docs/your-games.md): to prove they own a Riot ID, the player sets
+    \\-- profile icon `icon` before `expires` (unix s). state: pending (being issued),
+    \\-- issued, checking, mismatch (icon not set yet), done, not_found
+    \\CREATE TABLE IF NOT EXISTS challenges (
+    \\    riot_id TEXT PRIMARY KEY,
+    \\    puuid TEXT,
+    \\    icon INTEGER,
+    \\    expires INTEGER NOT NULL,
+    \\    state TEXT NOT NULL
+    \\) WITHOUT ROWID;
+    \\
+    \\-- Players who objected (or Riot asked us to erase): never fetched or shown again
+    \\CREATE TABLE IF NOT EXISTS blocked (
+    \\    puuid TEXT PRIMARY KEY,
+    \\    at INTEGER NOT NULL
+    \\) WITHOUT ROWID;
+    \\
+    \\-- summary: gzip JSON of game.Summary (no names; PUUIDs hashed). timeline: gzip
+    \\-- compact timeline (riot/timeline.zig), NULL when Riot has none
+    \\CREATE TABLE IF NOT EXISTS matches (
+    \\    match_id TEXT PRIMARY KEY,
+    \\    fetched INTEGER NOT NULL,
+    \\    summary BLOB NOT NULL,
+    \\    timeline BLOB
+    \\);
+;
+
+pub fn open(path: [:0]const u8) !Db {
+    const db = try Db.open(path);
+    errdefer db.close();
+    try db.exec(schema);
+    return db;
+}
+
+/// Lower case "name#tag" with surrounding spaces trimmed; null unless both parts are
+/// there and within Riot's lengths (name 3-16, tag 3-5; checked loosely, Riot decides)
+pub fn riotIdKey(buf: []u8, name: []const u8, tag: []const u8) ?[]const u8 {
+    const n = std.mem.trim(u8, name, " ");
+    const t = std.mem.trim(u8, tag, " ");
+    if (n.len == 0 or n.len > 32 or t.len == 0 or t.len > 8) return null;
+    if (std.mem.indexOfAny(u8, n, "#/?\\") != null or std.mem.indexOfAny(u8, t, "#/?\\ ") != null) return null;
+    const key = std.fmt.bufPrint(buf, "{s}#{s}", .{ n, t }) catch return null;
+    // ASCII only: Riot IDs may hold other letters, and lookups by them are case
+    // insensitive on Riot's side, so a missed fold only costs a second cache row
+    for (key) |*c| c.* = std.ascii.toLower(c.*);
+    return key;
+}
+
+/// Deletes everything about one player (their row, games, any queued job) and blocks
+/// their PUUID from being fetched again: for objections and Riot's erasure lists. The
+/// blocklist keeps the PUUID alone, the minimum needed to honour the objection.
+/// Matches stay: they hold no names, and other players may share them; unreferenced
+/// ones go. `now` in unix seconds
+pub fn forget(db: Db, puuid: []const u8, now: i64) !void {
+    try db.begin();
+    errdefer db.rollback();
+    try db.run("INSERT OR REPLACE INTO blocked VALUES (?, ?)", .{ puuid, now });
+    try deletePlayers(db, "SELECT ?1", .{puuid});
+    try db.commit();
+}
+
+/// Retention: players nobody has looked up since `before` (unix s) go, unblocked (a
+/// new lookup starts afresh); so do settled or expired challenges and remembered
+/// unknown Riot IDs older than a day
+pub fn prune(db: Db, before: i64, now: i64) !void {
+    try db.begin();
+    errdefer db.rollback();
+    try deletePlayers(db, "SELECT puuid FROM players WHERE looked_up < ?1", .{before});
+    try db.run("DELETE FROM challenges WHERE expires < ?", .{now - std.time.s_per_day});
+    try db.run("DELETE FROM accounts WHERE puuid IS NULL AND checked < ?", .{now - std.time.s_per_day});
+    try db.commit();
+}
+
+/// Players whose PUUIDs `select` returns, with their games, accounts and jobs; then
+/// matches no remaining player references. Caller holds the transaction
+fn deletePlayers(db: Db, comptime select: []const u8, args: anytype) !void {
+    try db.run("CREATE TEMP TABLE IF NOT EXISTS gone (puuid TEXT PRIMARY KEY)", .{});
+    try db.run("DELETE FROM temp.gone", .{});
+    try db.run("INSERT OR IGNORE INTO temp.gone " ++ select, args);
+    try db.run("DELETE FROM players WHERE puuid IN temp.gone", .{});
+    try db.run("DELETE FROM player_games WHERE puuid IN temp.gone", .{});
+    try db.run("DELETE FROM accounts WHERE puuid IN temp.gone", .{});
+    try db.run("DELETE FROM jobs WHERE key IN temp.gone", .{});
+    try db.run(
+        \\DELETE FROM matches WHERE match_id NOT IN (SELECT match_id FROM player_games)
+    , .{});
+}
+
+test "prune drops players not looked up, keeps blocked ones blocked" {
+    const db = try open(":memory:");
+    defer db.close();
+    try db.run("INSERT INTO players (puuid, game_name, tag_line, platform, looked_up) VALUES ('old','A','1','EUW1',10), ('new','B','1','EUW1',500)", .{});
+    try db.run("INSERT INTO player_games VALUES ('old','M1',0,0), ('new','M2',0,0)", .{});
+    try db.run("INSERT INTO matches VALUES ('M1',0,x'00',NULL), ('M2',0,x'00',NULL)", .{});
+    try db.run("INSERT INTO accounts VALUES ('old#1','old',0), ('gone#1',NULL,0)", .{});
+    try db.run("INSERT INTO blocked VALUES ('x', 0)", .{});
+    try prune(db, 100, 1_000_000);
+    try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM players", .{}));
+    try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM matches WHERE match_id = 'M2'", .{}));
+    try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM matches", .{}));
+    try testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM accounts", .{}));
+    try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM blocked", .{}));
+}
+
+const testing = std.testing;
+
+test riotIdKey {
+    var buf: [64]u8 = undefined;
+    try testing.expectEqualStrings("faker#kr1", riotIdKey(&buf, " Faker ", "KR1").?);
+    try testing.expectEqualStrings("hide on bush#kr1", riotIdKey(&buf, "Hide on bush", "KR1").?);
+    try testing.expect(riotIdKey(&buf, "", "EUW") == null);
+    try testing.expect(riotIdKey(&buf, "a/b", "EUW") == null);
+    try testing.expect(riotIdKey(&buf, "name", "toolongtag") == null);
+}
+
+test "forget keeps matches other players share" {
+    const db = try open(":memory:");
+    defer db.close();
+    try db.run("INSERT INTO players (puuid, game_name, tag_line, platform) VALUES ('a','A','1','EUW1'), ('b','B','1','EUW1')", .{});
+    try db.run("INSERT INTO accounts VALUES ('a#1','a',0), ('b#1','b',0)", .{});
+    try db.run("INSERT INTO player_games VALUES ('a','M1',0,0), ('a','M2',0,0), ('b','M2',0,1)", .{});
+    try db.run("INSERT INTO matches VALUES ('M1',0,x'00',NULL), ('M2',0,x'00',NULL)", .{});
+    try forget(db, "a", 0);
+    try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM players", .{}));
+    try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM accounts", .{}));
+    try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM matches WHERE match_id = 'M2'", .{}));
+    try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM matches", .{}));
+}

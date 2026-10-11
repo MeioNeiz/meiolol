@@ -88,7 +88,54 @@ pub fn masteries(c: *Client, p: Platform, puuid: []const u8) !?[]u8 {
     return c.get(p.host, path, "champion-mastery-v4.by-puuid");
 }
 
+/// Riot IDs are global: any of americas, asia or europe answers account-v1
+pub fn accountByRiotId(c: *Client, r: Region, game_name: []const u8, tag_line: []const u8) !?[]u8 {
+    var buf: [512]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try w.writeAll("/riot/account/v1/accounts/by-riot-id/");
+    try std.Uri.Component.percentEncode(&w, game_name, isUnreserved);
+    try w.writeByte('/');
+    try std.Uri.Component.percentEncode(&w, tag_line, isUnreserved);
+    return c.get(@tagName(r), w.buffered(), "account-v1.by-riot-id");
+}
+
+/// The platform a player plays League on ({"region": "euw1"}: a platform host)
+pub fn activePlatform(c: *Client, r: Region, puuid: []const u8) !?[]u8 {
+    var buf: [256]u8 = undefined;
+    const path = try std.fmt.bufPrint(&buf, "/riot/account/v1/region/by-game/lol/by-puuid/{s}", .{puuid});
+    return c.get(@tagName(r), path, "account-v1.region");
+}
+
+pub fn leagueByPuuid(c: *Client, p: Platform, puuid: []const u8) !?[]u8 {
+    var buf: [256]u8 = undefined;
+    const path = try std.fmt.bufPrint(&buf, "/lol/league/v4/entries/by-puuid/{s}", .{puuid});
+    return c.get(p.host, path, "league-v4.by-puuid");
+}
+
+/// For profileIconId: the ownership check before an objection is honoured
+pub fn summonerByPuuid(c: *Client, p: Platform, puuid: []const u8) !?[]u8 {
+    var buf: [256]u8 = undefined;
+    const path = try std.fmt.bufPrint(&buf, "/lol/summoner/v4/summoners/by-puuid/{s}", .{puuid});
+    return c.get(p.host, path, "summoner-v4.by-puuid");
+}
+
+fn isUnreserved(ch: u8) bool {
+    return std.ascii.isAlphanumeric(ch) or ch == '-' or ch == '.' or ch == '_' or ch == '~';
+}
+
+pub fn platformByHost(host: []const u8) ?Platform {
+    for (platforms) |p| if (std.ascii.eqlIgnoreCase(p.host, host)) return p;
+    return null;
+}
+
+pub const Account = struct {
+    puuid: []const u8,
+    gameName: ?[]const u8 = null,
+    tagLine: ?[]const u8 = null,
+};
+
 pub const LeagueEntry = struct {
+    queueType: ?[]const u8 = null,
     puuid: ?[]const u8 = null,
     tier: []const u8,
     rank: []const u8,

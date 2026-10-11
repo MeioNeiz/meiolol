@@ -11,6 +11,8 @@ src/
   learning.zig       learning curves: results by games played on a champion
   stats.zig          model file from the matches table (`meiolol stats`)
   eval.zig           draft model on held-out newer games (`meiolol eval`, docs/model.md)
+  api/               "Your games" service (`meiolol api`, docs/your-games.md): cache.zig
+                     (api.db), fetch.zig (the one Riot caller), game.zig (lane vs curve)
   site/              public website generator (`meiolol site`): html.zig layout and
                      boilerplate, prose.zig fixed pages, static/ (css, draft.js)
   wasm.zig           recommender in the browser (wasm32-freestanding),
@@ -214,6 +216,17 @@ edges with games (greyed under 200), and each option's points with reasons.
   page shows the viewer's local date's puzzle (hence two days ahead), ?n= for the
   archive. Guesses, streak and archive in localStorage (key meiolol.daily.v1); share
   text is an emoji grid with the link
+
+## Your games service (src/api, src/site/your.zig, static/your.js)
+
+`meiolol api` on the jomove server behind nginx at /api/; details, privacy decisions and
+deploy steps in docs/your-games.md. Requests answer from api.db (own SQLite file, not
+the crawler's) and queue jobs; one fetcher task makes every Riot call within a budget per
+route (default 20 per 2 min) on top of the shared Limiter. Matches cached by id (summary
+without names, PUUIDs hashed; compact timeline). Per-game numbers come from curves.zig
+`lane()`, compared with `Curves.get` for the player's visible-tier bracket. Objection:
+profile-icon check, then delete and block the PUUID. Players not looked up for 90 days
+are pruned.
 
 ## App (src/app_main.zig, src/lcu)
 

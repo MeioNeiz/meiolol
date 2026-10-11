@@ -140,3 +140,12 @@ tr.thin td { color: var(--muted); opacity: 0.6; }
 .pool-main h2 .champ img { width: 40px; height: 40px; }
 .pool-h { margin: 20px 0 4px; }
 td.thin { color: var(--muted); opacity: 0.6; }
+/* Your games */
+.lookup { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.lookup input { flex: 1 1 220px; max-width: 320px; }
+.your-games { display: grid; gap: 16px; }
+.your-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.your-head .champ img { width: 28px; height: 28px; }
+.chart .you { fill: none; stroke: var(--text); stroke-width: 2.5; }
+.card ul.facts li { display: list-item; list-style: disc; margin-left: 18px; padding: 2px 0; }
+#stat-tabs button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }

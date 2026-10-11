@@ -8,6 +8,7 @@ const stats = @import("../stats.zig");
 pub const html = @import("html.zig");
 const prose = @import("prose.zig");
 const daily_page = @import("daily.zig");
+const your_page = @import("your.zig");
 const daily = @import("../daily.zig");
 const matchup = @import("matchup.zig");
 const pool_page = @import("pool.zig");
@@ -177,6 +178,7 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     try site.write("style.css", @embedFile("static/style.css"));
     try site.write("favicon.svg", @embedFile("static/favicon.svg"));
     try site.write("daily.js", @embedFile("static/daily.js"));
+    try site.write("your.js", @embedFile("static/your.js"));
     try site.write("meiolol.wasm", @embedFile("draft.wasm"));
     try site.write("data/stats.bin", model_bytes);
     try writeChampionsJson(&site);
@@ -221,6 +223,7 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
         .{ "method.html", "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
         .{ "daily.html", "Daily Draft", "Guess the hidden champion and the winner of a real ranked draft, then see what the numbers say.", .daily, daily_page.page },
         .{ "download.html", "Desktop app", "The meiolol desktop app for Windows, in development.", .none, prose.download },
+        .{ "your.html", "Your games", "Your lane in each recent ranked game, minute by minute, against how the matchup typically goes at your rank.", .none, your_page.page },
         .{ "privacy.html", "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
         .{ "terms.html", "Terms of use", "Terms for using meiolol.", .none, prose.terms },
     };

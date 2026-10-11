@@ -1,0 +1,455 @@
+//! `meiolol api`: the dynamic service behind "Your games" (docs/your-games.md). JSON
+//! over HTTP on localhost, behind nginx at /api/ on the website's host. Lookups queue a
+//! job for the fetcher (fetch.zig, the only Riot caller) and return at once; the page
+//! polls until the job is done.
+//!
+//!   GET  /api/games?id=Name%23TAG   state, player, report (game.zig)
+//!   POST /api/forget?id=Name%23TAG  objection: issue a profile icon; &check=1 checks it
+//!   GET  /api/forget?id=Name%23TAG  the objection's state
+//!   GET  /api/health                queue length
+
+const std = @import("std");
+const Io = std.Io;
+const store = @import("store");
+const core = @import("core");
+const ddragon = @import("../ddragon.zig");
+pub const cache = @import("cache.zig");
+pub const fetch = @import("fetch.zig");
+pub const game = @import("game.zig");
+
+const Allocator = std.mem.Allocator;
+const log = std.log.scoped(.api);
+
+pub const Options = struct {
+    /// api.db
+    db_path: [:0]const u8,
+    /// Directory with curves-<patch>.bin files (`meiolol curves`); may be empty
+    curves_dir: []const u8,
+    key: []const u8,
+    host: []const u8 = "127.0.0.1",
+    port: u16 = 8090,
+    /// Access-Control-Allow-Origin, for a page served from another origin in testing
+    cors: ?[]const u8 = null,
+    fetch: fetch.Options = .{},
+    /// Refresh a player's games when the last refresh is older than this
+    refresh_after_s: i64 = 30 * 60,
+    /// Retry an unknown Riot ID after this long
+    not_found_s: i64 = 24 * 60 * 60,
+    /// More queued lookups than this and new ones are refused (503) until it drains
+    max_jobs: i64 = 30,
+    /// Games in a report, newest first
+    max_games: u32 = 100,
+};
+
+/// Newest curves files kept in memory (tens of MB each at full crawl; the web server
+/// has ~1 GB)
+const max_curve_files = 2;
+
+const Context = struct {
+    gpa: Allocator,
+    io: Io,
+    opts: Options,
+    curves: game.CurveSet,
+};
+
+pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var ctx: Context = .{ .gpa = gpa, .io = io, .opts = opts, .curves = try loadCurves(gpa, arena, io, opts.curves_dir) };
+    // Item lists change little between patches: the newest curves patch's serves all
+    if (ctx.curves.files.len > 0) {
+        const label = ctx.curves.files[0].label;
+        const patch = label[if (std.mem.indexOfScalar(u8, label, '-')) |d| d + 1 else 0..];
+        if (ddragon.legendaries(arena, io, patch)) |ids| {
+            ctx.curves.legendaries = ids;
+        } else |err| log.warn("legendary items for {s}: {t}; first items left out", .{ patch, err });
+    }
+
+    const db = try cache.open(opts.db_path);
+    defer db.close();
+    var fetcher: fetch.Fetcher = .{ .gpa = gpa, .io = io, .key = opts.key, .db = db, .opts = opts.fetch };
+    defer fetcher.deinit();
+
+    const address = try Io.net.IpAddress.parse(opts.host, opts.port);
+    var server = try address.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
+    log.info("api on http://{s}:{d}/api/, {d} curves files, budget {s} per route", .{
+        opts.host, opts.port, ctx.curves.files.len, opts.fetch.budget,
+    });
+
+    var group: Io.Group = .init;
+    defer group.cancel(io);
+    var worker = try io.concurrent(work, .{&fetcher});
+    defer worker.cancel(io);
+    while (true) {
+        const stream = try server.accept(io);
+        group.async(io, connection, .{ &ctx, stream });
+    }
+}
+
+/// Without the fetcher the service only serves stale caches: exit, so systemd restarts
+/// it, except on a rejected key (exit 3, as the crawler; the unit does not restart on 3)
+fn work(f: *fetch.Fetcher) void {
+    f.run() catch |err| switch (err) {
+        error.Canceled => return,
+        error.KeyRejected => {
+            log.err("Riot rejected the API key", .{});
+            std.process.exit(3);
+        },
+        else => {
+            log.err("fetcher stopped: {t}", .{err});
+            std.process.exit(1);
+        },
+    };
+}
+
+/// curves-<label>.bin files, newest patch first, at most max_curve_files
+fn loadCurves(gpa: Allocator, arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
+    var dir = Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch |err| switch (err) {
+        error.FileNotFound => {
+            log.warn("no curves directory {s}: games show without typical curves", .{dir_path});
+            return .{};
+        },
+        else => return err,
+    };
+    defer dir.close(io);
+    var names: std.ArrayList([]const u8) = .empty;
+    var it = dir.iterate();
+    while (try it.next(io)) |e| {
+        if (e.kind != .file or !std.mem.startsWith(u8, e.name, "curves-") or !std.mem.endsWith(u8, e.name, ".bin")) continue;
+        try names.append(arena, try arena.dupe(u8, e.name));
+    }
+    std.mem.sort([]const u8, names.items, {}, struct {
+        fn newer(_: void, a: []const u8, b: []const u8) bool {
+            return newestPatch(a) > newestPatch(b);
+        }
+    }.newer);
+    var files: std.ArrayList(game.CurveSet.File) = .empty;
+    for (names.items) |name| {
+        if (files.items.len == max_curve_files) break;
+        // Parsed copies live on; the raw bytes go at once (the web server is small)
+        const bytes = try dir.readFileAlloc(io, name, gpa, .limited(1 << 30));
+        defer gpa.free(bytes);
+        const curves = core.curvesfile.Curves.parse(arena, bytes) catch |err| {
+            log.warn("{s}: {t}", .{ name, err });
+            continue;
+        };
+        const label = name["curves-".len .. name.len - ".bin".len];
+        try files.append(arena, .{ .label = label, .curves = curves });
+        log.info("{s}: {d} curves", .{ name, curves.curves.len });
+    }
+    return .{ .files = files.items };
+}
+
+/// "curves-16.19-16.20.bin" -> 1620; 0 when unreadable
+fn newestPatch(name: []const u8) u32 {
+    if (name.len < "curves-.bin".len) return 0;
+    const label = name["curves-".len .. name.len - ".bin".len];
+    const r = game.CurveSet.patchRange(label) orelse return 0;
+    return r[1];
+}
+
+test newestPatch {
+    try std.testing.expect(newestPatch("curves-17.10.bin") > newestPatch("curves-17.9.bin"));
+    try std.testing.expectEqual(1620, newestPatch("curves-16.19-16.20.bin"));
+    try std.testing.expectEqual(0, newestPatch("curves-x.bin"));
+}
+
+fn connection(ctx: *Context, stream: Io.net.Stream) void {
+    const io = ctx.io;
+    defer stream.close(io);
+    var recv_buffer: [8192]u8 = undefined;
+    var send_buffer: [16 * 1024]u8 = undefined;
+    var conn_reader = stream.reader(io, &recv_buffer);
+    var conn_writer = stream.writer(io, &send_buffer);
+    var server = std.http.Server.init(&conn_reader.interface, &conn_writer.interface);
+    while (server.reader.state == .ready) {
+        var request = server.receiveHead() catch |err| switch (err) {
+            error.HttpConnectionClosing => return,
+            else => return log.debug("closing connection: {t}", .{err}),
+        };
+        // std's respond() asserts a POST states its body length; a bare `curl -X POST`
+        // states none, which would crash the service. No length and no chunking means
+        // no body (RFC 9112 6.3)
+        if (request.head.transfer_encoding == .none and request.head.content_length == null) {
+            request.head.content_length = 0;
+        }
+        handle(ctx, &request) catch |err| {
+            log.warn("{s}: {t}", .{ request.head.target, err });
+            return;
+        };
+    }
+}
+
+const Status = std.http.Status;
+
+fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const target = request.head.target;
+    const q = std.mem.indexOfScalar(u8, target, '?') orelse target.len;
+    const path = target[0..q];
+    const query = if (q < target.len) target[q + 1 ..] else "";
+    const method = request.head.method;
+
+    if (std.mem.eql(u8, path, "/api/games") and method == .GET) {
+        const db = try cache.open(ctx.opts.db_path);
+        defer db.close();
+        const r = try games(ctx, arena, db, query);
+        return send(ctx, request, r.status, r.body);
+    }
+    if (std.mem.eql(u8, path, "/api/forget") and (method == .POST or method == .GET)) {
+        const db = try cache.open(ctx.opts.db_path);
+        defer db.close();
+        const r = try forget(ctx, arena, db, query, method == .POST);
+        return send(ctx, request, r.status, r.body);
+    }
+    if (std.mem.eql(u8, path, "/api/health") and method == .GET) {
+        const db = try cache.open(ctx.opts.db_path);
+        defer db.close();
+        const jobs = try db.scalar("SELECT count(*) FROM jobs", .{}) orelse 0;
+        return send(ctx, request, .ok, try std.fmt.allocPrint(arena, "{{\"ok\":true,\"jobs\":{d}}}", .{jobs}));
+    }
+    return send(ctx, request, .not_found, "{\"error\":\"not found\"}");
+}
+
+fn send(ctx: *Context, request: *std.http.Server.Request, status: Status, body: []const u8) !void {
+    var headers: [3]std.http.Header = undefined;
+    var n: usize = 0;
+    headers[n] = .{ .name = "content-type", .value = "application/json" };
+    n += 1;
+    headers[n] = .{ .name = "cache-control", .value = "no-store" };
+    n += 1;
+    if (ctx.opts.cors) |origin| {
+        headers[n] = .{ .name = "access-control-allow-origin", .value = origin };
+        n += 1;
+    }
+    try request.respond(body, .{ .status = status, .extra_headers = headers[0..n] });
+}
+
+const Reply = struct { status: Status, body: []const u8 };
+
+fn errorReply(arena: Allocator, status: Status, state: []const u8, message: []const u8) !Reply {
+    return .{ .status = status, .body = try std.json.Stringify.valueAlloc(arena, .{ .state = state, .@"error" = message }, .{}) };
+}
+
+/// Value of `name` in a query string, percent-decoded; null when absent
+pub fn param(arena: Allocator, query: []const u8, name: []const u8) !?[]const u8 {
+    var it = std.mem.splitScalar(u8, query, '&');
+    while (it.next()) |pair| {
+        const eq = std.mem.indexOfScalar(u8, pair, '=') orelse continue;
+        if (!std.mem.eql(u8, pair[0..eq], name)) continue;
+        const v = try arena.dupe(u8, pair[eq + 1 ..]);
+        return std.Uri.percentDecodeInPlace(v);
+    }
+    return null;
+}
+
+/// The lower case Riot ID key from ?id=Name#TAG
+fn riotIdParam(arena: Allocator, query: []const u8) !?[]const u8 {
+    const id = try param(arena, query, "id") orelse return null;
+    const hash = std.mem.lastIndexOfScalar(u8, id, '#') orelse return null;
+    const buf = try arena.alloc(u8, id.len);
+    return cache.riotIdKey(buf, id[0..hash], id[hash + 1 ..]);
+}
+
+const PlayerOut = struct {
+    name: []const u8,
+    tag: []const u8,
+    platform: []const u8,
+    tier: ?[]const u8,
+    division: ?[]const u8,
+    lp: ?i64,
+    /// Unix seconds; 0 before the first refresh
+    refreshed: i64,
+    @"error": ?[]const u8,
+};
+
+const GamesOut = struct {
+    /// queued: waiting for the fetcher; fetching: in progress; ready; not_found
+    state: []const u8,
+    /// Jobs ahead in the queue
+    ahead: ?i64 = null,
+    /// Games left to fetch and in this refresh
+    pending: ?i64 = null,
+    total: ?i64 = null,
+    player: ?PlayerOut = null,
+    report: ?game.Report = null,
+};
+
+fn games(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Reply {
+    const key = try riotIdParam(arena, query) orelse
+        return errorReply(arena, .bad_request, "error", "expected ?id=Name#TAG");
+    const now = std.Io.Clock.real.now(ctx.io).toSeconds();
+
+    // Every read statement is finished before a write (see fetch.cachedSummary)
+    const acct = try account(arena, db, key);
+    if (acct == null or (acct.?.puuid == null and now - acct.?.checked > ctx.opts.not_found_s)) {
+        if (!try enqueue(ctx, db, key, now)) return busy(arena);
+        return reply(arena, try progress(arena, db, key, .{ .state = "queued" }));
+    }
+    const puuid = acct.?.puuid orelse return .{
+        .status = .not_found,
+        .body = try std.json.Stringify.valueAlloc(arena, GamesOut{ .state = "not_found" }, .{}),
+    };
+    if (try db.scalar("SELECT 1 FROM blocked WHERE puuid = ?", .{puuid}) != null) {
+        return reply(arena, .{ .state = "opted_out" });
+    }
+    const player = try loadPlayer(arena, db, puuid) orelse {
+        if (!try enqueue(ctx, db, key, now)) return busy(arena);
+        return reply(arena, try progress(arena, db, key, .{ .state = "queued" }));
+    };
+    try db.run("UPDATE players SET looked_up = ? WHERE puuid = ?", .{ now, puuid });
+    // A job for this player under either key: the Riot ID while resolving, else PUUID
+    const job_key = if (try db.scalar("SELECT 1 FROM jobs WHERE key = ?", .{key}) != null) key else puuid;
+    if (now - player.refreshed > ctx.opts.refresh_after_s) _ = try enqueue(ctx, db, job_key, now);
+
+    var out = try progress(arena, db, job_key, .{ .state = "ready", .player = player });
+    out.report = try report(ctx, arena, db, puuid, .{ .tier = player.tier, .division = player.division, .lp = player.lp });
+    return reply(arena, out);
+}
+
+fn account(arena: Allocator, db: store.Db, key: []const u8) !?struct { puuid: ?[]const u8, checked: i64 } {
+    var q = try db.prepare("SELECT puuid, checked FROM accounts WHERE riot_id = ?");
+    defer q.deinit();
+    try q.bind(.{key});
+    if (!try q.step()) return null;
+    return .{ .puuid = if (q.isNull(0)) null else try arena.dupe(u8, q.bytes(0)), .checked = q.int(1) };
+}
+
+fn loadPlayer(arena: Allocator, db: store.Db, puuid: []const u8) !?PlayerOut {
+    var p = try db.prepare(
+        \\SELECT game_name, tag_line, platform, tier, division, lp, refreshed, error
+        \\FROM players WHERE puuid = ?
+    );
+    defer p.deinit();
+    try p.bind(.{puuid});
+    if (!try p.step()) return null;
+    return .{
+        .name = try arena.dupe(u8, p.bytes(0)),
+        .tag = try arena.dupe(u8, p.bytes(1)),
+        .platform = try arena.dupe(u8, p.bytes(2)),
+        .tier = if (p.isNull(3)) null else try arena.dupe(u8, p.bytes(3)),
+        .division = if (p.isNull(4)) null else try arena.dupe(u8, p.bytes(4)),
+        .lp = p.optInt(5),
+        .refreshed = p.int(6),
+        .@"error" = if (p.isNull(7)) null else try arena.dupe(u8, p.bytes(7)),
+    };
+}
+
+fn reply(arena: Allocator, out: GamesOut) !Reply {
+    return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, out, .{ .emit_null_optional_fields = false }) };
+}
+
+fn busy(arena: Allocator) !Reply {
+    return errorReply(arena, .service_unavailable, "busy", "too many lookups queued; try again in a few minutes");
+}
+
+/// False when the queue is full. A key already queued keeps its place
+fn enqueue(ctx: *Context, db: store.Db, key: []const u8, now: i64) !bool {
+    if (try db.scalar("SELECT 1 FROM jobs WHERE key = ?", .{key}) != null) return true;
+    const jobs = try db.scalar("SELECT count(*) FROM jobs", .{}) orelse 0;
+    if (jobs >= ctx.opts.max_jobs) return false;
+    try db.run("INSERT OR IGNORE INTO jobs (key, requested) VALUES (?, ?)", .{ key, now });
+    return true;
+}
+
+/// `out` with the job's place and progress when one is queued
+fn progress(arena: Allocator, db: store.Db, key: []const u8, out: GamesOut) !GamesOut {
+    _ = arena;
+    var o = out;
+    var q = try db.prepare("SELECT requested, pending, total FROM jobs WHERE key = ?");
+    defer q.deinit();
+    try q.bind(.{key});
+    if (!try q.step()) return o;
+    o.ahead = try db.scalar("SELECT count(*) FROM jobs WHERE requested < ?", .{q.int(0)});
+    o.pending = q.optInt(1);
+    o.total = q.optInt(2);
+    o.state = if (o.pending != null) "fetching" else "queued";
+    return o;
+}
+
+fn report(ctx: *Context, arena: Allocator, db: store.Db, puuid: []const u8, rank: game.Rank) !game.Report {
+    var q = try db.prepare(
+        \\SELECT pg.match_id, pg.slot, m.summary, m.timeline
+        \\FROM player_games pg JOIN matches m USING (match_id)
+        \\WHERE pg.puuid = ? ORDER BY pg.start_ms DESC LIMIT ?
+    );
+    defer q.deinit();
+    try q.bind(.{ puuid, ctx.opts.max_games });
+    var inputs: std.ArrayList(game.Input) = .empty;
+    while (try q.step()) {
+        const summary = fetch.readSummary(arena, q.bytes(2)) catch |err| {
+            log.warn("{s}: summary {t}", .{ q.bytes(0), err });
+            continue;
+        };
+        const slot: u8 = @intCast(q.int(1));
+        if (slot >= summary.players.len) continue;
+        const t = if (q.isNull(3)) null else fetch.readTimeline(arena, q.bytes(3)) catch |err| blk: {
+            log.warn("{s}: timeline {t}", .{ q.bytes(0), err });
+            break :blk null;
+        };
+        try inputs.append(arena, .{ .summary = summary, .slot = slot, .timeline = t });
+    }
+    return game.report(arena, inputs.items, rank, ctx.curves);
+}
+
+/// Objection and removal, gated by the profile icon check (docs/your-games.md).
+/// POST starts a challenge (or, with &check=1, checks the icon); GET reports its state.
+/// The fetcher does the Riot calls: the page polls GET until the state settles
+fn forget(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8, post: bool) !Reply {
+    const key = try riotIdParam(arena, query) orelse
+        return errorReply(arena, .bad_request, "error", "expected ?id=Name#TAG");
+    const now = std.Io.Clock.real.now(ctx.io).toSeconds();
+    if (post) {
+        const check = try param(arena, query, "check") != null;
+        const state = blk: {
+            var q = try db.prepare("SELECT state, expires FROM challenges WHERE riot_id = ?");
+            defer q.deinit();
+            try q.bind(.{key});
+            if (!try q.step() or q.int(1) <= now) break :blk "";
+            break :blk try arena.dupe(u8, q.bytes(0));
+        };
+        const waiting = std.mem.eql(u8, state, "issued") or std.mem.eql(u8, state, "mismatch");
+        const busy_already = std.mem.eql(u8, state, "pending") or std.mem.eql(u8, state, "checking");
+        if ((check and waiting) or !(waiting or busy_already)) {
+            // Room first: a challenge row with no job behind it would hang until expiry
+            const jobs = try db.scalar("SELECT count(*) FROM jobs", .{}) orelse 0;
+            if (jobs >= ctx.opts.max_jobs) return busy(arena);
+            if (check and waiting) {
+                try db.run("UPDATE challenges SET state = 'checking' WHERE riot_id = ?", .{key});
+            } else {
+                try db.run("INSERT OR REPLACE INTO challenges VALUES (?, NULL, NULL, ?, 'pending')", .{ key, now + fetch.challenge_s });
+            }
+            var buf: [128]u8 = undefined;
+            const job = try std.fmt.bufPrint(&buf, "{s}{s}", .{ fetch.verify_prefix, key });
+            // requested 0: ahead of every lookup, someone is waiting on the page
+            try db.run("INSERT OR REPLACE INTO jobs (key, requested) VALUES (?, 0)", .{job});
+        }
+    }
+    var q = try db.prepare("SELECT state, icon, expires FROM challenges WHERE riot_id = ?");
+    defer q.deinit();
+    try q.bind(.{key});
+    if (!try q.step()) return .{ .status = .ok, .body = "{\"state\":\"none\"}" };
+    const expired = q.int(2) <= now and !std.mem.eql(u8, q.bytes(0), "done");
+    return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, .{
+        .state = if (expired) "expired" else q.bytes(0),
+        .icon = q.optInt(1),
+        .expires = q.int(2),
+    }, .{}) };
+}
+
+test param {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const v = (try param(arena, "x=1&id=Hide%20on%20bush%23KR1", "id")).?;
+    try std.testing.expectEqualStrings("Hide on bush#KR1", v);
+    try std.testing.expect(try param(arena, "x=1", "id") == null);
+}
+
+test {
+    std.testing.refAllDecls(@This());
+}
