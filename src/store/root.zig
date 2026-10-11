@@ -6,6 +6,7 @@ pub const raw = @import("raw.zig");
 
 pub const Db = sqlite.Db;
 pub const Blob = sqlite.Blob;
+pub const Stmt = sqlite.Stmt;
 pub const open = schema.open;
 
 test {

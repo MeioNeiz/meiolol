@@ -19,6 +19,11 @@ fn failure(db: ?*c.sqlite3, rc: c_int, what: []const u8) Error {
         log.warn("{s}: {s}", .{ what, msg });
         return error.Busy;
     }
+    // One bad row, which callers like the crawler's writer skip and carry on
+    if (rc & 0xff == c.SQLITE_CONSTRAINT) {
+        log.warn("{s}: {s}", .{ what, msg });
+        return error.Sqlite;
+    }
     log.err("{s}: {s}", .{ what, msg });
     return error.Sqlite;
 }
@@ -140,6 +145,11 @@ pub const Stmt = struct {
             c.SQLITE_DONE => false,
             else => |rc| failure(s.db, rc, "step"),
         };
+    }
+
+    /// Ends a read early (a statement stepped to its first row only)
+    pub fn reset(s: *Stmt) void {
+        _ = c.sqlite3_reset(s.handle);
     }
 
     pub fn exec(s: *Stmt, args: anytype) Error!void {
