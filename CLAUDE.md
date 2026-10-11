@@ -12,8 +12,9 @@ docs/plan.md. Read it first.
   the gpu-box PC) and `meiolol-app` (player tool: suggest, watch, session, get)
 - Website: https://meiolol.jomify.lol, static nginx on the jomove server
   (`ssh -i ~/.ssh/oci_instance-20260714-1317 ubuntu@193.123.180.81`; jomove's own
-  site runs there too, leave its config alone). Box builds and uploads daily:
-  `deploy/box.sh web start jombirds@gmail.com|stop|status`. Preview mode until prod key
+  site runs there too, leave its config alone). Box builds and uploads on new data;
+  every push to main deploys (git hook, deploy/on-push.sh, log .git/meiolol-deploy.log).
+  `deploy/box.sh web start [jombirds@gmail.com]|stop|status`. Preview mode until prod key
 - Layout, modules, storage, model file format: docs/architecture.md
 - Draft model quality on held-out games (`meiolol eval`): docs/model.md. Measure any
   recommender change there first

@@ -68,8 +68,10 @@ with no work behind them) and hands out work, not just the next plan step.
    also serve jomove there, leave its config alone). Done 2026-10-11: nginx
    /etc/nginx/conf.d/meiolol.conf (root /var/www/meiolol, gzip_static, acme webroot
    /var/www/letsencrypt), user `meiolol` with only an rrsync key from the box,
-   `deploy/box.sh web start EMAIL` builds + uploads on each 20% growth in patch games,
-   at least daily (deploy/web-loop.sh).
+   `deploy/box.sh web start EMAIL` builds + uploads on new games: every 15 min early in
+   a patch (each 20% growth), then hourly (deploy/web-loop.sh). A push to main deploys
+   origin/main and uploads at once (deploy/hooks/reference-transaction, symlinked into
+   .git/hooks; deploy/on-push.sh).
    Live 2026-10-11 at https://meiolol.jomify.lol (Let's Encrypt via webroot, renews with
    certbot.timer). Left: real contact email (placeholder now; restart `deploy/box.sh web
    start EMAIL`). Keep preview mode until the production key is granted

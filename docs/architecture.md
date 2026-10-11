@@ -192,7 +192,8 @@ robots.txt disallow, banner): Riot forbids serving the public on a personal key;
 it on the box and rsyncs it to data/site. `meiolol serve` (src/serve.zig) serves a site
 directory over HTTP with .gz siblings; handy for local previews. Hosting:
 meiolol.jomify.lol, static nginx on the jomove server, uploaded from the box by
-deploy/web-loop.sh (often early in a patch, then daily; docs/plan.md step 2).
+deploy/web-loop.sh (every 15 min early in a patch, then hourly; docs/plan.md step 2),
+and at once on each push to main (deploy/on-push.sh).
 
 Known gaps: stats.bin is dense (~12 MB raw; brotli helps while sparse), no rank
 brackets (statsfile has none), no per-patch history.

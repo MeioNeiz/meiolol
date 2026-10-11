@@ -66,10 +66,13 @@ case "${1:-}" in
         # Site build and upload to the jomove server: deploy/web-loop.sh
         case "${2:-}" in
             start)
-                [[ -n "${3:-}" ]] || { echo "usage: deploy/box.sh web start <contact email>"; exit 2; }
+                # (Re)starts; the contact email is remembered on the box
+                contact=${3:-$(ssh "$HOST" "cat $DIR/contact 2>/dev/null" || true)}
+                [[ -n "$contact" ]] || { echo "usage: deploy/box.sh web start <contact email>"; exit 2; }
                 sync
-                ssh "$HOST" "cd $DIR && tmux new -d -s $WEB \
-                    'bin/web-loop.sh $3 >> data/web.log 2>&1'"
+                ssh "$HOST" "cd $DIR && echo '$contact' > contact \
+                    && { tmux kill-session -t $WEB 2>/dev/null || true; } \
+                    && tmux new -d -s $WEB 'bin/web-loop.sh $contact >> data/web.log 2>&1'"
                 echo "started $WEB on $HOST"
                 ;;
             stop) ssh "$HOST" "tmux kill-session -t $WEB" ;;
@@ -77,9 +80,9 @@ case "${1:-}" in
                 ssh "$HOST" "tmux has-session -t $WEB 2>/dev/null && echo running || echo stopped; \
                     tail -n 3 $DIR/data/web.log"
                 ;;
-            *) echo "usage: deploy/box.sh web start <contact>|stop|status"; exit 2 ;;
+            *) echo "usage: deploy/box.sh web start [contact]|stop|status"; exit 2 ;;
         esac
         ;;
-    *) echo "usage: deploy/box.sh sync|start|stop|status|logs [n]|run <meiolol args>|site <contact>|web start <contact>|stop|status"
+    *) echo "usage: deploy/box.sh sync|start|stop|status|logs [n]|run <meiolol args>|site <contact>|web start [contact]|stop|status"
        exit 2 ;;
 esac

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Runs on the box (deploy/box.sh web start): every 15 min, build the site and upload it to
-# the jomove server when the current patch's game count grew 20% since the last upload,
-# the patch changed, or a day passed. So early in a patch (few games) it pushes often,
-# later about daily. A build takes well under a second. The meiolol-web ssh alias is user
-# meiolol with a key limited to rsync into /var/www/meiolol (rrsync); nginx there serves
-# meiolol.jomify.lol. Riot's verification string, if any, lives in riot.txt beside bin/.
+# the jomove server when the patch changed, the current patch's game count grew 20% since
+# the last upload, or there are any new games and an hour passed. So early in a patch (few
+# games) it pushes every 15 min, later hourly. A build takes well under a second. The
+# meiolol-web ssh alias is user meiolol with a key limited to rsync into /var/www/meiolol
+# (rrsync); nginx there serves meiolol.jomify.lol. Riot's verification string, if any,
+# lives in riot.txt beside bin/.
 # Lane curves (`meiolol curves`, a pass over every timeline of the patch) are rebuilt daily
 # and when the patch changes; a fresh curves file forces an upload.
 # Daily, `meiolol eval` (docs/model.md) appends a line to data/eval-history.tsv (model
@@ -38,7 +39,8 @@ while true; do
             <<< "$out")
         now=$(date +%s)
         if [[ "$patch" != "$last_patch" ]] || (( games * 5 >= last_games * 6 )) \
-            || (( now - last_upload >= 86400 )) || (( fresh_curves )); then
+            || (( games > last_games && now - last_upload >= 3600 )) \
+            || (( fresh_curves )); then
             echo "$out"
             rm -rf data/site.old
             [ -d data/site ] && mv data/site data/site.old

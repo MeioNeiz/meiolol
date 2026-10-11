@@ -1,0 +1,9 @@
+#!/bin/sh
+# Starts deploy/on-push.sh when origin/main moves (after a push, or a fetch of someone
+# else's). Installed by symlink:
+#   ln -s ../../deploy/hooks/reference-transaction .git/hooks/
+# Git runs this for every ref update, so it must stay cheap and never block.
+[ "$1" = committed ] || exit 0
+grep -q ' refs/remotes/origin/main$' || exit 0
+root=$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)
+nohup "$root/deploy/on-push.sh" >> "$root/.git/meiolol-deploy.log" 2>&1 < /dev/null &
