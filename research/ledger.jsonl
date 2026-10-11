@@ -572,3 +572,5 @@
 {"t": "lead", "date": "2026-10-11", "url": "https://codeberg.org/ziglang/zig/issues/31421", "why": "Zig 0.16 Windows exe size regression; fixed in 0.17?", "for": "zig-gui-options", "key": "codeberg.org/ziglang/zig/issues/31421"}
 {"t": "lead", "date": "2026-10-11", "url": "https://github.com/floooh/sokol/blob/master/sokol_app.h", "why": "high_dpi handling on Windows for the sokol option", "for": "zig-gui-options", "key": "github.com/floooh/sokol"}
 {"t": "search", "date": "2026-10-11", "where": "other", "query": "zig 0.16 windows cross-compile builds of candidates (local)", "for": "zig-gui-options", "new": 1}
+{"t": "fetch", "date": "2026-10-11", "url": "https://ziglang.org/download/0.17.0/release-notes.html", "slug": "zig-017-release-notes", "file": "raw/zig-017-release-notes.md", "sha": "c3cddf7f392b", "key": "ziglang.org/download/0.17.0/release-notes.html"}
+{"t": "fetch", "date": "2026-10-11", "slug": "zig-017-trial-port", "file": "raw/zig-017-trial-port.md", "sha": "f1fdd675b90a"}
