@@ -24,7 +24,9 @@ product is meiolol itself, two faces of one application (docs/production-key.md)
 
 Several Claude sessions in parallel, coordinated by one (meiolol-44 at the time of
 writing). Code sessions use git worktrees and merge to main themselves after build and
-tests; deploys build from a commit, never the working tree. Jacob's standing ask: the
+tests; deploys build from a commit, never the working tree. In the shared main checkout
+commit only by explicit path (`git commit -m ... -- <paths>`): the index may hold another
+session's staged work. Jacob's standing ask: the
 coordinator reviews regularly for gaps nobody owns (risks, safety nets, doc requirements
 with no work behind them) and hands out work, not just the next plan step.
 
