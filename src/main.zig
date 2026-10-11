@@ -17,6 +17,8 @@ pub const learning = @import("learning.zig");
 pub const patchday = @import("patchday.zig");
 pub const eval = @import("eval.zig");
 pub const api = @import("api/root.zig");
+pub const backup = @import("backup.zig");
+pub const forget = @import("forget.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
 
@@ -92,6 +94,20 @@ const usage =
     \\  rekey       after switching to another app's key (new PUUIDs): forget
     \\              players, ladder and mastery, keep matches; run rebuild first
     \\  champions   refresh champion ids and names from Data Dragon
+    \\  backup      consistent copy of tables and compact timelines (docs/data-safety.md)
+    \\              --out DIR        default $MEIOLOL_BACKUPS or ./backups
+    \\              --keep-daily N   state snapshots kept (default 7)
+    \\              --keep-weekly N  plus the newest of N weeks (default 4)
+    \\              --full           one segment with every match, replacing the rest
+    \\  restore     rebuild --data DIR (no database there yet) from a backup
+    \\              --from DIR       backup directory
+    \\              --state FILE     state snapshot (default the newest)
+    \\  forget      erase players from every table (docs/data-safety.md)
+    \\              --puuid P        repeatable
+    \\              --riot-id N#T    repeatable; needs RIOT_API_KEY
+    \\              --list FILE      one PUUID or Riot ID per line (erasure lists)
+    \\              --backups DIR    also scrub every backup file there
+    \\              --export FILE    write every forgotten PUUID there, one per line
     \\
     \\options for all commands:
     \\  --data DIR  data directory (default $MEIOLOL_DATA or ./data)
@@ -130,11 +146,21 @@ pub fn main(init: std.process.Init) !u8 {
     var min_games: u32 = 20;
     var eval_opts: eval.Options = .{};
     var history: ?[]const u8 = null;
+    var keep_daily: usize = 7;
+    var keep_weekly: usize = 4;
+    var full = false;
+    var from_dir: ?[]const u8 = null;
+    var state_file: ?[]const u8 = null;
+    var erase: ForgetArgs = .{};
     var i: usize = 2;
     while (i < args.len) : (i += 1) {
         const a = args[i];
         if (std.mem.eql(u8, a, "--no-mastery")) {
             mastery = false;
+            continue;
+        }
+        if (std.mem.eql(u8, a, "--full")) {
+            full = true;
             continue;
         }
         if (std.mem.eql(u8, a, "--public")) {
@@ -213,6 +239,29 @@ pub fn main(init: std.process.Init) !u8 {
             exchange = v;
         } else if (std.mem.eql(u8, a, "--riot-txt")) {
             riot_txt = v;
+        } else if (std.mem.eql(u8, a, "--keep-daily")) {
+            keep_daily = std.fmt.parseInt(usize, v, 10) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--keep-weekly")) {
+            keep_weekly = std.fmt.parseInt(usize, v, 10) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--from")) {
+            from_dir = v;
+        } else if (std.mem.eql(u8, a, "--state")) {
+            state_file = v;
+        } else if (std.mem.eql(u8, a, "--backups")) {
+            erase.backups = v;
+        } else if (std.mem.eql(u8, a, "--export")) {
+            erase.export_path = v;
+        } else if (std.mem.eql(u8, a, "--puuid") or std.mem.eql(u8, a, "--riot-id")) {
+            try erase.ids.append(arena, v);
+        } else if (std.mem.eql(u8, a, "--list")) {
+            erase.listed = true;
+            const text = try std.Io.Dir.cwd().readFileAlloc(init.io, v, arena, .limited(64 << 20));
+            var lines = std.mem.tokenizeAny(u8, text, "\r\n");
+            while (lines.next()) |line| {
+                const t = std.mem.trim(u8, line, " \t");
+                // Riot IDs hold '#', so only a leading one marks a comment
+                if (t.len > 0 and t[0] != '#') try erase.ids.append(arena, t);
+            }
         } else return usageError(a);
     }
     try std.Io.Dir.cwd().createDirPath(init.io, data_dir);
@@ -335,7 +384,115 @@ pub fn main(init: std.process.Init) !u8 {
         std.log.info("{d} champions", .{n});
         return 0;
     }
+    if (std.mem.eql(u8, cmd, "backup")) {
+        const r = try backup.run(arena, init.io, .{
+            .data_dir = data_dir,
+            .out_dir = out_path orelse init.environ_map.get("MEIOLOL_BACKUPS") orelse "backups",
+            .keep_daily = keep_daily,
+            .keep_weekly = keep_weekly,
+            .full = full,
+            .now = std.Io.Clock.real.now(init.io).toSeconds(),
+        });
+        std.log.info("{s}; segment {s}: {d} matches, {d} timelines; {d} old files removed", .{
+            r.state, r.segment orelse "none (nothing new)", r.matches, r.timelines, r.removed,
+        });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "restore")) {
+        const from = from_dir orelse return usageError("--from");
+        const now = std.Io.Clock.real.now(init.io).toSeconds();
+        const r = backup.restore(arena, init.io, from, data_dir, state_file, now) catch |err| {
+            if (err == error.TargetNotEmpty) std.log.err("{s} holds a database: restore only into an empty directory", .{data_dir});
+            return err;
+        };
+        std.log.info("{s}: {d} files, {d} matches, {d} timelines; {d} rows re-erased", .{
+            data_dir, r.files, r.matches, r.timelines, r.removed.total(),
+        });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "forget")) return forgetPlayers(init, arena, data_dir, erase);
     return usageError(cmd);
+}
+
+const ForgetArgs = struct {
+    ids: std.ArrayList([]const u8) = .empty,
+    /// --list given: an empty list is fine (the exchange with the Your games service)
+    listed: bool = false,
+    backups: ?[]const u8 = null,
+    export_path: ?[]const u8 = null,
+};
+
+/// Logs counts only: an erasure log naming the player would defeat the erasure. PUUIDs
+/// already in `forgotten` are skipped, so complete lists can be fed in again and again.
+fn forgetPlayers(init: std.process.Init, arena: std.mem.Allocator, data_dir: []const u8, args: ForgetArgs) !u8 {
+    const ids = args.ids.items;
+    if (ids.len == 0 and !args.listed and args.export_path == null) {
+        return usageError("--puuid, --riot-id, --list or --export");
+    }
+    const now = std.Io.Clock.real.now(init.io).toSeconds();
+    var client: ?riot.client.Client = null;
+    defer if (client) |*c| c.deinit();
+    // The box holds the crawler databases, the web server the Your games cache; open
+    // whichever this data directory has, never creating the other
+    const cwd = std.Io.Dir.cwd();
+    const crawl_path = try std.fs.path.join(arena, &.{ data_dir, "meiolol.db" });
+    const api_path = try std.fs.path.joinZ(arena, &.{ data_dir, "api.db" });
+    const db: ?store.Db = if (cwd.access(init.io, crawl_path, .{})) |_| try store.open(init.gpa, data_dir) else |_| null;
+    defer if (db) |d| d.close();
+    const api_db: ?store.Db = if (cwd.access(init.io, api_path, .{})) |_| try api.cache.open(api_path) else |_| null;
+    defer if (api_db) |d| d.close();
+    if (db == null and api_db == null) {
+        std.log.err("{s} holds neither meiolol.db nor api.db", .{data_dir});
+        return 1;
+    }
+    var live: forget.Removed = .{};
+    var scrubbed: forget.Removed = .{};
+    var unresolved: usize = 0;
+    var already: usize = 0;
+    for (ids) |id| {
+        const puuid = if (std.mem.indexOfScalar(u8, id, '#') == null) id else blk: {
+            if (client == null) {
+                const key = try apiKey(init, arena) orelse {
+                    std.log.err("RIOT_API_KEY not set (env or .env): needed for Riot IDs", .{});
+                    return 1;
+                };
+                client = try .init(init.gpa, init.io, key);
+            }
+            break :blk try forget.resolveRiotId(arena, &client.?, id) orelse {
+                unresolved += 1;
+                continue;
+            };
+        };
+        if (api_db) |d| try api.cache.forget(d, puuid, now);
+        const d = db orelse continue;
+        if (try forget.isForgotten(d, puuid)) {
+            already += 1;
+            continue;
+        }
+        live.add(try forget.forget(d, puuid, now, .record));
+        if (args.backups) |dir| scrubbed.add(try backup.scrub(arena, init.io, dir, puuid, now));
+    }
+    if (ids.len > 0) {
+        std.log.info("{d} of {d} erased, {d} already forgotten; live rows: players {d}, " ++
+            "mastery {d}, participants blanked {d}, raw matches {d}, raw timelines {d}", .{
+            ids.len - unresolved - already, ids.len, already, live.players, live.mastery,
+            live.participants, live.raw_matches, live.raw_timelines,
+        });
+    }
+    if (api_db != null and ids.len > 0) std.log.info("Your games cache: erased and blocked", .{});
+    if (args.backups != null) std.log.info("backup rows: {d}", .{scrubbed.total()});
+    if (args.export_path) |path| {
+        const d = db orelse {
+            std.log.err("--export needs meiolol.db in {s}", .{data_dir});
+            return 1;
+        };
+        std.log.info("{d} forgotten PUUIDs written to {s}", .{ try forget.exportList(init.io, d, path), path });
+    }
+    if (unresolved > 0) {
+        std.log.warn("{d} Riot IDs have no account (renamed or deleted): resolve them by PUUID", .{unresolved});
+        return 1;
+    }
+    return 0;
 }
 
 fn usageError(arg: ?[]const u8) u8 {

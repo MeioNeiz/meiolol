@@ -14,6 +14,9 @@ src/
   eval.zig           draft model on held-out newer games (`meiolol eval`, docs/model.md)
   api/               "Your games" service (`meiolol api`, docs/your-games.md): cache.zig
                      (api.db), fetch.zig (the one Riot caller), game.zig (lane vs curve)
+  backup.zig         `meiolol backup|restore`: state snapshots + append-only segments
+  forget.zig         `meiolol forget`: GDPR erasure, `forgotten` suppression list
+                     (both: docs/data-safety.md)
   site/              public website generator (`meiolol site`): html.zig layout and
                      boilerplate, prose.zig fixed pages, static/ (css, draft.js)
   wasm.zig           recommender in the browser (wasm32-freestanding),
@@ -27,6 +30,8 @@ src/
                      127.0.0.1 trusting only riotgames.pem), session (champ select)
   app_main.zig       `meiolol-app`: suggest (offline), watch (live), session, get
 deploy/box.sh        cross-compile (x86_64-linux-musl, static) and run on gpu-box
+deploy/*-loop.sh     box loops in tmux: web (site upload), backup, health (ntfy);
+                     health.sh the checks, mac-watch.sh the Mac side (launchd)
 testdata/lcu/        champ select fixtures (session-synthetic.json is made up)
 src/riot/testdata/   one real match-v5 JSON, PUUIDs and names replaced
 ```

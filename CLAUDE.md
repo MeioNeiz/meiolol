@@ -22,6 +22,8 @@ docs/plan.md. Read it first.
 - Production key requirements and policy limits on what the app may show:
   docs/production-key.md; sources and quotes in research/ (josearch store, see
   research/README.md)
+- Backups, health alerts, disk headroom, GDPR erasure (`meiolol backup|restore|forget`):
+  docs/data-safety.md
 - Crawler runs 24/7 on the PC: `deploy/box.sh start|stop|status|logs|run`. Data lives
   only there (~/ml/meiolol/data). PC access: `ssh gpu-box` (see ~/personal/gpu-box)
 - Riot key: RIOT_API_KEY in .env (gitignored), copied to the box by deploy/box.sh.

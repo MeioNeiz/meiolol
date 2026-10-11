@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Runs on the box (deploy/box.sh backup start): once a day at ~04:00 UTC, swap forgotten
+# PUUIDs with the Your games service, then `meiolol backup` into $MEIOLOL_BACKUPS
+# (default /mnt/d/meiolol-backups, the D: drive: another SSD than the C: drive holding
+# the WSL disk). docs/data-safety.md.
+set -u
+cd "$(dirname "$0")/.." || exit 1
+export MEIOLOL_BACKUPS=${MEIOLOL_BACKUPS:-/mnt/d/meiolol-backups}
+while true; do
+    # Complete lists both ways (docs/your-games.md); the meiolol-exchange ssh alias is the
+    # rrsync user on the web server. Skipped until the service is deployed
+    if rsync -q meiolol-exchange:forgotten.txt data/exchange-forgotten.txt 2> /dev/null; then
+        bin/meiolol forget --data data --list data/exchange-forgotten.txt \
+            --backups "$MEIOLOL_BACKUPS" --export data/box-forgotten.txt \
+            && rsync -q data/box-forgotten.txt meiolol-exchange:box-forgotten.txt \
+            || echo "$(date -u +%FT%TZ) forgotten exchange FAILED"
+    fi
+    bin/meiolol backup --data data || echo "$(date -u +%FT%TZ) backup FAILED"
+    sleep $(( $(date -u -d 'tomorrow 04:00' +%s) - $(date +%s) ))
+done
