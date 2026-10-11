@@ -308,7 +308,8 @@ pub fn syncForgotten(gpa: Allocator, io: std.Io, db: store.Db, dir_path: []const
         var lines = std.mem.tokenizeAny(u8, text, "\r\n");
         while (lines.next()) |line| {
             const puuid = std.mem.trim(u8, line, " \t");
-            if (puuid.len == 0 or puuid[0] == '#') continue;
+            // PUUIDs only: never contain '#', so comments and Riot IDs are skipped
+            if (puuid.len == 0 or std.mem.indexOfScalar(u8, puuid, '#') != null) continue;
             if (try db.scalar("SELECT 1 FROM blocked WHERE puuid = ?", .{puuid}) != null) continue;
             try cache.forget(db, puuid, now);
             added += 1;
@@ -340,7 +341,7 @@ test syncForgotten {
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const len = try tmp.dir.realPath(io, &buf);
     const path = buf[0..len];
-    try tmp.dir.writeFile(io, .{ .sub_path = "box-forgotten.txt", .data = "boxer\n# comment\n\nours\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "box-forgotten.txt", .data = "boxer\n# comment\n\nSome One#EUW\nours\n" });
 
     const db = try cache.open(":memory:");
     defer db.close();
