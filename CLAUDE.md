@@ -9,7 +9,7 @@ docs/plan.md. Read it first.
 - Build: `zig build`, `zig build test`, `zig build -Dtarget=x86_64-windows` (app ships
   on Windows, developed on macOS; both must compile)
 - Two executables: `meiolol` (backend: crawl, stats, site, status, champions; runs on
-  the gpu-box PC) and `meiolol-app` (player tool: suggest, watch, session, get)
+  the box, an Oracle Cloud server) and `meiolol-app` (player tool: suggest, watch, session, get)
 - Website: https://meiolol.jomify.lol, static nginx on the jomove server
   (`ssh -i ~/.ssh/oci_instance-20260714-1317 ubuntu@193.123.180.81`; jomove's own
   site runs there too, leave its config alone). Box builds and uploads on new data;
@@ -24,8 +24,9 @@ docs/plan.md. Read it first.
   research/README.md)
 - Backups, health alerts, disk headroom, GDPR erasure (`meiolol backup|restore|forget`):
   docs/data-safety.md
-- Crawler runs 24/7 on the PC: `deploy/box.sh start|stop|status|logs|run`. Data lives
-  only there (~/ml/meiolol/data). PC access: `ssh gpu-box` (see ~/personal/gpu-box)
+- Crawler runs 24/7 on the box: `deploy/box.sh start|stop|status|logs|run`. Data lives
+  only there (~/ml/meiolol/data). `ssh meiolol-cloud`; hosts, limits: docs/hosting.md.
+  The old gpu-box PC keeps a copy as a restore point
 - Riot key: RIOT_API_KEY in .env (gitignored), copied to the box by deploy/box.sh.
   Never print it. Riot portal automation: `jodrive riot ...` (~/personal/jodrive)
 - Zig 0.16 std changed a lot (std.Io everywhere): read std source at

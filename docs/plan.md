@@ -37,6 +37,10 @@ next steps land here.
   --env-file .env`), no expiry. New key = new PUUIDs (players re-seeded). Dev key, if
   ever needed: standing ok to regenerate (`jodrive riot key --regenerate --submit
   --env-file .env`, captcha in a window, old key dies at once, new one live in ~2 min)
+- Box moved off the gpu-box PC to Oracle Cloud (2026-10-11 ~05:30 BST, docs/hosting.md):
+  stopgap 1 GB micro `meiolol-cloud` until A1 capacity (retry loop running); crawl.args
+  cut raw retention to 3 d / 1 d; backups not running there yet (too slow on the micro);
+  gpu-box data + D: backup kept as the restore point
 - Crawler (box, deployed 6f6b65b): all 15 platforms, 4 regional buckets at their caps,
   ~33k matches + timelines/day per region (europe EUW-first), compact timelines
   (timeline.db, ~8.5 KB/match), raw summaries kept 30 days, raw timelines 7, compact
@@ -55,8 +59,8 @@ next steps land here.
 - Legal drafts: docs/legal/ (privacy, terms, LIA, objection form), waiting on Jacob
 - Desktop app: LCU client works in tests; never run against a real champ select. Lane
   card not built; GUI choice dvui pending a Windows run
-- Disk: C: 249 GB free; ~1.6 GB/day kept forever + ~110 GB rolling raw: full in ~3
-  months (early December with 50 GB slack) unless WSL moves to the 2 TB NVMe
+- Disk: the micro has ~40 GB free; ~1.6 GB/day kept forever at the full all-region rate:
+  weeks. A1 (up to ~150 GB free), EUW-only or paid disk (PAYG): Jacob's call
 
 ## Next steps
 
@@ -150,7 +154,6 @@ flashcards with spaced repetition; season "lane story" share cards.
   + backup mirror); ok to delete de's pre-deploy copies in ml/meiolol/backup (1.8 GB)
   after a second nightly backup
 - Squads as private invite-link pages with Riot IDs shown to members only
-- Disk: move WSL to the 2 TB NVMe (673 GB unallocated) before ~20 Nov, at the PC
 - Budget for EUNE/TR/RU/ME in the europe bucket (EUW takes it all while it has players due)
 - Patch day movers bar: z 1.96 or 2.58
 - Zig 0.17 timing (recommended: now, add dvui when it catches up)
@@ -161,7 +164,8 @@ flashcards with spaced repetition; season "lane story" share cards.
 - Hosting: jomove server (Oracle uk-london-1, `ssh -i ~/.ssh/oci_instance-20260714-1317
   ubuntu@193.123.180.81`; jomove's own nginx config: leave alone).
   /etc/nginx/conf.d/meiolol.conf, root /var/www/meiolol, user `meiolol` with an rrsync
-  key from the box; Let's Encrypt via webroot. deploy/web-loop.sh on the box builds and
+  key from the box; Let's Encrypt via webroot. The box: docs/hosting.md (Oracle Cloud,
+  `meiolol-cloud`). deploy/web-loop.sh on the box builds and
   uploads (often early in a patch, then hourly on new games); riot.txt from
   ml/meiolol/riot.txt
 - jodrive: `riot register --agree` handles the General Policies modal; `riot key --app

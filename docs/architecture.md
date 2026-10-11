@@ -29,7 +29,8 @@ src/
   lcu/               League client: lockfile/process discovery, https (TLS to
                      127.0.0.1 trusting only riotgames.pem), session (champ select)
   app_main.zig       `meiolol-app`: suggest (offline), watch (live), session, get
-deploy/box.sh        cross-compile (x86_64-linux-musl, static) and run on gpu-box
+deploy/box.sh        cross-compile (static musl, for the host's CPU) and run on the box
+deploy/systemd/      the box's loops as systemd user services (docs/hosting.md)
 deploy/*-loop.sh     box loops in tmux: web (site upload), backup, health (ntfy);
                      health.sh the checks, mac-watch.sh the Mac side (launchd)
 testdata/lcu/        champ select fixtures (session-synthetic.json is made up)
@@ -76,9 +77,8 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   inside the write lock, so concurrent opens are safe). Back up before a first run
 - Scale at full rate (4 regions, ~135k matches/day): kept forever ~8.6 KB timeline +
   ~3 KB rows per match, ~1.6 GB/day, ~570 GB/year; rolling raw ~50 GB summaries + ~60
-  GB timelines; mastery ~1 KB per ranked player, bounded. Real headroom ~250 GB: the
-  WSL disk (df shows a 1 TB cap) lives on C: with ~250 GB free, so ~3 months at full
-  rate until it moves to the 2 TB NVMe
+  GB timelines at default retention; mastery ~1 KB per ranked player, bounded. Disk on
+  the box: docs/hosting.md
 
 ## Crawler (src/riot/crawl.zig)
 
