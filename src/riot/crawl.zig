@@ -46,6 +46,14 @@ pub const Options = struct {
     raw_timeline_days: u32 = 7,
     /// Raw match summaries kept this long (`meiolol rebuild` re-parses them); 0 = forever
     raw_match_days: u32 = 30,
+    /// Rolling window: matches, their rows and timelines go this long after game
+    /// start; 0 = forever
+    keep_days: u32 = 0,
+    /// Every match participant also becomes a player to scan. The ladder already has
+    /// every ranked player, so off saves ten upserts (random index pages) per match
+    participant_players: bool = true,
+    /// The writer's page cache
+    cache_mb: u32 = 64,
     /// Platforms whose players a regional thread scans before any other's, so they
     /// get its whole budget while they have players due
     priority: []const []const u8 = &.{"EUW1"},
@@ -84,6 +92,7 @@ pub const Crawler = struct {
         const db = try store.open(c.gpa, c.opts.data_dir);
         defer db.close();
         try c.backfillTimelines(db);
+        try dropDoneRows(db);
 
         c.writer = .{ .c = c };
         defer c.writer.deinit();
@@ -96,9 +105,6 @@ pub const Crawler = struct {
 
         const started = c.nowS();
         var last_report = started;
-        // An hour in, not at once: a prune holds this thread (and the reports) while it
-        // runs, and start-up is busy enough on a slow box
-        var last_prune = started;
         while (!c.stop.load(.acquire)) {
             c.io.sleep(.fromSeconds(1), .awake) catch break;
             const now = c.nowS();
@@ -108,10 +114,6 @@ pub const Crawler = struct {
             if (now - last_report >= 60) {
                 last_report = now;
                 c.report(now - started);
-            }
-            if (now - last_prune >= 3600) {
-                last_prune = now;
-                c.pruneRaw(db) catch |err| log.warn("pruning raw documents: {t}", .{err});
             }
         }
         c.stopAll(&threads, writer_thread);
@@ -234,57 +236,23 @@ pub const Crawler = struct {
         try db.commit();
         if (queued > 0) log.info("queued timelines for {d} earlier matches", .{queued});
     }
+};
 
-    fn pruneRaw(c: *Crawler, db: store.Db) !void {
-        try c.pruneChunks(db, "timelines", c.opts.raw_timeline_days,
-            \\DELETE FROM raw.timeline_docs WHERE rowid IN
-            \\    (SELECT rowid FROM raw.timeline_docs d WHERE fetched_at < ? AND NOT EXISTS
-            \\        (SELECT 1 FROM timeline_queue q
-            \\         WHERE q.match_id = d.match_id AND q.status = 'failed')
-            \\     LIMIT 500)
-        );
-        try c.pruneChunks(db, "match summaries", c.opts.raw_match_days,
-            \\DELETE FROM raw.raw_docs WHERE source = 'riot_match' AND key IN
-            \\    (SELECT key FROM raw.raw_docs
-            \\     WHERE source = 'riot_match' AND fetched_at < ? LIMIT 500)
-        );
-        // Riot asks for stored player data to be refreshed monthly: players no ladder
-        // page or match has shown for 30 days go (erased accounts stop appearing), and
-        // mastery is dropped to be fetched again
-        try c.pruneChunks(db, "mastery of unseen players", 30,
-            \\DELETE FROM mastery WHERE puuid IN
-            \\    (SELECT puuid FROM players WHERE seen_at < ? LIMIT 500)
-        );
-        try c.pruneChunks(db, "unseen players", 30,
-            \\DELETE FROM players WHERE puuid IN
-            \\    (SELECT puuid FROM players WHERE seen_at < ? LIMIT 500)
-        );
-        try c.pruneChunks(db, "mastery snapshots", 30,
-            \\DELETE FROM mastery WHERE puuid IN
-            \\    (SELECT puuid FROM mastery WHERE fetched_at < ? LIMIT 500)
-        );
-        // Privacy policy: matches older than 24 months keep no PUUIDs
-        const cutoff_ms = (c.nowS() - 730 * 86400) * 1000;
-        try db.run(
-            \\UPDATE participants SET puuid = NULL WHERE puuid IS NOT NULL AND match_id IN
-            \\    (SELECT match_id FROM matches WHERE game_start < ?)
-        , .{cutoff_ms});
-    }
-
-    /// In chunks, so the writer waits at most one chunk
-    fn pruneChunks(c: *Crawler, db: store.Db, what: []const u8, days: u32, sql: []const u8) !void {
-        if (days == 0) return;
-        const cutoff = c.nowS() - @as(i64, days) * 86400;
+/// Stored matches and timelines used to stay queued as 'done'; now they leave the
+/// queue. A no-op once the old rows are gone
+fn dropDoneRows(db: store.Db) !void {
+    inline for (.{ "match_queue", "timeline_queue" }) |table| {
         var total: i64 = 0;
-        while (!c.stop.load(.acquire)) {
-            try db.run(sql, .{cutoff});
+        while (true) {
+            try db.run("DELETE FROM " ++ table ++ " WHERE match_id IN (SELECT match_id FROM " ++
+                table ++ " WHERE status = 'done' LIMIT 5000)", .{});
             const n = try db.scalar("SELECT changes()", .{}) orelse 0;
             total += n;
             if (n == 0) break;
         }
-        if (total > 0) log.info("pruned {d} raw {s}", .{ total, what });
+        if (total > 0) log.info("dropped {d} done rows from {s}", .{ total, table });
     }
-};
+}
 
 const Task = union(enum) {
     platform: ep.Platform,
@@ -809,4 +777,18 @@ test "gold at 10, 14 and 15 minutes" {
         "SELECT count(*) FROM participants WHERE gold10 > 0 AND gold14 >= gold10",
         .{},
     ));
+}
+
+test "done queue rows are dropped" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec(
+        \\INSERT INTO match_queue (match_id, status, discovered_at) VALUES
+        \\    ('EUW1_1', 'done', 1), ('EUW1_2', 'pending', 1), ('EUW1_3', 'failed', 1);
+        \\INSERT INTO timeline_queue (match_id, region, status, queued_at) VALUES
+        \\    ('EUW1_1', 'europe', 'done', 1);
+    );
+    try dropDoneRows(db);
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM match_queue", .{}));
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM timeline_queue", .{}));
 }

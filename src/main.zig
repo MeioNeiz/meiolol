@@ -35,9 +35,16 @@ const usage =
     \\              --regions R      americas,asia,europe,sea (default all)
     \\              --timelines PCT  share of matches that also get a timeline
     \\                               (default 100, 0 for none)
-    \\              --raw-timeline-days N  keep raw timeline JSON N days (default 7)
+    \\              --raw-timeline-days N  keep raw timeline JSON N days (default 7,
+    \\                                     0 none)
     \\              --raw-match-days N     keep raw match JSON N days (default 30,
     \\                                     0 forever)
+    \\              --keep-days N    rolling window: drop matches, their rows and
+    \\                               timelines N days after game start (default 0,
+    \\                               kept forever)
+    \\              --no-participant-players  scan ladder players only, not every
+    \\                               match participant
+    \\              --cache-mb N     the writer's page cache (default 64)
     \\              --priority P     platforms whose players come first in their
     \\                               region (default EUW1, "none" for none)
     \\              --reserve PCT    leave PCT of each rate limit to other processes
@@ -141,6 +148,9 @@ pub fn main(init: std.process.Init) !u8 {
     var priority: ?[]const []const u8 = null;
     var reserve_pct: u8 = 0;
     var ladder_refresh_days: i64 = 7;
+    var keep_days: u32 = 0;
+    var cache_mb: u32 = 64;
+    var participant_players = true;
     var fake_api_ms: ?u32 = null;
     var out_path: ?[]const u8 = null;
     var contact: ?[]const u8 = null;
@@ -169,6 +179,10 @@ pub fn main(init: std.process.Init) !u8 {
             mastery = false;
             continue;
         }
+        if (std.mem.eql(u8, a, "--no-participant-players")) {
+            participant_players = false;
+            continue;
+        }
         if (std.mem.eql(u8, a, "--full")) {
             full = true;
             continue;
@@ -184,6 +198,10 @@ pub fn main(init: std.process.Init) !u8 {
             data_dir = v;
         } else if (std.mem.eql(u8, a, "--hours")) {
             hours = std.fmt.parseFloat(f64, v) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--keep-days")) {
+            keep_days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--cache-mb")) {
+            cache_mb = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
         } else if (std.mem.eql(u8, a, "--ladder-refresh-days")) {
             ladder_refresh_days = std.fmt.parseInt(i64, v, 10) catch return usageError(a);
         } else if (std.mem.eql(u8, a, "--since-days")) {
@@ -306,6 +324,9 @@ pub fn main(init: std.process.Init) !u8 {
             .timeline_percent = timeline_percent,
             .raw_timeline_days = raw_timeline_days,
             .raw_match_days = raw_match_days,
+            .keep_days = keep_days,
+            .participant_players = participant_players,
+            .cache_mb = cache_mb,
             .priority = priority orelse &.{"EUW1"},
             .reserve_pct = reserve_pct,
             .fake = if (fake) |*f| f else null,

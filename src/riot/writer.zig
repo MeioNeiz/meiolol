@@ -21,6 +21,10 @@ const log = std.log.scoped(.crawl);
 const max_pending = 128;
 /// Busy here means another process (backup, rebuild) holds the lock: retry the batch
 const busy_pause_s = 5;
+/// A short batch waits up to this long for more jobs (fewer, bigger commits: each
+/// commit rewrites the index pages it touched), unless a worker is waiting in wait()
+const linger_ms = 2000;
+const linger_jobs = 32;
 
 pub const Job = struct {
     arena: std.heap.ArenaAllocator,
@@ -79,7 +83,10 @@ pub const Writer = struct {
     committed_seq: u64 = 0,
     closing: bool = false,
     dead: bool = false,
+    /// Workers in wait(): the batch commits at once rather than linger
+    waiters: u32 = 0,
     stats: Stats = .{},
+    prune: Prune = .{},
 
     pub fn deinit(wr: *Writer) void {
         for (wr.pending.items) |job| job.destroy(wr.c.gpa);
@@ -109,6 +116,8 @@ pub const Writer = struct {
         const io = wr.c.io;
         wr.mutex.lockUncancelable(io);
         defer wr.mutex.unlock(io);
+        wr.waiters += 1;
+        defer wr.waiters -= 1;
         while (wr.committed_seq < seq) {
             if (wr.dead or wr.stopping()) return error.Stopping;
             wr.cond.waitUncancelable(io, &wr.mutex);
@@ -156,6 +165,7 @@ pub const Writer = struct {
         const gpa = wr.c.gpa;
         const db = try store.schema.connect(gpa, wr.c.opts.data_dir);
         defer db.close();
+        try tune(db, wr.c.opts.cache_mb);
         var s: Stmts = try .init(db);
         defer s.deinit();
         var batch: std.ArrayList(*Job) = .empty;
@@ -166,6 +176,7 @@ pub const Writer = struct {
                 defer wr.mutex.unlock(wr.c.io);
                 while (wr.pending.items.len == 0 and !wr.closing) wr.cond.waitUncancelable(wr.c.io, &wr.mutex);
                 if (wr.pending.items.len == 0) return;
+                wr.linger();
                 std.mem.swap(std.ArrayList(*Job), &batch, &wr.pending);
                 // Room again for blocked submitters
                 wr.cond.broadcast(wr.c.io);
@@ -193,6 +204,23 @@ pub const Writer = struct {
             wr.committed_seq = batch.items[batch.items.len - 1].seq;
             wr.cond.broadcast(wr.c.io);
             wr.mutex.unlock(wr.c.io);
+            wr.prune.step(db, wr.c.io, wr.c.opts) catch |err| {
+                if (err != error.Busy) return err;
+            };
+        }
+    }
+
+    /// Called and returns with the mutex held. Sleeps in short steps so a worker that
+    /// starts waiting gets its commit within ~50 ms
+    fn linger(wr: *Writer) void {
+        const io = wr.c.io;
+        var waited: u32 = 0;
+        while (wr.pending.items.len < linger_jobs and wr.waiters == 0 and !wr.closing and
+            !wr.stopping() and waited < linger_ms) : (waited += 50)
+        {
+            wr.mutex.unlock(io);
+            io.sleep(.fromMilliseconds(50), .awake) catch {};
+            wr.mutex.lockUncancelable(io);
         }
     }
 
@@ -299,10 +327,10 @@ pub const Writer = struct {
                 try s.blank_participant.exec(.{ id, slot });
                 continue;
             }
-            try s.participant_player.exec(.{ puuid, platform, @tagName(r), t });
+            if (wr.c.opts.participant_players) try s.participant_player.exec(.{ puuid, platform, @tagName(r), t });
         }
         if (!match.isRemake(doc) and wr.c.wantTimeline(id)) try s.timeline_queue.exec(.{ id, @tagName(r), t });
-        try s.match_status.exec(.{ "done", id });
+        try s.match_done.exec(.{id});
     }
 
     fn storeTimeline(wr: *Writer, s: *Stmts, id: []const u8, raw: ?[]const u8, compact: ?crawl.Compact, t: i64) !void {
@@ -319,8 +347,143 @@ pub const Writer = struct {
             for (0..ct.participants) |slot| {
                 try s.gold.exec(.{ ct.gold[0][slot], ct.gold[1][slot], ct.gold[2][slot], id, slot });
             }
+            try s.timeline_done.exec(.{id});
+        } else try s.timeline_status.exec(.{ "failed", id });
+    }
+};
+
+/// The writer's connection: the only one that needs a big page cache. The WAL file
+/// keeps its high-water size, so cap it: a burst must not leave a huge file every
+/// reader searches
+fn tune(db: store.Db, cache_mb: u32) !void {
+    var buf: [64]u8 = undefined;
+    try db.exec(try std.fmt.bufPrintZ(&buf, "PRAGMA main.cache_size = -{d}", .{cache_mb * 1024}));
+    try db.exec(
+        \\PRAGMA main.journal_size_limit = 67108864;
+        \\PRAGMA raw.journal_size_limit = 67108864;
+        \\PRAGMA timeline.journal_size_limit = 67108864;
+        \\PRAGMA temp_store = MEMORY;
+        \\CREATE TEMP TABLE IF NOT EXISTS gone (id TEXT PRIMARY KEY);
+    );
+}
+
+/// Hourly upkeep, one chunk per batch so items never wait long behind it
+const Prune = struct {
+    /// Index into `steps`; steps.len when idle
+    next: usize = steps.len,
+    started_at: i64 = 0,
+    total: i64 = 0,
+
+    const Step = struct {
+        what: []const u8,
+        days: union(enum) { raw_timeline, raw_match, keep, fixed: u32 },
+        /// Removes one chunk older than the cutoff (unix seconds); returns how many
+        run: *const fn (db: store.Db, cutoff: i64) store.sqlite.Error!i64,
+    };
+
+    const steps = [_]Step{
+        // Raw timelines that failed to parse stay, so a fixed parser can redo them
+        .{ .what = "raw timelines", .days = .raw_timeline, .run = chunk(
+            \\DELETE FROM raw.timeline_docs WHERE rowid IN
+            \\    (SELECT rowid FROM raw.timeline_docs d WHERE fetched_at < ? AND NOT EXISTS
+            \\        (SELECT 1 FROM timeline_queue q
+            \\         WHERE q.match_id = d.match_id AND q.status = 'failed')
+            \\     LIMIT 500)
+        ) },
+        .{ .what = "raw match summaries", .days = .raw_match, .run = chunk(
+            \\DELETE FROM raw.raw_docs WHERE source = 'riot_match' AND key IN
+            \\    (SELECT key FROM raw.raw_docs
+            \\     WHERE source = 'riot_match' AND fetched_at < ? LIMIT 500)
+        ) },
+        // Riot asks for stored player data to be refreshed monthly: players no ladder
+        // page or match has shown for 30 days go with their mastery (erased accounts
+        // stop appearing), and older mastery is dropped to be fetched again
+        .{ .what = "unseen players", .days = .{ .fixed = 30 }, .run = unseenPlayers },
+        .{ .what = "mastery snapshots", .days = .{ .fixed = 30 }, .run = chunk(
+            \\DELETE FROM mastery WHERE puuid IN
+            \\    (SELECT puuid FROM mastery WHERE fetched_at < ? LIMIT 500)
+        ) },
+        // Privacy policy: matches older than 24 months keep no PUUIDs
+        .{ .what = "PUUIDs of old matches", .days = .{ .fixed = 730 }, .run = chunk(
+            \\UPDATE participants SET puuid = NULL WHERE (match_id, slot) IN
+            \\    (SELECT p.match_id, p.slot FROM matches m JOIN participants p USING (match_id)
+            \\     WHERE m.game_start < ? * 1000 AND p.puuid IS NOT NULL LIMIT 2000)
+        ) },
+        .{ .what = "matches past the window", .days = .keep, .run = oldMatches },
+    };
+
+    fn chunk(comptime sql: []const u8) *const fn (store.Db, i64) store.sqlite.Error!i64 {
+        return struct {
+            fn run(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
+                try db.run(sql, .{cutoff});
+                return try db.scalar("SELECT changes()", .{}) orelse 0;
+            }
+        }.run;
+    }
+
+    /// A chunk of ids into a temp table, then every table's rows for them
+    fn unseenPlayers(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
+        try db.exec("DELETE FROM temp.gone");
+        try db.run("INSERT INTO temp.gone SELECT puuid FROM players WHERE seen_at < ? LIMIT 500", .{cutoff});
+        const n = try db.scalar("SELECT changes()", .{}) orelse 0;
+        try db.exec(
+            \\DELETE FROM mastery WHERE puuid IN temp.gone;
+            \\DELETE FROM players WHERE puuid IN temp.gone;
+        );
+        return n;
+    }
+
+    fn oldMatches(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
+        try db.exec("DELETE FROM temp.gone");
+        try db.run("INSERT INTO temp.gone SELECT match_id FROM matches WHERE game_start < ? * 1000 LIMIT 500", .{cutoff});
+        const n = try db.scalar("SELECT changes()", .{}) orelse 0;
+        try db.exec(
+            \\DELETE FROM timeline.timelines WHERE match_id IN temp.gone;
+            \\DELETE FROM participants WHERE match_id IN temp.gone;
+            \\DELETE FROM bans WHERE match_id IN temp.gone;
+            \\DELETE FROM matches WHERE match_id IN temp.gone;
+        );
+        return n;
+    }
+
+    fn cutoffDays(s: Step, opts: crawl.Options) ?u32 {
+        const days = switch (s.days) {
+            // 0 keeps no raw timelines; for the rest 0 is forever
+            .raw_timeline => return opts.raw_timeline_days,
+            .raw_match => opts.raw_match_days,
+            .keep => opts.keep_days,
+            .fixed => |d| d,
+        };
+        return if (days == 0) null else days;
+    }
+
+    /// Start a round when an hour has passed, else run one chunk of the current step.
+    /// The first round an hour after start: start-up is busy enough on a slow box
+    fn step(p: *Prune, db: store.Db, io: std.Io, opts: crawl.Options) !void {
+        const now = std.Io.Clock.real.now(io).toSeconds();
+        if (p.started_at == 0) p.started_at = now;
+        if (p.next == steps.len) {
+            if (now - p.started_at < 3600) return;
+            p.started_at = now;
+            p.next = 0;
+            p.total = 0;
         }
-        try s.timeline_status.exec(.{ if (compact == null) "failed" else "done", id });
+        const s = steps[p.next];
+        const days = cutoffDays(s, opts) orelse return p.advance();
+        try db.begin();
+        errdefer db.rollback();
+        const n = try s.run(db, now - @as(i64, days) * 86400);
+        try db.commit();
+        p.total += n;
+        if (n == 0) {
+            if (p.total > 0) log.info("pruned {d} {s}", .{ p.total, s.what });
+            p.advance();
+        }
+    }
+
+    fn advance(p: *Prune) void {
+        p.next += 1;
+        p.total = 0;
     }
 };
 
@@ -339,12 +502,14 @@ const Stmts = struct {
     blank_participant: store.Stmt,
     timeline_queue: store.Stmt,
     match_status: store.Stmt,
+    match_done: store.Stmt,
     match_attempt: store.Stmt,
     blank: store.Stmt,
     raw_timeline: store.Stmt,
     timeline: store.Stmt,
     gold: store.Stmt,
     timeline_status: store.Stmt,
+    timeline_done: store.Stmt,
     timeline_attempt: store.Stmt,
 
     const sql = .{
@@ -359,23 +524,35 @@ const Stmts = struct {
         \\    rank_seen_at = excluded.rank_seen_at, source = 'ladder',
         \\    platform = excluded.platform, region = excluded.region,
         \\    seen_at = excluded.seen_at
+        // Most of a ladder is unchanged week to week: leave those rows (and the
+        // players indexes) alone unless seen_at is a day old
+        \\WHERE tier IS NOT excluded.tier OR division IS NOT excluded.division
+        \\    OR lp IS NOT excluded.lp OR wins IS NOT excluded.wins
+        \\    OR losses IS NOT excluded.losses OR source <> 'ladder'
+        \\    OR seen_at < excluded.seen_at - 86400
         ,
         .ladder_page = "INSERT OR REPLACE INTO ladder_pages " ++
             "(platform, tier, division, page, entries, fetched_at) VALUES (?,?,?,?,?,?)",
         .mastery = "INSERT OR REPLACE INTO mastery VALUES (?,?,?,?,?)",
         .mastery_delete = "DELETE FROM mastery WHERE puuid = ?",
         .player_delete = "DELETE FROM players WHERE puuid = ?",
-        .match_queue = "INSERT OR IGNORE INTO match_queue (match_id, discovered_at, region) VALUES (?, ?, ?)",
+        // Stored matches leave the queue, so a match already stored is checked for too
+        .match_queue =
+        \\INSERT OR IGNORE INTO match_queue (match_id, discovered_at, region)
+        \\SELECT ?1, ?2, ?3 WHERE NOT EXISTS (SELECT 1 FROM matches WHERE match_id = ?1)
+        ,
         .checked = "UPDATE players SET matches_checked_at = ? WHERE puuid = ?",
         .raw_doc = "INSERT OR REPLACE INTO raw.raw_docs VALUES (?,?,?,?)",
         .participant_player =
         \\INSERT INTO players (puuid, source, platform, region, seen_at)
         \\VALUES (?, 'participant', ?, ?, ?)
         \\ON CONFLICT (puuid) DO UPDATE SET seen_at = excluded.seen_at
+        \\WHERE seen_at < excluded.seen_at - 86400
         ,
         .blank_participant = "UPDATE participants SET puuid = NULL WHERE match_id = ? AND slot = ?",
         .timeline_queue = "INSERT OR IGNORE INTO timeline_queue (match_id, region, queued_at) VALUES (?, ?, ?)",
         .match_status = "UPDATE match_queue SET status = ? WHERE match_id = ?",
+        .match_done = "DELETE FROM match_queue WHERE match_id = ?",
         .match_attempt =
         \\UPDATE match_queue SET attempts = attempts + 1,
         \\    status = CASE WHEN attempts >= 2 THEN 'failed' ELSE status END
@@ -386,6 +563,7 @@ const Stmts = struct {
         .timeline = "INSERT OR REPLACE INTO timeline.timelines VALUES (?,?,?,?)",
         .gold = "UPDATE participants SET gold10 = ?, gold14 = ?, gold15 = ? WHERE match_id = ? AND slot = ?",
         .timeline_status = "UPDATE timeline_queue SET status = ? WHERE match_id = ?",
+        .timeline_done = "DELETE FROM timeline_queue WHERE match_id = ?",
         .timeline_attempt =
         \\UPDATE timeline_queue SET attempts = attempts + 1,
         \\    status = CASE WHEN attempts >= 2 THEN 'failed' ELSE status END
@@ -469,4 +647,69 @@ test "jobs apply in one transaction; a bad one is marked failed, the rest stored
         .{ "SELECT count(*) FROM raw.timeline_docs", 0 },
     };
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
+}
+
+test "stored matches leave the queue and are not queued again" {
+    const gpa = std.testing.allocator;
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const db = try store.schema.memory();
+    defer db.close();
+    var c: crawl.Crawler = .{ .gpa = gpa, .io = std.testing.io, .opts = .{ .data_dir = "", .key = "" } };
+    var wr: Writer = .{ .c = &c };
+    defer wr.deinit();
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+
+    var doc = try match.parse(arena.allocator(), @embedFile("testdata/match.json"));
+    doc.metadata.matchId = "EUW1_1";
+    const ids: []const []const u8 = &.{ "EUW1_1", "EUW1_2" };
+    var first = [_]*Job{
+        try .create(gpa, .{ .match_ids = .{ .ids = ids, .discovered_at = 1, .region = .europe } }),
+        try .create(gpa, .{ .match = .{ .region = .europe, .id = "EUW1_1", .doc = doc, .raw = "r", .t = 2 } }),
+    };
+    defer for (first) |job| job.destroy(gpa);
+    try wr.commit(db, &s, &first);
+    var again = [_]*Job{try .create(gpa, .{ .match_ids = .{ .ids = ids, .discovered_at = 3, .region = .europe } })};
+    defer for (again) |job| job.destroy(gpa);
+    try wr.commit(db, &s, &again);
+
+    const want = [_]struct { []const u8, i64 }{
+        .{ "SELECT count(*) FROM match_queue", 1 },
+        .{ "SELECT count(*) FROM match_queue WHERE match_id = 'EUW1_2'", 1 },
+        .{ "SELECT count(*) FROM timeline_queue", 1 },
+        .{ "SELECT count(*) FROM players WHERE source = 'participant'", 10 },
+    };
+    for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
+}
+
+test "rolling window prunes old matches with their rows" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try tune(db, 1);
+    const now = std.Io.Clock.real.now(std.testing.io).toSeconds();
+    var buf: [1024]u8 = undefined;
+    try db.exec(try std.fmt.bufPrintZ(&buf,
+        \\INSERT INTO matches VALUES ('A', 'riot', 'EUW1', 420, '16.1', '16.1.1', {d}, 1, 100, 0);
+        \\INSERT INTO matches VALUES ('B', 'riot', 'EUW1', 420, '16.1', '16.1.1', {d}, 1, 100, 0);
+        \\INSERT INTO participants (match_id, slot, team_id, champion_id, win) VALUES
+        \\    ('A', 0, 100, 1, 1), ('B', 0, 100, 1, 1);
+        \\INSERT INTO bans VALUES ('A', 100, 1, 2), ('B', 100, 1, 2);
+        \\INSERT INTO timeline.timelines VALUES ('A', 1, 1, x'00'), ('B', 1, 1, x'00');
+        \\INSERT INTO players (puuid, source, seen_at) VALUES ('old', 'ladder', 1), ('new', 'ladder', {d});
+        \\INSERT INTO mastery VALUES ('old', 'EUW1', {d}, 0, x'00');
+    , .{ (now - 61 * 86400) * 1000, (now - 59 * 86400) * 1000, now, now }));
+    var p: Prune = .{ .started_at = 1 };
+    const opts: crawl.Options = .{ .data_dir = "", .key = "", .keep_days = 60 };
+    for (0..40) |_| try p.step(db, std.testing.io, opts);
+    for ([_][]const u8{ "matches", "participants", "bans", "timeline.timelines" }) |t| {
+        var sql: [128]u8 = undefined;
+        var q = try db.prepare(try std.fmt.bufPrint(&sql, "SELECT group_concat(match_id) FROM {s}", .{t}));
+        defer q.deinit();
+        try q.bind(.{});
+        try std.testing.expect(try q.step());
+        try std.testing.expectEqualStrings("B", q.bytes(0));
+    }
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM players", .{}));
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM mastery", .{}));
 }
