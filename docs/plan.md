@@ -85,13 +85,30 @@ next steps land here.
   restart starts it over); measure site size (~2x, est. ~400 MB), upload time, disk
 - Check europe's EUW1-first scanning holds on the new host (players.matches_checked_at
   by platform, region europe)
-- Single crawler writer (branch worktree-writer): after deploy, compare the micro's
-  report (matches/day, "writes N in M commits", busy) with the 11k/day, 153-waits run;
-  check europe gets timelines. If batches stay ~2 jobs/commit and disk is the limit, try
-  a minimum gap between commits. The emulation (deploy/bench-crawl.sh micro) showed no
-  lock waits even before the change, so the box may gain more or less than 1.5x
-- Raw prune runs an hour after start (4b94ffa) and blocks the main thread's reports
-  while it runs; move it off the main thread if that matters
+- Crawl speed (meiolol-83, 2026-10-11). Ceiling on the free key: 20/1 s + 100/2 min
+  per routing value; matches + timelines use the 4 regional buckets, ~2.13 calls per
+  match, so ~130k matches+timelines/day all regions at 5% reserve (~33k/region; the
+  gpu-box did 135k). More keys for one product is against policy; the production key
+  is the only way up. The micro's limit is random disk I/O (~200 reads/s, 40-90% steal),
+  not the key: 43 GB written + 32 GB read in 4 h for ~2k matches with 19 writers.
+  Done and deployed (e6d3841, crawl.args `--reserve 5 --no-mastery --raw-timeline-days
+  0 --raw-match-days 3 --keep-days 60 --ladder-per-hour 20`): one writer thread
+  (merged worktree-writer), done rows leave the queues, chunked prune in the writer,
+  linger, WAL cap, page counters in the report, weekly ladder refresh skipping unchanged
+  rows, per-platform ladder cap. Bench (deploy/bench-crawl.sh micro, fake API): 150k vs
+  56k matches/day at minute 3 vs the old 19 writers, no busy waits.
+  Committed, NOT deployed: d315740 (meiolol-a7's EUW-first gate, waiting on Jacob's ok)
+  and eb173b0 (ranks table: ladder writes ranks by PUUID hash for everyone, players
+  rows only for 1 in --player-sample N; old 8.9M players rows expire via the 30-day
+  prune). Next: push both, add `--player-sample 16` to crawl.args, restart
+  (`deploy/box.sh start ...`), then watch the report's "writes N in M commits" and
+  "pages written/read" per match; europe should get timelines. If ladder still
+  dominates, lower --ladder-per-hour. Not tested yet: --no-participant-players and
+  dropping the participants_puuid index (only `forget` reads it): bench round
+  scratch-only, rerun deploy/bench-crawl.sh with --no-mastery for pages/match.
+  Before ~2026-11-25 (first matches pass --keep-days 60): per-patch aggregates kept
+  forever and Pool learning curves on them, or raise/drop --keep-days. `meiolol status`
+  still counts whole tables and takes the write lock (store.open): slow on the micro
 - Box ops loose ends (meiolol-5a): cut crawl.args raw windows once disk matters, after
   the writer fix (first prune is heavy on the micro); one-off `meiolol rebuild` for the
   gold10/14/15 migration, not run (do it on A1); once on A1 remove the dynamic group
