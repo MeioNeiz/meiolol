@@ -128,15 +128,15 @@ next steps land here.
   them; older segments and daily backups off-host, encrypted (rclone crypt, file per
   file so `forget --backups` scrubs still work), to a Hetzner Storage Box
 - Draft table kept forever (agreed 2026-10-11), before the A1 crawls at full rate: one
-  compact row per match, no PUUIDs or Riot IDs (match id, platform, patch, date, rank
+  compact row per match, no PUUIDs, Riot IDs or match id (platform, patch, date, rank
   bracket, blue win, 10 x champion + role, bans), ~40-100 bytes, so 10M games < 1 GB.
   Written by the writer with participants, untouched by `--keep-days` prune; backfill
   from rows still on the box. Why: synergy and good-pick models need 1-3M games (5M+
   for a LoLDraftAI-level model, ~55-56%), pooled across 2-4 patches, so the 60-day
   window would throw away what they train on. ±2 pp needs ~2,400 games per cell: common
   pairs (5% x 5%) ~500k games, typical (2% x 2%) ~3M; one model with rank as an input,
-  not one per bracket. Check before building: no personal data left in a row (match id
-  plus champions is not linkable to a player once participants are pruned)
+  not one per bracket. No match id because the Riot API turns one back into the players;
+  dedupe at write time instead. Check the row has nothing else linkable before building
 
 ### Your games and Squads (was your-games-e0)
 
