@@ -133,3 +133,9 @@ tr.thin td { color: var(--muted); opacity: 0.6; }
 .matchup-list { columns: 2 260px; padding-left: 18px; }
 .matchup-list li { margin: 2px 0; }
 .matchup-list li.thin a { color: var(--muted); }
+.pool-form { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0; }
+.pool-form label { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; }
+.pool-form label span { color: var(--muted); font-size: 14px; }
+.pool-main { margin-top: 24px; }
+.pool-main h2 .champ img { width: 40px; height: 40px; }
+.pool-h { margin: 20px 0 4px; }

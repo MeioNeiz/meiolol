@@ -7,6 +7,8 @@ src/
   ddragon.zig        champion ids/names from Data Dragon
   daily.zig          Daily Draft puzzles (data/daily), published by `meiolol site`
   curves.zig         lane matchup curves from timelines (`meiolol curves`)
+  pool.zig           Pool: who mains X also plays Y, hard-lane options, ban fallback
+  learning.zig       learning curves: results by games played on a champion
   stats.zig          model file from the matches table (`meiolol stats`)
   site/              public website generator (`meiolol site`): html.zig layout and
                      boilerplate, prose.zig fixed pages, static/ (css, draft.js)
@@ -118,6 +120,34 @@ charts and rows are grey with "more data needed". Not yet: first-item timing (ne
 item list from Data Dragon), experienced-players filter (mastery), core-item split,
 region filter. Curves are not built by the web loop yet: run `meiolol curves` (daily is
 plenty) before `meiolol site`.
+
+## Pool (src/pool.zig, src/site/pool.zig, static/pool.js)
+
+A player's main is their top champion; they play another when it has at least 10% of
+the main's weight (games now, mastery points once that table fills; min 10 games).
+"Players who main X also play Y" is lift: share of X-mains playing Y over Y's share
+among players who don't main Y, shrunk toward 1 by 20 pseudo-players; lists from 30
+mains, n shown. From the model file's lane pairs (score.matchupPp, 30+ games): X's
+five worst lane matchups, the also-played champions in X's role that are positive into
+them ("options", several, with reasons), and those positive into X's best lanes (ban
+fallback). `meiolol site` writes data/pool.json, pool.html (pick up to three mains;
+pool.html#garen,darius) and a section on each champion page; `meiolol pool` writes the
+same JSON to data/export/pool.json for a look. Mastery source (points, champions
+played in the last year, 50k total and 10k per champion) is used once it has more
+players than the games source. Not yet: curves instead of win rates for hard lanes,
+your own record per matchup.
+
+## Learning curves (src/learning.zig, src/site/learning.zig)
+
+For players whose match history was crawled, each ranked solo game's number on that
+champion (all patches) goes into bins 1-5, 6-20, 21-50, 51+: games, win rate, and lane
+gold difference at 14 (timeline frame 14, laner minus lane opponent) where a timeline
+exists. "Usual by games X-Y": the first bin within 1 point of the champion's overall win
+rate, only when every bin up to it has 400+ games; bins under 200 are greyed. Games
+before the crawl window count as early games, so early bins hold some returning players
+(the gap shown is too small, never too big); mastery can correct that once it fills.
+`meiolol site` writes data/learning.json, a section on each champion page, a "How long
+champions take to learn" table on pool.html, and a line per pool option.
 
 ## Recommender (src/core/score.zig)
 

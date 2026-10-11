@@ -11,6 +11,8 @@ pub const site = @import("site/root.zig");
 pub const serve = @import("serve.zig");
 pub const daily = @import("daily.zig");
 pub const curves = @import("curves.zig");
+pub const pool = @import("pool.zig");
+pub const learning = @import("learning.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
 
@@ -43,6 +45,10 @@ const usage =
     \\              --platform P     as for stats
     \\              --out FILE       default DIR/export/curves-<patch>.bin
     \\              --min-games N    leave out matchups with fewer games (default 20)
+    \\  pool        write what players of each champion also play (pool.zig), as JSON
+    \\              --patch P        as for stats (matchups); pools use every patch
+    \\              --platform P     as for stats
+    \\              --out FILE       default DIR/export/pool.json
     \\  site        write the public website (static files)
     \\              --patch P        as for stats
     \\              --platform P     as for stats (pages say EUW: reword before others)
@@ -189,6 +195,10 @@ pub fn main(init: std.process.Init) !u8 {
     }
     if (std.mem.eql(u8, cmd, "curves")) {
         try writeCurves(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path, min_games);
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "pool")) {
+        try writePool(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path);
         return 0;
     }
     if (std.mem.eql(u8, cmd, "site")) {
@@ -339,6 +349,37 @@ fn writeCurves(
     std.log.info("{s}: patch {s}, {d} games ({d} skipped)", .{
         path, label, r.summary.games, r.summary.skipped,
     });
+}
+
+fn writePool(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    arena: std.mem.Allocator,
+    data_dir: []const u8,
+    wanted: []const []const u8,
+    platforms: []const []const u8,
+    out_path: ?[]const u8,
+) !void {
+    const db = try store.open(gpa, data_dir);
+    defer db.close();
+    const chosen = if (wanted.len > 0) wanted else try newestPatch(arena, db, platforms);
+    var r = try stats.build(gpa, db, chosen, platforms);
+    defer r.builder.deinit();
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    var model: std.Io.Writer.Allocating = .init(arena);
+    try r.builder.write(&model.writer, try stats.label(&label_buf, chosen));
+    const st: core.Stats = try .parse(arena, model.written());
+    const p = try pool.make(gpa, arena, db, &st, platforms, .{});
+
+    const path = out_path orelse try std.fs.path.join(arena, &.{ data_dir, "export", "pool.json" });
+    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+    defer file.deinit(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var w = file.file.writer(io, &buf);
+    try pool.writeJson(&w.interface, p);
+    try w.interface.flush();
+    try file.replace(io);
+    std.log.info("{s}", .{path});
 }
 
 /// Where `meiolol curves` writes by default for these patches
