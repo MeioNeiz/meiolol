@@ -32,7 +32,8 @@ const usage =
     \\                               (default: the newest patch)
     \\              --out FILE       default DIR/export/stats-<patch>.bin
     \\              --platform P     Riot platform id, repeatable or comma separated
-    \\                               (default EUW1; see riot/endpoints.zig)
+    \\                               (default EUW1; "all" for every platform in
+    \\                               riot/endpoints.zig)
     \\  curves      write lane matchup curves from match timelines (curvesfile.zig)
     \\              --patch P        as for stats
     \\              --platform P     as for stats
@@ -115,7 +116,11 @@ pub fn main(init: std.process.Init) !u8 {
             while (it.next()) |p| try patches.append(arena, p);
         } else if (std.mem.eql(u8, a, "--platform")) {
             var it = std.mem.tokenizeScalar(u8, v, ',');
-            while (it.next()) |p| try platforms.append(arena, p);
+            while (it.next()) |p| {
+                if (std.mem.eql(u8, p, "all")) {
+                    for (riot.endpoints.platforms) |pl| try platforms.append(arena, pl.id);
+                } else try platforms.append(arena, p);
+            }
         } else if (std.mem.eql(u8, a, "--regions")) {
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |r| {
