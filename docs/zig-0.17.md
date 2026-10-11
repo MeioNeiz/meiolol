@@ -4,6 +4,16 @@ Assessed 2026-10-11 against commit 1149c0b. Evidence: research/questions/
 zig-017-migration.md (release notes plus a trial port). The full diff and build output
 are in research/raw/zig-017-trial-port.md.
 
+## Decision (Jacob, 2026-10-11)
+
+Wait. ZLS does not work with 0.17 (the maker/configurer split; release notes, Build
+Server Protocol) and dvui is not on 0.17 yet. Move once ZLS supports 0.17, ideally with
+dvui. What 0.17 gives us meanwhile is modest: SafeAllocator (thread-safe leak, double
+free and race checks, useful for the crawler's threads), `zig fmt --complexity` (a size
+metric for ci), faster build cache hits, `arena.print`. Incremental compilation is
+x86_64-linux only (we develop on aarch64 macOS) and loop vectorisation stays off until
+0.18, so neither helps yet.
+
 ## Verdict
 
 Small: about an hour of edits plus a runtime check. On 0.17.0 the trial port hit 6

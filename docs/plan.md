@@ -165,7 +165,8 @@ next steps land here.
 - Site polish: screenshots/GIFs, a short demo video
 - Desktop: run dvui on the Windows PC, build the lane card (concept part 6), test LCU in
   a real champ select (`meiolol-app session --save testdata/lcu/session-real.json`)
-- Zig 0.17 move: small (docs/zig-0.17.md); dvui not on 0.17 yet
+- Zig 0.17 move: small (docs/zig-0.17.md). Waiting (Jacob, 2026-10-11) until ZLS works
+  with 0.17, ideally with dvui on 0.17 too; then one move
 
 ### Ideas not started (concept extensions, 2026-10-11)
 
@@ -185,7 +186,6 @@ flashcards with spaced repetition; season "lane story" share cards.
 - Squads as private invite-link pages with Riot IDs shown to members only
 - Budget for EUNE/TR/RU/ME in the europe bucket (EUW takes it all while it has players due)
 - Patch day movers bar: z 1.96 or 2.58
-- Zig 0.17 timing (recommended: now, add dvui when it catches up)
 - Name/domain: "lol" in name and TLD is a mild Riot-trademark risk
 - Storage and hosting (research/questions/free-hosting-storage.md): (1) Hetzner Storage
   Box BX11, 1 TB for EUR 3.20/month, for off-host backups and old segments (~1.5 years
