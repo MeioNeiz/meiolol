@@ -146,6 +146,9 @@ edges with games (greyed under 200), and each option's points with reasons.
 - data/daily/<n>.json is the public puzzle, written once and never remade (the numbers
   are frozen at that day's data); data/daily/used.txt holds the match ids behind them so
   none repeats. used.txt stays on the box: never under site/
+- GDPR: puzzles hold no PUUIDs; used.txt holds match ids, so a deletion that covers a
+  match means dropping its line (the puzzle itself stays anonymous)
+- A failure here (or a bad curves file) is logged and the rest of the site still builds
 - Anonymised: no Riot IDs, PUUIDs, match ids or game dates; tier is the median visible
   rank of the players we have a rank for, only when 5+ are known
 - Site: daily.html + daily.js, daily/index.json ([{n, date}]) and daily/<n>.json. The

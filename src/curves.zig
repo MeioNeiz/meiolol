@@ -79,7 +79,7 @@ fn decode(arena: std.mem.Allocator, blob: []const u8) !timeline.Timeline {
     return timeline.decode(arena, try store.raw.decompress(arena, blob));
 }
 
-const Game = struct {
+pub const Game = struct {
     /// Participant id (slot + 1) and champion per side and role
     ids: [2][5]u8,
     champions: [2][5]u32,
@@ -114,7 +114,7 @@ fn readGame(players: *store.sqlite.Stmt) !?Game {
 }
 
 /// Blue's laner in `r` as a, red's as b
-fn lane(t: timeline.Timeline, g: Game, r: Role, blue_won: bool) Lane {
+pub fn lane(t: timeline.Timeline, g: Game, r: Role, blue_won: bool) Lane {
     const pa = g.ids[0][@intFromEnum(r)];
     const pb = g.ids[1][@intFromEnum(r)];
     // Frame k is minute k; the last frame is the game's end, part of a minute

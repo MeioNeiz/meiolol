@@ -149,12 +149,16 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     };
     try loadChamps(&site, db);
     if (opts.curves) |path| {
+        // Optional extras: a bad or old file leaves out matchup pages, not the site
         const read = cwd.readFileAlloc(io, path, arena, .limited(1 << 30));
         if (read) |bytes| {
-            site.curves = try .parse(arena, bytes);
+            site.curves = core.curvesfile.Curves.parse(arena, bytes) catch |err| blk: {
+                log.warn("lane curves at {s}: {t}", .{ path, err });
+                break :blk null;
+            };
         } else |err| switch (err) {
             error.FileNotFound => log.info("no lane curves at {s}", .{path}),
-            else => return err,
+            else => log.warn("lane curves at {s}: {t}", .{ path, err }),
         }
     }
 
@@ -170,12 +174,15 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
 
     if (opts.daily_dir) |d| {
         const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
-        const files = try daily.update(arena, io, db, &site.stats, .{
+        const files = daily.update(arena, io, db, &site.stats, .{
             .dir = d,
             .patches = opts.patches,
             .platforms = opts.platforms,
             .today = day,
-        });
+        }) catch |err| blk: {
+            log.warn("daily draft: {t}", .{err});
+            break :blk &.{};
+        };
         for (files) |f| try site.write(f.path, f.data);
     }
 

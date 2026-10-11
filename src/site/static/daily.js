@@ -21,7 +21,8 @@ const pad = (n) => String(n).padStart(2, "0");
 
 function loadResults() {
   try {
-    return JSON.parse(localStorage.getItem(KEY)) || {};
+    const saved = JSON.parse(localStorage.getItem(KEY));
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
   } catch {
     return {};
   }
@@ -117,7 +118,11 @@ class Game {
   answer(field, value) {
     if (this.mine[field] !== undefined) return;
     this.mine[field] = value;
-    if (this.done) this.mine.marks = this.marks();
+    if (this.done) {
+      this.mine.marks = this.marks();
+      // Streaks count puzzles finished on their own day, not archive catch-ups
+      this.mine.on = localDate();
+    }
     this.results[this.p.n] = this.mine;
     saveResults(this.results);
     this.render();
@@ -221,8 +226,8 @@ class Game {
       read = `${SIDES[favoured]} side had the better odds on paper and still lost: a draft sets the odds, not the result.`;
     }
     $("estimate").textContent =
-      `From ${p.games.toLocaleString("en-GB")} ranked solo games on patch ${p.patch}, drafts ` +
-      `like this one win about ${blue}% of the time for blue side and ${100 - blue}% for red. ${read}`;
+      `By this patch's numbers (${p.games.toLocaleString("en-GB")} ranked solo games on ` +
+      `patch ${p.patch}), the two drafts rate about ${blue} to ${100 - blue} for blue side. ${read}`;
 
     const lanes = $("lanes");
     lanes.replaceChildren();
@@ -248,15 +253,15 @@ class Game {
 
     const notes = $("option-notes");
     notes.replaceChildren();
-    const sorted = [...p.options].sort((a, b) => b.pp - a.pp);
     const role = roleName[p.hidden_role].toLowerCase();
-    for (const o of sorted) {
+    // Same order as the question: ranking them would read as a verdict on the pick
+    for (const o of p.options) {
       const li = document.createElement("li");
       const head = document.createElement("div");
       head.append(this.champ(o.id));
       const sub = document.createElement("span");
       sub.className = "muted";
-      sub.textContent = ` ${signed(o.pp)} in this draft, ${o.games} games in ${role}`;
+      sub.textContent = ` ${signed(o.pp)} points in this draft, ${o.games} games in ${role}`;
       head.append(sub);
       if (o.id === p.played) {
         const tag = document.createElement("span");
@@ -288,18 +293,20 @@ class Game {
     return `${pts} ${r.kind === "ally" ? "with" : "vs"} ${this.name(r.id)} (${role}, ${n})`;
   }
 
-  // Streak: consecutive puzzles completed, ending today or yesterday
+  // Streak: consecutive published puzzles each finished on its own day, ending with
+  // today's or the one before (a day without a puzzle does not break it)
   record() {
     const done = (n) => {
       const r = this.results[n];
       return r && r.pick !== undefined && r.side !== undefined;
     };
-    const latest = this.live[this.live.length - 1].n;
-    let n = done(latest) ? latest : latest - 1;
+    const onTime = (e) => done(e.n) && this.results[e.n].on === e.date;
+    let i = this.live.length - 1;
+    if (!onTime(this.live[i])) i -= 1;
     let streak = 0;
-    while (n > 0 && done(n)) {
+    while (i >= 0 && onTime(this.live[i])) {
       streak += 1;
-      n -= 1;
+      i -= 1;
     }
     let played = 0;
     let both = 0;
@@ -330,7 +337,8 @@ class Game {
       }
       await navigator.clipboard.writeText(text);
       note.textContent = "Copied";
-    } catch {
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
       note.textContent = text;
     }
   }
@@ -350,7 +358,7 @@ class Game {
       span.className = "muted";
       span.textContent = r && r.marks
         ? [...r.marks].map((m) => (m === "1" ? "🟩" : "🟥")).join("")
-        : "not played";
+        : r ? "started" : "not played";
       li.append(span);
       list.append(li);
     }

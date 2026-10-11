@@ -252,10 +252,12 @@ fn load(
             if (seen[t][@intFromEnum(r)] or st.index(id) == null) return null;
             seen[t][@intFromEnum(r)] = true;
             p.teams[t][@intFromEnum(r)] = id;
-            p.kills[t] += @intCast(q.optInt(3) orelse 0);
-            p.gold[t] += @intCast(q.optInt(4) orelse 0);
+            p.kills[t] += @intCast(@max(0, q.optInt(3) orelse 0));
+            p.gold[t] += @intCast(@max(0, q.optInt(4) orelse 0));
         }
         if (rows != 10) return null;
+        // Exact totals would help find the game elsewhere; the reveal shows 0.1k anyway
+        for (&p.gold) |*g| g.* = (g.* + 50) / 100 * 100;
     }
     {
         var bans: [2]std.ArrayList(u32) = .{ .empty, .empty };
