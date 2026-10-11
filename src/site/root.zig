@@ -9,6 +9,8 @@ pub const html = @import("html.zig");
 const prose = @import("prose.zig");
 const daily_page = @import("daily.zig");
 const daily = @import("../daily.zig");
+const learn = @import("../learn.zig");
+const learn_page = @import("learn.zig");
 const matchup = @import("matchup.zig");
 const pool_page = @import("pool.zig");
 const pool = @import("../pool.zig");
@@ -177,6 +179,7 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     try site.write("style.css", @embedFile("static/style.css"));
     try site.write("favicon.svg", @embedFile("static/favicon.svg"));
     try site.write("daily.js", @embedFile("static/daily.js"));
+    try site.write("learn.js", @embedFile("static/learn.js"));
     try site.write("meiolol.wasm", @embedFile("draft.wasm"));
     try site.write("data/stats.bin", model_bytes);
     try writeChampionsJson(&site);
@@ -209,6 +212,17 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
         };
         for (files) |f| try site.write(f.path, f.data);
     }
+    // After the Daily Draft, so practice leaves out the games behind its puzzles
+    const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
+    if (learn.build(arena, io, db, &site.stats, if (site.curves) |*c| c else null, .{
+        .patches = opts.patches,
+        .platforms = opts.platforms,
+        .today = day,
+        .daily_dir = opts.daily_dir,
+    })) |l| {
+        for (l.files) |f| try site.write(f.path, f.data);
+        try learn_page.write(&site, &l.facts);
+    } else |err| log.warn("learn: {t}", .{err});
 
     try writeIndex(&site);
     for (Role.all) |r| try writeRole(&site, r);

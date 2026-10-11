@@ -52,6 +52,8 @@ const Request = struct {
     allies: []const Pick = &.{},
     enemies: []const Pick = &.{},
     bans: []const u32 = &.{},
+    /// Only these champions are scored; null for any
+    pool: ?[]const u32 = null,
     top: u8 = 5,
     min_games: u32 = 200,
 };
@@ -69,6 +71,7 @@ fn run(s: *const core.Stats, json: []const u8) ![]u8 {
         .allies = try picks(arena, req.allies),
         .enemies = try picks(arena, req.enemies),
         .bans = req.bans,
+        .pool = req.pool,
     }, .{ .min_games = req.min_games }, out[0..@min(req.top, out.len)]);
 
     var aw: std.Io.Writer.Allocating = .init(gpa);
