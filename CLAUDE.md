@@ -36,5 +36,5 @@ docs/plan.md. Read it first.
   The old gpu-box PC keeps a copy as a restore point
 - Riot key: RIOT_API_KEY in .env (gitignored), copied to the box by deploy/box.sh.
   Never print it. Riot portal automation: `jodrive riot ...` (~/personal/jodrive)
-- Zig 0.16 std changed a lot (std.Io everywhere): read std source at
-  `$(zig env | grep lib_dir)` rather than guessing APIs
+- Zig 0.16 std changed a lot (std.Io everywhere): check APIs via LSP hover/goToDefinition
+  (ZLS) rather than guessing; std source at `$(zig env | grep lib_dir)` as fallback
