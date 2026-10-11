@@ -31,6 +31,9 @@ const Game = stats.Row;
 /// Prior strengths tried by the tuning grid; the last means "no pair terms"
 const prior_grid = [_]f64{ 50, 100, 200, 400, 800, 1600, 3200, 6400, 1e9 };
 
+/// Cells with fewer games are left out of the empirical-Bayes estimate
+const eb_min_games = 30;
+
 pub fn run(
     gpa: std.mem.Allocator,
     db: store.Db,
@@ -72,22 +75,36 @@ pub fn run(
     const blue_rate = blue_wins / @as(f64, @floatFromInt(train.len));
 
     const current: score.Options = .{};
+    const base_only: Predictor = .{ .label = "champion base only", .kind = .{ .base = current } };
+    const model: Predictor = .{ .label = "current model", .kind = .{ .model = current } };
+    const tuned_priors: Predictor = .{ .label = "tuned priors", .kind = .{ .model = tuned.opts } };
+    const weighted: Predictor = .{ .label = "tuned + term weights", .kind = .{ .weighted = .{
+        .opts = tuned.opts,
+        .w = tuned.weights,
+    } } };
+    const empirical: Predictor = .{ .label = "empirical-Bayes priors", .kind = .empirical };
     const predictors = [_]Predictor{
         .{ .label = "coin flip (50%)", .kind = .coin },
         .{ .label = "blue side rate", .kind = .{ .side = blue_rate } },
-        .{ .label = "champion base only", .kind = .{ .base = current } },
-        .{ .label = "current model", .kind = .{ .model = current } },
-        .{ .label = "tuned priors", .kind = .{ .model = tuned.opts } },
-        .{ .label = "tuned + term weights", .kind = .{ .weighted = .{
-            .opts = tuned.opts,
-            .w = tuned.weights,
-        } } },
+        base_only,
+        model,
+        tuned_priors,
+        weighted,
+        empirical,
     };
-    try w.writeAll("## Full draft, held-out games\n\n");
+    const eb = score.empiricalPriors(&full.stats, eb_min_games);
+    try w.print("## Full draft, held-out games\n\nEmpirical-Bayes priors from train (cells " ++
+        "with {d}+ games): base {f}, duo {f}, lane {f}, other matchups {f}.\n\n", .{
+        eb_min_games,
+        Prior{ .games = eb.base },
+        Prior{ .games = eb.duo },
+        Prior{ .games = eb.lane },
+        Prior{ .games = eb.matchup },
+    });
     try fullDraft(gpa, &full.stats, tests, &predictors, 3, w);
 
-    try w.print("\nCalibration by decile of prediction, {s}:\n\n", .{predictors[5].label});
-    try calibration(gpa, &full.stats, tests, predictors[5], w);
+    try w.print("\nCalibration by decile of prediction, {s}:\n\n", .{empirical.label});
+    try calibration(gpa, &full.stats, tests, empirical, w);
 
     // Default stats file today: newest patch only
     const newest = tests[tests.len - 1].patch;
@@ -102,9 +119,10 @@ pub fn run(
         var tests_np: std.ArrayList(Game) = .empty;
         defer tests_np.deinit(gpa);
         for (tests) |g| if (g.patch == newest) try tests_np.append(gpa, g);
-        try fullDraft(gpa, &sp.stats, tests_np.items, predictors[2..5], 1, w);
+        const subset = [_]Predictor{ base_only, model, tuned_priors, empirical };
+        try fullDraft(gpa, &sp.stats, tests_np.items, &subset, 1, w);
         try w.writeAll("\nSame test games, trained on every patch:\n\n");
-        try fullDraft(gpa, &full.stats, tests_np.items, predictors[2..5], 1, w);
+        try fullDraft(gpa, &full.stats, tests_np.items, &subset, 1, w);
     }
 
     try w.writeAll("\n## Pick metric\n\n");
@@ -112,7 +130,7 @@ pub fn run(
         "percentile of the champion actually picked among candidates (1 = model's top).\n\n");
     try w.writeAll("| model | picks ranked | winners' mean pct | losers' mean pct | " ++
         "AUC pct vs win | win rate, picks in model's top 10% |\n| --- | --- | --- | --- | --- | --- |\n");
-    for ([_]Predictor{ predictors[3], predictors[4] }) |p| {
+    for ([_]Predictor{ model, tuned_priors, empirical }) |p| {
         try pickMetric(gpa, &full.stats, tests, p, opts.pick_min_games, w);
     }
 
@@ -120,19 +138,20 @@ pub fn run(
     try roleInference(&full.stats, tests, w);
 
     try w.writeAll("\n## Learning curve\n\nSame test games, models from the newest N train games.\n\n");
-    try w.writeAll("| train games | base only | current | tuned priors | tuned + weights | AUC (tuned + weights) |\n");
-    try w.writeAll("| --- | --- | --- | --- | --- | --- |\n");
+    try w.writeAll("Log loss, and AUC for empirical Bayes:\n\n| train games | base only | " ++
+        "current | tuned priors | tuned + weights | empirical Bayes | AUC (EB) |\n");
+    try w.writeAll("| --- | --- | --- | --- | --- | --- | --- |\n");
     var size: usize = 250;
     while (true) : (size *= 2) {
         const n = @min(size, train.len);
         var m: Model = try .build(gpa, champs, train[train.len - n ..], null);
         defer m.deinit(gpa);
         try w.print("| {d} |", .{n});
-        for ([_]Predictor{ predictors[2], predictors[3], predictors[4], predictors[5] }) |p| {
+        for ([_]Predictor{ base_only, model, tuned_priors, weighted, empirical }) |p| {
             const r = try evaluate(gpa, &m.stats, tests, p);
             defer gpa.free(r.p);
             try w.print(" {d:.4} |", .{r.m.log_loss});
-            if (p.kind == .weighted) try w.print(" {d:.3} |", .{r.m.auc});
+            if (p.kind == .empirical) try w.print(" {d:.3} |", .{r.m.auc});
         }
         try w.writeAll("\n");
         if (n == train.len) break;
@@ -201,10 +220,20 @@ const Predictor = struct {
         base: score.Options,
         model: score.Options,
         weighted: struct { opts: score.Options, w: Weights },
+        /// The model with priors from score.empiricalPriors on the stats it is given
+        empirical,
     },
+
+    /// Per stats file: empirical priors become concrete options
+    fn on(p: Predictor, st: *const core.Stats) Predictor {
+        if (p.kind != .empirical) return p;
+        const priors = score.empiricalPriors(st, eb_min_games);
+        return .{ .label = p.label, .kind = .{ .model = priors.apply(.{}) } };
+    }
 
     fn predict(p: Predictor, st: *const core.Stats, g: Game) f64 {
         return switch (p.kind) {
+            .empirical => unreachable,
             .coin => 0.5,
             .side => |rate| rate,
             .base => |o| sigmoid(score.draftTerms(st, o, g.teams).base),
@@ -287,7 +316,8 @@ const Evaluated = struct { p: []f64, m: Metrics };
 fn evaluate(gpa: std.mem.Allocator, st: *const core.Stats, games: []const Game, pr: Predictor) !Evaluated {
     const p = try gpa.alloc(f64, games.len);
     errdefer gpa.free(p);
-    for (games, p) |g, *q| q.* = pr.predict(st, g);
+    const concrete = pr.on(st);
+    for (games, p) |g, *q| q.* = concrete.predict(st, g);
     return .{ .p = p, .m = try metrics(gpa, p, games) };
 }
 
@@ -495,10 +525,11 @@ fn pickMetric(
     min_games: u32,
     w: *std.Io.Writer,
 ) !void {
-    const opts = switch (pr.kind) {
+    var candidates = switch (pr.on(st).kind) {
         .model => |o| o,
         else => unreachable,
     };
+    candidates.min_games = min_games;
     const out = try gpa.alloc(score.Suggestion, st.n);
     defer gpa.free(out);
     var pct: std.ArrayList(f64) = .empty;
@@ -519,11 +550,7 @@ fn pickMetric(
             .role = r,
             .allies = &allies,
             .enemies = &enemies,
-        }, .{
-            .min_games = min_games,
-            .base_prior_games = opts.base_prior_games,
-            .prior_games = opts.prior_games,
-        }, out);
+        }, candidates, out);
         const hidden = g.teams[s][@intFromEnum(r)];
         const rank = for (list, 0..) |sg, i| {
             if (sg.champion == hidden) break i;
@@ -608,7 +635,7 @@ const Prior = struct {
     games: f64,
 
     pub fn format(p: Prior, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        if (p.games >= 1e9) try w.writeAll("off") else try w.print("{d}", .{p.games});
+        if (p.games >= score.max_prior_games) try w.writeAll("off") else try w.print("{d:.0}", .{p.games});
     }
 };
 

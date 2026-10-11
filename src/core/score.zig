@@ -43,6 +43,11 @@ pub const Options = struct {
     /// Pseudo-games pulling a duo or matchup toward the base-rating prediction;
     /// DraftGap's "medium risk" default
     prior_games: f64 = 1000,
+    /// Overrides prior_games for ally duos, for matchups between lane opponents (same
+    /// role) and for other matchups; see empiricalPriors
+    duo_prior_games: ?f64 = null,
+    lane_prior_games: ?f64 = null,
+    matchup_prior_games: ?f64 = null,
     /// Reasons worth less than this many percentage points are left out
     min_reason_pp: f64 = 0.1,
 };
@@ -236,6 +241,87 @@ pub fn inferRoles(stats: *const Stats, picks: []const Pick, out: []?Role) void {
     }
 }
 
+/// Prior strengths in pseudo-games, per kind of term
+pub const Priors = struct {
+    base: f64,
+    duo: f64,
+    lane: f64,
+    matchup: f64,
+
+    /// `opts` with these priors
+    pub fn apply(p: Priors, opts: Options) Options {
+        var o = opts;
+        o.base_prior_games = p.base;
+        o.duo_prior_games = p.duo;
+        o.lane_prior_games = p.lane;
+        o.matchup_prior_games = p.matchup;
+        return o;
+    }
+};
+
+pub const min_prior_games = 20;
+/// "Noise only": a spread at or below zero must not make estimates exact (Gelman 2005)
+pub const max_prior_games = 50_000;
+
+/// Prior strengths from the stats file itself: empirical Bayes by method of moments
+/// (Brown 2008, research/questions/curve-statistics-method.md). Per kind, the real
+/// spread of winrates around their prediction is the observed spread minus sampling
+/// noise, averaged unweighted over cells with at least `min_games` (weighting by games
+/// biases it: popular champions and pairs differ systematically); k = p(1-p) / spread.
+/// Pair predictions use the base ratings under the estimated base prior
+pub fn empiricalPriors(stats: *const Stats, min_games: u32) Priors {
+    var base: Moments = .{};
+    for (Role.all) |r| for (0..stats.n) |c| base.add(stats.champRole(r, c), 0.5, min_games);
+    const base_k = base.prior();
+
+    const ctx: Context = .{ .stats = stats, .opts = .{ .base_prior_games = base_k } };
+    var duo: Moments = .{};
+    var lane: Moments = .{};
+    var matchup: Moments = .{};
+    for (Role.all) |r1| for (Role.all) |r2| {
+        if (@intFromEnum(r2) < @intFromEnum(r1)) continue;
+        for (0..stats.n) |c1| {
+            if (stats.champRole(r1, c1).games < min_games) continue;
+            const a = ctx.place(c1, r1);
+            for (0..stats.n) |c2| {
+                if (r1 == r2 and c2 <= c1) continue;
+                const b = ctx.place(c2, r2);
+                if (r1 != r2) duo.add(stats.ally(r1, r2, c1, c2), sigmoid(a.base + b.base), min_games);
+                const m = if (r1 == r2) &lane else &matchup;
+                m.add(stats.enemy(r1, r2, c1, c2), sigmoid(a.base - b.base), min_games);
+            }
+        }
+    };
+    return .{ .base = base_k, .duo = duo.prior(), .lane = lane.prior(), .matchup = matchup.prior() };
+}
+
+/// Running sums for one kind's method of moments
+const Moments = struct {
+    cells: f64 = 0,
+    /// Observed squared distance from the prediction minus binomial noise
+    excess: f64 = 0,
+    noise: f64 = 0,
+
+    fn add(m: *Moments, x: Counts, expected: f64, min_games: u32) void {
+        if (x.games < min_games or x.games == 0) return;
+        const n: f64 = @floatFromInt(x.games);
+        const d = @as(f64, @floatFromInt(x.wins)) / n - expected;
+        const v = expected * (1 - expected);
+        m.cells += 1;
+        m.excess += d * d - v / n;
+        m.noise += v;
+    }
+
+    /// With few cells the estimate is too noisy to use: too small a prior overfits far
+    /// worse than too large a one
+    fn prior(m: Moments) f64 {
+        if (m.cells < min_cells or m.excess <= 0) return max_prior_games;
+        return std.math.clamp(m.noise / m.excess, min_prior_games, max_prior_games);
+    }
+
+    const min_cells = 100;
+};
+
 fn evenPp(x: f64) f64 {
     return 100 * (sigmoid(x) - 0.5);
 }
@@ -266,8 +352,7 @@ const Context = struct {
     }
 
     /// Smoothed pair logit minus the expected logit
-    fn pairDelta(ctx: *const Context, pair: Counts, expected: f64) f64 {
-        const k = ctx.opts.prior_games;
+    fn pairDelta(pair: Counts, expected: f64, k: f64) f64 {
         const wins = @as(f64, @floatFromInt(pair.wins)) + k * sigmoid(expected);
         const games = @as(f64, @floatFromInt(pair.games)) + k;
         if (games == 0) return 0;
@@ -288,13 +373,14 @@ const Context = struct {
     fn duo(ctx: *const Context, a: Placed, b: Placed) f64 {
         if (a.role == b.role) return 0;
         const pair = ctx.stats.ally(a.role, b.role, a.c, b.c);
-        return ctx.pairDelta(pair, a.base + b.base);
+        return pairDelta(pair, a.base + b.base, ctx.opts.duo_prior_games orelse ctx.opts.prior_games);
     }
 
     /// From `a`'s side
     fn matchup(ctx: *const Context, a: Placed, e: Placed) f64 {
         const pair = ctx.stats.enemy(a.role, e.role, a.c, e.c);
-        return ctx.pairDelta(pair, a.base - e.base);
+        const k = if (a.role == e.role) ctx.opts.lane_prior_games else ctx.opts.matchup_prior_games;
+        return pairDelta(pair, a.base - e.base, k orelse ctx.opts.prior_games);
     }
 
     /// Known champions with roles: given ones kept (unless clashing), the rest the
