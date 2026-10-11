@@ -1,0 +1,73 @@
+# #1068 [BUG] Swiftplay queue matches are no longer returned by the RGAPI
+state: closed created: 2025-04-29T18:42:58Z closed: 2025-05-12T20:22:06Z
+author: 1337MARCEL
+
+**Bug & Problem Description**  
+For the past week or so, it seems like games played on Swiftplay queue are no longer returned by the RGAPI. `/lol/match/v5/matches/by-puuid/{puuid}/ids` nor `/lol/match/v5/matches/{matchId}` work as expected. The only way I can see them is by viewing my own profile in the League client.
+
+e.g. `EUW1_7383662079` is a Swiftplay match that was played yesterday.
+
+![Image](https://github.com/user-attachments/assets/68ff90bc-33ee-4cfe-8e25-84bcc39567ad)
+
+
+
+## comment by danblock97 (NONE) 2025-04-29T19:15:26Z
+
+Can confirm Swiftplay games like `EUW1_7383662079` do not show up for me either via the RGAPI. 
+
+
+## comment by aryan159 (NONE) 2025-05-03T17:27:48Z
+
+Same, the API does not return the swiftplay games that I played this week.
+
+Server: SEA
+Summoner: TheOpChicken#6820
+
+
+## comment by geozukunft (NONE) 2025-05-06T14:38:53Z
+
+Hey @lucasMesquitaBorges could you take a look at this as it stands right now we are loosing somewhere in the neighbourhood of 250k games per day that are inaccessible. 
+
+
+## comment by lucasMesquitaBorges (NONE) 2025-05-12T19:19:53Z
+
+Hi! We were informed that Swiftplay games are now private. This means it requires authorization from player to get data (use [lol-rso-match-v1](https://developer.riotgames.com/apis#lol-rso-match-v1) endpoints).
+
+Please validate and let me know if it's working as expected.
+
+
+## comment by geozukunft (NONE) 2025-05-12T19:35:03Z
+
+This is a very sudden change without any public notice prior to this change happening and especially without any reasoning given for this change. On the one side sanctioned players names are now shown in the client to people but the casual game mode is now considered private data? It would be nice to get a public statement with an actual reasoning to this. 
+
+
+## comment by lucasMesquitaBorges (NONE) 2025-05-12T20:22:06Z
+
+@geozukunft Good call, sorry about the change without a heads up.
+This came from outside our team, but I’ll sync with the DevRel producers and check with game teams.
+
+We’ll follow up soon with clearer info on all the game modes and how data works for each one.
+
+
+## comment by geozukunft (NONE) 2025-05-12T20:31:04Z
+
+Also another note @lucasMesquitaBorges if there is really a desire for whatever non explainable reason to have these public matches be made private then please tell the game team to consider doing it like valorant, still make it possible to fetch those games but make policies that sharing those specific games data is only allowed with RSO consent. 
+Cause the way it is right now a website like mine with YearIn.LoL is basically rendered useless due to the 1000 games limit in match-v5 if a user visits my website the first time next year when they want to see their recap of the year I won't be able to show them all of their games if they played more than 1000 of them. 
+
+
+## comment by ChaseWater (NONE) 2025-05-12T21:04:58Z
+
+> Also another note [@lucasMesquitaBorges](https://github.com/lucasMesquitaBorges) if there is really a desire for whatever non explainable reason to have these public matches be made private then please tell the game team to consider doing it like valorant, still make it possible to fetch those games but make policies that sharing those specific games data is only allowed with RSO consent. Cause the way it is right now a website like mine with YearIn.LoL is basically rendered useless due to the 1000 games limit in match-v5 if a user visits my website the first time next year when they want to see their recap of the year I won't be able to show them all of their games if they played more than 1000 of them.
+
+We are working with the appropriate teams to validate if this is the intended outcome and will make a more public community announcement once we have more details. 
+
+
+## comment by ChaseWater (NONE) 2025-05-13T01:38:19Z
+
+@geozukunft For reference, we have learned that the Swiftplay matches being made private was unintentional and we are working to fix this. In the meantime, using what @lucasMesquitaBorges brought up (use [lol-rso-match-v1](https://developer.riotgames.com/apis#lol-rso-match-v1) endpoints) can be used to still retrieve this data. 
+
+
+## comment by geozukunft (NONE) 2025-05-13T05:16:23Z
+
+Thank you @ChaseWater for clearing up this situation quickly, much appreciated.
+

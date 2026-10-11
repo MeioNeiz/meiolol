@@ -4,6 +4,92 @@
 const std = @import("std");
 const sqlite = @import("sqlite.zig");
 
+// Tables migrate() rebuilds, so their DDL lives apart from `schema`. WITHOUT ROWID
+// where the key is text: a rowid table would store the key twice (table + index).
+
+/// PUUIDs are encrypted per app: a new key type (dev -> personal -> production) means
+/// new PUUIDs for the same players (see rekey). platform is Riot's id (EUW1, KR);
+/// region the match-v5 route (europe, asia). seen_at: last time a ladder page or a
+/// match showed the player; the crawler drops players unseen for 30 days (Riot asks
+/// for stored player data to be refreshed monthly; erased accounts stop appearing)
+const players_ddl =
+    \\CREATE TABLE IF NOT EXISTS players (
+    \\    puuid TEXT PRIMARY KEY,
+    \\    tier TEXT,
+    \\    division TEXT,
+    \\    lp INTEGER,
+    \\    wins INTEGER,
+    \\    losses INTEGER,
+    \\    rank_seen_at INTEGER,
+    \\    matches_checked_at INTEGER,
+    \\    source TEXT NOT NULL,
+    \\    platform TEXT,
+    \\    region TEXT,
+    \\    seen_at INTEGER
+    \\) WITHOUT ROWID;
+    \\
+;
+
+/// slot = index in info.participants. Builds live here because raw summaries are
+/// pruned: items at game end (item6 = trinket), runes (keystone = first primary perk,
+/// perk1-3 primary, perk4-5 secondary, then stat shards). tier/division: the player's
+/// ladder rank when the match was stored (players holds only the latest and loses
+/// everyone on rekey); NULL when not on the ladder then
+const participants_ddl =
+    \\CREATE TABLE IF NOT EXISTS participants (
+    \\    match_id TEXT NOT NULL,
+    \\    slot INTEGER NOT NULL,
+    \\    team_id INTEGER NOT NULL,
+    \\    puuid TEXT,
+    \\    champion_id INTEGER NOT NULL,
+    \\    position TEXT,
+    \\    individual_position TEXT,
+    \\    win INTEGER NOT NULL,
+    \\    kills INTEGER, deaths INTEGER, assists INTEGER,
+    \\    gold INTEGER,
+    \\    damage_to_champions INTEGER,
+    \\    damage_taken INTEGER,
+    \\    vision_score INTEGER,
+    \\    cs INTEGER,
+    \\    champ_level INTEGER,
+    \\    summoner1 INTEGER, summoner2 INTEGER,
+    \\    keystone INTEGER,
+    \\    secondary_style INTEGER,
+    \\    item0 INTEGER, item1 INTEGER, item2 INTEGER, item3 INTEGER,
+    \\    item4 INTEGER, item5 INTEGER, item6 INTEGER,
+    \\    primary_style INTEGER,
+    \\    perk1 INTEGER, perk2 INTEGER, perk3 INTEGER, perk4 INTEGER, perk5 INTEGER,
+    \\    shard_offense INTEGER, shard_flex INTEGER, shard_defense INTEGER,
+    \\    tier TEXT, division TEXT,
+    \\    PRIMARY KEY (match_id, slot)
+    \\) WITHOUT ROWID;
+    \\
+;
+
+const bans_ddl =
+    \\CREATE TABLE IF NOT EXISTS bans (
+    \\    match_id TEXT NOT NULL,
+    \\    team_id INTEGER NOT NULL,
+    \\    pick_turn INTEGER NOT NULL,
+    \\    champion_id INTEGER NOT NULL,
+    \\    PRIMARY KEY (match_id, team_id, pick_turn)
+    \\) WITHOUT ROWID;
+    \\
+;
+
+/// One compact blob per player (riot/mastery.zig). Snapshot at fetched_at, not at
+/// match time
+const mastery_ddl =
+    \\CREATE TABLE IF NOT EXISTS mastery (
+    \\    puuid TEXT PRIMARY KEY,
+    \\    platform TEXT,
+    \\    fetched_at INTEGER NOT NULL,
+    \\    champions INTEGER NOT NULL,
+    \\    data BLOB NOT NULL
+    \\);
+    \\
+;
+
 pub const schema =
     \\-- Every document fetched as compressed JSON (see raw.zig), so normalised tables
     \\-- can be rebuilt when parsing changes without refetching. Own file: most bytes.
@@ -31,21 +117,7 @@ pub const schema =
     \\    data BLOB NOT NULL
     \\);
     \\
-    \\-- PUUIDs are encrypted per API key: a new key means new PUUIDs for the same players.
-    \\-- platform is Riot's id (EUW1, KR); region the match-v5 route (europe, asia).
-    \\CREATE TABLE IF NOT EXISTS players (
-    \\    puuid TEXT PRIMARY KEY,
-    \\    tier TEXT,
-    \\    division TEXT,
-    \\    lp INTEGER,
-    \\    wins INTEGER,
-    \\    losses INTEGER,
-    \\    rank_seen_at INTEGER,
-    \\    matches_checked_at INTEGER,
-    \\    source TEXT NOT NULL,
-    \\    platform TEXT,
-    \\    region TEXT
-    \\);
+++ players_ddl ++
     \\
     \\CREATE TABLE IF NOT EXISTS ladder_pages (
     \\    platform TEXT NOT NULL,
@@ -87,48 +159,7 @@ pub const schema =
     \\);
     \\CREATE INDEX IF NOT EXISTS matches_patch ON matches (patch);
     \\
-    \\-- slot = index in info.participants
-    \\CREATE TABLE IF NOT EXISTS participants (
-    \\    match_id TEXT NOT NULL,
-    \\    slot INTEGER NOT NULL,
-    \\    team_id INTEGER NOT NULL,
-    \\    puuid TEXT,
-    \\    champion_id INTEGER NOT NULL,
-    \\    position TEXT,
-    \\    individual_position TEXT,
-    \\    win INTEGER NOT NULL,
-    \\    kills INTEGER, deaths INTEGER, assists INTEGER,
-    \\    gold INTEGER,
-    \\    damage_to_champions INTEGER,
-    \\    damage_taken INTEGER,
-    \\    vision_score INTEGER,
-    \\    cs INTEGER,
-    \\    champ_level INTEGER,
-    \\    summoner1 INTEGER, summoner2 INTEGER,
-    \\    keystone INTEGER,
-    \\    secondary_style INTEGER,
-    \\    PRIMARY KEY (match_id, slot)
-    \\);
-    \\CREATE INDEX IF NOT EXISTS participants_puuid ON participants (puuid);
-    \\
-    \\CREATE TABLE IF NOT EXISTS bans (
-    \\    match_id TEXT NOT NULL,
-    \\    team_id INTEGER NOT NULL,
-    \\    pick_turn INTEGER NOT NULL,
-    \\    champion_id INTEGER NOT NULL,
-    \\    PRIMARY KEY (match_id, team_id, pick_turn)
-    \\);
-    \\
-    \\-- Snapshot at fetched_at, not at match time
-    \\CREATE TABLE IF NOT EXISTS mastery (
-    \\    puuid TEXT NOT NULL,
-    \\    champion_id INTEGER NOT NULL,
-    \\    level INTEGER,
-    \\    points INTEGER,
-    \\    last_play_time INTEGER,
-    \\    fetched_at INTEGER NOT NULL,
-    \\    PRIMARY KEY (puuid, champion_id)
-    \\);
+++ participants_ddl ++ bans_ddl ++ mastery_ddl ++
     \\
     \\CREATE TABLE IF NOT EXISTS champions (
     \\    id INTEGER PRIMARY KEY,
@@ -137,6 +168,13 @@ pub const schema =
     \\    tags TEXT,
     \\    ddragon_version TEXT NOT NULL
     \\);
+    \\
+    \\-- Players who asked to be forgotten (`meiolol forget`, src/forget.zig): the crawler
+    \\-- never stores them again. Key: lower-case hex sha256 of the PUUID bytes
+    \\CREATE TABLE IF NOT EXISTS forgotten (
+    \\    puuid_sha256 TEXT PRIMARY KEY,
+    \\    forgotten_at INTEGER NOT NULL
+    \\) WITHOUT ROWID;
 ;
 
 /// After migrate: they may name columns older databases lack
@@ -148,6 +186,11 @@ const indexes =
     \\CREATE INDEX IF NOT EXISTS timeline_queue_region
     \\    ON timeline_queue (region, status, queued_at, match_id);
     \\CREATE INDEX IF NOT EXISTS raw.timeline_docs_age ON timeline_docs (fetched_at);
+    \\CREATE INDEX IF NOT EXISTS raw.raw_docs_age ON raw_docs (source, fetched_at);
+    \\CREATE INDEX IF NOT EXISTS participants_puuid ON participants (puuid);
+    \\CREATE INDEX IF NOT EXISTS players_seen ON players (seen_at);
+    \\CREATE INDEX IF NOT EXISTS mastery_age ON mastery (fetched_at);
+    \\CREATE INDEX IF NOT EXISTS matches_start ON matches (game_start);
 ;
 
 /// Open meiolol.db with raw.db and timeline.db attached as `raw` and `timeline`, all
@@ -227,7 +270,56 @@ fn migrate(db: sqlite.Db) !void {
             \\DROP TABLE ladder_pages_euw;
         );
     }
+    if (!try hasColumn(db, "participants", "item0")) {
+        // Rebuilt rather than altered to drop their rowids; `meiolol rebuild` fills
+        // the new columns from raw summaries
+        try db.exec("ALTER TABLE participants RENAME TO participants_v1;" ++
+            "ALTER TABLE bans RENAME TO bans_v1;" ++ participants_ddl ++ bans_ddl ++
+            \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position,
+            \\    individual_position, win, kills, deaths, assists, gold, damage_to_champions,
+            \\    damage_taken, vision_score, cs, champ_level, summoner1, summoner2, keystone,
+            \\    secondary_style)
+            \\SELECT match_id, slot, team_id, puuid, champion_id, position, individual_position,
+            \\    win, kills, deaths, assists, gold, damage_to_champions, damage_taken,
+            \\    vision_score, cs, champ_level, summoner1, summoner2, keystone, secondary_style
+            \\FROM participants_v1;
+            \\INSERT INTO bans SELECT * FROM bans_v1;
+            \\DROP TABLE participants_v1;
+            \\DROP TABLE bans_v1;
+        );
+    }
+    if (!try hasColumn(db, "mastery", "data")) {
+        // Row-per-champion form, never filled on the box (ladder still seeding); its raw
+        // documents go too. Take a backup before the first run anyway
+        try db.exec("DROP TABLE mastery; DELETE FROM raw.raw_docs WHERE source = 'riot_mastery';" ++
+            mastery_ddl);
+    }
+    if (!try hasColumn(db, "players", "seen_at")) {
+        // Counts as seen now, so existing players get the full 30 days
+        try db.exec(
+            \\ALTER TABLE players ADD COLUMN seen_at INTEGER;
+            \\UPDATE players SET seen_at = unixepoch();
+        );
+    }
     try db.commit();
+}
+
+/// For a new app's key (dev -> personal -> production): PUUIDs change, so forget
+/// players, ladder pages and mastery (re-seeded from the ladders) and blank old
+/// PUUIDs in participants, keeping their rank in participants.tier. Matches, timelines and queues are keyed by match id and
+/// stay. Run `meiolol rebuild` before, not after: it restores PUUIDs from raw.
+pub fn rekey(db: sqlite.Db) !void {
+    try db.begin();
+    errdefer db.rollback();
+    try db.exec(
+        \\UPDATE participants SET (tier, division) =
+        \\    (SELECT tier, division FROM players p WHERE p.puuid = participants.puuid)
+        \\WHERE tier IS NULL;
+    ++ "DROP TABLE players; DROP TABLE ladder_pages; DROP TABLE mastery;" ++
+        "UPDATE participants SET puuid = NULL;" ++
+        "DELETE FROM raw.raw_docs WHERE source = 'riot_mastery';");
+    try db.commit();
+    try apply(db);
 }
 
 fn hasColumn(db: sqlite.Db, table: []const u8, column: []const u8) !bool {
@@ -258,14 +350,37 @@ test "migrates an EUW-only database" {
         \\CREATE TABLE match_queue (match_id TEXT PRIMARY KEY,
         \\    status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
         \\    discovered_at INTEGER NOT NULL) WITHOUT ROWID;
+        \\CREATE TABLE participants (match_id TEXT NOT NULL, slot INTEGER NOT NULL,
+        \\    team_id INTEGER NOT NULL, puuid TEXT, champion_id INTEGER NOT NULL, position TEXT,
+        \\    individual_position TEXT, win INTEGER NOT NULL, kills INTEGER, deaths INTEGER,
+        \\    assists INTEGER, gold INTEGER, damage_to_champions INTEGER, damage_taken INTEGER,
+        \\    vision_score INTEGER, cs INTEGER, champ_level INTEGER, summoner1 INTEGER,
+        \\    summoner2 INTEGER, keystone INTEGER, secondary_style INTEGER,
+        \\    PRIMARY KEY (match_id, slot));
+        \\CREATE INDEX participants_puuid ON participants (puuid);
+        \\CREATE TABLE bans (match_id TEXT NOT NULL, team_id INTEGER NOT NULL,
+        \\    pick_turn INTEGER NOT NULL, champion_id INTEGER NOT NULL,
+        \\    PRIMARY KEY (match_id, team_id, pick_turn));
+        \\CREATE TABLE mastery (puuid TEXT NOT NULL, champion_id INTEGER NOT NULL,
+        \\    level INTEGER, points INTEGER, last_play_time INTEGER,
+        \\    fetched_at INTEGER NOT NULL, PRIMARY KEY (puuid, champion_id));
         \\INSERT INTO players (puuid, source) VALUES ('p1', 'ladder');
         \\INSERT INTO ladder_pages VALUES ('GOLD', 'I', 1, 205, 9);
         \\INSERT INTO match_queue (match_id, discovered_at) VALUES ('EUW1_1', 9);
+        \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, win, keystone)
+        \\    VALUES ('EUW1_1', 0, 100, 'p1', 266, 1, 8010);
+        \\INSERT INTO bans VALUES ('EUW1_1', 100, 1, 157);
     );
     try apply(db);
     try apply(db);
     const t = std.testing;
     const one: ?i64 = 1;
+    try t.expectEqual(@as(?i64, 8010), try db.scalar(
+        "SELECT keystone FROM participants WHERE puuid = 'p1' AND item0 IS NULL",
+        .{},
+    ));
+    try t.expectEqual(@as(?i64, 157), try db.scalar("SELECT champion_id FROM bans", .{}));
+    try t.expect(try hasColumn(db, "mastery", "data"));
     try t.expectEqual(one, try db.scalar(
         "SELECT count(*) FROM players WHERE region = 'europe' AND platform = 'EUW1'",
         .{},
@@ -280,6 +395,25 @@ test "migrates an EUW-only database" {
     ));
     try t.expectEqual(@as(?i64, 0), try db.scalar(
         "SELECT count(*) FROM sqlite_master WHERE name = 'players_check'",
+        .{},
+    ));
+}
+
+test "rekey keeps matches, forgets players" {
+    const db = try memory();
+    defer db.close();
+    try db.exec(
+        \\INSERT INTO players (puuid, tier, division, source) VALUES ('old', 'GOLD', 'II', 'ladder');
+        \\INSERT INTO match_queue (match_id, discovered_at) VALUES ('EUW1_1', 9);
+        \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, win)
+        \\    VALUES ('EUW1_1', 0, 100, 'old', 266, 1);
+    );
+    try rekey(db);
+    const t = std.testing;
+    try t.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM players", .{}));
+    try t.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM match_queue", .{}));
+    try t.expectEqual(@as(?i64, 1), try db.scalar(
+        "SELECT count(*) FROM participants WHERE puuid IS NULL AND tier = 'GOLD'",
         .{},
     ));
 }

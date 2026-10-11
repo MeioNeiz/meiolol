@@ -20,6 +20,16 @@ product is meiolol itself, two faces of one application (docs/production-key.md)
    draft tool. Genuinely needs millions of matches, and is the site Riot requires
 2. Desktop draft assistant (`meiolol-app`), same data
 
+## How we work (2026-10-11)
+
+Several Claude sessions in parallel, coordinated by one (meiolol-44 at the time of
+writing). Code sessions use git worktrees and merge to main themselves after build and
+tests; deploys build from a commit, never the working tree. In the shared main checkout
+commit only by explicit path (`git commit -m ... -- <paths>`): the index may hold another
+session's staged work. Jacob's standing ask: the
+coordinator reviews regularly for gaps nobody owns (risks, safety nets, doc requirements
+with no work behind them) and hands out work, not just the next plan step.
+
 ## State
 
 - Done: Zig crawler live on the gpu-box PC (replaced the Python one, same database);
@@ -73,7 +83,14 @@ product is meiolol itself, two faces of one application (docs/production-key.md)
 - Dynamic service (Your games, Squads): on the jomove server beside the static site
 - Name/domain: live on meiolol.jomify.lol (subdomain of Jacob's jomify.lol, Namecheap).
   "lol" in name and TLD is a mild Riot-trademark risk; revisit if the concept renames
-- GUI library
+- GUI library: research says dvui (DX11) pinned to a commit, zgui fallback; settle after
+  a real run on the Windows PC (research: zig-gui-options)
+- Zig 0.17.0 shipped 2026-10-01 and libraries follow it: plan the move from 0.16 in a
+  quiet window (touches every session's code)
+- Before the production review (research: identity-and-privacy): privacy policy with a
+  legitimate interests assessment, ToS, objection/removal form, UK ICO fee (~52 GBP/yr),
+  probably an EEA representative (open); honour Riot's erasure lists and refresh stored
+  players every 30 days
 
 ## Personal key registration
 

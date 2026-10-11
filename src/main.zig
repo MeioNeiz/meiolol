@@ -11,6 +11,8 @@ pub const site = @import("site/root.zig");
 pub const serve = @import("serve.zig");
 pub const daily = @import("daily.zig");
 pub const curves = @import("curves.zig");
+pub const pool = @import("pool.zig");
+pub const learning = @import("learning.zig");
 pub const eval = @import("eval.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
@@ -27,6 +29,12 @@ const usage =
     \\              --timelines PCT  share of matches that also get a timeline
     \\                               (default 100, 0 for none)
     \\              --raw-timeline-days N  keep raw timeline JSON N days (default 7)
+    \\              --raw-match-days N     keep raw match JSON N days (default 30,
+    \\                                     0 forever)
+    \\              --priority P     platforms whose players come first in their
+    \\                               region (default EUW1, "none" for none)
+    \\              --reserve PCT    leave PCT of each rate limit to other processes
+    \\                               on the key (default 0)
     \\  stats       write the model file the app reads (ranked solo, no remakes)
     \\              --patch P        patch to include, repeatable or comma separated
     \\                               (default: the newest patch)
@@ -39,6 +47,10 @@ const usage =
     \\              --platform P     as for stats
     \\              --out FILE       default DIR/export/curves-<patch>.bin
     \\              --min-games N    leave out matchups with fewer games (default 20)
+    \\  pool        write what players of each champion also play (pool.zig), as JSON
+    \\              --patch P        as for stats (matchups); pools use every patch
+    \\              --platform P     as for stats
+    \\              --out FILE       default DIR/export/pool.json
     \\  eval        how well the draft model predicts held-out newer games (markdown
     \\              report on stdout; docs/model.md)
     \\              --patch P        as for stats (default: every patch, pooled)
@@ -60,6 +72,9 @@ const usage =
     \\              --port P         default 8080
     \\              --out DIR        site directory to serve
     \\  status      row counts and crawl queue state
+    \\  rebuild     re-parse kept raw match JSON into the normalised tables
+    \\  rekey       after switching to another app's key (new PUUIDs): forget
+    \\              players, ladder and mastery, keep matches; run rebuild first
     \\  champions   refresh champion ids and names from Data Dragon
     \\
     \\options for all commands:
@@ -83,6 +98,9 @@ pub fn main(init: std.process.Init) !u8 {
     var regions: std.ArrayList(riot.endpoints.Region) = .empty;
     var timeline_percent: u8 = 100;
     var raw_timeline_days: u32 = 7;
+    var raw_match_days: u32 = 30;
+    var priority: ?[]const []const u8 = null;
+    var reserve_pct: u8 = 0;
     var out_path: ?[]const u8 = null;
     var contact: ?[]const u8 = null;
     var riot_txt: ?[]const u8 = null;
@@ -132,6 +150,18 @@ pub fn main(init: std.process.Init) !u8 {
             if (timeline_percent > 100) return usageError(a);
         } else if (std.mem.eql(u8, a, "--raw-timeline-days")) {
             raw_timeline_days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--raw-match-days")) {
+            raw_match_days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--reserve")) {
+            reserve_pct = std.fmt.parseInt(u8, v, 10) catch return usageError(a);
+            if (reserve_pct > 90) return usageError(a);
+        } else if (std.mem.eql(u8, a, "--priority")) {
+            var list: std.ArrayList([]const u8) = .empty;
+            var it = std.mem.tokenizeScalar(u8, v, ',');
+            while (it.next()) |p| {
+                if (!std.mem.eql(u8, p, "none")) try list.append(arena, p);
+            }
+            priority = list.items;
         } else if (std.mem.eql(u8, a, "--out")) {
             out_path = v;
         } else if (std.mem.eql(u8, a, "--contact")) {
@@ -172,6 +202,9 @@ pub fn main(init: std.process.Init) !u8 {
             .regions = if (regions.items.len > 0) regions.items else std.enums.values(riot.endpoints.Region),
             .timeline_percent = timeline_percent,
             .raw_timeline_days = raw_timeline_days,
+            .raw_match_days = raw_match_days,
+            .priority = priority orelse &.{"EUW1"},
+            .reserve_pct = reserve_pct,
         } };
         crawler.run() catch |err| switch (err) {
             error.KeyRejected => return 3,
@@ -185,6 +218,10 @@ pub fn main(init: std.process.Init) !u8 {
     }
     if (std.mem.eql(u8, cmd, "curves")) {
         try writeCurves(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path, min_games);
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "pool")) {
+        try writePool(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path);
         return 0;
     }
     if (std.mem.eql(u8, cmd, "eval")) {
@@ -222,6 +259,19 @@ pub fn main(init: std.process.Init) !u8 {
     }
     if (std.mem.eql(u8, cmd, "status")) {
         try status(init.gpa, init.io, data_dir);
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "rebuild")) {
+        const db = try store.open(init.gpa, data_dir);
+        defer db.close();
+        std.log.info("{d} matches rebuilt", .{try riot.match.rebuild(init.gpa, db)});
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "rekey")) {
+        const db = try store.open(init.gpa, data_dir);
+        defer db.close();
+        try store.schema.rekey(db);
+        std.log.info("players, ladder and mastery cleared; matches kept", .{});
         return 0;
     }
     if (std.mem.eql(u8, cmd, "champions")) {
@@ -311,7 +361,12 @@ fn writeCurves(
     const label = try stats.label(&label_buf, chosen);
     const path = out_path orelse try curvesPath(arena, data_dir, chosen);
 
-    var r = try curves.build(gpa, db, chosen, platforms);
+    const legendaries = ddragon.legendaries(gpa, io, chosen[0]) catch |err| blk: {
+        std.log.warn("no item list from Data Dragon ({t}): curves without first items", .{err});
+        break :blk &.{};
+    };
+    defer gpa.free(legendaries);
+    var r = try curves.build(gpa, db, chosen, platforms, legendaries);
     defer r.builder.deinit();
     if (r.summary.games == 0) {
         std.log.err("no ranked solo games with timelines on patch {s}", .{label});
@@ -327,6 +382,37 @@ fn writeCurves(
     std.log.info("{s}: patch {s}, {d} games ({d} skipped)", .{
         path, label, r.summary.games, r.summary.skipped,
     });
+}
+
+fn writePool(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    arena: std.mem.Allocator,
+    data_dir: []const u8,
+    wanted: []const []const u8,
+    platforms: []const []const u8,
+    out_path: ?[]const u8,
+) !void {
+    const db = try store.open(gpa, data_dir);
+    defer db.close();
+    const chosen = if (wanted.len > 0) wanted else try newestPatch(arena, db, platforms);
+    var r = try stats.build(gpa, db, chosen, platforms);
+    defer r.builder.deinit();
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    var model: std.Io.Writer.Allocating = .init(arena);
+    try r.builder.write(&model.writer, try stats.label(&label_buf, chosen));
+    const st: core.Stats = try .parse(arena, model.written());
+    const p = try pool.make(gpa, arena, db, &st, platforms, .{});
+
+    const path = out_path orelse try std.fs.path.join(arena, &.{ data_dir, "export", "pool.json" });
+    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+    defer file.deinit(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var w = file.file.writer(io, &buf);
+    try pool.writeJson(&w.interface, p);
+    try w.interface.flush();
+    try file.replace(io);
+    std.log.info("{s}", .{path});
 }
 
 /// Where `meiolol curves` writes by default for these patches

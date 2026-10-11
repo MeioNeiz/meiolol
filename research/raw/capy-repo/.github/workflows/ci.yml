@@ -1,0 +1,28 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  ci:
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Setup Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install libgtk-4-dev
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.14.1
+      - name: Check formatting
+        run: zig fmt --check src examples
+      - name: Build Capy for native
+        run: zig build
+      - name: Build Capy for Windows x86_64
+        run: zig build -Dtarget=x86_64-windows
+      - name: Build Capy for Windows x86
+        run: zig build -Dtarget=x86-windows

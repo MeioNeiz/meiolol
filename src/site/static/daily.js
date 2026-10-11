@@ -13,8 +13,14 @@ const ROLES = [
 const roleName = Object.fromEntries(ROLES);
 const SIDES = ["Blue", "Red"];
 const KEY = "meiolol.daily.v1";
-// Below this many games a lane edge is too thin to read much into
-const THIN = 200;
+// Win-rate numbers are noise until there is a lot of data (draft model eval: level with
+// a coin flip on 6k games). A pair edge needs PAIR_GAMES games and must clear chance
+// (|pp| > 1.96 SE, SE = 50 / sqrt(n) points); a champion's role numbers need ROLE_GAMES;
+// whole-draft ratings need DRAFT_GAMES games on the patch
+const PAIR_GAMES = 400;
+const ROLE_GAMES = 300;
+const DRAFT_GAMES = 100000;
+const clear = (pp, n) => n >= PAIR_GAMES && Math.abs(pp) > 98 / Math.sqrt(n);
 
 const $ = (id) => document.getElementById(id);
 const pad = (n) => String(n).padStart(2, "0");
@@ -215,6 +221,7 @@ class Game {
       `kills ${k[0]} to ${k[1]}, gold ${gold[0]} to ${gold[1]} (blue first). ` +
       `You guessed ${this.name(this.mine.pick)} and ${SIDES[this.mine.side].toLowerCase()} side.`;
 
+    const enough = p.games >= DRAFT_GAMES;
     const blue = Math.round(p.blue_win * 100);
     const favoured = blue === 50 ? null : blue > 50 ? 0 : 1;
     let read;
@@ -225,16 +232,18 @@ class Game {
     } else {
       read = `${SIDES[favoured]} side had the better odds on paper and still lost: a draft sets the odds, not the result.`;
     }
-    $("estimate").textContent =
-      `By this patch's numbers (${p.games.toLocaleString("en-GB")} ranked solo games on ` +
-      `patch ${p.patch}), the two drafts rate about ${blue} to ${100 - blue} for blue side. ${read}`;
+    const games = `${p.games.toLocaleString("en-GB")} ranked solo games on patch ${p.patch}`;
+    $("estimate").textContent = enough
+      ? `By this patch's numbers (${games}), the two drafts rate about ${blue} to ${100 - blue} for blue side. ${read}`
+      : `This patch has ${games} so far: too few to rate whole drafts or picks, so the numbers below are only shown where the games behind them are enough.`;
 
     const lanes = $("lanes");
     lanes.replaceChildren();
     ROLES.forEach(([, label], r) => {
       const lane = p.lanes[r];
       const tr = document.createElement("tr");
-      if (lane.games < THIN) tr.className = "thin";
+      const shown = clear(lane.pp, lane.games);
+      if (!shown) tr.className = "thin";
       const cell = (child, cls) => {
         const td = document.createElement("td");
         if (cls) td.className = cls;
@@ -244,10 +253,9 @@ class Game {
       cell(label);
       cell(this.champ(p.teams[0][r], 24));
       cell(this.champ(p.teams[1][r], 24));
-      const edge =
-        Math.abs(lane.pp) < 0.1 ? "even" : `${signed(Math.abs(lane.pp))} ${lane.pp > 0 ? "blue" : "red"}`;
+      const edge = shown ? `${signed(Math.abs(lane.pp))} ${lane.pp > 0 ? "blue" : "red"}` : "more data needed";
       cell(edge, "num");
-      cell(lane.games < THIN ? `${lane.games} (few)` : String(lane.games), "num");
+      cell(String(lane.games), "num");
       lanes.append(tr);
     });
 
@@ -261,7 +269,9 @@ class Game {
       head.append(this.champ(o.id));
       const sub = document.createElement("span");
       sub.className = "muted";
-      sub.textContent = ` ${signed(o.pp)} points in this draft, ${o.games} games in ${role}`;
+      sub.textContent = enough
+        ? ` ${signed(o.pp)} points in this draft, ${o.games} games in ${role}`
+        : ` ${o.games} games in ${role} this patch`;
       head.append(sub);
       if (o.id === p.played) {
         const tag = document.createElement("span");
@@ -270,7 +280,9 @@ class Game {
         head.append(tag);
       }
       li.append(head);
-      for (const r of o.reasons) {
+      const solid = o.reasons.filter((r) =>
+        r.kind === "base" ? enough && r.games >= ROLE_GAMES : clear(r.pp, r.games));
+      for (const r of solid) {
         const why = document.createElement("div");
         why.className = "why";
         why.textContent = this.describe(r);

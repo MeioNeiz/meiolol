@@ -40,7 +40,7 @@ const preview_banner =
     \\
 ;
 
-pub const Nav = enum { tiers, draft, daily, download, about, none };
+pub const Nav = enum { matchups, daily, pool, champions, method, none };
 
 pub const Page = struct {
     title: []const u8,
@@ -83,11 +83,11 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         product,
     });
     const items = [_]struct { Nav, []const u8, []const u8 }{
-        .{ .tiers, "tier/top.html", "Tier lists" },
-        .{ .draft, "draft.html", "Draft helper" },
+        .{ .matchups, "matchup/index.html", "Matchups" },
         .{ .daily, "daily.html", "Daily Draft" },
-        .{ .download, "download.html", "Desktop app" },
-        .{ .about, "about.html", "How it works" },
+        .{ .pool, "pool.html", "Champion pool" },
+        .{ .champions, "role/top.html", "Champions" },
+        .{ .method, "method.html", "Method" },
     };
     for (items) |it| {
         try w.print("<a href=\"{s}{s}\"{s}>{s}</a>\n", .{
@@ -105,13 +105,13 @@ pub fn foot(w: *Writer, p: Page) Writer.Error!void {
         \\<footer><div class="wrap">
         \\<p>EUW ranked solo/duo, patch {s}, {d} games. Updated daily.</p>
         \\<p><a href="{s}privacy.html">Privacy</a> · <a href="{s}terms.html">Terms</a> ·
-        \\<a href="{s}about.html">How it works</a></p>
+        \\<a href="{s}method.html">Method</a> · <a href="{s}download.html">Desktop app</a></p>
         \\<p class="legal">{s}</p>
         \\</div></footer>
         \\</body>
         \\</html>
         \\
-    , .{ p.patch, p.games, p.root, p.root, p.root, boilerplate });
+    , .{ p.patch, p.games, p.root, p.root, p.root, p.root, boilerplate });
 }
 
 test "escape" {

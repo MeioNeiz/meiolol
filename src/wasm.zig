@@ -1,7 +1,7 @@
 //! The recommender for the website's draft helper, built for wasm32-freestanding.
 //! JS: `alloc` space, copy the model file in, `load` it; then per draft, copy a JSON
 //! request in and call `suggest`, which returns a pointer to JSON (length from
-//! `result_len`). Request and reply shapes: src/site/static/draft.js.
+//! `result_len`). Request and reply shapes: Request below and `run`.
 
 const std = @import("std");
 const core = @import("core");

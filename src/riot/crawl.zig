@@ -13,6 +13,7 @@ const Client = @import("client.zig").Client;
 const ep = @import("endpoints.zig");
 const match = @import("match.zig");
 const timeline = @import("timeline.zig");
+const mastery = @import("mastery.zig");
 
 const log = std.log.scoped(.crawl);
 
@@ -40,6 +41,13 @@ pub const Options = struct {
     timeline_percent: u8 = 100,
     /// Raw timeline JSON kept this long for re-extraction; 0 keeps none
     raw_timeline_days: u32 = 7,
+    /// Raw match summaries kept this long (`meiolol rebuild` re-parses them); 0 = forever
+    raw_match_days: u32 = 30,
+    /// Platforms whose players a regional thread scans before any other's, so they
+    /// get its whole budget while they have players due
+    priority: []const []const u8 = &.{"EUW1"},
+    /// Share of each bucket left to other processes on the key (the Your games service)
+    reserve_pct: u8 = 0,
 };
 
 const RegionCounters = struct {
@@ -95,7 +103,7 @@ pub const Crawler = struct {
             }
             if (now - last_prune >= 3600) {
                 last_prune = now;
-                c.pruneRawTimelines(db) catch |err| log.warn("pruning raw timelines: {t}", .{err});
+                c.pruneRaw(db) catch |err| log.warn("pruning raw documents: {t}", .{err});
             }
         }
         c.stop.store(true, .release);
@@ -195,21 +203,54 @@ pub const Crawler = struct {
         if (queued > 0) log.info("queued timelines for {d} earlier matches", .{queued});
     }
 
+    fn pruneRaw(c: *Crawler, db: store.Db) !void {
+        try c.pruneChunks(db, "timelines", c.opts.raw_timeline_days,
+            \\DELETE FROM raw.timeline_docs WHERE rowid IN
+            \\    (SELECT rowid FROM raw.timeline_docs d WHERE fetched_at < ? AND NOT EXISTS
+            \\        (SELECT 1 FROM timeline_queue q
+            \\         WHERE q.match_id = d.match_id AND q.status = 'failed')
+            \\     LIMIT 500)
+        );
+        try c.pruneChunks(db, "match summaries", c.opts.raw_match_days,
+            \\DELETE FROM raw.raw_docs WHERE source = 'riot_match' AND key IN
+            \\    (SELECT key FROM raw.raw_docs
+            \\     WHERE source = 'riot_match' AND fetched_at < ? LIMIT 500)
+        );
+        // Riot asks for stored player data to be refreshed monthly: players no ladder
+        // page or match has shown for 30 days go (erased accounts stop appearing), and
+        // mastery is dropped to be fetched again
+        try c.pruneChunks(db, "mastery of unseen players", 30,
+            \\DELETE FROM mastery WHERE puuid IN
+            \\    (SELECT puuid FROM players WHERE seen_at < ? LIMIT 500)
+        );
+        try c.pruneChunks(db, "unseen players", 30,
+            \\DELETE FROM players WHERE puuid IN
+            \\    (SELECT puuid FROM players WHERE seen_at < ? LIMIT 500)
+        );
+        try c.pruneChunks(db, "mastery snapshots", 30,
+            \\DELETE FROM mastery WHERE puuid IN
+            \\    (SELECT puuid FROM mastery WHERE fetched_at < ? LIMIT 500)
+        );
+        // Privacy policy: matches older than 24 months keep no PUUIDs
+        const cutoff_ms = (c.nowS() - 730 * 86400) * 1000;
+        try db.run(
+            \\UPDATE participants SET puuid = NULL WHERE puuid IS NOT NULL AND match_id IN
+            \\    (SELECT match_id FROM matches WHERE game_start < ?)
+        , .{cutoff_ms});
+    }
+
     /// In chunks, so region threads' raw writes wait at most one chunk
-    fn pruneRawTimelines(c: *Crawler, db: store.Db) !void {
-        if (c.opts.raw_timeline_days == 0) return;
-        const cutoff = c.nowS() - @as(i64, c.opts.raw_timeline_days) * 86400;
+    fn pruneChunks(c: *Crawler, db: store.Db, what: []const u8, days: u32, sql: []const u8) !void {
+        if (days == 0) return;
+        const cutoff = c.nowS() - @as(i64, days) * 86400;
         var total: i64 = 0;
         while (!c.stop.load(.acquire)) {
-            try db.run(
-                \\DELETE FROM raw.timeline_docs WHERE rowid IN
-                \\    (SELECT rowid FROM raw.timeline_docs WHERE fetched_at < ? LIMIT 500)
-            , .{cutoff});
+            try db.run(sql, .{cutoff});
             const n = try db.scalar("SELECT changes()", .{}) orelse 0;
             total += n;
             if (n == 0) break;
         }
-        if (total > 0) log.info("pruned {d} raw timelines", .{total});
+        if (total > 0) log.info("pruned {d} raw {s}", .{ total, what });
     }
 };
 
@@ -246,7 +287,10 @@ const Worker = struct {
     fn init(c: *Crawler, job: Job) !Worker {
         const db = try store.open(c.gpa, c.opts.data_dir);
         errdefer db.close();
-        return .{ .c = c, .job = job, .db = db, .client = try .init(c.gpa, c.io, c.opts.key) };
+        var client: Client = try .init(c.gpa, c.io, c.opts.key);
+        errdefer client.deinit();
+        try client.limiter.setReserve(c.opts.reserve_pct);
+        return .{ .c = c, .job = job, .db = db, .client = client };
     }
 
     fn deinit(w: *Worker) void {
@@ -341,17 +385,19 @@ const Worker = struct {
         errdefer w.db.rollback();
         var up = try w.db.prepare(
             \\INSERT INTO players (puuid, tier, division, lp, wins, losses, rank_seen_at, source,
-            \\    platform, region)
-            \\VALUES (?,?,?,?,?,?,?,'ladder',?,?)
+            \\    platform, region, seen_at)
+            \\VALUES (?1,?2,?3,?4,?5,?6,?7,'ladder',?8,?9,?7)
             \\ON CONFLICT (puuid) DO UPDATE SET
             \\    tier = excluded.tier, division = excluded.division, lp = excluded.lp,
             \\    wins = excluded.wins, losses = excluded.losses,
             \\    rank_seen_at = excluded.rank_seen_at, source = 'ladder',
-            \\    platform = excluded.platform, region = excluded.region
+            \\    platform = excluded.platform, region = excluded.region,
+            \\    seen_at = excluded.seen_at
         );
         defer up.deinit();
         for (entries) |e| {
             const puuid = e.puuid orelse continue;
+            if (try forgotten(w.db, puuid)) continue;
             try up.exec(.{
                 puuid, e.tier, e.rank, e.leaguePoints, e.wins, e.losses, t, p.id, @tagName(p.region),
             });
@@ -396,23 +442,18 @@ const Worker = struct {
         return w.mastery_cursor[0..w.mastery_cursor_len];
     }
 
+    /// Compact only: the raw response is ~70 KB for ~1 KB of data we use. An empty
+    /// list still gets a row, marking the player done
     fn fetchMastery(w: *Worker, p: ep.Platform, arena: std.mem.Allocator, puuid: []const u8) !void {
         const got = try ep.masteries(&w.client, p, puuid);
         defer if (got) |b| w.c.gpa.free(b);
-        const body = got orelse "[]";
-        const rows = try ep.parse([]const ep.Mastery, arena, body);
+        const entries = try mastery.fromJson(arena, got orelse "[]");
         const t = w.now();
-        try w.db.begin();
-        errdefer w.db.rollback();
-        try putRaw(w.c.gpa, w.db, "riot_mastery", puuid, body, t);
-        var ins = try w.db.prepare("INSERT OR REPLACE INTO mastery VALUES (?,?,?,?,?,?)");
-        defer ins.deinit();
-        for (rows) |m| {
-            try ins.exec(.{ puuid, m.championId, m.championLevel, m.championPoints, m.lastPlayTime, t });
-        }
-        // Marks the player as done even with no masteries
-        if (rows.len == 0) try ins.exec(.{ puuid, 0, null, null, null, t });
-        try w.db.commit();
+        const blob = try mastery.encode(w.c.gpa, entries, t);
+        defer w.c.gpa.free(blob);
+        try w.db.run("INSERT OR REPLACE INTO mastery VALUES (?,?,?,?,?)", .{
+            puuid, p.id, t, entries.len, store.Blob{ .bytes = blob },
+        });
         _ = w.c.counters.mastery.fetchAdd(1, .monotonic);
     }
 
@@ -446,26 +487,38 @@ const Worker = struct {
         if (done == 0) try w.nap(15);
     }
 
-    /// Never-scanned players first (NULL sorts first), then the stalest. PUUIDs are
-    /// random, so ordering by them samples players without favouring any rank or activity.
+    /// Priority platforms' players first, then the region's. Within those, never
+    /// scanned (NULL sorts first), then the stalest. PUUIDs are random, so ordering by
+    /// them samples players without favouring any rank or activity.
     fn scanPlayers(w: *Worker, r: ep.Region, n: u32) !u32 {
         var arena: std.heap.ArenaAllocator = .init(w.c.gpa);
         defer arena.deinit();
         var s = try w.db.prepare(
             \\SELECT puuid, matches_checked_at FROM players
-            \\WHERE region = ? AND (matches_checked_at IS NULL OR matches_checked_at < ?)
+            \\WHERE region = ?1 AND (?2 IS NULL OR platform = ?2)
+            \\    AND (matches_checked_at IS NULL OR matches_checked_at < ?3)
             \\ORDER BY matches_checked_at, puuid
-            \\LIMIT ?
+            \\LIMIT ?4
         );
         defer s.deinit();
-        try s.bind(.{ @tagName(r), w.now() - w.c.opts.recheck_s, n });
         const Player = struct { puuid: []const u8, checked_at: ?i64 };
         var players: std.ArrayList(Player) = .empty;
-        while (try s.step()) {
-            try players.append(arena.allocator(), .{
-                .puuid = try arena.allocator().dupe(u8, s.bytes(0)),
-                .checked_at = s.optInt(1),
-            });
+        var filters: std.ArrayList(?[]const u8) = .empty;
+        for (w.c.opts.priority) |id| {
+            const p = ep.platformOf(id) orelse continue;
+            if (p.region == r) try filters.append(arena.allocator(), id);
+        }
+        try filters.append(arena.allocator(), null);
+        for (filters.items) |platform| {
+            const want = n - players.items.len;
+            if (want == 0) break;
+            try s.bind(.{ @tagName(r), platform, w.now() - w.c.opts.recheck_s, want });
+            while (try s.step()) {
+                try players.append(arena.allocator(), .{
+                    .puuid = try arena.allocator().dupe(u8, s.bytes(0)),
+                    .checked_at = s.optInt(1),
+                });
+            }
         }
         for (players.items) |p| {
             try w.check();
@@ -522,26 +575,52 @@ const Worker = struct {
             log.warn("match {s} did not parse: {t}", .{ id, err });
             return w.db.run("UPDATE match_queue SET status = 'failed' WHERE match_id = ?", .{id});
         };
+        // A row this match cannot store must not stop the crawler: on restart the
+        // same match would come first again
+        w.storeMatch(r, id, body, doc) catch |err| {
+            if (err != error.Sqlite) return err;
+            log.warn("match {s} not stored: {t}", .{ id, err });
+            return w.db.run("UPDATE match_queue SET status = 'failed' WHERE match_id = ?", .{id});
+        };
+        _ = w.c.counters.region[@intFromEnum(r)].matches.fetchAdd(1, .monotonic);
+    }
+
+    fn storeMatch(w: *Worker, r: ep.Region, id: []const u8, body: []const u8, doc: match.Doc) !void {
         const t = w.now();
         try w.db.begin();
         errdefer w.db.rollback();
-        try putRaw(w.c.gpa, w.db, "riot_match", id, body, t);
+        var any_forgotten = false;
+        for (doc.info.participants) |p| {
+            if (p.puuid) |puuid| any_forgotten = any_forgotten or try forgotten(w.db, puuid);
+        }
+        // The raw JSON names every player, so none is kept for a forgotten one's match
+        if (!any_forgotten) try putRaw(w.c.gpa, w.db, "riot_match", id, body, t);
         try match.storeRows(w.db, doc, "riot");
         const platform = doc.info.platformId orelse if (ep.platformOf(id)) |p| p.id else null;
-        var ins = try w.db.prepare("INSERT OR IGNORE INTO players (puuid, source, platform, region) " ++
-            "VALUES (?, 'participant', ?, ?)");
+        var ins = try w.db.prepare(
+            \\INSERT INTO players (puuid, source, platform, region, seen_at)
+            \\VALUES (?, 'participant', ?, ?, ?)
+            \\ON CONFLICT (puuid) DO UPDATE SET seen_at = excluded.seen_at
+        );
         defer ins.deinit();
-        for (doc.metadata.participants) |puuid| try ins.exec(.{ puuid, platform, @tagName(r) });
+        for (doc.info.participants, 0..) |p, slot| {
+            const puuid = p.puuid orelse continue;
+            if (any_forgotten and try forgotten(w.db, puuid)) {
+                try w.db.run("UPDATE participants SET puuid = NULL WHERE match_id = ? AND slot = ?", .{ id, slot });
+                continue;
+            }
+            try ins.exec(.{ puuid, platform, @tagName(r), t });
+        }
         if (!match.isRemake(doc) and w.c.wantTimeline(id)) {
             try w.db.run("INSERT OR IGNORE INTO timeline_queue (match_id, region, queued_at) " ++
                 "VALUES (?, ?, ?)", .{ id, @tagName(r), t });
         }
         try w.db.run("UPDATE match_queue SET status = 'done' WHERE match_id = ?", .{id});
         try w.db.commit();
-        _ = w.c.counters.region[@intFromEnum(r)].matches.fetchAdd(1, .monotonic);
     }
 
-    /// The raw JSON is kept when extraction fails, so a fixed parser can redo it
+    /// The raw JSON is kept when extraction fails (and not pruned), so a fixed parser
+    /// can redo it
     fn fetchTimeline(w: *Worker, r: ep.Region, id: []const u8) !void {
         const gpa = w.c.gpa;
         const body = ep.timeline(&w.client, r, id) catch |err| {
@@ -564,10 +643,24 @@ const Worker = struct {
         };
         defer if (compact) |ct| gpa.free(ct.blob);
 
+        w.storeTimeline(id, body, compact) catch |err| {
+            if (err != error.Sqlite) return err;
+            log.warn("timeline {s} not stored: {t}", .{ id, err });
+            return w.db.run("UPDATE timeline_queue SET status = 'failed' WHERE match_id = ?", .{id});
+        };
+        if (compact != null) _ = w.c.counters.region[@intFromEnum(r)].timelines.fetchAdd(1, .monotonic);
+    }
+
+    fn storeTimeline(w: *Worker, id: []const u8, body: []const u8, compact: ?Compact) !void {
+        const gpa = w.c.gpa;
         const t = w.now();
         try w.db.begin();
         errdefer w.db.rollback();
-        if (w.c.opts.raw_timeline_days > 0 or compact == null) {
+        // Raw timelines carry PUUIDs: none kept when a player is blank (forgotten, or
+        // a match from before a rekey)
+        const blank = try w.db.scalar("SELECT EXISTS (SELECT 1 FROM participants " ++
+            "WHERE match_id = ? AND puuid IS NULL)", .{id}) == 1;
+        if (!blank and (w.c.opts.raw_timeline_days > 0 or compact == null)) {
             const raw = try store.raw.compress(gpa, body);
             defer gpa.free(raw);
             try w.db.run("INSERT OR REPLACE INTO raw.timeline_docs VALUES (?,?,?)", .{
@@ -583,7 +676,6 @@ const Worker = struct {
             if (compact == null) "failed" else "done", id,
         });
         try w.db.commit();
-        if (compact != null) _ = w.c.counters.region[@intFromEnum(r)].timelines.fetchAdd(1, .monotonic);
     }
 
     /// First column of every row, copied into `arena`
@@ -596,6 +688,16 @@ const Worker = struct {
         return out.items;
     }
 };
+
+/// In the `forgotten` table (src/forget.zig writes it)
+fn forgotten(db: store.Db, puuid: []const u8) !bool {
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(puuid, &digest, .{});
+    const hex = std.fmt.bytesToHex(digest, .lower);
+    return try db.scalar("SELECT EXISTS (SELECT 1 FROM forgotten WHERE puuid_sha256 = ?)", .{
+        hex[0..],
+    }) == 1;
+}
 
 const Compact = struct { blob: []u8, frames: usize, events: usize };
 
@@ -615,4 +717,14 @@ pub fn putRaw(gpa: std.mem.Allocator, db: store.Db, source: []const u8, key: []c
     try db.run("INSERT OR REPLACE INTO raw.raw_docs VALUES (?,?,?,?)", .{
         source, key, t, store.Blob{ .bytes = blob },
     });
+}
+
+test forgotten {
+    const db = try store.schema.memory();
+    defer db.close();
+    // sha256("abc")
+    try db.exec("INSERT INTO forgotten VALUES " ++
+        "('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 1)");
+    try std.testing.expect(try forgotten(db, "abc"));
+    try std.testing.expect(!try forgotten(db, "abd"));
 }

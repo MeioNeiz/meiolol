@@ -50,9 +50,9 @@ pub const Bucket = struct {
         return wait;
     }
 
-    /// Replace limits from a spec like "20:1,100:120", keeping hits of windows
-    /// whose length is unchanged
-    fn setSpec(b: *Bucket, gpa: Allocator, spec: []const u8) !void {
+    /// Replace limits from a spec like "20:1,100:120", less `reserve_pct`, keeping hits
+    /// of windows whose length is unchanged
+    fn setSpec(b: *Bucket, gpa: Allocator, spec: []const u8, reserve_pct: u8) !void {
         var parsed: [max_windows]struct { limit: u32, seconds: u32 } = undefined;
         var n: usize = 0;
         var parts = std.mem.tokenizeScalar(u8, spec, ',');
@@ -64,6 +64,7 @@ pub const Bucket = struct {
                 .limit = try std.fmt.parseInt(u32, trimmed, 10),
                 .seconds = try std.fmt.parseInt(u32, std.mem.trim(u8, part[colon + 1 ..], " "), 10),
             };
+            parsed[n].limit = @max(1, parsed[n].limit * (100 - @min(reserve_pct, 99)) / 100);
             n += 1;
         }
         var same = n == b.windows.items.len;
@@ -110,13 +111,22 @@ pub const Limiter = struct {
     io: std.Io,
     app: Bucket = .{},
     methods: std.StringHashMapUnmanaged(Bucket) = .empty,
+    /// Share of the app limit left unused for other processes on the same key
+    reserve_pct: u8 = 0,
 
     pub const app_default = "20:1,100:120";
 
     pub fn init(gpa: Allocator, io: std.Io) !Limiter {
         var l: Limiter = .{ .gpa = gpa, .io = io };
-        try l.app.setSpec(gpa, app_default);
+        try l.app.setSpec(gpa, app_default, 0);
         return l;
+    }
+
+    /// Leave `pct` of every app window to other processes on the same key. Riot's
+    /// -Count headers already include their requests, so this only caps our share
+    pub fn setReserve(l: *Limiter, pct: u8) !void {
+        l.reserve_pct = pct;
+        try l.app.setSpec(l.gpa, app_default, pct);
     }
 
     pub fn deinit(l: *Limiter) void {
@@ -167,9 +177,9 @@ pub const Limiter = struct {
     pub fn update(l: *Limiter, method_name: []const u8, h: Headers) !void {
         const t = l.now();
         const m = try l.method(method_name);
-        if (h.app_limit) |spec| try l.app.setSpec(l.gpa, spec);
+        if (h.app_limit) |spec| try l.app.setSpec(l.gpa, spec, l.reserve_pct);
         if (h.app_count) |counts| try l.app.syncCounts(l.gpa, counts, t);
-        if (h.method_limit) |spec| try m.setSpec(l.gpa, spec);
+        if (h.method_limit) |spec| try m.setSpec(l.gpa, spec, 0);
         if (h.method_count) |counts| try m.syncCounts(l.gpa, counts, t);
     }
 
@@ -212,4 +222,15 @@ test "acquire waits once a window is full" {
     for (0..4) |_| try l.acquire("m");
     const elapsed_ms = @divTrunc(l.now() - start, std.time.ns_per_ms);
     try testing.expect(elapsed_ms >= 1000 and elapsed_ms < 2500);
+}
+
+test "reserve caps app windows, not method ones" {
+    var l = try Limiter.init(testing.allocator, testing.io);
+    defer l.deinit();
+    try l.setReserve(20);
+    try testing.expectEqual(@as(u32, 80), l.app.windows.items[1].limit);
+    try l.update("m", .{ .app_limit = "20:1,100:120", .method_limit = "2000:10" });
+    try testing.expectEqual(@as(u32, 16), l.app.windows.items[0].limit);
+    try testing.expectEqual(@as(u32, 80), l.app.windows.items[1].limit);
+    try testing.expectEqual(@as(u32, 2000), l.methods.getPtr("m").?.windows.items[0].limit);
 }
