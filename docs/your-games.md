@@ -133,11 +133,12 @@ Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB
   is /etc/nginx/meiolol.conf.bak-2026-10-11). `limit_req_zone meiolol_api 60r/m` at the
   top; `location /api/` in the 443 server: auth_basic (/etc/nginx/meiolol-api.htpasswd,
   root:www-data 640), limit_req burst 30, access_log off, proxy_pass 127.0.0.1:8090,
-  client_max_body_size 1k
+  client_max_body_size 1k. `location /admin/` (the ops page, src/admin.zig): same
+  htpasswd and realm, previous config /etc/nginx/meiolol.conf.bak-2026-10-12
 - Preview gating: basic auth on /api/ until the production key (a personal key may not
   serve the public). User `meiolol`; password in vault (meiolol/local,
-  MEIOLOL_API_BASIC_AUTH) and in .env. Remove the two auth_basic lines once the
-  production key is granted
+  MEIOLOL_API_BASIC_AUTH) and in .env. Remove /api/'s two auth_basic lines once the
+  production key is granted; /admin/ keeps its own
 - Box: ssh alias `meiolol-exchange` (key ~/.ssh/meiolol_exchange) is the rrsync user
   limited to the exchange dir (`command="/usr/bin/rrsync /var/lib/meiolol-api/exchange",
   restrict` in ~meiolol/.ssh/authorized_keys; the site key stays limited to

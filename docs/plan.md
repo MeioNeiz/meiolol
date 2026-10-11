@@ -324,6 +324,10 @@ flashcards with spaced repetition; season "lane story" share cards.
   `meiolol-cloud`). deploy/web-loop.sh on the box builds and
   uploads (often early in a patch, then hourly on new games); riot.txt from
   ml/meiolol/riot.txt
+- Admin page: https://meiolol.jomify.lol/admin/ (/api/ basic auth; src/admin.zig).
+  Crawl rates by region from crawl.log report lines, storage growth
+  (data/admin-history.tsv), ingest mix, queues, eval, uploads, deploys; rebuilt every
+  15 min by the web loop
 - jodrive: `riot register --agree` handles the General Policies modal; `riot key --app
   ID` reads a registered app's key
 - Personal key registration (Jacob's words, approved instantly): learning tool showing

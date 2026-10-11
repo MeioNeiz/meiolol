@@ -20,6 +20,7 @@ pub const eval = @import("eval.zig");
 pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
 pub const forget = @import("forget.zig");
+pub const admin = @import("admin.zig");
 const Date = @import("date.zig").Date;
 
 pub const std_options: std.Options = .{ .logFn = logFn };
@@ -124,6 +125,13 @@ const usage =
     \\              --budget SPEC    Riot calls per route, Riot's format (default 20:120)
     \\              --cors ORIGIN    allow a page on ORIGIN (local testing)
     \\  status      row counts and crawl queue state
+    \\  admin       private ops page (src/admin.zig): crawl rates from the crawl log,
+    \\              storage growth (appends DIR/admin-history.tsv), ingest mix, queues
+    \\              --out DIR        default DIR/admin
+    \\              --log FILE       crawler log (default DIR/crawl.log)
+    \\              --days N         history shown (default 7)
+    \\              --disk "S U A"   data disk size, used, available in bytes
+    \\              --health TEXT    deploy/health.sh output
     \\  rebuild     re-parse kept raw match JSON into the normalised tables, and
     \\              refill participants columns taken from timelines
     \\  rekey       after switching to another app's key (new PUUIDs): forget
@@ -196,6 +204,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "serve", cmdServe },
     .{ "api", cmdApi },
     .{ "status", cmdStatus },
+    .{ "admin", cmdAdmin },
     .{ "rebuild", cmdRebuild },
     .{ "rekey", cmdRekey },
     .{ "champions", cmdChampions },
@@ -694,6 +703,35 @@ fn cmdApi(c: *Cmd) !u8 {
 fn cmdStatus(c: *Cmd) !u8 {
     try c.noFlags();
     try status(c.init.gpa, c.init.io, c.data_dir);
+    return 0;
+}
+
+fn cmdAdmin(c: *Cmd) !u8 {
+    const now = std.Io.Clock.real.now(c.init.io).toSeconds();
+    var o: admin.Options = .{ .out_dir = "", .data_dir = c.data_dir, .crawl_log = "", .now_s = now };
+    var out: ?[]const u8 = null;
+    var log_path: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (c.is("--out")) {
+            out = try c.value();
+        } else if (c.is("--log")) {
+            log_path = try c.value();
+        } else if (c.is("--days")) {
+            o.days = try c.int(u32);
+        } else if (c.is("--disk")) {
+            var words = std.mem.tokenizeScalar(u8, try c.value(), ' ');
+            var d: [3]u64 = undefined;
+            for (&d) |*x| x.* = std.fmt.parseInt(u64, words.next() orelse return error.Usage, 10) catch return error.Usage;
+            o.disk = d;
+        } else if (c.is("--health")) {
+            o.health = try c.value();
+        } else return error.Usage;
+    }
+    o.out_dir = out orelse try std.fs.path.join(c.arena, &.{ c.data_dir, "admin" });
+    o.crawl_log = log_path orelse try std.fs.path.join(c.arena, &.{ c.data_dir, "crawl.log" });
+    const db = try store.open(c.init.gpa, c.data_dir);
+    defer db.close();
+    try admin.generate(c.init.gpa, c.init.io, db, o);
     return 0;
 }
 

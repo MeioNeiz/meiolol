@@ -11,6 +11,7 @@ const curves = @import("curves.zig");
 const builds = @import("builds.zig");
 const ddragon = @import("ddragon.zig");
 const site = @import("site/root.zig");
+const admin = @import("admin.zig");
 
 const testing = std.testing;
 const games = 3;
@@ -131,6 +132,63 @@ test "fixture games to stats, curves and the website" {
             return error.TestUnexpectedResult;
         };
     }
+}
+
+test "admin page from the fixture games and a crawl log" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path });
+
+    const db = try store.schema.memory();
+    defer db.close();
+    try fill(arena, db);
+    try db.exec("INSERT INTO draft_backfill SELECT match_id FROM matches");
+    var drafts: store.draft.Builder = try .init(db);
+    defer drafts.deinit();
+    _ = try store.draft.backfillChunk(gpa, db, &drafts, 100);
+
+    // now_s = 2025-10-11 23:10:00
+    const report = " info(crawl): 1000 matches/day | ladder pages 1 | mastery 0 | platform req 1" ++
+        " | europe {d}m 1t 1ids {d}req | writes {d} in 2 commits, 0 queued, 0 busy | pages written 9, read 9\n";
+    var log: std.Io.Writer.Allocating = .init(arena);
+    try log.writer.writeAll("2025-10-11 23:00:00 info(crawl): 19 workers for 4 regions\n");
+    try log.writer.print("2025-10-11 23:01:00" ++ report, .{ 10, 50, 10 });
+    try log.writer.print("2025-10-11 23:02:00" ++ report, .{ 25, 90, 30 });
+    try log.writer.writeAll("2025-10-11 23:02:30 warning(riot): 503 (server) on /lol/match/v5/matches/EUW1_7123456, waiting 5s\n");
+    try tmp.dir.writeFile(io, .{ .sub_path = "crawl.log", .data = log.written() });
+
+    const out = try std.fs.path.join(arena, &.{ dir, "admin" });
+    for (0..2) |_| try admin.generate(gpa, io, db, .{
+        .out_dir = out,
+        .data_dir = dir,
+        .crawl_log = try std.fs.path.join(arena, &.{ dir, "crawl.log" }),
+        .now_s = 1760224200,
+        .disk = .{ 100, 40, 60 },
+        .health = "",
+    });
+    const html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "index.html" }), arena, .limited(4 << 20));
+    for ([_][]const u8{
+        "\"name\":\"matches\",\"rows\":3",
+        "\"restarts\":[1760223600]",
+        "\"m\":[0,0,25,0]",
+        "\"text\":\"warning(riot): N (server) on /lol/match/vN/matches/…, waiting Ns\"",
+        "\"rows\":3,\"days\":[{\"day\":",
+    }) |want| if (std.mem.indexOf(u8, html, want) == null) {
+        std.debug.print("admin page lacks {s}\n", .{want});
+        return error.TestUnexpectedResult;
+    };
+    try std.testing.expect(std.mem.indexOf(u8, html, "EUW1_7123456") == null);
+    for ([_][]const u8{ "admin.js", "admin.css", "index.html.gz" }) |f| {
+        try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ out, f }), .{});
+    }
+    // One history line per build, under one header
+    const history = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ dir, "admin-history.tsv" }), arena, .limited(1 << 20));
+    try testing.expectEqual(3, std.mem.count(u8, history, "\n"));
 }
 
 /// Data Dragon's classes for the fixture timeline's purchases (16.20): its finished

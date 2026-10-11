@@ -15,6 +15,8 @@
 # DB; in the background at low priority, so a slow run never delays uploads.
 # Builds (`meiolol builds`, EUW and every region, current patch) the same way: daily and
 # on a new patch, in the background; the next site build picks the files up.
+# Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
+# behind basic auth there; the site's rsync leaves that directory alone.
 set -u
 contact=$1
 cd "$(dirname "$0")/.." || exit 1
@@ -79,13 +81,19 @@ while true; do
             rm -rf data/site.old
             [ -d data/site ] && mv data/site data/site.old
             mv data/site.new data/site
-            if rsync -a --delete-delay --delay-updates data/site/ meiolol-web:./; then
+            if rsync -a --delete-delay --delay-updates --exclude /admin/ data/site/ meiolol-web:./; then
                 echo "$(date -u +%FT%TZ) uploaded"
                 last_patch=$patch last_games=$games last_upload=$now fresh_curves=0
             fi
         fi
     else
         echo "$out"
+    fi
+    if nice -n 10 bin/meiolol admin --out data/admin.new \
+        --disk "$(df -B1 --output=size,used,avail data | tail -n 1)" \
+        --health "$(bin/health.sh)" 2>&1; then
+        rm -rf data/admin && mv data/admin.new data/admin
+        rsync -a --delete data/admin/ meiolol-web:admin/ || echo "$(date -u +%FT%TZ) admin upload FAILED"
     fi
     sleep 900
 done
