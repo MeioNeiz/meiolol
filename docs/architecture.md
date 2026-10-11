@@ -10,7 +10,7 @@ src/
   stats.zig          model file from the matches table (`meiolol stats`)
   site/              public website generator (`meiolol site`): html.zig layout and
                      boilerplate, prose.zig fixed pages, static/ (css, draft.js)
-  wasm.zig           recommender for the site's draft helper (wasm32-freestanding),
+  wasm.zig           recommender in the browser (wasm32-freestanding),
                      embedded into the backend binary by build.zig
   riot/              Riot API: ratelimit, client (std.http), endpoints (platforms and
                      regions), match parser, timeline (compact format), crawl
@@ -116,12 +116,15 @@ several options with reasons. A trained model replaces this later behind the sam
 
 ## Website (src/site, src/wasm.zig)
 
-`meiolol site --contact EMAIL` writes static files to data/site: tier list per role,
-a page per champion (lane matchups, duos), draft helper, about, download, privacy,
-terms, robots.txt, optional riot.txt, data/stats.bin + data/champions.json. Champion
-icons hotlink Data Dragon. Edges and tiers use the same maths as the app
-(score.roleWin, matchupPp, duoPp). Draft helper: draft.js runs core.recommend compiled to
-wasm (~80 KB), so site and app always agree. Preview mode by default (noindex,
+`meiolol site --contact EMAIL` writes static files to data/site, framed as "learn your
+lane" for the production review (docs/concept.md "Application wording": no tier list,
+draft helper, best pick or recommend wording): landing page, matchup index and pages,
+Daily Draft, a page per role (role/<role>.html, most played first, no tier grades), a
+page per champion (lane opponents and teammates by edge, lane curve links), method,
+download (desktop app, in development), privacy, terms, robots.txt, optional riot.txt,
+data/stats.bin (for the app) + data/champions.json, meiolol.wasm (core.recommend in the
+browser, for pages that score drafts). Champion icons hotlink Data Dragon. Edges use the
+same maths as the app (score.matchupPp, duoPp). Preview mode by default (noindex,
 robots.txt disallow, banner): Riot forbids serving the public on a personal key;
 `--public` only once the production key is granted. `deploy/box.sh site EMAIL` builds
 it on the box and rsyncs it to data/site. `meiolol serve` (src/serve.zig) serves a site

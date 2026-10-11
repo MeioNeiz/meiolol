@@ -1,5 +1,6 @@
-//! Fixed text pages. Wording follows docs/production-key.md: several options with
-//! reasons, never a single forced pick; no other players' names; no auto actions.
+//! Fixed text pages. Wording follows docs/production-key.md and docs/concept.md
+//! ("Application wording"): champion and aggregate data, facts not advice, never a
+//! single "best pick"; no other players' names; no auto actions.
 
 const std = @import("std");
 const Writer = std.Io.Writer;
@@ -12,44 +13,70 @@ pub const Info = struct {
     updated: []const u8,
 };
 
-pub fn about(w: *Writer, info: Info) Writer.Error!void {
+pub fn method(w: *Writer, info: Info) Writer.Error!void {
     _ = info;
     try w.writeAll(
         \\<div class="prose">
-        \\<h1>How it works</h1>
-        \\<p class="lead">meiolol helps ranked players learn draft. It highlights the pick
-        \\decisions that matter and offers several options, each with the reasons behind it.
-        \\It never picks for you.</p>
+        \\<h1>Method</h1>
+        \\<p class="lead">meiolol helps players understand how lane matchups unfold and compare
+        \\their own lane with the typical curve. Everything here is champion and aggregate
+        \\data from ranked games. It never shows other players and never names a "best
+        \\pick".</p>
         \\<h2>The data</h2>
         \\<ul>
-        \\<li>Ranked Solo/Duo games on EUW, collected through the official Riot Games API,
-        \\from every rank tier, players chosen at random rather than only the top of the
-        \\ladder.</li>
-        \\<li>Only complete games: no remakes, all ten positions known.</li>
-        \\<li>Counted per patch, updated daily. Only champion level statistics are ever
-        \\published: no player names, accounts or match histories.</li>
+        \\<li>Ranked Solo/Duo games collected through the official Riot Games API, players
+        \\chosen at random from every rank tier rather than only the top of the ladder.</li>
+        \\<li>Only complete games: no remakes, a winner, all ten positions known.</li>
+        \\<li>Each game's match timeline: every player's gold, experience and CS once a
+        \\minute, plus kills, level ups and item purchases. Timelines are stored once per
+        \\match, compactly, and never fetched twice.</li>
+        \\<li>Grouped per patch and updated daily. Nothing identifying a player is
+        \\published.</li>
         \\</ul>
-        \\<h2>The numbers</h2>
+        \\<h2>Lane curves</h2>
         \\<ul>
-        \\<li><b>Win rate</b>: games won with the champion in that role.</li>
-        \\<li><b>Pick rate</b>: share of games with the champion in that role.</li>
-        \\<li><b>Ban rate</b>: share of games where the champion was banned.</li>
-        \\<li><b>Tier</b>: from the win rate pulled toward 50% for champions with few games,
-        \\so a lucky handful of games cannot make a champion S tier.</li>
-        \\<li><b>Matchup and duo edges</b>: how much better (or worse) a pairing does than
-        \\the two champions' own win rates predict, in percentage points. Pairs with few
-        \\games stay close to zero until the data supports them.</li>
+        \\<li><b>Matchup</b>: the two players in the same position on opposite teams (top
+        \\against top, and so on).</li>
+        \\<li><b>Curves</b>: for each minute from 1 to 25, the difference between the two in
+        \\gold, experience and CS (lane minions plus jungle monsters). The line is the median
+        \\game; the band is the middle half of games (25th to 75th percentile), so you see
+        \\how much games vary, not only the typical one.</li>
+        \\<li><b>Games still going</b>: later minutes count only games that lasted that long,
+        \\which tilts them toward closer games. Charts stop when fewer than 10 games
+        \\remain.</li>
+        \\<li><b>Leads at 14 minutes</b>: who is ahead in gold at 14 minutes, and how often
+        \\each side then wins the game. Winning lane and winning the game often
+        \\disagree.</li>
+        \\<li><b>Kills</b>: the share of games where each laner took part in killing the
+        \\other, before 6 minutes, from 6 to 14 and after 14.</li>
+        \\<li><b>Timings</b>: median time to level 6 and to the first finished item (2,200
+        \\gold or more, building into nothing, boots excluded).</li>
+        \\<li><b>Rank</b>: the median visible rank tier of the game's players when the game
+        \\was collected, in three brackets (Iron to Silver, Gold to Emerald, Diamond and
+        \\above). Never hidden matchmaking rating.</li>
+        \\<li><b>Sample size</b>: every chart states patch, rank and the number of games. A
+        \\matchup needs 20 games for a page, and anything under 200 games is greyed out as
+        \\"more data needed": thin curves still move as games come in.</li>
         \\</ul>
-        \\<h2>The draft helper and desktop app</h2>
-        \\<p>Both add up the same edges for the champions already picked and banned and list
-        \\three to five options for your role, with the reasons for each: counters, synergy
-        \\with your team and how the champion is doing this patch. You choose.</p>
+        \\<h2>Champion statistics</h2>
         \\<ul>
-        \\<li>No automatic picking, banning, locking or dodging.</li>
-        \\<li>The desktop app reads champ select from the League client on your own PC, and
-        \\only champions, roles and timers. It never shows other players' names or
-        \\statistics.</li>
-        \\<li>Options favour variety: several viable picks rather than one "best" champion.</li>
+        \\<li><b>Win, pick and ban rate</b>: games won with the champion in that role, share
+        \\of games with it in that role, share of games where it was banned.</li>
+        \\<li><b>Lane opponents and teammates</b>: how much better or worse a pairing does
+        \\than the two champions' own win rates predict, in percentage points. Pairs with
+        \\few games are pulled toward zero until the data supports them.</li>
+        \\</ul>
+        \\<h2>Daily Draft</h2>
+        \\<p>One complete ranked game a day, the same for everyone, with every player
+        \\identity removed: no names, Riot IDs, match ids or dates. One champion is hidden
+        \\among four that were plausible in that draft; the reveal shows what was played,
+        \\who won and what this patch's numbers say about the lanes. It describes the game,
+        \\it does not grade the pick.</p>
+        \\<h2>What meiolol never does</h2>
+        \\<ul>
+        \\<li>Show other players' names, accounts or statistics.</li>
+        \\<li>Pick, ban, lock or dodge for anyone, or name a single "best" champion.</li>
+        \\<li>Infer hidden ranks or matchmaking rating.</li>
         \\</ul>
         \\</div>
         \\
@@ -61,20 +88,21 @@ pub fn download(w: *Writer, info: Info) Writer.Error!void {
     try w.writeAll(
         \\<div class="prose">
         \\<h1>Desktop app</h1>
-        \\<p class="lead">The meiolol app sits next to the League client during champ select
-        \\and updates its options as picks and bans come in.</p>
+        \\<p class="lead">In development: a small Windows app that, once you have picked
+        \\your champion in champ select, shows how your lane matchup usually unfolds and
+        \\your own record in it.</p>
         \\<ul>
         \\<li>Windows 10 and 11. Free.</li>
         \\<li>Reads champ select from the League client on your PC (the client's local
-        \\interface). Nothing about your games leaves your computer.</li>
-        \\<li>Shows three to five options for your role with the reasons behind each, using
-        \\the same statistics as this site.</li>
+        \\interface), read-only. Nothing about your games leaves your computer.</li>
+        \\<li>The likely lane opponent is labelled as a guess, since enemy roles are hidden
+        \\in champ select. Where it shows champions from your pool, it lists several with
+        \\their reasons, never one.</li>
         \\<li>Never picks, bans, locks or dodges for you, and never shows other players'
         \\names or statistics.</li>
         \\</ul>
-        \\<p class="note">The first public release is in preparation. Until then, try the
-        \\<a href="draft.html">draft helper</a> in your browser: it uses the same
-        \\suggestions.</p>
+        \\<p class="note">Not released yet. Meanwhile the <a href="matchup/index.html">matchup
+        \\curves</a> on this site show the same lane data.</p>
         \\</div>
         \\
     );
@@ -96,14 +124,14 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\approximate rank tier and team totals.</p>
         \\<h2>The desktop app</h2>
         \\<p>The app reads champ select from the League client running on your own PC and
-        \\shows suggestions on screen. It does not send your games, account or any other
+        \\shows lane information on screen. It does not send your games, account or any other
         \\personal data anywhere. It downloads updated champion statistics from this
         \\site.</p>
         \\<h2>Game data from Riot Games</h2>
         \\<p>The statistics are computed from ranked match data provided by the Riot Games
         \\API. Raw match records, which include Riot's per-application encrypted player
         \\identifiers, are stored privately and used only to compute and improve
-        \\champion level statistics and suggestion models. Nothing identifying a player is
+        \\champion level and aggregate statistics. Nothing identifying a player is
         \\published. Deletion requests passed on by Riot Games are honoured, and you can ask
         \\us directly to delete any data about your account.</p>
         \\<h2>Contact</h2>
@@ -119,8 +147,8 @@ pub fn terms(w: *Writer, info: Info) Writer.Error!void {
         \\<h1>Terms of use</h1>
         \\<p class="muted">Last updated {s}.</p>
         \\<ul>
-        \\<li>meiolol (this site and the desktop app) is free to use. Statistics and
-        \\suggestions are estimates from past games and come with no guarantee.</li>
+        \\<li>meiolol (this site and the desktop app) is free to use. Its statistics are
+        \\estimates from past games and come with no guarantee.</li>
         \\<li>You remain bound by Riot Games' Terms of Service when you play. meiolol only
         \\shows information; it never acts in the game client for you.</li>
         \\<li>Do not scrape the site at a rate that disrupts it or resell its data.</li>

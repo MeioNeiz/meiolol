@@ -1,5 +1,5 @@
 //! `meiolol site`: the public stats website as static files (HTML, CSS, the model
-//! file and champion JSON for the browser draft helper). Host anywhere static.
+//! file and champion JSON for the browser pages). Host anywhere static.
 
 const std = @import("std");
 const store = @import("store");
@@ -38,7 +38,7 @@ pub const Options = struct {
     curves: ?[]const u8 = null,
 };
 
-/// Below this share of all games a champion is left out of a role's tier list
+/// Below this share of all games a champion is left out of a role's page
 const min_pick_rate = 0.004;
 /// And below this share of the champion's own games, as a role it rarely plays
 const min_role_share = 0.1;
@@ -164,7 +164,6 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
 
     try site.write("style.css", @embedFile("static/style.css"));
     try site.write("favicon.svg", @embedFile("static/favicon.svg"));
-    try site.write("draft.js", @embedFile("static/draft.js"));
     try site.write("daily.js", @embedFile("static/daily.js"));
     try site.write("meiolol.wasm", @embedFile("draft.wasm"));
     try site.write("data/stats.bin", model_bytes);
@@ -187,15 +186,15 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     }
 
     try writeIndex(&site);
-    try writeDraft(&site);
-    for (Role.all) |r| try writeTier(&site, r);
+    for (Role.all) |r| try writeRole(&site, r);
     for (site.champs) |ch| try writeChampion(&site, ch);
     if (site.curves) |*c| try matchup.writeAll(&site, c);
+    try matchup.writeIndex(&site, if (site.curves) |*c| c else null);
     const info: prose.Info = .{ .contact = opts.contact, .updated = opts.updated };
     const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
-        .{ "about.html", "How it works", "How meiolol's statistics and draft suggestions are made.", .about, prose.about },
+        .{ "method.html", "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
         .{ "daily.html", "Daily Draft", "Guess the hidden champion and the winner of a real ranked draft, then see what the numbers say.", .daily, daily_page.page },
-        .{ "download.html", "Desktop app", "The meiolol champ select app for Windows.", .download, prose.download },
+        .{ "download.html", "Desktop app", "The meiolol desktop app for Windows, in development.", .none, prose.download },
         .{ "privacy.html", "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
         .{ "terms.html", "Terms of use", "Terms for using meiolol.", .none, prose.terms },
     };
@@ -299,12 +298,11 @@ const Row = struct {
     ch: Champ,
     games: u32,
     wins: u32,
-    smoothed: f64,
-    tier: u8 = 'C',
 };
 
-/// Champions played enough in `r`, best first, with tiers by rank
-fn tierRows(site: *const Site, r: Role) ![]Row {
+/// Champions played enough in `r`, most played first. Not ranked by win rate: the site
+/// describes champions, it does not grade picks (docs/concept.md)
+fn roleRows(site: *const Site, r: Role) ![]Row {
     var rows: std.ArrayList(Row) = .empty;
     for (site.champs) |ch| {
         const cr = site.stats.champRole(r, ch.c);
@@ -315,19 +313,13 @@ fn tierRows(site: *const Site, r: Role) ![]Row {
             .ch = ch,
             .games = cr.games,
             .wins = cr.wins,
-            .smoothed = score.roleWin(&site.stats, site.score_opts, ch.c, r),
         });
     }
     std.mem.sort(Row, rows.items, {}, struct {
         fn f(_: void, a: Row, b: Row) bool {
-            return a.smoothed > b.smoothed;
+            return a.games > b.games;
         }
     }.f);
-    const n = rows.items.len;
-    for (rows.items, 0..) |*row, i| {
-        const q = @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(n));
-        row.tier = if (q < 0.1) 'S' else if (q < 0.3) 'A' else if (q < 0.6) 'B' else if (q < 0.85) 'C' else 'D';
-    }
     return rows.items;
 }
 
@@ -347,7 +339,7 @@ fn earlyNote(site: *const Site, w: *Writer) !void {
 fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
     try w.writeAll("<nav class=\"tabs\">");
     for (Role.all) |r| {
-        try w.print("<a href=\"{s}tier/{s}.html\"{s}>{s}</a>", .{
+        try w.print("<a href=\"{s}role/{s}.html\"{s}>{s}</a>", .{
             root,                                               roleSlug(r),
             if (current == r) " aria-current=\"page\"" else "", roleName(r),
         });
@@ -375,37 +367,37 @@ pub fn roleName(r: Role) []const u8 {
     };
 }
 
-fn writeTier(site: *const Site, r: Role) !void {
+fn writeRole(site: *const Site, r: Role) !void {
     const a = site.arena;
     var aw: Writer.Allocating = .init(a);
     const w = &aw.writer;
-    const title = try std.fmt.allocPrint(a, "{s} tier list, patch {s} | meiolol", .{ roleName(r), site.patch });
-    const desc = try std.fmt.allocPrint(a, "{s} champions ranked for EUW ranked solo queue on patch {s}, with win, pick and ban rates.", .{ roleName(r), site.patch });
-    const p = site.page(title, desc, "../", .tiers);
+    const title = try std.fmt.allocPrint(a, "{s} lane champions, patch {s} | meiolol", .{ roleName(r), site.patch });
+    const desc = try std.fmt.allocPrint(a, "{s} lane champions in EUW ranked solo queue on patch {s}: games, win, pick and ban rates.", .{ roleName(r), site.patch });
+    const p = site.page(title, desc, "../", .champions);
     try html.head(w, p);
-    try w.print("<h1>{s} tier list</h1>\n<p class=\"muted\">Patch {s}, EUW ranked solo/duo, all ranks.</p>\n", .{ roleName(r), site.patch });
+    try w.print("<h1>{s} lane champions</h1>\n<p class=\"muted\">Patch {s}, EUW ranked solo/duo, all ranks. Most played first.</p>\n", .{ roleName(r), site.patch });
     try roleTabs(w, r, "../");
     try earlyNote(site, w);
     try w.writeAll(
         \\<div class="table-scroll"><table>
-        \\<thead><tr><th class="num">#</th><th>Champion</th><th>Tier</th><th class="num">Win rate</th><th class="num">Pick rate</th><th class="num">Ban rate</th><th class="num">Games</th></tr></thead>
+        \\<thead><tr><th>Champion</th><th class="num">Games</th><th class="num">Win rate</th><th class="num">Pick rate</th><th class="num">Ban rate</th></tr></thead>
         \\<tbody>
         \\
     );
-    for (try tierRows(site, r), 1..) |row, i| {
-        try w.print("<tr><td class=\"num\">{d}</td><td>", .{i});
+    for (try roleRows(site, r)) |row| {
+        try w.writeAll("<tr><td>");
         try site.champLink(w, row.ch, "../");
-        try w.print("</td><td><span class=\"tier tier-{c}\">{c}</span></td><td class=\"num\">", .{ row.tier, row.tier });
+        try w.print("</td><td class=\"num\">{d}</td><td class=\"num\">", .{row.games});
         try pct(w, row.wins, row.games);
         try w.writeAll("</td><td class=\"num\">");
         try pct(w, row.games, site.games);
         try w.writeAll("</td><td class=\"num\">");
         try pct(w, row.ch.banned, site.games);
-        try w.print("</td><td class=\"num\">{d}</td></tr>\n", .{row.games});
+        try w.writeAll("</td></tr>\n");
     }
     try w.writeAll("</tbody></table></div>\n");
     try html.foot(w, p);
-    try site.write(try std.fmt.allocPrint(a, "tier/{s}.html", .{roleSlug(r)}), aw.written());
+    try site.write(try std.fmt.allocPrint(a, "role/{s}.html", .{roleSlug(r)}), aw.written());
 }
 
 fn writeIndex(site: *const Site) !void {
@@ -413,96 +405,57 @@ fn writeIndex(site: *const Site) !void {
     var aw: Writer.Allocating = .init(a);
     const w = &aw.writer;
     const p = site.page(
-        "meiolol: draft help for ranked solo queue",
-        "League of Legends champion statistics and draft suggestions for EUW ranked solo queue: tier lists, matchups, duos and a draft helper.",
+        "meiolol: learn your lane",
+        "How League of Legends lane matchups unfold minute by minute, from ranked games: gold, experience and CS curves per matchup and rank, a Daily Draft puzzle and champion statistics.",
         "",
         .none,
     );
     try html.head(w, p);
-    try w.print(
-        \\<h1>Draft help for ranked solo queue</h1>
-        \\<p class="lead">Champion statistics for EUW ranked solo/duo on patch {s}, and a
-        \\draft helper that offers several picks for your role with the reasons behind each:
-        \\counters, synergy with your team and how the champion is doing this patch.</p>
-        \\<p><a href="draft.html">Open the draft helper</a> · <a href="download.html">Desktop app for champ select</a></p>
+    const matchups: usize = if (site.curves) |c| blk: {
+        var n: usize = 0;
+        for (c.curves) |cv| n += @intFromBool(cv.header.bracket == 0 and cv.header.experience == 0);
+        break :blk n;
+    } else 0;
+    try w.writeAll(
+        \\<h1>Learn your lane</h1>
+        \\<p class="lead">How lane matchups actually unfold, minute by minute, and how your
+        \\own games compare. From ranked match timelines: the typical gold, experience and CS
+        \\curve of every lane matchup by rank, with the spread and the number of games behind
+        \\it. Champion and aggregate data only; never other players, never "the best pick".</p>
+        \\<div class="grid">
+        \\<div class="card"><h3><a href="matchup/index.html">Matchup curves</a></h3>
         \\
-    , .{site.patch});
-    try earlyNote(site, w);
-    try w.writeAll("<h2>Top of each role</h2>\n<div class=\"grid\">\n");
-    for (Role.all) |r| {
-        try w.print("<div class=\"card\"><h3><a href=\"tier/{s}.html\">{s}</a></h3><ul>\n", .{ roleSlug(r), roleName(r) });
-        const rows = try tierRows(site, r);
-        for (rows[0..@min(rows.len, 5)]) |row| {
-            try w.writeAll("<li>");
-            try site.champLink(w, row.ch, "");
-            try w.print("<span class=\"tier tier-{c}\">{c}</span></li>\n", .{ row.tier, row.tier });
-        }
-        try w.writeAll("</ul></div>\n");
+    );
+    if (matchups > 0) {
+        try w.print("<p>{d} lane matchups so far: when each side tends to get ahead, by how much, and whether winning lane wins the game.</p></div>\n", .{matchups});
+    } else {
+        try w.writeAll("<p>When each side of a lane matchup tends to get ahead, by how much, and whether winning lane wins the game. Curves appear as match timelines come in.</p></div>\n");
     }
-    try w.writeAll("</div>\n<h2>All champions</h2>\n<p>");
+    try w.writeAll(
+        \\<div class="card"><h3><a href="daily.html">Daily Draft</a></h3>
+        \\<p>One real ranked draft a day, anonymised. Guess the hidden champion and the
+        \\winner, then see what happened and what the numbers say. Keep a streak, share
+        \\your grid.</p></div>
+        \\<div class="card"><h3>Your games <span class="muted">coming</span></h3>
+        \\<p>Enter your Riot ID and see each recent game's lane laid over the typical curve
+        \\for that matchup at your rank, and your record per matchup over the months.</p></div>
+        \\<div class="card"><h3>Pool <span class="muted">coming</span></h3>
+        \\<p>Champions that players of your main also play, and which of them cover your
+        \\main's hardest lanes.</p></div>
+        \\</div>
+        \\
+    );
+    try earlyNote(site, w);
+    try w.writeAll("<h2>Champions</h2>\n");
+    try roleTabs(w, null, "");
+    try w.writeAll("<p>");
     for (site.champs, 0..) |ch, i| {
         if (i > 0) try w.writeAll(" · ");
         try w.print("<a href=\"champion/{s}.html\">{f}</a>", .{ ch.slug, esc(ch.name) });
     }
-    try w.writeAll("</p>\n");
+    try w.writeAll("</p>\n<p class=\"muted\"><a href=\"method.html\">How the numbers are made</a></p>\n");
     try html.foot(w, p);
     try site.write("index.html", aw.written());
-}
-
-fn writeDraft(site: *const Site) !void {
-    var aw: Writer.Allocating = .init(site.arena);
-    const w = &aw.writer;
-    const p = site.page(
-        "Draft helper | meiolol",
-        "Enter the picks and bans so far and get several champion options for your role, with the reasons behind each.",
-        "",
-        .draft,
-    );
-    try html.head(w, p);
-    try w.writeAll(
-        \\<h1>Draft helper</h1>
-        \\<p class="lead">Enter the picks and bans so far. You get several options for your
-        \\role, each with its reasons: counters, synergy with your team and how the champion
-        \\is doing this patch. The choice is yours.</p>
-        \\<p id="status" class="note">Loading…</p>
-        \\<form id="draft" class="draft" autocomplete="off" onsubmit="return false">
-        \\<datalist id="champions"></datalist>
-        \\<div class="card">
-        \\<h3>Your team</h3>
-        \\<label><span>You</span><select name="role">
-        \\<option value="top">Top</option><option value="jungle">Jungle</option>
-        \\<option value="middle" selected>Mid</option><option value="bottom">Bot</option>
-        \\<option value="utility">Support</option></select></label>
-        \\
-    );
-    for (0..4) |_| {
-        try w.writeAll("<label><span></span><input data-ally list=\"champions\" placeholder=\"Champion\"></label>\n");
-    }
-    try w.writeAll(
-        \\</div>
-        \\<div class="card">
-        \\<h3>Enemy team <span class="muted">roles guessed</span></h3>
-        \\
-    );
-    for (1..6) |i| {
-        try w.print("<label><span>Enemy {d}</span><input data-enemy list=\"champions\" placeholder=\"Champion\"></label>\n", .{i});
-    }
-    try w.writeAll(
-        \\</div>
-        \\<div class="card">
-        \\<h3>Bans</h3>
-        \\<label><input name="bans" list="champions" placeholder="Comma separated, e.g. Yasuo, Zed"></label>
-        \\</div>
-        \\</form>
-        \\<h2>Options for your role</h2>
-        \\<ul id="suggestions" class="card suggestions"></ul>
-        \\<p class="muted">Numbers are percentage points of win chance each factor adds or
-        \\takes away, estimated from this patch's games. <a href="about.html">How it works</a>.</p>
-        \\<script src="draft.js" defer></script>
-        \\
-    );
-    try html.foot(w, p);
-    try site.write("draft.html", aw.written());
 }
 
 const Pair = struct { other: usize, role: Role, pp: f64, games: u32, wins: u32 };
@@ -516,8 +469,8 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
     const st = &site.stats;
     var aw: Writer.Allocating = .init(a);
     const w = &aw.writer;
-    const title = try std.fmt.allocPrint(a, "{s} stats, matchups and duos, patch {s} | meiolol", .{ ch.name, site.patch });
-    const desc = try std.fmt.allocPrint(a, "{s} win rate, counters and best duos in EUW ranked solo queue on patch {s}.", .{ ch.name, site.patch });
+    const title = try std.fmt.allocPrint(a, "{s} lane opponents, teammates and curves, patch {s} | meiolol", .{ ch.name, site.patch });
+    const desc = try std.fmt.allocPrint(a, "{s} in EUW ranked solo queue on patch {s}: games, win rate, lane opponents, teammates and lane curves.", .{ ch.name, site.patch });
     const p = site.page(title, desc, "../", .none);
     try html.head(w, p);
     try w.print(
@@ -581,15 +534,15 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
         const best_lane = lane.items[0..@min(n_good, matchups_shown)];
         const worst_lane = lane.items[@max(n_good, lane.items.len -| matchups_shown)..];
         try w.writeAll("<div class=\"grid\">\n");
-        try pairCard(site, w, "Good against", "in lane", best_lane, false, false);
-        try pairCard(site, w, "Hard against", "in lane", worst_lane, true, false);
+        try pairCard(site, w, "Higher win rate against", "in lane", best_lane, false, false);
+        try pairCard(site, w, "Lower win rate against", "in lane", worst_lane, true, false);
         var n_duos: usize = 0;
         while (n_duos < @min(duos.items.len, duos_shown) and duos.items[n_duos].pp > 0) n_duos += 1;
-        try pairCard(site, w, "Best with", "on your team", duos.items[0..n_duos], false, true);
+        try pairCard(site, w, "Higher win rate with", "on the same team", duos.items[0..n_duos], false, true);
         try w.writeAll("</div>\n");
         if (site.curves) |*c| try matchup.links(site, w, c, ch, r);
     }
-    try w.writeAll("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts; pairs with few games stay near zero. <a href=\"../about.html\">How it works</a>.</p>\n");
+    try w.writeAll("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts; pairs with few games stay near zero. <a href=\"../method.html\">Method</a>.</p>\n");
     try html.foot(w, p);
     try site.write(try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug}), aw.written());
 }

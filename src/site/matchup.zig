@@ -43,6 +43,66 @@ pub fn writeAll(site: *const Site, curves: *const Curves) !void {
     std.log.scoped(.site).info("{d} matchup pages", .{pages});
 }
 
+/// matchup/index.html: every matchup page by role, most games first
+pub fn writeIndex(site: *const Site, curves: ?*const Curves) !void {
+    const a = site.arena;
+    var aw: Writer.Allocating = .init(a);
+    const w = &aw.writer;
+    const p = site.page(
+        try std.fmt.allocPrint(a, "Lane matchup curves, patch {s} | meiolol", .{site.patch}),
+        "How every lane matchup unfolds minute by minute: gold, experience and CS difference, kills and level 6 timing, by rank.",
+        "../",
+        .matchups,
+    );
+    try html.head(w, p);
+    try w.writeAll(
+        \\<h1>Lane matchup curves</h1>
+        \\<p class="lead">How each lane matchup unfolds, minute by minute: the typical gold,
+        \\experience and CS difference with its spread, who tends to lead at 14 minutes and
+        \\whether that side then wins the game.</p>
+        \\
+    );
+    const c = curves orelse {
+        try w.writeAll("<p class=\"note\">Curves need match timelines, which are being collected now. A matchup gets its page once it has 20 games; under 200 it is shown greyed out as \"more data needed\".</p>\n");
+        try html.foot(w, p);
+        return site.write("matchup/index.html", aw.written());
+    };
+    const Entry = struct { x: Champ, y: Champ, games: u32 };
+    for (Role.all) |r| {
+        var list: std.ArrayList(Entry) = .empty;
+        for (c.curves) |cv| {
+            const h = cv.header;
+            if (h.role != @intFromEnum(r) or h.bracket != 0 or h.experience != 0) continue;
+            const x = champ(site, h.a) orelse continue;
+            const y = champ(site, h.b) orelse continue;
+            try list.append(a, .{ .x = x, .y = y, .games = h.games });
+        }
+        std.mem.sort(Entry, list.items, {}, struct {
+            fn f(_: void, p_: Entry, q: Entry) bool {
+                return p_.games > q.games;
+            }
+        }.f);
+        try w.print("<h2>{s} <span class=\"muted\">{d} matchups</span></h2>\n", .{ root.roleName(r), list.items.len });
+        if (list.items.len == 0) {
+            try w.writeAll("<p class=\"muted\">More data needed.</p>\n");
+            continue;
+        }
+        try w.writeAll("<ul class=\"matchup-list\">\n");
+        for (list.items) |e| {
+            try w.print("<li{s}><a href=\"{s}\">{f} vs {f}</a> <span class=\"muted\">{d} games</span></li>\n", .{
+                if (e.games < thin_games) " class=\"thin\"" else "",
+                (try path(a, r, e.x, e.y))["matchup/".len..],
+                esc(e.x.name),
+                esc(e.y.name),
+                e.games,
+            });
+        }
+        try w.writeAll("</ul>\n");
+    }
+    try html.foot(w, p);
+    try site.write("matchup/index.html", aw.written());
+}
+
 pub fn champ(site: *const Site, id: u32) ?Champ {
     const c = site.stats.index(id) orelse return null;
     return site.champs[site.by_c[c] orelse return null];
@@ -86,7 +146,7 @@ fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cha
     const desc = try std.fmt.allocPrint(a, "How {s} against {s} in {s} lane unfolds minute by minute: gold, experience and CS difference, kills, level 6 timing.", .{
         x.name, y.name, lane,
     });
-    const p = site.page(title, desc, "../../", .none);
+    const p = site.page(title, desc, "../../", .matchups);
     try html.head(w, p);
     try w.print(
         "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><div><h1>{f} vs {f}</h1>\n",
@@ -119,7 +179,7 @@ fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cha
     try w.writeAll("<h2>By rank</h2>\n");
     try brackets(w, curves, r, x, y);
     try w.print(
-        "<p class=\"muted\"><a href=\"../../champion/{s}.html\">{f}</a> · <a href=\"../../champion/{s}.html\">{f}</a> · <a href=\"../../about.html\">How it works</a></p>\n",
+        "<p class=\"muted\"><a href=\"../../champion/{s}.html\">{f}</a> · <a href=\"../../champion/{s}.html\">{f}</a> · <a href=\"../../method.html\">Method</a></p>\n",
         .{ x.slug, esc(x.name), y.slug, esc(y.name) },
     );
     try html.foot(w, p);
