@@ -36,17 +36,16 @@ product is meiolol itself, two faces of one application (docs/production-key.md)
    - `jodrive riot register --type personal --inspect`, fill with the text below, show
      Jacob the exact values, `--submit` only after he approves
    - After any key change: `deploy/box.sh start` (copies .env to the box)
-2. Host the site on the jomove server (Oracle Cloud, `ssh -i ~/.ssh/oci_instance-20260714-1317
-   ubuntu@193.123.180.81`; Ubuntu 24.04 x86_64, 1 GB RAM, nginx + certbot already serve
-   jomove.jomify.lol there). Plan, pending Jacob's go-ahead and domain choice:
-   - nginx server block for the domain, root /var/www/meiolol, `gzip_static on` (site
-     writes .gz siblings), certbot TLS; must not block `python-requests/2.11.1` (riot.txt)
-   - Dedicated `meiolol` user on the server owning /var/www/meiolol; the box gets its
-     own key for that user only (not ubuntu, which has sudo)
-   - Box: daily `meiolol site` then rsync to the server (`deploy/box.sh web` currently
-     builds daily and serves on box localhost:8080 only; switch it to push)
-   - Domain: subdomain of jomify.lol (Namecheap DNS, A record to 193.123.180.81) or a new
-     one. Keep preview mode until the production key is granted
+2. Hosting at meiolol.jomify.lol on the jomove server (Oracle Cloud,
+   `ssh -i ~/.ssh/oci_instance-20260714-1317 ubuntu@193.123.180.81`; nginx + certbot
+   also serve jomove there, leave its config alone). Done 2026-10-11: nginx
+   /etc/nginx/conf.d/meiolol.conf (root /var/www/meiolol, gzip_static, acme webroot
+   /var/www/letsencrypt), user `meiolol` with only an rrsync key from the box,
+   `deploy/box.sh web start EMAIL` builds + uploads daily (deploy/web-loop.sh). Left:
+   - Jacob: Namecheap A record meiolol -> 193.123.180.81; real contact email
+   - Then `sudo certbot certonly --webroot -w /var/www/letsencrypt -d meiolol.jomify.lol`
+     and add the 443 server + http->https redirect in meiolol.conf (jomove.conf style)
+   - Keep preview mode until the production key is granted
 3. Site polish before applying: screenshots/GIF of the app in champ select, a demo
    video, rank brackets (statsfile v2), smaller stats.bin (sparse), patch history
 4. Desktop app: pick a Zig GUI (candidates: dvui, sokol + imgui, raylib; check Zig 0.16
