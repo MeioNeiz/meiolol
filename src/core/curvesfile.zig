@@ -577,7 +577,6 @@ pub const View = struct {
         return if (v.flipped) .{ h.level6_b, h.level6_a } else .{ h.level6_a, h.level6_b };
     }
 
-    /// Median seconds to the first finished item for me and them; 0 when unknown
     /// Games and my wins when my lane gold lead at `at` fell in `b` (0 = behind
     /// 1500+ ... 4 = ahead 1500+)
     pub fn comeback(v: View, at: Comeback, b: usize) Counts {
@@ -587,6 +586,7 @@ pub const View = struct {
         return .{ .games = c.games, .wins = c.games - c.wins };
     }
 
+    /// Median seconds to the first finished item for me and them; 0 when unknown
     pub fn firstItem(v: View) [2]u16 {
         const h = v.curve.header;
         const both: [2]u16 = .{ h.first_item_a, h.first_item_b };
