@@ -8,6 +8,7 @@ src/
   daily.zig          Daily Draft puzzles (data/daily), published by `meiolol site`
   curves.zig         lane matchup curves from timelines (`meiolol curves`)
   stats.zig          model file from the matches table (`meiolol stats`)
+  eval.zig           draft model on held-out newer games (`meiolol eval`, docs/model.md)
   site/              public website generator (`meiolol site`): html.zig layout and
                      boilerplate, prose.zig fixed pages, static/ (css, draft.js)
   wasm.zig           recommender for the site's draft helper (wasm32-freestanding),
@@ -113,6 +114,8 @@ matchups against enemies, each pair smoothed toward what the two base ratings pr
 (prior games, default 1000), so sparse pairs contribute ~0. Unknown roles (enemies in
 ranked) inferred by brute force over role permutations using play rates. Returns
 several options with reasons. A trained model replaces this later behind the same API.
+draftTerms/draftWin score a full draft (eval, Daily Draft). How well it predicts:
+docs/model.md.
 
 ## Website (src/site, src/wasm.zig)
 

@@ -11,6 +11,7 @@ pub const site = @import("site/root.zig");
 pub const serve = @import("serve.zig");
 pub const daily = @import("daily.zig");
 pub const curves = @import("curves.zig");
+pub const eval = @import("eval.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
 
@@ -37,6 +38,12 @@ const usage =
     \\              --platform P     as for stats
     \\              --out FILE       default DIR/export/curves-<patch>.bin
     \\              --min-games N    leave out matchups with fewer games (default 20)
+    \\  eval        how well the draft model predicts held-out newer games (markdown
+    \\              report on stdout; docs/model.md)
+    \\              --patch P        as for stats (default: every patch, pooled)
+    \\              --platform P     as for stats
+    \\              --test-share F   newest share of games held out (default 0.2)
+    \\              --folds K        folds for tuning inside train (default 5)
     \\  site        write the public website (static files)
     \\              --patch P        as for stats
     \\              --platform P     as for stats (pages say EUW: reword before others)
@@ -80,6 +87,7 @@ pub fn main(init: std.process.Init) !u8 {
     var host: []const u8 = "127.0.0.1";
     var port: u16 = 8080;
     var min_games: u32 = 20;
+    var eval_opts: eval.Options = .{};
     var i: usize = 2;
     while (i < args.len) : (i += 1) {
         const a = args[i];
@@ -127,6 +135,12 @@ pub fn main(init: std.process.Init) !u8 {
             port = std.fmt.parseInt(u16, v, 10) catch return usageError(a);
         } else if (std.mem.eql(u8, a, "--min-games")) {
             min_games = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--test-share")) {
+            eval_opts.test_share = std.fmt.parseFloat(f64, v) catch return usageError(a);
+            if (!(eval_opts.test_share > 0 and eval_opts.test_share < 1)) return usageError(a);
+        } else if (std.mem.eql(u8, a, "--folds")) {
+            eval_opts.folds = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
+            if (eval_opts.folds < 2) return usageError(a);
         } else if (std.mem.eql(u8, a, "--riot-txt")) {
             riot_txt = v;
         } else return usageError(a);
@@ -162,6 +176,16 @@ pub fn main(init: std.process.Init) !u8 {
     }
     if (std.mem.eql(u8, cmd, "curves")) {
         try writeCurves(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path, min_games);
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "eval")) {
+        const db = try store.open(init.gpa, data_dir);
+        defer db.close();
+        const chosen = if (patches.items.len > 0) patches.items else try stats.patches(arena, db, platforms.items);
+        var buf: [64 * 1024]u8 = undefined;
+        var stdout = std.Io.File.stdout().writer(init.io, &buf);
+        try eval.run(init.gpa, db, chosen, platforms.items, eval_opts, &stdout.interface);
+        try stdout.interface.flush();
         return 0;
     }
     if (std.mem.eql(u8, cmd, "site")) {

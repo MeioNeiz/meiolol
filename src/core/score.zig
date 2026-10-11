@@ -171,6 +171,71 @@ pub fn matchupPp(stats: *const Stats, opts: Options, r: Role, c: usize, er: Role
     return evenPp(ctx.matchup(ctx.place(c, r), ctx.place(e, er)));
 }
 
+/// A full draft's log-odds for side 0, by kind of term
+pub const DraftTerms = struct {
+    /// Side 0's base ratings minus side 1's
+    base: f64 = 0,
+    /// Side 0's duo deltas minus side 1's
+    duo: f64 = 0,
+    /// Matchup deltas between lane opponents (same role)
+    lane: f64 = 0,
+    /// All other matchup deltas
+    matchup: f64 = 0,
+
+    pub fn total(t: DraftTerms) f64 {
+        return t.base + t.duo + t.lane + t.matchup;
+    }
+};
+
+/// teams[side][@intFromEnum(role)] = champion id, every role known; champions the stats
+/// file does not know add nothing
+pub fn draftTerms(stats: *const Stats, opts: Options, teams: [2][5]u32) DraftTerms {
+    const ctx: Context = .{ .stats = stats, .opts = opts };
+    var placed: [2][5]?Placed = undefined;
+    for (teams, 0..) |team, s| for (team, Role.all) |id, r| {
+        placed[s][@intFromEnum(r)] = if (stats.index(id)) |c| ctx.place(c, r) else null;
+    };
+    var t: DraftTerms = .{};
+    for (0..2) |s| {
+        const sign: f64 = if (s == 0) 1 else -1;
+        for (placed[s], 0..) |pa, i| {
+            const a = pa orelse continue;
+            t.base += sign * a.base;
+            for (placed[s][i + 1 ..]) |pb| if (pb) |b| {
+                t.duo += sign * ctx.duo(a, b);
+            };
+        }
+    }
+    for (placed[0]) |pa| {
+        const a = pa orelse continue;
+        for (placed[1]) |pe| if (pe) |e| {
+            if (a.role == e.role) t.lane += ctx.matchup(a, e) else t.matchup += ctx.matchup(a, e);
+        };
+    }
+    return t;
+}
+
+/// Side 0's win chance for a full draft, 0..1 (see draftTerms)
+pub fn draftWin(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
+    return sigmoid(draftTerms(stats, opts, teams).total());
+}
+
+/// The roles recommend infers for a team whose positions are hidden: `out[i]` for
+/// `picks[i]`, null when the stats file does not know the champion. Roles given in
+/// `picks` are kept
+pub fn inferRoles(stats: *const Stats, picks: []const Pick, out: []?Role) void {
+    var ctx: Context = .{ .stats = stats, .opts = .{} };
+    const n = @min(picks.len, 5);
+    const placed = ctx.resolve(picks[0..n], 5, .initEmpty(), &ctx.enemy_buf);
+    var j: usize = 0;
+    for (picks[0..n], out[0..n]) |p, *o| {
+        if (j < placed.len and placed[j].id == p.champion and stats.index(p.champion) != null) {
+            o.* = placed[j].role;
+            j += 1;
+        } else o.* = null;
+    }
+}
+
 fn evenPp(x: f64) f64 {
     return 100 * (sigmoid(x) - 0.5);
 }
@@ -544,6 +609,38 @@ test "synergy, filters and reasons" {
     try testing.expectEqual(2, mid.len);
     const none = recommend(&t.stats, .{ .role = .top }, test_opts, out[0..0]);
     try testing.expectEqual(0, none.len);
+}
+
+test "full draft agrees with recommend" {
+    var t = try buildTestStats();
+    defer t.deinit();
+    const teams: [2][5]u32 = .{ .{ garen, vi, ahri, 0, lux }, .{ darius, 0, zed, jinx, 0 } };
+    const p = draftWin(&t.stats, test_opts, teams);
+    const swapped = draftWin(&t.stats, test_opts, .{ teams[1], teams[0] });
+    try testing.expectApproxEqAbs(1, p + swapped, 1e-12);
+
+    var out: [4]Suggestion = undefined;
+    const s = recommend(&t.stats, .{
+        .role = .top,
+        .allies = &.{
+            .{ .champion = vi, .role = .jungle },
+            .{ .champion = ahri, .role = .middle },
+            .{ .champion = lux, .role = .utility },
+        },
+        .enemies = &.{
+            .{ .champion = darius, .role = .top },
+            .{ .champion = zed, .role = .middle },
+            .{ .champion = jinx, .role = .bottom },
+        },
+        .pool = &.{garen},
+    }, test_opts, &out);
+    try testing.expectApproxEqAbs(s[0].win, p, 1e-12);
+
+    var roles: [3]?Role = undefined;
+    inferRoles(&t.stats, &.{ .{ .champion = 9999 }, .{ .champion = jinx }, .{ .champion = zed } }, &roles);
+    try testing.expectEqual(null, roles[0]);
+    try testing.expectEqual(Role.bottom, roles[1].?);
+    try testing.expectEqual(Role.middle, roles[2].?);
 }
 
 test "enemy roles inferred jointly" {
