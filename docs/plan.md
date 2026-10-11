@@ -196,8 +196,12 @@ next steps land here.
 
 - Done: `meiolol builds` + build pages in the patch views (docs/architecture.md
   "Builds"), Platinum IV+ per player, gated like champion-page pairs; web loop runs it
-  daily. Next: check the first box run (data/builds.log: time, "dropped options" lines,
-  RSS at all-regions volume on the micro/A1) and a few pages; a builds index or nav entry
+  daily. First box run (micro, 15:01Z, crawler running): EUW 16.20 3.9k games 29 s,
+  19 MB RSS; all regions 10.5k games 77 s, 25 MB. ~7.5 ms a game there (disk), so a
+  full patch at ~30k EUW/day would take ~1 h EUW and hours for all regions on the
+  micro: before volume grows, aggregate each day's games once and merge (or move to
+  A1). Next: check data/builds.log after the loop's runs ("dropped options" lines,
+  time) and a few pages on the site; a builds index or nav entry
   if Jacob wants builds that visible (application text does not mention builds);
   first-three skill levels; first-item timing per core; builds by matchup once pairs
   reach volume
