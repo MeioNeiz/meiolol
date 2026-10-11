@@ -38,21 +38,17 @@ product is meiolol itself, two faces of one application (docs/production-key.md)
 
 ## Next steps, in order
 
-1. Keep data flowing. The crawler uses a 24h development key created 2026-10-11
-   ~00:45 BST; when it expires the crawler exits 3 and stays stopped. Fix: personal key
-   (no expiry), or meanwhile a fresh dev key:
-   - Portal session works (`jodrive riot apps` lists app MEIONEIZ, development key).
-     Jacob's standing ok (2026-10-11): agents may regenerate the dev key when needed.
-     `jodrive riot key --regenerate --submit --env-file .env` (captcha in a window; the
-     old key dies at once), wait for the new one to answer 200 (~2 min), copy .env to
-     the box and restart. `deploy/box.sh start` rebuilds from the working tree, so with
-     uncommitted crawler work restart the existing binary instead. Last: 03:00 BST 11 Oct
-   - Personal key registration ON HOLD until the text and "I Agree" are approved (the
-     description must match). Blocker found: on /app-type, `button[app_type=personal]`
-     opens a "General Policies" modal (#general) that needs "I Agree"
-     (`a.policy_agreement`) before the form appears; jodrive does not handle it
-     (~/personal/jodrive/projects/riot/register.js). Clicking I Agree accepts Riot's
-     policies for Jacob: ask him first. Then `--inspect`, show values, `--submit` on ok
+1. Keys. Done 2026-10-11: personal app MEIOLOL (890240) approved; its key (no expiry) is
+   in .env (`jodrive riot key --app 890240 --env-file .env`) and goes to the box with
+   meiolol-de's all-regions deploy (new key = new PUUIDs: players re-seeded from the
+   ladders). Production application started by Jacob 2026-10-11; riot.txt served from
+   ml/meiolol/riot.txt on the box via deploy/web-loop.sh. Don't edit the application
+   while it queues (resets it). Draft production text (Jacob's voice): docs/production-
+   key.md. jodrive handles the General Policies modal with `register --agree`.
+   Dev key, if ever needed again: Jacob's standing ok to regenerate (`jodrive riot key
+   --regenerate --submit --env-file .env`, captcha in a window, old key dies at once,
+   new one answers 200 after ~2 min). `deploy/box.sh start` rebuilds from the working
+   tree: with uncommitted crawler work restart the existing binary instead
 2. Hosting at meiolol.jomify.lol on the jomove server (Oracle Cloud,
    `ssh -i ~/.ssh/oci_instance-20260714-1317 ubuntu@193.123.180.81`; nginx + certbot
    also serve jomove there, leave its config alone). Done 2026-10-11: nginx
@@ -75,27 +71,17 @@ product is meiolol itself, two faces of one application (docs/production-key.md)
 ## Open decisions (Jacob)
 
 - Dynamic service (Your games, Squads): on the jomove server beside the static site
-- Personal key registration text (revised draft below) and the "I Agree" click
 - Name/domain: live on meiolol.jomify.lol (subdomain of Jacob's jomify.lol, Namecheap).
   "lol" in name and TLD is a mild Riot-trademark risk; revisit if the concept renames
 - GUI library
 
-## Personal key registration draft
+## Personal key registration
 
-Rewritten 2026-10-11 for docs/concept.md. Not approved.
-
-- Product name: meiolol. Product URL: https://meiolol.jomify.lol
-- Description: Personal development key for meiolol, a League of Legends learning tool
-  in development. It shows how lane matchups unfold minute by minute (gold, XP and CS
-  curves per matchup and rank tier, from aggregate ranked match timelines), lets players
-  compare their own lane with the typical curve after a game, and includes a daily draft
-  puzzle built from anonymised past games. On this key I collect ranked solo queue match
-  data (match-v5 with timelines, league-exp-v4, champion-mastery-v4) across regions within
-  the personal rate limits, to build and test the prototype. An unadvertised preview
-  website (meiolol.jomify.lol) shows aggregate champion statistics only and will be
-  submitted for a production key before it is made public. Data is stored privately,
-  keyed by match ID, and deletion requests will be honoured. Champion and aggregate data
-  only: never other players' names or stats in champ select, no auto-locking or dodging.
+Submitted by Jacob 2026-10-11 in his own words (approved instantly): a learning tool
+showing how lane matchups go minute by minute, compare your lane with the typical curve,
+daily draft puzzle; match-v5 with timelines, league-exp-v4, champion-mastery-v4; needs
+many games across regions for specific matchups and less played champions; preview site
+meiolol.jomify.lol.
 
 ## Ruled out (do not revisit without new facts)
 

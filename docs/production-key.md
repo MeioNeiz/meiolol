@@ -67,3 +67,29 @@ logos). Gray areas: ask in the application as an App Note.
 - "Uses only champion and aggregate statistics; never shows or analyses other players
   in champ select"
 - "Increases champion diversity by surfacing viable picks beyond the meta"
+
+## Application text (draft 2026-10-11, Jacob's voice; application started same day)
+
+Meiolol is a learning tool for League of Legends. It shows how lane matchups usually go
+minute by minute. Showing gold, XP and cs curves per matchup and rank tier. Players can
+look up their own games and compare their lane with the typical curve after a game, and
+see how they do in each matchup over time.
+
+There is also a daily draft puzzle made from anonymised past games, and friends can group
+up to see recaps of the games they played together.
+
+I use match-v5 (with timelines), league-exp-v4, champion-mastery-v4 and account-v1. The
+site only shows champion and aggregate data, and a player's own games when they look
+themselves up. It never shows other players' names or stats in champ select, never
+auto-locks or dodges, and doesn't tell players what to pick.
+
+I need a lot of games across regions to cover specific matchups and less played
+champions. A curve needs a few hundred games per matchup per rank tier per patch, so
+that's millions of matches with timelines each patch. Each match is only fetched once and
+stored by match ID. Matchups without enough games are marked on the site.
+
+Data is stored privately and deletion requests will be honoured.
+
+The site is meiolol.jomify.lol.
+
+App note: please link PUUID encryption to my personal app MEIOLOL (890240).
