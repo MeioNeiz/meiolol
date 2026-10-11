@@ -104,13 +104,17 @@ function icon(id, size) {
   return img;
 }
 
-function renderCheck(box) {
+// `focus`: after a re-render the clicked button is gone, so keyboard focus moves to the
+// answer's explanation ({why: i}) or the first choice ({first: true})
+function renderCheck(box, focus = null) {
   const key = box.dataset.lesson;
   const qs = checks[key] || [];
   // Kept in state only once answered or opened, so rendering marks nothing as started
   const mine = state.lessons[key] || { seen: true, answers: [] };
   mine.answers ||= [];
   box.querySelectorAll(".q").forEach((q) => q.remove());
+  // Focused once in the document; focus() on a detached element does nothing
+  let focusAfter = null;
   qs.forEach((q, i) => {
     const wrap = el("div", "q");
     wrap.append(el("p", "q-text", `${i + 1}. ${q.q}`));
@@ -131,7 +135,7 @@ function renderCheck(box) {
         mine.answers[i] = j;
         state.lessons[key] = mine;
         save();
-        renderCheck(box);
+        renderCheck(box, { why: i });
         renderLessonMarks();
         renderProgress();
       };
@@ -141,8 +145,10 @@ function renderCheck(box) {
     if (answered) {
       const right = mine.answers[i] === q.answer;
       const why = el("p", `why ${right ? "good" : "bad"}`);
+      why.tabIndex = -1;
       why.append(el("b", "", right ? "Right. " : "Not quite. "), q.why);
       wrap.append(why);
+      if (focus && focus.why === i) focusAfter = why;
     }
     box.append(wrap);
   });
@@ -153,12 +159,14 @@ function renderCheck(box) {
     again.onclick = () => {
       mine.answers = [];
       save();
-      renderCheck(box);
+      renderCheck(box, { first: true });
       renderLessonMarks();
       renderProgress();
     };
     box.append(again);
   }
+  if (focus && focus.first) focusAfter = box.querySelector(".q button");
+  if (focusAfter) focusAfter.focus();
 }
 
 function renderLessonMarks() {
@@ -317,9 +325,11 @@ class Practice {
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") add();
     });
-    $("p-next").onclick = () => {
-      this.next();
+    $("p-next").onclick = async () => {
+      // May wait for the recommender to load; focus the question once it is drawn
+      await this.next();
       $("drill").scrollIntoView({ behavior: "smooth", block: "start" });
+      $("p-question").focus({ preventScroll: true });
     };
     this.renderSetup();
     this.next();
@@ -530,6 +540,9 @@ class Practice {
       b.onclick = () => {
         cur.shown += 1;
         this.renderHints();
+        // The button is re-created: keep focus on it, or on the options once hints run out
+        const again = box.querySelector("button") || $("p-options").querySelector("button");
+        if (again) again.focus();
       };
       box.append(b);
     }
@@ -552,6 +565,8 @@ class Practice {
         renderProgress();
         this.render();
         $("p-reveal").scrollIntoView({ behavior: "smooth", block: "nearest" });
+        // The chosen button is now disabled: carry keyboard focus to the explanations
+        $("p-reveal-title").focus({ preventScroll: true });
       };
       box.append(b);
     }

@@ -152,7 +152,9 @@ td.thin { color: var(--muted); opacity: 0.6; }
 /* Learn */
 .small { font-size: 13px; }
 .lessons { display: grid; gap: 10px; }
-.lesson { padding: 0; }
+/* Grid items otherwise grow to their content's minimum width and overflow on phones */
+.lesson { padding: 0; min-width: 0; }
+.lesson summary > span:nth-child(2) { flex: 1 1 auto; min-width: 0; }
 .lesson summary {
   display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer;
   list-style: none;
@@ -202,6 +204,8 @@ dfn.term:hover::after, dfn.term:focus::after {
   white-space: normal;
 }
 dfn.term:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Focus lands here after an answer so keyboard users carry on from the result */
+.check .why:focus, #p-question:focus, #p-reveal-title:focus { outline: none; }
 .practice-setup { display: grid; gap: 10px; }
 .setup-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .setup-label { width: 150px; color: var(--muted); font-size: 14px; }
