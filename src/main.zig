@@ -32,6 +32,8 @@ const usage =
     \\              --since-days N   how far back to collect match ids (default 14)
     \\              --no-mastery     skip champion mastery
     \\              --ladder-refresh-days N  refetch ladder pages after N days
+    \\              --ladder-per-hour N  ladder pages per platform per hour at most
+    \\                               (default 0: no cap)
     \\                               (default 7)
     \\              --regions R      americas,asia,europe,sea (default all)
     \\              --timelines PCT  share of matches that also get a timeline
@@ -297,6 +299,8 @@ fn cmdCrawl(c: *Cmd) !u8 {
             o.since_days = try c.int(i64);
         } else if (c.is("--ladder-refresh-days")) {
             o.ladder_refresh_s = try c.int(i64) * std.time.s_per_day;
+        } else if (c.is("--ladder-per-hour")) {
+            o.ladder_per_hour = try c.int(u32);
         } else if (c.is("--keep-days")) {
             o.keep_days = try c.int(u32);
         } else if (c.is("--cache-mb")) {

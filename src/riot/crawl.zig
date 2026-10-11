@@ -36,6 +36,10 @@ pub const Options = struct {
     key: []const u8,
     since_days: i64 = 14,
     ladder_refresh_s: i64 = 7 * 24 * 3600,
+    /// Ladder pages each platform thread fetches per hour at most; 0 = no cap. A page
+    /// is ~600 random page writes into players: on a slow disk an uncapped ladder fills
+    /// the writer's queue and matches wait behind it
+    ladder_per_hour: u32 = 0,
     recheck_s: i64 = 12 * 3600,
     mastery: bool = true,
     hours: ?f64 = null,
@@ -289,6 +293,8 @@ const Worker = struct {
     /// Last PUUID given mastery, so each batch resumes instead of rescanning done players
     mastery_cursor: [128]u8 = undefined,
     mastery_cursor_len: usize = 0,
+    /// When this thread last fetched a ladder page (--ladder-per-hour)
+    last_ladder: i64 = 0,
 
     /// run() migrated already; workers only connect
     fn init(c: *Crawler, job: Task) !Worker {
@@ -385,6 +391,7 @@ const Worker = struct {
                         if (fresh.int(0) == 0) break;
                         continue;
                     }
+                    try w.ladderGap();
                     // A bad page ends this division for now; the next pass retries it
                     const entries = w.fetchLadderPage(p, tier, division, page) catch |err| {
                         if (fatal(err)) return err;
@@ -398,6 +405,15 @@ const Worker = struct {
             }
         }
         return fetched;
+    }
+
+    /// Nap until this platform may fetch another ladder page (--ladder-per-hour)
+    fn ladderGap(w: *Worker) !void {
+        const per_hour = w.c.opts.ladder_per_hour;
+        if (per_hour == 0) return;
+        const next = w.last_ladder + @divTrunc(3600, @as(i64, per_hour));
+        while (w.now() < next) try w.nap(1);
+        w.last_ladder = w.now();
     }
 
     fn fetchLadderPage(w: *Worker, p: ep.Platform, tier: []const u8, division: []const u8, page: u32) !usize {
