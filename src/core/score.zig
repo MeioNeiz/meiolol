@@ -43,6 +43,11 @@ pub const Options = struct {
     /// Pseudo-games pulling a duo or matchup toward the base-rating prediction;
     /// DraftGap's "medium risk" default
     prior_games: f64 = 1000,
+    /// Overrides prior_games for ally duos, for matchups between lane opponents (same
+    /// role) and for other matchups; see empiricalPriors
+    duo_prior_games: ?f64 = null,
+    lane_prior_games: ?f64 = null,
+    matchup_prior_games: ?f64 = null,
     /// Reasons worth less than this many percentage points are left out
     min_reason_pp: f64 = 0.1,
 };
@@ -171,6 +176,152 @@ pub fn matchupPp(stats: *const Stats, opts: Options, r: Role, c: usize, er: Role
     return evenPp(ctx.matchup(ctx.place(c, r), ctx.place(e, er)));
 }
 
+/// A full draft's log-odds for side 0, by kind of term
+pub const DraftTerms = struct {
+    /// Side 0's base ratings minus side 1's
+    base: f64 = 0,
+    /// Side 0's duo deltas minus side 1's
+    duo: f64 = 0,
+    /// Matchup deltas between lane opponents (same role)
+    lane: f64 = 0,
+    /// All other matchup deltas
+    matchup: f64 = 0,
+
+    pub fn total(t: DraftTerms) f64 {
+        return t.base + t.duo + t.lane + t.matchup;
+    }
+};
+
+/// teams[side][@intFromEnum(role)] = champion id, every role known; champions the stats
+/// file does not know add nothing
+pub fn draftTerms(stats: *const Stats, opts: Options, teams: [2][5]u32) DraftTerms {
+    const ctx: Context = .{ .stats = stats, .opts = opts };
+    var placed: [2][5]?Placed = undefined;
+    for (teams, 0..) |team, s| for (team, Role.all) |id, r| {
+        placed[s][@intFromEnum(r)] = if (stats.index(id)) |c| ctx.place(c, r) else null;
+    };
+    var t: DraftTerms = .{};
+    for (0..2) |s| {
+        const sign: f64 = if (s == 0) 1 else -1;
+        for (placed[s], 0..) |pa, i| {
+            const a = pa orelse continue;
+            t.base += sign * a.base;
+            for (placed[s][i + 1 ..]) |pb| if (pb) |b| {
+                t.duo += sign * ctx.duo(a, b);
+            };
+        }
+    }
+    for (placed[0]) |pa| {
+        const a = pa orelse continue;
+        for (placed[1]) |pe| if (pe) |e| {
+            if (a.role == e.role) t.lane += ctx.matchup(a, e) else t.matchup += ctx.matchup(a, e);
+        };
+    }
+    return t;
+}
+
+/// Side 0's win chance for a full draft, 0..1 (see draftTerms)
+pub fn draftWin(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
+    return sigmoid(draftTerms(stats, opts, teams).total());
+}
+
+/// The roles recommend infers for a team whose positions are hidden: `out[i]` for
+/// `picks[i]`, null when the stats file does not know the champion. Roles given in
+/// `picks` are kept
+pub fn inferRoles(stats: *const Stats, picks: []const Pick, out: []?Role) void {
+    var ctx: Context = .{ .stats = stats, .opts = .{} };
+    const n = @min(picks.len, 5);
+    const placed = ctx.resolve(picks[0..n], 5, .initEmpty(), &ctx.enemy_buf);
+    var j: usize = 0;
+    for (picks[0..n], out[0..n]) |p, *o| {
+        if (j < placed.len and placed[j].id == p.champion and stats.index(p.champion) != null) {
+            o.* = placed[j].role;
+            j += 1;
+        } else o.* = null;
+    }
+}
+
+/// Prior strengths in pseudo-games, per kind of term
+pub const Priors = struct {
+    base: f64,
+    duo: f64,
+    lane: f64,
+    matchup: f64,
+
+    /// `opts` with these priors
+    pub fn apply(p: Priors, opts: Options) Options {
+        var o = opts;
+        o.base_prior_games = p.base;
+        o.duo_prior_games = p.duo;
+        o.lane_prior_games = p.lane;
+        o.matchup_prior_games = p.matchup;
+        return o;
+    }
+};
+
+pub const min_prior_games = 20;
+/// "Noise only": a spread at or below zero must not make estimates exact (Gelman 2005)
+pub const max_prior_games = 50_000;
+
+/// Prior strengths from the stats file itself: empirical Bayes by method of moments
+/// (Brown 2008, research/questions/curve-statistics-method.md). Per kind, the real
+/// spread of winrates around their prediction is the observed spread minus sampling
+/// noise, averaged unweighted over cells with at least `min_games` (weighting by games
+/// biases it: popular champions and pairs differ systematically); k = p(1-p) / spread.
+/// Pair predictions use the base ratings under the estimated base prior
+pub fn empiricalPriors(stats: *const Stats, min_games: u32) Priors {
+    var base: Moments = .{};
+    for (Role.all) |r| for (0..stats.n) |c| base.add(stats.champRole(r, c), 0.5, min_games);
+    const base_k = base.prior();
+
+    const ctx: Context = .{ .stats = stats, .opts = .{ .base_prior_games = base_k } };
+    var duo: Moments = .{};
+    var lane: Moments = .{};
+    var matchup: Moments = .{};
+    for (Role.all) |r1| for (Role.all) |r2| {
+        if (@intFromEnum(r2) < @intFromEnum(r1)) continue;
+        for (0..stats.n) |c1| {
+            if (stats.champRole(r1, c1).games < min_games) continue;
+            const a = ctx.place(c1, r1);
+            for (0..stats.n) |c2| {
+                if (r1 == r2 and c2 <= c1) continue;
+                const b = ctx.place(c2, r2);
+                if (r1 != r2) duo.add(stats.ally(r1, r2, c1, c2), sigmoid(a.base + b.base), min_games);
+                const m = if (r1 == r2) &lane else &matchup;
+                m.add(stats.enemy(r1, r2, c1, c2), sigmoid(a.base - b.base), min_games);
+            }
+        }
+    };
+    return .{ .base = base_k, .duo = duo.prior(), .lane = lane.prior(), .matchup = matchup.prior() };
+}
+
+/// Running sums for one kind's method of moments
+const Moments = struct {
+    cells: f64 = 0,
+    /// Observed squared distance from the prediction minus binomial noise
+    excess: f64 = 0,
+    noise: f64 = 0,
+
+    fn add(m: *Moments, x: Counts, expected: f64, min_games: u32) void {
+        if (x.games < min_games or x.games == 0) return;
+        const n: f64 = @floatFromInt(x.games);
+        const d = @as(f64, @floatFromInt(x.wins)) / n - expected;
+        const v = expected * (1 - expected);
+        m.cells += 1;
+        m.excess += d * d - v / n;
+        m.noise += v;
+    }
+
+    /// With few cells the estimate is too noisy to use: too small a prior overfits far
+    /// worse than too large a one
+    fn prior(m: Moments) f64 {
+        if (m.cells < min_cells or m.excess <= 0) return max_prior_games;
+        return std.math.clamp(m.noise / m.excess, min_prior_games, max_prior_games);
+    }
+
+    const min_cells = 100;
+};
+
 fn evenPp(x: f64) f64 {
     return 100 * (sigmoid(x) - 0.5);
 }
@@ -201,8 +352,7 @@ const Context = struct {
     }
 
     /// Smoothed pair logit minus the expected logit
-    fn pairDelta(ctx: *const Context, pair: Counts, expected: f64) f64 {
-        const k = ctx.opts.prior_games;
+    fn pairDelta(pair: Counts, expected: f64, k: f64) f64 {
         const wins = @as(f64, @floatFromInt(pair.wins)) + k * sigmoid(expected);
         const games = @as(f64, @floatFromInt(pair.games)) + k;
         if (games == 0) return 0;
@@ -223,13 +373,14 @@ const Context = struct {
     fn duo(ctx: *const Context, a: Placed, b: Placed) f64 {
         if (a.role == b.role) return 0;
         const pair = ctx.stats.ally(a.role, b.role, a.c, b.c);
-        return ctx.pairDelta(pair, a.base + b.base);
+        return pairDelta(pair, a.base + b.base, ctx.opts.duo_prior_games orelse ctx.opts.prior_games);
     }
 
     /// From `a`'s side
     fn matchup(ctx: *const Context, a: Placed, e: Placed) f64 {
         const pair = ctx.stats.enemy(a.role, e.role, a.c, e.c);
-        return ctx.pairDelta(pair, a.base - e.base);
+        const k = if (a.role == e.role) ctx.opts.lane_prior_games else ctx.opts.matchup_prior_games;
+        return pairDelta(pair, a.base - e.base, k orelse ctx.opts.prior_games);
     }
 
     /// Known champions with roles: given ones kept (unless clashing), the rest the
@@ -544,6 +695,38 @@ test "synergy, filters and reasons" {
     try testing.expectEqual(2, mid.len);
     const none = recommend(&t.stats, .{ .role = .top }, test_opts, out[0..0]);
     try testing.expectEqual(0, none.len);
+}
+
+test "full draft agrees with recommend" {
+    var t = try buildTestStats();
+    defer t.deinit();
+    const teams: [2][5]u32 = .{ .{ garen, vi, ahri, 0, lux }, .{ darius, 0, zed, jinx, 0 } };
+    const p = draftWin(&t.stats, test_opts, teams);
+    const swapped = draftWin(&t.stats, test_opts, .{ teams[1], teams[0] });
+    try testing.expectApproxEqAbs(1, p + swapped, 1e-12);
+
+    var out: [4]Suggestion = undefined;
+    const s = recommend(&t.stats, .{
+        .role = .top,
+        .allies = &.{
+            .{ .champion = vi, .role = .jungle },
+            .{ .champion = ahri, .role = .middle },
+            .{ .champion = lux, .role = .utility },
+        },
+        .enemies = &.{
+            .{ .champion = darius, .role = .top },
+            .{ .champion = zed, .role = .middle },
+            .{ .champion = jinx, .role = .bottom },
+        },
+        .pool = &.{garen},
+    }, test_opts, &out);
+    try testing.expectApproxEqAbs(s[0].win, p, 1e-12);
+
+    var roles: [3]?Role = undefined;
+    inferRoles(&t.stats, &.{ .{ .champion = 9999 }, .{ .champion = jinx }, .{ .champion = zed } }, &roles);
+    try testing.expectEqual(null, roles[0]);
+    try testing.expectEqual(Role.bottom, roles[1].?);
+    try testing.expectEqual(Role.middle, roles[2].?);
 }
 
 test "enemy roles inferred jointly" {

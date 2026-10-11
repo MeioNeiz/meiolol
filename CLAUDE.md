@@ -15,6 +15,8 @@ docs/plan.md. Read it first.
   site runs there too, leave its config alone). Box builds and uploads daily:
   `deploy/box.sh web start jombirds@gmail.com|stop|status`. Preview mode until prod key
 - Layout, modules, storage, model file format: docs/architecture.md
+- Draft model quality on held-out games (`meiolol eval`): docs/model.md. Measure any
+  recommender change there first
 - Data sources and what was ruled out (and why): docs/data.md. Read before adding one
 - Production key requirements and policy limits on what the app may show:
   docs/production-key.md; sources and quotes in research/ (josearch store, see

@@ -28,30 +28,62 @@ pub fn build(
     builder: statsfile.Builder,
     summary: Summary,
 } {
-    var champs: std.ArrayList(statsfile.Champion) = .empty;
-    defer {
-        for (champs.items) |c| gpa.free(c.name);
-        champs.deinit(gpa);
-    }
-    {
-        var q = try db.prepare("SELECT id, name FROM champions ORDER BY name");
-        defer q.deinit();
-        try q.bind(.{});
-        while (try q.step()) {
-            try champs.append(gpa, .{ .id = @intCast(q.int(0)), .name = try gpa.dupe(u8, q.bytes(1)) });
-        }
-    }
-    if (champs.items.len == 0) return error.NoChampions;
-
-    var b: statsfile.Builder = try .init(gpa, champs.items);
+    const champs = try champions(gpa, db);
+    defer freeChampions(gpa, champs);
+    var b: statsfile.Builder = try .init(gpa, champs);
     errdefer b.deinit();
+    const summary = try scan(gpa, db, chosen, platforms, BuilderSink{ .b = &b });
+    return .{ .builder = b, .summary = summary };
+}
 
+const BuilderSink = struct {
+    b: *statsfile.Builder,
+
+    fn add(s: BuilderSink, r: Row) !void {
+        s.b.addGame(r.teams, r.winner);
+    }
+};
+
+/// A valid game from `scan`
+pub const Row = struct {
+    /// Unix ms
+    start: i64,
+    /// See patchKey
+    patch: u32,
+    /// Index into the `platforms` given to scan
+    platform: u8,
+    teams: [2][5]u32,
+    winner: u1,
+};
+
+fn platformIndex(platforms: []const []const u8, platform: []const u8) u8 {
+    for (platforms, 0..) |p, i| if (std.mem.eql(u8, p, platform)) return @intCast(i);
+    return 0;
+}
+
+/// "16.20" as 16020, for ordering and comparing patches cheaply
+pub fn patchKey(patch: []const u8) u32 {
+    var it = std.mem.splitScalar(u8, patch, '.');
+    const major = std.fmt.parseInt(u32, it.next() orelse "", 10) catch 0;
+    const minor = std.fmt.parseInt(u32, it.next() orelse "", 10) catch 0;
+    return major * 1000 + minor;
+}
+
+/// Every valid game (as for `build`) to `sink.add(Row)`, in match id order
+pub fn scan(
+    gpa: std.mem.Allocator,
+    db: store.Db,
+    chosen: []const []const u8,
+    platforms: []const []const u8,
+    sink: anytype,
+) !Summary {
     const patch_json = try std.json.Stringify.valueAlloc(gpa, chosen, .{});
     defer gpa.free(patch_json);
     const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
     defer gpa.free(platform_json);
     var q = try db.prepare(
-        \\SELECT m.match_id, m.winning_team, p.team_id, p.position, p.champion_id
+        \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, m.platform,
+        \\  p.team_id, p.position, p.champion_id
         \\FROM matches m JOIN participants p USING (match_id)
         \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
         \\  AND m.platform IN (SELECT value FROM json_each(?))
@@ -68,20 +100,50 @@ pub fn build(
     while (try q.step()) {
         const id = q.bytes(0);
         if (!std.mem.eql(u8, id, current.items)) {
-            game.finish(&b, &summary);
+            try game.finish(sink, &summary);
             current.clearRetainingCapacity();
             try current.appendSlice(gpa, id);
-            game = .{ .winning_team = q.int(1) };
+            game = .{
+                .winning_team = q.int(1),
+                .start = q.int(2),
+                .patch = patchKey(q.bytes(3)),
+                .platform = platformIndex(platforms, q.bytes(4)),
+            };
         }
-        game.add(q.int(2), if (q.isNull(3)) "" else q.bytes(3), q.int(4));
+        game.add(q.int(5), if (q.isNull(6)) "" else q.bytes(6), q.int(7));
     }
-    game.finish(&b, &summary);
-    return .{ .builder = b, .summary = summary };
+    try game.finish(sink, &summary);
+    return summary;
+}
+
+/// The champions table, by name. Free with freeChampions
+pub fn champions(gpa: std.mem.Allocator, db: store.Db) ![]statsfile.Champion {
+    var list: std.ArrayList(statsfile.Champion) = .empty;
+    defer list.deinit(gpa);
+    errdefer for (list.items) |c| gpa.free(c.name);
+    var q = try db.prepare("SELECT id, name FROM champions ORDER BY name");
+    defer q.deinit();
+    try q.bind(.{});
+    while (try q.step()) {
+        const name = try gpa.dupe(u8, q.bytes(1));
+        errdefer gpa.free(name);
+        try list.append(gpa, .{ .id = @intCast(q.int(0)), .name = name });
+    }
+    if (list.items.len == 0) return error.NoChampions;
+    return list.toOwnedSlice(gpa);
+}
+
+pub fn freeChampions(gpa: std.mem.Allocator, champs: []const statsfile.Champion) void {
+    for (champs) |c| gpa.free(c.name);
+    gpa.free(champs);
 }
 
 /// One match's participants as they arrive from the query
 const Game = struct {
     winning_team: i64 = 0,
+    start: i64 = 0,
+    patch: u32 = 0,
+    platform: u8 = 0,
     teams: [2][5]u32 = @splat(@splat(0)),
     rows: u8 = 0,
     bad: bool = false,
@@ -108,7 +170,7 @@ const Game = struct {
         slot.* = @intCast(champion);
     }
 
-    fn finish(g: *const Game, b: *statsfile.Builder, summary: *Summary) void {
+    fn finish(g: *const Game, sink: anytype, summary: *Summary) !void {
         if (g.rows == 0) return;
         const winner: ?u1 = switch (g.winning_team) {
             100 => 0,
@@ -119,7 +181,7 @@ const Game = struct {
             summary.skipped += 1;
             return;
         }
-        b.addGame(g.teams, winner.?);
+        try sink.add(.{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .winner = winner.? });
         summary.games += 1;
     }
 };
