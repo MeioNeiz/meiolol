@@ -146,11 +146,14 @@ next steps land here.
   for a LoLDraftAI-level model, ~55-56%) pooled over 2-4 patches; ±2 pp needs ~2,400
   games per cell (common pairs ~500k games, typical ~3M); one model with rank as input.
   Next:
+  - Live since 15:01Z (crawler restarted on 65123e9; drafts rows arriving, ~95% with a
+    rank). A push does not restart the crawler, and the web loop's first open had made
+    the table while the old crawler still ran, so with it stopped every match was
+    listed again (drafts was empty): 35,944 matches in draft_backfill
   - On A1 after the move (not on the micro): `deploy/box.sh run draft-backfill` once
-    (chunks of 200 with 1 s pauses, resumable; the first open of the new binary lists
-    every stored match in draft_backfill). Until it finishes the `--keep-days` prune
-    skips listed matches, so run it before 2026-11-25. Check `meiolol status`: drafts
-    ~ matches, draft_backfill 0
+    (chunks of 200 with 1 s pauses, resumable). Until it finishes the `--keep-days`
+    prune skips listed matches, so run it before 2026-11-25. Check `meiolol status`:
+    draft_backfill 0
   - Move stats/eval onto `draft.Reader` once the window drops games they need (eval's
     lane gold and experience sections still join per-match data by match id)
   - Open (Jacob): add game length in whole minutes (useful for early/late models;
