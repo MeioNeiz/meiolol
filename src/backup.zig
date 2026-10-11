@@ -4,8 +4,9 @@
 //! - state/state-YYYY-MM-DD.db: the mutable tables (queues, mastery, forgotten, ...),
 //!   rotated (7 daily + 4 weekly by default)
 //! - segments/NNNNNN.db: matches, participants and bans of matches stored since the last
-//!   segment, and compact timelines likewise. These rows never change once stored, so
-//!   segments are append-only and kept; the `segment` table holds each one's rowid range.
+//!   segment, and compact timelines and draft rows (store/draft.zig) likewise. These
+//!   rows never change once stored, so segments are append-only and kept; the `segment`
+//!   table holds each one's rowid range.
 //!   `--full` writes one segment with everything and drops the older ones (after a
 //!   rebuild or rekey, which rewrite stored rows)
 //! Raw JSON is not backed up: raw.db is a 30-day buffer and the tables hold what it gives.
@@ -47,6 +48,7 @@ pub const Summary = struct {
     segment: ?[]const u8,
     matches: i64,
     timelines: i64,
+    drafts: i64,
     removed: usize,
 };
 
@@ -66,22 +68,19 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
     try cwd.access(io, timeline_db, .{});
 
     const state_path = try std.fmt.allocPrint(arena, "{s}/state-{f}.db", .{ state_dir, Date.fromSeconds(opts.now) });
-    _ = try writeFile(arena, io, state_path, main_db, timeline_db, .state, 0, 0, opts.now);
+    _ = try writeFile(arena, io, state_path, main_db, timeline_db, .state, .{}, opts.now);
 
     var removed = try rotate(arena, io, state_dir, opts.keep_daily, opts.keep_weekly);
 
     const segs = try listSegments(arena, io, seg_dir);
-    var after_m: i64 = 0;
-    var after_t: i64 = 0;
+    var after: Range = .{};
     if (!opts.full and segs.len > 0) {
         const last = try std.fs.path.join(arena, &.{ seg_dir, segs[segs.len - 1].name });
-        const range = try readRange(arena, last);
-        after_m = range.matches_to;
-        after_t = range.timelines_to;
+        after = try readRange(arena, last);
     }
     const next = if (segs.len > 0) segs[segs.len - 1].seq + 1 else 1;
     const seg_path = try std.fmt.allocPrint(arena, "{s}/{d:0>6}.db", .{ seg_dir, next });
-    const wrote = try writeFile(arena, io, seg_path, main_db, timeline_db, .segment, after_m, after_t, opts.now);
+    const wrote = try writeFile(arena, io, seg_path, main_db, timeline_db, .segment, after, opts.now);
     if (wrote.rows > 0 and opts.full) {
         for (segs) |s| {
             try cwd.deleteFile(io, try std.fs.path.join(arena, &.{ seg_dir, s.name }));
@@ -93,13 +92,14 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
         .segment = if (wrote.rows > 0) seg_path else null,
         .matches = wrote.matches,
         .timelines = wrote.timelines,
+        .drafts = wrote.drafts,
         .removed = removed,
     };
 }
 
 const Kind = enum { state, segment };
 
-const Written = struct { rows: i64 = 0, matches: i64 = 0, timelines: i64 = 0 };
+const Written = struct { rows: i64 = 0, matches: i64 = 0, timelines: i64 = 0, drafts: i64 = 0 };
 
 /// Build `path` from the live databases inside one read transaction. A segment with no
 /// new rows is not kept.
@@ -110,8 +110,7 @@ fn writeFile(
     main_db: []const u8,
     timeline_db: []const u8,
     kind: Kind,
-    after_m: i64,
-    after_t: i64,
+    after: Range,
     now: i64,
 ) !Written {
     const cwd = Io.Dir.cwd();
@@ -136,18 +135,27 @@ fn writeFile(
             .segment => {
                 const to_m = try db.scalar("SELECT coalesce(max(rowid), 0) FROM live.matches", .{}) orelse 0;
                 const to_t = try db.scalar("SELECT coalesce(max(rowid), 0) FROM livet.timelines", .{}) orelse 0;
+                // A database no binary with drafts has opened yet lacks the table
+                const drafts = try copyDdl(arena, db, "live", "drafts");
+                const to_d = if (!drafts) after.drafts_to else try db.scalar(
+                    "SELECT coalesce(max(id), 0) FROM live.drafts",
+                    .{},
+                ) orelse 0;
                 try db.exec(
                     \\CREATE TABLE segment (matches_after INTEGER NOT NULL, matches_to INTEGER NOT NULL,
                     \\    timelines_after INTEGER NOT NULL, timelines_to INTEGER NOT NULL,
-                    \\    made_at INTEGER NOT NULL);
+                    \\    made_at INTEGER NOT NULL, drafts_after INTEGER NOT NULL DEFAULT 0,
+                    \\    drafts_to INTEGER NOT NULL DEFAULT 0);
                 );
-                try db.run("INSERT INTO segment VALUES (?, ?, ?, ?, ?)", .{ after_m, to_m, after_t, to_t, now });
+                try db.run("INSERT INTO segment VALUES (?, ?, ?, ?, ?, ?, ?)", .{
+                    after.matches_to, to_m, after.timelines_to, to_t, now, after.drafts_to, to_d,
+                });
                 for ([_][]const u8{ "matches", "participants", "bans" }) |t| _ = try copyDdl(arena, db, "live", t);
                 _ = try copyDdl(arena, db, "livet", "timelines");
                 try copyRows(arena, db, "live", "matches", try std.fmt.allocPrint(
                     arena,
                     " WHERE rowid > {d} AND rowid <= {d}",
-                    .{ after_m, to_m },
+                    .{ after.matches_to, to_m },
                 ));
                 w.matches = changes(db);
                 // Same transaction as the match row in the crawler, so never half a match
@@ -157,10 +165,18 @@ fn writeFile(
                 try copyRows(arena, db, "livet", "timelines", try std.fmt.allocPrint(
                     arena,
                     " WHERE rowid > {d} AND rowid <= {d}",
-                    .{ after_t, to_t },
+                    .{ after.timelines_to, to_t },
                 ));
                 w.timelines = changes(db);
-                w.rows = w.matches + w.timelines;
+                if (drafts) {
+                    try copyRows(arena, db, "live", "drafts", try std.fmt.allocPrint(
+                        arena,
+                        " WHERE id > {d} AND id <= {d}",
+                        .{ after.drafts_to, to_d },
+                    ));
+                    w.drafts = changes(db);
+                }
+                w.rows = w.matches + w.timelines + w.drafts;
             },
         }
         try db.exec("COMMIT");
@@ -217,16 +233,25 @@ pub fn listSegments(arena: std.mem.Allocator, io: Io, seg_dir: []const u8) ![]Se
     return out.items;
 }
 
-const Range = struct { matches_to: i64, timelines_to: i64 };
+/// Last rowid (drafts: id) each segment copied up to
+const Range = struct { matches_to: i64 = 0, timelines_to: i64 = 0, drafts_to: i64 = 0 };
 
 fn readRange(arena: std.mem.Allocator, path: []const u8) !Range {
     const db = try Db.open(try arena.dupeZ(u8, path));
     defer db.close();
-    var s = try db.prepare("SELECT matches_to, timelines_to FROM segment");
+    // Segments from before drafts have no drafts_to: the next one copies them all
+    const has_drafts = (try db.scalar(
+        "SELECT count(*) FROM pragma_table_info('segment') WHERE name = 'drafts_to'",
+        .{},
+    ) orelse 0) > 0;
+    var s = try db.prepare(if (has_drafts)
+        "SELECT matches_to, timelines_to, drafts_to FROM segment"
+    else
+        "SELECT matches_to, timelines_to, 0 FROM segment");
     defer s.deinit();
     try s.bind(.{});
     if (!try s.step()) return error.BadSegment;
-    return .{ .matches_to = s.int(0), .timelines_to = s.int(1) };
+    return .{ .matches_to = s.int(0), .timelines_to = s.int(1), .drafts_to = s.int(2) };
 }
 
 /// Keep the newest `daily` snapshots, plus the newest of each of the `weekly` most recent
@@ -423,12 +448,15 @@ test "backup then restore round trip, incremental segments, scrub" {
             \\    VALUES ('EUW1_1', 0, 100, 'p1', 1, 1), ('EUW1_1', 1, 200, 'p2', 2, 0);
             \\INSERT INTO bans VALUES ('EUW1_1', 100, 1, 9);
             \\INSERT INTO timeline.timelines VALUES ('EUW1_1', 30, 100, x'01');
+            \\INSERT INTO drafts (id, platform, queue, patch, day, ranked, blue_win, picks, bans)
+            \\    VALUES (7, 'EUW1', 420, '16.20', 1, 0, 1, x'', x'');
         );
     }
     const day = 86400 * 20737;
     const first = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day });
     try testing.expectEqual(1, first.matches);
     try testing.expectEqual(1, first.timelines);
+    try testing.expectEqual(1, first.drafts);
     // Nothing new: no segment
     const idle = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day + 86400 });
     try testing.expectEqual(null, idle.segment);
@@ -444,6 +472,7 @@ test "backup then restore round trip, incremental segments, scrub" {
     const second = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day + 2 * 86400 });
     try testing.expectEqual(1, second.matches);
     try testing.expectEqual(0, second.timelines);
+    try testing.expectEqual(0, second.drafts);
     try testing.expectEqual(2, (try listSegments(arena, io, try std.fmt.allocPrint(arena, "{s}/segments", .{out}))).len);
 
     // p1 objects after the backups were taken: live forget records it, scrub cleans files
@@ -470,6 +499,7 @@ test "backup then restore round trip, incremental segments, scrub" {
         try testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM participants WHERE puuid = 'p1'", .{}));
         try testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM players", .{}));
         try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM bans", .{}));
+        try testing.expectEqual(@as(?i64, 7), try db.scalar("SELECT id FROM drafts", .{}));
         try testing.expect(try forget.isForgotten(db, "p1"));
     }
     try testing.expectError(error.TargetNotEmpty, restore(arena, io, out, restored_dir, null, day));

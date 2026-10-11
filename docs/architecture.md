@@ -62,6 +62,19 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   gold at those timeline minutes), bans, mastery (one
   compact blob per player, src/riot/mastery.zig, ~0.7 KB), champions. Text-keyed
   tables are WITHOUT ROWID (no second copy of the key in an index)
+- `drafts` (meiolol.db, src/store/draft.zig): one row per complete ranked game (420/440,
+  no remake, a winner, 5 v 5), kept forever whatever `--keep-days` says, for draft
+  models that need millions of games over several patches. Platform, queue, patch, game
+  day (unix day, not the start time), rank (median ladder rank snapshot of the players
+  with one, schema.packRank, NULL under 5 known; `ranked` = how many known), blue win,
+  picks (10 x u16: champion | (role + 1) << 13, blue then red) and bans (10 x u16).
+  No PUUID, Riot ID or match id: the Riot API turns a match id back into the players.
+  72 bytes per row measured (10M games ~0.7 GB). Deduped without a key: the writer adds
+  it in the transaction that first inserts the match row (same file as participants, so
+  atomic under WAL; an attached file would not be). Matches stored before the table
+  existed are listed in `draft_backfill` (match ids, transient) when a new binary first
+  opens the database; `meiolol draft-backfill` drains it in short chunks, and the prune
+  keeps listed matches until then. `draft.Reader` reads rows for stats and eval
 - Match ID is the permanent key and carries the platform (EUW1_, KR_); matches.platform
   and players.platform/region let stats pool or split regions
 - PUUIDs are encrypted per app: switching app (dev -> personal -> production) gives
@@ -99,7 +112,8 @@ batch, the timelines of matches just stored), so nothing is fetched twice. A sho
 batch lingers up to 2 s for more jobs unless a worker is waiting (each commit rewrites
 the index pages it touched). Between batches the writer prunes, one 500-row chunk at a
 time: raw documents, unseen players and old mastery, PUUIDs past 24 months, and matches
-past `--keep-days` with their participants, bans and timelines. Only the writer's
+past `--keep-days` with their participants, bans and timelines (not their draft rows;
+not matches still waiting for the draft backfill). Only the writer's
 connection has a big page cache (`--cache-mb`, default 64); WAL files are capped at 64
 MB after a checkpoint. Why: on the 1/8-OCPU micro 19 writing threads waited on the lock
 (holders descheduled mid-transaction, gzip inside it), and per-row commits with 2 MB

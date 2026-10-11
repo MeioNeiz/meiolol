@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const sqlite = @import("sqlite.zig");
+const draft = @import("draft.zig");
 
 // Tables migrate() rebuilds, so their DDL lives apart from `schema`. WITHOUT ROWID
 // where the key is text: a rowid table would store the key twice (table + index).
@@ -372,6 +373,11 @@ fn migrate(db: sqlite.Db) !void {
             \\ALTER TABLE participants ADD COLUMN gold15 INTEGER;
         );
     }
+    if (!try hasColumn(db, "drafts", "id")) {
+        // Every match stored so far awaits `meiolol draft-backfill`; from now on the
+        // writer adds each new match's row. In key order: appends to the list's B-tree
+        try db.exec(draft.ddl ++ "INSERT INTO draft_backfill SELECT match_id FROM matches ORDER BY match_id;");
+    }
     try db.commit();
 }
 
@@ -497,4 +503,20 @@ test "rekey keeps matches, forgets players" {
         "SELECT count(*) FROM participants WHERE puuid IS NULL AND tier = 'GOLD'",
         .{},
     ));
+}
+
+test "drafts: a database from before them lists its matches for the backfill" {
+    const db = try memory();
+    defer db.close();
+    try db.exec(
+        \\DROP TABLE drafts; DROP TABLE draft_backfill;
+        \\INSERT INTO matches VALUES ('EUW1_2', 'riot', 'EUW1', 420, '16.1', '16.1.1', 1, 1, 100, 0);
+        \\INSERT INTO matches VALUES ('EUW1_1', 'riot', 'EUW1', 420, '16.1', '16.1.1', 1, 1, 100, 0);
+    );
+    try apply(db);
+    try db.exec("INSERT INTO matches VALUES ('EUW1_3', 'riot', 'EUW1', 420, '16.1', '16.1.1', 1, 1, 100, 0)");
+    // Once only: a later open lists nothing new
+    try apply(db);
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM draft_backfill", .{}));
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM drafts", .{}));
 }

@@ -32,8 +32,11 @@ under the write lock they starve the crawler on a slow host.
   crawl state, ~3 GB at ~9M players, re-seeded from the ladders within a day of a
   restore, which then rescans everyone's match ids
 - `segments/NNNNNN.db`: matches, participants and bans of matches stored since the last
-  segment (by matches rowid), and compact timelines likewise (timelines rowid). Stored
-  rows never change, so segments are append-only and never rotated
+  segment (by matches rowid), and compact timelines likewise (timelines rowid), and
+  draft rows (drafts id; the first segment after an older one copies them all). Stored
+  rows never change, so segments are append-only and never rotated. `draft_backfill`
+  is not backed up: a restore from backups taken before `meiolol draft-backfill`
+  finished lacks the draft rows of matches it had not reached
 - Each file is plain SQLite, written as *.tmp inside one read transaction (consistent
   while the crawler writes) and renamed when complete. Not raw JSON: raw.db is a 30-day
   buffer and the tables hold what it gives
@@ -102,6 +105,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | raw.raw_docs (riot_match) | summaries of their games deleted (they name all ten players) |
 | raw.timeline_docs | raw timelines of their games deleted (they hold PUUIDs) |
 | timeline.timelines | nothing: compact timelines hold slots 1-10 only |
+| drafts | nothing: no PUUID, Riot ID or match id, only platform, patch, day, median rank, result, champions, roles and bans, so no row can be found by player (see below) |
 | forgotten | PUUID and date added: the suppression list |
 | Daily Draft (daily/used.txt, puzzles) | nothing: match ids and anonymous puzzles only |
 | backup files | `--backups /mnt/d/meiolol-backups` scrubs every state and segment file at once |
@@ -125,5 +129,11 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
   that no longer resolves (renamed or deleted) is counted and exits 1: get its PUUID
 - Not wiped: freed ext4 blocks inside the WSL image and on D: (accepted; files are
   rewritten, not just unlinked)
+- Draft rows (`drafts`, kept forever, docs/architecture.md Storage) hold no identifier:
+  not the match id either, since the Riot API turns one back into the ten players, and
+  the game's day rather than its start time. Someone who already knows a game (its
+  champions and day) could pick out its row, but it tells them nothing beyond what they
+  knew. With nothing to look a person up by, forget does not touch them; the transient
+  `draft_backfill` list holds match ids and goes once the backfill has run
 - Retention sweeps (players not seen for 30 days, PUUIDs blanked after 24 months) live in
   the crawler's hourly prune (meiolol-de). Public wording: docs/legal/privacy.md

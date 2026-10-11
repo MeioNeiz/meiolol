@@ -3,6 +3,7 @@
 pub const sqlite = @import("sqlite.zig");
 pub const schema = @import("schema.zig");
 pub const raw = @import("raw.zig");
+pub const draft = @import("draft.zig");
 
 pub const Db = sqlite.Db;
 pub const Blob = sqlite.Blob;

@@ -136,16 +136,27 @@ next steps land here.
   (60 days to start), per-patch aggregates kept forever, Pool learning curves moved onto
   them; older segments and daily backups off-host, encrypted (rclone crypt, file per
   file so `forget --backups` scrubs still work), to a Hetzner Storage Box
-- Draft table kept forever (agreed 2026-10-11), before the A1 crawls at full rate: one
-  compact row per match, no PUUIDs, Riot IDs or match id (platform, patch, date, rank
-  bracket, blue win, 10 x champion + role, bans), ~40-100 bytes, so 10M games < 1 GB.
-  Written by the writer with participants, untouched by `--keep-days` prune; backfill
-  from rows still on the box. Why: synergy and good-pick models need 1-3M games (5M+
-  for a LoLDraftAI-level model, ~55-56%), pooled across 2-4 patches, so the 60-day
-  window would throw away what they train on. ±2 pp needs ~2,400 games per cell: common
-  pairs (5% x 5%) ~500k games, typical (2% x 2%) ~3M; one model with rank as an input,
-  not one per bracket. No match id because the Riot API turns one back into the players;
-  dedupe at write time instead. Check the row has nothing else linkable before building
+- Draft table kept forever: done 2026-10-11 (docs/architecture.md Storage,
+  src/store/draft.zig). `drafts` in meiolol.db, one row per complete ranked game, 72
+  bytes measured (10M games ~0.7 GB): platform, queue, patch, day, median rank (5+
+  known) and count known, blue win, 10 x champion + role, bans. No PUUID, Riot ID, match
+  id or start time; forget leaves it alone (docs/data-safety.md). Written by the writer
+  when it first inserts a match; in backup segments by id range; `meiolol status` counts
+  it and the backfill list. Why kept: synergy and good-pick models need 1-3M games (5M+
+  for a LoLDraftAI-level model, ~55-56%) pooled over 2-4 patches; ±2 pp needs ~2,400
+  games per cell (common pairs ~500k games, typical ~3M); one model with rank as input.
+  Next:
+  - On A1 after the move (not on the micro): `deploy/box.sh run draft-backfill` once
+    (chunks of 200 with 1 s pauses, resumable; the first open of the new binary lists
+    every stored match in draft_backfill). Until it finishes the `--keep-days` prune
+    skips listed matches, so run it before 2026-11-25. Check `meiolol status`: drafts
+    ~ matches, draft_backfill 0
+  - Move stats/eval onto `draft.Reader` once the window drops games they need (eval's
+    lane gold and experience sections still join per-match data by match id)
+  - Open (Jacob): add game length in whole minutes (useful for early/late models;
+    slightly more distinctive rows)? Matches stored before the ranks table have no
+    participants rank, so their rows have no rank: fall back to the current ranks
+    entry in the backfill?
 
 ### Your games and Squads (was your-games-e0)
 

@@ -324,6 +324,8 @@ pub const Writer = struct {
     }
 
     fn storeMatch(wr: *Writer, db: store.Db, s: *Stmts, r: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64) !void {
+        const stored_id = doc.metadata.matchId;
+        const existed = try s.exists(stored_id);
         var any_forgotten = false;
         for (doc.info.participants) |p| {
             if (p.puuid) |puuid| any_forgotten = any_forgotten or try s.isForgotten(puuid);
@@ -348,6 +350,9 @@ pub const Writer = struct {
                 try s.participant_player.exec(.{ puuid, platform, @tagName(r), t });
             }
         }
+        // After the ranks above. Once per match: a re-stored one has its row already,
+        // unless it still awaits the backfill
+        if (!existed or try s.drafts.taken(stored_id)) _ = try s.drafts.write(stored_id);
         if (!match.isRemake(doc) and wr.c.wantTimeline(id)) try s.timeline_queue.exec(.{ id, @tagName(r), t });
         try s.match_done.exec(.{id});
     }
@@ -469,7 +474,11 @@ const Prune = struct {
 
     fn oldMatches(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
         try db.exec("DELETE FROM temp.gone");
-        try db.run("INSERT INTO temp.gone SELECT match_id FROM matches WHERE game_start < ? * 1000 LIMIT 500", .{cutoff});
+        // Not those the draft backfill has yet to read
+        try db.run(
+            \\INSERT INTO temp.gone SELECT match_id FROM matches
+            \\WHERE game_start < ? * 1000 AND match_id NOT IN draft_backfill LIMIT 500
+        , .{cutoff});
         const n = try db.scalar("SELECT changes()", .{}) orelse 0;
         try db.exec(
             \\DELETE FROM timeline.timelines WHERE match_id IN temp.gone;
@@ -553,6 +562,8 @@ const Stmts = struct {
     timeline_status: store.Stmt,
     timeline_done: store.Stmt,
     timeline_attempt: store.Stmt,
+    match_exists: store.Stmt,
+    drafts: store.draft.Builder,
 
     const sql = .{
         .forgotten = "SELECT EXISTS (SELECT 1 FROM forgotten WHERE puuid = ?)",
@@ -619,15 +630,18 @@ const Stmts = struct {
         \\    status = CASE WHEN attempts >= 2 THEN 'failed' ELSE status END
         \\WHERE match_id = ?
         ,
+        .match_exists = "SELECT EXISTS (SELECT 1 FROM matches WHERE match_id = ?)",
     };
 
     fn init(db: store.Db) !Stmts {
         var s: Stmts = undefined;
+        s.drafts = try .init(db);
+        errdefer s.drafts.deinit();
         var done: usize = 0;
-        errdefer inline for (@typeInfo(Stmts).@"struct".fields, 0..) |f, i| {
+        errdefer inline for (stmt_fields, 0..) |f, i| {
             if (i < done) @field(s, f.name).deinit();
         };
-        inline for (@typeInfo(Stmts).@"struct".fields) |f| {
+        inline for (stmt_fields) |f| {
             @field(s, f.name) = try db.prepare(@field(sql, f.name));
             done += 1;
         }
@@ -635,7 +649,17 @@ const Stmts = struct {
     }
 
     fn deinit(s: *Stmts) void {
-        inline for (@typeInfo(Stmts).@"struct".fields) |f| @field(s, f.name).deinit();
+        inline for (stmt_fields) |f| @field(s, f.name).deinit();
+        s.drafts.deinit();
+    }
+
+    /// Every field but drafts
+    const stmt_fields = @typeInfo(Stmts).@"struct".fields[0 .. @typeInfo(Stmts).@"struct".fields.len - 1];
+
+    fn exists(s: *Stmts, match_id: []const u8) !bool {
+        try s.match_exists.bind(.{match_id});
+        defer s.match_exists.reset();
+        return try s.match_exists.step() and s.match_exists.int(0) == 1;
     }
 
     fn rankOf(s: *Stmts, key: i64) !?store.schema.Rank {
@@ -806,4 +830,48 @@ test "ladder: ranks for everyone, player rows for the sample; matches take ranks
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
     // 1 in 1000 sampled: almost surely none of the 11 PUUIDs
     try std.testing.expect((try db.scalar("SELECT count(*) FROM players", .{})).? <= 2);
+}
+
+test "one draft row per match, kept by the prune; listed matches wait for the backfill" {
+    const gpa = std.testing.allocator;
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const db = try store.schema.memory();
+    defer db.close();
+    try tune(db, 1);
+    var c: crawl.Crawler = .{ .gpa = gpa, .io = std.testing.io, .opts = .{ .data_dir = "", .key = "" } };
+    var wr: Writer = .{ .c = &c };
+    defer wr.deinit();
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+
+    var docs: [3]match.Doc = undefined;
+    for (&docs, 0..) |*d, i| {
+        d.* = try match.parse(arena.allocator(), @embedFile("testdata/match.json"));
+        d.metadata.matchId = try std.fmt.allocPrint(arena.allocator(), "EUW1_{d}", .{i + 1});
+    }
+    // 2 and 3 were stored before drafts existed
+    try match.storeRows(db, docs[1], "riot");
+    try match.storeRows(db, docs[2], "riot");
+    try db.exec("INSERT INTO draft_backfill VALUES ('EUW1_2'), ('EUW1_3')");
+    var jobs: [3]*Job = undefined;
+    for (&jobs, [_]usize{ 0, 0, 1 }) |*job, d| {
+        const id = docs[d].metadata.matchId;
+        job.* = try .create(gpa, .{ .match = .{ .region = .europe, .id = id, .doc = docs[d], .raw = "r", .t = 2 } });
+    }
+    defer for (jobs) |job| job.destroy(gpa);
+    try wr.commit(db, &s, &jobs);
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM drafts", .{}));
+
+    // The fixture game is from 2025: past a 1-day window, except 3 (still listed)
+    var p: Prune = .{ .started_at = 1 };
+    const opts: crawl.Options = .{ .data_dir = "", .key = "", .keep_days = 1 };
+    for (0..40) |_| try p.step(db, std.testing.io, opts);
+    const want = [_]struct { []const u8, i64 }{
+        .{ "SELECT count(*) FROM drafts", 2 },
+        .{ "SELECT count(*) FROM matches WHERE match_id = 'EUW1_3'", 1 },
+        .{ "SELECT count(*) FROM matches", 1 },
+        .{ "SELECT count(*) FROM draft_backfill", 1 },
+    };
+    for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
 }

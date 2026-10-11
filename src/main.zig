@@ -117,6 +117,11 @@ const usage =
     \\  rekey       after switching to another app's key (new PUUIDs): forget
     \\              players, ladder and mastery, keep matches; run rebuild first
     \\  champions   refresh champion ids and names from Data Dragon
+    \\  draft-backfill  add the draft rows (kept forever) of matches stored before the
+    \\              drafts table existed; once, alongside the crawler
+    \\              --chunk N        matches per transaction (default 200)
+    \\              --pause-ms MS    between chunks, so the crawler gets the lock
+    \\                               (default 1000)
     \\  backup      consistent copy of tables and compact timelines (docs/data-safety.md)
     \\              --out DIR        default $MEIOLOL_BACKUPS or ./backups
     \\              --keep-daily N   state snapshots kept (default 7)
@@ -181,6 +186,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "rebuild", cmdRebuild },
     .{ "rekey", cmdRekey },
     .{ "champions", cmdChampions },
+    .{ "draft-backfill", cmdDraftBackfill },
     .{ "backup", cmdBackup },
     .{ "restore", cmdRestore },
     .{ "forget", cmdForget },
@@ -652,6 +658,50 @@ fn cmdChampions(c: *Cmd) !u8 {
     return 0;
 }
 
+/// Resumable: the list shrinks as chunks commit
+fn cmdDraftBackfill(c: *Cmd) !u8 {
+    var chunk: usize = 200;
+    var pause_ms: u32 = 1000;
+    while (c.next()) |_| {
+        if (c.is("--chunk")) {
+            chunk = try c.int(usize);
+            if (chunk == 0) return error.Usage;
+        } else if (c.is("--pause-ms")) {
+            pause_ms = try c.int(u32);
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    var b: store.draft.Builder = try .init(db);
+    defer b.deinit();
+    const left = try db.scalar("SELECT count(*) FROM draft_backfill", .{}) orelse 0;
+    std.log.info("{d} matches to read", .{left});
+    var taken: usize = 0;
+    var written: usize = 0;
+    var chunks: usize = 0;
+    while (true) {
+        const r = store.draft.backfillChunk(c.init.gpa, db, &b, chunk) catch |err| switch (err) {
+            // The crawler's writer or a backup held the lock past the busy timeout
+            error.Busy => {
+                try io.sleep(.fromMilliseconds(pause_ms), .awake);
+                continue;
+            },
+            else => return err,
+        };
+        if (r.taken == 0) break;
+        taken += r.taken;
+        written += r.written;
+        chunks += 1;
+        if (chunks % 50 == 0) std.log.info("{d} of {d} read, {d} rows", .{ taken, left, written });
+        try io.sleep(.fromMilliseconds(pause_ms), .awake);
+    }
+    std.log.info("done: {d} matches read, {d} draft rows (the rest not complete ranked games)", .{
+        taken, written,
+    });
+    return 0;
+}
+
 fn cmdBackup(c: *Cmd) !u8 {
     var o: backup.Options = .{
         .data_dir = c.data_dir,
@@ -670,8 +720,8 @@ fn cmdBackup(c: *Cmd) !u8 {
         } else return error.Usage;
     }
     const r = try backup.run(c.arena, c.init.io, o);
-    std.log.info("{s}; segment {s}: {d} matches, {d} timelines; {d} old files removed", .{
-        r.state, r.segment orelse "none (nothing new)", r.matches, r.timelines, r.removed,
+    std.log.info("{s}; segment {s}: {d} matches, {d} timelines, {d} drafts; {d} old files removed", .{
+        r.state, r.segment orelse "none (nothing new)", r.matches, r.timelines, r.drafts, r.removed,
     });
     return 0;
 }
@@ -846,6 +896,8 @@ fn status(gpa: std.mem.Allocator, io: std.Io, data_dir: []const u8) !void {
         "timeline_queue",
         "timeline.timelines",
         "raw.timeline_docs",
+        "drafts",
+        "draft_backfill",
     };
     inline for (tables) |t| {
         try out.print("{s}: {d}\n", .{ t, try db.scalar("SELECT count(*) FROM " ++ t, .{}) orelse 0 });

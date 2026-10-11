@@ -1,6 +1,6 @@
 //! End to end on fixtures: match JSON and timeline into the tables as the crawler stores
-//! them, then the commands the box runs (stats, curves, site). Catches what unit tests
-//! miss: a page that fails on thin data, a file format the next step cannot read.
+//! them, then the commands the box runs (stats, drafts, curves, site). Catches what unit
+//! tests miss: a page that fails on thin data, a file format the next step cannot read.
 
 const std = @import("std");
 const store = @import("store");
@@ -36,6 +36,19 @@ test "fixture games to stats, curves and the website" {
     var model: std.Io.Writer.Allocating = .init(arena);
     try st.builder.write(&model.writer, patch);
     _ = try core.Stats.parse(arena, model.written());
+
+    // Draft rows of the same games, as `meiolol draft-backfill` adds them
+    try db.exec("INSERT INTO draft_backfill SELECT match_id FROM matches");
+    var drafts: store.draft.Builder = try .init(db);
+    defer drafts.deinit();
+    _ = try store.draft.backfillChunk(gpa, db, &drafts, 100);
+    var reader: store.draft.Reader = try .init(gpa, db, .{ .patches = &.{patch}, .platforms = &.{"EUW1"} });
+    defer reader.deinit();
+    var n_drafts: usize = 0;
+    while (try reader.next()) |d| : (n_drafts += 1) {
+        for (d.picks) |p| try testing.expect(p.role != null);
+    }
+    try testing.expectEqual(games, n_drafts);
 
     var cv = try curves.build(gpa, db, &.{patch}, 0, &.{"EUW1"}, &.{});
     defer cv.builder.deinit();
