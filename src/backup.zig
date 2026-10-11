@@ -48,11 +48,13 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
     try cwd.createDirPath(io, state_dir);
     try cwd.createDirPath(io, seg_dir);
 
-    // Opening through store applies the schema and migrations first, so backups always
-    // copy the current table layout
-    (try store.open(arena, opts.data_dir)).close();
+    // Not store.open: that runs migrations under the write lock, which on a slow host
+    // starve the crawler. Backups copy each table's live DDL, whatever its version
     const main_db = try std.fs.path.join(arena, &.{ opts.data_dir, "meiolol.db" });
     const timeline_db = try std.fs.path.join(arena, &.{ opts.data_dir, "timeline.db" });
+    // ATTACH would create a missing file
+    try cwd.access(io, main_db, .{});
+    try cwd.access(io, timeline_db, .{});
 
     var date_buf: [10]u8 = undefined;
     const state_path = try std.fmt.allocPrint(arena, "{s}/state-{s}.db", .{ state_dir, isoDate(&date_buf, opts.now) });
