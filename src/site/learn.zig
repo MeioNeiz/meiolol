@@ -191,7 +191,7 @@ pub fn write(site: *const Site, facts: *const learn.Facts) !void {
     }
     try w.writeAll("}</script>\n<script src=\"learn.js\" defer></script>\n");
     try html.foot(w, p);
-    try site.write("learn.html", aw.written());
+    try site.writeShared("learn.html", aw.written());
 }
 
 /// In a script element only "</" can end it early; JSON may escape it as "<\/"

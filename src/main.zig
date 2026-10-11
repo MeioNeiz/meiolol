@@ -69,10 +69,10 @@ const usage =
     \\                               alone with every --platform pooled
     \\              --history FILE   append one TSV line (date, sizes, log loss and AUC
     \\                               per model) for the accuracy-vs-data curve
-    \\  site       write the public website (static files): EUW at the root, every
-    \\              region under all/ (lane curves from the curves command's default
-    \\              files for each)
-    \\              --patch P        as for stats (default: EUW's newest patch)
+    \\  site       write the public website (static files): EUW over the last 30 days
+    \\              at the root, the patch under patch/, every region under all/ and
+    \\              all/patch/ (lane curves: the curves command's default files)
+    \\              --patch P        the patch views' (default: EUW's newest patch)
     \\              --out DIR        default DIR/site
     \\              --contact EMAIL  shown on the privacy and terms pages (required)
     \\              --riot-txt TEXT  served as /riot.txt (Riot's verification string)
@@ -337,23 +337,25 @@ pub fn main(init: std.process.Init) !u8 {
         const chosen = if (patches.items.len > 0) patches.items else try newestPatch(arena, db, &.{"EUW1"});
         var every: std.ArrayList([]const u8) = .empty;
         for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
+        // Indexed by site.html.View.index: EUW 30 days, EUW patch, all 30 days, all patch
+        const view_curves = [_]?[]const u8{
+            try recentCurvesPath(arena, data_dir, false),
+            try curvesPath(arena, data_dir, chosen, false),
+            try recentCurvesPath(arena, data_dir, true),
+            try curvesPath(arena, data_dir, chosen, true),
+        };
+        const now_ms = std.Io.Clock.real.now(init.io).toMilliseconds();
         try site.generate(init.gpa, init.io, db, .{
             .out_dir = out_path orelse try std.fs.path.join(arena, &.{ data_dir, "site" }),
             .patches = chosen,
+            .since_ms = now_ms - 30 * std.time.ms_per_day,
             .all_platforms = every.items,
             .contact = email,
             .riot_txt = riot_txt,
             .updated = try today(arena, init.io),
             .public = public,
             .daily_dir = try std.fs.path.join(arena, &.{ data_dir, "daily" }),
-            .curves = if (patches.items.len > 0)
-                try curvesPath(arena, data_dir, chosen, false)
-            else
-                try recentCurvesPath(arena, data_dir, false),
-            .all_curves = if (patches.items.len > 0)
-                try curvesPath(arena, data_dir, chosen, true)
-            else
-                try recentCurvesPath(arena, data_dir, true),
+            .curves = view_curves,
         });
         return 0;
     }

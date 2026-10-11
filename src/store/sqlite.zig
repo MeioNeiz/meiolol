@@ -5,7 +5,23 @@ pub const c = @cImport(@cInclude("sqlite3.h"));
 
 const log = std.log.scoped(.sqlite);
 
-pub const Error = error{Sqlite};
+/// Busy: another connection held the lock past the busy timeout; worth retrying
+pub const Error = error{ Sqlite, Busy };
+
+/// Extended codes too: SQLITE_BUSY_SNAPSHOT and the like
+fn busy(rc: c_int) bool {
+    return rc & 0xff == c.SQLITE_BUSY or rc & 0xff == c.SQLITE_LOCKED;
+}
+
+fn failure(db: ?*c.sqlite3, rc: c_int, what: []const u8) Error {
+    const msg = if (db) |h| c.sqlite3_errmsg(h) else c.sqlite3_errstr(rc);
+    if (busy(rc)) {
+        log.warn("{s}: {s}", .{ what, msg });
+        return error.Busy;
+    }
+    log.err("{s}: {s}", .{ what, msg });
+    return error.Sqlite;
+}
 
 /// Bind as a BLOB rather than TEXT
 pub const Blob = struct { bytes: []const u8 };
@@ -23,8 +39,9 @@ pub const Db = struct {
             }
             return error.Sqlite;
         }
-        // Before anything else: other connections may hold the lock (WAL switch)
-        _ = c.sqlite3_busy_timeout(handle.?, 10_000);
+        // Before anything else: other connections may hold the lock (WAL switch). Long:
+        // the crawler's many writers share a slow disk on the cloud box
+        _ = c.sqlite3_busy_timeout(handle.?, 60_000);
         return .{ .handle = handle.? };
     }
 
@@ -34,20 +51,16 @@ pub const Db = struct {
 
     /// One or more statements without parameters or results
     pub fn exec(db: Db, sql: [:0]const u8) Error!void {
-        var msg: [*c]u8 = null;
-        if (c.sqlite3_exec(db.handle, sql.ptr, null, null, &msg) != c.SQLITE_OK) {
-            log.err("{s}", .{msg});
-            c.sqlite3_free(msg);
-            return error.Sqlite;
-        }
+        const rc = c.sqlite3_exec(db.handle, sql.ptr, null, null, null);
+        if (rc != c.SQLITE_OK) return failure(db.handle, rc, "exec");
     }
 
     pub fn prepare(db: Db, sql: []const u8) Error!Stmt {
         var stmt: ?*c.sqlite3_stmt = null;
         const rc = c.sqlite3_prepare_v2(db.handle, sql.ptr, @intCast(sql.len), &stmt, null);
         if (rc != c.SQLITE_OK) {
-            log.err("prepare: {s}\n  {s}", .{ c.sqlite3_errmsg(db.handle), sql });
-            return error.Sqlite;
+            log.err("  in: {s}", .{sql});
+            return failure(db.handle, rc, "prepare");
         }
         return .{ .handle = stmt.?, .db = db.handle };
     }
@@ -125,10 +138,7 @@ pub const Stmt = struct {
         return switch (c.sqlite3_step(s.handle)) {
             c.SQLITE_ROW => true,
             c.SQLITE_DONE => false,
-            else => {
-                log.err("step: {s}", .{c.sqlite3_errmsg(s.db)});
-                return error.Sqlite;
-            },
+            else => |rc| failure(s.db, rc, "step"),
         };
     }
 
@@ -174,4 +184,12 @@ test "round trip" {
     try std.testing.expect(try s.step());
     try std.testing.expectEqual(@as(?i64, null), s.optInt(0));
     try std.testing.expect(!try s.step());
+}
+
+test busy {
+    try std.testing.expect(busy(c.SQLITE_BUSY));
+    try std.testing.expect(busy(c.SQLITE_BUSY_SNAPSHOT));
+    try std.testing.expect(busy(c.SQLITE_LOCKED_SHAREDCACHE));
+    try std.testing.expect(!busy(c.SQLITE_ERROR));
+    try std.testing.expect(!busy(c.SQLITE_CONSTRAINT_UNIQUE));
 }

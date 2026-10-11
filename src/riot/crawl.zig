@@ -159,7 +159,13 @@ pub const Crawler = struct {
     }
 
     fn worker(c: *Crawler, job: Job) void {
-        var w = Worker.init(c, job) catch |err| return c.fail(err);
+        var w = while (true) {
+            break Worker.init(c, job) catch |err| {
+                if (err != error.Busy or c.stop.load(.acquire)) return c.fail(err);
+                c.io.sleep(.fromSeconds(5), .awake) catch return c.fail(err);
+                continue;
+            };
+        };
         defer w.deinit();
         w.loop() catch |err| {
             if (err != error.Stopping) {
@@ -269,7 +275,8 @@ const Job = union(enum) {
 /// Errors that stop the crawler; anything else is logged and the item skipped
 fn fatal(err: anyerror) bool {
     return switch (err) {
-        error.KeyRejected, error.OutOfMemory, error.Stopping, error.Sqlite => true,
+        // Busy too: the item stays queued, Worker.loop pauses and carries on
+        error.KeyRejected, error.OutOfMemory, error.Stopping, error.Sqlite, error.Busy => true,
         else => false,
     };
 }
@@ -316,14 +323,24 @@ const Worker = struct {
         while (true) {
             try w.check();
             w.countRequests();
-            switch (w.job) {
-                .platform => |p| {
-                    if (try w.seedLadder(p) > 0) continue;
-                    if (w.c.opts.mastery and try w.fetchMasteries(p, 50) > 0) continue;
-                    try w.nap(60);
+            w.step() catch |err| switch (err) {
+                error.Busy => {
+                    log.warn("{s}: database busy, pausing", .{w.job.name()});
+                    try w.nap(5);
                 },
-                .regional => |r| try w.matchStep(r),
-            }
+                else => return err,
+            };
+        }
+    }
+
+    fn step(w: *Worker) !void {
+        switch (w.job) {
+            .platform => |p| {
+                if (try w.seedLadder(p) > 0) return;
+                if (w.c.opts.mastery and try w.fetchMasteries(p, 50) > 0) return;
+                try w.nap(60);
+            },
+            .regional => |r| try w.matchStep(r),
         }
     }
 
