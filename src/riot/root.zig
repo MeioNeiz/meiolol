@@ -4,6 +4,7 @@ pub const ratelimit = @import("ratelimit.zig");
 pub const client = @import("client.zig");
 pub const endpoints = @import("endpoints.zig");
 pub const match = @import("match.zig");
+pub const timeline = @import("timeline.zig");
 pub const crawl = @import("crawl.zig");
 
 test {

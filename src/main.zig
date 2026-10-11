@@ -1,4 +1,4 @@
-//! `meiolol`: backend. Crawls EUW ranked solo games from the Riot API into SQLite
+//! `meiolol`: backend. Crawls ranked solo games and timelines from the Riot API into SQLite
 //! and builds the model file the app reads. Runs on the gpu-box PC (deploy/box.sh).
 
 const std = @import("std");
@@ -16,16 +16,23 @@ const usage =
     \\usage: meiolol <command> [options]
     \\
     \\commands:
-    \\  crawl       crawl EUW ranked solo games (needs RIOT_API_KEY in env or .env)
+    \\  crawl       crawl ranked solo games (needs RIOT_API_KEY in env or .env)
     \\              --hours H        stop after H hours (default: run until stopped)
     \\              --since-days N   how far back to collect match ids (default 14)
     \\              --no-mastery     skip champion mastery
+    \\              --regions R      americas,asia,europe,sea (default all)
+    \\              --timelines PCT  share of matches that also get a timeline
+    \\                               (default 100, 0 for none)
+    \\              --raw-timeline-days N  keep raw timeline JSON N days (default 7)
     \\  stats       write the model file the app reads (ranked solo, no remakes)
     \\              --patch P        patch to include, repeatable or comma separated
     \\                               (default: the newest patch)
     \\              --out FILE       default DIR/export/stats-<patch>.bin
+    \\              --platform P     Riot platform id, repeatable or comma separated
+    \\                               (default EUW1; see riot/endpoints.zig)
     \\  site        write the public website (static files)
     \\              --patch P        as for stats
+    \\              --platform P     as for stats (pages say EUW: reword before others)
     \\              --out DIR        default DIR/site
     \\              --contact EMAIL  shown on the privacy and terms pages (required)
     \\              --riot-txt TEXT  served as /riot.txt (Riot's verification string)
@@ -55,6 +62,10 @@ pub fn main(init: std.process.Init) !u8 {
     var since_days: i64 = 14;
     var mastery = true;
     var patches: std.ArrayList([]const u8) = .empty;
+    var platforms: std.ArrayList([]const u8) = .empty;
+    var regions: std.ArrayList(riot.endpoints.Region) = .empty;
+    var timeline_percent: u8 = 100;
+    var raw_timeline_days: u32 = 7;
     var out_path: ?[]const u8 = null;
     var contact: ?[]const u8 = null;
     var riot_txt: ?[]const u8 = null;
@@ -84,6 +95,20 @@ pub fn main(init: std.process.Init) !u8 {
         } else if (std.mem.eql(u8, a, "--patch")) {
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |p| try patches.append(arena, p);
+        } else if (std.mem.eql(u8, a, "--platform")) {
+            var it = std.mem.tokenizeScalar(u8, v, ',');
+            while (it.next()) |p| try platforms.append(arena, p);
+        } else if (std.mem.eql(u8, a, "--regions")) {
+            var it = std.mem.tokenizeScalar(u8, v, ',');
+            while (it.next()) |r| {
+                try regions.append(arena, std.meta.stringToEnum(riot.endpoints.Region, r) orelse
+                    return usageError(a));
+            }
+        } else if (std.mem.eql(u8, a, "--timelines")) {
+            timeline_percent = std.fmt.parseInt(u8, v, 10) catch return usageError(a);
+            if (timeline_percent > 100) return usageError(a);
+        } else if (std.mem.eql(u8, a, "--raw-timeline-days")) {
+            raw_timeline_days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
         } else if (std.mem.eql(u8, a, "--out")) {
             out_path = v;
         } else if (std.mem.eql(u8, a, "--contact")) {
@@ -97,6 +122,7 @@ pub fn main(init: std.process.Init) !u8 {
         } else return usageError(a);
     }
     try std.Io.Dir.cwd().createDirPath(init.io, data_dir);
+    if (platforms.items.len == 0) try platforms.append(arena, "EUW1");
 
     const cmd = args[1];
     if (std.mem.eql(u8, cmd, "crawl")) {
@@ -110,6 +136,9 @@ pub fn main(init: std.process.Init) !u8 {
             .since_days = since_days,
             .mastery = mastery,
             .hours = hours,
+            .regions = if (regions.items.len > 0) regions.items else std.enums.values(riot.endpoints.Region),
+            .timeline_percent = timeline_percent,
+            .raw_timeline_days = raw_timeline_days,
         } };
         crawler.run() catch |err| switch (err) {
             error.KeyRejected => return 3,
@@ -118,17 +147,18 @@ pub fn main(init: std.process.Init) !u8 {
         return 0;
     }
     if (std.mem.eql(u8, cmd, "stats")) {
-        try writeStats(init.gpa, init.io, arena, data_dir, patches.items, out_path);
+        try writeStats(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path);
         return 0;
     }
     if (std.mem.eql(u8, cmd, "site")) {
         const email = contact orelse return usageError("--contact");
         const db = try store.open(init.gpa, data_dir);
         defer db.close();
-        const chosen = if (patches.items.len > 0) patches.items else try newestPatch(arena, db);
+        const chosen = if (patches.items.len > 0) patches.items else try newestPatch(arena, db, platforms.items);
         try site.generate(init.gpa, init.io, db, .{
             .out_dir = out_path orelse try std.fs.path.join(arena, &.{ data_dir, "site" }),
             .patches = chosen,
+            .platforms = platforms.items,
             .contact = email,
             .riot_txt = riot_txt,
             .updated = try today(arena, init.io),
@@ -184,17 +214,18 @@ fn writeStats(
     arena: std.mem.Allocator,
     data_dir: []const u8,
     wanted: []const []const u8,
+    platforms: []const []const u8,
     out_path: ?[]const u8,
 ) !void {
     const db = try store.open(gpa, data_dir);
     defer db.close();
-    const chosen = if (wanted.len > 0) wanted else try newestPatch(arena, db);
+    const chosen = if (wanted.len > 0) wanted else try newestPatch(arena, db, platforms);
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = try stats.label(&label_buf, chosen);
     const path = out_path orelse
         try std.fmt.allocPrint(arena, "{s}/export/stats-{s}.bin", .{ data_dir, label });
 
-    var r = try stats.build(gpa, db, chosen);
+    var r = try stats.build(gpa, db, chosen, platforms);
     defer r.builder.deinit();
     if (r.summary.games == 0) {
         std.log.err("no complete ranked solo games on patch {s}", .{label});
@@ -214,8 +245,8 @@ fn writeStats(
     });
 }
 
-fn newestPatch(arena: std.mem.Allocator, db: store.Db) ![]const []const u8 {
-    const all = try stats.patches(arena, db);
+fn newestPatch(arena: std.mem.Allocator, db: store.Db, platforms: []const []const u8) ![]const []const u8 {
+    const all = try stats.patches(arena, db, platforms);
     if (all.len == 0) return error.NoMatches;
     return all[0..1];
 }
@@ -236,7 +267,21 @@ fn status(gpa: std.mem.Allocator, io: std.Io, data_dir: []const u8) !void {
     var buf: [4096]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
     const out = &stdout.interface;
-    inline for (.{ "players", "ladder_pages", "match_queue", "matches", "participants", "bans", "mastery", "champions", "raw.raw_docs" }) |t| {
+    const tables = .{
+        "players",
+        "ladder_pages",
+        "match_queue",
+        "matches",
+        "participants",
+        "bans",
+        "mastery",
+        "champions",
+        "raw.raw_docs",
+        "timeline_queue",
+        "timeline.timelines",
+        "raw.timeline_docs",
+    };
+    inline for (tables) |t| {
         try out.print("{s}: {d}\n", .{ t, try db.scalar("SELECT count(*) FROM " ++ t, .{}) orelse 0 });
     }
     var q = try db.prepare("SELECT status, count(*) FROM match_queue GROUP BY 1 ORDER BY 1");
@@ -249,8 +294,19 @@ fn status(gpa: std.mem.Allocator, io: std.Io, data_dir: []const u8) !void {
     try p.bind(.{});
     try out.writeAll("\nby patch:");
     while (try p.step()) try out.print(" {s}={d}", .{ p.bytes(0), p.int(1) });
+    try groups(db, out, "\nby platform:", "SELECT platform, count(*) FROM matches GROUP BY 1 ORDER BY 2 DESC");
+    try groups(db, out, "\ntimelines:", "SELECT region || ' ' || status, count(*) FROM timeline_queue GROUP BY 1 ORDER BY 1");
+    try groups(db, out, "\nplayers:", "SELECT region, count(*) FROM players GROUP BY 1 ORDER BY 2 DESC");
     try out.writeAll("\n");
     try out.flush();
+}
+
+fn groups(db: store.Db, out: *std.Io.Writer, label: []const u8, sql: []const u8) !void {
+    var q = try db.prepare(sql);
+    defer q.deinit();
+    try q.bind(.{});
+    try out.writeAll(label);
+    while (try q.step()) try out.print(" {s}={d}", .{ q.bytes(0), q.int(1) });
 }
 
 /// Default log format plus a UTC timestamp, for the crawl log on the box

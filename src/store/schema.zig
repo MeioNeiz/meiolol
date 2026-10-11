@@ -15,7 +15,24 @@ pub const schema =
     \\    PRIMARY KEY (source, key)
     \\) WITHOUT ROWID;
     \\
+    \\-- Raw timelines (~60 KB each), kept a few days so timelines.data can be re-extracted
+    \\-- after a parser fix; the crawler prunes older ones.
+    \\CREATE TABLE IF NOT EXISTS raw.timeline_docs (
+    \\    match_id TEXT PRIMARY KEY,
+    \\    fetched_at INTEGER NOT NULL,
+    \\    body BLOB NOT NULL
+    \\);
+    \\
+    \\-- Compact timelines (riot/timeline.zig, gzip). Own file: grows ~1 GB/day.
+    \\CREATE TABLE IF NOT EXISTS timeline.timelines (
+    \\    match_id TEXT PRIMARY KEY,
+    \\    frames INTEGER NOT NULL,
+    \\    events INTEGER NOT NULL,
+    \\    data BLOB NOT NULL
+    \\);
+    \\
     \\-- PUUIDs are encrypted per API key: a new key means new PUUIDs for the same players.
+    \\-- platform is Riot's id (EUW1, KR); region the match-v5 route (europe, asia).
     \\CREATE TABLE IF NOT EXISTS players (
     \\    puuid TEXT PRIMARY KEY,
     \\    tier TEXT,
@@ -25,26 +42,36 @@ pub const schema =
     \\    losses INTEGER,
     \\    rank_seen_at INTEGER,
     \\    matches_checked_at INTEGER,
-    \\    source TEXT NOT NULL
+    \\    source TEXT NOT NULL,
+    \\    platform TEXT,
+    \\    region TEXT
     \\);
-    \\CREATE INDEX IF NOT EXISTS players_check ON players (matches_checked_at);
     \\
     \\CREATE TABLE IF NOT EXISTS ladder_pages (
+    \\    platform TEXT NOT NULL,
     \\    tier TEXT NOT NULL,
     \\    division TEXT NOT NULL,
     \\    page INTEGER NOT NULL,
     \\    entries INTEGER NOT NULL,
     \\    fetched_at INTEGER NOT NULL,
-    \\    PRIMARY KEY (tier, division, page)
+    \\    PRIMARY KEY (platform, tier, division, page)
     \\) WITHOUT ROWID;
     \\
     \\CREATE TABLE IF NOT EXISTS match_queue (
     \\    match_id TEXT PRIMARY KEY,
     \\    status TEXT NOT NULL DEFAULT 'pending',
     \\    attempts INTEGER NOT NULL DEFAULT 0,
-    \\    discovered_at INTEGER NOT NULL
+    \\    discovered_at INTEGER NOT NULL,
+    \\    region TEXT NOT NULL DEFAULT 'europe'
     \\) WITHOUT ROWID;
-    \\CREATE INDEX IF NOT EXISTS match_queue_status ON match_queue (status, match_id);
+    \\
+    \\CREATE TABLE IF NOT EXISTS timeline_queue (
+    \\    match_id TEXT PRIMARY KEY,
+    \\    region TEXT NOT NULL,
+    \\    status TEXT NOT NULL DEFAULT 'pending',
+    \\    attempts INTEGER NOT NULL DEFAULT 0,
+    \\    queued_at INTEGER NOT NULL
+    \\) WITHOUT ROWID;
     \\
     \\CREATE TABLE IF NOT EXISTS matches (
     \\    match_id TEXT PRIMARY KEY,
@@ -112,31 +139,147 @@ pub const schema =
     \\);
 ;
 
-/// Open meiolol.db with raw.db attached as `raw`. Paths are `dir`/meiolol.db and
-/// `dir`/raw.db. One connection per thread.
+/// After migrate: they may name columns older databases lack
+const indexes =
+    \\CREATE INDEX IF NOT EXISTS players_region_check
+    \\    ON players (region, matches_checked_at, puuid);
+    \\CREATE INDEX IF NOT EXISTS match_queue_region
+    \\    ON match_queue (region, status, discovered_at, match_id);
+    \\CREATE INDEX IF NOT EXISTS timeline_queue_region
+    \\    ON timeline_queue (region, status, queued_at, match_id);
+    \\CREATE INDEX IF NOT EXISTS raw.timeline_docs_age ON timeline_docs (fetched_at);
+;
+
+/// Open meiolol.db with raw.db and timeline.db attached as `raw` and `timeline`, all
+/// in `dir`. One connection per thread.
 pub fn open(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
     const main_path = try std.fs.path.joinZ(gpa, &.{ dir, "meiolol.db" });
     defer gpa.free(main_path);
     const raw_path = try std.fs.path.join(gpa, &.{ dir, "raw.db" });
     defer gpa.free(raw_path);
+    const timeline_path = try std.fs.path.join(gpa, &.{ dir, "timeline.db" });
+    defer gpa.free(timeline_path);
 
     const db = try sqlite.Db.open(main_path);
     errdefer db.close();
     try db.run("ATTACH DATABASE ? AS raw", .{raw_path});
+    try db.run("ATTACH DATABASE ? AS timeline", .{timeline_path});
     try db.exec(
         \\PRAGMA main.journal_mode=WAL;
         \\PRAGMA raw.journal_mode=WAL;
+        \\PRAGMA timeline.journal_mode=WAL;
         \\PRAGMA main.synchronous=NORMAL;
         \\PRAGMA raw.synchronous=NORMAL;
+        \\PRAGMA timeline.synchronous=NORMAL;
     );
-    try db.exec(schema);
+    try apply(db);
     return db;
 }
 
+/// Empty in-memory database with every table, for tests
+pub fn memory() !sqlite.Db {
+    const db = try sqlite.Db.open(":memory:");
+    errdefer db.close();
+    try db.exec("ATTACH DATABASE ':memory:' AS raw; ATTACH DATABASE ':memory:' AS timeline");
+    try apply(db);
+    return db;
+}
+
+fn apply(db: sqlite.Db) !void {
+    try db.exec(schema);
+    try migrate(db);
+    try db.exec(indexes);
+}
+
+/// Databases from before multi-region crawling held EUW only. Idempotent, and safe
+/// when several connections open at once: the checks run inside the write lock.
+fn migrate(db: sqlite.Db) !void {
+    try db.begin();
+    errdefer db.rollback();
+    if (!try hasColumn(db, "players", "region")) {
+        try db.exec(
+            \\ALTER TABLE players ADD COLUMN platform TEXT;
+            \\ALTER TABLE players ADD COLUMN region TEXT;
+            \\UPDATE players SET platform = 'EUW1', region = 'europe';
+            \\DROP INDEX IF EXISTS players_check;
+        );
+    }
+    if (!try hasColumn(db, "match_queue", "region")) {
+        try db.exec(
+            \\ALTER TABLE match_queue ADD COLUMN region TEXT NOT NULL DEFAULT 'europe';
+            \\DROP INDEX IF EXISTS match_queue_status;
+        );
+    }
+    if (!try hasColumn(db, "ladder_pages", "platform")) {
+        try db.exec(
+            \\ALTER TABLE ladder_pages RENAME TO ladder_pages_euw;
+            \\CREATE TABLE ladder_pages (
+            \\    platform TEXT NOT NULL,
+            \\    tier TEXT NOT NULL,
+            \\    division TEXT NOT NULL,
+            \\    page INTEGER NOT NULL,
+            \\    entries INTEGER NOT NULL,
+            \\    fetched_at INTEGER NOT NULL,
+            \\    PRIMARY KEY (platform, tier, division, page)
+            \\) WITHOUT ROWID;
+            \\INSERT INTO ladder_pages
+            \\    SELECT 'EUW1', tier, division, page, entries, fetched_at FROM ladder_pages_euw;
+            \\DROP TABLE ladder_pages_euw;
+        );
+    }
+    try db.commit();
+}
+
+fn hasColumn(db: sqlite.Db, table: []const u8, column: []const u8) !bool {
+    const n = try db.scalar("SELECT count(*) FROM pragma_table_info(?) WHERE name = ?", .{
+        table, column,
+    });
+    return (n orelse 0) > 0;
+}
+
 test "schema applies twice" {
+    const db = try memory();
+    defer db.close();
+    try apply(db);
+}
+
+test "migrates an EUW-only database" {
     const db = try sqlite.Db.open(":memory:");
     defer db.close();
-    try db.exec("ATTACH DATABASE ':memory:' AS raw");
-    try db.exec(schema);
-    try db.exec(schema);
+    try db.exec(
+        \\ATTACH DATABASE ':memory:' AS raw; ATTACH DATABASE ':memory:' AS timeline;
+        \\CREATE TABLE players (puuid TEXT PRIMARY KEY, tier TEXT, division TEXT, lp INTEGER,
+        \\    wins INTEGER, losses INTEGER, rank_seen_at INTEGER, matches_checked_at INTEGER,
+        \\    source TEXT NOT NULL);
+        \\CREATE INDEX players_check ON players (matches_checked_at);
+        \\CREATE TABLE ladder_pages (tier TEXT NOT NULL, division TEXT NOT NULL,
+        \\    page INTEGER NOT NULL, entries INTEGER NOT NULL, fetched_at INTEGER NOT NULL,
+        \\    PRIMARY KEY (tier, division, page)) WITHOUT ROWID;
+        \\CREATE TABLE match_queue (match_id TEXT PRIMARY KEY,
+        \\    status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+        \\    discovered_at INTEGER NOT NULL) WITHOUT ROWID;
+        \\INSERT INTO players (puuid, source) VALUES ('p1', 'ladder');
+        \\INSERT INTO ladder_pages VALUES ('GOLD', 'I', 1, 205, 9);
+        \\INSERT INTO match_queue (match_id, discovered_at) VALUES ('EUW1_1', 9);
+    );
+    try apply(db);
+    try apply(db);
+    const t = std.testing;
+    const one: ?i64 = 1;
+    try t.expectEqual(one, try db.scalar(
+        "SELECT count(*) FROM players WHERE region = 'europe' AND platform = 'EUW1'",
+        .{},
+    ));
+    try t.expectEqual(@as(?i64, 205), try db.scalar(
+        "SELECT entries FROM ladder_pages WHERE platform = 'EUW1'",
+        .{},
+    ));
+    try t.expectEqual(one, try db.scalar(
+        "SELECT count(*) FROM match_queue WHERE region = 'europe'",
+        .{},
+    ));
+    try t.expectEqual(@as(?i64, 0), try db.scalar(
+        "SELECT count(*) FROM sqlite_master WHERE name = 'players_check'",
+        .{},
+    ));
 }

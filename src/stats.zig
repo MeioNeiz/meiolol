@@ -16,9 +16,15 @@ pub const Summary = struct {
     skipped: u32,
 };
 
-/// Every ranked solo game on `chosen` patches (no remakes, a winner, all ten positions) into
-/// a builder made from the champions table. Caller owns the builder.
-pub fn build(gpa: std.mem.Allocator, db: store.Db, chosen: []const []const u8) !struct {
+/// Every ranked solo game on `chosen` patches and `platforms` (Riot ids: EUW1, KR; no
+/// remakes, a winner, all ten positions) into a builder made from the champions table.
+/// Caller owns the builder.
+pub fn build(
+    gpa: std.mem.Allocator,
+    db: store.Db,
+    chosen: []const []const u8,
+    platforms: []const []const u8,
+) !struct {
     builder: statsfile.Builder,
     summary: Summary,
 } {
@@ -42,15 +48,18 @@ pub fn build(gpa: std.mem.Allocator, db: store.Db, chosen: []const []const u8) !
 
     const patch_json = try std.json.Stringify.valueAlloc(gpa, chosen, .{});
     defer gpa.free(patch_json);
+    const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
+    defer gpa.free(platform_json);
     var q = try db.prepare(
         \\SELECT m.match_id, m.winning_team, p.team_id, p.position, p.champion_id
         \\FROM matches m JOIN participants p USING (match_id)
         \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
+        \\  AND m.platform IN (SELECT value FROM json_each(?))
         \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
         \\ORDER BY m.match_id
     );
     defer q.deinit();
-    try q.bind(.{ patch_json, ranked_solo });
+    try q.bind(.{ patch_json, ranked_solo, platform_json });
 
     var summary: Summary = .{ .games = 0, .skipped = 0 };
     var game: Game = .{};
@@ -115,16 +124,20 @@ const Game = struct {
     }
 };
 
-/// Patches with ranked solo games, newest first ("16.20" before "16.9")
-pub fn patches(gpa: std.mem.Allocator, db: store.Db) ![][]const u8 {
+/// Patches with ranked solo games on `platforms`, newest first ("16.20" before "16.9").
+/// Per platform because a patch reaches regions on different days
+pub fn patches(gpa: std.mem.Allocator, db: store.Db, platforms: []const []const u8) ![][]const u8 {
     var list: std.ArrayList([]const u8) = .empty;
     errdefer {
         for (list.items) |p| gpa.free(p);
         list.deinit(gpa);
     }
-    var q = try db.prepare("SELECT DISTINCT patch FROM matches WHERE queue_id = ?");
+    const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
+    defer gpa.free(platform_json);
+    var q = try db.prepare("SELECT DISTINCT patch FROM matches WHERE queue_id = ? " ++
+        "AND platform IN (SELECT value FROM json_each(?))");
     defer q.deinit();
-    try q.bind(.{ranked_solo});
+    try q.bind(.{ ranked_solo, platform_json });
     while (try q.step()) try list.append(gpa, try gpa.dupe(u8, q.bytes(0)));
     std.mem.sort([]const u8, list.items, {}, newerPatch);
     return list.toOwnedSlice(gpa);
@@ -161,10 +174,8 @@ pub fn label(buf: []u8, chosen: []const []const u8) ![]const u8 {
 const testing = std.testing;
 
 fn testDb() !store.Db {
-    const db = try store.Db.open(":memory:");
+    const db = try store.schema.memory();
     errdefer db.close();
-    try db.exec("ATTACH DATABASE ':memory:' AS raw");
-    try db.exec(store.schema.schema);
     try db.exec(
         \\INSERT INTO champions VALUES
         \\  (1,'A','A','',''), (2,'B','B','',''), (3,'C','C','',''), (4,'D','D','',''),
@@ -175,7 +186,10 @@ fn testDb() !store.Db {
 }
 
 fn addMatch(db: store.Db, id: []const u8, patch: []const u8, queue: i64, winner: ?i64, remake: bool, positions: [10][]const u8) !void {
-    try db.run("INSERT INTO matches VALUES (?,'t','EUW1',?,?,'',0,1800,?,?)", .{ id, queue, patch, winner, remake });
+    const platform = id[0..std.mem.indexOfScalar(u8, id, '_').?];
+    try db.run("INSERT INTO matches VALUES (?,'t',?,?,?,'',0,1800,?,?)", .{
+        id, platform, queue, patch, winner, remake,
+    });
     for (positions, 0..) |pos, slot| {
         const team: i64 = if (slot < 5) 100 else 200;
         try db.run(
@@ -184,6 +198,8 @@ fn addMatch(db: store.Db, id: []const u8, patch: []const u8, queue: i64, winner:
         );
     }
 }
+
+const euw: []const []const u8 = &.{"EUW1"};
 
 const roles_ok = [10][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY", "UTILITY", "BOTTOM", "MIDDLE", "JUNGLE", "TOP" };
 
@@ -203,7 +219,7 @@ test "build counts valid games only" {
     missing[9] = "";
     try addMatch(db, "EUW1_7", "16.20", 420, 100, false, missing);
 
-    var r = try build(gpa, db, &.{"16.20"});
+    var r = try build(gpa, db, &.{"16.20"}, euw);
     defer r.builder.deinit();
     try testing.expectEqual(Summary{ .games = 2, .skipped = 2 }, r.summary);
 
@@ -218,9 +234,14 @@ test "build counts valid games only" {
     try testing.expectEqual(statsfile.Counts{ .games = 2, .wins = 1 }, s.enemy(.top, .top, a, j));
     try testing.expectEqual(statsfile.Counts{ .games = 0, .wins = 0 }, s.champRole(.jungle, a));
 
-    var both = try build(gpa, db, &.{ "16.19", "16.20" });
+    var both = try build(gpa, db, &.{ "16.19", "16.20" }, euw);
     defer both.builder.deinit();
     try testing.expectEqual(3, both.summary.games);
+
+    try addMatch(db, "KR_1", "16.20", 420, 100, false, roles_ok);
+    var kr = try build(gpa, db, &.{"16.20"}, &.{"KR"});
+    defer kr.builder.deinit();
+    try testing.expectEqual(1, kr.summary.games);
 }
 
 test "patch order and label" {
@@ -230,7 +251,8 @@ test "patch order and label" {
     try addMatch(db, "EUW1_1", "16.9", 420, 100, false, roles_ok);
     try addMatch(db, "EUW1_2", "16.20", 420, 100, false, roles_ok);
     try addMatch(db, "EUW1_3", "16.19", 420, 100, false, roles_ok);
-    const ps = try patches(gpa, db);
+    try addMatch(db, "KR_1", "16.21", 420, 100, false, roles_ok);
+    const ps = try patches(gpa, db, euw);
     defer {
         for (ps) |p| gpa.free(p);
         gpa.free(ps);

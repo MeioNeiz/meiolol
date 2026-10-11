@@ -75,6 +75,11 @@ fn nonEmpty(s: ?[]const u8) ?[]const u8 {
     return if (v.len == 0) null else v;
 }
 
+pub fn isRemake(doc: Doc) bool {
+    for (doc.info.participants) |p| if (p.gameEndedInEarlySurrender) return true;
+    return false;
+}
+
 /// Replace this match's rows. Caller holds the transaction.
 pub fn storeRows(db: store.Db, doc: Doc, source: []const u8) !void {
     const info = doc.info;
@@ -89,8 +94,7 @@ pub fn storeRows(db: store.Db, doc: Doc, source: []const u8) !void {
         winners += 1;
     };
     if (winners != 1) winner = null;
-    var remake = false;
-    for (info.participants) |p| remake = remake or p.gameEndedInEarlySurrender;
+    const remake = isRemake(doc);
 
     const platform_id = info.platformId orelse id[0 .. std.mem.indexOfScalar(u8, id, '_') orelse id.len];
     try db.run("DELETE FROM participants WHERE match_id = ?", .{id});
@@ -143,10 +147,8 @@ test "parse and store the fixture" {
     try testing.expectEqualStrings("NA1_5321429660", doc.metadata.matchId);
     try testing.expectEqualStrings("15.13", patchOf(doc.info.gameVersion));
 
-    const db = try store.Db.open(":memory:");
+    const db = try store.schema.memory();
     defer db.close();
-    try db.exec("ATTACH DATABASE ':memory:' AS raw");
-    try db.exec(store.schema.schema);
     try storeRows(db, doc, "riot");
     try storeRows(db, doc, "riot");
     try testing.expectEqual(@as(?i64, 10), try db.scalar("SELECT count(*) FROM participants", .{}));

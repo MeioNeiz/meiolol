@@ -5,11 +5,24 @@ Researched 2026-10-11. Production key details: production-key.md.
 ## Source: Riot API only
 
 - Personal key: 20 req/s and 100 req/2 min per routing value, no expiry, not for public
-  use. Match details and match ids share the `europe` bucket: ~72k req/day, ~60k matches
-  after id lookups
-- EUW plays ~150-170k ranked solo games/day (lolalytics counts), so we get ~35-40%
+  use. Each routing value is its own bucket (~72k req/day): match-v5 uses the 4
+  regional ones (americas, asia, europe, sea), league-exp and mastery the 15 platform
+  ones. Match ids, details and timelines share their region's bucket
+- Crawled since 2026-10-11 (Jacob: other regions fill blind spots): all 15 platforms.
+  Platform -> region: NA1 BR1 LA1 LA2 americas; KR JP1 asia; EUW1 EUN1 TR1 RU ME1
+  europe; OC1 SG2 TW2 VN2 sea (OC1 verified on sea). PH2/TH2 no longer resolve (merged
+  into SG2). All 15 answered league-exp on 2026-10-11
+- Timelines (`/matches/{id}/timeline`): 1 frame/min, ~730 KB JSON / ~60-70 KB gz, one
+  extra call per match. With timelines a match costs ~2.13 calls (incl. ids), so ~33k
+  matches/day per region, ~135k/day total (was ~60k EUW summaries only). Stored compact
+  (docs/architecture.md, Storage); raw kept 7 days
+- Summary-only alternative (`--timelines 0`): ~63k matches/day per region
+- EUW alone plays ~150-170k ranked solo games/day (lolalytics counts); the europe
+  bucket's ~33k/day now spans EUW, EUNE, TR, RU and ME (in proportion to their
+  players), so a much smaller share of EUW than the old ~35-40%
 - Match data kept 2 years (timelines 1 year); a player's match list holds their last
   ~1000 games, older ones only reachable by match id
+- Metas differ by region (KR especially): matches.platform lets stats pool or split
 - Not available anywhere: pick order (ban `pickTurn` is slot order, not real order),
   rank at match time (we snapshot the ladder), mastery at match time
 - Production key: 3-8 month review, needs a live site; default limits may be no higher

@@ -19,6 +19,8 @@ const log = std.log.scoped(.site);
 pub const Options = struct {
     out_dir: []const u8,
     patches: []const []const u8,
+    /// Riot platform ids. The pages say EUW: change their wording before adding more
+    platforms: []const []const u8 = &.{"EUW1"},
     contact: []const u8,
     /// The string Riot's application form gives, served as /riot.txt
     riot_txt: ?[]const u8 = null,
@@ -110,7 +112,7 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var built = try stats.build(gpa, db, opts.patches);
+    var built = try stats.build(gpa, db, opts.patches, opts.platforms);
     defer built.builder.deinit();
     if (built.summary.games == 0) return error.NoMatches;
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
@@ -177,15 +179,17 @@ fn loadChamps(site: *Site, db: store.Db) !void {
     var banned: std.AutoHashMapUnmanaged(u32, u32) = .empty;
     {
         const patch_json = try std.json.Stringify.valueAlloc(a, site.opts.patches, .{});
+        const platform_json = try std.json.Stringify.valueAlloc(a, site.opts.platforms, .{});
         var q = try db.prepare(
             \\SELECT b.champion_id, count(DISTINCT b.match_id)
             \\FROM bans b JOIN matches m USING (match_id)
             \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
+            \\  AND m.platform IN (SELECT value FROM json_each(?))
             \\  AND m.remake = 0
             \\GROUP BY 1
         );
         defer q.deinit();
-        try q.bind(.{ patch_json, stats.ranked_solo });
+        try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
         while (try q.step()) try banned.put(a, @intCast(q.int(0)), @intCast(q.int(1)));
     }
 
@@ -306,7 +310,7 @@ fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
     try w.writeAll("<nav class=\"tabs\">");
     for (Role.all) |r| {
         try w.print("<a href=\"{s}tier/{s}.html\"{s}>{s}</a>", .{
-            root,                                                      roleSlug(r),
+            root,                                               roleSlug(r),
             if (current == r) " aria-current=\"page\"" else "", roleName(r),
         });
     }
