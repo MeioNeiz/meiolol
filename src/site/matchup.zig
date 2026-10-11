@@ -6,6 +6,7 @@ const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const comeback = @import("comeback.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -176,6 +177,7 @@ fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cha
 
     try w.writeAll("<h2>Lane and game</h2>\n");
     try sides(w, v, x, y);
+    try comeback.section(w, curves, r, x, y);
     try w.writeAll("<h2>By rank</h2>\n");
     try brackets(w, curves, r, x, y);
     try w.print(

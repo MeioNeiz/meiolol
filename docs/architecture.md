@@ -117,7 +117,9 @@ at 1M games; fine on the box (15 GB).
 `meiolol site` reads the curves file for its patches when present: a page per matchup
 with an all-ranks curve (matchup/<role>/<a>-vs-<b>.html, lower id first), three SVG
 charts (median line, middle-half band; patch, tier and n in every caption), a lane and
-game table, a by-rank table, and "Lane curves" links on champion pages. Under 200 games
+game table, comeback odds (src/site/comeback.zig: win rate per gold bucket at 10/15
+min beside the role baseline, one fact line), a by-rank table, and "Lane curves" links
+on champion pages. Under 200 games
 charts and rows are grey with "more data needed". Not yet: first-item timing (needs an
 item list from Data Dragon), experienced-players filter (mastery), core-item split,
 region filter. Curves are not built by the web loop yet: run `meiolol curves` (daily is

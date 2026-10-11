@@ -139,3 +139,4 @@ tr.thin td { color: var(--muted); opacity: 0.6; }
 .pool-main { margin-top: 24px; }
 .pool-main h2 .champ img { width: 40px; height: 40px; }
 .pool-h { margin: 20px 0 4px; }
+td.thin { color: var(--muted); opacity: 0.6; }
