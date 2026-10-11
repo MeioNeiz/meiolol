@@ -79,7 +79,10 @@ const usage =
     \\              RIOT_API_KEY). Cache in DIR/api.db
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8090
-    \\              --curves DIR     curves-<patch>.bin files (default DIR/export)
+    \\              --exchange DIR   shared with the box: curves/ in, forgotten
+    \\                               PUUID lists both ways (docs/your-games.md)
+    \\              --curves DIR     curves-<patch>.bin files (default EXCHANGE/curves,
+    \\                               else DIR/export)
     \\              --budget SPEC    Riot calls per route, Riot's format (default 20:120)
     \\              --cors ORIGIN    allow a page on ORIGIN (local testing)
     \\  status      row counts and crawl queue state
@@ -121,6 +124,7 @@ pub fn main(init: std.process.Init) !u8 {
     var curves_dir: ?[]const u8 = null;
     var budget: ?[]const u8 = null;
     var cors: ?[]const u8 = null;
+    var exchange: ?[]const u8 = null;
     var min_games: u32 = 20;
     var eval_opts: eval.Options = .{};
     var history: ?[]const u8 = null;
@@ -203,6 +207,8 @@ pub fn main(init: std.process.Init) !u8 {
             budget = v;
         } else if (std.mem.eql(u8, a, "--cors")) {
             cors = v;
+        } else if (std.mem.eql(u8, a, "--exchange")) {
+            exchange = v;
         } else if (std.mem.eql(u8, a, "--riot-txt")) {
             riot_txt = v;
         } else return usageError(a);
@@ -292,12 +298,13 @@ pub fn main(init: std.process.Init) !u8 {
         };
         try api.run(init.gpa, init.io, .{
             .db_path = try std.fmt.allocPrintSentinel(arena, "{s}/api.db", .{data_dir}, 0),
-            .curves_dir = curves_dir orelse try std.fs.path.join(arena, &.{ data_dir, "export" }),
+            .curves_dir = curves_dir orelse
+                try std.fs.path.join(arena, if (exchange) |x| &.{ x, "curves" } else &.{ data_dir, "export" }),
             .key = key,
             .host = host,
             .port = port orelse 8090,
             .cors = cors,
-            .fetch = .{ .budget = budget orelse "20:120" },
+            .fetch = .{ .budget = budget orelse "20:120", .exchange_dir = exchange },
         });
         return 0;
     }

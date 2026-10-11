@@ -91,6 +91,11 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
   same check for consent. RSO replaces it once the production key allows (C6, C13)
 - Riot's erasure lists and emailed requests: `api.cache.forget(db, puuid, now)` deletes
   and blocks; data-safety-af's `meiolol forget` calls it for api.db
+- The box holds the same players (crawler DBs, backups). Forgotten PUUIDs sync both ways
+  through the exchange directory, hourly and on each honoured objection: the service
+  writes forgotten.txt (every blocked PUUID, one per line, no Riot IDs), the box pulls it
+  and runs `meiolol forget --list`; the box pushes its own list as box-forgotten.txt and
+  the service blocks those too. Both files are complete lists, so either side can rerun
 - Logs: the service logs no Riot IDs itself, but Riot client warnings (429s) include the
   request path, which for account lookups holds the Riot ID; nginx should not log /api/
   (`access_log off` below). journald keeps the service log; cap it (SystemMaxUse)
@@ -108,7 +113,9 @@ Server: jomove (x86_64, 1 GB RAM, ~540 MB free; 2 curves files in memory at most
    ```
    sudo useradd --system --home /var/lib/meiolol-api --shell /usr/sbin/nologin meiolol-api
    sudo install -d -o meiolol-api -m 750 /var/lib/meiolol-api
-   sudo install -d -o meiolol -g meiolol-api -m 750 /var/lib/meiolol-api/curves
+   # Exchange with the box (rrsync user meiolol writes, the service reads and writes)
+   sudo install -d -o meiolol -g meiolol-api -m 2770 /var/lib/meiolol-api/exchange
+   sudo install -d -o meiolol -g meiolol-api -m 2770 /var/lib/meiolol-api/exchange/curves
    ```
 3. Key, without printing it: from the Mac
    `grep '^RIOT_API_KEY=' .env | ssh jomove 'sudo install -m 600 /dev/stdin /etc/meiolol-api.env'`
@@ -122,7 +129,8 @@ Server: jomove (x86_64, 1 GB RAM, ~540 MB free; 2 curves files in memory at most
    [Service]
    User=meiolol-api
    EnvironmentFile=/etc/meiolol-api.env
-   ExecStart=/usr/local/bin/meiolol api --data /var/lib/meiolol-api --curves /var/lib/meiolol-api/curves
+   ExecStart=/usr/local/bin/meiolol api --data /var/lib/meiolol-api --exchange /var/lib/meiolol-api/exchange
+   UMask=0007
    Restart=on-failure
    RestartSec=10
    # 3: Riot rejected the key; restarting would not help
@@ -141,7 +149,7 @@ Server: jomove (x86_64, 1 GB RAM, ~540 MB free; 2 curves files in memory at most
    /etc/systemd/system/meiolol-api-reload.path
    ```
    [Path]
-   PathChanged=/var/lib/meiolol-api/curves
+   PathChanged=/var/lib/meiolol-api/exchange/curves
 
    [Install]
    WantedBy=multi-user.target
@@ -174,16 +182,20 @@ Server: jomove (x86_64, 1 GB RAM, ~540 MB free; 2 curves files in memory at most
 6. Preview: a personal key may not serve the public (docs/production-key.md). Until the
    production key, either put `auth_basic` on /api/ (htpasswd for Jacob and testers) or
    leave the page unlinked; the site's index already says "coming". Decide before step 5
-7. Curves to the server: a second key on the box with
-   `command="rrsync /var/lib/meiolol-api/curves",restrict` in ~meiolol/.ssh/authorized_keys
-   (the existing key stays limited to /var/www/meiolol), an ssh alias `meiolol-curves`,
-   and in deploy/web-loop.sh after `meiolol curves` succeeds:
-   `rsync -a --delete $(ls -t data/export/curves-*.bin | head -2) meiolol-curves:./`
-   (the curves file is not public: tens of MB at full crawl)
+7. Exchange with the box: a second key on the box with
+   `command="rrsync /var/lib/meiolol-api/exchange",restrict` in
+   ~meiolol/.ssh/authorized_keys (the existing key stays limited to /var/www/meiolol)
+   and an ssh alias `meiolol-exchange`. In deploy/web-loop.sh after `meiolol curves`
+   succeeds: `rsync -a --delete $(ls -t data/export/curves-*.bin | head -2)
+   meiolol-exchange:curves/` (not public: tens of MB at full crawl). In the box's daily
+   backup loop (data-safety-af): `rsync meiolol-exchange:forgotten.txt data/` then
+   `meiolol forget --list data/forgotten.txt` before the backup, and push the box's own
+   list: `rsync <box list> meiolol-exchange:box-forgotten.txt`
 8. Restart the crawler with `--reserve 20` (meiolol-de) so lookups do not queue behind it
 9. Check: `curl -s https://meiolol.jomify.lol/api/health`, then the page with your own
    Riot ID, then the objection flow on a test account
-10. Flip the index card from "coming" to a link (src/site/root.zig, meiolol-b5)
+10. In the branch that goes live: the index card's "coming" becomes a link to
+    your.html (writeIndex in src/site/root.zig; meiolol-b5 agreed)
 
 ## Testing locally
 

@@ -26,6 +26,10 @@ pub const Options = struct {
     since_days: i64 = 60,
     /// Players nobody looked up for this long are deleted (docs/your-games.md)
     retention_days: i64 = 90,
+    /// Shared with the box (docs/your-games.md): the service writes forgotten.txt,
+    /// every blocked PUUID; it imports box-forgotten.txt, the box's `meiolol forget`
+    /// list. Null: no sync
+    exchange_dir: ?[]const u8 = null,
 };
 
 /// Account lookups go to the nearest account-v1 cluster; any answers for any player
@@ -77,6 +81,9 @@ pub const Fetcher = struct {
             const now = f.seconds();
             if (now - pruned >= std.time.s_per_hour) {
                 try cache.prune(f.db, now - f.opts.retention_days * std.time.s_per_day, now);
+                if (f.opts.exchange_dir) |dir| syncForgotten(f.gpa, f.io, f.db, dir, now) catch |err| {
+                    log.warn("forgotten list sync: {t}", .{err});
+                };
                 pruned = now;
             }
             const key = try nextJob(arena, f.db) orelse {
@@ -187,6 +194,9 @@ pub const Fetcher = struct {
             if (icon != null and current == icon.?) {
                 try cache.forget(f.db, a.puuid, now);
                 try f.db.run("UPDATE challenges SET puuid = NULL, state = 'done' WHERE riot_id = ?", .{riot_id});
+                if (f.opts.exchange_dir) |dir| syncForgotten(f.gpa, f.io, f.db, dir, now) catch |err| {
+                    log.warn("forgotten list sync: {t}", .{err});
+                };
                 log.info("objection honoured: player forgotten and blocked", .{});
             } else {
                 try f.db.run("UPDATE challenges SET state = 'mismatch' WHERE riot_id = ?", .{riot_id});
@@ -285,6 +295,63 @@ pub const Fetcher = struct {
         return std.Io.Clock.real.now(f.io).toSeconds();
     }
 };
+
+/// Both lists are complete, one PUUID per line: idempotent on either side, so a missed
+/// sync only delays. Imports first, so the written list includes the box's
+pub fn syncForgotten(gpa: Allocator, io: std.Io, db: store.Db, dir_path: []const u8, now: i64) !void {
+    const dir = std.Io.Dir.cwd();
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const theirs = try std.fmt.bufPrint(&path_buf, "{s}/box-forgotten.txt", .{dir_path});
+    if (dir.readFileAlloc(io, theirs, gpa, .limited(64 << 20))) |text| {
+        defer gpa.free(text);
+        var added: usize = 0;
+        var lines = std.mem.tokenizeAny(u8, text, "\r\n");
+        while (lines.next()) |line| {
+            const puuid = std.mem.trim(u8, line, " \t");
+            if (puuid.len == 0 or puuid[0] == '#') continue;
+            if (try db.scalar("SELECT 1 FROM blocked WHERE puuid = ?", .{puuid}) != null) continue;
+            try cache.forget(db, puuid, now);
+            added += 1;
+        }
+        if (added > 0) log.info("blocked {d} PUUIDs forgotten on the box", .{added});
+    } else |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    }
+
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    var q = try db.prepare("SELECT puuid FROM blocked ORDER BY puuid");
+    defer q.deinit();
+    try q.bind(.{});
+    while (try q.step()) try aw.writer.print("{s}\n", .{q.bytes(0)});
+    const ours = try std.fmt.bufPrint(&path_buf, "{s}/forgotten.txt", .{dir_path});
+    var file = try dir.createFileAtomic(io, ours, .{ .replace = true });
+    defer file.deinit(io);
+    try file.file.writeStreamingAll(io, aw.written());
+    try file.replace(io);
+}
+
+test syncForgotten {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const len = try tmp.dir.realPath(io, &buf);
+    const path = buf[0..len];
+    try tmp.dir.writeFile(io, .{ .sub_path = "box-forgotten.txt", .data = "boxer\n# comment\n\nours\n" });
+
+    const db = try cache.open(":memory:");
+    defer db.close();
+    try db.run("INSERT INTO players (puuid, game_name, tag_line, platform) VALUES ('boxer','A','1','EUW1')", .{});
+    try db.run("INSERT INTO blocked VALUES ('ours', 0)", .{});
+    try syncForgotten(gpa, io, db, path, 100);
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM players", .{}));
+    const out = try tmp.dir.readFileAlloc(io, "forgotten.txt", gpa, .limited(1024));
+    defer gpa.free(out);
+    try std.testing.expectEqualStrings("boxer\nours\n", out);
+}
 
 /// Job keys for objections: this prefix, then the lower case Riot ID
 pub const verify_prefix = "verify:";
