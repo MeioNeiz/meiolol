@@ -117,6 +117,18 @@ next steps land here.
   Before ~2026-11-25 (first matches pass --keep-days 60): per-patch aggregates kept
   forever and Pool learning curves on them, or raise/drop --keep-days. `meiolol status`
   still counts whole tables and takes the write lock (store.open): slow on the micro
+- Keep more data (Jacob, 2026-10-11): deletion was for the micro's disk, not by choice.
+  On the A1: `--keep-days 0` (matches, rows, compact timelines forever, ~1.4 GB/day at
+  ~120k/day), raw summaries 30 days; older segments and backups to an off-host Storage
+  Box once local disk fills (Jacob to order; or paid OCI disk). Privacy rules stay:
+  PUUIDs blanked at 24 months, forget, Riot 404 deletes
+- Rank history (Jacob, 2026-10-11: keep ranks): ranks drops a player 30 days after the
+  ladder last showed them, and keeps only the latest rank. Add a history (puuidKey, day,
+  rank, lp, wins, losses), a row only when it changed since the last ladder page, kept
+  24 months after last seen (what docs/legal/privacy.md already says), removed by
+  `forget` and covered by backups. Gives rank at game time to within a week (data.md
+  lists it as unavailable) and climb/learning analysis. ~1.5M changed rows a week at
+  ~24 bytes: ~2 GB a year. Build with the keep-days change on the A1
 - Tier floor (Jacob, 2026-10-11): only Platinum IV and up, every region. `--min-tier
   PLATINUM` stops the ladder walk and filters the scan pool; ladder cap raised 20 -> 40
   an hour so the weekly refresh reaches Platinum IV (at 20 it restarted at the top
