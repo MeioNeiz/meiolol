@@ -4,6 +4,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Limiter = @import("ratelimit.zig").Limiter;
+const Fake = @import("fake.zig").Fake;
 
 const log = std.log.scoped(.riot);
 
@@ -14,6 +15,8 @@ pub const Client = struct {
     limiter: Limiter,
     key: []const u8,
     requests: std.atomic.Value(u64) = .init(0),
+    /// Benchmarks only: answers instead of Riot, no rate limits
+    fake: ?*const Fake = null,
 
     pub fn init(gpa: Allocator, io: std.Io, key: []const u8) !Client {
         return .{
@@ -38,6 +41,10 @@ pub const Client = struct {
             route, path,
         });
         const uri = try std.Uri.parse(url);
+        if (c.fake) |f| {
+            _ = c.requests.fetchAdd(1, .monotonic);
+            return f.get(c.gpa, route, path);
+        }
         const shown = logged(path, method);
         for (0..6) |attempt| {
             const backoff: i64 = @as(i64, 1) << @intCast(attempt);

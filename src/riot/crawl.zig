@@ -48,6 +48,7 @@ pub const Options = struct {
     priority: []const []const u8 = &.{"EUW1"},
     /// Share of each bucket left to other processes on the key (the Your games service)
     reserve_pct: u8 = 0,
+    fake: ?*const @import("fake.zig").Fake = null,
 };
 
 const RegionCounters = struct {
@@ -302,6 +303,7 @@ const Worker = struct {
         var client: Client = try .init(c.gpa, c.io, c.opts.key);
         errdefer client.deinit();
         try client.limiter.setReserve(c.opts.reserve_pct);
+        client.fake = c.opts.fake;
         return .{ .c = c, .job = job, .db = db, .client = client };
     }
 
