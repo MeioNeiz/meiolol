@@ -41,11 +41,10 @@ product is meiolol itself, two faces of one application (docs/production-key.md)
    also serve jomove there, leave its config alone). Done 2026-10-11: nginx
    /etc/nginx/conf.d/meiolol.conf (root /var/www/meiolol, gzip_static, acme webroot
    /var/www/letsencrypt), user `meiolol` with only an rrsync key from the box,
-   `deploy/box.sh web start EMAIL` builds + uploads daily (deploy/web-loop.sh). Left:
-   - Jacob: Namecheap A record meiolol -> 193.123.180.81; real contact email
-   - Then `sudo certbot certonly --webroot -w /var/www/letsencrypt -d meiolol.jomify.lol`
-     and add the 443 server + http->https redirect in meiolol.conf (jomove.conf style)
-   - Keep preview mode until the production key is granted
+   `deploy/box.sh web start EMAIL` builds + uploads daily (deploy/web-loop.sh).
+   Live 2026-10-11 at https://meiolol.jomify.lol (Let's Encrypt via webroot, renews with
+   certbot.timer). Left: real contact email (placeholder now; restart `deploy/box.sh web
+   start EMAIL`). Keep preview mode until the production key is granted
 3. Site polish before applying: screenshots/GIF of the app in champ select, a demo
    video, rank brackets (statsfile v2), smaller stats.bin (sparse), patch history
 4. Desktop app: pick a Zig GUI (candidates: dvui, sokol + imgui, raylib; check Zig 0.16
