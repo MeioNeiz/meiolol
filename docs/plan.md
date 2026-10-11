@@ -146,6 +146,10 @@ flashcards with spaced repetition; season "lane story" share cards.
 - Legal: controller name, privacy contact (suggested privacy@jomify.lol ->
   jombirds@gmail.com), ICO fee (52 GBP/yr, 47 by direct debit), EEA representative,
   retention periods (docs/legal/privacy.md top)
+- Alerts and backups: an ntfy topic for phone alerts (NTFY_TOPIC in .env; the health loop
+  only logs until then); install the Mac job (`deploy/box.sh watch install`: notifications
+  + backup mirror); ok to delete de's pre-deploy copies in ml/meiolol/backup (1.8 GB)
+  after a second nightly backup
 - Squads as private invite-link pages with Riot IDs shown to members only
 - Disk: move WSL to the 2 TB NVMe (673 GB unallocated) before ~20 Nov, at the PC
 - Budget for EUNE/TR/RU/ME in the europe bucket (EUW takes it all while it has players due)
