@@ -39,8 +39,11 @@ next steps land here.
   --env-file .env`, captcha in a window, old key dies at once, new one live in ~2 min)
 - Box moved off the gpu-box PC to Oracle Cloud (2026-10-11 ~05:30 BST, docs/hosting.md):
   stopgap 1 GB micro `meiolol-cloud` until A1 capacity (retry loop running); crawl.args
-  cut raw retention to 3 d / 1 d; backups not running there yet (too slow on the micro);
-  gpu-box data + D: backup kept as the restore point
+  cut raw retention to 3 d / 1 d; first backup there 04:00Z 2026-10-12, on its own
+  disk only (no migrations, f90a5ad; no second run on restart); off-host target: Jacob;
+  gpu-box data + D: backup kept as the restore point. Crawler stable since 7320adf
+  (migrate once per process) but ~2k matches/day on the 1/8-OCPU micro while sharing it
+  with backup/eval/curves; real rate pending meiolol-5a's watch
 - Crawler (box, deployed 6f6b65b): all 15 platforms, 4 regional buckets at their caps,
   ~33k matches + timelines/day per region (europe EUW-first), compact timelines
   (timeline.db, ~8.5 KB/match), raw summaries kept 30 days, raw timelines 7, compact
