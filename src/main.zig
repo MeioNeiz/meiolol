@@ -12,6 +12,7 @@ pub const serve = @import("serve.zig");
 pub const daily = @import("daily.zig");
 pub const curves = @import("curves.zig");
 pub const pool = @import("pool.zig");
+pub const learning = @import("learning.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
 

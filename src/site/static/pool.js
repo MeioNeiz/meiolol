@@ -29,18 +29,41 @@ function el(tag, attrs = {}, ...children) {
 async function start() {
   const status = document.getElementById("status");
   try {
-    const [pool, meta] = await Promise.all([
+    const [pool, meta, learning] = await Promise.all([
       fetch("data/pool.json").then((r) => r.json()),
       fetch("data/champions.json").then((r) => r.json()),
+      // Learning curves are extra: the page works without them
+      fetch("data/learning.json")
+        .then((r) => r.json())
+        .catch(() => null),
     ]);
     status.hidden = true;
-    setup(pool, meta);
+    setup(pool, meta, learning);
   } catch (e) {
     status.textContent = "Could not load the pool data: " + e.message;
   }
 }
 
-function setup(pool, meta) {
+// learning.json (src/learning.zig): {players, thin_games, bins: [first game of each],
+// champions: [{id, usual, reach: bin index | null, bins: [[games, wins, gold games,
+// mean gold]]}]}
+function learningLine(learning, id) {
+  const c = learning?.champions.find((x) => x.id === id);
+  if (!c || c.bins[0][0] < learning.thin_games) return "learning curve: more data needed";
+  const [games, wins] = c.bins[0];
+  const first = `${learning.bins[1] - 1}`;
+  const usual = (100 * c.usual).toFixed(1);
+  let text = `first ${first} games on it: ${((100 * wins) / games).toFixed(1)}% (usual ${usual}%)`;
+  if (c.reach === 0) text += ", about as well from the start";
+  else if (c.reach !== null) {
+    const lo = learning.bins[c.reach];
+    const hi = learning.bins[c.reach + 1];
+    text += `, usual by games ${hi ? `${lo}-${hi - 1}` : `${lo}+`}`;
+  }
+  return text;
+}
+
+function setup(pool, meta, learning) {
   const byId = new Map(meta.champions.map((c) => [c.id, c]));
   const byName = new Map(meta.champions.map((c) => [norm(c.name), c]));
   const bySlug = new Map(meta.champions.map((c) => [c.slug, c]));
@@ -165,6 +188,7 @@ function setup(pool, meta) {
               `${pts(pp)} vs ${nameOf(e)} (${games} games; ${c.name} there: ${pts(hardPp.get(e) ?? 0)})`,
           ),
           `played ${times(o.lift)} as often by ${c.name} players`,
+          learningLine(learning, o.id),
         ]),
       );
     }
@@ -184,6 +208,7 @@ function setup(pool, meta) {
           `played by ${o.together} of ${m.players} ${c.name} players (${times(o.lift)} the usual rate)`,
           "also good into " +
             o.lanes.map(([e, pp]) => `${nameOf(e)} (${pts(pp)})`).join(", "),
+          learningLine(learning, o.id),
         ]),
       );
     }

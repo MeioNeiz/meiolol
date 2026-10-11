@@ -12,6 +12,8 @@ const daily = @import("../daily.zig");
 const matchup = @import("matchup.zig");
 const pool_page = @import("pool.zig");
 const pool = @import("../pool.zig");
+const learning_page = @import("learning.zig");
+const learning = @import("../learning.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -74,6 +76,7 @@ pub const Site = struct {
     score_opts: score.Options = .{},
     curves: ?core.curvesfile.Curves = null,
     pool: pool.Pool = .{},
+    learning: learning.Learning = .{},
 
     pub fn page(s: *const Site, title: []const u8, description: []const u8, root: []const u8, nav: html.Nav) html.Page {
         return .{
@@ -177,6 +180,12 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
         try pool.writeJson(&aw.writer, site.pool);
         try site.write("data/pool.json", aw.written());
     }
+    site.learning = try learning.make(gpa, arena, db, &site.stats, opts.platforms, .{});
+    {
+        var aw: Writer.Allocating = .init(arena);
+        try learning.writeJson(&aw.writer, site.learning);
+        try site.write("data/learning.json", aw.written());
+    }
     try site.write("pool.js", @embedFile("static/pool.js"));
     if (opts.riot_txt) |t| try site.write("riot.txt", t);
     try site.write("robots.txt", if (opts.public) "User-agent: *\nAllow: /\n" else "User-agent: *\nDisallow: /\n");
@@ -200,7 +209,7 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     for (site.champs) |ch| try writeChampion(&site, ch);
     if (site.curves) |*c| try matchup.writeAll(&site, c);
     try matchup.writeIndex(&site, if (site.curves) |*c| c else null);
-    try pool_page.writePage(&site, &site.pool);
+    try pool_page.writePage(&site, &site.pool, &site.learning);
     const info: prose.Info = .{ .contact = opts.contact, .updated = opts.updated };
     const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
         .{ "method.html", "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
@@ -554,6 +563,7 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
         if (site.curves) |*c| try matchup.links(site, w, c, ch, r);
     }
     try pool_page.section(site, w, &site.pool, ch);
+    try learning_page.section(w, &site.learning, ch);
     try w.writeAll("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts; pairs with few games stay near zero. <a href=\"../method.html\">Method</a>.</p>\n");
     try html.foot(w, p);
     try site.write(try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug}), aw.written());

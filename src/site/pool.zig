@@ -7,6 +7,8 @@ const root = @import("root.zig");
 const html = @import("html.zig");
 const matchup = @import("matchup.zig");
 const pool = @import("../pool.zig");
+const learning = @import("../learning.zig");
+const learning_page = @import("learning.zig");
 
 const Writer = std.Io.Writer;
 const Site = root.Site;
@@ -23,7 +25,8 @@ pub fn sourceText(p: *const pool.Pool) []const u8 {
     };
 }
 
-pub fn writePage(site: *const Site, p: *const pool.Pool) !void {
+/// With the learning-curve table under the picker (site/learning.zig)
+pub fn writePage(site: *const Site, p: *const pool.Pool, l: *const learning.Learning) !void {
     var aw: Writer.Allocating = .init(site.arena);
     const w = &aw.writer;
     const pg = site.page(
@@ -56,6 +59,7 @@ pub fn writePage(site: *const Site, p: *const pool.Pool) !void {
         \\<script src="pool.js" defer></script>
         \\
     , .{ sourceText(p), p.players, p.min_players, site.patch });
+    try learning_page.table(site, w, l);
     try html.foot(w, pg);
     try site.write("pool.html", aw.written());
 }
