@@ -159,7 +159,7 @@ pub const Crawler = struct {
         const per_day = if (elapsed_s > 0) matches * 86400 / @as(u64, @intCast(elapsed_s)) else 0;
         const ws = &c.writer.stats;
         log.info("{d} matches/day | ladder pages {d} | mastery {d} | platform req {d}{s}" ++
-            " | writes {d} in {d} commits, {d} queued, {d} busy", .{
+            " | writes {d} in {d} commits, {d} queued, {d} busy | pages written {d}, read {d}", .{
             per_day,
             c.counters.ladder_pages.load(.monotonic),
             c.counters.mastery.load(.monotonic),
@@ -169,6 +169,8 @@ pub const Crawler = struct {
             ws.commits.load(.monotonic),
             c.writer.queued(),
             ws.busy.load(.monotonic),
+            ws.pages_written.load(.monotonic),
+            ws.pages_read.load(.monotonic),
         });
     }
 

@@ -85,6 +85,17 @@ pub const Db = struct {
         return if (try stmt.step()) stmt.int(0) else null;
     }
 
+    /// Pages this connection wrote to the database or WAL, and read from disk (cache
+    /// misses), since it opened: every attached schema
+    pub fn pageCounts(db: Db) struct { written: u64, missed: u64 } {
+        var cur: c_int = 0;
+        var hi: c_int = 0;
+        _ = c.sqlite3_db_status(db.handle, c.SQLITE_DBSTATUS_CACHE_WRITE, &cur, &hi, 0);
+        const written: u64 = @intCast(cur);
+        _ = c.sqlite3_db_status(db.handle, c.SQLITE_DBSTATUS_CACHE_MISS, &cur, &hi, 0);
+        return .{ .written = written, .missed = @intCast(cur) };
+    }
+
     pub fn begin(db: Db) Error!void {
         try db.exec("BEGIN IMMEDIATE");
     }

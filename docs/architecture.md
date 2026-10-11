@@ -5,6 +5,8 @@ build.zig            modules: core (pure), store (SQLite C), backend, app
 src/
   main.zig           `meiolol` backend CLI: crawl, stats, site, status, champions
   ddragon.zig        champion ids/names from Data Dragon
+  date.zig           UTC dates (Date: format, parse, epoch days)
+  pipeline_test.zig  fixture games through stats, curves and the site
   daily.zig          Daily Draft puzzles (data/daily), published by `meiolol site`
   learn.zig          Learn page data: champion facts, practice draft pack
   curves.zig         lane matchup curves from timelines (`meiolol curves`)
@@ -45,16 +47,17 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
 - `raw.db`: fetched JSON, gzip (early rows from the retired Python crawler are zstd;
   std decompresses both, compresses only deflate; told apart by magic bytes). Rolling,
   pruned hourly by the crawler: `raw_docs` match summaries 30 days
-  (`--raw-match-days`), `timeline_docs` timelines 7 days (`--raw-timeline-days`; ones
-  that failed to parse are kept). `meiolol rebuild` re-parses kept summaries into the
+  (`--raw-match-days`), `timeline_docs` timelines 7 days (`--raw-timeline-days`, 0
+  keeps none; ones that failed to parse are kept). `meiolol rebuild` re-parses kept summaries into the
   tables after a parser or schema change. Mastery is not kept raw
 - `timeline.db`: `timelines`, one compact blob per match (src/riot/timeline.zig: per
   minute per participant gold, xp, level, CS, position, damage, CC; events: kills
   with position, items, skills, wards, buildings, plates, monsters, transforms). ~8.6
   KB vs ~60 KB raw gz, lossless for those fields; `timeline.decode` reads it.
-  Participant id = slot + 1. Kept forever
-- `meiolol.db`: crawl state (players, ladder_pages, match_queue, timeline_queue) and
-  tables kept forever: matches, participants (incl. final items, full rune page, and
+  Participant id = slot + 1. Kept forever unless `--keep-days`
+- `meiolol.db`: crawl state (players, ladder_pages, match_queue and timeline_queue:
+  pending, missing and failed only; stored ones leave) and tables kept forever (or
+  `--keep-days` after game start: a rolling window): matches, participants (incl. final items, full rune page, and
   tier/division = rank snapshot when the match was stored, gold10/14/15 = total
   gold at those timeline minutes), bans, mastery (one
   compact blob per player, src/riot/mastery.zig, ~0.7 KB), champions. Text-keyed
@@ -65,7 +68,7 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   new PUUIDs. `meiolol rebuild` then `meiolol rekey` forgets players, ladder and
   mastery (re-seeded from the ladders) and blanks old PUUIDs in participants; matches,
   timelines and rank snapshots stay. Re-storing a match keeps its PUUIDs and rank
-- Privacy (crawler, hourly): players no ladder page or match has shown for 30 days
+- Privacy (crawler writer, hourly): players no ladder page or match has shown for 30 days
   are deleted with their mastery, and mastery older than 30 days is refetched (Riot's
   monthly refresh; erased accounts drop out). A mastery refetch that Riot answers 404
   deletes the player at once. Matches older than 24 months lose their PUUIDs.
@@ -92,22 +95,32 @@ compress outside any lock and queue owned jobs (at most 128 waiting, then they b
 the writer applies whatever has queued in one transaction, a savepoint per job, so a
 row that cannot be stored marks its match or timeline failed and the rest commit. A
 worker waits for its jobs' commit before reading queues they change (the next match
-batch, the timelines of matches just stored), so nothing is fetched twice. Why: on the
-1/8-OCPU micro 19 writing threads spent much of their time waiting for the lock
-(holders descheduled mid-transaction, gzip inside it); see the benchmark below.
+batch, the timelines of matches just stored), so nothing is fetched twice. A short
+batch lingers up to 2 s for more jobs unless a worker is waiting (each commit rewrites
+the index pages it touched). Between batches the writer prunes, one 500-row chunk at a
+time: raw documents, unseen players and old mastery, PUUIDs past 24 months, and matches
+past `--keep-days` with their participants, bans and timelines. Only the writer's
+connection has a big page cache (`--cache-mb`, default 64); WAL files are capped at 64
+MB after a checkpoint. Why: on the 1/8-OCPU micro 19 writing threads waited on the lock
+(holders descheduled mid-transaction, gzip inside it), and per-row commits with 2 MB
+caches wrote 43 GB and read 32 GB in 4 hours for ~2k matches.
 
 - platform (euw1, kr, na1, ...): league-exp ladder pages for every tier (players +
-  rank snapshot, refreshed daily), then champion mastery with spare budget
+  rank snapshot, refreshed weekly: `--ladder-refresh-days`; unchanged players are not
+  rewritten), then champion mastery with spare budget (`--no-mastery` to skip)
 - regional (americas, asia, europe, sea): match ids per player of its platforms (last
   14 days, queue 420), match details, then timelines of non-remakes (`--timelines PCT`,
   default all, picked by match id hash). Queues put `--priority` platforms' matches
   first, then FIFO for matches and newest first for timelines; ids refill only under 300
   pending. Each batch of 40 matches gets 40 timelines, so new games get theirs at once;
   a backlog of older timelines (60 a batch) only drains when the match batch is short.
-  Per match ~2.13 calls (match + timeline + ids), so ~33k matches/day/region
-- main thread: per-region report every minute (plus writer jobs, commits, queue length,
-  busy retries), raw pruning hourly (its own connection, 500-row chunks). On first start
-  with an empty timeline_queue, queues timelines for already crawled matches
+  Per match ~2.13 calls (match + timeline + ids), so ~33k matches/day/region.
+  Participants also become players to scan unless `--no-participant-players` (the
+  ladder already lists every ranked player)
+- main thread: per-region report every minute, plus writer jobs, commits, queue length,
+  busy retries and the writer's pages written and read (cache misses; page = 4 KB; a
+  checkpoint writes pages again). On start, drops 'done' rows older crawlers left in the
+  queues, and with an empty timeline_queue queues timelines for crawled matches
 
 Benchmark: `deploy/bench-crawl.sh seed DIR`, then `run DIR MINUTES [slow|micro]` crawls
 a clone of box-sized databases with `--fake-api` (fixture answers, no network or rate

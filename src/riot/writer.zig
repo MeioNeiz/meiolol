@@ -71,6 +71,10 @@ pub const Stats = struct {
     jobs: std.atomic.Value(u64) = .init(0),
     commits: std.atomic.Value(u64) = .init(0),
     busy: std.atomic.Value(u64) = .init(0),
+    /// The writer connection's page writes and cache misses (page_size bytes each); a
+    /// checkpoint writes WAL pages to the database file again, not counted here
+    pages_written: std.atomic.Value(u64) = .init(0),
+    pages_read: std.atomic.Value(u64) = .init(0),
 };
 
 pub const Writer = struct {
@@ -200,6 +204,9 @@ pub const Writer = struct {
                 break;
             }
             wr.counted(batch.items);
+            const pages = db.pageCounts();
+            wr.stats.pages_written.store(pages.written, .monotonic);
+            wr.stats.pages_read.store(pages.missed, .monotonic);
             wr.mutex.lockUncancelable(wr.c.io);
             wr.committed_seq = batch.items[batch.items.len - 1].seq;
             wr.cond.broadcast(wr.c.io);
