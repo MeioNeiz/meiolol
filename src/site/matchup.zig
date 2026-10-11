@@ -174,15 +174,17 @@ fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cha
     });
     const page_path = try path(a, r, x, y);
     var p = site.page(title, desc, page_path, .matchups);
-    const there = if (site.other_curves) |*o| o.get(r, .all, x.id, y.id) != null else false;
-    if (p.switch_path != null and !there) p.switch_path = "matchup/index.html";
+    for (site.view_curves, &p.counterparts.?) |*other, *there| {
+        const has = if (other.*) |*o| o.get(r, .all, x.id, y.id) != null else false;
+        if (!has) there.* = "matchup/index.html";
+    }
     try html.head(w, p);
     try w.print(
         "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><div><h1>{f} vs {f}</h1>\n",
         .{ site.icon(x), site.icon(y), esc(x.name), esc(y.name) },
     );
     try w.print("<p class=\"muted\">{s} lane, ranked solo/duo {s}, {s}, all ranks, {d} game{s}.</p></div></div>\n", .{
-        lane, site.region.in(), when, v.games(), plural(v.games()),
+        lane, site.view.region.in(), when, v.games(), plural(v.games()),
     });
     if (v.games() < thin_games) {
         try w.print(

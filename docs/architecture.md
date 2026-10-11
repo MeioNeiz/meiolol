@@ -148,8 +148,8 @@ min(10, games) still going. Size: ~800 pages, 14 MB with .gz, per 200 games; rai
 --min-games if the upload grows too big. The index has a min games selector
 (html.minGames, static/min-games.js; default 1). Not yet: first-item timing (needs an
 item list from Data Dragon), experienced-players filter (mastery), core-item split,
-patch / period filter (planned: last 30 days default, a specific patch,
-rank). deploy/web-loop.sh rebuilds both curves files hourly and on a new patch.
+older patches, rank filter. deploy/web-loop.sh rebuilds the four curves files hourly
+and on a new patch.
 
 ## Pool (src/pool.zig, src/site/pool.zig, static/pool.js)
 
@@ -191,12 +191,14 @@ docs/model.md.
 
 ## Website (src/site, src/wasm.zig)
 
-Region views (html.Region): EUW at the site root, every platform under all/ (stats,
-pool, curves from all-recent-curves.bin, i.e. `meiolol curves --platform all`). Stats
-pages exist in both; a header switch links to the same page in the other view (a
-matchup the other view lacks: its matchup index), and localStorage remembers the last
-view so shared pages (Daily Draft, Learn, Your games, legal, at the root only, on EUW
-data) link back into it. Same patch for both: EUW's newest.
+Views (html.View), as lolalytics' filters: region (EUW, or every platform) by period
+(games started in the last 30 days, or EUW's newest patch). EUW over 30 days is the
+default at the site root; the others under patch/, all/ and all/patch/. Each has its own
+stats, pool and curves file (recent-curves.bin, curves-<patch>.bin, and all- versions
+from `meiolol curves --platform all`). Header switches link to the same page in another
+view (a matchup that view lacks: its matchup index); localStorage remembers the last
+view so shared pages (Daily Draft, Learn, Your games, legal: at the root only, made
+from the EUW patch view; learn.js reads patch/data/stats.bin) link back into it.
 
 `meiolol site --contact EMAIL` writes static files to data/site, framed as "learn your
 lane" for the production review (docs/concept.md "Application wording": no tier list,

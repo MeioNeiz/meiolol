@@ -19,20 +19,28 @@ pub const Summary = struct {
 /// Every ranked solo game on `chosen` patches and `platforms` (Riot ids: EUW1, KR; no
 /// remakes, a winner, all ten positions) into a builder made from the champions table.
 /// Caller owns the builder.
-pub fn build(
+pub fn build(gpa: std.mem.Allocator, db: store.Db, chosen: []const []const u8, platforms: []const []const u8) !Built {
+    return buildSince(gpa, db, chosen, platforms, 0);
+}
+
+pub const Built = struct {
+    builder: statsfile.Builder,
+    summary: Summary,
+};
+
+/// As build, games started from `since_ms` (Unix ms) only
+pub fn buildSince(
     gpa: std.mem.Allocator,
     db: store.Db,
     chosen: []const []const u8,
     platforms: []const []const u8,
-) !struct {
-    builder: statsfile.Builder,
-    summary: Summary,
-} {
+    since_ms: i64,
+) !Built {
     const champs = try champions(gpa, db);
     defer freeChampions(gpa, champs);
     var b: statsfile.Builder = try .init(gpa, champs);
     errdefer b.deinit();
-    const summary = try scan(gpa, db, chosen, platforms, BuilderSink{ .b = &b });
+    const summary = try scan(gpa, db, chosen, platforms, since_ms, BuilderSink{ .b = &b });
     return .{ .builder = b, .summary = summary };
 }
 
@@ -75,12 +83,14 @@ pub fn patchKey(patch: []const u8) u32 {
     return major * 1000 + minor;
 }
 
-/// Every valid game (as for `build`) to `sink.add(Row)`, in match id order
+/// Every valid game (as for `build`) started from `since_ms` (0: any) to
+/// `sink.add(Row)`, in match id order
 pub fn scan(
     gpa: std.mem.Allocator,
     db: store.Db,
     chosen: []const []const u8,
     platforms: []const []const u8,
+    since_ms: i64,
     sink: anytype,
 ) !Summary {
     const patch_json = try std.json.Stringify.valueAlloc(gpa, chosen, .{});
@@ -93,11 +103,11 @@ pub fn scan(
         \\FROM matches m JOIN participants p USING (match_id)
         \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
         \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
+        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL AND m.game_start >= ?
         \\ORDER BY m.match_id
     );
     defer q.deinit();
-    try q.bind(.{ patch_json, ranked_solo, platform_json });
+    try q.bind(.{ patch_json, ranked_solo, platform_json, since_ms });
 
     var summary: Summary = .{ .games = 0, .skipped = 0 };
     var game: Game = .{};

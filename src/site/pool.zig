@@ -54,11 +54,11 @@ pub fn writePage(site: *const Site, p: *const pool.Pool, l: *const learning.Lear
         \\({d} players so far). "×2.4" means players who main that champion play this one
         \\2.4 times as often as other players do; small groups are pulled toward ×1. Lists
         \\start at {d} players per main. Lane numbers are percentage points of win chance
-        \\beyond what the two champions' own win rates predict, on patch {s}.
+        \\beyond what the two champions' own win rates predict, {s} {s}.
         \\<a href="{s}method.html">Method</a>.</p>
         \\<script src="pool.js" defer></script>
         \\
-    , .{ sourceText(p), p.players, p.min_players, site.patch, site.region.up() });
+    , .{ sourceText(p), p.players, p.min_players, site.view.region.in(), site.when, site.view.up() });
     try learning_page.table(site, w, l);
     try html.foot(w, pg);
     try site.write("pool.html", aw.written());

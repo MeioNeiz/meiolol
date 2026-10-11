@@ -42,26 +42,9 @@ const preview_banner =
 
 pub const Nav = enum { matchups, daily, learn, pool, champions, method, none };
 
-/// The site's region views: EUW at the site root, every region under all/. Stats pages
-/// exist in both; shared pages (Daily Draft, Learn, legal) only at the site root
 pub const Region = enum {
     euw,
     all,
-
-    pub fn dir(r: Region) []const u8 {
-        return switch (r) {
-            .euw => "",
-            .all => "all/",
-        };
-    }
-
-    /// From this view's root to the site root
-    pub fn up(r: Region) []const u8 {
-        return switch (r) {
-            .euw => "",
-            .all => "../",
-        };
-    }
 
     /// "ranked solo/duo {in}"
     pub fn in(r: Region) []const u8 {
@@ -72,26 +55,62 @@ pub const Region = enum {
     }
 };
 
+pub const Period = enum { days30, patch };
+
+/// The site's stats views, as lolalytics' filters: EUW over the last 30 days at the site
+/// root, the rest in directories. Stats pages exist in each; shared pages (Daily Draft,
+/// Learn, legal: EUW, current patch) only at the site root
+pub const View = struct {
+    region: Region,
+    period: Period,
+
+    pub const all = [_]View{
+        .{ .region = .euw, .period = .days30 },
+        .{ .region = .euw, .period = .patch },
+        .{ .region = .all, .period = .days30 },
+        .{ .region = .all, .period = .patch },
+    };
+    pub const count = all.len;
+    /// Where shared pages get their numbers
+    pub const shared: View = all[1];
+
+    pub fn index(v: View) usize {
+        return 2 * @as(usize, @intFromEnum(v.region)) + @intFromEnum(v.period);
+    }
+
+    /// Under the site root
+    pub fn dir(v: View) []const u8 {
+        return ([_][]const u8{ "", "patch/", "all/", "all/patch/" })[v.index()];
+    }
+
+    /// From this view's root to the site root
+    pub fn up(v: View) []const u8 {
+        return ([_][]const u8{ "", "../", "../", "../../" })[v.index()];
+    }
+};
+
 pub const Page = struct {
     title: []const u8,
     description: []const u8,
     /// "" for pages at their view's root, "../" one directory down; links are relative
     /// so the site also works from disk
     root: []const u8 = "",
-    /// Region view the page belongs to; null for shared pages
-    region: ?Region = null,
-    /// The other view's page for the region switch, usually the same path; null for none
-    switch_path: ?[]const u8 = null,
+    /// View the page belongs to; null for shared pages
+    view: ?View = null,
+    /// This page's counterpart in each view (View.index) for the switches: usually the
+    /// same path. Null: no switches
+    counterparts: ?[View.count][]const u8 = null,
     nav: Nav = .none,
-    /// Shown in the footer
+    /// Current patch, for the period switch
     patch: []const u8,
-    games: u32,
+    /// Footer: "in EUW, last 30 days, 5123 games"
+    data: []const u8,
     /// Preview: unlisted for search engines, with a banner saying so
     public: bool,
 };
 
 pub fn head(w: *Writer, p: Page) Writer.Error!void {
-    const up = if (p.region) |r| r.up() else "";
+    const up = if (p.view) |v| v.up() else "";
     try w.print(
         \\<!doctype html>
         \\<html lang="en">
@@ -135,24 +154,33 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         try w.print("{s}</a>\n", .{it[2]});
     }
     try w.writeAll("</nav>\n");
-    if (p.region) |r| {
-        if (p.switch_path) |other| {
-            try w.writeAll("<nav class=\"region\" aria-label=\"Region\">");
-            for ([_]Region{ .euw, .all }, [_][]const u8{ "EUW", "All regions" }) |to, label| {
-                if (to == r) {
-                    try w.print("<a aria-current=\"page\">{s}</a>", .{label});
-                } else {
-                    try w.print("<a href=\"{s}{s}{s}{s}\">{s}</a>", .{ p.root, up, to.dir(), other, label });
+    if (p.view) |v| {
+        if (p.counterparts) |paths| {
+            try w.writeAll("<div class=\"filters\">\n");
+            // Labels as two parts: "Patch " ++ p.patch
+            const switches = [_]struct { []const u8, [2]View, [2][2][]const u8 }{
+                .{ "Region", .{ .{ .region = .euw, .period = v.period }, .{ .region = .all, .period = v.period } }, .{ .{ "EUW", "" }, .{ "All regions", "" } } },
+                .{ "Period", .{ .{ .region = v.region, .period = .days30 }, .{ .region = v.region, .period = .patch } }, .{ .{ "30 days", "" }, .{ "Patch ", p.patch } } },
+            };
+            for (switches) |sw| {
+                try w.print("<nav class=\"switch\" aria-label=\"{s}\">", .{sw[0]});
+                for (sw[1], sw[2]) |to, label| {
+                    if (to.index() == v.index()) {
+                        try w.print("<a aria-current=\"page\">{s}{s}</a>", .{ label[0], label[1] });
+                    } else {
+                        try w.print("<a href=\"{s}{s}{s}{s}\">{s}{s}</a>", .{ p.root, up, to.dir(), paths[to.index()], label[0], label[1] });
+                    }
                 }
+                try w.writeAll("</nav>\n");
             }
-            try w.writeAll("</nav>\n");
+            try w.writeAll("</div>\n");
         }
         // Remembered so shared pages link back into this view
-        try w.print("<script>try{{localStorage.setItem(\"region\",\"{t}\")}}catch(e){{}}</script>\n", .{r});
+        try w.print("<script>try{{localStorage.setItem(\"view\",\"{s}\")}}catch(e){{}}</script>\n", .{v.dir()});
     } else {
         try w.writeAll(
-            \\<script>try{if(localStorage.getItem("region")==="all")for(const a of
-            \\document.querySelectorAll("a[data-all]"))a.href=a.dataset.all}catch(e){}</script>
+            \\<script>try{const v=localStorage.getItem("view");if(["patch/","all/","all/patch/"].includes(v))
+            \\for(const a of document.querySelectorAll("a[data-view]"))a.href=v+a.getAttribute("href")}catch(e){}</script>
             \\
         );
     }
@@ -161,20 +189,18 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
     try w.writeAll("<main class=\"wrap\">\n");
 }
 
-/// Opens a link to `path` in the page's view; from a shared page, to EUW's, switched
-/// to all/ by the header script when that view was the last one visited
+/// Opens a link to `path` in the page's view; from a shared page (all at the site
+/// root), to the default view's, moved by the header script into the last one visited
 fn viewLink(w: *Writer, p: Page, path: []const u8, attrs: []const u8) Writer.Error!void {
-    try w.print("<a href=\"{s}{s}\"{s}", .{ p.root, path, attrs });
-    if (p.region == null) try w.print(" data-all=\"{s}all/{s}\"", .{ p.root, path });
-    try w.writeAll(">");
+    try w.print("<a href=\"{s}{s}\"{s}{s}>", .{ p.root, path, attrs, if (p.view == null) " data-view" else "" });
 }
 
 pub fn foot(w: *Writer, p: Page) Writer.Error!void {
-    const up = if (p.region) |r| r.up() else "";
+    const up = if (p.view) |v| v.up() else "";
     try w.print(
         \\</main>
         \\<footer><div class="wrap">
-        \\<p>Ranked solo/duo {s}, patch {s}, {d} games. Updated daily.</p>
+        \\<p>Ranked solo/duo {s}. Updated daily.</p>
         \\<p><a href="{s}{s}privacy.html">Privacy</a> · <a href="{s}{s}terms.html">Terms</a> ·
         \\<a href="{s}{s}method.html">Method</a> · <a href="{s}{s}download.html">Desktop app</a></p>
         \\<p class="legal">{s}</p>
@@ -182,10 +208,7 @@ pub fn foot(w: *Writer, p: Page) Writer.Error!void {
         \\</body>
         \\</html>
         \\
-    , .{
-        (p.region orelse Region.euw).in(), p.patch, p.games, p.root, up, p.root, up, p.root, up, p.root, up,
-        boilerplate,
-    });
+    , .{ p.data, p.root, up, p.root, up, p.root, up, p.root, up, boilerplate });
 }
 
 test "escape" {
