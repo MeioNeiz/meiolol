@@ -116,7 +116,17 @@ next steps land here.
   scratch-only, rerun deploy/bench-crawl.sh with --no-mastery for pages/match.
   Before ~2026-11-25 (first matches pass --keep-days 60): per-patch aggregates kept
   forever and Pool learning curves on them, or raise/drop --keep-days. `meiolol status`
-  still counts whole tables and takes the write lock (store.open): slow on the micro
+  still counts whole tables and takes the write lock (store.open): slow on the micro.
+  Crawler rework on the A1 (6401336, 5298abe, 2026-10-11 ~20:30Z): slack gate gone (it
+  kept the other regions off for ~1.5 h after each restart), EUW first via its region's
+  queues and the writer's queue (others wait at half full); RegionCrawler and
+  PlatformCrawler. crawl.args now `--reserve 20 --timelines 50` (EUW keeps every
+  timeline): the reserve only applies for 10 min after another process shows in Riot's
+  fixed-window counts (tested: 3 manual calls, europe reserved within 1 s, no false
+  alarms), requests paced evenly. Measured 20:36-20:46Z: every region ~50 req/min (was
+  ~47), still 1:1 timelines while the old 100% backlog drains (~300-460 per region).
+  Expect ~33k EUW + ~43k per other region, ~160-170k/day. Europe's 7.3k older EUW
+  timelines only drain when EUW runs out of players due (in practice never)
 - Keep more data (Jacob, 2026-10-11): deletion was for the micro's disk, not by choice.
   On the A1: `--keep-days 0` (matches, rows, compact timelines forever, ~1.4 GB/day at
   ~120k/day), raw summaries 30 days and raw timelines for a 10% sample over 30 days
