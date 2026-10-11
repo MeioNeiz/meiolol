@@ -213,11 +213,11 @@ fn practiceSection(w: *Writer) !void {
         \\champions, then see what each one brings to this draft. Several can fit well; the
         \\point is the reasons, not one right answer.</p>
         \\<div class="card practice-setup">
-        \\<div class="setup-row"><span class="setup-label">Your role</span>
-        \\<div id="p-roles" class="seg"></div></div>
-        \\<div class="setup-row"><span class="setup-label">Difficulty</span>
-        \\<div id="p-levels" class="seg"></div></div>
-        \\<div class="setup-row"><span class="setup-label">Champions you play</span>
+        \\<div class="setup-row"><span class="setup-label" id="p-roles-label">Your role</span>
+        \\<div id="p-roles" class="seg" role="group" aria-labelledby="p-roles-label"></div></div>
+        \\<div class="setup-row"><span class="setup-label" id="p-levels-label">Difficulty</span>
+        \\<div id="p-levels" class="seg" role="group" aria-labelledby="p-levels-label"></div></div>
+        \\<div class="setup-row"><label class="setup-label" for="p-pool-input">Champions you play</label>
         \\<div class="own-pool"><input id="p-pool-input" list="p-champions"
         \\placeholder="Add a champion" autocomplete="off"><datalist id="p-champions"></datalist>
         \\<span id="p-pool" class="chips"></span></div></div>
@@ -234,12 +234,12 @@ fn practiceSection(w: *Writer) !void {
         \\<p class="bans" id="p-bans-1"></p></div>
         \\</div>
         \\<section class="card question">
-        \\<h2 id="p-question"></h2>
+        \\<h2 id="p-question" tabindex="-1"></h2>
         \\<div id="p-hints" class="hints"></div>
         \\<div id="p-options" class="choices"></div>
         \\</section>
         \\<section id="p-reveal" hidden>
-        \\<h2>What each option brings</h2>
+        \\<h2 id="p-reveal-title" tabindex="-1">What each option brings</h2>
         \\<ul id="p-notes" class="card notes"></ul>
         \\<p id="p-real" class="muted"></p>
         \\<p id="p-c3" class="note" hidden></p>
