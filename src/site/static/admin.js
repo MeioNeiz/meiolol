@@ -44,11 +44,27 @@ function ago(t) {
   return Math.round(s / 86400) + " days ago";
 }
 const pad = n => String(n).padStart(2, "0");
-function utc(t, withDay = true) {
-  const d = new Date(t * 1000);
-  const hm = pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes());
-  if (!withDay) return hm;
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }) + " " + hm;
+// UK time: BST in summer, GMT in winter
+const TZ = "Europe/London";
+const ukFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: TZ, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric",
+  hour: "numeric", minute: "numeric", second: "numeric", timeZoneName: "short",
+});
+function ukParts(t) {
+  const p = {};
+  for (const { type, value } of ukFmt.formatToParts(new Date(t * 1000))) p[type] = value;
+  return p;
+}
+// Seconds UK time is ahead of UTC at t
+function ukOffset(t) {
+  const p = ukParts(t);
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) / 1000 - t;
+}
+const zoneName = t => ukParts(t).timeZoneName;
+function uk(t) {
+  const p = ukParts(t);
+  const day = new Date(t * 1000).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: TZ });
+  return `${day} ${pad(p.hour)}:${pad(p.minute)}`;
 }
 function dayLabel(day) {
   return new Date(day * 86400000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -174,7 +190,7 @@ function drawChart(box, tip, o) {
     if (m < x0 || m > x1) continue;
     const l = svg("line", { class: "marker", x1: px(m), x2: px(m), y1: T, y2: H - B });
     const title = svg("title");
-    title.textContent = "crawler started " + utc(m);
+    title.textContent = "crawler started " + uk(m);
     l.append(title);
     s.append(l);
   }
@@ -245,7 +261,7 @@ function drawChart(box, tip, o) {
       rows += `<div><i style="background:${ser.color}"></i>${esc(ser.name)}<b>${f(ser.values[i])}</b></div>`;
     }
     if (stacked && o.series.length > 1) rows += `<div class="total">Total<b>${f(tops[i])}</b></div>`;
-    tip.innerHTML = `<div class="when">${esc((o.xFmt || utc)(xs[i]))}</div>` + rows;
+    tip.innerHTML = `<div class="when">${esc((o.xFmt || uk)(xs[i]))}</div>` + rows;
     tip.hidden = false;
     const left = cx + 14 + tip.offsetWidth > W ? cx - 14 - tip.offsetWidth : cx + 14;
     tip.style.left = Math.max(0, left) + "px";
@@ -262,11 +278,13 @@ function timeTicks(x0, x1, width) {
   const maxTicks = Math.max(2, Math.floor(width / 70));
   const steps = [3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400];
   const st = steps.find(v => span / v <= maxTicks) || 7 * 86400;
-  for (let t = Math.ceil(x0 / st) * st; t <= x1; t += st) {
-    const d = new Date(t * 1000);
-    const label = st >= 86400 || d.getUTCHours() === 0
-      ? d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })
-      : pad(d.getUTCHours()) + ":00";
+  // On UK hours and midnights (one offset for the range: a clock change moves ticks an hour)
+  const off = ukOffset(x0);
+  for (let t = Math.ceil((x0 + off) / st) * st - off; t <= x1; t += st) {
+    const h = +ukParts(t).hour;
+    const label = st >= 86400 || h === 0
+      ? new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: TZ })
+      : pad(h) + ":00";
     out.push([t, label]);
   }
   return out;
@@ -340,7 +358,7 @@ function render() {
   app.innerHTML = "";
   const top = el("header", { class: "top" },
     el("h1", {}, "meiolol ", el("span", {}, "admin")),
-    el("p", { class: "sub" }, `Built ${utc(D.now)} UTC (${ago(D.now)}). Times in UTC.`));
+    el("p", { class: "sub" }, `Built ${uk(D.now)} ${zoneName(D.now)} (${ago(D.now)}). Times in UK time (${zoneName(D.now)}); log excerpts in UTC.`));
   const toggle = el("nav", { class: "switch", "aria-label": "Range" });
   for (const [k, label] of [["24h", "24 hours"], ["7d", `${D.days} days`]]) {
     const a = el("button", { type: "button" }, label);
@@ -567,7 +585,7 @@ function render() {
     for (const t of ups) {
       const c = svg("circle", { cx: px(t), cy: 18, r: 4, fill: PALETTE[2] });
       const title = svg("title");
-      title.textContent = "uploaded " + utc(t);
+      title.textContent = "uploaded " + uk(t);
       c.append(title);
       s.append(c);
     }
