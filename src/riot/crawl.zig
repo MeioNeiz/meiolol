@@ -24,7 +24,7 @@ const tiers = [_][]const u8{
 const divisions = [_][]const u8{ "I", "II", "III", "IV" };
 const pending_low = 300;
 const detail_batch = 40;
-/// Above detail_batch so a timeline backlog drains while new matches keep coming
+/// When the match queue runs short, so a timeline backlog drains in quiet spells
 const timeline_batch = 60;
 const all_regions = std.enums.values(ep.Region);
 
@@ -466,8 +466,9 @@ const Worker = struct {
         _ = w.c.counters.mastery.fetchAdd(1, .monotonic);
     }
 
-    /// Queues are first in, first out: they stay short, and platforms in a region
-    /// get turns in proportion to their players
+    /// Priority platforms' matches first (EUW: other platforms share its regional rate
+    /// limit), then first in, first out. Timelines keep pace with new matches, newest
+    /// first; a backlog of older ones waits for a short match queue
     fn matchStep(w: *Worker, r: ep.Region) !void {
         var done: usize = 0;
         const pending = try w.db.scalar("SELECT count(*) FROM match_queue " ++
@@ -476,18 +477,14 @@ const Worker = struct {
 
         var arena: std.heap.ArenaAllocator = .init(w.c.gpa);
         defer arena.deinit();
-        const batch = try w.column(arena.allocator(),
-            \\SELECT match_id FROM match_queue WHERE region = ? AND status = 'pending'
-            \\ORDER BY discovered_at, match_id LIMIT ?
-        , .{ @tagName(r), detail_batch });
+        const priority = try std.json.Stringify.valueAlloc(arena.allocator(), w.c.opts.priority, .{});
+        const batch = try w.column(arena.allocator(), next_matches, .{ @tagName(r), priority, detail_batch });
         for (batch) |id| {
             try w.check();
             try w.fetchMatch(r, id);
         }
-        const timelines = try w.column(arena.allocator(),
-            \\SELECT match_id FROM timeline_queue WHERE region = ? AND status = 'pending'
-            \\ORDER BY queued_at, match_id LIMIT ?
-        , .{ @tagName(r), timeline_batch });
+        const n_timelines = if (batch.len == detail_batch) batch.len else timeline_batch;
+        const timelines = try w.column(arena.allocator(), next_timelines, .{ @tagName(r), priority, n_timelines });
         for (timelines) |id| {
             try w.check();
             try w.fetchTimeline(r, id);
@@ -495,6 +492,19 @@ const Worker = struct {
         done += batch.len + timelines.len;
         if (done == 0) try w.nap(15);
     }
+
+    const next_matches =
+        \\SELECT match_id FROM match_queue WHERE region = ?1 AND status = 'pending'
+        \\ORDER BY substr(match_id, 1, instr(match_id, '_') - 1)
+        \\    IN (SELECT value FROM json_each(?2)) DESC, discovered_at, match_id
+        \\LIMIT ?3
+    ;
+    const next_timelines =
+        \\SELECT match_id FROM timeline_queue WHERE region = ?1 AND status = 'pending'
+        \\ORDER BY substr(match_id, 1, instr(match_id, '_') - 1)
+        \\    IN (SELECT value FROM json_each(?2)) DESC, queued_at DESC, match_id DESC
+        \\LIMIT ?3
+    ;
 
     /// Priority platforms' players first, then the region's. Within those, never
     /// scanned (NULL sorts first), then the stalest. PUUIDs are random, so ordering by
@@ -514,7 +524,7 @@ const Worker = struct {
         var players: std.ArrayList(Player) = .empty;
         var filters: std.ArrayList(?[]const u8) = .empty;
         for (w.c.opts.priority) |id| {
-            const p = ep.platformOf(id) orelse continue;
+            const p = ep.platform(id) orelse continue;
             if (p.region == r) try filters.append(arena.allocator(), id);
         }
         try filters.append(arena.allocator(), null);
@@ -780,6 +790,31 @@ pub fn putRaw(gpa: std.mem.Allocator, db: store.Db, source: []const u8, key: []c
     try db.run("INSERT OR REPLACE INTO raw.raw_docs VALUES (?,?,?,?)", .{
         source, key, t, store.Blob{ .bytes = blob },
     });
+}
+
+test "queues: priority platforms first, matches oldest first, timelines newest" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec(
+        \\INSERT INTO match_queue (match_id, discovered_at, region) VALUES
+        \\    ('EUN1_1', 1, 'europe'), ('EUW1_3', 3, 'europe'), ('EUW1_2', 2, 'europe'),
+        \\    ('NA1_1', 0, 'americas');
+        \\INSERT INTO timeline_queue (match_id, region, queued_at) VALUES
+        \\    ('EUN1_1', 'europe', 9), ('EUW1_2', 'europe', 1), ('EUW1_3', 'europe', 2);
+    );
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var w: Worker = undefined;
+    w.db = db;
+    const want = [_]struct { []const u8, []const []const u8 }{
+        .{ Worker.next_matches, &.{ "EUW1_2", "EUW1_3", "EUN1_1" } },
+        .{ Worker.next_timelines, &.{ "EUW1_3", "EUW1_2", "EUN1_1" } },
+    };
+    for (want) |c| {
+        const got = try w.column(arena.allocator(), c[0], .{ "europe", "[\"EUW1\"]", 10 });
+        try std.testing.expectEqual(c[1].len, got.len);
+        for (c[1], got) |e, g| try std.testing.expectEqualStrings(e, g);
+    }
 }
 
 test forgotten {

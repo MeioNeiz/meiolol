@@ -114,11 +114,10 @@ pub fn write(site: *const Site, facts: *const learn.Facts) !void {
     const a = site.arena;
     var aw: Writer.Allocating = .init(a);
     const w = &aw.writer;
-    const p = site.page(
+    const p = site.sharedPage(
         "Learn to draft | meiolol",
         "Short lessons for new League of Legends players, with examples from real ranked " ++
             "games, and practice drafts with every option explained.",
-        "",
         .learn,
     );
     try html.head(w, p);

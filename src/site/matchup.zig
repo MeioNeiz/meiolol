@@ -70,7 +70,7 @@ pub fn writeIndex(site: *const Site, curves: ?*const Curves) !void {
     const p = site.page(
         if (curves) |c| try std.fmt.allocPrint(a, "Lane matchup curves, {s} | meiolol", .{try period(a, c)}) else "Lane matchup curves | meiolol",
         "How every lane matchup unfolds minute by minute: gold, experience and CS difference, kills and level 6 timing, by rank.",
-        "../",
+        "matchup/index.html",
         .matchups,
     );
     try html.head(w, p);
@@ -172,14 +172,17 @@ fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cha
     const desc = try std.fmt.allocPrint(a, "How {s} against {s} in {s} lane unfolds minute by minute: gold, experience and CS difference, kills, level 6 timing.", .{
         x.name, y.name, lane,
     });
-    const p = site.page(title, desc, "../../", .matchups);
+    const page_path = try path(a, r, x, y);
+    var p = site.page(title, desc, page_path, .matchups);
+    const there = if (site.other_curves) |*o| o.get(r, .all, x.id, y.id) != null else false;
+    if (p.switch_path != null and !there) p.switch_path = "matchup/index.html";
     try html.head(w, p);
     try w.print(
         "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><div><h1>{f} vs {f}</h1>\n",
         .{ site.icon(x), site.icon(y), esc(x.name), esc(y.name) },
     );
-    try w.print("<p class=\"muted\">{s} lane, ranked solo/duo, {s}, all ranks, {d} game{s}.</p></div></div>\n", .{
-        lane, when, v.games(), plural(v.games()),
+    try w.print("<p class=\"muted\">{s} lane, ranked solo/duo {s}, {s}, all ranks, {d} game{s}.</p></div></div>\n", .{
+        lane, site.region.in(), when, v.games(), plural(v.games()),
     });
     if (v.games() < thin_games) {
         try w.print(
@@ -206,11 +209,11 @@ fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cha
     try w.writeAll("<h2>By rank</h2>\n");
     try brackets(w, curves, r, x, y);
     try w.print(
-        "<p class=\"muted\"><a href=\"../../champion/{s}.html\">{f}</a> · <a href=\"../../champion/{s}.html\">{f}</a> · <a href=\"../../method.html\">Method</a></p>\n",
-        .{ x.slug, esc(x.name), y.slug, esc(y.name) },
+        "<p class=\"muted\"><a href=\"../../champion/{s}.html\">{f}</a> · <a href=\"../../champion/{s}.html\">{f}</a> · <a href=\"{s}method.html\">Method</a></p>\n",
+        .{ x.slug, esc(x.name), y.slug, esc(y.name), site.toShared(page_path) },
     );
     try html.foot(w, p);
-    try site.write(try path(a, r, x, y), aw.written());
+    try site.write(page_path, aw.written());
 }
 
 fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {

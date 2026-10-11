@@ -39,6 +39,12 @@ header.top .wrap {
 header nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 header nav a { color: var(--muted); }
 header nav a[aria-current="page"] { color: var(--text); font-weight: 600; }
+header nav.region {
+  gap: 0; margin-left: auto; border: 1px solid var(--line); border-radius: 999px;
+  overflow: hidden; font-size: 14px;
+}
+header nav.region a { padding: 3px 12px; }
+header nav.region a[aria-current="page"] { background: var(--text); color: var(--bg); }
 main { padding: 24px 16px 48px; }
 h1 { font-size: 28px; line-height: 1.2; margin: 8px 0 12px; }
 h2 { font-size: 20px; margin: 32px 0 12px; }

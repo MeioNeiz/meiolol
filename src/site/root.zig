@@ -29,8 +29,10 @@ const log = std.log.scoped(.site);
 pub const Options = struct {
     out_dir: []const u8,
     patches: []const []const u8,
-    /// Riot platform ids. The pages say EUW: change their wording before adding more
+    /// Riot platform ids of the EUW view (html.Region), the site root
     platforms: []const []const u8 = &.{"EUW1"},
+    /// Of the all-regions view under all/; empty leaves it out
+    all_platforms: []const []const u8 = &.{},
     contact: []const u8,
     /// The string Riot's application form gives, served as /riot.txt
     riot_txt: ?[]const u8 = null,
@@ -43,6 +45,8 @@ pub const Options = struct {
     daily_dir: ?[]const u8 = null,
     /// Lane curves file for the same patches (`meiolol curves`); matchup pages when set
     curves: ?[]const u8 = null,
+    /// The same for the all-regions view
+    all_curves: ?[]const u8 = null,
 };
 
 /// Below this share of all games a champion is left out of a role's page
@@ -84,22 +88,48 @@ pub const Site = struct {
     games: u32,
     patch: []const u8,
     ddragon_version: []const u8,
+    /// The view being written; opts.platforms and opts.curves are its own
+    region: html.Region,
     opts: Options,
     score_opts: score.Options = .{},
     curves: ?core.curvesfile.Curves = null,
+    /// The other view's, so its region switch skips matchups that have no page there
+    other_curves: ?core.curvesfile.Curves = null,
     pool: pool.Pool = .{},
     learning: learning.Learning = .{},
 
-    pub fn page(s: *const Site, title: []const u8, description: []const u8, root: []const u8, nav: html.Nav) html.Page {
+    /// A page of the view at `path` within it
+    pub fn page(s: *const Site, title: []const u8, description: []const u8, path: []const u8, nav: html.Nav) html.Page {
+        var p = s.sharedPage(title, description, nav);
+        p.region = s.region;
+        if (s.opts.all_platforms.len > 0) p.switch_path = path;
+        p.root = s.toRoot(path);
+        return p;
+    }
+
+    /// A page at the site root, written once for every view
+    pub fn sharedPage(s: *const Site, title: []const u8, description: []const u8, nav: html.Nav) html.Page {
         return .{
             .title = title,
             .description = description,
-            .root = root,
             .nav = nav,
             .patch = s.patch,
             .games = s.games,
             .public = s.opts.public,
         };
+    }
+
+    /// From `path` up to its view's root
+    pub fn toRoot(s: *const Site, path: []const u8) []const u8 {
+        const depth = std.mem.count(u8, path, "/");
+        const out = s.arena.alloc(u8, 3 * depth) catch return "";
+        for (0..depth) |i| @memcpy(out[3 * i ..][0..3], "../");
+        return out;
+    }
+
+    /// From `path` to the site root, where the shared pages are
+    pub fn toShared(s: *const Site, path: []const u8) []const u8 {
+        return std.mem.concat(s.arena, u8, &.{ s.toRoot(path), s.region.up() }) catch "";
     }
 
     /// Also `path`.gz for `meiolol serve` to send to clients that accept gzip
@@ -134,6 +164,18 @@ pub const Site = struct {
 };
 
 pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options) !void {
+    try generateView(gpa, io, db, opts, .euw, opts.all_curves);
+    if (opts.all_platforms.len == 0) return;
+    var all = opts;
+    all.out_dir = try std.fs.path.join(gpa, &.{ opts.out_dir, "all" });
+    defer gpa.free(all.out_dir);
+    all.platforms = opts.all_platforms;
+    all.curves = opts.all_curves;
+    all.daily_dir = null;
+    try generateView(gpa, io, db, all, .all, opts.curves);
+}
+
+fn generateView(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options, region: html.Region, other_curves: ?[]const u8) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -163,29 +205,26 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
         .games = built.summary.games,
         .patch = patch,
         .ddragon_version = "",
+        .region = region,
         .opts = opts,
     };
     try loadChamps(&site, db);
-    if (opts.curves) |path| {
-        // Optional extras: a bad or old file leaves out matchup pages, not the site
-        const read = cwd.readFileAlloc(io, path, arena, .limited(1 << 30));
-        if (read) |bytes| {
-            site.curves = core.curvesfile.Curves.parse(arena, bytes) catch |err| blk: {
-                log.warn("lane curves at {s}: {t}", .{ path, err });
-                break :blk null;
-            };
-        } else |err| switch (err) {
-            error.FileNotFound => log.info("no lane curves at {s}", .{path}),
-            else => log.warn("lane curves at {s}: {t}", .{ path, err }),
-        }
-    }
+    if (opts.curves) |path| site.curves = loadCurves(arena, io, path);
+    if (opts.all_platforms.len > 0) if (other_curves) |path| {
+        site.other_curves = loadCurves(arena, io, path);
+    };
 
-    try site.write("style.css", @embedFile("static/style.css"));
-    try site.write("favicon.svg", @embedFile("static/favicon.svg"));
-    try site.write("daily.js", @embedFile("static/daily.js"));
-    try site.write("your.js", @embedFile("static/your.js"));
-    try site.write("learn.js", @embedFile("static/learn.js"));
-    try site.write("meiolol.wasm", @embedFile("draft.wasm"));
+    const shared = region == .euw;
+    if (shared) {
+        try site.write("style.css", @embedFile("static/style.css"));
+        try site.write("favicon.svg", @embedFile("static/favicon.svg"));
+        try site.write("daily.js", @embedFile("static/daily.js"));
+        try site.write("your.js", @embedFile("static/your.js"));
+        try site.write("learn.js", @embedFile("static/learn.js"));
+        try site.write("meiolol.wasm", @embedFile("draft.wasm"));
+        if (opts.riot_txt) |t| try site.write("riot.txt", t);
+        try site.write("robots.txt", if (opts.public) "User-agent: *\nAllow: /\n" else "User-agent: *\nDisallow: /\n");
+    }
     try site.write("data/stats.bin", model_bytes);
     try writeChampionsJson(&site);
     site.pool = try pool.make(gpa, arena, db, &site.stats, opts.platforms, .{});
@@ -202,8 +241,6 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     }
     try site.write("pool.js", @embedFile("static/pool.js"));
     try site.write("min-games.js", @embedFile("static/min-games.js"));
-    if (opts.riot_txt) |t| try site.write("riot.txt", t);
-    try site.write("robots.txt", if (opts.public) "User-agent: *\nAllow: /\n" else "User-agent: *\nDisallow: /\n");
 
     if (opts.daily_dir) |d| {
         const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
@@ -219,16 +256,18 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
         for (files) |f| try site.write(f.path, f.data);
     }
     // After the Daily Draft, so practice leaves out the games behind its puzzles
-    const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
-    if (learn.build(arena, io, db, &site.stats, if (site.curves) |*c| c else null, .{
-        .patches = opts.patches,
-        .platforms = opts.platforms,
-        .today = day,
-        .daily_dir = opts.daily_dir,
-    })) |l| {
-        for (l.files) |f| try site.write(f.path, f.data);
-        try learn_page.write(&site, &l.facts);
-    } else |err| log.warn("learn: {t}", .{err});
+    if (shared) {
+        const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
+        if (learn.build(arena, io, db, &site.stats, if (site.curves) |*c| c else null, .{
+            .patches = opts.patches,
+            .platforms = opts.platforms,
+            .today = day,
+            .daily_dir = opts.daily_dir,
+        })) |l| {
+            for (l.files) |f| try site.write(f.path, f.data);
+            try learn_page.write(&site, &l.facts);
+        } else |err| log.warn("learn: {t}", .{err});
+    }
 
     try writeIndex(&site);
     for (Role.all) |r| try writeRole(&site, r);
@@ -245,17 +284,32 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
         .{ "privacy.html", "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
         .{ "terms.html", "Terms of use", "Terms for using meiolol.", .none, prose.terms },
     };
-    for (fixed) |f| {
+    if (shared) for (fixed) |f| {
         var aw: Writer.Allocating = .init(arena);
-        const p = site.page(try std.fmt.allocPrint(arena, "{s} | meiolol", .{f[1]}), f[2], "", f[3]);
+        const p = site.sharedPage(try std.fmt.allocPrint(arena, "{s} | meiolol", .{f[1]}), f[2], f[3]);
         try html.head(&aw.writer, p);
         try f[4](&aw.writer, info);
         try html.foot(&aw.writer, p);
         try site.write(f[0], aw.written());
-    }
+    };
     log.info("{s}: patch {s}, {d} games, {d} champion pages", .{
         opts.out_dir, patch, site.games, site.champs.len,
     });
+}
+
+/// Optional extras: a bad or old file leaves out matchup pages, not the site
+fn loadCurves(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?core.curvesfile.Curves {
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 30)) catch |err| {
+        switch (err) {
+            error.FileNotFound => log.info("no lane curves at {s}", .{path}),
+            else => log.warn("lane curves at {s}: {t}", .{ path, err }),
+        }
+        return null;
+    };
+    return core.curvesfile.Curves.parse(arena, bytes) catch |err| {
+        log.warn("lane curves at {s}: {t}", .{ path, err });
+        return null;
+    };
 }
 
 fn loadChamps(site: *Site, db: store.Db) !void {
@@ -419,10 +473,11 @@ fn writeRole(site: *const Site, r: Role) !void {
     var aw: Writer.Allocating = .init(a);
     const w = &aw.writer;
     const title = try std.fmt.allocPrint(a, "{s} lane champions, patch {s} | meiolol", .{ roleName(r), site.patch });
-    const desc = try std.fmt.allocPrint(a, "{s} lane champions in EUW ranked solo queue on patch {s}: games, win, pick and ban rates.", .{ roleName(r), site.patch });
-    const p = site.page(title, desc, "../", .champions);
+    const desc = try std.fmt.allocPrint(a, "{s} lane champions in ranked solo queue {s} on patch {s}: games, win, pick and ban rates.", .{ roleName(r), site.region.in(), site.patch });
+    const path = try std.fmt.allocPrint(a, "role/{s}.html", .{roleSlug(r)});
+    const p = site.page(title, desc, path, .champions);
     try html.head(w, p);
-    try w.print("<h1>{s} lane champions</h1>\n<p class=\"muted\">Patch {s}, EUW ranked solo/duo, all ranks. Most played first; greyed under {d} games.</p>\n", .{ roleName(r), site.patch, min_role_games });
+    try w.print("<h1>{s} lane champions</h1>\n<p class=\"muted\">Patch {s}, ranked solo/duo {s}, all ranks. Most played first; greyed under {d} games.</p>\n", .{ roleName(r), site.patch, site.region.in(), min_role_games });
     try roleTabs(w, r, "../");
     try earlyNote(site, w);
     try w.writeAll(
@@ -444,7 +499,7 @@ fn writeRole(site: *const Site, r: Role) !void {
     }
     try w.writeAll("</tbody></table></div>\n");
     try html.foot(w, p);
-    try site.write(try std.fmt.allocPrint(a, "role/{s}.html", .{roleSlug(r)}), aw.written());
+    try site.write(path, aw.written());
 }
 
 fn writeIndex(site: *const Site) !void {
@@ -454,7 +509,7 @@ fn writeIndex(site: *const Site) !void {
     const p = site.page(
         "meiolol: learn your lane",
         "How League of Legends lane matchups unfold minute by minute, from ranked games: gold, experience and CS curves per matchup and rank, a Daily Draft puzzle and champion statistics.",
-        "",
+        "index.html",
         .none,
     );
     try html.head(w, p);
@@ -478,15 +533,15 @@ fn writeIndex(site: *const Site) !void {
     } else {
         try w.writeAll("<p>When each side of a lane matchup tends to get ahead, by how much, and whether winning lane wins the game. Curves appear as match timelines come in.</p></div>\n");
     }
-    try w.writeAll(
-        \\<div class="card"><h3><a href="daily.html">Daily Draft</a></h3>
+    try w.print(
+        \\<div class="card"><h3><a href="{0s}daily.html">Daily Draft</a></h3>
         \\<p>One real ranked draft a day, anonymised. Guess the hidden champion and the
         \\winner, then see what happened and what the numbers say. Keep a streak, share
         \\your grid.</p></div>
-        \\<div class="card"><h3><a href="learn.html">New to League? Start with Learn</a></h3>
+        \\<div class="card"><h3><a href="{0s}learn.html">New to League? Start with Learn</a></h3>
         \\<p>Five short lessons on draft in plain words, with real examples, then practice on
         \\real ranked drafts with every option explained. No timers, no streaks.</p></div>
-        \\<div class="card"><h3><a href="your.html">Your games</a></h3>
+        \\<div class="card"><h3><a href="{0s}your.html">Your games</a></h3>
         \\<p>Enter your Riot ID and see each recent game's lane laid over the typical curve
         \\for that matchup at your rank, and your record per matchup over the months.</p></div>
         \\<div class="card"><h3><a href="pool.html">Champion pool</a></h3>
@@ -494,7 +549,7 @@ fn writeIndex(site: *const Site) !void {
         \\main's hardest lanes, and what they play when it is banned.</p></div>
         \\</div>
         \\
-    );
+       , .{site.region.up()});
     try earlyNote(site, w);
     try w.writeAll("<h2>Champions</h2>\n");
     try roleTabs(w, null, "");
@@ -503,7 +558,7 @@ fn writeIndex(site: *const Site) !void {
         if (i > 0) try w.writeAll(" · ");
         try w.print("<a href=\"champion/{s}.html\">{f}</a>", .{ ch.slug, esc(ch.name) });
     }
-    try w.writeAll("</p>\n<p class=\"muted\"><a href=\"method.html\">How the numbers are made</a></p>\n");
+    try w.print("</p>\n<p class=\"muted\"><a href=\"{s}method.html\">How the numbers are made</a></p>\n", .{site.region.up()});
     try html.foot(w, p);
     try site.write("index.html", aw.written());
 }
@@ -554,12 +609,13 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
     var aw: Writer.Allocating = .init(a);
     const w = &aw.writer;
     const title = try std.fmt.allocPrint(a, "{s} lane opponents, teammates and curves, patch {s} | meiolol", .{ ch.name, site.patch });
-    const desc = try std.fmt.allocPrint(a, "{s} in EUW ranked solo queue on patch {s}: games, win rate, lane opponents, teammates and lane curves.", .{ ch.name, site.patch });
-    const p = site.page(title, desc, "../", .none);
+    const desc = try std.fmt.allocPrint(a, "{s} in ranked solo queue {s} on patch {s}: games, win rate, lane opponents, teammates and lane curves.", .{ ch.name, site.region.in(), site.patch });
+    const path = try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug});
+    const p = site.page(title, desc, path, .none);
     try html.head(w, p);
     try w.print(
-        "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><div><h1>{f}</h1><p class=\"muted\">Patch {s}, EUW ranked solo/duo, all ranks.</p></div></div>\n",
-        .{ site.icon(ch), esc(ch.name), site.patch },
+        "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><div><h1>{f}</h1><p class=\"muted\">Patch {s}, ranked solo/duo {s}, all ranks.</p></div></div>\n",
+        .{ site.icon(ch), esc(ch.name), site.patch, site.region.in() },
     );
     try earlyNote(site, w);
 
@@ -630,7 +686,7 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
     }
     try pool_page.section(site, w, &site.pool, ch);
     try learning_page.section(w, &site.learning, ch);
-    try w.print("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts. By default a pair is listed only with {d}+ games and an edge larger than chance alone would give at that size; a lower minimum shows thinner pairs, greyed out. <a href=\"../method.html\">Method</a>.</p>\n", .{min_pair_games});
+    try w.print("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts. By default a pair is listed only with {d}+ games and an edge larger than chance alone would give at that size; a lower minimum shows thinner pairs, greyed out. <a href=\"{s}method.html\">Method</a>.</p>\n", .{ min_pair_games, site.toShared(path) });
     try html.foot(w, p);
     try site.write(try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug}), aw.written());
 }

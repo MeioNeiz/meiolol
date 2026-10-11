@@ -91,9 +91,11 @@ to region map: `platforms` in src/riot/endpoints.zig.
   rank snapshot, refreshed daily), then champion mastery with spare budget
 - regional (americas, asia, europe, sea): match ids per player of its platforms (last
   14 days, queue 420), match details, then timelines of non-remakes (`--timelines PCT`,
-  default all, picked by match id hash). Queues are FIFO per region; ids refill only
-  under 300 pending. Timeline batches (60) outsize match batches (40) so a backlog
-  drains. Per match ~2.13 calls (match + timeline + ids), so ~33k matches/day/region
+  default all, picked by match id hash). Queues put `--priority` platforms' matches
+  first, then FIFO for matches and newest first for timelines; ids refill only under 300
+  pending. Each batch of 40 matches gets 40 timelines, so new games get theirs at once;
+  a backlog of older timelines (60 a batch) only drains when the match batch is short.
+  Per match ~2.13 calls (match + timeline + ids), so ~33k matches/day/region
 - main thread: per-region report every minute, raw pruning hourly. On first start with
   an empty timeline_queue, queues timelines for already crawled matches
 
@@ -146,7 +148,7 @@ min(10, games) still going. Size: ~800 pages, 14 MB with .gz, per 200 games; rai
 --min-games if the upload grows too big. The index has a min games selector
 (html.minGames, static/min-games.js; default 1). Not yet: first-item timing (needs an
 item list from Data Dragon), experienced-players filter (mastery), core-item split,
-region filter, patch / period filter (planned: last 30 days default, a specific patch,
+patch / period filter (planned: last 30 days default, a specific patch,
 rank). deploy/web-loop.sh rebuilds both curves files hourly and on a new patch.
 
 ## Pool (src/pool.zig, src/site/pool.zig, static/pool.js)
@@ -188,6 +190,13 @@ draftTerms/draftWin score a full draft (eval, Daily Draft). How well it predicts
 docs/model.md.
 
 ## Website (src/site, src/wasm.zig)
+
+Region views (html.Region): EUW at the site root, every platform under all/ (stats,
+pool, curves from all-recent-curves.bin, i.e. `meiolol curves --platform all`). Stats
+pages exist in both; a header switch links to the same page in the other view (a
+matchup the other view lacks: its matchup index), and localStorage remembers the last
+view so shared pages (Daily Draft, Learn, Your games, legal, at the root only, on EUW
+data) link back into it. Same patch for both: EUW's newest.
 
 `meiolol site --contact EMAIL` writes static files to data/site, framed as "learn your
 lane" for the production review (docs/concept.md "Application wording": no tier list,
