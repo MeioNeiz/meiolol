@@ -1,0 +1,45 @@
+# #1020 [BUG] League Schördinger's Quickplay games with/against bots match-v5
+state: open created: 2024-12-21T21:16:16Z closed: null
+author: geozukunft
+
+**Bug Description**  
+Games of players that are played in Quickplay (queue_id 490) together or against bots as was announced in https://www.leagueoflegends.com/en-us/news/game-updates/patch-14-18-notes/ are 404ing on match-v5
+
+**Problem Description**  
+When querying a players matchhistory the gameid for quickplay games that were played with/against bots show up in the history but when trying to actually get the data for that match the match 404s
+
+**Expected Result**  
+Either remove the entry from the matchhistory if the intention is to not have that data available to API consumers or make those matches available.
+
+**Actual Result**  
+When trying to query for such a match example: EUW1_7236792459 the response is 404
+
+**Developer Impact**  
+
+* Frequency: A couple hundred thousand games affected globally for 2024.
+* Severity: Leads to unneccesary 404s 
+* Cost: Uneccessary traffic for both developers and Riot
+* Efficiency: see above points
+
+**Player Impact**  
+
+* Frequency: Affects a handful of games for new players
+* Severity: The played time data for a player is inaccurate 
+* Quantity: Almost all new player who play quickplay are affected
+* Region: Globally
+
+**Preconditions**  
+What conditions must be met in order for this bug to occur?
+
+* Quickplay match must be played in which bots are present
+* Seemingly only for new accounts
+
+
+**Issue Comments**  
+
+This boils down to what the game team wants: data to be available or not and if not then it shouldn't show up in the matchhistory either. 
+Obv as the developer of YearIn.LoL not having that data makes me sad as it makes the data for all new players inaccurate for this year but it would be nice to have a descision on this whole thing to either remove them from the match history or enable access to the data so they can be handled as if they were PvE games.
+
+tags:
+bug, match-v5, lol-api, 
+
