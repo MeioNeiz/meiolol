@@ -16,6 +16,7 @@ const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
 const logreg = @import("logreg.zig");
+const lanegold = @import("lanegold.zig");
 const score = core.score;
 const Role = core.Role;
 
@@ -45,7 +46,7 @@ pub fn run(
     platforms: []const []const u8,
     opts: Options,
     w: *std.Io.Writer,
-) !void {
+) !History {
     const champs = try stats.champions(gpa, db);
     defer stats.freeChampions(gpa, champs);
     var list: GameList = .{ .gpa = gpa };
@@ -167,6 +168,24 @@ pub fn run(
         }
     }
 
+    const gold = try laneGoldSection(gpa, db, patches, platforms, champs, &full.stats, train, tests, opts.folds, &.{
+        base_only, model, empirical, joint,
+    }, w);
+
+    var line: History = .{
+        .platforms = platforms.len,
+        .test_platform = opts.test_platform orelse "",
+        .games = games.len,
+        .train = train.len,
+        .tests = tests.len,
+        .gold = gold,
+    };
+    for ([_]Predictor{ predictors[0], base_only, model, empirical, joint }, &line.results) |p, *out| {
+        const r = try evaluate(gpa, &full.stats, tests, p);
+        defer gpa.free(r.p);
+        out.* = .{ .log_loss = r.m.log_loss, .auc = r.m.auc };
+    }
+
     try w.writeAll("\n## Pick metric\n\n");
     try w.writeAll("Each held-out pick hidden in turn, the other nine known with roles; " ++
         "percentile of the champion actually picked among candidates (1 = model's top).\n\n");
@@ -205,6 +224,154 @@ pub fn run(
         try w.print(" {d:.3} |\n", .{eb_auc});
         if (n == train.len) break;
     }
+    return line;
+}
+
+const Result = struct { log_loss: f64, auc: f64 };
+
+/// One run, for the history file (data/eval-history.tsv on the box, deploy/web-loop.sh)
+pub const History = struct {
+    platforms: usize,
+    test_platform: []const u8,
+    games: usize,
+    train: usize,
+    tests: usize,
+    /// coin flip, base only, current, empirical Bayes, joint ratings
+    results: [5]Result = undefined,
+    /// EB + lane gold on the test games with timelines; null when too few
+    gold: ?GoldResult,
+
+    pub const header = "date\tplatforms\ttest_platform\tgames\ttrain\ttest\t" ++
+        "ll_coin\tll_base\tll_current\tll_eb\tll_joint\t" ++
+        "auc_base\tauc_current\tauc_eb\tauc_joint\t" ++
+        "gold_test\tll_eb_gold_subset\tll_gold\tauc_gold\n";
+
+    pub fn write(h: History, w: *std.Io.Writer, date: []const u8) !void {
+        try w.print("{s}\t{d}\t{s}\t{d}\t{d}\t{d}", .{
+            date, h.platforms, h.test_platform, h.games, h.train, h.tests,
+        });
+        for (h.results) |r| try w.print("\t{d:.5}", .{r.log_loss});
+        for (h.results[1..]) |r| try w.print("\t{d:.4}", .{r.auc});
+        if (h.gold) |g| {
+            try w.print("\t{d}\t{d:.5}\t{d:.5}\t{d:.4}\n", .{ g.tests, g.eb_log_loss, g.log_loss, g.auc });
+        } else try w.writeAll("\t0\t\t\t\n");
+    }
+};
+
+pub const GoldResult = struct { tests: usize, eb_log_loss: f64, log_loss: f64, auc: f64 };
+
+/// Appends `h` to the TSV at `path`, with a header when the file is new
+pub fn appendHistory(io: std.Io, path: []const u8, h: History, date: []const u8) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
+    defer file.close(io);
+    const len = try file.length(io);
+    var buf: [1024]u8 = undefined;
+    var fw = file.writer(io, &buf);
+    try fw.seekTo(len);
+    if (len == 0) try fw.interface.writeAll(History.header);
+    try h.write(&fw.interface, date);
+    try fw.interface.flush();
+}
+
+/// Fewer train games with lane gold and the section is skipped
+const min_gold_games = 500;
+
+/// Lane gold at 14 minutes (lanegold.zig) stacked with the draft's terms, on the test
+/// games that have timelines
+fn laneGoldSection(
+    gpa: std.mem.Allocator,
+    db: store.Db,
+    patches: []const []const u8,
+    platforms: []const []const u8,
+    champs: []const core.statsfile.Champion,
+    full: *const core.Stats,
+    train: []const Game,
+    tests: []const Game,
+    folds: u32,
+    others: []const Predictor,
+    w: *std.Io.Writer,
+) !?GoldResult {
+    var map = try lanegold.load(gpa, db, patches, platforms);
+    defer map.deinit(gpa);
+    var train_gold: usize = 0;
+    for (train) |g| train_gold += @intFromBool(map.contains(g.id));
+    var tests_gold: std.ArrayList(Game) = .empty;
+    defer tests_gold.deinit(gpa);
+    for (tests) |g| if (map.contains(g.id)) try tests_gold.append(gpa, g);
+    try w.print("\n## Lane gold at {d} minutes\n\nGames with a timeline: {d} of {d} train, {d} of " ++
+        "{d} test.", .{ lanegold.minute, train_gold, train.len, tests_gold.items.len, tests.len });
+    if (train_gold < min_gold_games or tests_gold.items.len < 100) {
+        try w.print(" Too few (need {d} train, 100 test); skipped.\n", .{min_gold_games});
+        return null;
+    }
+
+    // Out-of-fold features for the stack's weights
+    var xs: std.ArrayList(Weights) = .empty;
+    defer xs.deinit(gpa);
+    var ys: std.ArrayList(f64) = .empty;
+    defer ys.deinit(gpa);
+    for (0..folds) |k| {
+        var m: Model = try .build(gpa, champs, train, .{ .k = k, .folds = folds });
+        defer m.deinit(gpa);
+        var gm: lanegold.Model = try .build(gpa, &m.stats, train, &map, .{ .k = k, .folds = folds });
+        defer gm.deinit(gpa);
+        const o = score.empiricalPriors(&m.stats, eb_min_games).apply(.{});
+        for (train, 0..) |g, i| if (i % folds == k and map.contains(g.id)) {
+            try xs.append(gpa, goldFeatures(&m.stats, o, &gm, g));
+            try ys.append(gpa, blueWon(g));
+        };
+    }
+    const weights = fitLogistic(xs.items, ys.items, 1.0);
+
+    var gm: lanegold.Model = try .build(gpa, full, train, &map, null);
+    defer gm.deinit(gpa);
+    const o = score.empiricalPriors(full, eb_min_games).apply(.{});
+    try w.print(" Gold sd by role (top..support):", .{});
+    for (gm.sd) |sd| try w.print(" {d:.0}", .{sd});
+    try w.writeAll("; prior games, champion:");
+    for (gm.champ_prior) |k| try w.print(" {f}", .{Prior{ .games = k }});
+    try w.writeAll(", pair:");
+    for (gm.pair_prior) |k| try w.print(" {f}", .{Prior{ .games = k }});
+    try w.print(". Stack weights (out-of-fold): intercept {d:.3}, base {d:.3}, lane winrate " ++
+        "{d:.3}, champion gold {d:.3}, pair gold {d:.3}\n\n", .{
+        weights[0], weights[1], weights[2], weights[3], weights[4],
+    });
+
+    var list: std.ArrayList(Predictor) = .empty;
+    defer list.deinit(gpa);
+    try list.appendSlice(gpa, others);
+    try list.append(gpa, .{ .label = "EB + lane gold (stacked)", .kind = .{ .gold = .{
+        .opts = o,
+        .gm = &gm,
+        .w = weights,
+    } } });
+    var gold_only = weights;
+    gold_only[1] = 0;
+    gold_only[2] = 0;
+    try list.append(gpa, .{ .label = "lane gold terms only", .kind = .{ .gold = .{
+        .opts = o,
+        .gm = &gm,
+        .w = gold_only,
+    } } });
+    try fullDraft(gpa, full, tests_gold.items, list.items, 1, w);
+
+    const eb = try evaluate(gpa, full, tests_gold.items, .{ .label = "", .kind = .empirical });
+    defer gpa.free(eb.p);
+    const stacked = try evaluate(gpa, full, tests_gold.items, list.items[others.len]);
+    defer gpa.free(stacked.p);
+    return .{
+        .tests = tests_gold.items.len,
+        .eb_log_loss = eb.m.log_loss,
+        .log_loss = stacked.m.log_loss,
+        .auc = stacked.m.auc,
+    };
+}
+
+/// intercept, base and lane terms (opts), champion gold, pair gold
+fn goldFeatures(st: *const core.Stats, opts: score.Options, gm: *const lanegold.Model, g: Game) Weights {
+    const t = score.draftTerms(st, opts, g.teams);
+    const f = gm.features(st, g.teams);
+    return .{ 1, t.base, t.lane, f[0], f[1] };
 }
 
 /// Joint champion-role ratings: feature 0 the intercept (blue side), then one per
@@ -292,6 +459,8 @@ const Predictor = struct {
         empirical,
         /// Weights from fitJoint
         joint: []const f64,
+        /// Draft terms plus lane gold, weighted (goldStack)
+        gold: struct { opts: score.Options, gm: *const lanegold.Model, w: Weights },
     },
 
     /// Per stats file: empirical priors become concrete options
@@ -305,6 +474,7 @@ const Predictor = struct {
         return switch (p.kind) {
             .empirical => unreachable,
             .joint => |jw| sigmoid(jointRow(st, g).dot(jw)),
+            .gold => |x| sigmoid(dot(x.w, goldFeatures(st, x.opts, x.gm, g))),
             .coin => 0.5,
             .side => |rate| rate,
             .base => |o| sigmoid(score.draftTerms(st, o, g.teams).base),
@@ -740,7 +910,7 @@ const Prior = struct {
 };
 
 /// Unix ms as YYYY-MM-DD (UTC)
-const Day = struct {
+pub const Day = struct {
     ms: i64,
 
     pub fn format(d: Day, w: *std.Io.Writer) std.Io.Writer.Error!void {
@@ -757,7 +927,7 @@ test "auc and logistic fit" {
     const gpa = testing.allocator;
     var games: [4]Game = undefined;
     for (&games, [_]u1{ 1, 0, 1, 0 }) |*g, won| {
-        g.* = .{ .start = 0, .patch = 0, .platform = 0, .teams = @splat(@splat(0)), .winner = won };
+        g.* = .{ .id = 0, .start = 0, .patch = 0, .platform = 0, .teams = @splat(@splat(0)), .winner = won };
     }
     // Blue won games 1 and 3; perfectly ranked, then one swap
     try testing.expectEqual(1.0, try auc(gpa, &.{ 0.1, 0.9, 0.2, 0.8 }, &games));
