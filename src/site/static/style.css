@@ -249,3 +249,8 @@ button.primary { background: var(--accent); color: var(--bg); border-color: var(
   .setup-label { width: 100%; }
   .lenbar { grid-template-columns: 90px 1fr 80px; }
 }
+table.build td:first-child { white-space: normal; }
+table.build .icon { width: 28px; height: 28px; border-radius: 4px; vertical-align: middle; margin-right: 2px; }
+table.build .label { margin: 0 8px 0 4px; vertical-align: middle; }
+table.build .sep { color: var(--muted); margin: 0 4px; }
+p.caption { font-size: 13px; margin: 4px 0 16px; }

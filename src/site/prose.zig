@@ -66,6 +66,27 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\than the two champions' own win rates predict, in percentage points. Pairs with
         \\few games are pulled toward zero until the data supports them.</li>
         \\</ul>
+        \\<h2 id="builds">Builds</h2>
+        \\<ul>
+        \\<li><b>What is counted</b>: per champion and role on the current patch, the choices
+        \\of players ranked Platinum IV and above when the game was collected. Most played
+        \\first: a build page shows what players take, it does not rank choices.</li>
+        \\<li><b>Runes and summoner spells</b>: from the end-of-game summary. The rune page
+        \\is both trees without stat shards, which have their own table; Flash on either key
+        \\counts as the same pair.</li>
+        \\<li><b>Items</b>, from the match timeline: starting items are everything bought in
+        \\the first 90 seconds (net of undos and sales, trinkets left out); boots are the
+        \\first pair bought, an upgraded pair counting as the boots it came from, and "no
+        \\boots" once a player finished two items without any; finished items are those
+        \\used for first-item timing above, in the order they were bought.</li>
+        \\<li><b>Skill priority</b>: Q, W and E ordered by points spent after 13 skill
+        \\points (or the game's end, from 11), ties going to the ability that got there
+        \\first.</li>
+        \\<li><b>Sample size</b>: every row shows games and its share. A win rate needs 100
+        \\games and always comes with its 95% range; rows under 400 games are greyed out.
+        \\Games that reach three finished items run long, so their win rates are for
+        \\comparing with each other.</li>
+        \\</ul>
         \\<h2>Daily Draft</h2>
         \\<p>One complete ranked game a day, the same for everyone, with every player
         \\identity removed: no names, Riot IDs, match ids or dates. One champion is hidden

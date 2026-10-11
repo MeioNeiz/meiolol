@@ -192,6 +192,16 @@ next steps land here.
 - Daily Draft "easy daily" for new players
 - Curves memory at full volume: measure on the box
 
+### Builds (2026-10-11)
+
+- Done: `meiolol builds` + build pages in the patch views (docs/architecture.md
+  "Builds"), Platinum IV+ per player, gated like champion-page pairs; web loop runs it
+  daily. Next: check the first box run (data/builds.log: time, "dropped options" lines,
+  RSS at all-regions volume on the micro/A1) and a few pages; a builds index or nav entry
+  if Jacob wants builds that visible (application text does not mention builds);
+  first-three skill levels; first-item timing per core; builds by matchup once pairs
+  reach volume
+
 ### Learn (was learn-draft-6b)
 
 - Counters lesson: our own learning-curve numbers instead of the Reddit 44% vs 51.5%

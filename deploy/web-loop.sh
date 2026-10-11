@@ -13,6 +13,8 @@
 # Daily, `meiolol eval` (docs/model.md) appends a line to data/eval-history.tsv (model
 # accuracy vs data volume) and leaves its report in data/eval-latest.md. Read-only on the
 # DB; in the background at low priority, so a slow run never delays uploads.
+# Builds (`meiolol builds`, EUW and every region, current patch) the same way: daily and
+# on a new patch, in the background; the next site build picks the files up.
 set -u
 contact=$1
 cd "$(dirname "$0")/.." || exit 1
@@ -33,6 +35,7 @@ push_curves() {
 
 last_patch='' last_games=0 last_upload=0
 patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0
+last_builds=0 builds_patch='' builds_pid=''
 while true; do
     now=$(date +%s)
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
@@ -41,6 +44,13 @@ while true; do
             --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
             && mv data/eval-latest.md.new data/eval-latest.md) &
         last_eval=$now
+    fi
+    if [[ -n "$patch" ]] && { [[ -z "$builds_pid" ]] || ! kill -0 "$builds_pid" 2> /dev/null; } \
+        && { (( now - last_builds >= 86400 )) || [[ "$patch" != "$builds_patch" ]]; }; then
+        (nice -n 10 bin/meiolol builds --patch "$patch" \
+            && nice -n 10 bin/meiolol builds --patch "$patch" --platform all) \
+            > data/builds.log 2>&1 &
+        builds_pid=$! last_builds=$now builds_patch=$patch
     fi
     if (( now - last_curves >= 3600 )) || [[ "$patch" != "$curves_patch" ]]; then
         # Fails harmlessly (logged) until there are timelines

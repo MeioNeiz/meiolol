@@ -4,12 +4,13 @@
 build.zig            modules: core (pure), store (SQLite C), backend, app
 src/
   main.zig           `meiolol` backend CLI: crawl, stats, site, status, champions
-  ddragon.zig        champion ids/names from Data Dragon
+  ddragon.zig        Data Dragon: champion ids/names; item classes, rune and spell names
   date.zig           UTC dates (Date: format, parse, epoch days)
   pipeline_test.zig  fixture games through stats, curves and the site
   daily.zig          Daily Draft puzzles (data/daily), published by `meiolol site`
   learn.zig          Learn page data: champion facts, practice draft pack
   curves.zig         lane matchup curves from timelines (`meiolol curves`)
+  builds.zig         builds per champion and role (`meiolol builds`, JSON for the site)
   pool.zig           Pool: who mains X also plays Y, hard-lane options, ban fallback
   learning.zig       learning curves: results by games played on a champion
   stats.zig          model file from the matches table (`meiolol stats`)
@@ -205,6 +206,42 @@ min(10, games) still going. Size: ~800 pages, 14 MB with .gz, per 200 games; rai
 item list from Data Dragon), experienced-players filter (mastery), core-item split,
 older patches, rank filter. deploy/web-loop.sh rebuilds the four curves files hourly
 and on a new patch.
+
+## Builds (src/builds.zig, src/site/builds.zig)
+
+`meiolol builds` (--patch default the newest, --platform as stats, --min-tier default
+PLATINUM per player from participants.tier, "any" for everyone) writes
+data/export/builds-<patch>.json (all-builds-... with --platform all): per champion and
+role the 10 most played options of each kind with games and wins, plus the kind's total
+(the share's whole) and names/icons of what they use, so the site needs no network.
+Kinds: keystone, rune page (both trees, secondary pair sorted), stat shards, summoner
+spells (unordered pair) from participants; from timelines: starting items (bought in the
+first 90 s, net of undo and sale, no trinkets), boots (first tier-2, tier 3 counted as
+its tier 2; "no boots" once two items are finished without), first two and first three
+finished items in purchase order (ddragon legendary rule, as first-item timing; an undone
+purchase comes off), skill priority (Q/W/E by points after 13 skill-ups or the game's end
+from 11, ties by who got there first; EVOLVE ups skipped). Needs Data Dragon's item.json,
+runesReforged.json and summoner.json for the patch (ddragon.buildData); stat shard names
+are a table in ddragon.zig.
+
+Memory: one hash map of distinct options (~50 B each) capped by --max-keys (default
+512k, ~30 MB); at the cap options at or under a rising count floor are dropped (logged),
+totals never. Per game an arena reset, like curves. Measured on 3.8k EUW 16.20 games
+(1.7k timelines): 1 s, 29 MB RSS, 25k options, 1.1 MB JSON; ~0.25 ms per timeline, so
+a full EUW patch (~400k) is a couple of minutes. deploy/web-loop.sh runs EUW and all
+regions for the current patch daily and on a new patch, in the background at nice 10
+(log data/builds.log); the next site build picks them up.
+
+`meiolol site` reads the current patch's two files: a page per champion and role in the
+patch views (patch/build/<slug>-<role>.html, all/patch/...) when the role has 10%+ of
+the champion's games in the file; champion pages link to it from each role section (the
+30-day views into their region's patch view; switches fall back to the champion page).
+Rows most played first, never by win rate, no "best" or "recommended": games and share
+on every row, a win rate only from 100 games and always with its 95% range (±1.96 SE),
+rows under 400 greyed, a "more data needed" note under 400 for the champion-role. Item,
+rune and spell icons hotlink Data Dragon like champion icons. Method page section
+`#builds`. Not yet: a builds index or nav entry, first-three skill levels, item timing,
+builds by rank or matchup.
 
 ## Pool (src/pool.zig, src/site/pool.zig, static/pool.js)
 

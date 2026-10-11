@@ -12,6 +12,7 @@ pub const serve = @import("serve.zig");
 pub const daily = @import("daily.zig");
 pub const learn = @import("learn.zig");
 pub const curves = @import("curves.zig");
+pub const builds = @import("builds.zig");
 pub const pool = @import("pool.zig");
 pub const learning = @import("learning.zig");
 pub const patchday = @import("patchday.zig");
@@ -74,6 +75,16 @@ const usage =
     \\              --out FILE       default DIR/export/curves-<patch>.bin (all-curves-...
     \\                               and all-recent-curves.bin with --platform all)
     \\              --min-games N    leave out matchups with fewer games (default 1: all)
+    \\  builds      write what players build per champion and role (builds.zig): runes,
+    \\              summoner spells, starting items, boots, first items, skill order;
+    \\              JSON the site reads (needs Data Dragon)
+    \\              --patch P        as for stats (default: the newest patch)
+    \\              --platform P     as for stats
+    \\              --min-tier T     lowest rank counted, per player (default PLATINUM;
+    \\                               "any" counts everyone, unranked too)
+    \\              --max-keys N     distinct options held in memory (default 524288)
+    \\              --out FILE       default DIR/export/builds-<patch>.json
+    \\                               (all-builds-... with --platform all)
     \\  pool        write what players of each champion also play (pool.zig), as JSON
     \\              --patch P        as for stats (matchups); pools use every patch
     \\              --platform P     as for stats
@@ -90,7 +101,8 @@ const usage =
     \\                               per model) for the accuracy-vs-data curve
     \\  site       write the public website (static files): EUW over the last 30 days
     \\              at the root, the patch under patch/, every region under all/ and
-    \\              all/patch/ (lane curves: the curves command's default files)
+    \\              all/patch/ (lane curves and builds: the curves and builds
+    \\              commands' default files)
     \\              --patch P        the patch views' (default: EUW's newest patch)
     \\              --out DIR        default DIR/site
     \\              --contact EMAIL  shown on the privacy and terms pages (required)
@@ -177,6 +189,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "crawl", cmdCrawl },
     .{ "stats", cmdStats },
     .{ "curves", cmdCurves },
+    .{ "builds", cmdBuilds },
     .{ "pool", cmdPool },
     .{ "eval", cmdEval },
     .{ "site", cmdSite },
@@ -462,6 +475,52 @@ fn cmdCurves(c: *Cmd) !u8 {
     return 0;
 }
 
+fn cmdBuilds(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var out: ?[]const u8 = null;
+    var o: builds.Options = .{ .patches = &.{}, .platforms = &.{} };
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--out")) {
+            out = try c.value();
+        } else if (c.is("--min-tier")) {
+            const t = try c.value();
+            o.min_tier = if (std.mem.eql(u8, t, "any")) null else t;
+        } else if (c.is("--max-keys")) {
+            o.max_keys = try c.int(usize);
+        } else return error.Usage;
+    }
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    o.platforms = g.platformIds();
+    o.patches = if (g.patches.items.len > 0) g.patches.items else try newestPatch(c.arena, db, o.platforms);
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    const label = try stats.label(&label_buf, o.patches);
+    const path = out orelse try buildsPath(c.arena, c.data_dir, o.patches, g.every_platform);
+    const data = try ddragon.buildData(gpa, c.arena, io, o.patches[0]);
+
+    var b = try builds.build(gpa, db, &data, o);
+    defer b.deinit();
+    if (b.games == 0) {
+        std.log.err("no ranked solo games on patch {s}", .{label});
+        return error.NoMatches;
+    }
+    const f = try b.file(c.arena, &data, label, o.min_tier orelse "", o.rows);
+    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+    defer file.deinit(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var w = file.file.writer(io, &buf);
+    try std.json.Stringify.value(f, .{}, &w.interface);
+    try w.interface.flush();
+    try file.replace(io);
+    std.log.info("{s}: patch {s}, {d} games ({d} with timelines), {d} champion roles, {d} options held", .{
+        path, label, b.games, b.timelines, f.builds.len, b.options.count(),
+    });
+    return 0;
+}
+
 fn cmdPool(c: *Cmd) !u8 {
     var g: Games = .{};
     var out: ?[]const u8 = null;
@@ -575,6 +634,12 @@ fn cmdSite(c: *Cmd) !u8 {
         .public = public,
         .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
         .curves = view_curves,
+        .builds = .{
+            null,
+            try buildsPath(arena, c.data_dir, chosen, false),
+            null,
+            try buildsPath(arena, c.data_dir, chosen, true),
+        },
     });
     return 0;
 }
@@ -865,6 +930,13 @@ fn curvesPath(arena: std.mem.Allocator, data_dir: []const u8, chosen: []const []
 /// curves-*.bin, which the Your games service reads as one file per patch
 fn recentCurvesPath(arena: std.mem.Allocator, data_dir: []const u8, every: bool) ![]const u8 {
     return std.fmt.allocPrint(arena, "{s}/export/{s}recent-curves.bin", .{ data_dir, allPrefix(every) });
+}
+
+/// Where `meiolol builds` writes by default; the site reads the newest patch's
+fn buildsPath(arena: std.mem.Allocator, data_dir: []const u8, chosen: []const []const u8, every: bool) ![]const u8 {
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    const label = try stats.label(&label_buf, chosen);
+    return std.fmt.allocPrint(arena, "{s}/export/{s}builds-{s}.json", .{ data_dir, allPrefix(every), label });
 }
 
 fn allPrefix(every: bool) []const u8 {

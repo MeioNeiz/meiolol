@@ -17,6 +17,8 @@ const pool_page = @import("pool.zig");
 const pool = @import("../pool.zig");
 const learning_page = @import("learning.zig");
 const learning = @import("../learning.zig");
+const builds_page = @import("builds.zig");
+const builds = @import("../builds.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -49,6 +51,8 @@ pub const Options = struct {
     /// Lane curves file per view (html.View.index; `meiolol curves`): matchup pages
     /// where set
     curves: [html.View.count]?[]const u8 = @splat(null),
+    /// Builds file per view (`meiolol builds`): build pages in the patch views where set
+    builds: [html.View.count]?[]const u8 = @splat(null),
 };
 
 /// Below this share of all games a champion is left out of a role's page
@@ -104,6 +108,8 @@ pub const Site = struct {
     curves: ?core.curvesfile.Curves = null,
     /// Every view's (html.View.index), so the switches skip matchups without a page
     view_curves: *const [html.View.count]?core.curvesfile.Curves,
+    /// Every view's builds (html.View.index); the 30-day views link to their patch view's
+    view_builds: *const [html.View.count]?builds.File,
     pool: pool.Pool = .{},
     learning: learning.Learning = .{},
 
@@ -190,11 +196,15 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     for (opts.curves, &view_curves) |path, *c| {
         if (path) |p| c.* = loadCurves(arena, io, p);
     }
+    var view_builds: [html.View.count]?builds.File = @splat(null);
+    for (opts.builds, &view_builds) |path, *b| {
+        if (path) |p| b.* = loadBuilds(arena, io, p);
+    }
     const cwd = std.Io.Dir.cwd();
     try cwd.createDirPath(io, opts.out_dir);
     var root_dir = try cwd.openDir(io, opts.out_dir, .{});
     defer root_dir.close(io);
-    for (html.View.all) |v| try generateView(gpa, io, db, opts, v, root_dir, &view_curves);
+    for (html.View.all) |v| try generateView(gpa, io, db, opts, v, root_dir, &view_curves, &view_builds);
 }
 
 fn generateView(
@@ -205,6 +215,7 @@ fn generateView(
     view: html.View,
     root_dir: std.Io.Dir,
     view_curves: *const [html.View.count]?core.curvesfile.Curves,
+    view_builds: *const [html.View.count]?builds.File,
 ) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -258,6 +269,7 @@ fn generateView(
         .opts = opts,
         .curves = view_curves[view.index()],
         .view_curves = view_curves,
+        .view_builds = view_builds,
     };
     try loadChamps(&site, db);
 
@@ -320,6 +332,7 @@ fn generateView(
     for (site.champs) |ch| try writeChampion(&site, ch);
     if (site.curves) |*c| try matchup.writeAll(&site, c);
     try matchup.writeIndex(&site, if (site.curves) |*c| c else null);
+    if (view.period == .patch) if (view_builds[view.index()]) |*b| try builds_page.writeAll(&site, b);
     try pool_page.writePage(&site, &site.pool, &site.learning);
     const info: prose.Info = .{ .contact = opts.contact, .updated = opts.updated };
     const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
@@ -342,6 +355,21 @@ fn generateView(
     log.info("{s}/{s}: {s}, {d} games, {d} champion pages", .{
         opts.out_dir, view.dir(), site.when, site.games, site.champs.len,
     });
+}
+
+/// Optional, as curves: a bad or missing file leaves out build pages
+fn loadBuilds(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?builds.File {
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 30)) catch |err| {
+        switch (err) {
+            error.FileNotFound => log.info("no builds at {s}", .{path}),
+            else => log.warn("builds at {s}: {t}", .{ path, err }),
+        }
+        return null;
+    };
+    return builds.File.parse(arena, bytes) catch |err| {
+        log.warn("builds at {s}: {t}", .{ path, err });
+        return null;
+    };
 }
 
 /// Optional extras: a bad or old file leaves out matchup pages, not the site
@@ -729,6 +757,7 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
         try pairCard(site, w, "Lower win rate against", "in lane", worst.items, matchups_shown, false);
         try pairCard(site, w, "Higher win rate with", "on the same team", duos.items, duos_shown, true);
         try w.writeAll("</div>\n");
+        try builds_page.link(site, w, ch, r, path);
         if (site.curves) |*c| try matchup.links(site, w, c, ch, r);
     }
     try pool_page.section(site, w, &site.pool, ch);
