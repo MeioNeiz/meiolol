@@ -75,6 +75,13 @@ next steps land here.
   production key
 - Requeue matches failed by 429 storms (6x 429 then GaveUp counts as an attempt)
 - Optional: lossy timeline compaction if disk gets tight
+- Four-view site (region EUW/all x period 30 days/patch, 9096d0f): check
+  /all/patch/index.html goes live after a full web-loop pass on the micro (10+ min, any
+  restart starts it over); measure site size (~2x, est. ~400 MB), upload time, disk
+- Check europe's EUW1-first scanning holds on the new host (players.matches_checked_at
+  by platform, region europe)
+- Raw prune runs an hour after start (4b94ffa) and blocks the main thread's reports
+  while it runs; move it off the main thread if that matters
 - Storage plan (research/questions/free-hosting-storage.md, C18/C19), if Jacob agrees:
   `meiolol prune` keeps a rolling window of match rows + compact timelines on the box
   (60 days to start), per-patch aggregates kept forever, Pool learning curves moved onto
