@@ -32,7 +32,7 @@ pub const Options = struct {
     data_dir: []const u8,
     key: []const u8,
     since_days: i64 = 14,
-    ladder_refresh_s: i64 = 24 * 3600,
+    ladder_refresh_s: i64 = 7 * 24 * 3600,
     recheck_s: i64 = 12 * 3600,
     mastery: bool = true,
     hours: ?f64 = null,
@@ -415,6 +415,10 @@ const Worker = struct {
             \\    rank_seen_at = excluded.rank_seen_at, source = 'ladder',
             \\    platform = excluded.platform, region = excluded.region,
             \\    seen_at = excluded.seen_at
+            \\WHERE tier IS NOT excluded.tier OR division IS NOT excluded.division
+            \\    OR lp IS NOT excluded.lp OR wins IS NOT excluded.wins
+            \\    OR losses IS NOT excluded.losses OR source <> 'ladder'
+            \\    OR seen_at < excluded.seen_at - 86400
         );
         defer up.deinit();
         for (entries) |e| {
@@ -642,6 +646,7 @@ const Worker = struct {
             \\INSERT INTO players (puuid, source, platform, region, seen_at)
             \\VALUES (?, 'participant', ?, ?, ?)
             \\ON CONFLICT (puuid) DO UPDATE SET seen_at = excluded.seen_at
+            \\WHERE seen_at < excluded.seen_at - 86400
         );
         defer ins.deinit();
         for (doc.info.participants, 0..) |p, slot| {

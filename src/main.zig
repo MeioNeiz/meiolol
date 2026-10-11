@@ -30,6 +30,8 @@ const usage =
     \\              --hours H        stop after H hours (default: run until stopped)
     \\              --since-days N   how far back to collect match ids (default 14)
     \\              --no-mastery     skip champion mastery
+    \\              --ladder-refresh-days N  refetch ladder pages after N days
+    \\                               (default 7)
     \\              --regions R      americas,asia,europe,sea (default all)
     \\              --timelines PCT  share of matches that also get a timeline
     \\                               (default 100, 0 for none)
@@ -138,6 +140,7 @@ pub fn main(init: std.process.Init) !u8 {
     var raw_match_days: u32 = 30;
     var priority: ?[]const []const u8 = null;
     var reserve_pct: u8 = 0;
+    var ladder_refresh_days: i64 = 7;
     var out_path: ?[]const u8 = null;
     var contact: ?[]const u8 = null;
     var riot_txt: ?[]const u8 = null;
@@ -180,6 +183,8 @@ pub fn main(init: std.process.Init) !u8 {
             data_dir = v;
         } else if (std.mem.eql(u8, a, "--hours")) {
             hours = std.fmt.parseFloat(f64, v) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--ladder-refresh-days")) {
+            ladder_refresh_days = std.fmt.parseInt(i64, v, 10) catch return usageError(a);
         } else if (std.mem.eql(u8, a, "--since-days")) {
             since_days = std.fmt.parseInt(i64, v, 10) catch return usageError(a);
         } else if (std.mem.eql(u8, a, "--patch")) {
@@ -288,6 +293,7 @@ pub fn main(init: std.process.Init) !u8 {
             .data_dir = data_dir,
             .key = key,
             .since_days = since_days,
+            .ladder_refresh_s = ladder_refresh_days * 86400,
             .mastery = mastery,
             .hours = hours,
             .regions = if (regions.items.len > 0) regions.items else std.enums.values(riot.endpoints.Region),
