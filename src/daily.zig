@@ -16,6 +16,7 @@ const stats = @import("stats.zig");
 const Role = core.Role;
 const Stats = core.Stats;
 const score = core.score;
+const curvesfile = core.curvesfile;
 
 const log = std.log.scoped(.daily);
 
@@ -212,19 +213,6 @@ fn make(
     return null;
 }
 
-const tier_order = [_][]const u8{
-    "IRON",
-    "BRONZE",
-    "SILVER",
-    "GOLD",
-    "PLATINUM",
-    "EMERALD",
-    "DIAMOND",
-    "MASTER",
-    "GRANDMASTER",
-    "CHALLENGER",
-};
-
 /// Null when the game is unusable: a position missing or doubled, a champion the
 /// model file lacks, or too few champions to fill the four options
 fn load(
@@ -311,15 +299,10 @@ fn medianTier(db: store.Db, match_id: []const u8) !?[]const u8 {
     var ranks: [10]usize = undefined;
     var len: usize = 0;
     while (try q.step() and len < ranks.len) {
-        const tier = q.bytes(0);
-        for (tier_order, 0..) |t, i| if (std.mem.eql(u8, tier, t)) {
-            ranks[len] = i;
-            len += 1;
-        };
+        ranks[len] = curvesfile.tierRank(q.bytes(0)) orelse continue;
+        len += 1;
     }
-    if (len < 5) return null;
-    std.mem.sort(usize, ranks[0..len], {}, std.sort.asc(usize));
-    return tier_order[ranks[len / 2]];
+    return curvesfile.tiers[curvesfile.medianRank(ranks[0..len]) orelse return null];
 }
 
 /// Same minimum as the site's draft helper: 0.3% of games, between 5 and 200

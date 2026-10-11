@@ -10,6 +10,7 @@ pub const stats = @import("stats.zig");
 pub const site = @import("site/root.zig");
 pub const serve = @import("serve.zig");
 pub const daily = @import("daily.zig");
+pub const curves = @import("curves.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
 
@@ -31,6 +32,11 @@ const usage =
     \\              --out FILE       default DIR/export/stats-<patch>.bin
     \\              --platform P     Riot platform id, repeatable or comma separated
     \\                               (default EUW1; see riot/endpoints.zig)
+    \\  curves      write lane matchup curves from match timelines (curvesfile.zig)
+    \\              --patch P        as for stats
+    \\              --platform P     as for stats
+    \\              --out FILE       default DIR/export/curves-<patch>.bin
+    \\              --min-games N    leave out matchups with fewer games (default 20)
     \\  site        write the public website (static files)
     \\              --patch P        as for stats
     \\              --platform P     as for stats (pages say EUW: reword before others)
@@ -73,6 +79,7 @@ pub fn main(init: std.process.Init) !u8 {
     var public = false;
     var host: []const u8 = "127.0.0.1";
     var port: u16 = 8080;
+    var min_games: u32 = 20;
     var i: usize = 2;
     while (i < args.len) : (i += 1) {
         const a = args[i];
@@ -118,6 +125,8 @@ pub fn main(init: std.process.Init) !u8 {
             host = v;
         } else if (std.mem.eql(u8, a, "--port")) {
             port = std.fmt.parseInt(u16, v, 10) catch return usageError(a);
+        } else if (std.mem.eql(u8, a, "--min-games")) {
+            min_games = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
         } else if (std.mem.eql(u8, a, "--riot-txt")) {
             riot_txt = v;
         } else return usageError(a);
@@ -151,6 +160,10 @@ pub fn main(init: std.process.Init) !u8 {
         try writeStats(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path);
         return 0;
     }
+    if (std.mem.eql(u8, cmd, "curves")) {
+        try writeCurves(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path, min_games);
+        return 0;
+    }
     if (std.mem.eql(u8, cmd, "site")) {
         const email = contact orelse return usageError("--contact");
         const db = try store.open(init.gpa, data_dir);
@@ -165,6 +178,7 @@ pub fn main(init: std.process.Init) !u8 {
             .updated = try today(arena, init.io),
             .public = public,
             .daily_dir = try std.fs.path.join(arena, &.{ data_dir, "daily" }),
+            .curves = try curvesPath(arena, data_dir, chosen),
         });
         return 0;
     }
@@ -245,6 +259,48 @@ fn writeStats(
     std.log.info("{s}: patch {s}, {d} games ({d} skipped), {d} champions", .{
         path, label, r.summary.games, r.summary.skipped, r.builder.ids.len,
     });
+}
+
+fn writeCurves(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    arena: std.mem.Allocator,
+    data_dir: []const u8,
+    wanted: []const []const u8,
+    platforms: []const []const u8,
+    out_path: ?[]const u8,
+    min_games: u32,
+) !void {
+    const db = try store.open(gpa, data_dir);
+    defer db.close();
+    const chosen = if (wanted.len > 0) wanted else try newestPatch(arena, db, platforms);
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    const label = try stats.label(&label_buf, chosen);
+    const path = out_path orelse try curvesPath(arena, data_dir, chosen);
+
+    var r = try curves.build(gpa, db, chosen, platforms);
+    defer r.builder.deinit();
+    if (r.summary.games == 0) {
+        std.log.err("no ranked solo games with timelines on patch {s}", .{label});
+        return error.NoMatches;
+    }
+    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+    defer file.deinit(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var w = file.file.writer(io, &buf);
+    try r.builder.write(&w.interface, label, min_games);
+    try w.interface.flush();
+    try file.replace(io);
+    std.log.info("{s}: patch {s}, {d} games ({d} skipped)", .{
+        path, label, r.summary.games, r.summary.skipped,
+    });
+}
+
+/// Where `meiolol curves` writes by default for these patches
+fn curvesPath(arena: std.mem.Allocator, data_dir: []const u8, chosen: []const []const u8) ![]const u8 {
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    const label = try stats.label(&label_buf, chosen);
+    return std.fmt.allocPrint(arena, "{s}/export/curves-{s}.bin", .{ data_dir, label });
 }
 
 fn newestPatch(arena: std.mem.Allocator, db: store.Db, platforms: []const []const u8) ![]const []const u8 {

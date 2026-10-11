@@ -6,6 +6,7 @@ src/
   main.zig           `meiolol` backend CLI: crawl, stats, site, status, champions
   ddragon.zig        champion ids/names from Data Dragon
   daily.zig          Daily Draft puzzles (data/daily), published by `meiolol site`
+  curves.zig         lane matchup curves from timelines (`meiolol curves`)
   stats.zig          model file from the matches table (`meiolol stats`)
   site/              public website generator (`meiolol site`): html.zig layout and
                      boilerplate, prose.zig fixed pages, static/ (css, draft.js)
@@ -15,7 +16,7 @@ src/
                      regions), match parser, timeline (compact format), crawl
   store/             sqlite.zig (thin wrapper), schema.zig, raw.zig (compression)
   core/              pure, std only, shared: roles, statsfile (model file format),
-                     score (recommender)
+                     score (recommender), curvesfile (lane curves format)
   lcu/               League client: lockfile/process discovery, https (TLS to
                      127.0.0.1 trusting only riotgames.pem), session (champ select)
   app_main.zig       `meiolol-app`: suggest (offline), watch (live), session, get
@@ -81,6 +82,29 @@ of statsfile.zig; bump the version on any change. Written by `meiolol stats` (de
 newest patch; `--patch 16.19,16.20` for several; `--platform` picks platforms, default
 EUW1, since the site says EUW) to data/export/stats-<patch>.bin. Only ranked solo
 games with no remake, a winner and all ten positions count.
+
+## Lane curves (src/curves.zig, src/core/curvesfile.zig, src/site/matchup.zig)
+
+`meiolol curves` (same --patch/--platform as stats, --min-games default 20) reads every
+ranked solo game with a timeline and writes data/export/curves-<patch>.bin. Per lane
+matchup (role, champion pair) and bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
+median visible tier of the game's players, never MMR): per minute 1..25 the p25/p50/p75
+of gold, XP and CS (lane + jungle) difference with n still playing; who leads in gold at
+14 min and how often each side then wins; games where each takes part in killing the
+other before 6, 6-14 and after 14 min; median level 6 time. Pairs are stored once (lower
+champion id first, a mirror from blue's side); `Curves.get(role, bracket, me, them)`
+returns a View from `me`'s side that negates and swaps quartiles. Format at the top of
+curvesfile.zig; bump the version on any change. Memory: ~170 B per lane record, ~1 GB
+at 1M games; fine on the box (15 GB).
+
+`meiolol site` reads the curves file for its patches when present: a page per matchup
+with an all-ranks curve (matchup/<role>/<a>-vs-<b>.html, lower id first), three SVG
+charts (median line, middle-half band; patch, tier and n in every caption), a lane and
+game table, a by-rank table, and "Lane curves" links on champion pages. Under 200 games
+charts and rows are grey with "more data needed". Not yet: first-item timing (needs an
+item list from Data Dragon), experienced-players filter (mastery), core-item split,
+region filter. Curves are not built by the web loop yet: run `meiolol curves` (daily is
+plenty) before `meiolol site`.
 
 ## Recommender (src/core/score.zig)
 

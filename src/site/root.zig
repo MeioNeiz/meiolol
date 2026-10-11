@@ -9,6 +9,7 @@ pub const html = @import("html.zig");
 const prose = @import("prose.zig");
 const daily_page = @import("daily.zig");
 const daily = @import("../daily.zig");
+const matchup = @import("matchup.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -33,6 +34,8 @@ pub const Options = struct {
     public: bool = false,
     /// Where Daily Draft puzzles are kept (src/daily.zig); null leaves them out
     daily_dir: ?[]const u8 = null,
+    /// Lane curves file for the same patches (`meiolol curves`); matchup pages when set
+    curves: ?[]const u8 = null,
 };
 
 /// Below this share of all games a champion is left out of a role's tier list
@@ -42,7 +45,7 @@ const min_role_share = 0.1;
 const matchups_shown = 6;
 const duos_shown = 6;
 
-const Champ = struct {
+pub const Champ = struct {
     /// Index in the stats file
     c: usize,
     id: u32,
@@ -53,7 +56,7 @@ const Champ = struct {
     games: u64,
 };
 
-const Site = struct {
+pub const Site = struct {
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     io: std.Io,
@@ -67,8 +70,9 @@ const Site = struct {
     ddragon_version: []const u8,
     opts: Options,
     score_opts: score.Options = .{},
+    curves: ?core.curvesfile.Curves = null,
 
-    fn page(s: *const Site, title: []const u8, description: []const u8, root: []const u8, nav: html.Nav) html.Page {
+    pub fn page(s: *const Site, title: []const u8, description: []const u8, root: []const u8, nav: html.Nav) html.Page {
         return .{
             .title = title,
             .description = description,
@@ -81,7 +85,7 @@ const Site = struct {
     }
 
     /// Also `path`.gz for `meiolol serve` to send to clients that accept gzip
-    fn write(s: *const Site, path: []const u8, data: []const u8) !void {
+    pub fn write(s: *const Site, path: []const u8, data: []const u8) !void {
         if (std.fs.path.dirname(path)) |d| try s.dir.createDirPath(s.io, d);
         try s.dir.writeFile(s.io, .{ .sub_path = path, .data = data });
         if (data.len < 1024) return;
@@ -91,7 +95,7 @@ const Site = struct {
         try s.dir.writeFile(s.io, .{ .sub_path = gz_path, .data = gz });
     }
 
-    fn icon(s: *const Site, ch: Champ) []const u8 {
+    pub fn icon(s: *const Site, ch: Champ) []const u8 {
         return std.fmt.allocPrint(
             s.arena,
             "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png",
@@ -99,7 +103,7 @@ const Site = struct {
         ) catch "";
     }
 
-    fn champLink(s: *const Site, w: *Writer, ch: Champ, root: []const u8) !void {
+    pub fn champLink(s: *const Site, w: *Writer, ch: Champ, root: []const u8) !void {
         try w.print(
             "<a class=\"champ\" href=\"{s}champion/{s}.html\"><img src=\"{s}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{f}</a>",
             .{ root, ch.slug, s.icon(ch), esc(ch.name) },
@@ -144,6 +148,15 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
         .opts = opts,
     };
     try loadChamps(&site, db);
+    if (opts.curves) |path| {
+        const read = cwd.readFileAlloc(io, path, arena, .limited(1 << 30));
+        if (read) |bytes| {
+            site.curves = try .parse(arena, bytes);
+        } else |err| switch (err) {
+            error.FileNotFound => log.info("no lane curves at {s}", .{path}),
+            else => return err,
+        }
+    }
 
     try site.write("style.css", @embedFile("static/style.css"));
     try site.write("favicon.svg", @embedFile("static/favicon.svg"));
@@ -170,6 +183,7 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     try writeDraft(&site);
     for (Role.all) |r| try writeTier(&site, r);
     for (site.champs) |ch| try writeChampion(&site, ch);
+    if (site.curves) |*c| try matchup.writeAll(&site, c);
     const info: prose.Info = .{ .contact = opts.contact, .updated = opts.updated };
     const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
         .{ "about.html", "How it works", "How meiolol's statistics and draft suggestions are made.", .about, prose.about },
@@ -334,7 +348,7 @@ fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
     try w.writeAll("</nav>\n");
 }
 
-fn roleSlug(r: Role) []const u8 {
+pub fn roleSlug(r: Role) []const u8 {
     return switch (r) {
         .top => "top",
         .jungle => "jungle",
@@ -344,7 +358,7 @@ fn roleSlug(r: Role) []const u8 {
     };
 }
 
-fn roleName(r: Role) []const u8 {
+pub fn roleName(r: Role) []const u8 {
     return switch (r) {
         .top => "Top",
         .jungle => "Jungle",
@@ -566,6 +580,7 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
         while (n_duos < @min(duos.items.len, duos_shown) and duos.items[n_duos].pp > 0) n_duos += 1;
         try pairCard(site, w, "Best with", "on your team", duos.items[0..n_duos], false, true);
         try w.writeAll("</div>\n");
+        if (site.curves) |*c| try matchup.links(site, w, c, ch, r);
     }
     try w.writeAll("<p class=\"muted\">Edges are percentage points beyond what each champion's own win rate predicts; pairs with few games stay near zero. <a href=\"../about.html\">How it works</a>.</p>\n");
     try html.foot(w, p);

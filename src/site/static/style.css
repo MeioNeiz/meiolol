@@ -137,3 +137,16 @@ button:disabled { cursor: default; }
 tr.thin td { color: var(--muted); opacity: 0.6; }
 .archive { list-style: none; padding: 0; }
 .archive li { display: flex; gap: 12px; padding: 2px 0; }
+.hero img + img { margin-left: -12px; }
+.chart { margin: 0; }
+.chart svg { width: 100%; height: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.chart text { fill: var(--muted); font-size: 12px; }
+.chart .side { font-size: 12px; }
+.chart .grid { stroke: var(--line); }
+.chart .zero { stroke: var(--muted); stroke-dasharray: 4 4; }
+.chart .band { fill: var(--accent); opacity: 0.18; }
+.chart .median { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.chart.thin .band { fill: var(--muted); }
+.chart.thin .median { stroke: var(--muted); }
+.chart figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
+.curves-links { font-size: 14px; }
