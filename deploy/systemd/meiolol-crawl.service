@@ -1,0 +1,15 @@
+# The crawler (deploy/box.sh start). Arguments in crawl.args. Exit 3 is Riot rejecting
+# the key: logged and not restarted, so a dead key never hammers Riot
+[Unit]
+Description=meiolol crawler
+
+[Service]
+WorkingDirectory=%h/ml/meiolol
+EnvironmentFile=-%h/ml/meiolol/host.env
+ExecStart=/bin/sh -c 'bin/meiolol crawl $(cat crawl.args 2>/dev/null) >> data/crawl.log 2>&1; rc=$?; [ $rc -eq 3 ] && echo KEY REJECTED >> data/crawl.log; exit $rc'
+Restart=always
+RestartSec=60
+RestartPreventExitStatus=3
+
+[Install]
+WantedBy=default.target

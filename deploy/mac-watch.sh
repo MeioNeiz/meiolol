@@ -2,9 +2,10 @@
 # Runs on the Mac every 30 min (launchd: deploy/net.jacob.meiolol-watch.plist): the box's
 # health check, toasted with `wz notify` when the problems change, and a daily mirror of
 # the box's backups (rsync --delete, so rotation and `forget --backups` scrubs follow).
-# Catches what the box cannot report itself: the PC off, asleep or unreachable.
+# Catches what the box cannot report itself: the box down or unreachable.
 set -u
-HOST=${GPU_HOST_ALIAS:-gpu-box}
+HOST=${MEIOLOL_HOST:-meiolol-cloud}
+REMOTE_BACKUPS=${MEIOLOL_REMOTE_BACKUPS:-ml/meiolol/backups}
 MIRROR=${MEIOLOL_MIRROR:-$HOME/Backups/meiolol}
 STATE=$HOME/.cache/meiolol-watch
 mkdir -p "$STATE" "$MIRROR"
@@ -12,11 +13,11 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
 
 out=$(ssh -o ConnectTimeout=20 -o BatchMode=yes "$HOST" ml/meiolol/bin/health.sh 2>&1)
 rc=$?
-(( rc == 255 )) && out="gpu-box unreachable (off, asleep or no network)"
+(( rc == 255 )) && out="$HOST unreachable (down or no network)"
 (( rc == 0 )) && out=''
 
 if (( rc == 0 )) && [[ ! -f "$STATE/mirrored" || -n $(find "$STATE/mirrored" -mmin +1200) ]]; then
-    if rsync -a --delete "$HOST:/mnt/d/meiolol-backups/" "$MIRROR/"; then
+    if rsync -a --delete "$HOST:$REMOTE_BACKUPS/" "$MIRROR/"; then
         touch "$STATE/mirrored"
     else
         out="backup mirror to the Mac failed"

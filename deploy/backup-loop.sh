@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs on the box (deploy/box.sh backup start): once a day at ~04:00 UTC, swap forgotten
-# PUUIDs with the Your games service, then `meiolol backup` into $MEIOLOL_BACKUPS
-# (default /mnt/d/meiolol-backups, the D: drive: another SSD than the C: drive holding
-# the WSL disk). docs/data-safety.md.
+# PUUIDs with the Your games service, then `meiolol backup` into $MEIOLOL_BACKUPS (set in
+# host.env on the cloud box; default /mnt/d/meiolol-backups, the gpu-box's D: drive).
+# docs/data-safety.md.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 export MEIOLOL_BACKUPS=${MEIOLOL_BACKUPS:-/mnt/d/meiolol-backups}

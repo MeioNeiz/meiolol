@@ -1,0 +1,12 @@
+[Unit]
+Description=meiolol daily backups (deploy/backup-loop.sh)
+
+[Service]
+WorkingDirectory=%h/ml/meiolol
+EnvironmentFile=-%h/ml/meiolol/host.env
+ExecStart=/bin/sh -c 'exec bin/backup-loop.sh >> data/backup.log 2>&1'
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=default.target

@@ -4,16 +4,23 @@
 # in docs/data-safety.md. Keeps the crawler's last progress in data/health.state.
 set -u
 cd "$(dirname "$0")/.." || exit 1
+# host.env (MEIOLOL_BACKUPS etc.) is the services' EnvironmentFile; mac-watch.sh runs this
+# over ssh without it
+[[ -f host.env ]] && { set -a; . ./host.env; set +a; }
 BACKUPS=${MEIOLOL_BACKUPS:-/mnt/d/meiolol-backups}
 STALL_H=${STALL_H:-2}
 now=$(date +%s)
 problems=()
+# A systemd user service (deploy/systemd) on the cloud box, a tmux session on the gpu-box
+running() {
+    systemctl --user is-active -q "$1" 2>/dev/null || tmux has-session -t "$1" 2>/dev/null
+}
 
-if ! tmux has-session -t meiolol-crawl 2>/dev/null; then
+if ! running meiolol-crawl; then
     if tail -n 5 data/crawl.log 2>/dev/null | grep -q 'KEY REJECTED'; then
         problems+=("crawler stopped: Riot rejected the key (exit 3)")
     else
-        problems+=("crawler not running (tmux meiolol-crawl gone)")
+        problems+=("crawler not running (meiolol-crawl)")
     fi
 else
     # Report line every minute; its per-region "<n>m" counters are cumulative per process
@@ -33,8 +40,8 @@ else
     fi
 fi
 
-if ! tmux has-session -t meiolol-web 2>/dev/null; then
-    problems+=("site loop not running (tmux meiolol-web gone)")
+if ! running meiolol-web; then
+    problems+=("site loop not running (meiolol-web)")
 fi
 uploaded=$(grep -oE '^[0-9TZ:-]+ uploaded' data/web.log 2>/dev/null | tail -n 1 | cut -d' ' -f1)
 if [[ -z "$uploaded" ]] || (( now - $(date -d "$uploaded" +%s) > 26 * 3600 )); then
@@ -49,8 +56,8 @@ for limit in /mnt/c:80 /mnt/d:90 /:80; do
     if (( ${use:-0} >= ${limit#*:} )); then problems+=("disk $mount at ${use}%"); fi
 done
 
-if ! tmux has-session -t meiolol-backup 2>/dev/null; then
-    problems+=("backup loop not running (tmux meiolol-backup gone)")
+if ! running meiolol-backup; then
+    problems+=("backup loop not running (meiolol-backup)")
 fi
 newest=$(ls -t "$BACKUPS"/state/state-*.db 2>/dev/null | head -n 1)
 if [[ -z "$newest" ]] || (( now - $(stat -c %Y "$newest") > 26 * 3600 )); then
