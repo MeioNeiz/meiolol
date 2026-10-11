@@ -26,7 +26,11 @@ Several Claude sessions in parallel, coordinated by one (meiolol-44 at the time 
 writing). Code sessions use git worktrees and merge to main themselves after build and
 tests; deploys build from a commit, never the working tree. In the shared main checkout
 commit only by explicit path (`git commit -m ... -- <paths>`): the index may hold another
-session's staged work. Jacob's standing ask: the
+session's staged work. Until the site goes public (Jacob, 2026-10-11): sessions merge to
+main, push to GitHub and redeploy the preview site and box binary without asking, after
+build + test + windows pass on a clean checkout. Still ask first: anything irreversible
+(deleting data, key or registration changes, Riot applications) and changes to the
+jomove server's nginx/systemd. Live DB migrations: backup and rehearsal on a copy first. Jacob's standing ask: the
 coordinator reviews regularly for gaps nobody owns (risks, safety nets, doc requirements
 with no work behind them) and hands out work, not just the next plan step.
 
