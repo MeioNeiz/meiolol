@@ -45,7 +45,7 @@ pub const Db = struct {
             return error.Sqlite;
         }
         // Before anything else: other connections may hold the lock (WAL switch). Long:
-        // the crawler's many writers share a slow disk on the cloud box
+        // the crawler's writer waits out prune chunks and other processes on a slow disk
         _ = c.sqlite3_busy_timeout(handle.?, 60_000);
         return .{ .handle = handle.? };
     }

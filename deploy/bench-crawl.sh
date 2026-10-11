@@ -13,7 +13,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 cmd=$1 dir=$2
-bin=zig-out/bin/meiolol
+bin=${MEIOLOL_BIN:-zig-out/bin/meiolol}
 
 seed() {
     rm -rf "$dir/base" && mkdir -p "$dir/base"

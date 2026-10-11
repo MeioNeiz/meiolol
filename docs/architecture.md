@@ -83,9 +83,18 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
 ## Crawler (src/riot/crawl.zig)
 
 All regions by default (`--regions` to limit). A personal key's limits apply per
-routing value, so one thread per bucket, each with its own DB connection, HTTP client
-and limiter (no shared state but atomics): 4 regional + 15 platform threads. Platform
-to region map: `platforms` in src/riot/endpoints.zig.
+routing value, so one thread per bucket, each with its own HTTP client, limiter and a
+DB connection it only reads with: 4 regional + 15 platform threads. Platform to region
+map: `platforms` in src/riot/endpoints.zig.
+
+One writer thread (src/riot/writer.zig) makes every crawler write. Workers parse and
+compress outside any lock and queue owned jobs (at most 128 waiting, then they block);
+the writer applies whatever has queued in one transaction, a savepoint per job, so a
+row that cannot be stored marks its match or timeline failed and the rest commit. A
+worker waits for its jobs' commit before reading queues they change (the next match
+batch, the timelines of matches just stored), so nothing is fetched twice. Why: on the
+1/8-OCPU micro 19 writing threads spent much of their time waiting for the lock
+(holders descheduled mid-transaction, gzip inside it); see the benchmark below.
 
 - platform (euw1, kr, na1, ...): league-exp ladder pages for every tier (players +
   rank snapshot, refreshed daily), then champion mastery with spare budget
@@ -96,8 +105,14 @@ to region map: `platforms` in src/riot/endpoints.zig.
   pending. Each batch of 40 matches gets 40 timelines, so new games get theirs at once;
   a backlog of older timelines (60 a batch) only drains when the match batch is short.
   Per match ~2.13 calls (match + timeline + ids), so ~33k matches/day/region
-- main thread: per-region report every minute, raw pruning hourly. On first start with
-  an empty timeline_queue, queues timelines for already crawled matches
+- main thread: per-region report every minute (plus writer jobs, commits, queue length,
+  busy retries), raw pruning hourly (its own connection, 500-row chunks). On first start
+  with an empty timeline_queue, queues timelines for already crawled matches
+
+Benchmark: `deploy/bench-crawl.sh seed DIR`, then `run DIR MINUTES [slow|micro]` crawls
+a clone of box-sized databases with `--fake-api` (fixture answers, no network or rate
+limits); micro mode runs the process 1 slice in 8 at background QoS, a rough stand-in
+for the micro.
 
 Players are scanned in PUUID order (effectively random): no rank or activity bias.
 `--priority` platforms (default EUW1) are scanned before the rest of their region, so

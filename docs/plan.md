@@ -85,6 +85,11 @@ next steps land here.
   restart starts it over); measure site size (~2x, est. ~400 MB), upload time, disk
 - Check europe's EUW1-first scanning holds on the new host (players.matches_checked_at
   by platform, region europe)
+- Single crawler writer (branch worktree-writer): after deploy, compare the micro's
+  report (matches/day, "writes N in M commits", busy) with the 11k/day, 153-waits run;
+  check europe gets timelines. If batches stay ~2 jobs/commit and disk is the limit, try
+  a minimum gap between commits. The emulation (deploy/bench-crawl.sh micro) showed no
+  lock waits even before the change, so the box may gain more or less than 1.5x
 - Raw prune runs an hour after start (4b94ffa) and blocks the main thread's reports
   while it runs; move it off the main thread if that matters
 - Box ops loose ends (meiolol-5a): cut crawl.args raw windows once disk matters, after
