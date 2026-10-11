@@ -25,7 +25,7 @@ pub const Options = struct {
     /// How far back to list match ids
     since_days: i64 = 60,
     /// Players nobody looked up for this long are deleted (docs/your-games.md)
-    retention_days: i64 = 90,
+    retention_days: i64 = 30,
     /// Shared with the box (docs/your-games.md): the service writes forgotten.txt,
     /// every blocked PUUID; it imports box-forgotten.txt, the box's `meiolol forget`
     /// list. Null: no sync

@@ -78,10 +78,11 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
   hashes (so a later lookup can find its slot in a cached match without refetching; a
   hash is pseudonymous, not anonymous: anyone with the PUUID can recompute it); and the
   compact timeline (per-minute stats per slot, no identities)
-- Retention: a player nobody has looked up for 90 days is deleted (hourly prune), with
-  matches no remaining player uses. Each visit refreshes from Riot (at most every 30
-  min), which covers Riot's advice to refresh stored players at least every 30 days (C7)
-  for anyone who is still looked up
+- Retention: a player nobody has looked up for 30 days is deleted (hourly prune), with
+  matches no remaining player uses: Riot's advice to refresh stored players at least
+  every 30 days (C7) and the privacy policy's promise. Each visit refreshes from Riot (at
+  most every 30 min) and restarts the 30 days, so a player who comes back keeps their
+  history for the per-matchup trend
 - Objection and removal, open to anyone who owns the Riot ID: the page issues a random
   starter profile icon (ids 0-28, never the current one), the player sets it in the
   client within 15 min and presses check; the service re-reads it via summoner-v4 and on
@@ -96,12 +97,15 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
   writes forgotten.txt (every blocked PUUID, one per line, no Riot IDs), the box pulls it
   and runs `meiolol forget --list`; the box pushes its own list as box-forgotten.txt and
   the service blocks those too. Both files are complete lists, so either side can rerun
-- Logs: the service logs no Riot IDs itself, but Riot client warnings (429s) include the
-  request path, which for account lookups holds the Riot ID; nginx should not log /api/
-  (`access_log off` below). journald keeps the service log; cap it (SystemMaxUse)
-- Privacy page: needs a "Your games" paragraph before going live: what a lookup stores,
-  90-day retention, the objection flow, legitimate interests (owner: whoever finishes
-  the privacy policy for the production review, docs/plan.md)
+- Logs: no Riot IDs. The service never logs them, and the Riot client shows account
+  lookups by endpoint name instead of path. nginx does not log /api/ (`access_log off`
+  below), since the query string holds the Riot ID
+- Privacy page: "Your games" section on the site (src/site/prose.zig) and in
+  docs/legal/privacy.md, matching the above
+- Preview gating (Jacob left it to us, 2026-10-11): /api/ behind HTTP basic auth until
+  the production key, since a personal key may not serve the public. User `meiolol`,
+  password in vault (group meiolol/local, key MEIOLOL_API_BASIC_AUTH; also in .env). The
+  browser asks once; your.html itself is public and harmless without the API
 
 ## Deploy (not done: for Jacob)
 

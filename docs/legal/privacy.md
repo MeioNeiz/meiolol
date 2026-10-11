@@ -61,7 +61,7 @@ contact them instead of us about anything in this policy. -->
 - To build those statistics we collect ranked match data from the official Riot Games
   API, which includes encrypted player identifiers. We never sell it or share it
 - You can object and have your data removed at any time by emailing us at
-  jombirds@gmail.com, or *(when live)* using the form on this site
+  jombirds@gmail.com, or using "Remove a Riot ID" on the Your games page
 
 ## Data from Riot Games
 
@@ -74,8 +74,8 @@ match records from Riot also contain Riot IDs (name and tag); we keep those only
 the raw copy, which is deleted after 30 days.
 
 **Why.** To compute champion level and aggregate statistics: matchup curves, champion
-win rates, the Daily Draft. *(when live)* And to show a player their own games when
-someone looks up their Riot ID.
+win rates, the Daily Draft. And to show a player their own games when someone looks up
+their Riot ID.
 
 **Legal basis.** Legitimate interests (UK GDPR and EU GDPR Article 6(1)(f)). Most players
 in our data have never visited this site, so we can't ask for consent; instead we have
@@ -106,14 +106,23 @@ IDs, match ids or dates; only champions, bans, patch, an approximate rank tier a
 totals. Your guesses, streak and archive stay in your own browser (local storage). They
 are never sent to us; clearing this site's data removes them.
 
-## Your games *(when live)*
+## Your games
 
-When you enter a Riot ID, we ask the Riot Games API for that player's recent games and
-show them against the typical curves. Anyone can look up any Riot ID, as on other League
-statistics sites; the page shows that player's own games only, never a comparison with
-named other players. We keep the Riot ID you entered with the cached results for up to
-30 days so repeat visits are fast. We don't record who looked up whom beyond the server
-logs below.
+When you enter a Riot ID, we ask the Riot Games API for that player's recent ranked
+games and show their own lane against the typical curve for each matchup. Anyone can
+look up any Riot ID, as on other League statistics sites (legal basis: legitimate
+interests). The page shows only that player's games: their champion, their lane
+opponent's champion and the numbers, never other players' names.
+
+For each player looked up we store the Riot ID, Riot's encrypted player identifier,
+server, visible rank, and the games we fetched: champions, positions, results and
+per-minute statistics, with no names; the other players in those games are kept only as
+one-way hashes of their identifiers. A player nobody has looked up for 30 days is
+deleted. We don't record who looked up whom, and lookups are not in our server logs.
+
+To remove your games and stop us collecting them again, use "Remove a Riot ID" on the
+Your games page (the profile icon check below); we delete everything about you and keep
+only your encrypted identifier on a "do not collect" list.
 
 ## Squads *(when live)*
 
@@ -139,9 +148,9 @@ browser type. We use these only for security and to fix problems, and delete the
 ## Your rights
 
 You can ask us to:
-- **Object** to our use of your data, and have it **erased**: email us, or *(when live)*
-  use the [removal form](remove.html), which checks you own the Riot ID and removes you
-  within minutes
+- **Object** to our use of your data, and have it **erased**: email us, or use "Remove a
+  Riot ID" on the [Your games](your.html) page, which checks you own the Riot ID and
+  removes you within minutes
 - **Access** the data we hold about you
 - **Correct** it, though match data comes from Riot as it happened
 - **Restrict** our use of it while a request is considered

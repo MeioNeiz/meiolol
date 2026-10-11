@@ -486,7 +486,7 @@ fn writeIndex(site: *const Site) !void {
         \\<div class="card"><h3><a href="learn.html">New to League? Start with Learn</a></h3>
         \\<p>Five short lessons on draft in plain words, with real examples, then practice on
         \\real ranked drafts with every option explained. No timers, no streaks.</p></div>
-        \\<div class="card"><h3>Your games <span class="muted">coming</span></h3>
+        \\<div class="card"><h3><a href="your.html">Your games</a></h3>
         \\<p>Enter your Riot ID and see each recent game's lane laid over the typical curve
         \\for that matchup at your rank, and your record per matchup over the months.</p></div>
         \\<div class="card"><h3><a href="pool.html">Champion pool</a></h3>

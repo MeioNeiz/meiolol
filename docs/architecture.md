@@ -243,7 +243,7 @@ the crawler's) and queue jobs; one fetcher task makes every Riot call within a b
 route (default 20 per 2 min) on top of the shared Limiter. Matches cached by id (summary
 without names, PUUIDs hashed; compact timeline). Per-game numbers come from curves.zig
 `lane()`, compared with `Curves.get` for the player's visible-tier bracket. Objection:
-profile-icon check, then delete and block the PUUID. Players not looked up for 90 days
+profile-icon check, then delete and block the PUUID. Players not looked up for 30 days
 are pruned.
 
 ## Learn (src/learn.zig, src/site/learn.zig, static/learn.js)

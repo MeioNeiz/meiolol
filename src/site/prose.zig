@@ -122,6 +122,24 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\<p>Daily Draft puzzles are real ranked games with every player identity removed:
         \\no names, Riot IDs, match ids or game dates, only champions, bans, patch, an
         \\approximate rank tier and team totals.</p>
+        \\<h2>Your games</h2>
+        \\<p>When you enter a Riot ID on <a href="your.html">Your games</a>, we ask the Riot
+        \\Games API for that player's recent ranked games and show their own lane against
+        \\the typical curve for each matchup. Anyone can look up any Riot ID, as on other
+        \\League statistics sites (legal basis: legitimate interests). The page shows only
+        \\that player's games: their champion, their lane opponent's champion and the
+        \\numbers, never other players' names.</p>
+        \\<p>For each player looked up we store the Riot ID, Riot's encrypted player
+        \\identifier, server, visible rank, and the games we fetched: champions, positions,
+        \\results and per-minute statistics, with no names; the other players in those games
+        \\are kept only as one-way hashes of their identifiers. A player nobody has looked up
+        \\for 30 days is deleted. We don't record who looked up whom, and lookups are not in
+        \\our server logs.</p>
+        \\<p>To remove your games and stop us collecting them again, use "Remove a Riot ID"
+        \\on the Your games page. You prove the account is yours by setting a given free
+        \\profile icon in the League client for a minute; we then delete everything about
+        \\you, and keep only your encrypted identifier on a "do not collect" list so we
+        \\never fetch your games again.</p>
         \\<h2>The desktop app</h2>
         \\<p>The app reads champ select from the League client running on your own PC and
         \\shows lane information on screen. It does not send your games, account or any other

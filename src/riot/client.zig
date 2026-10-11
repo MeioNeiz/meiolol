@@ -38,13 +38,14 @@ pub const Client = struct {
             route, path,
         });
         const uri = try std.Uri.parse(url);
+        const shown = logged(path, method);
         for (0..6) |attempt| {
             const backoff: i64 = @as(i64, 1) << @intCast(attempt);
             try c.limiter.acquire(method);
             const res = c.once(uri, method, backoff) catch |err| switch (err) {
                 error.OutOfMemory => return err,
                 else => {
-                    log.warn("{s} on {s}, retrying", .{ @errorName(err), path });
+                    log.warn("{s} on {s}, retrying", .{ @errorName(err), shown });
                     try c.io.sleep(.fromSeconds(backoff), .awake);
                     continue;
                 },
@@ -58,7 +59,7 @@ pub const Client = struct {
                 },
                 401, 403 => {
                     c.gpa.free(res.body);
-                    log.err("{d} on {s}: key missing or expired", .{ res.status, path });
+                    log.err("{d} on {s}: key missing or expired", .{ res.status, shown });
                     return error.KeyRejected;
                 },
                 429 => {
@@ -67,7 +68,7 @@ pub const Client = struct {
                 },
                 else => {
                     c.gpa.free(res.body);
-                    log.warn("{d} on {s}, retrying", .{ res.status, path });
+                    log.warn("{d} on {s}, retrying", .{ res.status, shown });
                     if (res.status < 500) return error.UnexpectedStatus;
                     try c.io.sleep(.fromSeconds(backoff), .awake);
                 },
@@ -77,6 +78,11 @@ pub const Client = struct {
     }
 
     const Response = struct { status: u16, body: []u8 };
+
+    /// The path for logs, except where it holds a Riot ID: then the endpoint's name
+    fn logged(path: []const u8, method: []const u8) []const u8 {
+        return if (std.mem.indexOf(u8, path, "/by-riot-id/") != null) method else path;
+    }
 
     fn once(c: *Client, uri: std.Uri, method: []const u8, backoff: i64) !Response {
         var req = try c.http.request(.GET, uri, .{
@@ -108,7 +114,7 @@ pub const Client = struct {
         try c.limiter.update(method, h);
         if (status == 429) {
             const wait: u32 = retry_after orelse @intCast(backoff);
-            log.warn("429 ({s}) on {s}, waiting {d}s", .{ limit_type, uri.path.percent_encoded, wait });
+            log.warn("429 ({s}) on {s}, waiting {d}s", .{ limit_type, logged(uri.path.percent_encoded, method), wait });
             const scope: Limiter.Scope = if (std.mem.eql(u8, limit_type, "method")) .method else .app;
             try c.limiter.block(scope, method, wait);
         }
