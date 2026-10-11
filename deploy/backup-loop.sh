@@ -15,6 +15,9 @@ while true; do
             && rsync -q data/box-forgotten.txt meiolol-exchange:box-forgotten.txt \
             || echo "$(date -u +%FT%TZ) forgotten exchange FAILED"
     fi
-    bin/meiolol backup --data data || echo "$(date -u +%FT%TZ) backup FAILED"
+    # A deploy or restart restarts this loop: no second heavy run beside the crawler
+    if [[ ! -f "$MEIOLOL_BACKUPS/state/state-$(date -u +%F).db" ]]; then
+        bin/meiolol backup --data data || echo "$(date -u +%FT%TZ) backup FAILED"
+    fi
     sleep $(( $(date -u -d 'tomorrow 04:00' +%s) - $(date +%s) ))
 done
