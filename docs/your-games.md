@@ -58,9 +58,12 @@ personal key) with the crawler. On top of Riot's own limits (the shared Limiter,
 from Riot's -Count headers, so it sees the crawler's calls), the service keeps to its own
 budget: `--budget 20:120` per route by default. The crawler leaves room with
 `meiolol crawl --reserve 20` (meiolol-de, c2a8d67): without it a lookup waits behind a
-saturated bucket (measured 2026-10-11: 429 on the first call, ~2 min queued). So a
-first lookup fits in about one budget window; a few lookups a minute is the most the
-personal key allows, which is plenty in preview.
+saturated bucket (measured 2026-10-11: 429 on the first call, ~2 min queued). The
+reserve only applies for 10 minutes after the crawler sees the service's requests in
+Riot's counts, and the crawler paces its requests evenly, so the first call finds a
+slot within seconds and the rest of a lookup gets 20 per 2 min (docs/architecture.md,
+Crawler). So a first lookup fits in about one budget window; a few lookups a minute is
+the most the personal key allows, which is plenty in preview.
 
 ## Privacy: what is stored and shown, and why
 

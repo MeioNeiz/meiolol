@@ -1,12 +1,13 @@
 //! Ranked solo crawler for every region. On a personal key each routing value is its
 //! own rate limit bucket, so each gets a thread:
-//! - platform (euw1, kr, ...): ladder seeding for every tier, then mastery with spare
-//!   budget
-//! - regional (europe, asia, ...): match ids per player of its platforms, match
+//! - RegionCrawler (europe, asia, ...): match ids per player of its platforms, match
 //!   details, then their timelines
-//! Each thread owns its HTTP client, limiter and a DB connection it only reads with;
-//! one writer thread (writer.zig) makes every write. The main thread reports and
-//! prunes raw timelines.
+//! - PlatformCrawler (euw1, kr, ...): ladder seeding for every tier, then mastery with
+//!   spare budget
+//! Each thread owns a Bucket: HTTP client, limiter and a DB connection it only reads
+//! with; one writer thread (writer.zig) makes every write. `--priority` platforms (EUW1)
+//! come first in their region's queues, and their region's jobs first at the writer
+//! when the machine falls behind. The main thread reports.
 
 const std = @import("std");
 const store = @import("store");
@@ -22,14 +23,15 @@ const log = std.log.scoped(.crawl);
 
 const tiers = store.schema.tiers;
 const divisions = store.schema.divisions;
+/// Match ids are refilled when fewer than this many matches wait
 const pending_low = 300;
+const scan_batch = 10;
 const detail_batch = 40;
 /// When the match queue runs short, so a timeline backlog drains in quiet spells
 const timeline_batch = 60;
+/// Nap when a region has nothing due
+const idle_s = 15;
 const all_regions = std.enums.values(ep.Region);
-/// Ladder pages per platform per hour while others are paused and no cap is set:
-/// ~9M players at 205 a page over 15 platforms is ~17 an hour to refresh weekly
-const ladder_floor = 20;
 
 pub const Options = struct {
     data_dir: []const u8,
@@ -44,7 +46,8 @@ pub const Options = struct {
     mastery: bool = true,
     hours: ?f64 = null,
     regions: []const ep.Region = all_regions,
-    /// Share of matches that also get a timeline, chosen by match id hash
+    /// Share of non-priority platforms' matches that also get a timeline, chosen by
+    /// match id hash; every priority platform match gets one
     timeline_percent: u8 = 100,
     /// Raw timeline JSON kept this long for re-extraction; 0 keeps none
     raw_timeline_days: u32 = 7,
@@ -61,14 +64,15 @@ pub const Options = struct {
     player_sample: u32 = 1,
     /// The writer's page cache
     cache_mb: u32 = 64,
-    /// Platforms whose players a regional thread scans before any other's, so they
-    /// get its whole budget while they have players due. Their regions also get the
-    /// machine first: other work pauses while they are short of it (Crawler.others)
+    /// Platforms whose players and matches a region thread takes before any other's,
+    /// so they get its whole budget while they have players due. Their region's jobs
+    /// may also fill the writer's whole queue, the rest only half (Writer.submit)
     priority: []const []const u8 = &.{"EUW1"},
     /// Lowest tier the ladder walks and the scan pool takes, an index into `tiers`
     /// (PLATINUM: Platinum IV and up); the last tier takes everyone
     min_tier: usize = tiers.len - 1,
     /// Share of each bucket left to other processes on the key (the Your games service)
+    /// while one is using it (Limiter.reserve_pct)
     reserve_pct: u8 = 0,
     fake: ?*const @import("fake.zig").Fake = null,
 };
@@ -78,9 +82,6 @@ const RegionCounters = struct {
     timelines: std.atomic.Value(u64) = .init(0),
     ids_calls: std.atomic.Value(u64) = .init(0),
     requests: std.atomic.Value(u64) = .init(0),
-    /// Time the regional thread waited on the rate limit or had nothing due: the
-    /// machine kept up with it
-    slack_ns: std.atomic.Value(u64) = .init(0),
 };
 
 const Counters = struct {
@@ -100,28 +101,14 @@ pub const Crawler = struct {
     failure_lock: std.Io.Mutex = .init,
     /// Set up by run()
     writer: writer.Writer = undefined,
-    /// Off while a priority region is short of the machine (disk, CPU): other regions
-    /// and mastery pause and the ladder slows to its floor, until that region spends
-    /// enough time rate limited or idle again. Always on without a priority region
-    others: std.atomic.Value(bool) = .init(true),
-    /// Main thread only: the priority regions' least share of time spent slack, averaged
-    /// over ~100 s; null without a priority region
-    slack: ?f64 = null,
-    slack_avg: [all_regions.len]f64 = @splat(0),
-    slack_seen: [all_regions.len]u64 = @splat(0),
 
     pub fn run(c: *Crawler) !void {
-        // Opening once here migrates the schema before the workers connect
+        // Opening once here migrates the schema before the threads connect
         const db = try store.open(c.gpa, c.opts.data_dir);
         defer db.close();
         try c.backfillTimelines(db);
         try dropDoneRows(db);
 
-        for (c.opts.regions) |r| {
-            if (c.isPriority(r)) c.slack = 0;
-        }
-        // Priority regions first: others start once one is seen to keep up
-        c.others.store(c.slack == null, .release);
         c.writer = .{ .c = c };
         defer c.writer.deinit();
         const writer_thread = try std.Thread.spawn(.{}, writer.Writer.run, .{&c.writer});
@@ -129,20 +116,15 @@ pub const Crawler = struct {
         defer threads.deinit(c.gpa);
         defer c.stopAll(&threads, writer_thread);
         try c.spawnAll(&threads);
-        log.info("{d} workers for {d} regions", .{ threads.items.len, c.opts.regions.len });
+        log.info("{d} threads for {d} regions", .{ threads.items.len, c.opts.regions.len });
 
         const started = c.nowS();
         var last_report = started;
-        var last_gate = started;
         while (!c.stop.load(.acquire)) {
             c.io.sleep(.fromSeconds(1), .awake) catch break;
             const now = c.nowS();
             if (c.opts.hours) |h| {
                 if (@as(f64, @floatFromInt(now - started)) > h * 3600) c.stop.store(true, .release);
-            }
-            if (now - last_gate >= 10) {
-                c.updateGate(now - last_gate);
-                last_gate = now;
             }
             if (now - last_report >= 60) {
                 last_report = now;
@@ -154,7 +136,7 @@ pub const Crawler = struct {
         if (c.failure) |err| return err;
     }
 
-    /// Workers first: the writer then stores what they queued before stopping
+    /// Bucket threads first: the writer then stores what they queued before stopping
     fn stopAll(c: *Crawler, threads: *std.ArrayList(std.Thread), writer_thread: std.Thread) void {
         if (c.writer.closing) return;
         c.stop.store(true, .release);
@@ -167,10 +149,10 @@ pub const Crawler = struct {
     fn spawnAll(c: *Crawler, threads: *std.ArrayList(std.Thread)) !void {
         try threads.ensureTotalCapacity(c.gpa, all_regions.len + ep.platforms.len);
         for (c.opts.regions) |r| {
-            threads.appendAssumeCapacity(try std.Thread.spawn(.{}, worker, .{ c, Task{ .regional = r } }));
+            threads.appendAssumeCapacity(try std.Thread.spawn(.{}, Thread(RegionCrawler).run, .{ c, r }));
             for (ep.platforms) |p| {
                 if (p.region != r) continue;
-                threads.appendAssumeCapacity(try std.Thread.spawn(.{}, worker, .{ c, Task{ .platform = p } }));
+                threads.appendAssumeCapacity(try std.Thread.spawn(.{}, Thread(PlatformCrawler).run, .{ c, p }));
             }
         }
     }
@@ -188,11 +170,6 @@ pub const Crawler = struct {
                 rc.timelines.load(.monotonic), rc.ids_calls.load(.monotonic),
                 rc.requests.load(.monotonic),
             }) catch break;
-        }
-        if (c.slack) |s| {
-            const state = if (c.others.load(.monotonic)) "on" else "paused";
-            const pct = s * 100;
-            w.print(" | others {s}, priority slack {d:.0}%", .{ state, pct }) catch {};
         }
         const per_day = if (elapsed_s > 0) matches * 86400 / @as(u64, @intCast(elapsed_s)) else 0;
         const ws = &c.writer.stats;
@@ -212,9 +189,15 @@ pub const Crawler = struct {
         });
     }
 
-    /// Holds a `--priority` platform. Only regional threads: a ladder page costs ~100x
-    /// a match in writes, so even a priority platform's ladder yields
-    fn isPriority(c: *const Crawler, r: ep.Region) bool {
+    fn isPriority(c: *const Crawler, p: ep.Platform) bool {
+        for (c.opts.priority) |id| {
+            if (std.mem.eql(u8, id, p.id)) return true;
+        }
+        return false;
+    }
+
+    /// Holds a `--priority` platform
+    fn isPriorityRegion(c: *const Crawler, r: ep.Region) bool {
         for (c.opts.priority) |id| {
             const p = ep.platform(id) orelse continue;
             if (p.region == r) return true;
@@ -222,24 +205,9 @@ pub const Crawler = struct {
         return false;
     }
 
-    /// Every ~10 s: each priority region's share of time slack, smoothed over ~100 s
-    /// since the 120 s rate window makes waits bursty
-    fn updateGate(c: *Crawler, dt_s: i64) void {
-        if (c.slack == null) return;
-        var least: f64 = 1;
-        for (c.opts.regions) |r| {
-            if (!c.isPriority(r)) continue;
-            const i = @intFromEnum(r);
-            const total = c.counters.region[i].slack_ns.load(.monotonic);
-            const ns: f64 = @floatFromInt(total - c.slack_seen[i]);
-            c.slack_seen[i] = total;
-            const window: f64 = @floatFromInt(dt_s * std.time.ns_per_s);
-            const sample = @min(ns / window, 1);
-            c.slack_avg[i] += (sample - c.slack_avg[i]) * 0.1;
-            least = @min(least, c.slack_avg[i]);
-        }
-        c.slack = least;
-        c.others.store(othersRun(c.others.load(.monotonic), least), .release);
+    /// `--priority` as a JSON list, for the queue orderings
+    fn priorityJson(c: *const Crawler, a: std.mem.Allocator) ![]const u8 {
+        return std.json.Stringify.valueAlloc(a, c.opts.priority, .{});
     }
 
     fn nowS(c: *Crawler) i64 {
@@ -256,24 +224,11 @@ pub const Crawler = struct {
         c.writer.wake();
     }
 
-    fn worker(c: *Crawler, job: Task) void {
-        var w = while (true) {
-            break Worker.init(c, job) catch |err| {
-                if (err != error.Busy or c.stop.load(.acquire)) return c.fail(err);
-                c.io.sleep(.fromSeconds(5), .awake) catch return c.fail(err);
-                continue;
-            };
-        };
-        defer w.deinit();
-        w.loop() catch |err| {
-            if (err != error.Stopping) {
-                log.err("{s} worker: {t}", .{ job.name(), err });
-                c.fail(err);
-            }
-        };
-    }
-
-    pub fn wantTimeline(c: *Crawler, match_id: []const u8) bool {
+    /// Every priority platform match; of the rest `--timelines` percent, by match id hash
+    pub fn wantTimeline(c: *const Crawler, match_id: []const u8) bool {
+        if (ep.platformOf(match_id)) |p| {
+            if (c.isPriority(p)) return true;
+        }
         const pct = c.opts.timeline_percent;
         return pct >= 100 or std.hash.Wyhash.hash(0, match_id) % 100 < pct;
     }
@@ -281,7 +236,7 @@ pub const Crawler = struct {
     /// Queue timelines for matches crawled before timelines existed. Runs while the
     /// queue is empty, so in practice once
     fn backfillTimelines(c: *Crawler, db: store.Db) !void {
-        if (c.opts.timeline_percent == 0) return;
+        if (c.opts.timeline_percent == 0 and c.opts.priority.len == 0) return;
         if (try db.scalar("SELECT EXISTS (SELECT 1 FROM timeline_queue)", .{}) == 1) return;
         var q = try db.prepare(
             \\SELECT match_id FROM matches m WHERE remake = 0 AND queue_id = ?
@@ -324,314 +279,196 @@ fn dropDoneRows(db: store.Db) !void {
     }
 }
 
-const Task = union(enum) {
-    platform: ep.Platform,
-    regional: ep.Region,
-
-    fn name(j: Task) []const u8 {
-        return switch (j) {
-            .platform => |p| p.host,
-            .regional => |r| @tagName(r),
-        };
-    }
-};
-
-/// Others start once the priority regions are slack 30% of the time and stop under
-/// 10%; in between they keep their state, so they don't flap. Any wait on the rate
-/// limit means the 120 s window is full, so 10% still has the key as the limit
-fn othersRun(running: bool, slack: f64) bool {
-    return slack >= @as(f64, if (running) 0.1 else 0.3);
-}
-
 /// Errors that stop the crawler; anything else is logged and the item skipped
 fn fatal(err: anyerror) bool {
     return switch (err) {
-        // Busy too (a read, rare in WAL): Worker.loop pauses and carries on
+        // Busy too (a read, rare in WAL): the thread pauses and carries on
         error.KeyRejected, error.OutOfMemory, error.Stopping, error.Sqlite, error.Busy => true,
         else => false,
     };
 }
 
-const Worker = struct {
+/// Thread body for a RegionCrawler or PlatformCrawler (`T`): connect, then `step` until
+/// stopped. Both have `b: Bucket`, `init(c, T.Of)` and `step()`
+fn Thread(comptime T: type) type {
+    return struct {
+        fn run(c: *Crawler, of: T.Of) void {
+            var t = while (true) {
+                break T.init(c, of) catch |err| {
+                    if (err != error.Busy or c.stop.load(.acquire)) return c.fail(err);
+                    c.io.sleep(.fromSeconds(5), .awake) catch return c.fail(err);
+                    continue;
+                };
+            };
+            defer t.b.deinit();
+            loop(&t) catch |err| {
+                if (err != error.Stopping) {
+                    log.err("{s} thread: {t}", .{ t.b.name, err });
+                    c.fail(err);
+                }
+            };
+        }
+
+        fn loop(t: *T) !void {
+            while (true) {
+                try t.b.check();
+                t.b.countRequests();
+                t.step() catch |err| switch (err) {
+                    error.Busy => {
+                        log.warn("{s}: database busy, pausing", .{t.b.name});
+                        try t.b.nap(5);
+                    },
+                    else => return err,
+                };
+                try t.b.flush();
+            }
+        }
+    };
+}
+
+/// What each thread owns for its Riot rate limit bucket: HTTP client, a read-only
+/// connection and its place in the writer's queue
+const Bucket = struct {
     c: *Crawler,
-    job: Task,
+    name: []const u8,
     /// Reads only
     db: store.Db,
     client: Client,
+    /// Its jobs may fill the writer's whole queue, other buckets' only half
+    priority: bool,
+    /// countRequests adds this thread's requests here
+    requests: *std.atomic.Value(u64),
     reported_requests: u64 = 0,
-    /// Sequence number of this worker's newest job, for flush
+    /// Sequence number of this thread's newest job, for flush
     last_seq: u64 = 0,
-    /// Last PUUID given mastery, so each batch resumes instead of rescanning done players
-    mastery_cursor: [128]u8 = undefined,
-    mastery_cursor_len: usize = 0,
-    /// When this thread last fetched a ladder page (--ladder-per-hour)
-    last_ladder: i64 = 0,
 
-    /// run() migrated already; workers only connect
-    fn init(c: *Crawler, job: Task) !Worker {
+    /// run() migrated already; threads only connect
+    fn init(c: *Crawler, name: []const u8, priority: bool, requests: *std.atomic.Value(u64)) !Bucket {
         const db = try store.schema.connect(c.gpa, c.opts.data_dir);
         errdefer db.close();
         var client: Client = try .init(c.gpa, c.io, c.opts.key);
         errdefer client.deinit();
-        try client.limiter.setReserve(c.opts.reserve_pct);
+        client.limiter.setReserve(c.opts.reserve_pct);
+        client.limiter.paced = true;
         client.fake = c.opts.fake;
-        var w: Worker = .{ .c = c, .job = job, .db = db, .client = client };
-        if (w.slack()) |n| w.client.limiter.waited_ns = n;
-        return w;
+        return .{ .c = c, .name = name, .db = db, .client = client, .priority = priority, .requests = requests };
     }
 
-    fn slack(w: *Worker) ?*std.atomic.Value(u64) {
-        return switch (w.job) {
-            .platform => null,
-            .regional => |r| &w.c.counters.region[@intFromEnum(r)].slack_ns,
-        };
+    fn deinit(b: *Bucket) void {
+        b.countRequests();
+        b.client.deinit();
+        b.db.close();
     }
 
-    /// Waits for the priority regions to have the machine to spare
-    fn yields(w: *Worker) bool {
-        return switch (w.job) {
-            .platform => false,
-            .regional => |r| !w.c.isPriority(r),
-        };
-    }
-
-    fn deinit(w: *Worker) void {
-        w.countRequests();
-        w.client.deinit();
-        w.db.close();
-    }
-
-    fn countRequests(w: *Worker) void {
-        const n = w.client.requests.load(.monotonic);
-        const counter = switch (w.job) {
-            .platform => &w.c.counters.platform_requests,
-            .regional => |r| &w.c.counters.region[@intFromEnum(r)].requests,
-        };
-        _ = counter.fetchAdd(n - w.reported_requests, .monotonic);
-        w.reported_requests = n;
-    }
-
-    fn loop(w: *Worker) !void {
-        while (true) {
-            try w.check();
-            w.countRequests();
-            if (w.yields() and !w.c.others.load(.acquire)) {
-                try w.nap(5);
-                continue;
-            }
-            w.step() catch |err| switch (err) {
-                error.Busy => {
-                    log.warn("{s}: database busy, pausing", .{w.job.name()});
-                    try w.nap(5);
-                },
-                else => return err,
-            };
-            try w.flush();
-        }
+    fn countRequests(b: *Bucket) void {
+        const n = b.client.requests.load(.monotonic);
+        _ = b.requests.fetchAdd(n - b.reported_requests, .monotonic);
+        b.reported_requests = n;
     }
 
     /// Hand a job to the writer, which owns it from then on
-    fn submit(w: *Worker, job: *Job) !void {
-        w.last_seq = try w.c.writer.submit(job);
+    fn submit(b: *Bucket, job: *Job) !void {
+        b.last_seq = try b.c.writer.submit(job, b.priority);
     }
 
-    /// Until everything this worker queued is committed: before reading what it changes
-    fn flush(w: *Worker) !void {
-        try w.c.writer.wait(w.last_seq);
+    /// Until everything this thread queued is committed: before reading what it changes
+    fn flush(b: *Bucket) !void {
+        try b.c.writer.wait(b.last_seq);
     }
 
-    fn step(w: *Worker) !void {
-        switch (w.job) {
-            .platform => |p| {
-                if (try w.seedLadder(p) > 0) return;
-                const masteries = w.c.opts.mastery and w.c.others.load(.acquire);
-                if (masteries and try w.fetchMasteries(p, 50) > 0) return;
-                try w.nap(60);
-            },
-            .regional => |r| try w.matchStep(r),
-        }
+    fn check(b: *Bucket) !void {
+        if (b.c.stop.load(.acquire)) return error.Stopping;
     }
 
-    fn check(w: *Worker) !void {
-        if (w.c.stop.load(.acquire)) return error.Stopping;
-    }
-
-    fn nap(w: *Worker, seconds: u32) !void {
+    fn nap(b: *Bucket, seconds: u32) !void {
         for (0..seconds) |_| {
-            try w.check();
-            try w.c.io.sleep(.fromSeconds(1), .awake);
+            try b.check();
+            try b.c.io.sleep(.fromSeconds(1), .awake);
         }
     }
 
-    fn now(w: *Worker) i64 {
-        return w.c.nowS();
+    fn now(b: *Bucket) i64 {
+        return b.c.nowS();
     }
 
-    fn seedLadder(w: *Worker, p: ep.Platform) !u32 {
-        var fetched: u32 = 0;
-        for (tiers[0 .. w.c.opts.min_tier + 1]) |tier| {
-            const apex = std.mem.eql(u8, tier, "MASTER") or std.mem.eql(u8, tier, "GRANDMASTER") or
-                std.mem.eql(u8, tier, "CHALLENGER");
-            for (if (apex) divisions[0..1] else divisions[0..]) |division| {
-                var page: u32 = 1;
-                while (true) : (page += 1) {
-                    try w.check();
-                    var fresh = try w.db.prepare("SELECT entries, fetched_at FROM ladder_pages" ++
-                        " WHERE platform = ? AND tier = ? AND division = ? AND page = ?");
-                    defer fresh.deinit();
-                    try fresh.bind(.{ p.id, tier, division, page });
-                    if (try fresh.step() and fresh.int(1) > w.now() - w.c.opts.ladder_refresh_s) {
-                        if (fresh.int(0) == 0) break;
-                        continue;
-                    }
-                    try w.ladderGap();
-                    // A bad page ends this division for now; the next pass retries it
-                    const entries = w.fetchLadderPage(p, tier, division, page) catch |err| {
-                        if (fatal(err)) return err;
-                        log.warn("{s} ladder {s} {s} page {d}: {t}", .{ p.host, tier, division, page, err });
-                        break;
-                    };
-                    fetched += 1;
-                    w.countRequests();
-                    if (entries == 0) break;
-                }
+    fn queueStatus(b: *Bucket, which: writer.Kind.Queue, id: []const u8, status: writer.Kind.Status) !void {
+        const job = try Job.create(b.c.gpa, .none);
+        errdefer job.destroy(b.c.gpa);
+        job.kind = .{ .queue = .{ .which = which, .id = try job.allocator().dupe(u8, id), .status = status } };
+        try b.submit(job);
+    }
+};
+
+/// First column of every row, copied into `arena`
+fn column(db: store.Db, arena: std.mem.Allocator, sql: []const u8, args: anytype) ![]const []const u8 {
+    var s = try db.prepare(sql);
+    defer s.deinit();
+    try s.bind(args);
+    var out: std.ArrayList([]const u8) = .empty;
+    while (try s.step()) try out.append(arena, try arena.dupe(u8, s.bytes(0)));
+    return out.items;
+}
+
+/// Match ids, match details and timelines for one regional route
+const RegionCrawler = struct {
+    b: Bucket,
+    region: ep.Region,
+
+    const Of = ep.Region;
+
+    fn init(c: *Crawler, r: ep.Region) !RegionCrawler {
+        const requests = &c.counters.region[@intFromEnum(r)].requests;
+        return .{ .b = try .init(c, @tagName(r), c.isPriorityRegion(r), requests), .region = r };
+    }
+
+    fn counters(rc: *RegionCrawler) *RegionCounters {
+        return &rc.b.c.counters.region[@intFromEnum(rc.region)];
+    }
+
+    /// One round: refill match ids when the queue runs short, then a batch of matches
+    /// and as many timelines, newest first, so new games get theirs at once. A short
+    /// match batch makes room for more timelines, so a backlog drains in quiet spells
+    fn step(rc: *RegionCrawler) !void {
+        const pending = try rc.b.db.scalar("SELECT count(*) FROM match_queue " ++
+            "WHERE region = ? AND status = 'pending'", .{@tagName(rc.region)}) orelse 0;
+        const scanned = if (pending < pending_low) try rc.scanPlayers(scan_batch) else 0;
+        const matches = try rc.drain(.match, detail_batch);
+        const timelines = try rc.drain(.timeline, if (matches == detail_batch) detail_batch else timeline_batch);
+        if (scanned + matches + timelines == 0) try rc.b.nap(idle_s);
+    }
+
+    /// Fetch up to `n` of a queue's next items and wait for the writer to store them,
+    /// so the next read of the queue doesn't see them again. Matches queue their
+    /// timelines as they are stored
+    fn drain(rc: *RegionCrawler, which: writer.Kind.Queue, n: usize) !usize {
+        var arena: std.heap.ArenaAllocator = .init(rc.b.c.gpa);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const sql = switch (which) {
+            .match => next_matches,
+            .timeline => next_timelines,
+        };
+        const ids = try column(rc.b.db, a, sql, .{ @tagName(rc.region), try rc.b.c.priorityJson(a), n });
+        for (ids) |id| {
+            try rc.b.check();
+            switch (which) {
+                .match => try rc.fetchMatch(id),
+                .timeline => try rc.fetchTimeline(id),
             }
         }
-        return fetched;
+        try rc.b.flush();
+        return ids.len;
     }
 
-    /// Nap until this platform may fetch another ladder page (--ladder-per-hour)
-    fn ladderGap(w: *Worker) !void {
-        while (w.ladderPerHour()) |per_hour| {
-            if (w.now() >= w.last_ladder + @divTrunc(3600, @as(i64, per_hour))) break;
-            try w.nap(1);
-        }
-        w.last_ladder = w.now();
-    }
-
-    /// The cap, null for none. While others are paused the ladder still runs at the cap
-    /// or `ladder_floor`: it keeps players' seen_at fresh, and the writer drops players
-    /// unseen for 30 days
-    fn ladderPerHour(w: *Worker) ?u32 {
-        const cap = w.c.opts.ladder_per_hour;
-        if (w.c.others.load(.acquire)) return if (cap == 0) null else cap;
-        return if (cap == 0) ladder_floor else cap;
-    }
-
-    fn fetchLadderPage(w: *Worker, p: ep.Platform, tier: []const u8, division: []const u8, page: u32) !usize {
-        const got = try ep.leagueEntries(&w.client, p, tier, division, page);
-        defer if (got) |b| w.c.gpa.free(b);
-        const job = try Job.create(w.c.gpa, .none);
-        errdefer job.destroy(w.c.gpa);
-        // Parsed strings may point into the body: the copy lives as long as the job
-        const a = job.allocator();
-        const entries = try ep.parse([]const ep.LeagueEntry, a, try a.dupe(u8, got orelse "[]"));
-        job.kind = .{ .ladder = .{
-            .platform = p,
-            .tier = tier,
-            .division = division,
-            .page = page,
-            .entries = entries,
-            .t = w.now(),
-        } };
-        try w.submit(job);
-        return entries.len;
-    }
-
-    fn fetchMasteries(w: *Worker, p: ep.Platform, n: u32) !u32 {
-        var arena: std.heap.ArenaAllocator = .init(w.c.gpa);
-        defer arena.deinit();
-        const sql =
-            \\SELECT p.puuid FROM players p
-            \\WHERE p.platform = ? AND p.source = 'ladder' AND p.puuid > ? AND NOT EXISTS
-            \\    (SELECT 1 FROM mastery m WHERE m.puuid = p.puuid)
-            \\ORDER BY p.puuid LIMIT ?
-        ;
-        var puuids = try w.column(arena.allocator(), sql, .{ p.id, w.masteryCursor(), n });
-        if (puuids.len == 0 and w.mastery_cursor_len > 0) {
-            w.mastery_cursor_len = 0;
-            puuids = try w.column(arena.allocator(), sql, .{ p.id, "", n });
-        }
-        for (puuids) |puuid| {
-            try w.check();
-            w.fetchMastery(p, arena.allocator(), puuid) catch |err| {
-                if (fatal(err)) return err;
-                log.warn("{s} mastery: {t}", .{ p.host, err });
-            };
-            if (puuid.len <= w.mastery_cursor.len) {
-                @memcpy(w.mastery_cursor[0..puuid.len], puuid);
-                w.mastery_cursor_len = puuid.len;
-            }
-        }
-        return @intCast(puuids.len);
-    }
-
-    fn masteryCursor(w: *Worker) []const u8 {
-        return w.mastery_cursor[0..w.mastery_cursor_len];
-    }
-
-    /// Compact only: the raw response is ~70 KB for ~1 KB of data we use. An empty
-    /// list still gets a row, marking the player done
-    fn fetchMastery(w: *Worker, p: ep.Platform, arena: std.mem.Allocator, puuid: []const u8) !void {
-        const got = try ep.masteries(&w.client, p, puuid);
-        defer if (got) |b| w.c.gpa.free(b);
-        const job = try Job.create(w.c.gpa, .none);
-        errdefer job.destroy(w.c.gpa);
-        const a = job.allocator();
-        const t = w.now();
-        const entries = if (got) |body| try mastery.fromJson(arena, body) else &.{};
-        job.kind = .{ .mastery = .{
-            .puuid = try a.dupe(u8, puuid),
-            .platform = p.id,
-            .t = t,
-            .champions = entries.len,
-            .blob = if (got != null) try mastery.encode(a, entries, t) else null,
-        } };
-        try w.submit(job);
-    }
-
-    /// Priority platforms' matches first (EUW: other platforms share its regional rate
-    /// limit), then first in, first out. Timelines keep pace with new matches, newest
-    /// first; a backlog of older ones waits for a short match queue
-    fn matchStep(w: *Worker, r: ep.Region) !void {
-        var done: usize = 0;
-        const pending = try w.db.scalar("SELECT count(*) FROM match_queue " ++
-            "WHERE region = ? AND status = 'pending'", .{@tagName(r)}) orelse 0;
-        if (pending < pending_low) {
-            done += try w.scanPlayers(r, 10);
-            try w.flush();
-        }
-
-        var arena: std.heap.ArenaAllocator = .init(w.c.gpa);
-        defer arena.deinit();
-        const priority = try std.json.Stringify.valueAlloc(arena.allocator(), w.c.opts.priority, .{});
-        const batch = try w.column(arena.allocator(), next_matches, .{ @tagName(r), priority, detail_batch });
-        for (batch) |id| {
-            try w.check();
-            try w.fetchMatch(r, id);
-        }
-        // The writer queues these matches' timelines, which come first
-        try w.flush();
-        const n_timelines = if (batch.len == detail_batch) batch.len else timeline_batch;
-        const timelines = try w.column(arena.allocator(), next_timelines, .{ @tagName(r), priority, n_timelines });
-        for (timelines) |id| {
-            try w.check();
-            try w.fetchTimeline(r, id);
-        }
-        done += batch.len + timelines.len;
-        if (done == 0) {
-            // Nothing due: the machine is free for other regions meanwhile
-            _ = w.slack().?.fetchAdd(15 * std.time.ns_per_s, .monotonic);
-            try w.nap(15);
-        }
-    }
-
+    /// Priority platforms first (other platforms share the regional rate limit), then
+    /// first in, first out
     const next_matches =
         \\SELECT match_id FROM match_queue WHERE region = ?1 AND status = 'pending'
         \\ORDER BY substr(match_id, 1, instr(match_id, '_') - 1)
         \\    IN (SELECT value FROM json_each(?2)) DESC, discovered_at, match_id
         \\LIMIT ?3
     ;
+    /// Priority platforms first, then newest first
     const next_timelines =
         \\SELECT match_id FROM timeline_queue WHERE region = ?1 AND status = 'pending'
         \\ORDER BY substr(match_id, 1, instr(match_id, '_') - 1)
@@ -656,25 +493,27 @@ const Worker = struct {
 
     /// Priority platforms' players first, then the region's. Within those, never
     /// scanned (NULL sorts first), then the stalest. PUUIDs are random, so ordering by
-    /// them samples players without favouring any rank or activity.
-    fn scanPlayers(w: *Worker, r: ep.Region, n: u32) !u32 {
-        var arena: std.heap.ArenaAllocator = .init(w.c.gpa);
+    /// them samples players without favouring any rank or activity. Waits for the
+    /// writer, so the match queue has their ids
+    fn scanPlayers(rc: *RegionCrawler, n: u32) !u32 {
+        const c = rc.b.c;
+        var arena: std.heap.ArenaAllocator = .init(c.gpa);
         defer arena.deinit();
-        var s = try w.db.prepare(scan_players);
+        var s = try rc.b.db.prepare(scan_players);
         defer s.deinit();
-        const floor = try tierFloor(arena.allocator(), w.c.opts.min_tier);
+        const floor = try tierFloor(arena.allocator(), c.opts.min_tier);
         const Player = struct { puuid: []const u8, checked_at: ?i64 };
         var players: std.ArrayList(Player) = .empty;
         var filters: std.ArrayList(?[]const u8) = .empty;
-        for (w.c.opts.priority) |id| {
+        for (c.opts.priority) |id| {
             const p = ep.platform(id) orelse continue;
-            if (p.region == r) try filters.append(arena.allocator(), id);
+            if (p.region == rc.region) try filters.append(arena.allocator(), id);
         }
         try filters.append(arena.allocator(), null);
         for (filters.items) |platform| {
             const want = n - players.items.len;
             if (want == 0) break;
-            try s.bind(.{ @tagName(r), platform, w.now() - w.c.opts.recheck_s, want, floor });
+            try s.bind(.{ @tagName(rc.region), platform, rc.b.now() - c.opts.recheck_s, want, floor });
             while (try s.step()) {
                 try players.append(arena.allocator(), .{
                     .puuid = try arena.allocator().dupe(u8, s.bytes(0)),
@@ -683,46 +522,48 @@ const Worker = struct {
             }
         }
         for (players.items) |p| {
-            try w.check();
-            w.scanPlayer(r, p.puuid, p.checked_at) catch |err| {
+            try rc.b.check();
+            rc.scanPlayer(p.puuid, p.checked_at) catch |err| {
                 if (fatal(err)) return err;
-                log.warn("{t} match ids: {t}", .{ r, err });
+                log.warn("{t} match ids: {t}", .{ rc.region, err });
             };
             // Even after an error, so a bad player waits for the recheck interval
-            const job = try Job.create(w.c.gpa, .none);
-            errdefer job.destroy(w.c.gpa);
-            job.kind = .{ .checked = .{ .puuid = try job.allocator().dupe(u8, p.puuid), .t = w.now() } };
-            try w.submit(job);
+            const job = try Job.create(c.gpa, .none);
+            errdefer job.destroy(c.gpa);
+            job.kind = .{ .checked = .{ .puuid = try job.allocator().dupe(u8, p.puuid), .t = rc.b.now() } };
+            try rc.b.submit(job);
         }
+        try rc.b.flush();
         return @intCast(players.items.len);
     }
 
-    fn scanPlayer(w: *Worker, r: ep.Region, puuid: []const u8, checked_at: ?i64) !void {
-        const end = w.now();
-        const start_time = @max(checked_at orelse 0, end - w.c.opts.since_days * 86400);
+    fn scanPlayer(rc: *RegionCrawler, puuid: []const u8, checked_at: ?i64) !void {
+        const c = rc.b.c;
+        const end = rc.b.now();
+        const start_time = @max(checked_at orelse 0, end - c.opts.since_days * 86400);
         var start: u32 = 0;
         while (true) : (start += 100) {
-            const got = try ep.matchIds(&w.client, r, puuid, start_time, end, start);
-            defer if (got) |b| w.c.gpa.free(b);
+            const got = try ep.matchIds(&rc.b.client, rc.region, puuid, start_time, end, start);
+            defer if (got) |b| c.gpa.free(b);
             const body = got orelse "[]";
-            _ = w.c.counters.region[@intFromEnum(r)].ids_calls.fetchAdd(1, .monotonic);
-            const job = try Job.create(w.c.gpa, .none);
-            errdefer job.destroy(w.c.gpa);
+            _ = rc.counters().ids_calls.fetchAdd(1, .monotonic);
+            const job = try Job.create(c.gpa, .none);
+            errdefer job.destroy(c.gpa);
             const ids = try ep.parse([]const []const u8, job.allocator(), try job.allocator().dupe(u8, body));
-            job.kind = .{ .match_ids = .{ .ids = ids, .discovered_at = end, .region = r } };
-            try w.submit(job);
+            job.kind = .{ .match_ids = .{ .ids = ids, .discovered_at = end, .region = rc.region } };
+            try rc.b.submit(job);
             if (ids.len < 100) break;
         }
     }
 
-    fn fetchMatch(w: *Worker, r: ep.Region, id: []const u8) !void {
-        const gpa = w.c.gpa;
-        const got = ep.match(&w.client, r, id) catch |err| {
+    fn fetchMatch(rc: *RegionCrawler, id: []const u8) !void {
+        const gpa = rc.b.c.gpa;
+        const got = ep.match(&rc.b.client, rc.region, id) catch |err| {
             if (fatal(err)) return err;
             log.warn("match {s}: {t}", .{ id, err });
-            return w.queueStatus(.match, id, .attempt);
+            return rc.b.queueStatus(.match, id, .attempt);
         };
-        const fetched = got orelse return w.queueStatus(.match, id, .missing);
+        const fetched = got orelse return rc.b.queueStatus(.match, id, .missing);
         defer gpa.free(fetched);
 
         const job = try Job.create(gpa, .none);
@@ -733,28 +574,28 @@ const Worker = struct {
             if (err == error.OutOfMemory) return err;
             log.warn("match {s} did not parse: {t}", .{ id, err });
             job.kind = .{ .queue = .{ .which = .match, .id = try a.dupe(u8, id), .status = .failed } };
-            return w.submit(job);
+            return rc.b.submit(job);
         };
         job.kind = .{ .match = .{
-            .region = r,
+            .region = rc.region,
             .id = try a.dupe(u8, id),
             .doc = doc,
             .raw = try store.raw.compress(a, body),
-            .t = w.now(),
+            .t = rc.b.now(),
         } };
-        try w.submit(job);
+        try rc.b.submit(job);
     }
 
     /// The raw JSON is kept when extraction fails (and not pruned), so a fixed parser
     /// can redo it
-    fn fetchTimeline(w: *Worker, r: ep.Region, id: []const u8) !void {
-        const gpa = w.c.gpa;
-        const got = ep.timeline(&w.client, r, id) catch |err| {
+    fn fetchTimeline(rc: *RegionCrawler, id: []const u8) !void {
+        const gpa = rc.b.c.gpa;
+        const got = ep.timeline(&rc.b.client, rc.region, id) catch |err| {
             if (fatal(err)) return err;
             log.warn("timeline {s}: {t}", .{ id, err });
-            return w.queueStatus(.timeline, id, .attempt);
+            return rc.b.queueStatus(.timeline, id, .attempt);
         };
-        const body = got orelse return w.queueStatus(.timeline, id, .missing);
+        const body = got orelse return rc.b.queueStatus(.timeline, id, .missing);
         defer gpa.free(body);
 
         const job = try Job.create(gpa, .none);
@@ -765,32 +606,157 @@ const Worker = struct {
             log.warn("timeline {s} did not parse: {t}", .{ id, err });
             break :blk null;
         };
-        const keep_raw = w.c.opts.raw_timeline_days > 0 or compact == null;
+        const keep_raw = rc.b.c.opts.raw_timeline_days > 0 or compact == null;
         job.kind = .{ .timeline = .{
-            .region = r,
+            .region = rc.region,
             .id = try a.dupe(u8, id),
             .raw = if (keep_raw) try store.raw.compress(a, body) else null,
             .compact = compact,
-            .t = w.now(),
+            .t = rc.b.now(),
         } };
-        try w.submit(job);
+        try rc.b.submit(job);
+    }
+};
+
+/// League ladder pages, then champion mastery, for one platform route. Never priority
+/// at the writer: a ladder page costs ~100x a match in writes, so even EUW1's waits
+const PlatformCrawler = struct {
+    b: Bucket,
+    platform: ep.Platform,
+    /// Last PUUID given mastery, so each batch resumes instead of rescanning done players
+    mastery_cursor: [128]u8 = undefined,
+    mastery_cursor_len: usize = 0,
+    /// When this thread last fetched a ladder page (--ladder-per-hour)
+    last_ladder: i64 = 0,
+
+    const Of = ep.Platform;
+
+    fn init(c: *Crawler, p: ep.Platform) !PlatformCrawler {
+        return .{ .b = try .init(c, p.host, false, &c.counters.platform_requests), .platform = p };
     }
 
-    fn queueStatus(w: *Worker, which: writer.Kind.Queue, id: []const u8, status: writer.Kind.Status) !void {
-        const job = try Job.create(w.c.gpa, .none);
-        errdefer job.destroy(w.c.gpa);
-        job.kind = .{ .queue = .{ .which = which, .id = try job.allocator().dupe(u8, id), .status = status } };
-        try w.submit(job);
+    fn step(pc: *PlatformCrawler) !void {
+        if (try pc.seedLadder() > 0) return;
+        if (pc.b.c.opts.mastery and try pc.fetchMasteries(50) > 0) return;
+        try pc.b.nap(60);
     }
 
-    /// First column of every row, copied into `arena`
-    fn column(w: *Worker, arena: std.mem.Allocator, sql: []const u8, args: anytype) ![]const []const u8 {
-        var s = try w.db.prepare(sql);
-        defer s.deinit();
-        try s.bind(args);
-        var out: std.ArrayList([]const u8) = .empty;
-        while (try s.step()) try out.append(arena, try arena.dupe(u8, s.bytes(0)));
-        return out.items;
+    fn seedLadder(pc: *PlatformCrawler) !u32 {
+        const p = pc.platform;
+        var fetched: u32 = 0;
+        for (tiers[0 .. pc.b.c.opts.min_tier + 1]) |tier| {
+            const apex = std.mem.eql(u8, tier, "MASTER") or std.mem.eql(u8, tier, "GRANDMASTER") or
+                std.mem.eql(u8, tier, "CHALLENGER");
+            for (if (apex) divisions[0..1] else divisions[0..]) |division| {
+                var page: u32 = 1;
+                while (true) : (page += 1) {
+                    try pc.b.check();
+                    var fresh = try pc.b.db.prepare("SELECT entries, fetched_at FROM ladder_pages" ++
+                        " WHERE platform = ? AND tier = ? AND division = ? AND page = ?");
+                    defer fresh.deinit();
+                    try fresh.bind(.{ p.id, tier, division, page });
+                    if (try fresh.step() and fresh.int(1) > pc.b.now() - pc.b.c.opts.ladder_refresh_s) {
+                        if (fresh.int(0) == 0) break;
+                        continue;
+                    }
+                    try pc.ladderGap();
+                    // A bad page ends this division for now; the next pass retries it
+                    const entries = pc.fetchLadderPage(tier, division, page) catch |err| {
+                        if (fatal(err)) return err;
+                        log.warn("{s} ladder {s} {s} page {d}: {t}", .{ p.host, tier, division, page, err });
+                        break;
+                    };
+                    fetched += 1;
+                    pc.b.countRequests();
+                    if (entries == 0) break;
+                }
+            }
+        }
+        return fetched;
+    }
+
+    /// Nap until this platform may fetch another ladder page (--ladder-per-hour)
+    fn ladderGap(pc: *PlatformCrawler) !void {
+        const per_hour = pc.b.c.opts.ladder_per_hour;
+        if (per_hour > 0) {
+            while (pc.b.now() < pc.last_ladder + @divTrunc(3600, @as(i64, per_hour))) try pc.b.nap(1);
+        }
+        pc.last_ladder = pc.b.now();
+    }
+
+    fn fetchLadderPage(pc: *PlatformCrawler, tier: []const u8, division: []const u8, page: u32) !usize {
+        const gpa = pc.b.c.gpa;
+        const got = try ep.leagueEntries(&pc.b.client, pc.platform, tier, division, page);
+        defer if (got) |b| gpa.free(b);
+        const job = try Job.create(gpa, .none);
+        errdefer job.destroy(gpa);
+        // Parsed strings may point into the body: the copy lives as long as the job
+        const a = job.allocator();
+        const entries = try ep.parse([]const ep.LeagueEntry, a, try a.dupe(u8, got orelse "[]"));
+        job.kind = .{ .ladder = .{
+            .platform = pc.platform,
+            .tier = tier,
+            .division = division,
+            .page = page,
+            .entries = entries,
+            .t = pc.b.now(),
+        } };
+        try pc.b.submit(job);
+        return entries.len;
+    }
+
+    fn fetchMasteries(pc: *PlatformCrawler, n: u32) !u32 {
+        var arena: std.heap.ArenaAllocator = .init(pc.b.c.gpa);
+        defer arena.deinit();
+        const sql =
+            \\SELECT p.puuid FROM players p
+            \\WHERE p.platform = ? AND p.source = 'ladder' AND p.puuid > ? AND NOT EXISTS
+            \\    (SELECT 1 FROM mastery m WHERE m.puuid = p.puuid)
+            \\ORDER BY p.puuid LIMIT ?
+        ;
+        const id = pc.platform.id;
+        var puuids = try column(pc.b.db, arena.allocator(), sql, .{ id, pc.masteryCursor(), n });
+        if (puuids.len == 0 and pc.mastery_cursor_len > 0) {
+            pc.mastery_cursor_len = 0;
+            puuids = try column(pc.b.db, arena.allocator(), sql, .{ id, "", n });
+        }
+        for (puuids) |puuid| {
+            try pc.b.check();
+            pc.fetchMastery(arena.allocator(), puuid) catch |err| {
+                if (fatal(err)) return err;
+                log.warn("{s} mastery: {t}", .{ pc.platform.host, err });
+            };
+            if (puuid.len <= pc.mastery_cursor.len) {
+                @memcpy(pc.mastery_cursor[0..puuid.len], puuid);
+                pc.mastery_cursor_len = puuid.len;
+            }
+        }
+        return @intCast(puuids.len);
+    }
+
+    fn masteryCursor(pc: *PlatformCrawler) []const u8 {
+        return pc.mastery_cursor[0..pc.mastery_cursor_len];
+    }
+
+    /// Compact only: the raw response is ~70 KB for ~1 KB of data we use. An empty
+    /// list still gets a row, marking the player done
+    fn fetchMastery(pc: *PlatformCrawler, arena: std.mem.Allocator, puuid: []const u8) !void {
+        const gpa = pc.b.c.gpa;
+        const got = try ep.masteries(&pc.b.client, pc.platform, puuid);
+        defer if (got) |b| gpa.free(b);
+        const job = try Job.create(gpa, .none);
+        errdefer job.destroy(gpa);
+        const a = job.allocator();
+        const t = pc.b.now();
+        const entries = if (got) |body| try mastery.fromJson(arena, body) else &.{};
+        job.kind = .{ .mastery = .{
+            .puuid = try a.dupe(u8, puuid),
+            .platform = pc.platform.id,
+            .t = t,
+            .champions = entries.len,
+            .blob = if (got != null) try mastery.encode(a, entries, t) else null,
+        } };
+        try pc.b.submit(job);
     }
 };
 
@@ -876,14 +842,12 @@ test "queues: priority platforms first, matches oldest first, timelines newest" 
     );
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    var w: Worker = undefined;
-    w.db = db;
     const want = [_]struct { []const u8, []const []const u8 }{
-        .{ Worker.next_matches, &.{ "EUW1_2", "EUW1_3", "EUN1_1" } },
-        .{ Worker.next_timelines, &.{ "EUW1_3", "EUW1_2", "EUN1_1" } },
+        .{ RegionCrawler.next_matches, &.{ "EUW1_2", "EUW1_3", "EUN1_1" } },
+        .{ RegionCrawler.next_timelines, &.{ "EUW1_3", "EUW1_2", "EUN1_1" } },
     };
     for (want) |c| {
-        const got = try w.column(arena.allocator(), c[0], .{ "europe", "[\"EUW1\"]", 10 });
+        const got = try column(db, arena.allocator(), c[0], .{ "europe", "[\"EUW1\"]", 10 });
         try std.testing.expectEqual(c[1].len, got.len);
         for (c[1], got) |e, g| try std.testing.expectEqualStrings(e, g);
     }
@@ -899,48 +863,36 @@ test "scan pool: players below --min-tier are not scanned" {
     );
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    var w: Worker = undefined;
-    w.db = db;
-    const plat = try Worker.tierFloor(arena.allocator(), 5);
+    const plat = try RegionCrawler.tierFloor(arena.allocator(), 5);
     try std.testing.expectEqualStrings("|CHALLENGER|GRANDMASTER|MASTER|DIAMOND|EMERALD|PLATINUM|", plat.?);
-    try std.testing.expectEqual(null, try Worker.tierFloor(arena.allocator(), tiers.len - 1));
+    try std.testing.expectEqual(null, try RegionCrawler.tierFloor(arena.allocator(), tiers.len - 1));
     const want = [_]struct { ?[]const u8, []const []const u8 }{
         .{ plat, &.{ "d", "p" } },
         .{ null, &.{ "d", "g", "n", "p" } },
     };
     for (want) |c| {
-        const got = try w.column(arena.allocator(), Worker.scan_players, .{ "europe", null, 0, 10, c[0] });
+        const got = try column(db, arena.allocator(), RegionCrawler.scan_players, .{ "europe", null, 0, 10, c[0] });
         try std.testing.expectEqual(c[1].len, got.len);
         for (c[1], got) |e, g| try std.testing.expectEqualStrings(e, g);
     }
 }
 
-test "others pause while the priority region is short of the machine" {
+test "timelines: every priority match, a share of the rest" {
     var c: Crawler = .{
         .gpa = std.testing.allocator,
         .io = std.testing.io,
-        .opts = .{ .data_dir = "", .key = "" },
-        .slack = 0,
+        .opts = .{ .data_dir = "", .key = "", .timeline_percent = 50 },
     };
-    c.others.store(false, .monotonic);
-    const europe = &c.counters.region[@intFromEnum(ep.Region.europe)].slack_ns;
-    const tick = struct {
-        fn f(cr: *Crawler, n: *std.atomic.Value(u64), slack_s: u64, times: usize) bool {
-            for (0..times) |_| {
-                _ = n.fetchAdd(slack_s * std.time.ns_per_s, .monotonic);
-                cr.updateGate(10);
-            }
-            return cr.others.load(.monotonic);
-        }
-    }.f;
-    // Rate limited half the time: others start within ~100 s
-    try std.testing.expect(!tick(&c, europe, 5, 5));
-    try std.testing.expect(tick(&c, europe, 5, 10));
-    // 20%: still the key's limit, others keep running
-    try std.testing.expect(tick(&c, europe, 2, 30));
-    // Never waiting (disk bound): others pause
-    try std.testing.expect(!tick(&c, europe, 0, 20));
-    try std.testing.expect(c.slack.? < 0.1);
+    var buf: [32]u8 = undefined;
+    var others: u32 = 0;
+    for (0..1000) |i| {
+        try std.testing.expect(c.wantTimeline(try std.fmt.bufPrint(&buf, "EUW1_{d}", .{i})));
+        if (c.wantTimeline(try std.fmt.bufPrint(&buf, "EUN1_{d}", .{i}))) others += 1;
+    }
+    try std.testing.expect(others > 400 and others < 600);
+    c.opts.timeline_percent = 0;
+    try std.testing.expect(!c.wantTimeline("NA1_1"));
+    try std.testing.expect(c.wantTimeline("EUW1_1"));
 }
 
 test "gold at 10, 14 and 15 minutes" {

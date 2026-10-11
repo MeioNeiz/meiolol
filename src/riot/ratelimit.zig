@@ -27,11 +27,18 @@ pub const Window = struct {
         }
     }
 
-    /// ns until another request fits, 0 if one fits now
-    fn waitNs(w: *Window, now: i96) i96 {
+    /// ns until another request fits under the limit less `reserve_pct`, 0 if one fits
+    /// now. Paced: also one per span / limit at most, so the window fills evenly instead
+    /// of in a burst that leaves no room for another process until it slides
+    fn waitNs(w: *Window, now: i96, reserve_pct: u8, paced: bool) i96 {
         w.prune(now);
-        if (w.hits.len < w.limit) return 0;
-        return w.hits.at(w.hits.len - w.limit) + w.span() - now;
+        const limit = @max(1, w.limit * (100 - @min(reserve_pct, 99)) / 100);
+        var wait: i96 = 0;
+        if (w.hits.len >= limit) wait = w.hits.at(w.hits.len - limit) + w.span() - now;
+        if (paced) {
+            if (w.hits.back()) |last| wait = @max(wait, last + @divTrunc(w.span(), limit) - now);
+        }
+        return @max(wait, 0);
     }
 };
 
@@ -44,15 +51,21 @@ pub const Bucket = struct {
         b.windows.deinit(gpa);
     }
 
-    fn waitNs(b: *Bucket, now: i96) i96 {
+    fn waitNs(b: *Bucket, now: i96, reserve_pct: u8, paced: bool) i96 {
         var wait = @max(b.blocked_until - now, 0);
-        for (b.windows.items) |*w| wait = @max(wait, w.waitNs(now));
+        for (b.windows.items) |*w| wait = @max(wait, w.waitNs(now, reserve_pct, paced));
         return wait;
     }
 
-    /// Replace limits from a spec like "20:1,100:120", less `reserve_pct`, keeping hits
-    /// of windows whose length is unchanged
-    fn setSpec(b: *Bucket, gpa: Allocator, spec: []const u8, reserve_pct: u8) !void {
+    fn longestSpan(b: *const Bucket) i96 {
+        var span: i96 = 0;
+        for (b.windows.items) |w| span = @max(span, w.span());
+        return span;
+    }
+
+    /// Replace limits from a spec like "20:1,100:120", keeping hits of windows whose
+    /// length is unchanged
+    fn setSpec(b: *Bucket, gpa: Allocator, spec: []const u8) !void {
         var parsed: [max_windows]struct { limit: u32, seconds: u32 } = undefined;
         var n: usize = 0;
         var parts = std.mem.tokenizeScalar(u8, spec, ',');
@@ -64,7 +77,6 @@ pub const Bucket = struct {
                 .limit = try std.fmt.parseInt(u32, trimmed, 10),
                 .seconds = try std.fmt.parseInt(u32, std.mem.trim(u8, part[colon + 1 ..], " "), 10),
             };
-            parsed[n].limit = @max(1, parsed[n].limit * (100 - @min(reserve_pct, 99)) / 100);
             n += 1;
         }
         var same = n == b.windows.items.len;
@@ -91,8 +103,10 @@ pub const Bucket = struct {
     }
 
     /// Riot's X-*-Rate-Limit-Count ("3:1,57:120"): when Riot has seen more requests
-    /// than we sent (a restart, a manual call), pad our windows at `now`
-    fn syncCounts(b: *Bucket, gpa: Allocator, counts: []const u8, now: i96) !void {
+    /// than we sent (a restart, another process), pad our windows at `now`. The most
+    /// padded in any window: requests someone else sent
+    fn syncCounts(b: *Bucket, gpa: Allocator, counts: []const u8, now: i96) !u32 {
+        var padded: u32 = 0;
         var parts = std.mem.tokenizeScalar(u8, counts, ',');
         while (parts.next()) |part| {
             const colon = std.mem.indexOfScalar(u8, part, ':') orelse continue;
@@ -100,9 +114,11 @@ pub const Bucket = struct {
             const secs = std.fmt.parseInt(u32, std.mem.trim(u8, part[colon + 1 ..], " "), 10) catch continue;
             for (b.windows.items) |*w| {
                 if (w.seconds != secs) continue;
+                padded = @max(padded, seen -| @as(u32, @intCast(w.hits.len)));
                 while (w.hits.len < seen) try w.hits.pushBack(gpa, now);
             }
         }
+        return padded;
     }
 };
 
@@ -111,25 +127,36 @@ pub const Limiter = struct {
     io: std.Io,
     app: Bucket = .{},
     methods: std.StringHashMapUnmanaged(Bucket) = .empty,
-    /// Share of the app limit left unused for other processes on the same key
+    /// Share of the app limit left to other processes on the same key while one is
+    /// using it: Riot's counts showed requests we did not send in the last `shared_hold_s`
     reserve_pct: u8 = 0,
-    /// When set, acquire() adds the time it waits for a window: the key, not the
-    /// machine, is the limit (read by another thread)
-    waited_ns: ?*std.atomic.Value(u64) = null,
+    shared_until: i96 = 0,
+    /// Even spacing in every window (Window.waitNs)
+    paced: bool = false,
+    /// For a window after this, Riot still counts a previous process's requests
+    started: i96 = 0,
 
     pub const app_default = "20:1,100:120";
+    /// A Your games lookup is ~23 calls over a few minutes, and the page refreshes
+    pub const shared_hold_s = 600;
 
     pub fn init(gpa: Allocator, io: std.Io) !Limiter {
         var l: Limiter = .{ .gpa = gpa, .io = io };
-        try l.app.setSpec(gpa, app_default, 0);
+        try l.app.setSpec(gpa, app_default);
+        l.started = l.now();
         return l;
     }
 
-    /// Leave `pct` of every app window to other processes on the same key. Riot's
-    /// -Count headers already include their requests, so this only caps our share
-    pub fn setReserve(l: *Limiter, pct: u8) !void {
+    /// Leave `pct` of every app window to other processes on the same key while one is
+    /// using it. Riot's -Count headers already include their requests, so this only
+    /// caps our share
+    pub fn setReserve(l: *Limiter, pct: u8) void {
         l.reserve_pct = pct;
-        try l.app.setSpec(l.gpa, app_default, pct);
+    }
+
+    /// Another process used the key lately, so the reserve applies
+    pub fn sharing(l: *Limiter) bool {
+        return l.now() < l.shared_until;
     }
 
     pub fn deinit(l: *Limiter) void {
@@ -160,13 +187,13 @@ pub const Limiter = struct {
         const m = try l.method(method_name);
         while (true) {
             const t = l.now();
-            const wait = @max(l.app.waitNs(t), m.waitNs(t));
+            const reserve = if (t < l.shared_until) l.reserve_pct else 0;
+            const wait = @max(l.app.waitNs(t, reserve, l.paced), m.waitNs(t, 0, l.paced));
             if (wait <= 0) {
                 for (l.app.windows.items) |*w| try w.hits.pushBack(l.gpa, t);
                 for (m.windows.items) |*w| try w.hits.pushBack(l.gpa, t);
                 return;
             }
-            if (l.waited_ns) |n| _ = n.fetchAdd(@intCast(wait), .monotonic);
             try l.io.sleep(.fromNanoseconds(wait), .awake);
         }
     }
@@ -181,10 +208,15 @@ pub const Limiter = struct {
     pub fn update(l: *Limiter, method_name: []const u8, h: Headers) !void {
         const t = l.now();
         const m = try l.method(method_name);
-        if (h.app_limit) |spec| try l.app.setSpec(l.gpa, spec, l.reserve_pct);
-        if (h.app_count) |counts| try l.app.syncCounts(l.gpa, counts, t);
-        if (h.method_limit) |spec| try m.setSpec(l.gpa, spec, 0);
-        if (h.method_count) |counts| try m.syncCounts(l.gpa, counts, t);
+        if (h.app_limit) |spec| try l.app.setSpec(l.gpa, spec);
+        if (h.app_count) |counts| {
+            const foreign = try l.app.syncCounts(l.gpa, counts, t);
+            if (foreign > 0 and t - l.started > l.app.longestSpan()) {
+                l.shared_until = t + shared_hold_s * std.time.ns_per_s;
+            }
+        }
+        if (h.method_limit) |spec| try m.setSpec(l.gpa, spec);
+        if (h.method_count) |counts| _ = try m.syncCounts(l.gpa, counts, t);
     }
 
     pub const Scope = enum { app, method };
@@ -221,23 +253,35 @@ test "riot counts pad our windows" {
 test "acquire waits once a window is full" {
     var l = try Limiter.init(testing.allocator, testing.io);
     defer l.deinit();
-    var waited: std.atomic.Value(u64) = .init(0);
-    l.waited_ns = &waited;
     try l.update("m", .{ .app_limit = "3:1" });
     const start = l.now();
     for (0..4) |_| try l.acquire("m");
     const elapsed_ms = @divTrunc(l.now() - start, std.time.ns_per_ms);
     try testing.expect(elapsed_ms >= 1000 and elapsed_ms < 2500);
-    try testing.expect(waited.load(.monotonic) >= std.time.ns_per_s);
 }
 
-test "reserve caps app windows, not method ones" {
+test "reserve applies once Riot's counts show another process, not just after a start" {
     var l = try Limiter.init(testing.allocator, testing.io);
     defer l.deinit();
-    try l.setReserve(20);
-    try testing.expectEqual(@as(u32, 80), l.app.windows.items[1].limit);
-    try l.update("m", .{ .app_limit = "20:1,100:120", .method_limit = "2000:10" });
-    try testing.expectEqual(@as(u32, 16), l.app.windows.items[0].limit);
-    try testing.expectEqual(@as(u32, 80), l.app.windows.items[1].limit);
-    try testing.expectEqual(@as(u32, 2000), l.methods.getPtr("m").?.windows.items[0].limit);
+    l.setReserve(20);
+    const t = l.now();
+    for (0..85) |_| try l.app.windows.items[1].hits.pushBack(testing.allocator, t);
+    try testing.expectEqual(@as(i96, 0), l.app.waitNs(t, 0, false));
+    // A previous process's requests, still counted just after start
+    try l.update("m", .{ .app_count = "0:1,90:120" });
+    try testing.expect(!l.sharing());
+    l.started -= 200 * std.time.ns_per_s;
+    try l.update("m", .{ .app_count = "1:1,95:120" });
+    try testing.expect(l.sharing());
+    // 95 hits against 80 of 100
+    try testing.expect(l.app.waitNs(l.now(), l.reserve_pct, false) > 100 * std.time.ns_per_s);
+}
+
+test "paced windows space requests evenly" {
+    var w: Window = .{ .limit = 100, .seconds = 120 };
+    defer w.hits.deinit(testing.allocator);
+    try w.hits.pushBack(testing.allocator, 0);
+    try testing.expectEqual(@as(i96, 0), w.waitNs(0, 0, false));
+    try testing.expectEqual(@divTrunc(w.span(), 100), w.waitNs(0, 0, true));
+    try testing.expectEqual(@divTrunc(w.span(), 80), w.waitNs(0, 20, true));
 }

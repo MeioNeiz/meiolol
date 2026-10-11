@@ -127,12 +127,14 @@ caches wrote 43 GB and read 32 GB in 4 hours for ~2k matches.
   rank snapshot, refreshed weekly: `--ladder-refresh-days`; unchanged players are not
   rewritten), then champion mastery with spare budget (`--no-mastery` to skip)
 - regional (americas, asia, europe, sea): match ids per player of its platforms (last
-  14 days, queue 420), match details, then timelines of non-remakes (`--timelines PCT`,
-  default all, picked by match id hash). Queues put `--priority` platforms' matches
-  first, then FIFO for matches and newest first for timelines; ids refill only under 300
-  pending. Each batch of 40 matches gets 40 timelines, so new games get theirs at once;
-  a backlog of older timelines (60 a batch) only drains when the match batch is short.
-  Per match ~2.13 calls (match + timeline + ids), so ~33k matches/day/region.
+  14 days, queue 420), match details, then timelines of non-remakes (every `--priority`
+  platform match; `--timelines PCT` of the rest, default all, picked by match id hash;
+  the box runs 50). Queues put `--priority` platforms' matches first, then FIFO for
+  matches and newest first for timelines; ids refill only under 300 pending. Each round
+  (RegionCrawler.step) takes 40 matches and 40 timelines, so new games get theirs at
+  once; a backlog of older timelines (60 a round) only drains when the match batch is
+  short. Per match ~2.13 calls with a timeline (match + timeline + ids), ~1.13 without:
+  ~33k matches/day/region with all timelines, ~43k at 50%.
   Participants also become players to scan unless `--no-participant-players` (the
   ladder already lists every ranked player)
 - main thread: per-region report every minute, plus writer jobs, commits, queue length,
@@ -151,16 +153,23 @@ rank biased by design: the ladder walks top down and the box sets `--min-tier PL
 scanned. Ladder pages use the platform buckets, so the floor costs no match volume;
 `--ladder-per-hour` must cover a week's refresh of the walked tiers (EUW Platinum IV+
 is ~5,500 pages, ~33 an hour) or the walk restarts at the top before reaching the floor.
-`--priority` platforms (default EUW1) are scanned before the rest of their region, so
-EUW gets the whole europe bucket while it has players due. They also get the machine
-first: a priority region's thread counts its slack (time waiting on the rate limit, or
-idle with nothing due), and the main thread averages it over ~100 s. Under 10% the box
-(disk, CPU), not the key, is holding EUW back, so the other regions and mastery pause
-and the ladder drops to `--ladder-per-hour` (20 if unset; it keeps players' seen_at
-fresh against the 30-day expiry); they resume at 30%. On a box that keeps up the gate
-stays open and every bucket runs at its cap; `--priority none` turns it off. The minute
-report shows "others on|paused, priority slack N%". `--reserve PCT` leaves part of
-every bucket to other processes on the key (the Your games service).
+`--priority` platforms (default EUW1) come first in two places, and nowhere else. Their
+region's queues: EUW's players are scanned and its matches and timelines fetched before
+the rest of europe, so EUW gets the whole europe bucket while it has players due (the
+other regions never compete with EUW for the key, only for the machine). And the
+writer's queue (Writer.submit): other buckets' jobs wait once it is half full (64),
+the priority region's at 128, so when the box (disk, CPU) falls behind, the rest slow
+down at once and EUW keeps going; on a box that keeps up the queue never fills and
+every bucket runs at its cap. Ladder pages are never priority (~100x a match in
+writes). This replaced a gate on europe's measured slack (2026-10-11), which took up to
+1.5 h after every restart to let the other regions start.
+
+Each bucket's limiter paces requests evenly (one per window / limit) instead of filling
+a window in a burst, and `--reserve PCT` (box: 20) only applies while another process
+uses the key: Riot's -Count headers show requests we did not send (ignored for one
+window after start, when they are a previous run's), then for 10 minutes the crawler
+keeps under 100 - PCT of the limit. The log says "another process is using the key".
+So the crawler takes the whole key unless the Your games service is busy.
 Only Riot's key errors, OOM and SQLite errors outside a match stop the crawler; a bad
 page, player or match (including one SQLite cannot store) is logged and skipped.
 Limits come from Riot's headers (X-App/Method-Rate-Limit and their -Count, which also

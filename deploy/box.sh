@@ -42,8 +42,8 @@ case "${1:-}" in
     start)
         # Extra arguments go to `meiolol crawl` (kept in crawl.args on the box). Default
         # --reserve 20: the Your games service on the web server shares the key
-        # (docs/your-games.md). The service stops on exit 3 (key rejected) rather than
-        # hammer Riot
+        # (docs/your-games.md); it applies only while the service is calling. The
+        # service stops on exit 3 (key rejected) rather than hammer Riot
         shift
         (( $# )) || set -- --reserve 20
         sync

@@ -17,7 +17,8 @@ const crawl = @import("crawl.zig");
 const log = std.log.scoped(.crawl);
 
 /// Jobs waiting before submit blocks: bounds memory (a match job holds its parsed
-/// document, ~0.3 MB) on the 1 GB box
+/// document, ~0.3 MB). Non-priority jobs block at half, so when the writer falls behind
+/// (disk, CPU) the priority region's jobs still get in and the rest slow down
 const max_pending = 128;
 /// Busy here means another process (backup, rebuild) holds the lock: retry the batch
 const busy_pause_s = 5;
@@ -98,13 +99,13 @@ pub const Writer = struct {
     }
 
     /// Queue a job (the writer owns it once this returns); its sequence number for
-    /// `wait`. Blocks while the queue is full, except when stopping: the writer drains
-    /// it then
-    pub fn submit(wr: *Writer, job: *Job) !u64 {
+    /// `wait`. Blocks while the queue is full for this job (`room`), except when
+    /// stopping: the writer drains it then
+    pub fn submit(wr: *Writer, job: *Job, priority: bool) !u64 {
         const io = wr.c.io;
         wr.mutex.lockUncancelable(io);
         defer wr.mutex.unlock(io);
-        while (wr.pending.items.len >= max_pending and !wr.dead and !wr.stopping()) {
+        while (!room(wr.pending.items.len, priority) and !wr.dead and !wr.stopping()) {
             wr.cond.waitUncancelable(io, &wr.mutex);
         }
         if (wr.dead) return error.Stopping;
@@ -141,6 +142,10 @@ pub const Writer = struct {
         defer wr.mutex.unlock(wr.c.io);
         wr.closing = true;
         wr.cond.broadcast(wr.c.io);
+    }
+
+    fn room(pending: usize, priority: bool) bool {
+        return pending < @as(usize, if (priority) max_pending else max_pending / 2);
     }
 
     pub fn queued(wr: *Writer) usize {
@@ -874,4 +879,11 @@ test "one draft row per match, kept by the prune; listed matches wait for the ba
         .{ "SELECT count(*) FROM draft_backfill", 1 },
     };
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
+}
+
+test "non-priority jobs wait at half the queue, priority ones at full" {
+    try std.testing.expect(Writer.room(max_pending / 2 - 1, false));
+    try std.testing.expect(!Writer.room(max_pending / 2, false));
+    try std.testing.expect(Writer.room(max_pending - 1, true));
+    try std.testing.expect(!Writer.room(max_pending, true));
 }

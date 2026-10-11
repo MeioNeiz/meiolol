@@ -35,10 +35,10 @@ const usage =
     \\              --ladder-refresh-days N  refetch ladder pages after N days
     \\                               (default 7)
     \\              --ladder-per-hour N  ladder pages per platform per hour at most
-    \\                               (default 0: no cap; 20 while others pause)
+    \\                               (default 0: no cap)
     \\              --regions R      americas,asia,europe,sea (default all)
-    \\              --timelines PCT  share of matches that also get a timeline
-    \\                               (default 100, 0 for none)
+    \\              --timelines PCT  share of matches that also get a timeline; every
+    \\                               --priority match gets one (default 100)
     \\              --raw-timeline-days N  keep raw timeline JSON N days (default 7,
     \\                                     0 none)
     \\              --raw-match-days N     keep raw match JSON N days (default 30,
@@ -51,15 +51,15 @@ const usage =
     \\              --cache-mb N     the writer's page cache (default 64)
     \\              --player-sample N  keep full player rows (the scan pool) for 1
     \\                               ladder player in N; ranks has everyone (default 1)
-    \\              --priority P     platforms whose players come first in their
-    \\                               region; other regions, mastery and extra ladder
-    \\                               pause while it is short of the machine
-    \\                               (default EUW1, "none" for none)
+    \\              --priority P     platforms whose players and matches come first
+    \\                               in their region; its region's writes go first
+    \\                               when the machine falls behind (default EUW1,
+    \\                               "none" for none)
     \\              --min-tier T     lowest tier walked on the ladder and scanned for
     \\                               matches (e.g. PLATINUM: Platinum IV and up;
     \\                               default IRON, everyone)
     \\              --reserve PCT    leave PCT of each rate limit to other processes
-    \\                               on the key (default 0)
+    \\                               on the key while one is using it (default 0)
     \\  stats       write the model file the app reads (ranked solo, no remakes)
     \\              --patch P        patch to include, repeatable or comma separated
     \\                               (default: the newest patch)

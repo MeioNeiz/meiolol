@@ -16,7 +16,9 @@ Researched 2026-10-11. Production key details: production-key.md.
   extra call per match. With timelines a match costs ~2.13 calls (incl. ids), so ~33k
   matches/day per region, ~135k/day total (was ~60k EUW summaries only). Stored compact
   (docs/architecture.md, Storage); raw kept 7 days, raw summaries 30 days
-- Summary-only alternative (`--timelines 0`): ~63k matches/day per region
+- Summary-only alternative (`--timelines 0`): ~63k matches/day per region. The box
+  runs `--timelines 50`: EUW keeps every timeline (priority platforms always do), the
+  other regions get ~43k matches/day each, half with one
 - EUW is the priority (Jacob): the europe bucket scans EUW players first, so its ~33k
   matches/day are nearly all EUW (~20% of EUW's ~150-170k ranked solo games/day,
   lolalytics counts). EUNE, TR, RU and ME get only what EUW leaves (in practice a few

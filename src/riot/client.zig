@@ -49,6 +49,7 @@ pub const Client = struct {
         for (0..6) |attempt| {
             const backoff: i64 = @as(i64, 1) << @intCast(attempt);
             try c.limiter.acquire(method);
+            const shared = c.limiter.sharing();
             const res = c.once(uri, method, backoff) catch |err| switch (err) {
                 error.OutOfMemory => return err,
                 else => {
@@ -57,6 +58,11 @@ pub const Client = struct {
                     continue;
                 },
             };
+            if (!shared and c.limiter.sharing()) {
+                log.info("{s}: another process is using the key, leaving it {d}% for {d} min", .{
+                    route, c.limiter.reserve_pct, Limiter.shared_hold_s / 60,
+                });
+            }
             _ = c.requests.fetchAdd(1, .monotonic);
             switch (res.status) {
                 200 => return res.body,
