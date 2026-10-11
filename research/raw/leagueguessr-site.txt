@@ -1,0 +1,9 @@
+# LeagueGuessr
+
+<https://leagueguessr.com/>
+
+leagueguessr
+
+Total score: 0
+Guess Ranked Games
+Guess ARAM Games

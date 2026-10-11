@@ -1,0 +1,64 @@
+Measured 2026-10-11 with the meiolol personal key (EUW, europe routing), match EUW1_8009933221 (ranked solo 420, patch 16.20).
+Requests: GET match, GET timeline (first attempt 429, retried after retry-after); Accept-Encoding: gzip
+
+== curl results (http_code bytes_on_wire seconds) ==
+match: 200 11291 0.20
+timeline attempt 1: 429 81 0.07
+timeline attempt 2: 200 63205 0.294028
+
+== decompressed sizes (bytes) ==
+  727102 tl.json
+   78461 match.json
+  805563 total
+
+== match response headers (rate limits) ==
+content-encoding: gzip
+x-app-rate-limit: 100:120,20:1
+x-app-rate-limit-count: 100:120,1:1
+x-method-rate-limit: 2000:10
+x-method-rate-limit-count: 1:10
+
+== first timeline attempt headers ==
+HTTP/2 429 
+retry-after: 75
+x-app-rate-limit: 100:120,20:1
+x-app-rate-limit-count: 100:120,1:1
+x-method-rate-limit: 2000:10
+x-method-rate-limit-count: 0:10
+x-rate-limit-type: application
+
+== timeline retry headers ==
+HTTP/2 200 
+x-app-rate-limit: 100:120,20:1
+x-app-rate-limit-count: 100:120,1:1
+x-method-rate-limit: 2000:10
+x-method-rate-limit-count: 1:10
+
+== timeline analysis (python, research scratch an.py) ==
+frameInterval 60000 frames 26 duration_s 1493
+events 999
+{'ITEM_PURCHASED': 207, 'ITEM_DESTROYED': 175, 'WARD_PLACED': 146, 'SKILL_LEVEL_UP': 141, 'LEVEL_UP': 130, 'CHAMPION_KILL': 64, 'TURRET_PLATE_DESTROYED': 55, 'WARD_KILL': 30, 'BUILDING_KILL': 13, 'CHAMPION_SPECIAL_KILL': 11, 'ITEM_UNDO': 8, 'ELITE_MONSTER_KILL': 8, 'ITEM_SOLD': 6, 'PAUSE_END': 1, 'DRAGON_SOUL_GIVEN': 1, 'OBJECTIVE_BOUNTY_PRESTART': 1, 'OBJECTIVE_BOUNTY_FINISH': 1, 'GAME_END': 1}
+pf keys ['championStats', 'currentGold', 'damageStats', 'goldPerSecond', 'jungleMinionsKilled', 'level', 'minionsKilled', 'participantId', 'position', 'timeEnemySpentControlled', 'totalGold', 'xp']
+champStats keys ['abilityHaste', 'abilityPower', 'armor', 'armorPen', 'armorPenPercent', 'attackDamage', 'attackSpeed', 'bonusArmorPenPercent', 'bonusMagicPenPercent', 'ccReduction', 'cooldownReduction', 'health', 'healthMax', 'healthRegen', 'lifesteal', 'magicPen', 'magicPenPercent', 'magicResist', 'movementSpeed', 'omnivamp', 'physicalVamp', 'power', 'powerMax', 'powerRegen', 'spellVamp']
+frame15 p1 {'totalGold': 6208, 'xp': 8791, 'level': 12, 'minionsKilled': 137, 'jungleMinionsKilled': 0, 'position': {'x': 2817, 'y': 13061}}
+CHAMPION_KILL {"assistingParticipantIds": [10], "bounty": 400, "killStreakLength": 0, "killerId": 9, "position": {"x": 10934, "y": 1286}, "shutdownBounty": 0, "timestamp": 57862, "type": "CHAMPION_KILL", "victimId": 4, "victimTeamfightDamageDealt": [{"basic": true, "magicDamage": 0, "name": "Vayne", "participantI
+ITEM_PURCHASED {"itemId": 3865, "participantId": 0, "timestamp": 0, "type": "ITEM_PURCHASED"}
+SKILL_LEVEL_UP {"levelUpType": "NORMAL", "participantId": 4, "skillSlot": 1, "timestamp": 1551, "type": "SKILL_LEVEL_UP"}
+WARD_PLACED {"creatorId": 4, "timestamp": 34249, "type": "WARD_PLACED", "wardType": "YELLOW_TRINKET"}
+BUILDING_KILL {"bounty": 0, "buildingType": "TOWER_BUILDING", "killerId": 9, "laneType": "BOT_LANE", "position": {"x": 10504, "y": 1029}, "teamId": 100, "timestamp": 822472, "towerType": "OUTER_TURRET", "type": "BUILDING_KILL"}
+ELITE_MONSTER_KILL {"assistingParticipantIds": [9, 10], "bounty": 0, "killerId": 7, "killerTeamId": 200, "monsterSubType": "FIRE_DRAGON", "monsterType": "DRAGON", "position": {"x": 9859, "y": 4427}, "timestamp": 464595, "type": "ELITE_MONSTER_KILL"}
+timestamps [0, 60033, 120054] [1440539, 1493187]
+challenges keys 129 {'earlyLaningPhaseGoldExpAdvantage': 0, 'laningPhaseGoldExpAdvantage': 0, 'maxCsAdvantageOnLaneOpponent': 59, 'laneMinionsFirst10Minutes': 84}
+participant fields 156
+
+== match summary challenges per participant: teamPosition champion earlyLaningPhaseGoldExpAdvantage laningPhaseGoldExpAdvantage maxCsAdvantageOnLaneOpponent maxLevelLeadLaneOpponent laneMinionsFirst10Minutes ==
+TOP Volibear 0 0 59 3 84
+JUNGLE Kindred 0 0 16.69999995827675 1 0
+MIDDLE Ahri 1 0 32.599999994039536 1 82
+BOTTOM Vayne 0 0 0 0 35
+UTILITY Senna 0 0 40 2 20
+TOP Teemo 0 0 4 1 70
+JUNGLE JarvanIV 0 0 9.800000041723251 1 0
+MIDDLE Ekko 0 0 0.4000000059604645 1 57
+BOTTOM Kalista 1 1 80 3 69
+UTILITY Pyke 0 0 3 1 8

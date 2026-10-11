@@ -1,8 +1,9 @@
 # Research
 
-Prior art for meiolol, a League of Legends champ select pick recommender: existing draft
-tools, recommendation methods, Riot API data, and what the evidence says about draft
-impact on win rate. Decisions live in the plan, not here (no plan file yet).
+Prior art for meiolol: originally a League of Legends champ select pick recommender, now
+choosing a more Riot-friendly, data-hungry product (the production key goal). Existing
+tools of every kind, what Riot encourages, player needs, Riot API data, recommendation
+methods. Decisions live in the plan, not here (no plan file yet).
 
 Run with the `josearch` skill (`josearch help`). Start at [index](index.md); search with
 `josearch find`. Only `sources/`, `questions/` and this README are hand-written;
@@ -20,3 +21,7 @@ Every finding starts with one or more tags. Add tags here before using them.
 | `draft` | draft theory: counters, synergy, roles, comps, how much draft matters |
 | `ux` | how recommendations are shown during champ select |
 | `policy` | Riot developer policies, API key approval process, legal requirements |
+| `market` | popularity, traffic, downloads, monetisation, crowding of tool categories |
+| `needs` | what players say they want, pain points, complaints about existing tools |
+| `learning` | improvement and coaching tools: VOD/replay review, matchup guides, feedback |
+| `fun` | games, quizzes, social and friend features, community and creative tools |
