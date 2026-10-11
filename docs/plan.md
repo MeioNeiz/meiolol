@@ -119,7 +119,9 @@ next steps land here.
   still counts whole tables and takes the write lock (store.open): slow on the micro
 - Keep more data (Jacob, 2026-10-11): deletion was for the micro's disk, not by choice.
   On the A1: `--keep-days 0` (matches, rows, compact timelines forever, ~1.4 GB/day at
-  ~120k/day), raw summaries 30 days; older segments and backups to an off-host Storage
+  ~120k/day), raw summaries 30 days and raw timelines for a 10% sample over 30 days
+  (~50 + ~26 GB): Jacob will run the model over every field to choose what the compact
+  rows keep forever, so the raw window has to hold all of them first; older segments and backups to an off-host Storage
   Box once local disk fills (Jacob to order; or paid OCI disk). Privacy rules stay:
   PUUIDs blanked at 24 months, forget, Riot 404 deletes
 - Rank history (Jacob, 2026-10-11: keep ranks): ranks drops a player 30 days after the
