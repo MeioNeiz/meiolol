@@ -10,7 +10,10 @@ docs/plan.md. Read it first.
   on Windows, developed on macOS; both must compile)
 - Two executables: `meiolol` (backend: crawl, stats, site, status, champions; runs on
   the gpu-box PC) and `meiolol-app` (player tool: suggest, watch, session, get)
-- Website: `deploy/box.sh site EMAIL` -> data/site (static, preview mode until prod key)
+- Website: https://meiolol.jomify.lol, static nginx on the jomove server
+  (`ssh -i ~/.ssh/oci_instance-20260714-1317 ubuntu@193.123.180.81`; jomove's own
+  site runs there too, leave its config alone). Box builds and uploads daily:
+  `deploy/box.sh web start jombirds@gmail.com|stop|status`. Preview mode until prod key
 - Layout, modules, storage, model file format: docs/architecture.md
 - Data sources and what was ruled out (and why): docs/data.md. Read before adding one
 - Production key requirements and policy limits on what the app may show:

@@ -50,6 +50,16 @@ Uncertain, leaning approvable; the wait is the real cost.
   long the approval process ... takes", open betas included; do not advertise the site.
   Hence the site's preview mode (noindex, banner); research C8
 
+## Registration popup (seen 2026-10-11)
+
+Registering any product first shows "General Policies" with I Agree / I Disagree. Its
+"Please Don't" includes: "Utilize a Development or Interim API key to run a project
+accessible by the community (Development and Interim API keys are to be used to create a
+prototype that we can review before the project is made public)". Its "Please Do" list:
+think outside the box; "Think of ways to connect players with their friends"; "Think of
+ways for players to evaluate and improve their own gameplay"; use game art assets (not
+logos). Gray areas: ask in the application as an App Note.
+
 ## Description angles
 
 - "Helps players learn draft: highlights important pick decisions and offers several
