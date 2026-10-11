@@ -5,8 +5,12 @@ data grows; add a dated section, keep the old ones (the curve over training size
 evidence for the production key).
 
 ```
-meiolol eval --data DIR [--patch P] [--platform P] [--test-share 0.2] [--folds 5]
+meiolol eval --data DIR [--patch P] [--platform P] [--test-platform P]
+             [--test-share 0.2] [--folds 5]
 ```
+
+Copy of the box DB without touching the live one (python3 on the box, read-only source):
+`sqlite3.connect("file:.../meiolol.db?mode=ro", uri=True).backup(sqlite3.connect(dst))`.
 
 ## Method
 
@@ -53,6 +57,28 @@ Train 5335 games (27 Sep to 8 Oct), test 1334 (8 to 11 Oct, all 16.20).
 - Role inference: 91.6% of champions placed right, 81.5% of teams fully right; worst
   top (87.6%) and mid (88.2%), best bot (95.0%)
 - Learning curve, 250 to 5335 train games: flat at 0.692-0.693 for every model
+
+### Changes measured the same day (same split)
+
+| model | log loss | AUC | log loss vs current | verdict |
+| --- | --- | --- | --- | --- |
+| empirical-Bayes priors (score.empiricalPriors) | 0.6922 | 0.527 | -0.0008 ± 0.0014 | opt-in, not default |
+| joint ratings, L2 logistic (logreg.zig, l2 300) | 0.6920 | 0.527 | -0.0010 ± 0.0018 | eval only |
+
+- Empirical Bayes (method of moments, unweighted over cells with 30+ games, needs 100+
+  cells; meiolol-bb's research/questions/curve-statistics-method.md, Brown 2008):
+  base prior 1226 games, every pair kind (duo, lane, other matchups) "off" (spread not
+  measurable). It adapts as data grows and needs no grid. A 95%-lower-bound variant
+  switched everything off (coin flip); with fewer than 100 cells the point estimate
+  overfit (0.7235 at 250 train games), hence the cell floor
+- Joint ratings: champion-role ratings fitted together (adjusts for teammates and
+  opponents), the same form as a trained model will take. Out-of-fold L2 300 matches a
+  ~1000-game prior. Level with marginal base rates here
+- Neither beats the current model beyond noise, so app, site and Daily Draft keep
+  `.{}` defaults. Switch to `empiricalPriors(...).apply(.{})` once eval shows a gain at
+  volume
+- `--test-platform EUW1`: test on one region, compare training on it alone with every
+  scanned platform pooled (all-regions data from 2026-10-11)
 
 Why: a champion-role has ~60 games here, so its winrate is known to about ±6 pp, while
 real differences between champions are 1-3 pp. Pair cells have a handful of games.
