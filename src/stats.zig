@@ -50,9 +50,16 @@ pub const Row = struct {
     start: i64,
     /// See patchKey
     patch: u32,
+    /// Index into the `platforms` given to scan
+    platform: u8,
     teams: [2][5]u32,
     winner: u1,
 };
+
+fn platformIndex(platforms: []const []const u8, platform: []const u8) u8 {
+    for (platforms, 0..) |p, i| if (std.mem.eql(u8, p, platform)) return @intCast(i);
+    return 0;
+}
 
 /// "16.20" as 16020, for ordering and comparing patches cheaply
 pub fn patchKey(patch: []const u8) u32 {
@@ -75,8 +82,8 @@ pub fn scan(
     const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
     defer gpa.free(platform_json);
     var q = try db.prepare(
-        \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, p.team_id,
-        \\  p.position, p.champion_id
+        \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, m.platform,
+        \\  p.team_id, p.position, p.champion_id
         \\FROM matches m JOIN participants p USING (match_id)
         \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
         \\  AND m.platform IN (SELECT value FROM json_each(?))
@@ -96,9 +103,14 @@ pub fn scan(
             try game.finish(sink, &summary);
             current.clearRetainingCapacity();
             try current.appendSlice(gpa, id);
-            game = .{ .winning_team = q.int(1), .start = q.int(2), .patch = patchKey(q.bytes(3)) };
+            game = .{
+                .winning_team = q.int(1),
+                .start = q.int(2),
+                .patch = patchKey(q.bytes(3)),
+                .platform = platformIndex(platforms, q.bytes(4)),
+            };
         }
-        game.add(q.int(4), if (q.isNull(5)) "" else q.bytes(5), q.int(6));
+        game.add(q.int(5), if (q.isNull(6)) "" else q.bytes(6), q.int(7));
     }
     try game.finish(sink, &summary);
     return summary;
@@ -131,6 +143,7 @@ const Game = struct {
     winning_team: i64 = 0,
     start: i64 = 0,
     patch: u32 = 0,
+    platform: u8 = 0,
     teams: [2][5]u32 = @splat(@splat(0)),
     rows: u8 = 0,
     bad: bool = false,
@@ -168,7 +181,7 @@ const Game = struct {
             summary.skipped += 1;
             return;
         }
-        try sink.add(.{ .start = g.start, .patch = g.patch, .teams = g.teams, .winner = winner.? });
+        try sink.add(.{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .winner = winner.? });
         summary.games += 1;
     }
 };

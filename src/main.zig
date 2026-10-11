@@ -44,6 +44,8 @@ const usage =
     \\              --platform P     as for stats
     \\              --test-share F   newest share of games held out (default 0.2)
     \\              --folds K        folds for tuning inside train (default 5)
+    \\              --test-platform P  test on P's games only; compares training on P
+    \\                               alone with every --platform pooled
     \\  site        write the public website (static files)
     \\              --patch P        as for stats
     \\              --platform P     as for stats (pages say EUW: reword before others)
@@ -138,6 +140,8 @@ pub fn main(init: std.process.Init) !u8 {
         } else if (std.mem.eql(u8, a, "--test-share")) {
             eval_opts.test_share = std.fmt.parseFloat(f64, v) catch return usageError(a);
             if (!(eval_opts.test_share > 0 and eval_opts.test_share < 1)) return usageError(a);
+        } else if (std.mem.eql(u8, a, "--test-platform")) {
+            eval_opts.test_platform = v;
         } else if (std.mem.eql(u8, a, "--folds")) {
             eval_opts.folds = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
             if (eval_opts.folds < 2) return usageError(a);

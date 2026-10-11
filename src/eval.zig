@@ -24,6 +24,9 @@ pub const Options = struct {
     folds: u32 = 5,
     /// Pick metric candidates: champions with at least this many train games in the role
     pick_min_games: u32 = 10,
+    /// Test only on this platform's games (train still uses every platform scanned),
+    /// and compare with training on this platform alone
+    test_platform: ?[]const u8 = null,
 };
 
 const Game = stats.Row;
@@ -49,15 +52,34 @@ pub fn run(
     const summary = try stats.scan(gpa, db, patches, platforms, &list);
     const games = list.items.items;
     std.mem.sort(Game, games, {}, olderFirst);
-    const n_test: usize = @intFromFloat(@round(@as(f64, @floatFromInt(games.len)) * opts.test_share));
+
+    // Test: the newest share of the test platform's games; train: every older game
+    const test_platform: ?u8 = if (opts.test_platform) |tp| for (platforms, 0..) |p, i| {
+        if (std.mem.eql(u8, p, tp)) break @intCast(i);
+    } else return error.TestPlatformNotScanned else null;
+    var tests_list: std.ArrayList(Game) = .empty;
+    defer tests_list.deinit(gpa);
+    var pool: usize = 0;
+    for (games) |g| pool += @intFromBool(test_platform == null or g.platform == test_platform.?);
+    const n_test: usize = @intFromFloat(@round(@as(f64, @floatFromInt(pool)) * opts.test_share));
     if (games.len < 100 or n_test < 20) return error.TooFewGames;
-    const train = games[0 .. games.len - n_test];
-    const tests = games[games.len - n_test ..];
+    var at = games.len;
+    while (tests_list.items.len < n_test) {
+        at -= 1;
+        const g = games[at];
+        if (test_platform == null or g.platform == test_platform.?) try tests_list.append(gpa, g);
+    }
+    std.mem.reverse(Game, tests_list.items);
+    const tests = tests_list.items;
+    var n_train: usize = 0;
+    while (games[n_train].start < tests[0].start) n_train += 1;
+    const train = games[0..n_train];
 
     try w.print("# meiolol eval\n\n{d} games ({d} skipped) on {d} patch(es), ", .{
         games.len, summary.skipped, patches.len,
     });
     for (platforms, 0..) |p, i| try w.print("{s}{s}", .{ if (i > 0) "," else "", p });
+    if (opts.test_platform) |tp| try w.print(", tested on {s} only", .{tp});
     try w.print(". Train: oldest {d} ({f} to {f}). ", .{
         train.len, Day{ .ms = train[0].start }, Day{ .ms = train[train.len - 1].start },
     });
@@ -123,6 +145,21 @@ pub fn run(
         try fullDraft(gpa, &sp.stats, tests_np.items, &subset, 1, w);
         try w.writeAll("\nSame test games, trained on every patch:\n\n");
         try fullDraft(gpa, &full.stats, tests_np.items, &subset, 1, w);
+    }
+
+    if (test_platform) |tp| {
+        var own: std.ArrayList(Game) = .empty;
+        defer own.deinit(gpa);
+        for (train) |g| if (g.platform == tp) try own.append(gpa, g);
+        if (own.items.len > 0 and own.items.len < train.len) {
+            var m: Model = try .build(gpa, champs, own.items, null);
+            defer m.deinit(gpa);
+            const subset = [_]Predictor{ base_only, model, empirical };
+            try w.print("\nTrained on {s} games only ({d}):\n\n", .{ platforms[tp], own.items.len });
+            try fullDraft(gpa, &m.stats, tests, &subset, 1, w);
+            try w.print("\nTrained on every platform ({d}):\n\n", .{train.len});
+            try fullDraft(gpa, &full.stats, tests, &subset, 1, w);
+        }
     }
 
     try w.writeAll("\n## Pick metric\n\n");
@@ -656,7 +693,9 @@ const testing = std.testing;
 test "auc and logistic fit" {
     const gpa = testing.allocator;
     var games: [4]Game = undefined;
-    for (&games, [_]u1{ 1, 0, 1, 0 }) |*g, won| g.* = .{ .start = 0, .patch = 0, .teams = @splat(@splat(0)), .winner = won };
+    for (&games, [_]u1{ 1, 0, 1, 0 }) |*g, won| {
+        g.* = .{ .start = 0, .patch = 0, .platform = 0, .teams = @splat(@splat(0)), .winner = won };
+    }
     // Blue won games 1 and 3; perfectly ranked, then one swap
     try testing.expectEqual(1.0, try auc(gpa, &.{ 0.1, 0.9, 0.2, 0.8 }, &games));
     try testing.expectEqual(0.75, try auc(gpa, &.{ 0.1, 0.9, 0.85, 0.8 }, &games));
