@@ -216,6 +216,27 @@ pub const Crawler = struct {
             \\    (SELECT key FROM raw.raw_docs
             \\     WHERE source = 'riot_match' AND fetched_at < ? LIMIT 500)
         );
+        // Riot asks for stored player data to be refreshed monthly: players no ladder
+        // page or match has shown for 30 days go (erased accounts stop appearing), and
+        // mastery is dropped to be fetched again
+        try c.pruneChunks(db, "mastery of unseen players", 30,
+            \\DELETE FROM mastery WHERE puuid IN
+            \\    (SELECT puuid FROM players WHERE seen_at < ? LIMIT 500)
+        );
+        try c.pruneChunks(db, "unseen players", 30,
+            \\DELETE FROM players WHERE puuid IN
+            \\    (SELECT puuid FROM players WHERE seen_at < ? LIMIT 500)
+        );
+        try c.pruneChunks(db, "mastery snapshots", 30,
+            \\DELETE FROM mastery WHERE puuid IN
+            \\    (SELECT puuid FROM mastery WHERE fetched_at < ? LIMIT 500)
+        );
+        // Privacy policy: matches older than 24 months keep no PUUIDs
+        const cutoff_ms = (c.nowS() - 730 * 86400) * 1000;
+        try db.run(
+            \\UPDATE participants SET puuid = NULL WHERE puuid IS NOT NULL AND match_id IN
+            \\    (SELECT match_id FROM matches WHERE game_start < ?)
+        , .{cutoff_ms});
     }
 
     /// In chunks, so region threads' raw writes wait at most one chunk
@@ -364,17 +385,19 @@ const Worker = struct {
         errdefer w.db.rollback();
         var up = try w.db.prepare(
             \\INSERT INTO players (puuid, tier, division, lp, wins, losses, rank_seen_at, source,
-            \\    platform, region)
-            \\VALUES (?,?,?,?,?,?,?,'ladder',?,?)
+            \\    platform, region, seen_at)
+            \\VALUES (?1,?2,?3,?4,?5,?6,?7,'ladder',?8,?9,?7)
             \\ON CONFLICT (puuid) DO UPDATE SET
             \\    tier = excluded.tier, division = excluded.division, lp = excluded.lp,
             \\    wins = excluded.wins, losses = excluded.losses,
             \\    rank_seen_at = excluded.rank_seen_at, source = 'ladder',
-            \\    platform = excluded.platform, region = excluded.region
+            \\    platform = excluded.platform, region = excluded.region,
+            \\    seen_at = excluded.seen_at
         );
         defer up.deinit();
         for (entries) |e| {
             const puuid = e.puuid orelse continue;
+            if (try forgotten(w.db, puuid)) continue;
             try up.exec(.{
                 puuid, e.tier, e.rank, e.leaguePoints, e.wins, e.losses, t, p.id, @tagName(p.region),
             });
@@ -566,13 +589,28 @@ const Worker = struct {
         const t = w.now();
         try w.db.begin();
         errdefer w.db.rollback();
-        try putRaw(w.c.gpa, w.db, "riot_match", id, body, t);
+        var any_forgotten = false;
+        for (doc.info.participants) |p| {
+            if (p.puuid) |puuid| any_forgotten = any_forgotten or try forgotten(w.db, puuid);
+        }
+        // The raw JSON names every player, so none is kept for a forgotten one's match
+        if (!any_forgotten) try putRaw(w.c.gpa, w.db, "riot_match", id, body, t);
         try match.storeRows(w.db, doc, "riot");
         const platform = doc.info.platformId orelse if (ep.platformOf(id)) |p| p.id else null;
-        var ins = try w.db.prepare("INSERT OR IGNORE INTO players (puuid, source, platform, region) " ++
-            "VALUES (?, 'participant', ?, ?)");
+        var ins = try w.db.prepare(
+            \\INSERT INTO players (puuid, source, platform, region, seen_at)
+            \\VALUES (?, 'participant', ?, ?, ?)
+            \\ON CONFLICT (puuid) DO UPDATE SET seen_at = excluded.seen_at
+        );
         defer ins.deinit();
-        for (doc.metadata.participants) |puuid| try ins.exec(.{ puuid, platform, @tagName(r) });
+        for (doc.info.participants, 0..) |p, slot| {
+            const puuid = p.puuid orelse continue;
+            if (any_forgotten and try forgotten(w.db, puuid)) {
+                try w.db.run("UPDATE participants SET puuid = NULL WHERE match_id = ? AND slot = ?", .{ id, slot });
+                continue;
+            }
+            try ins.exec(.{ puuid, platform, @tagName(r), t });
+        }
         if (!match.isRemake(doc) and w.c.wantTimeline(id)) {
             try w.db.run("INSERT OR IGNORE INTO timeline_queue (match_id, region, queued_at) " ++
                 "VALUES (?, ?, ?)", .{ id, @tagName(r), t });
@@ -618,7 +656,11 @@ const Worker = struct {
         const t = w.now();
         try w.db.begin();
         errdefer w.db.rollback();
-        if (w.c.opts.raw_timeline_days > 0 or compact == null) {
+        // Raw timelines carry PUUIDs: none kept when a player is blank (forgotten, or
+        // a match from before a rekey)
+        const blank = try w.db.scalar("SELECT EXISTS (SELECT 1 FROM participants " ++
+            "WHERE match_id = ? AND puuid IS NULL)", .{id}) == 1;
+        if (!blank and (w.c.opts.raw_timeline_days > 0 or compact == null)) {
             const raw = try store.raw.compress(gpa, body);
             defer gpa.free(raw);
             try w.db.run("INSERT OR REPLACE INTO raw.timeline_docs VALUES (?,?,?)", .{
@@ -647,6 +689,16 @@ const Worker = struct {
     }
 };
 
+/// In the `forgotten` table (src/forget.zig writes it)
+fn forgotten(db: store.Db, puuid: []const u8) !bool {
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(puuid, &digest, .{});
+    const hex = std.fmt.bytesToHex(digest, .lower);
+    return try db.scalar("SELECT EXISTS (SELECT 1 FROM forgotten WHERE puuid_sha256 = ?)", .{
+        hex[0..],
+    }) == 1;
+}
+
 const Compact = struct { blob: []u8, frames: usize, events: usize };
 
 /// Timeline JSON -> gzipped compact blob (caller frees blob)
@@ -665,4 +717,14 @@ pub fn putRaw(gpa: std.mem.Allocator, db: store.Db, source: []const u8, key: []c
     try db.run("INSERT OR REPLACE INTO raw.raw_docs VALUES (?,?,?,?)", .{
         source, key, t, store.Blob{ .bytes = blob },
     });
+}
+
+test forgotten {
+    const db = try store.schema.memory();
+    defer db.close();
+    // sha256("abc")
+    try db.exec("INSERT INTO forgotten VALUES " ++
+        "('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 1)");
+    try std.testing.expect(try forgotten(db, "abc"));
+    try std.testing.expect(!try forgotten(db, "abd"));
 }

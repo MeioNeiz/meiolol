@@ -9,7 +9,9 @@ const sqlite = @import("sqlite.zig");
 
 /// PUUIDs are encrypted per app: a new key type (dev -> personal -> production) means
 /// new PUUIDs for the same players (see rekey). platform is Riot's id (EUW1, KR);
-/// region the match-v5 route (europe, asia).
+/// region the match-v5 route (europe, asia). seen_at: last time a ladder page or a
+/// match showed the player; the crawler drops players unseen for 30 days (Riot asks
+/// for stored player data to be refreshed monthly; erased accounts stop appearing)
 const players_ddl =
     \\CREATE TABLE IF NOT EXISTS players (
     \\    puuid TEXT PRIMARY KEY,
@@ -22,7 +24,8 @@ const players_ddl =
     \\    matches_checked_at INTEGER,
     \\    source TEXT NOT NULL,
     \\    platform TEXT,
-    \\    region TEXT
+    \\    region TEXT,
+    \\    seen_at INTEGER
     \\) WITHOUT ROWID;
     \\
 ;
@@ -165,6 +168,13 @@ pub const schema =
     \\    tags TEXT,
     \\    ddragon_version TEXT NOT NULL
     \\);
+    \\
+    \\-- Players who asked to be forgotten (`meiolol forget`, src/forget.zig): the crawler
+    \\-- never stores them again. Key: lower-case hex sha256 of the PUUID bytes
+    \\CREATE TABLE IF NOT EXISTS forgotten (
+    \\    puuid_sha256 TEXT PRIMARY KEY,
+    \\    forgotten_at INTEGER NOT NULL
+    \\) WITHOUT ROWID;
 ;
 
 /// After migrate: they may name columns older databases lack
@@ -178,6 +188,9 @@ const indexes =
     \\CREATE INDEX IF NOT EXISTS raw.timeline_docs_age ON timeline_docs (fetched_at);
     \\CREATE INDEX IF NOT EXISTS raw.raw_docs_age ON raw_docs (source, fetched_at);
     \\CREATE INDEX IF NOT EXISTS participants_puuid ON participants (puuid);
+    \\CREATE INDEX IF NOT EXISTS players_seen ON players (seen_at);
+    \\CREATE INDEX IF NOT EXISTS mastery_age ON mastery (fetched_at);
+    \\CREATE INDEX IF NOT EXISTS matches_start ON matches (game_start);
 ;
 
 /// Open meiolol.db with raw.db and timeline.db attached as `raw` and `timeline`, all
@@ -280,6 +293,13 @@ fn migrate(db: sqlite.Db) !void {
         // documents go too. Take a backup before the first run anyway
         try db.exec("DROP TABLE mastery; DELETE FROM raw.raw_docs WHERE source = 'riot_mastery';" ++
             mastery_ddl);
+    }
+    if (!try hasColumn(db, "players", "seen_at")) {
+        // Counts as seen now, so existing players get the full 30 days
+        try db.exec(
+            \\ALTER TABLE players ADD COLUMN seen_at INTEGER;
+            \\UPDATE players SET seen_at = unixepoch();
+        );
     }
     try db.commit();
 }

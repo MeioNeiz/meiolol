@@ -54,6 +54,12 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   new PUUIDs. `meiolol rebuild` then `meiolol rekey` forgets players, ladder and
   mastery (re-seeded from the ladders) and blanks old PUUIDs in participants; matches,
   timelines and rank snapshots stay. Re-storing a match keeps its PUUIDs and rank
+- Privacy (crawler, hourly): players no ladder page or match has shown for 30 days
+  are deleted with their mastery, and mastery older than 30 days is refetched (Riot's
+  monthly refresh; erased accounts drop out). Matches older than 24 months lose their
+  PUUIDs. `forgotten` (sha256 of PUUIDs, written by `meiolol forget`, src/forget.zig)
+  is honoured: never stored as players or mastery, blanked in participants, and no
+  raw summary or raw timeline kept for their matches
 - Schema changes: `schema.zig` migrate() alters or rebuilds tables in place (checks
   inside the write lock, so concurrent opens are safe). Back up before a first run
 - Scale at full rate (4 regions, ~135k matches/day): kept forever ~8.6 KB timeline +
