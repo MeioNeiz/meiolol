@@ -84,6 +84,9 @@ pub fn forget(db: Db, puuid: []const u8, now: i64, mode: Mode) !Removed {
         try db.run("DELETE FROM players WHERE puuid = ?", .{puuid});
         r.players = changes(db);
     }
+    if (try hasTable(db, "main", "ranks")) {
+        try db.run("DELETE FROM ranks WHERE key = ?", .{store.schema.puuidKey(puuid)});
+    }
     if (try hasTable(db, "main", "mastery")) {
         try db.run("DELETE FROM mastery WHERE puuid = ?", .{puuid});
         r.mastery = changes(db);

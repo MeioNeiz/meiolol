@@ -59,6 +59,9 @@ pub const Options = struct {
     /// Every match participant also becomes a player to scan. The ladder already has
     /// every ranked player, so off saves ten upserts (random index pages) per match
     participant_players: bool = true,
+    /// players keeps full rows (the scan pool) for one ladder player or participant in
+    /// this many, by PUUID hash; ranks has everyone's rank. 0 or 1 keeps everyone
+    player_sample: u32 = 1,
     /// The writer's page cache
     cache_mb: u32 = 64,
     /// Platforms whose players a regional thread scans before any other's, so they

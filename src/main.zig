@@ -48,6 +48,8 @@ const usage =
     \\              --no-participant-players  scan ladder players only, not every
     \\                               match participant
     \\              --cache-mb N     the writer's page cache (default 64)
+    \\              --player-sample N  keep full player rows (the scan pool) for 1
+    \\                               ladder player in N; ranks has everyone (default 1)
     \\              --priority P     platforms whose players come first in their
     \\                               region; other regions, mastery and extra ladder
     \\                               pause while it is short of the machine
@@ -303,6 +305,8 @@ fn cmdCrawl(c: *Cmd) !u8 {
             o.ladder_refresh_s = try c.int(i64) * std.time.s_per_day;
         } else if (c.is("--ladder-per-hour")) {
             o.ladder_per_hour = try c.int(u32);
+        } else if (c.is("--player-sample")) {
+            o.player_sample = try c.int(u32);
         } else if (c.is("--keep-days")) {
             o.keep_days = try c.int(u32);
         } else if (c.is("--cache-mb")) {

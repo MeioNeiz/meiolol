@@ -285,9 +285,13 @@ pub const Writer = struct {
         switch (job.kind) {
             .none => {},
             .ladder => |l| {
+                const day = @divFloor(l.t, std.time.s_per_day);
                 for (l.entries) |e| {
                     const puuid = e.puuid orelse continue;
                     if (try s.isForgotten(puuid)) continue;
+                    const key = store.schema.puuidKey(puuid);
+                    if (store.schema.packRank(e.tier, e.rank)) |rank| try s.rank_put.exec(.{ key, rank, day });
+                    if (!sampled(key, wr.c.opts.player_sample)) continue;
                     try s.ladder_player.exec(.{
                         puuid, e.tier, e.rank, e.leaguePoints, e.wins, e.losses, l.t, l.platform.id, @tagName(l.platform.region),
                     });
@@ -334,7 +338,15 @@ pub const Writer = struct {
                 try s.blank_participant.exec(.{ id, slot });
                 continue;
             }
-            if (wr.c.opts.participant_players) try s.participant_player.exec(.{ puuid, platform, @tagName(r), t });
+            const key = store.schema.puuidKey(puuid);
+            // Rank snapshot from ranks; storeRows took it from players, which keeps
+            // only the scan pool
+            if (try s.rankOf(key)) |rank| {
+                try s.participant_rank.exec(.{ rank.tier, rank.division, id, slot });
+            }
+            if (wr.c.opts.participant_players and sampled(key, wr.c.opts.player_sample)) {
+                try s.participant_player.exec(.{ puuid, platform, @tagName(r), t });
+            }
         }
         if (!match.isRemake(doc) and wr.c.wantTimeline(id)) try s.timeline_queue.exec(.{ id, @tagName(r), t });
         try s.match_done.exec(.{id});
@@ -406,6 +418,7 @@ const Prune = struct {
         // page or match has shown for 30 days go with their mastery (erased accounts
         // stop appearing), and older mastery is dropped to be fetched again
         .{ .what = "unseen players", .days = .{ .fixed = 30 }, .run = unseenPlayers },
+        .{ .what = "unseen ranks", .days = .{ .fixed = 30 }, .run = unseenRanks },
         .{ .what = "mastery snapshots", .days = .{ .fixed = 30 }, .run = chunk(
             \\DELETE FROM mastery WHERE puuid IN
             \\    (SELECT puuid FROM mastery WHERE fetched_at < ? LIMIT 500)
@@ -438,6 +451,20 @@ const Prune = struct {
             \\DELETE FROM players WHERE puuid IN temp.gone;
         );
         return n;
+    }
+
+    /// A twenty-fourth of the key space per hourly round (ranks has no seen_day index:
+    /// it would cost a random write per row), so the whole table is swept daily
+    fn unseenRanks(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
+        const slice: i128 = @mod(@divFloor(cutoff, 3600), 24);
+        const span: i128 = (@as(i128, 1) << 64) / 24;
+        const lo: i64 = @intCast(std.math.minInt(i64) + slice * span);
+        const hi: i64 = if (slice == 23) std.math.maxInt(i64) else @intCast(lo + span - 1);
+        try db.run(
+            \\DELETE FROM ranks WHERE key IN (SELECT key FROM ranks
+            \\    WHERE key BETWEEN ? AND ? AND seen_day < ? LIMIT 500)
+        , .{ lo, hi, @divFloor(cutoff, std.time.s_per_day) });
+        return try db.scalar("SELECT changes()", .{}) orelse 0;
     }
 
     fn oldMatches(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
@@ -494,9 +521,17 @@ const Prune = struct {
     }
 };
 
+/// In the scan pool: one PUUID key in `sample` (all when sample is 0 or 1)
+fn sampled(key: i64, sample: u32) bool {
+    return sample <= 1 or @as(u64, @bitCast(key)) % sample == 0;
+}
+
 /// Prepared once: on the slow box re-preparing per row cost as much as the writes
 const Stmts = struct {
     forgotten: store.Stmt,
+    rank_put: store.Stmt,
+    rank_get: store.Stmt,
+    participant_rank: store.Stmt,
     ladder_player: store.Stmt,
     ladder_page: store.Stmt,
     mastery: store.Stmt,
@@ -521,6 +556,14 @@ const Stmts = struct {
 
     const sql = .{
         .forgotten = "SELECT EXISTS (SELECT 1 FROM forgotten WHERE puuid = ?)",
+        // A refetched page rewrites a row only when the rank changed or a day passed
+        .rank_put =
+        \\INSERT INTO ranks VALUES (?1, ?2, ?3) ON CONFLICT (key) DO UPDATE SET
+        \\    rank = excluded.rank, seen_day = excluded.seen_day
+        \\WHERE rank <> excluded.rank OR seen_day <> excluded.seen_day
+        ,
+        .rank_get = "SELECT rank FROM ranks WHERE key = ?",
+        .participant_rank = "UPDATE participants SET tier = ?, division = ? WHERE match_id = ? AND slot = ?",
         .ladder_player =
         \\INSERT INTO players (puuid, tier, division, lp, wins, losses, rank_seen_at, source,
         \\    platform, region, seen_at)
@@ -593,6 +636,13 @@ const Stmts = struct {
 
     fn deinit(s: *Stmts) void {
         inline for (@typeInfo(Stmts).@"struct".fields) |f| @field(s, f.name).deinit();
+    }
+
+    fn rankOf(s: *Stmts, key: i64) !?store.schema.Rank {
+        try s.rank_get.bind(.{key});
+        defer s.rank_get.reset();
+        if (!try s.rank_get.step()) return null;
+        return store.schema.unpackRank(s.rank_get.int(0));
     }
 
     fn isForgotten(s: *Stmts, puuid: []const u8) !bool {
@@ -719,4 +769,41 @@ test "rolling window prunes old matches with their rows" {
     }
     try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM players", .{}));
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM mastery", .{}));
+}
+
+test "ladder: ranks for everyone, player rows for the sample; matches take ranks" {
+    const gpa = std.testing.allocator;
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const db = try store.schema.memory();
+    defer db.close();
+    var c: crawl.Crawler = .{ .gpa = gpa, .io = std.testing.io, .opts = .{ .data_dir = "", .key = "", .player_sample = 1000 } };
+    var wr: Writer = .{ .c = &c };
+    defer wr.deinit();
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+
+    var doc = try match.parse(arena.allocator(), @embedFile("testdata/match.json"));
+    doc.metadata.matchId = "EUW1_1";
+    const puuid = doc.info.participants[0].puuid.?;
+    var jobs = [_]*Job{
+        try .create(gpa, .{ .ladder = .{
+            .platform = ep.platform("EUW1").?,
+            .tier = "GOLD",
+            .division = "II",
+            .page = 1,
+            .entries = &.{.{ .puuid = puuid, .tier = "GOLD", .rank = "II" }},
+            .t = 5 * std.time.s_per_day,
+        } }),
+        try .create(gpa, .{ .match = .{ .region = .europe, .id = "EUW1_1", .doc = doc, .raw = "r", .t = 6 } }),
+    };
+    defer for (jobs) |job| job.destroy(gpa);
+    try wr.commit(db, &s, &jobs);
+    const want = [_]struct { []const u8, i64 }{
+        .{ "SELECT count(*) FROM ranks WHERE seen_day = 5", 1 },
+        .{ "SELECT count(*) FROM participants WHERE match_id = 'EUW1_1' AND slot = 0 AND tier = 'GOLD' AND division = 'II'", 1 },
+    };
+    for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
+    // 1 in 1000 sampled: almost surely none of the 11 PUUIDs
+    try std.testing.expect((try db.scalar("SELECT count(*) FROM players", .{})).? <= 2);
 }

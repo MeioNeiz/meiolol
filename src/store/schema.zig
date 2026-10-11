@@ -171,7 +171,51 @@ pub const schema =
     \\    ddragon_version TEXT NOT NULL
     \\);
     \\
-++ forgotten_ddl;
+++ forgotten_ddl ++ ranks_ddl;
+
+/// Ladder rank of every ranked player, for participants' rank snapshot: 8 bytes of
+/// PUUID hash (puuidKey) instead of the PUUID, so millions of players fit in a few
+/// hundred MB that stay in the page cache. players holds full rows only for the
+/// sampled scan pool. rank = packRank; seen_day = unix day of the last ladder page
+/// showing the player (gone after 30 days, as players)
+const ranks_ddl =
+    \\CREATE TABLE IF NOT EXISTS ranks (
+    \\    key INTEGER PRIMARY KEY,
+    \\    rank INTEGER NOT NULL,
+    \\    seen_day INTEGER NOT NULL
+    \\);
+    \\
+;
+
+pub fn puuidKey(puuid: []const u8) i64 {
+    return @bitCast(std.hash.Wyhash.hash(0, puuid));
+}
+
+/// Ranked tiers, highest first, and divisions, as the ladder names them
+pub const tiers = [_][]const u8{
+    "CHALLENGER", "GRANDMASTER", "MASTER", "DIAMOND", "EMERALD",
+    "PLATINUM",   "GOLD",        "SILVER", "BRONZE",  "IRON",
+};
+pub const divisions = [_][]const u8{ "I", "II", "III", "IV" };
+
+pub fn packRank(tier: []const u8, division: []const u8) ?i64 {
+    const t = indexOf(&tiers, tier) orelse return null;
+    const d = indexOf(&divisions, division) orelse return null;
+    return @intCast(t * divisions.len + d);
+}
+
+pub const Rank = struct { tier: []const u8, division: []const u8 };
+
+pub fn unpackRank(rank: i64) ?Rank {
+    if (rank < 0 or rank >= tiers.len * divisions.len) return null;
+    const r: usize = @intCast(rank);
+    return .{ .tier = tiers[r / divisions.len], .division = divisions[r % divisions.len] };
+}
+
+fn indexOf(names: []const []const u8, name: []const u8) ?usize {
+    for (names, 0..) |n, i| if (std.mem.eql(u8, n, name)) return i;
+    return null;
+}
 
 /// Suppression list of players who asked to be forgotten (`meiolol forget`,
 /// src/forget.zig): the crawler never stores them again. Plain PUUIDs, not hashes: a
@@ -342,7 +386,7 @@ pub fn rekey(db: sqlite.Db) !void {
         \\UPDATE participants SET (tier, division) =
         \\    (SELECT tier, division FROM players p WHERE p.puuid = participants.puuid)
         \\WHERE tier IS NULL;
-    ++ "DROP TABLE players; DROP TABLE ladder_pages; DROP TABLE mastery;" ++
+    ++ "DROP TABLE players; DROP TABLE ladder_pages; DROP TABLE mastery; DELETE FROM ranks;" ++
         "UPDATE participants SET puuid = NULL;" ++
         "DELETE FROM raw.raw_docs WHERE source = 'riot_mastery';");
     try db.commit();
@@ -354,6 +398,15 @@ fn hasColumn(db: sqlite.Db, table: []const u8, column: []const u8) !bool {
         table, column,
     });
     return (n orelse 0) > 0;
+}
+
+test "ranks pack and unpack" {
+    try std.testing.expectEqual(@as(?i64, 0), packRank("CHALLENGER", "I"));
+    try std.testing.expectEqual(@as(?i64, null), packRank("UNRANKED", "I"));
+    const r = unpackRank(packRank("GOLD", "III").?).?;
+    try std.testing.expectEqualStrings("GOLD", r.tier);
+    try std.testing.expectEqualStrings("III", r.division);
+    try std.testing.expectEqual(@as(?Rank, null), unpackRank(40));
 }
 
 test "schema applies twice" {
