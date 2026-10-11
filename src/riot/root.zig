@@ -7,6 +7,8 @@ pub const match = @import("match.zig");
 pub const timeline = @import("timeline.zig");
 pub const mastery = @import("mastery.zig");
 pub const crawl = @import("crawl.zig");
+pub const writer = @import("writer.zig");
+pub const fake = @import("fake.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());

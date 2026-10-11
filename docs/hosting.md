@@ -36,7 +36,9 @@ accounts may use Always Free only in the home region).
 
 ## Known problems on the micro
 
-- Slow: ~50k matches/day vs ~135k on the PC; memory tight. The A1 fixes both
+- Slow: ~11k matches/day vs ~135k on the PC with 19 writing threads (153 lock waits in
+  27 min); memory tight. Single writer thread since branch worktree-writer (1.5x matches,
+  4x mastery in a 1/8-CPU emulation, docs/architecture.md); the A1 fixes the rest
 - `meiolol backup` holds the DB for 10+ minutes here and starves the crawler of writes
   ("database is locked"), so the first run was killed; backups need rework (off-host
   target too: they sit on the same disk). gpu-box keeps its data and the 2026-10-11 D:

@@ -141,6 +141,7 @@ pub fn main(init: std.process.Init) !u8 {
     var priority: ?[]const []const u8 = null;
     var reserve_pct: u8 = 0;
     var ladder_refresh_days: i64 = 7;
+    var fake_api_ms: ?u32 = null;
     var out_path: ?[]const u8 = null;
     var contact: ?[]const u8 = null;
     var riot_txt: ?[]const u8 = null;
@@ -214,6 +215,9 @@ pub fn main(init: std.process.Init) !u8 {
         } else if (std.mem.eql(u8, a, "--reserve")) {
             reserve_pct = std.fmt.parseInt(u8, v, 10) catch return usageError(a);
             if (reserve_pct > 90) return usageError(a);
+        } else if (std.mem.eql(u8, a, "--fake-api")) {
+            // Benchmark only, not in usage: canned answers after MS ms (deploy/bench-crawl.sh)
+            fake_api_ms = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
         } else if (std.mem.eql(u8, a, "--priority")) {
             var list: std.ArrayList([]const u8) = .empty;
             var it = std.mem.tokenizeScalar(u8, v, ',');
@@ -285,7 +289,9 @@ pub fn main(init: std.process.Init) !u8 {
 
     const cmd = args[1];
     if (std.mem.eql(u8, cmd, "crawl")) {
-        const key = try apiKey(init, arena) orelse {
+        var fake: ?riot.fake.Fake = if (fake_api_ms) |ms| try .init(init.gpa, init.io, ms) else null;
+        defer if (fake) |*f| f.deinit(init.gpa);
+        const key = if (fake != null) "fake" else try apiKey(init, arena) orelse {
             std.log.err("RIOT_API_KEY not set (env or .env)", .{});
             return 1;
         };
@@ -302,6 +308,7 @@ pub fn main(init: std.process.Init) !u8 {
             .raw_match_days = raw_match_days,
             .priority = priority orelse &.{"EUW1"},
             .reserve_pct = reserve_pct,
+            .fake = if (fake) |*f| f else null,
         } };
         crawler.run() catch |err| switch (err) {
             error.KeyRejected => return 3,

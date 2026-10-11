@@ -4,8 +4,9 @@
 //!   budget
 //! - regional (europe, asia, ...): match ids per player of its platforms, match
 //!   details, then their timelines
-//! Each thread owns its DB connection, HTTP client and limiter. The main thread
-//! reports and prunes raw timelines.
+//! Each thread owns its HTTP client, limiter and a DB connection it only reads with;
+//! one writer thread (writer.zig) makes every write. The main thread reports and
+//! prunes raw timelines.
 
 const std = @import("std");
 const store = @import("store");
@@ -14,6 +15,8 @@ const ep = @import("endpoints.zig");
 const match = @import("match.zig");
 const timeline = @import("timeline.zig");
 const mastery = @import("mastery.zig");
+const writer = @import("writer.zig");
+const Job = writer.Job;
 
 const log = std.log.scoped(.crawl);
 
@@ -48,6 +51,7 @@ pub const Options = struct {
     priority: []const []const u8 = &.{"EUW1"},
     /// Share of each bucket left to other processes on the key (the Your games service)
     reserve_pct: u8 = 0,
+    fake: ?*const @import("fake.zig").Fake = null,
 };
 
 const RegionCounters = struct {
@@ -72,6 +76,8 @@ pub const Crawler = struct {
     counters: Counters = .{},
     failure: ?anyerror = null,
     failure_lock: std.Io.Mutex = .init,
+    /// Set up by run()
+    writer: writer.Writer = undefined,
 
     pub fn run(c: *Crawler) !void {
         // Opening once here migrates the schema before the workers connect
@@ -79,13 +85,13 @@ pub const Crawler = struct {
         defer db.close();
         try c.backfillTimelines(db);
 
+        c.writer = .{ .c = c };
+        defer c.writer.deinit();
+        const writer_thread = try std.Thread.spawn(.{}, writer.Writer.run, .{&c.writer});
         var threads: std.ArrayList(std.Thread) = .empty;
         defer threads.deinit(c.gpa);
-        c.spawnAll(&threads) catch |err| {
-            c.stop.store(true, .release);
-            for (threads.items) |t| t.join();
-            return err;
-        };
+        defer c.stopAll(&threads, writer_thread);
+        try c.spawnAll(&threads);
         log.info("{d} workers for {d} regions", .{ threads.items.len, c.opts.regions.len });
 
         const started = c.nowS();
@@ -108,19 +114,28 @@ pub const Crawler = struct {
                 c.pruneRaw(db) catch |err| log.warn("pruning raw documents: {t}", .{err});
             }
         }
-        c.stop.store(true, .release);
-        for (threads.items) |t| t.join();
+        c.stopAll(&threads, writer_thread);
         c.report(c.nowS() - started);
         if (c.failure) |err| return err;
+    }
+
+    /// Workers first: the writer then stores what they queued before stopping
+    fn stopAll(c: *Crawler, threads: *std.ArrayList(std.Thread), writer_thread: std.Thread) void {
+        if (c.writer.closing) return;
+        c.stop.store(true, .release);
+        c.writer.wake();
+        for (threads.items) |t| t.join();
+        c.writer.close();
+        writer_thread.join();
     }
 
     fn spawnAll(c: *Crawler, threads: *std.ArrayList(std.Thread)) !void {
         try threads.ensureTotalCapacity(c.gpa, all_regions.len + ep.platforms.len);
         for (c.opts.regions) |r| {
-            threads.appendAssumeCapacity(try std.Thread.spawn(.{}, worker, .{ c, Job{ .regional = r } }));
+            threads.appendAssumeCapacity(try std.Thread.spawn(.{}, worker, .{ c, Task{ .regional = r } }));
             for (ep.platforms) |p| {
                 if (p.region != r) continue;
-                threads.appendAssumeCapacity(try std.Thread.spawn(.{}, worker, .{ c, Job{ .platform = p } }));
+                threads.appendAssumeCapacity(try std.Thread.spawn(.{}, worker, .{ c, Task{ .platform = p } }));
             }
         }
     }
@@ -140,12 +155,18 @@ pub const Crawler = struct {
             }) catch break;
         }
         const per_day = if (elapsed_s > 0) matches * 86400 / @as(u64, @intCast(elapsed_s)) else 0;
-        log.info("{d} matches/day | ladder pages {d} | mastery {d} | platform req {d}{s}", .{
+        const ws = &c.writer.stats;
+        log.info("{d} matches/day | ladder pages {d} | mastery {d} | platform req {d}{s}" ++
+            " | writes {d} in {d} commits, {d} queued, {d} busy", .{
             per_day,
             c.counters.ladder_pages.load(.monotonic),
             c.counters.mastery.load(.monotonic),
             c.counters.platform_requests.load(.monotonic),
             w.buffered(),
+            ws.jobs.load(.monotonic),
+            ws.commits.load(.monotonic),
+            c.writer.queued(),
+            ws.busy.load(.monotonic),
         });
     }
 
@@ -153,14 +174,17 @@ pub const Crawler = struct {
         return std.Io.Clock.real.now(c.io).toSeconds();
     }
 
-    fn fail(c: *Crawler, err: anyerror) void {
-        c.failure_lock.lockUncancelable(c.io);
-        defer c.failure_lock.unlock(c.io);
-        if (c.failure == null) c.failure = err;
-        c.stop.store(true, .release);
+    pub fn fail(c: *Crawler, err: anyerror) void {
+        {
+            c.failure_lock.lockUncancelable(c.io);
+            defer c.failure_lock.unlock(c.io);
+            if (c.failure == null) c.failure = err;
+            c.stop.store(true, .release);
+        }
+        c.writer.wake();
     }
 
-    fn worker(c: *Crawler, job: Job) void {
+    fn worker(c: *Crawler, job: Task) void {
         var w = while (true) {
             break Worker.init(c, job) catch |err| {
                 if (err != error.Busy or c.stop.load(.acquire)) return c.fail(err);
@@ -177,7 +201,7 @@ pub const Crawler = struct {
         };
     }
 
-    fn wantTimeline(c: *Crawler, match_id: []const u8) bool {
+    pub fn wantTimeline(c: *Crawler, match_id: []const u8) bool {
         const pct = c.opts.timeline_percent;
         return pct >= 100 or std.hash.Wyhash.hash(0, match_id) % 100 < pct;
     }
@@ -247,7 +271,7 @@ pub const Crawler = struct {
         , .{cutoff_ms});
     }
 
-    /// In chunks, so region threads' raw writes wait at most one chunk
+    /// In chunks, so the writer waits at most one chunk
     fn pruneChunks(c: *Crawler, db: store.Db, what: []const u8, days: u32, sql: []const u8) !void {
         if (days == 0) return;
         const cutoff = c.nowS() - @as(i64, days) * 86400;
@@ -262,11 +286,11 @@ pub const Crawler = struct {
     }
 };
 
-const Job = union(enum) {
+const Task = union(enum) {
     platform: ep.Platform,
     regional: ep.Region,
 
-    fn name(j: Job) []const u8 {
+    fn name(j: Task) []const u8 {
         return switch (j) {
             .platform => |p| p.host,
             .regional => |r| @tagName(r),
@@ -277,7 +301,7 @@ const Job = union(enum) {
 /// Errors that stop the crawler; anything else is logged and the item skipped
 fn fatal(err: anyerror) bool {
     return switch (err) {
-        // Busy too: the item stays queued, Worker.loop pauses and carries on
+        // Busy too (a read, rare in WAL): Worker.loop pauses and carries on
         error.KeyRejected, error.OutOfMemory, error.Stopping, error.Sqlite, error.Busy => true,
         else => false,
     };
@@ -285,23 +309,25 @@ fn fatal(err: anyerror) bool {
 
 const Worker = struct {
     c: *Crawler,
-    job: Job,
+    job: Task,
+    /// Reads only
     db: store.Db,
     client: Client,
     reported_requests: u64 = 0,
+    /// Sequence number of this worker's newest job, for flush
+    last_seq: u64 = 0,
     /// Last PUUID given mastery, so each batch resumes instead of rescanning done players
     mastery_cursor: [128]u8 = undefined,
     mastery_cursor_len: usize = 0,
 
-    /// run() migrated already; workers only connect. 19 writers share the lock, so wait
-    /// longer than the default 10 s for it (hourly pruning, a slow disk)
-    fn init(c: *Crawler, job: Job) !Worker {
+    /// run() migrated already; workers only connect
+    fn init(c: *Crawler, job: Task) !Worker {
         const db = try store.schema.connect(c.gpa, c.opts.data_dir);
         errdefer db.close();
-        try db.exec("PRAGMA busy_timeout = 60000");
         var client: Client = try .init(c.gpa, c.io, c.opts.key);
         errdefer client.deinit();
         try client.limiter.setReserve(c.opts.reserve_pct);
+        client.fake = c.opts.fake;
         return .{ .c = c, .job = job, .db = db, .client = client };
     }
 
@@ -332,7 +358,18 @@ const Worker = struct {
                 },
                 else => return err,
             };
+            try w.flush();
         }
+    }
+
+    /// Hand a job to the writer, which owns it from then on
+    fn submit(w: *Worker, job: *Job) !void {
+        w.last_seq = try w.c.writer.submit(job);
+    }
+
+    /// Until everything this worker queued is committed: before reading what it changes
+    fn flush(w: *Worker) !void {
+        try w.c.writer.wait(w.last_seq);
     }
 
     fn step(w: *Worker) !void {
@@ -386,7 +423,6 @@ const Worker = struct {
                     };
                     fetched += 1;
                     w.countRequests();
-                    _ = w.c.counters.ladder_pages.fetchAdd(1, .monotonic);
                     if (entries == 0) break;
                 }
             }
@@ -397,42 +433,20 @@ const Worker = struct {
     fn fetchLadderPage(w: *Worker, p: ep.Platform, tier: []const u8, division: []const u8, page: u32) !usize {
         const got = try ep.leagueEntries(&w.client, p, tier, division, page);
         defer if (got) |b| w.c.gpa.free(b);
-        const body = got orelse "[]";
-        var arena: std.heap.ArenaAllocator = .init(w.c.gpa);
-        defer arena.deinit();
-        const entries = try ep.parse([]const ep.LeagueEntry, arena.allocator(), body);
-
-        const t = w.now();
-        try w.db.begin();
-        errdefer w.db.rollback();
-        var up = try w.db.prepare(
-            \\INSERT INTO players (puuid, tier, division, lp, wins, losses, rank_seen_at, source,
-            \\    platform, region, seen_at)
-            \\VALUES (?1,?2,?3,?4,?5,?6,?7,'ladder',?8,?9,?7)
-            \\ON CONFLICT (puuid) DO UPDATE SET
-            \\    tier = excluded.tier, division = excluded.division, lp = excluded.lp,
-            \\    wins = excluded.wins, losses = excluded.losses,
-            \\    rank_seen_at = excluded.rank_seen_at, source = 'ladder',
-            \\    platform = excluded.platform, region = excluded.region,
-            \\    seen_at = excluded.seen_at
-            \\WHERE tier IS NOT excluded.tier OR division IS NOT excluded.division
-            \\    OR lp IS NOT excluded.lp OR wins IS NOT excluded.wins
-            \\    OR losses IS NOT excluded.losses OR source <> 'ladder'
-            \\    OR seen_at < excluded.seen_at - 86400
-        );
-        defer up.deinit();
-        for (entries) |e| {
-            const puuid = e.puuid orelse continue;
-            if (try forgotten(w.db, puuid)) continue;
-            try up.exec(.{
-                puuid, e.tier, e.rank, e.leaguePoints, e.wins, e.losses, t, p.id, @tagName(p.region),
-            });
-        }
-        try w.db.run("INSERT OR REPLACE INTO ladder_pages " ++
-            "(platform, tier, division, page, entries, fetched_at) VALUES (?,?,?,?,?,?)", .{
-            p.id, tier, division, page, entries.len, t,
-        });
-        try w.db.commit();
+        const job = try Job.create(w.c.gpa, .none);
+        errdefer job.destroy(w.c.gpa);
+        // Parsed strings may point into the body: the copy lives as long as the job
+        const a = job.allocator();
+        const entries = try ep.parse([]const ep.LeagueEntry, a, try a.dupe(u8, got orelse "[]"));
+        job.kind = .{ .ladder = .{
+            .platform = p,
+            .tier = tier,
+            .division = division,
+            .page = page,
+            .entries = entries,
+            .t = w.now(),
+        } };
+        try w.submit(job);
         return entries.len;
     }
 
@@ -471,25 +485,21 @@ const Worker = struct {
     /// Compact only: the raw response is ~70 KB for ~1 KB of data we use. An empty
     /// list still gets a row, marking the player done
     fn fetchMastery(w: *Worker, p: ep.Platform, arena: std.mem.Allocator, puuid: []const u8) !void {
-        const got = try ep.masteries(&w.client, p, puuid) orelse {
-            // Riot does not know the PUUID: an erased or moved account. Forget it now
-            // rather than wait for the 30-day unseen expiry
-            try w.db.begin();
-            errdefer w.db.rollback();
-            try w.db.run("DELETE FROM mastery WHERE puuid = ?", .{puuid});
-            try w.db.run("DELETE FROM players WHERE puuid = ?", .{puuid});
-            try w.db.commit();
-            return;
-        };
-        defer w.c.gpa.free(got);
-        const entries = try mastery.fromJson(arena, got);
+        const got = try ep.masteries(&w.client, p, puuid);
+        defer if (got) |b| w.c.gpa.free(b);
+        const job = try Job.create(w.c.gpa, .none);
+        errdefer job.destroy(w.c.gpa);
+        const a = job.allocator();
         const t = w.now();
-        const blob = try mastery.encode(w.c.gpa, entries, t);
-        defer w.c.gpa.free(blob);
-        try w.db.run("INSERT OR REPLACE INTO mastery VALUES (?,?,?,?,?)", .{
-            puuid, p.id, t, entries.len, store.Blob{ .bytes = blob },
-        });
-        _ = w.c.counters.mastery.fetchAdd(1, .monotonic);
+        const entries = if (got) |body| try mastery.fromJson(arena, body) else &.{};
+        job.kind = .{ .mastery = .{
+            .puuid = try a.dupe(u8, puuid),
+            .platform = p.id,
+            .t = t,
+            .champions = entries.len,
+            .blob = if (got != null) try mastery.encode(a, entries, t) else null,
+        } };
+        try w.submit(job);
     }
 
     /// Priority platforms' matches first (EUW: other platforms share its regional rate
@@ -499,7 +509,10 @@ const Worker = struct {
         var done: usize = 0;
         const pending = try w.db.scalar("SELECT count(*) FROM match_queue " ++
             "WHERE region = ? AND status = 'pending'", .{@tagName(r)}) orelse 0;
-        if (pending < pending_low) done += try w.scanPlayers(r, 10);
+        if (pending < pending_low) {
+            done += try w.scanPlayers(r, 10);
+            try w.flush();
+        }
 
         var arena: std.heap.ArenaAllocator = .init(w.c.gpa);
         defer arena.deinit();
@@ -509,6 +522,8 @@ const Worker = struct {
             try w.check();
             try w.fetchMatch(r, id);
         }
+        // The writer queues these matches' timelines, which come first
+        try w.flush();
         const n_timelines = if (batch.len == detail_batch) batch.len else timeline_batch;
         const timelines = try w.column(arena.allocator(), next_timelines, .{ @tagName(r), priority, n_timelines });
         for (timelines) |id| {
@@ -572,7 +587,10 @@ const Worker = struct {
                 log.warn("{t} match ids: {t}", .{ r, err });
             };
             // Even after an error, so a bad player waits for the recheck interval
-            try w.db.run("UPDATE players SET matches_checked_at = ? WHERE puuid = ?", .{ w.now(), p.puuid });
+            const job = try Job.create(w.c.gpa, .none);
+            errdefer job.destroy(w.c.gpa);
+            job.kind = .{ .checked = .{ .puuid = try job.allocator().dupe(u8, p.puuid), .t = w.now() } };
+            try w.submit(job);
         }
         return @intCast(players.items.len);
     }
@@ -586,143 +604,81 @@ const Worker = struct {
             defer if (got) |b| w.c.gpa.free(b);
             const body = got orelse "[]";
             _ = w.c.counters.region[@intFromEnum(r)].ids_calls.fetchAdd(1, .monotonic);
-            var arena: std.heap.ArenaAllocator = .init(w.c.gpa);
-            defer arena.deinit();
-            const ids = try ep.parse([]const []const u8, arena.allocator(), body);
-            try w.db.begin();
-            errdefer w.db.rollback();
-            var ins = try w.db.prepare("INSERT OR IGNORE INTO match_queue " ++
-                "(match_id, discovered_at, region) VALUES (?, ?, ?)");
-            defer ins.deinit();
-            for (ids) |id| try ins.exec(.{ id, end, @tagName(r) });
-            try w.db.commit();
+            const job = try Job.create(w.c.gpa, .none);
+            errdefer job.destroy(w.c.gpa);
+            const ids = try ep.parse([]const []const u8, job.allocator(), try job.allocator().dupe(u8, body));
+            job.kind = .{ .match_ids = .{ .ids = ids, .discovered_at = end, .region = r } };
+            try w.submit(job);
             if (ids.len < 100) break;
         }
     }
 
     fn fetchMatch(w: *Worker, r: ep.Region, id: []const u8) !void {
-        const body = ep.match(&w.client, r, id) catch |err| {
+        const gpa = w.c.gpa;
+        const got = ep.match(&w.client, r, id) catch |err| {
             if (fatal(err)) return err;
             log.warn("match {s}: {t}", .{ id, err });
-            return w.db.run(
-                \\UPDATE match_queue SET attempts = attempts + 1,
-                \\    status = CASE WHEN attempts >= 2 THEN 'failed' ELSE status END
-                \\WHERE match_id = ?
-            , .{id});
-        } orelse {
-            return w.db.run("UPDATE match_queue SET status = 'missing' WHERE match_id = ?", .{id});
+            return w.queueStatus(.match, id, .attempt);
         };
-        defer w.c.gpa.free(body);
+        const fetched = got orelse return w.queueStatus(.match, id, .missing);
+        defer gpa.free(fetched);
 
-        var arena: std.heap.ArenaAllocator = .init(w.c.gpa);
-        defer arena.deinit();
-        const doc = match.parse(arena.allocator(), body) catch |err| {
+        const job = try Job.create(gpa, .none);
+        errdefer job.destroy(gpa);
+        const a = job.allocator();
+        const body = try a.dupe(u8, fetched);
+        const doc = match.parse(a, body) catch |err| {
+            if (err == error.OutOfMemory) return err;
             log.warn("match {s} did not parse: {t}", .{ id, err });
-            return w.db.run("UPDATE match_queue SET status = 'failed' WHERE match_id = ?", .{id});
+            job.kind = .{ .queue = .{ .which = .match, .id = try a.dupe(u8, id), .status = .failed } };
+            return w.submit(job);
         };
-        // A row this match cannot store must not stop the crawler: on restart the
-        // same match would come first again
-        w.storeMatch(r, id, body, doc) catch |err| {
-            if (err != error.Sqlite) return err;
-            log.warn("match {s} not stored: {t}", .{ id, err });
-            return w.db.run("UPDATE match_queue SET status = 'failed' WHERE match_id = ?", .{id});
-        };
-        _ = w.c.counters.region[@intFromEnum(r)].matches.fetchAdd(1, .monotonic);
-    }
-
-    fn storeMatch(w: *Worker, r: ep.Region, id: []const u8, body: []const u8, doc: match.Doc) !void {
-        const t = w.now();
-        try w.db.begin();
-        errdefer w.db.rollback();
-        var any_forgotten = false;
-        for (doc.info.participants) |p| {
-            if (p.puuid) |puuid| any_forgotten = any_forgotten or try forgotten(w.db, puuid);
-        }
-        // The raw JSON names every player, so none is kept for a forgotten one's match
-        if (!any_forgotten) try putRaw(w.c.gpa, w.db, "riot_match", id, body, t);
-        try match.storeRows(w.db, doc, "riot");
-        const platform = doc.info.platformId orelse if (ep.platformOf(id)) |p| p.id else null;
-        var ins = try w.db.prepare(
-            \\INSERT INTO players (puuid, source, platform, region, seen_at)
-            \\VALUES (?, 'participant', ?, ?, ?)
-            \\ON CONFLICT (puuid) DO UPDATE SET seen_at = excluded.seen_at
-            \\WHERE seen_at < excluded.seen_at - 86400
-        );
-        defer ins.deinit();
-        for (doc.info.participants, 0..) |p, slot| {
-            const puuid = p.puuid orelse continue;
-            if (any_forgotten and try forgotten(w.db, puuid)) {
-                try w.db.run("UPDATE participants SET puuid = NULL WHERE match_id = ? AND slot = ?", .{ id, slot });
-                continue;
-            }
-            try ins.exec(.{ puuid, platform, @tagName(r), t });
-        }
-        if (!match.isRemake(doc) and w.c.wantTimeline(id)) {
-            try w.db.run("INSERT OR IGNORE INTO timeline_queue (match_id, region, queued_at) " ++
-                "VALUES (?, ?, ?)", .{ id, @tagName(r), t });
-        }
-        try w.db.run("UPDATE match_queue SET status = 'done' WHERE match_id = ?", .{id});
-        try w.db.commit();
+        job.kind = .{ .match = .{
+            .region = r,
+            .id = try a.dupe(u8, id),
+            .doc = doc,
+            .raw = try store.raw.compress(a, body),
+            .t = w.now(),
+        } };
+        try w.submit(job);
     }
 
     /// The raw JSON is kept when extraction fails (and not pruned), so a fixed parser
     /// can redo it
     fn fetchTimeline(w: *Worker, r: ep.Region, id: []const u8) !void {
         const gpa = w.c.gpa;
-        const body = ep.timeline(&w.client, r, id) catch |err| {
+        const got = ep.timeline(&w.client, r, id) catch |err| {
             if (fatal(err)) return err;
             log.warn("timeline {s}: {t}", .{ id, err });
-            return w.db.run(
-                \\UPDATE timeline_queue SET attempts = attempts + 1,
-                \\    status = CASE WHEN attempts >= 2 THEN 'failed' ELSE status END
-                \\WHERE match_id = ?
-            , .{id});
-        } orelse {
-            return w.db.run("UPDATE timeline_queue SET status = 'missing' WHERE match_id = ?", .{id});
+            return w.queueStatus(.timeline, id, .attempt);
         };
+        const body = got orelse return w.queueStatus(.timeline, id, .missing);
         defer gpa.free(body);
 
-        const compact = compactTimeline(gpa, body) catch |err| blk: {
+        const job = try Job.create(gpa, .none);
+        errdefer job.destroy(gpa);
+        const a = job.allocator();
+        const compact = compactTimeline(a, body) catch |err| blk: {
             if (err == error.OutOfMemory) return err;
             log.warn("timeline {s} did not parse: {t}", .{ id, err });
             break :blk null;
         };
-        defer if (compact) |ct| gpa.free(ct.blob);
-
-        w.storeTimeline(id, body, compact) catch |err| {
-            if (err != error.Sqlite) return err;
-            log.warn("timeline {s} not stored: {t}", .{ id, err });
-            return w.db.run("UPDATE timeline_queue SET status = 'failed' WHERE match_id = ?", .{id});
-        };
-        if (compact != null) _ = w.c.counters.region[@intFromEnum(r)].timelines.fetchAdd(1, .monotonic);
+        const keep_raw = w.c.opts.raw_timeline_days > 0 or compact == null;
+        job.kind = .{ .timeline = .{
+            .region = r,
+            .id = try a.dupe(u8, id),
+            .raw = if (keep_raw) try store.raw.compress(a, body) else null,
+            .compact = compact,
+            .t = w.now(),
+        } };
+        try w.submit(job);
     }
 
-    fn storeTimeline(w: *Worker, id: []const u8, body: []const u8, compact: ?Compact) !void {
-        const gpa = w.c.gpa;
-        const t = w.now();
-        try w.db.begin();
-        errdefer w.db.rollback();
-        // Raw timelines carry PUUIDs: none kept when a player is blank (forgotten, or
-        // a match from before a rekey)
-        const blank = try w.db.scalar("SELECT EXISTS (SELECT 1 FROM participants " ++
-            "WHERE match_id = ? AND puuid IS NULL)", .{id}) == 1;
-        if (!blank and (w.c.opts.raw_timeline_days > 0 or compact == null)) {
-            const raw = try store.raw.compress(gpa, body);
-            defer gpa.free(raw);
-            try w.db.run("INSERT OR REPLACE INTO raw.timeline_docs VALUES (?,?,?)", .{
-                id, t, store.Blob{ .bytes = raw },
-            });
-        }
-        if (compact) |ct| {
-            try w.db.run("INSERT OR REPLACE INTO timeline.timelines VALUES (?,?,?,?)", .{
-                id, ct.frames, ct.events, store.Blob{ .bytes = ct.blob },
-            });
-            try storeGold(w.db, id, ct.participants, ct.gold);
-        }
-        try w.db.run("UPDATE timeline_queue SET status = ? WHERE match_id = ?", .{
-            if (compact == null) "failed" else "done", id,
-        });
-        try w.db.commit();
+    fn queueStatus(w: *Worker, which: writer.Kind.Queue, id: []const u8, status: writer.Kind.Status) !void {
+        const job = try Job.create(w.c.gpa, .none);
+        errdefer job.destroy(w.c.gpa);
+        job.kind = .{ .queue = .{ .which = which, .id = try job.allocator().dupe(u8, id), .status = status } };
+        try w.submit(job);
     }
 
     /// First column of every row, copied into `arena`
@@ -736,15 +692,10 @@ const Worker = struct {
     }
 };
 
-/// In the `forgotten` table (src/forget.zig writes it)
-fn forgotten(db: store.Db, puuid: []const u8) !bool {
-    return try db.scalar("SELECT EXISTS (SELECT 1 FROM forgotten WHERE puuid = ?)", .{puuid}) == 1;
-}
-
 /// Frames whose total gold participants keeps (gold10, gold14, gold15)
 const gold_minutes = [_]usize{ 10, 14, 15 };
 
-const Compact = struct {
+pub const Compact = struct {
     blob: []u8,
     frames: usize,
     events: usize,
@@ -752,7 +703,7 @@ const Compact = struct {
     gold: [gold_minutes.len][timeline.max_participants]?i32,
 };
 
-/// Timeline JSON -> gzipped compact blob (caller frees blob)
+/// Timeline JSON -> gzipped compact blob, allocated with `gpa`
 pub fn compactTimeline(gpa: std.mem.Allocator, body: []const u8) !Compact {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
@@ -811,14 +762,6 @@ pub fn rebuildGold(gpa: std.mem.Allocator, db: store.Db) !usize {
     return stored;
 }
 
-pub fn putRaw(gpa: std.mem.Allocator, db: store.Db, source: []const u8, key: []const u8, body: []const u8, t: i64) !void {
-    const blob = try store.raw.compress(gpa, body);
-    defer gpa.free(blob);
-    try db.run("INSERT OR REPLACE INTO raw.raw_docs VALUES (?,?,?,?)", .{
-        source, key, t, store.Blob{ .bytes = blob },
-    });
-}
-
 test "queues: priority platforms first, matches oldest first, timelines newest" {
     const db = try store.schema.memory();
     defer db.close();
@@ -842,14 +785,6 @@ test "queues: priority platforms first, matches oldest first, timelines newest" 
         try std.testing.expectEqual(c[1].len, got.len);
         for (c[1], got) |e, g| try std.testing.expectEqualStrings(e, g);
     }
-}
-
-test forgotten {
-    const db = try store.schema.memory();
-    defer db.close();
-    try db.exec("INSERT INTO forgotten VALUES ('abc', 1)");
-    try std.testing.expect(try forgotten(db, "abc"));
-    try std.testing.expect(!try forgotten(db, "abd"));
 }
 
 test "gold at 10, 14 and 15 minutes" {
