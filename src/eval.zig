@@ -1074,15 +1074,6 @@ const Prior = struct {
     }
 };
 
-/// Unix ms as YYYY-MM-DD (UTC)
-pub const Day = struct {
-    ms: i64,
-
-    pub fn format(d: Day, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        try Date.fromMs(d.ms).format(w);
-    }
-};
-
 const testing = std.testing;
 
 test "auc and logistic fit" {

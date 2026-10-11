@@ -1,5 +1,5 @@
 //! `meiolol`: backend. Crawls ranked solo games and timelines from the Riot API into SQLite
-//! and builds the model file the app reads. Runs on the gpu-box PC (deploy/box.sh).
+//! and builds the model file the app reads. Runs on the box (deploy/box.sh).
 
 const std = @import("std");
 const store = @import("store");
@@ -19,6 +19,7 @@ pub const eval = @import("eval.zig");
 pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
 pub const forget = @import("forget.zig");
+const Date = @import("date.zig").Date;
 
 pub const std_options: std.Options = .{ .logFn = logFn };
 
@@ -131,481 +132,242 @@ const usage =
 
 pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
-    const args = try init.minimal.args.toSlice(arena);
-    if (args.len < 2) return usageError(null);
-
-    var data_dir: []const u8 = init.environ_map.get("MEIOLOL_DATA") orelse "data";
-    var hours: ?f64 = null;
-    var since_days: i64 = 14;
-    var mastery = true;
-    var patches: std.ArrayList([]const u8) = .empty;
-    var platforms: std.ArrayList([]const u8) = .empty;
-    var every_platform = false;
-    var regions: std.ArrayList(riot.endpoints.Region) = .empty;
-    var timeline_percent: u8 = 100;
-    var raw_timeline_days: u32 = 7;
-    var raw_match_days: u32 = 30;
-    var priority: ?[]const []const u8 = null;
-    var reserve_pct: u8 = 0;
-    var ladder_refresh_days: i64 = 7;
-    var keep_days: u32 = 0;
-    var cache_mb: u32 = 64;
-    var participant_players = true;
-    var fake_api_ms: ?u32 = null;
-    var out_path: ?[]const u8 = null;
-    var contact: ?[]const u8 = null;
-    var riot_txt: ?[]const u8 = null;
-    var public = false;
-    var host: []const u8 = "127.0.0.1";
-    var port: ?u16 = null;
-    var curves_dir: ?[]const u8 = null;
-    var budget: ?[]const u8 = null;
-    var cors: ?[]const u8 = null;
-    var exchange: ?[]const u8 = null;
-    var min_games: u32 = 1;
-    var days: u32 = 30;
-    var eval_opts: eval.Options = .{};
-    var history: ?[]const u8 = null;
-    var keep_daily: usize = 7;
-    var keep_weekly: usize = 4;
-    var full = false;
-    var from_dir: ?[]const u8 = null;
-    var state_file: ?[]const u8 = null;
-    var erase: ForgetArgs = .{};
+    const argv = try init.minimal.args.toSlice(arena);
+    if (argv.len < 2) return usageError(null);
+    const run = commands.get(argv[1]) orelse return usageError(argv[1]);
+    var c: Cmd = .{
+        .init = init,
+        .arena = arena,
+        .data_dir = init.environ_map.get("MEIOLOL_DATA") orelse "data",
+    };
+    // --data is for every command; the rest are the command's own
+    var flags: std.ArrayList([]const u8) = .empty;
     var i: usize = 2;
-    while (i < args.len) : (i += 1) {
-        const a = args[i];
-        if (std.mem.eql(u8, a, "--no-mastery")) {
-            mastery = false;
-            continue;
-        }
-        if (std.mem.eql(u8, a, "--no-participant-players")) {
-            participant_players = false;
-            continue;
-        }
-        if (std.mem.eql(u8, a, "--full")) {
-            full = true;
-            continue;
-        }
-        if (std.mem.eql(u8, a, "--public")) {
-            public = true;
-            continue;
-        }
-        if (i + 1 >= args.len) return usageError(a);
-        const v = args[i + 1];
-        i += 1;
-        if (std.mem.eql(u8, a, "--data")) {
-            data_dir = v;
-        } else if (std.mem.eql(u8, a, "--hours")) {
-            hours = std.fmt.parseFloat(f64, v) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--keep-days")) {
-            keep_days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--cache-mb")) {
-            cache_mb = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--ladder-refresh-days")) {
-            ladder_refresh_days = std.fmt.parseInt(i64, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--since-days")) {
-            since_days = std.fmt.parseInt(i64, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--patch")) {
-            var it = std.mem.tokenizeScalar(u8, v, ',');
-            while (it.next()) |p| try patches.append(arena, p);
-        } else if (std.mem.eql(u8, a, "--platform")) {
-            var it = std.mem.tokenizeScalar(u8, v, ',');
-            while (it.next()) |p| {
-                if (std.mem.eql(u8, p, "all")) {
-                    every_platform = true;
-                    for (riot.endpoints.platforms) |pl| try platforms.append(arena, pl.id);
-                } else try platforms.append(arena, p);
-            }
-        } else if (std.mem.eql(u8, a, "--regions")) {
-            var it = std.mem.tokenizeScalar(u8, v, ',');
-            while (it.next()) |r| {
-                try regions.append(arena, std.meta.stringToEnum(riot.endpoints.Region, r) orelse
-                    return usageError(a));
-            }
-        } else if (std.mem.eql(u8, a, "--timelines")) {
-            timeline_percent = std.fmt.parseInt(u8, v, 10) catch return usageError(a);
-            if (timeline_percent > 100) return usageError(a);
-        } else if (std.mem.eql(u8, a, "--raw-timeline-days")) {
-            raw_timeline_days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--raw-match-days")) {
-            raw_match_days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--reserve")) {
-            reserve_pct = std.fmt.parseInt(u8, v, 10) catch return usageError(a);
-            if (reserve_pct > 90) return usageError(a);
-        } else if (std.mem.eql(u8, a, "--fake-api")) {
-            // Benchmark only, not in usage: canned answers after MS ms (deploy/bench-crawl.sh)
-            fake_api_ms = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--priority")) {
-            var list: std.ArrayList([]const u8) = .empty;
-            var it = std.mem.tokenizeScalar(u8, v, ',');
-            while (it.next()) |p| {
-                if (std.mem.eql(u8, p, "none")) continue;
-                if (riot.endpoints.platform(p) == null) return usageError(a);
-                try list.append(arena, p);
-            }
-            priority = list.items;
-        } else if (std.mem.eql(u8, a, "--out")) {
-            out_path = v;
-        } else if (std.mem.eql(u8, a, "--contact")) {
-            contact = v;
-        } else if (std.mem.eql(u8, a, "--host")) {
-            host = v;
-        } else if (std.mem.eql(u8, a, "--port")) {
-            port = std.fmt.parseInt(u16, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--min-games")) {
-            min_games = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--test-share")) {
-            eval_opts.test_share = std.fmt.parseFloat(f64, v) catch return usageError(a);
-            if (!(eval_opts.test_share > 0 and eval_opts.test_share < 1)) return usageError(a);
-        } else if (std.mem.eql(u8, a, "--test-platform")) {
-            eval_opts.test_platform = v;
-        } else if (std.mem.eql(u8, a, "--history")) {
-            history = v;
-        } else if (std.mem.eql(u8, a, "--folds")) {
-            eval_opts.folds = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
-            if (eval_opts.folds < 2) return usageError(a);
-        } else if (std.mem.eql(u8, a, "--days")) {
-            days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--curves")) {
-            curves_dir = v;
-        } else if (std.mem.eql(u8, a, "--budget")) {
-            budget = v;
-        } else if (std.mem.eql(u8, a, "--cors")) {
-            cors = v;
-        } else if (std.mem.eql(u8, a, "--exchange")) {
-            exchange = v;
-        } else if (std.mem.eql(u8, a, "--riot-txt")) {
-            riot_txt = v;
-        } else if (std.mem.eql(u8, a, "--keep-daily")) {
-            keep_daily = std.fmt.parseInt(usize, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--keep-weekly")) {
-            keep_weekly = std.fmt.parseInt(usize, v, 10) catch return usageError(a);
-        } else if (std.mem.eql(u8, a, "--from")) {
-            from_dir = v;
-        } else if (std.mem.eql(u8, a, "--state")) {
-            state_file = v;
-        } else if (std.mem.eql(u8, a, "--backups")) {
-            erase.backups = v;
-        } else if (std.mem.eql(u8, a, "--export")) {
-            erase.export_path = v;
-        } else if (std.mem.eql(u8, a, "--puuid") or std.mem.eql(u8, a, "--riot-id")) {
-            try erase.ids.append(arena, v);
-        } else if (std.mem.eql(u8, a, "--list")) {
-            erase.listed = true;
-            const text = try std.Io.Dir.cwd().readFileAlloc(init.io, v, arena, .limited(64 << 20));
-            var lines = std.mem.tokenizeAny(u8, text, "\r\n");
-            while (lines.next()) |line| {
-                const t = std.mem.trim(u8, line, " \t");
-                // Riot IDs hold '#', so only a leading one marks a comment
-                if (t.len > 0 and t[0] != '#') try erase.ids.append(arena, t);
-            }
-        } else return usageError(a);
+    while (i < argv.len) : (i += 1) {
+        if (std.mem.eql(u8, argv[i], "--data") and i + 1 < argv.len) {
+            i += 1;
+            c.data_dir = argv[i];
+        } else try flags.append(arena, argv[i]);
     }
-    try std.Io.Dir.cwd().createDirPath(init.io, data_dir);
-    if (platforms.items.len == 0) try platforms.append(arena, "EUW1");
-
-    const cmd = args[1];
-    if (std.mem.eql(u8, cmd, "crawl")) {
-        var fake: ?riot.fake.Fake = if (fake_api_ms) |ms| try .init(init.gpa, init.io, ms) else null;
-        defer if (fake) |*f| f.deinit(init.gpa);
-        const key = if (fake != null) "fake" else try apiKey(init, arena) orelse {
-            std.log.err("RIOT_API_KEY not set (env or .env)", .{});
-            return 1;
-        };
-        var crawler: riot.crawl.Crawler = .{ .gpa = init.gpa, .io = init.io, .opts = .{
-            .data_dir = data_dir,
-            .key = key,
-            .since_days = since_days,
-            .ladder_refresh_s = ladder_refresh_days * 86400,
-            .mastery = mastery,
-            .hours = hours,
-            .regions = if (regions.items.len > 0) regions.items else std.enums.values(riot.endpoints.Region),
-            .timeline_percent = timeline_percent,
-            .raw_timeline_days = raw_timeline_days,
-            .raw_match_days = raw_match_days,
-            .keep_days = keep_days,
-            .participant_players = participant_players,
-            .cache_mb = cache_mb,
-            .priority = priority orelse &.{"EUW1"},
-            .reserve_pct = reserve_pct,
-            .fake = if (fake) |*f| f else null,
-        } };
-        crawler.run() catch |err| switch (err) {
-            error.KeyRejected => return 3,
-            else => return err,
-        };
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "stats")) {
-        try writeStats(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path);
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "curves")) {
-        try writeCurves(init.gpa, init.io, arena, data_dir, patches.items, days, platforms.items, every_platform, out_path, min_games);
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "pool")) {
-        try writePool(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path);
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "eval")) {
-        const db = try store.open(init.gpa, data_dir);
-        defer db.close();
-        const chosen = if (patches.items.len > 0) patches.items else try stats.patches(arena, db, platforms.items);
-        var buf: [64 * 1024]u8 = undefined;
-        var stdout = std.Io.File.stdout().writer(init.io, &buf);
-        const line = try eval.run(init.gpa, db, chosen, platforms.items, eval_opts, &stdout.interface);
-        try stdout.interface.flush();
-        if (history) |path| {
-            const now: eval.Day = .{ .ms = std.Io.Clock.real.now(init.io).toMilliseconds() };
-            const date = try std.fmt.allocPrint(arena, "{f}", .{now});
-            try eval.appendHistory(init.io, path, line, date);
-        }
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "site")) {
-        const email = contact orelse return usageError("--contact");
-        const db = try store.open(init.gpa, data_dir);
-        defer db.close();
-        const chosen = if (patches.items.len > 0) patches.items else try newestPatch(arena, db, &.{"EUW1"});
-        var every: std.ArrayList([]const u8) = .empty;
-        for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
-        // Indexed by site.html.View.index: EUW 30 days, EUW patch, all 30 days, all patch
-        const view_curves = [_]?[]const u8{
-            try recentCurvesPath(arena, data_dir, false),
-            try curvesPath(arena, data_dir, chosen, false),
-            try recentCurvesPath(arena, data_dir, true),
-            try curvesPath(arena, data_dir, chosen, true),
-        };
-        const now_ms = std.Io.Clock.real.now(init.io).toMilliseconds();
-        try site.generate(init.gpa, init.io, db, .{
-            .out_dir = out_path orelse try std.fs.path.join(arena, &.{ data_dir, "site" }),
-            .patches = chosen,
-            .since_ms = now_ms - 30 * std.time.ms_per_day,
-            .all_platforms = every.items,
-            .contact = email,
-            .riot_txt = riot_txt,
-            .updated = try today(arena, init.io),
-            .public = public,
-            .daily_dir = try std.fs.path.join(arena, &.{ data_dir, "daily" }),
-            .curves = view_curves,
-        });
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "serve")) {
-        const dir = out_path orelse try std.fs.path.join(arena, &.{ data_dir, "site" });
-        try serve.run(init.gpa, init.io, dir, host, port orelse 8080);
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "api")) {
-        const key = try apiKey(init, arena) orelse {
-            std.log.err("RIOT_API_KEY not set (env or .env)", .{});
-            return 1;
-        };
-        try api.run(init.gpa, init.io, .{
-            .db_path = try std.fmt.allocPrintSentinel(arena, "{s}/api.db", .{data_dir}, 0),
-            .curves_dir = curves_dir orelse
-                try std.fs.path.join(arena, if (exchange) |x| &.{ x, "curves" } else &.{ data_dir, "export" }),
-            .key = key,
-            .host = host,
-            .port = port orelse 8090,
-            .cors = cors,
-            .fetch = .{ .budget = budget orelse "20:120", .exchange_dir = exchange },
-        });
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "status")) {
-        try status(init.gpa, init.io, data_dir);
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "rebuild")) {
-        const db = try store.open(init.gpa, data_dir);
-        defer db.close();
-        std.log.info("{d} matches rebuilt", .{try riot.match.rebuild(init.gpa, db)});
-        std.log.info("{d} timelines gave gold columns", .{try riot.crawl.rebuildGold(init.gpa, db)});
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "rekey")) {
-        const db = try store.open(init.gpa, data_dir);
-        defer db.close();
-        try store.schema.rekey(db);
-        std.log.info("players, ladder and mastery cleared; matches kept", .{});
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "champions")) {
-        const db = try store.open(init.gpa, data_dir);
-        defer db.close();
-        const n = try ddragon.refresh(init.gpa, init.io, db);
-        std.log.info("{d} champions", .{n});
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "backup")) {
-        const r = try backup.run(arena, init.io, .{
-            .data_dir = data_dir,
-            .out_dir = out_path orelse init.environ_map.get("MEIOLOL_BACKUPS") orelse "backups",
-            .keep_daily = keep_daily,
-            .keep_weekly = keep_weekly,
-            .full = full,
-            .now = std.Io.Clock.real.now(init.io).toSeconds(),
-        });
-        std.log.info("{s}; segment {s}: {d} matches, {d} timelines; {d} old files removed", .{
-            r.state, r.segment orelse "none (nothing new)", r.matches, r.timelines, r.removed,
-        });
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "restore")) {
-        const from = from_dir orelse return usageError("--from");
-        const now = std.Io.Clock.real.now(init.io).toSeconds();
-        const r = backup.restore(arena, init.io, from, data_dir, state_file, now) catch |err| {
-            if (err == error.TargetNotEmpty) std.log.err("{s} holds a database: restore only into an empty directory", .{data_dir});
-            return err;
-        };
-        std.log.info("{s}: {d} files, {d} matches, {d} timelines; {d} rows re-erased", .{
-            data_dir, r.files, r.matches, r.timelines, r.removed.total(),
-        });
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "forget")) return forgetPlayers(init, arena, data_dir, erase);
-    return usageError(cmd);
+    c.args = flags.items;
+    try std.Io.Dir.cwd().createDirPath(init.io, c.data_dir);
+    return run(&c) catch |err| switch (err) {
+        error.Usage => usageError(c.flag),
+        // Logged where it happened
+        error.NoApiKey => 1,
+        else => err,
+    };
 }
 
-const ForgetArgs = struct {
-    ids: std.ArrayList([]const u8) = .empty,
-    /// --list given: an empty list is fine (the exchange with the Your games service)
-    listed: bool = false,
-    backups: ?[]const u8 = null,
-    export_path: ?[]const u8 = null,
+const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(.{
+    .{ "crawl", cmdCrawl },
+    .{ "stats", cmdStats },
+    .{ "curves", cmdCurves },
+    .{ "pool", cmdPool },
+    .{ "eval", cmdEval },
+    .{ "site", cmdSite },
+    .{ "serve", cmdServe },
+    .{ "api", cmdApi },
+    .{ "status", cmdStatus },
+    .{ "rebuild", cmdRebuild },
+    .{ "rekey", cmdRekey },
+    .{ "champions", cmdChampions },
+    .{ "backup", cmdBackup },
+    .{ "restore", cmdRestore },
+    .{ "forget", cmdForget },
+});
+
+/// What a command gets: the process, the data directory and a cursor over its own
+/// flags. A flag it doesn't take, or a bad value, is error.Usage (exit 2)
+const Cmd = struct {
+    init: std.process.Init,
+    arena: std.mem.Allocator,
+    data_dir: []const u8,
+    args: []const []const u8 = &.{},
+    i: usize = 0,
+    /// The flag being read, named in the usage error
+    flag: ?[]const u8 = null,
+
+    fn next(c: *Cmd) ?[]const u8 {
+        if (c.i >= c.args.len) return null;
+        c.flag = c.args[c.i];
+        c.i += 1;
+        return c.flag;
+    }
+
+    fn is(c: *const Cmd, name: []const u8) bool {
+        return std.mem.eql(u8, c.flag.?, name);
+    }
+
+    /// The current flag's value
+    fn value(c: *Cmd) error{Usage}![]const u8 {
+        if (c.i >= c.args.len) return error.Usage;
+        c.i += 1;
+        return c.args[c.i - 1];
+    }
+
+    fn int(c: *Cmd, comptime T: type) error{Usage}!T {
+        return std.fmt.parseInt(T, try c.value(), 10) catch error.Usage;
+    }
+
+    fn float(c: *Cmd) error{Usage}!f64 {
+        return std.fmt.parseFloat(f64, try c.value()) catch error.Usage;
+    }
+
+    /// A comma separated value, split
+    fn list(c: *Cmd) ![]const []const u8 {
+        var out: std.ArrayList([]const u8) = .empty;
+        var it = std.mem.tokenizeScalar(u8, try c.value(), ',');
+        while (it.next()) |v| try out.append(c.arena, v);
+        return out.items;
+    }
+
+    fn noFlags(c: *Cmd) error{Usage}!void {
+        if (c.next() != null) return error.Usage;
+    }
+
+    fn required(c: *Cmd, v: ?[]const u8, name: []const u8) error{Usage}![]const u8 {
+        c.flag = name;
+        return v orelse error.Usage;
+    }
+
+    fn open(c: *const Cmd) !store.Db {
+        return store.open(c.init.gpa, c.data_dir);
+    }
+
+    /// RIOT_API_KEY from the environment, else from ./.env
+    fn apiKey(c: *const Cmd) ![]const u8 {
+        if (c.init.environ_map.get("RIOT_API_KEY")) |k| return k;
+        const text = std.Io.Dir.cwd().readFileAlloc(c.init.io, ".env", c.arena, .limited(64 * 1024)) catch |err| switch (err) {
+            error.FileNotFound => "",
+            else => return err,
+        };
+        var lines = std.mem.tokenizeAny(u8, text, "\r\n");
+        while (lines.next()) |line| {
+            const eq = std.mem.indexOfScalar(u8, line, '=') orelse continue;
+            if (std.mem.eql(u8, std.mem.trim(u8, line[0..eq], " "), "RIOT_API_KEY")) {
+                return std.mem.trim(u8, line[eq + 1 ..], " \"'");
+            }
+        }
+        std.log.err("RIOT_API_KEY not set (env or .env)", .{});
+        return error.NoApiKey;
+    }
 };
 
-/// Logs counts only: an erasure log naming the player would defeat the erasure. PUUIDs
-/// already in `forgotten` are skipped, so complete lists can be fed in again and again.
-fn forgetPlayers(init: std.process.Init, arena: std.mem.Allocator, data_dir: []const u8, args: ForgetArgs) !u8 {
-    const ids = args.ids.items;
-    if (ids.len == 0 and !args.listed and args.export_path == null) {
-        return usageError("--puuid, --riot-id, --list or --export");
-    }
-    const now = std.Io.Clock.real.now(init.io).toSeconds();
-    var client: ?riot.client.Client = null;
-    defer if (client) |*c| c.deinit();
-    // The box holds the crawler databases, the web server the Your games cache; open
-    // whichever this data directory has, never creating the other
-    const cwd = std.Io.Dir.cwd();
-    const crawl_path = try std.fs.path.join(arena, &.{ data_dir, "meiolol.db" });
-    const api_path = try std.fs.path.joinZ(arena, &.{ data_dir, "api.db" });
-    const db: ?store.Db = if (cwd.access(init.io, crawl_path, .{})) |_| try store.open(init.gpa, data_dir) else |_| null;
-    defer if (db) |d| d.close();
-    const api_db: ?store.Db = if (cwd.access(init.io, api_path, .{})) |_| try api.cache.open(api_path) else |_| null;
-    defer if (api_db) |d| d.close();
-    if (db == null and api_db == null) {
-        std.log.err("{s} holds neither meiolol.db nor api.db", .{data_dir});
-        return 1;
-    }
-    var live: forget.Removed = .{};
-    var scrubbed: forget.Removed = .{};
-    var unresolved: usize = 0;
-    var already: usize = 0;
-    for (ids) |id| {
-        const puuid = if (std.mem.indexOfScalar(u8, id, '#') == null) id else blk: {
-            if (client == null) {
-                const key = try apiKey(init, arena) orelse {
-                    std.log.err("RIOT_API_KEY not set (env or .env): needed for Riot IDs", .{});
-                    return 1;
-                };
-                client = try .init(init.gpa, init.io, key);
+/// --patch and --platform: the games stats, curves, pool and eval read
+const Games = struct {
+    patches: std.ArrayList([]const u8) = .empty,
+    platforms: std.ArrayList([]const u8) = .empty,
+    /// --platform all: output files get the all- prefix
+    every_platform: bool = false,
+
+    /// Reads the current flag if it is one of these
+    fn parse(g: *Games, c: *Cmd) !bool {
+        if (c.is("--patch")) {
+            try g.patches.appendSlice(c.arena, try c.list());
+        } else if (c.is("--platform")) {
+            for (try c.list()) |p| {
+                if (std.mem.eql(u8, p, "all")) {
+                    g.every_platform = true;
+                    for (riot.endpoints.platforms) |pl| try g.platforms.append(c.arena, pl.id);
+                } else try g.platforms.append(c.arena, p);
             }
-            break :blk try forget.resolveRiotId(arena, &client.?, id) orelse {
-                unresolved += 1;
-                continue;
-            };
-        };
-        if (api_db) |d| try api.cache.forget(d, puuid, now);
-        const d = db orelse continue;
-        if (try forget.isForgotten(d, puuid)) {
-            already += 1;
-            continue;
-        }
-        live.add(try forget.forget(d, puuid, now, .record));
-        if (args.backups) |dir| scrubbed.add(try backup.scrub(arena, init.io, dir, puuid, now));
+        } else return false;
+        return true;
     }
-    if (ids.len > 0) {
-        std.log.info("{d} of {d} erased, {d} already forgotten; live rows: players {d}, " ++
-            "mastery {d}, participants blanked {d}, raw matches {d}, raw timelines {d}", .{
-            ids.len - unresolved - already,
-            ids.len,
-            already,
-            live.players,
-            live.mastery,
-            live.participants,
-            live.raw_matches,
-            live.raw_timelines,
-        });
+
+    /// EUW1 unless given: the site says EUW
+    fn platformIds(g: *const Games) []const []const u8 {
+        return if (g.platforms.items.len > 0) g.platforms.items else &.{"EUW1"};
     }
-    if (api_db != null and ids.len > 0) std.log.info("Your games cache: erased and blocked", .{});
-    if (args.backups != null) std.log.info("backup rows: {d}", .{scrubbed.total()});
-    if (args.export_path) |path| {
-        const d = db orelse {
-            std.log.err("--export needs meiolol.db in {s}", .{data_dir});
-            return 1;
-        };
-        std.log.info("{d} forgotten PUUIDs written to {s}", .{ try forget.exportList(init.io, d, path), path });
+};
+
+fn cmdCrawl(c: *Cmd) !u8 {
+    var o: riot.crawl.Options = .{ .data_dir = c.data_dir, .key = "" };
+    var regions: std.ArrayList(riot.endpoints.Region) = .empty;
+    var fake_api_ms: ?u32 = null;
+    while (c.next()) |_| {
+        if (c.is("--no-mastery")) {
+            o.mastery = false;
+        } else if (c.is("--no-participant-players")) {
+            o.participant_players = false;
+        } else if (c.is("--hours")) {
+            o.hours = try c.float();
+        } else if (c.is("--since-days")) {
+            o.since_days = try c.int(i64);
+        } else if (c.is("--ladder-refresh-days")) {
+            o.ladder_refresh_s = try c.int(i64) * std.time.s_per_day;
+        } else if (c.is("--keep-days")) {
+            o.keep_days = try c.int(u32);
+        } else if (c.is("--cache-mb")) {
+            o.cache_mb = try c.int(u32);
+        } else if (c.is("--regions")) {
+            for (try c.list()) |r| {
+                const region = std.meta.stringToEnum(riot.endpoints.Region, r) orelse return error.Usage;
+                try regions.append(c.arena, region);
+            }
+        } else if (c.is("--timelines")) {
+            o.timeline_percent = try c.int(u8);
+            if (o.timeline_percent > 100) return error.Usage;
+        } else if (c.is("--raw-timeline-days")) {
+            o.raw_timeline_days = try c.int(u32);
+        } else if (c.is("--raw-match-days")) {
+            o.raw_match_days = try c.int(u32);
+        } else if (c.is("--priority")) {
+            var priority: std.ArrayList([]const u8) = .empty;
+            for (try c.list()) |p| {
+                if (std.mem.eql(u8, p, "none")) continue;
+                if (riot.endpoints.platform(p) == null) return error.Usage;
+                try priority.append(c.arena, p);
+            }
+            o.priority = priority.items;
+        } else if (c.is("--reserve")) {
+            o.reserve_pct = try c.int(u8);
+            if (o.reserve_pct > 90) return error.Usage;
+        } else if (c.is("--fake-api")) {
+            // Benchmark only, not in usage: canned answers after MS ms (deploy/bench-crawl.sh)
+            fake_api_ms = try c.int(u32);
+        } else return error.Usage;
     }
-    if (unresolved > 0) {
-        std.log.warn("{d} Riot IDs have no account (renamed or deleted): resolve them by PUUID", .{unresolved});
-        return 1;
-    }
+    if (regions.items.len > 0) o.regions = regions.items;
+    var fake: ?riot.fake.Fake = if (fake_api_ms) |ms| try .init(c.init.gpa, c.init.io, ms) else null;
+    defer if (fake) |*f| f.deinit(c.init.gpa);
+    if (fake) |*f| {
+        o.fake = f;
+        o.key = "fake";
+    } else o.key = try c.apiKey();
+    var crawler: riot.crawl.Crawler = .{ .gpa = c.init.gpa, .io = c.init.io, .opts = o };
+    crawler.run() catch |err| switch (err) {
+        error.KeyRejected => return 3,
+        else => return err,
+    };
     return 0;
 }
 
-fn usageError(arg: ?[]const u8) u8 {
-    if (arg) |a| std.log.err("unexpected or incomplete argument: {s}", .{a});
-    std.debug.print("{s}", .{usage});
-    return 2;
-}
-
-/// RIOT_API_KEY from the environment, else from ./.env
-fn apiKey(init: std.process.Init, arena: std.mem.Allocator) !?[]const u8 {
-    if (init.environ_map.get("RIOT_API_KEY")) |k| return k;
-    const text = std.Io.Dir.cwd().readFileAlloc(init.io, ".env", arena, .limited(64 * 1024)) catch |err| switch (err) {
-        error.FileNotFound => return null,
-        else => return err,
-    };
-    var lines = std.mem.tokenizeAny(u8, text, "\r\n");
-    while (lines.next()) |line| {
-        const eq = std.mem.indexOfScalar(u8, line, '=') orelse continue;
-        if (std.mem.eql(u8, std.mem.trim(u8, line[0..eq], " "), "RIOT_API_KEY")) {
-            return std.mem.trim(u8, line[eq + 1 ..], " \"'");
-        }
+fn cmdStats(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var out: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--out")) out = try c.value() else return error.Usage;
     }
-    return null;
-}
-
-fn writeStats(
-    gpa: std.mem.Allocator,
-    io: std.Io,
-    arena: std.mem.Allocator,
-    data_dir: []const u8,
-    wanted: []const []const u8,
-    platforms: []const []const u8,
-    out_path: ?[]const u8,
-) !void {
-    const db = try store.open(gpa, data_dir);
+    const io = c.init.io;
+    const db = try c.open();
     defer db.close();
-    const chosen = if (wanted.len > 0) wanted else try newestPatch(arena, db, platforms);
+    const platforms = g.platformIds();
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try newestPatch(c.arena, db, platforms);
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = try stats.label(&label_buf, chosen);
-    const path = out_path orelse
-        try std.fmt.allocPrint(arena, "{s}/export/stats-{s}.bin", .{ data_dir, label });
+    const path = out orelse
+        try std.fmt.allocPrint(c.arena, "{s}/export/stats-{s}.bin", .{ c.data_dir, label });
 
-    var r = try stats.build(gpa, db, chosen, platforms);
+    var r = try stats.build(c.init.gpa, db, chosen, platforms);
     defer r.builder.deinit();
     if (r.summary.games == 0) {
         std.log.err("no complete ranked solo games on patch {s}", .{label});
         return error.NoMatches;
     }
-
-    const cwd = std.Io.Dir.cwd();
-    var file = try cwd.createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
     defer file.deinit(io);
     var buf: [64 * 1024]u8 = undefined;
     var w = file.file.writer(io, &buf);
@@ -615,34 +377,42 @@ fn writeStats(
     std.log.info("{s}: patch {s}, {d} games ({d} skipped), {d} champions", .{
         path, label, r.summary.games, r.summary.skipped, r.builder.ids.len,
     });
+    return 0;
 }
 
-fn writeCurves(
-    gpa: std.mem.Allocator,
-    io: std.Io,
-    arena: std.mem.Allocator,
-    data_dir: []const u8,
-    wanted: []const []const u8,
-    days: u32,
-    platforms: []const []const u8,
-    every_platform: bool,
-    out_path: ?[]const u8,
-    min_games: u32,
-) !void {
-    const db = try store.open(gpa, data_dir);
+fn cmdCurves(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var out: ?[]const u8 = null;
+    var days: u32 = 30;
+    var min_games: u32 = 1;
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--out")) {
+            out = try c.value();
+        } else if (c.is("--days")) {
+            days = try c.int(u32);
+        } else if (c.is("--min-games")) {
+            min_games = try c.int(u32);
+        } else return error.Usage;
+    }
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const db = try c.open();
     defer db.close();
+    const wanted = g.patches.items;
+    const platforms = g.platformIds();
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = if (wanted.len > 0)
         try stats.label(&label_buf, wanted)
     else
         try std.fmt.bufPrint(&label_buf, "last {d} days", .{days});
-    const path = out_path orelse if (wanted.len > 0)
-        try curvesPath(arena, data_dir, wanted, every_platform)
+    const path = out orelse if (wanted.len > 0)
+        try curvesPath(c.arena, c.data_dir, wanted, g.every_platform)
     else
-        try recentCurvesPath(arena, data_dir, every_platform);
+        try recentCurvesPath(c.arena, c.data_dir, g.every_platform);
     const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
     const since_ms: i64 = if (wanted.len > 0) 0 else now_ms - @as(i64, days) * std.time.ms_per_day;
-    const item_patch = if (wanted.len > 0) wanted[0] else (try newestPatch(arena, db, platforms))[0];
+    const item_patch = if (wanted.len > 0) wanted[0] else (try newestPatch(c.arena, db, platforms))[0];
 
     const legendaries = ddragon.legendaries(gpa, io, item_patch) catch |err| blk: {
         std.log.warn("no item list from Data Dragon ({t}): curves without first items", .{err});
@@ -665,20 +435,23 @@ fn writeCurves(
     std.log.info("{s}: {s}, {d} games ({d} skipped)", .{
         path, label, r.summary.games, r.summary.skipped,
     });
+    return 0;
 }
 
-fn writePool(
-    gpa: std.mem.Allocator,
-    io: std.Io,
-    arena: std.mem.Allocator,
-    data_dir: []const u8,
-    wanted: []const []const u8,
-    platforms: []const []const u8,
-    out_path: ?[]const u8,
-) !void {
-    const db = try store.open(gpa, data_dir);
+fn cmdPool(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var out: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--out")) out = try c.value() else return error.Usage;
+    }
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const arena = c.arena;
+    const db = try c.open();
     defer db.close();
-    const chosen = if (wanted.len > 0) wanted else try newestPatch(arena, db, platforms);
+    const platforms = g.platformIds();
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try newestPatch(arena, db, platforms);
     var r = try stats.build(gpa, db, chosen, platforms);
     defer r.builder.deinit();
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
@@ -687,7 +460,7 @@ fn writePool(
     const st: core.Stats = try .parse(arena, model.written());
     const p = try pool.make(gpa, arena, db, &st, platforms, .{});
 
-    const path = out_path orelse try std.fs.path.join(arena, &.{ data_dir, "export", "pool.json" });
+    const path = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "export", "pool.json" });
     var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
     defer file.deinit(io);
     var buf: [64 * 1024]u8 = undefined;
@@ -696,6 +469,320 @@ fn writePool(
     try w.interface.flush();
     try file.replace(io);
     std.log.info("{s}", .{path});
+    return 0;
+}
+
+fn cmdEval(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var o: eval.Options = .{};
+    var history: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--test-share")) {
+            o.test_share = try c.float();
+            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
+        } else if (c.is("--folds")) {
+            o.folds = try c.int(u32);
+            if (o.folds < 2) return error.Usage;
+        } else if (c.is("--test-platform")) {
+            o.test_platform = try c.value();
+        } else if (c.is("--history")) {
+            history = try c.value();
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    const platforms = g.platformIds();
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
+    var buf: [64 * 1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    const line = try eval.run(c.init.gpa, db, chosen, platforms, o, &stdout.interface);
+    try stdout.interface.flush();
+    if (history) |path| {
+        const today: Date = .fromMs(std.Io.Clock.real.now(io).toMilliseconds());
+        try eval.appendHistory(io, path, line, try std.fmt.allocPrint(c.arena, "{f}", .{today}));
+    }
+    return 0;
+}
+
+fn cmdSite(c: *Cmd) !u8 {
+    var patches: std.ArrayList([]const u8) = .empty;
+    var out: ?[]const u8 = null;
+    var contact: ?[]const u8 = null;
+    var riot_txt: ?[]const u8 = null;
+    var public = false;
+    while (c.next()) |_| {
+        if (c.is("--patch")) {
+            try patches.appendSlice(c.arena, try c.list());
+        } else if (c.is("--out")) {
+            out = try c.value();
+        } else if (c.is("--contact")) {
+            contact = try c.value();
+        } else if (c.is("--riot-txt")) {
+            riot_txt = try c.value();
+        } else if (c.is("--public")) {
+            public = true;
+        } else return error.Usage;
+    }
+    const email = try c.required(contact, "--contact");
+    const arena = c.arena;
+    const db = try c.open();
+    defer db.close();
+    const chosen = if (patches.items.len > 0) patches.items else try newestPatch(arena, db, &.{"EUW1"});
+    var every: std.ArrayList([]const u8) = .empty;
+    for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
+    // Indexed by site.html.View.index: EUW 30 days, EUW patch, all 30 days, all patch
+    const view_curves = [_]?[]const u8{
+        try recentCurvesPath(arena, c.data_dir, false),
+        try curvesPath(arena, c.data_dir, chosen, false),
+        try recentCurvesPath(arena, c.data_dir, true),
+        try curvesPath(arena, c.data_dir, chosen, true),
+    };
+    const now_ms = std.Io.Clock.real.now(c.init.io).toMilliseconds();
+    try site.generate(c.init.gpa, c.init.io, db, .{
+        .out_dir = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "site" }),
+        .patches = chosen,
+        .since_ms = now_ms - 30 * std.time.ms_per_day,
+        .all_platforms = every.items,
+        .contact = email,
+        .riot_txt = riot_txt,
+        .updated = try std.fmt.allocPrint(arena, "{f}", .{Date.fromMs(now_ms).long()}),
+        .public = public,
+        .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
+        .curves = view_curves,
+    });
+    return 0;
+}
+
+fn cmdServe(c: *Cmd) !u8 {
+    var dir: ?[]const u8 = null;
+    var host: []const u8 = "127.0.0.1";
+    var port: u16 = 8080;
+    while (c.next()) |_| {
+        if (c.is("--out")) {
+            dir = try c.value();
+        } else if (c.is("--host")) {
+            host = try c.value();
+        } else if (c.is("--port")) {
+            port = try c.int(u16);
+        } else return error.Usage;
+    }
+    const root = dir orelse try std.fs.path.join(c.arena, &.{ c.data_dir, "site" });
+    try serve.run(c.init.gpa, c.init.io, root, host, port);
+    return 0;
+}
+
+fn cmdApi(c: *Cmd) !u8 {
+    var o: api.Options = .{ .db_path = "", .curves_dir = "", .key = "" };
+    var curves_dir: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (c.is("--host")) {
+            o.host = try c.value();
+        } else if (c.is("--port")) {
+            o.port = try c.int(u16);
+        } else if (c.is("--exchange")) {
+            o.fetch.exchange_dir = try c.value();
+        } else if (c.is("--curves")) {
+            curves_dir = try c.value();
+        } else if (c.is("--budget")) {
+            o.fetch.budget = try c.value();
+        } else if (c.is("--cors")) {
+            o.cors = try c.value();
+        } else return error.Usage;
+    }
+    const arena = c.arena;
+    o.key = try c.apiKey();
+    o.db_path = try std.fmt.allocPrintSentinel(arena, "{s}/api.db", .{c.data_dir}, 0);
+    o.curves_dir = curves_dir orelse if (o.fetch.exchange_dir) |x|
+        try std.fs.path.join(arena, &.{ x, "curves" })
+    else
+        try std.fs.path.join(arena, &.{ c.data_dir, "export" });
+    try api.run(c.init.gpa, c.init.io, o);
+    return 0;
+}
+
+fn cmdStatus(c: *Cmd) !u8 {
+    try c.noFlags();
+    try status(c.init.gpa, c.init.io, c.data_dir);
+    return 0;
+}
+
+fn cmdRebuild(c: *Cmd) !u8 {
+    try c.noFlags();
+    const db = try c.open();
+    defer db.close();
+    std.log.info("{d} matches rebuilt", .{try riot.match.rebuild(c.init.gpa, db)});
+    std.log.info("{d} timelines gave gold columns", .{try riot.crawl.rebuildGold(c.init.gpa, db)});
+    return 0;
+}
+
+fn cmdRekey(c: *Cmd) !u8 {
+    try c.noFlags();
+    const db = try c.open();
+    defer db.close();
+    try store.schema.rekey(db);
+    std.log.info("players, ladder and mastery cleared; matches kept", .{});
+    return 0;
+}
+
+fn cmdChampions(c: *Cmd) !u8 {
+    try c.noFlags();
+    const db = try c.open();
+    defer db.close();
+    std.log.info("{d} champions", .{try ddragon.refresh(c.init.gpa, c.init.io, db)});
+    return 0;
+}
+
+fn cmdBackup(c: *Cmd) !u8 {
+    var o: backup.Options = .{
+        .data_dir = c.data_dir,
+        .out_dir = c.init.environ_map.get("MEIOLOL_BACKUPS") orelse "backups",
+        .now = std.Io.Clock.real.now(c.init.io).toSeconds(),
+    };
+    while (c.next()) |_| {
+        if (c.is("--out")) {
+            o.out_dir = try c.value();
+        } else if (c.is("--keep-daily")) {
+            o.keep_daily = try c.int(usize);
+        } else if (c.is("--keep-weekly")) {
+            o.keep_weekly = try c.int(usize);
+        } else if (c.is("--full")) {
+            o.full = true;
+        } else return error.Usage;
+    }
+    const r = try backup.run(c.arena, c.init.io, o);
+    std.log.info("{s}; segment {s}: {d} matches, {d} timelines; {d} old files removed", .{
+        r.state, r.segment orelse "none (nothing new)", r.matches, r.timelines, r.removed,
+    });
+    return 0;
+}
+
+fn cmdRestore(c: *Cmd) !u8 {
+    var from: ?[]const u8 = null;
+    var state_file: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (c.is("--from")) {
+            from = try c.value();
+        } else if (c.is("--state")) {
+            state_file = try c.value();
+        } else return error.Usage;
+    }
+    const from_dir = try c.required(from, "--from");
+    const now = std.Io.Clock.real.now(c.init.io).toSeconds();
+    const r = backup.restore(c.arena, c.init.io, from_dir, c.data_dir, state_file, now) catch |err| {
+        if (err == error.TargetNotEmpty) std.log.err("{s} holds a database: restore only into an empty directory", .{c.data_dir});
+        return err;
+    };
+    std.log.info("{s}: {d} files, {d} matches, {d} timelines; {d} rows re-erased", .{
+        c.data_dir, r.files, r.matches, r.timelines, r.removed.total(),
+    });
+    return 0;
+}
+
+/// Logs counts only: an erasure log naming the player would defeat the erasure. PUUIDs
+/// already in `forgotten` are skipped, so complete lists can be fed in again and again.
+fn cmdForget(c: *Cmd) !u8 {
+    const io = c.init.io;
+    const arena = c.arena;
+    var id_list: std.ArrayList([]const u8) = .empty;
+    // --list given: an empty list is fine (the exchange with the Your games service)
+    var listed = false;
+    var backups: ?[]const u8 = null;
+    var export_path: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (c.is("--puuid") or c.is("--riot-id")) {
+            try id_list.append(arena, try c.value());
+        } else if (c.is("--list")) {
+            listed = true;
+            const text = try std.Io.Dir.cwd().readFileAlloc(io, try c.value(), arena, .limited(64 << 20));
+            var lines = std.mem.tokenizeAny(u8, text, "\r\n");
+            while (lines.next()) |line| {
+                const t = std.mem.trim(u8, line, " \t");
+                // Riot IDs hold '#', so only a leading one marks a comment
+                if (t.len > 0 and t[0] != '#') try id_list.append(arena, t);
+            }
+        } else if (c.is("--backups")) {
+            backups = try c.value();
+        } else if (c.is("--export")) {
+            export_path = try c.value();
+        } else return error.Usage;
+    }
+    const ids = id_list.items;
+    if (ids.len == 0 and !listed and export_path == null) {
+        c.flag = "--puuid, --riot-id, --list or --export";
+        return error.Usage;
+    }
+    const now = std.Io.Clock.real.now(io).toSeconds();
+    var client: ?riot.client.Client = null;
+    defer if (client) |*cl| cl.deinit();
+    // The box holds the crawler databases, the web server the Your games cache; open
+    // whichever this data directory has, never creating the other
+    const cwd = std.Io.Dir.cwd();
+    const crawl_path = try std.fs.path.join(arena, &.{ c.data_dir, "meiolol.db" });
+    const api_path = try std.fs.path.joinZ(arena, &.{ c.data_dir, "api.db" });
+    const db: ?store.Db = if (cwd.access(io, crawl_path, .{})) |_| try c.open() else |_| null;
+    defer if (db) |d| d.close();
+    const api_db: ?store.Db = if (cwd.access(io, api_path, .{})) |_| try api.cache.open(api_path) else |_| null;
+    defer if (api_db) |d| d.close();
+    if (db == null and api_db == null) {
+        std.log.err("{s} holds neither meiolol.db nor api.db", .{c.data_dir});
+        return 1;
+    }
+    var live: forget.Removed = .{};
+    var scrubbed: forget.Removed = .{};
+    var unresolved: usize = 0;
+    var already: usize = 0;
+    for (ids) |id| {
+        const puuid = if (std.mem.indexOfScalar(u8, id, '#') == null) id else blk: {
+            if (client == null) client = try .init(c.init.gpa, io, try c.apiKey());
+            break :blk try forget.resolveRiotId(arena, &client.?, id) orelse {
+                unresolved += 1;
+                continue;
+            };
+        };
+        if (api_db) |d| try api.cache.forget(d, puuid, now);
+        const d = db orelse continue;
+        if (try forget.isForgotten(d, puuid)) {
+            already += 1;
+            continue;
+        }
+        live.add(try forget.forget(d, puuid, now, .record));
+        if (backups) |dir| scrubbed.add(try backup.scrub(arena, io, dir, puuid, now));
+    }
+    if (ids.len > 0) {
+        std.log.info("{d} of {d} erased, {d} already forgotten; live rows: players {d}, " ++
+            "mastery {d}, participants blanked {d}, raw matches {d}, raw timelines {d}", .{
+            ids.len - unresolved - already,
+            ids.len,
+            already,
+            live.players,
+            live.mastery,
+            live.participants,
+            live.raw_matches,
+            live.raw_timelines,
+        });
+    }
+    if (api_db != null and ids.len > 0) std.log.info("Your games cache: erased and blocked", .{});
+    if (backups != null) std.log.info("backup rows: {d}", .{scrubbed.total()});
+    if (export_path) |path| {
+        const d = db orelse {
+            std.log.err("--export needs meiolol.db in {s}", .{c.data_dir});
+            return 1;
+        };
+        std.log.info("{d} forgotten PUUIDs written to {s}", .{ try forget.exportList(io, d, path), path });
+    }
+    if (unresolved > 0) {
+        std.log.warn("{d} Riot IDs have no account (renamed or deleted): resolve them by PUUID", .{unresolved});
+        return 1;
+    }
+    return 0;
+}
+
+fn usageError(arg: ?[]const u8) u8 {
+    if (arg) |a| std.log.err("unknown, incomplete or missing for this command: {s}", .{a});
+    std.debug.print("{s}", .{usage});
+    return 2;
 }
 
 /// Where `meiolol curves` writes by default for these patches. Every platform's files
@@ -720,16 +807,6 @@ fn newestPatch(arena: std.mem.Allocator, db: store.Db, platforms: []const []cons
     const all = try stats.patches(arena, db, platforms);
     if (all.len == 0) return error.NoMatches;
     return all[0..1];
-}
-
-/// "11 October 2026", UTC
-fn today(arena: std.mem.Allocator, io: std.Io) ![]const u8 {
-    const secs: u64 = @intCast(std.Io.Clock.real.now(io).toSeconds());
-    const epoch: std.time.epoch.EpochSeconds = .{ .secs = secs };
-    const day = epoch.getEpochDay().calculateYearDay();
-    const md = day.calculateMonthDay();
-    const months = [_][]const u8{ "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
-    return std.fmt.allocPrint(arena, "{d} {s} {d}", .{ md.day_index + 1, months[md.month.numeric() - 1], day.year });
 }
 
 fn status(gpa: std.mem.Allocator, io: std.Io, data_dir: []const u8) !void {
