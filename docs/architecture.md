@@ -49,7 +49,8 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   Participant id = slot + 1. Kept forever
 - `meiolol.db`: crawl state (players, ladder_pages, match_queue, timeline_queue) and
   tables kept forever: matches, participants (incl. final items, full rune page, and
-  tier/division = rank snapshot when the match was stored), bans, mastery (one
+  tier/division = rank snapshot when the match was stored, gold10/14/15 = total
+  gold at those timeline minutes), bans, mastery (one
   compact blob per player, src/riot/mastery.zig, ~0.7 KB), champions. Text-keyed
   tables are WITHOUT ROWID (no second copy of the key in an index)
 - Match ID is the permanent key and carries the platform (EUW1_, KR_); matches.platform
@@ -60,8 +61,10 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   timelines and rank snapshots stay. Re-storing a match keeps its PUUIDs and rank
 - Privacy (crawler, hourly): players no ladder page or match has shown for 30 days
   are deleted with their mastery, and mastery older than 30 days is refetched (Riot's
-  monthly refresh; erased accounts drop out). Matches older than 24 months lose their
-  PUUIDs. `forgotten` (sha256 of PUUIDs, written by `meiolol forget`, src/forget.zig)
+  monthly refresh; erased accounts drop out). A mastery refetch that Riot answers 404
+  deletes the player at once. Matches older than 24 months lose their PUUIDs.
+  `forgotten` (plain PUUIDs, so a rekey can translate them and the Your games service
+  can exchange them; written by `meiolol forget`, src/forget.zig)
   is honoured: never stored as players or mastery, blanked in participants, and no
   raw summary or raw timeline kept for their matches
 - Schema changes: `schema.zig` migrate() alters or rebuilds tables in place (checks

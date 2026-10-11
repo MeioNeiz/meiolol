@@ -445,9 +445,18 @@ const Worker = struct {
     /// Compact only: the raw response is ~70 KB for ~1 KB of data we use. An empty
     /// list still gets a row, marking the player done
     fn fetchMastery(w: *Worker, p: ep.Platform, arena: std.mem.Allocator, puuid: []const u8) !void {
-        const got = try ep.masteries(&w.client, p, puuid);
-        defer if (got) |b| w.c.gpa.free(b);
-        const entries = try mastery.fromJson(arena, got orelse "[]");
+        const got = try ep.masteries(&w.client, p, puuid) orelse {
+            // Riot does not know the PUUID: an erased or moved account. Forget it now
+            // rather than wait for the 30-day unseen expiry
+            try w.db.begin();
+            errdefer w.db.rollback();
+            try w.db.run("DELETE FROM mastery WHERE puuid = ?", .{puuid});
+            try w.db.run("DELETE FROM players WHERE puuid = ?", .{puuid});
+            try w.db.commit();
+            return;
+        };
+        defer w.c.gpa.free(got);
+        const entries = try mastery.fromJson(arena, got);
         const t = w.now();
         const blob = try mastery.encode(w.c.gpa, entries, t);
         defer w.c.gpa.free(blob);
@@ -671,6 +680,7 @@ const Worker = struct {
             try w.db.run("INSERT OR REPLACE INTO timeline.timelines VALUES (?,?,?,?)", .{
                 id, ct.frames, ct.events, store.Blob{ .bytes = ct.blob },
             });
+            try storeGold(w.db, id, ct.participants, ct.gold);
         }
         try w.db.run("UPDATE timeline_queue SET status = ? WHERE match_id = ?", .{
             if (compact == null) "failed" else "done", id,
@@ -691,15 +701,19 @@ const Worker = struct {
 
 /// In the `forgotten` table (src/forget.zig writes it)
 fn forgotten(db: store.Db, puuid: []const u8) !bool {
-    var digest: [32]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(puuid, &digest, .{});
-    const hex = std.fmt.bytesToHex(digest, .lower);
-    return try db.scalar("SELECT EXISTS (SELECT 1 FROM forgotten WHERE puuid_sha256 = ?)", .{
-        hex[0..],
-    }) == 1;
+    return try db.scalar("SELECT EXISTS (SELECT 1 FROM forgotten WHERE puuid = ?)", .{puuid}) == 1;
 }
 
-const Compact = struct { blob: []u8, frames: usize, events: usize };
+/// Frames whose total gold participants keeps (gold10, gold14, gold15)
+const gold_minutes = [_]usize{ 10, 14, 15 };
+
+const Compact = struct {
+    blob: []u8,
+    frames: usize,
+    events: usize,
+    participants: u8,
+    gold: [gold_minutes.len][timeline.max_participants]?i32,
+};
 
 /// Timeline JSON -> gzipped compact blob (caller frees blob)
 pub fn compactTimeline(gpa: std.mem.Allocator, body: []const u8) !Compact {
@@ -708,7 +722,56 @@ pub fn compactTimeline(gpa: std.mem.Allocator, body: []const u8) !Compact {
     const t = try timeline.fromJson(arena.allocator(), body);
     const bytes = try timeline.encode(gpa, t);
     defer gpa.free(bytes);
-    return .{ .blob = try store.raw.compress(gpa, bytes), .frames = t.frames.len, .events = t.events.len };
+    return .{
+        .blob = try store.raw.compress(gpa, bytes),
+        .frames = t.frames.len,
+        .events = t.events.len,
+        .participants = t.participants,
+        .gold = goldAt(t),
+    };
+}
+
+fn goldAt(t: timeline.Timeline) [gold_minutes.len][timeline.max_participants]?i32 {
+    var gold: [gold_minutes.len][timeline.max_participants]?i32 = @splat(@splat(null));
+    for (gold_minutes, &gold) |minute, *row| {
+        if (minute >= t.frames.len) continue;
+        for (row[0..t.participants], 1..) |*g, id| g.* = t.frames[minute].get(@intCast(id), .total_gold);
+    }
+    return gold;
+}
+
+fn storeGold(db: store.Db, match_id: []const u8, participants: u8, gold: [gold_minutes.len][timeline.max_participants]?i32) !void {
+    var up = try db.prepare("UPDATE participants SET gold10 = ?, gold14 = ?, gold15 = ? " ++
+        "WHERE match_id = ? AND slot = ?");
+    defer up.deinit();
+    for (0..participants) |slot| try up.exec(.{ gold[0][slot], gold[1][slot], gold[2][slot], match_id, slot });
+}
+
+/// gold10/14/15 for every stored timeline, after the columns were added
+pub fn rebuildGold(gpa: std.mem.Allocator, db: store.Db) !usize {
+    var q = try db.prepare("SELECT match_id, data FROM timeline.timelines");
+    defer q.deinit();
+    try q.bind(.{});
+    var stored: usize = 0;
+    try db.begin();
+    errdefer db.rollback();
+    while (try q.step()) {
+        var arena: std.heap.ArenaAllocator = .init(gpa);
+        defer arena.deinit();
+        const bytes = try store.raw.decompress(arena.allocator(), q.bytes(1));
+        const t = timeline.decode(arena.allocator(), bytes) catch |err| {
+            log.warn("timeline {s} did not decode: {t}", .{ q.bytes(0), err });
+            continue;
+        };
+        try storeGold(db, q.bytes(0), t.participants, goldAt(t));
+        stored += 1;
+        if (stored % 1000 == 0) {
+            try db.commit();
+            try db.begin();
+        }
+    }
+    try db.commit();
+    return stored;
 }
 
 pub fn putRaw(gpa: std.mem.Allocator, db: store.Db, source: []const u8, key: []const u8, body: []const u8, t: i64) !void {
@@ -722,9 +785,31 @@ pub fn putRaw(gpa: std.mem.Allocator, db: store.Db, source: []const u8, key: []c
 test forgotten {
     const db = try store.schema.memory();
     defer db.close();
-    // sha256("abc")
-    try db.exec("INSERT INTO forgotten VALUES " ++
-        "('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 1)");
+    try db.exec("INSERT INTO forgotten VALUES ('abc', 1)");
     try std.testing.expect(try forgotten(db, "abc"));
     try std.testing.expect(!try forgotten(db, "abd"));
+}
+
+test "gold at 10, 14 and 15 minutes" {
+    const gpa = std.testing.allocator;
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const body = try store.raw.decompress(arena.allocator(), @embedFile("testdata/timeline.json.gz"));
+    const ct = try compactTimeline(gpa, body);
+    defer gpa.free(ct.blob);
+    const db = try store.schema.memory();
+    defer db.close();
+    var doc = try match.parse(arena.allocator(), @embedFile("testdata/match.json"));
+    doc.metadata.matchId = "EUW1_1";
+    try match.storeRows(db, doc, "riot");
+    try storeGold(db, "EUW1_1", ct.participants, ct.gold);
+    // Frame 15, participant 1 of the fixture (riot-timeline-measured)
+    try std.testing.expectEqual(@as(?i64, 6208), try db.scalar(
+        "SELECT gold15 FROM participants WHERE match_id = 'EUW1_1' AND slot = 0",
+        .{},
+    ));
+    try std.testing.expectEqual(@as(?i64, 10), try db.scalar(
+        "SELECT count(*) FROM participants WHERE gold10 > 0 AND gold14 >= gold10",
+        .{},
+    ));
 }

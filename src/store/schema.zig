@@ -34,7 +34,8 @@ const players_ddl =
 /// pruned: items at game end (item6 = trinket), runes (keystone = first primary perk,
 /// perk1-3 primary, perk4-5 secondary, then stat shards). tier/division: the player's
 /// ladder rank when the match was stored (players holds only the latest and loses
-/// everyone on rekey); NULL when not on the ladder then
+/// everyone on rekey); NULL when not on the ladder then. gold10/14/15: total gold at
+/// timeline frames 10/14/15, set when the timeline is stored; NULL without one
 const participants_ddl =
     \\CREATE TABLE IF NOT EXISTS participants (
     \\    match_id TEXT NOT NULL,
@@ -61,6 +62,7 @@ const participants_ddl =
     \\    perk1 INTEGER, perk2 INTEGER, perk3 INTEGER, perk4 INTEGER, perk5 INTEGER,
     \\    shard_offense INTEGER, shard_flex INTEGER, shard_defense INTEGER,
     \\    tier TEXT, division TEXT,
+    \\    gold10 INTEGER, gold14 INTEGER, gold15 INTEGER,
     \\    PRIMARY KEY (match_id, slot)
     \\) WITHOUT ROWID;
     \\
@@ -169,12 +171,17 @@ pub const schema =
     \\    ddragon_version TEXT NOT NULL
     \\);
     \\
-    \\-- Players who asked to be forgotten (`meiolol forget`, src/forget.zig): the crawler
-    \\-- never stores them again. Key: lower-case hex sha256 of the PUUID bytes
+++ forgotten_ddl;
+
+/// Suppression list of players who asked to be forgotten (`meiolol forget`,
+/// src/forget.zig): the crawler never stores them again. Plain PUUIDs, not hashes: a
+/// rekey must translate them, and the Your games service exchanges the list
+const forgotten_ddl =
     \\CREATE TABLE IF NOT EXISTS forgotten (
-    \\    puuid_sha256 TEXT PRIMARY KEY,
+    \\    puuid TEXT PRIMARY KEY,
     \\    forgotten_at INTEGER NOT NULL
     \\) WITHOUT ROWID;
+    \\
 ;
 
 /// After migrate: they may name columns older databases lack
@@ -299,6 +306,17 @@ fn migrate(db: sqlite.Db) !void {
         try db.exec(
             \\ALTER TABLE players ADD COLUMN seen_at INTEGER;
             \\UPDATE players SET seen_at = unixepoch();
+        );
+    }
+    if (try hasColumn(db, "forgotten", "puuid_sha256")) {
+        // Hashed form never held rows: `meiolol forget` was not deployed with it
+        try db.exec("DROP TABLE forgotten;" ++ forgotten_ddl);
+    }
+    if (!try hasColumn(db, "participants", "gold10")) {
+        try db.exec(
+            \\ALTER TABLE participants ADD COLUMN gold10 INTEGER;
+            \\ALTER TABLE participants ADD COLUMN gold14 INTEGER;
+            \\ALTER TABLE participants ADD COLUMN gold15 INTEGER;
         );
     }
     try db.commit();

@@ -86,7 +86,8 @@ const usage =
     \\              --budget SPEC    Riot calls per route, Riot's format (default 20:120)
     \\              --cors ORIGIN    allow a page on ORIGIN (local testing)
     \\  status      row counts and crawl queue state
-    \\  rebuild     re-parse kept raw match JSON into the normalised tables
+    \\  rebuild     re-parse kept raw match JSON into the normalised tables, and
+    \\              refill participants columns taken from timelines
     \\  rekey       after switching to another app's key (new PUUIDs): forget
     \\              players, ladder and mastery, keep matches; run rebuild first
     \\  champions   refresh champion ids and names from Data Dragon
@@ -316,6 +317,7 @@ pub fn main(init: std.process.Init) !u8 {
         const db = try store.open(init.gpa, data_dir);
         defer db.close();
         std.log.info("{d} matches rebuilt", .{try riot.match.rebuild(init.gpa, db)});
+        std.log.info("{d} timelines gave gold columns", .{try riot.crawl.rebuildGold(init.gpa, db)});
         return 0;
     }
     if (std.mem.eql(u8, cmd, "rekey")) {
