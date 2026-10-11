@@ -284,9 +284,12 @@ const Worker = struct {
     mastery_cursor: [128]u8 = undefined,
     mastery_cursor_len: usize = 0,
 
+    /// run() migrated already; workers only connect. 19 writers share the lock, so wait
+    /// longer than the default 10 s for it (hourly pruning, a slow disk)
     fn init(c: *Crawler, job: Job) !Worker {
-        const db = try store.open(c.gpa, c.opts.data_dir);
+        const db = try store.schema.connect(c.gpa, c.opts.data_dir);
         errdefer db.close();
+        try db.exec("PRAGMA busy_timeout = 60000");
         var client: Client = try .init(c.gpa, c.io, c.opts.key);
         errdefer client.deinit();
         try client.limiter.setReserve(c.opts.reserve_pct);

@@ -203,6 +203,16 @@ const indexes =
 /// Open meiolol.db with raw.db and timeline.db attached as `raw` and `timeline`, all
 /// in `dir`. One connection per thread.
 pub fn open(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
+    const db = try connect(gpa, dir);
+    errdefer db.close();
+    try apply(db);
+    return db;
+}
+
+/// As open, without creating or migrating anything, for extra connections of a process
+/// that already ran open once (crawler workers): a migration holds the write lock, and
+/// 19 connections each waiting on it outlast the busy timeout on a slow machine
+pub fn connect(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
     const main_path = try std.fs.path.joinZ(gpa, &.{ dir, "meiolol.db" });
     defer gpa.free(main_path);
     const raw_path = try std.fs.path.join(gpa, &.{ dir, "raw.db" });
@@ -222,7 +232,6 @@ pub fn open(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
         \\PRAGMA raw.synchronous=NORMAL;
         \\PRAGMA timeline.synchronous=NORMAL;
     );
-    try apply(db);
     return db;
 }
 
@@ -302,11 +311,11 @@ fn migrate(db: sqlite.Db) !void {
             mastery_ddl);
     }
     if (!try hasColumn(db, "players", "seen_at")) {
-        // Counts as seen now, so existing players get the full 30 days
-        try db.exec(
-            \\ALTER TABLE players ADD COLUMN seen_at INTEGER;
-            \\UPDATE players SET seen_at = unixepoch();
-        );
+        // Counts as seen now, so existing players get the full 30 days. A constant
+        // default rather than an UPDATE: adding it rewrites no rows (millions of players)
+        const now = try db.scalar("SELECT unixepoch()", .{}) orelse 0;
+        var buf: [96]u8 = undefined;
+        try db.exec(try std.fmt.bufPrintZ(&buf, "ALTER TABLE players ADD COLUMN seen_at INTEGER DEFAULT {d}", .{now}));
     }
     if (try hasColumn(db, "forgotten", "puuid_sha256")) {
         // Hashed form never held rows: `meiolol forget` was not deployed with it
@@ -400,7 +409,8 @@ test "migrates an EUW-only database" {
     try t.expectEqual(@as(?i64, 157), try db.scalar("SELECT champion_id FROM bans", .{}));
     try t.expect(try hasColumn(db, "mastery", "data"));
     try t.expectEqual(one, try db.scalar(
-        "SELECT count(*) FROM players WHERE region = 'europe' AND platform = 'EUW1'",
+        "SELECT count(*) FROM players " ++
+            "WHERE region = 'europe' AND platform = 'EUW1' AND seen_at > 0",
         .{},
     ));
     try t.expectEqual(@as(?i64, 205), try db.scalar(
