@@ -105,7 +105,11 @@ next steps land here.
   players rows expire via the 30-day prune) deployed after it with `--player-sample
   16`. Next: watch the report's "others", "priority slack", "writes N in M commits" and
   "pages written/read" per match; once slack stays over 30% the other regions run.
-  If ladder still dominates, lower --ladder-per-hour. Not tested yet: --no-participant-players and
+  If ladder still dominates, lower --ladder-per-hour. 14 min after ranks (11:13Z): disk
+  ~9 r/s, <1% util (was ~360 r/s); europe ~34k/day (at cap), others on, each ~20k/day,
+  total ~95k/day; slack swings 16-30% (120 s window), gate never re-closed. Disk
+  runway: ~1.1 GB/day kept at this rate x --keep-days 60 = ~65 GB vs 37 GB free on the
+  micro: full around early November unless A1, PAYG disk or a shorter --keep-days Not tested yet: --no-participant-players and
   dropping the participants_puuid index (only `forget` reads it): bench round
   scratch-only, rerun deploy/bench-crawl.sh with --no-mastery for pages/match.
   Before ~2026-11-25 (first matches pass --keep-days 60): per-patch aggregates kept
