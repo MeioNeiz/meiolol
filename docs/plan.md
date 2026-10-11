@@ -39,7 +39,7 @@ next steps land here.
   --env-file .env`, captcha in a window, old key dies at once, new one live in ~2 min)
 - Box moved off the gpu-box PC to Oracle Cloud (2026-10-11 ~05:30 BST, docs/hosting.md):
   stopgap 1 GB micro `meiolol-cloud` until A1 capacity (retry loop running); crawl.args
-  cut raw retention to 3 d / 1 d; first backup there 04:00Z 2026-10-12, on its own
+  is plain `--reserve 20` (default raw windows, 30 d / 7 d); first backup there 04:00Z 2026-10-12, on its own
   disk only (no migrations, f90a5ad; no second run on restart); off-host target: Jacob;
   gpu-box data + D: backup kept as the restore point. Crawler stable since 7320adf
   (migrate once per process) but slow: ~11k matches/day (gpu-box ~135k), 153 lock
@@ -87,6 +87,13 @@ next steps land here.
   by platform, region europe)
 - Raw prune runs an hour after start (4b94ffa) and blocks the main thread's reports
   while it runs; move it off the main thread if that matters
+- Box ops loose ends (meiolol-5a): cut crawl.args raw windows once disk matters, after
+  the writer fix (first prune is heavy on the micro); one-off `meiolol rebuild` for the
+  gold10/14/15 migration, not run (do it on A1); once on A1 remove the dynamic group
+  meiolol-box, policy meiolol-box-launch and service meiolol-a1-launch; after the move
+  settles remove gpu-box ~/.ssh/migrate_cloud and its pubkey from meiolol-cloud
+  authorized_keys; jodrive oracle login: enrolment path untested, don't rerun it; stale
+  vault group jodrive/oracle (old TOTP), forget or re-import: Jacob
 - Storage plan (research/questions/free-hosting-storage.md, C18/C19), if Jacob agrees:
   `meiolol prune` keeps a rolling window of match rows + compact timelines on the box
   (60 days to start), per-patch aggregates kept forever, Pool learning curves moved onto
