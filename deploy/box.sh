@@ -10,12 +10,22 @@ SESSION=meiolol-crawl
 WEB=meiolol-web
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
+# Builds a clean checkout of REV (default HEAD), never the working tree: other sessions
+# keep uncommitted work there. The box logs each deploy in DEPLOYED
 sync() {
-    (cd "$ROOT" && zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe \
+    local rev tree
+    rev=$(git -C "$ROOT" rev-parse "${REV:-HEAD}")
+    tree=$(mktemp -d)
+    git -C "$ROOT" worktree add -q --detach "$tree" "$rev"
+    trap "git -C '$ROOT' worktree remove --force '$tree'" EXIT
+    (cd "$tree" && zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe \
         --prefix zig-out/box)
     ssh "$HOST" "mkdir -p $DIR/bin $DIR/data"
-    scp -q "$ROOT/zig-out/box/bin/meiolol" "$HOST:$DIR/bin/meiolol.new"
-    ssh "$HOST" "mv $DIR/bin/meiolol.new $DIR/bin/meiolol"
+    scp -q "$tree/zig-out/box/bin/meiolol" "$HOST:$DIR/bin/meiolol.new"
+    scp -q "$tree/deploy/web-loop.sh" "$HOST:$DIR/bin/web-loop.sh.new"
+    ssh "$HOST" "cd $DIR && mv bin/meiolol.new bin/meiolol && mv bin/web-loop.sh.new bin/web-loop.sh \
+        && echo \"$rev $(date -u +%FT%TZ)\" >> DEPLOYED"
+    echo "deployed $rev"
     if [[ -f "$ROOT/.env" ]]; then
         ssh "$HOST" "umask 077 && cat > $DIR/.env" < "$ROOT/.env"
     fi
@@ -24,10 +34,12 @@ sync() {
 case "${1:-}" in
     sync) sync ;;
     start)
+        # Extra arguments go to `meiolol crawl` (eg --reserve 20)
+        shift
         sync
         # Restart on crashes, but stop on exit 3 (key rejected) rather than hammer Riot
         ssh "$HOST" "cd $DIR && tmux new -d -s $SESSION \
-            'while true; do bin/meiolol crawl >> data/crawl.log 2>&1; \
+            'while true; do bin/meiolol crawl $* >> data/crawl.log 2>&1; \
              [ \$? -eq 3 ] && echo KEY REJECTED >> data/crawl.log && break; \
              sleep 60; done'"
         echo "started $SESSION on $HOST"
@@ -51,12 +63,11 @@ case "${1:-}" in
         ;;
     run) shift; ssh "$HOST" "cd $DIR && bin/meiolol $*" ;;
     web)
-        # Daily site build and upload to the jomove server: deploy/web-loop.sh
+        # Site build and upload to the jomove server: deploy/web-loop.sh
         case "${2:-}" in
             start)
                 [[ -n "${3:-}" ]] || { echo "usage: deploy/box.sh web start <contact email>"; exit 2; }
                 sync
-                scp -q "$ROOT/deploy/web-loop.sh" "$HOST:$DIR/bin/web-loop.sh"
                 ssh "$HOST" "cd $DIR && tmux new -d -s $WEB \
                     'bin/web-loop.sh $3 >> data/web.log 2>&1'"
                 echo "started $WEB on $HOST"
