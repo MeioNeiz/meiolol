@@ -97,13 +97,15 @@ next steps land here.
   linger, WAL cap, page counters in the report, weekly ladder refresh skipping unchanged
   rows, per-platform ladder cap. Bench (deploy/bench-crawl.sh micro, fake API): 150k vs
   56k matches/day at minute 3 vs the old 19 writers, no busy waits.
-  Committed, NOT deployed: d315740 (meiolol-a7's EUW-first gate, waiting on Jacob's ok)
-  and eb173b0 (ranks table: ladder writes ranks by PUUID hash for everyone, players
-  rows only for 1 in --player-sample N; old 8.9M players rows expire via the 30-day
-  prune). Next: push both, add `--player-sample 16` to crawl.args, restart
-  (`deploy/box.sh start ...`), then watch the report's "writes N in M commits" and
-  "pages written/read" per match; europe should get timelines. If ladder still
-  dominates, lower --ladder-per-hour. Not tested yet: --no-participant-players and
+  EUW-first gate (d315740, deployed 10:47Z): other regions and mastery pause while
+  europe's slack (rate-limit waits + idle) is under 10%, resume at 30%; ladder keeps
+  --ladder-per-hour. First 8 min: others paused, europe 160m 134t (~29k/day, cap ~33k),
+  slack 16%, disk ~360 r/s at ~50% util. Ranks table (eb173b0: ladder writes ranks by
+  PUUID hash for everyone, players rows only for 1 in --player-sample N; old 8.9M
+  players rows expire via the 30-day prune) deployed after it with `--player-sample
+  16`. Next: watch the report's "others", "priority slack", "writes N in M commits" and
+  "pages written/read" per match; once slack stays over 30% the other regions run.
+  If ladder still dominates, lower --ladder-per-hour. Not tested yet: --no-participant-players and
   dropping the participants_puuid index (only `forget` reads it): bench round
   scratch-only, rerun deploy/bench-crawl.sh with --no-mastery for pages/match.
   Before ~2026-11-25 (first matches pass --keep-days 60): per-patch aggregates kept
