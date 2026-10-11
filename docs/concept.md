@@ -81,6 +81,18 @@ aggregate facts only; never other players; never "the best pick".
      are hidden). "From your pool": several options with reasons, never one. Read-only
      LCU, no Overwolf, never other players' names or stats
 
+Added the same day (Jacob and the build sessions):
+
+7. **Learn** (website): plain-language lessons (roles, counters and why your own champion
+   matters more, early vs late, damage mix, synergy) with real examples and checks, plus
+   unlimited practice drafts by role and difficulty (graded on facts, not model scores);
+   for new players, beside the Daily Draft
+8. **Learning curves**: win rate and lane gold by games played on a champion ("how many
+   games to learn X"), on champion pages and Pool
+9. **Comeback odds**: win rate by lane gold lead or deficit at 10 and 15 min per matchup
+10. **Patch day** (core built): what moved between patches, champions and matchups, gated
+    by significance
+
 Dropped: ranking picks for the whole draft as a headline feature. Kept internally for the
 Daily Draft and as the multi-option "from your pool" list.
 
