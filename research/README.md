@@ -30,3 +30,4 @@ Every finding starts with one or more tags. Add tags here before using them.
 | `gui` | desktop GUI libraries and native windowing for the app |
 | `queues` | game modes, queue ids, which queues the API serves |
 | `toolchain` | Zig versions, build system, compiler and std changes affecting the repo |
+| `ops` | hosting, object storage, backups off-site, free tiers, prices, provider terms |

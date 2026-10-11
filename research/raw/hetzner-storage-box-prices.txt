@@ -1,0 +1,15 @@
+Extract of https://www.hetzner.com/_resources/app/data/app/live_data_prices.json (fetched 2026-10-11),
+the JSON the Storage Box page loads for its prices, plus the product name to product-key pairs
+from the page HTML (https://www.hetzner.com/storage/storage-box/).
+
+From the page HTML:
+BX11 product-key="ROBOT_1333"
+BX21 product-key="ROBOT_1334"
+BX31 product-key="ROBOT_1335"
+BX41 product-key="ROBOT_1336"
+
+From the price JSON:
+{"productId": "ROBOT_1333", "locations": [{"countryCode": "fi", "active": true, "datacenter": "HEL1", "prices": {"hourly": {"EUR": "0.005100", "USD": "0.006400"}, "monthly": {"USD": "4.00", "EUR": "3.20"}}}, {"countryCode": "de", "active": true, "datacenter": "FSN1", "prices": {"monthly": {"EUR": "3.20", "USD": "4.00"}, "hourly": {"EUR": "0.005100", "USD": "0.006400"}}}]}
+{"productId": "ROBOT_1334", "locations": [{"countryCode": "de", "active": true, "datacenter": "FSN1", "prices": {"monthly": {"EUR": "10.90", "USD": "13.00"}, "hourly": {"EUR": "0.017500", "USD": "0.020800"}}}, {"countryCode": "fi", "active": true, "datacenter": "HEL1", "prices": {"hourly": {"EUR": "0.017500", "USD": "0.020800"}, "monthly": {"EUR": "10.90", "USD": "13.00"}}}]}
+{"productId": "ROBOT_1335", "locations": [{"countryCode": "fi", "active": true, "datacenter": "HEL1", "prices": {"hourly": {"USD": "0.038500", "EUR": "0.033300"}, "monthly": {"USD": "24.00", "EUR": "20.80"}}}, {"countryCode": "de", "active": true, "datacenter": "FSN1", "prices": {"monthly": {"USD": "24.00", "EUR": "20.80"}, "hourly": {"USD": "0.038500", "EUR": "0.033300"}}}]}
+{"productId": "ROBOT_1336", "locations": [{"countryCode": "fi", "active": true, "datacenter": "HEL1", "prices": {"monthly": {"EUR": "40.60", "USD": "46.00"}, "hourly": {"EUR": "0.065100", "USD": "0.073700"}}}, {"countryCode": "de", "active": true, "datacenter": "FSN1", "prices": {"hourly": {"USD": "0.073700", "EUR": "0.065100"}, "monthly": {"USD": "46.00", "EUR": "40.60"}}}]}

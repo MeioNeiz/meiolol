@@ -75,6 +75,11 @@ next steps land here.
   production key
 - Requeue matches failed by 429 storms (6x 429 then GaveUp counts as an attempt)
 - Optional: lossy timeline compaction if disk gets tight
+- Storage plan (research/questions/free-hosting-storage.md, C18/C19), if Jacob agrees:
+  `meiolol prune` keeps a rolling window of match rows + compact timelines on the box
+  (60 days to start), per-patch aggregates kept forever, Pool learning curves moved onto
+  them; older segments and daily backups off-host, encrypted (rclone crypt, file per
+  file so `forget --backups` scrubs still work), to a Hetzner Storage Box
 
 ### Your games and Squads (was your-games-e0)
 
@@ -158,6 +163,14 @@ flashcards with spaced repetition; season "lane story" share cards.
 - Patch day movers bar: z 1.96 or 2.58
 - Zig 0.17 timing (recommended: now, add dvui when it catches up)
 - Name/domain: "lol" in name and TLD is a mild Riot-trademark risk
+- Storage and hosting (research/questions/free-hosting-storage.md): (1) Hetzner Storage
+  Box BX11, 1 TB for EUR 3.20/month, for off-host backups and old segments (~1.5 years
+  at full rate; B2 $6.95/TB second; no free option holds this); (2) keep a rolling
+  window of match data on the box instead of everything (recommended, also less
+  personal data kept); (3) Oracle Pay As You Go: still free within limits, A1 capacity
+  sooner, paid disk possible; (4) ok to delete the unattached April 47 GB "Jomify (Boot
+  Volume)" to free block storage. GitHub/Hugging Face ruled out: size limits, "not a
+  backup tool", erasure from git history impractical
 
 ## Reference
 
