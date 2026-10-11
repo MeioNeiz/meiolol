@@ -3,7 +3,7 @@ title: Riot Developer Portal League of Legends docs (API policy, Game Policy, RS
 url: https://developer.riotgames.com/docs/lol
 kind: docs
 commit:
-for: [riot-production-key]
+for: [riot-production-key, identity-and-privacy]
 looked: 2026-10-11
 depth: docs (Developer API Policy, Game Policy, RSO, League Client API sections)
 relevance: high
@@ -58,6 +58,17 @@ Why: League-specific rules for a champ select recommender, and what Riot evaluat
   > This service is not officially supported for use with third party applications.
   > Either [create a new application](https://developer.riotgames.com/app-type) or leave a note on your existing application in the Developer Portal.
 - [policy] Checked, not there: no champ select specific rule, no dodge rule, no mention of ML/AI training. ^f14
+
+- [privacy] [policy] Custom-game match history may be shown publicly only if the player
+  opts in for League; otherwise only to the player via RSO. Normal and ranked history
+  carry no such rule. ^f15
+  > Products may not publicly display a player's match history from the custom match queue unless the player opts in to share this specifically for League of Legends. Otherwise, a player’s custom match data may only be made available to them using RSO.
+- [privacy] Riot ID (game name plus tag line) is the required player-facing identifier;
+  lookup by Riot ID via account-v1 is the documented path. ^f16
+  > Applications featuring the "Find your Summoner by Region + Name" functionality must adapt to locate summoners using Riot IDs
+  > For third-party apps, displaying Riot IDs in place of summoner names within frontend fields is now necessary.
+- [privacy] Checked, not there: no rule against looking up any Riot ID and showing its
+  (non-custom) match history; no consent requirement for that; no retention period. ^f17
 
 ## Read
 

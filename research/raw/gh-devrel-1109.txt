@@ -1,0 +1,80 @@
+# #1109 [BUG][LoL][match-v5] ARAM: Mayhem matches return 403 Forbidden
+state: closed created: 2025-10-22T22:25:20Z closed: 2025-12-18T19:03:24Z
+author: metasrc
+
+**Bug Description**  
+When attempting to access match data for ARAM: Mayhem matches, the API returns 403 Forbidden
+
+**Problem Description**  
+There was no announcement specifying that this would be the case (like there was for Brawl here: https://x.com/RiotGamesDevRel/status/1922373887599489163) so I am assuming this is a bug.
+
+**Expected Result**  
+When I query the match API with ARAM: Mayhem game ids, I should receive a valid response and status 200 OK
+
+**Actual Result**  
+When I query the match API with ARAM: Mayhem game ids, I receive an error response with status 403 Forbidden
+
+**Developer Impact**  
+This completely blocks the ability for third party developers to build tools and ecosystems to support the new mode.
+
+* Frequency: Every time
+* Severity: Makes the API unusable for ARAM: Mayhem
+* User emails: We have received several user emails asking if we intend to support ARAM: Mayhem
+
+**Player Impact**  
+Players are impacted as they are unable to obtain the information and use the tools they would otherwise be used to having for similar modes, such as ARAM or Arena
+
+* Frequency: Every time
+* Severity: Prevents tools and information from being available to the user for this game mode.
+* Quantity: Every player seeking tools and information for ARAM: Mayhem from third party sources is affected
+* Region: This affects every region
+
+**Repro Steps**  
+Query the match API with a game ID from an ARAM: Mayhem game
+
+
+
+## comment by 1337MARCEL (NONE) 2025-10-22T22:27:32Z
+
+Asked Riot about it yesterday and they said it's unfortunately intended. 
+
+
+## comment by Jed-Mario-Dagher (NONE) 2025-11-10T17:47:58Z
+
+Any updates on this ? Do we have any way to get match history info related to ARAM: Mayhem games yet ?
+
+
+## comment by geozukunft (NONE) 2025-11-10T18:57:13Z
+
+Riot confirmed that ARAM: Mayhem data is not publicly available. People can check it out in the client but that's it
+
+
+## comment by metasrc (NONE) 2025-11-11T05:25:13Z
+
+> Riot confirmed that ARAM: Mayhem data is not publicly available. People can check it out in the client but that's it
+
+Can you provide a link to where a Riot representative confirmed this? Or are you basing it off of Marcel's response above?  While I agree that it is likely intentional and am not questioning Marcel's response, I think it would be better if these sorts of policies were communicated via more official channels, as they were when Brawl was intentionally blocked from the API.
+
+
+## comment by geozukunft (NONE) 2025-11-11T05:52:56Z
+
+This was confirmed to me in private so unfortunately there is nothing I can share. 
+There was no public statement for Doom Bots either, but as of right now and going forward they seem to no longer intend to make the data for new rotating game modes publicly available
+
+
+## comment by lucasMesquitaBorges (NONE) 2025-12-18T19:03:24Z
+
+Expected behavior. Mayhem matches are private.
+
+
+## comment by sweetArizCider (NONE) 2026-03-31T21:31:56Z
+
+any update for this to be public? 
+
+
+## comment by Cypherous (NONE) 2026-03-31T23:20:59Z
+
+> any update for this to be public?
+
+No, its private, there are no plans for that to change that anyone is aware of
+

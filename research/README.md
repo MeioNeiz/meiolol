@@ -25,3 +25,7 @@ Every finding starts with one or more tags. Add tags here before using them.
 | `needs` | what players say they want, pain points, complaints about existing tools |
 | `learning` | improvement and coaching tools: VOD/replay review, matchup guides, feedback |
 | `fun` | games, quizzes, social and friend features, community and creative tools |
+| `privacy` | player identity, Riot ID lookup, consent, data retention, GDPR, privacy policies |
+| `stats` | statistical estimation: smoothing, shrinkage, pooling, sample sizes, uncertainty |
+| `gui` | desktop GUI libraries and native windowing for the app |
+| `queues` | game modes, queue ids, which queues the API serves |

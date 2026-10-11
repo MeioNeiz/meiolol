@@ -1,0 +1,64 @@
+match-v5 per-queue probe, EUW, europe routing, personal key, 2026-10-11
+Method: puuids from euw1 challenger league (RANKED_SOLO_5x5) plus participants of one ARAM
+and one Arena match; GET by-puuid/{puuid}/ids?queue=Q&count=3 until a hit (up to 7 or 8
+players), then GET the first match summary and its timeline. 188 calls over three runs,
+1.3 s apart. puuids truncated; no key recorded. 200/0 means HTTP 200 with an empty list.
+
+Round 1 (pool: 3 challenger players, plus up to 4 ARAM/Arena players once found)
+queue | lists (status per player) | match | summary | queueId | gameMode | mapId | version | participants | subteams | timeline | frames | frameInterval
+450 | 200 | EUW1_7845926532 | 200 | 450 | ARAM | 12 | 16.9.772.8292 | 10 | 1 | 200 | 10 | 60000
+420 | 200 | EUW1_8005330559 | 200 | 420 | CLASSIC | 11 | 16.19.823.722 | 10 | 1 | 200 | 20 | 60000
+440 | 200 | EUW1_7944855955 | 200 | 440 | CLASSIC | 11 | 16.15.802.4387 | 10 | 1 | 200 | 34 | 60000
+400 | 200,200,200 | EUW1_7715593124 | 200 | 400 | CLASSIC | 11 | 16.2.741.3171 | 10 | 1 | 200 | 34 | 60000
+430 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+480 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+490 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+1700 | 200 | EUW1_7842540522 | 200 | 1700 | CHERRY | 30 | 16.9.772.1032 | 16 | 8 | 200 | 27 | 60000
+1710 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+1750 | 200 | EUW1_7862069785 | 200 | 1750 | CHERRY | 30 | 16.10.776.5552 | 18 | 6 | 200 | 26 | 60000
+2400 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+2300 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+900 | 200,200,200 | EUW1_7759739899 | 200 | 900 | URF | 11 | 16.4.748.682 | 10 | 1 | 200 | 13 | 60000
+1900 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+1020 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+1300 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+1400 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+1810 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+700 | 200 | EUW1_7721429163 | 200 | 700 | CLASSIC | 11 | 16.3.744.7656 | 10 | 1 | 200 | 38 | 60000
+720 | 200 | EUW1_7615166380 | 200 | 720 | ARAM | 12 | 15.23.728.3286 | 10 | 1 | 200 | 25 | 60000
+0 | 200,200,200,200,200,200,200 all empty | none | - | - | - | - | - | - | - | - | - | -
+
+Round 1 details per found match (first participant)
+450 EUW1_7845926532: placement 0, subteamId/subteamPlacement [0, 0], augments [0, 0, 0, 0, 0, 0], teamPosition '', win False, gameModeMutators [], endOfGameResult GameComplete, duration_s 502
+   timeline event types: CHAMPION_KILL CHAMPION_SPECIAL_KILL GAME_END ITEM_DESTROYED ITEM_PURCHASED ITEM_UNDO LEVEL_UP PAUSE_END SKILL_LEVEL_UP WARD_KILL WARD_PLACED
+420 EUW1_8005330559: placement 0, subteamId/subteamPlacement [0, 0], augments [0, 0, 0, 0, 0, 0], teamPosition 'TOP', win False, gameModeMutators None, endOfGameResult GameComplete, duration_s 1135
+   timeline event types: BUILDING_KILL CHAMPION_KILL CHAMPION_SPECIAL_KILL DRAGON_SOUL_GIVEN ELITE_MONSTER_KILL GAME_END ITEM_DESTROYED ITEM_PURCHASED ITEM_SOLD ITEM_UNDO LEVEL_UP OBJECTIVE_BOUNTY_FINISH OBJECTIVE_BOUNTY_PRESTART PAUSE_END SKILL_LEVEL_UP TURRET_PLATE_DESTROYED WARD_KILL WARD_PLACED
+440 EUW1_7944855955: placement 0, subteamId/subteamPlacement [0, 0], augments [0, 0, 0, 0, 0, 0], teamPosition 'TOP', win False, gameModeMutators None, endOfGameResult GameComplete, duration_s 1963
+   timeline event types: BUILDING_KILL CHAMPION_KILL CHAMPION_SPECIAL_KILL DRAGON_SOUL_GIVEN ELITE_MONSTER_KILL GAME_END ITEM_DESTROYED ITEM_PURCHASED ITEM_SOLD ITEM_UNDO LEVEL_UP OBJECTIVE_BOUNTY_FINISH OBJECTIVE_BOUNTY_PRESTART PAUSE_END SKILL_LEVEL_UP TURRET_PLATE_DESTROYED WARD_KILL WARD_PLACED
+400 EUW1_7715593124: placement 0, subteamId/subteamPlacement [0, 0], augments [0, 0, 0, 0, 0, 0], teamPosition 'TOP', win True, gameModeMutators None, endOfGameResult GameComplete, duration_s 1937
+   timeline event types: BUILDING_KILL CHAMPION_KILL CHAMPION_SPECIAL_KILL DRAGON_SOUL_GIVEN ELITE_MONSTER_KILL GAME_END ITEM_DESTROYED ITEM_PURCHASED ITEM_SOLD ITEM_UNDO LEVEL_UP OBJECTIVE_BOUNTY_FINISH OBJECTIVE_BOUNTY_PRESTART PAUSE_END SKILL_LEVEL_UP TURRET_PLATE_DESTROYED WARD_KILL WARD_PLACED
+1700 EUW1_7842540522: placement 7, subteamId/subteamPlacement [1, 7], augments [120, 1338, 195, 0, 0, 0], teamPosition '', win False, gameModeMutators None, endOfGameResult GameComplete, duration_s 1542
+   timeline event types: CHAMPION_KILL CHAMPION_SPECIAL_KILL GAME_END ITEM_DESTROYED ITEM_PURCHASED ITEM_SOLD ITEM_UNDO LEVEL_UP PAUSE_END SKILL_LEVEL_UP WARD_PLACED
+1750 EUW1_7862069785: placement 2, subteamId/subteamPlacement [6, 2], augments [89, 234, 195, 340, 364, 82], teamPosition '', win True, gameModeMutators None, endOfGameResult GameComplete, duration_s 1488
+   timeline event types: CHAMPION_KILL CHAMPION_SPECIAL_KILL GAME_END ITEM_DESTROYED ITEM_PURCHASED ITEM_SOLD ITEM_UNDO LEVEL_UP PAUSE_END SKILL_LEVEL_UP WARD_KILL WARD_PLACED
+900 EUW1_7759739899: placement 0, subteamId/subteamPlacement [0, 0], augments [0, 0, 0, 0, 0, 0], teamPosition '', win True, gameModeMutators None, endOfGameResult GameComplete, duration_s 663
+   timeline event types: BUILDING_KILL CHAMPION_KILL CHAMPION_SPECIAL_KILL ELITE_MONSTER_KILL GAME_END ITEM_DESTROYED ITEM_PURCHASED ITEM_SOLD ITEM_UNDO LEVEL_UP PAUSE_END SKILL_LEVEL_UP TURRET_PLATE_DESTROYED WARD_KILL WARD_PLACED
+700 EUW1_7721429163: placement 0, subteamId/subteamPlacement [0, 0], augments [0, 0, 0, 0, 0, 0], teamPosition 'TOP', win True, gameModeMutators None, endOfGameResult GameComplete, duration_s 2216
+   timeline event types: BUILDING_KILL CHAMPION_KILL CHAMPION_SPECIAL_KILL DRAGON_SOUL_GIVEN ELITE_MONSTER_KILL GAME_END ITEM_DESTROYED ITEM_PURCHASED ITEM_SOLD ITEM_UNDO LEVEL_UP OBJECTIVE_BOUNTY_FINISH OBJECTIVE_BOUNTY_PRESTART PAUSE_END SKILL_LEVEL_UP TURRET_PLATE_DESTROYED WARD_KILL WARD_PLACED
+720 EUW1_7615166380: placement 0, subteamId/subteamPlacement [0, 0], augments [0, 0, 0, 0, 0, 0], teamPosition '', win False, gameModeMutators [], endOfGameResult GameComplete, duration_s 1428
+   timeline event types: BUILDING_KILL CHAMPION_KILL CHAMPION_SPECIAL_KILL GAME_END ITEM_DESTROYED ITEM_PURCHASED ITEM_SOLD ITEM_UNDO LEVEL_UP PAUSE_END SKILL_LEVEL_UP
+
+Round 2 (8 more players: participants of the ARAM match EUW1_7845926532 and Arena match EUW1_7862069785)
+queue 2400: lists 200/0 200/0 200/0 200/0 200/0 200/0 200/0 200/0; hit None
+queue 490: lists 200/0 200/0 200/0 200/0 200/0 200/0 200/0 200/0; hit None
+queue 480: lists 200/0 200/0 200/0 200/0 200/0 200/0 200/0 200/0; hit None
+queue 430: lists 200/0 200/0 200/0 200/0 200/0 200/0 200/0 200/0; hit None
+queue 1900: lists 200/0 200/0 200/0 200/0 200/0 200/0 200/0 200/0; hit None
+queue 1710: lists 200/0 200/0 200/0 200/0 200/0 200/0 200/0 200/0; hit None
+unfiltered ids?count=8 for r_FxS9FD...: EUW1_8009957362 200 queue 450 16.20.824.8524; EUW1_8009955566 200 queue 450 16.20.824.8524; EUW1_8009931974 200 queue 450 16.20.824.8524; EUW1_8009902398 200 queue 450 16.20.824.8524; EUW1_8009883132 200 queue 450 16.20.824.8524; EUW1_8008921242 200 queue 450 16.20.824.8524; EUW1_8008920844 200 queue 450 16.20.824.8524; EUW1_8008905067 200 queue 450 16.20.824.8524
+unfiltered ids?count=8 for uzaWbwUK...: EUW1_8010013713 200 queue 420 16.20.824.8524; EUW1_8009932161 200 queue 420 16.20.824.8524; EUW1_8009914706 200 queue 420 16.20.824.8524; EUW1_8009877212 200 queue 420 16.20.824.8524; EUW1_8009642330 200 queue 420 16.20.824.8524; EUW1_8009593935 200 queue 420 16.20.824.8524; EUW1_8009550221 200 queue 420 16.20.824.8524; EUW1_8009517163 200 queue 420 16.20.824.8524
+
+Round 3 (match ids quoted in developer-relations issues)
+EUW1_7261321891 (Swiftplay 480, #1025): summary 200 queueId 480 gameMode SWIFTPLAY version 15.1.647.8644 timeline 200 frames 24
+EUW1_7383662079 (Swiftplay, #1068): summary 404
+EUW1_7236792459 (Quickplay with bots, #1020): summary 404

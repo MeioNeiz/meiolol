@@ -1,0 +1,956 @@
+Statistical Science
+2009, Vol. 24, No. 2, 211–222
+DOI: 10.1214/09-STS293
+c Institute of Mathematical Statistics, 2009
+
+arXiv:1001.2697v1 [stat.ME] 15 Jan 2010
+
+Longitudinal Data with Follow-up
+Truncated by Death: Match the Analysis
+Method to Research Aims
+Brenda F. Kurland, Laura L. Johnson, Brian L. Egleston and Paula H. Diehr
+
+Abstract. Diverse analysis approaches have been proposed to distinguish data missing due to death from nonresponse, and to summarize
+trajectories of longitudinal data truncated by death. We demonstrate
+how these analysis approaches arise from factorizations of the distribution of longitudinal data and survival information. Models are illustrated using cognitive functioning data for older adults. For unconditional models, deaths do not occur, deaths are independent of the longitudinal response, or the unconditional longitudinal response is averaged
+over the survival distribution. Unconditional models, such as random
+effects models fit to unbalanced data, may implicitly impute data beyond the time of death. Fully conditional models stratify the longitudinal response trajectory by time of death. Fully conditional models
+are effective for describing individual trajectories, in terms of either
+aging (age, or years from baseline) or dying (years from death). Causal
+models (principal stratification) as currently applied are fully conditional models, since group differences at one timepoint are described
+for a cohort that will survive past a later timepoint. Partly conditional
+models summarize the longitudinal response in the dynamic cohort of
+survivors. Partly conditional models are serial cross-sectional snapshots
+of the response, reflecting the average response in survivors at a given
+timepoint rather than individual trajectories. Joint models of survival
+and longitudinal response describe the evolving health status of the entire cohort. Researchers using longitudinal data should consider which
+method of accommodating deaths is consistent with research aims, and
+use analysis methods accordingly.
+Key words and phrases: Censoring, generalized estimating equations,
+longitudinal data, missing data, quality of life, random effects models,
+truncation by death.
+
+Brenda F. Kurland is Ph.D. Assistant Member, Clinical
+Research Division, Fred Hutchinson Cancer Research
+Center, 1100 Fairview Ave. N. D5-360, P.O. Box
+19024, Seattle, Washington 98109-1024, USA e-mail:
+bkurland@fhcrc.org. Laura L. Johnson is Ph.D.
+Statistician, Office of Clinical and Regulatory Affairs,
+National Center for Complementary and Alternative
+Medicine, National Institutes of Health, 6707
+Democracy Blvd. Suite 401, MSC 5475 Bethesda,
+Maryland 20892-5475, USA, e-mail:
+
+johnslau@mail.nih.gov. Brian L. Egleston is Ph.D.
+Associate Member, Biostatistics Facility, Fox Chase
+Cancer Center, 333 Cottman Ave., Philadelphia,
+Pennsylvania 19111-2497, USA e-mail:
+Brian.Egleston@fccc.edu. Paula H. Diehr is Ph.D.
+Professor, Departments of Biostatistics and Health
+Services, Box 357232 University of Washington, Seattle,
+Washington 98195-7232, USA e-mail:
+pdiehr@u.washington.edu.
+1
+
+2
+
+KURLAND, JOHNSON, EGLESTON AND DIEHR
+
+1. INTRODUCTION
+Research studies often collect information at multiple timepoints. For example, the Cardiovascular
+Health Study (CHS), an observational study of 5888
+older adults, conducted annual assessments of cardiovascular functioning and other health measures
+for up to 18 years. With these longitudinal measurements, CHS data have been used to study disease course (Kaplan et al., 2005), health in the years
+leading up to a diagnosis (Diehr et al., 2001b) and
+the natural history of aging (Burke et al., 2001;
+Diehr et al., 2002).
+Missing data can be an impediment to interpreting longitudinal data. Suppose a cohort of 200 subjects report self-rated health at age 70 years, and
+only 150 of these subjects are located for follow-up.
+If the average self-rated health at age 75 is higher
+than the average at 70, the increase could reflect improvement in individuals’ health, attrition of sicker
+participants or death of sicker participants.
+Many analysis methods for longitudinal data with
+dropout and nonresponse have been proposed to address different research aims, study designs, missing
+data patterns and estimation strategies (Little and
+Rubin, 1987; Rubin, 1987; Robins, Rotnitzky and
+Zhao, 1995). Comparatively little work in statistical methodology has addressed data missing when
+deaths occur during the period of follow-up, and recent work has focused mostly on principal stratification (Frangakis and Rubin, 2002; Frangakis et al.,
+2007). Kurland and Heagerty (2005) characterized
+targets of inference for longitudinal data truncated
+by death by factorizations of the joint distribution of
+survival and longitudinal response, f (S, Y). The factorization was introduced primarily to provide context for a single approach, the partly conditional
+mean model. In this article, we explore several targets of inference in detail, and give guidance on appropriate analysis techniques for common scientific
+questions arising for longitudinal data truncated by
+death. We present six modeling options, illustrated
+using both hypothetical and actual CHS data. The
+hypothetical data without measurement error illustrate clearly how modeling choices for longitudinal
+
+data reflect assumptions about survival. The real
+data illustrate how standard analysis techniques such
+as random effects models and generalized estimating
+equations (GEE) may be applied to address different
+research aims involving longitudinal data truncated
+by death. Bias, estimation and efficiency are important issues for data analysis. However, we focus only
+on our primary interest, the interpretation of regression model estimands. Although each model is used
+to fit a slope and expected response values, these
+estimands for the longitudinal response are “apples
+and oranges,” not directly comparable due to different factorizations of longitudinal response and survival.
+2. BACKGROUND: FOLLOW-UP CENSORED
+BY NONRESPONSE (DROPOUT)
+
+A brief review of models for longitudinal data with
+monotone dropout provides a foundation for discussing analysis of longitudinal data truncated by
+death. Two common, widely applied analysis methods for longitudinal data are random effects models (Laird and Ware, 1982) and generalized estimating equations (GEE) (Liang and Zeger, 1986). By
+modeling a structure for the correlation between
+subjects’ longitudinal responses, a correctly specified random effects model will yield consistent, unbiased estimates of regression parameters by maximum likelihood estimation, even with unbalanced
+data (Laird, 1988). For example, if sicker participants drop out, their trajectory of decline in selfrated health is continued implicitly by a well-specified
+random effects model. If trends for dropouts can be
+inferred from observed data and parameters for longitudinal response and dropout are distinct (missing at random, such as when scores decline before
+dropout), the missingness is ignorable and the overall rate of change may be analyzed as if no one has
+dropped out. If the decline in health that leads to
+dropout starts after the last recorded measurement,
+then dropout is nonignorable, and random effects
+models are not an easy solution. Untestable assumptions must be made about nonignorable dropout
+processes to model longitudinal trends (Laird, 1988).
+GEE can accommodate data missing at random if
+estimating equations are weighted by the inverse
+This is an electronic reprint of the original article
+published by the Institute of Mathematical Statistics in probability of dropout (Robins, Rotnitzky and Zhao,
+1995). Giving additional weight to observed data
+Statistical Science, 2009, Vol. 24, No. 2, 211–222. This
+for people who were likely to drop out is similar to
+reprint differs from the original in pagination and
+typographic detail.
+implicit or explicit imputation of unobserved data.
+
+3
+
+LONGITUDINAL DATA TRUNCATED BY DEATH
+
+In fact, under some conditions, weighted GEE and
+imputation will give the same results (Paik, 1997).
+Missing at random is often a reasonable assumption, especially when longitudinal observations are
+closely spaced relative to mechanisms acting on both
+dropout and response. For example, preclinical cognitive changes could likely be detected by annual
+assessments before a CHS participant becomes impaired by dementia in a way that would lead to
+nonresponse. However, analysis of longitudinal data
+with MAR dropout still requires accurate modeling
+of the regression model (fixed effects) and either correlation (for random effects models) or dropout (for
+weighted GEE) (Kurland and Heagerty, 2004).
+
+Table 1
+Longitudinal 3MSE scores for 4 hypothetical CHS
+participants (X = deceased)
+Age
+Participant
+
+70
+
+71
+
+72
+
+73
+
+74
+
+75
+
+A (“normal”)
+B (“mild cognitive impairment”)
+C (“terminal decline”)
+D (“terminal decline”)
+
+90
+84
+84
+65
+
+90
+82
+80
+50
+
+90
+80
+76
+35
+
+90
+78
+X
+X
+
+90
+76
+X
+X
+
+90
+74
+X
+X
+
+scores (5174 of 31093) were missing due to participant nonresponse, but most participants with missing data had only one or two scores missing (n = 948
+participants). Some participants had dropped out of
+3. DATA EXAMPLES AND NOTATION
+the study, and were missing 7 or more scores each
+3.1 Cardiovascular Health Study (CHS)
+(n = 134). Nonresponse was accommodated by sinThe Cardiovascular Health Study (CHS) was a gle imputation using the Markov Chain Monte Carlo
+population-based prospective longitudinal study of method of PROC MI in the SAS/STAT software,
+5888 adults aged 65 years and older at baseline version 9.1 (SAS Institute, Inc., Cary, NC). Impu(Fried et al., 1991). Cognitive functioning was as- tation was stratified by time of death (for decedents)
+sessed annually for up to 10 years by the Modi- and recruitment group (for nondecedents), and was
+fied Mini-Mental State Examination (3MSE, scored modeled based on observed 3MSE values, baseline
+from 0 to 100) (Teng and Chui, 1987). Our primary age, gender and recruitment group.
+Accommodation of deaths in CHS data also will
+goal in the CHS analysis is to describe the trajectory
+be
+described using simplified hypothetical data. Taof cognitive functioning (3MSE) over time, and to
+1 shows 3MSE data for 4 hypothetical particible
+estimate 3MSE scores at different ages. Gender efpants
+with a baseline age of 70. Participant A, repfects are explored in each analysis to add a betweenperson variable of interest to the longitudinal (within- resenting normal cognitive functioning, has a 3MSE
+person changes) model, and to explore the effects of 90 points at all assessments. Participant B’s linof differential survival on different regression ap- ear decline from 84 to 74 points over 5 years reflects
+proaches for longitudinal and survival data. We ex- a possible trajectory of mild cognitive impairment
+amine the 3814 participants aged 70 years and older (which could be interpreted as preclinical Alzheimer’s
+at baseline. In this cohort, 1356 participants (36%) disease). Participants C and D both decline between
+died during follow-up: 44% (744/1703) of men and baseline and age 72, and die before age 73.
+29% (612/2111) of women. We will examine how 3.2 Notation
+different analysis methods each yield 3MSE trajecVector Yi represents the longitudinal response (i.e.,
+tories (rates of change) and fitted values (expected
+cognitive
+functioning or quality of life), measured at
+cognitive status at specific ages), but address differmultiple
+timepoints
+for participant i. The dimenent research aims.
+Although models may be constructed to accom- sion of Yi may differ for individuals (values of i),
+modate
+both
+deaths
+and
+nonresponse due to death. For example, in Table 1 (hypotheti(Kurland and Heagerty, 2005), we imputed data cal CHS data), responses for participant A, YA , are
+missing due to nonresponse for simplicity of presen- the vector (90, 90, 90, 90, 90, 90), and for participant
+tation. Data were not considered missing if follow-up C, YC , are (84, 80, 76). Scalar variable Si represents
+was truncated by death, or censored by the end of survival time for participant i, such as age at death
+the study period. (A later cohort to boost minority or weeks from baseline until death: in Table 1, SC
+recruitment received 6 annual assessments instead is 73 years. The dimension of Yi is determined by
+of 10.) Most participants (n = 2061, 54%) completed the value of Si , but is not in principle affected by
+all scheduled 3MSE assessments. About 17% of 3MSE data missing due to nonresponse. In practice, the
+
+4
+
+KURLAND, JOHNSON, EGLESTON AND DIEHR
+Table 2
+Summary of statistical models for longitudinal response and survival (time of death)
+Statistical model
+
+a.
+
+b.
+
+c.
+
+d.
+
+e.
+
+f.
+
+Sample research setting
+
+Primary analysis
+method
+
+Comments
+
+Rate of local recurrence following ablation of liver tumors
+
+Mixed effects / random effects / latent
+variable regression
+
+May implicitly impute
+data beyond death
+
+Mixed effects / random effects regression
+stratified by survival
+time
+
+Describes individual trajectories, but uses future
+survival information to
+predict earlier responses
+
+Fully conditional: principal stratification f (Yi (z)|Si (0) > s, Si (1) > s)
+Describe average causal treat- Average QOL difference for Weighted averaging of
+outcomes
+ment effect for stratum that toxic treatment with greater estimated
+would survive past time s re- survival, versus less toxic treat- from models such
+ment with lesser survival, in as generalized linear
+gardless of treatment
+subjects expected to live 6+ models
+months on either treatment
+
+Weights are unidentifiable and must be explored through strong assumptions and/or sensitivity analysis
+
+Unconditional f (Yi )
+Describe Yi (longitudinal response) in setting where survival (Si ) is unrelated to Yi ,
+or when death does not result
+in missing data
+
+Fully conditional: pattern-mixture f (Yi |Si = s)
+Describe Yi separately for Longitudinal change in physigroups defined by survival cal functioning following stroke,
+separately for < 1, 1–5, and > 5time
+year survivors
+
+Fully conditional: terminal decline f (Yi |Si = s)
+Describe Yi counting back- Terminal decline studies
+ward from time of death
+
+Mixed effects / random effects regression
+
+Time scale is retrospective
+
+Partly conditional: regression conditioning on being alive f (Yi |Si > t)
+Describe Yi in the dynamic co- Average physical functioning in GEE with indepenhort of survivors at each time- survivors at 6 months and 5 dence working correlation
+years after stroke
+point
+
+Describes
+longitudinal
+trend of dynamic cohort,
+not individuals
+
+Joint model f (Yi |Si )
+Describe both Yi and Si for
+example, “probability of being
+alive and healthy”
+
+Continuous longitudinal
+outcomes may need to be
+categorized for analysis
+
+Percent of stroke patients who
+are alive and can perform selfcare 6 months after stroke
+
+analysis in Section 4 uses imputation of data missing due to nonresponse to ensure that the observed
+response vector is of the proper dimension. The joint
+distribution f (Yi , Si ) describes the probability that
+Yi takes on a vector of specific values, and that participant i dies at a specific time. We assume that
+(Yi , Si ) are independent and identically distributed
+over i.
+4. STATISTICAL MODELS FOR
+LONGITUDINAL RESPONSE AND SURVIVAL
+Regression models for longitudinal data describe
+the relationship between predictors and the longitudinal response, Yi . Because survival Si determines
+
+Logistic
+regression,
+GEE (binary outcome);
+specialized
+multiple
+response
+methods
+
+the length of Yi and is not fixed, regression models
+of longitudinal data truncated by death must explicitly or implicitly model survival as well. A single
+regression model could be built for the joint distribution f (Yi , Si ), or for factorizations based on
+the definitions of joint and conditional distributions:
+f (Yi |Si )f (Si ) or f (Si |Yi )f (Yi ). We will characterize models for Yi as unconditional, fully conditional
+or partly conditional based on how, or whether, the
+longitudinal response model conditions on Si . These
+models are defined in more detail below, and summarized in Table 2. Each model is applied to the
+hypothetical (Table 3) and actual (Figure 1) CHS
+data. Models are fit to data for all participants, but
+
+LONGITUDINAL DATA TRUNCATED BY DEATH
+
+5
+
+Table 3
+Hypothetical CHS data (Table 1) estimated age 75 3MSE score and 3MSE slope, using models that accommodate deaths in
+different ways. Even a predicted value for the response, such as “3MSE at age 75,” represents a different estimand for each
+model
+
+a.
+
+b.
+
+Sample research question(s)
+
+3MSE at age 75
+
+Linear 3MSE slope (annual change in 3MSE)
+
+Unconditional f (Yi )
+What is the expected 3MSE at age 75, in an
+immortal cohort?
+
+90+74+64+(−10)
+= 54.5
+4
+
+0+(−2)+(−4)+(−15)
+= −5.25 points per year
+4
+
+90+74
+= 82 points
+2
+
+0+(−2)
+= −1.0 points per year
+2
+
+(both deceased at age 75)
+
+−4+(−15)
+= −9.5 points per year
+2
+
+Fully conditional: survivors f (Yi |Si > 75)
+What is the expected 3MSE at age 70 or at
+age 75, for people who live to be at least 75?
+Fully conditional: decedents f (Yi |Si ≤ 75)
+What is the expected 3MSE at age 70 for people who die at age 71–75?
+
+points
+
+c.
+
+Fully conditional: principal stratification f (Yi (z)|Si (0) > 9, Si (1) > 9)
+What is the causal effect of gender on expected (causal effect not estimated for hypothetical data)
+3MSE scores at the fourth or ninth survey
+among those who would live to the ninth survey regardless of gender?
+
+d.
+
+Fully conditional: terminal decline f (Yi |Si = s)
+What is the expected 3MSE two years before (not estimated directly)
+death?
+
+e.
+
+f.
+
+Partly conditional: regression conditioning on being alive f (Yi |Si > t)
+What is the expected 3MSE at age 70 for peo- 76.2 + 0.92∗ 5 = 80.8
+ple who live to be at least 70, or at age 75 for points
+people who live to be at least 75?
+Joint model f (Yi , Si )
+What is the probability of being alive and
+healthy at age 75 for people who were alive
+at age 70?
+
+1
+alive and 3MSE ≥ 80 at
+4
+
+age 75
+
+Figure 1 shows fitted 3MSE values for a baseline
+age of 70 years. Clearly the estimators (functions of
+sample data) are different for the 6 methods shown
+for finding 3MSE fitted values and slopes. However,
+we emphasize that the estimands are also different:
+the linear slope in an unconditional model is not
+the same as the linear slope in a fully conditional
+model. We assume each estimator is unbiased for its
+estimand, and focus on interpretation of the estimands.
+
+0.92 points per year
+
+1
+on average 10
+lose health/life each year
+3
+(since 4 healthy at age 70, and 41 healthy
+at age 75)
+
+distribution f (Yi ) reflects averaging f (Yi |Si ) over
+the survival function f (Si ), as demonstrated below.
+Unconditional regression models cognitive functioning at all timepoints as if nobody died, in an “immortal cohort” (Dufouil, Brayne and Clayton, 2004).
+The unconditional average 3MSE at age 75 years in
+the CHS hypothetical data is as follows:
+E(Y|age = 75)
+= E(Y|age = 75, S > 75) · P(S > 75)
+
+4.1 f (Yi ) Unconditional
+An unconditional model, f (Yi ), is appropriate if
+deaths do not occur, are independent of the response
+process, or do not result in truncation (if the response has a well-defined value following death). If
+these stipulations are not met, the unconditional
+
+−9.5 points per year (same as row b
+decedents—changing time scale does not
+make a difference with only one stratum of
+decedents)
+
++ E(Y|age = 75, S ≤ 75) · P(S ≤ 75)
+=
+
+90 + 74 2
+2
+· +? · .
+2
+4
+4
+
+For analysis methods for which “missing at random” nonresponse mechanisms are ignorable—such
+
+6
+
+KURLAND, JOHNSON, EGLESTON AND DIEHR
+
+Fig. 1. Fitted Modified Mini-Mental State Examination (3MSE) trajectories for CHS participants aged 70 years at baseline,
+using different models to summarize longitudinal response (3MSE) and survival. Fitted values over time are shown as solid
+lines for males, and as dashed lines for females.
+
+as for likelihood-based models fit to unbalanced longitudinal data—the value of ? is imputed implicitly because of the structure imposed by correlation between each subject’s longitudinal observations (Laird, 1988). We convey this implicit imputation by projecting the hypothetical 3MSE data
+of deceased participants based on individual slopes.
+This extrapolation is more extreme than estimates
+
+would be with real data, since estimation of fixed effects in random effects models will be influenced by
+regression to the mean and other shrinkage (Robinson,
+1991). Extending the Table 1 trajectories for Participants C and D linearly, the “incomplete” response
+vectors (84, 80, 76) and (65, 50, 35) are imputed to
+(84, 80, 76, 72, 68, 64) and (65, 50, 35, 20, 5, −10). Par-
+
+LONGITUDINAL DATA TRUNCATED BY DEATH
+
+ticipant D’s imputed response at age 75 (−10 points)
+is inappropriate, outside the range of the 3MSE.
+An unconditional model uses both observed and
+implicitly imputed data to estimate linear 3MSE
+slope and 3MSE at age 75 (Table 3, row a). Completing the estimate of 3MSE at age 75,
+90 + 74 2 64 + (−10) 2
+· +
+·
+2
+4
+2
+4
+= 54.5.
+
+E(Y|age = 75) =
+
+The age 75 fitted 3MSE (54.5 points) and linear
+3MSE slope (5.25 point decline per year) both yield
+lower estimates of cognitive functioning at age 75
+than are observed for participants alive at age 75,
+because 3MSE values are imputed beyond death.
+The unconditional model of 3MSE scores by age
+in the CHS data (Figure 1a) is a random effects linear regression, separating the effects of age and aging (Neuhaus and Kalbfleisch, 1998) in a quadratic
+model with random intercept and first-order polynomial:
+3MSEij = β0 + b0i + β1 · malei + β2 · age0i
++ (β3 + b1i ) · yearij + β4 · year2ij
++ β5 · malei · yearij + β6 · malei · year2ij
++ εij ,
+
+7
+
+and 77 points at age 79. The unconditional model
+suggests rather strong age-associated declines in cognitive functioning, but the estimand is the trajectory
+for an immortal cohort in which truncation by death
+does not occur.
+In rare cases, implicit imputation beyond death
+may be reasonable. When evaluating local recurrence following ablation of liver tumors, some livers may “die” due to transplant. Tumor marker levels (Yi ) and transplant candidacy (Si ) are related.
+However, since the transplant rate will never be 100%,
+an unconditional model and implicit imputation beyond transplant may be valid. The research question
+addressed is, “What would the tumor marker levels
+be if no transplants had occurred, but the markers
+had continued along the exact path that led to transplant?” While this question is relevant to liver transplants, the CHS examples show that unconditional
+models are generally inappropriate for longitudinal
+data with considerable imbalance due to death.
+4.2 f (Yi |Si = s) Fully Conditional
+Sometimes only subjects who survive to the end of
+the study are included in analysis, or decedents are
+analyzed separately from nondecedents. An analogy in the missing data literature is pattern-mixture
+models (Little, 1995; Fitzmaurice and Laird, 2000),
+which stratify by the time of dropout. Pattern-mixture
+models may be fit using the same methods as unconditional models (random effects regression, etc.)
+but are made fully conditional by fitting separate
+regression models to strata defined by time of death.
+Generally a categorical variable defined by
+survival time is used as a main effect (and interaction term) in regression models, so that longitudinal trajectories are fit for groups defined by time of
+death (Ribaudo, Thompson and Allen-Mersh, 2000;
+Pauler, McCoy and Moinpour, 2003). An advantage
+of this approach is accurate representation of individuals’ scores over time. Principal stratification
+(Frangakis and Rubin, 2002; Rubin, 2006) examines
+causal effects by using counterfactual survival to create strata. Another stratification based on time of
+death examines the “dying process” for decedents
+only, with years until death as the timescale for examining terminal decline (Siegler, 1975; Diehr et al.,
+2002; Wilson et al., 2003).
+
+where age0i is the baseline age of participant i (in
+years), and yearij is the study year (years since baseline age) for participant i at timepoint j. malei is a
+dichotomous variable (with value 0 if the participant
+is female and value 1 if the participant is male), and
+random intercept, slope and error (b0i , b1i , and εij )
+are normally distributed with mean 0. Likelihoodbased methods such as random effects regression will
+fit an unconditional model, since they treat any imbalance in the data as “missing at random.” Interactions between sex and linear and quadratic terms
+are included as potential predictors of interest. Figure 1a shows the fitted “average” trajectories for
+males and females (thick lines, b0i = b1i = εij = 0),
+and several fitted trajectories for individuals (thin
+lines, selected b0i and b1i ). The random intercepts
+and slopes allow a wide range of individual fitted trajectories. However, time trends and other covariate
+effects are generally interpreted based on the mean
+model (thick lines), which reflects both observed
+4.2.1 Pattern-mixture. Computing linear slopes
+data and data implicitly imputed beyond death. According to this average trajectory, the expected 3MSE separately for decedents and survivors in the hyfor both males and females is 86 points at age 75, pothetical CHS data (Table 3, row b) demonstrates
+
+8
+
+KURLAND, JOHNSON, EGLESTON AND DIEHR
+
+minimal decline in survivors [1 point per year] and
+terminal decline for decedents [row b(2), 9.5 points
+per year]. However, since the time of death is not
+known in advance, these models could not be used
+to predict an individual’s trajectory based on baseline information.
+In a pattern-mixture model fit to CHS data,
+quadratic time trends are stratified by year of death
+relative to baseline. Figure 1b shows fitted mean
+3MSE trajectories for a baseline age of 70 years.
+The pattern-mixture model demonstrates terminal
+decline in participants who died (fitted lines that
+end before age 79), and reasonably stable cognitive
+functioning in participants who survived. The fitted 3MSE at age 75 ranged from 75 points in males
+who died by age 76, to 91 points in males and females who enrolled at age 70 and survived at least
+to age 79. The fitted mean trajectories are closer to
+trajectories observed for individuals than the unconditional model, but require conditioning on survival
+time, which is not known at baseline.
+
+years of study enrollment, and 0 otherwise.
+Let Si (z) similarly denote the potential survival time
+for person i with gender z, and Si (z) determines
+the dimension of Yi (z). We are interested in the
+3MSE scores among those in whom Di (0) = 0 and
+Di (1) = 0. Let Xi represent a vector of potentially
+confounding covariates; we only include age as a confounding covariate. To identify potential outcomes
+at each time point, we make the explainable nonrandom survival assumption and use the estimator of
+Hayden, Pauler and Schoenfeld (2005). Explainable
+nonrandom survival assumes that Di (z)⊥Di (1−z)|Xi
+and Di (z)⊥Yi (1 − z)|Xi , Di (1 − z) = 0 where ⊥ represents conditional independence. This assumption
+heuristically states that counterfactual outcomes will
+be conditionally independent of the observed outcomes. We need such an assumption since we do not
+observe counterfactual outcomes for study
+participants; for example, we do not observe 3MSE
+scores that women in the study would have had if
+they had been born men. We also make a pseudorandomization assumption that the potential out4.2.2 Principal stratification. Another fully con- comes are independent of gender given Xi as deditional approach is to estimate causal effects for tailed in Egleston et al. (2007). Pseudo-randomization
+selected principal strata defined by potential basically states that the “assignment” of gender is
+survival outcomes (Frangakis and Rubin, 2002; analogous to a random coin toss given a set of conHayden, Pauler and Schoenfeld, 2005; Egleston et al., founding covariates. We appreciate that some might
+2007; Egleston, Scharfstein and MacKenzie, 2009). feel that gender is inappropriate for such a causal
+Men are generally more likely to die than women analysis even as a didactic example, since gender
+at any given age. Do women have lower incidence cannot be manipulated (Holland, 1986).
+of mental and physical decline, or are they able to
+Figure 1c shows fitted 3MSE scores for particisurvive with greater deficits than men? By examin- pants aged 70–75 at baseline who would survive 9
+ing only a hypothetical group that would survive to years regardless of gender. Men and women are both
+a certain timepoint regardless of gender, we can de- predicted to have stable scores on average for four
+couple the association of gender and cognitive func- years after baseline, and to decline an average of
+tion from the association of gender and survival. 3.7 points in men and 5.0 points in women over
+We estimate the association of gender and cognitive the following five-year period. Trajectories for men
+function only in the stratum of patients expected to and for women look similar to the survivor cohort
+live nine years from age 70–75 regardless of gender. in the pattern-mixture model (Figure 1b). In other
+The interpretation of these fully conditional models words, when survival is held comparable for both
+differs from pattern-mixture models, because prin- genders, men may show an advantage in cognitive
+cipal stratification models are conditioned on both functioning. This could reflect an ability for women
+observed and counterfactual survival status. Gener- to survive when cognitive functioning is diminished.
+ally, untestable assumptions are necessary to iden- Cognitive impairment may occur at the same rate in
+tify effects within the principal strata.
+men and women, but may be associated with greater
+Specification of principal stratification models re- mortality risk in men.
+quires additional notation to describe potential outOne concern with this approach is that explaincomes. For z = {0 for women, 1 for men}, let Di (z) able nonrandom survival is a very strong
+be an indicator for potential death by a specified assumption. A number of sensitivity analysis aptime and Yi (z) denote potential 3MSE scores. For proaches are available to investigate whether deviathis analysis, Di (z) = 1 if a person dies within 9 tions from this assumption could influence
+
+LONGITUDINAL DATA TRUNCATED BY DEATH
+
+9
+
+inferences (Hayden, Pauler and Schoenfeld, 2005; on the subjects being alive at time tij . This conEgleston et al., 2007; Egleston, Scharfstein and ditioning may seem trivial: after all, data are not
+MacKenzie, 2009). Still, some investigators have collected posthumously. However, as is well docuadvocated that the use of relatively strong mented for data missing due to nonresponse (Laird,
+assumptions to uniquely identify principal strata ef- 1988), analysis methods that model the correlation
+fects is justifiable (Joffe, Small and Hsu, 2007; structure of longitudinal data (such as mixed modElliott, Joffe and Chen, 2006).
+els) will implicitly impute responses, whether missThe principal stratification approach is better suited ing due to dropout or death (Dufouil, Brayne and
+to estimating causal effects for interventions than Clayton, 2004; Kurland and Heagerty, 2005). Partly
+to describing the prognosis for individuals. Survival conditional regression models may be estimated by
+status and nonidentifiable assumptions about coun- assuming independence among the longitudinal reterfactual survival are both part of the estimand for sponses. In that sense, they may be fit using lincausal effects within each principal stratum.
+ear regression or generalized linear models. How4.2.3 Terminal decline. A third fully conditional ever, generalized estimating equations (with indeCHS model examines terminal decline. Rather than pendence working correlation) allow estimation of
+counting forward in years of age, the time scale for sandwich standard errors.
+Partly conditional “regression conditioning on bethis analysis counts backward from death. The 2458
+ing
+alive” (Kurland and Heagerty, 2005) (RCA) departicipants who are alive at the end of follow-up
+scribes
+3MSE scores at different ages among the sur(64%) are excluded, since their age at death is not
+known. As in earlier models, a random effects model viving participants. For the hypothetical CHS data,
+is fit with quadratic time and random intercept and RCA estimates of average 3MSE at age 75 and linear 3MSE slope are calculated using linear regresslope. However, the time scale is changed:
+sion (Table 3, row e). Implicit imputation is avoided
+3MSEij = β0 + b0i + β1 · malei + β2 · age0i
+by treating observations from the same person as
+independent. RCA accurately shows that the preva+ (β3 + b1i ) · yr fr deathij
+lent cognitive functioning level is slightly higher at
++ β4 · yr fr death2ij
+age 75 (82 points is the average 3MSE for survivors
+A and B, estimated as 80.8 by imposing a single
++ β5 · malei · yr fr deathij
+linear slope to all observed data), compared to age
++ β6 · malei · yr fr death2ij + εij ,
+70 (80.8 point average for A–D, estimated as 76.2
+where yr fr death ranges from −1 (one year before by linear regression). The partly conditional slope
+the year of death) to −9 (9 years before), and other predicts that average 3MSE increases 0.92 points
+variables are as described in Section 4.1. Figure 1d per year, despite that no individuals have increasshows fitted average terminal decline trajectories for ing 3MSE scores. Partly conditional regression remen and women with baseline age 70. The estimated flects 3MSE in the dynamic cohort of survivors, not
+rate of decline is about 4.7 points per year, plus individual subjects change in cognitive functioning.
+The partly conditional RCA model avoids implicit
+the effect of a negative quadratic coefficient (−0.3).
+The fitted 3MSE score 6 years before death is about imputation of data for deceased subjects, and de87 points, close to the average baseline value (88 scribes longitudinal 3MSE for the dynamic cohort of
+points) for the 70-year-olds at baseline. For this co- survivors (Dufouil, Brayne and Clayton, 2004;
+hort of decedents, averaging over yr fr death and Kurland and Heagerty, 2005). The regression equamale, the expected 3MSE at age 75 is 85 points, tion is similar to that for the unconditional and
+and at age 79 is 82 points. The rate of terminal de- pattern-mixture models, but does not include a rancline reflects the combined influence of the most dra- dom intercept or slope:
+matic declines and the more stable 3MSE patterns
+observed in the multiple pattern-mixture fitted trajectories for decedents.
+4.3 f (Yi |Si > t) Partly Conditional
+For partly conditional models, the expected value
+of Yij (response of subject i at time tij ) conditions
+
+3MSEij = β0 + β1 · malei + β2 · age0i + β3 · yearij
++ β4 · year2ij + β5 · malei · yearij
++ β6 · malei · year2ij + εij .
+Figure 1e shows expected 3MSE scores for participants who entered the study at age 70, given that
+
+10
+
+KURLAND, JOHNSON, EGLESTON AND DIEHR
+
+around the PAH estimate (Johnson, 2002). The percent alive and healthy is not always decreasing: individuals may regain “health,” such as when a low
+3MSE score was due to short-term side effects of
+medication. Like the partly conditional model, the
+joint model describes the cohort, rather than trends
+for individuals. Unlike the partly conditional model,
+the entire cohort is described at each timepoint, not
+only survivors. (The end of follow-up for the minority recruitment group could affect differences seen
+between ages 70–76 and 77–79. We avoid implicit
+imputation beyond 6 years by computing the empirical PAH as a simple proportion.)
+4.4 f (Yi , Si ) Joint Model
+For participants aged 70 years at baseline, the
+A joint response encompassing both survival and probability of being alive and having 3MSE ≥ 80
+the longitudinal response also may be of interest. at age 75 is 0.82 for females and 0.75 for males.
+A patient facing a diagnosis may ask not only the At age 79, the PAH is 0.70 for females and 0.54
+chance of 5-year survival but the chance of 5-year for males. Summing the area under the curve, the
+survival with acceptable quality of life. A joint model average years of healthy life (of 9 possible) is 7.6
+of the probability of being alive and healthy for females, and 6.7 for males (Diehr et al., 1998).
+(Diehr et al., 1995) characterizes the status of the The average gender difference appears to be greater
+entire cohort with respect to a longitudinal response for the joint model than for the other fitted modand death. A related approach rescales response mea- els in Figure 1. This reflects a survival advantage
+sures to predict the probability of being alive and for females, which was not apparent in models that
+healthy in a prescribed amount of time, such as focused on the 3MSE.
+one year (Diehr et al., 2001a). Because the joint response (alive and healthy) is defined at all time- 4.5 Other Factorizations
+points for all individuals, longitudinal data are balA factorization of the joint distribution f (Yi , Si )
+anced. Therefore, analysis methods (random not yet discussed is f (Si |Yi )f (Yi ). This framework
+effects, GEE, etc.) will not be affected by differential is especially applicable to predicting survival (Si )
+survival.
+Joint
+models
+also
+may
+assess using information from longitudinal biomarkers (Yi )
+treatment effects simultaneously for longitudinal re- (De Gruttola and Tu, 1994; Wulfsohn and Tsiatis,
+sponse and survival (Gray and Brookmeyer, 2000; 1997; Ye, Lin and Taylor, 2008). Applying this model
+Ratcliffe, Guo and Ten Have, 2004), or integrate mor- to hypothetical CHS data, we could conclude that
+bidity and mortality in utility measures such as 33% (1/3) of participants with declining 3MSE surquality-adjusted life years.
+vive to age 75, while 100% (1/1) with stable 3MSE
+Defining 3MSE scores ≥ 80 points as healthy, the survive to age 75. This class of models would be
+probability of being alive and healthy at age 75 in categorized as unconditional in the framework disthe hypothetical CHS data is 1/4 (Table 3, row f), cussed here, but is not considered in detail because
+which reflects a decline in the cohort, since 3/4 were survival, not longitudinal data, is the primary realive and healthy at baseline (see Table 1). Assum- sponse of interest.
+ing a linear trend, the decline from 3/4 healthy to
+1/4 healthy over 5 years reflects a rate of decline of
+5. DISCUSSION
+1/10 of the cohort losing health or life each year.
+Through analysis of hypothetical and actual data
+Figure 1f shows the proportion of CHS participants who are alive and healthy at ages 70–79. The sets, we have shown that choice of analysis has a
+percent alive and healthy (PAH) shown is a pro- great influence on interpretation of longitudinal data
+portion reflecting the status of study participants truncated by death. No single approach is approenrolled at age 70. Modeling of PAH also is pos- priate in all situations, so the analysis should be
+sible, as well as constructing confidence intervals chosen to address the aims of a research project.
+they were alive at the time 3MSE was measured.
+The difference in expected 3MSE at different ages
+is smaller than for the unconditional or fully conditional models. The expected 3MSE score of participants who entered CHS at age 70 is 91 points for
+surviving 75-year-olds, and 87 points for surviving
+79-year-olds. However, this does not imply an average decline of 1 3MSE point per year, since the average for survivors is not the same as the trajectory
+from following individuals. The partly conditional
+model tracks the prevalent average 3MSE score in
+the survivors at each timepoint.
+
+LONGITUDINAL DATA TRUNCATED BY DEATH
+
+11
+
+We have not addressed situations involving interSummaries of individual trajectories and descriptions of terminal decline are achieved with fully con- val censoring or unknown survival times. While a
+ditional models, in which analysis of longitudinal re- two-stage imputation method (Harel et al. (2007))
+sponse is stratified by time of death. The principal could address both nonresponse and missing surstratification approach is most suited for estimat- vival information, the data analysis method should
+ing meaningful exposure or treatment effects. For be chosen carefully to avoid implicit imputation and
+example, in an investigation of the effect of trauma to address research aims.
+centers on functional outcomes (Egleston, ScharfIn longitudinal studies in which some subjects die
+stein and MacKenzie, 2009), principal stratification yet another response, such as cognitive functioning
+could adjust for healthy survivor bias in nontrauma or quality of life, is of primary interest, careful modcenters. The partly conditional model can address eling is required to identify an analysis method to
+situations where prevalence, rather than individual address research aims. When deaths occur at many
+trajectories, are of interest. For example, survival in- different times along the time frame for which reformation could estimate the number of new Medi- sponses are measured (i.e., age or time from basecare recipients who will be alive in 10 years, and line), random effects models (which are uncondia partly conditional model could then estimate the tional with respect to survival) may implicitly imneed for dementia services in those survivors. For pute data beyond death. Implicit imputation is a
+studies of palliative care, treatment effects may be fundamental strength of random effects models in
+described by a joint model for longitudinal response the missing data context, but limits the suitabiland survival. The area under the joint density curve ity of these unconditional models in analyzing lonwould summarize treatment differences in both sur- gitudinal data with great imbalance due to death.
+vival and quality of life response.
+When the time scale describes time from (not unOnce the statistical model is clarified by research til) death, the model becomes fully conditional. For
+aims, choice of analysis method should be apparent terminal decline models, implicit imputation beyond
+(Table 2). An unconditional model is fit by random death will not occur when random effects models are
+effects and other multilevel approaches, when the
+fit. Analysts concerned about the potential impact
+time scale does not depend on survival times. A fully
+of implicit imputation may fit a generalized linear
+conditional model may be fit by random effects or
+model or generalized estimating equations with inother analysis methods, with time scale or stratificadependence correlation (which fit partly conditional
+tion depending on survival time (Diehr et al., 2002;
+models) and compare fitted parameters to an unPauler, McCoy and Moinpour, 2003). Partly condiconditional model.
+tional models may be fit directly by GEE with independence working correlation (Kurland and Heagerty,
+ACKNOWLEDGMENTS
+2005). Joint models may be fit as a multivariate joint
+distribution (Gray and Brookmeyer, 2000), or as a
+This research was supported in part by the Intracomposite response incorporating both survival and mural Research Program of the NIH, by NIH Grant
+longitudinal response (Diehr et al., 2001a).
+P30 CA 06927 and by an appropriation from the
+We have focused on research in which estimation Commonwealth of Pennsylvania. Research reported
+of a parameter, such as a treatment effect, slope in this article was supported by contract numbers
+or patient trajectory, is of primary interest. Other N01-HC-85079 through N01-HC-85086, N01-HC-35129,
+classes of statistical analysis are available to address N01 HC-15103, N01 HC-55222, N01-HC-75150, N01different research questions. Additionally, models fit HC-45133, Grant number U01 HL080295 from the
+using one factorization of the joint distribution of National Heart, Lung, and Blood Institute, with adsurvival and longitudinal response may be trans- ditional contribution from the National Institute of
+formed to address aspects of another model. For Neurological Disorders and Stroke. A full list of prinexample, a fully conditional model may be marginal- cipal CHS investigators and institutions can be found
+ized (Heagerty and Zeger (2000)) to estimate a partly at http://www.chs-nhlbi.org/pi.htm.
+conditional estimand, such as the expected 3MSE
+among CHS survivors at age 85 (Fitzmaurice and
+REFERENCES
+Laird, 2000); a joint model may estimate fully conditional trajectories (Ribaudo, Thompson and Allen- Burke, G. L., Arnold, A. M., Bild, D. E., Cushman, M.,
+Mersh, 2000).
+Fried, L. P., Newman, A., Nunn, C. and Robbins, J.
+
+12
+
+KURLAND, JOHNSON, EGLESTON AND DIEHR
+
+(2001). Factors associated with healthy aging: the cardiovascular health study. Journal of the American Geriatrics
+Society 49 254–262.
+De Gruttola, V. and Tu, X. M. (1994). Modelling progression of CD4-lymphocyte count and its relationship to
+survival time. Biometrics 50 1003–1014.
+Diehr, P., Patrick, D., Hedrick, S., Rothman, M.,
+Grembowski, D., Raghunathan, T. E. and Beresford,
+S. (1995). Including deaths when measuring health status
+over time. Medical Care 33 AS164–AS172.
+Diehr, P., Patrick, D. L., Bild, D. E., Burke, G. L.
+and Williamson, J. D. (1998). Predicting future years of
+healthy life for older adults. Journal of Clinical Epidemiology 51 343–353.
+Diehr, P., Patrick, D. L., Spertus, J., Kiefe, C. I., McDonell, M. and Fihn, S. D. (2001a). Transforming selfrated health and the SF-36 scales to include death and
+improve interpretability. Medical Care 39 670–680.
+Diehr, P., Williamson, J., Patrick, D. L., Bild, D. E.
+and Burke, G. L. (2001b). Patterns of self-rated health in
+older adults before and after sentinel health events. Journal
+of the American Geriatrics Society 49 36–44.
+Diehr, P., Williamson, J., Burke, G. L. and Psaty,
+B. M. (2002). The aging and dying processes and the
+health of older adults. Journal of Clinical Epidemiology 55
+269–278.
+Dufouil, C., Brayne, C. and Clayton, D. (2004). Analysis
+of longitudinal studies with death and drop-out: A case
+study. Stat. Med. 23 2215–2226.
+Egleston, B. L., Scharfstein, D. O., Freeman, E. E.
+and West, S. K. (2007). Causal inference for nonmortality outcomes in the presence of death. Biostatistics
+8 526–545.
+Egleston, B. L., Scharfstein, D. O. and MacKenzie, E.
+(2009). On estimation of the survivor average causal effect
+in observational studies when important confounders are
+missing due to death. Biometrics 65 497–504.
+Elliott, M. R., Joffe, M. M. and Chen, Z. (2006). A potential outcomes approach to developmental toxicity analyses. Biometrics 62 352–360. MR2227484
+Fitzmaurice, G. M. and Laird, N. M. (2000). Generalized
+linear mixture models for handling nonignorable dropouts
+in longitudinal studies. Biostatistics 1 141–156.
+Frangakis, C. E. and Rubin, D. B. (2002). Principal
+stratification in causal inference. Biometrics 58 21–29.
+MR1891039
+Frangakis, C. E., Rubin, D. B., An, M. W. and MacKenzie, E. (2007). Principal stratification designs to estimate
+input data missing due to death. Biometrics 63 641–649;
+discussion 650–662. MR2395697
+Fried, L. P., Borhani, N. O., Enright, P., Furberg,
+C. D., Gardin, J. M., Kronmal, R. A., Kuller, L. H.,
+Manolio, T. A., Mittelmark, M. B., Newman, A.,
+O’Leary, D. H., Psaty, B., Rautaharju, P., Tracy,
+R. P., Weiler, P. G. and research group (CHS)
+(1991). The cardiovascular health study: Design and rationale. Annals of Epidemiology 1 263–276.
+Gray, S. M. and Brookmeyer, R. (2000). Multidimensional
+longitudinal data: estimating a treatment effect from con-
+
+tinuous, discrete, or time-to-event response variables. J.
+Amer. Statist. Assoc. 95 396–406.
+Harel, O., Hofer, S. M., Hoffman, L., Pedersen, N. L.
+and Johansson, B. (2007). Population inference with mortality and attrition in longitudinal studies on aging: A twostage multiple imputation method. Experimental Aging Research 33 187–203.
+Hayden, D., Pauler, D. K. and Schoenfeld, D. (2005).
+An estimator for treatment comparisons among survivors
+in randomized trials. Biometrics 61 305–310. MR2135873
+Heagerty, P. J. and Zeger, S. L. (2000). Marginalized multilevel models and likelihood inference (with discussion).
+Statist. Sci. 15 1–26. MR1842235
+Holland, P. W. (1986). Statistics and causal inference
+(C/R: P961–P970). J. Amer. Statist. Assoc. 81 945–960.
+MR0867618
+Joffe, M. M., Small, D. and Hsu, C. Y. (2007). Defining and estimating intervention effects for groups that
+will develop an auxiliary outcome. Statist. Sci. 22 74–97.
+MR2408662
+Johnson, L. L. (2002). Incorporating death into the statistical analysis of categorical longitudinal health status data.
+Ph.D. thesis, Univ. Washington.
+Kaplan, R. C., Tirschwell, D. L., Longstreth, W. T.,
+J., Manolio, T. A., Heckbert, S. R., Lefkowitz, D.,
+El-Saed, A. and Psaty, B. M. (2005). Vascular events,
+mortality, and preventive therapy following ischemic stroke
+in the elderly. Neurology 65 835–842.
+Kurland, B. F. and Heagerty, P. J. (2004). Marginalized
+transition models for longitudinal binary data with ignorable and non-ignorable drop-out. Stat. Med. 23 2673–2695.
+Kurland, B. F. and Heagerty, P. J. (2005). Directly parameterized regression conditioning on being alive: Analysis of longitudinal data truncated by deaths. Biostatistics
+6 241–258.
+Laird, N. M. (1988). Missing data in longitudinal studies.
+Stat. Med. 7 305–315.
+Laird, N. M. and Ware, J. H. (1982). Random-effects models for longitudinal data. Biometrics 38 963–974.
+Liang, K. Y. and Zeger, S. L. (1986). Longitudinal data
+analysis using generalized linear models. Biometrika 7 13–
+22. MR0836430
+Little, R. J. A. (1995). Modeling the drop-out mechanism
+in repeated-measures studies. J. Amer. Statist. Assoc. 90
+1112–1121. MR1354029
+Little, R. J. A. and Rubin, D. B. (1987). Statistical Analysis with Missing Data. Wiley, New York. MR0890519
+Neuhaus, J. M. and Kalbfleisch, J. D. (1998). Betweenand within-cluster covariate effects in the analysis of clustered data. Biometrics 54 638–645.
+Paik, M. C. (1997). The generalized estimating equation approach when data are not missing completely at random.
+J. Amer. Statist. Assoc. 92 1320–1329.
+Pauler, D. K., McCoy, S. and Moinpour, C. (2003). Pattern mixture models for longitudinal quality of life studies
+in advanced stage disease. Stat. Med. 22 795–809.
+Ratcliffe, S. J., Guo, W. and Ten Have, T. R. (2004).
+Joint modeling of longitudinal and survival data via a common frailty. Biometrics 60 892–899. MR2133541
+
+LONGITUDINAL DATA TRUNCATED BY DEATH
+Ribaudo, H. J., Thompson, S. G. and Allen-Mersh,
+T. G. (2000). A joint analysis of quality of life and survival using a random effect selection model. Stat. Med. 19
+3237–3250.
+Robins, J. M., Rotnitzky, A. and Zhao, L. P. (1995).
+Analysis of semiparametric regression models for repeated
+outcomes in the presence of missing data. J. Amer. Statist.
+Assoc. 90 106–121. MR1325118
+Robinson, G. K. (1991). That BLUP is a good thing: The
+estimation of random effects (with discussion). Statist. Sci.
+6 15–51. MR1108815
+Rubin, D. B. (1987). Multiple Imputation for Nonresponse in
+Surveys. Wiley, New York. MR0899519
+Rubin, D. B. (2006). Causal inference through potential outcomes and principal stratification: Application to studies
+with “censoring” due to death. Statist. Sci. 21 299–309.
+MR2339125
+
+13
+
+Siegler, I. C. (1975). The terminal drop hypothesis: Fact or
+artifact? Experimental Aging Research 1 169–185.
+Teng, E. L. and Chui, H. C. (1987). The Modified MiniMental State (3MS) examination. Journal of Clinical Psychiatry 48 314–318.
+Wilson, R. S., Beckett, L. A., Bienias, J. L., Evans,
+D. A. and Bennett, D. A. (2003). Terminal decline in
+cognitive function. Neurology 60 1782–1787.
+Wulfsohn, M. S. and Tsiatis, A. A. (1997). A joint model
+for survival and longitudinal data measured with error.
+Biometrics 53 330–339. MR1450186
+Ye, W., Lin, X. and Taylor, J. M. G. (2008). Semiparametric modeling of longitudinal measurements and time-toevent data—a two-stage regression calibration approach.
+Biometrics 64 1238–1246.
+
+

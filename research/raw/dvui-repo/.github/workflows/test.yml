@@ -1,0 +1,64 @@
+name: Test
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the $default-branch branch
+  push:
+    branches: [$default-branch]
+  pull_request:
+  workflow_dispatch:
+
+# Only one ci action should run per branch at any one time
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Test
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v4
+      # uses .minimum_zig_version from build.zig.zon
+      - uses: mlugg/setup-zig@v2
+
+      - name: Compile
+        run: zig build -Dbackend=testing
+
+      - name: Run tests
+        run: zig build test -Dbackend=testing
+
+  compile:
+    needs: test
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        backend: [sdl2, sdl3, web]
+        include:
+          - # Add one extra job on windows for dx11
+            os: windows-latest
+            backend: dx11
+          - # Add raylib separately to specify extra args
+            os: ubuntu-latest
+            backend: raylib
+            args: "-Duse-lld=false"
+
+    runs-on: ${{ matrix.os }}
+    # A failure on testing will stop all other builds
+    continue-on-error: ${{ matrix.backend != 'testing' }}
+
+    name: Compile ${{ matrix.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+
+      - name: Install libraries
+        if: ${{ matrix.os == 'ubuntu-latest' && (matrix.backend == 'sdl2' || matrix.backend == 'sdl3' || matrix.backend == 'raylib') }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install mesa-common-dev libgl-dev libglx-dev libegl-dev libpulse-dev libxext-dev libxfixes-dev libxrender-dev libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev
+
+      - name: Compile
+        run: zig build -Dbackend=${{ matrix.backend }} ${{ matrix.args }}
