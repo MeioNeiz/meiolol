@@ -90,7 +90,9 @@ pub const Crawler = struct {
 
         const started = c.nowS();
         var last_report = started;
-        var last_prune: i64 = 0;
+        // An hour in, not at once: a prune holds this thread (and the reports) while it
+        // runs, and start-up is busy enough on a slow box
+        var last_prune = started;
         while (!c.stop.load(.acquire)) {
             c.io.sleep(.fromSeconds(1), .awake) catch break;
             const now = c.nowS();
