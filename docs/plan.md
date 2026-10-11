@@ -42,8 +42,10 @@ next steps land here.
   cut raw retention to 3 d / 1 d; first backup there 04:00Z 2026-10-12, on its own
   disk only (no migrations, f90a5ad; no second run on restart); off-host target: Jacob;
   gpu-box data + D: backup kept as the restore point. Crawler stable since 7320adf
-  (migrate once per process) but ~2k matches/day on the 1/8-OCPU micro while sharing it
-  with backup/eval/curves; real rate pending meiolol-5a's watch
+  (migrate once per process) but slow: ~11k matches/day (gpu-box ~135k), 153 lock
+  waits in 27 min, europe 0 timelines in that run; the 1/8-OCPU micro (~20% steal, slow
+  disk) with 19 writer threads is the bottleneck. A1 launch retry now runs on the box
+  (systemd user service meiolol-a1-launch, instance principal, ntfy on success)
 - Crawler (box, deployed 6f6b65b): all 15 platforms, 4 regional buckets at their caps,
   ~33k matches + timelines/day per region (europe EUW-first), compact timelines
   (timeline.db, ~8.5 KB/match), raw summaries kept 30 days, raw timelines 7, compact
