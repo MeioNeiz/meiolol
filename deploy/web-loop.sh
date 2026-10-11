@@ -6,8 +6,9 @@
 # meiolol-web ssh alias is user meiolol with a key limited to rsync into /var/www/meiolol
 # (rrsync); nginx there serves meiolol.jomify.lol. Riot's verification string, if any,
 # lives in riot.txt beside bin/.
-# Lane curves (`meiolol curves`, a pass over every timeline of the patch) are rebuilt daily
-# and when the patch changes; a fresh curves file forces an upload.
+# Lane curves are rebuilt hourly and when the patch changes: the site's (`meiolol curves`,
+# every patch of the last 30 days) and the current patch's for the Your games service;
+# fresh site curves force an upload.
 # Daily, `meiolol eval` (docs/model.md) appends a line to data/eval-history.tsv (model
 # accuracy vs data volume) and leaves its report in data/eval-latest.md. Read-only on the
 # DB; in the background at low priority, so a slow run never delays uploads.
@@ -24,10 +25,11 @@ while true; do
             && mv data/eval-latest.md.new data/eval-latest.md) &
         last_eval=$now
     fi
-    if (( now - last_curves >= 86400 )) || [[ "$patch" != "$curves_patch" ]]; then
-        # Fails harmlessly (logged) until there are timelines for the patch
+    if (( now - last_curves >= 3600 )) || [[ "$patch" != "$curves_patch" ]]; then
+        # Fails harmlessly (logged) until there are timelines
         if c=$(bin/meiolol curves 2>&1); then fresh_curves=1; fi
         echo "$c"
+        [[ -n "$patch" ]] && bin/meiolol curves --patch "$patch" 2>&1
         last_curves=$now curves_patch=$patch
     fi
     rm -rf data/site.new

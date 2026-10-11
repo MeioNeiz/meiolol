@@ -118,8 +118,10 @@ games with no remake, a winner and all ten positions count.
 
 ## Lane curves (src/curves.zig, src/core/curvesfile.zig, src/site/matchup.zig)
 
-`meiolol curves` (same --patch/--platform as stats, --min-games default 1: all) reads every
-ranked solo game with a timeline and writes data/export/curves-<patch>.bin. Per lane
+`meiolol curves` (--platform as stats, --min-games default 1: all) reads every ranked
+solo game with a timeline: by default every patch of the last --days (30) to
+data/export/recent-curves.bin (label "last 30 days"); with --patch, those patches to
+data/export/curves-<patch>.bin (the Your games service reads these per patch). Per lane
 matchup (role, champion pair) and bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
 median visible tier of the game's players, never MMR): per minute 1..25 the p25/p50/p75
 of gold, XP and CS (lane + jungle) difference with n still playing; who leads in gold at
@@ -132,18 +134,20 @@ returns a View from `me`'s side that negates and swaps quartiles. Format at the 
 curvesfile.zig; bump the version on any change. Memory: ~170 B per lane record, ~1 GB
 at 1M games; fine on the box (15 GB).
 
-`meiolol site` reads the curves file for its patches when present: a page per matchup
+`meiolol site` reads recent-curves.bin when present (curves-<patch>.bin with --patch;
+the rest of the site stays on the newest patch): a page per matchup
 with an all-ranks curve (matchup/<role>/<a>-vs-<b>.html, lower id first), three SVG
-charts (median line, middle-half band; patch, tier and n in every caption), a lane and
+charts (median line, middle-half band; period, tier and n in every caption), a lane and
 game table, comeback odds (src/site/comeback.zig: win rate per gold bucket at 10/15
 min beside the role baseline, one fact line), a by-rank table, and "Lane curves" links
 on champion pages. Every matchup gets a page, as on lolalytics; under 200 games charts
 and rows are grey with "more data needed", and a chart draws minutes with at least
-min(10, games) still going. Size: 816 pages, 14 MB with .gz, from 191 games; raise
+min(10, games) still going. Size: ~800 pages, 14 MB with .gz, per 200 games; raise
 --min-games if the upload grows too big. The index has a min games selector
 (html.minGames, static/min-games.js; default 1). Not yet: first-item timing (needs an
 item list from Data Dragon), experienced-players filter (mastery), core-item split,
-region filter. deploy/web-loop.sh rebuilds curves daily and on a new patch.
+region filter, patch / period filter (planned: last 30 days default, a specific patch,
+rank). deploy/web-loop.sh rebuilds both curves files hourly and on a new patch.
 
 ## Pool (src/pool.zig, src/site/pool.zig, static/pool.js)
 

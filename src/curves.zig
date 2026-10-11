@@ -1,5 +1,5 @@
 //! `meiolol curves`: lane matchup curves (core/curvesfile.zig) from the compact match
-//! timelines in timeline.db. One pass over the patch's games, like stats.zig.
+//! timelines in timeline.db. One pass over the chosen games, like stats.zig.
 
 const std = @import("std");
 const store = @import("store");
@@ -21,14 +21,16 @@ pub const Summary = struct {
     skipped: u32,
 };
 
-/// Every ranked solo game with a timeline on `chosen` patches and `platforms` (no
-/// remakes, a winner, all ten positions). `legendaries`: sorted finished item ids for
+/// Every ranked solo game with a timeline on `chosen` patches (empty: any) started from
+/// `since_ms` on (Riot ms timestamp, 0: any) and `platforms` (no remakes, a winner, all
+/// ten positions). `legendaries`: sorted finished item ids for
 /// first-item timing (ddragon.legendaries), empty to leave it out. Caller owns the
 /// builder.
 pub fn build(
     gpa: std.mem.Allocator,
     db: store.Db,
     chosen: []const []const u8,
+    since_ms: i64,
     platforms: []const []const u8,
     legendaries: []const u32,
 ) !struct { builder: curvesfile.Builder, summary: Summary } {
@@ -42,12 +44,13 @@ pub fn build(
     var q = try db.prepare(
         \\SELECT m.match_id, m.winning_team, t.data
         \\FROM matches m JOIN timeline.timelines t USING (match_id)
-        \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
+        \\WHERE (? = 0 OR m.patch IN (SELECT value FROM json_each(?)))
+        \\  AND m.game_start >= ? AND m.queue_id = ?
         \\  AND m.platform IN (SELECT value FROM json_each(?))
         \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
     );
     defer q.deinit();
-    try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
+    try q.bind(.{ chosen.len, patch_json, since_ms, stats.ranked_solo, platform_json });
     // tier is the rank snapshot stored with the match (players is emptied on a rekey);
     // mastery is a later snapshot of each player, absent after a rekey
     var players = try db.prepare(
@@ -220,7 +223,7 @@ test "curves from a real timeline" {
     const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     for (0..2) |g| {
         const id = try std.fmt.allocPrint(arena, "EUW1_{d}", .{g});
-        try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',0,1600,100,0)", .{id});
+        try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',?,1600,100,0)", .{ id, 1000 * g });
         const data: store.Blob = .{ .bytes = blob };
         try db.run("INSERT INTO timeline.timelines VALUES (?,26,0,?)", .{ id, data });
         for (0..10) |slot| {
@@ -240,7 +243,13 @@ test "curves from a real timeline" {
     try db.run("INSERT INTO mastery VALUES ('p','EUW1',0,2,?)", .{store.Blob{ .bytes = owned }});
 
     // Every item anyone bought counts as finished here: first purchase times
-    var r = try build(gpa, db, &.{"16.20"}, &.{"EUW1"}, &.{ 1055, 3078 });
+    {
+        // Any patch, from the second game's start on
+        var recent = try build(gpa, db, &.{}, 1000, &.{"EUW1"}, &.{});
+        defer recent.builder.deinit();
+        try testing.expectEqual(Summary{ .games = 1, .skipped = 0 }, recent.summary);
+    }
+    var r = try build(gpa, db, &.{"16.20"}, 0, &.{"EUW1"}, &.{ 1055, 3078 });
     defer r.builder.deinit();
     try testing.expectEqual(Summary{ .games = 2, .skipped = 0 }, r.summary);
     try testing.expectEqual(10, r.builder.lanes.items.len);

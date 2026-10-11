@@ -48,7 +48,9 @@ const usage =
     \\                               (default EUW1; "all" for every platform in
     \\                               riot/endpoints.zig)
     \\  curves      write lane matchup curves from match timelines (curvesfile.zig)
-    \\              --patch P        as for stats
+    \\              --patch P        as for stats (default: every patch of the last
+    \\                               --days, to DIR/export/recent-curves.bin)
+    \\              --days N         default 30
     \\              --platform P     as for stats
     \\              --out FILE       default DIR/export/curves-<patch>.bin
     \\              --min-games N    leave out matchups with fewer games (default 1: all)
@@ -144,6 +146,7 @@ pub fn main(init: std.process.Init) !u8 {
     var cors: ?[]const u8 = null;
     var exchange: ?[]const u8 = null;
     var min_games: u32 = 1;
+    var days: u32 = 30;
     var eval_opts: eval.Options = .{};
     var history: ?[]const u8 = null;
     var keep_daily: usize = 7;
@@ -229,6 +232,8 @@ pub fn main(init: std.process.Init) !u8 {
         } else if (std.mem.eql(u8, a, "--folds")) {
             eval_opts.folds = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
             if (eval_opts.folds < 2) return usageError(a);
+        } else if (std.mem.eql(u8, a, "--days")) {
+            days = std.fmt.parseInt(u32, v, 10) catch return usageError(a);
         } else if (std.mem.eql(u8, a, "--curves")) {
             curves_dir = v;
         } else if (std.mem.eql(u8, a, "--budget")) {
@@ -297,7 +302,7 @@ pub fn main(init: std.process.Init) !u8 {
         return 0;
     }
     if (std.mem.eql(u8, cmd, "curves")) {
-        try writeCurves(init.gpa, init.io, arena, data_dir, patches.items, platforms.items, out_path, min_games);
+        try writeCurves(init.gpa, init.io, arena, data_dir, patches.items, days, platforms.items, out_path, min_games);
         return 0;
     }
     if (std.mem.eql(u8, cmd, "pool")) {
@@ -333,7 +338,10 @@ pub fn main(init: std.process.Init) !u8 {
             .updated = try today(arena, init.io),
             .public = public,
             .daily_dir = try std.fs.path.join(arena, &.{ data_dir, "daily" }),
-            .curves = try curvesPath(arena, data_dir, chosen),
+            .curves = if (patches.items.len > 0)
+                try curvesPath(arena, data_dir, chosen)
+            else
+                try recentCurvesPath(arena, data_dir),
         });
         return 0;
     }
@@ -561,26 +569,35 @@ fn writeCurves(
     arena: std.mem.Allocator,
     data_dir: []const u8,
     wanted: []const []const u8,
+    days: u32,
     platforms: []const []const u8,
     out_path: ?[]const u8,
     min_games: u32,
 ) !void {
     const db = try store.open(gpa, data_dir);
     defer db.close();
-    const chosen = if (wanted.len > 0) wanted else try newestPatch(arena, db, platforms);
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
-    const label = try stats.label(&label_buf, chosen);
-    const path = out_path orelse try curvesPath(arena, data_dir, chosen);
+    const label = if (wanted.len > 0)
+        try stats.label(&label_buf, wanted)
+    else
+        try std.fmt.bufPrint(&label_buf, "last {d} days", .{days});
+    const path = out_path orelse if (wanted.len > 0)
+        try curvesPath(arena, data_dir, wanted)
+    else
+        try recentCurvesPath(arena, data_dir);
+    const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
+    const since_ms: i64 = if (wanted.len > 0) 0 else now_ms - @as(i64, days) * std.time.ms_per_day;
+    const item_patch = if (wanted.len > 0) wanted[0] else (try newestPatch(arena, db, platforms))[0];
 
-    const legendaries = ddragon.legendaries(gpa, io, chosen[0]) catch |err| blk: {
+    const legendaries = ddragon.legendaries(gpa, io, item_patch) catch |err| blk: {
         std.log.warn("no item list from Data Dragon ({t}): curves without first items", .{err});
         break :blk &.{};
     };
     defer gpa.free(legendaries);
-    var r = try curves.build(gpa, db, chosen, platforms, legendaries);
+    var r = try curves.build(gpa, db, wanted, since_ms, platforms, legendaries);
     defer r.builder.deinit();
     if (r.summary.games == 0) {
-        std.log.err("no ranked solo games with timelines on patch {s}", .{label});
+        std.log.err("no ranked solo games with timelines for {s}", .{label});
         return error.NoMatches;
     }
     var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
@@ -590,7 +607,7 @@ fn writeCurves(
     try r.builder.write(&w.interface, label, min_games);
     try w.interface.flush();
     try file.replace(io);
-    std.log.info("{s}: patch {s}, {d} games ({d} skipped)", .{
+    std.log.info("{s}: {s}, {d} games ({d} skipped)", .{
         path, label, r.summary.games, r.summary.skipped,
     });
 }
@@ -631,6 +648,12 @@ fn curvesPath(arena: std.mem.Allocator, data_dir: []const u8, chosen: []const []
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = try stats.label(&label_buf, chosen);
     return std.fmt.allocPrint(arena, "{s}/export/curves-{s}.bin", .{ data_dir, label });
+}
+
+/// Where `meiolol curves` writes by default: every patch of the last --days. Not
+/// curves-*.bin, which the Your games service reads as one file per patch
+fn recentCurvesPath(arena: std.mem.Allocator, data_dir: []const u8) ![]const u8 {
+    return std.fs.path.join(arena, &.{ data_dir, "export", "recent-curves.bin" });
 }
 
 fn newestPatch(arena: std.mem.Allocator, db: store.Db, platforms: []const []const u8) ![]const []const u8 {

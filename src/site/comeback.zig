@@ -40,7 +40,7 @@ pub fn section(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !
     if (head.games >= matchup.thin_games) {
         try w.print("<p>Between 500 and 1,500 gold behind {f} at 10 minutes, {f} still won ", .{ esc(y.name), esc(x.name) });
         try percent(w, head.wins, head.games);
-        try w.print(" of {d} games", .{head.games});
+        try w.print(" of {d} game{s}", .{ head.games, matchup.plural(head.games) });
         if (base) |b| {
             const bh = b.comeback(.ten, headline_bucket);
             try w.print(" (all {s} lanes: ", .{lane});

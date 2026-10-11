@@ -32,6 +32,17 @@ fn minuteFloor(v: View) u32 {
     return @max(1, @min(min_minute_games, v.games()));
 }
 
+/// The curves' games for running text: "last 30 days" or "patch 16.19"
+fn period(a: std.mem.Allocator, curves: *const Curves) ![]const u8 {
+    const label = curves.patch();
+    if (label.len > 0 and std.ascii.isDigit(label[0])) return std.fmt.allocPrint(a, "patch {s}", .{label});
+    return label;
+}
+
+pub fn plural(n: u64) []const u8 {
+    return if (n == 1) "" else "s";
+}
+
 pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
     return std.fmt.allocPrint(a, "matchup/{s}/{s}-vs-{s}.html", .{ root.roleSlug(r), x.slug, y.slug });
 }
@@ -57,7 +68,7 @@ pub fn writeIndex(site: *const Site, curves: ?*const Curves) !void {
     var aw: Writer.Allocating = .init(a);
     const w = &aw.writer;
     const p = site.page(
-        try std.fmt.allocPrint(a, "Lane matchup curves, patch {s} | meiolol", .{site.patch}),
+        if (curves) |c| try std.fmt.allocPrint(a, "Lane matchup curves, {s} | meiolol", .{try period(a, c)}) else "Lane matchup curves | meiolol",
         "How every lane matchup unfolds minute by minute: gold, experience and CS difference, kills and level 6 timing, by rank.",
         "../",
         .matchups,
@@ -101,13 +112,14 @@ pub fn writeIndex(site: *const Site, curves: ?*const Curves) !void {
         }
         try w.print("<ul class=\"matchup-list\" data-min-list data-count=\"n-{s}\">\n", .{slug});
         for (list.items) |e| {
-            try w.print("<li data-games=\"{d}\"{s}><a href=\"{s}\">{f} vs {f}</a> <span class=\"muted\">{d} games</span></li>\n", .{
+            try w.print("<li data-games=\"{d}\"{s}><a href=\"{s}\">{f} vs {f}</a> <span class=\"muted\">{d} game{s}</span></li>\n", .{
                 e.games,
                 if (e.games < thin_games) " class=\"thin\"" else "",
                 (try path(a, r, e.x, e.y))["matchup/".len..],
                 esc(e.x.name),
                 esc(e.y.name),
                 e.games,
+                plural(e.games),
             });
         }
         try w.writeAll("</ul>\n");
@@ -153,8 +165,9 @@ fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cha
     var aw: Writer.Allocating = .init(a);
     const w = &aw.writer;
     const lane = root.roleName(r);
-    const title = try std.fmt.allocPrint(a, "{s} vs {s}, {s} lane curves, patch {s} | meiolol", .{
-        x.name, y.name, lane, curves.patch(),
+    const when = try period(a, curves);
+    const title = try std.fmt.allocPrint(a, "{s} vs {s}, {s} lane curves, {s} | meiolol", .{
+        x.name, y.name, lane, when,
     });
     const desc = try std.fmt.allocPrint(a, "How {s} against {s} in {s} lane unfolds minute by minute: gold, experience and CS difference, kills, level 6 timing.", .{
         x.name, y.name, lane,
@@ -165,13 +178,13 @@ fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cha
         "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><div><h1>{f} vs {f}</h1>\n",
         .{ site.icon(x), site.icon(y), esc(x.name), esc(y.name) },
     );
-    try w.print("<p class=\"muted\">{s} lane. Patch {s}, ranked solo/duo, all ranks, {d} games.</p></div></div>\n", .{
-        lane, curves.patch(), v.games(),
+    try w.print("<p class=\"muted\">{s} lane, ranked solo/duo, {s}, all ranks, {d} game{s}.</p></div></div>\n", .{
+        lane, when, v.games(), plural(v.games()),
     });
     if (v.games() < thin_games) {
         try w.print(
-            "<p class=\"note\">More data needed: {d} games so far. Curves this thin still move as games come in, so they are greyed out until {d}.</p>\n",
-            .{ v.games(), thin_games },
+            "<p class=\"note\">More data needed: {d} game{s} so far. Curves this thin still move as games come in, so they are greyed out until {d}.</p>\n",
+            .{ v.games(), plural(v.games()), thin_games },
         );
     }
     try summary(w, v, x, y);
@@ -184,7 +197,7 @@ fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cha
     };
     inline for (metrics) |m| {
         try w.print("<h2>{s}</h2>\n", .{m.title});
-        try chart(w, v, m.field, m.unit, x, y, curves.patch());
+        try chart(w, v, m.field, m.unit, x, y, when);
     }
 
     try w.writeAll("<h2>Lane and game</h2>\n");
@@ -244,7 +257,7 @@ fn chart(
     unit: []const u8,
     x: Champ,
     y: Champ,
-    patch: []const u8,
+    when: []const u8,
 ) !void {
     var last: usize = 0;
     var max_abs: u32 = 0;
@@ -320,8 +333,8 @@ fn chart(
     }
     try w.writeAll("\"/>\n</svg>\n");
     try w.print(
-        "<figcaption>{f} minus {f}: median line, band = middle half of games. Patch {s}, all ranks, n = {d} games ({d} still going at {d} min).</figcaption>\n</figure>\n",
-        .{ esc(x.name), esc(y.name), patch, v.games(), v.minute(last - 1).n, last },
+        "<figcaption>{f} minus {f}: median line, band = middle half of games; {s}, all ranks, n = {d} game{s} ({d} still going at {d} min).</figcaption>\n</figure>\n",
+        .{ esc(x.name), esc(y.name), when, v.games(), plural(v.games()), v.minute(last - 1).n, last },
     );
 }
 
@@ -370,7 +383,7 @@ fn sides(w: *Writer, v: View, x: Champ, y: Champ) !void {
             try w.print("<td class=\"num\">{d}:{d:0>2}</td>", .{ secs / 60, secs % 60 });
         }
     }
-    try w.print("</tr>\n</tbody></table></div>\n<p class=\"muted\">Share of {d} games.</p>\n", .{v.games()});
+    try w.print("</tr>\n</tbody></table></div>\n<p class=\"muted\">Share of {d} game{s}.</p>\n", .{ v.games(), plural(v.games()) });
 }
 
 fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
