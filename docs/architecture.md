@@ -6,6 +6,7 @@ src/
   main.zig           `meiolol` backend CLI: crawl, stats, site, status, champions
   ddragon.zig        champion ids/names from Data Dragon
   daily.zig          Daily Draft puzzles (data/daily), published by `meiolol site`
+  learn.zig          Learn page data: champion facts, practice draft pack
   curves.zig         lane matchup curves from timelines (`meiolol curves`)
   pool.zig           Pool: who mains X also plays Y, hard-lane options, ban fallback
   learning.zig       learning curves: results by games played on a champion
@@ -227,6 +228,30 @@ without names, PUUIDs hashed; compact timeline). Per-game numbers come from curv
 `lane()`, compared with `Curves.get` for the player's visible-tier bracket. Objection:
 profile-icon check, then delete and block the PUUID. Players not looked up for 90 days
 are pruned.
+
+## Learn (src/learn.zig, src/site/learn.zig, static/learn.js)
+
+For new players: five lessons (roles, counters and why your own champion matters more,
+early vs late, mixing damage, synergy), each with examples picked from the patch's games
+and a three-question check, then unlimited practice drafts. No streaks or timers.
+
+- Facts, made per site build: magic share of each champion's damage to champions (raw
+  match JSON of the newest 3000 games), wins by game length (<25, 25-32, 32+ min) per
+  champion and role, and team win rate by damage mix (<30% / 30-70% / 70%+ magic)
+- Lessons show raw win rates with n, not model points: at a few thousand games the
+  model's pair terms are noise (draft-model eval: AUC 0.52). Examples are ranked by the
+  smoothed edge so thin pairs stay out of the top; an early-data note under 50k games
+- Practice pack (learn/practice.json, ~240 drafts): real games anonymised as the Daily
+  Draft, leaving out its used.txt games; remade daily from a seed of the day. Graded on
+  facts, not pp spread: easy = the four teammates lean one damage type and exactly one
+  option brings the other; medium = two do; hard = balanced team. Options are the
+  recommender's candidates that are usual for the role (30%+ of their games, 15+)
+- The reveal explains every option (damage fit, role win rate, game length, model
+  reasons with 50+ games, lane gold curve when the curves file has the pair), never "the
+  correct pick". Champions the player adds join the options (meiolol.wasm scores them,
+  request field `pool`)
+- Site: learn.html (checks and glossary as embedded JSON), learn.js, learn/champs.json,
+  learn/practice.json. Progress in localStorage (key meiolol.learn.v1)
 
 ## App (src/app_main.zig, src/lcu)
 

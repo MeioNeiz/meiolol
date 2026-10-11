@@ -140,7 +140,7 @@ pub fn update(
 }
 
 /// Newline-separated match ids, newest last
-fn readUsed(arena: std.mem.Allocator, io: std.Io, dir: std.Io.Dir) !std.ArrayList(u8) {
+pub fn readUsed(arena: std.mem.Allocator, io: std.Io, dir: std.Io.Dir) !std.ArrayList(u8) {
     const read = dir.readFileAlloc(io, "used.txt", arena, .limited(64 << 20));
     const text = read catch |err| switch (err) {
         error.FileNotFound => "",
@@ -151,7 +151,7 @@ fn readUsed(arena: std.mem.Allocator, io: std.Io, dir: std.Io.Dir) !std.ArrayLis
     return list;
 }
 
-fn isUsed(used: []const u8, match_id: []const u8) bool {
+pub fn isUsed(used: []const u8, match_id: []const u8) bool {
     var it = std.mem.tokenizeScalar(u8, used, '\n');
     while (it.next()) |id| if (std.mem.eql(u8, id, match_id)) return true;
     return false;
@@ -215,7 +215,7 @@ fn make(
 
 /// Null when the game is unusable: a position missing or doubled, a champion the
 /// model file lacks, or too few champions to fill the four options
-fn load(
+pub fn load(
     arena: std.mem.Allocator,
     db: store.Db,
     st: *const Stats,
@@ -308,13 +308,13 @@ fn medianTier(db: store.Db, match_id: []const u8) !?[]const u8 {
 }
 
 /// Same minimum as the site's draft helper: 0.3% of games, between 5 and 200
-fn minGames(st: *const Stats) u32 {
+pub fn minGames(st: *const Stats) u32 {
     const share: u32 = @intFromFloat(@round(@as(f64, @floatFromInt(st.games)) * 0.003));
     return std.math.clamp(share, 5, 200);
 }
 
 /// The hidden team's view: me in the hidden role, my four teammates, five known enemies
-fn hiddenDraft(arena: std.mem.Allocator, p: Puzzle) !core.Draft {
+pub fn hiddenDraft(arena: std.mem.Allocator, p: Puzzle) !core.Draft {
     var allies: std.ArrayList(core.Pick) = .empty;
     var enemies: std.ArrayList(core.Pick) = .empty;
     for (Role.all) |r| {
@@ -395,7 +395,7 @@ fn blueWin(st: *const Stats, teams: [2][5]u32) f64 {
     return if (s.len == 1) @round(s[0].win * 1000) / 1000 else 0.5;
 }
 
-fn round1(x: f64) f64 {
+pub fn round1(x: f64) f64 {
     return @round(x * 10) / 10;
 }
 
