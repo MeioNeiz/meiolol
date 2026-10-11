@@ -6,6 +6,7 @@ const std = @import("std");
 const core = @import("core");
 const riot = @import("../riot/root.zig");
 const curves_build = @import("../curves.zig");
+const Date = @import("../date.zig").Date;
 
 const Allocator = std.mem.Allocator;
 const Role = core.Role;
@@ -446,10 +447,7 @@ fn weekStart(buf: *[10]u8, start_ms: i64) []const u8 {
     const day = @divFloor(start_ms, std.time.ms_per_day);
     // 1 January 1970 was a Thursday
     const monday = day - @mod(day + 3, 7);
-    const epoch: std.time.epoch.EpochDay = .{ .day = @intCast(monday) };
-    const yd = epoch.calculateYearDay();
-    const md = yd.calculateMonthDay();
-    return std.fmt.bufPrint(buf, "{d}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 }) catch unreachable;
+    return std.fmt.bufPrint(buf, "{f}", .{Date.fromDay(monday)}) catch unreachable;
 }
 
 fn atMinute(gold: []const i16, m: usize) ?i16 {

@@ -18,6 +18,7 @@ const stats = @import("stats.zig");
 const logreg = @import("logreg.zig");
 const lanegold = @import("lanegold.zig");
 const experience = @import("experience.zig");
+const Date = @import("date.zig").Date;
 const score = core.score;
 const Role = core.Role;
 
@@ -84,10 +85,10 @@ pub fn run(
     for (platforms, 0..) |p, i| try w.print("{s}{s}", .{ if (i > 0) "," else "", p });
     if (opts.test_platform) |tp| try w.print(", tested on {s} only", .{tp});
     try w.print(". Train: oldest {d} ({f} to {f}). ", .{
-        train.len, Day{ .ms = train[0].start }, Day{ .ms = train[train.len - 1].start },
+        train.len, Date.fromMs(train[0].start), Date.fromMs(train[train.len - 1].start),
     });
     try w.print("Test: newest {d} ({f} to {f}).\n\n", .{
-        tests.len, Day{ .ms = tests[0].start }, Day{ .ms = tests[tests.len - 1].start },
+        tests.len, Date.fromMs(tests[0].start), Date.fromMs(tests[tests.len - 1].start),
     });
 
     const tuned = try tune(gpa, champs, train, opts.folds, w);
@@ -1078,10 +1079,7 @@ pub const Day = struct {
     ms: i64,
 
     pub fn format(d: Day, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        const epoch: std.time.epoch.EpochSeconds = .{ .secs = @intCast(@divFloor(d.ms, 1000)) };
-        const yd = epoch.getEpochDay().calculateYearDay();
-        const md = yd.calculateMonthDay();
-        try w.print("{d}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
+        try Date.fromMs(d.ms).format(w);
     }
 };
 

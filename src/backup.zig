@@ -15,6 +15,7 @@
 const std = @import("std");
 const store = @import("store");
 const forget = @import("forget.zig");
+const Date = @import("date.zig").Date;
 
 const Db = store.Db;
 const Io = std.Io;
@@ -56,8 +57,7 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
     try cwd.access(io, main_db, .{});
     try cwd.access(io, timeline_db, .{});
 
-    var date_buf: [10]u8 = undefined;
-    const state_path = try std.fmt.allocPrint(arena, "{s}/state-{s}.db", .{ state_dir, isoDate(&date_buf, opts.now) });
+    const state_path = try std.fmt.allocPrint(arena, "{s}/state-{f}.db", .{ state_dir, Date.fromSeconds(opts.now) });
     _ = try writeFile(arena, io, state_path, main_db, timeline_db, .state, 0, 0, opts.now);
 
     var removed = try rotate(arena, io, state_dir, opts.keep_daily, opts.keep_weekly);
@@ -258,30 +258,8 @@ fn toDelete(arena: std.mem.Allocator, names: [][]const u8, daily: usize, weekly:
 fn dateOf(name: []const u8) ?i64 {
     if (name.len != "state-YYYY-MM-DD.db".len or !std.mem.startsWith(u8, name, "state-") or
         !std.mem.endsWith(u8, name, ".db")) return null;
-    const y = std.fmt.parseInt(i64, name[6..10], 10) catch return null;
-    const m = std.fmt.parseInt(i64, name[11..13], 10) catch return null;
-    const d = std.fmt.parseInt(i64, name[14..16], 10) catch return null;
-    return daysFromCivil(y, m, d);
-}
-
-/// Howard Hinnant's days_from_civil
-fn daysFromCivil(y0: i64, m: i64, d: i64) i64 {
-    const y = if (m <= 2) y0 - 1 else y0;
-    const era = @divFloor(y, 400);
-    const yoe = y - era * 400;
-    const mp = @mod(m + 9, 12);
-    const doy = @divFloor(153 * mp + 2, 5) + d - 1;
-    const doe = yoe * 365 + @divFloor(yoe, 4) - @divFloor(yoe, 100) + doy;
-    return era * 146097 + doe - 719468;
-}
-
-fn isoDate(buf: *[10]u8, secs: i64) []const u8 {
-    const epoch: std.time.epoch.EpochSeconds = .{ .secs = @intCast(secs) };
-    const day = epoch.getEpochDay().calculateYearDay();
-    const md = day.calculateMonthDay();
-    return std.fmt.bufPrint(buf, "{d:0>4}-{d:0>2}-{d:0>2}", .{
-        day.year, md.month.numeric(), md.day_index + 1,
-    }) catch unreachable;
+    const d = Date.parse(name["state-".len..][0.."YYYY-MM-DD".len]) orelse return null;
+    return d.toDay();
 }
 
 pub const Restored = struct { files: usize, matches: i64, timelines: i64, removed: forget.Removed };
@@ -403,19 +381,16 @@ test "rotation keeps 7 daily and the newest of 4 weeks" {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     // 40 consecutive days, 2026-09-01 .. 2026-10-10
-    const start = daysFromCivil(2026, 9, 1);
+    const start = (Date{ .year = 2026, .month = 9, .day = 1 }).toDay();
     for (0..40) |i| {
-        var buf: [10]u8 = undefined;
-        const date = isoDate(&buf, (start + @as(i64, @intCast(i))) * 86400);
-        try names.append(arena, try std.fmt.allocPrint(arena, "state-{s}.db", .{date}));
+        const date: Date = .fromDay(start + @as(i64, @intCast(i)));
+        try names.append(arena, try std.fmt.allocPrint(arena, "state-{f}.db", .{date}));
     }
     const doomed = try toDelete(arena, names.items, 7, 4);
     // Kept: 7 newest days (Oct 4-10) + newest of each of the 4 newest weeks; two of those
     // weeks' newest days are among the 7, so 7 + 2 kept
     try testing.expectEqual(40 - 9, doomed.len);
     for (doomed) |n| try testing.expect(!std.mem.eql(u8, n, "state-2026-10-10.db"));
-    try testing.expectEqual(daysFromCivil(1970, 1, 1), 0);
-    try testing.expectEqual(daysFromCivil(2026, 10, 11), 20737);
 }
 
 test "backup then restore round trip, incremental segments, scrub" {

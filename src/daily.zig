@@ -12,6 +12,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
+const Date = @import("date.zig").Date;
 
 const Role = core.Role;
 const Stats = core.Stats;
@@ -131,8 +132,7 @@ pub fn update(
         const path = try std.fmt.allocPrint(arena, "daily/{s}", .{name});
         try files.append(arena, .{ .path = path, .data = data });
         if (index.writer.end > 1) try index.writer.writeByte(',');
-        const date = try isoDate(arena, day);
-        try index.writer.print("{{\"n\":{d},\"date\":\"{s}\"}}", .{ n, date });
+        try index.writer.print("{{\"n\":{d},\"date\":\"{f}\"}}", .{ n, Date.fromDay(day) });
     }
     try index.writer.writeAll("]\n");
     try files.append(arena, .{ .path = "daily/index.json", .data = index.written() });
@@ -155,15 +155,6 @@ pub fn isUsed(used: []const u8, match_id: []const u8) bool {
     var it = std.mem.tokenizeScalar(u8, used, '\n');
     while (it.next()) |id| if (std.mem.eql(u8, id, match_id)) return true;
     return false;
-}
-
-/// "2026-10-11"
-fn isoDate(arena: std.mem.Allocator, day: u32) ![]const u8 {
-    const yd = (std.time.epoch.EpochDay{ .day = day }).calculateYearDay();
-    const md = yd.calculateMonthDay();
-    return std.fmt.allocPrint(arena, "{d}-{d:0>2}-{d:0>2}", .{
-        yd.year, md.month.numeric(), md.day_index + 1,
-    });
 }
 
 /// Puzzle JSON for day `day` from a random unused game, recording its match id in
@@ -205,7 +196,7 @@ fn make(
         if (isUsed(used.items, match_id)) continue;
         var puzzle = try load(arena, db, st, match_id, rand) orelse continue;
         puzzle.n = n;
-        puzzle.date = try isoDate(arena, day);
+        puzzle.date = try std.fmt.allocPrint(arena, "{f}", .{Date.fromDay(day)});
         try used.appendSlice(arena, match_id);
         try used.append(arena, '\n');
         return try std.json.Stringify.valueAlloc(arena, puzzle, .{});
