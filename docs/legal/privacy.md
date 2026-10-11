@@ -23,7 +23,8 @@ goes live or into the production application.
   statistics keep the anonymous row), as Counterwatch does. The text below assumes this;
   it needs a `meiolol` job before going live
 - **30-day refresh.** Riot recommends refreshing stored players every 30 days and
-  dropping accounts it has erased. The text promises this; it needs a crawler sweep
+  dropping accounts it has erased. Implemented by meiolol-de: ladders refresh daily,
+  mastery at least every 30 days, and a 404 for a PUUID deletes the player at once
 - **Children.** League is played by teenagers. The UK Age Appropriate Design Code may
   apply to a site likely to be used by under-18s. This site has no accounts, ads or
   tracking, which is most of what the code asks for. Not researched beyond that
@@ -59,7 +60,8 @@ contact them instead of us about anything in this policy. -->
 - The public pages show champion and aggregate statistics only, never other players
 - To build those statistics we collect ranked match data from the official Riot Games
   API, which includes encrypted player identifiers. We never sell it or share it
-- You can object and have your data removed at any time, using the form on this site
+- You can object and have your data removed at any time by emailing us at
+  jombirds@gmail.com, or *(when live)* using the form on this site
 
 ## Data from Riot Games
 
@@ -94,8 +96,8 @@ records from Riot are not backed up, so the limits below apply to backups too.
   statistics
 - Rank and champion mastery per player: refreshed regularly; removed when the player
   has not appeared in a collected game for 24 months
-- We check stored players against Riot at least every 30 days and delete any account
-  Riot reports as erased
+- We refresh stored players at least every 30 days and delete any account Riot reports
+  as not found
 
 ## Daily Draft
 
