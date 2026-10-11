@@ -30,6 +30,9 @@ const detail_batch = 40;
 /// When the match queue runs short, so a timeline backlog drains in quiet spells
 const timeline_batch = 60;
 const all_regions = std.enums.values(ep.Region);
+/// Ladder pages per platform per hour while others are paused and no cap is set:
+/// ~9M players at 205 a page over 15 platforms is ~17 an hour to refresh weekly
+const ladder_floor = 20;
 
 pub const Options = struct {
     data_dir: []const u8,
@@ -59,7 +62,8 @@ pub const Options = struct {
     /// The writer's page cache
     cache_mb: u32 = 64,
     /// Platforms whose players a regional thread scans before any other's, so they
-    /// get its whole budget while they have players due
+    /// get its whole budget while they have players due. Their regions also get the
+    /// machine first: other work pauses while they are short of it (Crawler.others)
     priority: []const []const u8 = &.{"EUW1"},
     /// Share of each bucket left to other processes on the key (the Your games service)
     reserve_pct: u8 = 0,
@@ -71,6 +75,9 @@ const RegionCounters = struct {
     timelines: std.atomic.Value(u64) = .init(0),
     ids_calls: std.atomic.Value(u64) = .init(0),
     requests: std.atomic.Value(u64) = .init(0),
+    /// Time the regional thread waited on the rate limit or had nothing due: the
+    /// machine kept up with it
+    slack_ns: std.atomic.Value(u64) = .init(0),
 };
 
 const Counters = struct {
@@ -90,6 +97,15 @@ pub const Crawler = struct {
     failure_lock: std.Io.Mutex = .init,
     /// Set up by run()
     writer: writer.Writer = undefined,
+    /// Off while a priority region is short of the machine (disk, CPU): other regions
+    /// and mastery pause and the ladder slows to its floor, until that region spends
+    /// enough time rate limited or idle again. Always on without a priority region
+    others: std.atomic.Value(bool) = .init(true),
+    /// Main thread only: the priority regions' least share of time spent slack, averaged
+    /// over ~100 s; null without a priority region
+    slack: ?f64 = null,
+    slack_avg: [all_regions.len]f64 = @splat(0),
+    slack_seen: [all_regions.len]u64 = @splat(0),
 
     pub fn run(c: *Crawler) !void {
         // Opening once here migrates the schema before the workers connect
@@ -98,6 +114,11 @@ pub const Crawler = struct {
         try c.backfillTimelines(db);
         try dropDoneRows(db);
 
+        for (c.opts.regions) |r| {
+            if (c.isPriority(r)) c.slack = 0;
+        }
+        // Priority regions first: others start once one is seen to keep up
+        c.others.store(c.slack == null, .release);
         c.writer = .{ .c = c };
         defer c.writer.deinit();
         const writer_thread = try std.Thread.spawn(.{}, writer.Writer.run, .{&c.writer});
@@ -109,11 +130,16 @@ pub const Crawler = struct {
 
         const started = c.nowS();
         var last_report = started;
+        var last_gate = started;
         while (!c.stop.load(.acquire)) {
             c.io.sleep(.fromSeconds(1), .awake) catch break;
             const now = c.nowS();
             if (c.opts.hours) |h| {
                 if (@as(f64, @floatFromInt(now - started)) > h * 3600) c.stop.store(true, .release);
+            }
+            if (now - last_gate >= 10) {
+                c.updateGate(now - last_gate);
+                last_gate = now;
             }
             if (now - last_report >= 60) {
                 last_report = now;
@@ -160,6 +186,11 @@ pub const Crawler = struct {
                 rc.requests.load(.monotonic),
             }) catch break;
         }
+        if (c.slack) |s| {
+            const state = if (c.others.load(.monotonic)) "on" else "paused";
+            const pct = s * 100;
+            w.print(" | others {s}, priority slack {d:.0}%", .{ state, pct }) catch {};
+        }
         const per_day = if (elapsed_s > 0) matches * 86400 / @as(u64, @intCast(elapsed_s)) else 0;
         const ws = &c.writer.stats;
         log.info("{d} matches/day | ladder pages {d} | mastery {d} | platform req {d}{s}" ++
@@ -176,6 +207,36 @@ pub const Crawler = struct {
             ws.pages_written.load(.monotonic),
             ws.pages_read.load(.monotonic),
         });
+    }
+
+    /// Holds a `--priority` platform. Only regional threads: a ladder page costs ~100x
+    /// a match in writes, so even a priority platform's ladder yields
+    fn isPriority(c: *const Crawler, r: ep.Region) bool {
+        for (c.opts.priority) |id| {
+            const p = ep.platform(id) orelse continue;
+            if (p.region == r) return true;
+        }
+        return false;
+    }
+
+    /// Every ~10 s: each priority region's share of time slack, smoothed over ~100 s
+    /// since the 120 s rate window makes waits bursty
+    fn updateGate(c: *Crawler, dt_s: i64) void {
+        if (c.slack == null) return;
+        var least: f64 = 1;
+        for (c.opts.regions) |r| {
+            if (!c.isPriority(r)) continue;
+            const i = @intFromEnum(r);
+            const total = c.counters.region[i].slack_ns.load(.monotonic);
+            const ns: f64 = @floatFromInt(total - c.slack_seen[i]);
+            c.slack_seen[i] = total;
+            const window: f64 = @floatFromInt(dt_s * std.time.ns_per_s);
+            const sample = @min(ns / window, 1);
+            c.slack_avg[i] += (sample - c.slack_avg[i]) * 0.1;
+            least = @min(least, c.slack_avg[i]);
+        }
+        c.slack = least;
+        c.others.store(othersRun(c.others.load(.monotonic), least), .release);
     }
 
     fn nowS(c: *Crawler) i64 {
@@ -272,6 +333,13 @@ const Task = union(enum) {
     }
 };
 
+/// Others start once the priority regions are slack 30% of the time and stop under
+/// 10%; in between they keep their state, so they don't flap. Any wait on the rate
+/// limit means the 120 s window is full, so 10% still has the key as the limit
+fn othersRun(running: bool, slack: f64) bool {
+    return slack >= @as(f64, if (running) 0.1 else 0.3);
+}
+
 /// Errors that stop the crawler; anything else is logged and the item skipped
 fn fatal(err: anyerror) bool {
     return switch (err) {
@@ -304,7 +372,24 @@ const Worker = struct {
         errdefer client.deinit();
         try client.limiter.setReserve(c.opts.reserve_pct);
         client.fake = c.opts.fake;
-        return .{ .c = c, .job = job, .db = db, .client = client };
+        var w: Worker = .{ .c = c, .job = job, .db = db, .client = client };
+        if (w.slack()) |n| w.client.limiter.waited_ns = n;
+        return w;
+    }
+
+    fn slack(w: *Worker) ?*std.atomic.Value(u64) {
+        return switch (w.job) {
+            .platform => null,
+            .regional => |r| &w.c.counters.region[@intFromEnum(r)].slack_ns,
+        };
+    }
+
+    /// Waits for the priority regions to have the machine to spare
+    fn yields(w: *Worker) bool {
+        return switch (w.job) {
+            .platform => false,
+            .regional => |r| !w.c.isPriority(r),
+        };
     }
 
     fn deinit(w: *Worker) void {
@@ -327,6 +412,10 @@ const Worker = struct {
         while (true) {
             try w.check();
             w.countRequests();
+            if (w.yields() and !w.c.others.load(.acquire)) {
+                try w.nap(5);
+                continue;
+            }
             w.step() catch |err| switch (err) {
                 error.Busy => {
                     log.warn("{s}: database busy, pausing", .{w.job.name()});
@@ -352,7 +441,8 @@ const Worker = struct {
         switch (w.job) {
             .platform => |p| {
                 if (try w.seedLadder(p) > 0) return;
-                if (w.c.opts.mastery and try w.fetchMasteries(p, 50) > 0) return;
+                const masteries = w.c.opts.mastery and w.c.others.load(.acquire);
+                if (masteries and try w.fetchMasteries(p, 50) > 0) return;
                 try w.nap(60);
             },
             .regional => |r| try w.matchStep(r),
@@ -409,11 +499,20 @@ const Worker = struct {
 
     /// Nap until this platform may fetch another ladder page (--ladder-per-hour)
     fn ladderGap(w: *Worker) !void {
-        const per_hour = w.c.opts.ladder_per_hour;
-        if (per_hour == 0) return;
-        const next = w.last_ladder + @divTrunc(3600, @as(i64, per_hour));
-        while (w.now() < next) try w.nap(1);
+        while (w.ladderPerHour()) |per_hour| {
+            if (w.now() >= w.last_ladder + @divTrunc(3600, @as(i64, per_hour))) break;
+            try w.nap(1);
+        }
         w.last_ladder = w.now();
+    }
+
+    /// The cap, null for none. While others are paused the ladder still runs at the cap
+    /// or `ladder_floor`: it keeps players' seen_at fresh, and the writer drops players
+    /// unseen for 30 days
+    fn ladderPerHour(w: *Worker) ?u32 {
+        const cap = w.c.opts.ladder_per_hour;
+        if (w.c.others.load(.acquire)) return if (cap == 0) null else cap;
+        return if (cap == 0) ladder_floor else cap;
     }
 
     fn fetchLadderPage(w: *Worker, p: ep.Platform, tier: []const u8, division: []const u8, page: u32) !usize {
@@ -517,7 +616,11 @@ const Worker = struct {
             try w.fetchTimeline(r, id);
         }
         done += batch.len + timelines.len;
-        if (done == 0) try w.nap(15);
+        if (done == 0) {
+            // Nothing due: the machine is free for other regions meanwhile
+            _ = w.slack().?.fetchAdd(15 * std.time.ns_per_s, .monotonic);
+            try w.nap(15);
+        }
     }
 
     const next_matches =
@@ -771,6 +874,34 @@ test "queues: priority platforms first, matches oldest first, timelines newest" 
         try std.testing.expectEqual(c[1].len, got.len);
         for (c[1], got) |e, g| try std.testing.expectEqualStrings(e, g);
     }
+}
+
+test "others pause while the priority region is short of the machine" {
+    var c: Crawler = .{
+        .gpa = std.testing.allocator,
+        .io = std.testing.io,
+        .opts = .{ .data_dir = "", .key = "" },
+        .slack = 0,
+    };
+    c.others.store(false, .monotonic);
+    const europe = &c.counters.region[@intFromEnum(ep.Region.europe)].slack_ns;
+    const tick = struct {
+        fn f(cr: *Crawler, n: *std.atomic.Value(u64), slack_s: u64, times: usize) bool {
+            for (0..times) |_| {
+                _ = n.fetchAdd(slack_s * std.time.ns_per_s, .monotonic);
+                cr.updateGate(10);
+            }
+            return cr.others.load(.monotonic);
+        }
+    }.f;
+    // Rate limited half the time: others start within ~100 s
+    try std.testing.expect(!tick(&c, europe, 5, 5));
+    try std.testing.expect(tick(&c, europe, 5, 10));
+    // 20%: still the key's limit, others keep running
+    try std.testing.expect(tick(&c, europe, 2, 30));
+    // Never waiting (disk bound): others pause
+    try std.testing.expect(!tick(&c, europe, 0, 20));
+    try std.testing.expect(c.slack.? < 0.1);
 }
 
 test "gold at 10, 14 and 15 minutes" {

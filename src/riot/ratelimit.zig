@@ -113,6 +113,9 @@ pub const Limiter = struct {
     methods: std.StringHashMapUnmanaged(Bucket) = .empty,
     /// Share of the app limit left unused for other processes on the same key
     reserve_pct: u8 = 0,
+    /// When set, acquire() adds the time it waits for a window: the key, not the
+    /// machine, is the limit (read by another thread)
+    waited_ns: ?*std.atomic.Value(u64) = null,
 
     pub const app_default = "20:1,100:120";
 
@@ -163,6 +166,7 @@ pub const Limiter = struct {
                 for (m.windows.items) |*w| try w.hits.pushBack(l.gpa, t);
                 return;
             }
+            if (l.waited_ns) |n| _ = n.fetchAdd(@intCast(wait), .monotonic);
             try l.io.sleep(.fromNanoseconds(wait), .awake);
         }
     }
@@ -217,11 +221,14 @@ test "riot counts pad our windows" {
 test "acquire waits once a window is full" {
     var l = try Limiter.init(testing.allocator, testing.io);
     defer l.deinit();
+    var waited: std.atomic.Value(u64) = .init(0);
+    l.waited_ns = &waited;
     try l.update("m", .{ .app_limit = "3:1" });
     const start = l.now();
     for (0..4) |_| try l.acquire("m");
     const elapsed_ms = @divTrunc(l.now() - start, std.time.ns_per_ms);
     try testing.expect(elapsed_ms >= 1000 and elapsed_ms < 2500);
+    try testing.expect(waited.load(.monotonic) >= std.time.ns_per_s);
 }
 
 test "reserve caps app windows, not method ones" {

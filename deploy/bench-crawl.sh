@@ -77,8 +77,10 @@ run() {
     local hours prefix=()
     hours=$(echo "scale=4; $minutes / 60" | bc)
     [[ $mode == slow || $mode == micro ]] && prefix=(taskpolicy -c background)
-    ${prefix[@]+"${prefix[@]}"} "$bin" crawl --data "$run" --fake-api 20 --hours "$hours" \
-        > "$dir/run.log" 2>&1 &
+    # --priority none: fake answers never wait on a rate limit, so the crawler would
+    # see europe short of the machine and pause every other region
+    ${prefix[@]+"${prefix[@]}"} "$bin" crawl --data "$run" --fake-api 20 --priority none \
+        --hours "$hours" > "$dir/run.log" 2>&1 &
     local pid=$!
     if [[ $mode == micro ]]; then
         # Runs 1 slice in 8, like the micro's 1/8 OCPU; stolen time stops every thread

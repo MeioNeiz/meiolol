@@ -124,13 +124,20 @@ caches wrote 43 GB and read 32 GB in 4 hours for ~2k matches.
 
 Benchmark: `deploy/bench-crawl.sh seed DIR`, then `run DIR MINUTES [slow|micro]` crawls
 a clone of box-sized databases with `--fake-api` (fixture answers, no network or rate
-limits); micro mode runs the process 1 slice in 8 at background QoS, a rough stand-in
-for the micro.
+limits, so it runs with `--priority none`); micro mode runs the process 1 slice in 8 at
+background QoS, a rough stand-in for the micro.
 
 Players are scanned in PUUID order (effectively random): no rank or activity bias.
 `--priority` platforms (default EUW1) are scanned before the rest of their region, so
-EUW gets the whole europe bucket while it has players due. `--reserve PCT` leaves part
-of every bucket to other processes on the key (the Your games service).
+EUW gets the whole europe bucket while it has players due. They also get the machine
+first: a priority region's thread counts its slack (time waiting on the rate limit, or
+idle with nothing due), and the main thread averages it over ~100 s. Under 10% the box
+(disk, CPU), not the key, is holding EUW back, so the other regions and mastery pause
+and the ladder drops to `--ladder-per-hour` (20 if unset; it keeps players' seen_at
+fresh against the 30-day expiry); they resume at 30%. On a box that keeps up the gate
+stays open and every bucket runs at its cap; `--priority none` turns it off. The minute
+report shows "others on|paused, priority slack N%". `--reserve PCT` leaves part of
+every bucket to other processes on the key (the Your games service).
 Only Riot's key errors, OOM and SQLite errors outside a match stop the crawler; a bad
 page, player or match (including one SQLite cannot store) is logged and skipped.
 Limits come from Riot's headers (X-App/Method-Rate-Limit and their -Count, which also

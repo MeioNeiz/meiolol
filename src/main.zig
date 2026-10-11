@@ -32,9 +32,9 @@ const usage =
     \\              --since-days N   how far back to collect match ids (default 14)
     \\              --no-mastery     skip champion mastery
     \\              --ladder-refresh-days N  refetch ladder pages after N days
-    \\              --ladder-per-hour N  ladder pages per platform per hour at most
-    \\                               (default 0: no cap)
     \\                               (default 7)
+    \\              --ladder-per-hour N  ladder pages per platform per hour at most
+    \\                               (default 0: no cap; 20 while others pause)
     \\              --regions R      americas,asia,europe,sea (default all)
     \\              --timelines PCT  share of matches that also get a timeline
     \\                               (default 100, 0 for none)
@@ -49,7 +49,9 @@ const usage =
     \\                               match participant
     \\              --cache-mb N     the writer's page cache (default 64)
     \\              --priority P     platforms whose players come first in their
-    \\                               region (default EUW1, "none" for none)
+    \\                               region; other regions, mastery and extra ladder
+    \\                               pause while it is short of the machine
+    \\                               (default EUW1, "none" for none)
     \\              --reserve PCT    leave PCT of each rate limit to other processes
     \\                               on the key (default 0)
     \\  stats       write the model file the app reads (ranked solo, no remakes)
