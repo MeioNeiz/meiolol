@@ -479,6 +479,9 @@ fn writeIndex(site: *const Site) !void {
         \\<p>One real ranked draft a day, anonymised. Guess the hidden champion and the
         \\winner, then see what happened and what the numbers say. Keep a streak, share
         \\your grid.</p></div>
+        \\<div class="card"><h3><a href="learn.html">New to League? Start with Learn</a></h3>
+        \\<p>Five short lessons on draft in plain words, with real examples, then practice on
+        \\real ranked drafts with every option explained. No timers, no streaks.</p></div>
         \\<div class="card"><h3>Your games <span class="muted">coming</span></h3>
         \\<p>Enter your Riot ID and see each recent game's lane laid over the typical curve
         \\for that matchup at your rank, and your record per matchup over the months.</p></div>
