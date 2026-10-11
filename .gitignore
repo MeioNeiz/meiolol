@@ -1,0 +1,7 @@
+.zig-cache/
+zig-out/
+zig-pkg/
+data/
+.env
+CLAUDE.local.md
+.DS_Store

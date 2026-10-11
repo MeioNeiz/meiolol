@@ -1,0 +1,157 @@
+url: https://github.com/RiotGames/developer-relations/issues/1054
+opened: 2025-03-08T13:21:38Z
+closed: 2025-03-12T23:04:45Z
+title:	[BUG] New (dev-)keys are throwing 400 "unknown apikey"
+state:	CLOSED
+author:	DarkIntaqt (DarkIntaqt)
+labels:	
+comments:	15
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1054
+--
+**Bug Description**  
+Newly generated (dev-)keys are throwing a HTTP/400 everytime a requests get sends
+
+**Problem Description**  
+The key should be valid but it does not get accepted/validated
+
+**Expected Result**  
+The expect should work with the correct authentication 
+
+**Actual Result**  
+Every request with that key gets dropped/errored. 
+
+**Developer Impact**  
+Breaks the new developer experience as well as applications that needed to regenerate their API key
+
+
+=== COMMENTS ===
+--
+author: HadrienFlo
+association: NONE
+date: 2025-03-08T16:41:44Z
+--
+Same issue here
+
+--
+author: BenjaminGroseclose
+association: NONE
+date: 2025-03-08T17:09:21Z
+--
+Same issue I am experiencing
+
+--
+author: JeanLancer
+association: NONE
+date: 2025-03-08T20:24:54Z
+--
+Same here in all servers.
+
+--
+author: jabuckne
+association: NONE
+date: 2025-03-08T20:53:25Z
+--
+I am also getting this issue. API keys are not refreshing with new 24h keys, when i generate a new one it just gives me an bad one with the same expiration time as the last one (less than 24h). I created a new riot developer portal account and generated a new key which showed as unexpired and im still getting the same issue. Sometimes 400 or sometimes 403.
+
+--
+author: chz3
+association: NONE
+date: 2025-03-09T09:31:53Z
+--
+Same issue. I started using api key today, but what happened 😂
+
+--
+author: lastwarz
+association: NONE
+date: 2025-03-09T09:43:56Z
+--
+help... didn't working 
+
+--
+author: DarkIntaqt
+association: NONE
+date: 2025-03-09T12:10:21Z
+--
+This bug appears to be fixed. Can someone try to use their dev key or regenerate on of their dev keys and run a few test requests? It works on my end. 
+
+I think I will keep this issue open though, even if it is resolved, so that Lucas can investigate an underlying cause, if there is one. 
+
+--
+author: HadrienFlo
+association: NONE
+date: 2025-03-09T12:10:29Z
+--
+just tried now and it's working on my side ! thx
+
+--
+author: khoude24
+association: NONE
+date: 2025-03-09T16:12:50Z
+--
+Not working for me, still have 
+
+```
+{
+    "status": {
+        "message": "Unknown apikey",
+        "status_code": 400
+    }
+}
+```
+
+For every call
+
+--
+author: DarkIntaqt
+association: NONE
+date: 2025-03-09T16:19:07Z
+--
+
+@khoude24 it took like 3-5 minutes until the key worked for me, can you confirm that it is still not working now?
+
+--
+author: khoude24
+association: NONE
+date: 2025-03-09T16:30:41Z
+--
+I just retry on my side, got the error  "You are logout" on https://developer.riotgames.com/apis but the call are now working on postman using my API key :) 
+
+--
+author: SidiaDevelopment
+association: NONE
+date: 2025-03-10T23:11:02Z
+--
+Still having the issue on the /token endpoint with a live API key
+
+--
+author: lucasMesquitaBorges
+association: NONE
+date: 2025-03-12T23:03:47Z
+--
+There is a propagation time after the key is regenerated to the api validation. It should take at max 5 minutes to be valid.
+We enforce applying for live keys for uses out of the development scope.
+Feel free to ping me in case this happens again (key regeneration taking longer than 5 minutes to be valid).
+
+--
+author: lucasMesquitaBorges
+association: NONE
+date: 2025-03-12T23:04:45Z
+--
+@SidiaDevelopment If your issue is ongoing, seems isolated and different of the topic for this issue. Please reach out to our support with appID / curl details.
+
+--
+author: DarkIntaqt
+association: NONE
+date: 2025-03-13T06:19:42Z
+--
+Thank you very much for your quick response and help!
+

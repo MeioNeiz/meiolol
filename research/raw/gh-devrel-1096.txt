@@ -1,0 +1,65 @@
+url: https://github.com/RiotGames/developer-relations/issues/1096
+opened: 2025-08-26T16:28:04Z
+closed: 2025-12-18T19:08:57Z
+title:	[BUG]
+state:	CLOSED
+author:	Cypherous
+labels:	
+comments:	2
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1096
+--
+**Bug Description**  
+Unable to verify domain in prod key application
+
+**Problem Description**  
+When registering for a prod key i am unabel to actually verify the domain via the riot.txt method, the file is in the root of the folder so appears correctly when viewing it in a browser and via the online CURL tool i've used but the verification page just very quickly goes back to the app page with the status unverified without any kind of error message
+
+**Expected Result**  
+The expected result is that the domain passes verification
+
+**Actual Result**  
+Nothing happens, when i click verify the page goes straight back to the app page and has the status unverified
+
+**Developer Impact**  
+This means i cannot verify my domain and progress with my applications for a prod key
+
+* Frequency: 100% of the time
+* Severity: High, unable to continue with application process
+
+**Repro Steps**  
+Register for  a prod key, enter the domain URL, click verify app, upload the riot.txt containing the code to the server, hit verify and then get redirected back to the app status page which says unverified
+
+**Issue Comments**  
+
+App ID is 760517
+
+
+=== COMMENTS ===
+--
+author: Cypherous
+association: NONE
+date: 2025-08-31T12:03:47Z
+--
+So, it turns out the issue was that riot was getting blocked at a user agent level by my webhost, each time they requested the file they were getting a 403 responses even though the file exists, i spoke to the webhost and this was about the only feedback i could get from them
+
+"The block was triggered because the user agent matched patterns often linked to automated or unusual traffic. It may have been a false positive, but the script maintainers should review how the user agent is presented to avoid future flags."
+
+Your user agent currently presents as "python-requests/2.11.1" which would mark it as extremely old as version 2.11.1 is now atleast 9 years old, i would suggest updating this script or presenting a less suspect looking user agent
+
+--
+author: lucasMesquitaBorges
+association: NONE
+date: 2025-12-18T19:08:57Z
+--
+I appreciate the update. We also had some certificates validation issues depending on the issuer, which is now resolved.
+Feel free to reopen in case is an ongoing issue.
+

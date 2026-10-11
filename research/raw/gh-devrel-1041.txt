@@ -1,0 +1,60 @@
+url: https://github.com/RiotGames/developer-relations/issues/1041
+opened: 2025-02-03T19:14:53Z
+closed: null
+title:	[Account] (Feature Request) Automatic approval for Personal API Keys for TFT/Legends of Runeterra.
+state:	OPEN
+author:	oisincar
+labels:	
+comments:	2
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1041
+--
+**Account Information**
+My summoner name is Oiz, on EUW, and I'm a player & now developer.
+
+**Issue Description**  
+Personal API Keys are automatically approved for League of Legends, but not other games.
+
+**What I've Tried**
+What steps have you tried to resolve the issue.
+
+- [x] Log out of the Developer Portal
+- [X] Attempt to log in via "Incognito Mode"
+- [X] Clear your browser cookies
+- [X] Attempt to login via a secondary device (mobile or different computer)
+
+**Repro Steps**
+From Developer Dashboard -> Register Product -> Personal API Key. Select TFT as the game, and click 'apply' note that key goes into 'Approval Pending'.
+
+Repeat steps and select League of Legends as game, note that key gets approved instantly.
+
+Registering a game for League of Legends doesn't let you access other endpoints.
+
+
+Automatic approval for these keys would be fantastic as spending months swapping out the developer keys (while waiting for approval) is not fun.
+
+=== COMMENTS ===
+--
+author: bangingheads
+association: NONE
+date: 2025-02-03T19:16:46Z
+--
+Automatic approval was only added for League of Legends as a test, this is not a bug, this would be a feature request.
+
+--
+author: oisincar
+association: NONE
+date: 2025-02-03T19:35:31Z
+--
+> Automatic approval was only added for League of Legends as a test, this is not a bug, this would be a feature request.
+
+Fair enough - updated the issue.
+

@@ -1,0 +1,77 @@
+url: https://github.com/RiotGames/developer-relations/issues/1128
+opened: 2026-01-12T23:17:39Z
+closed: 2026-01-13T14:10:12Z
+title:	Production Key Pending (7 month +)
+state:	CLOSED
+author:	Emin-G (minG)
+labels:	
+comments:	4
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1128
+--
+My Riot Product API application has been pending for over seven months without any response or status update.
+
+Application details:
+Riot ID: 뺑소니장인한문철#minG
+App Name: Nadiya
+App ID: 746367
+Game: League of Legends
+Website: https://buzzk.arite.studio/
+
+The application is for a chatbot service used on Chzzk, a Korean live streaming platform similar to Twitch. The service is actively operating and is one of the most widely used third-party chatbot services on the Chzzk platform.
+
+I understand that this repository may not be the ideal place for application status–related inquiries. A support ticket was previously submitted, but no response was received, and there did not appear to be an appropriate channel within the Developer Relations Discord for application status inquiries.
+
+I am aware that Product API reviews and approvals have been taking a considerable amount of time recently. However, as the review has been pending for an extended period, I felt it was appropriate to reach out for an update.
+
+If there are any additional steps I should take or information I should be aware of, I would be grateful to learn about them.
+
+Thank you very much for your time and consideration.
+
+=== COMMENTS ===
+--
+author: Token07
+association: NONE
+date: 2026-01-13T01:10:15Z
+--
+Unfortunately the review process has been slow. 6+ months is in line with what us in the Riot API Discord community have been seeing.
+
+--
+author: Emin-G
+association: NONE
+date: 2026-01-13T10:17:30Z
+--
+Thanks for the reply — I really appreciate you sharing what you’ve been seeing in the community.
+
+I had been following the discussions mentioning that reviews are taking 6–9+ months these days, so I was aware that things were moving slowly.
+
+It seems waiting is the only option for now, which is a bit sad for all of us.
+
+Thanks again for taking the time to respond — it really does help.
+
+--
+author: geozukunft
+association: NONE
+date: 2026-01-13T12:17:22Z
+--
+Without a production key approval you are also violating the terms of service for the API in general fyi
+
+--
+author: Emin-G
+association: NONE
+date: 2026-01-13T13:38:57Z
+--
+Would distributing the feature to a limited group of users for beta testing also be considered a violation of the TOS?
+
+I’ve read through the TOS carefully, but it seems I may have misunderstood or overlooked some details.
+
+Thank you for bringing this to my attention. I’ll review the TOS again and make the necessary changes to ensure full compliance.
+

@@ -1,0 +1,99 @@
+url: https://github.com/RiotGames/developer-relations/issues/1186
+opened: 2026-09-09T19:52:13Z
+closed: null
+title:	[Account] production API about to 1 year waiting for
+state:	OPEN
+author:	MichaelPlathanus
+labels:	
+comments:	6
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1186
+--
+cc @Bulletdev 
+
+General Info
+App ID770591
+StatusPending Review
+Product Group[Default Group](https://developer.riotgames.com/groups/674483)
+Product URL https://prostaff.gg/
+Product Game Focus League of Legends 
+
+**Issue Description**  
+
+<img width="1507" height="594" alt="Image" src="https://github.com/user-attachments/assets/5b0b40bb-1809-4e6f-8b8d-159f155b2535" />
+
+**What I've Tried**
+tickets
+
+- [x] Log out of the Developer Portal
+- [ x] Attempt to log in via "Incognito Mode"
+- [ x] Clear your browser cookies
+- [ x] Attempt to login via a secondary device (mobile or different computer)
+
+tickets:
+
+121062220
+123145765
+124348206
+125139575
+126117195
+
+last activity 6 months ago
+
+=== COMMENTS ===
+--
+author: Bulletdev
+association: NONE
+date: 2026-09-09T19:53:00Z
+--
+fyy 
+
+Product URL https://prostaff.gg/
+
+
+
+--
+author: Cypherous
+association: NONE
+date: 2026-09-09T20:42:28Z
+--
+Yeah it takes 3-8 months on a good timeline, but at this point i'm pretty sure the riot API guy is ghosting us
+
+--
+author: faktgpofficial
+association: NONE
+date: 2026-09-11T01:24:25Z
+--
+Same here, why dont they seriously tell that they are not allowing any new API requests?
+
+my Product  URL is https://faktgp.com  valorant based community website which also hosts tournaments.    
+
+--
+author: Cypherous
+association: NONE
+date: 2026-09-11T01:26:26Z
+--
+Because they are allowing them, just extremely slowly, unless its a riftbound key, those are 100% being ignored, which is hilarious as that is their new cash cow lol
+
+--
+author: zeus369rah-netizen
+association: NONE
+date: 2026-09-15T00:00:45Z
+--
+Because AI boom and everyone can make sites and diddle with APIS left and right (:
+
+--
+author: Cypherous
+association: NONE
+date: 2026-09-15T00:34:02Z
+--
+AI won't affect support tickets though, thats just riot dropping our priority even further
+

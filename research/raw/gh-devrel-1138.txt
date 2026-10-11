@@ -1,0 +1,56 @@
+url: https://github.com/RiotGames/developer-relations/issues/1138
+opened: 2026-02-26T21:46:52Z
+closed: null
+title:	Follow-up: Production API Key Review — Champicker (App ID: 795623)
+state:	OPEN
+author:	bl4ckguard1
+labels:	
+comments:	1
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1138
+--
+Hi Riot DevRel team — I’m following up on the pending production API key review for our application, Champicker.
+
+**Application details**
+
+**App name**: Champicker
+
+**App ID**: 795623
+
+**Type**: Web portal + tool (AI draft & gameplay coach)
+
+**Submitted**: 09 Feb 2026
+
+**Website**: https://champicker.com/
+
+**Verification file**: https://champicker.com/demo/riot.txt
+
+**What Champicker does**
+Champicker helps players improve by coaching them while they play, not through static guides. During champion select, it analyzes picks/bans in real time and recommends champions based on counters, synergies, and strategic composition needs. After draft, it provides matchup- and comp-aware guidance (e.g., win conditions, side-specific strategy, jungle pathing, split push decisions, teamfight approach, and how to play the selected champion within the team composition).
+
+**Request**
+Could you please confirm the review status and, if possible, provide either:
+• an estimated review window, or
+• any missing requirements / changes needed for approval?
+
+We want to ensure full compliance with Riot’s API policies and are intentionally avoiding scaling a public-facing service without an approved production key. The product is live and ready; we’re holding back broader marketing and growth efforts until we have the production approval.
+
+Thank you for your time.
+
+=== COMMENTS ===
+--
+author: raimannma
+association: NONE
+date: 2026-02-26T21:49:20Z
+--
+Production keys for valorant take at least 8 months, but more likely be around 1 year.
+I am not sure if LoL has the same review times, but you should be aware that it can take a very long time.
+

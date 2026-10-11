@@ -1,0 +1,42 @@
+url: https://github.com/RiotGames/developer-relations/issues/1071
+opened: 2025-05-06T10:43:32Z
+closed: 2025-05-12T19:38:46Z
+title:	Stance on transparent topmost overlay windows
+state:	CLOSED
+author:	
+labels:	closed: unsuitable
+comments:	2
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1071
+--
+Hello!
+I'm currently working on implementing manual summoner spell tracking, similar to what is currently allowed on Overwolf-based applications (ex: [link](https://www.overwolf.com/app/amr_mahmoud_aakali-spell_tracker)) but without the need of using Overwolf. 
+
+It would be easily achievable via, for example, the GLFW attributes for a transparent, topmost, full-screen mouse pass-through window, but I'm aware this method is often used by cheaters for their own cheat overlays and thus could possibly be flagged. 
+
+Would that method be "safe to use" for legitimate applications (no memory reading, no reading from the LCU or the Riot Games API), or is injecting a Riot-approved `.dll` the only "safe" way of displaying an overlay inside of the game?
+
+=== COMMENTS ===
+--
+author: geozukunft
+association: NONE
+date: 2025-05-06T14:46:59Z
+--
+If you have questions about a specific application please submit a ticket on http://support-developer.riotgames.com/ 
+
+--
+author: lucasMesquitaBorges
+association: NONE
+date: 2025-05-12T19:38:46Z
+--
+@geozukunft thanks for the reply!
+
+

@@ -1,0 +1,177 @@
+//! Thin SQLite wrapper: open, exec, prepared statements with tuple binding.
+
+const std = @import("std");
+pub const c = @cImport(@cInclude("sqlite3.h"));
+
+const log = std.log.scoped(.sqlite);
+
+pub const Error = error{Sqlite};
+
+/// Bind as a BLOB rather than TEXT
+pub const Blob = struct { bytes: []const u8 };
+
+pub const Db = struct {
+    handle: *c.sqlite3,
+
+    pub fn open(path: [:0]const u8) Error!Db {
+        var handle: ?*c.sqlite3 = null;
+        const flags = c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE;
+        if (c.sqlite3_open_v2(path.ptr, &handle, flags, null) != c.SQLITE_OK) {
+            if (handle) |h| {
+                log.err("open {s}: {s}", .{ path, c.sqlite3_errmsg(h) });
+                _ = c.sqlite3_close(h);
+            }
+            return error.Sqlite;
+        }
+        // Before anything else: other connections may hold the lock (WAL switch)
+        _ = c.sqlite3_busy_timeout(handle.?, 10_000);
+        return .{ .handle = handle.? };
+    }
+
+    pub fn close(db: Db) void {
+        _ = c.sqlite3_close_v2(db.handle);
+    }
+
+    /// One or more statements without parameters or results
+    pub fn exec(db: Db, sql: [:0]const u8) Error!void {
+        var msg: [*c]u8 = null;
+        if (c.sqlite3_exec(db.handle, sql.ptr, null, null, &msg) != c.SQLITE_OK) {
+            log.err("{s}", .{msg});
+            c.sqlite3_free(msg);
+            return error.Sqlite;
+        }
+    }
+
+    pub fn prepare(db: Db, sql: []const u8) Error!Stmt {
+        var stmt: ?*c.sqlite3_stmt = null;
+        const rc = c.sqlite3_prepare_v2(db.handle, sql.ptr, @intCast(sql.len), &stmt, null);
+        if (rc != c.SQLITE_OK) {
+            log.err("prepare: {s}\n  {s}", .{ c.sqlite3_errmsg(db.handle), sql });
+            return error.Sqlite;
+        }
+        return .{ .handle = stmt.?, .db = db.handle };
+    }
+
+    /// Run a statement once with `args`, discarding any rows
+    pub fn run(db: Db, sql: []const u8, args: anytype) Error!void {
+        var stmt = try db.prepare(sql);
+        defer stmt.deinit();
+        try stmt.exec(args);
+    }
+
+    /// First column of the first row as an integer, or null when no rows
+    pub fn scalar(db: Db, sql: []const u8, args: anytype) Error!?i64 {
+        var stmt = try db.prepare(sql);
+        defer stmt.deinit();
+        try stmt.bind(args);
+        return if (try stmt.step()) stmt.int(0) else null;
+    }
+
+    pub fn begin(db: Db) Error!void {
+        try db.exec("BEGIN IMMEDIATE");
+    }
+
+    pub fn commit(db: Db) Error!void {
+        try db.exec("COMMIT");
+    }
+
+    pub fn rollback(db: Db) void {
+        db.exec("ROLLBACK") catch {};
+    }
+};
+
+pub const Stmt = struct {
+    handle: *c.sqlite3_stmt,
+    db: *c.sqlite3,
+
+    pub fn deinit(s: *Stmt) void {
+        _ = c.sqlite3_finalize(s.handle);
+    }
+
+    /// Reset, clear bindings, bind a tuple of ints, floats, strings, Blobs, nulls
+    /// or optionals. Strings and blobs are bound without copying: keep them alive
+    /// until the statement has been stepped.
+    pub fn bind(s: *Stmt, args: anytype) Error!void {
+        _ = c.sqlite3_reset(s.handle);
+        _ = c.sqlite3_clear_bindings(s.handle);
+        inline for (args, 1..) |arg, i| try s.bindOne(i, arg);
+    }
+
+    fn bindOne(s: *Stmt, i: c_int, arg: anytype) Error!void {
+        const T = @TypeOf(arg);
+        const rc = switch (@typeInfo(T)) {
+            .null => c.sqlite3_bind_null(s.handle, i),
+            .optional => return if (arg) |v| s.bindOne(i, v) else s.bindOne(i, null),
+            .int, .comptime_int => c.sqlite3_bind_int64(s.handle, i, @intCast(arg)),
+            .float, .comptime_float => c.sqlite3_bind_double(s.handle, i, arg),
+            .bool => c.sqlite3_bind_int64(s.handle, i, @intFromBool(arg)),
+            else => if (T == Blob)
+                c.sqlite3_bind_blob64(s.handle, i, arg.bytes.ptr, arg.bytes.len, null)
+            else
+                c.sqlite3_bind_text64(s.handle, i, text(arg).ptr, text(arg).len, null, c.SQLITE_UTF8),
+        };
+        if (rc != c.SQLITE_OK) {
+            log.err("bind {d}: {s}", .{ i, c.sqlite3_errmsg(s.db) });
+            return error.Sqlite;
+        }
+    }
+
+    fn text(arg: anytype) []const u8 {
+        return arg;
+    }
+
+    /// true when a row is ready, false when done
+    pub fn step(s: *Stmt) Error!bool {
+        return switch (c.sqlite3_step(s.handle)) {
+            c.SQLITE_ROW => true,
+            c.SQLITE_DONE => false,
+            else => {
+                log.err("step: {s}", .{c.sqlite3_errmsg(s.db)});
+                return error.Sqlite;
+            },
+        };
+    }
+
+    pub fn exec(s: *Stmt, args: anytype) Error!void {
+        try s.bind(args);
+        while (try s.step()) {}
+    }
+
+    pub fn int(s: *Stmt, col: c_int) i64 {
+        return c.sqlite3_column_int64(s.handle, col);
+    }
+
+    pub fn isNull(s: *Stmt, col: c_int) bool {
+        return c.sqlite3_column_type(s.handle, col) == c.SQLITE_NULL;
+    }
+
+    pub fn optInt(s: *Stmt, col: c_int) ?i64 {
+        return if (s.isNull(col)) null else s.int(col);
+    }
+
+    /// Valid until the next step, reset or deinit
+    pub fn bytes(s: *Stmt, col: c_int) []const u8 {
+        const len: usize = @intCast(c.sqlite3_column_bytes(s.handle, col));
+        const ptr: ?[*]const u8 = @ptrCast(c.sqlite3_column_blob(s.handle, col));
+        return if (ptr) |p| p[0..len] else "";
+    }
+};
+
+test "round trip" {
+    const db = try Db.open(":memory:");
+    defer db.close();
+    try db.exec("CREATE TABLE t (a INTEGER, b TEXT, c BLOB)");
+    try db.run("INSERT INTO t VALUES (?, ?, ?)", .{ 42, "hi", Blob{ .bytes = "\x00\x01" } });
+    try db.run("INSERT INTO t VALUES (?, ?, ?)", .{ @as(?i64, null), "x", null });
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM t", .{}));
+    var s = try db.prepare("SELECT a, b, c FROM t ORDER BY rowid");
+    defer s.deinit();
+    try s.bind(.{});
+    try std.testing.expect(try s.step());
+    try std.testing.expectEqual(@as(i64, 42), s.int(0));
+    try std.testing.expectEqualStrings("hi", s.bytes(1));
+    try std.testing.expectEqualSlices(u8, "\x00\x01", s.bytes(2));
+    try std.testing.expect(try s.step());
+    try std.testing.expectEqual(@as(?i64, null), s.optInt(0));
+    try std.testing.expect(!try s.step());
+}

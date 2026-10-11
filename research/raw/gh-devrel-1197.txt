@@ -1,0 +1,64 @@
+url: https://github.com/RiotGames/developer-relations/issues/1197
+opened: 2026-10-06T08:14:52Z
+closed: null
+title:	[Application Review] Production API Key — Pending Review 38 days (App ID: 875612, TILT)
+state:	OPEN
+author:	1Terrikola (César Vaquero Vicente)
+labels:	
+comments:	2
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1197
+--
+**Account Information**
+Riot ID: GothFeetEnjoyer#Canse
+I have played League of Legends for years; this is not an account created only for the Developer Portal.
+
+**Application Information**
+- App ID: **875612**
+- Product name: **TILT**
+- Key type: Production, League of Legends (no Tournament API)
+- Product URL: https://tiltleague.com
+- Submitted: **29 August 2026**
+- Current status: **Pending Review** — 38 days as of 6 October 2026
+
+**Issue Description**
+The application has been in Pending Review for 38 days, with no response and no request for further information. The Developer Portal FAQ states that applications are reviewed weekly and can take up to three weeks during busy periods. This is now well past that.
+
+As far as I can tell nothing is outstanding on my side:
+
+- Domain ownership was verified at submission, and the verification file is still being served: https://tiltleague.com/riot.txt
+- The product is live and working, so there is a functioning app to review.
+- I have not edited or resubmitted the application since 29 August, and I have sent no follow-up messages, to avoid being moved to the back of the queue.
+
+The application also puts two policy questions to Riot that remain unanswered: one about whether a feature of the product is compatible with the player-shaming policy, and one about monetisation terms. Both need someone to actually open the application.
+
+**Impact**
+The site is live on a development key, which expires every 24 hours and carries development rate limits. That makes it impossible to open the product to real users, which is the only thing this application is holding up.
+
+**Request**
+Could someone check the status of App ID 875612, or tell me what else is needed to move it forward? Happy to provide anything that is missing.
+
+=== COMMENTS ===
+--
+author: raimannma
+association: NONE
+date: 2026-10-06T08:16:07Z
+--
+FYI: For Valorant Keys you have to wait 6-8 months, some wait for over an year.
+LoL should generally be a bit faster iirc.
+
+--
+author: 1Terrikola
+association: NONE
+date: 2026-10-06T08:24:27Z
+--
+Hope so. It's really annoying having to update the API key every day just to be ready for whenever Riot checks the application.
+

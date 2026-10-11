@@ -1,0 +1,322 @@
+Riot staff comment activity in RiotGames/developer-relations issue comments since 2024-01-01
+Generated 2026-10-11 from: gh api repos/RiotGames/developer-relations/issues/comments?since=2024-01-01T00:00:00Z --paginate
+
+Total comments since 2024-01-01:      967
+Comments per year:
+   1 2022
+   1 2023
+ 480 2024
+ 297 2025
+ 188 2026
+
+Comments by author_association other than NONE:
+  92 tisbells CONTRIBUTOR
+
+Known Riot staff accounts (lucasMesquitaBorges profile: Senior Backend Software Engineer at Riot Games; tisbells: CONTRIBUTOR association):
+lucasMesquitaBorges comments: 74, first 2024-01-23, last 2025-12-26
+tisbells comments: 92, first 2024-01-02, last 2024-08-22
+Staff comments dated 2026: 0
+
+=== Full text (first 300 chars) of lucasMesquitaBorges comments since 2024 ===
+2024-01-23 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/882#issuecomment-1905283924
+Please try "Logout" and make the auth flow again. If the email is verified it should be enough.
+
+Let me know if this fixes the issue
+
+2024-06-13 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/918#issuecomment-2164641667
+Hi! I made some validations and the prismatic anvil purchase/destruction events are just how the item use is stored.
+You'll need to search for next events including IDs of prismatic items to find which item was created.
+
+2024-10-24 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/999#issuecomment-2436088203
+@ramezsw thanks for the update!
+@xorth are you still facing this issue? If it's ongoing, please provide an example curl
+
+2024-11-13 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/999#issuecomment-2474414561
+@Jagooodek About the curl you provided:
+- Field `client_assertion`: I'm assuming you're providing the sample token when you register a JWK or a self generated token using your private key with a valid expiry time.
+- Field `redirection_uri` is invalid, it needs to be renamed to `redirect_uri`
+
+Af
+
+2024-11-13 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1004#issuecomment-2474451196
+This issue was fixed. Thanks for reporting it!
+
+2024-11-27 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/992#issuecomment-2504622086
+Hi! That's correct. Thanks for the ping in this thread.
+I will check this issue.
+
+2024-12-10 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/992#issuecomment-2533051643
+The `cpid` object from `/userinfo` endpoint will only return if the player has played lol (that's when a shard is bound to the account).
+For the given rate you are reporting this issue, I'm assuming this `cpid` object is missing for players with a bound shard.
+
+To continue triaging this issue we 
+
+2024-12-17 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1018#issuecomment-2549137552
+Thank you all for reporting this issue.  A fix was released last Friday as @1337MARCEL reported.
+
+2025-01-17 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/992#issuecomment-2599227503
+Hi all! Can you please detail what scopes you're including in the redirect url for user authorization?
+(URL redirect to `https://auth.riotgames.com/authorize`)
+
+2025-01-22 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/992#issuecomment-2606017727
+Please add `offline_access` to your scopes and check if the error still happens!
+
+2025-01-22 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/992#issuecomment-2607893725
+@whyando @colin-j-rm @DarkIntaqt @OllieJennings @KarineValenca 
+
+> Please add `offline_access` to your scopes and check if the error still happens!
+
+Can you check if this solves your issue?
+
+2025-01-27 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/992#issuecomment-2616456971
+Thanks to all of you for reporting this issue. I'm pretty sure it was already fixed. Feel free to ping in case you need any help!
+
+2025-02-10 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1043#issuecomment-2649517638
+PUUID added to players object. Thanks for opening this issue.
+
+@geozukunft Thanks for reminding me about #708 issue. I'll work in the league-v4 updates.
+
+2025-02-11 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/708#issuecomment-2649523964
+@geozukunft I'll work to add `puuid` in the remaining endpoints. I appreciate raising this as an issue and sorry for the long time it's opened.
+
+Some data were made available to us just recently on these APIs.
+
+2025-02-11 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1044#issuecomment-2649536833
+Hi! I'm ckecking this issue.
+
+2025-02-18 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/708#issuecomment-2666689136
+@geozukunft I added `puuid` to `league-v4` endpoints.
+
+Thanks for raising this issue. When you created it we didn't have all the resources to enable it. Appreciate the patience on this.
+
+Unfortunately we can't provide `borderId` on summoner endpoints. I will track this and let you know in case I get
+
+2025-02-19 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/708#issuecomment-2667485394
+Got it. Sorry for the mistake. Reopened.
+
+I'll let you know as soon I have updates for the creation of the endpoint by `puuid`
+
+2025-02-24 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/708#issuecomment-2679401631
+@geozukunft @1337MARCEL @DarkIntaqt New league-v4 by puuid endpoint added. Please check at https://developer.riotgames.com/apis#league-v4/GET_getLeagueEntriesByPUUID
+
+Further changes will remove by summoner endpoints (We will announce in advance) and in some point get rid of summonerIds in response 
+
+2025-03-03 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1050#issuecomment-2695404750
+Hi! We made an update that temporarily removed the `Retry-Header` and after a recent patch it should be available. Please check and let us know in case of any issues.
+
+2025-03-03 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1050#issuecomment-2695693169
+@junioryono We only disabled one app. It spiked exponentially the amount of requests when it reached 429 responses.
+
+If that's your case, please fix this behaviour and enter in contact via https://support-developer.riotgames.com/hc/en-us/requests/new
+
+2025-03-03 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1050#issuecomment-2695697909
+@MingweiSamuel @Allan-Cao You also reported some differences on the rate limit algorithm. Counters were being shared between some subdomains. This was also fixed.
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1051#issuecomment-2699058205
+@jezi21 This issue was reported in https://github.com/RiotGames/developer-relations/issues/1050 and it's already resolved.
+
+Feel free to re-open in case you are still facing this issue.
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1031#issuecomment-2699077371
+This happened during a rollout. If it happens again, feel free to re-open and ping me.
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1032#issuecomment-2699078882
+This happened during a rollout. If it happens again, feel free to re-open and ping me.
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1029#issuecomment-2699085534
+@Vincouux @bangingheads can you confirm if this was resolved or is still ongoing?
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1030#issuecomment-2699094133
+@bangingheads @tbonelee can you please confirm if this is still ongoing?
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1007#issuecomment-2699097159
+@renja-g can you please confirm if this is still ongoing?
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1002#issuecomment-2699135058
+We've improved monitoring and telemetry on our APIs. Spectator is healthy for the last months.
+Feel free to open a new issue and ping me in case this happens again.
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/974#issuecomment-2699155957
+This issue was fixed. Feel free to ping me in case it happens again.
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/758#issuecomment-2699158000
+Spectator-v4 was removed. Please open a new issue if you get similar issues in spectator-v5.
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/602#issuecomment-2699159994
+In case you get any issues with spectator-v5, feel free to open a new issue.
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/600#issuecomment-2699163928
+Closed. Sorry, but this feature request isn't something we can do.
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1029#issuecomment-2699176478
+Thanks for the response!
+
+2025-03-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1023#issuecomment-2699189174
+@colin-j-rm @jk796 Can you confirm if this was fixed in your end?
+
+2025-03-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1030#issuecomment-2719297343
+Hi, I'm closing this issue since I wasn't able to replicate. Please re-open if it happens again.
+
+2025-03-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1054#issuecomment-2719313997
+There is a propagation time after the key is regenerated to the api validation. It should take at max 5 minutes to be valid.
+We enforce applying for live keys for uses out of the development scope.
+Feel free to ping me in case this happens again (key regeneration taking longer than 5 minutes to be v
+
+2025-03-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1054#issuecomment-2719315242
+@SidiaDevelopment If your issue is ongoing, seems isolated and different of the topic for this issue. Please reach out to our support with appID / curl details.
+
+2025-03-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/486#issuecomment-2719352898
+All `SummonerDTO` entities are now updated in the swagger. Thanks for opening this issue.
+
+2025-03-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1044#issuecomment-2719357684
+@gabrielfgularte Sorry, no updates yet. I'm still in discussion with responsible teams.
+
+2025-03-21 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1040#issuecomment-2744007411
+Hi @JackLGZimmerman Thanks for reporting this issue.
+I believe this was fixed. Can you please recheck?
+
+2025-03-27 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1040#issuecomment-2759136945
+If this starts to happen again, feel free to re-open or open a new issue.
+
+2025-03-27 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1028#issuecomment-2759149831
+Fixed.`actId` is now filled in the response.
+
+2025-03-27 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/489#issuecomment-2759201440
+Changed to required in both endpoints docs. Thanks for opening this issue!
+
+2025-04-04 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1042#issuecomment-2778996612
+Hi! Currently, Master Leagues are capped at 10,000 entries. We have escalated this to the owner team to implement pagination, allowing iteration over all entries.
+
+As of today, we cannot provide an ETA for when this will happen. As soon as we have updates, we will announce this improvement.
+
+2025-04-14 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1062#issuecomment-2802327335
+Closed. Ticket opened without filling the template.
+If you have any issues or errors on third-party ecosystem feel free to open a new issue!
+
+2025-04-25 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1044#issuecomment-2830331848
+Hi, I checked with game teams and these matches are intentionally excluded from regular matches (`match-v5`) for quality reasons (private). Private matches can be accessed via `lol-rso-match-v1` api, it uses RSO authentication.
+
+Please follow our [RSO Documentation](https://developer.riotgames.com/d
+
+2025-04-25 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1066#issuecomment-2830335784
+Please fill the template with your information so we can help you!
+Feel free to reopen the issue.
+
+2025-04-25 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1065#issuecomment-2830353852
+Hi @MingweiSamuel Thanks for opening this issue. This change was intentional.
+Endpoints path are the same for compatibility reasons but somethings changed internally.
+
+Esports were separated to new methods (docs/payload may differ in the future). If we add any breaking changes, will be announced bef
+
+2025-04-25 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1007#issuecomment-2830359177
+Closed since I couldn't find any occurrence of this anymore. Feel free to re-open in case it happens again.
+
+2025-04-25 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1055#issuecomment-2830385772
+@DarkView that's correct! We added the content in the documentation page.
+
+@geozukunft Thanks for reporting this issue.
+
+2025-04-25 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/472#issuecomment-2830402259
+Thanks @bangingheads for the update.
+
+2025-04-25 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1065#issuecomment-2831166791
+Yes, that's correct. Esports methods are using `esports` subdomain. Our swagger generation tool is buggy for this specific change and it shows regular routing values for the esports method. This is in my radar to be fixed.
+
+Ideally I also want a different path for esports, it will be kept the same f
+
+2025-04-30 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1046#issuecomment-2842843541
+@JoeGibson8 I believe our producers contacted you.
+
+We forwarded this to game teams and they're aware of what happened.
+
+The callbacks that failed during this issue are now succeeding, I'm assuming you fixed in your end to accept the trailing slash.
+
+2025-04-30 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1064#issuecomment-2842850686
+Hi @whyando Thanks for raising this issue but this is an unsupported resource on developer relations.
+
+2025-04-30 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1067#issuecomment-2842856487
+Hi @victorhaynes Can you please reach out via https://support-developer.riotgames.com informing your app id?
+
+2025-05-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/836#issuecomment-2873545087
+I know it's a long time after this transition but we finally got unblocked on this.
+
+The support for active shard for lol/tft was added, but it's a new endpoint!
+
+https://developer.riotgames.com/apis#account-v1/GET_getActiveRegion
+
+Feel free to re-open or create a new ticket if needed!
+
+2025-05-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/889#issuecomment-2873549438
+I know it's a long time after this transition but we finally got unblocked on this.
+
+The support for active shard for lol/tft was added, but it's a new endpoint!
+
+https://developer.riotgames.com/apis#account-v1/GET_getActiveRegion
+
+Feel free to re-open or create a new ticket if needed!
+
+2025-05-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1061#issuecomment-2873725644
+Hi! We made a fix and this should be working again!
+Can you please validate?
+
+2025-05-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1068#issuecomment-2873734266
+Hi! We were informed that Swiftplay games are now private. This means it requires authorization from player to get data (use [lol-rso-match-v1](https://developer.riotgames.com/apis#lol-rso-match-v1) endpoints).
+
+Please validate and let me know if it's working as expected.
+
+2025-05-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1061#issuecomment-2873773288
+@Finallo Thanks for the reply!
+
+@NicolasLembeye feel free to re-open or open a new issue if needed!
+
+2025-05-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1071#issuecomment-2873777489
+@geozukunft thanks for the reply!
+
+
+2025-05-12 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1068#issuecomment-2873879961
+@geozukunft Good call, sorry about the change without a heads up.
+This came from outside our team, but I’ll sync with the DevRel producers and check with game teams.
+
+We’ll follow up soon with clearer info on all the game modes and how data works for each one.
+
+2025-05-14 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1075#issuecomment-2881074643
+@1337MARCEL @danblock97 
+@ChaseWater mentioned that we can't filter out brawl matches from `/ids` endpoint.
+
+We are aware that this is not the best solution. If Brawl was a permanent mode, that's something we would improve.
+
+2025-11-20 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1100#issuecomment-3555399245
+Hi! I forwarded this to game teams. Can you please confirm if this issue is still ongoing?
+If so, can you please provide recent matchIDs?
+
+2025-12-18 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1100#issuecomment-3671677088
+Hi, Issue escalated to the owner team. As soon I get more updates will send here.
+
+2025-12-18 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1121#issuecomment-3671788917
+Hi @Fiora489 please send me your app id
+
+2025-12-18 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1109#issuecomment-3671793822
+Expected behavior. Mayhem matches are private.
+
+2025-12-18 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1111#issuecomment-3671801273
+It was an issue in our APIs. Sorry for the inconvenience. Resolved.
+
+2025-12-18 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1118#issuecomment-3671809389
+Closed. Opened with raw template.
+
+2025-12-18 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1096#issuecomment-3671816189
+I appreciate the update. We also had some certificates validation issues depending on the issuer, which is now resolved.
+Feel free to reopen in case is an ongoing issue.
+
+2025-12-26 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1116#issuecomment-3693242513
+Resolved. Thanks for reporting this error!
+
+2025-12-26 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1077#issuecomment-3693332435
+Brawl objects added
+
+2025-12-26 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1114#issuecomment-3693332864
+ARAM Mayhem object added to `queues.json`
+
+2025-12-26 lucasMesquitaBorges https://github.com/RiotGames/developer-relations/issues/1025#issuecomment-3693333412
+Swiftplay objects added
+

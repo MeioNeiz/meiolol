@@ -1,0 +1,13 @@
+//! Storage: SQLite (meiolol.db + raw.db) and raw document compression.
+
+pub const sqlite = @import("sqlite.zig");
+pub const schema = @import("schema.zig");
+pub const raw = @import("raw.zig");
+
+pub const Db = sqlite.Db;
+pub const Blob = sqlite.Blob;
+pub const open = schema.open;
+
+test {
+    @import("std").testing.refAllDecls(@This());
+}

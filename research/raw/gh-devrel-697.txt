@@ -1,0 +1,128 @@
+url: https://github.com/RiotGames/developer-relations/issues/697
+opened: 2022-10-27T07:07:41Z
+closed: null
+title:	[BUG] Hidden rate limit contradicts communicated rate limit (which also in turn contradicts documented rate limit)
+state:	OPEN
+author:	plengauer (Philipp Lengauer)
+labels:	topic: developer portal, topic: documentation
+comments:	7
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	697
+--
+**Bug Description**  
+I let the maintainer figure out what the actual bug is, see my problem below.
+
+**Problem Description**  
+I was issued a product key (for https://developer.riotgames.com/app/594356/info) and according that page got allotted 250 requests every 10 seconds as rate limit. Trying to play nice, I built my code to respect that rate limit, i.e., fire at most 250 requests in parallel and then wait at least 10 seconds before continuing. Surprisingly, I ran into HTTP 429 after about request 80 already.
+
+Digging deeper into it, creating debug outputs, I actually found this in the response headers:
+`"x-app-rate-limit":"20:1,100:120","x-app-rate-limit-count":"1:1,113:120","x-method-rate-limit":"250:10","x-method-rate-limit-count":"76:10","x-rate-limit-type":"application"`
+Looking at the x-method-rate-limit, that seems to reflect the documented rate limit, and it shows that i am way under it. However, there is a second rate limit on application level. This type of application rate limit is documented here https://hextechdocs.dev/rate-limiting/ BUT it is set so low that i can never ever reach my actual rate limit. With a rate limit of 20 per second or 100 per two minutes, i would only reach 200 or 8.3 requests per 10 seconds respectively, which is way below the 250 per 10 seconds.
+
+And ontop of that, the documentation states that a production key is 500 requests per 10 seconds, not the allotted 250 (https://developer.riotgames.com/docs/portal).
+
+The resolution if the issue should include rate limits that don.t contradict each other and that follow the public documentation.
+
+**Expected Result**  
+I expect to run into rate limits after exceeding my 250 request per 10 seconds.
+
+**Actual Result**  
+I randomly run into rate limits after only a few requests.
+
+**Developer Impact**  
+* Frequency: Every time a player starts a game and my Discord bot needs to do some calculation (which result in several API calls).
+* Severity: The Discord bot doesnt respond and errors.
+* Cost: My bot needs to make 517 requests (as of today) when a player that uses it starts a game. With the documented rate limits on my developer portal, I should be able to make these calls within 20-30 seconds. With the hidden application rate limits, I would need to space them out over roughly 10 minutes. Because my Discord bot is a serverless application, and the current cost is around 15€/month, that would mean the cost would go from 15€ to 450€.
+* Efficiency: -
+* User emails: -
+
+**Player Impact** 
+-
+
+**Preconditions and Reproduing**  
+1) Get a product key
+2) Query your summoner via https://developer.riotgames.com/apis#summoner-v4/GET_getBySummonerName
+3) Query your last 100 matches via https://developer.riotgames.com/apis#match-v5/GET_getMatchIdsByPUUID
+4) Try to query the details for every match as fast as u can (in parallel, respecting the 250 request rate limit) via https://developer.riotgames.com/apis#match-v5/GET_getMatch.
+
+**Issue Comments**  
+Might want to leave this as instructions for any replies to your issue:
+
+If you're also experiencing this issue please add any additional context that is useful, the developer impact to yourself, and the player impact to your users. As an example, if spectator-v4 isn't working it might affect a scouting site, but it could also affect a mobile app or site to share replays. Give the context on how this issue affects your project.
+
+
+=== COMMENTS ===
+--
+author: Token07
+association: NONE
+date: 2022-10-27T10:40:33Z
+--
+1. Production keys have not started at 500:10 in a really long time, that specific documentation is out of date, as is a lot of the other data on the developer portal.
+2. The rate limits do not contradict each other, the lowest limit applies.
+3. The API expects you to implement your own caching/data store. You should not be requesting the last 5, 10, 50, 100, etc matches for the same player every time, or really just the same match numerous times. Match details can be cached or stored indefinitely as they are not going to change (just deleted after 2 years, 1 year for timelines)
+
+--
+author: plengauer
+association: NONE
+date: 2022-10-28T06:44:05Z
+--
+Thanks for your comment, let me respond.
+1) I suggest updating the doc then.
+2) They DO contradict each other! I got a documented rate limit on my developer portal of 250 requests every 10 seconds. I understand that in a technical sense the lower one counts, but how can I be expected to write nice code respecting the rate limit if there is a smaller undocumented one that supersedes always? So yes, they contradict each other. If there is a smaller one, then why isnt that one listed instead on the developer page?
+3) That is not applicable to my case. I dont query the matches of the player, but of his enemies. I actually do have a cache in place, but have a hit rate of <1%.
+
+--
+author: thomasmarton
+association: NONE
+date: 2022-10-28T06:54:37Z
+--
+X-Rate-Limit-Type: "application"
+Makes me want to look at 
+X-App-Rate-Limit: 100:120 (100 every 2 minutes)
+X-App-Rate-Limit-Count: 113:120 (13 over 100 in the bucket)
+
+Clearly an undocumented rate limit :)
+Also your app rate limit is available on the developer portal (right where your API key is)
+
+As for the documentation, trust me, we'd love to have that updated but we don't provide enough player value to warrant Riot doing anything about the (at this point severely) out of date documentation.
+
+As a matter of fact the rate limiting doc you linked is from a 3rd party site (namely one I manage/own)
+
+--
+author: plengauer
+association: NONE
+date: 2022-10-28T07:09:05Z
+--
+Exactly, thats my point. the rate limit in my developer portal states 250 every 10 seconds. nothing at all about the 100 every 2 minutes.
+
+--
+author: geozukunft
+association: NONE
+date: 2022-10-28T07:19:37Z
+--
+Can you post a screenshot of that just for completness just to show the difference between the written limit on the dev portal and the headers? (Also make sure to blur your api key)
+
+--
+author: plengauer
+association: NONE
+date: 2022-10-28T07:21:34Z
+--
+![image](https://user-images.githubusercontent.com/100447901/198527729-8228d217-18f9-4c3a-b405-9bfb94fee6d2.png)
+
+
+--
+author: Canisback
+association: NONE
+date: 2022-10-28T07:46:31Z
+--
+![image](https://user-images.githubusercontent.com/1747029/198532777-bfc54267-f5ad-4b11-9888-6d804e0d12eb.png)
+Anyway, always sync with the rate limit headers.
+

@@ -1,0 +1,13 @@
+.{
+    .name = .meiolol,
+    .version = "0.0.0",
+    .fingerprint = 0x3ffff68425fe2390,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .sqlite = .{
+            .url = "https://sqlite.org/2026/sqlite-amalgamation-3540000.zip",
+            .hash = "N-V-__8AAIbIsACiE8KD1p1yFmEmwfDyxM6oeFpCwhUhBARB",
+        },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src" },
+}

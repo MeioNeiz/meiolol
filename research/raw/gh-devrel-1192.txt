@@ -1,0 +1,81 @@
+url: https://github.com/RiotGames/developer-relations/issues/1192
+opened: 2026-09-17T10:56:03Z
+closed: null
+title:	[Application Review] Production API Key — Pending Review for 7+ months, 3 support tickets unanswered (App ID: 798301)
+state:	OPEN
+author:	axelvuillaume (axelvuillaume)
+labels:	
+comments:	1
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1192
+--
+## General Info
+
+- **App ID:** 798301
+- **App name:** DraftEdge
+- **Status:** Pending Review
+- **Submission date:** Feb. 14, 2026
+- **Product URL:** https://draftedge.lol/
+- **Verification file:** https://draftedge.lol/riot.txt
+- **Product Game Focus:** League of Legends
+- **Video demo:** https://youtu.be/pqozIAC2Mw0
+
+## Product Description
+
+DraftEdge is an analytics app built for League of Legends teams:
+
+- **Game Analytics** — import and parse .ROFL replay files to extract
+  player and team performance metrics
+- **Draft Strategy Tool** — plan pick/ban scenarios and draft patterns
+- **Scrim Hub** — organize practice sessions, track custom coaching
+  objectives, and rate team performance across scrims
+
+Target audience: coaches and analysts in the amateur competitive ecosystem
+(French leagues, German Prime League) looking for a centralized platform to
+track performance, prepare drafts, and improve through data-driven insights
+— which we believe directly benefits the Riot Games ecosystem.
+
+A test account is available in the application notes on the Developer Portal
+for the review team.
+
+## Issue
+
+The application has been in **Pending Review since Feb. 14, 2026 — over 7
+months** — with no approval, rejection, or request for additional
+information.
+
+I have submitted **three tickets** on the developer support site, all of
+which are still marked "Open" with no response:
+
+- #121941042 — "Request Status Update for API Key Production" (Feb. 2026)
+- #122753567 — "Following ticket response about development Key" (Feb. 2026)
+- #124082689 — "Application review still pending (urgent)" (Mar. 2026)
+
+I have deliberately spaced these out over months to avoid being pushed back
+in the queue.
+
+## Request
+
+Could someone from Developer Relations please take a look at App ID 798301,
+or let me know if any additional information is needed? I am fully committed
+to complying with rate limits, data usage policies, and the free-tier
+requirement, and happy to adjust anything in the application.
+
+Thank you for your time.
+
+=== COMMENTS ===
+--
+author: Cypherous
+association: NONE
+date: 2026-09-17T13:00:09Z
+--
+Estimates are 3-8 months but it seems riot has been slacking off in that department, nobody here can speed this process up
+

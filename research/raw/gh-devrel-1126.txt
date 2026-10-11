@@ -1,0 +1,150 @@
+url: https://github.com/RiotGames/developer-relations/issues/1126
+opened: 2026-01-08T20:12:23Z
+closed: null
+title:	[Application Review] Production Key Pending 45+ Days - Honorus (ID: 767749)
+state:	OPEN
+author:	Romspopopoms
+labels:	
+comments:	5
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1126
+--
+**Account Information**
+  - Riot ID: MASAW LEPLUSBÖ#EUW
+  - Active League of Legends player and developer of Honorus
+
+  **Issue Description**
+  My application **Honorus** (App ID: **767749**) has been **Pending Review for 45+ days** without any response or feedback.
+
+  **Application Evolution**
+  Since my initial submission, Honorus has progressed significantly:
+  - ✅ Platform is now **live at https://honorus.fr**
+  - ✅ **50+ active users** in closed beta
+  - ✅ Full gamification system operational (missions, XP, rankings)
+  - ✅ Match tracking and performance analysis working
+  - ✅ Riot API integration complete and ToS-compliant
+
+  **Why I Need Production Key Now**
+  The Development Key rate limits (100 req/2min) are causing issues:
+  - Game detection polling hits limits during peak hours
+  - Match sync delays frustrate users after games
+  - Growing userbase (~50 users) exceeds dev key capacity
+
+  **APIs Used**
+  - Match-V5 (match history, performance tracking)
+  - Summoner-V4 (account linking)
+  - League-V4 (ranked stats display)
+  - Spectator-V5 (live game detection)
+
+  **Compliance**
+  - No data selling or sharing
+  - No automation or botting features
+  - Display-only usage for player improvement
+  - Users authenticate via Riot Sign-On
+
+  **Request**
+  Could someone please review application **#767749** or let me know if additional information is needed?
+
+  I'm available to answer any questions or provide a demo.
+
+  Thank you!
+
+=== COMMENTS ===
+--
+author: DarkIntaqt
+association: NONE
+date: 2026-01-08T20:13:43Z
+--
+Hi there.
+Based on other feedback from the community, the average waiting time is 6-9 months (by now) and steadily increasing. 
+
+Additionally, a production key still has the same limits as a dev key. You need to ask for a rate limit increase on the prod key while or after it has been approved. 
+
+On top of that, I might wanna point out that the matches named on your landing page could be easily pulled within 5 hours, even with a dev key. You might want to check your keys utilization and should try to spread requests more instead of bursting them.
+
+
+--
+author: Romspopopoms
+association: NONE
+date: 2026-01-08T20:34:06Z
+--
+Thanks for the info, really appreciate the transparency on the actual wait times.
+
+  A few follow-up questions:
+
+  1. **Rate limit increase on dev key** - Is it possible to request a rate limit increase on a dev key while waiting for prod approval? Or is that only for approved prod keys?
+
+  2. **Regarding request spreading** - We've actually just shipped several optimizations:
+     - Parallelized match fetching (batches of 5 with retry)
+     - Extended match cache to 6h / 2000 entries (cross-user)
+     - Reduced match fetch from 20 to 10 per sync
+     - Merged duplicate ranked API calls
+     - Skip ranked API when only ARAM/normals played
+
+     Our main rate limit issue comes from **Spectator API polling** (game detection every 45s per connected user). We're planning to implement adaptive polling to reduce this. Any other suggestions? 
+
+  3. **6-9 months** - Is there any way to expedite the review for apps that are already live with active users? Or is the queue strictly FIFO?
+
+  Thanks again for the insight. We'll keep optimizing in the meantime.
+
+--
+author: Cypherous
+association: NONE
+date: 2026-01-08T21:29:21Z
+--
+Dev keys are not subject to API limit increases, and even if they were, the support ticket system used for those requests also has a several month backlog aswell
+
+The queue is processed in the order applications are received and also editing the app also apparently resets your place in the queue so don't do that either
+
+--
+author: mkj777
+association: NONE
+date: 2026-05-07T03:34:03Z
+--
+> Hi there. Based on other feedback from the community, the average waiting time is 6-9 months (by now) and steadily increasing.
+> 
+> Additionally, a production key still has the same limits as a dev key. You need to ask for a rate limit increase on the prod key while or after it has been approved.
+> 
+> On top of that, I might wanna point out that the matches named on your landing page could be easily pulled within 5 hours, even with a dev key. You might want to check your keys utilization and should try to spread requests more instead of bursting them.
+
+Are you sure? the Documentation states the following: 
+
+```
+The starting rate limit of a production API key is much larger than the development key:
+
+    500 requests every 10 seconds
+    30,000 requests every 10 minutes
+
+Remember that this rate limit is enforced per region.
+```
+
+--
+author: Token07
+association: NONE
+date: 2026-05-07T03:43:18Z
+--
+> > Hi there. Based on other feedback from the community, the average waiting time is 6-9 months (by now) and steadily increasing.
+> > Additionally, a production key still has the same limits as a dev key. You need to ask for a rate limit increase on the prod key while or after it has been approved.
+> > On top of that, I might wanna point out that the matches named on your landing page could be easily pulled within 5 hours, even with a dev key. You might want to check your keys utilization and should try to spread requests more instead of bursting them.
+> 
+> Are you sure? the Documentation states the following:
+> 
+> ```
+> The starting rate limit of a production API key is much larger than the development key:
+> 
+>     500 requests every 10 seconds
+>     30,000 requests every 10 minutes
+> 
+> Remember that this rate limit is enforced per region.
+> ```
+
+A lot of the documentation on the dev portal has not been touched in some time (years in some cases). Anything regarding specific limits or timeframes should be considered out-of-date at this point.
+

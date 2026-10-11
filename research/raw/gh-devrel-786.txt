@@ -1,0 +1,75 @@
+url: https://github.com/RiotGames/developer-relations/issues/786
+opened: 2023-06-28T17:19:34Z
+closed: 2023-06-28T17:46:17Z
+title:	[Account] Requesting increased rate limit
+state:	CLOSED
+author:	mattvv (Matt Van)
+labels:	
+comments:	3
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	786
+--
+**Account Information**
+What's your summoner name (e.g., Tuxedo) or riot id (e.g., Tuxedo#AYAYA)?  voidgg#2022
+
+Have you played any of Riot's games or did you just create an account for the Developer Portal? This account is solely for developer portal.
+
+**Issue Description**  
+Hi Riot!
+
+We'd like to request a rate limit increase for a few endpoints.
+We are currently testing our service which we index game data for various games.
+
+We currently have a website where a user can get their match history and see stats about their games, we are using the following endpoints to populate the match history:
+/lol/summoner/v4/summoners/by-name/{summonerName}
+/lol/league/v4/entries/by-summoner/{encryptedSummonerId}
+
+If we have the users history, we show it directly from our database, but if we don't we use the following API call to get it.
+
+We're using a background jobs system to query the Riot Games API and trying to throttle the queue so we're below the API limit, but we're seeing in our testing that the queue gets backed up quite a bit.
+
+Could we request a limit to these two endpoints?
+
+Thanks!
+
+**What I've Tried**
+We have tried having our queue system continue to be under the rate limit, however this has our queue get super super big.
+
+
+
+=== COMMENTS ===
+--
+author: bangingheads
+association: NONE
+date: 2023-06-28T17:38:42Z
+--
+> The purpose of this repo is exclusively bug reporting for tools in the Riot Games Developer Ecosystem.
+
+This is not the proper place to ask for an app increase.
+
+Ask in the messages tab of your application. 
+
+If you do not have a messages tab you have a personal application that cannot receive rate limit increases and will need to apply for a production application.
+
+--
+author: mattvv
+association: NONE
+date: 2023-06-28T17:44:19Z
+--
+Thanks @bangingheads - I have requested there with no reply for a week or so now, will keep waiting patiently.
+
+--
+author: mattvv
+association: NONE
+date: 2023-06-28T17:46:17Z
+--
+Closing as not to pollute per @bangingheads comment
+

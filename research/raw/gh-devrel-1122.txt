@@ -1,0 +1,60 @@
+url: https://github.com/RiotGames/developer-relations/issues/1122
+opened: 2026-01-02T14:04:47Z
+closed: null
+title:	Riftbound API KEY stuck in pending review for 5 months
+state:	OPEN
+author:	Smedzlatko (Martin Myslík)
+labels:	
+comments:	4
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1122
+--
+Hello,
+
+I have a Riftbound application API key request stuck in review for 5 months. I created the application before the official API key policy was published and applied immediately (first attempt was rejected due to misunderstanding of my product description that mentioned hosting events which was unrelated to the API key usage). After re-submitting the app with updated description, it was never reviewed since.
+
+APP ID: 762989
+
+I am not sure if this is the correct channel to report this (I tried submitting a ticket in the official support channel, but it was stuck there for 2 months and finally closed with statement that the application in under review and will be handled shortly).
+
+Any help or feedback regarding what should be done on our side would be highly appreciated. 
+
+=== COMMENTS ===
+--
+author: Cypherous
+association: NONE
+date: 2026-01-02T14:17:38Z
+--
+Keys are processed in the order they are registered, the current estimate for approvals is around 7 months although given the holiday break they are on that is probably closer to 8 months currently but could end up being longer, there is nothing any of us can do to speed this process up sadly
+
+--
+author: Smedzlatko
+association: NONE
+date: 2026-01-02T14:22:08Z
+--
+I was going though the official FAQ that states that review process typically takes one week (3 weeks worst case in busy times). Perhaps it could be updated to reflect the current reality?
+
+Source: https://developer.riotgames.com/docs/faqs#_production-key-applications
+
+--
+author: Cypherous
+association: NONE
+date: 2026-01-02T14:24:55Z
+--
+Yeah you have more chance of squeezing blood from a stone than getting riot to update that documentation
+
+--
+author: chinnick967
+association: NONE
+date: 2026-01-07T06:25:11Z
+--
+@Smedzlatko And best hope you don't get rejected. My server was down for maintenance when my review finally got looked at after like 6 months, and because they couldn't see it I got rejected and booted to the back of the queue for another 6+ month wait.
+

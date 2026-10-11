@@ -1,0 +1,79 @@
+url: https://github.com/RiotGames/developer-relations/issues/776
+opened: 2023-05-31T03:43:40Z
+closed: 2023-06-08T01:50:03Z
+title:	[Account]  Help me evaluate whether it violates Riot's convention
+state:	CLOSED
+author:	LvBay (faker)
+labels:	
+comments:	6
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	776
+--
+**Account Information**
+I am a developer in Portal: FIREFIRE
+
+**Issue Description**  
+I saw this description at [Game Integrity](https://developer.riotgames.com/docs/lol#developer-api-policy_game-integrity): `Products cannot identify or analyze players who are deliberately hidden by the game.`
+
+ I have some doubts about this:
+
+A summoner has set a 'hidden record' in the game. If my product queries and display his record through the lcu api, does this violate Riot's convention?
+
+
+=== COMMENTS ===
+--
+author: Token07
+association: NONE
+date: 2023-05-31T10:25:54Z
+--
+This issue tracker is for issues with the API, not for inquiries. The appropriate piece to ask would be in an application on the developer portal or in the discord server linked in the README.
+
+--
+author: LvBay
+association: NONE
+date: 2023-06-06T02:11:28Z
+--
+> This issue tracker is for issues with the API, not for inquiries. The appropriate piece to ask would be in an application on the developer portal or in the discord server linked in the README.
+
+I am more concerned about whether the usage complies with Riot's regulations, rather than the function of the API
+
+--
+author: Token07
+association: NONE
+date: 2023-06-06T02:34:42Z
+--
+> I am more concerned about whether the usage complies with Riot's regulations, rather than the function of the API
+
+Then your issue is inappropriate for this bug tracker as you do not have a bug report that is in the scope of the developer relations team. As I previously said, the appropriate place to ask is the developer portal, which is where questions about 3rd party apps are handled and policy questions responded to authoritatively. The developer relations team members that are responsible for answering questions like this do not check nor respond to issues posted here.
+
+--
+author: LvBay
+association: NONE
+date: 2023-06-07T01:24:54Z
+--
+Ok I got it. BTW, is the developer portal always slow to respond? I submitted a product registration there and haven't heard back for over a week
+
+--
+author: Token07
+association: NONE
+date: 2023-06-07T01:26:54Z
+--
+> Ok I got it. BTW, is the developer portal always slow to respond? I submitted a product registration there and haven't heard back for over a week
+
+It normally takes a week or 2 to get a response. Occasionally longer, especially if they're waiting on an response from a different team
+
+--
+author: LvBay
+association: NONE
+date: 2023-06-08T01:50:03Z
+--
+thanks
+

@@ -1,0 +1,25 @@
+title:	美服海斗游戏中被permanent ban
+state:	CLOSED
+author:	jwu122
+labels:	
+comments:	1
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	523
+--
+开了自动匹配, 自动接受, 自动选英雄
+--- comments ---
+author:	Hanxven
+association:	member
+edited:	false
+status:	none
+--
+使用本软件需谨慎，我已告知可能的风险。
+--

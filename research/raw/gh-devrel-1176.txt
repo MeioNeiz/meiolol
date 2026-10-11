@@ -1,0 +1,45 @@
+url: https://github.com/RiotGames/developer-relations/issues/1176
+opened: 2026-08-08T10:25:41Z
+closed: null
+title:	Personal API Key product stuck in Pending Review for 1 month — App ID 858483
+state:	OPEN
+author:	WaterPlan3
+labels:	
+comments:	1
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1176
+--
+Hello Dev Rel team,
+
+My personal API key product "Season Analyzer Perso TFT" (App ID 858483, Game Focus: Teamfight Tactics) has been in Pending Review for about a month.
+
+For context, I registered two personal products back to back: the League of Legends one was approved instantly, but the TFT one (same account, same personal use case) is still pending.
+
+It's a strictly personal dashboard that analyzes my own TFT matches via TFT-Match-V1 and TFT-League-V1 — no public consumption. I already have a working prototype and I'm happy to provide any additional details.
+
+Could you please review it? Thank you!
+
+Riot ID: Evelynn Dhéliat#4691 — Region: EUW
+
+<img width="1548" height="815" alt="Image" src="https://github.com/user-attachments/assets/12e4d29b-afbc-4f31-b5d1-8365c07362fc" />
+
+=== COMMENTS ===
+--
+author: Token07
+association: NONE
+date: 2026-08-08T12:19:44Z
+--
+From Discord:
+> Expect **3-8 months** for an application review.
+> Ticket response times may be slightly shorter, but are still at least several months out.
+> 
+> *If your app status is listed as `unverified` in the developer portal it will **not** be reviewed.*
+

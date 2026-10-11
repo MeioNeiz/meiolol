@@ -1,0 +1,113 @@
+url: https://github.com/RiotGames/developer-relations/issues/1139
+opened: 2026-03-02T06:39:05Z
+closed: null
+title:	[Application Review] Production API Key
+state:	OPEN
+author:	bhatnag8 (Arryan Bhatnagar)
+labels:	
+comments:	10
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1139
+--
+I submitted my application for approval on around November 3rd and I got a response back on Feb. 9, 2026 saying that my app was rejected. 
+Reason: The link that you've included does not work or leads to a blank page. As it stands now we cannot verify what your project is intended to do. If you want to continue in the application process, please reply to this message with a working link, demo or user flow.
+My app ID is 775146
+
+I'm not sure what to do because:
+
+- The link works and does not lead to a blank page: https://daren.arryan.xyz/ this is the exact same link I used and have not edited it since.
+- There is also no place to reply in the Project Discussion tab on the developer portal. I'm assuming this is because the app was marked as rejected, and if it was approved, you can chat with them. But as of right now, there is no way to notify any link changes or even reply that I updated the website to make it more clear. So why would they say that?
+
+I resubmitted the app, but it seems like the person made legit no effort to do anything from their end, very frustrating after waiting more than 3 months. I already had my app completed before submitting to Riot and am just waiting on them to release it. I'd happily release it with an updating dev key every 24 hours but I'm pretty sure that's not allowed which is why I haven't done it. Is there anything I can do about it? 
+
+=== COMMENTS ===
+--
+author: Token07
+association: NONE
+date: 2026-03-02T11:13:01Z
+--
+That rejection message can also mean there is not enough information on your website for Riot to understand what your app does.
+
+--
+author: Bulletdev
+association: NONE
+date: 2026-03-05T23:17:58Z
+--
+I've been waiting for 4 months, and my application was rejected with the same message again. The website was up, and I provided test credentials. Perhaps they are rejecting all new applications
+
+--
+author: Token07
+association: NONE
+date: 2026-03-05T23:23:51Z
+--
+@Bulletdev From the discussion on Discord, that rejection message also means that Riot did not understand the flow of your site enough to grant approval.
+
+--
+author: Bulletdev
+association: NONE
+date: 2026-03-05T23:29:35Z
+--
+What is the difficulty in understanding the flow?
+
+https://prostaff.gg
+
+<img width="1179" height="739" alt="Image" src="https://github.com/user-attachments/assets/6eaab69b-b16e-4be4-82b1-fe0ee4891fd6" />
+
+--
+author: Token07
+association: NONE
+date: 2026-03-05T23:43:14Z
+--
+@Bulletdev I don't believe Riot typically uses demo credentials for apps, so I would recommend either putting some screenshots on your website or links to them in the app description. Also it may help to provide a more detailed description of your app.
+
+--
+author: Bulletdev
+association: NONE
+date: 2026-03-05T23:45:02Z
+--
+<img width="1271" height="470" alt="Image" src="https://github.com/user-attachments/assets/c0214a26-e82b-4405-a90f-b9f9f1db8b4b" />
+
+--
+author: Token07
+association: NONE
+date: 2026-03-06T00:00:55Z
+--
+@Bulletdev All I can recommend is to be more descriptive about the flow of your app in the mean time. There's not really a process to expedite re-reviews and it's 1 person handling the review of thousands of apps, so they can't really spend a lot of time going through demos.
+
+--
+author: bhatnag8
+association: NONE
+date: 2026-05-21T17:28:51Z
+--
+I updated the website here: https://daren.arryan.xyz/ again @Token07 
+
+I'm not sure what other information I can put here. Am I missing something that will cause them to reject the submission? 
+
+I don't even know that if they give a production API key right away or I have to resubmit/request after app approval... 
+
+It's quite silly that from Nov-3 to Feb-9, it took that long to review and they reject with the most generic message, and I had to resubmit and continue waiting in the queue as of right now (May-21)
+
+--
+author: Token07
+association: NONE
+date: 2026-05-21T18:24:34Z
+--
+lgtm @bhatnag8 
+
+Everyone is in agreement on the app review timeframe and process leaves a lot to be desired, unfortunately the best solution is to wait.
+
+--
+author: Cypherous
+association: NONE
+date: 2026-05-21T18:48:00Z
+--
+Be happy you're not me, mines been in the queue for 265 days so far
+

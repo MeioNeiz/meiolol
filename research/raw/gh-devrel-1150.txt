@@ -1,0 +1,59 @@
+url: https://github.com/RiotGames/developer-relations/issues/1150
+opened: 2026-04-13T21:58:28Z
+closed: null
+title:	Personal API Key Request - 3+ Weeks Pending
+state:	OPEN
+author:	vinchenzo-db (Vincent Chen)
+labels:	
+comments:	3
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1150
+--
+Could someone please help to review the status of these requests and advise if the approval process can be expedited? I submitted the request around March 21, 2026 but it's still "Pending Review". I already have a prototype of the application and I'm happy to provide additional information or documentation if needed. Thank you!
+
+Personal API: App ID 816044(River Sprite Co.)
+Current Status
+Pending Review
+
+```
+Product Description
+River Sprite Co. is a Discord community bot that tracks TFT match results for a private friend group server. When registered users finish a TFT game, the bot automatically posts a rich embed in a designated Discord channel showing their placement, final board composition, active traits, augments, and game duration - giving the group an easy way to see how everyone's games went without having to alt-tab or share screenshots.
+The bot detects game sessions through Discord's presence API and only calls the Riot API after a game ends to retrieve match details. This means API usage is minimal - typically a few calls per game session (account lookup on registration, match ID list, and match details on game completion).
+APIs used: riot/account/v1 (one-time account lookup during registration), tft/match/v1 (match IDs and match details after games end). The bot also reads from Data Dragon for champion display names.
+The bot also includes community engagement features - per-game challenges that highlight specific champions from the current set, encouraging players to try different comps and discuss their games together.
+```
+
+=== COMMENTS ===
+--
+author: geozukunft
+association: NONE
+date: 2026-04-13T22:16:17Z
+--
+Expect 3-8 months for an application review.
+Ticket response times may be slightly shorter, but are still at least several months out.
+If your app status is listed as unverified in the developer portal it will not be reviewed.
+
+This repository is only for reporting bugs with the API not for app approvals 
+
+--
+author: vinchenzo-db
+association: NONE
+date: 2026-04-13T22:21:10Z
+--
+Wow that's a long time; ok with this issue being closed then...
+
+--
+author: maxwhoppa
+association: NONE
+date: 2026-04-15T17:16:13Z
+--
+Same for me though, kind of redic
+

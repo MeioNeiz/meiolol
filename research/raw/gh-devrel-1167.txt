@@ -1,0 +1,61 @@
+url: https://github.com/RiotGames/developer-relations/issues/1167
+opened: 2026-07-13T14:17:53Z
+closed: null
+title:	[Application Review] Key Pending Since Mid-May - App ID 835512 (GAPLESS)
+state:	OPEN
+author:	nathanmanteau38750-wq (Pouss_Malin)
+labels:	
+comments:	3
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1167
+--
+Hi,
+
+My application has been pending review for about 2 months.
+
+- App ID: 835512
+- Product: GAPLESS (https://gapless.gg) — esport coaching marketplace
+- Riot API usage: LoL only — aggregated anonymized Master+ match data 
+  (league-v4 + match-v5) powering a free educational "Build Quiz". 
+  ~2000 requests/week via scheduled cron, no real-time data, 
+  no individual player identification.
+- Submitted: mid-May 2026
+- Status: Pending Review
+- No pending questions in my application messages on the portal
+
+Could you give me a status update on the review?
+
+Thanks!
+
+=== COMMENTS ===
+--
+author: Cypherous
+association: NONE
+date: 2026-07-13T14:29:57Z
+--
+Current wait time estimates are 3-8 months
+
+You won't get any direct response from riot though so you'll just be waiting until the reach you in the queue
+
+--
+author: nathanmanteau38750-wq
+association: NONE
+date: 2026-07-13T14:46:32Z
+--
+Oh, right, I didn’t realise it was that much – well, thanks. I suppose there’s no other way to make it any quicker, is there?
+
+--
+author: Cypherous
+association: NONE
+date: 2026-07-13T15:02:09Z
+--
+Invent time travel
+

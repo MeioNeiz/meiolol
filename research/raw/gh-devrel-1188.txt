@@ -1,0 +1,57 @@
+url: https://github.com/RiotGames/developer-relations/issues/1188
+opened: 2026-09-13T20:58:32Z
+closed: null
+title:	[Application Review] LoLSuggest — pending for 4 months
+state:	OPEN
+author:	omerserif8956-star
+labels:	
+comments:	3
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1188
+--
+Hi, I applied for LoLSuggest (https://lolsuggest.com/) about five months ago.
+
+App ID: 827293
+
+My current API limits are sufficient; I only need the appropriate approval to support the website with ads. Could you review my application and confirm whether Approved or Acknowledged status would cover my public API use and advertising? I already have "approved" personal key.
+
+Thank you.
+
+=== COMMENTS ===
+--
+author: Cypherous
+association: NONE
+date: 2026-09-14T00:44:08Z
+--
+https://support-developer.riotgames.com
+
+You need an already approved prod app in order to request a limit increase, or are you saying you haven't yet been approved for a prod key in the first place? because if you are using a personal or dev key you aren't allowed to advertise the site to users in the first place so your resource use should basically be nil as nobody should be being directed towards your site until your prod key is approved, and when it is approved it will have essentially the same limits as your personal key so you'll then need to fill out a devrel ticket on the link above to request an increase, just be aware its 3-8 months for a response for the prod key then however many months it takes them to respond to the ticket
+
+--
+author: omerserif8956-star
+association: NONE
+date: 2026-09-14T07:59:19Z
+--
+> https://support-developer.riotgames.com
+> 
+> You need an already approved prod app in order to request a limit increase, or are you saying you haven't yet been approved for a prod key in the first place? because if you are using a personal or dev key you aren't allowed to advertise the site to users in the first place so your resource use should basically be nil as nobody should be being directed towards your site until your prod key is approved, and when it is approved it will have essentially the same limits as your personal key so you'll then need to fill out a devrel ticket on the link above to request an increase, just be aware its 3-8 months for a response for the prod key then however many months it takes them to respond to the ticket
+
+
+Thanks, understood. I’m waiting for production approval so I can launch, promote the site, and support it with display ads. My current rate limits are sufficient—I’m asking for an application review, not a limit increase. App ID: 827293.
+
+
+--
+author: Cypherous
+association: NONE
+date: 2026-09-14T14:11:29Z
+--
+Yes and in that case you are still waiting for the 3-8 month timeline for apps to be processed like i said in my previous message, there is no way to accelerate this 
+

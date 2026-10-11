@@ -1,0 +1,37 @@
+# Data
+
+Researched 2026-10-11. Production key details: production-key.md.
+
+## Source: Riot API only
+
+- Personal key: 20 req/s and 100 req/2 min per routing value, no expiry, not for public
+  use. Match details and match ids share the `europe` bucket: ~72k req/day, ~60k matches
+  after id lookups
+- EUW plays ~150-170k ranked solo games/day (lolalytics counts), so we get ~35-40%
+- Match data kept 2 years (timelines 1 year); a player's match list holds their last
+  ~1000 games, older ones only reachable by match id
+- Not available anywhere: pick order (ban `pickTurn` is slot order, not real order),
+  rank at match time (we snapshot the ladder), mastery at match time
+- Production key: 3-8 month review, needs a live site; default limits may be no higher
+  than personal. Only worth it for the public app
+- One developer account per person and no key sharing (API Terms); one product per key
+
+## Dropped, and why
+
+- lolalytics API: response says "private API ... may not be used by third parties".
+  Its matchup and synergy rates can be computed from our own matches instead
+- Hugging Face / Kaggle dumps: old patches (15.x) or Master+ only; useless for an app
+  about today's games
+- Leaguepedia / Oracle's Elixir: pro play, not the target players
+- op.gg, u.gg etc: scraping against their terms or unclear; nothing we need
+
+## Policy
+
+From Riot's general policies (2025-05-29) and the Overwolf Riot compliance guide:
+
+- Register the product (LCU apps too). Personal key: personal use only
+- Show options with reasons; do not remove choices or auto-lock/ban/dodge
+- Ranked champ select: never reveal hidden names; non-party players are "Ally 1..5"
+- No MMR calculators, no de-anonymising
+- At pick time we only know the user's own identity and mastery, so the model can only
+  use teammates' and enemies' champions, not their history

@@ -1,0 +1,63 @@
+url: https://github.com/RiotGames/developer-relations/issues/1155
+opened: 2026-05-08T21:02:33Z
+closed: null
+title:	Production API Key Review Status — Ticket MXX2ZL-3WK4
+state:	OPEN
+author:	Solblod
+labels:	
+comments:	1
+assignees:	
+projects:	
+milestone:	
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	1155
+--
+Account Information
+Riot ID: Volibiere#EUW
+I've been an active League of Legends player for years before creating my Developer Portal account.
+
+Issue Description
+I submitted a production API key application in February 2026 (ticket **MXX2ZL-3WK4**) and followed up once via the Developer Portal  no response received on either submission. I'm opening this issue to request a status update, as my project is now hitting hard limits on the development key.
+
+Project: LegendsTracker.fr
+French-language League of Legends tracker and AI coaching platform. Live in production, fully respecting Riot's ToS (zero advertising or promotion while on dev key).
+
+Organic growth (no marketing):
+- 2.1K visitors / 14.8K page views in last 24h
+- 443 registered users 
+
+Current dev-key impact (last 64k requests):
+- All Riot-dependent routes p95-locked at our 8s timeout (`/match/timeline`, `/matches`, `/timeline`  ~3k calls combined)
+- Users experiencing degraded performance despite Redis + Postgres multi-layer caching
+
+Stack: Next.js 14, TypeScript, A+ security headers, 649+ tests. Full rate-limiting compliance via atomic Redis Lua scripts across 5 tiers.
+
+What I've Tried
+- [x] Submitted initial production key application (February 2026, ticket MXX2ZL-3WK4)
+- [x] Submitted follow-up ticket via Developer Portal no response
+- [x] Reached out on the Riot Games Third Party Developers Discord  directed here
+
+Repro Steps
+1. Log into Developer Portal
+2. Check status of ticket MXX2ZL-3WK4 → "Pending Review" since February 2026
+
+Issue Context
+The site is fully functional and live. I'm happy to provide a demo, additional documentation, or any compliance information needed. Just looking for any update on where the application stands in the review queue, or feedback on what might be missing.
+
+Thank you for your time.
+
+Gabin
+
+=== COMMENTS ===
+--
+author: Cypherous
+association: NONE
+date: 2026-05-08T21:29:11Z
+--
+Yeah the queue is backed up its around an 8 month wait give or take for the one guy on the API team to get to you
+

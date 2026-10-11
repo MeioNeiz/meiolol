@@ -1,0 +1,566 @@
+//! Pick suggestions from a Stats file: DraftGap-style additive log-odds.
+//!
+//! A champion's base rating is the logit of its role winrate, smoothed toward 50%.
+//! A pair (ally duo or matchup) is worth the logit of its smoothed winrate minus what
+//! the two base ratings alone predict; smoothing is toward that prediction, so pairs
+//! with few games add ~0. A draft's rating is my team's base ratings and duo deltas,
+//! minus the enemy's, plus every matchup delta; its win chance is the logistic of that.
+
+const std = @import("std");
+const Role = @import("roles.zig").Role;
+const statsfile = @import("statsfile.zig");
+const Stats = statsfile.Stats;
+const Counts = statsfile.Counts;
+
+pub const max_reasons = 4;
+
+pub const Pick = struct {
+    champion: u32,
+    /// Null when unknown (enemy positions are hidden in champ select); inferred from
+    /// the champions' role play rates
+    role: ?Role = null,
+    /// Pick intent shown by an ally, not locked in
+    hover: bool = false,
+};
+
+pub const Draft = struct {
+    /// The role to suggest for
+    role: Role,
+    /// My teammates, not me; at most 4 are used
+    allies: []const Pick = &.{},
+    /// At most 5 are used
+    enemies: []const Pick = &.{},
+    bans: []const u32 = &.{},
+    /// Champions I may pick (pickable and owned); null when anything goes
+    pool: ?[]const u32 = null,
+};
+
+pub const Options = struct {
+    /// Fewer games than this in the role and a champion is not suggested
+    min_games: u32 = 200,
+    /// Pseudo-games pulling a champion's role winrate toward 50%
+    base_prior_games: f64 = 1000,
+    /// Pseudo-games pulling a duo or matchup toward the base-rating prediction;
+    /// DraftGap's "medium risk" default
+    prior_games: f64 = 1000,
+    /// Reasons worth less than this many percentage points are left out
+    min_reason_pp: f64 = 0.1,
+};
+
+pub const Reason = struct {
+    pub const Kind = enum { base, ally, enemy };
+
+    kind: Kind,
+    /// The other champion (ally or enemy); the suggestion itself for `base`
+    champion: u32,
+    role: Role,
+    /// The other champion's role was inferred, not known
+    role_guessed: bool = false,
+    hover: bool = false,
+    /// Change in my team's win chance, percentage points
+    pp: f64,
+    /// Games behind it: role games for base, pair games otherwise
+    games: u32,
+};
+
+pub const Suggestion = struct {
+    champion: u32,
+    role: Role,
+    /// Estimated win chance for my team with this pick, 0..1
+    win: f64,
+    /// Percentage points this pick adds over an average champion
+    pp: f64,
+    /// Games on this champion in this role
+    games: u32,
+    reasons_buf: [max_reasons]Reason,
+    n_reasons: u8,
+
+    pub fn reasons(s: *const Suggestion) []const Reason {
+        return s.reasons_buf[0..s.n_reasons];
+    }
+};
+
+/// Best picks first, as many as fit in `out`
+pub fn recommend(
+    stats: *const Stats,
+    draft: Draft,
+    opts: Options,
+    out: []Suggestion,
+) []Suggestion {
+    var ctx: Context = .{ .stats = stats, .opts = opts };
+    var me_taken: RoleSet = .initEmpty();
+    me_taken.set(@intFromEnum(draft.role));
+    const allies = ctx.resolve(draft.allies, 4, me_taken, &ctx.ally_buf);
+    const enemies = ctx.resolve(draft.enemies, 5, .initEmpty(), &ctx.enemy_buf);
+
+    // Everything that does not involve my pick
+    var fixed: f64 = 0;
+    for (allies, 0..) |a, i| {
+        fixed += a.base;
+        for (allies[i + 1 ..]) |b| fixed += ctx.duo(a, b);
+        for (enemies) |e| fixed += ctx.matchup(a, e);
+    }
+    for (enemies, 0..) |e, i| {
+        fixed -= e.base;
+        for (enemies[i + 1 ..]) |f| fixed -= ctx.duo(e, f);
+    }
+
+    var len: usize = 0;
+    candidates: for (0..stats.n) |c| {
+        const id = stats.ids[c];
+        const games = stats.champRole(draft.role, c).games;
+        if (games < opts.min_games) continue;
+        if (std.mem.indexOfScalar(u32, draft.bans, id) != null) continue;
+        for (draft.allies) |p| if (p.champion == id) continue :candidates;
+        for (draft.enemies) |p| if (p.champion == id) continue :candidates;
+        if (draft.pool) |pool| if (std.mem.indexOfScalar(u32, pool, id) == null) continue;
+
+        const s = ctx.suggestion(c, draft.role, allies, enemies, fixed);
+        if (len < out.len) {
+            len += 1;
+        } else if (out.len == 0 or s.pp <= out[len - 1].pp) continue;
+        var at = len - 1;
+        while (at > 0 and out[at - 1].pp < s.pp) : (at -= 1) out[at] = out[at - 1];
+        out[at] = s;
+    }
+    return out[0..len];
+}
+
+/// "+2.1% vs Darius (top)", "+1.4% with Lulu (support, hover)", "+0.8% strong in mid
+/// this patch"
+pub fn describe(
+    stats: *const Stats,
+    r: Reason,
+    w: *std.Io.Writer,
+) std.Io.Writer.Error!void {
+    try w.print("{s}{d:.1}% ", .{ if (r.pp >= 0) "+" else "", r.pp });
+    switch (r.kind) {
+        .base => try w.print("{s} in {s} this patch", .{
+            if (r.pp >= 0) "strong" else "weak",
+            r.role.label(),
+        }),
+        .ally, .enemy => {
+            try w.print("{s} {s} ({s}{s}", .{
+                if (r.kind == .ally) "with" else "vs",
+                stats.nameOf(r.champion),
+                r.role.label(),
+                if (r.role_guessed) "?" else "",
+            });
+            if (r.hover) try w.writeAll(", hover");
+            try w.writeAll(")");
+        },
+    }
+}
+
+/// Stats pages: champion `c`'s winrate in role `r`, smoothed toward 50%, 0..1
+pub fn roleWin(stats: *const Stats, opts: Options, c: usize, r: Role) f64 {
+    const ctx: Context = .{ .stats = stats, .opts = opts };
+    return sigmoid(ctx.base(c, r));
+}
+
+/// Stats pages: percentage points `c` in `r` gains alongside ally `a` in `ar`, beyond
+/// what the two champions' own ratings predict, in an otherwise even game
+pub fn duoPp(stats: *const Stats, opts: Options, r: Role, c: usize, ar: Role, a: usize) f64 {
+    const ctx: Context = .{ .stats = stats, .opts = opts };
+    return evenPp(ctx.duo(ctx.place(c, r), ctx.place(a, ar)));
+}
+
+/// Stats pages: as duoPp, against enemy `e` in `er`
+pub fn matchupPp(stats: *const Stats, opts: Options, r: Role, c: usize, er: Role, e: usize) f64 {
+    const ctx: Context = .{ .stats = stats, .opts = opts };
+    return evenPp(ctx.matchup(ctx.place(c, r), ctx.place(e, er)));
+}
+
+fn evenPp(x: f64) f64 {
+    return 100 * (sigmoid(x) - 0.5);
+}
+
+const RoleSet = std.StaticBitSet(Role.count);
+
+/// A draft champion known to the stats file, with its role settled
+const Placed = struct {
+    c: usize,
+    id: u32,
+    role: Role,
+    guessed: bool,
+    hover: bool,
+    base: f64,
+};
+
+const Context = struct {
+    stats: *const Stats,
+    opts: Options,
+    ally_buf: [4]Placed = undefined,
+    enemy_buf: [5]Placed = undefined,
+
+    fn base(ctx: *const Context, c: usize, r: Role) f64 {
+        const k = ctx.opts.base_prior_games;
+        const cr = ctx.stats.champRole(r, c);
+        return logit((@as(f64, @floatFromInt(cr.wins)) + 0.5 * k) /
+            (@as(f64, @floatFromInt(cr.games)) + k));
+    }
+
+    /// Smoothed pair logit minus the expected logit
+    fn pairDelta(ctx: *const Context, pair: Counts, expected: f64) f64 {
+        const k = ctx.opts.prior_games;
+        const wins = @as(f64, @floatFromInt(pair.wins)) + k * sigmoid(expected);
+        const games = @as(f64, @floatFromInt(pair.games)) + k;
+        if (games == 0) return 0;
+        return logit(wins / games) - expected;
+    }
+
+    fn place(ctx: *const Context, c: usize, r: Role) Placed {
+        return .{
+            .c = c,
+            .id = ctx.stats.ids[c],
+            .role = r,
+            .guessed = false,
+            .hover = false,
+            .base = ctx.base(c, r),
+        };
+    }
+
+    fn duo(ctx: *const Context, a: Placed, b: Placed) f64 {
+        if (a.role == b.role) return 0;
+        const pair = ctx.stats.ally(a.role, b.role, a.c, b.c);
+        return ctx.pairDelta(pair, a.base + b.base);
+    }
+
+    /// From `a`'s side
+    fn matchup(ctx: *const Context, a: Placed, e: Placed) f64 {
+        const pair = ctx.stats.enemy(a.role, e.role, a.c, e.c);
+        return ctx.pairDelta(pair, a.base - e.base);
+    }
+
+    /// Known champions with roles: given ones kept (unless clashing), the rest the
+    /// likeliest assignment of the free roles by play rate
+    fn resolve(
+        ctx: *const Context,
+        picks: []const Pick,
+        max: usize,
+        taken_in: RoleSet,
+        buf: []Placed,
+    ) []Placed {
+        var taken = taken_in;
+        var len: usize = 0;
+        var unknown: [5]usize = undefined;
+        var n_unknown: usize = 0;
+        for (picks[0..@min(picks.len, max)]) |p| {
+            const c = ctx.stats.index(p.champion) orelse continue;
+            buf[len] = .{
+                .c = c,
+                .id = p.champion,
+                .role = undefined,
+                .guessed = true,
+                .hover = p.hover,
+                .base = 0,
+            };
+            if (p.role) |r| if (!taken.isSet(@intFromEnum(r))) {
+                taken.set(@intFromEnum(r));
+                buf[len].role = r;
+                buf[len].guessed = false;
+            };
+            if (buf[len].guessed) {
+                unknown[n_unknown] = len;
+                n_unknown += 1;
+            }
+            len += 1;
+        }
+        const placed = buf[0..len];
+        var best: [5]Role = undefined;
+        var best_score: f64 = -std.math.inf(f64);
+        var current: [5]Role = undefined;
+        const free = unknown[0..n_unknown];
+        ctx.assign(placed, free, 0, taken, 0, &current, &best, &best_score);
+        if (best_score == -std.math.inf(f64)) {
+            // More unknown champions than free roles: fall back to each one's main role
+            for (unknown[0..n_unknown]) |i| placed[i].role = ctx.mainRole(placed[i].c);
+        } else {
+            for (unknown[0..n_unknown], 0..) |i, j| placed[i].role = best[j];
+        }
+        for (placed) |*p| p.base = ctx.base(p.c, p.role);
+        return placed;
+    }
+
+    fn assign(
+        ctx: *const Context,
+        placed: []const Placed,
+        unknown: []const usize,
+        depth: usize,
+        taken: RoleSet,
+        score: f64,
+        current: *[5]Role,
+        best: *[5]Role,
+        best_score: *f64,
+    ) void {
+        if (depth == unknown.len) {
+            if (score > best_score.*) {
+                best_score.* = score;
+                best.* = current.*;
+            }
+            return;
+        }
+        const c = placed[unknown[depth]].c;
+        const total: f64 = @floatFromInt(ctx.stats.champGames(c));
+        for (Role.all) |r| {
+            if (taken.isSet(@intFromEnum(r))) continue;
+            const games: f64 = @floatFromInt(ctx.stats.champRole(r, c).games);
+            // Small floor so a never-seen role is unlikely, not impossible
+            const rate = if (total > 0) games / total else 0.2;
+            var next = taken;
+            next.set(@intFromEnum(r));
+            current[depth] = r;
+            const s = score + @log(rate + 1e-4);
+            ctx.assign(placed, unknown, depth + 1, next, s, current, best, best_score);
+        }
+    }
+
+    fn mainRole(ctx: *const Context, c: usize) Role {
+        var best: Role = .top;
+        for (Role.all) |r| {
+            const games = ctx.stats.champRole(r, c).games;
+            if (games > ctx.stats.champRole(best, c).games) best = r;
+        }
+        return best;
+    }
+
+    fn suggestion(
+        ctx: *const Context,
+        c: usize,
+        role: Role,
+        allies: []const Placed,
+        enemies: []const Placed,
+        fixed: f64,
+    ) Suggestion {
+        const cr = ctx.stats.champRole(role, c);
+        const me = ctx.place(c, role);
+        const Term = struct { reason: Reason, x: f64 };
+        var terms: [1 + 4 + 5]Term = undefined;
+        var n: usize = 0;
+        terms[n] = .{ .x = me.base, .reason = .{
+            .kind = .base,
+            .champion = me.id,
+            .role = role,
+            .pp = 0,
+            .games = cr.games,
+        } };
+        n += 1;
+        for (allies) |a| {
+            terms[n] = .{ .x = ctx.duo(me, a), .reason = .{
+                .kind = .ally,
+                .champion = a.id,
+                .role = a.role,
+                .role_guessed = a.guessed,
+                .hover = a.hover,
+                .pp = 0,
+                .games = ctx.stats.ally(role, a.role, c, a.c).games,
+            } };
+            n += 1;
+        }
+        for (enemies) |e| {
+            terms[n] = .{ .x = ctx.matchup(me, e), .reason = .{
+                .kind = .enemy,
+                .champion = e.id,
+                .role = e.role,
+                .role_guessed = e.guessed,
+                .pp = 0,
+                .games = ctx.stats.enemy(role, e.role, c, e.c).games,
+            } };
+            n += 1;
+        }
+
+        var mine: f64 = 0;
+        for (terms[0..n]) |t| mine += t.x;
+        const total = fixed + mine;
+        const win = sigmoid(total);
+        for (terms[0..n]) |*t| t.reason.pp = 100 * (win - sigmoid(total - t.x));
+        std.mem.sort(Term, terms[0..n], {}, struct {
+            fn lessThan(_: void, a: Term, b: Term) bool {
+                return @abs(a.reason.pp) > @abs(b.reason.pp);
+            }
+        }.lessThan);
+
+        var s: Suggestion = .{
+            .champion = me.id,
+            .role = role,
+            .win = win,
+            .pp = 100 * (win - sigmoid(fixed)),
+            .games = cr.games,
+            .reasons_buf = undefined,
+            .n_reasons = 0,
+        };
+        for (terms[0..n]) |t| {
+            if (s.n_reasons == max_reasons) break;
+            if (@abs(t.reason.pp) < ctx.opts.min_reason_pp) break;
+            s.reasons_buf[s.n_reasons] = t.reason;
+            s.n_reasons += 1;
+        }
+        return s;
+    }
+};
+
+fn logit(p: f64) f64 {
+    const q = std.math.clamp(p, 1e-6, 1 - 1e-6);
+    return @log(q / (1 - q));
+}
+
+fn sigmoid(x: f64) f64 {
+    return 1 / (1 + @exp(-x));
+}
+
+const testing = std.testing;
+
+// Synthetic: Garen and Darius top, Ahri and Zed mid, Lux support, Vi jungle, Jinx bot.
+// Id 0 is not in the file, so Builder skips those slots.
+const garen = 86;
+const darius = 122;
+const ahri = 103;
+const zed = 238;
+const lux = 99;
+const vi = 254;
+const jinx = 222;
+
+const test_champions = [_]statsfile.Champion{
+    .{ .id = garen, .name = "Garen" },
+    .{ .id = darius, .name = "Darius" },
+    .{ .id = ahri, .name = "Ahri" },
+    .{ .id = zed, .name = "Zed" },
+    .{ .id = lux, .name = "Lux" },
+    .{ .id = vi, .name = "Vi" },
+    .{ .id = jinx, .name = "Jinx" },
+};
+
+const TestStats = struct {
+    bytes: []u8,
+    stats: Stats,
+
+    fn deinit(t: *TestStats) void {
+        t.stats.deinit(testing.allocator);
+        testing.allocator.free(t.bytes);
+    }
+};
+
+/// Garen and Darius both win 50% overall, but Darius beats a team with Zed mid 70% of
+/// the time and Garen beats Ahri 70%. Garen and Lux win 80% as a duo, Darius and Lux 50%.
+fn buildTestStats() !TestStats {
+    const gpa = testing.allocator;
+    var b: statsfile.Builder = try .init(gpa, &test_champions);
+    defer b.deinit();
+    for (0..1000) |i| {
+        const top: u32 = if (i % 2 == 0) garen else darius;
+        const other_top: u32 = if (top == garen) darius else garen;
+        const their_mid: u32 = if ((i / 2) % 2 == 0) zed else ahri;
+        const good = (top == darius and their_mid == zed) or
+            (top == garen and their_mid == ahri);
+        const won = if (good) i % 10 < 7 else i % 10 < 3;
+        b.addGame(.{
+            .{ top, 0, 0, 0, 0 },
+            .{ other_top, 0, their_mid, 0, 0 },
+        }, if (won) 0 else 1);
+    }
+    for (0..800) |i| {
+        const top: u32 = if (i % 2 == 0) garen else darius;
+        const won = if (top == garen) (i / 2) % 5 != 0 else (i / 2) % 2 == 0;
+        b.addGame(.{ .{ top, 0, 0, 0, lux }, .{ 0, vi, 0, jinx, 0 } }, if (won) 0 else 1);
+        // The same result flipped without Lux keeps Garen and Darius at 50% overall
+        b.addGame(.{ .{ top, 0, 0, 0, 0 }, .{ 0, vi, 0, jinx, 0 } }, if (won) 1 else 0);
+    }
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try b.write(&aw.writer, "test");
+    const bytes = try aw.toOwnedSlice();
+    errdefer gpa.free(bytes);
+    return .{ .bytes = bytes, .stats = try .parse(gpa, bytes) };
+}
+
+const test_opts: Options = .{
+    .min_games = 50,
+    .base_prior_games = 50,
+    .prior_games = 20,
+};
+
+test "counter pick wins" {
+    var t = try buildTestStats();
+    defer t.deinit();
+    var out: [4]Suggestion = undefined;
+
+    const vs_zed = recommend(&t.stats, .{
+        .role = .top,
+        .enemies = &.{.{ .champion = zed, .role = .middle }},
+    }, test_opts, &out);
+    try testing.expectEqual(2, vs_zed.len);
+    try testing.expectEqual(darius, vs_zed[0].champion);
+    try testing.expect(vs_zed[0].win > 0.55);
+    try testing.expect(vs_zed[1].win < 0.45);
+    try testing.expectEqual(Reason.Kind.enemy, vs_zed[0].reasons()[0].kind);
+    try testing.expectEqual(zed, vs_zed[0].reasons()[0].champion);
+
+    const vs_ahri = recommend(&t.stats, .{
+        .role = .top,
+        .enemies = &.{.{ .champion = ahri }},
+    }, test_opts, &out);
+    try testing.expectEqual(garen, vs_ahri[0].champion);
+    // Ahri's role is inferred: she only played mid
+    try testing.expectEqual(Role.middle, vs_ahri[0].reasons()[0].role);
+    try testing.expect(vs_ahri[0].reasons()[0].role_guessed);
+}
+
+test "synergy, filters and reasons" {
+    var t = try buildTestStats();
+    defer t.deinit();
+    var out: [4]Suggestion = undefined;
+
+    const with_lux = recommend(&t.stats, .{
+        .role = .top,
+        .allies = &.{.{ .champion = lux, .role = .utility, .hover = true }},
+    }, test_opts, &out);
+    try testing.expectEqual(garen, with_lux[0].champion);
+    const r = with_lux[0].reasons()[0];
+    try testing.expectEqual(Reason.Kind.ally, r.kind);
+    try testing.expect(r.hover);
+    try testing.expect(r.pp > 1);
+
+    var buf: [128]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try describe(&t.stats, r, &w);
+    try testing.expect(std.mem.startsWith(u8, w.buffered(), "+"));
+    try testing.expect(std.mem.endsWith(u8, w.buffered(), "% with Lux (support, hover)"));
+
+    // Banned, picked by an enemy, outside the pool
+    try testing.expectEqual(darius, recommend(&t.stats, .{
+        .role = .top,
+        .allies = &.{.{ .champion = lux, .role = .utility }},
+        .bans = &.{garen},
+    }, test_opts, &out)[0].champion);
+    try testing.expectEqual(darius, recommend(&t.stats, .{
+        .role = .top,
+        .enemies = &.{.{ .champion = garen, .role = .top }},
+    }, test_opts, &out)[0].champion);
+    try testing.expectEqual(1, recommend(&t.stats, .{
+        .role = .top,
+        .pool = &.{ darius, ahri },
+    }, test_opts, &out).len);
+    const mid = recommend(&t.stats, .{ .role = .middle }, test_opts, &out);
+    try testing.expectEqual(2, mid.len);
+    const none = recommend(&t.stats, .{ .role = .top }, test_opts, out[0..0]);
+    try testing.expectEqual(0, none.len);
+}
+
+test "enemy roles inferred jointly" {
+    var t = try buildTestStats();
+    defer t.deinit();
+    var ctx: Context = .{ .stats = &t.stats, .opts = test_opts };
+    const placed = ctx.resolve(&.{
+        .{ .champion = jinx },
+        .{ .champion = vi },
+        .{ .champion = 9999 },
+        .{ .champion = zed },
+        .{ .champion = lux, .role = .utility },
+    }, 5, .initEmpty(), &ctx.enemy_buf);
+    try testing.expectEqual(4, placed.len);
+    try testing.expectEqual(Role.bottom, placed[0].role);
+    try testing.expectEqual(Role.jungle, placed[1].role);
+    try testing.expectEqual(Role.middle, placed[2].role);
+    try testing.expectEqual(Role.utility, placed[3].role);
+    try testing.expect(!placed[3].guessed);
+}
