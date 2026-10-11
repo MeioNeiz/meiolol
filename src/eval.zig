@@ -15,6 +15,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
+const logreg = @import("logreg.zig");
 const score = core.score;
 const Role = core.Role;
 
@@ -105,6 +106,9 @@ pub fn run(
         .w = tuned.weights,
     } } };
     const empirical: Predictor = .{ .label = "empirical-Bayes priors", .kind = .empirical };
+    const joint_w = try fitJoint(gpa, &full.stats, train, tuned.joint_l2);
+    defer gpa.free(joint_w);
+    const joint: Predictor = .{ .label = "joint ratings (logistic)", .kind = .{ .joint = joint_w } };
     const predictors = [_]Predictor{
         .{ .label = "coin flip (50%)", .kind = .coin },
         .{ .label = "blue side rate", .kind = .{ .side = blue_rate } },
@@ -113,6 +117,7 @@ pub fn run(
         tuned_priors,
         weighted,
         empirical,
+        joint,
     };
     const eb = score.empiricalPriors(&full.stats, eb_min_games);
     try w.print("## Full draft, held-out games\n\nEmpirical-Bayes priors from train (cells " ++
@@ -176,23 +181,49 @@ pub fn run(
 
     try w.writeAll("\n## Learning curve\n\nSame test games, models from the newest N train games.\n\n");
     try w.writeAll("Log loss, and AUC for empirical Bayes:\n\n| train games | base only | " ++
-        "current | tuned priors | tuned + weights | empirical Bayes | AUC (EB) |\n");
-    try w.writeAll("| --- | --- | --- | --- | --- | --- | --- |\n");
+        "current | tuned priors | tuned + weights | empirical Bayes | joint ratings | AUC (EB) |\n");
+    try w.writeAll("| --- | --- | --- | --- | --- | --- | --- | --- |\n");
     var size: usize = 250;
     while (true) : (size *= 2) {
         const n = @min(size, train.len);
-        var m: Model = try .build(gpa, champs, train[train.len - n ..], null);
+        const subset = train[train.len - n ..];
+        var m: Model = try .build(gpa, champs, subset, null);
         defer m.deinit(gpa);
+        const jw = try fitJoint(gpa, &m.stats, subset, tuned.joint_l2);
+        defer gpa.free(jw);
         try w.print("| {d} |", .{n});
-        for ([_]Predictor{ base_only, model, tuned_priors, weighted, empirical }) |p| {
+        var eb_auc: f64 = 0;
+        for ([_]Predictor{ base_only, model, tuned_priors, weighted, empirical, .{
+            .label = "joint",
+            .kind = .{ .joint = jw },
+        } }) |p| {
             const r = try evaluate(gpa, &m.stats, tests, p);
             defer gpa.free(r.p);
             try w.print(" {d:.4} |", .{r.m.log_loss});
-            if (p.kind == .empirical) try w.print(" {d:.3} |", .{r.m.auc});
+            if (p.kind == .empirical) eb_auc = r.m.auc;
         }
-        try w.writeAll("\n");
+        try w.print(" {d:.3} |\n", .{eb_auc});
         if (n == train.len) break;
     }
+}
+
+/// Joint champion-role ratings: feature 0 the intercept (blue side), then one per
+/// champion and role, +1 on blue, -1 on red
+fn jointRow(st: *const core.Stats, g: Game) logreg.Row {
+    var r: logreg.Row = .{ .y = blueWon(g) };
+    r.add(0, 1);
+    for (g.teams, 0..) |team, s| for (team, 0..) |id, role| {
+        const c = st.index(id) orelse continue;
+        r.add(@intCast(1 + role * st.n + c), if (s == 0) 1 else -1);
+    };
+    return r;
+}
+
+fn fitJoint(gpa: std.mem.Allocator, st: *const core.Stats, games: []const Game, l2: f64) ![]f64 {
+    const rows = try gpa.alloc(logreg.Row, games.len);
+    defer gpa.free(rows);
+    for (rows, games) |*r, g| r.* = jointRow(st, g);
+    return logreg.fit(gpa, 1 + Role.count * st.n, rows, l2);
 }
 
 const GameList = struct {
@@ -259,6 +290,8 @@ const Predictor = struct {
         weighted: struct { opts: score.Options, w: Weights },
         /// The model with priors from score.empiricalPriors on the stats it is given
         empirical,
+        /// Weights from fitJoint
+        joint: []const f64,
     },
 
     /// Per stats file: empirical priors become concrete options
@@ -271,6 +304,7 @@ const Predictor = struct {
     fn predict(p: Predictor, st: *const core.Stats, g: Game) f64 {
         return switch (p.kind) {
             .empirical => unreachable,
+            .joint => |jw| sigmoid(jointRow(st, g).dot(jw)),
             .coin => 0.5,
             .side => |rate| rate,
             .base => |o| sigmoid(score.draftTerms(st, o, g.teams).base),
@@ -422,7 +456,7 @@ fn calibration(gpa: std.mem.Allocator, st: *const core.Stats, games: []const Gam
     }
 }
 
-const Tuned = struct { opts: score.Options, weights: Weights };
+const Tuned = struct { opts: score.Options, weights: Weights, joint_l2: f64 };
 
 /// Prior strengths by out-of-fold log loss over the train games, then logistic weights
 /// on the terms of those out-of-fold drafts
@@ -492,8 +526,37 @@ fn tune(
         "{d:.3}, base {d:.3}, duo {d:.3}, lane {d:.3}, matchup {d:.3}\n\n", .{
         wloss, weights[0], weights[1], weights[2], weights[3], weights[4],
     });
-    return .{ .opts = best, .weights = weights };
+
+    // Joint ratings: L2 strength by out-of-fold log loss. Prior 1000 games ~ l2 300
+    const st = &models[0].stats;
+    var fold_train: std.ArrayList(Game) = .empty;
+    defer fold_train.deinit(gpa);
+    var best_l2: f64 = 0;
+    var best_joint = std.math.inf(f64);
+    try w.writeAll("Joint ratings, out-of-fold log loss by L2 strength:");
+    for (joint_l2_grid) |l2| {
+        var sum: f64 = 0;
+        for (0..folds) |k| {
+            fold_train.clearRetainingCapacity();
+            for (train, 0..) |g, gi| if (gi % folds != k) try fold_train.append(gpa, g);
+            const jw = try fitJoint(gpa, st, fold_train.items, l2);
+            defer gpa.free(jw);
+            for (train, 0..) |g, gi| if (gi % folds == k) {
+                sum += logLoss(sigmoid(jointRow(st, g).dot(jw)), blueWon(g));
+            };
+        }
+        const loss = sum / @as(f64, @floatFromInt(train.len));
+        try w.print(" {d}: {d:.4};", .{ l2, loss });
+        if (loss < best_joint) {
+            best_joint = loss;
+            best_l2 = l2;
+        }
+    }
+    try w.print(" best {d}\n\n", .{best_l2});
+    return .{ .opts = best, .weights = weights, .joint_l2 = best_l2 };
 }
+
+const joint_l2_grid = [_]f64{ 30, 100, 300, 1000, 3000, 10000 };
 
 /// L2-penalised logistic regression by Newton's method (few features); the intercept
 /// (feature 0) is not penalised
