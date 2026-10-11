@@ -1,20 +1,21 @@
 //! Curves file: how each lane matchup unfolds, minute by minute, for one patch (or
 //! patch range). Written beside the model file by `meiolol curves`.
 //!
-//! Format v2, little-endian:
+//! Format v3, little-endian:
 //!   magic "MEIOCURV", version u32, minutes u32 (m), games u32, curves u32 (k),
 //!   patch [16]u8 zero padded
 //!   k x (Header, then m x Minute), the extern structs below
 //! Curves are sorted by (role, a, b, bracket, experience) with a <= b by champion id;
 //! a == b is a mirror, seen from blue's side. Everything is from a's side: diffs are a
-//! minus b.
+//! minus b. a == b == 0 is the role baseline: every lane of the role counted from both
+//! sides, comeback counts only.
 //! Minute i (0-based) is the frame at i + 1 minutes.
 
 const std = @import("std");
 const Role = @import("roles.zig").Role;
 
 pub const magic = "MEIOCURV";
-pub const version: u32 = 2;
+pub const version: u32 = 3;
 pub const patch_len = 16;
 /// Lane phase and the early mid game; later minutes mostly measure who is still playing
 pub const max_minutes = 25;
@@ -36,6 +37,24 @@ pub const experienced_points = 100_000;
 pub const Experience = enum(u8) { any, a, b };
 
 /// Visible rank tiers, never inferred MMR (docs/concept.md)
+/// Comeback odds: games and wins by lane gold difference at these minutes, in buckets
+/// split at these edges (behind 1500+, 500 to 1500, within 500, ahead 500 to 1500, 1500+)
+pub const comeback_minutes = [_]u8{ 10, 15 };
+pub const comeback_edges = [_]i16{ -1500, -500, 500, 1500 };
+pub const buckets = comeback_edges.len + 1;
+pub const Comeback = enum { ten, fifteen };
+
+/// Games, and of them won by the side the curve is seen from
+pub const Counts = extern struct { games: u32 = 0, wins: u32 = 0 };
+
+pub fn bucket(gold: i16) usize {
+    if (gold < comeback_edges[0]) return 0;
+    if (gold < comeback_edges[1]) return 1;
+    if (gold <= comeback_edges[2]) return 2;
+    if (gold <= comeback_edges[3]) return 3;
+    return 4;
+}
+
 pub const Bracket = enum(u8) {
     all,
     /// Iron to Silver
@@ -89,7 +108,7 @@ pub fn medianRank(ranks: []usize) ?usize {
     return ranks[ranks.len / 2];
 }
 
-pub const Quartiles = extern struct { p25: i16, p50: i16, p75: i16 };
+pub const Quartiles = extern struct { p25: i16 = 0, p50: i16 = 0, p75: i16 = 0 };
 
 pub const Minute = extern struct {
     /// Games still going at this minute
@@ -127,6 +146,8 @@ pub const Header = extern struct {
     /// few finished one
     first_item_a: u16,
     first_item_b: u16,
+    /// [comeback minute][bucket of a's gold lead], wins = a's
+    comeback: [comeback_minutes.len][buckets]Counts,
 };
 
 /// One lane in one game, for Builder
@@ -206,7 +227,15 @@ pub const Builder = struct {
 
         var curves: u32 = 0;
         var start: usize = 0;
+        var role_start: usize = 0;
         while (start < lanes.len) {
+            if (start == role_start) {
+                const role = lanes[start].role;
+                var role_end = start;
+                while (role_end < lanes.len and lanes[role_end].role == role) role_end += 1;
+                curves += try baselines(b.gpa, &out, lanes[start..role_end], min_games);
+                role_start = role_end;
+            }
             var end = start + 1;
             while (end < lanes.len and sameMatchup(lanes[start], lanes[end])) end += 1;
             const group = lanes[start..end];
@@ -248,21 +277,48 @@ pub const Builder = struct {
     }
 };
 
-fn curve(
+/// The role's baseline per bracket: each lane from both sides, so the buckets are
+/// symmetric and games count every laner
+fn baselines(
     gpa: std.mem.Allocator,
     out: *std.ArrayList(u8),
-    scratch: *std.ArrayList(i16),
     lanes: []const Lane,
-    bracket: Bracket,
-    experience: Experience,
-) !void {
-    var h: Header = .{
-        .role = @intFromEnum(lanes[0].role),
+    min_games: u32,
+) !u32 {
+    var n: u32 = 0;
+    for (std.enums.values(Bracket)) |bracket| {
+        var h = emptyHeader(lanes[0].role, bracket, .any, 0, 0);
+        for (lanes) |l| {
+            if (bracket != .all and l.bracket != bracket) continue;
+            h.games += 2;
+            h.a_wins += 1;
+            for (comeback_minutes, 0..) |m, mi| {
+                if (l.minutes < m) continue;
+                const gold = l.gold[m - 1];
+                const won: u32 = @intFromBool(l.a_won);
+                h.comeback[mi][bucket(gold)].games += 1;
+                h.comeback[mi][bucket(gold)].wins += won;
+                h.comeback[mi][bucket(-gold)].games += 1;
+                h.comeback[mi][bucket(-gold)].wins += 1 - won;
+            }
+        }
+        if (h.games / 2 < @max(min_games, 1)) continue;
+        try out.appendSlice(gpa, std.mem.asBytes(&h));
+        const empty: Minute = .{ .n = 0, .gold = .{}, .xp = .{}, .cs = .{} };
+        for (0..max_minutes) |_| try out.appendSlice(gpa, std.mem.asBytes(&empty));
+        n += 1;
+    }
+    return n;
+}
+
+fn emptyHeader(role: Role, bracket: Bracket, experience: Experience, a: u32, b: u32) Header {
+    return .{
+        .role = @intFromEnum(role),
         .bracket = @intFromEnum(bracket),
         .experience = @intFromEnum(experience),
-        .a = lanes[0].a,
-        .b = lanes[0].b,
-        .games = @intCast(lanes.len),
+        .a = a,
+        .b = b,
+        .games = 0,
         .a_wins = 0,
         .lane_games = 0,
         .lane_a = 0,
@@ -275,9 +331,28 @@ fn curve(
         .level6_b = 0,
         .first_item_a = 0,
         .first_item_b = 0,
+        .comeback = @splat(@splat(.{})),
     };
+}
+
+fn curve(
+    gpa: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    scratch: *std.ArrayList(i16),
+    lanes: []const Lane,
+    bracket: Bracket,
+    experience: Experience,
+) !void {
+    var h = emptyHeader(lanes[0].role, bracket, experience, lanes[0].a, lanes[0].b);
+    h.games = @intCast(lanes.len);
     for (lanes) |l| {
         h.a_wins += @intFromBool(l.a_won);
+        for (comeback_minutes, 0..) |m, mi| {
+            if (l.minutes < m) continue;
+            const c = &h.comeback[mi][bucket(l.gold[m - 1])];
+            c.games += 1;
+            c.wins += @intFromBool(l.a_won);
+        }
         for (0..phases) |p| {
             h.a_kills_b[p] += @intFromBool(l.a_kills_b[p]);
             h.b_kills_a[p] += @intFromBool(l.b_kills_a[p]);
@@ -415,6 +490,11 @@ pub const Curves = struct {
         return c.find(role, bracket, if (me <= them) .a else .b, me, them);
     }
 
+    /// Every lane of `role` from both sides (comeback counts only); null when too few
+    pub fn baseline(c: *const Curves, role: Role, bracket: Bracket) ?View {
+        return c.find(role, bracket, .any, 0, 0);
+    }
+
     fn find(c: *const Curves, role: Role, bracket: Bracket, experience: Experience, me: u32, them: u32) ?View {
         const Key = struct { role: u8, a: u32, b: u32, bracket: u8, experience: u8 };
         const a = @min(me, them);
@@ -498,9 +578,19 @@ pub const View = struct {
     }
 
     /// Median seconds to the first finished item for me and them; 0 when unknown
+    /// Games and my wins when my lane gold lead at `at` fell in `b` (0 = behind
+    /// 1500+ ... 4 = ahead 1500+)
+    pub fn comeback(v: View, at: Comeback, b: usize) Counts {
+        const row = v.curve.header.comeback[@intFromEnum(at)];
+        if (!v.flipped) return row[b];
+        const c = row[buckets - 1 - b];
+        return .{ .games = c.games, .wins = c.games - c.wins };
+    }
+
     pub fn firstItem(v: View) [2]u16 {
         const h = v.curve.header;
-        return if (v.flipped) .{ h.first_item_b, h.first_item_a } else .{ h.first_item_a, h.first_item_b };
+        const both: [2]u16 = .{ h.first_item_a, h.first_item_b };
+        return if (v.flipped) .{ both[1], both[0] } else both;
     }
 
     pub fn minutes(v: View) usize {
@@ -564,8 +654,8 @@ test "round trip, sides and brackets" {
     defer c.deinit(gpa);
     try testing.expectEqualStrings("16.20", c.patch());
     try testing.expectEqual(5, c.games);
-    // all + low, each also with Darius experienced; high has one game
-    try testing.expectEqual(4, c.curves.len);
+    // all + low, each also with Darius experienced; role baselines for all and low
+    try testing.expectEqual(6, c.curves.len);
     try testing.expect(c.get(.top, .all, 1, 2) == null);
     try testing.expect(c.get(.top, .high, 122, 86) == null);
     try testing.expect(c.get(.jungle, .all, 122, 86) == null);
@@ -592,6 +682,17 @@ test "round trip, sides and brackets" {
     try testing.expectEqual(garen_gold, garen.minute(lane_minute - 1).gold);
     try testing.expectEqual(1, garen.lane().ahead);
     try testing.expectEqual([2]u16{ 420, 360 }, garen.level6());
+
+    // At 15 min Darius leads by 750, 321, 107 and trails by 535; won all but the 107
+    try testing.expectEqual(Counts{ .games = 1, .wins = 1 }, darius.comeback(.fifteen, 3));
+    try testing.expectEqual(Counts{ .games = 2, .wins = 1 }, darius.comeback(.fifteen, 2));
+    try testing.expectEqual(Counts{ .games = 1, .wins = 1 }, darius.comeback(.fifteen, 1));
+    try testing.expectEqual(Counts{ .games = 4, .wins = 3 }, darius.comeback(.ten, 2));
+    const base = c.baseline(.top, .all).?;
+    try testing.expectEqual(10, base.games());
+    try testing.expectEqual(Counts{ .games = 6, .wins = 3 }, base.comeback(.fifteen, 2));
+    try testing.expectEqual(Counts{ .games = 2, .wins = 1 }, base.comeback(.fifteen, 1));
+    try testing.expect(c.baseline(.jungle, .all) == null);
 
     const low = c.get(.top, .low, 122, 86).?;
     try testing.expectEqual(2, low.games());
