@@ -7,29 +7,25 @@ by `wz notify` on the Mac plus ntfy pushes from the box.
 
 ## Disk
 
-- The WSL disk image is `C:\Users\jacob\AppData\Local\wsl\{275009cc-...}\ext4.vhdx`:
-  dynamic, 1 TB cap, grows on C:. `df /` inside WSL shows the cap (~943 GB free); the
-  real limit is C: (953 GB, ~252 GB free, 74% used on 2026-10-11). The image never
-  shrinks by itself; ext4 reuses freed blocks, so pruning still caps its growth
-- Full-rate crawling keeps ~1.6 GB/day forever plus a rolling ~110 GB of raw JSON (30
-  days of summaries, 7 of timelines), reached by day 30. C: is full around day 88 and the
-  last 50 GB (Windows' own slack) go around day 57: early December 2026
-- Other disks: D: (Samsung 860 QVO 1 TB, 140 GB free, 86%) holds the backups. Disk 2
-  (Crucial P3 Plus 2 TB NVMe) has 673 GB unallocated plus partitions of 5 GB (FAT32),
-  128 GB, 1 TB and 32 GB with no drive letters, apparently an old Linux install
-- Fix, needs Jacob at the PC: an NTFS volume on the unallocated space (or the 1 TB
-  partition if it is dead), stop the loops (`deploy/box.sh stop`, and `web`, `backup`,
-  `health stop`), then in PowerShell `wsl --shutdown` and
-  `wsl --manage Ubuntu --move E:\wsl`. Paths inside WSL stay the same
+The box moved to Oracle Cloud on 2026-10-11 (docs/hosting.md): one 50 GB boot volume,
+~40 GB free, backups on the same disk for now (`MEIOLOL_BACKUPS` in host.env).
 
-Windows queries used (run from WSL with `powershell.exe -NoProfile -Command -` on stdin):
-`Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss` (BasePath per
-distro), `Get-Volume`, `Get-Disk`, `Get-Partition`.
+- Full rate needs ~1.6 GB/day kept forever plus rolling raw JSON: ~1.7 GB/day of
+  summaries for `--raw-match-days` (30) and ~8.6 GB/day of raw timelines for
+  `--raw-timeline-days` (7), ~110 GB at the defaults. On 40 GB that is days, not weeks:
+  run with small raw windows (eg 3 and 1) until there is more disk
+- Open (Jacob): the free tier has ~106 GB more block storage, still only ~2 months of
+  kept data; ~570 GB/year needs paid storage, less crawling, or the PC as bulk store
+- Off-host backups still to set up: the gpu-box pulling into D: and/or the Mac mirror
+- The gpu-box (before the move) keeps its data and the 2026-10-11 backup in
+  /mnt/d/meiolol-backups (restore-tested) as the restore point. Its WSL disk image lives
+  on C: (~252 GB free); its 2 TB NVMe has 673 GB unallocated, if it becomes the bulk store
 
 ## Backups
 
-`meiolol backup` (src/backup.zig), daily at ~04:00 UTC from tmux `meiolol-backup`
-(deploy/backup-loop.sh), into `/mnt/d/meiolol-backups` ($MEIOLOL_BACKUPS):
+`meiolol backup` (src/backup.zig), daily at ~04:00 UTC from the `meiolol-backup` service
+(deploy/backup-loop.sh), into $MEIOLOL_BACKUPS (host.env). It never runs migrations:
+under the write lock they starve the crawler on a slow host.
 
 - `state/state-YYYY-MM-DD.db`: players, ladder_pages, match_queue, timeline_queue,
   mastery, champions, forgotten. 7 daily + the newest of 4 weeks
