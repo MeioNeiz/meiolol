@@ -35,7 +35,8 @@ last_patch='' last_games=0 last_upload=0
 patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0
 while true; do
     now=$(date +%s)
-    if (( now - last_eval >= 86400 )); then
+    # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
+    if [[ -z "${MEIOLOL_NO_EVAL:-}" ]] && (( now - last_eval >= 86400 )); then
         (nice -n 10 bin/meiolol eval --platform all --test-platform EUW1 \
             --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
             && mv data/eval-latest.md.new data/eval-latest.md) &
