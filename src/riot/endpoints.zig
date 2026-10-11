@@ -40,8 +40,12 @@ pub const platforms = [_]Platform{
 
 /// Platform of a match id ("KR_7012345678" -> KR)
 pub fn platformOf(match_id: []const u8) ?Platform {
-    const prefix = match_id[0 .. std.mem.indexOfScalar(u8, match_id, '_') orelse return null];
-    for (platforms) |p| if (std.mem.eql(u8, p.id, prefix)) return p;
+    return platform(match_id[0 .. std.mem.indexOfScalar(u8, match_id, '_') orelse return null]);
+}
+
+/// "EUW1" -> EUW1
+pub fn platform(id: []const u8) ?Platform {
+    for (platforms) |p| if (std.mem.eql(u8, p.id, id)) return p;
     return null;
 }
 
@@ -160,4 +164,6 @@ test platformOf {
     try std.testing.expectEqual(Region.sea, platformOf("OC1_1").?.region);
     try std.testing.expect(platformOf("XX1_1") == null);
     try std.testing.expect(platformOf("nounderscore") == null);
+    try std.testing.expectEqual(Region.europe, platform("EUW1").?.region);
+    try std.testing.expect(platform("EUW1_1") == null);
 }

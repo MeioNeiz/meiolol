@@ -32,7 +32,7 @@ pub fn writePage(site: *const Site, p: *const pool.Pool, l: *const learning.Lear
     const pg = site.page(
         "Champion pool | meiolol",
         "Pick the champions you main: what their players also play, which of those do well into your hard lanes, and what they play when your main is banned.",
-        "",
+        "pool.html",
         .pool,
     );
     try html.head(w, pg);
@@ -55,10 +55,10 @@ pub fn writePage(site: *const Site, p: *const pool.Pool, l: *const learning.Lear
         \\2.4 times as often as other players do; small groups are pulled toward ×1. Lists
         \\start at {d} players per main. Lane numbers are percentage points of win chance
         \\beyond what the two champions' own win rates predict, on patch {s}.
-        \\<a href="method.html">Method</a>.</p>
+        \\<a href="{s}method.html">Method</a>.</p>
         \\<script src="pool.js" defer></script>
         \\
-    , .{ sourceText(p), p.players, p.min_players, site.patch });
+    , .{ sourceText(p), p.players, p.min_players, site.patch, site.region.up() });
     try learning_page.table(site, w, l);
     try html.foot(w, pg);
     try site.write("pool.html", aw.written());

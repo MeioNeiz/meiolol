@@ -70,7 +70,6 @@ next steps land here.
 - Rekey translation for `forgotten` (old PUUID -> Riot ID -> new PUUID) before the
   production key
 - Requeue matches failed by 429 storms (6x 429 then GaveUp counts as an attempt)
-- Newest-first timeline queue (FIFO per region today) so the current patch fills sooner
 - Optional: lossy timeline compaction if disk gets tight
 
 ### Your games and Squads (was your-games-e0)

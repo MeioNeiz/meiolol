@@ -52,7 +52,8 @@ const usage =
     \\                               --days, to DIR/export/recent-curves.bin)
     \\              --days N         default 30
     \\              --platform P     as for stats
-    \\              --out FILE       default DIR/export/curves-<patch>.bin
+    \\              --out FILE       default DIR/export/curves-<patch>.bin (all-curves-...
+    \\                               and all-recent-curves.bin with --platform all)
     \\              --min-games N    leave out matchups with fewer games (default 1: all)
     \\  pool        write what players of each champion also play (pool.zig), as JSON
     \\              --patch P        as for stats (matchups); pools use every patch
@@ -68,9 +69,10 @@ const usage =
     \\                               alone with every --platform pooled
     \\              --history FILE   append one TSV line (date, sizes, log loss and AUC
     \\                               per model) for the accuracy-vs-data curve
-    \\  site       write the public website (static files)
-    \\              --patch P        as for stats
-    \\              --platform P     as for stats (pages say EUW: reword before others)
+    \\  site       write the public website (static files): EUW at the root, every
+    \\              region under all/ (lane curves from the curves command's default
+    \\              files for each)
+    \\              --patch P        as for stats (default: EUW's newest patch)
     \\              --out DIR        default DIR/site
     \\              --contact EMAIL  shown on the privacy and terms pages (required)
     \\              --riot-txt TEXT  served as /riot.txt (Riot's verification string)
@@ -129,6 +131,7 @@ pub fn main(init: std.process.Init) !u8 {
     var mastery = true;
     var patches: std.ArrayList([]const u8) = .empty;
     var platforms: std.ArrayList([]const u8) = .empty;
+    var every_platform = false;
     var regions: std.ArrayList(riot.endpoints.Region) = .empty;
     var timeline_percent: u8 = 100;
     var raw_timeline_days: u32 = 7;
@@ -186,6 +189,7 @@ pub fn main(init: std.process.Init) !u8 {
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |p| {
                 if (std.mem.eql(u8, p, "all")) {
+                    every_platform = true;
                     for (riot.endpoints.platforms) |pl| try platforms.append(arena, pl.id);
                 } else try platforms.append(arena, p);
             }
@@ -209,7 +213,9 @@ pub fn main(init: std.process.Init) !u8 {
             var list: std.ArrayList([]const u8) = .empty;
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |p| {
-                if (!std.mem.eql(u8, p, "none")) try list.append(arena, p);
+                if (std.mem.eql(u8, p, "none")) continue;
+                if (riot.endpoints.platform(p) == null) return usageError(a);
+                try list.append(arena, p);
             }
             priority = list.items;
         } else if (std.mem.eql(u8, a, "--out")) {
@@ -302,7 +308,7 @@ pub fn main(init: std.process.Init) !u8 {
         return 0;
     }
     if (std.mem.eql(u8, cmd, "curves")) {
-        try writeCurves(init.gpa, init.io, arena, data_dir, patches.items, days, platforms.items, out_path, min_games);
+        try writeCurves(init.gpa, init.io, arena, data_dir, patches.items, days, platforms.items, every_platform, out_path, min_games);
         return 0;
     }
     if (std.mem.eql(u8, cmd, "pool")) {
@@ -328,20 +334,26 @@ pub fn main(init: std.process.Init) !u8 {
         const email = contact orelse return usageError("--contact");
         const db = try store.open(init.gpa, data_dir);
         defer db.close();
-        const chosen = if (patches.items.len > 0) patches.items else try newestPatch(arena, db, platforms.items);
+        const chosen = if (patches.items.len > 0) patches.items else try newestPatch(arena, db, &.{"EUW1"});
+        var every: std.ArrayList([]const u8) = .empty;
+        for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
         try site.generate(init.gpa, init.io, db, .{
             .out_dir = out_path orelse try std.fs.path.join(arena, &.{ data_dir, "site" }),
             .patches = chosen,
-            .platforms = platforms.items,
+            .all_platforms = every.items,
             .contact = email,
             .riot_txt = riot_txt,
             .updated = try today(arena, init.io),
             .public = public,
             .daily_dir = try std.fs.path.join(arena, &.{ data_dir, "daily" }),
             .curves = if (patches.items.len > 0)
-                try curvesPath(arena, data_dir, chosen)
+                try curvesPath(arena, data_dir, chosen, false)
             else
-                try recentCurvesPath(arena, data_dir),
+                try recentCurvesPath(arena, data_dir, false),
+            .all_curves = if (patches.items.len > 0)
+                try curvesPath(arena, data_dir, chosen, true)
+            else
+                try recentCurvesPath(arena, data_dir, true),
         });
         return 0;
     }
@@ -571,6 +583,7 @@ fn writeCurves(
     wanted: []const []const u8,
     days: u32,
     platforms: []const []const u8,
+    every_platform: bool,
     out_path: ?[]const u8,
     min_games: u32,
 ) !void {
@@ -582,9 +595,9 @@ fn writeCurves(
     else
         try std.fmt.bufPrint(&label_buf, "last {d} days", .{days});
     const path = out_path orelse if (wanted.len > 0)
-        try curvesPath(arena, data_dir, wanted)
+        try curvesPath(arena, data_dir, wanted, every_platform)
     else
-        try recentCurvesPath(arena, data_dir);
+        try recentCurvesPath(arena, data_dir, every_platform);
     const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
     const since_ms: i64 = if (wanted.len > 0) 0 else now_ms - @as(i64, days) * std.time.ms_per_day;
     const item_patch = if (wanted.len > 0) wanted[0] else (try newestPatch(arena, db, platforms))[0];
@@ -643,17 +656,22 @@ fn writePool(
     std.log.info("{s}", .{path});
 }
 
-/// Where `meiolol curves` writes by default for these patches
-fn curvesPath(arena: std.mem.Allocator, data_dir: []const u8, chosen: []const []const u8) ![]const u8 {
+/// Where `meiolol curves` writes by default for these patches. Every platform's files
+/// start all-, out of the curves-*.bin the Your games service reads (EUW, per patch)
+fn curvesPath(arena: std.mem.Allocator, data_dir: []const u8, chosen: []const []const u8, every: bool) ![]const u8 {
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = try stats.label(&label_buf, chosen);
-    return std.fmt.allocPrint(arena, "{s}/export/curves-{s}.bin", .{ data_dir, label });
+    return std.fmt.allocPrint(arena, "{s}/export/{s}curves-{s}.bin", .{ data_dir, allPrefix(every), label });
 }
 
 /// Where `meiolol curves` writes by default: every patch of the last --days. Not
 /// curves-*.bin, which the Your games service reads as one file per patch
-fn recentCurvesPath(arena: std.mem.Allocator, data_dir: []const u8) ![]const u8 {
-    return std.fs.path.join(arena, &.{ data_dir, "export", "recent-curves.bin" });
+fn recentCurvesPath(arena: std.mem.Allocator, data_dir: []const u8, every: bool) ![]const u8 {
+    return std.fmt.allocPrint(arena, "{s}/export/{s}recent-curves.bin", .{ data_dir, allPrefix(every) });
+}
+
+fn allPrefix(every: bool) []const u8 {
+    return if (every) "all-" else "";
 }
 
 fn newestPatch(arena: std.mem.Allocator, db: store.Db, platforms: []const []const u8) ![]const []const u8 {
