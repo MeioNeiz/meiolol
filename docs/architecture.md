@@ -7,6 +7,7 @@ src/
   ddragon.zig        champion ids/names from Data Dragon
   daily.zig          Daily Draft puzzles (data/daily), published by `meiolol site`
   curves.zig         lane matchup curves from timelines (`meiolol curves`)
+  pool.zig           Pool: who mains X also plays Y, hard-lane options, ban fallback
   stats.zig          model file from the matches table (`meiolol stats`)
   site/              public website generator (`meiolol site`): html.zig layout and
                      boilerplate, prose.zig fixed pages, static/ (css, draft.js)
@@ -118,6 +119,21 @@ charts and rows are grey with "more data needed". Not yet: first-item timing (ne
 item list from Data Dragon), experienced-players filter (mastery), core-item split,
 region filter. Curves are not built by the web loop yet: run `meiolol curves` (daily is
 plenty) before `meiolol site`.
+
+## Pool (src/pool.zig, src/site/pool.zig, static/pool.js)
+
+A player's main is their top champion; they play another when it has at least 10% of
+the main's weight (games now, mastery points once that table fills; min 10 games).
+"Players who main X also play Y" is lift: share of X-mains playing Y over Y's share
+among players who don't main Y, shrunk toward 1 by 20 pseudo-players; lists from 30
+mains, n shown. From the model file's lane pairs (score.matchupPp, 30+ games): X's
+five worst lane matchups, the also-played champions in X's role that are positive into
+them ("options", several, with reasons), and those positive into X's best lanes (ban
+fallback). `meiolol site` writes data/pool.json, pool.html (pick up to three mains;
+pool.html#garen,darius) and a section on each champion page; `meiolol pool` writes the
+same JSON to data/export/pool.json for a look. Not yet: mastery source (waits for the
+compact mastery table, riot/mastery.zig), curves instead of win rates for hard lanes,
+your own record per matchup.
 
 ## Recommender (src/core/score.zig)
 
