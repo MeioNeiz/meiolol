@@ -20,6 +20,14 @@ product is meiolol itself, two faces of one application (docs/production-key.md)
    draft tool. Genuinely needs millions of matches, and is the site Riot requires
 2. Desktop draft assistant (`meiolol-app`), same data
 
+## How we work (2026-10-11)
+
+Several Claude sessions in parallel, coordinated by one (meiolol-44 at the time of
+writing). Code sessions use git worktrees and merge to main themselves after build and
+tests; deploys build from a commit, never the working tree. Jacob's standing ask: the
+coordinator reviews regularly for gaps nobody owns (risks, safety nets, doc requirements
+with no work behind them) and hands out work, not just the next plan step.
+
 ## State
 
 - Done: Zig crawler live on the gpu-box PC (replaced the Python one, same database);
