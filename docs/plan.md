@@ -48,8 +48,8 @@ next steps land here.
   (lessons + practice drafts), Pool, learning curves, comeback odds, method page. Win-rate
   edges gated by game counts (draft-model thresholds)
 - Built, not deployed: Your games service (`meiolol api`, docs/your-games.md), Patch day
-  core (src/patchday.zig, not wired), data safety (branch worktree-data-safety: backup,
-  restore, forget, health checks; docs/data-safety.md on that branch)
+  core (src/patchday.zig, not wired); data safety (`meiolol backup|restore|forget`,
+  deploy/health.sh) merged, loops not yet started on the box
 - Draft model (docs/model.md): at ~8k games nothing beats champion base rates beyond
   noise; daily eval on the box appends data/eval-history.tsv
 - Legal drafts: docs/legal/ (privacy, terms, LIA, objection form), waiting on Jacob
@@ -62,9 +62,8 @@ next steps land here.
 
 ### Ops and data (was meiolol-de, data-safety-af)
 
-- Merge and deploy worktree-data-safety (rebased on the plain-PUUID `forgotten`), start
-  the box backup loop (D:) and health loop (ntfy); first backup + restore test. Mac
-  launchd notifier: Jacob's call
+- Data safety is on main (fad705a; docs/data-safety.md): start the box backup loop (D:)
+  and health loop (ntfy); first backup + restore test. Mac launchd notifier: Jacob's call
 - Backup loop: pull exchange/forgotten.txt from jomove, push box-forgotten.txt
 - Measure real per-match sizes after a day; recheck disk runway
 - Rekey translation for `forgotten` (old PUUID -> Riot ID -> new PUUID) before the
