@@ -378,6 +378,22 @@ fn migrate(db: sqlite.Db) !void {
         // writer adds each new match's row. In key order: appends to the list's B-tree
         try db.exec(draft.ddl ++ "INSERT INTO draft_backfill SELECT match_id FROM matches ORDER BY match_id;");
     }
+    if (!try hasColumn(db, "drafts", "minutes")) {
+        // Added hours after drafts went live. Their matches are all still stored (the
+        // table is younger than any --keep-days window), so the rows go back on the
+        // backfill list, which writes them again with a length. If there are fewer
+        // unlisted matches than rows, some are gone: keep the rows, length NULL
+        try db.exec("ALTER TABLE drafts ADD COLUMN minutes INTEGER");
+        const rows = try db.scalar("SELECT count(*) FROM drafts", .{}) orelse 0;
+        const unlisted = try db.scalar(
+            "SELECT count(*) FROM matches WHERE match_id NOT IN draft_backfill",
+            .{},
+        ) orelse 0;
+        if (rows <= unlisted) try db.exec(
+            \\DELETE FROM drafts;
+            \\INSERT OR IGNORE INTO draft_backfill SELECT match_id FROM matches ORDER BY match_id;
+        );
+    }
     try db.commit();
 }
 
@@ -519,4 +535,26 @@ test "drafts: a database from before them lists its matches for the backfill" {
     try apply(db);
     try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM draft_backfill", .{}));
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM drafts", .{}));
+}
+
+test "drafts: rows from before minutes go back on the backfill list" {
+    const db = try memory();
+    defer db.close();
+    try db.exec(
+        \\DROP TABLE drafts;
+        \\CREATE TABLE drafts (id INTEGER PRIMARY KEY, platform TEXT NOT NULL,
+        \\    queue INTEGER NOT NULL, patch TEXT NOT NULL, day INTEGER NOT NULL, rank INTEGER,
+        \\    ranked INTEGER NOT NULL, blue_win INTEGER NOT NULL, picks BLOB NOT NULL,
+        \\    bans BLOB NOT NULL);
+        \\INSERT INTO matches VALUES ('EUW1_1', 'riot', 'EUW1', 420, '16.1', '16.1.1', 1, 1, 100, 0);
+        \\INSERT INTO matches VALUES ('EUW1_2', 'riot', 'EUW1', 420, '16.1', '16.1.1', 1, 1, 100, 0);
+        \\INSERT INTO draft_backfill VALUES ('EUW1_1');
+        \\INSERT INTO drafts (platform, queue, patch, day, ranked, blue_win, picks, bans)
+        \\    VALUES ('EUW1', 420, '16.1', 0, 0, 1, x'', x'');
+    );
+    try apply(db);
+    try apply(db);
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM drafts", .{}));
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM draft_backfill", .{}));
+    try std.testing.expect(try hasColumn(db, "drafts", "minutes"));
 }

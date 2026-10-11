@@ -20,8 +20,9 @@ const schema = @import("schema.zig");
 /// one, NULL under 5 known; ranked: how many are known. picks: 10 x u16 LE, blue's five
 /// then red's in participant order, champion id | (role + 1) << 13, role 0..4 in Riot
 /// teamPosition order (core.Role), 0 when unknown. bans: 10 x u16 LE champion ids,
-/// blue's then red's in pick turn order, 0 for none. id: insertion order, so backups
-/// copy new rows by range and a restore keeps them
+/// blue's then red's in pick turn order, 0 for none. minutes: game length in whole
+/// minutes, at most 255 (last: added after the table went live, NULL in a few rows).
+/// id: insertion order, so backups copy new rows by range and a restore keeps them
 pub const ddl =
     \\CREATE TABLE IF NOT EXISTS drafts (
     \\    id INTEGER PRIMARY KEY,
@@ -33,7 +34,8 @@ pub const ddl =
     \\    ranked INTEGER NOT NULL,
     \\    blue_win INTEGER NOT NULL,
     \\    picks BLOB NOT NULL,
-    \\    bans BLOB NOT NULL
+    \\    bans BLOB NOT NULL,
+    \\    minutes INTEGER
     \\);
     \\CREATE TABLE IF NOT EXISTS draft_backfill (match_id TEXT PRIMARY KEY) WITHOUT ROWID;
     \\
@@ -64,6 +66,8 @@ pub const Draft = struct {
     rank: ?u8,
     ranked: u8,
     blue_win: bool,
+    /// Whole minutes, at most 255; null in rows from before the column
+    minutes: ?u8,
     /// 0-4 blue, 5-9 red, each in participant order
     picks: [10]Pick,
     /// 0-4 blue's, 5-9 red's, in pick turn order; 0 for none
@@ -124,7 +128,7 @@ pub const Builder = struct {
 
     pub fn init(db: sqlite.Db) !Builder {
         var match = try db.prepare(
-            \\SELECT platform, queue_id, patch, game_start, winning_team, remake
+            \\SELECT platform, queue_id, patch, game_start, winning_team, remake, duration_s
             \\FROM matches WHERE match_id = ?
         );
         errdefer match.deinit();
@@ -138,8 +142,8 @@ pub const Builder = struct {
         );
         errdefer bans.deinit();
         var insert = try db.prepare(
-            \\INSERT INTO drafts (platform, queue, patch, day, rank, ranked, blue_win, picks, bans)
-            \\VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            \\INSERT INTO drafts (platform, queue, patch, day, rank, ranked, blue_win, picks, bans,
+            \\    minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         );
         errdefer insert.deinit();
         const take = try db.prepare("DELETE FROM draft_backfill WHERE match_id = ?");
@@ -216,6 +220,7 @@ pub const Builder = struct {
             winner == 100,
             sqlite.Blob{ .bytes = &pick_bytes },
             sqlite.Blob{ .bytes = &ban_bytes },
+            @min(@divTrunc(@max(b.match.int(6), 0), 60), 255),
         });
         return true;
     }
@@ -283,7 +288,8 @@ pub const Reader = struct {
         const platform_json = if (f.platforms) |p| try std.json.Stringify.valueAlloc(gpa, p, .{}) else null;
         errdefer if (platform_json) |j| gpa.free(j);
         var q = try db.prepare(
-            \\SELECT platform, queue, patch, day, rank, ranked, blue_win, picks, bans FROM drafts
+            \\SELECT platform, queue, patch, day, rank, ranked, blue_win, picks, bans, minutes
+            \\FROM drafts
             \\WHERE (?1 IS NULL OR patch IN (SELECT value FROM json_each(?1)))
             \\  AND (?2 IS NULL OR platform IN (SELECT value FROM json_each(?2)))
             \\  AND day >= ?3 AND queue = ?4
@@ -311,6 +317,7 @@ pub const Reader = struct {
             .rank = if (q.optInt(4)) |v| @intCast(v) else null,
             .ranked = @intCast(q.int(5)),
             .blue_win = q.int(6) != 0,
+            .minutes = if (q.optInt(9)) |v| @intCast(v) else null,
             .picks = try decodePicks(q.bytes(7)),
             .bans = try decodeBans(q.bytes(8)),
         };
@@ -360,7 +367,13 @@ test "a match's row: teams, roles, bans, median rank; nothing else" {
     try testing.expectEqual(Pick{ .champion = 105, .role = null }, d.picks[5]);
     try testing.expectEqual(Pick{ .champion = 109, .role = 4 }, d.picks[9]);
     try testing.expectEqualSlices(u16, &.{ 54, 55, 0, 0, 0, 66, 0, 0, 0, 0 }, &d.bans);
+    try testing.expectEqual(@as(?u8, 30), d.minutes);
     try testing.expectEqual(null, try r.next());
+
+    // Length caps at 255 minutes (one byte)
+    try db.exec("UPDATE matches SET duration_s = 99999");
+    try testing.expect(try b.write("EUW1_1"));
+    try testing.expectEqual(@as(?i64, 255), try db.scalar("SELECT max(minutes) FROM drafts", .{}));
 
     var none: Reader = try .init(testing.allocator, db, .{ .platforms = &.{"KR"} });
     defer none.deinit();
@@ -371,7 +384,7 @@ test "a match's row: teams, roles, bans, median rank; nothing else" {
     defer cols.deinit();
     try cols.bind(.{});
     try testing.expect(try cols.step());
-    const want = "id,platform,queue,patch,day,rank,ranked,blue_win,picks,bans";
+    const want = "id,platform,queue,patch,day,rank,ranked,blue_win,picks,bans,minutes";
     try testing.expectEqualStrings(want, cols.bytes(0));
 }
 
@@ -427,8 +440,8 @@ test "bytes per row" {
     defer db.close();
     try db.exec(ddl);
     var ins = try db.prepare(
-        \\INSERT INTO drafts (platform, queue, patch, day, rank, ranked, blue_win, picks, bans)
-        \\VALUES ('EUW1', 420, '16.20', ?, ?, 10, ?, ?, ?)
+        \\INSERT INTO drafts (platform, queue, patch, day, rank, ranked, blue_win, picks, bans,
+        \\    minutes) VALUES ('EUW1', 420, '16.20', ?, ?, 10, ?, ?, ?, ?)
     );
     defer ins.deinit();
     var prng: std.Random.DefaultPrng = .init(1);
@@ -443,12 +456,12 @@ test "bytes per row" {
         const bb = encodeBans(bans);
         try ins.exec(.{
             20370 + i / 5000,            rand.intRangeAtMost(u8, 8, 30), rand.boolean(),
-            sqlite.Blob{ .bytes = &pb }, sqlite.Blob{ .bytes = &bb },
+            sqlite.Blob{ .bytes = &pb }, sqlite.Blob{ .bytes = &bb },    rand.intRangeAtMost(u8, 15, 45),
         });
     }
     const pages = (try db.scalar("PRAGMA page_count", .{})).?;
     const page_size = (try db.scalar("PRAGMA page_size", .{})).?;
     const per_row = @divTrunc(pages * page_size, n);
-    // 72 when measured (2026-10-11): 10M games ~0.7 GB
+    // 74 when measured (2026-10-11): 10M games ~0.7 GB
     try testing.expect(per_row >= 40 and per_row <= 80);
 }

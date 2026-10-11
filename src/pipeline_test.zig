@@ -49,6 +49,7 @@ test "fixture games to stats, curves and the website" {
     var n_drafts: usize = 0;
     while (try reader.next()) |d| : (n_drafts += 1) {
         for (d.picks) |p| try testing.expect(p.role != null);
+        try testing.expectEqual(@as(?u8, 27), d.minutes);
     }
     try testing.expectEqual(games, n_drafts);
 

@@ -105,7 +105,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | raw.raw_docs (riot_match) | summaries of their games deleted (they name all ten players) |
 | raw.timeline_docs | raw timelines of their games deleted (they hold PUUIDs) |
 | timeline.timelines | nothing: compact timelines hold slots 1-10 only |
-| drafts | nothing: no PUUID, Riot ID or match id, only platform, patch, day, median rank, result, champions, roles and bans, so no row can be found by player (see below) |
+| drafts | nothing: no PUUID, Riot ID or match id, only platform, patch, day, median rank, result, length in minutes, champions, roles and bans, so no row can be found by player (see below) |
 | forgotten | PUUID and date added: the suppression list |
 | Daily Draft (daily/used.txt, puzzles) | nothing: match ids and anonymous puzzles only |
 | backup files | `--backups /mnt/d/meiolol-backups` scrubs every state and segment file at once |
@@ -133,7 +133,9 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
   not the match id either, since the Riot API turns one back into the ten players, and
   the game's day rather than its start time. Someone who already knows a game (its
   champions and day) could pick out its row, but it tells them nothing beyond what they
-  knew. With nothing to look a person up by, forget does not touch them; the transient
+  knew. Game length in whole minutes (Jacob, 2026-10-11) adds no real risk: picks, bans
+  and day already single out a game almost always, and the length is one more thing
+  that game's own players can already see. With nothing to look a person up by, forget does not touch them; the transient
   `draft_backfill` list holds match ids and goes once the backfill has run
 - Retention sweeps (players not seen for 30 days, PUUIDs blanked after 24 months) live in
   the crawler's hourly prune (meiolol-de). Public wording: docs/legal/privacy.md

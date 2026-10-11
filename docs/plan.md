@@ -151,9 +151,9 @@ next steps land here.
   them; older segments and daily backups off-host, encrypted (rclone crypt, file per
   file so `forget --backups` scrubs still work), to a Hetzner Storage Box
 - Draft table kept forever: done 2026-10-11 (docs/architecture.md Storage,
-  src/store/draft.zig). `drafts` in meiolol.db, one row per complete ranked game, 72
+  src/store/draft.zig). `drafts` in meiolol.db, one row per complete ranked game, 74
   bytes measured (10M games ~0.7 GB): platform, queue, patch, day, median rank (5+
-  known) and count known, blue win, 10 x champion + role, bans. No PUUID, Riot ID, match
+  known) and count known, blue win, 10 x champion + role, bans, length in minutes. No PUUID, Riot ID, match
   id or start time; forget leaves it alone (docs/data-safety.md). Written by the writer
   when it first inserts a match; in backup segments by id range; `meiolol status` counts
   it and the backfill list. Why kept: synergy and good-pick models need 1-3M games (5M+
@@ -170,8 +170,12 @@ next steps land here.
     draft_backfill 0
   - Move stats/eval onto `draft.Reader` once the window drops games they need (eval's
     lane gold and experience sections still join per-match data by match id)
-  - Open (Jacob): add game length in whole minutes (useful for early/late models;
-    slightly more distinctive rows)? Matches stored before the ranks table have no
+  - Game length (Jacob: yes): `minutes` column, u8 capped at 255, 74 bytes a row. The
+    first binary with it adds the column, empties drafts and lists every match again
+    (all rows' matches are still stored), so the backfill rewrites them with a length;
+    rehearsed on a copy (2,182 rows rewritten, no NULLs). Restart the crawler on it
+    after the A1 move so its rows carry the length
+  - Open (Jacob): matches stored before the ranks table have no
     participants rank, so their rows have no rank: fall back to the current ranks
     entry in the backfill?
 

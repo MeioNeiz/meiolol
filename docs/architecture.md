@@ -68,9 +68,11 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   models that need millions of games over several patches. Platform, queue, patch, game
   day (unix day, not the start time), rank (median ladder rank snapshot of the players
   with one, schema.packRank, NULL under 5 known; `ranked` = how many known), blue win,
-  picks (10 x u16: champion | (role + 1) << 13, blue then red) and bans (10 x u16).
+  picks (10 x u16: champion | (role + 1) << 13, blue then red), bans (10 x u16) and
+  game length in whole minutes (capped at 255; added a few hours after launch, the
+  migration put the rows written so far back on the backfill list to get theirs).
   No PUUID, Riot ID or match id: the Riot API turns a match id back into the players.
-  72 bytes per row measured (10M games ~0.7 GB). Deduped without a key: the writer adds
+  74 bytes per row measured (10M games ~0.7 GB). Deduped without a key: the writer adds
   it in the transaction that first inserts the match row (same file as participants, so
   atomic under WAL; an attached file would not be). Matches stored before the table
   existed are listed in `draft_backfill` (match ids, transient) when a new binary first
