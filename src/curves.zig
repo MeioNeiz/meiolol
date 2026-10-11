@@ -5,6 +5,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
+const mastery = @import("riot/mastery.zig");
 const stats = @import("stats.zig");
 
 const Role = core.Role;
@@ -47,9 +48,12 @@ pub fn build(
     );
     defer q.deinit();
     try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
+    // tier is the rank snapshot stored with the match (players is emptied on a rekey);
+    // mastery is a later snapshot of each player, absent after a rekey
     var players = try db.prepare(
-        \\SELECT pa.slot, pa.team_id, pa.position, pa.champion_id, pl.tier
-        \\FROM participants pa LEFT JOIN players pl USING (puuid)
+        \\SELECT pa.slot, pa.team_id, pa.position, pa.champion_id, pa.tier,
+        \\  ms.data, ms.fetched_at
+        \\FROM participants pa LEFT JOIN mastery ms USING (puuid)
         \\WHERE pa.match_id = ?
     );
     defer players.deinit();
@@ -67,7 +71,7 @@ pub fn build(
             continue;
         };
         try players.bind(.{q.bytes(0)});
-        const game = try readGame(&players) orelse {
+        const game = try readGame(arena, &players) orelse {
             summary.skipped += 1;
             continue;
         };
@@ -92,7 +96,7 @@ pub const Game = struct {
 };
 
 /// Null unless every position is filled exactly once per side
-fn readGame(players: *store.sqlite.Stmt) !?Game {
+fn readGame(arena: std.mem.Allocator, players: *store.sqlite.Stmt) !?Game {
     var g: Game = .{ .ids = undefined, .champions = undefined, .bracket = null };
     var seen: [2][5]bool = @splat(@splat(false));
     var ranks: [10]usize = undefined;
@@ -105,7 +109,17 @@ fn readGame(players: *store.sqlite.Stmt) !?Game {
         if (seen[side][r] or slot < 0 or slot >= timeline.max_participants) return null;
         seen[side][r] = true;
         g.ids[side][r] = @intCast(slot + 1);
-        g.champions[side][r] = @intCast(players.int(3));
+        const champion: u32 = @intCast(players.int(3));
+        g.champions[side][r] = champion;
+        if (!players.isNull(5)) {
+            const entries = mastery.decode(arena, players.bytes(5), players.int(6)) catch &.{};
+            const i = std.sort.binarySearch(mastery.Entry, entries, champion, struct {
+                fn order(c: u32, e: mastery.Entry) std.math.Order {
+                    return std.math.order(c, e.champion);
+                }
+            }.order);
+            if (i) |at| g.experienced[side][r] = entries[at].points >= curvesfile.experienced_points;
+        }
         if (!players.isNull(4) and n_ranks < ranks.len) {
             if (curvesfile.tierRank(players.bytes(4))) |rank| {
                 ranks[n_ranks] = rank;
@@ -213,12 +227,17 @@ test "curves from a real timeline" {
             const team: i64 = if (slot < 5) 100 else 200;
             try db.run(
                 \\INSERT INTO participants
-                \\  (match_id, slot, team_id, puuid, champion_id, position, win)
-                \\VALUES (?,?,?,'p',?,?,0)
+                \\  (match_id, slot, team_id, puuid, champion_id, position, win, tier)
+                \\VALUES (?,?,?,'p',?,?,0,'EMERALD')
             , .{ id, slot, team, 10 * (slot + 1), positions[slot % 5] });
         }
     }
-    try db.run("INSERT INTO players (puuid, tier, source) VALUES ('p','EMERALD','t')", .{});
+    // Everyone shares puuid 'p': 150k points on champion 10 (blue top), 5k on 60
+    const owned = try mastery.encode(arena, &.{
+        .{ .champion = 10, .level = 20, .points = 150_000, .last_play = 0 },
+        .{ .champion = 60, .level = 3, .points = 5_000, .last_play = 0 },
+    }, 0);
+    try db.run("INSERT INTO mastery VALUES ('p','EUW1',0,2,?)", .{store.Blob{ .bytes = owned }});
 
     // Every item anyone bought counts as finished here: first purchase times
     var r = try build(gpa, db, &.{"16.20"}, &.{"EUW1"}, &.{ 1055, 3078 });
@@ -236,6 +255,8 @@ test "curves from a real timeline" {
     try testing.expectEqual(2, top.games());
     try testing.expectEqual(2, top.wins());
     try testing.expect(c.get(.top, .mid, 10, 60) != null);
+    try testing.expectEqual(2, c.getExperienced(.top, .all, 10, 60).?.games());
+    try testing.expect(c.getExperienced(.top, .all, 60, 10) == null);
     const f14 = t.frames[14];
     const m14 = top.minute(13);
     try testing.expectEqual(2, m14.n);

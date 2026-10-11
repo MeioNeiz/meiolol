@@ -291,10 +291,10 @@ fn load(
     return p;
 }
 
+/// From the rank snapshot stored with the match: players is emptied on a rekey
 fn medianTier(db: store.Db, match_id: []const u8) !?[]const u8 {
     var q = try db.prepare(
-        \\SELECT pl.tier FROM participants pa JOIN players pl USING (puuid)
-        \\WHERE pa.match_id = ? AND pl.tier IS NOT NULL
+        "SELECT tier FROM participants WHERE match_id = ? AND tier IS NOT NULL",
     );
     defer q.deinit();
     try q.bind(.{match_id});
@@ -419,12 +419,11 @@ fn testDb() !store.Db {
             const base = 1 + 5 * ((g + slot / 5) % 5);
             try db.run(
                 \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position,
-                \\  win, kills, gold) VALUES (?,?,?,?,?,?,0,?,1000)
+                \\  win, kills, gold, tier) VALUES (?,?,?,?,?,?,0,?,1000,'GOLD')
             , .{ id, slot, team, "p", base + slot % 5, positions[slot % 5], slot });
         }
         try db.run("INSERT INTO bans VALUES (?,100,1,9)", .{id});
     }
-    try db.run("INSERT INTO players (puuid, tier, source) VALUES ('p','GOLD','t')", .{});
     return db;
 }
 
