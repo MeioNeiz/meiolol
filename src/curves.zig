@@ -21,12 +21,15 @@ pub const Summary = struct {
 };
 
 /// Every ranked solo game with a timeline on `chosen` patches and `platforms` (no
-/// remakes, a winner, all ten positions). Caller owns the builder.
+/// remakes, a winner, all ten positions). `legendaries`: sorted finished item ids for
+/// first-item timing (ddragon.legendaries), empty to leave it out. Caller owns the
+/// builder.
 pub fn build(
     gpa: std.mem.Allocator,
     db: store.Db,
     chosen: []const []const u8,
     platforms: []const []const u8,
+    legendaries: []const u32,
 ) !struct { builder: curvesfile.Builder, summary: Summary } {
     var b: curvesfile.Builder = .{ .gpa = gpa };
     errdefer b.deinit();
@@ -68,7 +71,7 @@ pub fn build(
             summary.skipped += 1;
             continue;
         };
-        for (Role.all) |r| try b.addLane(lane(t, game, r, blue_won));
+        for (Role.all) |r| try b.addLane(lane(t, game, r, blue_won, legendaries));
         b.addGame();
         summary.games += 1;
     }
@@ -84,6 +87,8 @@ pub const Game = struct {
     ids: [2][5]u8,
     champions: [2][5]u32,
     bracket: ?curvesfile.Bracket,
+    /// Mastery of at least curvesfile.experienced_points on their champion
+    experienced: [2][5]bool = @splat(@splat(false)),
 };
 
 /// Null unless every position is filled exactly once per side
@@ -113,8 +118,8 @@ fn readGame(players: *store.sqlite.Stmt) !?Game {
     return g;
 }
 
-/// Blue's laner in `r` as a, red's as b
-pub fn lane(t: timeline.Timeline, g: Game, r: Role, blue_won: bool) Lane {
+/// Blue's laner in `r` as a, red's as b. `legendaries` as for build
+pub fn lane(t: timeline.Timeline, g: Game, r: Role, blue_won: bool, legendaries: []const u32) Lane {
     const pa = g.ids[0][@intFromEnum(r)];
     const pb = g.ids[1][@intFromEnum(r)];
     // Frame k is minute k; the last frame is the game's end, part of a minute
@@ -126,6 +131,8 @@ pub fn lane(t: timeline.Timeline, g: Game, r: Role, blue_won: bool) Lane {
         .b = g.champions[1][@intFromEnum(r)],
         .a_won = blue_won,
         .minutes = @intCast(@min(full, max_minutes)),
+        .experienced_a = g.experienced[0][@intFromEnum(r)],
+        .experienced_b = g.experienced[1][@intFromEnum(r)],
     };
     if (pa > t.participants or pb > t.participants) {
         l.minutes = 0;
@@ -144,13 +151,24 @@ pub fn lane(t: timeline.Timeline, g: Game, r: Role, blue_won: bool) Lane {
             if (k.victim == pa and involved(k, pb)) l.b_kills_a[phase] = true;
         },
         .level_up => |u| if (u.level == 6) {
-            const secs: u16 = @intCast(@min(@divFloor(e.t_ms, 1000), std.math.maxInt(u16)));
-            if (u.participant == pa and l.level6_a == 0) l.level6_a = secs;
-            if (u.participant == pb and l.level6_b == 0) l.level6_b = secs;
+            if (u.participant == pa and l.level6_a == 0) l.level6_a = seconds(e.t_ms);
+            if (u.participant == pb and l.level6_b == 0) l.level6_b = seconds(e.t_ms);
+        },
+        .item_purchased => |p| if (std.sort.binarySearch(u32, legendaries, p.item, orderU32) != null) {
+            if (p.participant == pa and l.first_item_a == 0) l.first_item_a = seconds(e.t_ms);
+            if (p.participant == pb and l.first_item_b == 0) l.first_item_b = seconds(e.t_ms);
         },
         else => {},
     };
     return l;
+}
+
+fn seconds(t_ms: i64) u16 {
+    return @intCast(std.math.clamp(@divFloor(t_ms, 1000), 1, std.math.maxInt(u16)));
+}
+
+fn orderU32(key: u32, item: u32) std.math.Order {
+    return std.math.order(key, item);
 }
 
 fn cs(f: timeline.Frame, p: u8) i32 {
@@ -202,7 +220,8 @@ test "curves from a real timeline" {
     }
     try db.run("INSERT INTO players (puuid, tier, source) VALUES ('p','EMERALD','t')", .{});
 
-    var r = try build(gpa, db, &.{"16.20"}, &.{"EUW1"});
+    // Every item anyone bought counts as finished here: first purchase times
+    var r = try build(gpa, db, &.{"16.20"}, &.{"EUW1"}, &.{ 1055, 3078 });
     defer r.builder.deinit();
     try testing.expectEqual(Summary{ .games = 2, .skipped = 0 }, r.summary);
     try testing.expectEqual(10, r.builder.lanes.items.len);

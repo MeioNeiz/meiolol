@@ -1,19 +1,20 @@
 //! Curves file: how each lane matchup unfolds, minute by minute, for one patch (or
 //! patch range). Written beside the model file by `meiolol curves`.
 //!
-//! Format v1, little-endian:
+//! Format v2, little-endian:
 //!   magic "MEIOCURV", version u32, minutes u32 (m), games u32, curves u32 (k),
 //!   patch [16]u8 zero padded
 //!   k x (Header, then m x Minute), the extern structs below
-//! Curves are sorted by (role, a, b, bracket) with a <= b by champion id; a == b is a
-//! mirror, seen from blue's side. Everything is from a's side: diffs are a minus b.
+//! Curves are sorted by (role, a, b, bracket, experience) with a <= b by champion id;
+//! a == b is a mirror, seen from blue's side. Everything is from a's side: diffs are a
+//! minus b.
 //! Minute i (0-based) is the frame at i + 1 minutes.
 
 const std = @import("std");
 const Role = @import("roles.zig").Role;
 
 pub const magic = "MEIOCURV";
-pub const version: u32 = 1;
+pub const version: u32 = 2;
 pub const patch_len = 16;
 /// Lane phase and the early mid game; later minutes mostly measure who is still playing
 pub const max_minutes = 25;
@@ -25,6 +26,14 @@ pub const phases = phase_ends.len + 1;
 const header_len = magic.len + 4 * 4 + patch_len;
 /// Bounds allocations from a corrupt header
 const max_curves = 1 << 24;
+
+/// Mastery points that make a laner "experienced" on their champion: the top bucket of
+/// research/raw/lol-mastery-analysis.md (win rates level off from 10k; 100k+ is high)
+pub const experienced_points = 100_000;
+
+/// Which games a curve counts: all, or only those where a (or b) is experienced on
+/// their champion (mastery is a snapshot from when the crawler fetched it, not match time)
+pub const Experience = enum(u8) { any, a, b };
 
 /// Visible rank tiers, never inferred MMR (docs/concept.md)
 pub const Bracket = enum(u8) {
@@ -95,7 +104,8 @@ pub const Minute = extern struct {
 pub const Header = extern struct {
     role: u8,
     bracket: u8,
-    _pad: u16 = 0,
+    experience: u8,
+    _pad: u8 = 0,
     a: u32,
     b: u32,
     games: u32,
@@ -113,6 +123,10 @@ pub const Header = extern struct {
     /// Median seconds to level 6; 0 when too few reached it
     level6_a: u16,
     level6_b: u16,
+    /// Median seconds to the first finished item (Data Dragon legendaries); 0 when too
+    /// few finished one
+    first_item_a: u16,
+    first_item_b: u16,
 };
 
 /// One lane in one game, for Builder
@@ -131,6 +145,11 @@ pub const Lane = struct {
     b_kills_a: [phases]bool = @splat(false),
     level6_a: u16 = 0,
     level6_b: u16 = 0,
+    first_item_a: u16 = 0,
+    first_item_b: u16 = 0,
+    /// Mastery of at least experienced_points on their champion
+    experienced_a: bool = false,
+    experienced_b: bool = false,
 
     /// The same lane from b's side
     fn swapped(l: Lane) Lane {
@@ -147,6 +166,10 @@ pub const Lane = struct {
         s.b_kills_a = l.a_kills_b;
         s.level6_a = l.level6_b;
         s.level6_b = l.level6_a;
+        s.first_item_a = l.first_item_b;
+        s.first_item_b = l.first_item_a;
+        s.experienced_a = l.experienced_b;
+        s.experienced_b = l.experienced_a;
         return s;
     }
 };
@@ -189,13 +212,18 @@ pub const Builder = struct {
             const group = lanes[start..end];
             start = end;
             for (std.enums.values(Bracket)) |bracket| {
-                subset.clearRetainingCapacity();
-                for (group) |l| if (bracket == .all or l.bracket == bracket) {
-                    try subset.append(b.gpa, l);
-                };
-                if (subset.items.len < @max(min_games, 1)) continue;
-                try curve(b.gpa, &out, &scratch, subset.items, bracket);
-                curves += 1;
+                for (std.enums.values(Experience)) |experience| {
+                    subset.clearRetainingCapacity();
+                    for (group) |l| {
+                        if (bracket != .all and l.bracket != bracket) continue;
+                        if (experience == .a and !l.experienced_a) continue;
+                        if (experience == .b and !l.experienced_b) continue;
+                        try subset.append(b.gpa, l);
+                    }
+                    if (subset.items.len < @max(min_games, 1)) continue;
+                    try curve(b.gpa, &out, &scratch, subset.items, bracket, experience);
+                    curves += 1;
+                }
             }
         }
 
@@ -226,10 +254,12 @@ fn curve(
     scratch: *std.ArrayList(i16),
     lanes: []const Lane,
     bracket: Bracket,
+    experience: Experience,
 ) !void {
     var h: Header = .{
         .role = @intFromEnum(lanes[0].role),
         .bracket = @intFromEnum(bracket),
+        .experience = @intFromEnum(experience),
         .a = lanes[0].a,
         .b = lanes[0].b,
         .games = @intCast(lanes.len),
@@ -243,6 +273,8 @@ fn curve(
         .b_kills_a = @splat(0),
         .level6_a = 0,
         .level6_b = 0,
+        .first_item_a = 0,
+        .first_item_b = 0,
     };
     for (lanes) |l| {
         h.a_wins += @intFromBool(l.a_won);
@@ -261,8 +293,10 @@ fn curve(
             h.b_wins_lane_b += @intFromBool(!l.a_won);
         }
     }
-    h.level6_a = try medianLevel6(gpa, lanes, .a);
-    h.level6_b = try medianLevel6(gpa, lanes, .b);
+    h.level6_a = try medianSeconds(gpa, lanes, "level6_a");
+    h.level6_b = try medianSeconds(gpa, lanes, "level6_b");
+    h.first_item_a = try medianSeconds(gpa, lanes, "first_item_a");
+    h.first_item_b = try medianSeconds(gpa, lanes, "first_item_b");
     try out.appendSlice(gpa, std.mem.asBytes(&h));
 
     for (0..max_minutes) |i| {
@@ -277,14 +311,12 @@ fn curve(
     }
 }
 
-fn medianLevel6(gpa: std.mem.Allocator, lanes: []const Lane, side: enum { a, b }) !u16 {
+/// Median of a seconds field over the lanes that reached it (0 = never)
+fn medianSeconds(gpa: std.mem.Allocator, lanes: []const Lane, comptime field: []const u8) !u16 {
     var times: std.ArrayList(u16) = .empty;
     defer times.deinit(gpa);
-    for (lanes) |l| {
-        const t = if (side == .a) l.level6_a else l.level6_b;
-        if (t > 0) try times.append(gpa, t);
-    }
-    // A median of a handful says little
+    for (lanes) |l| if (@field(l, field) > 0) try times.append(gpa, @field(l, field));
+    // When most never got there, a median of the rest says little
     if (times.items.len * 2 < lanes.len) return 0;
     std.mem.sort(u16, times.items, {}, std.sort.asc(u16));
     return times.items[times.items.len / 2];
@@ -372,35 +404,35 @@ pub const Curves = struct {
         return c.patch_buf[0..c.patch_len];
     }
 
-    /// `me` against `them` in `role`, seen from `me`'s side; null when the file has
-    /// too few games for it
+    /// `me` against `them` in `role`, seen from `me`'s side, all games; null when the
+    /// file has too few games for it
     pub fn get(c: *const Curves, role: Role, bracket: Bracket, me: u32, them: u32) ?View {
+        return c.find(role, bracket, .any, me, them);
+    }
+
+    /// As get, counting only games where `me` is experienced on their champion
+    pub fn getExperienced(c: *const Curves, role: Role, bracket: Bracket, me: u32, them: u32) ?View {
+        return c.find(role, bracket, if (me <= them) .a else .b, me, them);
+    }
+
+    fn find(c: *const Curves, role: Role, bracket: Bracket, experience: Experience, me: u32, them: u32) ?View {
+        const Key = struct { role: u8, a: u32, b: u32, bracket: u8, experience: u8 };
         const a = @min(me, them);
-        const b = @max(me, them);
-        const key: Header = .{
+        const key: Key = .{
             .role = @intFromEnum(role),
-            .bracket = @intFromEnum(bracket),
             .a = a,
-            .b = b,
-            .games = 0,
-            .a_wins = 0,
-            .lane_games = 0,
-            .lane_a = 0,
-            .lane_b = 0,
-            .a_wins_lane_a = 0,
-            .b_wins_lane_b = 0,
-            .a_kills_b = @splat(0),
-            .b_kills_a = @splat(0),
-            .level6_a = 0,
-            .level6_b = 0,
+            .b = @max(me, them),
+            .bracket = @intFromEnum(bracket),
+            .experience = @intFromEnum(experience),
         };
         const i = std.sort.binarySearch(Curve, c.curves, key, struct {
-            fn order(k: Header, cv: Curve) std.math.Order {
+            fn order(k: Key, cv: Curve) std.math.Order {
                 const h = cv.header;
                 if (k.role != h.role) return std.math.order(k.role, h.role);
                 if (k.a != h.a) return std.math.order(k.a, h.a);
                 if (k.b != h.b) return std.math.order(k.b, h.b);
-                return std.math.order(k.bracket, h.bracket);
+                if (k.bracket != h.bracket) return std.math.order(k.bracket, h.bracket);
+                return std.math.order(k.experience, h.experience);
             }
         }.order) orelse return null;
         return .{ .curve = &c.curves[i], .flipped = me != a };
@@ -465,6 +497,12 @@ pub const View = struct {
         return if (v.flipped) .{ h.level6_b, h.level6_a } else .{ h.level6_a, h.level6_b };
     }
 
+    /// Median seconds to the first finished item for me and them; 0 when unknown
+    pub fn firstItem(v: View) [2]u16 {
+        const h = v.curve.header;
+        return if (v.flipped) .{ h.first_item_b, h.first_item_a } else .{ h.first_item_a, h.first_item_b };
+    }
+
     pub fn minutes(v: View) usize {
         return v.curve.minutes.len;
     }
@@ -501,6 +539,8 @@ fn testLane(a: u32, b: u32, a_won: bool, gold_at: i16, bracket: ?Bracket) Lane {
     l.a_kills_b[0] = gold_at > 0;
     l.level6_a = 360;
     l.level6_b = 420;
+    l.first_item_a = 900;
+    l.experienced_a = gold_at > 0;
     return l;
 }
 
@@ -524,8 +564,8 @@ test "round trip, sides and brackets" {
     defer c.deinit(gpa);
     try testing.expectEqualStrings("16.20", c.patch());
     try testing.expectEqual(5, c.games);
-    // all + low; high has one game
-    try testing.expectEqual(2, c.curves.len);
+    // all + low, each also with Darius experienced; high has one game
+    try testing.expectEqual(4, c.curves.len);
     try testing.expect(c.get(.top, .all, 1, 2) == null);
     try testing.expect(c.get(.top, .high, 122, 86) == null);
     try testing.expect(c.get(.jungle, .all, 122, 86) == null);
@@ -555,6 +595,13 @@ test "round trip, sides and brackets" {
 
     const low = c.get(.top, .low, 122, 86).?;
     try testing.expectEqual(2, low.games());
+
+    const experienced = c.getExperienced(.top, .all, 122, 86).?;
+    try testing.expectEqual(3, experienced.games());
+    try testing.expect(experienced.flipped);
+    try testing.expectEqual([2]u16{ 900, 0 }, experienced.firstItem());
+    try testing.expect(c.getExperienced(.top, .all, 86, 122) == null);
+    try testing.expectEqual([2]u16{ 0, 900 }, garen.firstItem());
 
     const bytes = aw.written();
     try testing.expectError(error.Truncated, Curves.parse(gpa, bytes[0 .. bytes.len - 1]));

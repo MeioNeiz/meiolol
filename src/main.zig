@@ -278,7 +278,12 @@ fn writeCurves(
     const label = try stats.label(&label_buf, chosen);
     const path = out_path orelse try curvesPath(arena, data_dir, chosen);
 
-    var r = try curves.build(gpa, db, chosen, platforms);
+    const legendaries = ddragon.legendaries(gpa, io, chosen[0]) catch |err| blk: {
+        std.log.warn("no item list from Data Dragon ({t}): curves without first items", .{err});
+        break :blk &.{};
+    };
+    defer gpa.free(legendaries);
+    var r = try curves.build(gpa, db, chosen, platforms, legendaries);
     defer r.builder.deinit();
     if (r.summary.games == 0) {
         std.log.err("no ranked solo games with timelines on patch {s}", .{label});
