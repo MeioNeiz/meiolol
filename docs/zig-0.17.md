@@ -86,13 +86,13 @@ compiles (not used today).
    binary
 2. Install 0.17.0 beside 0.16 (the official tarball in ~/.local, or zvm), so a rollback
    is a PATH change, not a brew downgrade
-3. On a branch: the seven fixes above, plus the deprecated APIs. `zig build`,
-   `zig build test`, `-Dtarget=x86_64-windows`, the box target
+3. On main (no branches, CLAUDE.md), not pushed until step 4 passes: the seven fixes
+   above, plus the deprecated APIs, then `zig build ci` (every target in one step)
 4. Run on the box: `meiolol status`, one crawl cycle (deploy/box.sh run), `meiolol
    stats` and `meiolol site` against the real data; compare the site output with the
    0.16 build
 5. Run the app on the Windows PC against a live client (watch, champ select read)
-6. Merge, deploy the box binary, and update CLAUDE.md ("Zig 0.17, pinned in build.zig")
+6. Push (deploys the box binary), and update CLAUDE.md ("Zig 0.17, pinned in build.zig")
    and the std source pointer
 7. Then the GUI (dvui on 0.17, or zgui as the fallback)
 
