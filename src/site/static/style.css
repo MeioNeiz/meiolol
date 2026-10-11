@@ -138,6 +138,12 @@ tr.thin td { color: var(--muted); opacity: 0.6; }
 .chart .median { fill: none; stroke: var(--accent); stroke-width: 2.5; }
 .chart.thin .band { fill: var(--muted); }
 .chart.thin .median { stroke: var(--muted); }
+.chart .ending { stroke: var(--muted); stroke-dasharray: 2 4; }
+.exp-toggle { border: 0; padding: 0; margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.exp-toggle legend { padding: 0; color: var(--muted); font-size: 14px; }
+body:has(#exp-any:checked) .exp:not(.exp-any),
+body:has(#exp-x:checked) .exp:not(.exp-x),
+body:has(#exp-y:checked) .exp:not(.exp-y) { display: none; }
 .chart figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
 .curves-links { font-size: 14px; }
 .matchup-list { columns: 2 260px; padding-left: 18px; }

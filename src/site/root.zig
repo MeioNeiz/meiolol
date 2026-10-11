@@ -334,7 +334,11 @@ fn generateView(
     try matchup.writeIndex(&site, if (site.curves) |*c| c else null);
     if (view.period == .patch) if (view_builds[view.index()]) |*b| try builds_page.writeAll(&site, b);
     try pool_page.writePage(&site, &site.pool, &site.learning);
-    const info: prose.Info = .{ .contact = opts.contact, .updated = opts.updated };
+    const info: prose.Info = .{
+        .contact = opts.contact,
+        .updated = opts.updated,
+        .curves = biggestCurves(site.view_curves),
+    };
     const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
         .{ "method.html", "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
         .{ "daily.html", "Daily Draft", "Guess the hidden champion and the winner of a real ranked draft, then see what the numbers say.", .daily, daily_page.page },
@@ -373,6 +377,15 @@ fn loadBuilds(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?builds.Fi
 }
 
 /// Optional extras: a bad or old file leaves out matchup pages, not the site
+/// The views' curves file with the most games: the steadiest fit for the method page
+fn biggestCurves(all: *const [html.View.count]?core.curvesfile.Curves) ?*const core.curvesfile.Curves {
+    var best: ?*const core.curvesfile.Curves = null;
+    for (all) |*c| if (c.*) |*x| {
+        if (best == null or x.games > best.?.games) best = x;
+    };
+    return best;
+}
+
 fn loadCurves(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?core.curvesfile.Curves {
     const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 30)) catch |err| {
         switch (err) {

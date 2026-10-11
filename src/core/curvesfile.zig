@@ -1,9 +1,10 @@
 //! Curves file: how each lane matchup unfolds, minute by minute, for one patch (or
 //! patch range). Written beside the model file by `meiolol curves`.
 //!
-//! Format v3, little-endian:
+//! Format v4, little-endian:
 //!   magic "MEIOCURV", version u32, minutes u32 (m), games u32, curves u32 (k),
 //!   patch [16]u8 zero padded
+//!   Fit: per role the estimation's variance parameters and smoothing (curvefit.zig)
 //!   k x (Header, then m x Minute), the extern structs below
 //! Curves are sorted by (role, a, b, bracket, experience) with a <= b by champion id;
 //! a == b is a mirror, seen from blue's side. Everything is from a's side: diffs are a
@@ -13,9 +14,12 @@
 
 const std = @import("std");
 const Role = @import("roles.zig").Role;
+pub const curvefit = @import("curvefit.zig");
+
+const log = std.log.scoped(.curves);
 
 pub const magic = "MEIOCURV";
-pub const version: u32 = 3;
+pub const version: u32 = 4;
 pub const patch_len = 16;
 /// Lane phase and the early mid game; later minutes mostly measure who is still playing
 pub const max_minutes = 25;
@@ -110,14 +114,31 @@ pub fn medianRank(ranks: []usize) ?usize {
 
 pub const Quartiles = extern struct { p25: i16 = 0, p50: i16 = 0, p75: i16 = 0 };
 
+/// Gold, XP, CS: the order of Minute.est and the fit's metric index
+pub const Metric = enum(u2) { gold, xp, cs };
+pub const metrics = 3;
+
+/// The estimated mean difference (curvefit.zig: shrunk toward the champions'
+/// baseline, smoothed across minutes) and its standard error
+pub const Estimate = extern struct { mean: i16 = 0, se: u16 = 0 };
+
 pub const Minute = extern struct {
     /// Games still going at this minute
     n: u32,
+    /// Raw quartiles of the games' differences: the spread band
     gold: Quartiles,
     xp: Quartiles,
     /// Lane minions plus jungle monsters
     cs: Quartiles,
+    est: [metrics]Estimate = @splat(.{}),
     _pad: u16 = 0,
+};
+
+/// The file's estimation parameters: per role, curvefit.Params and the smoothing
+/// strength per metric
+pub const Fit = extern struct {
+    params: [Role.count]curvefit.Params,
+    lambda: [Role.count][metrics]f32,
 };
 
 pub const Header = extern struct {
@@ -146,6 +167,10 @@ pub const Header = extern struct {
     /// few finished one
     first_item_a: u16,
     first_item_b: u16,
+    /// Share of the gold estimate at lane_minute that comes from this curve's own
+    /// games rather than what it was shrunk toward, per mille: n / (n + k)
+    own: u16,
+    _pad2: u16 = 0,
     /// [comeback minute][bucket of a's gold lead], wins = a's
     comeback: [comeback_minutes.len][buckets]Counts,
 };
@@ -171,6 +196,8 @@ pub const Lane = struct {
     /// Mastery of at least experienced_points on their champion
     experienced_a: bool = false,
     experienced_b: bool = false,
+    /// The game's number in the builder (set by addLane), for split-half tests
+    game: u32 = 0,
 
     /// The same lane from b's side
     fn swapped(l: Lane) Lane {
@@ -210,50 +237,31 @@ pub const Builder = struct {
     }
 
     pub fn addLane(b: *Builder, lane: Lane) !void {
-        try b.lanes.append(b.gpa, if (lane.a > lane.b) lane.swapped() else lane);
+        var l = if (lane.a > lane.b) lane.swapped() else lane;
+        l.game = b.games;
+        try b.lanes.append(b.gpa, l);
     }
 
-    /// Curves with at least `min_games` games, for every bracket that has them
+    /// Curves with at least `min_games` games, for every bracket that has them. Logs
+    /// the fit per role (k, smoothing, split-half test; curvefit.zig)
     pub fn write(b: *Builder, w: *std.Io.Writer, patch: []const u8, min_games: u32) !void {
         if (patch.len > patch_len) return error.PatchTooLong;
         const lanes = b.lanes.items;
         std.mem.sort(Lane, lanes, {}, laneOrder);
         var out: std.ArrayList(u8) = .empty;
         defer out.deinit(b.gpa);
-        var scratch: std.ArrayList(i16) = .empty;
-        defer scratch.deinit(b.gpa);
-        var subset: std.ArrayList(Lane) = .empty;
-        defer subset.deinit(b.gpa);
+        const fit = try b.gpa.create(Fit);
+        defer b.gpa.destroy(fit);
+        fit.* = std.mem.zeroes(Fit);
 
         var curves: u32 = 0;
         var start: usize = 0;
-        var role_start: usize = 0;
         while (start < lanes.len) {
-            if (start == role_start) {
-                const role = lanes[start].role;
-                var role_end = start;
-                while (role_end < lanes.len and lanes[role_end].role == role) role_end += 1;
-                curves += try baselines(b.gpa, &out, lanes[start..role_end], min_games);
-                role_start = role_end;
-            }
-            var end = start + 1;
-            while (end < lanes.len and sameMatchup(lanes[start], lanes[end])) end += 1;
-            const group = lanes[start..end];
+            const role = lanes[start].role;
+            var end = start;
+            while (end < lanes.len and lanes[end].role == role) end += 1;
+            curves += try writeRole(b.gpa, &out, lanes[start..end], min_games, fit);
             start = end;
-            for (std.enums.values(Bracket)) |bracket| {
-                for (std.enums.values(Experience)) |experience| {
-                    subset.clearRetainingCapacity();
-                    for (group) |l| {
-                        if (bracket != .all and l.bracket != bracket) continue;
-                        if (experience == .a and !l.experienced_a) continue;
-                        if (experience == .b and !l.experienced_b) continue;
-                        try subset.append(b.gpa, l);
-                    }
-                    if (subset.items.len < @max(min_games, 1)) continue;
-                    try curve(b.gpa, &out, &scratch, subset.items, bracket, experience);
-                    curves += 1;
-                }
-            }
         }
 
         try w.writeAll(magic);
@@ -263,6 +271,7 @@ pub const Builder = struct {
         try w.writeInt(u32, curves, .little);
         try w.writeAll(patch);
         try w.splatByteAll(0, patch_len - patch.len);
+        try w.writeAll(std.mem.asBytes(fit));
         try w.writeAll(out.items);
     }
 
@@ -277,17 +286,116 @@ pub const Builder = struct {
     }
 };
 
+/// One role's curves, lanes sorted by matchup: the baselines, then each matchup by
+/// bracket and experience
+fn writeRole(
+    gpa: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    lanes: []Lane,
+    min_games: u32,
+    fit: *Fit,
+) !u32 {
+    const role = lanes[0].role;
+    var groups: std.ArrayList(curvefit.Group) = .empty;
+    defer groups.deinit(gpa);
+    var dense: std.AutoHashMapUnmanaged(u32, u32) = .empty;
+    defer dense.deinit(gpa);
+    var start: usize = 0;
+    while (start < lanes.len) {
+        var end = start + 1;
+        while (end < lanes.len and Builder.sameMatchup(lanes[start], lanes[end])) end += 1;
+        var ids: [2]u32 = undefined;
+        for ([2]u32{ lanes[start].a, lanes[start].b }, &ids) |champion, *id| {
+            const e = try dense.getOrPut(gpa, champion);
+            if (!e.found_existing) e.value_ptr.* = dense.count() - 1;
+            id.* = e.value_ptr.*;
+        }
+        try groups.append(gpa, .{ .start = @intCast(start), .end = @intCast(end), .a = ids[0], .b = ids[1] });
+        start = end;
+    }
+    var rf = try curvefit.fitRole(gpa, lanes, groups.items, dense.count());
+    defer rf.deinit(gpa);
+    const ri = @intFromEnum(role);
+    fit.params[ri] = rf.params;
+    for (&fit.lambda[ri], rf.lambda) |*to, from| to.* = @floatCast(from);
+    logFit(role, &rf);
+
+    var curves = try baselines(gpa, out, lanes, min_games);
+    var scratch: std.ArrayList(i16) = .empty;
+    defer scratch.deinit(gpa);
+    var subset: std.ArrayList(Lane) = .empty;
+    defer subset.deinit(gpa);
+    for (groups.items, 0..) |g, gi| {
+        const group = lanes[g.start..g.end];
+        for (std.enums.values(Bracket)) |bracket| {
+            for (std.enums.values(Experience)) |experience| {
+                subset.clearRetainingCapacity();
+                const filter: curvefit.Filter = .{ .bracket = bracket, .experience = experience };
+                for (group) |l| if (curvefit.keeps(filter, l)) try subset.append(gpa, l);
+                if (subset.items.len < @max(min_games, 1)) continue;
+                const est = rf.get(gi, bracket, experience).?;
+                const level = @intFromBool(experience != .any);
+                const sigma2 = rf.params[@intFromEnum(bracket)][level][0][lane_minute - 1].sigma2;
+                try curve(gpa, out, &scratch, subset.items, bracket, experience, est, sigma2);
+                curves += 1;
+            }
+        }
+    }
+    return curves;
+}
+
+/// k (games to stabilise) at a few minutes and the split-half test, per metric
+fn logFit(role: Role, rf: *const curvefit.RoleFit) void {
+    const r = rf.report;
+    for (std.enums.values(Metric), 0..) |m, mi| {
+        const p = rf.params[0][0][mi];
+        log.info("{t} {t}: sd/tau/k at 5 min {d:.0}/{d:.0}/{d:.0}, 10 min {d:.0}/{d:.0}/{d:.0}, 14 min {d:.0}/{d:.0}/{d:.0}, 20 min {d:.0}/{d:.0}/{d:.0}; lambda {d}", .{
+            role,                m,
+            @sqrt(p[4].sigma2),  @sqrt(p[4].tau2),
+            p[4].k(),            @sqrt(p[9].sigma2),
+            @sqrt(p[9].tau2),    p[9].k(),
+            @sqrt(p[13].sigma2), @sqrt(p[13].tau2),
+            p[13].k(),           @sqrt(p[19].sigma2),
+            @sqrt(p[19].tau2),   p[19].k(),
+            r.lambda[mi],
+        });
+        const t14 = lane_minute - 1;
+        const nest = rf.params;
+        log.info("{t} {t}: nested k at {d} min: Iron-Silver {d:.0}, Gold-Emerald {d:.0}, Diamond+ {d:.0}; experienced {d:.0} (tau {d:.0} {d:.0} {d:.0}; {d:.0})", .{
+            role,                            m,                               lane_minute,
+            nest[1][0][mi][t14].k(),         nest[2][0][mi][t14].k(),         nest[3][0][mi][t14].k(),
+            nest[0][1][mi][t14].k(),         @sqrt(nest[1][0][mi][t14].tau2), @sqrt(nest[2][0][mi][t14].tau2),
+            @sqrt(nest[3][0][mi][t14].tau2), @sqrt(nest[0][1][mi][t14].tau2),
+        });
+        const e = r.mse[mi];
+        const t = r.mse_thick[mi];
+        log.info("{t} {t}: split-half rms error at {d} min, {d} pairs: zero {d:.0} baseline {d:.0} raw {d:.0} shrunk {d:.0} smoothed {d:.0} (noise of the other half {d:.0}); {d} pairs with {d}+ games: zero {d:.0} baseline {d:.0} raw {d:.0} shrunk {d:.0} smoothed {d:.0} (noise {d:.0})", .{
+            role,        m,                        curvefit.report_minute, r.scored[mi],
+            @sqrt(e[0]), @sqrt(e[1]),              @sqrt(e[2]),            @sqrt(e[3]),
+            @sqrt(e[4]), @sqrt(r.noise[mi]),       r.scored_thick[mi],     curvefit.thick_games,
+            @sqrt(t[0]), @sqrt(t[1]),              @sqrt(t[2]),            @sqrt(t[3]),
+            @sqrt(t[4]), @sqrt(r.noise_thick[mi]),
+        });
+    }
+}
+
 /// The role's baseline per bracket: each lane from both sides, so the buckets are
-/// symmetric and games count every laner
+/// symmetric and games count every laner. Minutes hold the role's spread: n lanes
+/// times two and quartiles of the differences from both sides (median 0)
 fn baselines(
     gpa: std.mem.Allocator,
     out: *std.ArrayList(u8),
     lanes: []const Lane,
     min_games: u32,
 ) !u32 {
+    // Counts of |difference| per metric and minute
+    const hist = try gpa.alloc([1 << 15]u32, metrics * max_minutes);
+    defer gpa.free(hist);
     var n: u32 = 0;
     for (std.enums.values(Bracket)) |bracket| {
         var h = emptyHeader(lanes[0].role, bracket, .any, 0, 0);
+        for (hist) |*x| @memset(x, 0);
+        var going: [max_minutes]u32 = @splat(0);
         for (lanes) |l| {
             if (bracket != .all and l.bracket != bracket) continue;
             h.games += 2;
@@ -301,14 +409,39 @@ fn baselines(
                 h.comeback[mi][bucket(-gold)].games += 1;
                 h.comeback[mi][bucket(-gold)].wins += 1 - won;
             }
+            for (0..l.minutes) |i| {
+                going[i] += 1;
+                hist[0 * max_minutes + i][@min(@abs(l.gold[i]), (1 << 15) - 1)] += 1;
+                hist[1 * max_minutes + i][@min(@abs(l.xp[i]), (1 << 15) - 1)] += 1;
+                hist[2 * max_minutes + i][@min(@abs(l.cs[i]), (1 << 15) - 1)] += 1;
+            }
         }
         if (h.games / 2 < @max(min_games, 1)) continue;
         try out.appendSlice(gpa, std.mem.asBytes(&h));
-        const empty: Minute = .{ .n = 0, .gold = .{}, .xp = .{}, .cs = .{} };
-        for (0..max_minutes) |_| try out.appendSlice(gpa, std.mem.asBytes(&empty));
+        for (0..max_minutes) |i| {
+            var m: Minute = .{ .n = 2 * going[i], .gold = .{}, .xp = .{}, .cs = .{} };
+            inline for (.{ "gold", "xp", "cs" }, 0..) |field, mi| {
+                // Both sides: the 75th percentile is the median of |difference|
+                const p75 = medianOfCounts(&hist[mi * max_minutes + i], going[i]);
+                @field(m, field) = .{ .p25 = -p75, .p50 = 0, .p75 = p75 };
+            }
+            try out.appendSlice(gpa, std.mem.asBytes(&m));
+        }
         n += 1;
     }
     return n;
+}
+
+/// Nearest-rank median of `total` values counted by value
+fn medianOfCounts(counts: *const [1 << 15]u32, total: u32) i16 {
+    if (total == 0) return 0;
+    const rank = (total + 1) / 2;
+    var seen: u32 = 0;
+    for (counts, 0..) |c, v| {
+        seen += c;
+        if (seen >= rank) return @intCast(v);
+    }
+    unreachable;
 }
 
 fn emptyHeader(role: Role, bracket: Bracket, experience: Experience, a: u32, b: u32) Header {
@@ -331,10 +464,13 @@ fn emptyHeader(role: Role, bracket: Bracket, experience: Experience, a: u32, b: 
         .level6_b = 0,
         .first_item_a = 0,
         .first_item_b = 0,
+        .own = 0,
         .comeback = @splat(@splat(.{})),
     };
 }
 
+/// `est` from curvefit; `sigma2` the game-to-game variance of gold at lane_minute at
+/// this curve's level, for its own share
 fn curve(
     gpa: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -342,6 +478,8 @@ fn curve(
     lanes: []const Lane,
     bracket: Bracket,
     experience: Experience,
+    est: *const curvefit.Est,
+    sigma2: f32,
 ) !void {
     var h = emptyHeader(lanes[0].role, bracket, experience, lanes[0].a, lanes[0].b);
     h.games = @intCast(lanes.len);
@@ -372,6 +510,11 @@ fn curve(
     h.level6_b = try medianSeconds(gpa, lanes, "level6_b");
     h.first_item_a = try medianSeconds(gpa, lanes, "first_item_a");
     h.first_item_b = try medianSeconds(gpa, lanes, "first_item_b");
+    const at = est[0][lane_minute - 1];
+    // n / (n + k) = n var / sigma^2 for the posterior variance var = sigma^2 / (n + k)
+    h.own = if (sigma2 > 0)
+        @intFromFloat(std.math.clamp(@round(1000 * at.n * at.@"var" / sigma2), 0, 1000))
+    else if (at.n > 0) 1000 else 0;
     try out.appendSlice(gpa, std.mem.asBytes(&h));
 
     for (0..max_minutes) |i| {
@@ -382,8 +525,16 @@ fn curve(
             @field(m, field) = quartiles(scratch.items);
         }
         m.n = @intCast(scratch.items.len);
+        if (m.n > 0) for (&m.est, est) |*e, points| {
+            const p = points[i];
+            e.* = .{ .mean = clampI16(p.mean), .se = @intFromFloat(std.math.clamp(@round(@sqrt(p.@"var")), 0, 65535)) };
+        };
         try out.appendSlice(gpa, std.mem.asBytes(&m));
     }
+}
+
+fn clampI16(x: f32) i16 {
+    return @intFromFloat(std.math.clamp(@round(x), std.math.minInt(i16), std.math.maxInt(i16)));
 }
 
 /// Median of a seconds field over the lanes that reached it (0 = never)
@@ -419,6 +570,7 @@ pub const Curves = struct {
     patch_buf: [patch_len]u8,
     patch_len: usize,
     games: u32,
+    fit: *Fit,
     curves: []Curve,
     minutes: []Minute,
 
@@ -442,10 +594,15 @@ pub const Curves = struct {
         const games = r.takeInt(u32, .little) catch unreachable;
         const k = r.takeInt(u32, .little) catch unreachable;
         if (k > max_curves) return error.TooManyCurves;
+        if (bytes.len < header_len + @sizeOf(Fit)) return error.Truncated;
+        const fit = try gpa.create(Fit);
+        errdefer gpa.destroy(fit);
+        fit.* = std.mem.bytesToValue(Fit, bytes[header_len..][0..@sizeOf(Fit)]);
         var c: Curves = .{
             .patch_buf = undefined,
             .patch_len = 0,
             .games = games,
+            .fit = fit,
             .curves = &.{},
             .minutes = &.{},
         };
@@ -453,7 +610,7 @@ pub const Curves = struct {
         c.patch_len = std.mem.indexOfScalar(u8, &c.patch_buf, 0) orelse patch_len;
 
         const per_curve = @sizeOf(Header) + m * @sizeOf(Minute);
-        const body = bytes[header_len..];
+        const body = bytes[header_len + @sizeOf(Fit) ..];
         if (body.len < k * per_curve) return error.Truncated;
         if (body.len > k * per_curve) return error.SizeMismatch;
         c.curves = try gpa.alloc(Curve, k);
@@ -470,6 +627,7 @@ pub const Curves = struct {
     }
 
     pub fn deinit(c: *Curves, gpa: std.mem.Allocator) void {
+        gpa.destroy(c.fit);
         gpa.free(c.curves);
         gpa.free(c.minutes);
         c.* = undefined;
@@ -477,6 +635,12 @@ pub const Curves = struct {
 
     pub fn patch(c: *const Curves) []const u8 {
         return c.patch_buf[0..c.patch_len];
+    }
+
+    /// The estimation's variance parameters for `role`'s curves in `bracket`, all
+    /// games or experienced only, at minute index `i`
+    pub fn param(c: *const Curves, role: Role, bracket: Bracket, experienced: bool, metric: Metric, i: usize) curvefit.Param {
+        return c.fit.params[@intFromEnum(role)][@intFromEnum(bracket)][@intFromBool(experienced)][@intFromEnum(metric)][i];
     }
 
     /// `me` against `them` in `role`, seen from `me`'s side, all games; null when the
@@ -601,7 +765,20 @@ pub const View = struct {
     pub fn minute(v: View, i: usize) Minute {
         const m = v.curve.minutes[i];
         if (!v.flipped) return m;
-        return .{ .n = m.n, .gold = neg(m.gold), .xp = neg(m.xp), .cs = neg(m.cs) };
+        var est = m.est;
+        for (&est) |*e| e.mean = -e.mean;
+        return .{ .n = m.n, .gold = neg(m.gold), .xp = neg(m.xp), .cs = neg(m.cs), .est = est };
+    }
+
+    /// Estimated mean of `metric` at minute i, me minus them, and its standard error
+    pub fn estimate(v: View, metric: Metric, i: usize) Estimate {
+        return v.minute(i).est[@intFromEnum(metric)];
+    }
+
+    /// Share of the gold estimate at lane_minute from this matchup's own games, 0..1;
+    /// under a half it is mostly the champions' baseline
+    pub fn own(v: View) f64 {
+        return @as(f64, @floatFromInt(v.curve.header.own)) / 1000;
     }
 
     fn neg(q: Quartiles) Quartiles {
@@ -693,6 +870,18 @@ test "round trip, sides and brackets" {
     try testing.expectEqual(Counts{ .games = 6, .wins = 3 }, base.comeback(.fifteen, 2));
     try testing.expectEqual(Counts{ .games = 2, .wins = 1 }, base.comeback(.fifteen, 1));
     try testing.expect(c.baseline(.jungle, .all) == null);
+    // Baseline minutes: every lane from both sides, quartiles symmetric
+    const bm = base.minute(lane_minute - 1);
+    try testing.expectEqual(10, bm.n);
+    try testing.expectEqual(0, bm.gold.p50);
+    try testing.expectEqual(-bm.gold.p25, bm.gold.p75);
+
+    // Estimates flip with the side; the fit is in the file
+    const de = darius.estimate(.gold, lane_minute - 1);
+    try testing.expectEqual(-de.mean, garen.estimate(.gold, lane_minute - 1).mean);
+    try testing.expect(de.se > 0);
+    try testing.expect(darius.own() > 0 and darius.own() <= 1);
+    try testing.expect(c.param(.top, .all, false, .gold, lane_minute - 1).sigma2 > 0);
 
     const low = c.get(.top, .low, 122, 86).?;
     try testing.expectEqual(2, low.games());

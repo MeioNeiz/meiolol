@@ -174,38 +174,76 @@ newest patch; `--patch 16.19,16.20` for several; `--platform` picks platforms, d
 EUW1, since the site says EUW) to data/export/stats-<patch>.bin. Only ranked solo
 games with no remake, a winner and all ten positions count.
 
-## Lane curves (src/curves.zig, src/core/curvesfile.zig, src/site/matchup.zig)
+## Lane curves (src/curves.zig, src/core/curvesfile.zig, curvefit.zig, src/site/matchup.zig)
 
 `meiolol curves` (--platform as stats, --min-games default 1: all) reads every ranked
 solo game with a timeline: by default every patch of the last --days (30) to
 data/export/recent-curves.bin (label "last 30 days"); with --patch, those patches to
 data/export/curves-<patch>.bin (the Your games service reads these per patch). Per lane
-matchup (role, champion pair) and bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
-median visible tier of the game's players, never MMR): per minute 1..25 the p25/p50/p75
-of gold, XP and CS (lane + jungle) difference with n still playing; who leads in gold at
-14 min and how often each side then wins; comeback odds (games and wins by lane gold
-lead at 10 and 15 min in five buckets, plus a role baseline record a = b = 0 counting
-every lane from both sides); games where each takes part in killing the
-other before 6, 6-14 and after 14 min; median level 6 time. Pairs are stored once (lower
-champion id first, a mirror from blue's side); `Curves.get(role, bracket, me, them)`
-returns a View from `me`'s side that negates and swaps quartiles. Format at the top of
-curvesfile.zig; bump the version on any change. Memory: ~170 B per lane record, ~1 GB
-at 1M games; fine on the box (15 GB).
+matchup (role, champion pair), bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
+median visible tier of the game's players, never MMR) and experience (all games, or a
+or b with 100k+ mastery): per minute 1..25 the raw p25/p50/p75 of gold, XP and CS (lane
++ jungle) difference with n still playing, and the estimated mean with its standard
+error (below); who leads in gold at 14 min and how often each side then wins; comeback
+odds (games and wins by lane gold lead at 10 and 15 min in five buckets); games where
+each takes part in killing the other before 6, 6-14 and after 14 min; median level 6 and
+first finished item times; `own`, the share of the 14-min gold estimate from the
+matchup's own games. A role baseline record a = b = 0 per bracket counts every lane from
+both sides: comeback counts, and per minute n and the role's spread (quartiles,
+median 0). Pairs are stored once (lower champion id first, a mirror from blue's side);
+`Curves.get(role, bracket, me, them)` returns a View from `me`'s side that negates and
+swaps quartiles and estimates. The file also holds the fit (per role, bracket, level,
+metric and minute: sigma^2 and tau^2; smoothing per role and metric) for the method
+page. Format at the top of curvesfile.zig; bump the version on any change.
+
+Estimation (src/core/curvefit.zig, research/questions/curve-statistics-method.md), per
+role, metric and minute, closed form: champion effects by ridge least squares on the
+pairs' means (baseline A vs B = e_A - e_B; ridge by method of moments); tau^2 = unweighted
+mean over pairs with 2+ games of (r^2 - s^2/n), r = mean - baseline, s^2 the pair's own
+variance (rare pairs vary more than the pooled sigma^2), floored at sigma^2/100, so k =
+sigma^2/tau^2 <= 100; estimate = baseline + n/(n+k) r. Brackets shrink toward the
+all-ranks curve and experienced curves toward their bracket's, tau^2 from each unit
+against the rest of its parent's games (the parent holds the unit's games). Then a
+Whittaker smoother (second differences) across minutes, its strength per role and
+metric picked by a split-half test (fit on half the games by game hash, score against
+the other half's raw means; leave-one-minute-out would pick too little, as a curve's
+minutes share their games). The command logs per role and metric sd/tau/k at 5, 10, 14
+and 20 min, nested k, lambda and the split-half error of zero, baseline, raw, shrunk and
+smoothed predictors. Not yet: patch decay weights, same-player clustering (n_eff), tau^2
+smoothed across minutes.
+
+Measured 2026-10-11 on 18.8k games (all regions, Platinum IV+ crawl, mostly 16.19):
+sd of gold difference at 14 min 790 (support) to 1650 (bot); tau 140-240 gold; k at 14
+min gold: top 67, jungle 73, mid 29, bot and support at the cap (100). Split-half rms
+error at 14 min (top gold, 1611 pairs, noise of the other half 1054): raw means 1445,
+role mean 0 1130, baseline 1078, shrunk 1073: thin raw means are far worse than the
+baseline, and at this volume the baseline carries almost all of it; too few pairs have
+50+ games to see the matchup term pay. Smoothing chosen near zero (lambda 0 to 1) except
+support gold (100). Nested k is noisy (few units with games in both parts). ReleaseFast
+on the Mac: 4 s and 163 MB peak for those 18.8k games, file 37 MB (13.7k matchups, every
+bracket and experience variant with 1+ game). Memory grows with lanes (~180 B each, 5
+per game): ~2.7 GB at 30 days of all regions at ~100k games/day, beyond the micro's 1
+GB; the A1 (12 GB) holds it.
 
 `meiolol site` reads recent-curves.bin when present (curves-<patch>.bin with --patch;
 the rest of the site stays on the newest patch): a page per matchup
 with an all-ranks curve (matchup/<role>/<a>-vs-<b>.html, lower id first), three SVG
-charts (median line, middle-half band; period, tier and n in every caption), a lane and
-game table, comeback odds (src/site/comeback.zig: win rate per gold bucket at 10/15
-min beside the role baseline, one fact line), a by-rank table, and "Lane curves" links
-on champion pages. Every matchup gets a page, as on lolalytics; under 200 games charts
-and rows are grey with "more data needed", and a chart draws minutes with at least
-min(10, games) still going. Size: ~800 pages, 14 MB with .gz, per 200 games; raise
---min-games if the upload grows too big. The index has a min games selector
-(html.minGames, static/min-games.js; default 1). Not yet: first-item timing (needs an
-item list from Data Dragon), experienced-players filter (mastery), core-item split,
-older patches, rank filter. deploy/web-loop.sh rebuilds the four curves files hourly
-and on a new patch.
+charts (line = estimated mean; band = the matchup's middle half of games from 200 games,
+below that the role's middle half drawn around the line, said in the caption; ±2 SE at
+14 min, period, tier and n in every caption; a dotted line at 15 min, surrender, and the
+share of games ended by 20 and 25 min), a lane and game table (incl. first finished item
+times), comeback odds (src/site/comeback.zig: win rate per gold bucket at 10/15 min
+beside the role baseline, one fact line), a by-rank table (estimate ±2 SE), and "Lane
+curves" links on champion pages. "Games counted" radios (all games, X or Y players with
+100k+ mastery, offered from 10 such games) switch charts and table by CSS :has, no
+script. Every matchup gets a page, as on lolalytics; under 200 games or with own < 0.5
+("mostly the champions' baseline") charts and rows are grey, and a chart draws minutes
+with at least min(10, games) still going. The method page shows k by role and minute
+from the view with the most games. Size: 13.7k pages in the all-regions 30-day view at
+18.8k games, 252 MB with .gz; raise --min-games if the upload grows too big. The index
+has a min games selector (html.minGames, static/min-games.js; default 1). Not yet:
+core-item split, older patches, rank filter. deploy/web-loop.sh rebuilds the four
+curves files hourly and on a new patch.
 
 ## Builds (src/builds.zig, src/site/builds.zig)
 

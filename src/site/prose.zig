@@ -5,16 +5,54 @@
 const std = @import("std");
 const Writer = std.Io.Writer;
 const html = @import("html.zig");
+const core = @import("core");
+const curvesfile = core.curvesfile;
+const Curves = curvesfile.Curves;
+const Role = core.Role;
+const roleName = @import("root.zig").roleName;
 const esc = html.esc;
 
 pub const Info = struct {
     contact: []const u8,
     /// "11 October 2026"
     updated: []const u8,
+    /// For the method page's "games to stabilise" table
+    curves: ?*const Curves = null,
 };
 
+/// k by role and minute, all ranks: how many games a matchup needs before its own
+/// average counts as much as the champions' baseline
+fn gamesToStabilise(w: *Writer, c: *const Curves) Writer.Error!void {
+    const shown = [_]usize{ 5, 10, 14, 20 };
+    try w.print(
+        \\<h3>Games to stabilise</h3>
+        \\<p>k by role and minute, all ranks, from the {d} games of the biggest view. Under k
+        \\games a matchup's line is mostly its champions' baseline. "Gold at 14" is the
+        \\gold difference at 14 minutes.</p>
+        \\<div class="table-scroll"><table>
+        \\<thead><tr><th>Role</th>
+    , .{c.games});
+    for (shown) |m| try w.print("<th class=\"num\">Gold at {d}</th>", .{m});
+    try w.writeAll("<th class=\"num\">XP at 14</th><th class=\"num\">CS at 14</th></tr></thead>\n<tbody>\n");
+    for (Role.all) |r| {
+        try w.print("<tr><td>{s}</td>", .{roleName(r)});
+        for (shown) |m| try kCell(w, c.param(r, .all, false, .gold, m - 1));
+        try kCell(w, c.param(r, .all, false, .xp, 13));
+        try kCell(w, c.param(r, .all, false, .cs, 13));
+        try w.writeAll("</tr>\n");
+    }
+    try w.print(
+        "</tbody></table></div>\n<p class=\"muted\">k is capped at {d}: true matchup differences are never assumed to be zero.</p>\n",
+        .{curvesfile.curvefit.max_k},
+    );
+}
+
+fn kCell(w: *Writer, p: curvesfile.curvefit.Param) Writer.Error!void {
+    if (p.tau2 == 0) return w.writeAll("<td class=\"num\">-</td>");
+    try w.print("<td class=\"num\">{d:.0}</td>", .{p.k()});
+}
+
 pub fn method(w: *Writer, info: Info) Writer.Error!void {
-    _ = info;
     try w.writeAll(
         \\<div class="prose">
         \\<h1>Method</h1>
@@ -38,11 +76,28 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\<li><b>Matchup</b>: the two players in the same position on opposite teams (top
         \\against top, and so on).</li>
         \\<li><b>Curves</b>: for each minute from 1 to 25, the difference between the two in
-        \\gold, experience and CS (lane minions plus jungle monsters). The line is the median
-        \\game; the band is the middle half of games (25th to 75th percentile), so you see
-        \\how much games vary, not only the typical one.</li>
-        \\<li><b>Games still going</b>: later minutes count only games that lasted that long,
-        \\which tilts them toward closer games. Charts stop when fewer than 10 games
+        \\gold, experience and CS (lane minions plus jungle monsters). The line is the
+        \\estimated average difference (below); the band is the middle half of games (25th
+        \\to 75th percentile), so you see how much games vary, not only the typical one.
+        \\Under 200 games the band is the middle half of every lane in that role, drawn
+        \\around the line, and says so.</li>
+        \\<li><b>The estimate</b>: a matchup with few games is mostly noise, so its line
+        \\starts from the champions' baseline: how each of the two does against everyone in
+        \\that role, fitted together so that A against B starts at A's usual lead minus B's.
+        \\The matchup's own games then pull it away from the baseline: with n games, its own
+        \\average gets the weight n / (n + k). k, the "games to stabilise", is the
+        \\game-to-game variance divided by how much true matchups differ from their
+        \\baselines, both measured from the games at every update (table below). A rank
+        \\bracket, or games by experienced players, start from the all-ranks, all-games line
+        \\in the same way. Finally each line is smoothed across minutes, with a strength
+        \\chosen by fitting on half of the games and checking against the other half.</li>
+        \\<li><b>Uncertainty</b>: the "±" after an average is two standard errors of that
+        \\average: how far it may be from the truth. The band is something else: how much
+        \\single games differ.</li>
+        \\<li><b>Games still going</b>: surrender opens at 15 minutes, so before it nearly
+        \\every game is still running. Right of the dotted line at 15 minutes a curve counts
+        \\only games still going, which tilts it toward closer games; each chart says what
+        \\share had ended by 20 and 25 minutes. Charts stop when fewer than 10 games
         \\remain.</li>
         \\<li><b>Leads at 14 minutes</b>: who is ahead in gold at 14 minutes, and how often
         \\each side then wins the game. Winning lane and winning the game often
@@ -51,13 +106,22 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\other, before 6 minutes, from 6 to 14 and after 14.</li>
         \\<li><b>Timings</b>: median time to level 6 and to the first finished item (2,200
         \\gold or more, building into nothing, boots excluded).</li>
+        \\<li><b>Experienced players</b>: games where a laner has 100,000 or more mastery
+        \\points on their champion, from the mastery we last fetched for them (so it can be
+        \\later than the game). Offered on a matchup page once there are 10 such
+        \\games.</li>
         \\<li><b>Rank</b>: the median visible rank tier of the game's players when the game
         \\was collected, in three brackets (Iron to Silver, Gold to Emerald, Diamond and
         \\above). Never hidden matchmaking rating.</li>
-        \\<li><b>Sample size</b>: every chart states patch, rank and the number of games. A
-        \\matchup needs 20 games for a page, and anything under 200 games is greyed out as
-        \\"more data needed": thin curves still move as games come in.</li>
+        \\<li><b>Sample size</b>: every chart states patch, rank and the number of games.
+        \\Every matchup gets a page; under 200 games, or while less than half of the line
+        \\comes from the matchup's own games, it is greyed out: thin curves still move as
+        \\games come in.</li>
         \\</ul>
+        \\
+    );
+    if (info.curves) |c| try gamesToStabilise(w, c);
+    try w.writeAll(
         \\<h2>Champion statistics</h2>
         \\<ul>
         \\<li><b>Win, pick and ban rate</b>: games won with the champion in that role, share

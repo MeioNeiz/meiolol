@@ -1,5 +1,6 @@
 ---
-status: answered
+status: decided
+decision: docs/plan.md#curves-matchup-pages-patch-day-was-meiolol-b5-pool-9f
 priority: now
 tags: [stats, method, data]
 description: How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin?
@@ -52,6 +53,18 @@ defaults are ours, to tune on box data, C11):
 
 No paper on per-matchup lane gold curves in LoL or Dota was found (three searches).
 
+Built 2026-10-11 (src/core/curvefit.zig; docs/architecture.md "Lane curves") with these
+changes from the recipe: tau^2 uses each pair's own s^2 over pairs with 2+ games (with
+the pooled sigma^2, rare off-meta pairs, which vary more, inflated mid and support tau
+to k ~ 6-14); nested levels compare a unit with the rest of its parent's games; lambda
+by a split-half test on games, not leave-one-minute-out (a curve's minutes share their
+games); no patch weights or n_eff yet. First box data (18.8k games, all regions): sd of
+gold diff at 14 min 790-1650 by role, tau 140-240, k at 14 min gold 29 (mid) to the cap
+of 100 (bot, support); split-half rms error at 14 min, top gold: raw 1445, baseline
+1078, shrunk 1073 (noise 1054). So shrinkage matters a lot at this volume and the
+baseline carries almost all of it; the matchup term cannot be checked until pairs reach
+50+ games in both halves.
+
 ## Claims
 
 - C1: Shrinking thin units toward a group baseline beats raw means and the grand mean out of sample (about 40% less squared error in Brown's test). for: [[brown-2008-batting-eb#^f1]], [[brown-2008-batting-eb#^f2]], [[brown-2008-batting-eb#^f5]], [[robinson-eb-baseball#^f1]], [[robinson-eb-baseball#^f5]]
@@ -76,9 +89,11 @@ No paper on per-matchup lane gold curves in LoL or Dota was found (three searche
 
 ## Open
 
-- Real sigma_t and tau_t for gold, XP, CS diff per role (sets k and thresholds): needs
-  box data, first thing meiolol-b5 should print
-- Whether tau^2 should vary by minute or be smoothed as well
+- Real sigma_t and tau_t: first numbers above (18.8k games); k still jumps between
+  minutes (top gold 46/43/67/34 at 5/10/14/20), so recheck at 200k+ games before
+  trusting the method page table
+- Whether tau^2 should vary by minute or be smoothed as well: looks needed at this
+  volume (previous line)
 - How much patches and brackets differ (sets half-life h and bracket pooling); rho for
   one-tricks
 - No published low-n method for op.gg, leagueofgraphs, Dotabuff or Stratz; leads: Dotabuff

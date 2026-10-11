@@ -111,6 +111,9 @@ test "fixture games to stats, curves and the website" {
         .{ "patch/champion/darius.html", &.{"href=\"../build/darius-top.html\""} },
         .{ "champion/darius.html", &.{"href=\"../patch/build/darius-top.html\""} },
         .{ "all/champion/darius.html", &.{"href=\"../../all/patch/build/darius-top.html\""} },
+        // Lane curves: the estimate (curvefit.zig) on the page, k on the method page
+        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "estimated average", "First finished item", "More data needed" } },
+        .{ "method.html", &.{"Games to stabilise"} },
     };
     for (pages) |pg| {
         const path = try std.fs.path.join(arena, &.{ out, pg[0] });

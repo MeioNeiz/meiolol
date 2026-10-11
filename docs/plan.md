@@ -176,13 +176,28 @@ next steps land here.
 
 ### Curves, matchup pages, Patch day (was meiolol-b5, pool-9f)
 
-- Check the first real curves once timelines exist (matchup/index.html, a matchup page)
-- Curve estimation per research/questions/curve-statistics-method.md: sigma/tau per
-  role and metric from box data, baseline backfit, method-of-moments shrinkage, Whittaker
-  smoothing, nested brackets, k per role/minute on the method page, "share of games
-  ended" from minute 15; patch decay weights once two patches exist
-- Matchup pages: show the experienced-players toggle (Curves.getExperienced) and
-  first-item rows (View.firstItem), already in the curves file
+- Done 2026-10-11 (curves v4): estimation per research/questions/curve-statistics-method.md
+  in src/core/curvefit.zig (champion baseline by ridge least squares, MoM shrinkage
+  with each pair's own variance, nested brackets and experienced curves, Whittaker
+  smoothing picked by a split-half test); matchup pages draw the estimate (±2 SE,
+  role band under 200 games, grey when mostly baseline, dotted 15-min line and share
+  ended by 20/25), first-item row, experienced toggle (10+ games, CSS only); method page
+  "games to stabilise" table. Numbers in docs/architecture.md "Lane curves". First real
+  curves looked sane (Caitlyn vs Jhin, 359 games: lane gold within ±100, level 6 7:14 vs
+  7:16, first item ~11 min); no bugs found in the curves step itself
+- Curves next: patch decay weights (two patches in the 30-day window now) and n_eff for
+  same-player games; tau^2 smoothed across minutes (k jumps between minutes at 19k
+  games); recheck k and the split-half test at 200k+ games, when pairs reach 50+ per
+  half; brackets for a Platinum IV+ crawl (Iron-Silver is near empty, Gold-Emerald is
+  mostly Platinum-Emerald: maybe Platinum-Emerald, Diamond, Master+; Jacob)
+- Experienced toggle is starved: the box runs --no-mastery, so 3.7k of 189k participants
+  have a mastery row; ~1k matchup pages show it at all. Mastery back on (A1), or
+  experience from crawled match history (learning.zig game numbers): Jacob
+- Curves at full volume: lanes are held in memory, ~180 B x 5 per game, so 30 days of
+  all regions (~3M games) is ~2.7 GB: not on the micro; on A1 fine, or aggregate per
+  day and merge. Site: 13.7k matchup pages, 252 MB with .gz, in the all-regions 30-day
+  view at 19k games, growing with distinct pairs; a page floor (--min-games) if the
+  upload gets too big
 - Patch day: wire patchday.zig (main.zig passes previous patch + curvesPath(prev);
   root.zig builds previous Stats and curves); patch.html of the biggest clear movers;
   "Since patch X" per role on champion pages; on matchup charts a dashed previous-patch
@@ -193,7 +208,6 @@ next steps land here.
 - Champion shape labels (lane bully / scaler / spikes at 6 / even) from curves, rule on
   the method page
 - Daily Draft "easy daily" for new players
-- Curves memory at full volume: measure on the box
 
 ### Builds (2026-10-11)
 
