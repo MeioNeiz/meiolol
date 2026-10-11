@@ -162,7 +162,7 @@ function setup(pool, meta, learning) {
       el(
         "p",
         { class: "muted" },
-        `${m.players} players main ${c.name}; ${m.one_tricks} of them play it in over half their games.`,
+        `${m.players} players main ${c.name}; for ${m.one_tricks} of them it is over half their ${pool.source === "mastery" ? "mastery points" : "games"}.`,
       ),
     );
     const hardPp = new Map((m.hard ?? []).map(([e, pp]) => [e, pp]));

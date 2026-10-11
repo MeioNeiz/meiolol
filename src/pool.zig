@@ -14,6 +14,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
+const riot_mastery = @import("riot/mastery.zig");
 
 const Role = core.Role;
 const Stats = core.Stats;
@@ -38,6 +39,8 @@ pub const Rule = struct {
     one_trick_share: f64 = 0.5,
 
     pub const games: Rule = .{ .min_total = 10, .min_weight = 2 };
+    /// Points: roughly 10 games' worth to count a champion
+    pub const mastery: Rule = .{ .min_total = 50_000, .min_weight = 10_000 };
 };
 
 pub const Options = struct {
@@ -159,7 +162,47 @@ pub fn tallyGames(
     return t;
 }
 
-/// Tally from the best source there is and build, in `arena`
+/// Champions a player has not played for this long are not in their pool: mastery
+/// points are lifetime
+const mastery_recent_s = 365 * std.time.s_per_day;
+
+/// Every ladder player's champion mastery on `platforms`, by points
+pub fn tallyMastery(
+    gpa: Allocator,
+    db: store.Db,
+    st: *const Stats,
+    platforms: []const []const u8,
+) !Tally {
+    var t: Tally = try .init(gpa, st.n);
+    errdefer t.deinit(gpa);
+    const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
+    defer gpa.free(platform_json);
+    var q = try db.prepare(
+        \\SELECT data, fetched_at FROM mastery
+        \\WHERE platform IN (SELECT value FROM json_each(?))
+    );
+    defer q.deinit();
+    try q.bind(.{platform_json});
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    var plays: std.ArrayList(Play) = .empty;
+    defer plays.deinit(gpa);
+    while (try q.step()) {
+        _ = arena_state.reset(.retain_capacity);
+        const fetched_at = q.int(1);
+        const entries = riot_mastery.decode(arena_state.allocator(), q.bytes(0), fetched_at) catch continue;
+        plays.clearRetainingCapacity();
+        for (entries) |e| {
+            if (e.last_play < fetched_at - mastery_recent_s) continue;
+            try plays.append(gpa, .{ .champion = e.champion, .weight = e.points });
+        }
+        t.add(st, plays.items, .mastery);
+    }
+    return t;
+}
+
+/// Tally from the source with more players (mastery once it fills) and build, in
+/// `arena`
 pub fn make(
     gpa: Allocator,
     arena: Allocator,
@@ -168,9 +211,14 @@ pub fn make(
     platforms: []const []const u8,
     opts: Options,
 ) !Pool {
-    var t = try tallyGames(gpa, db, st, platforms);
-    defer t.deinit(gpa);
-    const p = try build(arena, &t, st, .games, opts);
+    var games = try tallyGames(gpa, db, st, platforms);
+    defer games.deinit(gpa);
+    var points = try tallyMastery(gpa, db, st, platforms);
+    defer points.deinit(gpa);
+    const p = if (points.players > games.players)
+        try build(arena, &points, st, .mastery, opts)
+    else
+        try build(arena, &games, st, .games, opts);
     var listed: usize = 0;
     for (p.mains) |m| listed += @intFromBool(m.players >= opts.min_players);
     log.info("{d} players from {s}, {d} champions with {d}+ mains", .{
@@ -540,4 +588,44 @@ test "options cover the main's hard lanes; fallbacks share its good ones" {
     const parsed = try std.json.parseFromSliceLeaky(std.json.Value, arena, aw.written(), .{});
     try testing.expectEqualStrings("games", parsed.object.get("source").?.string);
     try testing.expectEqual(3, parsed.object.get("mains").?.array.items.len);
+}
+
+test "mastery: points as weight, stale and small champions left out" {
+    const gpa = testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const st = try testStats(arena, 4, &.{.{ 1, 2, 0 }});
+    const db = try store.schema.memory();
+    defer db.close();
+    const now: i64 = 1_800_000_000;
+    const old = now - 2 * mastery_recent_s;
+    const players = [_]struct { []const u8, []const riot_mastery.Entry }{
+        // Mains 1, plays 2; 3 is stale, 4 too few points
+        .{ "EUW1", &.{
+            .{ .champion = 1, .level = 10, .points = 200_000, .last_play = now },
+            .{ .champion = 2, .level = 7, .points = 40_000, .last_play = now },
+            .{ .champion = 3, .level = 9, .points = 150_000, .last_play = old },
+            .{ .champion = 4, .level = 2, .points = 5_000, .last_play = now },
+        } },
+        // Under min_total
+        .{ "EUW1", &.{.{ .champion = 2, .level = 4, .points = 30_000, .last_play = now }} },
+        // Other platform
+        .{ "KR", &.{.{ .champion = 2, .level = 9, .points = 90_000, .last_play = now }} },
+    };
+    for (players, 0..) |p, i| {
+        const blob = try riot_mastery.encode(arena, p[1], now);
+        const puuid = try std.fmt.allocPrint(arena, "p{d}", .{i});
+        try db.run("INSERT INTO mastery VALUES (?,?,?,?,?)", .{
+            puuid, p[0], now, p[1].len, store.Blob{ .bytes = blob },
+        });
+    }
+    var t = try tallyMastery(gpa, db, &st, &.{"EUW1"});
+    defer t.deinit(gpa);
+    try testing.expectEqual(1, t.players);
+    try testing.expectEqual(1, t.mains[st.index(1).?]);
+    try testing.expectEqual(1, t.one_tricks[st.index(1).?]); // 200k of 245k recent
+    try testing.expectEqual(1, t.plays[st.index(2).?]);
+    try testing.expectEqual(0, t.plays[st.index(3).?]);
+    try testing.expectEqual(0, t.plays[st.index(4).?]);
 }

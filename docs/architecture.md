@@ -132,8 +132,9 @@ five worst lane matchups, the also-played champions in X's role that are positiv
 them ("options", several, with reasons), and those positive into X's best lanes (ban
 fallback). `meiolol site` writes data/pool.json, pool.html (pick up to three mains;
 pool.html#garen,darius) and a section on each champion page; `meiolol pool` writes the
-same JSON to data/export/pool.json for a look. Not yet: mastery source (waits for the
-compact mastery table, riot/mastery.zig), curves instead of win rates for hard lanes,
+same JSON to data/export/pool.json for a look. Mastery source (points, champions
+played in the last year, 50k total and 10k per champion) is used once it has more
+players than the games source. Not yet: curves instead of win rates for hard lanes,
 your own record per matchup.
 
 ## Learning curves (src/learning.zig, src/site/learning.zig)
