@@ -221,9 +221,14 @@ error at 14 min (top gold, 1611 pairs, noise of the other half 1054): raw means 
 role mean 0 1130, baseline 1078, shrunk 1073: thin raw means are far worse than the
 baseline, and at this volume the baseline carries almost all of it; too few pairs have
 50+ games to see the matchup term pay. Smoothing chosen near zero (lambda 0 to 1) except
-support gold (100). Nested k is noisy (few units with games in both parts). ReleaseFast
-on the Mac: 4 s and 163 MB peak for those 18.8k games, file 37 MB (13.7k matchups, every
-bracket and experience variant with 1+ game). Memory grows with lanes (~180 B each, 5
+support gold (100). Nested k is noisy (few units with games in both parts). On the box
+(27k games, 15:29Z): pairs with 50+ games in the fitting half (bot 63, support 32): the
+baseline alone did as well as or better than shrunk (bot gold 173 vs 204, noise 182), so
+the matchup term does not pay yet; a higher k cap (300, 1000) did not help overall
+(tried on the Mac). ReleaseFast on the Mac: 4 s and 163 MB peak for those 18.8k games,
+file 37 MB (13.7k matchups, every bracket and experience variant with 1+ game). On the
+micro with the crawler running: EUW 7.6k games 2.5 min, all regions 27k games 6.3 min
+(~30 s of fitting per role). Memory grows with lanes (~180 B each, 5
 per game): ~2.7 GB at 30 days of all regions at ~100k games/day, beyond the micro's 1
 GB; the A1 (12 GB) holds it.
 

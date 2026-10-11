@@ -202,7 +202,14 @@ next steps land here.
   ended by 20/25), first-item row, experienced toggle (10+ games, CSS only); method page
   "games to stabilise" table. Numbers in docs/architecture.md "Lane curves". First real
   curves looked sane (Caitlyn vs Jhin, 359 games: lane gold within ±100, level 6 7:14 vs
-  7:16, first item ~11 min); no bugs found in the curves step itself
+  7:16, first item ~11 min); no bugs found in the curves step itself. Deployed f6bf5d6
+  15:18Z (box v4 curves logged at 15:22-15:29Z: 27k games all regions in 6.3 min on the
+  micro); Your games API binary on jomove updated to read v4 (15:23Z; it has 0 curves
+  until the box pushes v4 per-patch files). Not yet checked: the live matchup pages
+  after the first v4 upload (the box move to A1 started first)
+- Split-half on the box (27k games): for pairs with 50+ games in a half (bot 63,
+  support 32), the baseline alone beat shrunk (bot gold rms 173 vs 204, noise 182), so
+  the matchup term does not pay yet; a higher k cap did not help. Recheck at volume
 - Curves next: patch decay weights (two patches in the 30-day window now) and n_eff for
   same-player games; tau^2 smoothed across minutes (k jumps between minutes at 19k
   games); recheck k and the split-half test at 200k+ games, when pairs reach 50+ per

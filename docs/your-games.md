@@ -114,8 +114,9 @@ Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB
 
 - Binary: /usr/local/bin/meiolol (root 755), built on the Mac from a clean commit with
   `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's
-  push deploy: after a change to src/api, rebuild, `scp` to /tmp, `sudo install`, then
-  `sudo systemctl restart meiolol-api`
+  push deploy: after a change to src/api or the curves file format (curvesfile.zig
+  version), rebuild, `scp` to /tmp, `sudo install`, then `sudo systemctl restart
+  meiolol-api`. Curves v4 binary installed 2026-10-11 15:23Z (f6bf5d6)
 - User `meiolol-api` (system, no shell). /var/lib/meiolol-api (750): api.db. Exchange
   /var/lib/meiolol-api/exchange (meiolol:meiolol-api, 2770; `meiolol` is in the group):
   curves/ from the box, forgotten.txt out, box-forgotten.txt in
