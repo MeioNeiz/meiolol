@@ -5,6 +5,7 @@ build.zig            modules: core (pure), store (SQLite C), backend, app
 src/
   main.zig           `meiolol` backend CLI: crawl, stats, site, status, champions
   ddragon.zig        champion ids/names from Data Dragon
+  daily.zig          Daily Draft puzzles (data/daily), published by `meiolol site`
   stats.zig          model file from the matches table (`meiolol stats`)
   site/              public website generator (`meiolol site`): html.zig layout and
                      boilerplate, prose.zig fixed pages, static/ (css, draft.js)
@@ -106,6 +107,27 @@ deploy/web-loop.sh (docs/plan.md step 2).
 
 Known gaps: stats.bin is dense (~12 MB raw; brotli helps while sparse), no rank
 brackets (statsfile has none), no per-patch history.
+
+## Daily Draft (src/daily.zig, src/site/daily.zig, static/daily.js)
+
+One real ranked solo game a day, same for everyone: one slot hidden behind four options
+(the played champion plus three from the 20 core.recommend rates highest in that draft),
+then guess the winner. Pick order is not in match-v5, so "which was picked last" became
+"which was played here". The reveal is facts plus numbers, never "the correct pick":
+result, length, team kills and gold, blue's estimated win chance, the five same-role lane
+edges with games (greyed under 200), and each option's points with reasons.
+
+- Made by `meiolol site` (every web-loop build): puzzles for today to today+2 (UTC) that
+  do not exist yet, from the site's patches and platforms. Puzzle #1 = 2026-10-11
+- data/daily/<n>.json is the public puzzle, written once and never remade (the numbers
+  are frozen at that day's data); data/daily/used.txt holds the match ids behind them so
+  none repeats. used.txt stays on the box: never under site/
+- Anonymised: no Riot IDs, PUUIDs, match ids or game dates; tier is the median visible
+  rank of the players we have a rank for, only when 5+ are known
+- Site: daily.html + daily.js, daily/index.json ([{n, date}]) and daily/<n>.json. The
+  page shows the viewer's local date's puzzle (hence two days ahead), ?n= for the
+  archive. Guesses, streak and archive in localStorage (key meiolol.daily.v1); share
+  text is an emoji grid with the link
 
 ## App (src/app_main.zig, src/lcu)
 

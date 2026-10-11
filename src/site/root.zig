@@ -7,6 +7,8 @@ const core = @import("core");
 const stats = @import("../stats.zig");
 pub const html = @import("html.zig");
 const prose = @import("prose.zig");
+const daily_page = @import("daily.zig");
+const daily = @import("../daily.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -29,6 +31,8 @@ pub const Options = struct {
     /// False until Riot grants the production key: personal-key data may not serve
     /// the public (docs/production-key.md), so pages are unlisted and say so
     public: bool = false,
+    /// Where Daily Draft puzzles are kept (src/daily.zig); null leaves them out
+    daily_dir: ?[]const u8 = null,
 };
 
 /// Below this share of all games a champion is left out of a role's tier list
@@ -144,11 +148,23 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     try site.write("style.css", @embedFile("static/style.css"));
     try site.write("favicon.svg", @embedFile("static/favicon.svg"));
     try site.write("draft.js", @embedFile("static/draft.js"));
+    try site.write("daily.js", @embedFile("static/daily.js"));
     try site.write("meiolol.wasm", @embedFile("draft.wasm"));
     try site.write("data/stats.bin", model_bytes);
     try writeChampionsJson(&site);
     if (opts.riot_txt) |t| try site.write("riot.txt", t);
     try site.write("robots.txt", if (opts.public) "User-agent: *\nAllow: /\n" else "User-agent: *\nDisallow: /\n");
+
+    if (opts.daily_dir) |d| {
+        const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
+        const files = try daily.update(arena, io, db, &site.stats, .{
+            .dir = d,
+            .patches = opts.patches,
+            .platforms = opts.platforms,
+            .today = day,
+        });
+        for (files) |f| try site.write(f.path, f.data);
+    }
 
     try writeIndex(&site);
     try writeDraft(&site);
@@ -157,6 +173,7 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     const info: prose.Info = .{ .contact = opts.contact, .updated = opts.updated };
     const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
         .{ "about.html", "How it works", "How meiolol's statistics and draft suggestions are made.", .about, prose.about },
+        .{ "daily.html", "Daily Draft", "Guess the hidden champion and the winner of a real ranked draft, then see what the numbers say.", .daily, daily_page.page },
         .{ "download.html", "Desktop app", "The meiolol champ select app for Windows.", .download, prose.download },
         .{ "privacy.html", "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
         .{ "terms.html", "Terms of use", "Terms for using meiolol.", .none, prose.terms },

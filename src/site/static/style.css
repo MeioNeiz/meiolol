@@ -109,3 +109,31 @@ input, select {
 .suggestions li > div:first-child .muted { font-weight: 400; font-size: 14px; }
 .preview { background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 14px; }
 .preview .wrap { padding: 8px 16px; }
+button {
+  font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 14px; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { cursor: default; }
+.board { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 640px) { .board { grid-template-columns: 1fr; } }
+.side-0 { border-top: 3px solid var(--accent); }
+.side-1 { border-top: 3px solid var(--bad); }
+.team { list-style: none; margin: 0; padding: 0; }
+.team li { display: flex; align-items: center; gap: 12px; padding: 4px 0; min-height: 40px; }
+.team .role { width: 64px; }
+.hidden-slot { font-weight: 700; font-size: 20px; color: var(--accent); }
+.bans { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+.question { margin-top: 16px; }
+.question h2 { margin: 0 0 12px; font-size: 18px; }
+.choices { display: flex; flex-wrap: wrap; gap: 10px; }
+.choices button .champ { pointer-events: none; }
+.choices button.chosen { border-color: var(--text); border-width: 2px; }
+.choices button.played { border-color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--panel)); }
+.tag {
+  font-size: 12px; font-weight: 600; color: var(--good); border: 1px solid var(--good);
+  border-radius: 999px; padding: 0 8px; margin-left: 8px;
+}
+tr.thin td { color: var(--muted); opacity: 0.6; }
+.archive { list-style: none; padding: 0; }
+.archive li { display: flex; gap: 12px; padding: 2px 0; }

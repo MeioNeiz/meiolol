@@ -1,0 +1,360 @@
+// Daily Draft: puzzles from src/daily.zig (daily/index.json lists them, daily/<n>.json
+// each). Guess the hidden champion, then the winner; the reveal explains with this
+// patch's numbers. Results, streak and archive stay in this browser (localStorage).
+"use strict";
+
+const ROLES = [
+  ["top", "Top"],
+  ["jungle", "Jungle"],
+  ["middle", "Mid"],
+  ["bottom", "Bot"],
+  ["utility", "Support"],
+];
+const roleName = Object.fromEntries(ROLES);
+const SIDES = ["Blue", "Red"];
+const KEY = "meiolol.daily.v1";
+// Below this many games a lane edge is too thin to read much into
+const THIN = 200;
+
+const $ = (id) => document.getElementById(id);
+const pad = (n) => String(n).padStart(2, "0");
+
+function loadResults() {
+  try {
+    return JSON.parse(localStorage.getItem(KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveResults(results) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(results));
+  } catch {
+    // Private mode or storage blocked: the game still works, it just forgets
+  }
+}
+
+const getJson = (url) =>
+  fetch(url).then((r) => {
+    if (!r.ok) throw new Error(`${url}: ${r.status}`);
+    return r.json();
+  });
+
+// The viewer's own date, so the puzzle changes at their midnight
+function localDate() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function longDate(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+const signed = (x) => `${x >= 0 ? "+" : ""}${x.toFixed(1)}`;
+
+async function start() {
+  const status = $("status");
+  try {
+    const [index, meta] = await Promise.all([
+      getJson("daily/index.json"),
+      getJson("data/champions.json"),
+    ]);
+    // Puzzles are published a day or two early for viewers ahead of UTC
+    const live = index.filter((p) => p.date <= localDate());
+    if (live.length === 0) {
+      status.textContent = "No puzzle yet. Come back tomorrow.";
+      return;
+    }
+    const wanted = Number(new URLSearchParams(location.search).get("n"));
+    const entry = live.find((p) => p.n === wanted) || live[live.length - 1];
+    const puzzle = await getJson(`daily/${entry.n}.json`);
+    status.hidden = true;
+    $("daily").hidden = false;
+    new Game(puzzle, meta, live).render();
+  } catch (e) {
+    status.textContent = "Could not load the puzzle: " + e.message;
+  }
+}
+
+class Game {
+  constructor(p, meta, live) {
+    this.p = p;
+    this.live = live;
+    this.byId = new Map(meta.champions.map((c) => [c.id, c]));
+    this.ddragon = meta.ddragon;
+    this.results = loadResults();
+    this.mine = this.results[p.n] || {};
+  }
+
+  name(id) {
+    const c = this.byId.get(id);
+    return c ? c.name : "?";
+  }
+
+  champ(id, size = 32) {
+    const c = this.byId.get(id);
+    const a = document.createElement(c ? "a" : "span");
+    a.className = "champ";
+    if (c) {
+      a.href = `champion/${c.slug}.html`;
+      const img = document.createElement("img");
+      img.src = `https://ddragon.leagueoflegends.com/cdn/${this.ddragon}/img/champion/${c.key}.png`;
+      img.alt = "";
+      img.width = img.height = size;
+      img.loading = "lazy";
+      a.append(img);
+    }
+    a.append(this.name(id));
+    return a;
+  }
+
+  answer(field, value) {
+    if (this.mine[field] !== undefined) return;
+    this.mine[field] = value;
+    if (this.done) this.mine.marks = this.marks();
+    this.results[this.p.n] = this.mine;
+    saveResults(this.results);
+    this.render();
+  }
+
+  get picked() {
+    return this.mine.pick !== undefined;
+  }
+
+  get done() {
+    return this.picked && this.mine.side !== undefined;
+  }
+
+  render() {
+    const p = this.p;
+    $("number").textContent = `#${p.n}`;
+    const tier = p.tier ? `, mostly ${p.tier[0]}${p.tier.slice(1).toLowerCase()} players` : "";
+    $("about").textContent = `${longDate(p.date)}. Ranked solo/duo, patch ${p.patch}${tier}.`;
+    this.renderBoard();
+    this.renderPick();
+    $("q-side").hidden = !this.picked;
+    for (const b of $("q-side").querySelectorAll("button")) {
+      const side = Number(b.dataset.side);
+      b.disabled = this.mine.side !== undefined;
+      b.classList.toggle("chosen", this.mine.side === side);
+      b.classList.toggle("played", this.done && p.winner === side);
+      b.onclick = () => this.answer("side", side);
+    }
+    $("reveal").hidden = !this.done;
+    if (this.done) this.renderReveal();
+    this.renderArchive();
+  }
+
+  renderBoard() {
+    const p = this.p;
+    for (const t of [0, 1]) {
+      const list = $(`team-${t}`);
+      list.replaceChildren();
+      ROLES.forEach(([role, label], r) => {
+        const li = document.createElement("li");
+        const tag = document.createElement("span");
+        tag.className = "role";
+        tag.textContent = label;
+        li.append(tag);
+        const hidden = t === p.hidden_team && role === p.hidden_role;
+        if (hidden && !this.picked) {
+          li.classList.add("hidden-slot");
+          li.append("?");
+        } else {
+          li.append(this.champ(p.teams[t][r]));
+        }
+        list.append(li);
+      });
+      const bans = $(`bans-${t}`);
+      bans.replaceChildren(p.bans[t].length ? "Bans: " : "No bans");
+      p.bans[t].forEach((id, i) => {
+        if (i > 0) bans.append(", ");
+        bans.append(this.name(id));
+      });
+    }
+  }
+
+  renderPick() {
+    const p = this.p;
+    $("q-pick-title").textContent =
+      `Which champion was played ${roleName[p.hidden_role].toLowerCase()} for ${SIDES[p.hidden_team].toLowerCase()} side?`;
+    const box = $("options");
+    box.replaceChildren();
+    for (const o of p.options) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.append(this.champ(o.id, 40));
+      // The link inside would navigate away mid-game
+      b.querySelector("a")?.removeAttribute("href");
+      b.disabled = this.picked;
+      b.classList.toggle("chosen", this.mine.pick === o.id);
+      b.classList.toggle("played", this.picked && o.id === p.played);
+      b.onclick = () => this.answer("pick", o.id);
+      box.append(b);
+    }
+  }
+
+  renderReveal() {
+    const p = this.p;
+    const won = SIDES[p.winner];
+    const k = p.kills;
+    const gold = p.gold.map((g) => `${(g / 1000).toFixed(1)}k`);
+    $("happened").textContent =
+      `${this.name(p.played)} was played. ${won} side won in ${p.minutes} minutes, ` +
+      `kills ${k[0]} to ${k[1]}, gold ${gold[0]} to ${gold[1]} (blue first). ` +
+      `You guessed ${this.name(this.mine.pick)} and ${SIDES[this.mine.side].toLowerCase()} side.`;
+
+    const blue = Math.round(p.blue_win * 100);
+    const favoured = blue === 50 ? null : blue > 50 ? 0 : 1;
+    let read;
+    if (Math.abs(blue - 50) < 3) {
+      read = "Close to even: the draft set up little, and the game was decided in play.";
+    } else if (favoured === p.winner) {
+      read = `${SIDES[favoured]} side had the better odds on paper and won.`;
+    } else {
+      read = `${SIDES[favoured]} side had the better odds on paper and still lost: a draft sets the odds, not the result.`;
+    }
+    $("estimate").textContent =
+      `From ${p.games.toLocaleString("en-GB")} ranked solo games on patch ${p.patch}, drafts ` +
+      `like this one win about ${blue}% of the time for blue side and ${100 - blue}% for red. ${read}`;
+
+    const lanes = $("lanes");
+    lanes.replaceChildren();
+    ROLES.forEach(([, label], r) => {
+      const lane = p.lanes[r];
+      const tr = document.createElement("tr");
+      if (lane.games < THIN) tr.className = "thin";
+      const cell = (child, cls) => {
+        const td = document.createElement("td");
+        if (cls) td.className = cls;
+        td.append(child);
+        tr.append(td);
+      };
+      cell(label);
+      cell(this.champ(p.teams[0][r], 24));
+      cell(this.champ(p.teams[1][r], 24));
+      const edge =
+        Math.abs(lane.pp) < 0.1 ? "even" : `${signed(Math.abs(lane.pp))} ${lane.pp > 0 ? "blue" : "red"}`;
+      cell(edge, "num");
+      cell(lane.games < THIN ? `${lane.games} (few)` : String(lane.games), "num");
+      lanes.append(tr);
+    });
+
+    const notes = $("option-notes");
+    notes.replaceChildren();
+    const sorted = [...p.options].sort((a, b) => b.pp - a.pp);
+    const role = roleName[p.hidden_role].toLowerCase();
+    for (const o of sorted) {
+      const li = document.createElement("li");
+      const head = document.createElement("div");
+      head.append(this.champ(o.id));
+      const sub = document.createElement("span");
+      sub.className = "muted";
+      sub.textContent = ` ${signed(o.pp)} in this draft, ${o.games} games in ${role}`;
+      head.append(sub);
+      if (o.id === p.played) {
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = "played";
+        head.append(tag);
+      }
+      li.append(head);
+      for (const r of o.reasons) {
+        const why = document.createElement("div");
+        why.className = "why";
+        why.textContent = this.describe(r);
+        li.append(why);
+      }
+      notes.append(li);
+    }
+
+    const stats = this.record();
+    $("record").textContent =
+      `Played ${stats.played} · streak ${stats.streak} · both guesses right ${stats.both}`;
+    $("share").onclick = () => this.share(stats.streak);
+  }
+
+  describe(r) {
+    const pts = signed(r.pp);
+    const role = roleName[r.role].toLowerCase();
+    const n = `${r.games} games`;
+    if (r.kind === "base") return `${pts} ${r.pp >= 0 ? "strong" : "weak"} in ${role} this patch (${n})`;
+    return `${pts} ${r.kind === "ally" ? "with" : "vs"} ${this.name(r.id)} (${role}, ${n})`;
+  }
+
+  // Streak: consecutive puzzles completed, ending today or yesterday
+  record() {
+    const done = (n) => {
+      const r = this.results[n];
+      return r && r.pick !== undefined && r.side !== undefined;
+    };
+    const latest = this.live[this.live.length - 1].n;
+    let n = done(latest) ? latest : latest - 1;
+    let streak = 0;
+    while (n > 0 && done(n)) {
+      streak += 1;
+      n -= 1;
+    }
+    let played = 0;
+    let both = 0;
+    for (const e of this.live) {
+      if (!done(e.n)) continue;
+      played += 1;
+      // Only today's puzzle is loaded; older ones keep the marks saved with them
+      const r = this.results[e.n];
+      if (r.marks === "11") both += 1;
+    }
+    return { played, streak, both };
+  }
+
+  marks() {
+    return `${this.mine.pick === this.p.played ? 1 : 0}${this.mine.side === this.p.winner ? 1 : 0}`;
+  }
+
+  async share(streak) {
+    const squares = [...this.mine.marks].map((m) => (m === "1" ? "🟩" : "🟥")).join("");
+    const url = `${location.origin}${location.pathname}?n=${this.p.n}`;
+    const text = `meiolol Daily Draft #${this.p.n}\n${squares} (pick, winner)` +
+      (streak > 1 ? `\n🔥 ${streak} day streak` : "") + `\n${url}`;
+    const note = $("share-note");
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      note.textContent = "Copied";
+    } catch {
+      note.textContent = text;
+    }
+  }
+
+  renderArchive() {
+    const list = $("archive");
+    list.replaceChildren();
+    for (const e of [...this.live].reverse()) {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = `?n=${e.n}`;
+      a.textContent = `#${e.n}, ${longDate(e.date)}`;
+      if (e.n === this.p.n) a.setAttribute("aria-current", "page");
+      li.append(a);
+      const r = this.results[e.n];
+      const span = document.createElement("span");
+      span.className = "muted";
+      span.textContent = r && r.marks
+        ? [...r.marks].map((m) => (m === "1" ? "🟩" : "🟥")).join("")
+        : "not played";
+      li.append(span);
+      list.append(li);
+    }
+  }
+}
+
+start();

@@ -88,7 +88,12 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\<h2>This website</h2>
         \\<p>No accounts, no cookies, no analytics or advertising trackers. The hosting
         \\provider keeps standard request logs (IP address, time, page) for security and
-        \\abuse prevention, for a limited time.</p>
+        \\abuse prevention, for a limited time. The Daily Draft keeps your guesses, streak
+        \\and archive in your own browser (local storage); they are never sent to us, and
+        \\clearing site data removes them.</p>
+        \\<p>Daily Draft puzzles are real ranked games with every player identity removed:
+        \\no names, Riot IDs, match ids or game dates, only champions, bans, patch, an
+        \\approximate rank tier and team totals.</p>
         \\<h2>The desktop app</h2>
         \\<p>The app reads champ select from the League client running on your own PC and
         \\shows suggestions on screen. It does not send your games, account or any other

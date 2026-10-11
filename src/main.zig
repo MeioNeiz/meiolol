@@ -9,6 +9,7 @@ pub const ddragon = @import("ddragon.zig");
 pub const stats = @import("stats.zig");
 pub const site = @import("site/root.zig");
 pub const serve = @import("serve.zig");
+pub const daily = @import("daily.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
 
@@ -163,6 +164,7 @@ pub fn main(init: std.process.Init) !u8 {
             .riot_txt = riot_txt,
             .updated = try today(arena, init.io),
             .public = public,
+            .daily_dir = try std.fs.path.join(arena, &.{ data_dir, "daily" }),
         });
         return 0;
     }

@@ -40,7 +40,7 @@ const preview_banner =
     \\
 ;
 
-pub const Nav = enum { tiers, draft, download, about, none };
+pub const Nav = enum { tiers, draft, daily, download, about, none };
 
 pub const Page = struct {
     title: []const u8,
@@ -85,6 +85,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
     const items = [_]struct { Nav, []const u8, []const u8 }{
         .{ .tiers, "tier/top.html", "Tier lists" },
         .{ .draft, "draft.html", "Draft helper" },
+        .{ .daily, "daily.html", "Daily Draft" },
         .{ .download, "download.html", "Desktop app" },
         .{ .about, "about.html", "How it works" },
     };
