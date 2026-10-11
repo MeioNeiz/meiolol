@@ -78,7 +78,10 @@ icons hotlink Data Dragon. Edges and tiers use the same maths as the app
 wasm (~80 KB), so site and app always agree. Preview mode by default (noindex,
 robots.txt disallow, banner): Riot forbids serving the public on a personal key;
 `--public` only once the production key is granted. `deploy/box.sh site EMAIL` builds
-it on the box and rsyncs it to data/site. Not hosted yet.
+it on the box and rsyncs it to data/site. `meiolol serve` (src/serve.zig) serves a site
+directory over HTTP with .gz siblings; `deploy/box.sh web` runs it on the box
+(localhost:8080) with a daily rebuild. Public hosting planned on the jomove server
+(docs/plan.md).
 
 Known gaps: stats.bin is dense (~12 MB raw; brotli helps while sparse), no rank
 brackets (statsfile has none), no per-patch history.

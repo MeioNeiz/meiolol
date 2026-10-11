@@ -8,6 +8,7 @@ pub const riot = @import("riot/root.zig");
 pub const ddragon = @import("ddragon.zig");
 pub const stats = @import("stats.zig");
 pub const site = @import("site/root.zig");
+pub const serve = @import("serve.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
 
@@ -30,6 +31,10 @@ const usage =
     \\              --riot-txt TEXT  served as /riot.txt (Riot's verification string)
     \\              --public         listed for search engines, no preview banner; only
     \\                               once Riot grants the production key
+    \\  serve       serve the website (default DIR/site) over HTTP, for the tunnel
+    \\              --host H         default 127.0.0.1 (local only)
+    \\              --port P         default 8080
+    \\              --out DIR        site directory to serve
     \\  status      row counts and crawl queue state
     \\  champions   refresh champion ids and names from Data Dragon
     \\
@@ -54,6 +59,8 @@ pub fn main(init: std.process.Init) !u8 {
     var contact: ?[]const u8 = null;
     var riot_txt: ?[]const u8 = null;
     var public = false;
+    var host: []const u8 = "127.0.0.1";
+    var port: u16 = 8080;
     var i: usize = 2;
     while (i < args.len) : (i += 1) {
         const a = args[i];
@@ -81,6 +88,10 @@ pub fn main(init: std.process.Init) !u8 {
             out_path = v;
         } else if (std.mem.eql(u8, a, "--contact")) {
             contact = v;
+        } else if (std.mem.eql(u8, a, "--host")) {
+            host = v;
+        } else if (std.mem.eql(u8, a, "--port")) {
+            port = std.fmt.parseInt(u16, v, 10) catch return usageError(a);
         } else if (std.mem.eql(u8, a, "--riot-txt")) {
             riot_txt = v;
         } else return usageError(a);
@@ -123,6 +134,11 @@ pub fn main(init: std.process.Init) !u8 {
             .updated = try today(arena, init.io),
             .public = public,
         });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "serve")) {
+        const dir = out_path orelse try std.fs.path.join(arena, &.{ data_dir, "site" });
+        try serve.run(init.gpa, init.io, dir, host, port);
         return 0;
     }
     if (std.mem.eql(u8, cmd, "status")) {

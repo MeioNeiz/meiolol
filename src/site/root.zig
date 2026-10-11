@@ -74,9 +74,15 @@ const Site = struct {
         };
     }
 
+    /// Also `path`.gz for `meiolol serve` to send to clients that accept gzip
     fn write(s: *const Site, path: []const u8, data: []const u8) !void {
         if (std.fs.path.dirname(path)) |d| try s.dir.createDirPath(s.io, d);
         try s.dir.writeFile(s.io, .{ .sub_path = path, .data = data });
+        if (data.len < 1024) return;
+        const gz = try store.raw.compress(s.gpa, data);
+        defer s.gpa.free(gz);
+        const gz_path = try std.fmt.allocPrint(s.arena, "{s}.gz", .{path});
+        try s.dir.writeFile(s.io, .{ .sub_path = gz_path, .data = gz });
     }
 
     fn icon(s: *const Site, ch: Champ) []const u8 {
