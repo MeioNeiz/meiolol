@@ -15,6 +15,21 @@
 set -u
 contact=$1
 cd "$(dirname "$0")/.." || exit 1
+
+# The newest two curves files go to the Your games service on the web server (not the
+# public site; docs/your-games.md). meiolol-exchange: rrsync into its exchange dir; a
+# new file restarts the service there
+push_curves() {
+    local files
+    files=$(ls -t data/export/curves-*.bin 2> /dev/null | head -2)
+    [[ -n "$files" ]] || return 0
+    rm -rf data/curves-push && mkdir -p data/curves-push
+    # shellcheck disable=SC2086
+    cp -p $files data/curves-push/
+    rsync -a --delete data/curves-push/ meiolol-exchange:curves/ \
+        || echo "$(date -u +%FT%TZ) curves push to the service FAILED"
+}
+
 last_patch='' last_games=0 last_upload=0
 patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0
 while true; do
@@ -31,6 +46,7 @@ while true; do
         echo "$c"
         [[ -n "$patch" ]] && bin/meiolol curves --patch "$patch" 2>&1
         last_curves=$now curves_patch=$patch
+        push_curves
     fi
     rm -rf data/site.new
     riot=()

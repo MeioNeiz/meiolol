@@ -36,8 +36,10 @@ sync() {
 case "${1:-}" in
     sync) sync ;;
     start)
-        # Extra arguments go to `meiolol crawl` (eg --reserve 20)
+        # Extra arguments go to `meiolol crawl`. Default --reserve 20: the Your games
+        # service on the web server shares the key (docs/your-games.md)
         shift
+        (( $# )) || set -- --reserve 20
         sync
         # Restart on crashes, but stop on exit 3 (key rejected) rather than hammer Riot
         ssh "$HOST" "cd $DIR && tmux new -d -s $SESSION \

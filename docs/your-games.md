@@ -4,7 +4,7 @@ The dynamic part of the site (docs/concept.md, product 1): enter a Riot ID, see 
 recent ranked solo game's lane laid over the typical curve for that matchup at your rank,
 then a weekly roll-up and per-matchup trend. `meiolol api` (src/api) serves JSON at
 /api/ behind nginx on the jomove server; site/your.html + your.js (src/site/your.zig,
-static/your.js) is the page. Not deployed yet: steps at the end, for Jacob.
+static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy below.
 
 ## How it works
 
@@ -107,99 +107,43 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
   password in vault (group meiolol/local, key MEIOLOL_API_BASIC_AUTH; also in .env). The
   browser asks once; your.html itself is public and harmless without the API
 
-## Deploy (not done: for Jacob)
+## Deploy (live since 2026-10-11, jomove server)
 
-Server: jomove (x86_64, 1 GB RAM, ~540 MB free; 2 curves files in memory at most).
+Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB RAM,
+~540 MB free; the service uses ~11 MB plus up to 2 curves files).
 
-1. Build on the Mac: `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`;
-   copy `zig-out/bin/meiolol` to the server as /usr/local/bin/meiolol (root, 755)
-2. User and directories:
-   ```
-   sudo useradd --system --home /var/lib/meiolol-api --shell /usr/sbin/nologin meiolol-api
-   sudo install -d -o meiolol-api -m 750 /var/lib/meiolol-api
-   # Exchange with the box (rrsync user meiolol writes, the service reads and writes)
-   sudo install -d -o meiolol -g meiolol-api -m 2770 /var/lib/meiolol-api/exchange
-   sudo install -d -o meiolol -g meiolol-api -m 2770 /var/lib/meiolol-api/exchange/curves
-   ```
-3. Key, without printing it: from the Mac
-   `grep '^RIOT_API_KEY=' .env | ssh jomove 'sudo install -m 600 /dev/stdin /etc/meiolol-api.env'`
-4. /etc/systemd/system/meiolol-api.service:
-   ```
-   [Unit]
-   Description=meiolol Your games API
-   After=network-online.target
-   Wants=network-online.target
-
-   [Service]
-   User=meiolol-api
-   EnvironmentFile=/etc/meiolol-api.env
-   ExecStart=/usr/local/bin/meiolol api --data /var/lib/meiolol-api --exchange /var/lib/meiolol-api/exchange
-   UMask=0007
-   Restart=on-failure
-   RestartSec=10
-   # 3: Riot rejected the key; restarting would not help
-   RestartPreventExitStatus=3
-   MemoryMax=400M
-   NoNewPrivileges=yes
-   ProtectSystem=strict
-   ProtectHome=yes
-   PrivateTmp=yes
-   ReadWritePaths=/var/lib/meiolol-api
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-   Curves are read at start, so restart on a new file:
-   /etc/systemd/system/meiolol-api-reload.path
-   ```
-   [Path]
-   PathChanged=/var/lib/meiolol-api/exchange/curves
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-   /etc/systemd/system/meiolol-api-reload.service
-   ```
-   [Service]
-   Type=oneshot
-   ExecStart=/bin/systemctl restart meiolol-api.service
-   ```
-   then `sudo systemctl daemon-reload && sudo systemctl enable --now meiolol-api
-   meiolol-api-reload.path`
-5. nginx, in /etc/nginx/conf.d/meiolol.conf only (jomove's config untouched). At the
-   top of the file (http context):
-   ```
-   limit_req_zone $binary_remote_addr zone=meiolol_api:1m rate=60r/m;
-   ```
-   inside the `listen 443` server block:
-   ```
-   location /api/ {
-       limit_req zone=meiolol_api burst=30 nodelay;
-       access_log off;
-       proxy_pass http://127.0.0.1:8090;
-       proxy_set_header Host $host;
-       proxy_read_timeout 30s;
-       client_max_body_size 1k;
-   }
-   ```
-   `sudo nginx -t && sudo systemctl reload nginx`
-6. Preview: a personal key may not serve the public (docs/production-key.md). Until the
-   production key, either put `auth_basic` on /api/ (htpasswd for Jacob and testers) or
-   leave the page unlinked; the site's index already says "coming". Decide before step 5
-7. Exchange with the box: a second key on the box with
-   `command="rrsync /var/lib/meiolol-api/exchange",restrict` in
-   ~meiolol/.ssh/authorized_keys (the existing key stays limited to /var/www/meiolol)
-   and an ssh alias `meiolol-exchange`. In deploy/web-loop.sh after `meiolol curves`
-   succeeds: `rsync -a --delete $(ls -t data/export/curves-*.bin | head -2)
-   meiolol-exchange:curves/` (not public: tens of MB at full crawl). In the box's daily
-   backup loop (data-safety-af): `rsync meiolol-exchange:forgotten.txt data/` then
-   `meiolol forget --list data/forgotten.txt` before the backup, and push the box's own
-   list: `rsync <box list> meiolol-exchange:box-forgotten.txt`
-8. Restart the crawler with `--reserve 20` (meiolol-de) so lookups do not queue behind it
-9. Check: `curl -s https://meiolol.jomify.lol/api/health`, then the page with your own
-   Riot ID, then the objection flow on a test account
-10. In the branch that goes live: the index card's "coming" becomes a link to
-    your.html (writeIndex in src/site/root.zig; meiolol-b5 agreed)
+- Binary: /usr/local/bin/meiolol (root 755), built on the Mac from a clean commit with
+  `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's
+  push deploy: after a change to src/api, rebuild, `scp` to /tmp, `sudo install`, then
+  `sudo systemctl restart meiolol-api`
+- User `meiolol-api` (system, no shell). /var/lib/meiolol-api (750): api.db. Exchange
+  /var/lib/meiolol-api/exchange (meiolol:meiolol-api, 2770; `meiolol` is in the group):
+  curves/ from the box, forgotten.txt out, box-forgotten.txt in
+- Key: /etc/meiolol-api.env (root 600, RIOT_API_KEY only), the same key as the box
+- systemd: meiolol-api.service (`meiolol api --data /var/lib/meiolol-api --exchange
+  /var/lib/meiolol-api/exchange`, UMask 0007, Restart=on-failure, not on exit 3,
+  MemoryMax 400M, ProtectSystem=strict); meiolol-api-reload.path watches exchange/curves
+  and restarts the service through meiolol-api-reload.service. Logs: `sudo journalctl
+  -u meiolol-api`
+- nginx: /etc/nginx/conf.d/meiolol.conf only (jomove.conf untouched; the previous version
+  is /etc/nginx/meiolol.conf.bak-2026-10-11). `limit_req_zone meiolol_api 60r/m` at the
+  top; `location /api/` in the 443 server: auth_basic (/etc/nginx/meiolol-api.htpasswd,
+  root:www-data 640), limit_req burst 30, access_log off, proxy_pass 127.0.0.1:8090,
+  client_max_body_size 1k
+- Preview gating: basic auth on /api/ until the production key (a personal key may not
+  serve the public). User `meiolol`; password in vault (meiolol/local,
+  MEIOLOL_API_BASIC_AUTH) and in .env. Remove the two auth_basic lines once the
+  production key is granted
+- Box: ssh alias `meiolol-exchange` (key ~/.ssh/meiolol_exchange) is the rrsync user
+  limited to the exchange dir (`command="/usr/bin/rrsync /var/lib/meiolol-api/exchange",
+  restrict` in ~meiolol/.ssh/authorized_keys; the site key stays limited to
+  /var/www/meiolol). deploy/web-loop.sh pushes the newest two curves files after each
+  `meiolol curves` (push_curves); deploy/backup-loop.sh swaps the forgotten lists daily
+  (data-safety-af)
+- Crawler: `deploy/box.sh start` now defaults to `--reserve 20`
+- Check: `curl -s -o /dev/null -w '%{http_code}' https://meiolol.jomify.lol/api/health`
+  answers 401; with the password, {"ok":true,"jobs":N}. Live lookup tested through nginx
+  on 2026-10-11 (10 games)
 
 ## Testing locally
 
