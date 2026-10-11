@@ -51,7 +51,12 @@ fn connection(ctx: *Context, stream: Io.net.Stream) void {
 
 fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     if (request.head.method != .GET and request.head.method != .HEAD) {
-        return request.respond("method not allowed\n", .{ .status = .method_not_allowed });
+        // A bodyless POST has neither length nor encoding, and respond() asserts on one
+        // when it discards the body
+        if (request.head.transfer_encoding == .none and request.head.content_length == null) {
+            request.head.content_length = 0;
+        }
+        return request.respond("method not allowed\n", .{ .status = .method_not_allowed, .keep_alive = false });
     }
     var path_buf: [512]u8 = undefined;
     const path = resolve(&path_buf, request.head.target) orelse return notFound(request);
