@@ -6,10 +6,10 @@
 # meiolol-web ssh alias is user meiolol with a key limited to rsync into /var/www/meiolol
 # (rrsync); nginx there serves meiolol.jomify.lol. Riot's verification string, if any,
 # lives in riot.txt beside bin/.
-# Lane curves are rebuilt hourly and when the patch changes: the site's (`meiolol curves`,
-# every patch of the last 30 days; EUW, and every region for the site's all/ view) and
-# the current patch's for the Your games service; fresh site curves force an upload. The
-# upload rules count EUW games only.
+# Lane curves are rebuilt hourly and when the patch changes, one file per site view (EUW
+# and every region, by last 30 days and current patch; the EUW patch file is also the
+# Your games service's); fresh site curves force an upload. The upload rules count EUW
+# games on the current patch only.
 # Daily, `meiolol eval` (docs/model.md) appends a line to data/eval-history.tsv (model
 # accuracy vs data volume) and leaves its report in data/eval-latest.md. Read-only on the
 # DB; in the background at low priority, so a slow run never delays uploads.
@@ -47,7 +47,10 @@ while true; do
         if c=$(bin/meiolol curves 2>&1); then fresh_curves=1; fi
         echo "$c"
         bin/meiolol curves --platform all 2>&1
-        [[ -n "$patch" ]] && bin/meiolol curves --patch "$patch" 2>&1
+        if [[ -n "$patch" ]]; then
+            bin/meiolol curves --patch "$patch" 2>&1
+            bin/meiolol curves --patch "$patch" --platform all 2>&1
+        fi
         last_curves=$now curves_patch=$patch
         push_curves
     fi
@@ -55,7 +58,7 @@ while true; do
     riot=()
     [[ -s riot.txt ]] && riot=(--riot-txt "$(<riot.txt)")
     if out=$(bin/meiolol site --contact "$contact" --out data/site.new "${riot[@]}" 2>&1); then
-        # First log line, EUW: "data/site.new: patch 16.20, 1054 games, 173 champion pages"
+        # First patch line, EUW: "data/site.new/patch/: patch 16.20, 1054 games, ..."
         read -r patch games < <(sed -nE 's/.*: patch ([^,]+), ([0-9]+) games.*/\1 \2/p' \
             <<< "$out")
         now=$(date +%s)

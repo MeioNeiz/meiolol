@@ -210,7 +210,8 @@ async function scorer() {
   if (wasm) return wasm;
   const [wasmBytes, model] = await Promise.all([
     fetch("meiolol.wasm").then((r) => r.arrayBuffer()),
-    fetch("data/stats.bin").then((r) => r.arrayBuffer()),
+    // The current patch view's, like the rest of Learn (html.View.shared)
+    fetch("patch/data/stats.bin").then((r) => r.arrayBuffer()),
   ]);
   const { instance } = await WebAssembly.instantiate(wasmBytes, {});
   const x = instance.exports;

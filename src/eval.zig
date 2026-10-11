@@ -52,7 +52,7 @@ pub fn run(
     defer stats.freeChampions(gpa, champs);
     var list: GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
-    const summary = try stats.scan(gpa, db, patches, platforms, &list);
+    const summary = try stats.scan(gpa, db, patches, platforms, 0, &list);
     const games = list.items.items;
     std.mem.sort(Game, games, {}, olderFirst);
 
