@@ -183,7 +183,10 @@ fn connection(ctx: *Context, stream: Io.net.Stream) void {
             request.head.content_length = 0;
         }
         handle(ctx, &request) catch |err| {
-            log.warn("{s}: {t}", .{ request.head.target, err });
+            // The query holds the Riot ID: the path only
+            const target = request.head.target;
+            const path = target[0 .. std.mem.indexOfScalar(u8, target, '?') orelse target.len];
+            log.warn("{s}: {t}", .{ path, err });
             return;
         };
     }
