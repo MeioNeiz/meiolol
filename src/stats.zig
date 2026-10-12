@@ -117,13 +117,20 @@ pub fn scan(
     defer gpa.free(patch_json);
     const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
     defer gpa.free(platform_json);
+    // Matches sorted alone, then each one's participants by primary key: sorting the
+    // joined rows sorted 10 a match (2x the time). The outer ORDER BY costs nothing, as
+    // SQLite knows m is in order, and keeps that order guaranteed
     var q = try db.prepare(
+        \\WITH m AS MATERIALIZED (
+        \\  SELECT match_id, winning_team, game_start, patch, platform FROM matches m
+        \\  WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
+        \\    AND m.platform IN (SELECT value FROM json_each(?))
+        \\    AND m.remake = 0 AND m.winning_team IS NOT NULL AND m.game_start >= ?
+        \\  ORDER BY match_id
+        \\)
         \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, m.platform,
         \\  p.team_id, p.position, p.champion_id
-        \\FROM matches m JOIN participants p USING (match_id)
-        \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
-        \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL AND m.game_start >= ?
+        \\FROM m CROSS JOIN participants p USING (match_id)
         \\ORDER BY m.match_id
     );
     defer q.deinit();
