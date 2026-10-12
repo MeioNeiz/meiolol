@@ -20,6 +20,7 @@ const learning = @import("../learning.zig");
 const builds_page = @import("builds.zig");
 const builds = @import("../builds.zig");
 const filters = @import("filters.zig");
+const evalchart = @import("evalchart.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -67,6 +68,8 @@ pub const Options = struct {
     origin: ?[]const u8 = null,
     /// Matchup pages with fewer games are noindex and left out of the sitemaps
     index_min_games: u32 = 0,
+    /// The daily eval's TSV (`meiolol eval --history`) for the method page's chart
+    eval_history: ?[]const u8 = null,
 };
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
@@ -128,6 +131,8 @@ pub const Site = struct {
     shared_files: []const File = &.{},
     /// Learn page facts; the shared view's only
     learn: ?learn.Facts = null,
+    /// The method page's accuracy chart (Options.eval_history)
+    eval: []const evalchart.Point = &.{},
     /// Champion page filter data; the root view's only, as the champion pages
     filter: filters.Made = .{},
 
@@ -395,6 +400,10 @@ fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
     return out.items;
 }
 
+test {
+    _ = evalchart;
+}
+
 test robots {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -491,6 +500,7 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
         const p = site.sharedPage(try site.arena.print("{s} | meiolol", .{f[1]}), f[2], f[3]);
         try html.head(w, p);
         try f[4](w, site.info());
+        if (f[3] == .method) try evalchart.section(w, site.eval);
         try html.foot(w, p);
         return true;
     }
@@ -609,6 +619,11 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
         };
         try shared_files.appendSlice(arena, daily_files);
     }
+    if (shared) if (opts.eval_history) |path| {
+        if (std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(16 << 20))) |tsv| {
+            site.eval = try evalchart.parse(arena, tsv);
+        } else |err| log.info("no eval history at {s}: {t}", .{ path, err });
+    };
     // After the Daily Draft, so practice leaves out the games behind its puzzles
     if (shared) {
         const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));

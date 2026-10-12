@@ -757,6 +757,7 @@ const SiteFlags = struct {
             .euw_only = f.euw_only,
             .static_min_games = f.static_min_games,
             .origin = f.origin,
+            .eval_history = try std.fs.path.join(arena, &.{ c.data_dir, "eval-history.tsv" }),
             .index_min_games = f.index_min_games,
             .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
             // Indexed by site.html.View.index: EUW 30 days, EUW patch, all 30 days, all patch
