@@ -65,7 +65,7 @@ function stateLabel(state) {
 
 // Run directories are named START-NAME (deploy/lab-run.sh)
 function shortName(run) {
-  return run.replace(/^\d{8}T\d{4}Z-/, "");
+  return run.replace(/^\d{8}T\d{4}(\d{2})?Z-/, "");
 }
 
 function duration(r) {

@@ -6,7 +6,7 @@
 # rule); `watch-install` sets it up. docs/compute.md
 #
 #   deploy/lab-run.sh start HOST NAME [--meiolol] [--head | --no-build] [--build-arg A]...
-#                           [--with PATH]... [--res cpu|gpu|none] -- ARGS...
+#                           [--with PATH]... [--res cpu|gpu|none] [--literal] -- ARGS...
 #   deploy/lab-run.sh status [HOST]
 #   deploy/lab-run.sh logs HOST RUN [LINES]
 #   deploy/lab-run.sh stop HOST RUN
@@ -18,6 +18,8 @@
 # spaces and run by bash in the run directory on the host, so ~ and globs expand there:
 #   deploy/lab-run.sh start gpu-box smoke -- gpu-smoke
 #   deploy/lab-run.sh start mac eval --meiolol -- eval --data "~/ml/snaps/X" ">" eval.md
+# --literal: each ARG reaches the program as one word, nothing expanded but a leading ~/
+# (deploy/lab-exp.sh: its words come from an agent, so they must not run as shell).
 # --head builds committed HEAD in a temp tree instead (other sessions edit the working
 # tree; a half-written file there breaks or silently changes the build).
 # --build-arg goes to zig build (deploy/lab-exp.sh: -Dcand=DIR); --with copies a file or
@@ -35,6 +37,7 @@ HEAD_ONLY=0
 BUILD_ARGS=()
 WITH=()
 RES=cpu
+LITERAL=0
 WATCH=meiolol-lab-watch
 
 on() {
@@ -53,6 +56,13 @@ copy() {
 check_host() {
     [[ "$1" == mac || "$1" == gpu-box ]] && return
     echo "HOST is gpu-box or mac, not $1"
+    exit 2
+}
+
+# RUN goes into shell commands on the host: a run dir name only
+check_run() {
+    [[ "$1" =~ ^[A-Za-z0-9_.-]+$ && "$1" != *..* ]] && return
+    echo "RUN: a run dir name (letters, digits, _ . -), not $1"
     exit 2
 }
 
@@ -98,6 +108,7 @@ start() {
             --build-arg) BUILD_ARGS+=("$2"); shift ;;
             --with) WITH+=("$2"); shift ;;
             --res) RES=$2; shift ;;
+            --literal) LITERAL=1 ;;
             --) shift; break ;;
             *) echo "unknown option $1"; exit 2 ;;
         esac
@@ -109,6 +120,14 @@ start() {
     [[ "$host" == mac ]] || set -- "${@/#$HOME/$tilde}"
     [[ "$name" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "NAME: letters, digits, _ . -"; exit 2; }
     [[ "$RES" =~ ^(cpu|gpu|none)$ ]] || { echo "--res: cpu, gpu or none"; exit 2; }
+    if (( LITERAL )); then
+        local a quoted=()
+        for a in "$@"; do
+            if [[ "$a" == "$tilde/"* ]]; then quoted+=("$tilde/$(printf '%q' "${a#"$tilde"/}")")
+            else quoted+=("$(printf '%q' "$a")"); fi
+        done
+        set -- "${quoted[@]}"
+    fi
     local path
     path=$(binpath "$host" "$bin")
     local tmp
@@ -125,7 +144,7 @@ start() {
     [[ -x "$path" ]] || { echo "no binary at $path"; exit 1; }
 
     local run
-    run=$(date -u +%Y%m%dT%H%MZ)-$name
+    run=$(date -u +%Y%m%dT%H%M%SZ)-$name
     {
         echo "host $host"
         echo "bin $bin $(shasum -a 256 "$path" | cut -c1-16)"
@@ -164,7 +183,9 @@ echo \$? > exit
 date -u +%FT%TZ > ended
 EOF
     chmod +x "$tmp/job.sh"
-    on "$host" "mkdir -p $RUNS/$run"
+    # No -p on the run dir: a second start of NAME in the same second must not share it
+    on "$host" "mkdir -p $RUNS && mkdir $RUNS/$run" \
+        || { echo "$run already exists on $host: not started"; exit 1; }
     copy "$host" "$RUNS/$run" "$path" "$tmp/meta" "$tmp/src.diff" "$tmp/job.sh"
     if (( ${#WITH[@]} )); then copy "$host" "$RUNS/$run" "${WITH[@]}"; fi
     on "$host" "cd $RUNS/$run && $LAUNCH"
@@ -208,9 +229,15 @@ case "${1:-}" in
             for h in gpu-box mac; do echo "== $h"; status "$h" || echo "unreachable"; done
         fi
         ;;
-    logs) check_host "$2"; on "$2" "tail -n ${4:-40} $RUNS/$3/log" ;;
+    logs)
+        check_host "$2"
+        check_run "${3:-}"
+        [[ "${4:-40}" =~ ^[0-9]+$ ]] || { echo "LINES: a number"; exit 2; }
+        on "$2" "tail -n ${4:-40} $RUNS/$3/log"
+        ;;
     restart)
         check_host "$2"
+        check_run "${3:-}"
         # shellcheck disable=SC2016 # expands on the host
         on "$2" 'cd '"$RUNS/$3"' || exit 1
             pg=$(cat job.pgid 2>/dev/null)
@@ -221,6 +248,7 @@ case "${1:-}" in
         ;;
     stop)
         check_host "$2"
+        check_run "${3:-}"
         # CONT after TERM: a paused group only acts on the TERM once it runs again
         # shellcheck disable=SC2016 # expands on the host
         on "$2" 'cd '"$RUNS/$3"' && pg=$(cat job.pgid) && touch stopped \
@@ -228,6 +256,7 @@ case "${1:-}" in
         ;;
     pull)
         check_host "$2"
+        check_run "${3:-}"
         mkdir -p "$ROOT/data/runs/$3"
         src="$HOME/$RUNS/$3/"
         [[ "$2" == mac ]] || src="$2:$RUNS/$3/"
