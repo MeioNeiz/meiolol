@@ -90,7 +90,9 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builti
     });
     store.addCSourceFile(.{
         .file = sqlite.path("sqlite3.c"),
-        .flags = &.{ "-DSQLITE_DQS=0", "-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1" },
+        // Optimised in Debug too: the site's data step is mostly SQL, and at -O0 a dev
+        // server's data load or a test run waits minutes on it
+        .flags = &.{ "-DSQLITE_DQS=0", "-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1", "-O2", "-fno-sanitize=undefined" },
     });
     store.addIncludePath(sqlite.path("."));
 

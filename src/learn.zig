@@ -358,12 +358,15 @@ fn practice(
         \\  AND platform IN (SELECT value FROM json_each(?))
         \\  AND remake = 0 AND winning_team IS NOT NULL AND duration_s >= 900
     ;
-    const total = try db.scalar("SELECT count(*) " ++ where, .{
-        patch_json, stats.ranked_solo, platform_json,
-    }) orelse 0;
-    if (total == 0) return &.{};
-    var q = try db.prepare("SELECT match_id " ++ where ++ " ORDER BY match_id LIMIT 1 OFFSET ?");
-    defer q.deinit();
+    // Once, not a query per try: OFFSET walks the rows before it every time
+    var ids: std.ArrayList([]const u8) = .empty;
+    {
+        var q = try db.prepare("SELECT match_id " ++ where ++ " ORDER BY match_id");
+        defer q.deinit();
+        try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
+        while (try q.step()) try ids.append(arena, try arena.dupe(u8, q.bytes(0)));
+    }
+    if (ids.items.len == 0) return &.{};
 
     var prng: std.Random.DefaultPrng = .init(std.hash.Wyhash.hash(opts.today, "learn"));
     const rand = prng.random();
@@ -373,10 +376,7 @@ fn practice(
             var made: usize = 0;
             var tries: usize = 0;
             while (made < per_cell and tries < tries_per_cell) : (tries += 1) {
-                const offset = rand.uintLessThan(u64, @intCast(total));
-                try q.bind(.{ patch_json, stats.ranked_solo, platform_json, offset });
-                if (!try q.step()) continue;
-                const match_id = try arena.dupe(u8, q.bytes(0));
+                const match_id = ids.items[@intCast(rand.uintLessThan(u64, ids.items.len))];
                 if (daily.isUsed(used.items, match_id)) continue;
                 const p = try daily.load(arena, db, st, match_id, rand) orelse continue;
                 const drill = try draftFor(arena, st, facts, curves, p, role, want, rand) orelse continue;
