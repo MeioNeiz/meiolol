@@ -590,7 +590,9 @@ fn cmdPool(c: *Cmd) !u8 {
     var model: std.Io.Writer.Allocating = .init(arena);
     try r.builder.write(&model.writer, try stats.label(&label_buf, chosen));
     const st: core.Stats = try .parse(arena, model.written());
-    const p = try pool.make(gpa, arena, db, &st, platforms, .{});
+    var t = try pool.tally(gpa, db, &st, &.{platforms});
+    defer t.deinit(gpa);
+    const p = try pool.make(arena, &t, 0, &st, .{});
 
     const path = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "export", "pool.json" });
     var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
