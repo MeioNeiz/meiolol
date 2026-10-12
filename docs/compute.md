@@ -60,3 +60,60 @@ so results match a serial run bit for bit (never accumulate shared floats in bod
 terms, lane gold folds and the pick metric. 26.6k games: 38 s serial, 13 s on the M5,
 7 s on the gpu-box; output byte-identical. Still serial: experience.load (SQLite page
 reads) and the scan.
+
+## Plan (2026-10-12)
+
+What we know now: model work is CPU-parallel folds and grids (par.zig, done) plus GPU
+embeddings and interactions (meiolol-2a), on snapshots of ~7-9 GB that grow with the
+crawl; an overnight lab agent is designed (docs/lab-agent.md); and from ~3 weeks out the
+gpu-box also holds the raw archive the box can no longer keep (plan.md "Retention").
+That last one turns the PC from a nice-to-have into infrastructure, so reliability comes
+first.
+
+### 1. The PC as infrastructure (before the raw archive goes live)
+
+- Sleep: Windows sleeps after 3 h idle on AC (powercfg standby 10800 s), freezing runs,
+  rsyncs and the archive pull. Either Jacob sets sleep to never, or lab-watch.sh holds a
+  wake request while a run is live or a pull is due (a hidden powershell holding
+  SetThreadExecutionState, ended when idle). Jacob's call
+- Reboots: after a reboot (Windows Update) WSL only starts at login. Options: Windows
+  auto-login, or the wsl-watchdog task set to "run whether logged on or not" (stores
+  Jacob's password in Task Scheduler). Jacob's call; until then a reboot stops the
+  archive until he logs in
+- Reachability alert: the box's health loop (ntfy) warns when the gpu-box has been
+  unreachable over 12 h and when the archive's unacked backlog nears the box's free disk
+- Archive disk: the WSL disk (ext4 vhdx, 939 GB virtual) lives on C:, 261 GB free and
+  shared with Windows and games. The 2 TB NVMe has no Windows letter: Linux partitions of
+  128 GB, 1 TB and 32 GB (an old Linux install?) and ~700 GB unallocated. Best home: the
+  1 TB partition via `wsl --mount` (admin, at boot) if Jacob no longer needs what is on
+  it, else a new volume in the free space. Jacob's call; 3c's raw-export targets it
+
+### 2. Data for models (with meiolol-2a, who owns snapshots)
+
+- Snapshot cadence: box -> Mac (anonymise, salt stays off the box) -> gpu-box
+  ~/ml/snaps, weekly or per patch, the older one deleted (shared protocol). Scripted
+  end to end instead of by hand; from the raw archive once it exists, not the live DB
+- Packed rows: one `meiolol-lab pack SNAP` writes fixed-width column files (games,
+  participants, timeline frames) per snapshot. Every model, eval included, then loads in
+  seconds by mmap instead of SQLite page reads (today's remaining serial part of eval:
+  experience.load and the scan), and the GPU path uploads columns as they are
+- Runs record the snapshot stamp and seed in meta
+
+### 3. Running more than one thing (when the lab agent starts)
+
+- Queue: `lab-run queue HOST NAME -- ARGS` waits for its resource (the one GPU, or a CPU
+  share) via a lock in job.sh; the lab agent's harness submits through it so overnight
+  campaigns run back to back without overlapping
+- Progress: runs append metrics.tsv (the dashboard, deploy/lab-push.sh, already reads
+  it); runs over ~1 h write checkpoints and resume after a WSL restart or reboot
+- Results: the harness keeps the ladder (lab-agent.md); docs/model.md keeps the dated
+  tables. Nothing new here
+
+### 4. Speed, only when a real workload needs it
+
+- Measure first: eval, outcomes and 2a's models on the full snapshot on the gpu-box
+- Dense Newton/Cholesky (logreg.zig) is d^3: fine at d ~850 (champion x role), not for
+  pair or embedding features. Then L-BFGS/CG on CPU or a Zig Cholesky kernel on the GPU
+  (2a)
+- Not planned: Mac GPU (Metal) or cloud GPUs. The PC answers in seconds at today's
+  volume; revisit only if it is often unavailable or a model outgrows 10 GB of VRAM

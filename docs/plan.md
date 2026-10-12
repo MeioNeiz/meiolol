@@ -335,6 +335,17 @@ next steps land here.
 - "Model accuracy vs data" chart on the method page from data/eval-history.tsv
 - empiricalPriors as default once it gains at volume; then comp features, rank brackets
 
+### Compute (2026-10-12, docs/compute.md "Plan")
+
+- Done: eval on every core (src/par.zig, 38 s -> 7 s on the gpu-box), deploy/lab-run.sh
+  (detached runs, gpu-box or Mac), League watcher, WSL 24 GB, wsl-watchdog (WSL back in
+  ~30 s after a shutdown)
+- Before the raw archive goes live (~3 weeks): PC sleep (3 h idle today), start after a
+  reboot without login, archive disk (1 TB Linux partition on the 2 TB NVMe?), box alert
+  when the gpu-box is unreachable. Jacob decides the first three
+- Then: scripted snapshot cadence and packed rows (with 2a), run queue and checkpoints
+  (for the lab agent), speed work only after measuring on the full snapshot
+
 ### Before the production review
 
 - Privacy/terms into src/site/prose.zig from docs/legal once Jacob fills the placeholders;

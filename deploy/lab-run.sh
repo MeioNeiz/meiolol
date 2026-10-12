@@ -90,13 +90,16 @@ start() {
         echo "args $*"
     } > "$tmp/meta"
     git -C "$ROOT" diff HEAD -- src build.zig > "$tmp/src.diff"
+    # caffeinate: a Mac asleep mid-run looks like a hung run
+    local awake=""
+    [[ "$host" == mac ]] && awake="caffeinate -i "
     # $$ is the process group: setpgrp below makes this bash its leader
     cat > "$tmp/job.sh" <<EOF
 #!/usr/bin/env bash
 cd "\$(dirname "\$0")"
 echo \$\$ > job.pgid
 date -u +%FT%TZ > started
-nice -n 10 ./$bin $*
+${awake}nice -n 10 ./$bin $*
 echo \$? > exit
 date -u +%FT%TZ > ended
 EOF
