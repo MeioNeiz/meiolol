@@ -332,3 +332,4 @@ h3.opp-h .muted { font-weight: 400; font-size: 13px; }
 .evalchart .legend .s1 { background: #3987e5; }
 .evalchart .legend .s2 { background: #d95926; }
 .evalchart .legend .s3 { background: #199e70; }
+.build-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 16px; }

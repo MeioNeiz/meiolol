@@ -472,6 +472,9 @@ pub fn renderPage(site: *const Site, w: *Writer, path: []const u8) !bool {
         try matchup.writeIndex(site, w, if (site.curves) |*c| c else null);
     } else if (strip(path, "matchup/", ".html")) |s| {
         return matchup.route(site, w, if (site.curves) |*c| c else return false, s);
+    } else if (eql(u8, path, builds_page.index_path)) {
+        if (site.view.period != .patch) return false;
+        try builds_page.writeIndex(site, w, if (site.view_builds[site.view.index()]) |*b| b else return false);
     } else if (strip(path, "build/", ".html")) |s| {
         if (site.view.period != .patch) return false;
         return builds_page.route(site, w, if (site.view_builds[site.view.index()]) |*b| b else return false, s);
@@ -1063,7 +1066,13 @@ fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     if (role) |r| {
         try w.print("<h1>{s} lane champions</h1>\n", .{roleName(r)});
     } else try w.writeAll("<h1>Champions</h1>\n");
-    try w.print("<p class=\"muted\"><b>{d}</b> ranked solo/duo games {s}, {s}, all ranks.</p>\n", .{ site.games, site.view.region.in(), site.when });
+    try w.print("<p class=\"muted\"><b>{d}</b> ranked solo/duo games {s}, {s}, all ranks.", .{ site.games, site.view.region.in(), site.when });
+    const patch_view: html.View = .{ .region = site.view.region, .period = .patch };
+    if (site.view_builds[patch_view.index()] != null) try html.tpl.render(w, " <a href=\"{href}\">Builds for patch {patch}</a>.", .{
+        .href = try std.mem.concat(a, u8, &.{ root, site.view.up(), patch_view.dir(), builds_page.index_path }),
+        .patch = site.patch,
+    });
+    try w.writeAll("</p>\n");
     try earlyNote(site, w, false);
     try tierTable(site, w, role, root);
     try html.foot(w, p);

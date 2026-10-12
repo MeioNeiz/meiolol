@@ -49,10 +49,46 @@ fn patchView(site: *const Site) html.View {
 
 /// A page per champion and role with enough of the champion's games (patch views only)
 pub fn paths(site: *const Site, f: *const File, list: *std.ArrayList([]const u8)) !void {
+    try list.append(site.arena, index_path);
     for (site.champs) |ch| for (Role.all) |r| {
         if (shown(f, ch.id, r) == null) continue;
         try list.append(site.arena, try path(site.arena, ch, r));
     };
+}
+
+pub const index_path = "build/index.html";
+
+/// Every champion and role with a build page, by role
+pub fn writeIndex(site: *const Site, w: *Writer, f: *const File) !void {
+    const a = site.arena;
+    const title = try a.print("Builds, patch {s} | meiolol", .{f.label});
+    const desc = try a.print("Runes, items and skill order per champion and role in ranked solo/duo {s}, patch {s}.", .{ site.view.region.in(), f.label });
+    const p = site.page(title, desc, index_path, .champions);
+    try html.head(w, p);
+    try tpl.render(w,
+        \\<h1>Builds, patch {patch}</h1>
+        \\<p class="muted">What players take per champion and role: ranked solo/duo {in}, patch {patch}, {ranks}. A role is listed when it has a tenth or more of the champion's games.</p>
+        \\
+    , .{ .patch = f.label, .in = site.view.region.in(), .ranks = try rankLabel(a, f.min_tier) });
+    for (Role.all) |r| {
+        var any = false;
+        for (site.champs) |ch| any = any or shown(f, ch.id, r) != null;
+        if (!any) continue;
+        try tpl.renderPart(w, "<h2>{role}</h2>\n<ul class=\"build-list\">", .{ .role = root.roleName(r) });
+        for (site.champs) |ch| {
+            const b = shown(f, ch.id, r) orelse continue;
+            try tpl.render(w,
+                \\<li><a class="champ" href="{href}"><img src="{icon}" alt="" loading="lazy" width="32" height="32">{name}</a> <span class="muted">{games}</span></li>
+            , .{
+                .href = try a.print("{s}-{s}.html", .{ ch.slug, root.roleSlug(r) }),
+                .icon = site.icon(ch),
+                .name = ch.name,
+                .games = b.games,
+            });
+        }
+        try w.writeAll("</ul>\n");
+    }
+    try html.foot(w, p);
 }
 
 /// `rest`: "<champion>-<role>" from build/<rest>.html; false for no such page
