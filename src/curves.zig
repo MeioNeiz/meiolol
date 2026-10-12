@@ -21,6 +21,26 @@ pub const Summary = struct {
     skipped: u32,
 };
 
+/// Which games one curves file takes
+pub const Spec = struct {
+    /// Empty: any patch
+    chosen: []const []const u8,
+    /// Riot ms timestamp, 0: any
+    since_ms: i64,
+    platforms: []const []const u8,
+
+    fn takes(s: Spec, patch: []const u8, start: i64, platform: []const u8) bool {
+        if (start < s.since_ms) return false;
+        if (s.chosen.len > 0 and !has(s.chosen, patch)) return false;
+        return has(s.platforms, platform);
+    }
+};
+
+fn has(list: []const []const u8, x: []const u8) bool {
+    for (list) |y| if (std.mem.eql(u8, x, y)) return true;
+    return false;
+}
+
 /// Every ranked solo game with a timeline on `chosen` patches (empty: any) started from
 /// `since_ms` on (Riot ms timestamp, 0: any) and `platforms` (no remakes, a winner, all
 /// ten positions). `legendaries`: sorted finished item ids for
@@ -34,23 +54,51 @@ pub fn build(
     platforms: []const []const u8,
     legendaries: []const u32,
 ) !struct { builder: curvesfile.Builder, summary: Summary } {
-    var b: curvesfile.Builder = .{ .gpa = gpa };
-    errdefer b.deinit();
-    const patch_json = try std.json.Stringify.valueAlloc(gpa, chosen, .{});
+    var b: [1]curvesfile.Builder = .{.{ .gpa = gpa }};
+    errdefer b[0].deinit();
+    var summary: [1]Summary = undefined;
+    const spec: Spec = .{ .chosen = chosen, .since_ms = since_ms, .platforms = platforms };
+    try buildMany(gpa, db, &.{spec}, legendaries, &b, &summary);
+    return .{ .builder = b[0], .summary = summary[0] };
+}
+
+/// As build, into builders[i] for specs[i] in one pass: each timeline is decoded once
+/// however many files take its game. Caller owns the builders, also on error
+pub fn buildMany(
+    gpa: std.mem.Allocator,
+    db: store.Db,
+    specs: []const Spec,
+    legendaries: []const u32,
+    builders: []curvesfile.Builder,
+    summaries: []Summary,
+) !void {
+    @memset(summaries, .{ .games = 0, .skipped = 0 });
+    // The query takes every spec's games (and maybe more); takes() then picks per spec
+    var since: i64 = std.math.maxInt(i64);
+    var patches: std.ArrayList([]const u8) = .empty;
+    defer patches.deinit(gpa);
+    var platforms: std.ArrayList([]const u8) = .empty;
+    defer platforms.deinit(gpa);
+    for (specs) |s| {
+        if (s.chosen.len == 0) since = @min(since, s.since_ms);
+        try patches.appendSlice(gpa, s.chosen);
+        try platforms.appendSlice(gpa, s.platforms);
+    }
+    const patch_json = try std.json.Stringify.valueAlloc(gpa, patches.items, .{});
     defer gpa.free(patch_json);
-    const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
+    const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms.items, .{});
     defer gpa.free(platform_json);
 
     var q = try db.prepare(
-        \\SELECT m.match_id, m.winning_team, t.data
+        \\SELECT m.match_id, m.winning_team, t.data, m.patch, m.game_start, m.platform
         \\FROM matches m JOIN timeline.timelines t USING (match_id)
-        \\WHERE (? = 0 OR m.patch IN (SELECT value FROM json_each(?)))
-        \\  AND m.game_start >= ? AND m.queue_id = ?
+        \\WHERE (m.game_start >= ? OR m.patch IN (SELECT value FROM json_each(?)))
+        \\  AND m.queue_id = ?
         \\  AND m.platform IN (SELECT value FROM json_each(?))
         \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
     );
     defer q.deinit();
-    try q.bind(.{ chosen.len, patch_json, since_ms, stats.ranked_solo, platform_json });
+    try q.bind(.{ since, patch_json, stats.ranked_solo, platform_json });
     // tier is the rank snapshot stored with the match (players is emptied on a rekey);
     // mastery is a later snapshot of each player, absent after a rekey
     var players = try db.prepare(
@@ -63,26 +111,36 @@ pub fn build(
 
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
-    var summary: Summary = .{ .games = 0, .skipped = 0 };
+    var takers: std.ArrayList(usize) = .empty;
+    defer takers.deinit(gpa);
     while (try q.step()) {
+        takers.clearRetainingCapacity();
+        for (specs, 0..) |s, i| {
+            if (s.takes(q.bytes(3), q.int(4), q.bytes(5))) try takers.append(gpa, i);
+        }
+        if (takers.items.len == 0) continue;
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
         const blue_won = q.int(1) == 100;
         const t = decode(arena, q.bytes(2)) catch |err| {
             log.warn("{s}: {t}", .{ q.bytes(0), err });
-            summary.skipped += 1;
+            for (takers.items) |i| summaries[i].skipped += 1;
             continue;
         };
         try players.bind(.{q.bytes(0)});
         const game = try readGame(arena, &players) orelse {
-            summary.skipped += 1;
+            for (takers.items) |i| summaries[i].skipped += 1;
             continue;
         };
-        for (Role.all) |r| try b.addLane(lane(t, game, r, blue_won, legendaries));
-        b.addGame();
-        summary.games += 1;
+        for (Role.all) |r| {
+            const l = lane(t, game, r, blue_won, legendaries);
+            for (takers.items) |i| try builders[i].addLane(l);
+        }
+        for (takers.items) |i| {
+            builders[i].addGame();
+            summaries[i].games += 1;
+        }
     }
-    return .{ .builder = b, .summary = summary };
 }
 
 fn decode(arena: std.mem.Allocator, blob: []const u8) !timeline.Timeline {
@@ -248,6 +306,22 @@ test "curves from a real timeline" {
         var recent = try build(gpa, db, &.{}, 1000, &.{"EUW1"}, &.{});
         defer recent.builder.deinit();
         try testing.expectEqual(Summary{ .games = 1, .skipped = 0 }, recent.summary);
+    }
+    {
+        // One pass for several files: each gets what its own build would
+        var b: [3]curvesfile.Builder = @splat(.{ .gpa = gpa });
+        defer for (&b) |*x| x.deinit();
+        var sum: [3]Summary = undefined;
+        try buildMany(gpa, db, &.{
+            .{ .chosen = &.{}, .since_ms = 1000, .platforms = &.{"EUW1"} },
+            .{ .chosen = &.{"16.19"}, .since_ms = 0, .platforms = &.{"EUW1"} },
+            .{ .chosen = &.{"16.20"}, .since_ms = 0, .platforms = &.{ "KR", "EUW1" } },
+        }, &.{}, &b, &sum);
+        try testing.expectEqual(Summary{ .games = 1, .skipped = 0 }, sum[0]);
+        try testing.expectEqual(Summary{ .games = 0, .skipped = 0 }, sum[1]);
+        try testing.expectEqual(Summary{ .games = 2, .skipped = 0 }, sum[2]);
+        try testing.expectEqual(5, b[0].lanes.items.len);
+        try testing.expectEqual(10, b[2].lanes.items.len);
     }
     var r = try build(gpa, db, &.{"16.20"}, 0, &.{"EUW1"}, &.{ 1055, 3078 });
     defer r.builder.deinit();

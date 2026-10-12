@@ -211,7 +211,9 @@ games with no remake, a winner and all ten positions count.
 `meiolol curves` (--platform as stats, --min-games default 1: all) reads every ranked
 solo game with a timeline: by default every patch of the last --days (30) to
 data/export/recent-curves.bin (label "last 30 days"); with --patch, those patches to
-data/export/curves-<patch>.bin (the Your games service reads these per patch). Per lane
+data/export/curves-<patch>.bin (the Your games service reads these per patch). `--site`
+(the web loop) writes the four files the site reads, EUW and every platform by last 30
+days and --patch, in one pass: each timeline is decoded once. Per lane
 matchup (role, champion pair), bracket (all, Iron-Silver, Gold-Emerald, Diamond+;
 median visible tier of the game's players, never MMR) and experience (all games, or a
 or b with 100k+ mastery): per minute 1..25 the raw p25/p50/p75 of gold, XP and CS (lane

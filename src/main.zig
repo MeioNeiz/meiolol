@@ -83,6 +83,9 @@ const usage =
     \\              --out FILE       default DIR/export/curves-<patch>.bin (all-curves-...
     \\                               and all-recent-curves.bin with --platform all)
     \\              --min-games N    leave out matchups with fewer games (default 1: all)
+    \\              --site           the files the site reads, in one pass over the
+    \\                               timelines: EUW and every platform, last --days
+    \\                               and (with --patch) that patch, default paths
     \\  builds      write what players build per champion and role (builds.zig): runes,
     \\              summoner spells, starting items, boots, first items, skill order;
     \\              JSON the site reads (needs Data Dragon)
@@ -474,6 +477,7 @@ fn cmdCurves(c: *Cmd) !u8 {
     var out: ?[]const u8 = null;
     var days: u32 = 30;
     var min_games: u32 = 1;
+    var site_files = false;
     while (c.next()) |_| {
         if (try g.parse(c)) continue;
         if (c.is("--out")) {
@@ -482,48 +486,95 @@ fn cmdCurves(c: *Cmd) !u8 {
             days = try c.int(u32);
         } else if (c.is("--min-games")) {
             min_games = try c.int(u32);
+        } else if (c.is("--site")) {
+            site_files = true;
         } else return error.Usage;
     }
+    if (site_files and (out != null or g.platforms.items.len > 0)) return error.Usage;
     const gpa = c.init.gpa;
     const io = c.init.io;
+    const arena = c.arena;
     const db = try c.open();
     defer db.close();
     const wanted = g.patches.items;
-    const platforms = g.platformIds();
-    var label_buf: [core.statsfile.patch_len]u8 = undefined;
-    const label = if (wanted.len > 0)
-        try stats.label(&label_buf, wanted)
-    else
-        try std.fmt.bufPrint(&label_buf, "last {d} days", .{days});
-    const path = out orelse if (wanted.len > 0)
-        try curvesPath(c.arena, c.data_dir, wanted, g.every_platform)
-    else
-        try recentCurvesPath(c.arena, c.data_dir, g.every_platform);
     const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
-    const since_ms: i64 = if (wanted.len > 0) 0 else now_ms - @as(i64, days) * std.time.ms_per_day;
-    const item_patch = if (wanted.len > 0) wanted[0] else (try newestPatch(c.arena, db, platforms))[0];
+    const recent_ms = now_ms - @as(i64, days) * std.time.ms_per_day;
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    const recent_label = try std.fmt.allocPrint(arena, "last {d} days", .{days});
+    const patch_label = if (wanted.len > 0) try arena.dupe(u8, try stats.label(&label_buf, wanted)) else "";
+
+    const File = struct { spec: curves.Spec, label: []const u8, path: []const u8 };
+    var files: std.ArrayList(File) = .empty;
+    if (site_files) {
+        var every: std.ArrayList([]const u8) = .empty;
+        for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
+        for ([_]bool{ false, true }) |all| {
+            const platforms: []const []const u8 = if (all) every.items else &.{"EUW1"};
+            try files.append(arena, .{
+                .spec = .{ .chosen = &.{}, .since_ms = recent_ms, .platforms = platforms },
+                .label = recent_label,
+                .path = try recentCurvesPath(arena, c.data_dir, all),
+            });
+            if (wanted.len > 0) try files.append(arena, .{
+                .spec = .{ .chosen = wanted, .since_ms = 0, .platforms = platforms },
+                .label = patch_label,
+                .path = try curvesPath(arena, c.data_dir, wanted, all),
+            });
+        }
+    } else {
+        const path = out orelse if (wanted.len > 0)
+            try curvesPath(arena, c.data_dir, wanted, g.every_platform)
+        else
+            try recentCurvesPath(arena, c.data_dir, g.every_platform);
+        try files.append(arena, .{
+            .spec = .{
+                .chosen = wanted,
+                .since_ms = if (wanted.len > 0) 0 else recent_ms,
+                .platforms = g.platformIds(),
+            },
+            .label = if (wanted.len > 0) patch_label else recent_label,
+            .path = path,
+        });
+    }
+    // --site: EUW's patch for every file, so EUW's files match a run of their own
+    const item_patch = if (wanted.len > 0)
+        wanted[0]
+    else
+        (try newestPatch(arena, db, if (site_files) &.{"EUW1"} else g.platformIds()))[0];
 
     const legendaries = ddragon.legendaries(gpa, io, item_patch) catch |err| blk: {
         std.log.warn("no item list from Data Dragon ({t}): curves without first items", .{err});
         break :blk &.{};
     };
     defer gpa.free(legendaries);
-    var r = try curves.build(gpa, db, wanted, since_ms, platforms, legendaries);
-    defer r.builder.deinit();
-    if (r.summary.games == 0) {
-        std.log.err("no ranked solo games with timelines for {s}", .{label});
-        return error.NoMatches;
+    const specs = try arena.alloc(curves.Spec, files.items.len);
+    for (files.items, specs) |f, *s| s.* = f.spec;
+    const builders = try arena.alloc(core.curvesfile.Builder, files.items.len);
+    @memset(builders, .{ .gpa = gpa });
+    defer for (builders) |*b| b.deinit();
+    const summaries = try arena.alloc(curves.Summary, files.items.len);
+    try curves.buildMany(gpa, db, specs, legendaries, builders, summaries);
+
+    var missing = false;
+    for (files.items, builders, summaries) |f, *b, sum| {
+        if (sum.games == 0) {
+            std.log.err("no ranked solo games with timelines for {s}: {s}", .{ f.label, f.path });
+            missing = true;
+            continue;
+        }
+        var file = try std.Io.Dir.cwd().createFileAtomic(io, f.path, .{ .make_path = true, .replace = true });
+        defer file.deinit(io);
+        var buf: [64 * 1024]u8 = undefined;
+        var w = file.file.writer(io, &buf);
+        try b.write(&w.interface, f.label, min_games);
+        try w.interface.flush();
+        try file.replace(io);
+        std.log.info("{s}: {s}, {d} games ({d} skipped)", .{ f.path, f.label, sum.games, sum.skipped });
+        // Freed as it goes: the next file's fit needs the room
+        b.deinit();
+        b.* = .{ .gpa = gpa };
     }
-    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
-    defer file.deinit(io);
-    var buf: [64 * 1024]u8 = undefined;
-    var w = file.file.writer(io, &buf);
-    try r.builder.write(&w.interface, label, min_games);
-    try w.interface.flush();
-    try file.replace(io);
-    std.log.info("{s}: {s}, {d} games ({d} skipped)", .{
-        path, label, r.summary.games, r.summary.skipped,
-    });
+    if (missing) return error.NoMatches;
     return 0;
 }
 

@@ -8,7 +8,8 @@
 # lives in riot.txt beside bin/.
 # Lane curves are rebuilt hourly and when the patch changes, one file per site view (EUW
 # and every region, by last 30 days and current patch; the EUW patch file is also the
-# Your games service's); fresh site curves force an upload. The upload rules count EUW
+# Your games service's), all four in one pass over the timelines (`meiolol curves
+# --site`); fresh site curves force an upload. The upload rules count EUW
 # games on the current patch only.
 # Daily, `meiolol eval` (docs/model.md) appends a line to data/eval-history.tsv (model
 # accuracy vs data volume) and leaves its report in data/eval-latest.md. Read-only on the
@@ -67,13 +68,7 @@ while true; do
     fi
     if (( now - last_curves >= 3600 )) || [[ "$patch" != "$curves_patch" ]]; then
         # Fails harmlessly (logged) until there are timelines
-        if c=$(bin/meiolol curves 2>&1); then fresh_curves=1; fi
-        echo "$c"
-        bin/meiolol curves --platform all 2>&1
-        if [[ -n "$patch" ]]; then
-            bin/meiolol curves --patch "$patch" 2>&1
-            bin/meiolol curves --patch "$patch" --platform all 2>&1
-        fi
+        if bin/meiolol curves --site ${patch:+--patch "$patch"} 2>&1; then fresh_curves=1; fi
         last_curves=$now curves_patch=$patch
         push_curves
     fi
