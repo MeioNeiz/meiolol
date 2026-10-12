@@ -4,9 +4,12 @@ Updated 2026-10-11 (end of the first multi-session day).
 
 ## Goal now: production key
 
-Product: "learn your lane" (docs/concept.md, adopted 2026-10-11): your own games laid
-over minute-by-minute matchup curves, public matchup pages, Daily Draft, Learn mode,
-Pool, Squads; picks only as several options with reasons. Research behind it in
+Product: "scout your own games" (docs/concept.md "Identity draft four", Jacob
+2026-10-12; replaces "learn your lane"): the player's own games first, as stats nobody
+else shows (game rewind, highlights and on-request record book, scouting report, matchup
+notebook, pre-game brief, squads), with the minute-by-minute matchup curves as the
+benchmark; Daily Draft, Learn, Pool kept; picks only as several options with reasons.
+Crawl is Platinum IV+ only, so "typical" means Platinum+. Research behind it in
 research/questions/ (josearch). Production application started by Jacob 2026-10-11 (text
 in docs/production-key.md); review takes 3-9 months, Riot looks at the site at review
 time, so keep building and keep the site up. Don't edit the application while it queues.
@@ -236,6 +239,22 @@ next steps land here.
   only; weekly recap on read with curve awards; squad Daily Draft needs a score endpoint;
   Discord PNG via canvas; coach kind = roster + weekly review + chart export; refresh
   on visit at most every 30 min
+
+### Identity draft four (meiolol-27, 2026-10-12)
+
+- Done: home page leads with the Riot ID lookup, six pillars marked live or coming;
+  Highlights tiles on Your games (d24c299)
+- Now: Death Cost (gold given per death, what the enemy took in the next 60 s) and the
+  Turning Minute (win chance by minute, whole game) in src/api/game.zig and your.js
+- Then, in Jacob's order of interest: spike window, level spikes, counter-item timing,
+  builds that worked, tilt check, snowball vs comeback, pool health, baron calls,
+  sidelane, fingerprint, role lenses, pre-game brief (desktop), squad scouting
+- Record book: full history only on request by the account owner (icon check), kept
+  while used; needs privacy.md text
+- Before Jacob presses Verify on prod app 890243 (still editable): new application text
+  (identity, Platinum+ scope, data kept, desktop app + LCU endpoints, PUUID-link note)
+  and privacy.md retention (raw summaries indefinitely, compact forever, pseudonymised
+  raw archive on the gpu-box until PUUID blanking at 24 months). Jacob: not yet
 
 ### Curves, matchup pages, Patch day (was meiolol-b5, pool-9f)
 
