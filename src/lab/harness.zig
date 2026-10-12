@@ -607,3 +607,25 @@ test "fractions are nested" {
     try std.testing.expect(kept[0] > 400 and kept[0] < 600);
     try std.testing.expectEqual(@as(usize, 2000), kept[2]);
 }
+
+test "win is scored on games that ended before 15:00" {
+    const gpa = std.testing.allocator;
+    var f = try Fixture.init(gpa, 3000, 5);
+    defer f.data.deinit();
+    // Every third game short: no timeline outcomes, as rows.zig leaves them
+    for (f.data.games, 0..) |*g, gi| g.timeline15 = gi % 3 != 0;
+    for (f.data.rows) |*r| if (!f.data.games[r.game].timeline15) {
+        r.y[api.outcomeIndex(.gold14)] = std.math.nan(f32);
+    };
+    const ranks = try gameRanks(gpa, &f.data);
+    defer gpa.free(ranks);
+    const c = try cuts(gpa, &f.data, 0);
+    var s = try score(Spy, gpa, &f.data, ranks, c, .dev, 1);
+    defer s.deinit(gpa);
+    var n: [2]usize = @splat(0);
+    for (s.row) |ri| for ([_]api.Outcome{ .win, .gold14 }, &n) |o, *x| {
+        x.* += @intFromBool(!std.math.isNan(f.data.rows[ri].y[api.outcomeIndex(o)]));
+    };
+    try std.testing.expectEqual(s.row.len, n[0]);
+    try std.testing.expect(n[1] < n[0]);
+}
