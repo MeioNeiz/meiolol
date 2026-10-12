@@ -6,10 +6,11 @@
 # rule); `watch-install` sets it up. docs/compute.md
 #
 #   deploy/lab-run.sh start HOST NAME [--meiolol] [--head | --no-build] [--build-arg A]...
-#                           [--with PATH]... -- ARGS...
+#                           [--with PATH]... [--res cpu|gpu|none] -- ARGS...
 #   deploy/lab-run.sh status [HOST]
 #   deploy/lab-run.sh logs HOST RUN [LINES]
 #   deploy/lab-run.sh stop HOST RUN
+#   deploy/lab-run.sh restart HOST RUN       run it again in its dir (after a WSL restart)
 #   deploy/lab-run.sh pull HOST RUN          results to data/runs/RUN here
 #   deploy/lab-run.sh watch-install          League watcher on the gpu-box
 #
@@ -21,6 +22,10 @@
 # tree; a half-written file there breaks or silently changes the build).
 # --build-arg goes to zig build (deploy/lab-exp.sh: -Dcand=DIR); --with copies a file or
 # directory into the run dir (the candidate's source, kept with its scores)
+# Queue: a run waits for its resource's lock on the host (~/ml/locks/RES; cpu by default,
+# since every run uses all cores via par.zig), so runs go one after another, not over each
+# other. A GPU run takes gpu and can share the PC with a cpu one. Waiting runs are
+# "queued"; `started` is written once the lock is held
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -29,6 +34,7 @@ SRC=$ROOT
 HEAD_ONLY=0
 BUILD_ARGS=()
 WITH=()
+RES=cpu
 WATCH=meiolol-lab-watch
 
 on() {
@@ -91,6 +97,7 @@ start() {
             --head) HEAD_ONLY=1 ;;
             --build-arg) BUILD_ARGS+=("$2"); shift ;;
             --with) WITH+=("$2"); shift ;;
+            --res) RES=$2; shift ;;
             --) shift; break ;;
             *) echo "unknown option $1"; exit 2 ;;
         esac
@@ -101,6 +108,7 @@ start() {
     local tilde="~"
     [[ "$host" == mac ]] || set -- "${@/#$HOME/$tilde}"
     [[ "$name" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "NAME: letters, digits, _ . -"; exit 2; }
+    [[ "$RES" =~ ^(cpu|gpu|none)$ ]] || { echo "--res: cpu, gpu or none"; exit 2; }
     local path
     path=$(binpath "$host" "$bin")
     local tmp
@@ -126,6 +134,7 @@ start() {
             echo "dirty $(git -C "$ROOT" status --porcelain -- src build.zig | wc -l) files"
         fi
         echo "args $*"
+        echo "res $RES"
         if (( ${#BUILD_ARGS[@]} )); then echo "build ${BUILD_ARGS[*]}"; fi
         if (( ${#WITH[@]} )); then echo "with ${WITH[*]}"; fi
     } > "$tmp/meta"
@@ -134,11 +143,21 @@ start() {
     # caffeinate: a Mac asleep mid-run looks like a hung run
     local awake=""
     [[ "$host" == mac ]] && awake="caffeinate -i "
-    # $$ is the process group: setpgrp below makes this bash its leader
+    # $$ is the process group: setpgrp below makes this bash its leader. The lock is on
+    # fd 9, which the job inherits, so it is held until the job and this bash are gone.
+    # perl, not flock(1): the Mac has none
+    local lock=""
+    [[ "$RES" == none ]] || lock="mkdir -p ~/ml/locks
+exec 9>> ~/ml/locks/$RES
+echo $RES > queued
+perl -MFcntl=:flock -e 'open(my \$f, q{>&=}, 9) or die; flock(\$f, LOCK_EX) or die' || exit 1
+rm queued"
     cat > "$tmp/job.sh" <<EOF
 #!/usr/bin/env bash
 cd "\$(dirname "\$0")"
 echo \$\$ > job.pgid
+rm -f started
+$lock
 date -u +%FT%TZ > started
 ${awake}nice -n 10 ./$bin $*
 echo \$? > exit
@@ -148,11 +167,13 @@ EOF
     on "$host" "mkdir -p $RUNS/$run"
     copy "$host" "$RUNS/$run" "$path" "$tmp/meta" "$tmp/src.diff" "$tmp/job.sh"
     if (( ${#WITH[@]} )); then copy "$host" "$RUNS/$run" "${WITH[@]}"; fi
-    # Braces: only the job goes to the background, so nothing keeps ssh's output open
-    on "$host" "cd $RUNS/$run && { nohup perl -e 'setpgrp(0,0); exec @ARGV' ./job.sh \
-        > log 2>&1 < /dev/null & }"
+    on "$host" "cd $RUNS/$run && $LAUNCH"
     echo "started $run on $host"
 }
+
+# Starts job.sh detached in the run dir, its own process group. Braces: only the job goes
+# to the background, so nothing keeps ssh's output open. deploy/lab-watch.sh has a copy
+LAUNCH="{ nohup perl -e 'setpgrp(0,0); exec @ARGV' ./job.sh >> log 2>&1 < /dev/null & }"
 
 # One line per run: name, state, start, last log line
 status() {
@@ -164,7 +185,9 @@ status() {
             if [[ -f $d/exit ]]; then s="exit $(cat $d/exit)"
             elif [[ -f $d/stopped ]]; then s=stopped
             elif [[ -n $pg ]] && kill -0 -- -$pg 2>/dev/null; then
-                if [[ -f $d/paused ]]; then s=paused; else s=running; fi
+                if [[ -f $d/paused ]]; then s=paused
+                elif [[ -f $d/queued ]]; then s="queued $(cat $d/queued)"
+                else s=running; fi
             else s=died; fi
             printf "%s | %s | %s | %s\n" "$d" "$s" "$(cat $d/started 2>/dev/null)" \
                 "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80)"
@@ -176,7 +199,7 @@ status() {
 
 case "${1:-}" in
     start)
-        (( $# >= 3 )) || { sed -n '8,13p' "$0"; exit 2; }
+        (( $# >= 3 )) || { sed -n '8,14p' "$0"; exit 2; }
         check_host "$2"
         start "${@:2}"
         ;;
@@ -186,6 +209,16 @@ case "${1:-}" in
         fi
         ;;
     logs) check_host "$2"; on "$2" "tail -n ${4:-40} $RUNS/$3/log" ;;
+    restart)
+        check_host "$2"
+        # shellcheck disable=SC2016 # expands on the host
+        on "$2" 'cd '"$RUNS/$3"' || exit 1
+            pg=$(cat job.pgid 2>/dev/null)
+            if [[ -n $pg ]] && kill -0 -- -$pg 2>/dev/null; then echo "still running"; exit 1; fi
+            rm -f exit ended stopped paused queued
+            echo "$(date -u +%FT%TZ) restart" >> restarts && '"$LAUNCH"
+        echo "restarted $3 on $2"
+        ;;
     stop)
         check_host "$2"
         # CONT after TERM: a paused group only acts on the TERM once it runs again
@@ -218,5 +251,5 @@ case "${1:-}" in
             && systemctl --user enable -q $WATCH \
             && systemctl --user restart $WATCH && systemctl --user is-active $WATCH"
         ;;
-    *) sed -n '8,13p' "$0"; exit 2 ;;
+    *) sed -n '8,14p' "$0"; exit 2 ;;
 esac

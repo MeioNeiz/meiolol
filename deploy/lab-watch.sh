@@ -5,6 +5,9 @@
 #   or game is up, every live run in ~/ml/runs is stopped (SIGSTOP to its process
 #   group), and continued once both are gone; each pause and resume goes to the run's
 #   pauses.log. A run started while League is up is stopped on the next tick
+# - WSL restarts (a shutdown, a reboot): at start, a run that was live when WSL went down
+#   (job.pgid from the last day, older than this boot, no exit) runs again in its dir,
+#   twice at most (restarts); runs resume from their own checkpoints, if they keep any
 # - Sleep (Jacob: awake while busy): while a run is live, or another job keeps a file in
 #   ~/ml/awake.d fresh (touched in the last 15 min, eg the archive pull), Windows is held
 #   awake by deploy/windows/meiolol-awake.ps1, which watches a flag file this keeps fresh
@@ -26,6 +29,20 @@ league() {
     out=$("$tasklist" /NH /FO CSV 2>/dev/null) || return 0
     grep -qiE '^"(LeagueClient|League of Legends)\.exe"' <<< "$out"
 }
+
+boot=$(awk '$1 == "btime" { print $2 }' /proc/stat)
+for d in */; do
+    d=${d%/}
+    [[ -f $d/job.pgid && ! -f $d/exit && ! -f $d/stopped ]] || continue
+    since=$(stat -c %Y "$d/job.pgid")
+    (( since < boot && since > boot - 86400 )) || continue
+    [[ $(wc -l < "$d/restarts" 2> /dev/null || echo 0) -lt 2 ]] || continue
+    rm -f "$d/paused" "$d/queued"
+    log "restart" >> "$d/restarts"
+    # As deploy/lab-run.sh restart: own process group, detached
+    (cd "$d" && nohup perl -e 'setpgrp(0,0); exec @ARGV' ./job.sh >> log 2>&1 < /dev/null &)
+    log "restarted $d (WSL restart)"
+done
 
 was='' holder='' busy_was=''
 while true; do

@@ -32,8 +32,10 @@ experiments run on:
 ## Runs (deploy/lab-run.sh)
 
 ```
-deploy/lab-run.sh start HOST NAME [--meiolol] [--no-build] -- ARGS...
-deploy/lab-run.sh status [HOST] | logs HOST RUN [N] | stop HOST RUN | pull HOST RUN
+deploy/lab-run.sh start HOST NAME [--meiolol] [--head | --no-build] [--res cpu|gpu|none]
+    -- ARGS...
+deploy/lab-run.sh status [HOST] | logs HOST RUN [N] | stop HOST RUN | restart HOST RUN
+deploy/lab-run.sh pull HOST RUN
 deploy/lab-run.sh watch-install
 ```
 
@@ -49,6 +51,13 @@ deploy/lab-run.sh watch-install
   relative outputs land in the run dir, `pull` copies it (minus the binary) to
   data/runs/RUN here
 - Jobs run under nice 10 in their own process group (`stop` sends TERM to the group)
+- Queue: a run waits for its resource's lock on the host (~/ml/locks/cpu or gpu) before
+  `started`; status shows it "queued". cpu by default (every run uses all cores), --res
+  gpu for GPU work (it can share the PC with a cpu run), none to skip. lab-exp.sh counts
+  only running time toward its budget, so queued runs aren't killed
+- WSL restarts: lab-watch.sh, starting with WSL, runs again (twice at most) any run that
+  was live when WSL went down; `restart` does it by hand. A run over ~1 h should keep
+  checkpoints in its run dir and resume from them (none does yet: runs take minutes)
 
 ## WSL memory
 
@@ -107,11 +116,10 @@ first.
 
 ### 3. Running more than one thing (when the lab agent starts)
 
-- Queue: `lab-run queue HOST NAME -- ARGS` waits for its resource (the one GPU, or a CPU
-  share) via a lock in job.sh; the lab agent's harness submits through it so overnight
-  campaigns run back to back without overlapping
+- Queue (done, 2026-10-12): every lab-run start waits for its resource's lock, so
+  lab-exp campaigns run back to back without overlapping (Runs above)
 - Progress: runs append metrics.tsv (the dashboard, deploy/lab-push.sh, already reads
-  it); runs over ~1 h write checkpoints and resume after a WSL restart or reboot
+  it). Restart after a WSL restart: done; checkpoints inside a model once one runs ~1 h
 - Results: the harness keeps the ladder (lab-agent.md); docs/model.md keeps the dated
   tables. Nothing new here
 

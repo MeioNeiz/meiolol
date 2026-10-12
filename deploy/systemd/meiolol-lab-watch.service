@@ -4,6 +4,9 @@ Description=Pause meiolol lab runs while League is open (deploy/lab-watch.sh, gp
 [Service]
 ExecStart=/bin/sh -c 'exec %h/ml/bin/lab-watch.sh >> %h/ml/runs/watcher.log 2>&1'
 Restart=always
+# Runs it restarts after a WSL restart live in its cgroup: a watcher restart must not
+# kill them
+KillMode=process
 RestartSec=10
 
 [Install]

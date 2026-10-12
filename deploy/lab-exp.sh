@@ -90,12 +90,13 @@ start_clean() {
     return $status
 }
 
-# Waits for RUN to end; only running time counts toward the budget
+# Waits for RUN to end; only running time counts toward the budget, not time paused or
+# queued behind another run (deploy/lab-run.sh: no `started` until it holds its lock)
 wait_run() {
     local run=$1 used=0 state
     while true; do
         state=$(on "cd ml/runs/$run && if [[ -f exit ]]; then echo exit; \
-            elif [[ -f paused ]]; then echo paused; else echo running; fi")
+            elif [[ -f paused || ! -f started ]]; then echo waiting; else echo running; fi")
         [[ "$state" == exit ]] && return 0
         [[ "$state" == running ]] && used=$((used + 10))
         if (( used > 2 * BUDGET )); then
