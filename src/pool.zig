@@ -136,12 +136,15 @@ pub fn tallyGames(
 ) !void {
     const platform_json = try stats.setsJson(gpa, sets);
     defer gpa.free(platform_json);
+    // CROSS JOIN: matches first, in table order. Walking the puuid index instead reads
+    // participants pages at random, 6x slower. By champion within a player, as the old
+    // GROUP BY puuid, champion gave: the first of tied top champions is the main
     var q = try db.prepare(
         \\SELECT p.puuid, m.platform, p.champion_id, count(*)
-        \\FROM participants p JOIN matches m USING (match_id)
+        \\FROM matches m CROSS JOIN participants p USING (match_id)
         \\WHERE m.queue_id = ? AND m.remake = 0 AND p.puuid IS NOT NULL
         \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\GROUP BY 1, 2, 3 ORDER BY 1
+        \\GROUP BY 1, 2, 3 ORDER BY 1, 3
     );
     defer q.deinit();
     try q.bind(.{ stats.ranked_solo, platform_json });

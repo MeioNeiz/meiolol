@@ -158,9 +158,10 @@ pub fn tallyHistory(
     const platform_json = try stats.setsJson(arena, sets);
     const gold = try goldMap(arena, db, platform_json);
 
+    // CROSS JOIN: matches first, as in pool.tallyGames (8x faster than the puuid index)
     var q = try db.prepare(
         \\SELECT pa.puuid, pa.champion_id, pa.match_id, pa.slot, pa.win, m.platform
-        \\FROM participants pa JOIN matches m USING (match_id) JOIN players pl USING (puuid)
+        \\FROM matches m CROSS JOIN participants pa USING (match_id) JOIN players pl USING (puuid)
         \\WHERE pl.matches_checked_at IS NOT NULL AND m.queue_id = ? AND m.remake = 0
         \\  AND m.platform IN (SELECT value FROM json_each(?))
         \\ORDER BY pa.puuid, pa.champion_id, m.game_start
