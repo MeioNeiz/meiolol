@@ -325,8 +325,9 @@ next steps land here.
   revert if models show matches outside EUW matter more). Disk is not a constraint:
   Jacob plans to buy more space (see Storage and hosting under Open decisions). Disk runway ~30 days, so the gpu-box raw archive
   (meiolol-3c: `meiolol raw-export`, salted-hash pseudonymised, pull timer with acks,
-  prune after ack, forget coverage) must be live within ~3 weeks. No study window yet.
-  Privacy draft (30 days) needs updating to match (meiolol-83)
+  prune after ack, forget coverage) must be live within ~3 weeks. Archive kept until player ids
+  are blanked at 24 months, as the crawler does (Jacob via meiolol-27). Privacy draft
+  (30 days) update on hold until Jacob asks (meiolol-27)
 - Result (meiolol-3c, docs/model.md "Team effects on early outcomes"): enemy and ally
   champions shift gold@14, lane diff, CS@10, deaths before 15 and first item
   additively, clear of 0; champion-specific team interactions (by class or champion)
