@@ -97,6 +97,41 @@ Train 5335 games (27 Sep to 8 Oct), test 1334 (8 to 11 Oct, all 16.20).
   after the rekey: 585 train / 0 test games with a crawled history, 0 with mastery;
   skipped (needs 300 / 100)
 
+## Shared protocol, 2026-10-12 (meiolol-3c and meiolol-2a)
+
+Both model agents score on the same rows so their numbers compare. Agreed between them;
+outcomes and readings decided by Jacob the same day.
+
+- Data: one snapshot of the three box DBs (VACUUM INTO), PUUIDs replaced by salted
+  hashes, forgotten players dropped, deleted when a newer snapshot replaces it.
+  Snapshot: pending (stamp, gameCreation cutoff and row counts go here)
+- Split: eval's. Test = newest 20% of EUW1 games by gameCreation; train = older games,
+  every platform. Tuning by folds inside train only; test touched once per model
+- Rows: ranked solo, non-remake, complete roles (stats.scan rules). Continuous outcomes
+  also need a compact timeline with frame 15. Platinum IV+ only (crawl floor)
+- Outcomes:
+  - win: log loss, paired interval vs champion base rates
+  - gold14: total_gold at frame 14
+  - lanediff14: gold14 minus the lane opponent's gold14
+  - cs10: minions + jungle_minions at frame 10
+  - deaths15: CHAMPION_KILL events with victim = p and t < 900000 ms
+  - first_item: minutes (fractional) of p's first ITEM_PURCHASED of an item in the
+    patch's finished set (ddragon.legendaries: SR, purchasable, in store, cost >= 2200,
+    builds into nothing, not boots/consumable/champion-only), not cancelled by an
+    ITEM_UNDO (before = item, after = 0; take the next one). Sold or destroyed later
+    still counts; quest/Ornn/transform upgrades don't. Never completed = censored:
+    out of the MSE, censored share reported per champion-role beside it. Finished sets
+    per patch in data/snap-<stamp>/legendaries.tsv (offline)
+  - continuous outcomes: held-out MSE vs champion-role mean (train), paired per-row
+    intervals
+- A gain counts only when its 95% interval excludes 0. Baselines to beat: champion base
+  rates for everyone; 3c's additive models for 2a's interaction and embedding models
+  (shared per-row prediction file, paired between any two models)
+- Each model labelled with train-time features and champ-select (use-time) features.
+  Use-time: champions, roles, the user's own rank and experience, aggregate facts only.
+  Other players' stats and end-of-game stats: training covariates or post-game lessons,
+  never champ-select inputs
+
 ## Next steps
 
 - Experience term: rerun once the daily eval shows 300+ train and 100+ test games per
