@@ -20,6 +20,11 @@ Platinum IV+ games only unless stated (crawl floor).
 
 ## Early game
 
+- 2026-10-12: The lane opponent's champion has its own effect on everyone in your role,
+  beyond the matchup cell. Adding it (3c-team2) beats every earlier model on all five
+  early outcomes (+0.3-0.7% of base MSE) and ties or beats lane embeddings; the
+  embeddings' thin-matchup gain was mostly this. Evidence: model.md "3c-team2". Sure.
+  Use: lane curves from the opponent's effect plus the shrunk pair cell, no embeddings
 - 2026-10-12: Enemy and ally champions shift your early game (gold@14, lane gold diff,
   CS@10, deaths before 15, first item) additively: the same enemy shifts everyone in a
   role about equally. Own champion sd 270-360 gold@14, lane opponent 74-196, each other
@@ -30,17 +35,31 @@ Platinum IV+ games only unless stated (crawl floor).
   detectable beyond the lane at 118k games: under ~20 gold@14. Evidence: model.md "Team
   effects" and "Champion embeddings against the enemy team" (two model families agree).
   Sure at this size. Site may not offer team counters or "best pick vs this comp"
-- 2026-10-12: Real interactions live in the lane. Champion embeddings beat per-pair
+- ~~2026-10-12: Real interactions live in the lane. Champion embeddings beat per-pair
   cells only in thin matchups: under 25 train games lanediff14 +2.4%, cs10 +2.2% of base
   MSE; at 100+ games nothing. Evidence: model.md "Champion embeddings", 533d450. Sure.
-  Use: embeddings (or a blend by count) for lane curves under ~100 games
+  Use: embeddings (or a blend by count) for lane curves under ~100 games~~
 - 2026-10-12: Most of the variation in early numbers is the game, not the draft: the
   draft explains a few % of gold@14, CS@10 and deaths variance. Sure. Site: show spreads
   and intervals, never single predictions
 
 ## Items
 
+- 2026-10-12: Which item a player finishes barely matters for winning beyond when it
+  was finished and the lead then: item term ~1 pp sd in top and jungle, none in other
+  roles; item on a specific champion none. Evidence: model.md "Items given the state at
+  purchase" (2.9M rows). Sure at this size. Site may not rank builds by win rate; item
+  timing is fair game
+
 ## Objectives
+
+- 2026-10-12: Objectives are worth gold-lead equivalents beyond their own gold: a
+  dragon ~1000, soul point ~800 more, soul ~4000, elder ~4800, baron buff 400-1000, an
+  inhibitor down 900 at 20 min to 2300 at 30, a grub ~100-150; towers only their gold.
+  The same whoever is ahead. Evidence: model.md "Objective value given the state"
+  (118k train; held-out gain over the gold and XP lead clear at every minute). Sure as
+  description, not cause. Site may say in post-game lessons "that dragon was worth
+  about 1000 gold"
 
 ## Playstyle
 

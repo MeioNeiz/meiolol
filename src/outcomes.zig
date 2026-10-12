@@ -43,6 +43,8 @@ const Row = struct {
     slot: u8,
     role: u8,
     platform: u8,
+    /// dense index over the scanned patches
+    patch: u8,
     champ: u16,
     ally: [Role.count]u16,
     enemy: [Role.count]u16,
@@ -84,6 +86,10 @@ const Group = enum {
     class,
     /// own champion x enemy champion in each other role
     pair,
+    /// the lane opponent's champion, whoever we play (lane is own x opponent)
+    lane_enemy,
+    /// game patch: drift over time the platform mix misses
+    patch,
 };
 const n_group = @typeInfo(Group).@"enum".field_names.len;
 const max_terms = @max(Role.count - 1, n_class);
@@ -115,6 +121,14 @@ const models = [_]Model{
     .{ .label = "+ own class x enemy classes", .file = "3c-classclass", .groups = team_groups ++ &[_]Group{.class_class}, .after = 4 },
     .{ .label = "+ own champion x enemy classes", .file = "3c-class", .groups = team_groups ++ &[_]Group{ .class_class, .class }, .after = 5 },
     .{ .label = "+ own champion x enemy champion", .file = "3c-pair", .groups = team_groups ++ &[_]Group{.pair}, .after = 4 },
+    .{ .label = "+ patch", .file = "3c-team-patch", .groups = team_groups ++ &[_]Group{.patch}, .after = 4 },
+    .{ .label = "+ lane opponent's champion", .file = "3c-team2", .groups = team2_groups, .after = 8 },
+};
+
+/// 3c-team with the lane opponent's own effect (fitted before the pair cell) and patch
+const team2_groups: []const Group = &.{
+    .platform,     .champ,       .lane_enemy, .lane,      .duo_enemy, .duo_ally,
+    .jungle_enemy, .jungle_ally, .rest_enemy, .rest_ally, .patch,
 };
 
 /// The fullest additive model, the baseline interaction models must beat
@@ -126,6 +140,7 @@ const Term = struct { cell: u32, x: f32 };
 const Space = struct {
     champs: u32,
     platforms: u32,
+    patches: u32,
     class_of: []const ?u8,
     /// [role][class]: mean count on the enemy team, train
     class_mean: [Role.count][n_class]f32 = @splat(@splat(0)),
@@ -140,6 +155,8 @@ const Space = struct {
             .class_class => n_class * n_class,
             .class => c * n_class,
             .pair => c * Role.count * c,
+            .lane_enemy => c,
+            .patch => s.patches,
         };
     }
 
@@ -151,6 +168,8 @@ const Space = struct {
         switch (g) {
             .platform => out[0] = .{ .cell = role * s.platforms + r.platform, .x = 1 },
             .champ => out[0] = .{ .cell = own, .x = 1 },
+            .lane_enemy => out[0] = .{ .cell = role * c + r.enemy[role], .x = 1 },
+            .patch => out[0] = .{ .cell = role * s.patches + r.patch, .x = 1 },
             .lane => out[0] = .{ .cell = own * c + r.enemy[role], .x = 1 },
             .duo_enemy, .duo_ally, .jungle_enemy, .jungle_ally, .rest_enemy, .rest_ally => {
                 const want: Relation = switch (g) {
@@ -276,7 +295,8 @@ fn fit(
         @memcpy(old.items, b);
         for (0..Role.count) |ri| {
             const lo = ri * per_role;
-            const k: f64 = if (g == .platform) 1 else blk: {
+            // Few cells, many games each: left unshrunk
+            const k: f64 = if (g == .platform or g == .patch) 1 else blk: {
                 var cells: f64 = 0;
                 var excess: f64 = 0;
                 for (sxr.items[lo..][0..per_role], sxx.items[lo..][0..per_role]) |xr, xx| {
@@ -341,6 +361,9 @@ pub fn run(
         }
     };
     const class_of = try championClasses(arena, db, ids.items);
+    var patch_index: std.AutoArrayHashMapUnmanaged(u32, void) = .empty;
+    defer patch_index.deinit(gpa);
+    for (games) |g| try patch_index.put(gpa, g.patch, {});
 
     var train: std.ArrayList(Row) = .empty;
     defer train.deinit(gpa);
@@ -362,6 +385,7 @@ pub fn run(
             .slot = o.slot[side][ri],
             .role = @intCast(ri),
             .platform = g.platform,
+            .patch = @intCast(patch_index.getIndex(g.patch).?),
             .champ = team[side][ri],
             .ally = team[side],
             .enemy = team[1 - side],
@@ -373,6 +397,7 @@ pub fn run(
     var space: Space = .{
         .champs = @intCast(ids.items.len),
         .platforms = @intCast(platforms.len),
+        .patches = @intCast(patch_index.count()),
         .class_of = class_of,
     };
     {
@@ -557,7 +582,8 @@ pub fn run(
         const shown = [_]struct { Group, usize }{
             .{ .champ, 4 },        .{ .lane, 4 },        .{ .duo_enemy, 4 },  .{ .duo_ally, 4 },
             .{ .jungle_enemy, 4 }, .{ .jungle_ally, 4 }, .{ .rest_enemy, 4 }, .{ .rest_ally, 4 },
-            .{ .class_class, 5 },  .{ .class, 6 },       .{ .pair, 7 },
+            .{ .class_class, 5 },  .{ .class, 6 },       .{ .pair, 7 },       .{ .lane_enemy, 9 },
+            .{ .lane, 9 },
         };
         for (shown) |sh| {
             const gi = @backingInt(sh[0]);

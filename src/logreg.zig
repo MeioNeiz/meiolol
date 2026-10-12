@@ -71,6 +71,37 @@ pub fn fit(gpa: std.mem.Allocator, d: usize, rows: []const Row, l2: f64) ![]f64 
     return w;
 }
 
+/// Standard error of each weight from `fit`: square roots of the inverse penalised
+/// Hessian's diagonal (caller frees)
+pub fn stdErrors(gpa: std.mem.Allocator, d: usize, rows: []const Row, w: []const f64, l2: f64) ![]f64 {
+    const hess = try gpa.alloc(f64, d * d);
+    defer gpa.free(hess);
+    @memset(hess, 0);
+    for (rows) |*r| {
+        const p = sigmoid(r.dot(w));
+        const h = p * (1 - p);
+        for (r.feats[0..r.n]) |a| {
+            for (r.feats[0..r.n]) |b| hess[a.i * d + b.i] += h * a.v * b.v;
+        }
+    }
+    for (1..d) |i| hess[i * d + i] += l2;
+    for (0..d) |i| if (hess[i * d + i] == 0) {
+        hess[i * d + i] = 1;
+    };
+    try cholesky(hess, d);
+    const se = try gpa.alloc(f64, d);
+    errdefer gpa.free(se);
+    const e = try gpa.alloc(f64, d);
+    defer gpa.free(e);
+    for (se, 0..) |*s, i| {
+        @memset(e, 0);
+        e[i] = 1;
+        solveInPlace(hess, d, e);
+        s.* = @sqrt(e[i]);
+    }
+    return se;
+}
+
 /// Lower-triangular L with L L^T = a, in place (a is symmetric positive definite)
 fn cholesky(a: []f64, d: usize) !void {
     for (0..d) |j| {

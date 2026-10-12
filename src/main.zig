@@ -18,6 +18,9 @@ pub const learning = @import("learning.zig");
 pub const patchday = @import("patchday.zig");
 pub const eval = @import("eval.zig");
 pub const outcomes = @import("outcomes.zig");
+pub const objectives = @import("objectives.zig");
+pub const winchance = @import("winchance.zig");
+pub const items = @import("items.zig");
 pub const archive = @import("archive.zig");
 pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
@@ -114,6 +117,23 @@ const usage =
     \\                               per model) for the accuracy-vs-data curve
     \\  outcomes    do allies and enemies shift gold@14, lane gold, CS@10, deaths before 15
     \\              and first item beyond champion and lane? (markdown on stdout)
+    \\              --patch P        as for stats (default: every patch, pooled)
+    \\              --platform P     as for stats (train uses every one given)
+    \\              --test-platform P  test on P's newest games (default EUW1)
+    \\              --test-share F   newest share of P's games held out (default 0.2)
+    \\              --preds DIR      one TSV of test predictions per model
+    \\  winchance   fit win chance by minute from the game state (Your games' turning
+    \\              minute and death cost): weights as Zig source, check on stdout
+    \\              --out FILE       default src/winchance_weights.zig
+    \\  objectives  what is an objective worth beyond its gold? win from the state at
+    \\              10-30 min (markdown on stdout; docs/model.md)
+    \\              --patch P        as for stats (default: every patch, pooled)
+    \\              --platform P     as for stats (train uses every one given)
+    \\              --test-platform P  test on P's newest games (default EUW1)
+    \\              --test-share F   newest share of P's games held out (default 0.2)
+    \\              --preds DIR      one TSV of test predictions per model
+    \\  items       does the finished item change the win chance, given the state when it
+    \\              was bought? (markdown on stdout; docs/model.md)
     \\              --patch P        as for stats (default: every patch, pooled)
     \\              --platform P     as for stats (train uses every one given)
     \\              --test-platform P  test on P's newest games (default EUW1)
@@ -258,6 +278,9 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "pool", cmdPool },
     .{ "eval", cmdEval },
     .{ "outcomes", cmdOutcomes },
+    .{ "objectives", cmdObjectives },
+    .{ "winchance", cmdWinchance },
+    .{ "items", cmdItems },
     .{ "raw-export", cmdRawExport },
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
@@ -751,6 +774,84 @@ fn cmdOutcomes(c: *Cmd) !u8 {
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
     try outcomes.run(c.init.gpa, io, db, chosen, platforms, &legendaries, o, &stdout.interface);
+    try stdout.interface.flush();
+    return 0;
+}
+
+fn cmdObjectives(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var o: objectives.Options = .{};
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--test-share")) {
+            o.test_share = try c.float();
+            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
+        } else if (c.is("--test-platform")) {
+            o.test_platform = try c.value();
+        } else if (c.is("--preds")) {
+            o.preds_dir = try c.value();
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    const platforms = g.platformIds();
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
+    var buf: [64 * 1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    try objectives.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
+    try stdout.interface.flush();
+    return 0;
+}
+
+fn cmdWinchance(c: *Cmd) !u8 {
+    var out: []const u8 = "src/winchance_weights.zig";
+    while (c.next()) |_| {
+        if (c.is("--out")) {
+            out = try c.value();
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    var src: std.Io.Writer.Allocating = .init(c.arena);
+    var buf: [16 * 1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    try winchance.fit(c.init.gpa, db, &src.writer, &stdout.interface);
+    try stdout.interface.flush();
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = out, .data = src.written() });
+    return 0;
+}
+
+fn cmdItems(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var o: items.Options = .{};
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--test-share")) {
+            o.test_share = try c.float();
+            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
+        } else if (c.is("--test-platform")) {
+            o.test_platform = try c.value();
+        } else if (c.is("--preds")) {
+            o.preds_dir = try c.value();
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    const platforms = g.platformIds();
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
+    const legendaries = try outcomes.loadLegendaries(
+        c.init.gpa,
+        c.arena,
+        io,
+        try std.fs.path.join(c.arena, &.{ c.data_dir, "legendaries.tsv" }),
+        chosen,
+    );
+    var buf: [64 * 1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    try items.run(c.init.gpa, io, db, chosen, platforms, &legendaries, o, &stdout.interface);
     try stdout.interface.flush();
     return 0;
 }

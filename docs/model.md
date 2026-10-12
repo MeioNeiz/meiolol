@@ -127,8 +127,10 @@ outcomes and readings decided by Jacob the same day.
   every platform. Tuning by folds inside train only; test touched once per model
 - Rows: ranked solo, non-remake, complete roles (stats.scan rules). Continuous outcomes
   also need a compact timeline that reached 15:00: frames[15].t_ms >= 900000 (frame 15
-  exists is not enough: games ending 14:09-14:59 have it as their end frame). Platinum
-  IV+ only (crawl floor)
+  exists is not enough: games ending 14:09-14:59 have it as their end frame). Win also
+  needs duration_s >= 900: earlier endings are remakes, leaver forfeits (surrender
+  without the remake flag, ~1.5%) or aborts, decided by the leaver, not the draft
+  (2026-10-12). Platinum IV+ only (crawl floor)
 - Outcomes:
   - win: log loss, paired interval vs champion base rates
   - gold14: total_gold at frame 14
@@ -170,7 +172,8 @@ enemy champion. Train-time and use-time features: champions and roles only (all
 champ-select legal). Preds: data/preds/snap-20261012T2055Z/ (base-champrole, 3c-*).
 
 Gains are % of the champion-role-mean test MSE removed by each step over the one
-before it, ± 95% interval clustered by game:
+before it, in per-role standardised units (the protocol's raw units, pooled over roles,
+give 3c-team 2.75 / 4.31 / 7.70 / 3.65 / 2.00), ± 95% interval clustered by game:
 
 | step | gold14 | lanediff14 | cs10 | deaths15 | first_item |
 | --- | --- | --- | --- | --- | --- |
@@ -277,6 +280,133 @@ the bucket:
 - For the site's lane curves: use the embedding estimate for matchups under ~100 games
   and the pair cells above, or blend by count. A sixth of test rows sit in pairs under
   25 games, so it matters on many pages
+
+### 3c-team2: the lane opponent's own effect, 2026-10-12 (meiolol-b0)
+
+2a's additive model beat 3c-team on deaths15 (+0.42) without interactions. The gap:
+3c-team's lane group is only the own champion x opponent cell, shrunk hard where the
+pair is thin, so an opponent's effect on everyone in the role was lost there. Two groups
+added to `meiolol outcomes` (src/outcomes.zig): the lane opponent's champion in my role
+(fitted before the pair cell) and role x patch (unshrunk, for the newer games' drift
+meiolol-f2 found). The rest-of-team groups were already per my role x their role.
+
+Raw units, % of base-champrole MSE pooled over roles (`meiolol-lab pairs`), ± 95%
+clustered by game:
+
+| comparison | gold14 | lanediff14 | cs10 | deaths15 | first_item |
+| --- | --- | --- | --- | --- | --- |
+| 3c-team-patch vs 3c-team (+ patch) | 0.00 ± 0.01 | 0.00 ± 0.00 | 0.06 ± 0.01 | -0.01 ± 0.01 | 0.01 ± 0.01 |
+| 3c-team2 vs 3c-team (+ patch, + lane opponent) | 0.35 ± 0.08 | 0.64 ± 0.12 | 0.66 ± 0.11 | 0.60 ± 0.09 | 0.29 ± 0.07 |
+| 2a-additive vs 3c-team2 | -0.53 | -0.45 | -1.19 | -0.18 | -0.66 |
+| 2a-lane vs 3c-team2 | -0.13 ± 0.11 | 0.14 ± 0.15 | -0.42 ± 0.16 | -0.14 ± 0.08 | -0.22 ± 0.30 |
+
+(2a-additive vs 3c-team2 is the difference of their gains over 3c-team, no interval.)
+3c-team2 totals over base: gold14 3.09, lanediff14 4.95, cs10 8.35, deaths15 4.26,
+first_item 2.29. Spread of the lane opponent's own effect: gold14 74-219 gold by role,
+lanediff14 278-461, deaths15 0.18-0.41.
+
+Reading:
+- 3c-team2 is the reference now: it beats 2a's additive on every outcome and 2a's lane
+  embeddings on cs10 and deaths15; lanediff14 and gold14 are within noise of them. Most
+  of the embeddings' thin-pair gain was the opponent's main effect, which pair cells
+  lose when they shrink to 0
+- Patch adds nothing on the test games (all 16.20; train has both patches): f2's
+  dev-val drift is within-patch time, not patch. Kept in 3c-team2, harmless
+- Preds: 3c-team-patch.tsv, 3c-team2.tsv (3c-team.tsv unchanged, byte for byte)
+
+### Objective value given the state, 2026-10-12 (meiolol-b0)
+
+`meiolol objectives --data SNAP --platform all --preds DIR` (src/objectives.zig), same
+split. One row per game and minute (10, 15, 20, 25, 30) for games still going after it:
+blue's win from blue-minus-red state at that frame. Logistic regressions per minute:
+gold and XP lead (with a curve term), then objectives held: towers taken, inhibitors
+down now, elemental dragons, soul point (3 dragons, no soul yet), soul, elder buff
+active, grubs, herald, baron buff active. Atakhan: none in 2026 games. Raw data note:
+DRAGON_SOUL_GIVEN with teamId 0 is the soul element announced after the second dragon,
+not a soul taken. Train-time and use-time features: in-game state (post-game lessons,
+never champ select). Preds: 3c-obj-{lead,held,elements,x}.tsv (match_id, minute).
+
+Test log loss gain, nats per game (EUW1 test games still going), ± 95%:
+
+| minute | test games | gold and XP lead (vs win rate) | + objectives held | dragons by element instead | + objective x gold lead |
+| --- | --- | --- | --- | --- | --- |
+| 10 | 10,660 | 0.1031 ± 0.0080 | 0.0083 ± 0.0023 | 0.0002 ± 0.0003 | 0.0000 ± 0.0000 |
+| 15 | 10,604 | 0.1703 ± 0.0096 | 0.0121 ± 0.0028 | -0.0000 ± 0.0003 | -0.0001 ± 0.0001 |
+| 20 | 9,885 | 0.2214 ± 0.0106 | 0.0128 ± 0.0032 | -0.0001 ± 0.0003 | -0.0002 ± 0.0002 |
+| 25 | 8,168 | 0.2576 ± 0.0121 | 0.0161 ± 0.0039 | -0.0003 ± 0.0003 | -0.0005 ± 0.0003 |
+| 30 | 4,630 | 0.2260 ± 0.0148 | 0.0178 ± 0.0059 | -0.0001 ± 0.0005 | 0.0000 ± 0.0003 |
+
+Value beyond the gold each brought, as the team gold lead worth the same at that
+minute (log-odds weight / gold weight; "-" under 30 train games with it):
+
+| held (one more than the enemy) | 10 min | 15 min | 20 min | 25 min | 30 min |
+| --- | --- | --- | --- | --- | --- |
+| 1000 gold lead, log-odds | 0.345 | 0.253 | 0.216 | 0.161 | 0.125 |
+| 1000 XP lead | 522 | 400 | 401 | 565 | 625 |
+| elemental dragon | 839 | 1034 | 997 | 1083 | 1071 |
+| soul point | - | - | 927 | 763 | 787 |
+| soul | - | - | - | 4291 | 3912 |
+| elder buff active | - | - | - | - | 4800 |
+| baron buff active | - | - | - | 406 | 970 |
+| inhibitor down | - | (616) | 869 | 1447 | 2285 |
+| tower | -310 | -216 | -74 | (40) | (88) |
+| grub | 156 | 137 | 90 | 95 | 106 |
+| herald | - | - | 198 | (-82) | -434 |
+
+Brackets: 95% interval wider than the value. Otherwise intervals are about ±4% of the
+value for dragons, XP and grubs at 10-15 min, ±20% for soul, ±40-60% for elder, baron,
+herald and soul point, ±65% for inhibitors at 20 min and ±13-21% after.
+
+Reading:
+- A dragon is worth about 1000 gold of lead beyond its own gold, at every minute; soul
+  about 4000; elder about 4800 (few games). Soul point adds ~800-900 on top of the
+  three dragons. A grub ~100-150, a herald ~200 at 20 min then nothing
+- Towers are worth their gold and no more (their plates and bounty are in the lead;
+  early towers slightly negative beyond it: the gold came from the tower, not fights)
+- Baron is worth ~400-1000 beyond its 1500 team gold while the buff is up; an
+  inhibitor down grows from ~900 at 20 min to ~2300 at 30
+- The value is the same whoever is ahead (objective x gold lead: nothing) and dragon
+  elements differ (mountain and ocean highest, chemtech and cloud lowest, ~±200 gold)
+  without improving prediction. Descriptive: teams that take objectives differ in
+  ways the state misses, so these are upper bounds on what taking one causes
+
+### Items given the state at purchase, 2026-10-12 (meiolol-b0)
+
+`meiolol items --data SNAP --platform all --preds DIR` (src/items.zig), same split,
+games with a timeline (119,479 train, 10,759 test). Rows: each player's first three
+distinct finished items (the first_item finished set and undo rule): 2.94M train,
+268k test. Baseline: logistic win from the purchase's state per slot (minute, team gold
+lead and lane gold lead at the frame before, with a lead x 1/minute term). On its
+residual, additive shrunk effects in win probability (backfitting, method-of-moments
+prior per group and role, as outcomes): champion in role; item in role and slot; item
+on the champion. Train-time: the state at purchase; use-time: post-game lessons only.
+Preds: 3c-items-{state,champ,item,champitem}.tsv (match_id, slot, k).
+
+| model | test log loss | gain, nats per row ± 95% clustered by game |
+| --- | --- | --- |
+| train win rate | 0.6923 | - |
+| state at purchase | 0.5219 | 0.17045 ± 0.00784 |
+| + champion | 0.5203 | 0.00158 ± 0.00049 |
+| + item in role and slot | 0.5202 | 0.00008 ± 0.00005 |
+| + item on the champion | 0.5202 | 0.00000 ± 0.00000 |
+
+Spread of true effects (sd, win pp): champion given the state 5.2-9.3 by role; item in
+role and slot top 1.0, jungle 1.5, off in mid, bottom and support; item on the champion
+off in every role (no detectable spread). Largest item effects (shrunk, 500+ rows):
+jungle Edge of Night 2nd +2.9, Youmuu's 1st -2.9, Guardian Angel 3rd +2.8, Malignance 1st
+-2.4, Death's Dance 2nd +2.0; top Sundered Sky 3rd -1.9, Frozen Heart 1st +1.6, Black
+Cleaver 1st +1.5.
+
+Reading:
+- Which item a player finishes says almost nothing about the win beyond when they
+  finished it and how far ahead they were: the item term is a twentieth of the
+  champion's and the champion-specific item term is nothing at 118k games
+- The state at purchase is most of it: an item finished late or behind loses
+- So item advice from win rates ("best build") is not supported at this volume; item
+  timing and the lead are. Item x enemy team is meiolol-2a's; with no main effect here
+  it would have to be a pure interaction
+- Champion given the state (5-9 pp sd) is large: champions convert the same lead
+  differently (scaling, team fight value). Worth its own look as lesson material
 
 ## Next steps
 
