@@ -17,7 +17,6 @@ const View = curvesfile.View;
 const Bracket = curvesfile.Bracket;
 const Site = root.Site;
 const Champ = root.Champ;
-const esc = html.esc;
 const tpl = html.tpl;
 
 /// Below this many games a curve is greyed out as "more data needed"
@@ -26,7 +25,6 @@ pub const thin_games = 200;
 const min_minute_games = 10;
 /// Experienced-only curves with fewer games are not offered
 const min_experienced = 10;
-/// Matchup links on a champion page, per role
 /// Minimum games choices on the matchup index; shows everything by default
 const index_floors = [_]u32{ 1, 5, 10, 20, 50, 100, thin_games };
 
@@ -86,21 +84,23 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         .matchups,
     );
     try html.head(w, p);
-    try w.writeAll(
+    try tpl.render(w,
         \\<h1>Lane matchup curves</h1>
         \\<p class="lead">How each lane matchup unfolds, minute by minute: the typical gold,
         \\experience and CS difference with its spread, who tends to lead at 14 minutes and
         \\whether that side then wins the game.</p>
         \\
-    );
+    , .{});
     const c = curves orelse {
-        try w.writeAll("<p class=\"note\">Curves need match timelines, which are being collected now. Every matchup gets a page; under 200 games it is shown greyed out as \"more data needed\".</p>\n");
+        try tpl.render(w,
+            \\<p class="note">Curves need match timelines, which are being collected now. Every matchup gets a page; under 200 games it is shown greyed out as "more data needed".</p>
+            \\
+        , .{});
         return html.foot(w, p);
     };
     try html.minGames(w, "../", "matchups", &index_floors, index_floors[0], 0);
-    const Entry = struct { x: Champ, y: Champ, games: u32, thin: bool };
     for (Role.all) |r| {
-        var list: std.ArrayList(Entry) = .empty;
+        var list: std.ArrayList(IndexEntry) = .empty;
         for (c.curves) |cv| {
             const h = cv.header;
             if (h.role != @backingInt(r) or h.bracket != 0 or h.experience != 0) continue;
@@ -108,34 +108,43 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
             const y = champ(site, h.b) orelse continue;
             try list.append(a, .{ .x = x, .y = y, .games = h.games, .thin = thin(.{ .curve = &cv, .flipped = false }) });
         }
-        std.mem.sort(Entry, list.items, {}, struct {
-            fn f(_: void, p_: Entry, q: Entry) bool {
+        std.mem.sort(IndexEntry, list.items, {}, struct {
+            fn f(_: void, p_: IndexEntry, q: IndexEntry) bool {
                 return p_.games > q.games;
             }
         }.f);
         const slug = root.roleSlug(r);
-        try w.print("<h2>{s} <span class=\"muted\"><span id=\"n-{s}\">{d}</span> matchups</span></h2>\n", .{
-            root.roleName(r), slug, list.items.len,
-        });
+        try tpl.render(w,
+            \\<h2>{role} <span class="muted"><span id="n-{slug}">{n}</span> matchups</span></h2>
+            \\
+        , .{ .role = root.roleName(r), .slug = slug, .n = list.items.len });
         if (list.items.len == 0) {
-            try w.writeAll("<p class=\"muted\">More data needed.</p>\n");
+            try tpl.render(w, "<p class=\"muted\">More data needed.</p>\n", .{});
             continue;
         }
-        try w.print("<ul class=\"matchup-list\" data-min-list data-count=\"n-{s}\">\n", .{slug});
-        for (list.items) |e| {
-            try w.print("<li data-games=\"{d}\"{s}><a href=\"{s}\">{f} vs {f}</a> <span class=\"muted\">{d} game{s}</span></li>\n", .{
-                e.games,
-                if (e.thin) " class=\"thin\"" else "",
-                (try path(a, r, e.x, e.y))["matchup/".len..],
-                esc(e.x.name),
-                esc(e.y.name),
-                e.games,
-                plural(e.games),
-            });
-        }
-        try w.writeAll("</ul>\n");
+        try tpl.render(w,
+            \\<ul class="matchup-list" data-min-list data-count="n-{slug}">
+            \\{items}</ul>
+            \\
+        , .{ .slug = slug, .items = tpl.each(list.items, .{ a, r }, indexItem) });
     }
     try html.foot(w, p);
+}
+
+const IndexEntry = struct { x: Champ, y: Champ, games: u32, thin: bool };
+
+fn indexItem(ctx: struct { std.mem.Allocator, Role }, w: *Writer, e: IndexEntry) !void {
+    try tpl.render(w,
+        \\<li data-games="{games}"{thin}><a href="{href}">{x} vs {y}</a> <span class="muted">{games} game{s}</span></li>
+        \\
+    , .{
+        .games = e.games,
+        .thin = tpl.flag(e.thin, "class=\"thin\""),
+        .href = (try path(ctx[0], ctx[1], e.x, e.y))["matchup/".len..],
+        .x = e.x.name,
+        .y = e.y.name,
+        .s = plural(e.games),
+    });
 }
 
 pub fn champ(site: *const Site, id: u32) ?Champ {
@@ -193,33 +202,46 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         if (!has) there.* = try std.mem.concat(a, u8, &.{ view.dir(), "matchup/index.html" });
     }
     try html.head(w, p);
-    try w.print(
-        "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><div><h1>{f} vs {f}</h1>\n",
-        .{ site.icon(x), site.icon(y), esc(x.name), esc(y.name) },
-    );
-    try w.print("<p class=\"muted\">{s} lane, ranked solo/duo {s}, {s}, all ranks, {d} game{s}.</p></div></div>\n", .{
-        lane, site.view.region.in(), when, v.games(), plural(v.games()),
+    try tpl.render(w,
+        \\<div class="hero"><img src="{x_icon}" alt="" width="72" height="72"><img src="{y_icon}" alt="" width="72" height="72"><div><h1>{x} vs {y}</h1>
+        \\<p class="muted">{lane} lane, ranked solo/duo {region}, {when}, all ranks, {games} game{s}.</p></div></div>
+        \\
+    , .{
+        .x_icon = site.icon(x),
+        .y_icon = site.icon(y),
+        .x = x.name,
+        .y = y.name,
+        .lane = lane,
+        .region = site.view.region.in(),
+        .when = when,
+        .games = v.games(),
+        .s = plural(v.games()),
     });
     if (v.games() < thin_games) {
-        try w.print(
-            "<p class=\"note\">More data needed: {d} game{s} so far. Until {d}, the line leans on how these two champions do against everyone (see the method), and the chart is greyed out.</p>\n",
-            .{ v.games(), plural(v.games()), thin_games },
-        );
+        try tpl.render(w,
+            \\<p class="note">More data needed: {games} game{s} so far. Until {thin}, the line leans on how these two champions do against everyone (see the method), and the chart is greyed out.</p>
+            \\
+        , .{ .games = v.games(), .s = plural(v.games()), .thin = thin_games });
     } else if (thin(v)) {
-        try w.writeAll("<p class=\"note\">Mostly the champions' baseline: the line still leans more on how these two champions do against everyone than on their games against each other (see the method).</p>\n");
+        try tpl.render(w,
+            \\<p class="note">Mostly the champions' baseline: the line still leans more on how these two champions do against everyone than on their games against each other (see the method).</p>
+            \\
+        , .{});
     }
     try summary(w, v, x, y);
 
     const vs = try variants(a, curves, r, x, y);
     if (vs.len > 1) {
-        try w.writeAll("<fieldset class=\"exp-toggle\"><legend>Games counted</legend>");
+        try tpl.renderPart(w, "<fieldset class=\"exp-toggle\"><legend>Games counted</legend>", .{});
         for (vs, 0..) |s, i| {
-            try w.print(
-                "<label><input type=\"radio\" name=\"exp\" value=\"{s}\" id=\"exp-{s}\"{s}> {f} <span class=\"muted\">({d})</span></label> ",
-                .{ s.key, s.key, if (i == 0) " checked" else "", esc(s.label), s.v.games() },
-            );
+            try tpl.render(w, "<label><input type=\"radio\" name=\"exp\" value=\"{key}\" id=\"exp-{key}\"{checked}> {label} <span class=\"muted\">({games})</span></label> ", .{
+                .key = s.key,
+                .checked = tpl.flag(i == 0, "checked"),
+                .label = s.label,
+                .games = s.v.games(),
+            });
         }
-        try w.writeAll("</fieldset>\n");
+        try tpl.renderPart(w, "</fieldset>\n", .{});
     }
 
     const base = curves.baseline(r, .all);
@@ -230,24 +252,32 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         .{ .title = "CS difference", .metric = .cs, .unit = "CS" },
     };
     for (charts) |c| {
-        try w.print("<h2>{s}</h2>\n", .{c.title});
+        try tpl.render(w, "<h2>{title}</h2>\n", .{ .title = c.title });
         try chart(w, vs, base, c.metric, c.unit, x, y, when, lane);
     }
 
-    try w.writeAll("<h2>Lane and game</h2>\n");
+    try tpl.render(w, "<h2>Lane and game</h2>\n", .{});
     for (vs) |s| {
-        if (vs.len > 1) try w.print("<div class=\"exp exp-{s}\">\n", .{s.key});
-        try sides(w, s.v, x, y);
-        if (vs.len > 1) try w.writeAll("</div>\n");
+        if (vs.len == 1) try sides(w, s.v, x, y) else try tpl.render(w,
+            \\<div class="exp exp-{key}">
+            \\{sides}</div>
+            \\
+        , .{ .key = s.key, .sides = tpl.call(sides, .{ s.v, x, y }) });
     }
     try comeback.section(w, curves, r, x, y);
-    try w.writeAll("<h2>By rank</h2>\n");
+    try tpl.render(w, "<h2>By rank</h2>\n", .{});
     try brackets(w, curves, r, x, y);
     const to_site = site.toShared(page_path);
-    try w.print(
-        "<p class=\"muted\"><a href=\"{f}\">{f}</a> · <a href=\"{f}\">{f}</a> · <a href=\"{s}method.html\">Method</a></p>\n",
-        .{ esc(site.champHref(x, to_site)), esc(x.name), esc(site.champHref(y, to_site)), esc(y.name), to_site },
-    );
+    try tpl.render(w,
+        \\<p class="muted"><a href="{x_href}">{x}</a> · <a href="{y_href}">{y}</a> · <a href="{up}method.html">Method</a></p>
+        \\
+    , .{
+        .x_href = site.champHref(x, to_site),
+        .x = x.name,
+        .y_href = site.champHref(y, to_site),
+        .y = y.name,
+        .up = to_site,
+    });
     try html.foot(w, p);
 }
 
@@ -295,43 +325,55 @@ pub fn featured(site: *const Site, w: *Writer, curves: *const Curves, matchups: 
 
 fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
     const lane = v.lane();
-    try w.writeAll("<p class=\"lead\">");
     const i = curvesfile.lane_minute - 1;
     const m = v.minute(i);
-    if (m.n >= minuteFloor(v)) {
+    const ahead = tpl.call(percent, .{ lane.ahead, lane.games });
+    const gold = if (m.n >= minuteFloor(v)) blk: {
         const e = v.estimate(.gold, i);
-        try w.print("At {d} minutes {f} is on average ", .{ curvesfile.lane_minute, esc(x.name) });
-        try amount(w, e.mean, "gold");
-        try w.print(" against {f} (±{d}", .{ esc(y.name), 2 * @as(u32, e.se) });
-        if (thin(v)) {
-            // The share below is raw and can disagree with a line that leans on the baseline
-            try w.print("), mostly from how both champions do against everyone. In these {d} game{s} {f} led in gold at {d} minutes in ", .{
-                v.games(), plural(v.games()), esc(x.name), curvesfile.lane_minute,
-            });
-            try percent(w, lane.ahead, lane.games);
-            try w.writeAll(". ");
-        } else {
-            try w.print("; middle half of games: {d} to {d}), and leads in gold in ", .{ m.gold.p25, m.gold.p75 });
-            try percent(w, lane.ahead, lane.games);
-            try w.writeAll(" of games. ");
-        }
-    }
-    try w.print("{f} wins ", .{esc(x.name)});
-    try percent(w, v.wins(), v.games());
-    try w.writeAll(" of these games");
-    if (lane.ahead >= min_minute_games and lane.behind >= min_minute_games) {
-        try w.writeAll(": ");
-        try percent(w, lane.wins_ahead, lane.ahead);
-        try w.print(" when ahead at {d} minutes, ", .{curvesfile.lane_minute});
-        try percent(w, lane.wins_behind, lane.behind);
-        try w.writeAll(" when behind");
-    }
-    try w.writeAll(".</p>\n");
+        // The share in the thin case is raw and can disagree with a line that leans on the
+        // baseline
+        break :blk tpl.t("At {minute} minutes {x} is on average {amount} against {y} (±{se}{thin}{own}", .{
+            .minute = curvesfile.lane_minute,
+            .x = x.name,
+            .amount = tpl.call(amount, .{ e.mean, "gold" }),
+            .y = y.name,
+            .se = 2 * @as(u32, e.se),
+            .thin = tpl.when(thin(v), tpl.t("), mostly from how both champions do against everyone. In these {games} game{s} {x} led in gold at {minute} minutes in {ahead}. ", .{
+                .games = v.games(),
+                .s = plural(v.games()),
+                .x = x.name,
+                .minute = curvesfile.lane_minute,
+                .ahead = ahead,
+            })),
+            .own = tpl.when(!thin(v), tpl.t("; middle half of games: {p25} to {p75}), and leads in gold in {ahead} of games. ", .{
+                .p25 = m.gold.p25,
+                .p75 = m.gold.p75,
+                .ahead = ahead,
+            })),
+        });
+    } else null;
+    try tpl.render(w,
+        \\<p class="lead">{gold}{x} wins {wins} of these games{split}.</p>
+        \\
+    , .{
+        .gold = gold,
+        .x = x.name,
+        .wins = tpl.call(percent, .{ v.wins(), v.games() }),
+        .split = tpl.when(lane.ahead >= min_minute_games and lane.behind >= min_minute_games, tpl.t(": {ahead} when ahead at {minute} minutes, {behind} when behind", .{
+            .ahead = tpl.call(percent, .{ lane.wins_ahead, lane.ahead }),
+            .minute = curvesfile.lane_minute,
+            .behind = tpl.call(percent, .{ lane.wins_behind, lane.behind }),
+        })),
+    });
 }
 
 fn amount(w: *Writer, value: i16, unit: []const u8) !void {
-    if (value == 0) return w.print("even in {s}", .{unit});
-    try w.print("{d} {s} {s}", .{ @abs(value), unit, if (value > 0) "ahead" else "behind" });
+    if (value == 0) return tpl.render(w, "even in {unit}", .{ .unit = unit });
+    try tpl.render(w, "{gold} {unit} {side}", .{
+        .gold = @abs(value),
+        .unit = unit,
+        .side = if (value > 0) "ahead" else "behind",
+    });
 }
 
 fn percent(w: *Writer, part: u64, whole: u64) !void {
@@ -424,7 +466,7 @@ fn chartOne(
         .line = line[0..last],
     });
     try caption(w, one.v, base, metric, x, y, when, lane);
-    try w.writeAll("</figure>\n");
+    try tpl.renderPart(w, "</figure>\n", .{});
 }
 
 fn caption(w: *Writer, v: View, base: ?View, metric: curvesfile.Metric, x: Champ, y: Champ, when: []const u8, lane: []const u8) !void {
@@ -455,7 +497,7 @@ fn caption(w: *Writer, v: View, base: ?View, metric: curvesfile.Metric, x: Champ
         });
     }
     try ended(w, if (own) v else base.?, last);
-    try w.writeAll(".</figcaption>\n");
+    try tpl.renderPart(w, ".</figcaption>\n", .{});
 }
 
 /// Surrender opens at 15 minutes: before it nearly all games are still running
@@ -466,92 +508,114 @@ fn ended(w: *Writer, v: View, last: usize) !void {
     if (last <= surrender_minute) return;
     const total = v.games();
     if (total == 0) return;
-    try w.print(". Right of the dotted line ({d} min), only games still running count: ", .{surrender_minute});
-    var first = true;
-    for ([_]usize{ 20, 25 }) |m| {
+    try tpl.render(w, ". Right of the dotted line ({minute} min), only games still running count: ", .{ .minute = surrender_minute });
+    for ([_]usize{ 20, 25 }, 0..) |m, k| {
         if (m > last) continue;
-        if (!first) try w.writeAll(", ");
-        first = false;
-        const going = v.minute(m - 1).n;
-        try percent(w, total -| going, total);
-        try w.print(" had ended by {d} min", .{m});
+        try tpl.render(w, "{sep}{share} had ended by {minute} min", .{
+            .sep = tpl.when(k > 0, ", "),
+            .share = tpl.call(percent, .{ total -| v.minute(m - 1).n, total }),
+            .minute = m,
+        });
     }
 }
 
-/// A round number (1, 2, 3, 4, 5, 6 or 8 times a power of ten) at least `value`, and
-/// at least 1, so the chart fills most of its height
 fn sides(w: *Writer, v: View, x: Champ, y: Champ) !void {
     const lane = v.lane();
-    try w.print(
-        "<div class=\"table-scroll\"><table>\n<thead><tr><th></th><th class=\"num\">{f}</th><th class=\"num\">{f}</th></tr></thead>\n<tbody>\n",
-        .{ esc(x.name), esc(y.name) },
-    );
-    try w.print("<tr><td>Ahead in gold at {d} min</td><td class=\"num\">", .{curvesfile.lane_minute});
-    try percent(w, lane.ahead, lane.games);
-    try w.writeAll("</td><td class=\"num\">");
-    try percent(w, lane.behind, lane.games);
-    try w.writeAll("</td></tr>\n<tr><td>Wins the game</td><td class=\"num\">");
-    try percent(w, v.wins(), v.games());
-    try w.writeAll("</td><td class=\"num\">");
-    try percent(w, v.games() - v.wins(), v.games());
-    try w.print("</td></tr>\n<tr><td>Wins when ahead at {d} min</td><td class=\"num\">", .{curvesfile.lane_minute});
-    try percent(w, lane.wins_ahead, lane.ahead);
-    try w.writeAll("</td><td class=\"num\">");
-    try percent(w, lane.behind - lane.wins_behind, lane.behind);
-    try w.writeAll("</td></tr>\n");
+    try tpl.renderPart(w,
+        \\<div class="table-scroll"><table>
+        \\<thead><tr><th></th><th class="num">{x}</th><th class="num">{y}</th></tr></thead>
+        \\<tbody>
+        \\<tr><td>Ahead in gold at {minute} min</td><td class="num">{ahead}</td><td class="num">{behind}</td></tr>
+        \\<tr><td>Wins the game</td><td class="num">{wins}</td><td class="num">{losses}</td></tr>
+        \\<tr><td>Wins when ahead at {minute} min</td><td class="num">{wins_ahead}</td><td class="num">{wins_behind}</td></tr>
+        \\
+    , .{
+        .x = x.name,
+        .y = y.name,
+        .minute = curvesfile.lane_minute,
+        .ahead = tpl.call(percent, .{ lane.ahead, lane.games }),
+        .behind = tpl.call(percent, .{ lane.behind, lane.games }),
+        .wins = tpl.call(percent, .{ v.wins(), v.games() }),
+        .losses = tpl.call(percent, .{ v.games() - v.wins(), v.games() }),
+        .wins_ahead = tpl.call(percent, .{ lane.wins_ahead, lane.ahead }),
+        .wins_behind = tpl.call(percent, .{ lane.behind - lane.wins_behind, lane.behind }),
+    });
     const phase_names = [_][]const u8{ "before 6 min", "6 to 14 min", "after 14 min" };
     for (phase_names, 0..) |name, ph| {
-        try w.print("<tr><td>Takes part in killing the other, {s}</td><td class=\"num\">", .{name});
-        try percent(w, v.kills(ph), v.games());
-        try w.writeAll("</td><td class=\"num\">");
-        try percent(w, v.deaths(ph), v.games());
-        try w.writeAll("</td></tr>\n");
+        try tpl.render(w,
+            \\<tr><td>Takes part in killing the other, {phase}</td><td class="num">{kills}</td><td class="num">{deaths}</td></tr>
+            \\
+        , .{
+            .phase = name,
+            .kills = tpl.call(percent, .{ v.kills(ph), v.games() }),
+            .deaths = tpl.call(percent, .{ v.deaths(ph), v.games() }),
+        });
     }
     try timing(w, "Level 6 (median)", v.level6());
     try timing(w, "First finished item (median)", v.firstItem());
-    try w.print("</tbody></table></div>\n<p class=\"muted\">Share of {d} game{s}. A finished item costs 2,200 gold or more and builds into nothing; a dash means fewer than half of the games got there.</p>\n", .{ v.games(), plural(v.games()) });
+    try tpl.renderPart(w,
+        \\</tbody></table></div>
+        \\<p class="muted">Share of {games} game{s}. A finished item costs 2,200 gold or more and builds into nothing; a dash means fewer than half of the games got there.</p>
+        \\
+    , .{ .games = v.games(), .s = plural(v.games()) });
 }
 
 fn timing(w: *Writer, label: []const u8, both: [2]u16) !void {
-    try w.print("<tr><td>{s}</td>", .{label});
-    for (both) |secs| {
-        if (secs == 0) {
-            try w.writeAll("<td class=\"num\">-</td>");
-        } else {
-            try w.print("<td class=\"num\">{d}:{d:0>2}</td>", .{ secs / 60, secs % 60 });
-        }
-    }
-    try w.writeAll("</tr>\n");
+    try tpl.render(w, "<tr><td>{label}</td>{x}{y}</tr>\n", .{
+        .label = label,
+        .x = tpl.call(time, .{both[0]}),
+        .y = tpl.call(time, .{both[1]}),
+    });
+}
+
+fn time(w: *Writer, secs: u16) !void {
+    if (secs == 0) return tpl.render(w, "<td class=\"num\">-</td>", .{});
+    try tpl.render(w, "<td class=\"num\">{min}:{sec:0>2}</td>", .{ .min = secs / 60, .sec = secs % 60 });
 }
 
 fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
-    try w.print(
-        "<div class=\"table-scroll\"><table>\n<thead><tr><th>Rank</th><th class=\"num\">Games</th><th class=\"num\">Gold at {d} min</th><th class=\"num\">{f} ahead at {d} min</th><th class=\"num\">{f} wins</th></tr></thead>\n<tbody>\n",
-        .{ curvesfile.lane_minute, esc(x.name), curvesfile.lane_minute, esc(x.name) },
-    );
+    try tpl.renderPart(w,
+        \\<div class="table-scroll"><table>
+        \\<thead><tr><th>Rank</th><th class="num">Games</th><th class="num">Gold at {minute} min</th><th class="num">{x} ahead at {minute} min</th><th class="num">{x} wins</th></tr></thead>
+        \\<tbody>
+        \\
+    , .{ .minute = curvesfile.lane_minute, .x = x.name });
     for (std.enums.values(Bracket)) |b| {
         const v = curves.get(r, b, x.id, y.id) orelse {
-            try w.print("<tr class=\"thin\"><td>{s}</td><td class=\"num\" colspan=\"4\">more data needed</td></tr>\n", .{b.label()});
+            try tpl.render(w,
+                \\<tr class="thin"><td>{rank}</td><td class="num" colspan="4">more data needed</td></tr>
+                \\
+            , .{ .rank = b.label() });
             continue;
         };
         const i = curvesfile.lane_minute - 1;
-        try w.print("<tr{s}><td>{s}</td><td class=\"num\">{d}</td><td class=\"num\">", .{
-            if (thin(v)) " class=\"thin\"" else "", b.label(), v.games(),
-        });
-        if (v.minute(i).n >= minuteFloor(v)) {
+        const has_gold = v.minute(i).n >= minuteFloor(v);
+        const gold = if (has_gold) blk: {
             const e = v.estimate(.gold, i);
-            try w.print("{s}{d} ±{d}", .{ if (e.mean > 0) "+" else "", e.mean, 2 * @as(u32, e.se) });
-        } else try w.writeAll("-");
-        try w.writeAll("</td><td class=\"num\">");
-        try percent(w, v.lane().ahead, v.lane().games);
-        try w.writeAll("</td><td class=\"num\">");
-        try percent(w, v.wins(), v.games());
-        try w.writeAll("</td></tr>\n");
+            break :blk tpl.t("{sign}{mean} ±{se}", .{
+                .sign = if (e.mean > 0) "+" else "",
+                .mean = e.mean,
+                .se = 2 * @as(u32, e.se),
+            });
+        } else null;
+        try tpl.render(w,
+            \\<tr{thin}><td>{rank}</td><td class="num">{games}</td><td class="num">{gold}{dash}</td><td class="num">{ahead}</td><td class="num">{wins}</td></tr>
+            \\
+        , .{
+            .thin = tpl.flag(thin(v), "class=\"thin\""),
+            .rank = b.label(),
+            .games = v.games(),
+            .gold = gold,
+            .dash = tpl.when(!has_gold, "-"),
+            .ahead = tpl.call(percent, .{ v.lane().ahead, v.lane().games }),
+            .wins = tpl.call(percent, .{ v.wins(), v.games() }),
+        });
     }
-    try w.print(
-        "</tbody></table></div>\n<p class=\"muted\">Rank is the median visible tier of the players in each game. Gold is the estimated average ±2 standard errors; a rank's estimate leans on the all-ranks one until it has games of its own. Rows under {d} games, or mostly baseline, are greyed out.</p>\n",
-        .{thin_games},
-    );
+    try tpl.renderPart(w,
+        \\</tbody></table></div>
+        \\<p class="muted">Rank is the median visible tier of the players in each game. Gold is the estimated average ±2 standard errors; a rank's estimate leans on the all-ranks one until it has games of its own. Rows under {thin} games, or mostly baseline, are greyed out.</p>
+        \\
+    , .{ .thin = thin_games });
 }
 
 test "nice scale" {

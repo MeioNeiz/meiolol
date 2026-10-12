@@ -25,7 +25,7 @@ const evalchart = @import("evalchart.zig");
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
 const Role = core.Role;
-const esc = html.esc;
+const tpl = html.tpl;
 const score = core.score;
 
 const log = std.log.scoped(.site);
@@ -194,10 +194,11 @@ pub const Site = struct {
     }
 
     pub fn champLink(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8) !void {
-        try w.print(
-            "<a class=\"champ\" href=\"{f}\"><img src=\"{s}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{f}</a>",
-            .{ esc(s.champHref(ch, to_site)), s.icon(ch), esc(ch.name) },
-        );
+        try tpl.render(w, "<a class=\"champ\" href=\"{href}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
+            .href = s.champHref(ch, to_site),
+            .icon = s.icon(ch),
+            .name = ch.name,
+        });
     }
 
     pub fn champBySlug(s: *const Site, slug_: []const u8) ?Champ {
@@ -388,7 +389,6 @@ const FileWriter = struct {
     }
 };
 
-/// Every page of the view the static build writes, by path within its directory
 fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
     if (!opts.public) return "User-agent: *\nDisallow: /\n";
     var out: std.ArrayList(u8) = .empty;
@@ -436,6 +436,7 @@ fn sitemap(site: *const Site) ![]const u8 {
     return out.items;
 }
 
+/// Every page of the view the static build writes, by path within its directory
 pub fn pagePaths(site: *const Site) ![]const []const u8 {
     return pagePathsMin(site, site.opts.static_min_games);
 }
@@ -931,16 +932,20 @@ fn winRateCell(w: *Writer, wins: u32, games: u32, span: f64) !void {
             return 100 * (std.math.clamp(x, 0.5 - half, 0.5 + half) - (0.5 - half)) / (2 * half);
         }
     }.f;
-    try w.print(
-        "<td data-v=\"{d:.4}\"><span class=\"wr\" style=\"--c:{f}\"><span class=\"ci\" title=\"95%: {d:.1}% to {d:.1}%, {d} games\">" ++
-            "<i class=\"r\" style=\"left:{d:.1}%;width:{d:.1}%\"></i><i class=\"d\" style=\"left:{d:.1}%\"></i></span>" ++
-            "<b>{d:.1}%</b><small>±{d:.1}</small></span></td>",
-        .{
-            p,       wrColour(p, span),    100 * iv[0],                       100 * iv[1],
-            games,   at(iv[0], span),      at(iv[1], span) - at(iv[0], span), at(p, span),
-            100 * p, 50 * (iv[1] - iv[0]),
-        },
-    );
+    try tpl.render(w, "<td data-v=\"{p:.4}\"><span class=\"wr\" style=\"--c:{colour}\"><span class=\"ci\" title=\"95%: {lo:.1}% to {hi:.1}%, {games} games\">" ++
+        "<i class=\"r\" style=\"left:{left:.1}%;width:{width:.1}%\"></i><i class=\"d\" style=\"left:{dot:.1}%\"></i></span>" ++
+        "<b>{rate:.1}%</b><small>±{pm:.1}</small></span></td>", .{
+        .p = p,
+        .colour = wrColour(p, span),
+        .lo = 100 * iv[0],
+        .hi = 100 * iv[1],
+        .games = games,
+        .left = at(iv[0], span),
+        .width = at(iv[1], span) - at(iv[0], span),
+        .dot = at(p, span),
+        .rate = 100 * p,
+        .pm = 50 * (iv[1] - iv[0]),
+    });
 }
 
 /// Win rate colour, diverging: orange below 50%, blue above, grey at 50%; full at
@@ -967,24 +972,32 @@ const early_games = 50_000;
 fn earlyNote(site: *const Site, w: *Writer, filtered: bool) !void {
     const early = site.games < early_games;
     if (!early and !filtered) return;
-    try w.print(
-        "<p class=\"note\" data-early=\"{d}\"{s}>Early data: <span data-early-games>{d} games so far ({s})</span>. Each bar shows where a win rate likely is (95%) and narrows as games come in. Colour runs from orange (low) through grey (50%) to blue (high).</p>\n",
-        .{ early_games, if (early) "" else " hidden", site.games, site.when },
-    );
+    try tpl.render(w,
+        \\<p class="note" data-early="{early}"{hidden}>Early data: <span data-early-games>{games} games so far ({when})</span>. Each bar shows where a win rate likely is (95%) and narrows as games come in. Colour runs from orange (low) through grey (50%) to blue (high).</p>
+        \\
+    , .{
+        .early = early_games,
+        .hidden = tpl.flag(!early, "hidden"),
+        .games = site.games,
+        .when = site.when,
+    });
 }
 
 /// All roles (champions.html) and one per role (role/<slug>.html)
 fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
-    try w.print("<nav class=\"tabs\"><a href=\"{s}champions.html\"{s}>All roles</a>", .{
-        root, if (current == null) " aria-current=\"page\"" else "",
+    try tpl.renderPart(w, "<nav class=\"tabs\"><a href=\"{root}champions.html\"{current}>All roles</a>", .{
+        .root = root,
+        .current = tpl.flag(current == null, "aria-current=\"page\""),
     });
     for (Role.all) |r| {
-        try w.print("<a href=\"{s}role/{s}.html\"{s}>{s}</a>", .{
-            root,                                               roleSlug(r),
-            if (current == r) " aria-current=\"page\"" else "", roleName(r),
+        try tpl.render(w, "<a href=\"{root}role/{slug}.html\"{current}>{name}</a>", .{
+            .root = root,
+            .slug = roleSlug(r),
+            .current = tpl.flag(current == r, "aria-current=\"page\""),
+            .name = roleName(r),
         });
     }
-    try w.writeAll("</nav>\n");
+    try tpl.renderPart(w, "</nav>\n", .{});
 }
 
 pub fn roleSlug(r: Role) []const u8 {
@@ -1021,43 +1034,55 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
             return ratio(a.wins, a.games) > ratio(b.wins, b.games);
         }
     }.f);
-    try w.writeAll("<div class=\"tl-bar\">");
+    try tpl.renderPart(w, "<div class=\"tl-bar\">", .{});
     try roleTabs(w, role, root);
-    try w.writeAll(
+    try tpl.renderPart(w,
         \\<input type="search" placeholder="Search champion" data-filter aria-label="Search champion"></div>
         \\<div class="tl-wrap"><table class="tl" data-sortable>
-        \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>
-    );
-    if (role == null) try w.writeAll("<th class=\"l\" data-sort=\"text\">Role</th>");
-    try w.writeAll(
-        \\<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" title="The low end of the bar: the win rate is very likely at least this">At least</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num">Games</th></tr></thead>
+        \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" title="The low end of the bar: the win rate is very likely at least this">At least</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
-    );
+    , .{ .role = tpl.when(role == null, tpl.t("<th class=\"l\" data-sort=\"text\">Role</th>", .{})) });
+    const to_site = try std.mem.concat(site.arena, u8, &.{ root, site.view.up() });
     var rare: usize = 0;
     var n: usize = 0;
     for (rows) |row| {
         if (row.rare) rare += 1 else n += 1;
-        try w.print("<tr data-name=\"{f}\"{s}><td class=\"rank\">{d}</td><td class=\"l\">", .{
-            esc(row.ch.name), if (row.rare) " data-rare hidden" else "", n,
-        });
-        try site.champLink(w, row.ch, try std.mem.concat(site.arena, u8, &.{ root, site.view.up() }));
-        try w.writeAll("</td>");
-        if (role == null) try w.print("<td class=\"l role\" data-v=\"{s}\">{s}</td>", .{ roleName(row.role), roleName(row.role) });
-        try winRateCell(w, row.wins, row.games, 0.12);
         const lo = wilson(row.wins, row.games)[0];
-        try w.print("<td class=\"dim\" data-v=\"{d:.4}\">{d:.1}%</td><td class=\"opt\" data-v=\"{d}\">", .{ lo, 100 * lo, row.games });
-        try pct(w, row.games, site.games);
-        try w.print("</td><td class=\"opt\" data-v=\"{d}\">", .{row.ch.banned});
-        try pct(w, row.ch.banned, site.games);
-        try w.print("</td><td class=\"dim\" data-v=\"{d}\">{d}</td></tr>\n", .{ row.games, row.games });
+        try tpl.render(w,
+            \\<tr data-name="{name}"{rare}><td class="rank">{n}</td><td class="l">{link}</td>{role}{wr}<td class="dim" data-v="{lo:.4}">{lo_pct:.1}%</td><td class="opt" data-v="{games}">{pick}</td><td class="opt" data-v="{banned}">{ban}</td><td class="dim" data-v="{games}">{games}</td></tr>
+            \\
+        , .{
+            .name = row.ch.name,
+            .rare = tpl.flag(row.rare, "data-rare hidden"),
+            .n = n,
+            .link = tpl.call(champLinkTo, .{ site, row.ch, to_site }),
+            .role = tpl.when(role == null, tpl.t("<td class=\"l role\" data-v=\"{role}\">{role}</td>", .{ .role = roleName(row.role) })),
+            .wr = tpl.call(winRateCell, .{ row.wins, row.games, @as(f64, 0.12) }),
+            .lo = lo,
+            .lo_pct = 100 * lo,
+            .games = row.games,
+            .pick = tpl.call(pct, .{ row.games, site.games }),
+            .banned = row.ch.banned,
+            .ban = tpl.call(pct, .{ row.ch.banned, site.games }),
+        });
     }
-    try w.writeAll("</tbody></table></div>\n");
-    if (rare > 0) try w.print(
-        "<p class=\"tl-more\">{d} rare picks (under {d:.1}% pick rate, or a role the champion seldom plays) hidden. <button class=\"link\" data-show-rare>Show them</button></p>\n",
-        .{ rare, 100 * min_pick_rate },
-    );
-    try w.print("<script src=\"{s}{s}table.js\" defer></script>\n", .{ root, site.view.up() });
+    try tpl.renderPart(w,
+        \\</tbody></table></div>
+        \\{more}<script src="{table_js}" defer></script>
+        \\
+    , .{
+        .more = tpl.when(rare > 0, tpl.t(
+            \\<p class="tl-more">{rare} rare picks (under {min:.1}% pick rate, or a role the champion seldom plays) hidden. <button class="link" data-show-rare>Show them</button></p>
+            \\
+        , .{ .rare = rare, .min = 100 * min_pick_rate })),
+        .table_js = html.Link{ .root = root, .up = site.view.up(), .path = "table.js" },
+    });
+}
+
+/// Site.champLink for tpl.call
+fn champLinkTo(w: *Writer, site: *const Site, ch: Champ, to_site: []const u8) !void {
+    return site.champLink(w, ch, to_site);
 }
 
 fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
@@ -1073,15 +1098,21 @@ fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     const p = site.page(title, desc, path, .champions);
     try html.head(w, p);
     if (role) |r| {
-        try w.print("<h1>{s} lane champions</h1>\n", .{roleName(r)});
-    } else try w.writeAll("<h1>Champions</h1>\n");
-    try w.print("<p class=\"muted\"><b>{d}</b> ranked solo/duo games {s}, {s}, all ranks.", .{ site.games, site.view.region.in(), site.when });
+        try tpl.render(w, "<h1>{role} lane champions</h1>\n", .{ .role = roleName(r) });
+    } else try tpl.render(w, "<h1>Champions</h1>\n", .{});
     const patch_view: html.View = .{ .region = site.view.region, .period = .patch };
-    if (site.view_builds[patch_view.index()] != null) try html.tpl.render(w, " <a href=\"{href}\">Builds for patch {patch}</a>.", .{
-        .href = try std.mem.concat(a, u8, &.{ root, site.view.up(), patch_view.dir(), builds_page.index_path }),
-        .patch = site.patch,
+    try tpl.render(w,
+        \\<p class="muted"><b>{games}</b> ranked solo/duo games {in}, {when}, all ranks.{builds}</p>
+        \\
+    , .{
+        .games = site.games,
+        .in = site.view.region.in(),
+        .when = site.when,
+        .builds = if (site.view_builds[patch_view.index()] != null) tpl.t(" <a href=\"{href}\">Builds for patch {patch}</a>.", .{
+            .href = try std.mem.concat(a, u8, &.{ root, site.view.up(), patch_view.dir(), builds_page.index_path }),
+            .patch = site.patch,
+        }) else null,
     });
-    try w.writeAll("</p>\n");
     try earlyNote(site, w, false);
     try tierTable(site, w, role, root);
     try html.foot(w, p);
@@ -1100,7 +1131,7 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         for (c.curves) |cv| n += @intFromBool(cv.header.bracket == 0 and cv.header.experience == 0);
         break :blk n;
     } else 0;
-    try html.tpl.render(w,
+    try tpl.render(w,
         \\<h1>Learn your lane</h1>
         \\<p class="lead">How lane matchups actually unfold, minute by minute, and how your
         \\own games compare. From ranked match timelines: the typical gold, experience and CS
@@ -1109,7 +1140,7 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         \\
     , .{});
     if (site.curves) |*c| if (matchups > 0) try matchup.featured(site, w, c, matchups);
-    try html.tpl.render(w,
+    try tpl.render(w,
         \\<div class="grid">
         \\<div class="card"><h3><a href="{your}">Your games</a></h3>
         \\<p>Enter your Riot ID and see each recent game's lane laid over the typical curve
@@ -1134,14 +1165,14 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         .example = html.Link{ .root = site.view.up(), .path = "your.html?example" },
         .daily = html.Link{ .root = site.view.up(), .path = "daily.html" },
         .learn = html.Link{ .root = site.view.up(), .path = "learn.html" },
-        .matchups = if (matchups > 0) html.tpl.t(
+        .matchups = if (matchups > 0) tpl.t(
             "{n} lane matchups so far: when each side tends to get ahead, by how much, and whether winning lane wins the game.",
             .{ .n = matchups },
         ) else null,
-        .no_matchups = html.tpl.when(matchups == 0, @as([]const u8, "When each side of a lane matchup tends to get ahead, by how much, and whether winning lane wins the game. Curves appear as match timelines come in.")),
+        .no_matchups = tpl.when(matchups == 0, @as([]const u8, "When each side of a lane matchup tends to get ahead, by how much, and whether winning lane wins the game. Curves appear as match timelines come in.")),
     });
     // The full table is champions.html: on this page it was 90% of the bytes
-    try html.tpl.render(w,
+    try tpl.render(w,
         \\<h2>Champions</h2>
         \\<p><a href="champions.html">Win rate, pick and ban rate of every champion</a>, from
         \\<b>{games}</b> ranked solo/duo games {in}, {when}, all ranks.
@@ -1188,34 +1219,38 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         }
     }
     std.mem.sort(Role, roles[0..n_roles], RoleGames{ .st = st, .c = ch.c }, RoleGames.more);
-    try w.print(
-        "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"64\" height=\"64\"><div><h1>{f}</h1><p class=\"muted\">Ranked solo/duo <span data-scope>{s}, {s}, all ranks</span>.",
-        .{ site.icon(ch), esc(ch.name), site.view.region.in(), site.when },
-    );
-    if (n_roles > 1) {
-        try w.writeAll(" Plays ");
-        for (roles[0..n_roles], 0..) |r, i| {
-            if (i > 0) try w.writeAll(if (i + 1 == n_roles) " and " else ", ");
-            try w.print("<a href=\"#{s}\">{s}</a>", .{ roleSlug(r), roleName(r) });
-        }
-        try w.writeAll(".");
-    }
-    try w.writeAll("</p></div></div>\n");
+    try tpl.render(w,
+        \\<div class="hero"><img src="{icon}" alt="" width="64" height="64"><div><h1>{name}</h1><p class="muted">Ranked solo/duo <span data-scope>{in}, {when}, all ranks</span>.{plays}</p></div></div>
+        \\
+    , .{
+        .icon = site.icon(ch),
+        .name = ch.name,
+        .in = site.view.region.in(),
+        .when = site.when,
+        .plays = tpl.when(n_roles > 1, tpl.t(" Plays {roles}.", .{ .roles = tpl.call(roleLinks, .{roles[0..n_roles]}) })),
+    });
     try earlyNote(site, w, true);
     try filterBar(site, w, ch);
-    if (n_roles == 0) try w.writeAll("<p>No games yet.</p>\n");
+    if (n_roles == 0) try tpl.render(w, "<p>No games yet.</p>\n", .{});
 
     for (roles[0..n_roles]) |r| {
         const cr = st.champRole(r, ch.c);
         const iv = wilson(cr.wins, cr.games);
-        try w.print("<section id=\"{s}\"><h2>{s}</h2>\n<div class=\"tiles\">", .{ roleSlug(r), roleName(r) });
-        try w.print("<div data-tile=\"wr\"><span>Win rate</span><b class=\"{s}\">", .{side(iv)});
-        try pct(w, cr.wins, cr.games);
-        try w.print("</b><small>{d:.1}% to {d:.1}%</small></div><div data-tile=\"pick\"><span>Pick rate</span><b>", .{ 100 * iv[0], 100 * iv[1] });
-        try pct(w, cr.games, site.games);
-        try w.writeAll("</b><small>of games</small></div><div data-tile=\"ban\"><span>Ban rate</span><b>");
-        try pct(w, ch.banned, site.games);
-        try w.print("</b><small>of games</small></div><div data-tile=\"games\"><span>Games</span><b>{d}</b><small>{s} lane</small></div></div>\n", .{ cr.games, roleName(r) });
+        try tpl.renderPart(w,
+            \\<section id="{slug}"><h2>{role}</h2>
+            \\<div class="tiles"><div data-tile="wr"><span>Win rate</span><b class="{side}">{wr}</b><small>{lo:.1}% to {hi:.1}%</small></div><div data-tile="pick"><span>Pick rate</span><b>{pick}</b><small>of games</small></div><div data-tile="ban"><span>Ban rate</span><b>{ban}</b><small>of games</small></div><div data-tile="games"><span>Games</span><b>{games}</b><small>{role} lane</small></div></div>
+            \\
+        , .{
+            .slug = roleSlug(r),
+            .role = roleName(r),
+            .side = side(iv),
+            .wr = tpl.call(pct, .{ cr.wins, cr.games }),
+            .lo = 100 * iv[0],
+            .hi = 100 * iv[1],
+            .pick = tpl.call(pct, .{ cr.games, site.games }),
+            .ban = tpl.call(pct, .{ ch.banned, site.games }),
+            .games = cr.games,
+        });
 
         var opps: std.ArrayList(Opponent) = .empty;
         for (site.champs) |other| {
@@ -1226,50 +1261,92 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         }
         try builds_page.link(site, w, ch, r, path);
         try opponentTable(site, w, ch, r, opps.items);
-        try w.writeAll("</section>\n");
+        try tpl.renderPart(w, "</section>\n", .{});
     }
     try pool_page.section(site, w, &site.pool, ch);
     try learning_page.section(w, &site.learning, ch);
-    try w.print("<p class=\"muted small\">Win rates are raw: no pulling toward 50%. Bars are 95% Wilson intervals. Gold at {d} min is the lane curve's estimate (± two standard errors); for filters other than a region and period above, the plain average of the games picked. <a href=\"../method.html\">Method</a>.</p>\n", .{core.curvesfile.lane_minute});
-    try w.writeAll("<script src=\"../table.js\" defer></script>\n<script src=\"../filters.js\" defer></script>\n");
+    try tpl.render(w,
+        \\<p class="muted small">Win rates are raw: no pulling toward 50%. Bars are 95% Wilson intervals. Gold at {minute} min is the lane curve's estimate (± two standard errors); for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
+        \\<script src="../table.js" defer></script>
+        \\<script src="../filters.js" defer></script>
+        \\
+    , .{ .minute = core.curvesfile.lane_minute });
     try html.foot(w, p);
+}
+
+/// "<a>Top</a>, <a>Jungle</a> and <a>Mid</a>"
+fn roleLinks(w: *Writer, roles: []const Role) !void {
+    for (roles, 0..) |r, i| {
+        try tpl.render(w, "{sep}<a href=\"#{slug}\">{name}</a>", .{
+            .sep = if (i == 0) null else if (i + 1 == roles.len) " and " else ", ",
+            .slug = roleSlug(r),
+            .name = roleName(r),
+        });
+    }
 }
 
 /// Filter bar (filters.zig, static/filters.js), set to the page as written (the root
 /// view); disabled until the script has the champion's filter data
 fn filterBar(site: *const Site, w: *Writer, ch: Champ) !void {
-    const f = site.filter;
     const region = site.opts.platforms[0];
-    try w.print(
-        "<div class=\"filter-bar\" data-src=\"../data/filters/{s}.json\" data-meta=\"../data/filters.json\" data-champions=\"../data/champions.json\" data-ddragon=\"{s}\" data-id=\"{d}\" data-region=\"{s}\" data-current=\"{s}\">",
-        .{ ch.slug, site.ddragon_version, ch.id, region, site.patch },
-    );
-    try w.writeAll("<label>Region <select data-f=\"region\" disabled><option value=\"all\">All regions</option>");
-    for (site.opts.all_platforms) |pl| {
-        try w.print("<option value=\"{s}\"{s}>{s}</option>", .{ pl, selected(std.mem.eql(u8, pl, region)), platformName(pl) });
-    }
-    try w.writeAll("</select></label>\n<label>Rank <select data-f=\"rank\" disabled><option value=\"\" selected>All ranks</option>");
+    try tpl.render(w,
+        \\<div class="filter-bar" data-src="../data/filters/{slug}.json" data-meta="../data/filters.json" data-champions="../data/champions.json" data-ddragon="{ddragon}" data-id="{id}" data-region="{region}" data-current="{patch}"><label>Region <select data-f="region" disabled><option value="all">All regions</option>{regions}</select></label>
+        \\<label>Rank <select data-f="rank" disabled><option value="" selected>All ranks</option>{ranks}</select></label>
+        \\<label>Period <select data-f="period" disabled><option value="days30" selected>Last 30 days</option>{patches}</select></label>
+        \\<label>Opponents <select data-f="min" disabled>{mins}</select></label>
+        \\<button class="link" data-reset hidden>Reset</button></div>
+        \\
+    , .{
+        .slug = ch.slug,
+        .ddragon = site.ddragon_version,
+        .id = ch.id,
+        .region = region,
+        .patch = site.patch,
+        .regions = tpl.each(site.opts.all_platforms, region, regionOption),
+        .ranks = tpl.call(rankOptions, .{site.arena}),
+        .patches = tpl.each(site.filter.patches, site.filter.current, patchOption),
+        .mins = tpl.call(minOptions, .{}),
+    });
+}
+
+fn regionOption(current: []const u8, w: *Writer, pl: []const u8) !void {
+    try tpl.render(w, "<option value=\"{pl}\"{selected}>{name}</option>", .{
+        .pl = pl,
+        .selected = tpl.flag(std.mem.eql(u8, pl, current), "selected"),
+        .name = platformName(pl),
+    });
+}
+
+fn rankOptions(w: *Writer, a: std.mem.Allocator) !void {
     for (filters.tiers, 0..) |t, i| {
-        try w.print("<option value=\"{d}\">{c}{s}+</option>", .{ i, t[0], try std.ascii.allocLowerString(site.arena, t[1..]) });
+        try tpl.render(w, "<option value=\"{i}\">{initial}{rest}+</option>", .{
+            .i = i,
+            .initial = t[0..1],
+            .rest = try std.ascii.allocLowerString(a, t[1..]),
+        });
     }
-    try w.writeAll("</select></label>\n<label>Period <select data-f=\"period\" disabled><option value=\"days30\" selected>Last 30 days</option>");
-    for (f.patches) |pa| {
-        const current = for (f.current) |c| {
-            if (std.mem.eql(u8, c, pa)) break true;
-        } else false;
-        try w.print("<option value=\"patch:{s}\">Patch {s}{s}</option>", .{ pa, pa, if (current) "" else " (last 30 days)" });
-    }
-    try w.writeAll("</select></label>\n<label>Opponents <select data-f=\"min\" disabled>");
+}
+
+fn patchOption(current: []const []const u8, w: *Writer, pa: []const u8) !void {
+    const is_current = for (current) |c| {
+        if (std.mem.eql(u8, c, pa)) break true;
+    } else false;
+    try tpl.render(w, "<option value=\"patch:{pa}\">Patch {pa}{days}</option>", .{
+        .pa = pa,
+        .days = tpl.when(!is_current, " (last 30 days)"),
+    });
+}
+
+fn minOptions(w: *Writer) !void {
     const mins = [_][2][]const u8{
         .{ "0", "All" },        .{ "5", "5+ games" },     .{ "10", "10+ games" },            .{ "20", "20+ games" },
         .{ "50", "50+ games" }, .{ "100", "100+ games" }, .{ "p1", "Seen in 1%+ of games" }, .{ "p2", "Seen in 2%+ of games" },
     };
-    for (mins, 0..) |m, i| try w.print("<option value=\"{s}\"{s}>{s}</option>", .{ m[0], selected(i == 0), m[1] });
-    try w.writeAll("</select></label>\n<button class=\"link\" data-reset hidden>Reset</button></div>\n");
-}
-
-fn selected(yes: bool) []const u8 {
-    return if (yes) " selected" else "";
+    for (mins, 0..) |m, i| try tpl.render(w, "<option value=\"{v}\"{selected}>{label}</option>", .{
+        .v = m[0],
+        .selected = tpl.flag(i == 0, "selected"),
+        .label = m[1],
+    });
 }
 
 /// "EUW1" -> "EUW", "EUN1" -> "EUNE", as static/filters.js platformName
@@ -1294,41 +1371,53 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Oppo
             return x.iv[1] < y.iv[1];
         }
     }.f);
-    try w.print(
-        \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{d}, hardest first, by the top of each bar</span></h3>
+    try tpl.renderPart(w,
+        \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{n}, hardest first, by the top of each bar</span></h3>
         \\<input type="search" placeholder="Search opponent" data-filter aria-label="Search opponent"></div>
         \\<div class="tl-wrap"><table class="tl" data-sortable>
-        \\<thead><tr><th class="l" data-sort="text">Opponent</th><th data-sort="num">{f}'s win rate</th><th data-sort="num" title="Lane curve estimate: {f} minus the opponent">Gold at {d}</th><th data-sort="num">Games</th></tr></thead>
+        \\<thead><tr><th class="l" data-sort="text">Opponent</th><th data-sort="num">{name}'s win rate</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent">Gold at {minute}</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
-    , .{ opps.len, esc(ch.name), esc(ch.name), core.curvesfile.lane_minute });
+    , .{ .n = opps.len, .name = ch.name, .minute = core.curvesfile.lane_minute });
     var few: usize = 0;
     for (opps) |o| {
         const thin = o.games < min_opponent_games;
         if (thin) few += 1;
-        try w.print("<tr data-id=\"{d}\" data-name=\"{f}\"{s}><td class=\"l\">", .{ o.other.id, esc(o.other.name), if (thin) " class=\"thin\"" else "" });
-        try site.champLink(w, o.other, "../");
-        try w.writeAll("</td>");
-        try winRateCell(w, o.wins, o.games, 0.25);
-        try goldCell(site, w, ch, o.other, r);
-        try w.print("<td class=\"dim\" data-v=\"{d}\">{d}</td></tr>\n", .{ o.games, o.games });
+        try tpl.render(w,
+            \\<tr data-id="{id}" data-name="{name}"{thin}><td class="l">{link}</td>{wr}{gold}<td class="dim" data-v="{games}">{games}</td></tr>
+            \\
+        , .{
+            .id = o.other.id,
+            .name = o.other.name,
+            .thin = tpl.flag(thin, "class=\"thin\""),
+            .link = tpl.call(champLinkTo, .{ site, o.other, "../" }),
+            .wr = tpl.call(winRateCell, .{ o.wins, o.games, @as(f64, 0.25) }),
+            .gold = tpl.call(goldCell, .{ site, ch, o.other, r }),
+            .games = o.games,
+        });
     }
-    try w.writeAll("</tbody></table></div>\n");
-    if (few > 0) try w.print(
-        "<p class=\"tl-more\">Faded: the last {d} opponents, under {d} games each, too few to read much into.</p>\n",
-        .{ few, min_opponent_games },
-    );
+    try tpl.renderPart(w,
+        \\</tbody></table></div>
+        \\{faded}
+    , .{ .faded = tpl.when(few > 0, tpl.t(
+        \\<p class="tl-more">Faded: the last {few} opponents, under {min} games each, too few to read much into.</p>
+        \\
+    , .{ .few = few, .min = min_opponent_games })) });
 }
 
-fn goldCell(site: *const Site, w: *Writer, ch: Champ, other: Champ, r: Role) !void {
-    const curves = if (site.curves) |*c| c else return w.writeAll("<td class=\"dim\" data-v=\"\"></td>");
-    const v = curves.get(r, .all, ch.id, other.id) orelse return w.writeAll("<td class=\"dim\" data-v=\"\"></td>");
+fn goldCell(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !void {
+    const none = "<td class=\"dim\" data-v=\"\"></td>";
+    const curves = if (site.curves) |*c| c else return tpl.render(w, none, .{});
+    const v = curves.get(r, .all, ch.id, other.id) orelse return tpl.render(w, none, .{});
     const e = v.estimate(.gold, core.curvesfile.lane_minute - 1);
     const margin = 2 * @as(i32, e.se);
-    const s = if (e.mean > margin) "up" else if (e.mean < -margin) "down" else "even";
     const x, const y = if (ch.id < other.id) .{ ch, other } else .{ other, ch };
-    try w.print("<td data-v=\"{d}\"><a class=\"gold {s}\" href=\"../{s}\" title=\"Lane curves\">{s}{d}</a><small>±{d}</small></td>", .{
-        e.mean, s, try matchup.path(site.arena, r, x, y), if (e.mean > 0) "+" else "", e.mean, margin,
+    try tpl.render(w, "<td data-v=\"{mean}\"><a class=\"gold {side}\" href=\"../{path}\" title=\"Lane curves\">{sign}{mean}</a><small>±{margin}</small></td>", .{
+        .mean = e.mean,
+        .side = if (e.mean > margin) "up" else if (e.mean < -margin) "down" else "even",
+        .path = try matchup.path(site.arena, r, x, y),
+        .sign = if (e.mean > 0) "+" else "",
+        .margin = margin,
     });
 }
 
