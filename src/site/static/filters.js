@@ -1,10 +1,11 @@
 // Champion page filters (root.zig filterBar, filters.zig). The champion's filter data has
 // one row per region, patch, 30-day flag, rank, role and lane opponent with games, wins
-// and gold at 14, plus bans; data/filters.json has every champion's players per role for
-// pick rates. This sums the rows the bar picks and redraws each role's tiles and opponent
-// table, the early-data note and the header switches. The page as written is the bar's
-// defaults (the root view), put back as it was on Reset. Picks live in the URL so a view
-// can be shared; the views' own links use the same keys (html.View.query).
+// and gold at 14, plus bans by the game's rank; data/filters.json has players per role
+// and games by rank for pick and ban rates. This sums the rows the bar picks and
+// redraws each role's tiles and opponent table, the early-data note and the header
+// switches. The page as written is the bar's defaults (the root view), put back as it
+// was on Reset. Picks live in the URL so a view can be shared; the views' own links use
+// the same keys (html.View.query).
 "use strict";
 
 (async () => {
@@ -102,7 +103,7 @@
     const out = {
       roles: meta.roles.map(() => ({ games: 0, wins: 0, slots: 0, opps: new Map() })),
       players: 0,
-      allPlayers: 0,
+      games: 0,
       bans: 0,
     };
     for (const [pl, pa, recent, ti, role, opp, g, w, gn, gs, gq] of data.rows) {
@@ -119,13 +120,13 @@
       o.gq += gq;
     }
     for (const [pl, pa, recent, ti, role, n] of meta.slots) {
-      if (!slice(pl, pa, recent)) continue;
-      out.allPlayers += n;
-      if (!ranked(ti)) continue;
+      if (!slice(pl, pa, recent) || !ranked(ti)) continue;
       out.players += n;
       out.roles[role].slots += n;
     }
-    for (const [pl, pa, recent, n] of data.bans) if (slice(pl, pa, recent)) out.bans += n;
+    // Bans and games by the game's rank (filters.zig gameTier)
+    for (const [pl, pa, recent, ti, n] of data.bans) if (slice(pl, pa, recent) && ranked(ti)) out.bans += n;
+    for (const [pl, pa, recent, ti, n] of meta.games) if (slice(pl, pa, recent) && ranked(ti)) out.games += n;
     return out;
   }
 
@@ -223,8 +224,8 @@
       // Two players per role and game
       tiles.querySelector('[data-tile="pick"] b').textContent = pct(2 * r.games, r.slots);
       const ban = tiles.querySelector('[data-tile="ban"]');
-      ban.querySelector("b").textContent = pct(10 * sums.bans, sums.allPlayers);
-      if (f.rank !== "") ban.title = "Of games at every rank: a ban belongs to the game, not a player";
+      ban.querySelector("b").textContent = pct(sums.bans, sums.games);
+      if (f.rank !== "") ban.title = "Of games whose players' middle rank is in the filter";
       tiles.querySelector('[data-tile="games"] b').textContent = r.games;
     }
     if (!s.body) return;

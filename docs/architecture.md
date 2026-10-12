@@ -355,7 +355,9 @@ written from the root view), with a filter bar for region (every platform), rank
 and up), period (30 days or a patch) and min opponent games. filters.zig writes
 data/filters/<slug>.json (games, wins and gold at 14 per region, patch, 30-day flag,
 rank, role and opponent; bans; each view's curve gold at 14) and data/filters.json
-(players per role, for pick rates); static/filters.js sums the picked slices and redraws
+(players per role, for pick rates; games by rank, for ban rates). A ban counts under
+its game's rank, the median ladder tier of its players: Riot's ban order doesn't say
+reliably which player banned. static/filters.js sums the picked slices and redraws
 the tiles, opponent table, early-data note and header switches. Gold at 14 is the
 curve's estimate when the filters are a view (any rank, or Diamond+), else the plain
 average. Other views link in with their filters in the query (html.View.query:

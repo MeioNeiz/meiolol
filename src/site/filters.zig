@@ -61,7 +61,11 @@ const Cells = std.AutoArrayHashMapUnmanaged(Key, Cell);
 const SlotKey = struct { slice: Slice, tier: u8, role: Role };
 const Slots = std.AutoArrayHashMapUnmanaged(SlotKey, u32);
 
-const BanKey = struct { slice: Slice, champion: u32 };
+/// A game's rank (gameTier) where it was played: ban rates by rank, as the ban order
+/// doesn't say reliably which player banned
+const GameKey = struct { slice: Slice, tier: u8 };
+const Games = std.AutoArrayHashMapUnmanaged(GameKey, u32);
+const BanKey = struct { game: GameKey, champion: u32 };
 const Bans = std.AutoArrayHashMapUnmanaged(BanKey, u32);
 
 const Player = struct {
@@ -92,6 +96,9 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
     const cells = try a.alloc(Cells, site.champs.len);
     @memset(cells, .empty);
     var slots: Slots = .empty;
+    var games: Games = .empty;
+    // Match id -> its key in games, for its bans
+    var game_keys: std.StringHashMapUnmanaged(GameKey) = .empty;
     var patches: std.ArrayList([]const u8) = .empty;
 
     const platform_json = try std.json.Stringify.valueAlloc(a, opts.all_platforms, .{});
@@ -118,6 +125,9 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
         const more = try q.step();
         if (!more or !std.mem.eql(u8, q.bytes(0), current.items)) {
             if (current.items.len > 0 and !bad and n == 10) if (winnerSide(game.winner)) |winner| {
+                const gk: GameKey = .{ .slice = game.slice, .tier = gameTier(&players) };
+                (try games.getOrPutValue(a, gk, 0)).value_ptr.* += 1;
+                try game_keys.put(a, try a.dupe(u8, current.items), gk);
                 for (players) |p| {
                     const s = try slots.getOrPutValue(a, .{ .slice = game.slice, .tier = p.tier, .role = p.role }, 0);
                     s.value_ptr.* += 1;
@@ -184,7 +194,7 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
         n += 1;
     }
 
-    const bans = try countBans(a, db, opts, platform_json, patch_json, &patches);
+    const bans = try countBans(a, db, opts, platform_json, patch_json, &game_keys);
     const sorted = try a.dupe([]const u8, patches.items);
     std.mem.sort([]const u8, sorted, {}, struct {
         fn f(_: void, x: []const u8, y: []const u8) bool {
@@ -195,7 +205,7 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
     const files = try a.alloc(root.File, site.champs.len + 1);
     {
         var aw: Writer.Allocating = .init(a);
-        try writeMeta(&aw.writer, opts, patches.items, sorted, &slots);
+        try writeMeta(&aw.writer, opts, patches.items, sorted, &slots, &games);
         files[0] = .{ .path = "data/filters.json", .data = aw.written() };
     }
     for (site.champs, cells, files[1..]) |ch, *c, *f| {
@@ -206,31 +216,40 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
     return .{ .files = files, .patches = sorted, .current = opts.patches };
 }
 
-/// Bans by champion in the games make counts (by match: rank doesn't apply)
-fn countBans(a: std.mem.Allocator, db: store.Db, opts: root.Options, platform_json: []const u8, patch_json: []const u8, patches: *std.ArrayList([]const u8)) !Bans {
+/// Bans by champion in the games make counts, once per game, under the game's rank
+fn countBans(a: std.mem.Allocator, db: store.Db, opts: root.Options, platform_json: []const u8, patch_json: []const u8, game_keys: *const std.StringHashMapUnmanaged(GameKey)) !Bans {
     var bans: Bans = .empty;
     var q = try db.prepare(
-        \\SELECT m.platform, m.patch, m.game_start >= ?, b.champion_id, count(DISTINCT b.match_id)
+        \\SELECT DISTINCT b.match_id, b.champion_id
         \\FROM bans b JOIN matches m USING (match_id)
         \\WHERE m.queue_id = ? AND m.platform IN (SELECT value FROM json_each(?))
         \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
         \\  AND (m.game_start >= ? OR m.patch IN (SELECT value FROM json_each(?)))
-        \\GROUP BY 1, 2, 3, 4
     );
     defer q.deinit();
-    try q.bind(.{ opts.since_ms, stats.ranked_solo, platform_json, opts.since_ms, patch_json });
+    try q.bind(.{ stats.ranked_solo, platform_json, opts.since_ms, patch_json });
     while (try q.step()) {
-        const slice: Slice = .{
-            .platform = @intCast(indexOf(opts.all_platforms, q.bytes(0)) orelse continue),
-            .patch = try patchIndex(a, patches, q.bytes(1)),
-            .recent = q.int(2) != 0,
-        };
-        try bans.put(a, .{ .slice = slice, .champion = @intCast(q.int(3)) }, @intCast(q.int(4)));
+        const gk = game_keys.get(q.bytes(0)) orelse continue;
+        (try bans.getOrPutValue(a, .{ .game = gk, .champion = @intCast(q.int(1)) }, 0)).value_ptr.* += 1;
     }
     return bans;
 }
 
-fn writeMeta(w: *Writer, opts: root.Options, patches: []const []const u8, sorted: []const []const u8, slots: *const Slots) !void {
+/// Median ladder tier of the game's players (lower middle); tiers.len when none is on
+/// the ladder
+fn gameTier(players: *const [10]Player) u8 {
+    var ranked: [10]u8 = undefined;
+    var n: usize = 0;
+    for (players) |p| if (p.tier < tiers.len) {
+        ranked[n] = p.tier;
+        n += 1;
+    };
+    if (n == 0) return tiers.len;
+    std.mem.sort(u8, ranked[0..n], {}, std.sort.asc(u8));
+    return ranked[(n - 1) / 2];
+}
+
+fn writeMeta(w: *Writer, opts: root.Options, patches: []const []const u8, sorted: []const []const u8, slots: *const Slots, games: *const Games) !void {
     try w.writeAll("{\"platforms\":");
     try std.json.Stringify.value(opts.all_platforms, .{}, w);
     try w.writeAll(",\"tiers\":");
@@ -258,6 +277,16 @@ fn writeMeta(w: *Writer, opts: root.Options, patches: []const []const u8, sorted
             k.slice.platform, k.slice.patch, @intFromBool(k.slice.recent), k.tier, @intFromEnum(k.role), e.value_ptr.*,
         });
     }
+    // Games by their rank (gameTier), for ban rates: platform, patch, recent, tier, games
+    try w.writeAll("],\"games\":[");
+    first = true;
+    var git = games.iterator();
+    while (git.next()) |e| {
+        if (!first) try w.writeByte(',');
+        first = false;
+        const k = e.key_ptr.*;
+        try w.print("[{d},{d},{d},{d},{d}]", .{ k.slice.platform, k.slice.patch, @intFromBool(k.slice.recent), k.tier, e.value_ptr.* });
+    }
     try w.writeAll("]}\n");
 }
 
@@ -283,7 +312,7 @@ fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches
             v.games,          v.wins,        v.gold_n,                     v.gold_sum, v.gold_sq,
         });
     }
-    // Platform, patch, recent, games banned in
+    // Platform, patch, recent, the game's rank (gameTier), games banned in
     try w.writeAll("],\"bans\":[");
     first = true;
     var bit = bans.iterator();
@@ -292,7 +321,8 @@ fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches
         if (k.champion != ch.id) continue;
         if (!first) try w.writeByte(',');
         first = false;
-        try w.print("[{d},{d},{d},{d}]", .{ k.slice.platform, k.slice.patch, @intFromBool(k.slice.recent), e.value_ptr.* });
+        const g = k.game;
+        try w.print("[{d},{d},{d},{d},{d}]", .{ g.slice.platform, g.slice.patch, @intFromBool(g.slice.recent), g.tier, e.value_ptr.* });
     }
     // Each view's lane curve gold at 14 per role and opponent: mean and standard error,
     // keyed "region|period|rank" as the filter bar's values. An all-ranks entry also
