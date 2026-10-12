@@ -351,8 +351,8 @@ next steps land here.
   after a reboot without login (wsl-watchdog task, logged out, elevated: Jacob still has
   to run the snippet with his password, docs/compute.md), archive on the 1 TB Linux
   partition of the 2 TB NVMe (/mnt/wsl/archive once attached; look at its contents
-  first, nothing deleted without Jacob). Still open: box alert when the gpu-box is
-  unreachable 12 h+
+  first, nothing deleted without Jacob). Box alert when the gpu-box stops acking the
+  archive for 12 h: done (deploy/health.sh)
 - Then: scripted snapshot cadence and packed rows (with 2a), run queue and checkpoints
   (for the lab agent), speed work only after measuring on the full snapshot
 

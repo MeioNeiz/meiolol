@@ -84,6 +84,8 @@ deploy/health.sh runs on the box and prints one line per problem:
 | site | tmux `meiolol-web` gone, or last upload in web.log older than 26h |
 | disk | /mnt/c or / at 80%, /mnt/d at 90% (it was 86% before backups) |
 | backup | tmux `meiolol-backup` gone, or newest state snapshot older than 26h |
+| gpu-box | no raw archive ack for 12h (ACK_H): PC off, asleep or WSL down; first export never acked |
+| raw held | free disk under twice raw.db + timeline.db + archive-out (raw stays until acked) |
 
 - Box: tmux `meiolol-health` (deploy/health-loop.sh) every 15 min; pushes to the private
   ntfy.sh topic NTFY_TOPIC from .env when the problems change, every 12h while they last,

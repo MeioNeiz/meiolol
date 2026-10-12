@@ -83,8 +83,9 @@ first.
 - Reboots (Jacob: task runs logged out): wsl-watchdog.ps1 as a password-stored task,
   highest privileges. Needs Jacob once in an elevated PowerShell (password); first boot
   without login still to be seen
-- Reachability alert: the box's health loop (ntfy) warns when the gpu-box has been
-  unreachable over 12 h and when the archive's unacked backlog nears the box's free disk
+- Reachability alert (done, deploy/health.sh): the box can't reach the PC, so it warns
+  when the archive has had no ack for 12 h, and when free disk is under twice the raw it
+  holds
 - Archive disk (Jacob: the 1 TB Linux partition): the WSL disk (ext4 vhdx) is on C:,
   261 GB free, shared with Windows and games. The 2 TB NVMe has no Windows letter: Linux
   partitions of 128 GB, 1 TB and 32 GB (an old Linux install?) and ~700 GB unallocated.

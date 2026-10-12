@@ -64,6 +64,31 @@ if [[ -z "$newest" ]] || (( now - $(stat -c %Y "$newest") > 26 * 3600 )); then
     problems+=("backup missing: newest ${newest:+$(basename "$newest")}${newest:-none}")
 fi
 
+# Raw archive: the gpu-box pulls and acks (deploy/archive-pull.sh); the box can't reach the
+# PC, so a stale ack is how it sees the PC off or WSL down. Lines carry the last ack's time,
+# not an age, so health-loop.sh doesn't push again every hour. Never exported: not live yet
+ACK_H=${ACK_H:-12}
+if archive=$(bin/meiolol raw-export --data data --status 2>&1); then
+    since=$(awk '$1 == "since_ack_s" { print $2 }' <<< "$archive")
+    oldest=$(awk '$1 == "oldest_unacked_s" { print $2 }' <<< "$archive")
+    unacked=$(awk '$1 == "unacked" { print $2 }' <<< "$archive")
+    if [[ "$since" =~ ^[0-9]+$ ]] && (( since > ACK_H * 3600 )); then
+        last=$(date -u -d "@$(( now - since ))" '+%F %H:%MZ')
+        problems+=("gpu-box: no archive ack since $last ($unacked exports waiting)")
+    elif [[ "$since" == null && "$oldest" =~ ^[0-9]+$ ]] && (( oldest > ACK_H * 3600 )); then
+        problems+=("gpu-box: first archive export never acked")
+    fi
+else
+    problems+=("archive status failed: $(head -n 1 <<< "$archive")")
+fi
+# Raw held on the box until acked: once it could no longer double, the disk fills before
+# a long gpu-box outage ends
+held=$(du -cb data/raw.db data/timeline.db data/archive-out 2>/dev/null | tail -n 1 | cut -f1)
+free=$(df --output=avail -B1 data | tail -n 1 | tr -dc '0-9')
+if (( ${free:-0} < 2 * ${held:-0} )); then
+    problems+=("box disk: $(( free >> 30 )) GB free for $(( held >> 30 )) GB of raw")
+fi
+
 (( ${#problems[@]} == 0 )) && exit 0
 printf '%s\n' "${problems[@]}"
 exit 1
