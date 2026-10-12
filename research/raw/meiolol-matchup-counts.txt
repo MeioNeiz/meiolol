@@ -1,0 +1,12 @@
+meiolol site matchup pages on the box, data/site, measured 2026-10-12 00:30 UTC
+Files per directory (html only): all/matchup 19150, all/patch 12668, patch/matchup 6972,
+matchup/top 3513, matchup/mid 2825, matchup/jungle 2074, matchup/support 2074, matchup/bot 1439
+Whole site: 1.2G, 103517 files (html plus .gz twins and assets)
+Size: matchup 239M, patch/matchup 137M, all/matchup 375M, all/patch/matchup 240M
+Pages by the game count in their first "N games." line (pages without that line not counted):
+view               pages  200+  100+  30+
+matchup            7508   12    54    707
+patch/matchup      3769   0     0     40
+all/matchup        12925  165   635   2576
+all/patch/matchup  7433   11    56    614
+Every page carries <meta name="robots" content="noindex"> (preview mode until the production key)

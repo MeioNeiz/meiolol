@@ -1,0 +1,11 @@
+meiolol champion page filter prototype, measured 2026-10-12
+src/site/filters.zig header (commit 2530524):
+//! Champion page filters (prototype, Options.filter_champions): per champion, games,
+//! wins and gold at 14 against the lane opponent, split by region, the player's rank,
+//! patch, role and opponent, as one JSON file (data/filters/<slug>.json at the site
+//! root). The page's filter bar (static/filters.js) sums the slices picked. Counts add
+//! up, so any mix of filters needs neither a server nor a page per combination
+
+Live: https://meiolol.jomify.lol/champion/ahri.html
+data/filters/ahri.json 34666 bytes gzipped; data/champions.json 4301 bytes gzipped
+Not summable when filtered: gold at 14 falls back from the lane-curve estimate to a plain average; pick and ban rate tiles are dimmed

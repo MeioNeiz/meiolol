@@ -31,4 +31,6 @@ Every finding starts with one or more tags. Add tags here before using them.
 | `web` | the website's UI: HTML generation, templating, client-side JS and wasm |
 | `queues` | game modes, queue ids, which queues the API serves |
 | `toolchain` | Zig versions, build system, compiler and std changes affecting the repo |
+| `seo` | search engines: indexing, crawl budget, sitemaps, spam policies, page speed |
+| `render` | when pages are built: static generation, on-demand rendering, caching, ISR |
 | `ops` | hosting, object storage, backups off-site, free tiers, prices, provider terms |

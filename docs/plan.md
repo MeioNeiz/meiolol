@@ -298,6 +298,44 @@ next steps land here.
 - Zig 0.17 move: small (docs/zig-0.17.md). Waiting (Jacob, 2026-10-11) until ZLS works
   with 0.17, ideally with dvui on 0.17 too; then one move
 
+### Site build and deploy (2026-10-12, was meiolol-a5)
+
+Push to live took 8-16 min: a deploy restarted the web loop cold (curves, eval and
+builds reran), the site is 103k files / 1.2 GB rewritten and re-uploaded each round, and
+nothing showed without a deploy. Research: research/questions/hybrid-rendering-seo.md
+
+Done:
+- Deploys signal the web loop (SIGUSR1: build and upload now); restart only when
+  web-loop.sh, its unit or the contact changes
+- Upload sends only changed files (checksum copy into data/site, rsync -z)
+- nginx: Cache-Control no-cache on the site, so browsers revalidate (304) every load
+- on-push skips pushes that touch only docs or research; box builds reuse .zig-cache
+- `deploy/box.sh preview` (working tree, EUW views, localhost:8081, ~2 min),
+  `preview static` (css and js, 1 s), `preview stop`; `meiolol site --euw-only`
+
+Direction: stay static (option E in the research), Zig renders, plain JS on top, no
+framework:
+- Static HTML for champion pages and thick matchup pages (the ones meant for search)
+- The browser filters (region, rank, period, role) from one summable data file per
+  champion (Ahri prototype) and draws thin matchups from per-champion data
+- One page per champion or matchup instead of four view copies: ~103k files to a few
+  thousand
+- Search: one indexable URL per matchup above a game floor, canonical for the rest,
+  sitemaps with lastmod
+- Server rendering (nginx try_files to a Zig renderer, proxy cache) only if the static
+  set outgrows quick builds
+
+Next:
+1. Measure per-champion matchup curve data (curves are estimates, precomputed per view)
+   and filter data size per champion (Ahri: 36 KB gzipped, grows with data)
+2. Filters on every champion page; drop the per-view champion copies
+3. Matchup pages: thick ones static, thin ones drawn in the browser
+4. pool.make once for all views (22% of a site pass, meiolol-d3's profile)
+5. Dev server: pages as functions of path and data, `meiolol serve` rendering on
+   request from data loaded once, so a template edit shows without a site pass
+6. If filter data grows: fetch on first use, merge Master+ ranks, content-hashed data
+   file names with long caching (keep the previous version one round), http2 in nginx
+
 ### Ideas not started (concept extensions, 2026-10-11)
 
 Jungle routes and gank timing from positions; region styles (KR vs EUW per matchup);
@@ -316,6 +354,8 @@ flashcards with spaced repetition; season "lane story" share cards.
 - Squads as private invite-link pages with Riot IDs shown to members only
 - Budget for EUNE/TR/RU/ME in the europe bucket (EUW takes it all while it has players due)
 - Patch day movers bar: z 1.96 or 2.58
+- Canonical view for search: all regions or EUW; last 30 days or patch
+- Game floor for indexing a matchup page (100? 200?)
 - Name/domain: "lol" in name and TLD is a mild Riot-trademark risk
 - Storage and hosting (research/questions/free-hosting-storage.md): (1) Hetzner Storage
   Box BX11, 1 TB for EUR 3.20/month, for off-host backups and old segments (~1.5 years
