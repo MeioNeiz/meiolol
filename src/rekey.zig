@@ -150,7 +150,6 @@ pub fn readList(gpa: std.mem.Allocator, db: Db, sql: []const u8) ![]const []cons
     errdefer list.deinit(gpa);
     var s = try db.prepare(sql);
     defer s.deinit();
-    try s.bind(.{});
     while (try s.step()) try list.append(gpa, try gpa.dupe(u8, s.bytes(0)));
     return list.toOwnedSlice(gpa);
 }

@@ -286,7 +286,7 @@ fn dropDoneRows(db: store.Db) !void {
         while (true) {
             try db.run("DELETE FROM " ++ table ++ " WHERE match_id IN (SELECT match_id FROM " ++
                 table ++ " WHERE status = 'done' LIMIT 5000)", .{});
-            const n = try db.scalar("SELECT changes()", .{}) orelse 0;
+            const n = db.changes();
             total += n;
             if (n == 0) break;
         }
@@ -942,7 +942,6 @@ fn storeGold(db: store.Db, match_id: []const u8, participants: u8, gold: [gold_m
 pub fn rebuildGold(gpa: std.mem.Allocator, db: store.Db) !usize {
     var q = try db.prepare("SELECT match_id, data FROM timeline.timelines");
     defer q.deinit();
-    try q.bind(.{});
     var stored: usize = 0;
     try db.begin();
     errdefer db.rollback();

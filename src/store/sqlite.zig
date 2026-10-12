@@ -111,6 +111,16 @@ pub const Db = struct {
         return .{ .written = written, .missed = @intCast(cur) };
     }
 
+    /// Rows the last INSERT, UPDATE or DELETE changed
+    pub fn changes(db: Db) i64 {
+        return c.sqlite3_changes64(db.handle);
+    }
+
+    /// Rows changed since the connection opened
+    pub fn totalChanges(db: Db) i64 {
+        return c.sqlite3_total_changes64(db.handle);
+    }
+
     pub fn begin(db: Db) Error!void {
         try db.exec("BEGIN IMMEDIATE");
     }
@@ -243,7 +253,6 @@ test "round trip" {
     try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM t", .{}));
     var s = try db.prepare("SELECT a, b, c FROM t ORDER BY rowid");
     defer s.deinit();
-    try s.bind(.{});
     try std.testing.expect(try s.step());
     try std.testing.expectEqual(@as(i64, 42), s.int(0));
     try std.testing.expectEqualStrings("hi", s.bytes(1));

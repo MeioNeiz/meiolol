@@ -240,7 +240,6 @@ const Group = struct { key: []const u8, n: i64 };
 fn groups(arena: std.mem.Allocator, db: store.Db, sql: []const u8) ![]Group {
     var q = try db.prepare(sql);
     defer q.deinit();
-    try q.bind(.{});
     var out: std.ArrayList(Group) = .empty;
     while (try q.step()) {
         const r = q.row(Group);
@@ -253,7 +252,6 @@ fn groups(arena: std.mem.Allocator, db: store.Db, sql: []const u8) ![]Group {
 fn ladderTiers(arena: std.mem.Allocator, db: store.Db) ![]Group {
     var q = try db.prepare("SELECT rank / 4, count(*) FROM ranks GROUP BY 1 ORDER BY 1");
     defer q.deinit();
-    try q.bind(.{});
     var out: std.ArrayList(Group) = .empty;
     while (try q.step()) {
         const g = q.row(struct { tier: i64, n: i64 });

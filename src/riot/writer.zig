@@ -340,9 +340,9 @@ pub const Writer = struct {
                 try s.player_delete.exec(.{m.puuid});
             },
             .match_ids => |*q| {
-                const before = try db.scalar("SELECT total_changes()", .{}) orelse 0;
+                const before = db.totalChanges();
                 for (q.ids) |id| try s.match_queue.exec(.{ id, q.discovered_at, @tagName(q.region) });
-                q.found = @intCast((try db.scalar("SELECT total_changes()", .{}) orelse 0) - before);
+                q.found = @intCast(db.totalChanges() - before);
             },
             .checked => |ch| try s.checked.exec(.{ ch.t, ch.puuid }),
             .match => |m| try wr.storeMatch(db, s, m.region, m.id, m.doc, m.raw, m.t, m.timeline),
@@ -490,7 +490,7 @@ const Prune = struct {
         return struct {
             fn run(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
                 try db.run(sql, .{cutoff});
-                return try db.scalar("SELECT changes()", .{}) orelse 0;
+                return db.changes();
             }
         }.run;
     }
@@ -499,7 +499,7 @@ const Prune = struct {
     fn unseenPlayers(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
         try db.exec("DELETE FROM temp.gone");
         try db.run("INSERT INTO temp.gone SELECT puuid FROM players WHERE seen_at < ? LIMIT 500", .{cutoff});
-        const n = try db.scalar("SELECT changes()", .{}) orelse 0;
+        const n = db.changes();
         try db.exec(
             \\DELETE FROM mastery WHERE puuid IN temp.gone;
             \\DELETE FROM players WHERE puuid IN temp.gone;
@@ -515,7 +515,7 @@ const Prune = struct {
             \\DELETE FROM ranks WHERE key IN (SELECT key FROM ranks
             \\    WHERE key BETWEEN ? AND ? AND seen_day < ? LIMIT 500)
         , .{ keys.lo, keys.hi, @divFloor(cutoff, std.time.s_per_day) });
-        return try db.scalar("SELECT changes()", .{}) orelse 0;
+        return db.changes();
     }
 
     /// Swept weekly (a 168th of the key space an hour): it reads every row in its slice
@@ -526,7 +526,7 @@ const Prune = struct {
             \\DELETE FROM rank_history WHERE key IN (SELECT key FROM rank_history
             \\    WHERE key BETWEEN ? AND ? GROUP BY key HAVING max(day) < ? LIMIT 500)
         , .{ keys.lo, keys.hi, @divFloor(cutoff, std.time.s_per_day) });
-        return try db.scalar("SELECT changes()", .{}) orelse 0;
+        return db.changes();
     }
 
     /// One of `n` equal ranges of PUUID keys, a different one each hour
@@ -549,7 +549,7 @@ const Prune = struct {
             \\INSERT INTO temp.gone SELECT match_id FROM matches
             \\WHERE game_start < ? * 1000 AND match_id NOT IN draft_backfill LIMIT 500
         , .{cutoff});
-        const n = try db.scalar("SELECT changes()", .{}) orelse 0;
+        const n = db.changes();
         try db.exec(
             \\DELETE FROM timeline.timelines WHERE match_id IN temp.gone;
             \\DELETE FROM participants WHERE match_id IN temp.gone;
@@ -896,7 +896,6 @@ test "rolling window prunes old matches with their rows" {
         var sql: [128]u8 = undefined;
         var q = try db.prepare(try std.mem.print(&sql, "SELECT group_concat(match_id) FROM {s}", .{t}));
         defer q.deinit();
-        try q.bind(.{});
         try std.testing.expect(try q.step());
         try std.testing.expectEqualStrings("B", q.bytes(0));
     }
@@ -974,7 +973,6 @@ test "rank history: a row per change since the last sighting, the day's last win
     }
     var q = try db.prepare("SELECT group_concat(day || ':' || rank || ':' || lp || ':' || wins, ' ') FROM rank_history");
     defer q.deinit();
-    try q.bind(.{});
     try std.testing.expect(try q.step());
     const gold_i = store.schema.packRank("GOLD", "I").?;
     var buf: [64]u8 = undefined;

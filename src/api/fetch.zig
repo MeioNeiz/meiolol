@@ -325,7 +325,6 @@ pub fn syncForgotten(gpa: Allocator, io: std.Io, db: store.Db, dir_path: []const
     defer aw.deinit();
     var q = try db.prepare("SELECT puuid FROM blocked ORDER BY puuid");
     defer q.deinit();
-    try q.bind(.{});
     while (try q.step()) try aw.writer.print("{s}\n", .{q.bytes(0)});
     const ours = try std.mem.print(&path_buf, "{s}/forgotten.txt", .{dir_path});
     var file = try dir.createFileAtomic(io, ours, .{ .replace = true });
@@ -393,7 +392,6 @@ pub fn readTimeline(arena: Allocator, blob: []const u8) !riot.timeline.Timeline 
 fn nextJob(arena: Allocator, db: store.Db) !?[]const u8 {
     var q = try db.prepare("SELECT key FROM jobs ORDER BY requested, key LIMIT 1");
     defer q.deinit();
-    try q.bind(.{});
     if (!try q.step()) return null;
     return try arena.dupe(u8, q.bytes(0));
 }

@@ -157,7 +157,7 @@ pub const Builder = struct {
     /// Off the backfill list; true when it was there (its row is still owed)
     pub fn taken(b: *Builder, match_id: []const u8) !bool {
         try b.take.exec(.{match_id});
-        return sqlite.c.sqlite3_changes64(b.db.handle) > 0;
+        return b.db.changes() > 0;
     }
 
     /// Add the match's row; false when it is not a complete ranked 5v5 game with a
@@ -409,7 +409,6 @@ test "a match's row: teams, roles, bans, median rank; nothing else" {
     // No column holds an identifier: the table's columns are exactly these
     var cols = try db.prepare("SELECT group_concat(name) FROM pragma_table_info('drafts')");
     defer cols.deinit();
-    try cols.bind(.{});
     try testing.expect(try cols.step());
     const want = "id,platform,queue,patch,day,rank,ranked,blue_win,picks,bans,minutes";
     try testing.expectEqualStrings(want, cols.bytes(0));

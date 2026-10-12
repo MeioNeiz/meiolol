@@ -169,7 +169,6 @@ pub fn champions(gpa: std.mem.Allocator, db: store.Db) ![]statsfile.Champion {
     errdefer for (list.items) |c| gpa.free(c.name);
     var q = try db.prepare("SELECT id, name FROM champions ORDER BY name");
     defer q.deinit();
-    try q.bind(.{});
     while (try q.step()) {
         const r = q.row(struct { id: i64, name: []const u8 });
         const name = try gpa.dupe(u8, r.name);

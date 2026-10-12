@@ -114,7 +114,6 @@ pub fn reapply(gpa: std.mem.Allocator, db: Db, now: i64) !Removed {
     {
         var s = try db.prepare("SELECT puuid FROM forgotten");
         defer s.deinit();
-        try s.bind(.{});
         while (try s.step()) try puuids.append(gpa, try gpa.dupe(u8, s.bytes(0)));
     }
     var total: Removed = .{};
@@ -131,7 +130,6 @@ pub fn exportList(io: std.Io, db: Db, path: []const u8) !usize {
     var w = file.file.writer(io, &buf);
     var s = try db.prepare("SELECT puuid FROM forgotten ORDER BY puuid");
     defer s.deinit();
-    try s.bind(.{});
     var n: usize = 0;
     while (try s.step()) : (n += 1) try w.interface.print("{s}\n", .{s.bytes(0)});
     try w.interface.flush();
@@ -169,7 +167,7 @@ fn hasTable(db: Db, schema: []const u8, name: []const u8) !bool {
 }
 
 fn changes(db: Db) i64 {
-    return store.sqlite.c.sqlite3_changes64(db.handle);
+    return db.changes();
 }
 
 const testing = std.testing;

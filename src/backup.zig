@@ -256,7 +256,6 @@ fn readRange(arena: std.mem.Allocator, path: []const u8) !Range {
         0,
     ));
     defer s.deinit();
-    try s.bind(.{});
     if (!try s.step()) return error.BadSegment;
     return s.row(Range);
 }
@@ -360,7 +359,6 @@ fn load(arena: std.mem.Allocator, db: Db, path: []const u8) !void {
     {
         var s = try db.prepare("SELECT name FROM b.sqlite_master WHERE type = 'table' AND name != 'segment'");
         defer s.deinit();
-        try s.bind(.{});
         while (try s.step()) try tables.append(arena, try arena.dupe(u8, s.bytes(0)));
     }
     try db.begin();
@@ -414,7 +412,7 @@ pub fn scrub(arena: std.mem.Allocator, io: Io, dir: []const u8, puuid: []const u
 }
 
 fn changes(db: Db) i64 {
-    return store.sqlite.c.sqlite3_changes64(db.handle);
+    return db.changes();
 }
 
 const testing = std.testing;

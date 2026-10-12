@@ -262,7 +262,6 @@ pub fn storeRows(db: store.Db, doc: Doc, source: []const u8) !void {
 pub fn rebuild(gpa: std.mem.Allocator, db: store.Db) !usize {
     var q = try db.prepare("SELECT key, body FROM raw.raw_docs WHERE source = 'riot_match'");
     defer q.deinit();
-    try q.bind(.{});
     var stored: usize = 0;
     try db.begin();
     errdefer db.rollback();

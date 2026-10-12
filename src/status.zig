@@ -112,7 +112,6 @@ fn byKey(arena: std.mem.Allocator, db: store.Db, comptime select: []const u8, co
 fn groups(arena: std.mem.Allocator, db: store.Db, sql: []const u8, scale: i64) ![]Group {
     var q = try db.prepare(sql);
     defer q.deinit();
-    try q.bind(.{});
     var list: std.ArrayList(Group) = .empty;
     while (try q.step()) {
         const r = q.row(struct { label: []const u8, n: i64 });
@@ -270,7 +269,6 @@ test "the samples read index ranges, not whole tables" {
     inline for (cases) |case| {
         var q = try db.prepare("EXPLAIN QUERY PLAN " ++ case[0]);
         defer q.deinit();
-        try q.bind(.{});
         var plan: std.ArrayList(u8) = .empty;
         defer plan.deinit(testing.allocator);
         while (try q.step()) try plan.appendSlice(testing.allocator, q.bytes(3));
