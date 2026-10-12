@@ -1,28 +1,57 @@
-//! meiolol-lab: modelling experiments on the gpu-box (x86_64 Linux, glibc, CUDA through
-//! libcuda). `zig build lab` builds it; docs/model.md has the results
+//! meiolol-lab: modelling experiments. `zig build lab` builds it for this machine
+//! (zig-out/bin) and the gpu-box (zig-out/gpu-box: x86_64 Linux, CUDA through libcuda);
+//! docs/model.md has the results
 
 const std = @import("std");
 const cuda = @import("gpu/cuda.zig");
+const anonymise = @import("lab/anonymise.zig");
+const protocol = @import("lab/protocol.zig");
 
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
 
 const usage =
     \\meiolol-lab COMMAND
-    \\  gpu-smoke   add two vectors on the GPU and check against the CPU
+    \\  gpu-smoke                       add two vectors on the GPU, check against the CPU
+    \\  anonymise SNAP_DIR [SALT_FILE]  hash PUUIDs and match ids in an analysis snapshot
+    \\                                  in place (salt: 32 bytes, default
+    \\                                  ~/.config/meiolol/snap-salt; docs/data-safety.md)
+    \\  split SNAP_DIR                  the shared held-out split (eval's, tested on EUW1):
+    \\                                  prints it, writes SNAP_DIR/split.tsv
     \\
 ;
 
 pub fn main(init: std.process.Init) !u8 {
-    const argv = try init.minimal.args.toSlice(init.arena.allocator());
+    const arena = init.arena.allocator();
+    const argv = try init.minimal.args.toSlice(arena);
     if (argv.len < 2) {
         std.debug.print("{s}", .{usage});
         return 2;
     }
-    if (std.mem.eql(u8, argv[1], "gpu-smoke")) {
+    const cmd = argv[1];
+    if (std.mem.eql(u8, cmd, "gpu-smoke")) {
         try gpuSmoke(init.gpa);
         return 0;
     }
-    std.debug.print("unknown command {s}\n{s}", .{ argv[1], usage });
+    if (std.mem.eql(u8, cmd, "anonymise") and argv.len >= 3) {
+        const salt_path = if (argv.len >= 4) argv[3] else try std.fs.path.join(arena, &.{
+            init.environ_map.get("HOME") orelse return error.NoHome, ".config/meiolol/snap-salt",
+        });
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, salt_path, arena, .limited(64));
+        if (bytes.len != 32) {
+            std.log.err("{s}: want 32 bytes, found {d}", .{ salt_path, bytes.len });
+            return 1;
+        }
+        try anonymise.run(init.gpa, argv[2], bytes[0..32]);
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "split") and argv.len >= 3) {
+        var buf: [4096]u8 = undefined;
+        var stdout = std.Io.File.stdout().writer(init.io, &buf);
+        try protocol.writeSplit(init.gpa, init.io, argv[2], &stdout.interface);
+        try stdout.interface.flush();
+        return 0;
+    }
+    std.debug.print("unknown command {s}\n{s}", .{ cmd, usage });
     return 2;
 }
 
@@ -59,4 +88,9 @@ fn gpuSmoke(gpa: std.mem.Allocator) !void {
     for (a, b, c) |x, y, z| bad += @intFromBool(z != x + y);
     std.debug.print("vadd n={d}: {d} mismatches\n", .{ n, bad });
     if (bad != 0) return error.Mismatch;
+}
+
+test {
+    _ = anonymise;
+    _ = protocol;
 }

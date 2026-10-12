@@ -55,29 +55,11 @@ pub fn run(
     defer list.items.deinit(gpa);
     const summary = try stats.scan(gpa, db, patches, platforms, 0, &list);
     const games = list.items.items;
-    std.mem.sort(Game, games, {}, olderFirst);
-
-    // Test: the newest share of the test platform's games; train: every older game
-    const test_platform: ?u8 = if (opts.test_platform) |tp| for (platforms, 0..) |p, i| {
-        if (std.mem.eql(u8, p, tp)) break @intCast(i);
-    } else return error.TestPlatformNotScanned else null;
-    var tests_list: std.ArrayList(Game) = .empty;
-    defer tests_list.deinit(gpa);
-    var pool: usize = 0;
-    for (games) |g| pool += @intFromBool(test_platform == null or g.platform == test_platform.?);
-    const n_test: usize = @intFromFloat(@round(@as(f64, @floatFromInt(pool)) * opts.test_share));
-    if (games.len < 100 or n_test < 20) return error.TooFewGames;
-    var at = games.len;
-    while (tests_list.items.len < n_test) {
-        at -= 1;
-        const g = games[at];
-        if (test_platform == null or g.platform == test_platform.?) try tests_list.append(gpa, g);
-    }
-    std.mem.reverse(Game, tests_list.items);
-    const tests = tests_list.items;
-    var n_train: usize = 0;
-    while (games[n_train].start < tests[0].start) n_train += 1;
-    const train = games[0..n_train];
+    var parts = try split(gpa, games, platforms, opts);
+    defer parts.deinit(gpa);
+    const train = parts.train;
+    const tests = parts.tests;
+    const test_platform = parts.test_platform;
 
     try w.print("# meiolol eval\n\n{d} games ({d} skipped) on {d} patch(es), ", .{
         games.len, summary.skipped, patches.len,
@@ -566,6 +548,49 @@ const GameList = struct {
         try l.items.append(l.gpa, g);
     }
 };
+
+pub const Split = struct {
+    /// Every game older than the first test game, on any platform
+    train: []const Game,
+    tests: []const Game,
+    /// Index into platforms; null tests on every platform
+    test_platform: ?u8,
+    tests_list: std.ArrayList(Game),
+
+    pub fn deinit(s: *Split, gpa: std.mem.Allocator) void {
+        s.tests_list.deinit(gpa);
+    }
+};
+
+/// The held-out split (docs/model.md Method; meiolol-lab scores the same games): sorts
+/// games oldest first, tests on the newest test_share of the test platform's games
+pub fn split(gpa: std.mem.Allocator, games: []Game, platforms: []const []const u8, opts: Options) !Split {
+    std.mem.sort(Game, games, {}, olderFirst);
+    const test_platform: ?u8 = if (opts.test_platform) |tp| for (platforms, 0..) |p, i| {
+        if (std.mem.eql(u8, p, tp)) break @intCast(i);
+    } else return error.TestPlatformNotScanned else null;
+    var tests_list: std.ArrayList(Game) = .empty;
+    errdefer tests_list.deinit(gpa);
+    var pool: usize = 0;
+    for (games) |g| pool += @intFromBool(test_platform == null or g.platform == test_platform.?);
+    const n_test: usize = @intFromFloat(@round(@as(f64, @floatFromInt(pool)) * opts.test_share));
+    if (games.len < 100 or n_test < 20) return error.TooFewGames;
+    var at = games.len;
+    while (tests_list.items.len < n_test) {
+        at -= 1;
+        const g = games[at];
+        if (test_platform == null or g.platform == test_platform.?) try tests_list.append(gpa, g);
+    }
+    std.mem.reverse(Game, tests_list.items);
+    var n_train: usize = 0;
+    while (games[n_train].start < tests_list.items[0].start) n_train += 1;
+    return .{
+        .train = games[0..n_train],
+        .tests = tests_list.items,
+        .test_platform = test_platform,
+        .tests_list = tests_list,
+    };
+}
 
 fn olderFirst(_: void, a: Game, b: Game) bool {
     return a.start < b.start;

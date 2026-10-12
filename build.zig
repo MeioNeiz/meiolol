@@ -65,9 +65,13 @@ pub fn build(b: *std.Build) void {
         shot_step.dependOn(&run.step);
     }
 
-    const lab = labExe(b);
-    b.step("lab", "Build meiolol-lab for the gpu-box (x86_64 Linux, CUDA)")
-        .dependOn(&b.addInstallArtifact(lab, .{}).step);
+    // Host build for Mac CPU jobs in zig-out/bin, gpu-box build in zig-out/gpu-box
+    const lab_mod = labModule(b, target, optimize);
+    const lab = b.addExecutable(.{ .name = "meiolol-lab", .root_module = labModule(b, b.resolveTargetQuery(gpu_box), .ReleaseFast) });
+    const lab_step = b.step("lab", "Build meiolol-lab for this machine and the gpu-box (x86_64 Linux, CUDA)");
+    lab_step.dependOn(&b.addInstallArtifact(b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_mod }), .{}).step);
+    lab_step.dependOn(&b.addInstallArtifact(lab, .{ .dest_dir = .{ .override = .{ .custom = "gpu-box" } } }).step);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = lab_mod, .filters = test_filters })).step);
 
     // What the pre-push hook runs (deploy/hooks/pre-push): every push to main deploys
     const ci = b.step("ci", "Everything before a push: fmt, tests, cross-builds, scripts");
@@ -244,10 +248,12 @@ fn lint(b: *std.Build, tool: []const u8, script: []const u8) *std.Build.Step {
     return &run.step;
 }
 
-/// Modelling experiments on the gpu-box (src/lab_main.zig). glibc, not musl: libcuda is
-/// a glibc library loaded with dlopen. Kernels (src/gpu/kernels.zig) go to PTX, which
-/// the driver compiles for the card at load
-fn labExe(b: *std.Build) *std.Build.Step.Compile {
+/// glibc, not musl: libcuda is a glibc library loaded with dlopen
+const gpu_box: std.Target.Query = .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu };
+
+/// Modelling experiments (src/lab_main.zig). Kernels (src/gpu/kernels.zig) go to PTX, which
+/// the driver compiles for the card at load; without libcuda the GPU commands fail soft
+fn labModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) *std.Build.Module {
     const kernels = b.addObject(.{
         .name = "kernels",
         .root_module = b.createModule(.{
@@ -260,12 +266,17 @@ fn labExe(b: *std.Build) *std.Build.Step.Compile {
             .optimize = .ReleaseFast,
         }),
     });
+    const m = modules(b, target, optimize);
     const mod = b.createModule(.{
         .root_source_file = b.path("src/lab_main.zig"),
-        .target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu }),
-        .optimize = .ReleaseFast,
+        .target = target,
+        .optimize = optimize,
         .link_libc = true,
+        .imports = &.{
+            .{ .name = "store", .module = m.store },
+            .{ .name = "core", .module = m.core },
+        },
     });
     mod.addAnonymousImport("kernels.ptx", .{ .root_source_file = kernels.getEmittedAsm() });
-    return b.addExecutable(.{ .name = "meiolol-lab", .root_module = mod });
+    return mod;
 }

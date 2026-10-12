@@ -114,6 +114,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | backup files | `--backups /mnt/d/meiolol-backups` scrubs every state and segment file at once |
 | Mac mirror | follows on its next daily sync (rsync replaces the scrubbed files) |
 | Your games (api.db on the web server) | `forget --data /var/lib/meiolol-api` there: `api.cache.forget` deletes and adds to `blocked` |
+| analysis snapshots (Mac, gpu-box) | re-erased when made, hashed, deleted when replaced (Analysis snapshots, below) |
 
 - Suppression: the crawler skips PUUIDs in `forgotten` on ladder and mastery and stores
   their participant rows with a blank PUUID (meiolol-de, crawl.zig, via
@@ -142,6 +143,23 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
   `draft_backfill` list holds match ids and goes once the backfill has run
 - Retention sweeps (players not seen for 30 days, PUUIDs blanked after 24 months) live in
   the crawler's hourly prune (meiolol-de). Public wording: docs/legal/privacy.md
+
+### Analysis snapshots
+
+Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
+
+- Made with `VACUUM INTO` on the box, streamed to the Mac (data/snap-STAMP/, gitignored)
+  and the box copy deleted at once. Before anyone models on it, `meiolol-lab anonymise
+  data/snap-STAMP` (src/lab/anonymise.zig) runs on the Mac: forgotten players re-erased,
+  then PUUIDs and match ids replaced by salted hashes (HMAC-SHA256), Riot IDs, summoner
+  ids and names blanked, profile icons zeroed, raw timelines dropped, VACUUM so freed
+  pages lose the old values. Match ids are hashed too: a real one gives back the ten
+  players through the API. Only then is it copied to the gpu-box (~/ml/snaps/STAMP/)
+- The salt is ~/.config/meiolol/snap-salt on the Mac: never in git, never on the box.
+  Without it a hash can't be linked back to a PUUID; with it only by hashing candidates
+- Disposable: a snapshot is deleted from the Mac and the gpu-box when a newer one
+  replaces it, so an erasure reaches analysis copies within one snapshot cycle. Not in
+  git, not published
 
 ### Key switch (rekey)
 
