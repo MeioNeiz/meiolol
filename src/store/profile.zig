@@ -1,8 +1,8 @@
 //! SQL profile, on with MEIOLOL_SQL_PROFILE=1: every connection sums each statement's
-//! run time and SQLite's own counters per SQL text, printed (top by time) when the last
-//! connection closes. Time runs from the first step to reset or the last row, so a
-//! streaming read includes the caller's work between rows; full scan steps, sorts,
-//! automatic indexes and VM steps are SQLite's alone
+//! time and SQLite's own counters per SQL text, printed (top by SQL time) when the last
+//! connection closes. SQL time is spent inside sqlite3_step; wall time runs from the
+//! first step to reset or the last row, so it adds the caller's work between rows
+//! (statements stepped inside another's loop count in both)
 
 const std = @import("std");
 const c = @import("sqlite.zig").c;
@@ -11,6 +11,7 @@ const log = std.log.scoped(.sql_profile);
 
 const Entry = struct {
     runs: u64 = 0,
+    step_ns: u64 = 0,
     ns: u64 = 0,
     vm_steps: u64 = 0,
     scan_steps: u64 = 0,
@@ -25,7 +26,7 @@ var open_connections: std.atomic.Value(u32) = .init(0);
 var locked: std.atomic.Value(bool) = .init(false);
 var entries: std.StringArrayHashMapUnmanaged(Entry) = .empty;
 
-fn on() bool {
+pub fn on() bool {
     if (enabled == null) {
         const v = std.c.getenv("MEIOLOL_SQL_PROFILE");
         enabled = v != null and std.mem.eql(u8, std.mem.span(v.?), "1");
@@ -67,27 +68,39 @@ fn trace(kind: c_uint, _: ?*anyopaque, p: ?*anyopaque, x: ?*anyopaque) callconv(
     };
     lock();
     defer unlock();
-    const gop = entries.getOrPut(gpa, sql) catch return 0;
+    const e = entry(sql) orelse return 0;
+    inline for (@typeInfo(Entry).@"struct".field_names) |f| @field(e, f) += @field(add, f);
+    return 0;
+}
+
+pub fn step(stmt: *c.sqlite3_stmt) c_int {
+    const io = std.Options.debug_io;
+    const start = std.Io.Clock.awake.now(io);
+    const rc = c.sqlite3_step(stmt);
+    const ns: u64 = @intCast(@max(start.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds(), 0));
+    const sql = std.mem.span(c.sqlite3_sql(stmt) orelse return rc);
+    lock();
+    defer unlock();
+    const e = entry(sql) orelse return rc;
+    e.step_ns += ns;
+    return rc;
+}
+
+fn entry(sql: []const u8) ?*Entry {
+    const gop = entries.getOrPut(gpa, sql) catch return null;
     if (!gop.found_existing) {
         gop.key_ptr.* = gpa.dupe(u8, sql) catch {
             entries.swapRemoveAt(gop.index);
-            return 0;
+            return null;
         };
         gop.value_ptr.* = .{};
     }
-    const e = gop.value_ptr;
-    inline for (@typeInfo(Entry).@"struct".field_names) |f| @field(e, f) += @field(add, f);
-    return 0;
+    return gop.value_ptr;
 }
 
 /// This run's count: reset so the statement's next run starts from 0
 fn counter(stmt: *c.sqlite3_stmt, op: c_int) u64 {
     return @intCast(@max(c.sqlite3_stmt_status(stmt, op, 1), 0));
-}
-
-fn byTime(ctx: void, a: Entry, b: Entry) bool {
-    _ = ctx;
-    return a.ns > b.ns;
 }
 
 /// Logs the `top` statements by total time and clears the sums
@@ -97,17 +110,22 @@ pub fn report(top: usize) void {
     const Ctx = struct {
         values: []const Entry,
         pub fn lessThan(ctx: @This(), a: usize, b: usize) bool {
-            return byTime({}, ctx.values[a], ctx.values[b]);
+            return ctx.values[a].step_ns > ctx.values[b].step_ns;
         }
     };
     entries.sort(Ctx{ .values = entries.values() });
     var total: u64 = 0;
-    for (entries.values()) |e| total += e.ns;
-    log.info("{d} statements, {d} ms in all", .{ entries.count(), total / std.time.ns_per_ms });
+    for (entries.values()) |e| total += e.step_ns;
+    log.info("{d} statements, {d} ms SQL time in all", .{ entries.count(), total / std.time.ns_per_ms });
     for (entries.keys()[0..@min(top, entries.count())], entries.values()[0..@min(top, entries.count())]) |sql, e| {
-        log.info("{d} ms {d}x vm {d} scan {d} sort {d} autoindex {d}: {s}", .{
-            e.ns / std.time.ns_per_ms, e.runs,  e.vm_steps,
-            e.scan_steps,              e.sorts, e.auto_indexes,
+        log.info("sql {d} ms wall {d} ms {d}x vm {d} scan {d} sort {d} autoindex {d}: {s}", .{
+            e.step_ns / std.time.ns_per_ms,
+            e.ns / std.time.ns_per_ms,
+            e.runs,
+            e.vm_steps,
+            e.scan_steps,
+            e.sorts,
+            e.auto_indexes,
             oneLine(sql),
         });
     }

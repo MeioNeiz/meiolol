@@ -179,10 +179,11 @@ pub const Stmt = struct {
 
     /// true when a row is ready, false when done
     pub fn step(s: *Stmt) Error!bool {
-        return switch (c.sqlite3_step(s.handle)) {
+        const rc = if (profile.on()) profile.step(s.handle) else c.sqlite3_step(s.handle);
+        return switch (rc) {
             c.SQLITE_ROW => true,
             c.SQLITE_DONE => false,
-            else => |rc| failure(s.db, rc, "step"),
+            else => failure(s.db, rc, "step"),
         };
     }
 
