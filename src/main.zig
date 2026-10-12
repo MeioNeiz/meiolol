@@ -116,10 +116,18 @@ const usage =
     \\              --public         listed for search engines, no preview banner; only
     \\                               once Riot grants the production key
     \\              --euw-only       the EUW views only (root, patch/): a quick preview
+    \\              --static-min-games N  leave out matchup pages under N games (for
+    \\                               `render` to serve on request)
     \\  dev        work on the site: pages rendered on request from DIR (data loaded
     \\              once), CSS and JS from src/site/static, live reload; run by
     \\              deploy/dev.sh, which rebuilds on edits. Takes site's flags
     \\              --port P         default 8080
+    \\  render     the pages `site --static-min-games` leaves out, rendered on request
+    \\              for the web server's nginx (all views loaded up front). Takes
+    \\              site's flags (--contact required)
+    \\              --host H         default 127.0.0.1 (local only)
+    \\              --port P         default 8091
+    \\              --reload FILE    load the data again whenever FILE changes
     \\  serve       serve the website (default DIR/site) over HTTP, for the tunnel
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8080
@@ -213,6 +221,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
     .{ "dev", cmdDev },
+    .{ "render", cmdRender },
     .{ "api", cmdApi },
     .{ "status", cmdStatus },
     .{ "admin", cmdAdmin },
@@ -623,6 +632,7 @@ const SiteFlags = struct {
     riot_txt: ?[]const u8 = null,
     public: bool = false,
     euw_only: bool = false,
+    static_min_games: u32 = 0,
 
     /// False for a flag that isn't one of these
     fn parse(f: *SiteFlags, c: *Cmd) !bool {
@@ -638,12 +648,14 @@ const SiteFlags = struct {
             f.public = true;
         } else if (c.is("--euw-only")) {
             f.euw_only = true;
+        } else if (c.is("--static-min-games")) {
+            f.static_min_games = try c.int(u32);
         } else return false;
         return true;
     }
 
-    fn options(f: *const SiteFlags, c: *Cmd, db: store.Db, contact: []const u8) !site.Options {
-        const arena = c.arena;
+    /// Allocated in `arena`, which must outlive the options
+    fn options(f: *const SiteFlags, c: *Cmd, arena: std.mem.Allocator, db: store.Db, contact: []const u8) !site.Options {
         const chosen = if (f.patches.items.len > 0) f.patches.items else try newestPatch(arena, db, &.{"EUW1"});
         var every: std.ArrayList([]const u8) = .empty;
         for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
@@ -658,6 +670,7 @@ const SiteFlags = struct {
             .updated = try std.fmt.allocPrint(arena, "{f}", .{Date.fromMs(now_ms).long()}),
             .public = f.public,
             .euw_only = f.euw_only,
+            .static_min_games = f.static_min_games,
             .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
             // Indexed by site.html.View.index: EUW 30 days, EUW patch, all 30 days, all patch
             .curves = .{
@@ -684,7 +697,7 @@ fn cmdSite(c: *Cmd) !u8 {
     const email = try c.required(f.contact, "--contact");
     const db = try c.open();
     defer db.close();
-    try site.generate(c.init.gpa, c.init.io, db, try f.options(c, db, email));
+    try site.generate(c.init.gpa, c.init.io, db, try f.options(c, c.arena, db, email));
     return 0;
 }
 
@@ -702,18 +715,119 @@ fn cmdDev(c: *Cmd) !u8 {
     const dev: serve.Dev = try .init(c.arena, c.init.io, try c.init.minimal.args.toSlice(c.arena), static_dir);
     const db = try c.open();
     defer db.close();
-    var opts = try f.options(c, db, f.contact orelse "dev@example.com");
+    var opts = try f.options(c, c.arena, db, f.contact orelse "dev@example.com");
     opts.static_dir = static_dir;
     const loaded = try site.Loaded.init(c.init.gpa, c.init.io, db, opts);
-    defer loaded.deinit();
+    const rendered = serve.Rendered.init(c.init.gpa, c.init.io, loaded, null) catch |err| {
+        loaded.deinit();
+        return err;
+    };
+    defer rendered.deinit();
     // Before listening, so the browser reloads once it is ready; the others on request
     _ = try loaded.site(site.html.View.all[0]);
     try serve.run(c.init.gpa, c.init.io, .{
         .port = port,
-        .render = loaded,
+        .render = rendered,
         .dev = dev,
     });
     return 0;
+}
+
+/// The pages the static build leaves out (--static-min-games), rendered on request for
+/// the web server's nginx (docs/hosting.md "Rendering on request"). Every view is loaded
+/// before it listens, and again whenever the --reload file changes
+fn cmdRender(c: *Cmd) !u8 {
+    var f: SiteFlags = .{};
+    var host: []const u8 = "127.0.0.1";
+    var port: u16 = 8091;
+    var reload: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (c.is("--host")) {
+            host = try c.value();
+        } else if (c.is("--port")) {
+            port = try c.int(u16);
+        } else if (c.is("--reload")) {
+            reload = try c.value();
+        } else if (!try f.parse(c)) return error.Usage;
+    }
+    const email = try c.required(f.contact, "--contact");
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    const first = try loadAll(c, &f, db, email);
+    const rendered = serve.Rendered.init(gpa, io, first.loaded, first.arena) catch |err| {
+        first.free(gpa);
+        return err;
+    };
+    defer rendered.deinit();
+    var group: std.Io.Group = .init;
+    defer group.cancel(io);
+    if (reload) |path| group.async(io, reloadOnChange, .{ c, &f, db, email, rendered, path });
+    try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered });
+    return 0;
+}
+
+const LoadedAll = struct {
+    loaded: *site.Loaded,
+    /// The options' strings
+    arena: *std.heap.ArenaAllocator,
+
+    fn free(l: LoadedAll, gpa: std.mem.Allocator) void {
+        l.loaded.deinit();
+        l.arena.deinit();
+        gpa.destroy(l.arena);
+    }
+};
+
+/// Options as of now (patch, 30-day window) and every view loaded, not on its first
+/// request
+fn loadAll(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !LoadedAll {
+    const gpa = c.init.gpa;
+    const arena = try gpa.create(std.heap.ArenaAllocator);
+    arena.* = .init(gpa);
+    errdefer {
+        arena.deinit();
+        gpa.destroy(arena);
+    }
+    const opts = try f.options(c, arena.allocator(), db, contact);
+    const loaded = try site.Loaded.init(gpa, c.init.io, db, opts);
+    errdefer loaded.deinit();
+    for (site.html.View.all) |v| {
+        if (opts.euw_only and v.region != .euw) continue;
+        _ = try loaded.site(v);
+    }
+    return .{ .loaded = loaded, .arena = arena };
+}
+
+/// Swaps in freshly loaded data whenever `path`'s mtime moves (deploy/web-loop.sh touches
+/// it after each upload); on a failed load the old data stays. The only database user
+/// once the server runs: every view is loaded up front
+fn reloadOnChange(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8, rendered: *serve.Rendered, path: []const u8) void {
+    const io = c.init.io;
+    var seen = fileMtime(io, path);
+    while (true) {
+        io.sleep(.fromMilliseconds(10_000), .awake) catch return;
+        const now = fileMtime(io, path);
+        if (now == seen) continue;
+        seen = now;
+        const start = std.Io.Clock.real.now(io).toMilliseconds();
+        const next = loadAll(c, f, db, contact) catch |err| {
+            std.log.warn("render reload: {t}", .{err});
+            continue;
+        };
+        rendered.swap(next.loaded, next.arena) catch |err| {
+            next.free(c.init.gpa);
+            std.log.warn("render reload: {t}", .{err});
+            continue;
+        };
+        std.log.info("render: reloaded in {d} s", .{@divTrunc(std.Io.Clock.real.now(io).toMilliseconds() - start, 1000)});
+    }
+}
+
+fn fileMtime(io: std.Io, path: []const u8) i96 {
+    const st = std.Io.Dir.cwd().statFile(io, path, .{}) catch return 0;
+    return st.mtime.toNanoseconds();
 }
 
 fn cmdServe(c: *Cmd) !u8 {

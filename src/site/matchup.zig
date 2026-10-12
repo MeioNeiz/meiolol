@@ -48,11 +48,12 @@ pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
     return std.fmt.allocPrint(a, "matchup/{s}/{s}-vs-{s}.html", .{ root.roleSlug(r), x.slug, y.slug });
 }
 
-/// A page per lane matchup with an all-ranks curve, from the lower champion id's side
-pub fn paths(site: *const Site, curves: *const Curves, list: *std.ArrayList([]const u8)) !void {
+/// A page per lane matchup with an all-ranks curve of `min_games` or more, from the lower
+/// champion id's side
+pub fn paths(site: *const Site, curves: *const Curves, list: *std.ArrayList([]const u8), min_games: u32) !void {
     for (curves.curves) |c| {
         const h = c.header;
-        if (h.bracket != @intFromEnum(Bracket.all)) continue;
+        if (h.bracket != @intFromEnum(Bracket.all) or h.games < min_games) continue;
         const x = champ(site, h.a) orelse continue;
         const y = champ(site, h.b) orelse continue;
         const r: Role = @enumFromInt(h.role);

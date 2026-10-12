@@ -60,6 +60,9 @@ pub const Options = struct {
     /// Front-end files (css, js) read from here per request instead of embedded: `meiolol
     /// dev`
     static_dir: ?[]const u8 = null,
+    /// Matchup pages with fewer games are left out of the static build: `meiolol render`
+    /// serves them on request
+    static_min_games: u32 = 0,
 };
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
@@ -330,7 +333,7 @@ const FileWriter = struct {
     }
 };
 
-/// Every page of the view, by path within its directory
+/// Every page of the view the static build writes, by path within its directory
 pub fn pagePaths(site: *const Site) ![]const []const u8 {
     const a = site.arena;
     var list: std.ArrayList([]const u8) = .empty;
@@ -340,7 +343,7 @@ pub fn pagePaths(site: *const Site) ![]const []const u8 {
         try list.append(a, try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug}));
     };
     try list.append(a, "matchup/index.html");
-    if (site.curves) |*c| try matchup.paths(site, c, &list);
+    if (site.curves) |*c| try matchup.paths(site, c, &list, site.opts.static_min_games);
     if (site.view.period == .patch) if (site.view_builds[site.view.index()]) |*b| try builds_page.paths(site, b, &list);
     try list.append(a, "pool.html");
     return list.items;

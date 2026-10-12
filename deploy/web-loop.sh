@@ -102,6 +102,8 @@ while true; do
                 echo "$(date -u +%FT%TZ) upload: site ${site_s}s, copy ${copy_s}s" \
                     "(${changed:-?} files changed), send $(( SECONDS - t ))s (${sent:-?} bytes)"
                 echo "$(date -u +%FT%TZ) uploaded"
+                # meiolol-render loads the same data again for the pages left out
+                touch data/render.reload
                 last_patch=$patch last_games=$games last_upload=$now fresh_curves=0
             fi
         fi

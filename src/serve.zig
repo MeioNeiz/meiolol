@@ -1,7 +1,8 @@
 //! `meiolol serve`: HTTP server for the website. Serves a generated site directory
 //! (`<file>.gz`, written by `meiolol site`, when the client accepts gzip); with `render`
 //! it renders pages on request from loaded data first (site.Loaded), the files being the
-//! fallback. `meiolol dev` adds live reload (Dev).
+//! fallback. `meiolol render` renders only, its data replaced as it reloads (Rendered);
+//! `meiolol dev` adds live reload (Dev).
 
 const std = @import("std");
 const Io = std.Io;
@@ -17,8 +18,78 @@ pub const Options = struct {
     root: ?[]const u8 = null,
     host: []const u8 = "127.0.0.1",
     port: u16 = 8080,
-    render: ?*site.Loaded = null,
+    render: ?*Rendered = null,
     dev: ?Dev = null,
+};
+
+/// The loaded site pages render from, replaced whole by `swap`: a request keeps the one
+/// it started with, freed after its last request
+pub const Rendered = struct {
+    gpa: std.mem.Allocator,
+    io: Io,
+    mutex: Io.Mutex = .init,
+    current: *Entry,
+
+    const Entry = struct {
+        loaded: *site.Loaded,
+        /// Holds what loaded's options point into; freed with it
+        arena: ?*std.heap.ArenaAllocator,
+        users: usize = 0,
+        retired: bool = false,
+
+        fn free(e: *Entry, gpa: std.mem.Allocator) void {
+            e.loaded.deinit();
+            if (e.arena) |a| {
+                a.deinit();
+                gpa.destroy(a);
+            }
+            gpa.destroy(e);
+        }
+    };
+
+    /// Owns `loaded`, and `arena` when set
+    pub fn init(gpa: std.mem.Allocator, io: Io, loaded: *site.Loaded, arena: ?*std.heap.ArenaAllocator) !*Rendered {
+        const r = try gpa.create(Rendered);
+        errdefer gpa.destroy(r);
+        const e = try gpa.create(Entry);
+        e.* = .{ .loaded = loaded, .arena = arena };
+        r.* = .{ .gpa = gpa, .io = io, .current = e };
+        return r;
+    }
+
+    /// After the server has stopped
+    pub fn deinit(r: *Rendered) void {
+        r.current.free(r.gpa);
+        r.gpa.destroy(r);
+    }
+
+    /// Replaces the site new requests render from, as `init`
+    pub fn swap(r: *Rendered, loaded: *site.Loaded, arena: ?*std.heap.ArenaAllocator) !void {
+        const e = try r.gpa.create(Entry);
+        e.* = .{ .loaded = loaded, .arena = arena };
+        r.mutex.lockUncancelable(r.io);
+        const old = r.current;
+        r.current = e;
+        old.retired = true;
+        const unused = old.users == 0;
+        r.mutex.unlock(r.io);
+        if (unused) old.free(r.gpa);
+    }
+
+    fn acquire(r: *Rendered) *Entry {
+        r.mutex.lockUncancelable(r.io);
+        defer r.mutex.unlock(r.io);
+        r.current.users += 1;
+        return r.current;
+    }
+
+    fn release(r: *Rendered, e: *Entry) void {
+        r.mutex.lockUncancelable(r.io);
+        e.users -= 1;
+        const done = e.retired and e.users == 0;
+        r.mutex.unlock(r.io);
+        if (done) e.free(r.gpa);
+    }
 };
 
 /// Every HTML page gets a script polling /__dev, which answers with the process start
@@ -151,12 +222,14 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             n += 1;
         }
     }
-    if (ctx.opts.render) |loaded| {
+    if (ctx.opts.render) |rendered| {
+        const entry = rendered.acquire();
+        defer rendered.release(entry);
         var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
         defer arena_state.deinit();
         const arena = arena_state.allocator();
         for (candidates[0..n]) |name| {
-            var body = try loaded.get(arena, name) orelse continue;
+            var body = try entry.loaded.get(arena, name) orelse continue;
             if (ctx.opts.dev != null and std.mem.endsWith(u8, name, ".html")) {
                 if (std.mem.lastIndexOf(u8, body, "</body>")) |at| {
                     body = try std.mem.concat(arena, u8, &.{ body[0..at], reload_script, body[at..] });
@@ -272,4 +345,24 @@ test "resolve" {
     try std.testing.expectEqual(null, resolve(&buf, "/%2e%2e/x"));
     try std.testing.expectEqual(null, resolve(&buf, "/.env"));
     try std.testing.expectEqual(null, resolve(&buf, "relative"));
+}
+
+test "Rendered: a swapped-out site is freed after its last request" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    const store = @import("store");
+    const db = try store.schema.memory();
+    defer db.close();
+    const opts: site.Options = .{ .out_dir = "", .patches = &.{}, .since_ms = 0, .all_platforms = &.{}, .contact = "", .updated = "" };
+    const r = try Rendered.init(gpa, io, try site.Loaded.init(gpa, io, db, opts), null);
+    defer r.deinit();
+    const first = r.acquire();
+    try r.swap(try site.Loaded.init(gpa, io, db, opts), null);
+    try std.testing.expect(first.retired and r.current != first);
+    // Freed by this release, not by the swap: the testing allocator reports a double
+    // free for one and a leak for none
+    r.release(first);
+    const second = r.acquire();
+    r.release(second);
+    try std.testing.expect(!second.retired);
 }

@@ -162,6 +162,14 @@ test "fixture games to stats, curves and the website" {
         checked += 1;
     }
     try testing.expect(checked > 50);
+    // Thin matchups left out of the static build are still rendered on request
+    {
+        var s = (try loaded.site(site.html.View.all[0])).*;
+        s.arena = arena;
+        s.opts.static_min_games = std.math.maxInt(u32);
+        for (try site.pagePaths(&s)) |p| try testing.expect(!std.mem.startsWith(u8, p, "matchup/") or std.mem.eql(u8, p, "matchup/index.html"));
+        try testing.expect(try loaded.get(arena, "matchup/top/mordekaiser-vs-darius.html") != null);
+    }
     for ([_][]const u8{ "champion/nobody.html", "all/champion/darius.html", "matchup/top/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html" }) |path| {
         try testing.expectEqual(null, try loaded.get(arena, path));
     }

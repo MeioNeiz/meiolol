@@ -158,7 +158,9 @@ SQL
         exit 1
         ;;
     web)
-        # Site build and upload to the jomove server: deploy/web-loop.sh
+        # Site build and upload to the jomove server (deploy/web-loop.sh), and the
+        # renderer for the pages the static build leaves out (meiolol-render, restarted
+        # with each new binary: thin pages not in nginx's cache fail while it loads)
         case "${2:-}" in
             start)
                 # The contact email is remembered on the box. A running loop whose
@@ -175,11 +177,15 @@ SQL
                         systemctl --user kill -s USR1 --kill-whom=main meiolol-web \
                         && echo 'signalled meiolol-web on $HOST'; \
                     else systemctl --user restart meiolol-web \
-                        && echo 'restarted meiolol-web on $HOST'; fi"
+                        && echo 'restarted meiolol-web on $HOST'; fi \
+                    && systemctl --user enable -q meiolol-render \
+                    && systemctl --user restart meiolol-render \
+                    && echo 'restarted meiolol-render on $HOST'"
                 ;;
-            stop) ssh "$HOST" "systemctl --user disable -q --now meiolol-web" ;;
+            stop) ssh "$HOST" "systemctl --user disable -q --now meiolol-web meiolol-render" ;;
             status)
-                ssh "$HOST" "systemctl --user is-active meiolol-web; tail -n 3 $DIR/data/web.log"
+                ssh "$HOST" "systemctl --user is-active meiolol-web meiolol-render; \
+                    tail -n 3 $DIR/data/web.log; tail -n 2 $DIR/data/render.log"
                 ;;
             *) echo "usage: deploy/box.sh web start [contact]|stop|status"; exit 2 ;;
         esac
