@@ -2,6 +2,7 @@
 
 const std = @import("std");
 pub const c = @import("sqlite_c");
+const profile = @import("profile.zig");
 
 const log = std.log.scoped(.sqlite);
 
@@ -58,6 +59,7 @@ pub const Db = struct {
         // Before anything else: other connections may hold the lock (WAL switch). Long:
         // the crawler's writer waits out prune chunks and other processes on a slow disk
         _ = c.sqlite3_busy_timeout(handle.?, busy_timeout_ms);
+        profile.opened(handle.?);
         return .{ .handle = handle.? };
     }
 
@@ -67,6 +69,7 @@ pub const Db = struct {
 
     pub fn close(db: Db) void {
         _ = c.sqlite3_close_v2(db.handle);
+        profile.closed();
     }
 
     /// One or more statements without parameters or results
