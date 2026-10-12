@@ -21,13 +21,13 @@ const Group = struct { label: []const u8, n: Count };
 /// first character within 0.5% of 1/64), so the 4 from A to D are a 1/16 sample that
 /// reads 1/16 of the players b-tree. GROUP BY the bare column: the exact count then
 /// walks players_region_check instead of sorting 9M rows
-const puuid_sample = "puuid >= 'A' AND puuid < 'E'";
-const puuid_scale = 16;
+pub const puuid_sample = "puuid >= 'A' AND puuid < 'E'";
+pub const puuid_scale = 16;
 
 /// ranks and rank_history keys are Wyhash(PUUID), uniform over i64, so keys from 0 to
 /// 2^58 are a 1/64 sample read off the primary key
-const key_sample = "key >= 0 AND key < 288230376151711744";
-const key_scale = 64;
+pub const key_sample = "key >= 0 AND key < 288230376151711744";
+pub const key_scale = 64;
 
 pub const Options = struct {
     exact: bool = false,
@@ -97,6 +97,26 @@ fn rowidRange(db: store.Db, comptime table: []const u8, exact: bool) !Count {
     const n = try db.scalar("SELECT coalesce((SELECT max(rowid) FROM " ++ table ++
         ") - (SELECT min(rowid) FROM " ++ table ++ ") + 1, 0)", .{});
     return .{ .n = n orelse 0, .estimate = true };
+}
+
+/// `table`'s rows as `write` estimates them where an exact count reads millions of rows
+/// (players and ranks sampled, participants 10 per match, timelines and drafts from the
+/// rowid range); others, and samples under min_sample, counted
+pub fn rows(db: store.Db, comptime table: []const u8) !i64 {
+    const min = (Options{}).min_sample;
+    const eql = std.mem.eql;
+    if (comptime eql(u8, table, "players")) {
+        const n = try db.scalar("SELECT count(*) FROM players WHERE " ++ puuid_sample, .{}) orelse 0;
+        if (n >= min) return n * puuid_scale;
+    } else if (comptime eql(u8, table, "ranks") or eql(u8, table, "rank_history")) {
+        const n = try db.scalar("SELECT count(*) FROM " ++ table ++ " WHERE " ++ key_sample, .{}) orelse 0;
+        if (n >= min) return n * key_scale;
+    } else if (comptime eql(u8, table, "participants")) {
+        return 10 * (try count(db, "matches")).n;
+    } else if (comptime eql(u8, table, "timeline.timelines") or eql(u8, table, "drafts")) {
+        return (try rowidRange(db, table, false)).n;
+    }
+    return (try count(db, table)).n;
 }
 
 /// `select` ++ `rest` over the key sample, or every row when exact or the sample is small

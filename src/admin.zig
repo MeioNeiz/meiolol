@@ -10,6 +10,7 @@ const date = @import("date.zig");
 const ep = @import("riot/endpoints.zig");
 const Limiter = @import("riot/ratelimit.zig").Limiter;
 const tsvlog = @import("tsvlog.zig");
+const status = @import("status.zig");
 
 const Io = std.Io;
 const Region = ep.Region;
@@ -124,7 +125,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
             .match = try groups(arena, db, "SELECT status, count(*) FROM match_queue GROUP BY 1 ORDER BY 2 DESC"),
             .timeline = try groups(arena, db, "SELECT region || ' ' || status, count(*) FROM timeline_queue GROUP BY 1 ORDER BY 1"),
         },
-        .players = try groups(arena, db, "SELECT coalesce(region, '?'), count(*) FROM players GROUP BY 1 ORDER BY 2 DESC"),
+        .players = try playersByRegion(arena, db, count(counts, "players")),
         .ladder = try ladderTiers(arena, db),
         .by_patch = try groups(arena, db, "SELECT patch, count(*) FROM matches GROUP BY 1 ORDER BY 1 DESC LIMIT 8"),
         .drafts = try draftMix(arena, db),
@@ -210,7 +211,7 @@ const tables = [_][]const u8{
 fn tableCounts(arena: std.mem.Allocator, db: store.Db) ![]Count {
     const out = try arena.alloc(Count, tables.len);
     inline for (tables, out) |t, *c| {
-        c.* = .{ .name = t, .rows = try db.scalar("SELECT count(*) FROM " ++ t, .{}) orelse 0 };
+        c.* = .{ .name = t, .rows = try status.rows(db, t) };
     }
     return out;
 }
@@ -270,7 +271,19 @@ fn groups(arena: std.mem.Allocator, db: store.Db, sql: []const u8) ![]Group {
     return out.items;
 }
 
-/// Ranked players on the ladder, by tier (ranks: every player a ladder page showed)
+/// Players by region from status's 1/16 PUUID sample, or every row when `total` (status's
+/// estimate) says the sample would be too small to stand for them
+fn playersByRegion(arena: std.mem.Allocator, db: store.Db, total: i64) ![]Group {
+    const select = "SELECT coalesce(region, '?'), count(*) FROM players";
+    const rest = " GROUP BY 1 ORDER BY 2 DESC";
+    if (total < (status.Options{}).min_sample * status.puuid_scale) return groups(arena, db, select ++ rest);
+    const gs = try groups(arena, db, select ++ " WHERE " ++ status.puuid_sample ++ rest);
+    for (gs) |*g| g.n *= status.puuid_scale;
+    return gs;
+}
+
+/// Ranked players on the ladder, by tier (ranks: every player a ladder page showed).
+/// Counted, not sampled: a 1/64 sample is far off for the small tiers (Challenger, Iron)
 fn ladderTiers(arena: std.mem.Allocator, db: store.Db) ![]Group {
     var q = try db.prepare("SELECT rank / 4, count(*) FROM ranks GROUP BY 1 ORDER BY 1");
     defer q.deinit();
