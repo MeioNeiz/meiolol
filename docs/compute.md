@@ -131,3 +131,20 @@ first.
   (2a)
 - Not planned: Mac GPU (Metal) or cloud GPUs. The PC answers in seconds at today's
   volume; revisit only if it is often unavailable or a model outgrows 10 GB of VRAM
+
+## GPU path in meiolol-lab (meiolol-2a, 2026-10-12)
+
+- No CUDA toolkit: src/gpu/cuda.zig dlopens libcuda.so.1 (WSL ships it as
+  /usr/lib/wsl/lib/libcuda.so.1) and declares the driver API calls it needs; device code
+  in src/gpu/kernels.zig compiles to PTX for sm_86 (`zig build lab` does it, embedded in
+  the binary); the driver JIT-compiles it at load. Smoke: `meiolol-lab gpu-smoke`
+- Kernels take pointers and scalars only (no by-value structs); a layout struct shared
+  with the host lives in device memory (src/gpu/fm_layout.zig, extern). Float atomics
+  (`@atomicRmw(f32, .Add)`) compile to native red.global.add.f32
+- fm kernels (fe3520e): fm_grad (one thread per row, gradients into a dense buffer with
+  atomics) and fm_adam (one thread per parameter). Host side (src/lab/bench.zig) not
+  written yet: upload rows once as fm_layout.Example (72 bytes), host shuffles each
+  epoch so CPU and GPU see identical batches, memset + fm_grad + fm_adam per batch
+- CPU reference: fm.zig's fit takes 1-5 s per fit single-threaded on 1.2M rows (5
+  outcomes x 4 models x grid ~5 min on one core). The GPU vs CPU timing (Jacob: measure,
+  don't assume) is the benchmark in progress
