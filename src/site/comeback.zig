@@ -61,7 +61,7 @@ pub fn section(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !
     }
 
     try tpl.renderPart(w,
-        \\<div class="table-scroll"><table>
+        \\<div class="table-scroll"><table class="comeback">
         \\<thead><tr><th>{x}'s lane gold vs {y}</th><th class="num">{x} won, at 10 min</th><th class="num">at 15 min</th><th class="num">All {lane} lanes, 10 min</th><th class="num">15 min</th></tr></thead>
         \\<tbody>
         \\

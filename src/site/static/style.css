@@ -333,3 +333,24 @@ h3.opp-h .muted { font-weight: 400; font-size: 13px; }
 .evalchart .legend .s2 { background: #d95926; }
 .evalchart .legend .s3 { background: #199e70; }
 .build-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 16px; }
+/* Phones: tables fit the screen without sideways scrolling. Labels and headers wrap,
+   numbers stay on one line until 380px; no rank or "at least" column */
+@media (max-width: 480px) {
+  table { font-size: 14px; }
+  table.tl { font-size: 13px; }
+  th, td { padding: 6px 4px; }
+  .table-scroll th, .table-scroll td:first-child, table.tl th { white-space: normal; }
+  table.tl td, table.tl th { padding: 4px 3px; }
+  table.tl small { margin-left: 2px; font-size: 11px; }
+  table.tl .rank, table.tl .lo { display: none; }
+  table.tl .champ { gap: 6px; }
+  table.tl .champ img { width: 22px; height: 22px; }
+  .wr { gap: 4px; }
+  .wr b, .wr small { width: auto; }
+  table.comeback td.num { white-space: normal; }
+  table.comeback td .muted { display: block; font-size: 12px; }
+}
+@media (max-width: 380px) {
+  table.tl .champ img { display: none; }
+  .table-scroll td.num { white-space: normal; }
+}
