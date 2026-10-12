@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const Writer = std.Io.Writer;
+pub const tpl = @import("tpl.zig");
 
 pub const product = "meiolol";
 
@@ -11,27 +12,7 @@ pub const boilerplate = product ++ " isn't endorsed by Riot Games and doesn't re
     "managing Riot Games properties. Riot Games, and all associated properties are " ++
     "trademarks or registered trademarks of Riot Games, Inc.";
 
-pub fn esc(s: []const u8) std.fmt.Alt([]const u8, writeEscaped) {
-    return .{ .data = s };
-}
-
-fn writeEscaped(s: []const u8, w: *Writer) Writer.Error!void {
-    var start: usize = 0;
-    for (s, 0..) |ch, i| {
-        const entity: []const u8 = switch (ch) {
-            '&' => "&amp;",
-            '<' => "&lt;",
-            '>' => "&gt;",
-            '"' => "&quot;",
-            '\'' => "&#39;",
-            else => continue,
-        };
-        try w.writeAll(s[start..i]);
-        try w.writeAll(entity);
-        start = i + 1;
-    }
-    try w.writeAll(s[start..]);
-}
+pub const esc = tpl.esc;
 
 /// Riot: a personal key may not serve the public while a production key is in review
 const preview_banner =
@@ -117,112 +98,146 @@ pub const Page = struct {
     public: bool,
 };
 
+/// A link to `path` under a root: for href and src holes
+pub const Link = struct {
+    root: []const u8,
+    up: []const u8 = "",
+    path: []const u8,
+
+    pub const url = true;
+
+    pub fn render(l: Link, w: *Writer) Writer.Error!void {
+        try w.writeAll(l.root);
+        try w.writeAll(l.up);
+        try w.writeAll(l.path);
+    }
+};
+
+/// From the page to `path` under the site root (shared pages and assets)
+fn toSite(p: Page, path: []const u8) Link {
+    return .{ .root = p.root, .up = if (p.view) |v| v.up() else "", .path = path };
+}
+
 pub fn head(w: *Writer, p: Page) Writer.Error!void {
-    const up = if (p.view) |v| v.up() else "";
-    try w.print(
+    try tpl.renderPart(w,
         \\<!doctype html>
         \\<html lang="en">
         \\<head>
         \\<meta charset="utf-8">
         \\<meta name="viewport" content="width=device-width, initial-scale=1">
-        \\<title>{f}</title>
-        \\<meta name="description" content="{f}">
-        \\<link rel="stylesheet" href="{s}{s}style.css">
-        \\<link rel="icon" href="{s}{s}favicon.svg" type="image/svg+xml">
-        \\{s}</head>
+        \\<title>{title}</title>
+        \\<meta name="description" content="{description}">
+        \\<link rel="stylesheet" href="{css}">
+        \\<link rel="icon" href="{icon}" type="image/svg+xml">
+        \\{robots}</head>
         \\<body>
         \\<header class="top"><div class="wrap">
+        \\{brand}<nav>
+        \\{items}</nav>
+        \\{switches}{remember}{meio_view}</div></header>
+        \\{banner}<main class="wrap">
         \\
     , .{
-        esc(p.title),
-        esc(p.description),
-        p.root,
-        up,
-        p.root,
-        up,
-        if (p.public) "" else "<meta name=\"robots\" content=\"noindex\">\n",
-    });
-    try viewLink(w, p, "index.html", " class=\"brand\"");
-    try w.print("{s}</a>\n<nav>\n", .{product});
-    const items = [_]struct { Nav, []const u8, []const u8, bool }{
-        .{ .matchups, "matchup/index.html", "Matchups", true },
-        .{ .daily, "daily.html", "Daily Draft", false },
-        .{ .learn, "learn.html", "Learn", false },
-        .{ .pool, "pool.html", "Champion pool", true },
-        .{ .champions, "champions.html", "Champions", true },
-        .{ .method, "method.html", "Method", false },
-    };
-    for (items) |it| {
-        const current = if (it[0] == p.nav) " aria-current=\"page\"" else "";
-        if (it[3]) {
-            try viewLink(w, p, it[1], current);
-        } else {
-            try w.print("<a href=\"{s}{s}{s}\"{s}>", .{ p.root, up, it[1], current });
-        }
-        try w.print("{s}</a>\n", .{it[2]});
-    }
-    try w.writeAll("</nav>\n");
-    if (p.counterparts) |paths| {
-        const v = p.view orelse View.all[0];
-        try w.writeAll("<div class=\"filters\">\n");
-        // Labels as two parts: "Patch " ++ p.patch. data-region, data-period: what
-        // filters.js sets on a click
-        const switches = [_]struct { []const u8, [2]View, [2][2][]const u8 }{
-            .{ "Region", .{ .{ .region = .euw, .period = v.period }, .{ .region = .all, .period = v.period } }, .{ .{ "EUW", "" }, .{ "All regions", "" } } },
-            .{ "Period", .{ .{ .region = v.region, .period = .days30 }, .{ .region = v.region, .period = .patch } }, .{ .{ "30 days", "" }, .{ "Patch ", p.patch } } },
-        };
-        for (switches, 0..) |sw, i| {
-            try w.print("<nav class=\"switch\" aria-label=\"{s}\">", .{sw[0]});
-            for (sw[1], sw[2]) |to, label| {
-                const data = if (i == 0) "region" else "period";
-                const value = if (i == 0) @tagName(to.region) else @tagName(to.period);
-                if (to.index() == v.index()) {
-                    try w.print("<a aria-current=\"page\" data-{s}=\"{s}\">{s}{s}</a>", .{ data, value, label[0], label[1] });
-                } else {
-                    try w.print("<a href=\"{s}{s}{f}\" data-{s}=\"{s}\">{s}{s}</a>", .{ p.root, up, esc(paths[to.index()]), data, value, label[0], label[1] });
-                }
-            }
-            try w.writeAll("</nav>\n");
-        }
-        try w.writeAll("</div>\n");
-    }
-    if (p.view) |v| {
+        .title = p.title,
+        .description = p.description,
+        .css = toSite(p, "style.css"),
+        .icon = toSite(p, "favicon.svg"),
+        .robots = tpl.when(!p.public, tpl.trusted("<meta name=\"robots\" content=\"noindex\">\n")),
+        .brand = tpl.t("<a href=\"{href}\" class=\"brand\"{view}>{name}</a>\n", .{
+            .href = Link{ .root = p.root, .path = "index.html" },
+            .view = tpl.flag(p.view == null, "data-view"),
+            .name = product,
+        }),
+        .items = tpl.each(&nav_items, p, navItem),
+        .switches = tpl.when(p.counterparts != null, tpl.call(switches, .{p})),
         // Remembered so shared pages link back into this view
-        try w.print("<script>try{{localStorage.setItem(\"view\",\"{s}\")}}catch(e){{}}</script>\n", .{v.dir()});
-    } else {
-        // meioView(v) again from the champion page's filters, which move between views
-        try w.writeAll(
-            \\<script>function meioView(v){try{if(v==null)v=localStorage.getItem("view");else localStorage.setItem("view",v)}catch(e){}
-            \\if(!["patch/","all/","all/patch/"].includes(v))v="";for(const a of document.querySelectorAll("a[data-view]")){
-            \\const h=a.dataset.base??=a.getAttribute("href"),up=h.match(/^(\.\.\/)*/)[0];a.href=up+v+h.slice(up.length)}}meioView()</script>
+        .remember = if (p.view) |v| tpl.t(
+            \\<script>try{localStorage.setItem("view","{dir}")}catch(e){}</script>
             \\
-        );
-    }
-    try w.writeAll("</div></header>\n");
-    if (!p.public) try w.writeAll(preview_banner);
-    try w.writeAll("<main class=\"wrap\">\n");
+        , .{ .dir = tpl.trusted(v.dir()) }) else null,
+        .meio_view = tpl.when(p.view == null, tpl.trusted(meio_view)),
+        .banner = tpl.when(!p.public, tpl.trusted(preview_banner)),
+    });
 }
 
-/// Opens a link to `path` in the page's view; from a shared page (all at the site
-/// root), to the default view's, moved by the header script into the last one visited
-fn viewLink(w: *Writer, p: Page, path: []const u8, attrs: []const u8) Writer.Error!void {
-    try w.print("<a href=\"{s}{s}\"{s}{s}>", .{ p.root, path, attrs, if (p.view == null) " data-view" else "" });
+/// On shared and champion pages: moves data-view links into the last view visited;
+/// meioView(v) again from the champion page's filters, which move between views
+const meio_view =
+    \\<script>function meioView(v){try{if(v==null)v=localStorage.getItem("view");else localStorage.setItem("view",v)}catch(e){}
+    \\if(!["patch/","all/","all/patch/"].includes(v))v="";for(const a of document.querySelectorAll("a[data-view]")){
+    \\const h=a.dataset.base??=a.getAttribute("href"),up=h.match(/^(\.\.\/)*/)[0];a.href=up+v+h.slice(up.length)}}meioView()</script>
+    \\
+;
+
+const NavItem = struct { nav: Nav, path: []const u8, label: []const u8, in_view: bool };
+
+const nav_items = [_]NavItem{
+    .{ .nav = .matchups, .path = "matchup/index.html", .label = "Matchups", .in_view = true },
+    .{ .nav = .daily, .path = "daily.html", .label = "Daily Draft", .in_view = false },
+    .{ .nav = .learn, .path = "learn.html", .label = "Learn", .in_view = false },
+    .{ .nav = .pool, .path = "pool.html", .label = "Champion pool", .in_view = true },
+    .{ .nav = .champions, .path = "champions.html", .label = "Champions", .in_view = true },
+    .{ .nav = .method, .path = "method.html", .label = "Method", .in_view = false },
+};
+
+/// Pages in a view link within it; from a shared page (all at the site root), to the
+/// default view's, moved by the header script into the last one visited
+fn navItem(p: Page, w: *Writer, it: NavItem) Writer.Error!void {
+    try tpl.render(w, "<a href=\"{href}\"{current}{view}>{label}</a>\n", .{
+        .href = if (it.in_view) Link{ .root = p.root, .path = it.path } else toSite(p, it.path),
+        .current = tpl.flag(it.nav == p.nav, "aria-current=\"page\""),
+        .view = tpl.flag(it.in_view and p.view == null, "data-view"),
+        .label = it.label,
+    });
+}
+
+/// Region and period switches; data-region, data-period: what filters.js sets on a click
+fn switches(w: *Writer, p: Page) Writer.Error!void {
+    const paths = p.counterparts.?;
+    const v = p.view orelse View.all[0];
+    try w.writeAll("<div class=\"filters\">\n");
+    const groups = [_]struct { []const u8, [2]View, [2][2][]const u8 }{
+        .{ "Region", .{ .{ .region = .euw, .period = v.period }, .{ .region = .all, .period = v.period } }, .{ .{ "EUW", "" }, .{ "All regions", "" } } },
+        .{ "Period", .{ .{ .region = v.region, .period = .days30 }, .{ .region = v.region, .period = .patch } }, .{ .{ "30 days", "" }, .{ "Patch ", p.patch } } },
+    };
+    for (groups, 0..) |g, i| {
+        try tpl.renderPart(w, "<nav class=\"switch\" aria-label=\"{label}\">", .{ .label = g[0] });
+        for (g[1], g[2]) |to, label| {
+            const here = to.index() == v.index();
+            try tpl.render(w, "<a{current}{href} {data}=\"{value}\">{label}{patch}</a>", .{
+                .current = tpl.flag(here, "aria-current=\"page\""),
+                .href = tpl.when(!here, tpl.attr("href", toSite(p, paths[to.index()]))),
+                .data = tpl.trusted(if (i == 0) "data-region" else "data-period"),
+                .value = if (i == 0) @tagName(to.region) else @tagName(to.period),
+                .label = label[0],
+                .patch = label[1],
+            });
+        }
+        try w.writeAll("</nav>\n");
+    }
+    try w.writeAll("</div>\n");
 }
 
 pub fn foot(w: *Writer, p: Page) Writer.Error!void {
-    const up = if (p.view) |v| v.up() else "";
-    try w.print(
+    try tpl.renderPart(w,
         \\</main>
         \\<footer><div class="wrap">
-        \\<p>Ranked solo/duo {s}. Updated daily.</p>
-        \\<p><a href="{s}{s}privacy.html">Privacy</a> · <a href="{s}{s}terms.html">Terms</a> ·
-        \\<a href="{s}{s}method.html">Method</a> · <a href="{s}{s}download.html">Desktop app</a></p>
-        \\<p class="legal">{s}</p>
+        \\<p>Ranked solo/duo {data}. Updated daily.</p>
+        \\<p><a href="{privacy}">Privacy</a> · <a href="{terms}">Terms</a> ·
+        \\<a href="{method}">Method</a> · <a href="{download}">Desktop app</a></p>
+        \\<p class="legal">{legal}</p>
         \\</div></footer>
         \\</body>
         \\</html>
         \\
-    , .{ p.data, p.root, up, p.root, up, p.root, up, p.root, up, boilerplate });
+    , .{
+        .data = p.data,
+        .privacy = toSite(p, "privacy.html"),
+        .terms = toSite(p, "terms.html"),
+        .method = toSite(p, "method.html"),
+        .download = toSite(p, "download.html"),
+        .legal = tpl.trusted(boilerplate),
+    });
 }
 
 test "escape" {
@@ -240,4 +255,8 @@ pub fn minGames(w: *Writer, root: []const u8, key: []const u8, choices: []const 
     try w.print("<p class=\"min-games\" hidden><label>Min games <select data-key=\"{s}\" data-strict=\"{d}\">", .{ key, strict });
     for (choices) |c| try w.print("<option{s}>{d}</option>", .{ if (c == default) " selected" else "", c });
     try w.print("</select></label></p>\n<script src=\"{s}min-games.js\" defer></script>\n", .{root});
+}
+
+test {
+    _ = tpl;
 }

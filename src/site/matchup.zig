@@ -17,6 +17,7 @@ const Bracket = curvesfile.Bracket;
 const Site = root.Site;
 const Champ = root.Champ;
 const esc = html.esc;
+const tpl = html.tpl;
 
 /// Below this many games a curve is greyed out as "more data needed"
 pub const thin_games = 200;
@@ -361,14 +362,88 @@ fn chartOne(
             max_abs = @max(max_abs, @abs(b[0]), @abs(b[1]), @abs(@as(i32, s.v.estimate(metric, i).mean)));
         }
     }
-    try w.print("<figure class=\"chart{s}", .{if (thin(one.v)) " thin" else ""});
-    if (toggle) try w.print(" exp exp-{s}", .{one.key});
-    try w.writeAll("\">\n");
+    const figure = .{
+        .thin = if (thin(one.v)) " thin" else "",
+        .exp = if (toggle) tpl.t(" exp exp-{key}", .{ .key = one.key }) else null,
+    };
     if (longest < 2) {
-        try w.writeAll("<p class=\"muted\">Not enough games yet.</p></figure>\n");
-        return;
+        return tpl.render(w,
+            \\<figure class="chart{thin}{exp}">
+            \\<p class="muted">Not enough games yet.</p></figure>
+            \\
+        , figure);
     }
-    const scale = niceCeil(@intCast(max_abs));
+    try tpl.renderPart(w, "<figure class=\"chart{thin}{exp}\">\n", figure);
+    const g: Geometry = .{ .scale = niceCeil(@intCast(max_abs)), .longest = longest };
+    try tpl.renderPart(w, "<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"{unit} of {x} minus {y} by minute\">\n", .{
+        .width = Geometry.width,
+        .height = Geometry.height,
+        .unit = unit,
+        .x = x.name,
+        .y = y.name,
+    });
+    for ([_]i32{ g.scale, 0, -g.scale }) |tick| {
+        try tpl.render(w,
+            \\<line class="{class}" x1="{left}" x2="{right}" y1="{y:.1}" y2="{y:.1}"/><text x="{label_x}" y="{label_y:.1}" text-anchor="end">{sign}{tick}</text>
+            \\
+        , .{
+            .class = if (tick == 0) "zero" else "grid",
+            .left = Geometry.left,
+            .right = Geometry.width - Geometry.right,
+            .y = g.py(tick),
+            .label_x = Geometry.left - 6,
+            .label_y = g.py(tick) + 4,
+            .sign = if (tick > 0) "+" else "",
+            .tick = tick,
+        });
+    }
+    var minute: usize = 5;
+    while (minute <= longest) : (minute += 5) {
+        try tpl.render(w, "<text x=\"{x:.1}\" y=\"{y}\" text-anchor=\"middle\">{minute} min</text>", .{
+            .x = g.px(minute - 1),
+            .y = Geometry.height - 8,
+            .minute = minute,
+        });
+    }
+    // Before this minute nearly every game is still running (no surrender vote yet)
+    if (longest > surrender_minute) {
+        try tpl.render(w, "<line class=\"ending\" x1=\"{x:.1}\" x2=\"{x:.1}\" y1=\"{top}\" y2=\"{bottom}\"/>", .{
+            .x = g.px(surrender_minute - 1),
+            .top = Geometry.top,
+            .bottom = Geometry.height - Geometry.bottom,
+        });
+    }
+    try tpl.render(w,
+        \\<text x="{x}" y="{top}" class="side">{a} ahead</text><text x="{x}" y="{bottom}" class="side">{b} ahead</text>
+        \\
+    , .{
+        .x = Geometry.left + 6,
+        .top = Geometry.top + 12,
+        .bottom = Geometry.height - Geometry.bottom - 6,
+        .a = x.name,
+        .b = y.name,
+    });
+    const last = reach(one.v);
+    if (last >= 2) {
+        try tpl.render(w,
+            \\<polygon class="band" points="{band}"/>
+            \\<polyline class="median" points="{line}"/>
+            \\
+        , .{
+            .band = Points{ .g = g, .v = one.v, .base = base, .metric = metric, .last = last, .what = .band },
+            .line = Points{ .g = g, .v = one.v, .base = base, .metric = metric, .last = last, .what = .line },
+        });
+    }
+    try w.writeAll("</svg>\n");
+    try caption(w, one.v, base, metric, x, y, when, lane);
+    try w.writeAll("</figure>\n");
+}
+
+/// Chart area in SVG units; values map onto it by the chart's scale
+const Geometry = struct {
+    scale: i32,
+    longest: usize,
+
     const width = 640;
     const height = 240;
     const left = 56;
@@ -377,88 +452,72 @@ fn chartOne(
     const bottom = 28;
     const mid: f64 = top + (height - top - bottom) / 2.0;
     const half: f64 = (height - top - bottom) / 2.0;
-    const px = struct {
-        fn f(i: usize, n: usize) f64 {
-            return left + @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(n - 1)) * (width - left - right);
-        }
-    }.f;
-    const py = struct {
-        fn f(value: i32, s: i32, mid_: f64, half_: f64) f64 {
-            return mid_ - @as(f64, @floatFromInt(value)) / @as(f64, @floatFromInt(s)) * half_;
-        }
-    }.f;
 
-    try w.print(
-        "<svg viewBox=\"0 0 {d} {d}\" role=\"img\" aria-label=\"{s} of {f} minus {f} by minute\">\n",
-        .{ width, height, unit, esc(x.name), esc(y.name) },
-    );
-    for ([_]i32{ scale, 0, -scale }) |tick| {
-        const ty = py(tick, scale, mid, half);
-        try w.print("<line class=\"{s}\" x1=\"{d}\" x2=\"{d}\" y1=\"{d:.1}\" y2=\"{d:.1}\"/>", .{
-            if (tick == 0) "zero" else "grid", left, width - right, ty, ty,
-        });
-        try w.print("<text x=\"{d}\" y=\"{d:.1}\" text-anchor=\"end\">{s}{d}</text>\n", .{
-            left - 6, ty + 4, if (tick > 0) "+" else "", tick,
-        });
+    fn px(g: Geometry, i: usize) f64 {
+        return left + @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(g.longest - 1)) * (width - left - right);
     }
-    var minute: usize = 5;
-    while (minute <= longest) : (minute += 5) {
-        try w.print("<text x=\"{d:.1}\" y=\"{d}\" text-anchor=\"middle\">{d} min</text>", .{
-            px(minute - 1, longest), height - 8, minute,
-        });
-    }
-    // Before this minute nearly every game is still running (no surrender vote yet)
-    if (longest > surrender_minute) {
-        const sx = px(surrender_minute - 1, longest);
-        try w.print("<line class=\"ending\" x1=\"{d:.1}\" x2=\"{d:.1}\" y1=\"{d}\" y2=\"{d}\"/>", .{ sx, sx, top, height - bottom });
-    }
-    try w.print("<text x=\"{d}\" y=\"{d}\" class=\"side\">{f} ahead</text>", .{ left + 6, top + 12, esc(x.name) });
-    try w.print("<text x=\"{d}\" y=\"{d}\" class=\"side\">{f} ahead</text>\n", .{
-        left + 6, height - bottom - 6, esc(y.name),
-    });
 
-    for (vs) |s| {
-        const last = reach(s.v);
-        if (last < 2) continue;
-        try w.writeAll("<polygon class=\"band\" points=\"");
-        for (0..last) |i| try w.print("{d:.1},{d:.1} ", .{ px(i, longest), py(band(s.v, base, metric, i)[1], scale, mid, half) });
-        var i = last;
+    fn py(g: Geometry, value: i32) f64 {
+        return mid - @as(f64, @floatFromInt(value)) / @as(f64, @floatFromInt(g.scale)) * half;
+    }
+};
+
+/// An SVG points list: the band (upper edge forwards, lower edge back) or the line
+const Points = struct {
+    g: Geometry,
+    v: View,
+    base: ?View,
+    metric: curvesfile.Metric,
+    last: usize,
+    what: enum { band, line },
+
+    pub fn render(p: Points, w: *Writer) Writer.Error!void {
+        if (p.what == .line) {
+            for (0..p.last) |i| try point(w, p.g.px(i), p.g.py(p.v.estimate(p.metric, i).mean));
+            return;
+        }
+        for (0..p.last) |i| try point(w, p.g.px(i), p.g.py(band(p.v, p.base, p.metric, i)[1]));
+        var i = p.last;
         while (i > 0) {
             i -= 1;
-            try w.print("{d:.1},{d:.1} ", .{ px(i, longest), py(band(s.v, base, metric, i)[0], scale, mid, half) });
+            try point(w, p.g.px(i), p.g.py(band(p.v, p.base, p.metric, i)[0]));
         }
-        try w.writeAll("\"/>\n<polyline class=\"median\" points=\"");
-        for (0..last) |j| {
-            try w.print("{d:.1},{d:.1} ", .{ px(j, longest), py(s.v.estimate(metric, j).mean, scale, mid, half) });
-        }
-        try w.writeAll("\"/>\n");
     }
-    try w.writeAll("</svg>\n");
-    for (vs) |s| {
-        const last = reach(s.v);
-        try w.writeAll("<figcaption>");
-        if (last < 2) {
-            try w.writeAll("Not enough games yet.</figcaption>\n");
-            continue;
-        }
-        const games = s.v.games();
-        try w.print("{f} minus {f}: line = estimated average; band = ", .{ esc(x.name), esc(y.name) });
-        if (games >= thin_games or base == null) {
-            try w.writeAll("middle half of games");
-        } else try w.print("middle half of all {s} lanes, around the line (too few games for this matchup's own)", .{lane});
-        try w.print("; {s}, all ranks, n = {d} game{s} ({d} still going at {d} min)", .{
-            when, games, plural(games), s.v.minute(last - 1).n, last,
+
+    fn point(w: *Writer, x: f64, y: f64) Writer.Error!void {
+        try w.print("{d:.1},{d:.1} ", .{ x, y });
+    }
+};
+
+fn caption(w: *Writer, v: View, base: ?View, metric: curvesfile.Metric, x: Champ, y: Champ, when: []const u8, lane: []const u8) !void {
+    const last = reach(v);
+    if (last < 2) return tpl.render(w, "<figcaption>Not enough games yet.</figcaption>\n", .{});
+    const games = v.games();
+    const own = games >= thin_games or base == null;
+    try tpl.renderPart(w,
+        \\<figcaption>{x} minus {y}: line = estimated average; band = {own}{baseline}; {when}, all ranks, n = {games} game{s} ({going} still going at {last} min)
+    , .{
+        .x = x.name,
+        .y = y.name,
+        .own = tpl.when(own, "middle half of games"),
+        .baseline = tpl.when(!own, tpl.t("middle half of all {lane} lanes, around the line (too few games for this matchup's own)", .{ .lane = lane })),
+        .when = when,
+        .games = games,
+        .s = plural(games),
+        .going = v.minute(last - 1).n,
+        .last = last,
+    });
+    if (last >= curvesfile.lane_minute) {
+        const e = v.estimate(metric, curvesfile.lane_minute - 1);
+        try tpl.renderPart(w, ". At {minute} min: {sign}{mean} ±{se} (2 standard errors of the average)", .{
+            .minute = curvesfile.lane_minute,
+            .sign = if (e.mean > 0) "+" else "",
+            .mean = e.mean,
+            .se = 2 * @as(u32, e.se),
         });
-        if (last >= curvesfile.lane_minute) {
-            const e = s.v.estimate(metric, curvesfile.lane_minute - 1);
-            try w.print(". At {d} min: {s}{d} ±{d} (2 standard errors of the average)", .{
-                curvesfile.lane_minute, if (e.mean > 0) "+" else "", e.mean, 2 * @as(u32, e.se),
-            });
-        }
-        try ended(w, if (games >= thin_games or base == null) s.v else base.?, last);
-        try w.writeAll(".</figcaption>\n");
     }
-    try w.writeAll("</figure>\n");
+    try ended(w, if (own) v else base.?, last);
+    try w.writeAll(".</figcaption>\n");
 }
 
 /// Surrender opens at 15 minutes: before it nearly all games are still running
