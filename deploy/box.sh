@@ -68,6 +68,45 @@ case "${1:-}" in
         echo "site in $ROOT/data/site"
         ;;
     run) shift; ssh "$HOST" "cd $DIR && bin/meiolol $*" ;;
+    snapshot)
+        # The tables `meiolol site` reads, with the curves, builds and Daily Draft files,
+        # copied to data/snap here for local site work (`meiolol site --data data/snap`).
+        # PUUIDs become p1, p2, ... (consistent across tables, so pool and learning
+        # still group by player); no raw or timeline docs, so Learn has no damage split
+        # and no practice drafts
+        ssh "$HOST" "cd $DIR/data && rm -rf snap && mkdir snap && cd snap \
+            && sqlite3 -readonly ../meiolol.db '.schema --nosys' | sqlite3 meiolol.db \
+            && sqlite3 -readonly ../raw.db '.schema --nosys' | sqlite3 raw.db \
+            && sqlite3 -readonly ../timeline.db '.schema --nosys' | sqlite3 timeline.db \
+            && nice sqlite3 meiolol.db" <<'SQL'
+ATTACH 'file:../meiolol.db?mode=ro' AS live;
+PRAGMA journal_mode=OFF;
+PRAGMA synchronous=OFF;
+BEGIN;
+CREATE TEMP TABLE ids (puuid TEXT PRIMARY KEY, n INTEGER NOT NULL) WITHOUT ROWID;
+INSERT INTO ids SELECT puuid, row_number() OVER () FROM (
+    SELECT puuid FROM live.participants WHERE puuid IS NOT NULL
+    UNION SELECT puuid FROM live.mastery);
+INSERT INTO champions SELECT * FROM live.champions;
+INSERT INTO matches SELECT * FROM live.matches;
+INSERT INTO bans SELECT * FROM live.bans;
+INSERT INTO drafts SELECT * FROM live.drafts;
+INSERT INTO participants SELECT * FROM live.participants;
+UPDATE participants SET puuid = (SELECT 'p' || n FROM ids WHERE ids.puuid = participants.puuid);
+INSERT INTO mastery (puuid, platform, fetched_at, champions, data)
+    SELECT 'p' || n, platform, fetched_at, champions, data FROM live.mastery JOIN ids USING (puuid);
+INSERT INTO players (puuid, matches_checked_at, source)
+    SELECT 'p' || n, matches_checked_at, source FROM live.players JOIN ids USING (puuid)
+    WHERE matches_checked_at IS NOT NULL;
+COMMIT;
+SQL
+        ssh "$HOST" "cd $DIR/data && mkdir -p snap/export && cp -p export/*curves*.bin \
+            export/*builds*.json snap/export/ && cp -rp daily snap/"
+        mkdir -p "$ROOT/data/snap"
+        rsync -az --delete "$HOST:$DIR/data/snap/" "$ROOT/data/snap/"
+        ssh "$HOST" "rm -rf $DIR/data/snap"
+        du -sh "$ROOT/data/snap"
+        ;;
     preview)
         # The working tree (uncommitted edits included, other sessions' too) rendered on
         # the box with live data, EUW views only, into data/preview, then served at
@@ -179,6 +218,6 @@ case "${1:-}" in
             *) echo "usage: deploy/box.sh watch install|uninstall"; exit 2 ;;
         esac
         ;;
-    *) echo "usage: deploy/box.sh sync|start|stop|status|logs [n]|run <meiolol args>|preview [static|stop]|site <contact>|web start [contact]|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
+    *) echo "usage: deploy/box.sh sync|start|stop|status|logs [n]|run <meiolol args>|snapshot|preview [static|stop]|site <contact>|web start [contact]|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
        exit 2 ;;
 esac

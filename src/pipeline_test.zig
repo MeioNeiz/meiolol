@@ -78,7 +78,7 @@ test "fixture games to stats, curves and the website" {
     const builds_path = try std.fs.path.join(arena, &.{ dir, "builds.json" });
 
     const out = try std.fs.path.join(arena, &.{ dir, "site" });
-    try site.generate(gpa, io, db, .{
+    const opts: site.Options = .{
         .out_dir = out,
         .patches = &.{patch},
         .since_ms = 0,
@@ -89,7 +89,8 @@ test "fixture games to stats, curves and the website" {
         .curves = @splat(curves_path),
         .builds = .{ null, builds_path, null, builds_path },
         .filter_champions = &.{"darius"},
-    });
+    };
+    try site.generate(gpa, io, db, opts);
     for ([_][]const u8{
         "index.html",
         "champions.html",
@@ -138,6 +139,30 @@ test "fixture games to stats, curves and the website" {
             std.debug.print("{s} lacks {s}\n", .{ pg[0], want });
             return error.TestUnexpectedResult;
         };
+    }
+
+    // Rendered on request (site.Loaded, `meiolol serve --render` and `dev`): every file
+    // the static build wrote, byte for byte, and nothing for paths it didn't
+    const loaded = try site.Loaded.init(gpa, io, db, opts);
+    defer loaded.deinit();
+    var out_dir = try std.Io.Dir.cwd().openDir(io, out, .{ .iterate = true });
+    defer out_dir.close(io);
+    var walker = try out_dir.walk(gpa);
+    defer walker.deinit();
+    var checked: usize = 0;
+    while (try walker.next(io)) |e| {
+        if (e.kind != .file or std.mem.endsWith(u8, e.path, ".gz")) continue;
+        const want = try out_dir.readFileAlloc(io, e.path, arena, .limited(1 << 24));
+        const got = try loaded.get(arena, e.path) orelse {
+            std.debug.print("not rendered: {s}\n", .{e.path});
+            return error.TestUnexpectedResult;
+        };
+        try testing.expectEqualStrings(want, got);
+        checked += 1;
+    }
+    try testing.expect(checked > 50);
+    for ([_][]const u8{ "champion/nobody.html", "matchup/top/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html" }) |path| {
+        try testing.expectEqual(null, try loaded.get(arena, path));
     }
 }
 

@@ -51,13 +51,13 @@ const Player = struct {
 
 /// The games of the 30-day and current-patch views on every platform, valid as for
 /// stats.scan (ten players, one per team and role, a winner)
-pub fn write(site: *const root.Site, db: store.Db, opts: root.Options) !void {
+pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) ![]const root.File {
     const a = site.arena;
     var wanted: std.ArrayList(root.Champ) = .empty;
     for (opts.filter_champions) |slug| {
         for (site.champs) |ch| if (std.mem.eql(u8, ch.slug, slug)) try wanted.append(a, ch);
     }
-    if (wanted.items.len == 0) return;
+    if (wanted.items.len == 0) return &.{};
     const cells = try a.alloc(Cells, wanted.items.len);
     @memset(cells, .empty);
     var patches: std.ArrayList([]const u8) = .empty;
@@ -152,12 +152,13 @@ pub fn write(site: *const root.Site, db: store.Db, opts: root.Options) !void {
         n += 1;
     }
 
-    for (wanted.items, cells) |ch, *c| {
+    const files = try a.alloc(root.File, wanted.items.len);
+    for (wanted.items, cells, files) |ch, *c, *f| {
         var aw: Writer.Allocating = .init(a);
         try writeJson(a, &aw.writer, opts, patches.items, c);
-        const path = try std.fmt.allocPrint(a, "data/filters/{s}.json", .{ch.slug});
-        try site.writeShared(path, aw.written());
+        f.* = .{ .path = try std.fmt.allocPrint(a, "data/filters/{s}.json", .{ch.slug}), .data = aw.written() };
     }
+    return files;
 }
 
 fn writeJson(a: std.mem.Allocator, w: *Writer, opts: root.Options, patches: []const []const u8, cells: *const Cells) !void {

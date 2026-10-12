@@ -364,7 +364,23 @@ same maths as the app (score.matchupPp, duoPp). Preview mode by default (noindex
 robots.txt disallow, banner): Riot forbids serving the public on a personal key;
 `--public` only once the production key is granted. `deploy/box.sh site EMAIL` builds
 it on the box and rsyncs it to data/site. `meiolol serve` (src/serve.zig) serves a site
-directory over HTTP with .gz siblings; handy for local previews. Hosting:
+directory over HTTP with .gz siblings; handy for local previews.
+
+Code shape (root.zig): `load` reads one view's data from the DB into a `Site` (stats,
+champions, pool, learning, Learn facts, data and script files); pages are functions of
+(path, Site): `renderPage` routes a path within the view to its page function,
+`renderShared` the site-root pages (shared_pages), `pagePaths` lists every page. The
+static build writes each listed path through the router (one arena per page), so a page
+rendered on request is the same bytes: `Loaded` holds every view (loaded on first
+request) and answers any path from the site root (pipeline_test checks every file).
+`meiolol dev` (deploy/dev.sh) serves `Loaded` from data/snap (`deploy/box.sh snapshot`:
+the tables the site reads, PUUIDs replaced, no raw docs) with CSS and JS from
+src/site/static, and reloads the open page on an edit: `zig build --watch` rebuilds,
+the server replaces itself with the new binary. Measured 2026-10-12 (M-series Mac,
+Debug, sqlite at -O2): CSS/JS edit visible at once, a Zig edit in ~20 s (9 s build, 11 s
+load), pages render in 1-40 ms.
+
+Hosting:
 meiolol.jomify.lol, static nginx on the jomove server, uploaded from the box by
 deploy/web-loop.sh (every 15 min early in a patch, then hourly; docs/plan.md step 2),
 and at once on each push to main (deploy/on-push.sh).

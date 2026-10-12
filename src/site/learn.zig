@@ -110,10 +110,8 @@ fn pctOf(n: Counts) u32 {
     return @intFromFloat(@round(100 * rate(n)));
 }
 
-pub fn write(site: *const Site, facts: *const learn.Facts) !void {
+pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
     const a = site.arena;
-    var aw: Writer.Allocating = .init(a);
-    const w = &aw.writer;
     const p = site.sharedPage(
         "Learn to draft | meiolol",
         "Short lessons for new League of Legends players, with examples from real ranked " ++
@@ -191,7 +189,6 @@ pub fn write(site: *const Site, facts: *const learn.Facts) !void {
     }
     try w.writeAll("}</script>\n<script src=\"learn.js\" defer></script>\n");
     try html.foot(w, p);
-    try site.writeShared("learn.html", aw.written());
 }
 
 /// In a script element only "</" can end it early; JSON may escape it as "<\/"

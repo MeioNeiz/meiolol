@@ -48,14 +48,21 @@ fn patchView(site: *const Site) html.View {
 }
 
 /// A page per champion and role with enough of the champion's games (patch views only)
-pub fn writeAll(site: *const Site, f: *const File) !void {
-    var pages: usize = 0;
+pub fn paths(site: *const Site, f: *const File, list: *std.ArrayList([]const u8)) !void {
     for (site.champs) |ch| for (Role.all) |r| {
-        const b = shown(f, ch.id, r) orelse continue;
-        try writePage(site, f, ch, r, b);
-        pages += 1;
+        if (shown(f, ch.id, r) == null) continue;
+        try list.append(site.arena, try path(site.arena, ch, r));
     };
-    std.log.scoped(.site).info("{d} build pages", .{pages});
+}
+
+/// `rest`: "<champion>-<role>" from build/<rest>.html; false for no such page
+pub fn route(site: *const Site, w: *Writer, f: *const File, rest: []const u8) !bool {
+    const dash = std.mem.lastIndexOfScalar(u8, rest, '-') orelse return false;
+    const ch = site.champBySlug(rest[0..dash]) orelse return false;
+    const r = root.roleFromSlug(rest[dash + 1 ..]) orelse return false;
+    const b = shown(f, ch.id, r) orelse return false;
+    try writePage(site, w, f, ch, r, b);
+    return true;
 }
 
 /// Champion page, in `r`'s section: a link to the build page, in this view or its patch
@@ -87,10 +94,8 @@ fn plural(n: u64) []const u8 {
     return if (n == 1) "" else "s";
 }
 
-fn writePage(site: *const Site, f: *const File, ch: Champ, r: Role, b: File.Build) !void {
+fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, b: File.Build) !void {
     const a = site.arena;
-    var aw: Writer.Allocating = .init(a);
-    const w = &aw.writer;
     const page_path = try path(a, ch, r);
     const ranks = try rankLabel(a, f.min_tier);
     const title = try std.fmt.allocPrint(a, "{s} {s} build: runes, items, skill order, patch {s} | meiolol", .{
@@ -161,7 +166,6 @@ fn writePage(site: *const Site, f: *const File, ch: Champ, r: Role, b: File.Buil
         .{ ch.slug, esc(ch.name), site.toShared(page_path) },
     );
     try html.foot(w, p);
-    try site.write(page_path, aw.written());
 }
 
 /// "52.3% ±2.4", or "few games" under rate_games

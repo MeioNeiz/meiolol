@@ -116,6 +116,10 @@ const usage =
     \\              --public         listed for search engines, no preview banner; only
     \\                               once Riot grants the production key
     \\              --euw-only       the EUW views only (root, patch/): a quick preview
+    \\  dev        work on the site: pages rendered on request from DIR (data loaded
+    \\              once), CSS and JS from src/site/static, live reload; run by
+    \\              deploy/dev.sh, which rebuilds on edits. Takes site's flags
+    \\              --port P         default 8080
     \\  serve       serve the website (default DIR/site) over HTTP, for the tunnel
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8080
@@ -208,6 +212,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "eval", cmdEval },
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
+    .{ "dev", cmdDev },
     .{ "api", cmdApi },
     .{ "status", cmdStatus },
     .{ "admin", cmdAdmin },
@@ -610,61 +615,103 @@ fn cmdEval(c: *Cmd) !u8 {
     return 0;
 }
 
-fn cmdSite(c: *Cmd) !u8 {
-    var patches: std.ArrayList([]const u8) = .empty;
-    var out: ?[]const u8 = null;
-    var contact: ?[]const u8 = null;
-    var riot_txt: ?[]const u8 = null;
-    var public = false;
-    var euw_only = false;
-    while (c.next()) |_| {
+/// Flags `site` and `dev` share
+const SiteFlags = struct {
+    patches: std.ArrayList([]const u8) = .empty,
+    out: ?[]const u8 = null,
+    contact: ?[]const u8 = null,
+    riot_txt: ?[]const u8 = null,
+    public: bool = false,
+    euw_only: bool = false,
+
+    /// False for a flag that isn't one of these
+    fn parse(f: *SiteFlags, c: *Cmd) !bool {
         if (c.is("--patch")) {
-            try patches.appendSlice(c.arena, try c.list());
+            try f.patches.appendSlice(c.arena, try c.list());
         } else if (c.is("--out")) {
-            out = try c.value();
+            f.out = try c.value();
         } else if (c.is("--contact")) {
-            contact = try c.value();
+            f.contact = try c.value();
         } else if (c.is("--riot-txt")) {
-            riot_txt = try c.value();
+            f.riot_txt = try c.value();
         } else if (c.is("--public")) {
-            public = true;
+            f.public = true;
         } else if (c.is("--euw-only")) {
-            euw_only = true;
-        } else return error.Usage;
+            f.euw_only = true;
+        } else return false;
+        return true;
     }
-    const email = try c.required(contact, "--contact");
-    const arena = c.arena;
+
+    fn options(f: *const SiteFlags, c: *Cmd, db: store.Db, contact: []const u8) !site.Options {
+        const arena = c.arena;
+        const chosen = if (f.patches.items.len > 0) f.patches.items else try newestPatch(arena, db, &.{"EUW1"});
+        var every: std.ArrayList([]const u8) = .empty;
+        for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
+        const now_ms = std.Io.Clock.real.now(c.init.io).toMilliseconds();
+        return .{
+            .out_dir = f.out orelse try std.fs.path.join(arena, &.{ c.data_dir, "site" }),
+            .patches = chosen,
+            .since_ms = now_ms - 30 * std.time.ms_per_day,
+            .all_platforms = every.items,
+            .contact = contact,
+            .riot_txt = f.riot_txt,
+            .updated = try std.fmt.allocPrint(arena, "{f}", .{Date.fromMs(now_ms).long()}),
+            .public = f.public,
+            .euw_only = f.euw_only,
+            .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
+            // Indexed by site.html.View.index: EUW 30 days, EUW patch, all 30 days, all patch
+            .curves = .{
+                try recentCurvesPath(arena, c.data_dir, false),
+                try curvesPath(arena, c.data_dir, chosen, false),
+                try recentCurvesPath(arena, c.data_dir, true),
+                try curvesPath(arena, c.data_dir, chosen, true),
+            },
+            .builds = .{
+                null,
+                try buildsPath(arena, c.data_dir, chosen, false),
+                null,
+                try buildsPath(arena, c.data_dir, chosen, true),
+            },
+        };
+    }
+};
+
+fn cmdSite(c: *Cmd) !u8 {
+    var f: SiteFlags = .{};
+    while (c.next()) |_| {
+        if (!try f.parse(c)) return error.Usage;
+    }
+    const email = try c.required(f.contact, "--contact");
     const db = try c.open();
     defer db.close();
-    const chosen = if (patches.items.len > 0) patches.items else try newestPatch(arena, db, &.{"EUW1"});
-    var every: std.ArrayList([]const u8) = .empty;
-    for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
-    // Indexed by site.html.View.index: EUW 30 days, EUW patch, all 30 days, all patch
-    const view_curves = [_]?[]const u8{
-        try recentCurvesPath(arena, c.data_dir, false),
-        try curvesPath(arena, c.data_dir, chosen, false),
-        try recentCurvesPath(arena, c.data_dir, true),
-        try curvesPath(arena, c.data_dir, chosen, true),
-    };
-    const now_ms = std.Io.Clock.real.now(c.init.io).toMilliseconds();
-    try site.generate(c.init.gpa, c.init.io, db, .{
-        .out_dir = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "site" }),
-        .patches = chosen,
-        .since_ms = now_ms - 30 * std.time.ms_per_day,
-        .all_platforms = every.items,
-        .contact = email,
-        .riot_txt = riot_txt,
-        .updated = try std.fmt.allocPrint(arena, "{f}", .{Date.fromMs(now_ms).long()}),
-        .public = public,
-        .euw_only = euw_only,
-        .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
-        .curves = view_curves,
-        .builds = .{
-            null,
-            try buildsPath(arena, c.data_dir, chosen, false),
-            null,
-            try buildsPath(arena, c.data_dir, chosen, true),
-        },
+    try site.generate(c.init.gpa, c.init.io, db, try f.options(c, db, email));
+    return 0;
+}
+
+/// Pages rendered on request from data loaded once, CSS and JS from src/site/static, and
+/// the browser reloading after an edit (deploy/dev.sh rebuilds the binary)
+fn cmdDev(c: *Cmd) !u8 {
+    var f: SiteFlags = .{};
+    var port: u16 = 8080;
+    while (c.next()) |_| {
+        if (c.is("--port")) {
+            port = try c.int(u16);
+        } else if (!try f.parse(c)) return error.Usage;
+    }
+    const static_dir = "src/site/static";
+    const dev: serve.Dev = try .init(c.arena, c.init.io, try c.init.minimal.args.toSlice(c.arena), static_dir);
+    const db = try c.open();
+    defer db.close();
+    var opts = try f.options(c, db, f.contact orelse "dev@example.com");
+    opts.static_dir = static_dir;
+    const loaded = try site.Loaded.init(c.init.gpa, c.init.io, db, opts);
+    defer loaded.deinit();
+    // Before listening, so the browser reloads once it is ready; the others on request
+    _ = try loaded.site(site.html.View.all[0]);
+    try serve.run(c.init.gpa, c.init.io, .{
+        .port = port,
+        .render = loaded,
+        .dev = dev,
     });
     return 0;
 }
@@ -683,7 +730,7 @@ fn cmdServe(c: *Cmd) !u8 {
         } else return error.Usage;
     }
     const root = dir orelse try std.fs.path.join(c.arena, &.{ c.data_dir, "site" });
-    try serve.run(c.init.gpa, c.init.io, root, host, port);
+    try serve.run(c.init.gpa, c.init.io, .{ .root = root, .host = host, .port = port });
     return 0;
 }
 

@@ -298,7 +298,7 @@ next steps land here.
 - Zig 0.17 move: small (docs/zig-0.17.md). Waiting (Jacob, 2026-10-11) until ZLS works
   with 0.17, ideally with dvui on 0.17 too; then one move
 
-### Site build and deploy (2026-10-12, was meiolol-a5)
+### Site build and deploy (2026-10-12, owner: the site session)
 
 Push to live took 8-16 min: a deploy restarted the web loop cold (curves, eval and
 builds reran), the site is 103k files / 1.2 GB rewritten and re-uploaded each round, and
@@ -312,29 +312,39 @@ Done:
 - on-push skips pushes that touch only docs or research; box builds reuse .zig-cache
 - `deploy/box.sh preview` (working tree, EUW views, localhost:8081, ~2 min),
   `preview static` (css and js, 1 s), `preview stop`; `meiolol site --euw-only`
+- Pages as functions of (path, data): `load` per view, one router for the static build
+  and rendering on request (`site.Loaded`); pipeline_test checks they agree byte for
+  byte (docs/architecture.md "Code shape")
+- Dev loop on the Mac: `deploy/box.sh snapshot` (data/snap, 454 MB, PUUIDs replaced,
+  54 s), `deploy/dev.sh` (`meiolol dev`: render on request, live reload). CSS/JS edit
+  visible at once, Zig edit ~20 s. Sqlite compiled -O2 in Debug too (Debug EUW site
+  build 3:38 to 1:32; tests faster)
+- Learn practice: match ids loaded once instead of an OFFSET query per try (13 s to 1 s
+  of each site pass on the Mac snapshot)
 
-Direction: stay static (option E in the research), Zig renders, plain JS on top, no
-framework:
-- Static HTML for champion pages and thick matchup pages (the ones meant for search)
-- The browser filters (region, rank, period, role) from one summable data file per
-  champion (Ahri prototype) and draws thin matchups from per-champion data
-- One page per champion or matchup instead of four view copies: ~103k files to a few
-  thousand
-- Search: one indexable URL per matchup above a game floor, canonical for the rest,
-  sitemaps with lastmod
-- Server rendering (nginx try_files to a Zig renderer, proxy cache) only if the static
-  set outgrows quick builds
+Direction (Jacob 2026-10-12, via meiolol-88: "build both"): stay static for the pages
+search sees, plain JS on top, no framework; plus option B from the research: a renderer
+on the box (`meiolol serve` with `site.Loaded`) behind jomify's nginx (try_files, then
+proxy to the box with proxy_cache, use_stale, background_update) for the long tail,
+unless it makes the site slower or less reliable. Thin matchups get server HTML, not
+browser drawing; the browser does filters (region, rank, period, role) from per-champion
+summable data. One page per champion or matchup instead of four view copies. Region:
+every region selectable (groups only if data files grow too big). Indexing: open, to be
+decided on evidence of what gets clicks, not just a game floor (Jacob 2026-10-12); build
+canonical, sitemap and noindex support as settings.
 
 Next:
-1. Measure per-champion matchup curve data (curves are estimates, precomputed per view)
-   and filter data size per champion (Ahri: 36 KB gzipped, grows with data)
-2. Filters on every champion page; drop the per-view champion copies
-3. Matchup pages: thick ones static, thin ones drawn in the browser
-4. pool.make once for all views (22% of a site pass, meiolol-d3's profile)
-5. Dev server: pages as functions of path and data, `meiolol serve` rendering on
-   request from data loaded once, so a template edit shows without a site pass
-6. If filter data grows: fetch on first use, merge Master+ ranks, content-hashed data
-   file names with long caching (keep the previous version one round), http2 in nginx
+1. Filters on every champion page (generalise the Ahri prototype, fix its gaps: header
+   switches and early-data note follow the filters, pick/ban tiles, gold at 14); drop
+   the per-view champion copies
+2. B on the box: `meiolol serve --render` as a service reloading data each web round;
+   needs Jacob's OK for a jomify-to-box network path and the meiolol nginx block
+3. Matchup pages: thick ones static, the rest rendered on request (B)
+4. pool.make once for all views (22% of a site pass), one timeline decode for curves,
+   gzip cost
+5. Dev: cached data load for faster restarts (later, Jacob); box preview from a clean
+   checkout of HEAD plus the site diff (a working-tree build once migrated the live DB)
+6. Design and UX pass with screenshots; page weight; SEO settings for `--public`
 
 ### Ideas not started (concept extensions, 2026-10-11)
 
@@ -354,8 +364,7 @@ flashcards with spaced repetition; season "lane story" share cards.
 - Squads as private invite-link pages with Riot IDs shown to members only
 - Budget for EUNE/TR/RU/ME in the europe bucket (EUW takes it all while it has players due)
 - Patch day movers bar: z 1.96 or 2.58
-- Canonical view for search: all regions or EUW; last 30 days or patch
-- Game floor for indexing a matchup page (100? 200?)
+- Indexing (which pages and view search sees): open, decided on evidence of clicks
 - Name/domain: "lol" in name and TLD is a mild Riot-trademark risk
 - Storage and hosting (research/questions/free-hosting-storage.md): (1) Hetzner Storage
   Box BX11, 1 TB for EUR 3.20/month, for off-host backups and old segments (~1.5 years

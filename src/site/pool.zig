@@ -26,9 +26,7 @@ pub fn sourceText(p: *const pool.Pool) []const u8 {
 }
 
 /// With the learning-curve table under the picker (site/learning.zig)
-pub fn writePage(site: *const Site, p: *const pool.Pool, l: *const learning.Learning) !void {
-    var aw: Writer.Allocating = .init(site.arena);
-    const w = &aw.writer;
+pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const learning.Learning) !void {
     const pg = site.page(
         "Champion pool | meiolol",
         "Pick the champions you main: what their players also play, which of those do well into your hard lanes, and what they play when your main is banned.",
@@ -61,7 +59,6 @@ pub fn writePage(site: *const Site, p: *const pool.Pool, l: *const learning.Lear
     , .{ sourceText(p), p.players, p.min_players, site.view.region.in(), site.when, site.view.up() });
     try learning_page.table(site, w, l);
     try html.foot(w, pg);
-    try site.write("pool.html", aw.written());
 }
 
 /// Champion page: who mains `ch` and what else they play

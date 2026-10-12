@@ -49,25 +49,33 @@ pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
 }
 
 /// A page per lane matchup with an all-ranks curve, from the lower champion id's side
-pub fn writeAll(site: *const Site, curves: *const Curves) !void {
-    var pages: usize = 0;
+pub fn paths(site: *const Site, curves: *const Curves, list: *std.ArrayList([]const u8)) !void {
     for (curves.curves) |c| {
         const h = c.header;
         if (h.bracket != @intFromEnum(Bracket.all)) continue;
         const x = champ(site, h.a) orelse continue;
         const y = champ(site, h.b) orelse continue;
         const r: Role = @enumFromInt(h.role);
-        try writePage(site, curves, r, x, y);
-        pages += 1;
+        try list.append(site.arena, try path(site.arena, r, x, y));
     }
-    std.log.scoped(.site).info("{d} matchup pages", .{pages});
+}
+
+/// `rest`: "<role>/<a>-vs-<b>" from matchup/<rest>.html; false for no such page
+pub fn route(site: *const Site, w: *Writer, curves: *const Curves, rest: []const u8) !bool {
+    const slash = std.mem.indexOfScalar(u8, rest, '/') orelse return false;
+    const r = root.roleFromSlug(rest[0..slash]) orelse return false;
+    var it = std.mem.splitSequence(u8, rest[slash + 1 ..], "-vs-");
+    const x = site.champBySlug(it.next().?) orelse return false;
+    const y = site.champBySlug(it.next() orelse return false) orelse return false;
+    if (it.next() != null or x.id >= y.id) return false;
+    if (curves.get(r, .all, x.id, y.id) == null) return false;
+    try writePage(site, w, curves, r, x, y);
+    return true;
 }
 
 /// matchup/index.html: every matchup page by role, most games first
-pub fn writeIndex(site: *const Site, curves: ?*const Curves) !void {
+pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
     const a = site.arena;
-    var aw: Writer.Allocating = .init(a);
-    const w = &aw.writer;
     const p = site.page(
         if (curves) |c| try std.fmt.allocPrint(a, "Lane matchup curves, {s} | meiolol", .{try period(a, c)}) else "Lane matchup curves | meiolol",
         "How every lane matchup unfolds minute by minute: gold, experience and CS difference, kills and level 6 timing, by rank.",
@@ -84,8 +92,7 @@ pub fn writeIndex(site: *const Site, curves: ?*const Curves) !void {
     );
     const c = curves orelse {
         try w.writeAll("<p class=\"note\">Curves need match timelines, which are being collected now. Every matchup gets a page; under 200 games it is shown greyed out as \"more data needed\".</p>\n");
-        try html.foot(w, p);
-        return site.write("matchup/index.html", aw.written());
+        return html.foot(w, p);
     };
     try html.minGames(w, "../", "matchups", &index_floors, index_floors[0], 0);
     const Entry = struct { x: Champ, y: Champ, games: u32, thin: bool };
@@ -126,7 +133,6 @@ pub fn writeIndex(site: *const Site, curves: ?*const Curves) !void {
         try w.writeAll("</ul>\n");
     }
     try html.foot(w, p);
-    try site.write("matchup/index.html", aw.written());
 }
 
 pub fn champ(site: *const Site, id: u32) ?Champ {
@@ -165,11 +171,9 @@ fn variants(a: std.mem.Allocator, curves: *const Curves, r: Role, x: Champ, y: C
     return list.items;
 }
 
-fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
+fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
     const a = site.arena;
     const v = curves.get(r, .all, x.id, y.id).?;
-    var aw: Writer.Allocating = .init(a);
-    const w = &aw.writer;
     const lane = root.roleName(r);
     const when = try period(a, curves);
     const title = try std.fmt.allocPrint(a, "{s} vs {s}, {s} lane curves, {s} | meiolol", .{
@@ -240,7 +244,6 @@ fn writePage(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cha
         .{ x.slug, esc(x.name), y.slug, esc(y.name), site.toShared(page_path) },
     );
     try html.foot(w, p);
-    try site.write(page_path, aw.written());
 }
 
 fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
