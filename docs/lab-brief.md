@@ -66,13 +66,15 @@ and `effects` (the effect tables written for the run).
 Jacob reads runs for what they say about League, not for loss numbers. After every run
 (crashes aside), before the next:
 
-- `finding CAMPAIGN RUN "..."`: one plain sentence a player would understand, in human
-  units, with the numbers from RESULT or the effect table. Say what the change was, what
-  it showed about the game, and how sure. Compare with the reference run where that is
-  the point. E.g. "Patch made no difference beyond what the model already had (0.0% of
-  the error, within noise)", "Players a tier higher get ~120 gold more at 14 in the same
-  matchup (±40); the term removes 0.6% more of the error than ref". A null result is a
-  finding too
+- `finding CAMPAIGN RUN "..."`: one sentence, shown verbatim on the admin page, by
+  docs/learned.md's rule: plain English a ranked player would follow, numbers in gold,
+  CS, deaths, minutes or percentage points from RESULT or the effect table. No MSE, sd,
+  nats, run or hypothesis ids, model, term or column names. Say what it showed about the
+  game and how sure (e.g. "within noise"). E.g. "Patch makes no difference to gold at 14
+  once champions and matchups are known (within noise)", "A player one tier higher has
+  about 120 gold more at 14 in the same matchup (give or take 40)", "Knowing the
+  junglers makes the gold-at-14 guess 0.4% better, too small to matter". A null result
+  is a finding too. The technical detail goes in digest.md
 - When a term is kept, the candidate exposes it in `effects` (rank tier, patch, or the top
   and bottom 10 champions or matchups by effect), each row with a 95% interval and the
   games behind it, in the target's units; name the file in the finding. src/lab/cand/
