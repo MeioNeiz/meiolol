@@ -783,12 +783,7 @@ const PlatformCrawler = struct {
                 var page: u32 = 1;
                 while (true) : (page += 1) {
                     try pc.b.check();
-                    var fresh = try pc.b.db.prepare("SELECT entries, fetched_at FROM ladder_pages" ++
-                        " WHERE platform = ? AND tier = ? AND division = ? AND page = ?");
-                    defer fresh.deinit();
-                    try fresh.bind(.{ p.id, tier, division, page });
-                    if (try fresh.step()) {
-                        const f = fresh.row(struct { entries: i64, fetched_at: i64 });
+                    if (try pc.storedPage(tier, division, page)) |f| {
                         if (f.fetched_at > pc.b.now() - pc.b.c.opts.ladder_refresh_s) {
                             if (f.entries == 0) break;
                             continue;
@@ -809,6 +804,18 @@ const PlatformCrawler = struct {
         }
         return fetched;
     }
+
+    /// Finalised before returning: a statement left on its row holds a read transaction,
+    /// and one held across the ladder gap and fetch kept main's WAL from ever restarting
+    fn storedPage(pc: *PlatformCrawler, tier: []const u8, division: []const u8, page: u32) !?StoredPage {
+        var s = try pc.b.db.prepare("SELECT entries, fetched_at FROM ladder_pages" ++
+            " WHERE platform = ? AND tier = ? AND division = ? AND page = ?");
+        defer s.deinit();
+        try s.bind(.{ pc.platform.id, tier, division, page });
+        return if (try s.step()) s.row(StoredPage) else null;
+    }
+
+    const StoredPage = struct { entries: i64, fetched_at: i64 };
 
     /// Nap until this platform may fetch another ladder page (--ladder-per-hour)
     fn ladderGap(pc: *PlatformCrawler) !void {
