@@ -386,6 +386,10 @@ next steps land here.
   every minute (dragon ~1000 gold equivalent, soul ~4000, elder ~4800, inhib 900-2300).
   Items: given state at purchase, the item adds nothing measurable at 2.9M rows, so no
   build-by-win-rate claims; timing and lead matter. Items x enemy team deprioritised
+- Playstyle (meiolol-b0, 5d0c22c): given the 14:00 leads, early style adds little
+  (0.00038 ± 0.00015 nats); most apparent style effect is being ahead. Small survivors
+  (trading damage, spare camps, support roams) are post-game lesson material only.
+  Next: champion given state (scaling, converting leads), fresh session
 - Win (meiolol-88): joint ratings first to beat champion baseline on dev (-0.0031 ±
   0.0017); win rows need duration_s >= 900 (leaver forfeits out)
 - Experience term (src/experience.zig): rerun at 300+ train / 100+ test per variant; if
