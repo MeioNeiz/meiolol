@@ -1,0 +1,468 @@
+//! Win from the draft, one logistic model per game (blue side's chance), nested so each
+//! step's gain is measurable:
+//!   rates:    blue-side rate per platform + each champion-role's own win rate as
+//!             log-odds, pulled to 50% by `rate_prior` games (eval's base rates)
+//!   ratings:  blue-side intercept per platform + sum of champion-role ratings, blue minus
+//!             red (eval's joint ratings, fitted by Adam)
+//!   lane:     + lane-opponent interactions (both enemies for bottom and support):
+//!             w[my role][their role] * <u[me], v[them]>, blue's minus red's
+//!   counters: the same interaction with all five enemies
+//!   full:     counters + teammate synergy, z[role][role] * <s[a], s[b]> per ally pair
+//! Optional: own_rank (champ select: the user's rank, a per-role slope on top of the
+//! game's logit) and all_ranks (post-game only: everyone's rank, an upper bound on what
+//! rank data is worth). L2 and dim picked on the newest 10% of visible games, refit on
+//! all of them. Other outcomes: no opinion. Variants differ only in `cfg` (docs/model.md)
+
+const std = @import("std");
+const api = @import("api");
+
+const Kind = enum { rates, ratings, lane, counters, full };
+
+const Cfg = struct {
+    kind: Kind,
+    own_rank: bool = false,
+    all_ranks: bool = false,
+    /// Only games of this platform index (protocol.platformIds order); null for all
+    platform: ?u8 = null,
+    /// Days; older games weigh exp(-age / half_life * ln 2); 0 for equal weights
+    half_life: f64 = 0,
+};
+
+const cfg: Cfg = .{ .kind = .ratings };
+
+pub const scope: api.Scope = if (cfg.all_ranks) .post_game else .champ_select;
+
+const n_role = 5;
+const n_platform = 256;
+const val_share = 0.1;
+const batch = 2048;
+const lr = 0.003;
+const max_epochs = 60;
+const patience = 5;
+/// Rank units: 0 Iron IV .. 39 Challenger I, centred on the training mean
+const rank_scale = 1.0 / 4.0;
+
+const rate_prior = 1000;
+
+const l2_grid = [_]f32{ 3e-4, 1e-3, 3e-3, 1e-2 };
+const dim_grid: []const u32 = if (cfg.kind == .ratings or cfg.kind == .rates) &.{0} else &.{ 4, 8 };
+
+/// One game: dense champion-role ids by side and role (0 = unseen), blue won
+const Game = struct {
+    ids: [2][n_role]u16,
+    platform: u8,
+    /// Everyone's rank minus the mean, blue's minus red's per role (all_ranks only)
+    rank_diff: [n_role]f32,
+    y: f32,
+    weight: f32,
+};
+
+const Space = struct {
+    dim: u32,
+    n_ids: usize,
+    // Offsets into the flat parameter slice
+    c: usize,
+    b: usize,
+    u: usize,
+    v: usize,
+    w: usize,
+    s: usize,
+    z: usize,
+    k: usize,
+    len: usize,
+
+    fn init(n_ids: usize, dim: u32) Space {
+        var sp: Space = undefined;
+        sp.dim = dim;
+        sp.n_ids = n_ids;
+        const d: usize = dim;
+        var at: usize = 0;
+        inline for (.{ "c", "b", "u", "v", "w", "s", "z", "k" }, .{ n_platform, n_ids, n_ids * d, n_ids * d, 25, n_ids * d, 25, n_role }) |name, size| {
+            @field(sp, name) = at;
+            at += size;
+        }
+        sp.len = at;
+        return sp;
+    }
+};
+
+fn laneMates(mine: usize, theirs: usize) bool {
+    const bot = @backingInt(api.Role.bottom);
+    const sup = @backingInt(api.Role.utility);
+    return mine == theirs or (mine >= bot and theirs >= bot and mine <= sup and theirs <= sup);
+}
+
+fn interacts(mine: usize, theirs: usize) bool {
+    return switch (cfg.kind) {
+        .rates, .ratings => false,
+        .lane => laneMates(mine, theirs),
+        .counters, .full => true,
+    };
+}
+
+fn dot(a: []const f32, b: []const f32) f32 {
+    var s: f32 = 0;
+    for (a, b) |x, y| s += x * y;
+    return s;
+}
+
+const Params = struct {
+    sp: Space,
+    p: []f32,
+
+    fn vec(m: Params, off: usize, id: u16) []f32 {
+        const d: usize = m.sp.dim;
+        return m.p[off + @as(usize, id) * d ..][0..d];
+    }
+
+    fn logit(m: Params, g: *const Game) f32 {
+        const p = m.p;
+        const sp = m.sp;
+        var s = p[sp.c + g.platform];
+        for (0..n_role) |r| s += p[sp.b + g.ids[0][r]] - p[sp.b + g.ids[1][r]];
+        if (cfg.all_ranks) for (0..n_role) |r| {
+            s += p[sp.k + r] * g.rank_diff[r];
+        };
+        if (cfg.kind == .ratings or cfg.kind == .rates) return s;
+        for (0..2) |side| {
+            const sign: f32 = if (side == 0) 1 else -1;
+            for (0..n_role) |ri| for (0..n_role) |rj| {
+                if (!interacts(ri, rj)) continue;
+                const uv = dot(m.vec(sp.u, g.ids[side][ri]), m.vec(sp.v, g.ids[1 - side][rj]));
+                s += sign * p[sp.w + ri * n_role + rj] * uv;
+            };
+            if (cfg.kind == .full) for (0..n_role) |ri| for (ri + 1..n_role) |rj| {
+                const ss = dot(m.vec(sp.s, g.ids[side][ri]), m.vec(sp.s, g.ids[side][rj]));
+                s += sign * p[sp.z + ri * n_role + rj] * ss;
+            };
+        }
+        return s;
+    }
+
+    /// Adds d(loss)/d(params) for g with residual r = p - y (log loss), times weight
+    fn grad(m: Params, g: *const Game, r: f32, gr: []f32) void {
+        const p = m.p;
+        const sp = m.sp;
+        const d: usize = sp.dim;
+        gr[sp.c + g.platform] += r;
+        for (0..n_role) |ro| {
+            gr[sp.b + g.ids[0][ro]] += r;
+            gr[sp.b + g.ids[1][ro]] -= r;
+        }
+        if (cfg.all_ranks) for (0..n_role) |ro| {
+            gr[sp.k + ro] += r * g.rank_diff[ro];
+        };
+        if (cfg.kind == .ratings or cfg.kind == .rates) return;
+        for (0..2) |side| {
+            const rs = if (side == 0) r else -r;
+            for (0..n_role) |ri| for (0..n_role) |rj| {
+                if (!interacts(ri, rj)) continue;
+                const a = g.ids[side][ri];
+                const b = g.ids[1 - side][rj];
+                const ua = m.vec(sp.u, a);
+                const vb = m.vec(sp.v, b);
+                const wi = sp.w + ri * n_role + rj;
+                gr[wi] += rs * dot(ua, vb);
+                const wr = rs * p[wi];
+                const gu = gr[sp.u + @as(usize, a) * d ..][0..d];
+                const gv = gr[sp.v + @as(usize, b) * d ..][0..d];
+                for (gu, gv, ua, vb) |*x, *y, pu, pv| {
+                    x.* += wr * pv;
+                    y.* += wr * pu;
+                }
+            };
+            if (cfg.kind == .full) for (0..n_role) |ri| for (ri + 1..n_role) |rj| {
+                const a = g.ids[side][ri];
+                const b = g.ids[side][rj];
+                const sa = m.vec(sp.s, a);
+                const sb = m.vec(sp.s, b);
+                const zi = sp.z + ri * n_role + rj;
+                gr[zi] += rs * dot(sa, sb);
+                const zr = rs * p[zi];
+                const ga = gr[sp.s + @as(usize, a) * d ..][0..d];
+                const gb = gr[sp.s + @as(usize, b) * d ..][0..d];
+                for (ga, gb, sa, sb) |*x, *y, pa, pb| {
+                    x.* += zr * pb;
+                    y.* += zr * pa;
+                }
+            };
+        }
+    }
+};
+
+fn sigmoid(x: f32) f32 {
+    return 1 / (1 + @exp(-x));
+}
+
+fn logLoss(m: Params, set: []const Game) f64 {
+    var s: f64 = 0;
+    var wsum: f64 = 0;
+    for (set) |*g| {
+        const q = std.math.clamp(sigmoid(m.logit(g)), 1e-6, 1 - 1e-6);
+        s -= g.weight * (g.y * @log(q) + (1 - g.y) * @log(1 - q));
+        wsum += g.weight;
+    }
+    return s / @max(wsum, 1e-9);
+}
+
+const Trained = struct { p: []f32, epochs: u32, val_loss: f64 };
+
+/// Adam on minibatches; with val, stops on it and keeps the best epoch's parameters
+fn train(gpa: std.mem.Allocator, sp: Space, l2: f32, set: []const Game, val: ?[]const Game, epochs_cap: u32, seed: u64) !Trained {
+    const p = try gpa.alloc(f32, sp.len);
+    errdefer gpa.free(p);
+    @memset(p, 0);
+    var rng: std.Random.DefaultPrng = .init(seed);
+    const rnd = rng.random();
+    // Unseen (id 0) keeps zero vectors: it never appears in training
+    for (sp.u + sp.dim..sp.u + sp.n_ids * sp.dim) |i| p[i] = (rnd.float(f32) - 0.5) * 0.02;
+    for (sp.v + sp.dim..sp.v + sp.n_ids * sp.dim) |i| p[i] = (rnd.float(f32) - 0.5) * 0.02;
+    for (sp.s + sp.dim..sp.s + sp.n_ids * sp.dim) |i| p[i] = (rnd.float(f32) - 0.5) * 0.02;
+    @memset(p[sp.w..][0..25], 1);
+    @memset(p[sp.z..][0..25], 1);
+    const m: Params = .{ .sp = sp, .p = p };
+
+    const scratch = try gpa.alloc(f32, sp.len * 4);
+    defer gpa.free(scratch);
+    const gr = scratch[0..sp.len];
+    const m1 = scratch[sp.len .. 2 * sp.len];
+    const m2 = scratch[2 * sp.len .. 3 * sp.len];
+    const best = scratch[3 * sp.len ..];
+    @memset(m1, 0);
+    @memset(m2, 0);
+    const order = try gpa.alloc(u32, set.len);
+    defer gpa.free(order);
+    for (order, 0..) |*o, i| o.* = @intCast(i);
+
+    var best_loss = std.math.inf(f64);
+    var best_epoch: u32 = 0;
+    var step: u32 = 0;
+    const b1: f32 = 0.9;
+    const b2: f32 = 0.999;
+    var epoch: u32 = 0;
+    while (epoch < epochs_cap) : (epoch += 1) {
+        rnd.shuffle(u32, order);
+        var at: usize = 0;
+        while (at < order.len) : (at += batch) {
+            const part = order[at..@min(at + batch, order.len)];
+            @memset(gr, 0);
+            var wsum: f32 = 0;
+            for (part) |i| {
+                const g = &set[i];
+                m.grad(g, g.weight * (sigmoid(m.logit(g)) - g.y), gr);
+                wsum += g.weight;
+            }
+            const scale = 1 / @max(wsum, 1e-6);
+            step += 1;
+            const c1 = 1 - std.math.pow(f32, b1, @floatFromInt(step));
+            const c2 = 1 - std.math.pow(f32, b2, @floatFromInt(step));
+            for (p, gr, m1, m2, 0..) |*x, g0, *s1, *s2, i| {
+                // No shrinkage on the side intercepts or the role-pair weights
+                const shrink = !(i < sp.c + n_platform or (i >= sp.w and i < sp.w + 25) or (i >= sp.z and i < sp.z + 25));
+                const g = g0 * scale + if (shrink) l2 * x.* else 0;
+                s1.* = b1 * s1.* + (1 - b1) * g;
+                s2.* = b2 * s2.* + (1 - b2) * g * g;
+                x.* -= lr * (s1.* / c1) / (@sqrt(s2.* / c2) + 1e-8);
+            }
+        }
+        const v = val orelse {
+            best_epoch = epoch + 1;
+            continue;
+        };
+        const loss = logLoss(m, v);
+        if (loss < best_loss - 1e-7) {
+            best_loss = loss;
+            best_epoch = epoch + 1;
+            @memcpy(best, p);
+        } else if (epoch + 1 - best_epoch >= patience) break;
+    }
+    if (val != null) @memcpy(p, best);
+    return .{ .p = p, .epochs = best_epoch, .val_loss = best_loss };
+}
+
+pub const Model = struct {
+    sp: Space,
+    p: []f32,
+    ids: std.AutoHashMapUnmanaged(u64, u16) = .empty,
+    rank_mean: f32 = 0,
+    /// own_rank: per-role slope on the user's centred rank, on the row's logit
+    own: [n_role]f32 = @splat(0),
+};
+
+fn key(champion: u32, role: usize) u64 {
+    return (@as(u64, champion) << 3) | role;
+}
+
+fn idOf(m: *const Model, champion: u32, role: usize) u16 {
+    return m.ids.get(key(champion, role)) orelse 0;
+}
+
+fn centred(rank: ?u8, mean: f32) f32 {
+    const r = rank orelse return 0;
+    return (@as(f32, @floatFromInt(r)) - mean) * rank_scale;
+}
+
+fn gameOf(m: *const Model, g: *const api.Game, ranks: ?[2][n_role]?u8, y: f32, weight: f32) Game {
+    var out: Game = .{ .ids = undefined, .platform = g.platform, .rank_diff = @splat(0), .y = y, .weight = weight };
+    for (0..2) |side| for (0..n_role) |r| {
+        out.ids[side][r] = idOf(m, g.teams[side][r], r);
+    };
+    if (ranks) |rk| for (0..n_role) |r| {
+        out.rank_diff[r] = centred(rk[0][r], m.rank_mean) - centred(rk[1][r], m.rank_mean);
+    };
+    return out;
+}
+
+pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Model {
+    var m: Model = .{ .sp = undefined, .p = &.{} };
+    errdefer m.ids.deinit(gpa);
+
+    // Blue won, per game, from any row with a win label
+    const won = try gpa.alloc(f32, t.games.len);
+    defer gpa.free(won);
+    @memset(won, std.math.nan(f32));
+    var rank_sum: f64 = 0;
+    var rank_n: f64 = 0;
+    for (t.rows) |r| {
+        const y = r.y[api.outcomeIndex(.win)];
+        if (!std.math.isNan(y)) won[r.game] = if (r.side == 0) y else 1 - y;
+        if (r.rank) |rk| {
+            rank_sum += @floatFromInt(rk);
+            rank_n += 1;
+        }
+    }
+    m.rank_mean = @floatCast(rank_sum / @max(rank_n, 1));
+
+    var newest: i64 = std.math.minInt(i64);
+    for (t.games) |g| newest = @max(newest, g.start);
+    var next_id: u16 = 1;
+    var games: std.ArrayList(Game) = .empty;
+    defer games.deinit(gpa);
+    var starts: std.ArrayList(i64) = .empty;
+    defer starts.deinit(gpa);
+    for (t.games, won) |*g, y| {
+        if (std.math.isNan(y)) continue;
+        if (cfg.platform) |pl| if (g.platform != pl) continue;
+        for (0..n_role) |r| for (0..2) |side| {
+            const e = try m.ids.getOrPut(gpa, key(g.teams[side][r], r));
+            if (!e.found_existing) {
+                e.value_ptr.* = next_id;
+                next_id += 1;
+            }
+        };
+        const age_days = @as(f64, @floatFromInt(newest - g.start)) / 86_400_000;
+        const weight: f32 = if (cfg.half_life > 0) @floatCast(@exp(-age_days / cfg.half_life * @log(2.0))) else 1;
+        try games.append(gpa, gameOf(&m, g, if (cfg.all_ranks) g.ranks else null, y, weight));
+        try starts.append(gpa, g.start);
+    }
+
+    // Validation: the newest share of games by start
+    const sorted = try gpa.dupe(i64, starts.items);
+    defer gpa.free(sorted);
+    std.mem.sort(i64, sorted, {}, std.sort.asc(i64));
+    const cut = sorted[@intFromFloat(@as(f64, @floatFromInt(sorted.len)) * (1 - val_share))];
+    var fit_set: std.ArrayList(Game) = .empty;
+    defer fit_set.deinit(gpa);
+    var val_set: std.ArrayList(Game) = .empty;
+    defer val_set.deinit(gpa);
+    for (games.items, starts.items) |g, s| try (if (s >= cut) &val_set else &fit_set).append(gpa, g);
+
+    if (cfg.kind == .rates) {
+        m.sp = .init(next_id, 0);
+        m.p = try rates(gpa, m.sp, games.items);
+        if (cfg.own_rank) fitOwnRank(&m, t, won);
+        return m;
+    }
+
+    var best: struct { l2: f32 = 0, dim: u32 = 0, epochs: u32 = 0, loss: f64 = std.math.inf(f64) } = .{};
+    for (dim_grid) |dim| for (l2_grid) |l2| {
+        const tr = try train(gpa, .init(next_id, dim), l2, fit_set.items, val_set.items, max_epochs, opts.seed);
+        defer gpa.free(tr.p);
+        if (tr.val_loss < best.loss) best = .{ .l2 = l2, .dim = dim, .epochs = tr.epochs, .loss = tr.val_loss };
+    };
+    m.sp = .init(next_id, best.dim);
+    // A tenth more games: a tenth more epochs
+    const refit = try train(gpa, m.sp, best.l2, games.items, null, @max(1, best.epochs + best.epochs / 10), opts.seed);
+    m.p = refit.p;
+    std.debug.print("win-model: kind {t} dim {d} l2 {d} epochs {d} val {d:.5} on {d} games\n", .{ cfg.kind, best.dim, best.l2, best.epochs, best.loss, games.items.len });
+
+    if (cfg.own_rank) fitOwnRank(&m, t, won);
+    return m;
+}
+
+/// Marginal rates as log-odds, no joint fit: the side intercept per platform and each
+/// champion-role's team win rate, shrunk to 50%
+fn rates(gpa: std.mem.Allocator, sp: Space, games: []const Game) ![]f32 {
+    const p = try gpa.alloc(f32, sp.len);
+    @memset(p, 0);
+    const n = try gpa.alloc(f64, sp.n_ids + n_platform);
+    defer gpa.free(n);
+    const w = try gpa.alloc(f64, n.len);
+    defer gpa.free(w);
+    @memset(n, 0);
+    @memset(w, 0);
+    for (games) |g| {
+        n[sp.n_ids + g.platform] += g.weight;
+        w[sp.n_ids + g.platform] += g.weight * g.y;
+        for (0..2) |side| for (g.ids[side]) |id| {
+            n[id] += g.weight;
+            w[id] += g.weight * (if (side == 0) g.y else 1 - g.y);
+        };
+    }
+    for (0..sp.n_ids) |id| {
+        const q = (w[id] + rate_prior * 0.5) / (n[id] + rate_prior);
+        p[sp.b + id] = @floatCast(@log(q / (1 - q)));
+    }
+    for (0..n_platform) |pl| {
+        const q = (w[sp.n_ids + pl] + 50) / (n[sp.n_ids + pl] + 100);
+        p[sp.c + pl] = @floatCast(@log(q / (1 - q)));
+    }
+    return p;
+}
+
+/// Per role, one slope on the user's centred rank with the game's logit as offset:
+/// Newton steps on the training rows, a weak ridge
+fn fitOwnRank(m: *Model, t: *const api.Train, won: []const f32) void {
+    const params: Params = .{ .sp = m.sp, .p = m.p };
+    for (0..n_role) |role| {
+        var beta: f64 = 0;
+        for (0..8) |_| {
+            var g1: f64 = 0;
+            var h: f64 = 1;
+            for (t.rows) |r| {
+                if (@backingInt(r.role) != role) continue;
+                const y = won[r.game];
+                if (std.math.isNan(y)) continue;
+                const x = centred(r.rank, m.rank_mean);
+                if (x == 0) continue;
+                const tg = gameOf(m, &t.games[r.game], null, y, 1);
+                const base = params.logit(&tg);
+                const off: f64 = if (r.side == 0) base else -base;
+                const yr: f64 = if (r.side == 0) y else 1 - y;
+                const q = 1 / (1 + @exp(-(off + beta * x)));
+                g1 += (q - yr) * x;
+                h += q * (1 - q) * x * x;
+            }
+            beta -= g1 / h;
+        }
+        m.own[role] = @floatCast(beta);
+    }
+    std.debug.print("win-model: own rank slopes {any}\n", .{m.own});
+}
+
+pub fn predict(m: *const Model, q: *const api.Query) api.Prediction {
+    var out = api.no_opinion;
+    const g: api.Game = .{ .start = q.start, .patch = q.patch, .platform = q.platform, .teams = q.teams, .ranks = @splat(@splat(null)) };
+    const tg = gameOf(m, &g, if (cfg.all_ranks) q.ranks else null, 0, 1);
+    const params: Params = .{ .sp = m.sp, .p = m.p };
+    const blue = params.logit(&tg);
+    var s = if (q.side == 0) blue else -blue;
+    if (cfg.own_rank) s += m.own[@backingInt(q.role)] * centred(q.rank, m.rank_mean);
+    out[api.outcomeIndex(.win)] = sigmoid(s);
+    return out;
+}
+
+pub fn deinit(m: *Model, gpa: std.mem.Allocator) void {
+    gpa.free(m.p);
+    m.ids.deinit(gpa);
+}

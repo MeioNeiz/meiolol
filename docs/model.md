@@ -408,6 +408,52 @@ Reading:
 - Champion given the state (5-9 pp sd) is large: champions convert the same lead
   differently (scaling, team fight value). Worth its own look as lesson material
 
+### Win from the draft, dev only, 2026-10-12 (meiolol-88)
+
+Candidate src/lab/cand/win-ratings: one logistic model per game (blue's chance), Adam,
+L2 and dim picked on the newest 10% of visible games, refit on all. Variants are copies
+with one `cfg` line changed: rates `.{ .kind = .rates }` (eval's base: marginal log-odds,
+prior 1000), ratings (joint, eval's "joint"), lane, counters (all 25 cross pairs), full
+(+ ally synergy), rank `.own_rank = true`, allranks `.all_ranks = true` (post-game),
+euw `.platform = 6`, hl3/hl7 `.half_life = 3/7`. Dev only: fit on the ~90k games
+older than dev-val, scored on dev-val (8,608 EUW1 games, 86,080 rows); Mac,
+`meiolol-lab exp run` with a scratch --lab (no looks spent). Sub-15:00 forfeits still
+in (harness filter pending, meiolol-39): rerun before final. Paired ± is clustered by
+game, from each run's dev.tsv.
+
+| model | log loss | AUC | vs ratings |
+| --- | --- | --- | --- |
+| coin | 0.6931 | 0.500 | |
+| rates | 0.6898 | 0.549 | +0.0001 ± 0.0005 |
+| ratings | 0.6897 | 0.550 | - |
+| lane | 0.6902 | 0.547 | +0.0005 ± 0.0007 |
+| counters | 0.6897 | 0.550 | +0.0001 ± 0.0005 |
+| full | 0.6902 | 0.546 | +0.0005 ± 0.0007 |
+| hl7 (recency) | 0.6898 | 0.549 | +0.0001 ± 0.0004 |
+| euw (EUW1 games only) | 0.6921 | 0.526 | +0.0024 ± 0.0014 |
+| rank (own rank) | 0.6891 | 0.552 | -0.0006 ± 0.0001 |
+| allranks (post-game) | 0.6586 | 0.672 | -0.031 |
+
+Learning curve (nested shares of the visible games; rates, ratings within noise of
+each other):
+
+| games | 4.5k | 9k | 18k | 31k | 45k | 67k | 90k |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| rates log loss | 0.6926 | 0.6925 | 0.6912 | 0.6912 | 0.6907 | 0.6898 | 0.6898 |
+| ratings AUC | 0.522 | 0.522 | 0.536 | 0.538 | 0.543 | 0.548 | 0.550 |
+
+Reading:
+- Champions alone now beat a coin: ~0.6897 log loss, AUC 0.55 at 90k games. The
+  curve still falls, ~0.0008 log loss and ~0.006 AUC per doubling, no plateau yet; at
+  that rate ~1M games reaches ~0.687, near the published ~0.68 at millions
+- Data volume is the lever, not model form: interactions (lane, every enemy, ally
+  synergy) add nothing detectable on win at 90k games, although lane embeddings do on
+  gold and CS (2a). Pool every region (EUW1 alone is clearly worse); recency weighting
+  within 16.19-16.20 gains nothing
+- Ranks leak: participants.tier/division is the snapshot when the match was stored,
+  after the game. allranks' -0.031 and part of own rank's -0.0006 are the result
+  showing through. Rank needs rank_history at game time before it counts as a feature
+
 ## Next steps
 
 - Experience term: rerun once the daily eval shows 300+ train and 100+ test games per
