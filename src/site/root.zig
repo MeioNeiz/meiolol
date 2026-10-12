@@ -288,6 +288,7 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
     const paths = try pagePaths(site);
     var matchups: usize = 0;
     var build_pages: usize = 0;
+    var champion_pages: usize = 0;
     for (paths) |path| {
         _ = page_arena.reset(.retain_capacity);
         var aw: Writer.Allocating = .init(s.arena);
@@ -295,6 +296,7 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
         try w.write(dir, path, aw.written());
         if (std.mem.startsWith(u8, path, "matchup/") and !std.mem.eql(u8, path, "matchup/index.html")) matchups += 1;
         if (std.mem.startsWith(u8, path, "build/")) build_pages += 1;
+        if (std.mem.startsWith(u8, path, "champion/")) champion_pages += 1;
     }
     if (std.meta.eql(site.view, html.View.shared)) for (shared_pages) |path| {
         _ = page_arena.reset(.retain_capacity);
@@ -306,7 +308,7 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
     if (build_pages > 0) log.info("{d} build pages", .{build_pages});
     // deploy/web-loop.sh reads the first "patch" line: EUW's
     log.info("{s}/{s}: {s}, {d} games, {d} champion pages", .{
-        site.opts.out_dir, site.view.dir(), site.when, site.games, site.champs.len,
+        site.opts.out_dir, site.view.dir(), site.when, site.games, champion_pages,
     });
 }
 
