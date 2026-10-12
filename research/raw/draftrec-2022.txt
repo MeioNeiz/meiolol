@@ -1,0 +1,1820 @@
+DraftRec: Personalized Draft Recommendation for Winning
+in Multi-Player Online Battle Arena Games
+Hojoon Lee∗†
+
+Dongyoon
+Hwang∗
+
+joonleesky@kaist.ac.kr
+KAIST
+godnpeter@kaist.ac.kr
+KAIST
+
+Hyunseung Kim
+
+Byungkun Lee
+
+Jaegul Choo‡
+
+mynsng@kaist.ac.kr
+KAIST
+
+byungkun@kaist.ac.kr
+KAIST
+
+jchoo@kaist.ac.kr
+KAIST
+
+arXiv:2204.12750v1 [cs.AI] 27 Apr 2022
+
+ABSTRACT
+This paper presents a personalized character recommendation system for Multiplayer Online Battle Arena (MOBA) games which
+are considered as one of the most popular online video game genres around the world. When playing MOBA games, players go
+through a draft stage, where they alternately select a virtual character to play. When drafting, players select characters by not only
+considering their character preferences, but also the synergy and
+competence of their team’s character combination. However, the
+complexity of drafting induces difficulties for beginners to choose
+the appropriate characters based on the characters of their team
+while considering their own champion preferences. To alleviate this
+problem, we propose DraftRec, a novel hierarchical model which
+recommends characters by considering each player’s champion
+preferences and the interaction between the players. DraftRec consists of two networks: the player network and the match network.
+The player network captures the individual player’s champion preference, and the match network integrates the complex relationship
+between the players and their respective champions. We train and
+evaluate our model from a manually collected 280,000 matches of
+League of Legends and a publicly available 50,000 matches of Dota2.
+Empirically, our method achieved state-of-the-art performance in
+character recommendation and match outcome prediction task.
+Furthermore, a comprehensive user survey confirms that DraftRec
+provides convincing and satisfying recommendations. Our code
+and dataset are available at https://github.com/dojeon-ai/DraftRec.
+
+KEYWORDS
+MOBA, League of Legends, Dota2, Draft Recommendation
+ACM Reference Format:
+Hojoon Lee, Dongyoon Hwang, Hyunseung Kim, Byungkun Lee, and Jaegul
+Choo. 2022. DraftRec: Personalized Draft Recommendation for Winning in
+Multi-Player Online Battle Arena Games. In Proceedings of the ACM Web
+Conference 2022 (WWW ’22), April 25–29, 2022, Virtual Event, Lyon, France.
+ACM, New York, NY, USA, 13 pages. https://doi.org/10.1145/3485447.3512278
+
+1
+
+INTRODUCTION
+
+Multi-player Online Battle Arena (MOBA) games such as League of
+Legends and Dota2 are one of the most popular online video games.
+∗ Equal Contribution. † Work done at KaKaoEnterprise. ‡ Corresponding author.
+
+This paper is published under the Creative Commons Attribution 4.0 International
+(CC-BY 4.0) license. Authors reserve their rights to disseminate the work on their
+personal and corporate Web sites with the appropriate attribution.
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+© 2022 IW3C2 (International World Wide Web Conference Committee), published
+under Creative Commons CC-BY 4.0 License.
+ACM ISBN 978-1-4503-9096-5/22/04.
+https://doi.org/10.1145/3485447.3512278
+
+For example, the annual world championship of League of Legends
+was reported to have nearly 50 million viewers in 2020 [28].
+When playing MOBA games, multiple players participate in a
+single session, which we refer to as a match. Each match is divided
+into two stages: draft stage and play stage. In the draft stage, players
+are split into two teams and alternately select a virtual character
+(i.e., champion). In the following play stage, players control their
+selected champions and the first team that destroys the opponent’s
+main tower wins the game. The draft stage is a crucial component
+in MOBA games since the strategy of the subsequent play stage
+largely depends on the champions selected in the draft stage.
+Champions in MOBA games vary in terms of their abilities and
+required player skills. Thus, it is vital to understand how different
+champions complement each other (i.e., synergy) and how they
+counter the abilities of the opponent team’s champions (i.e., competence) [9]. However, it is challenging to fully understand the
+synergy and competence since the number of champion combinations are exponential to the total number of champions. For example,
+in League of Legends, there currently exist 156 champions, leading
+
+151
+to approximately 4.42 × 1017 (i.e., 156
+5 × 5 ) possible champion
+combinations for a single match where there are two teams of five
+players. Therefore, players commonly rely on game analytic web
+services to access information about the relationship between the
+champions. For instance, the game analytic web service "op.gg" [1]
+is accessed by 55 million League of Legends players per month.
+To alleviate such difficulties, previous work focused on recommending champions with a high probability of winning by considering the synergy and competence of the champions [7, 49].
+However, while matches in MOBA games are composed of various
+players with different champion preferences, none of these methods
+take the player’s personal champion preference into consideration.
+Therefore, in order to build an effective champion recommendation
+system, it is essential to consider each player’s champion preference
+and the complex interaction between the players.
+To this end, we present DraftRec, a recommender system that
+suggests champions with a high probability of winning while understanding the champion preference of each player within the match.
+To reflect each player’s champion preference and then integrate
+that information, we construct a novel hierarchical architecture
+composed of two networks: the player network, and the match
+network. First, the player network captures the individual players’ champion preferences. Then, the match network integrates
+the complex relationship between the players and their selected
+champions by integrating the outputs from the player network.
+The main contributions of this paper can be summarized as
+follows: (i) we formalize the personalized draft recommendation
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+problem in MOBA games; (ii) we propose DraftRec, a novel hierarchical Transformer-based architecture [42] which understands
+and integrates information about players within a single match; (iii)
+through comprehensive experiments, DraftRec achieves state-ofthe-art performance against personalized recommendation systems
+in the champion recommendation task and the match outcome
+prediction task compared to existing MOBA research. In addition,
+DraftRec provides effective and satisfying recommendations to the
+real-world players corroborated by the user study.
+
+2 RELATED WORK
+2.1 Recommender Systems
+Traditional recommender systems attempt to estimate a user’s preferences and recommend items base on them [6]. Such recommender
+systems are mainly categorized into two groups, content- and collaborative filtering-based recommender systems [16, 21, 24, 32, 36, 48].
+While content-based systems utilize the similarity between items to
+provide new recommendations, collaborative filtering methods utilize the user’s historical feedback to model the degree of matching
+between users and items. Unfortunately, traditional recommender
+systems do not consider the temporal nature of human behaviors.
+To address these difficulties, deep learning-based sequential recommendation models have been proposed to further exploit the
+temporal dynamics of user behaviors [18, 19, 22, 34, 40]. By capturing the complex nonlinear relationship between users and items,
+recurrent neural networks (RNN) [18, 19, 34] were able to explicitly
+model the sequential nature in user behavior sequences. Due to their
+great success in natural language processing, deep-learning based
+recommender systems using attention mechanisms [22, 40] also
+have shown promising results in representing sequential data. SASRec [22] uses a uni-directional self-attention layer from the Transformer’s [42] decoder and Bert4Rec [40] uses the bi-directional
+self-attention layer from the Transformer’s encoder [11, 42].
+
+2.2
+
+Previous Research in MOBA Games
+
+Multiplayer Online Battle Arena (MOBA) games are a sub-genre of
+strategic video games where players form two teams and compete
+against each other in a virtual battlefield. MOBA games have been
+widely recognized as an ideal test-bed for AI research since the
+game play dynamics entail complex interactions including cooperation and competition among the players. While MOBA game
+research has been conducted on a variety of topics such as anomaly
+detection [39], player performance evaluation [9], game event prediction [37, 41] and game-play analysis [23, 29, 31, 33, 49, 50], our
+work mainly focus on the followings: (i) devising an accurate match
+outcome prediction and (ii) a personalized draft recommendation.
+Extensive prior research have focused on applying various machine learning methods to properly predict MOBA game match outcomes by utilizing various in-game features [7, 8, 10, 13, 20, 26, 49].
+HOI [26] predicts match outcomes by computing teammates’ pairwise interactions with a factorized machine based model. OptMatch [13] and GloMatch [10] adopts the multi-head self-attention
+module [42] to predict match outcomes. NeuralAC [14] provides a
+method which predicts match outcomes by explicitly modeling the
+synergy and competence between the champions.
+
+Lee et al.
+
+Recommendation systems for MOBA games [7, 43] have also
+been studied, where [7] recommends champions by leveraging
+Monte-Carlo Tree Search and [43] recommends play stage strategies
+to increase the probability of victory for the player. However, our
+work differs with previous work in that they do not take players’
+personal preferences into account.
+
+3
+
+PRELIMINARIES
+
+This section provides background information and a formal problem
+formulation about the drafting process in MOBA games.
+
+3.1
+
+Draft Process in MOBA Games
+
+Our work focuses on draft processes in competitive modes in MOBA
+games (e.g., the rank mode for League of Legends and the captain’s
+mode for Dota2). Since draft processes are similar across different
+MOBA games, with minor differences, we explain the draft process
+of MOBA games with an example from League of Legends.
+As illustrated in Fig. 1(b), a total of 10 players participate in a
+single match, where they are divided into two teams: Blue and
+Purple. Each player is randomly assigned a particular turn (i.e.,
+the order of selecting a champion) and a role (e.g., Top, Jungle,
+Middle, AD Carry, and Support) as shown in Fig. 1(b) and (d). After
+assignment, the ban process follows, where each player chooses
+champions to be illegal to select for the current match (Fig. 1(a)).
+Players then sequentially select champions (Fig. 1(c)) by considering
+one’s preferences as well as the synergy and competence of their
+team’s champion combination. The champion selection process is
+always conducted in a team-wise alternating order of "1-2-2-2-2-1"
+(i.e., 1-(2,3)-(4,5)-(6,7)-(8,9)-10 in Fig. 1(b)). In selection, previously
+selected champions (Fig. 1(c)) are visible to both teams and can no
+longer be selected by subsequent players within a single match.
+Note that the information available to a particular player in the
+draft stage is partial. That is, as shown in Fig. 1(d) and (e), the
+teammates’ roles and player IDs are available while the opponents’
+are not. "Summoner 1" shown in Fig. 1(e) is an anonymous nickname
+given to masked player IDs. Using IDs, players commonly search
+(h)
+(a)
+
+(a)
+(c)
+(d)
+
+Turn
+
+1
+
+(b)
+
+(b)
+
+(e)
+
+2
+
+4
+
+3
+
+5
+
+6
+
+8
+
+7
+
+9
+
+PICK
+
+(e)
+
+(c)
+
+10
+
+Figure 1: In-game screenshot of the draft stage in League of
+Legends, describing the selection at turn 9. ©Riot Games.
+
+DraftRec: Personalized Draft Recommendation for Winning in Multi-Player Online Battle Arena Games
+
+teammates’ match histories using game analytic applications to
+understand teammates’ champion preferences.
+
+3.2
+
+Problem Formulation
+
+The entire drafting process illustrated in Section 3.1 can be formalized as follows. Let us denote a single match as 𝑚𝑖 (for 1 ≤ 𝑖 ≤ 𝑀,
+where 𝑀 is the total number of matches in our training data) which
+is composed of 10 champion selections, one per each player. Players
+[𝑝 𝑖1, · · · , 𝑝 𝑖10 ] (where 𝑝𝑡𝑖 represents the player at turn 𝑡 in match 𝑚𝑖 )
+are evenly divided into two teams, 𝐵𝑙𝑢𝑒 [𝑝𝑡𝑖 ] 𝑡 =1,4,5,8,9 and 𝑃𝑢𝑟𝑝𝑙𝑒
+[𝑝𝑡𝑖 ] 𝑡 =2,3,6,7,10 as shown in Fig. 1(b). Here, the ground-truth champion, role, match outcome (e.g., win or lose) and team of 𝑝𝑡𝑖 are
+respectively defined as 𝑐𝑡𝑖 , 𝑟𝑡𝑖 , 𝑜𝑡𝑖 and 𝑡𝑒𝑎𝑚𝑖𝑡 .
+The draft stage of MOBA games can be formulated as a variant
+of the sequential recommendation problem. The typical sequential
+recommendation problem aims to predict the player’s most preferred champion (i.e., item) based on their champion interaction
+history [22, 40]. However, in MOBA games, we have to recommend
+champions based on not only a single player’s champion selection
+history but also on the teammates’ champion selection history.
+Therefore, we aim to encode each player’s champion preference
+information based on their past champion selection logs as well as
+their teammates’ selection logs.
+Let 𝐻𝑝 𝑖 ,𝐿 denote the match history list of player 𝑝𝑡𝑖 ’s most recent
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+player network focuses on capturing the individual players’ champion preferences, the followed match network integrates the outputs of the player network which will be explained in Sections
+4.1-4.2. Then, in Sections 4.3-4.4, we describe the training procedure and the recommendation strategy of DraftRec.
+Throughout this section, we simplify the notation by omitting
+the index of the match. To denote the player, champion, role, team,
+in-game features, match histories, and set of all partially observable
+information for a player at turn 𝑡 for match 𝑚𝑖 , we denote them
+as 𝑝𝑡 , 𝑐𝑡 , 𝑟𝑡 , 𝑜𝑡 , 𝑡𝑒𝑎𝑚𝑡 , 𝑓 𝑡𝑟𝑡 , 𝐻𝑝𝑡 ,𝐿 , and 𝑠𝑡 , respectively. In addition,
+notations with a superscript will denote a vector embedding instead.
+
+4.1
+
+Modeling Player’s Dynamic Behavior
+
+This section presents the details of the player network in Fig. 2(a).
+Embedding Layer. First, we initialize a learnable embedding for
+the champion 𝐸𝐶 ∈ R |𝐶 | × 𝑑 , role 𝐸𝑅 ∈ R |𝑅 | × 𝑑 and in-game features 𝐸 𝐹𝑇 𝑅 ∈ R |𝐹𝑇 𝑅 | × 𝑑 , where 𝑑 indicates the number of hidden
+units for the embedding. We also initialize a pre-defined sinusoidal
+positional embedding 𝐸𝑝𝑜𝑠 ∈ R |𝐿 | × 𝑑 to represent history order.
+Given the 𝑙-th match history ℎ𝑝,𝑙 of player 𝑝, the input embed0 is constructed by summing up the corresponding chamding 𝒉𝑝,𝑙
+pion, role, in-game feature, and position embedding, i.e.,
+
+𝑡
+
+𝐿 matches before match 𝑚𝑖 . Then, we denote 𝑐 𝑝 𝑖 ,𝑙 , 𝑟 𝑝 𝑖 ,𝑙 , and 𝑓 𝑡𝑟 𝑝 𝑖 ,𝑙
+𝑡
+𝑡
+𝑡
+as the champion, role, and list of in-game features (e.g., number of
+kills, total earned gold, see supplement for feature design) of the
+𝑙-th match in 𝐻𝑝 𝑖 ,𝐿 , respectively. Thus, ℎ𝑝 𝑖 ,𝑙 and 𝐻𝑝 𝑖 ,𝐿 is defined as
+𝑡
+
+𝑡
+
+𝑡
+
+ℎ𝑝 𝑖 ,𝑙 = [𝑐 𝑝 𝑖 ,𝑙 , 𝑟 𝑝 𝑖 ,𝑙 , 𝑓 𝑡𝑟 𝑝 𝑖 ,𝑙 ]
+𝑡
+
+𝑡
+
+𝑡
+
+𝑡
+
+𝐻𝑝 𝑖 , 𝐿 = [ℎ𝑝 𝑖 ,1, ℎ𝑝 𝑖 ,2, . . . , ℎ𝑝 𝑖 ,𝐿−1, ℎ𝑝 𝑖 ,𝐿 ]
+𝑡
+
+𝑡
+
+𝑡
+
+𝑡
+
+(1)
+
+(5)
+
+0 ∈ 𝐸 , 𝒓 0 ∈ 𝐸 , and 𝒇 𝒕𝒓 0 ∈ 𝐸
+where 𝒄 𝑝,𝑙
+𝐶 𝑝,𝑙
+𝑅
+𝐹𝑇 𝑅 are 𝑑-dimensional
+𝑝,𝑙
+embeddings for the champion 𝑐 𝑝,𝑙 , role 𝑟 𝑝,𝑙 , and feature 𝑓 𝑡𝑟 𝑝,𝑙 while
+𝒑𝒐𝒔𝑙 ∈ 𝐸𝑝𝑜𝑠 represents the positional embedding for position 𝑙.
+Then, the list of 𝐿 match history 𝐻𝑝,𝐿 is embedded as
+
+𝑡
+
+where ℎ𝑝 𝑖 ,𝐿 indicates the most recent match history and ℎ𝑝 𝑖 ,1 in𝑡
+𝑡
+dicates the oldest match history. In addition, we denote the lists
+𝑖
+𝐻𝑝 𝑖 , 𝐿 and 𝑟𝑘 of the players in the same team as 𝐻𝑡𝑒𝑎𝑚𝑖 , 𝐿 , 𝑅𝑡𝑒𝑎𝑚𝑖 .
+𝑡
+𝑡
+𝑘
+
+
+𝑖
+𝑖
+𝐻𝑡𝑒𝑎𝑚𝑖 , 𝐿 = 𝐻𝑝 𝑖 , 𝐿 𝑡𝑒𝑎𝑚𝑘 = 𝑡𝑒𝑎𝑚𝑡 for 𝑘 = 1, ..., 10
+𝑡
+𝑘
+(2)
+
+
+𝑅𝑡𝑒𝑎𝑚𝑖 = 𝑟𝑘𝑖 𝑡𝑒𝑎𝑚𝑖𝑘 = 𝑡𝑒𝑎𝑚𝑖𝑡 for 𝑘 = 1, ..., 10
+𝑡
+
+Then, as described in Section 3.1, for each champion selection, the
+players can access currently selected champions, their teammates’
+match histories, and their respective roles. We denote the set of all
+observable information for the player 𝑝𝑡𝑖 at turn 𝑡 as state 𝑠𝑡𝑖 .
+𝑠𝑡𝑖 = {[𝑐𝑘𝑖 ]𝑘=1:𝑡 −1, 𝐻𝑡𝑒𝑎𝑚𝑖 , 𝐿 , 𝑅𝑡𝑒𝑎𝑚𝑖 }
+𝑡
+𝑡
+
+(3)
+
+Given 𝑠𝑡𝑖 , our recommendation model 𝑓𝜃 outputs two different values, 𝑝ˆ𝑡 and 𝑣ˆ𝑡 .
+𝑝ˆ𝑡𝑖 , 𝑣ˆ𝑡𝑖 = 𝑓𝜃 (𝑠𝑡𝑖 )
+(4)
+For each output 𝑝ˆ𝑡 and 𝑣ˆ𝑡 , the goal of the recommendation model is
+to accurately predict the ground-truth champion 𝑐𝑡𝑖 and the match
+outcome 𝑜𝑡𝑖 respectively.
+
+4
+
+0
+0
+0
+0
+𝒉𝑝,𝑙
+= 𝒄 𝑝,𝑙
++ 𝒓 𝑝,𝑙
++ 𝒇 𝒕𝒓 𝑝,𝑙
++ 𝒑𝒐𝒔𝑙0
+
+PROPOSED METHOD
+
+This section presents a detailed design of DraftRec. DraftRec exploits a hierarchical architecture with the two Transformer-based
+networks: the player network and the match network. While the
+
+0
+0
+0
+0
+0
+𝑯 𝑝,𝐿
+= [𝒉𝑝,1
+, 𝒉𝑝,2
+, ..., 𝒉𝑝,2
+, 𝒉𝑝,𝐿
+]
+
+(6)
+
+Player History Encoder. On top of the embedding layer, we place
+𝑁 Transformer blocks Trm, each coupled with a multi-head selfattention network followed by a position-wise feed-forward network [42]. To further ease the difficulty of training, we employed a
+residual connection, layer normalization, and dropout, following
+[22, 40]. Through passing the Transformer blocks, the list of the
+0 is transformed as
+embedded match history 𝑯 𝑝,𝐿
+𝑯 𝑛𝑝,𝐿 = Trm(𝑯 𝑛−1
+𝑝,𝐿 ), ∀𝑛 ∈ [1, ..., 𝑁 ]
+
+(7)
+
+𝑁 encodes the
+After 𝑁 Transformer blocks, the final output 𝐻𝑝,𝐿
+information across match histories. Then, the last position of the
+𝑁 is defined as the player-level representation of a player
+output 𝒉𝑝,𝐿
+given his/her match history list.
+
+4.2
+
+Modeling Match Information
+
+This section explains the match network that integrates the outcomes of the player network as illustrated in Fig. 2(b)
+Embedding Layer. Every match 𝑚𝑖 is composed of 10 players
+[𝑝 1, ..., 𝑝 10 ], their respective roles [𝑟 1, ..., 𝑟 10 ] and champions [𝑐 1, ...,
+𝑐 10 ], corresponding teams [𝑡𝑒𝑎𝑚 1, ..., 𝑡𝑒𝑎𝑚 10 ], and the players’ past
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+Lee et al.
+
+player’s match
+history
+
+(a) Player-level embedding network
+(b) Match-level embedding network
+
+Figure 2: (a) Player-level embedding network which encodes the player’s match history. (b) Match-level embedding network
+which integrates the player’s representation with current match information. For brevity, we omit the positional encoding.
+match history lists [𝐻𝑝 1 ,𝐿 , ..., 𝐻𝑝 10 ,𝐿 ]. At turn 𝑡, the match information is partially observable for player 𝑝𝑡 , where only the champions selected before current turn [𝑐𝑘 ]𝑘=1:𝑡 −1 , along with the teammates’ match histories 𝐻𝑡𝑒𝑎𝑚𝑡 , 𝐿 and roles 𝑟𝑡𝑒𝑎𝑚𝑡 are known. Therefore, we replaced the unavailable instances with the "[unk]" token.
+Then, we replaced the champion 𝑐𝑡 with the "[mask]" token to
+indicate the query position. We add an extra learnable embedding
+𝐸𝑇 𝑒𝑎𝑚 ∈ R2 × 𝑑 to model the players’ team information, and initialize the sinusoidal positional embedding 𝐸𝑇𝑢𝑟𝑛 ∈ R |𝑇 | × 𝑑 to
+represent the order of the turn.
+Afterward, each player’s embedding 𝒑𝑘0 at turn 𝑘 is constructed
+by summing up the embedding of the corresponding champion,
+role, team, turn and the output of the player network:
+𝒑𝑘0 = 𝒄 𝑘0 + 𝒓 𝑘0 + 𝒕𝒆𝒂𝒎𝑘0 + 𝒕𝒖𝒓 𝒏𝑘0 + 𝒉𝑝𝑁𝑘 ,𝐿
+where 𝒄 𝑘0
+
+∈ 𝐸𝐶 , 𝒓 𝑘0
+
+(8)
+
+∈ 𝐸𝑅 , 𝒕𝒆𝒂𝒎𝑘0
+
+∈ 𝐸𝑇 𝑒𝑎𝑚 , and 𝒕𝒖𝒓 𝒏𝑘0 ∈ 𝐸𝑇𝑢𝑟𝑛
+are 𝑑-dimensional embeddings for the champion 𝑐𝑘 , role 𝑟𝑘 , team
+
+𝑡𝑒𝑎𝑚𝑘 , and positional embedding for turn 𝑘.
+Thus, we represent the list of players in match 𝑚𝑖 as
+𝑷 0 = [𝒑 01, ..., 𝒑 09, 𝒑 010 ]
+
+𝑇
+𝑝ˆ𝑡 = softmax(𝐺𝐸𝐿𝑈 (𝒑𝑡𝑁 𝑊 𝑃 + 𝑏 𝑃 )𝐸𝐶
++ 𝑏𝐶 )
+
+(10)
+
+After 𝑁 Transformer blocks, the final 𝑑-dimensional output 𝑃 𝑁
+serves as the match representation where the personal histories of
+the players and available information for each turn of the match
+are aggregated.
+Champion Prediction Head. We now predict the ground-truth
+champion 𝑐𝑡 based on the hierarchically integrated player representation 𝑝𝑡𝑁 at turn 𝑡. In particular, two fully-connected layers with
+
+(11)
+
+where 𝑊 𝑃 ∈ R𝑑×𝑑 is the learnable projection matrix and 𝑏 𝑃 , 𝑏𝐶
+are bias terms. To prevent the banned champions from being recommended, predicted scores of banned champions are masked out.
+Match-Outcome Prediction Head. We jointly perform the match
+outcome prediction by comparing the representations of the two
+teams. Similar to [10, 13, 14], we obtain a 𝑑-dimensional representation vector of each team 𝑇1,𝑇2 by applying the average pooling
+operation for the player representations within each team.
+𝑁
+𝑇1 = pool({𝒑 1𝑁 , ..., 𝒑 9𝑁 }), 𝑇2 = pool({𝒑 2𝑁 , ..., 𝒑 10
+})
+
+(12)
+
+Then, we subtract the two team representations and apply two
+fully-connected layers followed by a sigmoid function to obtain the
+match outcome prediction value 𝑣ˆ𝑡 such as
+𝑣ˆ𝑡 = sigmoid(((𝑇1 − 𝑇2 )𝑊 𝑂 + 𝑏𝑂 )𝑊 𝑉 + 𝑏𝑉 )
+
+(9)
+
+Match Encoder. Identical to the player network, we place 𝑁 Transformer blocks Trm as encoder of the match network. For each Transformer block, the list of players in the match is encoded as
+𝑷 𝑛 = Trm(𝑷 𝑛−1 ), ∀𝑛 ∈ [1, ..., 𝑁 ]
+
+a GELU nonlinear activation is utilized where a softmax layer is
+followed to produce an output probability distribution over target
+champions as 𝑝ˆ𝑡 ∈ R |𝐶 | :
+
+where 𝑊 𝑂
+
+∈ R𝑑×𝑑 and 𝑊 𝑉
+
+(13)
+
+∈ R𝑑×1 are a learnable projection
+
+matrix and 𝑏𝑂 and 𝑏𝑉 are bias terms. Note that since the match
+outcome prediction value 𝑣ˆ𝑡 is squashed to [0,1], it indicates the
+predicted probability of winning.
+
+4.3
+
+Training DraftRec
+
+This section explains the supervised training procedure of DraftRec.
+For each training match data 𝑚 at turn 𝑡, we first get state 𝑠𝑡 , which
+represents all partially observable information in respect to player
+𝑝𝑡 . Then, as illustrated in Section 4.2, we obtain the predicted champion selection probability and predicted match outcome by forwarding the state 𝑠𝑡 into the DraftRec model 𝑓𝜃 .
+𝑝ˆ𝑡 , 𝑣ˆ𝑡 = 𝑓𝜃 (𝑠𝑡 )
+
+(14)
+
+DraftRec: Personalized Draft Recommendation for Winning in Multi-Player Online Battle Arena Games
+
+Then, the network parameters 𝜃 are trained to maximize the predicted champion selection probability 𝑝ˆ𝑡 of the ground-truth champion 𝑐𝑡 while minimizing the error between the predicted match
+outcome 𝑣ˆ𝑡 and the ground-truth match outcome 𝑜𝑡 .
+Here, we denote L𝑝 as the champion prediction loss and L𝑣 as
+the match outcome prediction loss. We use binary-cross entropy
+for both L𝑝 and L𝑣 where L2 weight regularisation is utilized to
+avoid overfitting. In summary, loss L for each match is written as
+𝑇
+
+L=
+
+1 ∑︁
+𝜆L𝑝 (𝑝ˆ𝑡𝑖 , 𝑐ˆ𝑡𝑖 ) + (1 − 𝜆)L𝑣 (𝑣ˆ𝑡𝑖 , 𝑜ˆ𝑡𝑖 ) + 𝑐 ||𝜃 || 2
+𝑇 𝑡 =1
+
+(15)
+
+where 𝜆 controls the strength between the champion prediction
+loss and match outcome prediction loss, and 𝑐 controls the level of
+the L2 weight regularisation.
+
+4.4
+
+Therefore, to properly integrate the player’s champion preferences and expected winning probability, our model recommends
+the champion with the highest match outcome where its selection
+probability exceeds a threshold value 𝜏 as in Fig 3.(b).
+𝑐ˆ = argmax 𝑣ˆ𝑡,𝑐
+
+(17)
+
+𝑐 | 𝑝ˆ𝑡,𝑐 >𝜏
+
+Recently, this idea of restricting the decision space within the
+training distribution has been actively studied to deploy safe decisionmaking systems [12, 25, 46]. In various real-world applications (e.g.,
+recommender systems and robotics), these restrictions have shown
+reliable and robust results which are also corroborated by our experimental findings in Section 5.5.
+
+5
+
+EXPERIMENTS
+
+This section presents the experimental setup, experimental results,
+and a detailed description of our user study.
+
+Recommendation Strategy
+
+As described in Section 4.3, our model can predict the champion
+selection probability 𝑝ˆ𝑡 and match outcome 𝑣ˆ𝑡 for a given state 𝑠𝑡 .
+Here, we denote the champion recommended by our model as 𝑐ˆ
+and the probability of selecting an arbitrary champion 𝑐 as 𝑝ˆ𝑡,𝑐 . To
+estimate the match outcome of playing the champion 𝑐 at a given
+state 𝑠𝑡 , we first modify the state 𝑠𝑡 and fill the "[mask]" token in
+position 𝑐𝑡 with champion 𝑐. Then, we replace the champion 𝑐𝑡 +1
+with a "[mask]" token. Next, we pass the modified state to the model
+and obtain the predicted match outcome which we denote as 𝑣ˆ𝑡,𝑐 .
+Since we can predict the expected winning probability 𝑣ˆ𝑡,𝑐 for
+all champions 𝑐, the straightforward recommendation strategy is
+to recommend the champion with the highest winning probability
+which already takes the player’s champion preferences into account.
+𝑐ˆ = argmax 𝑣ˆ𝑡,𝑐
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+5.1
+
+Dataset
+
+To verify the performance of DraftRec, we conduct experiments
+on two MOBA game datasets: League of Legends (LOL) and Dota2.
+For each benchmark dataset, we sort the matches by time-stamps
+and take the first 85% matches as training set, next 5% matches as
+validation set, and last 10% matches as test set. The statistics for
+each dataset are given in Table 1.
+Table 1: Statistics of the benchmark datasets.
+Dataset
+LOL
+Dota2
+
+(16)
+
+Matches
+279,893
+50,000
+
+Champions
+156
+111
+
+Players
+62,466
+140,931
+
+Avg. Match History
+66.38
+2.12
+
+𝑐
+
+However, a recommendation system which solely rely on the
+match outcome prediction can exhibit unreliable behaviors. Fig. 3
+demonstrates an illustrative example where the blue and red curve
+represents the distribution of 𝑝ˆ𝑡,𝑐 and 𝑣ˆ𝑡,𝑐 respectively. Since the
+states that are unseen within the training data might have arbitrarily
+inaccurate prediction values [17, 27], the highest match outcome
+value can be inappropriately assigned to champions which players
+do not prefer, such as positions indicated at Fig. 3(a).
+
+League of Legends We manually collected match data for League
+of Legends utilizing the publicly accessible API endpoint provided
+by Riot Games [5] and constructed a MOBA game match dataset
+with rich individual player history. To ensure the quality of each
+match outcome, matches of the top 0.1% ranked players from June
+1, 2021, to September 9, 2021 were collected. Since the purpose of
+building a draft recommender system is to provide strategically
+advantageous suggestions, it is natural to train the model with
+matches from top rank players since they better understand the
+characteristics of champions compared to low rank players.
+Dota2 Since previous work on champion recommendation for
+MOBA games [7] utilized a Dota2 dataset to validate the performance of their recommendation system, we also used a publicly
+available Dota2 dataset from Kaggle [2], which was collected from
+November 5, 2015 to November 18, 2015. The dataset contains
+matches from various ranks and the average match history length
+of each player is short, as shown in Table 1.
+
+: threshold
+
+Figure 3: Illustration of different strategies. (a) indicates
+the champion with the highest win rate. (b) indicates the
+highest win rate champion among the preferred ones.
+
+5.2
+
+Experimental Setup
+
+Baselines. To verify the recommendation performance, we compare our model with the personalized recommendation baselines:
+•
+
+POP : It is the simplest baseline which ranks item based on the
+frequency within the given player history.
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+Lee et al.
+
+Table 2: Performance comparison of DraftRec and baselines on champion recommendation. Bold scores indicate the best
+model and underlined scores indicate the second best. The results are averaged over 10 random seeds.
+
+HR@1
+
+HR@5
+
+LOL
+NG@5
+
+HR@10
+
+NG@10
+
+HR@1
+
+HR@5
+
+Dota2
+NG@5 HR@10
+
+NG@10
+
+POP
+NCF [16]
+DMF [48]
+S-POP [19]
+SASRec [22]
+
+0.3212
+0.1376
+0.3243
+0.4135
+0.4497
+
+0.5646
+0.4219
+0.5758
+0.7404
+0.7430
+
+0.4497
+0.2823
+0.4567
+0.5865
+0.6071
+
+0.6553
+0.5900
+0.6742
+0.8469
+0.8547
+
+0.4792
+0.3367
+0.4887
+0.6213
+0.6368
+
+0.0508
+0.0403
+0.0562
+0.0554
+0.0449
+
+0.1131
+0.1384
+0.1488
+0.1253
+0.1477
+
+0.0824
+0.0899
+0.1030
+0.0901
+0.0951
+
+0.1647
+0.2407
+0.2302
+0.1773
+0.2542
+
+0.0989
+0.1226
+0.1290
+0.1004
+0.1296
+
+DraftRec-no-history
+DraftRec
+
+0.1456
+0.5042*
+
+0.3950
+0.8025*
+
+0.2711
+0.6646*
+
+0.5675
+0.8836*
+
+0.3268
+0.6618*
+
+0.0403
+0.0434
+
+0.1390
+0.1492
+
+0.0905
+0.0962
+
+0.2438
+0.2547
+
+0.1239
+0.1496*
+
+Models
+
+Notes: "∗" indicates the statistical significance (i.e., 𝑝 < 0.01).
+NCF [16] : It captures the nonlinear interactions between players
+and items through a MLP with implicit feedback.
+• DMF [48] : It optimizes the Latent Factor Model based on the
+explicit item selection ratio of each user.
+• S-POP [19] : It is a variant of POP that ranks items based on the
+player’s most recent 𝑛 history.
+• SASRec [22] : It utilizes the uni-directional Transformer structure
+for modeling the player’s preference over time.
+•
+
+For the match outcome prediction, we compare our model with:
+• Majority Class (MC) [7] : It is the simplest baseline which outputs
+the majority class (i.e., Blue for LOL and Radiant for Dota2).
+• Logistic Regression (LR) [30] : It is a linear classifier with L2
+regularization. We use the identical input format as [38].
+• Neural Network (NN) [7] : It is the neural network model which
+follows the architecture and input format as [7].
+• HOI [26] : It is based on factorization machines [35] and considers
+pair-wise interactions between players.
+• OptMatch [13] : It exploits graph neural networks to obtain hero
+embeddings which are used to model players’ champion preferences and proficiency. It further utilizes multi-head self attention
+to obtain team representations from the player representations.
+• NeuralAC [14] : It is a self attentive method which explicitly models the synergy and competence of different champions. However,
+it doesn’t utilize any in-game features or players’ match histories.
+Training Details. We re-implement the aforementioned baselines
+by strictly following the details of each paper. For a fair comparison,
+we set the number of layers 𝑁 = 2 and used the Adam optimizer
+with 𝛽 1 = 0.9, 𝛽 2 = 0.999 with gradient clipping when its 𝑙 2 norm
+exceeds 5. We fix the dimension of each head as 64 if the models
+utilized the self-attention mechanism.
+For all models, we tune the common hyper-parameters where
+learning rate 𝑙𝑟 ranges from {0.01, 0.001, 0.0001} and anneal with a
+cosine scheduler. We vary the 𝑙 2 regularization from {0.01, 0.001, 0.0001,
+0.00001}, dropout rate 𝑝 from {0, 0.1, 0.2}, hidden dimension size
+𝑑 from {64, 128, 256}, and batch size from {256, 512}. For the models which use match histories (i.e., S-POP, SASRec, NeuralAC, and
+DraftRec), we vary the match history length 𝐿 from {0, 1, 10, 20, 50, 100}.
+Since Dota2 does not have pre-defined roles, we do not utilize
+the role information when experimenting on the Dota2 dataset.
+
+Evaluation. To evaluate the performance of the champion recommendation and match outcome prediction tasks, we measure the
+metric of each state 𝑠𝑡 at turn 𝑡 for all matches in the test dataset.
+Then, we report the average value of each metric.
+We employ standard recommendation metrics, Hit Ratio (HR),
+and Normalized Cumulative Gain (NG), to evaluate the quality of
+champion recommendations. We report HR and NG with varying
+the rank 𝑘 from {1, 5, 10}. Since NG@1 is identical to HR@1, we
+omit NG@1. For match outcome prediction task, we consider Accuracy (ACC) and Mean Absolute Error (MAE) as our metrics. For
+all metrics except MAE, higher value indicates better performance.
+
+5.3
+
+Experimental Results
+
+In this section, we study the performance of all methods on the
+champion recommendation and match outcome prediction task.
+Champion Recommendation. Table 2 summarizes the performance of all models on the champion recommendation task. From
+our experimental results, we can observe the followings: All sequential methods (i.e., S-POP, SASRec, and DraftRec) outperform
+non-sequential methods (POP, NCF, and DMF) on all metrics except
+for HR@1 and NG@5 for the Dota2 dataset. This result shows that
+dynamically modelling players’ preferences improves champion
+recommendation performance.
+Among all models, DraftRec achieved the best recommendation
+performance for all metrics and datasets except for HR@1 and
+NG@5 in Dota2. We speculate that this is due to the sparse player
+history record in the Dota2 dataset, making it difficult to learn
+the champion preference of each individual player. Compared to
+SASRec, DraftRec shows an improvement of 12.1% in HR@1, 8%
+in HR@5, 9.5% in NG@5, 3.4% in HR@10 and 3.9% in NG@10 for
+League of Legends. For Dota2, DraftRec shows an improvement of
+15.4% in NG@10 against SASRec. In addition, when we trained
+DraftRec without any player match history information, the recommendation performance degrades by a significant margin. This confirms that integrating both player- and match-level representations
+is crucial in providing personalized champion recommendations.
+Match Outcome Prediction. Table 3 summarizes the performance
+of all match outcome prediction baselines. We find that for all
+datasets, match outcome prediction methods which utilize player
+
+DraftRec: Personalized Draft Recommendation for Winning in Multi-Player Online Battle Arena Games
+
+Table 3: Performance comparison of DraftRec and baselines
+on the match outcome prediction task.
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+ACC
+
+MAE
+
+Dota2
+ACC
+MAE
+
+MC [7]
+LR [30]
+NN [7]
+HOI [26]
+OptMatch [13]
+NeuralAC [14]
+
+0.5040
+0.5255
+0.5263
+0.5264
+0.5411
+0.5266
+
+0.4960
+0.4973
+0.4975
+0.4987
+0.4944
+0.4977
+
+0.5180
+0.5750
+0.5748
+0.5716
+0.5751
+0.5739
+
+0.4820
+0.4819
+0.4822
+0.4901
+0.4842
+0.4841
+
+Fig. 4 displays the average attention weights for the final selfattention layer of the match network over the test dataset. Blue
+(Orange) boxes show high attention weights within the same (different) team. From Fig. 4, we observe that champions with the Top
+and Middle roles have high attention scores between champions
+with the Jungle role. In addition, champions with the AD Carry
+and Support roles show high attention scores with each other. Interestingly, this interaction reflects the actual role interaction of
+League of Legends, where (Top, Jungle), (Middle, Jungle), and (AD
+Carry, Support) mainly interact with each other in a match. We
+conclude from the above analysis that DraftRec learns meaningful
+relationships between the players according to their role.
+
+DraftRec-no-history
+DraftRec
+
+0.5284
+0.5535*
+
+0.4942
+0.4842*
+
+0.5745
+0.5755
+
+0.4757*
+0.4782
+
+5.5
+
+Models
+
+LOL
+
+Notes: "∗" indicates the statistical significance (i.e., 𝑝 < 0.01).
+
+match history information (i.e., OptMatch, DraftRec) show superior
+performance compared to methods which do not (i.e., LR, NN, HOI,
+NeuralAC, DraftRec-no-history). This demonstrates the importance
+of integrating the player’s match histories in order to understand
+the dynamics behind the match outcome between the players.
+In addition, our proposed DraftRec outperforms all compared
+baselines for all metrics and datasets. For League of Legends, DraftRec
+shows an improvement of 2.3% in ACC and 2.1% in MAE. For Dota2,
+DraftRec shows an improvement of 1.3% in MAE. Identical to the
+findings from the champion recommendation task, we observe that
+utilizing both player-level and match-level representations is beneficial for the match outcome prediction task. For further experimental
+results of predicting the match outcome only at the post-draft stage
+(i.e., after the draft is completed), see Appendix B.1.
+
+5.4
+
+Interpreting the Attention Weights
+
+After training DraftRec, we analyzed the model’s attention weights
+on League of Legends dataset to understand how the model learned
+the synergy and competence between the different roles of players.
+
+Evaluation for Recommendation Strategy
+
+Here, we study the effectiveness of our recommendation strategy
+which recommends the champion with the highest winning probability among the champions preferred by the player. For comparison,
+we consider three different recommendation strategies.
+• DraftRec𝑝 : Recommendation strategy which ranks the champions
+based on the champion selection probability 𝑝ˆ𝑡,𝑐 .
+• DraftRec𝑣 : Recommendation strategy which ranks the champions
+based on the match outcome prediction 𝑣ˆ𝑡,𝑐 .
+• DraftRec𝑝+𝑣 : Our proposed recommendation strategy described
+in Equation 17. We set the selection probability threshold 𝜏 as
+1 ) to allow the model to recommend champions that
+0.02 (i.e., 50
+were selected within the most recent 50 previous matches.
+To compare the different strategies, a straightforward evaluation
+method is online A/B testing. However, this could be prohibitively
+expensive and may hurt players’ in-game experiences. Therefore,
+we utilize an offline evaluation method which directly estimates
+the results with a separate evaluation model [15, 44, 47, 51].
+For each turn in all test match data, DraftRec recommends a
+champion according to its corresponding recommendation strategy
+and a separate match outcome evaluation model predicts the match
+outcome of the draft assuming that the recommended champion is
+selected. If we use an identical model for both of our recommendation and match outcome evaluation, the correlation of inaccurate
+predictions can be problematic [45]. Therefore, we use OptMatch
+[13] as our separate match outcome evaluation model. We report
+HR@10, NG@10, and the average predicted win rate (Win) with
+varying rank 𝑘 from {3, 10} to evaluate each strategy.
+Table 4: Performance comparison of different recommendation strategies evaluated on the League of Legends dataset.
+Model
+DraftRec𝑝
+DraftRec𝑣
+DraftRec𝑝+𝑣
+
+Figure 4: Visualisation of the attention weights on League of
+Legends. The weights are ordered by the teams and roles.
+
+HR@10
+0.8836
+0.2051
+0.8495
+
+NG@10
+0.6618
+0.0938
+0.5657
+
+Win@3
+52.72
+51.34
+54.12
+
+Win@10
+52.46
+51.55
+52.59
+
+Table 4 summarizes the performance of different recommendation strategies on the League of Legends dataset. Our proposed
+recommendation strategy, DraftRec𝑝+𝑣 has achieved the highest
+predicted match outcome value with a win rate of 54.12% when
+one of the top-3 recommended champions from the model is selected. DraftRec𝑣 shows the worst performance in all metrics where
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+Lee et al.
+
+Table 5: Results of the user survey (N = 84). Bold indicates the best rank for each question and underlined indicates the second.
+Rank of the Players
+Question
+Q1. Are you familiar with the model’s recommended champions?
+Q2. Do you think recommended champions will lead to victory?
+Q3. Are the explanations of the recommendations reasonable?
+Q4. Do you wish to use this recommender system afterward?
+HR@10 and NG@10 drop significantly compared to DraftRec𝑝 . We
+suspect that the poor performance of DraftRec𝑣 is incurred from
+assigning inaccurate values to the champions outside of the training
+data distribution as illustrated in Section 4.4.
+
+5.6
+
+User Study
+
+To further evaluate our model’s recommendations, we conducted a
+user study with a visualization of DraftRec’s recommendations.
+
+The user study procedure. A total of 84 user study participants
+were gathered from various popular online League of Legends communities [3, 4]. When gathering players to participate in our user
+study, we explained that we are currently developing a recommendation system trained on top 0.1% ranked user data and that we
+aim to recommend personalized champions with a high winning
+probability. To conduct a personalized survey, we first received consent and then collected the account IDs of the participants. Then
+we gathered the 50 most recent match data of each player and
+reproduced the actual draft situation they experienced. For each
+match, the participants were given a display of 3 champion recommendations and a description made based on the attention weights,
+as shown in Fig. 5. The synergy (counter) champion indicates the
+champion with the highest attention value within the player’s (opponent’s) team. User study participants were given personalized
+surveys made based on their match history data.
+User study results. The survey took an average of 30 minutes for
+each player. The survey results are presented in Table 5. In terms
+of Q1, we observe that participants are familiar with the recommended champions (𝐴𝑙𝑙 = 86.9%). With respect to Q2, we observe
+most participants think that our recommendation will lead to victory (𝐴𝑙𝑙 = 79.76%), but this perception is more positive to high
+ranked users (𝐷𝑖𝑎𝑚𝑜𝑛𝑑 = 92.86%). With regard to Q3, we can see
+
+Diamond↑
+0-1%
+(N=14)
+100%
+92.86%
+85.71%
+92.86%
+
+Platinum
+1-10%
+(N=23)
+91.3%
+86.96%
+73.91%
+86.96%
+
+Gold
+10-40%
+(N=28)
+85.71%
+71.43%
+85.71%
+89.29%
+
+Silver↓
+40-100%
+(N=19)
+73.68%
+73.68%
+78.95%
+78.95%
+
+that participants found the explanations for the recommendations
+reasonable (𝐴𝑙𝑙 = 80.95%). Finally, in Q4, we notice that a great
+majority of the players wish to use our recommender system in
+the future (𝐴𝑙𝑙 = 86.9%). Interestingly, we were able to see a tendency that our method was more positive to high ranked players
+compared to low ranked players. We speculate that this is due to
+the difference in the understanding of MOBA games players have
+according to their rank. Another possible explanation is that high
+ranked players related more with the recommendations since our
+model was trained with the top 0.1% rank match data.
+
+6
+
+Figure 5: A user study screen which recommends top 3
+champions to the 9-th user. ©Riot Games.
+
+All
+0-100%
+(N=84)
+86.90%
+79.76%
+80.95%
+86.90%
+
+ETHICAL CONSIDERATION
+
+We took careful steps to preserve the ethics of research. Specifically,
+the collected League of Legends dataset utilized the publicly accessible API endpoint provided by Riot Games [5] which includes an
+automatic account ID encryption stage, preventing any abuse of
+personal information. For the Dota2 dataset, we utilized a public
+dataset where all personal information were removed. In addition,
+the user study in Section 5.6 was approved by the Research Ethical
+Committee of KAIST.
+
+7
+
+CONCLUSION AND FUTURE WORK
+
+In this paper, we present DraftRec, a novel recommendation system
+which understands each player’s champion preference and the complex interaction between different players within a match. DraftRec
+utilizes a distinctive strategy to recommend the champions with a
+high win rate among the preferred ones of each player. Through extensive experiments on two MOBA-game datasets, we empirically
+demonstrate the superiority of DraftRec over various baselines and
+through a comprehensive user study, find that DraftRec provides
+satisfactory recommendations to real-world players.
+A limitation of our work is that while in-game features are dependent on the performance of other players in a match, we only
+consider them from a single player’s perspective. Expanding our
+method to further integrate other players’ performance when constructing the players’ match history is left for future work. We hope
+that our research will contribute to enhanced user experience for
+various MOBA-game-related web services and applications.
+
+ACKNOWLEDGMENTS
+This work was supported by Institute of Information & communications Technology Planning & Evaluation (IITP) grant funded by
+the Korea government(MSIT) (No. 2019-0-00075, Artificial Intelligence Graduate School Program(KAIST), and No. 2020-0-00368, A
+NeuralSymbolic Model for Knowledge Acquisition and Inference
+Techniques).
+
+DraftRec: Personalized Draft Recommendation for Winning in Multi-Player Online Battle Arena Games
+
+REFERENCES
+[1] [n.d.]. About op.gg. Online website. Retrieved May 5, 2021 from https://www.
+op.gg/about/
+[2] [n.d.]. Dota2 Match Dataset. Online website. Retrieved January 23, 2022 from
+https://www.kaggle.com/devinanzelmo/dota-2-matches
+[3] [n.d.]. Popular League of Legends community (Inven). Online website. Retrieved
+January 23, 2022 from https://www.invenglobal.com/lol
+[4] [n.d.]. Popular League of Legends community (Op.gg). Online website. Retrieved
+January 23, 2022 from https://talk.op.gg/s/lol/
+[5] [n.d.]. Publicly accessible API endpoint for League of Legends. Online website.
+Retrieved January 23, 2022 from https://developer.riotgames.com/apis#match-v5
+[6] Gediminas Adomavicius and Alexander Tuzhilin. 2005. Toward the next generation of recommender systems: A survey of the state-of-the-art and possible
+extensions. IEEE transactions on knowledge and data engineering 17, 6 (2005),
+734–749.
+[7] Zhengxing Chen, Truong-Huy D Nguyen, Yuyu Xu, Christopher Amato, Seth
+Cooper, Yizhou Sun, and Magy Seif El-Nasr. 2018. The Art of Drafting: A TeamOriented Hero Recommendation System for Multiplayer Online Battle Arena
+Games. Proc. the ACM Conference on Recommender systems (RecSys).
+[8] Zhengxing Chen, Yuyu Xu, Truong-Huy D. Nguyen, Yizhou Sun, and Magy Seif ElNasr. 2018. Modeling Game Avatar Synergy and Opposition through Embedding
+in Multiplayer Online Battle Arena Games. arXiv:1803.10402 [cs.SI]
+[9] Simon Demediuk, Athanasios Kokkinakis, Moni Sagarika Patra, Justus Robertson,
+Ben Kirmann, Alistair Coates, Alan Chitayat, Jonathan Hook, Isabelle Nölle,
+Oluseyi Olarewaju, Daniel Slawson, Marian F. Ursu, Florian Block, and Anders
+Drachen. 2021. Performance Index: A New Way to Compare Players. In Proceedings of the 2021 MIT Sloan Sports Analytics Conference.
+[10] Qilin Deng, Hao Li, Kai Wang, Zhipeng Hu, Runze Wu, Linxia Gong, Jianrong
+Tao, Changjie Fan, and Peng Cui. 2021. Globally Optimized Matchmaking in
+Online Games. In Proc. the ACM SIGKDD International Conference on Knowledge
+Discovery and Data Mining (KDD). New York, NY, USA. https://doi.org/10.1145/
+3447548.3467074
+[11] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2019. BERT:
+Pre-training of Deep Bidirectional Transformers for Language Understanding. In
+NAACL.
+[12] Scott Fujimoto, David Meger, and Doina Precup. 2019. Off-policy deep reinforcement learning without exploration. In International Conference on Machine
+Learning. PMLR, 2052–2062.
+[13] Linxia Gong, Xiaochuan Feng, Dezhi Ye, Hao Li, Runze Wu, Jianrong Tao,
+Changjie Fan, and Peng Cui. 2020. OptMatch: Optimized Matchmaking via
+Modeling the High-Order Interactions on the Arena. In Proc. the ACM SIGKDD
+International Conference on Knowledge Discovery and Data Mining (KDD). New
+York, NY, USA. https://doi.org/10.1145/3394486.3403279
+[14] Yin Gu, Qi Liu, Kai Zhang, Zhenya Huang, Runze Wu, and Jianrong Tao. 2021.
+NeuralAC: Learning Cooperation and Competition Effects for Match Outcome
+Prediction. Proc. the AAAI Conference on Artificial Intelligence (AAAI) 35, 5 (May
+2021), 4072–4080. https://ojs.aaai.org/index.php/AAAI/article/view/16528
+[15] Caglar Gulcehre, Ziyu Wang, Alexander Novikov, Tom Le Paine, Sergio
+Gomez Colmenarejo, Konrad Zolna, Rishabh Agarwal, Josh Merel, Daniel
+Mankowitz, Cosmin Paduraru, et al. 2020. Rl unplugged: Benchmarks for offline
+reinforcement learning. arXiv e-prints (2020), arXiv–2006.
+[16] Xiangnan He, Lizi Liao, Hanwang Zhang, Liqiang Nie, Xia Hu, and Tat-Seng
+Chua. 2017. Neural collaborative filtering. In Proc. the International Conference
+on World Wide Web (WWW). 173–182.
+[17] Dan Hendrycks and Kevin Gimpel. 2017. A baseline for detecting misclassified
+and out-of-distribution examples in neural networks. Proc. the International
+Conference on Learning Representations (ICLR) (2017).
+[18] Balázs Hidasi and Alexandros Karatzoglou. 2018. Recurrent Neural Networks with
+Top-k Gains for Session-Based Recommendations. In Proc. the ACM Conference
+on Information and Knowledge Management (CIKM). 843–852.
+[19] Wang-Cheng Hidasi and Julian McAuley. 2018. Session-based recommendations
+with recurrent neural networks. Proc. the IEEE International Conference on Data
+Mining (ICDM).
+[20] Victoria J. Hodge, Sam Devlin, Nick Sephton, Florian Block, Peter I. Cowling, and
+Anders Drachen. 2019. Win Prediction in Multiplayer Esports: Live Professional
+Match Prediction. IEEE Transactions on Games (2019).
+[21] Yifan Hu, Yehuda Koren, and Chris Volinsky. 2008. Collaborative Filtering for
+Implicit Feedback Datasets. In Proc. the IEEE International Conference on Data
+Mining (ICDM). 263–272.
+[22] Balázs Kang, Alexandros Karatzoglou, Linas Baltrunas, and Domonkos Tikk. 2016.
+Self-attentive sequential recommendation. Proc. the International Conference on
+Learning Representations (ICLR).
+[23] Erica Kleinman, Sabbir Ahmad, Zhaoqing Teng, Andy Bryant, Truong-Huy D.
+Nguyen, Casper Harteveld, and Magy Seif El-Nasr. 2020. ”And Then They Died”:
+Using Action Sequences for Data Driven, Context Aware Gameplay Analysis. In
+International Conference on the Foundations of Digital Games (FDG).
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+[24] Yehuda Koren and Robert Bell. 2011. Advances in Collaborative Filtering. In
+Recommender Systems Handbook. Springer US, 145–186.
+[25] Aviral Kumar, Justin Fu, George Tucker, and Sergey Levine. 2019. Stabilizing
+off-policy q-learning via bootstrapping error reduction. Proc. the Advances in
+Neural Information Processing Systems (NeurIPS) (2019).
+[26] Yao Li, Minhao Cheng, Kevin Fujii, Fushing Hsieh, and Cho-Jui Hsieh. 2018.
+Learning from Group Comparisons: Exploiting Higher Order Interactions. In
+Proc. the Advances in Neural Information Processing Systems (NeurIPS), Vol. 31.
+[27] Shiyu Liang, Yixuan Li, and R Srikant. 2018. Enhancing The Reliability of Outof-distribution Image Detection in Neural Networks. Proc. the International
+Conference on Learning Representations (ICLR).
+[28] Field Level Media. 2020. Worlds 2020 posted record AMA numbers. Online article.
+Retrieved May 5, 2021 from https://www.reuters.com/article/esports-lol-worldsviewership-idUSFLM90tSYn
+[29] Marçal Mora-Cantallops and Miguel Ángel Sicilia. 2018. MOBA games: A literature review. Entertainment Computing 26 (2018), 128–138. https://doi.org/10.
+1016/j.entcom.2018.02.005
+[30] Andrew Ng and Michael Jordan. 2002. On Discriminative vs. Generative Classifiers: A comparison of logistic regression and naive Bayes. In Proc. the Advances
+in Neural Information Processing Systems (NeurIPS).
+[31] OpenAI, :, Christopher Berner, Greg Brockman, Brooke Chan, Vicki Cheung, Przemysław Dębiak, Christy Dennison, David Farhi, Quirin Fischer, Shariq Hashme,
+Chris Hesse, Rafal Józefowicz, Scott Gray, Catherine Olsson, Jakub Pachocki,
+Michael Petrov, Henrique P. d. O. Pinto, Jonathan Raiman, Tim Salimans, Jeremy
+Schlatter, Jonas Schneider, Szymon Sidor, Ilya Sutskever, Jie Tang, Filip Wolski,
+and Susan Zhang. 2019. Dota 2 with Large Scale Deep Reinforcement Learning.
+arXiv:1912.06680 [cs.LG]
+[32] Michael J. Pazzani and Daniel Billsus. 2007. Content-Based Recommendation
+Systems. 325–341 pages.
+[33] Nataliia Pobiedina, Julia Neidhardt, Maria del Carmen Calatrava Moreno, Laszlo
+Grad-Gyenge, and Hannes Werthner. 2013. On Successful Team Formation:
+Statistical Analysis of a Multiplayer Online Game. In 2013 IEEE 15th Conference
+on Business Informatics. 55–62. https://doi.org/10.1109/CBI.2013.17
+[34] Massimo Quadrana, Alexandros Karatzoglou, Balázs Hidasi, and Paolo Cremonesi.
+2017. Personalizing Session-Based Recommendations with Hierarchical Recurrent Neural Networks. In Proc. the ACM Conference on Recommender systems
+(RecSys).
+[35] Steffen Rendle. 2010. Factorization Machines. In 2010 IEEE International Conference on Data Mining. 995–1000. https://doi.org/10.1109/ICDM.2010.127
+[36] Badrul Sarwar, George Karypis, Joseph Konstan, and John Riedl. 2001. ItemBased Collaborative Filtering Recommendation Algorithms. In Proceedings of the
+10th International Conference on World Wide Web. Association for Computing
+Machinery, New York, NY, USA, 285–295.
+[37] Matthias Schubert, Anders Drachen, and Tobias Mahlmann. 2016. Esports Analytics Through Encounter Detection. In Proceedings of the 2016 MIT Sloan Sports
+Analytics Conference.
+[38] Aleksandr Semenov, Peter Romov, Sergey Korolev, Daniil Yashkov, and Kirill
+Neklyudov. 2016. Performance of machine learning algorithms in predicting
+game outcome from drafts in dota 2. In International Conference on Analysis of
+Images, Social Networks and Texts. Springer, 26–37.
+[39] Rafet Sifa, Anders Drachen, Florian Block, Spencer Moon, Anisha Dubhashi, Hao
+Xiao, Zili Li, Diego Klabjan, and Simon Demediuk. 2021. Archetypal Analysis
+Based Anomaly Detection for Improved Storytelling in Multiplayer Online Battle
+Arena Games. In Australasian Computer Science Week Multiconference (ACSW).
+[40] Fei Sun, Jun Liu, Jian Wu, Changhua Pei, Xiao Lin, Wenwu Ou, and Peng Jiang.
+2019. BERT4Rec: Sequential Recommendation with Bidirectional Encoder Representations from Transformer. In Proc. the ACM Conference on Information and
+Knowledge Management (CIKM).
+[41] Marko Tot, Michelangelo Conserva, Alan Pedrassoli Chitayat, Athanasios Kokkinakis, Sagarika Patra, Simon Demediuk, Alvaro Caceres Munoz, Oluseji Olarewaju, Marian Ursu, Ben Kirmann, Jonathan Hook, Florian Block, Anders Drachen,
+and Diego Perez-Liebana. 2021. What Are You Looking At? Team Fight Prediction
+Through Player Camera. In 2021 IEEE Conference on Games (CoG).
+[42] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
+Aidan N Gomez, Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is All you
+Need. In Proc. the Advances in Neural Information Processing Systems (NeurIPS).
+[43] Andrés Villa, Vladimir Araujo, Francisca Cattan, and Denis Parra. 2020. Interpretable Contextual Team-Aware Item Recommendation: Application in Multiplayer Online Battle Arena Games. In Proc. the ACM Conference on Recommender
+systems (RecSys).
+[44] Cameron Voloshin, Hoang M Le, Nan Jiang, and Yisong Yue. 2019. Empirical
+study of off-policy policy evaluation for reinforcement learning. arXiv preprint
+arXiv:1911.06854 (2019).
+[45] Fan Wang, Xiaomin Fang, Lihang Liu, Hao Tian, and Zhiming Peng. 2020. MBCAL: Sample Efficient and Variance Reduced Reinforcement Learning for Recommender Systems. Proc. the ACM SIGKDD International Conference on Knowledge
+Discovery and Data Mining (KDD) (2020).
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+[46] Yifan Wu, George Tucker, and Ofir Nachum. 2019. Behavior regularized offline
+reinforcement learning. arXiv preprint arXiv:1911.11361 (2019).
+[47] Teng Xiao and Donglin Wang. 2021. A general offline reinforcement learning
+framework for interactive recommendation. In Proc. the AAAI Conference on
+Artificial Intelligence (AAAI).
+[48] Hong-Jian Xue, Xinyu Dai, Jianbing Zhang, Shujian Huang, and Jiajun Chen.
+2017. Deep Matrix Factorization Models for Recommender Systems. In Proc. the
+International Joint Conference on Artificial Intelligence (IJCAI). 3203–3209.
+[49] Deheng Ye, Guibin Chen, Wen Zhang, Sheng Chen, Bo Yuan, Bo Liu, Jia Chen,
+Zhao Liu, Fuhao Qiu, Hongsheng Yu, Yinyuting Yin, Bei Shi, Liang Wang, Tengfei
+Shi, Qiang Fu, Wei Yang, Lanxiao Huang, and Wei Liu. 2020. Towards Playing
+Full MOBA Games with Deep Reinforcement Learning. In Proc. the Advances in
+Neural Information Processing Systems (NeurIPS).
+[50] Deheng Ye, Zhao Liu, Mingfei Sun, Bei Shi, Peilin Zhao, Hao Wu, Hongsheng Yu,
+Shaojie Yang, Xipeng Wu, Qingwei Guo, et al. 2020. Mastering complex control
+in moba games with deep reinforcement learning. In Proc. the AAAI Conference
+on Artificial Intelligence (AAAI), Vol. 34. 6672–6679.
+[51] Lixin Zou, Long Xia, Pan Du, Zhuo Zhang, Ting Bai, Weidong Liu, Jian-Yun Nie,
+and Dawei Yin. 2020. Pseudo Dyna-Q: A reinforcement learning framework for
+interactive recommendation. In Proc. of the Web Search and Data Mining (WSDM).
+816–824.
+
+Lee et al.
+
+DraftRec: Personalized Draft Recommendation for Winning in Multi-Player Online Battle Arena Games
+
+A
+
+IMPLEMENTATION DETAILS
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+Table 7: Selected features for Dota2.
+
+Here, we describe the implementation details of DraftRec.
+
+A.1
+
+Feature Selection
+
+Table 6 and Table 7 lists the selected features for the League of
+Legends dataset and Dota2 dataset respectively. We selected features
+that express the characteristic and champion preference of each
+player through a careful discussion with 5 top 1% ranked players
+of each game.
+Table 6: Selected features for League of Legends.
+Feature
+KDA
+Largest_killing_spree
+Largest_multi_kill
+Killing_sprees
+Longest_time_spent_living
+Double_kills
+Triple_kills
+Quadra_kills
+Penta_kills
+Unreal_kills
+Total_damage_dealt
+Magic_damage_dealt
+Physical_damage_dealt
+True_damage_dealt
+Largest_critical_strike
+Total_damage_to_champions
+Magic_damage_to_champions
+Physical_damage_to_champions
+True_damage_to_champions
+Total_heal
+Total_units_healed
+Damage_self_mitigated
+Damage_dealt_to_objectives
+Damage_dealt_to_turrets
+Vision_score
+Time_ccing_others
+Total_damage_taken
+Magical_damage_taken
+Physical_damage_taken
+True_damage_taken
+Gold_earned
+Gold_spent
+Turret_kills
+Inhibitor_kills
+Total_minion_killed
+Minions_killed
+Minions_killed_team_jungle
+Minions_killed_enemy_jungle
+Total_time_crowd_control
+Vision_wards_bought
+Sight_wards_bought
+Wards_placed
+Wards_killed
+
+Description
+(#kills + #assist) / #death
+Largest killing spree
+Larget number of multi kills
+Number of consecutive kills
+Longest time spent alive
+Number of double kills
+Number of triple kills
+Number of quadra kills
+Number of penta kills
+Number of unreal kills
+Total damage dealt
+Magic damage dealt
+Physical damage dealt
+True damage dealt
+Largest critical strike damage
+Total damage to champions
+Magic damage to champions
+Physical damage to champions
+True damage to champions
+Total heal amount
+Total number of units healds
+Damage self mitigated
+Damage dealt to objectives
+Damage dealt to turrets
+Vision score
+Time crowd controlling others
+Total damage taken
+Magical damage taken
+Physical damage taken
+True damage taken
+Total gold earned
+Total gold spent
+Number of turret kills
+Number of inhibitor kills
+Total number of minions killed
+Minions killed by player
+Team jungles killed by player
+Enemy jungles killed by player
+Time being crowd controlled
+Number of vision wards bought
+Number of sight wards bought
+Number of wards placed
+Number of wards killed
+
+Feature
+Kills
+Deaths
+Assists
+Denies
+Xp_hero
+Xp_creep
+Xp_roshan
+Xp_per_min
+Xp_other
+Level
+Hero_damage
+Hero_healing
+Tower_damage
+Last_hits
+Stuns
+Gold
+Gold_spent
+Gold_per_min
+Gold_other
+Gold_death
+Gold_buyback
+Gold_abandon
+Gold_sell
+Gold_destroying_structure
+Gold_killing_heroes
+Gold_killing_creeps
+Gold_killing_roshan
+
+A.2
+
+Description
+Number of kills
+Number of deaths
+Number of assists
+Number of denies
+Experience obtained by heroes
+Experience obtained by creeps
+Experience obtained by roshan
+Experience obtained per minute
+Experience obtained by other
+sources
+The hero’s level
+Damage done by hero
+Heal amount done by hero
+Total tower damage
+Number of last hits
+Number of stuns
+Total amount of gold earned
+Total amount of gold spent
+Gold earned per minute
+Gold earned by other sources
+Gold lost by dying
+Gold spent on buybacks
+Gold earned by abandonment
+Gold earned by selling items
+Gold earned by structures
+Gold earned by killing heroes
+Gold earned by creeps
+Gold earned by roshan
+
+Hyperparameters
+
+Table 8 describes the optimal hyper parameter configurations of
+DraftRec. All DraftRec models are trained using A100 GPU with
+64 cores. For League of Legends, training takes 5 hours to complete
+and for Dota2, training takes 1 hour to complete.
+
+B FURTHER EXPERIMENTS
+B.1 Match Outcome Prediction
+In our draft recommendation setting, the model needs to predict
+the match outcome at every turn for each match. Therefore, we
+trained and evaluated the match outcome prediction models with
+the partially observable information set at each turn. However, previous match outcome prediction research [7, 13, 14, 26, 30] focused
+on predicting the match outcome when a draft was finished (i.e.,
+prediction was made after every player has selected a champion).
+Therefore, in Table 9, we report the performance of all models
+when they are trained and evaluated by following the experimental
+protocols of previous work.
+Similar to the findings of our match outcome prediction experiments in Section 5.3, DraftRec performs the best among all methods for the League of Legends dataset. Compared to OptMatch [13],
+which is a state-of-the-art match outcome prediction model, DraftRec
+
+WWW ’22, April 25–29, 2022, Virtual Event, Lyon, France.
+
+Lee et al.
+
+Table 8: Hyperparameters of DraftRec on League of Legends
+and Dota2 dataset.
+
+S-POP
+
+DraftRec
+
+SASRec
+
+0.7
+
+Dota2
+20
+Adam
+1e-8
+(0.9, 0.999)
+Cosine
+1e-3
+0
+1e-4
+512
+64
+5.0
+0.2
+0.2
+1
+1
+20
+0.1
+-
+
+Table 9: Performance comparison of DraftRec and baselines
+on the match outcome prediction task when predictions are
+made after every player completed selecting a champion.
+
+0.8
+
+0.6
+
+NG@10
+
+LOL
+10
+Adam
+1e-8
+(0.9, 0.999)
+Cosine
+1e-3
+0
+1e-5
+512
+128
+5.0
+0.1
+0.1
+2
+2
+50
+0.1
+0.02
+
+HR@10
+
+Hyperparameter
+Epoch
+Optimizer
+Adam 𝜖
+Adam (𝛽 1, 𝛽 2 )
+LR Scheduler
+Initial LR
+Final LR
+Weight decay
+Batch size
+Hidden size
+Clip gradients
+Hidden dropout
+Attention dropout
+Num heads
+Num blocks 𝑁
+Max sequence length 𝐿
+Loss control 𝜆
+Selection threshold 𝜏
+
+0.6
+
+0.4
+0.4
+1
+
+2
+
+5
+
+10
+
+20
+
+50 100
+
+1
+
+5
+
+10
+
+20
+
+50 100
+
+𝐿
+
+Figure 6: Performance comparison of sequential
+recommendation models with varying history length 𝐿.
+Champion Recommendation. Fig. 6 displays the recommendation performances of sequential recommendation models which
+includes DraftRec, S-POP, and SASRec. We observe that player
+match history length 𝐿 is a crucial factor for the recommendation
+performances where both HR@10 and NG@10 increase when the
+player match history length 𝐿 increases. However, we also discovered that both HR@10 and NG@10 converges around 𝐿 = 50 for
+all models. This implies that the player’s champion selections are
+more affected by their recent matches rather than their old ones.
+DraftRec
+
+OptMatch
+0.5
+
+Dota2
+MAE
+
+ACC
+
+MAE
+
+MC [7]
+LR [30]
+NN [7]
+HOI [26]
+OptMatch [13]
+NeuralAC [14]
+
+0.5040
+0.5323
+0.5335
+0.5339
+0.5449
+0.5347
+
+0.4960
+0.4975
+0.4958
+0.4978
+0.4928
+0.4962
+
+0.5180
+0.6126
+0.6108
+0.6076
+0.6109
+0.6108
+
+0.4820
+0.4682
+0.4692
+0.4819
+0.4724
+0.4712
+
+DraftRec-no-history
+DraftRec
+
+0.5432
+0.5618*
+
+0.4893
+0.4826*
+
+0.6085
+0.6110
+
+0.4592*
+0.4642
+
+0.55
+
+MAE
+
+ACC
+
+ACC
+
+Models
+
+2
+
+𝐿
+
+0.56
+
+LOL
+
+0.5
+
+0.54
+
+0.49
+
+0.53
+0.48
+1
+
+2
+
+5
+
+10
+
+𝐿
+
+20
+
+50 100
+
+1
+
+2
+
+5
+
+10
+
+20
+
+50 100
+
+𝐿
+
+Figure 7: Performance comparison of match outcome
+prediction models with varying history length 𝐿.
+
+Notes: "∗" indicates the statistical significance (i.e., 𝑝 < 0.01).
+
+shows an improvement of 3.1% in ACC and 2.1% in MAE. However,
+for the Dota2 dataset, we observed that a simple logistic regression
+model performed the best.
+
+B.2
+
+Ablation on Maximum Sequence Length
+
+In order to further analyze the importance of utilizing personal
+match histories, we conduct an ablation studies referring to the
+length of the player match history the models utilizes. Since Dota2
+dataset contains a scarce amount of players’ match histories, we
+only consider League of Legends dataset throughout this experiment. For all the experiments, we vary the length of player match
+histories 𝐿 from {1, 2, 5, 10, 20, 50, 100} and fix the remaining hyperparameters to each model’s optimal configurations.
+
+Match Outcome Prediction. Fig. 7 shows the performance of the
+match outcome prediction models that utilizes player match history
+information which include DraftRec and OptMatch. We observed
+that both DraftRec and OptMatch benefits with longer player match
+history length 𝐿 and start to converge at 𝐿 = 50. When the player
+match history length 𝐿 gets longer, the models may not benefit
+from a longer history length since extra noise can be injected along
+with the extra history information.
+
+

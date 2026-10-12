@@ -1,0 +1,4582 @@
+A Group-Theoretic Framework for Data Augmentation
+Shuxiao Chen
+Edgar Dobriban
+
+shuxiaoc@wharton.upenn.edu
+dobriban@wharton.upenn.edu
+
+arXiv:1907.10905v4 [stat.ML] 6 Nov 2020
+
+Department of Statistics
+The Wharton School of the University of Pennsylvania
+Philadelphia, PA, 19104-6340, USA
+
+Jane H. Lee
+
+janehlee@sas.upenn.edu
+
+Department of Mathematics, and Computer and Information Science
+University of Pennsylvania
+Philadelphia, PA 19104-6309, USA
+
+Abstract
+Data augmentation is a widely used trick when training deep neural networks: in addition
+to the original data, properly transformed data are also added to the training set. However,
+to the best of our knowledge, a clear mathematical framework to explain the performance
+benefits of data augmentation is not available. In this paper, we develop such a theoretical
+framework. We show data augmentation is equivalent to an averaging operation over the
+orbits of a certain group that keeps the data distribution approximately invariant. We
+prove that it leads to variance reduction. We study empirical risk minimization, and the
+examples of exponential families, linear regression, and certain two-layer neural networks.
+We also discuss how data augmentation could be used in problems with symmetry where
+other approaches are prevalent, such as in cryo-electron microscopy (cryo-EM).
+Keywords: Data Augmentation, Deep Learning, Empirical Risk Minimization, Invariance, Variance Reduction
+
+1. Introduction
+Deep learning algorithms such as convolutional neural networks (CNNs) are successful in
+part because they exploit natural symmetry in the data. For instance, image identity is
+roughly invariant to translations and rotations: so a slightly translated cat is still a cat. Such
+invariances are present in many datasets, including image, text and speech data. Standard
+architectures are invariant to some, but not all transforms. For instance, CNNs induce an
+approximate equivariance to translations, but not to rotations. This is an inductive bias of
+CNNs, and the idea dates back at least to the neocognitron (Fukushima, 1980).
+To make models invariant to arbitrary transforms beyond the ones built into the architecture, data augmentation is commonly used. Roughly speaking, the model is trained not
+just with the original data, but also with transformed data. Data augmentation is a crucial
+component of modern deep learning pipelines, and it is typically needed to achieve state of
+the art performance. It has been used, e.g., in AlexNet (Krizhevsky et al., 2012), and other
+pioneering works (Cireşan et al., 2010). The state-of-the-art results on aggregator websites
+such as https://paperswithcode.com/sota often crucially rely on effective new ways of
+data augmentation. See Figure 1 for a small experiment (see Appendix D for details).
+©2020 Shuxiao Chen, Edgar Dobriban, and Jane H. Lee.
+License: CC-BY 4.0, see https://creativecommons.org/licenses/by/4.0/.
+
+Chen, Dobriban and Lee
+
+Figure 1: Benefits of data augmentation: A comparison of test accuracy across training
+epochs of ResNet18 (He et al., 2016) (1) without data augmentation, (2) horizontally flipping the image with 0.5 probability, and (3) a composition of randomly
+cropping a 32 × 32 portion of the image and random horizontal flip. The experiment is repeated 15 times, with the dotted lines showing the average test accuracy
+and the shaded regions representing 1 standard deviation around the mean. The
+left graph shows results from training on the full CIFAR10 training data and the
+right uses half of the training data as that of the left. Data augmentation leads
+to increased performance, especially with limited data.
+
+Equivariant or invariant architectures (such as CNNs) are attractive for tackling invariance. However, in many cases, datasets have symmetries that are naturally described in a
+generative form: we can specify generators of the group of symmetries (e.g., rotations and
+scalings). In contrast, computing the equivariant features requires designing new architectures. Thus, data augmentation is a universally applicable, generative, and algorithmic way
+to exploit invariances.
+However, a general framework for understanding data augmentation is missing. Such a
+framework would enable us to reason clearly about the benefits offered by augmentation,
+in comparison to invariant features. Moreover, such a framework could also shed light on
+questions such as: How can we improve the performance of our models by simply adding
+transformed versions of the training data? Under what conditions can we see benefits?
+Developing such a framework is challenging for several reasons: first, it is unclear what
+mathematical approach to use, and second, it is unclear how to demonstrate that data
+augmentation “helps”.
+In this paper, we propose such a general framework. We use group theory as a mathematical language, and model invariances as “approximate equality” in distribution under a
+group action. We show that data augmentation can be viewed as invariant learning by averaging over the group action. We then demonstrate that data augmentation leads to sample
+efficient learning, both in the non-asymptotic setting (relying on results from stochastic
+convex optimization and Rademacher complexity), as well as in the asymptotic setting (by
+using asymptotic statistical theory for empirical risk minimizers/M-estimators).
+2
+
+Theory for Data Augmentation
+
+We show how to apply data augmentation beyond deep learning, to other problems
+in statistics and machine learning that have invariances. In addition, we explain the connections to several other important notions from statistics and machine learning, including
+sufficiency, invariant representations, equivariance, variance reduction in Monte Carlo methods, and regularization.
+We can summarize our main contributions as follows:
+1. We study data augmentation in a group-theoretic formulation, where there is a group
+acting on the data, and the distribution of the data is equal (which we refer to as
+exact invariance), or does not change too much (which we refer to as approximate
+invariance) under the action. We explain that in empirical risk minimization (ERM),
+this leads to minimizing an augmented loss, which is the average of the original loss
+under the group action (Section 3.1). In the special case of maximum likelihood
+estimation (MLE), we discuss several variants of MLE that may potentially exploit
+invariance (Section 3.2). We also propose to extend data augmentation beyond ERM,
+using the “augmentation distribution” (Section 3.3).
+2. We provide several theoretical results to support the benefits of data augmentation.
+When the data is exactly invariant in distribution (exact invariance), we show that averaging over the group orbit (e.g., all rotations) reduces the variance of any function.
+We can immediately conclude that estimators based on the “augmentation distribution” gain efficiency and augmentation reduces the mean squared error (MSE) of
+general estimators (Section 4.1).
+3. Specializing the variance reduction to the loss and the gradients of the loss, we show
+that the empirical risk minimizer with data augmentation enjoys favorable properties
+in a non-asymptotic setup. Specifically, “loss-averaging” implies that data augmentation reduces the Rademacher complexity of a loss class (Section 4.2.1), which further
+suggests that the augmented model may generalize better. On the other hand, we
+show that “gradient-averaging” reduces the variance of the ERM when the loss is
+strongly-convex, using a recent result from stochastic convex optimization (Section
+4.2.2).
+4. Moving to the asymptotic case, we characterize the precise variance reduction obtained
+by data augmentation under exact invariance. We show that this depends on the
+covariance of the loss gradients along the group orbit (Section 4.2.3). This implies
+that data augmentation can improve upon the Fisher information of the un-augmented
+maximum likelihood estimator (MLE) (Section 4.2.4). For MLE, we further study the
+special case when the subspace of parameters with invariance is a low-dimensional
+manifold. We connect this to geometry showing that the projection of the gradient
+onto the tangent space is always invariant; however, it does not always capture all
+invariance. As a result, the augmented MLE cannot always be as efficient as the
+“constrained MLE”, where the invariance is achieved by constrained optimization.
+5. We work out several examples of our theory under exact invariance: exponential families (Section 5.1), least-squares regression (Section 5.2) and least squares classification
+3
+
+Chen, Dobriban and Lee
+
+(Section 5.3). As a notable example, we work out the efficiency gain for two-layer neural networks with circular shift data augmentation in the heavily underparametrized
+regime (where most of our results concern quadratic activations). We also provide
+an example of “augmentation distribution”, in the context of linear regression with
+general linear group actions (Section 5.4).
+6. We extend most of the results to the approximate invariance case, where the distribution of the data is close, but not exactly equal to its transformed copy (Section 6).
+Using optimal transport theory, we characterize an intriguing bias-variance tradeoff:
+while the orbit averaging operation reduces variance, a certain level of bias is created
+because of the non-exact-invariance. This tradeoff suggests that in practice where exact invariance does not hold, data augmentation may not always be beneficial, and its
+performance is governed by both the variability of the group and a specific Wasserstein
+distance between the data and its transformed copy.
+7. We illustrate the bias-variance tradeoff by studying the generalization error of overparameterized two-layer networks trained by gradient descent (Section 7), using recent
+results on Neural Tangent Kernel (see, e.g., Jacot et al. 2018; Arora et al. 2019; Ji
+and Telgarsky 2019; Chen et al. 2019).
+8. We also describe a few important problems where symmetries occur, but where other
+approaches—not data augmentation—are currently used (Section 8): cryo-electron
+microscopy (cryo-EM), spherically invariant data, and random effects models. These
+problems may be especially promising for using data augmentation.
+
+2. Some related work
+In this section, we discuss some related works, in addition to those that are mentioned in
+other places.
+Data augmentation methodology in deep learning. There is a great deal of work
+in developing efficient methods for data augmentation in deep learning. Here we briefly
+mention a few works. Data augmentation has a long history, and related ideas date back
+at least to Baird (1992), who built a “pseudo-random image generator”, that “given an
+image and a set of model parameters, computes a degraded image”. This is recounted in
+Schmidhuber (2015).
+Conditional generative adversarial networks (cGAN) are a method for learning to generate from the class-conditional distributions in a classification problem (Mirza and Osindero,
+2014). This has direct applications to data augmentation. Data augmentation GANs (DAGAN) (Antoniou et al., 2017) are a related approach that train a GAN to discriminate
+between x, xg , and x, x0 , where xg is generated as xg = f (x, z), and x0 is an independent
+copy. This learns the conditional distribution x0 |x, where x0 , x are sampled “independently”
+from the training set. Here the training data is viewed as non-independent and they learn
+the dependence structure.
+Hauberg et al. (2016) construct class-dependent distributions over diffeomorphisms for
+learned data augmentation. Ratner et al. (2017) learn data augmentation policies using
+4
+
+Theory for Data Augmentation
+
+reinforcement learning, starting with a known set of valid transforms. Tran et al. (2017)
+propose a Bayesian approach. RenderGAN (Sixt et al., 2018) combines a 3D model with
+GANs for image generation. DeVries and Taylor (2017a) propose to perform data augmentation in feature space. AutoAugment (Cubuk et al., 2018) is another approach for learning
+augmentation policies based on reinforcement learning, which is one of the state of the art
+approaches. RandAugment (Cubuk et al., 2019) proposes a strategy to reduce the search
+space of augmentation policies, which also achieves state of the art performance on ImageNet classification tasks. Hoffer et al. (2019) argues that replicating instances of samples
+within the same batch with different data augmentations can act as an accelerator and a
+regularizer when appropriately tuning the hyperparameters, increasing both the speed of
+training and the generalization performance.
+Neural net architecture design. There is a parallel line of work designing invariant
+and equivariant neural net architectures. A key celebrated example is convolutions, dating
+back at least to the neocognitron (Fukushima, 1980), see also LeCun et al. (1989). More
+recently, group equivariant Convolutional Neural Networks (G-CNNs), have been proposed,
+using G-convolutions to exploit symmetry (Cohen and Welling, 2016a). That work designs
+concrete architectures for groups of translations, rotations by 90 degrees around any center
+of rotation in a square grid, and reflections. Dieleman et al. (2016) designed architectures
+for cyclic symmetry.
+Worrall et al. (2017) introduces Harmonic Networks or H-Nets, which induce equivariance to patch-wise translation and 360 degree rotation. They rely on circular harmonics as
+invariant features. Cohen and Welling (2016b) propose steerable CNNs and Cohen et al.
+(2018a) develop a more general approach. There are several works on SO(3) equivariance,
+see Cohen et al. (2018b); Esteves et al. (2018a,b, 2019).
+Gens and Domingos (2014) introduces deep symmetry networks (symnets), that form
+feature maps over arbitrary symmetry groups via kernel-based interpolation to pool over
+symmetry spaces. See also Ravanbakhsh et al. (2017); Kondor and Trivedi (2018); Weiler
+et al. (2018); Kondor et al. (2018). There are also many examples of data augmentation
+methods developed in various application areas, e.g., Jaitly and Hinton (2013); Xie et al.
+(2019); Park et al. (2019); Ho et al. (2019), etc.
+Data augmentation as a form of regularization. There is also a line of work
+proposing to add random or adversarial noise to the data when training neural networks.
+The heuristic behind this approach is that the addition of noise-perturbed data should
+produce a classifier that is robust to random or adversarial corruption.
+For example, DeVries and Taylor (2017b) proposes to randomly mask out square regions
+of input images and fill the regions with pure gray color; Zhong et al. (2017) and Lopes
+et al. (2019) propose to randomly select a patch within an image and replace its pixels with
+random values; Bendory et al. (2018) proposes to add Perlin noise (Perlin, 1985) to medical
+images; Zhang et al. (2017) proposes to train with convex combinations of two images as
+well as their labels. The experiments done by those papers show that augmenting with
+noise-perturbed data can lead to lower generalization error and better robustness against
+corruption.
+5
+
+Chen, Dobriban and Lee
+
+Szegedy et al. (2013) and Cohen et al. (2019) demonstrate that training with adversarial
+examples can lead to some form of regularization. Hernández-Garcı́a and König (2018a) has
+argued that data augmentation can sometimes even replace other regularization mechanisms
+such as weight decay, while Hernández-Garcı́a and König (2018b) has argued that this can
+be less sensitive to hyperparameter choices than other forms of regularization. While this
+approach is also called data augmentation in the literature, it is fundamentally different
+from what we consider. We study a way to exploit invariance in the data, while those
+works focus on smoothing effects (adding noise cannot possibly lead to exactly invariant
+distributions).
+More related to our approach, Maaten et al. (2013) propose to train the model by minimizing the expected value of the loss function under the “corrupting distribution” and show
+such a strategy improves generalization. Chao et al. (2017); Mazaheri et al. (2019) aim to
+reduce the variance and enhance stability by “functional integration” inspired averaging
+over a large number of different representations of the same data. However, our quantitative approaches differ. Lyle et al. (2019) study the effect of invariance on generalization
+in neural networks. They study feature averaging, which agrees with our augmentation
+distribution defined later. They mention variance reduction, but we can, in fact, prove it.
+Other works connected to data augmentation. There is a tremendous amount of
+other work connected to data augmentation. On the empirical end, Bengio et al. (2011) has
+argued that the benefit of data augmentation goes up with depth. On the theoretical end,
+Rajput et al. (2019) investigate if gaussian data augmentation leads to a positive margin,
+with some negative results. Connecting to adversarial examples, Engstrom et al. (2017)
+shows that adversarially chosen group transforms such as rotations can already be enough
+to fool neural network classifiers. Javadi et al. (2019) shows that data augmentation can
+reduce a certain Hessian-based complexity of neural networks. Liu et al. (2019) show that
+data augmentation can significantly improve the optimization landscape of neural networks,
+so that SGD avoids bad local minima and leads to much more accurate trained networks.
+Hernández-Garcı́a et al. (2018) has shown that it also leads to better biological plausibility
+in some cases.
+Dao et al. (2019) also seek to establish a theoretical framework for understanding data
+augmentation, but focus on the connection between data augmentation and kernel classifiers.
+Dao et al. (2019) study k-NN and kernel methods. They show how data augmentation with
+a kernel classifier yields approximations which look like feature averaging and variance
+regularization, but do not explicitly quantify how this improves classification. One of the
+most related works by Bloem-Reddy and Teh (2019) use similar probabilistic models, but
+without focusing on data augmentation.
+We also note that data augmentation has another meaning in Bayesian statistics, namely
+the introduction of auxiliary variables to help compute the posterior (see e.g., Tanner and
+Wong, 1987). The naming clash is unfortunate. However, since the term “data augmentation” is well established in deep learning, we decided to keep it in our current work.
+Group invariance in statistical inference. There has been significant work on
+group invariance in statistical inference (e.g., Giri, 1996). However, the questions investigated there are different from the ones that we study. Among other contributions, Helland
+6
+
+Theory for Data Augmentation
+
+(2004) argues that group invariance can form natural non-informative priors for the parameters of the model, and introduces permissible sub-parameters as those upon which group
+actions can be defined.
+Physical invariances. There is a long history of studying invariance and symmetry in
+physics. Invariances lead to conservation laws, such as conservation of mass and momentum.
+In addition, invariances in Hamiltonians of physical systems lead to reductions in the number
+of parameters of probability distributions governing the systems. This has been among the
+explanations proposed of why deep learning works (Lin et al., 2017).
+
+3. Methodology for data augmentation
+3.1 ERM
+We start by explaining our framework in the context of empirical risk minimization (ERM).
+Consider observations X1 , . . . , Xn ∈ X (e.g., images along with their labels) sampled
+i.i.d. from a probability distribution P on the sample space X . Since data augmentation is a
+way of “teaching invariance to the model”, we need to assume our data is invariant to certain
+transformations. Consider thus a group G of transforms (e.g., the set of all rotations of
+images), which acts on the sample space: there is a function φ : G×X → X , (g, x) 7→ φ(g, x),
+such that φ(e, x) = x for the identity element e ∈ G, and φ(gh, x) = φ(g, φ(h, x)) for any
+g, h ∈ G. For notational simplicity, we write φ(g, x) ≡ gx then there is no ambiguity. To
+model invariance, we assume that for any group element g ∈ G and almost any X ∼ P, we
+have an “approximate equality” in distribution:
+X ≈d gX.
+
+(1)
+
+For ease of exposition, we start with exact invariance X =d gX in Section 4, and we handle
+approximate invariance in Section 6.
+For supervised learning applications, Xi = (Zi , Yi ) contains both the features Zi and
+the outcome Yi . The assumption (1) means that the probability of an image being a bird
+is (either exactly or approximately) the same as the probability for a rotated image.
+As an aside, the invariance in distribution (1) arises naturally in many familiar statistical
+settings, including permutation tests, time series analysis. See Section 3.4.
+In the current context, data augmentation corresponds to “adding all datapoints gXi ,
+g ∈ G, i = 1, . . . , n” to the dataset. When the group is finite, this can effectively be
+implemented by enlarging the data size. However, many important groups are infinite, and
+to understand data augmentation in that setting, it is most clear if we argue from first
+principles.
+In practice, data augmentation is performed via the following approach. To start, we
+consider a loss function L(θ, X), and attempt to minimize the empirical risk
+n
+
+1X
+Rn (θ) :=
+L(θ, Xi ).
+n
+
+(2)
+
+i=1
+
+We iterative over time t = 1, 2, . . . using stochastic gradient descent (SGD) or variants (see
+Algorithm 1). At each step t, a minibatch of Xi ’s (say with indices St ) is chosen. In data
+7
+
+Chen, Dobriban and Lee
+
+Algorithm 1: Augmented SGD
+Input : Data Xi , i = 1, . . . , n; Method to compute gradients ∇L(θ, X) of the loss;
+Method to sample augmentations g ∈ G, g ∼ Q; Learning rates ηt ; Batch sizes
+|St |; Initial parameters θ0 ; Stopping criterion.
+Output: Final parameters.
+Set t = 0
+While stopping criterion is not met
+Sample random minibatch St ⊂ {1, . . . , n}
+Sample random augmentation gi,t ∼ Q for each batch element
+Update parameters
+ηt X
+∇L(θ, gi,t Xi )
+θt+1 ← θt −
+|St |
+i∈St
+
+t←t+1
+return θ
+
+augmentation, a random transform gi,t ∈ G is sampled and applied to each data point in
+the minibatch. Then, the parameter is updated as
+θt+1 = θt −
+
+ηt X
+∇L(θ, gi,t Xi ).
+|St |
+
+(3)
+
+i∈St
+
+Here we need a probability distribution Q on the group G, from which gi,t is sampled.
+For a finite G, one usually takes Q to be the uniform distribution. However, care must be
+taken if G is infinite. We assume G is a compact topological group, and we take Q to be
+the Haar probability measure.1 Hence, for any g ∈ G and measurable S ⊆ G, the following
+translation invariant property holds: Q(gS) = Q(S), Q(Sg) = Q(S).
+A key observation is that the update rule (3) corresponds to SGD on an augmented
+empirical risk, where we take an average over all augmentations according to the measure
+Q:
+n Z
+1X
+min R̄n (θ) :=
+L(θ, gXi )dQ(g).
+(4)
+θ
+n
+G
+i=1
+
+To be precise, ∇L(θ, gi,t Xi ) is an unbiased stochastic gradient for the augmented loss function
+Z
+L̄(θ, X) :=
+
+L(θ, gX)dQ(g),
+
+(5)
+
+G
+
+and P
+hence we can view the resulting estimator as an empirical risk minimizer of R̄n =
+n
+−1
+n
+i=1 L̄(θ, Xi ).
+This can be viewed as Rao-Blackwellizing the loss, meaning taking a conditional expectation of the loss over the conditional distribution of x belonging to a certain group orbit.
+See Lemma 1 for a precise statement and Section 3.4 for more discussion.
+1. Haar measures are used for convenience. Most of our results hold for more general measures with slightly
+more lengthy proofs.
+
+8
+
+Theory for Data Augmentation
+
+3.2 Variants of MLE under invariance
+The maximum likelihood estimation (MLE) is a special case of ERM when there is an
+underlying parametric model. The usual approach goes as follows. One starts with a
+parametric statistical model (i.e., a collection of probability measures) {Pθ : θ ∈ Θ}, where
+Θ is some parameter space. Let pθ be the density of Pθ , and we define the log-likelihood
+function as `θ (x) = log pθ (x). We then define the MLE as any solution of the following
+problem:
+1 X
+θbMLE,n ∈ arg max
+`θ (Xi ).
+(6)
+θ∈Θ n
+i∈[n]
+
+The invariance assumption (1) is only imposed on the “true” parameter θ0 , so that for
+Pθ0 -a.e. x and Q-a.e. g, we have
+pθ0 (gx) · | det Jac(x → gx)| = pθ0 (x),
+
+(7)
+
+where Jac(x → gx) is the Jacobian of the transform x 7→ gx.
+There are multiple ways to adapt the likelihood function to the invariance structure
+(with data augmentation being one of them), and we detail some of them below.
+Constrained MLE. The invariance structure is a constraint on the density function.
+Hence we obtain a natural constrained (or restricted) maximum likelihood estimation problem. Define the invariant subspace as
+ΘG = {θ ∈ Θ : X =d gX, ∀g ∈ G}.
+
+(8)
+
+Then the constrained MLE is
+θbcMLE,n ∈ arg max
+
+θ∈ΘG
+
+X
+
+`θ (Xi ).
+
+(9)
+
+i∈[n]
+
+In general, this can be much more sample-efficient than the original MLE. For instance,
+suppose we are trying to estimate a normal mean based on one sample: X ∼ N (θ, 1). Let
+the group be negation, i.e., G = ({±1}, ·) = Z2 . Then ΘG = {0}, because the only normal
+density symmetric around zero is the one with zero mean. Hence, the invariance condition
+uniquely identifies the parameter, showing that the constrained MLE perfectly recovers the
+parameter.
+However, in general, optimizing over the restricted parameter set may be computationally more difficult. This is indeed the case in the applications we have in mind. For instance,
+in deep learning, G may correspond to the set of all translations, rotations, scalings, shearings, color shifts, etc. And it’s not clear how to obtain information on ΘG (for example,
+how to compute the projection operator onto ΘG ).
+Augmented MLE. A particular example of the augmented ERM is augmented maximum likelihood estimation. Here the loss is the negative log-likelihood, L(θ, x) = −`θ (x).
+Then the augmented ERM program (4) becomes
+XZ
+θbaMLE,n ∈ arg max
+`θ (gXi )dQ(g).
+(10)
+θ
+
+i∈[n] G
+
+9
+
+Chen, Dobriban and Lee
+
+Table 1: Optimization objectives
+Method
+ERM/MLE
+
+Sample Objective
+P
+min n1 i∈[n] L(θ, Xi )
+
+minEθ0 L(θ, X)
+
+θ∈Θ
+
+min
+
+P
+1
+
+Augmented ERM/MLE
+
+min n1
+
+P
+
+Invariant ERM/MLE
+
+min n1
+
+P
+
+Marginal MLE
+
+max n1
+θ∈Θ
+
+P
+
+Constrained ERM/MLE
+
+Population Objective
+
+θ∈Θ
+
+min Eθ0 L(θ, X)
+
+i∈[n] L(θ, Xi )
+
+θ∈ΘG n
+θ∈Θ
+
+θ∈Θ
+
+i∈[n]
+
+R
+
+θ∈ΘG
+
+L(θ, gXi )dQ(g)
+
+i∈[n] L(θ, T (Xi )),
+i∈[n] log
+
+R
+
+T (x) = T (gx)
+
+
+pθ (gXi )dQ(g)
+
+minEθ0
+θ∈Θ
+
+R
+
+L(θ, gX)dQ(g)
+
+minEθ0 L(θ, T (X))
+θ∈Θ
+
+maxEθ0 log
+θ∈Θ
+
+R
+
+pθ (gX)dQ(g)
+
+Invariant MLE. Another perspective to exploit invariance is that of invariant representations, i.e., learning over representations T (x) of the data such that T (gx) = T (x) (see
+also Section 3.4). However, it turns out that in some natural examples, the invariant MLE
+does not gain over the usual MLE (see Appendix C for a specific example). Thus we will
+not consider this in much detail.
+Marginal MLE. There is a natural additional method to estimate the parameters,
+the marginal MLE. Under exact invariance, our original local invariance assumption (7) is
+equivalent to the following latent variable model. Under the true parameter θ0 , we sample
+a random group element g ∼ Q, and a random datapoint X̃ ∼ Pθ0 , i.e.,
+X̃ ∼ Pθ0 , g ∼ Q.
+
+(11)
+
+Then, we observe X = g X̃. We repeat this independently over all datapoints to obtain all
+Xi . Since gX =d X under θ0 , this sampling process is exactly equivalent to the original
+model, under θ0 .
+Suppose that instead of fitting the model (11), we attempt to fit the relaxed model
+X̃ ∼ Pθ , g ∼ Q, observing X = g X̃. The only change is that we assume that the invariance
+holds for all parameter values. This model is mis-specified, nonetheless, it may be easier
+to fit computationally. Moreover, its MLE may still retain consistency for the original true
+parameter. Now the maximum marginal likelihood estimator (ignoring terms constant with
+respect to θ) can be written as:
+Z
+
+X
+b
+θmMLE,n = arg max
+log
+pθ (gXi )dQ(g) .
+(12)
+θ
+
+i∈[n]
+
+G
+
+We emphasize that this is not the same as the augmented MLE estimator considered above.
+This estimator has the log(·) terms outside the G-integral, while the augmented one effectively has the log(·) terms inside.
+Summary of methods. Thus we now have several estimators for the original problem:
+MLE, constrained MLE, augmented MLE, invariant MLE, and marginal MLE. We note that
+the former four methods are general in the ERM context, whereas the last one is specific
+10
+
+
+
+Theory for Data Augmentation
+
+to likelihood-based models. See Table 1 for a summary. Can we understand them? In the
+next few sections, we will develop theoretical results to address this question.
+3.3 Beyond ERM
+The above ideas apply to empirical risk minimization. However, there are many popular
+algorithms and methods that are not most naturally expressed as plain ERM. For instance:
+1. Regularized ERM, e.g., Ridge regression and Lasso
+2. Shrinkage estimators, e.g., Stein shrinkage
+3. Nearest neighbors, e.g., k-NN classification and regression
+4. Heuristic algorithms like Forward stepwise (stagewise, streamwise) regression, and
+backward stepwise. While these may be associated with an objective function, there
+may be no known computationally efficient methods for finding global solutions.
+b
+To apply data augmentation for those methods, let us consider a general estimator θ(x)
+based on data x. The simplest idea would be to try to compute the estimator on all the
+data, including the actual and transformed sets. Following the previous logic, if we have
+the invariance X ≈d gX for all g ∈ G, then after observing data x, we should “augment”
+our data with gx, for all g ∈ G. Finally, we should run our method on this data. However, this idea can be impractical, as the entire data can be too large to work with directly.
+Therefore, we will take a more principled approach and work through the logic step by step,
+considering all possibilities. We will eventually recover the above estimator as well.
+Augmentation distribution & General augmentations. We define the augmentation distribution as the set of values
+b
+θ(gx), g ∈ G.
+
+(13)
+
+We think of x = (x1 , . . . , xn ) as the entire dataset, and of g ∈ G being a group element
+summarizing the action on every data point. The augmentation distribution is simply the
+collection of values of the estimator we would get if we were to apply all group transforms
+to the data. It has a special role, because we think of each transform as equally informative,
+and thus each value of the augmentation distribution is an equally valid estimator.
+We can also make (13) a proper probability distribution by taking a random g ∼ Q. Then
+we can construct a final estimator by computing a summary statistic on this distribution,
+for instance, the mean
+b
+θbG (x) = Eg∼Q θ(gx).
+(14)
+It is worth noticing that this summary statistic is exactly invariant, so that θbG (x) =
+b
+θG (gx). Moreover, this estimator can be approximated in the natural way in practice via
+sampling gi ∼ Q independently:
+1
+θbk (x) =
+k
+
+k
+X
+i=1
+
+11
+
+b i x).
+θ(g
+
+(15)
+
+Chen, Dobriban and Lee
+
+Connection to previous approach. To see how this connects to the previous ideas,
+let us consider X = (X1 , . . . , Xn ), and let θb be the ERM with loss function L(θ, ·). Consider
+the group Gn = G × . . . × G acting on X elementwise. Then, the augmentation distribution
+is the set of values
+1 X
+b
+θ(X1 , . . . , Xn ; g1 , . . . , gn ) := arg min
+L(θ, gi Xi ),
+θ n
+i∈[n]
+
+where we range g ∈ G. Then, the final estimator, according to (14), would be
+1
+θbG (X1 , . . . , Xn ) := Eg1 ,...,gn ∼Q arg min
+θ n
+
+X
+
+L(θ, gi Xi ).
+
+i∈[n]
+
+Compared to the previous augmented ERM estimator, the current one changes the order of
+averaging over G and minimization. Specifically, the previous one is arg min Eg Rn (θ; gX),
+while the current one is Eg arg min Rn (θ; gX). If we know that the estimator is obtained
+from minimizing a loss function, then we can average that loss function; but in general we
+can only average the estimator, which justifies the current approach.
+The two approaches above are closer than one may think. We can view the SGD iteration
+P (3) as an online optimization approach to minimize a randomized objective of the form
+i∈[n] L(θ, gi Xi ). This holds exactly if we take one pass over the data in a deterministic
+way, which is known as a type of incremental gradient method. In this case, minimizing the
+augmented ERM has a resemblance to minimizing the mean of the augmentation distribution. However, in practice, people take multiple passes over the data, so this interpretation
+is not exact.
+Augmentation in sequence of estimators. In the above generalization of data augmentation beyond ERM, we assumed only the bare minimum, meaning that the estimator
+b
+θ(x)
+exists. Suppose now that we have slightly more structure, and the estimator is part
+of a sequence of estimators θbn , defined for all n. This is a mild assumption, as in general
+estimators can be embedded into sequences defined for all data sizes. Then we can directly
+augment our dataset X1 , . . . , Xn by adding new datapoints. We can define augmented estimators in several ways. For instance, for any fixed m, we can compute the estimator on
+a uniformly resampled set of size m from the data, applying uniform random transforms:
+θbm (g1 Xi1 , g2 Xi2 , . . . , , gm Xim )
+ik ∼ Unif([n]), gk ∼ Q.
+This implicitly assumes a form of symmetry of the estimator with respect to its arguments.
+There are many variations: e.g., we may insist that m should be a multiple of n, or we can
+include all datapoints. This leads us to a “completely augmented” estimator which includes
+all data and all transforms (assuming |G| is finite)
+θbn|G| ({gj Xi }i∈[n],j∈[|G|] ).
+The advantage of the above reasoning is that it allows us to design augmented/invariant
+learning procedures extremely generally.
+12
+
+Theory for Data Augmentation
+
+3.4 Connections and perspectives
+Our approach has connections to many important and well-known concepts in statistics and
+machine learning. Here we elaborate on those connections, which should help deepen our
+understanding of the problems under study.
+Sufficiency. The notion of sufficiency, due to Ronald A Fisher, is a fundamental concept
+in statistics. Given an observation (datapoint) X from a statistical model X ∼ P, a statistic
+T := T (X) is said to be sufficient for a parameter θ := θ(P) if the conditional distribution
+of X|T = t does not depend on θ for almost any t. Effectively, we can reduce the data X to
+the statistic T without any loss of information about θ. A statistic T is said to be minimal
+sufficient if any other sufficient statistic is a function of it.
+In our setup, assuming the invariance X =d gX, on the invariant subspace ΘG , the
+orbits G · x := {gx|g ∈ G} are minimal sufficient for θ. More generally, the local invariance
+condition (where invariance only holds for a subset of the parameter space) implies that
+the group orbits are a locally sufficient statistic for our model. From the perspective of
+statistical theory, this suggests that we should work with the orbits. However, this can only
+be practical under the following conditions:
+1. We can conveniently compute the orbits, or we can conveniently find representatives;
+2. We can compute the distribution induced by the model on the orbits;
+3. We can compute estimators/learning rules defined on the orbits in a convenient way.
+This is possible in many cases (Lehmann and Casella, 1998; Lehmann and Romano,
+2005), but in complex cases such as deep learning, some or all of these steps can be impractical. For instance, the set of transforms may include translations, rotations, scalings,
+shearings, color shifts, etc. How can we compute the orbit of an image? It appears that an
+explicit description would be hard to find.
+Invariant representations. The notions of invariant representations and features are
+closely connected to our approach. Given an observation x, and a group of transforms G
+acting on X , a feature F : X → Y is invariant if F (x) = F (gx) for all x, g. This definition
+does not require a probabilistic model. By design, convolutional filters are trained to look
+for spatially localized features, such as edges, whose pixel-wise representation is invariant
+to location. In our setup, we have a group acting on the data. In that case, it is again easy
+to see that the orbits G · x := {gx|g ∈ G} are the maximal invariant representations.
+Related work by Mallat, Bölcskei and others (e.g., Mallat, 2012; Bruna and Mallat,
+2013; Wiatowski and Bölcskei, 2018; Anselmi et al., 2019) tries to explain how CNNs extract features, using ideas from harmonic analysis. They show that the features of certain
+models of neural networks (Deep Scattering Networks for Mallat) are increasingly invariant
+with respect to depth.
+Equivariance. The notion of equivariance is also key in statistics (e.g., Lehmann and
+Casella, 1998). A statistical model is called equivariant with respect to a group G acting
+on the sample space if there is an induced group G∗ acting on the parameter space Θ such
+13
+
+Chen, Dobriban and Lee
+
+that for any X ∼ Pθ , and any g ∈ G, there is a g ∗ ∈ G∗ such that gX ∼ Pg∗ θ . Under
+equivariance, it is customary to restrict to equivariant estimators, i.e., those that satisfy
+b
+b
+θ(gx)
+= g ∗ θ(x).
+Under some conditions, there are Uniformly Minimum Risk Equivariant
+(UMRE) estimators.
+Our invariance condition can be viewed as having a “trivial” induced group G∗ , which
+always acts as the identity. Then the equivariant estimators are those for which b
+θ(gx) =
+b
+θ(x). Thus, equivariant estimators are invariant on the orbits.
+The above mentioned UMRE results crucially use that the induced group has large orbits on the parameter space (or in the extreme case, is transitive), so that many parameter
+values are equivalent. In contrast, we have the complete opposite setting, where the orbits
+are singletons. Thus our setting is very different from classical equivariance.
+Exact invariance in some statistical models. The exact invariance in distribution
+X =d gX arises naturally in many familiar statistical settings. In permutation tests, we are
+testing a null hypothesis H0 , under which the distribution of the observed data X1 , . . . , Xn
+is invariant to some permutations. For instance, in two-sample tests against a mean shift
+alternative, we are interested to test the null of no significant difference between two samples. Under the null, the data is invariant to all permutations, and this can be the basis of
+statistical inference (e.g., Lehmann and Romano, 2005). In this case, the group is the symmetric group of all permutations, and this falls under our invariance assumption. However,
+the goals in permutation testing are very different from our ones.
+In time series analysis, we have observations X = (. . . , X1 , X2 , . . . , Xt , . . .) measured
+over time. Here, the classical notion of strict stationarity is the same as invariance under
+shifts, i.e., (. . . , Xt , Xt+1 , . . .) =d (. . . , Xt+1 , Xt+2 , . . .) (e.g., Brockwell and Davis 2009).
+Thus, our invariance in distribution can capture an important existing notion in time series
+analysis. Moreover, data augmentation corresponds to adding all shifts of the time series
+to the data. Hence, it is connected to auto-regressive methods.
+We discuss other connections, e.g., to nonparametric density estimation under symmetry constraints, and U-statistics, in other places of this paper.
+Variance reduction in Monte Carlo. Variance reduction techniques are widely used
+in Monte Carlo methods (Robert and Casella, 2013). Data augmentation can be viewed as
+a type of variance reduction, and is connected to other known techniques. For instance,
+f (gX) can be viewed as control variates for the random variable f (X). The reason is that
+f (gX) has the same marginal distribution, and hence the same mean as f (X). Taking
+averages can be viewed as a suboptimal, but universal way to combine control variates.
+We briefly mention that under a reflection symmetry assumption, data augmentation
+can also be viewed as a special case of the method of antithetic variates.
+Connection to data augmentation. We can summarize the connections to the areas
+mentioned above. Data augmentation is computationally feasible approach to approximately
+learn on the orbits (which are both the minimal sufficient statistics and maximal invariant
+features). The computational efficiency is partly because we never explicitly compute or
+store the orbits and invariant features.
+14
+
+Theory for Data Augmentation
+
+f¯(g · x)
+<latexit sha1_base64="Kj8hRmAWSpOjwNudBori3nxGt4Q=">AAAB+XicbVDLSsNAFL3xWesr6tLN0CJUhJIIosuiG5cV7AOaUCbTSTt0kgkzk2II/QuXblwo4tY/cde/cfpYaOtZHc65l3vuCRLOlHacibW2vrG5tV3YKe7u7R8c2kfHTSVSSWiDCC5kO8CKchbThmaa03YiKY4CTlvB8G7qt0ZUKibiR50l1I9wP2YhI1gbqWvbXoAlCit9j/SERk/nXbvsVJ0Z0CpxF6RcK3kXz5NaVu/a315PkDSisSYcK9VxnUT7OZaaEU7HRS9VNMFkiPu0Y2iMI6r8fJZ8jM6M0kOhMBFErNFM/b2R40ipLArMZIT1QC17U/E/r5Pq8MbPWZykmsZkfihMOdICTWtAPSYp0TwzBBPJTFZEBlhiok1ZRVOCu/zyKmleVt2rqvNg2riFOQpwCiWogAvXUIN7qEMDCIzgBd7g3cqtV+vD+pyPrlmLnRP4A+vrB1HKlcc=</latexit>
+
+f (g · x)
+<latexit sha1_base64="Y+/Z8IFvepQ1yognickhZgKIgh4=">AAAB8nicbVDLSsNAFJ3UV62vqks3Q4tQEUoiiC6LblxWsA9oQplMJu3QSSbM3Igh9C9040IRt36Nu/6N08dCWw9cOJxzL/fe4yeCa7DtiVVYW9/Y3Cpul3Z29/YPyodHbS1TRVmLSiFV1yeaCR6zFnAQrJsoRiJfsI4/up36nUemNJfxA2QJ8yIyiHnIKQEj9cLawKWBBPx01i9X7bo9A14lzoJUGxX3/HnSyJr98rcbSJpGLAYqiNY9x07Ay4kCTgUbl9xUs4TQERmwnqExiZj28tnJY3xqlACHUpmKAc/U3xM5ibTOIt90RgSGetmbiv95vRTCay/ncZICi+l8UZgKDBJP/8cBV4yCyAwhVHFzK6ZDoggFk1LJhOAsv7xK2hd157Ju35s0btAcRXSCKqiGHHSFGugONVELUSTRC3pD7xZYr9aH9TlvLViLmWP0B9bXD3olk7M=</latexit>
+
+f¯(x)
+<latexit sha1_base64="tlYoiAfWFeQPBkcyX7Igg31eirU=">AAAB8HicbVDLSgMxFL3js9ZX1aWb0CJUhDIjiC6LblxWsA/pDCWTZtrQJDMkGXEo/QpduFDErZ/jrn9j+lho61kdzrmXe+4JE860cd2xs7K6tr6xmdvKb+/s7u0XDg4bOk4VoXUS81i1QqwpZ5LWDTOcthJFsQg5bYaDm4nffKRKs1jemyyhgcA9ySJGsLHSgx9ihaLy02mnUHIr7hRomXhzUqoW/bOXcTWrdQrffjcmqaDSEI61bntuYoIhVoYRTkd5P9U0wWSAe7RtqcSC6mA4DTxCJ1bpoii2t2Np0FT9vTHEQutMhHZSYNPXi95E/M9rpya6CoZMJqmhkswORSlHJkaT71GXKUoMzyzBRDGbFZE+VpgY21HeluAtvrxMGucV76Li3tk2rmGGHBxDEcrgwSVU4RZqUAcCAp7hDd4d5bw6H87nbHTFme8cwR84Xz/b/5LD</latexit>
+
+g·x
+<latexit sha1_base64="UaBnOJtnXioHmoiBIdL3TQ9NA0g=">AAAB73icbVDLSgNBEJyNrxhfUY+KDAbBU9gVRI9BLx4TMA9IljA7O0mGzM6sM71iWHL0B7x4UMSrf5Dv8OY3+BNOHgdNLGgoqrrp7gpiwQ247peTWVpeWV3Lruc2Nre2d/K7ezWjEk1ZlSqhdCMghgkuWRU4CNaINSNRIFg96F+P/fo904YreQuDmPkR6Ure4ZSAlRrdFg0V4Id2vuAW3QnwIvFmpFA6HFW+H49G5Xb+sxUqmkRMAhXEmKbnxuCnRAOngg1zrcSwmNA+6bKmpZJEzPjp5N4hPrFKiDtK25KAJ+rviZRExgyiwHZGBHpm3huL/3nNBDqXfsplnACTdLqokwgMCo+fxyHXjIIYWEKo5vZWTHtEEwo2opwNwZt/eZHUzoreedGt2DSu0BRZdICO0Sny0AUqoRtURlVEkUBP6AW9OnfOs/PmvE9bM85sZh/9gfPxA7+8k3o=</latexit>
+
+<latexit sha1_base64="MvD+TtjXB+14Xtf9q8+UlQvNRdg=">AAAB63icbVBNSwMxEJ2tX7V+VT16CS1CRSi7guix6MVjBfsB7VKyabYNTbJLkhXL0r/gRUERr/4hb/03ZtsetPXBwOO9GWbmBTFn2rju1MmtrW9sbuW3Czu7e/sHxcOjpo4SRWiDRDxS7QBrypmkDcMMp+1YUSwCTlvB6DbzW49UaRbJBzOOqS/wQLKQEWwyKaw8nfWKZbfqzoBWibcg5Vqpe/46rY3rveJ3tx+RRFBpCMdadzw3Nn6KlWGE00mhm2gaYzLCA9qxVGJBtZ/Obp2gU6v0URgpW9Kgmfp7IsVC67EIbKfAZqiXvUz8z+skJrz2UybjxFBJ5ovChCMToexx1GeKEsPHlmCimL0VkSFWmBgbT8GG4C2/vEqaF1Xvsure2zRuYI48nEAJKuDBFdTgDurQAAJDeIY3eHeE8+J8OJ/z1pyzmDmGP3C+fgCIWpDg</latexit>
+
+f¯(g̃ · x)
+
+f (x)
+
+<latexit sha1_base64="vcLwbitTdC4gIidF3FfDWq1CcQE=">AAACAHicbVC7SgNBFJ2NrxhfqxYWNkOCEBHCriBaBm0sI5gHZEOYnZ1NhszuLDN3xbCk8Rv8AxsLRWz9DLv8jZNHoYmnOpxzL/fc4yeCa3CcsZVbWV1b38hvFra2d3b37P2DhpapoqxOpZCq5RPNBI9ZHTgI1koUI5EvWNMf3Ez85gNTmsv4HoYJ60SkF/OQUwJG6tpHnk8UDssecBEw3PNoIAE/nnbtklNxpsDLxJ2TUrXonT2Pq8Na1/72AknTiMVABdG67ToJdDKigFPBRgUv1SwhdEB6rG1oTCKmO9n0gRE+MUqAQ2mSyBjwVP29kZFI62Hkm8mIQF8vehPxP6+dQnjVyXicpMBiOjsUpgKDxJM2cMAVoyCGhhCquMmKaZ8oQsF0VjAluIsvL5PGecW9qDh3po1rNEMeHaMiKiMXXaIqukU1VEcUjdALekPv1pP1an1Yn7PRnDXfOUR/YH39AGSWmJs=</latexit>
+
+g̃ · x
+
+x
+<latexit sha1_base64="HY/pM4Dks3HUzyiKqQzv6ll/AHs=">AAAB6HicbZC7SgNBFIbPxltcb1FLm8EgWIVdQbQRgzaWCZgLJEuYnZxNxsxemJkVw5InsLFQxFYfxt5GfBsniYUm/jDw8f/nMOccPxFcacf5snILi0vLK/lVe219Y3OrsL1TV3EqGdZYLGLZ9KlCwSOsaa4FNhOJNPQFNvzB5Thv3KJUPI6u9TBBL6S9iAecUW2s6l2nUHRKzkRkHtwfKJ6/22fJ26dd6RQ+2t2YpSFGmgmqVMt1Eu1lVGrOBI7sdqowoWxAe9gyGNEQlZdNBh2RA+N0SRBL8yJNJu7vjoyGSg1D31SGVPfVbDY2/8taqQ5OvYxHSaoxYtOPglQQHZPx1qTLJTIthgYok9zMSlifSsq0uY1tjuDOrjwP9aOSe1xyqk6xfAFT5WEP9uEQXDiBMlxBBWrAAOEeHuHJurEerGfrZVqas356duGPrNdvRyGQPQ==</latexit>
+
+<latexit sha1_base64="NTaVAWHqKyHn2fd7wi4iddm+AbQ=">AAAB+HicbVDLSsNAFJ34rPXRqEtFBovgqiSC6LLoxmUL9gFNKJPJtB06yYSZG7GGLv0KNy4Uceuq3+HOb/AnnD4W2nrgwuGce7n3niARXIPjfFlLyyura+u5jfzm1vZOwd7dq2uZKspqVAqpmgHRTPCY1YCDYM1EMRIFgjWC/vXYb9wxpbmMb2GQMD8i3Zh3OCVgpLZd8ICLkOGuR0MJ+L5tF52SMwFeJO6MFMuHo+r349Go0rY/vVDSNGIxUEG0brlOAn5GFHAq2DDvpZolhPZJl7UMjUnEtJ9NDh/iE6OEuCOVqRjwRP09kZFI60EUmM6IQE/Pe2PxP6+VQufSz3icpMBiOl3USQUGiccp4JArRkEMDCFUcXMrpj2iCAWTVd6E4M6/vEjqZyX3vORUTRpXaIocOkDH6BS56AKV0Q2qoBqiKEVP6AW9Wg/Ws/VmvU9bl6zZzD76A+vjBza8ln8=</latexit>
+
+f (g̃ · x)
+<latexit sha1_base64="m2eXDpkOUBRQZK8P0UJ5om5eNgY=">AAAB/HicbVDLSsNAFJ3UV62vaJduhhahIpREEF0W3bisYB/QhDKZTNqhkwczN2II9Svcu3GhiFs/xF3/xuljoa0HLhzOuZd77/ESwRVY1sQorK1vbG4Vt0s7u3v7B+bhUVvFqaSsRWMRy65HFBM8Yi3gIFg3kYyEnmAdb3Qz9TsPTCoeR/eQJcwNySDiAacEtNQ3y0HNAS58hgfYoX4M+PG0b1atujUDXiX2glQbFefsedLImn3z2/FjmoYsAiqIUj3bSsDNiQROBRuXnFSxhNARGbCephEJmXLz2fFjfKIVHwex1BUBnqm/J3ISKpWFnu4MCQzVsjcV//N6KQRXbs6jJAUW0fmiIBUYYjxNAvtcMgoi04RQyfWtmA6JJBR0XiUdgr388ippn9fti7p1p9O4RnMU0TGqoBqy0SVqoFvURC1EUYZe0Bt6N56MV+PD+Jy3FozFTBn9gfH1A1JEluI=</latexit>
+
+G·x
+<latexit sha1_base64="Ry5WEYlWod+RyKlodWW5nhZ3oo4=">AAAB73icbZDLSgMxFIYzXut4q7p0EyyCqzIjiG7EogtdVrAXaIeSyaRtaCYZkzNiGfoSblwoIrjySdy7Ed/G9LLQ1h8CH/9/DjnnhIngBjzv25mbX1hcWs6tuKtr6xub+a3tqlGppqxClVC6HhLDBJesAhwEqyeakTgUrBb2LoZ57Y5pw5W8gX7Cgph0JG9zSsBa9csmjRTg+1a+4BW9kfAs+BMonH24p8nbl1tu5T+bkaJpzCRQQYxp+F4CQUY0cCrYwG2mhiWE9kiHNSxKEjMTZKN5B3jfOhFuK22fBDxyf3dkJDamH4e2MibQNdPZ0Pwva6TQPgkyLpMUmKTjj9qpwKDwcHkccc0oiL4FQjW3s2LaJZpQsCdy7RH86ZVnoXpY9I+K3rVXKJ2jsXJoF+2hA+SjY1RCV6iMKogigR7QE3p2bp1H58V5HZfOOZOeHfRHzvsPAPOS8A==</latexit>
+
+Figure 2: A pictorial illustration of orbit averaging. The circle represents the orbit G · x =
+{gx : g ∈ G}, and x, gx, g̃x are three different points on this orbit. Although
+f (x), f (gx), f (g̃x) may be different, after orbit averaging, f¯(x), f¯(gx), f¯(g̃x) all
+take the same value.
+
+4. Theoretical results under exact invariance
+In this section, we present our theoretical results for data augmentation under the assumption of exact invariance: gX =d X for almost all g ∼ Q and x ∼ P.
+4.1 General estimators
+We start with some general results on variance reduction. The following lemma characterizes
+the bias and variance of a general estimator under augmentation:
+Lemma 1 (Invariance lemma) Let f be an arbitrary function s.t. the map (X, g) 7→
+f (gX) is in L2 (P × Q). Assume exact invariance holds for Q-almost all g ∈ G. Let
+f¯(x) := Eg∼Q f (gx) be the “orbit average” of f . Then:
+1. For any x, f¯(x) is the conditional expectation of f (X), conditional on the orbit:
+f¯(x) = E[f (X)|X ∈ Gx], where Gx := {gx : g ∈ G};
+2. Therefore, by the law of total expectation, the mean of f¯(X) and f (X) coincide:
+EX∼P f (X) = EX∼P f¯(X);
+3. By the law of total covariance, the covariance of f (X) can be decomposed as
+CovX∼P f (X) = CovX∼P f¯(X) + EX∼P Covg∼Q f (gX);
+4. Let ϕ be any real-valued convex function. Then EX∼P [ϕ(f (X))] ≥ EX∼P [ϕ(f¯(X))].
+Proof See Appendix A.1.
+Figure 2 gives an illustration of orbit averaging.
+Augmentation leads to variance reduction. This lemma immediately implies that
+data augmentation has favorable variance reduction properties. For general estimators, we
+obtain a direct consequence:
+15
+
+Chen, Dobriban and Lee
+
+Proposition 2 (Augmentation decreases MSE of general estimators) Assume exact invariance holds. Consider an estimator b
+θ(X) of θ0 , and its augmented version θbG (X) =
+b
+Eg∼Q θ(gX). The bias of the augmented estimator is the same as the bias of the original
+estimator, and the covariance matrix decreases in the Loewner order:
+h
+i
+h
+i
+b
+Cov θbG (X)  Cov θ(X)
+.
+Hence, the mean-squared erro (MSE) decreases by augmentation. Moreover, for any convex
+loss function L(θ0 , ·), we have
+b
+EL(θ0 , θ(X))
+≥ EL(θ0 , θbG (X)).
+The estimator θbG (X) is an instance of data augmentation via augmentation distribution
+(14). We see that the augmented estimator is no worse than the original estimator according
+to any convex loss. In some cases, using such a strategy gives an unexpectedly large efficiency
+gain (See Section 5.4 for an example).
+For ERM and MLE, the claim implies that the variance of the augmented loss, loglikelihood, and score functions all decreases. For other estimators based on the augmentation distribution, such as the median, one can show that other measures of error, such
+as the mean absolute error decrease. This shows how data augmentation can be viewed as
+a form of algorithmic regularization. Indeed, the mean behavior of loss/log-likelihood, etc
+are all unchanged, but the variance decreases. This indeed shows that augmentation is a
+natural form of regularization.
+Connection to Rao-Blackwell theorem. Lemma 1 has the same flavor as the celebrated Rao-Blackwell theorem, where a “better” estimator is constructed from a preliminary estimator by conditioning on a sufficient statistic. In fact, the orbit GX is a sufficient
+statistic in many cases and we provide a classical example below to illustrate this point:
+Example 1 (U-statistic as an augmented estimator) Consider data X1 , ..., Xn sampled i.i.d. from some distribution P. We are interested in estimating some functional θ of
+b 1 , ..., Xr ), which takes r ≤ n arguP. Suppose we have a crude preliminary estimator θ(X
+ments. Let G be the group acting on (X1 , ..., Xn ) by randomly selecting r samples without
+replacement. Then the augmented estimator is
+Eg∼Q [ b
+θ(g(X1 , ..., Xn ))] =
+
+1
+
+n
+
+X
+
+r
+
+i1 6=i2 6=···6=ir
+
+b
+θ(Xi1 , ..., Xir ),
+
+where the summation is taken over the set of all unordered subsets {i1 , ..., ir } of r different
+b The statistical
+integers chosen from [n]. This is the U-statistic of order r with kernel θ.
+properties of the U-statistic are better than its non-augmented counterpart, which does not
+use all the data. There are well-known explicit formulas for the variance reduction (e.g.,
+Van der Vaart, 1998).
+Beyond groups. Some of our conclusions hold without requiring a group structure on
+the set of transforms. Instead, it is enough to consider a set (i.e., a semigroup, because
+the identity always makes sense to include) of transforms T : X → X , with a probability
+16
+
+Theory for Data Augmentation
+
+measure Q on them. This is more realistic in some applications, e.g., in deep learning where
+we also consider transforms such as cropping images, which are not invertible. Then we
+still get the variance reduction as in Lemma 1 (specifically, part 2, 3, and 4 still hold).
+Therefore, under appropriate regularity conditions, we also get improved performance for
+augmented ERM, as stated previously, as well as in the next sections. However, some of
+the results and interpretations do not hold in this more general setting. Specifically, the
+orbits are not necessarily defined anymore, and so we cannot view the augmented estimators
+as conditional expectations over orbits. The semigroup extension may allow us to handle
+methods such as subsampling or the bootstrap in a unified framework.
+4.2 ERM / M-estimators
+We now move on to present our results on the behavior of ERM. Recall our setup from
+Section 3.1, namely that
+θ0 ∈ arg min EL(θ, X),
+
+θG ∈ arg min EL̄(θ, X),
+
+θ∈Θ
+
+θbn ∈ arg min
+
+n
+1X
+
+θ∈Θ n
+
+θ∈Θ
+n
+X
+
+1
+θbn,G ∈ arg min
+θ∈Θ n
+
+L(θ, Xi ),
+
+i=1
+
+L̄(θ, Xi ),
+
+i=1
+
+where Θ is some parameter space. Under exact invariance, it is easy to see that EL(θ, X) =
+EL̄(θ, X), and hence there is a one-to-one correspondence between θ0 and θG . To evaluate
+an estimator b
+θ, we may want
+1. small generalization error: we want EL( b
+θ, X) − EL(θ0 , X) to be small;
+2. small parameter estimation error: we want kθb − θ0 k2 to be small.
+Comparing θbn with θbn,G , we will see in Section 4.2.1 that the reduction in generalization
+error can be quantified by averaging the loss function over the orbit, whereas in Section
+4.2.2, it is shown that the reduction in parameter estimation error can be quantified by
+averaging the gradient over the orbit.
+4.2.1 Effect of loss-averaging
+To obtain a bound on the generalization error, we first present what can be deduced quite
+directly from known results on Rademacher complexity. The point of this section is mainly
+pedagogical, i.e., to remind readers of some basic definitions, and to set a baseline for the
+more sophisticated results to follow. We recall the classical approach of decomposing the
+generalization error into terms that can be bounded via concentration and Rademacher
+complexity (Bartlett and Mendelson, 2002; Shalev-Shwartz and Ben-David, 2014):
+1
+EL(θbn , X) − EL(θ0 , X) = EL(θbn , X) −
+n
+
+n
+X
+
+n
+
+L(θbn , Xi ) +
+
+i=1
+
+1X b
+L(θn , Xi ) − EL(θ0 , X).
+n
+i=1
+
+The second half of the RHS above can be bounded as
+n
+
+n
+
+i=1
+
+i=1
+
+1X b
+1X
+L(θn , Xi ) − EL(θ0 , X) ≤
+L(θ0 , Xi ) − EL(θ0 , X),
+n
+n
+17
+
+Chen, Dobriban and Lee
+
+because θbn is a minimizer of the empirical risk. Hence we arrive at
+1
+EL(θbn , X) − EL(θ0 , X) ≤ EL(θbn , X) −
+n
+
+n
+X
+
+n
+
+1X
+L(θ0 , Xi ) − EL(θ0 , X)
+n
+i=1
+i=1
+ X
+
+n
+n
+1
+1X
+L(θ, Xi ) − EL(θ, X) +
+L(θ0 , Xi ) − EL(θ0 , X) .
+≤ sup
+n
+θ∈Θ n
+L(θbn , Xi ) +
+
+i=1
+
+i=1
+
+Using exact invariance, a similar computation gives
+1
+EL(θbn,G , X)−EL(θ0 , X) ≤ sup
+θ∈Θ n
+
+n
+X
+i=1
+
+
+ X
+n
+1
+L̄(θ, Xi )−EL̄(θ, X) +
+L̄(θ0 , Xi )−EL̄(θ0 , X) .
+n
+i=1
+
+P
+To control
+the two terms in the RHS, we need to show that both n−1 ni=1 L(θ, Xi ) and
+P
+n−1 ni=1 L̄(θ, Xi ) concentrate around their means, respectively, uniformly for all θ ∈ Θ.
+Intuitively, as L̄ is an averaged version of L, we would expect that the concentration of L̄
+happens at a faster rate than that of L, hence giving a tighter generalization bound. We
+will make this intuition rigorous in the following theorem:
+Theorem 3 (Rademacher bounds under exact invariance) Assume the loss L(·, ·) ∈
+[0, 1] and assume exact invariance holds. Then with probability at least 1 − δ over the draw
+of X1 , ..., Xn , we have
+r
+2 log 2/δ
+EL(θbn , X) − EL(θ0 , X) ≤ 2Rn (L ◦ Θ) +
+(Classical Rademacher bound)
+n
+r
+2 log 2/δ
+b
+,
+(Implication for data augmentation)
+EL(θn,G , X) − EL(θ0 , X) ≤ 2Rn (L̄ ◦ Θ) +
+n
+where Rn (L ◦ Θ) and Rn (L̄ ◦ Θ) are the Rademacher complexity of the original loss class
+and the augmented loss class, repectively, defined as
+n
+
+n
+
+1X
+εi L(θ, Xi ) ,
+θ∈Θ n
+
+Rn (L ◦ Θ) = E sup
+
+1X
+εi L̄(θ, Xi ) ,
+θ∈Θ n
+
+Rn (L̄ ◦ Θ) = E sup
+
+i=1
+
+i=1
+
+i.i.d.
+
+εi ∼ Rademacher, {εi }ni=1 ⊥
+⊥ {Xi }ni=1 ,
+where the expectation is taken over both {εi }n1 and {Xi }n1 . Moreover, augmentation decreases the Rademacher complexity of the loss class:
+Rn (L̄ ◦ Θ) ≤ Rn (L ◦ Θ).
+Proof This is a special case of Theorem 17. We refer the readers to Appendix B.3 for a
+proof.
+The first generalization bound is a standard result. It can be viewed as an intermediate
+between Theorems 26.3 and Theorem 26.5 of Shalev-Shwartz and Ben-David (2014), part
+3, because it is a high-probability bound (like 26.5) for expected generalization error (like
+18
+
+Theory for Data Augmentation
+
+26.3). The second bound simply applies the first one to data augmentation, and the point
+is that we obtain a sharper result.
+We also note that the decrease of the Rademacher complexity under augmentation fits
+into the “Rademacher calculus” Shalev-Shwartz and Ben-David (2014), along with results
+such as bounds on the Rademacher complexity under convex combinations and Lipschitz
+transforms. The current claim holds by inspection.
+4.2.2 Effect of gradient-averaging
+Just as the averaged loss function concentrates faster around its mean, the averaged gradient
+also concentrates faster. Specifically, an application of Lemma 1 gives
+Cov∇L(θ, X) = Cov∇L̄(θ, X) + EX∼P Covg∼Q ∇L(θ, gX).
+If we assume the loss function is strongly convex w.r.t. the parameter, then this observation, along with a recent result from Foster et al. (2019), gives a bound of the parameter
+estimation error for both θbn and θbn,G :
+Theorem 4 (Data augmentation reduces variance in ERM) Assume the loss L(·, x)
+is λ-strongly convex and assume exact invariance holds. Then
+
+
+4
+2
+b
+Ekθn − θ0 k2 ≤ 2 tr Cov∇L(θ0 , X)
+(Classical ERM bound)
+λ n
+
+
+4
+2
+b
+Ekθn,G − θ0 k2 ≤ 2 tr Cov∇L(θ0 , X) − EX Covg ∇L(θ, gX)
+λ n
+(Implication for data augmentation).
+Proof The proof is simply a matter of checking the conditions required by Theorem 7
+of Foster et al. (2019). It is not hard to see that the strong convexity is preserved under
+averaging, and so the strong convexity constant of θ → L̄(θ, x) is at least as large as that
+of θ → L(θ, x). Then invoking part 3 of Lemma 1 gives the desired result.
+The above result is similar to Theorem 3 in that it gives a sharper upper bound on the
+estimation error.
+4.2.3 Asymptotic results
+The finite sample results in Theorem 3 and 4 do not precisely tell us how much we gain.
+This motivates us to consider an asymptotic regime where we can characterize precisely
+how much we gain by data augmentation.
+We assume the sample space X ⊆ Rd and the parameter space Θ ⊆ Rp . We will consider
+the classical under-parameterized regime, where both d and p are fixed and n → ∞. The
+over-parameterized regime will be handled in Section 7. Under weak regularity conditions, it
+is a well-known result that θbn is asymptotically normal with covariance given by the inverse
+Fisher information (see, e.g, Van der Vaart 1998). We will see that a similar asymptotic
+normality result holds for θbn,G and its asymptotic covariance is explicitly computable. This
+requires some standard assumptions, and we state them for completeness below.
+19
+
+Chen, Dobriban and Lee
+
+Assumption A (Regularity of the population risk minimizer) The minimizer θ0 of
+the population risk is well separated: for any ε > 0, we have
+sup
+θ:kθ−θ0 k≥ε
+
+EL(θ, X) > EL(θ0 , X).
+
+Assumption B (Regularity of the loss function) For the loss function L(θ, x), we assume that
+1. uniform weak law of large number holds:
+n
+
+1X
+p
+L(θ, Xi ) − EL(θ, X)| → 0;
+n
+θ∈Θ
+
+sup |
+
+i=1
+
+2. for each θ ∈ Θ, the map x 7→ L(θ, x) is measurable;
+3. the map θ 7→ L(θ, x) is differentiable at θ0 for almost every x;
+4. there exists a L2 (P) function L̇ s.t. for almost every x and for every θ1 , θ2 in a
+neighborhood of θ0 , we have
+|L(θ1 , x) − L(θ2 , x)| ≤ L̇(x)kθ1 − θ2 k;
+5. the map θ 7→ EL(θ, X) admits a second-order Taylor expansion at θ0 with non-singular
+second derivative matrix Vθ0 .
+Note that the two assumptions above can be defined in a similar fashion for the pair
+(θG , L̄). The lemma below says that such a re-definition is unnecessary under exact invariance.
+Lemma 5 (Regularity of the augmented loss) For each θ ∈ Θ, assume the map (X, g) 7→
+L(θ, gX) is in L1 (P × Q). Assume exact invariance holds. If the pair (θ0 , L) satisfies Assumption A and B, then the two assumptions also hold for the pair (θG , L̄).
+Proof See Appendix A.2.
+By the above lemma, we conclude that θbn,G is also asymptotically normal, and a covariance calculation gives the following theorem. We present the classical results for Mestimators in parallel for clarity.
+Theorem 6 (Asymptotic normality for the augmented estimator) Assume Θ is open
+and the conditions in Lemma 5 hold. Then θbn and θbn,G admit the following Bahadur representation:
+√
+√
+
+n
+
+X
+1
+n(θbn − θ0 ) = √ Vθ−1
+∇L(θ0 , Xi ) + op (1)
+n 0
+
+1
+n(θbn,G − θ0 ) = √ Vθ−1
+n 0
+
+i=1
+n
+X
+i=1
+
+∇L̄(θ0 , Xi ) + op (1).
+20
+
+(Classical representation for M-estimators)
+(Representation for augmented M-estimators)
+
+Theory for Data Augmentation
+
+EX⇠P Covg⇠Q (rL(✓0 , gX))
+<latexit sha1_base64="YAYkaSP2Q/AmyVgVnwRGklw7DXU=">AAACQHicbVBNaxNRFH3T+lFTP2JdunlYhRQkzBREl8UiuHCRgmkCmTDceblJHn0fw3t3gmGYv9VdN/oP3Ll240IRF7pw5ZukBW098OBwzrnc+05eKOkpjj9FG5vXrt+4uXWrtX37zt177fs7x96WTmBfWGXdMAePShrskySFw8Ih6FzhID85bPzBAp2X1rylZYFjDTMjp1IABSlrD1INNM/z6lWdVcPUS80vlF5dp4TvyFinQVWHdhEisyZykTiq605qIFfA33RSmiNBFj/ls+HeXtbejbvxCvwqSc7J7sHjn6cfFtu/eln7YzqxotRoSCjwfpTEBY0rcCSFwrqVlh4LECcww1GgBjT6cbUqoOZPgjLhU+vCM8RX6t8TFWjvlzoPyeZ0f9lrxP95o5KmL8aVNEVJaMR60bRUnCxv2uQT6VCQWgYCwslwKxdzcCAodN4KJSSXv3yVHO93k2fd+Ci08ZKtscUeskeswxL2nB2w16zH+kywM/aZfWXfovfRl+h79GMd3YjOZx6wfxD9/gM6LrWb</latexit>
+
+Covg⇠Q (rL(✓0 , gx0 ))
+<latexit sha1_base64="yMeRC7FJjFNc4NFu8mlah3GdXS4=">AAACJXicbVBNSxxBEO0xmphV4yY55tJoQlaQZSYQkoMHiRcPOSi4KuwsQ01v7W5jfwzdNYvLMH/GS/5B/kAuueQQkUBO+RV6tnfXQ6J5UPB4r4qqenmhpKc4/h0tPFpcevxk+WljZXXt2Xrz+Ytjb0snsCOssu40B49KGuyQJIWnhUPQucKT/Gxv6p+M0XlpzRFNCuxpGBo5kAIoSFlzJyU8J2OdBlXt2XGdVcPUS81TDTTK8+qwrlupgVwB/9xKaYQEWbzNh+dvt7ay5mbcjmfgD0lyRzZ3X19//TZeuTnImpdp34pSoyGhwPtuEhfUq8CRFArrRlp6LECcwRC7gRrQ6HvV7MuavwlKnw+sC2WIz9S/JyrQ3k90Hjqnt/v73lT8n9ctafCxV0lTlIRGzBcNSsXJ8mlkvC8dClKTQEA4GW7lYgQOBIVgGyGE5P7LD8nxu3byvh0fhjQ+sTmW2Su2wVosYR/YLttnB6zDBLtg39lPdhl9iX5EV9GveetCdDfzkv2D6M8tQpmpZw==</latexit>
+
+rL(✓0 , g · x0 )
+
+<latexit sha1_base64="geG1rhtkwI5lLWT2uL4Cau3X7dY=">AAACJHicbVA9axtBEN1zEseWE1tJSjdLbIMMQdwZQgJpTNykSGFDZBt04phbjaTF+3HszgmJ435MmvyE/AEXblLkgxRp/C+cOivJRfzxYODx3gwz8/JCSU9x/CdaevDw0fLjldXG2pOn6xvNZ8+PvS2dwI6wyrrTHDwqabBDkhSeFg5B5wpP8rODmX8yRuelNZ9oWmBPw9DIgRRAQcqa71LCCRnrNKjqwI7rrBqmXmqeaqBRnldHdd1KDeQK+MdWSiMkyOJXfDjZ3c2aW3E7noPfJck12drfvvp6Pl77e5g1f6Z9K0qNhoQC77tJXFCvAkdSKKwbaemxAHEGQ+wGakCj71XzJ2u+E5Q+H1gXyhCfq/9PVKC9n+o8dM5O97e9mXif1y1p8LZXSVOUhEYsFg1KxcnyWWK8Lx0KUtNAQDgZbuViBA4EhVwbIYTk9st3yfFeO3ndjo9CGu/ZAitsk71kLZawN2yffWCHrMME+8wu2Hf2I/oSfYt+Rb8XrUvR9cwLdgPR5T/MB6k2</latexit>
+
+Covg⇠Q (rL(✓0 , gx))
+
+<latexit sha1_base64="O8q0XAT7i8DadQ+qfodLmOnjTbo=">AAACBnicbVA9SwNBEN3zM8avqKUIS0SMKOFOEC2DNhYWEUwi5EKY22ySJXt7x+6cGEIqG3+Af8LGQhFbf4Nd/o2bxEITHww83pthZl4QS2HQdQfOzOzc/MJiaim9vLK6tp7Z2CybKNGMl1gkI30bgOFSKF5CgZLfxppDGEheCToXQ79yx7URkbrBbsxrIbSUaAoGaKV6ZsdXEEigVzkf2xyh7h7Rls8aEdL7/YN6ZtfNuyPQaeL9kN1C1j98GhS6xXrmy29ELAm5QibBmKrnxljrgUbBJO+n/cTwGFgHWrxqqYKQm1pv9Eaf7lmlQZuRtqWQjtTfEz0IjemGge0MAdtm0huK/3nVBJtntZ5QcYJcsfGiZiIpRnSYCW0IzRnKriXAtLC3UtYGDQxtcmkbgjf58jQpH+e9k7x7bdM4J2OkyDbJkhzxyCkpkEtSJCXCyAN5Jq/kzXl0Xpx352PcOuP8zGyRP3A+vwHciJps</latexit>
+
+rL(✓0 , g · x)
+<latexit sha1_base64="POwFQIj9Ma+BCxitvDAVoROI2ig=">AAACBXicbVA9SwNBEN2LXzF+RS21WCJCRAl3gmgZtLGwiGBiIBfC3GaTLO7tHbtzYghpbPwD/ggbC0Vs/Q92+TduPgpNfDDweG+GmXlBLIVB1x04qbn5hcWl9HJmZXVtfSO7uVUxUaIZL7NIRroagOFSKF5GgZJXY80hDCS/De4uhv7tPddGROoGuzGvh9BWoiUYoJUa2V1fQSCBXuV97HCEhntE2z5rRkgfDhrZPbfgjkBniTche8Wcf/g8KHZLjey334xYEnKFTIIxNc+Nsd4DjYJJ3s/4ieExsDto85qlCkJu6r3RF326b5UmbUXalkI6Un9P9CA0phsGtjME7Jhpbyj+59USbJ3Ve0LFCXLFxotaiaQY0WEktCk0Zyi7lgDTwt5KWQc0MLTBZWwI3vTLs6RyXPBOCu61TeOcjJEmOyRH8sQjp6RILkmJlAkjj+SFvJF358l5dT6cz3FrypnMbJM/cL5+AHLMmjs=</latexit>
+
+<latexit sha1_base64="oBRyU0Z+WUdMGalHrVzZVeBqrLk=">AAACAHicbVA9SwNBEN3zM8avqIWFzZIgRpRwJ4iWQRsLiwgmEXIhzG02Zsne3rE7J4aQxt/gP7CxUMTWn2GXf+Pmo9DEBwOP92aYmRfEUhh03YEzN7+wuLScWkmvrq1vbGa2tismSjTjZRbJSN8FYLgUipdRoOR3seYQBpJXg87l0K8+cG1EpG6xG/N6CPdKtAQDtFIjs+srCCTQ67yPbY7QcI/p48FhupHJuQV3BDpLvAnJFbP+0fOg2C01Mt9+M2JJyBUyCcbUPDfGeg80CiZ5P+0nhsfAOnDPa5YqCLmp90YP9Om+VZq0FWlbCulI/T3Rg9CYbhjYzhCwbaa9ofifV0uwdV7vCRUnyBUbL2olkmJEh2nQptCcoexaAkwLeytlbdDA0GY2DMGbfnmWVE4K3mnBvbFpXJAxUmSPZEmeeOSMFMkVKZEyYaRPXsgbeXeenFfnw/kct845k5kd8gfO1w/5+Jet</latexit>
+
+0
+
+rL(✓0 , x )
+
+x0
+
+rL(✓0 , x)
+<latexit sha1_base64="TMVYoOtPwyBNclEvmcZ6e8IIPhw=">AAAB/nicbVDJSgNBEO2JW4xbVDx5aSJCRAkzgugx6MWDhwhmgUwINZ2OadLTM3TXiGEI+BH+gBcPinj1O7zlb+wsB7cHBY/3qqiqF8RSGHTdkZOZm19YXMou51ZW19Y38ptbNRMlmvEqi2SkGwEYLoXiVRQoeSPWHMJA8nrQvxj79TuujYjUDQ5i3grhVomuYIBWaud3fAWBBHpV9LHHEdruEb0/aOf33JI7Af1LvBnZKxf8w8dReVBp5z/9TsSSkCtkEoxpem6MrRQ0Cib5MOcnhsfA+nDLm5YqCLlppZPzh3TfKh3ajbQthXSifp9IITRmEAa2MwTsmd/eWPzPaybYPWulQsUJcsWmi7qJpBjRcRa0IzRnKAeWANPC3kpZDzQwtInlbAje75f/ktpxyTspudc2jXMyRZbskgIpEo+ckjK5JBVSJYyk5Im8kFfnwXl23pz3aWvGmc1skx9wPr4AV3+XaA==</latexit>
+
+<latexit sha1_base64="/9NBvommw6UnFMtPrueh27kUW1A=">AAAB6XicbZDLSgMxFIbPeK3jrerSTbCIrsqMILoRi25cVrEXaIeSSTNtaCYTkoxYhr6BGxeKuO3DuHcjvo3pZaGtPwQ+/v8ccs4JJWfaeN63s7C4tLyymltz1zc2t7bzO7tVnaSK0ApJeKLqIdaUM0ErhhlO61JRHIec1sLe9SivPVClWSLuTV/SIMYdwSJGsLHW3eNRK1/wit5YaB78KRQuP9wLOfxyy638Z7OdkDSmwhCOtW74njRBhpVhhNOB20w1lZj0cIc2LAocUx1k40kH6NA6bRQlyj5h0Nj93ZHhWOt+HNrKGJuuns1G5n9ZIzXReZAxIVNDBZl8FKUcmQSN1kZtpigxvG8BE8XsrIh0scLE2OO49gj+7MrzUD0p+qdF79YrlK5gohzswwEcgw9nUIIbKEMFCETwBC/w6vScZ+fNeZ+ULjjTnj34I2f4A6eZkG4=</latexit>
+
+<latexit sha1_base64="aAeWjlpPvUIuvBSshHTvGJ98bEc=">AAAB8HicbVDLSgNBEJz1GeMr6lGRwSB6CruC6DHoxWMC5iHJEmZnJ8mQmdllplcMS45+gRcPinj1C/Id3vwGf8LJ46CJBQ1FVTfdXUEsuAHX/XIWFpeWV1Yza9n1jc2t7dzObtVEiaasQiMR6XpADBNcsQpwEKwea0ZkIFgt6F2P/No904ZH6hb6MfMl6Sje5pSAle46TRpGgB9OWrm8W3DHwPPEm5J88WBY/n48HJZauc9mGNFEMgVUEGManhuDnxINnAo2yDYTw2JCe6TDGpYqIpnx0/HBA3xslRC3I21LAR6rvydSIo3py8B2SgJdM+uNxP+8RgLtSz/lKk6AKTpZ1E4EhgiPvsch14yC6FtCqOb2Vky7RBMKNqOsDcGbfXmeVM8K3nnBLds0rtAEGbSPjtAp8tAFKqIbVEIVRJFET+gFvTraeXbenPdJ64IzndlDf+B8/AAi3pOr</latexit>
+
+g·x
+
+0
+
+x
+<latexit sha1_base64="HY/pM4Dks3HUzyiKqQzv6ll/AHs=">AAAB6HicbZC7SgNBFIbPxltcb1FLm8EgWIVdQbQRgzaWCZgLJEuYnZxNxsxemJkVw5InsLFQxFYfxt5GfBsniYUm/jDw8f/nMOccPxFcacf5snILi0vLK/lVe219Y3OrsL1TV3EqGdZYLGLZ9KlCwSOsaa4FNhOJNPQFNvzB5Thv3KJUPI6u9TBBL6S9iAecUW2s6l2nUHRKzkRkHtwfKJ6/22fJ26dd6RQ+2t2YpSFGmgmqVMt1Eu1lVGrOBI7sdqowoWxAe9gyGNEQlZdNBh2RA+N0SRBL8yJNJu7vjoyGSg1D31SGVPfVbDY2/8taqQ5OvYxHSaoxYtOPglQQHZPx1qTLJTIthgYok9zMSlifSsq0uY1tjuDOrjwP9aOSe1xyqk6xfAFT5WEP9uEQXDiBMlxBBWrAAOEeHuHJurEerGfrZVqas356duGPrNdvRyGQPQ==</latexit>
+
+g·x
+<latexit sha1_base64="UaBnOJtnXioHmoiBIdL3TQ9NA0g=">AAAB73icbVDLSgNBEJyNrxhfUY+KDAbBU9gVRI9BLx4TMA9IljA7O0mGzM6sM71iWHL0B7x4UMSrf5Dv8OY3+BNOHgdNLGgoqrrp7gpiwQ247peTWVpeWV3Lruc2Nre2d/K7ezWjEk1ZlSqhdCMghgkuWRU4CNaINSNRIFg96F+P/fo904YreQuDmPkR6Ure4ZSAlRrdFg0V4Id2vuAW3QnwIvFmpFA6HFW+H49G5Xb+sxUqmkRMAhXEmKbnxuCnRAOngg1zrcSwmNA+6bKmpZJEzPjp5N4hPrFKiDtK25KAJ+rviZRExgyiwHZGBHpm3huL/3nNBDqXfsplnACTdLqokwgMCo+fxyHXjIIYWEKo5vZWTHtEEwo2opwNwZt/eZHUzoreedGt2DSu0BRZdICO0Sny0AUqoRtURlVEkUBP6AW9OnfOs/PmvE9bM85sZh/9gfPxA7+8k3o=</latexit>
+
+Figure 3: A pictorial illustration on computing the average covariance EX Covg ∇L(θ0 , gX)
+of the gradient of the loss over an orbit.
+
+Therefore, both θbn and θbn,G are asymptotically normal:
+√
+
+√
+
+n(θbn − θ0 ) ⇒ N (0, Σ0 ),
+
+n(θbn,G − θ0 ) ⇒ N (0, ΣG ),
+
+where the covariance is given by
+Σ0 = Vθ−1
+EX [∇L(θ0 , X)∇L(θ0 , X)> ]Vθ−1
+0
+0
+
+(Classical covariance)
+
+ΣG = Σ0 − Vθ−1
+EX [Covg ∇L(θ0 , gX)]Vθ−1
+.
+0
+0
+
+(Augmented covariance)
+
+tr(Σ0 )
+As a consequence, the asymptotic relative efficiency of θbn,G compared to θbn is RE = tr(Σ
+≥
+G)
+1.
+
+Proof See Appendix A.3.
+Interpretation. The reduction in covariance is governed by EX Covg ∇L(θ0 , gX). This
+is the average covariance of the gradient ∇L along the orbits Gx. If the gradient varies a
+lot along the orbits, then augmentation gains a lot of efficiency. This makes sense, because
+this procedure effectively denoises the gradient, making it more stable. See Figure 3 for an
+illustration.
+Alternatively, the covariance of the augmented estimator can also be written as Vθ−1
+0
+CovX Eg ∇L(θ0 , gX) Vθ−1
+.
+The
+inner
+term
+is
+the
+covariance
+matrix
+of
+the
+orbit-average
+gra0
+dient, and similar to above, augmentation effectively denoises and reduces it.
+Understanding the Bahadur representation. It is worthwhile to understand the
+form of the Bahadur representations. For the ERM, we sum the terms f (Xi ) := ∇L(θ0 , Xi ),
+while for the augmented ERM, we sum the terms f¯(Xi ) = ∇L̄(θ0 , gXi ). Thus, even in the
+Bahadur representation, we can see clearly that the effect of data augmentation is to average the gradients over the orbits.
+
+21
+
+Chen, Dobriban and Lee
+
+Statistical inference. It follows automatically from our theory that statistical inference for θ can be performed in the usual way. Specifically, assuming that θ 7→ L(θ, x) is
+twice differentiable at θ0 on a set of full measure, we will have that Vθ0 = E∇2 Lθ0 (X). We
+can then compute the plug-in estimator of Vθ0 :
+1
+Vbθ0 =
+n
+
+n
+X
+i=1
+
+∇2 L(θbn,G , Xi ).
+
+Let us also define the plug-in estimator of the gradient covariance:
+1
+Ic̄
+θ0 =
+n
+
+n
+X
+i=1
+
+∇L(θbn,G , Xi )∇L(θbn,G , Xi )> .
+
+We can then define the plug-in covariance estimator
+b G = Vb −1 Ic̄
+b −1
+Σ
+θ0 θ0 Vθ0 .
+This leads to the following corollary, whose proof is quite direct and we omit it for brevity.
+Corollary 7 (Statistical inference with the augmented estimator) Assume the same
+conditions as Theorem 6. Assume in addition that θ → L(θ, x) is twice differentiable
+at θ0 on a set of full x-measure, and that each entry of the Hessian ∇2 L(θ0 , ·) is in
+L1 (P). Assume that for both of the functions Fi , i = 1, 2 F1 (θ, x) = ∇2 L(θ, x) and
+F1 (θ, x) = ∇L(θ, x)∇L(θ, x)> there exist L1 (P) functions Li such that for every θ1 , θ2 in a
+neighborhood of θ0 , we have
+kFi (θ1 , x) − Fi (θ2 , x)k ≤ Li (x)kθ1 − θ2 k.
+Then we have:
+p
+bG →
+Σ
+ΣG .
+
+Therefore, we have the asymptotic normality
+√
+
+−1/2 b
+(θn,G − θ0 ) ⇒ N
+
+b
+nΣ
+G
+
+
+
+
+0, Ip .
+
+Hence, statistical inference for θ0 can be performed in the usual way, constructing normal
+confidence intervals and tests based on the asymptotic pivot.
+ERM in high dimensions. We conclude this subsection by noting that asymptotic
+covariance formula can hold in some high-dimensional ERM problems, where the dimension
+of the parameter space can diverge as n → ∞. Specifically, if we assume θ0 is sparse
+and we are able to perform variable selection in a consistent way, then the original (highdimensional) problem can be reduced to a low-dimensional one, and the same asymptotic
+variance formulas hold (see, e.g., Wainwright 2019). Then augmentation will lead to benefits
+as above.
+22
+
+Theory for Data Augmentation
+
+4.2.4 Implications for MLE
+Now we consider the special case of maximum likelihood estimation in a model {Pθ : θ ∈ Θ}.
+Recall the setup from Section 3.2:
+1
+θbMLE ∈ arg max
+θ∈Θ n
+
+n
+X
+
+1
+θbaMLE ∈ arg max
+θ∈Θ n
+
+`θ (Xi ),
+
+i=1
+
+n
+X
+
+`¯θ (Xi ),
+
+i=1
+
+where `¯θ (x) = Eg∼Q `θ (gx) is the averaged version of the log-likelihood.
+In the context of ERM, we have L(θ, x) = −`θ (x). Hence, if the conditions in Theorem
+6 hold, we have
+√
+n(θbMLE − θ0 ) ⇒ N (0, Iθ−1
+)
+ 0 
+
+
+√
+−1
+−1
+b
+n(θaMLE − θ0 ) ⇒ N 0, Iθ0 Iθ0 − Eθ0 Covg ∇`θ0 (gX) Iθ0 ,
+where Iθ0 = Eθ0 ∇`θ0 ∇`>
+θ0 is the Fisher information at θ0 .
+Invariance on a submanifold. Note that the gain in efficiency is again determined
+by the term
+Eθ0 Covg ∇`θ0 (gX).
+We will see that the magnitude of this quantity is closely related to the geometric structure of
+the parameter space. To be clear, let us recall the invariant subspace ΘG defined in Equation
+(8). If this subspace is “small”, we expect augmentation to be very efficient. Continuing to
+assume that the whole parameter set Θ is an open subset of Rp , we additionally suppose
+that we can identify ΘG ⊆ Θ with a smooth submanifold of Rp . If we assume G acts linearly
+on X , then every g ∈ G can be represented as a matrix, and thus the Jacobian of x 7→ gx is
+simply the matrix representation of g. As a result, for every θ ∈ ΘG , Equation (7) becomes
+pθ (x) = pθ (g −1 x)/| det(g)|.
+As a result, we have
+`θ (gx) + log | det(g)| = `θ (x), ∀θ ∈ ΘG , g ∈ G.
+
+(16)
+
+It is temping to differentiate both sides at θ0 and obtain an identity. However, it is important
+to note that in general, for the score function,
+∇`θ0 (gx) 6= ∇`θ0 (x).
+To be clear, this is because the differentiation operation at θ0 may not be valid. Indeed,
+Equation (16) does not necessarily hold in an open neighborhood of θ0 . If it holds in an
+open neighborhood, we can differentiate and get the identity for the score. However, it
+may only hold in a lower dimensional submanifold locally around θ0 , in which case the
+desired equation for the score function only holds in the tangential direction at θ0 . Figure 4
+provides an illustration of this intuition, and this intuition is made rigorous by the following
+proposition:
+23
+
+Chen, Dobriban and Lee
+
+⇥
+<latexit sha1_base64="/baboUPUtyk2cTiQUnX7L7gX7Ts=">AAAB7XicbZDLSgMxFIYz9VbHW9Wlm2ARXJUZQXQjFt24rNAbtEPJpJk2NpMMyRmhDH0HNy4UcePCR3HvRnwb08tCW38IfPz/OeScEyaCG/C8bye3tLyyupZfdzc2t7Z3Crt7daNSTVmNKqF0MySGCS5ZDTgI1kw0I3EoWCMcXI/zxj3ThitZhWHCgpj0JI84JWCtervaZ0A6haJX8ibCi+DPoHj54V4kb19upVP4bHcVTWMmgQpiTMv3EggyooFTwUZuOzUsIXRAeqxlUZKYmSCbTDvCR9bp4khp+yTgifu7IyOxMcM4tJUxgb6Zz8bmf1krheg8yLhMUmCSTj+KUoFB4fHquMs1oyCGFgjV3M6KaZ9oQsEeyLVH8OdXXoT6Sck/LXm3XrF8habKowN0iI6Rj85QGd2gCqohiu7QA3pCz45yHp0X53VamnNmPfvoj5z3H9PQkkk=</latexit>
+
+⇥G
+<latexit sha1_base64="FXcvXuKHx2Fewf59vejgq8yDxAc=">AAAB73icbVDLSgNBEOyNrxhfUcGLl8UgeAq7gugxxIMeE8gLkiXMTmaTIbOz60yvEJb8hBcPinj14F/4Bd68+C1OHgdNLGgoqrrp7vJjwTU6zpeVWVldW9/Ibua2tnd29/L7Bw0dJYqyOo1EpFo+0UxwyerIUbBWrBgJfcGa/vB64jfvmdI8kjUcxcwLSV/ygFOCRmp1agOGpHvTzRecojOFvUzcOSmUjqrf/L38UenmPzu9iCYhk0gF0brtOjF6KVHIqWDjXCfRLCZ0SPqsbagkIdNeOr13bJ8apWcHkTIl0Z6qvydSEmo9Cn3TGRIc6EVvIv7ntRMMrryUyzhBJulsUZAIGyN78rzd44pRFCNDCFXc3GrTAVGEookoZ0JwF19eJo3zontRdKomjTLMkIVjOIEzcOESSnALFagDBQEP8ATP1p31aL1Yr7PWjDWfOYQ/sN5+AJ15k2M=</latexit>
+
+PG r`✓0 (x)
+<latexit sha1_base64="Nd+TcmXvKiwo6oQD7Wzf+gQirXo=">AAACBXicbVDLSgNBEJz1bXxFPephUARFCLuC6DHoQY8RjArZsPROOmZwdnaZ6RXDkosXf8CP8OJBEa/+gzf/xkniwVdBQ1HVTXdXnClpyfc/vJHRsfGJyanp0szs3PxCeXHpzKa5EVgXqUrNRQwWldRYJ0kKLzKDkMQKz+Orw75/fo3GylSfUjfDZgKXWralAHJSVF6tRUc81BArCFGpqAipgwSR39u82YrK637FH4D/JcEXWa+uhdv3H9VuLSq/h61U5AlqEgqsbQR+Rs0CDEmhsFcKc4sZiCu4xIajGhK0zWLwRY9vOKXF26lxpYkP1O8TBSTWdpPYdSZAHfvb64v/eY2c2vvNQuosJ9RiuKidK04p70fCW9KgINV1BISR7lYuOmBAkAuu5EIIfr/8l5ztVILdin/i0jhgQ0yxFbbGNlnA9liVHbMaqzPBbtkDe2LP3p336L14r8PWEe9rZpn9gPf2CZ5Bmvw=</latexit>
+
+r`✓0 (x)
+<latexit sha1_base64="NVV9yQeNwK1OGq1g2EDwfNul+xA=">AAACAXicbVBNS8NAEN34bf2qehG8hBZBEUoiiB6LXjwqWC00JUy203bpZhN2J2IJ9eJf8Cd48aCIV/+FN/+N29aDWh8MPN6bYWZelEphyPM+nanpmdm5+YXFwtLyyupacX3jyiSZ5ljjiUx0PQKDUiiskSCJ9VQjxJHE66h3OvSvb1AbkahL6qfYjKGjRFtwICuFxa1AQSQhQCnDPKAuEoTeYPd2LyyWvYo3gjtJ/G9SrpaC/YfPav88LH4ErYRnMSriEoxp+F5KzRw0CS5xUAgygynwHnSwYamCGE0zH30wcHes0nLbibalyB2pPydyiI3px5HtjIG65q83FP/zGhm1j5u5UGlGqPh4UTuTLiXuMA63JTRykn1LgGthb3V5FzRwsqEVbAj+35cnydVBxT+seBc2jRM2xgLbZiW2y3x2xKrsjJ2zGuPsjj2yZ/bi3DtPzqvzNm6dcr5nNtkvOO9fR/aZvg==</latexit>
+
+✓0
+<latexit sha1_base64="0VrxKqAoUwkTo6ooPObPUVaDBHM=">AAAB73icbVDLSgNBEJyNrxhfUcGLl8EgeAq7gugxxIvHBMwDkhBmJ73JkNnZdaZXCEt+wosHRbx68C/8Am9e/BYnj4MmFjQUVd10d/mxFAZd98vJrKyurW9kN3Nb2zu7e/n9g7qJEs2hxiMZ6abPDEihoIYCJTRjDSz0JTT84fXEb9yDNiJStziKoROyvhKB4Ayt1GzjAJB13W6+4BbdKegy8eakUDqqfov38kelm/9s9yKehKCQS2ZMy3Nj7KRMo+ASxrl2YiBmfMj60LJUsRBMJ53eO6anVunRINK2FNKp+nsiZaExo9C3nSHDgVn0JuJ/XivB4KqTChUnCIrPFgWJpBjRyfO0JzRwlCNLGNfC3kr5gGnG0UaUsyF4iy8vk/p50bsoulWbRpnMkCXH5IScEY9ckhK5IRVSI5xI8kCeyLNz5zw6L87rrDXjzGcOyR84bz+r3ZNs</latexit>
+
+Figure 4: A pictorial illustration of projection onto local tangent space of ΘG at the point
+θ0 .
+
+Proposition 8 (MLE under invariance on a submanifold) Let the conditions of Theorem 6 hold with L(θ, x) = −`θ (x). Assume G acts linearly on the sample space X . Let
+PG be the orthogonal projection operator onto the tangent space of the manifold ΘG at the
+point θ0 , and let PG⊥ = Id − PG . Then we can decompose
+∇`θ0 (gx) = PG ∇`θ0 (gx) + PG⊥ ∇`θ0 (gx),
+and the tangential part is invariant:
+PG ∇`θ0 (gx) = PG ∇`θ0 (x), ∀g ∈ G.
+Moreover, we have that the covariance of the gradient is the covariance of the projection
+“out” of the tangent space:
+Eθ0 Covg (∇`θ0 (gX)) = Eθ0 Covg (PG⊥ ∇`θ0 (gX)).
+Proof See Appendix A.4.
+The above proposition sends a clear message on the magnitude of Eθ0 Covg (∇`θ0 (gX)):
+The larger the tangential part is, the less we gain from augmentation.
+At one extreme, if ΘG contains an open neighborhood of θ0 , then PG = Id, so that
+Eθ0 CovG (∇`θ0 (gX)) = 0. This means augmentation does not gain us anything. At another extreme, if ΘG is a singleton, then PG⊥ = Id, and so augmentation leads to a great
+variance reduction.
+Orbit averaging and tangential projection. We now have two operators that
+“capture the invariance”. The first one is the orbit averaging operator, defined by EG :
+∇`θ0 (x) 7→ Eg∼Q ∇`θ0 (gx). The second one is the tangential projection operator PG , which
+projects ∇`θ0 (x) to the tangent space of the manifold ΘG at the point θ0 . How does
+EG relate to PG ? In the current notation, recall that the inner term of the asymptotic
+24
+
+Theory for Data Augmentation
+
+covariance ΣG can be written as Covθ0 EG ∇`θ0 . Proposition 8 allows us to do the following
+decomposition:
+Covθ0 EG ∇`θ0 = Covθ0 PG ∇`θ0 (X) + Covθ0 EG PG⊥ ∇`θ0 ,
+
+(17)
+
+which relates the two operators. An interesting question now is whether the two operators
+are equivalent. A careful analysis shows that this is not true in general.
+Let us consider a special case, where θ = (θ1 , θ2 ), and the invariant set ΘG is characterized by θ2 = 0. In this special case, the tangent space is exactly {(θ1 , θ2 ) : θ2 = 0}, and so
+
+
+
+
+∇1 `θ0
+0
+PG ∇`θ0 =
+,
+PG⊥ ∇`θ0 =
+,
+(18)
+0
+∇2 `θ0
+
+where ∇1 and ∇2 denote the gradient w.r.t. the first and the second component of the
+parameter, respectively. Now, since EG is a conditional expectation (see Lemma 1), we
+know EG ∇`θ and ∇`θ − EG ∇`θ are uncorrelated. Hence, if EG = PG , then ∇1 `θ0 and ∇2 `θ0
+are uncorrelated. If we write the Fisher information in a block matrix:
+
+
+ 
+>
+∇1 `θ0 · ∇1 `>
+θ0 ∇1 `θ0 · ∇2 `θ0 = I11 (θ0 ) I12 (θ0 ) ,
+Iθ0 = Eθ0 ∇`θ0 ∇`>
+=
+E
+θ0
+θ0
+>
+I21 (θ0 ) I22 (θ0 )
+∇2 `θ0 · ∇1 `>
+θ0 ∇2 `θ0 · ∇2 `θ0
+then we would have I12 (θ0 ) = 0. This shows that if EG = PG , then the two parameter
+blocks are orthogonal, i.e., I12 (θ0 ) = 0, which does not hold in general.
+aMLE vs cMLE. Recall that another method that exploits the invariance structure is
+the constrained MLE, defined by
+1
+θbcMLE ∈ arg max
+θ∈ΘG n
+
+n
+X
+
+`θ (Xi ),
+
+i=1
+
+where we seek the minimizer over the invariant subspace ΘG . How does it compare to the
+augmented MLE? If ΘG is open, and if the true parameter belongs to the interior of the
+invariant subspace, θ0 ∈ intΘG , then by an application of Theorem 6 (with Θ replaced
+by ΘG ) and Proposition 8, it is clear that all three estimators – θbMLE , θbaMLE , and θbcMLE
+– share the same asymptotic behavior. At the other extreme, if ΘG is a singleton, then
+the constrained MLE, provided it can be solved, gives the exact answer θbcMLE = θ0 . In
+comparison, the augmented MLE gains some efficiency but in general will not recover θ0
+exactly.
+What happens to constrained MLE when the manifold dimension of ΘG is somewhere
+between 0 and p? We provide an answer to this question in an simplified setup, where we
+again assume that θ = (θ1 , θ2 ) and that ΘG can be characterized by {(θ1 , θ2 ) : θ2 = 0}. We
+first recall the known behavior of cMLE in this case, which has asymptotic covariance matrix
+(I11 (θ0 ))−1 (see e.g., Van der Vaart, 1998). By an application of the Schur complement
+formula, we have
+(I11 (θ0 ))−1  [Iθ−1
+]11 = [I11 (θ0 ) − I12 (θ0 )(I22 (θ0 ))−1 I21 (θ0 )]−1 ,
+0
+which says that the cMLE is more efficient than the MLE–which has has asymptotic covariance matrix Iθ−1
+. A further computation gives the following result:
+0
+25
+
+Chen, Dobriban and Lee
+
+Proposition 9 (Relation between aMLE and cMLE in parametric models that decompose)
+Suppose that the parameter has two blocks, θ = (θ1 , θ2 ), and the constrained set ΘG is char¯
+acterized by θ2 = 0. Denote by I(θ)
+:= CovEg ∇`θ (gX) the covariance of the average
+gradient. Define
+
+
+(I11 (θ))−1 (Iθ−1 )1
+Mθ =
+−1
+¯
+(Iθ−1 ) 1
+(I(θ))
+•
+
+•
+
+where the notation (I −1 )1 refers to the submatrix of I −1 corresponding to the rows indexed
+by the coordinates of θ1 . Then the aMLE is asymptotically more efficient than the cMLE
+in estimating θ1 if and only if Mθ0 is p.s.d.
+•
+
+Proof See Appendix A.5.
+In general, it seems that the two are not easy to compare, and the required condition would
+have to be checked on a case by case basis.
+4.3 Finite augmentations
+The augmented estimator considered in above sections involves integrals over G, which are
+in general intractable if G is infinite. As we have seen in Section 3, in practice, one usually
+randomly samples some finite number of elements in G at each iteration. Therefore, it is of
+interest to understand the behavior of the augmented estimator in the presence of such a
+“finite approximation”. It turns out that we can repeat the above arguments
+Pk with minimal
+−1
+¯
+changes. Specifically, given a function f (x), we can define fk (x) = k
+j=1 f (gj x), where
+gj are arbitrary elements of G. Similarly to before, we find that the mean is preserved,
+while the variance is reduced, in the following way:
+1. Ef (X) = Ef¯k (X);
+2. Covf (X) = Covf¯k (X) + EX∼P Vark [f (g1 X), . . . , f (gk X)], where Vark (a1 , . . . , ak ) is
+the variance of the k numbers ai .
+The above arguments suggest that for ERM problems, the efficiency gain is governed
+by the expected variance of k vectors ∇L(θ0 , gi X), where i = 1, ..., k. The general principle
+for practitioners is that the augmented estimator performs better if we choose gi to “vary
+a lot” in the appropriate variance metric.
+
+5. Examples
+In this section, we give several examples of models where exact invariance occurs. We characterize how much efficiency we can gain by doing data augmentation and compare it with
+various other estimators. Some examples are simple enough to give a finite-sample characterization, whereas others are calculated according to the asymptotic theory developed in
+the previous section.
+5.1 Exponential families
+We start with exponential families, which are a fundamental class of models in statistics
+(e.g., Lehmann and Casella, 1998; Lehmann and Romano, 2005). Suppose X ∼ Pθ is
+26
+
+Theory for Data Augmentation
+
+distributed according to an exponential family, so that the log-likelihood can be written as
+`θ (X) = θ> T (X) − A(θ),
+where T (X) is the sufficient statistic, θ is the natural parameter, A(θ) is the log-partition
+function. The densities of Pθ are assumed to exist with respect to some common dominating
+σ-finite measure. Then the score function and the Fisher information is given by
+Iθ = Cov [T (X)] = ∇2 A(θ).
+
+∇`θ (X) = T (X) − ∇A(θ),
+
+Given invariance with respect to a group G, by Theorem 6, the asymptotic covariance
+matrix of the aMLE equals Iθ−1 Jθ Iθ−1 , where Jθ is the covariance of the orbit-averaged
+sufficient statistic Jθ = CovX Eg T (gX).
+Assuming a linear action by the group G, by Equation (16), the invariant parameter
+space ΘG consists of those parameters θ for which
+θ> [T (gx) − T (x)] + v(g) = 0, ∀g, x,
+where v(g) = log | det g| is the log-determinant. This is a set of linear equations in θ.
+Moreover, the log-likelihood is concave, and hence the constrained MLE estimator can in
+principle be computed as the solution to the following convex optimization problem:
+θbcMLE ∈ arg max θ> T (X) − A(θ)
+θ
+>
+
+s.t. θ [T (gx) − T (x)] + v(g) = 0, ∀g ∈ G, x ∈ X .
+Assume that Θ = Rp , so that the exponential family is well defined for all natural parameters, and that ∇A is invertible on the range of Eg T (gX). The KKT conditions of the above
+convex program is given by
+θbcMLE ∈ [∇A]−1 (T (X) + span{T (gz) − T (z) : z ∈ Rd , g ∈ G})
+s.t. θ> [T (gx) − T (x)] + v(g) = 0, ∀g, x.
+
+Meanwhile, augmented MLE is the solution of the optimization problem where we replace the sufficient statistic T (x) by T̄ (x) = Eg T (gx):
+θbaMLE ∈ arg max θ> Eg T (gX) − A(θ).
+θ
+
+We then have θbaMLE = [∇A]−1 Eg T (gX). Therefore, for exponential families we were able
+to give more concrete expressions for the augmented and constrained MLEs.
+Gaussian mean. Consider now the important special case of Gaussian mean estimation. Suppose that X is a standard Gaussian random variable, so that A(θ) = kθk2 /2, and
+T (x) = x. Assume for simplicity that G acts orthogonally. Then we have ΘG = {v : g > v =
+v, ∀g ∈ G}. Recall that maximizing the Gaussian likelihood is equivalent to minimizing the
+distance kθ − Xk22 . Hence, the constrained MLE, by definition of the projection, takes the
+following form:
+θbcMLE = PG X,
+27
+
+Chen, Dobriban and Lee
+
+where we recall that PG is the orthogonal projection operator onto the tangent space of ΘG
+at θ. However, since ΘG is a linear space in our case, PG is simply the orthogonal projection
+operator onto ΘG . On the other hand, we have
+θbaMLE = Eg∼Q [g]X.
+In fact, under the current setup, the augmented MLE equals the constrained MLE:
+Proposition 10 Assume G acts linearly and orthogonally. If X is d-dimensional standard
+Gaussian, then PG = Eg∼Q [g], so that both the aMLE and cMLE are equal to the projection
+onto the invariant subspace ΘG . In particular, their risk equals dim ΘG .
+Proof See Appendix A.6.
+For instance, suppose G = ({±1}, ·) acting by flipping the signs. Then it is clear that
+ΘG = {0}, and so both the cMLE and aMLE are identically equal to zero.
+On the other hand, the marginal MLE (12) is a different object, even in the onedimensional case. Suppose that X ∼ N (θ, 1), and we consider the reflection group G =
+{1, −1}. The marginal distribution of the data is a Gaussian mixture model
+1
+Z ∼ [N (θ, 1) + N (−θ, 1)].
+2
+So the mMLE fits a mixture model, solving
+Z
+
+X
+b
+θmMLE ∈ arg max
+log
+pθ (gXi )dQ(g)
+θ
+
+= arg max
+θ
+
+= arg max
+θ
+
+G
+
+i∈[n]
+
+X
+i∈[n]
+
+X
+i∈[n]
+
+
+log
+
+
+1
+[pθ (Xi ) + pθ (−Xi )]
+2
+
+
+log exp[−(Xi − θ)2 /2] + exp[−(−Xi − θ)2 /2]
+
+The solution to this is not necessarily identically equal to zero, and in particular it does not
+agree with the cMLE and aMLE.
+Numerical results. We present some numerical results to support our theory. We
+consider X ∼ N (µ, Id ), and invariance to the reflection group that reverses the order of the
+vector. This is a stylized model of invariance, which occurs for instance in objects like faces.
+In Figure 5, we show the results of two experiments. On the left figure, we show the
+histograms of the mean squared errors (normalized by dimension) of the MLE and the
+augmented MLE on a d = 100 dimensional Gaussian problem. We repeat the experiment
+nM C = 100 times. We see that the MLE has average MSE roughly equal to unity, while
+the augmented MLE has average MSE roughly equal to one half. Thus, data augmentation
+reduces the MSE two-fold. This confirms our theory.
+On the right figure, we change the model to each coordinate Xi of X being sampled
+independently as Xi ∼ P oisson(λ). We show that the relative efficiency (the relative
+decrease in MSE) of the MLE and the augmented MLE is roughly equal to two regardless
+of λ. This again confirms our theory.
+28
+
+Theory for Data Augmentation
+
+Figure 5: Plots of the increase in efficiency achieved by data augmentation in a flip symmetry model.
+
+5.2 Parametric regression models
+We consider a regression problem where we observe an iid random sample {(X1 , Y1 ), . . . ,
+(Xn , Yn )} ⊆ Rd × R from the law of a random vector (X, Y ). This follows the model:
+ε⊥
+⊥ X,
+
+Y = f (θ0 , X) + ε,
+
+Eε = 0,
+
+where θ0 ∈ Rp . We have a group G acting on Rd × R only through X:
+g(X, Y ) = (gX, Y ),
+and the invariance is characterized by
+(gX, Y ) =d (X, Y ).
+In regression or classification problems in deep learning, we typically apply the augmentations conditionally on the outcome or class label. This corresponds to the conditional
+invariance
+(gX|Y = y) =d (X|Y = y).
+The conditional invariance can be deduced from (gX, Y ) =d (X, Y ) by conditioning on
+Y = y. Conversely, if it holds conditionally for each y, we deduce that it also holds
+jointly, i.e., (gX, Y ) =d (X, Y ). Thus, conditional and joint invariance are equivalent.
+Moreover, each of them clearly implies marginal invariance of the features, i.e., gX =d X.
+By conditional invariance, E(Y |X = x) = E(Y |X = gx), hence
+f (θ0 , gx) = f (θ0 , x)
+
+(19)
+
+for every non-random x and any g ∈ G. This is what we would expect in the applications
+we have in mind: the label should be preserved provided there is no random error.
+29
+
+Chen, Dobriban and Lee
+
+5.2.1 Non-linear least squares regression
+We now focus on the least squares loss:
+L(θ, X, Y ) = (Y − f (θ, X))2 .
+
+(20)
+
+The population risk is
+ELθ (X, Y ) = E(Y − f (θ0 , X) + f (θ0 , X) − f (θ, X))2 = E(f (θ0 , X) − f (θ, X))2 + γ 2 ,
+
+where γ 2P
+is the variance of the error ε. Under standard assumptions, the minimizer θbERM
+n
+of θ 7→
+i=1 L(θ, Xi , Yi ) is consistent (see e.g., Example 5.27 of Van der Vaart 1998).
+Similarly, under standard smoothness conditions, we have
+
+
+
+
+1
+2
+>
+>
+EL(θ, X, Y ) =
+γ
++ E (θ − θ0 ) 2∇f (θ0 , X)∇f (θ0 , X) (θ − θ0 ) + o(kθ − θ0 k2 ),
+|{z}
+2
+=EL(θ0 ,X,Y )
+
+where ∇f (θ, X) is the gradient w.r.t. θ. This suggests that we can apply Theorem 6
+with Vθ0 = 2E∇f (θ0 , X)∇f (θ0 , X)> and ∇L(θ0 , X, Y ) = −2(Y − f (θ0 , X))∇f (θ0 , X) =
+−2ε∇f (θ0 , X), which gives (with the Fisher information Iθ = E∇f (θ, X)∇f (θ, X)> )
+
+
+
+
+
+
+√
+−1
+−1
+2
+>
+2 −1
+b
+=d N 0, γ Iθ0 . (21)
+n(θERM − θ0 ) ⇒ N 0, Vθ0 E 4ε ∇f (θ0 , X)∇f (θ0 , X) Vθ0
+P
+On the other hand, the augmented ERM estimator is the minimizer θbaERM of θ 7→ ni=1
+Eg L(θ, gXi , Yi ). Now applying Theorem 6 gives
+√
+n(θbaERM − θ0 ) ⇒ N (0, ΣaERM ),
+(22)
+with the asymptotic covariance being
+
+
+−1
+ΣaERM = γ 2 Iθ−1
+−
+V
+E
+Cov
+∇L(θ
+,
+gX,
+Y
+)
+Vθ−1
+g
+0
+θ0
+0
+0
+
+
+−1
+2 −1
+= γ Iθ0 − Iθ0 E Covg (Y − f (θ0 , gX))∇f (θ0 , gX) Iθ−1
+0
+
+
+= γ 2 Iθ−1
+− Iθ−1
+E ε2 Covg ∇f (θ0 , gX) Iθ−1
+0
+0
+0
+
+
+
+
+−1
+−1
+−1
+2
+= γ · Iθ0 − Iθ0 E Covg ∇f (θ0 , gX) Iθ0 ,
+where we used f (θ0 , gx) = f (θ0 , x) in the second to last line. Using Lemma 1, we can also
+write
+
+
+
+ΣaERM = γ 2 Iθ−1
+I
+−
+E
+Cov
+∇f
+(θ
+,
+gX)
+Iθ−1
+0
+G
+θ0
+0
+0
+
+
+
+2 −1
+= γ Iθ0 CovX ∇f (θ0 , X) − E CovG ∇f (θ0 , gX) Iθ−1
+0
+= γ 2 Iθ−1
+I¯θ0 Iθ−1
+,
+0
+0
+where I¯θ0 is the “averaged Fisher information”, defined as
+
+
+> 
+¯
+Iθ0 = CovX [Eg ∇f (θ0 , gX)] = EX Eg ∇f (θ0 , gX) Eg ∇f (θ0 , gX)
+.
+30
+
+Theory for Data Augmentation
+
+5.2.2 Two-layer neural network for regression tasks
+As an example, consider a two-layer neural network
+f (θ, x) = a> σ(W x).
+Here x is a d-dimensional input, W is a p × d weight matrix, σ is a nonlinearity applied
+elementwise to the preactivations W x. The overall parameters are θ = (a, W ). For simplicity, let us focus on the case where a = 1p is the all ones vector. This will simplify the
+expressions for the gradient. We can then write
+f (W, x) = 1> σ(W x).
+
+(23)
+
+Let IW = E∇f (W, X)∇f (W, X)> be the fisher information, and denote its averaged
+version as
+
+
+ 
+>
+
+I¯W = EX
+
+Eg ∇f (W, gX)
+
+Eg ∇f (W, gX)
+
+.
+
+Recall Equation (21) and (22):
+√
+
+
+
+cERM − W ) ⇒ N 0, σ 2 I −1
+n(W
+W
+
+
+√
+−1
+2 −1 ¯
+c
+n(WaERM − W ) ⇒ N 0, σ IW IW IW .
+Therefore, the efficiency of the ERM and aERM estimators is determined by the magnitude of IW and I¯W . In general, those are difficult to calculate. However, an exact
+calculation is possible under a natural example of translation invariance. Let the group
+G = {g0 , g1 , ..., gp−1 }, where gi acts by shifting a vector circularly by i units:
+(gi x)j+i mod p = xj .
+
+(24)
+
+We equip G with a uniform distribution. Under such a setup, we have the following result:
+Theorem 11 (Circular shift data augmentation in two-layer networks) Consider the
+two-layer neural network model (23) trained using the least squared loss (20). Then:
+1. The Fisher information matrix IW can be viewed as a tensor
+IW = E(σ 0 (W X) ⊗ σ 0 (W X)) · (X ⊗ X)> .
+If, furthermore, the activation function is quadratic, η(x) = x2 /2, then IW can be
+written as the product of a p2 × d2 tensor and a d2 × d2 tensor:
+IW = (W ⊗ W ) · E(XX > ⊗ XX > ).
+2. Assume the activation function is quadratic. Let Cv be the circulant matrix associated
+with the vector v, with entries Cv (i, j) = vi−j+1 . Then I¯W can be written as
+>
+>
+I¯W = (W ⊗ W ) · d−2 E(CX CX
+⊗ CX CX
+).
+
+31
+
+Chen, Dobriban and Lee
+
+Figure 6: Plot of the increase in efficiency achieved by data augmentation in a circular
+symmetry model.
+
+If furthermore the distribution of X is normal, X ∼ N (0, Id ), then we have
+I¯W = (W ⊗ W ) · F2∗ · (F22
+
+M ) · F2∗ .
+
+Here F2 = F ⊗ F , where F is the d × d DFT matrix, M is the d2 × d2 tensor with
+entries
+Miji0 j 0 = Fi> Fj · Fi>0 Fj 0 + Fi> Fj 0 · Fi>0 Fj + Fi> Fi0 · Fi> Fj 0 ,
+and F2∗ is the complex conjugate of F2 .
+Proof See Appedix A.7.
+This theorem shows in a precise quantitative sense how much we gain from data augmentation in a two-layer neural network. To get a sense of the magnitude of improvement, we
+will attempt to understand how much “smaller” I¯W is compared to IW by calculating their
+MSEs. For simplicity, we will impose a prior W ∼ N (0, Ip ⊗Id ), and the MSE is calculated by
+taking expectation w.r.t. this prior. First we have E tr IW = EkW XX > k2F r . Let S = XX > .
+Now W ∼ N (0, Ip ⊗ Id ). So conditional on X, we have W S ∼ N (0, Ip ⊗ S 2 ). Hence,
+> )2 /d2 .
+EkW Sk2F r = pE tr S 2 = pE tr(XX > )2 . Similarly, we find E tr I¯W = pE tr(CX CX
+Numerical results. In Figure 6, we show the results of an experiment where we
+randomly generate the input as X ∼ N (0, Id ). For a fixed X, we compute the values of
+> )2 /d2 , and record their ratio. We repeat
+E tr IW = p tr(XX > )2 and E tr I¯W = p tr(CX CX
+the experiment nM C = 100 times. We then show the relative efficiency of aMLE with
+respect to MLE as a function of the input dimension d. We find that the relative efficiency
+scales as RE(d) ∼ d/2. Thus, for the efficiency gain increases as a function of the input
+dimension. However, the efficiency gain does not depend on the output dimension p. This
+makes sense, as circular invariance affects and reduces only the input dimension.
+32
+
+Theory for Data Augmentation
+
+5.3 Parametric classification models
+Similar calculations as in the previous subsection carry over to the classification problems.
+We now have a random sample {(X1 , Y1 ), ..., (Xn , Yn )} ⊆ Rd × {0, 1} from the law of a
+random vector (X, Y ), which follows the model:
+P(Y = 1 | X) = η(f (θ0 , X)),
+where θ0 ∈ Rp , η : R → [0, 1] is an increasing activation function, and f (θ0 , ·) is a real-valued
+function. For example, the sigmoid η(x) = 1/(1 + e−x ) gives the logistic regression model,
+using features extracted by f (θ0 , ·). As in the regression case, we have a group G acting on
+Rd × {0, 1} via
+g(X, Y ) = (gX, Y ),
+and the invariance is
+(gX, Y ) =d (X, Y ).
+The interpretation of the invariance relation is again two-fold. On the one hand, we
+have gX =d X. On the other hand, for almost every (w.r.t. the law of X) x, we have
+P(Y = 1 | gX = x) = P(Y = 1 | X = x).
+The LHS is η(f (θ0 , g −1 x)), whereas the RHS is η(f (θ0 , x)). This shows that for any (nonrandom) g ∈ G and x, we have
+η(f (θ0 , gx)) = η(f (θ0 , x)).
+For image classification, the invariance relation says that the class probabilities stay the
+same if we transform the image by the group action. Moreover, since we assume η is
+monotonically strictly increasing, applying its inverse gives
+f (θ0 , gx) = f (θ0 , x).
+5.3.1 Non-linear least squares classification
+We consider using the least square loss to train the classifier:
+L(θ, X, Y ) = (Y − η(f (θ, X)))2 .
+
+(25)
+
+Though this is not the most popular loss, in some cases it can be empirically superior to
+the default choices, e.g., logistic loss and hinge loss (Wu and Liu, 2007; Nguyen and Sanner,
+2013). The loss function has a bias-variance decomposition:
+EL(θ, X, Y ) = E[Y − η(f (θ0 , X)) + η(f (θ0 , X)) − η(f (θ, X))]2
+
+= E[Y − η(f (θ0 , X))]2 +E[η(f (θ0 , X)) − η(f (θ, X))]2 ,
+|
+{z
+}
+EL(θ0 ,X,Y )
+
+where the cross-term vanishes because η(f (θ0 , X)) = E[Y |X]. Note that
+
+
+2
+2
+2
+E[Y − η(f (θ0 , X))] = E[(Y − E[Y |X]) ] = E E[(Y − E[Y |X]) | X]
+= EVar(Y |X) = EVar[Bernoulli(η(f (θ0 , X)))] = Eη(f (θ0 , X))(1 − η(f (θ0 , X))).
+33
+
+Chen, Dobriban and Lee
+
+Meanwhile, since ∇η(f (θ, X)) = η 0 (f (θ, X))∇f (θ, X), for sufficiently smooth η, we have a
+second-order expansion of the population risk:
+1
+EL(θ, X, Y ) = EL(θ0 , X, Y )+ (θ−θ0 )> E[2η 0 (f (θ0 , X))2 ∇f (θ0 , X)∇f (θ0 , X)> ](θ−θ0 )+o(kθ−θ0 k2 ).
+2
+This suggests that we can apply Theorem 6 with Vθ0 = E[2η 0 (f (θ0 , X))2 ∇f (θ0 , X)∇f (θ0 , X)> ]
+and ∇L(θ, X, Y ) = −2(Y − η(f (θ, X)))η 0 (f (θ, X))∇f (θ, X), which gives
+√
+
+n(θbERM − θ0 ) ⇒ N (0, ΣERM ),
+
+(26)
+
+where the asymptotic covariance is
+ΣERM = E[Uθ0 (X)]−1 E[vθ0 (X)Uθ0 (X)]E[Uθ0 (X)]−1
+
+(27)
+
+vθ0 (X) = η(f (θ0 , X)) · (1 − η(f (θ0 , X)))
+
+Uθ0 (X) = η 0 (f (θ0 , X))2 ∇f (θ0 , X)∇f (θ0 , X)> .
+Here vθ0 (X) can be viewed as the noise level, which corresponds Eε2 in the regression
+case. Also, Uθ0 (X) is the information, which corresponds to E∇f (θ0 , X)∇f (θ0 , X)> in the
+regression case. The classification problem is a bit more involved, because the noise and
+the information do not decouple (they both depend on X). In a sense, the asymptotics of
+classification correspond to a regression problem with heteroskedastic noise, whose variance
+depends on the mean signal level.
+In contrast, applying Theorem 6 for the augmented loss gives
+√
+n(θbaERM − θ0 ) ⇒ N (0, ΣaERM ),
+
+(28)
+
+where
+ΣERM − ΣERM = Vθ−1
+ECovg ∇L(θ0 , gX)Vθ−1
+.
+0
+0
+We now compute the gain in efficiency:
+
+
+ECovg ∇L(θ0 , gX) = ECovg 2(Y − η(f (θ0 , gX)))η 0 (f (θ0 , gX))∇f (θ0 , gX)
+
+
+
+2
+0
+= 4E (Y − η(f (θ0 , X))) Covg η (f (θ0 , gX))∇f (θ0 , gX)
+
+
+
+0
+= 4E vθ0 (X)Covg η (f (θ0 , gX))∇f (θ0 , gX) .
+In summary, the covariance of ERM is larger than the covariance of augmented ERM by
+−1
+
+ΣERM − ΣaERM = E[Uθ0 (X)]
+
+
+
+
+0
+E vθ0 (X)Covg η (f (θ0 , gX))∇f (θ0 , gX) E[Uθ0 (X)]−1 .
+(29)
+34
+
+Theory for Data Augmentation
+
+5.3.2 Two-layer neural network for classification tasks
+We consider the two-layer neural network (23) here. Most of the computations for the
+regression case carry over to the classification case. Recall that in the current setup, the
+model (23) becomes
+P(Y = 1 | X) = η(f (W, X)) := η(1> σ(W X)),
+
+(30)
+
+where W ∈ Rp×d and η is a nonlinearity applied elementwise. We then have an analog of
+Theorem 11:
+Corollary 12 Consider the two-layer neural network model (23) trained using the least
+squares loss (25). Assume the activation function is quadratic: σ(x) = x2 /2. Let UW , vW
+be defined as in (27). Then
+ΣERM = E[UW (X)]−1 E[vW (X)UX (X)]E[UW (X)]−1 ,
+where
+EUW (X) = (W ⊗ W ) · E[η 0 (f (W, X))2 · XX > ⊗ XX > ]
+
+E[vW (X)UW (X)] = (W ⊗ W )E[vW (X)η 0 (f (W, X))2 · XX > ⊗ XX > ].
+If we further assume that the group G acts by cirlular shift (24) and Q is the uniform
+distribution on G, then
+>
+>
+EUW (X)ΣaERM EUW (X) = (W ⊗ W ) · d−2 E[vW (X)η 0 (f (W, X))2 · CX CX
+⊗ CX CX
+].
+
+Thus, the gain by augmentation is characterized by
+E[UW (X)](ΣERM − ΣaERM )E[UW (X)]
+
+
+
+0
+2
+>
+>
+>
+>
+= (W ⊗ W )E vW (X)η (f (W, X)) XX ⊗ XX − CX CX ⊗ CX CX .
+Proof See Appendix A.8.
+
+5.4 Improving linear regression by augmentation distribution
+In this section, we provide an example on how to use the “augmentation distribution”,
+described in Section 3.3, to improve the performance of ordinary least squares estimator
+in linear regression. We will see that, perhaps unexpectedly, the idea of augmentation
+distribution gives an estimator nearly as efficient as the constrained ERM in many cases.
+We consider the classical linear regression model
+Y = X > β + ε,
+
+β ∈ Rp .
+
+We again let γ 2 = Eε2 . We will assume that the action is linear, so that g can be represented
+as a p × p matrix. If we augment by a single fixed g, we get
+arg min ky − Xg > βk22 = ((Xg > )> Xg > )−1 (Xg > )> y.
+35
+
+Chen, Dobriban and Lee
+
+Following the ideas on augmentation distribution, we can then average the above estimator
+over g ∼ Q to obtain
+
+
+> >
+> −1
+> >
+b
+βaDIST = Eg∼Q ((Xg ) Xg ) (Xg ) y .
+On the other hand, let us consider the estimator arising from constrained ERM. By
+Equation (19), we have
+x> β = (gx)> β
+for PX -a.e. x and Q-a.e. g. This is a set of linear constraints on the regression coefficient
+β. Formally, supposing that x can take any value (i.e., PX has mass on the entire Rp ), we
+conclude that β is constrained to be in the invariant parameter subspace ΘG , which is a
+linear subspace defined by
+ΘG = {v : g > v = v, ∀g ∈ G}.
+
+If x can only take values in a smaller subset of Rp , then we get fewer constraints. So the
+constrained ERM, defined as
+s.t. (g > − Ip )β = 0 ∀g ∈ G,
+
+βbcERM = arg minky − Xβk22
+β
+
+can in principle, be solved via convex optimization.
+Intuitively, we expect both βbaDIST and βbcERM to be better than the vanilla ERM
+βbERM = arg minky − Xβk22 ,
+β
+
+Let rERM , raDIST , rcERM be the mean squared errors of the three estimators. We summarize
+the relationship between the three estimators in the following proposition:
+Proposition 13 (Comparison between ERM, aDIST and cERM in linear regression)
+Let the action of G be linear. Then:
+1. Denote vj ∈ Rp as the j-th eigenvector of X T X and d2j as the corresponding eigenvalue. We have
+2
+
+>
+
+−1
+
+rERM = γ tr[X X]
+
+=γ
+
+2
+
+p
+X
+
+d−2
+j ,
+
+raDIST = γ
+
+j=1
+
+2
+
+p
+X
+j=1
+
+>
+2
+d−2
+j kG vj k2 ,
+
+where G = Eg∼Q [g].
+2. If G acts orthogonally, then raDIST ≤ rERM .
+3. If G is the permutation group over {1, ..., p}, then
+>
+−1
+raDIST = γ 2 p−1 1>
+p (X X) 1p ,
+
+>
+−1
+rcERM = γ 2 p(1>
+p X X1p ) .
+
+Furthermore, if X is an orthogonal design so that X > X = Ip , we have
+rERM = pγ 2 ,
+
+raDIST = rcERM = γ 2 .
+36
+
+Theory for Data Augmentation
+
+Proof See Appendix A.9.
+In general, constrained ERM can be even more efficient than the estimator obtained
+by the augmention distribution. However, by the third point in the above proposition, in
+the special case where G is the permutation group, we have raDIST = rcERM  rERM when
+the dimension p is large. A direct extension of the above proposition shows that such a
+phenomenon occurs when G is the permutation group on a subset of {1, . . . , p}. There are
+several other subgroups of interest of the permutation group, including the group of cyclic
+permutations and the group that contains the identity and the operation that “flips” or
+reverses each vector.
+We note briefly that the above results apply mutatis mutandis to logistic regression.
+There, the outcome Y ∈ {−1, 1} is binary, and P (Y = 1|X = x) = σ(x> β), where σ(z) =
+1/(1 + exp(−x)) is the sigmoid function. The invariance condition reduces to the same as
+for linear regression. We omit the details.
+
+6. Extension to approximate invariance
+In this section, we develop extensions of the results in Section 4 without assuming exact
+invariance. We only require approximate invariance gX ≈d X in an appropriate sense.
+We start by recalling the notion of distance between probability distributions based on
+transporting the mass from one distribution to another (see, e.g., Villani 2003 and references
+therein):
+Definition 14 (Wasserstein metric) Let X be a Polish space. Let d be a lower semicontinuous metric on X . For two probability distributions µ, ν on X , we define
+Wd (µ, ν) =
+
+Z
+inf
+
+π∈Π(µ,ν) X ×X
+
+d(x, y)dπ(x, y),
+
+where Π(µ, ν) are all couplings whose marginals agree with µ and ν. When X is a Euclidean space and d is the Euclidean distance, we denote W`2 ≡ W1 and refer to it as the
+Wasserstein-1 distance.
+6.1 General estimators
+Since we no longer have gX =d X, the equation Ef = Ef¯ cannot hold in general. However,
+we still expect some variance reduction by averaging a function over the orbit. Hence,
+we should see a bias-variance tradeoff, which is made clear in the following lemma. For
+symmetric matrices A, B, C, we will use the notation A ∈ [B, C] to mean that B  A  C
+in the Loewner order.
+Lemma 15 (Approximate invariance lemma) Assume the conditions in Lemma 1 hold,
+but gX 6=d X. Let kf k∞ = sup kf (x)k2 (which can be ∞). Then:
+1. The expectations satisfy kEX f¯(X) − EX f (X)k2 ≤ Eg W1 (f (gX), f (X));
+37
+
+Chen, Dobriban and Lee
+
+2. The covariances satisfy CovX f¯(X) = Cov(X,g) f (gX) − EX Covg f (gX), and according
+to the Loewner order, we have
+
+
+¯
+CovX f (X) − CovX f (X) ∈ − EX Covg f (gX) ± 4kf k∞ Eg W1 (f (gX), f (X)) · I ,
+where I is the identity matrix;
+3. Let ϕ be any real-valued convex function, and let ϕ ◦ f (x) = Eg ϕ ◦ f (gx). Then
+
+
+
+EX ϕ(f¯(X))−EX ϕ(f (X)) ∈
+EX ϕ(f¯(X))−EX ϕ ◦ f (X) ±kϕkLip Eg W1 (f (gX), f (X)) ,
+where kϕkLip is the (possibly infinite) Lipschitz constant of ϕ. We recall from our
+prior results that EX ϕ(f¯(X)) − EX ϕ ◦ f (X) ≤ 0.
+Proof See Appendix B.1.
+The above lemma reduces to Lemma 1 under exact invariance. With this lemma at hand,
+we prove an analog of Proposition 2 below, which characterizes the mean squared error if
+we think of f as a general estimator:
+Proposition 16 (MSE of general estimators under approximate invariance) Under
+b
+the setup of Lemma 15, consider the estimator θ(X)
+of θ0 , and its augmented version
+b
+b
+θG (X) = Eg∼Q θ(gX). Then we have
+
+
+b
+b
+b
+MSE(θG ) − MSE(θ) ∈ − EX tr(Covg θ(gX)) ± ∆ ,
+where
+
+
+b
+b
+b
+b
+b
+b
+∆ = Eg W1 (θ(gX), θ(X)) · Eg W1 (θ(gX), θ(X)) + 2kBias(θ(X))k2 + 4kθk∞ .
+Proof See Appendix B.2.
+b
+Compared with exact invariance , apart from the variance reduction term EX tr(Covg θ(gX)),
+we have an additional “bias” term ∆ as a result of approximate invariance. This bias
+has three components in the present form. We need the following to be small: (1) the
+b
+b
+Wasserstein-1 distance Eg W1 (θ(gX),
+θ(X))
+(which is small if the invariance is close to being exact), (2) the bias of the original estimator Bias( b
+θ(X)) is small (which is a minor
+requirement, because otherwise there is no point in using this estimator), and (3) the supnorm k b
+θk∞ is small (which is reasonable, because we can always standardize the estimating
+target θ0 ).
+6.2 ERM / M-estimators
+We now extend the results on the behavior of ERM. Recall that θ0 and θG are minimizers
+of the population risks EL(θ, X) and EP
+L̄(θ, X), respectively. Meanwhile,
+θbn and θbn,G are
+Pn
+n
+−1
+−1
+minimizers of the empirical risks n
+i=1 L(θ, Xi ) and n
+i=1 L̄(θ, Xi ), respectively.
+38
+
+Theory for Data Augmentation
+
+Under regularity conditions, it is clear that θbn,G is an asymptotically unbiased estimator for
+θG . However, under approximate invariance, some quantities, for example, θ0 and θG , may
+not coincide exactly, introducing an additional bias. As a result, there is a bias-variance
+tradeoff, similar to that observed in Proposition 16.
+We first illustrate this tradeoff for the generalization error, in an extension of Theorem
+3:
+Theorem 17 (Rademacher bounds under approximate invariance) Let L(θ, ·) be Lipschitz uniformly over θ ∈ Θ, with a (potentially infinite) Lipschitz constant kLkLip . Assume
+L(·, ·) ∈ [0, 1]. Then with probability at least 1 − δ over the draw of X1 , . . . , Xn , we have
+r
+2 log 2/δ
+EL(θbn , X) − EL(θ0 , X) ≤ 2Rn (L ◦ Θ) +
+(Classical Rademacher bound)
+n
+r
+2 log 2/δ
++ 2kLkLip · Eg∼Q W1 (X, gX).
+EL(θbn,G , X) − EL(θ0 , X) ≤ 2Rn (L̄ ◦ Θ) +
+n
+(Bound for augmentation under approx invariance)
+Moreover, the Rademacher complexity of the augmented loss class can further be bounded
+as
+Rn (L̄ ◦ Θ) − Rn (L ◦ Θ) ≤ ∆ + kLkLip · Eg∼Q W1 (X, gX),
+where
+n
+
+1
+1X
+εi Eg L(θ, gXi )| − EEg sup | εi L(θ, gXi )| ≤ 0
+∆ = E sup |
+n
+n
+θ∈Θ
+θ
+i=1
+
+is the “variance reduction” term.
+Proof See Appendix B.3.
+Compared to Theorem 3, we see that there is an additional bias term 2kLkLip ·Eg Wd (X, gX)
+due to approximate invariance. The bound ∆ ≤ 0 can be loose, and this variance reduction
+term can be much smaller than zero. Consequently, as long as Eg W1 (X, gX) is small, the
+above theorem can potentially yield a tighter bound for the augmented estimator θbn,G .
+We now illustrate the bias-variance tradeoff in the asymptotic regime. The next theorem
+is analogous to Theorem 6:
+Theorem 18 (Asymptotic normality under approximate invariance) Assume Θ is
+open. Let Assumption A and B hold for both pairs (θ0 , L) and (θG , L̄). Let V0 , VG be the Hessian of θ 7→ EL(θ, X) and θ 7→ EL̄(θ, X), respectively. Let M0 (X) = ∇L(θ0 , X)∇L(θ0 , X)>
+and MG (X) = ∇L(θG , X)∇L(θG , X)> . Then we have
+
+
+−2
+2
+b
+b
+n(MSE(θn,G ) − MSE(θn )) → nkθG − θ0 k2 + Eg EX MG (gX) − MG (X), VG
+
+
+−2
++ EX MG (X) − M0 (X), VG
++ hCovX ∇L(θ0 , X), VG−2 − V0−2 i
+− hEX Covg (∇L(θG , gX)), VG−2 i.
+39
+
+Chen, Dobriban and Lee
+
+Proof See Appendix B.4.
+From the above theorem, we see that the the variance reduction is determined by the term
+EX Covg (∇L(θG , gX)),
+whereas we have three extra bias terms on the RHS due to approximate invariance. Indeed,
+if gX and X are close in the W1 metric, one can check that the three additional bias terms
+are small. For example, by the dual representation of Wasserstein metric, we have
+
+
+
+
+−2
+−2
+−2
+≤ Eg W1 hMG (gX), VG i, hMG (X), VG i
+Eg EX MG (gX) − MG (X), VG
+
+
+
+
+−2
+−2
+−2
+≤ W1 hMG (X), VG i, hM0 (X), VG i ,
+EX MG (X) − M0 (X), VG
+and the upper bound goes to zero as we approach exact invariance. Hence we can see an
+efficiency gain by data augmentation.
+
+7. A Case Study on Over-Parameterized Two-Layer Nets
+The result on two-layer nets in Section 5 has three major limitations. First, we only considered quadratic activations, whereas in practice rectified linear units (ReLU) are usually
+used. Also, the entire result concerns the under-parameterized regime, whereas in practice,
+neural nets are often over-parameterized. Finally, we assumed that we can optimize the
+weights of the neural network to consistently estimate the true weights, which can be a
+hard nonconvex optimization problem with only partially known solutions.
+In this section, we present an example that addresses the above three limitations: we
+consider a ReLU network; we allow the input dimension and the number of neurons to scale
+with n; we use gradient descent for training.
+Consider a binary classification problem, where the data points {Xi , Yi }n1 ⊆ Sn−1 ×{±1}
+are sampled i.i.d. from some data distribution. For technical convenience, we assume
+|G| < ∞, and gX ∈ Sd−1 for all g ∈ G and almost every X from the feature distribution.
+We again consider a two-layer net f (x; W, a) = √1m a> σ(W x), where W ∈ Rm×d , a ∈ Rm
+are the weights and σ(x) = max(x, 0) is the ReLU activation. We consider the following
+initialization: Wij ∼ N (0, 1), as ∼ unif({±1}). Such a setup is common in recent literature
+on Neural Tangent Kernel.
+In the training process, we fix a and only train W . We use the logistic loss `(z) =
+log(1 + e−z ). In our previous notation, we have L(θ, X, Y ) = `(Y f (X; W, a)). The weight
+is then trained by gradient descent: Wt+1 = Wt − ηt ∇R̄n (Wt ), where R̄n is the augmented
+empirical risk (4).
+To facilitate the analysis, we impose a margin condition below, similar to that in Ji and
+Telgarsky (2019).
+Assumption
+C (Margin condition) Let H be the space of functions v : Rd → Rd s.t.
+R
+2
+kv(z)k2 dµ(z) < ∞, where µ is the d-dimensional standard Gaussian probability measure.
+Assume there exists v̄ ∈ H and γ > 0, s.t. the Euclidean norm satisfies kv̄(z)k2 ≤ 1 for any
+z ∈ Rd , and that
+Z
+Y
+
+hv̄(z), gXi1{hz, gXi > 0}dµ(z) ≥ γ
+40
+
+Theory for Data Augmentation
+
+for all g ∈ G and amost all (X, Y ) from the data distribution.
+This says that there is a classifier that can distinguish the (augmented) data with positive
+margin.
+We need a few notations. For ρ > 0, we define Wρ := {W ∈ Rm×d : kws − ws,0 k2 ≤
+ρ for any s ∈ [m]}, where ws , ws,0 is the s-th row of W, W0 , respectively. We let
+1
+Rn := E sup | εi [−`0 (yi f (Xi ; W, a))]|
+W ∈Wρ n
+be the Rademacher complexity of the non-augmented gradient, where the expectation is
+taken over both {εi }n1 and {Xi , Yi }n1 . Similarly, writing fi,g (W ) = f (gXi ; W, a), we define
+1
+R̄n := E sup | εi Eg [−`0 (Yi fi,g (W ))]|
+W ∈Wρ n
+to be the Rademacher complexity of the augmented gradient. The following theorem characterizes the performance gain by data augmentation in this example:
+Theorem 19 (Benefits of data augmentation for two-layer ReLU nets) Under Assumption C, take any ε ∈ (0, 1) and δ ∈ (0, 1/5). Let
+p
+2 log(4n|G|/δ) + log(4/ε)
+4096λ2
+λ=
+,M =
+,
+γ/4
+γ6
+√
+and let ρ = 4λ/(γ m). Let k bepthe best iteration (with the lowest
+p risk) in the
+√ empirical
+first d2λ2 /nεe steps. Let α = 16[ 2 log(4n|G|/δ) + log(4/ε)]/γ 2 + md + 2 log(1/δ). For
+any m ≥ M and any constant step size η ≤ 1, with probability at least 1 − 5δ over the
+random initialization and i.i.d. draws of the data points, we have
+r
+2 log 2/δ
+1
+P(Y f (X; Wk , a) ≤ 0) ≤ 2ε + [
++ 4R̄n ] + EY Eg W1 (X|Y, gX|Y ) · α.
+n
+2
+The three terms bound the optimization error, generalization error, and the bias due to
+approximate invariance. Moreover, with probability at least 1 − δ over the random initialization, we have
+1
+R̄n − Rn ≤ ∆ + EY Eg W1 (X|Y, gX|Y ) · α,
+4
+where
+1
+1
+∆ = E sup | εi Eg [−`0 (yi fi,g (W ))]| − EEg sup | εi [−`0 (yi fi,g (W ))]| ≤ 0
+W ∈Wρ n
+W ∈Wρ n
+is the “variance reduction” term.
+Proof See Appendix B.5.
+The proof idea is largely based on results in Ji and Telgarsky (2019). We decompose the
+41
+
+Chen, Dobriban and Lee
+
+overall error into optimization error and generalization error. The optimization error is
+taken care of by a corollary of Theorem 2.2 in Ji and Telgarsky (2019). The generalization
+error is dealt with by adapting several arguments in Theorem 3.2 of Ji and Telgarsky (2019)
+and using some arguments in the proof of Theorem 17.
+Again, we see a bias-variance tradeoff in this example due to approximate invariance.
+We conclude this section by noting that the term Rn can be further bounded by invoking
+Rademacher calculus and the Rademacher complexity bound for linear classifiers. We refer
+readers to Section 3 of Ji and Telgarsky (2019) for details.
+
+8. Potential applications
+8.1 Cryo-EM and related problems
+In this section, we describe several important problems in the biological and chemical sciences, and how data augmentation may be useful. Cryo-Electron Microscopy (Cryo-EM) is
+a revolutionary technique in structural biology, allowing us to determine the structure of
+molecules to an unprecedented resolution (e.g., Frank, 2006). The technique was awarded
+the Nobel Prize in Chemistry in 2017.
+The data generated by Cryo-EM poses significant data analytic (mathematical, statistical, and computational) challenges (Singer, 2018). In particular, the data possesses several
+invariance properties that can be exploited to improve the accuracy of molecular structure
+determination. However, exploiting these invariance properties is highly nontrivial, because
+of the massive volume of the data, and due to the high levels of noise. In particular, exploiting the invariance is an active area of research (Kam, 1980; Frank, 2006; Zhao et al.,
+2016; Bandeira et al., 2017; Bendory et al., 2018). Classical and recent approaches involve
+mainly (1) latent variable models for the unknown symmetries, and (2) invariant feature
+approaches. Here we will explain the problem, and how data augmentation may help.
+In the imaging process, many copies of the molecule of interest are frozen in a thin layer
+of ice, and then 2D images are taken via an electron beam. A 3D molecule is represented
+by an electron density map φ : R3 → R. Each molecule is randomly rotated, via a rotation
+that can be represented by a 3D orthogonal rotation matrix Ri ∈ O(3). Then we observe
+the noisy line integral
+Z
+φ(Ri [x, y, z]> )dz + εi .
+
+Yi =
+z
+
+We observe several iid copies, and the goal is to estimate the density map φ. Clearly the
+model is invariant under rotations of φ. Existing approaches mainly work by fitting statistical methods for latent variable models, such as the expectation maximization (EM)
+algorithm. Data augmentation is a different approach, where we add the data transformed
+according to the symmetries. It is interesting, but beyond our scope, to investigate if this
+can improve the estimation accuracy.
+Invariant denoising. A related problem is invariant denoising, where we want to denoise images subject to an invariance of their distribution, say according to rotations (see
+e.g., Vonesch et al., 2015; Zhao et al., 2016, 2018). This area is well studied, and popular
+approaches rely on invariant features. It is known how to do it for rotations. However,
+capturing translation-invariance poses complications to the invariant features approach. In
+42
+
+Theory for Data Augmentation
+
+principle, data augmentation could be used as a more general approach.
+XFEL. Another related technique, X-ray free electron lasers (XFEL), is a rapidly
+developing and increasingly popular experimental method for understanding the threedimensional structure of molecules (e.g., Favre-Nicolin et al., 2015; Maia and Hajdu, 2016;
+Bergmann et al., 2017). Single molecule XFEL imaging collects two-dimensional diffraction
+patterns of single particles at random orientations. A key advantage is that XFEL uses
+extremely short femtosecond X-ray pulses, during which the molecule does not change its
+structure. On the other hand, we only capture one diffraction pattern per particle and the
+particle orientations are unknown, so it is challenging to reconstruct the 3D structure at
+a low signal-to-noise ratio. The images obtained are very noisy due to the low number of
+photons that are typical for single particles (Pande et al., 2015).
+A promising approach for 3-D structure reconstruction is Kam’s method (Kam, 1977,
+1980; Saldin et al., 2009), which requires estimating the covariance matrix of the noiseless
+2-D images. This is extremely difficult due to low photon counts, and motivated prior work
+to develop improved methods for PCA and covariance estimation such as ePCA (Liu et al.,
+2018), as well as the steerable ePCA method Zhao et al. (2018) that builds in invariances.
+As above, it would be interesting to investigate if we can use data augmentation as another
+approach for rotation-invariance.
+8.2 Spherically invariant data
+Here we discuss models for spherically invariant data, and how data augmentation may be
+used. See for instance Fisher et al. (1993) for more general models of spherical data. In the
+invariant model, the data X ∈ Rp is such that X =d OX for any orthogonal matrix O. One
+can see that the Euclidean norms kXk are sufficient statistics. There are several problems
+of interest:
+• Estimating the radial density. By taking the norms of the data, this reduces to
+estimating their 1D density.
+• Estimating the marginal density f of a single coordinate. Here it is less obvious how
+to exploit spherical invariance. However, data augmentation provides an approach.
+A naive estimator for the marginal density is any density estimator applied to the first
+coordinates of the data, X1 (1), . . . , Xn (1). Since Xi (1) ∼iid f , we can use any estimator, fb(X) = fb(X1 (1), . . . , Xn (1)) for instance a kernel density estimator. However, this is
+inefficient, because it does not use information in all coordinates.
+In data augmentation we rotate our data uniformly, leading to
+Z
+fba (X) = fb(gX)dQ(g) = EO1 ,...,Op ∼O(p) f ([O1 X1 ](1), . . . , [Op Xp ](1)).
+Note that if O ∼ O(p), then for any vector x, [Ox](1) =d kxkZ(1)/kZk, where Z ∼
+N (0, Ip ). Hence the expectation can be rewritten in terms of Gaussian integrals. It is also
+possible to write it as a 2-dimensional integral, in terms of Z(1), kZ(2 : p)k2 , which have
+independent normal and Chi-squared distributions. However, in general, it may be hard to
+compute exactly.
+43
+
+Chen, Dobriban and Lee
+
+When the density estimator decouples into a sum of terms over the datapoints, P
+then this
+expression simplifies. This is the case for kernel density estimators: fb(x) = (nhp )−1 ni=1 k([x−
+P
+xi (1)]/h). More generally, if fb(x) = ni=1 T (x − xi (1)), then we only need to calculate
+T̃ (x) = EO T (x − [Oy](1))
+
+
+Z(1)
+.
+= EZ∼N (0,Ip ) T x − kyk
+kZk
+This is significantly simpler than the previous expression. It can also be viewed as a form
+of convolution of a kernel with T , which is already a kernel typically. Therefore, we have
+shown how data augmentation can be used to estimate the marginal density of coordinates
+for spherically uniform data.
+8.3 Random effects models
+Data augmentation may have applications to certain random effect models (Searle et al.,
+2009). Consider the one-way layout Xij = µ + Ai + Bij , i = 1 . . . , s, j = 1, . . . , ni , where
+2 ), B ∼ N (0, σ 2 ) independently. We want to estimate the global mean µ
+Ai ∼ N (0, σA
+ij
+B
+2 , σ 2 . If the layout is unbalanced, that is the number of
+and the variance components σA
+B
+replications is not equal, this can be somewhat challenging. Two general approaches for
+estimation are the restricted maximum likelihood (REML), and minimum norm quadratic
+estimation (MINQUE) methods.
+2 such
+Here is how
+augmentation. Consider a simple estimator of σB
+Pnone may use data
+2
+2
+−1
+as σ
+bB = s
+i=1 E(Xi1 − Xi2 ) /2 (we assume that ni ≥ 2 for all i). This is a heuristic
+plug-in estimator, which is convenient to write down and compute in a closed form. It is
+also unbiased. However, it clearly does not use all samples, and therefore, it should be
+possible to improve it.
+Now let us denote by Xi the block of i-th observations. These have a joint normal
+2 1 1> + σ 2 I ). The model is invariant under the operations
+distribution Xi ∼ N (µ1ni , σA
+ni ni
+B ni
+Xi → Oi Xi ,
+for any orthogonal matrix Oi of size ni for which Oi 1ni = 1ni , i.e., a matrix that has the
+vector of all ones 1ni as an eigenvector. Let Gi be the group of such matrices. Then
+the overall model is invariant under the action of the direct product G1 × G2 × . . . × Gs .
+Therefore, any estimator that is not invariant with respect to this group can be improved
+by data augmentation.
+2 , to find its augmented version, we need to compute
+Going back to the estimator σ
+bB
+the quantity E([Ox]1 − [Ox]2 )2 , where x ∈ Rk is fixed and O is uniformly random from
+the group of orthogonal matrices such that O1k = 1k . Write x = x̄1k + r, where x̄ is the
+mean of the entries of x. Then Ox = x̄1k + Or, and [Ox]j = x̄ + [Or]j . Thus we need
+E([Or]1 − [Or]2 )2 . This can be done by using that Or is uniformly distributed on the k − 1
+dimensional orthocomplement of the 1k vector, and we omit the details.
+
+Acknowledgments
+44
+
+Theory for Data Augmentation
+
+We are grateful to Zongming Ma for proposing the topic, and for participating in our
+early meetings. We thank Jialin Mao for participating in several meetings and for helpful
+references. We thank numerous people for valuable discussions, including Peter Bickel,
+Kostas Daniilidis, Jason Lee, William Leeb, Po-Ling Loh, Tengyu Ma, Jonathan Rosenblatt,
+Yee Whye Teh, Tengyao Wang, the members in Konrad Kording’s lab, with special thanks
+to David Rolnick. We thank Dylan Foster for telling us about the results from Foster et al.
+(2019). This work was supported in part by NSF BIGDATA grant IIS 1837992 and NSF
+TRIPODS award 1934960. We thank the Simons Institute for the Theory of Computing
+for providing AWS credits.
+
+Appendix A. Proofs for results under exact invariance
+A.1 Proof of Lemma 1
+We first prove part 1. Let x be fixed. Let A = {X ∈ Gx}. It suffices to show
+Z
+Z
+Eg f (gx)dP(X) =
+f (X)dP(X).
+A
+
+A
+
+For an arbitrary g ∈ G, the RHS above is equal to
+Z
+Z
+f (X)dP(X) = f (gX)1{gX ∈ Gx}dP(X)
+A
+Z
+= f (gX)1{X ∈ Gx}dP(X),
+where the first equality is by the exact invariance, and the second equality is by the definition
+of the orbit. Taking expectation w.r.t. Q, we get
+Z
+Z Z
+f (X)dP(X) =
+f (gX)1{X ∈ Gx}dP(X)dQ(g).
+A
+
+G
+
+∗ , potentially depending on X, s.t. X = g ∗ x. Hence, we
+On the event A, there exists gX
+X
+have
+Z
+Z Z
+∗
+f (X)dP(X) =
+f (g ◦ gX
+x)1{X ∈ Gx}dP(X)dQ(g)
+A
+G
+Z Z
+∗
+=
+f (g ◦ gX
+x)dQ(g)1{X ∈ Gx}dP(X)
+G
+Z Z
+=
+f (gx)dQ(g)1{X ∈ Gx}dP(X)
+G
+Z
+=
+Eg f (gx)dP(X),
+A
+
+where the second equality is by Fubini’s theorem, and the third inequality is due to the
+translation invariant property of the Haar measure.
+Part 2 follows by law of total expectation along with the above point.
+Part 3 follows directly from part 1 and the law of the total covariance applied to the
+random variable f (gX), where g ∼ Q, X ∼ P.
+Part 4 follows from Jensen’s inequality.
+45
+
+Chen, Dobriban and Lee
+
+A.2 Proof of Lemma 5
+By exact invariance and Fubuni’s theorem, it is clear that EL̄(θ, X) = EL(θ, X) for any
+θ ∈ Θ. Hence θG = θ0 and Assumption A is verified for (θG , L̄). We now verify the five
+parts of Assumption B.
+For part 1, we have
+n
+
+n
+
+1X
+1X
+EL̄(θ, Xi ) − EL̄(θ, X) = sup Eg [
+L(θ, gXi ) − EL(θ, gX)]
+n
+θ∈Θ n
+θ∈Θ
+
+sup
+
+i=1
+
+i=1
+
+≤ sup Eg
+θ∈Θ
+
+n
+1X
+
+n
+
+1
+n
+θ∈Θ
+
+≤ Eg sup
+
+L(θ, gXi ) − EL(θ, gX)
+
+i=1
+n
+X
+i=1
+
+L(θ, gXi ) − EL(θ, gX)
+
+= op (1),
+where the two inequalities is by Jensen’s inequality, and the convergence statement is true
+because of the exact invariance and the fact that the original loss satisfies part 1 of Assumption B.
+Part 2 is true because we have assumed that the action x 7→ gx is continuous.
+For part 3, since (θ0 , L) satisfies this assumption, we know that on an event with full
+probability, we have
+
+lim
+
+δ→0
+
+L(θ0 + δ, gX) − L(θ0 , gX) − δ > ∇L(θ0 , gX)
+kδk
+
+= 0.
+
+Now we have
+Eg L(θ0 + δ, gX) − Eg L(θ0 , gX) − δ > Eg ∇L(θ0 , gX)
+kδk
+≤
+
+Eg L(θ0 + δ, gX) − L(θ0 , gX) − δ > ∇L(θ0 , gX)
+kδk
+
+≤ Eg [L̇(gX) + k∇L(θ0 , gX)k],
+where the first inequality is by Jensen’s inequality, and the second inequality is by part 4
+applied to (θ0 , L). We have assumed that E[L̇(X)2 ] < ∞, and hence so does E[L̇(X)]. By
+exact invariance, we have
+EX Eg [L̇(gX)] = Eg EX [L̇(gX)] = E[L̇(X)] < ∞,
+which implies Eg [L̇(gx)] < ∞ for P-a.e. x. On the other hand, part 5 applied to (θ0 , L)
+implies the existence of E∇L(θ0 , X)∇L(θ0 , X)> , and hence Ek∇L(θ0 , X)k2 < ∞ and so
+does Ek∇L(θ0 , X)k. Now a similar argument shows that under exact invariance, we have
+Eg k∇L(θ0 , gx)k < ∞.
+46
+
+Theory for Data Augmentation
+
+for P-a.e. x. Hence we can apply dominated convergence theorem to conclude that
+
+lim
+
+Eg L(θ0 + δ, gX) − Eg L(θ0 , gX) − δ > Eg ∇L(θ0 , gX)
+kδk
+
+δ→0
+
+≤ Eg lim
+
+L(θ0 + δ, gX) − L(θ0 , gX) − δ > ∇L(θ0 , gX)
+kδk
+
+δ→0
+
+= 0,
+
+which implies that θ 7→ L̄(θ, x) is indeed differentiable at θ0 .
+For part 4, by assumption, we have
+|L(θ1 , gx) − L(θ2 , gx)| ≤ L̇(gx)kθ1 − θ2 k
+for almost every x and every θ1 , θ2 in a neighborhood of θ0 = θG . Taking expectation w.r.t.
+g ∼ Q, we get
+|L̄(θ1 , x) − L̄(θ2 , x)| ≤ Eg |L(θ1 , gx) − L(θ2 , gx)|
+≤ Eg L̇(gx)kθ1 − θ2 k.
+
+Now it suffices to show x 7→ Eg L̇(gx) is in L2 (P). This is true by an application of Jensen’s
+inequality and exact invariance:
+EX [(Eg L̇(gX))2 ] ≤ EX Eg [(L̇(gX))2 ]
+
+= Eg EX [(L̇(gX))2 ]
+= Eg EL̇2
+= EL̇2
+< ∞.
+
+Part 5 is true because under exact invariance, we have EL(θ, X) = EL̄(θ, X).
+A.3 Proof of Theorem 6
+The results concerning θbn is classical (see, e.g., Theorem 5.23 of Van der Vaart 1998). By
+Lemma 3.4, we can apply Theorem 5.23 of Van der Vaart (1998) to the pair (θG = θ0 , L̄) to
+conclude the Bahadur representation. Hence the asymptotic normality of θbn,G follows and
+we have
+ΣG = Vθ−1
+E[L̄(θ0 , X)L̄(θ0 , X)> ]Vθ−1
+.
+0
+0
+The final representation of ΣG follows from part 3 of Lemma 1.
+A.4 Proof of Proposition 8
+Let Tp M be the tangent space of M at the point p. The inclusion map from ΘG to Rp is
+an immersion. So we can decompose Tθ0 Rp = Tθ0 ΘG ⊕ (Tθ0 ΘG )⊥ , i.e., the direct sum of
+47
+
+Chen, Dobriban and Lee
+
+the tangent space of ΘG at θ0 and its orthogonal complement. Hence the decomposition is
+valid. Now as `θ (gx) + log det g = `θ (x) for any θ ∈ ΘG , it is clear that the gradient of `θ0
+w.r.t. ΘG is invariant.
+Using PG ∇`θ0 (gX) = PG ∇`θ0 (X), we have
+Eθ0 Covg (∇`θ0 (gX)) = Eθ0 Covg (PG ∇`θ0 (gX) + PG⊥ ∇`θ0 (gX))
+= Eθ0 Covg (PG ∇`θ0 (X) + PG⊥ ∇`θ0 (gX))
+= Eθ0 Covg (PG⊥ ∇`θ0 (gX)),
+which concludes the proof.
+A.5 Proof of Proposition 9
+From our theory we know that the asymptotic covariance matrix of cMLE for estimating
+¯ −1 , while that of aMLE for estimating θ1 is I −1 . Thus
+parameters θ = (θ1 , θ2 ) is I −1 II
+11
+aMLE is asymptotically more efficient than the cMLE if and only if
+−1
+II −1 ]11 .
+ [I −1 ¯
+I11
+
+Denoting K := (I −1 )1 , this is equivalent to
+•
+
+−1
+¯ >,
+ K IK
+I11
+
+by Equation (17) and (18), Using the Schur complement formula, this is equivalent to the
+−1
+in the matrix Mθ is PSD, where Mθ
+statement that the Shur complement of the matrix IG
+equals
+
+ −1
+K
+I11
+.
+Mθ =
+K > I¯−1
+−1
+, is PSD. Thus, from the properties of Schur
+Now, the top left block of this matrix, I11
+complements, the entire matrix Mθ is also PSD. Therefore, the condition is equivalent to
+the matrix Mθ being PSD.
+
+A.6 Proof of Proposition 10
+Let C = Eg∼Q [g]. By orthogonality, for each g we have that g > = g −1 is also in G. Along
+with the fact that Q is Haar, we conclude that the matrix C is symmetric. Then for any
+v ∈ ΘG , we have Cv = Eg∼Q [gv] = Eg∼Q [g > v] = Eg∼Q [v] = v. Moreover, for any w ∈ Θ⊥
+G,
+we have Cw = Eg∼Q [gw] = Eg∼Q [g > w] = Eg∼Q [0] = 0. Hence, C is exactly the orthogonal
+projection into the subspace ΘG , which finishes the proof.
+A.7 Proof of Theorem 11
+In the following proof, we will use θ and W interchangeably when there is no ambiguity.
+For part 1 of the theorem, we have
+∇f (W, x) = σ 0 (W x) · x> ∈ Rp×d .
+48
+
+Theory for Data Augmentation
+
+We then have
+∇f (W, x) = σ 0 (W x) · x> ∈ Rp×d .
+
+We can think of the Fisher information matrix Iθ = E∇f (θ, X)∇f (θ, X)> as a tensor, i.e,
+IW = E(σ 0 (W X) · X > ) ⊗ (σ 0 (W X) · X > )
+
+= E(σ 0 (W X) ⊗ σ 0 (W X)) · (X ⊗ X)> .
+
+The i, j, i0 , j 0 -th entries of this tensor are
+IW (i, j, i0 , j 0 ) = Eσ 0 (Wi> X)σ 0 (Wi>0 X) · Xj Xj 0 .
+For a quadratic activation function, σ(x) = x2 /2, we can get more detailed results. We
+then have
+IW = E(W XX > ) ⊗ (W XX > )
+
+= (W ⊗ W ) · E(XX > ⊗ XX > ).
+
+The group acts by gx = Tg x, where Tg is an operator that
+P shifts a vector circularly by
+g units. We can then write the neural network f (W, x) = pi=1 h(Wi ; x) as a sum, where
+h(a, x) = σ(a> x). Therefore, the invariant function corresponding to fW can also be written
+in terms of the corresponding invariant functions corresponding to the h-s:
+1
+f¯(W, x) =
+d
+
+d
+X
+
+f (W, Tg x) =
+
+g=1
+
+p
+X
+
+h̄(Wi ; x).
+
+i=1
+
+P
+where h̄(a; x) = d1 dg=1 h(a; Tg x). We can use this representation to calculate the gradient.
+We first notice ∇h(a; x) = σ 0 (a> x)x. Thus,
+d
+
+d
+
+g=1
+
+g=1
+
+1X
+1X 0 >
+∇h̄(a; x) =
+∇h(a; Tg x) =
+σ (a Tg x)Tg x
+d
+d
+1
+= Cx · σ 0 (Cx> a).
+d
+Here Cx is the circulant matrix
+
+x1 , xd , . . . , xd−1
+x2 , x1 , . . . , xd 
+.
+Cx = [x, T1 x, . . . , Td−1 x] = 
+
+
+...
+xd , xd−1 , . . . , x1
+
+
+Hence the gradient of the invariant neural network f¯(W, x) as a matrix-vector product
+
+
+ 0
+
+σ (W1> Cx ) · Cx>
+∇h̄(W1 ; x)>
+= 1
+ = 1 σ 0 (W Cx ) · Cx> .
+...
+...
+∇f¯(W, x) = 
+d
+d
+σ 0 (Wp> Cx ) · Cx>
+∇h̄(Wp ; x)>
+49
+
+Chen, Dobriban and Lee
+
+So the Fisher information can also expressed in terms of matrix products
+>
+>
+I¯W = E(σ 0 (W CX ) · CX
+) ⊗ (σ 0 (W CX ) · CX
+)
+
+= E(σ 0 (W CX ) ⊗ σ 0 (W CX )) · (CX ⊗ CX )> .
+
+For quadratic activation functions, we have
+1
+>
+>
+) ⊗ (W CX CX
+)
+I¯W = 2 E(W CX CX
+d
+1
+>
+>
+= (W ⊗ W ) · 2 E(CX CX
+⊗ CX CX
+)
+d
+1
+= (W ⊗ W ) · 2 E(CX ⊗ CX ) · (CX ⊗ CX )> .
+d
+Therefore, the efficiency gain can be characterized by the move from the 4th moment tensor
+of X to that of √1d CX .
+Finally, if we assume X ∼ N (0, Id ), then we can express our results in a simpler form
+using the discrete Fourier transform. Let F be the d × d Discrete Fourier Transform (DFT)
+matrix, with entries Fj,k = d−1/2 exp(−2πi/d · (j − 1)(k − 1)). Then F x is called the DFT
+of the vector x, and F −1 y = F ∗ y is called the inverse DFT. The DFT matrix is a unitary
+matrix with F F ∗ = F ∗ F = Id . Thus F −1 = F ∗ . It is also a symmetric matrix with
+F > = F . Then the circular matrix can be diagonalized as
+1
+√ Cx = F ∗ diag(F x)F.
+d
+The eigenvalues of d−1/2 Cx are the entries of F x, with eigenvectors the corresponding
+columns of F .
+So we can write, with D := diag(F X),
+d−1 CX ⊗ CX = F ∗ DF ⊗ F ∗ DF
+
+= (F ⊗ F )∗ · (D ⊗ D) · (F ⊗ F ) = F2∗ D2 F2 ,
+
+where F2 = F ⊗ F , and D2 = D ⊗ D is a diagonal matrix. So
+d−2 E(CX ⊗ CX ) · (CX ⊗ CX )> = EF2∗ D2 F2 · (F2∗ D2 F2 )>
+= EF2∗ D2 F2 · F2> D2 F2∗,T
+= F2∗ · ED2 F22 D2 · F2∗ .
+
+Here we used that F = F > , hence F2> = (F ⊗ F )> = F > ⊗ F > = F2 .
+Now, D2 can be viewed as a d2 × d2 matrix, with diagonal entries D2 (i, j, i, j) = Di Dj =
+Fi> X · Fj> X, where Fi are the rows (which are also equal to the columns) of the DFT. Thus
+the inner expectation can be written as an elementwise product (also known as Hadamard
+or odot product)
+ED2 F22 D2 = F22 ED2 D2> .
+So we only need to calculate the 4th order moment tensor M of the Fourier transform F X,
+Miji0 j 0 = EFi> X · Fj> X · Fi>0 X · Fj>0 X.
+50
+
+Theory for Data Augmentation
+
+Let us write r := F X. Then by Wick’s formula,
+Efi fj fi0 fj 0 = Efi fj · Efi0 fj 0 + Efi fj 0 · Efi0 fj + Efi fi0 · Efi fj 0 .
+Now
+Efi fj = EFi> X · Fj> X = Fi> · EXX > · Fj = Fi> Fj .
+
+Hence
+
+Miji0 j 0 = Fi> Fj · Fi>0 Fj 0 + Fi> Fj 0 · Fi>0 Fj + Fi> Fi0 · Fi> Fj 0 .
+This leads to a completely explicit expression for the average information. Recall F2 =
+F ⊗ F , and M is the d2 × d2 tensor with entries given above. Then
+I¯W = (W ⊗ W ) · F2∗ · (F22
+
+M ) · F2∗ .
+
+A.8 Proof of Corollary 12
+For notational simplicity, for a generic matrix A, we will use A⊗2 to denote the tensor
+product A ⊗ A. Recalling the definitions in (27), we have
+EUW (X) = E[η 0 (f (W, X))2 (σ 0 (W X) ⊗ σ 0 (W X)) · (X ⊗ X)> ],
+and similarly,
+E[UW (X)]ΣERM E[UW (X)] = E[vW (X)UW (X)]
+= E[vW (X)η 0 (f (W, X))2 (σ 0 (W X) ⊗ σ 0 (W X)) · (X ⊗ X)> ].
+On the other hand, under the circular symmetry model (24), for the augmented estimator,
+by Theorem 6, we can directly compute
+
+⊗2 
+0
+E[UW (X)]ΣaERM E[UW (X)] = E EG [(Y − η(f (W, gX)))η (f (W, gX))∇f (W, gX)]
+
+
+= E (Y − η(f (W, X)))2 η 0 (f (W, X))2 (EG ∇f (W, gX))⊗2
+
+
+⊗2 >
+0
+2 0
+⊗2
+= E vW (X)η (f (W, X)) (σ (W CX )) (CX ) ,
+where in the second line we used f (W, x) = f (W, gx), and the last equality is by a similar
+computation as in the proof of Theorem 11. Then it is clear that
+E[UW (X)](ΣERM − ΣaERM )E[UW (X)]
+
+
+
+⊗2 >
+= E vW (X)η 0 (f (W, X))2 × (σ 0 (W X))⊗2 (X ⊗2 )> − (σ 0 (W CX ))⊗2 (CX
+)
+.
+Assuming σ(x) = x2 /2, we have
+E[UW (X)](ΣERM − ΣaERM )E[UW (X)]
+
+
+
+⊗2
+0
+2
+> ⊗2
+> ⊗2
+= W E vW (X)η (f (W, X)) (XX ) − (CX CX )
+,
+which concludes the proof.
+51
+
+Chen, Dobriban and Lee
+
+A.9 Proof of Proposition 13
+For part 1, we have
+
+
+> >
+
+> −1
+
+> >
+
+
+
+βbaDIST = Eg ((Xg ) Xg ) (Xg ) y
+
+
+>
+> −1
+>
+>
+= Eg (gX Xg ) gX (Xg β + ε)
+
+
+= β + Eg (gX > Xg > )−1 gX > ε
+
+
+−1
+>
+−1 −1
+>
+= β + Eg g (X X) g gX ε
+= β + Eg [g −1 ](X > X)−1 X > ε
+= β + G > (X > X)−1 X > ε.
+Let X = U DV > be a SVD of X, where V ∈ Rp×p is unitary. Note that βbaDIST is unbiased,
+so its `2 risk is
+raDIST = γ 2 tr(Var(βbaDIST )) = γ 2 tr(G > (X > X)−1 G)
+
+= γ 2 tr(G > V D−2 V > G) = γ 2 tr(D−2 V > GG > V )
+= γ2
+
+p
+X
+j=1
+
+>
+>
+2
+dj−2 e>
+j V GG V ej = γ
+
+p
+X
+j=1
+
+>
+2
+d−2
+j kG vj k2 ,
+
+where vj ∈ Rp is j-th eigenvector of X > X and d2j is j-th eigenvalue of X > X. As a comparison, for the usual ERM, we have
+βbERM = (X > X)−1 X > y = β + (X > X)−1 X > ε,
+so its `2 risk is
+rERM = γ 2 tr((X > X)−1 ) = γ 2
+
+p
+X
+
+d−2
+j .
+
+j=1
+
+So part 1 is proved.
+We now prove part 2. For raDIST ≤ rERM we need to show
+tr((X > X)−1 GG > ) ≤ tr((X > X)−1 ).
+A sufficient condition is that, in the partial ordering of positive semidefinite matrices,
+GG > ≤ Ip .
+This is equivalent to the claim that for all v kEg g > vk2 ≤ kvk2 . However, by Jensen’s
+inequality, kEg g > vk2 ≤ EG kg > vk2 . Since G is a subgroup of the orthogonal group, we have
+kg > vk2 = kvk2 , which finishes the proof for part 2.
+52
+
+Theory for Data Augmentation
+
+We finally prove part 3. We assume G is the permutation group. This group is clearly
+a subgroup of the orthogonal group. Note that invariance w.r.t. G implies that the true
+parameter is a multiple of the all ones vector: β = 1p b. So we have
+bb = arg min ky − X1p bk2 .
+2
+
+βbcERM = 1pbb,
+Solving the least-squares equation gives
+bb =
+
+1> X > y
+.
+>
+1>
+p X X1p
+
+>
+−1
+b
+The risk of estimating b is then γ 2 (1>
+p X X1p ) , so that the risk of estimating β by 1p b is
+>
+−1
+rcERM = γ 2 p(1>
+p X X1p ) .
+
+Finally, we have
+raDIST =
+
+γ2
+γ 2 > > −1
+>
+>
+−1
+>
+tr(1
+1
+(X
+X)
+1
+1
+)
+=
+1 (X X) 1p ,
+p p
+p p
+p2
+p p
+
+which is equal to rcERM if X > X = Ip .
+
+Appendix B. Proofs for results under approximate invariance
+B.1 Proof of Lemma 15
+For part 1, we have
+kEX Eg f (gX) − EX f (X)k2 = sup Eg EX hv, f (gX) − EX f (X)i
+kvk2 ≤1
+
+≤ sup Eg kvk2 W1 (f (gX), f (X))
+kvk2 ≤1
+
+= Eg W1 (f (gX), f (X)),
+where the inequality is due to Kantorovich-Rubinstein theorem, i.e., the dual representation
+of the W1 metric (see. e.g., Villani 2003).
+For part 2, by law of total variance, we have
+CovX f¯(X) − CovX f (X) = −EX Covg f (gX) + ∆1 + ∆2 ,
+where
+∆1 = E(X,g) f (gX)f (gX)> − EX f (X)f (X)>
+
+∆2 = EX f (X)EX f (X)> − E(X,g) f (gX)E(X,g) f (gX)>
+For any non-zero vector v, we have
+
+
+2
+2
+|v ∆1 v| = Eg EX hv, f (gX)i − hv, f (X)i
+
+
+2
+2
+≤ Eg EX hv, f (gX)i − hv, f (X)i .
+>
+
+53
+
+Chen, Dobriban and Lee
+
+The Lipschitz constant for the function w 7→ hv, wi2 , where w ∈ Range(f ), is bounded
+above by 2kvk22 kf k∞ . Invoking Kantorovich-Rubinstein theorem again, we have
+|v > ∆1 v| ≤ 2kvk22 kf k∞ Eg W1 (f (gX), f (X)).
+Similarly, we have
+
+2 
+2
+EX hv, f (X)i − E(X,g) hv, f (gX)i
+
+
+≤ 2kf k∞ Eg EX hv, f (X)i − hv, f (gX)i
+
+
+≤ 2kf k∞ Eg EX hv, f (X)i − hv, f (gX)i
+
+|v > ∆2 v| =
+
+≤ 2kvk22 kf k∞ Eg W1 (f (gX), f (X)).
+Part 2 is then proved by recalling the definition of the Loewner order.
+For part 3, we have
+EX ϕ(f¯(X)) − EX ϕ(f (X)) = EX ϕ(f¯(X)) − EX ϕ ¯◦ f (X) + Eg EX ϕ ◦ f (gX) − EX ϕ(f (X)).
+We finish the proof by noting that
+Eg EX ϕ ◦ f (gX) − EX ϕ(f (X)) ≤ kϕkLip W1 (f (gX), f (X)).
+B.2 Proof of Proposition 16
+b Then using bias-variance decomposition,
+For notational simplicity, we let f¯ = θbG and f = θ.
+we have
+MSE(f¯) − MSE(f ) = B + V,
+
+where
+
+B = kBias(f¯)k22 − kBias(f )k22
+V = tr(CovX f¯(X)) − tr(CovX f (X)).
+We first analyze the bias term. Note that by Lemma 15, we have
+kBias(f¯)k2 − kBias(f )k2 ≤ kEX f¯(X) − EX f (X)k2
+≤ Eg W1 (f (gX), f (X)).
+Hence
+
+
+¯
+|B| ≤ kBias(f )k2 + kBias(f )k2 kBias(f¯)k2 − kBias(f )k2
+
+
+¯
+≤ kEX f (X) − EX f (X)k2 + 2kBias(f )k2 · kEX f¯(X) − EX f (X)k2
+
+
+≤ EG W1 (f (gX), f (X)) + 2kBias(f )k2 · Eg W1 (f (gX), f (X)).
+54
+
+Theory for Data Augmentation
+
+The variance term V can be bounded by the following arguments. We have
+
+
+| tr(∆1 )| =
+
+Eg EX kf (gX)k22 − kf (X)k22
+
+
+
+
+
+≤ 2kf k∞ Eg EX kf (gX)k2 − kf (X)k2
+≤ 2kf k∞ Eg W1 (f (gX), f (X)).
+Similarly, we have
+| tr(∆2 )| = kEX f (X)k22 − kEX,g f (gX)k22
+≤ 2kf k∞ kEX f (X)k2 − kEX,g f (gX)k2
+≤ 2kf k∞ kEX f (X) − EX f¯(X)k2
+≤ 2kf k∞ Eg W1 (f (gX), f (X)),
+
+where the last inequality is due to Lemma 15.
+Combining the bound for B and V gives the desired result.
+B.3 Proof of Theorem 17
+We first prove a useful lemma.
+Lemma 20 (Triangle inequality/Tensorization) For two random vectors (X1 , ..., Xn ),
+(Y1 , ..., Yn ) ∈ X n , we denote the joint laws as µn , ν n respectively, and the marginal laws as
+{µi }n1 , {νi }n1 respectively. We have
+Wdn (µn , ν n ) ≤
+
+X
+i
+
+Wd (µi , νi ).
+
+Proof By Kantorovich duality (see, e.g., Villani 2003), for each coordinate, we can choose
+optimal couplings (Xi∗ , Yi∗ ) ∈ Π(µi , νi ) s.t. Wd (Xi , Yi ) = Ed(Xi∗ , Yi∗ ). We then conclude
+that proof by noting that ({Xi∗ }n1 , {Yi∗ }n1 ) ∈ Π(µn , ν n ).
+Now we are ready to give the proof. We will do the proof for a general metric d. The
+desired result is a special case when d is the Euclidean metric.
+The results concerning θbn is classical. We present a proof here for completeness. We
+recall the classical approach of decomposing the generalization error into terms that can
+be bounded via concentration and Rademacher complexity (Bartlett and Mendelson, 2002;
+Shalev-Shwartz and Ben-David, 2014):
+1
+EL(θbn , X) − EL(θ0 , X) = EL(θbn , X) −
+n
+
+n
+X
+i=1
+
+55
+
+1
+L(θbn , Xi ) +
+n
+
+n
+X
+i=1
+
+L(θbn , Xi ) − EL(θ0 , X).
+
+Chen, Dobriban and Lee
+
+Hence we arrive at
+1
+EL(θbn , X) − EL(θ0 , X) ≤ EL(θbn , X) −
+n
+
+n
+X
+
+n
+
+1X
+L(θ0 , Xi ) − EL(θ0 , X)
+n
+i=1
+i=1
+ n
+
+n
+1X
+1X
+≤ sup
+L(θ, Xi ) − EL(θ, X) +
+L(θ0 , Xi ) − EL(θ0 , X) ,
+n
+θ∈Θ n
+L(θbn , Xi ) +
+
+i=1
+
+i=1
+
+where the first inequality is because θbn is a minimizer of the empirical risk. By McDiarmid’s
+inequality, we have
+n
+
+1X
+P(
+L(θ0 , Xi ) − EL(θ0 , X) > t) ≤ exp{−2nt2 }.
+n
+i=1
+
+So w.p. at least 1 − δ/2, we have
+n
+
+1X
+L(θ0 , Xi ) − EL(θ0 , X) ≤
+n
+
+r
+
+i=1
+
+It remains to control
+
+log 2/δ
+.
+2n
+
+n
+
+1X
+L(θ, Xi ) − EL(θ, X) .
+θ∈Θ n
+
+sup
+
+i=1
+
+We bound the above quantity using Rademacher complexity. The arguments are standard
+and can be found in many textbooks (see, e.g., Shalev-Shwartz and Ben-David 2014). Since
+we’ve assumed L(θ, x) ∈ [0, 1], for two data sets {Xi }n1 and {X̃i }n1 which only differ in the
+i-th coordinate, we have
+n
+
+n
+
+i=1
+
+i=1
+
+1X
+1X
+L(θ, Xi ) − EL(θ, X) − sup
+L(θ, X̃i ) − EL(θ, X)
+θ∈Θ n
+θ∈Θ n
+
+sup
+≤
+
+1
+1
+sup |L(θ, Xi ) − L(θ, X̃i )| ≤ .
+n θ∈Θ
+n
+
+By McDiarmid’s inequality, we have
+
+
+
+
+n
+n
+1X
+1X
+P sup
+L(θ, Xi ) − EL(θ, X) − E sup
+L(θ, Xi ) − EL(θ, X) ≥ t
+θ∈Θ n
+θ∈Θ n
+i=1
+2
+
+i=1
+
+≤ exp{−2nt }.
+It follows that w.p. 1 − δ/2, we have
+
+ r
+n
+n
+1X
+1X
+log 2/δ
+sup
+L(θ, Xi ) − EL(θ, X) − E sup
+L(θ, Xi ) − EL(θ, X) ≤
+.
+n
+n
+2n
+θ∈Θ
+θ∈Θ
+i=1
+
+i=1
+
+A standard symmetrization argument then shows that
+
+
+n
+1X
+E sup
+L(θ, Xi ) − EL(θ, X) ≤ 2Rn (L ◦ Θ),
+θ∈Θ n
+i=1
+
+56
+
+Theory for Data Augmentation
+
+where the Rademacher complexity of the function class L ◦ Θ = {x 7→ L(θ, x) : θ ∈ Θ} is
+defined as
+n
+1X
+Rn (L ◦ Θ) = E sup
+εi L(θ, Xi ) ,
+θ∈Θ n
+i=1
+
+where the expectation is taken over both the data and IID Rademacher random variables
+εi , which are independent of the data. Summarizing the above computations (along with a
+union bound) finishes the proof for θbn .
+Now we consider the results for θbn,G under approximate invariance. We start by doing
+a similar decomposition
+EL(θbG , X) − EL(θ0 , X) = I + II + III + IV + V,
+where
+I = EL(θbG , X) − EEG L(θbG , gX)
+n
+1X
+b
+II = EEG L(θG , gX) −
+EG L(θbG , gXi )
+n
+i=1
+
+III =
+IV =
+
+n
+1X
+
+n
+1
+n
+
+i=1
+n
+X
+i=1
+
+1
+EG L(θbG , gXi ) −
+n
+
+n
+X
+
+EG L(θ0 , gXi )
+
+i=1
+
+EG L(θ0 , gXi ) − EEG L(θ0 , gX)
+
+V = EEG L(θ0 , gX) − EL(θ0 , X).
+By construction, we have III ≤ 0 and
+n
+
+1X
+EG L(θ, gXi ) − EEG L(θ, gX) .
+II ≤ sup
+θ∈Θ n
+i=1
+
+Moreover, we have
+I + V ≤ 2 sup EL(θ, X) − EEG L(θ, gX) ,
+θ∈Θ
+
+which is equal to zero under exact invariance gX =d X.
+The term II + IV is taken care of by essentially the same arguments as the proof for θbn .
+One uses concentration to bound IV and uses Rademacher complexity to bound II. These
+arguments give
+r
+2 log 2/δ
+II + IV ≤ 2Rn (L̄ ◦ Θ) +
+n
+w.p. at least 1 − δ, where
+n
+
+1X
+Rn (L̄ ◦ Θ) = E sup
+εi EG L(θ, gXi ) .
+θ∈Θ n
+i=1
+
+57
+
+Chen, Dobriban and Lee
+
+Now we have
+
+n
+n
+1X
+1X
+εi L(θ, gXi ) − E sup
+εi L(θ, Xi ) ,
+Rn (L̄ ◦ Θ) − Rn (L ◦ Θ) ≤ ∆ + Eg E sup
+θ∈Θ n
+θ∈Θ n
+
+
+i=1
+
+i=1
+
+where we recall
+n
+
+1X
+1
+∆ = E sup |
+εi Eg L(θ, gXi )| − EEg sup | εi L(θ, gXi )| ≤ 0
+n
+θ
+θ∈Θ n
+i=1
+
+by Jensen’s inequality.
+By our assumption, for any x, x̃ ∈ X , θ ∈ Θ, we have
+L(θ, x) − L(θ, x̃) ≤ kLkLip · d(x, x̃)
+for some constant kLkLip . For a fixed vector (ε1 , ..., εn ), consider the function
+n
+
+1X
+h : (x1 , ..., xn ) 7→ sup
+εi L(θ, xi ) .
+θ∈Θ n
+i=1
+
+We have
+n
+
+X
+1
+sup
+εi L(θ, xi ) − εi L(θ, yi )
+n θ∈Θ
+i=1
+X
+1
+d(xi , yi ).
+≤ kLkLip ·
+n
+
+|h(x1 , ..., xn ) − h(y1 , ..., yn )| ≤
+
+i
+
+That is, the function h :P
+X n → R is (kLkLip /n)-Lipschitz w.r.t. the l.s.c. metric dn , defined
+n
+n
+by dn ({xi }1 , {yi }1 ) =
+i d(xi , yi ). Applying the tensorization lemma and KantorovichRubinstein theorem, for arbitrary random vectors (X1 , ..., Xn ) and (Y1 , ..., Yn ), we have
+1
+kLkLip · Wdn (µn , ν n )
+n
+n
+X
+1
+≤ kLkLip ·
+Wd (Xi , Yi ).
+n
+
+|Eh(X1 , ..., Xn ) − h(Y1 , ..., Yn )| ≤
+
+i=1
+
+Hence we arrive at
+Rn (L̄ ◦ Θ) − Rn (L ◦ Θ) ≤ ∆ + kLkLip ·
+
+1X
+Eg Wd (Xi , gXi )
+n
+i
+
+= kLkLip · Eg Wd (X, gX).
+Summarizing the above computations, we have
+r
+II + IV ≤ 2Rn (L ◦ Θ) + 2kLkLip · EG Wd (X, gX) +
+w.p. at least 1 − δ.
+58
+
+2 log 2/δ
+n
+
+Theory for Data Augmentation
+
+We now bound I + V. We have
+I + V ≤ 2 sup EL(θ, X) − EEG L(θ, gX)
+θ∈Θ
+
+≤ 2 sup EG EL(θ, X) − EL(θ, gX)
+θ∈Θ
+
+≤ 2kLkLip · Wd (X, gX).
+Combining the bounds for the five terms gives the desired result.
+B.4 Proof of Theorem 18
+Recall that
+θG = arg minEEg L(θ, gX).
+θ∈Θ
+
+By our assumptions, we can apply Theorem 5.23 of Van der Vaart (1998) to obtain the
+Bahadur representation:
+√
+
+n
+
+X
+1
+n(θbG − θG ) = √ VG−1
+∇EG L(θ0 , gXi ) + op (1),
+n
+i=1
+
+so that we get
+√
+
+
+
+
+
+−1
+−1
+>
+b
+n(θG − θG ) ⇒ N 0, VG E ∇EG L(θG , gX)(EG ∇L(θG , gX)) VG .
+
+To simplify notations, we let
+C0 = CovX (∇L(θ0 , X)),
+
+CG = CovX (∇Eg L(θG , gX)).
+
+By bias-variance decomposition, we have
+MSE0 = n−1 tr(V0−1 C0 V0−1 )
+MSEG = n−1 tr(VG−1 CG VG−1 ) + kθG − θ0 k2 .
+We have
+tr(VG−1 CG VG−1 ) − tr(V0−1 C0 V0−1 ) = hCG , VG−2 i − hC0 , V0−2 i
+
+= hCG − C0 + C0 , VG−2 i − hC0 , V0−2 i
+
+= hCG − C0 , VG−2 i + hC0 , VG−2 − V0−2 i.
+
+We let M0 (X) = ∇L(θ0 , X)∇L(θ0 , X)> and MG (X) = ∇L(θG , X)∇L(θG , X)> . Then we
+have
+CG − C0 = CG − EX MG (X) + EX MG (X) − C0
+
+
+
+
+
+
+= CG − EX Eg MG (gX) + Eg EX MG (gX) − MG (X) + EX MG (X) − M0 (X)
+
+
+
+
+= −EX Covg (∇L(θG , gX)) + Eg EX MG (gX) − MG (X) + EX MG (X) − M0 (X) .
+59
+
+Chen, Dobriban and Lee
+
+Hence we arrive at
+
+
+−2
+n(MSEG − MSE0 ) = − EX CovG (∇L(θG , gX)), VG
++ I + II + III + IV,
+where
+I = nkθG − θ0 k2
+
+
+−2
+II = Eg EX MG (gX) − MG (X), VG
+
+
+−2
+III = EX MG (X) − M0 (X), VG
+IV = hC0 , VG−2 − V0−2 i,
+and this is the desired result.
+B.5 Proof of Theorem 19
+We seek to control the misclassification error of the two-layer net at step k. By Markov’s
+inequality, for a new sample (X, Y ) from the data distribution, we have
+
+
+1
+1
+P(Y f (x; Wk , a) ≤ 0) = P
+≥
+2
+1 + eY f (X;Wk ,a)
+
+
+0
+≤ 2E − ` (Y f (X; Wk , a)) .
+The population quantity in the RHS is decomposed by
+
+
+0
+E − ` (Y f (X; Wk , a)) = I + II,
+where
+
+
+
+1 X
+0
+I=
+Eg − ` (Yi fi,g (Wk ))
+n
+i∈[n]
+
+and
+
+
+
+
+1 X
+0
+0
+Eg − ` (Yi fi,g (Wk ))
+II = E − ` (Y f (X; Wk , a)) −
+n
+i∈[n]
+
+The first term (optimization error) is controlled by calculations based on the Neural
+Tangent Kernel. The second term (generalization error) is controlled via Rademacher complexity.
+We first control the first term (optimization error). In fact, everything is set up so
+that we can directly invoke Theorem 2.2 of Ji and Telgarsky (2019). We note that their
+result holds for any fixed dataset and there is no independence assumption. This gives the
+following result:
+60
+
+Theory for Data Augmentation
+
+Proposition 21 Given ε ∈ (0, 1), δ ∈ (0, 1/3). Let
+p
+λ=
+
+2 log(4n|G|/δ) + log(4/ε)
+,
+γ/4
+
+M=
+
+4096λ2
+.
+γ6
+
+For any m ≥ M and any constant step size η ≤ 1, w.p. 1−3δ over the random initialization,
+we have
+1X
+R̄n (Wt ) ≤ ε,
+T = d2λ2 /(nε)e.
+T
+t<T
+
+Moreover, for any 0 ≤ t < T and any 1 ≤ s ≤ m, we have
+4λ
+kws,t − ws,0 k2 ≤ √ ,
+γ m
+where ws,t is the s-th row of the weight matrix at step t.
+Proof This is a direct corollary of Theorem 2.2 in Ji and Telgarsky (2019).
+Assume the above event happens. Since we’ve chosen k to be the best iteration (with the
+lowest empirical loss) in the first T steps. Then with the same probability as above, we
+have R̄n (Wk ) ≤ ε. Now, let us note that the logistic loss satisfies the following fundamental
+self-consistency bound: −`0 ≤ `. This shows that if the loss is small, then the magnitude
+of the derivative is also small. Thus on the same event, we have that the term I is also
+bounded,
+I ≤ R̄n (Wk ) ≤ ε.
+We then control the second term (generalization error). The calculations below are
+similar to the proof of Theorem 4.4. We begin by decomposing
+II = II.1 + II.2,
+where
+
+
+
+
+0
+0
+II.1 = E − ` (Y f (X; Wk , a)) − EEg − ` (Y f (gX; Wk , a))
+and
+II.2 = EEg
+
+
+
+
+
+
+1 X
+0
+− ` (Y f (gX; Wk , a)) −
+Eg − ` (Yi f (gXi ; Wk , a)) .
+n
+0
+
+i∈[n]
+
+We control term II.1 by exploiting the closedness between the distribution of (X, Y ) and
+that of (gX, Y ). Note that the Lipschitz constant of the map x 7→ −`0 (yf (x; Wk , a)) (w.r.t.
+61
+
+Chen, Dobriban and Lee
+
+the Euclidean metric on Rd ) can be computed by:
+1
+|`0 (yf (x; Wk , a)) − `0 (yf (x̃; Wk , a))| ≤ |f (x; Wk , a) − f (x̃; Wk , a)|
+4
+1 1 X
+1 X
+>
+>
+= √
+σ(ws,k
+x) − √
+σ(ws,k
+x̃)
+4 m
+m
+s∈[m]
+
+s∈[m]
+
+1 1 X >
+≤ √
+|ws,k (x − x̃)|
+4 m
+s∈[m]
+
+≤
+
+1 1 X
+√
+kws,k k2 kx − x̃k2
+4 m
+s∈[m]
+
+1 1 X
+√
+(kws,0 k2 + kws,0 − ws,k k2 )kx − x̃k2
+4 m
+s∈[m]
+
+
+1 X
+1 √
+kws,0 k2 kx − x̃k2 ,
+ρ m+ √
+≤
+4
+m
+≤
+
+s∈[m]
+
+4λ
+and the last inequality is by Proposition 21. Note that each kws,0 k2
+where ρ = γ √
+m
+is 1-subgaussian as a 1-Lipschitz function of a Gaussian random vector (for example, by
+Theorem 2.1.12 of Tao 2012), so that
+
+
+
+
+1 X
+1 X
+2
+√
+√
+kws,0 k2 − E
+kws,0 k2 ≥ t ≤ e−t /2 .
+P
+m
+m
+
+
+s∈[m]
+
+s∈[m]
+
+Hence w.p. at least 1 − δ, we have
+
+ r
+1 X
+1 X
+1
+√
+kws,0 k2 ≤ E √
+kws,0 k2 + 2 log
+δ
+m
+m
+s∈[m]
+s∈[m]
+r
+q
+1 X
+1
+√
+≤
+Ekws,0 k22 + 2 log
+δ
+m
+s∈[m]
+p
+√
+= md + 2 log 1/δ.
+So w.p. at least 1 − δ, the Lipschitz constant of the map x 7→ −`0 (yf (x; Wk , a)) is bounded
+above by
+
+
+p
+1 4λ √
++ md + 2 log 1/δ .
+4 γ
+Assume the above event happens (along with the previous event, the overall event happens
+w.p. at least 1 − 4δ). This information allows us to exploit the closeness between X|Y and
+62
+
+Theory for Data Augmentation
+
+gX|Y . We have
+
+
+
+II.1 = EY Eg∼Q EX|Y [−` (Y f (X; Wk , a))] − EgX|Y [−` (Y f (gX; Wk , a))]
+ 
+
+
+p
+1 4λ √
+≤ EY Eg∼Q
++ md + 2 log 1/δ · W1 (X|Y, gX|Y )
+4 γ
+
+
+p
+1 4λ √
+=
++ md + 2 log 1/δ · EY Eg∼Q W1 (X|Y, gX|Y ),
+4 γ
+0
+
+0
+
+where we let X|Y to denote the conditional distribution of X given Y , and the inequality is
+by the dual representation of the Wasserstein distance. Note that under exact invariance,
+II.1 = 0.
+The term II.2 is controlled by standard results on Rademacher complexity. Indeed, by
+the same arguments as in the proof of Theorem 6.4 of the main manuscript, w.p. at least
+1 − δ, we have
+r
+log 2/δ
+II.2 ≤ 2R̄n +
+.
+2n
+Taking a union bound (now w.p. at least 1 − 5δ), we have proved the generalization error
+bound.
+Finally, we prove the bound on R̄n − Rn . Under exact invariance, Jensen’s inequality
+gives R̄n ≤ Rn . However, under approximate invariance, we have an extra bias term. We
+have
+
+
+1
+0
+R̄n − Rn = ∆ + EEg sup
+εi − ` (Yi fi,g (W )) − Rn .
+W ∈Wρ n
+where
+
+
+
+
+1
+1
+0
+0
+∆ = E sup
+εi Eg − ` (Yi fi,g (W )) − EEg sup
+εi − ` (Yi fi,g (W )) ≤ 0
+W ∈Wρ n
+W ∈Wρ n
+by Jensen’s inequality. Now by the computations when bounding term II.1 and the arguments in the proof of Theorem 4.4, we have
+
+
+
+
+p
+1
+1 4λ √
+0
+EEg sup
+εi − ` (Yi fi,g (W )) − Rn ≤
++ md + 2 log 1/δ
+4 γ
+W ∈Wρ n
+· EY Eg∼Q W1 (X|Y, gX|Y )
+w.p. at least 1 − δ. Combining the above bounds finishes the proof.
+
+Appendix C. Invariant MLE
+Another perspective to exploit invariance is that of invariant representations. The natural
+question is, how can we work with invariant representations, and what are the limits of
+information we can extract from them?
+Suppose therefore that in our model it is possible to choose a representation T (x) such
+that (T (x), 0m ) ∈ G · x for all x(where 0m is the zero vector with m entries). Thus, T
+63
+
+Chen, Dobriban and Lee
+
+chooses a representative from each orbit. This is equivalent to (T (x), 0m ) = g0 (x) · x, for
+some specific g0 (x) ∈ G. Suppose T (·), g(·) satisfy sufficient regularity conditions, such
+as smoothness. For example, when G is the orthogonal rotation group O(d), we can take
+T (x) := kxk2 , and g any orthogonal rotation such that g0 (x) = (kxk2 , 0d−1 ).
+How can we estimate the parameters θ based on this representation? A natural approach
+is to construct the MLE based on the data T (X1 ), . . . , T (Xn ). We can also construct
+invariant ERM using the same principle, but we will focus on MLE first. Let therefore Qθ
+be the induced distribution of T (X), when X ∼ Pθ , and assume it has a density qθ with
+respect to Lebesgue measure on a potentially lower dimensional Euclidean subspace (say d0
+dimensional, where d is original dimension and m = d − d0 ). We can construct the invariant
+MLE (iMLE):
+θbiM LE,n = arg max
+θ
+
+X
+
+log qθ (T (Xi )).
+
+i∈[n]
+
+How does this compare to the previous approaches? It turns out that in general this is
+not better than the un-augmented MLE. Suppose that the group G is discrete. Then we
+have
+X
+qT (t) =
+pX (g · (t, 0)) = |G| · pX ((t, 0)).
+g∈G
+
+Therefore, in this case the iMLE equals the MLE. Therefore, the invariant MLE does not
+actually gain anything over the usual MLE, and in particular augmented MLE is better.
+
+Appendix D. Experiment details
+Our code is available at https://github.com/dobriban/data_aug. Our experiment to
+generate Figure 1 is standard: We train ResNet18 (He et al., 2016) on CIFAR10 (Krizhevsky,
+2009) for 200 epochs, based on the code of https://github.com/kuangliu/pytorch-cifar.
+The CIFAR10 dataset is standard and can be downloaded from https://www.cs.toronto.
+edu/~kriz/cifar.html. We use the default settings from that code, including the SGD
+optimizer with a learning rate of 0.1, momentum 0.9, weight decay 5 · 10−4 , and batch size
+of 128. We train three models: (1) without data augmentation, (2) horizontally flipping the
+image with 0.5 probability, and (3) a composition of randomly cropping a 32 × 32 portion
+of the image and random horizontal flip; besides the data augmentation, all other hyperparameters and settings are kept the same. We repeat this experiment 15 times and plot the
+average test accuracy for each number of training epochs. The shaded regions represent 1
+standard deviation around the average test accuracy. We train both on the full CIFAR10
+training data, as well as a randomly chosen half of the training data. We do this to evaluate
+the behavior of data augmentation in the limited data regime, because there it may to lead
+to higher benefits. This experiment was done on a p3.2xlarge (GPU) instance on Amazon
+Web Services (AWS).
+
+References
+F. Anselmi, G. Evangelopoulos, L. Rosasco, and T. Poggio. Symmetry-adapted representation learning. Pattern Recognition, 86:201–208, 2019.
+64
+
+Theory for Data Augmentation
+
+A. Antoniou, A. Storkey, and H. Edwards. Data augmentation generative adversarial networks. arXiv preprint arXiv:1711.04340, 2017.
+S. Arora, S. S. Du, W. Hu, Z. Li, R. R. Salakhutdinov, and R. Wang. On exact computation
+with an infinitely wide neural net. In Advances in Neural Information Processing Systems,
+pages 8139–8148, 2019.
+H. S. Baird. Document image defect models. In Structured Document Image Analysis, pages
+546–556. Springer, 1992.
+A. S. Bandeira, B. Blum-Smith, J. Kileel, A. Perry, J. Weed, and A. S. Wein. Estimation
+under group actions: recovering orbits from invariants. arXiv preprint arXiv:1712.10163,
+2017.
+P. L. Bartlett and S. Mendelson. Rademacher and gaussian complexities: Risk bounds and
+structural results. Journal of Machine Learning Research, 3(Nov):463–482, 2002.
+T. Bendory, N. Boumal, C. Ma, Z. Zhao, and A. Singer. Bispectrum inversion with application to multireference alignment. IEEE Transactions on Signal Processing, 66(4):
+1037–1050, 2018.
+Y. Bengio, F. Bastien, A. Bergeron, N. Boulanger-Lewandowski, T. Breuel, Y. Chherawala,
+M. Cisse, M. Côté, D. Erhan, J. Eustache, et al. Deep learners benefit more from outof-distribution examples. In Proceedings of the Fourteenth International Conference on
+Artificial Intelligence and Statistics, pages 164–172, 2011.
+U. Bergmann, V. Yachandra, and J. Yano, editors. X-Ray Free Electron Lasers. Energy
+and Environment Series. The Royal Society of Chemistry, 2017.
+B. Bloem-Reddy and Y. W. Teh. Probabilistic symmetry and invariant neural networks.
+arXiv preprint arXiv:1901.06082, 2019.
+P. J. Brockwell and R. A. Davis. Time series: theory and methods. Springer, 2009.
+J. Bruna and S. Mallat. Invariant scattering convolution networks. IEEE transactions on
+pattern analysis and machine intelligence, 35(8):1872–1886, 2013.
+P. Chao, T. Mazaheri, B. Sun, N. B. Weingartner, and Z. Nussinov. The stochastic replica
+approach to machine learning: Stability and parameter optimization. arXiv preprint
+arXiv:1708.05715, 2017.
+Z. Chen, Y. Cao, D. Zou, and Q. Gu. How much over-parameterization is sufficient to learn
+deep relu networks? arXiv preprint arXiv:1911.12360, 2019.
+D. C. Cireşan, U. Meier, L. M. Gambardella, and J. Schmidhuber. Deep, big, simple neural
+nets for handwritten digit recognition. Neural computation, 22(12):3207–3220, 2010.
+J. M. Cohen, E. Rosenfeld, and J. Z. Kolter. Certified adversarial robustness via randomized
+smoothing. arXiv preprint arXiv:1902.02918, 2019.
+65
+
+Chen, Dobriban and Lee
+
+T. Cohen and M. Welling. Group equivariant convolutional networks. In International
+conference on machine learning, pages 2990–2999, 2016a.
+T. Cohen, M. Geiger, and M. Weiler. A general theory of equivariant cnns on homogeneous
+spaces. arXiv preprint arXiv:1811.02017, 2018a.
+T. S. Cohen and M. Welling. Steerable cnns. arXiv preprint arXiv:1612.08498, 2016b.
+T. S. Cohen, M. Geiger, J. Köhler, and M. Welling.
+arXiv:1801.10130, 2018b.
+
+Spherical cnns. arXiv preprint
+
+E. D. Cubuk, B. Zoph, D. Mane, V. Vasudevan, and Q. V. Le. Autoaugment: Learning
+augmentation policies from data. arXiv preprint arXiv:1805.09501, 2018.
+E. D. Cubuk, B. Zoph, J. Shlens, and Q. V. Le. Randaugment: Practical data augmentation
+with no separate search. arXiv preprint arXiv:1909.13719, 2019.
+T. Dao, A. Gu, A. Ratner, V. Smith, C. De Sa, and C. Re. A kernel theory of modern data
+augmentation. In Proceedings of the 36th International Conference on Machine Learning,
+2019.
+T. DeVries and G. W. Taylor. Dataset augmentation in feature space. arXiv preprint
+arXiv:1702.05538, 2017a.
+T. DeVries and G. W. Taylor. Improved regularization of convolutional neural networks
+with cutout. arXiv preprint arXiv:1708.04552, 2017b.
+S. Dieleman, J. De Fauw, and K. Kavukcuoglu. Exploiting cyclic symmetry in convolutional
+neural networks. arXiv preprint arXiv:1602.02660, 2016.
+L. Engstrom, B. Tran, D. Tsipras, L. Schmidt, and A. Madry. A rotation and a translation
+suffice: Fooling cnns with simple transformations. arXiv preprint arXiv:1712.02779, 2017.
+C. Esteves, C. Allen-Blanchette, A. Makadia, and K. Daniilidis. Learning so(3) equivariant
+representations with spherical cnns. In The European Conference on Computer Vision
+(ECCV), September 2018a.
+C. Esteves, A. Sud, Z. Luo, K. Daniilidis, and A. Makadia. Cross-domain 3d equivariant
+image embeddings. arXiv preprint arXiv:1812.02716, 2018b.
+C. Esteves, Y. Xu, C. Allen-Blanchette, and K. Daniilidis. Equivariant multi-view networks.
+arXiv preprint arXiv:1904.00993, 2019.
+V. Favre-Nicolin, J. Baruchel, H. Renevier, J. Eymery, and A. Borbély. XTOP: highresolution X-ray diffraction and imaging. Journal of Applied Crystallography, 48(3):620–
+620, 2015.
+N. I. Fisher, T. Lewis, and B. J. Embleton. Statistical analysis of spherical data. Cambridge
+university press, 1993.
+66
+
+Theory for Data Augmentation
+
+D. Foster, A. Sekhari, O. Shamir, N. Srebro, K. Sridharan, and B. Woodworth. The
+complexity of making the gradient small in stochastic convex optimization. arXiv preprint
+arXiv:1902.04686, 2019.
+J. Frank. Three-dimensional electron microscopy of macromolecular assemblies: visualization of biological molecules in their native state. Oxford University Press, 2006.
+K. Fukushima. Neocognitron: A self-organizing neural network model for a mechanism of
+pattern recognition unaffected by shift in position. Biological cybernetics, 36(4):193–202,
+1980.
+R. Gens and P. M. Domingos. Deep symmetry networks. In Advances in neural information
+processing systems, pages 2537–2545, 2014.
+N. C. Giri. Group invariance in statistical inference. World Scientific, 1996.
+S. Hauberg, O. Freifeld, A. B. L. Larsen, J. Fisher, and L. Hansen. Dreaming more data:
+Class-dependent distributions over diffeomorphisms for learned data augmentation. In
+Artificial Intelligence and Statistics, pages 342–350, 2016.
+K. He, X. Zhang, S. Ren, and J. Sun. Deep residual learning for image recognition. In 2016
+IEEE Conference on Computer Vision and Pattern Recognition (CVPR), pages 770–778,
+June 2016. doi: 10.1109/CVPR.2016.90.
+I. S. Helland. Statistical inference under symmetry. International Statistical Review, 72(3):
+409–422, 2004.
+A. Hernández-Garcı́a and P. König. Data augmentation instead of explicit regularization.
+arXiv preprint arXiv:1806.03852, 2018a.
+A. Hernández-Garcı́a and P. König. Further advantages of data augmentation on convolutional neural networks. In International Conference on Artificial Neural Networks, pages
+95–103. Springer, 2018b.
+A. Hernández-Garcı́a, J. Mehrer, N. Kriegeskorte, P. König, and T. C. Kietzmann. Deep
+neural networks trained with heavier data augmentation learn features closer to representations in hit. In Conference on Cognitive Computational Neuroscience, 2018.
+D. Ho, E. Liang, I. Stoica, P. Abbeel, and X. Chen. Population based augmentation:
+Efficient learning of augmentation policy schedules. arXiv preprint arXiv:1905.05393,
+2019.
+E. Hoffer, T. Ben-Nun, I. Hubara, N. Giladi, T. Hoefler, and D. Soudry. Augment your
+batch: better training with larger batches. arXiv preprint arXiv:1901.09335, 2019.
+A. Jacot, F. Gabriel, and C. Hongler. Neural tangent kernel: Convergence and generalization
+in neural networks. In Advances in neural information processing systems, pages 8571–
+8580, 2018.
+67
+
+Chen, Dobriban and Lee
+
+N. Jaitly and G. E. Hinton. Vocal tract length perturbation (vtlp) improves speech recognition. In Proc. ICML Workshop on Deep Learning for Audio, Speech and Language,
+volume 117, 2013.
+H. Javadi, R. Balestriero, and R. Baraniuk. A hessian based complexity measure for deep
+networks. arXiv preprint arXiv:1905.11639, 2019.
+Z. Ji and M. Telgarsky. Polylogarithmic width suffices for gradient descent to achieve
+arbitrarily small test error with shallow relu networks. arXiv preprint arXiv:1909.12292,
+2019.
+Z. Kam. Determination of macromolecular structure in solution by spatial correlation of
+scattering fluctuations. Macromolecules, 10(5):927–934, 1977.
+Z. Kam. The reconstruction of structure from electron micrographs of randomly oriented
+particles. Journal of Theoretical Biology, 82(1):15–39, 1980.
+R. Kondor and S. Trivedi. On the generalization of equivariance and convolution in neural
+networks to the action of compact groups. arXiv preprint arXiv:1802.03690, 2018.
+R. Kondor, Z. Lin, and S. Trivedi. Clebsch–gordan nets: a fully fourier space spherical
+convolutional neural network. In Advances in Neural Information Processing Systems,
+pages 10117–10126, 2018.
+A. Krizhevsky. Learning multiple layers of features from tiny images. 2009.
+A. Krizhevsky, I. Sutskever, and G. E. Hinton. Imagenet classification with deep convolutional neural networks. In Advances in neural information processing systems, pages
+1097–1105, 2012.
+Y. LeCun, B. Boser, J. S. Denker, D. Henderson, R. E. Howard, W. Hubbard, and L. D.
+Jackel. Backpropagation applied to handwritten zip code recognition. Neural computation, 1(4):541–551, 1989.
+E. Lehmann and G. Casella. Theory of point estimation. Springer Texts in Statistics, 1998.
+E. L. Lehmann and J. P. Romano. Testing statistical hypotheses. Springer Science &
+Business Media, 2005.
+H. W. Lin, M. Tegmark, and D. Rolnick. Why does deep and cheap learning work so well?
+Journal of Statistical Physics, 168(6):1223–1247, 2017.
+L. T. Liu, E. Dobriban, and A. Singer. e pca: High dimensional exponential family pca.
+The Annals of Applied Statistics, 12(4):2121–2150, 2018.
+S. Liu, D. Papailiopoulos, and D. Achlioptas. Bad global minima exist and sgd can reach
+them. arXiv preprint arXiv:1906.02613, 2019.
+R. G. Lopes, D. Yin, B. Poole, J. Gilmer, and E. D. Cubuk. Improving robustness without
+sacrificing accuracy with patch gaussian augmentation. arXiv preprint arXiv:1906.02611,
+2019.
+68
+
+Theory for Data Augmentation
+
+C. Lyle, M. Kwiatkowksa, and Y. Gal. An analysis of the effect of invariance on generalization in neural networks. In International conference on machine learning Workshop on
+Understanding and Improving Generalization in Deep Learning, 2019.
+L. Maaten, M. Chen, S. Tyree, and K. Weinberger. Learning with marginalized corrupted
+features. In International Conference on Machine Learning, pages 410–418, 2013.
+F. R. Maia and J. Hajdu. The trickle before the torrent—diffraction data from X-ray lasers.
+Scientific Data, 3, 2016.
+S. Mallat. Group invariant scattering. Communications on Pure and Applied Mathematics,
+65(10):1331–1398, 2012.
+T. Mazaheri, B. Sun, J. Scher-Zagier, A. Thind, D. Magee, P. Ronhovde, T. Lookman,
+R. Mishra, and Z. Nussinov. Stochastic replica voting machine prediction of stable cubic
+and double perovskite materials and binary alloys. Physical Review Materials, 3(6):
+063802, 2019.
+M. Mirza and S. Osindero.
+arXiv:1411.1784, 2014.
+
+Conditional generative adversarial nets.
+
+arXiv preprint
+
+T. Nguyen and S. Sanner. Algorithms for direct 0–1 loss optimization in binary classification.
+In International Conference on Machine Learning, pages 1085–1093, 2013.
+K. Pande, M. Schmidt, P. Schwander, and D. Saldin. Simulations on time-resolved structure
+determination of uncrystallized biomolecules in the presence of shot noise. Structural
+Dynamics, 2(2):024103, 2015.
+D. S. Park, W. Chan, Y. Zhang, C.-C. Chiu, B. Zoph, E. D. Cubuk, and Q. V. Le. Specaugment: A simple data augmentation method for automatic speech recognition. arXiv
+preprint arXiv:1904.08779, 2019.
+K. Perlin. An image synthesizer. ACM Siggraph Computer Graphics, 19(3):287–296, 1985.
+S. Rajput, Z. Feng, Z. Charles, P.-L. Loh, and D. Papailiopoulos. Does data augmentation
+lead to positive margin? arXiv preprint arXiv:1905.03177, 2019.
+A. J. Ratner, H. Ehrenberg, Z. Hussain, J. Dunnmon, and C. Ré. Learning to compose
+domain-specific transformations for data augmentation. In Advances in neural information processing systems, pages 3236–3246, 2017.
+S. Ravanbakhsh, J. Schneider, and B. Poczos. Equivariance through parameter-sharing.
+2017.
+C. Robert and G. Casella. Monte Carlo statistical methods. Springer Science & Business
+Media, 2013.
+D. K. Saldin, V. L. Shneerson, R. Fung, and A. Ourmazd. Structure of isolated biomolecules
+obtained from ultrashort x-ray pulses: exploiting the symmetry of random orientations.
+Journal of Physics: Condensed Matter, 21(13), 2009.
+69
+
+Chen, Dobriban and Lee
+
+J. Schmidhuber. Deep learning in neural networks: An overview. Neural networks, 61:
+85–117, 2015.
+S. R. Searle, G. Casella, and C. E. McCulloch. Variance components, volume 391. John
+Wiley & Sons, 2009.
+S. Shalev-Shwartz and S. Ben-David. Understanding machine learning: From theory to
+algorithms. Cambridge university press, 2014.
+A. Singer. Mathematics for cryo-electron microscopy. arXiv preprint arXiv:1803.06714,
+2018.
+L. Sixt, B. Wild, and T. Landgraf. Rendergan: Generating realistic labeled data. Frontiers
+in Robotics and AI, 5:66, 2018.
+C. Szegedy, W. Zaremba, I. Sutskever, J. Bruna, D. Erhan, I. Goodfellow, and R. Fergus.
+Intriguing properties of neural networks. arXiv preprint arXiv:1312.6199, 2013.
+M. A. Tanner and W. H. Wong. The calculation of posterior distributions by data augmentation. Journal of the American statistical Association, 82(398):528–540, 1987.
+T. Tao. Topics in random matrix theory. American Mathematical Society, 2012.
+T. Tran, T. Pham, G. Carneiro, L. Palmer, and I. Reid. A bayesian data augmentation approach for learning deep models. In Advances in Neural Information Processing Systems,
+pages 2797–2806, 2017.
+A. W. Van der Vaart. Asymptotic statistics. Cambridge University Press, 1998.
+C. Villani. Topics in optimal transportation. Number 58. American Mathematical Soc.,
+2003.
+C. Vonesch, F. Stauber, and M. Unser. Steerable pca for rotation-invariant image recognition. SIAM Journal on Imaging Sciences, 8(3):1857–1873, 2015.
+M. J. Wainwright. High-dimensional statistics: A non-asymptotic viewpoint, volume 48.
+Cambridge University Press, 2019.
+M. Weiler, M. Geiger, M. Welling, W. Boomsma, and T. Cohen. 3d steerable cnns: Learning
+rotationally equivariant features in volumetric data. In Advances in Neural Information
+Processing Systems, pages 10381–10392, 2018.
+T. Wiatowski and H. Bölcskei. A mathematical theory of deep convolutional neural networks
+for feature extraction. IEEE Transactions on Information Theory, 64(3):1845–1866, 2018.
+D. E. Worrall, S. J. Garbin, D. Turmukhambetov, and G. J. Brostow. Harmonic networks:
+Deep translation and rotation equivariance. In Proceedings of the IEEE Conference on
+Computer Vision and Pattern Recognition, pages 5028–5037, 2017.
+Y. Wu and Y. Liu. Robust truncated hinge loss support vector machines. Journal of the
+American Statistical Association, 102(479):974–983, 2007.
+70
+
+Theory for Data Augmentation
+
+Q. Xie, Z. Dai, E. Hovy, M.-T. Luong, and Q. V. Le. Unsupervised data augmentation.
+arXiv preprint arXiv:1904.12848, 2019.
+H. Zhang, M. Cisse, Y. N. Dauphin, and D. Lopez-Paz. mixup: Beyond empirical risk
+minimization. arXiv preprint arXiv:1710.09412, 2017.
+Z. Zhao, Y. Shkolnisky, and A. Singer. Fast steerable principal component analysis. IEEE
+Transactions on Computational Imaging, 2(1):1–12, 2016.
+Z. Zhao, L. T. Liu, and A. Singer. Steerable e pca. arXiv preprint arXiv:1812.08789, 2018.
+Z. Zhong, L. Zheng, G. Kang, S. Li, and Y. Yang. Random erasing data augmentation.
+arXiv preprint arXiv:1708.04896, 2017.
+
+71
+
+

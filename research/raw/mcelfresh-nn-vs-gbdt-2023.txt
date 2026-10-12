@@ -1,0 +1,7064 @@
+arXiv:2305.02997v4 [cs.LG] 15 Jul 2024
+
+When Do Neural Nets Outperform Boosted Trees on
+Tabular Data?
+Duncan McElfresh∗ 1,2 , Sujay Khandagale3 , Jonathan Valverde4 , Vishak Prasad C5 ,
+Benjamin Feuer6 , Chinmay Hegde6 , Ganesh Ramakrishnan5 , Micah Goldblum6 , Colin White1,7
+1
+Abacus.AI, 2 Stanford, 3 Pinterest, 4 University of Maryland,
+5
+IIT Bombay, 6 New York University, 7 Caltech
+
+Abstract
+Tabular data is one of the most commonly used types of data in machine learning.
+Despite recent advances in neural nets (NNs) for tabular data, there is still an
+active discussion on whether or not NNs generally outperform gradient-boosted
+decision trees (GBDTs) on tabular data, with several recent works arguing either
+that GBDTs consistently outperform NNs on tabular data, or vice versa. In this
+work, we take a step back and question the importance of this debate. To this
+end, we conduct the largest tabular data analysis to date, comparing 19 algorithms
+across 176 datasets, and we find that the ‘NN vs. GBDT’ debate is overemphasized:
+for a surprisingly high number of datasets, either the performance difference
+between GBDTs and NNs is negligible, or light hyperparameter tuning on a
+GBDT is more important than choosing between NNs and GBDTs. A remarkable
+exception is the recently-proposed prior-data fitted network, TabPFN: although
+it is effectively limited to training sets of size 3000, we find that it outperforms
+all other algorithms on average, even when randomly sampling 3000 training
+datapoints. Next, we analyze dozens of metafeatures to determine what properties
+of a dataset make NNs or GBDTs better-suited to perform well. For example, we
+find that GBDTs are much better than NNs at handling skewed or heavy-tailed
+feature distributions and other forms of dataset irregularities. Our insights act as
+a guide for practitioners to determine which techniques may work best on their
+dataset. Finally, with the goal of accelerating tabular data research, we release
+the TabZilla Benchmark Suite: a collection of the 36 ‘hardest’ of the datasets
+we study. Our benchmark suite, codebase, and all raw results are available at
+https://github.com/naszilla/tabzilla.
+
+1
+
+Introduction
+
+Tabular datasets are data organized into rows and columns, consisting of distinct features that are
+typically continuous, categorical, or ordinal. They are the oldest and among the most ubiquitous
+dataset types in machine learning in practice [8, 61], due to their numerous applications across
+medicine [38, 64], finance [6, 14], online advertising [29, 48, 56], and many other areas [10, 11, 65].
+Despite recent advances in neural network (NN) architectures for tabular data [5, 53], there is still
+an active debate over whether or not NNs generally outperform gradient-boosted decision trees
+(GBDTs) on tabular data, with multiple works arguing either for [5, 39, 43, 53, 57] or against
+[8, 27, 28, 61] NNs. This is in stark contrast to other areas such as computer vision and natural
+language understanding, in which NNs have far outpaced competing methods [9, 19, 20, 42, 67].
+∗
+
+Email: duncan@abacus.ai, crwhite@caltech.edu. Work done while SK and JV were at Abacus.AI.
+
+37th Conference on Neural Information Processing Systems (NeurIPS 2023) Track on Datasets and Benchmarks.
+
+Nearly all prior studies of tabular data use fewer than 50 datasets or do not properly tune baselines
+[47, 63], putting the generalizability of these findings into question. Furthermore, the bottom line of
+many prior works is to answer the question, ‘which performs better, NNs or GBDTs, in terms of the
+average rank across datasets’ without searching for more fine-grained insights.
+In this work, we take a completely different approach by focusing on the following points. First, we
+question the importance of the ‘NN vs. GBDT’ debate, by investigating the significance of algorithm
+selection. Second, we analyze what properties of a dataset make NNs or GBDTs better-suited to
+perform well. We take a data-driven approach to answering these questions, conducting the largest
+tabular data analysis to date, by comparing 19 algorithms each with up to 30 hyperparameter
+settings, across 176 datasets, including datasets from the OpenML-CC18 suite [7] and the OpenML
+Benchmarking Suite [26]. To assess performance differences across datasets, we consider dozens of
+metafeatures. We use 10 folds for each dataset to further reduce the uncertainty of our results.
+We find that for a surprisingly high fraction of datasets, either a very simple baseline performs on
+par with the top algorithms; furthermore, for roughly one-third of all datasets, light hyperparameter
+tuning on CatBoost or ResNet increases performance more than choosing among GBDTs and NNs.
+These results show that for many tabular datasets, it is not necessary to try out many different NNs
+and GBDTs: in many cases, a strong baseline or a well-tuned GBDT will suffice.
+We do find that over all 176 datasets, the two best-performing algorithms are CatBoost [54] and
+TabPFN [33]. The latter’s performance is particularly interesting because TabPFN is a recentlyproposed prior-data fitted network that can perform training and inference on small datasets in less
+than one second, however its runtime and memory usage scale quadratically with the number of
+training samples. Surprisingly, we show that even for large datasets, randomly selecting 3000 training
+datapoints is sufficient for TabPFN to achieve very strong performance.
+Next, we run analyses to discover what properties of datasets explain which methods, or families of
+methods, do or do not succeed. We compute the correlations of various metafeatures with algorithm
+performance, and we demonstrate that these correlations are predictive. Our main findings are as
+follows (also see Figure 5): dataset regularity is predictive of NNs outperforming GBDTs (for
+example, feature distributions that are less skewed and less heavy-tailed). Furthermore, GBDTs tend
+to perform better on larger datasets.
+Finally, with the goal of accelerating tabular data research, we release the TabZilla Benchmark Suite:
+a collection of the ‘hardest’ of the 176 datasets we studied. We select datasets on which a simple
+baseline does not win, as well as datasets such that most algorithms do not reach top performance.
+Our work provides a large set of tools for researchers and practitioners working on tabular data. We
+provide the largest open-source codebase of algorithms and datasets in one interface, together with a
+set of the ‘hardest’ datasets, and raw results (over 500K trained models) at https://github.com/
+naszilla/tabzilla for researchers and practitioners to more easily compare methods. Finally, our
+metafeature insights can be used by researchers, to uncover the failure modes of tabular algorithms,
+and by practitioners, to help determine which algorithms will perform well on a new dataset.
+Our contributions. We summarize our main contributions below:
+• We conduct the largest analysis of tabular data to date, comparing 19 methods on 176 datasets,
+with more than half a million models trained. We show that for a surprisingly high fraction of
+datasets, either a simple baseline performs the best, or light hyperparameter tuning of a GBDT
+is more important than choosing among NNs and GBDTs, suggesting that the ‘NN vs. GBDT’
+debate is overemphasized.
+• After analyzing dozens of metafeatures, we present a number of insights into the properties that
+make a dataset better-suited for GBDTs or NNs.
+• We release the TabZilla Suite: a collection of 36 ‘hard’ datasets, with the goal of accelerating
+tabular data research. We open-source our benchmark suite, codebase, and raw results.
+Related work. Tabular datasets are the oldest and among the most common dataset types in
+machine learning in practice [8, 61], due to their wide variety of applications [6, 11, 14, 38, 56].
+GBDTs [22] iteratively build an ensemble of decision trees, with each new tree fitting the residual
+of the loss from the previous trees, using gradient descent to minimize the losses. XGBoost [13],
+LightGBM [40], and Catboost [54] are three widely-used, high-performing variants. Borisov et
+2
+
+Datasets
+
+“NNs vs. GBDTs”
+NNs
+
+Metafeatures
+
+Baselines
+
+36 ‘Hardest’ Datasets
+
+176 Datasets
+
+Neural nets,
+GBDTs,
+baselines
+
+OpenML Suite,
+CC-18,
+addtl. OpenML
+
+ΔHPO
+
+No family dominates
+19 Algorithms
+
+ΔAlgo. selection
+
+500K total evaluations
+
+TabZilla Suite
+
+GBDTs
+Irregularity
+
+Algorithms
+
+HPO is just as important as
+choosing NNs/GBDTs
+
+Size
+
+No datasets s.t.
+baselines win
+
+GBDTs handle
+irregularity better
+
+No datasets s.t.
+many methods win
+
+Neural nets
+handle small
+datasets better
+
+10 folds per dataset
+
+Large variety
+
+Figure 1: Overview of our work. We start by conducting the largest study on tabular data to date
+(left); we analyze the importance of algorithm selection (‘NNs vs. GBDTs’) as well as metafeatures
+(middle); and based on our study, we release TabZilla, a collection of the hardest tabular datasets.
+
+al. described three types of tabular data approaches for neural networks [8]: data transformation
+methods [30, 70], architecture-based methods [5, 12, 29, 53] (including transformers [27, 36, 62]),
+and regularization-based methods [37, 39, 60]. Several recent works compare GBDTs to NNs on
+tabular data, often finding that either NNs [5, 27, 39, 53] or GBDTs [8, 27, 28, 61] perform best.
+Perhaps the most related work to ours is by Grinsztajn et al. [28], who investigate why tree-based
+methods outperform neural nets on tabular data. There are a few differences between their work and
+ours. First, they consider seven algorithms and 45 datasets, compared to our 19 algorithms and 176
+datasets. Second, their dataset sizes range from 3 000 to 10 000, or seven that are exactly 50 000,
+in contrast to our dataset sizes which range from 32 to 1 025 009 (see Table 5). Additionally, they
+further control their study, for example by upper bounding the ratio of size to features, by removing
+high-cardinality categorical feature, and by removing low-cardinality numerical features. While this
+has the benefit of being a more controlled study, their analysis misses out on some of our observations,
+such as GBDTs performing better than NNs on ‘irregular’ datasets. Finally, while Grinsztajn et al.
+focused in depth on a few metafeatures such as dataset smoothness and number of uninformative
+features, our work considers orders of magnitude more metafeatures. Again, while each approach has
+its own strengths, our work is able to discover more potential insights, correlations, and takeaways
+for practitioners. To the best of our knowledge, the only related work has considered more than
+50 datasets is TabPFN [33], which considered 179 datasets which are size 2 000 or smaller. See
+Appendix C for a longer discussion of related work.
+
+2
+
+Analysis of Algorithms for Tabular Data
+
+In this section, we present a large-scale study of techniques for tabular data across a wide variety of
+datasets. Our analysis seeks to answer the following two questions.
+1. How do algorithms (and algorithm families) compare across a wide variety of datasets?
+2. What properties of a dataset are associated with algorithms (and families) outperforming others?
+Algorithms and datasets implemented. We present results for 19 algorithms, including popular
+recent techniques and baselines. The methods include three GBDTs: CatBoost [54], LightGBM
+[40], and XGBoost [13]; 11 neural networks: DANet [12], FT-Transformer [27], two MLPs [27],
+NODE [53], ResNet [27], SAINT [62], STG [69], TabNet [5], TabPFN [33], and VIME [70]; and five
+baselines: Decision Tree [55], KNN [17], Logistic Regression [18], Random Forest [45], and SVM
+[16]. We choose these algorithms because of their popularity, diversity, and strong performance. For
+TabPFN, the runtime and memory usage scale quadratically with the number of inputs (i.e., training
+samples). In order to run on datasets of size larger than 3000, we simply take a random sample of
+size 3000 from the full training dataset. We denote this variant as TabPFN∗ .
+3
+
+Table 1: Performance of algorithms across 98 datasets (see Table 10 for extended results). Columns
+show the algorithm family (GBDT, NN, PFN, or baseline), rank over all datasets, the average
+normalized accuracy (Mean Acc.), the std. dev. of normalized accuracy across folds (Std. Acc.), and
+the train time in seconds per 1000 instances. Min/max/mean/median of these quantities are taken
+over all datasets.
+Algorithm
+
+Class
+
+CatBoost
+TabPFN∗
+XGBoost
+ResNet
+SAINT
+NODE
+FTTransformer
+RandomForest
+LightGBM
+SVM
+DANet
+MLP-rtdl
+STG
+DecisionTree
+MLP
+LinearModel
+TabNet
+KNN
+VIME
+
+GBDT
+PFN
+GBDT
+NN
+NN
+NN
+NN
+base
+GBDT
+base
+NN
+NN
+NN
+base
+NN
+base
+NN
+base
+NN
+
+Rank
+min max
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+2
+
+18
+18
+17
+19
+19
+19
+18
+19
+19
+18
+18
+19
+19
+19
+19
+19
+19
+19
+19
+
+mean
+
+med.
+
+Mean Acc.
+mean med.
+
+Std. Acc.
+mean med.
+
+Time /1000 inst.
+mean
+med.
+
+5.50
+5.89
+6.87
+7.65
+7.90
+7.90
+8.14
+8.26
+8.46
+9.09
+9.73
+9.85
+11.76
+11.81
+12.00
+12.18
+12.69
+13.69
+14.98
+
+4
+5
+6
+8
+7
+7
+8
+7
+8
+10
+10
+10.50
+12.50
+13
+13
+14
+14
+15
+17
+
+0.87
+0.83
+0.81
+0.75
+0.73
+0.74
+0.76
+0.76
+0.76
+0.69
+0.73
+0.65
+0.56
+0.59
+0.57
+0.51
+0.54
+0.45
+0.37
+
+0.30
+0.27
+0.33
+0.30
+0.31
+0.26
+0.31
+0.32
+0.36
+0.26
+0.32
+0.28
+0.29
+0.35
+0.29
+0.31
+0.39
+0.29
+0.27
+
+21.70
+0.25
+0.81
+16.01
+169.54
+138.36
+27.67
+0.35
+0.87
+30.40
+68.82
+14.27
+18.44
+0.03
+18.39
+0.04
+34.95
+0.01
+16.81
+
+0.93
+0.92
+0.89
+0.83
+0.86
+0.81
+0.80
+0.83
+0.84
+0.76
+0.79
+0.72
+0.63
+0.68
+0.57
+0.53
+0.60
+0.51
+0.32
+
+0.22
+0.19
+0.22
+0.21
+0.24
+0.20
+0.21
+0.22
+0.21
+0.19
+0.23
+0.16
+0.17
+0.25
+0.18
+0.24
+0.25
+0.21
+0.18
+
+2.08
+0.01
+0.37
+9.34
+146.16
+117.04
+18.40
+0.24
+0.34
+1.67
+60.15
+7.30
+15.79
+0.01
+11.20
+0.03
+29.90
+0.00
+14.86
+
+We run the algorithms on 176 classification datasets from OpenML [66]. Our aim is to include most
+classification datasets from popular recent papers that study tabular data [8, 27, 39, 61], including
+datasets from the OpenML-CC18 suite [7], the OpenML Benchmarking Suite [26], and additional
+OpenML datasets. Due to the scale of our experiments (538 650 total models trained), we limit the
+run-time for each experiment (described below), which precluded the use of datasets of size larger
+than 1.1M. Table 5 shows summary statistics for all datasets. CC-18 and OpenML Benchmarking
+Suite are both seen as the go-to standards for conducting a fair, diverse evaluation across algorithms
+due to their rigorous selection criteria and wide diversity of datasets [7, 26]. To the best of our
+knowledge, our 19 algorithms and 176 datasets are the largest number of either algorithms or datasets
+(with the exception of TabPFN [33]) considered by recent tabular dataset literature, and the largest
+number available in a single open-source repository.
+Metafeatures. We extract metafeatures using the Python library PyMFE [4], which contains 965
+metafeatures. The categories of metafeatures include: ‘general’ (such as number of datapoints,
+classes, or numeric/categorical features), ‘statistical’ (such as the min, mean, or max skewness, or
+kurtosis, of all feature distributions), ‘information theoretic’ (such as the Shannon entropy of the
+target), ‘landmarking’ (the performance of a baseline such as 1-Nearest Neighbor on a subsample of
+the dataset), and ‘model-based’ (summary statistics for some model fit on the data, such as number of
+leaf nodes in a decision tree model). Since some of these features have long-tailed distributions, we
+also include the log of each strictly-positive metafeature in our analysis.
+Experimental design. For each dataset, we use the ten train/test folds provided by OpenML, which
+allows our results on the test folds to be compared with other works that used the same OpenML
+datasets. Since we also need validation splits in order to run hyperparameter tuning, we divide each
+training fold into a training and validation set. For each algorithm, and for each dataset split, we run
+the algorithm for up to 10 hours. During this time, we train and evaluate the algorithm with at most
+30 hyperparameter sets (one default set and 29 random sets, using Optuna [3]). Each parameterized
+algorithm is given at most two hours on a 32GiB V100 to complete a single train/evaluation cycle. In
+line with prior work, our main metric of interest is accuracy, and we report the test performance of
+the hyperparameter setting that had the maximum performance on the validation set. We also consider
+log loss, which is highly correlated with accuracy but contains significantly fewer ties. We also
+include results for F1-score and ROC AUC in Appendix D. Similar to prior work [21, 68], whenever
+4
+
+Table 2: Performance of algorithms across 57 datasets of size less than or equal to 1250. Columns
+show the rank over all datasets, the average normalized accuracy (Mean Acc.), the standard deviation of normalized accuracy across folds (Std. Acc), and the train time per 1000 instances.
+Min/max/mean/median are taken over all datasets.
+Algorithm
+TabPFN∗
+CatBoost
+ResNet
+RandomForest
+SAINT
+FTTransformer
+XGBoost
+NODE
+SVM
+MLP-rtdl
+LightGBM
+LinearModel
+DANet
+DecisionTree
+MLP
+STG
+KNN
+TabNet
+VIME
+
+Rank
+min max
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+3
+2
+
+18
+18
+19
+18
+19
+18
+17
+19
+18
+19
+19
+19
+18
+19
+19
+19
+19
+19
+19
+
+mean
+
+med.
+
+4.88
+5.37
+6.75
+7.65
+7.67
+7.93
+8.30
+8.35
+9.54
+9.77
+10.00
+10.21
+10.74
+11.44
+11.49
+11.49
+13.12
+14.54
+14.88
+
+3
+4
+6
+7
+6
+7
+8
+8
+11
+10
+10
+11
+10
+13
+13
+12
+15
+16
+17
+
+Mean Acc.
+mean med.
+
+Std. Acc.
+mean med.
+
+Time /1000 inst.
+mean
+med.
+
+0.84
+0.85
+0.77
+0.76
+0.74
+0.75
+0.74
+0.73
+0.68
+0.64
+0.68
+0.61
+0.68
+0.60
+0.57
+0.57
+0.46
+0.42
+0.33
+
+0.35
+0.39
+0.42
+0.40
+0.42
+0.42
+0.42
+0.36
+0.35
+0.39
+0.45
+0.38
+0.41
+0.45
+0.38
+0.40
+0.38
+0.52
+0.36
+
+0.00
+26.22
+23.67
+0.47
+197.41
+32.93
+0.95
+173.55
+23.90
+21.48
+0.64
+0.06
+83.57
+0.02
+27.88
+21.22
+0.00
+41.83
+18.95
+
+0.93
+0.91
+0.79
+0.82
+0.87
+0.78
+0.80
+0.75
+0.72
+0.69
+0.71
+0.71
+0.69
+0.67
+0.54
+0.64
+0.51
+0.40
+0.27
+
+0.26
+0.30
+0.30
+0.29
+0.31
+0.32
+0.30
+0.28
+0.28
+0.31
+0.38
+0.29
+0.34
+0.32
+0.30
+0.34
+0.32
+0.49
+0.29
+
+0.00
+2.75
+13.87
+0.32
+181.62
+26.39
+0.61
+144.45
+0.42
+12.21
+0.23
+0.05
+71.19
+0.01
+16.81
+18.24
+0.00
+34.35
+16.43
+
+we average across datasets, we use the average distance to the minimum (ADTM) metric, which
+consists of 0-1 scaling (after selecting the best hyperparameters, which helps protect against outliers
+[28]). Finally, in order to see the variance of each method on different folds of the same dataset, we
+report the average (scaled) standard deviation of each method across all 10 folds.
+2.1
+
+Relative Algorithm Performance
+
+In this section, we answer the question, “How do individual algorithms, and families of algorithms,
+perform across a wide variety of datasets?” We especially consider whether the difference between
+GBDTs and NNs is significant.
+No individual algorithm dominates. We start by comparing the average rank of all algorithms
+across all datasets, while excluding datasets which ran into memory or timeout issues on a nontrivial
+number of algorithms using the experimental setup described above. Therefore, we consider a set
+of 98 datasets (and we include results on all 176 datasets in the next section and in Appendix D.2).
+As mentioned in the previous section, for each algorithm and dataset split, we report the test set
+performance after tuning on the validation set; see Table 1.
+Surprisingly, nearly every algorithm ranks first on at least one dataset and last on at least one other
+dataset. As expected, baseline methods tend to perform poorly while neural nets and GBDTs tend to
+perform better on average. The fact that the best out of all algorithms, CatBoost, only achieved an
+average rank of 5.06, shows that there is not a single approach that dominates across most datasets.
+TabPFN performs remarkably well. In Table 1, we find that TabPFN achieves nearly the same
+performance as CatBoost. This is particularly surprising for two reasons. First, TabPFN’s average
+training time per 1000 instances is 0.25 seconds: the fastest of any non-baseline, and two orders
+of magnitude faster than CatBoost. Second, recall that in order to run TabPFN on large datasets,
+we simply run TabPFN with a random sample of size 3000 from the full training dataset. TabPFN
+achieves near-top performance, despite only seeing part of the training dataset for many datasets.
+Next, in Table 2, we compute the same table for the 57 smallest datasets: the datasets with size at most
+1250. Now, we find that TabPFN achieves the best average performance of all algorithms, while
+also having the fastest training time. However, one caveat is that the inference time for TabPFN is
+5
+
+Log Loss
+
+19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1
+TabPFN *
+CatBoost
+XGBoost
+SAINT
+LightGBM
+ResNet
+SVM
+FTTransformer
+RandomForest
+
+VIME
+DecisionTree
+KNN
+MLP
+NODE
+TabNet
+MLP-rtdl
+LinearModel
+STG
+DANet
+
+Figure 3: Critical difference plot comparing all algorithms according to their mean log loss rank
+over 98 datasets. Each algorithm’s average rank is shown as a horizontal line on the axis. Sets of
+algorithms which are not significantly different are connected by a horizontal black bar. Algorithm
+family is indicated by a marker next to the algorithm name: red “X” indicates a neural net, blue circle
+indicates a baseline algorithm, green triangles indicate GBDTs, and purple squares indicate a PFN.
+
+2.36 seconds per 1000 instances, which is higher than other algorithms. We give further discussion
+and results on TabPFN in Appendix D.3, including an ablation study of randomly sampling either 1k
+or 3k training points, for both TabPFN and CatBoost.
+
+Normalized Accuracy
+
+Performance vs. runtime. In FigCatBoost ResNet FTTransformer SAINT
+XGBoost
+DecisionTree
+ure 2, we plot the accuracy vs. runtime
+1.0 TabPFN *
+LightGBM
+for all algorithms, averaged across
+all datasets. Overall, neural nets re0.8
+quire the longest runtime, and often
+0.6
+outperform baseline methods. On the
+SVM
+other hand, GBDTs simultaneously reMLP-rtdl
+0.4
+quire little runtime while also achievRandomForest
+VIME
+ing strong performance: they consisKNN
+0.2
+LinearModel
+tently outperform baseline methods,
+neural
+baseline
+gbdt
+pfn
+0.0
+and consistently require less runtime
+1
+1
+2
+0
+10
+10
+10
+10
+102
+than NNs. Once again, we see the
+Training time per 1000 instances (sec)
+impressive performance of TabPFN,
+which achieves top accuracy with less Figure 2: Median runtime vs. median normalized accuracy
+training time than any GBDT or NN. for each algorithm, over 98 datasets. The bars span the 20th
+to 80th percentile over all datasets.
+Statistically significant performance differences. Table 1 shows
+that many algorithms have similar performance. Next, we determine statistically significant (p<0.05)
+performance differences between algorithms across the 98 datasets described above. First, we use a
+Friedman test to determine whether performance differences between each algorithm are significant
+[23]; we can reject the null hypothesis (p<0.05) for this test; the p-value is less than 10−20 . We then
+use a Wilcoxon signed-rank test to determine which pairs of algorithms have significant performance
+differences (p<0.05) [15]. With the Wilcoxon tests we use a Holm-Bonferroni correction to account
+for multiple comparisons [35]. Due to the presence of many ties in the test accuracy metric, we
+use the test log loss metric. See Figure 3 (and see Figure 9 for the F1 score). In these figures, the
+average rank of each algorithm is shown on the horizontal axis; if differences between algorithms are
+not significant (p≥ 0.05), then algorithms are shown connected by a horizontal bar. We find that
+TabPFN outperforms all other algorithms on average across 98 datasets, and this result is statistically
+significant. Note that the slight differences between Figure 3 and Table 1 is that the former uses
+accuracy, while the latter uses log loss.
+GBDTs vs. NNs. Although Table 10 tells us which individual methods perform best on average,
+now we consider the age-old question, ‘are GBDTs better than NNs for tabular data?’ We split
+the 19 algorithms into three families: GBDTs (CatBoost, XGBoost, LightGBM), NNs (DANet, FTTransformer, two MLPs, NODE, ResNet, SAINT, STG, TabNet, and VIME), and baselines (Decision
+6
+
+15
+(9%)
+
+46
+(26%)
+9
+(5%)
+
+13
+(7%)
+
+60
+(34%)
+8
+(5%)
+
+25
+(14%)
+
+Baselines
+
+|Best default NN - GBDT|
+
+High-Performing Algorithm Family over 176 Datasets
+Threshold = 0.99
+GBDTs
+Neural Nets
+
+100
+10 1
+10 2
+10 3
+10 4
+10 5
+
+0 10 4
+10 2
+100 0 10 4
+10 2
+CatBoost tuning improvement ResNet tuning improveme
+
+Figure 4: Left: Venn diagram of the number datasets where each algorithm is ‘high-performing’ for
+each algorithm class, over all 176 datasets. An algorithm is high-performing if its test accuracy after
+0-1 scaling is at least 0.99 (we show 0.9999 in Appendix D.2). Right: the performance improvement
+of hyperparameter tuning on CatBoost, compared to the absolute performance difference between
+the best neural net and the best GBDT using default hyperparameters. Each point indicates the
+normalized log loss of one dataset, Points on or below the dotted line indicate that the performance
+improvement due to tuning is as high as the difference between NN-GBDT algorithm selection.
+
+Tree, KNN, LinearModel, RandomForest, SVM). † We say that an algorithm is ‘high-performing’
+if it achieves a 0-1 scaled test accuracy of at least 0.99, and then we determine which algorithm
+families (GBDTs, NNs, baselines) have a high-performing algorithm; see Figure 4. Surprisingly, the
+three-way Venn diagram is relatively balanced among GBDTs, NNs, and baselines, although GBDTs
+overall have the edge. In Appendix D.2, we run the same analysis, using a threshold of 0.9999. In
+this case, GBDTs are the sole high-performing algorithm family for most datasets. Since these wins
+are by less than 0.01%, they may not be significant to practitioners.
+Algorithm selection vs. tuning. Next, we determine whether it is more important to select the
+best possible algorithm family, or to simply run light hyperparameter tuning on an algorithm that
+performs well in general, such as CatBoost or ResNet. We consider a scenario in which a practitioner
+can decide to (a) test several algorithms using their default hyperparameters, or (b) optimize the
+hyperparameters of a single model, such as CatBoost or ResNet. We compute whether (a) or (b)
+leads to better performance. Specifically, we measure the performance difference between the bestperforming GBDT and NN using their default hyperparameters, as well as the performance difference
+between CatBoost with the default hyperparameters vs. CatBoost tuned via 30 iterations of random
+search on a validation set; see Figure 4 (right), and see Appendix D.2 for the same analysis with
+ResNet. Surprisingly, light hyperparameter tuning yields a greater performance improvement than
+GBDT-vs-NN selection for about one-third of all datasets. Once again, this suggests that for a large
+fraction of datasets, it is not necessary to determine whether GBDTs or NNs are better: light tuning
+on an algorithm such as CatBoost or ResNet can give just as much performance gain. In the next
+section, we explore why a dataset might be more amenable to a neural net or a GBDT.
+2.2
+
+Metafeature Analysis
+
+In this section, we answer the question, “What properties of a dataset are associated with certain
+techniques, or families of techniques, outperforming others?” We answer this question by computing
+the correlation of metafeatures with three different quantities related to the performance difference
+between algorithm families, the performance difference between pairs of algorithms, and the relative
+performance of individual algorithms.
+†
+
+Since TabPFN works substantially differently from any neural net (or any other algorithm), we exclude it
+from our analysis in this section and the next section when discussing ‘GBDTs vs. NNs.’
+
+7
+
+LightGBM
+SAINT
+
+FTTransformer
+ResNet
+
+107
+105
+103
+0
+
+1
+
+2
+
+3
+4
+Irregularity
+
+5
+
+Diff. Log Loss (XGB - ResNet)
+
+Num. Instances
+
+CatBoost
+XGBoost
+
+6
+
+0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+
+105
+103
+Num. Instances
+
+0
+
+2
+4
+Irregularity
+
+6
+
+Figure 5: Left: scatterplot of the best algorithm on all 176 datasets across metafeatures. The vertical
+axis indicates the dataset size, and the horizontal axis combines five dataset metafeatures related to
+irregularity. Right: scatterplot of the difference in normalized log loss between XGBoost and ResNet,
+by dataset size (middle subplot) and irregularity (right subplot). The irregularity feature is a linear
+combination of five standardized dataset attributes: the minimum eigenvalue of the feature covariance
+matrix (-0.33), the skewness of the standard deviation of all features (0.23), the skewness of the range
+of all features (0.22), the interquartile range of the harmonic mean of all features (0.21), and the
+standard deviation of the kurtosis of all features (0.21).
+
+In order to assess the difference in performance between NNs and GBDTs, we calculate the difference
+in normalized log loss between the best NN and the best GBDT, which we refer to as ∆ℓℓ . We compute
+the correlation of ∆ℓℓ to various metafeatures across all datasets; see Figure 14 and Table 16 in
+Appendix D.4. Next, in order to determine the individual strengths and weaknesses of each algorithm,
+we compute the correlation of various metafeatures to the performance of an individual algorithm
+relative to all other algorithms; see Table 3 and Figure 5. Finally, we compute the correlation of
+metafeatures to the difference in performance between pairs of the top-performing algorithms from
+Section 2.1: CatBoost, XGBoost, SAINT, and ResNet. See Figure 5 and Table 21.
+In order to show that these metafeatures are predictive, we train and evaluate a meta-learning model
+using a leave-one-out approach: one dataset is held out for testing, while the remaining 175 datasets
+are used for training, averaged across all 176 possible test sets; see Appendix D.4. In the rest of this
+section, we state and discuss the main findings of our metafeature analysis.
+Neural nets perform comparatively worse on larger datasets. Throughout our metafeature
+analyses, we find that GBDTs perform comparatively better than NNs and baselines with larger
+datasets. Figure 5 shows that XGBoost achieves top performance compared to all 19 algorithms
+on the seven largest datasets, and GBDTs overall perform well. In Table 3, somewhat surprisingly,
+dataset size is the most negatively-correlated metafeature with the relative performance of both
+LightGBM and XGBoost. Finally, Table 16 shows that the GBDT family’s performance is also
+positively correlated with the ratio of size to the number of features. Notably, all of these analyses
+are relative to the performance of all algorithms, which includes the newly released TabPFN [33], a
+neural net that performs remarkably well on datasets of small size, due to its carefully-designed prior.
+On the other hand, GBDTs excel when the ratio of dataset size to number of features is high, because
+all split in the decision trees are computed using more datapoints. Some of our above findings are
+backed up by prior work, for example, Grinsztajn et al. [28] showed that increasing the ratio of
+(uninformative) features to dataset size, hurts the performance of ResNet, and our results indicate
+the same trend (Table 22). On the other hand, NNs as a whole see the opposite trend (Table 16),
+which at least is shown for FTTransformer in Grinsztajn et al. [28]. We provide additional analyses
+in Appendix D.3.4. Note that, while the general trend shows GBDTs outperforming NNs on larger
+datasets, this does not imply that all GBDTs are better than all NNs on larger datasets. For example,
+TabPFN and TabNet are both neural nets, yet TabPFN performs particularly well on smaller datasets,
+and TabNet performs particularly well on larger datasets. It is important to note that when choosing
+an algorithm for a new use-case, practitioners should focus on algorithm-specific analyses (such
+as in Table 1, Table 2, and Appendix D.3.4) rather than general ‘GBDT vs. NN’ trends.
+GBDTs favor irregular datasets. Another trend present throughout all three metafeature analyses
+is that GBDTs consistently favor ‘irregular’ datasets. When comparing pairs of the top GBDTs
+and NNs, we find that both CatBoost and XGBoost outperform ResNet and SAINT on datasets
+whose feature distributions are heavy-tailed, skewed, or have high variance (see Table 21 for the full
+8
+
+Table 3: Metafeatures that are most correlated with the performance of each top-performing algorithm,
+calculated as the Pearson correlation between the metafeature and normalized log loss over 176
+datasets. Metafeatures with the largest absolute Pearson correlation with algorithm performance
+are shown, and correlations are presented as 95% confidence intervals, calculated using the Fisher
+transformation.
+Alg.
+
+Metafeature Description
+
+Corr.
+
+CatBoost
+
+P
+P
+P
+Noisiness of the features: ( i Si − i M I(i, y))/ i M I(i, y), where Si is the entropy
+of feature i, and M I(i, y) is the mutual information between feature i and the target y.
+
+[0.25, 0.34]
+
+XGBoost
+
+Log. number of instances.
+
+[-0.27, -0.18]
+
+LightGBM
+
+Log. number of instances.
+
+[-0.36, -0.28]
+
+ResNet
+
+Mean canonical correlation between any numeric feature and the target.
+
+[-0.28, -0.19]
+
+FTTransformer
+
+Number of target classes.
+
+[0.23, 0.32]
+
+SAINT
+
+Noisiness of the features.
+
+[0.19, 0.29]
+
+details). That is, some datasets’ feature distributions all have a similar amount of skewness, while
+other datasets’ feature distributions are more irregular, with a high range of skewness. It is the latter
+type of datasets on which GBDTs outperform NNs. We also find that GBDTs perform better when
+datasets are more class imbalanced (on SAINT in particular). In Figure 5, GBDTs perform best on
+the most irregular datasets, computed via a linear combination of five metafeatures each measuring
+the skewness or kurtosis of the feature distributions.
+The bottom line. Overall, we answer the title question of our paper: GBDTs outperform NNs on
+datasets that are more ‘irregular’, as well as large datasets, and datasets with a high ratio of size to
+number of features. When a practitioner is faced with a new dataset, based on all the analysis in
+Section 2, we give the following recommendation: first try simple baselines, and then conduct light
+hyperparameter tuning on CatBoost. Surprisingly, this often will already result in strong performance.
+As a next step, the practitioner can try NNs and other GBDTs that are most-correlated with strong
+performance based on the dataset’s metafeatures, using analyses such as Table 1 and Appendix D.3.4.
+
+3
+
+TabZilla Benchmark Suite
+
+In order to accelerate tabular data research, we release the TabZilla Benchmark Suite: a collection of
+the 36 ‘hardest’ of the 176 datasets we studied in Section 2. We use the following three criteria.
+Hard for baseline algorithms. As discussed in Section 2.1, simple baselines perform very well on
+a surprisingly large fraction of the datasets in our experiments. Therefore, to select our suite of hard
+datasets, we remove any dataset such that a baseline (as defined in Section 2) achieved a normalized
+log loss within 20% of the top-performing algorithm. This criterion is not perfect; for example, if a
+dataset is so hard that all 19 algorithms fail to reach non-trivial performance, it would not satisfy the
+criterion. However, the criterion is a good proxy for dataset hardness given the available information.
+Hard for most algorithms. This criterion is designed to include datasets on which most algorithms
+were not able to reach top performance. In particular, a dataset satisfies the criterion if the fourth-best
+log loss out of 19 algorithms is at least 7% worse than the top log loss. In other words, this criterion
+will include datasets on which one, two, or three algorithms were able to stand out in terms of
+performance. For example, if ten algorithms were all able to achieve a performance within 7%
+of the top-performing algorithm, we can reasonably assume that the dataset might not be ‘hard’.
+Interestingly, this criterion subsumes the majority of the datasets from the previous criterion.
+Hard for GBDTs. The first two criteria result in datasets such that GBDTs primarily are the
+top-performing methods. This is not surprising in light of the overall performance of GBDTs that
+we showed in Section 2. However, for the field of tabular data to progress, focusing on datasets for
+which GBDTs already perform well would leave a blindspot on datasets for which GBDTs perform
+poorly. Therefore, we add all datasets for which GBDTs perform 10% worse than the top-performing
+algorithm, in order to achieve a greater diversity of datasets.
+9
+
+Table 4: The TabZilla Benchmark Suite. Columns show the hardness metrics used as selection
+criteria, dataset attributes, and the top-performing algorithms. ‘Std. Kurtosis’ indicates the std. dev.
+of the kurtosis of all features. Hardness metrics that meet our selection criteria are shown in bold.
+Dataset
+
+Hardness Metrics
+base 4th-best GBDT
+
+credit-g
+jungle-chess
+MiniBooNE
+albert
+electricity
+elevators
+guillermo
+higgs
+nomao
+100-plants-texture
+poker-hand
+profb
+socmob
+audiology
+splice
+vehicle
+Australian
+Bioresponse
+GesturePhase
+SpeedDating
+ada-agnostic
+airlines
+artificial-characters
+colic
+credit-approval
+heart-h
+jasmine
+kc1
+lymph
+mfeat-fourier
+phoneme
+qsar-biodeg
+balance-scale
+cnae-9
+mfeat-zernike
+monks-problems-2
+
+0.26
+0.30
+0.20
+0.42
+0.46
+0.36
+0.35
+0.41
+0.22
+0.20
+0.58
+0.39
+0.24
+0.43
+0.30
+0.05
+0.15
+0.07
+0.08
+0.18
+0.12
+0.20
+0.13
+0.13
+0.12
+0.10
+0.13
+0.14
+0.14
+0.00
+0.10
+0.08
+0.07
+0.11
+0.00
+0.04
+
+0.13
+0.18
+0.09
+0.28
+0.38
+0.08
+0.60
+0.10
+0.18
+0.11
+0.98
+0.38
+0.10
+0.03
+0.03
+0.10
+0.08
+0.07
+0.08
+0.14
+0.11
+0.18
+0.11
+0.11
+0.08
+0.07
+0.13
+0.07
+0.08
+0.07
+0.15
+0.08
+0.05
+0.04
+0.04
+0.00
+
+0.12
+0.17
+0.00
+0.00
+0.00
+0.05
+0.00
+0.07
+0.00
+0.00
+0.00
+0.00
+0.00
+0.00
+0.00
+0.10
+0.00
+0.00
+0.00
+0.00
+0.00
+0.00
+0.00
+0.00
+0.00
+0.08
+0.00
+0.00
+0.00
+0.07
+0.00
+0.05
+0.16
+0.10
+0.10
+0.17
+
+Dataset Attributes
+N # feats. Std. Kurtosis
+1 000
+44 819
+130 064
+425 240
+45 312
+16 599
+20 000
+98 050
+34 465
+1 599
+1 025 009
+672
+1 156
+226
+3 190
+846
+690
+3 751
+9 872
+8 378
+4 562
+539 382
+10 218
+368
+690
+294
+2 984
+2 109
+148
+2 000
+5 404
+1 055
+625
+1 080
+2 000
+601
+
+21
+7
+51
+79
+9
+19
+4 297
+29
+119
+65
+11
+10
+6
+70
+61
+19
+15
+1 777
+33
+121
+49
+8
+8
+27
+16
+14
+145
+22
+19
+77
+6
+42
+5
+857
+48
+7
+
+1.92
+0.08
+12162.65
+1686.90
+2693.51
+2986.50
+NaN
+15.53
+1100.34
+17.66
+0.08
+0.95
+NaN
+NaN
+NaN
+15.16
+2.00
+328.77
+52.18
+36.43
+NaN
+2.01
+0.63
+4.00
+74.77
+NaN
+47.60
+28.34
+17.04
+0.64
+1.23
+93.24
+0.02
+NaN
+1.42
+NaN
+
+1st
+
+Top 3 Algs.
+2nd
+
+3rd
+
+ResNet
+SAINT
+LightGBM
+CatBoost
+LightGBM
+TabNet
+XGBoost
+ResNet
+LightGBM
+CatBoost
+XGBoost
+CatBoost
+XGBoost
+STG
+LightGBM
+TabPFN
+CatBoost
+LightGBM
+LightGBM
+XGBoost
+XGBoost
+LightGBM
+XGBoost
+CatBoost
+CatBoost
+DeepFM
+CatBoost
+CatBoost
+XGBoost
+SVM
+XGBoost
+TabPFN
+TabPFN
+TabTransformer
+SVM
+SAINT
+
+FTTransformer
+TabNet
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+RandomForest
+XGBoost
+XGBoost
+XGBoost
+CatBoost
+DeepFM
+CatBoost
+XGBoost
+XGBoost
+SVM
+XGBoost
+XGBoost
+XGBoost
+CatBoost
+CatBoost
+XGBoost
+LightGBM
+XGBoost
+TabPFN
+TabTransformer
+XGBoost
+XGBoost
+DANet
+SAINT
+LightGBM
+CatBoost
+SAINT
+STG
+DANet
+ResNet
+
+CatBoost
+LightGBM
+CatBoost
+ResNet
+FTTransformer
+CatBoost
+TabNet
+LightGBM
+CatBoost
+ResNet
+KNN
+MLP-rtdl
+ResNet
+ResNet
+CatBoost
+DANet
+TabPFN
+CatBoost
+CatBoost
+LightGBM
+LightGBM
+CatBoost
+CatBoost
+FTTransformer
+XGBoost
+NAM
+LightGBM
+FTTransformer
+SAINT
+STG
+RandomForest
+SAINT
+MLP
+MLP-rtdl
+ResNet
+MLP-rtdl
+
+TabZilla Characteristics. Table 4 shows all datasets, their statistics, and their top three algorithms.
+Based on the criteria alone, the dataset characteristics are diverse, with sizes ranging from 148 to over
+1 million, as well as a large range of the variance of kurtosis of the features (one of our measures of
+irregularity).
+In Appendix E, we compare the performance of all algorithms on the benchmark 291 suite. In
+order to accelerate research in tabular data, we release TabZilla as a collection in OpenML, and we
+open-source all of our computed metafeatures and results. In Appendix B, we give the full dataset
+documentation, including a datasheet [24].
+
+4
+
+Conclusions and Future Work
+
+In this work, we conducted the largest tabular data analysis to date, by comparing 19 approaches
+across 176 datasets. We found that the ‘NN vs. GBDT’ debate is overemphasized: for a surprisingly
+high number of datasets, either a simple baseline method performs on par with all other methods, or
+light hyperparameter tuning on a GBDT increases performance more than choosing the best algorithm.
+On the other hand, on average, GBDTs do outperform NNs. We also analyzed what properties of a
+dataset make NNs or GBDTs better-suited to perform well. For example, GBDTs are better than NNs
+at handling various types of data irregularity. Finally, based on our analysis, we released TabZilla, a
+collection of the 36 ‘hardest’ out of the 176 datasets we studied: hard for baselines, most algorithms,
+and GBDTs. The goal in releasing TabZilla is to accelerate tabular data research by focusing on
+improving the current blind spots in the literature.
+Our work provides a large set of tools to accelerate research on tabular data. For example, researchers
+developing a new neural net for tabular data can use our open-source repository to immediately
+compare their method to 19 algorithms across 176 datasets. Researchers can also use our metafeature
+analysis to improve the weaknesses of current or future algorithms; for example, making neural nets
+more robust to data irregularities is a natural next step. Furthermore, researchers studying ensemble
+10
+
+methods can weight the models differently for each dataset based on its metafeatures. Finally, our
+open-source collection of extensive datasets and metafeatures can make it easier for researchers to
+design new meta-learned [33] or pre-trained models for tabular data [32, 44, 71]. There are several
+interesting ideas for extensions such as regression datasets, time-series forecasting datasets, studying
+uncertainty quantification, studying the effect of the percentage of categorical features on NNs, and
+studying more comprehensive hyperparameter optimization including regularization methods.
+
+Author Contributions
+DM, SK, JV, VPC, GR, MG, and CW contributed to the original paper, which was accepted to the
+NeurIPS Datasets and Benchmarks Track 2023. BF and CH then joined to significantly extend and
+improve the results in Section 2 and Appendix D.
+
+References
+[1] Steven Adriaensen, Herilalaina Rakotoarison, Samuel Müller, and Frank Hutter. Efficient
+bayesian learning curve extrapolation using prior-data fitted networks. In Proceedings of the
+Annual Conference on Neural Information Processing Systems (NeurIPS), 2023.
+[2] Rishabh Agarwal, Levi Melnick, Nicholas Frosst, Xuezhou Zhang, Ben Lengerich, Rich
+Caruana, and Geoffrey E Hinton. Neural additive models: Interpretable machine learning
+with neural nets. In Proceedings of the Annual Conference on Neural Information Processing
+Systems (NeurIPS), 2021.
+[3] Takuya Akiba, Shotaro Sano, Toshihiko Yanase, Takeru Ohta, and Masanori Koyama. Optuna:
+A next-generation hyperparameter optimization framework. In Proceedings of the 25th ACM
+SIGKDD international conference on knowledge discovery & data mining, pages 2623–2631,
+2019.
+[4] Edesio Alcobaça, Felipe Siqueira, Adriano Rivolli, Luís P. F. Garcia, Jefferson T. Oliva, and
+André C. P. L. F. de Carvalho. Mfe: Towards reproducible meta-feature extraction. Journal of
+Machine Learning Research, 21(111):1–5, 2020.
+[5] Sercan Ö Arik and Tomas Pfister. Tabnet: Attentive interpretable tabular learning. In Proceedings of the AAAI Conference on Artificial Intelligence (AAAI), 2021.
+[6] Kumar Arun, Garg Ishan, and Kaur Sanmeet. Loan approval prediction based on machine
+learning approach. IOSR J. Comput. Eng, 18(3):18–21, 2016.
+[7] Bernd Bischl, Giuseppe Casalicchio, Matthias Feurer, Frank Hutter, Michel Lang, Rafael G
+Mantovani, Jan N van Rijn, and Joaquin Vanschoren. Openml benchmarking suites. arXiv
+preprint arXiv:1708.03731, 2017.
+[8] Vadim Borisov, Tobias Leemann, Kathrin Seßler, Johannes Haug, Martin Pawelczyk, and Gjergji
+Kasneci. Deep neural networks and tabular data: A survey. arXiv preprint arXiv:2110.01889,
+2021.
+[9] Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal,
+Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are
+few-shot learners. Advances in neural information processing systems, 33:1877–1901, 2020.
+[10] Anna L Buczak and Erhan Guven. A survey of data mining and machine learning methods for
+cyber security intrusion detection. IEEE Communications surveys & tutorials, 18(2):1153–1176,
+2015.
+[11] Varun Chandola, Arindam Banerjee, and Vipin Kumar. Anomaly detection: A survey. ACM
+computing surveys (CSUR), 41(3):1–58, 2009.
+[12] Jintai Chen, Kuanlun Liao, Yao Wan, Danny Z Chen, and Jian Wu. Danets: Deep abstract
+networks for tabular data classification and regression. In Proceedings of the AAAI Conference
+on Artificial Intelligence (AAAI), 2022.
+11
+
+[13] Tianqi Chen and Carlos Guestrin. Xgboost: A scalable tree boosting system. In Proceedings of
+the 22nd acm sigkdd international conference on knowledge discovery and data mining, pages
+785–794, 2016.
+[14] Jillian M Clements, Di Xu, Nooshin Yousefi, and Dmitry Efimov. Sequential deep learning for
+credit risk monitoring with tabular financial data. arXiv preprint arXiv:2012.15330, 2020.
+[15] William Jay Conover. Practical nonparametric statistics, volume 350. john wiley & sons, 1999.
+[16] Corinna Cortes and Vladimir Vapnik. Support-vector networks. Machine learning, 1995.
+[17] Thomas Cover and Peter Hart. Nearest neighbor pattern classification. IEEE transactions on
+information theory, 1967.
+[18] David R Cox. The regression analysis of binary sequences. Journal of the Royal Statistical
+Society: Series B (Methodological), 1958.
+[19] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of
+deep bidirectional transformers for language understanding. arXiv preprint arXiv:1810.04805,
+2018.
+[20] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai,
+Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al.
+An image is worth 16x16 words: Transformers for image recognition at scale. In Proceedings
+of the International Conference on Learning Representations (ICLR), 2021.
+[21] Matthias Feurer, Katharina Eggensperger, Stefan Falkner, Marius Lindauer, and Frank Hutter.
+Auto-sklearn 2.0: Hands-free automl via meta-learning. The Journal of Machine Learning
+Research, 2022.
+[22] Jerome H Friedman. Greedy function approximation: a gradient boosting machine. Annals of
+statistics, pages 1189–1232, 2001.
+[23] Milton Friedman. The use of ranks to avoid the assumption of normality implicit in the analysis
+of variance. Journal of the american statistical association, 1937.
+[24] Timnit Gebru, Jamie Morgenstern, Briana Vecchione, Jennifer Wortman Vaughan, Hanna
+Wallach, Hal Daumé Iii, and Kate Crawford. Datasheets for datasets. Communications of the
+ACM, 64(12):86–92, 2021.
+[25] E.S. Gelsema and L.N. Kanal. Pattern Recognition in Practice IV: Multiple Paradigms, Comparative Studies and Hybrid Systems. ISSN. Elsevier Science, 2014.
+[26] Pieter Gijsbers, Erin LeDell, Janek Thomas, Sébastien Poirier, Bernd Bischl, and Joaquin
+Vanschoren. An open source automl benchmark. arXiv preprint arXiv:1907.00909, 2019.
+[27] Yury Gorishniy, Ivan Rubachev, Valentin Khrulkov, and Artem Babenko. Revisiting deep
+learning models for tabular data. Proceedings of the Annual Conference on Neural Information
+Processing Systems (NeurIPS), 2021.
+[28] Leo Grinsztajn, Edouard Oyallon, and Gael Varoquaux. Why do tree-based models still
+outperform deep learning on typical tabular data? In Thirty-sixth Conference on Neural
+Information Processing Systems Datasets and Benchmarks Track, 2022.
+[29] Huifeng Guo, Ruiming Tang, Yunming Ye, Zhenguo Li, and Xiuqiang He. Deepfm: a
+factorization-machine based neural network for ctr prediction. In IJCAI, 2017.
+[30] John T Hancock and Taghi M Khoshgoftaar. Survey on categorical data for neural networks.
+Journal of Big Data, 7(1):1–41, 2020.
+[31] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image
+recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition,
+pages 770–778, 2016.
+12
+
+[32] Stefan Hegselmann, Alejandro Buendia, Hunter Lang, Monica Agrawal, Xiaoyi Jiang, and
+David Sontag. Tabllm: Few-shot classification of tabular data with large language models. In
+Proceedings of the International Conference on Artificial Intelligence and Statistics (AISTATS),
+2023.
+[33] Noah Hollmann, Samuel Müller, Katharina Eggensperger, and Frank Hutter. Tabpfn: A
+transformer that solves small tabular classification problems in a second. In Proceedings of the
+International Conference on Learning Representations (ICLR), 2023.
+[34] Noah Hollmann, Samuel Müller, and Frank Hutter. Gpt for semi-automated data science:
+Introducing caafe for context-aware automated feature engineering. In Proceedings of the
+International Conference on Machine Learning (ICML), 2023.
+[35] Sture Holm. A simple sequentially rejective multiple test procedure. Scandinavian journal of
+statistics, pages 65–70, 1979.
+[36] Xin Huang, Ashish Khetan, Milan Cvitkovic, and Zohar Karnin. Tabtransformer: Tabular data
+modeling using contextual embeddings. arXiv preprint arXiv:2012.06678, 2020.
+[37] Alan Jeffares, Tennison Liu, Jonathan Crabbé, Fergus Imrie, and Mihaela van der Schaar. Tangos:
+Regularizing tabular neural networks through gradient orthogonalization and specialization. In
+Proceedings of the International Conference on Learning Representations (ICLR), 2023.
+[38] Alistair EW Johnson, Tom J Pollard, Lu Shen, Li-wei H Lehman, Mengling Feng, Mohammad
+Ghassemi, Benjamin Moody, Peter Szolovits, Leo Anthony Celi, and Roger G Mark. Mimic-iii,
+a freely accessible critical care database. Scientific data, 3(1):1–9, 2016.
+[39] Arlind Kadra, Marius Lindauer, Frank Hutter, and Josif Grabocka. Well-tuned simple nets excel
+on tabular datasets. Proceedings of the Annual Conference on Neural Information Processing
+Systems (NeurIPS), 34, 2021.
+[40] Guolin Ke, Qi Meng, Thomas Finley, Taifeng Wang, Wei Chen, Weidong Ma, Qiwei Ye, and
+Tie-Yan Liu. Lightgbm: A highly efficient gradient boosting decision tree. In Proceedings of
+the Annual Conference on Neural Information Processing Systems (NeurIPS), 2017.
+[41] Gurnoor Singh Khurana, Samuel Dooley, Siddartha Venkat Naidu, and Colin White. Forecastpfn:
+Universal forecasting for healthcare. In ICLR 2023 Workshop on Time Series Representation
+Learning for Health, 2023.
+[42] Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classification with deep
+convolutional neural networks. In Proceedings of the Annual Conference on Neural Information
+Processing Systems (NeurIPS), 2012.
+[43] Roman Levin, Valeriia Cherepanova, Avi Schwarzschild, Arpit Bansal, C Bayan Bruss, Tom
+Goldstein, Andrew Gordon Wilson, and Micah Goldblum. Transfer learning with deep tabular
+models. ICLR, 2023.
+[44] Roman Levin, Valeriia Cherepanova, Avi Schwarzschild, Arpit Bansal, C Bayan Bruss, Tom
+Goldstein, Andrew Gordon Wilson, and Micah Goldblum. Transfer learning with deep tabular
+models. In Proceedings of the International Conference on Learning Representations (ICLR),
+2023.
+[45] Andy Liaw, Matthew Wiener, et al. Classification and regression by randomforest. R news,
+2(3):18–22, 2002.
+[46] Guido Lindner and Rudi Studer. Ast: Support for algorithm selection with a cbr approach. In
+Proceedings of the Third European Conference on Principles of Data Mining and Knowledge
+Discovery, PKDD ’99, page 418–423, Berlin, Heidelberg, 1999. Springer-Verlag.
+[47] Zachary C Lipton and Jacob Steinhardt. Troubling trends in machine learning scholarship:
+Some ml papers suffer from flaws that could mislead the public and stymie future research.
+Queue, 2019.
+13
+
+[48] H Brendan McMahan, Gary Holt, David Sculley, Michael Young, Dietmar Ebner, Julian Grady,
+Lan Nie, Todd Phillips, Eugene Davydov, Daniel Golovin, et al. Ad click prediction: a view
+from the trenches. In Proceedings of the Annual Conference on Knowledge Discovery and Data
+Mining (KDD), pages 1222–1230, 2013.
+[49] Samuel Müller, Matthias Feurer, Noah Hollmann, and Frank Hutter. Pfns4bo: In-context
+learning for bayesian optimization. In Proceedings of the International Conference on Machine
+Learning (ICML), 2023.
+[50] Samuel Müller, Noah Hollmann, Sebastian Pineda Arango, Josif Grabocka, and Frank Hutter.
+Transformers can do bayesian inference. In Proceedings of the International Conference on
+Learning Representations (ICLR), 2022.
+[51] Thomas Nagler. Statistical foundations of prior-data fitted networks. In Proceedings of the
+International Conference on Machine Learning (ICML), 2023.
+[52] Fabian Pedregosa, Gaël Varoquaux, Alexandre Gramfort, Vincent Michel, Bertrand Thirion,
+Olivier Grisel, Mathieu Blondel, Peter Prettenhofer, Ron Weiss, Vincent Dubourg, et al. Scikitlearn: Machine learning in python. the Journal of machine Learning research, 12:2825–2830,
+2011.
+[53] Sergei Popov, Stanislav Morozov, and Artem Babenko. Neural oblivious decision ensembles
+for deep learning on tabular data. In Proceedings of the International Conference on Learning
+Representations (ICLR), 2020.
+[54] Liudmila Prokhorenkova, Gleb Gusev, Aleksandr Vorobev, Anna Veronika Dorogush, and
+Andrey Gulin. Catboost: unbiased boosting with categorical features. Proceedings of the
+Annual Conference on Neural Information Processing Systems (NeurIPS), 2018.
+[55] J. Ross Quinlan. Induction of decision trees. Machine learning, 1986.
+[56] Matthew Richardson, Ewa Dominowska, and Robert Ragno. Predicting clicks: estimating the
+click-through rate for new ads. In Proceedings of the 16th international conference on World
+Wide Web, pages 521–530, 2007.
+[57] Ivan Rubachev, Artem Alekberov, Yury Gorishniy, and Artem Babenko. Revisiting pretraining
+objectives for tabular deep learning. arXiv preprint arXiv:2207.03208, 2022.
+[58] Mostafa A Salama, Aboul Ella Hassanien, and Kenneth Revett. Employment of neural network
+and rough set in meta-learning. Memetic Computing, 5:165–177, 2013.
+[59] Bernhard Schäfl, Lukas Gruber, Angela Bitto-Nemling, and Sepp Hochreiter. Hopular: Modern
+hopfield networks for tabular data. arXiv preprint arXiv:2206.00664, 2022.
+[60] Ira Shavitt and Eran Segal. Regularization learning networks: deep learning for tabular datasets.
+Advances in Neural Information Processing Systems, 31, 2018.
+[61] Ravid Shwartz-Ziv and Amitai Armon. Tabular data: Deep learning is not all you need.
+Information Fusion, 81:84–90, 2022.
+[62] Gowthami Somepalli, Micah Goldblum, Avi Schwarzschild, C Bayan Bruss, and Tom Goldstein.
+Saint: Improved neural networks for tabular data via row attention and contrastive pre-training.
+arXiv preprint arXiv:2106.01342, 2021.
+[63] Bojan Tunguz. Trouble with hopular, 2022.
+[64] Dennis Ulmer, Lotta Meijerink, and Giovanni Cinà. Trust issues: Uncertainty estimation does
+not enable reliable ood detection on medical tabular data. In Machine Learning for Health,
+pages 341–354. PMLR, 2020.
+[65] Christopher J Urban and Kathleen M Gates. Deep learning: A primer for psychologists.
+Psychological Methods, 2021.
+[66] Joaquin Vanschoren, Jan N Van Rijn, Bernd Bischl, and Luis Torgo. Openml: networked science
+in machine learning. ACM SIGKDD Explorations Newsletter, 2014.
+14
+
+[67] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In Advances in neural information
+processing systems, pages 5998–6008, 2017.
+[68] Martin Wistuba, Nicolas Schilling, and Lars Schmidt-Thieme. Learning hyperparameter
+optimization initializations. In 2015 IEEE international conference on data science and
+advanced analytics (DSAA), 2015.
+[69] Yutaro Yamada, Ofir Lindenbaum, Sahand Negahban, and Yuval Kluger. Feature selection
+using stochastic gates. In Proceedings of the International Conference on Machine Learning
+(ICML), 2020.
+[70] Jinsung Yoon, Yao Zhang, James Jordon, and Mihaela van der Schaar. Vime: Extending the
+success of self-and semi-supervised learning to tabular domain. Advances in Neural Information
+Processing Systems, 33:11033–11043, 2020.
+[71] Bingzhao Zhu, Xingjian Shi, Nick Erickson, Mu Li, George Karypis, and Mahsa Shoaran. Xtab:
+Cross-table pretraining for tabular transformers. arXiv preprint arXiv:2305.06090, 2023.
+
+15
+
+A
+
+Broader Societal Impact Statement
+
+The goal of our work is to conduct an analysis of tabular data, including the significance of ‘GBDTs
+vs. NNs’, as well as to provide a large set of tools for researchers and practitioners working on tabular
+data. We do not see any negative broader societal impacts of our work. In fact, our work shows that
+on a surprisingly large fraction of datasets, it is not necessary to train a resource-intensive neural
+net: a simple baseline, or tuning CatBoost, is enough to reach top performance. We even predict
+which datasets are more amenable to GBDTs: larger datasets, datasets with a high size-to-number-offeatures ratio, and ‘irregular’ datasets. Our hope is that our work will have a positive impact for both
+practitioners and researchers: by providing the largest analysis and open-source codebase to date,
+along with a benchmark suite of ‘hard’ datasets, our work can both accelerate future research and
+make the comparisons in future work more rigorous and comprehensive.
+
+B
+
+Dataset Documentation
+
+In this section, we give an overview of the documentation for our dataset. For the full details,
+including usage and tutorials, see https://github.com/naszilla/tabzilla.
+B.1
+
+Author responsibility and license
+
+We, the authors, bear all responsibility in case of violation of rights. The license of our repository is
+the Apache License 2.0. For more information, see https://github.com/naszilla/tabzilla/
+blob/main/LICENSE.
+B.2
+
+Maintenance plan
+
+The data is available on OpenML at https://www.openml.org/search?type=study&study_
+type=task&id=379&sort=tasks_included.
+We plan to actively maintain the benchmark suite, and we welcome contributions from the community.
+B.3
+
+Code of conduct
+
+Our Code of Conduct is from the Contributor Covenant, version 2.0. See
+https://www.contributor-covenant.org/version/2/0/code_of_conduct.html.
+
+B.4
+
+Datasheet
+
+We include a datasheet [24] for TabZilla, which is available here and also at https://github.com/
+naszilla/tabzilla.
+Motivation For Datasheet Creation
+
+*Why was the datasheet created? (e.g., was there a specific task in mind? was there a specific gap that
+needed to be filled?) The goal of releasing the TabZilla Benchmark Suite is to accelerate research in
+tabular data by introducing a set of ‘hard’ datasets. Specifically, simple baselines cannot reach top
+performance, and most algorithms (out of the 19 we tried) cannot reach top performance. We found
+that a surprisingly high percentage of datasets used in tabular research today are such that a simple
+baseline can reach just as high accuracy as the leading methods.
+
+*Has the dataset been used already? If so, where are the results so others can compare (e.g., links to
+published papers)? All of the individual datasets are already released in OpenML, and many have
+been used in prior work on tabular data. However, our work gathers these datasets into a single ‘hard’
+suite.
+16
+
+*What (other) tasks could the dataset be used for? All of these datasets are tabular classification
+datasets, and so to the best of our knowledge, they cannot be used for anything other than tabular
+classification.
+
+*Who funded the creation dataset? This benchmark suite was created by researchers at Abacus.AI,
+Stanford, Pinterest, University of Maryland, IIT Bombay, New York University, and Caltech. Funding
+for the dataset computation itself is from Abacus.AI.
+
+*Any other comment? None.
+Datasheet Composition
+
+*What are the instances?(that is, examples; e.g., documents, images, people, countries) Are there
+multiple types of instances? (e.g., movies, users, ratings; people, interactions between them; nodes,
+edges) Each instance is a tabular datapoint. The makeup of each point depends on its dataset. For
+example, three of the datasets consist of poker hands, electricity usage, and plant textures.
+
+*How many instances are there in total (of each type, if appropriate)? See Table 4 for a breakdown of
+the number of instances for each dataset.
+
+*What data does each instance consist of ? “Raw” data (e.g., unprocessed text or images)? Features/attributes? Is there a label/target associated with instances? If the instances related to people,
+are subpopulations identified (e.g., by age, gender, etc.) and what is their distribution? The raw data
+is hosted on OpenML. In our repository, we also contain scripts for the standard preprocessing we
+ran before training tabular data models. The data are not related to people.
+
+*Is any information missing from individual instances? If so, please provide a description, explaining
+why this information is missing (e.g., because it was unavailable). This does not include intentionally
+removed information, but might include, e.g., redacted text. There is no missing information.
+
+*Are relationships between individual instances made explicit (e.g., users’ movie ratings, social
+network links)? If so, please describe how these relationships are made explicit. There are no
+relationships between individual instances.
+
+*Does the dataset contain all possible instances or is it a sample (not necessarily random) of instances
+from a larger set? If the dataset is a sample, then what is the larger set? Is the sample representative
+of the larger set (e.g., geographic coverage)? If so, please describe how this representativeness was
+validated/verified. If it is not representative of the larger set, please describe why not (e.g., to cover a
+more diverse range of instances, because instances were withheld or unavailable).
+We selected the datasets for our benchmark suite as follows. We started with 176 datasets, which
+we selected with the aim to include most classification datasets from popular recent papers that
+study tabular data [8, 27, 39, 61], including datasets from the OpenML-CC18 suite [7], the OpenML
+Benchmarking Suite [26], and additional OpenML datasets [66]. Due to the scale of our experiments
+(538 650 total models trained), we limited to datasets smaller than 1.1M. CC-18 and OpenML
+Benchmarking Suite are both seen as the go-to standards for conducting a fair, diverse evaluation
+17
+
+across algorithms due to their rigorous selection criteria and wide diversity of datasets [7, 26]. Out of
+these 176 datasets, we selected 36 datasets for our suite as described in Section 3.
+
+*Are there recommended data splits (e.g., training, development/validation, testing)? If so, please
+provide a description of these splits, explaining the rationale behind them.
+We use the 10 folds from OpenML, and it is recommended to report performance averaged over these
+10 folds, as we do and as OpenML does. If a validation set is required, we recommend additionally
+using the validation splits that we used, described in Section 2.
+
+*Are there any errors, sources of noise, or redundancies in the dataset? If so, please provide a
+description. There are no known errors, sources of noise, or redundancies.
+
+*Is the dataset self-contained, or does it link to or otherwise rely on external resources (e.g., websites,
+tweets, other datasets)? If it links to or relies on external resources, a) are there guarantees that they
+will exist, and remain constant, over time; b) are there official archival versions of the complete dataset
+(i.e., including the external resources as they existed at the time the dataset was created); c) are there
+any restrictions (e.g., licenses, fees) associated with any of the external resources that might apply to
+a future user? Please provide descriptions of all external resources and any restrictions associated
+with them, as well as links or other access points, as appropriate. The dataset is self-contained.
+Any other comments? None.
+
+Collection Process
+
+*What mechanisms or procedures were used to collect the data (e.g., hardware apparatus or sensor,
+manual human curation, software program, software API)? How were these mechanisms or procedures
+validated? We did not create the individual datasets. However, we selected the datasets for our
+benchmark suite as follows. We started with 176 datasets, which we selected with the aim to
+include most classification datasets from popular recent papers that study tabular data [8, 27, 39, 61],
+including datasets from the OpenML-CC18 suite [7], the OpenML Benchmarking Suite [26], and
+additional OpenML datasets [66]. Due to the scale of our experiments (538 650 total models trained),
+we limited to datasets smaller than 1.1M. CC-18 and OpenML Benchmarking Suite are both seen as
+the go-to standards for conducting a fair, diverse evaluation across algorithms due to their rigorous
+selection criteria and wide diversity of datasets [7, 26].
+Out of these 176 datasets, we selected 36 datasets for our suite as described in Section 3.
+
+*How was the data associated with each instance acquired? Was the data directly observable (e.g.,
+raw text, movie ratings), reported by subjects (e.g., survey responses), or indirectly inferred/derived
+from other data (e.g., part-of-speech tags, model-based guesses for age or language)? If data was
+reported by subjects or indirectly inferred/derived from other data, was the data validated/verified? If
+so, please describe how. The datasets were selected using the three criteria from Section 3.
+
+*If the dataset is a sample from a larger set, what was the sampling strategy (e.g., deterministic,
+probabilistic with specific sampling probabilities)? As described earlier, the datasets were selected
+using the three criteria from Section 3.
+
+18
+
+*Who was involved in the data collection process (e.g., students, crowdworkers, contractors) and
+how were they compensated (e.g., how much were crowdworkers paid)? The creation of the TabZilla
+Benchmark Suite was done by the authors of this work.
+
+*Over what timeframe was the data collected? Does this timeframe match the creation timeframe
+of the data associated with the instances (e.g., recent crawl of old news articles)? If not, please
+describe the timeframe in which the data associated with the instances was created. The timeframe
+for constructing the TabZilla Benchmark Suite was from April 15, 2023 to June 1, 2023.
+Data Preprocessing
+
+*Was any preprocessing/cleaning/labeling of the data done (e.g., discretization or bucketing, tokenization, part-of-speech tagging, SIFT feature extraction, removal of instances, processing of missing
+values)? If so, please provide a description. If not, you may skip the remainder of the questions in
+this section.
+We include both the raw data and the preprocessed data. We preprocessed the data by imputing each
+NaN to the mean of the respective feature. We left all other preprocessing (such as scaling) to the
+algorithms themselves.
+
+*Was the “raw” data saved in addition to the preprocessed/cleaned/labeled data (e.g., to support
+unanticipated future uses)? If so, please provide a link or other access point to the “raw” data.
+The raw data is available at https://www.openml.org/search?type=study&study_type=
+task&id=379&sort=tasks_included.
+
+*Is the software used to preprocess/clean/label the instances available? If so, please provide a link or
+other access point.
+Our README contains an extensive section on the data preprocessing, here: https://github.
+com/naszilla/tabzilla#openml-datasets.
+
+*Does this dataset collection/processing procedure achieve the motivation for creating the dataset
+stated in the first section of this datasheet? If not, what are the limitations? We hope that the release
+of this benchmark suite will achieve our goal of accelerating research in tabular data, as well as
+making it easier for researchers and practitioners to devise and compare algorithms. Time will tell
+whether our suite will be adopted by the community.
+
+*Any other comments None.
+Dataset Distribution
+
+*How will the dataset be distributed? (e.g., tarball on website, API, GitHub; does the data have a
+DOI and is it archived redundantly?) The benchmark suite is on OpenML at https://www.openml.
+org/search?type=study&study_type=task&id=379&sort=tasks_included.
+
+*When will the dataset be released/first distributed? What license (if any) is it distributed under? The
+benchmark suite is public as of June 1, 2023, distributed under the Apache License 2.0.
+19
+
+*Are there any copyrights on the data? There are no copyrights on the data.
+
+*Are there any fees or access/export restrictions? There are no fees or restrictions.
+
+*Any other comments? None.
+
+Dataset Maintenance
+
+*Who is supporting/hosting/maintaining the dataset?
+ing/hosting/maintaining the dataset.
+
+The authors of this work are support-
+
+*Will the dataset be updated? If so, how often and by whom? We welcome updates from the tabular
+data community. If new algorithms are created, the authors may open a pull request to include their
+method.
+
+*How will updates be communicated? (e.g., mailing list, GitHub) Updates will be communicated on
+the GitHub README https://github.com/naszilla/tabzilla.
+
+*If the dataset becomes obsolete how will this be communicated? If the dataset becomes obsolete, it
+will be communicated on the GitHub README https://github.com/naszilla/tabzilla.
+
+*If others want to extend/augment/build on this dataset, is there a mechanism for them to do so? If so,
+is there a process for tracking/assessing the quality of those contributions. What is the process for
+communicating/distributing these contributions to users? Others can create a pull request on GitHub
+with possible extensions to our benchmark suite, which will be approved case-by-case. For example,
+an author of a new hard tabular dataset may create a PR in our codebase with the new dataset. These
+updates will again be communicated on the GitHub README.
+
+Legal and Ethical Considerations
+
+*Were any ethical review processes conducted (e.g., by an institutional review board)? If so, please
+provide a description of these review processes, including the outcomes, as well as a link or other
+access point to any supporting documentation. There was no ethical review process. We note that our
+benchmark suite consists of existing datasets that are already publicly available on OpenML.
+
+*Does the dataset contain data that might be considered confidential (e.g., data that is protected
+by legal privilege or by doctorpatient confidentiality, data that includes the content of individuals
+non-public communications)? If so, please provide a description. The datasets do not contain any
+confidential data.
+
+20
+
+*Does the dataset contain data that, if viewed directly, might be offensive, insulting, threatening,
+or might otherwise cause anxiety? If so, please describe why None of the data might be offensive,
+insulting, threatening, or otherwise cause anxiety.
+
+*Does the dataset relate to people? If not, you may skip the remaining questions in this section. The
+datasets do not relate to people.
+
+*Any other comments? None.
+
+C
+
+Additional Related Work
+
+Gradient-boosted decision trees. GBDTs iteratively build an ensemble of decision trees, with each
+new tree fitting the residual of the loss from the previous trees, using gradient descent to minimize
+the losses. GBDTs have been a powerful tool for modeling tabular data ever since their creation
+in 2001 [22], and numerous works propose high-performing GBDT variants. XGBoost (eXtreme
+Gradient Boosting) [13] uses weighted quantile sketching and sparsity-awareness, allowing it to
+scale to large datasets. LightGBM (Light Gradient Boosting Machine) [40] uses gradient-based
+one-sided sampling and exclusive feature bundling to create a faster and more lightweight GBDT
+implementation. CatBoost (Categorical Boosting) [54] introduces ordered boosting, a new method
+for handling categorical features, as well as better methods for handling missing values and outliers.
+Neural networks for tabular data. In their survey on deep learning for tabular data, Borisov et al.
+described three types of tabular data approaches for neural networks [8]. Data transformation methods
+[30, 70] seek to encode the data into a format that is better-suited for neural nets. Architecture-based
+methods design specialized neural architectures for tabular data [12, 29, 53], a large sub-class of
+which are transformer-based architectures [5, 27, 36, 62]. Regularization-based methods specially
+tailor regularizers methods to improve the performance of a given architecture [37, 39, 60]. Notably,
+one recent work designs a new framework for regularization in the tabular setting built on latent unit
+attributions [37], and another recent work shows that searching for the optimal combination/cocktail
+of 13 regularization techniques applied to a simple neural net achieves strong performance. While
+regularization was not the focus of our current work, including regularization methods would be an
+exciting direction for follow-up work.
+A notable recent neural network for tabular data is TabPFN [33, 34], a prior-data fitted network
+[50, 51] for tabular data. TabPFN is a meta-learned algorithm that provably approximates Bayesian
+inference, which can make predictions on a new dataset in under one second. PFNs have recently
+been applied to learning curve extrapolation [1], forecasting [41], and Bayesian optimization [49].
+GBDTs versus NNs. Several recent works compare GBDTs to NNs on tabular data, often finding
+that either neural nets [5, 27, 39, 53] or GBDTs [8, 27, 28, 61] perform best. Shwartz-Ziv and
+Armon compare GBDTs and NNs on 30 datasets, finding that GBDTs perform better on average,
+and ensembling both achieves better performance [61]. Kadra et al. compare GBDTs and NNs on 40
+datasets, finding that properly-tuned neural networks perform best on average [39].
+Gorishniy et al. [27] introduce a ResNet-like [31] architecture, and FT-Transformer, a transformerbased [67] architecture. Across experiments on eleven datasets, they conclude that there is still no
+universal winner among GBDTs and NNs. Borisov et al. [8] compare classical machine learning
+methods with eleven deep learning approaches on five tabular datasets, concluding that GBDTs still
+have the edge. In the transfer learning setting, Levin et al. [43] find that neural networks have a
+decisive edge over GBDTs when pre-training data is available.
+Perhaps the most related work to ours is by Grinsztajn et al. [28], who investigate why tree-based
+methods outperform neural nets on tabular data. There are a few differences between their work and
+ours. First, they only consider seven algorithms and 45 datasets, compared to our 19 algorithms and
+176 datasets. Second, their dataset sizes range from 3 000 to 10 000, or seven that are exactly 50 000,
+in contrast to our dataset sizes which range from 32 to 1 025 009 (see Table 5). Additionally, they
+further control their study, for example by upper bounding the ratio of size to features, by removing
+21
+
+Table 5: Summary statistics for all 176 datasets used in our experiments. Left columns show the
+number of instances, number of features, number of target classes, and the ratio of the mimum
+frerquency of any class to the maximum frequency of any class (Min-Max Class Freq.). Right
+columns show the number of feature types. All statistics except for class frequency ratio are rounded
+to the nearest integer.
+# Inst. # Feats. # Classes Min-Max Class Freq.
+# Feature Types
+Num.
+Bin.
+Cat.
+mean
+std
+min
+25%
+50%
+75%
+max
+
+30567
+106943
+32
+596
+2218
+11008
+1025009
+
+223
+786
+2
+9
+21
+61
+7200
+
+6
+12
+2
+2
+2
+6
+100
+
+0.48
+0.35
+2e-05
+0.14
+0.46
+0.82
+1.00
+
+206
+781
+0
+4
+10
+50
+7200
+
+25
+144
+0
+0
+0
+2
+1555
+
+17
+119
+0
+0
+0
+8
+1555
+
+high-cardinality categorical feature, and by removing low-cardinality numerical features. While this
+has the benefit of being a more controlled study, their analysis misses out on some of our observations,
+such as GBDTs performing better than NNs on ‘irregular’ datasets. Finally, while Grinsztajn et al.
+focused in depth on a few metafeatures such as dataset smoothness and number of uninformative
+features, our work considers orders of magnitude more metafeatures. Again, while each approach has
+its own strengths, our work is able to discover more potential insights, correlations, and takeaways
+for practitioners.
+
+D
+
+Additional Experiments
+
+We give additional experiments, including dataset statistics (Appendix D.1), additional results from
+Section 2.1 (Appendix D.2), and additional results from Section 2.2 (Appendix D.4).
+D.1
+
+Dataset statistics
+
+Table 5 shows summary statistics for all 176 datasets used in our experiments. Roughly half of our
+datasets have a binary classification target (and as many as 100 target classes), and roughly half of
+all training sets have fewer than 2300 instances—though many datasets have tens of thousands of
+instances.
+D.2
+
+Additional experiments from Section 2.1
+
+In this section, we give additional experiments from Section 2.1, including relative performance
+tables, training time analysis, and critical difference diagrams.
+D.2.1
+
+Relative performance tables
+
+First, we show the ranking of all tuned algorithms according to each performance metric, averaged
+over datasets: log loss (Table 6), F1 score (Table 7), and ROC-AUC (Table 8). These are similar to
+Table 1, but with different metrics. Rankings are calculated by first averaging tuned performance
+over all 10 splits of each dataset, and then ranking each algorithm for each dataset according to their
+average performance. For these rankings, a tie between two algorithms is indicated by the lowest
+(best) ranking. So if multiple algorithms achieve the highest average accuracy for a dataset, they both
+receive ranking 1.
+Some algorithms perform well even without hyperparameter tuning. Next, we calculate the ranking
+of all datasets using the same procedure as in Table 1 and the previous tables, but with their default
+hyperparameter set displayed as a separate algorithm. We show ranking results for test accuracy. See
+Table 9. Many of the best-performing algorithms, including CatBoost, XGBoost, LightGBM, and
+ResNet, perform fairly well both with and without hyperparameter tuning.
+22
+
+Table 6: Performance of algorithms according to Log Loss over 98 datasets. Columns show the rank
+over all datasets, the average normalized log loss (Mean LL), the standard deviation of normalized
+LL across folds (Std. LL), and the train time per 1000 instances. Min/max/mean/median are taken
+over all datasets.
+Algorithm
+
+Class
+
+TabPFN∗
+CatBoost
+XGBoost
+SAINT
+ResNet
+SVM
+LightGBM
+DANet
+FTTransformer
+STG
+RandomForest
+LinearModel
+MLP-rtdl
+NODE
+MLP
+TabNet
+VIME
+KNN
+DecisionTree
+
+PFN
+GBDT
+GBDT
+NN
+NN
+base
+GBDT
+NN
+NN
+NN
+base
+base
+NN
+NN
+NN
+NN
+NN
+base
+base
+
+Rank
+min max
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+3
+1
+1
+
+15
+14
+15
+19
+16
+18
+19
+18
+17
+18
+19
+19
+19
+18
+19
+19
+19
+19
+19
+
+mean
+
+med.
+
+Mean LL
+mean med.
+
+Std. LL
+mean med.
+
+Time /1000 inst.
+mean
+med.
+
+4.49
+4.92
+5.31
+7.20
+8.30
+8.34
+8.38
+8.62
+9.34
+9.68
+10.57
+10.58
+11.71
+11.89
+12.51
+12.90
+14.36
+15.32
+15.59
+
+3
+4
+5
+6
+8
+9
+7.50
+9
+10
+10
+11
+11
+12
+12
+13
+14.50
+16
+16
+18
+
+0.05
+0.04
+0.05
+0.12
+0.12
+0.14
+0.13
+0.12
+0.14
+0.18
+0.19
+0.24
+0.28
+0.23
+0.29
+0.40
+0.40
+0.51
+0.56
+
+0.07
+0.08
+0.08
+0.09
+0.10
+0.08
+0.21
+0.13
+0.11
+0.07
+0.22
+0.10
+0.17
+0.04
+0.15
+0.38
+0.09
+0.37
+0.54
+
+0.25
+13.89
+0.73
+202.59
+16.12
+49.83
+0.83
+71.58
+29.58
+18.82
+0.29
+0.04
+13.75
+196.82
+18.29
+34.62
+16.92
+0.01
+0.02
+
+0.01
+0.02
+0.02
+0.06
+0.08
+0.06
+0.07
+0.09
+0.09
+0.07
+0.13
+0.10
+0.18
+0.18
+0.21
+0.25
+0.37
+0.42
+0.58
+
+0.04
+0.06
+0.06
+0.08
+0.08
+0.05
+0.09
+0.08
+0.09
+0.05
+0.07
+0.06
+0.12
+0.03
+0.11
+0.19
+0.07
+0.20
+0.41
+
+0.01
+1.66
+0.37
+173.23
+8.97
+1.20
+0.27
+61.35
+18.48
+15.85
+0.22
+0.03
+7.96
+176.16
+10.95
+29.69
+14.64
+0.00
+0.01
+
+Table 7: Performance of algorithms according to F1 score over 98 datasets. Columns show the rank
+over all datasets, the average normalized F1 score (Mean F1), the standard deviation of normalized
+F1 score across folds (Std. F1), and the train time per 1000 instances. Min/max/mean/median are
+taken over all datasets.
+Algorithm
+
+Class
+
+CatBoost
+TabPFN∗
+XGBoost
+ResNet
+NODE
+SAINT
+FTTransformer
+RandomForest
+LightGBM
+SVM
+DANet
+MLP-rtdl
+DecisionTree
+STG
+MLP
+LinearModel
+TabNet
+KNN
+VIME
+
+GBDT
+PFN
+GBDT
+NN
+NN
+NN
+NN
+base
+GBDT
+base
+NN
+NN
+base
+NN
+NN
+base
+NN
+base
+NN
+
+Rank
+min max
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+2
+
+18
+19
+17
+19
+19
+19
+17
+19
+19
+18
+18
+19
+19
+19
+19
+19
+19
+19
+19
+
+mean
+
+med.
+
+Mean F1
+mean med.
+
+Std. F1
+mean med.
+
+Time /1000 inst.
+mean
+med.
+
+5.77
+5.97
+6.78
+7.67
+8.05
+8.07
+8.17
+8.20
+8.47
+9.05
+9.69
+9.72
+11.69
+11.81
+12.18
+12.24
+12.66
+13.60
+15.11
+
+4
+5
+6
+7.50
+8
+7
+8
+7
+8
+9.50
+10
+10
+13
+12
+13
+14
+14
+15
+17
+
+0.87
+0.83
+0.82
+0.76
+0.75
+0.73
+0.76
+0.77
+0.76
+0.69
+0.74
+0.66
+0.61
+0.57
+0.57
+0.52
+0.56
+0.46
+0.36
+
+0.29
+0.26
+0.32
+0.29
+0.25
+0.30
+0.30
+0.31
+0.35
+0.25
+0.31
+0.27
+0.34
+0.28
+0.29
+0.30
+0.38
+0.28
+0.27
+
+21.00
+0.25
+0.83
+16.04
+140.71
+171.14
+27.94
+0.36
+0.86
+29.99
+69.54
+14.29
+0.03
+18.43
+18.42
+0.04
+34.82
+0.01
+17.02
+
+23
+
+0.93
+0.93
+0.89
+0.82
+0.81
+0.86
+0.82
+0.83
+0.83
+0.77
+0.81
+0.73
+0.71
+0.65
+0.58
+0.53
+0.61
+0.55
+0.34
+
+0.22
+0.19
+0.22
+0.19
+0.19
+0.23
+0.19
+0.21
+0.21
+0.17
+0.22
+0.16
+0.24
+0.18
+0.18
+0.24
+0.26
+0.21
+0.18
+
+2.08
+0.01
+0.37
+9.34
+117.04
+144.37
+18.40
+0.25
+0.31
+1.73
+60.20
+7.30
+0.01
+15.76
+11.20
+0.03
+29.16
+0.00
+14.96
+
+Table 8: Performance of algorithms according to ROC-AUC, over 98 datasets. Columns show the
+rank over all datasets, the average normalized ROC-AUC score (Mean AUC), the standard deviation
+of normalized ROC-AUC score across folds (Std. AUC), and the train time per 1000 instances.
+Min/max/mean/median are taken over all datasets.
+Algorithm
+
+Class
+
+TabPFN∗
+CatBoost
+XGBoost
+ResNet
+SAINT
+RandomForest
+DANet
+LightGBM
+NODE
+FTTransformer
+SVM
+MLP-rtdl
+STG
+LinearModel
+MLP
+TabNet
+DecisionTree
+KNN
+VIME
+
+PFN
+GBDT
+GBDT
+NN
+NN
+base
+NN
+GBDT
+NN
+NN
+base
+NN
+NN
+base
+NN
+NN
+base
+base
+NN
+
+Rank
+min max
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+
+16
+18
+17
+19
+19
+18
+17
+19
+19
+19
+19
+19
+19
+19
+19
+19
+19
+19
+19
+
+mean
+
+med.
+
+Mean AUC
+mean med.
+
+Std. AUC
+mean med.
+
+Time /1000 inst.
+mean
+med.
+
+4.87
+5.64
+6.12
+7.11
+7.22
+7.45
+8.08
+8.69
+9.17
+9.40
+9.87
+10.02
+11.33
+12.01
+12.55
+12.81
+13.88
+14.59
+14.98
+
+3
+4
+5
+6
+6
+7
+8
+8
+10
+9.50
+10.50
+10
+12
+13
+13.50
+14
+15
+16
+16
+
+0.91
+0.92
+0.90
+0.84
+0.84
+0.87
+0.83
+0.83
+0.81
+0.79
+0.75
+0.73
+0.66
+0.62
+0.65
+0.63
+0.53
+0.52
+0.49
+
+0.17
+0.18
+0.19
+0.19
+0.19
+0.19
+0.19
+0.23
+0.20
+0.20
+0.22
+0.21
+0.24
+0.23
+0.23
+0.32
+0.30
+0.25
+0.30
+
+0.25
+20.51
+0.84
+15.83
+170.31
+0.41
+64.15
+0.89
+160.58
+27.73
+61.16
+15.05
+18.58
+0.04
+18.17
+35.06
+0.02
+0.01
+17.84
+
+0.97
+0.96
+0.96
+0.93
+0.93
+0.94
+0.91
+0.91
+0.90
+0.88
+0.87
+0.83
+0.79
+0.75
+0.71
+0.75
+0.59
+0.56
+0.50
+
+0.07
+0.08
+0.09
+0.12
+0.12
+0.10
+0.08
+0.10
+0.14
+0.13
+0.10
+0.12
+0.15
+0.17
+0.14
+0.19
+0.23
+0.19
+0.20
+
+0.01
+1.94
+0.38
+8.78
+145.99
+0.28
+57.12
+0.29
+131.56
+18.00
+2.01
+7.01
+15.98
+0.03
+11.16
+29.32
+0.01
+0.00
+15.55
+
+Now, we present a table similar to Table 1, but with the full set of 176 datasets. See Table 10. We
+also include partial results for NAM [2], DeepFM [29], and TabTransformer [36]. An important
+caveat to Table 10 is that not all algorithms completed on all 176 (especially NAM, DeepFM, and
+TabTransformer) due to memory or timeout issues with our experimental setup described in Section 2,
+so these are only rough comparisons. However, we note that the ordering of the algorithms is still
+nearly the same as in Table 1.
+D.2.2
+
+Training time analysis
+
+In this section we analyze the relative training time required by each algorithm. Here we only consider
+algorithms with their default hyperparameters, so no tuning is used. Table 11 shows a ranking of all
+algorithms, according to the average training time per 1 000 training samples. Similar to Table 10,
+an important caveat to Table 11 is that not all algorithms completed on all 176 (especially NAM,
+DeepFM, and TabTransformer) due to memory or timeout issues with our experimental setup, so
+these are only rough comparisons. We also separately present results for datasets of size less than or
+equal to 1250 in Table 12 (and this table has no such caveat).
+
+D.3
+
+Additional TabPFN Results
+
+In this section, we show additional results that include two modified versions of TabPFN, one that
+uses a random subset of 3000 training points (referred to as TabPFN-3k, or TabPFN∗ in the main
+paper), and one that uses 1000 randomly sampled training points (TabPFN-1k). As an ablation, we
+also test a version of CatBoost that uses a subset of 1000 training points (CatBoost-1k).
+This analysis includes a subset of 98 datasets and 21 algorithms (including TabPFN-3k, TabPFN-1k,
+and CatBoost-1k), where all algorithms produce a result for all datasets. For a table similar to
+Table 1, but with the TabPFN and CatBoost ablations, see Table 13 (where the performance metric is
+accuracy). See also the same tables for log loss (Table 14) and F1 score (Table 15). Next, we present
+critical difference plots similar to Figure 3, but where the performance metric is accuracy: Figure 6.
+Finally, we present a plot of accuracy vs. time, similar to Figure 2, but which includes the TabPFN
+and CatBoost ablations: Figure 7.
+24
+
+Table 9: Performance of algorithms including algorithms parameterized with their default hyperparameters, according to accuracy, over 104 datasets. Columns show the rank over all datasets, the
+average normalized accuracy (Mean Acc.), the standard deviation of normalized accuracy across
+folds (Std. Acc.), and the train time per 1000 instances. Min/max/mean/median are taken over all
+datasets.
+Rank
+min max
+
+Algorithm
+CatBoost
+CatBoost (default)
+XGBoost
+ResNet
+XGBoost (default)
+NODE
+SAINT
+FTTransformer
+RandomForest
+LightGBM
+ResNet (default)
+SVM
+LightGBM (default)
+SAINT (default)
+NODE (default)
+DANet
+RandomForest (default)
+MLP-rtdl
+FTTransformer (default)
+STG
+DecisionTree
+SVM (default)
+MLP
+LinearModel
+MLP-rtdl (default)
+DANet (default)
+TabNet
+DecisionTree (default)
+KNN
+TabNet (default)
+MLP (default)
+KNN (default)
+VIME
+STG (default)
+VIME (default)
+
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+3
+1
+6
+
+30
+31
+30
+34
+34
+33
+34
+31
+33
+34
+35
+32
+34
+35
+34
+33
+35
+34
+35
+34
+35
+35
+34
+35
+35
+33
+35
+35
+35
+35
+35
+35
+34
+35
+35
+
+mean
+
+med.
+
+Mean Acc.
+mean med.
+
+Std. Acc.
+mean med.
+
+Time /1000 inst.
+mean
+med.
+
+8.05
+10.12
+10.77
+11.51
+12.02
+12.17
+12.27
+12.78
+13.00
+13.19
+13.94
+14.24
+14.38
+14.48
+14.61
+15.08
+16.22
+16.28
+18.01
+18.73
+18.93
+19.63
+19.66
+19.95
+20.11
+20.19
+20.56
+21.88
+22.88
+23.52
+23.78
+24.61
+25.16
+26.17
+30.78
+
+6.0
+7.0
+8.5
+11.5
+10.5
+12.0
+10.0
+13.0
+12.0
+12.0
+14.0
+16.0
+12.5
+12.0
+15.0
+15.0
+15.0
+18.0
+20.0
+19.0
+20.0
+24.0
+21.5
+22.0
+21.0
+22.0
+22.5
+23.0
+25.0
+25.0
+27.0
+26.5
+27.0
+30.0
+33.0
+
+0.91
+0.87
+0.87
+0.84
+0.85
+0.82
+0.81
+0.83
+0.83
+0.85
+0.79
+0.78
+0.80
+0.76
+0.77
+0.83
+0.76
+0.74
+0.71
+0.70
+0.73
+0.64
+0.69
+0.64
+0.63
+0.71
+0.68
+0.63
+0.59
+0.60
+0.56
+0.54
+0.53
+0.44
+0.23
+
+0.20
+0.20
+0.22
+0.20
+0.22
+0.18
+0.20
+0.21
+0.21
+0.23
+0.22
+0.18
+0.23
+0.20
+0.18
+0.21
+0.20
+0.18
+0.21
+0.20
+0.23
+0.19
+0.20
+0.22
+0.20
+0.21
+0.25
+0.24
+0.20
+0.29
+0.24
+0.21
+0.17
+0.18
+0.23
+
+30.27
+21.95
+0.94
+16.07
+1.20
+146.89
+168.14
+29.47
+0.36
+1.06
+15.26
+29.22
+1.30
+135.22
+67.54
+69.29
+0.50
+14.33
+25.92
+18.47
+0.03
+1.09
+18.61
+0.04
+13.07
+45.04
+35.09
+0.02
+0.01
+28.39
+17.37
+0.01
+17.10
+16.39
+15.75
+
+0.95
+0.93
+0.93
+0.90
+0.91
+0.88
+0.91
+0.87
+0.88
+0.90
+0.87
+0.88
+0.88
+0.88
+0.86
+0.87
+0.82
+0.83
+0.80
+0.81
+0.79
+0.74
+0.73
+0.71
+0.78
+0.74
+0.78
+0.70
+0.62
+0.70
+0.59
+0.57
+0.59
+0.38
+0.05
+
+0.12
+0.12
+0.13
+0.11
+0.13
+0.12
+0.15
+0.14
+0.15
+0.14
+0.14
+0.13
+0.16
+0.15
+0.12
+0.15
+0.14
+0.11
+0.14
+0.11
+0.18
+0.12
+0.11
+0.15
+0.13
+0.15
+0.18
+0.16
+0.15
+0.22
+0.18
+0.16
+0.13
+0.11
+0.14
+
+2.22
+1.53
+0.42
+10.04
+0.61
+118.94
+144.84
+18.63
+0.25
+0.37
+8.67
+1.37
+0.50
+107.82
+50.85
+60.15
+0.39
+7.62
+15.35
+16.00
+0.01
+0.38
+11.92
+0.03
+6.33
+38.53
+30.83
+0.01
+0.00
+25.93
+11.30
+0.00
+14.97
+13.74
+14.10
+
+Accuracy
+
+19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1
+VIME
+KNN
+LinearModel
+MLP
+STG
+DecisionTree
+TabNet
+MLP-rtdl
+SVM
+DANet
+
+CatBoost
+TabPFN *
+XGBoost
+LightGBM
+ResNet
+FTTransformer
+RandomForest
+NODE
+SAINT
+
+Figure 6: Critical difference plot comparing all algorithms according to their mean accuracy rank
+over 98 datasets. Each algorithm’s average rank is shown as a horizontal line on the axis. Sets of
+algorithms which are not significantly different are connected by a horizontal black bar.
+
+25
+
+Table 10: Performance of 21 algorithms over all 176 datasets according to accuracy. A caveat is that
+some algorithms did not complete on all 176 datasets (especially DeepFM, TabTransformer,
+and NAM) due to memory or timeout issues with our experimental setup, so this is only a
+rough comparison (however, we note that the ordering of the algorithms is still nearly the same as in
+Table 1). Columns show the rank over all datasets, the average normalized accuracy (Mean Acc.),
+and the standard deviation of normalized accuracy across folds (Std. Acc.). Min/max/mean/median
+are taken over all datasets. The rightmost column show the number of datasets where each algorithm
+ran successfully, out of 176.
+Algorithm
+
+Normalized Accuracy
+
+CatBoost
+XGBoost
+ResNet
+LightGBM
+SAINT
+NODE
+RandomForest
+FTTransformer
+SVM
+DANet
+MLP-rtdl
+DeepFM
+TabNet
+MLP
+DecisionTree
+TabTransformer
+STG
+LinearModel
+KNN
+VIME
+NAM
+
+Rank
+min max
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+
+DecisionTree
+1.0 TabPFN-3k
+TabPFN-1k
+0.8
+
+18
+19
+20
+21
+20
+20
+20
+17
+19
+20
+19
+21
+21
+21
+21
+21
+21
+21
+21
+21
+21
+
+mean
+
+med.
+
+Mean Acc.
+mean med.
+
+Std. Acc.
+mean med.
+
+5.21
+5.60
+6.80
+6.98
+7.55
+7.57
+8.10
+8.15
+8.41
+8.73
+9.57
+10.89
+11.05
+11.36
+11.40
+11.52
+11.55
+12.30
+12.83
+14.58
+15.94
+
+4.0
+4.0
+7.0
+6.0
+7.0
+7.0
+8.0
+8.0
+8.0
+8.0
+10.0
+11.5
+10.0
+12.0
+12.0
+12.0
+12.0
+14.0
+14.0
+16.0
+17.0
+
+0.88
+0.88
+0.79
+0.83
+0.76
+0.76
+0.77
+0.76
+0.74
+0.77
+0.67
+0.64
+0.64
+0.62
+0.60
+0.58
+0.60
+0.51
+0.53
+0.41
+0.35
+
+0.22
+0.24
+0.22
+0.27
+0.25
+0.23
+0.22
+0.25
+0.21
+0.26
+0.20
+0.26
+0.29
+0.21
+0.25
+0.16
+0.22
+0.23
+0.22
+0.21
+0.25
+
+XGBoost
+
+CatBoost
+
+0.11
+0.12
+0.10
+0.12
+0.13
+0.14
+0.10
+0.14
+0.14
+0.15
+0.09
+0.19
+0.13
+0.12
+0.13
+0.10
+0.11
+0.13
+0.13
+0.12
+0.17
+
+165
+174
+174
+165
+138
+141
+173
+148
+143
+147
+176
+90
+168
+175
+175
+124
+164
+168
+167
+163
+80
+
+ResNet FTTransformer
+
+SAINT
+
+LightGBM
+
+0.6
+
+SVM
+
+0.4
+0.2
+
+0.94
+0.96
+0.88
+0.92
+0.88
+0.84
+0.84
+0.81
+0.85
+0.83
+0.75
+0.74
+0.75
+0.64
+0.65
+0.66
+0.69
+0.57
+0.58
+0.40
+0.26
+
+Num. Datasets
+
+RandomForest
+KNN
+
+10 2
+
+VIME
+
+LinearModel
+neural
+
+0.0
+
+MLP-rtdl
+
+baseline
+
+gbdt
+
+10 1
+101
+100
+Training time per 1000 instances (sec)
+
+pfn
+102
+
+Figure 7: Median runtime vs. median normalized accuracy for each algorithm, including two variants
+of TabPFN, over 98 datasets. The bars span the 20th to 80th percentile over all datasets.
+
+26
+
+Table 11: Ranking of all algorithms over all 176 datasets, according to average training time per
+1 000 samples. A caveat is that some algorithms did not complete on all 176 datasets (especially
+DeepFM, TabTransformer, and NAM) due to memory or timeout issues with our experimental
+setup, so this is only a rough comparison. Lower ranks indicate lower training times. Rank columns
+show min, max, and mean ranks over all datasets. Right columns show average training time per
+1 000 samples over all 10 training folds, and the number of datasets considered for each algorithm.
+Rank
+Mean Train Time Num. Datasets
+Algorithm
+min max mean (s/1000 samples)
+KNN
+DecisionTree
+LinearModel
+RandomForest
+XGBoost
+LightGBM
+SVM
+CatBoost
+MLP-rtdl
+DeepFM
+MLP
+ResNet
+TabTransformer
+VIME
+STG
+FTTransformer
+TabNet
+DANet
+NODE
+NAM
+SAINT
+
+D.3.1
+
+1
+1
+1
+1
+1
+4
+3
+1
+2
+7
+3
+4
+5
+8
+8
+7
+9
+11
+7
+12
+10
+
+5
+8
+4
+8
+16
+14
+20
+19
+17
+16
+17
+16
+19
+19
+20
+18
+20
+21
+21
+21
+21
+
+1.66
+2.33
+2.45
+5.05
+5.70
+6.67
+6.74
+7.32
+9.23
+9.64
+10.43
+10.46
+12.79
+13.12
+13.18
+13.47
+15.37
+17.20
+17.44
+18.34
+18.38
+
+0.04
+0.18
+0.05
+0.47
+1.68
+2.64
+3.76
+15.36
+9.21
+5.52
+12.19
+11.58
+17.28
+18.25
+15.26
+21.97
+26.41
+42.10
+60.76
+129.18
+119.49
+
+167
+175
+168
+173
+174
+165
+141
+165
+176
+90
+175
+174
+122
+156
+164
+148
+160
+146
+141
+79
+124
+
+HPO Plot
+
+In Figure 4, we plotted the performance improvement of hyperparameter tuning on CatBoost,
+compared to the absolute performance difference between the best neural net and the best GBDT
+using default hyperparameters. Now, we also give the same plot for ResNet. See Figure 8.
+D.3.2
+
+Critical difference diagrams
+
+Figure 9 shows a critical difference plot according to F1 score. Note that we repeat the Friedman test
+four times with rankings of the same datasets and algorithms. However it is unlikely that our findings
+would change, given that p-values for these tests without correction are extremely small (p< 10−20 ).
+We compare the performance of each algorithm family (GBDTs, NNs, and baselines). Here we use
+all 176 datasets. We use the same methodology here as in previous sections. See Figure 10 (log loss)
+and Figure 11 (F1 score).
+D.3.3
+
+Venn Diagrams
+
+Recall from Section 2 that for our Venn diagram plots, we split the 19 algorithms into three families:
+GBDTs (CatBoost, XGBoost, LightGBM), NNs (listed in Section 2), and baselines (Decision Tree,
+KNN, LinearModel, RandomForest, SVM). To compare algorithm performance across datasets, we
+use min-max scaling as described in Section 2. In Figure 4, we said that an algorithm is ‘highperforming’ if it achieves a scaled test-set accuracy of at least 0.99, and then we determine which
+algorithm families (GBDTs, NNs, baselines) have a high-performing algorithm. Now we compute
+the same Venn diagram, when tightening the definition of high-performing to 0.9999 scaled accuracy.
+See Figure 12. In this case, GBDTs are the sole high-performing algorithm family for 42% of datasets,
+while NNs are the sole high-performing algorithm family for 30% of datasets. However, since these
+differences are smaller than 0.1%, they may not be significant to practitioners.
+27
+
+|Best default NN - GBDT|
+
+100
+10 1
+10 2
+10 3
+10 4
+10 5
+
+0 10 4
+10 2
+100 0 10 4
+10 2
+100
+CatBoost tuning improvement ResNet tuning improvement
+
+Figure 8: The performance improvement of hyperparameter tuning (horizontal axis) for CatBoost
+(left) and ResNet (right) compared to the absolute performance difference between the best neural
+net and the best GBDT, using default hyperparameters (vertical axis). Each point indicates a
+different dataset, and all values are in normalized log loss. Points on the dotted line indicate that
+the performance improvement due to hyperparameter tuning is identical to the difference due to
+NN-vs-GBDT algorithm selection.
+
+F1
+
+18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1
+VIME
+KNN
+LinearModel
+MLP
+STG
+TabNet
+DecisionTree
+MLP-rtdl
+SVM
+
+CatBoost
+XGBoost
+LightGBM
+ResNet
+SAINT
+RandomForest
+FTTransformer
+DANet
+NODE
+
+Figure 9: Critical difference diagram comparing all algorithms according to F1 score. Each algorithm’s average rank is shown as a horizontal line on the axis. Algorithms which are not significantly
+different are connected by a horizontal black bar.
+
+3
+
+Log Loss
+2
+
+1
+gbdt
+
+baseline
+neural
+
+Figure 10: Critical difference plot comparing three algorithm types, according to log loss. Each
+algorithm’s average rank is shown as a horizontal line on the axis. Algorithms which are not
+significantly different are connected by a horizontal black bar.
+
+3
+
+F1
+2
+
+1
+gbdt
+
+baseline
+neural
+
+Figure 11: Critical difference plot comparing three algorithm types, according to F1 score. Each
+algorithm’s average rank is shown as a horizontal line on the axis. Algorithms which are not
+significantly different are connected by a horizontal black bar.
+
+28
+
+Table 12: Ranking of all 22 algorithms over the 57 datasets of size less than or equal to 1250,
+according to average training time per 1 000 samples. Lower ranks indicate lower training times.
+Rank columns show min, max, and mean ranks over all datasets. Right columns show average
+training time per 1 000 samples over all 10 training folds, and the number of datasets considered for
+each algorithm.
+Rank
+Mean Train Time # Datasets
+Algorithm
+min max mean (s/1000 samples) Num. Datasets
+TabPFN
+KNN
+DecisionTree
+LinearModel
+SVM
+LightGBM
+RandomForest
+XGBoost
+CatBoost
+MLP-rtdl
+ResNet
+VIME
+STG
+MLP
+FTTransformer
+TabNet
+DANet
+NODE
+SAINT
+
+1
+1
+1
+3
+4
+5
+5
+6
+8
+9
+10
+9
+9
+9
+11
+10
+15
+13
+16
+
+3
+3
+4
+5
+8
+12
+9
+9
+19
+17
+16
+16
+15
+17
+18
+18
+19
+19
+19
+
+1.16
+2.00
+2.88
+4.25
+5.23
+6.47
+6.84
+7.35
+9.67
+11.51
+12.14
+12.49
+12.56
+13.26
+13.86
+15.04
+17.39
+17.40
+18.51
+
+0.00
+0.00
+0.02
+0.06
+0.22
+0.85
+0.70
+1.25
+17.94
+20.26
+22.70
+18.03
+18.99
+26.30
+29.09
+32.14
+53.91
+61.94
+155.07
+
+57
+57
+57
+57
+57
+57
+57
+57
+57
+57
+57
+57
+57
+57
+57
+57
+57
+57
+57
+
+High-Performing Algorithm Family over 176 Datasets
+Threshold = 0.9999
+GBDTs
+Neural Nets
+52
+(30%)
+
+74
+(42%)
+
+5
+(3%)
+5
+(3%)
+
+1
+(1%)
+
+32
+(18%)
+
+Baselines
+
+7
+(4%)
+
+Figure 12: Venn diagram of the number of datasets where an algorithm family is ‘high-performing’,
+over all 176 datasets. An algorithm is high-performing if its test accuracy after 0-1 scaling is above a
+certain threshold. While Figure 4 used a threshold 0.99, this figure uses threshold 0.9999.
+
+D.3.4
+
+Dataset size analysis
+
+In this section, we investigate the association between dataset size and performance. In Section 2.2 we
+show that, when compared to NNs and baselines, GBDTs perform relatively better with larger datasets;
+this is based on a negative correlations between normalized log loss and dataset size. However, it is
+more informative to compare performance of individual algorithms rather than algorithm families.
+For example, Figure 13 compares the rank of three algorithms: CatBoost, SAINT, and TabNet,
+with dataset size. In the left panel (CatBoost minus TabNet), CatBoost outperforms TabNet for all
+datasets up to size roughly 1 500. For larger datasets there is little difference between CatBoost and
+TabNet; this indicates that CatBoost should be chosen over TabNet for smaller datasets, and that both
+29
+
+Table 13: Performance of algorithms across 98 datasets, where the algorithms include two modified
+versions of TabPFN. Columns show the algorithm family (GBDT, NN, baseline, or PFN), rank over
+all datasets, the average normalized accuracy (Mean Acc.), the std. dev. of normalized accuracy
+across folds (Std. Acc.), and the train time in seconds per 1000 instances. Min/max/mean/median of
+these quantities are taken over all datasets.
+Class
+
+CatBoost
+TabPFN-3k
+CatBoost-1k
+XGBoost
+TabPFN-1k
+ResNet
+NODE
+SAINT
+FTTransformer
+RandomForest
+LightGBM
+SVM
+DANet
+MLP-rtdl
+STG
+DecisionTree
+MLP
+LinearModel
+TabNet
+KNN
+VIME
+
+GBDT
+PFN
+GBDT
+GBDT
+PFN
+NN
+NN
+NN
+NN
+base
+GBDT
+base
+NN
+NN
+NN
+base
+NN
+base
+NN
+base
+NN
+
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+3
+
+med.
+
+Mean Acc.
+mean med.
+
+Std. Acc.
+mean med.
+
+Time /1000 inst.
+mean
+med.
+
+6.12
+6.43
+7.02
+7.85
+7.94
+8.73
+9.08
+9.09
+9.29
+9.5
+9.61
+10.34
+11.07
+11.1
+13.19
+13.32
+13.49
+13.76
+14.24
+15.32
+16.73
+
+5
+5
+5.5
+6.5
+7
+8
+9
+8
+9
+9
+9
+11.5
+11
+12
+14
+15
+15
+16
+16
+17
+19
+
+0.87
+0.84
+0.85
+0.81
+0.8
+0.75
+0.74
+0.73
+0.76
+0.76
+0.76
+0.69
+0.73
+0.65
+0.56
+0.59
+0.57
+0.51
+0.54
+0.45
+0.37
+
+0.3
+0.26
+0.3
+0.33
+0.27
+0.3
+0.26
+0.31
+0.31
+0.32
+0.36
+0.26
+0.32
+0.28
+0.29
+0.35
+0.29
+0.31
+0.39
+0.29
+0.27
+
+21.7
+0.25
+6.76
+0.81
+0.25
+16.01
+138.36
+169.54
+27.67
+0.35
+0.87
+30.4
+68.82
+14.27
+18.44
+0.03
+18.39
+0.04
+34.95
+0.01
+16.81
+
+CatBoost minus TabNet
+
+0.5
+0.0
+0.5
+1.0
+
+19
+19
+21
+19
+21
+21
+21
+21
+20
+21
+21
+20
+20
+21
+21
+21
+21
+21
+21
+21
+21
+
+mean
+
+102
+
+104
+103
+Dataset Size
+
+0.93
+0.92
+0.9
+0.89
+0.91
+0.83
+0.81
+0.86
+0.8
+0.83
+0.84
+0.76
+0.79
+0.72
+0.63
+0.68
+0.57
+0.53
+0.6
+0.51
+0.32
+
+CatBoost minus SAINT
+
+0.22
+0.19
+0.23
+0.22
+0.19
+0.21
+0.2
+0.24
+0.21
+0.22
+0.21
+0.19
+0.23
+0.16
+0.17
+0.25
+0.18
+0.24
+0.25
+0.21
+0.18
+
+2.08
+0.01
+2.4
+0.37
+0.01
+9.34
+117.04
+146.16
+18.4
+0.24
+0.34
+1.67
+60.15
+7.3
+15.79
+0.01
+11.2
+0.03
+29.9
+0.0
+14.86
+
+SAINT minus TabNet
+SAINT minus TabNet (LL)
+
+1.0
+
+Rank
+min max
+
+CatBoost minus SAINT (LL)
+
+CatBoost minus TabNet (LL)
+
+Algorithm
+
+102
+
+104
+103
+Dataset Size
+
+102
+
+104
+103
+Dataset Size
+
+Figure 13: Difference in normalized log loss (lower is better), between three algorithms: CatBoost,
+SAINT, and TabNet, plotted with dataset size. Points above the dotted line indicate that the second
+algorithm has lower log loss, meaning better performance than the first.
+
+algorithms are comparable for larger datasets On the other hand, the center panel (CatBoost minus
+SAINT), indicates that both CatBoost and SAINT have comparable performance for all datasets
+up to those with size 1 500; for larger datasets, CatBoost outperforms SAINT. This indicates that
+CatBoost should be chosen over SAINT for very large datasets, but for small datasets both algorithms
+are comparable.
+The main takeaway from these findings is that practitioners should not focus on choosing an
+algorithm family, such as NNs or GBDTs, to focus on. For example, TabPFN and TabNet are
+both neural nets, but TabPFN does comparatively better on smaller datasets, while TabNet does
+comparatively better on larger datasets. Rather they can consult our metadataset of results to decide
+which algorithm is appropriate for their specific use case. General trends are helpful, but not sufficient,
+for selecting an effective algorithm.
+30
+
+Table 14: Performance of algorithms across 98 datasets, where the algorithms include two modified
+versions of TabPFN. Columns show the algorithm family (GBDT, NN, baseline, or PFN), rank over
+all datasets, the average normalized log loss (Mean LL), the std. dev. of normalized LL across folds
+(Std. LL), and the train time in seconds per 1000 instances. Min/max/mean/median of these quantities
+are taken over all datasets.
+Algorithm
+
+Class
+
+TabPFN-3k
+CatBoost
+CatBoost-1k
+TabPFN-1k
+XGBoost
+SAINT
+ResNet
+SVM
+LightGBM
+DANet
+FTTransformer
+STG
+RandomForest
+LinearModel
+MLP-rtdl
+NODE
+MLP
+TabNet
+VIME
+KNN
+DecisionTree
+
+PFN
+GBDT
+GBDT
+PFN
+GBDT
+NN
+NN
+base
+GBDT
+NN
+NN
+NN
+base
+base
+NN
+NN
+NN
+NN
+NN
+base
+base
+
+ll (Neural - GBDT)
+
+1.00
+
+Rank
+min max
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+3
+1
+1
+
+corr. = 0.66
+
+16
+16
+18
+17
+17
+21
+18
+20
+21
+20
+19
+20
+21
+21
+21
+20
+21
+21
+21
+21
+21
+
+mean
+
+med.
+
+Mean LL
+mean med.
+
+Std. LL
+mean med.
+
+Time /1000 inst.
+mean
+med.
+
+5.02
+5.73
+5.93
+6.21
+6.36
+8.49
+9.67
+9.7
+9.76
+10.08
+10.85
+11.17
+12.26
+12.28
+13.31
+13.71
+14.27
+14.55
+16.27
+17.17
+17.46
+
+4
+5
+5
+5
+6
+8
+9
+10
+9
+10
+11.5
+11
+13
+13
+14
+14
+15
+16.5
+18
+18
+20
+
+0.06
+0.05
+0.05
+0.07
+0.05
+0.12
+0.12
+0.15
+0.13
+0.12
+0.14
+0.18
+0.19
+0.24
+0.28
+0.23
+0.29
+0.4
+0.4
+0.51
+0.56
+
+0.07
+0.08
+0.08
+0.08
+0.08
+0.09
+0.1
+0.08
+0.21
+0.13
+0.11
+0.07
+0.22
+0.1
+0.17
+0.04
+0.15
+0.38
+0.09
+0.37
+0.54
+
+0.25
+13.89
+5.59
+0.25
+0.73
+202.59
+16.12
+49.83
+0.83
+71.58
+29.58
+18.82
+0.29
+0.04
+13.75
+196.82
+18.29
+34.62
+16.92
+0.01
+0.02
+
+corr. = 0.6
+
+0.01
+0.02
+0.02
+0.02
+0.03
+0.06
+0.08
+0.06
+0.07
+0.09
+0.09
+0.07
+0.13
+0.1
+0.18
+0.19
+0.21
+0.25
+0.37
+0.42
+0.58
+
+corr. = -0.47
+
+0.04
+0.06
+0.05
+0.04
+0.06
+0.08
+0.08
+0.05
+0.09
+0.08
+0.09
+0.05
+0.07
+0.06
+0.12
+0.03
+0.11
+0.19
+0.07
+0.2
+0.41
+
+0.01
+1.66
+1.84
+0.01
+0.37
+173.23
+8.97
+1.2
+0.27
+61.35
+18.48
+15.85
+0.22
+0.03
+7.96
+176.16
+10.95
+29.69
+14.64
+0.0
+0.01
+
+corr. = -0.33
+
+0.75
+0.50
+0.25
+0.00
+104
+Dataset Size
+
+103
+10 2 10 1 100
+10 3
+Inst-To-Attributes Med. Canon.-Corr. Min. Class Freq.
+
+Figure 14: Difference in normalized log loss between the best NN and GBDT (∆ℓℓ ) by four dataset
+properties, for all 10 splits of all 176 datasets. Larger correlations mean that a larger value of the
+property corresponds to larger log loss (worse performance) for the best neural net compared to the
+best GBDT. All dataset properties are plotted on a log scale.
+
+D.4
+
+Additional experiments from Section 2.2
+
+Recall from Section 2.2 that ∆ℓℓ denotes the difference in normalized log loss between the best
+neural net and the best GBDT method. Table 16 and Figure 14 shows the dataset properties with the
+largest absolute correlation with ∆ℓℓ .
+To evaluate the predictive power of dataset properties, we train several decision tree models using the
+train/test procedure above, with a binary outcome: 1 if ∆ℓℓ > 0 (the best neural net beats the best
+GBDT), and 0 otherwise. Table 17 shows the performance accuracy of decision trees trained on this
+task, with varying depth levels; we also include an XGBoost model for comparison. Finally, we
+include a visual depiction of a simple depth-3 decision tree, in Figure 15. The decision tree classifies
+which of the top five algorithms performs the best. Note that the decision splits are based purely on
+maximizing information gain at that point in the tree.
+31
+
+Table 15: Performance of algorithms across 98 datasets, where the algorithms include two modified
+versions of TabPFN. Columns show the algorithm family (GBDT, NN, baseline, or PFN), rank over
+all datasets, the average normalized F1 score loss (Mean F1), the std. dev. of normalized F1 across
+folds (Std. F1), and the train time in seconds per 1000 instances. Min/max/mean/median of these
+quantities are taken over all datasets.
+Algorithm
+
+Class
+
+CatBoost
+TabPFN-3k
+CatBoost-1k
+XGBoost
+TabPFN-1k
+ResNet
+NODE
+SAINT
+FTTransformer
+RandomForest
+LightGBM
+SVM
+MLP-rtdl
+DANet
+DecisionTree
+STG
+MLP
+LinearModel
+TabNet
+KNN
+VIME
+
+GBDT
+PFN
+GBDT
+GBDT
+PFN
+NN
+NN
+NN
+NN
+base
+GBDT
+base
+NN
+NN
+base
+NN
+NN
+base
+NN
+base
+NN
+
+Rank
+min max
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+3
+
+19
+20
+21
+19
+21
+21
+21
+21
+19
+21
+21
+20
+21
+20
+21
+21
+21
+21
+21
+21
+21
+
+mean
+
+med.
+
+6.43
+6.46
+7.09
+7.78
+8.01
+8.74
+9.23
+9.26
+9.32
+9.46
+9.62
+10.3
+10.96
+11.01
+13.19
+13.24
+13.69
+13.83
+14.22
+15.21
+16.87
+
+5
+5.5
+6
+6
+7
+8.5
+9
+9
+9
+9
+9
+11
+12
+11
+15
+14
+15
+16
+16
+17
+19
+
+Mean F1
+mean med.
+
+Std. F1
+mean med.
+
+Time /1000 inst.
+mean
+med.
+
+0.87
+0.83
+0.85
+0.82
+0.8
+0.76
+0.75
+0.73
+0.76
+0.77
+0.76
+0.69
+0.66
+0.74
+0.61
+0.57
+0.57
+0.52
+0.56
+0.46
+0.36
+
+0.29
+0.25
+0.29
+0.32
+0.26
+0.29
+0.25
+0.3
+0.3
+0.31
+0.35
+0.25
+0.27
+0.31
+0.34
+0.28
+0.29
+0.3
+0.38
+0.28
+0.27
+
+21.0
+0.25
+6.94
+0.83
+0.25
+16.04
+140.71
+171.14
+27.94
+0.36
+0.86
+29.99
+14.29
+69.54
+0.03
+18.43
+18.42
+0.04
+34.82
+0.01
+17.02
+
+0.93
+0.93
+0.91
+0.89
+0.91
+0.82
+0.81
+0.85
+0.82
+0.83
+0.83
+0.77
+0.73
+0.81
+0.71
+0.65
+0.58
+0.53
+0.6
+0.55
+0.34
+
+0.22
+0.19
+0.22
+0.22
+0.19
+0.19
+0.19
+0.23
+0.19
+0.21
+0.21
+0.17
+0.16
+0.22
+0.24
+0.18
+0.18
+0.24
+0.26
+0.21
+0.18
+
+2.08
+0.01
+2.43
+0.37
+0.01
+9.34
+117.04
+144.37
+18.4
+0.25
+0.31
+1.73
+7.3
+60.2
+0.01
+15.76
+11.2
+0.03
+29.16
+0.0
+14.96
+
+Table 16: Selected metafeatures with the largest absolute correlation with the difference in normalized
+log loss between the best NN and GBDT (∆ℓℓ ), over all all 176 datasets. Higher correlation values
+indicate that larger values of the metafeature are associated with worse NN performance and stronger
+GBDT performance.
+Corr. with ∆ℓℓ
+
+Description
+Log number of instances.
+
+0.63
+
+Ratio of the size of the dataset to the number of features.
+
+0.55
+
+Log of the median canonical correlation between each feature and the target.
+
+-0.41
+
+Log of the min. target class frequency.
+
+-0.35
+
+Finally, we present the metafeatures most-correlated with the difference in log loss between pairs of
+algorithms. We consider the two best-performing algorithms from each family: CatBoost, XGBoost,
+ResNet, and SAINT. See Table 21 and Table 22 for statistical and general metafeatures, respectively.
+D.5
+
+Experiments on Regression Datasets
+
+While our experiments focus on classification datasets, the TabZilla codebase is also equipped
+to handle regression datasets—which have a continuous target variable rather than categorical or
+binary. We run experiments using 12 algorithms with 17 tabular regression datasets, using the same
+experiment design and parameters described in Section 2. Each algorithm is tuned for each dataset
+by maximizing the R-squared (R2) metric. The regression datasets used in these experiments have
+been used in recent studies of machine learning with tabular data [27, 36, 53, 59]; each dataset
+corresponds to an OpenML task, and can be preprocessed exactly like the classification datasets
+used in other experiments. The datasets used in these experiments are “Bank-Note-AuthenticationUCI” (OpenML task 361002), “EgyptianSkulls” (5040), “Wine” (190420), “Wisconsin-breastcancer-cytology-features” (361003), “bodyfat” (5514), “california” (361089), “chscase-foot” (5012),
+“cleveland” (2285), “colleges” (359942), “cpu-small” (4883), “dataset-sales” (190418), “kin8nm”
+(2280), “liver-disorders” (52948), “meta” (4729), “mv” (4774), “pbc” (4850), and “veteran” (4828).
+32
+
+Table 17: The test accuracy of tree models for predicting whether the best neural network will
+outperform the best GBDT model on a tabular dataset. Results are aggregated over 176 train/test
+splits with one dataset family held out for testing in each split. The number of dataset properties used
+by any model of each model type is listed in the leftmost column. Top rows include decision trees
+(DT≤ n) with maximum depth n; the bottom row is an XGBoost model for comparison.
+Test Accuracy
+Num.
+Model
+(mean ± stddev)
+Metafeatures
+0.54 ± 0.28
+0.60 ± 0.29
+0.59 ± 0.28
+0.64 ± 0.29
+0.66 ± 0.27
+0.66 ± 0.30
+0.65 ± 0.29
+0.68 ± 0.30
+0.67 ± 0.30
+0.74 ± 0.33
+
+DT= 1
+DT≤ 3
+DT≤ 5
+DT≤ 7
+DT≤ 9
+DT≤ 11
+DT≤ 13
+DT≤ 15
+DT≤ ∞
+XGBoost
+
+3
+21
+183
+382
+423
+529
+561
+594
+685
+675
+
+Is the number of instances <= 4211?
+
+Yes
+
+No
+
+Is the number of instances <= 1132?
+
+Is the min. of the sparsity metric
+over all features <= 0.044?
+
+Yes
+
+No
+
+Yes
+
+No
+
+TabPFN
+
+189
+
+TabPFN
+ResNet
+SAINT
+CatBoost
+XGBoost
+101
+
+1
+
+ResNet
+
+111
+28
+1
+131
+0
+142
+2
+115
+102 103 101 102
+
+Yes
+
+0
+
+60
+54
+51
+
+79
+
+103 101
+
+102
+
+0
+5
+
+CatBoost
+13
+
+0
+
+XGBoost
+
+3
+
+81
+
+27
+103 101 102
+
+No
+
+Yes
+
+No
+
+XGBoost
+
+Is the ratio of features
+to instances <= 0.003?
+
+Is the max. of the relative frequency of
+all target classes <= 0.792?
+
+Is the median of the concentration
+coefficient between all features and
+target classes <= 0.025?
+
+Is the number of numerical
+features without NaNs <= 65?
+
+No
+
+Yes
+
+103 101
+
+0
+
+32
+32
+102
+
+CatBoost
+10
+
+293
+103 101
+
+24
+
+69
+
+67
+102
+
+No
+
+Yes
+
+0
+1
+0
+
+SAINT
+56
+
+13
+103 101 102
+
+0
+
+ResNet
+11
+
+2
+0
+7
+103 101
+
+102
+
+103
+
+Figure 15: Decision tree for picking the best algorithm, based on our experiments across 176
+datasets. The decision tree chooses among the five best-performing algorithms from our experiments:
+ResNet, SAINT, TabPFN, CatBoost, and XGBoost. Note that the decision splits are based purely on
+maximizing information gain at that point in the tree, across 176 datasets. IQR denotes interquartile
+range, and CanCor [46] denotes canonical correlation.
+
+Table 18 shows the rankings of 12 algorithms on these 17 regression datasets, according to the R2
+metric calculated on the test set. The general conclusions are similar to our findings with classification
+datasets: most algorithms perform well and poorly on at least one dataset; however, GBDTs perform
+particularly well, especially CatBoost.
+D.6
+
+Additional Results with Quantile Scaling
+
+In this section, we discuss dataset preprocessing. Different papers use a variety of different preprocessing methods, and there is also a wide range in the amount of ‘built-in’ preprocessing techniques
+inside the algorithms themselves. Therefore, our main results minimize confounding factors by
+having a consistent, lightweight preprocessing (imputing NaN values). In this section, we compare 13
+algorithms on the tabzilla benchmark suite with and without quantile scaling, one of the most popular
+techniques, for all continuous features. We use QuantileTransformer from scikit-learn [52]. We use
+the same computational setup and experiment design as in our main experiments. See Table 19. We
+33
+
+Table 18: Performance of 12 algorithms across 17 tabular regression datasets. Columns show the
+rank over all datasets, the average normalized R2 (Mean R2), and the std. dev. of normalized R2
+across folds (Std. R2). Min/max/mean/median of these quantities are taken over all datasets.
+Rank
+Mean R2
+Std. R2
+Algorithm
+min max mean med. mean med. mean med.
+CatBoost
+LightGBM
+RandomForest
+XGBoost
+STG
+LinearModel
+MLP
+NODE
+TabNet
+DecisionTree
+KNN
+VIME
+
+1.0
+1.0
+2.0
+1.0
+1.0
+1.0
+1.0
+1.0
+3.0
+2.0
+2.0
+3.0
+
+7.0
+11.0
+10.0
+10.0
+11.0
+12.0
+12.0
+12.0
+12.0
+12.0
+12.0
+12.0
+
+3.0
+4.35
+4.94
+5.29
+6.24
+6.71
+6.82
+7.56
+7.65
+7.94
+8.06
+9.18
+
+3.0
+3.0
+4.0
+6.0
+7.0
+7.0
+7.0
+8.5
+7.0
+8.0
+8.0
+10.0
+
+0.96
+0.93
+0.89
+0.89
+0.82
+0.75
+0.78
+0.47
+0.68
+0.7
+0.64
+0.62
+
+0.98
+0.97
+0.94
+0.99
+0.89
+0.89
+0.95
+0.5
+0.9
+0.84
+0.88
+0.77
+
+0.11
+0.15
+0.17
+0.18
+0.10
+0.21
+0.23
+0.16
+0.48
+0.30
+0.11
+0.15
+
+0.02
+0.03
+0.03
+0.03
+0.02
+0.04
+0.04
+0.16
+0.04
+0.07
+0.03
+0.07
+
+find that quantile scaling improves the simple algorithms: decision tree, MLP, random forest, and
+SVM, while it has little effect on the high-performing algorithms.
+D.7
+
+Experiments with Additional Hyperparameter Optimization
+
+In our main experiments, for hyperparameter optimization (HPO), we ran 30 iterations of random
+search for all algorithms. In this section, we test the impact of additional HPO for four algorithms:
+XGBoost, CatBoost, LightGBM, and RandomForest. We did not run additional HPO experiments on
+any neural net methods due to the substantial compute resources required.
+For each algorithm, we run 100 iterations of HPO using the default Optuna [3] algorithm (treestructured Parzen Estimator), optimizing log loss. We run these HPO experiments on all 36 datasets
+in the TabZilla benchmark suite. All hyperparameter ranges can be viewed in our repository in the
+folder https://github.com/naszilla/tabzilla/tree/main/TabZilla/models.
+Table 20 shows the performance of these HPO experiments (algorithm suffix “(HPO)”), compared
+with with the performance of the default hyperparameters (suffix “(default)”), and the performance
+after 30 iterations of random hyperparameter search as in our main results (no suffix). As expected,
+additional hyperparameter tuning improves the performance of XGBoost, CatBoost, LightGBM, and
+RandomForest.
+D.8
+
+Forward Feature Selection for Identifying Important Dataset Attributes
+
+In this section, we present a different method for determining which dataset attributes are related to
+performance differences between algorithms. Here we use greedy forward feature selection [25] to
+identify important dataset attributes. In these experiments, we study the problem of predicting the
+difference in normalized log loss between CatBoost and ResNet (two very effective GBDT and NN
+algorithms), using metafeatures.
+At a high level, greedy forward feature selection selects metafeatures sequentially which improve
+the performance of the meta-model. To evaluate performance we use leave-one-dataset-out cross
+validation: each dataset contributes 10 folds to the overall metadataset, so each fold includes 10
+instances for validation and all remaining instances for training.
+In these experiments, we first use an XGB regressor fit on the entire metadataset to select 200 features
+for consideration. Then we use greedy forward selection, implemented in the python package mlxtend
+(https://rasbt.github.io/mlxtend), using an XGB regressor as a meta-model. The first five
+selected features are (in order):
+1. Number of features normally-distributed, according to the Shapiro-Wilk test.
+2. Median value of the minimum of all features.
+34
+
+Table 19: Performance of 13 algorithms on 36 datasets in the hard dataset benchmark suite, with and
+without applying quantile scaling to each continuous feature. Algorithms with the suffix “-QSCALE”
+use quantile scaling, while those without this suffix use the raw continuous features. Algorithms
+are ranked according to normalized log loss, and columns show the rank, normalized log loss, and
+training time, similar to Table 1. A caveat is that some algorithms did not complete on all 36
+datasets due to memory or timeout issues with our experimental setup, so it is only a rough
+comparison among algorithms (comparisons between X and X-QSCALE for all X, have the same
+number of datasets).
+Algorithm
+XGBoost
+XGBoost-QSCALE
+CatBoost
+CatBoost-QSCALE
+LightGBM
+ResNet
+ResNet-QSCALE
+SAINT
+DANet
+SAINT-QSCALE
+FTTransformer
+RandomForest-QSCALE
+DANet-QSCALE
+FTTransformer-QSCALE
+RandomForest
+MLP-rtdl
+SVM
+SVM-QSCALE
+STG
+MLP-rtdl-QSCALE
+TabNet
+NODE
+NODE-QSCALE
+MLP
+LinearModel
+LinearModel-QSCALE
+VIME
+DecisionTree-QSCALE
+DecisionTree
+KNN
+KNN-QSCALE
+
+min
+1
+1
+1
+1
+1
+1
+1
+1
+2
+1
+4
+3
+2
+5
+4
+2
+1
+6
+1
+1
+1
+9
+6
+3
+4
+5
+6
+8
+9
+6
+5
+
+Rank
+max mean
+22
+24
+19
+27
+24
+23
+25
+28
+23
+24
+24
+26
+27
+24
+27
+30
+28
+22
+28
+29
+30
+27
+26
+29
+29
+30
+28
+30
+31
+31
+30
+
+4.78
+4.83
+5.60
+6.57
+9.53
+9.89
+10.43
+10.52
+11.63
+11.74
+12.48
+12.77
+13.33
+13.81
+14.46
+14.56
+15.03
+15.25
+15.61
+15.92
+16.88
+17.50
+17.76
+17.81
+17.97
+18.06
+21.44
+21.54
+21.86
+23.61
+23.94
+
+med.
+
+mean
+
+Mean LL
+med. mean
+
+Std. LL
+med.
+mean
+
+3
+3
+4
+4
+8
+9
+9
+8
+12
+10
+11
+11
+12
+12
+14
+12
+14
+17
+17
+14.5
+16
+17
+18
+18.5
+18.5
+17
+24
+23
+23
+25
+25.5
+
+0.07
+0.07
+0.09
+0.12
+0.13
+0.19
+0.22
+0.20
+0.18
+0.23
+0.25
+0.27
+0.20
+0.27
+0.28
+0.36
+0.29
+0.21
+0.32
+0.39
+0.37
+0.37
+0.36
+0.43
+0.47
+0.47
+0.49
+0.60
+0.62
+0.68
+0.70
+
+0.04
+0.04
+0.06
+0.08
+0.09
+0.17
+0.17
+0.14
+0.15
+0.15
+0.20
+0.23
+0.17
+0.22
+0.27
+0.25
+0.21
+0.17
+0.23
+0.31
+0.27
+0.34
+0.33
+0.40
+0.37
+0.38
+0.48
+0.59
+0.62
+0.70
+0.75
+
+0.06
+0.06
+0.06
+0.06
+0.08
+0.08
+0.09
+0.08
+0.11
+0.05
+0.11
+0.08
+0.14
+0.09
+0.09
+0.13
+0.08
+0.12
+0.06
+0.14
+0.12
+0.07
+0.07
+0.14
+0.07
+0.08
+0.08
+0.20
+0.20
+0.21
+0.23
+
+0.10
+0.10
+0.11
+0.10
+0.19
+0.12
+0.13
+0.12
+0.14
+0.09
+0.13
+0.16
+0.18
+0.14
+0.22
+0.16
+0.14
+0.13
+0.10
+0.18
+0.26
+0.08
+0.08
+0.15
+0.11
+0.12
+0.09
+0.36
+0.38
+0.35
+0.34
+
+2.02
+1.02
+26.46
+2.40
+1.23
+8.27
+8.63
+130.18
+58.70
+90.53
+17.41
+0.20
+59.44
+19.00
+0.35
+6.33
+19.73
+8.85
+15.99
+7.35
+27.02
+153.72
+171.73
+8.86
+0.04
+0.01
+20.79
+0.05
+0.11
+0.03
+0.01
+
+Time /1000 inst.
+med.
+0.28
+0.26
+1.15
+1.19
+0.36
+5.22
+5.74
+92.42
+52.74
+42.05
+12.64
+0.15
+57.77
+15.93
+0.24
+4.21
+2.81
+1.91
+15.29
+4.85
+27.10
+124.27
+147.36
+4.36
+0.02
+0.01
+15.18
+0.01
+0.01
+0.00
+0.00
+
+3. Median value of the sparsity of all features. [58]
+4. Interquartile range of the mean value of all features.
+5. Mean of the harmonic mean of all features.
+
+E
+
+Additional Details from Section 3
+
+Table 23 compares the performance of all algorithms on the benchmark suite. However, an important
+caveat to Table 10 is that not all algorithms completed on all 36 datasets due to memory or timeout
+issues with our experimental setup, as discussed in Section 2.1, so these are only rough comparisons.
+
+35
+
+Table 20: Performance of all algorithms on all 36 datasets in the hard dataset benchmark suite,
+including the performance after 100 iterations of HPO (algorithms with suffix “(HPO)”), and the
+default hyperparameters (algorithms with suffix “(default)”). Algorithm names without any suffix
+indicate performance after 30 iterations of random hyperparameter search, as in our main results.
+Algorithms are ranked according to normalized log loss, and columns show the rank, normalized
+log loss, and training time, similar to Table 1. A caveat is that some algorithms did not complete
+on all 36 datasets due to memory or timeout issues with our experimental setup, so it is only a
+rough comparison among algorithms (comparisons between X, X-default, and X-HPO, for all X,
+have the same number of datasets).
+Algorithm
+
+min
+
+XGBoost (HPO)
+XGBoost
+CatBoost (HPO)
+CatBoost
+LightGBM (HPO)
+XGBoost (default)
+CatBoost (default)
+LightGBM
+ResNet
+SAINT
+LightGBM (default)
+DANet
+FTTransformer
+SAINT (default)
+RandomForest (HPO)
+ResNet (default)
+MLP-rtdl
+RandomForest
+STG
+SVM
+TabNet
+RandomForest (default)
+MLP
+FTTransformer (default)
+NODE
+MLP-rtdl (default)
+DANet (default)
+LinearModel
+NODE (default)
+SVM (default)
+TabNet (default)
+MLP (default)
+VIME
+STG (default)
+DecisionTree
+KNN
+DecisionTree (default)
+VIME (default)
+KNN (default)
+
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+2
+2
+2
+2
+4
+2
+2
+5
+1
+1
+1
+4
+3
+5
+11
+1
+6
+8
+11
+2
+2
+4
+4
+10
+14
+6
+15
+18
+6
+
+Rank
+max mean
+30
+28
+28
+20
+22
+27
+33
+30
+26
+34
+34
+31
+29
+37
+35
+35
+37
+33
+35
+34
+37
+34
+36
+36
+32
+39
+37
+37
+34
+35
+38
+39
+34
+38
+37
+37
+39
+39
+39
+
+6.28
+6.83
+6.88
+7.23
+7.38
+9.06
+11.17
+11.94
+12.20
+13.33
+13.81
+14.81
+15.69
+16.18
+16.29
+17.00
+17.92
+18.03
+18.48
+18.62
+20.30
+20.57
+21.06
+21.17
+21.27
+21.69
+21.74
+22.09
+22.70
+23.57
+24.94
+25.28
+25.91
+26.81
+27.29
+29.27
+31.91
+32.00
+33.48
+
+med.
+
+mean
+
+Mean LL
+med. mean
+
+Std. LL
+med.
+mean
+
+4
+5
+6
+6
+4.5
+8
+10
+11
+12
+11
+12
+14
+15
+13
+13
+16
+16
+16
+20
+18
+18
+21
+21.5
+23
+20
+21.5
+23
+22.5
+23
+26
+27
+26
+29
+27
+28
+31
+35
+33
+36
+
+0.03
+0.03
+0.05
+0.05
+0.04
+0.07
+0.10
+0.06
+0.10
+0.08
+0.07
+0.06
+0.10
+0.08
+0.14
+0.13
+0.18
+0.15
+0.14
+0.11
+0.14
+0.23
+0.21
+0.19
+0.19
+0.29
+0.12
+0.26
+0.21
+0.15
+0.22
+0.34
+0.23
+0.25
+0.29
+0.28
+0.60
+0.38
+0.59
+
+0.02
+0.02
+0.02
+0.02
+0.02
+0.03
+0.04
+0.03
+0.04
+0.05
+0.05
+0.05
+0.06
+0.05
+0.08
+0.06
+0.09
+0.10
+0.06
+0.07
+0.12
+0.10
+0.12
+0.07
+0.12
+0.13
+0.09
+0.13
+0.14
+0.08
+0.14
+0.17
+0.18
+0.14
+0.21
+0.26
+0.67
+0.31
+0.55
+
+0.03
+0.03
+0.03
+0.02
+0.03
+0.03
+0.02
+0.04
+0.04
+0.03
+0.04
+0.04
+0.03
+0.04
+0.03
+0.04
+0.04
+0.03
+0.03
+0.03
+0.06
+0.02
+0.04
+0.04
+0.02
+0.06
+0.05
+0.03
+0.02
+0.02
+0.07
+0.07
+0.03
+0.02
+0.08
+0.09
+0.15
+0.02
+0.17
+
+36
+
+0.04
+0.04
+0.04
+0.04
+0.04
+0.03
+0.03
+0.07
+0.04
+0.04
+0.05
+0.05
+0.04
+0.04
+0.08
+0.06
+0.06
+0.08
+0.04
+0.04
+0.09
+0.03
+0.05
+0.05
+0.03
+0.11
+0.08
+0.04
+0.03
+0.04
+0.11
+0.10
+0.04
+0.03
+0.13
+0.12
+0.30
+0.09
+0.22
+
+6.36
+2.02
+16.75
+26.46
+0.64
+1.76
+29.53
+1.23
+8.27
+130.18
+1.46
+58.70
+17.41
+111.07
+0.33
+7.28
+6.33
+0.35
+15.99
+19.73
+27.02
+0.32
+8.86
+15.71
+153.72
+5.82
+40.59
+0.04
+52.26
+4.19
+24.04
+8.13
+20.79
+13.72
+0.11
+0.03
+0.12
+20.10
+0.03
+
+Time /1000 inst.
+med.
+1.54
+0.28
+1.82
+1.15
+0.20
+0.41
+0.97
+0.36
+5.22
+92.42
+0.61
+52.74
+12.64
+83.68
+0.20
+4.72
+4.21
+0.24
+15.29
+2.81
+27.10
+0.27
+4.36
+11.42
+124.27
+3.89
+38.95
+0.02
+42.19
+0.80
+23.40
+4.44
+15.18
+13.20
+0.01
+0.00
+0.02
+12.79
+0.00
+
+Table 21: Dataset metafeatures that are most correlated with the difference in normalized log loss
+between pairs of algorithms (the loss of Alg. 1 minus Alg. 2). Correlations are taken over all 10
+splits of all 133 datasets in which CatBoost, XGBoost, ResNet, and SAINT ran successfully. The 10
+dataset attributes with the largest absolute correlation are listed for each pair of algorithms. Attribute
+names correspond to the naming convention used by PyMFE.
+Alg. 1
+
+Alg. 2
+
+Corr.
+
+Attribute Name
+
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+
+-0.25
+-0.24
+-0.23
+-0.23
+0.22
+
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+
+ResNet
+ResNet
+ResNet
+ResNet
+
+0.21
+0.21
+0.20
+0.20
+
+Maximum skewness of all features.
+Range of the skewness of all features.
+Log of the standard deviation of the kurtosis of all features.
+Log of the standard deviation of the skewness of all features.
+Log of the median of the absolute value of the covariance between all feature
+pairs.
+Log of the median of the standard deviation of all features.
+Log of the median of the variance of all features.
+Log of the median of the maximum value of all features.
+Best performance of a naive Bayes classifier trained over 10-fold CV.
+
+CatBoost
+
+SAINT
+
+0.26
+
+CatBoost
+
+SAINT
+
+0.25
+
+CatBoost
+
+SAINT
+
+0.24
+
+CatBoost
+
+SAINT
+
+-0.24
+
+CatBoost
+
+SAINT
+
+-0.23
+
+CatBoost
+CatBoost
+
+SAINT
+SAINT
+
+0.23
+-0.23
+
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+
+-0.29
+-0.28
+-0.28
+-0.27
+0.25
+
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+
+0.24
+0.23
+0.23
+0.22
+0.22
+
+XGBoost
+
+SAINT
+
+-0.23
+
+XGBoost
+XGBoost
+XGBoost
+
+SAINT
+SAINT
+SAINT
+
+-0.22
+-0.20
+-0.20
+
+XGBoost
+XGBoost
+XGBoost
+
+SAINT
+SAINT
+SAINT
+
+-0.20
+0.19
+-0.19
+
+XGBoost
+XGBoost
+
+SAINT
+SAINT
+
+-0.18
+0.18
+
+Best performance over all 10 folds, of 10-fold CV of a single-node decision
+tree fit using the least-informative feature.
+Average performance over 10-fold CV of a single-node decision tree fit using
+the least-informative feature.
+Median performance over 10 folds, for 10-fold CV of a single-node decision
+tree fit using the least-informative feature.
+Log of the worst performance over 10-fold CV of a single-node decision tree
+fit using the most-informative feature.
+Log of the kurtosis of the performance of a single-node decision tree fit using
+the most-informative feature, over 10-fold CV.
+Log of the Shannon entropy of the target.
+Log of the best performance of elite-nearest-neighbor over 10-fold CV.
+Maximum skewness of all features.
+Range of the skewness of all features.
+Log of the standard deviation of the kurtosis of all features.
+Log of the standard deviation of the skewness of all features
+Log of the median value of the absolute covariance between all pairs of
+features.
+Log of the median standard deviation of all features.
+Log of the median variance of all features.
+Log of the median maximum-value of all features.
+Best performance of a naive Bayes classifier over 10-fold CV.
+Log of the best performance of a naive Bayes classifier over 10-fold CV.
+P
+P
+P
+Noisiness of the features: ( i Si − i M I(i, y))/ i M I(i, y), where Si
+is the entropy of feature i, and M I(i, y) is the mutual information between
+feature i and the target y.
+Log of the standard deviation of the kurtosis of all features.
+Log of the standard deviation of the skewness of all features.
+Best performance over 10-fold CV of a single-node decision tree fit using
+the most-informative feature.
+Maximum skewness of all features.
+Log of the Shannon entropy of the target.
+Log of the standard deviation of the absolute correlation between all pairs of
+features.
+Range of the skewness of all features.
+Log of the range of the performance of a decision tree trained on a random
+attribute, over 10-fold CV.
+
+37
+
+Table 22: Dataset metafeatures that are most correlated with the difference in normalized log loss
+between pairs of algorithms (the loss of Alg. 1 minus Alg. 2). Correlations are taken over all 10
+splits of all 133 datasets in which CatBoost, XGBoost, ResNet, and SAINT ran successfully. The 10
+dataset attributes with the largest absolute correlation are listed for each pair of algorithms. Attribute
+names correspond to the naming convention used by PyMFE.
+Alg. 1
+
+Alg. 2
+
+Corr.
+
+Attribute Name
+
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+
+-0.14
+0.14
+-0.14
+0.06
+0.06
+-0.06
+-0.06
+-0.05
+-0.04
+
+Log of the size of the dataset.
+Log of the ratio of number of features to dataset size.
+Log of the ratio of dataset size to number of features.
+Number of numerical features.
+Number of features.
+Range of the relative frequency of each target class.
+Log of the maximum frequency of any target class.
+Interquartile range of the relative frequency of all target classes.
+Maximum relative frequency of any target class.
+
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+CatBoost
+
+SAINT
+SAINT
+SAINT
+SAINT
+SAINT
+SAINT
+SAINT
+
+-0.19
+0.18
+-0.18
+-0.18
+-0.17
+0.16
+0.15
+
+Standard deviation of the relative frequency of all target classes.
+Kurtosis of the relative frequency of all target classes.
+Maximum relative frequency of all target classes.
+Mean relative frequency of all target classes.
+Log of the median relative frequency of all target classes.
+Number of target classes.
+Skewness of the relative frequency of target classes.
+
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+ResNet
+
+-0.20
+-0.20
+0.20
+0.11
+0.08
+0.08
+0.07
+
+Log of the dataset size.
+Log of the ratio of dataset size to number of features.
+Log of the ratio of number of features to dataset size.
+Log of the minimum relative frequency of all target classes.
+Number of numerical features.
+Median relative frequency of all target classes.
+Minimum relative frequency of all target classes.
+
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+XGBoost
+
+SAINT
+SAINT
+SAINT
+SAINT
+SAINT
+SAINT
+SAINT
+SAINT
+SAINT
+
+-0.17
+-0.16
+-0.16
+0.15
+-0.15
+-0.15
+-0.13
+-0.13
+-0.12
+
+Standard deviation of the relative frequency of all target classes.
+Log of the dataset size.
+Interquartile range of the relative frequency of all target classes.
+Log of the ratio of dataset size to number of features.
+Log of the ratio of number of features to dataset size.
+Maximum relative frequency of all target classes.
+Range of the relative frequency of all target classes.
+Mean of the relative frequency of all target classes.
+Median of the relative frequency of all target classes.
+
+38
+
+Table 23: Performance of algorithms across the Tabular Benchmark Suite. An important caveat
+is that not all algorithms completed on all 36 datasets due to memory or timeout issues with
+our experimental setup, so these are only rough comparisons. Columns show the rank over all
+algorithms, the average normalized log loss (Mean LL), the standard deviation of normalized log
+loss across folds (Std. LL), and the train time per 1000 instances. Min/max/mean/median of these
+quantities are taken over all completed datasets for each algorithm.
+Algorithm
+XGBoost
+CatBoost
+TabPFN∗
+LightGBM
+ResNet
+SAINT
+DANet
+FTTransformer
+MLP-rtdl
+RandomForest
+SVM
+STG
+TabNet
+NODE
+MLP
+LinearModel
+VIME
+DecisionTree
+KNN
+
+min
+1
+1
+1
+1
+1
+1
+2
+2
+2
+2
+1
+1
+1
+6
+3
+4
+5
+6
+4
+
+Rank
+max mean
+15
+13
+13
+15
+14
+18
+16
+15
+19
+17
+18
+18
+19
+17
+18
+19
+18
+19
+19
+
+3.69
+4.14
+5.29
+6.62
+6.77
+7.00
+8.04
+8.24
+9.42
+9.43
+10.00
+10.29
+11.03
+11.40
+11.42
+11.68
+13.91
+14.26
+15.42
+
+med.
+
+mean
+
+Mean LL
+med. mean
+
+Std. LL
+med.
+mean
+
+2
+3
+4
+6.5
+6
+6
+8
+8
+8
+9
+10
+11
+10
+11
+11.5
+11.5
+15
+16
+17
+
+0.07
+0.09
+0.19
+0.14
+0.20
+0.20
+0.19
+0.25
+0.37
+0.29
+0.30
+0.33
+0.39
+0.38
+0.45
+0.48
+0.51
+0.63
+0.71
+
+0.04
+0.06
+0.13
+0.09
+0.17
+0.15
+0.16
+0.20
+0.25
+0.28
+0.22
+0.26
+0.29
+0.35
+0.39
+0.39
+0.48
+0.62
+0.74
+
+0.06
+0.07
+0.07
+0.09
+0.08
+0.08
+0.11
+0.12
+0.13
+0.09
+0.08
+0.06
+0.11
+0.07
+0.14
+0.07
+0.08
+0.22
+0.21
+
+39
+
+0.11
+0.11
+0.11
+0.20
+0.13
+0.12
+0.15
+0.13
+0.16
+0.23
+0.14
+0.11
+0.28
+0.08
+0.15
+0.12
+0.09
+0.39
+0.36
+
+2.02
+26.46
+0.48
+1.23
+8.27
+130.18
+58.70
+17.41
+6.33
+0.35
+19.73
+15.99
+27.02
+153.72
+8.86
+0.04
+20.79
+0.11
+0.03
+
+Time /1000 inst.
+med.
+0.28
+1.15
+0.01
+0.36
+5.22
+92.42
+52.74
+12.64
+4.21
+0.24
+2.81
+15.29
+27.10
+124.27
+4.36
+0.02
+15.18
+0.01
+0.00
+
+

@@ -1,0 +1,813 @@
+Modeling Game Avatar Synergy and Opposition through Embedding in
+Multiplayer Online Battle Arena Games
+Zhengxing Chen1 , Yuyu Xu1 , Truong-Huy D. Nguyen2 , Yizhou Sun3 and Magy Seif El-Nasr1
+1
+
+College of Information and Computer Science, Northeastern University
+Department of Computer and Information Science, Fordham University
+3
+Department of Computer Science, University of California, Log Angeles
+1
+czxttkl@gmail.com, yuyuxu@ccs.neu.edu, m.seifel-nasr@neu.edu
+2
+tnguyen88@fordham.edu
+3
+yzsun@cs.ucla.edu
+
+arXiv:1803.10402v1 [cs.SI] 28 Mar 2018
+
+2
+
+Abstract
+Multiplayer Online Battle Arena (MOBA) games have received increasing worldwide popularity recently. In such
+games, players compete in teams against each other by controlling selected game avatars, each of which is designed
+with different strengths and weaknesses. Intuitively, putting
+together game avatars that complement each other (synergy)
+and suppress those of opponents (opposition) would result in
+a stronger team. In-depth understanding of synergy and opposition relationships among game avatars benefits player in
+making decisions in game avatar drafting and gaining better
+prediction of match events. However, due to intricate design
+and complex interactions between game avatars, thorough understanding of their relationships is not a trivial task.
+In this paper, we propose a latent variable model, namely
+Game Avatar Embedding (GAE), to learn avatars’ numerical representations which encode synergy and opposition relationships between pairs of avatars. The merits of our model
+are twofold: (1) the captured synergy and opposition relationships are sensible to experienced human players’ perception;
+(2) the learned numerical representations of game avatars allow many important downstream tasks, such as similar avatar
+search, match outcome prediction, and avatar pick recommender. To our best knowledge, no previous model is able
+to simultaneously support both features. Our quantitative and
+qualitative evaluations on real match data from three commercial MOBA games illustrate the benefits of our model.
+
+Introduction
+Multiplayer Online Battle Arena (MOBA) has been one of
+the most popular e-sports game types. For example, League
+of Legends (Riot Games), one of the most popular e-Sports,
+reportedly has 90 million accounts registered, 27 million
+unique daily players, and 7.5 million concurrent users at
+peak (Minotti 2016; Tassi 2016). In a MOBA game, 2 teams,
+composed of 5 player each, combat in a virtual environment.
+The goal is to beat the opposite team and destroy their base.
+Game avatars are often designed with a variety of attributes,
+skills, roles, etc., which is intended to provide players with
+choices and options so that every player can find a character that fits their preferences. Moreover, it is customary for
+avatars in such games to possess strength in one aspect, but
+weakness in others. As such, in order to win a match, it is
+Copyright c 2017, Association for the Advancement of Artificial
+Intelligence (www.aaai.org). All rights reserved.
+
+well-known that players need to not only control their own
+game avatars well, but also need to select a game avatar that,
+together with other team members’ picks, forms a team that
+enhances skills and complements weaknesses of each other
+(synergy), while posing suppressing strengths over those in
+the opponent team (opposition)1 2 . For example, in DOTA
+2 (Valve Corporation), avatar Clockwerk has high synergy
+with Naix because Clockwerk can transport Naix to target
+enemy directly, increasing the limited mobility of Naix to
+hit enemy. Naix also delivers large damage to complement
+the limited attack by Clockwerk, making them an efficient
+fighting duo. In another example, avatar Anti-Mage’s mana
+burn skill reduces an opponent’s mana resource, making him
+a natural opposition to Medusa whose durable capability is
+completely relying on how much mana it has.
+Comprehensive understanding of synergy and opposition
+relationships between game avatar enhances player awareness and experience in games. First, it allows players to
+make good decisions in drafting their team’s game avatars
+to maximize the chance of winning. Second, it improves the
+prediction of the match’s progress and final outcomes, which
+helps players in preparing for strategies in advance. Lastly,
+it helps players discover other game avatars that match their
+personal expertise or preferences. However, due to the intricate design and complex interactions among game avatars,
+thorough understanding of game avatars’ pros and cons and
+their relationships is not a trivial task to human players.
+In order to model game avatars’ synergy and opposition
+relationships, we propose a latent variable model, called
+Game Avatar Embedding (GAE). GAE models game avatars
+as vectors in a low-dimensional space learned. We hypothesized that the probability function of a match outcome
+constitutes of pairwise synergy and opposition interactions
+formulated by game avatar vectors. Game avatar vectors
+and other model parameters are learned by gradient descent
+through maximizing the likelihood function of all observed
+match outcomes. Latent variable models (LVM) and embedding techniques have been shown to successfully capture characteristics of entities in texts (Mikolov et al. 2013),
+1
+
+http://www.weskimo.com/a-guide-todrafting.html
+2
+https://www.reddit.com/r/learndota2/
+comments/3f9szo/how to counter pick heroes/
+
+graphs (Maaten and Hinton 2008), and recommendation systems (Koren, Bell, and Volinsky 2009). The advantages of
+these techniques include: 1. less manual feature engineering required, 2. robust learning even when the data sparsity problem is present, and 3. better reusability for downstream tasks than pure predictive algorithms such as Gradient Boosting Decision Tree (Friedman 2001) and Factorization Machine (Rendle 2010).
+Inheriting the advantages from LVM, GAE is the first
+model to our best knowledge that not only captures synergy and opposition relationships robustly, but also facilitates many important downstream tasks which consume
+game avatar vectors as input, e.g., similarity search on
+game avatars, team composition analysis (Kim et al. 2016;
+Agarwala and Pearce 2014) and match outcome prediction (Yang, Qin, and Lei 2016).
+In sum, the contributions of our paper are multi-fold:
+1. we describe a novel Game Avatar Embedding (GAE)
+model which characterizes game avatars in vectors in
+terms of synergy and opposition;
+2. we demonstrate the effectiveness of the model via quantitative experiments on real data from three commercial
+MOBA games;
+3. we showcase how our model facilitates downstream tasks
+such as similar avatar search and avatar pick recommendation, which off-the-shelf Machine Learning models
+cannot accomplish.
+Our paper is structured as follows. We first present related
+work, then introduce GAE models with details on model
+specification and learning process. Next, we report quantitative evaluation results of GAE, followed by two case studies. Finally, we conclude our paper and discuss limitations
+as well as future directions.
+
+Related Works
+As we adopt an embedding model to uncover synergy and
+opposition relationships among game avatars from teambased outcomes for MOBA games, our work aligns with recent research in team formation analysis, MOBA game research, and embedding-based modeling methods.
+
+Team Formation Analysis
+Team formation analysis is the research topic which aims
+to uncover factors that impact team performance. Team formation has already been studied in MOBA games (Pobiedina et al. 2013a; Semenov et al. 2016). (Pobiedina et al.
+2013a) verified that team success depends on a successful
+selected combination of game avatars. (Semenov et al. 2016)
+predicts MOBA outcomes by using 2-way factorization machine (Rendle 2010), which can reliably estimate the levels
+of pairwise relationships through factorized parameterization. However, their method does not naturally derive meaningful numerical representations of game avatars that can be
+analyzed and utilized for many other downstream applications.
+Although we focus on video game data in this paper,
+team formation analysis could help advance many other
+
+domains, such as social networks (Lappas, Liu, and Terzi
+2009; Anagnostopoulos et al. 2012), crowdsourcing (Rahman et al. 2015; Kittur 2010; Roy et al. 2015), and robotics
+(Liemhetcharat and Veloso 2012). Existing works that also
+use machine learning to learn chacacterization of team members (Liemhetcharat and Veloso 2012; Rahman et al. 2015)
+are different than our work in that: (1) the dimensions of
+team member characterization are often pre-defined and
+fixed, such as a fixed set of skills, which requires manual efforts and domain knowledge; (2) no opposition relationship
+has been modeled.
+
+MOBA Game Research
+The rich design of MOBA games has attracted variety of
+research to be conducted upon them. For example, team
+formation analysis (Pobiedina et al. 2013a; Pobiedina et
+al. 2013b; Neidhardt, Huang, and Contractor 2015; Kim
+et al. 2016; Agarwala and Pearce 2014), skill decomposition (Chen et al. 2016), match outcome prediction and avatar
+pick recommendation systems (Bhattacharya and Sabik ).
+They shed lights on real-world problems or facilitate building adaptive player experience (Nguyen, Chen, and El-Nasr
+2015). Many of these tasks rely on processing vectors which
+encode characteristics of game avatars. For example, in team
+formation analysis, the calculation of team diversity is averaged pairwise cosine distances between game avatars’
+attribute vectors. Principal Component Analysis (Jolliffe
+2002) and t-SNE (Maaten and Hinton 2008), two frequently
+used dimension reduction techniques in clustering and visualization, are also based on entities’ vectors. Our GAE
+model induces the vectors of game avatars encoding their
+synergy and opposition relationships, which can facilitate
+many downstream tasks that perform upon vectors.
+
+LVMs and Embedding Models
+LVMs/embedding models have been long studied in Natural
+Language Processing (NLP) (Mikolov et al. 2013), graph
+(Maaten and Hinton 2008), and recommendation system
+(Koren, Bell, and Volinsky 2009). In this family of models,
+entities are associated with vectors in a shared, continuous
+low-dimensional space which encode entities’ characteristics efficiently and effectively. We will use vectors and embedding interchangeably to refer to the numerical representations of entities.
+Some salient advantages of embedding models/LVMs are
+as follows: 1. it requires little human labor for feature engineering because entity vectors can be learned based on labels
+or what are observed explicitly (e.g., links between nodes
+in a graph, user-item matrix, word sequences). 2. information between entities can be shared more effectively during the learning phase. For example, similar embeddings of
+two similar words can be learned if they are often used and
+occur in the similar contexts, even though they do not appear together. 3. learned vector representation can be reused
+by many kinds of applications, such as sentiment analysis
+(Maas et al. 2011) and data visualization (Maaten and Hinton 2008).
+In our paper, game avatars are embedded as lowdimensional vectors. Their values are learned (supervised)
+
+through maximizing the winning probabilities (defined in
+Section 3) of all observed match outcomes. We will show
+in Performance Evaluation and Case Study that the learned
+game avatar embeddings indeed capture sensible teamrelated characteristics and allow for other downstream applications, such as similar avatar search and avatar pick
+recommendation. This cannot be achieved by previous
+methods such as Logistic Regression, Factorization Machine (Semenov et al. 2016) and Gradient Boosting Decision Tree (Friedman 2001) which simply predict match outcomes without a means to derive game avatar embeddings
+to be reused in other tasks.
+
+C(i, j) = aTi · Q · aj =
+
+Preliminary and Problem Definition
+
+Game Avatar Embedding Model
+In this section, we will describe the proposed model, the
+learning process, as well as discuss its relationships with
+Factorization Machines, a related model.
+
+Model Synergy and Opposition
+Inspired by embedding methods which have managed to
+learn low-dimensional vectors to capture abundant attributes
+of entities, we propose to map characteristics of game
+avatars into a low-dimensional latent space. For a game
+avatar Ai , its latent feature vector is denoted as ai ∈ RK .
+A ∈ RN ×K is the latent feature matrix such that A = {ai }.
+We choose to use a bilinear model to model synergy and
+opposition relationships between pairs of avatars. The bilinear model allows us to separately learn game avatar embeddings, as well as the matrices that determine the extents of
+synergy and opposition across different dimensions of game
+avatar embeddings.
+First, we introduce the intra-team synergy score function
+S(i, j), which calculates the level of synergy to which Ai
+exerts on Aj in the same team:
+K X
+K
+X
+
+aim · pmn · ajn
+
+K X
+K
+X
+
+aim · qmn · ajn
+
+(2)
+
+m=1 n=1
+
+Suppose the training data is a match set M =
+{M1 , M2 , · · · , MZ } with Z matches. There are N unique
+game avatars appearing in total, denoted by A =
+{A1 , A2 , · · · , AN }. We assume each match is competed between two teams, the red and the blue team. We use Tz,r =
+{Ai } and Tz,b = {Aj } to denote the sets of game avatars in
+the red team and the blue team in Mz , respectively. Since we
+are studying 5-vs-5 MOBA games, we have for ∀z, |Tz,r | =
+5 and |Tz,b | = 5. We use T = {(Tz,r , Tz,b )|z = 1, · · · , Z}
+to denote all game avatar line-ups of M.
+Match outcomes are marked as O = {o1 , o2 , · · · , oZ }.
+oz = 1 means the red team wins over the blue team in Mz
+otherwise oz = 0. We use p(oz = 1) and p(oz = 0) to
+denote the winning probability from the view of the red team
+and the blue team, respectively. Hence, p(oz = 0) = 1 −
+p(oz = 1).
+
+S(i, j) = aTi · P · aj =
+
+1. one can think of aTi · P = a0i as converting Ai ’s embedding into the dimensions that Aj looks for as a helpful
+teammate. Then, the higher the dot product is between a0i
+and aj , the higher synergy the two game avatars can build.
+2. alternatively, one can think that pmn measures how much
+m-th dimension of ai fits n-th dimension of aj in terms
+of intra-team interaction.
+Second, we define the inter-team opposition score function C(i, j), which quantifies the extent to which Ai counters Aj in the opposite team:
+
+(1)
+
+m=1 n=1
+
+P ∈ RK×K is named synergy matrix. There are two ways
+to understand P intuitively:
+
+Q ∈ RK×K is named opposition matrix. In a similar way
+to understand P , qmn measures the influence on Ai countering Aj , given their embeddings’ interaction on m-th and
+n-th dimension respectively.
+Note that P and Q are not necessarily symmetric, as the
+level of opposition in which Ai suppress Aj could be different from that of Aj on Ai .
+In this model, we only capture pairwise relationships because they are much more prevalent. We also find advanced
+models such as Gradient Boosting Decision Trees (Friedman
+2001) potentially considering more intricate relationships do
+not improve the match outcome prediction task on all the
+three datasets we study (See Section Performance Evaluation). Still, it is possible to extend GAE for higher order
+interactions by modeling them using tensors and tensor operations (Kolda and Bader 2009). We will explore this aspect
+in the future.
+
+Model Winning Probability
+Next, we propose to model a winning outcome as the linear
+breakdown of the individual biases, as well as their intrateam and inter-team interactions, of game avatars from
+the two teams involved. Individual biases represent game
+avatars’ intrinsic control difficulty that affects match outcomes, denoted as b = {b1 , b2 , · · · , bN }. Hence, the winning outcome p(oz = 1) of a match Mz is defined as follows:
+p(oz = 1) = σ
+
+X
+
+bi −
+
+i∈Tz,r
+
++
+
+X
+
+X
+
+S(i, j) −
+
+i,j∈Tz,r
+i6=j
+
++
+
+X
+
+bj
+
+j∈Tz,b
+
+X
+
+S(i, j)
+
+i,j∈Tz,b
+i6=j
+
+X
+
+(3)
+
+
+C(i, j) − C(j, i)
+
+i∈Tz,r j∈Tz,b
+1
+where σ(·) is sigmoid function 1+exp(−x)
+.
+The input of the sigmoid function is the sum of the differences of: (1) individual biases towards winning, (2) synergy strength inside the team, and (3) opposition intensity
+against the opponent team. The latter two differences depend
+on traversing all valid pairs of game avatars within the same
+team or across the two teams. The larger the differences are,
+
+the closer p(oz = 1) is to 1 meaning the advantageous team
+is more likely to win.
+Note that in our formulation, players’ individual skill levels are not accounted for in the winning outcome’s probability. This is reasonable, since the data we collected is from
+highly selective ranked matches. Most commercial MOBA
+games have proprietary matchmaking systems to ensure that
+only sufficiently experienced players with similar skill levels are allowed to compete in ranked matches (the type of
+matches we study). Therefore, the chance of results being
+skewed by data from incompetent players is low.
+
+Dot productions in Eqn. 7 can be re-written in the vectormatrix-vector product form that is similar to Eqn. 1 and
+Eqn. 2. For each Ai , we can set v i = Ui ui and v i+N =
+Vi ui where Ui and Vi are two matrices that linearly transform the same base ui . ui can be seen as the equivalence of
+ai in GAE, a vector capturing characteristics of Ai . Therefore, each pairwise term in Eqn. 7 can be written as:
+
+Objective Function and Learning
+
+(10)
+< v i , v j+N > = uTi (UiT Vj )uj
+FM and GAE both attempt to estimate second-order interactions through the embedding/factorization technique.
+Therefore, they both inherit the advantages of the factorization technique that all pairs of co-occurrences can help the
+learning of any particular pair of interaction. Since the hierarchy of both models is the linear summation of first-order
+biases and second-order interactions, FM and GAE are expected to have similar classification performance in match
+outcome prediction. However, for FM, it is unclear how to
+determine Ui and Vi for ∀i. On the contrast, GAE by design
+can learn game avatar embedding and synergy and opposition matrices at the same time, which enables practitioners
+to reuse game avatar embedding for other downstream tasks.
+
+Assuming that each match is independent, the overall likelihood function is:
+p(O, T |A, P , Q, b) =
+
+Z
+Y
+
+p(oz = 1)oz p(oz = 0)1−oz
+
+z=1
+
+(4)
+The objective function is to minimize the negative log
+likelihood w.r.t Θ = {A, P , Q, b}:
+Z
+
+1 X
+oz log p(oz = 1) + (1 − oz ) log p(oz = 0)
+Z z=1
+(5)
+For parameter learning, we use AdaGrad (Duchi, Hazan,
+and Singer 2011) to update parameters based on a small
+batch of matches in each iteration.
+
+J(Θ) = −
+
+< v i , v j > = uTi (UiT Uj )uj
+
+(8)
+
+< v i+N , v j+N > = uTi (ViT Vj )uj
+
+(9)
+
+Performance Evaluation
+
+We evaluate the utility of GAE using datasets collected from
+Relation to Factorization Machine Model
+three commercial MOBA games, namely Defense of the Ancients (DOTA2), Heroes of Newerth (HoN), and Heroes of
+GAE has a close relationship with 2-way factorization mathe Storms (HotS). All data is from 5-vs-5 matches that pit
+chine (FM) (Rendle 2010), which has been applied in (Seten random players in two teams against each other. No mamenov et al. 2016) to predict match outcomes of the same
+jor game update affecting the mechanics of the games ockind of games. In (Semenov et al. 2016), for a match Mz ,
+curred during the data collection phase. All three games
+the feature vector xz ∈ {0, 1}2N is a binary vector indiemploy matchmaking systems that select only players of
+cating which five avatars appear in the red and blue team
+similar skill levels when assembling a match. All the three
+respectively:
+datasets have roughly balanced winning outcomes for both
+
+the red and blue teams. Statistics of the three datasets is
+1, if i ≤ N and avatar i was in the red team
+shown in Table 1.
+xzi =
+or if i > N and avatar i − N was in the blue team
+The HotS match data was downloaded from a third-party
+
+0, otherwise
+game log website3 ; all the matches happened during the last
+month of 2016. The HoN dataset was collected by (Suznje(6)
+vic, Matijasevic, and Konfic 2015), which contains matches
+and FM models a winning probability by additionally explayed between December 20, 2014 from April 29, 2015.
+ploring pairwise interactions between non-zero features:
+X
+X
+Finally, for DOTA 2, we use the original data set colp(oz = 1) =σ
+ci +
+cj+N
+lected between February 11, 2016 to March 2, 2016 by Sei∈Tz,r
+j∈Tz,b
+menov et al. (Semenov et al. 2016), and extract a subset of
+X
+X
++
+< vi , vj > +
+< v i+N , v j+N > matches played by gamers with similar skill levels (i.e., normal level).
+i,j∈T
+i,j∈T
+z,r
+i<j
+
++
+
+X
+
+z,b
+i<j
+
+X
+
+
+< v i , v j+N > ,
+
+i∈Tz,r j∈Tz,b
+
+(7)
+where ci ∈ R and v i ∈ RK for ∀i = 1, · · · , 2N are firstorder and second-order parameters, and < ·, · > is dot product operation. Therefore, each avatar Ai is associated with a
+quartet of parameters (ci , ci+N , v i , v i+N ).
+
+Experiment Setup and Results
+There are two experiments designed to assess the effectiveness of GAE. The first is conducted as a numerical evaluation in terms of outcome prediction, while the second evaluates GAE’s interpretability using human experts, as compared to other state-of-the-art methods.
+3
+
+https://www.hotslogs.com/Info/API
+
+Table 1: Statistics of datasets
+
+# of Matches
+# of Avatars
+
+HotS
+
+HoN
+
+DOTA2
+
+1,814,066
+58
+
+1,101,046
+126
+
+3,056,596
+111
+
+Table 2: Outcome prediction AUC on test datasets; (*) indicate where GAE outperforms with p-values < 0.001.
+Models
+
+HotS
+
+HoN
+
+DOTA2
+
+LR
+GBDT
+FM
+
+0.6095*
+0.6375*
+0.6440
+
+0.6115*
+0.6144*
+0.6154*
+
+0.6875*
+0.7014*
+0.7143
+
+GAE
+
+0.6437
+
+0.6220
+
+0.7143
+
+Outcome Prediction Results
+First, we evaluate the match outcome prediction performance of GAE against well-known baselines, including Logistic Regression (LR)4 , Gradient Boosting Decision Trees
+(GBDT)5 and 2-way Factorization Machine (FM)6 . For
+each game dataset, we adopt 10-fold cross-validation procedure with train:validate:test ratio set to be 8:1:1. In each
+fold, a model with different configurations of hyperparameters (e.g., regularization penalty, the number of trees, the
+dimension of latent space, etc.) is trained on the train dataset
+and the best hyperparameters is determined according to
+the classification performance on the validation dataset. The
+classification performance of the model with the best hyperparameters on the test dataset will be recorded as the final
+measurement of its classification strength. For GAE, we use
+Eqn. 3 to predict outcomes on test datasets. For baseline
+models, Eqn. 6 is used to construct feature vectors, similar to how it is done in previous works. The area under
+ROC Curve (AUC) is used as the classification performance
+measurement. Ten test AUC are recorded during the 10-fold
+cross-validation for each model (LR, GBDT, FM and GAE)
+such that classification performance can be compared using
+paired t-test (with confidence level 0.001).
+Table 2 reports the classification performances of all models in match outcome prediction. The paired t-tests showed
+that GAE has significantly higher test AUC than other models except GAE vs. FM in Hots and DOTA2.
+We observe that LR has the worst classification AUC in
+all three games. That is not surprising because LR does not
+model interactions between avatars. This verifies that there
+do exist team synergy and opposition between game avatars.
+GBDT is a tree-based model that could handle interactions
+among more than two game avatars. However, it achieves
+statistically worse results than GAE. This demonstrates: (1)
+the strength of embedding methods in effectively encoding
+meaningful information of pairwise synergy and opposition
+relationships in a low-dimensional space; (2) much more
+4
+
+http://scikit-learn.org/
+https://github.com/dmlc/xgboost
+6
+https://github.com/ibayer/fastFM
+
+Table 3: Pearson’s r between human ratings and
+GAE/baseline scores on 3 evaluation sets of pairs (boldface
+indicates p-values < 0.001)
+Similarity
+
+Synergy
+
+Opposition
+
+Win-Ratio Matrix
+FM
+
+0.5258
+-
+
+0.7841
+
+0.7669
+
+GAE
+
+0.8080
+
+0.8488
+
+0.7384
+
+data might be needed for GBDT to fully capture more complicated relationships. When GAE and FM are tuned with a
+proper number of latent space dimensions K, they achieve
+comparable AUC in HotS and DOTA2. This verified our
+expectation in Section Relation to Factorization Machine
+Model that GAE and FM should have similar outcome prediction performance because they both rely on factorization
+techniques to quantify pairwise interactions. However, the
+exception is HoN where GAE is statistically significantly
+better than FM in HoN and GAE appears to have smaller improvement over LR than in other games. We will investigate
+the characteristics of HoN compared to other MOBA games
+in the future. Overall, GAE predicted match outcomes well
+and robustly.
+
+Human Evaluation
+Second, we would like to validate how sensible GAE results
+are as compared to the experts’, i.e., human players’, judgment. We ask human players to rate pairs of game avatars in
+terms of similarity, synergy and opposition. Intuitively, if a
+model’s scores are highly correlated with human ratings, we
+conclude that such model generates sensible results. Since
+recruitment of knowledgeable players is a relatively expensive task, we only evaluate on the DOTA2 dataset. Based
+on a pilot test of three DOTA2 players, 60 pairs are selected
+which have clear similarity, synergy and opposition relationships (20 pairs for each kind of relationship). For example,
+the 20 similarity evaluation pairs include both very similar
+as well as very different pairs of game avatars because either
+kind is expected to be evaluated consistently by subjects.
+When using GAE to evaluate the pairs, the similarity is
+determined by cosine similarity between the learned game
+avatar embeddings. The synergy is determined by S(i, j) +
+S(j, i) and the opposition by the absolute value of C(i, j) −
+C(j, i) for any pair of game avatars Ai and Aj . Note that
+besides GAE, we are not aware of any approach that can
+handle similarity, synergy, and opposition queries all in a
+single model. FMs can naturally answer synergy and opposition queries; more specifically, two avatars’ synergy and
+opposition levels can be obtained using the left hand side of
+Eqn. 8 and Eqn. 10 respectively. However, they are not designed for similarity search, so we created an ad-hoc baseline method to compute avatars’ similarity based on the cosine similarity between the respective rows of a win-ratio
+matrix W ∈ RN ×2N , constructed as:
+
+5
+
+Wi,j =
+
+# of matches (Ai , Aj ) win
+# of matches (Ai , Aj ) from the same team
+
+(11)
+
+# of matches Ai wins over Aj
+# of matches Ai , Aj from the opposite teams
+(12)
+To collect human ratings, we created a survey asking subjects to rate on a 5-point Likert scale the level of similarity, synergy or opposition on the 60 pairs, with 1 as “not at
+all” and 5 as “very much”, and asked ten similarly skillful
+DOTA2 players to provide their ratings. We produce Pearson’s r between human ratings and GAE/baseline scores on
+the 20 pairs in each kind of relationship.
+We compared the correlations (using Pearson’s r) between human ratings and those by GAE and the baseline.
+Better correlation corresponds to more sensible results from
+the players’ perspective. As shown in Table 3, for similarity
+queries, GAE’s results better correlate with human ratings
+than those by the baseline, suggesting that similarity search
+based on the learned embeddings by GAE are more sensible. For synergy and opposition queries, both GAE and the
+baseline correlate with human ratings with high Pearson’s r
+(≥ 0.7) with p-value < 0.001, which indicates both methods
+are sensible to human players. This can be explained by the
+similarity of FM and GAE’s approach in using the factorization/embedding technique to model pairwise interactions.
+Wi,j+N =
+
+Case Study
+In this section, we would like to qualitatively demonstrate
+the quality and utility of GAE within the context of practical applications. All analyses are done with the help of
+three seasoned DOTA2 players, conducted on GAE’s results
+(K = 75) as learned from DOTA2 data. Game avatars are
+called heroes in DOTA 2.
+
+Application - Similarity Search
+One direct downstream application utilizing GAE’s game
+avatar vectors is similarity search. It can help players, both
+starters or pros, to expand their hero pools by recommending heroes similar to what they are already familiar with or
+good at. For example, given input hero Clinkz, the top three
+heroes GAE returns are Weaver, Riki and Mirana. After examining the results, the three seasoned DOTA2 players all
+agreed that the top three heroes are very similar to Clinkz,
+as they are all Agility Carry heroes with low hit points, great
+escape capability, and sharing a stealthy play style.
+
+Application - Personalized Recommendation
+Kim et al. (Kim et al. 2016) suggested that the ideal game
+avatar to maximize the winning chance fit players’ personal
+expertise and team congruency in parallel, guided by which
+GAE could be used for a personalized avatar pick recommendation system. We select a real match played by one of
+our DOTA2 players for illustration although the real implementation and verification of this idea requires more work
+in the future.
+In a ranked match, the player is the last to pick a
+hero, when his team have picked Puck, Ember Spirit, Lion,
+Necrophos, and the opposite team picked Silencer, Pudge,
+Sand King, Juggernaut, Anti-Mage. Given 30 seconds to
+make the pick, he wants to prioritize the hero selection that
+
+synergizes with his team and opposes the other team. Using
+Eqn. 3 to search the hero that maximizes the winning probability, GAE returns the top recommendation, Ursa. However, the player has not played Ursa before, thus are less
+confident about playing it. Based on the similarity search on
+the learned game avatar embeddings, GAE returns a list of
+heroes similar to Ursa, top 3 being Troll Warlord, Sven and
+Juggernaut. Finally, the player decides to go for Sven since
+that is the hero he is experienced with and Sven is also one
+of the top 5 heroes identified with best overall synergy and
+opposition besides Ursa.
+Analyzing the above example, all the three DOTA2 players strongly agreed that Ursa is a very suitable choice given
+that this player’s team lacks burst physical damage. In addition, they had different extra interpretations on the Ursa
+pick. For example, one player identified that Ursa could help
+the player finish the game early, disallowing the opposing
+team to elongate the game when Anti-mage will show his
+max advantage as a late game Carry. Another player recognized that Ursa could increase team fights capability since
+Ursa is a Tank Carry hero who is durable in fights. All the
+three players agreed that Sven is similar to Ursa, as both
+heroes output high burst physical damage. They also proposed that GAE recommendation can be used differently according to personal prioritization. For example, some players who strongly prefer skill familiarity can first use GAE
+to list their familiar heroes then run synergy and opposition
+search.
+As a summary, GAE provides an interface to perform
+queries of similar, synergy and opposition simultaneously.
+These capabilities can then be incorporated into downstream
+applications, giving users a white-box tool to help them better understand the game and make better in-game choices
+that maximize the winning chance.
+
+Conclusions, Limitations and Future Works
+Modeling synergy and opposition relationships between
+game avatars is an important task that helps players understand the game and make better decisions in forming effective teams. To tackle this task, our proposed embeddingbased method models synergy and opposition relationships
+with game avatars encoded as vector representation. Our
+quantitative and qualitative analyses show that GAE is able
+to capture pairwise synergy and opposition relationships
+between game avatars that are sensible to human players.
+Moreover, the learned game avatar embeddings effectively
+capture important characteristics of game avatars because
+similarity search based on the game avatar embeddings also
+highly correlate with human ratings. Our model opens new
+doors to many downstream tasks, such as similarity search
+on game avatars and personalized avatar recommendation.
+There are some future directions that we will pursue next.
+First, we want to study the extension of GAE in capturing higher-order relationships that involve more than two
+avatars, as well as study the trade-offs between its performance improvement and computation overhead incurred.
+Second, we are currently limited to access to sensitive human player information. In the future, we hope to collect
+
+match data with richer player information and model player
+and game avatar embeddings within the same model.
+
+References
+[Agarwala and Pearce 2014] Agarwala, A., and Pearce, M.
+2014. Learning dota 2 team compositions. Technical report,
+tech. rep., Stanford University.
+[Anagnostopoulos et al. 2012] Anagnostopoulos, A.; Becchetti, L.; Castillo, C.; Gionis, A.; and Leonardi, S. 2012.
+Online team formation in social networks. In Proceedings of
+the 21st international conference on World Wide Web, 839–
+848. ACM.
+[Bhattacharya and Sabik ] Bhattacharya, R., and Sabik, A.
+Data-driven recommendation systems for multiplayer online
+battle arenas.
+[Chen et al. 2016] Chen, Z.; Sun, Y.; Seif El-Nasr, M.; and
+Nguyen, T.-H. D. 2016. Player skill decomposition in multiplayer online battle arenas. In Meaningful Play.
+[Duchi, Hazan, and Singer 2011] Duchi, J.; Hazan, E.; and
+Singer, Y. 2011. Adaptive subgradient methods for online
+learning and stochastic optimization. Journal of Machine
+Learning Research 12(Jul):2121–2159.
+[Friedman 2001] Friedman, J. H. 2001. Greedy function approximation: a gradient boosting machine. Annals of statistics 1189–1232.
+[Jolliffe 2002] Jolliffe, I. 2002. Principal component analysis. Wiley Online Library.
+[Kim et al. 2016] Kim, J.; Keegan, B. C.; Park, S.; and Oh,
+A. 2016. The proficiency-congruency dilemma: Virtual
+team design and performance in multiplayer online games.
+In Proceedings of the 2016 CHI Conference on Human Factors in Computing Systems, 4351–4365. ACM.
+[Kittur 2010] Kittur, A. 2010. Crowdsourcing, collaboration
+and creativity. ACM Crossroads 17(2):22–26.
+[Kolda and Bader 2009] Kolda, T. G., and Bader, B. W.
+2009. Tensor decompositions and applications. SIAM review 51(3):455–500.
+[Koren, Bell, and Volinsky 2009] Koren, Y.; Bell, R.; and
+Volinsky, C. 2009. Matrix factorization techniques for recommender systems. Computer (8):30–37.
+[Lappas, Liu, and Terzi 2009] Lappas, T.; Liu, K.; and Terzi,
+E. 2009. Finding a team of experts in social networks. In
+Proceedings of the 15th ACM SIGKDD international conference on Knowledge discovery and data mining, 467–476.
+ACM.
+[Liemhetcharat and Veloso 2012] Liemhetcharat, S., and
+Veloso, M. 2012. Modeling and learning synergy for team
+formation with heterogeneous agents. In Proceedings of
+the 11th International Conference on Autonomous Agents
+and Multiagent Systems-Volume 1, 365–374.
+International Foundation for Autonomous Agents and Multiagent
+Systems.
+[Maas et al. 2011] Maas, A. L.; Daly, R. E.; Pham, P. T.;
+Huang, D.; Ng, A. Y.; and Potts, C. 2011. Learning word
+vectors for sentiment analysis. In Proceedings of the 49th
+
+Annual Meeting of the Association for Computational Linguistics: Human Language Technologies-Volume 1, 142–
+150. Association for Computational Linguistics.
+[Maaten and Hinton 2008] Maaten, L. v. d., and Hinton, G.
+2008. Visualizing data using t-sne. Journal of Machine
+Learning Research 9(Nov):2579–2605.
+[Mikolov et al. 2013] Mikolov, T.; Sutskever, I.; Chen, K.;
+Corrado, G. S.; and Dean, J. 2013. Distributed representations of words and phrases and their compositionality. In
+Advances in neural information processing systems, 3111–
+3119.
+[Minotti 2016] Minotti, M. 2016. Comparing MOBAs:
+League of Legends vs. Dota 2 vs. Smite vs. Heroes of
+the Storm. http://venturebeat.com/2015/07/
+15/comparing-mobas-league-of-legendsvs-dota-2-vs-smite-vs-heroes-of-thestorm/. Online; accessed May, 2016.
+[Neidhardt, Huang, and Contractor 2015] Neidhardt,
+J.;
+Huang, Y.; and Contractor, N. 2015. Team vs. team:
+Success factors in a multiplayer online battle arena game.
+In Academy of Management Proceedings, volume 2015,
+18725. Academy of Management.
+[Nguyen, Chen, and El-Nasr 2015] Nguyen, T.-H. D.; Chen,
+Z.; and El-Nasr, M. S. 2015. Analytics-based AI Techniques
+for Better Gaming Experience, volume 2 of Game AI Pro.
+Boca Raton, Florida: CRC Press.
+[Pobiedina et al. 2013a] Pobiedina, N.; Neidhardt, J.; Calatrava Moreno, M. d. C.; Grad-Gyenge, L.; and Werthner, H.
+2013a. On Successful Team Formation: Statistical Analysis
+of a Multiplayer Online Game. In 2013 IEEE 15th Conference on Business Informatics, 55–62. IEEE.
+[Pobiedina et al. 2013b] Pobiedina, N.; Neidhardt, J.; Calatrava Moreno, M. d. C.; and Werthner, H. 2013b. Ranking
+factors of team success. In Proceedings of the 22nd international conference on World Wide Web companion, 1185–
+1194. International World Wide Web Conferences Steering
+Committee.
+[Rahman et al. 2015] Rahman, H.; Thirumuruganathan, S.;
+Roy, S. B.; Amer-Yahia, S.; and Das, G. 2015. Worker skill
+estimation in team-based tasks. Proceedings of the VLDB
+Endowment 8(11):1142–1153.
+[Rendle 2010] Rendle, S. 2010. Factorization machines. In
+2010 IEEE International Conference on Data Mining, 995–
+1000. IEEE.
+[Roy et al. 2015] Roy, S. B.; Lykourentzou, I.; Thirumuruganathan, S.; Amer-Yahia, S.; and Das, G. 2015. Task assignment optimization in knowledge-intensive crowdsourcing. The VLDB Journal 24(4):467–491.
+[Semenov et al. 2016] Semenov, A.; Romov, P.; Korolev, S.;
+Yashkov, D.; and Neklyudov, K. 2016. Performance of
+Machine Learning Algorithms in Predicting Game Outcome
+from Drafts in Dota 2. In Analysis of Images, Social Networks and Texts. Springer. 26–37.
+[Suznjevic, Matijasevic, and Konfic 2015] Suznjevic, M.;
+Matijasevic, M.; and Konfic, J. 2015. Application context
+based algorithm for player skill evaluation in MOBA games.
+
+In Network and Systems Support for Games (NetGames),
+2015 International Workshop on, 1–6. IEEE.
+[Tassi 2016] Tassi, P. 2016. Riot’s ’League of Legends’ Reveals Astonishing 27 Million Daily Players,
+67 Million Monthly.
+http://www.forbes.com/
+sites/insertcoin/2014/01/27/riotsleague-of-legends-reveals-astonishing27-million-daily-players-67-millionmonthly/#26ff8e543511. Online; accessed May,
+2016.
+[Yang, Qin, and Lei 2016] Yang, Y.; Qin, T.; and Lei, Y.-H.
+2016. Real-time esports match result prediction. arXiv
+preprint arXiv:1701.03162.
+
+

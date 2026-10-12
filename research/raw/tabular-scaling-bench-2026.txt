@@ -1,0 +1,2085 @@
+Scaling Laws for Classical Machine Learning on
+Tabular Data: An Empirical Benchmark Study
+
+Kaihua Ding
+University of Pennsylvania
+dkaihua@upenn.edu
+
+arXiv:2607.21866v2 [cs.LG] 28 Jul 2026
+
+Abstract
+Prior classical-ML learning-curve work fits power laws to tree, linear, and kernel
+models on tabular data [Perlich et al., 2003, Mukherjee et al., 2003, Figueroa et al.,
+2012, Domhan et al., 2015], but at small scale: typically one curve, one team, a
+handful of cells. We present a distributed benchmark study of classical-ML scaling
+laws: a graduate cohort of 127 independent replicators each ran a fixed protocol on
+3 assigned datasets, drawn from 18 tabular classification and regression datasets
+and 6 model families (Boosting, Random Forest, SVM, Linear/Logistic, Ridge,
+Lasso), yielding 11,536 training runs and 1,648 fitted power-law curves of the
+form error(N ) = aN −b + c. Because each replicator was assigned a different
+subset of datasets, this is a partial rather than a full replication: our focus is the
+scaling exponents and whether they are shared across a model family, not exact
+reproduction of a single result. Three findings. (1) Power laws fit: R2 > 0.8
+on 77.7% of cells, with tree ensembles dominating at full data (Boosting 50%
+of datasets, RandomForest 33%; linear models underperform on classification).
+(2) Approximate shared exponents within a model family: for 5 of 6 families,
+a single family-level exponent predicts each family’s cross-dataset curves nearly
+as well as per-dataset exponents (R2 gap < 0.011), though AIC favors the unconstrained fit and curve collapse is partial (32–58% of points within ±0.5 dex).
+We frame this as approximate predictive compressibility, not dataset-independent
+universality; Lasso fails outright (negative control) and Ridge is fragile under
+leave-one-dataset-out. (3) Replicator-implementation variance: with the random
+seed fixed, independent re-implementations of the same protocol still differ by a
+mean coefficient of variation CV(b) = 0.144 on the fitted exponent b—here CV is
+the across-replicator standard deviation divided by the mean, so 0.144 means the
+fitted exponent moves by about 14% from one compliant re-implementation to the
+next. This is not seed variance, but the spread induced by unconstrained parts of
+the protocol (preprocessing, encoding, missing-value handling). We release the
+aggregated curves, per-cell fits, and a practical data-requirement table for N ⋆ —the
+training-set size a model needs to reach a target test error, here set to 0.15 (e.g.
+1 − AUROC = 0.15, i.e. AUROC ≈ 0.85, a practical useful-accuracy threshold
+for these tasks).
+
+1
+
+Introduction
+
+Empirical scaling laws have become central to how large neural networks are designed, trained, and
+budgeted: predictable power-law decay of test loss with model size, dataset size, and compute now
+informs decisions worth tens of millions of dollars per training run [Kaplan et al., 2020, Hoffmann
+et al., 2022, Hestness et al., 2017, Rosenfeld et al., 2020]. Yet the overwhelming majority of applied
+machine learning in industry is not large neural networks on text or images. It is gradient-boosted
+trees, random forests, and linear models on tabular business data—churn prediction, default risk,
+Preprint.
+
+sales forecasting, ad-click prediction, and causal market segmentation [Ding et al., 2024]. These
+are precisely the settings where tree ensembles continue to outperform deep learning [Grinsztajn
+et al., 2022, Shwartz-Ziv and Armon, 2022]. While a classical-ML learning-curve literature exists
+[Perlich et al., 2003, Mukherjee et al., 2003, Figueroa et al., 2012, Domhan et al., 2015], no prior
+study to our knowledge characterizes how their generalization error scales with training-set size at
+the cross-replicator scale that Kaplan et al. achieved for transformers within a single research team.
+Our contribution is not the idea of fitting a power law to a tree- or linear-model learning curve but
+scale: we run a single fixed protocol 127 times, once per member of a graduate ML cohort, with each
+member independently assigned a different subset of 3 of the 18 datasets. The 127 runs are therefore
+spread across the full dataset suite rather than being 127 repeats of one setting, yielding 11,536 model
+fits and 1,648 successful scaling curves. This lets us measure both the exponents and their variance
+across nominally compliant re-implementations.
+Our contributions are:
+• Approximate shared exponents within a model family: We separate three levels of claim.
+(a) Fit: the additive power law describes individual curves well (77.7% with R2 > 0.8).
+(b) Compression: a single family-level bm replaces per-dataset bm,d with small predictive
+loss (R2 gap < 0.011 on 5 of 6 families; held-out leave-one-dataset-out (LODO) gap
+≤ 0.012 for Boosting, RandomForest, LinearModel). (c) Universality (bm,d = bm ): not
+supported—AIC favors per-dataset fits, curve collapse is partial, and a permutation null
+shows the in-sample gap lacks specificity. Lasso fails outright as a negative control; Ridge
+is fragile (LODO CV 0.96). The contribution is the compression result, not universality.
+• Empirical benchmark: 18 datasets × 6 model families × 7 nested training fractions,
+11,536 runs aggregated from a graduate cohort of 127 replicators; tree ensembles win at full
+data (Boosting 50%, RandomForest 33%).
+• Replicator-implementation variance: With the random seed fixed, CV(b) = 0.144 across
+replicators measures unconstrained-protocol spread (preprocessing, encoding, missing-value
+handling), not seed variance.
+• Practical data-requirement curves: pooled-fit N ⋆ to reach 0.15 target error, with cells
+where the floor c ≥ 0.15 flagged as unreachable for that model.
+
+2
+
+Related Work
+
+Neural scaling laws. A line of work beginning with Hestness et al. [2017] and crystallized by
+Kaplan et al. [2020] established that neural language-model test loss follows a clean power law in
+model size, dataset size, and compute. The Chinchilla paper [Hoffmann et al., 2022] refined the
+joint parameter–data tradeoff and showed that prior large models were systematically undertrained.
+Rosenfeld et al. [2020] extended the formalism to image classification and proposed the additiveirreducible-error parameterization aN −b + c that we adopt directly. These results are all on neural
+models—transformers, ResNets, recurrent nets—and at moderately large data scales. Whether the
+same functional form applies to gradient-boosted trees on a few thousand tabular rows has, until now,
+not been settled empirically at scale.
+Classical-ML learning curves. Fitting power laws to classical-ML learning curves is itself a
+long-studied topic that predates the neural-scaling-laws literature. Perlich et al. [2003] fit learning
+curves for tree induction versus logistic regression on a panel of UCI-style datasets. Mukherjee et al.
+[2003] use learning-curve extrapolation to estimate sample-size requirements for DNA microarray
+classification. Figueroa et al. [2012] fit and invert learning curves to predict the sample size required
+to reach a target classification performance. Domhan et al. [2015] extrapolate learning curves to speed
+up hyperparameter optimization. The broader principle—treating error as a smooth, extrapolable
+function of a resource budget and using the resulting estimate to plan how much budget to spend—is
+shared with output-based error estimation in numerical analysis, where an adjoint-weighted error
+estimate directs where to add mesh resolution to reduce a target output’s error most efficiently [Ding
+et al., 2016]; the fitted aN −b + c plays the analogous role for labeled data, telling a practitioner how
+many additional rows buy a given error reduction. We do not claim novelty in the idea of fitting an
+aN −b + c law to classical models on tabular data; what is new is the scale and the question that scale
+2
+
+lets us answer. To our knowledge this is the largest classical-ML learning-curve study to date—127
+independent replicators × 18 datasets × 6 model families, 1,648 fitted curves, orders of magnitude
+beyond the single-curve, single-team efforts above—and the first large enough to test directly whether
+a single scaling exponent is shared across a model family’s datasets, rather than fitting one curve at
+a time. That question, not the curve-fitting itself, is the point: prior work establishes that classical
+learning curves are power laws; we ask whether those power laws have a common exponent, and how
+far a reported exponent can be trusted. On top of this we contribute a protocol-level reproducibility
+lens (quantifying how far a fitted exponent drifts across nominally compliant re-implementations)
+and a public release of the aggregated curves, per-cell pooled fits, and data-requirement tables as a
+benchmark resource.
+Tabular ML benchmarking. A parallel literature has shown repeatedly that on most tabular tasks,
+gradient boosting and random forests still beat deep architectures [Grinsztajn et al., 2022, Shwartz-Ziv
+and Armon, 2022, Chen and Guestrin, 2016, Breiman, 2001]. The standard methodology in that
+literature, however, is to evaluate models at full data, not to trace error as a function of N . Our work
+complements this by adding the sample-size axis: the ranking-at-full-data picture is enriched by
+knowing how quickly each family approaches its irreducible-error floor.
+Reproducibility and replication. Pineau et al. [2021] document the reproducibility crisis in
+machine learning and report on the NeurIPS Reproducibility Program. Bouthillier et al. [2019] argue
+that single-run reports systematically understate uncertainty: variance from seeds, data splits, and
+implementation details is real and large. Quantifying reliability is harder still when no gold-standard
+label is available: Ding [2025] address this with a variance-bounded evaluation framework that
+scores a system by its expected success across plausible interpretations, penalized by variance. Our
+replicator-spread estimate is a scaling-law analogue—it treats the variance of a reported exponent
+across nominally compliant re-implementations as a first-class quantity rather than a nuisance. Our
+127-replicator design is, in effect, a controlled multi-replicator experiment whose primary product—in
+addition to the scaling laws themselves—is a quantitative estimate of how much a single research
+group’s reported scaling exponent should be trusted.
+
+3
+
+Methodology
+
+3.1
+
+Datasets
+
+We curated 18 publicly available tabular datasets covering business-relevant classification and regression tasks, drawn primarily from the UCI Machine Learning Repository [Dua and Graff, 2019]
+and other public repositories, summarized in Table 1. Ten are classification (binary, with class
+imbalance ranging from 54%/46% to 88%/12%), and eight are regression. Sample sizes range from
+303 (heart_disease [Dua and Graff, 2019]) to 53,940 (diamonds [Wickham, 2016]). Feature
+counts range from 4 to 74, mixing numeric and categorical columns. All datasets are widely used in
+undergraduate and applied-ML courses, chosen because they admit straightforward preprocessing
+(one-hot encoding for categoricals, median imputation for the small number of missing values) and
+because the tasks are well-defined.
+3.2
+
+Models and Protocol
+
+We evaluate six classical model families, all from scikit-learn with fixed default-style hyperparameters: (i) Boosting (GradientBoostingClassifier / Regressor); (ii) Random Forest;
+(iii) SVM (RBF kernel); (iv) Linear / Logistic regression; (v) Ridge regression (regression only);
+(vi) Lasso regression (regression only). Hyperparameters are fixed across all N —no per-N retuning—
+to keep results comparable across replicators and to isolate the data-size effect.
+For each (dataset, model) pair, each replicator performed a single 80/20 train/test split
+with seed 42, then trained on nested subsets of the train fold at the seven fractions
+{0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 1.00} of the 80%-train pool. Subsets are nested (smaller subsets
+are subsets of larger ones) to reduce sampling noise across fractions. The same held-out 20% test set
+is used to evaluate every fraction.
+For classification we report 1 − AUROC as the error metric; for regression we report
+RMSE/std(ytest ), i.e. RMSE normalized by the test-set standard deviation of the target. To bound
+3
+
+Table 1: The 18 curated datasets used in this study.
+Dataset
+
+Rows
+
+Features
+
+adult_income
+bank_marketing
+credit_card_default
+diabetes_pima
+employee_attrition
+german_credit
+heart_disease
+online_shoppers
+telco_churn
+wine_quality
+abalone
+ames_housing
+auto_mpg
+bike_sharing
+california_housing
+concrete_strength
+diamonds
+insurance_charges
+
+45,222
+45,211
+30,000
+768
+1,470
+1,000
+303
+12,330
+7,043
+6,497
+4,177
+1,460
+398
+17,379
+20,640
+1,030
+53,940
+1,338
+
+14
+16
+23
+8
+30
+20
+13
+17
+19
+12
+8
+74
+7
+12
+8
+8
+9
+6
+
+Task
+
+Domain
+
+classification
+classification
+classification
+classification
+classification
+classification
+classification
+classification
+classification
+classification
+regression
+regression
+regression
+regression
+regression
+regression
+regression
+regression
+
+Census / income
+Marketing
+Credit risk
+Healthcare
+HR
+Credit risk
+Healthcare
+E-commerce
+Telecom
+Quality control
+Biology
+Real estate
+Automotive
+Mobility
+Real estate
+Materials
+Pricing
+Insurance
+
+SVM training time, classification SVMs were capped at a 10,000-row subsample of the training
+fraction.
+3.3
+
+Power-Law Fitting
+
+For each (replicator, dataset, model) triple we fit a three-parameter power law,
+error(N ) = a N −b + c,
+
+a, b ≥ 0,
+
+(1)
+
+to the seven (N, error) points using non-linear least squares. Bounds on the irreducible-error floor
+are c ∈ [0, 1] for classification (since 1 − AUROC ∈ [0, 1]) and c ∈ [0, 5] for regression. The
+exponent b is bounded to [0, 3]. Fits with b at the upper bound or with a collapsing to zero are
+flagged but retained when reporting distributions. We use the threshold R2 > 0.7 when reporting
+per-model exponent statistics (to exclude obviously failed fits without overpruning), and R2 > 0.8
+when counting “successful” fits in headline statements.
+3.4
+
+Cohort-Scale Aggregation
+
+The protocol of subsection 3.2 was executed independently by a graduate ML cohort of 127 replicators.
+Each cohort member was assigned three datasets, spread across classification and regression. Per(dataset, model) coverage ranges from 11 to 30 replicators depending on the random assignment
+(with SVM coverage slightly lower because a few replicators timed out on the largest classification
+datasets). In total this produced 11,536 individual model training runs and 1,648 replicator-level
+power-law fits that converged (per-replicator fit convergence: 100%; pooled-method failures: 0/80).
+We aggregate per-replicator fits to a population-level summary in two ways. The pooled approach
+concatenates all (N, error) points from all replicators for a given (dataset, model) and fits a single
+power law to the union; this is what we report for the data-requirement curves. The per-fraction-mean
+approach first averages error across replicators at each fraction and fits a power law to those seven
+means; we use this for robustness checks. Cross-replicator dispersion is reported as the coefficient of
+variation CV(b) = σb /µb —the across-replicator standard deviation of the fitted value divided by
+its mean (a unitless measure of relative spread; not cross-validation and not a raw variance)—of the
+scaling-law exponent b of Equation 1, taken across replicators within a (dataset, model) cell that has
+at least 5 replicators.
+Because each replicator was assigned only 3 of 18 datasets, the per-cell CV(b) is computed over
+a different subset of replicators for each (dataset, model) cell, so the design is partially blocked
+rather than fully crossed. We therefore treat the resulting variance as observational and the headline
+CV(b) = 0.144 as a marginal average over heterogeneous cells.
+4
+
+3.5
+
+Cross-Dataset Combination
+
+To test whether a single exponent describes a model family across datasets, we combine per-cell
+evidence three ways. (i) Per-cell pooled fit: Equation 1 fit once per (dataset, model) on the
+union of replicator points. (ii) Shared-exponent joint fit: for each family we fit errord,i (N ) =
+ad N −bmodel + cd jointly across its datasets, sharing bmodel while leaving (ad , cd ) free per dataset
+(scipy.optimize.least_squares with the bounds of subsection 3.3; soft-L1 loss for Lasso),
+compared to an unconstrained joint fit (free bd ) by R2 and AIC on the same point cloud. (iii) Randomeffects meta-analysis:
+within each cell with ≥ 5 replicators we pool b̂ via DerSimonian–Laird,
+√
+using (σ̂b / n)2 as within-study variance, and collapse per-replicator curves onto a normalised axis
+enorm = (error − c)/a vs. N .
+Upon acceptance we will release the aggregated (N, error) CSVs for all 11,536 runs, per-cell pooled
+fits, the data-requirement table, the analysis scripts, and the protocol skeleton distributed to each
+replicator at https://github.com/dingkaihua/classical_scaling.
+
+4
+
+Results
+
+4.1
+
+Power-Law Fits
+
+Across all 1,648 converged per-replicator fits, 77.7% achieve R2 > 0.8 and 74.5% achieve R2 > 0.9,
+supporting the claim that the additive power law of Equation 1 is a useful description of how classicalML test error scales with N on tabular data. Fit quality is, however, very uneven across model
+families (Table 2). Tree ensembles, SVM, and Linear/Logistic regression fit cleanly: 87.9–94.8% of
+their per-replicator fits exceed R2 > 0.8. Ridge and especially Lasso fit poorly, with only 47.5% and
+23.8% respectively above that threshold.
+Table 2: R2 distribution per model family (all fits).
+Model
+
+mean
+
+median
+
+q25
+
+q75
+
+%fits R2 > 0.8
+
+Boosting
+Lasso
+LinearModel
+RandomForest
+Ridge
+SVM
+
+0.954
+0.546
+0.910
+0.947
+0.658
+0.961
+
+0.985
+0.649
+0.967
+0.971
+0.745
+0.978
+
+0.949
+0.443
+0.916
+0.956
+0.324
+0.952
+
+0.999
+0.703
+0.997
+0.991
+0.968
+0.997
+
+92.4%
+23.8%
+90.4%
+87.9%
+47.5%
+94.8%
+
+The poor Lasso and Ridge fits are mechanistic, not noise. Lasso shrinks all coefficients to zero in the
+small-N regime under fixed regularization strength, producing a flat “predict-the-mean” error that is
+invariant to N and incompatible with monotone power-law decay. Ridge shows a related pathology
+on california_housing, where the held-out RMSE briefly rises with N at intermediate fractions
+before settling, which the power-law form (Equation 1) cannot represent. We flag these mechanisms
+rather than discarding the cells: they are real findings about the limits of the power-law description
+for regularized linear models with fixed hyperparameters. The R2 heatmap in Figure 4 makes the
+pattern visible at a glance.
+4.2
+
+Scaling Exponents and Irreducible Error
+
+The scaling exponent b varies systematically across model families (Figure 1 and Table 3). Random
+Forest has the smallest median exponent (b̃ = 0.325): its error decays with N but slowly, consistent
+with the high-variance averaging behavior of bagged trees. Boosting has a moderate exponent
+(b̃ = 0.480). Linear/Logistic regression has the largest stable exponent (b̃ = 0.830) on classification,
+reflecting the fact that low-capacity models gain more from each additional training point relative to
+their already-high error. Ridge has an even larger median exponent (b̃ = 1.654) but with very wide
+spread and poor fit quality; we view it as a fitting artifact rather than a meaningful exponent.
+The median exponent across all good fits is 0.495. Of classification fits, 47.7% have b > 0.5 and
+76.5% have b > 0.3. Of regression fits, 51.9% have b > 0.5. Consistent with this, classification
+5
+
+3.0 Classification
+2.5
+2.0
+1.5
+1.0
+0.83
+0.5
+n=161
+0.48
+0.48
+0.43
+0.0 n=178
+n=147
+n=178
+l
+t
+g o
+ode oresidge SVM
+stin ass
+Boo L inearM ndomF R
+L Ra
+
+b (scaling exponent)
+
+b (scaling exponent)
+
+exponents are slightly higher than regression exponents within each family that does both: Boosting
+(0.575 clf vs. 0.508 reg), RandomForest (0.426 vs. 0.325), and SVM (1.023 vs. 0.745).
+
+Regression
+
+1.65
+n=125
+0.60 0.52
+n=202 n=65
+
+0.32
+n=202
+
+0.46
+n=159
+
+l
+t
+g o
+ode oresidge SVM
+stin ass
+Boo L inearM ndomF R
+L Ra
+
+Figure 1: Boxplots of fitted scaling exponent b per model, split by task type. Tree ensembles cluster
+near b ≈ 0.3–0.5; linear models on classification show systematically larger but noisier exponents.
+Table 3: Distributions of b and c per model (per-replicator fits with R2 > 0.7). The n column reflects
+only fits passing the R2 > 0.7 filter; Lasso (n=65) and Ridge (n=125) have substantially smaller n
+than Boosting/RandomForest/SVM (n=306–380) because their power-law fits are noisier (cf. the R2
+heatmap in Figure 4). The reported b and c for Lasso and Ridge are therefore conditional on the rare
+cells where the additive power-law form even applies, not on the full set of convergent fits.
+Model
+
+mean
+
+b (exponent)
+median
+q25
+
+Boosting
+Lasso
+LinearModel
+RandomForest
+Ridge
+SVM
+
+0.540
+0.634
+0.856
+0.372
+1.591
+0.879
+
+0.480
+0.522
+0.830
+0.325
+1.654
+0.457
+
+0.348
+0.001
+0.506
+0.164
+0.753
+0.350
+
+q75
+
+n
+
+mean
+
+c (floor)
+median
+
+n
+
+0.724
+1.142
+0.867
+0.473
+1.654
+0.627
+
+380
+65
+161
+380
+125
+306
+
+0.213
+0.773
+0.139
+0.155
+0.518
+0.245
+
+0.208
+0.999
+0.139
+0.110
+0.462
+0.248
+
+380
+65
+161
+380
+125
+306
+
+The irreducible-error floors c tell the complementary story. Figure 5 plots (b, c) per fit. The two tree
+ensembles sit near the desirable lower-left of the plot (modest b, low c). Boosting in particular has
+a median floor of c̃ = 0.208 on classification (i.e., AUROC ≈ 0.79) at full data—non-trivial but
+useful. Random Forest’s median c = 0.110 is lower still. Linear/Logistic regression has a small floor
+(c̃ = 0.139) but only because its larger b pulls error down; on several classification cells it never
+overtakes Boosting in absolute error. Lasso’s floor is essentially 1, reflecting the shrink-to-mean
+failure mode discussed above. The takeaway is that for practical decisions, b alone is misleading;
+what matters is the joint (b, c).
+4.3
+
+Approximate Shared Exponents Across Datasets
+
+The per-dataset exponents of subsection 4.2 cluster strongly by model family. We test this directly:
+for each family we fit a single shared exponent bmodel across all of its datasets while leaving the
+per-dataset level parameters (ad , cd ) free (subsection 3.5). Table 4 reports the comparison. Two facts
+must be read together. First, ∆AIC ∈ [+65, +908] strongly favors the unconstrained per-dataset
+fit on every family: the extra D−1 free exponents capture residual structure that a single shared
+exponent cannot. Second, despite this, the pooled R2 gap is at most 0.011 for 5 of 6 families. We
+therefore read the result as approximate predictive compressibility rather than evidence for true
+equality of dataset-level exponents: a shared exponent loses very little explained variance on the
+pooled point cloud, while statistically real per-dataset heterogeneity in b remains.
+Figure 6 visualises this with a forest plot: the shared-exponent CI is tight for the four robust families
+(Boosting, RandomForest, SVM, LinearModel) and overlaps with most of the per-(dataset, model)
+pooled b’s as well as with the random-effects meta-pooled estimate; Ridge is fragile and Lasso fails
+outright. A complementary data-collapse analysis (rescaled (error − c)/a vs. N in log-log space)
+shows that the collapse is visibly partial—58% of SVM points and 32–46% for the other families lie
+6
+
+Table 4: Shared-exponent vs. unconstrained joint fits per model family. Shared b with 95% CI from
+2
+2
+the joint fit; Rshared
+and Runc
+are the joint-fit coefficients of determination of the shared-exponent
+and unconstrained models on the same pooled point cloud; D datasets, N pooled points. Lasso fails:
+2
+its 95% CI on b crosses zero and Rshared
+= 0.03, consistent with the shrink-to-mean pathology of
+subsection 4.1.
+shared b
+
+95% CI
+
+2
+Rshared
+
+2
+Runc
+
+R2 gap
+
+D
+
+N
+
+Boosting
+RandomForest
+SVM
+LinearModel
+Ridge
+
+0.555
+0.290
+0.709
+0.703
+0.593
+
+[0.532, 0.579]
+[0.275, 0.306]
+[0.661, 0.757]
+[0.666, 0.741]
+[0.384, 0.803]
+
+0.992
+0.995
+0.970
+0.977
+0.961
+
+0.994
+0.996
+0.980
+0.981
+0.963
+
+0.002
+0.001
+0.011
+0.004
+0.002
+
+18
+18
+18
+10
+8
+
+2,660
+2,660
+2,142
+1,246
+1,414
+
+Lasso (fails)
+
+0.518
+
+[-2.19, 3.23]
+
+0.032
+
+0.033
+
+0.000
+
+8
+
+1,414
+
+Model
+
+within ±0.5 dex of the shared-exponent line—consistent with real residual cell-level heterogeneity,
+not perfect shared-exponent behaviour.
+We stress-test this reading three ways (full detail in Appendix A). (i) LODO (leave-one-dataset-out)
+transfer: we refit the shared-b model on D−1 datasets and use it to predict the held-out dataset it
+was never fit on—a direct test of whether the shared exponent transfers to a new dataset rather than
+merely describing the datasets it was trained on. This gives median held-out R2 gaps of 0.007–0.035
+(−d)
+for Boosting, RandomForest, LinearModel, and SVM, with bshared stable across folds (CV 0.04–0.09);
+Ridge blows up (CV 0.96) and Lasso is meaningless. (ii) Bound sensitivity: relaxing b ∈ [0, 5]
+and doubling the c bound leaves all five non-Lasso shared exponents unchanged to within 0.001.
+(iii) Permutation null on the in-sample R2 gap: per-dataset exponent scrambling (B=500) yields
+one-sided p ∈ [0.55, 0.97], so the small in-sample gap is not specific to a true shared exponent—
+the held-out content lives in the LODO transfer and the tight shared-b CIs of Table 4, not the insample gap. The headline 5-of-6 count refines under LODO to: strong held-out support for Boosting,
+RandomForest, LinearModel; moderate for SVM; fragile for Ridge; failure for Lasso (which we treat
+as a negative control).
+4.4
+
+Replicator-Implementation Variance
+
+The protocol fixes random_state=42, so strictly compliant re-implementation should yield byteidentical fits. Of 71 (dataset, model) cells with ≥ 5 replicators, 13 (18%) have std(b) < 10−10 ,
+confirming the design floor. The remaining 58 cells show nonzero spread: unweighted mean
+CV(b) = 0.144, size-weighted 0.131, and 0.164 excluding the byte-identical cells (the upper bound
+on pure implementation noise). With the seed fixed this is not seed/sampling variance: it measures
+replicator-implementation spread induced by the unconstrained parts of the protocol (preprocessing,
+encoding, missing-value handling). SVM dominates (per-family weighted CV 0.25); the other
+families cluster in 0.08–0.20. By regime: 36 cells (51%) at CV(b) < 0.05 (including the 13 byteidentical), 25 (35%) at 0.05–0.30 (legitimate protocol ambiguity), and 10 (14%) at ≥ 0.30 (more
+consistent with implementation bugs; e.g. RandomForest×diabetes_pima = 0.72). Figure 2 shows
+this dispersion grows at small N where preprocessing choices have the largest leverage.
+The practical implication: single-group scaling-law studies should report uncertainty intervals on b
+wide enough to accommodate this 14% floor; comparative claims (“model A has larger b than B”)
+should require at minimum a ∼ 0.15 b gap to be credible against protocol-drift noise. Pooling across
+replicators (Figure 3, dashed) gives tighter fits than any single replicator’s curve and underlies the
+data-requirement table below.
+4.5
+
+Data Requirements and Model Ranking
+
+From the pooled per-cell power-law fit, we invert Equation 1 to get the sample size N ⋆ required to
+reach a target error of 0.15. Table 5 reports N ⋆ for each classification (dataset, model) cell where
+the target is reachable (i.e., where c < 0.15). On easy classification problems—adult_income,
+online_shoppers—tree ensembles get to 1 − AUROC = 0.15 with fewer than 400 training points.
+At the other extreme, telco_churn needs ∼ 16,500 points for Boosting to reach the target.
+7
+
+Bank Marketing
+
+0.05
+0.00 2
+10
+
+10 1
+
+100
+
+train_fraction
+
+0.10
+0.05
+0.00 2
+10
+
+California Housing
+CV of error
+
+CV of error
+
+0.00 2
+10
+
+Boosting
+
+10 1
+
+100
+
+train_fraction
+Lasso
+
+100
+
+train_fraction
+
+0.04
+0.02
+
+10 1
+
+0.3
+
+0.02
+0.01
+0.00 2
+10
+
+Diamonds
+
+0.1
+10 1
+
+100
+
+Bike Sharing
+
+0.2
+0.0 2
+10
+
+10 1
+
+train_fraction
+
+CV of error
+
+0.10
+
+Online Shoppers
+CV of error
+
+Adult Income
+CV of error
+
+CV of error
+
+0.15
+
+100
+
+0.04
+0.02
+0.00 2
+10
+
+10 1
+
+100
+
+train_fraction
+train_fraction
+LinearModel
+RandomForest
+Ridge
+
+SVM
+
+Figure 2: Coefficient of variation of test error across replicators at each train fraction, on representative
+datasets. Variance is largest at small N and shrinks but does not vanish at full data.
+
+We flag N ⋆ values requiring > 10× extrapolation beyond the largest observed N with a dagger (†);
+the extreme case is german_credit×LinearModel (b = 0.038, N ⋆ ≈ 2.8 × 109 ), which should
+read as “unattainable under linear scaling.” Tiny N ⋆ values are flagged “< 30” (degenerate fits with
+a small and c≈0). Cells with c ≥ 0.15 are unreachable without changing the model class. Figure 7
+visualizes the full pattern.
+Table 5: Pooled-fit sample size N ⋆ to reach target error 0.15 on representative classification cells
+where the floor c < 0.15. Full table (including pathological extrapolations and degenerate fits) in
+Table 6.
+Dataset
+
+Model
+
+adult_income
+adult_income
+bank_marketing
+bank_marketing
+online_shoppers
+online_shoppers
+online_shoppers
+telco_churn
+wine_quality
+
+Boosting
+RandomForest
+Boosting
+RandomForest
+Boosting
+RandomForest
+LinearModel
+Boosting
+RandomForest
+
+a
+
+b
+
+c
+
+N⋆
+
+2.669
+1.723
+9.940
+1.246
+1.163
+0.553
+7.618
+0.737
+0.528
+
+0.679
+0.695
+0.820
+0.473
+0.517
+0.416
+0.844
+0.417
+0.194
+
+0.079
+0.099
+0.074
+0.063
+0.062
+0.071
+0.111
+0.137
+0.000
+
+208
+159
+383
+276
+148
+109
+518
+16,539
+666
+
+Finally, Figure 8 ranks the six families at full data: Boosting wins 50% of datasets (avg. rank 1.78),
+RandomForest 33% (2.11), LinearModel and SVM mid-pack, Ridge and Lasso 0% (3.75, 5.00). The
+“boosted trees rule tabular” result reproduces cleanly. With only 17–30 replicators per cell and small
+test sets on the smallest datasets, win-rates should be read as effect-size summaries, not significance
+tests.
+
+5
+
+Discussion
+
+For practitioners. Default-tuned tree ensembles dominate at full data, reproducing Grinsztajn et al.
+[2022] on a broader list and adding that they also have the most favorable (b, c) profile. The datarequirement table gives concrete estimates: ∼200–500 rows suffice to push 1 − AUROC < 0.15 on
+adult_income, bank_marketing, and online_shoppers [Dua and Graff, 2019] with a booster,
+while telco_churn needs an order of magnitude more. Several cells have c above the practical
+target—more data cannot help, and the right move is a better feature set, loss, or model class.
+8
+
+Adult Income
+
+Bank Marketing
+0.20
+
+0.20
+
+error
+
+error
+
+0.25
+0.15
+
+0.10
+
+0.10
+102
+
+104
+
+103
+
+102
+
+n_train_samples
+
+Online Shoppers
+0.20
+
+error
+
+error
+
+0.25
+0.15
+0.10
+102
+
+Telco Churn
+
+104
+
+103
+
+n_train_samples
+
+104
+
+103
+
+n_train_samples
+
+0.275
+0.250
+0.225
+0.200
+0.175
+102
+
+California Housing
+
+1.0
+
+103
+
+n_train_samples
+
+Diamonds
+
+1.0
+0.8
+
+0.8
+
+error
+
+error
+
+0.15
+
+0.6
+
+0.6
+0.4
+0.2
+
+102
+
+103
+
+n_train_samples
+
+104
+
+102
+
+Bike Sharing
+
+1.0
+
+error
+
+error
+
+0.9
+
+0.6
+0.4
+
+Boosting
+
+104
+
+Abalone
+
+1.0
+
+0.8
+
+0.2
+
+103
+
+n_train_samples
+
+0.8
+0.7
+
+102
+
+103
+
+104
+
+102
+
+LinearModel
+
+RandomForest
+
+n_train_samples
+Lasso
+
+103
+
+n_train_samples
+
+Ridge
+
+SVM
+
+Figure 3: Pooled scaling curves on 4 representative classification (top row) and 4 representative
+regression (bottom row) datasets. Thin lines: per-replicator curves; thick line: across-replicator mean;
+dashed line: pooled power-law fit. Per-replicator dispersion at small N is visible; pooled fits are
+visibly tighter than any single replicator’s curve.
+
+For theory. Kaplan et al. [2020] report b ≈ 0.095 for transformer loss and Hestness et al. [2017] b ≈
+0.07–0.35 across modalities. Our classical exponents (median 0.495; 0.32–0.48 for tree ensembles;
+0.83 for LinearModel on classification) are if anything larger than the small-NN exponents—each
+row buys more error reduction in classical tabular models than each token in a frontier transformer.
+What distinguishes the classical regime is the irreducible-error floor: tree ensembles routinely have
+c ≈ 0.10–0.21 on classification, orders of magnitude larger than overparameterised LMs. In tabular
+ML the floor, not the exponent, is the binding constraint.
+9
+
+Methodology. Treating a graduate cohort of 127 as a population of independent replicators gives a
+near-free estimate of the protocol-drift floor on a scaling-law claim; the CV(b) = 0.144 figure is a
+concrete prior for single-group studies. Pooling across replicators (Figure 3) also yields tighter fits
+than any individual curve at no extra compute cost.
+
+6
+
+Limitations
+
+The scope conditions below are deliberate design choices, not oversights. Each keeps a distributed,
+127-replicator study tractable and its shared-exponent and reproducibility comparisons clean; we
+state them as the conditions under which our claims hold, not as afterthoughts.
+(i) Fixed hyperparameters (no per-N tuning), so our b values are lower bounds for what proper
+model selection could achieve; Lasso/Ridge are most fragile under this constraint. We fix them
+deliberately: a single shared configuration is what makes 127 independent re-implementations directly
+comparable and isolates the data-size effect from tuning noise. (ii) Dataset coverage: 18 small-tomedium clean datasets (largest 53,940 rows); we say nothing about million-row settings. (iii) SVM
+cap: classification SVMs truncated to 10,000-row subsample, slightly suppressing large-N behavior.
+(iv) Single split seed: with random_state=42 the CV(b) = 0.144 is replicator-implementation
+spread, not seed variance; a multi-seed study would report a larger total CV. (v) Imperfect replicators
+and partial blocking: each replicator saw only 3/18 datasets, so per-cell CV is computed over
+different sub-cohorts; cells with CV(b) ≥ 0.30 (10/71) are more consistent with implementation
+bugs than legitimate ambiguity and we treat them as part of the phenomenon being measured.
+(vi) Shared-exponent stress tests are descriptive: supported in-sample (small gaps) and held-out
+(LODO for four families) but in-sample gap lacks specificity under permutation null and Ridge
+is fragile across folds (Appendix A). (vii) Agreement is not correctness: our shared-exponent
+evidence rests on independent per-replicator fits agreeing (low cross-replicator CV(b)), but agreement
+among independent estimators is necessary, not sufficient—shared implementation conventions can
+manufacture consensus—so low cross-replicator variance corroborates rather than proves a universal
+exponent [Ding, 2026].
+
+7
+
+Conclusion
+
+A 127-replicator benchmark study (18 datasets, 6 families) shows aN −b + c fits 77.7% of cells at
+R2 >0.8; a family-level exponent compresses cross-dataset curves for 5/6 families (Lasso fails); tree
+ensembles dominate at full data; fixed-seed CV(b) ≈ 0.14.
+
+Acknowledgments and Disclosure of Funding
+I thank the graduate-course cohort whose submitted model-output runs constitute the dataset analyzed
+here. All analysis, framing, and conclusions are the author’s own.
+The author acknowledges the National Artificial Intelligence Research Resource (NAIRR) Pilot and
+the Jetstream2 cloud resource at Indiana University for contributing to this research result. This work
+used Jetstream2 through NAIRR Pilot allocation NAIRR250223; Jetstream2 is supported by the U.S.
+National Science Foundation under award NSF-OAC 2005506. The author also thanks the Wharton
+AI & Analytics Initiative at the University of Pennsylvania for financially supporting this project
+through its AI Education Innovation Fund.
+
+References
+Xavier Bouthillier, César Laurent, and Pascal Vincent. Unreproducible research is reproducible.
+International Conference on Machine Learning, 2019.
+Leo Breiman. Random forests. Machine Learning, 45(1):5–32, 2001.
+Tianqi Chen and Carlos Guestrin. XGBoost: A scalable tree boosting system. Proceedings of the
+22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, pages
+785–794, 2016.
+10
+
+Kaihua Ding. Variance-bounded evaluation of entity-centric AI systems without ground truth: Theory
+and measurement. arXiv preprint arXiv:2509.22751, 2025.
+Kaihua Ding. When LLMs agree, are they right? auditing self-consistency and cross-model agreement
+as confidence signals. arXiv preprint arXiv:2607.08065, 2026.
+Kaihua Ding, Krzysztof J. Fidkowski, and Philip L. Roe. Continuous adjoint based error estimation
+and r-refinement for the active-flux method. In 54th AIAA Aerospace Sciences Meeting, 2016.
+Kaihua Ding, Jingsong Cui, Mohammad Soltani, and Jing Jin. Iterative causal segmentation: Filling
+the gap between market segmentation and marketing strategy. arXiv preprint arXiv:2405.14743,
+2024.
+Tobias Domhan, Jost Tobias Springenberg, and Frank Hutter. Speeding up automatic hyperparameter
+optimization of deep neural networks by extrapolation of learning curves. In International Joint
+Conference on Artificial Intelligence (IJCAI), 2015.
+Dheeru Dua and Casey Graff. UCI machine learning repository. http://archive.ics.uci.edu/
+ml, 2019. University of California, Irvine, School of Information and Computer Sciences.
+Rosa L. Figueroa, Qing Zeng-Treitler, Sasikiran Kandula, and Long H. Ngo. Predicting sample size
+required for classification performance. BMC Medical Informatics and Decision Making, 12:8,
+2012.
+Léo Grinsztajn, Edouard Oyallon, and Gaël Varoquaux. Why do tree-based models still outperform
+deep learning on typical tabular data? In Advances in Neural Information Processing Systems
+Datasets and Benchmarks Track, 2022.
+Joel Hestness, Sharan Narang, Newsha Ardalani, Gregory Diamos, Heewoo Jun, Hassan Kianinejad,
+Md. Mostofa Ali Patwary, Yang Yang, and Yanqi Zhou. Deep learning scaling is predictable,
+empirically. arXiv preprint arXiv:1712.00409, 2017.
+Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza
+Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, et al.
+Training compute-optimal large language models. arXiv preprint arXiv:2203.15556, 2022.
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, Benjamin Chess, Rewon Child,
+Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language models.
+arXiv preprint arXiv:2001.08361, 2020.
+Sayan Mukherjee, Pablo Tamayo, Simon Rogers, Ryan Rifkin, Anna Engle, Colin Campbell, Todd R.
+Golub, and Jill P. Mesirov. Estimating dataset size requirements for classifying DNA microarray
+data. Journal of Computational Biology, 10(2):119–142, 2003.
+Claudia Perlich, Foster Provost, and Jeffrey S. Simonoff. Tree induction vs. logistic regression: A
+learning-curve analysis. Journal of Machine Learning Research, 4:211–255, 2003.
+Joelle Pineau, Philippe Vincent-Lamarre, Koustuv Sinha, Vincent Larivière, Alina Beygelzimer,
+Florence d’Alché Buc, Emily Fox, and Hugo Larochelle. Improving reproducibility in machine
+learning research (a report from the neurips 2019 reproducibility program). Journal of Machine
+Learning Research, 22(164):1–20, 2021.
+Jonathan S. Rosenfeld, Amir Rosenfeld, Yonatan Belinkov, and Nir Shavit. A constructive prediction
+of the generalization error across scales. In International Conference on Learning Representations,
+2020.
+Ravid Shwartz-Ziv and Amitai Armon. Tabular data: Deep learning is not all you need. Information
+Fusion, 81:84–90, 2022.
+Hadley Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York, 2016.
+
+A
+
+Stress Tests on the Shared-Exponent Claim
+
+This appendix expands the three stress tests summarised in subsection 4.3.
+11
+
+Caveats on reading the in-sample R2 gap. Several caveats sharpen the in-sample reading of
+Table 4. First, the joint model retains 2D free per-dataset (ad , cd ) parameters (36 nuisance parameters
+for the 18-dataset families), so a small pooled R2 gap is necessary but not sufficient evidence for
+exponent equality; we do not interpret it as such. Second, the R2 gap is itself a weak goodness-of-fit
+summary for nonlinear least squares with free dataset offsets; we report it because it is directly
+interpretable (an R2 gap of 0.011 corresponds to roughly 1% of explained-variance loss), not as
+a hypothesis test. Third, Ridge’s CI is wide ([0.38, 0.80]) because two of its eight cells hit the
+upper-bound b=3 in their per-cell fits; we include Ridge in the 5/6 count for completeness but treat
+2
+its shared-exponent estimate as fragile. Fourth, Lasso fails outright (CI crosses zero, Rshared
+= 0.03):
+we treat it as a negative control demonstrating that a small gap alone is insufficient evidence for
+shared-exponent structure.
+Held-out evidence: leave-one-dataset-out (LODO) shared-b prediction. To probe whether the
+small in-sample R2 gap reflects a genuinely transferable exponent or merely an in-sample compression
+artefact of the 2D free (ad , cd ) offsets, we re-fit the shared-b joint model on each family’s D−1
+(−d)
+remaining datasets, freeze bshared , and on the held-out dataset d fit only (ad , cd ); we then compare
+against the unconstrained 3-parameter fit on the same held-out points (lodo_shared_b.parquet; rerun via analysis/scripts/lodo_shared_b.py). Median held-out R2 gaps are 0.007 (Boosting),
+0.010 (RandomForest), 0.035 (SVM), 0.012 (LinearModel), 0.088 (Ridge), 0.0002 (Lasso), with a
+fraction of folds within a 0.05 gap of 83.3%, 83.3%, 61.1%, 80.0%, 12.5%, and 75.0% respectively.
+(−d)
+The held-out bshared values are stable for the four well-behaved families (CV across folds 0.036–0.085)
+and unstable for Ridge (CV = 0.96, with one fold landing at b=2.94 when insurance_charges
+is held out). Across Boosting, RandomForest, and LinearModel the held-out gap is within roughly
+an order of magnitude of the in-sample gap and 80%+ of folds transfer cleanly, supporting the
+predictive-compressibility reading. SVM’s held-out gap is ∼ 3× its in-sample value (honest mild
+inflation), Ridge’s LODO gap blows up by ∼ 40× confirming fragility, and Lasso is meaningless
+under either evaluation.
+Bound sensitivity. Refitting the joint model with relaxed bounds (b ∈ [0, 5], c doubled) leaves all
+five non-Lasso shared exponents unchanged to within 0.001 and Ridge’s LODO CV(bloo ) = 0.96
+unchanged to three decimal places. Lasso’s b drifts to whichever ceiling is imposed (R2 ≈ 0.03
+either way), confirming its failure is intrinsic.
+Permutation null on the in-sample R2 gap. Because the joint shared-b model retains 2D free perdataset (ad , cd ) offsets, a small in-sample R2 gap could be a flexibility artefact of the 36-parameter
+offset bath rather than evidence of a real common exponent. We test this with a per-dataset exponentscrambling permutation (analysis/scripts/permutation_null_shared_b.py, B=500,
+seed=42): each iteration permutes b̂d across datasets within a family while holding (âd , ĉd ) fixed,
+−bπ(d)
+simulates errornull
++ ĉd + ϵd,i with Gaussian ϵ at the per-cell empirical residual std, and
+d,i = âd N
+refits the shared-b joint model plus its per-cell unconstrained reference on the null panel. The observed
+in-sample gaps are not unusually small under this null: empirical one-sided p-values (Variant B,
+2
+2
+Pr(∆Rnull
+≤ ∆Robs
+)) are 0.59 (Boosting), 0.97 (RandomForest), 0.85 (SVM), 0.55 (LinearModel),
+0.77 (Ridge), and 0.94 (Lasso), with null-gap medians 0.0012, 0.0005, 0.0021, 0.0022, 0.0001, and
+0.0000. A cheaper Variant A that shuffles dataset labels among normalised (error − ĉd )/âd curves
+gives p ∈ [0.54, 0.91]. We therefore use the in-sample gap only as a compression metric, not as
+evidence for true dataset-independent exponents. Per-family null distributions are stored under
+permutation_null_shared_b in results_summary.json.
+
+B
+
+Full Data-Requirement Table
+
+C
+
+Additional Figures
+
+This appendix collects supporting figures referenced from the main text.
+
+12
+
+Table 6: Full pooled-fit sample size N ⋆ to reach target error 0.15 on classification cells where the
+floor c < 0.15. † marks N ⋆ requiring extrapolation more than 10× beyond the largest observed N
+for that dataset; these values are statistically unreliable and shown for completeness only. “< 30”
+marks cells whose fit predicts the target is already met below the smallest training-fraction bin we
+actually evaluated, indicating a degenerate fit (small a, c≈0) rather than a genuine claim that fewer
+than 30 rows suffice.
+Dataset
+
+Model
+
+adult_income
+adult_income
+adult_income
+adult_income
+bank_marketing
+bank_marketing
+bank_marketing
+bank_marketing
+diabetes_pima
+diabetes_pima
+diabetes_pima
+employee_attrition
+employee_attrition
+german_credit
+german_credit
+heart_disease
+heart_disease
+heart_disease
+heart_disease
+online_shoppers
+online_shoppers
+online_shoppers
+online_shoppers
+telco_churn
+wine_quality
+wine_quality
+
+Boosting
+LinearModel
+RandomForest
+SVM
+Boosting
+LinearModel
+RandomForest
+SVM
+Boosting
+RandomForest
+SVM
+LinearModel
+SVM
+LinearModel
+RandomForest
+Boosting
+LinearModel
+RandomForest
+SVM
+Boosting
+LinearModel
+RandomForest
+SVM
+Boosting
+Boosting
+RandomForest
+
+a
+
+b
+
+c
+
+N⋆
+
+2.669
+1.504
+1.723
+0.708
+9.940
+43.044
+1.246
+0.463
+0.692
+0.472
+0.707
+3.392
+2.099
+0.343
+0.396
+17.120
+0.735
+0.126
+0.379
+1.163
+7.618
+0.553
+0.320
+0.737
+0.629
+0.528
+
+0.679
+0.556
+0.695
+0.438
+0.820
+1.051
+0.473
+0.274
+0.213
+0.147
+0.195
+0.647
+0.404
+0.038
+0.229
+1.409
+0.454
+0.161
+0.504
+0.517
+0.844
+0.416
+0.251
+0.417
+0.277
+0.194
+
+0.079
+0.091
+0.099
+0.102
+0.074
+0.095
+0.063
+0.067
+0.000
+0.000
+0.000
+0.139
+0.043
+0.000
+0.131
+0.039
+0.000
+0.000
+0.028
+0.062
+0.111
+0.071
+0.099
+0.137
+0.079
+0.000
+
+208
+338
+159
+474
+383
+564
+276
+515
+1,315
+2,425
+2,831
+7,364
+1,589
+2.8×109 †
+556,439 †
+36
+33
+< 30
+< 30
+148
+518
+109
+1,504
+16,539
+2,670
+666
+
+NeurIPS Paper Checklist
+1. Claims
+Question: Do the main claims made in the abstract and introduction accurately reflect the
+paper’s contributions and scope?
+Answer: [Yes]
+Justification: The abstract and introduction enumerate three concrete findings (power-law
+fits, approximate shared exponents, replicator-implementation variance) that map directly to
+subsection 4.1, subsection 4.3, and subsection 4.4.
+2. Limitations
+Question: Does the paper discuss the limitations of the work performed by the authors?
+Answer: [Yes]
+Justification: section 6 enumerates six limitations (fixed hyperparameters, dataset coverage,
+SVM cap, single split seed, imperfect replicators / partial blocking, descriptive nature of
+shared-exponent stress tests).
+3. Theory Assumptions and Proofs
+Question: For each theoretical result, does the paper provide the full set of assumptions and
+a complete (and correct) proof?
+Answer: [N/A]
+Justification: The paper is empirical; no theoretical results are claimed.
+4. Experimental Result Reproducibility
+13
+
+0.98
+
+0.90
+
+0.99
+
+1.00
+
+1.00
+
+0.97
+
+0.99
+
+0.98
+1.00
+
+0.95
+
+0.69
+
+0.96
+
+0.01
+
+1.00
+
+0.72
+
+-0.00
+
+0.75
+
+0.74
+
+0.92
+
+1.00
+
+1.00
+
+1.00
+
+0.99
+
+0.98
+
+0.99
+
+1.00
+
+1.00
+
+1.00
+
+1.00
+
+0.70
+
+0.99
+
+0.46
+
+0.99
+
+0.97
+
+0.43
+
+0.98
+
+0.33
+
+0.98
+
+1.00
+0.85
+1.00
+
+0.90
+
+0.99
+
+0.97
+
+0.96
+
+0.06
+
+1.00
+0.97
+
+0.76
+
+0.40
+
+0.89
+
+0.90
+
+0.99
+
+0.92
+
+0.77
+
+0.98
+0.95
+
+0.4
+
+1.00
+
+0.95
+
+0.95
+
+0.6
+
+0.96
+1.00
+
+0.95
+0.63
+
+0.8
+
+0.97
+
+0.97
+
+0.96
+
+1.0
+
+Mean R²
+
+Abalone
+Adult Income
+Ames Housing
+Auto MPG
+Bank Marketing
+Bike Sharing
+California Housing
+Concrete Strength
+Credit Card Default
+Diabetes (Pima)
+Diamonds
+Employee Attrition
+German Credit
+Heart Disease
+Insurance Charges
+Online Shoppers
+Telco Churn
+Wine Quality
+
+0.2
+
+0.98
+
+1.00
+
+0.99
+
+1.00
+
+0.94
+
+0.99
+
+1.00
+
+0.97
+
+0.90
+
+1.00
+
+0.96
+
+0.96
+
+1.00
+
+0.0
+
+ng Lasso odel orest Ridge SVM
+arM mF
+Line Rando
+
+sti
+Boo
+
+Figure 4: Mean per-replicator R2 of power-law fits per (dataset, model) cell. Most cells exceed 0.9;
+diagnostic dark cells (Lasso, Ridge, and a notable Lasso/Ridge column on california_housing)
+flag cases where the power-law assumption is misleading. Companion to Table 2.
+
+Classification
+
+0.3
+0.2
+0.1
+0.0
+
+0
+
+Boosting
+
+1
+
+2
+
+b (scaling exponent)
+Lasso
+
+Regression
+
+1.0
+
+c (irreducible error)
+
+c (irreducible error)
+
+0.4
+
+0.8
+0.6
+0.4
+0.2
+0.0
+
+3
+
+LinearModel
+
+0
+
+1
+
+2
+
+b (scaling exponent)
+
+RandomForest
+
+Ridge
+
+3
+SVM
+
+Figure 5: Per-(replicator, dataset, model) scatter of (b, c), faceted by task. Tree ensembles occupy the
+favorable low-c, moderate-b region; Lasso clusters at c ≈ 1 on classification.
+
+Question: Does the paper fully disclose all the information needed to reproduce the main experimental results of the paper to the extent that it affects the main claims and/or conclusions
+of the paper (regardless of whether the code and data are provided or not)?
+Answer: [Yes]
+Justification: section 3 specifies the protocol (datasets, model families, training fractions,
+fixed seed, fitting bounds), and we will release aggregated (N, error) CSVs, per-cell pooled
+fits, and analysis scripts upon acceptance.
+5. Open access to data and code
+14
+
+Boosting
+RandomForest
+SVM
+LinearModel
+Ridge
+Lasso
+
+Universal b
+Meta-pooled b
+
+0.0
+
+0.5
+
+1.0
+
+1.5
+
+2.0
+
+scaling exponent b
+
+2.5
+
+3.0
+
+Figure 6: Forest plot of scaling exponents per model family. Square: the shared b from the sharedexponent joint fit (Table 4) with 95% CI. Circles: per-(dataset, model) pooled b’s. Diamond: the
+DerSimonian–Laird random-effects meta-pooled b across cells. Note the four tight shared-b intervals
+for the robust families (Boosting, RandomForest, SVM, LinearModel), Ridge’s wider/fragile CI, and
+Lasso’s CI that crosses zero.
+
+208
+
+338
+
+159
+
+474
+
+Bank Marketing
+
+383
+
+564
+
+276
+
+515
+
+Credit Card Default
+1315
+
+Employee Attrition
+
+2425
+7364
+
+German Credit
+
+2831
+1589
+
+4
+
+2.8e+095.6e+05
+
+Heart Disease
+
+36
+
+33
+
+0
+
+10
+
+Online Shoppers
+
+148
+
+518
+
+109
+
+1504
+
+2670
+
+2
+0
+
+Telco Churn 16539
+Wine Quality
+
+6
+
+log10 N*
+
+Diabetes (Pima)
+
+8
+
+666
+
+l
+t
+o
+e
+g
+stin Lass arModemFores Ridg SVM
+Boo
+e
+o
+Lin Rand
+
+4
+1
+1
+3
+2
+2
+2
+1
+1
+1
+3
+3
+1
+2
+1
+1
+1
+2
+
+5
+2
+5
+5
+3
+5
+5
+5
+4
+2
+5
+2
+3
+1
+5
+3
+2
+4
+
+3
+3
+2
+1
+1
+1
+1
+2
+2
+3
+1
+4
+2
+4
+2
+2
+3
+1
+
+2
+4
+4
+4
+4
+4
+
+4
+
+4
+
+1
+4
+3
+2
+4
+3
+3
+3
+3
+4
+2
+1
+4
+3
+3
+4
+4
+3
+
+6
+5
+4
+
+Rank
+
+Adult Income
+
+Abalone
+Adult Income
+Ames Housing
+Auto MPG
+Bank Marketing
+Bike Sharing
+California Housing
+Concrete Strength
+Credit Card Default
+Diabetes (Pima)
+Diamonds
+Employee Attrition
+German Credit
+Heart Disease
+Insurance Charges
+Online Shoppers
+Telco Churn
+Wine Quality
+
+3
+2
+1
+
+l
+t
+o
+e
+g
+stin Lass arModemFores Ridg SVM
+Boo
+e
+o
+Lin Rand
+
+Figure 7: log10 N ⋆ to reach error 0.15 on each
+(classification dataset, model) cell. Empty cells
+indicate c ≥ 0.15 (unreachable). Companion to
+Table 5.
+
+Figure 8: Per-dataset model rank at training
+fraction 1.0 (1 = best). Boosting wins 50% of
+datasets; tree ensembles together win 83%.
+
+Question: Does the paper provide open access to the data and code, with sufficient instructions to faithfully reproduce the main experimental results, as described in supplemental
+material?
+Answer: [Yes]
+Justification: Aggregated curves, per-cell fits, the data-requirement table, and analysis scripts
+will be released at an anonymous mirror during review (subsection 3.5); all 18 datasets used
+are public.
+6. Experimental Setting/Details
+15
+
+Question: Does the paper specify all the training and test details (e.g., data splits, hyperparameters, how they were chosen, type of optimizer, etc.) necessary to understand the
+results?
+Answer: [Yes]
+Justification: subsection 3.2 specifies the 80/20 split with seed 42, the seven nested training
+fractions, default-style hyperparameters held fixed across N , and the SVM cap; subsection 3.3 specifies the power-law fit bounds and R2 thresholds.
+7. Experiment Statistical Significance
+Question: Does the paper report error bars suitably and correctly defined or other appropriate
+information about the statistical significance of the experiments?
+Answer: [Yes]
+Justification: Table 4 reports 95% CIs on shared exponents from joint nonlinear least-squares;
+subsection 4.4 reports CV(b) across replicators with weighted and unweighted variants;
+Appendix A reports LODO held-out gaps and a permutation null with 500 replicates.
+8. Experiments Compute Resources
+Question: For each experiment, does the paper provide sufficient information on the computer resources (type of compute workers, memory, time of execution) needed to reproduce
+the experiments?
+Answer: [No]
+Justification: All training runs use scikit-learn with default-style hyperparameters on
+commodity hardware; per-run cost is small (seconds to minutes) and the experiments were
+distributed across the 127 replicators’ personal laptops, so we did not aggregate compute
+hours. Aggregated analysis scripts run in minutes on a single laptop.
+9. Code Of Ethics
+Question: Does the research conducted in the paper conform, in every respect, with the
+NeurIPS Code of Ethics?
+Answer: [Yes]
+Justification: The work uses only public benchmark datasets, fits descriptive statistical
+models, and does not deploy systems or release models that could enable misuse.
+10. Broader Impacts
+Question: Does the paper discuss both potential positive societal impacts and negative
+societal impacts of the work performed?
+Answer: [N/A]
+Justification: The paper is foundational empirical methodology (scaling-law fits and
+replicator-variance estimates for tabular ML); it does not introduce new applications or
+models with foreseeable societal impacts beyond standard ML benchmarking practice.
+11. Safeguards
+Question: Does the paper describe safeguards that have been put in place for responsible
+release of data or models that have a high risk for misuse (e.g., pretrained language models,
+image generators, or scraped datasets)?
+Answer: [N/A]
+Justification: The released artifacts are aggregated learning curves and pooled power-law
+fits on public tabular datasets; they pose no misuse risk.
+12. Licenses for existing assets
+Question: Are the creators or original owners of assets (e.g., code, data, models), used in
+the paper, properly credited and are the license and terms of use explicitly mentioned and
+properly respected?
+Answer: [Yes]
+Justification: All 18 datasets are public and cited (Table 1); model implementations come
+from scikit-learn (BSD-3-Clause). Our released analysis code uses a permissive opensource license.
+16
+
+13. New Assets
+Question: Are new assets introduced in the paper well documented and is the documentation
+provided alongside the assets?
+Answer: [Yes]
+Justification: The aggregated learning-curve CSVs, per-cell pooled fits, data-requirement
+table, and analysis scripts are released with documentation describing column schemas,
+fitting procedures, and reproduction commands.
+14. Crowdsourcing and Research with Human Subjects
+Question: For crowdsourcing experiments and research with human subjects, does the paper
+include the full text of instructions given to participants and screenshots, if applicable, as
+well as details about compensation (if any)?
+Answer: [N/A]
+Justification: This was not crowdsourcing or human-subjects research. The 127 replicators
+were members of a graduate ML cohort and submitted course assignments; the paper
+analyses the resulting model-fit artifacts, not the individuals themselves. The protocol
+skeleton (the code template every cohort member received) is included in the release.
+15. Institutional Review Board (IRB) Approvals or Equivalent for Research with Human
+Subjects
+Question: Does the paper describe potential risks incurred by study participants, whether
+such risks were disclosed to the subjects, and whether Institutional Review Board (IRB)
+approvals (or an equivalent approval/review based on the requirements of your country or
+institution) were obtained?
+Answer: [N/A]
+Justification: As noted above, this is not human-subjects research; only de-identified modelfit outputs from a course assignment are analysed and only in aggregate.
+16. Declaration of LLM usage
+Question: Does the paper describe the usage of LLMs if it is an important, original, or
+non-standard component of the core methods in this research?
+Answer: [N/A]
+Justification: LLMs were not used as any component of the core methodology. The core
+methods (power-law fitting, joint shared-exponent estimation, LODO transfer, permutation
+null) are all classical numerical methods implemented in scipy / scikit-learn. Any
+LLM use was limited to writing, editing, and formatting and is not part of the research
+method.
+
+17
+
+

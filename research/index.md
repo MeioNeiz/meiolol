@@ -9,12 +9,12 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 3 | 73 | 299 |
-| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 2 | 110 | 458 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 60 | 188 |
-| [stats](areas/stats.md) | estimation and recommendation methods | 1 | 30 | 105 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 4 | 70 | 268 |
-| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 4 | 66 | 238 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 4 | 97 | 390 |
+| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 2 | 112 | 460 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 82 | 233 |
+| [stats](areas/stats.md) | estimation and recommendation methods | 4 | 106 | 703 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 4 | 74 | 272 |
+| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 4 | 74 | 259 |
 
 ## Questions
 
@@ -22,6 +22,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
+| answered | soon | [What do League of Legends players search for most, and which of those searches could meiolol answer better than existing sites?](questions/search-demand.md): What do League of Legends players search for most, and which of those searches could meiolol answer better than existing sites? | 9 strong, 5 moderate, 3 weak | 24 | 14 (growing) | 1 |
 | decided | soon | [What League of Legends third-party tools exist, what do they do with match data, and where are the gaps?](questions/league-tools-landscape.md): What League of Legends third-party tools exist, what do they do with match data, and where are the gaps? | 8 strong, 6 moderate, 2 weak | 27 | 28 (saturated) | 12 |
 | decided | soon | [What do ranked and casual League players want from third-party tools that they don't get today?](questions/player-tool-needs.md): What do ranked and casual League players want from third-party tools that they don't get today? | 7 strong, 4 moderate, 2 contested | 13 | 33 (growing) | 8 |
 | decided | soon | [What kinds of third-party League tools does Riot encourage, feature or partner with, and what is it moving against?](questions/riot-appreciated-tools.md): What kinds of third-party League tools does Riot encourage, feature or partner with, and what is it moving against? | 9 strong, 2 moderate | 18 | 13 (growing) | 4 |
@@ -45,7 +46,10 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
-| decided | now | [How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin?](questions/curve-statistics-method.md): How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin? | 9 strong, 2 moderate | 14 | 21 (growing) | 3 |
+| answered | now | [How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games?](questions/draft-predictor-methods.md): How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games? | 11 strong, 4 moderate, 4 weak, 2 contested | 45 | 48 (growing) | 19 |
+| answered | soon | [How should an LLM agent run meiolol's modelling experiments, and which tools should it get?](questions/llm-experiment-agent.md): How should an LLM agent run meiolol's modelling experiments, and which tools should it get? | 14 strong, 6 moderate, 1 contested | 20 | 11 (growing) | 9 |
+| answered | soon | [How should an experiment agent choose what to try next, instead of brute-forcing many runs?](questions/smart-experiment-search.md): How should an experiment agent choose what to try next, instead of brute-forcing many runs? | 7 strong, 5 moderate | 11 | 7 (growing) | 7 |
+| decided | now | [How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin?](questions/curve-statistics-method.md): How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin? | 9 strong, 2 moderate | 14 | 21 (growing) | 2 |
 
 ### ui
 
@@ -67,6 +71,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 17 questions, 237 sources, 1360 findings
-- Open leads: 45 (`josearch leads`)
+- 21 questions, 329 sources, 2076 findings
+- Open leads: 80 (`josearch leads`)
 - Lint: 0 errors, 1 warnings (`josearch lint`)

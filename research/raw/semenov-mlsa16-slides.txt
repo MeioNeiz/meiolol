@@ -1,0 +1,139 @@
+Applications of Machine Learning in DOTA2:
+Literature Review and Practical Knowledge
+Sharing
+Daniil Yashkov, Peter Romov, Kirill Neklyudov,
+Aleksander Semenov and Daniil Kireev
+
+ML for E-Sport
+• Huge amount of data, collected
+automatically every day
+• Data is clean
+• It is a rapidly growing industry
+• Over $150 million market
+
+Multiplayer Online Battle Arena (MOBA): Dota 2
+• 2 teams, each one formed of 5 players
+• 1st stage – draft stage :
+players from every team choose their heroes
+• 2nd stage – each team is aimed at destroying “Ancient” building of the
+enemy
+• During the game each player improve their heroes, gaining gold,
+experience, killing enemies, buying items, etc.
+All this data is logging and collecting.
+
+Multiplayer Online Battle Arena (MOBA): Dota 2
+
+Data analysis in Dota 2
+• Win prediction :
+o at the start of the game
+o after draft stage
+o real-time
+
+• Actions/strategies reccomendations for players
+• Player ranking
+• Smart camera for commentators
+• …
+
+Draft stage win prediction
+• Input data
+
+• Match = 5 heroes for each team out of 113
+• Target: win or lose? Whose pick is better?
+
+Big variety of matches
+What is different in matches:
+1. Players and their strategies
+2. Picked heroes.
+
+Total amount of combinations
+Matches played since 2013
+
+Each player choose one hero
+
+113 heroes pool
+
+Algorithms
+• Features – 113 “hero” features for each team.
+𝑓" = 1, if 𝑖&' hero is picked by this team
+• Algortihms:
+• Xgboost
+• Factorization machines
+• Logistic regression
+
+2nd order factorization model
+
+Results
+
+• Set of picked heroes explains at least
+• 6% of information(Shannon) for very high skill players
+• 10% of information for normal skill
+
+YASP dataset
+• Timeseries of heroes features (points every 30s) such as:
+• Gold
+• Experience
+• Items (purchasing)
+• Abilities
+
+• heroes trajectories (coordinates on map)
+• Special buildings(such as tower) states (destroyed or not)
+
+Task:
+
+• Predict winner using first 5
+minutes of match
+
+Data:
+
+≈120 000 preprocessed matches
+
+• Final task for ML course as Kaggle In-class сompetition
+• One of the most popular kaggle in-class contest:
+650 solo competitors (teams were not allowed)
+• A lot of different ideas, special features
+• Very good feedback
+
+Winner’s solution
+1. Use Logistic Regression instead of
+more complex models (e.g. Random
+Forest, GBDT)
+2. Find good informative features
+• Statistics for each team
+• One-hot encoded picked heroes
+in the teams
+• First time team used some items
+(bottle, courier, ward)
+• Often combinations of heroes in
+the team: pairs and triples (need
+to be accurately selected, easy
+to overfit)
+• Aggregated hero characteristics
+
+Realtime win prediction
+
+https://github.com/romovpa/dotascience-hackathon
+
+Hackathon:
+
+• Realtime leaderboard during
+Shanghai Major
+• 35 teams competed
+• Usage of external data
+
+External data:
+
+• odds parsed from websites
+• Additional data from steam
+API
+• Parsed replays
+
+Summary
+• Large dataset of Dota2 matches
+• Game outcome prediction using drafts stage
+auc = 0.66 – 0.7 (depending on skill)
+• Kaggle In-class contest: win prediciton having first 5 minutes
+auc = 0.8
+• Dota Science hackathon – realtime win prediction
+baseline quality practically doubled
+
+

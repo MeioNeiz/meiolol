@@ -1,0 +1,2325 @@
+Revisiting Deep Learning Models for Tabular Data
+
+arXiv:2106.11959v5 [cs.LG] 26 Oct 2023
+
+Yury Gorishniy∗†‡
+
+Ivan Rubachev†♣
+
+Valentin Khrulkov†
+
+Artem Babenko†♣
+
+† Yandex
+‡ Moscow Institute of Physics and Technology
+♣ National Research University Higher School of Economics
+
+Abstract
+The existing literature on deep learning for tabular data proposes a wide range of
+novel architectures and reports competitive results on various datasets. However,
+the proposed models are usually not properly compared to each other and existing
+works often use different benchmarks and experiment protocols. As a result,
+it is unclear for both researchers and practitioners what models perform best.
+Additionally, the field still lacks effective baselines, that is, the easy-to-use models
+that provide competitive performance across different problems.
+In this work, we perform an overview of the main families of DL architectures for tabular data and raise the bar of baselines in tabular DL by identifying two simple and powerful deep architectures. The first one is a ResNetlike architecture which turns out to be a strong baseline that is often missing
+in prior works. The second model is our simple adaptation of the Transformer
+architecture for tabular data, which outperforms other solutions on most tasks.
+Both models are compared to many existing architectures on a diverse set of
+tasks under the same training and tuning protocols. We also compare the best
+DL models with Gradient Boosted Decision Trees and conclude that there is
+still no universally superior solution. The source code is available at https:
+//github.com/yandex-research/tabular-dl-revisiting-models.
+
+1
+
+Introduction
+
+Due to the tremendous success of deep learning on such data domains as images, audio and texts
+(Goodfellow et al., 2016), there has been a lot of research interest to extend this success to problems
+with data stored in tabular format. In these problems, data points are represented as vectors of
+heterogeneous features, which is typical for industrial applications and ML competitions, where
+neural networks have a strong non-deep competitor in the form of GBDT (Chen and Guestrin, 2016;
+Ke et al., 2017; Prokhorenkova et al., 2018). Along with potentially higher performance, using
+deep learning for tabular data is appealing as it would allow constructing multi-modal pipelines for
+problems, where only one part of the input is tabular, and other parts include images, audio and
+other DL-friendly data. Such pipelines can then be trained end-to-end by gradient optimization for
+all modalities. For these reasons, a large number of DL solutions were recently proposed, and new
+models continue to emerge (Arik and Pfister, 2020; Badirli et al., 2020; Hazimeh et al., 2020; Huang
+et al., 2020a; Klambauer et al., 2017; Popov et al., 2020; Song et al., 2019; Wang et al., 2017, 2020a).
+Unfortunately, due to the lack of established benchmarks (such as ImageNet (Deng et al., 2009) for
+computer vision or GLUE (Wang et al., 2019a) for NLP), existing papers use different datasets for
+evaluation and proposed DL models are often not adequately compared to each other. Therefore, from
+the current literature, it is unclear what DL model generally performs better than others and whether
+GBDT is surpassed by DL models. Additionally, despite the large number of novel architectures,
+the field still lacks simple and reliable solutions that allow achieving competitive performance
+∗
+
+The first author: firstnamelastname@gmail.com
+
+35th Conference on Neural Information Processing Systems (NeurIPS 2021), Sydney, Australia.
+
+with moderate effort and provide stable performance across many tasks. In that regard, Multilayer
+Perceptron (MLP) remains the main simple baseline for the field, however, it does not always
+represent a significant challenge for other competitors.
+The described problems impede the research process and make the observations from the papers not
+conclusive enough. Therefore, we believe it is timely to review the recent developments from the
+field and raise the bar of baselines in tabular DL. We start with a hypothesis that well-studied DL
+architecture blocks may be underexplored in the context of tabular data and may be used to design
+better baselines. Thus, we take inspiration from well-known battle-tested architectures from other
+fields and obtain two simple models for tabular data. The first one is a ResNet-like architecture (He
+et al., 2015b) and the second one is FT-Transformer — our simple adaptation of the Transformer
+architecture (Vaswani et al., 2017) for tabular data. Then, we compare these models with many
+existing solutions on a diverse set of tasks under the same protocols of training and hyperparameters
+tuning. First, we reveal that none of the considered DL models can consistently outperform the
+ResNet-like model. Given its simplicity, it can serve as a strong baseline for future work. Second,
+FT-Transformer demonstrates the best performance on most tasks and becomes a new powerful
+solution for the field. Interestingly, FT-Transformer turns out to be a more universal architecture for
+tabular data: it performs well on a wider range of tasks than the more “conventional” ResNet and
+other DL models. Finally, we compare the best DL models to GBDT and conclude that there is still
+no universally superior solution.
+We summarize the contributions of our paper as follows:
+1. We thoroughly evaluate the main models for tabular DL on a diverse set of tasks to investigate
+their relative performance.
+2. We demonstrate that a simple ResNet-like architecture is an effective baseline for tabular
+DL, which was overlooked by existing literature. Given its simplicity, we recommend this
+baseline for comparison in future tabular DL works.
+3. We introduce FT-Transformer — a simple adaptation of the Transformer architecture for
+tabular data that becomes a new powerful solution for the field. We observe that it is a more
+universal architecture: it performs well on a wider range of tasks than other DL models.
+4. We reveal that there is still no universally superior solution among GBDT and deep models.
+
+2
+
+Related work
+
+The “shallow” state-of-the-art for problems with tabular data is currently ensembles of decision
+trees, such as GBDT (Gradient Boosting Decision Tree) (Friedman, 2001), which are typically
+the top-choice in various ML competitions. At the moment, there are several established GBDT
+libraries, such as XGBoost (Chen and Guestrin, 2016), LightGBM (Ke et al., 2017), CatBoost
+(Prokhorenkova et al., 2018), which are widely used by both ML researchers and practitioners. While
+these implementations vary in detail, on most of the tasks, their performances do not differ much
+(Prokhorenkova et al., 2018).
+During several recent years, a large number of deep learning models for tabular data have been
+developed (Arik and Pfister, 2020; Badirli et al., 2020; Hazimeh et al., 2020; Huang et al., 2020a;
+Klambauer et al., 2017; Popov et al., 2020; Song et al., 2019; Wang et al., 2017). Most of these
+models can be roughly categorized into three groups, which we briefly describe below.
+Differentiable trees. The first group of models is motivated by the strong performance of decision
+tree ensembles for tabular data. Since decision trees are not differentiable and do not allow gradient
+optimization, they cannot be used as a component for pipelines trained in the end-to-end fashion.
+To address this issue, several works (Hazimeh et al., 2020; Kontschieder et al., 2015; Popov et al.,
+2020; Yang et al., 2018) propose to “smooth” decision functions in the internal tree nodes to make the
+overall tree function and tree routing differentiable. While the methods of this family can outperform
+GBDT on some tasks (Popov et al., 2020), in our experiments, they do not consistently outperform
+ResNet.
+Attention-based models. Due to the ubiquitous success of attention-based architectures for different
+domains (Dosovitskiy et al., 2021; Vaswani et al., 2017), several authors propose to employ attentionlike modules for tabular DL as well (Arik and Pfister, 2020; Huang et al., 2020a; Song et al., 2019).
+2
+
+In our experiments, we show that the properly tuned ResNet outperforms the existing attention-based
+models. Nevertheless, we identify an effective way to apply the Transformer architecture (Vaswani
+et al., 2017) to tabular data: the resulting architecture outperforms ResNet on most of the tasks.
+Explicit modeling of multiplicative interactions. In the literature on recommender systems and
+click-through-rate prediction, several works criticize MLP since it is unsuitable for modeling multiplicative interactions between features (Beutel et al., 2018; Qin et al., 2021; Wang et al., 2017).
+Inspired by this motivation, some works (Beutel et al., 2018; Wang et al., 2017, 2020a) have proposed
+different ways to incorporate feature products into MLP. In our experiments, however, we do not find
+such methods to be superior to properly tuned baselines.
+The literature also proposes some other architectural designs (Badirli et al., 2020; Klambauer et al.,
+2017) that cannot be explicitly assigned to any of the groups above. Overall, the community has
+developed a variety of models that are evaluated on different benchmarks and are rarely compared
+to each other. Our work aims to establish a fair comparison of them and identify the solutions that
+consistently provide high performance.
+
+3
+
+Models for tabular data problems
+
+In this section, we describe the main deep architectures that we highlight in our work, as well
+as the existing solutions included in the comparison. Since we argue that the field needs strong
+easy-to-use baselines, we try to reuse well-established DL building blocks as much as possible when
+designing ResNet (section 3.2) and FT-Transformer (section 3.3). We hope this approach will result
+in conceptually familiar models that require less effort to achieve good performance. Additional
+discussion and technical details for all the models are provided in supplementary.
+Notation. In this work, we consider supervised learning problems. D={(xi , yi )}ni=1 denotes a
+(num)
+(cat)
+(num)
+(cat)
+dataset, where xi =(xi
+, xi ) ∈ X represents numerical xij
+and categorical xij features
+of an object and yi ∈ Y denotes the corresponding object label. The total number of features is
+denoted as k. The dataset is split into three disjoint subsets: D = Dtrain ∪ Dval ∪ Dtest , where
+Dtrain is used for training, Dval is used for early stopping and hyperparameter tuning, and Dtest
+is used for the final evaluation. We consider three types of tasks: binary classification Y = {0, 1},
+multiclass classification Y = {1, . . . , C} and regression Y = R.
+3.1
+
+MLP
+
+We formalize the “MLP” architecture in Equation 1.
+MLP(x) = Linear (MLPBlock (. . . (MLPBlock(x))))
+MLPBlock(x) = Dropout(ReLU(Linear(x)))
+3.2
+
+(1)
+
+ResNet
+
+We are aware of one attempt to design a ResNet-like baseline (Klambauer et al., 2017) where the
+reported results were not competitive. However, given ResNet’s success story in computer vision (He
+et al., 2015b) and its recent achievements on NLP tasks (Sun and Iyyer, 2021), we give it a second try
+and construct a simple variation of ResNet as described in Equation 2. The main building block is
+simplified compared to the original architecture, and there is an almost clear path from the input to
+output which we find to be beneficial for the optimization. Overall, we expect this architecture to
+outperform MLP on tasks where deeper representations can be helpful.
+
+ResNet(x) = Prediction (ResNetBlock (. . . (ResNetBlock (Linear(x)))))
+ResNetBlock(x) = x + Dropout(Linear(Dropout(ReLU(Linear(BatchNorm(x))))))
+Prediction(x) = Linear (ReLU (BatchNorm (x)))
+
+3
+
+(2)
+
+3.3
+
+FT-Transformer
+
+In this section, we introduce FT-Transformer (Feature Tokenizer + Transformer) — a simple
+adaptation of the Transformer architecture (Vaswani et al., 2017) for the tabular domain. Figure 1
+demonstrates the main parts of FT-Transformer. In a nutshell, our model transforms all features
+(categorical and numerical) to embeddings and applies a stack of Transformer layers to the embeddings. Thus, every Transformer layer operates on the feature level of one object. We compare
+FT-Transformer to conceptually similar AutoInt in section 5.2.
+
+x
+
+<latexit sha1_base64="Er266MYslE46l94jwOZg6ifeTYI=">AAAB+HicbVDLSgNBEOyNrxhfUY9eFoPgKexGQY9BLx4TyAuSJcxOepMhM7PLzKwQQ77Aq969iVf/xqtf4iTZgyYWNBRV3VRTYcKZNp735eQ2Nre2d/K7hb39g8Oj4vFJS8epotikMY9VJyQaOZPYNMxw7CQKiQg5tsPx/dxvP6LSLJYNM0kwEGQoWcQoMVaqN/rFklf2FnDXiZ+REmSo9YvfvUFMU4HSUE607vpeYoIpUYZRjrNCL9WYEDomQ+xaKolAHUwXj87cC6sM3ChWdqRxF+rviykRWk9EaDcFMSO96s3Ff71QrCSb6DaYMpmkBiVdBkcpd03szltwB0whNXxiCaGK2d9dOiKKUGO7KthS/NUK1kmrUvavypX6dal6l9WThzM4h0vw4Qaq8AA1aAIFhGd4gVfnyXlz3p2P5WrOyW5O4Q+czx/m35OC</latexit>
+
+T
+
+ŷ
+
+TL
+
+T0
+[CLS]
+<latexit sha1_base64="NRz7UU+K2ImEJjN88KAz5rtUl6k=">AAAB+nicbVC7SgNBFL0bXzG+opY2g0GwCrtR0DJoYxkxL0iWMDuZTYbMzC4zs0JY8wm22tuJrT9j65c42WyhiQcuHM65l3M5QcyZNq775RTW1jc2t4rbpZ3dvf2D8uFRW0eJIrRFIh6pboA15UzSlmGG026sKBYBp51gcjv3O49UaRbJppnG1Bd4JFnICDZWemgO3EG54lbdDGiVeDmpQI7GoPzdH0YkEVQawrHWPc+NjZ9iZRjhdFbqJ5rGmEzwiPYslVhQ7afZqzN0ZpUhCiNlRxqUqb8vUiy0norAbgpsxnrZm4v/eoFYSjbhtZ8yGSeGSrIIDhOOTITmPaAhU5QYPrUEE8Xs74iMscLE2LZKthRvuYJV0q5VvYtq7f6yUr/J6ynCCZzCOXhwBXW4gwa0gMAInuEFXp0n5815dz4WqwUnvzmGP3A+fwATmpQl</latexit>
+
+<latexit sha1_base64="ehueANtMlSBGnzPvtot/dsmURoc=">AAAB+HicbVDLTgJBEOzFF+IL9ehlIjHxRHbRRI9ELx4hkUcCGzI79MKE2dnNzKwRCV/gVe/ejFf/xqtf4gB7ULCSTipV3alOBYng2rjul5NbW9/Y3MpvF3Z29/YPiodHTR2nimGDxSJW7YBqFFxiw3AjsJ0opFEgsBWMbmd+6wGV5rG8N+ME/YgOJA85o8ZK9cdeseSW3TnIKvEyUoIMtV7xu9uPWRqhNExQrTuemxh/QpXhTOC00E01JpSN6AA7lkoaofYn80en5MwqfRLGyo40ZK7+vpjQSOtxFNjNiJqhXvZm4r9eEC0lm/Dan3CZpAYlWwSHqSAmJrMWSJ8rZEaMLaFMcfs7YUOqKDO2q4ItxVuuYJU0K2XvolypX5aqN1k9eTiBUzgHD66gCndQgwYwQHiGF3h1npw35935WKzmnOzmGP7A+fwBH76Tpg==</latexit>
+
+<latexit sha1_base64="Dh41pn4g0OI9DEsQjNd4FNJH48k=">AAAB/nicbVDLSgNBEOyNrxhfUY9eBoPgKexGQY9BLx4jmAckS5idTJIhs7PLTK+wLAF/wavevYlXf8WrX+Ik2YMmFjQUVd1UU0EshUHX/XIKa+sbm1vF7dLO7t7+QfnwqGWiRDPeZJGMdCeghkuheBMFSt6JNadhIHk7mNzO/PYj10ZE6gHTmPshHSkxFIyildq9McUsnfbLFbfqzkFWiZeTCuRo9MvfvUHEkpArZJIa0/XcGP2MahRM8mmplxgeUzahI961VNGQGz+bvzslZ1YZkGGk7Sgkc/X3RUZDY9IwsJshxbFZ9mbiv14QLiXj8NrPhIoT5IotgoeJJBiRWRdkIDRnKFNLKNPC/k7YmGrK0DZWsqV4yxWsklat6l1Ua/eXlfpNXk8RTuAUzsGDK6jDHTSgCQwm8Awv8Oo8OW/Ou/OxWC04+c0x/IHz+QMUxpZ0</latexit>
+
+<latexit sha1_base64="USlI0QVWwW7mMQKtQqhjoQhYsLQ=">AAAB/HicbVA9SwNBFHwXv2L8ilraLAbBKtxFQcugjYVFhFwSSI6wt9lLluzuHbt7QjjiX7DV3k5s/S+2/hI3yRWaOPBgmHmPeUyYcKaN6345hbX1jc2t4nZpZ3dv/6B8eNTScaoI9UnMY9UJsaacSeobZjjtJIpiEXLaDse3M7/9SJVmsWyaSUIDgYeSRYxgYyW/2c/up/1yxa26c6BV4uWkAjka/fJ3bxCTVFBpCMdadz03MUGGlWGE02mpl2qaYDLGQ9q1VGJBdZDNn52iM6sMUBQrO9Kgufr7IsNC64kI7abAZqSXvZn4rxeKpWQTXQcZk0lqqCSL4CjlyMRo1gQaMEWJ4RNLMFHM/o7ICCtMjO2rZEvxlitYJa1a1buo1h4uK/WbvJ4inMApnIMHV1CHO2iADwQYPMMLvDpPzpvz7nwsVgtOfnMMf+B8/gAT4pVN</latexit>
+
+Predict
+
+[CLS]
+<latexit sha1_base64="ZD0P/xFYEhljWhZw+G1A2/+q8fw=">AAACBXicbVC7SgNBFJ31GeMramkzGASrsBsFLYNpLCwimgcka5idzCZDZmaXmbtiWFL7C7ba24mt32HrlzhJttDEAxcO59zLuZwgFtyA6345S8srq2vruY385tb2zm5hb79hokRTVqeRiHQrIIYJrlgdOAjWijUjMhCsGQyrE7/5wLThkbqDUcx8SfqKh5wSsNJ9B9gjAKTt6vWtP+4Wim7JnQIvEi8jRZSh1i18d3oRTSRTQAUxpu25Mfgp0cCpYON8JzEsJnRI+qxtqSKSGT+dfj3Gx1bp4TDSdhTgqfr7IiXSmJEM7KYkMDDz3kT81wvkXDKEF37KVZwAU3QWHCYCQ4QnleAe14yCGFlCqOb2d0wHRBMKtri8LcWbr2CRNMol77RUvjkrVi6zenLoEB2hE+Shc1RBV6iG6ogijZ7RC3p1npw35935mK0uOdnNAfoD5/MHQi+ZSw==</latexit>
+
+<latexit sha1_base64="ZD0P/xFYEhljWhZw+G1A2/+q8fw=">AAACBXicbVC7SgNBFJ31GeMramkzGASrsBsFLYNpLCwimgcka5idzCZDZmaXmbtiWFL7C7ba24mt32HrlzhJttDEAxcO59zLuZwgFtyA6345S8srq2vruY385tb2zm5hb79hokRTVqeRiHQrIIYJrlgdOAjWijUjMhCsGQyrE7/5wLThkbqDUcx8SfqKh5wSsNJ9B9gjAKTt6vWtP+4Wim7JnQIvEi8jRZSh1i18d3oRTSRTQAUxpu25Mfgp0cCpYON8JzEsJnRI+qxtqSKSGT+dfj3Gx1bp4TDSdhTgqfr7IiXSmJEM7KYkMDDz3kT81wvkXDKEF37KVZwAU3QWHCYCQ4QnleAe14yCGFlCqOb2d0wHRBMKtri8LcWbr2CRNMol77RUvjkrVi6zenLoEB2hE+Shc1RBV6iG6ogijZ7RC3p1npw35935mK0uOdnNAfoD5/MHQi+ZSw==</latexit>
+
+Feature
+Tokenizer
+
+<latexit sha1_base64="afg15pp3NZ1NWyWmdfHkNCjRHEE=">AAACCXicbVDLSgNBEJyNrxhfqx69DAbBU9iNgh6DXjxGMA9IljA720mGzD6Y6Q2GJV/gL3jVuzfx6ld49UucJHvQxIKGoqqbaspPpNDoOF9WYW19Y3OruF3a2d3bP7APj5o6ThWHBo9lrNo+0yBFBA0UKKGdKGChL6Hlj25nfmsMSos4esBJAl7IBpHoC87QSD3b7iI8ImJWVxAIjtOeXXYqzhx0lbg5KZMc9Z793Q1inoYQIZdM647rJOhlTKHgEqalbqohYXzEBtAxNGIhaC+bfz6lZ0YJaD9WZiKkc/X3RcZCrSehbzZDhkO97M3Efz0/XErG/rWXiShJESK+CO6nkmJMZ7XQQCjgKCeGMK6E+Z3yIVOMoymvZEpxlytYJc1qxb2oVO8vy7WbvJ4iOSGn5Jy45IrUyB2pkwbhZEyeyQt5tZ6sN+vd+lisFqz85pj8gfX5A/SrmsE=</latexit>
+
+Transformer
+
+<latexit sha1_base64="rwpUdRkfJbsopsGX8Flo22FRYiQ=">AAACCXicbVDLSgNBEJz1GeNr1aOXwSB4CrtR0GNQEI8RzAOSJcxOepMhsw9meoNhyRf4C1717k28+hVe/RInyR40saChqOqmmvITKTQ6zpe1srq2vrFZ2Cpu7+zu7dsHhw0dp4pDnccyVi2faZAigjoKlNBKFLDQl9D0hzdTvzkCpUUcPeA4AS9k/UgEgjM0Ute2OwiPiJjdAsNUwaRrl5yyMwNdJm5OSiRHrWt/d3oxT0OIkEumddt1EvQyplBwCZNiJ9WQMD5kfWgbGrEQtJfNPp/QU6P0aBArMxHSmfr7ImOh1uPQN5shw4Fe9Kbiv54fLiRjcOVlIkpShIjPg4NUUozptBbaEwo4yrEhjCthfqd8wBTjaMormlLcxQqWSaNSds/LlfuLUvU6r6dAjskJOSMuuSRVckdqpE44GZFn8kJerSfrzXq3PuarK1Z+c0T+wPr8AfYKmsI=</latexit>
+
+<latexit sha1_base64="AWQBENphD40p0dPT6tWGUljC5co=">AAACDXicbVDLSgNBEJyNrxhf6+PmZTEInsJuFPQY9OIxQl6QhDA76SRDZmaXmV4xLvkGf8Gr3r2JV7/Bq1/i5HHQxIKGoqqbaiqMBTfo+19OZmV1bX0ju5nb2t7Z3XP3D2omSjSDKotEpBshNSC4gipyFNCINVAZCqiHw5uJX78HbXikKjiKoS1pX/EeZxSt1HGPWggPiJhWNFWmF2kJetxx837Bn8JbJsGc5Mkc5Y773epGLJGgkAlqTDPwY2ynVCNnAsa5VmIgpmxI+9C0VFEJpp1Ovx97p1bpejbajkJvqv6+SKk0ZiRDuykpDsyiNxH/9UK5kIy9q3bKVZwgKDYL7iXCw8ibVON1uQaGYmQJZZrb3z02oJoytAXmbCnBYgXLpFYsBOeF4t1FvnQ9rydLjskJOSMBuSQlckvKpEoYeSTP5IW8Ok/Om/PufMxWM8785pD8gfP5A3d1nLE=</latexit>
+
+<latexit sha1_base64="CCtNxMB+t4G4yc9qxfWQSZtMPMY=">AAACC3icbVDLSsNAFJ34rPUV69JNsAiuSlIFXRbduKzQF7ShTKa37dDJJMzcSGvoJ/gLbnXvTtz6EW79EqdtFtp64MLhnHs5lxPEgmt03S9rbX1jc2s7t5Pf3ds/OLSPCg0dJYpBnUUiUq2AahBcQh05CmjFCmgYCGgGo9uZ33wApXkkaziJwQ/pQPI+ZxSN1LULHYQxIqa1aASSP4Kadu2iW3LncFaJl5EiyVDt2t+dXsSSECQyQbVue26MfkoVciZgmu8kGmLKRnQAbUMlDUH76fz3qXNmlJ7Tj5QZic5c/X2R0lDrSRiYzZDiUC97M/FfLwiXkrF/7adcxgmCZIvgfiIcjJxZMU6PK2AoJoZQprj53WFDqihDU1/elOItV7BKGuWSd1Eq318WKzdZPTlyQk7JOfHIFamQO1IldcLImDyTF/JqPVlv1rv1sVhds7KbY/IH1ucPyEabxQ==</latexit>
+
+Figure 1: The FT-Transformer architecture. Firstly, Feature Tokenizer transforms features to embeddings. The embeddings are then processed by the Transformer module and the final representation of
+the [CLS] token is used for prediction.
+
++
++
++
+<latexit sha1_base64="2KnxdAUbbP9fFOkK5C3uPUW4Iho=">AAAB+HicbVDLSgNBEOyNrxhfUY9eFoMgCGE3CnoMevGYgHlAsoTZSW8yZGZ2mZkVYsgXeNW7N/Hq33j1S5wke9DEgoaiqptqKkw408bzvpzc2vrG5lZ+u7Czu7d/UDw8auo4VRQbNOaxaodEI2cSG4YZju1EIREhx1Y4upv5rUdUmsXywYwTDAQZSBYxSoyV6he9Yskre3O4q8TPSAky1HrF724/pqlAaSgnWnd8LzHBhCjDKMdpoZtqTAgdkQF2LJVEoA4m80en7plV+m4UKzvSuHP198WECK3HIrSbgpihXvZm4r9eKJaSTXQTTJhMUoOSLoKjlLsmdmctuH2mkBo+toRQxezvLh0SRaixXRVsKf5yBaukWSn7l+VK/apUvc3qycMJnMI5+HANVbiHGjSAAsIzvMCr8+S8Oe/Ox2I152Q3x/AHzucPpiuTWQ==</latexit>
+
+<latexit sha1_base64="hCVpvvS/tPbELM3KKoiYDAExazg=">AAAB/XicbVDLSgNBEOz1GeMr6tHLYBA8hd0o6DHoxWME84BkCbOT2WTMzO4y0yuEJfgLXvXuTbz6LV79EifJHjSxoKGo6qaaChIpDLrul7Oyura+sVnYKm7v7O7tlw4OmyZONeMNFstYtwNquBQRb6BAyduJ5lQFkreC0c3Ubz1ybUQc3eM44b6ig0iEglG0UrOLQnHTK5XdijsDWSZeTsqQo94rfXf7MUsVj5BJakzHcxP0M6pRMMknxW5qeELZiA54x9KI2hA/m307IadW6ZMw1nYiJDP190VGlTFjFdhNRXFoFr2p+K8XqIVkDK/8TERJijxi8+AwlQRjMq2C9IXmDOXYEsq0sL8TNqSaMrSFFW0p3mIFy6RZrXjnlerdRbl2nddTgGM4gTPw4BJqcAt1aACDB3iGF3h1npw35935mK+uOPnNEfyB8/kDEGCV3g==</latexit>
+
+<latexit sha1_base64="UHP2rx9JrjCBYyeSBwtGEQUyORk=">AAAB+nicbVC7SgNBFL0bXzG+opY2g0GwWnZjQMugjWVE84BkCbOT2WTIzOwyMyuENZ9gq72d2Poztn6Jk2QLTTxw4XDOvZzLCRPOtPG8L6ewtr6xuVXcLu3s7u0flA+PWjpOFaFNEvNYdUKsKWeSNg0znHYSRbEIOW2H45uZ336kSrNYPphJQgOBh5JFjGBjpXvP9fvliud6c6BV4uekAjka/fJ3bxCTVFBpCMdad30vMUGGlWGE02mpl2qaYDLGQ9q1VGJBdZDNX52iM6sMUBQrO9Kgufr7IsNC64kI7abAZqSXvZn4rxeKpWQTXQUZk0lqqCSL4CjlyMRo1gMaMEWJ4RNLMFHM/o7ICCtMjG2rZEvxlytYJa2q61+41btapX6d11OEEziFc/DhEupwCw1oAoEhPMMLvDpPzpvz7nwsVgtOfnMMf+B8/gCOgpPR</latexit>
+
+<latexit sha1_base64="2KnxdAUbbP9fFOkK5C3uPUW4Iho=">AAAB+HicbVDLSgNBEOyNrxhfUY9eFoMgCGE3CnoMevGYgHlAsoTZSW8yZGZ2mZkVYsgXeNW7N/Hq33j1S5wke9DEgoaiqptqKkw408bzvpzc2vrG5lZ+u7Czu7d/UDw8auo4VRQbNOaxaodEI2cSG4YZju1EIREhx1Y4upv5rUdUmsXywYwTDAQZSBYxSoyV6he9Yskre3O4q8TPSAky1HrF724/pqlAaSgnWnd8LzHBhCjDKMdpoZtqTAgdkQF2LJVEoA4m80en7plV+m4UKzvSuHP198WECK3HIrSbgpihXvZm4r9eKJaSTXQTTJhMUoOSLoKjlLsmdmctuH2mkBo+toRQxezvLh0SRaixXRVsKf5yBaukWSn7l+VK/apUvc3qycMJnMI5+HANVbiHGjSAAsIzvMCr8+S8Oe/Ox2I152Q3x/AHzucPpiuTWQ==</latexit>
+
+<latexit sha1_base64="hCVpvvS/tPbELM3KKoiYDAExazg=">AAAB/XicbVDLSgNBEOz1GeMr6tHLYBA8hd0o6DHoxWME84BkCbOT2WTMzO4y0yuEJfgLXvXuTbz6LV79EifJHjSxoKGo6qaaChIpDLrul7Oyura+sVnYKm7v7O7tlw4OmyZONeMNFstYtwNquBQRb6BAyduJ5lQFkreC0c3Ubz1ybUQc3eM44b6ig0iEglG0UrOLQnHTK5XdijsDWSZeTsqQo94rfXf7MUsVj5BJakzHcxP0M6pRMMknxW5qeELZiA54x9KI2hA/m307IadW6ZMw1nYiJDP190VGlTFjFdhNRXFoFr2p+K8XqIVkDK/8TERJijxi8+AwlQRjMq2C9IXmDOXYEsq0sL8TNqSaMrSFFW0p3mIFy6RZrXjnlerdRbl2nddTgGM4gTPw4BJqcAt1aACDB3iGF3h1npw35935mK+uOPnNEfyB8/kDEGCV3g==</latexit>
+
+<latexit sha1_base64="FMnrTS4Kc6nFN8MOmMgnHody/QM=">AAAB+nicbVC7SgNBFL0bXzG+opY2g0GwWnZjQMugjWVE84BkCbOT2WTIzOwyMyuENZ9gq72d2Poztn6Jk2QLTTxw4XDOvZzLCRPOtPG8L6ewtr6xuVXcLu3s7u0flA+PWjpOFaFNEvNYdUKsKWeSNg0znHYSRbEIOW2H45uZ336kSrNYPphJQgOBh5JFjGBjpXvfrfbLFc/15kCrxM9JBXI0+uXv3iAmqaDSEI617vpeYoIMK8MIp9NSL9U0wWSMh7RrqcSC6iCbvzpFZ1YZoChWdqRBc/X3RYaF1hMR2k2BzUgvezPxXy8US8kmugoyJpPUUEkWwVHKkYnRrAc0YIoSwyeWYKKY/R2REVaYGNtWyZbiL1ewSlpV179wq3e1Sv06r6cIJ3AK5+DDJdThFhrQBAJDeIYXeHWenDfn3flYrBac/OYY/sD5/AGRrJPT</latexit>
+
+<latexit sha1_base64="2KnxdAUbbP9fFOkK5C3uPUW4Iho=">AAAB+HicbVDLSgNBEOyNrxhfUY9eFoMgCGE3CnoMevGYgHlAsoTZSW8yZGZ2mZkVYsgXeNW7N/Hq33j1S5wke9DEgoaiqptqKkw408bzvpzc2vrG5lZ+u7Czu7d/UDw8auo4VRQbNOaxaodEI2cSG4YZju1EIREhx1Y4upv5rUdUmsXywYwTDAQZSBYxSoyV6he9Yskre3O4q8TPSAky1HrF724/pqlAaSgnWnd8LzHBhCjDKMdpoZtqTAgdkQF2LJVEoA4m80en7plV+m4UKzvSuHP198WECK3HIrSbgpihXvZm4r9eKJaSTXQTTJhMUoOSLoKjlLsmdmctuH2mkBo+toRQxezvLh0SRaixXRVsKf5yBaukWSn7l+VK/apUvc3qycMJnMI5+HANVbiHGjSAAsIzvMCr8+S8Oe/Ox2I152Q3x/AHzucPpiuTWQ==</latexit>
+
+<latexit sha1_base64="hCVpvvS/tPbELM3KKoiYDAExazg=">AAAB/XicbVDLSgNBEOz1GeMr6tHLYBA8hd0o6DHoxWME84BkCbOT2WTMzO4y0yuEJfgLXvXuTbz6LV79EifJHjSxoKGo6qaaChIpDLrul7Oyura+sVnYKm7v7O7tlw4OmyZONeMNFstYtwNquBQRb6BAyduJ5lQFkreC0c3Ubz1ybUQc3eM44b6ig0iEglG0UrOLQnHTK5XdijsDWSZeTsqQo94rfXf7MUsVj5BJakzHcxP0M6pRMMknxW5qeELZiA54x9KI2hA/m307IadW6ZMw1nYiJDP190VGlTFjFdhNRXFoFr2p+K8XqIVkDK/8TERJijxi8+AwlQRjMq2C9IXmDOXYEsq0sL8TNqSaMrSFFW0p3mIFy6RZrXjnlerdRbl2nddTgGM4gTPw4BJqcAt1aACDB3iGF3h1npw35935mK+uOPnNEfyB8/kDEGCV3g==</latexit>
+
+>tixetal/<JO56x/w5OfA8ncD5mrbsjd+dc6tc5VN4elR4BAkmdME3aYIu8JA4OTB4UUv5d7aVxVrSLzvVqKdVCm7fUYriuiN1igojXen9ihqQY9ZDINVAcbxs7ORXKHVwXkUQpaCTkNBdNJplo41vibm9eFJmCuJticSrIw4ivr+5xRqdWhC3Ms6cd70jmjsOBKBV1ithMRXIxoqXFfKHjygoykQi7tuuRnzQKVQTxYw999i3jCpyO5XJdN8mF7lyX2e0piFxjGBZhCJQBTCzfwSWlSkffn5ujfIbyFhEUkE2hjZaxaic0gkTr6xYJFbRT5oljPapHew+7tri2dRbux2btya537pNZKcYTRV3VRBNWYygZTi4ftqx/fVi969qA77SIalZlldmQmcvnYmEJHg5CMWxoHD6o0dh8AhYLHt6rMeG1zOEBNgSLDVbciH+BAAA>"=o9OKua6A7fVJC5C1bUfo+OGYz3b"=46esab_1ahs tixetal<
+
+(cat)
+
+W1
+
+(cat)
+
+<latexit sha1_base64="DmJz/8TmsLFraTAUOsFhdM3L8Kg=">AAACBHicbZA9SwNBEIbn/IzxK2ppsxiE2IS7KGgZsLGMYD4gOcPeZi9Zsrt37u4J4bjWv2CrvZ3Y+j9s/SVukis08YWBh3dmmOENYs60cd0vZ2V1bX1js7BV3N7Z3dsvHRy2dJQoQpsk4pHqBFhTziRtGmY47cSKYhFw2g7G19N++5EqzSJ5ZyYx9QUeShYygo21/PZ9WrF4lvVTL+uXym7VnQktg5dDGXI1+qXv3iAiiaDSEI617npubPwUK8MIp1mxl2gaYzLGQ9q1KLGg2k9nT2fo1DoDFEbKljRo5v7eSLHQeiICOymwGenF3tT8txeIhcsmvPJTJuPEUEnmh8OEIxOhaSJowBQlhk8sYKKY/R2REVaYGJtb0YbiLUawDK1a1Tuv1m4vynU3j6cAx3ACFfDgEupwAw1oAoEHeIYXeHWenDfn3fmYj644+c4R/JHz+QOxCJhS</latexit>
+
+A
+B
+
+<latexit sha1_base64="QgyrtO/u2p9ElRRvbchzHKmq1Es=">AAACAnicbZA9SwNBEIbn4leMX1FLm8UgxCbcRUHLoI1lBPMByRn2NnvJkt29Y3dPDEc6/4Kt9nZi6x+x9Ze4Sa7QxBcGHt6ZYYY3iDnTxnW/nNzK6tr6Rn6zsLW9s7tX3D9o6ihRhDZIxCPVDrCmnEnaMMxw2o4VxSLgtBWMrqf91gNVmkXyzoxj6gs8kCxkBBtrdR7v07LF00nP6xVLbsWdCS2Dl0EJMtV7xe9uPyKJoNIQjrXueG5s/BQrwwink0I30TTGZIQHtGNRYkG1n85enqAT6/RRGClb0qCZ+3sjxULrsQjspMBmqBd7U/PfXiAWLpvw0k+ZjBNDJZkfDhOOTISmeaA+U5QYPraAiWL2d0SGWGFibGoFG4q3GMEyNKsV76xSvT0v1a6yePJwBMdQBg8uoAY3UIcGEIjgGV7g1Xly3px352M+mnOynUP4I+fzBxH+l3k=</latexit>
+
+B
+
+b1
+<latexit sha1_base64="pc8bsy797mWrCpIxMzJgbKVefU4=">AAACAnicbVC7SgNBFL3rM8ZX1NJmMAixCbtR0DJoYxnBPCBZw+xkkgyZxzIzK4Qlnb9gq72d2Pojtn6Jk2QLTTxw4dxz7uVeThRzZqzvf3krq2vrG5u5rfz2zu7efuHgsGFUogmtE8WVbkXYUM4krVtmOW3FmmIRcdqMRjdTv/lItWFK3ttxTEOBB5L1GcHWSe2oGzykJdecTbqFol/2Z0DLJMhIETLUuoXvTk+RRFBpCcfGtAM/tmGKtWWE00m+kxgaYzLCA9p2VGJBTZjOXp6gU6f0UF9pV9Kimfp7I8XCmLGI3KTAdmgWvan4rxeJhcu2fxWmTMaJpZLMD/cTjqxC0zxQj2lKLB87golm7ndEhlhjYl1qeRdKsBjBMmlUysF5uXJ3UaxeZ/Hk4BhOoAQBXEIVbqEGdSCg4Ble4NV78t68d+9jPrriZTtH8Afe5w/tHZdj</latexit>
+
++
+
+<latexit sha1_base64="nv53o5L/K+7SaQVN82Zv0vxp7aA=">AAAB+HicbVDLTgJBEOzFF+IL9ehlIjHxRHbRRI+oF4+QyCOBDZkdemHCzO5mZtYECV/gVe/ejFf/xqtf4gB7ULCSTipV3alOBYng2rjul5NbW9/Y3MpvF3Z29/YPiodHTR2nimGDxSJW7YBqFDzChuFGYDtRSGUgsBWM7mZ+6xGV5nH0YMYJ+pIOIh5yRo2V6je9Ysktu3OQVeJlpAQZar3id7cfs1RiZJigWnc8NzH+hCrDmcBpoZtqTCgb0QF2LI2oRO1P5o9OyZlV+iSMlZ3IkLn6+2JCpdZjGdhNSc1QL3sz8V8vkEvJJrz2JzxKUoMRWwSHqSAmJrMWSJ8rZEaMLaFMcfs7YUOqKDO2q4ItxVuuYJU0K2XvolypX5aqt1k9eTiBUzgHD66gCvdQgwYwQHiGF3h1npw35935WKzmnOzmGP7A+fwByOOTbw==</latexit>
+
+<latexit sha1_base64="QwGPqiurbeq7I17Iqz6AGyXq/G0=">AAAB+HicbVDLTgJBEOzFF+IL9ehlIzHxRHbRRI8ELx4hkUcCGzI79MKEmdnNzKwJEr7Aq969Ga/+jVe/xAH2oGAlnVSqulOdChPOtPG8Lye3sbm1vZPfLeztHxweFY9PWjpOFcUmjXmsOiHRyJnEpmGGYydRSETIsR2O7+Z++xGVZrF8MJMEA0GGkkWMEmOlRq1fLHllbwF3nfgZKUGGer/43RvENBUoDeVE667vJSaYEmUY5Tgr9FKNCaFjMsSupZII1MF08ejMvbDKwI1iZUcad6H+vpgSofVEhHZTEDPSq95c/NcLxUqyiW6DKZNJalDSZXCUctfE7rwFd8AUUsMnlhCqmP3dpSOiCDW2q4ItxV+tYJ20KmX/qlxpXJeqtayePJzBOVyCDzdQhXuoQxMoIDzDC7w6T86b8+58LFdzTnZzCn/gfP4AyneTcA==</latexit>
+
+<latexit sha1_base64="2KnxdAUbbP9fFOkK5C3uPUW4Iho=">AAAB+HicbVDLSgNBEOyNrxhfUY9eFoMgCGE3CnoMevGYgHlAsoTZSW8yZGZ2mZkVYsgXeNW7N/Hq33j1S5wke9DEgoaiqptqKkw408bzvpzc2vrG5lZ+u7Czu7d/UDw8auo4VRQbNOaxaodEI2cSG4YZju1EIREhx1Y4upv5rUdUmsXywYwTDAQZSBYxSoyV6he9Yskre3O4q8TPSAky1HrF724/pqlAaSgnWnd8LzHBhCjDKMdpoZtqTAgdkQF2LJVEoA4m80en7plV+m4UKzvSuHP198WECK3HIrSbgpihXvZm4r9eKJaSTXQTTJhMUoOSLoKjlLsmdmctuH2mkBo+toRQxezvLh0SRaixXRVsKf5yBaukWSn7l+VK/apUvc3qycMJnMI5+HANVbiHGjSAAsIzvMCr8+S8Oe/Ox2I152Q3x/AHzucPpiuTWQ==</latexit>
+
+<latexit sha1_base64="QwGPqiurbeq7I17Iqz6AGyXq/G0=">AAAB+HicbVDLTgJBEOzFF+IL9ehlIzHxRHbRRI8ELx4hkUcCGzI79MKEmdnNzKwJEr7Aq969Ga/+jVe/xAH2oGAlnVSqulOdChPOtPG8Lye3sbm1vZPfLeztHxweFY9PWjpOFcUmjXmsOiHRyJnEpmGGYydRSETIsR2O7+Z++xGVZrF8MJMEA0GGkkWMEmOlRq1fLHllbwF3nfgZKUGGer/43RvENBUoDeVE667vJSaYEmUY5Tgr9FKNCaFjMsSupZII1MF08ejMvbDKwI1iZUcad6H+vpgSofVEhHZTEDPSq95c/NcLxUqyiW6DKZNJalDSZXCUctfE7rwFd8AUUsMnlhCqmP3dpSOiCDW2q4ItxV+tYJ20KmX/qlxpXJeqtayePJzBOVyCDzdQhXuoQxMoIDzDC7w6T86b8+58LFdzTnZzCn/gfP4AyneTcA==</latexit>
+
+(cat)
+
+x2
+
+[
+
+(cat)
+W2
+
+(cat)
+
+<latexit sha1_base64="r06vOZ/g3fOQ2cojjOr/nRnSHEQ=">AAACBHicbZA9SwNBEIbn/IzxK2ppsxiE2IS7KGgZsLGMYD4gOcPeZi9Zsrt37u4J4bjWv2CrvZ3Y+j9s/SVukis08YWBh3dmmOENYs60cd0vZ2V1bX1js7BV3N7Z3dsvHRy2dJQoQpsk4pHqBFhTziRtGmY47cSKYhFw2g7G19N++5EqzSJ5ZyYx9QUeShYygo21/PZ9WrF4lvXTWtYvld2qOxNaBi+HMuRq9EvfvUFEEkGlIRxr3fXc2PgpVoYRTrNiL9E0xmSMh7RrUWJBtZ/Ons7QqXUGKIyULWnQzP29kWKh9UQEdlJgM9KLvan5by8QC5dNeOWnTMaJoZLMD4cJRyZC00TQgClKDJ9YwEQx+zsiI6wwMTa3og3FW4xgGVq1qnderd1elOtuHk8BjuEEKuDBJdThBhrQBAIP8Awv8Oo8OW/Ou/MxH11x8p0j+CPn8weynZhT</latexit>
+
+b2
+
+<latexit sha1_base64="FTiak1c7vEOBR1Xm49FlOYbli34=">AAACAnicbZA9SwNBEIbn4leMX1FLm8UgxCbcRUHLoI1lBPMByRn2NnvJkt3bY3dPDEc6/4Kt9nZi6x+x9Ze4Sa7QxBcGHt6ZYYY3iDnTxnW/nNzK6tr6Rn6zsLW9s7tX3D9oapkoQhtEcqnaAdaUs4g2DDOctmNFsQg4bQWj62m/9UCVZjK6M+OY+gIPIhYygo21Oo/3adni6aRX7RVLbsWdCS2Dl0EJMtV7xe9uX5JE0MgQjrXueG5s/BQrwwink0I30TTGZIQHtGMxwoJqP529PEEn1umjUCpbkUEz9/dGioXWYxHYSYHNUC/2pua/vUAsXDbhpZ+yKE4Mjcj8cJhwZCSa5oH6TFFi+NgCJorZ3xEZYoWJsakVbCjeYgTL0KxWvLNK9fa8VLvK4snDERxDGTy4gBrcQB0aQEDCM7zAq/PkvDnvzsd8NOdkO4fwR87nDxOSl3o=</latexit>
+
+<latexit sha1_base64="XRdiGQpfjg256FRSJ9xKeMuxlqA=">AAACAnicbVC7SgNBFL3rM8ZX1NJmMAixCbtR0DJoYxnBPCCJYXYymwyZxzIzK4Qlnb9gq72d2Pojtn6Jk2QLTTxw4dxz7uVeThhzZqzvf3krq2vrG5u5rfz2zu7efuHgsGFUogmtE8WVboXYUM4krVtmOW3FmmIRctoMRzdTv/lItWFK3ttxTLsCDySLGMHWSe2wV3lIS645m/QKRb/sz4CWSZCRImSo9Qrfnb4iiaDSEo6NaQd+bLsp1pYRTif5TmJojMkID2jbUYkFNd109vIEnTqljyKlXUmLZurvjRQLY8YidJMC26FZ9Kbiv14oFi7b6KqbMhknlkoyPxwlHFmFpnmgPtOUWD52BBPN3O+IDLHGxLrU8i6UYDGCZdKolIPzcuXuoli9zuLJwTGcQAkCuIQq3EIN6kBAwTO8wKv35L15797HfHTFy3aO4A+8zx/uuZdk</latexit>
+
++
+<latexit sha1_base64="2KnxdAUbbP9fFOkK5C3uPUW4Iho=">AAAB+HicbVDLSgNBEOyNrxhfUY9eFoMgCGE3CnoMevGYgHlAsoTZSW8yZGZ2mZkVYsgXeNW7N/Hq33j1S5wke9DEgoaiqptqKkw408bzvpzc2vrG5lZ+u7Czu7d/UDw8auo4VRQbNOaxaodEI2cSG4YZju1EIREhx1Y4upv5rUdUmsXywYwTDAQZSBYxSoyV6he9Yskre3O4q8TPSAky1HrF724/pqlAaSgnWnd8LzHBhCjDKMdpoZtqTAgdkQF2LJVEoA4m80en7plV+m4UKzvSuHP198WECK3HIrSbgpihXvZm4r9eKJaSTXQTTJhMUoOSLoKjlLsmdmctuH2mkBo+toRQxezvLh0SRaixXRVsKf5yBaukWSn7l+VK/apUvc3qycMJnMI5+HANVbiHGjSAAsIzvMCr8+S8Oe/Ox2I152Q3x/AHzucPpiuTWQ==</latexit>
+
+[
+
+<latexit sha1_base64="b3zYGO+ofUb1C5CJVf7A6auKO9o=">AAAB+HicbVDLSgNBEOz1GeMr6tHLYhA8hd0o6DHoxWMC5gHJEmYnvcmQmdllZlaIS77Aq969iVf/xqtf4iTZgyYWNBRV3VRTYcKZNp735aytb2xubRd2irt7+weHpaPjlo5TRbFJYx6rTkg0ciaxaZjh2EkUEhFybIfju5nffkSlWSwfzCTBQJChZBGjxFip0e2Xyl7Fm8NdJX5OypCj3i999wYxTQVKQznRuut7iQkyogyjHKfFXqoxIXRMhti1VBKBOsjmj07dc6sM3ChWdqRx5+rvi4wIrScitJuCmJFe9mbiv14olpJNdBNkTCapQUkXwVHKXRO7sxbcAVNIDZ9YQqhi9neXjogi1NiuirYUf7mCVdKqVvzLSrVxVa7d5vUU4BTO4AJ8uIYa3EMdmkAB4Rle4NV5ct6cd+djsbrm5Dcn8AfO5w/x65OJ</latexit>
+
+<latexit sha1_base64="Er266MYslE46l94jwOZg6ifeTYI=">AAAB+HicbVDLSgNBEOyNrxhfUY9eFoPgKexGQY9BLx4TyAuSJcxOepMhM7PLzKwQQ77Aq969iVf/xqtf4iTZgyYWNBRV3VRTYcKZNp735eQ2Nre2d/K7hb39g8Oj4vFJS8epotikMY9VJyQaOZPYNMxw7CQKiQg5tsPx/dxvP6LSLJYNM0kwEGQoWcQoMVaqN/rFklf2FnDXiZ+REmSo9YvfvUFMU4HSUE607vpeYoIpUYZRjrNCL9WYEDomQ+xaKolAHUwXj87cC6sM3ChWdqRxF+rviykRWk9EaDcFMSO96s3Ff71QrCSb6DaYMpmkBiVdBkcpd03szltwB0whNXxiCaGK2d9dOiKKUGO7KthS/NUK1kmrUvavypX6dal6l9WThzM4h0vw4Qaq8AA1aAIFhGd4gVfnyXlz3p2P5WrOyW5O4Q+czx/m35OC</latexit>
+
+{
+
+T
+
+<latexit sha1_base64="T5I//+tkz1f90mnelN6ef3xPXgc=">AAAB+XicbVDLSgMxFL2pr1pfVZdugkVwVWaqYJcFNy6r2Ae0Q8mkmTY0yQxJRihD/8Ct7t2JW7/GrV9i2s5CWw9cOJxzL+dywkRwYz3vCxU2Nre2d4q7pb39g8Oj8vFJ28SppqxFYxHrbkgME1yxluVWsG6iGZGhYJ1wcjv3O09MGx6rRztNWCDJSPGIU2Kd9NDPBuWKV/UWwOvEz0kFcjQH5e/+MKapZMpSQYzp+V5ig4xoy6lgs1I/NSwhdEJGrOeoIpKZIFt8OsMXThniKNZulMUL9fdFRqQxUxm6TUns2Kx6c/FfL5QryTaqBxlXSWqZosvgKBXYxnheAx5yzagVU0cI1dz9jumYaEKtK6vkSvFXK1gn7VrVv6rW7q8rjXpeTxHO4BwuwYcbaMAdNKEFFCJ4hhd4RRl6Q+/oY7laQPnNKfwB+vwB1/iUBQ==</latexit>
+
+{
+
+Ti
+<latexit sha1_base64="Bt+fns0sB6ifYUPOPY//MPQiXiU=">AAAB+nicbVC7SgNBFL0bXzG+opY2g0GwCrtR0DJoYxkxL0iWMDuZTYbMzC4zs0JY8wm22tuJrT9j65c42WyhiQcuHM65l3M5QcyZNq775RTW1jc2t4rbpZ3dvf2D8uFRW0eJIrRFIh6pboA15UzSlmGG026sKBYBp51gcjv3O49UaRbJppnG1Bd4JFnICDZWemgO2KBccatuBrRKvJxUIEdjUP7uDyOSCCoN4VjrnufGxk+xMoxwOiv1E01jTCZ4RHuWSiyo9tPs1Rk6s8oQhZGyIw3K1N8XKRZaT0VgNwU2Y73szcV/vUAsJZvw2k+ZjBNDJVkEhwlHJkLzHtCQKUoMn1qCiWL2d0TGWGFibFslW4q3XMEqadeq3kW1dn9Zqd/k9RThBE7hHDy4gjrcQQNaQGAEz/ACr86T8+a8Ox+L1YKT3xzDHzifP22OlF4=</latexit>
+
+Add
+<latexit sha1_base64="8AGrbPTAelS0oWlrprd/K5pMJOo=">AAACA3icbVC7SgNBFJ2NrxhfUUubwSBYhd0oaBm1sYxgHpBdwuzsJBkyM7vM3BXDktJfsNXeTmz9EFu/xEmyhSYeuHA4517O5YSJ4AZc98sprKyurW8UN0tb2zu7e+X9g5aJU01Zk8Yi1p2QGCa4Yk3gIFgn0YzIULB2OLqZ+u0Hpg2P1T2MExZIMlC8zykBK/k+sEcAyK6iaNIrV9yqOwNeJl5OKihHo1f+9qOYppIpoIIY0/XcBIKMaOBUsEnJTw1LCB2RAetaqohkJshmP0/wiVUi3I+1HQV4pv6+yIg0ZixDuykJDM2iNxX/9UK5kAz9yyDjKkmBKToP7qcCQ4ynheCIa0ZBjC0hVHP7O6ZDogkFW1vJluItVrBMWrWqd1at3Z1X6td5PUV0hI7RKfLQBaqjW9RATURRgp7RC3p1npw35935mK8WnPzmEP2B8/kDCWOYpg==</latexit>
+
+Feed
+Forward
+<latexit sha1_base64="uu4pAS0iKHPD05rqbBaCrazt+qQ=">AAACBHicbVDLSgNBEJz1GeMr6tHLYBA8hd0o6DEoiMcI5gHJEmZne5Mhsw9nesWw5OoveNW7N/Hqf3j1S5wke9DEgoaiqptqykuk0GjbX9bS8srq2npho7i5tb2zW9rbb+o4VRwaPJaxantMgxQRNFCghHaigIWehJY3vJr4rQdQWsTRHY4ScEPWj0QgOEMjuV2ER0TMrgH8ca9Utiv2FHSRODkpkxz1Xum768c8DSFCLpnWHcdO0M2YQsEljIvdVEPC+JD1oWNoxELQbjZ9ekyPjeLTIFZmIqRT9fdFxkKtR6FnNkOGAz3vTcR/PS+cS8bgws1ElKQIEZ8FB6mkGNNJI9QXCjjKkSGMK2F+p3zAFONoeiuaUpz5ChZJs1pxTivV27Ny7TKvp0AOyRE5IQ45JzVyQ+qkQTi5J8/khbxaT9ab9W59zFaXrPzmgPyB9fkD3FOZGw==</latexit>
+
+<latexit sha1_base64="T5I//+tkz1f90mnelN6ef3xPXgc=">AAAB+XicbVDLSgMxFL2pr1pfVZdugkVwVWaqYJcFNy6r2Ae0Q8mkmTY0yQxJRihD/8Ct7t2JW7/GrV9i2s5CWw9cOJxzL+dywkRwYz3vCxU2Nre2d4q7pb39g8Oj8vFJ28SppqxFYxHrbkgME1yxluVWsG6iGZGhYJ1wcjv3O09MGx6rRztNWCDJSPGIU2Kd9NDPBuWKV/UWwOvEz0kFcjQH5e/+MKapZMpSQYzp+V5ig4xoy6lgs1I/NSwhdEJGrOeoIpKZIFt8OsMXThniKNZulMUL9fdFRqQxUxm6TUns2Kx6c/FfL5QryTaqBxlXSWqZosvgKBXYxnheAx5yzagVU0cI1dz9jumYaEKtK6vkSvFXK1gn7VrVv6rW7q8rjXpeTxHO4BwuwYcbaMAdNKEFFCJ4hhd4RRl6Q+/oY7laQPnNKfwB+vwB1/iUBQ==</latexit>
+
+<latexit sha1_base64="QHisn6MigSAPGmh+4xLpH/q3tjc=">AAACCXicbVDLSsNAFJ3UV62vqEs3wSK4KkkVdFkUxGUF+4A2lMlk0g6dyYSZm2oJ/QJ/wa3u3Ylbv8KtX+K0zUJbD1w4nHMv53KChDMNrvtlFVZW19Y3ipulre2d3T17/6CpZaoIbRDJpWoHWFPOYtoABpy2E0WxCDhtBcPrqd8aUaWZjO9hnFBf4H7MIkYwGKln212gjwCQ3Uj1gFU46dllt+LO4CwTLydllKPes7+7oSSpoDEQjrXueG4CfoYVMMLppNRNNU0wGeI+7RgaY0G1n80+nzgnRgmdSCozMTgz9fdFhoXWYxGYTYFhoBe9qfivF4iFZIgu/YzFSQo0JvPgKOUOSGdaixMyRQnwsSGYKGZ+d8gAK0zAlFcypXiLFSyTZrXinVWqd+fl2lVeTxEdoWN0ijx0gWroFtVRAxE0Qs/oBb1aT9ab9W59zFcLVn5ziP7A+vwBBK2ayw==</latexit>
+
+Norm
+<latexit sha1_base64="/hGSn+eNOnEKOJo4YFijInUK3ng=">AAACBXicbVC7SgNBFJ31GeMramkzGASrsBsFLYM2VhLBPCBZw+xkNhkyj2XmrhiW1P6CrfZ2Yut32Pol7iZbaOKBC4dz7uVcThAJbsF1v5yl5ZXVtfXCRnFza3tnt7S337Q6NpQ1qBbatANimeCKNYCDYO3IMCIDwVrB6CrzWw/MWK7VHYwj5ksyUDzklEAq3XeBPQJAcqONnBR7pbJbcafAi8TLSRnlqPdK392+prFkCqgg1nY8NwI/IQY4FWxS7MaWRYSOyIB1UqqIZNZPpl9P8HGq9HGoTToK8FT9fZEQae1YBummJDC0814m/usFci4Zwgs/4SqKgSk6Cw5jgUHjrBLc54ZREOOUEGp4+jumQ2IIhbS4rBRvvoJF0qxWvNNK9fasXLvM6ymgQ3SETpCHzlENXaM6aiCKDHpGL+jVeXLenHfnY7a65OQ3B+gPnM8fVlSZVw==</latexit>
+
+k
+
+Fi
+<latexit sha1_base64="R209j2X5lW3M7o+Picn9JeY7Cvg=">AAAB+nicbVBNSwMxFHxbv2r9qnr0EiyCp7JbBT0WBfFY0W0L7VKyabYNTbJLkhXK2p/gVe/exKt/xqu/xLTdg7YOPBhm3mMeEyacaeO6X05hZXVtfaO4Wdra3tndK+8fNHWcKkJ9EvNYtUOsKWeS+oYZTtuJoliEnLbC0fXUbz1SpVksH8w4oYHAA8kiRrCx0v1Nj/XKFbfqzoCWiZeTCuRo9Mrf3X5MUkGlIRxr3fHcxAQZVoYRTielbqppgskID2jHUokF1UE2e3WCTqzSR1Gs7EiDZurviwwLrccitJsCm6Fe9Kbiv14oFpJNdBlkTCapoZLMg6OUIxOjaQ+ozxQlho8twUQx+zsiQ6wwMbatki3FW6xgmTRrVe+sWrs7r9Sv8nqKcATHcAoeXEAdbqEBPhAYwDO8wKvz5Lw5787HfLXg5DeH8AfO5w9XWpRQ</latexit>
+
+Add
+
+<latexit sha1_base64="JNZElOSOYEo2LotYBfGqEcU7W+M=">AAAB+HicbVDLSgNBEOz1GeMr6tHLYhA8hd0o6DHoxWMC5gHJEmYnvcmQmdllZlaIS77Aq969iVf/xqtf4iTZgyYWNBRV3VRTYcKZNp735aytb2xubRd2irt7+weHpaPjlo5TRbFJYx6rTkg0ciaxaZjh2EkUEhFybIfju5nffkSlWSwfzCTBQJChZBGjxFipMe6Xyl7Fm8NdJX5OypCj3i999wYxTQVKQznRuut7iQkyogyjHKfFXqoxIXRMhti1VBKBOsjmj07dc6sM3ChWdqRx5+rvi4wIrScitJuCmJFe9mbiv14olpJNdBNkTCapQUkXwVHKXRO7sxbcAVNIDZ9YQqhi9neXjogi1NiuirYUf7mCVdKqVvzLSrVxVa7d5vUU4BTO4AJ8uIYa3EMdmkAB4Rle4NV5ct6cd+djsbrm5Dcn8AfO5w8LOpOZ</latexit>
+
+<latexit sha1_base64="8AGrbPTAelS0oWlrprd/K5pMJOo=">AAACA3icbVC7SgNBFJ2NrxhfUUubwSBYhd0oaBm1sYxgHpBdwuzsJBkyM7vM3BXDktJfsNXeTmz9EFu/xEmyhSYeuHA4517O5YSJ4AZc98sprKyurW8UN0tb2zu7e+X9g5aJU01Zk8Yi1p2QGCa4Yk3gIFgn0YzIULB2OLqZ+u0Hpg2P1T2MExZIMlC8zykBK/k+sEcAyK6iaNIrV9yqOwNeJl5OKihHo1f+9qOYppIpoIIY0/XcBIKMaOBUsEnJTw1LCB2RAetaqohkJshmP0/wiVUi3I+1HQV4pv6+yIg0ZixDuykJDM2iNxX/9UK5kAz9yyDjKkmBKToP7qcCQ4ynheCIa0ZBjC0hVHP7O6ZDogkFW1vJluItVrBMWrWqd1at3Z1X6td5PUV0hI7RKfLQBaqjW9RATURRgp7RC3p1npw35935mK8WnPzmEP2B8/kDCWOYpg==</latexit>
+
+Multi-Head
+Self-Attention
+<latexit sha1_base64="c1OfdORp1ZajtiDYjPAU7BhzjEA=">AAACDXicbVDLSsNAFJ3UV62v+Ni5CRbBjSWpgi6LbroRKtgHtKFMJjft0MmDmRuxhn6Dv+BW9+7Erd/g1i8xabPQ1gMXDufcy7kcJxJcoWl+aYWl5ZXVteJ6aWNza3tH391rqTCWDJosFKHsOFSB4AE0kaOATiSB+o6AtjO6zvz2PUjFw+AOxxHYPh0E3OOMYir19YMewgMiJjexQH5aB+pOSn29bFbMKYxFYuWkTHI0+vp3zw1Z7EOATFClupYZoZ1QiZwJmJR6sYKIshEdQDelAfVB2cn0+4lxnCqu4YUynQCNqfr7IqG+UmPfSTd9ikM172Xiv57jzyWjd2knPIhihIDNgr1YGBgaWTWGyyUwFOOUUCZ5+rvBhlRShmmBWSnWfAWLpFWtWGeV6u15uXaV11Mkh+SInBCLXJAaqZMGaRJGHskzeSGv2pP2pr1rH7PVgpbf7JM/0D5/ABUwm9I=</latexit>
+
+<latexit sha1_base64="rGI9i03ASytyFYmCpyjOC7/5Hig=">AAACEXicbVC7TsMwFHXKq5RXgAWJxaJCYqFKChKMBRbGIuhDaqPKcZ3Wqp1E9g2iispP8AussLMhVr6AlS/BaTtAy5EsHZ1zH77HjwXX4DhfVm5hcWl5Jb9aWFvf2Nyyt3fqOkoUZTUaiUg1faKZ4CGrAQfBmrFiRPqCNfzBVeY37pnSPArvYBgzT5JeyANOCRipY++1gT0AQHrLRHB8AcDCzBgVOnbRKTlj4HniTkkRTVHt2N/tbkQTaQZQQbRuuU4MXkoUcCrYqNBONIsJHZAeaxkaEsm0l44vGOFDo3RxECnzQsBj9XdHSqTWQ+mbSkmgr2e9TPzX8+XMZgjOvZSHcWIupZPFQSIwRDiLB3e5YhTE0BBCFTd/x7RPFKFgQsxCcWcjmCf1csk9KZVvTouVy2k8ebSPDtARctEZqqBrVEU1RNEjekYv6NV6st6sd+tjUpqzpj276A+szx+UNJ29</latexit>
+
+{
+
+x1
+
+b(num)
+<latexit sha1_base64="supoUfk0uRGDmkDkd5C82Fny8ls=">AAACAHicbVC7SgNBFL0bXzG+opY2g0GITdhNBC0DNpYRzEOSNcxOZpMhM7PLzKwQljT+gq32dmLrn9j6JU6SLTTxwIXDOfdyLieIOdPGdb+c3Nr6xuZWfruws7u3f1A8PGrpKFGENknEI9UJsKacSdo0zHDaiRXFIuC0HYyvZ377kSrNInlnJjH1BR5KFjKCjZXug4e0LBNxPu0XS27FnQOtEi8jJcjQ6Be/e4OIJIJKQzjWuuu5sfFTrAwjnE4LvUTTGJMxHtKupRILqv10/vAUnVllgMJI2ZEGzdXfFykWWk9EYDcFNiO97M3Ef71ALCWb8MpPmYwTQyVZBIcJRyZCszbQgClKDJ9Ygoli9ndERlhhYmxnBVuKt1zBKmlVK16tUr29KNXdrJ48nMAplMGDS6jDDTSgCQQEPMMLvDpPzpvz7nwsVnNOdnMMf+B8/gDa8ZbF</latexit>
+
+Norm
+
+<latexit sha1_base64="T5I//+tkz1f90mnelN6ef3xPXgc=">AAAB+XicbVDLSgMxFL2pr1pfVZdugkVwVWaqYJcFNy6r2Ae0Q8mkmTY0yQxJRihD/8Ct7t2JW7/GrV9i2s5CWw9cOJxzL+dywkRwYz3vCxU2Nre2d4q7pb39g8Oj8vFJ28SppqxFYxHrbkgME1yxluVWsG6iGZGhYJ1wcjv3O09MGx6rRztNWCDJSPGIU2Kd9NDPBuWKV/UWwOvEz0kFcjQH5e/+MKapZMpSQYzp+V5ig4xoy6lgs1I/NSwhdEJGrOeoIpKZIFt8OsMXThniKNZulMUL9fdFRqQxUxm6TUns2Kx6c/FfL5QryTaqBxlXSWqZosvgKBXYxnheAx5yzagVU0cI1dz9jumYaEKtK6vkSvFXK1gn7VrVv6rW7q8rjXpeTxHO4BwuwYcbaMAdNKEFFCJ4hhd4RRl6Q+/oY7laQPnNKfwB+vwB1/iUBQ==</latexit>
+
+⇥
+0.1 ⇥
+1.2 ⇥
+0.8
+
+W (num)
+
+<latexit sha1_base64="lMD0gR5e8K8efa7H8kks9I4WqjQ=">AAAB+nicbVC7SgNBFL0bXzG+opY2g0GwWnajYMqgjWVE84BkCbOT2WTIzOwyMyuENZ9gq72d2Poztn6Jk2QLTTxw4XDOvZzLCRPOtPG8L6ewtr6xuVXcLu3s7u0flA+PWjpOFaFNEvNYdUKsKWeSNg0znHYSRbEIOW2H45uZ336kSrNYPphJQgOBh5JFjGBjpXvPrfXLFc/15kCrxM9JBXI0+uXv3iAmqaDSEI617vpeYoIMK8MIp9NSL9U0wWSMh7RrqcSC6iCbvzpFZ1YZoChWdqRBc/X3RYaF1hMR2k2BzUgvezPxXy8US8kmqgUZk0lqqCSL4CjlyMRo1gMaMEWJ4RNLMFHM/o7ICCtMjG2rZEvxlytYJa2q61+41bvLSv06r6cIJ3AK5+DDFdThFhrQBAJDeIYXeHWenDfn3flYrBac/OYY/sD5/AGZjpPY</latexit>
+
+(cat)
+
+[
+
+<latexit sha1_base64="5UdFhh/uIOfb9VPonxmlL1BUNZI=">AAACAHicbVC7SgNBFL0bXzG+opY2g0GITdhNBC0DNpYRzEOSNcxOZpMhM7PLzKwQljT+gq32dmLrn9j6JU6SLTTxwIXDOfdyLieIOdPGdb+c3Nr6xuZWfruws7u3f1A8PGrpKFGENknEI9UJsKacSdo0zHDaiRXFIuC0HYyvZ377kSrNInlnJjH1BR5KFjKCjZXu2w9pWSbifNovltyKOwdaJV5GSpCh0S9+9wYRSQSVhnCsdddzY+OnWBlGOJ0WeommMSZjPKRdSyUWVPvp/OEpOrPKAIWRsiMNmqu/L1IstJ6IwG4KbEZ62ZuJ/3qBWEo24ZWfMhknhkqyCA4TjkyEZm2gAVOUGD6xBBPF7O+IjLDCxNjOCrYUb7mCVdKqVrxapXp7Uaq7WT15OIFTKIMHl1CHG2hAEwgIeIYXeHWenDfn3flYrOac7OYY/sD5/AHJPZa6</latexit>
+
+{
+
+<latexit sha1_base64="b3zYGO+ofUb1C5CJVf7A6auKO9o=">AAAB+HicbVDLSgNBEOz1GeMr6tHLYhA8hd0o6DHoxWMC5gHJEmYnvcmQmdllZlaIS77Aq969iVf/xqtf4iTZgyYWNBRV3VRTYcKZNp735aytb2xubRd2irt7+weHpaPjlo5TRbFJYx6rTkg0ciaxaZjh2EkUEhFybIfju5nffkSlWSwfzCTBQJChZBGjxFip0e2Xyl7Fm8NdJX5OypCj3i999wYxTQVKQznRuut7iQkyogyjHKfFXqoxIXRMhti1VBKBOsjmj07dc6sM3ChWdqRx5+rvi4wIrScitJuCmJFe9mbiv14olpJNdBNkTCapQUkXwVHKXRO7sxbcAVNIDZ9YQqhi9neXjogi1NiuirYUf7mCVdKqVvzLSrVxVa7d5vUU4BTO4AJ8uIYa3EMdmkAB4Rle4NV5ct6cd+djsbrm5Dcn8AfO5w/x65OJ</latexit>
+
+x(num)
+
+<latexit sha1_base64="T5I//+tkz1f90mnelN6ef3xPXgc=">AAAB+XicbVDLSgMxFL2pr1pfVZdugkVwVWaqYJcFNy6r2Ae0Q8mkmTY0yQxJRihD/8Ct7t2JW7/GrV9i2s5CWw9cOJxzL+dywkRwYz3vCxU2Nre2d4q7pb39g8Oj8vFJ28SppqxFYxHrbkgME1yxluVWsG6iGZGhYJ1wcjv3O09MGx6rRztNWCDJSPGIU2Kd9NDPBuWKV/UWwOvEz0kFcjQH5e/+MKapZMpSQYzp+V5ig4xoy6lgs1I/NSwhdEJGrOeoIpKZIFt8OsMXThniKNZulMUL9fdFRqQxUxm6TUns2Kx6c/FfL5QryTaqBxlXSWqZosvgKBXYxnheAx5yzagVU0cI1dz9jumYaEKtK6vkSvFXK1gn7VrVv6rW7q8rjXpeTxHO4BwuwYcbaMAdNKEFFCJ4hhd4RRl6Q+/oY7laQPnNKfwB+vwB1/iUBQ==</latexit>
+
+[
+
+<latexit sha1_base64="mttgI9sS3iXJbfSzMYYNA/9R/oI=">AAACAHicbVC7SgNBFL0bXzG+opY2g0GITdiNgpYBG8sI5iHJGmYns8mQmdllZlYMSxp/wVZ7O7H1T2z9EifJFpp44MLhnHs5lxPEnGnjul9ObmV1bX0jv1nY2t7Z3SvuHzR1lChCGyTikWoHWFPOJG0YZjhtx4piEXDaCkZXU7/1QJVmkbw145j6Ag8kCxnBxkp3j/dpWSbidNIrltyKOwNaJl5GSpCh3it+d/sRSQSVhnCsdcdzY+OnWBlGOJ0UuommMSYjPKAdSyUWVPvp7OEJOrFKH4WRsiMNmqm/L1IstB6LwG4KbIZ60ZuK/3qBWEg24aWfMhknhkoyDw4TjkyEpm2gPlOUGD62BBPF7O+IDLHCxNjOCrYUb7GCZdKsVryzSvXmvFRzs3rycATHUAYPLqAG11CHBhAQ8Awv8Oo8OW/Ou/MxX8052c0h/IHz+QP+WZbb</latexit>
+
+d
+
+<latexit sha1_base64="/hGSn+eNOnEKOJo4YFijInUK3ng=">AAACBXicbVC7SgNBFJ31GeMramkzGASrsBsFLYM2VhLBPCBZw+xkNhkyj2XmrhiW1P6CrfZ2Yut32Pol7iZbaOKBC4dz7uVcThAJbsF1v5yl5ZXVtfXCRnFza3tnt7S337Q6NpQ1qBbatANimeCKNYCDYO3IMCIDwVrB6CrzWw/MWK7VHYwj5ksyUDzklEAq3XeBPQJAcqONnBR7pbJbcafAi8TLSRnlqPdK392+prFkCqgg1nY8NwI/IQY4FWxS7MaWRYSOyIB1UqqIZNZPpl9P8HGq9HGoTToK8FT9fZEQae1YBummJDC0814m/usFci4Zwgs/4SqKgSk6Cw5jgUHjrBLc54ZREOOUEGp4+jumQ2IIhbS4rBRvvoJF0qxWvNNK9fasXLvM6ymgQ3SETpCHzlENXaM6aiCKDHpGL+jVeXLenHfnY7a65OQ3B+gPnM8fVlSZVw==</latexit>
+
+<latexit sha1_base64="zS1hBakp+h1/7KshCTKeV9nKij0=">AAAB+HicbVDLSgNBEOz1GeMr6tHLYhA8hd0o6DHoxWMC5gHJEmZne5MhM7PLzKwQQ77Aq969iVf/xqtf4iTZgyYWNBRV3VRTYcqZNp735aytb2xubRd2irt7+weHpaPjlk4yRbFJE56oTkg0ciaxaZjh2EkVEhFybIeju5nffkSlWSIfzDjFQJCBZDGjxFipEfVLZa/izeGuEj8nZchR75e+e1FCM4HSUE607vpeaoIJUYZRjtNiL9OYEjoiA+xaKolAHUzmj07dc6tEbpwoO9K4c/X3xYQIrccitJuCmKFe9mbiv14olpJNfBNMmEwzg5IuguOMuyZxZy24EVNIDR9bQqhi9neXDoki1NiuirYUf7mCVdKqVvzLSrVxVa7d5vUU4BTO4AJ8uIYa3EMdmkAB4Rle4NV5ct6cd+djsbrm5Dcn8AfO5w8ALpOS</latexit>
+
+Ti 1
+
+>tixetal/<JO56x/w5OfA8ncD5mrbsjd+dc6tc5VN4elR4BAkmdME3aYIu8JA4OTB4UUv5d7aVxVrSLzvVqKdVCm7fUYriuiN1igojXen9ihqQY9ZDINVAcbxs7ORXKHVwXkUQpaCTkNBdNJplo41vibm9eFJmCuJticSrIw4ivr+5xRqdWhC3Ms6cd70jmjsOBKBV1ithMRXIxoqXFfKHjygoykQi7tuuRnzQKVQTxYw999i3jCpyO5XJdN8mF7lyX2e0piFxjGBZhCJQBTCzfwSWlSkffn5ujfIbyFhEUkE2hjZaxaic0gkTr6xYJFbRT5oljPapHew+7tri2dRbux2btya537pNZKcYTRV3VRBNWYygZTi4ftqx/fVi969qA77SIalZlldmQmcvnYmEJHg5CMWxoHD6o0dh8AhYLHt6rMeG1zOEBNgSLDVbciH+BAAA>"=o9OKua6A7fVJC5C1bUfo+OGYz3b"=46esab_1ahs tixetal<
+
+<latexit sha1_base64="Z1JpHjN3dJSV8kDso3x5UDepr2Q=">AAAB/nicbVC7SgNBFL0bXzG+opY2g0GwMexGQcugjWWEvCBZwuxkNhkyM7vMzAphCfgLttrbia2/YuuXONlsoYkHLhzOuZdzOUHMmTau++UU1tY3NreK26Wd3b39g/LhUVtHiSK0RSIeqW6ANeVM0pZhhtNurCgWAaedYHI39zuPVGkWyaaZxtQXeCRZyAg2Vuo0Bym78GaDcsWtuhnQKvFyUoEcjUH5uz+MSCKoNIRjrXueGxs/xcowwums1E80jTGZ4BHtWSqxoNpPs3dn6MwqQxRGyo40KFN/X6RYaD0Vgd0U2Iz1sjcX//UCsZRswhs/ZTJODJVkERwmHJkIzbtAQ6YoMXxqCSaK2d8RGWOFibGNlWwp3nIFq6Rdq3qX1drDVaV+m9dThBM4hXPw4BrqcA8NaAGBCTzDC7w6T86b8+58LFYLTn5zDH/gfP4AI92V3A==</latexit>
+
+(a)
+
+(b)
+
+<latexit sha1_base64="/rd31GxZKKRhDczZebPH7MoTAy8=">AAAB+nicbVC7SgNBFL0bXzG+opY2g0GITdhNBFMGbCwjmgckS5idzCZDZmaXmVkhrPkEW+3txNafsfVLnCRbaOKBC4dz7uVcThBzpo3rfjm5jc2t7Z38bmFv/+DwqHh80tZRoghtkYhHqhtgTTmTtGWY4bQbK4pFwGknmNzM/c4jVZpF8sFMY+oLPJIsZAQbK92X8eWgWHIr7gJonXgZKUGG5qD43R9GJBFUGsKx1j3PjY2fYmUY4XRW6CeaxphM8Ij2LJVYUO2ni1dn6MIqQxRGyo40aKH+vkix0HoqArspsBnrVW8u/usFYiXZhHU/ZTJODJVkGRwmHJkIzXtAQ6YoMXxqCSaK2d8RGWOFibFtFWwp3moF66RdrXi1SvXuqtSoZ/Xk4QzOoQweXEMDbqEJLSAwgmd4gVfnyXlz3p2P5WrOyW5O4Q+czx/C35Pq</latexit>
+
+<latexit sha1_base64="J3PGJklANf2C0M8cIciYYCc1luY=">AAAB+nicbVC7SgNBFL0bXzG+opY2g0GITdhNBFMGbCwjmgckS5idzCZDZmaXmVkhrPkEW+3txNafsfVLnCRbaOKBC4dz7uVcThBzpo3rfjm5jc2t7Z38bmFv/+DwqHh80tZRoghtkYhHqhtgTTmTtGWY4bQbK4pFwGknmNzM/c4jVZpF8sFMY+oLPJIsZAQbK92Xg8tBseRW3AXQOvEyUoIMzUHxuz+MSCKoNIRjrXueGxs/xcowwums0E80jTGZ4BHtWSqxoNpPF6/O0IVVhiiMlB1p0EL9fZFiofVUBHZTYDPWq95c/NcLxEqyCet+ymScGCrJMjhMODIRmveAhkxRYvjUEkwUs78jMsYKE2PbKthSvNUK1km7WvFqlerdValRz+rJwxmcQxk8uIYG3EITWkBgBM/wAq/Ok/PmvDsfy9Wck92cwh84nz/EdJPr</latexit>
+
+Figure 2: (a) Feature Tokenizer; in the example, there are three numerical and two categorical features;
+(b) One Transformer layer.
+Feature Tokenizer. The Feature Tokenizer module (see Figure 2) transforms the input features x to
+embeddings T ∈ Rk×d . The embedding for a given feature xj is computed as follows:
+Tj = bj + fj (xj ) ∈ Rd
+(num)
+
+where bj is the j-th feature bias, fj
+
+fj : Xj → Rd .
+
+is implemented as the element-wise multiplication with the
+
+(num)
+(cat)
+(cat)
+vector Wj
+∈ Rd and fj
+is implemented as the lookup table Wj
+∈ RSj ×d for categorical
+
+features. Overall:
+
+(num)
+
+Tj
+
+(cat)
+
+Tj
+
+(num)
+
+= bj
+
+(cat)
+
+= bj
+
+h
+
+(num)
+
++ xj
+
+(cat)
+
++ eTj Wj
+(num)
+
+T = stack T1
+
+(num)
+
+∈ Rd ,
+
+· Wj
+
+(num)
+
+(cat)
+
+, . . . , Tk(num) , T1
+
+(cat)
+
+i
+
+∈ Rd ,
+
+, . . . , Tk(cat) ∈ Rk×d .
+
+where eTj is a one-hot vector for the corresponding categorical feature.
+Transformer. At this stage, the embedding of the [CLS] token (or “classification token”, or “output
+token”, see Devlin et al. (2019)) is appended to T and L Transformer layers F1 , . . . , FL are applied:
+T0 = stack [[CLS], T ]
+4
+
+Ti = Fi (Ti−1 ).
+
+We use the PreNorm variant for easier optimization (Wang et al., 2019b), see Figure 2. In the PreNorm
+setting, we also found it to be necessary to remove the first normalization from the first Transformer
+layer to achieve good performance. See the original paper (Vaswani et al., 2017) for the background
+on Multi-Head Self-Attention (MHSA) and the Feed Forward module. See supplementary for details
+such as activations, placement of normalizations and dropout modules (Srivastava et al., 2014).
+Prediction. The final representation of the [CLS] token is used for prediction:
+ŷ = Linear(ReLU(LayerNorm(TL[CLS] ))).
+Limitations. FT-Transformer requires more resources (both hardware and time) for training than
+simple models such as ResNet and may not be easily scaled to datasets when the number of features
+is “too large” (it is determined by the available hardware and time budget). Consequently, widespread
+usage of FT-Transformer for solving tabular data problems can lead to greater CO2 emissions
+produced by ML pipelines, since tabular data problems are ubiquitous. The main cause of the
+described problem lies in the quadratic complexity of the vanilla MHSA with respect to the number
+of features. However, the issue can be alleviated by using efficient approximations of MHSA (Tay
+et al., 2020). Additionally, it is still possible to distill FT-Transformer into simpler architectures for
+better inference performance. We report training times and the used hardware in supplementary.
+3.4
+
+Other models
+
+In this section, we list the existing models designed specifically for tabular data that we include in the
+comparison.
+• SNN (Klambauer et al., 2017). An MLP-like architecture with the SELU activation that
+enables training deeper models.
+• NODE (Popov et al., 2020). A differentiable ensemble of oblivious decision trees.
+• TabNet (Arik and Pfister, 2020). A recurrent architecture that alternates dynamical reweighing of features and conventional feed-forward modules.
+• GrowNet (Badirli et al., 2020). Gradient boosted weak MLPs. The official implementation
+supports only classification and regression problems.
+• DCN V2 (Wang et al., 2020a). Consists of an MLP-like module and the feature crossing
+module (a combination of linear layers and multiplications).
+• AutoInt (Song et al., 2019). Transforms features to embeddings and applies a series of
+attention-based transformations to the embeddings.
+• XGBoost (Chen and Guestrin, 2016). One of the most popular GBDT implementations.
+• CatBoost (Prokhorenkova et al., 2018). GBDT implementation that uses oblivious decision
+trees (Lou and Obukhov, 2017) as weak learners.
+
+4
+
+Experiments
+
+In this section, we compare DL models to each other as well as to GBDT. Note that in the main text,
+we report only the key results. In supplementary, we provide: (1) the results for all models on all
+datasets; (2) information on hardware; (3) training times for ResNet and FT-Transformer.
+4.1
+
+Scope of the comparison
+
+In our work, we focus on the relative performance of different architectures and do not employ various
+model-agnostic DL practices, such as pretraining, additional loss functions, data augmentation,
+distillation, learning rate warmup, learning rate decay and many others. While these practices can
+potentially improve the performance, our goal is to evaluate the impact of inductive biases imposed
+by the different model architectures.
+4.2
+
+Datasets
+
+We use a diverse set of eleven public datasets (see supplementary for the detailed description). For
+each dataset, there is exactly one train-validation-test split, so all algorithms use the same splits. The
+datasets include: California Housing (CA, real estate data, Kelley Pace and Barry (1997)), Adult
+(AD, income estimation, Kohavi (1996)), Helena (HE, anonymized dataset, Guyon et al. (2019)),
+5
+
+Jannis (JA, anonymized dataset, Guyon et al. (2019)), Higgs (HI, simulated physical particles, Baldi
+et al. (2014); we use the version with 98K samples available at the OpenML repository (Vanschoren
+et al., 2014)), ALOI (AL, images, Geusebroek et al. (2005)), Epsilon (EP, simulated physics experiments), Year (YE, audio features, Bertin-Mahieux et al. (2011)), Covertype (CO, forest characteristics,
+Blackard and Dean. (2000)), Yahoo (YA, search queries, Chapelle and Chang (2011)), Microsoft (MI,
+search queries, Qin and Liu (2013)). We follow the pointwise approach to learning-to-rank and treat
+ranking problems (Microsoft, Yahoo) as regression problems. The dataset properties are summarized
+in Table 1.
+
+Table 1: Dataset properties. Notation: “RMSE” ~ root-mean-square error, “Acc.” ~ accuracy.
+CA
+
+AD
+
+HE
+
+JA
+
+HI
+
+AL
+
+EP
+
+YE
+
+CO
+
+YA
+
+MI
+
+#objects
+20640 48842 65196 83733 98050 108000 500000 515345 581012 709877 1200192
+#num. features
+8
+6
+27
+54
+28
+128
+2000
+90
+54
+699
+136
+#cat. features
+0
+8
+0
+0
+0
+0
+0
+0
+0
+0
+0
+metric
+RMSE Acc. Acc. Acc. Acc. Acc.
+Acc. RMSE Acc. RMSE RMSE
+#classes
+–
+2
+100
+4
+2
+1000
+2
+–
+7
+–
+–
+
+4.3
+
+Implementation details
+
+Data preprocessing. Data preprocessing is known to be vital for DL models. For each dataset, the
+same preprocessing was used for all deep models for a fair comparison. By default, we used the
+quantile transformation from the Scikit-learn library (Pedregosa et al., 2011). We apply standardization (mean subtraction and scaling) to Helena and ALOI. The latter one represents image data,
+and standardization is a common practice in computer vision. On the Epsilon dataset, we observed
+preprocessing to be detrimental to deep models’ performance, so we use the raw features on this
+dataset. We apply standardization to regression targets for all algorithms.
+Tuning. For every dataset, we carefully tune each model’s hyperparameters. The best hyperparameters
+are the ones that perform best on the validation set, so the test set is never used for tuning. For
+most algorithms, we use the Optuna library (Akiba et al., 2019) to run Bayesian optimization (the
+Tree-Structured Parzen Estimator algorithm), which is reported to be superior to random search
+(Turner et al., 2021). For the rest, we iterate over predefined sets of configurations recommended by
+corresponding papers. We provide parameter spaces and grids in supplementary. We set the budget
+for Optuna-based tuning in terms of iterations and provide additional analysis on setting the budget
+in terms of time in supplementary.
+Evaluation. For each tuned configuration, we run 15 experiments with different random seeds and
+report the performance on the test set. For some algorithms, we also report the performance of default
+configurations without hyperparameter tuning.
+Ensembles. For each model, on each dataset, we obtain three ensembles by splitting the 15 single
+models into three disjoint groups of equal size and averaging predictions of single models within
+each group.
+Neural networks. We minimize cross-entropy for classification problems and mean squared error
+for regression problems. For TabNet and GrowNet, we follow the original implementations and use
+the Adam optimizer (Kingma and Ba, 2017). For all other algorithms, we use the AdamW optimizer
+(Loshchilov and Hutter, 2019). We do not apply learning rate schedules. For each dataset, we use
+a predefined batch size for all algorithms unless special instructions on batch sizes are given in
+the corresponding papers (see supplementary). We continue training until there are patience + 1
+consecutive epochs without improvements on the validation set; we set patience = 16 for all
+algorithms.
+Categorical features. For XGBoost, we use one-hot encoding. For CatBoost, we employ the built-in
+support for categorical features. For Neural Networks, we use embeddings of the same dimensionality
+for all categorical features.
+6
+
+Table 2: Results for DL models. The metric values averaged over 15 random seeds are reported. See
+supplementary for standard deviations. For each dataset, top results are in bold. “Top” means “the
+gap between this result and the result with the best score is not statistically significant”. For each
+dataset, ranks are calculated by sorting the reported scores; the “rank” column reports the average
+rank across all datasets. Notation: FT-T ~ FT-Transformer, ↓ ~ RMSE, ↑ ~ accuracy
+CA ↓ AD ↑ HE ↑
+
+JA ↑
+
+HI ↑
+
+AL ↑
+
+EP ↑
+
+YE ↓
+
+CO ↑
+
+YA ↓
+
+MI ↓ rank (std)
+
+TabNet 0.510 0.850 0.378 0.723 0.719 0.954 0.8896 8.909 0.957 0.823 0.751 7.5 (2.0)
+SNN
+0.493 0.854 0.373 0.719 0.722 0.954 0.8975 8.895 0.961 0.761 0.751 6.4 (1.4)
+AutoInt 0.474 0.859 0.372 0.721 0.725 0.945 0.8949 8.882 0.934 0.768 0.750 5.7 (2.3)
+GrowNet 0.487 0.857
+–
+–
+0.722
+–
+0.8970 8.827
+–
+0.765 0.751 5.7 (2.2)
+MLP
+0.499 0.852 0.383 0.719 0.723 0.954 0.8977 8.853 0.962 0.757 0.747 4.8 (1.9)
+DCN2
+0.484 0.853 0.385 0.716 0.723 0.955 0.8977 8.890 0.965 0.757 0.749 4.7 (2.0)
+NODE
+0.464 0.858 0.359 0.727 0.726 0.918 0.8958 8.784 0.958 0.753 0.745 3.9 (2.8)
+ResNet 0.486 0.854 0.396 0.728 0.727 0.963 0.8969 8.846 0.964 0.757 0.748 3.3 (1.8)
+FT-T
+0.459 0.859 0.391 0.732 0.729 0.960 0.8982 8.855 0.970 0.756 0.746 1.8 (1.2)
+
+4.4
+
+Comparing DL models
+
+Table 2 reports the results for deep architectures.
+The main takeaways:
+• MLP is still a good sanity check
+• ResNet turns out to be an effective baseline that none of the competitors can consistently
+outperform.
+• FT-Transformer performs best on most tasks and becomes a new powerful solution for the
+field.
+• Tuning makes simple models such as MLP and ResNet competitive, so we recommend
+tuning baselines when possible. Luckily, today, it is more approachable with libraries such
+as Optuna (Akiba et al., 2019).
+Among other models, NODE (Popov et al., 2020) is the only one that demonstrates high performance
+on several tasks. However, it is still inferior to ResNet on six datasets (Helena, Jannis, Higgs, ALOI,
+Epsilon, Covertype), while being a more complex solution. Moreover, it is not a truly “single” model;
+in fact, it often contains significantly more parameters than ResNet and FT-Transformer and has an
+ensemble-like structure. We illustrate that by comparing ensembles in Table 3. The results indicate
+that FT-Transformer and ResNet benefit more from ensembling; in this regime, FT-Transformer
+outperforms NODE and the gap between ResNet and NODE is significantly reduced. Nevertheless,
+NODE remains a prominent solution among tree-based approaches.
+Table 3: Results for ensembles of DL models with the highest ranks (see Table 2). For each
+model-dataset pair, the metric value averaged over three ensembles is reported. See supplementary
+for standard deviations. Depending on the dataset, the highest accuracy or the lowest RMSE is in
+bold. Due to the limited precision, some different values are represented with the same figures.
+Notation: ↓ ~ RMSE, ↑ ~ accuracy.
+CA ↓ AD ↑ HE ↑
+
+JA ↑
+
+HI ↑
+
+AL ↑
+
+EP ↑
+
+YE ↓
+
+CO ↑
+
+YA ↓
+
+MI ↓
+
+NODE
+0.461 0.860 0.361 0.730 0.727 0.921 0.8970 8.716 0.965 0.750 0.744
+ResNet
+0.478 0.857 0.398 0.734 0.731 0.966 0.8976 8.770 0.967 0.751 0.745
+FT-Transformer 0.448 0.860 0.398 0.739 0.731 0.967 0.8984 8.751 0.973 0.747 0.743
+
+4.5
+
+Comparing DL models and GBDT
+
+In this section, our goal is to check whether DL models are conceptually ready to outperform GBDT.
+To this end, we compare the best possible metric values that one can achieve using GBDT or DL
+models, without taking speed and hardware requirements into account (undoubtedly, GBDT is a more
+lightweight solution). We accomplish that by comparing ensembles instead of single models since
+7
+
+GBDT is essentially an ensembling technique and we expect that deep architectures will benefit more
+from ensembling (Fort et al., 2020). We report the results in Table 4.
+Table 4: Results for ensembles of GBDT and the main DL models. For each model-dataset pair, the
+metric value averaged over three ensembles is reported. See supplementary for standard deviations.
+Notation follows Table 3.
+CA ↓ AD ↑ HE ↑
+
+JA ↑
+
+HI ↑
+
+AL ↑
+
+EP ↑
+
+YE ↓
+
+CO ↑
+
+YA ↓
+
+MI ↓
+
+Default hyperparameters
+XGBoost
+0.462 0.874 0.348 0.711 0.717 0.924 0.8799 9.192 0.964 0.761 0.751
+CatBoost
+0.428 0.873 0.386 0.724 0.728 0.948 0.8893 8.885 0.910 0.749 0.744
+FT-Transformer 0.454 0.860 0.395 0.734 0.731 0.966 0.8969 8.727 0.973 0.747 0.742
+Tuned hyperparameters
+XGBoost
+0.431 0.872 0.377 0.724 0.728
+–
+0.8861 8.819 0.969 0.732 0.742
+CatBoost
+0.423 0.874 0.388 0.727 0.729
+–
+0.8898 8.837 0.968 0.740 0.741
+ResNet
+0.478 0.857 0.398 0.734 0.731 0.966 0.8976 8.770 0.967 0.751 0.745
+FT-Transformer 0.448 0.860 0.398 0.739 0.731 0.967 0.8984 8.751 0.973 0.747 0.743
+
+Default hyperparameters. We start with the default configurations to check the “out-of-the-box”
+performance, which is an important practical scenario. The default FT-Transformer implies a configuration with all hyperparameters set to some specific values that we provide in supplementary. Table 4
+demonstrates that the ensemble of FT-Transformers mostly outperforms the ensembles of GBDT,
+which is not the case for only two datasets (California Housing, Adult). Interestingly, the ensemble
+of default FT-Transformers performs quite on par with the ensembles of tuned FT-Transformers.
+The main takeaway: FT-Transformer allows building powerful ensembles out of the box.
+Tuned hyperparameters. Once hyperparameters are properly tuned, GBDTs start dominating on
+some datasets (California Housing, Adult, Yahoo; see Table 4). In those cases, the gaps are significant
+enough to conclude that DL models do not universally outperform GBDT. Importantly, the fact that
+DL models outperform GBDT on most of the tasks does not mean that DL solutions are “better” in any
+sense. In fact, it only means that the constructed benchmark is slightly biased towards “DL-friendly”
+problems. Admittedly, GBDT remains an unsuitable solution to multiclass problems with a large
+number of classes. Depending on the number of classes, GBDT can demonstrate unsatisfactory
+performance (Helena) or even be untunable due to extremely slow training (ALOI).
+The main takeaways:
+• there is still no universal solution among DL models and GBDT
+• DL research efforts aimed at surpassing GBDT should focus on datasets where GBDT
+outperforms state-of-the-art DL solutions. Note that including “DL-friendly” problems is
+still important to avoid degradation on such problems.
+4.6
+
+An intriguing property of FT-Transformer
+
+Table 4 tells one more important story. Namely, FT-Transformer delivers most of its advantage over
+the “conventional” DL model in the form of ResNet exactly on those problems where GBDT is
+superior to ResNet (California Housing, Adult, Covertype, Yahoo, Microsoft) while performing on
+par with ResNet on the remaining problems. In other words, FT-Transformer provides competitive
+performance on all tasks, while GBDT and ResNet perform well only on some subsets of the tasks.
+This observation may be the evidence that FT-Transformer is a more “universal” model for tabular
+data problems. We develop this intuition further in section 5.1. Note that the described phenomenon
+is not related to ensembling and is observed for single models too (see supplementary).
+
+5
+
+Analysis
+
+5.1
+
+When FT-Transformer is better than ResNet?
+
+In this section, we make the first step towards understanding the difference in behavior between
+FT-Transformer and ResNet, which was first observed in section 4.6. To achieve that, we design a
+8
+
+sequence of synthetic tasks where the difference in performance of the two models gradually changes
+from negligible to dramatic. Namely, we generate and fix objects {xi }ni=1 , perform the train-val-test
+split once and interpolate between two regression targets: fGBDT , which is supposed to be easier for
+GBDT and fDL , which is expected to be easier for ResNet. Formally, for one object:
+
+x ∼ N (0, Ik ),
+
+y = α · fGBDT (x) + (1 − α) · fDL (x).
+
+RMSE
+
+where fGBDT (x) is an average prediction of
+0.8
+30 randomly constructed decision trees, and
+0.7
+fDL (x) is an MLP with three randomly initial0.6
+ized hidden layers. Both fGBDT and fDL are
+0.5
+generated once, i.e. the same functions are applied to all objects (see supplementary for de0.4
+tails). The resulting targets are standardized
+0.3
+before training. The results are visualized in
+0.2
+ResNet
+Figure 3. ResNet and FT-Transformer perform
+FT-Transformer
+similarly well on the ResNet-friendly tasks and
+0.1
+CatBoost
+outperform CatBoost on those tasks. However,
+0.0
+0.00
+0.25
+0.50
+0.75
+1.00
+the ResNet’s relative performance drops signifα
+icantly when the target becomes more GBDT
+friendly. By contrast, FT-Transformer yields
+competitive performance across the whole range Figure 3: Test RMSE averaged over five seeds
+(shadows represent std. dev.). One α corresponds
+of tasks.
+to one task; each task has the same set of train,
+The conducted experiment reveals a type of validation and test features, but different targets.
+functions that are better approximated by
+FT-Transformer than by ResNet. Additionally,
+the fact that these functions are based on decision trees correlates with the observations in section 4.6
+and the results in Table 4, where FT-Transformer shows the most convincing improvements over
+ResNet exactly on those datasets where GBDT outperforms ResNet.
+5.2
+
+Ablation study
+
+In this section, we test some design choices of FT-Transformer.
+First, we compare FT-Transformer with AutoInt (Song et al., 2019), since it is the closest competitor
+in its spirit. AutoInt also converts all features to embeddings and applies self-attention on top of them.
+However, in its details, AutoInt significantly differs from FT-Transformer: its embedding layer does
+not include feature biases, its backbone significantly differs from the vanilla Transformer (Vaswani
+et al., 2017), and the inference mechanism does not use the [CLS] token.
+Second, we check whether feature biases in Feature Tokenizer are essential for good performance.
+We tune and evaluate FT-Transformer without feature biases following the same protocol as in
+section 4.3 and reuse the remaining numbers from Table 2. The results averaged over 15 runs are
+reported in Table 5 and demonstrate both the superiority of the Transformer’s backbone to that of
+AutoInt and the necessity of feature biases.
+
+Table 5: The results of the comparison between FT-Transformer and two attention-based alternatives:
+AutoInt and FT-Transformer without feature biases. Notation follows Table 2.
+CA ↓
+
+HE ↑
+
+JA ↑
+
+HI ↑
+
+AL ↑
+
+YE ↓
+
+CO ↑
+
+MI ↓
+
+AutoInt
+0.474 0.372 0.721 0.725 0.945 8.882 0.934 0.750
+FT-Transformer (w/o feature biases) 0.470 0.381 0.724 0.727 0.958 8.843 0.964 0.751
+FT-Transformer
+0.459 0.391 0.732 0.729 0.960 8.855 0.970 0.746
+
+9
+
+5.3
+
+Obtaining feature importances from attention maps
+
+In this section, we evaluate attention maps as a source of information on feature importances for
+FT-Transformer for a given set of samples. For the i-th sample, we calculate the average attention map
+pi for the [CLS] token from Transformer’s forward pass. Then, the obtained individual distributions
+are averaged into one distribution p that represents the feature importances:
+X
+X
+1
+1
+pi
+pi =
+pihl .
+p=
+nsamples i
+nheads × L
+h,l
+
+where pihl is the h-th head’s attention map for the [CLS] token from the forward pass of the l-th
+layer on the i-th sample. The main advantage of the described heuristic technique is its efficiency: it
+requires a single forward for one sample.
+In order to evaluate our approach, we compare it with Integrated Gradients (IG, Sundararajan et al.
+(2017)), a general technique applicable to any differentiable model. We use permutation test (PT,
+Breiman (2001)) as a reasonable interpretable method that allows us to establish a constructive metric,
+namely, rank correlation. We run all the methods on the train set and summarize results in Table 6.
+Interestingly, the proposed method yields reasonable feature importances and performs similarly to
+IG (note that this does not imply similarity to IG’s feature importances). Given that IG can be orders
+of magnitude slower and the “baseline” in the form of PT requires (nf eatures + 1) forward passes
+(versus one for the proposed method), we conclude that the simple averaging of attention maps can
+be a good choice in terms of cost-effectiveness.
+Table 6: Rank correlation (takes values in [−1, 1]) between permutation test’s feature importances
+ranking and two alternative rankings: Attention Maps (AM) and Integrated Gradients (IG). Means
+and standard deviations over five runs are reported.
+CA
+
+HE
+
+JA
+
+HI
+
+AL
+
+YE
+
+CO
+
+MI
+
+AM 0.81 (0.05) 0.77 (0.03) 0.78 (0.05) 0.91 (0.03) 0.84 (0.01) 0.92 (0.01) 0.84 (0.04) 0.86 (0.02)
+IG 0.84 (0.08) 0.74 (0.03) 0.75 (0.04) 0.72 (0.03) 0.89 (0.01) 0.50 (0.03) 0.90 (0.02) 0.56 (0.02)
+
+6
+
+Conclusion
+
+In this work, we have investigated the status quo in the field of deep learning for tabular data and
+improved the state of baselines in tabular DL. First, we have demonstrated that a simple ResNet-like
+architecture can serve as an effective baseline. Second, we have proposed FT-Transformer — a
+simple adaptation of the Transformer architecture that outperforms other DL solutions on most of
+the tasks. We have also compared the new baselines with GBDT and demonstrated that GBDT still
+dominates on some tasks. The code and all the details of the study are open-sourced 1 , and we hope
+that our evaluation and two simple models (ResNet and FT-Transformer) will serve as a basis for
+further developments on tabular DL.
+
+References
+T. Akiba, S. Sano, T. Yanase, T. Ohta, and M. Koyama. Optuna: A next-generation hyperparameter
+optimization framework. In KDD, 2019.
+S. O. Arik and T. Pfister. Tabnet: Attentive interpretable tabular learning. arXiv, 1908.07442v5, 2020.
+J. L. Ba, J. R. Kiros, and G. E. Hinton. Layer normalization. arXiv, 1607.06450v1, 2016.
+S. Badirli, X. Liu, Z. Xing, A. Bhowmik, K. Doan, and S. S. Keerthi. Gradient boosting neural
+networks: Grownet. arXiv, 2002.07971v2, 2020.
+P. Baldi, P. Sadowski, and D. Whiteson. Searching for exotic particles in high-energy physics with
+deep learning. Nature Communications, 5, 2014.
+1
+
+https://github.com/yandex-research/tabular-dl-revisiting-models
+
+10
+
+T. Bertin-Mahieux, D. P. Ellis, B. Whitman, and P. Lamere. The million song dataset. In Proceedings
+of the 12th International Conference on Music Information Retrieval (ISMIR 2011), 2011.
+A. Beutel, P. Covington, S. Jain, C. Xu, J. Li, V. Gatto, and E. H. Chi. Latent cross: Making use of
+context in recurrent recommender systems. In WSDM 2018: The Eleventh ACM International
+Conference on Web Search and Data Mining, 2018.
+J. A. Blackard and D. J. Dean. Comparative accuracies of artificial neural networks and discriminant
+analysis in predicting forest cover types from cartographic variables. Computers and Electronics
+in Agriculture, 24(3):131–151, 2000.
+L. Breiman. Random forests. Machine Learning, 45(1):5–32, 2001.
+O. Chapelle and Y. Chang. Yahoo! learning to rank challenge overview. In Proceedings of the
+Learning to Rank Challenge, volume 14, 2011.
+T. Chen and C. Guestrin. Xgboost: A scalable tree boosting system. In SIGKDD, 2016.
+J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei. Imagenet: A large-scale hierarchical
+image database. In CVPR, 2009.
+J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova. Bert: Pre-training of deep bidirectional
+transformers for language understanding. arXiv, 1810.04805v2, 2019.
+A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani,
+M. Minderer, G. Heigold, S. Gelly, et al. An image is worth 16x16 words: Transformers for image
+recognition at scale. In ICLR, 2021.
+S. Fort, H. Hu, and B. Lakshminarayanan. Deep ensembles: A loss landscape perspective. arXiv,
+1912.02757v2, 2020.
+J. H. Friedman. Greedy function approximation: A gradient boosting machine. The Annals of
+Statistics, 29(5):1189–1232, 2001.
+J. M. Geusebroek, G. J. Burghouts, , and A. W. M. Smeulders. The amsterdam library of object
+images. Int. J. Comput. Vision, 61(1):103–112, 2005.
+I. Goodfellow, Y. Bengio, and A. Courville. Deep Learning. MIT Press, 2016. http://www.
+deeplearningbook.org.
+I. Guyon, L. Sun-Hosoya, M. Boullé, H. J. Escalante, S. Escalera, Z. Liu, D. Jajetic, B. Ray, M. Saeed,
+M. Sebag, A. Statnikov, W. Tu, and E. Viegas. Analysis of the automl challenge series 2015-2018.
+In AutoML, Springer series on Challenges in Machine Learning, 2019.
+H. Hazimeh, N. Ponomareva, P. Mol, Z. Tan, and R. Mazumder. The tree ensemble layer: Differentiability meets conditional computation. In ICML, 2020.
+K. He, X. Zhang, S. Ren, and J. Sun. Delving deep into rectifiers: Surpassing human-level performance on imagenet classification. In ICCV, 2015a.
+K. He, X. Zhang, S. Ren, and J. Sun. Deep residual learning for image recognition. arXiv,
+1512.03385v1, 2015b.
+K. He, X. Zhang, S. Ren, and J. Sun. Identity mappings in deep residual networks. In ECCV, 2016.
+X. Huang, A. Khetan, M. Cvitkovic, and Z. Karnin. Tabtransformer: Tabular data modeling using
+contextual embeddings. arXiv, 2012.06678v1, 2020a.
+X. S. Huang, F. Perez, J. Ba, and M. Volkovs. Improving transformer optimization through better
+initialization. In ICML, 2020b.
+G. Ke, Q. Meng, T. Finley, T. Wang, W. Chen, W. Ma, Q. Ye, and T.-Y. Liu. Lightgbm: A highly
+efficient gradient boosting decision tree. Advances in neural information processing systems, 30:
+3146–3154, 2017.
+11
+
+R. Kelley Pace and R. Barry. Sparse spatial autoregressions. Statistics & Probability Letters, 33(3):
+291–297, 1997.
+D. P. Kingma and J. Ba. Adam: A method for stochastic optimization. arXiv, 1412.6980v9, 2017.
+G. Klambauer, T. Unterthiner, A. Mayr, and S. Hochreiter. Self-normalizing neural networks. In
+NIPS, 2017.
+R. Kohavi. Scaling up the accuracy of naive-bayes classifiers: a decision-tree hybrid. In KDD, 1996.
+P. Kontschieder, M. Fiterau, A. Criminisi, and S. Rota Bulo. Deep neural decision forests. In
+Proceedings of the IEEE international conference on computer vision, 2015.
+L. Liu, X. Liu, J. Gao, W. Chen, and J. Han. Understanding the difficulty of training transformers. In
+EMNLP, 2020.
+I. Loshchilov and F. Hutter. Decoupled weight decay regularization. In ICLR, 2019.
+Y. Lou and M. Obukhov. Bdt: Gradient boosted decision tables for high accuracy and scoring
+efficiency. In Proceedings of the 23rd ACM SIGKDD International Conference on Knowledge
+Discovery and Data Mining, 2017.
+S. Moro, P. Cortez, and P. Rita. A data-driven approach to predict the success of bank telemarketing.
+Decis. Support Syst., 62:22–31, 2014.
+S. Narang, H. W. Chung, Y. Tay, W. Fedus, T. Fevry, M. Matena, K. Malkan, N. Fiedel, N. Shazeer,
+Z. Lan, Y. Zhou, W. Li, N. Ding, J. Marcus, A. Roberts, and C. Raffel. Do transformer modifications
+transfer across implementations and applications? arXiv, 2102.11972v1, 2021.
+T. Q. Nguyen and J. Salazar. Transformers without tears: Improving the normalization of selfattention. In IWSLT, 2019.
+F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher, M. Perrot, and
+E. Duchesnay. Scikit-learn: Machine learning in Python. Journal of Machine Learning Research,
+12:2825–2830, 2011.
+S. Popov, S. Morozov, and A. Babenko. Neural oblivious decision ensembles for deep learning on
+tabular data. In ICLR, 2020.
+L. Prokhorenkova, G. Gusev, A. Vorobev, A. V. Dorogush, and A. Gulin. Catboost: unbiased boosting
+with categorical features. In NeurIPS, 2018.
+T. Qin and T. Liu. Introducing LETOR 4.0 datasets. arXiv, 1306.2597v1, 2013.
+Z. Qin, L. Yan, H. Zhuang, Y. Tay, R. K. Pasumarthi, X. Wang, M. Bendersky, and M. Najork. Are
+neural rankers still outperformed by gradient boosted decision trees? In ICLR, 2021.
+N. Shazeer. Glu variants improve transformer. arXiv, 2002.05202v1, 2020.
+W. Song, C. Shi, Z. Xiao, Z. Duan, Y. Xu, M. Zhang, and J. Tang. Autoint: Automatic feature
+interaction learning via self-attentive neural networks. In CIKM, 2019.
+N. Srivastava, G. E. Hinton, A. Krizhevsky, I. Sutskever, and R. Salakhutdinov. Dropout: a simple
+way to prevent neural networks from overfitting. Journal of Machine Learning Research, 15(1):
+1929–1958, 2014.
+S. Sun and M. Iyyer. Revisiting simple neural probabilistic language models. In NAACL, 2021.
+M. Sundararajan, A. Taly, and Q. Yan. Axiomatic attribution for deep networks. In ICML, 2017.
+Y. Tay, M. Dehghani, D. Bahri, and D. Metzler. Efficient transformers: A survey. arXiv, 2009.06732v1,
+2020.
+12
+
+R. Turner, D. Eriksson, M. McCourt, J. Kiili, E. Laaksonen, Z. Xu, and I. Guyon. Bayesian
+optimization is superior to random search for machine learning hyperparameter tuning: Analysis
+of the black-box optimization challenge 2020. arXiv, https://arxiv.org/abs/2104.10201v1, 2021.
+J. Vanschoren, J. N. van Rijn, B. Bischl, and L. Torgo. Openml: networked science in machine
+learning. arXiv, 1407.7722v1, 2014.
+A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and I. Polosukhin.
+Attention is all you need. In NIPS, 2017.
+A. Wang, A. Singh, J. Michael, F. Hill, O. Levy, and S. R. Bowman. GLUE: A multi-task benchmark
+and analysis platform for natural language understanding. In ICLR, 2019a.
+Q. Wang, B. Li, T. Xiao, J. Zhu, C. Li, D. F. Wong, and L. S. Chao. Learning deep transformer
+models for machine translation. In ACL, 2019b.
+R. Wang, B. Fu, G. Fu, and M. Wang. Deep & cross network for ad click predictions. In ADKDD,
+2017.
+R. Wang, R. Shivanna, D. Z. Cheng, S. Jain, D. Lin, L. Hong, and E. H. Chi. Dcn v2: Improved deep
+& cross network and practical lessons for web-scale learning to rank systems. arXiv, 2008.13535v2,
+2020a.
+S. Wang, B. Z. Li, M. Khabsa, H. Fang, and H. Ma. Linformer: Self-attention with linear complexity.
+arXiv, 2006.04768v3, 2020b.
+N. Wies, Y. Levine, D. Jannai, and A. Shashua. Which transformer architecture fits my data? a
+vocabulary bottleneck in self-attention. In ICLM, 2021.
+F. Wilcoxon. Individual comparisons by ranking methods. Biometrics Bulletin, 1(6):80, 1945.
+T. Wolf, L. Debut, V. Sanh, J. Chaumond, C. Delangue, A. Moi, P. Cistac, T. Rault, R. Louf,
+M. Funtowicz, J. Davison, S. Shleifer, P. von Platen, C. Ma, Y. Jernite, J. Plu, C. Xu, T. L. Scao,
+S. Gugger, M. Drame, Q. Lhoest, and A. M. Rush. Huggingface’s transformers: State-of-the-art
+natural language processing. arXiv, 1910.03771v5, 2020.
+Y. Yang, I. G. Morillo, and T. M. Hospedales. Deep neural decision trees. arXiv, 1806.06988v1,
+2018.
+
+13
+
+Supplementary material
+A
+
+Software and hardware
+
+For most model-dataset pairs the workflow was as follows:
+• tune the model on any suitable hardware
+• evaluate the tuned model on one or more NVidia Tesla V100 32Gb
+All the experiments were conducted under the same conditions in terms of software versions. For
+almost all experiments the used hardware can be found in the source code.
+B
+
+Data
+
+B.1
+
+Datasets
+Table 7: Datasets description
+
+Name
+
+Abbr # Train # Validation # Test # Num # Cat Task type Batch size
+
+California Housing
+Adult
+Helena
+Jannis
+Higgs Small
+ALOI
+Epsilon
+Year
+Covtype
+Yahoo
+Microsoft
+
+CA
+AD
+HE
+JA
+HI
+AL
+EP
+YE
+CO
+YA
+MI
+
+B.2
+
+13209
+26048
+41724
+53588
+62752
+69120
+320000
+370972
+371847
+473134
+723412
+
+3303
+6513
+10432
+13398
+15688
+17280
+80000
+92743
+92962
+71083
+235259
+
+4128
+8
+16281
+6
+13040
+27
+16747
+54
+19610
+28
+21600 128
+100000 2000
+51630
+90
+116203 54
+165660 699
+241521 136
+
+0
+8
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
+Regression
+Binclass
+Multiclass
+Multiclass
+Binclass
+Multiclass
+Binclass
+Regression
+Multiclass
+Regression
+Regression
+
+256
+256
+512
+512
+512
+512
+1024
+1024
+1024
+1024
+1024
+
+Preprocessing
+
+For regression problems, we standardize the target values:
+ynew =
+
+yold − mean(ytrain ))
+std(ytrain )
+
+(3)
+
+The feature preprocessing for DL models is described in the main text. Note that we add noise from
+N (0, 1e − 3) to train numerical features for calculating the parameters (quantiles) of the quantile
+preprocessing as a workaround for features with few distinct values (see the source code for the
+exact implementation). The preprocessing is then applied to original features. We do not preprocess
+features for GBDTs, since this family of algorithms is insensitive to feature shifts and scaling.
+C
+
+Results for all algorithms on all datasets
+
+To measure statistical significance in the main text and in the tables in this section, we use the
+one-sided Wilcoxon (1945) test with p = 0.01.
+Table 8 and Table 9 report all results for all models on all datasets.
+
+14
+
+15
+
+HE ↑
+
+JA ↑
+
+AL ↑
+
+Baseline Neural Networks
+
+HI ↑
+
+EP ↑
+
+YE ↓
+
+CO ↑
+
+YA ↓
+
+FT-Transformer
+
+0.430±7.4e-4 0.873±9.6e-4
+0.431±1.5e-3 0.873±1.2e-3
+0.462±0.0
+0.874±0.0
+0.433±1.6e-3 0.872±4.6e-4
+
+0.381±1.5e-3
+0.385±1.1e-3
+0.348±0.0
+0.375±1.2e-3
+
+0.721±1.1e-3
+0.723±1.5e-3
+0.711±0.0
+0.721±1.0e-3
+
+0.726±8.0e-4
+0.725±1.5e-3
+0.717±0.0
+0.727±1.0e-3
+
+0.946±9.3e-4
+–
+0.924±0.0
+–
+
+GBDT
+0.8880±4.5e-4
+0.8880±5.8e-4
+0.8799±0.0
+0.8837±1.2e-3
+
+8.913±5.5e-3
+8.877±6.0e-3
+9.192±0.0
+8.947±8.5e-3
+
+HE ↑
+
+JA ↑
+
+AL ↑
+
+Baseline Neural Networks
+
+HI ↑
+
+EP ↑
+
+YE ↓
+
+CO ↑
+
+YA ↓
+
+FT-Transformer
+
+0.488±1.8e-3 0.856±3.4e-4 0.391±3.1e-4 0.736±1.3e-3 0.727±1.3e-3 0.961±2.8e-4 0.8944±6.8e-4 8.728±8.0e-3 0.966±1.5e-3 0.815±3.4e-3 0.746±3.5e-4
+0.478±1.0e-3 0.857±3.1e-4 0.380±1.2e-3 0.727±8.7e-4 0.729±2.2e-3 0.962±2.8e-4 0.8976±7.5e-5 8.759±1.4e-3 0.966±4.5e-4 0.754±4.0e-4 0.747±5.2e-4
+0.459±3.7e-3 0.860±2.2e-4 0.382±3.7e-4 0.733±7.8e-4 0.732±6.6e-4 0.959±1.7e-4 0.8966±2.5e-4 8.736±3.0e-3 0.950±1.1e-3 0.758±1.7e-4 0.747±1.5e-4
+0.468±1.4e-3 0.859±6.3e-4
+–
+–
+0.730±4.1e-4
+–
+0.8978±1.5e-4 8.683±6.6e-3
+–
+0.756±4.7e-4 0.747±1.4e-4
+0.487±7.9e-4 0.855±4.8e-4 0.390±1.4e-3 0.725±2.1e-4 0.725±3.1e-4 0.960±3.2e-4 0.8979±1.1e-4 8.712±6.3e-3 0.966±9.1e-5 0.753±1.5e-4 0.746±1.4e-4
+0.477±3.7e-4 0.857±3.2e-4 0.388±1.5e-3 0.719±1.5e-3 0.725±1.0e-3 0.960±4.1e-4 0.8977±4.8e-5 8.800±9.9e-3 0.969±6.4e-4 0.752±7.7e-4 0.746±3.7e-4
+0.461±6.9e-4 0.860±7.0e-4 0.361±7.9e-4 0.730±8.4e-4 0.727±9.1e-4 0.921±1.6e-3 0.8970±3.7e-4 8.716±3.1e-3 0.965±5.0e-4 0.750±2.1e-5 0.744±8.2e-5
+0.478±7.9e-4 0.857±4.3e-4 0.398±7.2e-4 0.734±1.3e-3 0.731±8.5e-4 0.966±4.9e-4 0.8976±2.7e-4 8.770±8.0e-3 0.967±6.7e-4 0.751±7.5e-5 0.745±1.9e-4
+
+AD ↑
+
+CatBoostd
+CatBoost
+XGBoostd
+XGBoost
+
+0.428±4.5e-5 0.873±4.2e-4 0.386±1.0e-3
+0.423±8.9e-4 0.874±4.5e-4 0.388±2.7e-4
+0.462±0.0
+0.874±0.0
+0.348±0.0
+0.431±3.6e-4 0.872±2.3e-4 0.377±7.6e-4
+
+0.724±4.8e-4
+0.727±6.4e-4
+0.711±0.0
+0.724±3.4e-4
+
+0.728±7.4e-4
+0.729±1.6e-3
+0.717±0.0
+0.728±5.3e-4
+
+0.948±9.2e-4
+–
+0.924±0.0
+–
+
+GBDT
+0.8893±2.7e-4
+0.8898±7.7e-5
+0.8799±0.0
+0.8861±1.6e-4
+
+8.885±1.9e-3
+8.837±3.2e-3
+9.192±0.0
+8.819±4.0e-3
+
+0.910±3.0e-4 0.749±1.1e-4 0.744±4.4e-5
+0.968±2.2e-5 0.740±1.7e-4 0.741±7.3e-5
+0.964±0.0
+0.761±0.0
+0.751±0.0
+0.969±1.9e-4 0.732±5.4e-5 0.742±1.8e-5
+
+FT-Transformerd 0.454±1.1e-3 0.860±4.9e-4 0.395±9.4e-4 0.734±7.5e-4 0.731±8.0e-4 0.966±3.9e-4 0.8969±1.9e-4 8.727±1.6e-2 0.973±3.2e-4 0.747±3.8e-4 0.742±3.3e-4
+FT-Transformer 0.448±7.5e-4 0.860±3.9e-4 0.398±4.3e-4 0.739±5.9e-4 0.731±7.7e-4 0.967±4.8e-4 0.8984±1.6e-4 8.751±9.4e-3 0.973±1.1e-4 0.747±3.8e-4 0.743±1.1e-4
+
+TabNet
+SNN
+AutoInt
+GrowNet
+MLP
+DCN2
+NODE
+ResNet
+
+CA ↓
+
+MI ↓
+
+0.908±2.4e-4 0.751±2.0e-4 0.745±2.3e-4
+0.966±2.7e-4 0.743±2.4e-4 0.743±2.1e-4
+0.964±0.0
+0.761±0.0
+0.751±0.0
+0.969±5.1e-4 0.736±2.1e-4 0.742±1.3e-4
+
+0.747±7.9e-4
+0.746±4.9e-4
+
+Table 9: Results for ensembles with standard deviations. Color notation follows Table 8, "top" results are defined as in Table 3. Best viewed in colors.
+
+CatBoostd
+CatBoost
+XGBoostd
+XGBoost
+
+MI ↓
+
+0.510±7.6e-3 0.850±5.2e-3 0.378±1.7e-3 0.723±3.5e-3 0.719±1.7e-3 0.954±1.0e-3 0.8896±3.1e-3 8.909±2.3e-2 0.957±7.5e-3 0.823±9.2e-3 0.751±9.4e-4
+0.493±4.6e-3 0.854±1.8e-3 0.373±2.8e-3 0.719±1.6e-3 0.722±2.2e-3 0.954±1.6e-3 0.8975±2.4e-4 8.895±1.9e-2 0.961±2.0e-3 0.761±5.3e-4 0.751±5.2e-4
+0.474±3.3e-3 0.859±1.5e-3 0.372±2.5e-3 0.721±2.3e-3 0.725±1.7e-3 0.945±1.3e-3 0.8949±5.8e-4 8.882±3.3e-2 0.934±3.5e-3 0.768±1.1e-3 0.750±6.1e-4
+0.487±7.1e-3 0.857±1.9e-3
+–
+–
+0.722±1.6e-3
+–
+0.8970±5.7e-4 8.827±3.8e-2
+–
+0.765±1.2e-3 0.751±4.7e-4
+0.499±2.9e-3 0.852±1.9e-3 0.383±2.6e-3 0.719±1.3e-3 0.723±1.8e-3 0.954±1.4e-3 0.8977±4.1e-4 8.853±3.1e-2 0.962±1.1e-3 0.757±3.5e-4 0.747±3.3e-4
+0.484±2.4e-3 0.853±3.9e-3 0.385±3.0e-3 0.716±1.5e-3 0.723±1.3e-3 0.955±1.2e-3 0.8977±2.6e-4 8.890±2.8e-2 0.965±1.0e-3 0.757±1.9e-3 0.749±5.8e-4
+0.464±1.5e-3 0.858±1.6e-3 0.359±2.0e-3 0.727±1.6e-3 0.726±1.3e-3 0.918±5.4e-3 0.8958±4.7e-4 8.784±1.6e-2 0.958±1.1e-3 0.753±2.5e-4 0.745±2.0e-4
+0.486±2.9e-3 0.854±1.7e-3 0.396±1.7e-3 0.728±1.5e-3 0.727±1.7e-3 0.963±7.5e-4 0.8969±4.4e-4 8.846±2.4e-2 0.964±1.1e-3 0.757±6.2e-4 0.748±3.1e-4
+
+AD ↑
+
+FT-Transformerd 0.469±3.8e-3 0.857±1.1e-3 0.381±2.4e-3 0.725±2.3e-3 0.725±1.8e-3 0.953±1.1e-3 0.8959±4.9e-4 8.889±4.6e-2 0.967±7.9e-4 0.756±8.2e-4
+FT-Transformer 0.459±3.5e-3 0.859±1.0e-3 0.391±1.2e-3 0.732±2.0e-3 0.729±1.5e-3 0.960±1.1e-3 0.8982±2.8e-4 8.855±3.1e-2 0.970±6.6e-4 0.756±8.2e-4
+
+TabNet
+SNN
+AutoInt
+GrowNet
+MLP
+DCN2
+NODE
+ResNet
+
+CA ↓
+
+Table 8: Results for single models with standard deviations. For each dataset, top results for baseline neural networks are in bold, top results for baseline neural
+networks and FT-Transformer are in blue, the overall top results are in red. “Top” means “the gap between this result and the result with the best mean score is not
+statistically significant”. “d” stands for “default”. The remaining notation follows those from the main text. Best viewed in colors.
+
+D
+
+Additional results
+
+D.1
+
+Training times
+Table 10: Training times in seconds averaged over 15 runs.
+CA
+
+AD
+
+HE
+
+JA
+
+HI
+
+AL
+
+EP
+
+YE
+
+CO
+
+YA
+
+MI
+
+ResNet
+72 144 363 163 91 933 704 777 4026 923 1243
+FT-Transformer 187 128 536 576 257 2864 934 1776 5050 12712 2857
+Overhead
+
+2.6x 0.9x 1.5x 3.5x 2.8x 3.1x 1.3x 2.3x 1.3x 13.8x 2.3x
+
+For most experiments, training times can be found in the source code. In Table 10, we provide the
+comparison between ResNet and FT-Transformer in order to “visualize” the overhead introduced by
+FT-Transformer compared to the main “conventional” DL baseline. The big difference on the Yahoo
+dataset is expected because of the large number of features (700).
+D.2
+
+How tuning time budget affects performance?
+
+In this section, we aim to answer the following questions:
+• how does the relative performance of tuned models depends on tuning time budget?
+• does the number of tuning iterations used in the main text allow models to reach most of
+their potential?
+The first question is important for two main reasons. First, we have to make sure that longer tuning
+times of FT-Transformer (the number of tuning iterations is the same as for all other models) is not
+the reason of its strong performance. Second, we want to test FT-Transformer in the regime of low
+tuning time budget.
+We consider four algorithms: XGBoost (as a fast GBDT implementation), MLP (as the fastest and
+simplest DL model), ResNet (as a stronger but slower DL model), FT-Transformer (as the strongest
+and the slowest DL model). We consider three datasets: California Housing, Adult, Higgs Small.
+On each dataset, for each algorithm, we run five independent (five random seeds) hyperparameter
+optimizations. Each run is constrained only by time. For each of the considered time budgets (15
+minutes, 30 minutes, 1 hour, 2 hours, 3 hours, 4 hours, 5 hours, 6 hours), we pick the best model
+identified by Optuna on the validation set using no more than this time budget. Then, we report its
+performance and the number of Optuna iterations averaged over the five random seeds. The results
+are reported in Table 11. The takeaways are as follows:
+• interestingly, FT-Transformer achieves good metrics just after several randomly sampled
+configurations (Optuna performs simple random sampling during the first 10 (default)
+iterations).
+• FT-Transformer is slower to train, which is expected
+• extended tuning (in terms of iterations) for other algorithms does not lead to any meaningful
+improvements
+
+16
+
+Table 11: Performance of tuned models with different tuning time budgets. Tuned model performance
+and the number of Optuna iterations (in parentheses) are reported (both metrics are averaged over
+five random seeds). Best results among DL models are in bold, overall best results are in bold red.
+0.25h
+
+0.5h
+
+1h
+
+2h
+
+3h
+
+4h
+
+0.433 (410)
+0.489(349)
+0.482(101)
+0.458 (74)
+
+0.432 (557)
+0.489(466)
+0.482(131)
+0.458 (99)
+
+5h
+
+6h
+
+California Housing
+XGBoost
+0.437 (31)
+MLP
+0.503(16)
+ResNet
+0.488(7)
+FT-Transformer 0.466 (4)
+
+0.436 (56) 0.434 (120) 0.433 (252)
+0.496(42) 0.493(103) 0.488(230)
+0.487(15) 0.483(30) 0.481(64)
+0.464 (9) 0.465 (20) 0.460 (47)
+
+0.433 (719) 0.432 (867)
+0.488(596) 0.488(724)
+0.482(164) 0.484(197)
+0.457 (124) 0.459 (153)
+
+Adult
+XGBoost
+0.871 (165) 0.873 (311) 0.872 (638) 0.872 (1296) 0.872 (1927) 0.872 (2478) 0.872 (2999) 0.872 (3500)
+MLP
+0.856(20) 0.857(37) 0.858(71) 0.857(130) 0.856(190) 0.856(247) 0.856(310) 0.856(375)
+ResNet
+0.856(8) 0.854(16) 0.854(32) 0.856(69) 0.855(105) 0.855(140) 0.856(174) 0.855(208)
+FT-Transformer 0.861 (6) 0.860 (12) 0.859 (27) 0.859 (52) 0.860 (78) 0.860 (99) 0.860 (125) 0.860 (148)
+Higgs Small
+XGBoost
+0.725(88) 0.725(153) 0.724(291) 0.725(573)
+MLP
+0.721(16) 0.720(29) 0.723(62) 0.722(137)
+ResNet
+0.724(8) 0.727(14) 0.727(32) 0.728(61)
+FT-Transformer 0.727 (2)
+0.729 (5) 0.728 (12) 0.728 (23)
+
+E
+
+0.725(823) 0.726(1069) 0.725(1318) 0.725(1559)
+0.724(220) 0.723(300) 0.724(375) 0.724(447)
+0.728(84) 0.728(107) 0.728(132) 0.728(154)
+0.729 (34) 0.729 (44) 0.730 (56) 0.729 (66)
+
+FT-Transformer
+
+In this section, we formally describe the details of FT-Transformer its tuning and evaluation. Also,
+we share additional technical experience and observations that were not used for final results in the
+paper but may be of interest to researchers and practitioners.
+E.1
+
+Architecture
+
+Formal definition.
+FT-Transformer(x) = Prediction(Block(. . . (Block(AppendCLS(FeatureTokenizer(x))))))
+Block(x) = ResidualPreNorm(FFN, ResidualPreNorm(MHSA, x))
+ResidualPreNorm(Module, x) = x + Dropout(Module(Norm(x)))
+FFN(x) = Linear(Dropout(Activation(Linear(x))))
+We use LayerNorm (Ba et al., 2016) as the normalization. See the main text for the description
+of Prediction and FeatureTokenizer. For MHSA, we set nheads = 8 and do not tune this
+parameter.
+Activation. Throughout the whole paper we used the ReGLU activation, since it is reported to be
+superior to the usually used GELU activation (Narang et al., 2021; Shazeer, 2020). However, we did
+not observe strong difference between ReGLU and ReLU in preliminary experiments.
+Dropout rates. We observed that the attention dropout is always beneficial and FFN-dropout is also
+usually set by the tuning process to some non-zero value. As for the final dropout of each residual
+branch, it is rarely set to non-zero values by the tuning process.
+PreNorm vs PostNorm. We use the PreNorm variant of Transformer, i.e. normalizations are placed
+at the beginning of each residual branch. The PreNorm variant is known for better optimization
+properties as opposed to the original Transformer, which is a PostNorm-Transformer (Liu et al., 2020;
+Nguyen and Salazar, 2019; Wang et al., 2019b). The latter one may produce better models in terms
+of target metrics (Liu et al., 2020), but it usually requires additional modifications to the model and/or
+the training process, such as learning rate warmup or complex initialization schemes (Huang et al.,
+2020b; Liu et al., 2020). While the PostNorm variant can be an option for practitioners seeking
+for the best possible model, we use the PreNorm variant in order to keep the optimization simple
+17
+
+and same for all models. Note that in the PostNorm formulation the LayerNorm in the "Prediction"
+equation (see the section “FT-Transformer” in the main text) should be omitted.
+E.2
+
+The default configuration(s)
+
+Table 12 describes the configuration of FT-Transformer referred to as “default” in the main text. Note
+that it includes hyperparameters for both the model and the optimization. In fact, the configuration is
+a result of an “educated guess” and we did not invest much resources in its tuning.
+Table 12: Default FT-Transformer used in the main text.
+Layer count
+Feature embedding size
+Head count
+Activation & FFN size factor
+Attention dropout
+FFN dropout
+Residual dropout
+Initialization
+
+3
+192
+8
+(ReGLU, 4/3)
+0.2
+0.1
+0.0
+Kaiming
+
+Parameter count
+
+929K
+
+The value is given for 100 numerical features
+
+Optimizer
+Learning rate
+Weight decay
+
+AdamW
+1e−4
+1e−5
+
+0.0 for Feature Tokenizer, LayerNorm and biases
+
+(He et al., 2015a)
+
+where “FFN size factor” is a ratio of the FFN’s hidden size to the feature embedding size.
+We also designed a heuristic scaling rule to produce “default” configurations with the number of
+layers from one to six. We applied it on the Epsilon and Yahoo datasets in order to reduce the number
+of tuning iterations. However, we did not dig into the topic and our scaling rule may be suboptimal,
+see Wies et al. (2021) for a theoretically sound scaling rule.
+In Table 13, we provide hyperparameter space used for Optuna-driven tuning (Akiba et al., 2019).
+For Epsilon, however, we iterated over several “default” configurations using a heuristic scaling
+rule, since the full tuning procedure turned out to be too time consuming. For Yahoo, we did not
+perform tuning at all, since the default configuration already performed well. In the main text, for
+FT-Transformer on Yahoo, we report the result of the default FT-Transformer.
+Table 13: FT-Transformer hyperparameter space. Here (A) = {CA, AD, HE, JA, HI} and
+(B) = {AL, YE, CO, MI}
+
+E.3
+
+Parameter
+
+(Datasets) Distribution
+
+# Layers
+Feature embedding size
+Residual dropout
+Attention dropout
+FFN dropout
+FFN factor
+Learning rate
+Weight decay
+
+(A) UniformInt[1, 4], (B) UniformInt[1, 6]
+(A,B) UniformInt[64, 512]
+(A) {0, Uniform[0, 0.2]}, (B) Const(0.0)
+(A,B) Uniform[0, 0.5]
+(A,B) Uniform[0, 0.5]
+(A) Uniform[2/3, 8/3], (B) Const(4/3)
+(A) LogUniform[1e-5, 1e-3], (B) LogUniform[3e-5, 3e-4]
+(A,B) LogUniform[1e-6, 1e-3]
+
+# Iterations
+
+(A) 100, (B) 50
+
+Training
+
+On the Epsilon dataset, we scale FT-Transformer using the technique proposed by Wang et al. (2020b)
+with the “headwise” sharing policy; we set the projection dimension to 128. We follow the popular
+18
+
+“transformers” library (Wolf et al., 2020) and do not apply weight decay to Feature Tokenizer, biases
+in linear layers and normalization layers.
+F
+
+Models
+
+In this section, we describe the implementation details for all models. See section E.1 for details on
+FT-Transformer.
+F.1
+
+ResNet
+
+Architecture. The architecture is formally described in the main text.
+We tested several configurations and observed measurable difference in performance between all of
+them. We found the ones with “clear main path” (i.e. with all normalizations (except the last one)
+placed only in residual branches as in He et al. (2016) or Wang et al. (2019b)) to perform better. As
+expected, it is also easier for them to train deeper configurations. We found the block design inspired
+by Transformer (Vaswani et al., 2017) to perform better or on par with the one inspired by the ResNet
+from computer vision (He et al., 2015b).
+We observed that in the “optimal” configurations (the result of the hyperparameter optimization
+process) the inner dropout rate (not the last one) of one block was usually set to higher values
+compared to the outer dropout rate. Moreover, the latter one was set to zero in many cases.
+Implementation. Ours, see the source code.
+In Table 14, we provide hyperparameter space used for Optuna-driven tuning (Akiba et al., 2019).
+Table 14: ResNet hyperparameter space. Here (A) = {CA, AD, HE, JA, HI, AL} and
+(B) = {EP, YE, CO, YA, MI}
+
+F.2
+
+Parameter
+
+(Datasets) Distribution
+
+# Layers
+Layer size
+Hidden factor
+Hidden dropout
+Residual dropout
+Learning rate
+Weight decay
+Category embedding size
+
+(A) UniformInt[1, 8], (B) UniformInt[1, 16]
+(A) UniformInt[64, 512], (B) UniformInt[64, 1024]
+(A,B) Uniform[1, 4]
+(A,B) Uniform[0, 0.5]
+(A,B) {0, Uniform[0, 0.5]}
+(A,B) LogUniform[1e-5, 1e-2]
+(A,B) {0, LogUniform[1e-6, 1e-3]}
+({AD}) UniformInt[64, 512]
+
+# Iterations
+
+100
+
+MLP
+
+Architecture. The architecture is formally described in the main text.
+Implementation. Ours, see the source code.
+In Table 15, we provide hyperparameter space used for Optuna-driven tuning (Akiba et al., 2019).
+Note that the size of the first and the last layers are tuned and set separately, while the size for
+“in-between” layers is the same for all of them.
+F.3
+
+XGBoost
+
+Implementation. We fix and do not tune the following hyperparameters:
+• booster = "gbtree"
+• early-stopping-rounds = 50
+• n-estimators = 2000
+19
+
+Table 15: MLP hyperparameter space. Here (A) = {CA, AD, HE, JA, HI, AL} and
+(B) = {EP, YE, CO, YA, MI}
+Parameter
+
+(Datasets) Distribution
+
+# Layers
+Layer size
+Dropout
+Learning rate
+Weight decay
+Category embedding size
+
+(A) UniformInt[1, 8], (B) UniformInt[1, 16]
+(A) UniformInt[1, 512], (B) UniformInt[1, 1024]
+(A,B) {0, Uniform[0, 0.5]}
+(A,B) LogUniform[1e-5, 1e-2]
+(A,B) {0, LogUniform[1e-6, 1e-3]}
+({AD}) UniformInt[64, 512]
+
+# Iterations
+
+100
+
+In Table 16, we provide hyperparameter space used for Optuna-driven tuning (Akiba et al., 2019).
+Table 16: XGBoost hyperparameter space. Here (A) = {CA, AD, HE, JA, HI} and
+(B) = {EP, YE, CO, YA, MI}
+
+F.4
+
+Parameter
+
+(Datasets) Distribution
+
+Max depth
+Min child weight
+Subsample
+Learning rate
+Col sample by level
+Col sample by tree
+Gamma
+Lambda
+Alpha
+
+(A) UniformInt[3, 10], (B) UniformInt[6, 10]
+(A,B) LogUniform[1e-8, 1e5]
+(A,B) Uniform[0.5, 1]
+(A,B) LogUniform[1e-5, 1]
+(A,B) Uniform[0.5, 1]
+(A,B) Uniform[0.5, 1]
+(A,B) {0, LogUniform[1e-8, 1e2]}
+(A,B) {0, LogUniform[1e-8, 1e2]}
+(A,B) {0, LogUniform[1e-8, 1e2]}
+
+# Iterations
+
+100
+
+CatBoost
+
+Implementation. We fix and do not tune the following hyperparameters:
+• early-stopping-rounds = 50
+• od-pval = 0.001
+• iterations = 2000
+In Table 17, we provide hyperparameter space used for Optuna-driven tuning (Akiba et al., 2019).
+We set the task_type parameter to “GPU” (the tuning was unacceptably slow on CPU).
+Evaluation. We set the task_type parameter to “CPU”, since for the used version of the CatBoost
+library it is crucial for performance in terms of target metrics.
+F.5
+
+SNN
+
+Implementation. Ours, see the source code.
+In Table 18, we provide hyperparameter space used for Optuna-driven tuning (Akiba et al., 2019).
+F.6
+
+NODE
+
+Implementation. We used the official implementation: https://github.com/Qwicen/node.
+20
+
+Table 17: CatBoost hyperparameter space. Here (A) = {CA, AD, HE, JA, HI} and
+(B) = {EP, YE, CO, YA, MI}
+Parameter
+
+(Datasets) Distribution
+
+Max depth
+Learning rate
+Bagging temperature
+L2 leaf reg
+Leaf estimation iterations
+
+(A) UniformInt[3, 10], (B) UniformInt[6, 10]
+(A,B) LogUniform[1e-5, 1]
+(A,B) Uniform[0, 1]
+(A,B) LogUniform[1, 10]
+(A,B) UniformInt[1, 10]
+
+# Iterations
+
+100
+
+Table 18: SNN hyperparameter space. Here (A) = {CA, AD, HE, JA, HI, AL} and
+(B) = {EP, YE, CO, YA, MI}
+Parameter
+
+(Datasets) Distribution
+
+# Layers
+Layer size
+Dropout
+Learning rate
+Weight decay
+Category embedding size
+
+(A) UniformInt[2, 16], (B) UniformInt[2, 32]
+(A) UniformInt[1, 512], (B) UniformInt[1, 1024]
+(A,B) {0, Uniform[0, 0.1]}
+(A,B) LogUniform[1e-5, 1e-2]
+(A,B) {0, LogUniform[1e-5, 1e-3]}
+({AD}) UniformInt[64, 512]
+
+# Iterations
+
+100
+
+Tuning. We iterated over the parameter grid from the original paper (Popov et al., 2020) plus the
+default configuration from the original paper. For multiclass datasets, we set the tree dimension
+being equal to the number of classes. For the Helena and ALOI datasets there was no tuning since
+NODE does not scale to classification problems with a large number of classes (for example, the
+minimal non-default configuration of NODE contains 600M+ parameters on the Helena dataset), so
+the reported results for these datasets are obtained with the default configuration.
+F.7
+
+TabNet
+
+Implementation. We used the official implementation:
+https://github.com/google-research/google-research/tree/master/tabnet.
+We always set feature-dim equal to output-dim. We also fix and do not tune the following
+hyperparameters (let A = {CA, AD}, B = {HE, JA, HI, AL}, C = {EP, YE, CO, YA, MI}):
+• virtual-batch-size = (A) 2048, (B) 8192, (C) 16384
+• batch-size = (A) 256, (B) 512, (C) 1024
+In Table 19, we provide hyperparameter space used for Optuna-driven tuning (Akiba et al., 2019).
+F.8
+
+GrowNet
+
+Implementation. We used the official implementation: https://github.com/sbadirli/
+GrowNet. Note that it does not support multiclass problems, hence the gaps in the main tables
+for multiclass problems. We use no more than 40 small MLPs, each MLP has 2 hidden layers,
+boosting rate is learned – as suggested by the authors.
+In Table 20, we provide hyperparameter space used for Optuna-driven tuning (Akiba et al., 2019).
+21
+
+Table 19: TabNet hyperparameter space.
+Parameter
+
+Distribution
+
+# Decision steps
+Layer size
+Relaxation factor
+Sparsity loss weight
+Decay rate
+Decay steps
+Learning rate
+
+UniformInt[3, 10]
+{8, 16, 32, 64, 128}
+Uniform[1, 2]
+LogUniform[1e-6, 1e-1]
+Uniform[0.4, 0.95]
+{100, 500, 2000}
+Uniform[1e-3, 1e-2]
+
+# Iterations
+
+100
+
+Table 20: GrowNet hyperparameter space.
+
+F.9
+
+Parameter
+
+(Datasets) Distribution
+
+Correct epochs
+Epochs per stage
+Hidden dimension
+Learning rate
+Weight decay
+Category embedding size
+
+(all) {1, 2}
+(all) {1, 2}
+(all) UniformInt[32, 512]
+(all) LogUniform[1e-5, 1e-2]
+(all) {0, LogUniform[1e-6, 1e-3]}
+({AD}) UniformInt[32, 512]
+
+# Iterations
+
+100
+
+DCN V2
+
+Architecture. There are two variats of DCN V2, namely, “stacked” and “parallel”. We tuned and
+evaluated both and did not observe strong superiority of any of them. We report numbers for the
+“parallel” variant as it was slightly better on large datasets.
+Implementation. Ours, see the source code.
+In Table 21, we provide hyperparameter space used for Optuna-driven tuning (Akiba et al., 2019).
+Table 21: DCN V2 hyperparameter space. Here (A) = {CA, AD, HE, JA, HI, AL} and
+(B) = {EP, YE, CO, YA, MI}
+Parameter
+
+(Datasets) Distribution
+
+# Cross layers
+# Hidden layers
+Layer size
+Hidden dropout
+Cross dropout
+Learning rate
+Weight decay
+Category embedding size
+
+(A) UniformInt[1, 8], (B) UniformInt[1, 16]
+(A) UniformInt[1, 8], (B) UniformInt[1, 16]
+(A) UniformInt[64, 512], (B) UniformInt[64, 1024]
+(A,B) Uniform[0, 0.5]
+(A,B) {0, Uniform[0, 0.5]}
+(A,B) LogUniform[1e-5, 1e-2]
+(A,B) {0, LogUniform[1e-6, 1e-3]}
+({AD}) UniformInt[64, 512]
+
+# Iterations
+
+100
+
+22
+
+F.10
+
+AutoInt
+
+Implementation. Ours, see the source code. We mostly follow the original paper (Song et al., 2019),
+however, it turns out to be necessary to introduce some modifications such as normalization in order
+to make the model competitive. We fix nheads = 2 as recommended in the original paper.
+In Table 22, we provide hyperparameter space used for Optuna-driven tuning (Akiba et al., 2019).
+Table 22: AutoInt hyperparameter space. Here (A) = {CA, AD, HE, JA, HI} and
+(B) = {AL, YE, CO, MI}
+
+G
+G.1
+
+Parameter
+
+(Datasets) Distribution
+
+# Layers
+Feature embedding size
+Residual dropout
+Attention dropout
+Learning rate
+Weight decay
+
+(A,B) UniformInt[1, 6]
+(A,B) UniformInt[8, 64]
+(A) {0, Uniform[0.0, 0.2]}, (B) Const(0.0)
+(A,B) Uniform[0.0, 0.5]
+(A) LogUniform[1e-5, 1e-3], (B) LogUniform[3e-5, 3e-4]
+(A,B) LogUniform[1e-6, 1e-3]
+
+# Iterations
+
+(A) 100, (B) 50
+
+Analysis
+When FT-Transformer is better than ResNet?
+
+Data. Train, validation and test set sizes are 500 000, 50 000 and 100 000 respectively. One object is
+generated as x ∼ N (0, I100 ). For each object, the first 50 features are used for target generation and
+the remaining 50 features play the role of “noise”.
+fDL . The function is implemented as an MLP with three hidden layers, each of size 256. Weights
+are initialized with Kaiming initialization (He et al., 2015a), biases are initialized with the uniform
+distribution U(−a, a), where a = d−0.5
+input . All the parameters are fixed after initialization and are not
+trained.
+fGBDT . The function is implemented as an average prediction of 30 randomly constructed decision
+trees. The construction of one random decision tree is demonstrated in algorithm 1. The inference
+process for one decision tree is the same as for ordinary decision trees.
+CatBoost. We use the default hyperparameters.
+FT-Transformer. We use the default hyperparameters. Parameter count: 930K.
+ResNet. Residual block count: 4. Embedding size: 256. Dropout rate inside residual blocks: 0.5.
+Parameter count: 820K.
+G.2
+
+Ablation study
+
+Table 23 is a more detailed version of the corresponding table from the main text.
+Table 23: The results of the comparison between FT-Transformer and two attention-based alternatives.
+Means and standard deviations over 15 runs are reported
+CA ↓
+
+HE ↑
+
+JA ↑
+
+HI ↑
+
+AL ↑
+
+YE ↓
+
+CO ↑
+
+MI ↓
+
+AutoInt
+0.474±3.3e-3 0.372±2.5e-3 0.721±2.3e-3 0.725±1.7e-3 0.945±1.3e-3 8.882±3.3e-2 0.934±3.5e-3 0.750±6.1e-4
+FT-Transformer (w/o feature biases) 0.470±5.7e-3 0.381±1.6e-3 0.724±3.9e-3 0.727±1.9e-3 0.958±1.2e-3 8.843±2.5e-2 0.964±6.2e-4 0.751±5.6e-4
+FT-Transformer
+0.459±3.5e-3 0.391±1.2e-3 0.732±2.0e-3 0.729±1.5e-3 0.960±1.1e-3 8.855±3.1e-2 0.970±6.6e-4 0.746±4.9e-4
+
+23
+
+Algorithm 1: Construction of one random decision tree.
+Result: Random Decision Tree
+set of leaves L = {root};
+depths - mapping from nodes to their depths;
+left - mapping from nodes to their left children;
+right - mapping from nodes to their right children;
+features - mapping from nodes to splitting features;
+thresholds - mapping from nodes to splitting thresholds;
+values - mapping from leaves to their associated values;
+n = 0 - number of nodes;
+k = 100 - number of features;
+while n < 100 do
+randomly choose leaf z from L s.t. depths[z] < 10;
+features[z] ∼ UniformInt[1, . . . , k];
+thresholds[z] ∼ N (0, 1);
+add two new nodes l and r to L;
+remove z from L;
+unset values[z];
+left[z] = l;
+right[z] = r;
+depths[l] = depths[r] = depths[z] + 1;
+values[l] ∼ N (0, 1);
+values[r] ∼ N (0, 1);
+n = n + 2;
+end
+return Random Decision Tree as {L, left, right, features, thresholds, values}.
+
+H
+
+Additional datasets
+
+Here, we report results for some datasets that turned out to be non-informative benchmarks, that is,
+where all models perform similarly. We report the average results over 15 random seeds for single
+models that are tuned and trained under the same protocol as described in the main text. The datasets
+include Bank (Moro et al., 2014), Kick 2 , MiniBooNe 3 , Click 4 . The dataset properties are given in
+Table 24 and the results are reported in Table 25.
+
+Table 24: Additional datasets
+Dataset
+
+# objects # Num # Cat Task type (metric)
+
+Bank
+45211
+Kick
+72983
+MiniBooNe 130064
+Click
+1000000
+
+7
+14
+50
+3
+
+2
+
+9
+18
+0
+8
+
+Binclass (accuracy)
+Binclass (accuracy)
+Binclass (accuracy)
+Binclass (accuracy)
+
+https://www.kaggle.com/c/DontGetKicked
+https://archive.ics.uci.edu/ml/datasets/MiniBooNE+particle+identification
+4
+http://www.kdd.org/kdd-cup/view/kdd-cup-2012-track-2
+3
+
+24
+
+Table 25: Results for single models on additional datasets.
+
+SNN
+Grownet
+DCNv2
+AutoInt
+MLP
+ResNet
+FT-Transformer
+FT-Transformer (default)
+CatBoost
+XgBoost
+
+Bank
+
+Kick
+
+MiniBooNE
+
+Click
+
+0.9076 (0.0016)
+0.9093 (0.0012)
+0.9085 (0.0010)
+0.9065 (0.0014)
+0.9059 (0.0014)
+0.9072 (0.0014)
+0.9090 (0.0014)
+0.9088 (0.0013)
+0.9068 (0.0015)
+0.9087 (0.0009)
+
+0.9014 (0.0007)
+0.9016 (0.0006)
+0.9014 (0.0007)
+0.9005 (0.0005)
+0.9012 (0.0004)
+0.9017 (0.0005)
+0.9016 (0.0003)
+0.9013 (0.0006)
+0.9021 (0.0009)
+0.9034 (0.0003)
+
+0.9493 (0.0006)
+0.9494 (0.0007)
+0.9496 (0.0005)
+0.9478 (0.0008)
+0.9501 (0.0006)
+0.9508 (0.0006)
+0.9491 (0.0007)
+0.9476 (0.0007)
+0.9465 (0.0005)
+0.9461 (0.0005)
+
+0.6613 (0.0006)
+0.6614 (0.0009)
+0.6615 (0.0003)
+0.6614 (0.0005)
+0.6617 (0.0006)
+0.6612 (0.0007)
+0.6606 (0.0009)
+0.6610 (0.0007)
+0.6635 (0.0002)
+0.6399 (0.0006)
+
+25
+
+

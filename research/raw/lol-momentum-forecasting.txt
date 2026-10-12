@@ -1,0 +1,1472 @@
+Scalable Psychological Momentum Forecasting in Esports
+Alfonso White, Daniela M. Romano
+[a.white.16,d.romano]@ucl.ac.uk
+University College London
+
+arXiv:2001.11274v2 [cs.LG] 15 Feb 2020
+
+ABSTRACT
+The world of competitive Esports and video gaming has seen and
+continues to experience steady growth in popularity and complexity. Correspondingly, more research on the topic is being published,
+ranging from social network analyses to the benchmarking of advanced artificial intelligence systems in playing against humans.
+In this paper, we present ongoing work on an intelligent agent
+recommendation engine that suggests actions to players in order
+to maximise success and enjoyment, both in the space of in-game
+choices, as well as decisions made around play session timing in
+the broader context. By leveraging temporal data and appropriate
+models, we show that a learned representation of player psychological momentum, and of tilt, can be used, in combination with
+player expertise, to achieve state-of-the-art performance in preand post-draft win prediction. Our progress toward fulfilling the
+potential for deriving optimal recommendations is documented.
+
+CCS CONCEPTS
+• Information systems → Personalization; Massively multiplayer online games; Data mining; • Applied computing →
+Psychology; • Computing methodologies → Neural networks.
+
+KEYWORDS
+Psychological momentum, recommender systems, recurrent neural
+networks, multiplayer online battle arenas
+ACM Reference Format:
+Alfonso White, Daniela M. Romano. 2020. Scalable Psychological Momentum Forecasting in Esports. In Proceedings of Workshop SUM ’20: State-based
+User Modelling, The Thirteenth ACM International Conference on Web Search
+and Data Mining (WSDM ’20) (SUM ’20). ACM, New York, NY, USA, 8 pages.
+
+1
+
+INTRODUCTION
+
+League of Legends, by Riot Games Inc., is one of the most popular
+video games worldwide, the most played of the multiplayer online
+battle arena (MOBA) genre. In August of 2019, there were an estimated 8 million peak concurrent daily players, with a total of more
+than 200 million active monthly players, and the game has consistently been among the most watched games on video platforms
+such as Twitch.tv and YouTube. It is considered one of the more
+difficult games to master, in part owing to its complexity, intensity
+and pace, imperfect information scenarios, snowballing effects, and
+depth of game knowledge required.
+Permission to make digital or hard copies of part or all of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for third-party components of this work must be honored.
+For all other uses, contact the owner/author(s).
+SUM ’20, February 03–07, 2020, Houston, TX
+© 2020 Copyright held by the owner/author(s).
+
+In particular, the number of characters to select from in the prematch team draft phase create an enormous strategic search space,
+and, since the early days of MOBAs, recommendation engines have
+been used by a large number of players to help focus planning
+and ease personal learning [Conley and Perry 2013]. In addition
+to the known aspects of player expertise in particular roles and
+compositional viability, there exists another predictor of in-game
+success, which, until now, has not been tapped for the potential
+of game plan recommendation: that of short-term performance
+deviation. This can be roughly subdivided into two forms: psychological momentum; usually a positive influence, or tilt; a negative
+influence similar to the notion of negative momentum. Psychological momentum is an important concept in sports science [Crust
+and Nesti 2006], and can be defined as athletes’ cognitive, affective
+and physiological disposition toward repeating the results of the
+previous event(s). It is closely related to the hot hand phenomenon,
+originating in basketball [Csapo et al. 2015], where players may
+attempt more difficult shots, and have more success in them, when
+they are on a streak of points. It has been linked to flow states in
+elite sport [Swann et al. 2012], and can occur in high performance
+work environments. Tilt, originating as a poker term, describes a
+suboptimal state of mind of which can occur after experiencing a
+significant loss [Palomäki et al. 2013], whether a consequence of
+bad luck, having made a mistake, or a provocating exchange with
+an adversary. The term has since been adopted in the gaming community [Wei et al. 2016], though, the same emotional mechanisms
+are observed in more universal scenarios, such as in road rage. Tilt
+in Esports and internet gaming is fairly common, with the general
+description, nonspecifically related to “emotional breakdown and
+frustration, due to negative results following hard work”, occupying the top position on Urban Dictionary, with the example given
+citing League of Legends. We note that, while a player who is tilted
+is almost certainly experiencing negative momentum, one who is
+in a state of negative momentum may not necessarily be ‘on tilt’.
+To account for these factors in state-based player recommendation, game design and analytics, we use various methods to accommodate participant’s immediate historical performances within a
+win prediction model. We achieve a state-of-the-art classification
+accuracy of 72.1% for League of Legends using a logistic regression,
+a 2.0% improvement over previous work based on strategic player
+behaviour profile clustering [Ong et al. 2015]. We also implement
+a recurrent network that achieves a 0.5% relative gain in pre-draft
+single player classification rate, with both models using an automatic logarithmic scaling that improves accuracy by up to 1.3% for
+linear models and 2.8% for neural networks. With machine learning, we are able to learn atypical, subtle and complex nonlinearities
+corresponding to short-term fluctuations in momentum, such as
+tilt onset, from a large, comprehensive dataset of player histories.
+These models may be used to recommend better draft choices
+that synergise with the player’s own ability more precisely, as well
+
+SUM ’20, February 03–07, 2020, Houston, TX
+
+White, Romano
+
+as with the team draft. For example, when significant positive momentum is detected, higher impact roles and characters that require
+a greater level of finesse or concentration may be suggested. By
+transferring pre-trained weights of the recurrent network submodules, we learn a first approximation to a pre-draft single player
+performance model conditioned to factor out players’ baseline skill,
+estimating the effect of momentum alone. In the future work section, we describe our proposal to use this player state representation
+as input to a tilt recognition model, and a reinforcement learning
+agent that can accurately coach the player in tilt management, using
+sympathetic between-match notifications. These can contain suggestions for when and how to take optimal breaks, a tilt reduction
+strategy that can improve mentality and performance in League of
+Legends [Kou et al. 2018].
+
+1.1
+
+Game Description
+
+Baron
+
+Dragon
+
+Figure 1: Map of Summoner’s Rift.
+In League of Legends, the player assumes the role of a summoner,
+who summons one of 148 unique champions onto The Rift, the
+environment in which the game is played (fig. 1). Two teams of
+five players, spawning in opposite corners of the map, are pitted
+against each other in a race to build up strength through earned
+gold and items, strategically advance upon the opponent’s base, and
+ultimately win by destroying the nexus. Each champion has their
+own set of abilities, playstyle, and strategic position, though these
+can be approximately categorised into a number of overlapping
+classes such as Mages (spell casters), Marksmen, Tanks, Fighters, and
+Supports. The strengths of each character vary between physical
+locations on the map, and across the temporal game phases of each
+match, which in total last an average of 32 minutes. There are five
+main positions, or roles, which players occupy: Top, Jungle, Mid,
+Bottom, and Support, and a player can optionally select a role for
+the matchmaking algorithm to prioritise, in addition to queueing
+for a match at the player’s skill level (Elo rating). The number of
+champions and therefore the number of possible combinations of
+interactions between teams, make each game, though played in an
+identical setting, unique in nature and line. This creates a diverse
+set of learning scenarios in the zone of proximal development.
+
+2
+
+RELATED WORK
+
+The field of win prediction in competitive gaming and Esports is
+one of active research, both in the pre-game setting, and in real-time
+prediction. The first work on draft recommendation in a MOBA
+game was DotA2CP [2013], for one of the first major titles, DotA
+2 (successor to Defence of the Ancients, and the most often studied
+MOBA), reportedly achieving an accuracy of 63% using hero picks
+alone. Conley and Perry [2013] built upon this work to achieve
+69.8% accuracy with logistic regression and 70% accuracy with knearest neighbours (k-NN), still using only the presence of heroes
+on either team as training data. They also created a pick recommendation engine using a greedy algorithm to add heroes to a
+team incrementally based on updated win probability. Agarwala
+and Pearce [2014] also used logistic regression, but added a prior
+principal component analysis (PCA) step in order to study team
+composition. This did not increase the predictive accuracy on the
+match history dataset, however, it did improve the pick recommendations given, as it caused the model to capture more about
+interactions between heroes, rather than assuming that players
+have already chosen a balanced combination (out of distribution
+generalisation). Kalyanaraman [2014] was the first to introduce the
+hero roles as a model feature, and used a combination of a genetic
+algorithm and logistic regression to achieve 74.1% accuracy on a
+dataset of high skill rank matches in DotA 2. Almeida et al. [2017]
+used Naive Bayes to achieve an accuracy of 76.3%. Sapienza et al.
+[2018] performed an analysis using neural networks to recommend
+teammates for advancing in DotA 2.
+Ong et al. [2015] used k-means clustering of strategic player
+behaviours and a support vector classifier (SVC) to achieve 70.4%
+in post-draft League of Legends win prediction. Chen et al. [2017]
+examined player skill in League, finding that player’s base skill,
+their chosen champion’s base skill, and the player’s skill on that
+champion are the top three components, and were able to score
+60.24% using logistic regression (LR). To the best of our knowledge,
+our work is the first to succeed in employing players’ immediate history to improve a win prediction model; previous work by Grutzik
+et al. [2017], on Esports win prediction in DotA 2, made an attempt
+at this, using neural networks and rolling statistics for the last 10
+professional matches. Other work has used hierarchical attentionbased networks to recommend purchasable items in the mobile
+MOBA King of Glory [Yao et al. 2018], and there is much research
+on recurrent models for in-game prediction [Lan et al. 2018]. In
+terms of in-production recommendation and coaching tools for
+League, the most popular is Blitz, with over 1.5 million users, providing matchup-based champion suggestions, optimal pre-match
+runes, item build paths, and informative post-game analysis. The
+field of reinforcement learning has also made much progress in
+solving MOBA games as a stepping stone toward solving artificial
+general intelligence (AGI) [Zhang et al. 2019], as it provides an
+example of a complex, co-operative, real-time task with sparse and
+delayed reward signals. In April of 2019, Open AI Five defeated the
+world champion DotA 2 team, OG [OpenAI 2019]. Whereas other
+tilt detection methods have used peripheral equipment to estimate
+affective states [Wei et al. 2016], we use a minimal amount of information to infer effects through user interactions and performance
+statistics alone, scaling to production with zero user requirements.
+
+Scalable Psychological Momentum Forecasting in Esports
+
+DATASET
+
+A number of sources are combined in order to efficiently obtain
+a dataset. The Riot Games developer API is used to crawl player
+match histories, searching for games which occurred recently, contain unseen players (at least from the recent past), and such that the
+skill distribution is sampled uniformly. Once a valid match is found,
+participant profile summaries are loaded from op.gg, which contain
+on-champion proficiency statistics, season totals, and performances
+for up to the last 20 games. In addition, global and regional averages for each champion and common matchups (pairs of champions
+often found competing in the same lane) are loaded from champion.gg, and op.gg, and updated daily. This is to keep up with game
+updates, which are released approximately once a fortnight, and
+can have a dramatic impact on the strategic metagame.
+In total, 87,743 valid samples were collected starting two weeks
+after the beginning of season 9, from February 5th to September 20th
+of 2019. 86.4% were from Solo/Duo queue, 13.6% from Flex queue,
+and in total contained 517,269 unique summoners. 70,194 matches
+were used in training within five 5-fold stratified cross validations,
+7,743 in a validation set, and 10,000 in testing. The corresponding
+701,940 individual match histories are used for training single player
+pre-draft models within the same folds.
+
+4 METHODOLOGY
+4.1 Feature Engineering
+While our network model is powerful enough to encode an appropriate distributed representation from just the raw data, in practice,
+training this kind of model is difficult, partly due to the amount
+of data required, a result of the combinatorial explosion. Instead,
+we perform some preliminary feature engineering to reduce the
+complexity. For example, one feature, present for each role, is the
+global average matchup win rate for the specific pair of champions. The full feature set used is given in appendix A. Features are
+standardised to zero median and unit interquartile range.
+4.1.1 Experimental momentum retention representation. To attempt
+to capture the time dependent effects of the onset or dissipation
+of shorter term performance deviation, we investigate the use of a
+feature representation based on an exponential model of memory
+retention [Murre and Dros 2015][Ebbinghaus 1885]. Effects of recent events on performance are approximated as random deviations
+that dissipate with time exponentially. These features are gathered
+multiple times, for the last 1, 2, 4, 8, and 20 matches. We also normalise by the match duration (rolling statistics are normalised only
+by match duration (z values), and gathered for the last t ≤ 20 recent
+matches).
+z =v ×
+
+d¯
+d
+
+z
+x=
+1 + exp((C 1 × (tnow − t)) − C 2 )
+
+C 1 = 1.41 and C 2 = 1.79 (days) are learned by a Bayesian optimisation of Gaussian process upper confidence bound (fig. 2).
+Normalising by past match duration increases accuracy by 0.2% for
+the logistic regression.
+67.5
+
+5.0
+
+67.0
+
+4.5
+C2 (offset, days)
+
+3
+
+SUM ’20, February 03–07, 2020, Houston, TX
+
+66.5
+
+4.0
+
+66.0
+
+3.5
+3.0
+
+65.5
+
+2.5
+
+65.0
+
+2.0
+
+64.5
+
+1.5
+
+64.0
+
+1.0
+
+0.25
+
+0.50
+
+0.75 1.00 1.25 1.50
+C1 (gradient scale, days)
+
+1.75
+
+2.00
+
+63.5
+
+Figure 2: Bayesian optimisation of momentum constants.
+This graph maps the performance of parameter pairs for the
+Ebbinghaus momentum representation. C 1 controls the rate at
+which the impact of past events decays exponentially, while C 2
+adds a constant base rate. Skill retention timeframes may also be
+relevant. Accuracy of the resulting feature set was assessed using a
+training set of 30,000 samples, and 10,000 for testing;
+improvements were consistent when using the full training dataset.
+The peak value of 67.40 is shown in red.
+4.1.2 Rolling statistics medium-term momentum representation. Our
+primary momentum features, used for all models, are the performance summaries for the last t ≤ 20 matches played for each player.
+These contain the player’s performance scores for the games, as
+well as the differences between these scores and the player’s average for the champion (for the current season, or over the last two
+(momentum)
+seasons if the sample size is small). vt
+= vt − v̄ (season) .
+
+Figure 3: Distribution of α values in the AutoLog layer for
+scalar features, over training, before and after adjustment.
+Samples are taken for each of 400 batches of 256 data points.
+
+(1)
+(2)
+
+where
+v is one of the recent history values, prior to normalisation,
+d is the recent game duration (d¯ is the mean duration of 32 mins),
+t is the match end timestamp in days (tnow is the current time),
+x is the final, Ebbinghaus-normalised version of v, and
+
+4.1.3 Automatic Logarithmic Scaling. The scalar inputs to our models are close to normally distributed, however, many contain long
+tails in the positive direction. This is due to the nature of their
+generation: scores are bound to be above zero, not bound in the
+positive direction, snowball, and, the duration of the game is also
+unbound. To counteract this, a logarithmic transformation can be
+applied, curbing the skew, however, each input’s skew is distinct,
+meaning a choice of scale factor and offset for each input is needed;
+
+SUM ’20, February 03–07, 2020, Houston, TX
+
+are the approx. min. values for the features
+
+α init = 0.1
+β init = 0.4, ∀i.βi > 0
+γ init = 0.1, ∀i.γi ≥ 10−4
+◦
+
+is the Hadamard or entrywise product
+
+This significantly improves accuracy for the neural network model,
+particularly when a separate set of initial seed parameters are found
+for the recurrent inputs (6 values in total). Average final seed α, β
+& γ for the scalar inputs are 0.054, 0.372, and 0.006, and for the
+recurrent inputs, 0.123, 0.211, 0.073. For the logistic regression, a set
+of α, β and γ shared for all features obtains a better performance,
+and, the low time complexity means a bayesian optimisation can
+be used to find the optimum, however, feature-specific AutoLog
+parameters learned from the neural network training perform 0.1%
+better than those learned from a logistic regression optimised by
+gradient descent, indicating that transfer learning may be possible
+in a similar scenario. In both cases the use of an automatically
+configured logarithmic scaling accelerated the process of finding
+desirable optima, with the inclusion of the α parameter increasing
+accuracy by 0.15% for the neural network and 0.05% for the logistic
+regression. In general, this layer may reduce the amount of time
+needed to find the optimum of logarithmic scaling parameters for
+unstable or mixed-distribution inputs to a high complexity model.
+4.1.4 Feature Selection. The final feature set (appendix A) is selected from a bank of features which is approximately twice as
+large, using a sequential forward floating selection (SFFS) to optimise cross validation score. This is made computationally feasible
+by using logistic regression as the model, mean-averaging expert
+momentum features for each role, mean-averaging features across
+the members of each team, and taking the difference between teams.
+
+4.2
+
+Model Architectures
+
+4.2.1 Linear Model. Our top performing architecture for post-draft
+win prediction is a logistic regression with ℓ2 -regularised weights
+optimised by L-BFGS. This type of linear model directly optimises
+the difference in predictive distribution and is resilient to noise
+in large feature and data sets, making it suitable for our task. We
+found it to outperform many other linear and nonlinear models
+of varying hypothesis space complexity. 3 runs of 3-fold stratified
+cross validation are used internally on the 70,194 training samples
+to choose an appropriate inverse regularisation parameter C from
+the range [e −2 , e 4 ]. Due to the limited ability for continuous and
+complex temporal dependencies to be learned through linear models
+and feature engineering alone, we also experiment with a suitable
+nonlinear algorithm that can be applied to our dataset.
+
+(init)
+
++b TOP
+
+11
+
+x
+
+256
+
+256
+
+256
+
+256
+
+256
+
++b TOP
+256 WTOP x t,TOP,
+BLUE
+
+94
+
+94
+
+94
+
+x (meta) 11
+
+256
+
+256
+
+256
+
+(meta)
+
+(post)
+
+(post)
+
++bTOP
+GRU(z t , ht -1 ) WTOP h t,TOP,
+BLUE
+256
+(rnn)’
+
+(pre)
+
+...
+
+(join)
+
+WTOP ot,TOP,
+
+BLUE
+
+4096
+(pre)
+
+x (rnn)’
+t,TOP,
+
+256
+
+4096
+
+(rnn)’
+
+^
+P( blue win | x )
+
+(pre)
+
+(init)
+
+(meta)
+
+(init)
+
++bSUPP
+11
+
+x (meta)
+
+(rnn)’
+xt,JUNG,
+BLUE
+
+256
+
+256
+256
+
+recurrent submodule
+
+94
+
+RED
+
+256
+256
+94
+
+256
+
+W
+W
+
+^
+E[ total gold@10 | x ]
+
+x x +b
+
+(pre)
+SUPPORT
+
++b
+
+4096
+
+LinearUnit(x ) input to RNN
+
+(rnn)’
+xt,SUPP,
+
+LinearUnit(x ) in sum join
+
+RED
+
+LinearUnit(x )
+
+W (flat)x (flat)+b(flat)
+1352
+
+[ AutoLog(x
+x
+
+4096
+4096
+
+4096
+
+(pre) (rnn)’(rnn)’ (pre)
+(pre)
+t,SUPPORT,
+t,SUPP,
+SUPP
+SUPPORT
+BLUE
+RED
+
+Elo
+vector of 860 2107
+63% cwr
+scalar features ... 860
+
+champions, spells, Rumble
+Teleport
+pick positions ... 492
+
+(post)
+
+(post)
+
+4096
+
+^
+E[ blue top cc score | x ]
+
+WSUPP h t,SUPP,+b SUPP
+
+GRU(z t , ht -1 )
+
+4096
+
+^ match duration | x ]
+E[
+
+BLUE
+
+WSUPP x
+
+4096
+
+BLUE
+
+(pre)
+
+94
+
+4096
+
+sum
+
+(join)
+
+WJUNGot,JUNG,
+
+BLUE
+
+256 WJUNG x t,JUNG,+bJUNG
+
+recent matches, t ≤ 20,
+for all 10 players
+
+(rnn)
+x t,⋅(rnn)’ = AutoLog(x t,⋅
+)
+
+...
+
+AutoLog(x) = α ◦ x + log(β ◦ (γ + max(0, x − min(X train ))))
+min(X train ) ∈ Rm
+
+(init) (meta)
+
+WTOP x
+
+...
+
+a difficult and impractical task for the number of features used,
+and with frequent game updates. To solve this we propose and
+implement a logarithmic scaling layer, which transforms scalar
+inputs prior to modelling. Initial seed factor and offset parameters
+α, β and γ are manually specified to minimise the spread from the
+initial locations in training (fig. 3), then optimised using Bayesian
+hyperparameter optimisation beginning in a small enclosing region,
+which is updated if necessary. For an input data point x ∈ Rm ,
+
+White, Romano
+
+4096
+
+(scalar)
+
+(categorical)
+
+)
+
+]
+
+4096
+(join)
+
+(join)
+
+W (flat)o(flat)+b (flat)
+
+GRU(z t , h t -1) recurrent cell
+Softmax(z )
+Dropout,
+
+LeakyReLU(z )
+with batch norm.
+
+Figure 4: Win prediction multi-task recurrent network.
+x (meta) consists of the player Elo and region, which are also
+(rnn)
+included in x (flat) . x t, · contains the time since the recent match
+occurred, time of day, duration, overlapping class
+membership-encoded champion, and statistics. Linear layers
+surrounding recurrent cells are role-convolutional.
+Table 1: Multi-task learning targets for post-draft network.
+Target (# instances)
+
+Description
+
+Blue side win (1)
+Match duration (1)
+Crowd control (10)
+Vision score (10)
+CS@10 (10)
+Total gold@10 (1)
+
+Single classification target
+Length of the game
+Type-normalised cc score, per player
+# wards placed or destroyed, per player
+Creep score at 10 mins, per player
+The sum of all players’ gold at 10 mins
+
+4.2.2 Neural network. Our post-draft neural network is as follows
+(fig. 4). Two input submodules, a recent past recurrent component
+(with a GRU cell to prevent vanishing gradient), and the flat inputs,
+are joined by sum operations prior to four hidden layers of 4096
+units each. A recurrent sequence is used for each of the ten players’
+recent matches, sharing the same recurrent cell weights, however,
+a linear layer with 256 units is used before the recurrent cell, with
+weights shared only for the same roles (5 total weight matrices),
+transforming each player’s performance into a role-independent
+activation. Another fully connected layer of 256 units with roleshared weights is used after the recurrent layers, accounting for
+role-specific momentum dependencies, before the fully connected
+layer for the join, which uses 4096 units. An initial state vector for
+the recurrent cell is also computed using a linear layer, from categorical region and scalar Elo metadata - this gives the recurrent module
+a point of reference to differentiate skill from momentum, especially
+when t is low; performance is measured relative to the baseline
+skill for the region, Elo, and role. The 860 scalar inputs are combined with the 10 champions, draft pick ordering, and summoner
+
+Scalable Psychological Momentum Forecasting in Esports
+
+SUM ’20, February 03–07, 2020, Houston, TX
+
+spells for each player, before a single linear layer with 4096 units
+for the join. The 10 champion choices are summed for each team,
+reducing the number of required inputs from 1480 to 296, while
+maintaining accuracy. Dropout and batch normalisation are used at
+many points in the graph to prevent overfitting; keep probabilities
+are 0.55 between recurrent layers and 0.67 between non-recurrent
+layers. LeakyReLU activations are used to control gradients without
+complete deactivation. AMSGrad is a stochastic gradient descent
+variant which adds a fraction of the maximum of past squared
+gradients to the current update vector, reducing rare informative
+minibatch diminishing that occurs with the exponentially decaying
+averages of typical variants (i.e., Adam). We use it to optimise a
+sum of the win classification log-loss and the mean of regression ℓ2
+losses, with a ratio of 0.01 (the scale of the ℓ2 sum is much larger;
+this value equalises scale and slightly prioritises the classification
+loss). Each regression output (min-max rescaled to between 0 and
+1) is weighted equally. A learning rate of 3.5 × 10−5 is used, with
+β 1 = 0.9 and β 2 = 0.99. Architectural importances are given in
+table 2, and the multiple simultaneous learning tasks in table 1.
+Table 2: Post-draft network architecture importances.
+
+the Ebbinghaus features. Logistic regression accuracy plateaued by
+∼70,000 data points. TensorFlow and four Nvidia Tesla v100s were
+used for implementation. With gains in normalisation, escaping
+local minima, maintaining gradient flow, and data (sec. 7.1.1), higher
+scores are possible. Nondeterminism and noise are key.
+Table 3: Learning algorithm comparison. This may also show
+the change in predictive game factors since earlier studies.
+Algorithm
+
+Train n
+
+Test %
+
+Train %
+
+AutoLog+Rolling+(momentum) +LR
+
+70,194
+70,194
+70,194
+70,194
+70,194
+117,000
+117,000
+70,194
+70,194
+208,091
+
+72.1
+72.0
+71.8
+71.1
+70.8
+70.4
+68.8
+68.8
+68.3
+60.24
+
+73.6
+73.5
+72.8
+71.6
+73.1
+74.8
+74.8
+71.7
+71.4
+-
+
+70,194
+70,194
+70,194
+70,194
+70,194
+70,194
+70,194
+70,194
+208,091
+
+65.7
+65.6
+65.1
+64.4
+62.9
+62.7
+62.3
+61.6
+56.75
+
+66.8
+66.7
+66.0
+64.5
+66.2
+65.8
+65.4
+68.9
+-
+
+701,940
+701,940
+701,940
+701,940
+701,940
+701,940
+701,940
+
+54.30
+54.28
+54.03
+53.59
+53.38
+52.48
+52.38
+
+54.36
+54.34
+54.12
+53.71
+53.49
+52.70
+52.72
+
+AutoLog+Rolling+LR
+AutoLog+LR
+AutoLog+MTL+RNN
+Loginit +Rolling+(momentum) +LR
+k-means+SVC [Ong et al. 2015]
+k-means+LR [Ong et al. 2015]
+Rolling+(momentum) +LR
+LR (baseline)
+LR [Chen et al. 2017]
+Pre-draft Teams
+
+Improvement
+AutoLog layer (vs. shared α, β, γ /untransformed)
+Recurrent structure (RNN) (vs. Rolling/Ebbinghaus)
+AMSGrad [Reddi et al. 2019] (vs. SGD/Adam)
+Multi-Task Learning (MTL) (vs. Win only)
+Metadata RNN initial state W x + b (vs. b alone)
+Gated Recurrent Unit (GRU) cell (vs. tanh)
+Role convolutions (vs. fully shared linear layers)
+Dropout & Batch norm. on non-recurrent layers
+
+% Gain
+0.904/2.771
+1.473/2.621
+0.643/0.587
+0.327
+0.209
+0.158
+0.073
+0.064
+
+AutoLog+Rolling+(momentum) +LR
+AutoLog+Rolling+LR
+AutoLog+LR
+AutoLog+MTL+RNN
+Loginit +Rolling+(momentum) +LR
+Rolling+(momentum) +LR
+LR (baseline)
+MTL+RNN
+LR [Chen et al. 2017]
+Pre-draft Solo (in-queue)
+
+When estimating pre-draft solo win probability, an alternative
+structure is employed to maximise predictive accuracy by extracting
+a useful momentum embedding: first, we learn the single post-draft
+classification task, abridging the four layers of 4096 units, and, the
+output dimension of the post-RNN layer is set to 32 units, with no
+activation or dropout (only batch normalisation). All scalar inputs
+are concatenated with the recurrent modules directly prior to the
+output layer; the logistic loss is minimised using Adam (learning
+rate 4.0 × 10−4 ), on the recurrent submodule output, the rolling
+features, the probability given by the previous logistic regression
+(trained with L-BFGS), and the remaining scalar features (categoricals are not included). We then generate role-specific momentum
+embeddings using the trained recurrent submodule, reduce the dimensionality from 32 to 2 using principal component analysis, and
+include these two components (e.g., skill and momentum) as player
+inputs to the original logistic regression trained with L-BFGS.
+
+5 EXPERIMENTS
+5.1 Model Evaluation
+Our techniques are compared in table 3. The representational capacity of deep networks makes them the most suitable choice for momentum estimation, though the logistic regression outperforms in
+the multiplayer prediction task, with rolling statistics preferred over
+
+AutoLog+Rolling+(momentum) +RNN
+AutoLog+Rolling+(momentum) +LR
+AutoLog+Rolling+LR
+AutoLog+LR
+LR (baseline)
+AutoLog+MTL-TL+RNN
+AutoLog+RNN
+
+History (2.4)
+Champion
+proficiency/
+playstyle
+(6.5)
+
+17%
+46%
+17%
+
+2%
+14%
+2%2%
+
+Metadata (patch, region, Elo) (0.3)
+Recent matches
+(momentum) (2.0)
+
+Categoricals (champions, etc...) (0.3)
+Global matchup stats (0.3)
+Global champion stats (2.4)
+
+Figure 5: Approximate Feature Group Importances.
+Drop in accuracy when the group is omitted (in brackets); relative
+importance is illustrated as a fraction of the total importance.
+
+SUM ’20, February 03–07, 2020, Houston, TX
+
+First approximation to a temporal win% momentum model
+
+League of Legends Game Factors
+
+To study the factors that determine the outcome of a match, we
+observe the contribution in neural network accuracy when including independent feature groups (fig. 5). Proficiencies are the most
+significant factor post-draft. The choice of champion may be influenced by momentum, though this is contextual, depending both on
+the team composition and the player’s intentions. Of the information available prior to champion select (in-queue), the 2nd largest
+contribution, around 40%, comes from the most recent matches.
+
+Test accuracy %
+
+56
+54
+52
+50
+48
+
+747
+
+118
+1088
+
+509 126120772457250119921454
+
+543
+
+1.04- 1.3- 1.42-1.55-1.68- 1.8- 1.93-2.06-2.18-2.31-2.44-2.56-2.69-2.821.3 1.42 1.55 1.68 1.8 1.93 2.06 2.18 2.31 2.44 2.56 2.69 2.82 6.11
+Player average streak length buckets
+
+Effect of transfer learning on recent matches model
+
+50
+48
+
+Test accuracy %
+
+56
+Figure
+6: Accuracy for representative groups of players 56
+with
+similar
+streakiness tendency (either
+747 win or loss).
+54 118
+54
+We examine players with 2 or 3 occurrences in test332
+dataset, and
+1088
+15 historical
+recent matches belonging to a 543
+complete streak, of 52
+n ≥ 52
+509 126120772457250119921454
+known length, and n ≥ 15 belonging to a complete session).
+50
+50
+231 496
+Allowing outliers at the two extremes, the transfer-learned model
+48 shows a slight positive relationship. Annotations are the 48
+(violet)
+1.04- 1.3- 1.42-1.55-1.68- 1.8- 1.93-2.06-2.18-2.31-2.44-2.56-2.69-2.821.3 of1.42
+1.55points
+1.68 1.8(players)
+1.93 2.06 used
+2.18 2.31
+2.44 2.56 2.69
+2.82bar.
+6.11
+number
+data
+to compute
+each
+Player average streak length buckets
+
+We experiment with two single player pre-draft models, the
+RNN win% influence, and the win% momentum (recent effects, independent of baseline skill). Both are composed of the pretrained
+recurrent submodule from the full post-draft model, subsequently
+using two 512-unit layers. The influence model also uses a 512-unit
+layer to sum-join scalar history features, and consistently achieves
+a slightly higher accuracy than the same model without pretraining
+(52.48 over 52.38%). Win% momentum is compared with average
+player streak size for players with 2 or 3 occurrences in the test
+dataset (fig. 6), and short-term momentum conditioning is observed
+(fig. 7). While the model accuracy is below that of a logistic regression, it has learned a short-term temporal structure which
+the logistic regression is unable to fully capture. The nonlinearities correspond with the expected hidden latent construct, in that
+they predict based on a player’s typical streakiness tendency, and
+show temporal behaviours consistent with the hypothesis. By quasimarginalising player history and skill via the use of the pretrained
+recurrent submodule, we achieve an intuitive and unbiased metric.
+
+6
+
+118
+
+52
+231 496
+
+DISCUSSION
+
+Though the signal found is faint, we are able to account for momentum that occurs over the medium term of the last t ≤ 20 matches
+within a post-draft win prediction model, increasing the accuracy
+by 0.1-0.3%, and, a recurrent network architecture is able to forecast short-term nonlinear fluctuations, increasing pre-draft solo
+
+1.0
+
+2.8
+
+3.0
+
+0.6
+
+0.504
+2
+
+4
+
+t (hours)
+
+6
+
+8
+
+10
+
+6.4 6.2
+
+0.509
+0.508
+
+3.2
+
+0.507
+
+5.7
+
+1.7
+
+2.3
+Inter-match
+
+0.506
+Effect
+of transfer learning on recent matches modelBreak theory
+
+56
+54
+
+332
+
+1.7
+
+0.506
+0
+
+Influence and Momentum Models
+Effect of transfer learning on recent matches model
+
+2.0
+
+0.508
+
+(win | recent past)
+
+5.3
+
+0.510 2.8
+
+(win | recent past)
+
+5.2
+
+White, Romano
+
+1.2
+
+Next game (loss)
+332
+2
+4
+6
+8
+10
+231
+509
+2457
+1992
+t (hours)
+2501
+1454
+1088 747 543
+12612077
+496over time.
+Figure 7: Two players’ momentum estimates
+0.505
+
+0
+
+Past wins are represented by green lines, losses by red, and each
+match is annotated with post-game KDA ratio (kills + assists ÷
+1.04- 1.3- 1.42-1.55-1.68- 1.8- 1.93-2.06-2.18-2.31-2.44-2.56-2.69-2.82deaths);
+considered
+average.
+Tilt
+recognised as a
+1.3
+1.42 a
+1.55value
+1.68 of
+1.8 2.0
+1.93is2.06 2.18
+2.31 2.44
+2.56 2.69
+2.82is6.11
+Player
+average streakbreak
+length increases
+buckets
+point where
+a post-match
+win probability after
+Effect
+of 20
+transfer
+learning
+on recent
+matches
+model the player to
+around
+minutes,
+though
+actively
+prompting
+118
+temporarily
+disengage,
+and
+providing
+an
+objective
+reason to (fig. 8),
+509
+is likely to accelerate
+effects
+and
+aid
+tilt
+recovery
+[Kou
+et al. 2018].
+543
+231
+24572501
+332
+2077
+1454
+747
+1992
+496
+1261
+1088
+accuracy by 0.02%; a relative increase of 0.5%. Significant improvements are possible, in pre- and post-draft settings, by reducing the
+noise-induced difficulty of capturing the underlying function, and
+1.04- 1.3- 1.42-1.55-1.68- 1.8- 1.93-2.06-2.18-2.31-2.44-2.56-2.69-2.821.3
+1.55 1.68
+1.93small
+2.06 2.18
+2.31size
+2.44 of
+2.56 2.69
+2.82 6.11 momentum
+with1.42
+data
+(7.1.1).1.8The
+effect
+transferring
+streak length
+buckets to the logistic regression
+embeddingsPlayer
+fromaverage
+the recurrent
+network
+indicates that the underlying structure may be hidden in the distributed representation, or that the gradient descent training is not
+able to sufficiently pick up on the subtleties. By including existing
+features in the encoder training, we attempt to learn a shorterterm representation which factors out the medium-term baseline
+(information already included in the rolling statistics). The form
+by which the model approximates the underlying function, and
+the methods needed to capture patterns, are valuable to study as
+they can contain potentially transferable information. Multi-task
+learning helps the learning process via inductive transfer from the
+task of predicting in-game statistics. Medium-term pre-draft momentum was significant; a 20% relative gain in accuracy for the
+solo model. Up-to-date performance data may also allow a more accurate estimate by measuring skill relative to changes in game and
+metagame structure due to game updates. Regarding why tilt onset
+occurs, one reason may be that humans are blind to integration
+noise when accounting for multiple discordant sources of cognitive
+information. This noise blindness occurs even at lower difficulties,
+and is consistent across time; effects remain even when evidence of
+overconfidence in choices is shown [Herce Castañón et al. 2018].
+
+7
+
+CONCLUSIONS
+
+Overall, our analysis and experiments show that it is possible to
+model the phenomena of psychological momentum and tilt in their
+context-sensitive impact on the outcomes of competitive games.
+
+Scalable Psychological Momentum Forecasting in Esports
+
+While the system introduced is designed for League of Legends, it
+can be directly applied to other MOBAs, to other genres, and, with
+adaptations, other activities outside of gaming (see sec. 7.3). The
+probabilities returned intuitively reflected subjective predictions.
+
+7.1
+
+Limitations
+
+7.1.1 Data Resolution. Throughout our experiments, the dataset
+used, assembled from various high bandwidth, relatively open
+sources, has been sufficient to show that our methodology is feasible. However, the resolution of this data may be a limiting factor.
+Elo information for particular players was only requested after the
+target match ended, meaning that differences in skill rating prior
+to the match were not obtained, and thus only the average for all
+10 participants could be used (while Elo may account for momentum, the stochasticity of the match result obscures this). Due to the
+summarised form of performance histories, the data we have for
+analysing nuances of tilt (and momentum) is relatively low resolution. Temporal in-game data may be highly valuable; post-match
+summaries cannot distinguish effects that have appeared over the
+course of a game from those which have dissipated.
+
+7.2
+
+Future Work
+
+Here we describe our ongoing and future efforts in creating useful,
+momentum-sensitive recommendation systems.
+7.2.1 Draft Pick Recommendations. Initial experiments using a
+greedy algorithm to select the next champion based on the increased
+win probability have been promising, however, the application of
+unbiased methods [Agarwala and Pearce 2014], is a top priority.
+Field testing will be used to verify momentum-utilising suggestions.
+7.2.2 Application to DotA 2. While player skill and other player
+factors are known to be less game-deciding in DotA [Chen et al.
+2017], momentum and tilt are still present, and the evaluation of
+our system on a more widely studied title will be informative.
+
+SUM ’20, February 03–07, 2020, Houston, TX
+
+check’ message is predicted to be useful, a notification is triggered
+before the next game, usually after entering the queue. A graph
+illustrates the player’s live momentum and Elo statistics over time,
+also indicating wins and losses on the timeline, and past notifications from the app can also be reviewed and rated. Active learning
+is allowed by an optional but encouraged tilt survey, which uses
+time-stratified random sampling in order to maintain a naturalistic and enjoyable playing environment, and this will be a hidden
+setting post-beta, when enough data is collected. Notifications also
+deliver intelligence on break duration for optimal momentum.
+7.2.4 Adaptive Notification Strategy. Initially, we begin with just
+the win% momentum model, though our target is an intelligent
+agent that can accurately predict felt momentum and tilt, when
+to send a notification, and what the contents should be. The environment or the state at time t (per second) is represented by the
+time-dependent momentum embedding, additional modalities and
+user activity (for example, mouse and keyboard press rate), the
+game client phase (post-game lobby, pre-game lobby or in-queue),
+and outputs from survey models. We propose a reinforcement learning approach to achieve this, with an action space corresponding
+to personal tilt trainer vocabulary, and optimal break duration. The
+reward function which the agent should maximise is proposed to
+be some combination of reduction in tilt prior to the next match
+played, increase in player skill, user satisfaction, or a user-defined
+objective [Christiano et al. 2017]. A phased, active, online learning
+rollout strategy is defined in order to maximise success, accuracy,
+applicability and computational performance of the platform.
+7.2.5 Longitudinal Survey. A longitudinal survey may be ideal for
+assessing the final effectiveness of our system in long-term user
+satisfaction. In addition, we plan to test the hypothesis that, without hurting user interest, tilt management training may improve
+upon addiction score, as League is one of the most addictive games
+[Škařupová and Blinka 2015], especially among youth [Bekir and
+Çelik 2019], and self-regulation has been recommended as a shared
+conceptualisation tool, because neither ‘virtual life’ nor real life
+suffer due to high self-regulation skills.
+
+7.3
+
+Figure 8: Example Flow notification.
+7.2.3 Flow App. Flow (fig. 8), is a small desktop applet that subtly
+guides players to be more successful using illuminating notifications and tilt training gamification [Stannett et al. 2016]. It is built
+with the multiplatform Electron framework. Most of the time, the
+app is designed to be invisible, only occupying a system tray slot.
+The app’s GUI displays the live influence and momentum estimates.
+When using the win% momentum, figures are rescaled to between
+-5 and 5. If tilt is detected or a motivational or explanatory ‘reality
+
+Applications
+
+The methods presented in this paper are designed for gamers, however, the same methodology, with some adjustments, may easily
+be applied to other activities. For example, in skill-based gambling,
+whether these are part of an addictive behaviour that a gambler
+would like to minimise, recreational play, or professional efforts for
+which the user would like to minimise financial risk. This would
+be most useful to activities that involve the highest degree of tilt,
+strategic planning, long session times, and episodic event schedules
+where notification timing can be tapped. As with distinguishing a
+mistake from bad luck and deviance in the gaming case, the degree
+to which one has experienced misfortune can be modelled with
+relative ease, for example, by using the deviation of the player’s
+profit or loss from the expected value (EV) of their actions. This
+may also characterise various other high pressure environments
+for which performance statistics and interaction patterns can be
+used to create beneficial notification strategies; i.e. financial trading,
+crisis management, emergency departments, and in sports.
+
+SUM ’20, February 03–07, 2020, Houston, TX
+
+REFERENCES
+2013. Dota2 Counter-Pick. Retrieved December 10, 2019 from https://blog.liangchun.
+me/Dota2CP Originally hosted at http://dota2cp.com.
+Atish Agarwala and Michael Pearce. 2014. Learning Dota 2 team compositions. Technical
+Report. Stanford University.
+Carlos EM Almeida, Ronaldo CM Correia, Danilo M Eler, Celso Olivete-Jr, Rogério E
+Garci, Lucas C Scabora, and Gabriel Spadon. 2017. Prediction of winners in MOBA
+games. In 2017 12th Iberian Conference on Information Systems and Technologies.
+IEEE, 1–6.
+Seyhan Bekir and Eyüp Çelik. 2019. Examining the Factors Contributing to AdolescentsâĂŹ Online Game Addiction. Annals of Psychology 35, 3 (2019), 444–452.
+Zhengxing Chen, Yizhou Sun, Magy Seif El-Nasr, and Truong-Huy D Nguyen. 2017.
+Player skill decomposition in multiplayer online battle arenas. arXiv preprint
+arXiv:1702.06253 (2017).
+Paul F Christiano, Jan Leike, Tom Brown, Miljan Martic, Shane Legg, and Dario Amodei.
+2017. Deep reinforcement learning from human preferences. In Advances in Neural
+Information Processing Systems. 4299–4307.
+Kevin Conley and Daniel Perry. 2013. How Does He Saw Me? A Recommendation Engine
+for Picking Heroes in Dota 2. CS229 Technical Report. Stanford University.
+Lee Crust and Mark Nesti. 2006. A Review of Psychological Momentum in Sports:
+Why qualitative research is needed. Athletic Insight 8, 1 (2006), 1–15.
+Peter Csapo, Simcha Avugos, Markus Raab, and Michael Bar-Eli. 2015. The effect of
+perceived streakiness on the shot-taking behaviour of basketball players. European
+Journal of Sport Science 15, 7 (2015), 647–654.
+Hermann Ebbinghaus. 1885. Forgetting curve. Memory A Contribution to Experimental
+Psychology (1885).
+Petra Grutzik, Joe Higgins, and Long Tran. 2017. Predicting outcomes of professional
+DotA 2 matches. Technical Report. Stanford University.
+Santiago Herce Castañón, Dan Bang, Rani Moran, Jacqueline Ding, Tobias Egner,
+and Christopher Summerfield. 2018. Human noise blindness drives suboptimal
+cognitive inference. (2018).
+Kaushik Kalyanaraman. 2014. To win or not to win? A prediction model to determine the
+outcome of a DotA2 match. University of California San Diego.
+Yubo Kou, Yao Li, Xinning Gui, and Eli Suzuki-Gill. 2018. Playing with Streakiness in
+Online Games: How Players Perceive and React to Winning and Losing Streaks in
+League of Legends. In Proceedings of the 2018 CHI Conference on Human Factors in
+Computing Systems. ACM, 578.
+Xuan Lan, Lei Duan, Wen Chen, Ruiqi Qin, Timo Nummenmaa, and Jyrki Nummenmaa.
+2018. A Player Behavior Model for Predicting Win-Loss Outcome in MOBA Games.
+In International Conference on Advanced Data Mining and Applications. Springer,
+474–488.
+Jaap M. J. Murre and Joeri Dros. 2015. Replication and Analysis of EbbinghausâĂŹ
+Forgetting Curve. PLOS ONE 10, 7 (07 2015), 1–23. https://doi.org/10.1371/journal.
+pone.0120644
+Hao Yi Ong, Sunil Deolalikar, and Mark Peng. 2015. Player Behavior and Optimal
+Team Composition for Online Multiplayer Games. arXiv preprint arXiv:1503.02230
+(2015).
+OpenAI. 2019. How to Train Your OpenAI Five. Retrieved December 2019 from
+https://openai.com/blog/how-to-train-your-openai-five
+Jussi Palomäki, Michael Laakasuo, and Mikko Salmela. 2013. âĂŸThis is just so
+unfair!âĂŹ: A qualitative analysis of loss-induced emotions and tilting in on-line
+poker. International Gambling Studies 13, 2 (2013), 255–270.
+Sashank J Reddi, Satyen Kale, and Sanjiv Kumar. 2019. On the convergence of adam
+and beyond. arXiv preprint arXiv:1904.09237 (2019).
+Anna Sapienza, Palash Goyal, and Emilio Ferrara. 2018. Deep Neural Networks for
+Optimal Team Composition. arXiv preprint arXiv:1805.03285 (2018).
+Kateřina Škařupová and Lukas Blinka. 2015. Interpersonal dependency and online
+gaming addiction. Journal of Behavioral Addictions 5, 1 (2015), 108–114.
+Mike Stannett, Alhasan Sedeeq, and Daniela M. Romano. 2016. Generic and Adaptive
+Gamification: A Panoramic Review. Convention Proceedings of the Society for the
+Study of Artificial Intelligence and Simulation of Behaviour 2016.
+Christian F. Swann, Richard J. Keegan, David Piggo, and Lee Crust. 2012. A systematic
+review of the experience, occurrence, and controllability of flow states in elite sport.
+Psychology of Sport and Exercise 13, 6 (2012), 807–819.
+Xingjie Wei, Jussi Palomaki, Jeff Yan, and Peter Robinson. 2016. The Science and
+Detection of Tilting. In Proceedings of the 2016 ACM on International Conference on
+Multimedia Retrieval. ACM, 79–86.
+Qiongjie Yao, Xiaofei Liao, and Hai Jin. 2018. Hierarchical Attention Based Recurrent Neural Network Framework for Mobile MOBA Game Recommender Systems. In 2018 International Conference on Parallel & Distributed Processing with
+Applications, Ubiquitous Computing & Communications, Big Data & Cloud Computing, Social Computing & Networking, Sustainable Computing & Communications
+(ISPA/IUCC/BDCloud/SocialCom/SustainCom). IEEE, 338–345.
+Zhijian Zhang, Haozheng Li, Luo Zhang, Tianyin Zheng, Ting Zhang, Xiong Hao,
+Xiaoxin Chen, Min Chen, Fangxu Xiao, and Wei Zhou. 2019. Hierarchical Reinforcement Learning for Multi-agent MOBA Game. arXiv preprint arXiv:1901.08004
+(2019).
+
+White, Romano
+
+A
+
+FEATURE LIST
+(1) Player ranked summary performance features
+elo - Match average skill rating over all participants
+season win rate - Player’s win rate for the season
+(2) Base global champion stats
+Global stats for the chosen champion (in the current role and skill bracket)
+Stats for today, very recent trends in the meta:
+regional avg. champion [win rate, gold, creep score] today
+Stats for this patch (stable trends based on the game version):
+global avg. champion [win rate, play rate, kills, deaths, assists, kill sprees,
+gold, total damage taken, total heal, wards placed, wards killed, total damage,
+total magic damage, total physical damage, total true damage] this patch
+Since these are specific features for each role, the early, mid, and late game
+potential of the chosen champion is normalised by position:
+global avg. champion duration [0-15, 15-20, 20-25, ..., 40+] win rate this patch
+(3) Base global matchup stats
+These are gathered for each role, and also for the four extra cross combinations
+that occur between the four players in the Bottom lane, which correspond to
+synergies and counters between Marksman and Support champions.
+Global stats for the lane matchup (in the current role and skill bracket):
+global avg. matchup [wins, win rate, gold, creep score, total damage dealt to
+champions, champion.gg’s ‘weighed score’]
+(4) Player average season performance stats (history)
+These features are averages across the player’s champion pool, using data
+from the previous season too if there are not many games for the current
+season. As with the global statistics, because these are specific for each role,
+the performance for each category is normalised by the position.
+Player diverse game knowledge/performance (avg. across champion pool):
+player champion average [wins, losses, kills, deaths, assists, gold, creep score,
+damage dealt, damage taken]
+Player performance over last 2 seasons for specific champion categories:
+player champion class [Fighter, Tank, Mage, Assassin, Support, Marksman]
+average [wins, losses]
+(5) Player champion-specific performance stats (proficiency/playstyle)
+Player recent game performance on their chosen champion (average for
+last 2 seasons). Since this feature is not normalised for the champion, this is
+essentially their predicted performance stats for this game:
+champion proficiency [games, wins, losses, bayes win rate, alltotal wins, alltotal losses, alltotal bayes win rate, kills, deaths, assists, gold, creep score,
+damage taken]
+The previous group of features, normalised by the global avg. (representing
+player skill on the champion they’ve chosen):
+champion proficiency kills ÷ global avg. champion kills this patch
+champion proficiency deaths ÷ global avg. champion deaths this patch
+champion proficiency assists ÷ global avg. champion assists this patch
+champion proficiency gold ÷ regional avg. champion gold today
+champion proficiency creep score ÷ regional avg. champion creep score today
+champion proficiency damage taken ÷ global avg. champion damage taken
+this patch
+(6) Player momentum/tilt performance stats (of the most recent games)
+recent duration - How long the recent match lasted (in general, longer is better more carrying losing teams, less solo losing games)
+recent time since match - Time since match occurred
+recent time of day - Approximate time of day when match occurred (hours since
+midnight, for the given region)
+recent champion classes1 - Class membership of the chosen champion in match
+recent [win rate, kills, deaths, assists, creep score, kill participation, control
+wards bought] - Performance stats for recent games
+How skilled this player is at the champions they’ve been playing very recently:
+recent champion proficiency [games, wins, losses, bayes win rate]
+How good the champions that this player is playing are in the current meta:
+recent regional avg. champion win rate today
+recent global avg. champion win rate this patch
+How well this player has been playing the champions they’ve been playing
+compared to how well they normally play them(momentum) :
+[recent kills, deaths, assists, creep score − champion proficiency kills, deaths,
+assists, creep score]
+
+1 Only included for neural network models (not selected in SFFS for logistic regression).
+
+

@@ -1,0 +1,1467 @@
+1
+
+Which Heroes to Pick? Learning to Draft in MOBA
+Games with Neural Networks and Tree Search
+
+arXiv:2012.10171v4 [cs.AI] 5 Aug 2021
+
+Sheng Chen ∗ , Menghui Zhu ∗ , Deheng Ye † , Weinan Zhang, Qiang Fu, Wei Yang
+
+Abstract—Hero drafting is essential in MOBA game playing
+as it builds the team of each side and directly affects the match
+outcome. State-of-the-art drafting methods fail to consider: 1)
+drafting efficiency when the hero pool is expanded; 2) the multiround nature of a MOBA 5v5 match series, i.e., two teams play
+best-of-N and the same hero is only allowed to be drafted once
+throughout the series. In this paper, we formulate the drafting
+process as a multi-round combinatorial game and propose a
+novel drafting algorithm based on neural networks and MonteCarlo tree search, named JueWuDraft. Specifically, we design a
+long-term value estimation mechanism to handle the best-of-N
+drafting case. Taking Honor of Kings, one of the most popular
+MOBA games at present, as a running case, we demonstrate the
+practicality and effectiveness of JueWuDraft when compared to
+state-of-the-art drafting methods.
+Index Terms—hero drafting, neural networks, Monte-Carlo
+tree search, best-of-N drafting, MOBA game.
+
+I. I NTRODUCTION
+Artificial Intelligence for games (Game AI) has drawn a lot
+of attention since the AlphaGo and AlphaZero defeated human
+professionals in board games [1], [2]. Also, we have witnessed
+the success of AI agents in other game types, including Atari
+series [3], first-person shooting (FPS) games like Doom [4],
+video games like Super Smash Bros [5], card games like Poker
+[6], etc. Despite their great success, another general type of
+game – real-time strategy (RTS) video games [7] still has not
+been conquered by AI agents, due to its raw complexity and
+multi-agent challenges. Thus, recently researchers have paid
+more attention to RTS games such as Defense of the Ancients
+2 (Dota2) [8], [9], StarCraft II [10], [11], [12], [13] and Honor
+of Kings [14], [15], [16].
+As a subgenre of RTS games, Multiplayer Online Battle
+Arena (MOBA) is one of the most popular contemporary esports [8], [14], [15], [16]. Due to its playing mechanics, which
+involve multi-agent competition and cooperation, imperfect
+information, complex action control, enormous state-action
+space, MOBA is considered as a interesting testbed for AI
+research [17], [18]. The standard game mode in MOBA is
+5v5, i.e., a team of five players competes against another team
+of five players. The ultimate objective is to destroy the home
+base of the opposite team. Each player controls a single game
+∗ : equal contributions. † : corresponding author.
+Sheng Chen, Deheng Ye, Qiang Fu and Wei Yang are with the Tencent AI
+Lab, Shenzhen, China. (e-mail: victchen@tencent.com, dericye@tencent.com,
+leonfu@tencent.com, willyang@tencent.com)
+Menghui Zhu and Weinan Zhang are with the Department of Computer
+Science and Engineering, Shanghai Jiao Tong University, Shanghai, China.
+(e-mail: zerozmi7@sjtu.edu.cn, wnzhang@sjtu.edu.cn) Menghui Zhu was an
+intern in Tencent when this work was done.
+
+character, known as hero, to cooperate with other teammates
+in attacking opponents’ heroes, minions, turrets, and neutral
+creeps, while defending their own in-game properties.
+A single MOBA match consists of two phases: (i) the prematch phase during which the 10 players of the two teams
+select heroes from a pool of heroes, a.k.a., hero drafting or
+hero picking, and (ii) the in-match phase where two teams
+start to fight until the game ends. Here we provide a screenshot
+of hero drafting phase in Honor of Kings in Fig. 1. Drafting
+alternates between two teams until each player has selected
+one hero. The pick order is “1-2-2-1-1-2-2-1-1-2”, meaning
+that the first team picks one hero, followed by the second team
+picking two heroes, then the first team picking two heroes, and
+so on. More details will be explained in following chapters.
+We refer to the 10 heroes in a completed draft as a lineup,
+which directly affects future strategies and match results. Thus,
+hero drafting process is very important and a necessary part
+of building a complete AI system to play MOBA games [8],
+[16].
+To determine the winner of two teams, the best-of-N
+rounds, where the odd number N can be 1, 3, 5, etc., is the
+widely used rule, which means maximum N rounds can be
+played until one team wins (N + 1)/2 rounds.
+Each MOBA hero in one team is uniquely designed to
+have hero-specific skills and abilities, which together add
+to a team’s overall power. Also, heroes have the sophisticated counter and supplement relationships to each other.
+For example, in Dota 2, hero Anti-Mage’s skill can reduce
+an opponent hero’s mana resource, making him a natural
+counter to hero Medusa, whose durability heavily relies on
+the amount of mana. For another example, in Honor of Kings,
+hero MingShiyin can enhance the normal attack of ally heroes,
+making him a strong supplement to the shooter hero HouYi.
+Therefore, to win the match, players need to carefully draft
+heroes that can enhance the strengths and compensate for the
+weaknesses of teammates’ heroes, with respect to the opposite
+heroes.
+In MOBA games like Honor of Kings and Dota 2, there are
+possibly more than 100 heroes that can be selected by a player
+during drafting. For example, the latest version of Honor of
+Kings includes 102 heroes. Thus the number of possible hero
+10
+5
+lineups can be approximately 5.37 × 1015 (C102
+× C10
+, i.e.,
+picking 10 heroes out of a pool of 102 heroes and picking 5
+out of 10). Due to the complex relationships among heroes as
+mentioned above and the huge number of possible lineups,
+drafting a suitable hero that can synergize teammates and
+counter opponents is challenging to human players.
+State-of-the-art methods for MOBA hero drafting are from
+
+2
+
+Fig. 1: Screenshot of hero drafting phase in Honor of Kings.
+The left column shows heroes picked by ally camp, and the
+right column shows heroes picked by enemy camp. Drafting
+alternates between two teams until all players have selected
+one heroes, which makes up a complete lineup.
+
+OpenAI Five [8] and DraftArtist [19]. OpenAI Five, the AI
+program for playing Dota 2, uses the Minimax algorithm [20],
+[21] for hero drafting since only 17 heroes were supported.
+However, Minimax constructs a complete search tree comprising of all possible picks alternated by each player, making it
+computationally intractable to scale to large hero pools, e.g.,
+100 heroes. With pruning techniques [22], the computation
+time of Minimax algorithm is reduced by preventing exploring
+useless branches of the search tree. However, its efficiency
+improvement is not sufficient when the hero pool is large.
+DraftArtist leverages Monte-Carlo Tree Search (MCTS) [23],
+[24] to estimate the value of each pick by simulating possible
+following picks until the lineup completes. However, it only
+considers one single match only, i.e., best-of-1, which may
+result in less optimal drafting result. Moreover, its MCTS
+simulation adopts random rollouts to get the reward, which
+may need a large number of iterations to get an accurate
+estimation. Thus, it’s inefficient.
+In this paper, we characterize the MOBA drafting process
+as a two-player zero-sum game with perfect information. The
+aim of each player is to maximize the winning rate of its team
+consisting of five heroes drafted from a large pool of heroes
+against the opponent five-hero team, under the condition that
+one hero is only allowed to be picked once for the same
+team. To handle with this problem, we propose to combine
+Monte-Carlo Tree Search (MCTS) and Neural Networks (NN).
+Specifically, we use MCTS with a policy and value network,
+where the value network is to predict the value of the current
+state directly instead of the inefficient random roll-out to get
+the reward. Unlike board games such as Chess and Go in
+which the terminal state determines the winner of the match,
+the end of the drafting process is not the end of a MOBA
+match. Therefore, we cannot get match results directly. To deal
+with this, we build a neural predictor to predict the winning
+rate of particular lineups, named as win-rate predictor. The
+win-rate predictor is trained in the way of supervised learning
+
+with a match dataset. The winning rate of the terminal state is
+used as the reward for back-propagation of MCTS and training
+the value network.
+In best-of-N rule, there are several rounds to determine
+the final winner. Drafting a hero for the current round will
+affect the outcome of later rounds. Specifically, players are
+not allowed to pick heroes that were picked by themselves
+in previous rounds. To handle this problem, we formulate
+the drafting process as a multi-round combinatorial game
+and design a long-term value mechanism. Thus, our drafting
+strategy will have a longer consideration for both current
+rounds and following rounds.
+To sum up, we make the following contributions:
+• We propose a hero drafting method called JueWuDraft
+for MOBA games via leveraging neural networks and
+Monte-Carlo tree search. Specifically, we use MCTS with
+a policy and value network, where the value network is
+to evaluate the value of the current state, and the policy
+network is used for sampling actions for next drafting.
+• We formulate the best-of-N drafting problem as a multiround combinatorial game, where each round has a
+winning rate for its final lineup. To adapt to such bestof-N drafting problem, we design a long-term value
+mechanism. Thus the value estimation of the current state
+will consider longer for the following rounds.
+• We conduct extensive experiments and the results demonstrate the superiority of JueWuDraft over state-of-theart drafting methods on both single-round and multiround games. Specifically, JueWuDraft performs better
+on multi-round games, which indicates our method can
+handle further consideration better than other strategies.
+II. R ELATED W ORK
+Previous methods for MOBA hero drafting can be categorized into the following four types.
+1) Historical selection frequency. Along this line, Summerville et al. [25] proposed to recommend heroes that players
+tend to select. Specifically, hero drafting is modeled as a
+sequence prediction problem, in which the next hero to pick is
+predicted from the sequence of picks made already in the draft.
+Since the sequence prediction model is trained with supervised
+learning from pick sequences in historical matches and does
+not consider their win-loss results, the predicted hero is “what
+is likely to be picked, not what is necessarily best” [25]. In
+other words, this method will pick heroes with the highest
+frequencies rather than heroes with the highest winning rates,
+which may not be optimal for the team victory.
+2) Previous winning rate based. In [26], Hanke and
+Chaimowicz proposed to mine association rules [27] from
+historical hero lineup data and use it as heuristics to recommend the next hero to pick. Here the association rules are hero
+subsets that appear frequently together either in the winning
+team or in opposite teams. Then heroes mined by association
+rules are considered as a recommendation list for the next
+drafting step. However, such a method does not consider which
+heroes to be picked in the rest of the drafting process, thus it
+is essentially a myopic, greedy-based approach.
+
+3
+
+3) Minimax algorithm. OpenAI Five uses the Minimax
+algorithm for hero drafting [8], with 17 heroes available (only
+4,900,896 combinations of two 5-hero teams from the pool
+of 17 heroes). Minimax method will make the move that
+maximizes the minimum value of the position resulting from
+the opponent’s possible following moves. Specifically, a hero
+is picked that can maximize the worst case scenario after
+the opponent hero selection. However, the time complexity
+of this method increases at the polynomial scale when the
+hero pool enlarges. Even with alpha-beta pruning technique
+[22], the improvement of time complexity is limited. Given a
+large hero pool, e.g., 100 heroes (more than 1015 combinations), the method used for drafting in OpenAI Five will be
+computationally intractable.
+4) Monte-Carlo tree search (MCTS). MCTS [23] can be
+seen as an alternative to Minimax algorithm, which improves
+the efficiency of search by using random roll-outs for value approximations. Recently, it has attracted much attention because
+of its successful application to Go-playing programs [1], [2],
+General Game Playing [28], and Real-Time Strategy games
+[29]. Specifically, DraftArtist [19] uses MCTS for estimating
+the values of hero combinations, which is the state-of-the-art
+hero drafting algorithm. However, this method fails to consider
+the fact that a formal MOBA match contains a series of N
+rounds. Besides, random rollouts adopted by MCTS simulation
+are not efficient enough.
+Although there are other works using machine learning
+models to predict match outcomes [30], [31], they do not focus
+on how to utilize these models for hero drafting.
+The combination of the planning ability from MCTS and the
+generalization ability from neural networks brings the agent
+to the level of beating human professionals in the game of
+Go [1], as known as AlphaGo. Subsequently, a more general
+deep reinforcement learning (DRL) method is further applied
+to the Chess and Shogi 1v1 games [2], as known as AlphaZero.
+Different with AlphaGo, AlphaZero starts from zero with selfplay without human demonstrations.
+Similar to the board games like Go, the drafting problem
+can also be treated as a two-player zero-sum perfect information game. Thus, we propose our drafting method based on
+MCTS and neural networks, which is similar to AlphaZero.
+Unlike board games, the end of drafting process can only
+determine the final lineup rather than win-lose information,
+thus we build a winning rate predictor to predict the winning
+rate of particular lineups, which is used as the reward for
+back-propagation of MCTS and training the value network.
+Moreover, we formulate the best-of-N drafting process as a
+multi-round combinatorial game. And we design a long-term
+value mechanism for value credit assignment [32], which is
+normal in multi-agent reinforcement learning (MARL) field
+[33], [34], and also has been considered in MCTS/UCT [24],
+[35]. With such value design, our drafting method can take
+a long-term consideration for both the current round and the
+following rounds.
+
+a multi-round combinatorial game, (ii) how we apply MCTS
+and neural network for the optimal hero drafting, and (iii) how
+to design the long-term value mechanism.
+
+III. M ETHOD
+In this section, we describe JueWuDraft in detail, including
+(i) the problem formulation of the hero drafting process as
+
+1 KPL is the professional player league of Honor of Kings, which organizes
+annual esports tournament. Other popular MOBA games also have similar
+annual esports tournament, e.g., TI (The International) of Dota, LPL (LOL
+Pro League) of League of Legends.
+
+A. Problem Formulation
+As described above, drafting heroes plays an important role
+in MOBA, especially in complicated game matches. In formal
+MOBA matches, the best-of-N round format is widely used
+to determine the winner, where N is an odd, usually BO3
+or BO5. For example, The competition format of King Pro
+League (KPL) 1 always contains several rounds. Under this
+format, two teams fight against each other until one wins
+(N + 1)/2 rounds (2 in BO3, 3 in BO5). Besides, players
+are not allowed to pick heroes that were picked by themselves
+in previous rounds of the multi-round games. It means that to
+win a multi-round game, one must take the state of both the
+current round and the following rounds into account during
+drafting.
+Therefore, instead of considering the drafting in each round
+individually, we define the draft in a full game G as a
+two-player zero-sum perfect information game with repeated
+similar sub-structure in this paper. The game we defined
+consists of the following elements (in this paper we do not
+consider banning heroes):
+• The number of players in a full game: P = 2, including
+{player1, player2}.
+• The number of camps in a game: M = 2, including
+{camp1, camp2}. Noted that either player can be camp1
+or camp2, and camp1 always chooses heroes firstly.
+• The number of rounds in a full game: D. It represents
+that a full game contains D rounds, which means to win
+a full game, a player must win at least dD/2e rounds.
+• The length of a round L: It defines that a round in a full
+game will last L time-steps, there is one hero drafted at
+each time-step.
+• Player order Oround and Of irst : For example, in Honor
+of Kings, in every round, the two players take actions
+in the pick order Oround = {1, 2, 2, 1, 1, 2, 2, 1, 1, 2}l .
+It represents that camp1 first picks a hero, and camp2
+consecutively picks two heroes, then camp1 goes on
+to pick 2 heroes and so on. Another player order Of irst = {player0 , player1 , . . .}d defines which
+player to pick first in the corresponding round. In
+the rule of KPL, the Of irst is fixed to Of irst =
+{player1, player2, player1, . . .}d , where the two players
+take turns to pick firstly in the round.
+• The turn function ρ : t → {player1, player2} : ρ decides
+which player’s turn to give an action according to the
+time-step t. Obviously, it is based on Oround and Of irst
+as stated above.
+L×D
+• The state of the game s ∈ S ⊂ [0, Nclasses ]
+. The
+state s is a vector of positive integers, of which the
+length is L × D. si ∈ s means that in time step i, the
+
+4
+
+player has picked i heroes, while the remaining part of
+the vector remains undetermined yet. Thus, the remaining
+dimensions will be filled with the default index Nclasses .
+Nclasses is the total number of the hero pool.
+• The action a of the game: At the time-step t, the agent
+gives an action a ∈ A ⊂ [0, Nclasses − 1] ∩ N, indicating
+that the player decides to pick the corresponding hero
+with the index range from 0 to Nclasses − 1.
+It is worth noting that not all the actions are legal, i.e.,
+heroes picked in the past by the player himself or in
+the current rounds by both players are forbidden to be
+selected.
+• The transition function P : S × A → S. P simply means
+that when taking an action ai at the state si , we get to a
+new state si+1 .
+• Single-round winning rate predictor φ: Though we consider the full multi-round game as a whole, the winning
+rate of each round is only decided by the lineup of the
+heroes of an individual round. The winning rate of a
+single round here is estimated by the function φ. It takes
+the lineups as input and outputs a winning rate {p, 1 − p}
+for each camp.
+• The reward r: The two players get rewards {r, −r}
+after the whole game ends. P
+The reward is calculated by
+D−1
+the following equation: r = i=0 φ(lineup1i , lineup2i ),
+1
+2
+where lineupi and lineupi are the lineups of player1
+and player2 at round i.
+• The goal of the game G: To get a higher reward r than
+the opponent player, i.e., get a positive reward r.
+B. Learning to Draft in MOBA Games with Neural Network
+and Tree Search
+In many two-player zero-sum games, like Go, Chess, and
+Shogi, the family of Monte-Carlo tree search (MCTS) algorithms is seen as a powerful toolkit to get favorable actions
+with an acceptable computational cost. Recently, the variant
+of predictor upper confidence trees (PUCT) algorithm [36]
+combined with deep neural networks, as known as AlphaZero,
+proposes a general framework for dealing with a series of
+chess games. However, to adapt to the draft problem in MOBA
+games, there are additional work to do. In this section, we
+will illustrate how we modify the mechanism of value backpropagation and adapt the framework to our multi-round draft
+games.
+1) Overall Training Framework: The overall training
+framework of JueWuDraft is shown in Fig. 2. To improve training efficiency, we make the framework distributed between a
+number of CPU and GPU servers.
+From the whole perspective, our framework consists of 4
+modules: data sampler, samples pool, neural network trainer,
+and model pool. A data sampler consists of two players and
+a gamecore, which generates samples by simulating matches
+between two players. The samples are sent to the samples pool
+for training. The neural network trainer performs supervised
+learning for the policy and value network with these samples
+and transmits the models to the model pool, which synchronizes trained models to data samplers. Take this as a loop,
+
+Samples Pool
+
+Data Sampler
+
+R1
+
+...
+
+VS
+
+Player 2
+
+R3
+
+...
+
+Player 1
+
+VS
+
+...
+
+Neur al Networ k
+Tr ainer
+
+M odel Pool
+
+Fig. 2: Overall Training Framework. The total framework
+consists of 4 modules: data sampler, sample pool, neural
+network trainer, model pool.
+
+with the latest model, the data samplers continues to generate
+samples.
+2) Parallel MCTS with Deep Neural Networks: In our
+framework, we utilize PUCT as the searching algorithm.
+Before introducing how to build a search tree, we first explain
+the meaning and the construction of the nodes in the tree.
+In our algorithm, a node n(s) is uniquely identified
+by a state s. Usually, a node stores a set of statistics,
+{C(s), W (s), Q(s), P (s), V L(s)}. Here C(s) is the visit
+count; W (s) is the total value; Q(s) is the mean value;
+P (s) is the prior probability which is from the prediction
+of the policy network for its parent node; V L(s) is the
+virtual loss for parallel tree searching [37]. When a node is
+visited by a thread, the virtual loss increases. When the thread
+back-propagates the reward across this node, its virtual loss
+decreases. Thus, different threads are more likely to explore
+different nodes. The parent node n(s) and the children node
+n(s0 ) are connected by edges e(s, a), which means that we
+takes action a at state s and arrive at a new state s0 .
+To improve the speed of data sampling and fully utilize the
+computing resource, we perform searches on the tree in parallel. Generally, our PUCT search tree is built iteratively in four
+steps: selection, evaluation, expansion and back-propagation.
+The process is illustrated in Fig. 3.
+• Selection. In this step, the algorithm begins at the root
+node that represents the current situation. Before meeting
+the leaf nodes of the search tree, the algorithm selects
+actions by the following equation and visit the deeper
+nodes:
+at = arg max Q(st,a )+cpuct U (st,a )−V L(st,a )/C(st,a ),
+a
+(1)
+sX
+U (st,a ) = P (st,a )
+C(st,a0 )/C(st,a ),
+(2)
+a0
+
+where the mean value is calculated as Q(st ) =
+W (st )/C(st ). st,a means the new state st+1 after taking
+action a at state st . Thus Q(st,a ), U (st,a ), V L(st,a )),
+P (st,a ) and C(st,a ) are equal to Q(st+1 ), U (st+1 ),
+V L(st+1 ), P (st+1 ), and C(st+1 ) respectively. For parallel searching, the virtual loss of the selected nodes should
+be added to avoid that different searching threads choose
+
+5
+
+Selection
+
+Evaluation & Expansion
+
+Play
+
+Back-propagation
+
+I nference
+...
+
+M ax?
+
+...
+
+A round ended?
+N
+
+Y
+
+Fig. 3: MCTS for drafting process. Each simulation contains four steps: selection, evaluation, expansion and back-propagation,
+which are listed on the left. At the back-propagation step, the returned value will be added with a win-rate of this round when
+a round is end. After the search is complete, probabilities π is returned (proportional to C(s), the visit count of each node,
+and τ is a parameter controlling temperature), which is shown on the right.
+the same branch of the tree: V L(st,a ) ← V L(st,a ) + cvl ,
+where cvl is a hyperparameter for virtual loss. cpuct is a
+balancing hyperparameter.
+• Evaluation. When the algorithm visits a leaf node n(sT ),
+it stops step Selection and turns to step Evaluation. In
+Evaluation step, the algorithm gets the oracle policy
+π(·|sT ) and the value fθ (s) by policy and value neural
+network through inference.
+When a normal game (e.g., Go) ends, the winner is
+determined immediately. And the value is replaced with
+the win-lose result (−1 or 1), which is designed as the
+ground-truth reward. However, we can only get complete
+lineups when the drafting process ends. Thus, we need to
+obtain the winning rate according to the complete lineup.
+As MOBA games are complex, computing the winning
+rate via taking an average of a bunch of games with the
+lineup is computationally infeasible. Therefore, we adopt
+the winning rate predictor φ(s) (we will introduce how
+it works later) to get a predicted winning rate and take it
+as the estimated value instead of the predicted value of
+the value network.
+Note that above we only replace the value when the last
+round ends, while there are several rounds during the
+multi-round game. The reason is that the estimation of
+our value network will have; a long-term consideration
+for both current rounds and following rounds. But the
+winning rate predictor only gets the value of the lineup
+for the current round.
+• Expansion. The algorithm expands the leaf node n(sT )
+as follows: Firstly, we mask all the illegal actions and
+renormalize the policy vector. Then according to the
+renormalized vector π(·|sT ), for every legal action a, we
+create a new node n(sT +1 ) and initialize all statistics to
+0, except P (st+1 ) = π(a|sT )|st+1 =st,a .
+• Back-propagation. After expansion, we update information for all nodes on the path from the node n(sT ) to the
+root node. For every passed node n(s), we update the
+statistics as C(s) ← C(s) + 1, V L(s) ← V L(s) − cvl ,
+and Q(s) ← W (s)/C(s). For value update, the normal
+way is W (s) ← W (s) + v(sT ). While in multi-round
+
+game, nodes in earlier rounds have influences on nodes
+in later rounds. Thus we will design a long-term value
+mechanism, which is introduced in subsection Long-term
+Value Propagation.
+3) Policy and Value Network Training: Providing the generalization ability to estimate value on unseen states, the deep
+neural network plays an important role in JueWuDraft, for both
+providing a stable reference of current value and dominant
+actions. Also, the neural network largely saves time when
+searching and building the tree as traditional MCTS algorithm
+samples to the end of the game, thus spending much time on
+rollouts. Thus, how to train the network is crucial.
+
+...
+Round 1
+
+...
+...
+
+...
+
+...
+Round 2
+
+...
+
+...
+
+Round 3
+
+...
+Back-propagation
+step in M CTS
+
+...
+
+Tar get label of value
+networ k
+
+Fig. 4: Value propagation
+Our network outputs the value and oracle policy with a
+single unified architecture. Specifically, for a specific state s,
+the network fθ parameterized by θ predicts the outcome vθ (s)
+and policy pθ (s) simultaneously. When training, we regard
+it as a supervised learning problem and adjust by gradient
+descent on a loss function l that sums over mean-squared error
+and cross-entropy losses:
+l = (z − vθ (s))2 − π > log pθ (s) + cp kθk2 ,
+
+(3)
+
+6
+
+where π is the returned probabilities by MCTS, shown on the
+right side of Fig. 3. cp is the L2 penalty constant and z is the
+target outcome in multi-round games.
+Firstly, since the winning rate predictor gives a winning rate
+φ(s) ∈ [0, 1], which can be mapped to [−1, 1] as reward signal:
+zd = (φ(s) − 0.5) × 2,
+
+(4)
+
+where zd represents the transformed winning rate at the round
+d. While in multi-round games, past picked heroes cannot be
+chosen by the same player anymore, so the agents should
+make an advanced plan, and the target outcomes z should
+be carefully designed, which will be discussed in the next
+subsection.
+4) Long-term Value Propagation: As discussed above, each
+drafting at earlier rounds will affect the outcome of later
+rounds in multi-round games. Also, it is intuitive to sum up all
+the outcomes in all related rounds for the value of the current
+step. There are two cases of long-term value propagation:
+• For the Back-propagation step in MCTS. Defining a node
+n(sdt ) on the path from the leaf node n(sD
+T ) to the root
+0
+node n(sD
+),
+d
+is
+the
+round
+index
+and
+t
+is
+the step index
+T0
+range from T0 to T . The values of the node n(sdt ) and
+d
+D
+node n(sD
+T ) are v(st ) and v(sT ), respectively. We update
+d
+the value of the node n(st ) as:
+X
+v new (sdt ) = v(sdt ) + v(sD
+zi ,
+(5)
+T)+
+i∈[d,D)
+
+where zi is the transformed winning rate of round i,
+cares about
+which is mentioned in Eq. (4). v(sD
+T ) only P
+values of round D and further. Thus we add i∈[d,D) zi
+which reflects the influences of outcomes between round
+d and round D − 1.
+• For the target label of the value network. For a step at
+round d, the target label is designed as
+X
+z=
+zi ,
+(6)
+i≥d
+
+which means the ground-truth value for one step at round
+d only counts on current and later rounds, and it does not
+consider previous rounds. Each steps of the same player
+in the same round has the same target value.
+We show an example of a 3-round game in Fig. 4 for both
+the back-propagation step in MCTS and the target label for
+the value network. As is illustrated, nodes at earlier rounds
+affect more nodes than those later.
+Note that the value back-propagation for player1 and
+player2 has the opposite sign since both players strive to
+maximize the predicted value of their team based on the
+current drafting situation.
+5) Network Structure and State Reconstruction: In our
+multi-round draft game, the state s is a vector with length
+L × D. However, to train a policy and value network in a
+more efficient way, we need to reconstruct the state s.
+As Fig. 5 shows, the reconstructed vector mainly consists
+of three parts: the current draft part includes the draft in the
+current round, which mainly affects the winning rate. The
+middle of the vector is the history draft information. The last
+
+Cur r rent Dr aft
+
+Histor y Dr aft
+
+Win-lose/Tur n
+
+Fig. 5: State vector configuration for policy and value network.
+It consists of three parts: heroes indexes of the current round;
+history draft information; the related game information (e.g.,
+current round, whose turn.)
+part is the related information (e.g., current round, whose turn
+to pick). Note that to further simplify the state, we here sort
+the hero index for each camp in current draft and history draft
+parts from small to large.
+We use a simple 3-layer fully connected neural network as
+our policy and value network as shown in Fig. 6(b). It takes in
+the state vector as shown in Fig. 5 while outputs two heads:
+a fully-connected (FC) layer with a softmax function — the
+policy head which outputs the probability of each action; an
+FC layer with a tanh function — the value head which outputs
+the value of current state ranged from −1 to 1.
+C. Winning Rate Predictor
+We can only get complete lineups rather than win-lose
+information when the drafting process ends. Thus, we adopt
+the winning rate predictor to predict the winning rate of the
+lineup as our reward function. This winning rate predictor
+is trained with a match dataset which contains lineup and
+win-lose information. Each unique hero is distinguished with
+indices ranging from [0, Nclasses − 1]. The input feature is
+represented by the indices of all 10 picked heroes.
+The network architecture is shown in Fig. 6(a), which is a
+simple 3-layer neural network with an output layer connected
+by a sigmoid activation function. Thus the output is the
+winning rate ranged from 0 to 1, which is always from the
+view of camp1.
+IV. E XPERIMENTS
+A. Datasets
+We train our winning rate predictor on the dataset containing
+a large number of matches in the game King of Honor. In
+detail, we test JueWuDraft on two individual datasets, which
+are based on AI matches and human matches, respectively.
+Our simulation results are based on these two match datasets.
+The AI Dataset: Note that we have developed an AI system
+to play full game of Honor of Kings, which is discussed in
+[16]. Thus we collect matches via self-play of our trained AI
+during the training process when its performance becomes stable. The dataset contains 30 million matches, with each match
+containing hero lineup information and win-lose information,
+including 95 distinct heroes.
+The Human Dataset: We collect some matches of King of
+Honor played by top 5% human players between August 1st,
+2020 to August 10th, 2020. To be consistent with AI dataset,
+this match dataset is set to contain 30 million matches, with
+each match containing hero lineup information and win-lose
+information, including these 95 distinct heroes.
+
+7
+
+Dr aft
+Feature
+VS
+
+Game I nfo
+
+Embedding
+
+Dr aft_N
+
+Embedding
+
+Shared
+FC/ReL U
+
+Shared FC/ReL U
+
+Concat
+
+Concat
+
+FC/Sigmoid
+
+...
+
+Dr aft_0
+
+FC/Tanh
+
+FC/Softmax
+
+(a)
+
+(b)
+
+Fig. 6: Network Architecture for (a) the winning rate predictor and (b) the policy and value network.
+
+B. Winning Rate Predictor Performance
+To prepare the data for training the winning rate predictor,
+heroes of each match are distinguished with indices ranging
+in [0, 94], while the match outcome is used as the label. The
+learning rate is set to 10−4 with Adam optimizer.
+We compare our winning rate predictor (neural network,
+NN) [38], [39], [40] with other two classification methods,
+including Gradient Boosted Decision Tree (GBDT) [41], [42],
+Logistic Regression (LR) [43]. These methods are trained on
+two individual match datasets, respectively. And we report the
+accuracy, area under ROC curve (AUC), and the harmonic
+mean of the precision and recall (F1-Score) for each kind of
+methods in Fig. 7(a) and Fig. 7(b), averaged over 10-fold cross
+validation.
+As is shown in Fig. 7(a) and Fig. 7(b), NN performs the
+best on all metrics (accuracy, AUC and F1-Score) among
+these classification methods, which is 16.8% better on the
+accuracy, 17.8% better on AUC and 18.1% better on F1-Score
+than the second best method (LR) for the AI Dataset, and
+8.6% better on the accuracy, 8.1% better on AUC and 11.4%
+better on F1-Score than the second best method (LR) for the
+Human Dataset, respectively. Thus we choose the designed
+neural network as our winning rate predictor. Note that all
+classification methods perform worse on the Human Dataset.
+The reason is that matches from the AI Dataset are played
+by similar policies. However, the Human Dataset contains
+matches from different human players, which makes it difficult
+to fit for all classification models.
+C. Training Details.
+JueWuDraft is trained over a total number of 2400 CPU
+cores encapsulated in Dockers and a single Nvidia GPU (Tesla
+P40). The mini-batch size is 400; the learning rate is set to
+10−4 with Adam optimizer; the cvl parameter is set to 3; the
+cpuct parameter is 1; the temperature parameter τ is 1; and
+the L2 penalty parameter cp is 10−4 ;
+For single-round game, about 0.4 million games of self-play
+(4 million samples) were generated during training, with 3200
+
+Classification performance on AI Dataset
+
+0.847
+Acc
+
+0.725
+0.713
+
+0.908
+AUC
+
+0.771
+0.751
+0.814
+
+F1-Score
+
+0.689
+0.656
+0.4
+
+0.5
+
+0.6
+
+0.7
+
+NN
+
+LR
+
+0.8
+
+0.9
+
+1
+
+GBDT
+
+(a)
+Classification performance on Human Dataset
+
+0.617
+Acc
+
+0.568
+0.561
+0.694
+
+AUC
+
+0.642
+0.648
+
+0.625
+F1-Score
+
+0.561
+0.557
+0.4
+
+0.5
+
+0.6
+NN
+
+0.7
+LR
+
+0.8
+
+0.9
+
+1
+
+GBDT
+
+(b)
+
+Fig. 7: Performance of classification methods for winning rate
+predictors for (a) the AI Dataset and (b) the Human Dataset.
+
+iterations for each MCTS. The training process lasts about 2
+hours until its loss converges.
+For 3-round game, about 0.4 million games of self-play (12
+
+8
+
+million samples) were generated during training, with 6400
+iterations for each MCTS. The training time is about 24 hours.
+For 5-round game, about 0.3 million games of self-play (15
+million samples) were generated during training, with 9600
+iterations for each MCTS. The training time is about 32 hours.
+
+TABLE I: Mean predicted winning rate with the 95% confidence interval of the row player in each pair of strategies for
+single-round game on the AI Dataset, where the row player
+plays against the column player. The strategies are sorted in
+ascending order by their strengths, from top to bottom, and
+from left to right. winning rates symmetric to diagonal always
+sum to one.
+
+D. Testing Details.
+We compare JueWuDraft with the other three strategies
+(DraftArtist, HWR, RD). To prove the effectiveness of longterm value mechanism for multi-round games, we also provide JueWuDraft strategy without long-term value mechanism
+(JueWuBase) as a comparison strategy. For every pair of
+strategies, we conduct 1000 simulation games: in each simulation, two players participate in the drafting process, with
+each player adopting one of the two compared strategies. At
+the end of each simulation, we collect the averaged winning
+rate predicted by φ(s) ∈ [0, 1], with the 95% confidence
+interval as a measure of strength of two strategies. Finally,
+the mean winning rates predicted by φ(s) ∈ [0, 1], with
+the 95% confidence interval over 1000 simulations of each
+pair of strategies are recorded and shown in table form.
+For each simulated draft, regardless of the strategy adopted,
+the first step of drafting heroes will be sampled from the
+probability distribution to cover more possible scenarios. And
+each strategy is set to pick heroes first for half of all 1000
+simulations for fairness. All our test experiments are conducted
+on a PC with an Intel(R) Xeon(R) E5-2680 v4 @ 2.40GHz
+CPU (14 cores) and a single Nvidia GPU (Tesla M40).
+The three comparison strategies are listed as below:
+• DraftArtist [19], which uses pure MCTS without our
+trained policy and value network. Note that this strategy
+will not consider situations of following rounds.
+• Highest winning rate (HWR), selects the hero with the
+highest winning rate in the left hero pool, based on the
+statistical data.
+• Random (RD), which selects the hero randomly in the
+remaining hero pool.
+• JueWuDraft strategy without long-term value mechanism
+(JueWuBase), which uses MCTS with policy and value
+network, and without long-term value mechanism.
+Note that we set the processing time for all MCTS-based
+methods to about 1 second for comparison, which is far lower
+than the time limit for gamecore (3 seconds) or limit for human
+players (30 seconds). And the processing time for MCTS-like
+method is mainly proportional to the number of iterations.
+According to processing time setting, the corresponding number of iterations will be 1.6 × 104 for DraftArtist, 1.6 × 104
+for JueWuDraft (BO1), 1.3 × 104 for JueWuDraft (BO3), and
+1.0 × 104 for JueWuDraft (BO5), respectively.
+E. Simulation Results
+1) Effectiveness: We compared JueWuDraft with other
+three strategies (DraftArtist, HWR, RD) and a comparison
+strategy (JueWuBase) trained on both two match datasets (the
+AI Dataset and the Human Dataset). And results of both
+single-round and multi-round games (BO3, BO5) are provided.
+
+Row/Col.
+
+RD
+
+HWR
+
+DraftArtist
+
+RD
+HWR
+0.982 ± 0.004
+DraftArtist 0.983 ± 0.006 0.591 ± 0.005
+JueWuDraft 0.983 ± 0.005 0.679 ± 0.007 0.548 ± 0.008
+
+JueWuDraft
+-
+
+TABLE II: Mean predicted winning rate with the 95% confidence interval of each pair of strategies for 3-round game on
+the AI Dataset.
+Row/Col.
+
+RD
+
+HWR
+
+DraftArtist
+
+JueWuBase
+
+RD
+HWR
+0.974 ± 0.005
+DraftArtist 0.978 ± 0.006 0.622 ± 0.004
+JueWuBase 0.979 ± 0.006 0.658 ± 0.004 0.553 ± 0.003
+JueWuDraft 0.981 ± 0.005 0.677 ± 0.003 0.580 ± 0.004 0.516 ± 0.003
+
+TABLE III: Mean predicted winning rate with the 95% confidence interval of each pair of strategies for 5-round game on
+the AI Dataset.
+Row/Col.
+
+RD
+
+HWR
+
+DraftArtist
+
+JueWuBase
+
+RD
+HWR
+0.938 ± 0.007
+DraftArtist 0.955 ± 0.009 0.594 ± 0.011
+JueWuBase 0.966 ± 0.006 0.629 ± 0.005 0.570 ± 0.005
+JueWuDraft 0.970 ± 0.006 0.644 ± 0.005 0.601 ± 0.006 0.528 ± 0.005
+
+Each cell in the table means the mean predicted winning rate
+φ(s) ∈ [0, 1] with the 95% confidence interval which is played
+by each pair of strategies (the corresponding strategy from the
+first column and the corresponding strategy from the first row).
+We judge the strength of one strategy by analyzing the mean
+predicted winning rates against other strategies. For example,
+one strategy can defeat another strategy with more than 50%
+averaged winning rate, we consider it is a better strategy. The
+predicted winning rates shown in the table are from the view
+of strategies in the first column. In total, we present the results
+in six tables (namely, Table I-VI), each of which represents
+one specific experimental setting.
+Single-round game (BO1). JueWuDraft beats the second
+place (DraftArtist) with 54.8% on the AI Dataset as shown
+in Table I, and 52.5% better than the second place on the
+Human Dataset shown in Table IV, respectively. It shows
+that JueWuDraft performs best among all strategies for singleround game.
+3-round game (BO3). Experiments show that JueWuDraft
+outperforms other strategies for 3-round game. It has a mean
+
+9
+
+TABLE IV: Mean predicted winning rate with the 95% confidence interval of each pair of strategies for single-round game
+on the Human Dataset, where the row player plays against the
+column player. The strategies are sorted in ascending order
+by their strengths, from top to bottom, and from left to right.
+Winning rates symmetric to diagonal always sum to one.
+
+Row/Col.
+
+RD
+
+HWR
+
+DraftArtist
+
+JueWuBase
+
+RD
+HWR
+0.587 ± 0.010
+DraftArtist 0.675 ± 0.013 0.589 ± 0.007
+JueWuBase 0.698 ± 0.008 0.609 ± 0.007 0.523 ± 0.006
+JueWuDraft 0.712 ± 0.007 0.626 ± 0.006 0.547 ± 0.005 0.525 ± 0.006
+
+predicted winning rate of 58.0% against the second place on
+the AI Dataset shown in Table II, and 55.8% better than
+the second place on the Human Dataset shown in Table
+V, respectively. And with long-term value mechanism, the
+mean predicted winning rates against DraftArtist increased by
+4.9% on the AI Dataset and 4.7% on the Human Dataset,
+respectively.
+5-round game (BO5). JueWuDraft has a mean predicted
+winning rate of 60.1% against the second place on the AI
+Dataset shown in Table III, and 54.7% better than the second
+place on the Human Dataset shown in Table VI, respectively. It
+demonstrates that JueWuDraft achieves the best performance
+for 5-round game. And JueWuDraft (with the long-term value
+mechanism) beats over JueWuBase (without long-term value
+mechanism) over 52.8% on AI Dataset, and 52.5% on Human
+Dataset, respectively.
+Comparing performance between single-round and multiround games (BO3, BO5), it can be seen that JueWuDraft
+performs better against the baseline method (DraftArtist) on
+multi-round games. The main reason is that the multi-round
+games are more complex and need more consideration for both
+
+Mean Winning Rate
+
+current states and the following rounds. While JueWuDraft can
+handle further consideration better than the other strategies.
+Noted that JueWuDraft achieves higher predicted winning
+rates for the AI Dataset compared to these for the Human
+Dataset. And the differences of average predicted winning
+rates between each pair of strategies are smaller for the Human
+Dataset. One possible reason is that matches from the AI
+Row/Col.
+RD
+HWR
+DraftArtist JueWuDraft
+Dataset are collected via self-play of similar policies, enlarging
+RD
+the gaps in winning rates for heroes. While matches from the
+HWR
+0.646 ± 0.006
+Human Dataset are collected from various kinds of human
+DraftArtist 0.699 ± 0.005 0.537 ± 0.007
+players at a similar level, which will weaken the effects of
+JueWuDraft 0.756 ± 0.005 0.600 ± 0.002 0.525 ± 0.003
+lineups to game results. According to our statistics, the mean
+winning rates of heroes range from 41.4% to 55.4% for the
+TABLE V: Mean predicted winning rate with the 95% confi- Human Dataset, and the interval is [26.4%, 81.9%] for the AI
+dence interval of each pair of strategies for 3-round game on Dataset.
+2) Efficiency: To show the efficiency of different strategies,
+the Human Dataset.
+we provide the average processing time per step of the drafting
+Row/Col.
+RD
+HWR
+DraftArtist
+JueWuBase
+process for every strategy in Table VII. The average time
+of picking a hero by JueWuDraft is about 1 second. It is
+RD
+acceptable to apply our drafting method to the game in real
+HWR
+0.595 ± 0.005
+time. The time limit for our gamecore is 3 seconds, and it is
+DraftArtist 0.693 ± 0.005 0.571 ± 0.006
+over 30 seconds for human players. Therefore, our drafting
+JueWuBase 0.719 ± 0.006 0.618 ± 0.005 0.533 ± 0.005
+JueWuDraft 0.739 ± 0.006 0.642 ± 0.006 0.558 ± 0.005 0.520 ± 0.006 system is suitable for being applied in real game with a large
+scale.
+TABLE VI: Mean predicted winning rate with the 95% confibaseline
+0.66
+dence interval of each pair of strategies for 5-round game on
+0.642
++ value network
+0.64
++ policy and value network
+the Human Dataset.
+0.618
+0.62
+
++ long-term value mechanism
+
+0.6
+0.58
+
+0.581
+0.571
+
+0.56
+0.54
+0.52
+
+Fig. 8: Ablation study for key components.These experiments
+use a specific setup: 3-round game on Human Dataset, taking
+HWR as a comparison method.
+3) Ablation Study: To further analyze the key components
+in JueWuDraft, we run an internal ablation, which is shown
+in Fig. 8. We test JueWuDraft by adding key components
+gradually with a specific setting: 1000 simulations for 3round game on Human Dataset, taking HWR as its opponent
+strategy. The baseline in Fig. 8 is the MCTS strategy, and
+three other strategies are MCTS with the value network (a
+provisional version of JueWuDraft used in [16]), MCTS with
+policy and value network (JueWuBase), MCTS with policy
+and value network and long-term value mechanism (the full
+version of JueWuDraft). It shows that using value network can
+increase the mean predicted winning rate slightly compared
+with the baseline strategy. Then, adding policy and value
+network obtains better results significantly. Further, we observe
+that the performance improves after adding long-term value
+mechanism. It demonstrates that adding policy network, value
+network and long-term value mechanism, all of them are
+helpful for our drafting process.
+Here we show one specific simulation case of our final
+method, against with HWR strategy, which is a greedy strategy
+
+10
+
+TABLE VII: Average process time of picking a hero for all methods (in seconds).
+RD
+
+HWR
+
+DraftArtist
+
+JueWuDraft
+
+2 × 10−5
+
+2 × 10−5
+
+1.0
+
+1.0
+
+Camp1: JueWuDraft
+
+Round 1
+
+Estimated Winning Rate:
+56.3%
+
+Camp2: HWR
+
+Camp1: HWR
+
+Round 2
+
+Estimated Winning Rate:
+71.8%
+
+Camp2: JueWuDraft
+
+Round 3
+
+Camp1: JueWuDraft
+
+Estimated Winning Rate:
+65.1%
+
+Camp2: HWR
+
+Fig. 9: One specific simulation case of JueWuDraft against with HWR strategy, where JueWuDraft takes the first move.
+
+and tends to choose the hero with the highest predicted
+winning rates. The predicted winning rates for JueWuDraft
+in three rounds are 56.3%, 71.8%, 65.1%, respectively. The
+predicted winning rates are higher in the second and third
+rounds rather than in the first round. Specifically, JueWuDraft
+chooses hero Chengjisihan rather than Liubei (the hero with
+highest mean predicted winning rate) at the first hand, although
+choosing Liubei firstly may get a higher predicted winning rate
+in the first round. It indicates that JueWuDraft is a less greedy
+strategy and considers longer for later rounds.
+In conclusion, JueWuDraft outperforms other strategies in
+all experimental settings, which demonstrates both the effectiveness and the efficiency of our algorithm.
+V. C ONCLUSION AND F UTURE W ORK
+In this paper, we propose a novel drafting algorithm based
+on Monte-Carlo tree search and neural networks. Furthermore,
+we formulate the multi-round drafting process as a combinatorial game, and design a long-term value mechanism to
+adapt our method to the best-of-N drafting problem. Extensive
+experimental results show the effectiveness and efficiency
+of our proposed algorithm, as compared with other drafting
+methods.
+The limitations of the work so far can be summarized in
+three aspects.
+Firstly, besides the drafting process, the process of banning
+heroes is also an important pre-match phase, which is also
+known as Ban/Pick process. Yet in this paper we have not
+considered about banning heroes yet in this algorithm.
+Secondly, the training datasets are collected from RL training matches or human matches, while the whole AI system
+
+is built to fight against human players, which forms a gap
+in winning rates between our trained agents and human
+players. However, our designed winning rate predictor does
+not explicitly consider this gap. Also, different human teams
+have their own playing style, which cannot be modeled by a
+single win-rate predictor that trained by match results played
+by different top human players. How to adapt to different
+MOBA opponent for our win-rate predictor, it’s an unsolved
+problem in this paper.
+Finally, the rule of multi-round games is that a player needs
+only taking over half rounds of all rounds to become a winner.
+We have tried to design specific value objective function to
+maximize the probability of winning corresponding rounds
+(e.g., 2 of 3 rounds). However, we find that value mechanism
+is hard to convergence for our network. Thus, we choose a
+easy and simple way (maximize the mean winning rates of
+all rounds) as our value mechanism, which is a imperfect
+approximation of what we really want. In general, the value
+credit assignment for multi-round drafting problem is still a
+problem worth to be explored.
+In the future, we will work on these three aspects to further
+improve JueWuDraft.
+VI. B ROADER I MPACT
+To the research community. MOBA game is a challenging
+field for all AI researchers. Building an AI system to play
+full MOBA 5v5 games with over 100 heroes in a best-ofN competition is still an unconquered but significant task
+for AI community. Hero drafting is a necessary pre-match
+procedure for MOBA game. Thus, developing an automatic
+hero drafting algorithm is an important part of a complete AI
+
+11
+
+system for MOBA game. Speaking of this paper, it proposes
+a hero drafting method leveraging Monte-Carlo tree search
+and neural network. As far as we know, it is the first time that
+best-of-N drafting problem is considered, where we formulate
+it as a multi-round combinatorial game, and design a longterm value mechanism to adapt to it. The experiment results
+demonstrate the superiority of our method. We herewith expect
+this work to provide inspiration to other complex real-world
+problems, e.g., real-time multi-step decisions of robotics.
+To the game industry. Honor of Kings is the most popular
+MOBA game all over the world, also the most downloaded
+App worldwide 2 . As an important part of a complete AI
+system for MOBA game, our automatic hero drafting method
+has found several real-world applications in the game and is
+changing the way of playing MOBA games. These applications can be concluded as below:
+1) PVE (player vs environment) game mode. We have developed a whole AI system which can be used for Honor
+of Kings in PVE game mode [16], where JueWuDraft
+can be used for picking heroes for AI camp.
+2) Hero recommendation for human players. At the prematch phase of games, JueWuDraft can provide a prior
+hero list and an inferior hero list to help human players
+to pick heroes that can cooperate well with teammates
+and counter with opponents.
+ACKNOWLEDGMENT
+This work is supported by the “New Generation of AI 2030”
+Major Project (2018AAA0100900), Shanghai Municipal Science and Technology Major Project (2021SHZDZX0102),
+National Natural Science Foundation of China (62076161,
+61632017) and the Tencent Rhino-Bird Research Project.
+R EFERENCES
+[1] D. Silver, A. Huang, C. J. Maddison, A. Guez, L. Sifre, G. Van
+Den Driessche, J. Schrittwieser, I. Antonoglou, V. Panneershelvam,
+M. Lanctot et al., “Mastering the game of go with deep neural networks
+and tree search,” nature, vol. 529, no. 7587, pp. 484–489, 2016.
+[2] D. Silver, J. Schrittwieser, K. Simonyan, I. Antonoglou, A. Huang,
+A. Guez, T. Hubert, L. Baker, M. Lai, A. Bolton et al., “Mastering
+the game of go without human knowledge,” nature, vol. 550, no. 7676,
+pp. 354–359, 2017.
+[3] V. Mnih, K. Kavukcuoglu, D. Silver, A. A. Rusu, J. Veness, M. G.
+Bellemare, A. Graves, M. Riedmiller, A. K. Fidjeland, G. Ostrovski
+et al., “Human-level control through deep reinforcement learning,”
+nature, vol. 518, no. 7540, pp. 529–533, 2015.
+[4] G. Lample and D. S. Chaplot, “Playing fps games with deep reinforcement learning,” in Proceedings of the AAAI Conference on Artificial
+Intelligence, vol. 31, no. 1, 2017.
+[5] Z. Chen and D. Yi, “The game imitation: Deep supervised convolutional
+networks for quick video game ai,” arXiv preprint arXiv:1702.05663,
+2017.
+[6] N. Brown and T. Sandholm, “Superhuman ai for heads-up no-limit
+poker: Libratus beats top professionals,” Science, vol. 359, no. 6374,
+pp. 418–424, 2018.
+[7] M. Buro, “Real-time strategy games: A new ai research challenge,” in
+IJCAI, vol. 2003, 2003, pp. 1534–1535.
+[8] C. Berner, G. Brockman, B. Chan, V. Cheung, P. D˛ebiak, C. Dennison,
+D. Farhi, Q. Fischer, S. Hashme, C. Hesse et al., “Dota 2 with large
+scale deep reinforcement learning,” arXiv preprint arXiv:1912.06680,
+2019.
+2 https://en.wikipedia.org/wiki/Honor_of_Kings
+
+[9] G. Brockman, S. Zhang, R. Józefowicz, F. Wolski, H. Pondé, S. Sidor,
+B. Chan, C. Hesse, S. Gray, A. Radford et al., “Openai five,” OpenAi
+blog https://blog.openai.com/openai-five/.[Online, 2018.
+[10] O. Vinyals, T. Ewalds, S. Bartunov, P. Georgiev, A. S. Vezhnevets,
+M. Yeo, A. Makhzani, H. Küttler, J. Agapiou, J. Schrittwieser et al.,
+“Starcraft ii: A new challenge for reinforcement learning,” arXiv preprint
+arXiv:1708.04782, 2017.
+[11] Y. Tian, Q. Gong, W. Shang, Y. Wu, and C. L. Zitnick, “Elf: An extensive, lightweight and flexible research platform for real-time strategy
+games,” in Advances in Neural Information Processing Systems, 2017,
+pp. 2659–2669.
+[12] P. Sun, X. Sun, L. Han, J. Xiong, Q. Wang, B. Li, Y. Zheng, J. Liu,
+Y. Liu, H. Liu et al., “Tstarbots: Defeating the cheating level builtin ai
+in starcraft ii in the full game,” arXiv preprint arXiv:1809.07193, 2018.
+[13] O. Vinyals, I. Babuschkin, W. M. Czarnecki, M. Mathieu, A. Dudzik,
+J. Chung, D. H. Choi, R. Powell, T. Ewalds, P. Georgiev et al., “Grandmaster level in starcraft ii using multi-agent reinforcement learning,”
+Nature, vol. 575, no. 7782, pp. 350–354, 2019.
+[14] D. Ye, G. Chen, P. Zhao, F. Qiu, B. Yuan, W. Zhang, S. Chen,
+M. Sun, X. Li, S. Li et al., “Supervised learning achieves human-level
+performance in moba games: A case study of honor of kings,” IEEE
+Transactions on Neural Networks and Learning Systems, 2020.
+[15] D. Ye, Z. Liu, M. Sun, B. Shi, P. Zhao, H. Wu, H. Yu, S. Yang, X. Wu,
+Q. Guo et al., “Mastering complex control in moba games with deep
+reinforcement learning,” arXiv, pp. arXiv–1912, 2019.
+[16] D. Ye, G. Chen, W. Zhang, S. Chen, B. Yuan, B. Liu, J. Chen, Z. Liu,
+F. Qiu, H. Yu, Y. Yin et al., “Towards playing full moba games with deep
+reinforcement learning,” Advances in Neural Information Processing
+Systems, vol. 33, 2020.
+[17] V. d. N. Silva and L. Chaimowicz, “Moba: a new arena for game ai,”
+arXiv preprint arXiv:1705.10443, 2017.
+[18] G. Robertson and I. Watson, “A review of real-time strategy game ai,”
+Ai Magazine, vol. 35, no. 4, pp. 75–104, 2014.
+[19] Z. Chen, T.-H. D. Nguyen, Y. Xu, C. Amato, S. Cooper, Y. Sun, and
+M. S. El-Nasr, “The art of drafting: a team-oriented hero recommendation system for multiplayer online battle arena games,” in Proceedings
+of the 12th ACM Conference on Recommender Systems, 2018, pp. 200–
+208.
+[20] K. Fan, “Minimax theorems,” Proceedings of the National Academy of
+Sciences of the United States of America, vol. 39, no. 1, p. 42, 1953.
+[21] M. Sion et al., “On general minimax theorems.” Pacific Journal of
+mathematics, vol. 8, no. 1, pp. 171–176, 1958.
+[22] D. E. Knuth and R. W. Moore, “An analysis of alpha-beta pruning,”
+Artificial intelligence, vol. 6, no. 4, pp. 293–326, 1975.
+[23] R. Coulom, “Efficient selectivity and backup operators in monte-carlo
+tree search,” in International conference on computers and games.
+Springer, 2006, pp. 72–83.
+[24] L. Kocsis and C. Szepesvári, “Bandit based monte-carlo planning,” in
+European conference on machine learning. Springer, 2006, pp. 282–
+293.
+[25] A. Summerville, M. Cook, and B. Steenhuisen, “Draft-analysis of the
+ancients: predicting draft picks in dota 2 using machine learning,”
+in Twelfth Artificial Intelligence and Interactive Digital Entertainment
+Conference, 2016.
+[26] L. Hanke and L. Chaimowicz, “A recommender system for hero lineups in moba games,” in Thirteenth Artificial Intelligence and Interactive
+Digital Entertainment Conference, 2017.
+[27] R. Agarwal, R. Srikant et al., “Fast algorithms for mining association
+rules,” in Proc. of the 20th VLDB Conference, 1994, pp. 487–499.
+[28] H. Finnsson and Y. Björnsson, “Simulation-based approach to general
+game playing.” in Aaai, vol. 8, 2008, pp. 259–264.
+[29] R. Balla and A. Fern, “Uct for tactical assault planning in real-time
+strategy games. international join conference of artifical intelligence,
+ijcai,” 2009.
+[30] A. Semenov, P. Romov, S. Korolev, D. Yashkov, and K. Neklyudov,
+“Performance of machine learning algorithms in predicting game outcome from drafts in dota 2,” in International Conference on Analysis of
+Images, Social Networks and Texts. Springer, 2016, pp. 26–37.
+[31] P. Yang, B. E. Harrison, and D. L. Roberts, “Identifying patterns in
+combat that are predictive of success in moba games.” in FDG, 2014.
+[32] R. S. Sutton, “Temporal credit assignment in reinforcement learning,”
+Ph.D. dissertation, University of Massachusetts Amherst, 1984.
+[33] P. Sunehag, G. Lever, A. Gruslys, W. M. Czarnecki, V. Zambaldi,
+M. Jaderberg, M. Lanctot, N. Sonnerat, J. Z. Leibo, K. Tuyls et al.,
+“Value-decomposition networks for cooperative multi-agent learning,”
+arXiv preprint arXiv:1706.05296, 2017.
+
+12
+
+[34] J. Foerster, G. Farquhar, T. Afouras, N. Nardelli, and S. Whiteson,
+“Counterfactual multi-agent policy gradients,” in Proceedings of the
+AAAI Conference on Artificial Intelligence, vol. 32, no. 1, 2018.
+[35] T. Vodopivec, S. Samothrakis, and B. Ster, “On monte carlo tree search
+and reinforcement learning,” Journal of Artificial Intelligence Research,
+vol. 60, pp. 881–936, 2017.
+[36] C. D. Rosin, “Multi-armed bandits with episode context,” Annals of
+Mathematics and Artificial Intelligence, vol. 61, no. 3, pp. 203–230,
+2011.
+[37] G. M.-B. Chaslot, M. H. Winands, and H. J. van Den Herik, “Parallel
+monte-carlo tree search,” in International Conference on Computers and
+Games. Springer, 2008, pp. 60–71.
+[38] Y. LeCun, B. E. Boser, J. S. Denker, D. Henderson, R. E. Howard, W. E.
+Hubbard, and L. D. Jackel, “Handwritten digit recognition with a backpropagation network,” in Advances in neural information processing
+systems, 1990, pp. 396–404.
+[39] A. Krizhevsky, I. Sutskever, and G. E. Hinton, “Imagenet classification
+with deep convolutional neural networks,” in Advances in neural information processing systems, 2012, pp. 1097–1105.
+[40] K. Simonyan and A. Zisserman, “Very deep convolutional networks for
+large-scale image recognition,” arXiv preprint arXiv:1409.1556, 2014.
+[41] B. P. Roe, H.-J. Yang, J. Zhu, Y. Liu, I. Stancu, and G. McGregor,
+“Boosted decision trees as an alternative to artificial neural networks
+for particle identification,” Nuclear Instruments and Methods in Physics
+Research Section A: Accelerators, Spectrometers, Detectors and Associated Equipment, vol. 543, no. 2-3, pp. 577–584, 2005.
+[42] J. Ye, J.-H. Chow, J. Chen, and Z. Zheng, “Stochastic gradient boosted
+distributed decision trees,” in Proceedings of the 18th ACM conference
+on Information and knowledge management, 2009, pp. 2061–2064.
+[43] R. E. Wright, “Logistic regression.” 1995.
+
+Sheng Chen received the B.S. and M.S. degrees
+from the University of Science and Technology of
+China, Hefei, China, in 2015 and 2018, respectively.
+He is a Researcher with the Tencent AI Lab, Shenzhen, China. His research interests include Game AI
+and applied machine learning.
+
+Menghui Zhu received the B.S. from the Department of Computer Science and Engineering, Shanghai Jiao Tong University, in 2020.
+He is a postgraduate student in Shanghai Jiao
+Tong University. His research interests lie primarily
+in reinforcement learning and its applications.
+
+Deheng Ye finished his Ph.D. from the School of
+Computer Science and Engineering, Nanyang Technological University, Singapore, in 2016.
+He is now a Researcher and Team Manager with
+the Tencent AI Lab, Shenzhen, China, where he
+leads a group of engineers and researchers developing large-scale learning platforms and intelligent
+AI agents. He is broadly interested in applied machine learning, reinforcement learning, and software
+engineering. He has been serving as a (senior) PC
+for NeurIPS, ICLR, AAAI, IJCAI, etc.
+
+Weinan Zhang is now an associate professor at
+Shanghai Jiao Tong University. He received his
+Ph.D. from the Computer Science Department of
+University College London in 2016. His research
+interests include reinforcement learning, deep learning and data science with various real-world applications of recommender systems, search engines,
+text mining and generation, game AI etc. He has
+published over 100 research papers on international
+conferences and journals and has been serving as
+a (senior) PC member at ICML, NeurIPS, ICLR,
+KDD, AAAI, IJCAI, SIGIR etc. and a reviewer at JMLR, TOIS, TKDE,
+TIST etc. His research work achieves Best Paper Honorable Mention Award
+in SIGIR 2017, ACM Shanghai Rising Star Award 2017 and Best System
+Paper Award at CoRL 2020.
+
+Qiang Fu received the B.S. and M.S. degrees from
+the University of Science and Technology of China,
+Hefei, China, in 2006 and 2009, respectively. He is
+the Director of the Game AI Center, Tencent AI Lab,
+Shenzhen, China.
+He has been dedicated to machine learning, data
+mining, and information retrieval for over a decade.
+His current research focus is game intelligence and
+its applications, leveraging deep learning, domain
+data analysis, reinforcement learning, and game theory.
+
+Wei Yang received the M.S. degree from the
+Huazhong University of Science and Technology,
+Wuhan, China, in 2007. He is currently the General
+Manager of the Tencent AI Lab, Shenzhen, China.
+He has pioneered many influential projects in
+Tencent in a wide range of domains, covering Game
+AI, Medical AI, search, data mining, large-scale
+learning systems, and so on.
+
+
