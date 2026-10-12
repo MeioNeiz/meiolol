@@ -167,8 +167,10 @@ deploy/archive-pull.sh, docs/data-safety.md "Raw archive"):
 - Kept until player ids would be blanked anyway: days past 24 months lose every hashed
   PUUID and their mastery (`archive-age`), as the crawler blanks its own rows. Forgotten
   players: left out at ingest, erased from archived days (`archive-forget`) each round
-- Size: ~172k summaries/day x ~4 KB and ~130k timelines/day x ~30 KB at -15: ~4.5 GB/day,
-  ~1.6 TB/year; the 1 TB partition lasts ~7 months, then more disk (Jacob plans to buy)
+- Size, measured on the first pull (2026-10-12; timelines from 1,744 only, recheck on a
+  full day): ~172k summaries/day x 4.3 KB and ~130k timelines/day x 45 KB at -15: ~6.6
+  GB/day, ~2.4 TB/year; the 1 TB partition lasts ~5 months, then more disk (Jacob plans
+  to buy)
 
 Next, after the models: compact v2 with what they choose. Likely regardless: damage by
 type to champions and taken (6 ints in participants); death recaps for the post-game

@@ -191,8 +191,9 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   12h) and raw held (free disk under twice the raw held)
 - 24 months: `meiolol-lab archive-age` (every pull) blanks every hashed PUUID in days
   older than 730 and deletes their mastery files, as the crawler blanks participants
-- ~4.5 GB/day at today's rate. ARCHIVE is ~/ml/archive (unit drop-in) until the 1 TB
-  partition is attached at /mnt/wsl/archive
+- ~6.6 GB/day at today's rate (first pull, 2026-10-12: summaries 4.3 KB, timelines
+  45 KB each at -15). ARCHIVE is /mnt/wsl/archive/meiolol-raw, on the 1 TB
+  partition (948 GB free, 2026-10-12): ~5 months at this rate
 
 ### Key switch (rekey)
 
