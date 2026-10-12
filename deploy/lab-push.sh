@@ -6,7 +6,7 @@
 # changed, or every 5 min while a run is live so the page can tell a quiet run from a Mac
 # that went to sleep. Also sent: docs/learned.md and docs/model.md from this checkout, each
 # lab campaign's digest.md and hypotheses.tsv (~/ml/agent/<campaign>, LAB_CANDS), and a
-# run's findings.tsv with the effect files it names. The gpu-box (home network only) is staged over ssh at most once a
+# run's result.tsv, findings.tsv and effects-*.tsv (meiolol-lab). The gpu-box (home network only) is staged over ssh at most once a
 # minute; when unreachable its last staged copy is sent and hosts.tsv says when it was
 # last reached. launchd calls it every 30 s
 # once installed. Upload: a gzipped tar over ssh with a key whose forced command is
@@ -58,18 +58,13 @@ stage_runs() {
             # meiolol-lab's summary line (lab exp run, screen, diagnose, preds)
             last=$(grep -h '^RESULT ' "$runs/$d/log" 2>/dev/null | tail -n 1 | cut -c8- | tr '\t' ' ' || true)
         fi
-        # Plain findings (meiolol-lab): findings.tsv and the effect files its effect_file
-        # column names, by base name only
+        # meiolol-lab's plain results: result.tsv (the run's record, category, error removed),
+        # findings.tsv (one sentence per line) and its effects-*.tsv tables
         found=''
-        if [[ -f "$runs/$d/findings.tsv" ]]; then
-            found=1
-            cp "$runs/$d/findings.tsv" "$out/runs/$d/"
-            awk -F'\t' 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "effect_file") c = i; next }
-                c && $c != "" { print $c }' "$runs/$d/findings.tsv" | while read -r f; do
-                f=${f##*/}
-                if [[ -f "$runs/$d/$f" ]]; then cp "$runs/$d/$f" "$out/runs/$d/"; fi
-            done
-        fi
+        for f in result.tsv findings.tsv "$runs/$d"/effects-*.tsv; do
+            f=${f##*/}
+            if [[ -f "$runs/$d/$f" ]]; then cp "$runs/$d/$f" "$out/runs/$d/"; found=1; fi
+        done
         meta() { sed -n "s/^$1 //p" "$runs/$d/meta" 2>/dev/null | tr '\t' ' '; }
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$d" "$state" \
             "$(cat "$runs/$d/started" 2>/dev/null)" "$(cat "$runs/$d/ended" 2>/dev/null)" \

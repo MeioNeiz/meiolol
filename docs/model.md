@@ -21,9 +21,9 @@ Models tab: one category per docs/learned.md heading, each with what we learnt, 
 model against its baseline, run cards (plain sentence from meiolol-lab's RESULT line or
 the run's findings.tsv) and run health. Runs of the Mac and the gpu-box (deploy/lab-run.sh)
 show live there via deploy/lab-push.sh (docs/hosting.md), which also sends learned.md,
-model.md (the team effects table), lab campaigns and run findings: findings.tsv with
-columns campaign, finding, effect_file, category; each effect file a first line
-`# title | unit | what higher means`, then a TSV of label, effect, ci (95% half-width), n.
+model.md (the team effects table), lab campaigns and meiolol-lab's per-run result.tsv
+(category, % of error removed, typical miss), findings.tsv (one sentence per line) and
+effects-*.tsv (`# title | unit | what higher means`, then label, effect, ci, n).
 A run reports progress by appending to metrics.tsv in its run directory
 (the working directory): a header, then a row per evaluation, first column the x axis
 (step, epoch, games), the rest numbers.

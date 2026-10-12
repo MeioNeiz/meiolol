@@ -1267,15 +1267,28 @@ function runInfo(r) {
   if (!cat && /item/.test(r.args)) cat = "items";
   if (!cat && /objective/.test(r.args)) cat = "objectives";
   if (!cat && /playstyle/.test(r.args)) cat = "playstyle";
-  return { ...r, host: r.host || "mac", lab, res, target, synthetic, cat: cat || null, campaign: lab && lab.campaign };
+  const result = MODELS.findings.get(r.run)?.result;
+  if (result && result.category && result.category !== "-") cat = result.category;
+  return { ...r, host: r.host || "mac", lab, res, result, target: target || (result && result.target), synthetic, cat: cat || null, campaign: (lab && lab.campaign) || (result && result.campaign) };
 }
 
 // What a run found, in a sentence a non-statistician can read
 function runSentence(i) {
-  const res = i.res, out = OUTCOMES[i.target];
+  const res = i.res || {}, out = OUTCOMES[i.target];
   const what = out ? out[0].toLowerCase() : i.target || "the outcome";
   if (i.synthetic) return "Synthetic: random curves from a test script, not a model.";
-  if (!res) return i.last ? i.last : "";
+  if (!res && !(i.result && i.result.removed_pct)) return i.last ? i.last : "";
+  const rt = i.result, rp = rt && +rt.removed_pct, rh = rt && +rt.removed_half;
+  if (rt && isFinite(rp) && isFinite(rh) && rt.removed_pct !== "") {
+    const unit = rt.unit && rt.unit !== "-" ? " " + rt.unit : "";
+    const miss = isFinite(+rt.err_base) && isFinite(+rt.err_cand) && unit ? ` Typical miss ${num(+rt.err_base)} → ${num(+rt.err_cand)}${unit}.` : "";
+    let s = rp - rh > 0 ? `Predicts ${what} better than champion averages: ${rp.toFixed(1)}% (± ${rh.toFixed(1)}) of the error removed on practice games.${miss}`
+      : rp + rh < 0 ? `Predicts ${what} worse than champion averages (${rp.toFixed(1)}% ± ${rh.toFixed(1)}).`
+        : `No measurable difference from champion averages for ${what}.`;
+    if (rt.select === "new-best") s += " Confirmed on the held-back selection games: the new best.";
+    else if (rt.select === "no-change") s += " Not better on the held-back selection games.";
+    return s;
+  }
   if (res.kind === "run" && res.dev && !res.dev.ci) return `Reference run for ${what}: the baseline scored against itself.`;
   if (res.kind === "run" && res.dev) {
     const better = res.dev.mean + res.dev.ci < 0, worse = res.dev.mean - res.dev.ci > 0;
@@ -1595,7 +1608,11 @@ function labBest(parent, targets) {
     const b = best[r.target];
     if (!b || r.res.dev.mean < b.res.dev.mean) best[r.target] = r;
   }
-  const rows = targets.filter(t => best[t]).map(t => ({ label: `${OUTCOMES[t][0]}: ${best[t].campaign || shortRun(best[t].run)}`, value: -best[t].res.dev.mean * 100, ci: best[t].res.dev.ci * 100 }));
+  const rows = targets.filter(t => best[t]).map(t => {
+    const b = best[t], rt = b.result;
+    const own = rt && rt.removed_pct !== "" && isFinite(+rt.removed_pct);
+    return { label: `${OUTCOMES[t][0]}: ${b.campaign || shortRun(b.run)}`, value: own ? +rt.removed_pct : -b.res.dev.mean * 100, ci: own ? +rt.removed_half : b.res.dev.ci * 100 };
+  });
   if (!rows.length) return;
   intervalChart(parent, {
     title: "Best lab model so far, per outcome", right: "less error", fmt: v => (+v.toFixed(1)).toString() + "%",
@@ -1632,48 +1649,60 @@ function labView(body) {
 
 // ---------- models: run findings ----------
 
-// A run's findings.tsv (campaign, finding, effect_file, category; meiolol-lab) and the
-// effect files it names: "# title | unit | what higher means", then label, effect, ci, n
+// meiolol-lab's plain results per run: result.tsv (one row: category, removed_pct ±
+// removed_half = % of the baseline's error removed, err_base and err_cand = typical miss in
+// `unit`, effects = comma list of effect files), findings.tsv (campaign, finding,
+// effect_file; may come after the run) and effect files: "# title | unit | what higher
+// means", then label, effect, ci (95% half-width), n
 async function loadFindings(runs) {
   for (const r of runs) {
-    const key = r.run + "|" + r.state + "|" + r.ended;
+    const key = r.run + "|" + r.state + "|" + r.ended + "|" + r.last;
     if (MODELS.findings.get(r.run)?.key === key) continue;
     const base = "training/runs/" + encodeURIComponent(r.run) + "/";
-    const rows = tsvRaw(await getText(base + "findings.tsv").catch(() => ""));
-    for (const f of rows) {
-      if (!f.effect_file) continue;
-      const text = await getText(base + encodeURIComponent(f.effect_file.split("/").pop())).catch(() => null);
+    const [res, fin] = await Promise.all([getText(base + "result.tsv").catch(() => ""), getText(base + "findings.tsv").catch(() => "")]);
+    const result = tsvRaw(res)[0] || null;
+    const findings = tsvRaw(fin).filter(f => f.finding);
+    const names = new Set([...findings.map(f => f.effect_file), ...(result && result.effects ? result.effects.split(",") : [])]
+      .map(x => (x || "").trim().split("/").pop()).filter(x => x && x !== "-"));
+    const effects = {};
+    for (const name of names) {
+      const text = await getText(base + encodeURIComponent(name)).catch(() => null);
       if (!text) continue;
       const lines = text.split("\n");
       const meta = lines[0].startsWith("#") ? lines.shift().slice(1).split("|").map(x => x.trim()) : [];
-      f.effect = { title: meta[0] || f.effect_file, unit: meta[1] || "", higher: meta[2] || "", rows: tsvRaw(lines.join("\n")).map(x => ({ label: x.label, value: +x.effect, ci: +x.ci || 0, n: +x.n || null })).filter(x => isFinite(x.value)) };
+      effects[name] = { title: meta[0] || name, unit: meta[1] || "", higher: meta[2] || "", rows: tsvRaw(lines.join("\n")).map(x => ({ label: x.label, value: +x.effect, ci: +x.ci || 0, n: +x.n || null })).filter(x => isFinite(x.value)) };
     }
-    MODELS.findings.set(r.run, { key, rows });
+    MODELS.findings.set(r.run, { key, result, findings, effects });
   }
 }
 
-// Findings from runs in a category, newest first, each with its effect chart
+function effectChart(parent, e) {
+  if (!e || !e.rows.length) return;
+  let rows = e.rows.slice().sort((a, b) => b.value - a.value);
+  // Long lists: the ten largest and ten smallest
+  if (rows.length > 20) rows = [...rows.slice(0, 10), { label: "…", value: 0, gap: true }, ...rows.slice(-10)];
+  intervalChart(parent, {
+    title: e.title, right: e.higher || null, fmt: v => (+v.toPrecision(3)).toString() + (e.unit && e.unit !== "-" ? " " + e.unit : ""), rows,
+    caption: `95% intervals${e.rows.length > 20 ? `; the top and bottom 10 of ${e.rows.length}` : ""}. Blue: clear of zero.`,
+  });
+}
+
+// Findings from runs in a category, newest first, each with its effect charts
 function runFindings(parent, cat) {
-  const out = [];
-  for (const r of MODELS.runs) {
-    const f = MODELS.findings.get(r.run);
-    if (!f) continue;
-    for (const x of f.rows) if ((x.category ? x.category.toLowerCase().replace(/ game$/, "") : r.cat) === cat || (x.category || "").toLowerCase() === CATS.find(c => c[0] === cat)?.[1].toLowerCase()) out.push({ r, x });
-  }
+  const out = MODELS.runs.filter(r => r.cat === cat && MODELS.findings.get(r.run)?.findings.length);
   if (!out.length) return;
   parent.append(el("h3", { class: "subhead" }, "From recent runs"));
-  parent.append(el("ul", { class: "readings" }, ...out.map(({ r, x }) => el("li", {}, x.finding || "", el("span", { class: "sub" }, ` (${x.campaign || r.campaign || shortRun(r.run)}, ${uk(Date.parse(r.started) / 1000)})`)))));
+  const ul = el("ul", { class: "readings" });
+  parent.append(ul);
   const g = grid(parent);
-  for (const { x } of out) {
-    const e = x.effect;
-    if (!e || !e.rows.length) continue;
-    let rows = e.rows.slice().sort((a, b) => b.value - a.value);
-    // Long lists: the ten largest and ten smallest
-    if (rows.length > 20) rows = [...rows.slice(0, 10), { label: "…", value: 0, gap: true }, ...rows.slice(-10)];
-    intervalChart(g, {
-      title: e.title, right: e.higher || null, fmt: v => (+v.toPrecision(3)).toString() + (e.unit ? " " + e.unit : ""), rows,
-      caption: `95% intervals${e.rows.length > 20 ? `; top and bottom 10 of ${e.rows.length}` : ""}. Blue: clear of zero.`,
-    });
+  const shown = new Set();
+  for (const r of out) {
+    const f = MODELS.findings.get(r.run);
+    for (const x of f.findings) {
+      ul.append(el("li", {}, x.finding, el("span", { class: "sub" }, ` (${x.campaign || r.campaign || shortRun(r.run)}, ${uk(Date.parse(r.started) / 1000)})`)));
+      const name = (x.effect_file || "").split("/").pop();
+      if (name && name !== "-" && !shown.has(r.run + name)) { shown.add(r.run + name); effectChart(g, f.effects[name]); }
+    }
   }
 }
 
@@ -1716,6 +1745,13 @@ function runsBlock(body, all) {
   const health = el("details", { class: "health-block" }, el("summary", {}, `Run health: ${shortRun(ui.run)} (curves, log)`));
   sec.append(health);
   const detail = el("div", { class: "detail" });
+  const fx = MODELS.findings.get(ui.run);
+  if (fx && Object.keys(fx.effects).length) {
+    const fd = el("details", { open: true }, el("summary", {}, `Effects measured by ${shortRun(ui.run)} (${Object.keys(fx.effects).length})`));
+    const g = grid(fd);
+    for (const e of Object.values(fx.effects)) effectChart(g, e);
+    sec.insertBefore(fd, health);
+  }
   health.append(detail);
   runDetail(detail, runs.find(r => r.run === ui.run));
 }
