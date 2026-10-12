@@ -130,7 +130,8 @@ next steps land here.
   for players (1/16 PUUID sample, within 0.2%), participants (10 per match), timelines
   and drafts (rowid range); `--exact` counts every row. On the A1 with the crawler
   running: 0.3-1.4 s, ~0 writes (was 1.5-5.5 s, 1800 blocks written, and once 478 s
-  waiting on the writer); --exact 1.4-2 s. Next: add rank_history once it lands
+  waiting on the writer); --exact 1.4-2 s. ranks and rank_history from a 1/64 key sample
+  (ranks within 0.6%), plus rank_history rows for the newest 3 days
   Crawler rework on the A1 (6401336, 5298abe, 2026-10-11 ~20:30Z): slack gate gone (it
   kept the other regions off for ~1.5 h after each restart), EUW first via its region's
   queues and the writer's queue (others wait at half full); RegionCrawler and

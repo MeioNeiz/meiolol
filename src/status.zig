@@ -24,6 +24,11 @@ const Group = struct { label: []const u8, n: Count };
 const puuid_sample = "puuid >= 'A' AND puuid < 'E'";
 const puuid_scale = 16;
 
+/// ranks and rank_history keys are Wyhash(PUUID), uniform over i64, so keys from 0 to
+/// 2^58 are a 1/64 sample read off the primary key
+const key_sample = "key >= 0 AND key < 288230376151711744";
+const key_scale = 64;
+
 pub const Options = struct {
     exact: bool = false,
     /// Fewer sampled players than this: count them all, it's cheap (and PUUIDs that
@@ -40,11 +45,17 @@ pub fn write(arena: std.mem.Allocator, db: store.Db, out: *std.Io.Writer, o: Opt
     }
     const match_queue = try groups(arena, db, "SELECT region || ' ' || status, count(*) FROM match_queue GROUP BY 1 ORDER BY 1", 1);
     const timeline_queue = try groups(arena, db, "SELECT region || ' ' || status, count(*) FROM timeline_queue GROUP BY 1 ORDER BY 1", 1);
+    const ranks = sum(try byKey(arena, db, "SELECT '', count(*) FROM ranks", "", o));
+    const history = sum(try byKey(arena, db, "SELECT '', count(*) FROM rank_history", "", o));
+    // No day index: the newest days from the same sample, sorted in memory
+    const history_days = try byKey(arena, db, "SELECT date(day * 86400, 'unixepoch'), count(*) FROM rank_history", " GROUP BY day ORDER BY day DESC LIMIT 3", o);
     const by_patch = try groups(arena, db, "SELECT patch, count(*) FROM matches GROUP BY 1 ORDER BY 1 DESC", 1);
     const matches = sum(by_patch);
 
     try out.print("players: {f}\n", .{sum(players)});
     try out.print("ladder_pages: {f}\n", .{try count(db, "ladder_pages")});
+    try out.print("ranks: {f}\n", .{ranks});
+    try out.print("rank_history: {f}\n", .{history});
     try out.print("match_queue: {f}\n", .{sum(match_queue)});
     try out.print("matches: {f}\n", .{matches});
     // Every stored match has its 10 participants: the writer and prune keep them together
@@ -69,9 +80,11 @@ pub fn write(arena: std.mem.Allocator, db: store.Db, out: *std.Io.Writer, o: Opt
     try print(out, "\nby platform:", try byPlatform(arena, db));
     try print(out, "\ntimelines:", timeline_queue);
     try print(out, "\nplayers:", players);
+    try print(out, "\nrank_history by day:", history_days);
     try out.writeAll("\n");
-    if (!exact) try out.writeAll("~ estimate: players from 1/16 of PUUIDs, participants 10 per " ++
-        "match, timelines and drafts from the rowid range; --exact counts every row\n");
+    if (!exact) try out.writeAll("~ estimate: players from 1/16 of PUUIDs, ranks and " ++
+        "rank_history from 1/64 of keys, participants 10 per match, timelines and drafts " ++
+        "from the rowid range; --exact counts every row\n");
 }
 
 fn count(db: store.Db, comptime table: []const u8) !Count {
@@ -84,6 +97,15 @@ fn rowidRange(db: store.Db, comptime table: []const u8, exact: bool) !Count {
     const n = try db.scalar("SELECT coalesce((SELECT max(rowid) FROM " ++ table ++
         ") - (SELECT min(rowid) FROM " ++ table ++ ") + 1, 0)", .{});
     return .{ .n = n orelse 0, .estimate = true };
+}
+
+/// `select` ++ `rest` over the key sample, or every row when exact or the sample is small
+fn byKey(arena: std.mem.Allocator, db: store.Db, comptime select: []const u8, comptime rest: []const u8, o: Options) ![]Group {
+    if (!o.exact) {
+        const gs = try groups(arena, db, select ++ " WHERE " ++ key_sample ++ rest, key_scale);
+        if (sum(gs).n >= o.min_sample * key_scale) return gs;
+    }
+    return groups(arena, db, select ++ rest, 1);
 }
 
 /// Rows of (label, count), counts times `scale` (> 1: an estimate from a sample)
@@ -153,6 +175,15 @@ fn fixture() !store.Db {
         \\INSERT INTO timeline.timelines VALUES ('EUW1_1', 26, 0, x'01'), ('EUW1_2', 26, 0, x'01');
         \\INSERT INTO draft_backfill VALUES ('KR_4');
     );
+    // One key per 64th of the key space, so the sample holds exactly one
+    var r = try db.prepare("INSERT INTO ranks (key, rank, seen_day) VALUES (? * 288230376151711744, 1, 20000)");
+    defer r.deinit();
+    var h = try db.prepare("INSERT INTO rank_history VALUES (? * 288230376151711744, 20000, 1, 0, 1, 1)");
+    defer h.deinit();
+    for (0..64) |i| {
+        try r.exec(.{@as(i64, @intCast(i)) - 32});
+        try h.exec(.{@as(i64, @intCast(i)) - 32});
+    }
     var p = try db.prepare("INSERT INTO participants (match_id, slot, team_id, champion_id, win) SELECT match_id, ?, 100, 1, 1 FROM matches");
     defer p.deinit();
     for (0..10) |slot| try p.exec(.{@as(i64, @intCast(slot))});
@@ -170,6 +201,8 @@ test "estimates match exact counts on uniform data" {
     try testing.expectEqualStrings(
         \\players: ~64
         \\ladder_pages: 0
+        \\ranks: ~64
+        \\rank_history: ~64
         \\match_queue: 1
         \\matches: 4
         \\participants: ~40
@@ -186,7 +219,8 @@ test "estimates match exact counts on uniform data" {
         \\by platform: EUW1=2 KR=1 EUN1=1
         \\timelines: europe pending=1
         \\players: europe=~48 asia=~16
-        \\~ estimate: players from 1/16 of PUUIDs, participants 10 per match, timelines and drafts from the rowid range; --exact counts every row
+        \\rank_history by day: 2024-10-04=~64
+        \\~ estimate: players from 1/16 of PUUIDs, ranks and rank_history from 1/64 of keys, participants 10 per match, timelines and drafts from the rowid range; --exact counts every row
         \\
     , cheap.written());
 
@@ -196,6 +230,8 @@ test "estimates match exact counts on uniform data" {
     try testing.expectEqualStrings(
         \\players: 64
         \\ladder_pages: 0
+        \\ranks: 64
+        \\rank_history: 64
         \\match_queue: 1
         \\matches: 4
         \\participants: 40
@@ -213,6 +249,7 @@ test "estimates match exact counts on uniform data" {
         \\by platform: EUW1=2 KR=1 EUN1=1
         \\timelines: europe pending=1
         \\players: europe=48 asia=16
+        \\rank_history by day: 2024-10-04=64
         \\
     , full.written());
 }
@@ -224,6 +261,8 @@ test "the samples read index ranges, not whole tables" {
         .{ "SELECT count(*) FROM players WHERE " ++ puuid_sample, "SEARCH players USING PRIMARY KEY" },
         .{ "SELECT count(*) FROM matches WHERE match_id >= 'KR_' AND match_id < 'KR`'", "SEARCH matches USING COVERING INDEX sqlite_autoindex_matches_1" },
         .{ "SELECT (SELECT max(rowid) FROM drafts) - (SELECT min(rowid) FROM drafts)", "SEARCH drafts" },
+        .{ "SELECT count(*) FROM rank_history WHERE " ++ key_sample, "SEARCH rank_history USING PRIMARY KEY (key>? AND key<?)" },
+        .{ "SELECT count(*) FROM ranks WHERE " ++ key_sample, "SEARCH ranks USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)" },
     };
     inline for (cases) |case| {
         var q = try db.prepare("EXPLAIN QUERY PLAN " ++ case[0]);
