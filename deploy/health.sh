@@ -81,6 +81,15 @@ if archive=$(bin/meiolol raw-export --data data --status 2>&1); then
 else
     problems+=("archive status failed: $(head -n 1 <<< "$archive")")
 fi
+# The gpu-box's disks, reported by each archive pull (deploy/archive-pull.sh). C: holds
+# the WSL disk next to Windows and games
+if read -r _ use < data/gpu-box.disk 2> /dev/null; then
+    IFS=, read -r c wsl arch <<< "$use"
+    (( ${c#c} >= 85 )) && problems+=("gpu-box C: at ${c#c}% (holds the WSL disk)")
+    (( ${wsl#wsl} >= 85 )) && problems+=("gpu-box WSL disk at ${wsl#wsl}%")
+    if [[ "$arch" == arch- ]]; then problems+=("gpu-box: archive partition not attached")
+    elif (( ${arch#arch} >= 85 )); then problems+=("gpu-box archive partition at ${arch#arch}%"); fi
+fi
 # Raw held on the box until acked: once it could no longer double, the disk fills before
 # a long gpu-box outage ends
 held=$(du -cb data/raw.db data/timeline.db data/archive-out 2>/dev/null | tail -n 1 | cut -f1)

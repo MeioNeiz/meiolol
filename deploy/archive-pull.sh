@@ -26,6 +26,13 @@ if /mnt/c/Windows/System32/tasklist.exe /NH /FO CSV 2> /dev/null \
     log "League is open: next round"
     exit 0
 fi
+# Disk use for the box's health check (the box can't reach this PC): C: (it holds the WSL
+# disk, Windows and games), the WSL disk, the archive partition ("-": not attached)
+mount=$(dirname "$archive")
+use() { df --output=pcent "$1" | tail -n 1 | tr -dc '0-9'; }
+arch=-
+mountpoint -q "$mount" && arch=$(use "$mount")
+ssh -n "$box" disk "c$(use /mnt/c),wsl$(use /),arch$arch" || log "disk report failed"
 [[ -d "$archive" ]] || { log "$archive missing: archive disk not attached"; exit 1; }
 touch "$awake"
 

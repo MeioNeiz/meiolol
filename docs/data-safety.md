@@ -85,6 +85,7 @@ deploy/health.sh runs on the box and prints one line per problem:
 | disk | /mnt/c or / at 80%, /mnt/d at 90% (it was 86% before backups) |
 | backup | tmux `meiolol-backup` gone, or newest state snapshot older than 26h |
 | gpu-box | no raw archive ack for 12h (ACK_H): PC off, asleep or WSL down; first export never acked |
+| gpu-box disks | C: (holds the WSL disk) or the WSL disk or the archive partition at 85%, or the partition not attached; reported by each archive pull |
 | raw held | free disk under twice raw.db + timeline.db + archive-out (raw stays until acked) |
 
 - Box: tmux `meiolol-health` (deploy/health-loop.sh) every 15 min; pushes to the private
