@@ -14,6 +14,11 @@ Platinum IV+ games only unless stated (crawl floor).
 
 ## Win
 
+- 2026-10-12 (dev only, final pending): draft win keeps improving with data, no
+  plateau: about -0.0008 log loss and +0.006 AUC per doubling, AUC 0.550 at 90k games
+  (champion ratings). Counters (all 25 cross pairs) and ally synergy add nothing
+  detectable yet; pooling all regions beats EUW only (0.0024 ± 0.0014); recency
+  weighting no gain. Evidence: meiolol-88 lab win-* runs. Data volume is the lever
 - 2026-10-11: Win alone from the draft does not beat champion base rates (log loss
   0.6905 vs 0.6902 at 152k games). Evidence: eval, docs/model.md baselines. Sure at
   this size. Continuous outcomes carry more signal per game
@@ -66,10 +71,14 @@ Platinum IV+ games only unless stated (crawl floor).
 ## Player
 
 - 2026-10-12 (dev only, interim): own rank tier predicts gold@14 within Platinum+
-  (lab screen r 0.11). Lesson material ("at your rank expect X"), not a pick reason
+  (lab screen r 0.11). Lesson material ("at your rank expect X"), not a pick reason.
+  Partly leakage: see Data quality, rank is a post-game snapshot
 
 ## Data quality
 
+- 2026-10-12: participants.tier/division is the rank stored with the match, taken
+  after the game, so any rank feature leaks the result a little. Use rank_history at
+  game start before trusting a rank effect (meiolol-88)
 - 2026-10-12: DRAGON_SOUL_GIVEN with teamId 0 (every game with 2+ dragons, ~12-15 min)
   is the soul's element being announced, not a soul taken; teamId 100/200 is the real
   soul. Evidence: archived raw timelines (1,683 of 2,209 such events are team 0).
