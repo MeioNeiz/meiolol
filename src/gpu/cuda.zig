@@ -110,19 +110,12 @@ pub const Gpu = struct {
     /// 1-D launch over n threads; args are pointers to each kernel parameter
     pub fn launch(g: *const Gpu, f: Function, n: u32, args: []const ?*anyopaque) !void {
         const block: u32 = 256;
-        try g.api.check(g.api.cuLaunchKernel(
-            f,
-            (n + block - 1) / block,
-            1,
-            1,
-            block,
-            1,
-            1,
-            0,
-            null,
-            @constCast(args.ptr),
-            null,
-        ));
+        try g.launchGrid(f, (n + block - 1) / block, 1, block, args);
+    }
+
+    /// gx by gy blocks of `block` threads
+    pub fn launchGrid(g: *const Gpu, f: Function, gx: u32, gy: u32, block: u32, args: []const ?*anyopaque) !void {
+        try g.api.check(g.api.cuLaunchKernel(f, gx, gy, 1, block, 1, 1, 0, null, @constCast(args.ptr), null));
     }
 
     /// Sets n 32-bit words at dst to value

@@ -13,6 +13,7 @@ const enemy = @import("lab/enemy.zig");
 const pairs = @import("lab/pairs.zig");
 const lanebuckets = @import("lab/lanebuckets.zig");
 const bench = @import("lab/bench.zig");
+const draftnet = @import("lab/draftnet.zig");
 const exp = @import("lab/exp.zig");
 const draft = @import("lab/draft.zig");
 const harness = @import("lab/harness.zig");
@@ -44,6 +45,9 @@ const usage =
     \\                                  (lab/bench.zig): --devices cpu1,cpu,gpu --kinds
     \\                                  additive,lane,pairwise --dims 8,32,128 --scales
     \\                                  1,4,16 --epochs 10 --sweep 0 (fits per sweep)
+    \\  draftbench SNAP [OPT VALUE]...  the deep draft model (lab/draftnet.zig) timed the
+    \\                                  same way: --devices cpu1,cpu,gpu --scales
+    \\                                  1,4,16,64 --epochs 2
     \\
 ++ exp.usage ++ draft.usage;
 
@@ -152,6 +156,34 @@ pub fn main(init: std.process.Init) !u8 {
         try stdout.interface.flush();
         return 0;
     }
+    if (std.mem.eql(u8, cmd, "draftbench") and argv.len >= 3) {
+        var opts: draftnet.Options = .{};
+        var i: usize = 3;
+        while (i + 1 < argv.len) : (i += 2) {
+            const v = argv[i + 1];
+            if (std.mem.eql(u8, argv[i], "--devices")) {
+                opts.devices = try parseList(draftnet.Device, arena, v);
+            } else if (std.mem.eql(u8, argv[i], "--scales")) {
+                opts.scales = try parseList(u32, arena, v);
+            } else if (std.mem.eql(u8, argv[i], "--epochs")) {
+                opts.epochs = try std.fmt.parseInt(u32, v, 10);
+            } else {
+                std.debug.print("draftbench: unknown option {s}\n{s}", .{ argv[i], usage });
+                return 2;
+            }
+        }
+        var gpu: ?cuda.Gpu = null;
+        if (std.mem.indexOfScalar(draftnet.Device, opts.devices, .gpu) != null) gpu = try cuda.Gpu.init(ptx);
+        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
+        defer legendaries.deinit(init.gpa);
+        var data = try rows.load(init.gpa, argv[2], &legendaries);
+        defer data.deinit();
+        var buf: [4096]u8 = undefined;
+        var stdout = std.Io.File.stdout().writer(init.io, &buf);
+        try draftnet.run(init.gpa, init.io, &data, opts, if (gpu) |*g| g else null, &stdout.interface);
+        try stdout.interface.flush();
+        return 0;
+    }
     if (std.mem.eql(u8, cmd, "pairs") and argv.len >= 4) {
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
@@ -246,6 +278,7 @@ test {
     _ = pairs;
     _ = lanebuckets;
     _ = bench;
+    _ = draftnet;
     _ = harness;
     _ = exp;
     _ = draft;
