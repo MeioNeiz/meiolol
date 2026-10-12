@@ -123,6 +123,9 @@ const usage =
     \\              --test-platform P  test on P's newest games (default EUW1)
     \\              --test-share F   newest share of P's games held out (default 0.2)
     \\              --preds DIR      one TSV of test predictions per model
+    \\  legendaries write DATA/legendaries.tsv, the finished items of every patch in the
+    \\              data (Data Dragon; outcomes and meiolol-lab's first_item read it)
+    \\              --patch P, --platform P  as for stats
     \\  winchance   fit win chance by minute from the game state (Your games' turning
     \\              minute and death cost): weights as Zig source, check on stdout
     \\              --out FILE       default src/winchance_weights.zig
@@ -286,6 +289,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "pool", cmdPool },
     .{ "eval", cmdEval },
     .{ "outcomes", cmdOutcomes },
+    .{ "legendaries", cmdLegendaries },
     .{ "objectives", cmdObjectives },
     .{ "winchance", cmdWinchance },
     .{ "items", cmdItems },
@@ -751,6 +755,20 @@ fn cmdEval(c: *Cmd) !u8 {
         const today: Date = .fromMs(std.Io.Clock.real.now(io).toMilliseconds());
         try eval.appendHistory(io, path, line, try c.arena.print("{f}", .{today}));
     }
+    return 0;
+}
+
+fn cmdLegendaries(c: *Cmd) !u8 {
+    var g: Games = .{};
+    while (c.next()) |_| {
+        if (!try g.parse(c)) return error.Usage;
+    }
+    const db = try c.open();
+    defer db.close();
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, g.platformIds());
+    const path = try std.fs.path.join(c.arena, &.{ c.data_dir, "legendaries.tsv" });
+    const legendaries = try outcomes.loadLegendaries(c.init.gpa, c.arena, c.init.io, path, chosen);
+    std.debug.print("{s}: {d} patches\n", .{ path, legendaries.count() });
     return 0;
 }
 
