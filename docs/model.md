@@ -104,7 +104,12 @@ outcomes and readings decided by Jacob the same day.
 
 - Data: one snapshot of the three box DBs (VACUUM INTO), PUUIDs replaced by salted
   hashes, forgotten players dropped, deleted when a newer snapshot replaces it.
-  Snapshot: pending (stamp, gameCreation cutoff and row counts go here)
+  Snapshot snap-20261012T2055Z (hashed; data/snap-20261012T2055Z on the Mac,
+  ~/ml/snaps/ on the gpu-box): 224,910 games scanned, patches 16.19-16.20, 15
+  platforms. Test from game_start 1791709711585 (11 Oct): 10,759 EUW1 games, 10,618
+  with a timeline to minute 15; train 174,575 games, 117,948 with one. Every test game
+  and its frame count in split.tsv, finished items per patch in legendaries.tsv (both in
+  the snapshot dir)
 - Split: eval's. Test = newest 20% of EUW1 games by gameCreation; train = older games,
   every platform. Tuning by folds inside train only; test touched once per model
 - Rows: ranked solo, non-remake, complete roles (stats.scan rules). Continuous outcomes
