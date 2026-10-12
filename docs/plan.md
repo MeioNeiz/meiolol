@@ -410,6 +410,11 @@ next steps land here.
   (0.00038 ± 0.00015 nats); most apparent style effect is being ahead. Small survivors
   (trading damage, spare camps, support roams) are post-game lesson material only.
   Next: champion given state (scaling, converting leads), fresh session
+- Scaling (meiolol-8a, e072351): champion matters beyond the team gold/XP lead at
+  every minute (spread 3-11 pp, 500-2300 gold equivalent; e.g. Kayle top's team wins
+  like one ~2,900 gold ahead at 25, Pyke like one ~2,600 behind). Per-minute curve
+  real but small; converting leads or comebacks beyond that: nothing. Next: split who
+  holds the gold, then objectives held in the state
 - Win (meiolol-88): joint ratings first to beat champion baseline on dev (-0.0031 ±
   0.0017); win rows need duration_s >= 900 (leaver forfeits out)
 - Experience term (src/experience.zig): rerun at 300+ train / 100+ test per variant; if
