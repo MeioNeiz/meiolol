@@ -303,6 +303,19 @@ next steps land here.
 
 ### Draft model (was draft-model-19)
 
+- Model agents (2026-10-12): meiolol-3c (CPU, interpretable shrinkage: additive enemy
+  champions, class-tag comp types, per-item marginal effects, objective value given
+  state, playstyle features) and meiolol-2a (gpu-box, `zig build lab`: embeddings,
+  interactions, every-field ranking, sequence/playstyle clustering), run by a
+  coordinator session. 2a's models must beat 3c's, not just base rates. Shared
+  protocol and results in docs/model.md
+- Decided (Jacob, 2026-10-12): outcomes win, gold@14, lane gold diff@14, CS@10, deaths
+  before 15, first completed item minute; enemy team read both ways (additive per
+  champion and Riot class tags, hand labels only if tags show signal); every field
+  ranked by draft-time and post-game value, end-of-game stats never champ-select
+  inputs; analysis snapshots hash PUUIDs with a salt, drop forgotten players, deleted
+  when replaced; gpu-box long runs OK while League isn't running (watcher pauses);
+  box WAL fix (meiolol-83)
 - Experience term (src/experience.zig): rerun at 300+ train / 100+ test per variant; if
   "user only" beats no-experience beyond its interval, wire it into recommend() as the
   "your pool" reason (wasm `pool` field). Mastery is a post-match snapshot and flatters
