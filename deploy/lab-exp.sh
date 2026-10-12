@@ -157,6 +157,13 @@ case "$cmd" in
             on "grep '^RESULT' ml/runs/$run/log | tail -n 1"
             echo "NEXT: $ROOT/deploy/lab-exp.sh finding $campaign $run \"<what it learnt about the game, human units>\"" \
                 "[effects-....tsv]  (docs/lab-brief.md \"Findings\")"
+            # Headless agents can't take session messages: humans leave notes here
+            if [[ -s "$dir/inbox.md" ]]; then
+                echo "NOTE FROM THE HUMANS (shown once, kept as $(basename "$dir")/inbox-read.md):"
+                cat "$dir/inbox.md"
+                cat "$dir/inbox.md" >> "$dir/inbox-read.md"
+                rm "$dir/inbox.md"
+            fi
         else
             on "tail -n 30 ml/runs/$run/log; mkdir -p $LAB; \
                 printf '%s\t%s\t%s\t-\t-\t-\t-\tcrash\t-\t-\n' '$run' '$campaign' '$target' \
