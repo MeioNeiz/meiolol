@@ -113,8 +113,11 @@ stage() {
     rm -rf "$out/mac"
     # The admin Draft tester's model: the newest run that exported one (meiolol-lab draft
     # --export), with its reference drafts
-    d=$(cd "$out/runs" && find . -mindepth 2 -maxdepth 2 -name draft-model.json | cut -d/ -f2 | sort | tail -n 1)
-    if [[ -n "$d" ]]; then cp "$out/runs/$d"/draft-*.json "$out/"; fi
+    # --export DIR may write into a dir that isn't a lab-run.sh run (no job.sh), so look at
+    # this Mac's run dirs directly too; names start with the UTC stamp
+    d=$( { find "$RUNS" "$out/runs" -mindepth 2 -maxdepth 2 -name draft-model.json 2>/dev/null || true; } \
+        | awk -F/ '{ print $(NF-1) "\t" $0 }' | sort | tail -n 1 | cut -f2)
+    if [[ -n "$d" ]]; then cp "${d%/*}"/draft-*.json "$out/"; fi
     cp "$ROOT/docs/learned.md" "$ROOT/docs/model.md" "$out/" 2>/dev/null || true
     mkdir -p "$out/campaigns"
     for d in "$CAMPAIGNS"/*/; do

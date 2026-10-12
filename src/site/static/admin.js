@@ -1735,42 +1735,89 @@ async function loadDraftModel() {
   if (ui.tab === "models" && ui.cat === "draft") render(true);
 }
 
-// The exported model behind one interface: champions, play rate per role, and blue's win
-// chance with a 95% interval for a draft {blue: {role: id}, red: {role: id}} (empty slots
-// add nothing). Provisional reading of the export until meiolol-88 settles the format:
-// logit = intercept + sum(blue effects) - sum(red effects), interval from the effects' se
+// The exported model (docs/model.md "Draft model file"; Scorer in src/lab/draft.zig is the
+// reference): champions, play share per role on the newest patch, blue's win chance with a
+// 95% interval for a draft, and the candidates for a slot. A draft here is
+// {blue: {role: id}, red: {role: id}}; an empty slot, or a champion with no term in the
+// role, is average[role] with sd 0
 function draftModel(M) {
-  if (!M || !M.champions) return null;
-  const eff = M.effects || {}, play = M.play || {};
-  const term = (role, id) => (eff[role] || {})[id] || null;
-  return {
+  if (!M || M.format !== "meiolol-draft-model" || M.version !== 1) return null;
+  const terms = new Map(M.model.terms.map(t => [t.champion + ":" + t.role, t]));
+  const cells = new Map(M.cells.map(c => [c.champion + ":" + c.role, c]));
+  const avg = M.average.map(a => ({ ...a, sd: 0 }));
+  const { intercept, w, z } = M.model;
+  const dot = (a, b) => { let x = 0; for (let i = 0; i < a.length; i++) x += a[i] * b[i]; return x; };
+  const sig = x => 1 / (1 + Math.exp(-x));
+  // teams[side][role]: champion id, 0 empty
+  const score = teams => {
+    const [B, R] = teams.map(t => t.map((id, r) => (id && terms.get(id + ":" + r)) || avg[r]));
+    let logit = intercept, v = 0;
+    for (let r = 0; r < 5; r++) {
+      logit += B[r].b - R[r].b;
+      v += B[r].sd ** 2 + R[r].sd ** 2;
+    }
+    if (M.has_pairs) {
+      for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) logit += w[i * 5 + j] * (dot(B[i].u, R[j].v) - dot(R[i].u, B[j].v));
+      for (let a = 0; a < 5; a++) for (let b = a + 1; b < 5; b++) logit += z[a * 5 + b] * (dot(B[a].s, B[b].s) - dot(R[a].s, R[b].s));
+    }
+    const h = 1.96 * Math.sqrt(v);
+    return { p: sig(logit), lo: sig(logit - h), hi: sig(logit + h) };
+  };
+  const teamsOf = d => SIDES.map(([side]) => DRAFT_ROLES.map(([role]) => +d[side][role] || 0));
+  const roleIdx = Object.fromEntries(DRAFT_ROLES.map(([r], i) => [r, i]));
+  const m = {
+    M, score, teamsOf,
     champs: M.champions.slice().sort((a, b) => a.name.localeCompare(b.name)),
-    rate: (id, role) => +((play[role] || {})[id] || 0),
-    win(d) {
-      let z = +M.intercept || 0, v = 0;
-      for (const [side, sign] of [["blue", 1], ["red", -1]]) {
-        for (const [role] of DRAFT_ROLES) {
-          const id = d[side][role];
-          const t = id != null && term(role, id);
-          if (!t) continue;
-          z += sign * t.b;
-          v += (t.se || 0) ** 2;
-        }
+    rate: (id, role) => (cells.get(id + ":" + roleIdx[role]) || {}).patch_share || 0,
+    games: (id, role) => (cells.get(id + ":" + roleIdx[role]) || {}).games || 0,
+    win: d => score(teamsOf(d)),
+    // A slot's candidates: games in the role >= min_games, not picked, not banned; win and
+    // change for the side filling it, sorted by win then champion id (as draft-ref.json)
+    slot(teams, bans, side, r, min = M.min_games) {
+      const mine = x => side === 0 ? x : { p: 1 - x.p, lo: 1 - x.hi, hi: 1 - x.lo };
+      const t = teams.map(x => x.slice());
+      t[side][r] = 0;
+      const empty = mine(score(t)).p;
+      const out = new Set([...t.flat(), ...bans].filter(Boolean));
+      const options = [];
+      for (const c of M.cells) {
+        if (c.role !== r || c.games < min || out.has(c.champion)) continue;
+        t[side][r] = c.champion;
+        const x = mine(score(t));
+        options.push({ champion: c.champion, games: c.games, share: c.patch_share, win: x.p, lo: x.lo, hi: x.hi, change: x.p - empty });
       }
-      const s = x => 1 / (1 + Math.exp(-x)), h = 1.96 * Math.sqrt(v);
-      return { p: s(z), lo: s(z - h), hi: s(z + h) };
+      options.sort((a, b) => b.win - a.win || a.champion - b.champion);
+      const g = sumR(options.map(o => o.games));
+      return { empty, average: g ? sumR(options.map(o => o.win * o.games)) / g : null, options };
     },
   };
+  return m;
 }
 
-// The page's numbers against meiolol-lab's reference pairs (draft-ref.json: [{draft, p}])
+// The page's numbers against meiolol-lab's reference (draft-ref.json): whole drafts, and
+// slot queries with their candidate lists
 function draftCheck(m, ref) {
-  const cases = Array.isArray(ref) ? ref : ref.cases || [];
-  if (!cases.length) return null;
-  let worst = 0;
-  for (const c of cases) worst = Math.max(worst, Math.abs(m.win({ blue: c.draft.blue || {}, red: c.draft.red || {} }).p - c.p));
-  return worst < 1e-9 ? { ok: true, text: `Matches meiolol-lab on ${cases.length} reference drafts.` }
-    : { ok: false, text: `Differs from meiolol-lab on its reference drafts by up to ${(worst * 100).toFixed(3)} points: don't trust these numbers.` };
+  const tol = ref.tolerance || 1e-9;
+  let worst = 0, n = 0, bad = null;
+  const cmp = (a, b, what) => { n++; const e = Math.abs(a - b); if (e > worst) { worst = e; if (e > tol) bad = what; } };
+  for (const x of ref.drafts || []) {
+    const s = m.score(x.teams);
+    for (const k of ["p", "lo", "hi"]) cmp(s[k], x.blue[k], `${x.label}: ${k}`);
+  }
+  for (const q of ref.slots || []) {
+    const s = m.slot(q.teams, q.bans || [], q.side, q.role, q.min_games);
+    cmp(s.empty, q.empty, `${q.label}: empty`);
+    cmp(s.average, q.average, `${q.label}: average`);
+    if (s.options.length !== q.options.length) { bad = `${q.label}: ${s.options.length} candidates, meiolol-lab has ${q.options.length}`; worst = Infinity; continue; }
+    q.options.forEach((o, i) => {
+      const mine = s.options[i];
+      if (mine.champion !== o.champion) { bad = `${q.label}: order differs at ${i + 1}`; worst = Infinity; return; }
+      for (const k of ["win", "lo", "hi", "change"]) cmp(mine[k], o[k], `${q.label}: ${k}`);
+    });
+  }
+  if (!n) return null;
+  return bad ? { ok: false, text: `Differs from meiolol-lab's reference (${bad}; largest gap ${isFinite(worst) ? worst.toExponential(1) : "order"}): don't trust these numbers.` }
+    : { ok: true, text: `Matches meiolol-lab on ${(ref.drafts || []).length} reference drafts and ${(ref.slots || []).length} slot lists (largest gap ${worst.toExponential(1)}).` };
 }
 
 // Search key: letters and digits only, so "kaisa" finds Kai'Sa and "nunu" Nunu & Willump
@@ -1784,7 +1831,7 @@ function randomFill(m, d, all) {
     const key = side + "." + role;
     if (d.locks[key] || (!all && d[side][role] != null)) continue;
     if (d[side][role] != null) taken.delete(String(d[side][role]));
-    const pool = m.champs.filter(c => !taken.has(String(c.id)) && m.rate(c.id, role) > 0);
+    const pool = m.champs.filter(c => !taken.has(String(c.id)) && m.rate(c.id, role) > 0 && m.games(c.id, role) >= m.M.min_games);
     let x = Math.random() * sumR(pool.map(c => m.rate(c.id, role)));
     const pick = pool.find(c => (x -= m.rate(c.id, role)) <= 0) || pool[pool.length - 1];
     if (!pick) continue;
@@ -1804,7 +1851,8 @@ function draftView(body) {
   }
   const d = draftState();
   const name = id => (m.champs.find(c => String(c.id) === String(id)) || { name: "#" + id }).name;
-  sec.append(el("p", { class: "sub" }, [meta.name, meta.games != null ? `${num(meta.games)} training games` : null, meta.snapshot, meta.dev_accuracy != null ? `right ${pct(meta.dev_accuracy)} of the time on practice games` : null].filter(Boolean).join(" · ")));
+  const dev = meta.dev || {};
+  sec.append(el("p", { class: "sub", title: dev.what || "" }, [meta.name, meta.training_games != null ? `${num(meta.training_games)} training games to ${meta.newest_game}` : null, meta.patch ? `play rates from patch ${meta.patch}` : null, dev.accuracy != null ? `right ${pct(dev.accuracy)} of ${num(dev.games)} practice games (coin flip 50%)` : null].filter(Boolean).join(" · ")));
   if (DRAFT.check) sec.append(el("div", { class: "health " + (DRAFT.check.ok ? "good" : "bad") }, el("b", {}, DRAFT.check.ok ? "✓ " : "⚠ "), DRAFT.check.text));
   if (!M.has_pairs) sec.append(el("div", { class: "health warn" }, el("b", {}, "Caveat: "), "the model has no counter or synergy terms yet. It ranks by champion strength in the role; other picks shift the numbers, not the order."));
 
@@ -1859,17 +1907,12 @@ function draftView(body) {
 // chance if picked; sorted by play rate or by that change
 function slotPicker(m, d, side, role) {
   const box = el("div", { class: "slotpicker" });
-  const taken = takenIn(d);
   const cur = d[side][role];
-  if (cur != null) taken.delete(String(cur));
-  const mine = p => side === "blue" ? p : 1 - p;
-  const base = mine(m.win({ blue: { ...d.blue, [role]: side === "blue" ? undefined : d.blue[role] }, red: { ...d.red, [role]: side === "red" ? undefined : d.red[role] } }).p);
-  const now = mine(m.win(d).p);
-  const all = m.champs.filter(c => !taken.has(String(c.id)) && m.rate(c.id, role) > 0).map(c => {
-    const t = { blue: { ...d.blue }, red: { ...d.red } };
-    t[side][role] = c.id;
-    return { c, rate: m.rate(c.id, role), p: mine(m.win(t).p) };
-  });
+  const ri = DRAFT_ROLES.findIndex(([r]) => r === role), si = side === "blue" ? 0 : 1;
+  const q = m.slot(m.teamsOf(d), d.bans.map(Number), si, ri);
+  const byId = new Map(m.champs.map(c => [c.id, c]));
+  const all = q.options.map(o => ({ c: byId.get(o.champion) || { id: o.champion, name: "#" + o.champion }, rate: o.share, p: o.win, change: o.change }));
+  const now = cur != null ? (all.find(x => String(x.c.id) === String(cur)) || {}).change ?? null : null;
   const input = el("input", { type: "search", placeholder: `Search ${all.length} champions played ${role}`, "aria-label": "Search champions", autocomplete: "off", spellcheck: "false" });
   const sortBtn = el("nav", { class: "switch", "aria-label": "Sort" });
   for (const [k, label] of [["played", "Most played"], ["best", "Best for this team"]]) {
@@ -1882,10 +1925,10 @@ function slotPicker(m, d, side, role) {
     const hits = all.filter(x => !q || champKey(x.c.name).includes(q) || champKey(x.c.alias).includes(q))
       .sort(d.sort === "best" ? (a, b) => b.p - a.p : (a, b) => b.rate - a.rate);
     list.replaceChildren(...hits.slice(0, 40).map(x => {
-      const delta = x.p - (cur != null ? now : base);
+      const delta = x.change - (now ?? 0);
       return el("button", { type: "button", role: "option", class: String(x.c.id) === String(cur) ? "cur" : null, onclick: () => pick(x.c.id) },
         el("span", { class: "nm" }, x.c.name), el("span", { class: "rate" }, pct(x.rate)),
-        el("b", { class: delta > 0.0005 ? "up" : delta < -0.0005 ? "down" : "" }, (delta >= 0 ? "+" : "−") + Math.abs(delta * 100).toFixed(1) + "%"));
+        el("b", { class: delta > 0.0005 ? "up" : delta < -0.0005 ? "down" : "" }, (Math.abs(delta) < 0.0005 ? "±" : delta > 0 ? "+" : "−") + Math.abs(delta * 100).toFixed(1) + "%"));
     }));
     if (hits.length > 40) list.append(el("p", { class: "sub" }, `${hits.length - 40} more: type to narrow.`));
   };
@@ -1894,7 +1937,7 @@ function slotPicker(m, d, side, role) {
     if (ev.key === "Enter") { const b = list.querySelector("button"); if (b) b.click(); }
     if (ev.key === "Escape") { d.open = null; saveDraft(d); }
   });
-  box.append(el("div", { class: "pickhead" }, input, sortBtn), el("p", { class: "sub" }, `Play rate in the role, then the change to ${side}'s win chance ${cur != null ? "against the current pick" : "against leaving the slot empty"}.`), list);
+  box.append(el("div", { class: "pickhead" }, input, sortBtn), el("p", { class: "sub" }, `Share of the role's games on the newest patch, then the change to ${side}'s win chance ${now != null ? "against the current pick" : "against an empty slot"}. An average pick here: ${pct(q.average)}.`), list);
   fill();
   setTimeout(() => input.focus({ preventScroll: true }), 0);
   return box;
