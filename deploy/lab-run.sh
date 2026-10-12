@@ -5,8 +5,8 @@
 # On the gpu-box, deploy/lab-watch.sh pauses every run while League is open (Jacob's
 # rule); `watch-install` sets it up. docs/compute.md
 #
-#   deploy/lab-run.sh start HOST NAME [--meiolol] [--no-build] [--build-arg A]... [--with PATH]...
-#                           -- ARGS...
+#   deploy/lab-run.sh start HOST NAME [--meiolol] [--head | --no-build] [--build-arg A]...
+#                           [--with PATH]... -- ARGS...
 #   deploy/lab-run.sh status [HOST]
 #   deploy/lab-run.sh logs HOST RUN [LINES]
 #   deploy/lab-run.sh stop HOST RUN
@@ -17,12 +17,16 @@
 # spaces and run by bash in the run directory on the host, so ~ and globs expand there:
 #   deploy/lab-run.sh start gpu-box smoke -- gpu-smoke
 #   deploy/lab-run.sh start mac eval --meiolol -- eval --data "~/ml/snaps/X" ">" eval.md
+# --head builds committed HEAD in a temp tree instead (other sessions edit the working
+# tree; a half-written file there breaks or silently changes the build).
 # --build-arg goes to zig build (deploy/lab-exp.sh: -Dcand=DIR); --with copies a file or
 # directory into the run dir (the candidate's source, kept with its scores)
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 RUNS=ml/runs
+SRC=$ROOT
+HEAD_ONLY=0
 BUILD_ARGS=()
 WITH=()
 WATCH=meiolol-lab-watch
@@ -47,22 +51,34 @@ check_host() {
 }
 
 # Prints the binary's path. Own prefix per host and binary, so zig-out/bin is left alone
-build() {
-    local host=$1 bin=$2 prefix="$ROOT/zig-out/lab-run/$1"
+prefix() {
+    local prefix="$ROOT/zig-out/lab-run/$1"
+    (( HEAD_ONLY )) && prefix+=-head
     # Own prefix per set of build args, so concurrent candidate builds don't swap binaries
     if (( ${#BUILD_ARGS[@]} )); then
         prefix+=-$(printf '%s\n' "${BUILD_ARGS[@]}" | shasum | cut -c1-8)
     fi
-    local args=(--prefix "$prefix" -Doptimize=ReleaseFast ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}) dir=bin
-    # `zig build lab` installs a host build in bin and the gpu-box one in gpu-box
+    echo "$prefix"
+}
+
+# Where `build` puts BIN for HOST: `zig build lab` installs a host build in bin and the
+# gpu-box one in gpu-box
+binpath() {
+    local dir=bin
+    [[ "$2" == meiolol-lab && "$1" == gpu-box ]] && dir=gpu-box
+    echo "$(prefix "$1")/$dir/$2"
+}
+
+build() {
+    local host=$1 bin=$2
+    local args=(--prefix "$(prefix "$host")" -Doptimize=ReleaseFast)
+    args+=(${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"})
     if [[ "$bin" == meiolol-lab ]]; then
         args+=(lab)
-        [[ "$host" == gpu-box ]] && dir=gpu-box
     elif [[ "$host" == gpu-box ]]; then
         args+=(-Dtarget=x86_64-linux-musl -Dcpu=x86_64_v3)
     fi
-    (cd "$ROOT" && zig build "${args[@]}" >&2)
-    echo "$prefix/$dir/$bin"
+    (cd "$SRC" && zig build "${args[@]}" --cache-dir "$ROOT/.zig-cache" >&2)
 }
 
 start() {
@@ -72,6 +88,7 @@ start() {
         case "$1" in
             --meiolol) bin=meiolol ;;
             --no-build) build=0 ;;
+            --head) HEAD_ONLY=1 ;;
             --build-arg) BUILD_ARGS+=("$2"); shift ;;
             --with) WITH+=("$2"); shift ;;
             --) shift; break ;;
@@ -84,25 +101,36 @@ start() {
     local tilde="~"
     [[ "$host" == mac ]] || set -- "${@/#$HOME/$tilde}"
     [[ "$name" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "NAME: letters, digits, _ . -"; exit 2; }
-    local path="$ROOT/zig-out/lab-run/$host/bin/$bin"
-    (( build )) && path=$(build "$host" "$bin")
-    [[ -x "$path" ]] || { echo "no binary at $path"; exit 1; }
-
-    local run tmp
-    run=$(date -u +%Y%m%dT%H%MZ)-$name
+    local path
+    path=$(binpath "$host" "$bin")
+    local tmp
     tmp=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now: tmp is local
     trap "rm -rf '$tmp'" RETURN
+    if (( HEAD_ONLY )); then
+        mkdir "$tmp/src"
+        git -C "$ROOT" archive HEAD | tar -x -C "$tmp/src"
+        SRC=$tmp/src
+    fi
+    # A failed build must not start a stale binary left at the prefix
+    if (( build )) && ! build "$host" "$bin"; then echo "build failed: not started"; exit 1; fi
+    [[ -x "$path" ]] || { echo "no binary at $path"; exit 1; }
+
+    local run
+    run=$(date -u +%Y%m%dT%H%MZ)-$name
     {
         echo "host $host"
         echo "bin $bin $(shasum -a 256 "$path" | cut -c1-16)"
         echo "head $(git -C "$ROOT" rev-parse HEAD)"
-        echo "dirty $(git -C "$ROOT" status --porcelain -- src build.zig | wc -l) files"
+        if (( HEAD_ONLY )); then echo "dirty 0 files (--head)"; else
+            echo "dirty $(git -C "$ROOT" status --porcelain -- src build.zig | wc -l) files"
+        fi
         echo "args $*"
         if (( ${#BUILD_ARGS[@]} )); then echo "build ${BUILD_ARGS[*]}"; fi
         if (( ${#WITH[@]} )); then echo "with ${WITH[*]}"; fi
     } > "$tmp/meta"
-    git -C "$ROOT" diff HEAD -- src build.zig > "$tmp/src.diff"
+    : > "$tmp/src.diff"
+    (( HEAD_ONLY )) || git -C "$ROOT" diff HEAD -- src build.zig > "$tmp/src.diff"
     # caffeinate: a Mac asleep mid-run looks like a hung run
     local awake=""
     [[ "$host" == mac ]] && awake="caffeinate -i "
@@ -177,12 +205,14 @@ case "${1:-}" in
         on gpu-box "mkdir -p ml/bin $RUNS .config/systemd/user"
         scp -q "$ROOT/deploy/lab-watch.sh" gpu-box:ml/bin/
         scp -q "$ROOT/deploy/systemd/$WATCH.service" gpu-box:.config/systemd/user/
-        # Windows side (deploy/windows) to %USERPROFILE%\.meiolol, CRLF for Windows
+        # Windows side (deploy/windows) to %USERPROFILE%\.meiolol, CRLF for Windows.
+        # cmd.exe reads stdin, so it gets /dev/null
         # shellcheck disable=SC2016 # expands on the host
-        win='$(wslpath "$(cd /mnt/c && /mnt/c/Windows/System32/cmd.exe /c "echo %USERPROFILE%" </dev/null | tr -d "\r")")/.meiolol'
-        on gpu-box "mkdir -p \"$win\""
+        win=$(on gpu-box 'cd /mnt/c && /mnt/c/Windows/System32/cmd.exe /c "echo %USERPROFILE%" \
+            < /dev/null | tr -d "\r\n" | xargs -0 wslpath')/.meiolol
+        on gpu-box "mkdir -p '$win'"
         for f in "$ROOT"/deploy/windows/*; do
-            sed 's/$/\r/' "$f" | on gpu-box "cat > \"$win/$(basename "$f")\""
+            sed 's/$/\r/' "$f" | on gpu-box "cat > '$win/$(basename "$f")'"
         done
         on gpu-box "loginctl enable-linger \$USER; systemctl --user daemon-reload \
             && systemctl --user enable -q $WATCH \

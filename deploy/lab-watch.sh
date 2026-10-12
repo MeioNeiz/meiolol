@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 # Runs on the gpu-box (systemd user service meiolol-lab-watch, deploy/lab-run.sh
-# watch-install). Jacob's rule: long runs only while League isn't running. Every 5 s it
-# asks Windows for the League client or game; while either is up, every live run in
-# ~/ml/runs is stopped (SIGSTOP to its process group), and continued once both are gone.
-# A run started while League is up is stopped on the next tick. Each pause and resume
-# goes to the run's pauses.log, so its timing can be explained.
+# watch-install). Every 5 s:
+# - League (Jacob's rule: long runs only while League isn't running): while the client
+#   or game is up, every live run in ~/ml/runs is stopped (SIGSTOP to its process
+#   group), and continued once both are gone; each pause and resume goes to the run's
+#   pauses.log. A run started while League is up is stopped on the next tick
+# - Sleep (Jacob: awake while busy): while a run is live, or another job keeps a file in
+#   ~/ml/awake.d fresh (touched in the last 15 min, eg the archive pull), Windows is held
+#   awake by deploy/windows/meiolol-awake.ps1, which watches a flag file this keeps fresh
 set -u
 cd ~/ml/runs || exit 1
-tasklist=/mnt/c/Windows/System32/tasklist.exe
+mkdir -p ~/ml/awake.d
+win=/mnt/c/Windows/System32
+tasklist=$win/tasklist.exe
+home=$(cd /mnt/c && $win/cmd.exe /c 'echo %USERPROFILE%' 2> /dev/null < /dev/null)
+home=$(wslpath "${home%$'\r'}")/.meiolol
+flag=$home/awake
+vbs=$(wslpath -w "$home/meiolol-awake.vbs")
 
 log() { echo "$(date -u +%FT%TZ) $*"; }
 
@@ -18,16 +27,18 @@ league() {
     grep -qiE '^"(LeagueClient|League of Legends)\.exe"' <<< "$out"
 }
 
-was=''
+was='' holder='' busy_was=''
 while true; do
     if league; then now=up; else now=down; fi
     [[ "$now" != "$was" ]] && log "League $now"
     was=$now
+    busy=''
     for d in */; do
         d=${d%/}
         [[ -f $d/job.pgid && ! -f $d/exit && ! -f $d/stopped ]] || continue
         pg=$(cat "$d/job.pgid")
         kill -0 -- "-$pg" 2>/dev/null || continue
+        busy=$d
         if [[ $now == up && ! -f $d/paused ]]; then
             kill -STOP -- "-$pg" && touch "$d/paused" && log "STOP" >> "$d/pauses.log" \
                 && log "paused $d"
@@ -36,5 +47,17 @@ while true; do
                 && log "resumed $d"
         fi
     done
+    [[ -n $busy ]] || busy=$(find ~/ml/awake.d -type f -mmin -15 -printf '%f\n' | head -1)
+    if [[ -n $busy ]]; then
+        touch "$flag"
+        if [[ -z $holder ]] || ! kill -0 "$holder" 2>/dev/null; then
+            (cd /mnt/c && exec "$win/wscript.exe" "$vbs" "$(wslpath -w "$flag")") &
+            holder=$!
+        fi
+    else
+        rm -f "$flag"
+    fi
+    [[ "$busy" != "$busy_was" ]] && log "awake: ${busy:-no (Windows may sleep)}"
+    busy_was=$busy
     sleep 5
 done

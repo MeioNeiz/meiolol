@@ -16,11 +16,15 @@ experiments run on:
   each run's pauses.log says when. If Windows can't be asked, runs stay paused
 - Tell the sessions using it (cc-peers; today meiolol-2a) before restarting WSL or
   rebooting the gpu-box: it kills running jobs
-- WSL comes back by itself: Windows task `wsl-watchdog` (every 2 min and at logon, runs
-  C:\Users\jacob\wsl-watchdog.vbs) starts `wsl.exe -d Ubuntu --exec sleep infinity`
-  when no such process runs. So `wsl.exe --shutdown` from inside WSL is a restart, back in
-  under ~2 min. Only while Jacob is logged in to Windows (the Startup script
-  wsl-keepalive.vbs does the same at login)
+- WSL comes back by itself: Windows task `wsl-watchdog` (at boot and every 2 min, as
+  Jacob, logged on or not, highest privileges) runs
+  %USERPROFILE%\.meiolol\wsl-watchdog.ps1
+  (deploy/windows): attaches the archive partition at /mnt/wsl/archive, then blocks in a
+  keepalive. `wsl.exe --shutdown` from inside WSL is a restart, back in under ~2 min.
+  Its log: watchdog.log; requests.txt is `powercfg /requests` (elevated) each start
+- Sleep: lab-watch.sh keeps Windows awake while a run is live or a file in ~/ml/awake.d
+  was touched in the last 15 min (eg the archive pull), via deploy/windows/meiolol-awake.*
+  (SetThreadExecutionState); otherwise Windows sleeps as set (3 h idle on AC)
 - ~/ml/meiolol on the gpu-box is the restore point from before the move to Oracle: leave
   it alone. Snapshots go in ~/ml/snaps/<stamp>/ (meiolol-2a: anonymised, salted PUUID
   hashes), runs in ~/ml/runs/
@@ -33,7 +37,9 @@ deploy/lab-run.sh status [HOST] | logs HOST RUN [N] | stop HOST RUN | pull HOST 
 deploy/lab-run.sh watch-install
 ```
 
-- Builds from the working tree (experiments are often uncommitted): meiolol-lab by
+- Builds from the working tree (experiments are often uncommitted), or with --head
+  from committed HEAD in a temp tree (the shared tree is often mid-edit); a failed build
+  never starts. meiolol-lab by
   default (`zig build lab`, ReleaseFast: host build for mac, x86_64-linux-gnu for the
   gpu-box), or meiolol with --meiolol (musl, x86_64_v3 on the gpu-box)
 - Run dir ~/ml/runs/<UTC stamp>-<name> on the host: the binary, job.sh, log, meta (host,
@@ -72,21 +78,18 @@ first.
 
 ### 1. The PC as infrastructure (before the raw archive goes live)
 
-- Sleep: Windows sleeps after 3 h idle on AC (powercfg standby 10800 s), freezing runs,
-  rsyncs and the archive pull. Either Jacob sets sleep to never, or lab-watch.sh holds a
-  wake request while a run is live or a pull is due (a hidden powershell holding
-  SetThreadExecutionState, ended when idle). Jacob's call
-- Reboots: after a reboot (Windows Update) WSL only starts at login. Options: Windows
-  auto-login, or the wsl-watchdog task set to "run whether logged on or not" (stores
-  Jacob's password in Task Scheduler). Jacob's call; until then a reboot stops the
-  archive until he logs in
+- Sleep (Jacob: awake while busy): done, lab-watch.sh and ~/ml/awake.d (Rules above).
+  The archive pull touches a file in ~/ml/awake.d while it has work
+- Reboots (Jacob: task runs logged out): wsl-watchdog.ps1 as a password-stored task,
+  highest privileges. Needs Jacob once in an elevated PowerShell (password); first boot
+  without login still to be seen
 - Reachability alert: the box's health loop (ntfy) warns when the gpu-box has been
   unreachable over 12 h and when the archive's unacked backlog nears the box's free disk
-- Archive disk: the WSL disk (ext4 vhdx, 939 GB virtual) lives on C:, 261 GB free and
-  shared with Windows and games. The 2 TB NVMe has no Windows letter: Linux partitions of
-  128 GB, 1 TB and 32 GB (an old Linux install?) and ~700 GB unallocated. Best home: the
-  1 TB partition via `wsl --mount` (admin, at boot) if Jacob no longer needs what is on
-  it, else a new volume in the free space. Jacob's call; 3c's raw-export targets it
+- Archive disk (Jacob: the 1 TB Linux partition): the WSL disk (ext4 vhdx) is on C:,
+  261 GB free, shared with Windows and games. The 2 TB NVMe has no Windows letter: Linux
+  partitions of 128 GB, 1 TB and 32 GB (an old Linux install?) and ~700 GB unallocated.
+  wsl-watchdog.ps1 attaches the 1 TB one at /mnt/wsl/archive. Look at what is on it
+  before writing; the archive goes in its own directory, nothing deleted without Jacob
 
 ### 2. Data for models (with meiolol-2a, who owns snapshots)
 
