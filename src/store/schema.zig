@@ -294,7 +294,7 @@ pub fn memory() !sqlite.Db {
     return db;
 }
 
-fn apply(db: sqlite.Db) !void {
+pub fn apply(db: sqlite.Db) !void {
     try db.exec(schema);
     try migrate(db);
     try db.exec(indexes);
@@ -413,6 +413,14 @@ fn migrate(db: sqlite.Db) !void {
 pub fn rekey(db: sqlite.Db) !void {
     try db.begin();
     errdefer db.rollback();
+    try rekeyRows(db);
+    try db.commit();
+    try apply(db);
+}
+
+/// rekey inside the caller's transaction (rekey.zig carries `forgotten` over in the same
+/// one); run apply after the commit, to recreate the dropped tables
+pub fn rekeyRows(db: sqlite.Db) !void {
     try db.exec(
         \\UPDATE participants SET (tier, division) =
         \\    (SELECT tier, division FROM players p WHERE p.puuid = participants.puuid)
@@ -420,8 +428,6 @@ pub fn rekey(db: sqlite.Db) !void {
     ++ "DROP TABLE players; DROP TABLE ladder_pages; DROP TABLE mastery; DELETE FROM ranks;" ++
         "UPDATE participants SET puuid = NULL;" ++
         "DELETE FROM raw.raw_docs WHERE source = 'riot_mastery';");
-    try db.commit();
-    try apply(db);
 }
 
 fn hasColumn(db: sqlite.Db, table: []const u8, column: []const u8) !bool {

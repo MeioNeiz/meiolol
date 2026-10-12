@@ -121,6 +121,17 @@ pub fn prune(db: Db, before: i64, now: i64) !void {
     try db.commit();
 }
 
+/// After a key switch every cached PUUID belongs to the old app: players, their games,
+/// Riot ID lookups, PUUID jobs and challenges go, refetched on the next lookup. Caller
+/// holds the transaction; rekey.zig carries `blocked` over
+pub fn clearForRekey(db: Db) !void {
+    try deletePlayers(db, "SELECT puuid FROM players", .{});
+    // Riot ID jobs hold '#' and stay valid
+    try db.run("DELETE FROM jobs WHERE instr(key, '#') = 0", .{});
+    try db.run("DELETE FROM accounts", .{});
+    try db.run("DELETE FROM challenges", .{});
+}
+
 /// Players whose PUUIDs `select` returns, with their games, accounts and jobs; then
 /// matches no remaining player references. Caller holds the transaction
 fn deletePlayers(db: Db, comptime select: []const u8, args: anytype) !void {

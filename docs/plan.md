@@ -76,8 +76,12 @@ next steps land here.
   call
 - Backup loop: pull exchange/forgotten.txt from jomove, push box-forgotten.txt
 - Measure real per-match sizes after a day; recheck disk runway
-- Rekey translation for `forgotten` (old PUUID -> Riot ID -> new PUUID) before the
-  production key
+- Rekey translation (done 2026-10-12, src/rekey.zig): `meiolol rekey` carries
+  `forgotten` and Your games `blocked` over (old PUUID -> Riot ID -> new PUUID, both
+  keys, Riot ID never stored), in one transaction with the crawl-state clear; stops
+  if the keys share encryption. Runbook: docs/data-safety.md "Key switch". Next: when
+  the production key arrives, `rekey --dry-run` with both keys tells whether Riot
+  linked the apps; Jacob: delete pre-switch backups (gpu-box, old snapshots) after?
 - 429 storms (done 2026-10-12): a request that gets 429 on all 6 tries is RateLimited,
   left pending with no attempt counted, and a player scan it cuts short is not marked
   checked (that skipped their games since the last scan). A writer Sqlite error counts an

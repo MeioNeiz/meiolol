@@ -17,6 +17,8 @@ pub const Fake = struct {
     match_json: []const u8,
     timeline_json: []u8,
     mastery_json: []u8,
+    /// Which app's key this stands for: account-v1 PUUIDs differ per app (rekey.zig)
+    encryption: u8 = 0,
 
     pub fn init(gpa: std.mem.Allocator, io: std.Io, latency_ms: u32) !Fake {
         return .{
@@ -38,6 +40,7 @@ pub const Fake = struct {
         try f.io.sleep(.fromMilliseconds(f.latency_ms), .awake);
         if (std.mem.startsWith(u8, path, "/lol/league-exp/v4/entries/")) return try ladder(gpa, route, path);
         if (std.mem.startsWith(u8, path, "/lol/champion-mastery/")) return try gpa.dupe(u8, f.mastery_json);
+        if (std.mem.startsWith(u8, path, "/riot/account/v1/accounts/")) return try f.account(gpa, path);
         const by_puuid = "/lol/match/v5/matches/by-puuid/";
         if (std.mem.startsWith(u8, path, by_puuid)) return try matchIds(gpa, route, path[by_puuid.len..]);
         const matches = "/lol/match/v5/matches/";
@@ -47,6 +50,44 @@ pub const Fake = struct {
             return try withIds(gpa, f.timeline_json, "EUW1_8009933221", rest[0 .. rest.len - "/timeline".len]);
         }
         return try withIds(gpa, f.match_json, "NA1_5321429660", rest);
+    }
+
+    /// Account PUUIDs are "acct<encryption>.<name>.<tag>", so any key can turn them into
+    /// a Riot ID and back. Other PUUIDs (crawled, real) are encryption 0's, with a Riot ID
+    /// made from their hash. Names starting "gone" have no account
+    fn account(f: *const Fake, gpa: std.mem.Allocator, path: []const u8) !?[]u8 {
+        var name_buf: [64]u8 = undefined;
+        var name: []const u8 = undefined;
+        var tag: []const u8 = undefined;
+        const by_puuid = "/riot/account/v1/accounts/by-puuid/";
+        const by_riot_id = "/riot/account/v1/accounts/by-riot-id/";
+        if (std.mem.startsWith(u8, path, by_puuid)) {
+            const puuid = path[by_puuid.len..];
+            if (std.mem.startsWith(u8, puuid, "acct")) {
+                // Riot answers 400 to a PUUID another app's key encrypted
+                if (puuid.len < 5 or puuid[4] != '0' + f.encryption) return error.UnexpectedStatus;
+                var parts = std.mem.splitScalar(u8, puuid, '.');
+                _ = parts.next();
+                name = parts.next() orelse return error.UnexpectedStatus;
+                tag = parts.next() orelse return error.UnexpectedStatus;
+            } else {
+                if (f.encryption != 0) return error.UnexpectedStatus;
+                name = try std.fmt.bufPrint(&name_buf, "p{x:0>16}", .{std.hash.Wyhash.hash(0, puuid)});
+                tag = "OLD";
+            }
+        } else if (std.mem.startsWith(u8, path, by_riot_id)) {
+            const rest = path[by_riot_id.len..];
+            const slash = std.mem.indexOfScalar(u8, rest, '/') orelse return null;
+            const encoded = rest[0..slash];
+            if (encoded.len > name_buf.len) return null;
+            @memcpy(name_buf[0..encoded.len], encoded);
+            name = std.Uri.percentDecodeInPlace(name_buf[0..encoded.len]);
+            tag = rest[slash + 1 ..];
+        } else return null;
+        if (std.mem.startsWith(u8, name, "gone")) return null;
+        return try std.fmt.allocPrint(gpa,
+            \\{{"puuid":"acct{d}.{s}.{s}","gameName":"{s}","tagLine":"{s}"}}
+        , .{ f.encryption, name, tag, name, tag });
     }
 };
 

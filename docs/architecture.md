@@ -84,7 +84,9 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
 - PUUIDs are encrypted per app: switching app (dev -> personal -> production) gives
   new PUUIDs. `meiolol rebuild` then `meiolol rekey` forgets players, ladder and
   mastery (re-seeded from the ladders) and blanks old PUUIDs in participants; matches,
-  timelines and rank snapshots stay. Re-storing a match keeps its PUUIDs and rank
+  timelines and rank snapshots stay. Re-storing a match keeps its PUUIDs and rank.
+  Before clearing, rekey carries the erasure lists over by Riot ID with both keys
+  (src/rekey.zig, docs/data-safety.md "Key switch")
 - Privacy (crawler writer, hourly): players no ladder page or match has shown for 30 days
   are deleted with their mastery, and mastery older than 30 days is refetched (Riot's
   monthly refresh; erased accounts drop out). A mastery refetch that Riot answers 404

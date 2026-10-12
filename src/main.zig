@@ -20,6 +20,7 @@ pub const eval = @import("eval.zig");
 pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
 pub const forget = @import("forget.zig");
+pub const rekey = @import("rekey.zig");
 pub const admin = @import("admin.zig");
 const Date = @import("date.zig").Date;
 
@@ -154,8 +155,13 @@ const usage =
     \\              --health TEXT    deploy/health.sh output
     \\  rebuild     re-parse kept raw match JSON into the normalised tables, and
     \\              refill participants columns taken from timelines
-    \\  rekey       after switching to another app's key (new PUUIDs): forget
-    \\              players, ladder and mastery, keep matches; run rebuild first
+    \\  rekey       after switching to another app's key (new PUUIDs): carry the
+    \\              erasure lists over (forgotten, Your games blocked) by Riot ID,
+    \\              then forget players, ladder and mastery, keep matches; run
+    \\              rebuild first. New key RIOT_API_KEY, old RIOT_API_KEY_OLD (env
+    \\              or .env); stops if the keys share PUUIDs (docs/data-safety.md)
+    \\              --dry-run        translate and report, write nothing
+    \\              --fake-api       fake account-v1 instead of Riot, both keys
     \\  champions   refresh champion ids and names from Data Dragon
     \\  draft-backfill  add the draft rows (kept forever) of matches stored before the
     \\              drafts table existed; once, alongside the crawler
@@ -294,9 +300,16 @@ const Cmd = struct {
         return store.open(c.init.gpa, c.data_dir);
     }
 
-    /// RIOT_API_KEY from the environment, else from ./.env
     fn apiKey(c: *const Cmd) ![]const u8 {
-        if (c.init.environ_map.get("RIOT_API_KEY")) |k| return k;
+        return try c.envKey("RIOT_API_KEY") orelse {
+            std.log.err("RIOT_API_KEY not set (env or .env)", .{});
+            return error.NoApiKey;
+        };
+    }
+
+    /// `name` from the environment, else from ./.env
+    fn envKey(c: *const Cmd, name: []const u8) !?[]const u8 {
+        if (c.init.environ_map.get(name)) |k| return k;
         const text = std.Io.Dir.cwd().readFileAlloc(c.init.io, ".env", c.arena, .limited(64 * 1024)) catch |err| switch (err) {
             error.FileNotFound => "",
             else => return err,
@@ -304,12 +317,11 @@ const Cmd = struct {
         var lines = std.mem.tokenizeAny(u8, text, "\r\n");
         while (lines.next()) |line| {
             const eq = std.mem.indexOfScalar(u8, line, '=') orelse continue;
-            if (std.mem.eql(u8, std.mem.trim(u8, line[0..eq], " "), "RIOT_API_KEY")) {
+            if (std.mem.eql(u8, std.mem.trim(u8, line[0..eq], " "), name)) {
                 return std.mem.trim(u8, line[eq + 1 ..], " \"'");
             }
         }
-        std.log.err("RIOT_API_KEY not set (env or .env)", .{});
-        return error.NoApiKey;
+        return null;
     }
 };
 
@@ -578,9 +590,7 @@ fn cmdPool(c: *Cmd) !u8 {
     var model: std.Io.Writer.Allocating = .init(arena);
     try r.builder.write(&model.writer, try stats.label(&label_buf, chosen));
     const st: core.Stats = try .parse(arena, model.written());
-    var t = try pool.tally(gpa, db, &st, &.{platforms});
-    defer t.deinit(gpa);
-    const p = try pool.make(arena, &t, 0, &st, .{});
+    const p = try pool.make(gpa, arena, db, &st, platforms, .{});
 
     const path = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "export", "pool.json" });
     var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
@@ -971,11 +981,115 @@ fn cmdRebuild(c: *Cmd) !u8 {
 }
 
 fn cmdRekey(c: *Cmd) !u8 {
-    try c.noFlags();
-    const db = try c.open();
-    defer db.close();
-    try store.schema.rekey(db);
-    std.log.info("players, ladder and mastery cleared; matches kept", .{});
+    const io = c.init.io;
+    const gpa = c.init.gpa;
+    var dry_run = false;
+    var fake_api = false;
+    while (c.next()) |_| {
+        if (c.is("--dry-run")) {
+            dry_run = true;
+        } else if (c.is("--fake-api")) {
+            fake_api = true;
+        } else return error.Usage;
+    }
+    // As forget: the box holds meiolol.db, the web server api.db
+    const cwd = std.Io.Dir.cwd();
+    const crawl_path = try std.fs.path.join(c.arena, &.{ c.data_dir, "meiolol.db" });
+    const api_path = try std.fs.path.joinZ(c.arena, &.{ c.data_dir, "api.db" });
+    const db: ?store.Db = if (cwd.access(io, crawl_path, .{})) |_| try c.open() else |_| null;
+    defer if (db) |d| d.close();
+    const api_db: ?store.Db = if (cwd.access(io, api_path, .{})) |_| try api.cache.open(api_path) else |_| null;
+    defer if (api_db) |d| d.close();
+    if (db == null and api_db == null) {
+        std.log.err("{s} holds neither meiolol.db nor api.db", .{c.data_dir});
+        return 1;
+    }
+    var listed: std.ArrayList([]const u8) = .empty;
+    var probes: []const []const u8 = &.{};
+    if (db) |d| {
+        try forget.ensure(d);
+        try listed.appendSlice(c.arena, try rekey.readList(c.arena, d, "SELECT puuid FROM forgotten"));
+        probes = try rekey.readList(c.arena, d, "SELECT puuid FROM players LIMIT 3");
+    }
+    if (api_db) |d| {
+        try listed.appendSlice(c.arena, try rekey.readList(c.arena, d, "SELECT puuid FROM blocked"));
+        if (probes.len == 0) probes = try rekey.readList(c.arena, d, "SELECT puuid FROM players LIMIT 3");
+    }
+
+    var fakes: [2]riot.fake.Fake = undefined;
+    var keys: [2]?[]const u8 = .{ "fake", "fake" };
+    if (fake_api) {
+        for (&fakes, 0..) |*f, e| {
+            f.* = try .init(gpa, io, 0);
+            f.encryption = @intCast(e);
+        }
+    } else keys = .{ try c.envKey("RIOT_API_KEY_OLD"), try c.envKey("RIOT_API_KEY") };
+    defer if (fake_api) for (&fakes) |*f| f.deinit(gpa);
+    const new_key = keys[1] orelse {
+        std.log.err("RIOT_API_KEY (the new key) not set (env or .env)", .{});
+        return 1;
+    };
+    const old_key = keys[0] orelse {
+        if (listed.items.len > 0) {
+            std.log.err("RIOT_API_KEY_OLD not set: {d} erased players need it to carry over", .{listed.items.len});
+            return 1;
+        }
+        std.log.warn("RIOT_API_KEY_OLD not set and nothing erased: not checking the keys", .{});
+        return try rekeyApply(c, db, api_db, &.{}, dry_run);
+    };
+    var old: riot.client.Client = try .init(gpa, io, old_key);
+    defer old.deinit();
+    var new: riot.client.Client = try .init(gpa, io, new_key);
+    defer new.deinit();
+    if (fake_api) {
+        old.fake = &fakes[0];
+        new.fake = &fakes[1];
+    }
+    // Nothing is written before the plan is complete
+    const plan = rekey.Plan.build(c.arena, &old, &new, listed.items, probes) catch |err| {
+        switch (err) {
+            error.UnexpectedStatus => std.log.err("the old key cannot read a listed PUUID " ++
+                "(already rekeyed, or RIOT_API_KEY_OLD is not the old app's key)", .{}),
+            error.RiotIdNotFound => std.log.err("a Riot ID changed during the translation: run again", .{}),
+            error.MixedEncryption => std.log.err("some PUUIDs change and some don't: " ++
+                "the lists mix both apps' PUUIDs", .{}),
+            else => return err,
+        }
+        return 1;
+    };
+    if (plan.linked()) {
+        std.log.info("both keys give the same PUUIDs (encryption linked): nothing to rekey", .{});
+        return 0;
+    }
+    std.log.info("{d} erased players carried over, {d} accounts gone (dropped)", .{ plan.moved, plan.gone });
+    return try rekeyApply(c, db, api_db, &plan, dry_run);
+}
+
+fn rekeyApply(c: *Cmd, db: ?store.Db, api_db: ?store.Db, plan: *const rekey.Plan, dry_run: bool) !u8 {
+    if (dry_run) {
+        std.log.info("dry run: nothing written", .{});
+        return 0;
+    }
+    if (db) |d| {
+        rekey.applyCrawl(c.init.gpa, d, plan) catch |err| switch (err) {
+            error.ListChanged => {
+                std.log.err("forgotten changed during the translation: stop the loops, run again", .{});
+                return 1;
+            },
+            else => return err,
+        };
+        std.log.info("forgotten carried over; players, ladder and mastery cleared; matches kept", .{});
+    }
+    if (api_db) |d| {
+        rekey.applyApi(c.init.gpa, d, plan) catch |err| switch (err) {
+            error.ListChanged => {
+                std.log.err("blocked changed during the translation: stop the service, run again", .{});
+                return 1;
+            },
+            else => return err,
+        };
+        std.log.info("Your games: blocked carried over, cached players cleared", .{});
+    }
     return 0;
 }
 

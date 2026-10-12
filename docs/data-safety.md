@@ -114,8 +114,8 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 
 - Suppression: the crawler skips PUUIDs in `forgotten` on ladder and mastery and stores
   their participant rows with a blank PUUID (meiolol-de, crawl.zig, via
-  `forget.isForgotten`). Plain PUUIDs, not hashes: a rekey to the production key must
-  translate the list (old PUUID to Riot ID with the old key, then the new PUUID)
+  `forget.isForgotten`). Plain PUUIDs, not hashes: a key switch must translate the
+  list (Key switch, below)
 - Restores re-apply `forgotten` from the newest state snapshot, so an older segment
   cannot bring a player back
 - Box and Your games service swap complete lists daily (deploy/backup-loop.sh, before
@@ -139,3 +139,49 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
   `draft_backfill` list holds match ids and goes once the backfill has run
 - Retention sweeps (players not seen for 30 days, PUUIDs blanked after 24 months) live in
   the crawler's hourly prune (meiolol-de). Public wording: docs/legal/privacy.md
+
+### Key switch (rekey)
+
+PUUIDs are encrypted per app, so moving to the production key changes every one, and
+the erasure lists (`forgotten` on the box, `blocked` in the Your games cache, and the
+exchange files made from them) would stop matching: erased players could be crawled
+again. Unless Riot links the production app's encryption to the personal app (asked
+for in the application, docs/production-key.md), `meiolol rekey` carries each entry
+over before clearing crawl state (src/rekey.zig):
+
+- Old PUUID to Riot ID with the old key (account-v1 by-puuid), then Riot ID to new PUUID
+  with the new key (by-riot-id). The Riot ID exists only between those two requests:
+  never written or logged. The entry keeps its original date
+- No account under the old key (404: deleted): the entry is dropped, since no new PUUID
+  can ever exist for it
+- Everything is translated before anything is written, then the list and the crawl
+  state change in one transaction: any failure leaves the old state whole, and running
+  again starts afresh. The old key cannot read a new PUUID, so a second run after a
+  successful one stops with an error and writes nothing
+- If both keys give the same PUUID, encryption is linked: rekey reports it and changes
+  nothing. With empty lists it asks about a player instead. So `meiolol rekey --dry-run`
+  with both keys answers "did Riot link the apps?" as soon as the production key exists
+- Ruled out: keeping a match id and slot per erased player (the new key's match-v5 would
+  name the slot's new PUUID) holds more personal data and stops working once Riot drops
+  the match; there is no PUUID-to-PUUID endpoint
+- Rehearse on a copy with `--fake-api` (no keys; fake account-v1 in src/riot/fake.zig
+  maps any crawled PUUID to a made-up Riot ID and back under a second fake app)
+
+Runbook, with RIOT_API_KEY the new key and RIOT_API_KEY_OLD the old one (env or .env on
+each host; the old key must still work, so switch before revoking it):
+
+1. Box: stop the crawler and every loop (`deploy/box.sh stop`, then `backup`, `health`
+   and `web` with `stop`): no forgotten exchange may run between the two sides' rekeys
+2. Box, each via `deploy/box.sh run`: `backup` (as backup-loop.sh runs it); `rekey
+   --dry-run` (expect "N erased players carried over, M accounts gone", or "encryption
+   linked": then stop here, nothing to rekey); `rebuild`; `rekey`; `backup --full`
+3. Web server: stop the Your games service; `meiolol rekey --data /var/lib/meiolol-api`;
+   delete the exchange dir's forgotten.txt and box-forgotten.txt (old PUUIDs: the
+   service would import the box's stale list); start the service
+4. Box: delete data/exchange-forgotten.txt and data/box-forgotten.txt; remove
+   RIOT_API_KEY_OLD from .env; start everything. The first exchange swaps the new lists
+5. Backups from before the switch hold old-key PUUIDs that a later erasure (by new PUUID)
+   cannot find: the pre-switch state snapshots (rotate out within 4 weeks; the new full
+   segment replaces the old segments), the Mac mirror (follows) and the gpu-box restore
+   point. Deleting them once the first new-key backup is restore-tested is Jacob's call
+

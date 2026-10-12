@@ -49,9 +49,10 @@ objection model (C12), ICO on objections (C9).
 
 **Gotcha: PUUIDs are per app.** When the production key arrives, every PUUID changes
 (docs/architecture.md, rekey). Either Riot links the production app's encryption to the
-personal app (already planned in the application), or `meiolol rekey` must translate
+personal app (already planned in the application), or `meiolol rekey` translates
 `forgotten` too: old PUUID to Riot ID with the old key (account-v1 by-puuid), then
-to the new PUUID with the new key. Don't lose this table in a rekey.
+to the new PUUID with the new key (built 2026-10-12: src/rekey.zig, runbook in
+docs/data-safety.md "Key switch").
 
 **Fallback:** someone who can't change their icon (banned, lost account, Riot ID
 changed) emails jombirds@gmail.com with what they can show; handled by hand within one
