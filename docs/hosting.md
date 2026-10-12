@@ -92,17 +92,20 @@ The static upload leaves out matchup pages under 200 games (`meiolol site
   (files/), hourly totals kept 90 days (hourly.tsv). Update by hand: scp the script and
   units, `sudo install -m 755 traffic.sh /usr/local/bin/meiolol-traffic`, units into
   /etc/systemd/system, `daemon-reload`. nginx before: /home/ubuntu/meiolol.conf.bak-dashboard
-- Admin API (/admin/api/, src/admin_api.zig): `meiolol render` on the box answers live.json
-  (crawler's last 3 h by minute, queues, services, health; cached 30 s), log?file=&lines=
-  (crawl, web, eval, render, health, backup, builds; ids and Riot IDs redacted) and
-  POST action/NAME (crawl-start|stop|restart, site-build, eval-run, health-check: fixed
-  commands, one at a time across both instances via data/admin-action.lock, each logged
-  to data/admin-actions.log). Layers: basic auth at nginx; nginx adds X-Meiolol-Admin
-  from /etc/nginx/meiolol-admin-token.conf (root only) and clears it on public @render
+- Admin API (/admin/api/, src/admin_api.zig): `meiolol render` on the box answers
+  live.json (crawler's last 3 h by minute, queues, services, health; cached 30 s),
+  log?file=&lines= (crawl, web, eval, render, health, backup, builds; ids and Riot IDs
+  redacted) and POST action/NAME (crawl-start|stop|restart, site-build, eval-run,
+  health-check: fixed commands, one at a time across both instances via
+  data/admin-action.lock, each logged to data/admin-actions.log; eval-run shares
+  data/eval.lock with web-loop.sh's daily eval and is refused under MEIOLOL_NO_EVAL).
+  Layers: basic auth at nginx; nginx adds X-Meiolol-Admin from
+  /etc/nginx/meiolol-admin-token.conf (root only) and clears it on public @render
   requests; the box compares it in constant time with ml/meiolol/admin.token (64 hex,
-  read per request, so rotate by rewriting both and reloading nginx); without a match the
-  routes do not exist (same 404/405 as any path). Actions also need the request header
-  X-Meiolol-Action: 1, which a cross-site form cannot send. 8091 takes only the web server
+  read per request, so rotate by rewriting both and reloading nginx); without a match
+  the routes do not exist (same 404/405 as any path). Actions also need the request
+  header X-Meiolol-Action: 1, which a cross-site form cannot send. 8091 takes only the
+  web server
 
 ## Known problems on the micro
 

@@ -13,7 +13,8 @@
 # games on the current patch only.
 # Daily, `meiolol eval` (docs/model.md) appends a line to data/eval-history.tsv (model
 # accuracy vs data volume) and leaves its report in data/eval-latest.md. Read-only on the
-# DB; in the background at low priority, so a slow run never delays uploads.
+# DB; in the background at low priority, so a slow run never delays uploads. One at a
+# time with the admin page's Run eval (src/admin_api.zig): both flock data/eval.lock.
 # Builds (`meiolol builds`, EUW and every region, current patch) the same way: daily and
 # on a new patch, in the background; the next site build picks the files up.
 # Daily, `meiolol your-example` (read-only, background) leaves one anonymised player's
@@ -72,9 +73,10 @@ while true; do
     now=$(date +%s)
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
     if [[ -z "${MEIOLOL_NO_EVAL:-}" ]] && (( now - last_eval >= 86400 )); then
-        (nice -n 10 bin/meiolol eval --platform all --test-platform EUW1 \
-            --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
-            && mv data/eval-latest.md.new data/eval-latest.md) &
+        (flock -n 9 || exit 0
+            nice -n 10 bin/meiolol eval --platform all --test-platform EUW1 \
+                --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
+                && mv data/eval-latest.md.new data/eval-latest.md) 9> data/eval.lock &
         last_eval=$now
     fi
     # Space by table and index, for the admin page; the file's age, not a timer, so a
