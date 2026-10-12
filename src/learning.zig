@@ -14,6 +14,22 @@ const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
+const ep = @import("riot/endpoints.zig");
+
+/// FROM and WHERE for the participant rows of the scan pool's players (matches_checked_at
+/// set), driven from players_region_check: ~15k players of 9M, where joining every
+/// participant to players did 2.3M lookups (19 s of the box's site build, now ~5x less).
+/// Every region listed so the index's first column is an equality; a checked player
+/// always has one
+pub const checked_players = "FROM players pl CROSS JOIN participants pa USING (puuid)" ++
+    " CROSS JOIN matches m USING (match_id)" ++
+    " WHERE pl.region IN (" ++ region_list ++ ") AND pl.matches_checked_at IS NOT NULL";
+
+const region_list = blk: {
+    var list: []const u8 = "";
+    for (std.enums.values(ep.Region), 0..) |r, i| list = list ++ (if (i == 0) "'" else ", '") ++ @tagName(r) ++ "'";
+    break :blk list;
+};
 
 const Role = core.Role;
 const Stats = core.Stats;
@@ -158,14 +174,10 @@ pub fn tallyHistory(
     const platform_json = try stats.setsJson(arena, sets);
     const gold = try goldMap(arena, db, platform_json);
 
-    // CROSS JOIN: matches first, as in pool.tallyGames (8x faster than the puuid index)
-    var q = try db.prepare(
-        \\SELECT pa.puuid, pa.champion_id, pa.match_id, pa.slot, pa.win, m.platform
-        \\FROM matches m CROSS JOIN participants pa USING (match_id) JOIN players pl USING (puuid)
-        \\WHERE pl.matches_checked_at IS NOT NULL AND m.queue_id = ? AND m.remake = 0
-        \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\ORDER BY pa.puuid, pa.champion_id, m.game_start
-    );
+    var q = try db.prepare("SELECT pa.puuid, pa.champion_id, pa.match_id, pa.slot, pa.win, m.platform " ++
+        checked_players ++ " AND m.queue_id = ? AND m.remake = 0" ++
+        " AND m.platform IN (SELECT value FROM json_each(?))" ++
+        " ORDER BY pa.puuid, pa.champion_id, m.game_start");
     defer q.deinit();
     try q.bind(.{ stats.ranked_solo, platform_json });
     var player: std.ArrayList(u8) = .empty;
