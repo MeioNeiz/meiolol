@@ -186,6 +186,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     });
     const page_path = try path(a, r, x, y);
     var p = site.page(title, desc, page_path, .matchups);
+    p.index = v.games() >= site.opts.index_min_games;
     for (html.View.all, site.view_curves, &p.counterparts.?) |view, *other, *there| {
         const has = if (other.*) |*o| o.get(r, .all, x.id, y.id) != null else false;
         if (!has) there.* = try std.mem.concat(a, u8, &.{ view.dir(), "matchup/index.html" });

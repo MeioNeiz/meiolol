@@ -63,6 +63,10 @@ pub const Options = struct {
     /// Matchup pages with fewer games are left out of the static build: `meiolol render`
     /// serves them on request
     static_min_games: u32 = 0,
+    /// "https://meiolol.jomify.lol": canonical links and sitemaps, when public
+    origin: ?[]const u8 = null,
+    /// Matchup pages with fewer games are noindex and left out of the sitemaps
+    index_min_games: u32 = 0,
 };
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
@@ -136,7 +140,14 @@ pub const Site = struct {
             there.* = std.mem.concat(s.arena, u8, &.{ v.dir(), path }) catch path;
         }
         p.root = s.toRoot(path);
+        p.canonical = s.canonical(s.view.dir(), path);
         return p;
+    }
+
+    /// `origin/dir/path`; null without Options.origin
+    pub fn canonical(s: *const Site, dir: []const u8, path: []const u8) ?[]const u8 {
+        const origin = s.opts.origin orelse return null;
+        return std.mem.concat(s.arena, u8, &.{ origin, "/", dir, path }) catch null;
     }
 
     /// A page at the site root, written once (from html.View.shared)
@@ -373,7 +384,55 @@ const FileWriter = struct {
 };
 
 /// Every page of the view the static build writes, by path within its directory
+fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
+    if (!opts.public) return "User-agent: *\nDisallow: /\n";
+    var out: std.ArrayList(u8) = .empty;
+    try out.appendSlice(arena, "User-agent: *\nAllow: /\n");
+    if (opts.origin) |origin| for (html.View.all) |v| {
+        if (opts.euw_only and v.region != .euw) continue;
+        try out.print(arena, "Sitemap: {s}/{s}sitemap.xml\n", .{ origin, v.dir() });
+    };
+    return out.items;
+}
+
+test robots {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const opts: Options = .{ .out_dir = "", .patches = &.{}, .since_ms = 0, .all_platforms = &.{}, .contact = "", .updated = "" };
+    try std.testing.expectEqualStrings("User-agent: *\nDisallow: /\n", try robots(arena.allocator(), opts));
+    var public = opts;
+    public.public = true;
+    public.origin = "https://x.io";
+    public.euw_only = true;
+    try std.testing.expectEqualStrings(
+        "User-agent: *\nAllow: /\nSitemap: https://x.io/sitemap.xml\nSitemap: https://x.io/patch/sitemap.xml\n",
+        try robots(arena.allocator(), public),
+    );
+}
+
+/// The view's pages search engines may index, at its root; the root view's (at the
+/// site root) also lists the shared pages
+fn sitemap(site: *const Site) ![]const u8 {
+    const a = site.arena;
+    var out: std.ArrayList(u8) = .empty;
+    try out.appendSlice(a, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+    var paths: std.ArrayList([]const u8) = .empty;
+    try paths.appendSlice(a, try pagePathsMin(site, site.opts.index_min_games));
+    if (site.view.index() == 0) try paths.appendSlice(a, &shared_pages);
+    for (paths.items) |path| {
+        // Paths are slugs and fixed names: nothing XML needs escaped
+        try out.print(a, "<url><loc>{s}</loc></url>\n", .{site.canonical(site.view.dir(), path).?});
+    }
+    try out.appendSlice(a, "</urlset>\n");
+    return out.items;
+}
+
 pub fn pagePaths(site: *const Site) ![]const []const u8 {
+    return pagePathsMin(site, site.opts.static_min_games);
+}
+
+/// As pagePaths, but matchup pages from `min_games` up
+fn pagePathsMin(site: *const Site, min_games: u32) ![]const []const u8 {
     const a = site.arena;
     var list: std.ArrayList([]const u8) = .empty;
     try list.appendSlice(a, &.{ "index.html", "champions.html" });
@@ -382,7 +441,7 @@ pub fn pagePaths(site: *const Site) ![]const []const u8 {
         try list.append(a, try a.print("champion/{s}.html", .{ch.slug}));
     };
     try list.append(a, "matchup/index.html");
-    if (site.curves) |*c| try matchup.paths(site, c, &list, site.opts.static_min_games);
+    if (site.curves) |*c| try matchup.paths(site, c, &list, min_games);
     if (site.view.period == .patch) if (site.view_builds[site.view.index()]) |*b| try builds_page.paths(site, b, &list);
     try list.append(a, "pool.html");
     return list.items;
@@ -508,10 +567,10 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
     if (shared) {
         try shared_files.append(arena, .{ .path = "meiolol.wasm", .data = @embedFile("draft.wasm") });
         if (opts.riot_txt) |t| try shared_files.append(arena, .{ .path = "riot.txt", .data = t });
-        try shared_files.append(arena, .{
-            .path = "robots.txt",
-            .data = if (opts.public) "User-agent: *\nAllow: /\n" else "User-agent: *\nDisallow: /\n",
-        });
+        try shared_files.append(arena, .{ .path = "robots.txt", .data = try robots(arena, opts) });
+    }
+    if (opts.public and opts.origin != null) {
+        try files.append(arena, .{ .path = "sitemap.xml", .data = try sitemap(site) });
     }
     // The root view's directory is the site root, where champion pages are
     if (view.index() == 0) {
@@ -1020,7 +1079,8 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         \\<div class="grid">
         \\<div class="card"><h3><a href="{your}">Your games</a></h3>
         \\<p>Enter your Riot ID and see each recent game's lane laid over the typical curve
-        \\for that matchup at your rank, and your record per matchup over the months.</p></div>
+        \\for that matchup at your rank, and your record per matchup over the months.
+        \\<a href="{example}">See an example</a>.</p></div>
         \\<div class="card"><h3><a href="matchup/index.html">Matchup curves</a></h3>
         \\<p>{matchups}{no_matchups}</p></div>
         \\<div class="card"><h3><a href="{daily}">Daily Draft</a></h3>
@@ -1037,6 +1097,7 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         \\
     , .{
         .your = html.Link{ .root = site.view.up(), .path = "your.html" },
+        .example = html.Link{ .root = site.view.up(), .path = "your.html?example" },
         .daily = html.Link{ .root = site.view.up(), .path = "daily.html" },
         .learn = html.Link{ .root = site.view.up(), .path = "learn.html" },
         .matchups = if (matchups > 0) html.tpl.t(
@@ -1070,6 +1131,7 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     p.root = "../";
     p.counterparts = @as([html.View.count][]const u8, undefined);
     for (html.View.all, &p.counterparts.?) |v, *there| there.* = try std.mem.concat(a, u8, &.{ path, v.query() });
+    p.canonical = site.canonical("", path);
     try html.head(w, p);
 
     var roles: [Role.count]Role = undefined;

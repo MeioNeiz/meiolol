@@ -96,6 +96,11 @@ pub const Page = struct {
     data: []const u8,
     /// Preview: unlisted for search engines, with a banner saying so
     public: bool,
+    /// Absolute URL search engines should file the page under (Options.origin); only
+    /// written when public
+    canonical: ?[]const u8 = null,
+    /// False: noindex even when public (thin matchups, Options.index_min_games)
+    index: bool = true,
 };
 
 /// A link to `path` under a root: for href and src holes
@@ -129,7 +134,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         \\<meta name="description" content="{description}">
         \\<link rel="stylesheet" href="{css}">
         \\<link rel="icon" href="{icon}" type="image/svg+xml">
-        \\{robots}</head>
+        \\{robots}{canonical}</head>
         \\<body>
         \\<header class="top"><div class="wrap">
         \\{brand}<nav>
@@ -142,7 +147,11 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         .description = p.description,
         .css = toSite(p, "style.css"),
         .icon = toSite(p, "favicon.svg"),
-        .robots = tpl.when(!p.public, tpl.trusted("<meta name=\"robots\" content=\"noindex\">\n")),
+        .robots = tpl.when(!p.public or !p.index, tpl.trusted("<meta name=\"robots\" content=\"noindex\">\n")),
+        .canonical = if (p.public and p.index) if (p.canonical) |url|
+            tpl.t("<link rel=\"canonical\" href=\"{url}\">\n", .{ .url = url })
+        else
+            null else null,
         .brand = tpl.t("<a href=\"{href}\" class=\"brand\"{view}>{name}</a>\n", .{
             .href = Link{ .root = p.root, .path = "index.html" },
             .view = tpl.flag(p.view == null, "data-view"),

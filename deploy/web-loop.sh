@@ -87,6 +87,7 @@ while true; do
     site_start=$SECONDS
     # Thin matchup pages: meiolol-render serves them (docs/hosting.md)
     if out=$(bin/meiolol site --contact "$contact" --out data/site.new --static-min-games 200 \
+        --origin https://meiolol.jomify.lol \
         "${riot[@]}" 2>&1); then
         site_s=$(( SECONDS - site_start ))
         [[ -s data/your-example.json ]] && cp data/your-example.json data/site.new/data/

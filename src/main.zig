@@ -123,6 +123,9 @@ const usage =
     \\              --euw-only       the EUW views only (root, patch/): a quick preview
     \\              --static-min-games N  leave out matchup pages under N games (for
     \\                               `render` to serve on request)
+    \\              --origin URL     site URL for canonical links and sitemaps (public)
+    \\              --index-min-games N  matchup pages under N games noindex and out of
+    \\                               the sitemaps
     \\  dev        work on the site: pages rendered on request from DIR (data loaded
     \\              once), CSS and JS from src/site/static, live reload; run by
     \\              deploy/dev.sh, which rebuilds on edits. Takes site's flags
@@ -709,6 +712,8 @@ const SiteFlags = struct {
     public: bool = false,
     euw_only: bool = false,
     static_min_games: u32 = 0,
+    origin: ?[]const u8 = null,
+    index_min_games: u32 = 0,
 
     /// False for a flag that isn't one of these
     fn parse(f: *SiteFlags, c: *Cmd) !bool {
@@ -726,6 +731,10 @@ const SiteFlags = struct {
             f.euw_only = true;
         } else if (c.is("--static-min-games")) {
             f.static_min_games = try c.int(u32);
+        } else if (c.is("--origin")) {
+            f.origin = std.mem.trimEnd(u8, try c.value(), "/");
+        } else if (c.is("--index-min-games")) {
+            f.index_min_games = try c.int(u32);
         } else return false;
         return true;
     }
@@ -747,6 +756,8 @@ const SiteFlags = struct {
             .public = f.public,
             .euw_only = f.euw_only,
             .static_min_games = f.static_min_games,
+            .origin = f.origin,
+            .index_min_games = f.index_min_games,
             .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
             // Indexed by site.html.View.index: EUW 30 days, EUW patch, all 30 days, all patch
             .curves = .{
