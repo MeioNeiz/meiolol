@@ -365,6 +365,7 @@ next steps land here.
   gpu-box /mnt/wsl/archive/meiolol-raw (1 TB partition, moved there the same night),
   ~6.6 GB/day at zstd -15 (summaries 0.7, timelines 5.9): ~5 months on the partition.
   Box ~29 days at ~3.5 GB/day while raw summaries stay forever there too
+  Archive operation (export, pull, acks, alerts): meiolol-11 from 2026-10-12
 - Result (meiolol-3c, docs/model.md "Team effects on early outcomes"): enemy and ally
   champions shift gold@14, lane diff, CS@10, deaths before 15 and first item
   additively, clear of 0; champion-specific team interactions (by class or champion)
