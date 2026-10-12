@@ -23,21 +23,23 @@ Where things live:
   draft-only on a time split; with pre-game player features 55-57%. Report both our
   time split and a LoLDraftAI-style random split for comparison
 
-## Sessions and what they own (2026-10-13 ~00:50; names change on handover)
+## Sessions and what they own (2026-10-13 ~01:10; names change on handover)
+
+Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 
 | Session | Owns |
 | --- | --- |
 | meiolol-db | win / draft predictor: experience feature (internal scope), everything-pre-game model with per-champion skill slopes, sub-15:00 with/without test on dev |
-| meiolol-ff | winchance weights fix (live Your games bug), clustered playstyle intervals, bootstrap bounds (playstyle waits on meiolol-47's refactor commit) |
+| meiolol-ff [f6a37d] | winchance weights fix (live Your games bug), clustered playstyle intervals (both free now; tell 47 when the playstyle/logreg commit is in), bootstrap bounds (wait for 47's all-clear) |
 | meiolol-6f | GPU vs CPU benchmark (bench1 done at 16x; 1x/4x, sweeps, deep draft net pending), then field ranking, then playstyle clustering |
-| meiolol-12 | lab harness and campaigns (gold14-a final running, Jacob authorised; cand/team removed; brief fix waits on db's hunk) |
+| meiolol-12 | lab harness and campaigns, from meiolol-39 (gold14-a final queued behind 6f's bench2, Jacob authorised; cand/team removed; brief fix waits on db's hunk) |
 | meiolol-0d | admin page: Models tab, Draft tester (live), suggester lane and blind lists next |
 | meiolol-11 [1f36a8] | box, archive operation, rows.zig, snapshots (weekly Sun, first 19 Oct), mastery for all players, flex sample |
-| meiolol-47 | overnight code review, shared analysis-module refactor |
-| meiolol-82 | Riot application text (asked Jacob whether it owns identity) |
+| meiolol-47 | overnight code review, shared analysis-module refactor (holds outcomes, items, objectives, scaling, eval until its src/analysis.zig commit, ~02:30) |
+| meiolol-82 | Riot application text (drafted; waits on Jacob: ownership, privacy.md 24-month retention, meiolol-ef's deploy) |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
-shows. When an agent hands over, get the successor's name and tell the others.
+shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an agent hands over, get the successor's name and tell the others.
 
 ## Rules given to every model agent
 
