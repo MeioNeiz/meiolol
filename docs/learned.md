@@ -70,6 +70,10 @@ Platinum IV+ games only unless stated (crawl floor).
 
 ## Data quality
 
+- 2026-10-12: DRAGON_SOUL_GIVEN with teamId 0 (every game with 2+ dragons, ~12-15 min)
+  is the soul's element being announced, not a soul taken; teamId 100/200 is the real
+  soul. Evidence: archived raw timelines (1,683 of 2,209 such events are team 0).
+  Sure. Models: read soul only from 100/200 (src/objectives.zig)
 - 2026-10-12: ~3,400 of 230k games (1.5%) end before 15:00 without the remake flag,
   ~90% by surrender (gameEndedInSurrender true, gameEndedInEarlySurrender false):
   leaver forfeits, real results for LP but decided by the leaver. Plus a few
