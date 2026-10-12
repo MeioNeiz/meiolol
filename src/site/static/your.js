@@ -13,7 +13,6 @@ const THIN = 200;
 const MIN_N = 10;
 const LANE_END = 14;
 const POLL_MS = 3000;
-const SVG = "http://www.w3.org/2000/svg";
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -254,58 +253,17 @@ function chart(g, l) {
   const band = c ? c[stat] : null;
   const thin = !c || c.games < THIN;
   const fig = el("figure", `chart${thin ? " thin" : ""}`);
-  const W = 640, H = 220, left = 48, right = 12, top = 12, bottom = 26;
-  const minutes = Math.max(mine.length, 1);
-  const shown = (i) => band && c.n[i] >= MIN_N;
-  let lo = 0, hi = 0;
-  mine.forEach((v, i) => {
-    lo = Math.min(lo, v);
-    hi = Math.max(hi, v);
-    if (shown(i)) {
-      lo = Math.min(lo, band[i][0]);
-      hi = Math.max(hi, band[i][2]);
-    }
-  });
-  const span = Math.max(hi - lo, stat === "cs" ? 20 : 400);
-  lo -= span * 0.08;
-  hi += span * 0.08;
-  const x = (m) => left + (m / minutes) * (W - left - right);
-  const y = (v) => top + ((hi - v) / (hi - lo)) * (H - top - bottom);
-
-  const svg = document.createElementNS(SVG, "svg");
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", `${stat} difference by minute, you minus your lane opponent`);
-  const add = (tag, attrs, text) => {
-    const n = document.createElementNS(SVG, tag);
-    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-    if (text !== undefined) n.textContent = text;
-    svg.append(n);
-    return n;
-  };
-  for (let m = 0; m <= minutes; m += 5) {
-    add("line", { class: "grid", x1: x(m), x2: x(m), y1: top, y2: H - bottom });
-    add("text", { x: x(m), y: H - 8, "text-anchor": "middle" }, `${m}`);
-  }
-  const step = niceStep((hi - lo) / 4);
-  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
-    if (v !== 0) add("line", { class: "grid", x1: left, x2: W - right, y1: y(v), y2: y(v) });
-    add("text", { x: left - 6, y: y(v) + 4, "text-anchor": "end" }, signed(v));
-  }
-  add("line", { class: "zero", x1: left, x2: W - right, y1: y(0), y2: y(0) });
-  add("text", { x: left + 6, y: top + 12, class: "side" }, "You ahead");
-  add("text", { x: left + 6, y: H - bottom - 6, class: "side" }, "Opponent ahead");
-  if (band) {
-    const idx = [...band.keys()].filter((i) => shown(i) && i < minutes);
-    if (idx.length) {
-      const upper = [[0, 0], ...idx.map((i) => [i + 1, band[i][2]])];
-      const lower = [[0, 0], ...idx.map((i) => [i + 1, band[i][0]])].reverse();
-      add("polygon", { class: "band", points: [...upper, ...lower].map(([m, v]) => `${x(m)},${y(v)}`).join(" ") });
-      add("polyline", { class: "median", points: [[0, 0], ...idx.map((i) => [i + 1, band[i][1]])].map(([m, v]) => `${x(m)},${y(v)}`).join(" ") });
-    }
-  }
-  add("polyline", { class: "you", points: [[0, 0], ...mine.map((v, i) => [i + 1, v])].map(([m, v]) => `${x(m)},${y(v)}`).join(" ") });
-  fig.append(svg);
+  // Typical minutes while enough games are still going (a prefix: games only end)
+  const shown = band ? band.slice(0, mine.length).filter((_, i) => c.n[i] >= MIN_N) : [];
+  const svg = laneSvg(
+    `${stat} difference by minute, you minus your lane opponent`,
+    "You",
+    "Opponent",
+    shown.map((q) => [q[0], q[2]]),
+    shown.map((q) => q[1]),
+    mine,
+  );
+  if (svg) fig.insertAdjacentHTML("afterbegin", svg);
 
   const cap = el("figcaption");
   cap.textContent = c
@@ -315,10 +273,36 @@ function chart(g, l) {
   return fig;
 }
 
-// 1, 2 or 5 times a power of ten, at least `raw`
-function niceStep(raw) {
-  const p = 10 ** Math.floor(Math.log10(Math.max(raw, 1)));
-  return [1, 2, 5, 10].map((m) => m * p).find((s) => s >= raw);
+let chartWasm = null;
+
+async function loadChart() {
+  try {
+    const { instance } = await WebAssembly.instantiateStreaming(fetch("chart.wasm"));
+    chartWasm = instance.exports;
+  } catch {
+    // Charts left out; captions and facts still show
+  }
+}
+
+// The matchup pages' chart (src/site/lanechart.zig) through chart_wasm.zig, whose
+// header has the input layout. Names come back escaped by the Zig templates, so the
+// SVG may go in as markup
+function laneSvg(aria, a, b, band, line, you) {
+  const w = chartWasm;
+  if (!w) return null;
+  const enc = new TextEncoder();
+  const texts = [aria, a, b].map((t) => enc.encode(t));
+  const ints = [...texts.map((t) => t.length), band.length, line.length, you.length, ...band.flat(), ...line, ...you];
+  const len = 4 * ints.length + texts.reduce((n, t) => n + t.length, 0);
+  const view = new DataView(w.memory.buffer, w.input(), len);
+  ints.forEach((v, i) => view.setInt32(4 * i, v, true));
+  let at = 4 * ints.length;
+  for (const t of texts) {
+    new Uint8Array(w.memory.buffer, w.input() + at, t.length).set(t);
+    at += t.length;
+  }
+  const n = w.render(len);
+  return n ? new TextDecoder().decode(new Uint8Array(w.memory.buffer, w.output(), n)) : null;
 }
 
 function facts(g, l) {
@@ -429,7 +413,7 @@ function forgetState(j) {
 }
 
 async function start() {
-  await loadChamps();
+  await Promise.all([loadChamps(), loadChart()]);
   $("lookup").addEventListener("submit", (e) => {
     e.preventDefault();
     const id = $("riot-id").value.trim();

@@ -566,6 +566,7 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
     var shared_files: std.ArrayList(File) = .empty;
     if (shared) {
         try shared_files.append(arena, .{ .path = "meiolol.wasm", .data = @embedFile("draft.wasm") });
+        try shared_files.append(arena, .{ .path = "chart.wasm", .data = @embedFile("chart.wasm") });
         if (opts.riot_txt) |t| try shared_files.append(arena, .{ .path = "riot.txt", .data = t });
         try shared_files.append(arena, .{ .path = "robots.txt", .data = try robots(arena, opts) });
     }

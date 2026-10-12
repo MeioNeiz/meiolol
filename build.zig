@@ -156,6 +156,19 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
     wasm.rdynamic = true;
     backend.addAnonymousImport("draft.wasm", .{ .root_source_file = wasm.getEmittedBin() });
 
+    // The lane chart for Your games (src/site/chart_wasm.zig), embedded the same way
+    const chart_wasm = b.addExecutable(.{
+        .name = "chart",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/site/chart_wasm.zig"),
+            .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
+            .optimize = .ReleaseSmall,
+        }),
+    });
+    chart_wasm.entry = .disabled;
+    chart_wasm.rdynamic = true;
+    backend.addAnonymousImport("chart.wasm", .{ .root_source_file = chart_wasm.getEmittedBin() });
+
     return .{ .core = core, .store = store, .backend = backend, .app = app };
 }
 

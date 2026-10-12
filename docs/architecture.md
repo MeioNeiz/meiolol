@@ -25,7 +25,8 @@ src/
   site/              public website generator (`meiolol site`): html.zig layout and
                      boilerplate, tpl.zig templates (named holes, escaping by position,
                      compile-time checks; new markup goes through it, usage in its
-                     header), prose.zig fixed pages, static/ (css, draft.js)
+                     header), lanechart.zig the lane chart (matchup pages, and Your
+                     games through chart_wasm.zig: chart.wasm, 12 KB), prose.zig fixed pages, static/ (css, draft.js)
   wasm.zig           recommender in the browser (wasm32-freestanding),
                      embedded into the backend binary by build.zig
   riot/              Riot API: ratelimit, client (std.http), endpoints (platforms and
