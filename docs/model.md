@@ -508,6 +508,58 @@ Reading:
 - Lesson material at most, with intervals; one sd of any style is worth under 2.5 pp
   once the state is known
 
+### Draft model file (meiolol-lab draft --export)
+
+`meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
+`exportModel`, today win-ratings) fits on every game in the snapshot and writes
+DIR/draft-model.json and DIR/draft-ref.json for the admin draft board (meiolol-3b).
+Admin only: the public site never shows "this draft wins X%" (docs/learned.md). Run it
+into a run dir on the Mac (~/ml/runs/<stamp>-draft-export); lab-push.sh sends the newest.
+
+draft-model.json:
+- meta: name ("win-ratings (ratings)"), run, snapshot, newest_game, training_games,
+  patch (newest), platform (EUW1: the intercept used), dev {what, games, log_loss,
+  baseline_log_loss, coin_log_loss, accuracy, auc}: a refit on dev's games, scored on
+  dev-val, as described in `what`
+- roles: top, jungle, middle, bottom, utility; role fields are indices into it
+- has_pairs: false for rates and ratings. Then the other picks shift the numbers, not
+  the order of candidates for a slot
+- min_games: default floor of training games in the role to list a candidate (100)
+- champions [{id, name, alias}]: alias is the name lowercased, letters and digits only
+- cells [{champion, role, games, patch_games, patch_share}]: training games in the role
+  (every patch); games and share of the role's games on the newest patch (random games,
+  picker order, role averages)
+- average[role] {b, u, v, s}: the empty-slot term, patch_share-weighted mean of the
+  role's terms on the newest patch
+- model {kind, dim, intercept, w[25], z[25], terms [{champion, role, games, b, sd, u, v,
+  s}]}: u, v, s are length dim (empty for rates and ratings); w and z row-major 5 x 5
+
+Scoring (Scorer in draft.zig, the reference). Each slot is a champion-role term; an
+empty slot, or a champion with no term in that role, is average[role] with sd 0. B_r and
+R_r are blue's and red's slot in role r:
+
+```
+logit = intercept + sum_r (B_r.b - R_r.b)
+      + sum_{ri,rj} w[ri*5+rj] * (<B_ri.u, R_rj.v> - <R_ri.u, B_rj.v>)
+      + sum_{a<b} z[a*5+b] * (<B_a.s, B_b.s> - <R_a.s, R_b.s>)
+blue = 1 / (1 + exp(-logit)); red = 1 - blue
+var = sum over the 10 slots of sd^2;  interval = sigmoid(logit -/+ 1.96 sqrt(var))
+```
+
+sd is a Laplace approximation of each rating's own uncertainty, 1 / sqrt(games / 4 +
+prior precision), treated as independent: parameter uncertainty, not the game's.
+Slot query (the tester's list): candidates are champions with games >= min_games in the
+role, not picked by either team and not banned; win is the user's team's chance with it
+in the slot, change = win minus the chance with the slot empty, and "an average pick" is
+the mean of the candidates' win weighted by their games in the role.
+
+draft-ref.json: `tolerance` 1e-9; `drafts` [{label, teams[side][role] (0 empty), blue
+{p, lo, hi}}] (three EUW1 test games whole and with three slots empty, and the empty
+board); `slots` [{label, role, side, teams (by side), bans, min_games, empty, average,
+options [{champion, games, win, lo, hi, change}] sorted by win, then champion id}]. Export
+checks the scorer against the candidate's own predict on 500 test games and stops if
+they differ by more than 1e-4 (f32: ~5e-8 measured).
+
 ## Next steps
 
 - Experience term: rerun once the daily eval shows 300+ train and 100+ test games per

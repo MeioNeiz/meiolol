@@ -30,6 +30,9 @@ const Cfg = struct {
 
 const cfg: Cfg = .{ .kind = .ratings };
 
+/// For exported files; variants differ by cfg.kind
+pub const name = "win-ratings";
+
 pub const scope: api.Scope = if (cfg.all_ranks) .post_game else .champ_select;
 
 const n_role = 5;
@@ -77,8 +80,8 @@ const Space = struct {
         sp.n_ids = n_ids;
         const d: usize = dim;
         var at: usize = 0;
-        inline for (.{ "c", "b", "u", "v", "w", "s", "z", "k" }, .{ n_platform, n_ids, n_ids * d, n_ids * d, 25, n_ids * d, 25, n_role }) |name, size| {
-            @field(sp, name) = at;
+        inline for (.{ "c", "b", "u", "v", "w", "s", "z", "k" }, .{ n_platform, n_ids, n_ids * d, n_ids * d, 25, n_ids * d, 25, n_role }) |field, size| {
+            @field(sp, field) = at;
             at += size;
         }
         sp.len = at;
@@ -287,6 +290,10 @@ pub const Model = struct {
     rank_mean: f32 = 0,
     /// own_rank: per-role slope on the user's centred rank, on the row's logit
     own: [n_role]f32 = @splat(0),
+    /// Training games per dense id, for exportModel's sd
+    id_games: []u32 = &.{},
+    /// The rating prior's precision in logit units (L2 x games, or the rate prior)
+    prior_precision: f32 = 0,
 };
 
 fn key(champion: u32, role: usize) u64 {
@@ -356,6 +363,13 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
         try starts.append(gpa, g.start);
     }
 
+    m.id_games = try gpa.alloc(u32, next_id);
+    errdefer gpa.free(m.id_games);
+    @memset(m.id_games, 0);
+    for (games.items) |g| for (g.ids) |team| for (team) |id| {
+        m.id_games[id] += 1;
+    };
+
     // Validation: the newest share of games by start
     const sorted = try gpa.dupe(i64, starts.items);
     defer gpa.free(sorted);
@@ -370,6 +384,7 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
     if (cfg.kind == .rates) {
         m.sp = .init(next_id, 0);
         m.p = try rates(gpa, m.sp, games.items);
+        m.prior_precision = rate_prior * 0.25;
         if (cfg.own_rank) fitOwnRank(&m, t, won);
         return m;
     }
@@ -381,6 +396,7 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
         if (tr.val_loss < best.loss) best = .{ .l2 = l2, .dim = dim, .epochs = tr.epochs, .loss = tr.val_loss };
     };
     m.sp = .init(next_id, best.dim);
+    m.prior_precision = best.l2 * @as(f32, @floatFromInt(games.items.len));
     // A tenth more games: a tenth more epochs
     const refit = try train(gpa, m.sp, best.l2, games.items, null, @max(1, best.epochs + best.epochs / 10), opts.seed);
     m.p = refit.p;
@@ -462,7 +478,64 @@ pub fn predict(m: *const Model, q: *const api.Query) api.Prediction {
     return out;
 }
 
+/// One champion-role's terms; vectors empty when the kind has none
+pub const Term = struct {
+    champion: u32,
+    /// api.Role order: top jungle middle bottom utility
+    role: u8,
+    games: u32,
+    /// Rating, logit units
+    b: f32,
+    /// Approximate sd of b: 1 / sqrt(games / 4 + prior precision) (Laplace, diagonal)
+    sd: f32,
+    u: []const f32,
+    v: []const f32,
+    s: []const f32,
+};
+
+pub const Export = struct {
+    kind: []const u8,
+    dim: u32,
+    /// Blue side's intercept by platform index (protocol.platformIds order)
+    intercept: []const f32,
+    /// Counters: w[mine * 5 + theirs], 0 for pairs the kind leaves out
+    w: [25]f32,
+    /// Ally synergy: z[a * 5 + b] for a < b, 0 unless kind full
+    z: [25]f32,
+    terms: []const Term,
+};
+
+/// The fitted parameters for meiolol-lab draft --export (docs/model.md "Draft model file")
+pub fn exportModel(m: *const Model, arena: std.mem.Allocator) !Export {
+    const sp = m.sp;
+    const d: usize = sp.dim;
+    var terms: std.ArrayList(Term) = .empty;
+    var it = m.ids.iterator();
+    while (it.next()) |e| {
+        const id = e.value_ptr.*;
+        const games = m.id_games[id];
+        try terms.append(arena, .{
+            .champion = @intCast(e.key_ptr.* >> 3),
+            .role = @intCast(e.key_ptr.* & 7),
+            .games = games,
+            .b = m.p[sp.b + id],
+            .sd = 1 / @sqrt(@as(f32, @floatFromInt(games)) / 4 + m.prior_precision),
+            .u = if (d > 0) m.p[sp.u + @as(usize, id) * d ..][0..d] else &.{},
+            .v = if (d > 0) m.p[sp.v + @as(usize, id) * d ..][0..d] else &.{},
+            .s = if (d > 0 and cfg.kind == .full) m.p[sp.s + @as(usize, id) * d ..][0..d] else &.{},
+        });
+    }
+    var w: [25]f32 = @splat(0);
+    var z: [25]f32 = @splat(0);
+    for (0..n_role) |ri| for (0..n_role) |rj| {
+        if (interacts(ri, rj)) w[ri * n_role + rj] = m.p[sp.w + ri * n_role + rj];
+        if (cfg.kind == .full and ri < rj) z[ri * n_role + rj] = m.p[sp.z + ri * n_role + rj];
+    };
+    return .{ .kind = @tagName(cfg.kind), .dim = sp.dim, .intercept = m.p[sp.c..][0..n_platform], .w = w, .z = z, .terms = terms.items };
+}
+
 pub fn deinit(m: *Model, gpa: std.mem.Allocator) void {
+    gpa.free(m.id_games);
     gpa.free(m.p);
     m.ids.deinit(gpa);
 }
