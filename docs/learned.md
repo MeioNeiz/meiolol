@@ -42,7 +42,8 @@ How to write a line:
   late). Sure: 118k games; not detected rather than ruled out: the estimate is zero in
   most roles and minutes, at most about 2 percentage points per 1,000 gold (jungle,
   10-20 min), and modelling it never improved held-out games. Site: no "comeback
-  champion" labels; scaling only as the effect by minute with intervals. Evidence: docs/model.md "Champion given the state (scaling)"
+  champion" labels; scaling only as the effect by minute with intervals. Evidence:
+  docs/model.md "Champion given the state (scaling)"
 - ~~2026-10-12 (early): Our best draft model picks the winner 53.3% of the time, still
   getting better with every doubling of games. Withdrawn 2026-10-13: 53.3 was the old
   eval's pick percentile (reported there as no signal), not an accuracy, and the curve
