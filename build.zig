@@ -65,6 +65,10 @@ pub fn build(b: *std.Build) void {
         shot_step.dependOn(&run.step);
     }
 
+    const lab = labExe(b);
+    b.step("lab", "Build meiolol-lab for the gpu-box (x86_64 Linux, CUDA)")
+        .dependOn(&b.addInstallArtifact(lab, .{}).step);
+
     // What the pre-push hook runs (deploy/hooks/pre-push): every push to main deploys
     const ci = b.step("ci", "Everything before a push: fmt, tests, cross-builds, scripts");
     ci.dependOn(&b.addFmt(.{ .paths = &fmt_paths, .check = true }).step);
@@ -77,6 +81,7 @@ pub fn build(b: *std.Build) void {
     }
     if (desktopExe(b, windows, .Debug)) |exe| ci.dependOn(&exe.step);
     if (shot) |exe| ci.dependOn(&exe.step);
+    ci.dependOn(&lab.step);
     ci.dependOn(lint(b, "shellcheck", "shellcheck -S warning deploy/*.sh deploy/hooks/*"));
     ci.dependOn(lint(b, "node", "for f in src/site/static/*.js; do node --check \"$f\" || exit 1; done"));
 }
@@ -224,4 +229,30 @@ fn lint(b: *std.Build, tool: []const u8, script: []const u8) *std.Build.Step {
     run.setCwd(b.path("."));
     run.setName(tool);
     return &run.step;
+}
+
+/// Modelling experiments on the gpu-box (src/lab_main.zig). glibc, not musl: libcuda is
+/// a glibc library loaded with dlopen. Kernels (src/gpu/kernels.zig) go to PTX, which
+/// the driver compiles for the card at load
+fn labExe(b: *std.Build) *std.Build.Step.Compile {
+    const kernels = b.addObject(.{
+        .name = "kernels",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/gpu/kernels.zig"),
+            .target = b.resolveTargetQuery(.{
+                .cpu_arch = .nvptx64,
+                .os_tag = .cuda,
+                .cpu_model = .{ .explicit = &std.Target.nvptx.cpu.sm_86 },
+            }),
+            .optimize = .ReleaseFast,
+        }),
+    });
+    const mod = b.createModule(.{
+        .root_source_file = b.path("src/lab_main.zig"),
+        .target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu }),
+        .optimize = .ReleaseFast,
+        .link_libc = true,
+    });
+    mod.addAnonymousImport("kernels.ptx", .{ .root_source_file = kernels.getEmittedAsm() });
+    return b.addExecutable(.{ .name = "meiolol-lab", .root_module = mod });
 }

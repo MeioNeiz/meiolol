@@ -16,7 +16,9 @@ docs/plan.md. Read it first.
 - src/pipeline_test.zig: fixture games through stats, curves and the whole site; extend
   it when adding a pipeline step or page
 - Two executables: `meiolol` (backend: crawl, stats, site, status, champions; runs on
-  the box, an Oracle Cloud server) and `meiolol-app` (player tool: suggest, watch, session, get)
+  the box, an Oracle Cloud server) and `meiolol-app` (player tool: suggest, watch, session, get).
+  `zig build lab`: `meiolol-lab`, modelling experiments on the gpu-box (CUDA via libcuda,
+  kernels in src/gpu compiled to PTX)
 - Website: https://meiolol.jomify.lol, static nginx on the jomove server
   (`ssh -i ~/.ssh/oci_instance-20260714-1317 ubuntu@193.123.180.81`; jomove's own
   site runs there too, leave its config alone). Box builds and uploads on new data;
