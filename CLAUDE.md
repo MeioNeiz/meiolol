@@ -32,6 +32,8 @@ docs/plan.md. Read it first.
 - Layout, modules, storage, model file format: docs/architecture.md
 - Draft model quality on held-out games (`meiolol eval`): docs/model.md. Measure any
   recommender change there first
+- What we have learnt about the data (plain findings, read first): docs/learned.md. Add a
+  line when a model or data check gives a final result
 - Data sources and what was ruled out (and why): docs/data.md. Read before adding one
 - Production key requirements and policy limits on what the app may show:
   docs/production-key.md; sources and quotes in research/ (josearch store, see
