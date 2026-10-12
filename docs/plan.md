@@ -343,6 +343,10 @@ next steps land here.
   Approved by Jacob 2026-10-13: internal scope (39's terms), mastery for all ten
   participants (deduped, weekly refresh, EUW first; meiolol-11), admin-only Draft
   tester link in the main site's menu (meiolol-3b)
+  Also approved: a small EUW ranked flex sample (queue 440, a few thousand games a
+  week, test only; site and stats stay solo/duo, meiolol-11) and meiolol-58's solo/duo
+  lookup filter. Draft predictor next: everything pre-game internal model with
+  per-champion skill sensitivity (meiolol-db), tested on solo and on flex
 - Lab agent (docs/lab-agent.md, brief docs/lab-brief.md; built 2026-10-12, meiolol-f2):
   LLM campaigns on candidates behind a harness (scope and leakage by construction,
   ladder of 50 selection looks per snapshot, screen and diagnose tools, sandboxed
