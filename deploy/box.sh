@@ -24,7 +24,7 @@ sync() {
         --prefix zig-out/box --cache-dir "$ROOT/.zig-cache")
     ssh "$HOST" "mkdir -p $DIR/bin $DIR/data .config/systemd/user"
     scp -q "$tree/zig-out/box/bin/meiolol" "$HOST:$DIR/bin/meiolol.new"
-    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh" s
+    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh render-swap.sh" s
     for s in $scripts; do scp -q "$tree/deploy/$s" "$HOST:$DIR/bin/$s.new"; done
     scp -q "$tree"/deploy/systemd/*.service "$HOST:.config/systemd/user/"
     ssh "$HOST" "cd $DIR && mv bin/meiolol.new bin/meiolol \
@@ -159,8 +159,8 @@ SQL
         ;;
     web)
         # Site build and upload to the jomove server (deploy/web-loop.sh), and the
-        # renderer for the pages the static build leaves out (meiolol-render, restarted
-        # with each new binary: thin pages not in nginx's cache fail while it loads)
+        # renderer for the pages the static build leaves out (meiolol-render@a|b: each
+        # new binary starts the idle one and stops the old once it serves, render-swap.sh)
         case "${2:-}" in
             start)
                 # The contact email is remembered on the box. A running loop whose
@@ -178,13 +178,19 @@ SQL
                         && echo 'signalled meiolol-web on $HOST'; \
                     else systemctl --user restart meiolol-web \
                         && echo 'restarted meiolol-web on $HOST'; fi \
-                    && systemctl --user enable -q meiolol-render \
-                    && systemctl --user restart meiolol-render \
-                    && echo 'restarted meiolol-render on $HOST'"
+                    && if systemctl --user -q is-active meiolol-render-swap; then \
+                        echo 'meiolol-render swap already running: it picks up the new binary'; \
+                    else systemd-run --user -q --collect --unit meiolol-render-swap \
+                        --working-directory=\$HOME/$DIR \$HOME/$DIR/bin/render-swap.sh \
+                        && echo 'swapping meiolol-render on $HOST (data/render.log)'; fi"
                 ;;
-            stop) ssh "$HOST" "systemctl --user disable -q --now meiolol-web meiolol-render" ;;
+            stop)
+                ssh "$HOST" "systemctl --user disable -q --now meiolol-web meiolol-render@a \
+                    meiolol-render@b"
+                ;;
             status)
-                ssh "$HOST" "systemctl --user is-active meiolol-web meiolol-render; \
+                ssh "$HOST" "systemctl --user is-active meiolol-web meiolol-render@a \
+                    meiolol-render@b; \
                     tail -n 3 $DIR/data/web.log; tail -n 2 $DIR/data/render.log"
                 ;;
             *) echo "usage: deploy/box.sh web start [contact]|stop|status"; exit 2 ;;

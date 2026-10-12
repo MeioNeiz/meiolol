@@ -55,11 +55,12 @@ accounts may use Always Free only in the home region).
 
 The static upload leaves out matchup pages under 200 games (`meiolol site
 --static-min-games 200`, deploy/web-loop.sh); meiolol-render on the box serves them.
-- `meiolol render` (systemd meiolol-render) on the box's private address 10.0.0.3:8091,
-  all views loaded up front (~3.5 min, ~600 MB); deploy/web-loop.sh touches
-  data/render.reload after each upload and it loads the new data in the background,
-  swapping when done. Restarted by each deploy (`deploy/box.sh web start`): while it
-  loads, thin pages not in nginx's cache answer 503 "being updated". Log data/render.log
+- `meiolol render` (systemd meiolol-render@a or @b) on the box's private address
+  10.0.0.3:8091, all views loaded up front (~3.5 min, ~600 MB); deploy/web-loop.sh
+  touches data/render.reload after each upload and it loads the new data in the
+  background, swapping when done. A deploy runs deploy/render-swap.sh: it starts the idle
+  instance beside the running one (both listen, SO_REUSEPORT), and stops the old once the
+  new one writes data/render-<a|b>.ready, so there is no gap. Log data/render.log
 - Network: jomify (10.0.0.214) and the box share subnet 10.0.0.0/24. Security list rule
   "meiolol-render: jomify nginx to the box" (TCP 8091 from 10.0.0.214/32; the list as it
   was is in .git/oci-ingress-before-render.json on the Mac) and an iptables ACCEPT on the

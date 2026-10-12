@@ -327,7 +327,8 @@ Done:
   4.5 MB gzipped for all champions. Ban rate by the game's rank (median player tier)
 - Rendering on request (B, Jacob's OK 2026-10-12): meiolol-render on the box behind
   jomify's nginx (try_files, then proxy cache), over the private subnet; matchup pages
-  under 200 games no longer uploaded (docs/hosting.md "Rendering on request")
+  under 200 games no longer uploaded (docs/hosting.md "Rendering on request"); deploys
+  swap the renderer without a gap (two instances take turns on the port)
 
 Direction (Jacob 2026-10-12, via meiolol-88: "build both"): stay static for the pages
 search sees, plain JS on top, no framework; plus option B from the research: a renderer
@@ -341,13 +342,11 @@ decided on evidence of what gets clicks, not just a game floor (Jacob 2026-10-12
 canonical, sitemap and noindex support as settings.
 
 Next:
-1. Renderer restarts without a gap (start the new one, then stop the old), or a faster
-   load: each deploy leaves uncached thin pages answering 503 for ~3.5 min
-2. pool.make once for all views (22% of a site pass), one timeline decode for curves,
+1. pool.make once for all views (22% of a site pass), one timeline decode for curves,
    gzip cost
-3. Dev: cached data load for faster restarts (later, Jacob); box preview from a clean
+2. Dev: cached data load for faster restarts (later, Jacob); box preview from a clean
    checkout of HEAD plus the site diff (a working-tree build once migrated the live DB)
-4. Design and UX pass with screenshots; page weight; SEO settings for `--public`
+3. Design and UX pass with screenshots; page weight; SEO settings for `--public`
 
 ### Ideas not started (concept extensions, 2026-10-11)
 

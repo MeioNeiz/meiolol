@@ -20,6 +20,8 @@ pub const Options = struct {
     port: u16 = 8080,
     render: ?*Rendered = null,
     dev: ?Dev = null,
+    /// Written (empty) once listening: deploy/render-swap.sh waits for it
+    ready: ?[]const u8 = null,
 };
 
 /// The loaded site pages render from, replaced whole by `swap`: a request keeps the one
@@ -130,6 +132,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, opts: Options) !void {
     var server = try address.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
     log.info("serving {s} on http://{s}:{d}/", .{ opts.root orelse "rendered pages", opts.host, opts.port });
+    if (opts.ready) |path| try Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = "" });
 
     var ctx: Context = .{ .gpa = gpa, .io = io, .opts = opts, .started = Io.Clock.real.now(io).toNanoseconds() };
     var group: Io.Group = .init;

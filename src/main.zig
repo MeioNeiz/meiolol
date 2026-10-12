@@ -128,6 +128,8 @@ const usage =
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8091
     \\              --reload FILE    load the data again whenever FILE changes
+    \\              --ready FILE     written once listening. Several may share the
+    \\                               port (SO_REUSEPORT): deploy/render-swap.sh
     \\  serve       serve the website (default DIR/site) over HTTP, for the tunnel
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8080
@@ -735,12 +737,14 @@ fn cmdDev(c: *Cmd) !u8 {
 
 /// The pages the static build leaves out (--static-min-games), rendered on request for
 /// the web server's nginx (docs/hosting.md "Rendering on request"). Every view is loaded
-/// before it listens, and again whenever the --reload file changes
+/// before it listens, and again whenever the --reload file changes. A new instance can
+/// listen beside the old one (SO_REUSEPORT), which stops once it is --ready
 fn cmdRender(c: *Cmd) !u8 {
     var f: SiteFlags = .{};
     var host: []const u8 = "127.0.0.1";
     var port: u16 = 8091;
     var reload: ?[]const u8 = null;
+    var ready: ?[]const u8 = null;
     while (c.next()) |_| {
         if (c.is("--host")) {
             host = try c.value();
@@ -748,6 +752,8 @@ fn cmdRender(c: *Cmd) !u8 {
             port = try c.int(u16);
         } else if (c.is("--reload")) {
             reload = try c.value();
+        } else if (c.is("--ready")) {
+            ready = try c.value();
         } else if (!try f.parse(c)) return error.Usage;
     }
     const email = try c.required(f.contact, "--contact");
@@ -764,7 +770,7 @@ fn cmdRender(c: *Cmd) !u8 {
     var group: std.Io.Group = .init;
     defer group.cancel(io);
     if (reload) |path| group.async(io, reloadOnChange, .{ c, &f, db, email, rendered, path });
-    try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered });
+    try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered, .ready = ready });
     return 0;
 }
 
