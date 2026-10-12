@@ -8,6 +8,9 @@ const log = std.log.scoped(.sqlite);
 /// Busy: another connection held the lock past the busy timeout; worth retrying
 pub const Error = error{ Sqlite, Busy };
 
+/// How long a connection waits on another's lock before Busy
+pub const busy_timeout_ms = 60_000;
+
 /// Extended codes too: SQLITE_BUSY_SNAPSHOT and the like
 fn busy(rc: c_int) bool {
     return rc & 0xff == c.SQLITE_BUSY or rc & 0xff == c.SQLITE_LOCKED;
@@ -54,8 +57,12 @@ pub const Db = struct {
         }
         // Before anything else: other connections may hold the lock (WAL switch). Long:
         // the crawler's writer waits out prune chunks and other processes on a slow disk
-        _ = c.sqlite3_busy_timeout(handle.?, 60_000);
+        _ = c.sqlite3_busy_timeout(handle.?, busy_timeout_ms);
         return .{ .handle = handle.? };
+    }
+
+    pub fn setBusyTimeout(db: Db, ms: c_int) void {
+        _ = c.sqlite3_busy_timeout(db.handle, ms);
     }
 
     pub fn close(db: Db) void {

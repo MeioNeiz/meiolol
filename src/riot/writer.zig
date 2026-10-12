@@ -22,6 +22,13 @@ const log = std.log.scoped(.crawl);
 const max_pending = 128;
 /// Busy here means another process (backup, rebuild) holds the lock: retry the batch
 const busy_pause_s = 5;
+/// journal_size_limit only trims the WAL when it restarts, which needs a moment with
+/// every frame copied back and no reader on it. With nonstop writes and readers always
+/// about that moment never came, and main's WAL reached 57 GB. So force it this often
+const wal_truncate_s = 300;
+/// Short: commits wait while the checkpoint waits on readers; on Busy, try again soon
+const wal_truncate_busy_ms = 250;
+const wal_truncate_retry_s = 10;
 /// A short batch waits up to this long for more jobs (fewer, bigger commits: each
 /// commit rewrites the index pages it touched), unless a worker is waiting in wait()
 const linger_ms = 2000;
@@ -181,6 +188,7 @@ pub const Writer = struct {
         defer s.deinit();
         var batch: std.ArrayList(*Job) = .empty;
         defer batch.deinit(gpa);
+        var truncate_at: i64 = 0;
         while (true) {
             {
                 wr.mutex.lockUncancelable(wr.c.io);
@@ -221,6 +229,14 @@ pub const Writer = struct {
             wr.prune.step(db, wr.c.io, wr.c.opts) catch |err| {
                 if (err != error.Busy) return err;
             };
+            const now = std.Io.Clock.real.now(wr.c.io).toSeconds();
+            if (now >= truncate_at) {
+                const done = truncateWal(db) catch |err| blk: {
+                    log.warn("writer: WAL truncate: {t}", .{err});
+                    break :blk false;
+                };
+                truncate_at = now + @as(i64, if (done) wal_truncate_s else wal_truncate_retry_s);
+            }
         }
     }
 
@@ -393,6 +409,15 @@ pub const Writer = struct {
         } else try s.timeline_status.exec(.{ "failed", id });
     }
 };
+
+/// True once main's WAL is empty; false when a reader or writer kept it busy
+fn truncateWal(db: store.Db) !bool {
+    db.setBusyTimeout(wal_truncate_busy_ms);
+    defer db.setBusyTimeout(store.sqlite.busy_timeout_ms);
+    var s = try db.prepare("PRAGMA main.wal_checkpoint(TRUNCATE)");
+    defer s.deinit();
+    return try s.step() and s.int(0) == 0;
+}
 
 /// The writer's connection: the only one that needs a big page cache. The WAL file
 /// keeps its high-water size, so cap it: a burst must not leave a huge file every
@@ -824,6 +849,25 @@ test "stored matches leave the queue and are not queued again" {
         .{ "SELECT count(*) FROM players WHERE source = 'participant'", 10 },
     };
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
+}
+
+test "truncateWal empties main's WAL" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buf: [256]u8 = undefined;
+    const path = try std.mem.printSentinel(&path_buf, ".zig-cache/tmp/{s}/t.db", .{&tmp.sub_path}, 0);
+    const db = try store.Db.open(path);
+    defer db.close();
+    try db.exec(
+        \\PRAGMA journal_mode = WAL;
+        \\CREATE TABLE t (x);
+        \\INSERT INTO t VALUES (1), (2), (3);
+    );
+    try std.testing.expect(try truncateWal(db));
+    var s = try db.prepare("PRAGMA main.wal_checkpoint(PASSIVE)");
+    defer s.deinit();
+    try std.testing.expect(try s.step());
+    try std.testing.expectEqual(0, s.int(1));
 }
 
 test "rolling window prunes old matches with their rows" {
