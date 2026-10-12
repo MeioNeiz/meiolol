@@ -34,7 +34,8 @@ pub const Client = struct {
     }
 
     /// Response body (caller frees) on 200, null on 404. `method` names the
-    /// per-endpoint rate limit bucket.
+    /// per-endpoint rate limit bucket. error.RateLimited when every try got a 429: the
+    /// key or Riot's service was saturated, nothing wrong with the request itself
     pub fn get(c: *Client, route: []const u8, path: []const u8, method: []const u8) !?[]u8 {
         var url_buf: [1024]u8 = undefined;
         const url = try std.fmt.bufPrint(&url_buf, "https://{s}.api.riotgames.com{s}", .{
@@ -46,7 +47,8 @@ pub const Client = struct {
             return f.get(c.gpa, route, path);
         }
         const shown = logged(path, method);
-        for (0..6) |attempt| {
+        var limited: usize = 0;
+        for (0..tries) |attempt| {
             const backoff: i64 = @as(i64, 1) << @intCast(attempt);
             try c.limiter.acquire(method);
             const shared = c.limiter.sharing();
@@ -78,6 +80,7 @@ pub const Client = struct {
                 },
                 429 => {
                     c.gpa.free(res.body);
+                    limited += 1;
                     continue;
                 },
                 else => {
@@ -88,8 +91,10 @@ pub const Client = struct {
                 },
             }
         }
-        return error.GaveUp;
+        return if (limited == tries) error.RateLimited else error.GaveUp;
     }
+
+    const tries = 6;
 
     const Response = struct { status: u16, body: []u8 };
 

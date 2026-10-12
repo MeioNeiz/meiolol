@@ -629,8 +629,10 @@ const RegionCrawler = struct {
             rc.scanPlayer(p.puuid, p.checked_at, p.platform) catch |err| {
                 if (fatal(err)) return err;
                 log.warn("{t} match ids: {t}", .{ rc.region, err });
+                // Marking them checked would skip their games since the last scan
+                if (err == error.RateLimited) continue;
             };
-            // Even after an error, so a bad player waits for the recheck interval
+            // Even after another error, so a bad player waits for the recheck interval
             const job = try Job.create(c.gpa, .none);
             errdefer job.destroy(c.gpa);
             job.kind = .{ .checked = .{ .puuid = try job.allocator().dupe(u8, p.puuid), .t = rc.b.now() } };
@@ -679,6 +681,8 @@ const RegionCrawler = struct {
         const got = ep.match(&rc.b.client, rc.region, id) catch |err| {
             if (fatal(err)) return err;
             log.warn("match {s}: {t}", .{ id, err });
+            // Left pending, so a 429 storm can't use up its tries
+            if (err == error.RateLimited) return;
             return rc.b.queueStatus(.match, id, .attempt);
         };
         const fetched = got orelse return rc.b.queueStatus(.match, id, .missing);
@@ -715,6 +719,8 @@ const RegionCrawler = struct {
         const got = ep.timeline(&rc.b.client, rc.region, id) catch |err| {
             if (fatal(err)) return err;
             log.warn("timeline {s}: {t}", .{ id, err });
+            // Left pending, so a 429 storm can't use up its tries
+            if (err == error.RateLimited) return;
             return rc.b.queueStatus(.timeline, id, .attempt);
         };
         const body = got orelse return rc.b.queueStatus(.timeline, id, .missing);

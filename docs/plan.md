@@ -78,7 +78,11 @@ next steps land here.
 - Measure real per-match sizes after a day; recheck disk runway
 - Rekey translation for `forgotten` (old PUUID -> Riot ID -> new PUUID) before the
   production key
-- Requeue matches failed by 429 storms (6x 429 then GaveUp counts as an attempt)
+- 429 storms (done 2026-10-12): a request that gets 429 on all 6 tries is RateLimited,
+  left pending with no attempt counted, and a player scan it cuts short is not marked
+  checked (that skipped their games since the last scan). A writer Sqlite error counts an
+  attempt instead of failing the match at once. The box's 32 failed matches (all "not
+  stored: Sqlite" from 2026-10-11 04:4xZ) requeued by hand
 - Optional: lossy timeline compaction if disk gets tight
 - Four-view site (region EUW/all x period 30 days/patch, 9096d0f): check
   /all/patch/index.html goes live after a full web-loop pass on the micro (10+ min, any

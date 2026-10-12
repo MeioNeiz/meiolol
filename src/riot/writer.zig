@@ -273,13 +273,15 @@ pub const Writer = struct {
             try db.exec("RELEASE job");
             if (err != error.Sqlite) return err;
             switch (job.kind) {
+                // An attempt, not failed at once: Sqlite errors are often passing
+                // (locks, a full disk), and a match that never stores fails after three
                 .match => |m| {
                     log.warn("match {s} not stored: {t}", .{ m.id, err });
-                    try s.match_status.exec(.{ "failed", m.id });
+                    try s.match_attempt.exec(.{m.id});
                 },
                 .timeline => |t| {
                     log.warn("timeline {s} not stored: {t}", .{ t.id, err });
-                    try s.timeline_status.exec(.{ "failed", t.id });
+                    try s.timeline_attempt.exec(.{t.id});
                 },
                 else => log.warn("writer: {t} not stored: {t}", .{ job.kind, err }),
             }
@@ -695,7 +697,7 @@ const Stmts = struct {
     }
 };
 
-test "jobs apply in one transaction; a bad one is marked failed, the rest stored" {
+test "jobs apply in one transaction; a bad one counts an attempt, the rest stored" {
     // The bad job's warnings are expected
     std.testing.log_level = .err;
     const gpa = std.testing.allocator;
@@ -743,7 +745,7 @@ test "jobs apply in one transaction; a bad one is marked failed, the rest stored
         .{ "SELECT attempts FROM match_queue WHERE match_id = 'EUW1_1'", 1 },
         .{ "SELECT count(*) FROM players", 1 },
         .{ "SELECT count(*) FROM ladder_pages WHERE entries = 2", 1 },
-        .{ "SELECT count(*) FROM timeline_queue WHERE status = 'failed'", 1 },
+        .{ "SELECT attempts FROM timeline_queue WHERE match_id = 'EUW1_2' AND status = 'pending'", 1 },
         .{ "SELECT count(*) FROM raw.timeline_docs", 0 },
     };
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
