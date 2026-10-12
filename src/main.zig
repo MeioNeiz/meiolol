@@ -34,9 +34,12 @@ const usage =
     \\              --since-days N   how far back to collect match ids (default 14)
     \\              --patch-only     match ids only from each platform's newest patch;
     \\                               older patches' matches get no timeline
+    \\              --no-active-first  scan stalest players first, not those the
+    \\                               ladder shows played since their last scan
     \\              --no-mastery     skip champion mastery
     \\              --ladder-refresh-days N  refetch ladder pages after N days
     \\                               (default 7)
+    \\              --ladder-refresh-hours N  the same in hours
     \\              --ladder-per-hour N  ladder pages per platform per hour at most
     \\                               (default 0: no cap)
     \\              --regions R      americas,asia,europe,sea (default all)
@@ -336,6 +339,10 @@ fn cmdCrawl(c: *Cmd) !u8 {
             o.since_days = try c.int(i64);
         } else if (c.is("--patch-only")) {
             o.patch_only = true;
+        } else if (c.is("--no-active-first")) {
+            o.active_first = false;
+        } else if (c.is("--ladder-refresh-hours")) {
+            o.ladder_refresh_s = try c.int(i64) * 3600;
         } else if (c.is("--ladder-refresh-days")) {
             o.ladder_refresh_s = try c.int(i64) * std.time.s_per_day;
         } else if (c.is("--ladder-per-hour")) {

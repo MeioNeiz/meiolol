@@ -151,9 +151,14 @@ next steps land here.
 - Newest patch only (Jacob, 2026-10-12): `--patch-only` starts match ids at each
   platform's first game seen on its newest patch; older-patch matches get no timeline.
   Before: ~2/3 of fetched matches were 16.19 four days into 16.20 (first scans take 14
-  days). Next, early in a patch: 54% of 90 random EUW Plat+ ladder players had 0 games
-  on 16.20 after 5 days (active ones ~6.4): scan players whose ladder wins+losses grew
-  since their last check first (ladder pages use the idle platform buckets)
+  days). Active first (research/questions/crawl-discovery.md): 54% of 90 random EUW
+  Plat+ ladder players had 0 games on 16.20 after 5 days; over ~20 h, 131 of 160 had
+  none, and ladder wins+losses growth matched their new ids for 156 of 160. So players
+  are scanned most-new-games-first by ladder growth since their last scan
+  (players.games_checked, index players_new_games), then never-scanned/stalest as
+  before; ladder refreshed every 12 h (--ladder-refresh-hours 12, --ladder-per-hour
+  500; EUW1/KR ~4.7k Plat+ pages) on the otherwise idle platform buckets. Report shows
+  `Nids Mnew` per region: watch new ids per ids call (was ~0.5 per call on rescans)
 - Box ops loose ends (meiolol-5a): cut crawl.args raw windows once disk matters, after
   the writer fix (first prune is heavy on the micro); one-off `meiolol rebuild` for the
   gold10/14/15 migration, not run (do it on A1); once on A1 remove the dynamic group

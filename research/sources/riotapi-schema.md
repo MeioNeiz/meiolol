@@ -101,6 +101,9 @@ challenges, spectator, clash, league-exp), without scraping Riot's JS reference 
 - [privacy] [data] account-v1 resolves any Riot ID (game name plus tag line) to an
   account, with no player consent step. `/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}` ^f19
   > summary: 'Get account by riot id'
+- [data] league-exp-v4 entries carry each player's ranked wins and losses, so a later ladder page shows how many games a player has played since an earlier one. ^f20
+  > description: 'Winning team on Summoners Rift. First placement in Teamfight Tactics.'
+  > description: 'Losing team on Summoners Rift. Second through eighth placement in Teamfight Tactics.'
 
 ## Read
 

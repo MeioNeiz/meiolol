@@ -55,7 +55,8 @@ pub const Kind = union(enum) {
     ladder: struct { platform: ep.Platform, tier: []const u8, division: []const u8, page: u32, entries: []const ep.LeagueEntry, t: i64 },
     /// blob null: Riot does not know the PUUID, so the player goes
     mastery: struct { puuid: []const u8, platform: []const u8, t: i64, champions: usize, blob: ?[]const u8 },
-    match_ids: struct { ids: []const []const u8, discovered_at: i64, region: ep.Region },
+    /// found: ids new to the queue, set by apply
+    match_ids: struct { ids: []const []const u8, discovered_at: i64, region: ep.Region, found: u32 = 0 },
     checked: struct { puuid: []const u8, t: i64 },
     /// id: the queue's, in case Riot's document names another. timeline false: an older
     /// patch's match under --patch-only, stored without one
@@ -252,6 +253,7 @@ pub const Writer = struct {
             switch (job.kind) {
                 .match => |m| _ = wr.c.counters.region[@intFromEnum(m.region)].matches.fetchAdd(1, .monotonic),
                 .timeline => |t| _ = wr.c.counters.region[@intFromEnum(t.region)].timelines.fetchAdd(1, .monotonic),
+                .match_ids => |q| _ = wr.c.counters.region[@intFromEnum(q.region)].ids_found.fetchAdd(q.found, .monotonic),
                 .mastery => |m| if (m.blob != null) {
                     _ = wr.c.counters.mastery.fetchAdd(1, .monotonic);
                 },
@@ -312,7 +314,11 @@ pub const Writer = struct {
                 try s.mastery_delete.exec(.{m.puuid});
                 try s.player_delete.exec(.{m.puuid});
             },
-            .match_ids => |q| for (q.ids) |id| try s.match_queue.exec(.{ id, q.discovered_at, @tagName(q.region) }),
+            .match_ids => |*q| {
+                const before = try db.scalar("SELECT total_changes()", .{}) orelse 0;
+                for (q.ids) |id| try s.match_queue.exec(.{ id, q.discovered_at, @tagName(q.region) });
+                q.found = @intCast((try db.scalar("SELECT total_changes()", .{}) orelse 0) - before);
+            },
             .checked => |ch| try s.checked.exec(.{ ch.t, ch.puuid }),
             .match => |m| try wr.storeMatch(db, s, m.region, m.id, m.doc, m.raw, m.t, m.timeline),
             .timeline => |t| try wr.storeTimeline(s, t.id, t.raw, t.compact, t.t),
@@ -583,14 +589,21 @@ const Stmts = struct {
         .participant_rank = "UPDATE participants SET tier = ?, division = ? WHERE match_id = ? AND slot = ?",
         .ladder_player =
         \\INSERT INTO players (puuid, tier, division, lp, wins, losses, rank_seen_at, source,
-        \\    platform, region, seen_at)
-        \\VALUES (?1,?2,?3,?4,?5,?6,?7,'ladder',?8,?9,?7)
+        \\    platform, region, seen_at, games_checked)
+        \\VALUES (?1,?2,?3,?4,?5,?6,?7,'ladder',?8,?9,?7,?5 + ?6)
         \\ON CONFLICT (puuid) DO UPDATE SET
         \\    tier = excluded.tier, division = excluded.division, lp = excluded.lp,
         \\    wins = excluded.wins, losses = excluded.losses,
         \\    rank_seen_at = excluded.rank_seen_at, source = 'ladder',
         \\    platform = excluded.platform, region = excluded.region,
-        \\    seen_at = excluded.seen_at
+        \\    seen_at = excluded.seen_at,
+        // Fewer games than checked: a new season. Never set: from the previous page,
+        // so its games since then count as new
+        \\    games_checked = CASE
+        \\        WHEN excluded.wins + excluded.losses < coalesce(games_checked, wins + losses, 0)
+        \\            THEN excluded.wins + excluded.losses
+        \\        WHEN games_checked IS NULL THEN coalesce(wins + losses, excluded.wins + excluded.losses)
+        \\        ELSE games_checked END
         // Most of a ladder is unchanged week to week: leave those rows (and the
         // players indexes) alone unless seen_at is a day old
         \\WHERE tier IS NOT excluded.tier OR division IS NOT excluded.division
@@ -608,7 +621,7 @@ const Stmts = struct {
         \\INSERT OR IGNORE INTO match_queue (match_id, discovered_at, region)
         \\SELECT ?1, ?2, ?3 WHERE NOT EXISTS (SELECT 1 FROM matches WHERE match_id = ?1)
         ,
-        .checked = "UPDATE players SET matches_checked_at = ? WHERE puuid = ?",
+        .checked = "UPDATE players SET matches_checked_at = ?, games_checked = wins + losses WHERE puuid = ?",
         .raw_doc = "INSERT OR REPLACE INTO raw.raw_docs VALUES (?,?,?,?)",
         .participant_player =
         \\INSERT INTO players (puuid, source, platform, region, seen_at)
@@ -880,6 +893,30 @@ test "one draft row per match, kept by the prune; listed matches wait for the ba
         .{ "SELECT count(*) FROM draft_backfill", 1 },
     };
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
+}
+
+test "games_checked: from the ladder's previous counts, reset by a scan or a new season" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec(
+        \\INSERT INTO players (puuid, wins, losses, source, platform, region) VALUES
+        \\    ('old', 10, 10, 'ladder', 'EUW1', 'europe');
+    );
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+    const Row = struct { []const u8, i64, i64 };
+    const pages = [_]Row{ .{ "old", 12, 11 }, .{ "new", 3, 4 } };
+    for (pages) |r| try s.ladder_player.exec(.{ r[0], "GOLD", "I", 0, r[1], r[2], 5, "EUW1", "europe" });
+    const pending = "SELECT wins + losses - games_checked FROM players WHERE puuid = ?";
+    try std.testing.expectEqual(@as(?i64, 3), try db.scalar(pending, .{"old"}));
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar(pending, .{"new"}));
+    try s.checked.exec(.{ 6, "old" });
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar(pending, .{"old"}));
+    try s.ladder_player.exec(.{ "old", "GOLD", "I", 0, 14, 11, 7, "EUW1", "europe" });
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar(pending, .{"old"}));
+    // New season: counts restart below games_checked
+    try s.ladder_player.exec(.{ "old", "GOLD", "I", 0, 1, 0, 8, "EUW1", "europe" });
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar(pending, .{"old"}));
 }
 
 test "non-priority jobs wait at half the queue, priority ones at full" {

@@ -46,6 +46,10 @@ pub const Options = struct {
     /// the writer's queue and matches wait behind it
     ladder_per_hour: u32 = 0,
     recheck_s: i64 = 12 * 3600,
+    /// Scan first the players whose ladder wins + losses grew since their last scan,
+    /// most new games first; then the stalest as before. Needs a ladder refreshed more
+    /// often than players are rescanned to see who has played
+    active_first: bool = true,
     mastery: bool = true,
     hours: ?f64 = null,
     regions: []const ep.Region = all_regions,
@@ -84,6 +88,8 @@ const RegionCounters = struct {
     matches: std.atomic.Value(u64) = .init(0),
     timelines: std.atomic.Value(u64) = .init(0),
     ids_calls: std.atomic.Value(u64) = .init(0),
+    /// Match ids new to the queue
+    ids_found: std.atomic.Value(u64) = .init(0),
     requests: std.atomic.Value(u64) = .init(0),
 };
 
@@ -167,17 +173,17 @@ pub const Crawler = struct {
     }
 
     fn report(c: *Crawler, elapsed_s: i64) void {
-        var buf: [512]u8 = undefined;
+        var buf: [768]u8 = undefined;
         var w: std.Io.Writer = .fixed(&buf);
         var matches: u64 = 0;
         for (c.opts.regions) |r| {
             const rc = &c.counters.region[@intFromEnum(r)];
             const m = rc.matches.load(.monotonic);
             matches += m;
-            w.print(" | {t} {d}m {d}t {d}ids {d}req", .{
+            w.print(" | {t} {d}m {d}t {d}ids {d}new {d}req", .{
                 r,                             m,
                 rc.timelines.load(.monotonic), rc.ids_calls.load(.monotonic),
-                rc.requests.load(.monotonic),
+                rc.ids_found.load(.monotonic), rc.requests.load(.monotonic),
             }) catch break;
         }
         const per_day = if (elapsed_s > 0) matches * 86400 / @as(u64, @intCast(elapsed_s)) else 0;
@@ -572,6 +578,17 @@ const RegionCrawler = struct {
         \\LIMIT ?4
     ;
 
+    /// Players with ranked games since their last scan (ladder wins + losses), most
+    /// first. Uses players_new_games
+    const new_games =
+        \\SELECT puuid, matches_checked_at, platform FROM players
+        \\WHERE region = ?1 AND games_checked IS NOT NULL AND wins + losses - games_checked > 0
+        \\    AND (?2 IS NULL OR platform = ?2)
+        \\    AND (?3 IS NULL OR instr(?3, '|' || tier || '|') > 0)
+        \\ORDER BY wins + losses - games_checked DESC
+        \\LIMIT ?4
+    ;
+
     /// "|CHALLENGER|...|PLATINUM|" for scan_players, null when every tier is in
     fn tierFloor(a: std.mem.Allocator, min_tier: usize) !?[]const u8 {
         if (min_tier + 1 >= tiers.len) return null;
@@ -588,8 +605,9 @@ const RegionCrawler = struct {
         defer arena.deinit();
         var s = try rc.b.db.prepare(scan_players);
         defer s.deinit();
+        var active = try rc.b.db.prepare(new_games);
+        defer active.deinit();
         const floor = try tierFloor(arena.allocator(), c.opts.min_tier);
-        const Player = struct { puuid: []const u8, checked_at: ?i64, platform: []const u8 };
         var players: std.ArrayList(Player) = .empty;
         var filters: std.ArrayList(?[]const u8) = .empty;
         for (c.opts.priority) |id| {
@@ -598,16 +616,13 @@ const RegionCrawler = struct {
         }
         try filters.append(arena.allocator(), null);
         for (filters.items) |platform| {
-            const want = n - players.items.len;
-            if (want == 0) break;
-            try s.bind(.{ @tagName(rc.region), platform, rc.b.now() - c.opts.recheck_s, want, floor });
-            while (try s.step()) {
-                try players.append(arena.allocator(), .{
-                    .puuid = try arena.allocator().dupe(u8, s.bytes(0)),
-                    .checked_at = s.optInt(1),
-                    .platform = try arena.allocator().dupe(u8, s.bytes(2)),
-                });
+            if (c.opts.active_first) {
+                try active.bind(.{ @tagName(rc.region), platform, floor, n - players.items.len });
+                try takePlayers(arena.allocator(), &active, &players);
             }
+            if (players.items.len == n) break;
+            try s.bind(.{ @tagName(rc.region), platform, rc.b.now() - c.opts.recheck_s, n - players.items.len, floor });
+            try takePlayers(arena.allocator(), &s, &players);
         }
         for (players.items) |p| {
             try rc.b.check();
@@ -623,6 +638,20 @@ const RegionCrawler = struct {
         }
         try rc.b.flush();
         return @intCast(players.items.len);
+    }
+
+    const Player = struct { puuid: []const u8, checked_at: ?i64, platform: []const u8 };
+
+    /// Rows of new_games or scan_players, skipping players already taken
+    fn takePlayers(a: std.mem.Allocator, s: *store.Stmt, players: *std.ArrayList(Player)) !void {
+        next: while (try s.step()) {
+            for (players.items) |p| if (std.mem.eql(u8, p.puuid, s.bytes(0))) continue :next;
+            try players.append(a, .{
+                .puuid = try a.dupe(u8, s.bytes(0)),
+                .checked_at = s.optInt(1),
+                .platform = try a.dupe(u8, s.bytes(2)),
+            });
+        }
     }
 
     fn scanPlayer(rc: *RegionCrawler, puuid: []const u8, checked_at: ?i64, platform: []const u8) !void {
@@ -968,6 +997,35 @@ test "scan pool: players below --min-tier are not scanned" {
         try std.testing.expectEqual(c[1].len, got.len);
         for (c[1], got) |e, g| try std.testing.expectEqualStrings(e, g);
     }
+}
+
+test "active first: players the ladder shows played since their last scan, most first" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec(
+        \\INSERT INTO players (puuid, tier, wins, losses, games_checked, source, platform, region) VALUES
+        \\    ('none', 'DIAMOND', 5, 5, 10, 'ladder', 'EUW1', 'europe'),
+        \\    ('two', 'DIAMOND', 6, 6, 10, 'ladder', 'EUW1', 'europe'),
+        \\    ('five', 'PLATINUM', 8, 7, 10, 'ladder', 'EUW1', 'europe'),
+        \\    ('gold', 'GOLD', 20, 20, 10, 'ladder', 'EUW1', 'europe'),
+        \\    ('unknown', 'DIAMOND', 9, 9, NULL, 'ladder', 'EUW1', 'europe'),
+        \\    ('kr', 'DIAMOND', 20, 20, 10, 'ladder', 'KR', 'asia');
+    );
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const plat = try RegionCrawler.tierFloor(a, 5);
+    const got = try column(db, a, RegionCrawler.new_games, .{ "europe", null, plat, 10 });
+    try std.testing.expectEqual(2, got.len);
+    try std.testing.expectEqualStrings("five", got[0]);
+    try std.testing.expectEqualStrings("two", got[1]);
+    var plan = try db.prepare("EXPLAIN QUERY PLAN " ++ RegionCrawler.new_games);
+    defer plan.deinit();
+    try plan.bind(.{ "europe", null, plat, 10 });
+    try std.testing.expect(try plan.step());
+    try std.testing.expectEqualStrings("SEARCH players USING INDEX players_new_games (region=? AND <expr>>?)", plan.bytes(3));
+    // No temp B-tree: rows come in ORDER BY order straight from the index
+    try std.testing.expect(!try plan.step());
 }
 
 test "patches: newest per platform, from its first game seen" {

@@ -12,7 +12,9 @@ const draft = @import("draft.zig");
 /// new PUUIDs for the same players (see rekey). platform is Riot's id (EUW1, KR);
 /// region the match-v5 route (europe, asia). seen_at: last time a ladder page or a
 /// match showed the player; the crawler drops players unseen for 30 days (Riot asks
-/// for stored player data to be refreshed monthly; erased accounts stop appearing)
+/// for stored player data to be refreshed monthly; erased accounts stop appearing).
+/// games_checked: ranked games (wins + losses) as of the player's last match id scan,
+/// so the ladder shows who has played since
 const players_ddl =
     \\CREATE TABLE IF NOT EXISTS players (
     \\    puuid TEXT PRIMARY KEY,
@@ -26,7 +28,8 @@ const players_ddl =
     \\    source TEXT NOT NULL,
     \\    platform TEXT,
     \\    region TEXT,
-    \\    seen_at INTEGER
+    \\    seen_at INTEGER,
+    \\    games_checked INTEGER
     \\) WITHOUT ROWID;
     \\
 ;
@@ -241,6 +244,8 @@ const indexes =
     \\CREATE INDEX IF NOT EXISTS raw.raw_docs_age ON raw_docs (source, fetched_at);
     \\CREATE INDEX IF NOT EXISTS participants_puuid ON participants (puuid);
     \\CREATE INDEX IF NOT EXISTS players_seen ON players (seen_at);
+    \\CREATE INDEX IF NOT EXISTS players_new_games
+    \\    ON players (region, wins + losses - games_checked) WHERE games_checked IS NOT NULL;
     \\CREATE INDEX IF NOT EXISTS mastery_age ON mastery (fetched_at);
     \\CREATE INDEX IF NOT EXISTS matches_start ON matches (game_start);
 ;
@@ -361,6 +366,10 @@ fn migrate(db: sqlite.Db) !void {
         const now = try db.scalar("SELECT unixepoch()", .{}) orelse 0;
         var buf: [96]u8 = undefined;
         try db.exec(try std.fmt.bufPrintZ(&buf, "ALTER TABLE players ADD COLUMN seen_at INTEGER DEFAULT {d}", .{now}));
+    }
+    if (!try hasColumn(db, "players", "games_checked")) {
+        // NULL until the ladder next changes a row, which sets it from the old counts
+        try db.exec("ALTER TABLE players ADD COLUMN games_checked INTEGER");
     }
     if (try hasColumn(db, "forgotten", "puuid_sha256")) {
         // Hashed form never held rows: `meiolol forget` was not deployed with it
