@@ -143,7 +143,9 @@ outcomes and readings decided by Jacob the same day.
     out of the MSE, censored share reported per champion-role beside it. Finished sets
     per patch in data/snap-<stamp>/legendaries.tsv (offline)
   - continuous outcomes: held-out MSE vs champion-role mean (train), paired per-row
-    intervals
+    intervals clustered by game. Headline gain = % of base MSE in raw outcome units,
+    pooled over roles (`meiolol-lab pairs`); per-role standardised gains (as in 3c's
+    first table) only when labelled so, and always with test RMSE by role
 - A gain counts only when its 95% interval excludes 0. Baselines to beat: champion base
   rates for everyone; 3c's additive models for 2a's interaction and embedding models
   (shared per-row prediction file, paired between any two models)
