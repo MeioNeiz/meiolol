@@ -1,7 +1,7 @@
 # Your games: the service
 
 The dynamic part of the site (docs/concept.md, product 1): enter a Riot ID, see each
-recent ranked solo game's lane laid over the typical curve for that matchup at your rank,
+recent Summoner's Rift game's lane laid over the typical curve for that matchup at your rank,
 then a weekly roll-up and per-matchup trend. `meiolol api` (src/api) serves JSON at
 /api/ behind nginx on the jomove server; site/your.html + your.js (src/site/your.zig,
 static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy below.
@@ -12,10 +12,12 @@ static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy b
   api.db at once and queues a job; one fetcher task (src/api/fetch.zig) is the only Riot
   caller and works the queue oldest first; the page polls every 3 s and shows progress
 - Per new Riot ID: account-v1 by Riot ID and active region (europe route), league-v4
-  by PUUID (visible rank), match-v5 ids (queue 420, last 60 days), then match +
-  timeline for up to 10 games not yet cached. ~23 regional calls plus 1 platform call
-  for a first lookup; a refresh (at most every 30 min, on a visit) costs 2 plus 2 per new
-  game
+  by PUUID (visible rank), match-v5 ids (last 60 days, one list per queue: solo 420,
+  flex 440, draft 400, Swiftplay 480), then match + timeline for up to 10 games not yet
+  cached, newest first across the lists. ~26 regional calls plus 1 platform call for a
+  first lookup; a refresh (at most every 30 min, on a visit) costs 5 plus 2 per new game.
+  Not the unfiltered list: it holds private ARAM Mayhem ids (403) that would take the 10
+  new-game slots on every refresh. ARAM and Arena have no lanes to show
 - Cache by match id (api.db `matches`): a summary of the match (champions, positions,
   results, K/D/A; no names) and the compact timeline (riot/timeline.zig, ~8 KB gz). A
   match shared by two looked-up players is fetched once
@@ -25,9 +27,10 @@ static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy b
   CS at 10, level 6 and first legendary item times (yours and theirs)
 - Typical curve: `Curves.get(role, bracket, me, them)` from the curves file covering
   the game's patch (else the newest), bracket from the player's visible solo tier at the
-  last refresh; all ranks when that bracket is too thin (the page says so). Every chart
-  caption names bracket, patch and n; under 200 games it is grey ("more data needed"),
-  minutes with n < 10 are not drawn
+  last refresh; all ranks when that bracket is too thin (the page says so). Curves are
+  from solo games only, for flex, draft and Swiftplay games too (their captions say
+  "solo/duo games"). Every chart caption names bracket, patch and n; under 200 games it
+  is grey ("more data needed"), minutes with n < 10 are not drawn
 - Facts, never verdicts: gold difference at 14 against the typical middle half;
   biggest 3-minute fall and rise against the typical median (against an even lane when
   there is no curve) with deaths and kills in those minutes, shown only when 200+ gold;
@@ -43,8 +46,8 @@ static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy b
 - Tier is the visible rank (league-v4), never inferred MMR. It is the rank now, not at
   game time; the curves bracket games by the median visible rank of their players
 - Not yet: the experienced-players curve (needs champion-mastery per player, more
-  calls), recalls (not in match-v5 timelines), flex or other queues (curves are solo
-  only)
+  calls), recalls (not in match-v5 timelines), curves for flex or normal games (the
+  crawler is solo only), ARAM and Arena
 
 ## Example
 
@@ -136,7 +139,8 @@ Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB
   `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's
   push deploy: after a change to src/api or the curves file format (curvesfile.zig
   version), rebuild, `scp` to /tmp, `sudo install`, then `sudo systemctl restart
-  meiolol-api`. Curves v4 binary installed 2026-10-11 15:23Z (f6bf5d6)
+  meiolol-api`. Installed: 33c523b (win chance, death cost), 2026-10-12 22:55Z; previous
+  binary kept as /usr/local/bin/meiolol.bak-pre-33c523b
 - User `meiolol-api` (system, no shell). /var/lib/meiolol-api (750): api.db. Exchange
   /var/lib/meiolol-api/exchange (meiolol:meiolol-api, 2770; `meiolol` is in the group):
   curves/ from the box, forgotten.txt out, box-forgotten.txt in
