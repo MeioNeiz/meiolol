@@ -51,6 +51,17 @@ pub fn build(b: *std.Build) void {
 
     b.step("fmt", "Format the Zig sources").dependOn(&b.addFmt(.{ .paths = &fmt_paths }).step);
 
+    const windows = b.resolveTargetQuery(ci_targets[0]);
+    const desktop_step = b.step("desktop", "Build the desktop window for Windows (meiolol-desktop.exe)");
+    if (desktopExe(b, windows, optimize)) |exe| desktop_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+    const shot_step = b.step("desktop-shot", "Render the desktop window's states to PNG " ++
+        "(-- --stats FILE --curves FILE [--out DIR])");
+    if (desktopShot(b, target, optimize)) |exe| {
+        const run = b.addRunArtifact(exe);
+        run.addPassthruArgs();
+        shot_step.dependOn(&run.step);
+    }
+
     // What the pre-push hook runs (deploy/hooks/pre-push): every push to main deploys
     const ci = b.step("ci", "Everything before a push: fmt, tests, cross-builds, scripts");
     ci.dependOn(&b.addFmt(.{ .paths = &fmt_paths, .check = true }).step);
@@ -61,6 +72,8 @@ pub fn build(b: *std.Build) void {
             ci.dependOn(&b.addExecutable(.{ .name = name, .root_module = mod }).step);
         }
     }
+    if (desktopExe(b, windows, .Debug)) |exe| ci.dependOn(&exe.step);
+    if (desktopShot(b, target, .Debug)) |exe| ci.dependOn(&exe.step);
     ci.dependOn(lint(b, "shellcheck", "shellcheck -S warning deploy/*.sh deploy/hooks/*"));
     ci.dependOn(lint(b, "node", "for f in src/site/static/*.js; do node --check \"$f\" || exit 1; done"));
 }
@@ -136,6 +149,65 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
     backend.addAnonymousImport("draft.wasm", .{ .root_source_file = wasm.getEmittedBin() });
 
     return .{ .core = core, .store = store, .backend = backend, .app = app };
+}
+
+/// The desktop window (src/desktop_main.zig): dvui with its Direct3D 11 backend, tree-sitter
+/// off. Null until the lazy dvui dependency is fetched (the build reruns after)
+fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) ?*std.Build.Step.Compile {
+    const dvui = b.lazyDependency("dvui", .{
+        .target = target,
+        .optimize = optimize,
+        .backend = .dx11,
+        .@"tree-sitter" = false,
+    }) orelse return null;
+    const exe = b.addExecutable(.{
+        .name = "meiolol-desktop",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/desktop_main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "core", .module = modules(b, target, optimize).core },
+                .{ .name = "dvui", .module = dvui.module("dvui_dx11") },
+            },
+        }),
+    });
+    exe.subsystem = .windows;
+    return exe;
+}
+
+/// The same UI drawn into memory by src/desktop/raster.zig, for PNGs on any host
+fn desktopShot(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) ?*std.Build.Step.Compile {
+    const dvui = b.lazyDependency("dvui", .{
+        .target = target,
+        .optimize = optimize,
+        .backend = .custom,
+        .libc = true,
+        .freetype = true,
+        .@"stb-image" = true,
+        .@"tree-sitter" = false,
+    }) orelse return null;
+    const dvui_mod = dvui.module("dvui");
+    const raster = b.createModule(.{
+        .root_source_file = b.path("src/desktop/raster.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "dvui", .module = dvui_mod }},
+    });
+    dvui_mod.addImport("backend", raster);
+    return b.addExecutable(.{
+        .name = "meiolol-desktop-shot",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/desktop_shot.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "core", .module = modules(b, target, optimize).core },
+                .{ .name = "dvui", .module = dvui_mod },
+                .{ .name = "raster", .module = raster },
+            },
+        }),
+    });
 }
 
 /// A non-Zig check run from the repo root. A missing tool fails the step, not the

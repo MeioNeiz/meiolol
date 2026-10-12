@@ -64,8 +64,9 @@ next steps land here.
 - Draft model (docs/model.md): at ~8k games nothing beats champion base rates beyond
   noise; daily eval on the box appends data/eval-history.tsv
 - Legal drafts: docs/legal/ (privacy, terms, LIA, objection form), waiting on Jacob
-- Desktop app: LCU client works in tests; never run against a real champ select. Lane
-  card not built; GUI choice dvui pending a Windows run
+- Desktop app: lane card window built (meiolol-desktop.exe, dvui dx11, 2026-10-12),
+  checked only as PNGs from the raster backend; never run on Windows or against a real
+  champ select
 - Disk: the micro has ~40 GB free; ~1.6 GB/day kept forever at the full all-region rate:
   weeks. A1 (up to ~150 GB free), EUW-only or paid disk (PAYG): Jacob's call
 
@@ -314,8 +315,13 @@ next steps land here.
 - Privacy/terms into src/site/prose.zig from docs/legal once Jacob fills the placeholders;
   objection by email (`meiolol forget`) until the form is live
 - Site polish: screenshots/GIFs, a short demo video
-- Desktop: run dvui on the Windows PC, build the lane card (concept part 6), test LCU in
-  a real champ select (`meiolol-app session --save testdata/lcu/session-real.json`)
+- Desktop: lane card built (docs/architecture.md "Desktop window"; `zig build
+  desktop-shot` for PNGs). Next: run meiolol-desktop.exe on the Windows PC (DPI at 150%,
+  fonts, idle CPU, D3DCOMPILER_47.dll; gpu-box was asleep), then a real champ select
+  (`meiolol-app session --save testdata/lcu/session-real.json`; check mastery and
+  ranked replies parse). Not yet: your own record in the matchup (concept part 6; LCU
+  match history, needs a real reply to fix the schema), champion icons, window icon and
+  DPI manifest, the download page shipping the exe with stats and curves
 - Zig 0.17 move: done 2026-10-12 (docs/zig-0.17.md). dvui: pin PR #1012 (0.17.x
   branch) until it merges; ZLS built from its main until a 0.17 release
 

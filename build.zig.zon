@@ -12,6 +12,13 @@
             .url = "git+https://codeberg.org/ziglang/translate-c?ref=zig-0.17.x#f978dca0f2b2a782d06591989e80aae7c74d0183",
             .hash = "translate_c-2.0.1-Q_BUWmVOBwDWdxpDb7n6-LpMznKteZvXbL_4r6DxB2_d",
         },
+        // Desktop window only (lazy: the box never fetches it). PR #1012, the 0.17 port;
+        // move to main once it merges
+        .dvui = .{
+            .lazy = true,
+            .url = "https://github.com/david-vanderson/dvui/archive/164b69f397419b8d06e4579b9b8a86fa0b1ed071.tar.gz",
+            .hash = "dvui-0.6.0-dev-AQFJmVUKBAGK70x-BA-UMgh0NAyduhaNExbFdypjWuvO",
+        },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src" },
 }

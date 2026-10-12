@@ -1,6 +1,7 @@
 const std = @import("std");
 const core = @import("core");
 const lcu = @import("lcu/root.zig");
+const datafiles = @import("datafiles.zig");
 
 // watch retries every second; Debug builds would print a stack trace for each
 // error.Unexpected from the network layer
@@ -204,7 +205,7 @@ const App = struct {
     const Loaded = struct { stats: Stats, path: []const u8 };
 
     fn loadStats(app: App) !Loaded {
-        const path = app.args.stats orelse try findStats(app.arena, app.io) orelse
+        const path = app.args.stats orelse try datafiles.stats(app.arena, app.io) orelse
             fail("no stats file: pass --stats FILE (none in data/export)", .{});
         const cwd = std.Io.Dir.cwd();
         const limit: std.Io.Limit = .limited(1 << 30);
@@ -522,37 +523,6 @@ fn printPicks(
     try w.writeAll("\n");
 }
 
-/// Newest data/export/stats-*.bin under the current directory, else next to the
-/// executable (beside it or in its data/export)
-fn findStats(arena: std.mem.Allocator, io: std.Io) !?[]const u8 {
-    if (try newestStats(arena, io, "data/export")) |p| return p;
-    const exe_dir = std.process.executableDirPathAlloc(io, arena) catch return null;
-    const exe_export = try std.fs.path.join(arena, &.{ exe_dir, "data", "export" });
-    if (try newestStats(arena, io, exe_export)) |p| return p;
-    return newestStats(arena, io, exe_dir);
-}
-
-fn newestStats(arena: std.mem.Allocator, io: std.Io, dir_path: []const u8) !?[]const u8 {
-    const cwd = std.Io.Dir.cwd();
-    var dir = cwd.openDir(io, dir_path, .{ .iterate = true }) catch return null;
-    defer dir.close(io);
-    var best: ?[]const u8 = null;
-    var best_time: i96 = std.math.minInt(i96);
-    var it = dir.iterate();
-    while (it.next(io) catch null) |entry| {
-        if (entry.kind != .file and entry.kind != .sym_link) continue;
-        const name = entry.name;
-        const is_stats = std.mem.startsWith(u8, name, "stats-") and
-            std.mem.endsWith(u8, name, ".bin");
-        if (!is_stats) continue;
-        const st = dir.statFile(io, entry.name, .{}) catch continue;
-        if (st.mtime.nanoseconds <= best_time) continue;
-        best_time = st.mtime.nanoseconds;
-        best = try std.fs.path.join(arena, &.{ dir_path, entry.name });
-    }
-    return best;
-}
-
 fn failGet(path: []const u8, err: anyerror) noreturn {
     if (err == error.ClientNotRunning) {
         fail("League client not running (stale lockfile?)", .{});
@@ -571,5 +541,6 @@ fn fail(comptime fmt: []const u8, args: anytype) noreturn {
 
 test {
     _ = lcu;
+    _ = @import("lanecard.zig");
     std.testing.refAllDecls(lcu);
 }

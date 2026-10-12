@@ -34,8 +34,13 @@ src/
   core/              pure, std only, shared: roles, statsfile (model file format),
                      score (recommender), curvesfile (lane curves format)
   lcu/               League client: lockfile/process discovery, https (TLS to
-                     127.0.0.1 trusting only riotgames.pem), session (champ select)
+                     127.0.0.1 trusting only riotgames.pem), session (champ select),
+                     me (own mastery and solo tier)
   app_main.zig       `meiolol-app`: suggest (offline), watch (live), session, get
+  lanecard.zig       the lane card's content (pure): opponent, sentence, curve, options
+  desktop_main.zig   `meiolol-desktop`: the lane card in a window (dvui, Direct3D 11)
+  desktop/           ui.zig (the window, drawn from a View), raster.zig (dvui backend
+                     drawing into memory, for desktop_shot.zig's PNGs)
 deploy/box.sh        cross-compile (static musl, for the host's CPU) and run on the box
 deploy/systemd/      the box's loops as systemd user services (docs/hosting.md)
 deploy/*-loop.sh     box loops in tmux: web (site upload), backup, health (ntfy);
@@ -493,3 +498,27 @@ and a three-question check, then unlimited practice drafts. No streaks or timers
 - Never shows other players' names or stats (Riot policy, docs/production-key.md)
 - Known gaps: no network timeouts in Zig 0.16 Threaded IO; refused connect on Windows
   surfaces as error.Unexpected (mapped to ClientNotRunning)
+
+### Desktop window (src/desktop_main.zig, src/desktop, src/lanecard.zig)
+
+- `zig build desktop -Doptimize=ReleaseSmall`: zig-out/bin/meiolol-desktop.exe (~3 MB;
+  dvui pinned to PR #1012, lazy so the box never fetches it). Reads the newest
+  stats-*.bin and recent-curves.bin (else curves-<patch>.bin) from data/export or next
+  to the exe (src/datafiles.zig, shared with `meiolol-app`)
+- A detached poller thread does what `watch` does once a second and publishes a
+  ui.Status (with the lane card) under a mutex, waking the window with dvui.refresh;
+  the UI thread only draws. Detached because a request to a hung client cannot be
+  interrupted. Per champ select it also reads pickable and owned champions, the
+  player's own mastery and visible solo tier (lcu/me.zig)
+- Lane card (lanecard.zig, docs/concept.md part 6): the enemy shown in my position, else
+  the one core.score.inferRoles puts there (labelled a guess); gold at 14 min one
+  sentence and a chart (estimate line, middle half of games shaded) from the player's
+  bracket once it has 200 games, else all ranks; thin as the site. "From your pool":
+  up to 15 most-mastered pickable champions with role games, ranked by the recommender,
+  widened to every pickable champion below 3 options; 3-5 shown, each with lane gold vs
+  the opponent (green/red only when 2 SE from even and not mostly baseline), mastery and
+  team-fit facts, never win-chance numbers. Riot boilerplate in the footer
+- `zig build desktop-shot -- --stats F --curves F [--out DIR] [--min-games N]`: the
+  window's states (fixture champ selects in desktop_shot.zig) as PNGs at 100%, 150% and
+  full height, drawn by desktop/raster.zig (premultiplied "over" blending, top-left
+  fill rule); no screen or client needed. `zig build ci` compiles both
