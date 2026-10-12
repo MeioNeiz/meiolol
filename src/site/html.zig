@@ -139,7 +139,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         \\<header class="top"><div class="wrap">
         \\{brand}<nav>
         \\{items}</nav>
-        \\{switches}{remember}{meio_view}</div></header>
+        \\{switches}{remember}{meio_view}{admin}</div></header>
         \\{banner}<main class="wrap">
         \\
     , .{
@@ -165,9 +165,18 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
             \\
         , .{ .dir = tpl.trusted(v.dir()) }) else null,
         .meio_view = tpl.when(p.view == null, tpl.trusted(meio_view)),
+        .admin = tpl.trusted(admin_link),
         .banner = tpl.when(!p.public, tpl.trusted(preview_banner)),
     });
 }
+
+/// Jacob's menu link to the admin Draft tester: the admin page (behind basic auth) stores
+/// it in this origin's localStorage, so visitors' pages carry neither link nor admin path
+const admin_link =
+    \\<script>try{const l=JSON.parse(localStorage.getItem("admin-link"));if(l){const a=document.createElement("a");
+    \\a.href=l.href;a.textContent=l.label;document.querySelector("header.top nav").append(a)}}catch(e){}</script>
+    \\
+;
 
 /// On shared and champion pages: moves data-view links into the last view visited;
 /// meioView(v) again from the champion page's filters, which move between views

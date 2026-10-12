@@ -2437,6 +2437,8 @@ window.addEventListener("keydown", ev => {
 });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
 
+// The site's menu shows Jacob a link here (src/site/html.zig admin_link)
+store("link", { href: location.pathname + "#models/draft", label: "Draft tester (admin)" });
 render();
 pollLive();
 pollTraffic();
