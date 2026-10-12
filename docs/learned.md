@@ -68,6 +68,14 @@ Platinum IV+ games only unless stated (crawl floor).
 
 ## Playstyle
 
+- 2026-10-12: Early style (roaming, enemy-half time, fights, damage, wards) barely
+  predicts winning once the gold and XP leads at 14:00 are known: +0.0004 nats vs
+  +0.021 without the state, so most of style's apparent value is being ahead. Small
+  survivors: trading damage (bottom +2.4, mid +1.7 pp per sd), warding (+0.2-0.7),
+  laners taking spare camps, supports roaming. Evidence: model.md "Playstyle given the
+  state". Sure at this size. Site may not say "play aggressive to win"; may show the
+  user's own style against their role's spread as post-game context
+
 ## Player
 
 - 2026-10-12 (dev only, interim): own rank tier predicts gold@14 within Platinum+

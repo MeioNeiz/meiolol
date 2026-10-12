@@ -454,6 +454,55 @@ Reading:
   after the game. allranks' -0.031 and part of own rank's -0.0006 are the result
   showing through. Rank needs rank_history at game time before it counts as a feature
 
+### Playstyle given the state, 2026-10-12 (meiolol-b0)
+
+`meiolol playstyle --data SNAP --platform all --preds DIR` (src/playstyle.zig), rows as
+the protocol's continuous outcomes (games reaching 15:00; 117,806 train, 10,604 test,
+ten rows each), outcome win. Style per player from minutes 0-13, standardised per
+role: away (laners: position frames from minute 3 out of their own lane band and base;
+junglers: in any lane), enemy_half (frames past the river diagonal), fights (kills +
+assists + deaths), damage to champions, wards placed, control wards, wards killed,
+off-role CS (laners: jungle camps; junglers: lane minions). Map zones are rough bands
+on one position a minute. Logistic, L2 1: champion x role dummies, then style x role,
+with and without the state at 14:00 (team gold lead, team XP lead, lane gold lead, by
+role). Use-time: the user's own style, post-game only. Preds: 3c-style-*.tsv.
+
+| model | test log loss | gain, nats per row ± 95% clustered by game |
+| --- | --- | --- |
+| champion in role | 0.6930 | - |
+| + style | 0.6718 | 0.02119 ± 0.00174 |
+| champion + state at 14:00 | 0.5314 | 0.16158 ± 0.00930 (vs champion) |
+| + style, given the state | 0.5310 | 0.00038 ± 0.00015 |
+
+Style weights given the state, win pp per +1 sd (± 95% about ±0.25-0.4):
+
+| feature | top | jungle | middle | bottom | utility |
+| --- | --- | --- | --- | --- | --- |
+| away | 0.23 | -0.85 | 0.31 | 0.69 | 0.64 |
+| enemy_half | -0.23 | 0.46 | 0.16 | -0.31 | 0.98 |
+| fights | 0.39 | -0.60 | -0.20 | -1.10 | 0.91 |
+| damage | 0.44 | 1.04 | 1.65 | 2.36 | 0.65 |
+| wards | 0.57 | 0.20 | 0.70 | 0.26 | 0.65 |
+| control_wards | -0.41 | 0.01 | -0.66 | -0.58 | -0.29 |
+| ward_kills | 0.56 | 0.32 | 0.43 | 0.53 | 0.31 |
+| off_role_cs | 0.29 | -0.15 | 0.67 | 0.77 | 0.56 |
+
+Without the state the same features look large (enemy_half 5.5-8.9 pp per sd, damage
+4.5-7.4, support fights 5.3): that is mostly being ahead, not style.
+
+Reading:
+- Early style says little about winning beyond the state it produced: a twentieth of
+  its apparent value once the gold and XP leads at 14:00 are known. "Play in the enemy
+  half" is a symptom of winning, not a recipe
+- What survives, small: trading damage (bottom +2.4, mid +1.7 pp per sd), warding and
+  clearing wards (+0.2-0.7), laners taking spare camps (+0.3-0.8), supports roaming and
+  fighting (+0.6-1.0). Fighting more for the same gold hurts bottom (-1.1); junglers
+  who spend more time in lanes than the state rewards lose a little (-0.85). Control
+  wards bought for the same gold lead go with losing (-0.3 to -0.7): likely behind
+  teams buy them, not that they hurt
+- Lesson material at most, with intervals; one sd of any style is worth under 2.5 pp
+  once the state is known
+
 ## Next steps
 
 - Experience term: rerun once the daily eval shows 300+ train and 100+ test games per
