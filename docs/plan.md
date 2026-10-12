@@ -415,6 +415,11 @@ next steps land here.
   like one ~2,900 gold ahead at 25, Pyke like one ~2,600 behind). Per-minute curve
   real but small; converting leads or comebacks beyond that: nothing. Next: split who
   holds the gold, then objectives held in the state
+  Done (f151e51, c71627d): gold lead per role predicts better than team gold, and the
+  champion effects stay (they're value at equal gold, not gold on a low-value role);
+  1000 gold is worth 1-3 pp on the support, 6-12 on bot; champion effects hold with
+  objectives in the state. Review fixes queued: winchance weights (live bug in Your
+  games), clustered playstyle intervals, after meiolol-47's refactor commit
 - Win (meiolol-88): joint ratings first to beat champion baseline on dev (-0.0031 ±
   0.0017); win rows need duration_s >= 900 (leaver forfeits out)
 - Experience term (src/experience.zig): rerun at 300+ train / 100+ test per variant; if
