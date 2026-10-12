@@ -137,8 +137,10 @@ outcomes and readings decided by Jacob the same day.
   also need a compact timeline that reached 15:00: frames[15].t_ms >= 900000 (frame 15
   exists is not enough: games ending 14:09-14:59 have it as their end frame). Win also
   needs duration_s >= 900: earlier endings are remakes, leaver forfeits (surrender
-  without the remake flag, ~1.5%) or aborts, decided by the leaver, not the draft
-  (2026-10-12). Platinum IV+ only (crawl floor)
+  without the remake flag, ~1.5%) or aborts, likely decided by the leaver, not the draft
+  (2026-10-12). A choice, not yet measured: compare win runs with and without them
+  (dev only) before treating it as settled; stats.scan, eval and draft --export keep
+  them. Platinum IV+ only (crawl floor)
 - Outcomes:
   - win: log loss, paired interval vs champion base rates
   - gold14: total_gold at frame 14
@@ -452,8 +454,9 @@ each other):
 
 Reading:
 - Champions alone now beat a coin: ~0.6897 log loss, AUC 0.55 at 90k games. The
-  curve still falls, ~0.0008 log loss and ~0.006 AUC per doubling, no plateau yet; at
-  that rate ~1M games reaches ~0.687, near the published ~0.68 at millions
+  curve fell from 4.5k to 67k (~0.0008 log loss and ~0.006 AUC per doubling over that
+  range) but 67k to 90k is flat within the ±0.0005 paired noise, so a plateau can't be
+  ruled out; extrapolating to ~1M games is not supported yet
 - Data volume is the lever, not model form: interactions (lane, every enemy, ally
   synergy) add nothing detectable on win at 90k games, although lane embeddings do on
   gold and CS (2a). Pool every region (EUW1 alone is clearly worse); recency weighting
@@ -482,7 +485,9 @@ role). Use-time: the user's own style, post-game only. Preds: 3c-style-*.tsv.
 | champion + state at 14:00 | 0.5314 | 0.16158 ± 0.00930 (vs champion) |
 | + style, given the state | 0.5310 | 0.00038 ± 0.00015 |
 
-Style weights given the state, win pp per +1 sd (± 95% about ±0.25-0.4):
+Style weights given the state, win pp per +1 sd (± 95% about ±0.25-0.4, from the
+Hessian with rows treated as independent: ten per game, mirrored state features, so
+too narrow until refitted with errors clustered by game):
 
 | feature | top | jungle | middle | bottom | utility |
 | --- | --- | --- | --- | --- | --- |
@@ -577,8 +582,9 @@ Reading:
   nats at 10, 20, 25). Bottom laners' spread grows with the game (3.7 at 10 to 8.5 at
   30), top's shrinks after 25
 - No champion converts a lead or comes back from behind measurably differently from its
-  general value: "from 2k behind at 15" is the same effect as at even, at 118k games
-  (any difference under ~1 pp per 1000 gold)
+  general value: "from 2k behind at 15" is the same effect as at even, at 118k games.
+  Not detected rather than bounded: the spread estimate is truncated at 0 and reaches
+  ~2 pp per 1000 gold (jungle 10-20); a bootstrap over games would give a real bound
 - Descriptive: who picks the champion and the rest of their team are not held fixed.
   Lesson material with intervals, never a pick reason
 

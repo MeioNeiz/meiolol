@@ -17,6 +17,10 @@ How to write a line:
 - Add a line when a result is final (held-out games, interval reported); mark dev-only
   results "(early)". Supersede, don't delete: strike the old line with ~~ ~~ and add the
   new one with its date
+- "Sure:" names what was measured. A null result is "not detected", with the largest
+  effect the data still allows; "under X" only when X is a measured upper bound
+- Leaving games out (short games, regions, patches) needs a with/without comparison
+  first; until then say which code leaves them out and that it is untested
 - Platinum IV+ games unless stated (the crawl's floor)
 
 ## Win
@@ -31,20 +35,26 @@ How to write a line:
   Site: lessons such as "on Kayle, 1,500 gold behind at 15 is par", with the
   interval; never a pick reason (who plays the champion isn't held fixed). Evidence:
   docs/model.md "Champion given the state (scaling)"
-- 2026-10-13: No champion is measurably better at coming back from behind, or at
+- 2026-10-13: We found no champion that is better at coming back from behind, or at
   closing out a lead, than at an even game: 2,000 gold behind at 15, a champion makes
   the same difference as at even. A champion's value beyond the gold mostly stays the
   same from minute 10 to 30, with a small real scaling curve (bot laners matter more
-  late). Sure: 118k games; any comeback difference is under about 1 percentage point
-  per 1,000 gold. Site: no "comeback champion" labels; scaling only as the effect by
-  minute with intervals. Evidence: docs/model.md "Champion given the state (scaling)"
-- 2026-10-12 (early): Our best draft model picks the winner 53.3% of the time (a coin
-  flip is 50%, LoLDraftAI reports 55-56%), and it is still getting better with every
-  doubling of games, with no sign of levelling off. Counters and ally synergy don't add
-  anything measurable yet; using every region's games beats using EUW's alone; giving
-  newer games more weight doesn't help. Sure: dev games only, 90k training games.
-  Site: nothing yet; data volume is the lever. Evidence: meiolol-88's lab win runs
-  (about -0.0008 log loss and +0.006 AUC per doubling)
+  late). Sure: 118k games; not detected rather than ruled out: the estimate is zero in
+  most roles and minutes, at most about 2 percentage points per 1,000 gold (jungle,
+  10-20 min), and modelling it never improved held-out games. Site: no "comeback
+  champion" labels; scaling only as the effect by minute with intervals. Evidence: docs/model.md "Champion given the state (scaling)"
+- ~~2026-10-12 (early): Our best draft model picks the winner 53.3% of the time, still
+  getting better with every doubling of games. Withdrawn 2026-10-13: 53.3 was the old
+  eval's pick percentile (reported there as no signal), not an accuracy, and the curve
+  is flat from 67k to 90k games~~
+- 2026-10-13 (early): The ten champions alone predict the winner only slightly better
+  than a coin: our best draft model ranks a winning team above a losing one 55% of the
+  time (a coin 50%). It improved from 4.5k to 67k training games but not from 67k to
+  90k, so whether more games keep helping is open. Counters and ally synergy added
+  nothing measurable; every region's games beat EUW's alone; weighting newer games
+  didn't help. Sure: dev games only, 90k training games, games ending before 15:00
+  still in. Site: nothing yet. Evidence: docs/model.md "Win from the draft" (AUC 0.550,
+  log loss 0.6897 vs a coin's 0.6931)
 - 2026-10-11: Knowing all ten champions does not yet predict the winner better than
   each champion's own win rate. Sure at 152k games. Site: no "this draft wins X%"
   claims. Evidence: meiolol eval, docs/model.md baselines (log loss 0.6905 vs 0.6902)
@@ -79,8 +89,9 @@ How to write a line:
   games. Site: "what your lane matchup and this enemy team typically do to your early
   game", with ranges. Evidence: docs/model.md "Team effects on early outcomes"
 - 2026-10-12: Whether your champion in particular is good or bad against this enemy
-  team doesn't show up beyond your lane: any such effect is under about 20 gold at 14.
-  Sure: two different model types agree at 118k games. Site: no team counters or "best
+  team doesn't show up beyond your lane. Sure: two different model types agree at 118k
+  games; not detected rather than ruled out (the estimate is 0-21 gold at 14 and is
+  switched off as noise in 3 of 5 roles). Site: no team counters or "best
   pick against this comp". Evidence: docs/model.md "Team effects", "Champion
   embeddings against the enemy team"
 - ~~2026-10-12: Real interactions live in the lane: champion embeddings help only in
@@ -92,9 +103,11 @@ How to write a line:
 
 ## Items
 
-- 2026-10-12: Which item you finish barely changes your chance to win once you account
-  for when you bought it and how far ahead you were; "win rate by item" mostly shows
-  who was already ahead. Sure: 2.9M first-three-item purchases. Site: no "best build"
+- 2026-10-12: Which item you finish adds almost nothing to predicting the win once you
+  know when you bought it and how far ahead you were (a twentieth of what the champion
+  adds). Sure: 118k games (2.9M first-three-item purchases); the champion-specific item
+  term is not detected; no item-only model was fitted, so how much of "win rate by item"
+  is the lead is not measured. Site: no "best build"
   or "this item wins more"; buying time and the lead at purchase are fair lessons.
   Evidence: docs/model.md "Items given the state at purchase"
 
@@ -103,7 +116,7 @@ How to write a line:
 - 2026-10-12: Teams that take objectives win about as often as teams with this much
   more gold lead: a dragon about 1000, each soul point about 800 more, soul about 4000,
   elder about 4800, baron 400-1000, an inhibitor 900 at 20 minutes to 2300 at 30, a
-  grub 100-150; towers are worth only their gold. The values are the same whoever is
+  grub 100-150; towers are worth only their gold. No difference was detected by who is
   ahead. Sure as a description, not proof the objective caused the win. Site:
   post-game "teams that took this dragon won about as often as teams 1000 gold ahead"
   (Jacob to confirm). Evidence: docs/model.md "Objective value given the state"
@@ -115,8 +128,10 @@ How to write a line:
   14:00 are known, style adds very little. What survives is small: bot laners and mids
   who trade more damage win a bit more (about +2.4 and +1.7 percentage points per step),
   supports who roam and fight and laners who take spare camps a little more. Sure:
-  118k games. Site: no "play aggressive to win"; post-game may show your own style
-  against your role's spread. Evidence: docs/model.md "Playstyle given the state"
+  118k games for the overall result; the per-style numbers' intervals treat the ten
+  players of a game as independent, so they are too narrow until refitted by game.
+  Site: no "play aggressive to win"; post-game may show your own style against your
+  role's spread. Evidence: docs/model.md "Playstyle given the state"
 
 ## Player
 
@@ -135,10 +150,12 @@ How to write a line:
   Sure: 1,683 of 2,209 such events are team 0 in archived timelines. Models read soul
   from team 100/200 only (src/objectives.zig)
 - 2026-10-12: About 1.5% of games end before 15:00 without being flagged as remakes,
-  mostly surrenders after someone left: they count for LP but the leaver decided them.
-  A few are anti-cheat aborts with no real result. Real remakes are flagged correctly.
-  Sure: 3,400 of 230k games, raw summaries checked. Models: left out of win and stats;
-  early-game outcomes already need 15:00
+  mostly surrenders after someone left, likely decided by the leaver; a few are
+  anti-cheat aborts with no real result. Real remakes are flagged correctly. Sure:
+  3,400 of 230k games, raw summaries checked. Models: not settled. The lab harness
+  leaves them out of win fitting and scoring (07564cc); the site's stats, meiolol eval
+  and the draft export keep them. Whether leaving them out helps is untested: compare
+  win runs with and without first. Early-game outcomes need 15:00 by definition
 - 2026-10-12: Nearly everyone finishes an item before the game ends (only 1.1% of top
   laners and 1.3% of supports in games past 15:00 never do), so first-item time works
   for every role. Sure. Evidence: docs/model.md "Team effects"
