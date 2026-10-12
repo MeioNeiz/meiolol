@@ -201,6 +201,37 @@ pub const Stmt = struct {
         const ptr: ?[*]const u8 = @ptrCast(c.sqlite3_column_blob(s.handle, col));
         return if (ptr) |p| p[0..len] else "";
     }
+
+    /// The current row as a T, one field per column in SELECT order: ints, floats, bools,
+    /// []const u8 (text or blob, valid until the next step, reset or deinit) or optionals
+    /// of those (null for NULL). Panics when the column count differs from T's fields, so
+    /// a SELECT edited without its struct fails on first use instead of reading shifted
+    /// columns
+    pub fn row(s: *Stmt, comptime T: type) T {
+        const info = @typeInfo(T).@"struct";
+        const n = c.sqlite3_column_count(s.handle);
+        if (n != info.field_names.len) std.debug.panic(
+            "row {s}: {d} columns for {d} fields",
+            .{ @typeName(T), n, info.field_names.len },
+        );
+        var r: T = undefined;
+        inline for (info.field_names, info.field_types, 0..) |name, F, i| {
+            @field(r, name) = s.column(F, i);
+        }
+        return r;
+    }
+
+    fn column(s: *Stmt, comptime T: type, col: c_int) T {
+        return switch (@typeInfo(T)) {
+            .optional => |o| if (s.isNull(col)) null else s.column(o.child, col),
+            .int => @intCast(s.int(col)),
+            .float => @floatCast(c.sqlite3_column_double(s.handle, col)),
+            .bool => s.int(col) != 0,
+            else => if (T == []const u8) s.bytes(col) else @compileError(
+                "row: no column type " ++ @typeName(T),
+            ),
+        };
+    }
 };
 
 test "round trip" {
@@ -218,7 +249,10 @@ test "round trip" {
     try std.testing.expectEqualStrings("hi", s.bytes(1));
     try std.testing.expectEqualSlices(u8, "\x00\x01", s.bytes(2));
     try std.testing.expect(try s.step());
-    try std.testing.expectEqual(@as(?i64, null), s.optInt(0));
+    const r = s.row(struct { a: ?u8, b: []const u8, c: ?[]const u8 });
+    try std.testing.expectEqual(@as(?u8, null), r.a);
+    try std.testing.expectEqualStrings("x", r.b);
+    try std.testing.expectEqual(@as(?[]const u8, null), r.c);
     try std.testing.expect(!try s.step());
 }
 

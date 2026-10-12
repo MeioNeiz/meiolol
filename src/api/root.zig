@@ -323,7 +323,8 @@ fn account(arena: Allocator, db: store.Db, key: []const u8) !?struct { puuid: ?[
     defer q.deinit();
     try q.bind(.{key});
     if (!try q.step()) return null;
-    return .{ .puuid = if (q.isNull(0)) null else try arena.dupe(u8, q.bytes(0)), .checked = q.int(1) };
+    const r = q.row(struct { puuid: ?[]const u8, checked: i64 });
+    return .{ .puuid = if (r.puuid) |v| try arena.dupe(u8, v) else null, .checked = r.checked };
 }
 
 fn loadPlayer(arena: Allocator, db: store.Db, puuid: []const u8) !?PlayerOut {
@@ -334,15 +335,25 @@ fn loadPlayer(arena: Allocator, db: store.Db, puuid: []const u8) !?PlayerOut {
     defer p.deinit();
     try p.bind(.{puuid});
     if (!try p.step()) return null;
+    const r = p.row(struct {
+        name: []const u8,
+        tag: []const u8,
+        platform: []const u8,
+        tier: ?[]const u8,
+        division: ?[]const u8,
+        lp: ?i64,
+        refreshed: i64,
+        @"error": ?[]const u8,
+    });
     return .{
-        .name = try arena.dupe(u8, p.bytes(0)),
-        .tag = try arena.dupe(u8, p.bytes(1)),
-        .platform = try arena.dupe(u8, p.bytes(2)),
-        .tier = if (p.isNull(3)) null else try arena.dupe(u8, p.bytes(3)),
-        .division = if (p.isNull(4)) null else try arena.dupe(u8, p.bytes(4)),
-        .lp = p.optInt(5),
-        .refreshed = p.int(6),
-        .@"error" = if (p.isNull(7)) null else try arena.dupe(u8, p.bytes(7)),
+        .name = try arena.dupe(u8, r.name),
+        .tag = try arena.dupe(u8, r.tag),
+        .platform = try arena.dupe(u8, r.platform),
+        .tier = if (r.tier) |v| try arena.dupe(u8, v) else null,
+        .division = if (r.division) |v| try arena.dupe(u8, v) else null,
+        .lp = r.lp,
+        .refreshed = r.refreshed,
+        .@"error" = if (r.@"error") |v| try arena.dupe(u8, v) else null,
     };
 }
 
@@ -376,9 +387,10 @@ fn progress(arena: Allocator, db: store.Db, key: []const u8, out: GamesOut) !Gam
     defer q.deinit();
     try q.bind(.{key});
     if (!try q.step()) return o;
-    o.ahead = try db.scalar("SELECT count(*) FROM jobs WHERE requested < ?", .{q.int(0)});
-    o.pending = q.optInt(1);
-    o.total = q.optInt(2);
+    const r = q.row(struct { requested: i64, pending: ?i64, total: ?i64 });
+    o.ahead = try db.scalar("SELECT count(*) FROM jobs WHERE requested < ?", .{r.requested});
+    o.pending = r.pending;
+    o.total = r.total;
     o.state = if (o.pending != null) "fetching" else "queued";
     return o;
 }
@@ -393,17 +405,22 @@ fn report(ctx: *Context, arena: Allocator, db: store.Db, puuid: []const u8, rank
     try q.bind(.{ puuid, ctx.opts.max_games });
     var inputs: std.ArrayList(game.Input) = .empty;
     while (try q.step()) {
-        const summary = fetch.readSummary(arena, q.bytes(2)) catch |err| {
-            log.warn("{s}: summary {t}", .{ q.bytes(0), err });
+        const r = q.row(struct {
+            match_id: []const u8,
+            slot: u8,
+            summary: []const u8,
+            timeline: ?[]const u8,
+        });
+        const summary = fetch.readSummary(arena, r.summary) catch |err| {
+            log.warn("{s}: summary {t}", .{ r.match_id, err });
             continue;
         };
-        const slot: u8 = @intCast(q.int(1));
-        if (slot >= summary.players.len) continue;
-        const t = if (q.isNull(3)) null else fetch.readTimeline(arena, q.bytes(3)) catch |err| blk: {
-            log.warn("{s}: timeline {t}", .{ q.bytes(0), err });
+        if (r.slot >= summary.players.len) continue;
+        const t = if (r.timeline) |bytes| fetch.readTimeline(arena, bytes) catch |err| blk: {
+            log.warn("{s}: timeline {t}", .{ r.match_id, err });
             break :blk null;
-        };
-        try inputs.append(arena, .{ .summary = summary, .slot = slot, .timeline = t });
+        } else null;
+        try inputs.append(arena, .{ .summary = summary, .slot = r.slot, .timeline = t });
     }
     return game.report(arena, inputs.items, rank, ctx.curves);
 }
@@ -421,8 +438,10 @@ fn forget(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8, post
             var q = try db.prepare("SELECT state, expires FROM challenges WHERE riot_id = ?");
             defer q.deinit();
             try q.bind(.{key});
-            if (!try q.step() or q.int(1) <= now) break :blk "";
-            break :blk try arena.dupe(u8, q.bytes(0));
+            if (!try q.step()) break :blk "";
+            const r = q.row(struct { state: []const u8, expires: i64 });
+            if (r.expires <= now) break :blk "";
+            break :blk try arena.dupe(u8, r.state);
         };
         const waiting = std.mem.eql(u8, state, "issued") or std.mem.eql(u8, state, "mismatch");
         const busy_already = std.mem.eql(u8, state, "pending") or std.mem.eql(u8, state, "checking");
@@ -445,11 +464,12 @@ fn forget(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8, post
     defer q.deinit();
     try q.bind(.{key});
     if (!try q.step()) return .{ .status = .ok, .body = "{\"state\":\"none\"}" };
-    const expired = q.int(2) <= now and !std.mem.eql(u8, q.bytes(0), "done");
+    const r = q.row(struct { state: []const u8, icon: ?i64, expires: i64 });
+    const expired = r.expires <= now and !std.mem.eql(u8, r.state, "done");
     return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, .{
-        .state = if (expired) "expired" else q.bytes(0),
-        .icon = q.optInt(1),
-        .expires = q.int(2),
+        .state = if (expired) "expired" else r.state,
+        .icon = r.icon,
+        .expires = r.expires,
     }, .{}) };
 }
 

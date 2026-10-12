@@ -134,20 +134,29 @@ pub fn scan(
     var current: std.ArrayList(u8) = .empty;
     defer current.deinit(gpa);
     while (try q.step()) {
-        const id = q.bytes(0);
-        if (!std.mem.eql(u8, id, current.items)) {
+        const r = q.row(struct {
+            match_id: []const u8,
+            winning_team: i64,
+            game_start: i64,
+            patch: []const u8,
+            platform: []const u8,
+            team_id: i64,
+            position: []const u8,
+            champion_id: i64,
+        });
+        if (!std.mem.eql(u8, r.match_id, current.items)) {
             try game.finish(sink, &summary);
             current.clearRetainingCapacity();
-            try current.appendSlice(gpa, id);
+            try current.appendSlice(gpa, r.match_id);
             game = .{
-                .id = matchKey(id),
-                .winning_team = q.int(1),
-                .start = q.int(2),
-                .patch = patchKey(q.bytes(3)),
-                .platform = platformIndex(platforms, q.bytes(4)),
+                .id = matchKey(r.match_id),
+                .winning_team = r.winning_team,
+                .start = r.game_start,
+                .patch = patchKey(r.patch),
+                .platform = platformIndex(platforms, r.platform),
             };
         }
-        game.add(q.int(5), if (q.isNull(6)) "" else q.bytes(6), q.int(7));
+        game.add(r.team_id, r.position, r.champion_id);
     }
     try game.finish(sink, &summary);
     return summary;
@@ -162,9 +171,10 @@ pub fn champions(gpa: std.mem.Allocator, db: store.Db) ![]statsfile.Champion {
     defer q.deinit();
     try q.bind(.{});
     while (try q.step()) {
-        const name = try gpa.dupe(u8, q.bytes(1));
+        const r = q.row(struct { id: i64, name: []const u8 });
+        const name = try gpa.dupe(u8, r.name);
         errdefer gpa.free(name);
-        try list.append(gpa, .{ .id = @intCast(q.int(0)), .name = name });
+        try list.append(gpa, .{ .id = @intCast(r.id), .name = name });
     }
     if (list.items.len == 0) return error.NoChampions;
     return list.toOwnedSlice(gpa);

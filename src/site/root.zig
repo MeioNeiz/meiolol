@@ -781,7 +781,10 @@ fn loadChamps(site: *Site, db: store.Db) !void {
         );
         defer q.deinit();
         try q.bind(.{ patch_json, stats.ranked_solo, platform_json, site.since_ms });
-        while (try q.step()) try banned.put(a, @intCast(q.int(0)), @intCast(q.int(1)));
+        while (try q.step()) {
+            const r = q.row(struct { champion: u32, games: u32 });
+            try banned.put(a, r.champion, r.games);
+        }
     }
 
     var list: std.ArrayList(Champ) = .empty;
@@ -789,19 +792,25 @@ fn loadChamps(site: *Site, db: store.Db) !void {
     defer q.deinit();
     try q.bind(.{});
     while (try q.step()) {
-        const id: u32 = @intCast(q.int(0));
+        const r = q.row(struct {
+            id: u32,
+            key: []const u8,
+            name: []const u8,
+            ddragon_version: []const u8,
+        });
+        const id = r.id;
         const c = site.stats.index(id) orelse continue;
-        const name = try a.dupe(u8, q.bytes(2));
+        const name = try a.dupe(u8, r.name);
         try list.append(a, .{
             .c = c,
             .id = id,
-            .key = try a.dupe(u8, q.bytes(1)),
+            .key = try a.dupe(u8, r.key),
             .name = name,
             .slug = try slug(a, name),
             .banned = banned.get(id) orelse 0,
             .games = site.stats.champGames(c),
         });
-        if (site.ddragon_version.len == 0) site.ddragon_version = try a.dupe(u8, q.bytes(3));
+        if (site.ddragon_version.len == 0) site.ddragon_version = try a.dupe(u8, r.ddragon_version);
     }
     site.champs = try list.toOwnedSlice(a);
     site.by_c = try a.alloc(?usize, site.stats.n);

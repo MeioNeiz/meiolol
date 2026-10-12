@@ -114,20 +114,28 @@ pub fn buildMany(
     var takers: std.ArrayList(usize) = .empty;
     defer takers.deinit(gpa);
     while (try q.step()) {
+        const m = q.row(struct {
+            match_id: []const u8,
+            winner: i64,
+            timeline: []const u8,
+            patch: []const u8,
+            start: i64,
+            platform: []const u8,
+        });
         takers.clearRetainingCapacity();
         for (specs, 0..) |s, i| {
-            if (s.takes(q.bytes(3), q.int(4), q.bytes(5))) try takers.append(gpa, i);
+            if (s.takes(m.patch, m.start, m.platform)) try takers.append(gpa, i);
         }
         if (takers.items.len == 0) continue;
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
-        const blue_won = q.int(1) == 100;
-        const t = decode(arena, q.bytes(2)) catch |err| {
-            log.warn("{s}: {t}", .{ q.bytes(0), err });
+        const blue_won = m.winner == 100;
+        const t = decode(arena, m.timeline) catch |err| {
+            log.warn("{s}: {t}", .{ m.match_id, err });
             for (takers.items) |i| summaries[i].skipped += 1;
             continue;
         };
-        try players.bind(.{q.bytes(0)});
+        try players.bind(.{m.match_id});
         const game = try readGame(arena, &players) orelse {
             for (takers.items) |i| summaries[i].skipped += 1;
             continue;
@@ -164,16 +172,25 @@ fn readGame(arena: std.mem.Allocator, players: *store.sqlite.Stmt) !?Game {
     var n_ranks: usize = 0;
     var rows: usize = 0;
     while (try players.step()) : (rows += 1) {
-        const side: usize = if (players.int(1) == 100) 0 else 1;
-        const r = @backingInt(Role.fromLcu(players.bytes(2)) orelse return null);
-        const slot = players.int(0);
+        const p = players.row(struct {
+            slot: i64,
+            team: i64,
+            position: []const u8,
+            champion: u32,
+            tier: ?[]const u8,
+            mastery: ?[]const u8,
+            fetched_at: i64,
+        });
+        const side: usize = if (p.team == 100) 0 else 1;
+        const r = @backingInt(Role.fromLcu(p.position) orelse return null);
+        const slot = p.slot;
         if (seen[side][r] or slot < 0 or slot >= timeline.max_participants) return null;
         seen[side][r] = true;
         g.ids[side][r] = @intCast(slot + 1);
-        const champion: u32 = @intCast(players.int(3));
+        const champion = p.champion;
         g.champions[side][r] = champion;
-        if (!players.isNull(5)) {
-            const entries = mastery.decode(arena, players.bytes(5), players.int(6)) catch &.{};
+        if (p.mastery) |data| {
+            const entries = mastery.decode(arena, data, p.fetched_at) catch &.{};
             const i = std.sort.binarySearch(mastery.Entry, entries, champion, struct {
                 fn order(c: u32, e: mastery.Entry) std.math.Order {
                     return std.math.order(c, e.champion);
@@ -181,8 +198,8 @@ fn readGame(arena: std.mem.Allocator, players: *store.sqlite.Stmt) !?Game {
             }.order);
             if (i) |at| g.experienced[side][r] = entries[at].points >= curvesfile.experienced_points;
         }
-        if (!players.isNull(4) and n_ranks < ranks.len) {
-            if (curvesfile.tierRank(players.bytes(4))) |rank| {
+        if (p.tier != null and n_ranks < ranks.len) {
+            if (curvesfile.tierRank(p.tier.?)) |rank| {
                 ranks[n_ranks] = rank;
                 n_ranks += 1;
             }

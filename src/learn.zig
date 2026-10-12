@@ -179,12 +179,18 @@ fn champFacts(arena: std.mem.Allocator, db: store.Db, st: *const Stats, opts: Op
         defer q.deinit();
         try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
         while (try q.step()) {
-            const c = st.index(@intCast(q.int(0))) orelse continue;
-            const r = Role.fromLcu(q.bytes(1)) orelse continue;
-            const minutes: u32 = @intCast(@divFloor(@max(0, q.int(3)), 60));
+            const p = q.row(struct {
+                champion: u32,
+                position: []const u8,
+                win: bool,
+                duration_s: i64,
+            });
+            const c = st.index(p.champion) orelse continue;
+            const r = Role.fromLcu(p.position) orelse continue;
+            const minutes: u32 = @intCast(@divFloor(@max(0, p.duration_s), 60));
             const n = &champs[c].length[@backingInt(r)][lengthBucket(minutes)];
             n.games += 1;
-            if (q.int(2) != 0) n.wins += 1;
+            if (p.win) n.wins += 1;
         }
     }
 
@@ -210,7 +216,13 @@ fn champFacts(arena: std.mem.Allocator, db: store.Db, st: *const Stats, opts: Op
         var won = false;
         while (true) {
             const more = try q.step();
-            const same = more and team_id == q.int(1) and std.mem.eql(u8, team_key.items, q.bytes(0));
+            const p = if (more) q.row(struct {
+                match_id: []const u8,
+                team: i64,
+                champion: u32,
+                win: bool,
+            }) else undefined;
+            const same = more and team_id == p.team and std.mem.eql(u8, team_key.items, p.match_id);
             if (!same and members > 0) {
                 // Only full teams with every damage type known
                 if (members == 5 and known == 5) {
@@ -225,12 +237,12 @@ fn champFacts(arena: std.mem.Allocator, db: store.Db, st: *const Stats, opts: Op
             if (!more) break;
             if (!same) {
                 team_key.clearRetainingCapacity();
-                try team_key.appendSlice(arena, q.bytes(0));
-                team_id = q.int(1);
-                won = q.int(3) != 0;
+                try team_key.appendSlice(arena, p.match_id);
+                team_id = p.team;
+                won = p.win;
             }
             members += 1;
-            const c = st.index(@intCast(q.int(2))) orelse continue;
+            const c = st.index(p.champion) orelse continue;
             const m = champs[c].magic orelse continue;
             sum += m;
             known += 1;

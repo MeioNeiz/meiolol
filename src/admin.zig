@@ -242,7 +242,10 @@ fn groups(arena: std.mem.Allocator, db: store.Db, sql: []const u8) ![]Group {
     defer q.deinit();
     try q.bind(.{});
     var out: std.ArrayList(Group) = .empty;
-    while (try q.step()) try out.append(arena, .{ .key = try arena.dupe(u8, q.bytes(0)), .n = q.int(1) });
+    while (try q.step()) {
+        const r = q.row(Group);
+        try out.append(arena, .{ .key = try arena.dupe(u8, r.key), .n = r.n });
+    }
     return out.items;
 }
 
@@ -253,8 +256,9 @@ fn ladderTiers(arena: std.mem.Allocator, db: store.Db) ![]Group {
     try q.bind(.{});
     var out: std.ArrayList(Group) = .empty;
     while (try q.step()) {
-        const r = store.schema.unpackRank(q.int(0) * 4) orelse continue;
-        try out.append(arena, .{ .key = r.tier, .n = q.int(1) });
+        const g = q.row(struct { tier: i64, n: i64 });
+        const r = store.schema.unpackRank(g.tier * 4) orelse continue;
+        try out.append(arena, .{ .key = r.tier, .n = g.n });
     }
     return out.items;
 }
@@ -287,29 +291,36 @@ fn draftMix(arena: std.mem.Allocator, db: store.Db) !DraftMix {
     var platforms: std.StringArrayHashMapUnmanaged(i64) = .empty;
     var patches: std.StringArrayHashMapUnmanaged(i64) = .empty;
     while (try q.step()) {
+        const row = q.row(struct {
+            day: i64,
+            platform: []const u8,
+            patch: []const u8,
+            rank: ?i64,
+            blue_win: u64,
+            minutes: ?i64,
+        });
         mix.rows += 1;
-        const platform = q.bytes(1);
-        const p = try platforms.getOrPut(arena, platform);
+        const p = try platforms.getOrPut(arena, row.platform);
         if (!p.found_existing) {
-            p.key_ptr.* = try arena.dupe(u8, platform);
+            p.key_ptr.* = try arena.dupe(u8, row.platform);
             p.value_ptr.* = 0;
         }
         p.value_ptr.* += 1;
-        const pt = try patches.getOrPut(arena, q.bytes(2));
+        const pt = try patches.getOrPut(arena, row.patch);
         if (!pt.found_existing) {
-            pt.key_ptr.* = try arena.dupe(u8, q.bytes(2));
+            pt.key_ptr.* = try arena.dupe(u8, row.patch);
             pt.value_ptr.* = 0;
         }
         pt.value_ptr.* += 1;
-        if (ep.platform(platform)) |pl| {
-            const d = try days.getOrPut(arena, q.int(0));
+        if (ep.platform(row.platform)) |pl| {
+            const d = try days.getOrPut(arena, row.day);
             if (!d.found_existing) d.value_ptr.* = @splat(0);
             d.value_ptr[@backingInt(pl.region)] += 1;
         }
-        const tier: usize = if (q.optInt(3)) |r| @min(@as(usize, @intCast(@max(r, 0))) / 4, store.schema.tiers.len) else store.schema.tiers.len;
+        const tier: usize = if (row.rank) |r| @min(@as(usize, @intCast(@max(r, 0))) / 4, store.schema.tiers.len) else store.schema.tiers.len;
         mix.tiers[tier] += 1;
-        mix.blue_wins += @intCast(q.int(4));
-        if (q.optInt(5)) |m| mix.minutes[@min(@as(usize, @intCast(@max(m, 0))) / 5, mix.minutes.len - 1)] += 1;
+        mix.blue_wins += row.blue_win;
+        if (row.minutes) |m| mix.minutes[@min(@as(usize, @intCast(@max(m, 0))) / 5, mix.minutes.len - 1)] += 1;
     }
     const day_rows = try arena.alloc(DayRow, days.count());
     for (days.keys(), days.values(), day_rows) |d, v, *r| r.* = .{ .day = d, .region = v };

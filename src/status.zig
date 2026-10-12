@@ -114,10 +114,13 @@ fn groups(arena: std.mem.Allocator, db: store.Db, sql: []const u8, scale: i64) !
     defer q.deinit();
     try q.bind(.{});
     var list: std.ArrayList(Group) = .empty;
-    while (try q.step()) try list.append(arena, .{
-        .label = try arena.dupe(u8, q.bytes(0)),
-        .n = .{ .n = q.int(1) * scale, .estimate = scale > 1 },
-    });
+    while (try q.step()) {
+        const r = q.row(struct { label: []const u8, n: i64 });
+        try list.append(arena, .{
+            .label = try arena.dupe(u8, r.label),
+            .n = .{ .n = r.n * scale, .estimate = scale > 1 },
+        });
+    }
     return list.items;
 }
 

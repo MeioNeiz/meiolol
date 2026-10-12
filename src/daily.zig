@@ -221,9 +221,10 @@ pub fn load(
         defer q.deinit();
         try q.bind(.{match_id});
         if (!try q.step()) return null;
-        p.patch = try arena.dupe(u8, q.bytes(0));
-        p.winner = if (q.int(1) == 100) 0 else 1;
-        p.minutes = @intCast(@divFloor(q.int(2) + 30, 60));
+        const m = q.row(struct { patch: []const u8, winning_team: i64, duration_s: i64 });
+        p.patch = try arena.dupe(u8, m.patch);
+        p.winner = if (m.winning_team == 100) 0 else 1;
+        p.minutes = @intCast(@divFloor(m.duration_s + 30, 60));
     }
     {
         var seen: [2][5]bool = @splat(@splat(false));
@@ -237,14 +238,20 @@ pub fn load(
         try q.bind(.{match_id});
         var rows: usize = 0;
         while (try q.step()) : (rows += 1) {
-            const t: u1 = if (q.int(0) == 100) 0 else 1;
-            const r = Role.fromLcu(q.bytes(1)) orelse return null;
-            const id: u32 = @intCast(q.int(2));
-            if (seen[t][@backingInt(r)] or st.index(id) == null) return null;
+            const pa = q.row(struct {
+                team_id: i64,
+                position: []const u8,
+                champion_id: u32,
+                kills: ?i64,
+                gold: ?i64,
+            });
+            const t: u1 = if (pa.team_id == 100) 0 else 1;
+            const r = Role.fromLcu(pa.position) orelse return null;
+            if (seen[t][@backingInt(r)] or st.index(pa.champion_id) == null) return null;
             seen[t][@backingInt(r)] = true;
-            p.teams[t][@backingInt(r)] = id;
-            p.kills[t] += @intCast(@max(0, q.optInt(3) orelse 0));
-            p.gold[t] += @intCast(@max(0, q.optInt(4) orelse 0));
+            p.teams[t][@backingInt(r)] = pa.champion_id;
+            p.kills[t] += @intCast(@max(0, pa.kills orelse 0));
+            p.gold[t] += @intCast(@max(0, pa.gold orelse 0));
         }
         if (rows != 10) return null;
         // Exact totals would help find the game elsewhere; the reveal shows 0.1k anyway
@@ -259,7 +266,8 @@ pub fn load(
         defer q.deinit();
         try q.bind(.{match_id});
         while (try q.step()) {
-            try bans[if (q.int(0) == 100) 0 else 1].append(arena, @intCast(q.int(1)));
+            const b = q.row(struct { team_id: i64, champion_id: u32 });
+            try bans[if (b.team_id == 100) 0 else 1].append(arena, b.champion_id);
         }
         p.bans = .{ bans[0].items, bans[1].items };
     }

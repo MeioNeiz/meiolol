@@ -157,16 +157,22 @@ pub fn tallyGames(
     var current: std.ArrayList(u8) = .empty;
     defer current.deinit(gpa);
     while (try q.step()) {
-        if (!std.mem.eql(u8, q.bytes(0), current.items)) {
+        const r = q.row(struct {
+            puuid: []const u8,
+            platform: []const u8,
+            champion_id: u32,
+            games: u32,
+        });
+        if (!std.mem.eql(u8, r.puuid, current.items)) {
             for (out, plays) |*t, *p| {
                 t.add(st, p.items, .games);
                 p.clearRetainingCapacity();
             }
             current.clearRetainingCapacity();
-            try current.appendSlice(gpa, q.bytes(0));
+            try current.appendSlice(gpa, r.puuid);
         }
-        const in = stats.setsWith(sets, q.bytes(1));
-        const play: Play = .{ .champion = @intCast(q.int(2)), .weight = @intCast(q.int(3)) };
+        const in = stats.setsWith(sets, r.platform);
+        const play: Play = .{ .champion = r.champion_id, .weight = r.games };
         for (plays, 0..) |*p, i| {
             if (in & (@as(u32, 1) << @intCast(i)) == 0) continue;
             // The same champion on another of the set's platforms
@@ -208,14 +214,14 @@ pub fn tallyMastery(
     defer plays.deinit(gpa);
     while (try q.step()) {
         _ = arena_state.reset(.retain_capacity);
-        const fetched_at = q.int(1);
-        const entries = riot_mastery.decode(arena_state.allocator(), q.bytes(0), fetched_at) catch continue;
+        const r = q.row(struct { data: []const u8, fetched_at: i64, platform: []const u8 });
+        const entries = riot_mastery.decode(arena_state.allocator(), r.data, r.fetched_at) catch continue;
         plays.clearRetainingCapacity();
         for (entries) |e| {
-            if (e.last_play < fetched_at - mastery_recent_s) continue;
+            if (e.last_play < r.fetched_at - mastery_recent_s) continue;
             try plays.append(gpa, .{ .champion = e.champion, .weight = e.points });
         }
-        const in = stats.setsWith(sets, q.bytes(2));
+        const in = stats.setsWith(sets, r.platform);
         for (out, 0..) |*t, i| {
             if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(st, plays.items, .mastery);
         }

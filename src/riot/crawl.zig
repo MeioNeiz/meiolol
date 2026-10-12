@@ -484,7 +484,10 @@ pub const Patches = struct {
         for (newest) |patch| {
             if (patch.len == 0) continue;
             try q.bind(.{patch});
-            while (try q.step()) _ = ps.see(q.bytes(0), patch, q.int(1));
+            while (try q.step()) {
+                const r = q.row(struct { platform: []const u8, start_s: i64 });
+                _ = ps.see(r.platform, patch, r.start_s);
+            }
         }
         return ps;
     }
@@ -647,11 +650,12 @@ const RegionCrawler = struct {
     /// Rows of new_games or scan_players, skipping players already taken
     fn takePlayers(a: std.mem.Allocator, s: *store.Stmt, players: *std.ArrayList(Player)) !void {
         next: while (try s.step()) {
-            for (players.items) |p| if (std.mem.eql(u8, p.puuid, s.bytes(0))) continue :next;
+            const r = s.row(Player);
+            for (players.items) |p| if (std.mem.eql(u8, p.puuid, r.puuid)) continue :next;
             try players.append(a, .{
-                .puuid = try a.dupe(u8, s.bytes(0)),
-                .checked_at = s.optInt(1),
-                .platform = try a.dupe(u8, s.bytes(2)),
+                .puuid = try a.dupe(u8, r.puuid),
+                .checked_at = r.checked_at,
+                .platform = try a.dupe(u8, r.platform),
             });
         }
     }
@@ -783,9 +787,12 @@ const PlatformCrawler = struct {
                         " WHERE platform = ? AND tier = ? AND division = ? AND page = ?");
                     defer fresh.deinit();
                     try fresh.bind(.{ p.id, tier, division, page });
-                    if (try fresh.step() and fresh.int(1) > pc.b.now() - pc.b.c.opts.ladder_refresh_s) {
-                        if (fresh.int(0) == 0) break;
-                        continue;
+                    if (try fresh.step()) {
+                        const f = fresh.row(struct { entries: i64, fetched_at: i64 });
+                        if (f.fetched_at > pc.b.now() - pc.b.c.opts.ladder_refresh_s) {
+                            if (f.entries == 0) break;
+                            continue;
+                        }
                     }
                     try pc.ladderGap();
                     // A bad page ends this division for now; the next pass retries it
@@ -942,12 +949,13 @@ pub fn rebuildGold(gpa: std.mem.Allocator, db: store.Db) !usize {
     while (try q.step()) {
         var arena: std.heap.ArenaAllocator = .init(gpa);
         defer arena.deinit();
-        const bytes = try store.raw.decompress(arena.allocator(), q.bytes(1));
+        const r = q.row(struct { match_id: []const u8, data: []const u8 });
+        const bytes = try store.raw.decompress(arena.allocator(), r.data);
         const t = timeline.decode(arena.allocator(), bytes) catch |err| {
-            log.warn("timeline {s} did not decode: {t}", .{ q.bytes(0), err });
+            log.warn("timeline {s} did not decode: {t}", .{ r.match_id, err });
             continue;
         };
-        try storeGold(db, q.bytes(0), t.participants, goldAt(t));
+        try storeGold(db, r.match_id, t.participants, goldAt(t));
         stored += 1;
         if (stored % 1000 == 0) {
             try db.commit();

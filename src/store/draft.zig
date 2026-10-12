@@ -166,10 +166,18 @@ pub const Builder = struct {
         try b.match.bind(.{match_id});
         defer b.match.reset();
         if (!try b.match.step()) return false;
-        const queue = b.match.int(1);
-        if (std.mem.indexOfScalar(i64, &queues, queue) == null) return false;
-        if (b.match.int(5) != 0 or b.match.isNull(4)) return false;
-        const winner = b.match.int(4);
+        const m = b.match.row(struct {
+            platform: []const u8,
+            queue: i64,
+            patch: []const u8,
+            game_start: i64,
+            winner: ?i64,
+            remake: i64,
+            duration_s: i64,
+        });
+        if (std.mem.indexOfScalar(i64, &queues, m.queue) == null) return false;
+        if (m.remake != 0) return false;
+        const winner = m.winner orelse return false;
         if (winner != 100 and winner != 200) return false;
 
         var picks: [10]Pick = undefined;
@@ -179,17 +187,24 @@ pub const Builder = struct {
         try b.players.bind(.{match_id});
         defer b.players.reset();
         while (try b.players.step()) {
-            const t = team(b.players.int(0)) orelse return false;
+            const p = b.players.row(struct {
+                team: i64,
+                position: ?[]const u8,
+                champion: i64,
+                tier: ?[]const u8,
+                division: ?[]const u8,
+            });
+            const t = team(p.team) orelse return false;
             if (per_team[t] == 5) return false;
-            const champion = b.players.int(2);
-            if (champion <= 0 or champion > max_champion) return false;
-            const role: ?u3 = if (b.players.isNull(1)) null else for (positions, 0..) |p, i| {
-                if (std.mem.eql(u8, p, b.players.bytes(1))) break @intCast(i);
+            if (p.champion <= 0 or p.champion > max_champion) return false;
+            const role: ?u3 = for (positions, 0..) |name, i| {
+                if (std.mem.eql(u8, name, p.position orelse break null)) break @intCast(i);
             } else null;
-            picks[t * 5 + per_team[t]] = .{ .champion = @intCast(champion), .role = role };
+            picks[t * 5 + per_team[t]] = .{ .champion = @intCast(p.champion), .role = role };
             per_team[t] += 1;
-            if (b.players.isNull(3) or b.players.isNull(4)) continue;
-            if (schema.packRank(b.players.bytes(3), b.players.bytes(4))) |r| {
+            const tier = p.tier orelse continue;
+            const division = p.division orelse continue;
+            if (schema.packRank(tier, division)) |r| {
                 ranks[ranked] = @intCast(r);
                 ranked += 1;
             }
@@ -201,26 +216,27 @@ pub const Builder = struct {
         try b.bans.bind(.{match_id});
         defer b.bans.reset();
         while (try b.bans.step()) {
-            const t = team(b.bans.int(0)) orelse continue;
-            const champion = b.bans.int(1);
-            if (bans_per_team[t] == 5 or champion <= 0 or champion > std.math.maxInt(u16)) continue;
-            bans[t * 5 + bans_per_team[t]] = @intCast(champion);
+            const ban = b.bans.row(struct { team: i64, champion: i64 });
+            const t = team(ban.team) orelse continue;
+            if (bans_per_team[t] == 5 or ban.champion <= 0) continue;
+            if (ban.champion > std.math.maxInt(u16)) continue;
+            bans[t * 5 + bans_per_team[t]] = @intCast(ban.champion);
             bans_per_team[t] += 1;
         }
 
         const pick_bytes = encodePicks(picks);
         const ban_bytes = encodeBans(bans);
         try b.insert.exec(.{
-            b.match.bytes(0),
-            queue,
-            b.match.bytes(2),
-            @divFloor(b.match.int(3), std.time.ms_per_day),
+            m.platform,
+            m.queue,
+            m.patch,
+            @divFloor(m.game_start, std.time.ms_per_day),
             medianRank(ranks[0..ranked]),
             ranked,
             winner == 100,
             sqlite.Blob{ .bytes = &pick_bytes },
             sqlite.Blob{ .bytes = &ban_bytes },
-            @min(@divTrunc(@max(b.match.int(6), 0), 60), 255),
+            @min(@divTrunc(@max(m.duration_s, 0), 60), 255),
         });
         return true;
     }
@@ -308,18 +324,29 @@ pub const Reader = struct {
 
     pub fn next(r: *Reader) !?Draft {
         if (!try r.q.step()) return null;
-        const q = &r.q;
+        const d = r.q.row(struct {
+            platform: []const u8,
+            queue: u16,
+            patch: []const u8,
+            day: i32,
+            rank: ?u8,
+            ranked: u8,
+            blue_win: bool,
+            picks: []const u8,
+            bans: []const u8,
+            minutes: ?u8,
+        });
         return .{
-            .platform = q.bytes(0),
-            .queue = @intCast(q.int(1)),
-            .patch = q.bytes(2),
-            .day = @intCast(q.int(3)),
-            .rank = if (q.optInt(4)) |v| @intCast(v) else null,
-            .ranked = @intCast(q.int(5)),
-            .blue_win = q.int(6) != 0,
-            .minutes = if (q.optInt(9)) |v| @intCast(v) else null,
-            .picks = try decodePicks(q.bytes(7)),
-            .bans = try decodeBans(q.bytes(8)),
+            .platform = d.platform,
+            .queue = d.queue,
+            .patch = d.patch,
+            .day = d.day,
+            .rank = d.rank,
+            .ranked = d.ranked,
+            .blue_win = d.blue_win,
+            .minutes = d.minutes,
+            .picks = try decodePicks(d.picks),
+            .bans = try decodeBans(d.bans),
         };
     }
 };

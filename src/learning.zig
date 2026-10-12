@@ -130,14 +130,14 @@ fn goldMap(arena: Allocator, db: store.Db, platform_json: []const u8) !GoldMap {
     defer q.deinit();
     try q.bind(.{ stats.ranked_solo, platform_json });
     while (try q.step()) {
-        const slot = q.int(1);
-        if (slot < 0 or slot >= 10) continue;
-        const e = try map.getOrPut(arena, q.bytes(0));
+        const r = q.row(struct { match_id: []const u8, slot: i64, diff: i32 });
+        if (r.slot < 0 or r.slot >= 10) continue;
+        const e = try map.getOrPut(arena, r.match_id);
         if (!e.found_existing) {
-            e.key_ptr.* = try arena.dupe(u8, q.bytes(0));
+            e.key_ptr.* = try arena.dupe(u8, r.match_id);
             e.value_ptr.* = @splat(null);
         }
-        e.value_ptr[@intCast(slot)] = @intCast(q.int(2));
+        e.value_ptr[@intCast(r.slot)] = r.diff;
     }
     return map;
 }
@@ -175,17 +175,25 @@ pub fn tallyHistory(
     const games = try arena.alloc(u32, sets.len);
     var seen: u32 = 0;
     while (try q.step()) {
-        if (!std.mem.eql(u8, q.bytes(0), player.items)) {
+        const r = q.row(struct {
+            puuid: []const u8,
+            champion: i64,
+            match_id: []const u8,
+            slot: i64,
+            win: bool,
+            platform: []const u8,
+        });
+        if (!std.mem.eql(u8, r.puuid, player.items)) {
             player.clearRetainingCapacity();
-            try player.appendSlice(gpa, q.bytes(0));
+            try player.appendSlice(gpa, r.puuid);
             seen = 0;
             champion = -1;
         }
-        if (q.int(1) != champion) {
-            champion = q.int(1);
+        if (r.champion != champion) {
+            champion = r.champion;
             @memset(games, 0);
         }
-        const in = stats.setsWith(sets, q.bytes(5));
+        const in = stats.setsWith(sets, r.platform);
         for (out, games, 0..) |*t, *game, i| {
             const bit = @as(u32, 1) << @intCast(i);
             if (in & bit == 0) continue;
@@ -194,13 +202,13 @@ pub fn tallyHistory(
             seen |= bit;
         }
         const c = st.index(@intCast(champion)) orelse continue;
-        const slot = q.int(3);
-        const g: ?i32 = if (gold.get(q.bytes(2))) |slots|
+        const slot = r.slot;
+        const g: ?i32 = if (gold.get(r.match_id)) |slots|
             (if (slot >= 0 and slot < 10) slots[@intCast(slot)] else null)
         else
             null;
         for (out, games, 0..) |*t, game, i| {
-            if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(c, game, q.int(4) != 0, g);
+            if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(c, game, r.win, g);
         }
     }
 }

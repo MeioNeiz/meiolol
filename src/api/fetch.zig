@@ -174,7 +174,8 @@ pub const Fetcher = struct {
             defer q.deinit();
             try q.bind(.{riot_id});
             if (!try q.step()) return;
-            break :blk .{ try arena.dupe(u8, q.bytes(0)), q.optInt(1) };
+            const r = q.row(struct { state: []const u8, icon: ?i64 });
+            break :blk .{ try arena.dupe(u8, r.state), r.icon };
         };
         const a = try f.account(arena, riot_id) orelse {
             try f.db.run("UPDATE challenges SET state = 'not_found' WHERE riot_id = ?", .{riot_id});

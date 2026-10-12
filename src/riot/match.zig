@@ -269,9 +269,10 @@ pub fn rebuild(gpa: std.mem.Allocator, db: store.Db) !usize {
     while (try q.step()) {
         var arena: std.heap.ArenaAllocator = .init(gpa);
         defer arena.deinit();
-        const body = try store.raw.decompress(arena.allocator(), q.bytes(1));
+        const r = q.row(struct { key: []const u8, body: []const u8 });
+        const body = try store.raw.decompress(arena.allocator(), r.body);
         const doc = parse(arena.allocator(), body) catch |err| {
-            std.log.warn("match {s} did not parse: {t}", .{ q.bytes(0), err });
+            std.log.warn("match {s} did not parse: {t}", .{ r.key, err });
             continue;
         };
         try storeRows(db, doc, "riot");

@@ -61,13 +61,12 @@ pub fn writeSplit(gpa: std.mem.Allocator, io: std.Io, snap: []const u8, w: *std.
     var written: usize = 0;
     var with_15: usize = 0;
     while (try q.step()) {
-        const id = q.bytes(0);
-        if (!keys.contains(stats.matchKey(id))) continue;
-        const frames = q.int(2);
-        try out.interface.print("{s}\t{d}\t{d}\n", .{ id, q.int(1), frames });
+        const r = q.row(struct { match_id: []const u8, game_start: i64, frames: i64 });
+        if (!keys.contains(stats.matchKey(r.match_id))) continue;
+        try out.interface.print("{s}\t{d}\t{d}\n", .{ r.match_id, r.game_start, r.frames });
         written += 1;
         // Frame 0 is the start, so frame 15 (minute 15) is the 16th
-        with_15 += @intFromBool(frames >= 16);
+        with_15 += @intFromBool(r.frames >= 16);
     }
     try out.interface.flush();
     if (written != parts.tests.len) return error.SplitMismatch;

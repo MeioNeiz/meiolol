@@ -123,7 +123,19 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
     var game: struct { winner: i64 = 0, slice: Slice = undefined } = .{};
     while (true) {
         const more = try q.step();
-        if (!more or !std.mem.eql(u8, q.bytes(0), current.items)) {
+        const r = if (more) q.row(struct {
+            match_id: []const u8,
+            winner: i64,
+            start: i64,
+            patch: []const u8,
+            platform: []const u8,
+            team: i64,
+            position: ?[]const u8,
+            champion: i64,
+            tier: ?[]const u8,
+            gold14: ?i64,
+        }) else undefined;
+        if (!more or !std.mem.eql(u8, r.match_id, current.items)) {
             if (current.items.len > 0 and !bad and n == 10) if (winnerSide(game.winner)) |winner| {
                 const gk: GameKey = .{ .slice = game.slice, .tier = gameTier(&players) };
                 (try games.getOrPutValue(a, gk, 0)).value_ptr.* += 1;
@@ -151,15 +163,15 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
             };
             if (!more) break;
             current.clearRetainingCapacity();
-            try current.appendSlice(a, q.bytes(0));
+            try current.appendSlice(a, r.match_id);
             n = 0;
             bad = false;
             game = .{
-                .winner = q.int(1),
+                .winner = r.winner,
                 .slice = .{
-                    .recent = q.int(2) >= opts.since_ms,
-                    .platform = @intCast(indexOf(opts.all_platforms, q.bytes(4)) orelse 0),
-                    .patch = try patchIndex(a, &patches, q.bytes(3)),
+                    .recent = r.start >= opts.since_ms,
+                    .platform = @intCast(indexOf(opts.all_platforms, r.platform) orelse 0),
+                    .patch = try patchIndex(a, &patches, r.patch),
                 },
             };
         }
@@ -167,7 +179,7 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
             bad = true;
             continue;
         }
-        const team: u1 = switch (q.int(5)) {
+        const team: u1 = switch (r.team) {
             100 => 0,
             200 => 1,
             else => {
@@ -175,11 +187,11 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
                 continue;
             },
         };
-        const role = Role.fromLcu(if (q.isNull(6)) "" else q.bytes(6)) orelse {
+        const role = Role.fromLcu(r.position orelse "") orelse {
             bad = true;
             continue;
         };
-        const champion = q.int(7);
+        const champion = r.champion;
         if (champion <= 0 or champion > std.math.maxInt(u16)) bad = true;
         for (players[0..n]) |p| {
             if (p.team == team and p.role == role) bad = true;
@@ -188,8 +200,8 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
             .team = team,
             .role = role,
             .champion = @intCast(std.math.clamp(champion, 0, std.math.maxInt(u16))),
-            .tier = @intCast(if (q.isNull(8)) tiers.len else indexOf(&tiers, q.bytes(8)) orelse tiers.len),
-            .gold14 = if (q.isNull(9)) null else q.int(9),
+            .tier = @intCast(if (r.tier) |t| indexOf(&tiers, t) orelse tiers.len else tiers.len),
+            .gold14 = r.gold14,
         };
         n += 1;
     }
@@ -229,8 +241,9 @@ fn countBans(a: std.mem.Allocator, db: store.Db, opts: root.Options, platform_js
     defer q.deinit();
     try q.bind(.{ stats.ranked_solo, platform_json, opts.since_ms, patch_json });
     while (try q.step()) {
-        const gk = game_keys.get(q.bytes(0)) orelse continue;
-        (try bans.getOrPutValue(a, .{ .game = gk, .champion = @intCast(q.int(1)) }, 0)).value_ptr.* += 1;
+        const r = q.row(struct { match_id: []const u8, champion: u32 });
+        const gk = game_keys.get(r.match_id) orelse continue;
+        (try bans.getOrPutValue(a, .{ .game = gk, .champion = r.champion }, 0)).value_ptr.* += 1;
     }
     return bans;
 }

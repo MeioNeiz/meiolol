@@ -55,21 +55,22 @@ pub fn load(
     while (try q.step()) {
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
-        const t = timeline.decode(arena, store.raw.decompress(arena, q.bytes(1)) catch continue) catch continue;
+        const m = q.row(struct { match_id: []const u8, data: []const u8 });
+        const t = timeline.decode(arena, store.raw.decompress(arena, m.data) catch continue) catch continue;
         // Frame k is minute k; the last frame is the game's end, part of a minute
         if (t.frames.len < minute + 2) continue;
-        try players.bind(.{q.bytes(0)});
+        try players.bind(.{m.match_id});
         var pid: [2][Role.count]u8 = @splat(@splat(0));
         while (try players.step()) {
-            const side: usize = switch (players.int(1)) {
+            const p = players.row(struct { slot: i64, team_id: i64, position: []const u8 });
+            const side: usize = switch (p.team_id) {
                 100 => 0,
                 200 => 1,
                 else => continue,
             };
-            const r = Role.fromLcu(if (players.isNull(2)) "" else players.bytes(2)) orelse continue;
-            const slot = players.int(0);
-            if (slot < 0 or slot >= t.participants) continue;
-            pid[side][@backingInt(r)] = @intCast(slot + 1);
+            const r = Role.fromLcu(p.position) orelse continue;
+            if (p.slot < 0 or p.slot >= t.participants) continue;
+            pid[side][@backingInt(r)] = @intCast(p.slot + 1);
         }
         var lanes: Lanes = undefined;
         const f = t.frames[minute];
@@ -79,7 +80,7 @@ pub fn load(
             if (a == 0 or b == 0) break false;
             lanes[@backingInt(r)] = @floatFromInt(f.get(a, .total_gold) - f.get(b, .total_gold));
         } else true;
-        if (complete) try map.put(gpa, stats.matchKey(q.bytes(0)), lanes);
+        if (complete) try map.put(gpa, stats.matchKey(m.match_id), lanes);
     }
     return map;
 }

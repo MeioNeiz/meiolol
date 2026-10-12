@@ -63,18 +63,25 @@ pub fn load(gpa: std.mem.Allocator, db: store.Db, platforms: []const []const u8)
     var champion: i64 = -1;
     var game: u32 = 0;
     while (try q.step()) {
-        if (!std.mem.eql(u8, q.bytes(0), player.items)) {
+        const r = q.row(struct {
+            puuid: []const u8,
+            champion_id: i64,
+            match_id: []const u8,
+            team_id: i64,
+            position: []const u8,
+        });
+        if (!std.mem.eql(u8, r.puuid, player.items)) {
             player.clearRetainingCapacity();
-            try player.appendSlice(gpa, q.bytes(0));
+            try player.appendSlice(gpa, r.puuid);
             champion = -1;
         }
-        if (q.int(1) != champion) {
-            champion = q.int(1);
+        if (r.champion_id != champion) {
+            champion = r.champion_id;
             game = 0;
         }
         game += 1;
-        const at = slot(q.int(3), if (q.isNull(4)) "" else q.bytes(4)) orelse continue;
-        const gop = try map.getOrPut(gpa, stats.matchKey(q.bytes(2)));
+        const at = slot(r.team_id, r.position) orelse continue;
+        const gop = try map.getOrPut(gpa, stats.matchKey(r.match_id));
         if (!gop.found_existing) gop.value_ptr.* = @splat(@splat(.{}));
         gop.value_ptr[at[0]][at[1]].history = @intCast(learning.binOf(game));
     }
@@ -91,15 +98,22 @@ pub fn load(gpa: std.mem.Allocator, db: store.Db, platforms: []const []const u8)
     defer arena_state.deinit();
     while (try m.step()) {
         _ = arena_state.reset(.retain_capacity);
-        const at = slot(m.int(1), if (m.isNull(2)) "" else m.bytes(2)) orelse continue;
-        const id: u32 = @intCast(m.int(3));
-        const entries = riot_mastery.decode(arena_state.allocator(), m.bytes(4), m.int(5)) catch continue;
+        const r = m.row(struct {
+            match_id: []const u8,
+            team_id: i64,
+            position: []const u8,
+            champion_id: u32,
+            data: []const u8,
+            fetched_at: i64,
+        });
+        const at = slot(r.team_id, r.position) orelse continue;
+        const entries = riot_mastery.decode(arena_state.allocator(), r.data, r.fetched_at) catch continue;
         // Absent from the response: never played it, 0 points
         var points: u32 = 0;
-        for (entries) |e| if (e.champion == id) {
+        for (entries) |e| if (e.champion == r.champion_id) {
             points = e.points;
         };
-        const gop = try map.getOrPut(gpa, stats.matchKey(m.bytes(0)));
+        const gop = try map.getOrPut(gpa, stats.matchKey(r.match_id));
         if (!gop.found_existing) gop.value_ptr.* = @splat(@splat(.{}));
         gop.value_ptr[at[0]][at[1]].mastery = masteryBin(points);
     }

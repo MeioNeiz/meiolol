@@ -258,7 +258,7 @@ fn readRange(arena: std.mem.Allocator, path: []const u8) !Range {
     defer s.deinit();
     try s.bind(.{});
     if (!try s.step()) return error.BadSegment;
-    return .{ .matches_to = s.int(0), .timelines_to = s.int(1), .drafts_to = s.int(2), .history_to = s.int(3) };
+    return s.row(Range);
 }
 
 fn segmentColumn(db: Db, name: []const u8) ![]const u8 {

@@ -434,42 +434,63 @@ pub fn build(gpa: std.mem.Allocator, db: store.Db, d: *const ddragon.BuildData, 
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
         b.games += 1;
+        const m = q.row(struct { match_id: []const u8, data: ?[]const u8 });
         var have_picks = false;
-        if (!q.isNull(1)) {
-            if (decode(arena, q.bytes(1))) |t| {
+        if (m.data) |data| {
+            if (decode(arena, data)) |t| {
                 picks(t, d, all[0..t.participants]);
                 have_picks = true;
                 b.timelines += 1;
-            } else |err| log.warn("{s}: {t}", .{ q.bytes(0), err });
+            } else |err| log.warn("{s}: {t}", .{ m.match_id, err });
         }
-        try players.bind(.{q.bytes(0)});
+        try players.bind(.{m.match_id});
         while (try players.step()) {
-            const role = Role.fromLcu(players.bytes(1)) orelse continue;
+            const r = players.row(struct {
+                slot: usize,
+                position: []const u8,
+                champion_id: u32,
+                win: bool,
+                tier: ?[]const u8,
+                summoner1: ?i64,
+                summoner2: ?i64,
+                keystone: ?i64,
+                primary_style: ?i64,
+                perk1: ?i64,
+                perk2: ?i64,
+                perk3: ?i64,
+                perk4: ?i64,
+                perk5: ?i64,
+                secondary_style: ?i64,
+                shard_offense: ?i64,
+                shard_flex: ?i64,
+                shard_defense: ?i64,
+            });
+            const role = Role.fromLcu(r.position) orelse continue;
             if (floor) |f| {
-                const rank = if (players.isNull(4)) null else tierIndex(players.bytes(4));
+                const rank = if (r.tier) |t| tierIndex(t) else null;
                 if (rank == null or rank.? > f) continue;
             }
-            const slot: usize = @intCast(players.int(0));
             const p: Player = .{
-                .champion = @intCast(players.int(2)),
+                .champion = r.champion_id,
                 .role = role,
-                .won = players.int(3) != 0,
-                .spells = .{ colId(&players, 5), colId(&players, 6) },
-                .keystone = colId(&players, 7),
-                .primary = colId(&players, 8),
-                .perks = .{ colId(&players, 9), colId(&players, 10), colId(&players, 11), colId(&players, 12), colId(&players, 13) },
-                .secondary = colId(&players, 14),
-                .shards = .{ colId(&players, 15), colId(&players, 16), colId(&players, 17) },
+                .won = r.win,
+                .spells = .{ idOf(r.summoner1), idOf(r.summoner2) },
+                .keystone = idOf(r.keystone),
+                .primary = idOf(r.primary_style),
+                .perks = .{ idOf(r.perk1), idOf(r.perk2), idOf(r.perk3), idOf(r.perk4), idOf(r.perk5) },
+                .secondary = idOf(r.secondary_style),
+                .shards = .{ idOf(r.shard_offense), idOf(r.shard_flex), idOf(r.shard_defense) },
             };
-            const k: ?Picks = if (have_picks and slot < timeline.max_participants) all[slot] else null;
+            const k: ?Picks = if (have_picks and r.slot < timeline.max_participants) all[r.slot] else null;
             try b.addPlayer(p, k, d);
         }
     }
     return b;
 }
 
-fn colId(s: *store.sqlite.Stmt, col: c_int) u32 {
-    return std.math.cast(u32, s.optInt(col) orelse 0) orelse 0;
+/// NULL or out of range: 0, none
+fn idOf(v: ?i64) u32 {
+    return std.math.cast(u32, v orelse 0) orelse 0;
 }
 
 fn decode(arena: std.mem.Allocator, blob: []const u8) !timeline.Timeline {

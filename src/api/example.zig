@@ -46,35 +46,57 @@ pub fn build(arena: Allocator, db: store.Db, set: game.CurveSet, o: Options) !?a
     var inputs: std.ArrayList(game.Input) = .empty;
     var rank: game.Rank = .{};
     while (try q.step()) {
-        if (inputs.items.len == 0) rank = .{
-            .tier = if (q.isNull(7)) null else try arena.dupe(u8, q.bytes(7)),
-            .division = if (q.isNull(8)) null else try arena.dupe(u8, q.bytes(8)),
-        };
-        try players.bind(.{q.bytes(0)});
-        var list: std.ArrayList(game.Summary.Player) = .empty;
-        while (try players.step()) try list.append(arena, .{
-            .hash = "",
-            .team = players.int(1),
-            .position = try arena.dupe(u8, players.bytes(2)),
-            .champion = @intCast(players.int(3)),
-            .win = players.int(4) != 0,
-            .kills = players.int(5),
-            .deaths = players.int(6),
-            .assists = players.int(7),
+        const g = q.row(struct {
+            match_id: []const u8,
+            patch: []const u8,
+            game_start: i64,
+            duration_s: i64,
+            remake: bool,
+            timeline: []const u8,
+            slot: u8,
+            tier: ?[]const u8,
+            division: ?[]const u8,
         });
-        const slot: u8 = @intCast(q.int(6));
-        if (slot >= list.items.len) continue;
-        const t = fetch.readTimeline(arena, q.bytes(5)) catch null;
+        if (inputs.items.len == 0) rank = .{
+            .tier = if (g.tier) |v| try arena.dupe(u8, v) else null,
+            .division = if (g.division) |v| try arena.dupe(u8, v) else null,
+        };
+        try players.bind(.{g.match_id});
+        var list: std.ArrayList(game.Summary.Player) = .empty;
+        while (try players.step()) {
+            const p = players.row(struct {
+                slot: i64,
+                team: i64,
+                position: []const u8,
+                champion: u32,
+                win: bool,
+                kills: i64,
+                deaths: i64,
+                assists: i64,
+            });
+            try list.append(arena, .{
+                .hash = "",
+                .team = p.team,
+                .position = try arena.dupe(u8, p.position),
+                .champion = p.champion,
+                .win = p.win,
+                .kills = p.kills,
+                .deaths = p.deaths,
+                .assists = p.assists,
+            });
+        }
+        if (g.slot >= list.items.len) continue;
+        const t = fetch.readTimeline(arena, g.timeline) catch null;
         try inputs.append(arena, .{
             .summary = .{
-                .patch = try arena.dupe(u8, q.bytes(1)),
+                .patch = try arena.dupe(u8, g.patch),
                 .queue = ranked_solo,
-                .start_ms = @divFloor(q.int(2), std.time.ms_per_day) * std.time.ms_per_day,
-                .duration_s = q.int(3),
-                .remake = q.int(4) != 0,
+                .start_ms = @divFloor(g.game_start, std.time.ms_per_day) * std.time.ms_per_day,
+                .duration_s = g.duration_s,
+                .remake = g.remake,
                 .players = list.items,
             },
-            .slot = slot,
+            .slot = g.slot,
             .timeline = t,
         });
     }
