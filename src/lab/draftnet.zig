@@ -610,6 +610,8 @@ pub const Options = struct {
     /// Fits per sweep (seeds 1..S): on the CPU one single-threaded fit per core at once, on
     /// the GPU one after another; 0 skips sweeps
     sweep: u32 = 0,
+    /// Train on only the first N games (an agreement check over a few steps); 0 all
+    limit: u32 = 0,
 };
 
 pub const Device = enum { cpu1, cpu, gpu };
@@ -617,6 +619,9 @@ pub const Device = enum { cpu1, cpu, gpu };
 pub fn run(gpa: std.mem.Allocator, io: std.Io, d: *const rows.Data, opts: Options, gpu: ?*const cuda.Gpu, w: *std.Io.Writer) !void {
     var games = try buildGames(gpa, d);
     defer games.deinit(gpa);
+    const all_train = games.train;
+    defer games.train = all_train;
+    if (opts.limit > 0) games.train = games.train[0..@min(opts.limit, games.train.len)];
     const threads = std.Thread.getCpuCount() catch 1;
     try w.print("draft net: {d} train games, {d} test games, {d} ids, {d} params, {d} epochs per timing, {d} CPU threads\n\n", .{
         games.train.len, games.tests.len, games.n_ids, dn.Layout.init(games.n_ids, n_platforms).len, opts.epochs, threads,
