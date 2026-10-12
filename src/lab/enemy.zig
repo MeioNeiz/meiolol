@@ -10,7 +10,7 @@ const rows = @import("rows.zig");
 /// Champion-roles with fewer train rows share their role's "other" id
 const min_rows = 30;
 
-const Ids = struct {
+pub const Ids = struct {
     map: std.AutoHashMapUnmanaged(u64, u16) = .empty,
     n: u16 = 5,
 
@@ -23,7 +23,7 @@ const Ids = struct {
     }
 };
 
-fn buildIds(gpa: std.mem.Allocator, d: *const rows.Data) !Ids {
+pub fn buildIds(gpa: std.mem.Allocator, d: *const rows.Data) !Ids {
     var counts: std.AutoHashMapUnmanaged(u64, u32) = .empty;
     defer counts.deinit(gpa);
     for (d.rows) |r| {
@@ -40,7 +40,7 @@ fn buildIds(gpa: std.mem.Allocator, d: *const rows.Data) !Ids {
     return ids;
 }
 
-const Set = struct {
+pub const Set = struct {
     ex: std.ArrayList(fm.Example) = .empty,
     /// Row index of each example, for game clustering and the preds file
     row: std.ArrayList(u32) = .empty,
@@ -51,9 +51,9 @@ const Set = struct {
     }
 };
 
-const Sets = struct { inner: Set = .{}, val: Set = .{}, train: Set = .{}, tests: Set = .{} };
+pub const Sets = struct { inner: Set = .{}, val: Set = .{}, train: Set = .{}, tests: Set = .{} };
 
-fn buildSets(gpa: std.mem.Allocator, d: *const rows.Data, ids: *const Ids, k: rows.Outcome, mean: *f64, sd: *f64) !Sets {
+pub fn buildSets(gpa: std.mem.Allocator, d: *const rows.Data, ids: *const Ids, k: rows.Outcome, mean: *f64, sd: *f64) !Sets {
     // Games are in start order, train first; the newest 20% of train games validate
     var n_train: usize = 0;
     for (d.games) |g| n_train += @intFromBool(!g.is_test);

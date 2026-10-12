@@ -228,7 +228,7 @@ pub fn mse(m: *const Model, set: []const Example) f64 {
 /// Starts b at each champion-role's shrunk mean residual and pl at each platform-role's
 /// (on what b leaves): Adam then refines instead of walking there from 0, which early
 /// stopping on a drifting validation slice would cut short
-fn warmStart(gpa: std.mem.Allocator, m: *Model, train: []const Example) !void {
+pub fn warmStart(gpa: std.mem.Allocator, m: *Model, train: []const Example) !void {
     const prior = 50;
     const sum = try gpa.alloc(f64, @max(m.b.len, m.pl.len));
     defer gpa.free(sum);

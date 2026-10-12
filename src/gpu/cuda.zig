@@ -24,6 +24,7 @@ pub const Api = struct {
     cuMemFree_v2: *const fn (DevicePtr) callconv(.c) Result,
     cuMemcpyHtoD_v2: *const fn (DevicePtr, *const anyopaque, usize) callconv(.c) Result,
     cuMemcpyDtoH_v2: *const fn (*anyopaque, DevicePtr, usize) callconv(.c) Result,
+    cuMemsetD32_v2: *const fn (DevicePtr, c_uint, usize) callconv(.c) Result,
     cuLaunchKernel: *const fn (
         Function,
         c_uint,
@@ -122,6 +123,11 @@ pub const Gpu = struct {
             @constCast(args.ptr),
             null,
         ));
+    }
+
+    /// Sets n 32-bit words at dst to value
+    pub fn memset32(g: *const Gpu, dst: DevicePtr, value: u32, n: usize) !void {
+        try g.api.check(g.api.cuMemsetD32_v2(dst, value, n));
     }
 
     pub fn sync(g: *const Gpu) !void {
