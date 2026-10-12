@@ -140,27 +140,10 @@ fn parseLogQuery(query: []const u8) ?LogQuery {
 
 /// The last `n` lines of a log, each redacted (admin.redact)
 fn logTail(arena: std.mem.Allocator, io: Io, path: []const u8, n: usize) ![]const u8 {
-    var file = Io.Dir.cwd().openFile(io, path, .{}) catch |err| switch (err) {
-        error.FileNotFound => return "",
-        else => return err,
-    };
-    defer file.close(io);
-    const len = try file.length(io);
-    const from = len -| (4 << 20);
-    const buf = try arena.alloc(u8, @intCast(len - from));
-    var text: []const u8 = buf[0..try file.readPositionalAll(io, buf, from)];
-    if (from > 0) text = text[(std.mem.indexOfScalar(u8, text, '\n') orelse text.len - 1) + 1 ..];
-    text = std.mem.trimEnd(u8, text, "\n");
-    var start = text.len;
-    var lines: usize = 0;
-    while (start > 0) : (start -= 1) {
-        if (text[start - 1] == '\n') {
-            lines += 1;
-            if (lines == n) break;
-        }
-    }
+    const text = std.mem.trimEnd(u8, try admin.tail(arena, io, path, n), "\n");
+    if (text.len == 0) return "";
     var out: std.ArrayList(u8) = .empty;
-    var it = std.mem.splitScalar(u8, text[start..], '\n');
+    var it = std.mem.splitScalar(u8, text, '\n');
     while (it.next()) |line| {
         try out.appendSlice(arena, try admin.redact(arena, line));
         try out.append(arena, '\n');
@@ -404,7 +387,7 @@ test "admin log tail redacted" {
     const text = try logTail(arena_state.allocator(), io, path, 3);
     try testing.expectEqualStrings("2026-10-12 20:01:00 info(crawl): 174204 matches/day | europe 13840m\n" ++
         "2026-10-12 20:02:00 warning(riot): 500 (server) on /lol/match/v5/matches/by-puuid/…/ids\n" ++
-        "2026-10-12 20:03:00 warning(riot): 503 on /lol/match/v5/matches/… for …, puzzle #1\n", text);
+        "2026-10-12 20:03:00 warning(riot): 503 on /lol/match/v5/matches/… …, puzzle #1\n", text);
     try testing.expectEqualStrings("", try logTail(arena_state.allocator(), io, "no/such.log", 3));
 }
 

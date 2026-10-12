@@ -380,7 +380,7 @@ fn sorted(arena: std.mem.Allocator, m: std.StringArrayHashMapUnmanaged(i64)) ![]
 }
 
 /// The last `n` lines of a text file, "" when it is missing
-fn tail(arena: std.mem.Allocator, io: Io, path: []const u8, n: usize) ![]const u8 {
+pub fn tail(arena: std.mem.Allocator, io: Io, path: []const u8, n: usize) ![]const u8 {
     const text = try readTail(arena, io, path, 4 << 20);
     var lines: usize = 0;
     var i = std.mem.trimEnd(u8, text, "\n").len;
@@ -555,27 +555,45 @@ fn actionLog(arena: std.mem.Allocator, io: Io, path: []const u8) ![]const Action
 }
 
 /// A log line for the admin page's log viewer: as written, numbers and times kept, but
-/// id-like words (PUUIDs, match ids like EUW1_7123456) and Riot IDs (name#tag) to …
+/// id-like words and Riot IDs to … (`scrub`)
 pub fn redact(arena: std.mem.Allocator, line: []const u8) ![]const u8 {
+    return scrub(arena, line, false);
+}
+
+/// `line` with id-like words (PUUIDs, match ids like EUW1_7123456) and Riot IDs (name#tag)
+/// to …, and with `digits`, digit runs to N so lines group
+fn scrub(arena: std.mem.Allocator, line: []const u8, digits: bool) ![]const u8 {
     var out: std.ArrayList(u8) = .empty;
+    var id = riotIdAt(line, 0);
     var i: usize = 0;
     while (i < line.len) {
+        if (id) |r| if (i == r.start) {
+            try out.appendSlice(arena, "…");
+            i = r.end;
+            id = riotIdAt(line, i);
+            continue;
+        };
         if (!isWordChar(line[i])) {
             try out.append(arena, line[i]);
             i += 1;
             continue;
         }
+        const stop = if (id) |r| r.start else line.len;
         var e = i;
-        var digits = false;
-        while (e < line.len and isWordChar(line[e])) : (e += 1) digits = digits or std.ascii.isDigit(line[e]);
-        // name#tag: both sides, the tag letters or digits
-        if (e + 1 < line.len and line[e] == '#' and isWordChar(line[e + 1])) {
-            e += 1;
-            while (e < line.len and isWordChar(line[e])) e += 1;
+        while (e < stop and isWordChar(line[e])) e += 1;
+        const word = line[i..e];
+        const has_digit = std.mem.indexOfAny(u8, word, "0123456789") != null;
+        if (word.len >= 20 or (has_digit and std.mem.indexOfScalar(u8, word, '_') != null)) {
             try out.appendSlice(arena, "…");
-        } else if (e - i >= 20 or (digits and std.mem.indexOfScalar(u8, line[i..e], '_') != null)) {
-            try out.appendSlice(arena, "…");
-        } else try out.appendSlice(arena, line[i..e]);
+        } else if (!digits) {
+            try out.appendSlice(arena, word);
+        } else for (word) |c| {
+            if (!std.ascii.isDigit(c)) {
+                try out.append(arena, c);
+            } else if (out.items.len == 0 or out.items[out.items.len - 1] != 'N') {
+                try out.append(arena, 'N');
+            }
+        }
         i = e;
     }
     return out.items;
@@ -583,6 +601,50 @@ pub fn redact(arena: std.mem.Allocator, line: []const u8) ![]const u8 {
 
 fn isWordChar(c: u8) bool {
     return std.ascii.isAlphanumeric(c) or c == '_' or c == '-';
+}
+
+/// Riot ID game names: 3-16 letters (any script), digits or spaces; tags 3-5
+const max_name_chars = 16;
+
+/// The first Riot ID (name#tag) at or after `from`. The name runs back from `#` over
+/// letters, digits, spaces and non-ASCII bytes to the previous separator, at most 16
+/// characters and whole words; the tag is 3 or more letters or digits. Wider than Riot's
+/// rules, so a neighbouring word may go too: better than a name left half shown
+fn riotIdAt(line: []const u8, from: usize) ?struct { start: usize, end: usize } {
+    var h = from;
+    while (std.mem.indexOfScalarPos(u8, line, h, '#')) |hash| : (h = hash + 1) {
+        if (hash == from or !isNameByte(line[hash - 1]) or line[hash - 1] == ' ') continue;
+        var end = hash + 1;
+        var tag_chars: usize = 0;
+        while (end < line.len and (std.ascii.isAlphanumeric(line[end]) or line[end] >= 0x80)) : (end += 1) {
+            if (!isContinuation(line[end])) tag_chars += 1;
+        }
+        if (tag_chars < 3) continue;
+        var start = hash;
+        var name_chars: usize = 0;
+        while (start > from and isNameByte(line[start - 1])) {
+            var c = start - 1;
+            while (c > from and isContinuation(line[c]) and isNameByte(line[c - 1])) c -= 1;
+            if (name_chars == max_name_chars) break;
+            name_chars += 1;
+            start = c;
+        }
+        // Cut off inside a word: that word is too long to be in the name
+        if (start > from and isNameByte(line[start - 1]) and line[start - 1] != ' ') {
+            if (std.mem.indexOfScalarPos(u8, line[0..hash], start, ' ')) |sp| start = sp;
+        }
+        while (line[start] == ' ') start += 1;
+        return .{ .start = start, .end = end };
+    }
+    return null;
+}
+
+fn isNameByte(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == ' ' or c == '_' or c >= 0x80;
+}
+
+fn isContinuation(c: u8) bool {
+    return c & 0xc0 == 0x80;
 }
 
 /// "2026-10-11 23:07:21 ..." or "2026-10-11T23:07:21Z ..." to unix seconds
@@ -765,34 +827,10 @@ fn lastNumber(s: []const u8) u64 {
     return n;
 }
 
-/// Digits to N and long id-like words (PUUIDs, match ids) to …, so lines group and
-/// carry nothing that names a player or a game
+/// Digits to N and id-like words and Riot IDs to …, so lines group and carry nothing that
+/// names a player or a game
 fn normalise(arena: std.mem.Allocator, line: []const u8) ![]const u8 {
-    var out: std.ArrayList(u8) = .empty;
-    var i: usize = 0;
-    while (i < line.len) {
-        const c = line[i];
-        if (std.ascii.isAlphanumeric(c) or c == '_' or c == '-') {
-            var e = i;
-            var digits = false;
-            while (e < line.len and (std.ascii.isAlphanumeric(line[e]) or line[e] == '_' or line[e] == '-')) : (e += 1) {
-                digits = digits or std.ascii.isDigit(line[e]);
-            }
-            const word = line[i..e];
-            if (word.len >= 20 or (digits and std.mem.indexOfScalar(u8, word, '_') != null)) {
-                try out.appendSlice(arena, "…");
-            } else for (word) |ch| {
-                if (std.ascii.isDigit(ch)) {
-                    if (out.items.len == 0 or out.items[out.items.len - 1] != 'N') try out.append(arena, 'N');
-                } else try out.append(arena, ch);
-            }
-            i = e;
-        } else {
-            try out.append(arena, c);
-            i += 1;
-        }
-    }
-    return out.items;
+    return scrub(arena, line, true);
 }
 
 fn classify(msg: []const u8) Kind {
@@ -852,6 +890,24 @@ test "normalise log messages" {
     try std.testing.expect(std.mem.indexOf(u8, p, "IosuG") == null);
     try std.testing.expectEqual(Kind.db_busy, classify(try normalise(arena, "warning(crawl): kr: database busy, pausing")));
     try std.testing.expectEqual(Kind.rate_limit, classify(try normalise(arena, "warning(riot): 429 (application) on /x, waiting 65s")));
+}
+
+test "redact Riot IDs" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const cases = [_][2][]const u8{
+        .{ "warning(api): Ñandú#EUW: not found", "warning(api): …: not found" },
+        .{ "info: 404, Hide on bush#KR1, retrying", "info: 404, …, retrying" },
+        // At most 16 characters back: Riot's longest name
+        .{ "info: 404 for Hide on bush#KR1", "info: 404 …" },
+        .{ "on /x/EUW1_7123456 for Faker#KR1", "on /x/… …" },
+        .{ "x (Faker#KR1) y", "x (…) y" },
+        .{ "joined: 김치찌개#한국1 left", "joined: … left" },
+        .{ "puzzle #1, issue#22, colour #fff", "puzzle #1, issue#22, colour #fff" },
+    };
+    for (cases) |c| try std.testing.expectEqualStrings(c[1], try redact(arena, c[0]));
+    try std.testing.expectEqualStrings("warning(api): …: N (server)", try normalise(arena, "warning(api): Some One#EUW1: 503 (server)"));
 }
 
 test "log stamps" {
