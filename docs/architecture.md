@@ -18,6 +18,7 @@ src/
   api/               "Your games" service (`meiolol api`, docs/your-games.md): cache.zig
                      (api.db), fetch.zig (the one Riot caller), game.zig (lane vs curve)
   admin.zig          `meiolol admin`: private ops page (/admin/, static/admin.js charts)
+  admin_api.zig      /admin/api/ in `meiolol render`: live data, logs, actions (hosting.md)
   backup.zig         `meiolol backup|restore`: state snapshots + append-only segments
   forget.zig         `meiolol forget`: GDPR erasure, `forgotten` suppression list
                      (both: docs/data-safety.md)

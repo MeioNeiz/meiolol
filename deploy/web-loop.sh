@@ -19,7 +19,9 @@
 # Daily, `meiolol your-example` (read-only, background) leaves one anonymised player's
 # games in data/your-example.json; each site build gets a copy for your.html's example.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
-# behind basic auth there; the site's rsync leaves that directory alone.
+# behind basic auth there; the site's rsync leaves that directory alone. Daily, a dbstat
+# scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
+# for it.
 # A deploy (deploy/box.sh web start) sends SIGUSR1 rather than restarting, unless this
 # script, its unit or the contact changed (data/web-loop.sum): the loop then builds and
 # uploads the site at once with the new binary, keeping its curves, eval and builds
@@ -49,9 +51,23 @@ push_curves() {
         || echo "$(date -u +%FT%TZ) curves push to the service FAILED"
 }
 
+# Bytes and cells of every table and index (dbstat, aggregate: seconds per database),
+# read-only and idle priority so the crawler never waits on it
+storage_scan() {
+    local db
+    printf 'db\tname\tkind\tbytes\tcells\n' > data/storage.tsv.new
+    for db in meiolol raw timeline; do
+        nice -n 19 ionice -c 3 sqlite3 -readonly -cmd '.timeout 5000' -separator $'\t' \
+            "data/$db.db" "SELECT '$db', s.name, coalesce(m.type, 'table'), s.pgsize, s.ncell
+                FROM dbstat('main', 1) s LEFT JOIN sqlite_master m ON m.name = s.name
+                ORDER BY 4 DESC" >> data/storage.tsv.new 2> data/storage.log || return 1
+    done
+    mv data/storage.tsv.new data/storage.tsv
+}
+
 last_patch='' last_games=0 last_upload=0
 patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0 last_example=0
-last_builds=0 builds_patch='' builds_pid=''
+last_builds=0 builds_patch='' builds_pid='' storage_pid=''
 while true; do
     now=$(date +%s)
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
@@ -60,6 +76,13 @@ while true; do
             --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
             && mv data/eval-latest.md.new data/eval-latest.md) &
         last_eval=$now
+    fi
+    # Space by table and index, for the admin page; the file's age, not a timer, so a
+    # restart does not rescan
+    if [[ ! -f data/storage.tsv || -n $(find data/storage.tsv -mmin +1380) ]] \
+        && { [[ -z "$storage_pid" ]] || ! kill -0 "$storage_pid" 2> /dev/null; }; then
+        storage_scan &
+        storage_pid=$!
     fi
     if (( now - last_example >= 86400 )); then
         (nice -n 10 bin/meiolol your-example --out data/your-example.json.new \

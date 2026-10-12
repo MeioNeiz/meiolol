@@ -74,6 +74,34 @@ The static upload leaves out matchup pages under 200 games (`meiolol site
   try_files, then `@render` (upstream meiolol_render: the box twice, for the retry): proxy cache /var/cache/nginx/meiolol (2 GB, key $uri), 200s
   10 min, 404s 1 min, stale copies while the box is down or refreshing, one render per
   page under a burst. Header X-Meiolol-Render: HIT, MISS, STALE, UPDATING
+- Training view (/admin/training/, same basic auth as /admin/): the Mac's lab runs,
+  uploaded by deploy/lab-push.sh (launchd, every 30 s when changed). Served from
+  /var/www/meiolol-training/current (symlink; outside /var/www/meiolol, whose uploads
+  --delete). Mac key ~/.ssh/meiolol-training, in user meiolol's authorized_keys with forced
+  command /usr/local/bin/meiolol-training-receive (deploy/training-receive.sh, reinstall
+  by hand when it changes: tar on stdin, swapped in atomically). Not rrsync: macOS's
+  openrsync is refused by it. nginx before: /home/ubuntu/meiolol.conf.bak-training
+- Site traffic (/admin/ops/traffic.json, same basic auth): meiolol has its own nginx access
+  log, /var/log/nginx/meiolol.access.log, format meiolol_noip (JSON lines: time, status,
+  method, uri without query, bytes, request time, render cache, referer, user agent; no
+  IP addresses, so none are kept or derived; /api/ stays unlogged). deploy/traffic.sh
+  aggregates it every 5 min (meiolol-traffic.timer, system unit, user meiolol-traffic,
+  sandboxed: sees only /var/log/nginx, no network) into /var/www/meiolol-ops. State in
+  /var/lib/meiolol-traffic: per log file summaries cached by inode with the offset read
+  (files/), hourly totals kept 90 days (hourly.tsv). Update by hand: scp the script and
+  units, `sudo install -m 755 traffic.sh /usr/local/bin/meiolol-traffic`, units into
+  /etc/systemd/system, `daemon-reload`. nginx before: /home/ubuntu/meiolol.conf.bak-dashboard
+- Admin API (/admin/api/, src/admin_api.zig): `meiolol render` on the box answers live.json
+  (crawler's last 3 h by minute, queues, services, health; cached 30 s), log?file=&lines=
+  (crawl, web, eval, render, health, backup, builds; ids and Riot IDs redacted) and
+  POST action/NAME (crawl-start|stop|restart, site-build, eval-run, health-check: fixed
+  commands, one at a time across both instances via data/admin-action.lock, each logged
+  to data/admin-actions.log). Layers: basic auth at nginx; nginx adds X-Meiolol-Admin
+  from /etc/nginx/meiolol-admin-token.conf (root only) and clears it on public @render
+  requests; the box compares it in constant time with ml/meiolol/admin.token (64 hex,
+  read per request, so rotate by rewriting both and reloading nginx); without a match the
+  routes do not exist (same 404/405 as any path). Actions also need the request header
+  X-Meiolol-Action: 1, which a cross-site form cannot send. 8091 takes only the web server
 
 ## Known problems on the micro
 

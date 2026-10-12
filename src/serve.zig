@@ -7,6 +7,7 @@
 const std = @import("std");
 const Io = std.Io;
 const site = @import("site/root.zig");
+pub const admin_api = @import("admin_api.zig");
 
 const log = std.log.scoped(.serve);
 
@@ -22,6 +23,8 @@ pub const Options = struct {
     dev: ?Dev = null,
     /// Written (empty) once listening: deploy/render-swap.sh waits for it
     ready: ?[]const u8 = null,
+    /// /admin/api/ (`meiolol render`), for requests nginx gave the admin token
+    admin: ?*admin_api.Api = null,
 };
 
 /// The loaded site pages render from, replaced whole by `swap`: a request keeps the one
@@ -185,6 +188,8 @@ fn connection(ctx: *Context, stream: Io.net.Stream) void {
 }
 
 fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
+    // Without the token, /admin/api/ falls through to the answers any path gets
+    if (ctx.opts.admin) |api| if (try admin_api.handle(api, request)) return;
     if (request.head.method != .GET and request.head.method != .HEAD) {
         // A bodyless POST has neither length nor encoding, and respond() asserts on one
         // when it discards the body
@@ -379,4 +384,8 @@ test "Rendered: a swapped-out site is freed after its last request" {
     const second = r.acquire();
     r.release(second);
     try std.testing.expect(!second.retired);
+}
+
+test {
+    _ = admin_api;
 }

@@ -232,7 +232,15 @@ test "admin page from the fixture games and a crawl log" {
     try log.writer.print("2025-10-11 23:01:00" ++ report, .{ 10, 50, 10 });
     try log.writer.print("2025-10-11 23:02:00" ++ report, .{ 25, 90, 30 });
     try log.writer.writeAll("2025-10-11 23:02:30 warning(riot): 503 (server) on /lol/match/v5/matches/EUW1_7123456, waiting 5s\n");
+    try log.writer.writeAll("2025-10-11 23:03:00 error(riot): 403 on /lol/match/v5/matches/EUW1_7123457: key missing or expired\n");
+    try log.writer.writeAll("KEY REJECTED\n");
     try tmp.dir.writeFile(io, .{ .sub_path = "crawl.log", .data = log.written() });
+    try tmp.dir.writeFile(io, .{ .sub_path = "eval-latest.md", .data = "# meiolol eval\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "storage.tsv", .data = "db\tname\tkind\tbytes\tcells\nmeiolol\tmatches\ttable\t4096\t12\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "admin-actions.log", .data = "2025-10-11T23:05:00Z\tcrawl-restart\tok\t\n" });
+    try tmp.dir.createDirPath(io, "backups/segments");
+    try tmp.dir.writeFile(io, .{ .sub_path = "backups/segments/a", .data = "12345" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "crawl.args", .data = "--reserve 20\n" });
 
     const out = try std.fs.path.join(arena, &.{ dir, "admin" });
     for (0..2) |_| try admin.generate(gpa, io, db, .{
@@ -242,6 +250,8 @@ test "admin page from the fixture games and a crawl log" {
         .now_s = 1760224200,
         .disk = .{ 100, 40, 60 },
         .health = "",
+        .backups_dir = try std.fs.path.join(arena, &.{ dir, "backups" }),
+        .crawl_args = try std.fs.path.join(arena, &.{ dir, "crawl.args" }),
     });
     const html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "index.html" }), arena, .limited(4 << 20));
     for ([_][]const u8{
@@ -255,7 +265,42 @@ test "admin page from the fixture games and a crawl log" {
         return error.TestUnexpectedResult;
     };
     try std.testing.expect(std.mem.indexOf(u8, html, "EUW1_7123456") == null);
-    for ([_][]const u8{ "admin.js", "admin.css", "index.html.gz" }) |f| {
+    // data.json: the page's data, for polling between rebuilds
+    const json = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data.json" }), arena, .limited(4 << 20));
+    for ([_][]const u8{
+        "\"eval_report\":\"# meiolol eval\\n\"",
+        "\"storage\":{\"generated\":",
+        "\"rows\":[[\"meiolol\",\"matches\",\"table\",4096,12]]",
+        "\"backups\":{\"bytes\":5,\"files\":1,\"newest\":",
+        "\"riot\":{\"app_limit\":\"20:1,100:120\",\"method_limits\":{},\"crawl_args\":\"--reserve 20\"," ++
+            "\"key_problems\":[[1760223780,\"error(riot): N on /lol/match/vN/matches/…: key missing or expired\"]," ++
+            "[1760223780,\"KEY REJECTED\"]]}",
+    }) |want| if (std.mem.indexOf(u8, json, want) == null) {
+        std.debug.print("data.json lacks {s}\n", .{want});
+        return error.TestUnexpectedResult;
+    };
+    try std.testing.expect(std.mem.indexOf(u8, html, json) != null);
+    // live.json (admin_api.zig), its command results given
+    const live = try admin.liveJson(arena, io, db, .{
+        .data_dir = dir,
+        .now_s = 1760224200,
+        .services = .{ .@"meiolol-crawl" = "active" },
+        .health = "crawler silent",
+        .disk = .{ 100, 40, 60 },
+        .action = .{ .name = "site-build", .since = 1760224190 },
+    });
+    for ([_][]const u8{
+        "{\"now\":1760224200,\"services\":{\"meiolol-crawl\":\"active\",\"meiolol-web\":\"unknown\",",
+        "\"health\":\"crawler silent\",\"crawl\":{\"start\":1760213400,\"step\":60,",
+        "\"queues\":{\"match\":",
+        "\"disk\":[100,40,60],\"files\":[{\"name\":\"meiolol.db\",",
+        "\"actions\":[[1760223900,\"crawl-restart\",\"ok\",\"\"]]",
+        "\"running\":{\"eval\":null,\"action\":{\"name\":\"site-build\",\"since\":1760224190}}}",
+    }) |want| if (std.mem.indexOf(u8, live, want) == null) {
+        std.debug.print("live.json lacks {s}\n{s}\n", .{ want, live });
+        return error.TestUnexpectedResult;
+    };
+    for ([_][]const u8{ "admin.js", "admin.css", "index.html.gz", "data.json.gz" }) |f| {
         try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ out, f }), .{});
     }
     // One history line per build, under one header

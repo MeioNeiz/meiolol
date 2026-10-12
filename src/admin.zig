@@ -8,6 +8,7 @@ const std = @import("std");
 const store = @import("store");
 const date = @import("date.zig");
 const ep = @import("riot/endpoints.zig");
+const Limiter = @import("riot/ratelimit.zig").Limiter;
 
 const Io = std.Io;
 const Region = ep.Region;
@@ -25,6 +26,12 @@ pub const Options = struct {
     disk: ?[3]u64 = null,
     /// deploy/health.sh output: one problem per line, empty when all is well
     health: ?[]const u8 = null,
+    /// Default: backups beside the data directory (ml/meiolol/backups on the box,
+    /// MEIOLOL_BACKUPS there)
+    backups_dir: ?[]const u8 = null,
+    /// The crawler's arguments (deploy/box.sh start); default: crawl.args beside the
+    /// data directory
+    crawl_args: ?[]const u8 = null,
 };
 
 const log_tail = 32 << 20;
@@ -33,6 +40,7 @@ const bucket_s = 600;
 const draft_tail = 1_000_000;
 /// TSV lines of history kept on the page: 30 days at one per 15 min
 const history_lines = 2880;
+const eval_report_max = 256 << 10;
 
 /// Crawl log lines that are not report lines, by what they say
 const Kind = enum { rate_limit, riot_server, db_busy, network, other };
@@ -100,7 +108,9 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     try appendHistory(io, history_path, o, counts, files);
 
     const window_start = o.now_s - @as(i64, o.days) * 86400;
-    const crawl = try crawlSeries(arena, io, o.crawl_log, window_start, o.now_s);
+    var key_problems: std.ArrayList(KeyProblem) = .empty;
+    const crawl = try crawlSeries(arena, io, o.crawl_log, window_start, o.now_s, bucket_s, log_tail, &key_problems);
+    const kp = key_problems.items;
     const page = .{
         .now = o.now_s,
         .days = o.days,
@@ -126,6 +136,17 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
             .health = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "health.log" }), 12),
             .backup = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "backup.log" }), 6),
             .builds = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "builds.log" }), 6),
+        },
+        .eval_report = try readHead(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "eval-latest.md" }), eval_report_max),
+        .storage = try storage(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "storage.tsv" })),
+        .backups = try backups(arena, io, o.backups_dir orelse try std.fs.path.join(arena, &.{ o.data_dir, "..", "backups" })),
+        .riot = .{
+            .app_limit = Limiter.app_default,
+            // None seeded: the limiter learns them from Riot's headers
+            .method_limits = struct {}{},
+            .crawl_args = std.mem.trim(u8, try readHead(arena, io, o.crawl_args orelse
+                try std.fs.path.join(arena, &.{ o.data_dir, "..", "crawl.args" }), 4096) orelse "", " \n"),
+            .key_problems = kp[kp.len -| 50..],
         },
     };
     const json = try std.json.Stringify.valueAlloc(arena, page, .{});
@@ -160,6 +181,8 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     var dir = try cwd.openDir(io, o.out_dir, .{});
     defer dir.close(io);
     try writeGz(gpa, io, dir, "index.html", out.written());
+    // The same data for the page to poll between rebuilds
+    try writeGz(gpa, io, dir, "data.json", json);
     try writeGz(gpa, io, dir, "admin.js", @embedFile("site/static/admin.js"));
     try writeGz(gpa, io, dir, "admin.css", @embedFile("site/static/admin.css"));
 }
@@ -392,6 +415,164 @@ fn readTail(arena: std.mem.Allocator, io: Io, path: []const u8, max: u64) ![]con
     return text;
 }
 
+/// The first `max` bytes of a file; null when it is missing
+fn readHead(arena: std.mem.Allocator, io: Io, path: []const u8, max: usize) !?[]const u8 {
+    var file = Io.Dir.cwd().openFile(io, path, .{}) catch |err| switch (err) {
+        error.FileNotFound => return null,
+        else => return err,
+    };
+    defer file.close(io);
+    const buf = try arena.alloc(u8, @intCast(@min(try file.length(io), max)));
+    return buf[0..try file.readPositionalAll(io, buf, 0)];
+}
+
+const Storage = struct {
+    /// The scan's time (the file's)
+    generated: i64,
+    /// db, table or index name, kind, bytes, cells
+    rows: []const struct { []const u8, []const u8, []const u8, u64, u64 },
+};
+
+/// deploy/web-loop.sh's daily dbstat scan (data/storage.tsv); null before the first
+fn storage(arena: std.mem.Allocator, io: Io, path: []const u8) !?Storage {
+    const text = try readHead(arena, io, path, 4 << 20) orelse return null;
+    const st = try Io.Dir.cwd().statFile(io, path, .{});
+    var rows: std.ArrayList(@typeInfo(@FieldType(Storage, "rows")).pointer.child) = .empty;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    _ = lines.next();
+    while (lines.next()) |line| {
+        var f = std.mem.splitScalar(u8, line, '\t');
+        const db = f.next() orelse continue;
+        const name = f.next() orelse continue;
+        const kind = f.next() orelse continue;
+        const bytes = std.fmt.parseInt(u64, f.next() orelse continue, 10) catch continue;
+        const cells = std.fmt.parseInt(u64, f.next() orelse continue, 10) catch continue;
+        try rows.append(arena, .{ db, name, kind, bytes, cells });
+    }
+    return .{ .generated = st.mtime.toSeconds(), .rows = rows.items };
+}
+
+const Backups = struct { bytes: u64, files: u64, newest: i64 };
+
+/// Every file under the backups directory; null when there is none
+fn backups(arena: std.mem.Allocator, io: Io, path: []const u8) !?Backups {
+    var dir = Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch |err| switch (err) {
+        error.FileNotFound, error.NotDir => return null,
+        else => return err,
+    };
+    defer dir.close(io);
+    var walker = try dir.walk(arena);
+    defer walker.deinit();
+    var b: Backups = .{ .bytes = 0, .files = 0, .newest = 0 };
+    while (try walker.next(io)) |e| {
+        if (e.kind != .file) continue;
+        const st = e.dir.statFile(io, e.basename, .{}) catch continue;
+        b.bytes += st.size;
+        b.files += 1;
+        b.newest = @max(b.newest, st.mtime.toSeconds());
+    }
+    return b;
+}
+
+/// systemctl --user is-active, by unit (deploy/systemd)
+pub const Services = struct {
+    @"meiolol-crawl": []const u8 = "unknown",
+    @"meiolol-web": []const u8 = "unknown",
+    @"meiolol-render@a": []const u8 = "unknown",
+    @"meiolol-render@b": []const u8 = "unknown",
+    @"meiolol-backup": []const u8 = "unknown",
+    @"meiolol-health": []const u8 = "unknown",
+};
+
+pub const RunningAction = struct { name: []const u8, since: i64 };
+
+/// What the admin API (admin_api.zig) found out by running commands
+pub const Live = struct {
+    data_dir: []const u8,
+    now_s: i64,
+    services: Services = .{},
+    health: []const u8 = "",
+    disk: ?[3]u64 = null,
+    /// Start of a running `meiolol eval`
+    eval_since: ?i64 = null,
+    action: ?RunningAction = null,
+};
+
+const live_window_s = 3 * 3600;
+const live_step_s = 60;
+
+/// /admin/api/live.json: the crawler's last 3 h by minute, queues, files and the admin
+/// actions, with `l`'s command results. `db` read-only
+pub fn liveJson(arena: std.mem.Allocator, io: Io, db: store.Db, l: Live) ![]const u8 {
+    const crawl_log = try std.fs.path.join(arena, &.{ l.data_dir, "crawl.log" });
+    const live = .{
+        .now = l.now_s,
+        .services = l.services,
+        .health = l.health,
+        .crawl = try crawlSeries(arena, io, crawl_log, l.now_s - live_window_s, l.now_s, live_step_s, 4 << 20, null),
+        .queues = .{
+            .match = try groups(arena, db, "SELECT status, count(*) FROM match_queue GROUP BY 1 ORDER BY 2 DESC"),
+            .timeline = try groups(arena, db, "SELECT region || ' ' || status, count(*) FROM timeline_queue GROUP BY 1 ORDER BY 1"),
+        },
+        .disk = l.disk,
+        .files = try fileSizes(arena, io, l.data_dir),
+        .actions = try actionLog(arena, io, try std.fs.path.join(arena, &.{ l.data_dir, action_log })),
+        .running = .{ .eval = l.eval_since, .action = l.action },
+    };
+    return std.json.Stringify.valueAlloc(arena, live, .{});
+}
+
+/// Admin actions, one per line: ISO time, name, ok|failed|refused, output's start
+pub const action_log = "admin-actions.log";
+
+const ActionEntry = struct { i64, []const u8, []const u8, []const u8 };
+
+/// The last 20, newest last
+fn actionLog(arena: std.mem.Allocator, io: Io, path: []const u8) ![]const ActionEntry {
+    const text = try tail(arena, io, path, 20);
+    var out: std.ArrayList(ActionEntry) = .empty;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        var f = std.mem.splitScalar(u8, line, '\t');
+        const t = stamp(f.next() orelse continue) orelse continue;
+        const name = f.next() orelse continue;
+        const result = f.next() orelse continue;
+        try out.append(arena, .{ t, name, result, f.rest() });
+    }
+    return out.items;
+}
+
+/// A log line for the admin page's log viewer: as written, numbers and times kept, but
+/// id-like words (PUUIDs, match ids like EUW1_7123456) and Riot IDs (name#tag) to …
+pub fn redact(arena: std.mem.Allocator, line: []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (i < line.len) {
+        if (!isWordChar(line[i])) {
+            try out.append(arena, line[i]);
+            i += 1;
+            continue;
+        }
+        var e = i;
+        var digits = false;
+        while (e < line.len and isWordChar(line[e])) : (e += 1) digits = digits or std.ascii.isDigit(line[e]);
+        // name#tag: both sides, the tag letters or digits
+        if (e + 1 < line.len and line[e] == '#' and isWordChar(line[e + 1])) {
+            e += 1;
+            while (e < line.len and isWordChar(line[e])) e += 1;
+            try out.appendSlice(arena, "…");
+        } else if (e - i >= 20 or (digits and std.mem.indexOfScalar(u8, line[i..e], '_') != null)) {
+            try out.appendSlice(arena, "…");
+        } else try out.appendSlice(arena, line[i..e]);
+        i = e;
+    }
+    return out.items;
+}
+
+fn isWordChar(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '_' or c == '-';
+}
+
 /// "2026-10-11 23:07:21 ..." or "2026-10-11T23:07:21Z ..." to unix seconds
 fn stamp(line: []const u8) ?i64 {
     if (line.len < 19) return null;
@@ -404,22 +585,48 @@ fn stamp(line: []const u8) ?i64 {
     return d.toDay() * 86400 + h * 3600 + m * 60 + s;
 }
 
-fn crawlSeries(arena: std.mem.Allocator, io: Io, path: []const u8, from: i64, now: i64) !Crawl {
-    const start = @divFloor(from, bucket_s) * bucket_s;
-    const n_buckets: usize = @intCast(@divFloor(now - start, bucket_s) + 1);
+/// Riot refused the key: the client's 401/403 line, or the crawl unit's "KEY REJECTED"
+/// (exit 3, no time of its own: the line before's)
+const KeyProblem = struct { i64, []const u8 };
+
+/// `step`-second buckets from the last `max_bytes` of the log; key problems in the window
+/// into `key_problems` when given
+fn crawlSeries(
+    arena: std.mem.Allocator,
+    io: Io,
+    path: []const u8,
+    from: i64,
+    now: i64,
+    step: u32,
+    max_bytes: u64,
+    key_problems: ?*std.ArrayList(KeyProblem),
+) !Crawl {
+    const start = @divFloor(from, step) * step;
+    const n_buckets: usize = @intCast(@divFloor(now - start, step) + 1);
     const buckets = try arena.alloc(Bucket, n_buckets);
     @memset(buckets, .{});
     var restarts: std.ArrayList(i64) = .empty;
     var messages: std.StringArrayHashMapUnmanaged(Message) = .empty;
     var prev: ?struct { t: i64, r: Report } = null;
     var last_report: ?i64 = null;
+    var last_t: ?i64 = null;
 
-    const text = try readTail(arena, io, path, log_tail);
+    const text = try readTail(arena, io, path, max_bytes);
     var lines = std.mem.splitScalar(u8, text, '\n');
     while (lines.next()) |line| {
-        const t = stamp(line) orelse continue;
-        if (t < start or t > now) continue;
-        const b = &buckets[@intCast(@divFloor(t - start, bucket_s))];
+        const t = stamp(line) orelse {
+            if (key_problems) |kp| if (last_t) |lt| if (std.mem.eql(u8, line, "KEY REJECTED")) {
+                try kp.append(arena, .{ lt, "KEY REJECTED" });
+            };
+            continue;
+        };
+        if (t < start or t > now) {
+            last_t = null;
+            continue;
+        }
+        last_t = t;
+        if (line.len < 20) continue;
+        const b = &buckets[@intCast(@divFloor(t - start, step))];
         const rest = line[20..];
         if (parseReport(rest)) |r| {
             last_report = t;
@@ -435,6 +642,9 @@ fn crawlSeries(arena: std.mem.Allocator, io: Io, path: []const u8, from: i64, no
             prev = .{ .t = t, .r = .{} };
         } else if (std.mem.startsWith(u8, rest, "warning(") or std.mem.startsWith(u8, rest, "error(")) {
             const msg = try normalise(arena, rest);
+            if (key_problems) |kp| if (std.mem.indexOf(u8, msg, "key missing or expired") != null) {
+                try kp.append(arena, .{ t, msg });
+            };
             const kind = classify(msg);
             b.warnings[@backingInt(kind)] += 1;
             if (t >= now - 86400) {
@@ -453,6 +663,7 @@ fn crawlSeries(arena: std.mem.Allocator, io: Io, path: []const u8, from: i64, no
     }.gt);
     return .{
         .start = start,
+        .step = step,
         .buckets = buckets,
         .restarts = restarts.items,
         .messages = msgs[0..@min(msgs.len, 20)],

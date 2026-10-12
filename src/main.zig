@@ -906,7 +906,9 @@ fn cmdRender(c: *Cmd) !u8 {
     var group: std.Io.Group = .init;
     defer group.cancel(io);
     group.async(io, background, .{ c, &f, db, email, rendered, if (alone) first.loaded else null, if (alone) ready else null, reload });
-    try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered, .ready = if (alone) null else ready });
+    var admin_api: serve.admin_api.Api = .{ .gpa = gpa, .io = io, .data_dir = c.data_dir };
+    defer admin_api.deinit();
+    try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered, .ready = if (alone) null else ready, .admin = &admin_api });
     return 0;
 }
 
