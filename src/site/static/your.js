@@ -163,13 +163,14 @@ function render(body) {
 // Fun facts from the games in the report (newest first); each tile only when there is
 // something to say, so a short history shows fewer tiles rather than empty ones
 function renderHighlights(all) {
-  // Some remakes come without Riot's early-surrender flag; under 5 minutes is never a
-  // record worth showing
-  const games = all.filter((g) => !g.remake && g.duration_s >= 300);
+  // Under 5 minutes: an early surrender after a leaver. A real result (record and
+  // streaks count it), but never a record for length, KDA or lane
+  const played = all.filter((g) => !g.remake);
+  const games = played.filter((g) => g.duration_s >= 300);
   const box = $("highlight-tiles");
   box.replaceChildren();
-  $("highlights").hidden = !games.length;
-  if (!games.length) return;
+  $("highlights").hidden = !played.length;
+  if (!played.length) return;
   const tile = (value, label, sub) => {
     const t = el("div", "tile");
     t.append(el("b", "", value), el("span", "", label));
@@ -182,18 +183,19 @@ function renderHighlights(all) {
   const best = (xs, key) => xs.reduce((a, b) => (key(b) > key(a) ? b : a), xs[0]);
   const big = (x) => `${x > 0 ? "+" : ""}${x.toLocaleString("en-GB")}`;
 
-  const wins = games.filter((g) => g.win).length;
-  tile(`${wins}-${games.length - wins}`, "Record", `${Math.round((100 * wins) / games.length)}% wins in ${plural(games.length, "game")}`);
+  const wins = played.filter((g) => g.win).length;
+  tile(`${wins}-${played.length - wins}`, "Record", `${Math.round((100 * wins) / played.length)}% wins in ${plural(played.length, "game")}`);
 
   let streak = 1;
-  while (streak < games.length && games[streak].win === games[0].win) streak++;
+  while (streak < played.length && played[streak].win === played[0].win) streak++;
   let longest = 0;
-  for (let i = 0, run = 0; i < games.length; i++) {
-    run = games[i].win ? run + 1 : 0;
+  for (let i = 0, run = 0; i < played.length; i++) {
+    run = played[i].win ? run + 1 : 0;
     longest = Math.max(longest, run);
   }
-  if (streak >= 2) tile(`${streak} ${games[0].win ? "wins" : "losses"}`, "Current streak");
-  if (longest >= 2 && !(games[0].win && streak === longest)) tile(plural(longest, "win"), "Longest win streak");
+  if (streak >= 2) tile(`${streak} ${played[0].win ? "wins" : "losses"}`, "Current streak");
+  if (longest >= 2 && !(played[0].win && streak === longest)) tile(plural(longest, "win"), "Longest win streak");
+  if (!games.length) return;
 
   const long = best(games, (g) => g.duration_s);
   tile(clock(long.duration_s), "Longest game", on(long));
@@ -233,6 +235,25 @@ function renderHighlights(all) {
     tile(`${clean} of ${lanes.length}`, `Lanes without a death before ${LANE_END} min`);
   }
 
+  const costs = games.filter((g) => g.death_costs);
+  const deaths = costs.flatMap((g) => g.death_costs.map((d) => ({ g, d })));
+  if (costs.length) {
+    const gold = deaths.reduce((a, x) => a + x.d.gold, 0);
+    tile(Math.round(gold / costs.length).toLocaleString("en-GB"), "Kill gold given away per game", `${plural(deaths.length, "death")} in ${plural(costs.length, "game")}`);
+  }
+  if (deaths.length) {
+    const worst = best(deaths, (x) => x.d.gold + 1000 * (x.d.lost?.length ?? 0));
+    tile(`${worst.d.gold} gold`, "Most expensive death", `${clock(worst.d.t_s)}${worst.d.lost?.length ? `, then the enemy took ${list(worst.d.lost)}` : ""}: ${on(worst.g)}`);
+    const followed = deaths.filter((x) => x.d.lost?.length).length;
+    tile(`${followed} of ${deaths.length}`, "Deaths the enemy took an objective after", "within a minute");
+  }
+  const turns = games.filter((g) => g.turning);
+  if (turns.length) {
+    const swing = (g) => Math.abs(g.turning.to - g.turning.from);
+    const b = best(turns, swing);
+    tile(`${b.turning.from}% to ${b.turning.to}%`, "Biggest one-minute swing", `${b.turning.minute - 1}-${b.turning.minute} min: ${on(b)}`);
+  }
+
   const counts = new Map();
   for (const g of games) {
     const c = counts.get(g.champion) ?? { games: 0, wins: 0 };
@@ -243,7 +264,7 @@ function renderHighlights(all) {
   const [main, m] = [...counts].reduce((a, b) => (b[1].games > a[1].games ? b : a));
   if (m.games >= 2) tile(champName(main), "Most played", `${plural(m.games, "game")}, ${plural(m.wins, "win")}`);
 
-  $("highlights-note").textContent = `From your last ${plural(games.length, "ranked solo game")}. A record book across every game you've played is coming, built when you ask for it.`;
+  $("highlights-note").textContent = `From your last ${plural(played.length, "ranked solo game")}. A record book across every game you've played is coming, built when you ask for it.`;
 }
 
 function cell(text, num) {
@@ -325,13 +346,89 @@ function gameCard(g) {
   ].join(" · ")));
   card.append(head);
   const l = g.lane;
-  if (!l) {
+  if (l) {
+    card.append(chart(g, l));
+    card.append(facts(g, l));
+  } else {
     card.append(el("p", "muted", g.remake ? "Remake: no lane to show." : "No lane opponent or timeline for this game."));
-    return card;
   }
-  card.append(chart(g, l));
-  card.append(facts(g, l));
+  if (g.win_chance?.length > 1) card.append(wholeGame(g));
   return card;
+}
+
+const list = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}` : xs[0] ?? "");
+
+// Win chance by minute (src/winchance.zig), the turning minute and what each death cost
+function wholeGame(g) {
+  const box = el("div", "whole-game");
+  const wc = g.win_chance;
+  const t = g.turning;
+  box.append(winChart(wc, t, g.death_costs ?? []));
+  const ul = el("ul", "facts");
+  if (t) {
+    const what = [`${plural(t.kills, "kill")} and ${plural(t.deaths, "death")} for your team`];
+    if (t.your_deaths) what.push(t.your_deaths > 1 ? `you died ${t.your_deaths} times` : "you died");
+    else if (t.your_kills) what.push(`you took part in ${plural(t.your_kills, "kill")}`);
+    if (t.taken?.length) what.push(`your team took ${list(t.taken)}`);
+    if (t.lost?.length) what.push(`the enemy took ${list(t.lost)}`);
+    ul.append(el("li", "", `Turning minute: ${t.minute - 1}-${t.minute} min, your team's win chance ${t.from}% to ${t.to}%. That minute: ${list(what)}.`));
+  }
+  box.append(ul);
+  const deaths = g.death_costs ?? [];
+  if (deaths.length) {
+    const gold = deaths.reduce((a, d) => a + d.gold, 0);
+    const det = el("details", "deaths");
+    det.append(el("summary", "", `Death cost: ${plural(deaths.length, "death")}, ${gold.toLocaleString("en-GB")} kill gold to the enemy`));
+    const dl = el("ul", "facts");
+    for (const d of deaths) {
+      let text = `${clock(d.t_s)}, ${d.killer !== undefined ? `killed by ${champName(d.killer)}` : "executed"}${d.assists ? ` and ${plural(d.assists, "other")}` : ""}: ${d.gold} gold to the enemy.`;
+      if (d.lost?.length) text += ` In the next minute the enemy took ${list(d.lost)}.`;
+      if (d.before !== undefined && d.after !== undefined) text += ` Win chance ${d.before}% at ${Math.floor(d.t_s / 60)}:00, ${d.after}% at ${Math.floor(d.t_s / 60) + 1}:00.`;
+      dl.append(el("li", "", text));
+    }
+    det.append(dl);
+    box.append(det);
+  }
+  return box;
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs) => {
+  const e = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+};
+
+function winChart(wc, turn, deaths) {
+  const W = 640, H = 150, L = 40, R = 12, T = 10, B = 24;
+  const last = wc.length - 1;
+  const x = (m) => L + ((W - L - R) * m) / Math.max(last, 1);
+  const y = (p) => T + ((H - T - B) * (100 - p)) / 100;
+  const fig = el("figure", "chart win");
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Your team's win chance by minute" });
+  for (const p of [0, 50, 100]) {
+    svg.append(svgEl("line", { class: p === 50 ? "zero" : "grid", x1: L, x2: W - R, y1: y(p), y2: y(p) }));
+    const label = svgEl("text", { x: L - 6, y: y(p) + 4, "text-anchor": "end" });
+    label.textContent = `${p}%`;
+    svg.append(label);
+  }
+  for (let m = 5; m < last; m += 5) {
+    const label = svgEl("text", { x: x(m), y: H - 6, "text-anchor": "middle" });
+    label.textContent = `${m} min`;
+    svg.append(label);
+  }
+  if (turn) svg.append(svgEl("rect", { class: "turn", x: x(turn.minute - 1), width: x(turn.minute) - x(turn.minute - 1), y: T, height: H - T - B }));
+  svg.append(svgEl("polyline", { class: "median", points: wc.map((p, m) => `${x(m).toFixed(1)},${y(p).toFixed(1)}`).join(" ") }));
+  for (const d of deaths) {
+    const m = d.t_s / 60;
+    if (m > last) continue;
+    const lo = Math.floor(m), hi = Math.min(lo + 1, last);
+    const p = wc[lo] + (wc[hi] - wc[lo]) * (m - lo);
+    svg.append(svgEl("circle", { class: "death", cx: x(m), cy: y(p), r: 4 }));
+  }
+  fig.append(svg);
+  fig.append(el("figcaption", "", "Your team's win chance by minute, from the gold and XP lead and objectives held, as in Platinum+ games. Shaded: the turning minute. Dots: your deaths."));
+  return fig;
 }
 
 function chart(g, l) {

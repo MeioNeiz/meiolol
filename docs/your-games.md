@@ -33,6 +33,13 @@ static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy b
   there is no curve) with deaths and kills in those minutes, shown only when 200+ gold;
   weekly games, wins, mean gold difference at 14 and mean against typical; per matchup
   the gold difference at 10 oldest to newest and the older vs newer half's mean
+- Whole game (any role, lane opponent or not): the team's win chance per minute
+  (src/winchance.zig: objectives.zig's "+ objectives held" state model fitted at every
+  minute by `meiolol winchance`; weights in src/winchance_weights.zig, refit when the
+  game changes), the turning minute (biggest one-minute change, with that minute's
+  kills, deaths and objectives) and death cost per death (bounty and shutdown gold to
+  the enemy, objectives the enemy took in the next minute, win chance before and after).
+  Plate events after 14:00 are ignored (Riot sends them, worth nothing then)
 - Tier is the visible rank (league-v4), never inferred MMR. It is the rank now, not at
   game time; the curves bracket games by the median visible rank of their players
 - Not yet: the experienced-players curve (needs champion-mastery per player, more

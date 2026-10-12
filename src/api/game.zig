@@ -6,6 +6,7 @@ const std = @import("std");
 const core = @import("core");
 const riot = @import("../riot/root.zig");
 const curves_build = @import("../curves.zig");
+const winchance = @import("../winchance.zig");
 const Date = @import("../date.zig").Date;
 
 const Allocator = std.mem.Allocator;
@@ -166,7 +167,48 @@ pub const Game = struct {
     deaths: i64,
     assists: i64,
     lane: ?LaneReport,
+    /// Your team's chance to win at each minute's frame, percent; index 0 is the start.
+    /// Empty without a timeline
+    /// u16, not u8: std.json writes a u8 slice as a string
+    win_chance: []const u16 = &.{},
+    turning: ?Turn = null,
+    death_costs: []const Death = &.{},
 };
+
+/// The minute your team's win chance moved most
+pub const Turn = struct {
+    /// Between frames minute - 1 and minute
+    minute: u8,
+    from: u16,
+    to: u16,
+    /// Champion kills that minute by your team and of your team
+    kills: u32,
+    deaths: u32,
+    /// Kills you took part in and your deaths that minute
+    your_kills: u32,
+    your_deaths: u32,
+    /// Objectives your team and the enemy team took that minute
+    taken: []const []const u8,
+    lost: []const []const u8,
+};
+
+/// One of your deaths and what followed
+pub const Death = struct {
+    t_s: u32,
+    /// Champion that got the kill; null for a turret, minion or monster
+    killer: ?u32,
+    assists: u32,
+    /// Bounty and shutdown gold the enemy got for it
+    gold: u32,
+    /// Objectives the enemy team took in the next `death_window_ms`
+    lost: []const []const u8,
+    /// Your team's win chance at the frames before and after, percent
+    before: ?u16,
+    after: ?u16,
+};
+
+const death_window_ms = 60_000;
+const plates_fall_ms = 14 * 60_000;
 
 pub const LaneReport = struct {
     /// Minute i + 1, you minus your lane opponent
@@ -279,6 +321,7 @@ pub fn analyse(arena: Allocator, in: Input, rank: Rank, set: CurveSet) !Game {
         .assists = me.assists,
         .lane = null,
     };
+    if (!s.remake) if (in.timeline) |t| try wholeGame(arena, s, in.slot, t, &g);
     const r = role orelse return g;
     const opp_slot = for (s.players, 0..) |p, i| {
         if (p.team != me.team and std.mem.eql(u8, p.position, me.position)) break i;
@@ -326,6 +369,130 @@ pub fn analyse(arena: Allocator, in: Input, rank: Rank, set: CurveSet) !Game {
     lr.rise = stretch(t, my_id, lr.gold, lr.curve, .rise);
     g.lane = lr;
     return g;
+}
+
+/// Win chance, turning minute and death cost: the whole game, not only the lane
+fn wholeGame(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, g: *Game) !void {
+    if (t.participants != s.players.len) return;
+    const team = s.players[slot].team;
+    const me: u8 = slot + 1;
+    var chance: std.ArrayList(u16) = .empty;
+    var m: u8 = 0;
+    while (m < 255) : (m += 1) {
+        const p = winchance.blue(t, m) orelse break;
+        const mine_p = if (team == 100) p else 1 - p;
+        try chance.append(arena, @intFromFloat(@round(100 * mine_p)));
+    }
+    g.win_chance = chance.items;
+
+    var best: ?u8 = null;
+    for (1..chance.items.len) |i| {
+        const change = @abs(@as(i32, chance.items[i]) - chance.items[i - 1]);
+        if (best == null or change > @abs(@as(i32, chance.items[best.?]) - chance.items[best.? - 1])) best = @intCast(i);
+    }
+    if (best) |b| {
+        var turn: Turn = .{
+            .minute = b,
+            .from = chance.items[b - 1],
+            .to = chance.items[b],
+            .kills = 0,
+            .deaths = 0,
+            .your_kills = 0,
+            .your_deaths = 0,
+            .taken = &.{},
+            .lost = &.{},
+        };
+        const from_ms = @as(i64, b - 1) * 60_000;
+        for (t.events) |e| if (e.t_ms >= from_ms and e.t_ms < from_ms + 60_000) switch (e.data) {
+            .champion_kill => |k| {
+                if (k.victim == 0 or k.victim > s.players.len) continue;
+                const theirs = s.players[k.victim - 1].team != team;
+                if (theirs) turn.kills += 1 else turn.deaths += 1;
+                if (k.victim == me) turn.your_deaths += 1;
+                if (k.killer == me or std.mem.indexOfScalar(u8, k.assists, me) != null) turn.your_kills += 1;
+            },
+            else => {},
+        };
+        turn.taken = try objectivesBy(arena, t, team, from_ms, from_ms + 60_000, true);
+        turn.lost = try objectivesBy(arena, t, team, from_ms, from_ms + 60_000, false);
+        g.turning = turn;
+    }
+
+    var deaths: std.ArrayList(Death) = .empty;
+    for (t.events) |e| switch (e.data) {
+        .champion_kill => |k| if (k.victim == me) {
+            const minute: usize = @intCast(@divFloor(e.t_ms, 60_000));
+            try deaths.append(arena, .{
+                .t_s = @intCast(@divFloor(e.t_ms, 1000)),
+                .killer = if (k.killer >= 1 and k.killer <= s.players.len) s.players[k.killer - 1].champion else null,
+                .assists = @intCast(k.assists.len),
+                .gold = k.bounty + k.shutdown,
+                .lost = try objectivesBy(arena, t, team, e.t_ms, e.t_ms + death_window_ms, false),
+                .before = if (minute < chance.items.len) chance.items[minute] else null,
+                .after = if (minute + 1 < chance.items.len) chance.items[minute + 1] else null,
+            });
+        },
+        else => {},
+    };
+    g.death_costs = deaths.items;
+}
+
+/// Objectives taken in [from_ms, to_ms) by `team` (`ours`) or by the other team, as
+/// labels; repeats folded into "Turret plate x3"
+fn objectivesBy(arena: Allocator, t: timeline.Timeline, team: i64, from_ms: i64, to_ms: i64, ours: bool) ![]const []const u8 {
+    var labels: std.ArrayList([]const u8) = .empty;
+    var counts: std.ArrayList(u32) = .empty;
+    for (t.events) |e| {
+        if (e.t_ms < from_ms) continue;
+        if (e.t_ms >= to_ms) break;
+        const taker: i64, const label: []const u8 = switch (e.data) {
+            // team owns the building or plate: the other team took it
+            .building_kill => |b| .{ 300 - @as(i64, b.team), try buildingLabel(arena, b.building, b.lane, b.tower) },
+            // Plates fall at 14:00; Riot still sends plate events after, several when a
+            // tower dies, worth nothing then
+            .turret_plate => |p| if (e.t_ms < plates_fall_ms) .{ 300 - @as(i64, p.team), "Turret plate" } else continue,
+            .elite_monster => |em| .{ em.team, monsterLabel(em.monster, em.subtype) orelse continue },
+            else => continue,
+        };
+        if ((taker == team) != ours) continue;
+        for (labels.items, counts.items) |l, *n| {
+            if (std.mem.eql(u8, l, label)) {
+                n.* += 1;
+                break;
+            }
+        } else {
+            try labels.append(arena, label);
+            try counts.append(arena, 1);
+        }
+    }
+    for (labels.items, counts.items) |*l, n| if (n > 1) {
+        l.* = try std.fmt.allocPrint(arena, "{s} x{d}", .{ l.*, n });
+    };
+    return labels.items;
+}
+
+fn buildingLabel(arena: Allocator, building: []const u8, lane: []const u8, tower: []const u8) ![]const u8 {
+    const where: []const u8 = if (std.mem.eql(u8, lane, "TOP_LANE")) "Top" else if (std.mem.eql(u8, lane, "MID_LANE")) "Mid" else if (std.mem.eql(u8, lane, "BOT_LANE")) "Bot" else "Base";
+    if (std.mem.eql(u8, building, "INHIBITOR_BUILDING")) return std.fmt.allocPrint(arena, "{s} inhibitor", .{where});
+    const which: []const u8 = if (std.mem.eql(u8, tower, "OUTER_TURRET")) "outer" else if (std.mem.eql(u8, tower, "INNER_TURRET")) "inner" else if (std.mem.eql(u8, tower, "BASE_TURRET")) "base" else if (std.mem.eql(u8, tower, "NEXUS_TURRET")) return "Nexus tower" else "";
+    return std.fmt.allocPrint(arena, "{s} {s} tower", .{ where, which });
+}
+
+fn monsterLabel(monster: []const u8, subtype: []const u8) ?[]const u8 {
+    const eql = std.mem.eql;
+    if (eql(u8, monster, "BARON_NASHOR")) return "Baron";
+    if (eql(u8, monster, "RIFTHERALD")) return "Rift Herald";
+    if (eql(u8, monster, "HORDE")) return "Voidgrub";
+    if (eql(u8, monster, "ATAKHAN")) return "Atakhan";
+    if (!eql(u8, monster, "DRAGON")) return null;
+    const dragons = [_][2][]const u8{
+        .{ "FIRE_DRAGON", "Infernal dragon" },   .{ "WATER_DRAGON", "Ocean dragon" },
+        .{ "EARTH_DRAGON", "Mountain dragon" },  .{ "AIR_DRAGON", "Cloud dragon" },
+        .{ "HEXTECH_DRAGON", "Hextech dragon" }, .{ "CHEMTECH_DRAGON", "Chemtech dragon" },
+        .{ "ELDER_DRAGON", "Elder dragon" },
+    };
+    for (dragons) |d| if (eql(u8, subtype, d[0])) return d[1];
+    return "Dragon";
 }
 
 fn mine(arena: Allocator, diffs: []const i16, sign: i16) ![]i16 {
@@ -614,6 +781,20 @@ test "a real timeline from both sides, with and without a curve" {
     // One game: below min_minute_games, so no stretch is measured against it
     try testing.expect(with.lane.?.fall == null and with.lane.?.rise == null);
     for (rl.gold[0..lane_end], c.gold[0..lane_end]) |mine_gold, q| try testing.expectEqual(mine_gold, q[1]);
+
+    // Whole game: win chance from both sides adds up, deaths match the lane count
+    try testing.expect(blue.win_chance.len > lane_end);
+    for (blue.win_chance, red.win_chance) |b_pct, r_pct| try testing.expect(@abs(@as(i32, b_pct) + r_pct - 100) <= 1);
+    try testing.expectEqual(@as(u16, 50), blue.win_chance[0]);
+    const json = try std.json.Stringify.valueAlloc(arena, blue, .{});
+    try testing.expect(std.mem.indexOf(u8, json, "\"win_chance\":[50,") != null);
+    const turn = blue.turning.?;
+    try testing.expectEqual(turn.minute, red.turning.?.minute);
+    try testing.expectEqual(turn.taken.len, red.turning.?.lost.len);
+    var early: u32 = 0;
+    for (blue.death_costs) |d| early += @intFromBool(d.t_s < lane_end * 60);
+    try testing.expectEqual(bl.lane_deaths, early);
+    for (blue.death_costs) |d| try testing.expect(d.killer == null or d.killer.? > 5);
 
     const unranked = try analyse(arena, .{ .summary = s, .slot = 5, .timeline = t }, .{}, set);
     try testing.expectEqualStrings("All ranks", unranked.lane.?.curve.?.bracket);

@@ -1131,8 +1131,8 @@ const pillars = [_]Pillar{
     .{
         .name = "Game rewind",
         .soon = false,
-        .text = "Each game's lane minute by minute against Platinum+ games in the same matchup: the minutes it swung, and your level 6 and first item against typical.",
-        .example = "Biggest drop: 6-9 min, -540 gold, 2 deaths",
+        .text = "Each game's lane minute by minute against Platinum+ games in the same matchup, your team's win chance through the whole game, the minute it turned, and what each of your deaths cost.",
+        .example = "Turning minute 23-24: win chance 61% to 34%",
     },
     .{
         .name = "Highlights",
@@ -1143,14 +1143,14 @@ const pillars = [_]Pillar{
     .{
         .name = "Matchup notebook",
         .soon = false,
-        .text = "Your record in every lane matchup and how it moves over the months; next, the builds that worked for you against each kind of team.",
+        .text = "Your record in every lane matchup and how it moves over the months; next, what you built against each kind of team, and when.",
         .example = "Ahri vs Yone: gold at 10 -310, -120, +80",
     },
     .{
         .name = "Scouting report",
         .soon = true,
-        .text = "You as a player: snowball or comeback, spike timing, where your games tilt, what your deaths cost, and how your role compares with Platinum+.",
-        .example = "Your deaths gave away 2,900 gold a game",
+        .text = "You as a player: snowball or comeback, spike timing, where your games tilt, and how your role compares with Platinum+.",
+        .example = "Behind at 14 in 6 of 10 games, won 4 of them",
     },
     .{
         .name = "Before the game",

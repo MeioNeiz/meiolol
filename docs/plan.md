@@ -244,8 +244,12 @@ next steps land here.
 
 - Done: home page leads with the Riot ID lookup, six pillars marked live or coming;
   Highlights tiles on Your games (d24c299)
-- Now: Death Cost (gold given per death, what the enemy took in the next 60 s) and the
-  Turning Minute (win chance by minute, whole game) in src/api/game.zig and your.js
+- Done: Death Cost and the Turning Minute on Your games (win chance by minute,
+  src/winchance.zig; docs/your-games.md). The jomove API binary needs a rebuild and
+  install for them to show for looked-up players (docs/your-games.md Deploy); the
+  example page shows them after the box's next `your-example`
+- Short games (under 15:00, remake=0) are early surrenders after a leaver, real
+  results (meiolol-cf): an ended_early flag for stats and models needs an owner
 - Then, in Jacob's order of interest: spike window, level spikes, counter-item timing,
   builds that worked, tilt check, snowball vs comeback, pool health, baron calls,
   sidelane, fingerprint, role lenses, pre-game brief (desktop), squad scouting

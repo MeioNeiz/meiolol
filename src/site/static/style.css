@@ -390,3 +390,8 @@ h3.opp-h .muted { font-weight: 400; font-size: 13px; }
 .sample > p { margin: 0 0 10px; font-size: 13px; }
 .sample .tiles { grid-template-columns: 1fr 1fr; }
 .sample .tile { background: var(--panel-2); }
+.whole-game { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.chart.win .turn { fill: var(--accent); opacity: 0.15; }
+.chart.win .death { fill: var(--bad); stroke: var(--panel); stroke-width: 2; }
+details.deaths summary { cursor: pointer; color: var(--text); margin: 4px 0; }
+details.deaths ul.facts { margin-top: 6px; }
