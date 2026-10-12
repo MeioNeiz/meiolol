@@ -163,7 +163,7 @@ fn writeFile(
                     " WHERE rowid > {d} AND rowid <= {d}",
                     .{ after.matches_to, to_m },
                 ));
-                w.matches = changes(db);
+                w.matches = db.changes();
                 // Same transaction as the match row in the crawler, so never half a match
                 const of_matches = " WHERE match_id IN (SELECT match_id FROM main.matches)";
                 try copyRows(arena, db, "live", "participants", of_matches);
@@ -172,20 +172,20 @@ fn writeFile(
                     " WHERE rowid > {d} AND rowid <= {d}",
                     .{ after.timelines_to, to_t },
                 ));
-                w.timelines = changes(db);
+                w.timelines = db.changes();
                 if (drafts) {
                     try copyRows(arena, db, "live", "drafts", try arena.print(
                         " WHERE id > {d} AND id <= {d}",
                         .{ after.drafts_to, to_d },
                     ));
-                    w.drafts = changes(db);
+                    w.drafts = db.changes();
                 }
                 if (history) {
                     try copyRows(arena, db, "live", "rank_history", try arena.print(
                         " WHERE day > {d} AND day <= {d}",
                         .{ after.history_to, to_h },
                     ));
-                    w.rank_history = changes(db);
+                    w.rank_history = db.changes();
                 }
                 w.rows = w.matches + w.timelines + w.drafts + w.rank_history;
             },
@@ -409,10 +409,6 @@ pub fn scrub(arena: std.mem.Allocator, io: Io, dir: []const u8, puuid: []const u
         }
     }
     return total;
-}
-
-fn changes(db: Db) i64 {
-    return db.changes();
 }
 
 const testing = std.testing;

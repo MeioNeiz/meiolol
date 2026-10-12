@@ -68,33 +68,33 @@ pub fn forget(db: Db, puuid: []const u8, now: i64, mode: Mode) !Removed {
             \\DELETE FROM raw.raw_docs WHERE source = 'riot_match' AND key IN
             \\    (SELECT match_id FROM participants WHERE puuid = ?)
         , .{puuid});
-        r.raw_matches = changes(db);
+        r.raw_matches = db.changes();
     }
     if (has_participants and try hasTable(db, "raw", "timeline_docs")) {
         try db.run(
             \\DELETE FROM raw.timeline_docs WHERE match_id IN
             \\    (SELECT match_id FROM participants WHERE puuid = ?)
         , .{puuid});
-        r.raw_timelines = changes(db);
+        r.raw_timelines = db.changes();
     }
     if (has_participants) {
         try db.run("UPDATE participants SET puuid = NULL WHERE puuid = ?", .{puuid});
-        r.participants = changes(db);
+        r.participants = db.changes();
     }
     if (try hasTable(db, "main", "players")) {
         try db.run("DELETE FROM players WHERE puuid = ?", .{puuid});
-        r.players = changes(db);
+        r.players = db.changes();
     }
     if (try hasTable(db, "main", "ranks")) {
         try db.run("DELETE FROM ranks WHERE key = ?", .{store.schema.puuidKey(puuid)});
     }
     if (try hasTable(db, "main", "rank_history")) {
         try db.run("DELETE FROM rank_history WHERE key = ?", .{store.schema.puuidKey(puuid)});
-        r.rank_history = changes(db);
+        r.rank_history = db.changes();
     }
     if (try hasTable(db, "main", "mastery")) {
         try db.run("DELETE FROM mastery WHERE puuid = ?", .{puuid});
-        r.mastery = changes(db);
+        r.mastery = db.changes();
     }
     if (mode == .record) {
         try db.run("INSERT OR IGNORE INTO forgotten VALUES (?, ?)", .{ puuid, now });
@@ -164,10 +164,6 @@ fn hasTable(db: Db, schema: []const u8, name: []const u8) !bool {
     return try db.scalar("SELECT 1 FROM pragma_table_list WHERE schema = ? AND name = ?", .{
         schema, name,
     }) != null;
-}
-
-fn changes(db: Db) i64 {
-    return db.changes();
 }
 
 const testing = std.testing;
