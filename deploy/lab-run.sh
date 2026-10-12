@@ -214,7 +214,8 @@ status() {
                 "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80)"
         done'
     if [[ "$1" == gpu-box ]]; then
-        echo "watcher: $(on gpu-box "systemctl --user is-active $WATCH" || true)"
+        echo "watcher: $(on gpu-box "systemctl --user is-active $WATCH" || true)," \
+            "last said: $(on gpu-box "tail -n 1 $RUNS/watcher.log" || true)"
     fi
 }
 
@@ -267,8 +268,10 @@ case "${1:-}" in
         on gpu-box "mkdir -p ml/bin $RUNS .config/systemd/user"
         scp -q "$ROOT/deploy/lab-watch.sh" gpu-box:ml/bin/
         scp -q "$ROOT/deploy/systemd/$WATCH.service" gpu-box:.config/systemd/user/
-        # Windows side (deploy/windows) to %USERPROFILE%\.meiolol, CRLF for Windows.
-        # cmd.exe reads stdin, so it gets /dev/null
+        # Windows side (deploy/windows) to %USERPROFILE%\.meiolol, CRLF for Windows. WSL
+        # can write there, so nothing there runs elevated: the archive mount (admin) is
+        # installed once, by hand, by install-watchdog.ps1 (docs/compute.md). cmd.exe
+        # reads stdin, so it gets /dev/null
         # shellcheck disable=SC2016 # expands on the host
         win=$(on gpu-box 'cd /mnt/c && /mnt/c/Windows/System32/cmd.exe /c "echo %USERPROFILE%" \
             < /dev/null | tr -d "\r\n" | xargs -0 wslpath')/.meiolol

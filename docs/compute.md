@@ -16,12 +16,15 @@ experiments run on:
   each run's pauses.log says when. If Windows can't be asked, runs stay paused
 - Tell the sessions using it (cc-peers; today meiolol-2a) before restarting WSL or
   rebooting the gpu-box: it kills running jobs
-- WSL comes back by itself: Windows task `wsl-watchdog` (at boot and every 2 min, as
-  Jacob, logged on or not, highest privileges) runs
-  %USERPROFILE%\.meiolol\wsl-watchdog.ps1
-  (deploy/windows): attaches the archive partition at /mnt/wsl/archive, then blocks in a
-  keepalive. `wsl.exe --shutdown` from inside WSL is a restart, back in under ~2 min.
-  Its log: watchdog.log; requests.txt is `powercfg /requests` (elevated) each start
+- WSL comes back by itself: two Windows tasks, at boot and every 2 min, as Jacob, logged
+  on or not (S4U), one instance at a time (deploy/windows/install-watchdog.ps1 registers
+  both). `wsl-watchdog`, least privilege, runs %USERPROFILE%\.meiolol\wsl-watchdog.ps1,
+  a keepalive that blocks until WSL stops (log watchdog.log there). `wsl-mount`, highest
+  privileges (wsl --mount needs admin), runs C:\ProgramData\meiolol\wsl-mount.ps1, which
+  attaches the archive partition at /mnt/wsl/archive (log mount.log there). Nothing WSL
+  can write runs elevated: .meiolol is Jacob's, so anything in WSL could change a script
+  there; ProgramData\meiolol is Administrators and SYSTEM only. `wsl.exe --shutdown` from
+  inside WSL is a restart, back in under ~2 min
 - Sleep: lab-watch.sh keeps Windows awake while a run is live or a file in ~/ml/awake.d
   was touched in the last 15 min (eg the archive pull), via deploy/windows/meiolol-awake.*
   (SetThreadExecutionState); otherwise Windows sleeps as set (3 h idle on AC)
@@ -59,6 +62,60 @@ deploy/lab-run.sh watch-install
   was live when WSL went down; `restart` does it by hand. A run over ~1 h should keep
   checkpoints in its run dir and resume from them (none does yet: runs take minutes)
 
+## Lab agent limits
+
+A lab agent (docs/lab-agent.md) writes candidate code we build and run on the gpu-box as
+Jacob. What holds it, outermost first:
+
+- Its session (deploy/lab-agent.sh): reads the repo minus .env and data/, writes only its
+  campaign dir, runs only deploy/lab-exp.sh (not final or preds); no user settings, so
+  none of Jacob's own allow rules; dontAsk, so anything else is refused, not asked
+- lab-exp.sh: every word it gets is checked (plain names, the target list, numbers) and
+  meiolol-lab's args reach the host's shell as quoted words (lab-run.sh --literal), so
+  `lab-exp.sh *` can't become a shell on the gpu-box. Builds use committed HEAD plus the
+  candidate dir only
+- The candidate check (deploy/lab-guard.pl) is a tripwire, not a sandbox. It refuses
+  std's file, process, network, OS and global-Io namespaces, std aliases and
+  @import("std") outside the one import line, @import("root"), extern, export, asm,
+  @cImport and @ptrFromInt; Zig's module rules keep imports inside the candidate dir. It
+  can't stop code that misuses pointers it was given (a many-pointer read past
+  train.rows reaches the rest of the process's memory, test labels included) or that
+  hides a syscall in a construct it doesn't know. It catches honest mistakes and casual
+  shortcuts, not a determined adversary
+
+### The real boundary (designed, not built)
+
+Not built yet: it changes every scored run, needs a Linux kernel to test on (the gpu-box)
+and src/lab is busy. Design:
+
+- Fork per `score` (src/lab/harness.zig), after buildTrain, Baseline.fit and the query
+  rows are ready, before `C.fit`. The child: overwrites `y` of every scored row with NaN
+  in its copy of rows.Data (copy on write; the parent keeps the labels), drops its
+  rights (below), fits, predicts every scored row into a MAP_SHARED buffer the parent
+  mapped before the fork (n x outcome_count f32), writes effect tables as text after
+  them, and exits. The parent waits, checks exit status and a length header, and scores
+  as now. Fork, not a thread: Landlock binds a thread and those it creates later, and the
+  Io pool's threads already exist; a forked child has one thread, so all it spawns
+  inherits the limits
+- Dropping rights in the child, in order: prctl(PR_SET_NO_NEW_PRIVS, 1); Landlock: ask
+  the ABI with landlock_create_ruleset(NULL, 0, LANDLOCK_CREATE_RULESET_VERSION) (x86_64
+  syscalls 444-446), handle every fs right that ABI knows (v1 the 13 base rights, v2
+  REFER, v3 TRUNCATE, v5 IOCTL_DEV), TCP bind and connect from v4, and abstract unix
+  sockets and signals scoping from v6, add no rules, landlock_restrict_self; then a
+  seccomp filter (SECCOMP_SET_MODE_FILTER) allowing only memory (mmap, munmap, mremap,
+  madvise, brk), threads (clone and clone3 with thread flags only, futex, set_robust_list,
+  rseq, sched_yield, exit), time (clock_gettime, nanosleep), getrandom, write to stderr,
+  rt_sigreturn and exit_group; anything else kills the process (SECCOMP_RET_KILL_PROCESS).
+  Seccomp alone already blocks files, sockets and exec; Landlock adds the fs and TCP
+  limits in case the filter is ever widened
+- WSL: check `cat /sys/kernel/security/lsm` on the gpu-box; Microsoft's kernel may not
+  list landlock. ABI < 1 (ENOSYS or EOPNOTSUPP): seccomp alone. Seccomp is in every WSL2
+  kernel. On the Mac neither exists: the run says `sandbox none` in meta and RESULT, and
+  lab-exp.sh refuses an agent's run there unless LAB_UNSANDBOXED=1
+- Test: a candidate in src/lab/cand that tries openat, socket, execve and a read past
+  train.rows' end; a harness test (Linux only) asserts the child is killed or the call
+  fails, and that scores match an unsandboxed run bit for bit
+
 ## WSL memory
 
 WSL2 takes half the PC's memory by default (15 GB). C:\Users\jacob\.wslconfig sets
@@ -91,7 +148,8 @@ first.
   The archive pull touches a file in ~/ml/awake.d while it has work
 - Reboots (Jacob: task runs logged out): wsl-watchdog task registered 2026-10-12 (S4U,
   highest privileges), attaches the archive and keeps WSL up; first boot without login
-  still to be seen
+  still to be seen. 2026-10-13: split into wsl-mount (elevated, from ProgramData) and an
+  unelevated keepalive, since WSL could rewrite the elevated script (Rules above)
 - Reachability alert (done, deploy/health.sh): the box can't reach the PC, so it warns
   when the archive has had no ack for 12 h, and when free disk is under twice the raw it
   holds

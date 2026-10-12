@@ -23,11 +23,15 @@ vbs=$(wslpath -w "$home/meiolol-awake.vbs")
 
 log() { echo "$(date -u +%FT%TZ) $*"; }
 
-# Fails safe: if Windows can't be asked, runs stay paused
+# Prints up, down or unknown (Windows can't be asked: interop down, tasklist failing).
+# Unknown pauses like up (Jacob's rule fails safe) but is logged as itself, so a watcher
+# that can't see Windows shows in watcher.log and `lab-run.sh status`, not as League.
+# deploy/archive-pull.sh has its own check, which carries on when it can't ask
 league() {
     local out
-    out=$("$tasklist" /NH /FO CSV 2>/dev/null) || return 0
-    grep -qiE '^"(LeagueClient|League of Legends)\.exe"' <<< "$out"
+    out=$("$tasklist" /NH /FO CSV 2>/dev/null) || { echo unknown; return; }
+    if grep -qiE '^"(LeagueClient|League of Legends)\.exe"' <<< "$out"; then echo up
+    else echo down; fi
 }
 
 boot=$(awk '$1 == "btime" { print $2 }' /proc/stat)
@@ -46,9 +50,14 @@ done
 
 was='' holder='' busy_was=''
 while true; do
-    if league; then now=up; else now=down; fi
-    [[ "$now" != "$was" ]] && log "League $now"
-    was=$now
+    league=$(league)
+    if [[ "$league" != "$was" ]]; then
+        if [[ $league == unknown ]]; then log "League unknown (tasklist failed): runs stay paused"
+        else log "League $league"; fi
+    fi
+    was=$league
+    now=up
+    [[ $league == down ]] && now=down
     busy=''
     for d in */; do
         d=${d%/}
