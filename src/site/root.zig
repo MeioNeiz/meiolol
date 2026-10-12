@@ -772,19 +772,31 @@ fn loadChamps(site: *Site, db: store.Db) !void {
     {
         const patch_json = try std.json.Stringify.valueAlloc(a, site.opts.patches, .{});
         const platform_json = try std.json.Stringify.valueAlloc(a, site.opts.platforms, .{});
+        // Games each champion was banned in, counted here: count(DISTINCT) with GROUP BY
+        // took ~6x as long as reading the rows. CROSS JOIN keeps a match's bans together
         var q = try db.prepare(
-            \\SELECT b.champion_id, count(DISTINCT b.match_id)
-            \\FROM bans b JOIN matches m USING (match_id)
+            \\SELECT b.match_id, b.champion_id
+            \\FROM matches m CROSS JOIN bans b USING (match_id)
             \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
             \\  AND m.platform IN (SELECT value FROM json_each(?))
             \\  AND m.remake = 0 AND m.game_start >= ?
-            \\GROUP BY 1
         );
         defer q.deinit();
         try q.bind(.{ patch_json, stats.ranked_solo, platform_json, site.since_ms });
+        var match: std.ArrayList(u8) = .empty;
+        // A match's bans so far: a champion banned by both teams counts once
+        var seen: std.ArrayList(u32) = .empty;
         while (try q.step()) {
-            const r = q.row(struct { champion: u32, games: u32 });
-            try banned.put(a, r.champion, r.games);
+            const r = q.row(struct { match_id: []const u8, champion: u32 });
+            if (!std.mem.eql(u8, r.match_id, match.items)) {
+                match.clearRetainingCapacity();
+                try match.appendSlice(a, r.match_id);
+                seen.clearRetainingCapacity();
+            }
+            if (std.mem.indexOfScalar(u32, seen.items, r.champion) != null) continue;
+            try seen.append(a, r.champion);
+            const games = try banned.getOrPutValue(a, r.champion, 0);
+            games.value_ptr.* += 1;
         }
     }
 
