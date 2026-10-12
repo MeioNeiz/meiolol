@@ -71,8 +71,16 @@ pub fn inFraction(g: rows.Game, fraction: f64) bool {
     return u / @as(f64, 1 << 53) < fraction;
 }
 
+/// docs/model.md "Rows": a game over before 15:00 is a remake, leaver forfeit or abort,
+/// decided by the leaver, not the draft
+pub const min_duration_s = 900;
+
+fn played(g: rows.Game) bool {
+    return g.duration_s >= min_duration_s;
+}
+
 pub fn visible(p: Phase, c: Cuts, g: rows.Game) bool {
-    if (g.is_test) return false;
+    if (g.is_test or !played(g)) return false;
     return switch (p) {
         .dev => g.start < c.dev,
         .select => g.start < c.select,
@@ -81,6 +89,7 @@ pub fn visible(p: Phase, c: Cuts, g: rows.Game) bool {
 }
 
 pub fn scored(p: Phase, c: Cuts, g: rows.Game) bool {
+    if (!played(g)) return false;
     return switch (p) {
         .dev => !g.is_test and g.platform == c.eu and g.start >= c.dev and g.start < c.select,
         .select => !g.is_test and g.platform == c.eu and g.start >= c.select,
@@ -439,6 +448,7 @@ pub const Fixture = struct {
                 .teams = teams,
                 .winner = winner,
                 .timeline15 = true,
+                .duration_s = 1800,
             };
             for (0..10) |slot| {
                 const side: u1 = @intCast(slot / 5);
@@ -472,8 +482,10 @@ const Spy = struct {
     pub const Model = struct { newest: i64 };
     var saw_ranks = false;
     var newest_query: i64 = std.math.maxInt(i64);
+    var train_games: usize = 0;
 
     pub fn fit(_: std.mem.Allocator, t: *const api.Train, _: api.Options) !Model {
+        train_games = t.games.len;
         var newest: i64 = std.math.minInt(i64);
         for (t.games) |g| newest = @max(newest, g.start);
         return .{ .newest = newest };
@@ -664,12 +676,16 @@ test "effect tables come through on request only" {
     try std.testing.expectEqual(@as(usize, 0), plain.effects.len);
 }
 
-test "win is scored on games that ended before 15:00" {
+test "games over before 15:00 are neither fitted on nor scored" {
     const gpa = std.testing.allocator;
     var f = try Fixture.init(gpa, 3000, 5);
     defer f.data.deinit();
-    // Every third game short: no timeline outcomes, as rows.zig leaves them
-    for (f.data.games, 0..) |*g, gi| g.timeline15 = gi % 3 != 0;
+    // Every fourth game a leaver forfeit at 12:00 (every third is EUW1, the scored
+    // platform): no timeline outcomes, as rows.zig
+    for (f.data.games, 0..) |*g, gi| if (gi % 4 == 0) {
+        g.timeline15 = false;
+        g.duration_s = 720;
+    };
     for (f.data.rows) |*r| if (!f.data.games[r.game].timeline15) {
         r.y[api.outcomeIndex(.gold14)] = std.math.nan(f32);
     };
@@ -678,10 +694,9 @@ test "win is scored on games that ended before 15:00" {
     const c = try cuts(gpa, &f.data, 0);
     var s = try score(Spy, gpa, &f.data, ranks, c, .dev, .{});
     defer s.deinit(gpa);
-    var n: [2]usize = @splat(0);
-    for (s.row) |ri| for ([_]api.Outcome{ .win, .gold14 }, &n) |o, *x| {
-        x.* += @intFromBool(!std.math.isNan(f.data.rows[ri].y[api.outcomeIndex(o)]));
-    };
-    try std.testing.expectEqual(s.row.len, n[0]);
-    try std.testing.expect(n[1] < n[0]);
+    try std.testing.expect(s.row.len > 0);
+    for (s.row) |ri| try std.testing.expect(f.data.games[f.data.rows[ri].game].duration_s >= min_duration_s);
+    var long: usize = 0;
+    for (f.data.games) |g| long += @intFromBool(!g.is_test and g.start < c.dev and g.duration_s >= min_duration_s);
+    try std.testing.expectEqual(long, Spy.train_games);
 }

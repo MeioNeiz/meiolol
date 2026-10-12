@@ -80,6 +80,8 @@ A new snapshot moves every boundary forward and starts a fresh look budget.
 
 ## Scoring
 
+- Games over before 15:00 (duration_s < 900: remakes, leaver forfeits, aborts) are
+  neither fitted on nor scored (docs/model.md "Rows", 2026-10-13)
 - Per row and outcome: log loss for win (the row's team), squared error in the role's
   standard deviation for the rest; NaN outcomes (no timeline to 15:00, censored
   first_item) left out
@@ -97,7 +99,8 @@ only loss numbers (meiolol-cf, 2026-10-12). Per run dir:
 - result.tsv: the run's runs.tsv row with a header. Added columns (runs.tsv too):
   category (win, early, items: the admin page's grouping), removed_pct and removed_half
   (% of the baseline's dev loss removed, 95% half-width; positive = better), err_base and
-  err_cand (root mean squared error in the outcome's units; - for win), unit, effects
+  err_cand (root mean squared error in the outcome's units; for win the share of rows
+  whose result the prediction calls right, unit "% right"), unit, effects
 - effects-<name>.tsv: from the candidate's optional `effects` (api.Effects). First line
   `# title | unit | what higher means`, then a header `label effect ci n` (ci = 95%
   half-width, n = training games). `#<id>` in labels becomes the champion's name

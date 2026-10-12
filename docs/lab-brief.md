@@ -58,7 +58,8 @@ A run takes ~2 minutes. RESULT gives the dev gain vs the champion-role baseline 
 for `--select` the ladder's answer: `new-best` or `no-change`, never a number otherwise.
 50 selection looks per snapshot, shared with every other campaign. RESULT also gives
 `removed` (% of the baseline's error the candidate removes, ± its interval; positive =
-better), `error` (typical miss, baseline -> candidate, in gold, CS, deaths or minutes)
+better), `error` (typical miss, baseline -> candidate, in gold, CS, deaths or minutes;
+for win `accuracy`, the share of games whose winner it calls right, a coin flip 50%)
 and `effects` (the effect tables written for the run).
 
 ## Findings: what each run learnt about the game

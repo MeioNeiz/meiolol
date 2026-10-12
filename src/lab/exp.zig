@@ -192,8 +192,11 @@ fn run(
     });
     // Human units for the run's finding (docs/lab-brief.md "Findings")
     try w.print(" removed={d:.2}%±{d:.2}", .{ h.removed_pct, h.removed_half });
-    if (args.target != .win) try w.print(" error={s}->{s} {s}", .{
-        try errText(arena, args.target, h.err_base), try errText(arena, args.target, h.err_cand), unit(args.target),
+    try w.print(" {s}={s}->{s} {s}", .{
+        if (args.target == .win) "accuracy" else "error",
+        try errText(arena, args.target, h.err_base),
+        try errText(arena, args.target, h.err_cand),
+        unit(args.target),
     });
     try w.print(" effects={s}", .{if (effect_files.len > 0) effect_files else "none"});
     if (verdict) |v| if (v == .new_best) try w.print(" gain={d:.5}±{d:.5}", .{ v.new_best.diff, v.new_best.half });
@@ -213,7 +216,7 @@ fn category(o: api.Outcome) []const u8 {
 
 fn unit(o: api.Outcome) []const u8 {
     return switch (o) {
-        .win => "-",
+        .win => "% right",
         .gold14, .lanediff14 => "gold",
         .cs10 => "CS",
         .deaths15 => "deaths",
@@ -225,6 +228,7 @@ fn errText(arena: std.mem.Allocator, o: api.Outcome, x: f64) ![]const u8 {
     if (std.math.isNan(x)) return "-";
     return switch (o) {
         .gold14, .lanediff14 => std.fmt.allocPrint(arena, "{d:.0}", .{x}),
+        .win => std.fmt.allocPrint(arena, "{d:.1}", .{x}),
         else => std.fmt.allocPrint(arena, "{d:.2}", .{x}),
     };
 }
@@ -234,7 +238,8 @@ const Human = struct {
     /// positive = better
     removed_pct: f64,
     removed_half: f64,
-    /// Root mean squared error in the outcome's own units (gold, CS, ...); NaN for win
+    /// Root mean squared error in the outcome's own units (gold, CS, ...); for win the
+    /// share of rows whose team the prediction calls right (a coin flip is 50%)
     err_base: f64,
     err_cand: f64,
 };
@@ -246,7 +251,21 @@ fn human(gpa: std.mem.Allocator, d: *const rows.Data, s: *const harness.Scores, 
         .err_base = std.math.nan(f64),
         .err_cand = std.math.nan(f64),
     };
-    if (k == api.outcomeIndex(.win)) return h;
+    if (k == api.outcomeIndex(.win)) {
+        var right: [2]f64 = @splat(0);
+        var n: f64 = 0;
+        for (s.row, s.cand, s.base) |ri, pc, pb| {
+            const y = d.rows[ri].y[k];
+            if (std.math.isNan(y)) continue;
+            for ([2]f64{ pc[k], pb[k] }, &right) |q, *r| r.* += called(q, y);
+            n += 1;
+        }
+        if (n > 0) {
+            h.err_cand = 100 * right[0] / n;
+            h.err_base = 100 * right[1] / n;
+        }
+        return h;
+    }
     const la = try s.losses(gpa, d, k, null, .cand);
     defer gpa.free(la);
     const lb = try s.losses(gpa, d, k, null, .base);
@@ -267,6 +286,13 @@ fn human(gpa: std.mem.Allocator, d: *const rows.Data, s: *const harness.Scores, 
         h.err_base = @sqrt(sb / n);
     }
     return h;
+}
+
+/// 1 when the win prediction picks the row's result, 0 when it picks the other, half
+/// for a coin flip
+fn called(p: f64, y: f32) f64 {
+    if (p == 0.5) return 0.5;
+    return @floatFromInt(@intFromBool((p > 0.5) == (y > 0.5)));
 }
 
 /// Writes each table as effects-<name>.tsv: "# title | unit | what higher means", then
