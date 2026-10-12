@@ -244,6 +244,8 @@ pub const Scores = struct {
     sd: [5][api.outcome_count]f64,
     /// Candidate rows answered "no opinion" (scored as the baseline)
     no_opinion: [api.outcome_count]usize,
+    /// ScoreOptions.effects_for's tables, owned by ScoreOptions.effects_arena
+    effects: []const api.Effects = &.{},
 
     pub fn deinit(s: *Scores, gpa: std.mem.Allocator) void {
         gpa.free(s.row);
@@ -268,9 +270,18 @@ pub const Scores = struct {
     }
 };
 
-pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2][5]?u8, c: Cuts, p: Phase, fraction: f64) !Scores {
+pub const ScoreOptions = struct {
+    /// Share of the phase's visible games to fit on (learning curves)
+    fraction: f64 = 1,
+    /// Collects the candidate's effect tables for this outcome (first seed), when it has
+    /// `effects`; they live in effects_arena
+    effects_for: ?api.Outcome = null,
+    effects_arena: ?std.mem.Allocator = null,
+};
+
+pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2][5]?u8, c: Cuts, p: Phase, opts: ScoreOptions) !Scores {
     comptime checkCandidate(C);
-    var v = try buildTrain(gpa, d, ranks, p, c, fraction);
+    var v = try buildTrain(gpa, d, ranks, p, c, opts.fraction);
     defer v.deinit();
     var base = try Baseline.fit(gpa, &v.train);
     defer base.deinit(gpa);
@@ -295,9 +306,13 @@ pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, rank
     }
 
     const n_seeds: u64 = if (@hasDecl(C, "seeded") and C.seeded) seeds else 1;
+    var effects: []const api.Effects = &.{};
     for (1..n_seeds + 1) |seed| {
         var m = try C.fit(gpa, &v.train, .{ .seed = seed });
         defer C.deinit(&m, gpa);
+        if (@hasDecl(C, "effects") and seed == 1) if (opts.effects_for) |o| {
+            effects = try C.effects(&m, opts.effects_arena.?, o);
+        };
         for (row.items, cand, count) |ri, *o, *cnt| {
             const r = d.rows[ri];
             const q = query(C.scope, d.games[r.game], ranks[r.game], r);
@@ -322,6 +337,7 @@ pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, rank
         .base = basep,
         .sd = base.sd(),
         .no_opinion = none,
+        .effects = effects,
     };
 }
 
@@ -539,7 +555,7 @@ test "candidates see no scored games and no other ranks in champ select" {
         defer v.deinit();
         var newest: i64 = std.math.minInt(i64);
         for (v.train.games) |g| newest = @max(newest, g.start);
-        var s = try score(Spy, gpa, &f.data, ranks, c, p, 1);
+        var s = try score(Spy, gpa, &f.data, ranks, c, p, .{});
         defer s.deinit(gpa);
         try std.testing.expect(s.row.len > 0);
         try std.testing.expect(newest < Spy.newest_query);
@@ -567,7 +583,7 @@ test "ladder: noise never wins, a real gain does" {
     const c = try cuts(gpa, &f.data, 0);
     const k = api.outcomeIndex(.gold14);
 
-    var noise = try score(Noise, gpa, &f.data, ranks, c, .select, 1);
+    var noise = try score(Noise, gpa, &f.data, ranks, c, .select, .{});
     defer noise.deinit(gpa);
     const ln = try noise.losses(gpa, &f.data, k, null, .cand);
     defer gpa.free(ln);
@@ -577,7 +593,7 @@ test "ladder: noise never wins, a real gain does" {
     try std.testing.expect(ladder(noise.game, ln, lb, look_budget) == .budget_spent);
 
     // The baseline knows champion 1's +400; a single mean doesn't
-    var flat = try score(RoleMean, gpa, &f.data, ranks, c, .select, 1);
+    var flat = try score(RoleMean, gpa, &f.data, ranks, c, .select, .{});
     defer flat.deinit(gpa);
     const lf = try flat.losses(gpa, &f.data, k, null, .cand);
     defer gpa.free(lf);
@@ -608,6 +624,46 @@ test "fractions are nested" {
     try std.testing.expectEqual(@as(usize, 2000), kept[2]);
 }
 
+/// Reports one effect table: games it was fitted on, for the target it was asked
+const Tables = struct {
+    pub const scope: api.Scope = .champ_select;
+    pub const Model = struct { games: usize };
+
+    pub fn fit(_: std.mem.Allocator, t: *const api.Train, _: api.Options) !Model {
+        return .{ .games = t.games.len };
+    }
+
+    pub fn predict(_: *const Model, _: *const api.Query) api.Prediction {
+        return api.no_opinion;
+    }
+
+    pub fn deinit(_: *Model, _: std.mem.Allocator) void {}
+
+    pub fn effects(m: *const Model, arena: std.mem.Allocator, target: api.Outcome) ![]const api.Effects {
+        const rows_ = try arena.dupe(api.Effect, &.{.{ .label = "#1", .effect = 400, .ci = 30, .n = @intCast(m.games) }});
+        return arena.dupe(api.Effects, &.{.{ .name = @tagName(target), .title = "t", .unit = "gold", .higher = "h", .rows = rows_ }});
+    }
+};
+
+test "effect tables come through on request only" {
+    const gpa = std.testing.allocator;
+    var f = try Fixture.init(gpa, 600, 6);
+    defer f.data.deinit();
+    const ranks = try gameRanks(gpa, &f.data);
+    defer gpa.free(ranks);
+    const c = try cuts(gpa, &f.data, 0);
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var s = try score(Tables, gpa, &f.data, ranks, c, .dev, .{ .effects_for = .gold14, .effects_arena = arena.allocator() });
+    defer s.deinit(gpa);
+    try std.testing.expectEqual(@as(usize, 1), s.effects.len);
+    try std.testing.expectEqualStrings("gold14", s.effects[0].name);
+    try std.testing.expect(s.effects[0].rows[0].n > 0 and s.effects[0].rows[0].n < f.data.games.len);
+    var plain = try score(Tables, gpa, &f.data, ranks, c, .dev, .{});
+    defer plain.deinit(gpa);
+    try std.testing.expectEqual(@as(usize, 0), plain.effects.len);
+}
+
 test "win is scored on games that ended before 15:00" {
     const gpa = std.testing.allocator;
     var f = try Fixture.init(gpa, 3000, 5);
@@ -620,7 +676,7 @@ test "win is scored on games that ended before 15:00" {
     const ranks = try gameRanks(gpa, &f.data);
     defer gpa.free(ranks);
     const c = try cuts(gpa, &f.data, 0);
-    var s = try score(Spy, gpa, &f.data, ranks, c, .dev, 1);
+    var s = try score(Spy, gpa, &f.data, ranks, c, .dev, .{});
     defer s.deinit(gpa);
     var n: [2]usize = @splat(0);
     for (s.row) |ri| for ([_]api.Outcome{ .win, .gold14 }, &n) |o, *x| {

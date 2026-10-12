@@ -9,7 +9,10 @@
 //!   pub fn fit(gpa: std.mem.Allocator, train: *const api.Train, opts: api.Options) !Model
 //!   pub fn predict(m: *const Model, q: *const api.Query) api.Prediction
 //!   pub fn deinit(m: *Model, gpa: std.mem.Allocator) void
-//! and optionally `pub const seeded = true` (the harness then averages 3 seeds)
+//! and optionally `pub const seeded = true` (the harness then averages 3 seeds) and
+//!   pub fn effects(m: *const Model, arena: std.mem.Allocator, target: Outcome) ![]const Effects
+//! (what the fitted terms say about the game, in the target's units; the harness writes
+//! each table to the run dir as effects-<name>.tsv)
 
 const std = @import("std");
 
@@ -76,6 +79,28 @@ pub const Options = struct {
 /// Per outcome; win is the chance the user's team wins. NaN means "no opinion": the
 /// harness scores the champion-role baseline there
 pub const Prediction = [outcome_count]f32;
+
+/// One level of a fitted term: "#<champion id>" in a label becomes the champion's name
+pub const Effect = struct {
+    label: []const u8,
+    effect: f64,
+    /// 95% half-width
+    ci: f64,
+    /// Training games behind it
+    n: u32,
+};
+
+/// A term's effect table, e.g. own rank tier, or the top and bottom lane matchups
+pub const Effects = struct {
+    /// File stem: a-z 0-9 _ -
+    name: []const u8,
+    title: []const u8,
+    /// gold, CS, deaths, min, win pp
+    unit: []const u8,
+    /// What a higher effect means, e.g. "more gold at 14 than the matchup average"
+    higher: []const u8,
+    rows: []const Effect,
+};
 
 pub const no_opinion: Prediction = @splat(std.math.nan(f32));
 

@@ -13,6 +13,9 @@
 #   deploy/lab-exp.sh looks                        the ladder's selection looks
 #   deploy/lab-exp.sh show RUN                     summary.md: dev by outcome, role, patch, tier
 #   deploy/lab-exp.sh restore CAMPAIGN RUN         a run's candidate back into the campaign
+#   deploy/lab-exp.sh finding CAMPAIGN RUN TEXT [EFFECT_FILE]
+#                                                  what RUN learnt about the game, one plain
+#                                                  sentence, to the run's findings.tsv
 #   deploy/lab-exp.sh stop CAMPAIGN REASON         flag for a human: nothing real left
 #   deploy/lab-exp.sh final CAMPAIGN TARGET [N]    humans only: test score of the last N
 #                                                  (default 3) selection winners
@@ -49,7 +52,7 @@ on() {
 }
 
 usage() {
-    sed -n '7,22p' "$0"
+    sed -n '7,25p' "$0"
     exit 2
 }
 
@@ -152,6 +155,8 @@ case "$cmd" in
         [[ -n "$run" ]] || { echo "$out"; exit 1; }
         if wait_run "$run" && [[ "$(on "cat ml/runs/$run/exit")" == 0 ]]; then
             on "grep '^RESULT' ml/runs/$run/log | tail -n 1"
+            echo "NEXT: $ROOT/deploy/lab-exp.sh finding $campaign $run \"<what it learnt about the game, human units>\"" \
+                "[effects-....tsv]  (docs/lab-brief.md \"Findings\")"
         else
             on "tail -n 30 ml/runs/$run/log; mkdir -p $LAB; \
                 printf '%s\t%s\t%s\t-\t-\t-\t-\tcrash\t-\t-\n' '$run' '$campaign' '$target' \
@@ -193,6 +198,23 @@ case "$cmd" in
         if [[ "$HOST" == mac ]]; then cp "$HOME/$src"/*.zig "$dir/"
         else scp -q "$HOST:$src/*.zig" "$dir/"; fi
         echo "$dir now holds $2's candidate"
+        ;;
+    finding)
+        (( $# == 3 || $# == 4 )) || usage
+        campaign=$1 run=$2 text=$3 effect=${4:--}
+        campaign_dir "$campaign" > /dev/null
+        [[ "$run" =~ ^[A-Za-z0-9_.-]+$ && "$run" == *"-$campaign-"* ]] \
+            || { echo "$run is not a run of $campaign"; exit 2; }
+        [[ "$effect" == - || "$effect" =~ ^effects-[a-z0-9_-]+\.tsv$ ]] \
+            || { echo "EFFECT_FILE: an effects-<name>.tsv from the run's RESULT"; exit 2; }
+        on "test -f ml/runs/$run/result.tsv" || { echo "no scored run $run"; exit 1; }
+        [[ "$effect" == - ]] || on "test -f ml/runs/$run/$effect" \
+            || { echo "$run has no $effect (see effects= in its RESULT)"; exit 1; }
+        text=${text//$'\t'/ }
+        text=${text//$'\n'/ }
+        on "f=ml/runs/$run/findings.tsv; [[ -f \$f ]] || printf 'campaign\tfinding\teffect_file\n' > \$f; \
+            printf '%s\t%s\t%s\n' '$campaign' $(printf '%q' "$text") '$effect' >> \$f"
+        echo "finding recorded for $run"
         ;;
     stop)
         (( $# == 2 )) || usage

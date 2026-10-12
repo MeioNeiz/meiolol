@@ -1,5 +1,6 @@
 //! `meiolol-lab exp`: one lab-agent run of the candidate compiled in (-Dcand, docs/
-//! lab-agent.md). Runs in a deploy/lab-run.sh run dir, which gets summary.md and dev.tsv;
+//! lab-agent.md). Runs in a deploy/lab-run.sh run dir, which gets summary.md, dev.tsv,
+//! result.tsv (the run's runs.tsv row) and the candidate's effects-<name>.tsv tables;
 //! the snapshot's lab dir (LAB/<snapshot>/) gets runs.tsv, the ladder's looks.tsv and
 //! best-<target>.tsv, and finals.tsv. Last stdout line: RESULT ..., what the agent reads
 
@@ -10,6 +11,7 @@ const rows = @import("rows.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const search = @import("search.zig");
+const store = @import("store");
 
 const Io = std.Io;
 
@@ -130,10 +132,16 @@ fn run(
     w: *Io.Writer,
 ) !void {
     const k = api.outcomeIndex(args.target);
-    var dev = try harness.score(cand, gpa, d, ranks, c, .dev, args.fraction);
+    var dev = try harness.score(cand, gpa, d, ranks, c, .dev, .{
+        .fraction = args.fraction,
+        .effects_for = args.target,
+        .effects_arena = arena,
+    });
     defer dev.deinit(gpa);
     const dev_target = try summary(gpa, io, d, &dev, args);
     try writePreds(gpa, io, d, &dev, "dev.tsv");
+    const h = try human(gpa, d, &dev, k, dev_target);
+    const effect_files = try writeEffects(gpa, arena, io, args.snap, dev.effects);
 
     var verdict: ?harness.Verdict = null;
     var looks: usize = 0;
@@ -143,7 +151,7 @@ fn run(
         defer lock.close(io);
         const looks_path = try std.fs.path.join(arena, &.{ dir, "looks.tsv" });
         looks = try countLines(gpa, io, looks_path);
-        var sel = try harness.score(cand, gpa, d, ranks, c, .select, 1);
+        var sel = try harness.score(cand, gpa, d, ranks, c, .select, .{});
         defer sel.deinit(gpa);
         const best_path = try std.fs.path.join(arena, &.{ dir, try std.fmt.allocPrint(arena, "best-{t}.tsv", .{args.target}) });
         const best_preds = try readBest(gpa, io, best_path, sel.row.len);
@@ -167,19 +175,158 @@ fn run(
         if (verdict.? == .new_best) try writeBest(io, best_path, args.run, sel.cand, k);
     }
 
-    try appendLine(io, try std.fs.path.join(arena, &.{ dir, "runs.tsv" }), "run\tcampaign\ttarget\tscope\tdev_n\tdev_diff\tdev_half\tselect\tlooks\thyp\tfraction\tdesc\n", try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{t}\t{d}\t{d:.5}\t{d:.5}\t{s}\t{d}\t{s}\t{d}\t{s}\n", .{
-        args.run,     args.campaign,   args.target,     cand.scope,
-        dev_target.n, dev_target.diff, dev_target.half, verdictName(verdict),
-        looks,        args.hyp,        args.fraction,   args.desc,
-    }));
+    const header = "run\tcampaign\ttarget\tscope\tdev_n\tdev_diff\tdev_half\tselect\tlooks\thyp\tfraction\tdesc" ++
+        "\tcategory\tremoved_pct\tremoved_half\terr_base\terr_cand\tunit\teffects\n";
+    const line = try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{t}\t{d}\t{d:.5}\t{d:.5}\t{s}\t{d}\t{s}\t{d}\t{s}\t{s}\t{d:.3}\t{d:.3}\t{s}\t{s}\t{s}\t{s}\n", .{
+        args.run,                                    args.campaign,     args.target,                                     cand.scope,
+        dev_target.n,                                dev_target.diff,   dev_target.half,                                 verdictName(verdict),
+        looks,                                       args.hyp,          args.fraction,                                   args.desc,
+        category(args.target),                       h.removed_pct,     h.removed_half,                                  try errText(arena, args.target, h.err_base),
+        try errText(arena, args.target, h.err_cand), unit(args.target), if (effect_files.len > 0) effect_files else "-",
+    });
+    try appendLine(io, try std.fs.path.join(arena, &.{ dir, "runs.tsv" }), header, line);
+    try Io.Dir.cwd().writeFile(io, .{ .sub_path = "result.tsv", .data = try std.mem.concat(arena, u8, &.{ header, line }) });
     try w.print("RESULT run={s} target={t} dev={d:.5}±{d:.5} n={d} ({s}) select={s}", .{
         args.run,                                                         args.target,          dev_target.diff, dev_target.half, dev_target.n,
         if (dev_target.beats()) "beats baseline" else "not beyond noise", verdictName(verdict),
     });
+    // Human units for the run's finding (docs/lab-brief.md "Findings")
+    try w.print(" removed={d:.2}%±{d:.2}", .{ h.removed_pct, h.removed_half });
+    if (args.target != .win) try w.print(" error={s}->{s} {s}", .{
+        try errText(arena, args.target, h.err_base), try errText(arena, args.target, h.err_cand), unit(args.target),
+    });
+    try w.print(" effects={s}", .{if (effect_files.len > 0) effect_files else "none"});
     if (verdict) |v| if (v == .new_best) try w.print(" gain={d:.5}±{d:.5}", .{ v.new_best.diff, v.new_best.half });
     // Smallest gain this dev set would show 80% of the time: (1.96 + 0.84) / 1.96 half
     if (dev_target.half > 1e-9 and std.math.isFinite(dev_target.half)) try w.print(" mde={d:.5}", .{dev_target.half * 1.43});
     try w.print(" looks={d}/{d}\n", .{ looks, harness.look_budget });
+}
+
+/// The admin page groups runs by model category
+fn category(o: api.Outcome) []const u8 {
+    return switch (o) {
+        .win => "win",
+        .gold14, .lanediff14, .cs10, .deaths15 => "early",
+        .first_item => "items",
+    };
+}
+
+fn unit(o: api.Outcome) []const u8 {
+    return switch (o) {
+        .win => "-",
+        .gold14, .lanediff14 => "gold",
+        .cs10 => "CS",
+        .deaths15 => "deaths",
+        .first_item => "min",
+    };
+}
+
+fn errText(arena: std.mem.Allocator, o: api.Outcome, x: f64) ![]const u8 {
+    if (std.math.isNan(x)) return "-";
+    return switch (o) {
+        .gold14, .lanediff14 => std.fmt.allocPrint(arena, "{d:.0}", .{x}),
+        else => std.fmt.allocPrint(arena, "{d:.2}", .{x}),
+    };
+}
+
+const Human = struct {
+    /// Share of the baseline's dev loss the candidate removes, with its 95% half-width;
+    /// positive = better
+    removed_pct: f64,
+    removed_half: f64,
+    /// Root mean squared error in the outcome's own units (gold, CS, ...); NaN for win
+    err_base: f64,
+    err_cand: f64,
+};
+
+fn human(gpa: std.mem.Allocator, d: *const rows.Data, s: *const harness.Scores, k: usize, p: harness.Paired) !Human {
+    var h: Human = .{
+        .removed_pct = -100 * p.diff / p.b,
+        .removed_half = 100 * p.half / p.b,
+        .err_base = std.math.nan(f64),
+        .err_cand = std.math.nan(f64),
+    };
+    if (k == api.outcomeIndex(.win)) return h;
+    const la = try s.losses(gpa, d, k, null, .cand);
+    defer gpa.free(la);
+    const lb = try s.losses(gpa, d, k, null, .base);
+    defer gpa.free(lb);
+    // Losses are squared errors in role sd: scale back per row
+    var sa: f64 = 0;
+    var sb: f64 = 0;
+    var n: f64 = 0;
+    for (la, lb, s.row) |a, b, ri| {
+        if (std.math.isNan(a) or std.math.isNan(b)) continue;
+        const sd = s.sd[@backingInt(d.rows[ri].role)][k];
+        sa += a * sd * sd;
+        sb += b * sd * sd;
+        n += 1;
+    }
+    if (n > 0) {
+        h.err_cand = @sqrt(sa / n);
+        h.err_base = @sqrt(sb / n);
+    }
+    return h;
+}
+
+/// Writes each table as effects-<name>.tsv: "# title | unit | what higher means", then
+/// label, effect, ci (95% half-width), n. Returns the file names, comma separated
+fn writeEffects(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, snap: []const u8, tables: []const api.Effects) ![]const u8 {
+    if (tables.len == 0) return "";
+    const names = try championNames(gpa, arena, snap);
+    var files: std.ArrayList(u8) = .empty;
+    for (tables) |t| {
+        if (t.name.len == 0) return error.BadEffectsName;
+        for (t.name) |ch| if (!(std.ascii.isLower(ch) or std.ascii.isDigit(ch) or ch == '_' or ch == '-')) return error.BadEffectsName;
+        var aw: Io.Writer.Allocating = .init(arena);
+        const w = &aw.writer;
+        try w.print("# {s} | {s} | {s}\nlabel\teffect\tci\tn\n", .{
+            try clean(arena, &names, t.title), try clean(arena, &names, t.unit), try clean(arena, &names, t.higher),
+        });
+        for (t.rows) |r| try w.print("{s}\t{d:.4}\t{d:.4}\t{d}\n", .{ try clean(arena, &names, r.label), r.effect, r.ci, r.n });
+        const file = try std.fmt.allocPrint(arena, "effects-{s}.tsv", .{t.name});
+        try Io.Dir.cwd().writeFile(io, .{ .sub_path = file, .data = aw.written() });
+        if (files.items.len > 0) try files.append(arena, ',');
+        try files.appendSlice(arena, file);
+    }
+    return files.items;
+}
+
+/// Champion names by id (the snapshot's Data Dragon table), for effect labels
+fn championNames(gpa: std.mem.Allocator, arena: std.mem.Allocator, snap: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
+    const db = try store.schema.openReadOnly(gpa, snap);
+    defer db.close();
+    var out: std.AutoHashMapUnmanaged(u32, []const u8) = .empty;
+    var q = try db.prepare("SELECT id, name FROM champions");
+    defer q.deinit();
+    try q.bind(.{});
+    while (try q.step()) try out.put(arena, @intCast(q.int(0)), try arena.dupe(u8, q.bytes(1)));
+    return out;
+}
+
+/// One TSV field: "#<champion id>" becomes the champion's name; tabs, newlines and "|"
+/// (the title line's separator) become spaces
+fn clean(arena: std.mem.Allocator, names: *const std.AutoHashMapUnmanaged(u32, []const u8), text: []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (i < text.len) {
+        if (text[i] == '#') {
+            var j = i + 1;
+            while (j < text.len and std.ascii.isDigit(text[j])) j += 1;
+            const id = std.fmt.parseInt(u32, text[i + 1 .. j], 10) catch null;
+            if (id) |x| if (names.get(x)) |name| {
+                try out.appendSlice(arena, name);
+                i = j;
+                continue;
+            };
+        }
+        try out.append(arena, switch (text[i]) {
+            '\t', '\n', '\r', '|' => ' ',
+            else => text[i],
+        });
+        i += 1;
+    }
+    return out.items;
 }
 
 fn verdictName(v: ?harness.Verdict) []const u8 {
@@ -279,7 +426,7 @@ fn writePreds(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, s: *const har
 }
 
 fn testPreds(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, ranks: []const [2][5]?u8, c: harness.Cuts, w: *Io.Writer) !void {
-    var s = try harness.score(cand, gpa, d, ranks, c, .final, 1);
+    var s = try harness.score(cand, gpa, d, ranks, c, .final, .{});
     defer s.deinit(gpa);
     var file = try Io.Dir.cwd().createFile(io, "preds.tsv", .{});
     defer file.close(io);
@@ -360,7 +507,7 @@ fn final(
     dir: []const u8,
     w: *Io.Writer,
 ) !void {
-    var s = try harness.score(cand, gpa, d, ranks, c, .final, 1);
+    var s = try harness.score(cand, gpa, d, ranks, c, .final, .{});
     defer s.deinit(gpa);
     try w.print("# Final: {s} ({s}), test set, scope {t}\n\n| outcome | rows | baseline | candidate | diff |\n|---|---|---|---|---|\n", .{ args.run, args.campaign, cand.scope });
     const finals = try std.fs.path.join(arena, &.{ dir, "finals.tsv" });
@@ -376,6 +523,16 @@ fn final(
             args.run, args.campaign, args.target, o, p.n, p.diff, p.half,
         }));
     }
+}
+
+test "effect labels: champion ids become names, separators become spaces" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var names: std.AutoHashMapUnmanaged(u32, []const u8) = .empty;
+    try names.put(arena, 266, "Aatrox");
+    try std.testing.expectEqualStrings("Aatrox vs #9 (top) a b", try clean(arena, &names, "#266 vs #9 (top) a|b"));
+    try std.testing.expectEqualStrings("# 1", try clean(arena, &names, "#\t1"));
 }
 
 test {

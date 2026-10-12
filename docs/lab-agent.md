@@ -32,6 +32,7 @@ research/questions/llm-experiment-agent.md (C1-C20) and smart-experiment-search.
 | deploy/lab-exp.sh | us | the agent's only way to run and read results |
 | deploy/lab-agent.sh | us | starts a headless agent session on a campaign |
 | ~/ml/lab/<snapshot>/ on the host | harness only | runs.tsv, looks.tsv, best-*.tsv, finals.tsv |
+| ~/ml/runs/<run>/ on the host | harness; agent via `finding` | result.tsv, effects-*.tsv, findings.tsv (below) |
 | docs/lab-brief.md | us | the agent's brief (program.md in autoresearch) |
 
 The agent is a plain Claude Code session with the brief and narrow permissions, not a
@@ -88,6 +89,21 @@ A new snapshot moves every boundary forward and starts a fresh look budget.
 - First smoke run (2026-10-12, snapshot 20261012T2055Z): dev-val 80,190 gold14 rows,
   run time 16 s on the gpu-box plus ~80 s building
 
+## Findings and effect tables
+
+Runs say what they learnt about the game, for Jacob and the admin page (meiolol-3b), not
+only loss numbers (meiolol-cf, 2026-10-12). Per run dir:
+
+- result.tsv: the run's runs.tsv row with a header. Added columns (runs.tsv too):
+  category (win, early, items: the admin page's grouping), removed_pct and removed_half
+  (% of the baseline's dev loss removed, 95% half-width; positive = better), err_base and
+  err_cand (root mean squared error in the outcome's units; - for win), unit, effects
+- effects-<name>.tsv: from the candidate's optional `effects` (api.Effects). First line
+  `# title | unit | what higher means`, then a header `label effect ci n` (ci = 95%
+  half-width, n = training games). `#<id>` in labels becomes the champion's name
+- findings.tsv: `campaign finding effect_file` (effect_file `-` when none), one plain
+  sentence per line, written by `lab-exp.sh finding`; the brief says what a finding is
+
 ## The ladder (selection set)
 
 The agent never sees a raw selection score. Per snapshot and target the harness keeps
@@ -106,6 +122,7 @@ run CAMPAIGN NAME TARGET [--select] [--desc TEXT]
 table [CAMPAIGN] | looks | show RUN  records; summary.md: dev by outcome, role, patch, tier
 restore CAMPAIGN RUN                 a run's candidate back (sessions share main: no git
                                      reset; the candidate's history is the run records)
+finding CAMPAIGN RUN TEXT [FILE]      what the run learnt, to its findings.tsv
 stop CAMPAIGN REASON                 flag for a human: nothing real left
 final CAMPAIGN TARGET [N]            humans only: test score of the last N select winners
 ```

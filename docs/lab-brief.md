@@ -18,6 +18,8 @@ pub fn fit(gpa: std.mem.Allocator, train: *const api.Train, opts: api.Options) !
 pub fn predict(m: *const Model, q: *const api.Query) api.Prediction
 pub fn deinit(m: *Model, gpa: std.mem.Allocator) void
 // optional: pub const seeded = true;  (3 seeds averaged)
+// optional, effect tables in the target's units (Findings below):
+pub fn effects(m: *const Model, arena: std.mem.Allocator, target: api.Outcome) ![]const api.Effects
 // optional, for screening:
 pub const feature_names: []const []const u8 = &.{ ... };
 pub fn features(m: *const Model, q: *const api.Query, out: []f32) void
@@ -45,6 +47,7 @@ deploy/lab-exp.sh diagnose CAMPAIGN TARGET     where the candidate is biased (de
 deploy/lab-exp.sh screen CAMPAIGN TARGET       each feature alone (dev, free)
 deploy/lab-exp.sh run CAMPAIGN NAME TARGET --hyp ID --desc "one change" [--fraction F]
 deploy/lab-exp.sh run CAMPAIGN NAME TARGET --hyp ID --desc "..." --select   (costs a look)
+deploy/lab-exp.sh finding CAMPAIGN RUN "plain sentence" [effects-NAME.tsv]
 deploy/lab-exp.sh table CAMPAIGN | looks | show RUN
 deploy/lab-exp.sh restore CAMPAIGN RUN
 deploy/lab-exp.sh stop CAMPAIGN "REASON"
@@ -53,7 +56,28 @@ deploy/lab-exp.sh stop CAMPAIGN "REASON"
 A run takes ~2 minutes. RESULT gives the dev gain vs the champion-role baseline with a
 95% interval (negative = better), `mde` (the smallest gain this dev set would show), and
 for `--select` the ladder's answer: `new-best` or `no-change`, never a number otherwise.
-50 selection looks per snapshot, shared with every other campaign.
+50 selection looks per snapshot, shared with every other campaign. RESULT also gives
+`removed` (% of the baseline's error the candidate removes, ± its interval; positive =
+better), `error` (typical miss, baseline -> candidate, in gold, CS, deaths or minutes)
+and `effects` (the effect tables written for the run).
+
+## Findings: what each run learnt about the game
+
+Jacob reads runs for what they say about League, not for loss numbers. After every run
+(crashes aside), before the next:
+
+- `finding CAMPAIGN RUN "..."`: one plain sentence a player would understand, in human
+  units, with the numbers from RESULT or the effect table. Say what the change was, what
+  it showed about the game, and how sure. Compare with the reference run where that is
+  the point. E.g. "Patch made no difference beyond what the model already had (0.0% of
+  the error, within noise)", "Players a tier higher get ~120 gold more at 14 in the same
+  matchup (±40); the term removes 0.6% more of the error than ref". A null result is a
+  finding too
+- When a term is kept, the candidate exposes it in `effects` (rank tier, patch, or the top
+  and bottom 10 champions or matchups by effect), each row with a 95% interval and the
+  games behind it, in the target's units; name the file in the finding. src/lab/cand/
+  team has a worked example. `#<champion id>` in a label becomes the champion's name
+- digest.md entries carry the same sentence beside the run id
 
 ## Your starting point
 
@@ -85,10 +109,10 @@ by more than its interval. Its win prediction is the baseline's: for win, add yo
    values of a prior strength or L2 in separate runs on dev; scale priors by games
 8. Prefer **one shrunk model with several terms** over picking among many similar
    variants
-9. Update hypotheses.tsv after each run: status `confirmed`, `refuted` (narrow interval
+9. Record the run's `finding` (Findings above), then update hypotheses.tsv: status `confirmed`, `refuted` (narrow interval
    around 0), `inconclusive` (wide), or `parked`; list the run ids
-10. Every 10 runs rewrite digest.md: what worked and what didn't by run id, then the
-    next ideas. Numbers only by run id; the records are the truth
+10. Every 10 runs rewrite digest.md: what worked and what didn't by run id, each with
+    its finding sentence, then the next ideas. Numbers only from the records
 
 Rotate action types (diagnose, follow up a result, new idea, combine two confirmed
 ones). Never retest a refuted idea on more data hoping it passes.

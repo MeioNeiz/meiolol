@@ -184,7 +184,7 @@ pub fn diagnose(
     k: usize,
     w: *Io.Writer,
 ) !void {
-    var s = try harness.score(C, gpa, d, ranks, c, .dev, 1);
+    var s = try harness.score(C, gpa, d, ranks, c, .dev, .{});
     defer s.deinit(gpa);
     // Signed standardised residual, candidate minus truth: positive = over-predicts
     const res = try gpa.alloc(f64, s.row.len);
