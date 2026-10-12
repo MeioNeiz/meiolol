@@ -370,6 +370,11 @@ next steps land here.
   (+0.79 ± 0.19 % of base MSE) and gold14 (+0.22 ± 0.13) by letting thin lane pairs
   borrow from similar champions: candidate for lane curves on thin matchups. Other
   four enemies' interactions within noise. CPU suffices at this size (fits 1-5 s)
+  Gain is all in thin matchups (<25 train games: lanediff14 +2.4%, cs10 +2.2%; 100+:
+  none), so: embeddings or a count blend for lane curves under ~100 games (owner of
+  curves to pick up). GPU vs CPU being benchmarked at 1x/4x/16x data (Jacob: test it)
+- Findings ledger: docs/learned.md (plain one-liners, evidence, what the site may say)
+- Lab campaign gold14-a running (meiolol-39, from 3c-team, no spend cap, Jacob)
 - Experience term (src/experience.zig): rerun at 300+ train / 100+ test per variant; if
   "user only" beats no-experience beyond its interval, wire it into recommend() as the
   "your pool" reason (wasm `pool` field). Mastery is a post-match snapshot and flatters
