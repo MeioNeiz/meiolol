@@ -222,6 +222,9 @@ const shared_assets = [_]File{
     .{ .path = "favicon.svg", .data = @embedFile("static/favicon.svg") },
     .{ .path = "daily.js", .data = @embedFile("static/daily.js") },
     .{ .path = "your.js", .data = @embedFile("static/your.js") },
+    .{ .path = "review.js", .data = @embedFile("static/review.js") },
+    .{ .path = "home.js", .data = @embedFile("static/home.js") },
+    .{ .path = "inter.woff2", .data = @embedFile("static/inter.woff2") },
     .{ .path = "learn.js", .data = @embedFile("static/learn.js") },
     .{ .path = "table.js", .data = @embedFile("static/table.js") },
     .{ .path = "filters.js", .data = @embedFile("static/filters.js") },
@@ -1130,152 +1133,94 @@ fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     try html.foot(w, p);
 }
 
-/// What the home page promises, in the order a player meets it (docs/concept.md,
-/// identity draft four). `soon` parts are labelled as coming: Riot reviews the site
-const Pillar = struct {
-    name: []const u8,
-    soon: bool,
-    text: []const u8,
-    example: []const u8,
-};
-
-const pillars = [_]Pillar{
-    .{
-        .name = "Game rewind",
-        .soon = false,
-        .text = "Each game's lane minute by minute against Platinum+ games in the same matchup, your team's win chance through the whole game, the minute it turned, and what each of your deaths cost.",
-        .example = "Turning minute 23-24: win chance 61% to 34%",
-    },
-    .{
-        .name = "Highlights",
-        .soon = false,
-        .text = "Streaks, your longest game, best KDA, biggest lane lead and the game you won from furthest behind. The full record book across every game you've played comes on request.",
-        .example = "Won from 1,180 gold behind in lane at 14",
-    },
-    .{
-        .name = "Matchup notebook",
-        .soon = false,
-        .text = "Your record in every lane matchup and how it moves over the months; next, what you built against each kind of team, and when.",
-        .example = "Ahri vs Yone: gold at 10 -310, -120, +80",
-    },
-    .{
-        .name = "Scouting report",
-        .soon = true,
-        .text = "You as a player: snowball or comeback, spike timing, where your games tilt, and how your role compares with Platinum+.",
-        .example = "Behind at 14 in 6 of 10 games, won 4 of them",
-    },
-    .{
-        .name = "Before the game",
-        .soon = true,
-        .text = "The desktop app shows your own notebook for the lane you're likely in: your record, your spike window, your last note. Never other players.",
-        .example = "Their two-item spike lands 2 min after yours",
-    },
-    .{
-        .name = "Squads",
-        .soon = true,
-        .text = "Friends who opt in: superlatives, head to heads and a weekly rewind card for Discord.",
-        .example = "Most expensive death of the week: 1,450 gold",
-    },
-};
-
-fn pillarCard(_: void, w: *Writer, it: Pillar) Writer.Error!void {
-    try tpl.render(w,
-        \\<div class="card pillar"><h3>{name} <span{chip}>{state}</span></h3>
-        \\<p>{text}</p><p class="eg"><span>For example</span>{example}</p></div>
-        \\
-    , .{
-        .name = it.name,
-        .chip = tpl.attr("class", @as([]const u8, if (it.soon) "chip soon" else "chip")),
-        .state = @as([]const u8, if (it.soon) "Coming" else "Live"),
-        .text = it.text,
-        .example = it.example,
-    });
+/// 26568 as "26,568"
+fn thousands(a: std.mem.Allocator, n: u64) ![]const u8 {
+    const digits = try std.fmt.allocPrint(a, "{d}", .{n});
+    var out: std.ArrayList(u8) = .empty;
+    for (digits, 0..) |c, i| {
+        if (i > 0 and (digits.len - i) % 3 == 0) try out.append(a, ',');
+        try out.append(a, c);
+    }
+    return out.items;
 }
 
+test thousands {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expectEqualStrings("26,568", try thousands(arena.allocator(), 26568));
+    try std.testing.expectEqualStrings("999", try thousands(arena.allocator(), 999));
+    try std.testing.expectEqualStrings("1,000,000", try thousands(arena.allocator(), 1_000_000));
+}
+
+/// The home page: the lookup, and a game review of the example player's that steps
+/// through its biggest moments (static/home.js, from data/your-example.json). Not a
+/// stats page, so no region or period switches
 fn writeIndex(site: *const Site, w: *Writer) !void {
-    const p = site.page(
-        "meiolol: scout your own League games",
-        "Look yourself up: every recent ranked game laid over how Platinum+ players do in the same matchup, minute by minute, with your highlights, streaks and record in each matchup. Free, no sign-up.",
+    var p = site.page(
+        "meiolol: game review for League of Legends",
+        "Look yourself up: every recent game reviewed like a chess game. Your team's win chance minute by minute, the moments that moved it, what each death cost, and your lane against the typical game at your rank. Free, no sign-up.",
         "index.html",
-        .none,
+        .home,
     );
+    p.counterparts = null;
     try html.head(w, p);
-    const matchups: usize = if (site.curves) |c| blk: {
-        var n: usize = 0;
-        for (c.curves) |cv| n += @intFromBool(cv.header.bracket == 0 and cv.header.experience == 0);
-        break :blk n;
-    } else 0;
+    const up = site.view.up();
     try tpl.render(w,
-        \\<section class="home-hero"><div>
-        \\<h1>Your League games, in stats nobody else shows you</h1>
-        \\<p class="lead">Look yourself up. Every recent ranked game laid over how Platinum+
-        \\players do in the same matchup, minute by minute, with your highlights, streaks
-        \\and record in each matchup. Fun enough to share, deep enough to learn from.</p>
-        \\<form class="lookup" action="{your}" method="get">
-        \\<input name="id" placeholder="Name#TAG" autocomplete="off" spellcheck="false" required aria-label="Riot ID">
-        \\<button type="submit">Scout me</button>
+        \\<section class="home-top"><div>
+        \\<span class="tagline"><b>Free</b>Game review for League of Legends</span>
+        \\<h1>See the minute your game was <em>won or lost</em></h1>
+        \\<p class="lead">Look yourself up. Every recent game, reviewed: your team's win
+        \\chance minute by minute, the moments that moved it, what each death cost, and your
+        \\lane against the typical game at your rank.</p>
+        \\<form class="search" action="{your}" method="get" role="search"{submit}>
+        \\<input name="id" placeholder="Riot ID, like Name#EUW" aria-label="Riot ID, as Name#TAG" autocomplete="off" spellcheck="false" required>
+        \\<button type="submit">Review my games</button>
         \\</form>
-        \\<p class="muted">No Riot ID to hand? <a href="{example}">See an example</a>: real
-        \\ranked games from our data, with the player's name left out.</p>
+        \\<p class="sub-links"><a href="{example}">See an example review →</a><a href="{method}">How the numbers are made</a></p>
+        \\<div class="trust"><span><b>{games}</b>ranked games, {when}</span><span><b>No sign-up</b>just your Riot ID</span><span><b>Facts only</b>never verdicts on other players</span></div>
         \\</div>
-        \\<aside class="sample" aria-label="An example of highlights">
-        \\<p class="muted">Highlights, last 10 games (example)</p>
-        \\<div class="tiles">
-        \\<div class="tile"><b>4 wins</b><span>Current streak</span></div>
-        \\<div class="tile"><b>47:12</b><span>Longest game</span><small>Ornn vs Sion, win</small></div>
-        \\<div class="tile"><b>-1,180</b><span>Won from furthest behind</span><small>in lane at 14 min</small></div>
-        \\<div class="tile"><b>+620</b><span>Above the typical game at 14 min</span><small>Ahri vs Yone, Platinum+</small></div>
+        \\<div id="demo" class="panel demo" hidden>
+        \\<div class="panel-h"><b>Game review</b><span class="live"><i></i>the example player's real game</span></div>
         \\</div>
-        \\</aside>
         \\</section>
-        \\<h2>What you get</h2>
-        \\<div class="grid pillars">
-        \\{pillars}</div>
-        \\<p class="muted">Facts about your own games, never verdicts on other players and
-        \\never "the best pick". Ranked solo/duo; the typical games come from Platinum IV and
-        \\above.</p>
-        \\
-    , .{
-        .your = html.Link{ .root = site.view.up(), .path = "your.html" },
-        .example = html.Link{ .root = site.view.up(), .path = "your.html?example" },
-        .pillars = tpl.each(&pillars, {}, pillarCard),
-    });
-    try tpl.render(w,
-        \\<p class="muted bench">The benchmark your games are measured against: {matchups}{no_matchups}</p>
-        \\
-    , .{
-        .matchups = if (matchups > 0) tpl.t(
-            "{n} lane matchups so far, each showing when each side tends to get ahead, by how much, and whether winning lane wins the game.",
-            .{ .n = matchups },
-        ) else null,
-        .no_matchups = tpl.when(matchups == 0, @as([]const u8, "when each side of a lane matchup tends to get ahead, by how much, and whether winning lane wins the game. Curves appear as match timelines come in.")),
-    });
-    if (site.curves) |*c| if (matchups > 0) try matchup.featured(site, w, c, matchups);
-    // The full table is champions.html: on this page it was 90% of the bytes
-    try tpl.render(w,
-        \\<h2>More to explore</h2>
-        \\<div class="grid">
-        \\<div class="card"><h3><a href="{daily}">Daily Draft</a></h3>
-        \\<p>One real ranked draft a day, anonymised. Guess the hidden champion and the
-        \\winner, then see what happened. Keep a streak, share your grid.</p></div>
-        \\<div class="card"><h3><a href="{learn}">Learn</a></h3>
-        \\<p>Five short lessons on draft in plain words, then practice on real ranked
-        \\drafts with every option explained.</p></div>
-        \\<div class="card"><h3><a href="pool.html">Champion pool</a></h3>
-        \\<p>What players of your main also play, and which of those cover your main's
-        \\hardest lanes.</p></div>
-        \\<div class="card"><h3><a href="champions.html">Champions</a></h3>
-        \\<p>Win, pick and ban rate of every champion from <b>{games}</b> ranked solo/duo
-        \\games {in}, {when}. <a href="{method}">How the numbers are made</a>.</p></div>
+        \\<section class="home-sec">
+        \\<h2>In every review</h2>
+        \\<p>Built from Riot's minute-by-minute timeline of the game. Win chance as in
+        \\Platinum+ games; your lane against games in the same matchup at your rank.</p>
+        \\<div class="three">
+        \\<div class="panel feat"><h3><span class="badge c-turn">★</span>The turning minute</h3><p>The one minute that moved your team's win chance most, and what happened in it.</p><div class="viz" id="v-turn"></div></div>
+        \\<div class="panel feat"><h3><span class="badge c-cost">✕</span>What each death cost</h3><p>Who killed you, the gold they got, what the enemy took next, and the win chance it cost.</p><div class="viz"><ul class="mini-list" id="v-death"></ul></div></div>
+        \\<div class="panel feat"><h3><span class="badge c-gain">↑</span>Your lane against typical</h3><p>Gold, level 6 and first item against the typical game in the same matchup and rank.</p><div class="viz"><ul class="mini-list" id="v-lane"></ul></div></div>
         \\</div>
+        \\</section>
+        \\<section class="home-sec" hidden>
+        \\<h2>Your record book</h2>
+        \\<p>Highlights across your recent games. These are the example player's.</p>
+        \\<div class="hls" id="home-hls"></div>
+        \\</section>
+        \\<section class="home-sec">
+        \\<h2>Between games</h2>
+        \\<div class="three go">
+        \\<a class="panel" href="{daily}"><span class="ic"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#f5c451" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="14" height="13" rx="2"/><path d="M2 7h14M6 1.5v3M12 1.5v3"/></svg></span><span><b>Daily Draft</b><span>One real ranked draft a day. Guess who won.</span></span><span class="arrow">→</span></a>
+        \\<a class="panel" href="{learn}"><span class="ic"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3ccf91" stroke-width="1.6" aria-hidden="true"><path d="M2 4.5 9 2l7 2.5L9 7z"/><path d="M5 6v4.5c0 1.4 1.8 2.5 4 2.5s4-1.1 4-2.5V6"/></svg></span><span><b>Learn the draft</b><span>Five short lessons, then practice drafts.</span></span><span class="arrow">→</span></a>
+        \\<a class="panel" href="champions.html"><span class="ic"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#6aa1ff" stroke-width="1.6" aria-hidden="true"><path d="M3 15V9M7 15V4M11 15V7M15 15V2"/></svg></span><span><b>Champions</b><span>Win rates, matchups and lane curves.</span></span><span class="arrow">→</span></a>
+        \\</div>
+        \\</section>
+        \\<script src="{review_js}" defer></script>
+        \\<script src="{home_js}" data-root="{up}" defer></script>
         \\
     , .{
-        .daily = html.Link{ .root = site.view.up(), .path = "daily.html" },
-        .learn = html.Link{ .root = site.view.up(), .path = "learn.html" },
-        .games = site.games,
-        .in = site.view.region.in(),
+        .your = html.Link{ .root = up, .path = "your.html" },
+        .submit = tpl.trusted(html.lookup_submit),
+        .example = html.Link{ .root = up, .path = "your.html#example" },
+        .method = html.Link{ .root = up, .path = "method.html" },
+        .games = try thousands(site.arena, site.games),
         .when = site.when,
-        .method = html.Link{ .root = site.view.up(), .path = "method.html" },
+        .daily = html.Link{ .root = up, .path = "daily.html" },
+        .learn = html.Link{ .root = up, .path = "learn.html" },
+        .review_js = html.Link{ .root = up, .path = "review.js" },
+        .home_js = html.Link{ .root = up, .path = "home.js" },
+        .up = up,
     });
     try html.foot(w, p);
 }
@@ -1617,4 +1562,22 @@ test "views: a tree each, switches between them, shared pages once" {
     try std.testing.expect(std.mem.indexOf(u8, shared_page, "<a href=\"champions.html\" data-view>") != null);
     try std.testing.expectError(error.FileNotFound, read(arena, out, "all/daily.html"));
     try std.testing.expectError(error.FileNotFound, read(arena, out, "patch/style.css"));
+    // Under Champions: the section's tabs and the switches; not on home or shared pages
+    for ([_][]const u8{
+        "<nav class=\"section\" aria-label=\"Champions\">",
+        "<a href=\"matchup/index.html\">Matchups</a>",
+    }) |s| try std.testing.expect(std.mem.indexOf(u8, tiers, s) != null);
+    try std.testing.expect(std.mem.indexOf(u8, shared_page, "class=\"subbar\"") == null);
+    // Home in a view: the lookup and the review demo, its scripts at the site root
+    const home = try read(arena, out, "all/index.html");
+    for ([_][]const u8{
+        "<form class=\"search\" action=\"../your.html\"",
+        "<script src=\"../review.js\" defer></script>",
+        "<script src=\"../home.js\" data-root=\"../\" defer></script>",
+        "<b>2</b>ranked games",
+    }) |s| try std.testing.expect(std.mem.indexOf(u8, home, s) != null);
+    try std.testing.expect(std.mem.indexOf(u8, home, "class=\"subbar\"") == null);
+    const your = try read(arena, out, "your.html");
+    try std.testing.expect(std.mem.indexOf(u8, your, "<script src=\"review.js\" defer></script>\n<script src=\"your.js\" defer></script>") != null);
+    for ([_][]const u8{ "review.js", "home.js", "inter.woff2" }) |f| _ = try read(arena, out, f);
 }

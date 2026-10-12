@@ -21,7 +21,22 @@ const preview_banner =
     \\
 ;
 
-pub const Nav = enum { your, matchups, daily, learn, pool, champions, method, none };
+pub const Nav = enum {
+    home,
+    your,
+    matchups,
+    daily,
+    learn,
+    pool,
+    champions,
+    method,
+    none,
+
+    /// Pages under Champions in the menu, with its tabs and the stats switches
+    pub fn inChampions(n: Nav) bool {
+        return n == .champions or n == .matchups or n == .pool;
+    }
+};
 
 pub const Region = enum {
     euw,
@@ -123,6 +138,7 @@ fn toSite(p: Page, path: []const u8) Link {
     return .{ .root = p.root, .up = if (p.view) |v| v.up() else "", .path = path };
 }
 
+/// no-referrer: Your games has a Riot ID in its URL, and the access log keeps Referer
 pub fn head(w: *Writer, p: Page) Writer.Error!void {
     try tpl.renderPart(w,
         \\<!doctype html>
@@ -130,6 +146,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         \\<head>
         \\<meta charset="utf-8">
         \\<meta name="viewport" content="width=device-width, initial-scale=1">
+        \\<meta name="referrer" content="no-referrer">
         \\<title>{title}</title>
         \\<meta name="description" content="{description}">
         \\<link rel="stylesheet" href="{css}">
@@ -139,8 +156,8 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         \\<header class="top"><div class="wrap">
         \\{brand}<nav>
         \\{items}</nav>
-        \\{switches}{remember}{meio_view}{admin}</div></header>
-        \\{banner}<main class="wrap">
+        \\{look}{remember}{meio_view}{admin}</div></header>
+        \\{subbar}{banner}<main class="wrap">
         \\
     , .{
         .title = p.title,
@@ -152,13 +169,19 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
             tpl.t("<link rel=\"canonical\" href=\"{url}\">\n", .{ .url = url })
         else
             null else null,
-        .brand = tpl.t("<a href=\"{href}\" class=\"brand\"{view}>{name}</a>\n", .{
+        .brand = tpl.t("<a href=\"{href}\" class=\"brand\"{view}>{logo}<span>{name}</span></a>\n", .{
             .href = Link{ .root = p.root, .path = "index.html" },
             .view = tpl.flag(p.view == null, "data-view"),
+            .logo = tpl.trusted(logo),
             .name = product,
         }),
         .items = tpl.each(&nav_items, p, navItem),
-        .switches = tpl.when(p.counterparts != null, tpl.call(switches, .{p})),
+        // Home and Your games have their own, bigger lookup
+        .look = tpl.when(p.nav != .your and p.nav != .home, tpl.t(
+            \\<form class="look" action="{your}" method="get" role="search"{submit}><input name="id" placeholder="Look up a Riot ID" aria-label="Riot ID, as Name#TAG" autocomplete="off" spellcheck="false" required></form>
+            \\
+        , .{ .your = toSite(p, "your.html"), .submit = tpl.trusted(lookup_submit) })),
+        .subbar = tpl.when(p.nav.inChampions() or p.counterparts != null, tpl.call(subbar, .{p})),
         // Remembered so shared pages link back into this view
         .remember = if (p.view) |v| tpl.t(
             \\<script>try{localStorage.setItem("view","{dir}")}catch(e){}</script>
@@ -189,26 +212,65 @@ const meio_view =
 
 const NavItem = struct { nav: Nav, path: []const u8, label: []const u8, in_view: bool };
 
+/// The menu: the player's own games first; the stats pages sit under Champions
 const nav_items = [_]NavItem{
     .{ .nav = .your, .path = "your.html", .label = "Your games", .in_view = false },
-    .{ .nav = .matchups, .path = "matchup/index.html", .label = "Matchups", .in_view = true },
     .{ .nav = .daily, .path = "daily.html", .label = "Daily Draft", .in_view = false },
     .{ .nav = .learn, .path = "learn.html", .label = "Learn", .in_view = false },
-    .{ .nav = .pool, .path = "pool.html", .label = "Champion pool", .in_view = true },
     .{ .nav = .champions, .path = "champions.html", .label = "Champions", .in_view = true },
-    .{ .nav = .method, .path = "method.html", .label = "Method", .in_view = false },
+};
+
+/// Tabs on the pages under Champions
+const champion_tabs = [_]NavItem{
+    .{ .nav = .champions, .path = "champions.html", .label = "Champions", .in_view = true },
+    .{ .nav = .matchups, .path = "matchup/index.html", .label = "Matchups", .in_view = true },
+    .{ .nav = .pool, .path = "pool.html", .label = "Champion pool", .in_view = true },
 };
 
 /// Pages in a view link within it; from a shared page (all at the site root), to the
 /// default view's, moved by the header script into the last one visited
 fn navItem(p: Page, w: *Writer, it: NavItem) Writer.Error!void {
+    const here = it.nav == p.nav or (it.nav == .champions and p.nav.inChampions());
+    try navLink(p, w, it, here);
+}
+
+fn tabItem(p: Page, w: *Writer, it: NavItem) Writer.Error!void {
+    try navLink(p, w, it, it.nav == p.nav);
+}
+
+fn navLink(p: Page, w: *Writer, it: NavItem, here: bool) Writer.Error!void {
     try tpl.render(w, "<a href=\"{href}\"{current}{view}>{label}</a>\n", .{
         .href = if (it.in_view) Link{ .root = p.root, .path = it.path } else toSite(p, it.path),
-        .current = tpl.flag(it.nav == p.nav, "aria-current=\"page\""),
+        .current = tpl.flag(here, "aria-current=\"page\""),
         .view = tpl.flag(it.in_view and p.view == null, "data-view"),
         .label = it.label,
     });
 }
+
+/// Under the header on stats pages: the section's tabs and the region and period switches
+fn subbar(w: *Writer, p: Page) Writer.Error!void {
+    try tpl.render(w,
+        \\<div class="subbar"><div class="wrap">
+        \\{tabs}{switches}</div></div>
+        \\
+    , .{
+        .tabs = tpl.when(p.nav.inChampions(), tpl.t("<nav class=\"section\" aria-label=\"Champions\">\n{items}</nav>\n", .{
+            .items = tpl.each(&champion_tabs, p, tabItem),
+        })),
+        .switches = tpl.when(p.counterparts != null, tpl.call(switches, .{p})),
+    });
+}
+
+/// Riot ID lookup forms: to Your games with the ID in the fragment, which never reaches
+/// the server; without JS, the query (your.js moves it to the fragment)
+pub const lookup_submit =
+    \\ onsubmit="location.href=this.action+'#id='+encodeURIComponent(this.elements.namedItem('id').value.trim());return false"
+;
+
+/// The mark: a win chance line through its turning minute
+const logo =
+    \\<svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#8b7cf6"/><path d="M6 21.5 11.5 14l5 4.5L26 7" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16.5" cy="18.5" r="2.6" fill="#f5c451"/></svg>
+;
 
 /// Region and period switches; data-region, data-period: what filters.js sets on a click
 fn switches(w: *Writer, p: Page) Writer.Error!void {

@@ -145,7 +145,7 @@ const HARDEST = "hardest first, by the top of each bar";
   // a click sets the bar instead of loading the page again
   // Relative, so the site also works from disk; "?" alone still drops the picks
   const file = location.pathname.split("/").pop();
-  const switches = [...document.querySelectorAll("header .filters a[data-region], header .filters a[data-period]")];
+  const switches = [...document.querySelectorAll(".subbar .filters a[data-region], .subbar .filters a[data-period]")];
   const switchPick = (a) =>
     a.dataset.region
       ? ["region", a.dataset.region === "all" ? "all" : home]
