@@ -47,7 +47,7 @@ const usage =
     \\                                  1,4,16 --epochs 10 --sweep 0 (fits per sweep)
     \\  draftbench SNAP [OPT VALUE]...  the deep draft model (lab/draftnet.zig) timed the
     \\                                  same way: --devices cpu1,cpu,gpu --scales
-    \\                                  1,4,16,64 --epochs 2
+    \\                                  1,4,16,64 --epochs 2 --sweep 0
     \\
 ++ exp.usage ++ draft.usage;
 
@@ -167,6 +167,8 @@ pub fn main(init: std.process.Init) !u8 {
                 opts.scales = try parseList(u32, arena, v);
             } else if (std.mem.eql(u8, argv[i], "--epochs")) {
                 opts.epochs = try std.fmt.parseInt(u32, v, 10);
+            } else if (std.mem.eql(u8, argv[i], "--sweep")) {
+                opts.sweep = try std.fmt.parseInt(u32, v, 10);
             } else {
                 std.debug.print("draftbench: unknown option {s}\n{s}", .{ argv[i], usage });
                 return 2;

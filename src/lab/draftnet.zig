@@ -607,6 +607,9 @@ pub const Options = struct {
     devices: []const Device = &.{ .cpu1, .cpu, .gpu },
     scales: []const u32 = &.{ 1, 4, 16, 64 },
     epochs: u32 = 2,
+    /// Fits per sweep (seeds 1..S): on the CPU one single-threaded fit per core at once, on
+    /// the GPU one after another; 0 skips sweeps
+    sweep: u32 = 0,
 };
 
 pub const Device = enum { cpu1, cpu, gpu };
@@ -652,6 +655,37 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, d: *const rows.Data, opts: Option
             });
             try w.flush();
         }
+        if (opts.sweep > 0) for (opts.devices) |device| {
+            if (device == .cpu1 or (device == .gpu and gpu == null)) continue;
+            const t0 = std.Io.Clock.awake.now(io);
+            switch (device) {
+                .cpu1 => unreachable,
+                .cpu => {
+                    const Ctx = struct {
+                        gpa: std.mem.Allocator,
+                        io: std.Io,
+                        n_ids: u32,
+                        train: []const dn.Game,
+                        epochs: u32,
+                        fn one(c: @This(), i: usize) !void {
+                            var net = try fitCpu(c.gpa, c.io, .{ .seed = @intCast(i + 1) }, c.n_ids, c.train, c.epochs, 1);
+                            net.deinit(c.gpa);
+                        }
+                    };
+                    try par.forEach(io, opts.sweep, Ctx{ .gpa = gpa, .io = io, .n_ids = games.n_ids, .train = train, .epochs = opts.epochs }, Ctx.one);
+                },
+                .gpu => for (0..opts.sweep) |i| {
+                    var net = try fitGpu(gpa, gpu.?, &dev.?, .{ .seed = @intCast(i + 1) }, games.n_ids, train, opts.epochs);
+                    net.deinit(gpa);
+                },
+            }
+            const ns = t0.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
+            const secs = @as(f64, @floatFromInt(ns)) / 1e9;
+            try w.print("| {d}x | sweep of {d} | {s} | {d:.2} per fit-epoch | | |\n", .{
+                scale, opts.sweep, @tagName(device), secs / @as(f64, @floatFromInt(opts.sweep * opts.epochs)),
+            });
+            try w.flush();
+        };
     }
 }
 
