@@ -21,6 +21,7 @@ pub const outcomes = @import("outcomes.zig");
 pub const objectives = @import("objectives.zig");
 pub const winchance = @import("winchance.zig");
 pub const items = @import("items.zig");
+pub const playstyle = @import("playstyle.zig");
 pub const archive = @import("archive.zig");
 pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
@@ -134,6 +135,13 @@ const usage =
     \\              --preds DIR      one TSV of test predictions per model
     \\  items       does the finished item change the win chance, given the state when it
     \\              was bought? (markdown on stdout; docs/model.md)
+    \\              --patch P        as for stats (default: every patch, pooled)
+    \\              --platform P     as for stats (train uses every one given)
+    \\              --test-platform P  test on P's newest games (default EUW1)
+    \\              --test-share F   newest share of P's games held out (default 0.2)
+    \\              --preds DIR      one TSV of test predictions per model
+    \\  playstyle   does early style (roaming, fights, wards) change the win chance, beyond
+    \\              the champion and the state at 14:00? (markdown on stdout; docs/model.md)
     \\              --patch P        as for stats (default: every patch, pooled)
     \\              --platform P     as for stats (train uses every one given)
     \\              --test-platform P  test on P's newest games (default EUW1)
@@ -281,6 +289,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "objectives", cmdObjectives },
     .{ "winchance", cmdWinchance },
     .{ "items", cmdItems },
+    .{ "playstyle", cmdPlaystyle },
     .{ "raw-export", cmdRawExport },
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
@@ -852,6 +861,32 @@ fn cmdItems(c: *Cmd) !u8 {
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
     try items.run(c.init.gpa, io, db, chosen, platforms, &legendaries, o, &stdout.interface);
+    try stdout.interface.flush();
+    return 0;
+}
+
+fn cmdPlaystyle(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var o: playstyle.Options = .{};
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--test-share")) {
+            o.test_share = try c.float();
+            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
+        } else if (c.is("--test-platform")) {
+            o.test_platform = try c.value();
+        } else if (c.is("--preds")) {
+            o.preds_dir = try c.value();
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    const platforms = g.platformIds();
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
+    var buf: [64 * 1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    try playstyle.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
     try stdout.interface.flush();
     return 0;
 }
