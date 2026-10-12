@@ -2131,7 +2131,7 @@ function slotPicker(m, d, side, role) {
   return box;
 }
 
-const LANE_MIN_SHARE = 0.01;
+const SUGGEST_MIN_SHARE = 0.01;
 
 // Suggestions for the open slot, each with its reason as a plain sentence. Ranked by the
 // range's low end by default, so a champion on few games can't top a list (as the site's
@@ -2141,12 +2141,15 @@ function suggest(m, d, all, options, cur, now, side, role, pick) {
   const low = d.rank !== "guess";
   const ri = DRAFT_ROLES.findIndex(([r]) => r === role), roleName = DRAFT_ROLES[ri][1].toLowerCase();
   const nameOf = id => (m.champs.find(c => c.id === +id) || { name: "#" + id }).name;
-  const cands = all.filter(x => String(x.c.id) !== String(cur));
+  // Off-role picks (carries in support, say) farm more than the role's regulars and, on a few
+  // hundred games, top the lists; suggestions keep the role's regular picks
+  const cands = all.filter(x => String(x.c.id) !== String(cur) && x.rate >= SUGGEST_MIN_SHARE);
   const rank = el("nav", { class: "switch", "aria-label": "Rank by" });
   for (const [k, label] of [["low", "Likely (low end)"], ["guess", "Best guess"]]) {
     rank.append(el("button", { type: "button", "aria-pressed": String(d.rank === k), onclick: () => { d.rank = k; saveDraft(d); } }, label));
   }
-  const box = el("div", { class: "suggest" }, el("div", { class: "suggesthead" }, el("h4", {}, "Suggestions"), el("span", { class: "sub" }, "Rank by"), rank));
+  const box = el("div", { class: "suggest" }, el("div", { class: "suggesthead" }, el("h4", {}, "Suggestions"), el("span", { class: "sub" }, "Rank by"), rank),
+    el("p", { class: "sub" }, `Champions with at least ${pct(SUGGEST_MIN_SHARE)} of the ${roleName} role's games this patch.`));
   const list = (title, rows, empty) => {
     box.append(el("h5", {}, title));
     if (!rows.length) { box.append(el("p", { class: "muted" }, empty)); return; }
@@ -2165,14 +2168,10 @@ function suggest(m, d, all, options, cur, now, side, role, pick) {
   if (!lm) { box.append(el("p", { class: "sub" }, "Best into your lane opponent and safest blind pick need the lane model (meiolol-lab lane --export).")); return box; }
   const { lanediff14: G, cs10: C, deaths15: D } = lm.at;
   const by = r => low ? r.lo[G] : r.value[G];
-  // Off-role picks (carries in support, say) farm more than the role's regulars, so on a few
-  // hundred games they top every gold list; the lane lists keep the role's regular picks
-  const regular = cands.filter(x => x.rate >= LANE_MIN_SHARE);
-  box.append(el("p", { class: "sub" }, `Lane lists: champions with at least ${pct(LANE_MIN_SHARE)} of the ${roleName} role's games this patch.` +
-    (ri === 1 || ri === 4 ? ` For ${roleName === "jungle" ? "junglers" : "supports"}, gold at 14 says more about how much a champion farms than about who wins the lane.` : "")));
+  if (ri === 1 || ri === 4) box.append(el("p", { class: "sub" }, `For ${roleName === "jungle" ? "junglers" : "supports"}, gold at 14 says more about how much a champion farms than about who wins the lane.`));
   const other = side === "blue" ? "red" : "blue", opp = d[other][role];
   if (opp != null) {
-    const rows = regular.map(x => [x.c.id, lm.value(x.c.id, +opp, ri)]).sort((a, b) => by(b[1]) - by(a[1])).slice(0, 5);
+    const rows = cands.map(x => [x.c.id, lm.value(x.c.id, +opp, ri)]).sort((a, b) => by(b[1]) - by(a[1])).slice(0, 5);
     list(`Best into ${nameOf(opp)}`, rows.map(([id, r]) => [id,
       `${gold(r.value[G])} gold over ${nameOf(opp)} at 14 (likely ${gold(r.lo[G])} to ${gold(r.hi[G])}), ${r.value[C].toFixed(0)} CS at 10 and ${r.value[D].toFixed(1)} deaths before 15, ` +
       (r.pair_games ? `from ${num(r.pair_games)} games of this matchup and ${num(r.champ_games)} on ${nameOf(id)} in the ${roleName} role.` : `from ${num(r.champ_games)} games on ${nameOf(id)} in the ${roleName} role; no games of this matchup yet, so averages only.`)]), "No candidates left for this slot.");
@@ -2183,7 +2182,7 @@ function suggest(m, d, all, options, cur, now, side, role, pick) {
   // picks and bans; the "worst common matchup" is among the 10 most played
   const taken = takenIn(d);
   const field = m.champs.filter(c => !taken.has(String(c.id)) && m.rate(c.id, role) > 0).map(c => ({ id: c.id, w: m.rate(c.id, role) }));
-  const blind = regular.map(x => {
+  const blind = cands.map(x => {
     const f = field.filter(o => o.id !== x.c.id), t = sumR(f.map(o => o.w));
     return [x.c.id, lm.blind(x.c.id, ri, f.map(o => ({ id: o.id, w: o.w / t })))];
   }).sort((a, b) => by(b[1]) - by(a[1])).slice(0, 5);
