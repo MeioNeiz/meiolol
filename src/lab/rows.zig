@@ -22,7 +22,7 @@ pub const Game = struct {
     /// Champion ids by side (0 blue) and role, as stats.Row
     teams: [2][5]u32,
     winner: u1,
-    /// Timeline reaches minute 15
+    /// Timeline reaches 15:00 (protocol.reached15Timeline)
     timeline15: bool = false,
 };
 
@@ -146,7 +146,7 @@ pub fn load(
             const ta = tl_arena.allocator();
             const raw = try store.raw.decompress(ta, q.bytes(1));
             const t = timeline.decode(ta, raw) catch continue;
-            if (t.frames.len < 16) continue;
+            if (!protocol.reached15Timeline(t)) continue;
             games.items[gi].timeline15 = true;
             fillTimeline(rows.items, slots, games.items[gi].patch, t, legendaries);
         }
@@ -248,7 +248,7 @@ pub fn summary(d: *const Data, w: *std.Io.Writer) !void {
         tests += @intFromBool(g.is_test);
         tl += @intFromBool(g.timeline15);
     }
-    try w.print("{d} games ({d} test), {d} with a timeline to minute 15; {d} rows\n", .{
+    try w.print("{d} games ({d} test), {d} with a timeline reaching 15:00; {d} rows\n", .{
         d.games.len, tests, tl, d.rows.len,
     });
     try w.print("{s: <12} {s: >9} {s: >10} {s: >9} {s: >10}\n", .{ "outcome", "train n", "mean", "test n", "mean" });
