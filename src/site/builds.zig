@@ -8,6 +8,7 @@ const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const tpl = html.tpl;
 const builds = @import("../builds.zig");
 const ddragon = @import("../ddragon.zig");
 
@@ -17,7 +18,6 @@ const Site = root.Site;
 const Champ = root.Champ;
 const File = builds.File;
 const Kind = builds.Kind;
-const esc = html.esc;
 
 /// Below this a row shows no win rate: ±10 points at 100 games, wider below
 pub const rate_games = 100;
@@ -72,12 +72,19 @@ pub fn link(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8)
     const f = if (site.view_builds[pv.index()]) |*f| f else return;
     const b = shown(f, ch.id, r) orelse return;
     const to = try path(site.arena, ch, r);
-    const href = if (site.view.period == .patch)
-        try std.mem.concat(site.arena, u8, &.{ site.toRoot(from), to })
+    const href: html.Link = if (site.view.period == .patch)
+        .{ .root = site.toRoot(from), .path = to }
     else
-        try std.mem.concat(site.arena, u8, &.{ site.toShared(from), pv.dir(), to });
-    try w.print("<p class=\"curves-links\"><b>Build:</b> <a href=\"{s}\">runes, items and skill order, patch {s}</a> <span class=\"muted\">{d} game{s}, {s}</span></p>\n", .{
-        href, f.label, b.games, plural(b.games), try rankLabel(site.arena, f.min_tier),
+        .{ .root = site.toShared(from), .up = pv.dir(), .path = to };
+    try tpl.render(w,
+        \\<p class="curves-links"><b>Build:</b> <a href="{href}">runes, items and skill order, patch {patch}</a> <span class="muted">{games} game{s}, {ranks}</span></p>
+        \\
+    , .{
+        .href = href,
+        .patch = f.label,
+        .games = b.games,
+        .s = plural(b.games),
+        .ranks = try rankLabel(site.arena, f.min_tier),
     });
 }
 
@@ -112,18 +119,24 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         if (!has) there.* = try std.mem.concat(a, u8, &.{ champ_path, v.query() });
     }
     try html.head(w, p);
-    try w.print(
-        "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"72\" height=\"72\"><div><h1>{f} {s} build</h1>\n",
-        .{ site.icon(ch), esc(ch.name), root.roleName(r) },
-    );
-    try w.print("<p class=\"muted\">What players take on {f} in the {s} role: ranked solo/duo {s}, patch {s}, {s}. {d} game{s}", .{
-        esc(ch.name), role, site.view.region.in(), f.label, ranks, b.games, plural(b.games),
+    try tpl.render(w,
+        \\<div class="hero"><img src="{icon}" alt="" width="72" height="72"><div><h1>{name} {role} build</h1>
+        \\<p class="muted">What players take on {name} in the {lower} role: ranked solo/duo {in}, patch {patch}, {ranks}. {games} game{s}{rate}.</p></div></div>
+        \\
+    , .{
+        .icon = site.icon(ch),
+        .name = ch.name,
+        .role = root.roleName(r),
+        .lower = role,
+        .in = site.view.region.in(),
+        .patch = f.label,
+        .ranks = ranks,
+        .games = b.games,
+        .s = plural(b.games),
+        .rate = tpl.when(b.games >= rate_games, tpl.t(", win rate {wr}", .{
+            .wr = tpl.call(winRate, .{ b.games, b.wins }),
+        })),
     });
-    if (b.games >= rate_games) {
-        try w.writeAll(", win rate ");
-        try winRate(w, b.games, b.wins);
-    }
-    try w.writeAll(".</p></div></div>\n");
 
     var others: usize = 0;
     for (Role.all) |o| others += @intFromBool(shown(f, ch.id, o) != null);
@@ -131,21 +144,25 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         try w.writeAll("<nav class=\"tabs\">");
         for (Role.all) |o| {
             if (shown(f, ch.id, o) == null) continue;
-            try w.print("<a href=\"{s}\"{s}>{s}</a>", .{
-                (try path(a, ch, o))["build/".len..], if (o == r) " aria-current=\"page\"" else "", root.roleName(o),
+            try tpl.render(w, "<a href=\"{slug}-{role}.html\"{current}>{label}</a>", .{
+                .slug = ch.slug,
+                .role = root.roleSlug(o),
+                .current = tpl.flag(o == r, "aria-current=\"page\""),
+                .label = root.roleName(o),
             });
         }
         try w.writeAll("</nav>\n");
     }
     if (b.games < solid_games) {
-        try w.print("<p class=\"note\">More data needed: {d} game{s} so far. Rows under {d} games are greyed out and under {d} show no win rate; with few games the most played choices can still change places.</p>\n", .{
-            b.games, plural(b.games), solid_games, rate_games,
-        });
+        try tpl.render(w,
+            \\<p class="note">More data needed: {games} game{s} so far. Rows under {solid} games are greyed out and under {rated} show no win rate; with few games the most played choices can still change places.</p>
+            \\
+        , .{ .games = b.games, .s = plural(b.games), .solid = solid_games, .rated = rate_games });
     }
-    try w.print(
-        "<p class=\"muted\">Most played first: what players take, not a ranking. Win rates show a 95% range (±) from the number of games; two rows whose ranges overlap may not differ at all. Rows under {d} games are greyed out; under {d} there is no win rate.</p>\n",
-        .{ solid_games, rate_games },
-    );
+    try tpl.render(w,
+        \\<p class="muted">Most played first: what players take, not a ranking. Win rates show a 95% range (±) from the number of games; two rows whose ranges overlap may not differ at all. Rows under {solid} games are greyed out; under {rated} there is no win rate.</p>
+        \\
+    , .{ .solid = solid_games, .rated = rate_games });
 
     try w.writeAll("<h2>Runes</h2>\n");
     try table(w, f, b, .keystone, "Keystone", "players");
@@ -162,10 +179,10 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     try w.writeAll("<h2>Skill priority</h2>\n");
     try table(w, f, b, .skills, "Order", "players with a match timeline who reached level 11");
     const to_site = site.toShared(page_path);
-    try w.print(
-        "<p class=\"muted\"><a href=\"{f}\">{f}</a> · <a href=\"{s}method.html#builds\">How builds are counted</a></p>\n",
-        .{ esc(site.champHref(ch, to_site)), esc(ch.name), to_site },
-    );
+    try tpl.render(w,
+        \\<p class="muted"><a href="{champ}">{name}</a> · <a href="{site}method.html#builds">How builds are counted</a></p>
+        \\
+    , .{ .champ = site.champHref(ch, to_site), .name = ch.name, .site = to_site });
     try html.foot(w, p);
 }
 
@@ -174,28 +191,34 @@ fn winRate(w: *Writer, games: u32, wins: u32) !void {
     if (games < rate_games) return w.writeAll("<span class=\"muted\">few games</span>");
     const n: f64 = @floatFromInt(games);
     const rate = @as(f64, @floatFromInt(wins)) / n;
-    try w.print("{d:.1}% <span class=\"muted\">±{d:.1}</span>", .{ 100 * rate, 196 * @sqrt(rate * (1 - rate) / n) });
+    try tpl.render(w, "{rate:.1}% <span class=\"muted\">±{pm:.1}</span>", .{
+        .rate = 100 * rate,
+        .pm = 196 * @sqrt(rate * (1 - rate) / n),
+    });
 }
 
-fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, title: []const u8, of: []const u8) !void {
-    try w.print(
-        "<div class=\"table-scroll\"><table class=\"build\">\n<thead><tr><th>{s}</th><th class=\"num\">Games</th><th class=\"num\">Share</th><th class=\"num\">Win rate</th></tr></thead>\n<tbody>\n",
-        .{title},
-    );
+fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: []const u8, comptime of: []const u8) !void {
+    try w.writeAll("<div class=\"table-scroll\"><table class=\"build\">\n<thead><tr><th>" ++ title ++
+        "</th><th class=\"num\">Games</th><th class=\"num\">Share</th><th class=\"num\">Win rate</th></tr></thead>\n<tbody>\n");
     const rows = b.get(kind) orelse File.Rows{ .kind = kind, .games = 0, .wins = 0, .options = &.{} };
     if (rows.options.len == 0) {
         try w.writeAll("<tr class=\"thin\"><td colspan=\"4\">More data needed</td></tr>\n");
     }
     for (rows.options[0..@min(rows.options.len, rows_shown)]) |o| {
-        try w.print("<tr{s}><td>", .{if (o.games < solid_games) " class=\"thin\"" else ""});
-        try value(w, f, kind, o.v);
-        try w.print("</td><td class=\"num\">{d}</td><td class=\"num\">{d:.1}%</td><td class=\"num\">", .{
-            o.games, 100 * @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1))),
+        try tpl.render(w,
+            \\<tr{thin}><td>{value}</td><td class="num">{games}</td><td class="num">{share:.1}%</td><td class="num">{rate}</td></tr>
+            \\
+        , .{
+            .thin = tpl.flag(o.games < solid_games, "class=\"thin\""),
+            .value = tpl.call(value, .{ f, kind, o.v }),
+            .games = o.games,
+            .share = 100 * @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1))),
+            .rate = tpl.call(winRate, .{ o.games, o.wins }),
         });
-        try winRate(w, o.games, o.wins);
-        try w.writeAll("</td></tr>\n");
     }
-    try w.print("</tbody></table></div>\n<p class=\"muted caption\">Share of {d} {s}.</p>\n", .{ rows.games, of });
+    try tpl.renderPart(w, "</tbody></table></div>\n<p class=\"muted caption\">Share of {games} " ++ of ++ ".</p>\n", .{
+        .games = rows.games,
+    });
 }
 
 fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32) !void {
@@ -216,7 +239,7 @@ fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32) !void {
         },
         .shards => for (v, 0..) |x, i| {
             if (i > 0) try w.writeAll(" · ");
-            if (ddragon.find(f.runes, x)) |n| try w.print("{f}", .{esc(n.name)}) else try w.print("#{d}", .{x});
+            if (ddragon.find(f.runes, x)) |n| try tpl.writeEscaped(n.name, w) else try w.print("#{d}", .{x});
         },
         .start => for (v) |x| try named(w, f.items, x, false),
         .core2, .core3 => for (v, 0..) |x, i| {
@@ -225,12 +248,12 @@ fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32) !void {
         },
         .skills => for (v, 0..) |x, i| {
             if (i > 0) try w.writeAll("<span class=\"sep\">›</span>");
-            try w.print("<b>{s}</b>", .{switch (x) {
+            try tpl.render(w, "<b>{key}</b>", .{ .key = switch (x) {
                 1 => "Q",
                 2 => "W",
                 3 => "E",
                 else => "?",
-            }});
+            } });
         },
     }
 }
@@ -240,11 +263,11 @@ fn named(w: *Writer, list: []const ddragon.Named, id: u32, label: bool) !void {
     var buf: [16]u8 = undefined;
     const n = ddragon.find(list, id) orelse ddragon.Named{ .id = id, .name = try std.mem.print(&buf, "#{d}", .{id}) };
     if (n.icon.len > 0) {
-        try w.print("<img class=\"icon\" src=\"{s}\" alt=\"{f}\" title=\"{f}\" width=\"28\" height=\"28\" loading=\"lazy\">", .{
-            n.icon, esc(n.name), esc(n.name),
-        });
+        try tpl.render(w,
+            \\<img class="icon" src="{src}" alt="{name}" title="{name}" width="28" height="28" loading="lazy">
+        , .{ .src = n.icon, .name = n.name });
     }
-    if (label or n.icon.len == 0) try w.print("<span class=\"label\">{f}</span>", .{esc(n.name)});
+    if (label or n.icon.len == 0) try tpl.render(w, "<span class=\"label\">{name}</span>", .{ .name = n.name });
 }
 
 test "rank label" {
