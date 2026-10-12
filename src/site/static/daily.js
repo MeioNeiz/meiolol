@@ -65,6 +65,18 @@ function longDate(iso) {
 
 const signed = (x) => `${x >= 0 ? "+" : ""}${x.toFixed(1)}`;
 
+// Tick and cross, not green and red squares: the shapes read without colour
+const glyphs = (marks) => [...marks].map((m) => (m === "1" ? "✅" : "❌")).join("");
+const marksText = (marks) =>
+  ["pick", "winner"].map((q, i) => `${q} ${marks[i] === "1" ? "right" : "wrong"}`).join(", ");
+
+function tag(text) {
+  const t = document.createElement("span");
+  t.className = "tag";
+  t.textContent = text;
+  return t;
+}
+
 async function start() {
   const status = $("status");
   try {
@@ -79,6 +91,7 @@ async function start() {
       return;
     }
     const wanted = Number(new URLSearchParams(location.search).get("n"));
+    // A future n falls back to today's: published early, not playable early
     const entry = live.find((p) => p.n === wanted) || live[live.length - 1];
     const puzzle = await getJson(`daily/${entry.n}.json`);
     status.hidden = true;
@@ -145,6 +158,7 @@ class Game {
   render() {
     const p = this.p;
     $("number").textContent = `#${p.n}`;
+    this.renderBack();
     const tier = p.tier ? `, mostly ${p.tier[0]}${p.tier.slice(1).toLowerCase()} players` : "";
     $("about").textContent = `${longDate(p.date)}. Ranked solo/duo, patch ${p.patch}${tier}.`;
     this.renderBoard();
@@ -155,6 +169,9 @@ class Game {
       b.disabled = this.mine.side !== undefined;
       b.classList.toggle("chosen", this.mine.side === side);
       b.classList.toggle("played", this.done && p.winner === side);
+      b.replaceChildren(`${SIDES[side]} side`);
+      if (this.done && p.winner === side) b.append(" ", tag("won"));
+      else if (this.done && this.mine.side === side) b.append(" ", tag("your guess"));
       b.onclick = () => this.answer("side", side);
     }
     $("reveal").hidden = !this.done;
@@ -206,6 +223,9 @@ class Game {
       b.disabled = this.picked;
       b.classList.toggle("chosen", this.mine.pick === o.id);
       b.classList.toggle("played", this.picked && o.id === p.played);
+      // Labels as well as the border colour, which some can't tell apart
+      if (this.picked && o.id === p.played) b.append(tag("played"));
+      else if (this.picked && this.mine.pick === o.id) b.append(tag("your guess"));
       b.onclick = () => this.answer("pick", o.id);
       box.append(b);
     }
@@ -293,8 +313,31 @@ class Game {
 
     const stats = this.record();
     $("record").textContent =
-      `Played ${stats.played} · streak ${stats.streak} · both guesses right ${stats.both}`;
+      `Played ${stats.played} · streak ${stats.streak} · both guesses right ${stats.both}` +
+      (this.isToday ? ` · next puzzle in ${untilMidnight()}` : "");
     $("share").onclick = () => this.share(stats.streak);
+  }
+
+  get isToday() {
+    return this.p.n === this.live[this.live.length - 1].n;
+  }
+
+  // From an archive puzzle, the way back to today's (the shared one)
+  renderBack() {
+    let back = $("back");
+    if (this.isToday) {
+      back?.remove();
+      return;
+    }
+    if (!back) {
+      back = document.createElement("p");
+      back.id = "back";
+      const a = document.createElement("a");
+      a.href = location.pathname;
+      a.textContent = "Today's puzzle";
+      back.append("Archive puzzle, not today's: it doesn't count towards your streak. ", a);
+      $("about").after(back);
+    }
   }
 
   describe(r) {
@@ -337,7 +380,7 @@ class Game {
   }
 
   async share(streak) {
-    const squares = [...this.mine.marks].map((m) => (m === "1" ? "🟩" : "🟥")).join("");
+    const squares = glyphs(this.mine.marks);
     const url = `${location.origin}${location.pathname}?n=${this.p.n}`;
     const text = `meiolol Daily Draft #${this.p.n}\n${squares} (pick, winner)` +
       (streak > 1 ? `\n🔥 ${streak} day streak` : "") + `\n${url}`;
@@ -368,13 +411,19 @@ class Game {
       const r = this.results[e.n];
       const span = document.createElement("span");
       span.className = "muted";
-      span.textContent = r && r.marks
-        ? [...r.marks].map((m) => (m === "1" ? "🟩" : "🟥")).join("")
-        : r ? "started" : "not played";
+      span.textContent = r && r.marks ? glyphs(r.marks) : r ? "started" : "not played";
+      if (r && r.marks) span.title = marksText(r.marks);
       li.append(span);
       list.append(li);
     }
   }
+}
+
+function untilMidnight() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const mins = Math.ceil((next - now) / 60000);
+  return `${Math.floor(mins / 60)}h ${pad(mins % 60)}m`;
 }
 
 start();
