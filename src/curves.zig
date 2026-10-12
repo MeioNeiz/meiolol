@@ -165,7 +165,7 @@ fn readGame(arena: std.mem.Allocator, players: *store.sqlite.Stmt) !?Game {
     var rows: usize = 0;
     while (try players.step()) : (rows += 1) {
         const side: usize = if (players.int(1) == 100) 0 else 1;
-        const r = @intFromEnum(Role.fromLcu(players.bytes(2)) orelse return null);
+        const r = @backingInt(Role.fromLcu(players.bytes(2)) orelse return null);
         const slot = players.int(0);
         if (seen[side][r] or slot < 0 or slot >= timeline.max_participants) return null;
         seen[side][r] = true;
@@ -195,19 +195,19 @@ fn readGame(arena: std.mem.Allocator, players: *store.sqlite.Stmt) !?Game {
 
 /// Blue's laner in `r` as a, red's as b. `legendaries` as for build
 pub fn lane(t: timeline.Timeline, g: Game, r: Role, blue_won: bool, legendaries: []const u32) Lane {
-    const pa = g.ids[0][@intFromEnum(r)];
-    const pb = g.ids[1][@intFromEnum(r)];
+    const pa = g.ids[0][@backingInt(r)];
+    const pb = g.ids[1][@backingInt(r)];
     // Frame k is minute k; the last frame is the game's end, part of a minute
     const full = if (t.frames.len >= 2) t.frames.len - 2 else 0;
     var l: Lane = .{
         .role = r,
         .bracket = g.bracket,
-        .a = g.champions[0][@intFromEnum(r)],
-        .b = g.champions[1][@intFromEnum(r)],
+        .a = g.champions[0][@backingInt(r)],
+        .b = g.champions[1][@backingInt(r)],
         .a_won = blue_won,
         .minutes = @intCast(@min(full, max_minutes)),
-        .experienced_a = g.experienced[0][@intFromEnum(r)],
-        .experienced_b = g.experienced[1][@intFromEnum(r)],
+        .experienced_a = g.experienced[0][@backingInt(r)],
+        .experienced_b = g.experienced[1][@backingInt(r)],
     };
     if (pa > t.participants or pb > t.participants) {
         l.minutes = 0;
@@ -280,7 +280,7 @@ test "curves from a real timeline" {
     defer db.close();
     const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     for (0..2) |g| {
-        const id = try std.fmt.allocPrint(arena, "EUW1_{d}", .{g});
+        const id = try arena.print("EUW1_{d}", .{g});
         try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',?,1600,100,0)", .{ id, 1000 * g });
         const data: store.Blob = .{ .bytes = blob };
         try db.run("INSERT INTO timeline.timelines VALUES (?,26,0,?)", .{ id, data });

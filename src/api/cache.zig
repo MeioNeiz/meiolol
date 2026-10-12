@@ -89,7 +89,7 @@ pub fn riotIdKey(buf: []u8, name: []const u8, tag: []const u8) ?[]const u8 {
     const t = std.mem.trim(u8, tag, " ");
     if (n.len == 0 or n.len > 32 or t.len == 0 or t.len > 8) return null;
     if (std.mem.indexOfAny(u8, n, "#/?\\") != null or std.mem.indexOfAny(u8, t, "#/?\\ ") != null) return null;
-    const key = std.fmt.bufPrint(buf, "{s}#{s}", .{ n, t }) catch return null;
+    const key = std.mem.print(buf, "{s}#{s}", .{ n, t }) catch return null;
     // ASCII only: Riot IDs may hold other letters, and lookups by them are case
     // insensitive on Riot's side, so a missed fold only costs a second cache row
     for (key) |*c| c.* = std.ascii.toLower(c.*);

@@ -17,8 +17,8 @@ const esc = html.esc;
 /// "1-5", "6-20", "51+"
 fn binLabel(buf: []u8, i: usize) []const u8 {
     const lo = learning.bins[i];
-    if (i + 1 == learning.bin_count) return std.fmt.bufPrint(buf, "{d}+", .{lo}) catch "";
-    return std.fmt.bufPrint(buf, "{d}-{d}", .{ lo, learning.bins[i + 1] - 1 }) catch "";
+    if (i + 1 == learning.bin_count) return std.mem.print(buf, "{d}+", .{lo}) catch "";
+    return std.mem.print(buf, "{d}-{d}", .{ lo, learning.bins[i + 1] - 1 }) catch "";
 }
 
 fn pct(x: f64) f64 {

@@ -76,7 +76,7 @@ pub const View = struct {
     pub const shared: View = all[1];
 
     pub fn index(v: View) usize {
-        return 2 * @as(usize, @intFromEnum(v.region)) + @intFromEnum(v.period);
+        return 2 * @as(usize, @backingInt(v.region)) + @backingInt(v.period);
     }
 
     /// Under the site root

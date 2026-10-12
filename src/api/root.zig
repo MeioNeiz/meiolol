@@ -210,7 +210,7 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
         const jobs = try db.scalar("SELECT count(*) FROM jobs", .{}) orelse 0;
-        return send(ctx, request, .ok, try std.fmt.allocPrint(arena, "{{\"ok\":true,\"jobs\":{d}}}", .{jobs}));
+        return send(ctx, request, .ok, try arena.print("{{\"ok\":true,\"jobs\":{d}}}", .{jobs}));
     }
     return send(ctx, request, .not_found, "{\"error\":\"not found\"}");
 }
@@ -424,7 +424,7 @@ fn forget(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8, post
                 try db.run("INSERT OR REPLACE INTO challenges VALUES (?, NULL, NULL, ?, 'pending')", .{ key, now + fetch.challenge_s });
             }
             var buf: [128]u8 = undefined;
-            const job = try std.fmt.bufPrint(&buf, "{s}{s}", .{ fetch.verify_prefix, key });
+            const job = try std.mem.print(&buf, "{s}{s}", .{ fetch.verify_prefix, key });
             // requested 0: ahead of every lookup, someone is waiting on the page
             try db.run("INSERT OR REPLACE INTO jobs (key, requested) VALUES (?, 0)", .{job});
         }

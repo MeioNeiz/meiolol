@@ -89,7 +89,7 @@ const Ctx = struct {
     a: std.mem.Allocator,
 
     fn print(ctx: Ctx, comptime fmt: []const u8, args: anytype) ![]const u8 {
-        return std.fmt.allocPrint(ctx.a, fmt, args);
+        return ctx.a.print(fmt, args);
     }
 
     fn champ(ctx: Ctx, ch: Champ, w: *Writer) !void {
@@ -340,7 +340,7 @@ fn roles(ctx: Ctx, w: *Writer) ![]const Question {
         try qs.append(ctx.a, .{
             .q = try ctx.print("Which role is {s} played in most?", .{ch.name}),
             .choices = choices.items,
-            .answer = @intFromEnum(want),
+            .answer = @backingInt(want),
             .why = try ctx.print("{s}: {d:.0}% of {s}'s games this patch.", .{
                 root.roleName(want), 100 * best_share, ch.name,
             }),
@@ -474,7 +474,7 @@ fn timings(ctx: Ctx) ![]Timing {
     var list: std.ArrayList(Timing) = .empty;
     for (ctx.site.champs) |ch| {
         const r, _ = mainRole(st, ch.c);
-        const n = ctx.facts.champs[ch.c].length[@intFromEnum(r)];
+        const n = ctx.facts.champs[ch.c].length[@backingInt(r)];
         if (n[0].games < min_length_games or n[last].games < min_length_games) continue;
         var all: Counts = .{ .games = 0, .wins = 0 };
         for (n) |b| {
@@ -603,11 +603,11 @@ fn laneExample(ctx: Ctx, w: *Writer, c: *const curvesfile.Curves) !void {
     var best: ?Best = null;
     for (c.curves) |cv| {
         const h = cv.header;
-        if (h.bracket != @intFromEnum(curvesfile.Bracket.all) or h.a == h.b) continue;
+        if (h.bracket != @backingInt(curvesfile.Bracket.all) or h.a == h.b) continue;
         if (h.games < matchup.thin_games) continue;
         const x = matchup.champ(ctx.site, h.a) orelse continue;
         const y = matchup.champ(ctx.site, h.b) orelse continue;
-        const r: Role = @enumFromInt(h.role);
+        const r: Role = @fromBackingInt(@intCast(h.role));
         const v = c.get(r, .all, x.id, y.id).?;
         const m = v.minute(curvesfile.lane_minute - 1);
         if (m.n < h.games / 2) continue;

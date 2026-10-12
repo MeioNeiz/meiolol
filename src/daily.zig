@@ -114,7 +114,7 @@ pub fn update(
     var day: u32 = first_day;
     while (day <= last) : (day += 1) {
         const n = day - first_day + 1;
-        const name = try std.fmt.allocPrint(arena, "{d}.json", .{n});
+        const name = try arena.print("{d}.json", .{n});
         const read = dir.readFileAlloc(io, name, arena, .limited(1 << 20));
         const data = read catch |err| switch (err) {
             error.FileNotFound => if (day < opts.today) continue else blk: {
@@ -129,7 +129,7 @@ pub fn update(
             },
             else => return err,
         };
-        const path = try std.fmt.allocPrint(arena, "daily/{s}", .{name});
+        const path = try arena.print("daily/{s}", .{name});
         try files.append(arena, .{ .path = path, .data = data });
         if (index.writer.end > 1) try index.writer.writeByte(',');
         try index.writer.print("{{\"n\":{d},\"date\":\"{f}\"}}", .{ n, Date.fromDay(day) });
@@ -196,7 +196,7 @@ fn make(
         if (isUsed(used.items, match_id)) continue;
         var puzzle = try load(arena, db, st, match_id, rand) orelse continue;
         puzzle.n = n;
-        puzzle.date = try std.fmt.allocPrint(arena, "{f}", .{Date.fromDay(day)});
+        puzzle.date = try arena.print("{f}", .{Date.fromDay(day)});
         try used.appendSlice(arena, match_id);
         try used.append(arena, '\n');
         return try std.json.Stringify.valueAlloc(arena, puzzle, .{});
@@ -240,9 +240,9 @@ pub fn load(
             const t: u1 = if (q.int(0) == 100) 0 else 1;
             const r = Role.fromLcu(q.bytes(1)) orelse return null;
             const id: u32 = @intCast(q.int(2));
-            if (seen[t][@intFromEnum(r)] or st.index(id) == null) return null;
-            seen[t][@intFromEnum(r)] = true;
-            p.teams[t][@intFromEnum(r)] = id;
+            if (seen[t][@backingInt(r)] or st.index(id) == null) return null;
+            seen[t][@backingInt(r)] = true;
+            p.teams[t][@backingInt(r)] = id;
             p.kills[t] += @intCast(@max(0, q.optInt(3) orelse 0));
             p.gold[t] += @intCast(@max(0, q.optInt(4) orelse 0));
         }
@@ -268,13 +268,13 @@ pub fn load(
 
     p.hidden_team = rand.int(u1);
     p.hidden_role = Role.all[rand.uintLessThan(usize, Role.count)];
-    p.played = p.teams[p.hidden_team][@intFromEnum(p.hidden_role)];
+    p.played = p.teams[p.hidden_team][@backingInt(p.hidden_role)];
     p.options = (try options(arena, st, p, rand)) orelse return null;
     p.blue_win = blueWin(st, p.teams);
     for (Role.all) |r| {
-        const blue = st.index(p.teams[0][@intFromEnum(r)]).?;
-        const red = st.index(p.teams[1][@intFromEnum(r)]).?;
-        p.lanes[@intFromEnum(r)] = .{
+        const blue = st.index(p.teams[0][@backingInt(r)]).?;
+        const red = st.index(p.teams[1][@backingInt(r)]).?;
+        p.lanes[@backingInt(r)] = .{
             .pp = round1(score.matchupPp(st, .{}, r, blue, r, red)),
             .games = st.enemy(r, r, blue, red).games,
         };
@@ -309,8 +309,8 @@ pub fn hiddenDraft(arena: std.mem.Allocator, p: Puzzle) !core.Draft {
     var allies: std.ArrayList(core.Pick) = .empty;
     var enemies: std.ArrayList(core.Pick) = .empty;
     for (Role.all) |r| {
-        const mine = p.teams[p.hidden_team][@intFromEnum(r)];
-        const theirs = p.teams[1 - p.hidden_team][@intFromEnum(r)];
+        const mine = p.teams[p.hidden_team][@backingInt(r)];
+        const theirs = p.teams[1 - p.hidden_team][@backingInt(r)];
         if (r != p.hidden_role) try allies.append(arena, .{ .champion = mine, .role = r });
         try enemies.append(arena, .{ .champion = theirs, .role = r });
     }
@@ -371,10 +371,10 @@ fn blueWin(st: *const Stats, teams: [2][5]u32) f64 {
     var allies: [4]core.Pick = undefined;
     var enemies: [5]core.Pick = undefined;
     for (Role.all[1..], &allies) |r, *a| {
-        a.* = .{ .champion = teams[0][@intFromEnum(r)], .role = r };
+        a.* = .{ .champion = teams[0][@backingInt(r)], .role = r };
     }
     for (Role.all, &enemies) |r, *e| {
-        e.* = .{ .champion = teams[1][@intFromEnum(r)], .role = r };
+        e.* = .{ .champion = teams[1][@backingInt(r)], .role = r };
     }
     var out: [1]core.Suggestion = undefined;
     const s = core.recommend(st, .{
@@ -401,7 +401,7 @@ fn testDb() !store.Db {
     const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     var buf: [32]u8 = undefined;
     for (0..30) |g| {
-        const id = try std.fmt.bufPrint(&buf, "EUW1_{d}", .{g});
+        const id = try std.mem.print(&buf, "EUW1_{d}", .{g});
         try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',0,1800,?,0)", .{
             id, @as(i64, if (g % 3 == 0) 200 else 100),
         });
@@ -435,7 +435,7 @@ test "puzzles are made once, anonymised and published" {
 
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    const dir = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/daily", .{&tmp.sub_path});
+    const dir = try arena.print(".zig-cache/tmp/{s}/daily", .{&tmp.sub_path});
     const opts: Options = .{
         .dir = dir,
         .patches = &.{"16.20"},
@@ -466,7 +466,7 @@ test "puzzles are made once, anonymised and published" {
     var found = false;
     for (p.options) |o| found = found or o.id == p.played;
     try testing.expect(found);
-    try testing.expectEqual(p.played, p.teams[p.hidden_team][@intFromEnum(p.hidden_role)]);
+    try testing.expectEqual(p.played, p.teams[p.hidden_team][@backingInt(p.hidden_role)]);
 
     // Kept, not remade; a new game for each new day, never one already used
     var next = opts;
@@ -476,7 +476,7 @@ test "puzzles are made once, anonymised and published" {
     try testing.expectEqualStrings(files[0].data, again[0].data);
     try testing.expectEqualStrings(files[1].data, again[1].data);
     try testing.expectEqual(5, again.len);
-    const used_path = try std.fmt.allocPrint(arena, "{s}/used.txt", .{dir});
+    const used_path = try arena.print("{s}/used.txt", .{dir});
     const used = try std.Io.Dir.cwd().readFileAlloc(io, used_path, arena, .unlimited);
     try testing.expectEqual(4, std.mem.count(u8, used, "\n"));
 }

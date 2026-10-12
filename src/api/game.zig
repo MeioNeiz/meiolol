@@ -293,7 +293,7 @@ pub fn analyse(arena: Allocator, in: Input, rank: Rank, set: CurveSet) !Game {
     // Blue as a, as the curves are built; flip to my side after
     const blue = me.team == 100;
     var game: curves_build.Game = .{ .ids = @splat(@splat(0)), .champions = @splat(@splat(0)), .bracket = rank.bracket() };
-    const ri = @intFromEnum(r);
+    const ri = @backingInt(r);
     game.ids[0][ri] = if (blue) my_id else opp_id;
     game.ids[1][ri] = if (blue) opp_id else my_id;
     game.champions[0][ri] = if (blue) me.champion else g.opponent.?;
@@ -447,7 +447,7 @@ fn weekStart(buf: *[10]u8, start_ms: i64) []const u8 {
     const day = @divFloor(start_ms, std.time.ms_per_day);
     // 1 January 1970 was a Thursday
     const monday = day - @mod(day + 3, 7);
-    return std.fmt.bufPrint(buf, "{f}", .{Date.fromDay(monday)}) catch unreachable;
+    return std.mem.print(buf, "{f}", .{Date.fromDay(monday)}) catch unreachable;
 }
 
 fn atMinute(gold: []const i16, m: usize) ?i16 {

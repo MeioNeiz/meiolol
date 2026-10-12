@@ -316,8 +316,8 @@ next steps land here.
 - Site polish: screenshots/GIFs, a short demo video
 - Desktop: run dvui on the Windows PC, build the lane card (concept part 6), test LCU in
   a real champ select (`meiolol-app session --save testdata/lcu/session-real.json`)
-- Zig 0.17 move: small (docs/zig-0.17.md). Waiting (Jacob, 2026-10-11) until ZLS works
-  with 0.17, ideally with dvui on 0.17 too; then one move
+- Zig 0.17 move: done 2026-10-12 (docs/zig-0.17.md). dvui: pin PR #1012 (0.17.x
+  branch) until it merges; ZLS built from its main until a 0.17 release
 
 ### Site build and deploy (2026-10-12, owner: the site session)
 

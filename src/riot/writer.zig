@@ -251,9 +251,9 @@ pub const Writer = struct {
         for (jobs) |job| {
             if (!job.stored) continue;
             switch (job.kind) {
-                .match => |m| _ = wr.c.counters.region[@intFromEnum(m.region)].matches.fetchAdd(1, .monotonic),
-                .timeline => |t| _ = wr.c.counters.region[@intFromEnum(t.region)].timelines.fetchAdd(1, .monotonic),
-                .match_ids => |q| _ = wr.c.counters.region[@intFromEnum(q.region)].ids_found.fetchAdd(q.found, .monotonic),
+                .match => |m| _ = wr.c.counters.region[@backingInt(m.region)].matches.fetchAdd(1, .monotonic),
+                .timeline => |t| _ = wr.c.counters.region[@backingInt(t.region)].timelines.fetchAdd(1, .monotonic),
+                .match_ids => |q| _ = wr.c.counters.region[@backingInt(q.region)].ids_found.fetchAdd(q.found, .monotonic),
                 .mastery => |m| if (m.blob != null) {
                     _ = wr.c.counters.mastery.fetchAdd(1, .monotonic);
                 },
@@ -399,7 +399,7 @@ pub const Writer = struct {
 /// reader searches
 fn tune(db: store.Db, cache_mb: u32) !void {
     var buf: [64]u8 = undefined;
-    try db.exec(try std.fmt.bufPrintZ(&buf, "PRAGMA main.cache_size = -{d}", .{cache_mb * 1024}));
+    try db.exec(try std.mem.printSentinel(&buf, "PRAGMA main.cache_size = -{d}", .{cache_mb * 1024}, 0));
     try db.exec(
         \\PRAGMA main.journal_size_limit = 67108864;
         \\PRAGMA raw.journal_size_limit = 67108864;
@@ -700,23 +700,23 @@ const Stmts = struct {
         s.drafts = try .init(db);
         errdefer s.drafts.deinit();
         var done: usize = 0;
-        errdefer inline for (stmt_fields, 0..) |f, i| {
-            if (i < done) @field(s, f.name).deinit();
+        errdefer inline for (stmt_names, 0..) |name, i| {
+            if (i < done) @field(s, name).deinit();
         };
-        inline for (stmt_fields) |f| {
-            @field(s, f.name) = try db.prepare(@field(sql, f.name));
+        inline for (stmt_names) |name| {
+            @field(s, name) = try db.prepare(@field(sql, name));
             done += 1;
         }
         return s;
     }
 
     fn deinit(s: *Stmts) void {
-        inline for (stmt_fields) |f| @field(s, f.name).deinit();
+        inline for (stmt_names) |name| @field(s, name).deinit();
         s.drafts.deinit();
     }
 
     /// Every field but drafts
-    const stmt_fields = @typeInfo(Stmts).@"struct".fields[0 .. @typeInfo(Stmts).@"struct".fields.len - 1];
+    const stmt_names = @typeInfo(Stmts).@"struct".field_names[0 .. @typeInfo(Stmts).@"struct".field_names.len - 1];
 
     fn exists(s: *Stmts, match_id: []const u8) !bool {
         try s.match_exists.bind(.{match_id});
@@ -832,7 +832,7 @@ test "rolling window prunes old matches with their rows" {
     try tune(db, 1);
     const now = std.Io.Clock.real.now(std.testing.io).toSeconds();
     var buf: [1024]u8 = undefined;
-    try db.exec(try std.fmt.bufPrintZ(&buf,
+    try db.exec(try std.mem.printSentinel(&buf,
         \\INSERT INTO matches VALUES ('A', 'riot', 'EUW1', 420, '16.1', '16.1.1', {d}, 1, 100, 0);
         \\INSERT INTO matches VALUES ('B', 'riot', 'EUW1', 420, '16.1', '16.1.1', {d}, 1, 100, 0);
         \\INSERT INTO participants (match_id, slot, team_id, champion_id, win) VALUES
@@ -841,13 +841,13 @@ test "rolling window prunes old matches with their rows" {
         \\INSERT INTO timeline.timelines VALUES ('A', 1, 1, x'00'), ('B', 1, 1, x'00');
         \\INSERT INTO players (puuid, source, seen_at) VALUES ('old', 'ladder', 1), ('new', 'ladder', {d});
         \\INSERT INTO mastery VALUES ('old', 'EUW1', {d}, 0, x'00');
-    , .{ (now - 61 * 86400) * 1000, (now - 59 * 86400) * 1000, now, now }));
+    , .{ (now - 61 * 86400) * 1000, (now - 59 * 86400) * 1000, now, now }, 0));
     var p: Prune = .{ .started_at = 1 };
     const opts: crawl.Options = .{ .data_dir = "", .key = "", .keep_days = 60 };
     for (0..40) |_| try p.step(db, std.testing.io, opts);
     for ([_][]const u8{ "matches", "participants", "bans", "timeline.timelines" }) |t| {
         var sql: [128]u8 = undefined;
-        var q = try db.prepare(try std.fmt.bufPrint(&sql, "SELECT group_concat(match_id) FROM {s}", .{t}));
+        var q = try db.prepare(try std.mem.print(&sql, "SELECT group_concat(match_id) FROM {s}", .{t}));
         defer q.deinit();
         try q.bind(.{});
         try std.testing.expect(try q.step());
@@ -932,7 +932,7 @@ test "rank history: a row per change since the last sighting, the day's last win
     const gold_i = store.schema.packRank("GOLD", "I").?;
     var buf: [64]u8 = undefined;
     try std.testing.expectEqualStrings(
-        try std.fmt.bufPrint(&buf, "5:{d}:10:5 7:{d}:0:7", .{ gold_i + 1, gold_i }),
+        try std.mem.print(&buf, "5:{d}:10:5 7:{d}:0:7", .{ gold_i + 1, gold_i }),
         q.bytes(0),
     );
     try std.testing.expectEqual(@as(?i64, 8), try db.scalar("SELECT seen_day FROM ranks", .{}));
@@ -972,7 +972,7 @@ test "one draft row per match, kept by the prune; listed matches wait for the ba
     var docs: [3]match.Doc = undefined;
     for (&docs, 0..) |*d, i| {
         d.* = try match.parse(arena.allocator(), @embedFile("testdata/match.json"));
-        d.metadata.matchId = try std.fmt.allocPrint(arena.allocator(), "EUW1_{d}", .{i + 1});
+        d.metadata.matchId = try arena.allocator().print("EUW1_{d}", .{i + 1});
     }
     // 2 and 3 were stored before drafts existed
     try match.storeRows(db, docs[1], "riot");

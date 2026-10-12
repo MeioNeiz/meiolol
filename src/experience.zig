@@ -113,7 +113,7 @@ fn slot(team_id: i64, position: []const u8) ?[2]usize {
         else => return null,
     };
     const r = Role.fromLcu(position) orelse return null;
-    return .{ side, @intFromEnum(r) };
+    return .{ side, @backingInt(r) };
 }
 
 const testing = std.testing;

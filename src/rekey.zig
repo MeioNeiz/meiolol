@@ -26,7 +26,7 @@ pub const Outcome = union(enum) {
 
 pub fn translate(old: *Client, new: *Client, puuid: []const u8) !Outcome {
     var path_buf: [256]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buf, "/riot/account/v1/accounts/by-puuid/{s}", .{puuid});
+    const path = try std.mem.print(&path_buf, "/riot/account/v1/accounts/by-puuid/{s}", .{puuid});
     // Riot IDs are global: any account-v1 route answers
     const body = try old.get("europe", path, "account-v1.by-puuid") orelse return .gone;
     defer old.gpa.free(body);
@@ -36,7 +36,7 @@ pub fn translate(old: *Client, new: *Client, puuid: []const u8) !Outcome {
     }, old.gpa, body, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
     var id_buf: [128]u8 = undefined;
-    const riot_id = try std.fmt.bufPrint(&id_buf, "{s}#{s}", .{
+    const riot_id = try std.mem.print(&id_buf, "{s}#{s}", .{
         parsed.value.gameName orelse return error.NoRiotId,
         parsed.value.tagLine orelse return error.NoRiotId,
     });

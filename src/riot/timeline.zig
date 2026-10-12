@@ -34,7 +34,7 @@ pub const Stat = enum {
     /// timeEnemySpentControlled: ms of crowd control dealt to enemies
     cc_dealt_ms,
 };
-pub const stat_count = @typeInfo(Stat).@"enum".fields.len;
+pub const stat_count = @typeInfo(Stat).@"enum".field_names.len;
 
 pub const Frame = struct {
     t_ms: i64,
@@ -42,7 +42,7 @@ pub const Frame = struct {
     stats: [max_participants][stat_count]i32 = @splat(@splat(0)),
 
     pub fn get(f: Frame, participant: u8, stat: Stat) i32 {
-        return f.stats[participant - 1][@intFromEnum(stat)];
+        return f.stats[participant - 1][@backingInt(stat)];
     }
 };
 
@@ -250,7 +250,7 @@ pub fn fromJson(arena: Allocator, body: []const u8) !Timeline {
         dst.* = .{ .t_ms = src.timestamp };
         for (0..n) |i| {
             var key_buf: [4]u8 = undefined;
-            const key = std.fmt.bufPrint(&key_buf, "{d}", .{i + 1}) catch unreachable;
+            const key = std.mem.print(&key_buf, "{d}", .{i + 1}) catch unreachable;
             const p = src.participantFrames.map.get(key) orelse continue;
             dst.stats[i] = .{
                 p.totalGold,
@@ -350,12 +350,12 @@ pub fn encode(gpa: Allocator, t: Timeline) ![]u8 {
     try w.varint(t.events.len);
     var prev_t: i64 = 0;
     for (t.events) |e| {
-        try w.byte(@intFromEnum(e.data));
+        try w.byte(@backingInt(e.data));
         try w.z(e.t_ms - prev_t);
         prev_t = e.t_ms;
         switch (e.data) {
-            inline else => |payload| inline for (@typeInfo(@TypeOf(payload)).@"struct".fields) |f| {
-                try w.field(f.name, @field(payload, f.name));
+            inline else => |payload| inline for (@typeInfo(@TypeOf(payload)).@"struct".field_names) |name| {
+                try w.field(name, @field(payload, name));
             },
         }
     }
@@ -390,8 +390,9 @@ pub fn decode(arena: Allocator, bytes: []const u8) !Timeline {
         e.* = .{ .t_ms = prev_t, .data = switch (kind) {
             inline else => |k| blk: {
                 var payload: @FieldType(Event.Data, @tagName(k)) = undefined;
-                inline for (@typeInfo(@TypeOf(payload)).@"struct".fields) |f| {
-                    @field(payload, f.name) = try r.field(arena, f.type, f.name);
+                const info = @typeInfo(@TypeOf(payload)).@"struct";
+                inline for (info.field_names, info.field_types) |name, T| {
+                    @field(payload, name) = try r.field(arena, T, name);
                 }
                 break :blk @unionInit(Event.Data, @tagName(k), payload);
             },

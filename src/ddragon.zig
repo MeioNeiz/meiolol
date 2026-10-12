@@ -19,7 +19,7 @@ pub fn refresh(gpa: std.mem.Allocator, io: std.Io, db: store.Db) !usize {
         .{},
     );
     const version = versions[0];
-    const url = try std.fmt.allocPrint(a, base ++ "/cdn/{s}/data/en_GB/champion.json", .{version});
+    const url = try a.print(base ++ "/cdn/{s}/data/en_GB/champion.json", .{version});
     const Champion = struct { key: []const u8, id: []const u8, name: []const u8, tags: []const []const u8 = &.{} };
     const doc = try std.json.parseFromSliceLeaky(
         struct { data: std.json.ArrayHashMap(Champion) },
@@ -72,7 +72,7 @@ pub fn legendaries(gpa: std.mem.Allocator, io: std.Io, patch: []const u8) ![]u32
     var http: std.http.Client = .{ .allocator = gpa, .io = io };
     defer http.deinit();
     const version = try versionFor(&http, a, patch);
-    const url = try std.fmt.allocPrint(a, base ++ "/cdn/{s}/data/en_GB/item.json", .{version});
+    const url = try a.print(base ++ "/cdn/{s}/data/en_GB/item.json", .{version});
     return parseLegendaries(gpa, a, try fetch(&http, a, url));
 }
 
@@ -188,7 +188,7 @@ pub fn buildData(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io, p
     const version = try versionFor(&http, arena, patch);
     var bodies: [3][]const u8 = undefined;
     for ([_][]const u8{ "item", "runesReforged", "summoner" }, &bodies) |file, *body| {
-        const url = try std.fmt.allocPrint(arena, base ++ "/cdn/{s}/data/en_GB/{s}.json", .{ version, file });
+        const url = try arena.print(base ++ "/cdn/{s}/data/en_GB/{s}.json", .{ version, file });
         body.* = try fetch(&http, arena, url);
     }
     return parseBuildData(arena, version, bodies[0], bodies[1], bodies[2]);
@@ -214,7 +214,7 @@ pub fn parseBuildData(
         try named.append(arena, .{
             .id = id,
             .name = item.name,
-            .icon = try std.fmt.allocPrint(arena, base ++ "/cdn/{s}/img/item/{s}", .{ version, item.image.full }),
+            .icon = try arena.print(base ++ "/cdn/{s}/img/item/{s}", .{ version, item.image.full }),
         });
         if (item.legendary()) try legendary.append(arena, id);
         if (item.tagged("Trinket")) try trinkets.append(arena, id);
@@ -269,7 +269,7 @@ pub fn parseBuildData(
     for (doc.data.map.values()) |s| try spells.append(arena, .{
         .id = std.fmt.parseInt(u32, s.key, 10) catch continue,
         .name = s.name,
-        .icon = try std.fmt.allocPrint(arena, base ++ "/cdn/{s}/img/spell/{s}", .{ version, s.image.full }),
+        .icon = try arena.print(base ++ "/cdn/{s}/img/spell/{s}", .{ version, s.image.full }),
     });
 
     for ([_][]Named{ named.items, runes.items, spells.items }) |list| {
@@ -291,7 +291,7 @@ pub fn parseBuildData(
 }
 
 fn runeIcon(arena: std.mem.Allocator, path: []const u8) ![]const u8 {
-    return std.fmt.allocPrint(arena, base ++ "/cdn/img/{s}", .{path});
+    return arena.print(base ++ "/cdn/img/{s}", .{path});
 }
 
 /// `id` in a list sorted by id

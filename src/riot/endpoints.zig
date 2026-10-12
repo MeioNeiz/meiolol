@@ -51,7 +51,7 @@ pub fn platform(id: []const u8) ?Platform {
 
 pub fn leagueEntries(c: *Client, p: Platform, tier: []const u8, division: []const u8, page: u32) !?[]u8 {
     var buf: [256]u8 = undefined;
-    const path = try std.fmt.bufPrint(
+    const path = try std.mem.print(
         &buf,
         "/lol/league-exp/v4/entries/RANKED_SOLO_5x5/{s}/{s}?page={d}",
         .{ tier, division, page },
@@ -61,7 +61,7 @@ pub fn leagueEntries(c: *Client, p: Platform, tier: []const u8, division: []cons
 
 pub fn matchIds(c: *Client, r: Region, puuid: []const u8, start_time: i64, end_time: i64, start: u32) !?[]u8 {
     var buf: [512]u8 = undefined;
-    const path = try std.fmt.bufPrint(
+    const path = try std.mem.print(
         &buf,
         "/lol/match/v5/matches/by-puuid/{s}/ids?queue={d}&startTime={d}&endTime={d}" ++
             "&start={d}&count=100",
@@ -72,19 +72,19 @@ pub fn matchIds(c: *Client, r: Region, puuid: []const u8, start_time: i64, end_t
 
 pub fn match(c: *Client, r: Region, match_id: []const u8) !?[]u8 {
     var buf: [128]u8 = undefined;
-    const path = try std.fmt.bufPrint(&buf, "/lol/match/v5/matches/{s}", .{match_id});
+    const path = try std.mem.print(&buf, "/lol/match/v5/matches/{s}", .{match_id});
     return c.get(@tagName(r), path, "match-v5.match");
 }
 
 pub fn timeline(c: *Client, r: Region, match_id: []const u8) !?[]u8 {
     var buf: [128]u8 = undefined;
-    const path = try std.fmt.bufPrint(&buf, "/lol/match/v5/matches/{s}/timeline", .{match_id});
+    const path = try std.mem.print(&buf, "/lol/match/v5/matches/{s}/timeline", .{match_id});
     return c.get(@tagName(r), path, "match-v5.timeline");
 }
 
 pub fn masteries(c: *Client, p: Platform, puuid: []const u8) !?[]u8 {
     var buf: [256]u8 = undefined;
-    const path = try std.fmt.bufPrint(
+    const path = try std.mem.print(
         &buf,
         "/lol/champion-mastery/v4/champion-masteries/by-puuid/{s}",
         .{puuid},
@@ -106,20 +106,20 @@ pub fn accountByRiotId(c: *Client, r: Region, game_name: []const u8, tag_line: [
 /// The platform a player plays League on ({"region": "euw1"}: a platform host)
 pub fn activePlatform(c: *Client, r: Region, puuid: []const u8) !?[]u8 {
     var buf: [256]u8 = undefined;
-    const path = try std.fmt.bufPrint(&buf, "/riot/account/v1/region/by-game/lol/by-puuid/{s}", .{puuid});
+    const path = try std.mem.print(&buf, "/riot/account/v1/region/by-game/lol/by-puuid/{s}", .{puuid});
     return c.get(@tagName(r), path, "account-v1.region");
 }
 
 pub fn leagueByPuuid(c: *Client, p: Platform, puuid: []const u8) !?[]u8 {
     var buf: [256]u8 = undefined;
-    const path = try std.fmt.bufPrint(&buf, "/lol/league/v4/entries/by-puuid/{s}", .{puuid});
+    const path = try std.mem.print(&buf, "/lol/league/v4/entries/by-puuid/{s}", .{puuid});
     return c.get(p.host, path, "league-v4.by-puuid");
 }
 
 /// For profileIconId: the ownership check before an objection is honoured
 pub fn summonerByPuuid(c: *Client, p: Platform, puuid: []const u8) !?[]u8 {
     var buf: [256]u8 = undefined;
-    const path = try std.fmt.bufPrint(&buf, "/lol/summoner/v4/summoners/by-puuid/{s}", .{puuid});
+    const path = try std.mem.print(&buf, "/lol/summoner/v4/summoners/by-puuid/{s}", .{puuid});
     return c.get(p.host, path, "summoner-v4.by-puuid");
 }
 

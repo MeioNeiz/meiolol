@@ -56,7 +56,7 @@ pub const ChampSelect = struct {
 };
 
 fn roleByte(role: ?Role) u8 {
-    return if (role) |r| @intFromEnum(r) else 7;
+    return if (role) |r| @backingInt(r) else 7;
 }
 
 const Member = struct {

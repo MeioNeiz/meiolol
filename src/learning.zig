@@ -333,7 +333,7 @@ test "history: game number per player and champion, lane gold from the gold colu
     const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     // Seven games: 'me' on champion 10 in top (slot 0), 'you' on 60 against (slot 5)
     for (0..7) |g| {
-        const id = try std.fmt.allocPrint(arena, "EUW1_{d}", .{g});
+        const id = try arena.print("EUW1_{d}", .{g});
         try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',?,1600,100,0)", .{ id, g });
         for (0..10) |slot| {
             const team: i64 = if (slot < 5) 100 else 200;

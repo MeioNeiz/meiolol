@@ -262,7 +262,7 @@ fn fill(arena: std.mem.Allocator, db: store.Db) !void {
     const ct = try riot.crawl.compactTimeline(arena, json);
     for (0..games) |n| {
         var doc = try riot.match.parse(arena, body);
-        doc.metadata.matchId = try std.fmt.allocPrint(arena, "EUW1_{d}", .{n + 1});
+        doc.metadata.matchId = try arena.print("EUW1_{d}", .{n + 1});
         doc.info.platformId = "EUW1";
         doc.info.gameVersion = patch ++ ".1.1";
         doc.info.gameStartTimestamp = start_ms;

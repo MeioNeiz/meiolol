@@ -38,7 +38,7 @@ pub const Removed = struct {
     rank_history: i64 = 0,
 
     pub fn add(a: *Removed, b: Removed) void {
-        inline for (@typeInfo(Removed).@"struct".fields) |f| @field(a, f.name) += @field(b, f.name);
+        inline for (@typeInfo(Removed).@"struct".field_names) |name| @field(a, name) += @field(b, name);
     }
 
     pub fn total(r: Removed) i64 {

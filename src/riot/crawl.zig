@@ -177,7 +177,7 @@ pub const Crawler = struct {
         var w: std.Io.Writer = .fixed(&buf);
         var matches: u64 = 0;
         for (c.opts.regions) |r| {
-            const rc = &c.counters.region[@intFromEnum(r)];
+            const rc = &c.counters.region[@backingInt(r)];
             const m = rc.matches.load(.monotonic);
             matches += m;
             w.print(" | {t} {d}m {d}t {d}ids {d}new {d}req", .{
@@ -506,7 +506,7 @@ const RegionCrawler = struct {
     const Of = ep.Region;
 
     fn init(c: *Crawler, r: ep.Region) !RegionCrawler {
-        const requests = &c.counters.region[@intFromEnum(r)].requests;
+        const requests = &c.counters.region[@backingInt(r)].requests;
         return .{
             .b = try .init(c, @tagName(r), c.isPriorityRegion(r), requests),
             .region = r,
@@ -515,7 +515,7 @@ const RegionCrawler = struct {
     }
 
     fn counters(rc: *RegionCrawler) *RegionCounters {
-        return &rc.b.c.counters.region[@intFromEnum(rc.region)];
+        return &rc.b.c.counters.region[@backingInt(rc.region)];
     }
 
     /// One round: refill match ids when the queue runs short, then a batch of matches
@@ -592,7 +592,7 @@ const RegionCrawler = struct {
     /// "|CHALLENGER|...|PLATINUM|" for scan_players, null when every tier is in
     fn tierFloor(a: std.mem.Allocator, min_tier: usize) !?[]const u8 {
         if (min_tier + 1 >= tiers.len) return null;
-        return try std.fmt.allocPrint(a, "|{s}|", .{try std.mem.join(a, "|", tiers[0 .. min_tier + 1])});
+        return try a.print("|{s}|", .{try std.mem.join(a, "|", tiers[0 .. min_tier + 1])});
     }
 
     /// Priority platforms' players first, then the region's. Within those, never
@@ -1067,8 +1067,8 @@ test "timelines: every priority match, a share of the rest" {
     var buf: [32]u8 = undefined;
     var others: u32 = 0;
     for (0..1000) |i| {
-        try std.testing.expect(c.wantTimeline(try std.fmt.bufPrint(&buf, "EUW1_{d}", .{i})));
-        if (c.wantTimeline(try std.fmt.bufPrint(&buf, "EUN1_{d}", .{i}))) others += 1;
+        try std.testing.expect(c.wantTimeline(try std.mem.print(&buf, "EUW1_{d}", .{i})));
+        if (c.wantTimeline(try std.mem.print(&buf, "EUN1_{d}", .{i}))) others += 1;
     }
     try std.testing.expect(others > 400 and others < 600);
     c.opts.timeline_percent = 0;

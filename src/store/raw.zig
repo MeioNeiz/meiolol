@@ -48,7 +48,11 @@ pub fn decompress(gpa: Allocator, blob: []const u8) ![]u8 {
 
 test "gzip round trip" {
     const gpa = std.testing.allocator;
-    const text = "{\"metadata\":{\"matchId\":\"EUW1_1\"}," ** 200 ++ "}";
+    const text = comptime blk: {
+        var t: []const u8 = "";
+        for (0..200) |_| t = t ++ "{\"metadata\":{\"matchId\":\"EUW1_1\"},";
+        break :blk t ++ "}";
+    };
     const packed_ = try compress(gpa, text);
     defer gpa.free(packed_);
     try std.testing.expect(packed_.len < text.len / 10);

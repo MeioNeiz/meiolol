@@ -85,8 +85,8 @@ test Date {
     const d: Date = .fromSeconds(1_760_140_800 + 3600);
     try std.testing.expectEqual(Date{ .year = 2025, .month = 10, .day = 11 }, d);
     var buf: [32]u8 = undefined;
-    try std.testing.expectEqualStrings("2025-10-11", try std.fmt.bufPrint(&buf, "{f}", .{d}));
-    try std.testing.expectEqualStrings("11 October 2025", try std.fmt.bufPrint(&buf, "{f}", .{d.long()}));
+    try std.testing.expectEqualStrings("2025-10-11", try std.mem.print(&buf, "{f}", .{d}));
+    try std.testing.expectEqualStrings("11 October 2025", try std.mem.print(&buf, "{f}", .{d.long()}));
     try std.testing.expectEqual(d, Date.parse("2025-10-11").?);
     try std.testing.expectEqual(null, Date.parse("2025-13-01"));
     try std.testing.expectEqual(0, (Date{ .year = 1970, .month = 1, .day = 1 }).toDay());

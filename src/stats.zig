@@ -200,7 +200,7 @@ const Game = struct {
             g.bad = true;
             return;
         };
-        const slot = &g.teams[side][@intFromEnum(role)];
+        const slot = &g.teams[side][@backingInt(role)];
         if (slot.* != 0 or champion <= 0) {
             g.bad = true;
             return;
@@ -274,8 +274,8 @@ pub fn label(buf: []u8, chosen: []const []const u8) ![]const u8 {
         if (patchOrder(p, oldest) == .lt) oldest = p;
         if (patchOrder(p, newest) == .gt) newest = p;
     }
-    if (std.mem.eql(u8, oldest, newest)) return std.fmt.bufPrint(buf, "{s}", .{oldest});
-    return std.fmt.bufPrint(buf, "{s}-{s}", .{ oldest, newest });
+    if (std.mem.eql(u8, oldest, newest)) return std.mem.print(buf, "{s}", .{oldest});
+    return std.mem.print(buf, "{s}-{s}", .{ oldest, newest });
 }
 
 const testing = std.testing;

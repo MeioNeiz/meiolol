@@ -69,15 +69,15 @@ pub fn load(
             const r = Role.fromLcu(if (players.isNull(2)) "" else players.bytes(2)) orelse continue;
             const slot = players.int(0);
             if (slot < 0 or slot >= t.participants) continue;
-            pid[side][@intFromEnum(r)] = @intCast(slot + 1);
+            pid[side][@backingInt(r)] = @intCast(slot + 1);
         }
         var lanes: Lanes = undefined;
         const f = t.frames[minute];
         const complete = for (Role.all) |r| {
-            const a = pid[0][@intFromEnum(r)];
-            const b = pid[1][@intFromEnum(r)];
+            const a = pid[0][@backingInt(r)];
+            const b = pid[1][@backingInt(r)];
             if (a == 0 or b == 0) break false;
-            lanes[@intFromEnum(r)] = @floatFromInt(f.get(a, .total_gold) - f.get(b, .total_gold));
+            lanes[@backingInt(r)] = @floatFromInt(f.get(a, .total_gold) - f.get(b, .total_gold));
         } else true;
         if (complete) try map.put(gpa, stats.matchKey(q.bytes(0)), lanes);
     }
@@ -130,7 +130,7 @@ pub const Model = struct {
             const lanes = map.get(g.id) orelse continue;
             count += 1;
             for (Role.all, lanes) |r, gold| {
-                const ri = @intFromEnum(r);
+                const ri = @backingInt(r);
                 const a = st.index(g.teams[0][ri]) orelse continue;
                 const b = st.index(g.teams[1][ri]) orelse continue;
                 const d: f64 = gold;
@@ -154,7 +154,7 @@ pub const Model = struct {
         errdefer m.deinit(gpa);
         @memset(m.pair, 0);
         for (Role.all) |r| {
-            const ri = @intFromEnum(r);
+            const ri = @backingInt(r);
             // Lane gold differences are centred on 0 by symmetry
             m.sd[ri] = if (count > 1) @sqrt(sum_sq[ri] / count) else 1;
             const sd = m.sd[ri];
@@ -195,7 +195,7 @@ pub const Model = struct {
     pub fn features(m: *const Model, st: *const core.Stats, teams: [2][5]u32) [2]f64 {
         var out: [2]f64 = .{ 0, 0 };
         for (Role.all) |r| {
-            const ri = @intFromEnum(r);
+            const ri = @backingInt(r);
             const a = st.index(teams[0][ri]) orelse continue;
             const b = st.index(teams[1][ri]) orelse continue;
             out[0] += m.champ[ri * m.n + a] - m.champ[ri * m.n + b];
@@ -254,7 +254,7 @@ test "lane gold from a real timeline" {
     const f = t.frames[minute];
     // Mid: participant 3 (blue) against 8 (red)
     const want: f32 = @floatFromInt(f.get(3, .total_gold) - f.get(8, .total_gold));
-    try testing.expectEqual(want, lanes[@intFromEnum(Role.middle)]);
+    try testing.expectEqual(want, lanes[@backingInt(Role.middle)]);
 }
 
 test "champion gold shrinks toward zero" {

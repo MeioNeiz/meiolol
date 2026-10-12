@@ -276,7 +276,7 @@ pub const Builder = struct {
     }
 
     fn laneOrder(_: void, x: Lane, y: Lane) bool {
-        if (x.role != y.role) return @intFromEnum(x.role) < @intFromEnum(y.role);
+        if (x.role != y.role) return @backingInt(x.role) < @backingInt(y.role);
         if (x.a != y.a) return x.a < y.a;
         return x.b < y.b;
     }
@@ -315,7 +315,7 @@ fn writeRole(
     }
     var rf = try curvefit.fitRole(gpa, lanes, groups.items, dense.count());
     defer rf.deinit(gpa);
-    const ri = @intFromEnum(role);
+    const ri = @backingInt(role);
     fit.params[ri] = rf.params;
     for (&fit.lambda[ri], rf.lambda) |*to, from| to.* = @floatCast(from);
     logFit(role, &rf);
@@ -335,7 +335,7 @@ fn writeRole(
                 if (subset.items.len < @max(min_games, 1)) continue;
                 const est = rf.get(gi, bracket, experience).?;
                 const level = @intFromBool(experience != .any);
-                const sigma2 = rf.params[@intFromEnum(bracket)][level][0][lane_minute - 1].sigma2;
+                const sigma2 = rf.params[@backingInt(bracket)][level][0][lane_minute - 1].sigma2;
                 try curve(gpa, out, &scratch, subset.items, bracket, experience, est, sigma2);
                 curves += 1;
             }
@@ -446,9 +446,9 @@ fn medianOfCounts(counts: *const [1 << 15]u32, total: u32) i16 {
 
 fn emptyHeader(role: Role, bracket: Bracket, experience: Experience, a: u32, b: u32) Header {
     return .{
-        .role = @intFromEnum(role),
-        .bracket = @intFromEnum(bracket),
-        .experience = @intFromEnum(experience),
+        .role = @backingInt(role),
+        .bracket = @backingInt(bracket),
+        .experience = @backingInt(experience),
         .a = a,
         .b = b,
         .games = 0,
@@ -640,7 +640,7 @@ pub const Curves = struct {
     /// The estimation's variance parameters for `role`'s curves in `bracket`, all
     /// games or experienced only, at minute index `i`
     pub fn param(c: *const Curves, role: Role, bracket: Bracket, experienced: bool, metric: Metric, i: usize) curvefit.Param {
-        return c.fit.params[@intFromEnum(role)][@intFromEnum(bracket)][@intFromBool(experienced)][@intFromEnum(metric)][i];
+        return c.fit.params[@backingInt(role)][@backingInt(bracket)][@intFromBool(experienced)][@backingInt(metric)][i];
     }
 
     /// `me` against `them` in `role`, seen from `me`'s side, all games; null when the
@@ -663,11 +663,11 @@ pub const Curves = struct {
         const Key = struct { role: u8, a: u32, b: u32, bracket: u8, experience: u8 };
         const a = @min(me, them);
         const key: Key = .{
-            .role = @intFromEnum(role),
+            .role = @backingInt(role),
             .a = a,
             .b = @max(me, them),
-            .bracket = @intFromEnum(bracket),
-            .experience = @intFromEnum(experience),
+            .bracket = @backingInt(bracket),
+            .experience = @backingInt(experience),
         };
         const i = std.sort.binarySearch(Curve, c.curves, key, struct {
             fn order(k: Key, cv: Curve) std.math.Order {
@@ -744,7 +744,7 @@ pub const View = struct {
     /// Games and my wins when my lane gold lead at `at` fell in `b` (0 = behind
     /// 1500+ ... 4 = ahead 1500+)
     pub fn comeback(v: View, at: Comeback, b: usize) Counts {
-        const row = v.curve.header.comeback[@intFromEnum(at)];
+        const row = v.curve.header.comeback[@backingInt(at)];
         if (!v.flipped) return row[b];
         const c = row[buckets - 1 - b];
         return .{ .games = c.games, .wins = c.games - c.wins };
@@ -772,7 +772,7 @@ pub const View = struct {
 
     /// Estimated mean of `metric` at minute i, me minus them, and its standard error
     pub fn estimate(v: View, metric: Metric, i: usize) Estimate {
-        return v.minute(i).est[@intFromEnum(metric)];
+        return v.minute(i).est[@backingInt(metric)];
     }
 
     /// Share of the gold estimate at lane_minute from this matchup's own games, 0..1;

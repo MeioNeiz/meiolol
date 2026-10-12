@@ -451,7 +451,7 @@ fn cmdStats(c: *Cmd) !u8 {
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = try stats.label(&label_buf, chosen);
     const path = out orelse
-        try std.fmt.allocPrint(c.arena, "{s}/export/stats-{s}.bin", .{ c.data_dir, label });
+        try c.arena.print("{s}/export/stats-{s}.bin", .{ c.data_dir, label });
 
     var r = try stats.build(c.init.gpa, db, chosen, platforms);
     defer r.builder.deinit();
@@ -500,7 +500,7 @@ fn cmdCurves(c: *Cmd) !u8 {
     const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
     const recent_ms = now_ms - @as(i64, days) * std.time.ms_per_day;
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
-    const recent_label = try std.fmt.allocPrint(arena, "last {d} days", .{days});
+    const recent_label = try arena.print("last {d} days", .{days});
     const patch_label = if (wanted.len > 0) try arena.dupe(u8, try stats.label(&label_buf, wanted)) else "";
 
     const File = struct { spec: curves.Spec, label: []const u8, path: []const u8 };
@@ -689,7 +689,7 @@ fn cmdEval(c: *Cmd) !u8 {
     try stdout.interface.flush();
     if (history) |path| {
         const today: Date = .fromMs(std.Io.Clock.real.now(io).toMilliseconds());
-        try eval.appendHistory(io, path, line, try std.fmt.allocPrint(c.arena, "{f}", .{today}));
+        try eval.appendHistory(io, path, line, try c.arena.print("{f}", .{today}));
     }
     return 0;
 }
@@ -737,7 +737,7 @@ const SiteFlags = struct {
             .all_platforms = every.items,
             .contact = contact,
             .riot_txt = f.riot_txt,
-            .updated = try std.fmt.allocPrint(arena, "{f}", .{Date.fromMs(now_ms).long()}),
+            .updated = try arena.print("{f}", .{Date.fromMs(now_ms).long()}),
             .public = f.public,
             .euw_only = f.euw_only,
             .static_min_games = f.static_min_games,
@@ -983,7 +983,7 @@ fn cmdApi(c: *Cmd) !u8 {
     }
     const arena = c.arena;
     o.key = try c.apiKey();
-    o.db_path = try std.fmt.allocPrintSentinel(arena, "{s}/api.db", .{c.data_dir}, 0);
+    o.db_path = try arena.printSentinel("{s}/api.db", .{c.data_dir}, 0);
     o.curves_dir = curves_dir orelse if (o.fetch.exchange_dir) |x|
         try std.fs.path.join(arena, &.{ x, "curves" })
     else
@@ -1368,20 +1368,20 @@ fn usageError(arg: ?[]const u8) u8 {
 fn curvesPath(arena: std.mem.Allocator, data_dir: []const u8, chosen: []const []const u8, every: bool) ![]const u8 {
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = try stats.label(&label_buf, chosen);
-    return std.fmt.allocPrint(arena, "{s}/export/{s}curves-{s}.bin", .{ data_dir, allPrefix(every), label });
+    return arena.print("{s}/export/{s}curves-{s}.bin", .{ data_dir, allPrefix(every), label });
 }
 
 /// Where `meiolol curves` writes by default: every patch of the last --days. Not
 /// curves-*.bin, which the Your games service reads as one file per patch
 fn recentCurvesPath(arena: std.mem.Allocator, data_dir: []const u8, every: bool) ![]const u8 {
-    return std.fmt.allocPrint(arena, "{s}/export/{s}recent-curves.bin", .{ data_dir, allPrefix(every) });
+    return arena.print("{s}/export/{s}recent-curves.bin", .{ data_dir, allPrefix(every) });
 }
 
 /// Where `meiolol builds` writes by default; the site reads the newest patch's
 fn buildsPath(arena: std.mem.Allocator, data_dir: []const u8, chosen: []const []const u8, every: bool) ![]const u8 {
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = try stats.label(&label_buf, chosen);
-    return std.fmt.allocPrint(arena, "{s}/export/{s}builds-{s}.json", .{ data_dir, allPrefix(every), label });
+    return arena.print("{s}/export/{s}builds-{s}.json", .{ data_dir, allPrefix(every), label });
 }
 
 fn allPrefix(every: bool) []const u8 {

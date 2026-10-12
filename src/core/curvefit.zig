@@ -185,7 +185,7 @@ pub const RoleFit = struct {
     }
 
     fn slot(group: usize, bracket: Bracket, experience: Experience) usize {
-        return group * per_group + @as(usize, @intFromEnum(bracket)) * 3 + @intFromEnum(experience);
+        return group * per_group + @as(usize, @backingInt(bracket)) * 3 + @backingInt(experience);
     }
 
     fn put(f: *RoleFit, gpa: std.mem.Allocator, group: usize, bracket: Bracket, experience: Experience, e: Est) !void {
@@ -262,7 +262,7 @@ pub fn fitRole(
                 try rest_cells.append(gpa, rest);
             };
             try unit_est.resize(gpa, units.items.len);
-            nested(units.items, unit_cells.items, rest_cells.items, &f.params[@intFromEnum(bracket)][@intFromBool(experienced)], unit_est.items);
+            nested(units.items, unit_cells.items, rest_cells.items, &f.params[@backingInt(bracket)][@intFromBool(experienced)], unit_est.items);
             for (units.items, unit_est.items) |u, *e| {
                 smooth(e, f.lambda);
                 try f.put(gpa, u.group, bracket, u.experience, e.*);

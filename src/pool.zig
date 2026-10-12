@@ -662,7 +662,7 @@ test "mastery: points as weight, stale and small champions left out" {
     };
     for (players, 0..) |p, i| {
         const blob = try riot_mastery.encode(arena, p[1], now);
-        const puuid = try std.fmt.allocPrint(arena, "p{d}", .{i});
+        const puuid = try arena.print("p{d}", .{i});
         try db.run("INSERT INTO mastery VALUES (?,?,?,?,?)", .{
             puuid, p[0], now, p[1].len, store.Blob{ .bytes = blob },
         });
@@ -691,7 +691,7 @@ test "games: one pass for several platform sets, a champion summed across platfo
     // 'a': champion 1 six times on EUW1 and five on KR, champion 2 three times on KR
     for (0..14) |g| {
         const platform: []const u8 = if (g < 6) "EUW1" else "KR";
-        const id = try std.fmt.allocPrint(arena, "{s}_{d}", .{ platform, g });
+        const id = try arena.print("{s}_{d}", .{ platform, g });
         try db.run("INSERT INTO matches VALUES (?,'t',?,420,'16.20','',?,1600,100,0)", .{ id, platform, g });
         const champ: i64 = if (g < 11) 1 else 2;
         try db.run(

@@ -178,9 +178,9 @@ pub fn build(
     if (prev_curves != null and cur_curves != null) {
         for (cur_curves.?.curves) |*cv| {
             const h = cv.header;
-            if (h.bracket != @intFromEnum(curvesfile.Bracket.all)) continue;
-            if (h.experience != @intFromEnum(curvesfile.Experience.any) or h.a == 0) continue;
-            const r: Role = @enumFromInt(h.role);
+            if (h.bracket != @backingInt(curvesfile.Bracket.all)) continue;
+            if (h.experience != @backingInt(curvesfile.Experience.any) or h.a == 0) continue;
+            const r: Role = @fromBackingInt(@intCast(h.role));
             const pv = prev_curves.?.get(r, .all, h.a, h.b) orelse continue;
             const cview: curvesfile.View = .{ .curve = cv, .flipped = false };
             try matchups.append(arena, .{
@@ -213,8 +213,8 @@ fn laneTotals(c: *const Curves, id: u32, r: Role) LaneTotals {
     var t: LaneTotals = .{};
     for (c.curves) |*cv| {
         const h = cv.header;
-        if (h.role != @intFromEnum(r) or h.bracket != @intFromEnum(curvesfile.Bracket.all)) continue;
-        if (h.experience != @intFromEnum(curvesfile.Experience.any)) continue;
+        if (h.role != @backingInt(r) or h.bracket != @backingInt(curvesfile.Bracket.all)) continue;
+        if (h.experience != @backingInt(curvesfile.Experience.any)) continue;
         if (h.a != id and h.b != id) continue;
         const v: curvesfile.View = .{ .curve = cv, .flipped = h.a != id };
         const l = v.lane();

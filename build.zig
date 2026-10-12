@@ -1,12 +1,13 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const Translator = @import("translate_c").Translator;
 
 // 0.x releases break APIs; move versions on purpose
 comptime {
     const v = builtin.zig_version;
-    if (v.major != 0 or v.minor != 16) {
+    if (v.major != 0 or v.minor != 17) {
         @compileError(std.fmt.comptimePrint(
-            "meiolol is pinned to Zig 0.16.x, found {d}.{d}.{d}",
+            "meiolol is pinned to Zig 0.17.x, found {d}.{d}.{d}",
             .{ v.major, v.minor, v.patch },
         ));
     }
@@ -20,8 +21,6 @@ const ci_targets = [_]std.Target.Query{
     .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
 };
 
-const fmt_paths = [_][]const u8{ "build.zig", "build.zig.zon", "src" };
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -31,6 +30,7 @@ pub fn build(b: *std.Build) void {
         "Run only tests whose name contains this (repeatable)",
     ) orelse &.{};
 
+    const fmt_paths = [_]std.Build.LazyPath{ b.path("build.zig"), b.path("build.zig.zon"), b.path("src") };
     const m = modules(b, target, optimize);
     const exes = [_]struct { name: []const u8, mod: *std.Build.Module, about: []const u8 }{
         .{ .name = "meiolol", .mod = m.backend, .about = "backend: crawl, stats" },
@@ -41,7 +41,7 @@ pub fn build(b: *std.Build) void {
         const exe = b.addExecutable(.{ .name = e.name, .root_module = e.mod });
         b.installArtifact(exe);
         const run = b.addRunArtifact(exe);
-        if (b.args) |args| run.addArgs(args);
+        run.addPassthruArgs();
         b.step(e.name, b.fmt("Run {s} ({s})", .{ e.name, e.about })).dependOn(&run.step);
     }
     for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store }) |mod| {
@@ -72,7 +72,7 @@ const Modules = struct {
     app: *std.Build.Module,
 };
 
-fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) Modules {
+fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) Modules {
     const sqlite = b.dependency("sqlite", .{});
 
     // Pure: std only, shared by backend and app (draft model, stats file, scoring)
@@ -95,6 +95,12 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builti
         .flags = &.{ "-DSQLITE_DQS=0", "-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1", "-O2", "-fno-sanitize=undefined" },
     });
     store.addIncludePath(sqlite.path("."));
+    const sqlite_h: Translator = .init(b.dependency("translate_c", .{}), .{
+        .c_source_file = sqlite.path("sqlite3.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    store.addImport("sqlite_c", sqlite_h.mod);
 
     const backend = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -135,10 +141,11 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builti
 /// A non-Zig check run from the repo root. A missing tool fails the step, not the
 /// build script, so `zig build test` works without it
 fn lint(b: *std.Build, tool: []const u8, script: []const u8) *std.Build.Step {
-    _ = b.findProgram(&.{tool}, &.{}) catch {
-        return &b.addFail(b.fmt("{s} not found: install it to run `zig build ci`", .{tool})).step;
-    };
-    const run = b.addSystemCommand(&.{ "sh", "-c", script });
+    const check = b.fmt(
+        "command -v {s} >/dev/null || {{ echo '{s} not found: install it to run `zig build ci`'; exit 1; }}\n",
+        .{ tool, tool },
+    );
+    const run = b.addSystemCommand(&.{ "sh", "-c", b.fmt("{s}{s}", .{ check, script }) });
     run.setCwd(b.path("."));
     run.setName(tool);
     return &run.step;

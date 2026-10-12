@@ -182,7 +182,7 @@ fn champFacts(arena: std.mem.Allocator, db: store.Db, st: *const Stats, opts: Op
             const c = st.index(@intCast(q.int(0))) orelse continue;
             const r = Role.fromLcu(q.bytes(1)) orelse continue;
             const minutes: u32 = @intCast(@divFloor(@max(0, q.int(3)), 60));
-            const n = &champs[c].length[@intFromEnum(r)][lengthBucket(minutes)];
+            const n = &champs[c].length[@backingInt(r)][lengthBucket(minutes)];
             n.games += 1;
             if (q.int(2) != 0) n.wins += 1;
         }
@@ -413,10 +413,10 @@ fn draftFor(
 ) !?Practice {
     var p = game;
     p.hidden_role = role;
-    p.played = p.teams[p.hidden_team][@intFromEnum(role)];
+    p.played = p.teams[p.hidden_team][@backingInt(role)];
     const need = teamNeed(st, facts, p) orelse return null;
     if ((need.need == null) != (want == .hard)) return null;
-    const enemy = p.teams[1 - p.hidden_team][@intFromEnum(role)];
+    const enemy = p.teams[1 - p.hidden_team][@backingInt(role)];
 
     var draft = try daily.hiddenDraft(arena, p);
     var top: [candidates_len]core.Suggestion = undefined;
@@ -507,7 +507,7 @@ fn teamNeed(st: *const Stats, facts: Facts, p: daily.Puzzle) ?struct { need: ?Ne
     var sum: f64 = 0;
     for (Role.all) |r| {
         if (r == p.hidden_role) continue;
-        const c = st.index(p.teams[p.hidden_team][@intFromEnum(r)]) orelse return null;
+        const c = st.index(p.teams[p.hidden_team][@backingInt(r)]) orelse return null;
         sum += facts.champs[c].magic orelse return null;
     }
     return .{ .need = switch (mixBucket(sum / 4)) {
@@ -568,7 +568,7 @@ fn testDb() !store.Db {
     const rand = prng.random();
     var buf: [32]u8 = undefined;
     for (0..400) |g| {
-        const id = try std.fmt.bufPrint(&buf, "EUW1_{d}", .{g});
+        const id = try std.mem.print(&buf, "EUW1_{d}", .{g});
         var teams: [2][5]u32 = undefined;
         var sums: [2]u32 = .{ 0, 0 };
         for (&teams, &sums) |*t, *sum| for (t, 0..) |*c, r| {
@@ -656,13 +656,13 @@ test "facts and practice drafts" {
     try testing.expect(pack.len > 0);
     var seen: [3]usize = @splat(0);
     for (pack) |p| {
-        seen[@intFromEnum(p.difficulty)] += 1;
+        seen[@backingInt(p.difficulty)] += 1;
         var bring: usize = 0;
         for (p.options, 0..) |o, i| {
             for (p.options[i + 1 ..]) |other| try testing.expect(other.id != o.id);
             // The champion really played in the hidden slot may be one of them
             for (p.teams, 0..) |t, side| for (t, 0..) |c, r| {
-                if (side == p.hidden_team and r == @intFromEnum(p.hidden_role)) continue;
+                if (side == p.hidden_team and r == @backingInt(p.hidden_role)) continue;
                 try testing.expect(c != o.id);
             };
             const m = o.magic.?;
@@ -675,7 +675,7 @@ test "facts and practice drafts" {
             .medium => try testing.expectEqual(2, bring),
             .hard => try testing.expect(p.need == null),
         }
-        try testing.expectEqual(p.played, p.teams[p.hidden_team][@intFromEnum(p.hidden_role)]);
+        try testing.expectEqual(p.played, p.teams[p.hidden_team][@backingInt(p.hidden_role)]);
     }
     for (seen) |n| try testing.expect(n > 0);
 }

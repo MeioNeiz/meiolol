@@ -69,5 +69,5 @@ test "aliases" {
     try std.testing.expectEqual(Role.jungle, Role.parse("jg").?);
     try std.testing.expectEqual(Role.jungle, Role.parse("JNG").?);
     try std.testing.expectEqual(@as(?Role, null), Role.parse("feeder"));
-    try std.testing.expectEqual(3, @intFromEnum(Role.bottom));
+    try std.testing.expectEqual(3, @backingInt(Role.bottom));
 }

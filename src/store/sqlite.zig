@@ -1,7 +1,7 @@
 //! Thin SQLite wrapper: open, exec, prepared statements with tuple binding.
 
 const std = @import("std");
-pub const c = @cImport(@cInclude("sqlite3.h"));
+pub const c = @import("sqlite_c");
 
 const log = std.log.scoped(.sqlite);
 

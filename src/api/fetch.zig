@@ -301,7 +301,7 @@ pub const Fetcher = struct {
 pub fn syncForgotten(gpa: Allocator, io: std.Io, db: store.Db, dir_path: []const u8, now: i64) !void {
     const dir = std.Io.Dir.cwd();
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const theirs = try std.fmt.bufPrint(&path_buf, "{s}/box-forgotten.txt", .{dir_path});
+    const theirs = try std.mem.print(&path_buf, "{s}/box-forgotten.txt", .{dir_path});
     if (dir.readFileAlloc(io, theirs, gpa, .limited(64 << 20))) |text| {
         defer gpa.free(text);
         var added: usize = 0;
@@ -326,7 +326,7 @@ pub fn syncForgotten(gpa: Allocator, io: std.Io, db: store.Db, dir_path: []const
     defer q.deinit();
     try q.bind(.{});
     while (try q.step()) try aw.writer.print("{s}\n", .{q.bytes(0)});
-    const ours = try std.fmt.bufPrint(&path_buf, "{s}/forgotten.txt", .{dir_path});
+    const ours = try std.mem.print(&path_buf, "{s}/forgotten.txt", .{dir_path});
     var file = try dir.createFileAtomic(io, ours, .{ .replace = true });
     defer file.deinit(io);
     try file.file.writeStreamingAll(io, aw.written());

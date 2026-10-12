@@ -224,7 +224,7 @@ pub const Stats = struct {
     }
 
     pub fn champRole(s: *const Stats, r: Role, c: usize) Counts {
-        return readCounts(s.champ_role_bytes, @as(usize, @intFromEnum(r)) * s.n + c);
+        return readCounts(s.champ_role_bytes, @as(usize, @backingInt(r)) * s.n + c);
     }
 
     /// Total games for a champion over all roles
@@ -245,7 +245,7 @@ pub const Stats = struct {
     }
 
     fn pair(s: *const Stats, r1: Role, r2: Role, c1: usize, c2: usize) usize {
-        return pairIndex(s.n, @intFromEnum(r1), @intFromEnum(r2), c1, c2);
+        return pairIndex(s.n, @backingInt(r1), @backingInt(r2), c1, c2);
     }
 
     /// Champion index by name, forgiving case, spaces and punctuation ("kaisa",

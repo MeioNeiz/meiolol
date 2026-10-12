@@ -40,7 +40,7 @@ pub const Kind = enum {
     skills,
 
     pub fn fromTimeline(k: Kind) bool {
-        return @intFromEnum(k) >= @intFromEnum(Kind.start);
+        return @backingInt(k) >= @backingInt(Kind.start);
     }
 };
 
@@ -115,7 +115,7 @@ const BuildKey = struct {
 
     fn order(k: BuildKey, b: File.Build) std.math.Order {
         const c = std.math.order(k.champion, b.champion);
-        return if (c != .eq) c else std.math.order(@intFromEnum(k.role), @intFromEnum(b.role));
+        return if (c != .eq) c else std.math.order(@backingInt(k.role), @backingInt(b.role));
     }
 };
 
@@ -216,8 +216,8 @@ pub const Builder = struct {
         std.mem.sort(Entry, entries.items, {}, struct {
             fn f(_: void, x: Entry, y: Entry) bool {
                 if (x.key.champion != y.key.champion) return x.key.champion < y.key.champion;
-                if (x.key.role != y.key.role) return @intFromEnum(x.key.role) < @intFromEnum(y.key.role);
-                if (x.key.kind != y.key.kind) return @intFromEnum(x.key.kind) < @intFromEnum(y.key.kind);
+                if (x.key.role != y.key.role) return @backingInt(x.key.role) < @backingInt(y.key.role);
+                if (x.key.kind != y.key.kind) return @backingInt(x.key.kind) < @backingInt(y.key.kind);
                 if (x.count.games != y.count.games) return x.count.games > y.count.games;
                 return std.mem.order(u32, &x.key.v, &y.key.v) == .lt;
             }

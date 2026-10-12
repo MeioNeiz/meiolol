@@ -93,10 +93,10 @@ pub fn recommend(
     out: []Suggestion,
 ) []Suggestion {
     var ctx: Context = .{ .stats = stats, .opts = opts };
-    var me_taken: RoleSet = .initEmpty();
-    me_taken.set(@intFromEnum(draft.role));
+    var me_taken: RoleSet = .empty;
+    me_taken.set(@backingInt(draft.role));
     const allies = ctx.resolve(draft.allies, 4, me_taken, &ctx.ally_buf);
-    const enemies = ctx.resolve(draft.enemies, 5, .initEmpty(), &ctx.enemy_buf);
+    const enemies = ctx.resolve(draft.enemies, 5, .empty, &ctx.enemy_buf);
 
     // Everything that does not involve my pick
     var fixed: f64 = 0;
@@ -198,7 +198,7 @@ pub fn draftTerms(stats: *const Stats, opts: Options, teams: [2][5]u32) DraftTer
     const ctx: Context = .{ .stats = stats, .opts = opts };
     var placed: [2][5]?Placed = undefined;
     for (teams, 0..) |team, s| for (team, Role.all) |id, r| {
-        placed[s][@intFromEnum(r)] = if (stats.index(id)) |c| ctx.place(c, r) else null;
+        placed[s][@backingInt(r)] = if (stats.index(id)) |c| ctx.place(c, r) else null;
     };
     var t: DraftTerms = .{};
     for (0..2) |s| {
@@ -231,7 +231,7 @@ pub fn draftWin(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
 pub fn inferRoles(stats: *const Stats, picks: []const Pick, out: []?Role) void {
     var ctx: Context = .{ .stats = stats, .opts = .{} };
     const n = @min(picks.len, 5);
-    const placed = ctx.resolve(picks[0..n], 5, .initEmpty(), &ctx.enemy_buf);
+    const placed = ctx.resolve(picks[0..n], 5, .empty, &ctx.enemy_buf);
     var j: usize = 0;
     for (picks[0..n], out[0..n]) |p, *o| {
         if (j < placed.len and placed[j].id == p.champion and stats.index(p.champion) != null) {
@@ -279,7 +279,7 @@ pub fn empiricalPriors(stats: *const Stats, min_games: u32) Priors {
     var lane: Moments = .{};
     var matchup: Moments = .{};
     for (Role.all) |r1| for (Role.all) |r2| {
-        if (@intFromEnum(r2) < @intFromEnum(r1)) continue;
+        if (@backingInt(r2) < @backingInt(r1)) continue;
         for (0..stats.n) |c1| {
             if (stats.champRole(r1, c1).games < min_games) continue;
             const a = ctx.place(c1, r1);
@@ -326,7 +326,7 @@ fn evenPp(x: f64) f64 {
     return 100 * (sigmoid(x) - 0.5);
 }
 
-const RoleSet = std.StaticBitSet(Role.count);
+const RoleSet = std.bit_set.Static(Role.count);
 
 /// A draft champion known to the stats file, with its role settled
 const Placed = struct {
@@ -406,8 +406,8 @@ const Context = struct {
                 .hover = p.hover,
                 .base = 0,
             };
-            if (p.role) |r| if (!taken.isSet(@intFromEnum(r))) {
-                taken.set(@intFromEnum(r));
+            if (p.role) |r| if (!taken.isSet(@backingInt(r))) {
+                taken.set(@backingInt(r));
                 buf[len].role = r;
                 buf[len].guessed = false;
             };
@@ -454,12 +454,12 @@ const Context = struct {
         const c = placed[unknown[depth]].c;
         const total: f64 = @floatFromInt(ctx.stats.champGames(c));
         for (Role.all) |r| {
-            if (taken.isSet(@intFromEnum(r))) continue;
+            if (taken.isSet(@backingInt(r))) continue;
             const games: f64 = @floatFromInt(ctx.stats.champRole(r, c).games);
             // Small floor so a never-seen role is unlikely, not impossible
             const rate = if (total > 0) games / total else 0.2;
             var next = taken;
-            next.set(@intFromEnum(r));
+            next.set(@backingInt(r));
             current[depth] = r;
             const s = score + @log(rate + 1e-4);
             ctx.assign(placed, unknown, depth + 1, next, s, current, best, best_score);
@@ -739,7 +739,7 @@ test "enemy roles inferred jointly" {
         .{ .champion = 9999 },
         .{ .champion = zed },
         .{ .champion = lux, .role = .utility },
-    }, 5, .initEmpty(), &ctx.enemy_buf);
+    }, 5, .empty, &ctx.enemy_buf);
     try testing.expectEqual(4, placed.len);
     try testing.expectEqual(Role.bottom, placed[0].role);
     try testing.expectEqual(Role.jungle, placed[1].role);

@@ -38,7 +38,7 @@ pub const Client = struct {
     /// key or Riot's service was saturated, nothing wrong with the request itself
     pub fn get(c: *Client, route: []const u8, path: []const u8, method: []const u8) !?[]u8 {
         var url_buf: [1024]u8 = undefined;
-        const url = try std.fmt.bufPrint(&url_buf, "https://{s}.api.riotgames.com{s}", .{
+        const url = try std.mem.print(&url_buf, "https://{s}.api.riotgames.com{s}", .{
             route, path,
         });
         const uri = try std.Uri.parse(url);
@@ -112,7 +112,7 @@ pub const Client = struct {
         defer req.deinit();
         try req.sendBodiless();
         var response = try req.receiveHead(&.{});
-        const status: u16 = @intFromEnum(response.head.status);
+        const status: u16 = @backingInt(response.head.status);
 
         // Header slices die once the body reader starts, so use them now
         var h: Limiter.Headers = .{};

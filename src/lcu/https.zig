@@ -110,7 +110,7 @@ const Buffers = struct {
 
 fn basicAuth(buf: []u8, password: []const u8) ![]const u8 {
     var plain_buf: [384]u8 = undefined;
-    const plain = std.fmt.bufPrint(&plain_buf, "riot:{s}", .{password}) catch
+    const plain = std.mem.print(&plain_buf, "riot:{s}", .{password}) catch
         return error.PasswordTooLong;
     const enc = std.base64.standard.Encoder;
     if (enc.calcSize(plain.len) > buf.len) return error.PasswordTooLong;
@@ -165,7 +165,7 @@ pub fn readResponse(gpa: std.mem.Allocator, r: *std.Io.Reader) !Response {
             content_length = std.fmt.parseInt(usize, value, 10) catch
                 return error.BadResponse;
         } else if (std.ascii.eqlIgnoreCase(name, "transfer-encoding")) {
-            chunked = std.ascii.indexOfIgnoreCase(value, "chunked") != null;
+            chunked = std.ascii.findIgnoreCase(value, "chunked") != null;
         }
     }
 

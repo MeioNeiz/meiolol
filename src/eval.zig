@@ -976,17 +976,17 @@ fn pickMetric(
         var allies: [4]score.Pick = undefined;
         var n_allies: usize = 0;
         for (Role.all) |ar| if (ar != r) {
-            allies[n_allies] = .{ .champion = g.teams[s][@intFromEnum(ar)], .role = ar };
+            allies[n_allies] = .{ .champion = g.teams[s][@backingInt(ar)], .role = ar };
             n_allies += 1;
         };
         var enemies: [5]score.Pick = undefined;
-        for (Role.all, &enemies) |er, *e| e.* = .{ .champion = g.teams[1 - s][@intFromEnum(er)], .role = er };
+        for (Role.all, &enemies) |er, *e| e.* = .{ .champion = g.teams[1 - s][@backingInt(er)], .role = er };
         const list = score.recommend(st, .{
             .role = r,
             .allies = &allies,
             .enemies = &enemies,
         }, candidates, out);
-        const hidden = g.teams[s][@intFromEnum(r)];
+        const hidden = g.teams[s][@backingInt(r)];
         const rank = for (list, 0..) |sg, i| {
             if (sg.champion == hidden) break i;
         } else {
@@ -1043,8 +1043,8 @@ fn roleInference(st: *const core.Stats, games: []const Game, w: *std.Io.Writer) 
             const ok = got != null and got.? == want;
             if (ok) right += 1 else all = false;
             total += 1;
-            by_role[@intFromEnum(want)][0] += @intFromBool(ok);
-            by_role[@intFromEnum(want)][1] += 1;
+            by_role[@backingInt(want)][0] += @intFromBool(ok);
+            by_role[@backingInt(want)][1] += 1;
         }
         if (all) teams_right += 1;
     };

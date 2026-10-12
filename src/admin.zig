@@ -170,7 +170,7 @@ fn writeGz(gpa: std.mem.Allocator, io: Io, dir: Io.Dir, path: []const u8, data: 
     const gz = try store.raw.compress(gpa, data);
     defer gpa.free(gz);
     var buf: [64]u8 = undefined;
-    try dir.writeFile(io, .{ .sub_path = try std.fmt.bufPrint(&buf, "{s}.gz", .{path}), .data = gz });
+    try dir.writeFile(io, .{ .sub_path = try std.mem.print(&buf, "{s}.gz", .{path}), .data = gz });
 }
 
 const Count = struct { name: []const u8, rows: i64 };
@@ -205,7 +205,7 @@ fn fileSizes(arena: std.mem.Allocator, io: Io, data_dir: []const u8) ![]FileSize
     for (names, out) |n, *f| {
         f.* = .{ .name = n, .bytes = 0 };
         for ([_][]const u8{ "", "-wal" }) |suffix| {
-            const path = try std.fmt.allocPrint(arena, "{s}/{s}{s}", .{ data_dir, n, suffix });
+            const path = try arena.print("{s}/{s}{s}", .{ data_dir, n, suffix });
             const st = Io.Dir.cwd().statFile(io, path, .{}) catch continue;
             f.bytes += st.size;
         }
@@ -304,7 +304,7 @@ fn draftMix(arena: std.mem.Allocator, db: store.Db) !DraftMix {
         if (ep.platform(platform)) |pl| {
             const d = try days.getOrPut(arena, q.int(0));
             if (!d.found_existing) d.value_ptr.* = @splat(0);
-            d.value_ptr[@intFromEnum(pl.region)] += 1;
+            d.value_ptr[@backingInt(pl.region)] += 1;
         }
         const tier: usize = if (q.optInt(3)) |r| @min(@as(usize, @intCast(@max(r, 0))) / 4, store.schema.tiers.len) else store.schema.tiers.len;
         mix.tiers[tier] += 1;
@@ -427,7 +427,7 @@ fn crawlSeries(arena: std.mem.Allocator, io: Io, path: []const u8, from: i64, no
         } else if (std.mem.startsWith(u8, rest, "warning(") or std.mem.startsWith(u8, rest, "error(")) {
             const msg = try normalise(arena, rest);
             const kind = classify(msg);
-            b.warnings[@intFromEnum(kind)] += 1;
+            b.warnings[@backingInt(kind)] += 1;
             if (t >= now - 86400) {
                 const e = try messages.getOrPut(arena, msg);
                 if (!e.found_existing) e.value_ptr.* = .{ .text = msg, .kind = kind, .count = 0, .last = t };
@@ -486,7 +486,7 @@ fn parseReport(line: []const u8) ?Report {
         var words = std.mem.tokenizeAny(u8, part, " ,");
         const first = words.next() orelse continue;
         if (std.meta.stringToEnum(Region, first)) |region| {
-            const i = @intFromEnum(region);
+            const i = @backingInt(region);
             while (words.next()) |word| {
                 const digits = std.mem.indexOfNone(u8, word, "0123456789") orelse continue;
                 const n = std.fmt.parseInt(u64, word[0..digits], 10) catch continue;
@@ -594,9 +594,9 @@ test "report line" {
         " | americas 3978m 2160t 483ids 6593req | asia 3823m 2232t 565ids 6597req" ++
         " | writes 28138 in 3921 commits, 4 queued, 0 busy | pages written 626229, read 454155";
     const r = parseReport(line).?;
-    try std.testing.expectEqual(3978, r.m[@intFromEnum(Region.americas)]);
-    try std.testing.expectEqual(565, r.ids[@intFromEnum(Region.asia)]);
-    try std.testing.expectEqual(0, r.req[@intFromEnum(Region.europe)]);
+    try std.testing.expectEqual(3978, r.m[@backingInt(Region.americas)]);
+    try std.testing.expectEqual(565, r.ids[@backingInt(Region.asia)]);
+    try std.testing.expectEqual(0, r.req[@backingInt(Region.europe)]);
     try std.testing.expectEqual(180, r.ladder);
     try std.testing.expectEqual(3, r.mastery);
     try std.testing.expectEqual(181, r.platform_req);

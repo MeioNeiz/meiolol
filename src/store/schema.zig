@@ -403,7 +403,7 @@ fn migrate(db: sqlite.Db) !void {
         // default rather than an UPDATE: adding it rewrites no rows (millions of players)
         const now = try db.scalar("SELECT unixepoch()", .{}) orelse 0;
         var buf: [96]u8 = undefined;
-        try db.exec(try std.fmt.bufPrintZ(&buf, "ALTER TABLE players ADD COLUMN seen_at INTEGER DEFAULT {d}", .{now}));
+        try db.exec(try std.mem.printSentinel(&buf, "ALTER TABLE players ADD COLUMN seen_at INTEGER DEFAULT {d}", .{now}, 0));
     }
     if (!try hasColumn(db, "players", "games_checked")) {
         // NULL until the ladder next changes a row, which sets it from the old counts
@@ -625,7 +625,7 @@ test "openReadOnly: every schema read-only, data visible" {
     const testing = std.testing;
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    const dir = try std.fmt.allocPrint(testing.allocator, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const dir = try testing.allocator.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
     defer testing.allocator.free(dir);
     {
         const db = try open(testing.allocator, dir);

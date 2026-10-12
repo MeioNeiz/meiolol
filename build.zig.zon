@@ -2,11 +2,15 @@
     .name = .meiolol,
     .version = "0.0.0",
     .fingerprint = 0x3ffff68425fe2390,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .sqlite = .{
             .url = "https://sqlite.org/2026/sqlite-amalgamation-3540000.zip",
             .hash = "N-V-__8AAIbIsACiE8KD1p1yFmEmwfDyxM6oeFpCwhUhBARB",
+        },
+        .translate_c = .{
+            .url = "git+https://codeberg.org/ziglang/translate-c?ref=zig-0.17.x#f978dca0f2b2a782d06591989e80aae7c74d0183",
+            .hash = "translate_c-2.0.1-Q_BUWmVOBwDWdxpDb7n6-LpMznKteZvXbL_4r6DxB2_d",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src" },

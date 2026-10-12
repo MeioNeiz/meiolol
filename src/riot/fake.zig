@@ -72,7 +72,7 @@ pub const Fake = struct {
                 tag = parts.next() orelse return error.UnexpectedStatus;
             } else {
                 if (f.encryption != 0) return error.UnexpectedStatus;
-                name = try std.fmt.bufPrint(&name_buf, "p{x:0>16}", .{std.hash.Wyhash.hash(0, puuid)});
+                name = try std.mem.print(&name_buf, "p{x:0>16}", .{std.hash.Wyhash.hash(0, puuid)});
                 tag = "OLD";
             }
         } else if (std.mem.startsWith(u8, path, by_riot_id)) {
@@ -85,7 +85,7 @@ pub const Fake = struct {
             tag = rest[slash + 1 ..];
         } else return null;
         if (std.mem.startsWith(u8, name, "gone")) return null;
-        return try std.fmt.allocPrint(gpa,
+        return try gpa.print(
             \\{{"puuid":"acct{d}.{s}.{s}","gameName":"{s}","tagLine":"{s}"}}
         , .{ f.encryption, name, tag, name, tag });
     }
@@ -139,11 +139,11 @@ fn withIds(gpa: std.mem.Allocator, fixture: []const u8, fixture_id: []const u8, 
     var body = try std.mem.replaceOwned(u8, gpa, fixture, fixture_id, id);
     for (0..10) |slot| {
         var from_buf: [16]u8 = undefined;
-        const from = try std.fmt.bufPrint(&from_buf, "\"puuid-{d}\"", .{slot});
+        const from = try std.mem.print(&from_buf, "\"puuid-{d}\"", .{slot});
         var puuid_buf: [78]u8 = undefined;
         var to_buf: [80]u8 = undefined;
         const seed = std.hash.Wyhash.hash(slot, id) % player_pool;
-        const to = try std.fmt.bufPrint(&to_buf, "\"{s}\"", .{puuidOf(&puuid_buf, seed)});
+        const to = try std.mem.print(&to_buf, "\"{s}\"", .{puuidOf(&puuid_buf, seed)});
         const next = try std.mem.replaceOwned(u8, gpa, body, from, to);
         gpa.free(body);
         body = next;

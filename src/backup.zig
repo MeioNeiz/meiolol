@@ -68,7 +68,7 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
     try cwd.access(io, main_db, .{});
     try cwd.access(io, timeline_db, .{});
 
-    const state_path = try std.fmt.allocPrint(arena, "{s}/state-{f}.db", .{ state_dir, Date.fromSeconds(opts.now) });
+    const state_path = try arena.print("{s}/state-{f}.db", .{ state_dir, Date.fromSeconds(opts.now) });
     _ = try writeFile(arena, io, state_path, main_db, timeline_db, .state, .{}, opts.now);
 
     var removed = try rotate(arena, io, state_dir, opts.keep_daily, opts.keep_weekly);
@@ -80,7 +80,7 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
         after = try readRange(arena, last);
     }
     const next = if (segs.len > 0) segs[segs.len - 1].seq + 1 else 1;
-    const seg_path = try std.fmt.allocPrint(arena, "{s}/{d:0>6}.db", .{ seg_dir, next });
+    const seg_path = try arena.print("{s}/{d:0>6}.db", .{ seg_dir, next });
     const wrote = try writeFile(arena, io, seg_path, main_db, timeline_db, .segment, after, opts.now);
     if (wrote.rows > 0 and opts.full) {
         for (segs) |s| {
@@ -116,7 +116,7 @@ fn writeFile(
     now: i64,
 ) !Written {
     const cwd = Io.Dir.cwd();
-    const tmp = try std.fmt.allocPrintSentinel(arena, "{s}.tmp", .{path}, 0);
+    const tmp = try arena.printSentinel("{s}.tmp", .{path}, 0);
     cwd.deleteFile(io, tmp) catch |err| if (err != error.FileNotFound) return err;
     var w: Written = .{};
     {
@@ -159,8 +159,7 @@ fn writeFile(
                 });
                 for ([_][]const u8{ "matches", "participants", "bans" }) |t| _ = try copyDdl(arena, db, "live", t);
                 _ = try copyDdl(arena, db, "livet", "timelines");
-                try copyRows(arena, db, "live", "matches", try std.fmt.allocPrint(
-                    arena,
+                try copyRows(arena, db, "live", "matches", try arena.print(
                     " WHERE rowid > {d} AND rowid <= {d}",
                     .{ after.matches_to, to_m },
                 ));
@@ -169,23 +168,20 @@ fn writeFile(
                 const of_matches = " WHERE match_id IN (SELECT match_id FROM main.matches)";
                 try copyRows(arena, db, "live", "participants", of_matches);
                 try copyRows(arena, db, "live", "bans", of_matches);
-                try copyRows(arena, db, "livet", "timelines", try std.fmt.allocPrint(
-                    arena,
+                try copyRows(arena, db, "livet", "timelines", try arena.print(
                     " WHERE rowid > {d} AND rowid <= {d}",
                     .{ after.timelines_to, to_t },
                 ));
                 w.timelines = changes(db);
                 if (drafts) {
-                    try copyRows(arena, db, "live", "drafts", try std.fmt.allocPrint(
-                        arena,
+                    try copyRows(arena, db, "live", "drafts", try arena.print(
                         " WHERE id > {d} AND id <= {d}",
                         .{ after.drafts_to, to_d },
                     ));
                     w.drafts = changes(db);
                 }
                 if (history) {
-                    try copyRows(arena, db, "live", "rank_history", try std.fmt.allocPrint(
-                        arena,
+                    try copyRows(arena, db, "live", "rank_history", try arena.print(
                         " WHERE day > {d} AND day <= {d}",
                         .{ after.history_to, to_h },
                     ));
@@ -207,21 +203,19 @@ fn writeFile(
 /// Create `table` in the backup's main schema with the live table's own DDL (column
 /// order included, so SELECT * copies line up). false when the live side lacks it.
 fn copyDdl(arena: std.mem.Allocator, db: Db, from: []const u8, table: []const u8) !bool {
-    var s = try db.prepare(try std.fmt.allocPrint(
-        arena,
+    var s = try db.prepare(try arena.print(
         "SELECT sql FROM {s}.sqlite_master WHERE type = 'table' AND name = ?",
         .{from},
     ));
     defer s.deinit();
     try s.bind(.{table});
     if (!try s.step()) return false;
-    try db.exec(try arena.dupeZ(u8, s.bytes(0)));
+    try db.exec(try arena.dupeSentinel(u8, s.bytes(0), 0));
     return true;
 }
 
 fn copyRows(arena: std.mem.Allocator, db: Db, from: []const u8, table: []const u8, where: []const u8) !void {
-    try db.exec(try std.fmt.allocPrintSentinel(
-        arena,
+    try db.exec(try arena.printSentinel(
         "INSERT INTO main.{s} SELECT * FROM {s}.{s}{s}",
         .{ table, from, table, where },
         0,
@@ -252,12 +246,11 @@ pub fn listSegments(arena: std.mem.Allocator, io: Io, seg_dir: []const u8) ![]Se
 const Range = struct { matches_to: i64 = 0, timelines_to: i64 = 0, drafts_to: i64 = 0, history_to: i64 = 0 };
 
 fn readRange(arena: std.mem.Allocator, path: []const u8) !Range {
-    const db = try Db.open(try arena.dupeZ(u8, path));
+    const db = try Db.open(try arena.dupeSentinel(u8, path, 0));
     defer db.close();
     // Segments from before drafts or rank_history lack those columns: the next one
     // copies them all
-    var s = try db.prepare(try std.fmt.allocPrintSentinel(
-        arena,
+    var s = try db.prepare(try arena.printSentinel(
         "SELECT matches_to, timelines_to, {s}, {s} FROM segment",
         .{ try segmentColumn(db, "drafts_to"), try segmentColumn(db, "history_to") },
         0,
@@ -389,8 +382,7 @@ fn load(arena: std.mem.Allocator, db: Db, path: []const u8) !void {
             log.warn("{s}: table {s} is not in the schema, skipped", .{ path, t });
             continue;
         }
-        try db.exec(try std.fmt.allocPrintSentinel(
-            arena,
+        try db.exec(try arena.printSentinel(
             "INSERT OR REPLACE INTO {s}.{s} ({s}) SELECT {s} FROM b.{s}",
             .{ schema, t, cols.items, cols.items, t },
             0,
@@ -412,7 +404,7 @@ pub fn scrub(arena: std.mem.Allocator, io: Io, dir: []const u8, puuid: []const u
         var it = d.iterate();
         while (try it.next(io)) |e| {
             if (e.kind != .file or !std.mem.endsWith(u8, e.name, ".db")) continue;
-            const file = try std.fmt.allocPrintSentinel(arena, "{s}/{s}", .{ path, e.name }, 0);
+            const file = try arena.printSentinel("{s}/{s}", .{ path, e.name }, 0);
             const db = try Db.open(file);
             defer db.close();
             total.add(try forget.forget(db, puuid, now, .scrub));
@@ -436,7 +428,7 @@ test "rotation keeps 7 daily and the newest of 4 weeks" {
     const start = (Date{ .year = 2026, .month = 9, .day = 1 }).toDay();
     for (0..40) |i| {
         const date: Date = .fromDay(start + @as(i64, @intCast(i)));
-        try names.append(arena, try std.fmt.allocPrint(arena, "state-{f}.db", .{date}));
+        try names.append(arena, try arena.print("state-{f}.db", .{date}));
     }
     const doomed = try toDelete(arena, names.items, 7, 4);
     // Kept: 7 newest days (Oct 4-10) + newest of each of the 4 newest weeks; two of those
@@ -452,9 +444,9 @@ test "backup then restore round trip, incremental segments, scrub" {
     const io = testing.io;
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    const base = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
-    const data = try std.fmt.allocPrint(arena, "{s}/data", .{base});
-    const out = try std.fmt.allocPrint(arena, "{s}/backups", .{base});
+    const base = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const data = try arena.print("{s}/data", .{base});
+    const out = try arena.print("{s}/backups", .{base});
     try Io.Dir.cwd().createDirPath(io, data);
 
     {
@@ -501,7 +493,7 @@ test "backup then restore round trip, incremental segments, scrub" {
     try testing.expectEqual(0, second.timelines);
     try testing.expectEqual(0, second.drafts);
     try testing.expectEqual(1, second.rank_history);
-    try testing.expectEqual(2, (try listSegments(arena, io, try std.fmt.allocPrint(arena, "{s}/segments", .{out}))).len);
+    try testing.expectEqual(2, (try listSegments(arena, io, try arena.print("{s}/segments", .{out}))).len);
 
     // p1 objects after the backups were taken: live forget records it, scrub cleans files
     {
@@ -517,7 +509,7 @@ test "backup then restore round trip, incremental segments, scrub" {
     // A restore from the older state still ends without p1: forgotten comes from the
     // newest snapshot, so take one more
     _ = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day + 3 * 86400 });
-    const restored_dir = try std.fmt.allocPrint(arena, "{s}/restored", .{base});
+    const restored_dir = try arena.print("{s}/restored", .{base});
     const r = try restore(arena, io, out, restored_dir, null, day);
     try testing.expectEqual(2, r.matches);
     try testing.expectEqual(1, r.timelines);

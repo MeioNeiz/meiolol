@@ -28,7 +28,7 @@ const rows_shown = 6;
 const min_role_share = 0.1;
 
 pub fn path(a: std.mem.Allocator, ch: Champ, r: Role) ![]const u8 {
-    return std.fmt.allocPrint(a, "build/{s}-{s}.html", .{ ch.slug, root.roleSlug(r) });
+    return a.print("build/{s}-{s}.html", .{ ch.slug, root.roleSlug(r) });
 }
 
 /// The build `ch` has a page for in `r`
@@ -87,7 +87,7 @@ pub fn rankLabel(a: std.mem.Allocator, tier: []const u8) ![]const u8 {
     const name = try std.ascii.allocLowerString(a, tier);
     name[0] = std.ascii.toUpper(name[0]);
     const apex = std.mem.eql(u8, tier, "MASTER") or std.mem.eql(u8, tier, "GRANDMASTER") or std.mem.eql(u8, tier, "CHALLENGER");
-    return std.fmt.allocPrint(a, "{s}{s} and up", .{ name, if (apex) "" else " IV" });
+    return a.print("{s}{s} and up", .{ name, if (apex) "" else " IV" });
 }
 
 fn plural(n: u64) []const u8 {
@@ -98,15 +98,15 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     const a = site.arena;
     const page_path = try path(a, ch, r);
     const ranks = try rankLabel(a, f.min_tier);
-    const title = try std.fmt.allocPrint(a, "{s} {s} build: runes, items, skill order, patch {s} | meiolol", .{
+    const title = try a.print("{s} {s} build: runes, items, skill order, patch {s} | meiolol", .{
         ch.name, root.roleName(r), f.label,
     });
     const role = try std.ascii.allocLowerString(a, root.roleName(r));
-    const desc = try std.fmt.allocPrint(a, "What players take on {s} in the {s} role in ranked solo/duo {s}, patch {s}: rune pages, summoner spells, starting items, boots, first items and skill order, with games and win rates.", .{
+    const desc = try a.print("What players take on {s} in the {s} role in ranked solo/duo {s}, patch {s}: rune pages, summoner spells, starting items, boots, first items and skill order, with games and win rates.", .{
         ch.name, role, site.view.region.in(), f.label,
     });
     var p = site.page(title, desc, page_path, .champions);
-    const champ_path = try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug});
+    const champ_path = try a.print("champion/{s}.html", .{ch.slug});
     for (html.View.all, &p.counterparts.?) |v, *there| {
         const has = v.period == .patch and if (site.view_builds[v.index()]) |*o| shown(o, ch.id, r) != null else false;
         if (!has) there.* = try std.mem.concat(a, u8, &.{ champ_path, v.query() });
@@ -238,7 +238,7 @@ fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32) !void {
 /// Icon (name as alt and title), and the name beside it with `label`
 fn named(w: *Writer, list: []const ddragon.Named, id: u32, label: bool) !void {
     var buf: [16]u8 = undefined;
-    const n = ddragon.find(list, id) orelse ddragon.Named{ .id = id, .name = try std.fmt.bufPrint(&buf, "#{d}", .{id}) };
+    const n = ddragon.find(list, id) orelse ddragon.Named{ .id = id, .name = try std.mem.print(&buf, "#{d}", .{id}) };
     if (n.icon.len > 0) {
         try w.print("<img class=\"icon\" src=\"{s}\" alt=\"{f}\" title=\"{f}\" width=\"28\" height=\"28\" loading=\"lazy\">", .{
             n.icon, esc(n.name), esc(n.name),

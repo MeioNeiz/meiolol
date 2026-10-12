@@ -1,7 +1,7 @@
 # meiolol
 
 League of Legends champ select pick recommender for normal ranked players, today's
-patch, EUW first. All Zig (0.16, pinned in build.zig); no Python.
+patch, EUW first. All Zig (0.17, pinned in build.zig; docs/zig-0.17.md); no Python.
 
 **Current goal: get a Riot production key** (more rate limit). Plan and next steps:
 docs/plan.md. Read it first.
@@ -36,5 +36,6 @@ docs/plan.md. Read it first.
   The old gpu-box PC keeps a copy as a restore point
 - Riot key: RIOT_API_KEY in .env (gitignored), copied to the box by deploy/box.sh.
   Never print it. Riot portal automation: `jodrive riot ...` (~/personal/jodrive)
-- Zig 0.16 std changed a lot (std.Io everywhere): check APIs via LSP hover/goToDefinition
-  (ZLS) rather than guessing; std source at `$(zig env | grep lib_dir)` as fallback
+- Zig 0.16/0.17 std changed a lot (std.Io everywhere, renames): check APIs via LSP
+  hover/goToDefinition (ZLS) rather than guessing; std source at
+  `$(zig env | grep lib_dir)` as fallback

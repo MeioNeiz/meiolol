@@ -205,7 +205,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
 
     if (ctx.opts.dev) |d| if (std.mem.eql(u8, path, "__dev")) {
         var buf: [64]u8 = undefined;
-        const v = try std.fmt.bufPrint(&buf, "{d}-{d}", .{ ctx.started, staticVersion(ctx.io, d.static_dir) });
+        const v = try std.mem.print(&buf, "{d}-{d}", .{ ctx.started, staticVersion(ctx.io, d.static_dir) });
         return request.respond(v, .{ .extra_headers = &.{.{ .name = "cache-control", .value = "no-store" }} });
     };
 
@@ -215,13 +215,13 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     var html_buf: [520]u8 = undefined;
     var index_buf: [530]u8 = undefined;
     if (path.len == 0 or path[path.len - 1] == '/') {
-        candidates[n] = try std.fmt.bufPrint(&index_buf, "{s}index.html", .{path});
+        candidates[n] = try std.mem.print(&index_buf, "{s}index.html", .{path});
         n += 1;
     } else {
         candidates[n] = path;
         n += 1;
         if (std.fs.path.extension(path).len == 0) {
-            candidates[n] = try std.fmt.bufPrint(&html_buf, "{s}.html", .{path});
+            candidates[n] = try std.mem.print(&html_buf, "{s}.html", .{path});
             n += 1;
         }
     }
@@ -290,7 +290,7 @@ fn resolve(buf: []u8, target: []const u8) ?[]const u8 {
 fn serveFile(ctx: *Context, request: *std.http.Server.Request, name: []const u8, gzip: bool) !bool {
     const gpa = ctx.gpa;
     var gz_buf: [600]u8 = undefined;
-    const gz_name = try std.fmt.bufPrint(&gz_buf, "{s}.gz", .{name});
+    const gz_name = try std.mem.print(&gz_buf, "{s}.gz", .{name});
     var encoded = gzip;
     const body = blk: {
         if (gzip) {
@@ -323,7 +323,7 @@ fn serveFile(ctx: *Context, request: *std.http.Server.Request, name: []const u8,
 
 fn read(ctx: *Context, name: []const u8) ![]u8 {
     var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try std.fmt.bufPrint(&buf, "{s}/{s}", .{ ctx.opts.root.?, name });
+    const path = try std.mem.print(&buf, "{s}/{s}", .{ ctx.opts.root.?, name });
     return Io.Dir.cwd().readFileAlloc(ctx.io, path, ctx.gpa, .limited(max_file));
 }
 

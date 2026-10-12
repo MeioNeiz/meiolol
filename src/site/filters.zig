@@ -211,7 +211,7 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
     for (site.champs, cells, files[1..]) |ch, *c, *f| {
         var aw: Writer.Allocating = .init(a);
         try writeChampion(site, &aw.writer, opts, patches.items, ch, c, &bans);
-        f.* = .{ .path = try std.fmt.allocPrint(a, "data/filters/{s}.json", .{ch.slug}), .data = aw.written() };
+        f.* = .{ .path = try a.print("data/filters/{s}.json", .{ch.slug}), .data = aw.written() };
     }
     return .{ .files = files, .patches = sorted, .current = opts.patches };
 }
@@ -274,7 +274,7 @@ fn writeMeta(w: *Writer, opts: root.Options, patches: []const []const u8, sorted
         first = false;
         const k = e.key_ptr.*;
         try w.print("[{d},{d},{d},{d},{d},{d}]", .{
-            k.slice.platform, k.slice.patch, @intFromBool(k.slice.recent), k.tier, @intFromEnum(k.role), e.value_ptr.*,
+            k.slice.platform, k.slice.patch, @intFromBool(k.slice.recent), k.tier, @backingInt(k.role), e.value_ptr.*,
         });
     }
     // Games by their rank (gameTier), for ban rates: platform, patch, recent, tier, games
@@ -308,7 +308,7 @@ fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches
         const k = e.key_ptr.*;
         const v = e.value_ptr.*;
         try w.print("[{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}]", .{
-            k.slice.platform, k.slice.patch, @intFromBool(k.slice.recent), k.tier,     @intFromEnum(k.role), k.opponent,
+            k.slice.platform, k.slice.patch, @intFromBool(k.slice.recent), k.tier,     @backingInt(k.role), k.opponent,
             v.games,          v.wins,        v.gold_n,                     v.gold_sum, v.gold_sq,
         });
     }
@@ -333,7 +333,7 @@ fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches
         const curves = if (maybe.*) |*c| c else continue;
         const period = switch (v.period) {
             .days30 => "days30",
-            .patch => if (opts.patches.len == 1) try std.fmt.allocPrint(site.arena, "patch:{s}", .{opts.patches[0]}) else continue,
+            .patch => if (opts.patches.len == 1) try site.arena.print("patch:{s}", .{opts.patches[0]}) else continue,
         };
         const region = switch (v.region) {
             .euw => opts.platforms[0],
@@ -349,7 +349,7 @@ fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches
                 const e = view.estimate(.gold, core.curvesfile.lane_minute - 1);
                 if (n > 0) try w.writeByte(',');
                 n += 1;
-                try w.print("[{d},{d},{d},{d}]", .{ @intFromEnum(r), other.id, e.mean, e.se });
+                try w.print("[{d},{d},{d},{d}]", .{ @backingInt(r), other.id, e.mean, e.se });
             };
             try w.writeByte(']');
         }

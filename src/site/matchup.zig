@@ -36,7 +36,7 @@ fn minuteFloor(v: View) u32 {
 /// The curves' games for running text: "last 30 days" or "patch 16.19"
 fn period(a: std.mem.Allocator, curves: *const Curves) ![]const u8 {
     const label = curves.patch();
-    if (label.len > 0 and std.ascii.isDigit(label[0])) return std.fmt.allocPrint(a, "patch {s}", .{label});
+    if (label.len > 0 and std.ascii.isDigit(label[0])) return a.print("patch {s}", .{label});
     return label;
 }
 
@@ -45,7 +45,7 @@ pub fn plural(n: u64) []const u8 {
 }
 
 pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
-    return std.fmt.allocPrint(a, "matchup/{s}/{s}-vs-{s}.html", .{ root.roleSlug(r), x.slug, y.slug });
+    return a.print("matchup/{s}/{s}-vs-{s}.html", .{ root.roleSlug(r), x.slug, y.slug });
 }
 
 /// A page per lane matchup with an all-ranks curve of `min_games` or more, from the lower
@@ -53,10 +53,10 @@ pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
 pub fn paths(site: *const Site, curves: *const Curves, list: *std.ArrayList([]const u8), min_games: u32) !void {
     for (curves.curves) |c| {
         const h = c.header;
-        if (h.bracket != @intFromEnum(Bracket.all) or h.games < min_games) continue;
+        if (h.bracket != @backingInt(Bracket.all) or h.games < min_games) continue;
         const x = champ(site, h.a) orelse continue;
         const y = champ(site, h.b) orelse continue;
-        const r: Role = @enumFromInt(h.role);
+        const r: Role = @fromBackingInt(@intCast(h.role));
         try list.append(site.arena, try path(site.arena, r, x, y));
     }
 }
@@ -78,7 +78,7 @@ pub fn route(site: *const Site, w: *Writer, curves: *const Curves, rest: []const
 pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
     const a = site.arena;
     const p = site.page(
-        if (curves) |c| try std.fmt.allocPrint(a, "Lane matchup curves, {s} | meiolol", .{try period(a, c)}) else "Lane matchup curves | meiolol",
+        if (curves) |c| try a.print("Lane matchup curves, {s} | meiolol", .{try period(a, c)}) else "Lane matchup curves | meiolol",
         "How every lane matchup unfolds minute by minute: gold, experience and CS difference, kills and level 6 timing, by rank.",
         "matchup/index.html",
         .matchups,
@@ -101,7 +101,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         var list: std.ArrayList(Entry) = .empty;
         for (c.curves) |cv| {
             const h = cv.header;
-            if (h.role != @intFromEnum(r) or h.bracket != 0 or h.experience != 0) continue;
+            if (h.role != @backingInt(r) or h.bracket != 0 or h.experience != 0) continue;
             const x = champ(site, h.a) orelse continue;
             const y = champ(site, h.b) orelse continue;
             try list.append(a, .{ .x = x, .y = y, .games = h.games, .thin = thin(.{ .curve = &cv, .flipped = false }) });
@@ -166,7 +166,7 @@ fn variants(a: std.mem.Allocator, curves: *const Curves, r: Role, x: Champ, y: C
         try list.append(a, .{
             .v = if (s[0].id == x.id) v else .{ .curve = v.curve, .flipped = !v.flipped },
             .key = s[2],
-            .label = try std.fmt.allocPrint(a, "{s} players with {d}k+ mastery", .{ s[0].name, curvesfile.experienced_points / 1000 }),
+            .label = try a.print("{s} players with {d}k+ mastery", .{ s[0].name, curvesfile.experienced_points / 1000 }),
         });
     }
     return list.items;
@@ -177,10 +177,10 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     const v = curves.get(r, .all, x.id, y.id).?;
     const lane = root.roleName(r);
     const when = try period(a, curves);
-    const title = try std.fmt.allocPrint(a, "{s} vs {s}, {s} lane curves, {s} | meiolol", .{
+    const title = try a.print("{s} vs {s}, {s} lane curves, {s} | meiolol", .{
         x.name, y.name, lane, when,
     });
-    const desc = try std.fmt.allocPrint(a, "How {s} against {s} in {s} lane unfolds minute by minute: gold, experience and CS difference, kills, level 6 and first item timing.", .{
+    const desc = try a.print("How {s} against {s} in {s} lane unfolds minute by minute: gold, experience and CS difference, kills, level 6 and first item timing.", .{
         x.name, y.name, lane,
     });
     const page_path = try path(a, r, x, y);
@@ -309,7 +309,7 @@ fn band(v: View, base: ?View, metric: curvesfile.Metric, i: usize) [2]i32 {
         const q = quartile(m, metric);
         return .{ q.p25, q.p75 };
     }
-    const e: i32 = m.est[@intFromEnum(metric)].mean;
+    const e: i32 = m.est[@backingInt(metric)].mean;
     const q = quartile(base.?.minute(i), metric);
     return .{ e + q.p25, e + q.p75 };
 }

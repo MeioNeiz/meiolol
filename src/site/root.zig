@@ -131,7 +131,7 @@ pub const Site = struct {
     pub fn page(s: *const Site, title: []const u8, description: []const u8, path: []const u8, nav: html.Nav) html.Page {
         var p = s.sharedPage(title, description, nav);
         p.view = s.view;
-        p.counterparts = undefined;
+        p.counterparts = @as([html.View.count][]const u8, undefined);
         for (html.View.all, &p.counterparts.?) |v, *there| {
             there.* = std.mem.concat(s.arena, u8, &.{ v.dir(), path }) catch path;
         }
@@ -146,7 +146,7 @@ pub const Site = struct {
             .description = description,
             .nav = nav,
             .patch = s.patch,
-            .data = std.fmt.allocPrint(s.arena, "{s}, {s}, {d} games", .{ s.view.region.in(), s.when, s.games }) catch "",
+            .data = s.arena.print("{s}, {s}, {d} games", .{ s.view.region.in(), s.when, s.games }) catch "",
             .public = s.opts.public,
         };
     }
@@ -165,8 +165,7 @@ pub const Site = struct {
     }
 
     pub fn icon(s: *const Site, ch: Champ) []const u8 {
-        return std.fmt.allocPrint(
-            s.arena,
+        return s.arena.print(
             "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png",
             .{ s.ddragon_version, ch.key },
         ) catch "";
@@ -175,7 +174,7 @@ pub const Site = struct {
     /// To the champion's page (one per champion, at the site root), its filters set to
     /// this view. `to_site`: from the linking page to the site root. Raw: escape it
     pub fn champHref(s: *const Site, ch: Champ, to_site: []const u8) []const u8 {
-        return std.fmt.allocPrint(s.arena, "{s}champion/{s}.html{s}", .{ to_site, ch.slug, s.view.query() }) catch "";
+        return s.arena.print("{s}champion/{s}.html{s}", .{ to_site, ch.slug, s.view.query() }) catch "";
     }
 
     pub fn champLink(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8) !void {
@@ -368,7 +367,7 @@ const FileWriter = struct {
         const gz = try store.raw.compressWith(fw.gpa, fw.gz_window, data);
         defer fw.gpa.free(gz);
         var buf: [std.fs.max_path_bytes]u8 = undefined;
-        const gz_path = try std.fmt.bufPrint(&buf, "{s}.gz", .{path});
+        const gz_path = try std.mem.print(&buf, "{s}.gz", .{path});
         try dir.writeFile(fw.io, .{ .sub_path = gz_path, .data = gz });
     }
 };
@@ -378,9 +377,9 @@ pub fn pagePaths(site: *const Site) ![]const []const u8 {
     const a = site.arena;
     var list: std.ArrayList([]const u8) = .empty;
     try list.appendSlice(a, &.{ "index.html", "champions.html" });
-    for (Role.all) |r| try list.append(a, try std.fmt.allocPrint(a, "role/{s}.html", .{roleSlug(r)}));
+    for (Role.all) |r| try list.append(a, try a.print("role/{s}.html", .{roleSlug(r)}));
     if (site.view.index() == 0) for (site.champs) |ch| {
-        try list.append(a, try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug}));
+        try list.append(a, try a.print("champion/{s}.html", .{ch.slug}));
     };
     try list.append(a, "matchup/index.html");
     if (site.curves) |*c| try matchup.paths(site, c, &list, site.opts.static_min_games);
@@ -430,7 +429,7 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
     };
     for (fixed) |f| {
         if (!std.mem.eql(u8, path, f[0])) continue;
-        const p = site.sharedPage(try std.fmt.allocPrint(site.arena, "{s} | meiolol", .{f[1]}), f[2], f[3]);
+        const p = site.sharedPage(try site.arena.print("{s} | meiolol", .{f[1]}), f[2], f[3]);
         try html.head(w, p);
         try f[4](w, site.info());
         try html.foot(w, p);
@@ -491,7 +490,7 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
         .games = built.summary.games,
         .patch = patch,
         .when = switch (view.period) {
-            .patch => try std.fmt.allocPrint(arena, "patch {s}", .{patch}),
+            .patch => try arena.print("patch {s}", .{patch}),
             .days30 => "last 30 days",
         },
         .ddragon_version = "",
@@ -522,7 +521,7 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
     try files.append(arena, .{ .path = "data/stats.bin", .data = model_bytes });
     try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
     const people = try extras.tallies(gpa, db, &site.stats, all_opts);
-    const set = @intFromEnum(view.region);
+    const set = @backingInt(view.region);
     if (set >= people.learning.len) return error.NoView;
     site.pool = try pool.make(arena, &people.pool, set, &site.stats, .{});
     {
@@ -971,11 +970,11 @@ fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     const a = site.arena;
     const name = if (role) |r| roleName(r) else "All";
     const title = if (role) |r|
-        try std.fmt.allocPrint(a, "{s} lane champions, {s} | meiolol", .{ roleName(r), site.when })
+        try a.print("{s} lane champions, {s} | meiolol", .{ roleName(r), site.when })
     else
-        try std.fmt.allocPrint(a, "Champions, {s} | meiolol", .{site.when});
-    const desc = try std.fmt.allocPrint(a, "{s} champions in ranked solo queue {s}, {s}: win rate with how sure it is, pick and ban rates.", .{ name, site.view.region.in(), site.when });
-    const path = if (role) |r| try std.fmt.allocPrint(a, "role/{s}.html", .{roleSlug(r)}) else "champions.html";
+        try a.print("Champions, {s} | meiolol", .{site.when});
+    const desc = try a.print("{s} champions in ranked solo queue {s}, {s}: win rate with how sure it is, pick and ban rates.", .{ name, site.view.region.in(), site.when });
+    const path = if (role) |r| try a.print("role/{s}.html", .{roleSlug(r)}) else "champions.html";
     const root = site.toRoot(path);
     const p = site.page(title, desc, path, .champions);
     try html.head(w, p);
@@ -1051,12 +1050,12 @@ const Opponent = struct {
 fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     const a = site.arena;
     const st = &site.stats;
-    const title = try std.fmt.allocPrint(a, "{s} win rate, lane opponents and curves | meiolol", .{ch.name});
-    const desc = try std.fmt.allocPrint(a, "{s} in ranked solo queue by region, rank and patch: win rate with how sure it is, every lane opponent and lane curves.", .{ch.name});
-    const path = try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug});
+    const title = try a.print("{s} win rate, lane opponents and curves | meiolol", .{ch.name});
+    const desc = try a.print("{s} in ranked solo queue by region, rank and patch: win rate with how sure it is, every lane opponent and lane curves.", .{ch.name});
+    const path = try a.print("champion/{s}.html", .{ch.slug});
     var p = site.sharedPage(title, desc, .champions);
     p.root = "../";
-    p.counterparts = undefined;
+    p.counterparts = @as([html.View.count][]const u8, undefined);
     for (html.View.all, &p.counterparts.?) |v, *there| there.* = try std.mem.concat(a, u8, &.{ path, v.query() });
     try html.head(w, p);
 
@@ -1269,7 +1268,7 @@ test "views: a tree each, switches between them, shared pages once" {
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const out = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/site", .{&tmp.sub_path});
+    const out = try arena.print(".zig-cache/tmp/{s}/site", .{&tmp.sub_path});
     try generate(gpa, io, db, .{
         .out_dir = out,
         .patches = &.{"16.20"},

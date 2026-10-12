@@ -4,6 +4,33 @@ Assessed 2026-10-11 against commit 1149c0b. Evidence: research/questions/
 zig-017-migration.md (release notes plus a trial port). The full diff and build output
 are in research/raw/zig-017-trial-port.md.
 
+## Done (2026-10-12)
+
+Moved on 2026-10-12 (Jacob: go once ZLS main and dvui's 0.17 PR were usable). Toolchain:
+Homebrew zig 0.17.0; ZLS built from zigtools/zls main (0.17.0-dev, no 0.17 release yet);
+0.16.0 tarball kept in ~/.local/zig for old commits. dvui 0.17: PR #1012 (head 164b69f)
+builds the dx11 hello for Windows (2.58 MB); pin it until merged.
+
+More breaks than the trial port (the tree had grown), all fixed:
+- build.zig: `addFmt` paths are LazyPaths; `findProgram` takes options and poisons the
+  configure cache (lint now checks the tool in its own shell step); `std.builtin` is
+  `std.lang`
+- SQLite header via the translate-c package, branch zig-0.17.x (main tracks Zig master)
+- `Allocator.dupeZ` and `fmt.bufPrintZ` gone: `dupeSentinel(.., 0)`,
+  `mem.printSentinel(.., 0)`; deprecated `fmt.allocPrint`/`bufPrint` moved to
+  `a.print`/`mem.print`
+- Semantics: assigning `undefined` to an optional now reads as null in safe builds, so
+  `p.counterparts = undefined` then `.?` panicked; assign the payload type's undefined
+- `zig fmt` rewrites deprecated builtins (`@intFromEnum` to `@backingInt`, `@enumFromInt`
+  to `@fromBackingInt`): 101 lines, fmt-only
+
+Checked: `zig build ci`; box (aarch64 musl ReleaseSafe): `status`, and `site --euw-only`
+on a frozen copy of the live data: 65,880 files byte-identical to the 0.16 build except
+meiolol.wasm, which gave identical replies to 400 draft requests (and is 5% smaller).
+Site wall time swings 63-181 s on both versions with the page cache (the box has 11 GB
+RAM for ~17 GB of DBs); CPU time is the same. Windows: `suggest` byte-identical, `get`
+and `watch` reach the League client. Not yet: a real champ select on 0.17.
+
 ## Decision (Jacob, 2026-10-11)
 
 Wait. ZLS does not work with 0.17 (the maker/configurer split; release notes, Build
