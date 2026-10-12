@@ -212,6 +212,51 @@ Reading:
 - Gains are small in MSE terms (a lane matchup is ~1-3.5%) because one game's numbers
   are mostly the game. They are real: intervals are a tenth of the gains
 
+### Champion embeddings against the enemy team, 2026-10-12 (meiolol-2a)
+
+`meiolol-lab enemy SNAP preds` (src/lab/enemy.zig, fm.zig) on snap-20261012T2055Z, the
+same rows; run 20261012T2210Z-enemy7 on the gpu-box (dcbd6f0). Nested models per
+outcome, fitted by Adam with L2, grid (dim 4/8/16, L2) and epochs picked on the newest
+20% of train, refit on all train, test once:
+
+- additive: champion-role mean + platform x role + each enemy and ally champion-role's
+  effect on my role
+- lane: + an embedding interaction with the lane opponent only (both enemies for bot
+  and support): w[my role][their role] * <u[me], v[them]>
+- pairwise: the same interaction with all five enemies, each role pair weighted
+
+Use-time features: champions, roles, platform (champ-select legal). Compared with
+`meiolol-lab pairs` (src/lab/pairs.zig): gain as % of base-champrole MSE in raw outcome
+units (3c's table above standardises per role first, so its % differ slightly; on raw
+units 3c-team is 2.75 / 4.31 / 7.70 / 3.65 / 2.00), ± 95% clustered by game:
+
+| comparison | gold14 | lanediff14 | cs10 | deaths15 | first_item |
+| --- | --- | --- | --- | --- | --- |
+| lane vs additive (lane interaction) | 0.41 ± 0.11 | 0.60 ± 0.16 | 0.77 ± 0.18 | 0.04 ± 0.07 | 0.44 ± 0.10 |
+| pairwise vs lane (the other four enemies) | -0.13 ± 0.09 | -0.09 ± 0.06 | 0.02 ± 0.12 | 0.03 ± 0.05 | -0.06 ± 0.09 |
+| lane vs 3c-team | 0.22 ± 0.13 | 0.79 ± 0.19 | 0.23 ± 0.19 | 0.46 ± 0.12 | 0.07 ± 0.30 |
+| additive vs 3c-team | -0.19 ± 0.17 | 0.19 ± 0.25 | -0.54 ± 0.22 | 0.42 ± 0.13 | -0.37 ± 0.32 |
+
+Interaction size in the pairwise model (RMS of the term on test rows), where it is free
+to weight any role pair: gold14 top vs top 97 gold, mid vs mid 32, bot vs bot 9, every
+other pair under 7; lanediff14 top 216, mid 104, bot vs bot 47 and vs support 42, off
+the lane 0-27; jungle vs anyone ~0.
+
+Reading:
+- The answer to "your champion against the whole enemy team" is the same as 3c's:
+  champion-specific interactions live in the lane. Letting every enemy interact adds
+  nothing (pairwise vs lane within noise, slightly negative); the model itself puts
+  its interaction weight on the lane diagonal. Beyond the lane the enemy team acts
+  additively (3c's groups), at 118k train games
+- A low-rank lane interaction (embeddings) beats 3c's shrunk lane-pair cells on
+  lanediff14 (+0.79) and gold14 (+0.22): pairs with few games borrow from similar
+  champions. Worth carrying into the lane curves where pair cells are thin
+- deaths15: additive alone beats 3c-team (+0.42), so the gain is in the additive part
+  (ally/enemy terms by my role, unshrunk), not interactions; worth checking which
+  group with 3c
+- Compute: each fit is 1-5 s single-threaded on 1.2M rows; a whole run (5 outcomes x
+  4 models x grid) is ~5 minutes on one gpu-box core. No GPU needed at this size
+
 ## Next steps
 
 - Experience term: rerun once the daily eval shows 300+ train and 100+ test games per
