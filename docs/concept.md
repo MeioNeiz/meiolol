@@ -1,5 +1,18 @@
 # Concept: meiolol, learn your lane
 
+## Framing: game review, like chess.com's (Jacob, 2026-10-13)
+
+The product is "game review for League": look yourself up, each game reviewed like a
+chess game. Win chance by minute with an evaluation bar; key moments as move classes
+(turning minute, big minutes, swings against you, costly deaths) on the chart and in a
+list; death cost; lane against typical; a strip of recent games. Next: the Rift map as
+the board (deaths, objectives, your position by minute: timelines have positions, the
+API doesn't send them yet). Look: Linear-like (small type, dark, violet accent, data in
+colour); Jacob rejected League-site looks (splash art, big condensed type), editorial,
+terminal and Wrapped styles. Home leads with the lookup and a review demo. Menu: Your
+games, Daily Draft, Learn, Champions (Matchups and Champion pool as its tabs). Code:
+static/review.js, your.js, home.js; root.zig writeIndex; html.zig nav
+
 ## Identity draft four: scout your own games (Jacob, 2026-10-12)
 
 Supersedes the pitch below where they differ; the parts below stay as the benchmark and
