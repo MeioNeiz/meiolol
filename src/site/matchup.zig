@@ -7,6 +7,7 @@ const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
 const comeback = @import("comeback.zig");
+const lanechart = @import("lanechart.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -394,143 +395,37 @@ fn chartOne(
     when: []const u8,
     lane: []const u8,
 ) !void {
-    const vs: []const Variant = &.{one};
-    var max_abs: u32 = 0;
-    var longest: usize = 0;
-    for (vs) |s| {
-        const last = reach(s.v);
-        longest = @max(longest, last);
-        for (0..last) |i| {
-            const b = band(s.v, base, metric, i);
-            max_abs = @max(max_abs, @abs(b[0]), @abs(b[1]), @abs(@as(i32, s.v.estimate(metric, i).mean)));
-        }
-    }
+    const last = reach(one.v);
     const figure = .{
         .thin = if (thin(one.v)) " thin" else "",
         .exp = if (toggle) tpl.t(" exp exp-{key}", .{ .key = one.key }) else null,
     };
-    if (longest < 2) {
+    if (last < 2) {
         return tpl.render(w,
             \\<figure class="chart{thin}{exp}">
             \\<p class="muted">Not enough games yet.</p></figure>
             \\
         , figure);
     }
+    var bands: [curvesfile.max_minutes][2]i32 = undefined;
+    var line: [curvesfile.max_minutes]i32 = undefined;
+    for (0..last) |i| {
+        bands[i] = band(one.v, base, metric, i);
+        line[i] = one.v.estimate(metric, i).mean;
+    }
+    var aria_buf: [160]u8 = undefined;
+    const aria = std.fmt.bufPrint(&aria_buf, "{s} of {s} minus {s} by minute", .{ unit, x.name, y.name }) catch unit;
     try tpl.renderPart(w, "<figure class=\"chart{thin}{exp}\">\n", figure);
-    const g: Geometry = .{ .scale = niceCeil(@intCast(max_abs)), .longest = longest };
-    try tpl.renderPart(w, "<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"{unit} of {x} minus {y} by minute\">\n", .{
-        .width = Geometry.width,
-        .height = Geometry.height,
-        .unit = unit,
-        .x = x.name,
-        .y = y.name,
-    });
-    for ([_]i32{ g.scale, 0, -g.scale }) |tick| {
-        try tpl.render(w,
-            \\<line class="{class}" x1="{left}" x2="{right}" y1="{y:.1}" y2="{y:.1}"/><text x="{label_x}" y="{label_y:.1}" text-anchor="end">{sign}{tick}</text>
-            \\
-        , .{
-            .class = if (tick == 0) "zero" else "grid",
-            .left = Geometry.left,
-            .right = Geometry.width - Geometry.right,
-            .y = g.py(tick),
-            .label_x = Geometry.left - 6,
-            .label_y = g.py(tick) + 4,
-            .sign = if (tick > 0) "+" else "",
-            .tick = tick,
-        });
-    }
-    var minute: usize = 5;
-    while (minute <= longest) : (minute += 5) {
-        try tpl.render(w, "<text x=\"{x:.1}\" y=\"{y}\" text-anchor=\"middle\">{minute} min</text>", .{
-            .x = g.px(minute - 1),
-            .y = Geometry.height - 8,
-            .minute = minute,
-        });
-    }
-    // Before this minute nearly every game is still running (no surrender vote yet)
-    if (longest > surrender_minute) {
-        try tpl.render(w, "<line class=\"ending\" x1=\"{x:.1}\" x2=\"{x:.1}\" y1=\"{top}\" y2=\"{bottom}\"/>", .{
-            .x = g.px(surrender_minute - 1),
-            .top = Geometry.top,
-            .bottom = Geometry.height - Geometry.bottom,
-        });
-    }
-    try tpl.render(w,
-        \\<text x="{x}" y="{top}" class="side">{a} ahead</text><text x="{x}" y="{bottom}" class="side">{b} ahead</text>
-        \\
-    , .{
-        .x = Geometry.left + 6,
-        .top = Geometry.top + 12,
-        .bottom = Geometry.height - Geometry.bottom - 6,
+    try lanechart.render(w, .{
+        .aria = aria,
         .a = x.name,
         .b = y.name,
+        .band = bands[0..last],
+        .line = line[0..last],
     });
-    const last = reach(one.v);
-    if (last >= 2) {
-        try tpl.render(w,
-            \\<polygon class="band" points="{band}"/>
-            \\<polyline class="median" points="{line}"/>
-            \\
-        , .{
-            .band = Points{ .g = g, .v = one.v, .base = base, .metric = metric, .last = last, .what = .band },
-            .line = Points{ .g = g, .v = one.v, .base = base, .metric = metric, .last = last, .what = .line },
-        });
-    }
-    try w.writeAll("</svg>\n");
     try caption(w, one.v, base, metric, x, y, when, lane);
     try w.writeAll("</figure>\n");
 }
-
-/// Chart area in SVG units; values map onto it by the chart's scale
-const Geometry = struct {
-    scale: i32,
-    longest: usize,
-
-    const width = 640;
-    const height = 240;
-    const left = 56;
-    const right = 28;
-    const top = 16;
-    const bottom = 28;
-    const mid: f64 = top + (height - top - bottom) / 2.0;
-    const half: f64 = (height - top - bottom) / 2.0;
-
-    fn px(g: Geometry, i: usize) f64 {
-        return left + @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(g.longest - 1)) * (width - left - right);
-    }
-
-    fn py(g: Geometry, value: i32) f64 {
-        return mid - @as(f64, @floatFromInt(value)) / @as(f64, @floatFromInt(g.scale)) * half;
-    }
-};
-
-/// An SVG points list: the band (upper edge forwards, lower edge back) or the line
-const Points = struct {
-    g: Geometry,
-    v: View,
-    base: ?View,
-    metric: curvesfile.Metric,
-    last: usize,
-    what: enum { band, line },
-
-    pub fn render(p: Points, w: *Writer) Writer.Error!void {
-        if (p.what == .line) {
-            for (0..p.last) |i| try point(w, p.g.px(i), p.g.py(p.v.estimate(p.metric, i).mean));
-            return;
-        }
-        for (0..p.last) |i| try point(w, p.g.px(i), p.g.py(band(p.v, p.base, p.metric, i)[1]));
-        var i = p.last;
-        while (i > 0) {
-            i -= 1;
-            try point(w, p.g.px(i), p.g.py(band(p.v, p.base, p.metric, i)[0]));
-        }
-    }
-
-    fn point(w: *Writer, x: f64, y: f64) Writer.Error!void {
-        try w.print("{d:.1},{d:.1} ", .{ x, y });
-    }
-};
 
 fn caption(w: *Writer, v: View, base: ?View, metric: curvesfile.Metric, x: Champ, y: Champ, when: []const u8, lane: []const u8) !void {
     const last = reach(v);
@@ -564,7 +459,7 @@ fn caption(w: *Writer, v: View, base: ?View, metric: curvesfile.Metric, x: Champ
 }
 
 /// Surrender opens at 15 minutes: before it nearly all games are still running
-const surrender_minute = 15;
+const surrender_minute = lanechart.surrender_minute;
 
 /// "From 15 min only games still running count": the share ended by 20 and 25 min
 fn ended(w: *Writer, v: View, last: usize) !void {
@@ -585,13 +480,6 @@ fn ended(w: *Writer, v: View, last: usize) !void {
 
 /// A round number (1, 2, 3, 4, 5, 6 or 8 times a power of ten) at least `value`, and
 /// at least 1, so the chart fills most of its height
-fn niceCeil(value: i32) i32 {
-    var step: i32 = 1;
-    while (true) : (step *= 10) {
-        for ([_]i32{ 1, 2, 3, 4, 5, 6, 8 }) |k| if (k * step >= value) return k * step;
-    }
-}
-
 fn sides(w: *Writer, v: View, x: Champ, y: Champ) !void {
     const lane = v.lane();
     try w.print(
@@ -667,9 +555,9 @@ fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
 }
 
 test "nice scale" {
-    try std.testing.expectEqual(1, niceCeil(0));
-    try std.testing.expectEqual(500, niceCeil(420));
-    try std.testing.expectEqual(600, niceCeil(501));
-    try std.testing.expectEqual(2000, niceCeil(1001));
-    try std.testing.expectEqual(3000, niceCeil(2120));
+    try std.testing.expectEqual(1, lanechart.niceCeil(0));
+    try std.testing.expectEqual(500, lanechart.niceCeil(420));
+    try std.testing.expectEqual(600, lanechart.niceCeil(501));
+    try std.testing.expectEqual(2000, lanechart.niceCeil(1001));
+    try std.testing.expectEqual(3000, lanechart.niceCeil(2120));
 }
