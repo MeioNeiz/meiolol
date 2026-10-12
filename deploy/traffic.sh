@@ -18,9 +18,13 @@ touch "$HOURLY"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+TOP='def top($n): to_entries | sort_by(-.value) | .[:$n] | from_entries;'
+# Lines per jq run: its maps of paths (404s are any path a scanner tries) stay small
+PIECE_LINES=50000
+
 # Per hour: human and bot page views, assets, 5xx, bytes, then counts by status, 404 uri,
 # page uri, referrer domain, agent family, render cache status, latency bucket (ms)
-SUMMARY='
+SUMMARY=$TOP'
 def page: .m == "GET" and (.s == 200 or .s == 304)
     and (.u | test("(/|\\.html)$") or (split("/") | last | contains(".") | not));
 def bot: (.a // "") as $a | $a == ""
@@ -41,7 +45,6 @@ def domain: first(((.r // "") | capture("^[A-Za-z][A-Za-z0-9+.-]*://(?<d>[^/:?#@
 def bucket: (.rt * 1000) as $ms
     | (([1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000]
         | map(select(. >= $ms)) | first) // 60000) | tostring;
-def top($n): to_entries | sort_by(-.value) | .[:$n] | from_entries;
 reduce (inputs | fromjson? | select(type == "object" and (.t | type) == "number"
         and (.s | type) == "number" and (.u | type) == "string")
     | select(.u | startswith("/admin/") | not)) as $r
@@ -68,24 +71,46 @@ reduce (inputs | fromjson? | select(type == "object" and (.t | type) == "number"
 | .hours |= map_values(.nf |= top(200) | .pg |= top(200) | .rf |= top(200))
 '
 
-MERGE='
+# Path maps trimmed to the top 200 again after adding, so a cache entry stays bounded
+MERGE=$TOP'
 def addmap($a; $b): reduce ($b | to_entries[]) as $e ($a // {}; .[$e.key] += $e.value);
 def mergeh($a; $b): if $a == null then $b else
     {h: ($a.h + $b.h), b: ($a.b + $b.b), a: ($a.a + $b.a), e: ($a.e + $b.e), by: ($a.by + $b.by),
-     st: addmap($a.st; $b.st), nf: addmap($a.nf; $b.nf), pg: addmap($a.pg; $b.pg),
-     rf: addmap($a.rf; $b.rf), ag: addmap($a.ag; $b.ag), rc: addmap($a.rc; $b.rc),
+     st: addmap($a.st; $b.st), nf: (addmap($a.nf; $b.nf) | top(200)),
+     pg: (addmap($a.pg; $b.pg) | top(200)), rf: (addmap($a.rf; $b.rf) | top(200)),
+     ag: addmap($a.ag; $b.ag), rc: addmap($a.rc; $b.rc),
      lt: addmap($a.lt; $b.lt)} end;
 def merge: {from: (map(.from) | map(select(. != null)) | min),
     hours: (reduce .[] as $s ({}; reduce ($s.hours | to_entries[]) as $e (.;
         .[$e.key] = mergeh(.[$e.key]; $e.value))))};
 '
 
+# Summary of stdin's lines, PIECE_LINES at a time, merged. A piece jq fails on (out of
+# memory under MemoryMax) is skipped, so the offset still moves on: otherwise every later
+# run would fail on the same lines and traffic.json would stop
+summary() {
+    local piece
+    rm -f "$tmp"/piece.* "$tmp/pieces.json"
+    touch "$tmp/pieces.json"
+    split -a 4 -l "$PIECE_LINES" - "$tmp/piece."
+    for piece in "$tmp"/piece.*; do
+        [[ -f "$piece" ]] || continue
+        if jq -R -n -c "$SUMMARY" < "$piece" > "$tmp/piece.json"; then
+            cat "$tmp/piece.json" >> "$tmp/pieces.json"
+        else
+            echo "skipped $(wc -l < "$piece") lines: summary failed" >&2
+        fi
+        rm -f "$piece"
+    done
+    jq -c -s "$MERGE"' merge' "$tmp/pieces.json"
+}
+
 # Summarises FILE's lines from its cached offset on, merged into the cache entry
 summarise() {
     local file=$1 key=$2 entry=$CACHE/$2.json off=0 size part
     if [[ "$file" == *.gz ]]; then
         [[ -f "$entry" ]] && return 0
-        gzip -dc "$file" | jq -R -n -c "$SUMMARY" > "$tmp/new.json"
+        gzip -dc "$file" | summary > "$tmp/new.json"
         jq -c '{off: -1, sum: .}' "$tmp/new.json" > "$entry"
         return 0
     fi
@@ -100,7 +125,7 @@ summarise() {
         head -c $(($(wc -c < "$tmp/chunk") - part)) "$tmp/chunk" > "$tmp/chunk.full"
         mv "$tmp/chunk.full" "$tmp/chunk"
     fi
-    jq -R -n -c "$SUMMARY" < "$tmp/chunk" > "$tmp/new.json"
+    summary < "$tmp/chunk" > "$tmp/new.json"
     if [[ -f "$entry" ]]; then
         jq -c -n --slurpfile old "$entry" --slurpfile new "$tmp/new.json" --argjson off \
             $((off + $(wc -c < "$tmp/chunk"))) \
