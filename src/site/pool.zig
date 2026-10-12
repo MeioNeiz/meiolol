@@ -5,6 +5,7 @@
 const std = @import("std");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const tpl = html.tpl;
 const matchup = @import("matchup.zig");
 const pool = @import("../pool.zig");
 const learning = @import("../learning.zig");
@@ -13,7 +14,6 @@ const learning_page = @import("learning.zig");
 const Writer = std.Io.Writer;
 const Site = root.Site;
 const Champ = root.Champ;
-const esc = html.esc;
 
 /// On a champion page; the pool page shows the full list
 const also_shown = 6;
@@ -34,7 +34,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
         .pool,
     );
     try html.head(w, pg);
-    try w.print(
+    try tpl.render(w,
         \\<h1>Champion pool</h1>
         \\<p class="lead">Pick the champion you main, or up to three. See what players who
         \\main them also play, which of those champions do well into your main's hard lanes,
@@ -47,16 +47,24 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
         \\<label><span>Also</span><input data-main list="champions" placeholder="Champion (optional)"></label>
         \\<label><span>Also</span><input data-main list="champions" placeholder="Champion (optional)"></label>
         \\</form>
-        \\<div id="results" data-to-site="{s}" data-query="{f}"></div>
-        \\<p class="muted">A player's main is their most played champion, from {s}
-        \\({d} players so far). "×2.4" means players who main that champion play this one
+        \\<div id="results" data-to-site="{up}" data-query="{query}"></div>
+        \\<p class="muted">A player's main is their most played champion, from {source}
+        \\({players} players so far). "×2.4" means players who main that champion play this one
         \\2.4 times as often as other players do; small groups are pulled toward ×1. Lists
-        \\start at {d} players per main. Lane numbers are percentage points of win chance
-        \\beyond what the two champions' own win rates predict, {s} {s}.
-        \\<a href="{s}method.html">Method</a>.</p>
+        \\start at {min} players per main. Lane numbers are percentage points of win chance
+        \\beyond what the two champions' own win rates predict, {in} {when}.
+        \\<a href="{up}method.html">Method</a>.</p>
         \\<script src="pool.js" defer></script>
         \\
-    , .{ site.view.up(), esc(site.view.query()), sourceText(p), p.players, p.min_players, site.view.region.in(), site.when, site.view.up() });
+    , .{
+        .up = site.view.up(),
+        .query = site.view.query(),
+        .source = sourceText(p),
+        .players = p.players,
+        .min = p.min_players,
+        .in = site.view.region.in(),
+        .when = site.when,
+    });
     try learning_page.table(site, w, l);
     try html.foot(w, pg);
 }
@@ -67,30 +75,39 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, ch: Champ) !v
     const m: pool.Main = for (p.mains) |m| {
         if (m.id == ch.id) break m;
     } else .{ .id = ch.id, .players = 0, .one_tricks = 0 };
-    try w.print("<h2>Players who main {f} also play</h2>\n", .{esc(ch.name)});
+    try tpl.render(w, "<h2>Players who main {name} also play</h2>\n", .{ .name = ch.name });
     if (m.players < p.min_players) {
-        try w.print(
-            "<p class=\"note\">Not enough players yet: {d} with {f} as their most played champion so far; lists start at {d}.</p>\n",
-            .{ m.players, esc(ch.name), p.min_players },
-        );
+        try tpl.render(w,
+            \\<p class="note">Not enough players yet: {players} with {name} as their most played champion so far; lists start at {min}.</p>
+            \\
+        , .{ .players = m.players, .name = ch.name, .min = p.min_players });
         return;
     }
-    try w.print(
-        "<p class=\"muted\">{d} players main {f}, from {s}; ×2 means twice as often as other players.</p>\n",
-        .{ m.players, esc(ch.name), sourceText(p) },
-    );
+    try tpl.render(w,
+        \\<p class="muted">{players} players main {name}, from {source}; ×2 means twice as often as other players.</p>
+        \\
+    , .{ .players = m.players, .name = ch.name, .source = sourceText(p) });
     try w.writeAll("<div class=\"card\"><ul class=\"also\">\n");
     if (m.also.len == 0) try w.writeAll("<li class=\"muted\">No champion stands out yet</li>\n");
     for (m.also[0..@min(m.also.len, also_shown)]) |a| {
         const other = matchup.champ(site, a.id) orelse continue;
-        try w.writeAll("<li><span>");
-        try site.champLink(w, other, "../");
-        try w.print("</span><span class=\"num\" title=\"{d} of {d} players\">×{d:.1}</span></li>\n", .{
-            a.together, m.players, a.lift,
+        try tpl.render(w,
+            \\<li><span>{champ}</span><span class="num" title="{together} of {players} players">×{lift:.1}</span></li>
+            \\
+        , .{
+            .champ = tpl.call(champCell, .{ site, other }),
+            .together = a.together,
+            .players = m.players,
+            .lift = a.lift,
         });
     }
-    try w.print(
-        "</ul></div>\n<p><a href=\"../pool.html#{s}\">{f}'s pool: options for hard lanes and when it is banned</a></p>\n",
-        .{ ch.slug, esc(ch.name) },
-    );
+    try tpl.renderPart(w,
+        \\</ul></div>
+        \\<p><a href="../pool.html#{slug}">{name}'s pool: options for hard lanes and when it is banned</a></p>
+        \\
+    , .{ .slug = ch.slug, .name = ch.name });
+}
+
+fn champCell(w: *Writer, site: *const Site, other: Champ) !void {
+    try site.champLink(w, other, "../");
 }
