@@ -19,6 +19,8 @@
 # on a new patch, in the background; the next site build picks the files up.
 # Daily, `meiolol your-example` (read-only, background) leaves one anonymised player's
 # games in data/your-example.json; each site build gets a copy for your.html's example.
+# A failed run removes the file, so a stale example (perhaps a player forgotten since)
+# never ships; the page then offers none until the next success.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
 # behind basic auth there; the site's rsync leaves that directory alone. Daily, a dbstat
 # scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
@@ -87,9 +89,12 @@ while true; do
         storage_pid=$!
     fi
     if (( now - last_example >= 86400 )); then
-        (nice -n 10 bin/meiolol your-example --out data/your-example.json.new \
-            > data/your-example.log 2>&1 \
-            && mv data/your-example.json.new data/your-example.json) &
+        (if nice -n 10 bin/meiolol your-example --out data/your-example.json.new \
+            > data/your-example.log 2>&1; then
+            mv data/your-example.json.new data/your-example.json
+        else
+            rm -f data/your-example.json data/your-example.json.new
+        fi) &
         last_example=$now
     fi
     if [[ -n "$patch" ]] && { [[ -z "$builds_pid" ]] || ! kill -0 "$builds_pid" 2> /dev/null; } \

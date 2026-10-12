@@ -57,7 +57,8 @@ basic auth in preview). `meiolol your-example` (src/api/example.zig, read-only, 
 the box) picks one EUW player with the most lane games with timelines in the last 7
 days, Gold to Emerald first, never a `forgotten` one, and writes their 10 newest ranked
 solo games through the same report() as the API. No name, PUUID or match id; game starts
-cut to the day (UTC). The web loop runs it daily and copies the file into each site build.
+cut to the day (UTC). The web loop runs it daily and copies the file into each site build;
+a failed run deletes it, so no stale example ships (the page then offers none).
 
 ## API
 
@@ -116,10 +117,12 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
 - Riot's erasure lists and emailed requests: `api.cache.forget(db, puuid, now)` deletes
   and blocks; data-safety-af's `meiolol forget` calls it for api.db
 - The box holds the same players (crawler DBs, backups). Forgotten PUUIDs sync both ways
-  through the exchange directory, hourly and on each honoured objection: the service
-  writes forgotten.txt (every blocked PUUID, one per line, no Riot IDs), the box pulls it
-  and runs `meiolol forget --list`; the box pushes its own list as box-forgotten.txt and
-  the service blocks those too. Both files are complete lists, so either side can rerun
+  through the exchange directory: the service writes forgotten.txt (every blocked PUUID,
+  one per line, no Riot IDs) hourly and on each honoured objection, and imports
+  box-forgotten.txt then; the box swaps lists once a day at ~04:00 UTC
+  (deploy/backup-loop.sh): it pulls forgotten.txt, runs `meiolol forget --list` and pushes
+  its own list as box-forgotten.txt. So an objection reaches the box's data within a day.
+  Both files are complete lists, so either side can rerun
 - Logs: no Riot IDs. The service never logs them, and the Riot client shows account
   lookups by endpoint name instead of path. nginx does not log /api/ (`access_log off`
   below), since the query string holds the Riot ID
