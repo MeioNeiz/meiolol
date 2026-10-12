@@ -12,6 +12,19 @@ meiolol eval --data DIR [--patch P] [--platform P] [--test-platform P]
 Copy of the box DB without touching the live one (python3 on the box, read-only source):
 `sqlite3.connect("file:.../meiolol.db?mode=ro", uri=True).backup(sqlite3.connect(dst))`.
 
+The box runs it daily (deploy/web-loop.sh, ~9 min) into data/eval-history.tsv. Watch it
+from here: `deploy/box.sh model [ROWS] [-f]` (run state, AUC sparklines per model, last
+runs with the best log loss vs coin flip; -f redraws every minute). Charts and the latest
+report: the admin page's Model tab.
+
+Training runs on the Mac (deploy/lab-run.sh start mac ...) show live in the admin page's
+Training tab (https://meiolol.jomify.lol/admin/#training; deploy/lab-push.sh,
+docs/hosting.md). A run reports progress by appending to metrics.tsv in its run directory
+(the working directory): a header, then a row per evaluation, first column the x axis
+(step, epoch, games), the rest numbers.
+Columns sharing the part after the last `_` share a chart (`train_loss`, `test_loss`),
+and each prefix keeps its colour across charts. Flush each row as it is written.
+
 ## Method
 
 - Time split: newest 20% of games held out (test), models built only from older games
