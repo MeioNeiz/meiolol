@@ -54,8 +54,6 @@ pub const Options = struct {
     curves: [html.View.count]?[]const u8 = @splat(null),
     /// Builds file per view (`meiolol builds`): build pages in the patch views where set
     builds: [html.View.count]?[]const u8 = @splat(null),
-    /// Champion slugs whose pages get the filter bar (filters.zig; a prototype)
-    filter_champions: []const []const u8 = &.{"ahri"},
     /// Only the EUW views (the root and patch/; the shared pages come from patch/): a
     /// quick preview, links into all/ dangle
     euw_only: bool = false,
@@ -119,16 +117,21 @@ pub const Site = struct {
     learning: learning.Learning = .{},
     /// Data and script files in the view's directory
     files: []const File = &.{},
-    /// The shared view's files at the site root (Daily Draft, Learn, filter data)
+    /// The shared view's files at the site root (Daily Draft, Learn)
     shared_files: []const File = &.{},
     /// Learn page facts; the shared view's only
     learn: ?learn.Facts = null,
+    /// Champion page filter data; the root view's only, as the champion pages
+    filter: filters.Made = .{},
 
     /// A page of the view at `path` within it
     pub fn page(s: *const Site, title: []const u8, description: []const u8, path: []const u8, nav: html.Nav) html.Page {
         var p = s.sharedPage(title, description, nav);
         p.view = s.view;
-        p.counterparts = @splat(path);
+        p.counterparts = undefined;
+        for (html.View.all, &p.counterparts.?) |v, *there| {
+            there.* = std.mem.concat(s.arena, u8, &.{ v.dir(), path }) catch path;
+        }
         p.root = s.toRoot(path);
         return p;
     }
@@ -166,10 +169,16 @@ pub const Site = struct {
         ) catch "";
     }
 
-    pub fn champLink(s: *const Site, w: *Writer, ch: Champ, root: []const u8) !void {
+    /// To the champion's page (one per champion, at the site root), its filters set to
+    /// this view. `to_site`: from the linking page to the site root. Raw: escape it
+    pub fn champHref(s: *const Site, ch: Champ, to_site: []const u8) []const u8 {
+        return std.fmt.allocPrint(s.arena, "{s}champion/{s}.html{s}", .{ to_site, ch.slug, s.view.query() }) catch "";
+    }
+
+    pub fn champLink(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8) !void {
         try w.print(
-            "<a class=\"champ\" href=\"{s}champion/{s}.html\"><img src=\"{s}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{f}</a>",
-            .{ root, ch.slug, s.icon(ch), esc(ch.name) },
+            "<a class=\"champ\" href=\"{f}\"><img src=\"{s}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{f}</a>",
+            .{ esc(s.champHref(ch, to_site)), s.icon(ch), esc(ch.name) },
         );
     }
 
@@ -325,7 +334,9 @@ pub fn pagePaths(site: *const Site) ![]const []const u8 {
     var list: std.ArrayList([]const u8) = .empty;
     try list.appendSlice(a, &.{ "index.html", "champions.html" });
     for (Role.all) |r| try list.append(a, try std.fmt.allocPrint(a, "role/{s}.html", .{roleSlug(r)}));
-    for (site.champs) |ch| try list.append(a, try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug}));
+    if (site.view.index() == 0) for (site.champs) |ch| {
+        try list.append(a, try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug}));
+    };
     try list.append(a, "matchup/index.html");
     if (site.curves) |*c| try matchup.paths(site, c, &list);
     if (site.view.period == .patch) if (site.view_builds[site.view.index()]) |*b| try builds_page.paths(site, b, &list);
@@ -343,6 +354,7 @@ pub fn renderPage(site: *const Site, w: *Writer, path: []const u8) !bool {
     } else if (strip(path, "role/", ".html")) |s| {
         try writeTierList(site, w, roleFromSlug(s) orelse return false);
     } else if (strip(path, "champion/", ".html")) |s| {
+        if (site.view.index() != 0) return false;
         try writeChampion(site, w, site.champBySlug(s) orelse return false);
     } else if (eql(u8, path, "matchup/index.html")) {
         try matchup.writeIndex(site, w, if (site.curves) |*c| c else null);
@@ -456,7 +468,11 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
             .path = "robots.txt",
             .data = if (opts.public) "User-agent: *\nAllow: /\n" else "User-agent: *\nDisallow: /\n",
         });
-        try shared_files.appendSlice(arena, try filters.make(site, db, all_opts));
+    }
+    // The root view's directory is the site root, where champion pages are
+    if (view.index() == 0) {
+        site.filter = try filters.make(site, db, all_opts);
+        try files.appendSlice(arena, site.filter.files);
     }
     try files.append(arena, .{ .path = "data/stats.bin", .data = model_bytes });
     try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
@@ -783,11 +799,17 @@ fn wrHue(p: f64, span: f64) f64 {
     return red + (green - red) * (t + 1) / 2;
 }
 
-fn earlyNote(site: *const Site, w: *Writer) !void {
-    if (site.games >= 50_000) return;
+/// Under this many games a page says its data is early
+const early_games = 50_000;
+
+/// `filtered`: written even when hidden, for filters.js to show when the filters pick fewer
+/// games
+fn earlyNote(site: *const Site, w: *Writer, filtered: bool) !void {
+    const early = site.games < early_games;
+    if (!early and !filtered) return;
     try w.print(
-        "<p class=\"note\">Early data: {d} games so far ({s}). Each bar shows where a win rate likely is (95%) and narrows as games come in. Colour runs from red (low) through amber to green (high).</p>\n",
-        .{ site.games, site.when },
+        "<p class=\"note\" data-early=\"{d}\"{s}>Early data: <span data-early-games>{d} games so far ({s})</span>. Each bar shows where a win rate likely is (95%) and narrows as games come in. Colour runs from red (low) through amber to green (high).</p>\n",
+        .{ early_games, if (early) "" else " hidden", site.games, site.when },
     );
 }
 
@@ -859,7 +881,7 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
         try w.print("<tr data-name=\"{f}\"{s}><td class=\"rank\">{d}</td><td class=\"l\">", .{
             esc(row.ch.name), if (row.rare) " data-rare hidden" else "", n,
         });
-        try site.champLink(w, row.ch, root);
+        try site.champLink(w, row.ch, try std.mem.concat(site.arena, u8, &.{ root, site.view.up() }));
         try w.writeAll("</td>");
         if (role == null) try w.print("<td class=\"l role\" data-v=\"{s}\">{s}</td>", .{ roleName(row.role), roleName(row.role) });
         try winRateCell(w, row.wins, row.games, 0.12);
@@ -894,7 +916,7 @@ fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
         try w.print("<h1>{s} lane champions</h1>\n", .{roleName(r)});
     } else try w.writeAll("<h1>Champions</h1>\n");
     try w.print("<p class=\"muted\"><b>{d}</b> ranked solo/duo games {s}, {s}, all ranks.</p>\n", .{ site.games, site.view.region.in(), site.when });
-    try earlyNote(site, w);
+    try earlyNote(site, w, false);
     try tierTable(site, w, role, root);
     try html.foot(w, p);
 }
@@ -945,7 +967,7 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         \\
     , .{site.view.up()});
     try w.print("<h2>Champions</h2>\n<p class=\"muted\"><b>{d}</b> ranked solo/duo games {s}, {s}, all ranks. <a href=\"{s}method.html\">How the numbers are made</a></p>\n", .{ site.games, site.view.region.in(), site.when, site.view.up() });
-    try earlyNote(site, w);
+    try earlyNote(site, w, false);
     try tierTable(site, w, null, "");
     try html.foot(w, p);
 }
@@ -957,13 +979,18 @@ const Opponent = struct {
     iv: [2]f64,
 };
 
+/// One page per champion, from the root view (EUW, 30 days) at the site root; its
+/// filters (filterBar) show the other views and any other region, rank or patch
 fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     const a = site.arena;
     const st = &site.stats;
-    const title = try std.fmt.allocPrint(a, "{s} win rate, lane opponents and curves, {s} | meiolol", .{ ch.name, site.when });
-    const desc = try std.fmt.allocPrint(a, "{s} in ranked solo queue {s}, {s}: win rate with how sure it is, every lane opponent and lane curves.", .{ ch.name, site.view.region.in(), site.when });
+    const title = try std.fmt.allocPrint(a, "{s} win rate, lane opponents and curves | meiolol", .{ch.name});
+    const desc = try std.fmt.allocPrint(a, "{s} in ranked solo queue by region, rank and patch: win rate with how sure it is, every lane opponent and lane curves.", .{ch.name});
     const path = try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug});
-    const p = site.page(title, desc, path, .champions);
+    var p = site.sharedPage(title, desc, .champions);
+    p.root = "../";
+    p.counterparts = undefined;
+    for (html.View.all, &p.counterparts.?) |v, *there| there.* = try std.mem.concat(a, u8, &.{ path, v.query() });
     try html.head(w, p);
 
     var roles: [Role.count]Role = undefined;
@@ -989,11 +1016,8 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         try w.writeAll(".");
     }
     try w.writeAll("</p></div></div>\n");
-    try earlyNote(site, w);
-    const filtered = for (site.opts.filter_champions) |f| {
-        if (std.mem.eql(u8, f, ch.slug)) break true;
-    } else false;
-    if (filtered) try filterBar(site, w, ch);
+    try earlyNote(site, w, true);
+    try filterBar(site, w, ch);
     if (n_roles == 0) try w.writeAll("<p>No games yet.</p>\n");
 
     for (roles[0..n_roles]) |r| {
@@ -1002,9 +1026,9 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         try w.print("<section id=\"{s}\"><h2>{s}</h2>\n<div class=\"tiles\">", .{ roleSlug(r), roleName(r) });
         try w.print("<div data-tile=\"wr\"><span>Win rate</span><b class=\"{s}\">", .{side(iv)});
         try pct(w, cr.wins, cr.games);
-        try w.print("</b><small>{d:.1}% to {d:.1}%</small></div><div data-tile=\"view\"><span>Pick rate</span><b>", .{ 100 * iv[0], 100 * iv[1] });
+        try w.print("</b><small>{d:.1}% to {d:.1}%</small></div><div data-tile=\"pick\"><span>Pick rate</span><b>", .{ 100 * iv[0], 100 * iv[1] });
         try pct(w, cr.games, site.games);
-        try w.writeAll("</b><small>of games</small></div><div data-tile=\"view\"><span>Ban rate</span><b>");
+        try w.writeAll("</b><small>of games</small></div><div data-tile=\"ban\"><span>Ban rate</span><b>");
         try pct(w, ch.banned, site.games);
         try w.print("</b><small>of games</small></div><div data-tile=\"games\"><span>Games</span><b>{d}</b><small>{s} lane</small></div></div>\n", .{ cr.games, roleName(r) });
 
@@ -1021,27 +1045,53 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     }
     try pool_page.section(site, w, &site.pool, ch);
     try learning_page.section(w, &site.learning, ch);
-    try w.print("<p class=\"muted small\">Win rates are raw: no pulling toward 50%. Bars are 95% Wilson intervals. Gold at {d} min is the lane curve's estimate (± two standard errors). <a href=\"{s}method.html\">Method</a>.</p>\n", .{ core.curvesfile.lane_minute, site.toShared(path) });
-    try w.print("<script src=\"../{s}table.js\" defer></script>\n", .{site.view.up()});
-    if (filtered) try w.print("<script src=\"../{s}filters.js\" defer></script>\n", .{site.view.up()});
+    try w.print("<p class=\"muted small\">Win rates are raw: no pulling toward 50%. Bars are 95% Wilson intervals. Gold at {d} min is the lane curve's estimate (± two standard errors); for filters other than a region and period above, the plain average of the games picked. <a href=\"../method.html\">Method</a>.</p>\n", .{core.curvesfile.lane_minute});
+    try w.writeAll("<script src=\"../table.js\" defer></script>\n<script src=\"../filters.js\" defer></script>\n");
     try html.foot(w, p);
 }
 
-/// Filter bar (filters.zig, static/filters.js): hidden until the script fills it from
-/// the champion's filter data. Its defaults are this view's region and period
+/// Filter bar (filters.zig, static/filters.js), set to the page as written (the root
+/// view); disabled until the script has the champion's filter data
 fn filterBar(site: *const Site, w: *Writer, ch: Champ) !void {
+    const f = site.filter;
+    const region = site.opts.platforms[0];
     try w.print(
-        "<div class=\"filter-bar\" hidden data-src=\"../{s}data/filters/{s}.json\" data-champions=\"../data/champions.json\" data-ddragon=\"{s}\" data-region=\"{s}\" data-period=\"{s}\">",
-        .{ site.view.up(), ch.slug, site.ddragon_version, if (site.view.region == .euw) site.opts.platforms[0] else "all", @tagName(site.view.period) },
+        "<div class=\"filter-bar\" data-src=\"../data/filters/{s}.json\" data-meta=\"../data/filters.json\" data-champions=\"../data/champions.json\" data-ddragon=\"{s}\" data-id=\"{d}\" data-region=\"{s}\" data-current=\"{s}\">",
+        .{ ch.slug, site.ddragon_version, ch.id, region, site.patch },
     );
-    try w.writeAll(
-        \\<label>Region <select data-f="region"></select></label>
-        \\<label>Rank <select data-f="rank"></select></label>
-        \\<label>Period <select data-f="period"></select></label>
-        \\<label>Opponents <select data-f="min"></select></label>
-        \\<button class="link" data-reset hidden>Reset</button></div>
-        \\
-    );
+    try w.writeAll("<label>Region <select data-f=\"region\" disabled><option value=\"all\">All regions</option>");
+    for (site.opts.all_platforms) |pl| {
+        try w.print("<option value=\"{s}\"{s}>{s}</option>", .{ pl, selected(std.mem.eql(u8, pl, region)), platformName(pl) });
+    }
+    try w.writeAll("</select></label>\n<label>Rank <select data-f=\"rank\" disabled><option value=\"\" selected>All ranks</option>");
+    for (filters.tiers, 0..) |t, i| {
+        try w.print("<option value=\"{d}\">{c}{s}+</option>", .{ i, t[0], try std.ascii.allocLowerString(site.arena, t[1..]) });
+    }
+    try w.writeAll("</select></label>\n<label>Period <select data-f=\"period\" disabled><option value=\"days30\" selected>Last 30 days</option>");
+    for (f.patches) |pa| {
+        const current = for (f.current) |c| {
+            if (std.mem.eql(u8, c, pa)) break true;
+        } else false;
+        try w.print("<option value=\"patch:{s}\">Patch {s}{s}</option>", .{ pa, pa, if (current) "" else " (last 30 days)" });
+    }
+    try w.writeAll("</select></label>\n<label>Opponents <select data-f=\"min\" disabled>");
+    const mins = [_][2][]const u8{
+        .{ "0", "All" },        .{ "5", "5+ games" },     .{ "10", "10+ games" },            .{ "20", "20+ games" },
+        .{ "50", "50+ games" }, .{ "100", "100+ games" }, .{ "p1", "Seen in 1%+ of games" }, .{ "p2", "Seen in 2%+ of games" },
+    };
+    for (mins, 0..) |m, i| try w.print("<option value=\"{s}\"{s}>{s}</option>", .{ m[0], selected(i == 0), m[1] });
+    try w.writeAll("</select></label>\n<button class=\"link\" data-reset hidden>Reset</button></div>\n");
+}
+
+fn selected(yes: bool) []const u8 {
+    return if (yes) " selected" else "";
+}
+
+/// "EUW1" -> "EUW", "EUN1" -> "EUNE", as static/filters.js platformName
+fn platformName(p: []const u8) []const u8 {
+    const names = [_][2][]const u8{ .{ "EUN1", "EUNE" }, .{ "LA1", "LAN" }, .{ "LA2", "LAS" }, .{ "OC1", "OCE" } };
+    for (names) |n| if (std.mem.eql(u8, n[0], p)) return n[1];
+    return std.mem.trimEnd(u8, p, "0123456789");
 }
 
 /// Every lane opponent: win rate with its interval and the lane curve's gold difference at
@@ -1178,14 +1228,23 @@ test "views: a tree each, switches between them, shared pages once" {
         const page = try read(arena, out, c[0]);
         try std.testing.expect(std.mem.indexOf(u8, page, c[1]) != null);
     }
-    const champ = try read(arena, out, "all/champion/a.html");
+    const tiers = try read(arena, out, "all/champions.html");
     for ([_][]const u8{
-        "<a href=\"../../all/patch/champion/a.html\">Patch 16.20</a>",
-        "<a href=\"../../champion/a.html\">EUW</a>",
-        "href=\"../../style.css\"",
-        "href=\"../../daily.html\"",
-        "href=\"../champions.html\"",
+        "<a href=\"../all/patch/champions.html\" data-period=\"patch\">Patch 16.20</a>",
+        "<a href=\"../champions.html\" data-region=\"euw\">EUW</a>",
+        "href=\"../style.css\"",
+        "href=\"../daily.html\"",
+        "href=\"../champion/a.html?region=all\"",
+    }) |s| try std.testing.expect(std.mem.indexOf(u8, tiers, s) != null);
+    // One page per champion, at the site root: its switches set the filters
+    const champ = try read(arena, out, "champion/a.html");
+    for ([_][]const u8{
+        "<a href=\"../champion/a.html?period=patch\" data-period=\"patch\">Patch 16.20</a>",
+        "<a aria-current=\"page\" data-region=\"euw\">EUW</a>",
+        "href=\"../style.css\"",
+        "<a href=\"../champions.html\" aria-current=\"page\" data-view>",
     }) |s| try std.testing.expect(std.mem.indexOf(u8, champ, s) != null);
+    try std.testing.expectError(error.FileNotFound, read(arena, out, "all/champion/a.html"));
     const shared_page = try read(arena, out, "daily.html");
     try std.testing.expect(std.mem.indexOf(u8, shared_page, "<a href=\"champions.html\" data-view>") != null);
     try std.testing.expectError(error.FileNotFound, read(arena, out, "all/daily.html"));

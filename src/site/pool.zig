@@ -47,7 +47,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
         \\<label><span>Also</span><input data-main list="champions" placeholder="Champion (optional)"></label>
         \\<label><span>Also</span><input data-main list="champions" placeholder="Champion (optional)"></label>
         \\</form>
-        \\<div id="results"></div>
+        \\<div id="results" data-to-site="{s}" data-query="{f}"></div>
         \\<p class="muted">A player's main is their most played champion, from {s}
         \\({d} players so far). "×2.4" means players who main that champion play this one
         \\2.4 times as often as other players do; small groups are pulled toward ×1. Lists
@@ -56,7 +56,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
         \\<a href="{s}method.html">Method</a>.</p>
         \\<script src="pool.js" defer></script>
         \\
-    , .{ sourceText(p), p.players, p.min_players, site.view.region.in(), site.when, site.view.up() });
+    , .{ site.view.up(), esc(site.view.query()), sourceText(p), p.players, p.min_players, site.view.region.in(), site.when, site.view.up() });
     try learning_page.table(site, w, l);
     try html.foot(w, pg);
 }

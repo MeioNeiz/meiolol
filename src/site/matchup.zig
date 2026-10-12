@@ -184,9 +184,9 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     });
     const page_path = try path(a, r, x, y);
     var p = site.page(title, desc, page_path, .matchups);
-    for (site.view_curves, &p.counterparts.?) |*other, *there| {
+    for (html.View.all, site.view_curves, &p.counterparts.?) |view, *other, *there| {
         const has = if (other.*) |*o| o.get(r, .all, x.id, y.id) != null else false;
-        if (!has) there.* = "matchup/index.html";
+        if (!has) there.* = try std.mem.concat(a, u8, &.{ view.dir(), "matchup/index.html" });
     }
     try html.head(w, p);
     try w.print(
@@ -239,9 +239,10 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     try comeback.section(w, curves, r, x, y);
     try w.writeAll("<h2>By rank</h2>\n");
     try brackets(w, curves, r, x, y);
+    const to_site = site.toShared(page_path);
     try w.print(
-        "<p class=\"muted\"><a href=\"../../champion/{s}.html\">{f}</a> · <a href=\"../../champion/{s}.html\">{f}</a> · <a href=\"{s}method.html\">Method</a></p>\n",
-        .{ x.slug, esc(x.name), y.slug, esc(y.name), site.toShared(page_path) },
+        "<p class=\"muted\"><a href=\"{f}\">{f}</a> · <a href=\"{f}\">{f}</a> · <a href=\"{s}method.html\">Method</a></p>\n",
+        .{ esc(site.champHref(x, to_site)), esc(x.name), esc(site.champHref(y, to_site)), esc(y.name), to_site },
     );
     try html.foot(w, p);
 }

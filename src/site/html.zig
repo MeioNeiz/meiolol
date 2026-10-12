@@ -58,8 +58,9 @@ pub const Region = enum {
 pub const Period = enum { days30, patch };
 
 /// The site's stats views, as lolalytics' filters: EUW over the last 30 days at the site
-/// root, the rest in directories. Stats pages exist in each; shared pages (Daily Draft,
-/// Learn, legal: EUW, current patch) only at the site root
+/// root, the rest in directories. Stats pages exist in each, but champion pages: one per
+/// champion at the site root, whose filters pick the view (View.query). Shared pages
+/// (Daily Draft, Learn, legal: EUW, current patch) only at the site root
 pub const View = struct {
     region: Region,
     period: Period,
@@ -87,6 +88,12 @@ pub const View = struct {
     pub fn up(v: View) []const u8 {
         return ([_][]const u8{ "", "../", "../", "../../" })[v.index()];
     }
+
+    /// Picks this view on a champion page (one per champion, at the site root; the
+    /// filter bar reads it). Raw: escape it in HTML
+    pub fn query(v: View) []const u8 {
+        return ([_][]const u8{ "", "?period=patch", "?region=all", "?region=all&period=patch" })[v.index()];
+    }
 };
 
 pub const Page = struct {
@@ -95,10 +102,11 @@ pub const Page = struct {
     /// "" for pages at their view's root, "../" one directory down; links are relative
     /// so the site also works from disk
     root: []const u8 = "",
-    /// View the page belongs to; null for shared pages
+    /// View the page belongs to; null for shared pages and champion pages
     view: ?View = null,
-    /// This page's counterpart in each view (View.index) for the switches: usually the
-    /// same path. Null: no switches
+    /// This page's counterpart in each view (View.index) for the switches, from the site
+    /// root: usually the same path in that view's directory. Null: no switches. Without
+    /// a view, the switches start on View.all[0] (champion pages: filters.js moves them)
     counterparts: ?[View.count][]const u8 = null,
     nav: Nav = .none,
     /// Current patch, for the period switch
@@ -154,33 +162,39 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         try w.print("{s}</a>\n", .{it[2]});
     }
     try w.writeAll("</nav>\n");
-    if (p.view) |v| {
-        if (p.counterparts) |paths| {
-            try w.writeAll("<div class=\"filters\">\n");
-            // Labels as two parts: "Patch " ++ p.patch
-            const switches = [_]struct { []const u8, [2]View, [2][2][]const u8 }{
-                .{ "Region", .{ .{ .region = .euw, .period = v.period }, .{ .region = .all, .period = v.period } }, .{ .{ "EUW", "" }, .{ "All regions", "" } } },
-                .{ "Period", .{ .{ .region = v.region, .period = .days30 }, .{ .region = v.region, .period = .patch } }, .{ .{ "30 days", "" }, .{ "Patch ", p.patch } } },
-            };
-            for (switches) |sw| {
-                try w.print("<nav class=\"switch\" aria-label=\"{s}\">", .{sw[0]});
-                for (sw[1], sw[2]) |to, label| {
-                    if (to.index() == v.index()) {
-                        try w.print("<a aria-current=\"page\">{s}{s}</a>", .{ label[0], label[1] });
-                    } else {
-                        try w.print("<a href=\"{s}{s}{s}{s}\">{s}{s}</a>", .{ p.root, up, to.dir(), paths[to.index()], label[0], label[1] });
-                    }
+    if (p.counterparts) |paths| {
+        const v = p.view orelse View.all[0];
+        try w.writeAll("<div class=\"filters\">\n");
+        // Labels as two parts: "Patch " ++ p.patch. data-region, data-period: what
+        // filters.js sets on a click
+        const switches = [_]struct { []const u8, [2]View, [2][2][]const u8 }{
+            .{ "Region", .{ .{ .region = .euw, .period = v.period }, .{ .region = .all, .period = v.period } }, .{ .{ "EUW", "" }, .{ "All regions", "" } } },
+            .{ "Period", .{ .{ .region = v.region, .period = .days30 }, .{ .region = v.region, .period = .patch } }, .{ .{ "30 days", "" }, .{ "Patch ", p.patch } } },
+        };
+        for (switches, 0..) |sw, i| {
+            try w.print("<nav class=\"switch\" aria-label=\"{s}\">", .{sw[0]});
+            for (sw[1], sw[2]) |to, label| {
+                const data = if (i == 0) "region" else "period";
+                const value = if (i == 0) @tagName(to.region) else @tagName(to.period);
+                if (to.index() == v.index()) {
+                    try w.print("<a aria-current=\"page\" data-{s}=\"{s}\">{s}{s}</a>", .{ data, value, label[0], label[1] });
+                } else {
+                    try w.print("<a href=\"{s}{s}{f}\" data-{s}=\"{s}\">{s}{s}</a>", .{ p.root, up, esc(paths[to.index()]), data, value, label[0], label[1] });
                 }
-                try w.writeAll("</nav>\n");
             }
-            try w.writeAll("</div>\n");
+            try w.writeAll("</nav>\n");
         }
+        try w.writeAll("</div>\n");
+    }
+    if (p.view) |v| {
         // Remembered so shared pages link back into this view
         try w.print("<script>try{{localStorage.setItem(\"view\",\"{s}\")}}catch(e){{}}</script>\n", .{v.dir()});
     } else {
+        // meioView(v) again from the champion page's filters, which move between views
         try w.writeAll(
-            \\<script>try{const v=localStorage.getItem("view");if(["patch/","all/","all/patch/"].includes(v))
-            \\for(const a of document.querySelectorAll("a[data-view]"))a.href=v+a.getAttribute("href")}catch(e){}</script>
+            \\<script>function meioView(v){try{if(v==null)v=localStorage.getItem("view");else localStorage.setItem("view",v)}catch(e){}
+            \\if(!["patch/","all/","all/patch/"].includes(v))v="";for(const a of document.querySelectorAll("a[data-view]")){
+            \\const h=a.dataset.base??=a.getAttribute("href"),up=h.match(/^(\.\.\/)*/)[0];a.href=up+v+h.slice(up.length)}}meioView()</script>
             \\
         );
     }

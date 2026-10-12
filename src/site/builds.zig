@@ -109,7 +109,7 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     const champ_path = try std.fmt.allocPrint(a, "champion/{s}.html", .{ch.slug});
     for (html.View.all, &p.counterparts.?) |v, *there| {
         const has = v.period == .patch and if (site.view_builds[v.index()]) |*o| shown(o, ch.id, r) != null else false;
-        if (!has) there.* = champ_path;
+        if (!has) there.* = try std.mem.concat(a, u8, &.{ champ_path, v.query() });
     }
     try html.head(w, p);
     try w.print(
@@ -161,9 +161,10 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     try table(w, f, b, .core3, "First three finished items", "players who finished three items: longer games, so compare these win rates with each other rather than with the champion's overall");
     try w.writeAll("<h2>Skill priority</h2>\n");
     try table(w, f, b, .skills, "Order", "players with a match timeline who reached level 11");
+    const to_site = site.toShared(page_path);
     try w.print(
-        "<p class=\"muted\"><a href=\"../champion/{s}.html\">{f}</a> · <a href=\"{s}method.html#builds\">How builds are counted</a></p>\n",
-        .{ ch.slug, esc(ch.name), site.toShared(page_path) },
+        "<p class=\"muted\"><a href=\"{f}\">{f}</a> · <a href=\"{s}method.html#builds\">How builds are counted</a></p>\n",
+        .{ esc(site.champHref(ch, to_site)), esc(ch.name), to_site },
     );
     try html.foot(w, p);
 }

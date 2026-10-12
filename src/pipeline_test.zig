@@ -88,7 +88,6 @@ test "fixture games to stats, curves and the website" {
         // No daily: puzzles need three other options for a slot, more than 10 champions
         .curves = @splat(curves_path),
         .builds = .{ null, builds_path, null, builds_path },
-        .filter_champions = &.{"darius"},
     };
     try site.generate(gpa, io, db, opts);
     for ([_][]const u8{
@@ -112,22 +111,24 @@ test "fixture games to stats, curves and the website" {
             return err;
         };
     }
-    // Build page: three games, so no bare win rates; champion pages link to it, the
-    // 30-day view's into the patch view
+    // Build page: three games, so no bare win rates; the champion page (root view) links
+    // into the patch view's
     const pages = [_]struct { []const u8, []const []const u8 }{
-        .{ "patch/build/darius-top.html", &.{ "Conqueror", "few games", "Doran&#39;s Shield", "More data needed" } },
-        .{ "patch/champion/darius.html", &.{"href=\"../build/darius-top.html\""} },
+        .{ "patch/build/darius-top.html", &.{ "Conqueror", "few games", "Doran&#39;s Shield", "More data needed", "href=\"../../champion/darius.html?period=patch\"" } },
         // Champion table and page: raw win rate with its interval, every lane opponent
         // (few games: shown, faded) with the curve's gold at 14 linking to the matchup page
         .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "At least" } },
         .{ "champion/darius.html", &.{ "Lane opponents", "href=\"../matchup/top/mordekaiser-vs-darius.html\"", "Gold at 14", "Search opponent", "data-name=\"Mordekaiser\" class=\"thin\">" } },
         .{ "champion/darius.html", &.{"href=\"../patch/build/darius-top.html\""} },
-        // Filter prototype: the champion's counts by region, rank, patch, role and
-        // opponent, and the bar that sums them, defaulting to the page's view
-        .{ "data/filters/darius.json", &.{ "\"platforms\":[\"EUW1\"]", "\"roles\":[\"top\"", "\"rows\":[[" } },
-        .{ "champion/darius.html", &.{ "class=\"filter-bar\"", "data-region=\"EUW1\" data-period=\"days30\"", "filters.js", "data-id=\"" } },
-        .{ "all/patch/champion/darius.html", &.{"data-src=\"../../../data/filters/darius.json\""} },
-        .{ "all/champion/darius.html", &.{"href=\"../../all/patch/build/darius-top.html\""} },
+        // Filters: the champion's counts by region, rank, patch, role and opponent, its
+        // bans and each view's curve gold, the players per role for pick rates, and the
+        // bar that sums them, written as the root view. One page per champion: the other
+        // views link to it with their filters, and its switches set them
+        .{ "data/filters/darius.json", &.{ "\"platforms\":[\"EUW1\"]", "\"rows\":[[", "\"bans\":[", "\"gold\":{\"EUW1|days30|\":[" } },
+        .{ "data/filters.json", &.{ "\"roles\":[\"top\"", "\"slots\":[[" } },
+        .{ "champion/darius.html", &.{ "class=\"filter-bar\"", "data-src=\"../data/filters/darius.json\"", "<option value=\"EUW1\" selected>EUW</option>", "filters.js", "data-id=\"", "data-tile=\"pick\"", "data-early=\"", "href=\"../champion/darius.html?region=all\" data-region=\"all\"" } },
+        .{ "all/patch/role/top.html", &.{"href=\"../../../champion/darius.html?region=all&amp;period=patch\""} },
+        .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
         // Lane curves: the estimate (curvefit.zig) on the page, k on the method page
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "estimated average", "First finished item", "More data needed" } },
         .{ "method.html", &.{"Games to stabilise"} },
@@ -161,7 +162,7 @@ test "fixture games to stats, curves and the website" {
         checked += 1;
     }
     try testing.expect(checked > 50);
-    for ([_][]const u8{ "champion/nobody.html", "matchup/top/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html" }) |path| {
+    for ([_][]const u8{ "champion/nobody.html", "all/champion/darius.html", "matchup/top/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html" }) |path| {
         try testing.expectEqual(null, try loaded.get(arena, path));
     }
 }

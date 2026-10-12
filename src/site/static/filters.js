@@ -1,68 +1,59 @@
 // Champion page filters (root.zig filterBar, filters.zig). The champion's filter data has
-// one row per region, rank, patch, 30-day flag, role and lane opponent with games, wins
-// and gold at 14; this sums the rows the bar picks and redraws each role's win rate and
-// games tiles and its opponent table. The page as written is the bar's defaults, put
-// back as it was on Reset. Picks live in the URL so a view can be shared.
+// one row per region, patch, 30-day flag, rank, role and lane opponent with games, wins
+// and gold at 14, plus bans; data/filters.json has every champion's players per role for
+// pick rates. This sums the rows the bar picks and redraws each role's tiles and opponent
+// table, the early-data note and the header switches. The page as written is the bar's
+// defaults (the root view), put back as it was on Reset. Picks live in the URL so a view
+// can be shared; the views' own links use the same keys (html.View.query).
 "use strict";
 
 (async () => {
   const bar = document.querySelector(".filter-bar[data-src]");
   if (!bar) return;
-  let data, champs;
+  let data, meta, champs;
   try {
     const get = (url) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
-    [data, champs] = await Promise.all([get(bar.dataset.src), get(bar.dataset.champions)]);
+    [data, meta, champs] = await Promise.all(
+      [bar.dataset.src, bar.dataset.meta, bar.dataset.champions].map(get),
+    );
   } catch {
     return;
   }
   const byId = new Map(champs.champions.map((c) => [c.id, c]));
+  const self = byId.get(Number(bar.dataset.id));
   const field = (f) => bar.querySelector(`[data-f="${f}"]`);
-  const add = (select, value, text) => select.append(new Option(text, value));
   const titleCase = (s) => s.charAt(0) + s.slice(1).toLowerCase();
+  const current = meta.current.length === 1 ? meta.current[0] : null;
+  const home = bar.dataset.region;
 
-  const region = field("region");
-  add(region, "all", "All regions");
-  for (const p of data.platforms) add(region, p, platformName(p));
-  const rank = field("rank");
-  add(rank, "", "All ranks");
-  data.tiers.forEach((t, i) => add(rank, String(i), `${titleCase(t)}+`));
-  const period = field("period");
-  add(period, "days30", "Last 30 days");
-  for (const i of data.order) {
-    const p = data.patches[i];
-    add(period, `patch:${p}`, data.current.includes(p) ? `Patch ${p}` : `Patch ${p} (last 30 days)`);
-  }
-  const min = field("min");
-  for (const [v, t] of [
-    ["0", "All"], ["5", "5+ games"], ["10", "10+ games"], ["20", "20+ games"], ["50", "50+ games"],
-    ["100", "100+ games"], ["p1", "Seen in 1%+ of games"], ["p2", "Seen in 2%+ of games"],
-  ]) add(min, v, t);
-
-  const defaults = {
-    region: bar.dataset.region,
-    rank: "",
-    period: bar.dataset.period === "patch" ? `patch:${data.current[0]}` : "days30",
-    min: "0",
-  };
-  const selects = { region, rank, period, min };
+  const defaults = { region: home, rank: "", period: "days30", min: "0" };
+  const selects = { region: field("region"), rank: field("rank"), period: field("period"), min: field("min") };
+  // "period=patch" from the views' links: the current patch, whichever it is now
+  const fromUrl = (k, v) => (k === "period" && v === "patch" && current ? `patch:${current}` : v);
+  const toUrl = (k, v) => (k === "period" && current && v === `patch:${current}` ? "patch" : v);
   const params = new URLSearchParams(location.search);
   for (const [k, s] of Object.entries(selects)) {
-    const want = params.get(k) ?? defaults[k];
+    const want = fromUrl(k, params.get(k) ?? defaults[k]);
     s.value = [...s.options].some((o) => o.value === want) ? want : defaults[k];
+    s.disabled = false;
   }
 
   const scope = document.querySelector("[data-scope]");
+  const early = document.querySelector("[data-early]");
   const sections = [...document.querySelectorAll("main section[id]")]
-    .map((el) => ({ el, role: data.roles.indexOf(el.id) }))
+    .map((el) => ({ el, role: meta.roles.indexOf(el.id) }))
     .filter((s) => s.role >= 0)
     .map((s) => {
       const body = s.el.querySelector("table.tl tbody");
-      const originalRows = new Map();
-      for (const tr of body?.rows ?? []) originalRows.set(Number(tr.dataset.id), tr);
+      const links = new Map();
+      for (const tr of body?.rows ?? []) {
+        const a = tr.cells[2]?.querySelector("a");
+        if (a) links.set(Number(tr.dataset.id), a.getAttribute("href"));
+      }
       return {
         ...s,
         body,
-        originalRows,
+        links,
         original: {
           tiles: s.el.querySelector(".tiles")?.innerHTML,
           body: body?.innerHTML,
@@ -71,21 +62,52 @@
         },
       };
     });
-  const originalScope = scope?.textContent;
+  const original = { scope: scope?.textContent, early: early?.innerHTML, earlyHidden: early?.hidden };
 
   const picks = () => Object.fromEntries(Object.entries(selects).map(([k, s]) => [k, s.value]));
   const isDefault = (f) => Object.keys(defaults).every((k) => f[k] === defaults[k]);
+  const query = (f) => {
+    const q = new URLSearchParams();
+    for (const k of Object.keys(defaults)) if (f[k] !== defaults[k]) q.set(k, toUrl(k, f[k]));
+    return q.size ? `?${q}` : "";
+  };
+
+  // The view (html.View) the region and period pick, if any: its directory and its key
+  // in the curves' gold
+  function viewOf(f) {
+    const region = f.region === home ? "" : f.region === "all" ? "all/" : null;
+    const period = f.period === "days30" ? "" : current && f.period === `patch:${current}` ? "patch/" : null;
+    if (region === null || period === null) return null;
+    return { dir: region + period, key: `${f.region}|${f.period}` };
+  }
+
+  // Curve gold at 14 by "region|period|rank", then role and opponent
+  const gold = new Map();
+  function curveGold(key) {
+    if (!gold.has(key)) {
+      const m = new Map();
+      for (const [role, opp, mean, se] of data.gold[key] ?? []) m.set(role * 65536 + opp, { mean, se });
+      gold.set(key, m);
+    }
+    return gold.get(key);
+  }
 
   function sum(f) {
     const platform = f.region === "all" ? -1 : data.platforms.indexOf(f.region);
     const minTier = f.rank === "" ? -1 : Number(f.rank);
     const patch = f.period.startsWith("patch:") ? data.patches.indexOf(f.period.slice(6)) : -1;
-    const roles = data.roles.map(() => ({ games: 0, wins: 0, opps: new Map() }));
-    for (const [pl, ti, pa, recent, role, opp, g, w, gn, gs, gq] of data.rows) {
-      if (platform >= 0 && pl !== platform) continue;
-      if (minTier >= 0 && (ti < minTier || ti >= data.tiers.length)) continue;
-      if (patch >= 0 ? pa !== patch : !recent) continue;
-      const r = roles[role];
+    const slice = (pl, pa, recent) =>
+      (platform < 0 || pl === platform) && (patch >= 0 ? pa === patch : recent === 1);
+    const ranked = (ti) => minTier < 0 || (ti >= minTier && ti < meta.tiers.length);
+    const out = {
+      roles: meta.roles.map(() => ({ games: 0, wins: 0, slots: 0, opps: new Map() })),
+      players: 0,
+      allPlayers: 0,
+      bans: 0,
+    };
+    for (const [pl, pa, recent, ti, role, opp, g, w, gn, gs, gq] of data.rows) {
+      if (!slice(pl, pa, recent) || !ranked(ti)) continue;
+      const r = out.roles[role];
       r.games += g;
       r.wins += w;
       let o = r.opps.get(opp);
@@ -96,28 +118,80 @@
       o.gs += gs;
       o.gq += gq;
     }
-    return roles;
+    for (const [pl, pa, recent, ti, role, n] of meta.slots) {
+      if (!slice(pl, pa, recent)) continue;
+      out.allPlayers += n;
+      if (!ranked(ti)) continue;
+      out.players += n;
+      out.roles[role].slots += n;
+    }
+    for (const [pl, pa, recent, n] of data.bans) if (slice(pl, pa, recent)) out.bans += n;
+    return out;
   }
+
+  const when = (f) => (f.period === "days30" ? "last 30 days" : `patch ${f.period.slice(6)}`);
 
   function scopeText(f) {
     const where = f.region === "all" ? "across all regions" : `in ${platformName(f.region)}`;
-    const when = f.period === "days30" ? "last 30 days" : `patch ${f.period.slice(6)}`;
-    const ranks = f.rank === "" ? "all ranks" : `${titleCase(data.tiers[Number(f.rank)])} and above`;
-    return `${where}, ${when}, ${ranks}`;
+    const ranks = f.rank === "" ? "all ranks" : `${titleCase(meta.tiers[Number(f.rank)])} and above`;
+    return `${where}, ${when(f)}, ${ranks}`;
+  }
+
+  // Region and period switches in the header: the one the filters are on is current;
+  // a click sets the bar instead of loading the page again
+  // Relative, so the site also works from disk; "?" alone still drops the picks
+  const file = location.pathname.split("/").pop();
+  const switches = [...document.querySelectorAll("header .filters a[data-region], header .filters a[data-period]")];
+  const switchPick = (a) =>
+    a.dataset.region
+      ? ["region", a.dataset.region === "all" ? "all" : home]
+      : ["period", a.dataset.period === "patch" && current ? `patch:${current}` : "days30"];
+  function drawSwitches(f) {
+    for (const a of switches) {
+      const [k, v] = switchPick(a);
+      if (f[k] === v) {
+        a.setAttribute("aria-current", "page");
+        a.removeAttribute("href");
+      } else {
+        a.removeAttribute("aria-current");
+        a.href = file + (query({ ...f, [k]: v }) || "?");
+      }
+    }
+  }
+  for (const a of switches) {
+    a.addEventListener("click", (e) => {
+      const [k, v] = switchPick(a);
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || ![...selects[k].options].some((o) => o.value === v)) return;
+      e.preventDefault();
+      selects[k].value = v;
+      apply();
+    });
   }
 
   function apply() {
     const f = picks();
     const fresh = isDefault(f);
     bar.querySelector("[data-reset]").hidden = fresh;
-    const q = new URLSearchParams();
-    for (const k of Object.keys(defaults)) if (f[k] !== defaults[k]) q.set(k, f[k]);
-    history.replaceState(null, "", q.size ? `?${q}${location.hash}` : location.pathname + location.hash);
-    if (scope) scope.textContent = fresh ? originalScope : scopeText(f);
+    history.replaceState(null, "", location.pathname + query(f) + location.hash);
+    drawSwitches(f);
+    const view = viewOf(f);
+    // Nav links (Champions, Matchups, Pool) into the view the filters are on
+    if (view && typeof meioView === "function") meioView(view.dir);
+    if (scope) scope.textContent = fresh ? original.scope : scopeText(f);
     const sums = fresh ? null : sum(f);
+    if (early) {
+      if (fresh) {
+        early.innerHTML = original.early;
+        early.hidden = original.earlyHidden;
+      } else {
+        const games = Math.round(sums.players / 10);
+        early.hidden = games >= Number(early.dataset.early);
+        early.querySelector("[data-early-games]").textContent = `${games} games so far (${when(f)})`;
+      }
+    }
     for (const s of sections) {
       if (fresh) restore(s);
-      else draw(s, sums[s.role], f);
+      else draw(s, sums, f, view);
       // Re-run the table's name search over the new rows
       s.el.querySelector("input[data-filter]")?.dispatchEvent(new Event("input"));
     }
@@ -136,7 +210,8 @@
     }
   }
 
-  function draw(s, r, f) {
+  function draw(s, sums, f, view) {
+    const r = sums.roles[s.role];
     const tiles = s.el.querySelector(".tiles");
     if (tiles) {
       tiles.innerHTML = s.original.tiles;
@@ -145,11 +220,12 @@
       wr.querySelector("b").className = side(iv);
       wr.querySelector("b").textContent = pct(r.wins, r.games);
       wr.querySelector("small").textContent = `${(100 * iv[0]).toFixed(1)}% to ${(100 * iv[1]).toFixed(1)}%`;
+      // Two players per role and game
+      tiles.querySelector('[data-tile="pick"] b').textContent = pct(2 * r.games, r.slots);
+      const ban = tiles.querySelector('[data-tile="ban"]');
+      ban.querySelector("b").textContent = pct(10 * sums.bans, sums.allPlayers);
+      if (f.rank !== "") ban.title = "Of games at every rank: a ban belongs to the game, not a player";
       tiles.querySelector('[data-tile="games"] b').textContent = r.games;
-      for (const t of tiles.querySelectorAll('[data-tile="view"]')) {
-        t.classList.add("stale");
-        t.title = "For the page's own region and period, not the filters";
-      }
     }
     if (!s.body) return;
     const floor = f.min.startsWith("p") ? (Number(f.min.slice(1)) / 100) * r.games : Number(f.min);
@@ -161,7 +237,20 @@
       if (xt) return y.games - x.games;
       return x.wins / x.games - y.wins / y.games;
     });
-    s.body.replaceChildren(...opps.map((o) => row(s, o, o.games < thin)));
+    const curve = view ? curveGold(`${view.key}|${f.rank}`) : null;
+    const pages = view ? curveGold(`${view.key}|`) : null;
+    const q = query(f);
+    s.body.replaceChildren(
+      ...opps.map((o) => {
+        const k = s.role * 65536 + o.id;
+        const href = !view
+          ? s.links.get(o.id)
+          : pages.has(k)
+            ? matchupHref(view.dir, meta.roles[s.role], o.id)
+            : null;
+        return row(o, o.games < thin, curve?.get(k), href, q);
+      }),
+    );
     const count = s.el.querySelector(".opp-h .muted");
     if (count) count.textContent = `${opps.length}, hardest first`;
     const few = opps.filter((o) => o.games < thin).length;
@@ -172,26 +261,32 @@
     }
   }
 
-  function row(s, o, thin) {
+  // As matchup.zig path: from the lower champion id's side
+  function matchupHref(dir, role, opp) {
+    const other = byId.get(opp);
+    if (!self || !other) return null;
+    const [x, y] = self.id < other.id ? [self, other] : [other, self];
+    return `../${dir}matchup/${role}/${x.slug}-vs-${y.slug}.html`;
+  }
+
+  function row(o, thin, curve, href, q) {
     const tr = document.createElement("tr");
     const ch = byId.get(o.id);
     tr.dataset.id = o.id;
     tr.dataset.name = ch?.name ?? String(o.id);
     if (thin) tr.className = "thin";
-    const before = s.originalRows.get(o.id);
-    const name = before ? before.cells[0].cloneNode(true) : nameCell(ch);
-    const goldLink = before?.cells[2]?.querySelector("a")?.getAttribute("href");
-    tr.append(name, winRateCell(o.wins, o.games, 0.25), goldCell(o, goldLink), gamesCell(o.games));
+    tr.append(nameCell(ch, q), winRateCell(o.wins, o.games, 0.25), goldCell(o, curve, href), gamesCell(o.games));
     return tr;
   }
 
-  function nameCell(ch) {
+  // To the opponent's own page with the same filters
+  function nameCell(ch, q) {
     const td = document.createElement("td");
     td.className = "l";
     if (!ch) return td;
     const a = document.createElement("a");
     a.className = "champ";
-    a.href = `../champion/${ch.slug}.html`;
+    a.href = `${ch.slug}.html${q}`;
     const img = document.createElement("img");
     img.src = `https://ddragon.leagueoflegends.com/cdn/${bar.dataset.ddragon}/img/champion/${ch.key}.png`;
     img.alt = "";
@@ -218,18 +313,24 @@
     return td;
   }
 
-  // Raw mean of the gold difference at 14 with ± two standard errors; filtered games
-  // have no lane curve fit, so this is the plain average, not the curve's estimate
-  function goldCell(o, href) {
+  // Gold difference at 14 with ± two standard errors: the lane curve's estimate where
+  // the filters are a view with a curve for the matchup (as root.zig goldCell), else the
+  // plain average of the games picked
+  function goldCell(o, curve, href) {
     const td = document.createElement("td");
-    if (o.gn < 2) {
+    let mean, margin;
+    if (curve) {
+      mean = curve.mean;
+      margin = 2 * curve.se;
+    } else if (o.gn >= 2) {
+      mean = o.gs / o.gn;
+      const variance = Math.max(0, (o.gq - o.gn * mean * mean) / (o.gn - 1));
+      margin = 2 * Math.sqrt(variance / o.gn);
+    } else {
       td.className = "dim";
       td.dataset.v = "";
       return td;
     }
-    const mean = o.gs / o.gn;
-    const variance = Math.max(0, (o.gq - o.gn * mean * mean) / (o.gn - 1));
-    const margin = 2 * Math.sqrt(variance / o.gn);
     const cls = mean > margin ? "up" : mean < -margin ? "down" : "even";
     const m = Math.round(mean);
     td.dataset.v = m;
@@ -239,6 +340,7 @@
       value.href = href;
       value.title = "Lane curves";
     }
+    if (!curve) value.title = (href ? "Lane curves. " : "") + "Plain average of the games picked";
     value.textContent = `${m > 0 ? "+" : ""}${m}`;
     const small = document.createElement("small");
     small.textContent = `±${Math.round(margin)}`;
@@ -259,8 +361,7 @@
     for (const [k, s] of Object.entries(selects)) s.value = defaults[k];
     apply();
   });
-  bar.hidden = false;
-  if (!isDefault(picks())) apply();
+  apply();
 })();
 
 // As root.zig wilson: 95% interval of a win rate

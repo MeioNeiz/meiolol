@@ -80,7 +80,7 @@ function setup(pool, meta, learning) {
     if (!c) return el("span", {}, "?");
     return el(
       "a",
-      { class: "champ", href: `champion/${c.slug}.html` },
+      { class: "champ", href: `${out.dataset.toSite}champion/${c.slug}.html${out.dataset.query}` },
       el("img", { src: icon(c), alt: "", width: "32", height: "32", loading: "lazy" }),
       c.name,
     );

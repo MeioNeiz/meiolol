@@ -321,6 +321,10 @@ Done:
   build 3:38 to 1:32; tests faster)
 - Learn practice: match ids loaded once instead of an OFFSET query per try (13 s to 1 s
   of each site pass on the Mac snapshot)
+- Filters on every champion page, one page per champion at the site root (the per-view
+  copies dropped); header switches, early-data note, pick and ban tiles and gold at 14
+  follow the filters (docs/architecture.md "Website"). Filter data ~0.5 s per build,
+  4.5 MB gzipped for all champions
 
 Direction (Jacob 2026-10-12, via meiolol-88: "build both"): stay static for the pages
 search sees, plain JS on top, no framework; plus option B from the research: a renderer
@@ -334,17 +338,14 @@ decided on evidence of what gets clicks, not just a game floor (Jacob 2026-10-12
 canonical, sitemap and noindex support as settings.
 
 Next:
-1. Filters on every champion page (generalise the Ahri prototype, fix its gaps: header
-   switches and early-data note follow the filters, pick/ban tiles, gold at 14); drop
-   the per-view champion copies
-2. B on the box: `meiolol serve --render` as a service reloading data each web round;
+1. B on the box: `meiolol serve --render` as a service reloading data each web round;
    needs Jacob's OK for a jomify-to-box network path and the meiolol nginx block
-3. Matchup pages: thick ones static, the rest rendered on request (B)
-4. pool.make once for all views (22% of a site pass), one timeline decode for curves,
+2. Matchup pages: thick ones static, the rest rendered on request (B)
+3. pool.make once for all views (22% of a site pass), one timeline decode for curves,
    gzip cost
-5. Dev: cached data load for faster restarts (later, Jacob); box preview from a clean
+4. Dev: cached data load for faster restarts (later, Jacob); box preview from a clean
    checkout of HEAD plus the site diff (a working-tree build once migrated the live DB)
-6. Design and UX pass with screenshots; page weight; SEO settings for `--public`
+5. Design and UX pass with screenshots; page weight; SEO settings for `--public`
 
 ### Ideas not started (concept extensions, 2026-10-11)
 

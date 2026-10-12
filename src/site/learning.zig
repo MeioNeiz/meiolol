@@ -99,7 +99,7 @@ pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
     for (list.items) |c| {
         const ch = matchup.champ(site, c.id) orelse continue;
         try w.writeAll("<tr><td>");
-        try site.champLink(w, ch, "");
+        try site.champLink(w, ch, site.view.up());
         var games: u32 = 0;
         for (c.bins) |b| games += b.games;
         try w.print("</td><td>{s}</td><td class=\"num\">{d:.1}%</td><td class=\"num\">{d:.1}%</td><td class=\"num\">{d}</td></tr>\n", .{
