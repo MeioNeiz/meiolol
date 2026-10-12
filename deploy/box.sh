@@ -24,7 +24,7 @@ sync() {
         --prefix zig-out/box --cache-dir "$ROOT/.zig-cache")
     ssh "$HOST" "mkdir -p $DIR/bin $DIR/data .config/systemd/user"
     scp -q "$tree/zig-out/box/bin/meiolol" "$HOST:$DIR/bin/meiolol.new"
-    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh render-swap.sh" s
+    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh render-swap.sh archive-serve.sh" s
     for s in $scripts; do scp -q "$tree/deploy/$s" "$HOST:$DIR/bin/$s.new"; done
     scp -q "$tree"/deploy/systemd/*.service "$HOST:.config/systemd/user/"
     ssh "$HOST" "cd $DIR && mv bin/meiolol.new bin/meiolol \
