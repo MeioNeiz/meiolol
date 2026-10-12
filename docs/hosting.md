@@ -51,6 +51,24 @@ accounts may use Always Free only in the home region).
   PLATINUM --cache-mb 512` (raw retention cut for the old 50 GB disk; Platinum IV and up
   only). The 150 GB disk now has room for the plan's "keep more data" retention
 
+## Rendering on request
+
+The static upload leaves out matchup pages under 200 games (`meiolol site
+--static-min-games 200`, deploy/web-loop.sh); meiolol-render on the box serves them.
+- `meiolol render` (systemd meiolol-render) on the box's private address 10.0.0.3:8091,
+  all views loaded up front (~3.5 min, ~600 MB); deploy/web-loop.sh touches
+  data/render.reload after each upload and it loads the new data in the background,
+  swapping when done. Restarted by each deploy (`deploy/box.sh web start`): while it
+  loads, thin pages not in nginx's cache answer 503 "being updated". Log data/render.log
+- Network: jomify (10.0.0.214) and the box share subnet 10.0.0.0/24. Security list rule
+  "meiolol-render: jomify nginx to the box" (TCP 8091 from 10.0.0.214/32; the list as it
+  was is in .git/oci-ingress-before-render.json on the Mac) and an iptables ACCEPT on the
+  box before its REJECT (saved with netfilter-persistent). Jacob's OK 2026-10-12
+- jomify nginx (/etc/nginx/conf.d/meiolol.conf; before: meiolol.conf.bak-2026-10-12-render):
+  try_files, then `@render`: proxy cache /var/cache/nginx/meiolol (2 GB, key $uri), 200s
+  10 min, 404s 1 min, stale copies while the box is down or refreshing, one render per
+  page under a burst. Header X-Meiolol-Render: HIT, MISS, STALE, UPDATING
+
 ## Known problems on the micro
 
 - Slow: ~11k matches/day vs ~135k on the PC with 19 writing threads (153 lock waits in

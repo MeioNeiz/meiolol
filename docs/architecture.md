@@ -376,7 +376,10 @@ browser, for pages that score drafts). Champion icons hotlink Data Dragon. Edges
 same maths as the app (score.matchupPp, duoPp). Preview mode by default (noindex,
 robots.txt disallow, banner): Riot forbids serving the public on a personal key;
 `--public` only once the production key is granted. `deploy/box.sh site EMAIL` builds
-it on the box and rsyncs it to data/site. `meiolol serve` (src/serve.zig) serves a site
+it on the box and rsyncs it to data/site. `meiolol render` serves the pages the static
+build leaves out (--static-min-games: thin matchups) from the same code, its data swapped
+whole on reload (serve.Rendered; docs/hosting.md "Rendering on request"). `meiolol
+serve` (src/serve.zig) serves a site
 directory over HTTP with .gz siblings; handy for local previews.
 
 Code shape (root.zig): `load` reads one view's data from the DB into a `Site` (stats,

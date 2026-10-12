@@ -82,7 +82,9 @@ while true; do
     riot=()
     [[ -s riot.txt ]] && riot=(--riot-txt "$(<riot.txt)")
     site_start=$SECONDS
-    if out=$(bin/meiolol site --contact "$contact" --out data/site.new "${riot[@]}" 2>&1); then
+    # Thin matchup pages: meiolol-render serves them (docs/hosting.md)
+    if out=$(bin/meiolol site --contact "$contact" --out data/site.new --static-min-games 200 \
+        "${riot[@]}" 2>&1); then
         site_s=$(( SECONDS - site_start ))
         # First patch line, EUW: "data/site.new/patch/: patch 16.20, 1054 games, ..."
         read -r patch games < <(sed -nE 's/.*: patch ([^,]+), ([0-9]+) games.*/\1 \2/p' \
