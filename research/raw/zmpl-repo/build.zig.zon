@@ -1,0 +1,26 @@
+.{
+    .name = .zmpl,
+    .version = "0.0.1",
+    .fingerprint = 0xef2931206468149,
+    .minimum_zig_version = "0.15.1",
+    .dependencies = .{
+        .zmd = .{
+            .url = "https://github.com/jetzig-framework/zmd/archive/87b1c46b517f47b3384eba7ce98d197c463a9d5e.tar.gz",
+            .hash = "zmd-0.1.0-H8YV7bvdAABAVFR2lherqOup7valUMg9UTEiiMFxlTjZ",
+        },
+        .jetcommon = .{
+            .url = "https://github.com/jetzig-framework/jetcommon/archive/4b985fce2609615f6126e2ce402c99d16dac3cff.tar.gz",
+            .hash = "jetcommon-0.1.0-jPY_De9FAADel24f0Zpk3NTO8ss6fBLrQGdipiGOmi1K",
+        },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src/zmpl.zig",
+        "src/zmpl",
+        "src/manifest",
+        "LICENSE",
+        "README.md",
+    },
+}

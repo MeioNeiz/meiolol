@@ -28,6 +28,7 @@ Every finding starts with one or more tags. Add tags here before using them.
 | `privacy` | player identity, Riot ID lookup, consent, data retention, GDPR, privacy policies |
 | `stats` | statistical estimation: smoothing, shrinkage, pooling, sample sizes, uncertainty |
 | `gui` | desktop GUI libraries and native windowing for the app |
+| `web` | the website's UI: HTML generation, templating, client-side JS and wasm |
 | `queues` | game modes, queue ids, which queues the API serves |
 | `toolchain` | Zig versions, build system, compiler and std changes affecting the repo |
 | `ops` | hosting, object storage, backups off-site, free tiers, prices, provider terms |
