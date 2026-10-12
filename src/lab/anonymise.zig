@@ -1,6 +1,7 @@
 //! Analysis snapshots (docs/data-safety.md): replace PUUIDs and match ids with salted
-//! hashes in place, blank names, drop forgotten players. Run off the box, where the salt
-//! lives (~/.config/meiolol/snap-salt); the snapshot then goes to the gpu-box.
+//! hashes, blank names, leave out forgotten players. Run off the box, where the salt
+//! lives (~/.config/meiolol/snap-salt), into a new snapshot directory that then goes to
+//! the gpu-box.
 //!
 //! Match ids are hashed too: with a real match id anyone holding a Riot key gets the ten
 //! players back, which would undo the PUUID hashes. Hashed ids keep the platform prefix
@@ -10,7 +11,6 @@
 
 const std = @import("std");
 const store = @import("store");
-const forget = @import("../forget.zig");
 
 const c = store.sqlite.c;
 const Db = store.Db;
@@ -134,11 +134,14 @@ fn replaceAt(gpa: std.mem.Allocator, out: *std.ArrayList(u8), start: usize, end:
     try out.replaceRange(gpa, start, end - start, with);
 }
 
-/// SQL functions anon_puuid(text) and anon_match(text); NULL stays NULL
+/// SQL functions anon_puuid(text), anon_match(text), and for ranks keys old_key(puuid) =
+/// puuidKey(puuid), anon_key(puuid) = puuidKey(hashed puuid); NULL stays NULL
 fn registerFunctions(db: Db, salt: *const Salt) !void {
     const flags = c.SQLITE_UTF8 | c.SQLITE_DETERMINISTIC;
     if (c.sqlite3_create_function_v2(db.handle, "anon_puuid", 1, flags, @constCast(salt), sqlPuuid, null, null, null) != c.SQLITE_OK or
-        c.sqlite3_create_function_v2(db.handle, "anon_match", 1, flags, @constCast(salt), sqlMatch, null, null, null) != c.SQLITE_OK)
+        c.sqlite3_create_function_v2(db.handle, "anon_match", 1, flags, @constCast(salt), sqlMatch, null, null, null) != c.SQLITE_OK or
+        c.sqlite3_create_function_v2(db.handle, "anon_key", 1, flags, @constCast(salt), sqlAnonKey, null, null, null) != c.SQLITE_OK or
+        c.sqlite3_create_function_v2(db.handle, "old_key", 1, flags, null, sqlOldKey, null, null, null) != c.SQLITE_OK)
         return error.Sqlite;
 }
 
@@ -166,6 +169,17 @@ fn sqlPuuid(ctx: ?*c.sqlite3_context, _: c_int, argv: [*c]?*c.sqlite3_value) cal
     resultText(ctx, &h);
 }
 
+fn sqlOldKey(ctx: ?*c.sqlite3_context, _: c_int, argv: [*c]?*c.sqlite3_value) callconv(.c) void {
+    const raw = argText(argv) orelse return c.sqlite3_result_null(ctx);
+    c.sqlite3_result_int64(ctx, store.schema.puuidKey(raw));
+}
+
+fn sqlAnonKey(ctx: ?*c.sqlite3_context, _: c_int, argv: [*c]?*c.sqlite3_value) callconv(.c) void {
+    const raw = argText(argv) orelse return c.sqlite3_result_null(ctx);
+    const h = puuid(ctxSalt(ctx), raw);
+    c.sqlite3_result_int64(ctx, store.schema.puuidKey(&h));
+}
+
 fn sqlMatch(ctx: ?*c.sqlite3_context, _: c_int, argv: [*c]?*c.sqlite3_value) callconv(.c) void {
     const raw = argText(argv) orelse return c.sqlite3_result_null(ctx);
     var buf: [64]u8 = undefined;
@@ -173,93 +187,181 @@ fn sqlMatch(ctx: ?*c.sqlite3_context, _: c_int, argv: [*c]?*c.sqlite3_value) cal
     resultText(ctx, id);
 }
 
-/// Anonymise the snapshot in dir (meiolol.db with raw.db and timeline.db) in place
-pub fn run(gpa: std.mem.Allocator, dir: []const u8, salt: *const Salt) !void {
-    // In place and irreversible: never on a live data dir
-    if (!std.mem.startsWith(u8, std.fs.path.basename(dir), "snap-")) return error.NotASnapshotDir;
-    const db = try store.schema.connect(gpa, dir);
-    defer db.close();
-    try db.exec("PRAGMA secure_delete = ON");
-    if (try db.scalar("SELECT 1 FROM sqlite_master WHERE name = 'anon_meta'", .{}) != null)
-        return error.AlreadyAnonymised;
-    try registerFunctions(db, salt);
+/// Writes an anonymised copy of the snapshot in src (meiolol.db, raw.db, timeline.db) to
+/// dst, which must not exist. A copy, not an in-place UPDATE: rewriting the keys of
+/// millions of rows in place is random I/O for hours, while sorted inserts into fresh
+/// files are sequential and leave no old values in free pages
+pub fn run(gpa: std.mem.Allocator, io: std.Io, src: []const u8, dst: []const u8, salt: *const Salt) !void {
+    for ([_][]const u8{ src, dst }) |dir| {
+        if (!std.mem.startsWith(u8, std.fs.path.basename(dir), "snap-")) return error.NotASnapshotDir;
+    }
+    try std.Io.Dir.cwd().createDir(io, dst, .default_dir);
 
-    const forgotten = try forget.reapply(gpa, db, 0);
-    std.log.info("forgotten players re-erased: {d} rows", .{forgotten.total()});
+    // Inputs attached read-only (URI mode=ro), outputs read-write, on one connection
+    var handle: ?*c.sqlite3 = null;
+    const flags = c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE | c.SQLITE_OPEN_URI;
+    if (c.sqlite3_open_v2(":memory:", &handle, flags, null) != c.SQLITE_OK) return error.Sqlite;
+    const db: Db = .{ .handle = handle.? };
+    defer db.close();
+    try db.exec("PRAGMA temp_store = FILE");
+    try registerFunctions(db, salt);
+    inline for (schemas) |s| {
+        const in_path = try std.fmt.allocPrint(gpa, "file:{s}/{s}?mode=ro", .{ src, s.file });
+        defer gpa.free(in_path);
+        try db.run("ATTACH DATABASE ? AS " ++ s.in, .{in_path});
+        const out_path = try std.fs.path.join(gpa, &.{ dst, s.file });
+        defer gpa.free(out_path);
+        try db.run("ATTACH DATABASE ? AS " ++ s.out, .{out_path});
+        try db.exec("PRAGMA " ++ s.out ++ ".journal_mode = OFF; PRAGMA " ++ s.out ++
+            ".synchronous = OFF; PRAGMA " ++ s.in ++ ".cache_size = -200000");
+    }
+    if (try db.scalar("SELECT 1 FROM src_main.sqlite_master WHERE name = 'anon_meta'", .{}) != null)
+        return error.AlreadyAnonymised;
+
+    var forgotten: usize = 0;
+    {
+        var q = try db.prepare("SELECT puuid FROM src_main.forgotten");
+        defer q.deinit();
+        try q.bind(.{});
+        while (try q.step()) forgotten += 1;
+    }
+    // Their rows would need forget's erasure first; the box applies it before any
+    // snapshot, so none should be left
+    if (forgotten > 0 and try db.scalar(
+        "SELECT 1 FROM src_main.participants WHERE puuid IN (SELECT puuid FROM src_main.forgotten) LIMIT 1",
+        .{},
+    ) != null) return error.ForgottenPlayerInSnapshot;
 
     try db.begin();
     errdefer db.rollback();
-    try db.exec("DELETE FROM forgotten; DELETE FROM raw.timeline_docs");
-
-    // ranks keys are puuidKey(PUUID); map old to puuidKey(hashed PUUID)
-    try db.exec("CREATE TEMP TABLE keymap (old INTEGER PRIMARY KEY, new INTEGER NOT NULL)");
-    {
-        var ins = try db.prepare("INSERT OR IGNORE INTO keymap VALUES (?, ?)");
-        defer ins.deinit();
-        var s = try db.prepare(
-            \\SELECT puuid FROM players UNION
-            \\SELECT puuid FROM participants WHERE puuid IS NOT NULL
-        );
-        defer s.deinit();
-        try s.bind(.{});
-        while (try s.step()) {
-            const p = s.bytes(0);
-            const h = puuid(salt, p);
-            try ins.exec(.{ store.schema.puuidKey(p), store.schema.puuidKey(&h) });
+    inline for (schemas) |s| {
+        var tables = try db.prepare("SELECT name, sql FROM " ++ s.in ++
+            ".sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'");
+        defer tables.deinit();
+        try tables.bind(.{});
+        while (try tables.step()) {
+            const name = try gpa.dupe(u8, tables.bytes(0));
+            defer gpa.free(name);
+            try createLike(gpa, db, s.out, tables.bytes(1));
+            if (std.mem.eql(u8, name, "forgotten") or std.mem.eql(u8, name, "timeline_docs")) continue;
+            if (std.mem.eql(u8, name, "raw_docs")) {
+                try copyRawDocs(gpa, db, salt);
+                continue;
+            }
+            try copyTable(gpa, db, s.in, s.out, name);
+            std.log.info("{s}.{s} copied", .{ s.out, name });
         }
     }
-    inline for (.{ "ranks", "rank_history" }) |t| {
-        try db.exec("CREATE TEMP TABLE moved AS SELECT k.new AS nk, t.* FROM " ++ t ++
-            " t JOIN keymap k ON k.old = t.key");
-        try db.exec("ALTER TABLE moved DROP COLUMN key; DELETE FROM " ++ t ++
-            "; INSERT INTO " ++ t ++ " SELECT * FROM moved; DROP TABLE moved");
+    inline for (schemas) |s| {
+        var indexes = try db.prepare("SELECT sql FROM " ++ s.in ++
+            ".sqlite_master WHERE type = 'index' AND sql IS NOT NULL");
+        defer indexes.deinit();
+        try indexes.bind(.{});
+        while (try indexes.step()) try createLike(gpa, db, s.out, indexes.bytes(0));
     }
     try db.exec(
-        \\UPDATE participants SET puuid = anon_puuid(puuid), match_id = anon_match(match_id);
-        \\UPDATE players SET puuid = anon_puuid(puuid);
-        \\UPDATE mastery SET puuid = anon_puuid(puuid);
-        \\UPDATE matches SET match_id = anon_match(match_id);
-        \\UPDATE bans SET match_id = anon_match(match_id);
-        \\UPDATE match_queue SET match_id = anon_match(match_id);
-        \\UPDATE timeline_queue SET match_id = anon_match(match_id);
-        \\UPDATE draft_backfill SET match_id = anon_match(match_id);
-        \\UPDATE timeline.timelines SET match_id = anon_match(match_id);
-    );
-
-    const window = try gpa.alloc(u8, store.raw.window_len);
-    defer gpa.free(window);
-    var done: usize = 0;
-    {
-        var sel = try db.prepare("SELECT key, body FROM raw.raw_docs WHERE source = 'riot_match'");
-        defer sel.deinit();
-        var put = try db.prepare("INSERT INTO raw.raw_docs SELECT 'anon', anon_match(?1), fetched_at, ?2 " ++
-            "FROM raw.raw_docs WHERE source = 'riot_match' AND key = ?1");
-        defer put.deinit();
-        try sel.bind(.{});
-        while (try sel.step()) {
-            const key = try gpa.dupe(u8, sel.bytes(0));
-            defer gpa.free(key);
-            const json = try store.raw.decompress(gpa, sel.bytes(1));
-            defer gpa.free(json);
-            const anon = try rewriteMatch(gpa, salt, json);
-            defer gpa.free(anon);
-            const body = try store.raw.compressWith(gpa, window, anon);
-            defer gpa.free(body);
-            try put.exec(.{ key, store.Blob{ .bytes = body } });
-            done += 1;
-            if (done % 20000 == 0) std.log.info("raw summaries: {d}", .{done});
-        }
-    }
-    try db.exec(
-        \\DELETE FROM raw.raw_docs WHERE source <> 'anon';
-        \\UPDATE raw.raw_docs SET source = 'riot_match';
-        \\CREATE TABLE anon_meta (anonymised_at INTEGER NOT NULL);
-        \\INSERT INTO anon_meta VALUES (unixepoch());
+        \\CREATE TABLE out_main.anon_meta (anonymised_at INTEGER NOT NULL);
+        \\INSERT INTO out_main.anon_meta VALUES (unixepoch());
     );
     try db.commit();
-    std.log.info("raw summaries rewritten: {d}; vacuuming", .{done});
-    // Freed pages still hold the old ids until rewritten
-    try db.exec("VACUUM main; VACUUM raw; VACUUM timeline");
+}
+
+const Schema = struct { in: [:0]const u8, out: [:0]const u8, file: []const u8 };
+const schemas = [_]Schema{
+    .{ .in = "src_main", .out = "out_main", .file = "meiolol.db" },
+    .{ .in = "src_raw", .out = "out_raw", .file = "raw.db" },
+    .{ .in = "src_timeline", .out = "out_timeline", .file = "timeline.db" },
+};
+
+/// Runs a CREATE TABLE/INDEX statement against the output schema
+fn createLike(gpa: std.mem.Allocator, db: Db, out: []const u8, sql: []const u8) !void {
+    // "CREATE TABLE name" / "CREATE INDEX name" / "CREATE UNIQUE INDEX name": qualify name
+    const kinds = [_][]const u8{ "CREATE TABLE ", "CREATE INDEX ", "CREATE UNIQUE INDEX " };
+    for (kinds) |k| if (std.mem.startsWith(u8, sql, k)) {
+        const stmt = try std.fmt.allocPrintSentinel(gpa, "{s}{s}.{s}", .{ k, out, sql[k.len..] }, 0);
+        defer gpa.free(stmt);
+        return db.exec(stmt);
+    };
+    return error.UnexpectedSchemaSql;
+}
+
+/// Column expressions: PUUIDs and match ids hashed, ranks keys moved to the hashed
+/// PUUID's key; ordered by primary key so inserts are sequential
+fn copyTable(gpa: std.mem.Allocator, db: Db, in: []const u8, out: []const u8, name: []const u8) !void {
+    var cols: std.ArrayList(u8) = .empty;
+    defer cols.deinit(gpa);
+    var order: std.ArrayList(u8) = .empty;
+    defer order.deinit(gpa);
+    var pks: [8]struct { pk: i64, pos: usize } = undefined;
+    var n_pk: usize = 0;
+    const keyed = std.mem.eql(u8, name, "ranks") or std.mem.eql(u8, name, "rank_history");
+    {
+        const sql = try std.fmt.allocPrint(gpa, "SELECT name, pk FROM pragma_table_info('{s}', '{s}') ORDER BY cid", .{ name, in });
+        defer gpa.free(sql);
+        var q = try db.prepare(sql);
+        defer q.deinit();
+        try q.bind(.{});
+        var i: usize = 0;
+        while (try q.step()) : (i += 1) {
+            const col = q.bytes(0);
+            if (i > 0) try cols.appendSlice(gpa, ", ");
+            if (std.mem.eql(u8, col, "puuid")) {
+                try cols.appendSlice(gpa, "anon_puuid(t.puuid)");
+            } else if (std.mem.eql(u8, col, "match_id")) {
+                try cols.appendSlice(gpa, "anon_match(t.match_id)");
+            } else if (keyed and std.mem.eql(u8, col, "key")) {
+                try cols.appendSlice(gpa, "k.new");
+            } else {
+                try cols.print(gpa, "t.\"{s}\"", .{col});
+            }
+            if (q.int(1) > 0) {
+                pks[n_pk] = .{ .pk = q.int(1), .pos = i + 1 };
+                n_pk += 1;
+            }
+        }
+    }
+    std.mem.sort(@TypeOf(pks[0]), pks[0..n_pk], {}, struct {
+        fn lt(_: void, a: @TypeOf(pks[0]), b: @TypeOf(pks[0])) bool {
+            return a.pk < b.pk;
+        }
+    }.lt);
+    for (pks[0..n_pk], 0..) |p, i| try order.print(gpa, "{s}{d}", .{ if (i > 0) ", " else "", p.pos });
+    const join = if (keyed)
+        \\ JOIN (SELECT old_key(puuid) AS old, anon_key(puuid) AS new FROM src_main.players
+        \\       UNION SELECT old_key(puuid), anon_key(puuid) FROM src_main.participants
+        \\       WHERE puuid IS NOT NULL) k ON k.old = t.key
+    else
+        "";
+    const sql = try std.fmt.allocPrintSentinel(gpa, "INSERT INTO {s}.\"{s}\" SELECT {s} FROM {s}.\"{s}\" t{s}{s}{s}", .{
+        out,                                name,        cols.items, in, name, join,
+        if (n_pk > 0) " ORDER BY " else "", order.items,
+    }, 0);
+    defer gpa.free(sql);
+    try db.exec(sql);
+}
+
+fn copyRawDocs(gpa: std.mem.Allocator, db: Db, salt: *const Salt) !void {
+    const window = try gpa.alloc(u8, store.raw.window_len);
+    defer gpa.free(window);
+    var sel = try db.prepare("SELECT source, key, fetched_at, body FROM src_raw.raw_docs");
+    defer sel.deinit();
+    var put = try db.prepare("INSERT INTO out_raw.raw_docs VALUES (?, anon_match(?), ?, ?)");
+    defer put.deinit();
+    try sel.bind(.{});
+    var done: usize = 0;
+    while (try sel.step()) {
+        if (!std.mem.eql(u8, sel.bytes(0), "riot_match")) return error.UnknownRawSource;
+        const json = try store.raw.decompress(gpa, sel.bytes(3));
+        defer gpa.free(json);
+        const anon = try rewriteMatch(gpa, salt, json);
+        defer gpa.free(anon);
+        const body = try store.raw.compressWith(gpa, window, anon);
+        defer gpa.free(body);
+        try put.exec(.{ "riot_match", sel.bytes(1), sel.int(2), store.Blob{ .bytes = body } });
+        done += 1;
+        if (done % 20000 == 0) std.log.info("raw summaries: {d}", .{done});
+    }
+    std.log.info("raw summaries rewritten: {d}", .{done});
 }
 
 const testing = std.testing;

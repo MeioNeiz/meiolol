@@ -150,11 +150,12 @@ Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
 
 - Made with `VACUUM INTO` on the box, streamed to the Mac (data/snap-STAMP/, gitignored)
   and the box copy deleted at once. Before anyone models on it, `meiolol-lab anonymise
-  data/snap-STAMP` (src/lab/anonymise.zig) runs on the Mac: forgotten players re-erased,
-  then PUUIDs and match ids replaced by salted hashes (HMAC-SHA256), Riot IDs, summoner
-  ids and names blanked, profile icons zeroed, raw timelines dropped, VACUUM so freed
-  pages lose the old values. Match ids are hashed too: a real one gives back the ten
-  players through the API. Only then is it copied to the gpu-box (~/ml/snaps/STAMP/)
+  SRC DST` (src/lab/anonymise.zig) on the Mac writes a fresh copy: PUUIDs and match ids
+  replaced by salted hashes (HMAC-SHA256), Riot IDs, summoner ids and names blanked,
+  profile icons zeroed, raw timelines and the forgotten list left out (it refuses a
+  snapshot still holding a forgotten player's rows). Then SRC is deleted. Match ids are
+  hashed too: a real one gives back the ten players through the API. Only the hashed
+  copy goes to the gpu-box (~/ml/snaps/STAMP/)
 - The salt is ~/.config/meiolol/snap-salt on the Mac: never in git, never on the box.
   Without it a hash can't be linked back to a PUUID; with it only by hashing candidates
 - Disposable: a snapshot is deleted from the Mac and the gpu-box when a newer one
