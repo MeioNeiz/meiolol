@@ -433,10 +433,12 @@ Site UI pass (2026-10-12, meiolol-a0, from research/questions/site-design.md):
 - Lane chart one component (lanechart.zig) for matchup pages and, as chart.wasm (12 KB),
   Your games; method page "Model accuracy vs data" (evalchart.zig, eval-history.tsv);
   builds index per patch view; Daily Draft marks without red/green
+- Every HTML page on tpl (root.zig, matchup.zig last; byte-identical); phone width:
+  every page type fits 360 to 412px, tables included, no sideways scrolling
 
 Next:
-1. root.zig and matchup.zig rest onto tpl; mobile check at phone width; screenshots
-   or a short video for the application (Riot accepts them, research C1)
+1. Screenshots or a short video for the application (Riot accepts them, research C1);
+   meiolol-render's flags still lack --origin and --index-min-games
 2. Cached data load (Jacob: later): probably not worth it now that a load takes ~5 s on
    the Mac snapshot and ~44 s for every view on the box. Left of a pass: filters.make
    ~1 s, stats per view ~0.2 s (Mac). Renderer boot after a box reboot never verified
