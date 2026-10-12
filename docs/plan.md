@@ -327,6 +327,7 @@ next steps land here.
 
 ### Draft model (was draft-model-19)
 
+- Coordination of the model sessions (who owns what, rules, open items): docs/model-agents.md
 - Jacob's personal goal (2026-10-12, separate from the app): the best League draft
   predictor. Owner meiolol-88 (win-* in the lab). Benchmark: LoLDraftAI reports 55-56%
   solo-queue accuracy (research loldraftai#^f6, #^f7). Lever is data volume: dev curve
