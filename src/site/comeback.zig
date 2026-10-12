@@ -6,6 +6,7 @@ const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const tpl = html.tpl;
 const matchup = @import("matchup.zig");
 
 const Writer = std.Io.Writer;
@@ -14,7 +15,6 @@ const curvesfile = core.curvesfile;
 const Curves = curvesfile.Curves;
 const View = curvesfile.View;
 const Champ = root.Champ;
-const esc = html.esc;
 
 const minutes = [_]curvesfile.Comeback{ .ten, .fifteen };
 
@@ -38,57 +38,62 @@ pub fn section(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !
 
     const head = v.comeback(.ten, headline_bucket);
     if (head.games >= matchup.thin_games) {
-        try w.print("<p>Between 500 and 1,500 gold behind {f} at 10 minutes, {f} still won ", .{ esc(y.name), esc(x.name) });
-        try percent(w, head.wins, head.games);
-        try w.print(" of {d} game{s}", .{ head.games, matchup.plural(head.games) });
-        if (base) |b| {
-            const bh = b.comeback(.ten, headline_bucket);
-            try w.print(" (all {s} lanes: ", .{lane});
-            try percent(w, bh.wins, bh.games);
-            try w.writeAll(")");
-        }
-        try w.writeAll(".</p>\n");
+        const all = if (base) |bl| blk: {
+            const bh = bl.comeback(.ten, headline_bucket);
+            break :blk tpl.t(" (all {lane} lanes: {rate})", .{ .lane = lane, .rate = tpl.call(percent, .{ bh.wins, bh.games }) });
+        } else null;
+        try tpl.render(w,
+            \\<p>Between 500 and 1,500 gold behind {y} at 10 minutes, {x} still won {rate} of {games} game{s}{all}.</p>
+            \\
+        , .{
+            .y = y.name,
+            .x = x.name,
+            .rate = tpl.call(percent, .{ head.wins, head.games }),
+            .games = head.games,
+            .s = matchup.plural(head.games),
+            .all = all,
+        });
     } else {
-        try w.print(
-            "<p class=\"note\">More data needed: cells under {d} games are greyed out. The all-{s}-lanes columns fill sooner.</p>\n",
-            .{ matchup.thin_games, lane },
-        );
+        try tpl.render(w,
+            \\<p class="note">More data needed: cells under {thin} games are greyed out. The all-{lane}-lanes columns fill sooner.</p>
+            \\
+        , .{ .thin = matchup.thin_games, .lane = lane });
     }
 
-    try w.print(
+    try tpl.renderPart(w,
         \\<div class="table-scroll"><table>
-        \\<thead><tr><th>{f}'s lane gold vs {f}</th><th class="num">{f} won, at 10 min</th><th class="num">at 15 min</th><th class="num">All {s} lanes, 10 min</th><th class="num">15 min</th></tr></thead>
+        \\<thead><tr><th>{x}'s lane gold vs {y}</th><th class="num">{x} won, at 10 min</th><th class="num">at 15 min</th><th class="num">All {lane} lanes, 10 min</th><th class="num">15 min</th></tr></thead>
         \\<tbody>
         \\
-    , .{ esc(x.name), esc(y.name), esc(x.name), lane });
+    , .{ .x = x.name, .y = y.name, .lane = lane });
     for (labels, 0..) |label, i| {
-        try w.print("<tr><td>{s}</td>", .{label});
+        try tpl.renderPart(w, "<tr><td>{label}</td>", .{ .label = label });
         for (minutes) |m| try cell(w, v.comeback(m, i));
         for (minutes) |m| {
-            if (base) |b| try cell(w, b.comeback(m, i)) else try w.writeAll("<td class=\"num\">-</td>");
+            if (base) |bl| try cell(w, bl.comeback(m, i)) else try w.writeAll("<td class=\"num\">-</td>");
         }
         try w.writeAll("</tr>\n");
     }
-    try w.print(
+    try tpl.renderPart(w,
         \\</tbody></table></div>
-        \\<p class="muted">Gold is {f}'s total minus {f}'s at that minute. Games that ended
-        \\before it are left out. All {s} lanes counts every lane from both sides. Cells under
-        \\{d} games are greyed out.</p>
+        \\<p class="muted">Gold is {x}'s total minus {y}'s at that minute. Games that ended
+        \\before it are left out. All {lane} lanes counts every lane from both sides. Cells under
+        \\{thin} games are greyed out.</p>
         \\
-    , .{ esc(x.name), esc(y.name), lane, matchup.thin_games });
+    , .{ .x = x.name, .y = y.name, .lane = lane, .thin = matchup.thin_games });
 }
 
 fn cell(w: *Writer, c: curvesfile.Counts) !void {
-    try w.print("<td class=\"num{s}\" title=\"{d} games\">", .{
-        if (c.games < matchup.thin_games) " thin" else "", c.games,
+    const value = if (c.games == 0) null else tpl.t("{rate} <span class=\"muted\">{games}</span>", .{
+        .rate = tpl.call(percent, .{ c.wins, c.games }),
+        .games = c.games,
     });
-    if (c.games == 0) {
-        try w.writeAll("-");
-    } else {
-        try percent(w, c.wins, c.games);
-        try w.print(" <span class=\"muted\">{d}</span>", .{c.games});
-    }
-    try w.writeAll("</td>");
+    try tpl.render(w, "<td class=\"num{thin}\" title=\"{games} games\">{dash}{value}</td>", .{
+        .thin = tpl.when(c.games < matchup.thin_games, " thin"),
+        .games = c.games,
+        .dash = tpl.when(c.games == 0, "-"),
+        .value = value,
+    });
 }
 
 test "comeback section from both sides" {
