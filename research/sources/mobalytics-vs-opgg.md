@@ -43,7 +43,7 @@ learning features exist already.
   > We include everything from rune and item builds to combos and advice.
 - [market] Multi-game: LoL, TFT, Destiny 2, Genshin Impact; Twitch extension. ^f7
   > Copyright © 2016-2026 All rights reserved by Gamers Net, Inc.
-- [learning] Checked, not there: no mention of lane-phase timelines, gold or XP diffs, or matchup power curves; the improvement angle is about the player's own aggregate skills (GPI), not a specific matchup over time. ^f8
+- [learning] [ux/features] Checked, not there: no mention of lane-phase timelines, gold or XP diffs, or matchup power curves; the improvement angle is about the player's own aggregate skills (GPI), not a specific matchup over time. ^f8
 
 ## Read
 

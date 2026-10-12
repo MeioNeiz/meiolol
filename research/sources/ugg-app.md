@@ -26,10 +26,10 @@ Why: a top-tier stats site's desktop app; what it offers in champ select and how
 - [policy] Shows a "Riot Games Compliant" badge, alongside the "isn't endorsed" boilerplate. ^f1
   > Riot Games Compliant
   > U.GG Stats isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games
-- [tools] [ux] Champion select scouting recommends best picks, counters and team synergies. ^f2
+- [tools] [ux/features] Champion select scouting recommends best picks, counters and team synergies. ^f2
   > Champion Select Scouting
   > Scout everything, from the best picks & counters to team synergies
-- [ux] Auto-imports builds tailored by elo, role and matchup. ^f3
+- [ux/features] Auto-imports builds tailored by elo, role and matchup. ^f3
   > Auto-import the best builds, tailored by elo, role, and matchup
 - [policy] Checked, not there: no mention of production key, Riot approval, AI/ML, or removed features. ^f4
 

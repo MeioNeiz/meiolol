@@ -25,9 +25,9 @@ Why: does a daily, Wordle-like learning puzzle for League already exist?
 
 - [learning] [fun] Daily interactive puzzles to practise strategic concepts and decision speed. ^f1
   > Complete daily interactive puzzles to practice strategic concepts and enhance quality and speed of your decision making in League of Legends.
-- [learning] [ux] Puzzles are personalised by role and rank. ^f2
+- [learning] [ux/features] Puzzles are personalised by role and rank. ^f2
   > Puzzles are recommended for your role and rank, allowing you to learn at your own pace
-- [fun] [ux] Retention via day streaks and rewards (the Duolingo/Wordle loop). ^f3
+- [fun] [ux/features] Retention via day streaks and rewards (the Duolingo/Wordle loop). ^f3
   > Keep your day streak going by solving puzzles to maximise your learning and get rewards.
 - [market] 111K downloads but only 2 ratings, averaging 3 out of 5 (short page lines, unquotable). ^f4
 - [market] Free; Electron app on Overwolf, 292 MB; version 0.3.20 dated 31 Jul 2026. ^f5

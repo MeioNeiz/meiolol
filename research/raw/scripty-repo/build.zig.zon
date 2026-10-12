@@ -1,0 +1,18 @@
+.{
+    .name = .scripty,
+    .version = "0.1.0",
+    .fingerprint = 0x3dcb7e203bb9a22c,
+    .minimum_zig_version = "0.17.0-dev.1471+ff10b90bc",
+    .dependencies = .{
+        .tracy = .{
+            .url = "git+https://github.com/kristoff-it/tracy#67d2d89e351048c76fc6d161e0ac09d8a831dc60",
+            .hash = "tracy-0.0.0-4Xw-1pwwAABTfMgoDP1unCbZDZhJEfict7XCBGF6IdIn",
+        },
+    },
+    .paths = .{
+        "LICENSE",
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

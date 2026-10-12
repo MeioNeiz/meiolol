@@ -23,15 +23,15 @@ Why: is there a Zig framework with components like React that could render our p
 
 ## Findings
 
-- [web] Components are Zig functions returning `zx.Component`, written in JSX-like markup with Zig control flow. `README.md` ^f1
+- [web/template] Components are Zig functions returning `zx.Component`, written in JSX-like markup with Zig control flow. `README.md` ^f1
   > A Ziex Component is a Zig function that returns a `zx.Component`.
-- [web] Server-side rendering is called production-ready; client-side rendering and state are still evolving and undocumented. `README.md` ^f2
+- [web/template] [web/wasm] Server-side rendering is called production-ready; client-side rendering and state are still evolving and undocumented. `README.md` ^f2
   > server-side rendering (SSR) features are production-ready, Ziex continues to evolve with ongoing improvements to client-side rendering and state management
-- [web] Supports static site generation, which is what meiolol's site is. `README.md` ^f3
+- [web/template] Supports static site generation, which is what meiolol's site is. `README.md` ^f3
   > Pre-render pages at build/export time into static HTML for fast CDN delivery.
-- [web] [toolchain] Latest release targets Zig 0.17; the 0.16 line is marked outdated. `README.md` ^f4
+- [web/template] [toolchain] Latest release targets Zig 0.17; the 0.16 line is marked outdated. `README.md` ^f4
   > Ziex 0.1.0 is planned for release after `Zig 0.17.0` is available.
-- [web] [toolchain] build.zig.zon on main requires Zig 0.17.0. `build.zig.zon` ^f5
+- [web/template] [toolchain] build.zig.zon on main requires Zig 0.17.0. `build.zig.zon` ^f5
   > .minimum_zig_version = "0.17.0",
 
 ## Read

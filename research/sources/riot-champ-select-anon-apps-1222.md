@@ -27,7 +27,7 @@ Why: the most specific Riot ruling on what champ select tools may show.
 
 ## Findings
 
-- [policy] [ux] From patch 12.22, apps must not reveal player names or stats in Ranked
+- [policy] [ux/features] From patch 12.22, apps must not reveal player names or stats in Ranked
   Solo/Duo champ select. ^f1
   > Apps that reveal player names or stats in Champ Select will be asked to remove this feature immediately. This specifically applies only to Ranked Solo/Duo
 - [policy] Riot DevRel: the data is obfuscated in the API anyway; rule is against

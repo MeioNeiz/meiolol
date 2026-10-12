@@ -25,10 +25,10 @@ s.d.) or how sure we are of the mean (CI)? Players misread both.
 
 ## Findings
 
-- [stats] [ux] Readers misjudge error bars: asked for the separation needed for P = 0.05,
+- [stats] [ux/uncertainty] Readers misjudge error bars: asked for the separation needed for P = 0.05,
   only 22% were within a factor of 2. ^f1
   > only 22% of respondents were within a factor of 2
-- [stats] [ux] s.d. bars show the spread of the population and predict the range of new
+- [stats] [ux/uncertainty] s.d. bars show the spread of the population and predict the range of new
   samples; they are not the error in the mean. ^f2
   > Error bars based on s.d. inform us about the spread of the population and are therefore useful as predictors of the range of new samples.
   > be ready to help your reader understand that the s.d. bars reflect the variation of the data and not the error in your measurement.
@@ -37,9 +37,9 @@ s.d.) or how sure we are of the mean (CI)? Players misread both.
 - [stats] 95% CI is about 2 s.e.m. for n > 15; a CI is more intuitive than s.e.m. ^f4
   > 95% CI ≈ 2 × s.e.m. (n > 15).
   > CIs are a more intuitive measure of uncertainty and are popular in the medical literature.
-- [stats] [ux] Always state which bar type is shown. ^f5
+- [stats] [ux/uncertainty] [ux/charts] Always state which bar type is shown. ^f5
   > The first step in avoiding misinterpretation is to be clear about which measure of uncertainty is being represented by the error bar.
-- [stats] [ux] (inferred) For players the useful band is the game-to-game spread
+- [stats] [ux/uncertainty] (inferred) For players the useful band is the game-to-game spread
   ("in half of games you'll be between X and Y gold at 10"), i.e. percentiles of the
   observed diffs, labelled as such; the uncertainty of the mean belongs in n, the
   grey-out and a thin CI line or text, not as the main band. Two bands of different

@@ -23,7 +23,7 @@ Why: what the biggest stats site ships on the desktop, and how wide its business
 
 ## Findings
 
-- [tools] [ux] LoL overlays: jungle path and timers, inhibitor timers, spell tracker, real-time stats, gold and item comparison, builds, skill recommendations, ward count, loading screen. ^f1
+- [tools] [ux/features] LoL overlays: jungle path and timers, inhibitor timers, spell tracker, real-time stats, gold and item comparison, builds, skill recommendations, ward count, loading screen. ^f1
   > Gold & item comparison
   > Skill recommendations
 - [market] Desktop app has become a multi-game launcher (LoL, TFT, Valorant, Palworld, Steam) with a cross-game "play style" profile. ^f2

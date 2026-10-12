@@ -33,18 +33,18 @@ Why: appetite for League daily games and puzzles.
   > Since there is a HUGE spike in the number of users, I am currently updating the server to accept more incoming players.
 - [fun] [needs] Players slot it into an existing daily-puzzle routine (Heardle, Worldle). ^f3
   > Adding it to my daily routine of doing a bunch of heardles etc
-- [fun] [needs] Many ask for an unlimited or replayable mode and an archive of past days;
+- [fun] [needs] [ux/features] Many ask for an unlimited or replayable mode and an archive of past days;
   others value the once-a-day shared answer. ^f4
   > Make it repayable. I wanna play play play and play more than once a day.
   > Can you make a history, so it is possible to guess all the previous champions from days before?
-- [fun] Shared results as emoji grids appear in comments, Wordle style; players mention
+- [fun] [ux/features] Shared results as emoji grids appear in comments, Wordle style; players mention
   playing with friends. ^f5
   > Looks like a small fun game to play with friends while chatting.
   > looking forward to playing this with friends!
 - [fun] [data] Puzzle data has to follow the meta: a commenter flags a champion's listed
   position as out of date. ^f6
   > it needs to be constantly updated with always changing meta
-- [ux] Fairness complaints dominate (splash crops showing the wrong champion, skins);
+- [ux/colour] [ux/trust] Fairness complaints dominate (splash crops showing the wrong champion, skins);
   a colour-blind mode was added after feedback. ^f7
   > The colorblind mode is now live!
 

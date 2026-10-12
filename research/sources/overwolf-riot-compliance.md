@@ -28,7 +28,7 @@ Why: Overwolf hosts most commercial LoL companion apps; its compliance page is h
   > These guidelines hold even if you do not intend to use the Riot API itself. Do note that apps which reach the publication phase and do not yet possess a Riot approval will be asked to provide one before proceeding.
 - [policy] Apps must show the "isn't endorsed" line and not claim Riot approval or endorsement. ^f2
   > Riot asks that you ensure that your standard messaging (below) is located somewhere that users can see it and doesn’t mention their approval or endorsement of your app.
-- [policy] [ux] Ranked Solo/Duo champ select: non-party summoner names must be shown as Ally 1, Ally 2..., to prevent metagaming and queue dodging. ^f3
+- [policy] [ux/features] Ranked Solo/Duo champ select: non-party summoner names must be shown as Ally 1, Ally 2..., to prevent metagaming and queue dodging. ^f3
   > Riot Games is working to prevent metagaming and queue dodging (among other things). As such apps should make sure that Summoner Names in `Ranked Solo/Duo` champion select should be obfuscated.
   > All instances of non-party Summoner Names in Champion Select should be replaced with `Ally #`
 - [policy] Prohibited in-game: notifications that dictate player action from game state, power spike alerts, enemy cooldown or ultimate timers. ^f4

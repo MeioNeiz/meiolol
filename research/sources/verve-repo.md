@@ -23,14 +23,14 @@ Why: is there a Zig framework that does SSR plus interactive wasm islands?
 
 ## Findings
 
-- [web] SSR pages plus a wasm32-freestanding client runtime with signals, split into per-island wasm chunks. `README.md` ^f1
+- [web/template] [web/wasm] SSR pages plus a wasm32-freestanding client runtime with signals, split into per-island wasm chunks. `README.md` ^f1
   > Server-side rendering with fine-grained reactivity, a wasm32-freestanding
-- [web] Author says pre-1.0, APIs will break, use for learning and personal projects. `README.md` ^f2
+- [web/template] Author says pre-1.0, APIs will break, use for learning and personal projects. `README.md` ^f2
   > Use for learning, experiments,
   > and personal projects. Not production-ready.
-- [web] [toolchain] Targets Zig 0.16.0. `build.zig.zon` ^f3
+- [web/template] [toolchain] Targets Zig 0.16.0. `build.zig.zon` ^f3
   > .minimum_zig_version = "0.16.0",
-- [web] Output is an HTTP server binary (or desktop webview), not a static site; our site is static nginx. `README.md` ^f4
+- [web/template] Output is an HTTP server binary (or desktop webview), not a static site; our site is static nginx. `README.md` ^f4
   > `zig build` produces either an HTTP server with the WASM client
 
 ## Read

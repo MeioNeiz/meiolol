@@ -24,7 +24,7 @@ patch) that multiply the site's files?
 
 ## Findings
 
-- [render] [web] One JSON per champion holds games, wins and gold at 14 split by region, rank, patch, role and opponent; the browser sums the slices picked, so any filter mix needs no server and no page per combination. ^f1
+- [render] [web/wasm] One JSON per champion holds games, wins and gold at 14 split by region, rank, patch, role and opponent; the browser sums the slices picked, so any filter mix needs no server and no page per combination. ^f1
   > The page's filter bar (static/filters.js) sums the slices picked. Counts add
   > up, so any mix of filters needs neither a server nor a page per combination
 - [render] [ops] The data file is small: 35 KB gzipped for Ahri. ^f2

@@ -38,7 +38,7 @@ from timelines, and how well it works.
   timelines; evaluation on 450 test matches. ^f3
   > The dataset is built from Challenger-ranked matches through the LoL Developer’s (Riot Games) Application Programming Interface (API)
   > The state-estimation evaluation uses 450 test matches.
-- [learning] [ux] Authors frame the useful output as the probability path through the game
+- [learning] [ux/charts] Authors frame the useful output as the probability path through the game
   (when it became favourable), not a single prediction. ^f4
   > The model’s main value is not one isolated prediction, but the probability path that shows how the match moves from uncertainty toward a more stable state.
 - [method] Short-horizon forecasts of next events (fights, towers, objectives) are weak:

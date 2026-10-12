@@ -39,7 +39,7 @@ Why: what learning features excite ranked players, and how they want feedback fr
   spending, summoner spell efficiency, jungle clears. ^f4
   > I'd love to see warding habits tracked
   > Death analysis (e.g. "you've died X times too deep into their half with no vision"
-- [learning] [ux] Several players warn against a tool that says what you should have done;
+- [learning] [ux/trust] Several players warn against a tool that says what you should have done;
   they want facts to judge for themselves. Author agrees: visualise, don't judge. ^f5
   > Just be careful not to dip into ‘here’s what you should’ve done’ territory because an automated tool won’t be able to reliably say that.
   > stick with the facts. let the player figure out the why without the tool trying to suggest meaning.

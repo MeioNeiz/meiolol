@@ -37,7 +37,7 @@ Riot co-building tools with a third-party company.
   > how valuable the app would be to Legends of Runeterra players to use daily and how it shares our values as Rioters (i.e. don’t exploit players, don’t give players unfair advantages, don’t break the game).
 - [policy] Criterion Novelty: surprise and delight. ^f4
   > **Novelty**: We want you to surprise and delight us, be creative, and think outside the box.
-- [policy] Criterion Polish: something that feels shippable. ^f5
+- [policy] [ux/layout] Criterion Polish: something that feels shippable. ^f5
   > have something that feels shippable by the deadline
 - [policy] The game's dev team weighs heavily in picking the winner. ^f6
   > we’ll actively involve the Legends of Runeterra dev team to take a look at the finalists. Their judgment will weigh heavily on our choice of winner

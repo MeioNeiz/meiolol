@@ -1,6 +1,7 @@
 ---
 status: answered
 priority: now
+area: ops
 tags: [seo, render, ops, web]
 description: Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines?
 ---

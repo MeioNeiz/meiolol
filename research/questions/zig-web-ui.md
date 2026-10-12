@@ -1,6 +1,7 @@
 ---
 status: answered
 priority: soon
+area: ui
 tags: [web, toolchain]
 description: Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us?
 ---
@@ -62,5 +63,5 @@ None between sources; they target different shapes (server app, static site, can
 - Ziex client-side design (wasm + JS bridge?) not documented yet; revisit at its 0.1.0
 - Size and speed of a Zig-wasm-rendered table versus plain JS on a phone, not measured
 - zjb not built in meiolol yet: glue size, how it sits next to the existing draft.wasm
-- 4 searches only (discovery still growing); not searched: GitHub topic zig+html, Zine (static
-  site generator), Zig SuperHTML (HTML language server and template checker)
+- 4 searches only (discovery still growing); not searched: GitHub topic zig+html. Zine
+  and SuperHTML read for the template layer: [[zig-html-templates]] (need Zig 0.17-dev)

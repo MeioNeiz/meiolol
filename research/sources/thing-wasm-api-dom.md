@@ -23,14 +23,14 @@ Why: how do Zig wasm apps drive the DOM, and is there a mature bridge?
 
 ## Findings
 
-- [web] A TypeScript core plus Zig bindings to create and change DOM elements from Zig wasm. `packages/wasm-api-dom/README.md` ^f1
+- [web/wasm] A TypeScript core plus Zig bindings to create and change DOM elements from Zig wasm. `packages/wasm-api-dom/README.md` ^f1
   > Browser DOM bridge API for hybrid TypeScript & WASM (Zig) applications.
-- [web] DOM objects stay on the JS side; Zig refers to them by integer handles. `packages/wasm-api-dom/README.md` ^f2
+- [web/wasm] DOM objects stay on the JS side; Zig refers to them by integer handles. `packages/wasm-api-dom/README.md` ^f2
   > the bridge API caches those on the host side and [uses
   > managed ID (integer)
-- [web] Event handlers for input, key, mouse, pointer, scroll, touch and wheel are bound from Zig. `packages/wasm-api-dom/README.md` ^f3
+- [web/wasm] Event handlers for input, key, mouse, pointer, scroll, touch and wheel are bound from Zig. `packages/wasm-api-dom/README.md` ^f3
   > Event handlers, event types
-- [web] [toolchain] Zig versions older than 0.15.1 are no longer actively supported. `packages/wasm-api/README.md` ^f4
+- [web/wasm] [toolchain] Zig versions older than 0.15.1 are no longer actively supported. `packages/wasm-api/README.md` ^f4
   > older Zig versions than
   > [v0.15.1](https://ziglang.org/download/0.15.1/release-notes.html), are not
   > actively supported anymore

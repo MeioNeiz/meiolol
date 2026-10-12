@@ -2,6 +2,7 @@
 status: decided
 decision: docs/concept.md
 priority: soon
+area: product
 tags: [needs, learning, fun]
 description: What do ranked and casual League players want from third-party tools that they don't get today?
 ---

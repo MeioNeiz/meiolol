@@ -25,7 +25,7 @@ Why: iTero is a live, widely installed AI pick recommender in champ select, the 
 
 - [policy] Headline badge "Fully Riot Compliant" (self-declared, not "approved"). ^f1
   > Fully Riot Compliant
-- [tools] [ux] Real-time draft recommendations during champ select, personalised from both teams, match history and champion pool. ^f2
+- [tools] [ux/features] Real-time draft recommendations during champ select, personalised from both teams, match history and champion pool. ^f2
   > Get real-time recommendatios. iTero analyses both teams, your match history and your champion pool to give you personalized draft and builds suggestions
 - [tools] [method] AI models are customisable on the paid tier; free tier with ads includes all features shown. ^f3
   > The app is free, including all features shown above. There is a paid version, which removes Ads and includes various additional benefits, such as customising the AI models.

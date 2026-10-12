@@ -23,9 +23,9 @@ Why: is there a small comptime HTML DSL for Zig we could use or copy?
 
 ## Findings
 
-- [web] Pek parses an HTML-like DSL at comptime and fills it with a builtin template engine. `README.md` ^f1
+- [web/template] Pek parses an HTML-like DSL at comptime and fills it with a builtin template engine. `README.md` ^f1
   > A comptime HTML preprocessor with a builtin template engine for Zig.
-- [web] [toolchain] README badges say Zig 0.15 and Zigmod; it ships zig.mod, no build.zig.zon. `README.md`, `zig.mod` ^f2
+- [web/template] [toolchain] README badges say Zig 0.15 and Zigmod; it ships zig.mod, no build.zig.zon. `README.md`, `zig.mod` ^f2
 
 ## Read
 

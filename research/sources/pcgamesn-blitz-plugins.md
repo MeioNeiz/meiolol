@@ -30,7 +30,7 @@ Why: Riot's own stated line for companion apps, as reported in news; relevant to
   > Generally we don't want apps pulling in gameplay information that provides a competitive advantage that isn't just extrapolating from information we already provide
 - [policy] Riot's enforcement trigger is when players start to "need" a tool to be competitive. ^f3
   > If it feels like you start to 'need' it to be competitive, then we're likely to take some action there.
-- [tools] [ux] Blitz shows a lobby overlay summarising every player's strengths and weaknesses while loading in. ^f4
+- [tools] [ux/features] Blitz shows a lobby overlay summarising every player's strengths and weaknesses while loading in. ^f4
   > you can also add an overlay to the lobby that gives you an overview of everyone's general strengths and weaknesses
 - [policy] (inferred) The "need it to be competitive" test is the risk for a strong ML pick recommender: the better it is claimed to be (e.g. LoLDraftAI's +4 to 7% uplift), the closer it gets to Riot's stated trigger. ^f5
 

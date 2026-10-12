@@ -42,7 +42,7 @@ time-based (timeline-derived) champion curves?
 - [tools] Other sections: tier list, pro builds, matchups, runes, skill orders, items, spells, jungle paths, rankings, infographics, replays; popularity, win and ban rate history since 2016. ^f6
   > ### Popularity History
 - [tools] (inferred) Its curves are champion-wide (vs everyone) and end-of-game-duration based, not matchup-specific and not minute-by-minute lead within a lane. ^f7
-- [tools] Checked, not there: no per-matchup gold or XP curve, no lane-phase diff, no explanation of power spikes. ^f8
+- [tools] [ux/features] Checked, not there: no per-matchup gold or XP curve, no lane-phase diff, no explanation of power spikes. ^f8
 
 ## Read
 

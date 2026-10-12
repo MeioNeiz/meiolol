@@ -25,9 +25,9 @@ Why: is LoLDraftAI still operating in Oct 2026 and what does it show during cham
 
 - [tools] Live and updated for the current patch in Oct 2026. ^f1
   > Patch 16.20 · Updated October 10
-- [tools] [method] [ux] Custom-trained neural model predicts win rate and recommends champions for the specific draft. ^f2
+- [tools] [method] [ux/features] Custom-trained neural model predicts win rate and recommends champions for the specific draft. ^f2
   > A custom-trained AI model that reads the whole draft together to predict win rate, recommend champions, and tailor runes and item builds to your specific game.
-- [ux] Offers live client tracking and one-click item set import on desktop. ^f3
+- [ux/features] Offers live client tracking and one-click item set import on desktop. ^f3
   > on desktop you can apply it to your client as an item set in one click.
 - [method] (claim) Draft-only accuracy 56.7%, calibrated, and +4 to 7% last-pick win-rate uplift. ^f4
   > Calibrated · 55% means 55%

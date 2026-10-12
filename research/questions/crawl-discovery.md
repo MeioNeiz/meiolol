@@ -1,6 +1,7 @@
 ---
 status: answered
 priority: now
+area: data
 tags: [data]
 description: Which players to scan for match ids so the key's budget goes on newest-patch ranked games
 decision: docs/plan.md#ops-and-data-was-meiolol-de-data-safety-af

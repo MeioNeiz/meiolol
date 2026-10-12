@@ -25,7 +25,7 @@ Why: Blitz's first-party words on Riot data use and its relationship with Riot; 
 
 - [data] [policy] Blitz said it fetched all data from Riot's League API and analysed it itself, using no other third-party stats. ^f1
   > We fetch all our data directly from the Riot's League of Legends API and analyze them ourselves.
-- [tools] [ux] Historically showed teammates' names, strengths and ranked win rates on their champion in champ select. ^f2
+- [tools] [ux/features] Historically showed teammates' names, strengths and ranked win rates on their champion in champ select. ^f2
   > We also grab your teammate's Summoner Names when you enter champion select and automatically display their strengths and ranked win rates on their chosen champion.
 - [policy] Blitz claimed it consulted Riot before major features. ^f3
   > We talk with Riot before developing any major features to make sure they are okay with what we are doing!

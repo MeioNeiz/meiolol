@@ -23,16 +23,16 @@ Why: could a Zig template language replace our w.print HTML?
 
 ## Findings
 
-- [web] Templates use Zig code for control flow and compile to Zig for syntax and type checks. `README.md` ^f1
+- [web/template] Templates use Zig code for control flow and compile to Zig for syntax and type checks. `README.md` ^f1
   > Use Zig code directly in templates for control flow.
   > Compiles to Zig code for syntax and type validation.
-- [web] Template data is a JSON-like dynamic object looked up by path (`$.user.email`), not typed Zig values. `README.md` ^f2
+- [web/template] Template data is a JSON-like dynamic object looked up by path (`$.user.email`), not typed Zig values. `README.md` ^f2
   > Simple and intuitive DSL for building flexible, JSON-compatible data objects.
-- [web] Partials with positional and keyword args and slots: the component mechanism. `README.md` ^f3
+- [web/template] Partials with positional and keyword args and slots: the component mechanism. `README.md` ^f3
   > Partials with keyword args
-- [web] [toolchain] Declares minimum Zig 0.15.1; 0.16 support not stated. `build.zig.zon` ^f4
+- [web/template] [toolchain] Declares minimum Zig 0.15.1; 0.16 support not stated. `build.zig.zon` ^f4
   > .minimum_zig_version = "0.15.1",
-- [web] Checked, not there: nothing for client-side interactivity; it renders HTML text only. ^f5
+- [web/template] Checked, not there: nothing for client-side interactivity; it renders HTML text only. ^f5
 
 ## Read
 

@@ -1,6 +1,7 @@
 ---
 status: answered
 priority: now
+area: policy
 tags: [policy, privacy]
 description: How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data?
 ---

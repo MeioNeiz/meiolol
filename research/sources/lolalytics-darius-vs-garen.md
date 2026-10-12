@@ -38,7 +38,7 @@ timeline-derived (gold at 15, lane diffs, power curves)?
   > | First Tower | 52.8 | 72.98 | 46.47 | 31.3 |
 - [data] End-of-game averages ranked against the role (damage, kills, gold, CS). ^f6
   > Minions Killed:
-- [tools] Checked, not there: no gold or XP difference at 10 or 15 minutes, no per-minute lead curve, no explanation of how the lane plays out or when each champion spikes. ^f7
+- [tools] [ux/features] Checked, not there: no gold or XP difference at 10 or 15 minutes, no per-minute lead curve, no explanation of how the lane plays out or when each champion spikes. ^f7
 - [market] Cross-links sister sites (pros.lol, XDX.gg) and Mobalytics as "friends". ^f8
   > Quality alternative Darius build stats and more from our friends at Mobalytics.
 

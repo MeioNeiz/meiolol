@@ -1,6 +1,7 @@
 ---
 status: answered
 priority: now
+area: ops
 tags: [ops]
 description: Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box?
 ---

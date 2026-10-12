@@ -33,7 +33,7 @@ how did it do?
 - [policy] [fun] Riot also enabled RSO login; logged-in players can guess on a sample of their own ARAM history. ^f4
   > Thanks to Riot dev team, you can now log in with your Riot Games account
   > When logged in with your Riot account, you can play against your own ARAM history (random sample)
-- [fun] [ux] Social features: challenge friends without an account; no daily limit (it is endless, not a daily puzzle). ^f5
+- [fun] [ux/features] Social features: challenge friends without an account; no daily limit (it is endless, not a daily puzzle). ^f5
   > You don't need an account to challenge friends in a guessing match
   > No daily limit of games played
 - [market] Monetisation: small ads only to try to break even; developer struggling with hosting costs. ^f6

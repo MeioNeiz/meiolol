@@ -2,6 +2,7 @@
 status: decided
 decision: docs/concept.md
 priority: soon
+area: data
 tags: [data, learning, fun]
 description: What can the Riot API provide beyond match summaries to power a data-hungry learning or fun tool?
 ---

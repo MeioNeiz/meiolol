@@ -1,6 +1,7 @@
 ---
 status: answered
 priority: now
+area: ops
 tags: [ops, privacy]
 description: What free or very cheap hosting and storage fits meiolol's site, API and data?
 ---

@@ -38,7 +38,7 @@ criteria.
 - [policy] Creativity category rewards breaking convention over iterating on successful
   ideas. ^f4
   > this category is meant to reward the individuals who aren’t afraid to challenge convention in pursuit of new and revolutionary ideas
-- [policy] Judging criteria: technical difficulty, clarity/presentation, documentation,
+- [policy] [ux/layout] Judging criteria: technical difficulty, clarity/presentation, documentation,
   polish; public GitHub repo required. ^f5
   > All entries will be required to provide a public GitHub repo link as part of their submission.
   > Technical difficulty

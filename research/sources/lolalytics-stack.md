@@ -23,8 +23,8 @@ Why: is lolalytics a static site, or does it render per request?
 
 ## Findings
 
-- [web] The page is server-rendered by Qwik 1.20 (resumable SSR), per route, not a static file: the html tag carries q:render="ssr", q:container="paused", q:version="1.20.0" (attributes, so not quotable here). ^f1
-- [web] Data comes from a separate API host. ^f2
+- [web/template] The page is server-rendered by Qwik 1.20 (resumable SSR), per route, not a static file: the html tag carries q:render="ssr", q:container="paused", q:version="1.20.0" (attributes, so not quotable here). ^f1
+- [web/wasm] Data comes from a separate API host. ^f2
   > https://a1.lolalytics.com/mega/
 - [web] Checked, not there: no sign-in or login anywhere in the page. ^f3
 

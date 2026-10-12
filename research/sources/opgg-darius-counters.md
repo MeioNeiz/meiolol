@@ -39,7 +39,7 @@ timeline-derived or teaching content.
   > ADVERTISEMENT Remove ads
 - [tools] Counter list is matchup win rate and games only; per-champion tabs: build, counters, items, synergies, runes, masters build. ^f6
   > [Champion synergies](https://op.gg/lol/champions/darius/synergies/top "Champion synergies")
-- [learning] Checked, not there: no gold or XP diff over time, no power-spike or per-minute curve, no explanation of why a matchup wins beyond one-line tips. ^f7
+- [learning] [ux/features] Checked, not there: no gold or XP diff over time, no power-spike or per-minute curve, no explanation of why a matchup wins beyond one-line tips. ^f7
 
 ## Read
 

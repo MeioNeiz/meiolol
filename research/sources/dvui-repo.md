@@ -73,7 +73,7 @@ Windows without an SDK, and cover text, lists and line charts at high DPI?
 - [gui] Draws its own widgets (not native controls); fonts via FreeType or stb_truetype.
   `build.zig` ^f14
   > Freetype (or stb_truetype if false) for font rendering
-- [web] [gui] Has a Web backend (a `web-app` example, demo page), served as files from any web server; it draws the whole UI itself rather than producing HTML. `README.md` ^f15
+- [web/wasm] [gui] Has a Web backend (a `web-app` example, demo page), served as files from any web server; it draws the whole UI itself rather than producing HTML. `README.md` ^f15
   > To load examples for this backend, they must first be served through a (local) web server
 
 ## Read

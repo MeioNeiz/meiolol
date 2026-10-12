@@ -34,7 +34,7 @@ VOD review and sharing.
 - [market] Reception: 773 upvotes, 98% upvoted; top comment upvotes it for leaving
   Overwolf. ^f2
   > upvoted for separating from overwolf.
-- [needs] [ux] Overwolf-free is the deciding factor for several commenters; some uninstall
+- [needs] [ux/trust] Overwolf-free is the deciding factor for several commenters; some uninstall
   Overwolf on the spot. ^f3
   > Having something like this not linked to overwolf is what I've always wished for.
   > Not being tied to Overwolf is definitely the deciding factor for me
@@ -43,7 +43,7 @@ VOD review and sharing.
   "enshittified" with ads. ^f4
   > medal.tv (enshittified with ads)
   > outplayed (slowly being enshittified)
-- [ux] Bloat and ads named as the norm; a clean simple app stands out. ^f5
+- [ux/trust] Bloat and ads named as the norm; a clean simple app stands out. ^f5
   > this is a great reminder of the kind of software we could be having if everything didnt want to be bloatware
   > Ascent is incredible, no bloat, no ads, clean UI
 - [learning] [fun] Uses: clips of good plays, VOD review, sharing games with coaches and

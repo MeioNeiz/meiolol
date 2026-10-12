@@ -23,17 +23,17 @@ Why: is there a thin Zig-to-JS interop layer that fits a static site on Zig 0.16
 
 ## Findings
 
-- [web] Calls JS from Zig, e.g. `zjb.global("console").call("log", ...)`. `README.md` ^f1
+- [web/wasm] Calls JS from Zig, e.g. `zjb.global("console").call("log", ...)`. `README.md` ^f1
   > This library creates bindings for accessing Javascript from within a WASM runtime.
-- [web] [toolchain] Known to work with Zig 0.16.0. `README.md` ^f2
+- [web/wasm] [toolchain] Known to work with Zig 0.16.0. `README.md` ^f2
   > As of 2026-04-16, zjb is only known to work with Zig 0.16.0.
-- [web] A generator reads the wasm and writes JS glue for only the calls used; the generator is Zig (`src/generate_js.zig`), no npm. `README.md` ^f3
+- [web/wasm] A generator reads the wasm and writes JS glue for only the calls used; the generator is Zig (`src/generate_js.zig`), no npm. `README.md` ^f3
   > Run an extract methods program on the WASM file, producing a Javascript file to use along with your WASM file.
-- [web] JS objects live in a JS-side map; Zig holds integer handles and must release them. `README.md` ^f4
+- [web/wasm] JS objects live in a JS-side map; Zig holds integer handles and must release them. `README.md` ^f4
   > zjb requires manual Handle releasing.
-- [web] Exposes Zig functions to JS (`exportFn`, `fnHandle` for callbacks such as event listeners). `README.md` ^f5
+- [web/wasm] Exposes Zig functions to JS (`exportFn`, `fnHandle` for callbacks such as event listeners). `README.md` ^f5
   > `zjb.fnHandle` uses `zjb.exportFn` and additionally returns a `zjb.ConstHandle` to that function.
-- [web] Author calls it fully functional and ready for use; 1.0 waits for Zig 1.0. `README.md` ^f6
+- [web/wasm] Author calls it fully functional and ready for use; 1.0 waits for Zig 1.0. `README.md` ^f6
   > ZJB is fully functional and is ready to be used in other projects.
 
 ## Read

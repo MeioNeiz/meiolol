@@ -2,6 +2,7 @@
 status: decided
 decision: docs/plan.md#curves-matchup-pages-patch-day-was-meiolol-b5-pool-9f
 priority: now
+area: stats
 tags: [stats, method, data]
 description: How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin?
 ---

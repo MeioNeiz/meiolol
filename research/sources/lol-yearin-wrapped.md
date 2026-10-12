@@ -31,7 +31,7 @@ data-hungry fun product.
   > We downloaded every SINGLE game from 2022
 - [market] Reception: 2.2k upvotes, 96% upvoted. ^f2
   > I didn't realize that this was what was missing from my LoL-life till I saw my stats on your website.
-- [fun] Features: odd-stat leaderboards (pentakills, healing, time dead) instead of LP,
+- [fun] [ux/features] Features: odd-stat leaderboards (pentakills, healing, time dead) instead of LP,
   multi-account view, a shareable infographic. ^f3
   > We think getting rank 1 shouldn’t all be about LP gains - some people just wanna get a lot of pentakills, y’know?
   > We’ll make you a shiny infograph summarizing all your stats that you can use to show off
@@ -39,7 +39,7 @@ data-hungry fun product.
   against friends. ^f4
   > Showed the website to my friends and we had a nice time laughing for an hour.
   > I want to make a leaderboard to compare with my friends, but the site is AMAZING
-- [fun] [needs] Players want context for numbers: percentile against the player base. ^f5
+- [fun] [needs] [ux/uncertainty] Players want context for numbers: percentile against the player base. ^f5
   > I'd prefer if you could compare most of these stats to the % of the player base
 - [needs] Players want stats split by mode (ARAM vs Summoner's Rift); supported via a
   queue filter. ^f6
@@ -47,7 +47,7 @@ data-hungry fun product.
 - [data] Riot's API counts spell button presses, so recasts and pet commands inflate
   "most used ability". ^f7
   > Unfortunately that is a limitation of Riot's API as we only receive "how many times you pressed the given spell"
-- [ux] [data] Trust breaks on visible errors: users dispute control ward and pentakill
+- [ux/trust] [data] Trust breaks on visible errors: users dispute control ward and pentakill
   counts. ^f8
   > So both me and a fellow leaguer have noticed the pentakills tracker is inaccurate
 - [fun] [learning] A side effect: a player discovers they are a one-trick from the

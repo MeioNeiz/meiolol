@@ -2,6 +2,7 @@
 status: decided
 decision: docs/concept.md
 priority: soon
+area: product
 tags: [policy, learning, fun, tools]
 description: What kinds of third-party League tools does Riot encourage, feature or partner with, and what is it moving against?
 ---

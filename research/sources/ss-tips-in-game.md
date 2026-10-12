@@ -38,7 +38,7 @@ Why: the gap between consuming guides and applying them in game.
 - [learning] [needs] Users ask for macro tips tied to game events (dragon taken, fight
   won); one credits macro with climbing from Gold to Plat/Diamond. ^f4
   > I’ve gone from Gold to Plat/Diamond elo just by improving macro
-- [ux] Pop-up tips can distract mid-fight, though a silver user calls it a net positive. ^f5
+- [ux/features] Pop-up tips can distract mid-fight, though a silver user calls it a net positive. ^f5
   > The prompts can be a little distracting if it pops up in the middle of a fight but it's a huge net positive for a silver player like myself.
 - [policy] [needs] Players ask whether such apps are bannable; the developer answers that
   Riot gives no public approval, only ongoing review. ^f6

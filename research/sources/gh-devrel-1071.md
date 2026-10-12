@@ -23,7 +23,7 @@ Why: shows Riot will not answer app policy questions on GitHub; relevant to how 
 
 ## Findings
 
-- [policy] [ux] Opened 2025-05-06: is a transparent topmost overlay safe for a legit app, or only a Riot-approved DLL? ^f1
+- [policy] [ux/features] Opened 2025-05-06: is a transparent topmost overlay safe for a legit app, or only a Riot-approved DLL? ^f1
   > Would that method be "safe to use" for legitimate applications (no memory reading, no reading from the LCU or the Riot Games API)
 - [policy] Reply: app-specific questions go to a support ticket. ^f2
   > If you have questions about a specific application please submit a ticket on http://support-developer.riotgames.com/

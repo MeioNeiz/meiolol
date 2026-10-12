@@ -24,11 +24,11 @@ Why: what sample threshold a leading stats site uses before showing a matchup.
 
 ## Findings
 
-- [data] [ux] LoLalytics shows a matchup only once it has 100 games. ^f1
+- [data] [ux/uncertainty] LoLalytics shows a matchup only once it has 100 games. ^f1
   > A matchup requires a minimum of 100 games to be displayed.
 - [data] Off-role picks often lack data for a whole patch view: Kalista top had too few
   games to rank counters on patch 16.20 at Emerald+. ^f2
   > Presently there is insufficent games played by
   > top on Patch 16.20 to determine the strongest top counters.
-- [data] (inferred) At the 100-game floor a matchup win rate is noisy: binomial standard
+- [data] [ux/uncertainty] (inferred) At the 100-game floor a matchup win rate is noisy: binomial standard
   error at p = 0.5 and n = 100 is 5 points, so 95% interval +/- 10 points. ^f3

@@ -40,7 +40,7 @@ stats it already shows.
 - [learning] Post-match analytics with graphs of the player's, team's and opponents' performance. ^f5
   > Porofessor records and presents everything you need to know in intuitive graphs and detailed stats
 - [market] (inferred) The @10/@20 per-player stats mean Porofessor already reads timelines (or live game data) at scale, but uses them for scouting the people in this game, not for teaching a matchup. ^f6
-- [learning] Checked, not there: no matchup guide, no "how this lane usually goes minute by minute", no power-spike content. ^f7
+- [learning] [ux/features] Checked, not there: no matchup guide, no "how this lane usually goes minute by minute", no power-spike content. ^f7
 
 ## Read
 

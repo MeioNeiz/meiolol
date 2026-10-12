@@ -23,14 +23,14 @@ Why: is there a thin Zig-to-JS interop layer?
 
 ## Findings
 
-- [web] Lets Zig in wasm get, set and call JS values; JS calling Zig is out of scope. `README.md` ^f1
+- [web/wasm] Lets Zig in wasm get, set and call JS values; JS calling Zig is out of scope. `README.md` ^f1
   > Note this makes it particularly easy for Zig to call into JS. This
   > doesn't help for JS calling into Zig.
-- [web] Host-side values must be released with deinit. `README.md` ^f2
+- [web/wasm] Host-side values must be released with deinit. `README.md` ^f2
   > `deinit` calls are necessary to dereference garbage-collected
-- [web] JS side is a glue package in the repo's js/ folder, not yet published to npm. `README.md` ^f3
+- [web/wasm] JS side is a glue package in the repo's js/ folder, not yet published to npm. `README.md` ^f3
   > this will be published to npm
-- [web] [toolchain] build.zig.zon declares minimum Zig 0.15.1. `build.zig.zon` ^f4
+- [web/wasm] [toolchain] build.zig.zon declares minimum Zig 0.15.1. `build.zig.zon` ^f4
   > .minimum_zig_version = "0.15.1",
 
 ## Read

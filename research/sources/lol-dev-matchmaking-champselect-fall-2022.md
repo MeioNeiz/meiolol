@@ -32,7 +32,7 @@ Why: Riot's own stated philosophy for champion select, which a pick recommender 
   > We think the best version of League is not one where you metagame based on the players in your lobby, weigh who’s on a win or loss streak or playing a different champion, and dodge or pressure others to dodge when your setup doesn’t meet perfect conditions.
 - [policy] Riot wants to reduce dodging frequency by changing its motives. ^f3
   > We want to impact the motivations behind why dodging occurs to reduce the frequency in a natural way.
-- [ux] [tools] Riot itself planned champ select recommendations (runes, Summoner Spells),
+- [ux/features] [tools] Riot itself planned champ select recommendations (runes, Summoner Spells),
   citing players going to external sites for this. ^f4
   > we want to provide rune and Summoner Spell recommendations during champ select.
   > this should be helpful for more veteran players who might currently go to external websites or apps to learn what to take on a champion they’re not familiar with.

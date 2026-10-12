@@ -1,6 +1,7 @@
 ---
 status: answered
 priority: soon
+area: policy
 tags: [policy, data, tools]
 description: Would Riot grant meiolol a production API key, and what does the application need?
 ---

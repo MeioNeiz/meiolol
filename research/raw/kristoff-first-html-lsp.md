@@ -1,0 +1,87 @@
+# The First HTML LSP That Reports Syntax Errors | Loris Cro's Blog
+
+<https://kristoff.it/blog/first-html-lsp/>
+
+# [Loris Cro](https://kristoff.it/)
+
+_Personal Website_
+
+[About](https://kristoff.it/)   •   [Blog](https://kristoff.it/blog/)   •   [Twitch](https://twitch.tv/kristoff_it)   •   [YouTube](https://youtube.com/c/ZigSHOWTIME/)   •   [GitHub](https://github.com/kristoff-it)  /  [Codeberg](https://codeberg.org/kristoff)
+
+# The First HTML LSP That Reports Syntax Errors
+
+September 11, 2024 • 5 min read • by **Loris Cro**
+
+The story of how I gained two world-firsts, somehow.
+
+This might sound hard to believe but, as far as I know, I published the first ever Language Server for HTML that reports syntax errors, and then I also gained a second world-first after that.
+
+-   [VSCode extension](https://marketplace.visualstudio.com/items?itemName=LorisCro.super) ([OpenVSX](https://open-vsx.org/extension/LorisCro/super)) (or search “SuperHTML” in VSCode directly)
+-   [Source code](https://github.com/kristoff-it/superhtml) and prebuilt binaries
+-   [Setup instructions](https://zine-ssg.io/docs/editors/) for other editors.
+
+**Note that, while I will refer to SuperHTML as a Language Server throughout the post, the CLI tool can also be used directly from the command line.**
+
+Additionally, **it should be noted that SuperHTML still has some missing features** (see the GitHub repo for more information).
+
+## The status quo
+
+Open VSCode and type in a new file some wrong HTML code, like `</span>` (i.e. closing a tag that was never opened). VSCode won’t bat an eye.
+
+Do the same with your favorite editor and chances are that you will get the same behavior. Why? It turns out that a lot of other editors ([Neovim](https://github.com/neovim/nvim-lspconfig/blob/97e72e3a3bd3ae2034c2884da1253341409c2076/lua/lspconfig/server_configurations/html.lua#L5), [Helix](https://github.com/helix-editor/helix/blob/237cbe4bca46eed52efed39ed75eb44aaccbdde3/languages.toml#L104), [Zed](https://github.com/zed-industries/zed/blob/13c553c50f38af721cb51d775b898d4fda20ccb0/extensions/html/extension.toml#L9-L11), to name a few) use the same HTML Language Server that VSCode comes with.
+
+Editors that provide you with _**diagnostics**_ (the correct term for when a language server reports syntax errors and other squiggly things about your code) for HTML do exist, like JetBrains Webstorm for example, but those don’t use a Language Server as in [LSP](https://microsoft.github.io/language-server-protocol/), and are proprietary implementations as far as I know.
+
+Apparently all other editors offloaded to Microsoft the task of writing an HTML Language Server and up until now everybody was fine with what they got.
+
+## Enter SuperHTML
+
+Install SuperHTML in VSCode (or your favorite editor that supports LSP) and now you will be able to see all your mistakes right away, hurrah!
+
+Let me now tell you about the two best features of the SuperHTML LSP.
+
+### SuperHTML is not spec compliant
+
+The **best feature** of SuperHTML is that [it is](https://github.com/kristoff-it/superhtml/blob/eb9596299e248d128480af9d5eb1ac31b7c4b583/src/html/Tokenizer.zig#L483-L484) based on the official HTML living specification, but it deviates from it when it makes sense to do so.
+
+My favorite example is `<li>item<li>`, which is unfortunately both valid HTML and also an obvious typo.
+
+It’s valid HTML because the spec allows you to omit closing tags sometimes but, in the context of editing HTML by hand, respecting that part of the spec would force the Language Server to hide from you obvious errors like this one.
+
+### Autoformatting
+
+The second best feature of SuperHTML is that it gives you “zig fmt”-style autoformatting for your HTML.
+
+To give you an idea of what I mean by “zig fmt”-style, the idea is that by adding and removing whitespace before the opening tag of an element you can have the formatter switch between horizontal and vertical alignment of the whole element.
+
+Similarly, by adding and removing whitespace between the last attribute of a start tag and the `>`, the formatter will switch between horizontal and vertical alignment of all the attributes in the start tag.
+
+See it in action:
+
+## The first ever WASM WASI VSCode LSP Extension
+
+As mentioned in the beginning, **SuperHTML is a CLI tool that can also be used independently of LSP**.
+
+That said, LSP integration is probably the main way most users will access its functionality in the future, so it is worth making that experience as streamlined as possible.
+
+Microsoft, for a while, has been cooking WASI support in VSCode and, with a [gentle nudge](https://github.com/microsoft/vscode-wasm/pull/196) from [Matthew Lugg](https://github.com/mlugg) (Zig core team), they now have a working extension that allows language server authors to bundle a WASM build of their Language Server directly into their VSCode extension.
+
+Matthew Lugg’s fix was merged yesterday and as soon as it was released, I published a new version of the SuperHTML extension that doesn’t require you to get the CLI tool separately anymore.
+
+For completeness, even before this new addition by Microsoft, VSCode extensions could download executables for the user and manage them behind the scenes, which is how the Zig VSCode extension is able to give you a similar “batteries included” experience, where it offers to setup automatically for you both ZLS and the Zig compiler.
+
+## In Conclusion
+
+SuperHTML has a good parser implementation and gives you good diagnostics and autoformatting. It doesn’t implement yet suggestions and other fancy LSP features, but I will add those in the future (and contributions are welcome _wink wink_).
+
+In the meantime, I’ve been daily driving it for a while and I have enjoyed tremendously the instant feedback, especially coupled with [my static site generator](https://zine-ssg.io/)’s strict policy that HTML syntax errors are a build error.
+
+I haven’t talked at all in this post about the experience of writing the entire thing from scratch, but I will probably say more about it in the future, and I will also [give a talk](https://2024.squiggleconf.com/sessions#talk-loris-cro) at SquiggleConf in Boston this October about SuperHTML.
+
+* * *
+
+[← How To Write More Blog Posts](https://kristoff.it/blog/write-more/)   •   [Zine: A Static Site Generator Written in Zig →](https://kristoff.it/blog/zine-ssg-zig/)   or   [Back to the Homepage](https://kristoff.it/)
+
+you
+
+_[Join my Discord server](https://discord.com/invite/B73sGxF) to keep chatting._

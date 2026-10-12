@@ -38,7 +38,7 @@ Why: official answers on what a production application needs.
   > Your API key is approved only for the use case and game within your description.
 - [policy] RSO only for approved production apps; new approvals get an invite. ^f6
   > RSO Clients are only available for applications that have an existing, approved production application ID. All newly approved production applications will receive a link inviting them to apply for RSO access.
-- [policy] Website required: to see what the app does plus Terms of Service and Privacy Policy. ^f7
+- [policy] [ux/layout] Website required: to see what the app does plus Terms of Service and Privacy Policy. ^f7
   > We need to see a website to understand what your app does, view your Terms of Service and Privacy Policy, and to make sure your app is in a good state for a production key.
 - [policy] Production keys for completed or near-complete apps. ^f8
   > Production keys are for applications that are in a completed or near-complete state.
@@ -46,7 +46,7 @@ Why: official answers on what a production application needs.
   > we are unable to accept Github repositories and source code in lieu of a functioning application/site.
 - [policy] Native apps must be hosted on an owned domain with download, ToS and Privacy Policy. ^f10
   > In most cases, we still require you to host your native app on a domain you own. This is so that users can easily see what your product does, where to download it, where you list your Terms of Service and Privacy Policy, and so we can verify that you’re the owner of the app.
-- [policy] Video demos, screenshots or Figma files can demonstrate user flow. ^f11
+- [policy] [ux/layout] Video demos, screenshots or Figma files can demonstrate user flow. ^f11
   > Other ways are video demos, screenshots, or Figma files that clearly demonstrate your user flow.
 - [policy] Verification via text string uploaded to your URL; no verified site, no production key. ^f12
   > After submitting your production application, you’ll receive a text string to upload to your URL that proves you’re the website owner.

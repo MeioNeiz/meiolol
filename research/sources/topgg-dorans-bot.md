@@ -28,7 +28,7 @@ Why: what social/friend-group tools exist for League, and how big do they get?
 - [fun] Group stats: auto-updating server leaderboards and daily recaps of who climbed and fell. ^f2
   > Auto-updating rankings for every linked player. See who's actually the best.
   > Daily recaps show who climbed and who fell.
-- [fun] [ux] Each Discord server gets a public web page with history, profiles, leaderboards, analytics. ^f3
+- [fun] [ux/features] Each Discord server gets a public web page with history, profiles, leaderboards, analytics. ^f3
   > Every server gets a dedicated web page with match history, profiles, leaderboards, and analytics.
 - [fun] [policy] Play-money predictions on friends' live games with a prediction leaderboard (gambling-adjacent; Riot policy on betting would matter). ^f4
   > Bet gold on your friends' live games. Will they carry or int? Climb the prediction leaderboard.

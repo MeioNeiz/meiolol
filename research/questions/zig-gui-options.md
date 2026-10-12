@@ -1,6 +1,7 @@
 ---
 status: answered
 priority: soon
+area: ui
 tags: [gui]
 description: Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS?
 ---

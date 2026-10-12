@@ -23,11 +23,11 @@ Why: is there a Zig-JS interop toolkit?
 
 ## Findings
 
-- [web] Marshals all Zig types to JS and calls both ways. `README.md` ^f1
+- [web/wasm] Marshals all Zig types to JS and calls both ways. `README.md` ^f1
   > Access to all Zig data types in JavaScript/PHP
-- [web] The WebAssembly route runs through bundler plugins. `README.md` ^f2
+- [web/wasm] The WebAssembly route runs through bundler plugins. `README.md` ^f2
   > Support for Webpack, Rollup, and Vite (WebAssembly)
-- [web] [toolchain] Version 0.16.0 matches Zig 0.16. `README.md` ^f3
+- [web/wasm] [toolchain] Version 0.16.0 matches Zig 0.16. `README.md` ^f3
   > Use version 0.16.0
   > if you're still using that version of Zig.
 

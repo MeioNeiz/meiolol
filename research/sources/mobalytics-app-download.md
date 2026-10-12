@@ -29,7 +29,7 @@ Why: how a large commercial companion app presents Riot compliance and champ sel
 - [tools] [method] Offers counter picks and matchup advice framed as an AI coach. ^f2
   > PREPARE FOR EVERY GAME WITH YOUR OWN CHALLENGER AI COACH
   > Be ready for any situation with counter picks and matchup specific advice.
-- [tools] [ux] Lobby scouting and automatic build import before the game. ^f3
+- [tools] [ux/features] Lobby scouting and automatic build import before the game. ^f3
   > Scout your lobby and automatically get the best builds for every game
 - [policy] FAQ has a dedicated Vanguard question (answer not captured in snapshot). ^f4
   > Is Mobalytics allowed by Riot's Vanguard?

@@ -31,7 +31,7 @@ from someone who uses this data for balance.
   > They're a lot worse at determining exact winrate/power levels of a given champ, especially at Diamond+ or Master+ levels of play.
 - [data] Early in a patch, after only a few days, even Plat+ data is unreliable. ^f2
   > it gets even worse early in a patch when only a few days of data have been collected (at that point even plat+ data is unreliable).
-- [data] [ux] Example of a misleading number: 59% win rate on 120 games, which he says
+- [data] [ux/uncertainty] [ux/trust] Example of a misleading number: 59% win rate on 120 games, which he says
   should not be shown at all. ^f3
   > look at how broken 59% winrate Ivern is at master+" and then I see the data they're referencing has only 120 games
 - [data] U.GG says it competes on speed of pulling from the API within rate limits and

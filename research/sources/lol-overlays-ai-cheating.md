@@ -49,10 +49,10 @@ Why: what players think is fair for a data tool to do, and where draft tools sit
 - [draft] [method] Sceptics say draft AI is useless outside pro play because it cannot
   see players' skill on their champions. ^f7
   > AI can't know your or your enemies' level of knowledge on those champs. Winning draft outside of pro-play means almost nothing.
-- [tools] [ux] Some avoid Porofessor, Mobalytics and Trophy Hunter because of distrust of
+- [tools] [ux/trust] Some avoid Porofessor, Mobalytics and Trophy Hunter because of distrust of
   Overwolf and its resource use. ^f8
   > I avoid overlay apps like Porofessor, Mobalytics or Trophy Hunter simply because I do not trust Overwolf as a business
-- [tools] [needs] Stats sites like OP.GG are accepted when they show history and leave
+- [tools] [needs] [ux/trust] Stats sites like OP.GG are accepted when they show history and leave
   conclusions to the player. ^f9
   > they should only be allowed to present historical data and all conclusions reached should come from the player.
 - [learning] [needs] Arms-race worry: unrestricted tools force non-users to adopt them to

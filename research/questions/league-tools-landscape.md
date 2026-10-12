@@ -2,6 +2,7 @@
 status: decided
 decision: docs/concept.md
 priority: soon
+area: product
 tags: [tools, market, learning, fun]
 description: What League of Legends third-party tools exist, what do they do with match data, and where are the gaps?
 ---
