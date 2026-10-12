@@ -166,7 +166,9 @@ next steps land here.
 - Tier floor (Jacob, 2026-10-11): only Platinum IV and up, every region. `--min-tier
   PLATINUM` stops the ladder walk and filters the scan pool; ladder cap raised 20 -> 40
   an hour so the weekly refresh reaches Platinum IV (at 20 it restarted at the top
-  around Platinum II). Sub-Platinum players rows expire via the 30-day prune. Smart
+  around Platinum II). Sub-Platinum players rows expire via the 30-day prune. Kept
+  2026-10-12 (Jacob: "for now plat plus only") although the identity targets Silver to
+  Emerald: models and curves describe Platinum+ games. Smart
   timeline picking (only matches with an under-sampled lane matchup that can reach 100+
   games this patch) simulated on 16.19-16.20 EUW picks: 77-95% of matches still need
   one, so only +2-12% matches; revisit with the production key, when matchups saturate
