@@ -73,10 +73,13 @@ case "$cmd" in
         settings "$dir" > "$dir/agent-settings.json"
         model=()
         [[ -n "${LAB_AGENT_MODEL:-}" ]] && model=(--model "$LAB_AGENT_MODEL")
-        (cd "$dir" && nohup claude -p "$(prompt "$campaign" "$target" "$focus")" \
+        # Redirect the whole subshell and exec: a subshell left waiting on claude keeps
+        # the caller's stdout open, so a caller reading it (a pipe, a Claude Bash call)
+        # hangs until the campaign ends
+        (cd "$dir" && exec nohup claude -p "$(prompt "$campaign" "$target" "$focus")" \
             --settings "$dir/agent-settings.json" --permission-mode acceptEdits \
-            --add-dir "$ROOT" ${model[@]+"${model[@]}"} \
-            > agent.log 2>&1 < /dev/null &)
+            --add-dir "$ROOT" ${model[@]+"${model[@]}"}) \
+            > "$dir/agent.log" 2>&1 < /dev/null &
         echo "agent started on $campaign ($target), log $dir/agent.log"
         ;;
     *) sed -n '7,9p' "$0"; exit 2 ;;
