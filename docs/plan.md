@@ -340,6 +340,9 @@ next steps land here.
   games, per-patch offset, deep MLP only at 10M+. Report both our split and a
   LoLDraftAI-style split. Admin Draft tester (meiolol-3b) with presets and a champion
   suggester (win model + team2 lane effects export from meiolol-39)
+  Approved by Jacob 2026-10-13: internal scope (39's terms), mastery for all ten
+  participants (deduped, weekly refresh, EUW first; meiolol-11), admin-only Draft
+  tester link in the main site's menu (meiolol-3b)
 - Lab agent (docs/lab-agent.md, brief docs/lab-brief.md; built 2026-10-12, meiolol-f2):
   LLM campaigns on candidates behind a harness (scope and leakage by construction,
   ladder of 50 selection looks per snapshot, screen and diagnose tools, sandboxed
