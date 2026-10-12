@@ -60,13 +60,18 @@ The static upload leaves out matchup pages under 200 games (`meiolol site
   touches data/render.reload after each upload and it loads the new data in the
   background, swapping when done. A deploy runs deploy/render-swap.sh: it starts the idle
   instance beside the running one (both listen, SO_REUSEPORT), and stops the old once the
-  new one writes data/render-<a|b>.ready, so there is no gap. Log data/render.log
+  new one writes data/render-<a|b>.ready, so there is no gap. Connections queued on the
+  stopping one move to the new one (sysctl net.ipv4.tcp_migrate_req=1,
+  /etc/sysctl.d/60-meiolol-render.conf) and nginx retries a dropped one once. Alone (a
+  boot) it listens at once and serves each view as it loads (the root view after ~40 s,
+  all ~3 min); until then 503, so nginx serves its cached copy where it has one. Log
+  data/render.log
 - Network: jomify (10.0.0.214) and the box share subnet 10.0.0.0/24. Security list rule
   "meiolol-render: jomify nginx to the box" (TCP 8091 from 10.0.0.214/32; the list as it
   was is in .git/oci-ingress-before-render.json on the Mac) and an iptables ACCEPT on the
   box before its REJECT (saved with netfilter-persistent). Jacob's OK 2026-10-12
 - jomify nginx (/etc/nginx/conf.d/meiolol.conf; before: meiolol.conf.bak-2026-10-12-render):
-  try_files, then `@render`: proxy cache /var/cache/nginx/meiolol (2 GB, key $uri), 200s
+  try_files, then `@render` (upstream meiolol_render: the box twice, for the retry): proxy cache /var/cache/nginx/meiolol (2 GB, key $uri), 200s
   10 min, 404s 1 min, stale copies while the box is down or refreshing, one render per
   page under a burst. Header X-Meiolol-Render: HIT, MISS, STALE, UPDATING
 

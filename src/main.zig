@@ -736,9 +736,11 @@ fn cmdDev(c: *Cmd) !u8 {
 }
 
 /// The pages the static build leaves out (--static-min-games), rendered on request for
-/// the web server's nginx (docs/hosting.md "Rendering on request"). Every view is loaded
-/// before it listens, and again whenever the --reload file changes. A new instance can
-/// listen beside the old one (SO_REUSEPORT), which stops once it is --ready
+/// the web server's nginx (docs/hosting.md "Rendering on request"), loaded again whenever
+/// the --reload file changes. Beside a running instance (a deploy: deploy/render-swap.sh)
+/// it loads every view, then listens too (SO_REUSEPORT) and is --ready for the old one
+/// to stop. Alone (a boot), it listens at once and serves each view as it loads, the
+/// rest answering 503
 fn cmdRender(c: *Cmd) !u8 {
     var f: SiteFlags = .{};
     var host: []const u8 = "127.0.0.1";
@@ -761,7 +763,13 @@ fn cmdRender(c: *Cmd) !u8 {
     const io = c.init.io;
     const db = try c.open();
     defer db.close();
-    const first = try loadAll(c, &f, db, email);
+    const alone = !listening(io, host, port);
+    const first = try prepare(c, &f, db, email);
+    first.loaded.lazy = false;
+    if (!alone) loadViews(first.loaded) catch |err| {
+        first.free(gpa);
+        return err;
+    };
     const rendered = serve.Rendered.init(gpa, io, first.loaded, first.arena) catch |err| {
         first.free(gpa);
         return err;
@@ -769,9 +777,33 @@ fn cmdRender(c: *Cmd) !u8 {
     defer rendered.deinit();
     var group: std.Io.Group = .init;
     defer group.cancel(io);
-    if (reload) |path| group.async(io, reloadOnChange, .{ c, &f, db, email, rendered, path });
-    try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered, .ready = ready });
+    group.async(io, background, .{ c, &f, db, email, rendered, if (alone) first.loaded else null, if (alone) ready else null, reload });
+    try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered, .ready = if (alone) null else ready });
     return 0;
+}
+
+/// Whether something already listens at host:port: an older renderer
+fn listening(io: std.Io, host: []const u8, port: u16) bool {
+    const address = std.Io.net.IpAddress.parse(host, port) catch return false;
+    const stream = address.connect(io, .{ .mode = .stream }) catch return false;
+    stream.close(io);
+    return true;
+}
+
+/// The database's only user once the server runs: the first load when serving early
+/// (exiting on failure, for systemd to start again), then reloads
+fn background(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8, rendered: *serve.Rendered, first: ?*site.Loaded, ready: ?[]const u8, reload: ?[]const u8) void {
+    const io = c.init.io;
+    if (first) |l| {
+        loadViews(l) catch |err| {
+            std.log.err("render load: {t}", .{err});
+            std.process.exit(1);
+        };
+        if (ready) |path| std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = "" }) catch |err| {
+            std.log.warn("render ready file: {t}", .{err});
+        };
+    }
+    if (reload) |path| reloadOnChange(c, f, db, contact, rendered, path);
 }
 
 const LoadedAll = struct {
@@ -786,9 +818,8 @@ const LoadedAll = struct {
     }
 };
 
-/// Options as of now (patch, 30-day window) and every view loaded, not on its first
-/// request
-fn loadAll(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !LoadedAll {
+/// Options as of now (patch, 30-day window), no view loaded yet
+fn prepare(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !LoadedAll {
     const gpa = c.init.gpa;
     const arena = try gpa.create(std.heap.ArenaAllocator);
     arena.* = .init(gpa);
@@ -797,18 +828,28 @@ fn loadAll(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !Loa
         gpa.destroy(arena);
     }
     const opts = try f.options(c, arena.allocator(), db, contact);
-    const loaded = try site.Loaded.init(gpa, c.init.io, db, opts);
-    errdefer loaded.deinit();
+    return .{ .loaded = try site.Loaded.init(gpa, c.init.io, db, opts), .arena = arena };
+}
+
+/// Every view, the root (most visited) and the shared one first
+fn loadViews(loaded: *site.Loaded) !void {
     for (site.html.View.all) |v| {
-        if (opts.euw_only and v.region != .euw) continue;
-        _ = try loaded.site(v);
+        if (loaded.opts.euw_only and v.region != .euw) continue;
+        try loaded.loadView(v);
     }
-    return .{ .loaded = loaded, .arena = arena };
+}
+
+/// prepare and loadViews: every view loaded, not on its first request
+fn loadAll(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !LoadedAll {
+    const l = try prepare(c, f, db, contact);
+    errdefer l.free(c.init.gpa);
+    l.loaded.lazy = false;
+    try loadViews(l.loaded);
+    return l;
 }
 
 /// Swaps in freshly loaded data whenever `path`'s mtime moves (deploy/web-loop.sh touches
-/// it after each upload); on a failed load the old data stays. The only database user
-/// once the server runs: every view is loaded up front
+/// it after each upload); on a failed load the old data stays
 fn reloadOnChange(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8, rendered: *serve.Rendered, path: []const u8) void {
     const io = c.init.io;
     var seen = fileMtime(io, path);

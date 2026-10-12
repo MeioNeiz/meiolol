@@ -232,7 +232,18 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         defer arena_state.deinit();
         const arena = arena_state.allocator();
         for (candidates[0..n]) |name| {
-            var body = try entry.loaded.get(arena, name) orelse continue;
+            const got = entry.loaded.get(arena, name) catch |err| switch (err) {
+                // `meiolol render` just started: nginx serves its cached copy if it has one
+                error.Loading => return request.respond("This page is being updated. Try again in a minute.\n", .{
+                    .status = .service_unavailable,
+                    .extra_headers = &.{
+                        .{ .name = "content-type", .value = "text/plain; charset=utf-8" },
+                        .{ .name = "retry-after", .value = "30" },
+                    },
+                }),
+                else => return err,
+            };
+            var body = got orelse continue;
             if (ctx.opts.dev != null and std.mem.endsWith(u8, name, ".html")) {
                 if (std.mem.lastIndexOf(u8, body, "</body>")) |at| {
                     body = try std.mem.concat(arena, u8, &.{ body[0..at], reload_script, body[at..] });

@@ -162,6 +162,16 @@ test "fixture games to stats, curves and the website" {
         checked += 1;
     }
     try testing.expect(checked > 50);
+    // `meiolol render` serving while it loads: a view not loaded yet says so at once
+    {
+        const early = try site.Loaded.init(gpa, io, db, opts);
+        defer early.deinit();
+        early.lazy = false;
+        try testing.expectError(error.Loading, early.get(arena, "index.html"));
+        try early.loadView(site.html.View.all[0]);
+        try testing.expect(try early.get(arena, "index.html") != null);
+        try testing.expectError(error.Loading, early.get(arena, "patch/index.html"));
+    }
     // Thin matchups left out of the static build are still rendered on request
     {
         var s = (try loaded.site(site.html.View.all[0])).*;

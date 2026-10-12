@@ -543,6 +543,9 @@ pub const Loaded = struct {
     extras: Extras,
     sites: [html.View.count]?*Site = @splat(null),
     mutex: std.Io.Mutex = .init,
+    /// False: requests never load a view; one not loaded yet is error.Loading (`meiolol
+    /// render` loads them with loadView while it serves)
+    lazy: bool = true,
 
     pub fn init(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options) !*Loaded {
         const l = try gpa.create(Loaded);
@@ -561,9 +564,24 @@ pub const Loaded = struct {
         try l.mutex.lock(l.io);
         defer l.mutex.unlock(l.io);
         if (l.sites[v.index()]) |s| return s;
+        if (!l.lazy) return error.Loading;
         const s = try load(l.gpa, l.io, l.db, l.opts, v, &l.extras);
         l.sites[v.index()] = s;
         return s;
+    }
+
+    /// Loads `v` without holding the lock, so requests for loaded views go on meanwhile.
+    /// Only one caller at a time: the database connection isn't shared
+    pub fn loadView(l: *Loaded, v: html.View) !void {
+        {
+            try l.mutex.lock(l.io);
+            defer l.mutex.unlock(l.io);
+            if (l.sites[v.index()] != null) return;
+        }
+        const s = try load(l.gpa, l.io, l.db, l.opts, v, &l.extras);
+        l.mutex.lockUncancelable(l.io);
+        defer l.mutex.unlock(l.io);
+        l.sites[v.index()] = s;
     }
 
     /// The page or file at `path` from the site root, in `arena`; null when there is none
