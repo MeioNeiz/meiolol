@@ -206,8 +206,9 @@ pub fn diagnose(
         "names a misfit worth a hypothesis. Slices under 300 rows left out; long lists show " ++
         "the 12 most biased.\n\n");
     const all = harness.paired(s.game, res, zero, null);
-    try w.print("Overall bias (dev-val is newer than its training games, so a level shift " ++
-        "is drift over time): {d:.4} ± {d:.4} over {d} rows\n", .{ all.diff, all.half, all.n });
+    try w.print("Overall bias: {d:.4} ± {d:.4} over {d} rows. Dev-val is newer than its " ++
+        "training games and EUW1 only while they span every platform, so a level shift is " ++
+        "drift over time, region mix, or both (a platform or patch term tells which)\n", .{ all.diff, all.half, all.n });
     for (res) |*x| x.* -= all.diff;
 
     const Key = struct {
