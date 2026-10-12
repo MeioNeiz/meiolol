@@ -84,6 +84,19 @@ pub const Made = struct {
     current: []const []const u8 = &.{},
 };
 
+/// The games' matches; make reads each one's players and bans by primary key. A join
+/// ordered by match_id walks every match ever stored: with +match_id the start and patch
+/// indexes find the matches and only those are sorted. The order fixes the first-seen
+/// order of patches and the maps, so the files' byte order
+const games_sql =
+    \\SELECT match_id, winning_team, game_start, patch, platform
+    \\FROM matches
+    \\WHERE queue_id = ? AND platform IN (SELECT value FROM json_each(?))
+    \\  AND remake = 0 AND winning_team IS NOT NULL
+    \\  AND (game_start >= ? OR patch IN (SELECT value FROM json_each(?)))
+    \\ORDER BY +match_id
+;
+
 /// The games of the 30-day and current-patch views on every platform, valid as for
 /// stats.scan (ten players, one per team and role, a winner), for every champion
 pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
@@ -97,116 +110,116 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
     @memset(cells, .empty);
     var slots: Slots = .empty;
     var games: Games = .empty;
-    // Match id -> its key in games, for its bans
-    var game_keys: std.StringHashMapUnmanaged(GameKey) = .empty;
+    var bans: Bans = .empty;
     var patches: std.ArrayList([]const u8) = .empty;
 
     const platform_json = try std.json.Stringify.valueAlloc(a, opts.all_platforms, .{});
     const patch_json = try std.json.Stringify.valueAlloc(a, opts.patches, .{});
-    var q = try db.prepare(
-        \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, m.platform,
-        \\  p.team_id, p.position, p.champion_id, p.tier,
-        \\  CASE WHEN p.gold15 IS NULL THEN NULL ELSE p.gold14 END
-        \\FROM matches m JOIN participants p USING (match_id)
-        \\WHERE m.queue_id = ? AND m.platform IN (SELECT value FROM json_each(?))
-        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
-        \\  AND (m.game_start >= ? OR m.patch IN (SELECT value FROM json_each(?)))
-        \\ORDER BY m.match_id
-    );
+    var q = try db.prepare(games_sql);
     defer q.deinit();
     try q.bind(.{ stats.ranked_solo, platform_json, opts.since_ms, patch_json });
+    var pq = try db.prepare(
+        \\SELECT team_id, position, champion_id, tier,
+        \\  CASE WHEN gold15 IS NULL THEN NULL ELSE gold14 END
+        \\FROM participants WHERE match_id = ? ORDER BY slot
+    );
+    defer pq.deinit();
+    var bq = try db.prepare("SELECT champion_id FROM bans WHERE match_id = ? ORDER BY team_id, pick_turn");
+    defer bq.deinit();
 
-    var current: std.ArrayList(u8) = .empty;
     var players: [10]Player = undefined;
-    var n: usize = 0;
-    var bad = false;
-    var game: struct { winner: i64 = 0, slice: Slice = undefined } = .{};
-    while (true) {
-        const more = try q.step();
-        const r = if (more) q.row(struct {
+    while (try q.step()) {
+        const m = q.row(struct {
             match_id: []const u8,
             winner: i64,
             start: i64,
             patch: []const u8,
             platform: []const u8,
-            team: i64,
-            position: ?[]const u8,
-            champion: i64,
-            tier: ?[]const u8,
-            gold14: ?i64,
-        }) else undefined;
-        if (!more or !std.mem.eql(u8, r.match_id, current.items)) {
-            if (current.items.len > 0 and !bad and n == 10) if (winnerSide(game.winner)) |winner| {
-                const gk: GameKey = .{ .slice = game.slice, .tier = gameTier(&players) };
-                (try games.getOrPutValue(a, gk, 0)).value_ptr.* += 1;
-                try game_keys.put(a, try a.dupe(u8, current.items), gk);
-                for (players) |p| {
-                    const s = try slots.getOrPutValue(a, .{ .slice = game.slice, .tier = p.tier, .role = p.role }, 0);
-                    s.value_ptr.* += 1;
-                    const c = &cells[index_of[p.champion] orelse continue];
-                    const opp = opponent(&players, p) orelse continue;
-                    const e = try c.getOrPutValue(a, .{
-                        .slice = game.slice,
-                        .tier = p.tier,
-                        .role = p.role,
-                        .opponent = opp.champion,
-                    }, .{});
-                    e.value_ptr.games += 1;
-                    if (p.team == winner) e.value_ptr.wins += 1;
-                    if (p.gold14 != null and opp.gold14 != null) {
-                        const d = p.gold14.? - opp.gold14.?;
-                        e.value_ptr.gold_n += 1;
-                        e.value_ptr.gold_sum += d;
-                        e.value_ptr.gold_sq += d * d;
-                    }
-                }
-            };
-            if (!more) break;
-            current.clearRetainingCapacity();
-            try current.appendSlice(a, r.match_id);
-            n = 0;
-            bad = false;
-            game = .{
-                .winner = r.winner,
-                .slice = .{
-                    .recent = r.start >= opts.since_ms,
-                    .platform = @intCast(indexOf(opts.all_platforms, r.platform) orelse 0),
-                    .patch = try patchIndex(a, &patches, r.patch),
-                },
-            };
-        }
-        if (n == 10) {
-            bad = true;
-            continue;
-        }
-        const team: u1 = switch (r.team) {
-            100 => 0,
-            200 => 1,
-            else => {
+        });
+        var n: usize = 0;
+        var rows: usize = 0;
+        var bad = false;
+        try pq.bind(.{m.match_id});
+        while (try pq.step()) : (rows += 1) {
+            const r = pq.row(struct {
+                team: i64,
+                position: ?[]const u8,
+                champion: i64,
+                tier: ?[]const u8,
+                gold14: ?i64,
+            });
+            if (n == 10) {
                 bad = true;
                 continue;
-            },
-        };
-        const role = Role.fromLcu(r.position orelse "") orelse {
-            bad = true;
-            continue;
-        };
-        const champion = r.champion;
-        if (champion <= 0 or champion > std.math.maxInt(u16)) bad = true;
-        for (players[0..n]) |p| {
-            if (p.team == team and p.role == role) bad = true;
+            }
+            const team: u1 = switch (r.team) {
+                100 => 0,
+                200 => 1,
+                else => {
+                    bad = true;
+                    continue;
+                },
+            };
+            const role = Role.fromLcu(r.position orelse "") orelse {
+                bad = true;
+                continue;
+            };
+            if (r.champion <= 0 or r.champion > std.math.maxInt(u16)) bad = true;
+            for (players[0..n]) |p| {
+                if (p.team == team and p.role == role) bad = true;
+            }
+            players[n] = .{
+                .team = team,
+                .role = role,
+                .champion = @intCast(std.math.clamp(r.champion, 0, std.math.maxInt(u16))),
+                .tier = @intCast(if (r.tier) |t| indexOf(&tiers, t) orelse tiers.len else tiers.len),
+                .gold14 = r.gold14,
+            };
+            n += 1;
         }
-        players[n] = .{
-            .team = team,
-            .role = role,
-            .champion = @intCast(std.math.clamp(champion, 0, std.math.maxInt(u16))),
-            .tier = @intCast(if (r.tier) |t| indexOf(&tiers, t) orelse tiers.len else tiers.len),
-            .gold14 = r.gold14,
+        if (rows == 0) continue;
+        const slice: Slice = .{
+            .recent = m.start >= opts.since_ms,
+            .platform = @intCast(indexOf(opts.all_platforms, m.platform) orelse 0),
+            .patch = try patchIndex(a, &patches, m.patch),
         };
-        n += 1;
+        if (bad or n < 10) continue;
+        const winner = winnerSide(m.winner) orelse continue;
+        const gk: GameKey = .{ .slice = slice, .tier = gameTier(&players) };
+        (try games.getOrPutValue(a, gk, 0)).value_ptr.* += 1;
+        for (players) |p| {
+            const sl = try slots.getOrPutValue(a, .{ .slice = slice, .tier = p.tier, .role = p.role }, 0);
+            sl.value_ptr.* += 1;
+            const c = &cells[index_of[p.champion] orelse continue];
+            const opp = opponent(&players, p) orelse continue;
+            const e = try c.getOrPutValue(a, .{
+                .slice = slice,
+                .tier = p.tier,
+                .role = p.role,
+                .opponent = opp.champion,
+            }, .{});
+            e.value_ptr.games += 1;
+            if (p.team == winner) e.value_ptr.wins += 1;
+            if (p.gold14 != null and opp.gold14 != null) {
+                const d = p.gold14.? - opp.gold14.?;
+                e.value_ptr.gold_n += 1;
+                e.value_ptr.gold_sum += d;
+                e.value_ptr.gold_sq += d * d;
+            }
+        }
+        // Once per game: both teams may ban the same champion
+        var banned: [10]u32 = undefined;
+        var nb: usize = 0;
+        try bq.bind(.{m.match_id});
+        while (try bq.step()) {
+            const champion = bq.row(struct { champion: u32 }).champion;
+            if (std.mem.indexOfScalar(u32, banned[0..nb], champion) != null or nb == banned.len) continue;
+            banned[nb] = champion;
+            nb += 1;
+            (try bans.getOrPutValue(a, .{ .game = gk, .champion = champion }, 0)).value_ptr.* += 1;
+        }
     }
 
-    const bans = try countBans(a, db, opts, platform_json, patch_json, &game_keys);
     const sorted = try a.dupe([]const u8, patches.items);
     std.mem.sort([]const u8, sorted, {}, struct {
         fn f(_: void, x: []const u8, y: []const u8) bool {
@@ -226,26 +239,6 @@ pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
         f.* = .{ .path = try a.print("data/filters/{s}.json", .{ch.slug}), .data = aw.written() };
     }
     return .{ .files = files, .patches = sorted, .current = opts.patches };
-}
-
-/// Bans by champion in the games make counts, once per game, under the game's rank
-fn countBans(a: std.mem.Allocator, db: store.Db, opts: root.Options, platform_json: []const u8, patch_json: []const u8, game_keys: *const std.StringHashMapUnmanaged(GameKey)) !Bans {
-    var bans: Bans = .empty;
-    var q = try db.prepare(
-        \\SELECT DISTINCT b.match_id, b.champion_id
-        \\FROM bans b JOIN matches m USING (match_id)
-        \\WHERE m.queue_id = ? AND m.platform IN (SELECT value FROM json_each(?))
-        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
-        \\  AND (m.game_start >= ? OR m.patch IN (SELECT value FROM json_each(?)))
-    );
-    defer q.deinit();
-    try q.bind(.{ stats.ranked_solo, platform_json, opts.since_ms, patch_json });
-    while (try q.step()) {
-        const r = q.row(struct { match_id: []const u8, champion: u32 });
-        const gk = game_keys.get(r.match_id) orelse continue;
-        (try bans.getOrPutValue(a, .{ .game = gk, .champion = r.champion }, 0)).value_ptr.* += 1;
-    }
-    return bans;
 }
 
 /// Median ladder tier of the game's players (lower middle); tiers.len when none is on
@@ -393,4 +386,20 @@ fn patchIndex(a: std.mem.Allocator, patches: *std.ArrayList([]const u8), patch: 
     if (patches.items.len == std.math.maxInt(u8)) return error.TooManyPatches;
     try patches.append(a, try a.dupe(u8, patch));
     return @intCast(patches.items.len - 1);
+}
+
+test "games come from the start and patch indexes, not a walk of every match" {
+    const db = try store.schema.memory();
+    defer db.close();
+    var q = try db.prepare("EXPLAIN QUERY PLAN " ++ games_sql);
+    defer q.deinit();
+    var plan: std.ArrayList(u8) = .empty;
+    defer plan.deinit(std.testing.allocator);
+    while (try q.step()) try plan.appendSlice(std.testing.allocator, q.bytes(3));
+    for ([_][]const u8{ "USING INDEX matches_start", "USING INDEX matches_patch" }) |want| {
+        if (std.mem.indexOf(u8, plan.items, want) == null) {
+            std.debug.print("plan: {s}\n", .{plan.items});
+            return error.TestUnexpectedResult;
+        }
+    }
 }
