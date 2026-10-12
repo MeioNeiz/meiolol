@@ -249,6 +249,48 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     try html.foot(w, p);
 }
 
+/// The landing page's lead: one matchup's gold curve, the clearest lane among those
+/// out of "more data needed" (the most games while none is)
+pub fn featured(site: *const Site, w: *Writer, curves: *const Curves, matchups: usize) !void {
+    var best: ?struct { r: Role, x: Champ, y: Champ, v: View, score: f64 } = null;
+    for (curves.curves) |c| {
+        const h = c.header;
+        if (h.bracket != @backingInt(Bracket.all) or h.experience != 0) continue;
+        const x = champ(site, h.a) orelse continue;
+        const y = champ(site, h.b) orelse continue;
+        const r: Role = @fromBackingInt(@intCast(h.role));
+        const v = curves.get(r, .all, x.id, y.id) orelse continue;
+        const e = v.estimate(.gold, curvesfile.lane_minute - 1);
+        const games: f64 = @floatFromInt(v.games());
+        const score = if (thin(v)) games else 1e9 + @as(f64, @floatFromInt(@abs(e.mean)));
+        if (best == null or score > best.?.score) best = .{ .r = r, .x = x, .y = y, .v = v, .score = score };
+    }
+    const b = best orelse return;
+    // From x's side, the side ahead at 14 minutes, so the line reads upwards
+    const flip = b.v.estimate(.gold, curvesfile.lane_minute - 1).mean < 0;
+    const x = if (flip) b.y else b.x;
+    const y = if (flip) b.x else b.y;
+    const v = curves.get(b.r, .all, x.id, y.id).?;
+    const lane = root.roleName(b.r);
+    const when = try period(site.arena, curves);
+    const page_path = try path(site.arena, b.r, b.x, b.y);
+    try tpl.renderPart(w,
+        \\<section class="featured"><h2>{x} vs {y}, {lane} lane: gold difference by minute</h2>
+        \\
+    , .{ .x = x.name, .y = y.name, .lane = lane });
+    try summary(w, v, x, y);
+    const one = [_]Variant{.{ .v = v, .key = "any", .label = "All games" }};
+    try chart(w, &one, curves.baseline(b.r, .all), .gold, "gold", x, y, when, lane);
+    try tpl.renderPart(w,
+        \\<p><a href="{href}">Experience, CS, kills, item timings and ranks for this matchup</a> · <a href="{all}">All {n} matchups</a></p></section>
+        \\
+    , .{
+        .href = page_path,
+        .all = @as([]const u8, "matchup/index.html"),
+        .n = matchups,
+    });
+}
+
 fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
     const lane = v.lane();
     try w.writeAll("<p class=\"lead\">");

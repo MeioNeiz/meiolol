@@ -845,25 +845,32 @@ fn winRateCell(w: *Writer, wins: u32, games: u32, span: f64) !void {
         }
     }.f;
     try w.print(
-        "<td data-v=\"{d:.4}\"><span class=\"wr\" style=\"--c:oklch(0.76 0.15 {d:.0})\"><span class=\"ci\" title=\"95%: {d:.1}% to {d:.1}%, {d} games\">" ++
+        "<td data-v=\"{d:.4}\"><span class=\"wr\" style=\"--c:{f}\"><span class=\"ci\" title=\"95%: {d:.1}% to {d:.1}%, {d} games\">" ++
             "<i class=\"r\" style=\"left:{d:.1}%;width:{d:.1}%\"></i><i class=\"d\" style=\"left:{d:.1}%\"></i></span>" ++
             "<b>{d:.1}%</b><small>±{d:.1}</small></span></td>",
         .{
-            p,       wrHue(p, span),       100 * iv[0],                       100 * iv[1],
+            p,       wrColour(p, span),    100 * iv[0],                       100 * iv[1],
             games,   at(iv[0], span),      at(iv[1], span) - at(iv[0], span), at(p, span),
             100 * p, 50 * (iv[1] - iv[0]),
         },
     );
 }
 
-/// Oklch hue for a win rate: red through amber to green, full red or green at 50% ± 40%
-/// of the bar's `span` (±5 points on the champions table, ±10 against an opponent)
-fn wrHue(p: f64, span: f64) f64 {
-    const red = 25;
-    const green = 150;
-    const t = std.math.clamp((p - 0.5) / (0.4 * span), -1, 1);
-    return red + (green - red) * (t + 1) / 2;
+/// Win rate colour, diverging: orange below 50%, blue above, grey at 50%; full at
+/// 50% ± 40% of the bar's `span` (±5 points on the champions table, ±10 against an
+/// opponent). Not red against green: the pair red-green colour blindness merges
+fn wrColour(p: f64, span: f64) WrColour {
+    return .{ .t = std.math.clamp((p - 0.5) / (0.4 * span), -1, 1) };
 }
+
+const WrColour = struct {
+    t: f64,
+
+    pub fn format(c: WrColour, w: *Writer) Writer.Error!void {
+        const hue: f64 = if (c.t < 0) 50 else 225;
+        try w.print("oklch(0.76 {d:.3} {d:.0})", .{ 0.15 * @abs(c.t), hue });
+    }
+};
 
 /// Under this many games a page says its data is early
 const early_games = 50_000;
@@ -874,7 +881,7 @@ fn earlyNote(site: *const Site, w: *Writer, filtered: bool) !void {
     const early = site.games < early_games;
     if (!early and !filtered) return;
     try w.print(
-        "<p class=\"note\" data-early=\"{d}\"{s}>Early data: <span data-early-games>{d} games so far ({s})</span>. Each bar shows where a win rate likely is (95%) and narrows as games come in. Colour runs from red (low) through amber to green (high).</p>\n",
+        "<p class=\"note\" data-early=\"{d}\"{s}>Early data: <span data-early-games>{d} games so far ({s})</span>. Each bar shows where a win rate likely is (95%) and narrows as games come in. Colour runs from orange (low) through grey (50%) to blue (high).</p>\n",
         .{ early_games, if (early) "" else " hidden", site.games, site.when },
     );
 }
@@ -1000,38 +1007,44 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         for (c.curves) |cv| n += @intFromBool(cv.header.bracket == 0 and cv.header.experience == 0);
         break :blk n;
     } else 0;
-    try w.writeAll(
+    try html.tpl.render(w,
         \\<h1>Learn your lane</h1>
         \\<p class="lead">How lane matchups actually unfold, minute by minute, and how your
         \\own games compare. From ranked match timelines: the typical gold, experience and CS
         \\curve of every lane matchup by rank, with the spread and the number of games behind
         \\it. Champion and aggregate data only; never other players, never "the best pick".</p>
-        \\<div class="grid">
-        \\<div class="card"><h3><a href="matchup/index.html">Matchup curves</a></h3>
         \\
-    );
-    if (matchups > 0) {
-        try w.print("<p>{d} lane matchups so far: when each side tends to get ahead, by how much, and whether winning lane wins the game.</p></div>\n", .{matchups});
-    } else {
-        try w.writeAll("<p>When each side of a lane matchup tends to get ahead, by how much, and whether winning lane wins the game. Curves appear as match timelines come in.</p></div>\n");
-    }
-    try w.print(
-        \\<div class="card"><h3><a href="{0s}daily.html">Daily Draft</a></h3>
+    , .{});
+    if (site.curves) |*c| if (matchups > 0) try matchup.featured(site, w, c, matchups);
+    try html.tpl.render(w,
+        \\<div class="grid">
+        \\<div class="card"><h3><a href="{your}">Your games</a></h3>
+        \\<p>Enter your Riot ID and see each recent game's lane laid over the typical curve
+        \\for that matchup at your rank, and your record per matchup over the months.</p></div>
+        \\<div class="card"><h3><a href="matchup/index.html">Matchup curves</a></h3>
+        \\<p>{matchups}{no_matchups}</p></div>
+        \\<div class="card"><h3><a href="{daily}">Daily Draft</a></h3>
         \\<p>One real ranked draft a day, anonymised. Guess the hidden champion and the
         \\winner, then see what happened and what the numbers say. Keep a streak, share
         \\your grid.</p></div>
-        \\<div class="card"><h3><a href="{0s}learn.html">New to League? Start with Learn</a></h3>
+        \\<div class="card"><h3><a href="{learn}">New to League? Start with Learn</a></h3>
         \\<p>Five short lessons on draft in plain words, with real examples, then practice on
         \\real ranked drafts with every option explained. No timers, no streaks.</p></div>
-        \\<div class="card"><h3><a href="{0s}your.html">Your games</a></h3>
-        \\<p>Enter your Riot ID and see each recent game's lane laid over the typical curve
-        \\for that matchup at your rank, and your record per matchup over the months.</p></div>
         \\<div class="card"><h3><a href="pool.html">Champion pool</a></h3>
         \\<p>Champions that players of your main also play, which of them cover your
         \\main's hardest lanes, and what they play when it is banned.</p></div>
         \\</div>
         \\
-    , .{site.view.up()});
+    , .{
+        .your = html.Link{ .root = site.view.up(), .path = "your.html" },
+        .daily = html.Link{ .root = site.view.up(), .path = "daily.html" },
+        .learn = html.Link{ .root = site.view.up(), .path = "learn.html" },
+        .matchups = if (matchups > 0) html.tpl.t(
+            "{n} lane matchups so far: when each side tends to get ahead, by how much, and whether winning lane wins the game.",
+            .{ .n = matchups },
+        ) else null,
+        .no_matchups = html.tpl.when(matchups == 0, @as([]const u8, "When each side of a lane matchup tends to get ahead, by how much, and whether winning lane wins the game. Curves appear as match timelines come in.")),
+    });
     try w.print("<h2>Champions</h2>\n<p class=\"muted\"><b>{d}</b> ranked solo/duo games {s}, {s}, all ranks. <a href=\"{s}method.html\">How the numbers are made</a></p>\n", .{ site.games, site.view.region.in(), site.when, site.view.up() });
     try earlyNote(site, w, false);
     try tierTable(site, w, null, "");
@@ -1171,11 +1184,12 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Oppo
             const y_thin = y.games < min_opponent_games;
             if (x_thin != y_thin) return y_thin;
             if (x_thin) return x.games > y.games;
-            return ratio(x.wins, x.games) < ratio(y.wins, y.games);
+            // The interval's top end: hard even at best, so a few games can't top it
+            return x.iv[1] < y.iv[1];
         }
     }.f);
     try w.print(
-        \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{d}, hardest first</span></h3>
+        \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{d}, hardest first, by the top of each bar</span></h3>
         \\<input type="search" placeholder="Search opponent" data-filter aria-label="Search opponent"></div>
         \\<div class="tl-wrap"><table class="tl" data-sortable>
         \\<thead><tr><th class="l" data-sort="text">Opponent</th><th data-sort="num">{f}'s win rate</th><th data-sort="num" title="Lane curve estimate: {f} minus the opponent">Gold at {d}</th><th data-sort="num">Games</th></tr></thead>

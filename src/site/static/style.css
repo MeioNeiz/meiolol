@@ -8,8 +8,8 @@
   --faint: #5b6478;
   --line: #232b3b;
   --accent: #7aa2ff;
-  --good: #3ddc97;
-  --bad: #ff6b6b;
+  --good: #3fc6e8;
+  --bad: #ff8f4d;
   --axis: #2a3346;
 }
 * { box-sizing: border-box; }
@@ -316,3 +316,6 @@ h3.opp-h .muted { font-weight: 400; font-size: 13px; }
 .filter-bar label { display: flex; align-items: center; gap: 6px; }
 .filter-bar select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; }
 .tiles > div.stale { opacity: 0.45; }
+.choices button .tag { margin-left: 6px; vertical-align: middle; }
+.featured { margin: 8px 0 28px; }
+.featured h2 { margin-top: 8px; }

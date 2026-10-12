@@ -8,6 +8,9 @@
 // the same keys (html.View.query).
 "use strict";
 
+// As root.zig opponentTable: by the bar's top end, so few games can't top the list
+const HARDEST = "hardest first, by the top of each bar";
+
 (async () => {
   const bar = document.querySelector(".filter-bar[data-src]");
   if (!bar) return;
@@ -236,7 +239,7 @@
       const xt = x.games < thin, yt = y.games < thin;
       if (xt !== yt) return xt ? 1 : -1;
       if (xt) return y.games - x.games;
-      return x.wins / x.games - y.wins / y.games;
+      return wilson(x.wins, x.games)[1] - wilson(y.wins, y.games)[1];
     });
     const curve = view ? curveGold(`${view.key}|${f.rank}`) : null;
     const pages = view ? curveGold(`${view.key}|`) : null;
@@ -253,7 +256,7 @@
       }),
     );
     const count = s.el.querySelector(".opp-h .muted");
-    if (count) count.textContent = `${opps.length}, hardest first`;
+    if (count) count.textContent = `${opps.length}, ${HARDEST}`;
     const few = opps.filter((o) => o.games < thin).length;
     const more = s.el.querySelector(".tl-more");
     if (more) {
@@ -306,7 +309,7 @@
     const td = document.createElement("td");
     td.dataset.v = p.toFixed(4);
     td.innerHTML =
-      `<span class="wr" style="--c:oklch(0.76 0.15 ${hue(p, span).toFixed(0)})">` +
+      `<span class="wr" style="--c:${wrColour(p, span)}">` +
       `<span class="ci" title="95%: ${(100 * iv[0]).toFixed(1)}% to ${(100 * iv[1]).toFixed(1)}%, ${games} games">` +
       `<i class="r" style="left:${at(iv[0]).toFixed(1)}%;width:${(at(iv[1]) - at(iv[0])).toFixed(1)}%"></i>` +
       `<i class="d" style="left:${at(p).toFixed(1)}%"></i></span>` +
@@ -379,10 +382,10 @@ function side(iv) {
   return iv[0] > 0.5 ? "up" : iv[1] < 0.5 ? "down" : "even";
 }
 
-// As root.zig wrHue: red through amber to green, full at 50% ± 40% of the span
-function hue(p, span) {
+// As root.zig wrColour: orange below 50%, blue above, grey at 50%
+function wrColour(p, span) {
   const t = Math.min(Math.max((p - 0.5) / (0.4 * span), -1), 1);
-  return 25 + ((150 - 25) * (t + 1)) / 2;
+  return `oklch(0.76 ${(0.15 * Math.abs(t)).toFixed(3)} ${t < 0 ? 50 : 225})`;
 }
 
 function pct(part, whole) {
