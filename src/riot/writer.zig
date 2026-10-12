@@ -610,15 +610,18 @@ const Stmts = struct {
 
     const sql = .{
         .forgotten = "SELECT EXISTS (SELECT 1 FROM forgotten WHERE puuid = ?)",
-        // Before rank_put, which it compares with
+        // Before rank_put, which it compares with. Columns named in both: a column
+        // added by a newer binary's migration must not break a running older one
         .rank_change =
-        \\INSERT OR REPLACE INTO rank_history SELECT ?1, ?3, ?2, ?4, ?5, ?6
+        \\INSERT OR REPLACE INTO rank_history (key, day, rank, lp, wins, losses)
+        \\SELECT ?1, ?3, ?2, ?4, ?5, ?6
         \\WHERE NOT EXISTS (SELECT 1 FROM ranks WHERE key = ?1 AND rank = ?2
         \\    AND lp IS ?4 AND wins IS ?5 AND losses IS ?6)
         ,
         // A refetched page rewrites a row only when something changed or a day passed
         .rank_put =
-        \\INSERT INTO ranks VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (key) DO UPDATE SET
+        \\INSERT INTO ranks (key, rank, seen_day, lp, wins, losses) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        \\ON CONFLICT (key) DO UPDATE SET
         \\    rank = excluded.rank, seen_day = excluded.seen_day, lp = excluded.lp,
         \\    wins = excluded.wins, losses = excluded.losses
         \\WHERE rank <> excluded.rank OR seen_day <> excluded.seen_day
