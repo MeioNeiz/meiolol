@@ -5,6 +5,7 @@
 const std = @import("std");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const tpl = html.tpl;
 const matchup = @import("matchup.zig");
 const learning = @import("../learning.zig");
 
@@ -12,7 +13,6 @@ const Writer = std.Io.Writer;
 const Site = root.Site;
 const Champ = root.Champ;
 const Learning = learning.Learning;
-const esc = html.esc;
 
 /// "1-5", "6-20", "51+"
 fn binLabel(buf: []u8, i: usize) []const u8 {
@@ -25,47 +25,69 @@ fn pct(x: f64) f64 {
     return 100 * x;
 }
 
-const footnote =
-    "<p class=\"muted\">From the ranked histories of {d} players in our data. A game's " ++
-    "number counts only the games we have, so early rows include some players coming " ++
-    "back to a champion: the real gap is, if anything, bigger. Gold is the laner's total " ++
-    "gold minus their lane opponent's at {d} minutes.</p>\n";
+fn footnote(w: *Writer, players: u32) !void {
+    try tpl.render(w, "<p class=\"muted\">From the ranked histories of {players} players in our data. A game's " ++
+        "number counts only the games we have, so early rows include some players coming " ++
+        "back to a champion: the real gap is, if anything, bigger. Gold is the laner's total " ++
+        "gold minus their lane opponent's at {minute} minutes.</p>\n", .{ .players = players, .minute = learning.gold_minute });
+}
 
 /// Champion page: results by games on `ch`
 pub fn section(w: *Writer, l: *const Learning, ch: Champ) !void {
     if (l.players == 0) return;
     const c = l.get(ch.id) orelse return;
     var buf: [16]u8 = undefined;
-    try w.print("<h2>How long {f} takes to learn</h2>\n<p>", .{esc(ch.name)});
+    try tpl.renderPart(w, "<h2>How long {name} takes to learn</h2>\n<p>", .{ .name = ch.name });
     if (c.reach) |r| {
         if (r == 0) {
-            try w.print("Players do about as well on {f} from their first games as later ({d:.1}% usual win rate).", .{ esc(ch.name), pct(c.usual) });
+            try tpl.render(w, "Players do about as well on {name} from their first games as later ({usual:.1}% usual win rate).", .{
+                .name = ch.name,
+                .usual = pct(c.usual),
+            });
         } else {
-            try w.print("Players reach {f}'s usual win rate ({d:.1}%) around their games {s} on it.", .{ esc(ch.name), pct(c.usual), binLabel(&buf, r) });
+            try tpl.render(w, "Players reach {name}'s usual win rate ({usual:.1}%) around their games {bin} on it.", .{
+                .name = ch.name,
+                .usual = pct(c.usual),
+                .bin = binLabel(&buf, r),
+            });
         }
     } else {
-        try w.print("More data needed to say when players reach {f}'s usual win rate: every row needs 400+ games.", .{esc(ch.name)});
+        try tpl.render(w, "More data needed to say when players reach {name}'s usual win rate: every row needs 400+ games.", .{
+            .name = ch.name,
+        });
     }
-    try w.print(
+    try tpl.renderPart(w,
         \\</p>
         \\<div class="table-scroll"><table>
-        \\<thead><tr><th>Games on {f}</th><th class="num">Win rate</th><th class="num">Gold at {d} vs lane</th><th class="num">Games</th></tr></thead>
+        \\<thead><tr><th>Games on {name}</th><th class="num">Win rate</th><th class="num">Gold at {minute} vs lane</th><th class="num">Games</th></tr></thead>
         \\<tbody>
         \\
-    , .{ esc(ch.name), learning.gold_minute });
+    , .{ .name = ch.name, .minute = learning.gold_minute });
     for (c.bins, 0..) |b, i| {
-        try w.print("<tr{s}><td>{s}</td><td class=\"num\">", .{
-            if (b.games < l.thin_games) " class=\"thin\"" else "", binLabel(&buf, i),
+        const gold = if (b.gold()) |g| tpl.t("<span title=\"{n} games with a timeline\">{sign}{g:.0}</span>", .{
+            .n = b.gold_games,
+            .sign = if (g >= 0) "+" else "",
+            .g = g,
+        }) else null;
+        try tpl.render(w,
+            \\<tr{thin}><td>{bin}</td><td class="num">{dash}{rate}</td><td class="num">{gold}{none}</td><td class="num">{games}</td></tr>
+            \\
+        , .{
+            .thin = tpl.flag(b.games < l.thin_games, "class=\"thin\""),
+            .bin = binLabel(&buf, i),
+            .dash = tpl.when(b.games == 0, "-"),
+            .rate = tpl.when(b.games > 0, tpl.t("{r:.1}%", .{ .r = pct(b.winRate()) })),
+            .gold = gold,
+            .none = tpl.when(gold == null, "-"),
+            .games = b.games,
         });
-        if (b.games == 0) try w.writeAll("-") else try w.print("{d:.1}%", .{pct(b.winRate())});
-        try w.writeAll("</td><td class=\"num\">");
-        if (b.gold()) |g| {
-            try w.print("<span title=\"{d} games with a timeline\">{s}{d:.0}</span>", .{ b.gold_games, if (g >= 0) "+" else "", g });
-        } else try w.writeAll("-");
-        try w.print("</td><td class=\"num\">{d}</td></tr>\n", .{b.games});
     }
     try w.writeAll("</tbody></table></div>\n");
-    try w.print(footnote, .{ l.players, learning.gold_minute });
+    try footnote(w, l.players);
+}
+
+fn champCell(w: *Writer, site: *const Site, ch: Champ) !void {
+    try site.champLink(w, ch, site.view.up());
 }
 
 /// Pool page: champions with a learning point, quickest first
@@ -74,10 +96,10 @@ pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
     var list: std.ArrayList(learning.Champion) = .empty;
     for (l.champions) |c| if (c.reach != null) try list.append(site.arena, c);
     if (list.items.len == 0) {
-        try w.print(
-            "<p class=\"note\">More data needed: no champion has 400+ games in every range of games played on it yet ({d} players' histories so far).</p>\n",
-            .{l.players},
-        );
+        try tpl.render(w,
+            \\<p class="note">More data needed: no champion has 400+ games in every range of games played on it yet ({players} players' histories so far).</p>
+            \\
+        , .{ .players = l.players });
         return;
     }
     std.mem.sort(learning.Champion, list.items, {}, struct {
@@ -98,17 +120,19 @@ pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
     );
     for (list.items) |c| {
         const ch = matchup.champ(site, c.id) orelse continue;
-        try w.writeAll("<tr><td>");
-        try site.champLink(w, ch, site.view.up());
         var games: u32 = 0;
         for (c.bins) |b| games += b.games;
-        try w.print("</td><td>{s}</td><td class=\"num\">{d:.1}%</td><td class=\"num\">{d:.1}%</td><td class=\"num\">{d}</td></tr>\n", .{
-            if (c.reach.? == 0) "from the start" else binLabel(&buf, c.reach.?),
-            pct(c.bins[0].winRate()),
-            pct(c.usual),
-            games,
+        try tpl.render(w,
+            \\<tr><td>{champ}</td><td>{reach}</td><td class="num">{first:.1}%</td><td class="num">{usual:.1}%</td><td class="num">{games}</td></tr>
+            \\
+        , .{
+            .champ = tpl.call(champCell, .{ site, ch }),
+            .reach = if (c.reach.? == 0) "from the start" else binLabel(&buf, c.reach.?),
+            .first = pct(c.bins[0].winRate()),
+            .usual = pct(c.usual),
+            .games = games,
         });
     }
     try w.writeAll("</tbody></table></div>\n");
-    try w.print(footnote, .{ l.players, learning.gold_minute });
+    try footnote(w, l.players);
 }
