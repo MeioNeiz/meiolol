@@ -71,14 +71,18 @@ How to write a line:
 
 - 2026-10-13 (early): A higher rank means more gold at 14 in the same matchup: going
   from Emerald to Master is worth about 200 gold for a jungler, 145 mid and bot, 90 top
-  and 20 support, and Iron to Challenger spans 400-850 gold outside support. Sure: dev
-  and one selection check on 85k EUW1 rows, the typical gold miss drops from 823 to 809
-  (3% of it, give or take 0.3%); test not touched; the rank is the one recorded after
-  the game, not at its start (a small leak, one game rarely changes a tier): hold the
-  final until a rerun with rank at game start. Site: lesson material ("at your rank, expect about X gold at 14
-  in this matchup"), not a pick reason: it is mostly better players earning more.
-  Evidence: lab campaign gold14-a, run 20261012T2322Z-gold14-a-rankfx (effects-rank.tsv),
-  selection 20261012T2332Z-gold14-a-rank-sel new-best
+  and 20 support, and Iron to Challenger spans 400-850 gold outside support. Sure: on
+  85k dev rows rank's own gain over the team model is small but clear: the typical gold
+  miss drops from 812 to 809 (0.6% of the error, give or take 0.1%; CS at 10 gains 1.4%).
+  On 106k held-out test games the whole model (team model plus rank) removes 2.9% of
+  the champion-role error (give or take 0.2%), as on dev (3.0%, 823 to 809 gold), so
+  nothing was fitted to dev; rank's own share is not separated on test. The rank is the
+  one recorded after the game, not at its start (a small leak, one game rarely changes a
+  tier). Site: lesson material ("at your rank, expect about X gold at 14 in this
+  matchup"), not a pick reason: it is mostly better players earning more. Evidence: lab
+  campaign gold14-a, run 20261012T2322Z-gold14-a-rankfx (effects-rank.tsv), paired vs
+  20261012T2222Z-gold14-a-ref (`meiolol-lab pairs`), final
+  20261012T2343Z-final-gold14-a (finals.tsv)
 - 2026-10-13 (early): For your own gold at 14, it is who the enemy laner is that counts,
   not how your champion matches up against theirs: knowing the enemy laner's champion
   does as well as knowing the exact matchup. Sure: dev only, 80k rows, the two within
