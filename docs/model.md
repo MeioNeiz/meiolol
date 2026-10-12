@@ -634,6 +634,48 @@ options [{champion, games, win, lo, hi, change}] sorted by win, then champion id
 checks the scorer against the candidate's own predict on 500 test games and stops if
 they differ by more than 1e-4 (f32: ~5e-8 measured).
 
+### Lane model file (meiolol-lab lane --export)
+
+`meiolol-lab lane SNAP --export DIR` (src/lab/lane.zig, built with
+-Dcand=src/lab/cand/team2, the candidate with `exportLane`) fits 3c-team2 on every game
+that reached 15:00 and writes DIR/lane-model.json and DIR/lane-ref.json for the admin
+Draft tester's champion suggester (meiolol-3b): early outcomes for a champion into a lane
+opponent. Champion-only inputs; admin only. Run it through deploy/lab-run.sh with
+`-- lane "~/ml/snaps/SNAP" --export .` (first run 20261012T2326Z-lane-export: 182,748
+games, 849 champion terms, 48,194 pairs, 2.8 MB).
+
+lane-model.json (format meiolol-lane-model, version 1); every number rounded to 0.01:
+- meta: name, run, snapshot, newest_game, training_games, patch (newest), platform
+  (EUW1), dev [{outcome, unit, rows, err_base, err_cand, removed_pct, removed_half}]: a
+  refit on dev's games scored on dev-val (typical miss in the unit, % of the champion-role
+  baseline's error removed, 95% half-width)
+- roles; outcomes [gold14, lanediff14, cs10, deaths15]; units [gold, gold, CS, deaths]:
+  every per-outcome array below is in this order
+- champions [{id, name, alias}]
+- intercept[o][role]: role mean + EUW1's platform offset + the newest patch's offset
+- others[o][role]: the other eight slots at their average (rows-weighted mean of the
+  duo, jungle and rest terms)
+- spread[o][role]: residual sd, the typical game-to-game spread around an expectation
+- champ, enemy [{champion, enemy (0), role, n, b[o], sd[o]}]: own champion's term, and
+  the lane opponent's own term for the player in that role; n training rows (gold14's)
+- pair_columns, pairs: lane cells (own champion vs opponent, every pair with a training
+  game) as arrays [champion, enemy, role, n, b x4, sd x4]
+
+Scoring (Scorer in lane.zig, the reference). For champion X in role r into opponent Y,
+per outcome o, a missing term counting 0:
+
+```
+value = intercept[o][r] + others[o][r] + champ(X, r).b[o] + enemy(Y, r).b[o] + pair(X, Y, r).b[o]
+range = value -/+ 1.96 sqrt(sum of the present terms' sd[o]^2)
+```
+
+sd is each shrunk effect's posterior, sigma / sqrt(n + k), in the outcome's units:
+uncertainty of the average, not of one game (spread is that). lane.zig checks the
+export against the model's predictions before writing (max |diff| 0.02, rounding).
+lane-ref.json: per role the 4 most played pairs, a champion into an opponent with no
+pair cell and an unknown champion (id 0), each with value, lo, hi, champ_games and
+pair_games from Scorer.value; the page's JS must match them to 0.01.
+
 ## Next steps
 
 - Experience term: rerun once the daily eval shows 300+ train and 100+ test games per

@@ -16,6 +16,7 @@ const bench = @import("lab/bench.zig");
 const draftnet = @import("lab/draftnet.zig");
 const exp = @import("lab/exp.zig");
 const draft = @import("lab/draft.zig");
+const lane = @import("lab/lane.zig");
 const harness = @import("lab/harness.zig");
 
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
@@ -47,9 +48,9 @@ const usage =
     \\                                  1,4,16 --epochs 10 --sweep 0 (fits per sweep)
     \\  draftbench SNAP [OPT VALUE]...  the deep draft model (lab/draftnet.zig) timed the
     \\                                  same way: --devices cpu1,cpu,gpu --scales
-    \\                                  1,4,16,64 --epochs 2 --sweep 0
+    \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage;
+++ exp.usage ++ draft.usage ++ lane.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
@@ -169,6 +170,8 @@ pub fn main(init: std.process.Init) !u8 {
                 opts.epochs = try std.fmt.parseInt(u32, v, 10);
             } else if (std.mem.eql(u8, argv[i], "--sweep")) {
                 opts.sweep = try std.fmt.parseInt(u32, v, 10);
+            } else if (std.mem.eql(u8, argv[i], "--limit")) {
+                opts.limit = try std.fmt.parseInt(u32, v, 10);
             } else {
                 std.debug.print("draftbench: unknown option {s}\n{s}", .{ argv[i], usage });
                 return 2;
@@ -207,6 +210,9 @@ pub fn main(init: std.process.Init) !u8 {
     }
     if (std.mem.eql(u8, cmd, "draft")) {
         return draft.main(init.gpa, arena, init.io, argv[2..]);
+    }
+    if (std.mem.eql(u8, cmd, "lane")) {
+        return lane.main(init.gpa, arena, init.io, argv[2..]);
     }
     if (std.mem.eql(u8, cmd, "exp")) {
         return exp.main(init.gpa, arena, init.io, init.environ_map.get("HOME"), argv[2..]);
@@ -284,6 +290,7 @@ test {
     _ = harness;
     _ = exp;
     _ = draft;
+    _ = lane;
 }
 
 /// Comma-separated enum tags or integers

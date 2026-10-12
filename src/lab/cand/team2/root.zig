@@ -9,6 +9,7 @@ const std = @import("std");
 const api = @import("api");
 
 pub const scope: api.Scope = .champ_select;
+pub const name = "3c-team2";
 
 const passes = 12;
 /// Cells with fewer games are left out of the spread estimates
