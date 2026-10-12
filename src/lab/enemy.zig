@@ -89,6 +89,7 @@ fn buildSets(gpa: std.mem.Allocator, d: *const rows.Data, ids: *const Ids, k: ro
         var e: fm.Example = .{
             .me = ids.get(r.champion, @backingInt(r.role)),
             .role = @backingInt(r.role),
+            .platform = d.games[r.game].platform,
             .enemies = undefined,
             .enemy_roles = undefined,
             .allies = undefined,
@@ -156,7 +157,7 @@ fn pairedDiff(d: *const rows.Data, set: *const Set, ys: []const f32, a: []const 
 pub const Options = struct {
     outcomes: []const rows.Outcome = &.{ .gold14, .lanediff14, .cs10, .deaths15, .first_item },
     dims: []const u32 = &.{ 4, 8, 16 },
-    l2s: []const f32 = &.{ 1e-5, 1e-4, 1e-3 },
+    l2s: []const f32 = &.{ 1e-6, 1e-5, 1e-4 },
     /// Where 2a-<model>.tsv prediction files go (docs/model.md "Shared protocol"); null skips
     preds_dir: ?[]const u8 = null,
 };

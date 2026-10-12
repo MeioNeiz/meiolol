@@ -9,6 +9,7 @@ const archive = @import("lab/archive.zig");
 const protocol = @import("lab/protocol.zig");
 const rows = @import("lab/rows.zig");
 const enemy = @import("lab/enemy.zig");
+const pairs = @import("lab/pairs.zig");
 const exp = @import("lab/exp.zig");
 const harness = @import("lab/harness.zig");
 
@@ -30,6 +31,8 @@ const usage =
     \\  rows SNAP_DIR                   load the model rows, print outcome counts and means
     \\  enemy SNAP_DIR [PREDS_DIR]      base, additive and pairwise champion-role models on the
     \\                                  continuous outcomes (lab/enemy.zig); markdown table
+    \\  pairs BASE REF [PREDS...]       paired MSE gains of prediction TSVs on shared rows,
+    \\                                  % of BASE's MSE, intervals vs REF clustered by game
     \\
 ++ exp.usage;
 
@@ -86,6 +89,13 @@ pub fn main(init: std.process.Init) !u8 {
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
         try protocol.writeSplit(init.gpa, init.io, argv[2], &stdout.interface);
+        try stdout.interface.flush();
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "pairs") and argv.len >= 4) {
+        var buf: [4096]u8 = undefined;
+        var stdout = std.Io.File.stdout().writer(init.io, &buf);
+        try pairs.run(init.gpa, init.io, argv[2..], &stdout.interface);
         try stdout.interface.flush();
         return 0;
     }
@@ -160,6 +170,7 @@ test {
     _ = protocol;
     _ = rows;
     _ = enemy;
+    _ = pairs;
     _ = harness;
     _ = exp;
 }

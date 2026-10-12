@@ -1,4 +1,4 @@
-//! One row per player per game             if (first[i]) |f| if (u.before == f.item and u.after == 0) {rom an analysis snapshot, with the shared outcomes
+//! One row per player per game from an analysis snapshot, with the shared outcomes
 //! (docs/model.md "Shared protocol"). Games are stats.scan's (ranked solo, no remakes,
 //! roles complete); test games are protocol's split
 
@@ -168,6 +168,11 @@ pub fn load(
                 }
             }
         }
+    }
+    // participants.gold14 exists for games that ended before 15:00 too; the protocol
+    // scores only games that reached it
+    for (rows.items) |*r| {
+        if (!games.items[r.game].timeline15) r.y[@backingInt(Outcome.gold14)] = std.math.nan(f32);
     }
 
     data.games = games.items;

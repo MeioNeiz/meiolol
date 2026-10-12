@@ -1,7 +1,8 @@
 //! Champion-role embedding models for one continuous outcome per player (gold14, cs10,
 //! deaths15, lanediff14, first_item). Nested, so each step's gain is measurable:
 //!   base:      mu + b[me]                                    (champion-role mean)
-//!   additive:  + sum over enemies a[enemy][my role] + allies g[ally][my role]
+//!   additive:  + pl[platform][my role] + sum over enemies a[enemy][my role]
+//!              + allies g[ally][my role]
 //!   pairwise:  + sum over enemies w[my role][their role] * <u[me], v[enemy]>
 //! "pairwise" is the "vs the specific enemy five" reading: an enemy's effect depends on
 //! who you are, weighted per role pair (the lane opponent should weigh most). Adam on
@@ -14,22 +15,25 @@ const rows_mod = @import("rows.zig");
 
 pub const Kind = enum { base, additive, pairwise };
 
+pub const max_platforms = 16;
+
 pub const Config = struct {
     kind: Kind,
     dim: u32 = 8,
     l2: f32 = 1e-4,
-    lr: f32 = 0.01,
-    batch: u32 = 4096,
-    max_epochs: u32 = 60,
+    lr: f32 = 0.003,
+    batch: u32 = 8192,
+    max_epochs: u32 = 80,
     /// Stop when validation loss has not improved for this many epochs
-    patience: u32 = 4,
+    patience: u32 = 6,
     seed: u64 = 1,
 };
 
-/// A row as the model sees it: champion-role ids (dense), own role, target
+/// A row as the model sees it: champion-role ids (dense), own role, platform, target
 pub const Example = struct {
     me: u16,
     role: u3,
+    platform: u8,
     enemies: [5]u16,
     enemy_roles: [5]u3,
     allies: [4]u16,
@@ -44,6 +48,8 @@ pub const Model = struct {
     /// Parameters in one slice so Adam runs over them flat
     p: []f32,
     b: []f32,
+    /// [platform][my role], additive and pairwise only
+    pl: []f32,
     a: []f32,
     g: []f32,
     u: []f32,
@@ -52,14 +58,14 @@ pub const Model = struct {
 
     pub fn init(gpa: std.mem.Allocator, cfg: Config, n: usize, mu: f32) !Model {
         const d = cfg.dim;
-        const sizes = [_]usize{ n, n * 5, n * 5, n * d, n * d, 25 };
+        const sizes = [_]usize{ n, max_platforms * 5, n * 5, n * 5, n * d, n * d, 25 };
         var total: usize = 0;
         for (sizes) |s| total += s;
         const p = try gpa.alloc(f32, total);
         @memset(p, 0);
-        var m: Model = .{ .cfg = cfg, .n = n, .mu = mu, .p = p, .b = undefined, .a = undefined, .g = undefined, .u = undefined, .v = undefined, .w = undefined };
+        var m: Model = .{ .cfg = cfg, .n = n, .mu = mu, .p = p, .b = undefined, .pl = undefined, .a = undefined, .g = undefined, .u = undefined, .v = undefined, .w = undefined };
         var at: usize = 0;
-        inline for (.{ "b", "a", "g", "u", "v", "w" }, 0..) |name, i| {
+        inline for (.{ "b", "pl", "a", "g", "u", "v", "w" }, 0..) |name, i| {
             @field(m, name) = p[at .. at + sizes[i]];
             at += sizes[i];
         }
@@ -78,6 +84,7 @@ pub const Model = struct {
     pub fn predict(m: *const Model, e: *const Example) f32 {
         var s = m.mu + m.b[e.me];
         if (m.cfg.kind == .base) return s;
+        s += m.pl[@as(usize, e.platform) * 5 + e.role];
         for (e.enemies) |x| s += m.a[@as(usize, x) * 5 + e.role];
         for (e.allies) |x| s += m.g[@as(usize, x) * 5 + e.role];
         if (m.cfg.kind == .additive) return s;
@@ -92,17 +99,22 @@ pub const Model = struct {
         return s;
     }
 
+    fn offset(m: *const Model, s: []f32) usize {
+        return s.ptr - m.p.ptr;
+    }
+
     /// Adds d(loss)/d(params) for one example with residual r = pred - y (squared loss / 2)
     fn grad(m: *const Model, e: *const Example, r: f32, gr: []f32) void {
-        const off_b = 0;
-        const off_a = m.n;
-        const off_g = off_a + m.n * 5;
-        const off_u = off_g + m.n * 5;
+        const off_b = m.offset(m.b);
+        const off_a = m.offset(m.a);
+        const off_g = m.offset(m.g);
+        const off_u = m.offset(m.u);
+        const off_v = m.offset(m.v);
+        const off_w = m.offset(m.w);
         const d = m.cfg.dim;
-        const off_v = off_u + m.n * d;
-        const off_w = off_v + m.n * d;
         gr[off_b + e.me] += r;
         if (m.cfg.kind == .base) return;
+        gr[m.offset(m.pl) + @as(usize, e.platform) * 5 + e.role] += r;
         for (e.enemies) |x| gr[off_a + @as(usize, x) * 5 + e.role] += r;
         for (e.allies) |x| gr[off_g + @as(usize, x) * 5 + e.role] += r;
         if (m.cfg.kind == .additive) return;
@@ -134,6 +146,7 @@ pub fn fit(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const Example
     mu /= @floatFromInt(@max(train.len, 1));
     var m: Model = try .init(gpa, cfg, n, @floatCast(mu));
     errdefer m.deinit(gpa);
+    try warmStart(gpa, &m, train);
     const best = try gpa.alloc(f32, m.p.len);
     defer gpa.free(best);
     const gr = try gpa.alloc(f32, m.p.len);
@@ -206,4 +219,31 @@ pub fn mse(m: *const Model, set: []const Example) f64 {
         s += r * r;
     }
     return s / @as(f64, @floatFromInt(@max(set.len, 1)));
+}
+
+/// Starts b at each champion-role's shrunk mean residual and pl at each platform-role's
+/// (on what b leaves): Adam then refines instead of walking there from 0, which early
+/// stopping on a drifting validation slice would cut short
+fn warmStart(gpa: std.mem.Allocator, m: *Model, train: []const Example) !void {
+    const prior = 50;
+    const sum = try gpa.alloc(f64, @max(m.b.len, m.pl.len));
+    defer gpa.free(sum);
+    const cnt = try gpa.alloc(f64, sum.len);
+    defer gpa.free(cnt);
+    @memset(sum, 0);
+    @memset(cnt, 0);
+    for (train) |e| {
+        sum[e.me] += e.y - m.mu;
+        cnt[e.me] += 1;
+    }
+    for (m.b, sum[0..m.b.len], cnt[0..m.b.len]) |*b, s, c| b.* = @floatCast(s / (c + prior));
+    if (m.cfg.kind == .base) return;
+    @memset(sum, 0);
+    @memset(cnt, 0);
+    for (train) |e| {
+        const i = @as(usize, e.platform) * 5 + e.role;
+        sum[i] += e.y - m.mu - m.b[e.me];
+        cnt[i] += 1;
+    }
+    for (m.pl, sum[0..m.pl.len], cnt[0..m.pl.len]) |*p, s, c| p.* = @floatCast(s / (c + prior));
 }
