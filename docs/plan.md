@@ -288,8 +288,9 @@ next steps land here.
   full patch at ~30k EUW/day would take ~1 h EUW and hours for all regions on the
   micro: before volume grows, aggregate each day's games once and merge (or move to
   A1). Next: check data/builds.log after the loop's runs ("dropped options" lines,
-  time) and a few pages on the site; a builds index or nav entry
-  if Jacob wants builds that visible (application text does not mention builds);
+  time) and a few pages on the site; builds index done 2026-10-12, linked from the
+  champions pages (a nav entry only if Jacob wants builds that visible: the application
+  text does not mention builds);
   first-three skill levels; first-item timing per core; builds by matchup once pairs
   reach volume
 
@@ -392,8 +393,24 @@ every region selectable (groups only if data files grow too big). Indexing: open
 decided on evidence of what gets clicks, not just a game floor (Jacob 2026-10-12); build
 canonical, sitemap and noindex support as settings.
 
+Site UI pass (2026-10-12, meiolol-a0, from research/questions/site-design.md):
+- Templates: src/site/tpl.zig (named holes checked at compile time, escaping by
+  position); layout, matchup chart and the page files moved onto it, byte-identical
+- Landing leads with one matchup's gold curve (matchup.featured) and links a Your games
+  example (`meiolol your-example`, anonymised, written by the web loop); the champions
+  table moved off it (577 KB to 7 KB)
+- Win-rate colours orange / grey / blue (colour-blind safe, validated), not red/green;
+  lane opponents ranked by the 95% bar's top end so thin data can't top the list
+- SEO settings: `--origin` (canonical, sitemap per view, robots Sitemap lines; web loop
+  passes it), `--index-min-games` (thinner matchups noindex); both only act with
+  `--public`. meiolol-render's flags not yet given them
+- Lane chart one component (lanechart.zig) for matchup pages and, as chart.wasm (12 KB),
+  Your games; method page "Model accuracy vs data" (evalchart.zig, eval-history.tsv);
+  builds index per patch view; Daily Draft marks without red/green
+
 Next:
-1. Design and UX pass with screenshots; page weight; SEO settings for `--public`
+1. root.zig and matchup.zig rest onto tpl; mobile check at phone width; screenshots
+   or a short video for the application (Riot accepts them, research C1)
 2. Cached data load (Jacob: later): probably not worth it now that a load takes ~5 s on
    the Mac snapshot and ~44 s for every view on the box. Left of a pass: filters.make
    ~1 s, stats per view ~0.2 s (Mac). Renderer boot after a box reboot never verified
