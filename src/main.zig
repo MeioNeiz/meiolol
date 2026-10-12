@@ -22,6 +22,7 @@ pub const backup = @import("backup.zig");
 pub const forget = @import("forget.zig");
 pub const rekey = @import("rekey.zig");
 pub const admin = @import("admin.zig");
+pub const status = @import("status.zig");
 const Date = @import("date.zig").Date;
 
 pub const std_options: std.Options = .{ .logFn = logFn };
@@ -145,7 +146,9 @@ const usage =
     \\                               else DIR/export)
     \\              --budget SPEC    Riot calls per route, Riot's format (default 20:120)
     \\              --cors ORIGIN    allow a page on ORIGIN (local testing)
-    \\  status      row counts and crawl queue state
+    \\  status      row counts and crawl queue state; read-only, estimates (~) for the
+    \\              big tables (src/status.zig)
+    \\              --exact          count every row (slow on the box)
     \\  admin       private ops page (src/admin.zig): crawl rates from the crawl log,
     \\              storage growth (appends DIR/admin-history.tsv), ingest mix, queues
     \\              --out DIR        default DIR/admin
@@ -939,8 +942,16 @@ fn cmdApi(c: *Cmd) !u8 {
 }
 
 fn cmdStatus(c: *Cmd) !u8 {
-    try c.noFlags();
-    try status(c.init.gpa, c.init.io, c.data_dir);
+    var exact = false;
+    while (c.next()) |_| {
+        if (c.is("--exact")) exact = true else return error.Usage;
+    }
+    const db = try store.schema.openReadOnly(c.init.gpa, c.data_dir);
+    defer db.close();
+    var buf: [4096]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(c.init.io, &buf);
+    try status.write(c.arena, db, &stdout.interface, .{ .exact = exact });
+    try stdout.interface.flush();
     return 0;
 }
 
@@ -1327,56 +1338,6 @@ fn newestPatch(arena: std.mem.Allocator, db: store.Db, platforms: []const []cons
     const all = try stats.patches(arena, db, platforms);
     if (all.len == 0) return error.NoMatches;
     return all[0..1];
-}
-
-fn status(gpa: std.mem.Allocator, io: std.Io, data_dir: []const u8) !void {
-    const db = try store.open(gpa, data_dir);
-    defer db.close();
-    var buf: [4096]u8 = undefined;
-    var stdout = std.Io.File.stdout().writer(io, &buf);
-    const out = &stdout.interface;
-    const tables = .{
-        "players",
-        "ladder_pages",
-        "match_queue",
-        "matches",
-        "participants",
-        "bans",
-        "mastery",
-        "champions",
-        "raw.raw_docs",
-        "timeline_queue",
-        "timeline.timelines",
-        "raw.timeline_docs",
-        "drafts",
-        "draft_backfill",
-    };
-    inline for (tables) |t| {
-        try out.print("{s}: {d}\n", .{ t, try db.scalar("SELECT count(*) FROM " ++ t, .{}) orelse 0 });
-    }
-    var q = try db.prepare("SELECT status, count(*) FROM match_queue GROUP BY 1 ORDER BY 1");
-    defer q.deinit();
-    try q.bind(.{});
-    try out.writeAll("queue:");
-    while (try q.step()) try out.print(" {s}={d}", .{ q.bytes(0), q.int(1) });
-    var p = try db.prepare("SELECT patch, count(*) FROM matches GROUP BY 1 ORDER BY 1 DESC LIMIT 6");
-    defer p.deinit();
-    try p.bind(.{});
-    try out.writeAll("\nby patch:");
-    while (try p.step()) try out.print(" {s}={d}", .{ p.bytes(0), p.int(1) });
-    try groups(db, out, "\nby platform:", "SELECT platform, count(*) FROM matches GROUP BY 1 ORDER BY 2 DESC");
-    try groups(db, out, "\ntimelines:", "SELECT region || ' ' || status, count(*) FROM timeline_queue GROUP BY 1 ORDER BY 1");
-    try groups(db, out, "\nplayers:", "SELECT region, count(*) FROM players GROUP BY 1 ORDER BY 2 DESC");
-    try out.writeAll("\n");
-    try out.flush();
-}
-
-fn groups(db: store.Db, out: *std.Io.Writer, label: []const u8, sql: []const u8) !void {
-    var q = try db.prepare(sql);
-    defer q.deinit();
-    try q.bind(.{});
-    try out.writeAll(label);
-    while (try q.step()) try out.print(" {s}={d}", .{ q.bytes(0), q.int(1) });
 }
 
 /// Default log format plus a UTC timestamp, for the crawl log on the box

@@ -57,7 +57,8 @@ Measured 2026-10-11 (8,117 matches, 1.13M players): state 146 MB, segment 23 MB,
 
 1. `bin/meiolol restore --from /mnt/d/meiolol-backups --data data.restored` (refuses a
    directory that already holds a database; `--state FILE` for an older snapshot)
-2. `bin/meiolol status --data data.restored`: compare with what you expect
+2. `bin/meiolol status --exact --data data.restored`: compare with what you expect
+   (without --exact some counts are estimates)
 3. Stop the crawler and loops, `mv data data.broken && mv data.restored data`, copy back
    anything outside the databases (daily/, export/, site/), start again
 

@@ -126,7 +126,11 @@ next steps land here.
   scratch-only, rerun deploy/bench-crawl.sh with --no-mastery for pages/match.
   Before ~2026-11-25 (first matches pass --keep-days 60): per-patch aggregates kept
   forever and Pool learning curves on them, or raise/drop --keep-days. `meiolol status`
-  still counts whole tables and takes the write lock (store.open): slow on the micro.
+  read-only since 2026-10-12 (src/status.zig): no migration or write lock, estimates (~)
+  for players (1/16 PUUID sample, within 0.2%), participants (10 per match), timelines
+  and drafts (rowid range); `--exact` counts every row. On the A1 with the crawler
+  running: 0.3-1.4 s, ~0 writes (was 1.5-5.5 s, 1800 blocks written, and once 478 s
+  waiting on the writer); --exact 1.4-2 s. Next: add rank_history once it lands
   Crawler rework on the A1 (6401336, 5298abe, 2026-10-11 ~20:30Z): slack gate gone (it
   kept the other regions off for ~1.5 h after each restart), EUW first via its region's
   queues and the writer's queue (others wait at half full); RegionCrawler and

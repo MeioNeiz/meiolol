@@ -35,8 +35,16 @@ pub const Db = struct {
     handle: *c.sqlite3,
 
     pub fn open(path: [:0]const u8) Error!Db {
+        return openFlags(path, c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE);
+    }
+
+    /// Attached databases are read-only too
+    pub fn openReadOnly(path: [:0]const u8) Error!Db {
+        return openFlags(path, c.SQLITE_OPEN_READONLY);
+    }
+
+    fn openFlags(path: [:0]const u8, flags: c_int) Error!Db {
         var handle: ?*c.sqlite3 = null;
-        const flags = c.SQLITE_OPEN_READWRITE | c.SQLITE_OPEN_CREATE;
         if (c.sqlite3_open_v2(path.ptr, &handle, flags, null) != c.SQLITE_OK) {
             if (handle) |h| {
                 log.err("open {s}: {s}", .{ path, c.sqlite3_errmsg(h) });

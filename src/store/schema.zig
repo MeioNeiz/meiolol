@@ -265,15 +265,9 @@ pub fn open(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
 pub fn connect(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
     const main_path = try std.fs.path.joinZ(gpa, &.{ dir, "meiolol.db" });
     defer gpa.free(main_path);
-    const raw_path = try std.fs.path.join(gpa, &.{ dir, "raw.db" });
-    defer gpa.free(raw_path);
-    const timeline_path = try std.fs.path.join(gpa, &.{ dir, "timeline.db" });
-    defer gpa.free(timeline_path);
-
     const db = try sqlite.Db.open(main_path);
     errdefer db.close();
-    try db.run("ATTACH DATABASE ? AS raw", .{raw_path});
-    try db.run("ATTACH DATABASE ? AS timeline", .{timeline_path});
+    try attach(gpa, db, dir);
     try db.exec(
         \\PRAGMA main.journal_mode=WAL;
         \\PRAGMA raw.journal_mode=WAL;
@@ -283,6 +277,29 @@ pub fn connect(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
         \\PRAGMA timeline.synchronous=NORMAL;
     );
     return db;
+}
+
+/// As connect, read-only (raw and timeline too) and without the WAL pragmas: never
+/// takes the write lock, so it neither waits on nor stalls the crawler's writer. Expects
+/// an existing database with a current schema
+pub fn openReadOnly(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
+    const main_path = try std.fs.path.joinZ(gpa, &.{ dir, "meiolol.db" });
+    defer gpa.free(main_path);
+    const db = try sqlite.Db.openReadOnly(main_path);
+    errdefer db.close();
+    try attach(gpa, db, dir);
+    // Sorts (GROUP BY without an index) in memory: no temp files on the box's disk
+    try db.exec("PRAGMA query_only=ON; PRAGMA temp_store=MEMORY");
+    return db;
+}
+
+fn attach(gpa: std.mem.Allocator, db: sqlite.Db, dir: []const u8) !void {
+    const raw_path = try std.fs.path.join(gpa, &.{ dir, "raw.db" });
+    defer gpa.free(raw_path);
+    const timeline_path = try std.fs.path.join(gpa, &.{ dir, "timeline.db" });
+    defer gpa.free(timeline_path);
+    try db.run("ATTACH DATABASE ? AS raw", .{raw_path});
+    try db.run("ATTACH DATABASE ? AS timeline", .{timeline_path});
 }
 
 /// Empty in-memory database with every table, for tests
@@ -572,4 +589,23 @@ test "drafts: rows from before minutes go back on the backfill list" {
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM drafts", .{}));
     try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM draft_backfill", .{}));
     try std.testing.expect(try hasColumn(db, "drafts", "minutes"));
+}
+
+test "openReadOnly: every schema read-only, data visible" {
+    const testing = std.testing;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try std.fmt.allocPrint(testing.allocator, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer testing.allocator.free(dir);
+    {
+        const db = try open(testing.allocator, dir);
+        defer db.close();
+        try db.exec("INSERT INTO champions VALUES (1, 'Annie', 'Annie', NULL, '1')");
+    }
+    const db = try openReadOnly(testing.allocator, dir);
+    defer db.close();
+    for ([_][:0]const u8{ "main", "raw", "timeline" }) |name| {
+        try testing.expectEqual(1, sqlite.c.sqlite3_db_readonly(db.handle, name));
+    }
+    try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM champions", .{}));
 }

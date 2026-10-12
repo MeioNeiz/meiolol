@@ -21,6 +21,7 @@ src/
   backup.zig         `meiolol backup|restore`: state snapshots + append-only segments
   forget.zig         `meiolol forget`: GDPR erasure, `forgotten` suppression list
                      (both: docs/data-safety.md)
+  status.zig         `meiolol status`: read-only counts, estimates for big tables
   site/              public website generator (`meiolol site`): html.zig layout and
                      boilerplate, prose.zig fixed pages, static/ (css, draft.js)
   wasm.zig           recommender in the browser (wasm32-freestanding),
