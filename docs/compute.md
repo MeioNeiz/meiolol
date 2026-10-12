@@ -80,17 +80,19 @@ first.
 
 - Sleep (Jacob: awake while busy): done, lab-watch.sh and ~/ml/awake.d (Rules above).
   The archive pull touches a file in ~/ml/awake.d while it has work
-- Reboots (Jacob: task runs logged out): wsl-watchdog.ps1 as a password-stored task,
-  highest privileges. Needs Jacob once in an elevated PowerShell (password); first boot
-  without login still to be seen
+- Reboots (Jacob: task runs logged out): wsl-watchdog task registered 2026-10-12 (S4U,
+  highest privileges), attaches the archive and keeps WSL up; first boot without login
+  still to be seen
 - Reachability alert (done, deploy/health.sh): the box can't reach the PC, so it warns
   when the archive has had no ack for 12 h, and when free disk is under twice the raw it
   holds
 - Archive disk (Jacob: the 1 TB Linux partition): the WSL disk (ext4 vhdx) is on C:,
   261 GB free, shared with Windows and games. The 2 TB NVMe has no Windows letter: Linux
   partitions of 128 GB, 1 TB and 32 GB (an old Linux install?) and ~700 GB unallocated.
-  wsl-watchdog.ps1 attaches the 1 TB one at /mnt/wsl/archive. Look at what is on it
-  before writing; the archive goes in its own directory, nothing deleted without Jacob
+  wsl-watchdog.ps1 attaches the 1 TB one at /mnt/wsl/archive. It was the home of an old
+  Pop!_OS install (jml/, 8.6 GB): Jacob keeps it, so write only in meiolol-raw/ (the
+  archive, owned by jmu). Without the partition that directory is missing and the pull
+  stops
 
 ### 2. Data for models (with meiolol-2a, who owns snapshots)
 

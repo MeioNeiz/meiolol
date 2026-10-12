@@ -358,10 +358,9 @@ next steps land here.
   (detached runs, gpu-box or Mac), League watcher, WSL 24 GB, wsl-watchdog (WSL back in
   ~30 s after a shutdown)
 - Jacob, 2026-10-12: awake while busy (done: lab-watch.sh, ~/ml/awake.d), WSL starts
-  after a reboot without login (wsl-watchdog task, logged out, elevated: Jacob still has
-  to run the snippet with his password, docs/compute.md), archive on the 1 TB Linux
-  partition of the 2 TB NVMe (/mnt/wsl/archive once attached; look at its contents
-  first, nothing deleted without Jacob). Box alert when the gpu-box stops acking the
+  after a reboot without login (wsl-watchdog task, logged out, elevated: registered,
+  first reboot still to be seen), archive on the 1 TB Linux partition of the 2 TB NVMe
+  (/mnt/wsl/archive/meiolol-raw; the rest is an old Pop!_OS home Jacob keeps). Box alert when the gpu-box stops acking the
   archive for 12 h: done (deploy/health.sh)
 - Then: scripted snapshot cadence and packed rows (with 2a), run queue and checkpoints
   (for the lab agent), speed work only after measuring on the full snapshot
