@@ -81,7 +81,9 @@ while true; do
     rm -rf data/site.new
     riot=()
     [[ -s riot.txt ]] && riot=(--riot-txt "$(<riot.txt)")
+    site_start=$SECONDS
     if out=$(bin/meiolol site --contact "$contact" --out data/site.new "${riot[@]}" 2>&1); then
+        site_s=$(( SECONDS - site_start ))
         # First patch line, EUW: "data/site.new/patch/: patch 16.20, 1054 games, ..."
         read -r patch games < <(sed -nE 's/.*: patch ([^,]+), ([0-9]+) games.*/\1 \2/p' \
             <<< "$out")
@@ -90,8 +92,15 @@ while true; do
             || (( games > last_games && now - last_upload >= 3600 )) \
             || (( fresh_curves || forced )); then
             echo "$out"
-            rsync -rlpD --checksum --delete data/site.new/ data/site/
-            if rsync -az --delete-delay --delay-updates --exclude /admin/ data/site/ meiolol-web:./; then
+            t=$SECONDS
+            changed=$(rsync -rlpD --checksum --delete --stats data/site.new/ data/site/ \
+                | sed -nE 's/^Number of regular files transferred: ([0-9,]+)/\1/p')
+            copy_s=$(( SECONDS - t )) t=$SECONDS
+            if stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --stats \
+                data/site/ meiolol-web:./); then
+                sent=$(sed -nE 's/^Total bytes sent: ([0-9,]+)/\1/p' <<< "$stats")
+                echo "$(date -u +%FT%TZ) upload: site ${site_s}s, copy ${copy_s}s" \
+                    "(${changed:-?} files changed), send $(( SECONDS - t ))s (${sent:-?} bytes)"
                 echo "$(date -u +%FT%TZ) uploaded"
                 last_patch=$patch last_games=$games last_upload=$now fresh_curves=0
             fi
