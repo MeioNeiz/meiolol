@@ -172,96 +172,148 @@ const insert_participant = blk: {
         ") ON CONFLICT (match_id, slot) DO UPDATE SET " ++ sets;
 };
 
-/// Replace this match's rows. Caller holds the transaction.
+/// Replace this match's rows, with statements prepared for one call. Caller holds the
+/// transaction
 pub fn storeRows(db: store.Db, doc: Doc, source: []const u8) !void {
-    const info = doc.info;
-    const id = doc.metadata.matchId;
-    // Before Oct 2021 gameDuration was milliseconds and gameEndTimestamp absent
-    const duration = if (info.gameEndTimestamp == null) @divTrunc(info.gameDuration, 1000) else info.gameDuration;
+    var rows: Rows = try .init(db);
+    defer rows.deinit();
+    try rows.write(doc, source, try rows.exists(doc.metadata.matchId));
+}
 
-    var winner: ?i64 = null;
-    var winners: usize = 0;
-    for (info.teams) |t| if (t.win) {
-        winner = t.teamId;
-        winners += 1;
-    };
-    if (winners != 1) winner = null;
-    const remake = isRemake(doc);
+/// storeRows' statements, prepared once for callers storing many matches
+pub const Rows = struct {
+    has_rows: store.Stmt,
+    trim: store.Stmt,
+    unban: store.Stmt,
+    match: store.Stmt,
+    participant: store.Stmt,
+    snapshot: store.Stmt,
+    ban: store.Stmt,
 
-    const platform_id = info.platformId orelse id[0 .. std.mem.indexOfScalar(u8, id, '_') orelse id.len];
-    const existed = (try db.scalar("SELECT count(*) FROM participants WHERE match_id = ?", .{id}) orelse 0) > 0;
-    try db.run("DELETE FROM participants WHERE match_id = ? AND slot >= ?", .{ id, info.participants.len });
-    try db.run("DELETE FROM bans WHERE match_id = ?", .{id});
-    try db.run("INSERT OR REPLACE INTO matches VALUES (?,?,?,?,?,?,?,?,?,?)", .{
-        id,                                               source,                    platform_id,
-        info.queueId,                                     patchOf(info.gameVersion), info.gameVersion,
-        info.gameStartTimestamp orelse info.gameCreation, duration,                  winner,
-        remake,
-    });
-
-    var ins = try db.prepare(insert_participant);
-    defer ins.deinit();
-    for (info.participants, 0..) |p, slot| {
-        const r = p.runes();
-        const cs = (p.totalMinionsKilled orelse 0) + (p.neutralMinionsKilled orelse 0);
-        try ins.exec(.{
-            id,
-            slot,
-            p.teamId,
-            p.puuid,
-            p.championId,
-            nonEmpty(p.teamPosition),
-            nonEmpty(p.individualPosition),
-            p.win,
-            p.kills,
-            p.deaths,
-            p.assists,
-            p.goldEarned,
-            p.totalDamageDealtToChampions,
-            p.totalDamageTaken,
-            p.visionScore,
-            cs,
-            p.champLevel,
-            p.summoner1Id,
-            p.summoner2Id,
-            r.perks[0],
-            r.secondary_style,
-            p.item0,
-            p.item1,
-            p.item2,
-            p.item3,
-            p.item4,
-            p.item5,
-            p.item6,
-            r.primary_style,
-            r.perks[1],
-            r.perks[2],
-            r.perks[3],
-            r.perks[4],
-            r.perks[5],
-            r.shards[0],
-            r.shards[1],
-            r.shards[2],
-        });
-    }
-    if (!existed) try db.run(
+    const sql = .{
+        .has_rows = "SELECT EXISTS (SELECT 1 FROM participants WHERE match_id = ?)",
+        .trim = "DELETE FROM participants WHERE match_id = ? AND slot >= ?",
+        .unban = "DELETE FROM bans WHERE match_id = ?",
+        .match = "INSERT OR REPLACE INTO matches VALUES (?,?,?,?,?,?,?,?,?,?)",
+        .participant = insert_participant,
+        .snapshot =
         \\UPDATE participants SET (tier, division) =
         \\    (SELECT tier, division FROM players p WHERE p.puuid = participants.puuid)
         \\WHERE match_id = ?
-    , .{id});
-
-    var ban = try db.prepare("INSERT INTO bans VALUES (?,?,?,?)");
-    defer ban.deinit();
-    for (info.teams) |t| for (t.bans) |b| {
-        if (b.championId > 0) try ban.exec(.{ id, t.teamId, b.pickTurn, b.championId });
+        ,
+        .ban = "INSERT INTO bans VALUES (?,?,?,?)",
     };
-}
+    const names = @typeInfo(Rows).@"struct".field_names;
+
+    pub fn init(db: store.Db) !Rows {
+        var r: Rows = undefined;
+        var done: usize = 0;
+        errdefer inline for (names, 0..) |name, i| {
+            if (i < done) @field(r, name).deinit();
+        };
+        inline for (names) |name| {
+            @field(r, name) = try db.prepare(@field(sql, name));
+            done += 1;
+        }
+        return r;
+    }
+
+    pub fn deinit(r: *Rows) void {
+        inline for (names) |name| @field(r, name).deinit();
+    }
+
+    /// The match has participant rows already
+    pub fn exists(r: *Rows, id: []const u8) !bool {
+        try r.has_rows.bind(.{id});
+        defer r.has_rows.reset();
+        return try r.has_rows.step() and r.has_rows.int(0) == 1;
+    }
+
+    /// Replace this match's rows. Caller holds the transaction. `existed`: stored
+    /// before, so its rank snapshot stays
+    pub fn write(rows: *Rows, doc: Doc, source: []const u8, existed: bool) !void {
+        const info = doc.info;
+        const id = doc.metadata.matchId;
+        // Before Oct 2021 gameDuration was milliseconds and gameEndTimestamp absent
+        const duration = if (info.gameEndTimestamp == null) @divTrunc(info.gameDuration, 1000) else info.gameDuration;
+
+        var winner: ?i64 = null;
+        var winners: usize = 0;
+        for (info.teams) |t| if (t.win) {
+            winner = t.teamId;
+            winners += 1;
+        };
+        if (winners != 1) winner = null;
+        const remake = isRemake(doc);
+
+        const platform_id = info.platformId orelse id[0 .. std.mem.indexOfScalar(u8, id, '_') orelse id.len];
+        try rows.trim.exec(.{ id, info.participants.len });
+        try rows.unban.exec(.{id});
+        try rows.match.exec(.{
+            id,                                               source,                    platform_id,
+            info.queueId,                                     patchOf(info.gameVersion), info.gameVersion,
+            info.gameStartTimestamp orelse info.gameCreation, duration,                  winner,
+            remake,
+        });
+
+        for (info.participants, 0..) |p, slot| {
+            const r = p.runes();
+            const cs = (p.totalMinionsKilled orelse 0) + (p.neutralMinionsKilled orelse 0);
+            try rows.participant.exec(.{
+                id,
+                slot,
+                p.teamId,
+                p.puuid,
+                p.championId,
+                nonEmpty(p.teamPosition),
+                nonEmpty(p.individualPosition),
+                p.win,
+                p.kills,
+                p.deaths,
+                p.assists,
+                p.goldEarned,
+                p.totalDamageDealtToChampions,
+                p.totalDamageTaken,
+                p.visionScore,
+                cs,
+                p.champLevel,
+                p.summoner1Id,
+                p.summoner2Id,
+                r.perks[0],
+                r.secondary_style,
+                p.item0,
+                p.item1,
+                p.item2,
+                p.item3,
+                p.item4,
+                p.item5,
+                p.item6,
+                r.primary_style,
+                r.perks[1],
+                r.perks[2],
+                r.perks[3],
+                r.perks[4],
+                r.perks[5],
+                r.shards[0],
+                r.shards[1],
+                r.shards[2],
+            });
+        }
+        if (!existed) try rows.snapshot.exec(.{id});
+
+        for (info.teams) |t| for (t.bans) |b| {
+            if (b.championId > 0) try rows.ban.exec(.{ id, t.teamId, b.pickTurn, b.championId });
+        };
+    }
+};
 
 /// Re-parse every raw summary still kept into the normalised tables, after a parser or
 /// schema change. Returns how many were stored
 pub fn rebuild(gpa: std.mem.Allocator, db: store.Db) !usize {
     var q = try db.prepare("SELECT key, body FROM raw.raw_docs WHERE source = 'riot_match'");
     defer q.deinit();
+    var rows: Rows = try .init(db);
+    defer rows.deinit();
     var stored: usize = 0;
     try db.begin();
     errdefer db.rollback();
@@ -274,7 +326,7 @@ pub fn rebuild(gpa: std.mem.Allocator, db: store.Db) !usize {
             std.log.warn("match {s} did not parse: {t}", .{ r.key, err });
             continue;
         };
-        try storeRows(db, doc, "riot");
+        try rows.write(doc, "riot", try rows.exists(doc.metadata.matchId));
         stored += 1;
         if (stored % 1000 == 0) {
             try db.commit();

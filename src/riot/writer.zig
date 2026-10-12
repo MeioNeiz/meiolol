@@ -345,7 +345,7 @@ pub const Writer = struct {
                 q.found = @intCast(db.totalChanges() - before);
             },
             .checked => |ch| try s.checked.exec(.{ ch.t, ch.puuid }),
-            .match => |m| try wr.storeMatch(db, s, m.region, m.id, m.doc, m.raw, m.t, m.timeline),
+            .match => |m| try wr.storeMatch(s, m.region, m.id, m.doc, m.raw, m.t, m.timeline),
             .timeline => |t| try wr.storeTimeline(s, t.id, t.raw, t.compact, t.t),
             .queue => |q| switch (q.which) {
                 .match => switch (q.status) {
@@ -360,16 +360,22 @@ pub const Writer = struct {
         }
     }
 
-    fn storeMatch(wr: *Writer, db: store.Db, s: *Stmts, r: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64, want_timeline: bool) !void {
-        const stored_id = doc.metadata.matchId;
-        const existed = try s.exists(stored_id);
+    fn storeMatch(wr: *Writer, s: *Stmts, r: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64, want_timeline: bool) !void {
+        // Rows are keyed by the document's id and the queue by the requested one: were
+        // they to differ, blanking and forget would miss the rows. Never seen; fail it
+        if (!std.mem.eql(u8, doc.metadata.matchId, id)) {
+            log.warn("match {s} came back as {s}", .{ id, doc.metadata.matchId });
+            try s.match_status.exec(.{ "failed", id });
+            return;
+        }
+        const existed = try s.exists(id);
         var any_forgotten = false;
         for (doc.info.participants) |p| {
             if (p.puuid) |puuid| any_forgotten = any_forgotten or try s.isForgotten(puuid);
         }
         // The raw JSON names every player, so none is kept for a forgotten one's match
         if (!any_forgotten) try s.raw_doc.exec(.{ "riot_match", id, t, store.Blob{ .bytes = raw } });
-        try match.storeRows(db, doc, "riot");
+        try s.rows.write(doc, "riot", existed);
         const platform = doc.info.platformId orelse if (ep.platformOf(id)) |p| p.id else null;
         for (doc.info.participants, 0..) |p, slot| {
             const puuid = p.puuid orelse continue;
@@ -389,7 +395,7 @@ pub const Writer = struct {
         }
         // After the ranks above. Once per match: a re-stored one has its row already,
         // unless it still awaits the backfill
-        if (!existed or try s.drafts.taken(stored_id)) _ = try s.drafts.write(stored_id);
+        if (!existed or try s.drafts.taken(id)) _ = try s.drafts.write(id);
         if (want_timeline and !match.isRemake(doc) and wr.c.wantTimeline(id)) try s.timeline_queue.exec(.{ id, @tagName(r), t });
         try s.match_done.exec(.{id});
     }
@@ -422,12 +428,17 @@ fn truncateWal(db: store.Db) !bool {
     return try s.step() and s.int(0) == 0;
 }
 
-/// The writer's connection: the only one that needs a big page cache. The WAL file
-/// keeps its high-water size, so cap it: a burst must not leave a huge file every
-/// reader searches
+/// The writer's connection: the only one that needs a big page cache, and a quarter of
+/// it each for raw and timeline (blobs written once; their indexes are what stays hot).
+/// The WAL file keeps its high-water size, so cap it: a burst must not leave a huge file
+/// every reader searches
 fn tune(db: store.Db, cache_mb: u32) !void {
     var buf: [64]u8 = undefined;
     try db.exec(try std.mem.printSentinel(&buf, "PRAGMA main.cache_size = -{d}", .{cache_mb * 1024}, 0));
+    inline for (.{ "raw", "timeline" }) |schema| {
+        const sql = "PRAGMA " ++ schema ++ ".cache_size = -{d}";
+        try db.exec(try std.mem.printSentinel(&buf, sql, .{cache_mb * 256}, 0));
+    }
     try db.exec(
         \\PRAGMA main.journal_size_limit = 67108864;
         \\PRAGMA raw.journal_size_limit = 67108864;
@@ -443,12 +454,16 @@ const Prune = struct {
     next: usize = steps.len,
     started_at: i64 = 0,
     total: i64 = 0,
+    /// Per step: a cutoff it last finished at, less a day for late-stored matches. 0
+    /// after a restart, so the first round walks everything once
+    since: [steps.len]i64 = @splat(0),
 
     const Step = struct {
         what: []const u8,
         days: union(enum) { raw_timeline, raw_match, keep, fixed: u32 },
-        /// Removes one chunk older than the cutoff (unix seconds); returns how many
-        run: *const fn (db: store.Db, cutoff: i64) store.sqlite.Error!i64,
+        /// Removes one chunk older than the cutoff (unix seconds); returns how many.
+        /// Rows older than `since` were done in an earlier round
+        run: *const fn (db: store.Db, since: i64, cutoff: i64) store.sqlite.Error!i64,
     };
 
     const steps = [_]Step{
@@ -477,26 +492,37 @@ const Prune = struct {
             \\DELETE FROM mastery WHERE puuid IN
             \\    (SELECT puuid FROM mastery WHERE fetched_at < ? LIMIT 500)
         ) },
-        // Privacy policy: matches older than 24 months keep no PUUIDs
-        .{ .what = "PUUIDs of old matches", .days = .{ .fixed = 730 }, .run = chunk(
+        // Privacy policy: matches older than 24 months keep no PUUIDs. From `since`: with
+        // a long keep window each chunk would re-walk every match already blanked
+        .{ .what = "PUUIDs of old matches", .days = .{ .fixed = 730 }, .run = chunkSince(
             \\UPDATE participants SET puuid = NULL WHERE (match_id, slot) IN
             \\    (SELECT p.match_id, p.slot FROM matches m JOIN participants p USING (match_id)
-            \\     WHERE m.game_start < ? * 1000 AND p.puuid IS NOT NULL LIMIT 2000)
+            \\     WHERE m.game_start >= ? * 1000 AND m.game_start < ? * 1000
+            \\         AND p.puuid IS NOT NULL LIMIT 2000)
         ) },
         .{ .what = "matches past the window", .days = .keep, .run = oldMatches },
     };
 
-    fn chunk(comptime sql: []const u8) *const fn (store.Db, i64) store.sqlite.Error!i64 {
+    fn chunk(comptime sql: []const u8) *const fn (store.Db, i64, i64) store.sqlite.Error!i64 {
         return struct {
-            fn run(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
+            fn run(db: store.Db, _: i64, cutoff: i64) store.sqlite.Error!i64 {
                 try db.run(sql, .{cutoff});
                 return db.changes();
             }
         }.run;
     }
 
+    fn chunkSince(comptime sql: []const u8) *const fn (store.Db, i64, i64) store.sqlite.Error!i64 {
+        return struct {
+            fn run(db: store.Db, since: i64, cutoff: i64) store.sqlite.Error!i64 {
+                try db.run(sql, .{ since, cutoff });
+                return db.changes();
+            }
+        }.run;
+    }
+
     /// A chunk of ids into a temp table, then every table's rows for them
-    fn unseenPlayers(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
+    fn unseenPlayers(db: store.Db, _: i64, cutoff: i64) store.sqlite.Error!i64 {
         try db.exec("DELETE FROM temp.gone");
         try db.run("INSERT INTO temp.gone SELECT puuid FROM players WHERE seen_at < ? LIMIT 500", .{cutoff});
         const n = db.changes();
@@ -509,7 +535,7 @@ const Prune = struct {
 
     /// A twenty-fourth of the key space per hourly round (ranks has no seen_day index:
     /// it would cost a random write per row), so the whole table is swept daily
-    fn unseenRanks(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
+    fn unseenRanks(db: store.Db, _: i64, cutoff: i64) store.sqlite.Error!i64 {
         const keys = KeySlice.of(cutoff, 24);
         try db.run(
             \\DELETE FROM ranks WHERE key IN (SELECT key FROM ranks
@@ -520,7 +546,7 @@ const Prune = struct {
 
     /// Swept weekly (a 168th of the key space an hour): it reads every row in its slice
     /// and has nothing to delete for the first two years
-    fn oldRankHistory(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
+    fn oldRankHistory(db: store.Db, _: i64, cutoff: i64) store.sqlite.Error!i64 {
         const keys = KeySlice.of(cutoff, 168);
         try db.run(
             \\DELETE FROM rank_history WHERE key IN (SELECT key FROM rank_history
@@ -542,7 +568,7 @@ const Prune = struct {
         }
     };
 
-    fn oldMatches(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
+    fn oldMatches(db: store.Db, _: i64, cutoff: i64) store.sqlite.Error!i64 {
         try db.exec("DELETE FROM temp.gone");
         // Not those the draft backfill has yet to read
         try db.run(
@@ -585,10 +611,12 @@ const Prune = struct {
         const days = cutoffDays(s, opts) orelse return p.advance();
         try db.begin();
         errdefer db.rollback();
-        const n = try s.run(db, now - @as(i64, days) * 86400);
+        const cutoff = now - @as(i64, days) * 86400;
+        const n = try s.run(db, p.since[p.next], cutoff);
         try db.commit();
         p.total += n;
         if (n == 0) {
+            p.since[p.next] = cutoff - 86400;
             if (p.total > 0) log.info("pruned {d} {s}", .{ p.total, s.what });
             p.advance();
         }
@@ -634,6 +662,7 @@ const Stmts = struct {
     timeline_done: store.Stmt,
     timeline_attempt: store.Stmt,
     match_exists: store.Stmt,
+    rows: match.Rows,
     drafts: store.draft.Builder,
 
     const sql = .{
@@ -727,6 +756,8 @@ const Stmts = struct {
         var s: Stmts = undefined;
         s.drafts = try .init(db);
         errdefer s.drafts.deinit();
+        s.rows = try .init(db);
+        errdefer s.rows.deinit();
         var done: usize = 0;
         errdefer inline for (stmt_names, 0..) |name, i| {
             if (i < done) @field(s, name).deinit();
@@ -740,11 +771,12 @@ const Stmts = struct {
 
     fn deinit(s: *Stmts) void {
         inline for (stmt_names) |name| @field(s, name).deinit();
+        s.rows.deinit();
         s.drafts.deinit();
     }
 
-    /// Every field but drafts
-    const stmt_names = @typeInfo(Stmts).@"struct".field_names[0 .. @typeInfo(Stmts).@"struct".field_names.len - 1];
+    /// Every field but rows and drafts
+    const stmt_names = @typeInfo(Stmts).@"struct".field_names[0 .. @typeInfo(Stmts).@"struct".field_names.len - 2];
 
     fn exists(s: *Stmts, match_id: []const u8) !bool {
         try s.match_exists.bind(.{match_id});
@@ -995,7 +1027,7 @@ test "rank history goes 24 months after the player's newest row" {
     // A week of hourly rounds sweeps every key
     for (0..168) |h| {
         const cutoff = (day - 1) * std.time.s_per_day + @as(i64, @intCast(h)) * 3600;
-        while (try Prune.oldRankHistory(db, cutoff) > 0) {}
+        while (try Prune.oldRankHistory(db, 0, cutoff) > 0) {}
     }
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM rank_history WHERE key = ?", .{k("gone")}));
     try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM rank_history", .{}));
