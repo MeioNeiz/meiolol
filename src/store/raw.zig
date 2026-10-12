@@ -11,10 +11,18 @@ const zstd_magic = "\x28\xb5\x2f\xfd";
 const gzip_magic = "\x1f\x8b";
 
 pub fn compress(gpa: Allocator, data: []const u8) ![]u8 {
+    const window = try gpa.alloc(u8, window_len);
+    defer gpa.free(window);
+    return compressWith(gpa, window, data);
+}
+
+pub const window_len = flate.max_window_len;
+
+/// As compress, with a window of window_len the caller reuses across calls: a fresh one
+/// per call is most of the cost of compressing many small files
+pub fn compressWith(gpa: Allocator, window: []u8, data: []const u8) ![]u8 {
     var out: std.Io.Writer.Allocating = try .initCapacity(gpa, @max(64, data.len / 4));
     errdefer out.deinit();
-    const window = try gpa.alloc(u8, flate.max_window_len);
-    defer gpa.free(window);
     var c = try flate.Compress.init(&out.writer, window, .gzip, .default);
     try c.writer.writeAll(data);
     try c.finish();

@@ -32,8 +32,8 @@ const Key = struct {
 const Cell = struct {
     games: u32 = 0,
     wins: u32 = 0,
-    /// Games with both players' gold at 14 (timeline stored), the difference's sum and
-    /// sum of squares, for its mean and standard error
+    /// Games with both players' gold at 14 and a frame after it (as learning.goldMap),
+    /// the difference's sum and sum of squares, for its mean and standard error
     gold_n: u32 = 0,
     gold_sum: i64 = 0,
     gold_sq: i64 = 0,
@@ -66,7 +66,8 @@ pub fn write(site: *const root.Site, db: store.Db, opts: root.Options) !void {
     const patch_json = try std.json.Stringify.valueAlloc(a, opts.patches, .{});
     var q = try db.prepare(
         \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, m.platform,
-        \\  p.team_id, p.position, p.champion_id, p.tier, p.gold14
+        \\  p.team_id, p.position, p.champion_id, p.tier,
+        \\  CASE WHEN p.gold15 IS NULL THEN NULL ELSE p.gold14 END
         \\FROM matches m JOIN participants p USING (match_id)
         \\WHERE m.queue_id = ? AND m.platform IN (SELECT value FROM json_each(?))
         \\  AND m.remake = 0 AND m.winning_team IS NOT NULL

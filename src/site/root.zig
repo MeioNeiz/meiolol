@@ -106,6 +106,8 @@ pub const Site = struct {
     view_builds: *const [html.View.count]?builds.File,
     pool: pool.Pool = .{},
     learning: learning.Learning = .{},
+    /// Gzip window shared by every file written (store.raw.compressWith)
+    gz_window: []u8,
 
     /// A page of the view at `path` within it
     pub fn page(s: *const Site, title: []const u8, description: []const u8, path: []const u8, nav: html.Nav) html.Page {
@@ -156,7 +158,7 @@ pub const Site = struct {
         if (std.fs.path.dirname(path)) |d| try dir.createDirPath(s.io, d);
         try dir.writeFile(s.io, .{ .sub_path = path, .data = data });
         if (data.len < 1024) return;
-        const gz = try store.raw.compress(s.gpa, data);
+        const gz = try store.raw.compressWith(s.gpa, s.gz_window, data);
         defer s.gpa.free(gz);
         const gz_path = try std.fmt.allocPrint(s.arena, "{s}.gz", .{path});
         try dir.writeFile(s.io, .{ .sub_path = gz_path, .data = gz });
@@ -198,7 +200,9 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     try cwd.createDirPath(io, opts.out_dir);
     var root_dir = try cwd.openDir(io, opts.out_dir, .{});
     defer root_dir.close(io);
-    for (html.View.all) |v| try generateView(gpa, io, db, opts, v, root_dir, &view_curves, &view_builds);
+    const gz_window = try gpa.alloc(u8, store.raw.window_len);
+    defer gpa.free(gz_window);
+    for (html.View.all) |v| try generateView(gpa, io, db, opts, v, root_dir, &view_curves, &view_builds, gz_window);
 }
 
 fn generateView(
@@ -210,6 +214,7 @@ fn generateView(
     root_dir: std.Io.Dir,
     view_curves: *const [html.View.count]?core.curvesfile.Curves,
     view_builds: *const [html.View.count]?builds.File,
+    gz_window: []u8,
 ) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -264,6 +269,7 @@ fn generateView(
         .curves = view_curves[view.index()],
         .view_curves = view_curves,
         .view_builds = view_builds,
+        .gz_window = gz_window,
     };
     try loadChamps(&site, db);
 

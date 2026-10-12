@@ -109,66 +109,37 @@ pub fn reach(b: [bin_count]Bin, opts: Options) ?usize {
     return null;
 }
 
-/// Lane gold difference at gold_minute per participant slot, from match timelines
+/// Lane gold difference at gold_minute per participant slot, from the gold columns the
+/// crawler fills from each timeline (riot/crawl.zig goldAt)
 const GoldMap = std.StringHashMapUnmanaged([10]?i32);
 
+/// Lane opponent: same position, other team. Both need a frame after gold_minute
+/// (gold15 set): the last frame is the game's end, part of a minute
 fn goldMap(arena: Allocator, db: store.Db, platform_json: []const u8) !GoldMap {
     var map: GoldMap = .empty;
     var q = try db.prepare(
-        \\SELECT m.match_id, t.data
-        \\FROM matches m JOIN timeline.timelines t USING (match_id)
+        \\SELECT p.match_id, p.slot, p.gold14 - o.gold14
+        \\FROM matches m JOIN participants p USING (match_id)
+        \\JOIN participants o ON o.match_id = p.match_id AND o.position = p.position
+        \\  AND o.team_id != p.team_id
         \\WHERE m.queue_id = ? AND m.remake = 0
         \\  AND m.platform IN (SELECT value FROM json_each(?))
+        \\  AND p.position IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY')
+        \\  AND p.gold15 IS NOT NULL AND o.gold15 IS NOT NULL
     );
     defer q.deinit();
     try q.bind(.{ stats.ranked_solo, platform_json });
-    var players = try db.prepare("SELECT slot, team_id, position FROM participants WHERE match_id = ?");
-    defer players.deinit();
-
-    var scratch_state: std.heap.ArenaAllocator = .init(arena);
-    defer scratch_state.deinit();
-    var skipped: usize = 0;
     while (try q.step()) {
-        _ = scratch_state.reset(.retain_capacity);
-        const scratch = scratch_state.allocator();
-        const t = blk: {
-            const json = store.raw.decompress(scratch, q.bytes(1)) catch break :blk null;
-            break :blk timeline.decode(scratch, json) catch null;
-        } orelse {
-            skipped += 1;
-            continue;
-        };
-        try players.bind(.{q.bytes(0)});
-        var slots: [2][Role.count]?u8 = @splat(@splat(null));
-        while (try players.step()) {
-            const side: usize = if (players.int(1) == 100) 0 else 1;
-            const r = Role.fromLcu(players.bytes(2)) orelse continue;
-            const slot = players.int(0);
-            if (slot < 0 or slot >= 10) continue;
-            slots[side][@intFromEnum(r)] = @intCast(slot);
+        const slot = q.int(1);
+        if (slot < 0 or slot >= 10) continue;
+        const e = try map.getOrPut(arena, q.bytes(0));
+        if (!e.found_existing) {
+            e.key_ptr.* = try arena.dupe(u8, q.bytes(0));
+            e.value_ptr.* = @splat(null);
         }
-        try map.put(arena, try arena.dupe(u8, q.bytes(0)), laneGold(t, slots));
+        e.value_ptr[@intCast(slot)] = @intCast(q.int(2));
     }
-    if (skipped > 0) log.warn("{d} timelines did not decode", .{skipped});
     return map;
-}
-
-/// Each laner's total gold minus their lane opponent's at gold_minute; null without
-/// an opponent or when the game ended before it
-fn laneGold(t: timeline.Timeline, slots: [2][Role.count]?u8) [10]?i32 {
-    var out: [10]?i32 = @splat(null);
-    // Frame k is minute k; the last frame is the game's end, part of a minute
-    if (t.frames.len < gold_minute + 2) return out;
-    const f = t.frames[gold_minute];
-    for (0..Role.count) |r| {
-        const a = slots[0][r] orelse continue;
-        const b = slots[1][r] orelse continue;
-        if (a >= t.participants or b >= t.participants) continue;
-        const d = f.get(a + 1, .total_gold) - f.get(b + 1, .total_gold);
-        out[a] = d;
-        out[b] = -d;
-    }
-    return out;
 }
 
 /// Every ranked solo game of players whose match history was crawled, on
@@ -327,7 +298,7 @@ test "bins and reach" {
     try testing.expectEqual(0, reach(easy, opts).?);
 }
 
-test "history: game number per player and champion, lane gold from timelines" {
+test "history: game number per player and champion, lane gold from the gold columns" {
     const gpa = testing.allocator;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -335,7 +306,6 @@ test "history: game number per player and champion, lane gold from timelines" {
 
     const json = try store.raw.decompress(arena, @embedFile("riot/testdata/timeline.json.gz"));
     const tl = try timeline.fromJson(arena, json);
-    const blob = try store.raw.compress(arena, try timeline.encode(arena, tl));
     const db = try store.schema.memory();
     defer db.close();
     try db.exec(
@@ -348,10 +318,6 @@ test "history: game number per player and champion, lane gold from timelines" {
     for (0..7) |g| {
         const id = try std.fmt.allocPrint(arena, "EUW1_{d}", .{g});
         try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',?,1600,100,0)", .{ id, g });
-        if (g == 0) {
-            const data: store.Blob = .{ .bytes = blob };
-            try db.run("INSERT INTO timeline.timelines VALUES (?,26,0,?)", .{ id, data });
-        }
         for (0..10) |slot| {
             const team: i64 = if (slot < 5) 100 else 200;
             const who: []const u8 = if (slot == 0) "me" else if (slot == 5) "you" else "other";
@@ -360,6 +326,10 @@ test "history: game number per player and champion, lane gold from timelines" {
                 \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position, win)
                 \\VALUES (?,?,?,?,?,?,?)
             , .{ id, slot, team, who, champ, positions[slot % 5], team == 100 });
+            // Game 0 has a timeline: the crawler's gold columns from its frames
+            if (g == 0) try db.run("UPDATE participants SET gold14 = ?, gold15 = ? WHERE match_id = ? AND slot = ?", .{
+                tl.frames[14].get(@intCast(slot + 1), .total_gold), tl.frames[15].get(@intCast(slot + 1), .total_gold), id, slot,
+            });
         }
     }
 
