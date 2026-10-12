@@ -327,6 +327,11 @@ next steps land here.
   (meiolol-3c: `meiolol raw-export`, salted-hash pseudonymised, pull timer with acks,
   prune after ack, forget coverage) must be live within ~3 weeks. No study window yet.
   Privacy draft (30 days) needs updating to match (meiolol-83)
+- Result (meiolol-3c, docs/model.md "Team effects on early outcomes"): enemy and ally
+  champions shift gold@14, lane diff, CS@10, deaths before 15 and first item
+  additively, clear of 0; champion-specific team interactions (by class or champion)
+  not detectable at 118k games. Site can show lane matchup + sum of enemy effects, not
+  team counters. Next: 2a's embeddings vs 3c-team; 3c items, objectives, raw archive
 - Experience term (src/experience.zig): rerun at 300+ train / 100+ test per variant; if
   "user only" beats no-experience beyond its interval, wire it into recommend() as the
   "your pool" reason (wasm `pool` field). Mastery is a post-match snapshot and flatters
