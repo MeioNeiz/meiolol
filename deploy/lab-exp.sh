@@ -16,6 +16,8 @@
 #   deploy/lab-exp.sh stop CAMPAIGN REASON         flag for a human: nothing real left
 #   deploy/lab-exp.sh final CAMPAIGN TARGET [N]    humans only: test score of the last N
 #                                                  (default 3) selection winners
+#   deploy/lab-exp.sh preds CAMPAIGN               humans only: test-row predictions (no
+#                                                  scores) to RUN/preds.tsv, to check a port
 #
 # TARGET: win gold14 lanediff14 cs10 deaths15 first_item. Env: LAB_HOST (gpu-box),
 # LAB_SNAP (snap-20261012T2055Z, in ~/ml/snaps on the host), LAB_BUDGET_S (600 s of
@@ -46,7 +48,7 @@ on() {
 }
 
 usage() {
-    sed -n '7,20p' "$0"
+    sed -n '7,22p' "$0"
     exit 2
 }
 
@@ -156,7 +158,8 @@ case "$cmd" in
             exit 1
         fi
         ;;
-    screen|diagnose)
+    screen|diagnose|preds)
+        [[ "$cmd" == preds ]] && set -- "${1:-}" win
         (( $# == 2 )) || usage
         campaign=$1 target=$2
         dir=$(campaign_dir "$campaign")

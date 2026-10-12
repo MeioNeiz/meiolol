@@ -44,6 +44,7 @@ settings() {
     ],
     "deny": [
       "Bash($ROOT/deploy/lab-exp.sh final*)",
+      "Bash($ROOT/deploy/lab-exp.sh preds*)",
       "Bash(git *)",
       "Bash(ssh *)",
       "Bash(scp *)",

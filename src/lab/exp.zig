@@ -24,11 +24,14 @@ pub const usage =
     \\                                  its residuals by covariate (lab/search.zig)
     \\  exp final SNAP CAMPAIGN TARGET [--lab DIR] [--run ID]
     \\                                  test score, once per campaign: humans only
+    \\  exp preds SNAP CAMPAIGN TARGET  the candidate's test-row predictions, no outcomes
+    \\                                  or scores (preds.tsv), to check a port against
+    \\                                  its original's prediction file
     \\
 ;
 
 const Args = struct {
-    cmd: enum { run, final, screen, diagnose },
+    cmd: enum { run, final, screen, diagnose, preds },
     snap: []const u8,
     campaign: []const u8,
     target: api.Outcome,
@@ -70,6 +73,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, home: ?[]c
         .final => try final(gpa, arena, io, &data, ranks, c, args, dir, w),
         .screen => try search.screen(cand, gpa, &data, ranks, c, api.outcomeIndex(args.target), w),
         .diagnose => try search.diagnose(cand, gpa, &data, ranks, c, api.outcomeIndex(args.target), w),
+        .preds => try testPreds(gpa, io, &data, ranks, c, w),
     }
     try w.flush();
     return 0;
@@ -272,6 +276,24 @@ fn writePreds(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, s: *const har
         }
     }
     try w.flush();
+}
+
+fn testPreds(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, ranks: []const [2][5]?u8, c: harness.Cuts, w: *Io.Writer) !void {
+    var s = try harness.score(cand, gpa, d, ranks, c, .final, 1);
+    defer s.deinit(gpa);
+    var file = try Io.Dir.cwd().createFile(io, "preds.tsv", .{});
+    defer file.close(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var fw = file.writer(io, &buf);
+    try fw.interface.writeAll("match_id\tslot\toutcome\tpred\n");
+    for (s.row, s.cand) |ri, pred| {
+        const r = d.rows[ri];
+        for (pred, 0..) |p, k| try fw.interface.print("{s}\t{d}\t{t}\t{d:.4}\n", .{
+            d.games[r.game].match_id, r.slot, api.outcomeAt(k), p,
+        });
+    }
+    try fw.interface.flush();
+    try w.print("RESULT preds rows={d} file=preds.tsv\n", .{s.row.len});
 }
 
 fn countLines(gpa: std.mem.Allocator, io: Io, path: []const u8) !usize {
