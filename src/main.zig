@@ -17,6 +17,7 @@ pub const pool = @import("pool.zig");
 pub const learning = @import("learning.zig");
 pub const patchday = @import("patchday.zig");
 pub const eval = @import("eval.zig");
+pub const outcomes = @import("outcomes.zig");
 pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
 pub const forget = @import("forget.zig");
@@ -110,6 +111,13 @@ const usage =
     \\                               alone with every --platform pooled
     \\              --history FILE   append one TSV line (date, sizes, log loss and AUC
     \\                               per model) for the accuracy-vs-data curve
+    \\  outcomes    do allies and enemies shift gold@14, lane gold, CS@10, deaths before 15
+    \\              and first item beyond champion and lane? (markdown on stdout)
+    \\              --patch P        as for stats (default: every patch, pooled)
+    \\              --platform P     as for stats (train uses every one given)
+    \\              --test-platform P  test on P's newest games (default EUW1)
+    \\              --test-share F   newest share of P's games held out (default 0.2)
+    \\              --preds DIR      one TSV of test predictions per model
     \\  site       write the public website (static files): EUW over the last 30 days
     \\              at the root, the patch under patch/, every region under all/ and
     \\              all/patch/ (lane curves and builds: the curves and builds
@@ -240,6 +248,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "builds", cmdBuilds },
     .{ "pool", cmdPool },
     .{ "eval", cmdEval },
+    .{ "outcomes", cmdOutcomes },
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
     .{ "dev", cmdDev },
@@ -700,6 +709,39 @@ fn cmdEval(c: *Cmd) !u8 {
         const today: Date = .fromMs(std.Io.Clock.real.now(io).toMilliseconds());
         try eval.appendHistory(io, path, line, try c.arena.print("{f}", .{today}));
     }
+    return 0;
+}
+
+fn cmdOutcomes(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var o: outcomes.Options = .{};
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--test-share")) {
+            o.test_share = try c.float();
+            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
+        } else if (c.is("--test-platform")) {
+            o.test_platform = try c.value();
+        } else if (c.is("--preds")) {
+            o.preds_dir = try c.value();
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    const platforms = g.platformIds();
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
+    const legendaries = try outcomes.loadLegendaries(
+        c.init.gpa,
+        c.arena,
+        io,
+        try std.fs.path.join(c.arena, &.{ c.data_dir, "legendaries.tsv" }),
+        chosen,
+    );
+    var buf: [64 * 1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    try outcomes.run(c.init.gpa, io, db, chosen, platforms, &legendaries, o, &stdout.interface);
+    try stdout.interface.flush();
     return 0;
 }
 
