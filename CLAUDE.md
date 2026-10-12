@@ -19,6 +19,9 @@ docs/plan.md. Read it first.
   the box, an Oracle Cloud server) and `meiolol-app` (player tool: suggest, watch, session, get).
   `zig build lab`: `meiolol-lab`, modelling experiments on the gpu-box (CUDA via libcuda,
   kernels in src/gpu compiled to PTX)
+- Heavy model work on the gpu-box (3080, 20 threads) or Mac CPU, never the box:
+  deploy/lab-run.sh; League pauses gpu-box runs; warn sessions using it before restarting
+  WSL. Parallel loops: src/par.zig. docs/compute.md
 - Website: https://meiolol.jomify.lol, static nginx on the jomove server
   (`ssh -i ~/.ssh/oci_instance-20260714-1317 ubuntu@193.123.180.81`; jomove's own
   site runs there too, leave its config alone). Box builds and uploads on new data;

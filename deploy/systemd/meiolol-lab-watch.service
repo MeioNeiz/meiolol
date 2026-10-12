@@ -1,0 +1,10 @@
+[Unit]
+Description=Pause meiolol lab runs while League is open (deploy/lab-watch.sh, gpu-box)
+
+[Service]
+ExecStart=/bin/sh -c 'exec %h/ml/bin/lab-watch.sh >> %h/ml/runs/watcher.log 2>&1'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
