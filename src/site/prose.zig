@@ -5,12 +5,12 @@
 const std = @import("std");
 const Writer = std.Io.Writer;
 const html = @import("html.zig");
+const tpl = html.tpl;
 const core = @import("core");
 const curvesfile = core.curvesfile;
 const Curves = curvesfile.Curves;
 const Role = core.Role;
 const roleName = @import("root.zig").roleName;
-const esc = html.esc;
 
 pub const Info = struct {
     contact: []const u8,
@@ -24,32 +24,33 @@ pub const Info = struct {
 /// average counts as much as the champions' baseline
 fn gamesToStabilise(w: *Writer, c: *const Curves) Writer.Error!void {
     const shown = [_]usize{ 5, 10, 14, 20 };
-    try w.print(
+    try tpl.renderPart(w,
         \\<h3>Games to stabilise</h3>
-        \\<p>k by role and minute, all ranks, from the {d} games of the biggest view. Under k
+        \\<p>k by role and minute, all ranks, from the {games} games of the biggest view. Under k
         \\games a matchup's line is mostly its champions' baseline. "Gold at 14" is the
         \\gold difference at 14 minutes.</p>
         \\<div class="table-scroll"><table>
         \\<thead><tr><th>Role</th>
-    , .{c.games});
-    for (shown) |m| try w.print("<th class=\"num\">Gold at {d}</th>", .{m});
+    , .{ .games = c.games });
+    for (shown) |m| try tpl.render(w, "<th class=\"num\">Gold at {m}</th>", .{ .m = m });
     try w.writeAll("<th class=\"num\">XP at 14</th><th class=\"num\">CS at 14</th></tr></thead>\n<tbody>\n");
     for (Role.all) |r| {
-        try w.print("<tr><td>{s}</td>", .{roleName(r)});
+        try tpl.renderPart(w, "<tr><td>{role}</td>", .{ .role = roleName(r) });
         for (shown) |m| try kCell(w, c.param(r, .all, false, .gold, m - 1));
         try kCell(w, c.param(r, .all, false, .xp, 13));
         try kCell(w, c.param(r, .all, false, .cs, 13));
         try w.writeAll("</tr>\n");
     }
-    try w.print(
-        "</tbody></table></div>\n<p class=\"muted\">k is capped at {d}: true matchup differences are never assumed to be zero.</p>\n",
-        .{curvesfile.curvefit.max_k},
-    );
+    try tpl.renderPart(w,
+        \\</tbody></table></div>
+        \\<p class="muted">k is capped at {max}: true matchup differences are never assumed to be zero.</p>
+        \\
+    , .{ .max = curvesfile.curvefit.max_k });
 }
 
 fn kCell(w: *Writer, p: curvesfile.curvefit.Param) Writer.Error!void {
     if (p.tau2 == 0) return w.writeAll("<td class=\"num\">-</td>");
-    try w.print("<td class=\"num\">{d:.0}</td>", .{p.k()});
+    try tpl.render(w, "<td class=\"num\">{k:.0}</td>", .{ .k = p.k() });
 }
 
 pub fn method(w: *Writer, info: Info) Writer.Error!void {
@@ -200,10 +201,10 @@ pub fn download(w: *Writer, info: Info) Writer.Error!void {
 }
 
 pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
-    try w.print(
+    try tpl.render(w,
         \\<div class="prose">
         \\<h1>Privacy policy</h1>
-        \\<p class="muted">Last updated {s}.</p>
+        \\<p class="muted">Last updated {updated}.</p>
         \\<h2>This website</h2>
         \\<p>No accounts, no cookies, no analytics or advertising trackers. The hosting
         \\provider keeps standard request logs (IP address, time, page) for security and
@@ -244,17 +245,17 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\published. Deletion requests passed on by Riot Games are honoured, and you can ask
         \\us directly to delete any data about your account.</p>
         \\<h2>Contact</h2>
-        \\<p>Questions or requests: <a href="mailto:{f}">{f}</a>.</p>
+        \\<p>Questions or requests: <a href="mailto:{contact}">{contact}</a>.</p>
         \\</div>
         \\
-    , .{ info.updated, esc(info.contact), esc(info.contact) });
+    , .{ .updated = info.updated, .contact = info.contact });
 }
 
 pub fn terms(w: *Writer, info: Info) Writer.Error!void {
-    try w.print(
+    try tpl.render(w,
         \\<div class="prose">
         \\<h1>Terms of use</h1>
-        \\<p class="muted">Last updated {s}.</p>
+        \\<p class="muted">Last updated {updated}.</p>
         \\<ul>
         \\<li>meiolol (this site and the desktop app) is free to use. Its statistics are
         \\estimates from past games and come with no guarantee.</li>
@@ -264,9 +265,9 @@ pub fn terms(w: *Writer, info: Info) Writer.Error!void {
         \\<li>The software is provided as is, without warranty of any kind.</li>
         \\<li>These terms may change; the date above shows the latest version.</li>
         \\</ul>
-        \\<p>{s}</p>
-        \\<p>Contact: <a href="mailto:{f}">{f}</a>.</p>
+        \\<p>{legal}</p>
+        \\<p>Contact: <a href="mailto:{contact}">{contact}</a>.</p>
         \\</div>
         \\
-    , .{ info.updated, html.boilerplate, esc(info.contact), esc(info.contact) });
+    , .{ .updated = info.updated, .legal = tpl.trusted(html.boilerplate), .contact = info.contact });
 }
