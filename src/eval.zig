@@ -20,6 +20,7 @@ const lanegold = @import("lanegold.zig");
 const experience = @import("experience.zig");
 const par = @import("par.zig");
 const Date = @import("date.zig").Date;
+const tsvlog = @import("tsvlog.zig");
 const score = core.score;
 const Role = core.Role;
 
@@ -173,14 +174,26 @@ pub fn run(
         defer gpa.free(r.p);
         out.* = .{ .log_loss = r.m.log_loss, .auc = r.m.auc };
     }
+    {
+        const base = try evaluate(gpa, &full.stats, tests, base_only);
+        defer gpa.free(base.p);
+        const eb_r = try evaluate(gpa, &full.stats, tests, empirical);
+        defer gpa.free(eb_r.p);
+        const tw = try evaluate(gpa, &full.stats, tests, weighted);
+        defer gpa.free(tw.p);
+        line.tunedw = .{ .log_loss = tw.m.log_loss, .auc = tw.m.auc };
+        line.eb_vs_base = pairedDiff(eb_r.p, base.p, tests);
+        line.tunedw_vs_base = pairedDiff(tw.p, base.p, tests);
+    }
 
     try w.writeAll("\n## Pick metric\n\n");
     try w.writeAll("Each held-out pick hidden in turn, the other nine known with roles; " ++
         "percentile of the champion actually picked among candidates (1 = model's top).\n\n");
     try w.writeAll("| model | picks ranked | winners' mean pct | losers' mean pct | " ++
         "AUC pct vs win | win rate, picks in model's top 10% |\n| --- | --- | --- | --- | --- | --- |\n");
-    for ([_]Predictor{ model, tuned_priors, empirical }) |p| {
-        try pickMetric(gpa, io, &full.stats, tests, p, opts.pick_min_games, w);
+    for ([_]Predictor{ model, tuned_priors, empirical }, 0..) |p, i| {
+        const r = try pickMetric(gpa, io, &full.stats, tests, p, opts.pick_min_games, w);
+        if (i == 0) line.pick = r;
     }
 
     try w.writeAll("\n## Role inference\n\n");
@@ -228,11 +241,22 @@ pub const History = struct {
     results: [5]Result = undefined,
     /// EB + lane gold on the test games with timelines; null when too few
     gold: ?GoldResult,
+    /// Tuned priors + term weights
+    tunedw: Result = undefined,
+    /// Paired per-game log loss differences to champion base rates: comparable across
+    /// runs although each run's test games differ
+    eb_vs_base: Paired = undefined,
+    tunedw_vs_base: Paired = undefined,
+    /// The current model's picks
+    pick: PickResult = undefined,
 
+    // Columns only ever added at the end (tsvlog)
     pub const header = "date\tplatforms\ttest_platform\tgames\ttrain\ttest\t" ++
         "ll_coin\tll_base\tll_current\tll_eb\tll_joint\t" ++
         "auc_base\tauc_current\tauc_eb\tauc_joint\t" ++
-        "gold_test\tll_eb_gold_subset\tll_gold\tauc_gold\n";
+        "gold_test\tll_eb_gold_subset\tll_gold\tauc_gold\t" ++
+        "ll_tunedw\tauc_tunedw\td_eb_base\tci_eb_base\td_tunedw_base\tci_tunedw_base\t" ++
+        "pick_top10\tpick_top10_win\tpick_auc\n";
 
     pub fn write(h: History, w: *std.Io.Writer, date: []const u8) !void {
         try w.print("{s}\t{d}\t{s}\t{d}\t{d}\t{d}", .{
@@ -241,24 +265,26 @@ pub const History = struct {
         for (h.results) |r| try w.print("\t{d:.5}", .{r.log_loss});
         for (h.results[1..]) |r| try w.print("\t{d:.4}", .{r.auc});
         if (h.gold) |g| {
-            try w.print("\t{d}\t{d:.5}\t{d:.5}\t{d:.4}\n", .{ g.tests, g.eb_log_loss, g.log_loss, g.auc });
-        } else try w.writeAll("\t0\t\t\t\n");
+            try w.print("\t{d}\t{d:.5}\t{d:.5}\t{d:.4}", .{ g.tests, g.eb_log_loss, g.log_loss, g.auc });
+        } else try w.writeAll("\t0\t\t\t");
+        try w.print("\t{d:.5}\t{d:.4}", .{ h.tunedw.log_loss, h.tunedw.auc });
+        for ([_]Paired{ h.eb_vs_base, h.tunedw_vs_base }) |d| try w.print("\t{d:.5}\t{d:.5}", .{ d.mean, d.ci });
+        try w.print("\t{d}\t{d:.4}\t{d:.4}\n", .{ h.pick.top_n, h.pick.top_win, h.pick.auc });
     }
 };
+
+/// Picks in the model's top 10% of candidates and the share of them that won; AUC of
+/// percentile vs win
+pub const PickResult = struct { top_n: usize, top_win: f64, auc: f64 };
 
 pub const GoldResult = struct { tests: usize, eb_log_loss: f64, log_loss: f64, auc: f64 };
 
 /// Appends `h` to the TSV at `path`, with a header when the file is new
 pub fn appendHistory(io: std.Io, path: []const u8, h: History, date: []const u8) !void {
-    var file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
-    defer file.close(io);
-    const len = try file.length(io);
     var buf: [1024]u8 = undefined;
-    var fw = file.writer(io, &buf);
-    try fw.seekTo(len);
-    if (len == 0) try fw.interface.writeAll(History.header);
-    try h.write(&fw.interface, date);
-    try fw.interface.flush();
+    var w: std.Io.Writer = .fixed(&buf);
+    try h.write(&w, date);
+    try tsvlog.append(std.heap.smp_allocator, io, path, History.header, w.buffered());
 }
 
 /// Fewer train games with lane gold and the section is skipped
@@ -540,7 +566,7 @@ fn experienceRow(
     return if (known) r else null;
 }
 
-const Paired = struct { mean: f64, ci: f64 };
+pub const Paired = struct { mean: f64, ci: f64 };
 
 /// Mean per-game log loss of `a` minus `b`, with a 95% interval
 fn pairedDiff(a: []const f64, b: []const f64, games: []const Game) Paired {
@@ -849,18 +875,9 @@ fn fullDraft(
         try w.print("| {s} | {d:.4} | {d:.4} | {d:.3} | {d:.1}% | ", .{
             pr.label, r.m.log_loss, r.m.brier, r.m.auc, 100 * r.m.accuracy,
         });
-        var sum: f64 = 0;
-        var sq: f64 = 0;
-        for (r.p, ref.p, games) |a, b, g| {
-            const d = logLoss(a, blueWon(g)) - logLoss(b, blueWon(g));
-            sum += d;
-            sq += d * d;
-        }
-        const n: f64 = @floatFromInt(games.len);
-        const mean = sum / n;
-        const se = @sqrt(@max(sq / n - mean * mean, 0) / n);
-        if (se == 0) try w.writeAll("- |\n") else {
-            try w.print("{s}{d:.4} ± {d:.4} |\n", .{ if (mean >= 0) "+" else "", mean, 1.96 * se });
+        const d = pairedDiff(r.p, ref.p, games);
+        if (d.ci == 0) try w.writeAll("- |\n") else {
+            try w.print("{s}{d:.4} ± {d:.4} |\n", .{ if (d.mean >= 0) "+" else "", d.mean, d.ci });
         }
     }
 }
@@ -1094,7 +1111,7 @@ fn pickMetric(
     pr: Predictor,
     min_games: u32,
     w: *std.Io.Writer,
-) !void {
+) !PickResult {
     var candidates = switch (pr.on(st).kind) {
         .model => |o| o,
         else => unreachable,
@@ -1181,16 +1198,15 @@ fn pickMetric(
         }
     }
     const nl = @as(f64, @floatFromInt(pct.items.len)) - nw;
+    const out: PickResult = .{
+        .top_n = @intFromFloat(top_n),
+        .top_win = top_w / @max(top_n, 1),
+        .auc = try auc(gpa, pct.items, won.items),
+    };
     try w.print("| {s} | {d} ({d} not candidates) | {d:.3} | {d:.3} | {d:.3} | {d:.1}% of {d} |\n", .{
-        pr.label,
-        pct.items.len,
-        missed,
-        sw / nw,
-        sl / nl,
-        try auc(gpa, pct.items, won.items),
-        100 * top_w / @max(top_n, 1),
-        top_n,
+        pr.label, pct.items.len, missed, sw / nw, sl / nl, out.auc, 100 * out.top_win, out.top_n,
     });
+    return out;
 }
 
 fn roleInference(st: *const core.Stats, games: []const Game, w: *std.Io.Writer) !void {

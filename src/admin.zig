@@ -9,6 +9,7 @@ const store = @import("store");
 const date = @import("date.zig");
 const ep = @import("riot/endpoints.zig");
 const Limiter = @import("riot/ratelimit.zig").Limiter;
+const tsvlog = @import("tsvlog.zig");
 
 const Io = std.Io;
 const Region = ep.Region;
@@ -105,7 +106,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     const counts = try tableCounts(arena, db);
     const files = try fileSizes(arena, io, o.data_dir);
     const history_path = try std.fs.path.join(arena, &.{ o.data_dir, "admin-history.tsv" });
-    try appendHistory(io, history_path, o, counts, files);
+    try appendHistory(arena, io, history_path, o, counts, files);
 
     const window_start = o.now_s - @as(i64, o.days) * 86400;
     var key_problems: std.ArrayList(KeyProblem) = .empty;
@@ -219,43 +220,41 @@ fn count(counts: []const Count, name: []const u8) i64 {
     return 0;
 }
 
-const FileSize = struct { name: []const u8, bytes: u64 };
+const FileSize = struct { name: []const u8, bytes: u64, wal: u64 };
 
-/// Each database with its WAL
+/// Each database with its WAL (bytes includes wal)
 fn fileSizes(arena: std.mem.Allocator, io: Io, data_dir: []const u8) ![]FileSize {
     const names = [_][]const u8{ "meiolol.db", "timeline.db", "raw.db" };
     const out = try arena.alloc(FileSize, names.len);
     for (names, out) |n, *f| {
-        f.* = .{ .name = n, .bytes = 0 };
+        f.* = .{ .name = n, .bytes = 0, .wal = 0 };
         for ([_][]const u8{ "", "-wal" }) |suffix| {
             const path = try arena.print("{s}/{s}{s}", .{ data_dir, n, suffix });
             const st = Io.Dir.cwd().statFile(io, path, .{}) catch continue;
             f.bytes += st.size;
+            if (suffix.len > 0) f.wal = st.size;
         }
     }
     return out;
 }
 
+// WAL columns: growth readable without the WAL's swings (it once reached 57 GB)
 const history_header = "time\tmeiolol_db\ttimeline_db\traw_db\tdisk_used\tdisk_size\tplayers\tranks" ++
-    "\tmatches\ttimelines\tdrafts\tmatch_queue\ttimeline_queue\tmastery\n";
+    "\tmatches\ttimelines\tdrafts\tmatch_queue\ttimeline_queue\tmastery" ++
+    "\tmeiolol_wal\ttimeline_wal\traw_wal\n";
 
-fn appendHistory(io: Io, path: []const u8, o: Options, counts: []const Count, files: []const FileSize) !void {
-    var file = try Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
-    defer file.close(io);
-    const len = try file.length(io);
-    var buf: [1024]u8 = undefined;
-    var fw = file.writer(io, &buf);
-    try fw.seekTo(len);
-    const w = &fw.interface;
-    if (len == 0) try w.writeAll(history_header);
+fn appendHistory(arena: std.mem.Allocator, io: Io, path: []const u8, o: Options, counts: []const Count, files: []const FileSize) !void {
+    var row: Io.Writer.Allocating = .init(arena);
+    const w = &row.writer;
     try w.print("{d}", .{o.now_s});
     for (files) |f| try w.print("\t{d}", .{f.bytes});
     if (o.disk) |d| try w.print("\t{d}\t{d}", .{ d[1], d[0] }) else try w.writeAll("\t\t");
     for ([_][]const u8{ "players", "ranks", "matches", "timeline.timelines", "drafts", "match_queue", "timeline_queue", "mastery" }) |t| {
         try w.print("\t{d}", .{count(counts, t)});
     }
+    for (files) |f| try w.print("\t{d}", .{f.wal});
     try w.writeAll("\n");
-    try w.flush();
+    try tsvlog.append(arena, io, path, history_header, row.written());
 }
 
 const Group = struct { key: []const u8, n: i64 };

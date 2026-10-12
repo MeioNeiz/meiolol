@@ -240,8 +240,8 @@ function drawChart(box, tip, o, id) {
     return any ? (stacked ? sum : max) : null;
   });
   // fit: around the data instead of from zero (model scores move in the third decimal)
-  const known = series.flatMap(s => s.values).filter(v => v != null);
   const refs = [].concat(o.ref || []);
+  const known = series.flatMap(s => s.values).concat(refs.map(r => r.value)).filter(v => v != null);
   let ymin = 0, ymax = Math.max(0, ...tops.filter(v => v != null), ...refs.map(r => r.value));
   if (o.fit && known.length) {
     const lo = Math.min(...known), hi = Math.max(...known), st = niceStep(Math.max(hi - lo, Math.abs(hi) * 0.01), 4);
@@ -491,23 +491,53 @@ function tsv(text) {
   });
 }
 
+const mdCells = l => l.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+const isTableAt = (lines, i) => lines[i].trim().startsWith("|") && i + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1]);
+
+// The pipe tables of a report by ## section: [{intro, head, rows: [{column: text}]}],
+// intro the paragraph line just above the table
+function reportTables(md) {
+  const out = {}, lines = (md || "").replace(/\r/g, "").split("\n");
+  let sec = "", intro = "";
+  for (let i = 0; i < lines.length; i++) {
+    const h = lines[i].match(/^##\s+(.*)/);
+    if (h) { sec = h[1].trim(); intro = ""; continue; }
+    if (isTableAt(lines, i)) {
+      const head = mdCells(lines[i]), rows = [];
+      for (i += 2; i < lines.length && lines[i].trim().startsWith("|"); i++) {
+        const c = mdCells(lines[i]);
+        rows.push(Object.fromEntries(head.map((k, j) => [k, c[j]])));
+      }
+      i--;
+      (out[sec] = out[sec] || []).push({ intro, head, rows });
+    } else if (lines[i].trim()) intro = lines[i].trim();
+  }
+  return out;
+}
+const numIn = s => { const m = String(s ?? "").match(/[-+]?\d*\.?\d+/); return m ? +m[0] : null; };
+// "-0.0014 ± 0.0010": an estimate and its 95% half-width
+const pmIn = s => { const m = String(s ?? "").match(/([-+]?\d*\.?\d+)\s*±\s*(\d*\.?\d+)/); return m ? { mean: +m[1], ci: +m[2] } : null; };
+const signed = (v, d = 4) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d);
+const pmText = p => `${signed(p.mean)} ± ${p.ci.toFixed(4)}`;
+
 // Markdown as meiolol eval writes it: headings, pipe tables, lists, code, paragraphs
 function markdown(text) {
   const out = el("div", { class: "md" });
   const lines = text.replace(/\r/g, "").split("\n");
   const inline = s => {
     const frag = document.createDocumentFragment();
-    const re = /(`[^`]+`|\*\*[^*]+\*\*)/g;
+    const re = /(`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~)/g;
     let at = 0, m;
     while ((m = re.exec(s))) {
       if (m.index > at) frag.append(s.slice(at, m.index));
-      frag.append(m[0][0] === "`" ? el("code", {}, m[0].slice(1, -1)) : el("strong", {}, m[0].slice(2, -2)));
+      const t = m[0];
+      frag.append(t[0] === "`" ? el("code", {}, t.slice(1, -1)) : t[0] === "~" ? el("del", {}, t.slice(2, -2)) : el("strong", {}, t.slice(2, -2)));
       at = m.index + m[0].length;
     }
     frag.append(s.slice(at));
     return frag;
   };
-  const cells = l => l.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+  const cells = mdCells;
   for (let i = 0; i < lines.length;) {
     const l = lines[i];
     if (!l.trim()) { i++; continue; }
@@ -520,7 +550,7 @@ function markdown(text) {
       out.append(el("pre", {}, body.join("\n")));
       continue;
     }
-    if (l.trim().startsWith("|") && i + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1])) {
+    if (isTableAt(lines, i)) {
       const head = cells(l);
       const rows = [];
       for (i += 2; i < lines.length && lines[i].trim().startsWith("|"); i++) rows.push(cells(lines[i]));
@@ -966,14 +996,33 @@ function historyDays() {
   const h = tsv(D.history);
   return h.length > 1 ? Math.min(7, (h[h.length - 1].time - h[0].time) / 86400) : 0;
 }
-function growthPerDay(col) {
+// Sizes that include a WAL: growth is read without it (history from 13 Oct has the WAL
+// columns), and on the lower envelope (points no later point undercuts) for older rows,
+// where a WAL swing would read as growth and then shrinkage
+const WAL_OF = {
+  meiolol_db: ["meiolol_wal"], timeline_db: ["timeline_wal"], raw_db: ["raw_wal"],
+  disk_used: ["meiolol_wal", "timeline_wal", "raw_wal"],
+};
+// Per day over the newest `days`, least squares (null under ~5 h of history)
+function growthPerDay(col, days = 7) {
   const h = tsv(D.history).filter(r => r[col] != null);
   if (h.length < 2) return null;
-  const last = h[h.length - 1];
-  const first = h.find(r => r.time >= last.time - 7 * 86400) || h[0];
-  const days = (last.time - first.time) / 86400;
-  return days > 0.2 ? (last[col] - first[col]) / days : null;
+  const end = h[h.length - 1].time;
+  let pts = h.filter(r => r.time >= end - days * 86400).map(r => [r.time, r[col] - sumR((WAL_OF[col] || []).map(c => r[c]))]);
+  if (WAL_OF[col]) {
+    let min = Infinity;
+    pts = pts.reverse().filter(([, v]) => v <= min ? (min = v, true) : false).reverse();
+  }
+  if (pts.length < 2 || pts[pts.length - 1][0] - pts[0][0] < 0.2 * 86400) return null;
+  return slope(pts) * 86400;
 }
+function slope(pts) {
+  const n = pts.length, mx = sumR(pts.map(p => p[0])) / n, my = sumR(pts.map(p => p[1])) / n;
+  let sxy = 0, sxx = 0;
+  for (const [x, y] of pts) { sxy += (x - mx) * (y - my); sxx += (x - mx) ** 2; }
+  return sxx ? sxy / sxx : 0;
+}
+const dayDate = t => new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: TZ });
 
 VIEWS.storage = body => {
   const history = tsv(D.history);
@@ -985,15 +1034,20 @@ VIEWS.storage = body => {
   if (dk) {
     const used = dk[1] / dk[0];
     tile(tiles, "Disk used", pct(used), `${bytes(dk[1])} of ${bytes(dk[0])}`, used > 0.8 ? "bad" : used > 0.65 ? "warn" : null);
-    const g = growthPerDay("disk_used");
-    tile(tiles, "Disk growth", g == null ? "–" : bytes(g) + " / day", g > 0 ? `full in ~${Math.round(dk[2] / g)} days at the rate of the last ${span(historyDays() * 86400)}` : `${bytes(dk[2])} free`, g > 0 && dk[2] / g < 14 ? "bad" : g > 0 && dk[2] / g < 30 ? "warn" : null);
+    const g = growthPerDay("disk_used"), g1 = growthPerDay("disk_used", 1);
+    tile(tiles, "Disk growth", g == null ? "–" : bytes(g) + " / day", `over the last ${span(historyDays() * 86400)}, WAL excluded` + (g1 == null ? "" : `; last 24 h ${bytes(g1)} / day`));
+    if (g > 0) {
+      const left = dk[2] / g, faster = g1 > g ? dk[2] / g1 : null;
+      tile(tiles, "Disk full around", dayDate(D.now + left * 86400), `in ~${Math.round(left)} days at the week's rate` + (faster ? `, ~${Math.round(faster)} at the last 24 h's` : ""), left < 14 ? "bad" : left < 30 ? "warn" : null);
+    }
   }
   const dbTotal = sumR(files.map(f => f.bytes));
   tile(tiles, "Databases", bytes(dbTotal), files.map(f => `${f.name.replace(".db", "")} ${bytes(f.bytes)}`).join(" · "));
   const matches = (D.counts.find(c => c.name === "matches") || {}).rows;
   if (matches) tile(tiles, "Per stored match", bytes(dbTotal / matches), "all databases, WAL included");
-  const dbg = sumR(["meiolol_db", "timeline_db", "raw_db"].map(c => growthPerDay(c) || 0));
-  tile(tiles, "Database growth", dbg ? bytes(dbg) + " / day" : "–", "newest week");
+  const dbCols = [["meiolol", "meiolol_db"], ["timeline", "timeline_db"], ["raw", "raw_db"]];
+  const dbg = sumR(dbCols.map(([, c]) => growthPerDay(c) || 0));
+  tile(tiles, "Database growth", dbg ? bytes(dbg) + " / day" : "–", dbCols.map(([n, c]) => `${n} ${bytes(growthPerDay(c))}`).join(" · ") + ", newest week, WAL excluded");
   if (D.backups) tile(tiles, "Backups", bytes(D.backups.bytes), `${D.backups.files} files, newest ${ago(D.backups.newest)}`, D.backups.newest && D.now - D.backups.newest > 2 * 86400 ? "warn" : null);
   const g = grid(sec);
   chart(g, {
