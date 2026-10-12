@@ -12,7 +12,9 @@ docs/plan.md. Read it first.
   (`GIT_INDEX_FILE`); both can commit a stale copy of another session's file. A new
   file goes in the same commit as its first import (every push deploys)
 - Build: `zig build`; `zig build test` (`-Dtest-filter=NAME`; a test that logs a
-  warning fails); `zig build fmt`; `zig build ci` = fmt check, tests, Windows and Linux
+  warning fails); format only your own files, `zig fmt <paths>` (`zig build fmt`
+  rewrites the whole tree, other sessions' dirty files too); `zig build ci` = fmt
+  check, tests, Windows and Linux
   builds, shellcheck, JS syntax. Hooks in deploy/hooks (`git config core.hooksPath
   deploy/hooks`): pre-commit fmt, pre-push `zig build ci` on a clean checkout of the
   pushed commit, since every push deploys
