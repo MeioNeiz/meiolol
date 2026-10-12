@@ -75,6 +75,26 @@ fn platformIndex(platforms: []const []const u8, platform: []const u8) u8 {
     return 0;
 }
 
+/// Every platform of every set as one JSON array (for json_each), in `gpa`: one query
+/// serves several platform sets
+pub fn setsJson(gpa: std.mem.Allocator, sets: []const []const []const u8) ![]u8 {
+    var all: std.ArrayList([]const u8) = .empty;
+    defer all.deinit(gpa);
+    for (sets) |s| try all.appendSlice(gpa, s);
+    return std.json.Stringify.valueAlloc(gpa, all.items, .{});
+}
+
+/// Bit i set when `platform` is in sets[i]
+pub fn setsWith(sets: []const []const []const u8, platform: []const u8) u32 {
+    var mask: u32 = 0;
+    for (sets, 0..) |s, i| {
+        for (s) |p| {
+            if (std.mem.eql(u8, p, platform)) mask |= @as(u32, 1) << @intCast(i);
+        }
+    }
+    return mask;
+}
+
 /// "16.20" as 16020, for ordering and comparing patches cheaply
 pub fn patchKey(patch: []const u8) u32 {
     var it = std.mem.splitScalar(u8, patch, '.');

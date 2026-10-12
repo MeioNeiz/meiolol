@@ -237,6 +237,9 @@ pub const shared_pages = [_][]const u8{
 pub const Extras = struct {
     curves: [html.View.count]?core.curvesfile.Curves = @splat(null),
     builds: [html.View.count]?builds.File = @splat(null),
+    /// Pool and learning tallies by html.Region, on the first view's load: all patches,
+    /// so both periods share them, and one pass over the database serves every view
+    people: ?People = null,
 
     pub fn load(arena: std.mem.Allocator, io: std.Io, opts: Options) Extras {
         var e: Extras = .{};
@@ -248,12 +251,49 @@ pub const Extras = struct {
         }
         return e;
     }
+
+    pub fn deinit(e: *Extras, gpa: std.mem.Allocator) void {
+        if (e.people) |*p| p.deinit(gpa);
+    }
+
+    fn tallies(e: *Extras, gpa: std.mem.Allocator, db: store.Db, st: *const Stats, opts: Options) !*const People {
+        if (e.people) |*p| {
+            if (std.mem.eql(u32, p.ids, st.ids)) return p;
+            // A champion added since (a new release): tally again
+            p.deinit(gpa);
+            e.people = null;
+        }
+        const sets: []const []const []const u8 = if (opts.euw_only)
+            &.{opts.platforms}
+        else
+            &.{ opts.platforms, opts.all_platforms };
+        const ids = try gpa.dupe(u32, st.ids);
+        errdefer gpa.free(ids);
+        var p = try pool.tally(gpa, db, st, sets);
+        errdefer p.deinit(gpa);
+        e.people = .{ .ids = ids, .pool = p, .learning = try learning.tally(gpa, db, st, sets) };
+        return &e.people.?;
+    }
+};
+
+const People = struct {
+    /// Stats champion ids, which the tallies index by
+    ids: []u32,
+    pool: pool.Tallies,
+    learning: []learning.Tally,
+
+    fn deinit(p: *People, gpa: std.mem.Allocator) void {
+        gpa.free(p.ids);
+        p.pool.deinit(gpa);
+        learning.freeTallies(gpa, p.learning);
+    }
 };
 
 pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
-    const extras: Extras = .load(arena_state.allocator(), io, opts);
+    var extras: Extras = .load(arena_state.allocator(), io, opts);
+    defer extras.deinit(gpa);
     const cwd = std.Io.Dir.cwd();
     try cwd.createDirPath(io, opts.out_dir);
     var root_dir = try cwd.openDir(io, opts.out_dir, .{});
@@ -408,7 +448,7 @@ fn strip(path: []const u8, prefix: []const u8, suffix: []const u8) ?[]const u8 {
 
 /// Reads the view's data from the database (the slow part of a site build); free with
 /// unload
-pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options, view: html.View, extras: *const Extras) !*Site {
+pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options, view: html.View, extras: *Extras) !*Site {
     const owner = try gpa.create(std.heap.ArenaAllocator);
     owner.* = .init(gpa);
     errdefer {
@@ -481,13 +521,16 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
     }
     try files.append(arena, .{ .path = "data/stats.bin", .data = model_bytes });
     try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
-    site.pool = try pool.make(gpa, arena, db, &site.stats, opts.platforms, .{});
+    const people = try extras.tallies(gpa, db, &site.stats, all_opts);
+    const set = @intFromEnum(view.region);
+    if (set >= people.learning.len) return error.NoView;
+    site.pool = try pool.make(arena, &people.pool, set, &site.stats, .{});
     {
         var aw: Writer.Allocating = .init(arena);
         try pool.writeJson(&aw.writer, site.pool);
         try files.append(arena, .{ .path = "data/pool.json", .data = aw.written() });
     }
-    site.learning = try learning.make(gpa, arena, db, &site.stats, opts.platforms, .{});
+    site.learning = try learning.make(arena, &people.learning[set], &site.stats, .{});
     {
         var aw: Writer.Allocating = .init(arena);
         try learning.writeJson(&aw.writer, site.learning);
@@ -556,6 +599,7 @@ pub const Loaded = struct {
 
     pub fn deinit(l: *Loaded) void {
         for (l.sites) |s| if (s) |loaded| unload(loaded);
+        l.extras.deinit(l.gpa);
         l.arena_state.deinit();
         l.gpa.destroy(l);
     }

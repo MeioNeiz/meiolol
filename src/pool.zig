@@ -124,61 +124,77 @@ pub const Tally = struct {
     }
 };
 
-/// Every player's ranked solo champions on `platforms`, from the matches crawled so
-/// far (all patches: a pool changes more slowly than a patch)
+/// Every player's ranked solo champions, from the matches crawled so far (all patches: a
+/// pool changes more slowly than a patch), into out[i] for the platforms of sets[i], in
+/// one pass
 pub fn tallyGames(
     gpa: Allocator,
     db: store.Db,
     st: *const Stats,
-    platforms: []const []const u8,
-) !Tally {
-    var t: Tally = try .init(gpa, st.n);
-    errdefer t.deinit(gpa);
-    const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
+    sets: []const []const []const u8,
+    out: []Tally,
+) !void {
+    const platform_json = try stats.setsJson(gpa, sets);
     defer gpa.free(platform_json);
     var q = try db.prepare(
-        \\SELECT p.puuid, p.champion_id, count(*)
+        \\SELECT p.puuid, m.platform, p.champion_id, count(*)
         \\FROM participants p JOIN matches m USING (match_id)
         \\WHERE m.queue_id = ? AND m.remake = 0 AND p.puuid IS NOT NULL
         \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\GROUP BY 1, 2 ORDER BY 1
+        \\GROUP BY 1, 2, 3 ORDER BY 1
     );
     defer q.deinit();
     try q.bind(.{ stats.ranked_solo, platform_json });
-    var plays: std.ArrayList(Play) = .empty;
-    defer plays.deinit(gpa);
+    const plays = try gpa.alloc(std.ArrayList(Play), sets.len);
+    @memset(plays, .empty);
+    defer {
+        for (plays) |*p| p.deinit(gpa);
+        gpa.free(plays);
+    }
     var current: std.ArrayList(u8) = .empty;
     defer current.deinit(gpa);
     while (try q.step()) {
         if (!std.mem.eql(u8, q.bytes(0), current.items)) {
-            t.add(st, plays.items, .games);
-            plays.clearRetainingCapacity();
+            for (out, plays) |*t, *p| {
+                t.add(st, p.items, .games);
+                p.clearRetainingCapacity();
+            }
             current.clearRetainingCapacity();
             try current.appendSlice(gpa, q.bytes(0));
         }
-        try plays.append(gpa, .{ .champion = @intCast(q.int(1)), .weight = @intCast(q.int(2)) });
+        const in = stats.setsWith(sets, q.bytes(1));
+        const play: Play = .{ .champion = @intCast(q.int(2)), .weight = @intCast(q.int(3)) };
+        for (plays, 0..) |*p, i| {
+            if (in & (@as(u32, 1) << @intCast(i)) == 0) continue;
+            // The same champion on another of the set's platforms
+            for (p.items) |*have| {
+                if (have.champion == play.champion) {
+                    have.weight += play.weight;
+                    break;
+                }
+            } else try p.append(gpa, play);
+        }
     }
-    t.add(st, plays.items, .games);
-    return t;
+    for (out, plays) |*t, p| t.add(st, p.items, .games);
 }
 
 /// Champions a player has not played for this long are not in their pool: mastery
 /// points are lifetime
 const mastery_recent_s = 365 * std.time.s_per_day;
 
-/// Every ladder player's champion mastery on `platforms`, by points
+/// Every ladder player's champion mastery, by points, into out[i] for the platforms of
+/// sets[i], in one pass
 pub fn tallyMastery(
     gpa: Allocator,
     db: store.Db,
     st: *const Stats,
-    platforms: []const []const u8,
-) !Tally {
-    var t: Tally = try .init(gpa, st.n);
-    errdefer t.deinit(gpa);
-    const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
+    sets: []const []const []const u8,
+    out: []Tally,
+) !void {
+    const platform_json = try stats.setsJson(gpa, sets);
     defer gpa.free(platform_json);
     var q = try db.prepare(
-        \\SELECT data, fetched_at FROM mastery
+        \\SELECT data, fetched_at, platform FROM mastery
         \\WHERE platform IN (SELECT value FROM json_each(?))
     );
     defer q.deinit();
@@ -196,29 +212,57 @@ pub fn tallyMastery(
             if (e.last_play < fetched_at - mastery_recent_s) continue;
             try plays.append(gpa, .{ .champion = e.champion, .weight = e.points });
         }
-        t.add(st, plays.items, .mastery);
+        const in = stats.setsWith(sets, q.bytes(2));
+        for (out, 0..) |*t, i| {
+            if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(st, plays.items, .mastery);
+        }
     }
-    return t;
 }
 
-/// Tally from the source with more players (mastery once it fills) and build, in
+/// Both sources' tallies, one per platform set
+pub const Tallies = struct {
+    games: []Tally,
+    mastery: []Tally,
+
+    pub fn deinit(t: *Tallies, gpa: Allocator) void {
+        freeTallies(gpa, t.games);
+        freeTallies(gpa, t.mastery);
+    }
+};
+
+fn initTallies(gpa: Allocator, n: usize, count: usize) ![]Tally {
+    const out = try gpa.alloc(Tally, count);
+    var made: usize = 0;
+    errdefer freeTallies(gpa, out[0..made]);
+    while (made < count) : (made += 1) out[made] = try .init(gpa, n);
+    return out;
+}
+
+fn freeTallies(gpa: Allocator, ts: []Tally) void {
+    for (ts) |*t| t.deinit(gpa);
+    gpa.free(ts);
+}
+
+/// Tallies for each of `sets` (platform lists), two passes over the database in all
+pub fn tally(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8) !Tallies {
+    const games = try initTallies(gpa, st.n, sets.len);
+    errdefer freeTallies(gpa, games);
+    const mastery = try initTallies(gpa, st.n, sets.len);
+    errdefer freeTallies(gpa, mastery);
+    try tallyGames(gpa, db, st, sets, games);
+    try tallyMastery(gpa, db, st, sets, mastery);
+    return .{ .games = games, .mastery = mastery };
+}
+
+/// Build for sets[set] from the source with more players (mastery once it fills), in
 /// `arena`
-pub fn make(
-    gpa: Allocator,
-    arena: Allocator,
-    db: store.Db,
-    st: *const Stats,
-    platforms: []const []const u8,
-    opts: Options,
-) !Pool {
-    var games = try tallyGames(gpa, db, st, platforms);
-    defer games.deinit(gpa);
-    var points = try tallyMastery(gpa, db, st, platforms);
-    defer points.deinit(gpa);
+pub fn make(arena: Allocator, t: *const Tallies, set: usize, st: *const Stats, opts: Options) !Pool {
+    const games = &t.games[set];
+    const points = &t.mastery[set];
     const p = if (points.players > games.players)
-        try build(arena, &points, st, .mastery, opts)
+        try build(arena, points, st, .mastery, opts)
     else
-        try build(arena, &games, st, .games, opts);
+        try build(arena, games, st, .games, opts);
     var listed: usize = 0;
     for (p.mains) |m| listed += @intFromBool(m.players >= opts.min_players);
     log.info("{d} players from {s}, {d} champions with {d}+ mains", .{
@@ -620,12 +664,43 @@ test "mastery: points as weight, stale and small champions left out" {
             puuid, p[0], now, p[1].len, store.Blob{ .bytes = blob },
         });
     }
-    var t = try tallyMastery(gpa, db, &st, &.{"EUW1"});
-    defer t.deinit(gpa);
+    var both = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "EUW1", "KR" } });
+    defer both.deinit(gpa);
+    try testing.expectEqual(2, both.mastery[1].players);
+    const t = both.mastery[0];
     try testing.expectEqual(1, t.players);
     try testing.expectEqual(1, t.mains[st.index(1).?]);
     try testing.expectEqual(1, t.one_tricks[st.index(1).?]); // 200k of 245k recent
     try testing.expectEqual(1, t.plays[st.index(2).?]);
     try testing.expectEqual(0, t.plays[st.index(3).?]);
     try testing.expectEqual(0, t.plays[st.index(4).?]);
+}
+
+test "games: one pass for several platform sets, a champion summed across platforms" {
+    const gpa = testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const st = try testStats(arena, 4, &.{.{ 1, 2, 0 }});
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec("INSERT INTO players (puuid, source) VALUES ('a','t')");
+    // 'a': champion 1 six times on EUW1 and five on KR, champion 2 three times on KR
+    for (0..14) |g| {
+        const platform: []const u8 = if (g < 6) "EUW1" else "KR";
+        const id = try std.fmt.allocPrint(arena, "{s}_{d}", .{ platform, g });
+        try db.run("INSERT INTO matches VALUES (?,'t',?,420,'16.20','',?,1600,100,0)", .{ id, platform, g });
+        const champ: i64 = if (g < 11) 1 else 2;
+        try db.run(
+            \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position, win)
+            \\VALUES (?,0,100,'a',?,'TOP',1)
+        , .{ id, champ });
+    }
+    var t = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "EUW1", "KR" } });
+    defer t.deinit(gpa);
+    try testing.expectEqual(0, t.games[0].players); // 6 games: too new to say
+    const all = t.games[1];
+    try testing.expectEqual(1, all.players);
+    try testing.expectEqual(1, all.one_tricks[st.index(1).?]); // 11 of 14
+    try testing.expectEqual(1, all.plays[st.index(2).?]);
 }

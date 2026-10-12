@@ -142,24 +142,24 @@ fn goldMap(arena: Allocator, db: store.Db, platform_json: []const u8) !GoldMap {
     return map;
 }
 
-/// Every ranked solo game of players whose match history was crawled, on
-/// `platforms`, all patches: experience builds across patches
+/// Every ranked solo game of players whose match history was crawled, all patches
+/// (experience builds across patches), into out[i] for the platforms of sets[i], in one
+/// pass
 pub fn tallyHistory(
     gpa: Allocator,
     db: store.Db,
     st: *const Stats,
-    platforms: []const []const u8,
-) !Tally {
+    sets: []const []const []const u8,
+    out: []Tally,
+) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const platform_json = try std.json.Stringify.valueAlloc(arena, platforms, .{});
+    const platform_json = try stats.setsJson(arena, sets);
     const gold = try goldMap(arena, db, platform_json);
 
-    var t: Tally = try .init(gpa, st.n);
-    errdefer t.deinit(gpa);
     var q = try db.prepare(
-        \\SELECT pa.puuid, pa.champion_id, pa.match_id, pa.slot, pa.win
+        \\SELECT pa.puuid, pa.champion_id, pa.match_id, pa.slot, pa.win, m.platform
         \\FROM participants pa JOIN matches m USING (match_id) JOIN players pl USING (puuid)
         \\WHERE pl.matches_checked_at IS NOT NULL AND m.queue_id = ? AND m.remake = 0
         \\  AND m.platform IN (SELECT value FROM json_each(?))
@@ -170,28 +170,53 @@ pub fn tallyHistory(
     var player: std.ArrayList(u8) = .empty;
     defer player.deinit(gpa);
     var champion: i64 = -1;
-    var game: u32 = 0;
+    // Per set: the game's number on the champion, and whether the player counted yet
+    const games = try arena.alloc(u32, sets.len);
+    var seen: u32 = 0;
     while (try q.step()) {
         if (!std.mem.eql(u8, q.bytes(0), player.items)) {
             player.clearRetainingCapacity();
             try player.appendSlice(gpa, q.bytes(0));
-            t.players += 1;
+            seen = 0;
             champion = -1;
         }
         if (q.int(1) != champion) {
             champion = q.int(1);
-            game = 0;
+            @memset(games, 0);
         }
-        game += 1;
+        const in = stats.setsWith(sets, q.bytes(5));
+        for (out, games, 0..) |*t, *game, i| {
+            const bit = @as(u32, 1) << @intCast(i);
+            if (in & bit == 0) continue;
+            game.* += 1;
+            if (seen & bit == 0) t.players += 1;
+            seen |= bit;
+        }
         const c = st.index(@intCast(champion)) orelse continue;
         const slot = q.int(3);
         const g: ?i32 = if (gold.get(q.bytes(2))) |slots|
             (if (slot >= 0 and slot < 10) slots[@intCast(slot)] else null)
         else
             null;
-        t.add(c, game, q.int(4) != 0, g);
+        for (out, games, 0..) |*t, game, i| {
+            if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(c, game, q.int(4) != 0, g);
+        }
     }
-    return t;
+}
+
+/// Tallies for each of `sets` (platform lists) in one pass; free with freeTallies
+pub fn tally(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8) ![]Tally {
+    const out = try gpa.alloc(Tally, sets.len);
+    var made: usize = 0;
+    errdefer freeTallies(gpa, out[0..made]);
+    while (made < sets.len) : (made += 1) out[made] = try .init(gpa, st.n);
+    try tallyHistory(gpa, db, st, sets, out);
+    return out;
+}
+
+pub fn freeTallies(gpa: Allocator, ts: []Tally) void {
+    for (ts) |*t| t.deinit(gpa);
+    gpa.free(ts);
 }
 
 pub const Champion = struct {
@@ -229,17 +254,8 @@ fn usualGames(b: [bin_count]Bin) u32 {
     return n;
 }
 
-pub fn make(
-    gpa: Allocator,
-    arena: Allocator,
-    db: store.Db,
-    st: *const Stats,
-    platforms: []const []const u8,
-    opts: Options,
-) !Learning {
-    var t = try tallyHistory(gpa, db, st, platforms);
-    defer t.deinit(gpa);
-    const l = try build(arena, &t, st, opts);
+pub fn make(arena: Allocator, t: *const Tally, st: *const Stats, opts: Options) !Learning {
+    const l = try build(arena, t, st, opts);
     var reached: usize = 0;
     for (l.champions) |c| reached += @intFromBool(c.reach != null);
     log.info("{d} players' histories, {d} champions, {d} with a learning point", .{
@@ -340,8 +356,10 @@ test "history: game number per player and champion, lane gold from the gold colu
     try b.write(&aw.writer, "16.20");
     const st: Stats = try .parse(arena, aw.written());
 
-    var t = try tallyHistory(gpa, db, &st, &.{"EUW1"});
-    defer t.deinit(gpa);
+    const both = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "KR", "EUW1" } });
+    defer freeTallies(gpa, both);
+    try testing.expectEqualDeep(both[0].bins, both[1].bins);
+    const t = both[0];
     try testing.expectEqual(2, t.players);
     const a = t.bins[st.index(10).?];
     try testing.expectEqual(Bin{ .games = 5, .wins = 5, .gold_games = 1, .gold_sum = a[0].gold_sum }, a[0]);
