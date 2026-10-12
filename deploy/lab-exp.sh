@@ -12,6 +12,7 @@
 #   deploy/lab-exp.sh table [CAMPAIGN]             runs, best dev gain first
 #   deploy/lab-exp.sh looks                        the ladder's selection looks
 #   deploy/lab-exp.sh show RUN                     summary.md: dev by outcome, role, patch, tier
+#   deploy/lab-exp.sh effects RUN                  the run's effect tables (effects-*.tsv)
 #   deploy/lab-exp.sh restore CAMPAIGN RUN         a run's candidate back into the campaign
 #   deploy/lab-exp.sh finding CAMPAIGN RUN TEXT [EFFECT_FILE]
 #                                                  what RUN learnt about the game, one plain
@@ -52,7 +53,7 @@ on() {
 }
 
 usage() {
-    sed -n '7,25p' "$0"
+    sed -n '7,26p' "$0"
     exit 2
 }
 
@@ -197,6 +198,11 @@ case "$cmd" in
     show)
         (( $# == 1 )) || usage
         on "cat ml/runs/$1/summary.md"
+        ;;
+    effects)
+        (( $# == 1 )) && [[ "$1" =~ ^[A-Za-z0-9_.-]+$ ]] || usage
+        on "cd ml/runs/$1 && for f in effects-*.tsv; do [[ -f \$f ]] || { echo 'no effect tables'; break; }; \
+            echo \"== \$f\"; column -t -s \$'\\t' \$f; echo; done"
         ;;
     restore)
         (( $# == 2 )) || usage

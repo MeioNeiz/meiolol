@@ -51,6 +51,21 @@ How to write a line:
 
 ## Early game
 
+- 2026-10-13 (early): A higher rank means more gold at 14 in the same matchup: going
+  from Emerald to Master is worth about 200 gold for a jungler, 145 mid and bot, 90 top
+  and 20 support, and Iron to Challenger spans 400-850 gold outside support. Sure: dev
+  and one selection check on 85k EUW1 rows, the typical gold miss drops from 823 to 809
+  (3% of it, give or take 0.3%); test not touched; ranks are end-of-season snapshots, so
+  slightly flattering. Site: lesson material ("at your rank, expect about X gold at 14
+  in this matchup"), not a pick reason: it is mostly better players earning more.
+  Evidence: lab campaign gold14-a, run 20261012T2322Z-gold14-a-rankfx (effects-rank.tsv),
+  selection 20261012T2332Z-gold14-a-rank-sel new-best
+- 2026-10-13 (early): For your own gold at 14, it is who the enemy laner is that counts,
+  not how your champion matches up against theirs: knowing the enemy laner's champion
+  does as well as knowing the exact matchup. Sure: dev only, 80k rows, the two within
+  noise of each other; other early numbers (lane gold difference, CS) not checked this
+  way. Site: nothing yet. Evidence: lab campaign gold14-a, runs
+  20261012T2324Z-gold14-a-nolane and 20261012T2328Z-gold14-a-lanemain
 - 2026-10-12: Your lane opponent's champion changes your early game the same way
   whoever you play, on top of the specific matchup; adding that makes every early-game
   prediction better (gold at 14, lane gold difference, CS at 10, deaths before 15, first
