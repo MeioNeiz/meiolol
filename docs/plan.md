@@ -18,7 +18,9 @@ Several Claude sessions in parallel, all on main in the one checkout (Jacob,
 ... -- <paths>`): the index may hold another session's staged work. Every push to main
 deploys to the box (deploy/box.sh builds from a clean checkout of the commit; history in
 ml/meiolol/DEPLOYED), so the pre-push hook runs `zig build ci` on a clean checkout of the
-pushed commit first (CLAUDE.md).
+pushed commit first (CLAUDE.md). Push the tested commit by sha, `git push origin
+<sha>:main`, never `git push origin main`: over HTTPS git re-reads main after the hook,
+so a commit another session makes during CI goes out untested (055b97d, 2026-10-12).
 
 Until the site goes public (Jacob, 2026-10-11): sessions merge, push and redeploy the
 preview site and box binary without asking. Still ask first: anything irreversible
