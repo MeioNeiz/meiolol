@@ -108,11 +108,14 @@ SQL
         du -sh "$ROOT/data/snap"
         ;;
     preview)
-        # The working tree (uncommitted edits included, other sessions' too) rendered on
-        # the box with live data, EUW views only, into data/preview, then served at
+        # HEAD plus the working tree's edits under src/site (`preview src/site src/pool.zig`
+        # names other paths) rendered on the box with live data, EUW views only, into
+        # data/preview, then served at
         # http://localhost:8081: `meiolol-preview serve` runs detached on the box (unit
         # meiolol-preview) behind a background ssh tunnel, and this returns once the URL
-        # answers. Never touches the live site. A new preview replaces the old one.
+        # answers. Never touches the live site. A new preview replaces the old one. Not
+        # the whole working tree: other sessions' uncommitted work once migrated the live
+        # DB from a preview.
         # `preview static`: copy src/site/static/ over the last preview, no build (css
         # and js edits; reload the page). `preview stop`: tunnel and server
         tunnel="8081:127.0.0.1:8081 $HOST"
@@ -134,11 +137,20 @@ SQL
             echo "copied src/site/static into the preview"
             exit 0
         fi
+        paths=("${@:2}")
+        (( ${#paths[@]} )) || paths=(src/site)
         target=$(ssh "$HOST" uname -m)-linux-musl
-        (cd "$ROOT" && zig build -Dtarget="$target" -Doptimize=ReleaseSafe \
-            --prefix zig-out/preview)
+        tree=$(mktemp -d)
+        git -C "$ROOT" worktree add -q --detach "$tree" HEAD
+        # shellcheck disable=SC2064 # expand now
+        trap "git -C '$ROOT' worktree remove --force '$tree'" EXIT
+        git -C "$ROOT" diff --binary HEAD -- "${paths[@]}" | git -C "$tree" apply --allow-empty
+        git -C "$ROOT" ls-files -z --others --exclude-standard -- "${paths[@]}" \
+            | (cd "$ROOT" && xargs -0 -I{} rsync -R {} "$tree/")
+        (cd "$tree" && zig build -Dtarget="$target" -Doptimize=ReleaseSafe \
+            --prefix zig-out/preview --cache-dir "$ROOT/.zig-cache")
         stop_preview
-        scp -q "$ROOT/zig-out/preview/bin/meiolol" "$HOST:$DIR/bin/meiolol-preview"
+        scp -q "$tree/zig-out/preview/bin/meiolol" "$HOST:$DIR/bin/meiolol-preview"
         ssh "$HOST" "cd $DIR && rm -rf data/preview \
             && time bin/meiolol-preview site --contact \"\$(cat contact)\" --euw-only \
                 --out data/preview > data/preview.log 2>&1 || { tail data/preview.log; exit 1; }"

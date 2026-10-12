@@ -350,6 +350,15 @@ Done:
   jomify's nginx (try_files, then proxy cache), over the private subnet; matchup pages
   under 200 games no longer uploaded (docs/hosting.md "Rendering on request"); deploys
   swap the renderer without a gap (two instances take turns on the port)
+- Pool and learning tallied once per build for both regions, and their queries scan
+  matches first (sqlite walked the puuid index, 6-8x slower): box site pass 171 s to
+  ~45 s, renderer loads every view in ~44 s (was ~40 s root, ~3 min all). Output
+  byte-identical
+- `meiolol curves --site`: the four site curves files in one pass over the timelines
+  (box 161 s to 100 s, files byte-identical); fitting is the rest
+- gzip measured: level 1, 4 or 6 make no difference to pass time now; kept at 6
+- `box.sh preview` builds HEAD plus the working tree's src/site edits (other paths as
+  arguments), not the whole working tree; EUW preview build ~40 s
 
 Direction (Jacob 2026-10-12, via meiolol-88: "build both"): stay static for the pages
 search sees, plain JS on top, no framework; plus option B from the research: a renderer
@@ -363,11 +372,11 @@ decided on evidence of what gets clicks, not just a game floor (Jacob 2026-10-12
 canonical, sitemap and noindex support as settings.
 
 Next:
-1. pool.make once for all views (22% of a site pass), one timeline decode for curves,
-   gzip cost
-2. Dev: cached data load for faster restarts (later, Jacob); box preview from a clean
-   checkout of HEAD plus the site diff (a working-tree build once migrated the live DB)
-3. Design and UX pass with screenshots; page weight; SEO settings for `--public`
+1. Design and UX pass with screenshots; page weight; SEO settings for `--public`
+2. Cached data load (Jacob: later): probably not worth it now that a load takes ~5 s on
+   the Mac snapshot and ~44 s for every view on the box. Left of a pass: filters.make
+   ~1 s, stats per view ~0.2 s (Mac). Renderer boot after a box reboot never verified
+   on the box (only locally)
 
 ### Ideas not started (concept extensions, 2026-10-11)
 
