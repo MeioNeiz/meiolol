@@ -312,6 +312,7 @@ button.slot .fb { color: var(--warn); font-size: 12px; }
 .suggest { margin: 0 0 8px; }
 .suggesthead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; }
 .suggesthead h4 { margin: 0 auto 0 0; font-size: 13px; }
+.suggest h5 { margin: 8px 0 2px; font-size: 13px; }
 .suggest ol { margin: 0; padding-left: 20px; font-size: 13px; }
 .suggest li { margin: 2px 0; }
 button.link { font: inherit; font-weight: 600; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }

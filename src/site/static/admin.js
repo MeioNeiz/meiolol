@@ -1659,7 +1659,10 @@ async function loadFindings(runs) {
     const key = r.run + "|" + r.state + "|" + r.ended + "|" + r.last;
     if (MODELS.findings.get(r.run)?.key === key) continue;
     const base = "training/runs/" + encodeURIComponent(r.run) + "/";
-    const [res, fin] = await Promise.all([getText(base + "result.tsv").catch(() => ""), getText(base + "findings.tsv").catch(() => "")]);
+    // runs.tsv's findings column lists the files present; older pushes wrote just "1"
+    const has = f => r.findings === "1" || r.findings.split(",").includes(f);
+    const get = f => has(f) ? getText(base + f).catch(() => "") : "";
+    const [res, fin] = await Promise.all([get("result.tsv"), get("findings.tsv")]);
     const result = tsvRaw(res)[0] || null;
     const findings = tsvRaw(fin).filter(f => f.finding);
     const names = new Set([...findings.map(f => f.effect_file), ...(result && result.effects ? result.effects.split(",") : [])]
@@ -1733,6 +1736,15 @@ async function loadDraftModel() {
     DRAFT.err = null;
     DRAFT.check = DRAFT.m && DRAFT.ref ? draftCheck(DRAFT.m, DRAFT.ref) : null;
   } catch (e) { DRAFT.model = null; DRAFT.m = null; DRAFT.err = e.message; }
+  // The lane model is optional: without it the suggester shows only "Best for this draft"
+  DRAFT.lane = null; DRAFT.laneErr = null; DRAFT.laneCheck = null;
+  try {
+    const L = await getJson("training/lane-model.json");
+    DRAFT.lane = laneModel(L);
+    if (!DRAFT.lane) throw new Error(`lane-model.json is format "${L.format}" version ${L.version}; this page reads meiolol-lane-model version 1`);
+    const ref = await getJson("training/lane-ref.json").catch(() => null);
+    DRAFT.laneCheck = ref ? laneCheck(DRAFT.lane, ref) : null;
+  } catch (e) { if (!/^404/.test(e.message)) DRAFT.laneErr = e.message; }
   if (ui.tab === "models" && ui.cat === "draft") render(true);
 }
 
@@ -1833,6 +1845,50 @@ function draftCheck(m, ref) {
     : { ok: true, text: `Matches meiolol-lab on ${(ref.drafts || []).length} reference drafts and ${(ref.slots || []).length} slot lists (largest gap ${worst.toExponential(1)}).` };
 }
 
+// The early-game lane model (docs/model.md "Lane model file"; Scorer in src/lab/lane.zig is
+// the reference): expected gold14, lanediff14, cs10 and deaths15 for champion x in role r
+// into lane opponent y, each with a 95% range for the average, and the champion's and the
+// matchup's games. Every outcome array follows L.outcomes
+function laneModel(L) {
+  if (!L || L.format !== "meiolol-lane-model" || L.version !== 1) return null;
+  const champ = new Map(L.champ.map(t => [t.champion + ":" + t.role, t]));
+  const enemy = new Map(L.enemy.map(t => [t.champion + ":" + t.role, t]));
+  const col = Object.fromEntries(L.pair_columns.map((c, i) => [c, i]));
+  const pairs = new Map(L.pairs.map(p => [p[0] + ":" + p[1] + ":" + p[2], p]));
+  const outs = L.outcomes.map((o, i) => i);
+  // vc: the champion term's variance, shared by all its matchups; vr: the rest's
+  const value = (x, y, r) => {
+    const c = champ.get(x + ":" + r), e = enemy.get(y + ":" + r), p = pairs.get(x + ":" + y + ":" + r);
+    const pt = p && { b: L.outcomes.map(o => p[col["b_" + o]]), sd: L.outcomes.map(o => p[col["sd_" + o]]) };
+    const v = outs.map(o => L.intercept[o][r] + L.others[o][r] + (c ? c.b[o] : 0) + (e ? e.b[o] : 0) + (pt ? pt.b[o] : 0));
+    const vc = outs.map(o => c ? c.sd[o] ** 2 : 0);
+    const vr = outs.map(o => (e ? e.sd[o] ** 2 : 0) + (pt ? pt.sd[o] ** 2 : 0));
+    const h = outs.map(o => 1.96 * Math.sqrt(vc[o] + vr[o]));
+    return { value: v, lo: v.map((x, o) => x - h[o]), hi: v.map((x, o) => x + h[o]), vc, vr, champ_games: c ? c.n : 0, pair_games: p ? p[col.n] : 0 };
+  };
+  // Into a field of opponents [{id, w}] (w summing to 1): the weighted average, its range
+  // (opponent and pair terms average down, the champion's own term doesn't) and each matchup
+  const blind = (x, r, field) => {
+    const each = field.map(f => ({ ...f, ...value(x, f.id, r) }));
+    const v = outs.map(o => sumR(each.map(f => f.w * f.value[o])));
+    const h = outs.map(o => 1.96 * Math.sqrt((each[0] ? each[0].vc[o] : 0) + sumR(each.map(f => f.w * f.w * f.vr[o]))));
+    return { value: v, lo: v.map((x, o) => x - h[o]), hi: v.map((x, o) => x + h[o]), each, champ_games: (champ.get(x + ":" + r) || {}).n || 0 };
+  };
+  return { L, value, blind, at: Object.fromEntries(L.outcomes.map((o, i) => [o, i])) };
+}
+
+function laneCheck(lm, ref) {
+  let worst = 0, n = 0, bad = null;
+  for (const x of ref.refs || []) {
+    const s = lm.value(x.champion, x.enemy, x.role);
+    for (const k of ["value", "lo", "hi"]) x[k].forEach((v, o) => { n++; const e = Math.abs(s[k][o] - v); if (e > worst) worst = e; if (e > 0.01) bad = `${x.label}, role ${x.role}: ${k} ${lm.L.outcomes[o]}`; });
+    if (s.champ_games !== x.champ_games || s.pair_games !== x.pair_games) bad = `${x.label}, role ${x.role}: games`;
+  }
+  if (!n) return null;
+  return bad ? { ok: false, text: `Lane model differs from meiolol-lab's reference (${bad}; largest gap ${worst.toFixed(3)}): don't trust the lane suggestions.` }
+    : { ok: true, text: `Lane model matches meiolol-lab on ${ref.refs.length} reference matchups (largest gap ${worst.toExponential(1)}).` };
+}
+
 // Search key: letters and digits only, so "kaisa" finds Kai'Sa and "nunu" Nunu & Willump
 const champKey = s => (s || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
 const takenIn = d => new Set([...Object.values(d.blue), ...Object.values(d.red), ...d.bans].map(String));
@@ -1869,6 +1925,13 @@ function draftView(body) {
   const dev = meta.dev || {};
   sec.append(el("p", { class: "sub", title: dev.what || "" }, [meta.name, meta.training_games != null ? `${num(meta.training_games)} training games to ${meta.newest_game}` : null, meta.patch ? `play rates from patch ${meta.patch}` : null, dev.accuracy != null ? `right ${pct(dev.accuracy)} of ${num(dev.games)} practice games (coin flip 50%)` : null].filter(Boolean).join(" · ")));
   if (DRAFT.check) sec.append(el("div", { class: "health " + (DRAFT.check.ok ? "good" : "bad") }, el("b", {}, DRAFT.check.ok ? "✓ " : "⚠ "), DRAFT.check.text));
+  if (DRAFT.laneErr) sec.append(el("div", { class: "health bad" }, el("b", {}, "The lane model didn't load: "), DRAFT.laneErr));
+  if (DRAFT.laneCheck) sec.append(el("div", { class: "health " + (DRAFT.laneCheck.ok ? "good" : "bad") }, el("b", {}, DRAFT.laneCheck.ok ? "✓ " : "⚠ "), DRAFT.laneCheck.text));
+  if (DRAFT.lane) {
+    const lm = DRAFT.lane.L.meta, dev = (lm.dev || []).find(x => x.outcome === "lanediff14");
+    sec.append(el("p", { class: "sub" }, `Lane suggestions: early-game model ${lm.name !== "candidate" ? lm.name + " " : ""}on ${num(lm.training_games)} games to ${lm.newest_game}.` +
+      (dev ? ` It predicts the gold lead at 14 ${dev.removed_pct.toFixed(0)}% better than champion averages alone, so matchups nudge the numbers rather than decide them.` : "")));
+  }
   if (!M.has_pairs) sec.append(el("div", { class: "health warn" }, el("b", {}, "Caveat: "), "the model has no counter or synergy terms yet. It ranks by champion strength in the role; other picks shift the numbers, not the order."));
 
   const w = m.win(d);
@@ -2061,34 +2124,75 @@ function slotPicker(m, d, side, role) {
     if (ev.key === "Enter") { const b = list.querySelector("button"); if (b) b.click(); }
     if (ev.key === "Escape") { d.open = null; saveDraft(d); }
   });
-  box.append(suggest(d, all, q.options, cur, now, side, pick));
+  box.append(suggest(m, d, all, q.options, cur, now, side, role, pick));
   box.append(el("div", { class: "pickhead" }, input, sortBtn), el("p", { class: "sub" }, `Share of the role's games on the newest patch, then the change to ${side}'s win chance ${now != null ? "against the current pick" : "against an empty slot"}. An average pick here: ${pct(q.average)}.`), list);
   fill();
   setTimeout(() => input.focus({ preventScroll: true }), 0);
   return box;
 }
 
+const LANE_MIN_SHARE = 0.01;
+
 // Suggestions for the open slot, each with its reason as a plain sentence. Ranked by the
-// range's low end by default, so a champion on few games can't top the list (as the site's
-// lane opponents). Lane-opponent and blind-pick lists wait for the early-game lane export
-function suggest(d, all, options, cur, now, side, pick) {
+// range's low end by default, so a champion on few games can't top a list (as the site's
+// lane opponents). The lane lists need the lane model (DRAFT.lane)
+function suggest(m, d, all, options, cur, now, side, role, pick) {
   const byId = new Map(options.map(o => [o.champion, o]));
-  const by = d.rank === "guess" ? x => x.p : x => byId.get(x.c.id).lo;
-  const best = all.filter(x => String(x.c.id) !== String(cur)).sort((a, b) => by(b) - by(a)).slice(0, 5);
+  const low = d.rank !== "guess";
+  const ri = DRAFT_ROLES.findIndex(([r]) => r === role), roleName = DRAFT_ROLES[ri][1].toLowerCase();
+  const nameOf = id => (m.champs.find(c => c.id === +id) || { name: "#" + id }).name;
+  const cands = all.filter(x => String(x.c.id) !== String(cur));
   const rank = el("nav", { class: "switch", "aria-label": "Rank by" });
   for (const [k, label] of [["low", "Likely (low end)"], ["guess", "Best guess"]]) {
     rank.append(el("button", { type: "button", "aria-pressed": String(d.rank === k), onclick: () => { d.rank = k; saveDraft(d); } }, label));
   }
-  const ol = el("ol", {});
-  for (const x of best) {
+  const box = el("div", { class: "suggest" }, el("div", { class: "suggesthead" }, el("h4", {}, "Suggestions"), el("span", { class: "sub" }, "Rank by"), rank));
+  const list = (title, rows, empty) => {
+    box.append(el("h5", {}, title));
+    if (!rows.length) { box.append(el("p", { class: "muted" }, empty)); return; }
+    box.append(el("ol", {}, ...rows.map(([id, text]) => el("li", {}, el("button", { type: "button", class: "link", onclick: () => pick(id) }, nameOf(id)), ": ", text))));
+  };
+  const pts = x => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)} points`;
+  const gold = x => `${x >= 0 ? "+" : "−"}${Math.abs(Math.round(x)).toLocaleString("en-GB")}`;
+
+  const best = cands.slice().sort((a, b) => low ? byId.get(b.c.id).lo - byId.get(a.c.id).lo : b.p - a.p).slice(0, 5);
+  list("Best for this draft", best.map(x => {
     const o = byId.get(x.c.id);
-    const delta = x.change - (now ?? 0);
-    ol.append(el("li", {}, el("button", { type: "button", class: "link", onclick: () => pick(x.c.id) }, x.c.name), ": ",
-      `${side} would win ${pct(x.p)} of games (likely ${pct(o.lo)} to ${pct(o.hi)}), ${delta >= 0 ? "+" : "−"}${Math.abs(delta * 100).toFixed(1)} points against ${now != null ? "the current pick" : "an empty slot"}, from ${num(o.games)} games in the role.`));
+    return [x.c.id, `${side} would win ${pct(x.p)} of games (likely ${pct(o.lo)} to ${pct(o.hi)}), ${pts(x.change - (now ?? 0))} against ${now != null ? "the current pick" : "an empty slot"}, from ${num(o.games)} games in the role.`];
+  }), "No candidates left for this slot.");
+
+  const lm = DRAFT.lane;
+  if (!lm) { box.append(el("p", { class: "sub" }, "Best into your lane opponent and safest blind pick need the lane model (meiolol-lab lane --export).")); return box; }
+  const { lanediff14: G, cs10: C, deaths15: D } = lm.at;
+  const by = r => low ? r.lo[G] : r.value[G];
+  // Off-role picks (carries in support, say) farm more than the role's regulars, so on a few
+  // hundred games they top every gold list; the lane lists keep the role's regular picks
+  const regular = cands.filter(x => x.rate >= LANE_MIN_SHARE);
+  box.append(el("p", { class: "sub" }, `Lane lists: champions with at least ${pct(LANE_MIN_SHARE)} of the ${roleName} role's games this patch.` +
+    (ri === 1 || ri === 4 ? ` For ${roleName === "jungle" ? "junglers" : "supports"}, gold at 14 says more about how much a champion farms than about who wins the lane.` : "")));
+  const other = side === "blue" ? "red" : "blue", opp = d[other][role];
+  if (opp != null) {
+    const rows = regular.map(x => [x.c.id, lm.value(x.c.id, +opp, ri)]).sort((a, b) => by(b[1]) - by(a[1])).slice(0, 5);
+    list(`Best into ${nameOf(opp)}`, rows.map(([id, r]) => [id,
+      `${gold(r.value[G])} gold over ${nameOf(opp)} at 14 (likely ${gold(r.lo[G])} to ${gold(r.hi[G])}), ${r.value[C].toFixed(0)} CS at 10 and ${r.value[D].toFixed(1)} deaths before 15, ` +
+      (r.pair_games ? `from ${num(r.pair_games)} games of this matchup and ${num(r.champ_games)} on ${nameOf(id)} in the ${roleName} role.` : `from ${num(r.champ_games)} games on ${nameOf(id)} in the ${roleName} role; no games of this matchup yet, so averages only.`)]), "No candidates left for this slot.");
+  } else {
+    box.append(el("h5", {}, "Best into your lane opponent"), el("p", { class: "muted" }, `Pick ${other}'s ${roleName} first: that's the lane opponent.`));
   }
-  return el("div", { class: "suggest" }, el("div", { class: "suggesthead" }, el("h4", {}, "Best for this draft"), el("span", { class: "sub" }, "Rank by"), rank),
-    best.length ? ol : el("p", { class: "muted" }, "No candidates left for this slot."),
-    el("p", { class: "sub" }, "Best into your lane opponent and safest blind pick come with the early-game lane export."));
+  // Likely opponents: the role's champions by play share on the newest patch, without
+  // picks and bans; the "worst common matchup" is among the 10 most played
+  const taken = takenIn(d);
+  const field = m.champs.filter(c => !taken.has(String(c.id)) && m.rate(c.id, role) > 0).map(c => ({ id: c.id, w: m.rate(c.id, role) }));
+  const blind = regular.map(x => {
+    const f = field.filter(o => o.id !== x.c.id), t = sumR(f.map(o => o.w));
+    return [x.c.id, lm.blind(x.c.id, ri, f.map(o => ({ id: o.id, w: o.w / t })))];
+  }).sort((a, b) => by(b[1]) - by(a[1])).slice(0, 5);
+  list("Safest blind pick", blind.map(([id, r]) => {
+    const worst = r.each.slice().sort((a, b) => b.w - a.w).slice(0, 10).sort((a, b) => a.value[G] - b.value[G])[0];
+    return [id, `${gold(r.value[G])} gold over the lane opponent at 14 on average across likely opponents (likely ${gold(r.lo[G])} to ${gold(r.hi[G])})` +
+      (worst ? `; worst common matchup ${nameOf(worst.id)}, ${gold(worst.value[G])} gold` : "") + `; from ${num(r.champ_games)} games on ${nameOf(id)} in the ${roleName} role.`];
+  }), "No candidates left for this slot.");
+  return box;
 }
 
 // ---------- models: shell ----------

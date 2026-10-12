@@ -60,11 +60,16 @@ stage_runs() {
             last=$(grep -h '^RESULT ' "$runs/$d/log" 2>/dev/null | tail -n 1 | cut -c8- | tr '\t' ' ' || true)
         fi
         # meiolol-lab's plain results: result.tsv (the run's record, category, error removed),
-        # findings.tsv (one sentence per line) and its effects-*.tsv tables
+        # findings.tsv (one sentence per line) and its effects-*.tsv tables; `found` lists the
+        # ones present so the page fetches only those
         found=''
-        for f in result.tsv findings.tsv draft-model.json draft-ref.json "$runs/$d"/effects-*.tsv; do
+        for f in result.tsv findings.tsv draft-model.json draft-ref.json lane-model.json \
+            lane-ref.json "$runs/$d"/effects-*.tsv; do
             f=${f##*/}
-            if [[ -f "$runs/$d/$f" ]]; then cp "$runs/$d/$f" "$out/runs/$d/"; found=1; fi
+            if [[ -f "$runs/$d/$f" ]]; then
+                cp "$runs/$d/$f" "$out/runs/$d/"
+                [[ $f == *.tsv ]] && found+="${found:+,}$f"
+            fi
         done
         meta() { sed -n "s/^$1 //p" "$runs/$d/meta" 2>/dev/null | tr '\t' ' '; }
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$d" "$state" \
@@ -111,13 +116,15 @@ stage() {
     cp -R "$out/mac/runs/." "$out/runs/"
     [[ -d "$STATE/gpu/runs" ]] && cp -R "$STATE/gpu/runs/." "$out/runs/"
     rm -rf "$out/mac"
-    # The admin Draft tester's model: the newest run that exported one (meiolol-lab draft
-    # --export), with its reference drafts
+    # The admin Draft tester's models: the newest run that exported each (meiolol-lab draft
+    # or lane --export), with its reference values
     # --export DIR may write into a dir that isn't a lab-run.sh run (no job.sh), so look at
     # this Mac's run dirs directly too; names start with the UTC stamp
-    d=$( { find "$RUNS" "$out/runs" -mindepth 2 -maxdepth 2 -name draft-model.json 2>/dev/null || true; } \
-        | awk -F/ '{ print $(NF-1) "\t" $0 }' | sort | tail -n 1 | cut -f2)
-    if [[ -n "$d" ]]; then cp "${d%/*}"/draft-*.json "$out/"; fi
+    for m in draft lane; do
+        d=$( { find "$RUNS" "$out/runs" -mindepth 2 -maxdepth 2 -name "$m-model.json" 2>/dev/null \
+            || true; } | awk -F/ '{ print $(NF-1) "\t" $0 }' | sort | tail -n 1 | cut -f2)
+        if [[ -n "$d" ]]; then cp "${d%/*}/$m"-*.json "$out/"; fi
+    done
     cp "$ROOT/docs/learned.md" "$ROOT/docs/model.md" "$out/" 2>/dev/null || true
     mkdir -p "$out/campaigns"
     for d in "$CAMPAIGNS"/*/; do
