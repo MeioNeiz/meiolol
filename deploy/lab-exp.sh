@@ -207,7 +207,7 @@ case "$cmd" in
             || { echo "$run is not a run of $campaign"; exit 2; }
         [[ "$effect" == - || "$effect" =~ ^effects-[a-z0-9_-]+\.tsv$ ]] \
             || { echo "EFFECT_FILE: an effects-<name>.tsv from the run's RESULT"; exit 2; }
-        on "test -f ml/runs/$run/result.tsv" || { echo "no scored run $run"; exit 1; }
+        on "test -f ml/runs/$run/summary.md" || { echo "no scored run $run"; exit 1; }
         [[ "$effect" == - ]] || on "test -f ml/runs/$run/$effect" \
             || { echo "$run has no $effect (see effects= in its RESULT)"; exit 1; }
         text=${text//$'\t'/ }
