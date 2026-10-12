@@ -343,6 +343,11 @@ next steps land here.
   additively, clear of 0; champion-specific team interactions (by class or champion)
   not detectable at 118k games. Site can show lane matchup + sum of enemy effects, not
   team counters. Next: 2a's embeddings vs 3c-team; 3c items, objectives, raw archive
+- Result (meiolol-2a, docs/model.md "Champion embeddings against the enemy team"):
+  interactions live in the lane only; lane embeddings beat 3c-team on lanediff14
+  (+0.79 ± 0.19 % of base MSE) and gold14 (+0.22 ± 0.13) by letting thin lane pairs
+  borrow from similar champions: candidate for lane curves on thin matchups. Other
+  four enemies' interactions within noise. CPU suffices at this size (fits 1-5 s)
 - Experience term (src/experience.zig): rerun at 300+ train / 100+ test per variant; if
   "user only" beats no-experience beyond its interval, wire it into recommend() as the
   "your pool" reason (wasm `pool` field). Mastery is a post-match snapshot and flatters
