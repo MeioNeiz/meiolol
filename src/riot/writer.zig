@@ -204,6 +204,17 @@ pub const Writer = struct {
                 for (batch.items) |job| job.destroy(gpa);
                 batch.clearRetainingCapacity();
             }
+            // Here, after the linger, not after a commit: readers that started before
+            // the last commit have finished, and newer ones read the database file once
+            // every frame is copied back, so they don't hold the truncate up
+            const now = std.Io.Clock.real.now(wr.c.io).toSeconds();
+            if (now >= truncate_at) {
+                const done = truncateWal(db) catch |err| blk: {
+                    log.warn("writer: WAL truncate: {t}", .{err});
+                    break :blk false;
+                };
+                truncate_at = now + @as(i64, if (done) wal_truncate_s else wal_truncate_retry_s);
+            }
             var tries: u32 = 0;
             while (true) : (tries += 1) {
                 wr.commit(db, &s, batch.items) catch |err| {
@@ -229,14 +240,6 @@ pub const Writer = struct {
             wr.prune.step(db, wr.c.io, wr.c.opts) catch |err| {
                 if (err != error.Busy) return err;
             };
-            const now = std.Io.Clock.real.now(wr.c.io).toSeconds();
-            if (now >= truncate_at) {
-                const done = truncateWal(db) catch |err| blk: {
-                    log.warn("writer: WAL truncate: {t}", .{err});
-                    break :blk false;
-                };
-                truncate_at = now + @as(i64, if (done) wal_truncate_s else wal_truncate_retry_s);
-            }
         }
     }
 
