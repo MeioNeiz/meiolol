@@ -347,7 +347,7 @@ test "history: game number per player and champion, lane gold from the gold colu
     defer db.close();
     try db.exec(
         \\INSERT INTO champions VALUES (10,'A','A','',''), (60,'B','B','',''), (99,'C','C','','');
-        \\INSERT INTO players (puuid, source, matches_checked_at) VALUES ('me','t',1), ('you','t',1);
+        \\INSERT INTO players (puuid, source, region, matches_checked_at) VALUES ('me','t','europe',1), ('you','t','europe',1);
         \\INSERT INTO players (puuid, source) VALUES ('other','t');
     );
     const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
