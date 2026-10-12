@@ -326,6 +326,8 @@ test "fixture games to lab rows, from SQLite and packed" {
         try fillGames(arena, db, 150, true);
         try db.exec("UPDATE participants SET tier = CASE slot % 3 WHEN 0 THEN 'GOLD' " ++
             "WHEN 1 THEN NULL ELSE 'DIAMOND' END, division = 'II'");
+        // The same player in each slot of every game, slot 9 unknown: experience fills in
+        try db.exec("UPDATE participants SET puuid = CASE slot WHEN 9 THEN NULL ELSE 'p' || slot END");
     }
     var legendaries: std.AutoHashMapUnmanaged(u64, void) = .empty;
     defer legendaries.deinit(gpa);
@@ -334,8 +336,9 @@ test "fixture games to lab rows, from SQLite and packed" {
     var sql = try lab_rows.loadSql(gpa, snap, &legendaries);
     defer sql.deinit();
     // The fixture covers what the pack must carry: both sides of the split, two
-    // platforms, games with and without timeline outcomes, ranked and unranked rows
-    var seen: struct { tests: usize = 0, na: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0 } = .{};
+    // platforms, games with and without timeline outcomes, ranked and unranked rows,
+    // players with and without earlier games
+    var seen: struct { tests: usize = 0, na: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0, exp: usize = 0 } = .{};
     for (sql.games) |g| {
         try testing.expect(g.duration_s > 1000 and g.duration_s <= 1620);
         seen.tests += @intFromBool(g.is_test);
@@ -345,10 +348,12 @@ test "fixture games to lab rows, from SQLite and packed" {
     for (sql.rows) |r| {
         seen.unranked += @intFromBool(r.rank == null);
         seen.items += @intFromBool(!std.math.isNan(r.y[@backingInt(lab_rows.Outcome.first_item)]));
+        seen.exp += @intFromBool(r.champ_games > 0);
     }
     try testing.expect(sql.games.len >= 100);
     try testing.expect(seen.tests > 0 and seen.tests < sql.games.len and seen.na > 0);
     try testing.expect(seen.tl > 0 and seen.tl < sql.games.len and seen.unranked > 0 and seen.items > 0);
+    try testing.expect(seen.exp > 0 and seen.exp < sql.rows.len);
 
     try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &legendaries));
     _ = try lab_pack.write(gpa, io, snap, &legendaries);

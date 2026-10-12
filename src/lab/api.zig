@@ -1,7 +1,8 @@
 //! The lab agent's candidate interface (docs/lab-agent.md). A candidate is a module,
 //! src/lab/cand/<campaign>/root.zig, that can import only std and this file. It fits on
 //! the training games the harness hands it, then predicts one query at a time; a query
-//! never carries an outcome, and carries other players' ranks only in post-game scope.
+//! never carries an outcome, and carries other players' ranks only in post-game and
+//! internal scope, their experience only in internal.
 //!
 //! A candidate declares:
 //!   pub const scope: api.Scope
@@ -24,8 +25,26 @@ pub const outcome_count = @typeInfo(Outcome).@"enum".field_names.len;
 pub const Role = enum(u3) { top, jungle, middle, bottom, utility };
 
 /// docs/production-key.md: in champ select a model may use champions, roles, the user's
-/// own rank and experience, and aggregate facts. Other players' ranks only post-game
-pub const Scope = enum { champ_select, post_game };
+/// own rank and experience, and aggregate facts. Other players' ranks only post-game.
+/// internal: Jacob's draft predictor, research only, never the site or app; sees
+/// everyone's rank and experience
+pub const Scope = enum { champ_select, post_game, internal };
+
+/// A player's ranked solo games in our data that ended before this game started, on
+/// this champion and on any. Only what was crawled: 0 can mean "not in our data"
+pub const Experience = struct {
+    champ_games: u16 = 0,
+    champ_wins: u16 = 0,
+    games: u16 = 0,
+    wins: u16 = 0,
+    /// Means over those games, 0 when none: (kills + assists) / max(deaths, 1) over
+    /// `games`; lane gold diff at 14 and deaths before 15 over the perf_games of them
+    /// that reached 15:00
+    kda: f32 = 0,
+    perf_games: u16 = 0,
+    lanediff14: f32 = 0,
+    deaths15: f32 = 0,
+};
 
 pub const Game = struct {
     /// Unix ms
@@ -36,6 +55,8 @@ pub const Game = struct {
     teams: [2][5]u32,
     /// Training covariates only; never in a champ-select query
     ranks: [2][5]?u8,
+    /// Training covariates only; in a query in internal scope only
+    exp: [2][5]Experience,
 };
 
 pub const Row = struct {
@@ -46,6 +67,7 @@ pub const Row = struct {
     champion: u32,
     /// Higher is better: 0 Iron IV .. 39 Challenger I; null unranked
     rank: ?u8,
+    exp: Experience,
     /// NaN when unknown (no timeline to minute 15, no completed item)
     y: [outcome_count]f32,
 };
@@ -68,8 +90,12 @@ pub const Query = struct {
     rank: ?u8,
     /// Champion ids by side (0 blue) and role, the user included
     teams: [2][5]u32,
-    /// Everyone's ranks: post_game scope only, null in champ_select
+    /// Everyone's ranks: post_game and internal scope, null in champ_select
     ranks: ?[2][5]?u8,
+    /// The user's own
+    exp: Experience,
+    /// Everyone's: internal scope only, null otherwise
+    exps: ?[2][5]Experience,
 };
 
 pub const Options = struct {

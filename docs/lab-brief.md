@@ -49,6 +49,7 @@ deploy/lab-exp.sh run CAMPAIGN NAME TARGET --hyp ID --desc "one change" [--fract
 deploy/lab-exp.sh run CAMPAIGN NAME TARGET --hyp ID --desc "..." --select   (costs a look)
 deploy/lab-exp.sh finding CAMPAIGN RUN "plain sentence" [effects-NAME.tsv]
 deploy/lab-exp.sh table CAMPAIGN | looks | show RUN
+deploy/lab-exp.sh effects RUN                  the run's effect tables, to quote in findings
 deploy/lab-exp.sh restore CAMPAIGN RUN
 deploy/lab-exp.sh stop CAMPAIGN "REASON"
 ```
@@ -79,13 +80,14 @@ Jacob reads runs for what they say about League, not for loss numbers. After eve
 - When a term is kept, the candidate exposes it in `effects` (rank tier, patch, or the top
   and bottom 10 champions or matchups by effect), each row with a 95% interval and the
   games behind it, in the target's units; name the file in the finding. src/lab/cand/
-  team has a worked example. `#<champion id>` in a label becomes the champion's name
+  team2 has a worked example. `#<champion id>` in a label becomes the champion's name
 - digest.md entries carry the same sentence beside the run id
 
 ## Your starting point
 
-Your candidate starts as meiolol-3c's additive team model (src/lab/cand/team: champion,
-lane opponent, bot partners, junglers, rest of both teams, platform; shrunk, backfitted).
+Your candidate starts as 3c-team2 (src/lab/cand/team2): meiolol-3c's additive team model
+(champion, lane opponent, bot partners, junglers, rest of both teams, platform; shrunk,
+backfitted) plus the lane opponent's own effect and role x patch.
 RESULT's dev diff is against champion-role means, so first run the candidate unchanged
 (`run CAMPAIGN ref TARGET --hyp H0`): a change only counts if it beats that run's diff
 by more than its interval. Its win prediction is the baseline's: for win, add your own.
@@ -133,6 +135,8 @@ stop and say so rather than working around it.
 - Quote a number that isn't in a RESULT line or `show`/`table` output
 - Read or infer selection or test outcomes any other way than the ladder's answer
 - Use other players' ranks or any outcome at predict time
+- Use internal scope for app-facing work: it is Jacob's research predictor only, and its
+  results and findings never feed the site or app. App-facing campaigns use champ_select
 
 ## Known so far (snapshot 20261012T2055Z)
 

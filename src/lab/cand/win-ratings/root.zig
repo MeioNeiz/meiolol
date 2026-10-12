@@ -10,7 +10,13 @@
 //!   full:     counters + teammate synergy, z[role][role] * <s[a], s[b]> per ally pair
 //! Optional: own_rank (champ select: the user's rank, a per-role slope on top of the
 //! game's logit) and all_ranks (post-game only: everyone's rank, an upper bound on what
-//! rank data is worth). L2 and dim picked on the newest 10% of visible games, refit on
+//! rank data is worth). Internal only, from everyone's api.Experience, per-role weights
+//! on blue's minus red's: champ_exp (log1p games on the champion, its shrunk win rate's
+//! log-odds) and form (the same on any champion, plus mean KDA, lane gold diff at 14
+//! and deaths before 15, each pulled to the average by n / (n + 3)); skill (with
+//! champ_exp: each champion-role's own extra slope on log1p(games on the champion),
+//! shrunk to 0 by the ratings' L2, so the role's shared slope where data is thin;
+//! effects-skill-<role>.tsv). L2 and dim picked on the newest 10% of visible games, refit on
 //! all of them. Other outcomes: no opinion. Variants differ only in `cfg` (docs/model.md)
 
 const std = @import("std");
@@ -22,6 +28,9 @@ const Cfg = struct {
     kind: Kind,
     own_rank: bool = false,
     all_ranks: bool = false,
+    champ_exp: bool = false,
+    form: bool = false,
+    skill: bool = false,
     /// Only games of this platform index (protocol.platformIds order); null for all
     platform: ?u8 = null,
     /// Days; older games weigh exp(-age / half_life * ln 2); 0 for equal weights
@@ -33,7 +42,9 @@ const cfg: Cfg = .{ .kind = .ratings };
 /// For exported files; variants differ by cfg.kind
 pub const name = "win-ratings";
 
-pub const scope: api.Scope = if (cfg.all_ranks) .post_game else .champ_select;
+const experience = cfg.champ_exp or cfg.form;
+
+pub const scope: api.Scope = if (experience) .internal else if (cfg.all_ranks) .post_game else .champ_select;
 
 const n_role = 5;
 const n_platform = 256;
@@ -47,6 +58,11 @@ const rank_scale = 1.0 / 4.0;
 
 const rate_prior = 1000;
 
+/// Per player: champ_exp's 2 then form's 5 (expFeatures)
+const n_exp = 7;
+/// Pseudo-games at 50% in an experience win rate
+const exp_prior = 5;
+
 const l2_grid = [_]f32{ 3e-4, 1e-3, 3e-3, 1e-2 };
 const dim_grid: []const u32 = if (cfg.kind == .ratings or cfg.kind == .rates) &.{0} else &.{ 4, 8 };
 
@@ -56,6 +72,10 @@ const Game = struct {
     platform: u8,
     /// Everyone's rank minus the mean, blue's minus red's per role (all_ranks only)
     rank_diff: [n_role]f32,
+    /// Experience features, blue's minus red's per role (experience only)
+    exp_diff: [n_role][n_exp]f32,
+    /// log1p(games on the champion) by side and role (skill only)
+    skill_x: [2][n_role]f32,
     y: f32,
     weight: f32,
 };
@@ -72,6 +92,9 @@ const Space = struct {
     s: usize,
     z: usize,
     k: usize,
+    e: usize,
+    /// skill: per champion-role slope
+    q: usize,
     len: usize,
 
     fn init(n_ids: usize, dim: u32) Space {
@@ -80,7 +103,7 @@ const Space = struct {
         sp.n_ids = n_ids;
         const d: usize = dim;
         var at: usize = 0;
-        inline for (.{ "c", "b", "u", "v", "w", "s", "z", "k" }, .{ n_platform, n_ids, n_ids * d, n_ids * d, 25, n_ids * d, 25, n_role }) |field, size| {
+        inline for (.{ "c", "b", "u", "v", "w", "s", "z", "k", "e", "q" }, .{ n_platform, n_ids, n_ids * d, n_ids * d, 25, n_ids * d, 25, n_role, n_role * n_exp, if (cfg.skill) n_ids else 0 }) |field, size| {
             @field(sp, field) = at;
             at += size;
         }
@@ -126,6 +149,12 @@ const Params = struct {
         if (cfg.all_ranks) for (0..n_role) |r| {
             s += p[sp.k + r] * g.rank_diff[r];
         };
+        if (experience) for (0..n_role) |r| {
+            s += dot(p[sp.e + r * n_exp ..][0..n_exp], &g.exp_diff[r]);
+        };
+        if (cfg.skill) for (0..n_role) |r| {
+            s += p[sp.q + g.ids[0][r]] * g.skill_x[0][r] - p[sp.q + g.ids[1][r]] * g.skill_x[1][r];
+        };
         if (cfg.kind == .ratings or cfg.kind == .rates) return s;
         for (0..2) |side| {
             const sign: f32 = if (side == 0) 1 else -1;
@@ -154,6 +183,13 @@ const Params = struct {
         }
         if (cfg.all_ranks) for (0..n_role) |ro| {
             gr[sp.k + ro] += r * g.rank_diff[ro];
+        };
+        if (experience) for (0..n_role) |ro| for (0..n_exp) |j| {
+            gr[sp.e + ro * n_exp + j] += r * g.exp_diff[ro][j];
+        };
+        if (cfg.skill) for (0..n_role) |ro| {
+            gr[sp.q + g.ids[0][ro]] += r * g.skill_x[0][ro];
+            gr[sp.q + g.ids[1][ro]] -= r * g.skill_x[1][ro];
         };
         if (cfg.kind == .ratings or cfg.kind == .rates) return;
         for (0..2) |side| {
@@ -260,8 +296,10 @@ fn train(gpa: std.mem.Allocator, sp: Space, l2: f32, set: []const Game, val: ?[]
             const c1 = 1 - std.math.pow(f32, b1, @floatFromInt(step));
             const c2 = 1 - std.math.pow(f32, b2, @floatFromInt(step));
             for (p, gr, m1, m2, 0..) |*x, g0, *s1, *s2, i| {
-                // No shrinkage on the side intercepts or the role-pair weights
-                const shrink = !(i < sp.c + n_platform or (i >= sp.w and i < sp.w + 25) or (i >= sp.z and i < sp.z + 25));
+                // No shrinkage on the side intercepts, the role-pair weights or the
+                // experience weights (35, on every game)
+                const shrink = !(i < sp.c + n_platform or (i >= sp.w and i < sp.w + 25) or (i >= sp.z and i < sp.z + 25) or
+                    (i >= sp.e and i < sp.e + n_role * n_exp));
                 const g = g0 * scale + if (shrink) l2 * x.* else 0;
                 s1.* = b1 * s1.* + (1 - b1) * g;
                 s2.* = b2 * s2.* + (1 - b2) * g * g;
@@ -292,8 +330,14 @@ pub const Model = struct {
     own: [n_role]f32 = @splat(0),
     /// Training games per dense id, for exportModel's sd
     id_games: []u32 = &.{},
+    /// skill: per dense id, training players with earlier games on it and their sum of
+    /// log1p(games)^2, for the effect table's n and sd
+    skill_n: []u32 = &.{},
+    skill_x2: []f32 = &.{},
     /// The rating prior's precision in logit units (L2 x games, or the rate prior)
     prior_precision: f32 = 0,
+    /// form: training rows' mean KDA and deaths before 15, where known
+    form_mean: [2]f32 = @splat(0),
 };
 
 fn key(champion: u32, role: usize) u64 {
@@ -309,13 +353,50 @@ fn centred(rank: ?u8, mean: f32) f32 {
     return (@as(f32, @floatFromInt(r)) - mean) * rank_scale;
 }
 
-fn gameOf(m: *const Model, g: *const api.Game, ranks: ?[2][n_role]?u8, y: f32, weight: f32) Game {
-    var out: Game = .{ .ids = undefined, .platform = g.platform, .rank_diff = @splat(0), .y = y, .weight = weight };
+fn logOdds(wins: u16, games: u16) f32 {
+    const q = (@as(f32, @floatFromInt(wins)) + exp_prior * 0.5) / (@as(f32, @floatFromInt(games)) + exp_prior);
+    return @log(q / (1 - q));
+}
+
+/// n / (n + 3): a mean over few games counts for little
+fn trust(n: u16) f32 {
+    const x: f32 = @floatFromInt(n);
+    return x / (x + 3);
+}
+
+fn expFeatures(m: *const Model, e: api.Experience) [n_exp]f32 {
+    var out: [n_exp]f32 = @splat(0);
+    if (cfg.champ_exp) {
+        out[0] = std.math.log1p(@as(f32, @floatFromInt(e.champ_games)));
+        out[1] = logOdds(e.champ_wins, e.champ_games);
+    }
+    if (cfg.form) {
+        out[2] = std.math.log1p(@as(f32, @floatFromInt(e.games)));
+        out[3] = logOdds(e.wins, e.games);
+        if (e.games > 0) out[4] = (e.kda - m.form_mean[0]) * trust(e.games);
+        if (e.perf_games > 0) {
+            out[5] = e.lanediff14 / 1000 * trust(e.perf_games);
+            out[6] = (e.deaths15 - m.form_mean[1]) * trust(e.perf_games);
+        }
+    }
+    return out;
+}
+
+fn gameOf(m: *const Model, g: *const api.Game, ranks: ?[2][n_role]?u8, exps: ?[2][n_role]api.Experience, y: f32, weight: f32) Game {
+    var out: Game = .{ .ids = undefined, .platform = g.platform, .rank_diff = @splat(0), .exp_diff = @splat(@splat(0)), .skill_x = @splat(@splat(0)), .y = y, .weight = weight };
     for (0..2) |side| for (0..n_role) |r| {
         out.ids[side][r] = idOf(m, g.teams[side][r], r);
     };
     if (ranks) |rk| for (0..n_role) |r| {
         out.rank_diff[r] = centred(rk[0][r], m.rank_mean) - centred(rk[1][r], m.rank_mean);
+    };
+    if (exps) |e| for (0..n_role) |r| {
+        const blue = expFeatures(m, e[0][r]);
+        const red = expFeatures(m, e[1][r]);
+        for (&out.exp_diff[r], blue, red) |*x, b, rd| x.* = b - rd;
+        if (cfg.skill) for (0..2) |side| {
+            out.skill_x[side][r] = std.math.log1p(@as(f32, @floatFromInt(e[side][r].champ_games)));
+        };
     };
     return out;
 }
@@ -339,6 +420,19 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
         }
     }
     m.rank_mean = @floatCast(rank_sum / @max(rank_n, 1));
+    var form_sum: [2]f64 = @splat(0);
+    var form_n: [2]f64 = @splat(0);
+    for (t.rows) |r| {
+        if (r.exp.games > 0) {
+            form_sum[0] += r.exp.kda;
+            form_n[0] += 1;
+        }
+        if (r.exp.perf_games > 0) {
+            form_sum[1] += r.exp.deaths15;
+            form_n[1] += 1;
+        }
+    }
+    for (&m.form_mean, form_sum, form_n) |*x, sm, n| x.* = @floatCast(sm / @max(n, 1));
 
     var newest: i64 = std.math.minInt(i64);
     for (t.games) |g| newest = @max(newest, g.start);
@@ -359,7 +453,7 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
         };
         const age_days = @as(f64, @floatFromInt(newest - g.start)) / 86_400_000;
         const weight: f32 = if (cfg.half_life > 0) @floatCast(@exp(-age_days / cfg.half_life * @log(2.0))) else 1;
-        try games.append(gpa, gameOf(&m, g, if (cfg.all_ranks) g.ranks else null, y, weight));
+        try games.append(gpa, gameOf(&m, g, if (cfg.all_ranks) g.ranks else null, if (experience) g.exp else null, y, weight));
         try starts.append(gpa, g.start);
     }
 
@@ -369,6 +463,17 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
     for (games.items) |g| for (g.ids) |team| for (team) |id| {
         m.id_games[id] += 1;
     };
+    if (cfg.skill) {
+        m.skill_n = try gpa.alloc(u32, next_id);
+        m.skill_x2 = try gpa.alloc(f32, next_id);
+        @memset(m.skill_n, 0);
+        @memset(m.skill_x2, 0);
+        for (games.items) |g| for (g.ids, g.skill_x) |team, xs| for (team, xs) |id, x| {
+            if (x == 0) continue;
+            m.skill_n[id] += 1;
+            m.skill_x2[id] += x * x;
+        };
+    }
 
     // Validation: the newest share of games by start
     const sorted = try gpa.dupe(i64, starts.items);
@@ -401,6 +506,7 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
     const refit = try train(gpa, m.sp, best.l2, games.items, null, @max(1, best.epochs + best.epochs / 10), opts.seed);
     m.p = refit.p;
     std.debug.print("win-model: kind {t} dim {d} l2 {d} epochs {d} val {d:.5} on {d} games\n", .{ cfg.kind, best.dim, best.l2, best.epochs, best.loss, games.items.len });
+    if (experience) std.debug.print("win-model: experience weights by role (champ games, champ rate, games, rate, kda, lanediff, deaths15) {any}\n", .{m.p[m.sp.e..][0 .. n_role * n_exp]});
 
     if (cfg.own_rank) fitOwnRank(&m, t, won);
     return m;
@@ -451,7 +557,7 @@ fn fitOwnRank(m: *Model, t: *const api.Train, won: []const f32) void {
                 if (std.math.isNan(y)) continue;
                 const x = centred(r.rank, m.rank_mean);
                 if (x == 0) continue;
-                const tg = gameOf(m, &t.games[r.game], null, y, 1);
+                const tg = gameOf(m, &t.games[r.game], null, null, y, 1);
                 const base = params.logit(&tg);
                 const off: f64 = if (r.side == 0) base else -base;
                 const yr: f64 = if (r.side == 0) y else 1 - y;
@@ -468,8 +574,8 @@ fn fitOwnRank(m: *Model, t: *const api.Train, won: []const f32) void {
 
 pub fn predict(m: *const Model, q: *const api.Query) api.Prediction {
     var out = api.no_opinion;
-    const g: api.Game = .{ .start = q.start, .patch = q.patch, .platform = q.platform, .teams = q.teams, .ranks = @splat(@splat(null)) };
-    const tg = gameOf(m, &g, if (cfg.all_ranks) q.ranks else null, 0, 1);
+    const g: api.Game = .{ .start = q.start, .patch = q.patch, .platform = q.platform, .teams = q.teams, .ranks = @splat(@splat(null)), .exp = @splat(@splat(.{})) };
+    const tg = gameOf(m, &g, if (cfg.all_ranks) q.ranks else null, if (experience) q.exps else null, 0, 1);
     const params: Params = .{ .sp = m.sp, .p = m.p };
     const blue = params.logit(&tg);
     var s = if (q.side == 0) blue else -blue;
@@ -534,7 +640,47 @@ pub fn exportModel(m: *const Model, arena: std.mem.Allocator) !Export {
     return .{ .kind = @tagName(cfg.kind), .dim = sp.dim, .intercept = m.p[sp.c..][0..n_platform], .w = w, .z = z, .terms = terms.items };
 }
 
+/// skill: per role, each champion's win chance from 0 to 50 earlier games on it (the
+/// role's shared slope plus its own), linearised at 50%
+pub fn effects(m: *const Model, arena: std.mem.Allocator, target: api.Outcome) ![]const api.Effects {
+    if (!cfg.skill or target != .win) return &.{};
+    const role_names = [_][]const u8{ "top", "jungle", "middle", "bottom", "utility" };
+    const span = @log(51.0);
+    var tables: [n_role]std.ArrayList(api.Effect) = @splat(.empty);
+    var it = m.ids.iterator();
+    while (it.next()) |e| {
+        const id = e.value_ptr.*;
+        const role: usize = @intCast(e.key_ptr.* & 7);
+        const slope = m.p[m.sp.e + role * n_exp] + m.p[m.sp.q + id];
+        const sd = 1 / @sqrt(m.skill_x2[id] / 4 + m.prior_precision);
+        try tables[role].append(arena, .{
+            .label = try std.fmt.allocPrint(arena, "#{d}", .{e.key_ptr.* >> 3}),
+            .effect = 100 * (1 / (1 + @exp(-slope * span)) - 0.5),
+            .ci = 25 * span * 1.96 * sd,
+            .n = m.skill_n[id],
+        });
+    }
+    const out = try arena.alloc(api.Effects, n_role);
+    for (out, &tables, role_names) |*o, *t, rn| {
+        std.mem.sort(api.Effect, t.items, {}, struct {
+            fn more(_: void, a: api.Effect, b: api.Effect) bool {
+                return a.effect > b.effect;
+            }
+        }.more);
+        o.* = .{
+            .name = try std.fmt.allocPrint(arena, "skill-{s}", .{rn}),
+            .title = try std.fmt.allocPrint(arena, "Win chance from 0 to 50 earlier games on the champion, {s}", .{rn}),
+            .unit = "win pp",
+            .higher = "the champion rewards playing it a lot more",
+            .rows = t.items,
+        };
+    }
+    return out;
+}
+
 pub fn deinit(m: *Model, gpa: std.mem.Allocator) void {
+    gpa.free(m.skill_n);
+    gpa.free(m.skill_x2);
     gpa.free(m.id_games);
     gpa.free(m.p);
     m.ids.deinit(gpa);

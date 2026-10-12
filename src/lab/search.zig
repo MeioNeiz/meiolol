@@ -33,12 +33,12 @@ pub fn screen(
     comptime C: type,
     gpa: std.mem.Allocator,
     d: *const rows.Data,
-    ranks: []const [2][5]?u8,
+    players: []const harness.Players,
     c: harness.Cuts,
     k: usize,
     w: *Io.Writer,
 ) !void {
-    if (comptime hasFeatures(C)) return screenFeatures(C, gpa, d, ranks, c, k, w);
+    if (comptime hasFeatures(C)) return screenFeatures(C, gpa, d, players, c, k, w);
     try w.writeAll("screen: the candidate exposes no features (feature_names, features)\n");
 }
 
@@ -46,13 +46,13 @@ fn screenFeatures(
     comptime C: type,
     gpa: std.mem.Allocator,
     d: *const rows.Data,
-    ranks: []const [2][5]?u8,
+    players: []const harness.Players,
     c: harness.Cuts,
     k: usize,
     w: *Io.Writer,
 ) !void {
     const nf = C.feature_names.len;
-    var v = try harness.buildTrain(gpa, d, ranks, .dev, c, 1);
+    var v = try harness.buildTrain(gpa, d, players, .dev, c, 1);
     defer v.deinit();
     var base = try harness.Baseline.fit(gpa, &v.train);
     defer base.deinit(gpa);
@@ -74,7 +74,7 @@ fn screenFeatures(
     for (d.rows) |r| {
         const g = d.games[r.game];
         if (!harness.visible(.dev, c, g) or std.math.isNan(r.y[k])) continue;
-        const q = harness.query(C.scope, g, ranks[r.game], r);
+        const q = harness.query(C.scope, g, players[r.game], r);
         var f: [nf]f32 = undefined;
         C.features(&m, &q, &f);
         const key = cellKey(q.champion, q.role);
@@ -116,7 +116,7 @@ fn screenFeatures(
     for (d.rows) |r| {
         const g = d.games[r.game];
         if (!harness.scored(.dev, c, g) or std.math.isNan(r.y[k])) continue;
-        const q = harness.query(C.scope, g, ranks[r.game], r);
+        const q = harness.query(C.scope, g, players[r.game], r);
         var f: [nf]f32 = undefined;
         C.features(&m, &q, &f);
         const cell = cells.get(cellKey(q.champion, q.role)) orelse Cell{};
@@ -179,12 +179,12 @@ pub fn diagnose(
     comptime C: type,
     gpa: std.mem.Allocator,
     d: *const rows.Data,
-    ranks: []const [2][5]?u8,
+    players: []const harness.Players,
     c: harness.Cuts,
     k: usize,
     w: *Io.Writer,
 ) !void {
-    var s = try harness.score(C, gpa, d, ranks, c, .dev, .{});
+    var s = try harness.score(C, gpa, d, players, c, .dev, .{});
     defer s.deinit(gpa);
     // Signed standardised residual, candidate minus truth: positive = over-predicts
     const res = try gpa.alloc(f64, s.row.len);
@@ -324,8 +324,8 @@ test "screen finds a planted feature, diagnose runs" {
     const gpa = std.testing.allocator;
     var f = try harness.Fixture.init(gpa, 3000, 4);
     defer f.data.deinit();
-    const ranks = try harness.gameRanks(gpa, &f.data);
-    defer gpa.free(ranks);
+    const players = try harness.gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
     const c = try harness.cuts(gpa, &f.data, 0);
     const Cand = struct {
         pub const scope: api.Scope = .champ_select;
@@ -345,11 +345,11 @@ test "screen finds a planted feature, diagnose runs" {
     };
     var aw: Io.Writer.Allocating = .init(gpa);
     defer aw.deinit();
-    try screen(Cand, gpa, &f.data, ranks, c, api.outcomeIndex(.gold14), &aw.writer);
+    try screen(Cand, gpa, &f.data, players, c, api.outcomeIndex(.gold14), &aw.writer);
     const out = aw.written();
     try std.testing.expect(std.mem.indexOf(u8, out, "| enemy has champion 2 |") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "clear=1") != null);
     aw.clearRetainingCapacity();
-    try diagnose(Cand, gpa, &f.data, ranks, c, api.outcomeIndex(.gold14), &aw.writer);
+    try diagnose(Cand, gpa, &f.data, players, c, api.outcomeIndex(.gold14), &aw.writer);
     try std.testing.expect(std.mem.indexOf(u8, aw.written(), "RESULT diagnose") != null);
 }

@@ -31,7 +31,7 @@ research/questions/llm-experiment-agent.md (C1-C20) and smart-experiment-search.
 | src/lab/search.zig | us, read-only | `exp screen`, `exp diagnose` |
 | deploy/lab-exp.sh | us | the agent's only way to run and read results |
 | deploy/lab-agent.sh | us | starts a headless agent session on a campaign |
-| ~/ml/lab/<snapshot>/ on the host | harness only | runs.tsv, looks.tsv, best-*.tsv, finals.tsv |
+| ~/ml/lab/<snapshot>/ on the host | harness only | runs.tsv, looks.tsv, best-*.tsv (per target; post_game and internal have their own), finals.tsv |
 | ~/ml/runs/<run>/ on the host | harness; agent via `finding` | result.tsv, effects-*.tsv, findings.tsv (below) |
 | docs/lab-brief.md | us | the agent's brief (program.md in autoresearch) |
 

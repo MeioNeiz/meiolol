@@ -101,15 +101,36 @@ fn role(r: core.Role) api.Role {
     return @fromBackingInt(@backingInt(r));
 }
 
-/// Everyone's rank per game, by side and role
-pub fn gameRanks(gpa: std.mem.Allocator, d: *const rows.Data) ![][2][5]?u8 {
-    const out = try gpa.alloc([2][5]?u8, d.games.len);
-    @memset(out, @splat(@splat(null)));
-    for (d.rows) |r| out[r.game][r.side][@backingInt(r.role)] = r.rank;
+/// Everyone's rank and experience in one game, by side and role
+pub const Players = struct {
+    ranks: [2][5]?u8 = @splat(@splat(null)),
+    exp: [2][5]api.Experience = @splat(@splat(.{})),
+};
+
+pub fn gamePlayers(gpa: std.mem.Allocator, d: *const rows.Data) ![]Players {
+    const out = try gpa.alloc(Players, d.games.len);
+    @memset(out, .{});
+    for (d.rows) |r| {
+        out[r.game].ranks[r.side][@backingInt(r.role)] = r.rank;
+        out[r.game].exp[r.side][@backingInt(r.role)] = experience(r);
+    }
     return out;
 }
 
-pub fn query(scope: api.Scope, g: rows.Game, ranks: [2][5]?u8, r: rows.Row) api.Query {
+pub fn experience(r: rows.Row) api.Experience {
+    return .{
+        .champ_games = r.champ_games,
+        .champ_wins = r.champ_wins,
+        .games = r.games_before,
+        .wins = r.wins_before,
+        .kda = r.kda_before,
+        .perf_games = r.perf_games,
+        .lanediff14 = r.lanediff14_before,
+        .deaths15 = r.deaths15_before,
+    };
+}
+
+pub fn query(scope: api.Scope, g: rows.Game, players: Players, r: rows.Row) api.Query {
     return .{
         .start = g.start,
         .patch = g.patch,
@@ -121,7 +142,12 @@ pub fn query(scope: api.Scope, g: rows.Game, ranks: [2][5]?u8, r: rows.Row) api.
         .teams = g.teams,
         .ranks = switch (scope) {
             .champ_select => null,
-            .post_game => ranks,
+            .post_game, .internal => players.ranks,
+        },
+        .exp = experience(r),
+        .exps = switch (scope) {
+            .champ_select, .post_game => null,
+            .internal => players.exp,
         },
     };
 }
@@ -138,7 +164,7 @@ pub const Visible = struct {
 
 /// fraction: share of the visible games kept (dev only: selection and test always fit
 /// on everything)
-pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2][5]?u8, p: Phase, c: Cuts, fraction: f64) !Visible {
+pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, p: Phase, c: Cuts, fraction: f64) !Visible {
     std.debug.assert(p == .dev or fraction >= 1);
     var v: Visible = .{ .arena = .init(gpa), .train = .{ .games = &.{}, .rows = &.{} } };
     errdefer v.deinit();
@@ -146,10 +172,10 @@ pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2
     const index = try gpa.alloc(u32, d.games.len);
     defer gpa.free(index);
     var games: std.ArrayList(api.Game) = .empty;
-    for (d.games, index, ranks) |g, *i, rk| {
+    for (d.games, index, players) |g, *i, pl| {
         if (!visible(p, c, g) or !inFraction(g, fraction)) continue;
         i.* = @intCast(games.items.len);
-        try games.append(a, .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = rk });
+        try games.append(a, .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = pl.ranks, .exp = pl.exp });
     }
     var out: std.ArrayList(api.Row) = .empty;
     for (d.rows) |r| {
@@ -161,6 +187,7 @@ pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2
             .role = role(r.role),
             .champion = r.champion,
             .rank = r.rank,
+            .exp = experience(r),
             .y = r.y,
         });
     }
@@ -288,9 +315,9 @@ pub const ScoreOptions = struct {
     effects_arena: ?std.mem.Allocator = null,
 };
 
-pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2][5]?u8, c: Cuts, p: Phase, opts: ScoreOptions) !Scores {
+pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, c: Cuts, p: Phase, opts: ScoreOptions) !Scores {
     comptime checkCandidate(C);
-    var v = try buildTrain(gpa, d, ranks, p, c, opts.fraction);
+    var v = try buildTrain(gpa, d, players, p, c, opts.fraction);
     defer v.deinit();
     var base = try Baseline.fit(gpa, &v.train);
     defer base.deinit(gpa);
@@ -324,7 +351,7 @@ pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, rank
         };
         for (row.items, cand, count) |ri, *o, *cnt| {
             const r = d.rows[ri];
-            const q = query(C.scope, d.games[r.game], ranks[r.game], r);
+            const q = query(C.scope, d.games[r.game], players[r.game], r);
             const pred = C.predict(&m, &q);
             for (pred, o, cnt) |x, *acc, *nk| if (!std.math.isNan(x)) {
                 acc.* += x;
@@ -423,7 +450,8 @@ pub const Fixture = struct {
 
     /// n games a minute apart, a third EUW1 (platform 0); gold14 = 5000, +400 for champion
     /// 1 in any role, -300 with champion 2 on the enemy team, + noise (sd 300); win a coin
-    /// flip. +200 on champion 1 is below what the selection set can detect at 3000 games
+    /// flip. +200 on champion 1 is below what the selection set can detect at 3000 games.
+    /// Players from a pool of 200, so experience fills in
     pub fn init(gpa: std.mem.Allocator, n: usize, seed: u64) !Fixture {
         var data: rows.Data = .{ .arena = .init(gpa), .games = &.{}, .rows = &.{} };
         errdefer data.deinit();
@@ -432,6 +460,12 @@ pub const Fixture = struct {
         const rnd = prng.random();
         const games = try a.alloc(rows.Game, n);
         var out: std.ArrayList(rows.Row) = .empty;
+        // Own stream: the outcome draws stay as they were before players
+        var player_prng: std.Random.DefaultPrng = .init(seed ^ 0x9e37);
+        var players: std.ArrayList(u32) = .empty;
+        defer players.deinit(gpa);
+        var kdas: std.ArrayList(f32) = .empty;
+        defer kdas.deinit(gpa);
         const n_test = n / 15;
         for (games, 0..) |*g, gi| {
             var teams: [2][5]u32 = undefined;
@@ -468,8 +502,11 @@ pub const Fixture = struct {
                     .rank = @intCast(rnd.intRangeLessThan(u8, 16, 28)),
                     .y = y,
                 });
+                try players.append(gpa, player_prng.random().intRangeLessThan(u32, 0, 200));
+                try kdas.append(gpa, 2);
             }
         }
+        try rows.fillExperience(gpa, games, out.items, players.items, kdas.items);
         data.games = games;
         data.rows = out.items;
         return .{ .data = data };
@@ -477,28 +514,52 @@ pub const Fixture = struct {
 };
 
 /// Records what it was given, to check the harness's guarantees
-const Spy = struct {
-    pub const scope: api.Scope = .champ_select;
-    pub const Model = struct { newest: i64 };
-    var saw_ranks = false;
-    var newest_query: i64 = std.math.maxInt(i64);
-    var train_games: usize = 0;
+const Spy = SpyIn(.champ_select);
 
-    pub fn fit(_: std.mem.Allocator, t: *const api.Train, _: api.Options) !Model {
-        train_games = t.games.len;
-        var newest: i64 = std.math.minInt(i64);
-        for (t.games) |g| newest = @max(newest, g.start);
-        return .{ .newest = newest };
-    }
+fn SpyIn(comptime s: api.Scope) type {
+    return struct {
+        pub const scope: api.Scope = s;
+        pub const Model = struct { newest: i64 };
+        var saw_ranks = false;
+        var saw_exps = false;
+        var exps_nonzero = false;
+        /// The query's own exp differs from its slot in exps
+        var exps_mismatch = false;
+        var newest_query: i64 = std.math.maxInt(i64);
+        var train_games: usize = 0;
 
-    pub fn predict(_: *const Model, q: *const api.Query) api.Prediction {
-        if (q.ranks != null) saw_ranks = true;
-        newest_query = @min(newest_query, q.start);
-        return api.no_opinion;
-    }
+        fn reset() void {
+            saw_ranks = false;
+            saw_exps = false;
+            exps_nonzero = false;
+            exps_mismatch = false;
+            newest_query = std.math.maxInt(i64);
+        }
 
-    pub fn deinit(_: *Model, _: std.mem.Allocator) void {}
-};
+        pub fn fit(_: std.mem.Allocator, t: *const api.Train, _: api.Options) !Model {
+            train_games = t.games.len;
+            var newest: i64 = std.math.minInt(i64);
+            for (t.games) |g| newest = @max(newest, g.start);
+            return .{ .newest = newest };
+        }
+
+        pub fn predict(_: *const Model, q: *const api.Query) api.Prediction {
+            if (q.ranks != null) saw_ranks = true;
+            if (q.exps) |e| {
+                saw_exps = true;
+                const own = e[q.side][@backingInt(q.role)];
+                if (!std.meta.eql(own, q.exp)) exps_mismatch = true;
+                for (e) |team| for (team) |x| {
+                    if (x.games > 0) exps_nonzero = true;
+                };
+            }
+            newest_query = @min(newest_query, q.start);
+            return api.no_opinion;
+        }
+
+        pub fn deinit(_: *Model, _: std.mem.Allocator) void {}
+    };
+}
 
 /// The baseline's own champion-role means plus a little noise: must not get past the
 /// ladder
@@ -557,23 +618,44 @@ test "candidates see no scored games and no other ranks in champ select" {
     const gpa = std.testing.allocator;
     var f = try Fixture.init(gpa, 3000, 1);
     defer f.data.deinit();
-    const ranks = try gameRanks(gpa, &f.data);
-    defer gpa.free(ranks);
+    const players = try gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
     const c = try cuts(gpa, &f.data, 0);
     for ([_]Phase{ .dev, .select, .final }) |p| {
-        Spy.saw_ranks = false;
-        Spy.newest_query = std.math.maxInt(i64);
-        var v = try buildTrain(gpa, &f.data, ranks, p, c, 1);
+        Spy.reset();
+        var v = try buildTrain(gpa, &f.data, players, p, c, 1);
         defer v.deinit();
         var newest: i64 = std.math.minInt(i64);
         for (v.train.games) |g| newest = @max(newest, g.start);
-        var s = try score(Spy, gpa, &f.data, ranks, c, p, .{});
+        var s = try score(Spy, gpa, &f.data, players, c, p, .{});
         defer s.deinit(gpa);
         try std.testing.expect(s.row.len > 0);
         try std.testing.expect(newest < Spy.newest_query);
         try std.testing.expect(!Spy.saw_ranks);
+        try std.testing.expect(!Spy.saw_exps);
         // No opinion everywhere: scored exactly as the baseline
         try std.testing.expectEqual(s.row.len, s.no_opinion[0]);
+    }
+}
+
+test "others' experience only in internal scope, ranks in post-game and internal" {
+    const gpa = std.testing.allocator;
+    var f = try Fixture.init(gpa, 600, 8);
+    defer f.data.deinit();
+    const players = try gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
+    const c = try cuts(gpa, &f.data, 0);
+    inline for (.{ api.Scope.champ_select, .post_game, .internal }) |sc| {
+        const S = SpyIn(sc);
+        for ([_]Phase{ .dev, .select, .final }) |p| {
+            S.reset();
+            var s = try score(S, gpa, &f.data, players, c, p, .{});
+            defer s.deinit(gpa);
+            try std.testing.expectEqual(sc != .champ_select, S.saw_ranks);
+            try std.testing.expectEqual(sc == .internal, S.saw_exps);
+            try std.testing.expectEqual(sc == .internal, S.exps_nonzero);
+            try std.testing.expect(!S.exps_mismatch);
+        }
     }
 }
 
@@ -590,12 +672,12 @@ test "ladder: noise never wins, a real gain does" {
     const gpa = std.testing.allocator;
     var f = try Fixture.init(gpa, 3000, 2);
     defer f.data.deinit();
-    const ranks = try gameRanks(gpa, &f.data);
-    defer gpa.free(ranks);
+    const players = try gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
     const c = try cuts(gpa, &f.data, 0);
     const k = api.outcomeIndex(.gold14);
 
-    var noise = try score(Noise, gpa, &f.data, ranks, c, .select, .{});
+    var noise = try score(Noise, gpa, &f.data, players, c, .select, .{});
     defer noise.deinit(gpa);
     const ln = try noise.losses(gpa, &f.data, k, null, .cand);
     defer gpa.free(ln);
@@ -605,7 +687,7 @@ test "ladder: noise never wins, a real gain does" {
     try std.testing.expect(ladder(noise.game, ln, lb, look_budget) == .budget_spent);
 
     // The baseline knows champion 1's +400; a single mean doesn't
-    var flat = try score(RoleMean, gpa, &f.data, ranks, c, .select, .{});
+    var flat = try score(RoleMean, gpa, &f.data, players, c, .select, .{});
     defer flat.deinit(gpa);
     const lf = try flat.losses(gpa, &f.data, k, null, .cand);
     defer gpa.free(lf);
@@ -661,17 +743,17 @@ test "effect tables come through on request only" {
     const gpa = std.testing.allocator;
     var f = try Fixture.init(gpa, 600, 6);
     defer f.data.deinit();
-    const ranks = try gameRanks(gpa, &f.data);
-    defer gpa.free(ranks);
+    const players = try gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
     const c = try cuts(gpa, &f.data, 0);
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
-    var s = try score(Tables, gpa, &f.data, ranks, c, .dev, .{ .effects_for = .gold14, .effects_arena = arena.allocator() });
+    var s = try score(Tables, gpa, &f.data, players, c, .dev, .{ .effects_for = .gold14, .effects_arena = arena.allocator() });
     defer s.deinit(gpa);
     try std.testing.expectEqual(@as(usize, 1), s.effects.len);
     try std.testing.expectEqualStrings("gold14", s.effects[0].name);
     try std.testing.expect(s.effects[0].rows[0].n > 0 and s.effects[0].rows[0].n < f.data.games.len);
-    var plain = try score(Tables, gpa, &f.data, ranks, c, .dev, .{});
+    var plain = try score(Tables, gpa, &f.data, players, c, .dev, .{});
     defer plain.deinit(gpa);
     try std.testing.expectEqual(@as(usize, 0), plain.effects.len);
 }
@@ -689,10 +771,10 @@ test "games over before 15:00 are neither fitted on nor scored" {
     for (f.data.rows) |*r| if (!f.data.games[r.game].timeline15) {
         r.y[api.outcomeIndex(.gold14)] = std.math.nan(f32);
     };
-    const ranks = try gameRanks(gpa, &f.data);
-    defer gpa.free(ranks);
+    const players = try gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
     const c = try cuts(gpa, &f.data, 0);
-    var s = try score(Spy, gpa, &f.data, ranks, c, .dev, .{});
+    var s = try score(Spy, gpa, &f.data, players, c, .dev, .{});
     defer s.deinit(gpa);
     try std.testing.expect(s.row.len > 0);
     for (s.row) |ri| try std.testing.expect(f.data.games[f.data.rows[ri].game].duration_s >= min_duration_s);

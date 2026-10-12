@@ -339,13 +339,13 @@ fn euIndex() u8 {
 
 /// A tool, not an evaluation: every game that reached 15:00 minutes, test games included
 fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
-    const ranks = try harness.gameRanks(a, d);
+    const players = try harness.gamePlayers(a, d);
     const index = try a.alloc(u32, d.games.len);
     var games: std.ArrayList(api.Game) = .empty;
-    for (d.games, ranks, index) |g, rk, *ix| {
+    for (d.games, players, index) |g, pl, *ix| {
         if (g.duration_s < harness.min_duration_s) continue;
         ix.* = @intCast(games.items.len);
-        try games.append(a, .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = rk });
+        try games.append(a, .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = pl.ranks, .exp = pl.exp });
     }
     var out: std.ArrayList(api.Row) = .empty;
     for (d.rows) |r| {
@@ -356,6 +356,7 @@ fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
             .role = @fromBackingInt(@backingInt(r.role)),
             .champion = r.champion,
             .rank = r.rank,
+            .exp = harness.experience(r),
             .y = r.y,
         });
     }
@@ -364,10 +365,10 @@ fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
 
 /// The candidate refitted on dev's visible games, scored on dev-val per lane outcome
 fn devScore(gpa: std.mem.Allocator, d: *const rows.Data, eu: u8) ![n_lane]DevOut {
-    const ranks = try harness.gameRanks(gpa, d);
-    defer gpa.free(ranks);
+    const players = try harness.gamePlayers(gpa, d);
+    defer gpa.free(players);
     const c = try harness.cuts(gpa, d, eu);
-    var s = try harness.score(cand, gpa, d, ranks, c, .dev, .{});
+    var s = try harness.score(cand, gpa, d, players, c, .dev, .{});
     defer s.deinit(gpa);
     var out: [n_lane]DevOut = undefined;
     for (&out, cand.lane_outcomes) |*o, x| {

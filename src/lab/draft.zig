@@ -347,9 +347,9 @@ fn loadChampions(gpa: std.mem.Allocator, arena: std.mem.Allocator, snap: []const
 }
 
 fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
-    const ranks = try harness.gameRanks(a, d);
+    const players = try harness.gamePlayers(a, d);
     const games = try a.alloc(api.Game, d.games.len);
-    for (games, d.games, ranks) |*o, g, rk| o.* = .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = rk };
+    for (games, d.games, players) |*o, g, pl| o.* = .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = pl.ranks, .exp = pl.exp };
     const out = try a.alloc(api.Row, d.rows.len);
     for (out, d.rows) |*o, r| o.* = .{
         .game = r.game,
@@ -357,6 +357,7 @@ fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
         .role = @fromBackingInt(@backingInt(r.role)),
         .champion = r.champion,
         .rank = r.rank,
+        .exp = harness.experience(r),
         .y = r.y,
     };
     return .{ .games = games, .rows = out };
@@ -514,10 +515,10 @@ const Dev = struct {
 /// The candidate refitted on dev's visible games, scored on dev-val (lab-agent.md
 /// "Splits"): log loss per row, accuracy and AUC per game on blue's chance
 fn devScore(gpa: std.mem.Allocator, d: *const rows.Data, eu: u8) !Dev {
-    const ranks = try harness.gameRanks(gpa, d);
-    defer gpa.free(ranks);
+    const players = try harness.gamePlayers(gpa, d);
+    defer gpa.free(players);
     const c = try harness.cuts(gpa, d, eu);
-    var s = try harness.score(cand, gpa, d, ranks, c, .dev, .{});
+    var s = try harness.score(cand, gpa, d, players, c, .dev, .{});
     defer s.deinit(gpa);
     const k = api.outcomeIndex(.win);
     const la = try s.losses(gpa, d, k, null, .cand);
@@ -638,7 +639,7 @@ fn exportFiles(
     for (d.games) |g| {
         if (!g.is_test or checked == 500) continue;
         checked += 1;
-        const q: api.Query = .{ .start = g.start, .patch = g.patch, .platform = sc.platform, .side = 0, .role = .top, .champion = g.teams[0][0], .rank = null, .teams = g.teams, .ranks = null };
+        const q: api.Query = .{ .start = g.start, .patch = g.patch, .platform = sc.platform, .side = 0, .role = .top, .champion = g.teams[0][0], .rank = null, .teams = g.teams, .ranks = null, .exp = .{}, .exps = null };
         const want: f64 = cand.predict(m, &q)[api.outcomeIndex(.win)];
         worst = @max(worst, @abs(sc.blue(g.teams).p - want));
     }

@@ -2,7 +2,7 @@
 //! lab-agent.md). Runs in a deploy/lab-run.sh run dir, which gets summary.md, dev.tsv,
 //! result.tsv (the run's runs.tsv row) and the candidate's effects-<name>.tsv tables;
 //! the snapshot's lab dir (LAB/<snapshot>/) gets runs.tsv, the ladder's looks.tsv and
-//! best-<target>.tsv, and finals.tsv. Last stdout line: RESULT ..., what the agent reads
+//! best-<target>[-<scope>].tsv, and finals.tsv. Last stdout line: RESULT ..., what the agent reads
 
 const std = @import("std");
 const api = @import("api");
@@ -56,8 +56,8 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, home: ?[]c
     defer legendaries.deinit(gpa);
     var data = try rows.load(gpa, args.snap, &legendaries);
     defer data.deinit();
-    const ranks = try harness.gameRanks(gpa, &data);
-    defer gpa.free(ranks);
+    const players = try harness.gamePlayers(gpa, &data);
+    defer gpa.free(players);
     const ids = protocol.platformIds();
     const eu: u8 = for (ids, 0..) |id, i| {
         if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
@@ -71,11 +71,11 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, home: ?[]c
     var stdout = Io.File.stdout().writer(io, &buf);
     const w = &stdout.interface;
     switch (args.cmd) {
-        .run => try run(gpa, arena, io, &data, ranks, c, args, dir, w),
-        .final => try final(gpa, arena, io, &data, ranks, c, args, dir, w),
-        .screen => try search.screen(cand, gpa, &data, ranks, c, api.outcomeIndex(args.target), w),
-        .diagnose => try search.diagnose(cand, gpa, &data, ranks, c, api.outcomeIndex(args.target), w),
-        .preds => try testPreds(gpa, io, &data, ranks, c, w),
+        .run => try run(gpa, arena, io, &data, players, c, args, dir, w),
+        .final => try final(gpa, arena, io, &data, players, c, args, dir, w),
+        .screen => try search.screen(cand, gpa, &data, players, c, api.outcomeIndex(args.target), w),
+        .diagnose => try search.diagnose(cand, gpa, &data, players, c, api.outcomeIndex(args.target), w),
+        .preds => try testPreds(gpa, io, &data, players, c, w),
     }
     try w.flush();
     return 0;
@@ -125,14 +125,14 @@ fn run(
     arena: std.mem.Allocator,
     io: Io,
     d: *const rows.Data,
-    ranks: []const [2][5]?u8,
+    players: []const harness.Players,
     c: harness.Cuts,
     args: Args,
     dir: []const u8,
     w: *Io.Writer,
 ) !void {
     const k = api.outcomeIndex(args.target);
-    var dev = try harness.score(cand, gpa, d, ranks, c, .dev, .{
+    var dev = try harness.score(cand, gpa, d, players, c, .dev, .{
         .fraction = args.fraction,
         .effects_for = args.target,
         .effects_arena = arena,
@@ -151,9 +151,9 @@ fn run(
         defer lock.close(io);
         const looks_path = try std.fs.path.join(arena, &.{ dir, "looks.tsv" });
         looks = try countLines(gpa, io, looks_path);
-        var sel = try harness.score(cand, gpa, d, ranks, c, .select, .{});
+        var sel = try harness.score(cand, gpa, d, players, c, .select, .{});
         defer sel.deinit(gpa);
-        const best_path = try std.fs.path.join(arena, &.{ dir, try std.fmt.allocPrint(arena, "best-{t}.tsv", .{args.target}) });
+        const best_path = try std.fs.path.join(arena, &.{ dir, try bestName(arena, args.target) });
         const best_preds = try readBest(gpa, io, best_path, sel.row.len);
         defer if (best_preds) |b| gpa.free(b);
         const la = try sel.losses(gpa, d, k, null, .cand);
@@ -186,8 +186,8 @@ fn run(
     });
     try appendLine(io, try std.fs.path.join(arena, &.{ dir, "runs.tsv" }), header, line);
     try Io.Dir.cwd().writeFile(io, .{ .sub_path = "result.tsv", .data = try std.mem.concat(arena, u8, &.{ header, line }) });
-    try w.print("RESULT run={s} target={t} dev={d:.5}±{d:.5} n={d} ({s}) select={s}", .{
-        args.run,                                                         args.target,          dev_target.diff, dev_target.half, dev_target.n,
+    try w.print("RESULT run={s} scope={t} target={t} dev={d:.5}±{d:.5} n={d} ({s}) select={s}", .{
+        args.run,                                                         cand.scope,           args.target, dev_target.diff, dev_target.half, dev_target.n,
         if (dev_target.beats()) "beats baseline" else "not beyond noise", verdictName(verdict),
     });
     // Human units for the run's finding (docs/lab-brief.md "Findings")
@@ -451,8 +451,8 @@ fn writePreds(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, s: *const har
     try w.flush();
 }
 
-fn testPreds(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, ranks: []const [2][5]?u8, c: harness.Cuts, w: *Io.Writer) !void {
-    var s = try harness.score(cand, gpa, d, ranks, c, .final, .{});
+fn testPreds(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, players: []const harness.Players, c: harness.Cuts, w: *Io.Writer) !void {
+    var s = try harness.score(cand, gpa, d, players, c, .final, .{});
     defer s.deinit(gpa);
     var file = try Io.Dir.cwd().createFile(io, "preds.tsv", .{});
     defer file.close(io);
@@ -491,7 +491,17 @@ fn appendLine(io: Io, path: []const u8, header: []const u8, line: []const u8) !v
     try fw.interface.flush();
 }
 
-/// best-<target>.tsv: "run\t<id>" then one prediction per selection row; null until a
+/// The ladder per target and scope: a post-game or internal candidate sees more than
+/// champ select may, so it never sets the bar for champ-select ones. The look budget is
+/// shared
+fn bestName(arena: std.mem.Allocator, target: api.Outcome) ![]const u8 {
+    return switch (cand.scope) {
+        .champ_select => std.fmt.allocPrint(arena, "best-{t}.tsv", .{target}),
+        .post_game, .internal => std.fmt.allocPrint(arena, "best-{t}-{t}.tsv", .{ target, cand.scope }),
+    };
+}
+
+/// best-<target>[-<scope>].tsv: "run\t<id>" then one prediction per selection row; null until a
 /// candidate beats the baseline
 fn readBest(gpa: std.mem.Allocator, io: Io, path: []const u8, n: usize) !?[]f64 {
     const text = Io.Dir.cwd().readFileAlloc(io, path, gpa, .limited(64 << 20)) catch |err| switch (err) {
@@ -527,13 +537,13 @@ fn final(
     arena: std.mem.Allocator,
     io: Io,
     d: *const rows.Data,
-    ranks: []const [2][5]?u8,
+    players: []const harness.Players,
     c: harness.Cuts,
     args: Args,
     dir: []const u8,
     w: *Io.Writer,
 ) !void {
-    var s = try harness.score(cand, gpa, d, ranks, c, .final, .{});
+    var s = try harness.score(cand, gpa, d, players, c, .final, .{});
     defer s.deinit(gpa);
     try w.print("# Final: {s} ({s}), test set, scope {t}\n\n| outcome | rows | baseline | candidate | diff |\n|---|---|---|---|---|\n", .{ args.run, args.campaign, cand.scope });
     const finals = try std.fs.path.join(arena, &.{ dir, "finals.tsv" });
