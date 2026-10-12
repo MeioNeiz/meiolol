@@ -1188,9 +1188,9 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         \\<p>Built from Riot's minute-by-minute timeline of the game. Win chance as in
         \\Platinum+ games; your lane against games in the same matchup at your rank.</p>
         \\<div class="three">
-        \\<div class="panel feat"><h3><span class="badge c-turn">★</span>The turning minute</h3><p>The one minute that moved your team's win chance most, and what happened in it.</p><div class="viz" id="v-turn"></div></div>
-        \\<div class="panel feat"><h3><span class="badge c-cost">✕</span>What each death cost</h3><p>Who killed you, the gold they got, what the enemy took next, and the win chance it cost.</p><div class="viz"><ul class="mini-list" id="v-death"></ul></div></div>
-        \\<div class="panel feat"><h3><span class="badge c-gain">↑</span>Your lane against typical</h3><p>Gold, level 6 and first item against the typical game in the same matchup and rank.</p><div class="viz"><ul class="mini-list" id="v-lane"></ul></div></div>
+        \\<div class="panel feat"><h3><span class="badge c-turn">★</span>The turning minute</h3><p>The one minute that moved your team's win chance most, and what happened in it.</p><div class="viz" id="v-turn" hidden></div></div>
+        \\<div class="panel feat"><h3><span class="badge c-cost">✕</span>What each death cost</h3><p>Who killed you, the gold they got, what the enemy took next, and the win chance it cost.</p><div class="viz" hidden><ul class="mini-list" id="v-death"></ul></div></div>
+        \\<div class="panel feat"><h3><span class="badge c-gain">↑</span>Your lane against typical</h3><p>Gold, level 6 and first item against the typical game in the same matchup and rank.</p><div class="viz" hidden><ul class="mini-list" id="v-lane"></ul></div></div>
         \\</div>
         \\</section>
         \\<section class="home-sec" hidden>

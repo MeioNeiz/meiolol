@@ -1,6 +1,7 @@
 // Home page: the example player's most-swung game as a game review that steps through
 // its biggest moments, previews of what every review has, and their highlights. All
-// from data/your-example.json; without it the page keeps its static parts only.
+// from data/your-example.json; without it (or with an older one) the page keeps its
+// static parts only, previews hidden.
 "use strict";
 
 (async () => {
@@ -51,6 +52,7 @@
     p.style.margin = "8px 0 0";
     p.append(el("b", "t-turn", `${t.minute - 1}-${t.minute} min `), `${t.from}% → ${t.to}%: ${t.kills} kills for your team${t.taken?.length ? `, took ${Review.list(t.taken)}` : ""}`);
     turn.replaceChildren(s, p);
+    turn.hidden = false;
   }
   const deaths = document.getElementById("v-death");
   const worst = (g.death_costs ?? []).filter((d) => d.before !== undefined).sort((a, b) => (a.after - a.before) - (b.after - b.before)).slice(0, 3).sort((a, b) => a.t_s - b.t_s);
@@ -63,6 +65,7 @@
       li.append(what, el("b", "num t-cost", pct(d.after - d.before)));
       return li;
     }));
+    deaths.closest(".viz").hidden = false;
   }
   const lane = document.getElementById("v-lane");
   const lg = games.find((x) => x.lane?.curve && x.lane.gold.length >= Review.LANE_END && x.lane.curve.n[Review.LANE_END - 1] >= Review.MIN_N);
@@ -80,6 +83,7 @@
     if (l.level6?.[0] != null && c.level6?.[0] != null) rows.push(row("Level 6", clock(l.level6[0]), l.level6[0] - c.level6[0], l.level6[0] <= c.level6[0], sec(l.level6[0] - c.level6[0])));
     if (l.first_item?.[0] != null && c.first_item?.[0] != null) rows.push(row("First item", clock(l.first_item[0]), l.first_item[0] - c.first_item[0], l.first_item[0] <= c.first_item[0], sec(l.first_item[0] - c.first_item[0])));
     lane.replaceChildren(...rows);
+    lane.closest(".viz").hidden = false;
   }
 
   const hl = Review.highlights(body.report.games, date);
