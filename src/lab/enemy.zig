@@ -1,5 +1,5 @@
 //! "How does a champion do against the whole enemy team?" on continuous outcomes:
-//! fm.zig's base, additive and pairwise models on the shared split. Grid on the newest
+//! fm.zig's base, additive, lane and pairwise models on the shared split. Grid on the newest
 //! 20% of train (by time), refit on all of train at the chosen epochs, test once.
 //! Intervals: 95%, paired, clustered by game (a game's ten rows share one game state)
 
@@ -189,9 +189,9 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, d: *const rows.Data, opts: Option
             for (scored.items) |s| gpa.free(s.pred);
             scored.deinit(gpa);
         }
-        for ([_]fm.Kind{ .base, .additive, .pairwise }) |kind| {
+        for ([_]fm.Kind{ .base, .additive, .lane, .pairwise }) |kind| {
             var best: ?struct { cfg: fm.Config, epochs: u32, loss: f64 } = null;
-            const dims: []const u32 = if (kind == .pairwise) opts.dims else &.{8};
+            const dims: []const u32 = if (kind == .lane or kind == .pairwise) opts.dims else &.{8};
             for (dims) |dim| for (opts.l2s) |l2| {
                 const cfg: fm.Config = .{ .kind = kind, .dim = dim, .l2 = l2 };
                 const t0 = std.Io.Clock.awake.now(io);
@@ -209,6 +209,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, d: *const rows.Data, opts: Option
             const pred = try gpa.alloc(f32, tests.len);
             for (pred, tests) |*p, *e| p.* = m.predict(e);
             try scored.append(gpa, .{ .label = @tagName(kind), .cfg = b.cfg, .epochs = b.epochs, .pred = pred });
+            if (kind == .pairwise) try interactionSizes(&m, tests, sd, k, w);
         }
 
         const zero = try gpa.alloc(f32, tests.len);
@@ -279,4 +280,28 @@ fn writePreds(
         });
     }
     try out.interface.flush();
+}
+
+/// How far each enemy role's interaction term moves each role's outcome on the test
+/// rows: root mean square, in outcome units. Which enemies matter to whom, beyond their
+/// average effect
+fn interactionSizes(m: *const fm.Model, tests: []const fm.Example, sd: f64, k: rows.Outcome, w: *std.Io.Writer) !void {
+    var ss: [5][5]f64 = @splat(@splat(0));
+    var n: [5]f64 = @splat(0);
+    for (tests) |*e| {
+        n[e.role] += 1;
+        for (0..5) |j| {
+            const t = fm.pairTerm(m, e, j);
+            ss[e.role][e.enemy_roles[j]] += t * t;
+        }
+    }
+    try w.print("\n{s}, pairwise interaction size (RMS, outcome units), my role x enemy role:\n\n", .{@tagName(k)});
+    try w.writeAll("| me \\ enemy | top | jungle | mid | bot | support |\n| --- | --- | --- | --- | --- | --- |\n");
+    const names = [_][]const u8{ "top", "jungle", "mid", "bot", "support" };
+    for (names, 0..) |name, i| {
+        try w.print("| {s} |", .{name});
+        for (0..5) |j| try w.print(" {d:.2} |", .{@sqrt(ss[i][j] / @max(n[i], 1)) * sd});
+        try w.writeAll("\n");
+    }
+    try w.writeAll("\n");
 }

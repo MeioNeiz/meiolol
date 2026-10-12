@@ -3,6 +3,8 @@
 //!   base:      mu + b[me]                                    (champion-role mean)
 //!   additive:  + pl[platform][my role] + sum over enemies a[enemy][my role]
 //!              + allies g[ally][my role]
+//!   lane:      + the pairwise term below for the lane opponent only (both enemies
+//!              for bottom and support)
 //!   pairwise:  + sum over enemies w[my role][their role] * <u[me], v[enemy]>
 //! "pairwise" is the "vs the specific enemy five" reading: an enemy's effect depends on
 //! who you are, weighted per role pair (the lane opponent should weigh most). Adam on
@@ -13,7 +15,7 @@ const std = @import("std");
 const core = @import("core");
 const rows_mod = @import("rows.zig");
 
-pub const Kind = enum { base, additive, pairwise };
+pub const Kind = enum { base, additive, lane, pairwise };
 
 pub const max_platforms = 16;
 
@@ -91,6 +93,7 @@ pub const Model = struct {
         const d = m.cfg.dim;
         const um = m.u[@as(usize, e.me) * d ..][0..d];
         for (e.enemies, e.enemy_roles) |x, rx| {
+            if (m.cfg.kind == .lane and !laneMates(e.role, rx)) continue;
             const vx = m.v[@as(usize, x) * d ..][0..d];
             var dot: f32 = 0;
             for (um, vx) |p, q| dot += p * q;
@@ -121,6 +124,7 @@ pub const Model = struct {
         const um = m.u[@as(usize, e.me) * d ..][0..d];
         const gu = gr[off_u + @as(usize, e.me) * d ..][0..d];
         for (e.enemies, e.enemy_roles) |x, rx| {
+            if (m.cfg.kind == .lane and !laneMates(e.role, rx)) continue;
             const wi = @as(usize, e.role) * 5 + rx;
             const vx = m.v[@as(usize, x) * d ..][0..d];
             const gv = gr[off_v + @as(usize, x) * d ..][0..d];
@@ -246,4 +250,25 @@ fn warmStart(gpa: std.mem.Allocator, m: *Model, train: []const Example) !void {
         cnt[i] += 1;
     }
     for (m.pl, sum[0..m.pl.len], cnt[0..m.pl.len]) |*p, s, c| p.* = @floatCast(s / (c + prior));
+}
+
+/// The "lane" model's interactions: your lane opponent, and both enemies of the bot 2v2
+fn laneMates(mine: u3, theirs: u3) bool {
+    const bot = 3;
+    const support = 4;
+    return mine == theirs or (mine >= bot and theirs >= bot and mine <= support and theirs <= support);
+}
+
+/// One enemy's interaction term for e (enemy index k), in model units; 0 outside pairwise
+/// and lane models or for a masked role pair
+pub fn pairTerm(m: *const Model, e: *const Example, k: usize) f32 {
+    if (m.cfg.kind != .lane and m.cfg.kind != .pairwise) return 0;
+    const rx = e.enemy_roles[k];
+    if (m.cfg.kind == .lane and !laneMates(e.role, rx)) return 0;
+    const d = m.cfg.dim;
+    const um = m.u[@as(usize, e.me) * d ..][0..d];
+    const vx = m.v[@as(usize, e.enemies[k]) * d ..][0..d];
+    var dot: f32 = 0;
+    for (um, vx) |p, q| dot += p * q;
+    return m.w[@as(usize, e.role) * 5 + rx] * dot;
 }
