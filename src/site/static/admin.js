@@ -110,7 +110,7 @@ const hashTab = () => {
   const [t, sub] = location.hash.slice(1).split("/");
   return t === "model" ? ["models", "win"] : t === "training" ? ["models", "all"] : [t || "overview", sub];
 };
-const CATS_KEYS = ["all", "win", "early", "items", "objectives", "playstyle", "player", "data", "lab"];
+const CATS_KEYS = ["all", "win", "draft", "early", "items", "objectives", "playstyle", "player", "data", "lab"];
 const ui = {
   tab: hashTab()[0],
   cat: hashTab()[0] === "models" && hashTab()[1] ? hashTab()[1] : stored("cat", "all"),
@@ -1224,7 +1224,7 @@ VIEWS.ingest = body => {
 // learned.md, model.md, lab campaigns, run findings)
 
 const CATS = [
-  ["all", "All"], ["win", "Win (draft)"], ["early", "Early game"], ["items", "Items"],
+  ["all", "All"], ["win", "Win (draft)"], ["draft", "Draft tester"], ["early", "Early game"], ["items", "Items"],
   ["objectives", "Objectives"], ["playstyle", "Playstyle"], ["player", "Player"],
   ["data", "Data quality"], ["lab", "Lab campaigns"],
 ];
@@ -1706,6 +1706,200 @@ function runFindings(parent, cat) {
   }
 }
 
+// ---------- models: draft tester ----------
+//
+// Admin only: a draft board of two teams, the model's win chance for the whole draft, and
+// a picker per slot showing what each champion would change. The model comes from
+// meiolol-lab's `draft --export` (meiolol-88), sent by deploy/lab-push.sh as
+// training/draft-model.json with reference pairs in draft-ref.json, checked at load. Nothing
+// here reaches the public site, which must not claim "this draft wins X%"
+
+const DRAFT_ROLES = [["top", "Top"], ["jungle", "Jungle"], ["mid", "Mid"], ["bot", "Bot"], ["support", "Support"]];
+const SIDES = [["blue", "Blue"], ["red", "Red"]];
+const DRAFT = { model: undefined, ref: null, err: null, check: null, m: null };
+
+function draftState() {
+  const d = stored("draft2", null) || {};
+  return { blue: d.blue || {}, red: d.red || {}, locks: d.locks || {}, bans: d.bans || [], open: d.open || null, sort: d.sort || "played" };
+}
+function saveDraft(d) { store("draft2", d); render(true); }
+
+async function loadDraftModel() {
+  try {
+    DRAFT.model = await getJson("training/draft-model.json");
+    DRAFT.m = draftModel(DRAFT.model);
+    DRAFT.ref = await getJson("training/draft-ref.json").catch(() => null);
+    DRAFT.err = null;
+    DRAFT.check = DRAFT.m && DRAFT.ref ? draftCheck(DRAFT.m, DRAFT.ref) : null;
+  } catch (e) { DRAFT.model = null; DRAFT.m = null; DRAFT.err = e.message; }
+  if (ui.tab === "models" && ui.cat === "draft") render(true);
+}
+
+// The exported model behind one interface: champions, play rate per role, and blue's win
+// chance with a 95% interval for a draft {blue: {role: id}, red: {role: id}} (empty slots
+// add nothing). Provisional reading of the export until meiolol-88 settles the format:
+// logit = intercept + sum(blue effects) - sum(red effects), interval from the effects' se
+function draftModel(M) {
+  if (!M || !M.champions) return null;
+  const eff = M.effects || {}, play = M.play || {};
+  const term = (role, id) => (eff[role] || {})[id] || null;
+  return {
+    champs: M.champions.slice().sort((a, b) => a.name.localeCompare(b.name)),
+    rate: (id, role) => +((play[role] || {})[id] || 0),
+    win(d) {
+      let z = +M.intercept || 0, v = 0;
+      for (const [side, sign] of [["blue", 1], ["red", -1]]) {
+        for (const [role] of DRAFT_ROLES) {
+          const id = d[side][role];
+          const t = id != null && term(role, id);
+          if (!t) continue;
+          z += sign * t.b;
+          v += (t.se || 0) ** 2;
+        }
+      }
+      const s = x => 1 / (1 + Math.exp(-x)), h = 1.96 * Math.sqrt(v);
+      return { p: s(z), lo: s(z - h), hi: s(z + h) };
+    },
+  };
+}
+
+// The page's numbers against meiolol-lab's reference pairs (draft-ref.json: [{draft, p}])
+function draftCheck(m, ref) {
+  const cases = Array.isArray(ref) ? ref : ref.cases || [];
+  if (!cases.length) return null;
+  let worst = 0;
+  for (const c of cases) worst = Math.max(worst, Math.abs(m.win({ blue: c.draft.blue || {}, red: c.draft.red || {} }).p - c.p));
+  return worst < 1e-9 ? { ok: true, text: `Matches meiolol-lab on ${cases.length} reference drafts.` }
+    : { ok: false, text: `Differs from meiolol-lab on its reference drafts by up to ${(worst * 100).toFixed(3)} points: don't trust these numbers.` };
+}
+
+// Search key: letters and digits only, so "kaisa" finds Kai'Sa and "nunu" Nunu & Willump
+const champKey = s => (s || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
+const takenIn = d => new Set([...Object.values(d.blue), ...Object.values(d.red), ...d.bans].map(String));
+
+// Fill unlocked slots (only empty ones unless `all`) by play rate in the role
+function randomFill(m, d, all) {
+  const taken = takenIn(d);
+  for (const [side] of SIDES) for (const [role] of DRAFT_ROLES) {
+    const key = side + "." + role;
+    if (d.locks[key] || (!all && d[side][role] != null)) continue;
+    if (d[side][role] != null) taken.delete(String(d[side][role]));
+    const pool = m.champs.filter(c => !taken.has(String(c.id)) && m.rate(c.id, role) > 0);
+    let x = Math.random() * sumR(pool.map(c => m.rate(c.id, role)));
+    const pick = pool.find(c => (x -= m.rate(c.id, role)) <= 0) || pool[pool.length - 1];
+    if (!pick) continue;
+    d[side][role] = pick.id;
+    taken.add(String(pick.id));
+  }
+}
+
+function draftView(body) {
+  if (DRAFT.model === undefined) { loadDraftModel(); body.append(el("p", { class: "muted" }, "Loading the draft model…")); return; }
+  const m = DRAFT.m, M = DRAFT.model || {}, meta = M.meta || {};
+  const sec = section(body, "Draft tester", "Build two teams, swap champions in, see what the model thinks. Admin only: the public site never shows a draft's win chance.",
+    el("button", { type: "button", class: "ghost", onclick: () => { DRAFT.model = undefined; render(true); } }, "Reload model"));
+  if (!m) {
+    sec.append(el("p", { class: "muted" }, `No draft model yet${DRAFT.err ? ` (${DRAFT.err})` : ""}: meiolol-lab's \`draft --export\` (meiolol-88) writes it and deploy/lab-push.sh sends it.`));
+    return;
+  }
+  const d = draftState();
+  const name = id => (m.champs.find(c => String(c.id) === String(id)) || { name: "#" + id }).name;
+  sec.append(el("p", { class: "sub" }, [meta.name, meta.games != null ? `${num(meta.games)} training games` : null, meta.snapshot, meta.dev_accuracy != null ? `right ${pct(meta.dev_accuracy)} of the time on practice games` : null].filter(Boolean).join(" · ")));
+  if (DRAFT.check) sec.append(el("div", { class: "health " + (DRAFT.check.ok ? "good" : "bad") }, el("b", {}, DRAFT.check.ok ? "✓ " : "⚠ "), DRAFT.check.text));
+  if (!M.has_pairs) sec.append(el("div", { class: "health warn" }, el("b", {}, "Caveat: "), "the model has no counter or synergy terms yet. It ranks by champion strength in the role; other picks shift the numbers, not the order."));
+
+  const w = m.win(d);
+  sec.append(el("div", { class: "winbar", role: "img", "aria-label": `Blue ${pct(w.p)}, range ${pct(w.lo)} to ${pct(w.hi)}` },
+    el("div", { class: "labels" }, el("b", { class: "blue" }, `Blue ${pct(w.p)}`), el("span", { class: "sub" }, `range ${pct(w.lo)} to ${pct(w.hi)}`), el("b", { class: "red" }, `Red ${pct(1 - w.p)}`)),
+    el("div", { class: "track" }, el("span", { class: "range", style: `left:${100 * w.lo}%;width:${100 * (w.hi - w.lo)}%` }), el("span", { class: "mark", style: `left:${100 * w.p}%` }), el("span", { class: "half" }))));
+
+  const act = (label, f, cls) => el("button", { type: "button", class: "action" + (cls ? " " + cls : ""), onclick: () => { f(); saveDraft(d); } }, label);
+  sec.append(el("div", { class: "actions" },
+    act("Random game", () => randomFill(m, d, true)),
+    act("Random fill", () => randomFill(m, d, false)),
+    act("Swap sides", () => {
+      [d.blue, d.red] = [d.red, d.blue];
+      d.locks = Object.fromEntries(Object.entries(d.locks).map(([k, v]) => [k.replace(/^(blue|red)/, s => s === "blue" ? "red" : "blue"), v]));
+    }),
+    act("Clear unlocked", () => { for (const [s] of SIDES) for (const [r] of DRAFT_ROLES) if (!d.locks[s + "." + r]) delete d[s][r]; })));
+
+  const board = el("div", { class: "draft" });
+  sec.append(board);
+  for (const [side, title] of SIDES) {
+    const col = el("div", { class: "card team " + side }, el("h3", {}, title));
+    for (const [role, label] of DRAFT_ROLES) {
+      const key = side + "." + role, id = d[side][role], open = d.open === key, locked = !!d.locks[key];
+      col.append(el("div", { class: "slotrow" + (open ? " open" : "") },
+        el("span", { class: "role" }, label),
+        el("button", { type: "button", class: "slot", "aria-expanded": String(open), onclick: () => { d.open = open ? null : key; saveDraft(d); } }, id != null ? name(id) : el("span", { class: "muted" }, "empty")),
+        el("button", { type: "button", class: "ghost icon", "aria-pressed": String(locked), title: locked ? "Unlock" : "Lock (random keeps it)", onclick: () => { d.locks[key] = !locked; saveDraft(d); } }, locked ? "locked" : "lock"),
+        id != null ? el("button", { type: "button", class: "ghost icon", title: "Clear", "aria-label": "Clear " + name(id), onclick: () => { delete d[side][role]; saveDraft(d); } }, "×") : null));
+      if (open) col.append(slotPicker(m, d, side, role));
+    }
+    board.append(col);
+  }
+  const bans = el("div", { class: "card bans" }, el("h3", {}, `Bans (${d.bans.length}), left out of random games and pickers`));
+  const chips = el("div", { class: "chips" });
+  for (const b of d.bans) chips.append(el("button", { type: "button", title: "Remove ban", onclick: () => { d.bans = d.bans.filter(x => x !== b); saveDraft(d); } }, name(b), " ×"));
+  bans.append(chips);
+  if (d.bans.length < 10) {
+    const input = el("input", { type: "search", class: "bansearch", placeholder: "Ban a champion: type, Enter", "aria-label": "Ban a champion", autocomplete: "off", spellcheck: "false" });
+    input.addEventListener("keydown", ev => {
+      if (ev.key !== "Enter") return;
+      const q = champKey(input.value), taken = takenIn(d);
+      const c = m.champs.find(c => !taken.has(String(c.id)) && champKey(c.name).startsWith(q)) || m.champs.find(c => !taken.has(String(c.id)) && champKey(c.name).includes(q));
+      if (q && c) { d.bans.push(c.id); saveDraft(d); }
+    });
+    bans.append(input);
+  }
+  sec.append(bans);
+}
+
+// Candidates for one slot: search, play rate in the role, and the change to this team's win
+// chance if picked; sorted by play rate or by that change
+function slotPicker(m, d, side, role) {
+  const box = el("div", { class: "slotpicker" });
+  const taken = takenIn(d);
+  const cur = d[side][role];
+  if (cur != null) taken.delete(String(cur));
+  const mine = p => side === "blue" ? p : 1 - p;
+  const base = mine(m.win({ blue: { ...d.blue, [role]: side === "blue" ? undefined : d.blue[role] }, red: { ...d.red, [role]: side === "red" ? undefined : d.red[role] } }).p);
+  const now = mine(m.win(d).p);
+  const all = m.champs.filter(c => !taken.has(String(c.id)) && m.rate(c.id, role) > 0).map(c => {
+    const t = { blue: { ...d.blue }, red: { ...d.red } };
+    t[side][role] = c.id;
+    return { c, rate: m.rate(c.id, role), p: mine(m.win(t).p) };
+  });
+  const input = el("input", { type: "search", placeholder: `Search ${all.length} champions played ${role}`, "aria-label": "Search champions", autocomplete: "off", spellcheck: "false" });
+  const sortBtn = el("nav", { class: "switch", "aria-label": "Sort" });
+  for (const [k, label] of [["played", "Most played"], ["best", "Best for this team"]]) {
+    sortBtn.append(el("button", { type: "button", "aria-pressed": String(d.sort === k), onclick: () => { d.sort = k; saveDraft(d); } }, label));
+  }
+  const list = el("div", { class: "cands", role: "listbox" });
+  const pick = id => { d[side][role] = id; d.open = null; saveDraft(d); };
+  const fill = () => {
+    const q = champKey(input.value);
+    const hits = all.filter(x => !q || champKey(x.c.name).includes(q) || champKey(x.c.alias).includes(q))
+      .sort(d.sort === "best" ? (a, b) => b.p - a.p : (a, b) => b.rate - a.rate);
+    list.replaceChildren(...hits.slice(0, 40).map(x => {
+      const delta = x.p - (cur != null ? now : base);
+      return el("button", { type: "button", role: "option", class: String(x.c.id) === String(cur) ? "cur" : null, onclick: () => pick(x.c.id) },
+        el("span", { class: "nm" }, x.c.name), el("span", { class: "rate" }, pct(x.rate)),
+        el("b", { class: delta > 0.0005 ? "up" : delta < -0.0005 ? "down" : "" }, (delta >= 0 ? "+" : "−") + Math.abs(delta * 100).toFixed(1) + "%"));
+    }));
+    if (hits.length > 40) list.append(el("p", { class: "sub" }, `${hits.length - 40} more: type to narrow.`));
+  };
+  input.addEventListener("input", fill);
+  input.addEventListener("keydown", ev => {
+    if (ev.key === "Enter") { const b = list.querySelector("button"); if (b) b.click(); }
+    if (ev.key === "Escape") { d.open = null; saveDraft(d); }
+  });
+  box.append(el("div", { class: "pickhead" }, input, sortBtn), el("p", { class: "sub" }, `Play rate in the role, then the change to ${side}'s win chance ${cur != null ? "against the current pick" : "against leaving the slot empty"}.`), list);
+  fill();
+  setTimeout(() => input.focus({ preventScroll: true }), 0);
+  return box;
+}
+
 // ---------- models: shell ----------
 
 const MODELS = { learned: {}, modelMd: null, campaigns: [], runs: [], findings: new Map() };
@@ -1771,7 +1965,7 @@ function allView(body) {
   const cards = grid(sec, "cards");
   const W = winReadings();
   const te = teamEffects();
-  for (const [cat, label] of CATS.slice(1)) {
+  for (const [cat, label] of CATS.slice(1).filter(([k]) => k !== "draft")) {
     const items = MODELS.learned[cat] || [];
     const runs = MODELS.runs.filter(r => (cat === "lab" ? r.lab : r.cat === cat));
     const live = runs.filter(r => r.state === "running" || r.state === "paused").length;
@@ -1807,9 +2001,9 @@ VIEWS.models = body => {
     nav.append(el("button", { type: "button", "aria-pressed": String(k === ui.cat), onclick: () => setCat(k) }, label));
   }
   body.append(nav);
-  if (!TRAIN && !trainErr) body.append(el("p", { class: "muted" }, "Loading runs and findings…"));
+  if (!TRAIN && !trainErr && ui.cat !== "draft") body.append(el("p", { class: "muted" }, "Loading runs and findings…"));
   if (trainErr) body.append(el("div", { class: "health bad" }, el("b", {}, "Could not load the training view: "), trainErr));
-  ({ all: allView, win: winView, early: earlyView, lab: labView }[ui.cat] || (b => categoryView(b, ui.cat)))(body);
+  ({ all: allView, win: winView, draft: draftView, early: earlyView, lab: labView }[ui.cat] || (b => categoryView(b, ui.cat)))(body);
 };
 
 const shortRun = run => (run || "").replace(/^\d{8}T\d{4}Z-/, "");

@@ -264,3 +264,48 @@ button.card.catcard { display: flex; flex-direction: column; justify-content: fl
 .catcard .sub:last-child { margin-top: auto; padding-top: 8px; }
 ul.readings.checks { font-size: 13px; margin-top: 4px; }
 h3.subhead { margin: 16px 0 6px; }
+
+/* Draft tester */
+.winbar { margin: 10px 0 12px; max-width: 900px; }
+.winbar .labels { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.winbar .labels b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.winbar .blue { color: #3987e5; }
+.winbar .red { color: #d95926; }
+.winbar .track { position: relative; height: 14px; margin-top: 4px; border-radius: 7px; background: linear-gradient(90deg, rgba(57, 135, 229, 0.35), rgba(217, 89, 38, 0.35)); }
+.winbar .range { position: absolute; top: 0; bottom: 0; background: rgba(230, 233, 239, 0.25); border-radius: 7px; }
+.winbar .mark { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1px; background: var(--text); border-radius: 2px; }
+.winbar .half { position: absolute; left: 50%; top: -4px; bottom: -4px; border-left: 1px dashed var(--faint); }
+.draft { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; margin-top: 12px; }
+.card.team.blue { border-top: 3px solid #3987e5; }
+.card.team.red { border-top: 3px solid #d95926; }
+.slotrow { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 3px 0; }
+.slotrow .role { color: var(--muted); font-size: 12px; }
+button.slot {
+  font: inherit; color: var(--text); text-align: left; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 10px; cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+button.slot:hover, .slotrow.open button.slot { border-color: var(--accent); }
+button.ghost.icon { padding: 2px 8px; }
+button.ghost.icon[aria-pressed="true"] { color: var(--warn); border-color: var(--warn); }
+.slotpicker { background: var(--bg); border: 1px solid var(--axis); border-radius: 8px; padding: 8px; margin: 2px 0 8px; }
+.pickhead { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pickhead input, input.bansearch {
+  flex: 1 1 160px; min-width: 0; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px;
+}
+.slotpicker p.sub { margin: 6px 0; font-size: 12px; }
+.cands { display: grid; gap: 2px; max-height: 320px; overflow-y: auto; }
+.cands button {
+  font: inherit; color: var(--text); background: none; border: 0; border-radius: 6px; padding: 5px 8px; cursor: pointer;
+  display: grid; grid-template-columns: minmax(0, 1fr) 52px 60px; gap: 8px; text-align: left; font-variant-numeric: tabular-nums;
+}
+.cands button:hover, .cands button:focus-visible { background: var(--panel-2); }
+.cands button.cur { outline: 1px solid var(--accent); }
+.cands .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cands .rate { color: var(--muted); text-align: right; }
+.cands b { text-align: right; font-weight: 600; color: var(--muted); }
+.cands b.up { color: var(--good); }
+.cands b.down { color: var(--bad); }
+.card.bans { margin-top: 12px; }
+.card.bans .chips { margin-bottom: 8px; }
+input.bansearch { width: 100%; }
+.health.warn { border-left-color: var(--warn); }
