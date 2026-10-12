@@ -49,6 +49,7 @@ pub const Summary = struct {
     matches: i64,
     timelines: i64,
     drafts: i64,
+    rank_history: i64,
     removed: usize,
 };
 
@@ -93,13 +94,14 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
         .matches = wrote.matches,
         .timelines = wrote.timelines,
         .drafts = wrote.drafts,
+        .rank_history = wrote.rank_history,
         .removed = removed,
     };
 }
 
 const Kind = enum { state, segment };
 
-const Written = struct { rows: i64 = 0, matches: i64 = 0, timelines: i64 = 0, drafts: i64 = 0 };
+const Written = struct { rows: i64 = 0, matches: i64 = 0, timelines: i64 = 0, drafts: i64 = 0, rank_history: i64 = 0 };
 
 /// Build `path` from the live databases inside one read transaction. A segment with no
 /// new rows is not kept.
@@ -145,10 +147,15 @@ fn writeFile(
                     \\CREATE TABLE segment (matches_after INTEGER NOT NULL, matches_to INTEGER NOT NULL,
                     \\    timelines_after INTEGER NOT NULL, timelines_to INTEGER NOT NULL,
                     \\    made_at INTEGER NOT NULL, drafts_after INTEGER NOT NULL DEFAULT 0,
-                    \\    drafts_to INTEGER NOT NULL DEFAULT 0);
+                    \\    drafts_to INTEGER NOT NULL DEFAULT 0, history_after INTEGER NOT NULL DEFAULT 0,
+                    \\    history_to INTEGER NOT NULL DEFAULT 0);
                 );
-                try db.run("INSERT INTO segment VALUES (?, ?, ?, ?, ?, ?, ?)", .{
+                // rank_history by day: a day's rows change until it ends, so whole days only
+                const history = try copyDdl(arena, db, "live", "rank_history");
+                const to_h = if (history) @divFloor(now, std.time.s_per_day) - 1 else after.history_to;
+                try db.run("INSERT INTO segment VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", .{
                     after.matches_to, to_m, after.timelines_to, to_t, now, after.drafts_to, to_d,
+                    after.history_to, to_h,
                 });
                 for ([_][]const u8{ "matches", "participants", "bans" }) |t| _ = try copyDdl(arena, db, "live", t);
                 _ = try copyDdl(arena, db, "livet", "timelines");
@@ -176,7 +183,15 @@ fn writeFile(
                     ));
                     w.drafts = changes(db);
                 }
-                w.rows = w.matches + w.timelines + w.drafts;
+                if (history) {
+                    try copyRows(arena, db, "live", "rank_history", try std.fmt.allocPrint(
+                        arena,
+                        " WHERE day > {d} AND day <= {d}",
+                        .{ after.history_to, to_h },
+                    ));
+                    w.rank_history = changes(db);
+                }
+                w.rows = w.matches + w.timelines + w.drafts + w.rank_history;
             },
         }
         try db.exec("COMMIT");
@@ -233,25 +248,29 @@ pub fn listSegments(arena: std.mem.Allocator, io: Io, seg_dir: []const u8) ![]Se
     return out.items;
 }
 
-/// Last rowid (drafts: id) each segment copied up to
-const Range = struct { matches_to: i64 = 0, timelines_to: i64 = 0, drafts_to: i64 = 0 };
+/// Last rowid (drafts: id; rank_history: day) each segment copied up to
+const Range = struct { matches_to: i64 = 0, timelines_to: i64 = 0, drafts_to: i64 = 0, history_to: i64 = 0 };
 
 fn readRange(arena: std.mem.Allocator, path: []const u8) !Range {
     const db = try Db.open(try arena.dupeZ(u8, path));
     defer db.close();
-    // Segments from before drafts have no drafts_to: the next one copies them all
-    const has_drafts = (try db.scalar(
-        "SELECT count(*) FROM pragma_table_info('segment') WHERE name = 'drafts_to'",
-        .{},
-    ) orelse 0) > 0;
-    var s = try db.prepare(if (has_drafts)
-        "SELECT matches_to, timelines_to, drafts_to FROM segment"
-    else
-        "SELECT matches_to, timelines_to, 0 FROM segment");
+    // Segments from before drafts or rank_history lack those columns: the next one
+    // copies them all
+    var s = try db.prepare(try std.fmt.allocPrintSentinel(
+        arena,
+        "SELECT matches_to, timelines_to, {s}, {s} FROM segment",
+        .{ try segmentColumn(db, "drafts_to"), try segmentColumn(db, "history_to") },
+        0,
+    ));
     defer s.deinit();
     try s.bind(.{});
     if (!try s.step()) return error.BadSegment;
-    return .{ .matches_to = s.int(0), .timelines_to = s.int(1), .drafts_to = s.int(2) };
+    return .{ .matches_to = s.int(0), .timelines_to = s.int(1), .drafts_to = s.int(2), .history_to = s.int(3) };
+}
+
+fn segmentColumn(db: Db, name: []const u8) ![]const u8 {
+    const n = try db.scalar("SELECT count(*) FROM pragma_table_info('segment') WHERE name = ?", .{name});
+    return if ((n orelse 0) > 0) name else "0";
 }
 
 /// Keep the newest `daily` snapshots, plus the newest of each of the `weekly` most recent
@@ -451,12 +470,16 @@ test "backup then restore round trip, incremental segments, scrub" {
             \\INSERT INTO drafts (id, platform, queue, patch, day, ranked, blue_win, picks, bans)
             \\    VALUES (7, 'EUW1', 420, '16.20', 1, 0, 1, x'', x'');
         );
+        try db.run("INSERT INTO rank_history VALUES (?, 20736, 20, 0, 1, 0), (?, 20736, 20, 0, 1, 0)", .{
+            store.schema.puuidKey("p1"), store.schema.puuidKey("p2"),
+        });
     }
     const day = 86400 * 20737;
     const first = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day });
     try testing.expectEqual(1, first.matches);
     try testing.expectEqual(1, first.timelines);
     try testing.expectEqual(1, first.drafts);
+    try testing.expectEqual(2, first.rank_history);
     // Nothing new: no segment
     const idle = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day + 86400 });
     try testing.expectEqual(null, idle.segment);
@@ -468,11 +491,16 @@ test "backup then restore round trip, incremental segments, scrub" {
             \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, win)
             \\    VALUES ('EUW1_2', 0, 100, 'p1', 3, 0);
         );
+        // The second backup's today: in the third, once the day is over
+        try db.run("INSERT INTO rank_history VALUES (?, 20738, 20, 9, 2, 0), (?, 20739, 20, 9, 2, 0)", .{
+            store.schema.puuidKey("p1"), store.schema.puuidKey("p2"),
+        });
     }
     const second = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day + 2 * 86400 });
     try testing.expectEqual(1, second.matches);
     try testing.expectEqual(0, second.timelines);
     try testing.expectEqual(0, second.drafts);
+    try testing.expectEqual(1, second.rank_history);
     try testing.expectEqual(2, (try listSegments(arena, io, try std.fmt.allocPrint(arena, "{s}/segments", .{out}))).len);
 
     // p1 objects after the backups were taken: live forget records it, scrub cleans files
@@ -483,6 +511,7 @@ test "backup then restore round trip, incremental segments, scrub" {
     }
     const scrubbed = try scrub(arena, io, out, "p1", day);
     try testing.expectEqual(2, scrubbed.participants);
+    try testing.expectEqual(2, scrubbed.rank_history);
     try testing.expectEqual(0, scrubbed.players); // not backed up
 
     // A restore from the older state still ends without p1: forgotten comes from the
@@ -500,6 +529,8 @@ test "backup then restore round trip, incremental segments, scrub" {
         try testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM players", .{}));
         try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM bans", .{}));
         try testing.expectEqual(@as(?i64, 7), try db.scalar("SELECT id FROM drafts", .{}));
+        try testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM rank_history WHERE key = ?", .{store.schema.puuidKey("p2")}));
+        try testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM rank_history", .{}));
         try testing.expect(try forget.isForgotten(db, "p1"));
     }
     try testing.expectError(error.TargetNotEmpty, restore(arena, io, out, restored_dir, null, day));
@@ -507,5 +538,5 @@ test "backup then restore round trip, incremental segments, scrub" {
     // --full replaces the segments with one
     const full = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day + 4 * 86400, .full = true });
     try testing.expectEqual(2, full.matches);
-    try testing.expectEqual(2, full.removed);
+    try testing.expectEqual(3, full.removed); // the third holds p2's day-20739 rank row
 }

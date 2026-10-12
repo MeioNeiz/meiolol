@@ -148,13 +148,19 @@ next steps land here.
   rows keep forever, so the raw window has to hold all of them first; older segments and backups to an off-host Storage
   Box once local disk fills (Jacob to order; or paid OCI disk). Privacy rules stay:
   PUUIDs blanked at 24 months, forget, Riot 404 deletes
-- Rank history (Jacob, 2026-10-11: keep ranks): ranks drops a player 30 days after the
-  ladder last showed them, and keeps only the latest rank. Add a history (puuidKey, day,
-  rank, lp, wins, losses), a row only when it changed since the last ladder page, kept
-  24 months after last seen (what docs/legal/privacy.md already says), removed by
-  `forget` and covered by backups. Gives rank at game time to within a week (data.md
-  lists it as unavailable) and climb/learning analysis. ~1.5M changed rows a week at
-  ~24 bytes: ~2 GB a year. Build with the keep-days change on the A1
+- Rank history (Jacob, 2026-10-11: keep ranks): done 2026-10-12. rank_history (puuidKey,
+  day, rank, lp, wins, losses) gets a row when a ladder sighting differs from ranks
+  (which now keeps lp/wins/losses too); same-day changes replace that day's row. Goes 24
+  months after a player's newest row (privacy.md), removed by forget, in backup segments
+  by whole day. docs/architecture.md Storage. Rehearsed on a VACUUM INTO copy of the
+  live DB: migration 3 s; 5.39M ranks rows as history = 141 MB. With 12 h ladder
+  refreshes expect ~1-1.5M rows/day, ~15-20 GB a year (plan said 2: weekly refresh).
+  Next: measure the real rows/day after a day (`SELECT day, count(*) FROM rank_history
+  GROUP BY 1`) and fix the estimate in architecture.md; rank at game time for
+  participants/drafts from it (not wired). Open for Jacob: backup segments are kept
+  forever, so their PUUIDs (participants) and rank_history outlive the 24 months
+  (segments need the same sweep); history under old keys after a rekey can't be
+  forgotten by PUUID (it ages out in 24 months)
 - Tier floor (Jacob, 2026-10-11): only Platinum IV and up, every region. `--min-tier
   PLATINUM` stops the ladder walk and filters the scan pool; ladder cap raised 20 -> 40
   an hour so the weekly refresh reaches Platinum IV (at 20 it restarted at the top

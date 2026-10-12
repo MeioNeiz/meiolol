@@ -33,7 +33,9 @@ under the write lock they starve the crawler on a slow host.
   restore, which then rescans everyone's match ids
 - `segments/NNNNNN.db`: matches, participants and bans of matches stored since the last
   segment (by matches rowid), and compact timelines likewise (timelines rowid), and
-  draft rows (drafts id; the first segment after an older one copies them all). Stored
+  draft rows (drafts id; the first segment after an older one copies them all), and
+  rank_history rows by day (whole days up to yesterday: a day's rows change until it
+  ends; the first segment after an older one copies them all). Stored
   rows never change, so segments are append-only and never rotated. `draft_backfill`
   is not backed up: a restore from backups taken before `meiolol draft-backfill`
   finished lacks the draft rows of matches it had not reached

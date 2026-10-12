@@ -1176,8 +1176,9 @@ fn cmdBackup(c: *Cmd) !u8 {
         } else return error.Usage;
     }
     const r = try backup.run(c.arena, c.init.io, o);
-    std.log.info("{s}; segment {s}: {d} matches, {d} timelines, {d} drafts; {d} old files removed", .{
-        r.state, r.segment orelse "none (nothing new)", r.matches, r.timelines, r.drafts, r.removed,
+    std.log.info("{s}; segment {s}: {d} matches, {d} timelines, {d} drafts, {d} rank changes; " ++
+        "{d} old files removed", .{
+        r.state, r.segment orelse "none (nothing new)", r.matches, r.timelines, r.drafts, r.rank_history, r.removed,
     });
     return 0;
 }
@@ -1276,7 +1277,8 @@ fn cmdForget(c: *Cmd) !u8 {
     }
     if (ids.len > 0) {
         std.log.info("{d} of {d} erased, {d} already forgotten; live rows: players {d}, " ++
-            "mastery {d}, participants blanked {d}, raw matches {d}, raw timelines {d}", .{
+            "mastery {d}, participants blanked {d}, raw matches {d}, raw timelines {d}, " ++
+            "rank history {d}", .{
             ids.len - unresolved - already,
             ids.len,
             already,
@@ -1285,6 +1287,7 @@ fn cmdForget(c: *Cmd) !u8 {
             live.participants,
             live.raw_matches,
             live.raw_timelines,
+            live.rank_history,
         });
     }
     if (api_db != null and ids.len > 0) std.log.info("Your games cache: erased and blocked", .{});

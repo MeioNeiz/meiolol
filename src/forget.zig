@@ -35,13 +35,14 @@ pub const Removed = struct {
     participants: i64 = 0,
     raw_matches: i64 = 0,
     raw_timelines: i64 = 0,
+    rank_history: i64 = 0,
 
     pub fn add(a: *Removed, b: Removed) void {
         inline for (@typeInfo(Removed).@"struct".fields) |f| @field(a, f.name) += @field(b, f.name);
     }
 
     pub fn total(r: Removed) i64 {
-        return r.players + r.mastery + r.participants + r.raw_matches + r.raw_timelines;
+        return r.players + r.mastery + r.participants + r.raw_matches + r.raw_timelines + r.rank_history;
     }
 };
 
@@ -86,6 +87,10 @@ pub fn forget(db: Db, puuid: []const u8, now: i64, mode: Mode) !Removed {
     }
     if (try hasTable(db, "main", "ranks")) {
         try db.run("DELETE FROM ranks WHERE key = ?", .{store.schema.puuidKey(puuid)});
+    }
+    if (try hasTable(db, "main", "rank_history")) {
+        try db.run("DELETE FROM rank_history WHERE key = ?", .{store.schema.puuidKey(puuid)});
+        r.rank_history = changes(db);
     }
     if (try hasTable(db, "main", "mastery")) {
         try db.run("DELETE FROM mastery WHERE puuid = ?", .{puuid});
@@ -182,6 +187,9 @@ fn testDb() !Db {
         \\    ('riot_match', 'EUW1_2', 1, x'');
         \\INSERT INTO raw.timeline_docs VALUES ('EUW1_1', 1, x''), ('EUW1_2', 1, x'');
     );
+    try db.run("INSERT INTO rank_history VALUES (?1, 1, 0, 0, 1, 0), (?1, 2, 0, 9, 2, 0), (?2, 1, 0, 0, 1, 0)", .{
+        store.schema.puuidKey("gone"), store.schema.puuidKey("kept"),
+    });
     return db;
 }
 
@@ -195,6 +203,7 @@ test "forget blanks identity, keeps match rows, records the PUUID" {
         .participants = 1,
         .raw_matches = 1,
         .raw_timelines = 1,
+        .rank_history = 2,
     }, r);
     try testing.expectEqual(@as(?i64, 3), try db.scalar("SELECT count(*) FROM participants", .{}));
     try testing.expectEqual(@as(?i64, 0), try db.scalar(

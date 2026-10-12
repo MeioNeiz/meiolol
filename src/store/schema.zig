@@ -181,13 +181,34 @@ pub const schema =
 /// PUUID hash (puuidKey) instead of the PUUID, so millions of players fit in a few
 /// hundred MB that stay in the page cache. players holds full rows only for the
 /// sampled scan pool. rank = packRank; seen_day = unix day of the last ladder page
-/// showing the player (gone after 30 days, as players)
+/// showing the player (gone after 30 days, as players). lp, wins and losses as last
+/// seen, so the writer can tell a change for rank_history (NULL in rows from before)
 const ranks_ddl =
     \\CREATE TABLE IF NOT EXISTS ranks (
     \\    key INTEGER PRIMARY KEY,
     \\    rank INTEGER NOT NULL,
-    \\    seen_day INTEGER NOT NULL
+    \\    seen_day INTEGER NOT NULL,
+    \\    lp INTEGER,
+    \\    wins INTEGER,
+    \\    losses INTEGER
     \\);
+    \\
+++ rank_history_ddl;
+
+/// Ladder rank over time: a row when a ladder page shows a player (puuidKey) with a
+/// rank, LP or game count other than ranks held, so the day of each change. Kept 24
+/// months after the player's last row once ranks no longer lists them. Key first:
+/// lookups and forget are by player; ~2.5 changed rows/s land as random writes
+const rank_history_ddl =
+    \\CREATE TABLE IF NOT EXISTS rank_history (
+    \\    key INTEGER NOT NULL,
+    \\    day INTEGER NOT NULL,
+    \\    rank INTEGER NOT NULL,
+    \\    lp INTEGER NOT NULL,
+    \\    wins INTEGER NOT NULL,
+    \\    losses INTEGER NOT NULL,
+    \\    PRIMARY KEY (key, day)
+    \\) WITHOUT ROWID;
     \\
 ;
 
@@ -397,6 +418,15 @@ fn migrate(db: sqlite.Db) !void {
             \\ALTER TABLE participants ADD COLUMN gold10 INTEGER;
             \\ALTER TABLE participants ADD COLUMN gold14 INTEGER;
             \\ALTER TABLE participants ADD COLUMN gold15 INTEGER;
+        );
+    }
+    if (!try hasColumn(db, "ranks", "lp")) {
+        // Schema only, no row rewrite: each player's first sighting after this writes
+        // their first rank_history row
+        try db.exec(
+            \\ALTER TABLE ranks ADD COLUMN lp INTEGER;
+            \\ALTER TABLE ranks ADD COLUMN wins INTEGER;
+            \\ALTER TABLE ranks ADD COLUMN losses INTEGER;
         );
     }
     if (!try hasColumn(db, "drafts", "id")) {

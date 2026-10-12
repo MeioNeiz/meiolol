@@ -88,6 +88,21 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   timelines and rank snapshots stay. Re-storing a match keeps its PUUIDs and rank.
   Before clearing, rekey carries the erasure lists over by Riot ID with both keys
   (src/rekey.zig, docs/data-safety.md "Key switch")
+- `ranks` and `rank_history` (meiolol.db, keyed by schema.puuidKey: 8 bytes of PUUID
+  hash, not the PUUID): ranks is every ranked player's latest ladder rank, LP, wins and
+  losses and the day a ladder page last showed them (gone 30 days after; it gives
+  participants their rank snapshot). rank_history (key, day, rank, lp, wins, losses;
+  WITHOUT ROWID, key first) gets a row only when a sighting differs from ranks, so the
+  day of each change; a second change the same day replaces that day's row. The writer
+  does it in the ladder job: one INSERT ... WHERE NOT EXISTS against ranks (its page is
+  already in cache for the ranks upsert), so unchanged players cost nothing extra. With
+  `--ladder-refresh-hours 12` over Platinum+ (~5.3M players, all platforms) expect
+  roughly a row per player per day played (~1-1.5M rows/day, ~30-45 MB/day: ~16 GB a
+  year; measure). A player's rows go 24 months after their newest one, their last
+  change: about their last ranked game, as privacy.md promises (hourly prune, a 168th
+  of the key space per round, so weekly); forget deletes
+  them; backup segments copy them by whole day. A rekey leaves them under the old keys
+  (no mapping to the new PUUIDs): they match nobody and age out
 - Privacy (crawler writer, hourly): players no ladder page or match has shown for 30 days
   are deleted with their mastery, and mastery older than 30 days is refetched (Riot's
   monthly refresh; erased accounts drop out). A mastery refetch that Riot answers 404

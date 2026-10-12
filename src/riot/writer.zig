@@ -300,7 +300,11 @@ pub const Writer = struct {
                     const puuid = e.puuid orelse continue;
                     if (try s.isForgotten(puuid)) continue;
                     const key = store.schema.puuidKey(puuid);
-                    if (store.schema.packRank(e.tier, e.rank)) |rank| try s.rank_put.exec(.{ key, rank, day });
+                    if (store.schema.packRank(e.tier, e.rank)) |rank| {
+                        const row = .{ key, rank, day, e.leaguePoints, e.wins, e.losses };
+                        try s.rank_change.exec(row);
+                        try s.rank_put.exec(row);
+                    }
                     if (!sampled(key, wr.c.opts.player_sample)) continue;
                     try s.ladder_player.exec(.{
                         puuid, e.tier, e.rank, e.leaguePoints, e.wins, e.losses, l.t, l.platform.id, @tagName(l.platform.region),
@@ -438,6 +442,9 @@ const Prune = struct {
         // stop appearing), and older mastery is dropped to be fetched again
         .{ .what = "unseen players", .days = .{ .fixed = 30 }, .run = unseenPlayers },
         .{ .what = "unseen ranks", .days = .{ .fixed = 30 }, .run = unseenRanks },
+        // Privacy policy: 24 months after the player's newest row, their last change
+        // of rank, LP or games: about their last ranked game
+        .{ .what = "rank history", .days = .{ .fixed = 730 }, .run = oldRankHistory },
         .{ .what = "mastery snapshots", .days = .{ .fixed = 30 }, .run = chunk(
             \\DELETE FROM mastery WHERE puuid IN
             \\    (SELECT puuid FROM mastery WHERE fetched_at < ? LIMIT 500)
@@ -475,16 +482,37 @@ const Prune = struct {
     /// A twenty-fourth of the key space per hourly round (ranks has no seen_day index:
     /// it would cost a random write per row), so the whole table is swept daily
     fn unseenRanks(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
-        const slice: i128 = @mod(@divFloor(cutoff, 3600), 24);
-        const span: i128 = (@as(i128, 1) << 64) / 24;
-        const lo: i64 = @intCast(std.math.minInt(i64) + slice * span);
-        const hi: i64 = if (slice == 23) std.math.maxInt(i64) else @intCast(lo + span - 1);
+        const keys = KeySlice.of(cutoff, 24);
         try db.run(
             \\DELETE FROM ranks WHERE key IN (SELECT key FROM ranks
             \\    WHERE key BETWEEN ? AND ? AND seen_day < ? LIMIT 500)
-        , .{ lo, hi, @divFloor(cutoff, std.time.s_per_day) });
+        , .{ keys.lo, keys.hi, @divFloor(cutoff, std.time.s_per_day) });
         return try db.scalar("SELECT changes()", .{}) orelse 0;
     }
+
+    /// Swept weekly (a 168th of the key space an hour): it reads every row in its slice
+    /// and has nothing to delete for the first two years
+    fn oldRankHistory(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
+        const keys = KeySlice.of(cutoff, 168);
+        try db.run(
+            \\DELETE FROM rank_history WHERE key IN (SELECT key FROM rank_history
+            \\    WHERE key BETWEEN ? AND ? GROUP BY key HAVING max(day) < ? LIMIT 500)
+        , .{ keys.lo, keys.hi, @divFloor(cutoff, std.time.s_per_day) });
+        return try db.scalar("SELECT changes()", .{}) orelse 0;
+    }
+
+    /// One of `n` equal ranges of PUUID keys, a different one each hour
+    const KeySlice = struct {
+        lo: i64,
+        hi: i64,
+
+        fn of(t: i64, n: u32) KeySlice {
+            const slice: i128 = @mod(@divFloor(t, 3600), n);
+            const span: i128 = @divFloor(@as(i128, 1) << 64, n);
+            const lo: i64 = @intCast(std.math.minInt(i64) + slice * span);
+            return .{ .lo = lo, .hi = if (slice == n - 1) std.math.maxInt(i64) else @intCast(lo + span - 1) };
+        }
+    };
 
     fn oldMatches(db: store.Db, cutoff: i64) store.sqlite.Error!i64 {
         try db.exec("DELETE FROM temp.gone");
@@ -553,6 +581,7 @@ fn sampled(key: i64, sample: u32) bool {
 const Stmts = struct {
     forgotten: store.Stmt,
     rank_put: store.Stmt,
+    rank_change: store.Stmt,
     rank_get: store.Stmt,
     participant_rank: store.Stmt,
     ladder_player: store.Stmt,
@@ -581,11 +610,20 @@ const Stmts = struct {
 
     const sql = .{
         .forgotten = "SELECT EXISTS (SELECT 1 FROM forgotten WHERE puuid = ?)",
-        // A refetched page rewrites a row only when the rank changed or a day passed
+        // Before rank_put, which it compares with
+        .rank_change =
+        \\INSERT OR REPLACE INTO rank_history SELECT ?1, ?3, ?2, ?4, ?5, ?6
+        \\WHERE NOT EXISTS (SELECT 1 FROM ranks WHERE key = ?1 AND rank = ?2
+        \\    AND lp IS ?4 AND wins IS ?5 AND losses IS ?6)
+        ,
+        // A refetched page rewrites a row only when something changed or a day passed
         .rank_put =
-        \\INSERT INTO ranks VALUES (?1, ?2, ?3) ON CONFLICT (key) DO UPDATE SET
-        \\    rank = excluded.rank, seen_day = excluded.seen_day
+        \\INSERT INTO ranks VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (key) DO UPDATE SET
+        \\    rank = excluded.rank, seen_day = excluded.seen_day, lp = excluded.lp,
+        \\    wins = excluded.wins, losses = excluded.losses
         \\WHERE rank <> excluded.rank OR seen_day <> excluded.seen_day
+        \\    OR lp IS NOT excluded.lp OR wins IS NOT excluded.wins
+        \\    OR losses IS NOT excluded.losses
         ,
         .rank_get = "SELECT rank FROM ranks WHERE key = ?",
         .participant_rank = "UPDATE participants SET tier = ?, division = ? WHERE match_id = ? AND slot = ?",
@@ -851,6 +889,68 @@ test "ladder: ranks for everyone, player rows for the sample; matches take ranks
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
     // 1 in 1000 sampled: almost surely none of the 11 PUUIDs
     try std.testing.expect((try db.scalar("SELECT count(*) FROM players", .{})).? <= 2);
+}
+
+test "rank history: a row per change since the last sighting, the day's last wins" {
+    const gpa = std.testing.allocator;
+    const db = try store.schema.memory();
+    defer db.close();
+    var c: crawl.Crawler = .{ .gpa = gpa, .io = std.testing.io, .opts = .{ .data_dir = "", .key = "" } };
+    var wr: Writer = .{ .c = &c };
+    defer wr.deinit();
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+
+    const E = ep.LeagueEntry;
+    const sightings = [_]struct { i64, E }{
+        .{ 5, .{ .puuid = "p", .tier = "GOLD", .rank = "II", .leaguePoints = 10, .wins = 5, .losses = 5 } },
+        .{ 6, .{ .puuid = "p", .tier = "GOLD", .rank = "II", .leaguePoints = 10, .wins = 5, .losses = 5 } },
+        .{ 7, .{ .puuid = "p", .tier = "GOLD", .rank = "II", .leaguePoints = 30, .wins = 6, .losses = 5 } },
+        .{ 7, .{ .puuid = "p", .tier = "GOLD", .rank = "I", .leaguePoints = 0, .wins = 7, .losses = 5 } },
+        .{ 8, .{ .puuid = "p", .tier = "GOLD", .rank = "I", .leaguePoints = 0, .wins = 7, .losses = 5 } },
+        .{ 9, .{ .puuid = "p", .tier = "UNRANKED", .rank = "" } },
+    };
+    for (sightings) |sg| {
+        var jobs = [_]*Job{try .create(gpa, .{ .ladder = .{
+            .platform = ep.platform("EUW1").?,
+            .tier = "GOLD",
+            .division = "I",
+            .page = 1,
+            .entries = &.{sg[1]},
+            .t = sg[0] * std.time.s_per_day + 60,
+        } })};
+        defer jobs[0].destroy(gpa);
+        try wr.commit(db, &s, &jobs);
+    }
+    var q = try db.prepare("SELECT group_concat(day || ':' || rank || ':' || lp || ':' || wins, ' ') FROM rank_history");
+    defer q.deinit();
+    try q.bind(.{});
+    try std.testing.expect(try q.step());
+    const gold_i = store.schema.packRank("GOLD", "I").?;
+    var buf: [64]u8 = undefined;
+    try std.testing.expectEqualStrings(
+        try std.fmt.bufPrint(&buf, "5:{d}:10:5 7:{d}:0:7", .{ gold_i + 1, gold_i }),
+        q.bytes(0),
+    );
+    try std.testing.expectEqual(@as(?i64, 8), try db.scalar("SELECT seen_day FROM ranks", .{}));
+}
+
+test "rank history goes 24 months after the player's newest row" {
+    const db = try store.schema.memory();
+    defer db.close();
+    const day: i64 = 1000;
+    const k = store.schema.puuidKey;
+    try db.run(
+        \\INSERT INTO rank_history VALUES (?1, 1, 20, 0, 1, 1), (?1, 2, 20, 9, 2, 1),
+        \\    (?2, 1, 20, 0, 1, 1), (?2, 2000, 20, 0, 2, 1)
+    , .{ k("gone"), k("recent") });
+    // A week of hourly rounds sweeps every key
+    for (0..168) |h| {
+        const cutoff = (day - 1) * std.time.s_per_day + @as(i64, @intCast(h)) * 3600;
+        while (try Prune.oldRankHistory(db, cutoff) > 0) {}
+    }
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM rank_history WHERE key = ?", .{k("gone")}));
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM rank_history", .{}));
 }
 
 test "one draft row per match, kept by the prune; listed matches wait for the backfill" {
