@@ -21,7 +21,7 @@ sync() {
     # shellcheck disable=SC2064 # expand now: tree is local to sync
     trap "git -C '$ROOT' worktree remove --force '$tree'" EXIT
     (cd "$tree" && zig build -Dtarget="$target" -Doptimize=ReleaseSafe \
-        --prefix zig-out/box)
+        --prefix zig-out/box --cache-dir "$ROOT/.zig-cache")
     ssh "$HOST" "mkdir -p $DIR/bin $DIR/data .config/systemd/user"
     scp -q "$tree/zig-out/box/bin/meiolol" "$HOST:$DIR/bin/meiolol.new"
     local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh" s
@@ -68,17 +68,75 @@ case "${1:-}" in
         echo "site in $ROOT/data/site"
         ;;
     run) shift; ssh "$HOST" "cd $DIR && bin/meiolol $*" ;;
+    preview)
+        # The working tree (uncommitted edits included, other sessions' too) rendered on
+        # the box with live data, EUW views only, into data/preview, then served at
+        # http://localhost:8081: `meiolol-preview serve` runs detached on the box (unit
+        # meiolol-preview) behind a background ssh tunnel, and this returns once the URL
+        # answers. Never touches the live site. A new preview replaces the old one.
+        # `preview static`: copy src/site/static/ over the last preview, no build (css
+        # and js edits; reload the page). `preview stop`: tunnel and server
+        tunnel="8081:127.0.0.1:8081 $HOST"
+        stop_preview() {
+            pkill -f "ssh -fN -o ExitOnForwardFailure=yes -L $tunnel" || true
+            ssh "$HOST" "systemctl --user stop meiolol-preview 2> /dev/null; true"
+        }
+        if [[ "${2:-}" == stop ]]; then
+            stop_preview
+            echo "preview stopped"
+            exit 0
+        fi
+        if [[ "${2:-}" == static ]]; then
+            # The .gz twins go: serve would send those first
+            rsync -a --delete "$ROOT/src/site/static/" "$HOST:$DIR/data/preview.static/"
+            ssh "$HOST" "cd $DIR/data && for s in preview.static/*.css preview.static/*.js; do \
+                f=\${s#preview.static/}; find preview -name \"\$f.gz\" -delete; \
+                find preview -name \"\$f\" -exec cp \"\$s\" {} \\;; done"
+            echo "copied src/site/static into the preview"
+            exit 0
+        fi
+        target=$(ssh "$HOST" uname -m)-linux-musl
+        (cd "$ROOT" && zig build -Dtarget="$target" -Doptimize=ReleaseSafe \
+            --prefix zig-out/preview)
+        stop_preview
+        scp -q "$ROOT/zig-out/preview/bin/meiolol" "$HOST:$DIR/bin/meiolol-preview"
+        ssh "$HOST" "cd $DIR && rm -rf data/preview \
+            && time bin/meiolol-preview site --contact \"\$(cat contact)\" --euw-only \
+                --out data/preview > data/preview.log 2>&1 || { tail data/preview.log; exit 1; }"
+        ssh "$HOST" "systemd-run --user -q --collect --unit meiolol-preview \
+            --working-directory=\$HOME/$DIR \$HOME/$DIR/bin/meiolol-preview serve \
+            --out data/preview --port 8081"
+        ssh -fN -o ExitOnForwardFailure=yes -L $tunnel
+        for _ in $(seq 30); do
+            if curl -sf -o /dev/null http://localhost:8081/; then
+                echo "preview at http://localhost:8081 (deploy/box.sh preview stop)"
+                exit 0
+            fi
+            sleep 1
+        done
+        echo "preview not answering after 30 s"
+        ssh "$HOST" "journalctl --user -u meiolol-preview -n 10 --no-pager"
+        exit 1
+        ;;
     web)
         # Site build and upload to the jomove server: deploy/web-loop.sh
         case "${2:-}" in
             start)
-                # (Re)starts; the contact email is remembered on the box
+                # The contact email is remembered on the box. A running loop whose
+                # script, unit and contact are unchanged (data/web-loop.sum) gets SIGUSR1:
+                # build and upload now with the new binary. Anything else restarts it
                 contact=${3:-$(ssh "$HOST" "cat $DIR/contact 2>/dev/null" || true)}
                 [[ -n "$contact" ]] || { echo "usage: deploy/box.sh web start <contact email>"; exit 2; }
                 sync
-                ssh "$HOST" "cd $DIR && echo '$contact' > contact \
-                    && systemctl --user enable -q meiolol-web && systemctl --user restart meiolol-web"
-                echo "started meiolol-web on $HOST"
+                ssh "$HOST" "cd $DIR && { [ \"\$(cat contact 2>/dev/null)\" = '$contact' ] \
+                        || echo '$contact' > contact; } \
+                    && systemctl --user enable -q meiolol-web \
+                    && if systemctl --user -q is-active meiolol-web \
+                        && sha256sum --status -c data/web-loop.sum 2> /dev/null; then \
+                        systemctl --user kill -s USR1 --kill-whom=main meiolol-web \
+                        && echo 'signalled meiolol-web on $HOST'; \
+                    else systemctl --user restart meiolol-web \
+                        && echo 'restarted meiolol-web on $HOST'; fi"
                 ;;
             stop) ssh "$HOST" "systemctl --user disable -q --now meiolol-web" ;;
             status)
@@ -121,6 +179,6 @@ case "${1:-}" in
             *) echo "usage: deploy/box.sh watch install|uninstall"; exit 2 ;;
         esac
         ;;
-    *) echo "usage: deploy/box.sh sync|start|stop|status|logs [n]|run <meiolol args>|site <contact>|web start [contact]|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
+    *) echo "usage: deploy/box.sh sync|start|stop|status|logs [n]|run <meiolol args>|preview [static|stop]|site <contact>|web start [contact]|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
        exit 2 ;;
 esac

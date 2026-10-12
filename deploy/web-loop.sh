@@ -17,9 +17,20 @@
 # on a new patch, in the background; the next site build picks the files up.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
 # behind basic auth there; the site's rsync leaves that directory alone.
+# A deploy (deploy/box.sh web start) sends SIGUSR1 rather than restarting, unless this
+# script, its unit or the contact changed (data/web-loop.sum): the loop then builds and
+# uploads the site at once with the new binary, keeping its curves, eval and builds
+# timers. A restart reruns all of those, minutes on the box.
+# Upload: the new build is copied into data/site by checksum without times, so only
+# files whose content changed get a new mtime, and the upload's quick check sends just
+# those (a template change still sends every page).
 set -u
 contact=$1
 cd "$(dirname "$0")/.." || exit 1
+sha256sum bin/web-loop.sh "$HOME/.config/systemd/user/meiolol-web.service" contact \
+    > data/web-loop.sum
+force=0
+trap 'force=1' USR1
 
 # The newest two curves files go to the Your games service on the web server (not the
 # public site; docs/your-games.md). meiolol-exchange: rrsync into its exchange dir; a
@@ -66,6 +77,7 @@ while true; do
         last_curves=$now curves_patch=$patch
         push_curves
     fi
+    forced=$force force=0
     rm -rf data/site.new
     riot=()
     [[ -s riot.txt ]] && riot=(--riot-txt "$(<riot.txt)")
@@ -76,12 +88,10 @@ while true; do
         now=$(date +%s)
         if [[ "$patch" != "$last_patch" ]] || (( games * 5 >= last_games * 6 )) \
             || (( games > last_games && now - last_upload >= 3600 )) \
-            || (( fresh_curves )); then
+            || (( fresh_curves || forced )); then
             echo "$out"
-            rm -rf data/site.old
-            [ -d data/site ] && mv data/site data/site.old
-            mv data/site.new data/site
-            if rsync -a --delete-delay --delay-updates --exclude /admin/ data/site/ meiolol-web:./; then
+            rsync -rlpD --checksum --delete data/site.new/ data/site/
+            if rsync -az --delete-delay --delay-updates --exclude /admin/ data/site/ meiolol-web:./; then
                 echo "$(date -u +%FT%TZ) uploaded"
                 last_patch=$patch last_games=$games last_upload=$now fresh_curves=0
             fi
@@ -95,5 +105,10 @@ while true; do
         rm -rf data/admin && mv data/admin.new data/admin
         rsync -a --delete data/admin/ meiolol-web:admin/ || echo "$(date -u +%FT%TZ) admin upload FAILED"
     fi
-    sleep 900
+    # SIGUSR1 interrupts the wait; one during the round skips it
+    if (( ! force )); then
+        sleep 900 &
+        wait $!
+        kill $! 2> /dev/null
+    fi
 done

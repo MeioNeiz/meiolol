@@ -115,6 +115,7 @@ const usage =
     \\              --riot-txt TEXT  served as /riot.txt (Riot's verification string)
     \\              --public         listed for search engines, no preview banner; only
     \\                               once Riot grants the production key
+    \\              --euw-only       the EUW views only (root, patch/): a quick preview
     \\  serve       serve the website (default DIR/site) over HTTP, for the tunnel
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8080
@@ -615,6 +616,7 @@ fn cmdSite(c: *Cmd) !u8 {
     var contact: ?[]const u8 = null;
     var riot_txt: ?[]const u8 = null;
     var public = false;
+    var euw_only = false;
     while (c.next()) |_| {
         if (c.is("--patch")) {
             try patches.appendSlice(c.arena, try c.list());
@@ -626,6 +628,8 @@ fn cmdSite(c: *Cmd) !u8 {
             riot_txt = try c.value();
         } else if (c.is("--public")) {
             public = true;
+        } else if (c.is("--euw-only")) {
+            euw_only = true;
         } else return error.Usage;
     }
     const email = try c.required(contact, "--contact");
@@ -652,6 +656,7 @@ fn cmdSite(c: *Cmd) !u8 {
         .riot_txt = riot_txt,
         .updated = try std.fmt.allocPrint(arena, "{f}", .{Date.fromMs(now_ms).long()}),
         .public = public,
+        .euw_only = euw_only,
         .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
         .curves = view_curves,
         .builds = .{

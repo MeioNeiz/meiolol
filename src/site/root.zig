@@ -56,6 +56,9 @@ pub const Options = struct {
     builds: [html.View.count]?[]const u8 = @splat(null),
     /// Champion slugs whose pages get the filter bar (filters.zig; a prototype)
     filter_champions: []const []const u8 = &.{"ahri"},
+    /// Only the EUW views (the root and patch/; the shared pages come from patch/): a
+    /// quick preview, links into all/ dangle
+    euw_only: bool = false,
 };
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
@@ -202,7 +205,10 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     defer root_dir.close(io);
     const gz_window = try gpa.alloc(u8, store.raw.window_len);
     defer gpa.free(gz_window);
-    for (html.View.all) |v| try generateView(gpa, io, db, opts, v, root_dir, &view_curves, &view_builds, gz_window);
+    for (html.View.all) |v| {
+        if (opts.euw_only and v.region != .euw) continue;
+        try generateView(gpa, io, db, opts, v, root_dir, &view_curves, &view_builds, gz_window);
+    }
 }
 
 fn generateView(
