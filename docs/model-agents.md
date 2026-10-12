@@ -48,6 +48,11 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
 - Label train-time and use-time features; champ-select models use only champions,
   roles, the user's own rank and experience; `internal` scope (Jacob's predictor) may see
   all ten players' pre-game data and never feeds the site or app
+- Snapshot: snap-20261012T2055Z stays pinned for all work in flight (gold14-a, db's
+  models, ff's checks, 6f's bench), so results compare. A new weekly snapshot is a new
+  game set: start new models on it only once the coordinator pins it in docs/model.md,
+  and rescore any reference model on it before comparing. Re-packs (SNAP/pack/) never
+  change rows; code changes can
 - Condition on game state for items, objectives, playstyle (teams ahead buy and take)
 - Rank in participants is post-game (leaks); rank at game start comes from
   rank_history (from 12 Oct, so later snapshots)
