@@ -200,11 +200,15 @@ pub fn diagnose(
     }
     try w.print("# Diagnose: candidate's {t} residuals on dev-val\n\n", .{api.outcomeAt(k)});
     try w.writeAll("Mean of (prediction - outcome), in role sd (win: probability), 95% interval " ++
-        "clustered by game. Positive = over-predicts. A slice whose interval excludes 0 " ++
-        "names a misfit the next experiment can target. Slices under 300 rows left out; " ++
-        "long lists show the 12 most biased.\n\n");
+        "clustered by game. Positive = over-predicts. Slices are relative to the overall " ++
+        "bias, so they show where the model is wrong beyond a level shift. Flagged: the " ++
+        "slice's z clears a Bonferroni bound for its group's number of slices, so a flag " ++
+        "names a misfit worth a hypothesis. Slices under 300 rows left out; long lists show " ++
+        "the 12 most biased.\n\n");
     const all = harness.paired(s.game, res, zero, null);
-    try w.print("Overall: {d:.4} ± {d:.4} over {d} rows\n", .{ all.diff, all.half, all.n });
+    try w.print("Overall bias (dev-val is newer than its training games, so a level shift " ++
+        "is drift over time): {d:.4} ± {d:.4} over {d} rows\n", .{ all.diff, all.half, all.n });
+    for (res) |*x| x.* -= all.diff;
 
     const Key = struct {
         fn side(dd: *const rows.Data, ri: u32) ?u64 {
@@ -275,16 +279,30 @@ pub fn diagnose(
                 return @abs(a.p.diff) / a.p.half > @abs(b.p.diff) / b.p.half;
             }
         }.lt);
-        try w.print("\n## {s}\n\n| value | rows | bias | excludes 0 |\n|---|---|---|---|\n", .{grp.name});
+        const bound = normalQuantile(0.025 / @as(f64, @floatFromInt(@max(slices.items.len, 1))));
+        try w.print("\n## {s}\n\n{d} slices, flag at |z| > {d:.2}\n\n| value | rows | relative bias | z | flag |\n|---|---|---|---|---|\n", .{ grp.name, slices.items.len, bound });
         for (slices.items[0..@min(slices.items.len, top_slices)]) |sl| {
             var buf: [32]u8 = undefined;
-            try w.print("| {s} | {d} | {d:.4} ± {d:.4} | {s} |\n", .{
-                try grp.label.format(&buf, sl.key),             sl.p.n, sl.p.diff, sl.p.half,
-                if (@abs(sl.p.diff) > sl.p.half) "yes" else "",
+            const z = sl.p.diff / (sl.p.half / 1.96);
+            try w.print("| {s} | {d} | {d:.4} ± {d:.4} | {d:.1} | {s} |\n", .{
+                try grp.label.format(&buf, sl.key), sl.p.n, sl.p.diff, sl.p.half, z,
+                if (@abs(z) > bound) "yes" else "",
             });
         }
     }
     try w.print("RESULT diagnose target={t} bias={d:.4}±{d:.4}\n", .{ api.outcomeAt(k), all.diff, all.half });
+}
+
+/// z with upper tail probability p (Abramowitz and Stegun 26.2.23, error < 4.5e-4)
+fn normalQuantile(p: f64) f64 {
+    const t = @sqrt(-2 * @log(p));
+    return t - (2.515517 + 0.802853 * t + 0.010328 * t * t) /
+        (1 + 1.432788 * t + 0.189269 * t * t + 0.001308 * t * t * t);
+}
+
+test normalQuantile {
+    try std.testing.expectApproxEqAbs(@as(f64, 1.96), normalQuantile(0.025), 1e-3);
+    try std.testing.expectApproxEqAbs(@as(f64, 3.29), normalQuantile(0.0005), 2e-3);
 }
 
 const Label = enum {
