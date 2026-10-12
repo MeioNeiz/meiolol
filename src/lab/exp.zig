@@ -174,7 +174,7 @@ fn run(
     });
     if (verdict) |v| if (v == .new_best) try w.print(" gain={d:.5}±{d:.5}", .{ v.new_best.diff, v.new_best.half });
     // Smallest gain this dev set would show 80% of the time: (1.96 + 0.84) / 1.96 half
-    if (dev_target.half > 0 and std.math.isFinite(dev_target.half)) try w.print(" mde={d:.5}", .{dev_target.half * 1.43});
+    if (dev_target.half > 1e-9 and std.math.isFinite(dev_target.half)) try w.print(" mde={d:.5}", .{dev_target.half * 1.43});
     try w.print(" looks={d}/{d}\n", .{ looks, harness.look_budget });
 }
 

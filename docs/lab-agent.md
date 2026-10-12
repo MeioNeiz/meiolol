@@ -1,8 +1,9 @@
 # Lab agent: LLM-run model experiments
 
 A Claude Code session proposes, runs and analyses model experiments on the gpu-box; a
-harness it cannot change scores them and keeps the record. Harness built 2026-10-12
-(53b0577); search tools and the brief next (Build order). Evidence:
+harness it cannot change scores them and keeps the record. Built 2026-10-12: harness,
+search tools, brief (docs/lab-brief.md), launcher (deploy/lab-agent.sh); no campaign
+run yet (Build order). Evidence:
 research/questions/llm-experiment-agent.md (C1-C20) and smart-experiment-search.md
 (S1-S12 below means its C1-C12).
 
@@ -25,8 +26,11 @@ research/questions/llm-experiment-agent.md (C1-C20) and smart-experiment-search.
 | src/lab/api.zig | us, read-only to the agent | the candidate interface |
 | src/lab/harness.zig | us, read-only | splits, queries, baseline, scoring, ladder |
 | src/lab/exp.zig | us, read-only | `meiolol-lab exp`: records, summary, final |
-| src/lab/cand/<campaign>/ | the agent, only here | the candidate model; digest.md |
+| ~/ml/agent/<campaign>/ | the agent, only here | root.zig, digest.md, hypotheses.tsv |
+| src/lab/cand/base | us | the starting candidate |
+| src/lab/search.zig | us, read-only | `exp screen`, `exp diagnose` |
 | deploy/lab-exp.sh | us | the agent's only way to run and read results |
+| deploy/lab-agent.sh | us | starts a headless agent session on a campaign |
 | ~/ml/lab/<snapshot>/ on the host | harness only | runs.tsv, looks.tsv, best-*.tsv, finals.tsv |
 | docs/lab-brief.md | us | the agent's brief (program.md in autoresearch) |
 
@@ -163,13 +167,18 @@ one per outcome, or 3c-style shrinkage, 2a-style embeddings, comp features. They
 the look budget. Fleet starts them, one session per campaign; the coordinator reads
 digests in the morning.
 
-## Permissions
+## Permissions and launch
 
-Each agent session gets deny rules: Edit and Write outside src/lab/cand/<campaign>/;
-Bash `lab-exp.sh final`, git reset/checkout/commit/push, direct ssh. The clean-tree
-build already means edits outside the candidate never reach a run. The threat is a
-model taking a shortcut, not an attacker: permissions, module imports, the clean build
-and logged looks make shortcuts visible rather than impossible.
+`deploy/lab-agent.sh start CAMPAIGN TARGET [FOCUS]` makes the campaign in ~/ml/agent
+(LAB_CANDS: outside the shared checkout) and starts `claude -p` there in the
+background with the brief, a spend cap (`--max-budget-usd`, LAB_AGENT_USD, $20) and
+its own settings (`lab-agent.sh settings CAMPAIGN` prints them): allow Read, Edit in
+the campaign dir and `lab-exp.sh`; deny edits in the repo, `lab-exp.sh final`, git,
+ssh, scp, rsync, curl, web. Checked with a headless session told to try each one.
+lab-exp.sh caps runs per campaign (LAB_MAX_RUNS, 80). The clean-tree build means edits
+outside the candidate never reach a run anyway. The threat is a model taking a
+shortcut, not an attacker: permissions, module imports, the clean build and logged
+looks make shortcuts visible rather than impossible.
 
 ## Build order
 
@@ -177,10 +186,12 @@ and logged looks make shortcuts visible rather than impossible.
    clustered intervals, ladder), `exp run|final`, lab-exp.sh, tests (no scored game or
    other rank reaches a candidate; Query has no outcome; noise doesn't pass the ladder,
    a real gain does). Smoke run on the gpu-box
-2. Search tools: hypotheses.tsv and `--hyp` in runs.tsv; `--fraction`; `exp screen`;
-   `exp diagnose`; MDE line in the summary
-3. docs/lab-brief.md and the permission set; champion metadata (Riot class tags) in
-   api.Train for comp features
+2. Done (75cd185, afd0cb0): hypotheses.tsv and `--hyp`; `--fraction`; `exp screen`
+   (first real screen: own rank helps gold14, dev -0.0067 ± 0.0011); `exp diagnose`
+   (slices relative to the overall drift, Bonferroni flag per group; flags rank tiers
+   for gold14); `mde` in RESULT
+3. Done: docs/lab-brief.md, deploy/lab-agent.sh, permission set (checked), run cap.
+   Still to add: champion metadata (Riot class tags) in api.Train for comp features
 4. Port base, 3c additive and 2a fm as candidates; the harness must reproduce their
    numbers on the same snapshot
 5. One campaign, one night, continuous outcomes (more signal than win), reviewed by

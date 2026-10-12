@@ -20,16 +20,21 @@
 # TARGET: win gold14 lanediff14 cs10 deaths15 first_item. Env: LAB_HOST (gpu-box),
 # LAB_SNAP (snap-20261012T2055Z, in ~/ml/snaps on the host), LAB_BUDGET_S (600 s of
 # running time; killed at twice that; paused time while League is open doesn't count),
-# LAB_ROOT (ml/lab under the host's home; another root keeps smoke tests off the ladder)
+# LAB_ROOT (ml/lab under the host's home; another root keeps smoke tests off the ladder),
+# LAB_CANDS (campaign dirs; default src/lab/cand here), LAB_MAX_RUNS (per campaign, 80)
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 HOST=${LAB_HOST:-gpu-box}
 SNAP=${LAB_SNAP:-snap-20261012T2055Z}
 BUDGET=${LAB_BUDGET_S:-600}
+MAX_RUNS=${LAB_MAX_RUNS:-80}
 LAB_ROOT=${LAB_ROOT:-ml/lab}
 LAB=$LAB_ROOT/$SNAP
 CANDS=src/lab/cand
+# Where campaigns live: an agent session works outside the shared checkout (docs/
+# lab-brief.md), so it can't touch other sessions' files
+CAND_ROOT=${LAB_CANDS:-$ROOT/$CANDS}
 # Expands on the host, in the run's job.sh
 # shellcheck disable=SC2088
 SNAP_PATH="~/ml/snaps/$SNAP"
@@ -47,7 +52,7 @@ usage() {
 
 campaign_dir() {
     [[ "$1" =~ ^[a-z0-9_-]+$ ]] || { echo "CAMPAIGN: a-z 0-9 _ - only"; exit 2; }
-    echo "$CANDS/$1"
+    echo "$CAND_ROOT/$1"
 }
 
 # A candidate may compute, not reach the snapshot, labels or network behind the
@@ -67,13 +72,14 @@ guard() {
 # working tree: other sessions keep half-done edits there, and scoring must be the
 # committed harness (an agent's edits outside its candidate never reach a run)
 start_clean() {
-    local name=$1 cand=$2 tree out status=0
+    local name=$1 src=$2 tree out status=0 cand
     shift 2
+    cand=$CANDS/$(basename "$src")
     tree=$(mktemp -d)
     git -C "$ROOT" worktree add -q --detach "$tree" HEAD
-    mkdir -p "$(dirname "$tree/$cand")"
     rm -rf "${tree:?}/$cand"
-    cp -R "$ROOT/$cand" "$tree/$cand"
+    mkdir -p "$tree/$cand"
+    cp "$src"/*.zig "$tree/$cand/"
     out=$(ZIG_LOCAL_CACHE_DIR="$ROOT/.zig-cache" "$tree/deploy/lab-run.sh" start "$HOST" "$name" \
         --build-arg "-Dcand=$cand" --with "$tree/$cand" -- "$@") || status=$?
     git -C "$ROOT" worktree remove --force "$tree"
@@ -105,13 +111,14 @@ case "$cmd" in
     new)
         (( $# >= 1 )) || usage
         dir=$(campaign_dir "$1")
-        from=$CANDS/${2:-base}
-        [[ -e "$ROOT/$dir" ]] && { echo "$dir exists"; exit 1; }
-        mkdir -p "$ROOT/$dir"
-        cp "$ROOT/$from"/*.zig "$ROOT/$dir/"
+        from=$CAND_ROOT/${2:-base}
+        [[ -d "$from" ]] || from=$ROOT/$CANDS/${2:-base}
+        [[ -e "$dir" ]] && { echo "$dir exists"; exit 1; }
+        mkdir -p "$dir"
+        cp "$from"/*.zig "$dir/"
         printf '# %s digest\n\nWhat worked, what did not, by run id; then ideas.\n' "$1" \
-            > "$ROOT/$dir/digest.md"
-        printf 'id\tstatus\truns\thypothesis\n' > "$ROOT/$dir/hypotheses.tsv"
+            > "$dir/digest.md"
+        printf 'id\tstatus\truns\thypothesis\n' > "$dir/hypotheses.tsv"
         echo "$dir from $from"
         ;;
     run)
@@ -119,8 +126,13 @@ case "$cmd" in
         campaign=$1 name=$2 target=$3
         shift 3
         dir=$(campaign_dir "$campaign")
-        [[ -f "$ROOT/$dir/root.zig" ]] || { echo "no $dir/root.zig: deploy/lab-exp.sh new"; exit 1; }
-        guard "$ROOT/$dir"
+        [[ -f "$dir/root.zig" ]] || { echo "no $dir/root.zig: deploy/lab-exp.sh new"; exit 1; }
+        guard "$dir"
+        done_runs=$(on "awk -F '\t' '\$2 == \"$campaign\"' $LAB/runs.tsv 2>/dev/null | wc -l")
+        if (( done_runs >= MAX_RUNS )); then
+            echo "campaign $campaign has used its $MAX_RUNS runs (LAB_MAX_RUNS): stop and report"
+            exit 4
+        fi
         extra=()
         while (( $# )); do
             case "$1" in
@@ -148,7 +160,7 @@ case "$cmd" in
         (( $# == 2 )) || usage
         campaign=$1 target=$2
         dir=$(campaign_dir "$campaign")
-        guard "$ROOT/$dir"
+        guard "$dir"
         out=$(start_clean "$campaign-$cmd" "$dir" exp "$cmd" "$SNAP_PATH" "$campaign" "$target" \
             --lab "$LAB_PATH")
         run=$(sed -n 's/^started \([^ ]*\) on .*/\1/p' <<< "$out")
@@ -173,8 +185,8 @@ case "$cmd" in
         (( $# == 2 )) || usage
         dir=$(campaign_dir "$1")
         src="ml/runs/$2/$1"
-        if [[ "$HOST" == mac ]]; then cp "$HOME/$src"/*.zig "$ROOT/$dir/"
-        else scp -q "$HOST:$src/*.zig" "$ROOT/$dir/"; fi
+        if [[ "$HOST" == mac ]]; then cp "$HOME/$src"/*.zig "$dir/"
+        else scp -q "$HOST:$src/*.zig" "$dir/"; fi
         echo "$dir now holds $2's candidate"
         ;;
     stop)
@@ -190,12 +202,12 @@ case "$cmd" in
             { print \$1 }' $LAB/looks.tsv 2>/dev/null | tail -n $n")
         [[ -n "$runs" ]] || { echo "no selection winners for $campaign $target"; exit 1; }
         # Named as the campaign, so the final run dir keeps it as a run's would
-        dir=$CANDS/_final/$campaign
+        dir=$ROOT/$CANDS/_final/$campaign
         for run in $runs; do
-            rm -rf "${ROOT:?}/$dir"
-            mkdir -p "$ROOT/$dir"
-            if [[ "$HOST" == mac ]]; then cp "$HOME/ml/runs/$run/$campaign"/*.zig "$ROOT/$dir/"
-            else scp -q "$HOST:ml/runs/$run/$campaign/*.zig" "$ROOT/$dir/"; fi
+            rm -rf "${dir:?}"
+            mkdir -p "$dir"
+            if [[ "$HOST" == mac ]]; then cp "$HOME/ml/runs/$run/$campaign"/*.zig "$dir/"
+            else scp -q "$HOST:ml/runs/$run/$campaign/*.zig" "$dir/"; fi
             out=$(start_clean "final-$campaign" "$dir" exp final "$SNAP_PATH" "$campaign" "$target" --lab "$LAB_PATH" --run "$run")
             frun=$(sed -n 's/^started \([^ ]*\) on .*/\1/p' <<< "$out")
             wait_run "$frun" || true
