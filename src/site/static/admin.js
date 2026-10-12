@@ -1728,6 +1728,7 @@ async function loadDraftModel() {
   try {
     DRAFT.model = await getJson("training/draft-model.json");
     DRAFT.m = draftModel(DRAFT.model);
+    if (!DRAFT.m) throw new Error(`draft-model.json is format "${DRAFT.model.format}" version ${DRAFT.model.version}; this page reads meiolol-draft-model version 1`);
     DRAFT.ref = await getJson("training/draft-ref.json").catch(() => null);
     DRAFT.err = null;
     DRAFT.check = DRAFT.m && DRAFT.ref ? draftCheck(DRAFT.m, DRAFT.ref) : null;
@@ -1771,6 +1772,18 @@ function draftModel(M) {
     rate: (id, role) => (cells.get(id + ":" + roleIdx[role]) || {}).patch_share || 0,
     games: (id, role) => (cells.get(id + ":" + roleIdx[role]) || {}).games || 0,
     win: d => score(teamsOf(d)),
+    // Each slot's part of blue's logit, for tracing a number
+    explain(teams) {
+      const rows = [];
+      teams.forEach((t, side) => t.forEach((id, r) => {
+        const term = id && terms.get(id + ":" + r);
+        const x = term || avg[r];
+        rows.push({ side, role: r, champion: id || 0, average: !term, b: x.b, sd: x.sd, part: side === 0 ? x.b : -x.b });
+      }));
+      const lin = intercept + sumR(rows.map(x => x.part));
+      const p = score(teams);
+      return { intercept, rows, pairs: Math.log(p.p / (1 - p.p)) - lin, logit: Math.log(p.p / (1 - p.p)), p };
+    },
     // A slot's candidates: games in the role >= min_games, not picked, not banned; win and
     // change for the side filling it, sorted by win then champion id (as draft-ref.json)
     slot(teams, bans, side, r, min = M.min_games) {
@@ -1846,9 +1859,11 @@ function draftView(body) {
   const sec = section(body, "Draft tester", "Build two teams, swap champions in, see what the model thinks. Admin only: the public site never shows a draft's win chance.",
     el("button", { type: "button", class: "ghost", onclick: () => { DRAFT.model = undefined; render(true); } }, "Reload model"));
   if (!m) {
-    sec.append(el("p", { class: "muted" }, `No draft model yet${DRAFT.err ? ` (${DRAFT.err})` : ""}: meiolol-lab's \`draft --export\` (meiolol-88) writes it and deploy/lab-push.sh sends it.`));
+    if (DRAFT.err && !/^404/.test(DRAFT.err)) sec.append(el("div", { class: "health bad" }, el("b", {}, "The draft model didn't load: "), DRAFT.err));
+    else sec.append(el("p", { class: "muted" }, "No draft model yet: meiolol-lab's `draft --export` writes it and deploy/lab-push.sh sends it."));
     return;
   }
+  if (DRAFT.tags === undefined) loadTags();
   const d = draftState();
   const name = id => (m.champs.find(c => String(c.id) === String(id)) || { name: "#" + id }).name;
   const dev = meta.dev || {};
@@ -1861,16 +1876,7 @@ function draftView(body) {
     el("div", { class: "labels" }, el("b", { class: "blue" }, `Blue ${pct(w.p)}`), el("span", { class: "sub" }, `range ${pct(w.lo)} to ${pct(w.hi)}`), el("b", { class: "red" }, `Red ${pct(1 - w.p)}`)),
     el("div", { class: "track" }, el("span", { class: "range", style: `left:${100 * w.lo}%;width:${100 * (w.hi - w.lo)}%` }), el("span", { class: "mark", style: `left:${100 * w.p}%` }), el("span", { class: "half" }))));
 
-  const act = (label, f, cls) => el("button", { type: "button", class: "action" + (cls ? " " + cls : ""), onclick: () => { f(); saveDraft(d); } }, label);
-  sec.append(el("div", { class: "actions" },
-    act("Random game", () => randomFill(m, d, true)),
-    act("Random fill", () => randomFill(m, d, false)),
-    act("Swap sides", () => {
-      [d.blue, d.red] = [d.red, d.blue];
-      d.locks = Object.fromEntries(Object.entries(d.locks).map(([k, v]) => [k.replace(/^(blue|red)/, s => s === "blue" ? "red" : "blue"), v]));
-    }),
-    act("Clear unlocked", () => { for (const [s] of SIDES) for (const [r] of DRAFT_ROLES) if (!d.locks[s + "." + r]) delete d[s][r]; })));
-
+  sec.append(fillMenu(m, d));
   const board = el("div", { class: "draft" });
   sec.append(board);
   for (const [side, title] of SIDES) {
@@ -1901,6 +1907,103 @@ function draftView(body) {
     bans.append(input);
   }
   sec.append(bans);
+  sec.append(draftDebug(m, d, name));
+}
+
+// Data Dragon's tags (Tank, Assassin, ...) and attack/magic ratings per champion id, cached
+// per version; null when it can't be reached (the fills that need them are hidden)
+async function loadTags() {
+  DRAFT.tags = "loading";
+  try {
+    const [v] = await (await fetch("https://ddragon.leagueoflegends.com/api/versions.json")).json();
+    let data = null;
+    try { const c = JSON.parse(localStorage.getItem("admin-ddragon") || "null"); if (c && c.v === v) data = c.data; } catch (e) { /* storage blocked */ }
+    if (!data) {
+      const j = await (await fetch(`https://ddragon.leagueoflegends.com/cdn/${v}/data/en_US/champion.json`)).json();
+      data = Object.values(j.data).map(c => [+c.key, c.tags, c.info.attack, c.info.magic]);
+      try { localStorage.setItem("admin-ddragon", JSON.stringify({ v, data })); } catch (e) { /* storage blocked */ }
+    }
+    DRAFT.tags = new Map(data.map(([id, tags, attack, magic]) => [id, { tags, attack, magic }]));
+  } catch (e) { DRAFT.tags = null; }
+  if (ui.tab === "models" && ui.cat === "draft") render(true);
+}
+
+// Fill unlocked slots of `sides` with pick(role) -> id; `pool(role)` gives role-legal ids
+function fillSlots(d, sides, pick) {
+  const taken = takenIn(d);
+  for (const side of sides) for (const [role] of DRAFT_ROLES) {
+    if (d.locks[side + "." + role]) continue;
+    if (d[side][role] != null) taken.delete(String(d[side][role]));
+    const id = pick(role, taken);
+    if (id == null) delete d[side][role]; else { d[side][role] = id; taken.add(String(id)); }
+  }
+}
+
+function fillMenu(m, d) {
+  const legal = role => m.champs.filter(c => m.games(c.id, role) >= m.M.min_games && m.rate(c.id, role) > 0);
+  const weighted = (list, role, taken) => {
+    const pool = list.filter(c => !taken.has(String(c.id)));
+    let x = Math.random() * sumR(pool.map(c => m.rate(c.id, role)));
+    return (pool.find(c => (x -= m.rate(c.id, role)) <= 0) || pool[pool.length - 1] || {}).id;
+  };
+  const top = (role, n) => legal(role).sort((a, b) => m.rate(b.id, role) - m.rate(a.id, role)).slice(0, n);
+  const tagged = f => (role, taken) => weighted(legal(role).filter(c => DRAFT.tags.has(c.id) && f(DRAFT.tags.get(c.id))), role, taken);
+  const go = f => () => { f(); d.open = null; saveDraft(d); };
+  const both = ["blue", "red"];
+  const btn = (label, f, title) => el("button", { type: "button", class: "action", title, onclick: go(f) }, label);
+  const groups = [
+    ["Realistic", [
+      btn("Random realistic", () => fillSlots(d, both, (r, t) => weighted(legal(r), r, t)), "Each slot drawn by its play share in the role on the newest patch"),
+      btn("Random generic", () => fillSlots(d, both, (r, t) => weighted(top(r, 15), r, t)), "Each slot from the role's 15 most played"),
+      btn("Swap sides", () => {
+        [d.blue, d.red] = [d.red, d.blue];
+        d.locks = Object.fromEntries(Object.entries(d.locks).map(([k, v]) => [k.replace(/^(blue|red)/, x => x === "blue" ? "red" : "blue"), v]));
+      }, "Same champions, sides swapped: a symmetry check"),
+    ]],
+  ];
+  const tags = DRAFT.tags instanceof Map;
+  if (tags) {
+    const ad = t => t.attack > t.magic, ap = t => t.magic > t.attack;
+    groups.push(["Team styles", [
+      btn("Blue full AD", () => fillSlots(d, ["blue"], tagged(ad))), btn("Red full AD", () => fillSlots(d, ["red"], tagged(ad))),
+      btn("Blue full AP", () => fillSlots(d, ["blue"], tagged(ap))), btn("Red full AP", () => fillSlots(d, ["red"], tagged(ap))),
+    ]]);
+  }
+  const debug = [];
+  if (tags) {
+    debug.push(btn("All tanks", () => fillSlots(d, both, tagged(t => t.tags.includes("Tank")))),
+      btn("All assassins", () => fillSlots(d, both, tagged(t => t.tags.includes("Assassin")))));
+  }
+  debug.push(
+    btn("Mirror", () => { for (const side of both) for (const [role] of DRAFT_ROLES) { const c = top(role, 1)[0]; if (c) d[side][role] = c.id; } }, "The most played champion in every role on both sides: only the intercept (blue side) should remain, about 50%"),
+    btn("Empty board", () => { d.blue = {}; d.red = {}; d.locks = {}; }, "Every slot the role average"));
+  groups.push(["Debug", debug]);
+  const menu = el("details", { class: "fillmenu" }, el("summary", {}, "Fill…"));
+  for (const [title, buttons] of groups) menu.append(el("div", { class: "fillgroup" }, el("span", { class: "sub" }, title), el("div", { class: "actions" }, ...buttons)));
+  if (!tags) menu.append(el("p", { class: "sub" }, DRAFT.tags === null ? "AD, AP, tank and assassin fills need Data Dragon, which didn't answer." : "Loading Data Dragon tags…"));
+  return el("div", { class: "fillbar" },
+    el("button", { type: "button", class: "action", onclick: go(() => fillSlots(d, both, (r, t) => weighted(legal(r), r, t))) }, "Random game"),
+    el("button", { type: "button", class: "action", onclick: go(() => { const taken = takenIn(d); for (const side of both) for (const [r] of DRAFT_ROLES) if (d[side][r] == null && !d.locks[side + "." + r]) { const id = weighted(legal(r), r, taken); if (id != null) { d[side][r] = id; taken.add(String(id)); } } }) }, "Fill empty"),
+    menu);
+}
+
+// Blue's logit, slot by slot, so a number can be traced
+function draftDebug(m, d, name) {
+  const x = m.explain(m.teamsOf(d));
+  const box = el("details", { class: "debug" }, el("summary", {}, "Debug: how the win chance is built"));
+  const roles = DRAFT_ROLES.map(r => r[1]);
+  table(box, "draft-debug", [
+    { key: "side", label: "Side" }, { key: "role", label: "Role" }, { key: "champ", label: "Champion" },
+    { key: "b", label: "Rating", num: true, fmt: v => v.toFixed(4) }, { key: "sd", label: "± sd", num: true, fmt: v => v.toFixed(4) },
+    { key: "part", label: "Part of blue's logit", num: true, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(4) },
+  ], x.rows.map(r => ({ side: r.side ? "Red" : "Blue", role: roles[r.role], champ: r.champion ? name(r.champion) + (r.average ? " (no term: role average)" : "") : "empty (role average)", b: r.b, sd: r.sd, part: r.part })));
+  const swapped = m.score(m.teamsOf(d).slice().reverse()).p;
+  box.append(el("ul", { class: "readings" },
+    el("li", {}, `Intercept (blue side, ${m.M.meta.platform || "EUW1"}): ${x.intercept >= 0 ? "+" : ""}${x.intercept.toFixed(4)}.`),
+    el("li", {}, `Pair terms: ${m.M.has_pairs ? (x.pairs >= 0 ? "+" : "") + x.pairs.toFixed(4) : "none in this model"}.`),
+    el("li", {}, `Logit ${x.logit.toFixed(4)}, so blue ${pct(x.p.p)} (range ${pct(x.p.lo)} to ${pct(x.p.hi)}).`),
+    el("li", {}, `Sides swapped: blue would have ${pct(swapped)}; the two add up to ${pct(x.p.p + swapped)} (exactly 100% only without a side term).`)));
+  return box;
 }
 
 // Candidates for one slot: search, play rate in the role, and the change to this team's win

@@ -309,3 +309,8 @@ button.ghost.icon[aria-pressed="true"] { color: var(--warn); border-color: var(-
 .card.bans .chips { margin-bottom: 8px; }
 input.bansearch { width: 100%; }
 .health.warn { border-left-color: var(--warn); }
+.fillbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+details.fillmenu { margin-top: 0; padding: 4px 12px; flex: 1 1 260px; }
+details.fillmenu summary { line-height: 26px; }
+.fillgroup { display: grid; gap: 4px; margin: 6px 0 10px; }
+details.debug .table-scroll { overflow-x: auto; }
