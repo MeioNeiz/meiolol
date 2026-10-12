@@ -23,14 +23,15 @@
 # LAB_SNAP (snap-20261012T2055Z, in ~/ml/snaps on the host), LAB_BUDGET_S (600 s of
 # running time; killed at twice that; paused time while League is open doesn't count),
 # LAB_ROOT (ml/lab under the host's home; another root keeps smoke tests off the ladder),
-# LAB_CANDS (campaign dirs; default src/lab/cand here), LAB_MAX_RUNS (per campaign, 80)
+# LAB_CANDS (campaign dirs; default src/lab/cand here), LAB_MAX_RUNS (per campaign; unset:
+# no cap)
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 HOST=${LAB_HOST:-gpu-box}
 SNAP=${LAB_SNAP:-snap-20261012T2055Z}
 BUDGET=${LAB_BUDGET_S:-600}
-MAX_RUNS=${LAB_MAX_RUNS:-80}
+MAX_RUNS=${LAB_MAX_RUNS:-}
 LAB_ROOT=${LAB_ROOT:-ml/lab}
 LAB=$LAB_ROOT/$SNAP
 CANDS=src/lab/cand
@@ -130,8 +131,8 @@ case "$cmd" in
         dir=$(campaign_dir "$campaign")
         [[ -f "$dir/root.zig" ]] || { echo "no $dir/root.zig: deploy/lab-exp.sh new"; exit 1; }
         guard "$dir"
-        done_runs=$(on "awk -F '\t' '\$2 == \"$campaign\"' $LAB/runs.tsv 2>/dev/null | wc -l")
-        if (( done_runs >= MAX_RUNS )); then
+        [[ -z "$MAX_RUNS" ]] || done_runs=$(on "awk -F '\t' '\$2 == \"$campaign\"' $LAB/runs.tsv 2>/dev/null | wc -l")
+        if [[ -n "$MAX_RUNS" ]] && (( done_runs >= MAX_RUNS )); then
             echo "campaign $campaign has used its $MAX_RUNS runs (LAB_MAX_RUNS): stop and report"
             exit 4
         fi

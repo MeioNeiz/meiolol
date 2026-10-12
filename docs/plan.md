@@ -307,9 +307,12 @@ next steps land here.
 - Lab agent (docs/lab-agent.md, brief docs/lab-brief.md; built 2026-10-12, meiolol-f2):
   LLM campaigns on candidates behind a harness (scope and leakage by construction,
   ladder of 50 selection looks per snapshot, screen and diagnose tools, sandboxed
-  headless launch with a spend cap). No campaign yet: first one on a continuous
-  outcome, reviewed by hand (Jacob's call, costs tokens). Next: champion class tags in
-  api.Train; port 3c additive and 2a fm as candidates
+  headless launch, no spend cap: Jacob). 3c-team ported (src/lab/cand/team, matches
+  3c-team.tsv) and the default start. A 4-run probe on smoke records: $1.09, behaved.
+  Next: first real campaign (`deploy/lab-agent.sh start gold14-a gold14 "patch term,
+  own rank, matchup interactions"`), review its digest before more; champion class
+  tags in api.Train; port 2a fm once it beats 3c-team; meiolol-88 is starting win-*
+  candidates; persistent build tree (build ~80 s vs 16 s run)
 - Model agents (2026-10-12): meiolol-3c (CPU, interpretable shrinkage: additive enemy
   champions, class-tag comp types, per-item marginal effects, objective value given
   state, playstyle features) and meiolol-2a (gpu-box, `zig build lab`: embeddings,

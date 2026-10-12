@@ -171,11 +171,11 @@ digests in the morning.
 
 `deploy/lab-agent.sh start CAMPAIGN TARGET [FOCUS]` makes the campaign in ~/ml/agent
 (LAB_CANDS: outside the shared checkout) and starts `claude -p` there in the
-background with the brief, a spend cap (`--max-budget-usd`, LAB_AGENT_USD, $20) and
-its own settings (`lab-agent.sh settings CAMPAIGN` prints them): allow Read, Edit in
+background with the brief and its own settings (`lab-agent.sh settings CAMPAIGN` prints them): allow Read, Edit in
 the campaign dir and `lab-exp.sh`; deny edits in the repo, `lab-exp.sh final`, git,
 ssh, scp, rsync, curl, web. Checked with a headless session told to try each one.
-lab-exp.sh caps runs per campaign (LAB_MAX_RUNS, 80). The clean-tree build means edits
+No spend or run cap (Jacob, 2026-10-12): a campaign ends by the brief's stop rule or
+the look budget; LAB_MAX_RUNS caps runs when set. The clean-tree build means edits
 outside the candidate never reach a run anyway. The threat is a model taking a
 shortcut, not an attacker: permissions, module imports, the clean build and logged
 looks make shortcuts visible rather than impossible.
@@ -190,7 +190,7 @@ looks make shortcuts visible rather than impossible.
    (first real screen: own rank helps gold14, dev -0.0067 ± 0.0011); `exp diagnose`
    (slices relative to the overall drift, Bonferroni flag per group; flags rank tiers
    for gold14); `mde` in RESULT
-3. Done: docs/lab-brief.md, deploy/lab-agent.sh, permission set (checked), run cap.
+3. Done: docs/lab-brief.md, deploy/lab-agent.sh, permission set (checked).
    Still to add: champion metadata (Riot class tags) in api.Train for comp features
 4. Port base, 3c additive and 2a fm as candidates; the harness must reproduce their
    numbers on the same snapshot
