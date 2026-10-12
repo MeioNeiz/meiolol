@@ -334,6 +334,10 @@ next steps land here.
   prune after ack, forget coverage) must be live within ~3 weeks. Archive kept until player ids
   are blanked at 24 months, as the crawler does (Jacob via meiolol-27). Privacy draft
   (30 days) update on hold until Jacob asks (meiolol-27)
+  Archive live 2026-10-12 (meiolol-b0, took over from 3c): hourly pull to
+  gpu-box ~/ml/archive (partition path pending, meiolol-11), ~6.6 GB/day at zstd -15
+  (summaries 0.7, timelines 5.9); gpu-box ~4.5 months on / plus ~5 on the partition.
+  Box ~29 days at ~3.5 GB/day while raw summaries stay forever there too
 - Result (meiolol-3c, docs/model.md "Team effects on early outcomes"): enemy and ally
   champions shift gold@14, lane diff, CS@10, deaths before 15 and first item
   additively, clear of 0; champion-specific team interactions (by class or champion)
