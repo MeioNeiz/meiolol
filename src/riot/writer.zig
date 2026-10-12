@@ -24,8 +24,9 @@ const max_pending = 128;
 const busy_pause_s = 5;
 /// journal_size_limit only trims the WAL when it restarts, which needs a moment with
 /// every frame copied back and no reader on it. With nonstop writes and readers always
-/// about that moment never came, and main's WAL reached 57 GB. So force it this often
-const wal_truncate_s = 300;
+/// about that moment never came, and main's WAL reached 57 GB. So force it this often:
+/// main's WAL grows ~1 MB/s while site, builds and eval read, so this caps it ~60 MB
+const wal_truncate_s = 60;
 /// Short: commits wait while the checkpoint waits on readers; on Busy, try again soon
 const wal_truncate_busy_ms = 250;
 const wal_truncate_retry_s = 10;
