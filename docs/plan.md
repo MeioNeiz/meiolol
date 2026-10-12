@@ -304,6 +304,12 @@ next steps land here.
 
 ### Draft model (was draft-model-19)
 
+- Lab agent (docs/lab-agent.md, brief docs/lab-brief.md; built 2026-10-12, meiolol-f2):
+  LLM campaigns on candidates behind a harness (scope and leakage by construction,
+  ladder of 50 selection looks per snapshot, screen and diagnose tools, sandboxed
+  headless launch with a spend cap). No campaign yet: first one on a continuous
+  outcome, reviewed by hand (Jacob's call, costs tokens). Next: champion class tags in
+  api.Train; port 3c additive and 2a fm as candidates
 - Model agents (2026-10-12): meiolol-3c (CPU, interpretable shrinkage: additive enemy
   champions, class-tag comp types, per-item marginal effects, objective value given
   state, playstyle features) and meiolol-2a (gpu-box, `zig build lab`: embeddings,
