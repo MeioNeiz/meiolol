@@ -13,6 +13,8 @@ const ddragon = @import("ddragon.zig");
 const site = @import("site/root.zig");
 const admin = @import("admin.zig");
 const api = @import("api/root.zig");
+const lab_rows = @import("lab/rows.zig");
+const lab_pack = @import("lab/pack.zig");
 
 const testing = std.testing;
 const games = 3;
@@ -308,6 +310,93 @@ test "admin page from the fixture games and a crawl log" {
     try testing.expectEqual(3, std.mem.count(u8, history, "\n"));
 }
 
+test "fixture games to lab rows, from SQLite and packed" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const snap = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path });
+    {
+        const db = try store.schema.open(gpa, snap);
+        defer db.close();
+        // The protocol's split wants 100 games, 20 of them EUW test games
+        try fillGames(arena, db, 150, true);
+        try db.exec("UPDATE participants SET tier = CASE slot % 3 WHEN 0 THEN 'GOLD' " ++
+            "WHEN 1 THEN NULL ELSE 'DIAMOND' END, division = 'II'");
+    }
+    var legendaries: std.AutoHashMapUnmanaged(u64, void) = .empty;
+    defer legendaries.deinit(gpa);
+    for (build_data.legendary) |item| try legendaries.put(gpa, lab_rows.legendaryKey(stats.patchKey(patch), item), {});
+
+    var sql = try lab_rows.loadSql(gpa, snap, &legendaries);
+    defer sql.deinit();
+    // The fixture covers what the pack must carry: both sides of the split, two
+    // platforms, games with and without timeline outcomes, ranked and unranked rows
+    var seen: struct { tests: usize = 0, na: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0 } = .{};
+    for (sql.games) |g| {
+        try testing.expect(g.duration_s > 1000 and g.duration_s <= 1620);
+        seen.tests += @intFromBool(g.is_test);
+        seen.na += @intFromBool(g.platform != sql.games[sql.games.len - 1].platform);
+        seen.tl += @intFromBool(g.timeline15);
+    }
+    for (sql.rows) |r| {
+        seen.unranked += @intFromBool(r.rank == null);
+        seen.items += @intFromBool(!std.math.isNan(r.y[@backingInt(lab_rows.Outcome.first_item)]));
+    }
+    try testing.expect(sql.games.len >= 100);
+    try testing.expect(seen.tests > 0 and seen.tests < sql.games.len and seen.na > 0);
+    try testing.expect(seen.tl > 0 and seen.tl < sql.games.len and seen.unranked > 0 and seen.items > 0);
+
+    try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &legendaries));
+    _ = try lab_pack.write(gpa, io, snap, &legendaries);
+    var loaded = try lab_rows.load(gpa, snap, &legendaries);
+    defer loaded.deinit();
+    try expectSameRows(&sql, &loaded);
+    var packed_rows = (try lab_pack.read(gpa, io, snap, &legendaries)).?;
+    packed_rows.deinit();
+
+    // A pack from before a field was added (games.duration_s here) is stale
+    {
+        const manifest_path = try std.fs.path.join(arena, &.{ snap, "pack", "manifest" });
+        const manifest = try std.Io.Dir.cwd().readFileAlloc(io, manifest_path, arena, .limited(1 << 20));
+        const line = "column games.duration_s u32 1\n";
+        const at = std.mem.indexOf(u8, manifest, line).?;
+        const old = try std.mem.concat(arena, u8, &.{ manifest[0..at], manifest[at + line.len ..] });
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = manifest_path, .data = old });
+        try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &legendaries));
+    }
+
+    // Other legendaries, or a changed database: the pack is stale
+    var none: std.AutoHashMapUnmanaged(u64, void) = .empty;
+    try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &none));
+    {
+        const db = try store.schema.open(gpa, snap);
+        defer db.close();
+        try db.exec("DELETE FROM timeline.timelines WHERE match_id = 'EUW1_1'");
+        try db.exec("INSERT INTO champions VALUES (1, 'Annie', 'Annie', zeroblob(100000), '15.13.1')");
+    }
+    try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &legendaries));
+    var sql2 = try lab_rows.load(gpa, snap, &legendaries);
+    defer sql2.deinit();
+    try testing.expect(lab_pack.firstDiff(&sql, &sql2, &.{}) != null);
+    // Packing again replaces the old pack
+    _ = try lab_pack.write(gpa, io, snap, &legendaries);
+    var loaded2 = (try lab_pack.read(gpa, io, snap, &legendaries)).?;
+    defer loaded2.deinit();
+    try expectSameRows(&sql2, &loaded2);
+}
+
+fn expectSameRows(want: *const lab_rows.Data, got: *const lab_rows.Data) !void {
+    var buf: [256]u8 = undefined;
+    if (lab_pack.firstDiff(want, got, &buf)) |d| {
+        std.debug.print("packed rows differ: {s}\n", .{d});
+        return error.TestUnexpectedResult;
+    }
+}
+
 /// Data Dragon's classes for the fixture timeline's purchases (16.20): its finished
 /// items and boots; Darius's runes and spells for names
 const build_data: ddragon.BuildData = .{
@@ -323,16 +412,24 @@ const build_data: ddragon.BuildData = .{
 /// The fixture game stored `games` times under EUW match ids, with its timeline and
 /// champion names, as the crawler and `meiolol champions` leave them
 fn fill(arena: std.mem.Allocator, db: store.Db) !void {
+    try fillGames(arena, db, games, false);
+}
+
+/// varied: an hour apart, lengths varied, every 4th on NA1, every 3rd without a timeline
+fn fillGames(arena: std.mem.Allocator, db: store.Db, n_games: usize, varied: bool) !void {
     const body = @embedFile("riot/testdata/match.json");
     const json = try store.raw.decompress(arena, @embedFile("riot/testdata/timeline.json.gz"));
     const ct = try riot.crawl.compactTimeline(arena, json);
-    for (0..games) |n| {
+    for (0..n_games) |n| {
+        const platform = if (varied and n % 4 == 3) "NA1" else "EUW1";
         var doc = try riot.match.parse(arena, body);
-        doc.metadata.matchId = try arena.print("EUW1_{d}", .{n + 1});
-        doc.info.platformId = "EUW1";
+        doc.metadata.matchId = try arena.print("{s}_{d}", .{ platform, n + 1 });
+        doc.info.platformId = platform;
         doc.info.gameVersion = patch ++ ".1.1";
-        doc.info.gameStartTimestamp = start_ms;
+        doc.info.gameStartTimestamp = if (varied) start_ms + @as(i64, @intCast(n)) * 3_600_000 else start_ms;
+        if (varied) doc.info.gameDuration -= @as(i64, @intCast(n % 7)) * 60;
         try riot.match.storeRows(db, doc, "riot");
+        if (varied and n % 3 == 2) continue;
         try db.run("INSERT INTO timeline.timelines VALUES (?,?,?,?)", .{
             doc.metadata.matchId, ct.frames, ct.events, store.Blob{ .bytes = ct.blob },
         });

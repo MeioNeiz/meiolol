@@ -8,10 +8,13 @@ const anonymise = @import("lab/anonymise.zig");
 const archive = @import("lab/archive.zig");
 const protocol = @import("lab/protocol.zig");
 const rows = @import("lab/rows.zig");
+const pack = @import("lab/pack.zig");
 const enemy = @import("lab/enemy.zig");
 const pairs = @import("lab/pairs.zig");
 const lanebuckets = @import("lab/lanebuckets.zig");
+const bench = @import("lab/bench.zig");
 const exp = @import("lab/exp.zig");
+const draft = @import("lab/draft.zig");
 const harness = @import("lab/harness.zig");
 
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
@@ -30,13 +33,19 @@ const usage =
     \\  split SNAP_DIR                  the shared held-out split (eval's, tested on EUW1):
     \\                                  prints it, writes SNAP_DIR/split.tsv
     \\  rows SNAP_DIR                   load the model rows, print outcome counts and means
+    \\  pack SNAP_DIR                   write the model rows as column files in SNAP_DIR/pack,
+    \\                                  which every command then loads instead of SQLite
     \\  enemy SNAP_DIR [PREDS_DIR]      base, additive and pairwise champion-role models on the
     \\                                  continuous outcomes (lab/enemy.zig); markdown table
     \\  pairs BASE REF [PREDS...]       paired MSE gains of prediction TSVs on shared rows,
     \\                                  % of BASE's MSE, intervals vs REF clustered by game
     \\  lanebuckets SNAP BASE A B       A's gain over B by lane pair train games (lab/lanebuckets.zig)
+    \\  bench SNAP [OPT VALUE]...       fm fits timed on one core, all cores and the GPU
+    \\                                  (lab/bench.zig): --devices cpu1,cpu,gpu --kinds
+    \\                                  additive,lane,pairwise --dims 8,32,128 --scales
+    \\                                  1,4,16 --epochs 10 --sweep 0 (fits per sweep)
     \\
-++ exp.usage;
+++ exp.usage ++ draft.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
@@ -105,6 +114,44 @@ pub fn main(init: std.process.Init) !u8 {
         try stdout.interface.flush();
         return 0;
     }
+    if (std.mem.eql(u8, cmd, "bench") and argv.len >= 3) {
+        var opts: bench.Options = .{};
+        var i: usize = 3;
+        while (i + 1 < argv.len) : (i += 2) {
+            const v = argv[i + 1];
+            if (std.mem.eql(u8, argv[i], "--devices")) {
+                opts.devices = try parseList(bench.Device, arena, v);
+            } else if (std.mem.eql(u8, argv[i], "--kinds")) {
+                opts.kinds = try parseList(@import("lab/fm.zig").Kind, arena, v);
+            } else if (std.mem.eql(u8, argv[i], "--dims")) {
+                opts.dims = try parseList(u32, arena, v);
+            } else if (std.mem.eql(u8, argv[i], "--scales")) {
+                opts.scales = try parseList(u32, arena, v);
+            } else if (std.mem.eql(u8, argv[i], "--epochs")) {
+                opts.epochs = try std.fmt.parseInt(u32, v, 10);
+            } else if (std.mem.eql(u8, argv[i], "--sweep")) {
+                opts.sweep = try std.fmt.parseInt(u32, v, 10);
+            } else {
+                std.debug.print("bench: unknown option {s}\n{s}", .{ argv[i], usage });
+                return 2;
+            }
+        }
+        var gpu: ?cuda.Gpu = null;
+        if (std.mem.indexOfScalar(bench.Device, opts.devices, .gpu) != null) {
+            gpu = try cuda.Gpu.init(ptx);
+            var buf: [128]u8 = @splat(0);
+            std.log.info("device: {s}", .{try gpu.?.name(&buf)});
+        }
+        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
+        defer legendaries.deinit(init.gpa);
+        var data = try rows.load(init.gpa, argv[2], &legendaries);
+        defer data.deinit();
+        var buf: [4096]u8 = undefined;
+        var stdout = std.Io.File.stdout().writer(init.io, &buf);
+        try bench.run(init.gpa, init.io, &data, opts, if (gpu) |*g| g else null, &stdout.interface);
+        try stdout.interface.flush();
+        return 0;
+    }
     if (std.mem.eql(u8, cmd, "pairs") and argv.len >= 4) {
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
@@ -124,8 +171,20 @@ pub fn main(init: std.process.Init) !u8 {
         try stdout.interface.flush();
         return 0;
     }
+    if (std.mem.eql(u8, cmd, "draft")) {
+        return draft.main(init.gpa, arena, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "exp")) {
         return exp.main(init.gpa, arena, init.io, init.environ_map.get("HOME"), argv[2..]);
+    }
+    if (std.mem.eql(u8, cmd, "pack") and argv.len >= 3) {
+        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
+        defer legendaries.deinit(init.gpa);
+        const n = try pack.write(init.gpa, init.io, argv[2], &legendaries);
+        std.log.info("packed {d} games, {d} rows into {s}/{s} ({d:.1} MB)", .{
+            n.games, n.rows, argv[2], pack.dir_name, @as(f64, @floatFromInt(n.bytes)) / 1e6,
+        });
+        return 0;
     }
     if (std.mem.eql(u8, cmd, "rows") and argv.len >= 3) {
         var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
@@ -182,11 +241,25 @@ test {
     _ = archive;
     _ = protocol;
     _ = rows;
+    _ = pack;
     _ = enemy;
     _ = pairs;
     _ = lanebuckets;
+    _ = bench;
     _ = harness;
     _ = exp;
+    _ = draft;
+}
+
+/// Comma-separated enum tags or integers
+fn parseList(comptime T: type, arena: std.mem.Allocator, text: []const u8) ![]const T {
+    var out: std.ArrayList(T) = .empty;
+    var it = std.mem.tokenizeScalar(u8, text, ',');
+    while (it.next()) |s| try out.append(arena, switch (@typeInfo(T)) {
+        .@"enum" => std.meta.stringToEnum(T, s) orelse return error.Usage,
+        else => try std.fmt.parseInt(T, s, 10),
+    });
+    return out.items;
 }
 
 /// The snapshot salt: SALT_FILE or ~/.config/meiolol/snap-salt (docs/data-safety.md);

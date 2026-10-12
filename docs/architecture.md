@@ -39,6 +39,8 @@ src/
                      127.0.0.1 trusting only riotgames.pem), session (champ select),
                      me (own mastery and solo tier)
   app_main.zig       `meiolol-app`: suggest (offline), watch (live), session, get
+  lab_main.zig       `meiolol-lab`: modelling experiments (docs/model.md, compute.md);
+                     lab/rows.zig model rows from a snapshot, lab/pack.zig packed rows
   lanecard.zig       the lane card's content (pure): opponent, sentence, curve, options
   desktop_main.zig   `meiolol-desktop`: the lane card in a window (dvui, Direct3D 11)
   desktop/           ui.zig (the window, drawn from a View), raster.zig (dvui backend
@@ -214,6 +216,28 @@ of statsfile.zig; bump the version on any change. Written by `meiolol stats` (de
 newest patch; `--patch 16.19,16.20` for several; `--platform` picks platforms, default
 EUW1, since the site says EUW) to data/export/stats-<patch>.bin. Only ranked solo
 games with no remake, a winner and all ten positions count.
+
+## Packed rows (src/lab/pack.zig)
+
+A snapshot dir (docs/model.md "Shared protocol") holds meiolol.db, raw.db, timeline.db,
+split.tsv, legendaries.tsv and, after `meiolol-lab pack SNAP`, pack/: rows.Data (every
+game and row, unfiltered: the split is a field, cuts and fractions come after loading)
+as one file per field. rows.load reads it when it matches, else SQLite with a one-line
+note; `rows`, `enemy`, `exp` and the rest all go through rows.load.
+
+- games.FIELD, rows.FIELD: little-endian, COUNT values per game or row in game/row
+  order (rows.game indexes games). bool and u1 as u8 0/1, enums as their tag (u8),
+  rank ?u8 with 255 as null, teams 10 u32 (side major), y 6 f32 per row (Outcome order,
+  NaN unknown). Strings: games.match_id the bytes concatenated, games.match_id.end u64
+  end offsets
+- manifest (text): `meiolol-lab pack VERSION`, `code` (hash of rows.zig, pack.zig,
+  protocol.zig, stats.zig), `legendaries` (count, hash), per db its size and mtime (ns)
+  and its WAL's, one `column NAME TYPE COUNT` line per file, then `games N`, `rows N`.
+  Everything above the counts must equal what the loading binary computes, else the
+  pack is stale. Bump pack.version when rows change through code not hashed (eval.split,
+  timeline.decode)
+- Written to pack.tmp-RANDOM, read back and compared, then renamed over pack/; the
+  manifest is written last. A copy keeps the pack only if mtimes survive (rsync -a)
 
 ## Lane curves (src/curves.zig, src/core/curvesfile.zig, curvefit.zig, src/site/matchup.zig)
 

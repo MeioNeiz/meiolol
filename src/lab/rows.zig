@@ -9,6 +9,7 @@ const stats = @import("../stats.zig");
 const eval = @import("../eval.zig");
 const timeline = @import("../riot/timeline.zig");
 const protocol = @import("protocol.zig");
+const pack = @import("pack.zig");
 
 pub const Outcome = enum { win, gold14, lanediff14, cs10, deaths15, first_item };
 pub const outcome_count = @typeInfo(Outcome).@"enum".field_names.len;
@@ -24,6 +25,8 @@ pub const Game = struct {
     winner: u1,
     /// Timeline reaches 15:00 (protocol.reached15Timeline)
     timeline15: bool = false,
+    /// Game length (matches.duration_s)
+    duration_s: u32 = 0,
 };
 
 pub const Row = struct {
@@ -57,8 +60,20 @@ const GameList = struct {
     }
 };
 
+/// From SNAP/pack/ when it matches the snapshot (lab/pack.zig), else from SQLite.
 /// legendaries: (patch key, item id) of completed items, for first_item; may be empty
 pub fn load(
+    gpa: std.mem.Allocator,
+    snap: []const u8,
+    legendaries: *const std.AutoHashMapUnmanaged(u64, void),
+) !Data {
+    // Plain blocking reads, on the global Io so every caller gets the pack unchanged
+    const io = std.Io.Threaded.global_single_threaded.io();
+    if (try pack.read(gpa, io, snap, legendaries)) |d| return d;
+    return loadSql(gpa, snap, legendaries);
+}
+
+pub fn loadSql(
     gpa: std.mem.Allocator,
     snap: []const u8,
     legendaries: *const std.AutoHashMapUnmanaged(u64, void),
@@ -93,6 +108,16 @@ pub fn load(
                 .teams = g.teams,
                 .winner = g.winner,
             });
+        }
+    }
+
+    {
+        var q = try db.prepare("SELECT match_id, duration_s FROM matches");
+        defer q.deinit();
+        try q.bind(.{});
+        while (try q.step()) {
+            const gi = index.get(stats.matchKey(q.bytes(0))) orelse continue;
+            games.items[gi].duration_s = @intCast(q.int(1));
         }
     }
 

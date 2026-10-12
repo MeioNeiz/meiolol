@@ -108,10 +108,13 @@ first.
 - Snapshot cadence: box -> Mac (anonymise, salt stays off the box) -> gpu-box
   ~/ml/snaps, weekly or per patch, the older one deleted (shared protocol). Scripted
   end to end instead of by hand; from the raw archive once it exists, not the live DB
-- Packed rows: one `meiolol-lab pack SNAP` writes fixed-width column files (games,
-  participants, timeline frames) per snapshot. Every model, eval included, then loads in
-  seconds by mmap instead of SQLite page reads (today's remaining serial part of eval:
-  experience.load and the scan), and the GPU path uploads columns as they are
+- Packed rows (done, 2026-10-12): `meiolol-lab pack SNAP` writes rows.Data as
+  fixed-width column files in SNAP/pack/ (docs/architecture.md "Packed rows"); rows.load
+  reads them when they match the snapshot, else SQLite, so every lab command gets it.
+  snap-20261012T2055Z (185k games, 1.85M rows): pack 79 MB, written in ~17-34 s; `rows`
+  31-37 s from SQLite on the Mac, 15-17 s on the gpu-box, 0.14 s packed on both (RSS
+  1.1-2.4 GB down to 150 MB). Still open: eval (experience.load, the scan) and
+  timeline frames, which aren't in the pack
 - Runs record the snapshot stamp and seed in meta
 
 ### 3. Running more than one thing (when the lab agent starts)
