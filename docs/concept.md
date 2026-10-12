@@ -1,5 +1,31 @@
 # Concept: meiolol, learn your lane
 
+## Identity draft four: scout your own games (Jacob, 2026-10-12)
+
+Supersedes the pitch below where they differ; the parts below stay as the benchmark and
+extras. Focus on the player, not the meta.
+
+- Pitch: every ranked game you've played, turned into the stats nobody else shows you:
+  fun enough to share, deep enough to learn from. Home page leads with "look yourself
+  up" (src/site/root.zig writeIndex); matchup curves are the benchmark behind it
+- Pillars (Jacob's picks from ~60 ideas):
+  1. Game rewind: summary story, turning minute (win-chance model, whole game), how you
+     died (damage by type: needs death recaps), death cost, jump to the moment (replay)
+  2. Highlights / record book: streaks, longest game, best KDA, won from behind, lost
+     from ahead, when you play, champion picks, ability use, great games (throw, carry,
+     comeback). Recent-game highlights live on your.html; the full-history record book
+     only on request by the account owner (icon check), kept while used
+  3. Scouting report: fingerprint, role lenses, tilt check, snowball vs comeback,
+     spikes (spike window, level spikes), late game (baron calls, sidelane)
+  4. Matchup notebook: record per matchup, builds that worked, counter-item timing,
+     pool health; public "how to beat X as Y" and "X vs tanks" pages
+  5. Before the game (desktop app): pre-game brief from your own notebook
+  6. Squads: superlatives, head to head, rewind cards (Riot's Rift Rewind hackathon
+     rewarded year-wrapped recaps, personas, friend head-to-heads)
+- Not only the first 14 min: lane against the curve; mid and late game judged by what
+  followed (deaths before objectives, throws, fights, objective setup); spikes link them
+- Raw archive kept until PUUID blanking at 24 months (Jacob); privacy.md not yet updated
+
 Adopted 2026-10-11. Evidence: research/questions/
 league-tools-landscape, riot-appreciated-tools, player-tool-needs, riot-api-data-depth
 (all answered; claims cited below as question:Cn). Persona runs: summary at the end.

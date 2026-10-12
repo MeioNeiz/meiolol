@@ -12,8 +12,8 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
     try w.writeAll(
         \\<h1>Your games</h1>
         \\<p class="lead">Your lane in each recent ranked solo game, minute by minute, laid
-        \\over how that matchup typically goes at your rank. Then your weeks and your
-        \\matchups over time.</p>
+        \\over how that matchup typically goes at your rank. Your highlights and streaks,
+        \\then your weeks and your matchups over time.</p>
         \\<form id="lookup" class="lookup">
         \\<input id="riot-id" name="id" placeholder="Name#TAG" autocomplete="off" spellcheck="false" required>
         \\<button type="submit">Show my games</button>
@@ -24,6 +24,11 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<div id="player" hidden>
         \\<h2 id="player-name"></h2>
         \\<p id="player-rank" class="muted"></p>
+        \\<section id="highlights" hidden>
+        \\<h2>Highlights</h2>
+        \\<div id="highlight-tiles" class="tiles"></div>
+        \\<p id="highlights-note" class="muted"></p>
+        \\</section>
         \\<h2>By week</h2>
         \\<div class="table-scroll"><table>
         \\<thead><tr><th>Week of</th><th class="num">Games</th><th class="num">Wins</th><th class="num">Gold diff at 14 min</th><th class="num">Against typical at 14 min</th></tr></thead>

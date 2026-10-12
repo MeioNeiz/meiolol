@@ -154,9 +154,96 @@ function render(body) {
     ? `${p.platform}. Solo/duo rank at the newest game: ${tier}.`
     : `${p.platform}. Visible solo/duo rank: ${p.tier ? `${tier}, ${p.lp ?? 0} LP` : tier}${updated}.`;
   const r = body.report ?? { games: [], weeks: [], matchups: [] };
+  renderHighlights(r.games);
   renderWeeks(r.weeks);
   renderMatchups(r.matchups);
   renderGames(r.games);
+}
+
+// Fun facts from the games in the report (newest first); each tile only when there is
+// something to say, so a short history shows fewer tiles rather than empty ones
+function renderHighlights(all) {
+  // Some remakes come without Riot's early-surrender flag; under 5 minutes is never a
+  // record worth showing
+  const games = all.filter((g) => !g.remake && g.duration_s >= 300);
+  const box = $("highlight-tiles");
+  box.replaceChildren();
+  $("highlights").hidden = !games.length;
+  if (!games.length) return;
+  const tile = (value, label, sub) => {
+    const t = el("div", "tile");
+    t.append(el("b", "", value), el("span", "", label));
+    if (sub) t.append(el("small", "", sub));
+    box.append(t);
+  };
+  const result = (g) => (g.win ? "win" : "loss");
+  const date = (g) => new Date(g.start_ms).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const on = (g) => `${champName(g.champion)}${g.opponent !== undefined ? ` vs ${champName(g.opponent)}` : ""}, ${result(g)}, ${date(g)}`;
+  const best = (xs, key) => xs.reduce((a, b) => (key(b) > key(a) ? b : a), xs[0]);
+  const big = (x) => `${x > 0 ? "+" : ""}${x.toLocaleString("en-GB")}`;
+
+  const wins = games.filter((g) => g.win).length;
+  tile(`${wins}-${games.length - wins}`, "Record", `${Math.round((100 * wins) / games.length)}% wins in ${plural(games.length, "game")}`);
+
+  let streak = 1;
+  while (streak < games.length && games[streak].win === games[0].win) streak++;
+  let longest = 0;
+  for (let i = 0, run = 0; i < games.length; i++) {
+    run = games[i].win ? run + 1 : 0;
+    longest = Math.max(longest, run);
+  }
+  if (streak >= 2) tile(`${streak} ${games[0].win ? "wins" : "losses"}`, "Current streak");
+  if (longest >= 2 && !(games[0].win && streak === longest)) tile(plural(longest, "win"), "Longest win streak");
+
+  const long = best(games, (g) => g.duration_s);
+  tile(clock(long.duration_s), "Longest game", on(long));
+  const won = games.filter((g) => g.win);
+  if (won.length) {
+    const fast = best(won, (g) => -g.duration_s);
+    tile(clock(fast.duration_s), "Fastest win", on(fast));
+  }
+  const kda = (g) => (g.kills + g.assists) / Math.max(1, g.deaths);
+  const top = best(games, kda);
+  tile(kda(top).toFixed(1), "Best KDA", `${top.kills}/${top.deaths}/${top.assists}, ${on(top)}`);
+
+  const at = LANE_END - 1;
+  const lanes = games.filter((g) => g.lane && g.lane.gold.length > at);
+  if (lanes.length) {
+    const gold14 = (g) => g.lane.gold[at];
+    const lead = best(lanes, gold14);
+    // A lost lead shows below as the furthest-ahead loss
+    if (gold14(lead) > 0 && lead.win) tile(big(gold14(lead)), `Biggest lane lead at ${LANE_END} min`, on(lead));
+    const comeback = won.filter((g) => lanes.includes(g) && gold14(g) < 0);
+    if (comeback.length) {
+      const c = best(comeback, (g) => -gold14(g));
+      tile(big(gold14(c)), "Won from furthest behind", `in lane at ${LANE_END} min: ${on(c)}`);
+    }
+    const thrown = lanes.filter((g) => !g.win && gold14(g) > 0);
+    if (thrown.length) {
+      const t = best(thrown, gold14);
+      tile(big(gold14(t)), "Lost from furthest ahead", `in lane at ${LANE_END} min: ${on(t)}`);
+    }
+    const typical = (g) => (g.lane.curve && g.lane.curve.n[at] >= MIN_N ? gold14(g) - g.lane.curve.gold[at][1] : null);
+    const vs = lanes.filter((g) => typical(g) !== null);
+    if (vs.length) {
+      const v = best(vs, typical);
+      if (typical(v) > 0) tile(big(typical(v)), `Furthest above the typical game at ${LANE_END} min`, on(v));
+    }
+    const clean = lanes.filter((g) => g.lane.lane_deaths === 0).length;
+    tile(`${clean} of ${lanes.length}`, `Lanes without a death before ${LANE_END} min`);
+  }
+
+  const counts = new Map();
+  for (const g of games) {
+    const c = counts.get(g.champion) ?? { games: 0, wins: 0 };
+    c.games++;
+    c.wins += g.win ? 1 : 0;
+    counts.set(g.champion, c);
+  }
+  const [main, m] = [...counts].reduce((a, b) => (b[1].games > a[1].games ? b : a));
+  if (m.games >= 2) tile(champName(main), "Most played", `${plural(m.games, "game")}, ${plural(m.wins, "win")}`);
+
+  $("highlights-note").textContent = `From your last ${plural(games.length, "ranked solo game")}. A record book across every game you've played is coming, built when you ask for it.`;
 }
 
 function cell(text, num) {

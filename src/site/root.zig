@@ -495,7 +495,7 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
         .{ "method.html", "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
         .{ "daily.html", "Daily Draft", "Guess the hidden champion and the winner of a real ranked draft, then see what the numbers say.", .daily, daily_page.page },
         .{ "download.html", "Desktop app", "The meiolol desktop app for Windows, in development.", .none, prose.download },
-        .{ "your.html", "Your games", "Your lane in each recent ranked game, minute by minute, against how the matchup typically goes at your rank.", .none, your_page.page },
+        .{ "your.html", "Your games", "Look yourself up: your lane in each recent ranked game against how the matchup typically goes, with your highlights, streaks and record per matchup.", .your, your_page.page },
         .{ "privacy.html", "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
         .{ "terms.html", "Terms of use", "Terms for using meiolol.", .none, prose.terms },
     };
@@ -1118,10 +1118,72 @@ fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     try html.foot(w, p);
 }
 
+/// What the home page promises, in the order a player meets it (docs/concept.md,
+/// identity draft four). `soon` parts are labelled as coming: Riot reviews the site
+const Pillar = struct {
+    name: []const u8,
+    soon: bool,
+    text: []const u8,
+    example: []const u8,
+};
+
+const pillars = [_]Pillar{
+    .{
+        .name = "Game rewind",
+        .soon = false,
+        .text = "Each game's lane minute by minute against Platinum+ games in the same matchup: the minutes it swung, and your level 6 and first item against typical.",
+        .example = "Biggest drop: 6-9 min, -540 gold, 2 deaths",
+    },
+    .{
+        .name = "Highlights",
+        .soon = false,
+        .text = "Streaks, your longest game, best KDA, biggest lane lead and the game you won from furthest behind. The full record book across every game you've played comes on request.",
+        .example = "Won from 1,180 gold behind in lane at 14",
+    },
+    .{
+        .name = "Matchup notebook",
+        .soon = false,
+        .text = "Your record in every lane matchup and how it moves over the months; next, the builds that worked for you against each kind of team.",
+        .example = "Ahri vs Yone: gold at 10 -310, -120, +80",
+    },
+    .{
+        .name = "Scouting report",
+        .soon = true,
+        .text = "You as a player: snowball or comeback, spike timing, where your games tilt, what your deaths cost, and how your role compares with Platinum+.",
+        .example = "Your deaths gave away 2,900 gold a game",
+    },
+    .{
+        .name = "Before the game",
+        .soon = true,
+        .text = "The desktop app shows your own notebook for the lane you're likely in: your record, your spike window, your last note. Never other players.",
+        .example = "Their two-item spike lands 2 min after yours",
+    },
+    .{
+        .name = "Squads",
+        .soon = true,
+        .text = "Friends who opt in: superlatives, head to heads and a weekly rewind card for Discord.",
+        .example = "Most expensive death of the week: 1,450 gold",
+    },
+};
+
+fn pillarCard(_: void, w: *Writer, it: Pillar) Writer.Error!void {
+    try tpl.render(w,
+        \\<div class="card pillar"><h3>{name} <span{chip}>{state}</span></h3>
+        \\<p>{text}</p><p class="eg"><span>For example</span>{example}</p></div>
+        \\
+    , .{
+        .name = it.name,
+        .chip = tpl.attr("class", @as([]const u8, if (it.soon) "chip soon" else "chip")),
+        .state = @as([]const u8, if (it.soon) "Coming" else "Live"),
+        .text = it.text,
+        .example = it.example,
+    });
+}
+
 fn writeIndex(site: *const Site, w: *Writer) !void {
     const p = site.page(
-        "meiolol: learn your lane",
-        "How League of Legends lane matchups unfold minute by minute, from ranked games: gold, experience and CS curves per matchup and rank, a Daily Draft puzzle and champion statistics.",
+        "meiolol: scout your own League games",
+        "Look yourself up: every recent ranked game laid over how Platinum+ players do in the same matchup, minute by minute, with your highlights, streaks and record in each matchup. Free, no sign-up.",
         "index.html",
         .none,
     );
@@ -1132,53 +1194,72 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         break :blk n;
     } else 0;
     try tpl.render(w,
-        \\<h1>Learn your lane</h1>
-        \\<p class="lead">How lane matchups actually unfold, minute by minute, and how your
-        \\own games compare. From ranked match timelines: the typical gold, experience and CS
-        \\curve of every lane matchup by rank, with the spread and the number of games behind
-        \\it. Champion and aggregate data only; never other players, never "the best pick".</p>
-        \\
-    , .{});
-    if (site.curves) |*c| if (matchups > 0) try matchup.featured(site, w, c, matchups);
-    try tpl.render(w,
-        \\<div class="grid">
-        \\<div class="card"><h3><a href="{your}">Your games</a></h3>
-        \\<p>Enter your Riot ID and see each recent game's lane laid over the typical curve
-        \\for that matchup at your rank, and your record per matchup over the months.
-        \\<a href="{example}">See an example</a>.</p></div>
-        \\<div class="card"><h3><a href="matchup/index.html">Matchup curves</a></h3>
-        \\<p>{matchups}{no_matchups}</p></div>
-        \\<div class="card"><h3><a href="{daily}">Daily Draft</a></h3>
-        \\<p>One real ranked draft a day, anonymised. Guess the hidden champion and the
-        \\winner, then see what happened and what the numbers say. Keep a streak, share
-        \\your grid.</p></div>
-        \\<div class="card"><h3><a href="{learn}">New to League? Start with Learn</a></h3>
-        \\<p>Five short lessons on draft in plain words, with real examples, then practice on
-        \\real ranked drafts with every option explained. No timers, no streaks.</p></div>
-        \\<div class="card"><h3><a href="pool.html">Champion pool</a></h3>
-        \\<p>Champions that players of your main also play, which of them cover your
-        \\main's hardest lanes, and what they play when it is banned.</p></div>
+        \\<section class="home-hero"><div>
+        \\<h1>Your League games, in stats nobody else shows you</h1>
+        \\<p class="lead">Look yourself up. Every recent ranked game laid over how Platinum+
+        \\players do in the same matchup, minute by minute, with your highlights, streaks
+        \\and record in each matchup. Fun enough to share, deep enough to learn from.</p>
+        \\<form class="lookup" action="{your}" method="get">
+        \\<input name="id" placeholder="Name#TAG" autocomplete="off" spellcheck="false" required aria-label="Riot ID">
+        \\<button type="submit">Scout me</button>
+        \\</form>
+        \\<p class="muted">No Riot ID to hand? <a href="{example}">See an example</a>: real
+        \\ranked games from our data, with the player's name left out.</p>
         \\</div>
+        \\<aside class="sample" aria-label="An example of highlights">
+        \\<p class="muted">Highlights, last 10 games (example)</p>
+        \\<div class="tiles">
+        \\<div class="tile"><b>4 wins</b><span>Current streak</span></div>
+        \\<div class="tile"><b>47:12</b><span>Longest game</span><small>Ornn vs Sion, win</small></div>
+        \\<div class="tile"><b>-1,180</b><span>Won from furthest behind</span><small>in lane at 14 min</small></div>
+        \\<div class="tile"><b>+620</b><span>Above the typical game at 14 min</span><small>Ahri vs Yone, Platinum+</small></div>
+        \\</div>
+        \\</aside>
+        \\</section>
+        \\<h2>What you get</h2>
+        \\<div class="grid pillars">
+        \\{pillars}</div>
+        \\<p class="muted">Facts about your own games, never verdicts on other players and
+        \\never "the best pick". Ranked solo/duo; the typical games come from Platinum IV and
+        \\above.</p>
         \\
     , .{
         .your = html.Link{ .root = site.view.up(), .path = "your.html" },
         .example = html.Link{ .root = site.view.up(), .path = "your.html?example" },
-        .daily = html.Link{ .root = site.view.up(), .path = "daily.html" },
-        .learn = html.Link{ .root = site.view.up(), .path = "learn.html" },
-        .matchups = if (matchups > 0) tpl.t(
-            "{n} lane matchups so far: when each side tends to get ahead, by how much, and whether winning lane wins the game.",
-            .{ .n = matchups },
-        ) else null,
-        .no_matchups = tpl.when(matchups == 0, @as([]const u8, "When each side of a lane matchup tends to get ahead, by how much, and whether winning lane wins the game. Curves appear as match timelines come in.")),
+        .pillars = tpl.each(&pillars, {}, pillarCard),
     });
-    // The full table is champions.html: on this page it was 90% of the bytes
     try tpl.render(w,
-        \\<h2>Champions</h2>
-        \\<p><a href="champions.html">Win rate, pick and ban rate of every champion</a>, from
-        \\<b>{games}</b> ranked solo/duo games {in}, {when}, all ranks.
-        \\<a href="{method}">How the numbers are made</a>.</p>
+        \\<p class="muted bench">The benchmark your games are measured against: {matchups}{no_matchups}</p>
         \\
     , .{
+        .matchups = if (matchups > 0) tpl.t(
+            "{n} lane matchups so far, each showing when each side tends to get ahead, by how much, and whether winning lane wins the game.",
+            .{ .n = matchups },
+        ) else null,
+        .no_matchups = tpl.when(matchups == 0, @as([]const u8, "when each side of a lane matchup tends to get ahead, by how much, and whether winning lane wins the game. Curves appear as match timelines come in.")),
+    });
+    if (site.curves) |*c| if (matchups > 0) try matchup.featured(site, w, c, matchups);
+    // The full table is champions.html: on this page it was 90% of the bytes
+    try tpl.render(w,
+        \\<h2>More to explore</h2>
+        \\<div class="grid">
+        \\<div class="card"><h3><a href="{daily}">Daily Draft</a></h3>
+        \\<p>One real ranked draft a day, anonymised. Guess the hidden champion and the
+        \\winner, then see what happened. Keep a streak, share your grid.</p></div>
+        \\<div class="card"><h3><a href="{learn}">Learn</a></h3>
+        \\<p>Five short lessons on draft in plain words, then practice on real ranked
+        \\drafts with every option explained.</p></div>
+        \\<div class="card"><h3><a href="pool.html">Champion pool</a></h3>
+        \\<p>What players of your main also play, and which of those cover your main's
+        \\hardest lanes.</p></div>
+        \\<div class="card"><h3><a href="champions.html">Champions</a></h3>
+        \\<p>Win, pick and ban rate of every champion from <b>{games}</b> ranked solo/duo
+        \\games {in}, {when}. <a href="{method}">How the numbers are made</a>.</p></div>
+        \\</div>
+        \\
+    , .{
+        .daily = html.Link{ .root = site.view.up(), .path = "daily.html" },
+        .learn = html.Link{ .root = site.view.up(), .path = "learn.html" },
         .games = site.games,
         .in = site.view.region.in(),
         .when = site.when,

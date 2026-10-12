@@ -354,3 +354,39 @@ h3.opp-h .muted { font-weight: 400; font-size: 13px; }
   table.tl .champ img { display: none; }
   .table-scroll td.num { white-space: normal; }
 }
+.home-hero { padding: 28px 0 8px; }
+.home-hero h1 { font-size: 34px; max-width: 760px; }
+.home-hero .lookup { display: flex; gap: 8px; max-width: 520px; margin: 20px 0 8px; }
+.home-hero .lookup input { font-size: 17px; padding: 10px 12px; }
+.home-hero .lookup button { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 700; }
+.pillar h3 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pillar p { margin: 0 0 10px; }
+.chip {
+  font-size: 12px; font-weight: 600; color: var(--good); border: 1px solid var(--good);
+  border-radius: 999px; padding: 0 8px;
+}
+.chip.soon { color: var(--muted); border-color: var(--line); }
+.eg {
+  background: var(--panel-2); border-radius: 8px; padding: 8px 10px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.eg span { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.tile b { display: block; font-size: 24px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.tile span { display: block; color: var(--text); font-size: 14px; margin-top: 2px; }
+.tile small { display: block; color: var(--muted); font-size: 13px; margin-top: 4px; }
+@media (max-width: 480px) {
+  .home-hero h1 { font-size: 26px; }
+  .tiles { grid-template-columns: 1fr 1fr; }
+  .tile b { font-size: 20px; }
+}
+.bench { margin-top: 40px; }
+@media (min-width: 900px) {
+  .home-hero { display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; align-items: center; }
+  .pillars { grid-template-columns: repeat(3, 1fr); }
+}
+.sample { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 16px; }
+.sample > p { margin: 0 0 10px; font-size: 13px; }
+.sample .tiles { grid-template-columns: 1fr 1fr; }
+.sample .tile { background: var(--panel-2); }

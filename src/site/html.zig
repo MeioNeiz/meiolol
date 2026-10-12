@@ -21,7 +21,7 @@ const preview_banner =
     \\
 ;
 
-pub const Nav = enum { matchups, daily, learn, pool, champions, method, none };
+pub const Nav = enum { your, matchups, daily, learn, pool, champions, method, none };
 
 pub const Region = enum {
     euw,
@@ -181,6 +181,7 @@ const meio_view =
 const NavItem = struct { nav: Nav, path: []const u8, label: []const u8, in_view: bool };
 
 const nav_items = [_]NavItem{
+    .{ .nav = .your, .path = "your.html", .label = "Your games", .in_view = false },
     .{ .nav = .matchups, .path = "matchup/index.html", .label = "Matchups", .in_view = true },
     .{ .nav = .daily, .path = "daily.html", .label = "Daily Draft", .in_view = false },
     .{ .nav = .learn, .path = "learn.html", .label = "Learn", .in_view = false },
