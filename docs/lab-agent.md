@@ -1,8 +1,10 @@
 # Lab agent: LLM-run model experiments
 
-Design, 2026-10-12, not built. A Claude Code session proposes, runs and analyses model
-experiments overnight on the gpu-box; a harness it cannot change scores them and keeps
-the record. Evidence: research/questions/llm-experiment-agent.md (C1-C20 below).
+A Claude Code session proposes, runs and analyses model experiments on the gpu-box; a
+harness it cannot change scores them and keeps the record. Harness built 2026-10-12
+(53b0577); search tools and the brief next (Build order). Evidence:
+research/questions/llm-experiment-agent.md (C1-C20) and smart-experiment-search.md
+(S1-S12 below means its C1-C12).
 
 ## Why this shape
 
@@ -13,165 +15,182 @@ the record. Evidence: research/questions/llm-experiment-agent.md (C1-C20 below).
   C13, C14). None of the published loops guard against that (C15); we must
 - Agents game scorers they can see and invent results (C17, C19): scoring and records
   belong to the harness, never the agent
+- Smart, not brute force: diagnose, screen cheaply, size the effect, then run few
+  experiments fully (S1-S12, "Search" below)
 
 ## Pieces
 
 | piece | who writes it | what |
 |---|---|---|
-| src/lab/api.zig | us, read-only to the agent | the candidate interface and masked data |
-| src/lab/harness.zig | us, read-only | splits, masking, scoring, ladder, records |
-| src/lab/cand/<campaign>/*.zig | the agent, only here | one candidate model per campaign |
-| ~/ml/lab/<snap>/ on the gpu-box | harness only | run records, ladder state, look budget |
-| <campaign>/digest.md | the agent | what worked and what didn't, by run id |
+| src/lab/api.zig | us, read-only to the agent | the candidate interface |
+| src/lab/harness.zig | us, read-only | splits, queries, baseline, scoring, ladder |
+| src/lab/exp.zig | us, read-only | `meiolol-lab exp`: records, summary, final |
+| src/lab/cand/<campaign>/ | the agent, only here | the candidate model; digest.md |
+| deploy/lab-exp.sh | us | the agent's only way to run and read results |
+| ~/ml/lab/<snapshot>/ on the host | harness only | runs.tsv, looks.tsv, best-*.tsv, finals.tsv |
 | docs/lab-brief.md | us | the agent's brief (program.md in autoresearch) |
 
 The agent is a plain Claude Code session with the brief and narrow permissions, not a
 framework (autoresearch's form, C2).
 
-## Candidate interface
+## Candidate interface (src/lab/api.zig)
 
-One function: fit on the labels you can see, predict every row.
+A candidate fits on the visible training games, then predicts one query at a time:
 
 ```zig
-// src/lab/api.zig
-pub const Input = struct {
-    games: []const rows.Game,
-    rows: []const rows.Row, // y is NaN wherever the harness hides it
-    seed: u64,
-    deadline_ns: i96,
-};
-// a candidate module exports:
-pub fn predict(gpa: std.mem.Allocator, in: *const Input, out: [][rows.outcome_count]f32) !void;
+pub const scope: api.Scope = .champ_select; // or .post_game
+pub const Model = struct { ... };
+pub fn fit(gpa: Allocator, train: *const api.Train, opts: api.Options) !Model;
+pub fn predict(m: *const Model, q: *const api.Query) api.Prediction;
+pub fn deinit(m: *Model, gpa: Allocator) void;
+pub const seeded = true; // optional: the harness averages 3 seeds
 ```
 
-The harness calls it three times with different masks, so the same code is scored at
-three levels without the candidate knowing which:
-
-| call | labels visible | scored on | who sees the result |
-|---|---|---|---|
-| dev | train minus dev-val | dev-val | the agent, in full |
-| select | all train | selection set | the agent, ladder answer only |
-| final | train + selection | test | `exp final`, a human command |
-
-The candidate module gets only `std`, `core` and `api` as imports in build.zig, and Zig
-refuses `@import` of files outside its own directory, so it cannot reach rows.zig, the
-snapshot loader or the split. The harness also rejects a candidate whose source mentions
-`std.Io`, `std.fs` or `std.process` (no reading the snapshot or labels behind its back).
-Hidden tests are what stopped gaming in ImpossibleBench (C18).
+- Train: the phase's visible games and rows, every outcome (training labels)
+- Query: one player in one game as champ select knows it: start, patch, platform, side,
+  role, champion, own rank, both teams' champions by role. Never an outcome; other
+  players' ranks only for `post_game` (docs/production-key.md; meiolol-cf's two rules:
+  scope enforced by the harness, no leakage by construction). A test checks Query has
+  no outcome field
+- Prediction: every outcome; NaN means no opinion, scored as the baseline, so a
+  candidate can work on one target
+- The candidate module imports only `std` and `api` (build.zig); Zig refuses imports
+  outside the module's directory. deploy/lab-exp.sh also refuses candidates that name
+  std.Io, fs, process, posix, os, c, net, http or asm. Hidden tests are what stopped
+  gaming in ImpossibleBench (C18)
 
 ## Splits
 
-Protocol's split stays (docs/model.md "Shared protocol"): test = newest 20% of EUW1
-games. Train is cut further by time, both on EUW1 like test:
+Protocol's split stays (docs/model.md "Shared protocol"): test = newest 20% of EUW1.
+Inside train, by time on EUW1: selection = newest 20% of non-test EUW1 games, dev-val =
+the next 20%. Each phase sees only older games, every platform:
 
-- selection: newest 20% of the remaining EUW1 games
-- dev-val: the next newest 20% of EUW1 games
-- dev-train: everything older, every platform
+| phase | visible (fit on) | scored on | who sees the result |
+|---|---|---|---|
+| dev | games older than dev-val | dev-val | the agent, in full |
+| select | games older than selection | selection | the agent, ladder answer only |
+| final | all train | test | `lab-exp.sh final`, humans only |
 
-A new snapshot moves every boundary forward, so the look budget starts fresh on games no
-one has selected on.
+A new snapshot moves every boundary forward and starts a fresh look budget.
 
 ## Scoring
 
-- Per outcome (win, gold14, lanediff14, cs10, deaths15, first_item): log loss for win,
-  MSE standardised per role for the rest, censored first_item rows left out (protocol)
-- Every comparison paired per row and clustered by game, 95% interval (enemy.zig's
-  pairedDiff moves into harness.zig and both use it)
-- Each run also scores the baselines on the same rows: champion-role mean for everyone,
-  3c's additive model for 2a-style campaigns (plan: 2a must beat 3c)
-- Deterministic models run once; models with a seed run 3 seeds and the harness averages
-  predictions before scoring (single fixed-seed runs keep noise, C15)
+- Per row and outcome: log loss for win (the row's team), squared error in the role's
+  standard deviation for the rest; NaN outcomes (no timeline to 15:00, censored
+  first_item) left out
+- Baseline: champion-role mean fitted on the same visible rows (win pulled to the role
+  rate by 1000 rows); src/lab/cand/base is the same model, so a new campaign starts level
+- Every comparison paired per row, 95% interval clustered by game
+- First smoke run (2026-10-12, snapshot 20261012T2055Z): dev-val 80,190 gold14 rows,
+  run time 16 s on the gpu-box plus ~80 s building
 
 ## The ladder (selection set)
 
-The agent never sees a raw selection score. Per snapshot the harness keeps a current
-best; a `select` call answers:
+The agent never sees a raw selection score. Per snapshot and target the harness keeps
+a current best (the baseline until beaten). A `--select` run answers "new best" with
+its gain over the previous best when the paired interval's upper bound is below 0, else
+"no change" with no number: Blum and Hardt's Ladder with our paired test (C16). Budget:
+50 looks per snapshot, shared by every campaign (overfitting shows after 30-40 tuning
+looks, C13); then select refuses until the next snapshot. Dev scores are unlimited: the
+agent may overfit dev-val, and the ladder catches it.
 
-- "new best" with its gain over the previous best and interval, when the paired
-  interval's upper bound is below 0 for the campaign's target outcome
-- "no change" otherwise, with no number
-
-This is Blum and Hardt's Ladder with our paired test (C16): error grows with log k, not
-sqrt k. Budget: 50 `select` calls per snapshot, shared by every campaign on it (they
-all adapt to the same games; Cawley and Talbot see overfitting after 30-40 tuning
-looks, C13). When it runs out, select refuses until the next snapshot. Dev scores are
-unlimited: the agent may overfit dev-val, and the ladder is what catches it.
-
-## Commands (meiolol-lab exp)
+## Commands (deploy/lab-exp.sh)
 
 ```
-exp run CAMPAIGN NAME [--target OUTCOME]   dev score, plus select if --select
-exp table CAMPAIGN [--top N]                one line per run, sorted by dev gain
-exp show RUN                                meta, diff vs best, dev per outcome and role
-exp compare RUN_A RUN_B                     paired dev diff by outcome, role, patch, rank
-exp restore CAMPAIGN RUN                    copy a run's candidate back into cand/
-exp stop CAMPAIGN "REASON"                  flag for a human: nothing real left
-exp final SNAP [--top 3]                    human only: test score of the top 3 by select
+new CAMPAIGN [FROM]                  candidate dir from FROM (default base)
+run CAMPAIGN NAME TARGET [--select] [--desc TEXT]
+table [CAMPAIGN] | looks | show RUN  records; summary.md: dev by outcome, role, patch, tier
+restore CAMPAIGN RUN                 a run's candidate back (sessions share main: no git
+                                     reset; the candidate's history is the run records)
+stop CAMPAIGN REASON                 flag for a human: nothing real left
+final CAMPAIGN TARGET [N]            humans only: test score of the last N select winners
 ```
 
-- `run` goes through deploy/lab-run.sh (gpu-box, League watcher, run dir with diff) with
-  a fixed wall-clock budget, 10 minutes by default, so runs compare (C2). Killed at 2x
-  and recorded as crash. Output to the run log; the agent gets one summary line and the
-  log tail only on a crash (C7)
-- Every run is recorded, crashes and discards too (C9): runs.tsv (run id, campaign,
-  stamp, candidate hash, target, dev gain and interval per outcome, select verdict,
-  status, one-line description) plus the candidate source and stdout in the run dir.
-  Written by the harness, read-only to the agent
-- `restore` replaces autoresearch's git reset: sessions share main, so the agent never
-  resets or branches; the candidate's history lives in the run records
-- `compare` is the analysis tool: where a gain comes from (one role, one patch, one rank
-  band) is what decides whether it is real or a quirk
-- `final` scores a campaign's top 3 by select, not only the best (choosing the final
-  model is most of the validation-test gap; top-3 hedging recovers ~10%, C14). Every
-  call is logged in the snapshot's record, so an extra look shows
+- Each run builds HEAD plus the candidate in a clean temporary tree (as the pre-push
+  hook does), so other sessions' half-done edits never break a run and scoring is
+  always the committed harness. It runs through deploy/lab-run.sh (League watcher, run
+  dir with candidate source, meta and log) with a fixed budget (LAB_BUDGET_S, 600 s
+  of running time, killed at 2x, paused time not counted; C2)
+- Output goes to the log; the agent gets the RESULT line, or the log tail on a crash
+  (C7). Every run is a line in runs.tsv, crashes too (C9)
+- `final` scores the last N winners, not only the best (final-model choice is most of
+  the validation-test gap; top-3 hedging recovers ~10%, C14); every call is logged
 
-## The agent's loop (docs/lab-brief.md)
+## Search: how the agent decides what to run
 
-1. Read digest.md and `exp table`
-2. Propose one atomic change to the candidate (C3), with the hypothesis in one line
-3. `exp run`; on crash, fix up to 3 times, then restore the best and move on
-4. Keep a dev gain whose interval excludes 0 as the new working candidate; spend a
-   `select` look only on a dev gain that survives `exp compare` (not one role or patch)
-5. Every 10 runs, rewrite digest.md: what worked, what didn't, by run id, then ideas
-   (analysis and advice separate, C10). Numbers only as run ids; the harness's records
-   are the source (C19)
-6. Stop with `exp stop` when 30 runs bring no dev gain or the look budget is spent, and
-   say so. The brief rewards stopping at noise over pushing on (flag exit, C18)
+Box's loop, not brute force (S1, S2): every experiment answers a named misfit, is sized
+before it runs, and is recorded as a hypothesis with an outcome.
 
-The brief shows time and looks remaining each run (C7). It says not to game the scorer,
-but nothing depends on that working (C17).
+1. **Diagnose.** Read the current best's dev residuals sliced by covariates it doesn't
+   use yet (enemy lane champion, ally jungler, champion class, patch, rank tier, side,
+   game start hour). A slice with a consistent sign names a misfit (S2). Tool: `exp
+   diagnose` (to build)
+2. **Hypothesise.** One line: mechanism, the slice it fixes, expected direction and
+   rough size. Written to the campaign's hypotheses.tsv before running (S6). Domain
+   context (draft theory, field meanings) is what made LLM features work (S3)
+3. **Screen without a full run.** The candidate's Model exposes cheap features; `exp
+   screen` fits each alone on dev-train residuals (within champion-role, a score test,
+   S4) and reports its dev gain and interval in seconds. Only features whose gain
+   clears the dev interval go on (S5). Ideas below the detectable size are parked as
+   "inconclusive at this data size", not run and called refuted (S5)
+4. **Size it.** The smallest detectable gain is ~1.4x the dev interval half-width
+   (80% power); runs.tsv's recent intervals give it. A plausible effect below it waits
+   for data
+5. **Run, one atomic change** (C3), full data (close scores need full fidelity, S9).
+   Keep it as the working candidate when its dev interval excludes 0
+6. **Check it's general before a look.** The summary's slices: a gain from one role,
+   patch or tier is a quirk until shown otherwise. Then, for gains that need data,
+   `--fraction 0.25/0.5` runs: a gap growing with data means real and data-limited;
+   flat near 0 means no effect (S10). Subsets screen crashes and clear losers, never
+   near-ties (S8)
+7. **Spend a selection look** only on a dev gain that survived 5 and 6
+8. **Numbers by a routine, structure by the LLM.** Once a structure is fixed, its
+   numeric settings (prior strengths, L2, dims) go to a small grid or TPE on dev, not
+   to the LLM's guesses (S7). Scale any prior by games, or subsets mislead (S8)
+9. **Prefer one bigger shrunk model** over picking among many similar ones: add the
+   candidate terms together under shrinkage (S12)
+
+Schedule: the brief rotates action types (diagnose, follow up, new idea, combine) and
+the agent picks the concrete experiment; no bandit (S11). Every 10 runs it rewrites
+digest.md: what worked and what didn't by run id, then ideas (C10). Numbers only as run
+ids, the harness's records are the source (C19). It stops with `stop` after 30 runs
+without a dev gain or when looks run out; the brief rewards stopping at noise (C18).
 
 ## Several campaigns
 
-Variety comes from several short campaigns with different briefs rather than one long
-session (best-of-k, C6; context resets, C6): e.g. one per outcome, or one each for
-3c-style shrinkage, 2a-style embeddings, comp features. They share the look budget.
-Fleet starts them (one session per campaign); the coordinator reads digests in the
-morning.
+Variety comes from several short campaigns with different briefs (best-of-k, C6): e.g.
+one per outcome, or 3c-style shrinkage, 2a-style embeddings, comp features. They share
+the look budget. Fleet starts them, one session per campaign; the coordinator reads
+digests in the morning.
 
 ## Permissions
 
-Each agent session gets .claude/settings deny rules: Edit and Write outside
-src/lab/cand/<campaign>/ and its digest; Bash `exp final`, git reset/checkout/push,
-ssh except through deploy/lab-exp.sh. The threat is a model taking a shortcut, not an
-attacker: permissions, module imports and logged looks make shortcuts visible rather
-than impossible.
+Each agent session gets deny rules: Edit and Write outside src/lab/cand/<campaign>/;
+Bash `lab-exp.sh final`, git reset/checkout/commit/push, direct ssh. The clean-tree
+build already means edits outside the candidate never reach a run. The threat is a
+model taking a shortcut, not an attacker: permissions, module imports, the clean build
+and logged looks make shortcuts visible rather than impossible.
 
 ## Build order
 
-1. api.zig and harness.zig: masking, three calls, scoring, ladder, records; tests on a
-   fixture snapshot (a candidate that reads hidden labels must fail to build; the ladder
-   must answer "no change" to pure noise)
-2. Port base, 3c additive and 2a fm as candidates; the harness must reproduce enemy.zig
-   and outcomes.zig numbers on the same snapshot
-3. `exp` commands, deploy/lab-exp.sh, lab-brief.md, permissions
-4. One campaign, one night, continuous outcomes (more signal than win), reviewed by
+1. Done (53b0577): api, harness (fit/predict, scope masking, cuts, baseline, paired
+   clustered intervals, ladder), `exp run|final`, lab-exp.sh, tests (no scored game or
+   other rank reaches a candidate; Query has no outcome; noise doesn't pass the ladder,
+   a real gain does). Smoke run on the gpu-box
+2. Search tools: hypotheses.tsv and `--hyp` in runs.tsv; `--fraction`; `exp screen`;
+   `exp diagnose`; MDE line in the summary
+3. docs/lab-brief.md and the permission set; champion metadata (Riot class tags) in
+   api.Train for comp features
+4. Port base, 3c additive and 2a fm as candidates; the harness must reproduce their
+   numbers on the same snapshot
+5. One campaign, one night, continuous outcomes (more signal than win), reviewed by
    hand before running several
 
 ## Open
 
 - Cost per run in tokens: no source gives it; measure on the first campaign
-- At ~8k-27k games nothing beats base rates on win; whether the agent finds anything
-  before data grows is the first campaign's question
-- Budget of 50 looks is a guess between Cawley's 30-40 and the Ladder's log k; Roelofs
-  2019 and Recht 2019 (unread) argue holdout reuse overfits less than feared
+- Win: nothing beats base rates at current volume; the first campaigns target the
+  continuous outcomes
+- 50 looks is a guess between Cawley's 30-40 and the Ladder's log k; Roelofs 2019 and
+  Recht 2019 (unread) argue holdout reuse overfits less than feared
+- Build time (~80 s) dominates a 16 s run: a persistent build tree would cut it

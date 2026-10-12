@@ -5,7 +5,10 @@
 # (the log's tail on a crash). Records live on the host in ~/ml/lab/<snapshot>/.
 #
 #   deploy/lab-exp.sh new CAMPAIGN [FROM]          candidate dir from FROM (default base)
-#   deploy/lab-exp.sh run CAMPAIGN NAME TARGET [--select] [--desc TEXT]
+#   deploy/lab-exp.sh run CAMPAIGN NAME TARGET [--select] [--fraction F] [--hyp ID]
+#                         [--desc TEXT]
+#   deploy/lab-exp.sh screen CAMPAIGN TARGET       dev: the candidate's features one by one
+#   deploy/lab-exp.sh diagnose CAMPAIGN TARGET     dev: residual bias by covariate
 #   deploy/lab-exp.sh table [CAMPAIGN]             runs, best dev gain first
 #   deploy/lab-exp.sh looks                        the ladder's selection looks
 #   deploy/lab-exp.sh show RUN                     summary.md: dev by outcome, role, patch, tier
@@ -38,7 +41,7 @@ on() {
 }
 
 usage() {
-    sed -n '7,16p' "$0"
+    sed -n '7,20p' "$0"
     exit 2
 }
 
@@ -108,6 +111,7 @@ case "$cmd" in
         cp "$ROOT/$from"/*.zig "$ROOT/$dir/"
         printf '# %s digest\n\nWhat worked, what did not, by run id; then ideas.\n' "$1" \
             > "$ROOT/$dir/digest.md"
+        printf 'id\tstatus\truns\thypothesis\n' > "$ROOT/$dir/hypotheses.tsv"
         echo "$dir from $from"
         ;;
     run)
@@ -121,6 +125,7 @@ case "$cmd" in
         while (( $# )); do
             case "$1" in
                 --select) extra+=(--select) ;;
+                --fraction|--hyp) extra+=("$1" "$(printf '%q' "$2")"); shift ;;
                 --desc) extra+=(--desc "$(printf '%q' "$2")"); shift ;;
                 *) echo "unknown option $1"; exit 2 ;;
             esac
@@ -138,6 +143,18 @@ case "$cmd" in
             echo "RESULT run=$run crash"
             exit 1
         fi
+        ;;
+    screen|diagnose)
+        (( $# == 2 )) || usage
+        campaign=$1 target=$2
+        dir=$(campaign_dir "$campaign")
+        guard "$ROOT/$dir"
+        out=$(start_clean "$campaign-$cmd" "$dir" exp "$cmd" "$SNAP_PATH" "$campaign" "$target" \
+            --lab "$LAB_PATH")
+        run=$(sed -n 's/^started \([^ ]*\) on .*/\1/p' <<< "$out")
+        [[ -n "$run" ]] || { echo "$out"; exit 1; }
+        wait_run "$run" || true
+        on "cat ml/runs/$run/log"
         ;;
     table)
         filter=${1:-}

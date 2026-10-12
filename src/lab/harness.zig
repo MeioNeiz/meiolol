@@ -60,6 +60,17 @@ pub fn cuts(gpa: std.mem.Allocator, d: *const rows.Data, eu: u8) !Cuts {
     return .{ .select = starts.items[n - 1], .dev = starts.items[2 * n - 1], .eu = eu };
 }
 
+/// Keeps a fixed share of games, the same ones at every size (nested subsets for
+/// learning curves); 1 keeps all
+pub fn inFraction(g: rows.Game, fraction: f64) bool {
+    if (fraction >= 1) return true;
+    var h = std.hash.Wyhash.init(0x1ab);
+    h.update(std.mem.asBytes(&g.start));
+    h.update(std.mem.asBytes(&g.platform));
+    const u: f64 = @floatFromInt(h.final() >> 11);
+    return u / @as(f64, 1 << 53) < fraction;
+}
+
 pub fn visible(p: Phase, c: Cuts, g: rows.Game) bool {
     if (g.is_test) return false;
     return switch (p) {
@@ -116,7 +127,10 @@ pub const Visible = struct {
     }
 };
 
-pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2][5]?u8, p: Phase, c: Cuts) !Visible {
+/// fraction: share of the visible games kept (dev only: selection and test always fit
+/// on everything)
+pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2][5]?u8, p: Phase, c: Cuts, fraction: f64) !Visible {
+    std.debug.assert(p == .dev or fraction >= 1);
     var v: Visible = .{ .arena = .init(gpa), .train = .{ .games = &.{}, .rows = &.{} } };
     errdefer v.deinit();
     const a = v.arena.allocator();
@@ -124,13 +138,14 @@ pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2
     defer gpa.free(index);
     var games: std.ArrayList(api.Game) = .empty;
     for (d.games, index, ranks) |g, *i, rk| {
-        if (!visible(p, c, g)) continue;
+        if (!visible(p, c, g) or !inFraction(g, fraction)) continue;
         i.* = @intCast(games.items.len);
         try games.append(a, .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = rk });
     }
     var out: std.ArrayList(api.Row) = .empty;
     for (d.rows) |r| {
-        if (!visible(p, c, d.games[r.game])) continue;
+        const g = d.games[r.game];
+        if (!visible(p, c, g) or !inFraction(g, fraction)) continue;
         try out.append(a, .{
             .game = index[r.game],
             .side = r.side,
@@ -253,9 +268,9 @@ pub const Scores = struct {
     }
 };
 
-pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2][5]?u8, c: Cuts, p: Phase) !Scores {
+pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, ranks: []const [2][5]?u8, c: Cuts, p: Phase, fraction: f64) !Scores {
     comptime checkCandidate(C);
-    var v = try buildTrain(gpa, d, ranks, p, c);
+    var v = try buildTrain(gpa, d, ranks, p, c, fraction);
     defer v.deinit();
     var base = try Baseline.fit(gpa, &v.train);
     defer base.deinit(gpa);
@@ -378,13 +393,13 @@ pub fn ladder(game: []const u32, cand: []const f64, best: []const f64, looks: us
 
 // Tests: a fixture of synthetic games, no snapshot
 
-const Fixture = struct {
+pub const Fixture = struct {
     data: rows.Data,
 
     /// n games a minute apart, a third EUW1 (platform 0); gold14 = 5000, +400 for champion
-    /// 1 in any role, + noise (sd 300); win a coin flip. +200 is below what the selection
-    /// set can detect at 3000 games
-    fn init(gpa: std.mem.Allocator, n: usize, seed: u64) !Fixture {
+    /// 1 in any role, -300 with champion 2 on the enemy team, + noise (sd 300); win a coin
+    /// flip. +200 on champion 1 is below what the selection set can detect at 3000 games
+    pub fn init(gpa: std.mem.Allocator, n: usize, seed: u64) !Fixture {
         var data: rows.Data = .{ .arena = .init(gpa), .games = &.{}, .rows = &.{} };
         errdefer data.deinit();
         const a = data.arena.allocator();
@@ -415,7 +430,8 @@ const Fixture = struct {
                 const ch = teams[side][slot % 5];
                 var y: [rows.outcome_count]f32 = @splat(std.math.nan(f32));
                 y[@backingInt(rows.Outcome.win)] = @floatFromInt(@intFromBool(side == winner));
-                const bump: f32 = if (ch == 1) 400 else 0;
+                var bump: f32 = if (ch == 1) 400 else 0;
+                if (std.mem.indexOfScalar(u32, &teams[1 - side], 2) != null) bump -= 300;
                 y[@backingInt(rows.Outcome.gold14)] = 5000 + bump + 300 * @as(f32, @floatCast(rnd.floatNorm(f64)));
                 try out.append(a, .{
                     .game = @intCast(gi),
@@ -519,11 +535,11 @@ test "candidates see no scored games and no other ranks in champ select" {
     for ([_]Phase{ .dev, .select, .final }) |p| {
         Spy.saw_ranks = false;
         Spy.newest_query = std.math.maxInt(i64);
-        var v = try buildTrain(gpa, &f.data, ranks, p, c);
+        var v = try buildTrain(gpa, &f.data, ranks, p, c, 1);
         defer v.deinit();
         var newest: i64 = std.math.minInt(i64);
         for (v.train.games) |g| newest = @max(newest, g.start);
-        var s = try score(Spy, gpa, &f.data, ranks, c, p);
+        var s = try score(Spy, gpa, &f.data, ranks, c, p, 1);
         defer s.deinit(gpa);
         try std.testing.expect(s.row.len > 0);
         try std.testing.expect(newest < Spy.newest_query);
@@ -551,7 +567,7 @@ test "ladder: noise never wins, a real gain does" {
     const c = try cuts(gpa, &f.data, 0);
     const k = api.outcomeIndex(.gold14);
 
-    var noise = try score(Noise, gpa, &f.data, ranks, c, .select);
+    var noise = try score(Noise, gpa, &f.data, ranks, c, .select, 1);
     defer noise.deinit(gpa);
     const ln = try noise.losses(gpa, &f.data, k, null, .cand);
     defer gpa.free(ln);
@@ -561,7 +577,7 @@ test "ladder: noise never wins, a real gain does" {
     try std.testing.expect(ladder(noise.game, ln, lb, look_budget) == .budget_spent);
 
     // The baseline knows champion 1's +400; a single mean doesn't
-    var flat = try score(RoleMean, gpa, &f.data, ranks, c, .select);
+    var flat = try score(RoleMean, gpa, &f.data, ranks, c, .select, 1);
     defer flat.deinit(gpa);
     const lf = try flat.losses(gpa, &f.data, k, null, .cand);
     defer gpa.free(lf);
@@ -577,4 +593,17 @@ test "paired interval clusters by game" {
     try std.testing.expectEqual(@as(usize, 8), p.n);
     try std.testing.expectApproxEqAbs(@as(f64, 0.5), p.diff, 1e-12);
     try std.testing.expect(p.half > 0.4);
+}
+
+test "fractions are nested" {
+    var prng: std.Random.DefaultPrng = .init(3);
+    var kept: [3]usize = @splat(0);
+    for (0..2000) |i| {
+        const g: rows.Game = .{ .match_id = "", .start = @intCast(i * 7919 + prng.random().int(u16)), .patch = 0, .platform = 0, .is_test = false, .teams = undefined, .winner = 0 };
+        const in = [3]bool{ inFraction(g, 0.25), inFraction(g, 0.5), inFraction(g, 1) };
+        if (in[0]) try std.testing.expect(in[1]);
+        for (in, &kept) |x, *k| k.* += @intFromBool(x);
+    }
+    try std.testing.expect(kept[0] > 400 and kept[0] < 600);
+    try std.testing.expectEqual(@as(usize, 2000), kept[2]);
 }

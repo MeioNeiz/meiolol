@@ -1,0 +1,3871 @@
+Journal of Machine Learning Research 18 (2018) 1-52
+
+Submitted 11/16; Revised 12/17; Published 4/18
+
+Hyperband: A Novel Bandit-Based Approach to
+Hyperparameter Optimization
+Lisha Li
+
+lishal@cs.cmu.edu
+
+Carnegie Mellon University, Pittsburgh, PA 15213
+
+Kevin Jamieson
+
+jamieson@cs.washington.edu
+
+arXiv:1603.06560v4 [cs.LG] 18 Jun 2018
+
+University of Washington, Seattle, WA 98195
+
+Giulia DeSalvo
+
+giuliad@google.com
+
+Google Research, New York, NY 10011
+
+Afshin Rostamizadeh
+
+rostami@google.com
+
+Google Research, New York, NY 10011
+
+Ameet Talwalkar
+
+talwalkar@cmu.edu
+
+Carnegie Mellon University, Pittsburgh, PA 15213
+Determined AI
+
+Editor: Nando de Freitas
+
+Abstract
+Performance of machine learning algorithms depends critically on identifying a good set of
+hyperparameters. While recent approaches use Bayesian optimization to adaptively select
+configurations, we focus on speeding up random search through adaptive resource allocation
+and early-stopping. We formulate hyperparameter optimization as a pure-exploration nonstochastic infinite-armed bandit problem where a predefined resource like iterations, data
+samples, or features is allocated to randomly sampled configurations. We introduce a novel
+algorithm, Hyperband, for this framework and analyze its theoretical properties, providing
+several desirable guarantees. Furthermore, we compare Hyperband with popular Bayesian
+optimization methods on a suite of hyperparameter optimization problems. We observe
+that Hyperband can provide over an order-of-magnitude speedup over our competitor set
+on a variety of deep-learning and kernel-based learning problems.
+Keywords: hyperparameter optimization, model selection, infinite-armed bandits, online
+optimization, deep learning
+
+1. Introduction
+In recent years, machine learning models have exploded in complexity and expressibility at the
+price of staggering computational costs. Moreover, the growing number of tuning parameters
+associated with these models are difficult to set by standard optimization techniques. These
+“hyperparameters” are inputs to a machine learning algorithm that govern how the algorithm’s
+performance generalizes to new, unseen data; examples of hyperparameters include those
+that impact model architecture, amount of regularization, and learning rates. The quality of
+a predictive model critically depends on its hyperparameter configuration, but it is poorly
+understood how these hyperparameters interact with each other to affect the resulting model.
+c 2018 Lisha Li, Kevin Jamieson, Giulia DeSalvo, Afshin Rostamizadeh and Ameet Talwalkar.
+License: CC-BY 4.0, see https://creativecommons.org/licenses/by/4.0/. Attribution requirements are provided
+at http://jmlr.org/papers/v18/16-558.html.
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+(a) Configuration Selection
+
+(b) Configuration Evaluation
+
+Figure 1: (a) The heatmap shows the validation error over a two-dimensional search space
+with red corresponding to areas with lower validation error. Configuration selection
+methods adaptively choose new configurations to train, proceeding in a sequential
+manner as indicated by the numbers. (b) The plot shows the validation error as
+a function of the resources allocated to each configuration (i.e. each line in the
+plot). Configuration evaluation methods allocate more resources to promising
+configurations.
+
+Consequently, practitioners often default to brute-force methods like random search and
+grid search (Bergstra and Bengio, 2012).
+In an effort to develop more efficient search methods, the problem of hyperparameter
+optimization has recently been dominated by Bayesian optimization methods (Snoek et al.,
+2012; Hutter et al., 2011; Bergstra et al., 2011) that focus on optimizing hyperparameter
+configuration selection. These methods aim to identify good configurations more quickly than
+standard baselines like random search by selecting configurations in an adaptive manner; see
+Figure 1(a). Existing empirical evidence suggests that these methods outperform random
+search (Thornton et al., 2013; Eggensperger et al., 2013; Snoek et al., 2015b). However,
+these methods tackle the fundamentally challenging problem of simultaneously fitting and
+optimizing a high-dimensional, non-convex function with unknown smoothness, and possibly
+noisy evaluations.
+An orthogonal approach to hyperparameter optimization focuses on speeding up configuration evaluation; see Figure 1(b). These approaches are adaptive in computation, allocating
+more resources to promising hyperparameter configurations while quickly eliminating poor
+ones. Resources can take various forms, including size of training set, number of features,
+or number of iterations for iterative algorithms. By adaptively allocating resources, these
+approaches aim to examine orders-of-magnitude more hyperparameter configurations than
+approaches that uniformly train all configurations to completion, thereby quickly identifying
+good hyperparameters. While there are methods that combine Bayesian optimization with
+adaptive resource allocation (Swersky et al., 2013, 2014; Domhan et al., 2015; Klein et al.,
+2
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+2017a), we focus on speeding up random search as it offers a simple and theoretically
+principled launching point (Bergstra and Bengio, 2012).1
+We develop a novel configuration evaluation approach by formulating hyperparameter
+optimization as a pure-exploration adaptive resource allocation problem addressing how to
+allocate resources among randomly sampled hyperparameter configurations.2 Our procedure,
+Hyperband, relies on a principled early-stopping strategy to allocate resources, allowing it
+to evaluate orders-of-magnitude more configurations than black-box procedures like Bayesian
+optimization methods. Hyperband is a general-purpose technique that makes minimal
+assumptions unlike prior configuration evaluation approaches (Domhan et al., 2015; Swersky
+et al., 2014; György and Kocsis, 2011; Agarwal et al., 2011; Sparks et al., 2015; Jamieson
+and Talwalkar, 2015).
+Our theoretical analysis demonstrates the ability of Hyperband to adapt to unknown
+convergence rates and to the behavior of validation losses as a function of the hyperparameters.
+In addition, Hyperband is 5× to 30× faster than popular Bayesian optimization algorithms
+on a variety of deep-learning and kernel-based learning problems. A theoretical contribution
+of this work is the introduction of the pure-exploration, infinite-armed bandit problem in
+the non-stochastic setting, for which Hyperband is one solution. When Hyperband is
+applied to the special-case stochastic setting, we show that the algorithm comes within log
+factors of known lower bounds in both the infinite (Carpentier and Valko, 2015) and finite
+K-armed bandit settings (Kaufmann et al., 2015).
+The paper is organized as follows. Section 2 summarizes related work in two areas:
+(1) hyperparameter optimization, and (2) pure-exploration bandit problems. Section 3
+describes Hyperband and provides intuition for the algorithm through a detailed example.
+In Section 4, we present a wide range of empirical results comparing Hyperband with
+state-of-the-art competitors. Section 5 frames the hyperparameter optimization problem as
+an infinite-armed bandit problem and summarizes the theoretical results for Hyperband.
+Finally, Section 6 discusses possible extensions of Hyperband.
+
+2. Related Work
+In Section 1, we briefly discussed related work in the hyperparameter optimization literature.
+Here, we provide a more thorough coverage of the prior work, and also summarize significant
+related work on bandit problems.
+2.1 Hyperparameter Optimization
+Bayesian optimization techniques model the conditional probability p(y|λ) of a configuration’s
+performance on an evaluation metric y (i.e., test accuracy), given a set of hyperparameters λ.
+1. Random search will asymptotically converge to the optimal configuration, regardless of the smoothness or
+structure of the function being optimized, by a simple covering argument. While the rate of convergence
+for random search depends on the smoothness and is exponential in the number of dimensions in the search
+space, the same is true for Bayesian optimization methods without additional structural assumptions
+(Kandasamy et al., 2015).
+2. A preliminary version of this work appeared in Li et al. (2017). We extend the previous paper with a
+thorough theoretical analysis of Hyperband; an infinite horizon version of the algorithm with application
+to stochastic infinite-armed bandits; additional intuition and discussion of Hyperband to facilitate its
+use in practice; and additional results on a collection of 117 multistage model selection tasks.
+
+3
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+Sequential Model-based Algorithm Configuration (SMAC), Tree-structure Parzen Estimator
+(TPE), and Spearmint are three well-established methods (Feurer et al., 2014). SMAC uses
+random forests to model p(y|λ) as a Gaussian distribution (Hutter et al., 2011). TPE is
+a non-standard Bayesian optimization algorithm based on tree-structured Parzen density
+estimators (Bergstra et al., 2011). Lastly, Spearmint uses Gaussian processes (GP) to model
+p(y|λ) and performs slice sampling over the GP’s hyperparameters (Snoek et al., 2012).
+Previous work compared the relative performance of these Bayesian searchers (Thornton
+et al., 2013; Eggensperger et al., 2013; Bergstra et al., 2011; Snoek et al., 2012; Feurer
+et al., 2014, 2015). An extensive survey of these three methods by Eggensperger et al.
+(2013) introduced a benchmark library for hyperparameter optimization called HPOlib,
+which we use for our experiments. Bergstra et al. (2011) and Thornton et al. (2013) showed
+Bayesian optimization methods empirically outperform random search on a few benchmark
+tasks. However, for high-dimensional problems, standard Bayesian optimization methods
+perform similarly to random search (Wang et al., 2013). Recent methods specifically designed
+for high-dimensional problems assume a lower effective dimension for the problem (Wang
+et al., 2013) or an additive decomposition for the target function (Kandasamy et al., 2015).
+However, as can be expected, the performance of these methods is sensitive to required
+inputs; i.e. the effective dimension (Wang et al., 2013) or the number of additive components
+(Kandasamy et al., 2015).
+Gaussian processes have also been studied in the bandit setting using confidence bound
+acquisition functions (GP-UCB), with associated sublinear regret bounds (Srinivas et al.,
+2010; Grünewälder et al., 2010). Wang et al. (2016) improved upon GP-UCB by removing
+the need to tune a parameter that controls exploration and exploitation. Contal et al.
+(2014) derived a tighter regret bound than that for GP-UCB by using a mutual information
+acquisition function. However, van der Vaart and van Zanten (2011) showed that the learning
+rate of GPs are sensitive to the definition of the prior through an example with a poor
+prior where the learning rate degraded from polynomial to logarithmic in the number of
+observations n. Additionally, without structural assumptions on the covariance matrix of
+the GP, fitting the posterior is O(n3 ) (Wilson et al., 2015). Hence, Snoek et al. (2015a) and
+Springenberg et al. (2016) proposed using Bayesian neural networks, which scale linearly
+with n, to model the posterior.
+Adaptive configuration evaluation is not a new idea. Maron and Moore (1997) and Mnih
+and Audibert (2008) considered a setting where the training time is relatively inexpensive
+(e.g., k-nearest-neighbor classification) and evaluation on a large validation set is accelerated
+by evaluating on an increasing subset of the validation set, stopping early configurations that
+are performing poorly. Since subsets of the validation set provide unbiased estimates of its
+expected performance, this is an instance of the stochastic best-arm identification problem
+for multi-armed bandits (see the work by Jamieson and Nowak, 2014, for a brief survey).
+In contrast, we address a setting where the evaluation time is relatively inexpensive and
+the goal is to early-stop long-running training procedures by evaluating partially trained
+models on the full validation set. Previous approaches in this setting either require strong
+assumptions or use heuristics to perform adaptive resource allocation. György and Kocsis
+(2011) and Agarwal et al. (2011) made parametric assumptions on the convergence behavior
+of training algorithms, providing theoretical performance guarantees under these assumptions.
+Unfortunately, these assumptions are often hard to verify, and empirical performance can
+4
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+drastically suffer when they are violated. Krueger et al. (2015) proposed a heuristic based
+on sequential analysis to determine stopping times for training configurations on increasing
+subsets of the data. However, the theoretical correctness and empirical performance of this
+method are highly dependent on a user-defined “safety zone.”
+Several hybrid methods combining adaptive configuration selection and evaluation have
+also been introduced (Swersky et al., 2013, 2014; Domhan et al., 2015; Kandasamy et al.,
+2016; Klein et al., 2017a; Golovin et al., 2017). The algorithm proposed by Swersky et al.
+(2013) uses a GP to learn correlation between related tasks and requires the subtasks as
+input, but efficient subtasks with high informativeness for the target task are unknown
+without prior knowledge. Similar to the work by Swersky et al. (2013), Klein et al. (2017a)
+modeled the conditional validation error as a Gaussian process using a kernel that captures
+the covariance with downsampling rate to allow for adaptive evaluation. Swersky et al.
+(2014), Domhan et al. (2015), and Klein et al. (2017a) made parametric assumptions on the
+convergence of learning curves to perform early-stopping. In contrast, Golovin et al. (2017)
+devised an early-stopping rule based on predicted performance from a nonparametric GP
+model with a kernel designed to measure the similarity between performance curves. Finally,
+Kandasamy et al. (2016) extended GP-UCB to allow for adaptive configuration evaluation
+by defining subtasks that monotonically improve with more resources.
+In another line of work, Sparks et al. (2015) proposed a halving style bandit algorithm
+that did not require explicit convergence behavior, and Jamieson and Talwalkar (2015)
+analyzed a similar algorithm originally proposed by Karnin et al. (2013) for a different
+setting, providing theoretical guarantees and encouraging empirical results. Unfortunately,
+these halving style algorithms suffer from the “n versus B/n” problem, which we will
+discuss in Section 3.1. Hyperband addresses this issue and provides a robust, theoretically
+principled early-stopping algorithm for hyperparameter optimization.
+We note that Hyperband can be combined with any hyperparameter sampling approach
+and does not depend on random sampling; the theoretical results only assume the validation
+losses of sampled hyperparameter configurations are drawn from some stationary distribution.
+In fact, subsequent to our submission, Klein et al. (2017b) combined adaptive configuration
+selection with Hyperband by using a Bayesian neural network to model learning curves and
+only selecting configurations with high predicted performance to input into Hyperband.
+2.2 Bandit Problems
+Pure exploration bandit problems aim to minimize the simple regret, defined as the distance
+from the optimal solution, as quickly as possible in any given setting. The pure-exploration
+multi-armed bandit problem has a long history in the stochastic setting (Even-Dar et al.,
+2006; Bubeck et al., 2009), and was recently extended to the non-stochastic setting by
+Jamieson and Talwalkar (2015). Relatedly, the stochastic pure-exploration infinite-armed
+bandit problem was studied by Carpentier and Valko (2015), where a pull of each arm i yields
+an i.i.d. sample in [0, 1] with expectation νi , where νi is a loss drawn from a distribution
+with cumulative distribution function, F . Of course, the value of νi is unknown to the player,
+so the only way to infer its value is to pull arm i many times. Carpentier and Valko (2015)
+proposed an anytime algorithm, and derived a tight (up to polylog factors) upper bound
+on its error assuming what we will refer to as the β-parameterization of F described in
+5
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+Section 5.3.2. However, their algorithm was derived specifically for the β-parameterization
+of F , and furthermore, they must estimate β before running the algorithm, limiting the
+algorithm’s practical applicability. Also, the algorithm assumes stochastic losses from the
+arms and thus the convergence behavior is known; consequently, it does not apply in our
+hyperparameter optimization setting.3 Two related lines of work that both make use of an
+underlying metric space are Gaussian process optimization (Srinivas et al., 2010) and Xarmed bandits (Bubeck et al., 2011), or bandits defined over a metric space. However, these
+works either assume stochastic rewards or need to know something about the underlying
+function (e.g. an appropriate kernel or level of smoothness).
+In contrast, Hyperband is devised for the non-stochastic setting and automatically
+adapts to unknown F without making any parametric assumptions. Hence, we believe our
+work to be a generally applicable pure exploration algorithm for infinite-armed bandits. To
+the best of our knowledge, this is also the first work to test out such an algorithm on a real
+application.
+
+3. Hyperband Algorithm
+In this section, we present the Hyperband algorithm. We provide intuition for the algorithm,
+highlight the main ideas via a simple example that uses iterations as the adaptively allocated
+resource, and present a few guidelines on how to deploy Hyperband in practice.
+3.1 Successive Halving
+Hyperband extends the SuccessiveHalving algorithm proposed for hyperparameter
+optimization by Jamieson and Talwalkar (2015) and calls it as a subroutine. The idea
+behind the original SuccessiveHalving algorithm follows directly from its name: uniformly
+allocate a budget to a set of hyperparameter configurations, evaluate the performance of
+all configurations, throw out the worst half, and repeat until one configuration remains.
+The algorithm allocates exponentially more resources to more promising configurations.
+Unfortunately, SuccessiveHalving requires the number of configurations n as an input
+to the algorithm. Given some finite budget B (e.g., an hour of training time to choose a
+hyperparameter configuration), B/n resources are allocated on average across the configurations. However, for a fixed B, it is not clear a priori whether we should (a) consider many
+configurations (large n) with a small average training time; or (b) consider a small number
+of configurations (small n) with longer average training times.
+We use a simple example to better understand this tradeoff. Figure 2 shows the validation
+loss as a function of total resources allocated for two configurations with terminal validation
+losses ν1 and ν2 . The shaded areas bound the maximum deviation of the intermediate losses
+from the terminal validation loss and will be referred to as “envelope” functions.4 It is
+possible to distinguish between the two configurations when the envelopes no longer overlap.
+Simple arithmetic shows that this happens when the width of the envelopes is less than
+1
+ν2 − ν1 , i.e., when the intermediate losses are guaranteed to be less than ν2 −ν
+away from the
+2
+3. See the work by Jamieson and Talwalkar (2015) for detailed discussion motivating the non-stochastic
+setting for hyperparameter optimization.
+4. These envelope functions are guaranteed to exist; see discussion in Section 5.2 where we formally define
+these envelope (or γ) functions.
+
+6
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+Figure 2: The validation loss as a function of total resources allocated for two configurations
+is shown. ν1 and ν2 represent the terminal validation losses at convergence. The
+shaded areas bound the maximum distance of the intermediate losses from the
+terminal validation loss and monotonically decrease with the resource.
+
+terminal losses. There are two takeaways from this observation: more resources are needed
+to differentiate between the two configurations when either (1) the envelope functions are
+wider or (2) the terminal losses are closer together.
+However, in practice, the optimal allocation strategy is unknown because we do not
+have knowledge of the envelope functions nor the distribution of terminal losses. Hence, if
+more resources are required before configurations can differentiate themselves in terms of
+quality (e.g., if an iterative training method converges very slowly for a given data set or if
+randomly selected hyperparameter configurations perform similarly well), then it would be
+reasonable to work with a small number of configurations. In contrast, if the quality of a
+configuration is typically revealed after a small number of resources (e.g., if iterative training
+methods converge very quickly for a given data set or if randomly selected hyperparameter
+configurations are of low-quality with high probability), then n is the bottleneck and we
+should choose n to be large.
+Certainly, if meta-data or previous experience suggests that a certain tradeoff is likely
+to work well in practice, one should exploit that information and allocate the majority of
+resources to that tradeoff. However, without this supplementary information, practitioners
+are forced to make this tradeoff, severely hindering the applicability of existing configuration
+evaluation methods.
+3.2 Hyperband
+Hyperband, shown in Algorithm 1, addresses this “n versus B/n” problem by considering
+several possible values of n for a fixed B, in essence performing a grid search over feasible
+value of n. Associated with each value of n is a minimum resource r that is allocated to all
+configurations before some are discarded; a larger value of n corresponds to a smaller r and
+hence more aggressive early-stopping. There are two components to Hyperband; (1) the
+inner loop invokes SuccessiveHalving for fixed values of n and r (lines 3–9) and (2) the
+outer loop iterates over different values of n and r (lines 1–2). We will refer to each such
+run of SuccessiveHalving within Hyperband as a “bracket.” Each bracket is designed
+to use approximately B total resources and corresponds to a different tradeoff between n
+7
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+Algorithm 1: Hyperband algorithm for hyperparameter optimization.
+input
+: R, η (default η = 3)
+initialization : smax = blogη (R)c, B = (smax + 1)R
+1 for s ∈ {smax , smax − 1, . . . , 0} do
+ηs
+2
+n = dB
+r = Rη −s
+R (s+1) e,
+// begin SuccessiveHalving with (n, r) inner loop
+
+T =get hyperparameter configuration(n)
+for i ∈ {0, . . . , s} do
+5
+ni = bnη −i c
+6
+ri = rη i
+7
+L = {run then return val loss(t, ri ) : t ∈ T }
+8
+T =top k(T, L, bni /ηc)
+9
+end
+10 end
+11 return Configuration with the smallest intermediate loss seen so far.
+3
+
+4
+
+and B/n. Hence, a single execution of Hyperband takes a finite budget of (smax + 1)B;
+we recommend repeating it indefinitely.
+Hyperband requires two inputs (1) R, the maximum amount of resource that can
+be allocated to a single configuration, and (2) η, an input that controls the proportion of
+configurations discarded in each round of SuccessiveHalving. The two inputs dictate
+how many different brackets are considered; specifically, smax + 1 different values for n are
+considered with smax = blogη (R)c. Hyperband begins with the most aggressive bracket
+s = smax , which sets n to maximize exploration, subject to the constraint that at least one
+configuration is allocated R resources. Each subsequent bracket reduces n by a factor of
+approximately η until the final bracket, s = 0, in which every configuration is allocated
+R resources (this bracket simply performs classical random search). Hence, Hyperband
+performs a geometric search in the average budget per configuration and removes the need
+to select n for a fixed budget at the cost of approximately smax + 1 times more work than
+running SuccessiveHalving for a single value of n. By doing so, Hyperband is able to
+exploit situations in which adaptive allocation works well, while protecting itself in situations
+where more conservative allocations are required.
+Hyperband requires the following methods to be defined for any given learning problem:
+
+• get hyperparameter configuration(n) – a function that returns a set of n i.i.d.
+samples from some distribution defined over the hyperparameter configuration space.
+In this work, we assume uniformly sampling of hyperparameters from a predefined
+space (i.e., hypercube with min and max bounds for each hyperparameter), which
+immediately yields consistency guarantees. However, the more aligned the distribution
+is towards high quality hyperparameters (i.e., a useful prior), the better Hyperband
+will perform (see Section 6 for further discussion).
+8
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+i
+0
+1
+2
+3
+4
+
+s=4
+ni ri
+81 1
+27 3
+9
+9
+3
+27
+1
+81
+
+s=3
+ni ri
+27 3
+9
+9
+3
+27
+1
+81
+
+s=2
+ni ri
+9
+9
+3
+27
+1
+81
+
+s=1
+ni ri
+6
+27
+2
+81
+
+s=0
+ni ri
+5
+81
+
+Table 1: The values of ni and ri for the brackets of Hyperband corresponding to various
+values of s, when R = 81 and η = 3.
+
+• run then return val loss(t, r) – a function that takes a hyperparameter configuration t and resource allocation r as input and returns the validation loss after training
+the configuration for the allocated resources.
+• top k(configs, losses, k) – a function that takes a set of configurations as well
+as their associated losses and returns the top k performing configurations.
+3.3 Example Application with Iterations as a Resource: LeNet
+We next present a concrete example to provide further intuition about Hyperband. We
+work with the MNIST data set and optimize hyperparameters for the LeNet convolutional
+neural network trained using mini-batch stochastic gradient descent (SGD).5 Our search
+space includes learning rate, batch size, and number of kernels for the two layers of the
+network as hyperparameters (details are shown in Table 2 in Appendix A).
+We define the resource allocated to each configuration to be number of iterations of SGD,
+with one unit of resource corresponding to one epoch, i.e., a full pass over the data set. We
+set R to 81 and use the default value of η = 3, resulting in smax = 4 and thus 5 brackets of
+SuccessiveHalving with different tradeoffs between n and B/n. The resources allocated
+within each bracket are displayed in Table 1.
+Figure 3 shows an empirical comparison of the average test error across 70 trials of
+the individual brackets of Hyperband run separately as well as standard Hyperband.
+In practice, we do not know a priori which bracket s ∈ {0, . . . , 4} will be most effective
+in identifying good hyperparameters, and in this case neither the most (s = 4) nor least
+aggressive (s = 0) setting is optimal. However, we note that Hyperband does nearly as
+well as the optimal bracket (s = 3) and outperforms the baseline uniform allocation (i.e.,
+random search), which is equivalent to bracket s = 0.
+3.4 Different Types of Resources
+While the previous example focused on iterations as the resource, Hyperband naturally
+generalizes to various types of resources:
+5. Code and description of algorithm used is available at http://deeplearning.net/tutorial/lenet.html.
+
+9
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+Figure 3: Performance of individual brackets s and Hyperband.
+• Time – Early-stopping in terms of time can be preferred when various hyperparameter
+configurations differ in training time and the practitioner’s chief goal is to find a good
+hyperparameter setting in a fixed wall-clock time. For instance, training time could
+be used as a resource to quickly terminate straggler jobs in distributed computation
+environments.
+• Data Set Subsampling – Here we consider the setting of a black-box batch training
+algorithm that takes a data set as input and outputs a model. In this setting, we treat
+the resource as the size of a random subset of the data set with R corresponding to
+the full data set size. Subsampling data set sizes using Hyperband, especially for
+problems with super-linear training times like kernel methods, can provide substantial
+speedups.
+• Feature Subsampling – Random features or Nyström-like methods are popular
+methods for approximating kernels for machine learning applications (Rahimi and Recht,
+2007). In image processing, especially deep-learning applications, filters are usually
+sampled randomly, with the number of filters having an impact on the performance.
+Downsampling the number of features is a common tool used when hand-tuning
+hyperparameters; Hyperband can formalize this heuristic.
+3.5 Setting R
+The resource R and η (which we address next) are the only required inputs to Hyperband.
+As mentioned in Section 3.2, R represents the maximum amount of resources that can be
+allocated to any given configuration. In most cases, there is a natural upper bound on
+the maximum budget per configuration that is often dictated by the resource type (e.g.,
+training set size for data set downsampling; limitations based on memory constraint for
+feature downsampling; rule of thumb regarding number of epochs when iteratively training
+neural networks). If there is a range of possible values for R, a smaller R will give a result
+faster (since the budget B for each bracket is a multiple of R), but a larger R will give a
+better guarantee of successfully differentiating between the configurations.
+Moreover, for settings in which either R is unknown or not desired, we provide an
+infinite horizon version of Hyperband in Section 5. This version of the algorithm doubles
+10
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+the budget
+over time, B ∈ {2, 4, 8, 16, . . .}, and for each B, tries all possible values of
+
+n ∈ 2k : k ∈ {1, . . . , log2 (B)} . For each combination of B and n, the algorithm runs
+an instance of the (infinite horizon) SuccessiveHalving algorithm, which implicitly sets
+R = 2 logB (n) , thereby growing R as B increases. The main difference between the infinite
+2
+horizon algorithm and Algorithm 1 is that the number of unique brackets grows over time
+instead of staying constant with each outer loop. We will analyze this version of Hyperband
+in more detail in Section 5 and use it as the launching point for the theoretical analysis of
+standard (finite horizon) Hyperband.
+Note that R is also the number of configurations evaluated in the bracket that performs
+the most exploration, i.e s = smax . In practice one may want n ≤ nmax to limit overhead
+associated with training many configurations on a small budget, i.e., costs associated with
+initialization, loading a model, and validation. In this case, set smax = blogη (nmax )c.
+Alternatively, one can redefine one unit of resource so that R is artificially smaller (i.e., if
+the desired maximum iteration is 100k, defining one unit of resource to be 100 iterations
+will give R = 1, 000, whereas defining one unit to be 1k iterations will give R = 100). Thus,
+one unit of resource can be interpreted as the minimum desired resource and R as the ratio
+between maximum resource and minimum resource.
+3.6 Setting η
+The value of η is a knob that can be tuned based on practical user constraints. Larger
+values of η correspond to more aggressive elimination schedules and thus fewer rounds of
+elimination; specifically, each round retains 1/η configurations for a total of blogη (n)c + 1
+rounds of elimination with n configurations. If one wishes to receive a result faster at the
+cost of a sub-optimal asymptotic constant, one can increase η to reduce the budget per
+bracket B = (blogη (R)c + 1)R. We stress that results are not very sensitive to the choice of η.
+If our theoretical bounds are optimized (see Section 5), they suggest choosing η = e ≈ 2.718,
+but in practice we suggest taking η to be equal to 3 or 4.
+Tuning η will also change the number of brackets and consequently the number of different
+tradeoffs that Hyperband tries. Usually, the possible range of brackets is fairly constrained,
+since the number of brackets is logarithmic in R; namely, there are (blogη (R)c + 1) = smax + 1
+brackets. For our experiments in Section 4, we chose η to provide 5 brackets for the specified
+R; for most problems, 5 is a reasonable number of n versus B/n tradeoffs to explore. However,
+for large R, using η = 3 or 4 can give more brackets than desired. The number of brackets
+can be controlled in a few ways. First, as mentioned in the previous section, if R is too
+large and overhead is an issue, then one may want to control the overhead by limiting the
+maximum number of configurations to nmax , thereby also limiting smax . If overhead is not a
+concern and aggressive exploration is desired, one can (1) increase η to reduce the number
+of brackets while maintaining R as the maximum number of configurations in the most
+exploratory bracket, or (2) still use η = 3 or 4 but only try brackets that do a baseline
+level of exploration, i.e., set nmin and only try brackets from smax to s = blogη (nmin )c. For
+computationally intensive problems that have long training times and high-dimensional
+search spaces, we recommend the latter. Intuitively, if the number of configurations that can
+be trained to completion (i.e., trained using R resources) in a reasonable amount of time is
+on the order of the dimension of the search space and not exponential in the dimension, then
+11
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+it will be impossible to find a good configuration without using an aggressive exploratory
+tradeoff between n and B/n.
+3.7 Overview of Theoretical Results
+The theoretical properties of Hyperband are best demonstrated through an example.
+Suppose there are n configurations, each with a given terminal validation error νi for
+i = 1, . . . , n. Without loss of generality, index the configurations by performance so that
+ν1 corresponds to the best performing configuration, ν2 to the second best, and so on.
+Now consider the task of identifying the best configuration. The optimal strategy would
+allocate to each configuration i the minimum resource required to distinguish it from ν1 ,
+i.e., enough so that the envelope functions (see Figure 2) bound the intermediate loss to
+1
+be less than νi −ν
+away from the terminal value. In contrast, the naive uniform allocation
+2
+strategy, which allocates B/n to each configuration, has to allocate to every configuration
+the maximum resource required to distinguish any arm νi from ν1 . Remarkably, the budget
+required by SuccessiveHalving is only a small factor of the optimal because it capitalizes
+on configurations that are easy to distinguish from ν1 .
+The relative size of the budget required for uniform allocation and SuccessiveHalving
+depends on the envelope functions bounding deviation from terminal losses as well as the
+distribution from which νi ’s are drawn. The budget required for SuccessiveHalving is
+smaller when the optimal n versus B/n tradeoff discussed in Section 3.1 requires fewer
+resources per configuration. Hence, if the envelope functions tighten quickly as a function
+of resource allocated, or the average distances between terminal losses is large, then SuccessiveHalving can be substantially faster than uniform allocation. These intuitions are
+formalized in Section 5 and associated theorems/corollaries are provided that take into
+account the envelope functions and the distribution from which νi ’s are drawn.
+In practice, we do not have knowledge of either the envelope functions or the distribution
+of νi ’s, both of which are integral in characterizing SuccessiveHalving’s required budget.
+With Hyperband we address this shortcoming by hedging our aggressiveness. We show
+in Section 5.3.3 that Hyperband, despite having no knowledge of the envelope functions
+nor the distribution of νi ’s, requires a budget that is only log factors larger than that of
+SuccessiveHalving.
+
+4. Hyperparameter Optimization Experiments
+In this section, we evaluate the empirical behavior of Hyperband with three different
+resource types: iterations, data set subsamples, and feature samples. For all experiments, we
+compare Hyperband with three well known Bayesian optimization algorithms—SMAC, TPE,
+and Spearmint—using their default settings. We exclude Spearmint from the comparison set
+when there are conditional hyperparameters in the search space because it does not natively
+support them (Eggensperger et al., 2013). We also show results for SuccessiveHalving
+corresponding to repeating the most exploratory bracket of Hyperband to provide a baseline
+for aggressive early-stopping.6 Additionally, as standard baselines against which to measure
+6. This is not done for the experiments in Section 4.2.1, since the most aggressive bracket varies from dataset
+to dataset with the number of training points.
+
+12
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+all speedups, we consider random search and “random 2×,” a variant of random search with
+twice the budget of other methods. Of the hybrid methods described in Section 2, we compare
+to a variant of SMAC using the early termination criterion proposed by Domhan et al.
+(2015) in the deep learning experiments described in Section 4.1. We think a comparison
+of Hyperband to more sophisticated hybrid methods introduced recently by Klein et al.
+(2017a) and Kandasamy et al. (2017) is a fruitful direction for future work.
+In the experiments below, we followed these loose guidelines when determining how to
+configuration Hyperband:
+1. The maximum resource R should be reasonable given the problem, but ideally large
+enough so that early-stopping is beneficial.
+2. η should depend on R and be selected to yield ≈ 5 brackets with a minimum of
+3 brackets. This is to guarantee that Hyperband will use a baseline degree of
+early-stopping and prevent too coarse of a grid of n vs B tradeoffs.
+4.1 Early-Stopping Iterative Algorithms for Deep Learning
+For this benchmark, we tuned a convolutional neural network7 with the same architecture
+as that used in Snoek et al. (2012) and Domhan et al. (2015). The search spaces used in
+the two previous works differ, and we used a search space similar to that of Snoek et al.
+(2012) with 6 hyperparameters for stochastic gradient decent and 2 hyperparameters for the
+response normalization layers (see Appendix A for details). In line with the two previous
+works, we used a batch size of 100 for all experiments.
+Data sets: We considered three image classification data sets: CIFAR-10 (Krizhevsky,
+2009), rotated MNIST with background images (MRBI) (Larochelle et al., 2007), and Street
+View House Numbers (SVHN) (Netzer et al., 2011). CIFAR-10 and SVHN contain 32 × 32
+RGB images while MRBI contains 28 × 28 grayscale images. Each data set was split into a
+training, validation, and test set: (1) CIFAR-10 has 40k, 10k, and 10k instances; (2) MRBI
+has 10k, 2k, and 50k instances; and (3) SVHN has close to 600k, 6k, and 26k instances for
+training, validation, and test respectively. For all data sets, the only preprocessing performed
+on the raw images was demeaning.
+Hyperband Configuration: For these experiments, one unit of resource corresponds
+to 100 mini-batch iterations (10k examples with a batch size of 100). For CIFAR-10 and
+MRBI, R was set to 300 (or 30k total iterations). For SVHN, R was set to 600 (or 60k total
+iterations) to accommodate the larger training set. Given R for these experiments, we set
+η = 4 to yield five SuccessiveHalving brackets for Hyperband.
+Results: Each searcher was given a total budget of 50R per trial to return the best
+possible hyperparameter configuration. For Hyperband, the budget is sufficient to run
+the outer loop twice (for a total of 10 SuccessiveHalving brackets). For SMAC, TPE,
+and random search, the budget corresponds to training 50 different configurations to
+completion. Ten independent trials were performed for each searcher. The experiments
+took the equivalent of over 1 year of GPU hours on NVIDIA GRID K520 cards available
+on Amazon EC2 g2.8xlarge instances. We set a total budget constraint in terms of
+7. The model specification is available at http://code.google.com/p/cuda-convnet/.
+
+13
+
+0.32
+
+hyperband (finite)
+hyperband (infinite)
+SMAC
+SMAC (early)
+TPE
+
+Average Test Error
+
+0.30
+0.28
+0.26
+
+spearmint
+random
+random 2x
+bracket s=4
+
+0.24
+0.22
+
+Average Test Error
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+0.20
+0.18
+
+0
+
+10
+
+20
+30
+Multiple of R Used
+
+40
+
+50
+
+0.30
+0.29
+0.28
+0.27
+0.26
+0.25
+0.24
+0.23
+0.22
+
+0
+
+10
+
+(a) CIFAR-10
+
+20
+30
+Multiple of R Used
+
+40
+
+50
+
+(b) MRBI
+
+0.10
+Average Test Error
+
+0.09
+0.08
+0.07
+0.06
+0.05
+0.04
+0.03
+0
+
+10
+
+20
+30
+Multiple of R Used
+
+40
+
+50
+
+(c) SVHN
+
+Figure 4: Average test error across 10 trials. Label “SMAC (early)” corresponds to SMAC
+with the early-stopping criterion proposed in Domhan et al. (2015) and label
+“bracket s = 4” corresponds to repeating the most exploratory bracket of Hyperband.
+
+iterations instead of compute time to make comparisons hardware independent.8 Comparing
+progress by iterations instead of time ignores overhead costs, e.g. the cost of configuration
+selection for Bayesian methods and model initialization and validation costs for Hyperband.
+While overhead is hardware dependent, the overhead for Hyperband is below 5% on EC2
+g2.8xlarge machines, so comparing progress by time passed would not change results
+significantly.
+For CIFAR-10, the results in Figure 4(a) show that Hyperband is over an orderof-magnitude faster than its competitiors. For MRBI, Hyperband is over an order-of8. Most trials were run on Amazon EC2 g2.8xlarge instances but a few trials were run on different machines
+due to the large computational demand of these experiments.
+
+14
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+magnitude faster than standard configuration selection approaches and 5× faster than
+SMAC (early). For SVHN, while Hyperband finds a good configuration faster, Bayesian
+optimization methods are competitive and SMAC (early) outperforms Hyperband. The
+performance of SMAC (early) demonstrates there is merit to combining early-stopping and
+adaptive configuration selection.
+Across the three data sets, Hyperband and SMAC (early) are the only two methods
+that consistently outperform random 2×. On these data sets, Hyperband is over 20×
+faster than random search while SMAC (early) is ≤ 7× faster than random search within
+the evaluation window. In fact, the first result returned by Hyperband after using a
+budget of 5R is often competitive with results returned by other searchers after using 50R.
+Additionally, Hyperband is less variable than other searchers across trials, which is highly
+desirable in practice (see Appendix A for plots with error bars).
+As discussed in Section 3.6, for computationally expensive problems in high-dimensional
+search spaces, it may make sense to just repeat the most exploratory brackets. Similarly, if
+meta-data is available about a problem or it is known that the quality of a configuration is
+evident after allocating a small amount of resource, then one should just repeat the most
+exploratory bracket. Indeed, for these experiments, bracket s = 4 vastly outperforms all
+other methods on CIFAR-10 and MRBI and is nearly tied with SMAC (early) for first on
+SVHN.
+While we set R for these experiments to facilitate comparison to Bayesian methods
+and random search, it is also reasonable to use infinite horizon Hyperband to grow the
+maximum resource until a desired level of performance is reached. We evaluate infinite
+horizon Hyperband on CIFAR-10 using η = 4 and a starting budget of B = 2R. Figure 4(a)
+shows that infinite horizon Hyperband is competitive with other methods but does not
+perform as well as finite horizon Hyperband within the 50R budget limit. The infinite
+horizon algorithm underperforms initially because it has to tune the maximum resource R as
+well and starts with a less aggressive early-stopping rate. This demonstrates that in scenarios
+where a max resource is known, it is better to use the finite horizon algorithm. Hence, we
+focus on the finite horizon version of Hyperband for the remainder of our empirical studies.
+Finally, CIFAR-10 is a very popular data set and state-of-the-art models achieve much
+lower error rates than what is shown in Figure 4. The difference in performance is mainly
+attributable to higher model complexities and data manipulation (i.e. using reflection or
+random cropping to artificially increase the data set size). If we limit the comparison to
+published results that use the same architecture and exclude data manipulation, the best
+human expert result for the data set is 18% error and the best hyperparameter optimized
+results are 15.0% for Snoek et al. (2012)9 and 17.2% for Domhan et al. (2015). These results
+exceed ours on CIFAR-10 because they train on 25% more data, by including the validation
+set, and also train for more epochs. When we train the best model found by Hyperband on
+the combined training and validation data for 300 epochs, the model achieved a test error of
+17.0%.
+
+9. We were unable to reproduce this result even after receiving the optimal hyperparameters from the
+authors through a personal communication.
+
+15
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+4.2 Data Set Subsampling
+We studied two different hyperparameter search optimization problems for which Hyperband
+uses data set subsamples as the resource. The first adopts an extensive framework presented
+in Feurer et al. (2015) that attempts to automate preprocessing and model selection. Due
+to certain limitations of the framework that fundamentally limited the impact of data set
+downsampling, we conducted a second experiment using a kernel classification task.
+4.2.1 117 Data Sets
+We used the framework introduced by Feurer et al. (2015), which explored a structured
+hyperparameter search space comprised of 15 classifiers, 14 feature preprocessing methods,
+and 4 data preprocessing methods for a total of 110 hyperparameters. We excluded the
+meta-learning component introduced in Feurer et al. (2015) used to warmstart Bayesian
+methods with promising configurations, in order to perform a fair comparison with random
+search and Hyperband. Similar to Feurer et al. (2015), we imposed a 3GB memory limit,
+a 6-minute timeout for each hyperparameter configuration and a one-hour time window to
+evaluate each searcher on each data set. Twenty trials of each searcher were performed per
+data set and all trials in aggregate took over a year of CPU time on n1-standard-1 instances
+from Google Cloud Compute. Additional details about our experimental framework are
+available in Appendix A.
+Data sets: Feurer et al. (2015) used 140 binary and multiclass classification data sets
+from OpenML, but 23 of them are incompatible with the latest version of the OpenML
+plugin (Feurer, 2015), so we worked with the remaining 117 data sets. Due to the limitations
+of the experimental setup (discussed in Appendix A), we also separately considered 21
+of these data sets, which demonstrated at least modest (though still sublinear) training
+speedups due to subsampling. Specifically, each of these 21 data sets showed on average
+at least a 3× speedup due to 8× downsampling on 100 randomly selected hyperparameter
+configurations.
+Hyperband Configuration: Due to the wide range of dataset sizes, with some datasets
+having fewer than 10k training points, we ran Hyperband with η = 3 to allow for at least
+3 brackets without being overly aggressive in downsampling on small datasets. R was set to
+the full training set size for each data set and the maximum number of configurations for any
+bracket of SuccessiveHalving was limited to nmax = max{9, R/1000}. This ensured that
+the most exploratory bracket of Hyperband will downsample at least twice. As mentioned
+in Section 3.6, when nmax is specified, the only difference when running the algorithm is
+smax = blogη (nmax )c instead of blogη (R)c.
+Results: The results on all 117 data sets in Figure 5(a,b) show that Hyperband
+outperforms random search in test error rank despite performing worse in validation error rank.
+Bayesian methods outperform Hyperband and random search in test error performance
+but also exhibit signs of overfitting to the validation set, as they outperform Hyperband
+by a larger margin on the validation error rank. Notably, random 2× outperforms all other
+methods. However, for the subset of 21 data sets, Figure 5(c) shows that Hyperband
+outperforms all other searchers on test error rank, including random 2× by a very small
+margin. While these results are more promising, the effectiveness of Hyperband was
+restricted in this experimental framework; for smaller data sets, the startup overhead was
+16
+
+5
+
+5
+
+4
+
+4
+Average Rank
+
+Average Rank
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+3
+
+random
+random 2x
+
+3
+2
+
+2
+1
+
+SMAC
+TPE
+hyperband
+
+0
+
+1
+
+500 1000 1500 2000 2500 3000 3500
+Time (s)
+(a) Validation Error on 117 Data Sets
+
+0
+
+500 1000 1500 2000 2500 3000 3500
+Time (s)
+(b) Test Error on 117 Data Sets
+
+5
+
+Average Rank
+
+4
+3
+2
+1
+
+0
+
+500 1000 1500 2000 2500 3000 3500
+Time (s)
+(c) Test Error on 21 Data Sets
+
+Figure 5: Average rank across all data sets for each searcher. For each data set, the searchers
+are ranked according to the average validation/test error across 20 trials.
+
+high relative to total training time, while for larger data sets, only a handful of configurations
+could be trained within the hour window.
+We note that while average rank plots like those in Figure 5 are an effective way to
+aggregate information across many searchers and data sets, they provide no indication about
+the magnitude of the differences between the performance of the methods. Figure 6, which
+charts the difference between the test error for each searcher and that of random search
+across all 117 datasets, highlights the small difference in the magnitude of the test errors
+across searchers.
+These results are not surprising; as mentioned in Section 2.1, vanilla Bayesian optimization
+methods perform similarly to random search in high-dimensional search spaces. Feurer
+et al. (2015) showed that using meta-learning to warmstart Bayesian optimization methods
+improved performance in this high-dimensional setting. Using meta-learning to identify a
+17
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+Difference in Test Error vs Random
+
+2.00%
+1.50%
+1.00%
+0.50%
+0.00%
+-0.50%
+-1.00%
+-1.50%
+-2.00%
+smac
+
+hyperopt
+Searcher
+
+hyperband
+
+Figure 6: Each line plots, for a single data set, the difference in test error versus random
+search for each search, where lower is better. Nearly all the lines fall within the
+-0.5% and 0.5% band and, with the exception of a few outliers, the lines are mostly
+flat.
+
+promising distribution from which to sample configurations as input into Hyperband is a
+direction for future work.
+4.2.2 Kernel Regularized Least Squares Classification
+For this benchmark, we tuned the hyperparameters of a kernel-based classifier on CIFAR-10.
+We used the multi-class regularized least squares classification model, which is known to
+have comparable performance to SVMs (Rifkin and Klautau, 2004; Agarwal et al., 2014) but
+can be trained significantly faster.10 The hyperparameters considered in the search space
+include preprocessing method, regularization, kernel type, kernel length scale, and other
+kernel specific hyperparameters (see Appendix A for more details). For Hyperband, we
+set R = 400, with each unit of resource representing 100 datapoints, and η = 4 to yield a
+total of 5 brackets. Each hyperparameter optimization algorithm was run for ten trials on
+Amazon EC2 m4.2xlarge instances; for a given trial, Hyperband was allowed to run for
+two outer loops, bracket s = 4 was repeated 10 times, and all other searchers were run for
+12 hours.
+Figure 7 shows that Hyperband returned a good configuration after completing the
+first SuccessiveHalving bracket in approximately 20 minutes; other searchers failed to
+reach this error rate on average even after the entire 12 hours. Notably, Hyperband was
+able to evaluate over 250 configurations in this first bracket of SuccessiveHalving, while
+competitors were able to evaluate only three configurations in the same amount of time.
+Consequently, Hyperband is over 30× faster than Bayesian optimization methods and 70×
+faster than random search. Bracket s = 4 sightly outperforms Hyperband but the terminal
+10. The default SVM method in Scikit-learn is single core and takes hours to train on CIFAR-10, whereas a
+block coordinate descent least squares solver takes less than 10 minutes on an 8 core machine.
+
+18
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+hyperband (finite)
+SMAC
+TPE
+random
+random 2x
+bracket s=4
+
+Test Error
+
+0.65
+0.60
+0.55
+0.50
+
+0.70
+
+0.45
+0.40
+
+hyperband (finite)
+SMAC
+TPE
+spearmint
+random
+random 2x
+bracket s=4
+
+0.65
+Test Error
+
+0.70
+
+0.60
+0.55
+0.50
+0.45
+
+0
+
+0.40
+
+100 200 300 400 500 600 700
+Minutes
+
+Figure 7: Average test error of the best kernel regularized least square classification model found by each
+searcher on CIFAR-10. The color
+coded dashed lines indicate when
+the last trial of a given searcher
+finished.
+
+0
+
+100 200 300 400 500 600 700
+Minutes
+
+Figure 8: Average test error of the best
+random features model found by
+each searcher on CIFAR-10. The
+test error for Hyperband and
+bracket s = 4 are calculated in
+every evaluation instead of at the
+end of a bracket.
+
+performance for the two algorithms are the same. Random 2× is competitive with SMAC
+and TPE.
+4.3 Feature Subsampling to Speed Up Approximate Kernel Classification
+Next, we examine the performance of Hyperband when using features as a resource on a
+random feature kernel approximations task. Features were randomly generated using the
+method described in Rahimi and Recht (2007) to approximate the RBF kernel, and these
+random features were then used as inputs to a ridge regression classifier. The hyperparameter
+search space included the preprocessing method, kernel length scale, and L2 penalty. While it
+may seem natural to use infinite horizon Hyperband, since the fidelity of the approximation
+improves with more random features, in practice, the amount of available machine memory
+imposes a natural upper bound on the number of features. Thus, we used finite horizion
+Hyperband with a maximum resource of 100k random features, which comfortably fit
+into a machine with 60GB of memory. Additionally, we set one unit of resource to be 100
+features, so R = 1000. Again, we set η = 4 to yield 5 brackets of SuccessiveHalving. We
+ran 10 trials of each searcher, with each trial lasting 12 hours on a n1-standard-16 machine
+from Google Cloud Compute. The results in Figure 8 show that Hyperband is around
+6× faster than Bayesian methods and random search. Hyperband performs similarly to
+bracket s = 4. Random 2× outperforms Bayesian optimization algorithms.
+4.4 Experimental Discussion
+While our experimental results show Hyperband is a promising algorithm for hyperparameter optimization, a few questions naturally arise:
+19
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+1. What impacts the speedups provided by Hyperband?
+2. Why does SuccessiveHalving seem to outperform Hyperband?
+3. What about hyperparameters that should depend on the resource?
+We next address each of these questions in turn.
+4.4.1 Factors Impacting the Performance of Hyperband
+For a given R, the most exploratory SuccessiveHalving round performed by Hyperband
+evaluates R configurations using a budget of (blogη (R)c + 1)R, which gives an upper bound
+on the potential speedup over random search. If training time scales linearly with the
+resource, the maximum speedup offered by Hyperband compared to random search is
+R
+(blogη (R)c+1) . For the values of η and R used in our experiments, the maximum speedup
+over random search is approximately 50× given linear training time. However, we observe a
+range of speedups from 6× to 70× faster than random search. The differences in realized
+speedup can be explained by three factors:
+1. How training time scales with the given resource. In cases where training time is
+superlinear as a function of the resource, Hyperband can offer higher speedups. For
+instance, if training scales like a polynomial of degree p > 1, the maximum speedup for
+p −1
+Hyperband over random search is approximately ηηp−1
+R. In the kernel least square
+classifier experiment discussed in Section 4.2.2, the training time scaled quadratically
+as a function of the resource, which explains why the realized speedup of 70× is higher
+than the maximum expected speedup given linear scaling.
+2. Overhead costs associated with training. Total evaluation time also depends on fixed
+overhead costs associated with evaluating each hyperparameter configuration, e.g.,
+initializing a model, resuming previously trained models, and calculating validation
+error. For example, in the downsampling experiments on 117 data sets presented in
+Section 4.2.1, Hyperband did not provide significant speedup because many data
+sets could be trained in a matter of a few seconds and the initialization cost was high
+relative to training time.
+3. The difficulty of finding a good configuration. Hyperparameter optimization problems
+can vary in difficulty. For instance, an ‘easy’ problem is one where a randomly sampled
+configuration is likely to result in a high-quality model, and thus we only need to
+evaluate a small number of configurations to find a good setting. In contrast, a ‘hard’
+problem is one where an arbitrary configuration is likely to be bad, in which case
+many configurations must be considered. Hyperband leverages downsampling to
+boost the number of configurations that are evaluated, and thus is better suited for
+‘hard’ problems where more evaluations are actually necessary to find a good setting.
+Generally, the difficulty of a problem scales with the dimensionality of the search space.
+For low-dimensional problems, the number of configurations evaluated by random
+search and Bayesian methods is exponential in the number of dimensions so good
+coverage can be achieved. For instance, the low-dimensional (d = 3) search space in
+our feature subsampling experiment in Section 4.3 helps explain why Hyperband is
+20
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+only 6× faster than random search. In contrast, for the neural network experiments in
+Section 4.1, we hypothesize that faster speedups are observed for Hyperband because
+the dimension of the search space is higher.
+4.4.2 Comparison to SuccessiveHalving
+With the exception of the LeNet experiment (Section 3.3) and the 117 Datasets experiment (Section 4.2.1), the most aggressive bracket of SuccessiveHalving outperformed
+Hyperband in all of our experiments. In hindsight, we should have just run bracket s = 4,
+since aggressive early-stopping provides massive speedups on many of these benchmarking
+tasks. However, as previously mentioned, it was unknown a priori that bracket s = 4
+would perform the best and that is why we have to cycle through all possible brackets
+with Hyperband. Another question is what happens when one increases s even further,
+i.e. instead of 4 rounds of elimination, why not 5 or even more with the same maximum
+resource R? In our case, s = 4 was the most aggressive bracket we could run given the
+minimum resource per configuration limits imposed for the previous experiments. However,
+for larger data sets, it is possible to extend the range of possible values for s, in which case,
+Hyperband may either provide even faster speedups if more aggressive early-stopping helps
+or be slower by a small factor if the most aggressive brackets are essentially throwaways.
+We believe prior knowledge about a task can be particularly useful for limiting the
+range of brackets explored by Hyperband. In our experience, aggressive early-stopping
+is generally safe for neural network tasks and even more aggressive early-stopping may be
+reasonable for larger data sets and longer training horizons. However, when pushing the
+degree of early-stopping by increasing s, one has to consider the additional overhead cost
+associated with examining more models. Hence, one way to leverage meta-learning would
+be to use learning curve convergence rate, difficulty of different search spaces, and overhead
+costs of related tasks to determine the brackets considered by Hyperband.
+4.4.3 Resource Dependent Hyperparameters
+In certain cases, the setting for a given hyperparameter should depend on the allocated
+resource. For example, the maximum tree depth regularization hyperparameter for random
+forests should be higher with more data and more features. However, the optimal tradeoff
+between maximum tree depth and the resource is unknown and can be data set specific.
+In these situations, the rate of convergence to the true loss is usually slow because the
+performance on a smaller resource is not indicative of that on a larger resource. Hence,
+these problems are particularly difficult for Hyperband, since the benefit of early-stopping
+can be muted. Again, while Hyperband will only be a small factor slower than that
+of SuccessiveHalving with the optimal early-stopping rate, we recommend removing
+the dependence of the hyperparameter on the resource if possible. For the random forest
+example, an alternative regularization hyperparameter is minimum samples per leaf, which
+is less dependent on the training set size. Additionally, the dependence can oftentimes be
+removed with simple normalization. For example, the regularization term for our kernel
+least squares experiments were normalized by the training set size to maintain a constant
+tradeoff between the mean-squared error and the regularization term.
+21
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+5. Theory
+In this section, we introduce the pure-exploration non-stochastic infinite-armed bandit
+(NIAB) problem, a very general setting which encompasses our hyperparameter optimization
+problem of interest. As we will show, Hyperband is in fact applicable to problems far
+beyond just hyperparameter optimization. We begin by formalizing the hyperparameter
+optimization problem and then reducing it to the pure-exploration NIAB problem. We
+subsequently present a detailed analysis of Hyperband in both the infinite and finite
+horizon settings.
+5.1 Hyperparameter Optimization Problem Statement
+Let X denote the space of valid hyperparameter configurations, which could include continuous, discrete, or categorical variables that can be constrained with respect to each other
+in arbitrary ways (i.e. X need not be limited to a subset of [0, 1]d ). For k = 1, 2, . . . let
+`k : X → [0, 1] be a sequence of loss functions defined over X . For any hyperparameter
+configuration x ∈ X , `k (x) represents the validation error of the model trained using x with k
+units of resources (e.g. iterations). In addition, for some R ∈ N ∪ {∞}, define `∗ = limk→R `k
+and ν∗ = inf x∈X `∗ (x). Note that `k (·) for all k ∈ N, `∗ (·), and ν∗ are all unknown to the
+algorithm a priori. In particular, it is uncertain how quickly `k (x) varies as a function of x
+for any fixed k, and how quickly `k (x) → `∗ (x) as a function of k for any fixed x ∈ X .
+We assume hyperparameter configurations are sampled randomly from a known probability distribution p(x) : X → [0, ∞), with support on X . In our experiments, p(x) is simply the
+uniform distribution, but the algorithm can be used with any sampling method. If X ∈ X
+is a random sample from this probability distribution, then `∗ (X) is a random variable
+whose distribution is unknown since `∗ (·) is unknown. Additionally, since it is unknown how
+`k (x) varies as a function of x or k, one cannot necessarily infer anything about `k (x) given
+knowledge of `j (y) for any j ∈ N, y ∈ X . As a consequence, we reduce the hyperparmeter
+optimization problem down to a much simpler problem that ignores all underlying structure
+of the hyperparameters: we only interact with some x ∈ X through its loss sequence `k (x)
+for k = 1, 2, . . . . With this reduction, the particular value of x ∈ X does nothing more than
+index or uniquely identify the loss sequence.
+Without knowledge of how fast `k (·) → `∗ (·) or how `∗ (X) is distributed, the goal of
+Hyperband is to identify a hyperparameter configuration x ∈ X that minimizes `∗ (x) − ν∗
+by drawing as many random configurations as desired while using as few total resources as
+possible.
+5.2 The Pure-Exploration Non-stochastic Infinite-Armed Bandit Problem
+We now formally define the bandit problem of interest, and relate it to the problem of
+hyperparameter optimization. Each “arm” in the NIAB game is associated with a sequence
+that is drawn randomly from a distribution over sequences. If we “pull” the ith drawn arm
+exactly k times, we observe a loss `i,k . At each time, the player can either draw a new arm
+(sequence) or pull a previously drawn arm an additional time. There is no limit on the
+number of arms that can be drawn. We assume the arms are identifiable only by their index
+22
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+i (i.e. we have no side-knowledge or feature representation of an arm), and we also make the
+following two additional assumptions:
+Assumption 1 For each i ∈ N the limit limk→∞ `i,k exists and is equal to νi .11
+Assumption 2 Each νi is a bounded i.i.d. random variable with cumulative distribution
+function F .
+The objective of the NIAB problem is to identify an arm ı̂ with small νı̂ using as few total
+pulls as possible. We are interested in characterizing νı̂ as a function of the total number of
+pulls from all the arms. Clearly, the hyperparameter optimization problem described above
+is an instance of the NIAB problem. In this case, arm i correspondes to a configuration
+xi ∈ X , with `i,k = `k (xi ); Assumption 1 is equivalent to requiring that νi = `∗ (xi ) exists;
+and Assumption 2 follows from the fact that the arms are drawn i.i.d. from X according
+to distribution function p(x). F is simply the cumulative distribution function of `∗ (X),
+where X is a random variable drawn from the distribution p(x) over X . Note that since the
+arm draws are independent, the νi ’s are also independent. Again, this is not to say that the
+validation losses do not depend on the settings of the hyperparameters; the validation loss
+could well be correlated with certain hyperparameters, but this is not used in the algorithm
+and no assumptions are made regarding the correlation structure.
+In order to analyze the behavior of Hyperband in the NIAB setting, we must define
+a few additional objects. Let ν∗ = inf{m : P (ν ≤ m) > 0} > −∞, since the domain of the
+distribution F is bounded. Hence, the cumulative distribution function F satisfies
+P (νi − ν∗ ≤ ) = F (ν∗ + )
+
+(1)
+
+and let F −1 (y) = inf x {x : F (x) ≤ y}. Define γ : N → R as the pointwise smallest,
+monotonically decreasing function satisfying
+sup |`i,j − `i,∗ | ≤ γ(j) , ∀j ∈ N.
+
+(2)
+
+i
+
+The function γ is guaranteed to exist by Assumption 1 and bounds the deviation from
+the limit value as the sequence of iterates j increases. For hyperparameter optimization,
+this follows from the fact that `k uniformly converges to `∗ for all x ∈ X . In addition, γ
+can be interpretted as the deviation of the validation error of a configuration trained on a
+subset of resources versus the maximum number of allocatable resources. Finally, define
+R as the first index such that γ(R) = 0 if it exists, otherwise set R = ∞. For y ≥ 0 let
+γ −1 (y) = min{j ∈ N : γ(j) ≤ y}, using the convention that γ −1 (0) := R which we recall can
+be infinite.
+As previously discussed, there are many real-world scenarios in which R is finite and
+known. For instance, if increasing subsets of the full data set is used as a resource, then the
+maximum number of resources cannot exceed the full data set size, and thus γ(k) = 0 for
+all k ≥ R where R is the (known) full size of the data set. In other cases such as iterative
+training problems, one might not want to or know how to bound R. We separate these two
+settings into the finite horizon setting where R is finite and known, and the infinite horizon
+11. We can always define `i,k so that convergence is guaranteed, i.e. taking the infimum of a sequence.
+
+23
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+SuccessiveHalving (Infinite horizon)
+Input: Budget B, n arms where `i,k denotes the kth loss from the ith arm
+Initialize: S0 = [n].
+For k = 0, 1, . . . , dlog2 (n)e − 1
+B
+Pull each arm in Sk for rk = b |Sk |dlog
+(n)e c times.
+2
+
+Keep the best b|Sk |/2c arms in terms of the rk th observed loss as Sk+1 .
+Output : ı̂, `
+
+where ı̂ = Sdlog2 (n)e
+B/2
+ı̂,b dlog (n)e c
+2
+
+Hyperband (Infinite horizon)
+Input: None
+For k = 1, 2, . . .
+For s ∈ N s.t. k − s ≥ log2 (s)
+Bk,s = 2k , nk,s = 2s
+ı̂k,s , `
+
+ı̂k,s ,b
+
+2k−1 ← SuccessiveHalving (Bk,s ,nk,s )
+s c
+
+Figure 9: (Top) The SuccessiveHalving algorithm proposed and analyzed in Jamieson
+and Talwalkar (2015) for the non-stochastic setting. Note this algorithm was
+originally proposed for the stochastic setting in Karnin et al. (2013). (Bottom)
+The Hyperband algorithm for the infinite horizon setting. Hyperband calls
+SuccessiveHalving as a subroutine.
+
+setting where no bound on R is known and it is assumed to be infinite. While our empirical
+results suggest that the finite horizon may be more practically relevant for the problem
+of hyperparameter optimization, the infinite horizon case has natural connections to the
+literature, and we begin by analyzing this setting.
+5.3 Infinite Horizon Setting (R = ∞)
+Consider the Hyperband algorithm of Figure 9. The algorithm uses SuccessiveHalving
+(Figure 9) as a subroutine that takes a finite set of arms as input and outputs an estimate
+of the best performing arm in the set. We first analyze SuccessiveHalving (SH) for a
+given set of limits νi and then consider the performance of SH when νi are drawn randomly
+according to F . We then analyze the Hyperband algorithm. We note that the algorithm of
+Figure 9 was originally proposed by Karnin et al. (2013) for the stochastic setting. However,
+Jamieson and Talwalkar (2015) analyzed it in the non-stochastic setting and also found it to
+work well in practice. Extending the result of Jamieson and Talwalkar (2015) we have the
+following theorem:
+
+24
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+Theorem 1 Fix n arms. Let νi = lim `i,τ and assume ν1 ≤ · · · ≤ νn . For any  > 0 let
+τ →∞
+
+
+
+1
+zSH = 2dlog2 (n)e max i (1 + γ −1 max 4 , νi −ν
+)
+2
+i=2,...,n
+X
+
+
+1
+≤ 2dlog2 (n)e n +
+γ −1 max 4 , νi −ν
+2
+i=1,...,n
+
+If the SuccessiveHalving algorithm of Figure 9 is run with any budget B > zSH then an
+arm ı̂ is returned that satisfies νı̂ − ν1 ≤ /2. Moreover, |`
+− ν1 | ≤ .
+B/2
+ı̂,b dlog (n)e c
+2
+
+technical
+  νlemma
+ will be used to characterize the problem dependent term
+P The next
+−1
+i −ν1
+max 4 , 2
+when the sequences are drawn from a probability distribution.
+i=1,...,n γ
+Lemma 2 Fix δ ∈ (0, 1). Let pn = log(2/δ)
+. For any  ≥ 4(F −1 (pn ) − ν∗ ) define
+n
+Z ∞
+ −1
+4
+∗
+γ −1 ( t−ν
+H(F, γ, n, δ, ) := 2n
+4 )dF (t) + 3 log(2/δ) + 2nF (ν∗ + /4) γ
+ν∗ +/4
+
+
+16
+
+
+
+and H(F, γ, n, δ) := H(F, γ, n, δ, 4(F −1 (pn ) − ν∗ )) so that
+Z 1
+
+
+−1
+−1 F −1 (pn )−ν∗
+∗
+10
+H(F, γ, n, δ) = 2n
+γ −1 ( F (t)−ν
+)dt
++
+log(2/δ)γ
+.
+4
+3
+4
+pn
+
+For n arms with limits ν1 ≤ · · · ≤ νn drawn from F , then
+ν1 ≤ F −1 (pn )
+
+and
+
+n
+X
+
+
+1
+γ −1 max 4 , νi −ν
+≤ H(F, γ, n, δ, )
+2
+i=1
+
+for any  ≥ 4(F −1 (pn ) − ν∗ ) with probability at least 1 − δ.
+Setting  = 4(F −1 (pn ) − ν∗ ) in Theorem 1 and using the result of Lemma 2 that
+ν∗ ≤ ν1 ≤ ν∗ + (F −1 (pn ) − ν∗ ), we immediately obtain the following corollary.
+) − ν∗ ). Let B = 4dlog2 (n)eH(F, γ, n, δ, )
+Corollary 3 Fix δ ∈ (0, 1) and  ≥ 4(F −1 ( log(2/δ)
+n
+where H(F, γ, n, δ, ) is defined in Lemma 2. If the SuccessiveHalving algorithm of
+Figure 9 is run with the specified B and n arm configurations drawn randomly according
+to F , then an arm ı̂ ∈ [n] is returned such that with probability at least 1 − δ we have
+
+νı̂ − ν∗ ≤ F −1 ( log(2/δ)
+) − ν∗ + /2. In particular, if B = 4dlog2 (n)eH(F, γ, n, δ) and
+n
+
+ = 4(F −1 ( log(2/δ)
+) − ν∗ ) then νı̂ − ν∗ ≤ 3 F −1 ( log(2/δ)
+) − ν∗ with probability at least 1 − δ.
+n
+n
+Note that for any fixed n ∈ N we have for any ∆ > 0
+P( min νi − ν∗ ≥ ∆) = (1 − F (ν∗ + ∆))n ≈ e−nF (ν∗ +∆)
+i=1,...,n
+
+which implies E[mini=1,...,n νi − ν∗ ] ≈ F −1 ( n1 ) − ν∗ . That is, n needs to be sufficiently large
+so that it is probable that a good limit is sampled. On the other hand, for any fixed n,
+Corollary 3 suggests that the total resource budget B needs to be large enough in order to
+overcome the rates of convergence of the sequences described by γ. Next, we relate SH to a
+naive approach that uniformly allocates resources to a fixed set of n arms.
+25
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+5.3.1 Non-Adaptive Uniform Allocation
+The non-adaptive uniform allocation strategy takes as inputs a budget B and n arms,
+allocates B/n to each of the arms, and picks the arm with the lowest loss. The following
+results allow us to compare with SuccessiveHalving.
+Proposition 4 Suppose we draw n random configurations from F , train each with j =
+min{B/n, R} iterations, and let ı̂ = arg mini=1,...,n `j (Xi ). Without loss of generality assume
+ν1 ≤ . . . ≤ νn . If
+
+
+B ≥ nγ −1 12 (F −1 ( log(1/δ)
+)
+−
+ν
+)
+(3)
+∗
+n
+
+
+
+
+then with probability at least 1 − δ we have νı̂ − ν∗ ≤ 2 F −1 log(1/δ)
+. In contrast,
+−
+ν
+∗
+n
+there exists a sequence of functions `j that satisfy F and γ such that if
+
+
+log(c/δ)
+B ≤ nγ −1 2(F −1 ( n+log(c/δ)
+) − ν∗ )
+log(c/δ)
+then with probability at least δ, we have νı̂ − ν∗ ≥ 2(F −1 ( n+log(c/δ)
+) − ν∗ ), where c is a
+constant that depends on the regularity of F .
+
+For any fixed n and sufficiently large B, Corollary 3 shows that SuccessiveHalving
+outputs an ı̂ ∈ [n] that satisfies νı̂ − ν∗ . F −1 ( log(2/δ)
+) − ν∗ with probability at least 1 − δ.
+n
+This guarantee is similar to the result in Proposition 4. However, SuccessiveHalving
+achieves its guarantee as long as12
+"
+#
+Z 1
+
+
+B ≃ log2 (n) log(1/δ)γ −1 F −1 ( log(1/δ)
+) − ν∗ + n
+γ −1 (F −1 (t) − ν∗ )dt ,
+(4)
+n
+log(1/δ)
+n
+
+and this sample complexity may be substantially smaller than the budget required by uniform
+allocation shown in Eq. (3) of Proposition 4. Essentially, the first term in Eq. (4) represents
+the budget allocated to the constant number of arms with limits νi ≈ F −1 ( log(1/δ)
+) while
+n
+the second term describes the number of times the sub-optimal arms are sampled before
+discarded. The next section uses a particular parameterization for F and γ to help better
+illustrate the difference between the sample complexity of uniform allocation (Equation 3)
+versus that of SuccessiveHalving (Equation 4).
+5.3.2 A Parameterization of F and γ for Interpretability
+To gain some intuition and relate the results back to the existing literature, we make explicit
+parametric assumptions on F and γ. We stress that all of our results hold for general F and
+γ as previously stated, and this parameterization is simply a tool to provide intuition. First
+assume that there exists a constant α > 0 such that
+ 1/α
+1
+.
+(5)
+γ(j) ≃
+j
+12. We say f ≃ g if there exist constants c, c0 such that cg(x) ≤ f (x) ≤ c0 g(x).
+
+26
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+Note that a large value of α implies that the convergence of `i,k → νi is very slow.
+We will consider two possible parameterizations of F . First, assume there exists positive
+constants β such that
+
+(x − ν∗ )β if x ≥ ν∗
+F (x) ≃
+.
+(6)
+0
+if x < ν∗
+Here, a large value of β implies that it is very rare to draw a limit close to the optimal
+value ν∗ . The same model was studied in Carpentier and Valko (2015). Fix some ∆ > 0.
+−β log(1/δ) arms are drawn from
+As discussed in the preceding section, if n = Flog(1/δ)
+(ν∗ +∆) ≃ ∆
+F then with probability at least 1 − δ we have mini=1,...,n νi ≤ ν∗ + ∆. Predictably, both
+
+1/β
+uniform allocation and SuccessiveHalving output a νı̂ that satisfies νı̂ − ν∗ . log(1/δ)
+n
+with probability at least 1 − δ provided their measurement budgets are large enough. Thus,
+if n ≃ ∆−β log(1/δ) and the measurement budgets of the uniform allocation (Equation 3)
+and SuccessiveHalving (Equation 4) satisfy
+Uniform allocation
+SuccessiveHalving
+
+B ≃ ∆−(α+β) log(1/δ)
+−β
+
+B ≃ log2 (∆
+
+
+
+∆−β − ∆−α
+−α
+log(1/δ)
+log(1/δ)) ∆ log(1/δ) +
+1 − α/β
+
+≃ log(∆−1 log(1/δ)) log(∆−1 ) ∆− max{β,α} log(1/δ)
+then both also satisfy νı̂ − ν∗ . ∆ with probability at least 1 − δ.13 SuccessiveHalving’s
+budget scales like ∆− max{α,β} , which can be significantly smaller than the uniform allocation’s
+budget of ∆−(α+β) . However, because α and β are unknown in practice, neither method
+knows how to choose the optimal n or B to achieve this ∆ accuracy. In Section 5.3.3, we
+show how Hyperband addresses this issue.
+The second parameterization of F is the following discrete distribution:
+K
+
+F (x) =
+
+1 X
+1{x ≤ µj }
+K
+
+with
+
+∆j := µj − µ1
+
+(7)
+
+j=1
+
+for some set of unique scalars µ1 < µ2 < · · · < µK . Note that by letting K → ∞ this discrete
+CDF can approximate any piecewise-continuous CDF to arbitrary accuracy. In particular,
+this model can have multiple means take the same value so that α mass is on µ1 and 1 − α
+mass is on µ2 > µ1 , capturing the stochastic infinite-armed bandit model of Jamieson et al.
+(2016). In this setting, both uniform allocation and SuccessiveHalving output a νı̂ that
+is within the top log(1/δ)
+fraction of the K arms with probability at least 1 − δ if their
+n
+budgets are sufficiently large. Thus, let q > 0 be such that n ≃ q −1 log(1/δ). Then, if the
+measurement budgets of the uniform allocation (Equation 3) and SuccessiveHalving
+13. These quantities are intermediate results in the proofs of the theorems of Section 5.3.3.
+
+27
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+(Equation 4) satisfy
+
+Uniform allocation B ≃ log(1/δ)
+
+SuccessiveHalving
+
+
+K max ∆−α
+j
+j=2,...,K
+q −1 ∆−α
+dqKe
+
+B ≃ log(q −1 log(1/δ)) log(1/δ)
+
+if q = 1/K
+if q > 1/K
+
+K
+X
+
+
+−α
+
+
+∆
++
+∆−α
+
+j
+ 2
+
+if q = 1/K
+
+j=2
+
+K
+X
+
+
+−α
+1
+
+∆−α
+∆
++
+
+j
+
+ dqKe qK
+
+if q > 1/K,
+
+j=dqKe
+
+an arm that is in the best q-fraction of arms is returned, i.e. ı̂/K ≈ q and νı̂ − ν∗ .
+∆dmax{2,qK}e , with probability at least 1 − δ. This shows that the average resource per
+arm for uniform allocation is that required to distinguish the top q-fraction from the best,
+while that for SuccessiveHalving is a small multiple of the average resource required to
+distinguish an arm from the best; the difference between the max and the average can be
+very large in practice. We remark that the value of  in Corollary 3 is carefully chosen to
+make the SuccessiveHalving budget and guarantee work out. Also note that one would
+never take q < 1/K because q = 1/K is sufficient to return the best arm.
+5.3.3 Hyperband Guarantees
+The Hyperband algorithm of Figure 9 addresses the tradeoff between the number of arms n
+versus the average number of times each one is pulled B/n by performing a two-dimensional
+version of the so-called “doubling trick.” For each fixed B, we non-adaptively search a
+predetermined grid of values of n spaced geometrically apart so that the incurred loss of
+identifying the “best” setting takes a budget no more than log(B) times the budget necessary
+if the best setting of n were known ahead of time. Then, we successively double B so that
+the cumulative number of measurements needed to arrive at the necessary B is no more than
+2B. The idea is that even though we do not know the optimal setting for B, n to achieve
+some desired error rate, the hope is that by trying different values in a particular order, we
+will not waste too much effort.
+Fix δ ∈ (0, 1). For all (k, s) pairs defined in the Hyperband algorithm of Figure 9, let
+δk,s = 2kδ 3 . For all (k, s) define
+Ek,s := {Bk,s > 4dlog2 (nk,s )eH(F, γ, nk,s , δk,s )} = {2k > 4sH(F, γ, 2s , 2k 3 /δ)}
+Then by Corollary 3 we have
+
+P
+
+∞ [
+k
+[
+
+
+3 /δ)
+{νı̂k,s − ν∗ > 3 F −1 ( log(4k
+) − ν∗ } ∩ Ek,s
+2s
+k=1 s=1
+
+!
+≤
+
+∞ X
+k
+X
+k=1 s=1
+
+∞
+X
+δ
+δk,s =
+≤ δ.
+2k 2
+k=1
+
+S
+For sufficiently large k we will have ks=1 Ek,s 6= ∅, so assume B = 2k is sufficiently large.
+Let ı̂B be the empirically best-performing arm output from SuccessiveHalving of round
+kB = blog2 (B)c of Hyperband of Figure 9 and let sB ≤ kB be the largest value such that
+28
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+EkB ,sB holds. Then
+
+log(4blog2 (B)c3 /δ)
+blog (B)c−1
+) − ν∗ + γ(b 2 blog2 (B)c c).
+s
+B
+2
+2
+P
+P
+Also note that on stage k at most ki=1 iBi,1 ≤ k ki=1 Bi,1 ≤ 2kBk,s = 2 log2 (Bk,s )Bk,s
+total samples have been taken. While this guarantee holds for general F, γ, the value of
+sB , and consequently the resulting bound, is difficult to interpret. The following corollary
+considers the β, α parameterizations of F and γ, respectively, of Section 5.3.2 for better
+interpretation.
+νı̂B − ν∗ ≤ 3 F −1 (
+
+Theorem 5 Assume that Assumptions 1 and 2 of Section 5.2 hold and that the sampled
+loss sequences obey the parametric assumptions of Equations 5 and 6. Fix δ ∈ (0, 1). For
+any T ∈ N, let ı̂T be the empirically best-performing arm output from SuccessiveHalving
+from the last round k of Hyperband of Figure 9 after exhausting a total budget of T from
+all rounds, then
+
+νı̂T − ν∗ ≤ c
+
+log(T )3 log(log(T )/δ)
+T
+
+1/ max{α,β}
+
+for some constant c = exp(O(max{α, β})) where log(x) = log(x) log log(x).
+By a straightforward modification of the proof, one can show that if uniform allocation
+is used in place of SuccessiveHalving in Hyperband, the uniform allocation version
+1/(α+β)
+
+)/δ)
+achieves νı̂T −ν∗ ≤ c log(T )log(log(T
+. We apply the above theorem to the stochastic
+T
+infinite-armed bandit setting in the following corollary.
+Corollary 6 [Stochastic Infinite-armed Bandits] For any step k, s in the infinite horizon
+Hyperband algorithm with nk,s arms drawn, consider the setting where the jth pull of the ith
+β
+arm results in a stochastic loss Yi,j ∈ [0, 1] such that E[Yi,j ] = νi and P(νi − ν∗ ≤ ) = c−1
+1  .
+P
+If `j (i) = 1j js=1 Yi,s then with probability at least 1 − δ/2 we have ∀k ≥ 1, 0 ≤ s ≤ k, 1 ≤
+i ≤ nk,s , 1 ≤ j ≤ Bk ,
+|νi − `i,j | ≤
+
+q
+
+log(Bk nk,s /δk,s )
+≤
+2j
+
+q
+ 1/2
+2
+k
+.
+log( 16B
+)
+δ
+j
+
+Consequently, if after B total pulls we define νbB as the mean of the empirically best arm
+output from the last fully completed round k, then with probability at least 1 − δ
+νbB − ν∗ ≤ polylog(B/δ) max{B −1/2 , B −1/β }.
+The result of this corollary matches the anytime result of Section 4.3 of Carpentier and
+Valko (2015) whose algorithm was built specifically for the case of stochastic arms and the β
+parameterization of F defined in Eq. (6). Notably, this result also matches the lower bounds
+shown in that work up to poly-logarithmic factors, revealing that Hyperband is nearly
+tight for this important special case. However, we note that this earlier work has a more
+careful analysis for the fixed budget setting.
+29
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+Theorem 7 Assume that Assumptions 1 and 2 of Section 5.2 hold and that the sampled loss
+sequences obey the parametric assumptions of Equations 5 and 7. For any T ∈ N, let ı̂T be the
+empirically best-performing arm output from SuccessiveHalving from the last round k of
+Hyperband of Figure 9 after exhausting a total budget of T from
+all rounds. Fix δ ∈ (0, 1)
+−α
+1 PK
+−1
+and q ∈ (1/K, 1) and let zq = log(q )(∆dmax{2,qK}e + qK i=dmax{2,qK}e ∆−α
+i ). Once
+e
+T = Ω (zq log(zq ) log(1/δ)) total pulls have been made by Hyperband we have νbT − ν∗ ≤
+e hides log log(·) factors.
+∆dmax{2,qK}e with probability at least 1 − δ where Ω(·)
+Appealing to the stochastic setting of Corollary 6 so that α = 2, we conclude that the
+sample complexity sufficient to identify an arm within the best q proportion
+with probabiltiy
+−α
+1 PK
+−1
+1 − δ, up to log factors, scales like log(1/δ) log(q )(∆dqKe + qK i=dqKe ∆−α
+i ). One may
+interpret this result as an extension of the distribution-dependent pure-exploration results
+of Bubeck et al. (2009); but in our case, our bounds hold when the number of pulls is
+potentially much smaller than the number of arms K. When
+1/K this implies that the
+PK q =−2
+best arm is identified with about log(1/δ) log(K){∆−2
++
+∆
+2
+i=2 i } which matches known
+upper bounds Karnin et al. (2013); Jamieson et al. (2014) and lower bounds Kaufmann et al.
+(2015) up to log factors. Thus, for the stochastic K-armed bandit problem Hyperband
+recovers many of the known sample complexity results up to log factors.
+5.4 Finite Horizon Setting (R < ∞)
+In this section we analyze the algorithm described in Section 3, i.e. finite horizon Hyperband.
+We present similar theoretical guarantees as in Section 5.3 for infinite horizon Hyperband,
+and fortunately much of the analysis will be recycled. We state the finite horizon version of
+the SuccessiveHalving and Hyperband algorithms in Figure 10.
+The finite horizon setting differs in two major ways. First, in each bracket at least
+one arm will be pulled R times, but no arm will be pulled more than R times. Second,
+the number of brackets, each representing SuccessiveHalving with a different tradeoff
+between n and B, is fixed at logη (R) + 1. Hence, since we are sampling sequences randomly
+i.i.d., increasing B over time would just multiply the number of arms in each bracket by a
+constant, affecting performance only by a small constant.
+Theorem 8 Fix n arms. Let νi = `i,R and assume ν1 ≤ · · · ≤ νn . For any  > 0 let
+n
+h
+X
+
+
+ i
+1
+zSH = η(logη (R) + 1) n +
+min R, γ −1 max 4 , νi −ν
+2
+i=1
+
+If the Successive Halving algorithm of Figure 10 is run with any budget B ≥ zSH then an
+arm ı̂ is returned that satisfies νı̂ − ν1 ≤ /2.
+Recall that γ(R) = 0 in this setting and by definition supy≥0 γ −1 (y) ≤ R. Note that
+Lemma 2 still applies in this setting and just like above we obtain the following corollary.
+Corollary 9 Fix δ ∈ (0, 1) and  ≥ 4(F −1 ( log(2/δ)
+) − ν∗ ). Let H(F, γ, n, δ, ) be as defined
+n
+in Lemma 2 and B = η logη (R)(n + max{R, H(F, γ, n, δ, )}). If the SuccessiveHalving
+algorithm of Figure 10 is run with the specified B and n arm configurations drawn randomly
+30
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+SuccessiveHalving (Finite horizon)
+input: Budget B, and n arms where `i,k denotes the kth loss from the ith arm,
+maximum size R, η ≥ 2 (η = 3 by default).
+Initialize: S0 = [n], s = min{t ∈ N : nR(t + 1)η −t ≤ B, t ≤ logη (min{R, n})}.
+For k = 0, 1, . . . , s
+Set nk = bnη −k c, rk = bRη k−s c
+Pull each arm in Sk for rk times.
+Keep the best bnη −(k+1) c arms in terms of the rk th observed loss as Sk+1 .
+Output : ı̂, `ı̂,R where ı̂ = arg mini∈Ss+1 `i,R
+
+Hyperband (Finite horizon)
+Input: Budget B, maximum size R, η ≥ 2 (η = 3 by default)
+Initialize: smax = blog(R)/ log(η)c
+For k = 1, 2, . . .
+For s = smax , smax − 1, . . . , 0
+k s
+
+2 η
+Bk,s = 2k , nk,s = d R(s+1)
+e
+
+ı̂s , `ı̂s ,R ← SuccessiveHalving (Bk,s ,nk,s ,R,η)
+
+Figure 10: The finite horizon SuccessiveHalving and Hyperband algorithms are inspired
+by their infinite horizon counterparts of Figure 9 to handle practical constraints.
+Hyperband calls SuccessiveHalving as a subroutine.
+
+according to F then an arm ı̂ ∈ [n] is returned such that with probability at least 1 − δ we
+
+have νı̂ − ν∗ ≤ F −1 ( log(2/δ)
+) − ν∗ + /2. In particular, if B = 4dlog2 (n)eH(F, γ, n, δ) and
+n
+
+ = 4(F −1 ( log(2/δ)
+) − ν∗ ) then νı̂ − ν∗ ≤ 3 F −1 ( log(2/δ)
+) − ν∗ with probability at least 1 − δ.
+n
+n
+As in Section 5.3.2 we can apply the α, β parameterization for interpretability, with
+ 1/α
+−1
+the added constraint that supy≥0 γ (y) ≤ R so that γ(j) ≃ 1j<R 1j
+. Note that the
+approximate sample complexity of SuccessiveHalving given in Eq. (4) is still valid for
+the finite horizon algorithm.
+Fixing some ∆ > 0, δ ∈ (0, 1), and applying the parameterization of Eq. (6) we recognize
+that if n ≃ ∆−β log(1/δ) and the sufficient sampling budgets (treating η as an absolute
+constant) of the uniform allocation (Equation 3) and SuccessiveHalving (Eq. (4)) satisfy
+Uniform allocation
+
+B ≃ R∆−β log(1/δ)
+"
+
+SuccessiveHalving
+
+−1
+
+B ≃ log(∆
+
+log(1/δ)) log(1/δ) R + ∆
+
+−β 1 − (α/β)R
+
+1−β/α
+
+#
+
+1 − α/β
+
+then both also satisfy νı̂ − ν∗ . ∆ with probability at least 1 − δ. Recalling that a larger
+α means slower convergence and that a larger β means a greater difficulty of sampling
+a good limit, note that when α/β < 1 the budget of SuccessiveHalving behaves like
+R + ∆−β log(1/δ) but as α/β → ∞ the budget asymptotes to R∆−β log(1/δ).
+31
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+We can also apply the discrete-CDF parameterization of Eq. (7). For any q ∈ (0, 1), if
+n ≃ q −1 log(1/δ) and the measurement budgets of the uniform allocation (Equation 3) and
+SuccessiveHalving (Equation 4) satisfy
+
+
+
+
+K min R, max ∆−α
+if q = 1/K
+j
+j=2,...,K
+Uniform allocation:
+B ≃ log(1/δ)
+
+q −1 min{R, ∆−α }
+if q > 1/K
+dqKe
+SuccessiveHalving:
+
+B ≃ log(q −1 log(1/δ)) log(1/δ)
+
+
+K
+X
+
+
+−α
+
+
+min{R,
+∆
+}
++
+min{R, ∆−α
+2
+
+j }
+
+
+if q = 1/K
+
+K
+X
+
+
+−α
+1
+
+min{R,
+∆
+}
++
+min{R, ∆−α
+
+j }
+
+qK
+dqKe
+
+
+if q > 1/K
+
+j=2
+
+j=dqKe
+
+then an arm that is in the best q-fraction of arms is returned, i.e. ı̂/K ≈ q and νı̂ − ν∗ .
+∆dmax{2,qK}e , with probability at least 1 − δ. Once again we observe a stark difference
+ R for many
+between uniform allocation and SuccessiveHalving, particularly when ∆−α
+j
+values of j ∈ {1, . . . , n}.
+Armed with Corollary 9, all of the discussion of Section 5.3.3 preceding Theorem 5 holds
+for the finite case (R < ∞) as well. Predictably analogous theorems also hold for the finite
+horizon setting, but their specific forms (with the polylog factors) provide no additional
+insights beyond the sample complexities sufficient for SuccessiveHalving to succeed, given
+immediately above.
+It is important to note that in the finite horizon setting, for all sufficiently large B (e.g.
+B > 3R) and all distributions F , the budget B of SuccessiveHalving should scale linearly
+with n ≃ ∆−β log(1/δ) as ∆ → 0. Contrast this with the infinite horizon setting in which
+the ratio of B to n can become unbounded based on the values of α, β as ∆ → 0. One
+consequence of this observation is that in the finite horizon setting it suffices to set B large
+enough to identify an ∆-good arm with just constant probability, say 1/10, and then repeat
+9 m
+SuccessiveHalving m times to boost this constant probability to probability 1 − ( 10
+) .
+While in this theoretical treatment of Hyperband we grow B over time, in practice we
+recommend fixing B as a multiple of R as we have done in Section 3. The fixed budget
+version of finite horizon Hyperband is more suitable for practical application due to the
+constant time, instead of exponential time, between configurations trained to completion in
+each outer loop.
+
+6. Conclusion
+We conclude by discussing three potential extensions related to parallelizing Hyperband
+for distributed computing, adjusting for training methods with different convergence rates,
+and combining Hyperband with non-random sampling methods.
+Distributed implementations. Hyperband has the potential to be parallelized since
+arms are independent and sampled randomly. The most straightforward parallelization
+scheme is to distribute individual brackets of SuccessiveHalving to different machines.
+This can be done asynchronously and as machines free up, new brackets can be launched
+32
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+with a different set of arms. One can also parallelize a single bracket so that each round of
+SuccessiveHalving runs faster. One drawback of this method is that if R can be computed
+on one machine, the number of tasks decreases exponentially as arms are whittled down so a
+more sophisticated job priority queue must be managed. Devising parallel generalizations of
+Hyperband that efficiently leverage massive distributed clusters while minimizing overhead
+costs is an interesting avenue for future work.
+Adjusting for different convergence rates. A second open challenge involves generalizing the ideas behind Hyperband to settings where configurations have drastically
+differing convergence rates. Configurations can have different convergence rates if they
+have hyperparameters that impact convergence (e.g., learning rate decay for SGD or neural
+networks with differing numbers of layers or hidden units), and/or if they correspond to
+different model families (e.g., deep networks versus decision trees). The core issue arises
+when configurations with drastically slower convergence rates ultimately result in better
+models. To address these issues, we should be able to adjust the resources allocated to each
+configuration so that a fair comparison can be made at the time of elimination.
+Incorporating non-random sampling. Finally, Hyperband can benefit from different sampling schemes aside from simple random search. Quasi-random methods like Sobol
+or latin hypercube which were studied in Bergstra and Bengio (2012) may improve the
+performance of Hyperband by giving better coverage of the search space. Alternatively,
+meta-learning can be used to define intelligent priors informed by previous experimentation (Feurer et al., 2015). Finally, as mentioned in Section 2, exploring ways to combine
+Hyperband with adaptive configuration selection strategies is a very promising future
+direction.
+
+Acknowledgments
+KJ is supported by ONR awards N00014-15-1-2620 and N00014-13-1-0129. AT is supported
+in part by a Google Faculty Award and an AWS in Education Research Grant award.
+
+33
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+Appendix A. Additional Experimental Results
+Additional details for experiments presented in Section 3 and 4 are provided below.
+A.1 LeNet Experiment
+The search space for the LeNet example discussed in Section 3.3 is shown in Table 2.
+Hyperparameter
+Learning Rate
+Batch size
+Layer-2 Num Kernels (k2)
+Layer-1 Num Kernels (k1)
+
+Scale
+log
+log
+linear
+linear
+
+Min
+1e-3
+1e1
+10
+5
+
+Max
+1e-1
+1e3
+60
+k2
+
+Table 2: Hyperparameter space for the LeNet application of Section 3.3. Note that the
+number of kernels in Layer-1 is upper bounded by the number of kernels in Layer-2.
+
+A.2 Experiments Using Alex Krizhevsky’s CNN Architecture
+For the experiments discussed in Section 4.1, the exact architecture used is the 18% model
+provided on cuda-convnet for CIFAR-10.14
+Search Space: The search space used for the experiments is shown in Table 3. The
+learning rate reductions hyperparameter indicates how many times the learning rate was
+reduced by a factor of 10 over the maximum iteration window. For example, on CIFAR-10,
+which has a maximum iteration of 30,000, a learning rate reduction of 2 corresponds to
+reducing the learning every 10,000 iterations, for a total of 2 reductions over the 30,000
+iteration window. All hyperparameters, with the exception of the learning rate decay
+reduction, overlap with those in Snoek et al. (2012). Two hyperparameters in Snoek et al.
+(2012) were excluded from our experiments: (1) the width of the response normalization
+layer was excluded due to limitations of the Caffe framework and (2) the number of epochs
+was excluded because it is incompatible with dynamic resource allocation.
+Data Splits: For CIFAR-10, the training (40,000 instances) and validation (10,000
+instances) sets were sampled from data batches 1-5 with balanced classes. The original test
+set (10,000 instances) was used for testing. For MRBI, the training (10,000 instances) and
+validation (2,000 instances) sets were sampled from the original training set with balanced
+classes. The original test set (50,000 instances) was used for testing. Lastly, for SVHN, the
+train, validation, and test splits were created using the same procedure as that in Sermanet
+et al. (2012).
+Comparison with Early-Stopping: Domhan et al. (2015) proposed an early-stopping
+method for neural networks and combined it with SMAC to speed up hyperparameter optimization. Their method stops training a configuration if the probability of the configuration
+beating the current best is below a specified threshold. This probability is estimated by
+extrapolating learning curves fit to the intermediate validation error losses of a configuration.
+14. The model specification is available at http://code.google.com/p/cuda-convnet/.
+
+34
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+Hyperparameter
+Learning Parameters
+Initial Learning Rate
+Conv1 L2 Penalty
+Conv2 L2 Penalty
+Conv3 L2 Penalty
+FC4 L2 Penalty
+Learning Rate Reductions
+Local Response Normalization
+Scale
+Power
+
+Scale
+
+Min
+
+Max
+
+log
+log
+log
+log
+log
+integer
+
+5 ∗ 10−5
+5 ∗ 10−5
+5 ∗ 10−5
+5 ∗ 10−5
+5 ∗ 10−3
+0
+
+5
+5
+5
+5
+500
+3
+
+log
+linear
+
+5 ∗ 10−6
+0.01
+
+5
+3
+
+Table 3: Hyperparameters and associated ranges for the three-layer convolutional network.
+
+If a configuration is terminated early, the predicted terminal value from the estimated
+learning curves is used as the validation error passed to the hyperparameter optimization
+algorithm. Hence, if the learning curve fit is poor, it could impact the performance of the
+configuration selection algorithm. While this approach is heuristic in nature, it could work
+well in practice so we compare Hyperband to SMAC with early termination (labeled SMAC
+(early) in Figure 11). We used the conservative termination criterion with default parameters
+and recorded the validation loss every 400 iterations and evaluated the termination criterion
+3 times within the training period (every 8k iterations for CIFAR-10 and MRBI and every
+16k iterations for SVHN).15 Comparing the performance by the number of total iterations
+as mulitple of R is conservative because it does not account for the time spent fitting the
+learning curve in order to check the termination criterion.
+A.3 117 Data Sets Experiment
+For the experiments discussed in Section 4.2.1, we followed Feurer et al. (2015) and imposed
+a 3GB memory limit, a 6-minute timeout for each hyperparameter configuration and a
+one-hour time window to evaluate each searcher on each data set. Moreover, we evaluated
+the performance of each searcher by aggregating results across all data sets and reporting
+the average rank of each method. Specifically, the hour training window is divided up into
+30 second intervals and, at each time point, the model with the best validation error at that
+time is used in the calculation of the average error across all trials for each (data set-searcher)
+pair. Then, the performance of each searcher is ranked by data set and averaged across
+all data sets. All experiments were performed on Google Cloud Compute n1-standard-1
+instances in us-central1-f region with 1 CPU and 3.75GB of memory.
+Data Splits: Feurer et al. (2015) split each data set into 2/3 training and 1/3 test set,
+whereas we introduce a validation set to avoid overfitting to the test data. We also used 2/3
+of the data for training, but split the rest of the data into two equally sized validation and
+test sets. We reported results on both the validation and test data. Moreover, we performed
+15. We used the code provided at https://github.com/automl/pylearningcurvepredictor.
+
+35
+
+0.32
+
+hyperband (finite)
+hyperband (infinite)
+SMAC
+SMAC (early)
+TPE
+
+Average Test Error
+
+0.30
+0.28
+0.26
+
+spearmint
+random
+random 2x
+bracket s=4
+
+0.24
+0.22
+
+Average Test Error
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+0.20
+0.18
+
+0
+
+10
+
+20
+30
+Multiple of R Used
+
+40
+
+50
+
+0.30
+0.29
+0.28
+0.27
+0.26
+0.25
+0.24
+0.23
+0.22
+
+0
+
+10
+
+(a) CIFAR-10
+
+20
+30
+Multiple of R Used
+
+40
+
+50
+
+(b) MRBI
+
+0.10
+Average Test Error
+
+0.09
+0.08
+0.07
+0.06
+0.05
+0.04
+0.03
+0
+
+10
+
+20
+30
+Multiple of R Used
+
+40
+
+50
+
+(c) SVHN
+
+Figure 11: Average test error across 10 trials is shown in all plots. Error bars indicate the
+top and bottom quartiles of the test error corresponding to the model with the
+best validation error
+
+36
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+20 trials of each (data set-searcher) pair, and as in Feurer et al. (2015) we kept the same
+data splits across trials, while using a different random seed for each searcher in each trial.
+Shortcomings of the Experimental Setup: The benchmark contains a large variety
+of training set sizes and feature dimensions16 resulting in random search being able to test
+600 configurations on some data sets but just dozens on others. Hyperband was designed
+under the implicit assumption that computation scaled at least linearly with the data set size.
+For very small data sets that are trained in seconds, the initialization overheads dominate
+the computation and subsampling provides no computational benefit. In addition, many of
+the classifiers and preprocessing methods under consideration return memory errors as they
+require storage quadratic in the number of features (e.g., covariance matrix) or the number of
+observations (e.g., kernel methods). These errors usually happen immediately (thus wasting
+little time); however, they often occur on the full data set and not on subsampled data sets.
+A searcher like Hyperband that uses a subsampled data set could spend significant time
+training on a subsample only to error out when attempting to train it on the full data set.
+A.4 Kernel Classification Experiments
+Table 4 shows the hyperparameters and associated ranges considered in the kernel least
+squares classification experiment discussed in Section 4.2.2.
+Hyperparameter
+preprocessor
+kernel
+C
+gamma
+degree
+coef0
+
+Type
+Categorical
+Categorical
+Continuous
+Continuous
+if kernel=poly
+if kernel=poly, sigmoid
+
+Values
+min/max, standardize, normalize
+rbf, polynomial, sigmoid
+log [10−3 , 105 ]
+log [10−5 , 10]
+integer [2, 5]
+uniform [-1.0, 1.0]
+
+Table 4: Hyperparameter space for kernel regularized least squares classification problem
+discussed in Section 4.2.2.
+
+The cost term C is divided by the number of samples so that the tradeoff between the
+squared error and the L2 penalty would remain constant as the resource increased (squared
+error is summed across observations and not averaged). The regularization term λ is equal
+to the inverse of the scaled cost term C. Additionally, the average test error with the top
+and bottom quartiles across 10 trials are show in Figure 12.
+Table 5 shows the hyperparameters and associated ranges considered in the random
+features kernel approximation classification experiment discussed in Section 4.3. The
+regularization term λ is divided by the number of features so that the tradeoff between
+the squared error and the L2 penalty would remain constant as the resource increased.
+Additionally, the average test error with the top and bottom quartiles across 10 trials are
+show in Figure 13.
+16. Training set size ranges from 670 to 73,962 observations, and number of features ranges from 1 to 10,935.
+
+37
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+0.70
+
+hyperband (finite)
+SMAC
+TPE
+random
+random 2x
+bracket s=4
+
+Test Error
+
+0.65
+0.60
+0.55
+0.50
+0.45
+0.40
+
+0
+
+100 200 300 400 500 600 700
+Minutes
+
+Figure 12: Average test error of the best kernel regularized least square classification model
+found by each searcher on CIFAR-10. The color coded dashed lines indicate
+when the last trial of a given searcher finished. Error bars correspond to the top
+and bottom quartiles of the test error across 10 trials.
+
+0.70
+
+hyperband (finite)
+SMAC
+TPE
+spearmint
+random
+random 2x
+bracket s=4
+
+Test Error
+
+0.65
+0.60
+0.55
+0.50
+0.45
+0.40
+
+0
+
+100 200 300 400 500 600 700
+Minutes
+
+Figure 13: Average test error of the best random features model found by each searcher on
+CIFAR-10. The test error for Hyperband and bracket s = 4 are calculated in
+every evaluation instead of at the end of a bracket. Error bars correspond to the
+top and bottom quartiles of the test error across 10 trials.
+
+38
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+Hyperparameter
+preprocessor
+λ
+gamma
+
+Type
+Categorical
+Continuous
+Continuous
+
+Values
+none, min/max, standardize, normalize
+log [10−3 , 105 ]
+log [10−5 , 10]
+
+Table 5: Hyperparameter space for random feature kernel approximation classification
+problem discussed in Section 4.3.
+
+Appendix B. Proofs
+In this section, we provide proofs for the theorems presented in Section 5.
+B.1 Proof of Theorem 1
+Proof First, we verify that the algorithm never takes a total number of samples that
+exceeds the budget B:
+dlog2 (n)e−1
+
+X
+
+|Sk |
+
+j
+
+B
+|Sk |dlog(n)e
+
+k
+
+dlog2 (n)e−1
+
+≤
+
+k=0
+
+X
+
+B
+dlog(n)e ≤ B .
+
+k=0
+
+For notational ease, let `i,j := `j (Xi ). Again, for each i ∈ [n] := {1, . . . , n} we assume
+the limit limk→∞ `i,k exists and is equal to νi . As a reminder, γ : N → R is defined as the
+pointwise smallest, monotonically decreasing function satisfying
+max |`i,j − νi | ≤ γ(j) , ∀j ∈ N.
+i
+
+(8)
+
+Note γ is guaranteed to exist by the existence of νi and bounds the deviation from the limit
+value as the sequence of iterates j increases.
+Without loss of generality, order the terminal losses so that ν1 ≤ ν2 ≤ · · · ≤ νn . Assume
+that B ≥ zSH . Then we have for each round k
+B
+−1
+|Sk |dlog2 (n)e
+
+
+  νi − ν1 
+2
+≥
+max i 1 + γ −1 max ,
+−1
+|Sk | i=2,...,n
+4
+2
+
+
+  νb|Sk |/2c+1 − ν1 
+2
+−1
+≥
+(b|Sk |/2c + 1) 1 + γ
+max ,
+−1
+|Sk |
+4
+2
+
+
+  νb|Sk |/2c+1 − ν1 
+≥ 1 + γ −1 max ,
+−1
+4
+2
+  νb|Sk |/2c+1 − ν1 
+= γ −1 max ,
+,
+4
+2
+
+rk ≥
+
+where the fourth line follows from b|Sk |/2c ≥ |Sk |/2 − 1.
+39
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+
+1
+First we show that `i,t − `1,t > 0 for all t ≥ τi := γ −1 νi −ν
+. Given the definition of γ,
+2
+1
+we have for all i ∈ [n] that |`i,t − νi | ≤ γ(t) ≤ νi −ν
+where
+the
+last
+inequality holds for t ≥ τi .
+2
+Thus, for t ≥ τi we have
+`i,t − `1,t = `i,t − νi + νi − ν1 + ν1 − `1,t
+= `i,t − νi − (`1,t − ν1 ) + νi − ν1
+≥ −2γ(t) + νi − ν1
+νi − ν1
+≥ −2
++ νi − ν1
+2
+= 0.
+Under this scenario, we will eliminate arm i before arm 1 since on each round the arms are
+sorted by their empirical losses and the top half are discarded. Note that by the assumption
+the νi limits are non-decreasing in i so that the τi values are non-increasing in i.
+Fix a round k and assume 1 ∈ Sk (note, 1 ∈ S0 ). The above calculation shows that
+t ≥ τi =⇒ `i,t ≥ `1,t .
+
+(9)
+
+Consequently,
+
+X
+
+
+
+{1 ∈ Sk , 1 ∈
+/ Sk+1 } ⇐⇒
+1{`i,rk < `1,rk } ≥ b|Sk |/2c
+
+
+i∈Sk
+
+
+X
+
+=⇒
+1{rk < τi } ≥ b|Sk |/2c
+
+
+i∈Sk
+
+
+|/2c+1
+b|SkX
+
+=⇒
+1{rk < τi } ≥ b|Sk |/2c
+
+
+i=2
+
+⇐⇒ rk < τb|Sk |/2c+1 .
+where the first line follows by the definition of the algorithm, the second by Equation 9,
+and the third by τi being non-increasing (for all i < j we have τi ≥ τj and consequently,
+1{rk < τi } ≥ 1{rk < τj } so the first indicators of the sum not including 1 would be on
+before any other i’s in Sk ⊂ [n] sprinkled throughout [n]). This implies
+{1 ∈ Sk , rk ≥ τb|Sk |/2c+1 } =⇒ {1 ∈ Sk+1 }.
+
+(10)
+
+ νb|Sk |/2c+1 −ν1 
+νb|Sk |/2c+1 −ν1 
+Recalling that rk ≥ γ −1 max 4 ,
+and τb|Sk |/2c+1 = γ −1
+,
+2
+2
+we examine the following three exhaustive cases:
+νb|Sk |/2c+1 −ν1
+≥ 4 and 1 ∈ Sk
+2
+νb|Sk |/2c+1 −ν1 
+In this case, rk ≥ γ −1
+= τb|Sk |/2c+1 .
+2
+1 ∈ Sk+1 since 1 ∈ Sk .
+
+• Case 1:
+
+40
+
+By Equation 10 we have that
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+νb|Sk |/2c+1 −ν1
+< 4 and 1 ∈ Sk
+2
+
+
+In this case rk ≥ γ −1 4 but γ −1 4 < τb|Sk |/2c+1 . Equation 10 suggests that it may
+be possible for 1 ∈ Sk but 1 ∈
+/ Sk+1 . On the good event that 1 ∈ Sk+1 , the algorithm
+
+• Case 2:
+
+continues and on the next round either case 1 or case 2 could be true. So assume
+1∈
+/ Sk+1 . Here we show that {1 ∈ Sk , 1 ∈
+/ Sk+1 } =⇒ maxi∈Sk+1 νi ≤ ν1 + /2.
+Because 1 ∈ S0 , this guarantees that SuccessiveHalving either exits with arm bi = 1
+or some arm bi satisfying νbi ≤ ν1 + /2.
+1
+Let p = min{i ∈ [n] : νi −ν
+≥ 4 }. Note that p > b|Sk |/2c + 1 by the criterion of the
+2
+case and
+
+
+ 
+−1 
+−1 νi − ν1
+rk ≥ γ
+= τi , ∀i ≥ p.
+≥γ
+4
+2
+
+Thus, by Equation 9 (t ≥ τi =⇒ `i,t ≥ `1,t ) we have that arms i ≥ p would always
+have `i,rk ≥ `1,rk and be eliminated before or at the same time as arm 1, presuming
+1 ∈ Sk . In conclusion, if arm 1 is eliminated so that 1 ∈ Sk but 1 ∈
+/ Sk+1 then
+maxi∈Sk+1 νi ≤ maxi<p νi < ν1 + /2 by the definition of p.
+• Case 3: 1 ∈
+/ Sk
+Since 1 ∈ S0 , there exists some r < k such that 1 ∈ Sr and 1 ∈
+/ Sr+1 . For this r, only
+case 2 is possible since case 1 would proliferate 1 ∈ Sr+1 . However, under case 2, if
+1∈
+/ Sr+1 then maxi∈Sr+1 νi ≤ ν1 + /2.
+Because 1 ∈ S0 , we either have that 1 remains in Sk (possibly alternating between cases
+1 and 2) for all k until the algorithm exits with the best arm 1, or there exists some k such
+that case 3 is true and the algorithm exits with an arm bi such that νbi ≤ ν1 + /2. The proof
+is complete by noting that
+|`
+
+− ν1 | ≤ |`
+− νbi | + |νbi − ν1 | ≤ /4 + /2 ≤ 
+bi,b B/2 c
+bi,b B/2 c
+dlog (n)e
+dlog (n)e
+2
+
+2
+
+by the triangle inequality and because B ≥ 2dlog2 (n)eγ −1 (/4) by assumption.
+The second, looser, but perhaps more interpretable form of zSH follows from the fact
+that γ −1 (x) is non-increasing in x so that
+X
+
+
+
+
+1
+1
+max i γ −1 max 4 , νi −ν
+≤
+γ −1 max 4 , νi −ν
+.
+2
+2
+i=2,...,n
+
+i=1,...,n
+
+B.2 Proof of Lemma 2
+Proof Let pn = log(2/δ)
+, M = γ −1
+n
+ξ1 = {ν1 ≤ F −1 (pn )}
+( n
+X
+ξ2 =
+min{M, γ −1
+
+
+16
+
+
+
+
+ν −ν∗
+i
+
+4
+
+, and µ = E[min{M, γ −1
+
+νi −ν∗
+4
+
+
+
+}]. Define the events
+
+)
+p
+} ≤ nµ + 2nµM log(2/δ) + 23 M log(2/δ)
+
+i=1
+
+41
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+Note that P(ξ1c ) = P(mini=1,...,n νi > F −1 (pn )) = (1 − pn )n ≤ exp(−npn ) ≤ 2δ . Moreover,
+P(ξ2c ) ≤ 2δ by Bernstein’s inequality since
+ 2
+
+ 
+
+∗
+∗
+} ≤ E M min{M, γ −1 νi −ν
+} = M µ.
+E min{M, γ −1 νi −ν
+4
+4
+Thus, P(ξ1 ∩ ξ2 ) ≥ 1 − δ so in what follows assume these events hold.
+First
+show thatif ν∗ ≤ ν1 ≤ F −1 (pn ), which we will refer to as equation (∗), then
+  νwe
+∗
+i −ν1
+≥ max 4 , νi −ν
+.
+max 4 , 2
+4
+νi −ν1
+
+−1
+Case 1: 4 ≤ 2 and  ≥ 4(F (pn ) − ν∗ ).
+νi −ν1
+2
+
+(∗)
+
+≥ νi −ν∗ +ν∗2−F
+
+−1 (p )
+n
+
+∗
+∗
+= νi −ν
++ νi −ν
+−F
+4
+4
+
+−1 (p
+
+n )−ν∗
+
+(∗)
+
+∗
+1
+≥ νi −ν
++ νi −ν
+−F
+4
+4
+
+2
+
+−1 (p
+
+n )−ν∗
+
+2
+
+1
+Case 2: 4 > νi −ν
+and  ≥ 4(F −1 (pn ) − ν∗ ).
+2
+Case 2
+νi −ν∗
+∗
+∗
+1
+= νi −ν
++ ν1 −ν
+< 8 + ν1 −ν
+4
+4
+4
+4
+
+(∗)
+
+≤ 8 + F
+
+−1 (p
+
+n )−ν∗
+
+Case 2
+
+4
+
+<
+
+
+4
+
+which shows the desired result.
+Consequently, for any  ≥ 4(F −1 (pn ) − ν∗ ) we have
+n
+X
+
+γ
+
+−1
+
+max
+
+νi −ν1
+4,
+2
+
+
+
+
+
+≤
+
+i=1
+
+n
+X
+
+γ −1 max
+
+νi −ν∗
+4,
+4
+
+
+
+
+
+i=1
+
+≤
+
+n
+X
+
+γ −1 max
+
+νi −ν∗
+16 ,
+4
+
+
+
+
+
+i=1
+
+=
+
+n
+X
+
+min{M, γ −1
+
+νi −ν∗
+4
+
+
+
+}
+
+i=1
+
+p
+≤ nµ + 2nµM log(1/δ) + 32 M log(1/δ)
+
+2
+q
+√
+≤
+nµ + 23 M log(2/δ) ≤ 2nµ + 34 M log(2/δ).
+A direct computation yields
+
+∗
+µ = E[min{M, γ −1 νi −ν
+}]
+  νi4−ν∗ 
+−1
+= E[γ
+max 16 , 4
+]
+Z ∞
+
+
+= γ −1 16
+F (ν∗ + /4) +
+
+ν∗ +/4
+
+∗
+γ −1 ( t−ν
+4 )dF (t)
+
+so that
+n
+X
+
+γ −1 max
+
+
+
+4,
+
+νi −ν1
+2
+
+
+
+≤ 2nµ + 43 M log(2/δ)
+
+i=1
+
+Z ∞
+= 2n
+ν∗ +/4
+
+∗
+γ −1 ( t−ν
+4 )dF (t) +
+
+4
+3 log(2/δ) + 2nF (ν∗ + /4)
+
+
+
+which completes the proof.
+
+42
+
+γ −1
+
+
+16
+
+
+
+Case 1
+
+≥
+
+νi −ν∗
+4 .
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+B.3 Proof of Proposition 4
+We break the proposition up into upper and lower bounds and prove them seperately.
+B.4 Uniform Allocation
+Proposition 10 Suppose we draw n random configurations from F , train each with a budget
+of j,17 and let ı̂ = arg mini=1,...,n `j (Xi ). Let νi = `∗ (Xi ) and without loss of generality
+assume ν1 ≤ . . . ≤ νn . If
+
+
+B ≥ nγ −1 12 (F −1 ( log(1/δ)
+)
+−
+ν
+)
+(11)
+∗
+n
+
+
+
+
+−
+ν
+.
+then with probability at least 1 − δ we have νı̂ − ν∗ ≤ 2 F −1 log(1/δ)
+∗
+n
+Proof Note that if we draw n random configurations from F and i∗ = arg mini=1,...,n `∗ (Xi )
+then
+P (`∗ (Xi∗ ) − ν∗ ≤ ) = P
+
+n
+[
+
+{`∗ (Xi ) − ν∗ ≤ }
+
+
+
+i=1
+
+= 1 − (1 − F (ν∗ + ))n ≥ 1 − e−nF (ν∗ +) ,
+which is equivalent to saying that with probability at least 1−δ, `∗ (Xi∗ )−ν∗ ≤ F −1 (log(1/δ)/n)−
+ν∗ . Furthermore, if each configuration is trained for j iterations then with probability at
+least 1 − δ
+`∗ (Xı̂ ) − ν∗ ≤ `j (Xı̂ ) − ν∗ + γ(j) ≤ `j (Xi∗ ) − ν∗ + γ(j)
+
+
+− ν∗ + 2γ(j).
+≤ `∗ (Xi∗ ) − ν∗ + 2γ(j) ≤ F −1 log(1/δ)
+n
+If our measurement budget B is constrained so that B = nj then solving for j in terms of B
+and n yields the result.
+The following proposition demonstrates that the upper bound on the error of the uniform
+allocation strategy in Proposition 4 is in fact tight. That is, for any distribution F and
+function γ there exists a loss sequence that requires the budget described in Eq. (3) in order
+to avoid a loss of more than  with high probability.
+Proposition 11 Fix any δ ∈ (0, 1) and n ∈ N. For any c ∈ (0, 1], let Fc denote the space of
+(x+∆/2)
+continuous cumulative distribution functions F satisfying18 inf x∈[ν∗ ,1−ν∗ ] inf ∆∈[0,1−x] F (x+∆)−F
+≥
+F (x+∆)−F (x)
+c. And let Γ denote the space of monotonically decreasing functions over N. For any
+F ∈ Fc and γ ∈ Γ there exists a probability distribution µ over X and a sequence of
+functions `j : X → R ∀j ∈ N with `∗ := limj→∞ `j , ν∗ = inf x∈X `∗ (x) such that
+17. Here j can be bounded (finite horizon) or unbounded (infinite horizon).
+β
+18. Note that this condition is met whenever F is convex. Moreover, if F (ν∗ + ) = c−1
+1  then it is easy to
+verify that c = 1 − 2−β ≥ 12 min{1, β}.
+
+43
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+supx∈X |`j (x) − `∗ (x)| ≤ γ(j) and Pµ (`∗ (X) − ν∗ ≤ ) = F (). Moreover, if n configurations X1 , . . . , Xn are drawn from µ and ı̂ = arg mini∈1,...,n `B/n (Xi ) then with probability
+at least δ
+log(c/δ)
+`∗ (Xı̂ ) − ν∗ ≥ 2(F −1 ( n+log(c/δ)
+) − ν∗ )
+
+
+
+log(c/δ)
+whenever B ≤ nγ −1 2(F −1 ( n+log(c/δ)
+) − ν∗ ) .
+Proof Let X = [0, 1], `∗ (x) = F −1 (x), and µ be the uniform distribution over [0, 1]. Define
+log(c/δ)
+νb = F −1 ( n+log(c/δ)
+) and set
+(
+ν + 12 γ(j) − `∗ (x))
+νb + 21 γ(j) + (b
+`j (x) =
+`∗ (x)
+
+if |b
+ν + 12 γ(j) − `∗ (x)| ≤ 21 γ(j)
+otherwise.
+
+Essentially, if `∗ (x) is within 12 γ(j) of νb + 12 γ(j) then we set `j (x) equal to `∗ (x) reflected
+across the value 2b
+ν + γ(j). Clearly, |`j (x) − `∗ (x)| ≤ γ(j) for all x ∈ X .
+Since each `∗ (Xi ) is distributed according to F , we have
+n
+\
+
+P
+{`∗ (Xi ) − ν∗ ≥ } = (1 − F (ν∗ + ))n ≥ e−nF (ν∗ +)/(1−F (ν∗ +)) .
+i=1
+
+Setting the right-hand-side greater than or equal to δ/c and solving for , we find ν∗ +  ≥
+log(c/δ)
+F −1 ( n+log(c/δ)
+) = νb.
+Define I0 = [ν∗ , νb), I1 = [b
+ν , νb + 12 γ(B/n))
+and I2 = [b
+ν + 12 γ(B/n), νb + γ(B/n)]. FurPn
+thermore, for j ∈ {0, 1, 2} define Nj = i=1 1`∗ (Xi )∈Ij . Given N0 = 0 (which occurs with
+log(c/δ)
+probability at least δ/c), if N1 = 0 then `∗ (Xı̂ ) − ν∗ ≥ F −1 ( n+log(c/δ)
+) + 12 γ(B/n) and the
+claim is true.
+Below we will show that if N2 > 0 whenever N1 > 0 then the claim is also true. We now
+show that this happens with at least probability c whenever N1 + N2 = m for any m > 0.
+Observe that
+
+P(N2 > 0|N1 + N2 = m) = 1 − P(N2 = 0|N1 + N2 = m)
+= 1 − (1 − P(νi ∈ I2 |νi ∈ I1 ∪ I2 ))m ≥ 1 − (1 − c)m ≥ c
+since
+P(νi ∈ I2 |νi ∈ I1 ∪ I2 ) =
+
+P(νi ∈ [b
+ν + 12 γ, νb + γ])
+F (b
+ν + γ) − F (b
+ν + 12 γ)
+P(νi ∈ I2 )
+=
+=
+≥ c.
+P(νi ∈ I1 ∪ I2 )
+P(νi ∈ [b
+ν , νb + γ])
+F (b
+ν + γ) − F (b
+ν)
+
+Thus, the probability of the event that N0 = 0 and N2 > 0 whenever N1 > 0 occurs with
+probability at least δ/c · c = δ, so assume this is the case in what follows.
+Since N0 = 0, for all j ∈ N, each Xi must fall into one of three cases:
+1. `∗ (Xi ) > νb + γ(j) ⇐⇒ `j (Xi ) > νb + γ(j)
+2. νb ≤ `∗ (Xi ) < νb + 12 γ(j) ⇐⇒ νb + 21 γ(j) < `j (Xi ) ≤ νb + γ(j)
+44
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+3. νb + 12 γ(j) ≤ `∗ (Xi ) ≤ νb + γ(j) ⇐⇒ νb ≤ `j (Xi ) ≤ νb + 12 γ(j)
+The first case holds since within that regime we have `j (x) = `∗ (x), while the last two
+cases hold since they consider the regime where `j (x) = 2b
+ν + γ(j) − `∗ (x). Thus, for
+any i such that `∗ (Xi ) ∈ I2 it must be the case that `j (Xi ) ∈ I1 and vice versa. Because N2 ≥ N1 > 0, we conclude that if ı̂ = arg mini `B/n (Xi ) then `B/n (Xı̂ ) ∈ I1 and
+log(c/δ)
+`∗ (Xı̂ ) ∈ I2 . That is, νı̂ − ν∗ ≥ νb − ν∗ + 12 γ(j) = F −1 ( n+log(c/δ)
+) − ν∗ + 12 γ(j). So if
+log(c/δ)
+we wish νı̂ − ν∗ ≤ 2(F −1 ( n+log(c/δ)
+) − ν∗ ) with probability at least δ then we require
+
+
+log(c/δ)
+B/n = j ≥ γ −1 2(F −1 ( n+log(c/δ)
+) − ν∗ ) .
+
+B.5 Proof of Theorem 5
+Proof Step 1: Simplify H(F, γ, n, δ). We begin by simplifying H(F, γ, n, δ) in terms of
+just n, δ, α, β. In what follows, we use a constant c that may differ from one inequality to the
+next but remains an absolute constant that depends on α, β only. Let pn = log(2/δ)
+so that
+n
+γ −1
+
+
+
+F −1 (pn )−ν∗
+4
+
+
+
+≤ c F −1 (pn ) − ν∗
+
+−α
+
+≤ c p−α/β
+n
+
+and
+Z 1
+pn
+
+−1
+∗
+γ −1 ( F (t)−ν
+)dt ≤ c
+4
+
+Z 1
+
+−α/β
+
+t
+
+dt ≤
+
+(
+c log(1/pn )
+
+pn
+
+1−α/β
+1−pn
+
+c 1−α/β
+
+if α = β
+if α 6= β.
+
+We conclude that
+Z 1
+H(F, γ, n, δ) = 2n
+pn
+
+γ −1 ( F
+
+−1 (t)−ν
+∗
+
+4
+
+−1
+)dt + 10
+3 log(2/δ)γ
+
+≤ cp−α/β
+log(1/δ) + cn
+n
+
+(
+log(1/pn )
+1−α/β
+1−pn
+
+1−α/β
+
+
+
+F −1 (pn )−ν∗
+4
+
+
+
+if α = β
+if α 6= β.
+
+Step 2: Solve for (Bk,l , nk,l ) in terms of ∆. Fix ∆ > 0. Our strategy is to describe nk,l
+3 /δ)
+in terms of ∆. In particular, parameterize nk,l such that pnk,l = c log(4k
+= ∆β so that
+nk,l
+nk,l = c∆−β log(4k 3 /δ) so
+H(F, γ, nk,l , δk,l ) ≤ cp−α/β
+nk,l log(1/δk,l ) + cnk,l
+
+≤ c log(k/δ) ∆−α +
+
+
+log(1/pnk,l )
+
+if α = β
+
+1−α/β
+
+ 1−pnk,l
+1−α/β
+
+(
+∆−β log(∆−1 )
+
+if α 6= β.
+
+if α = β
+if α 6= β
+
+∆−β −∆−α
+1−α/β
+1
+≤ c log(k/δ) min{ |1−α/β| , log(∆−1 )}∆− max{β,α}
+
+45
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+where the last line follows from
+∆max{β,α}
+
+∆−β − ∆−α
+∆max{0,α−β} − ∆max{0,β−α}
+=β
+1 − α/β
+β−α
+(
+1−∆β−α
+if β > α
+1
+β−α
+= β 1−∆
+≤ c min{ |1−α/β|
+, log(∆−1 )}.
+α−β
+if
+β
+<
+α
+α−β
+
+Using the upperbound dlog(nk,l )e ≤ c log(log(k/δ)∆−1 ) ≤ c log(log(k/δ)) log(∆−1 ) and
+letting z∆ = log(∆−1 )2 ∆− max{β,α} , we conclude that
+Bk,l < min{2k : 2k > 4dlog(nk,l )eH(F, γ, nk,l , δk,l )}
+< min{2k : 2k > c log(k/δ) log(log(k/δ))z∆ }
+≤ cz∆ log(log(z∆ )/δ) log(log(log(z∆ )/δ))
+= cz∆ log(log(z∆ )/δ).
+Step 3: Count the total number of measurements. Moreover, the total number of
+measurements before ı̂k,l is output is upperbounded by
+T =
+
+k X
+i
+X
+
+Bi,j ≤ k
+
+i=1 j=l
+
+k
+X
+
+Bi,1 ≤ 2kBk,1 = 2Bk,1 log2 (Bk,1 )
+
+i=1
+
+where we have employed the so-called “doubling trick”:
+Simplifying,
+
+Pk
+
+i=1 Bi,1 =
+
+Pk
+
+i
+k+1 = 2B .
+k,i
+i=1 2 ≤ 2
+
+T ≤ cz∆ log(log(z∆ )/δ)log(z∆ log(log(z∆ )/δ)) ≤ c∆− max{β,α} log(∆−1 )3 log(log(∆−1 )/δ)
+Solving for ∆ in terms of T obtains
+
+∆=c
+
+log(T )3 log(log(T )/δ)
+T
+
+1/ max{α,β}
+.
+
+Because the output arm is just the empirical best, there is some error associated with
+k−1
+using the empirical estimate. The arm returned returned on round (k, l) is pulled b 2 l c &
+
+
+log(Bk,l ) 1/α
+≤
+Bk,l / log(Bk,l ) times so the possible error is bounded by γ(Bk,l / log(Bk,l )) ≤ c
+Bk,l
+
+
+1/α
+2
+c log(B) log(log(B))
+which is dominated by the value of ∆ solved for above.
+B
+
+B.6 Proof of Theorem 7
+Proof Step 1: Simplify H(F, γ, n, δ, ). We begin by simplifying H(F, γ, n, δ, ) in terms
+of just n, δ, α, β. As before, we use a constant c that may differ from one inequality to the
+next but remains an absolute constant. Let pn = log(2/δ)
+First we solve for
+n
+  by noting that
+we identify the best arm if νı̂ − ν∗ < ∆2 . Thus, if νı̂ − ν∗ ≤ F −1 (pn ) − ν∗ + /2 then we set
+
+
+
+ = max 2 ∆2 − F −1 (pn ) − ν∗ , 4 F −1 (pn ) − ν∗
+46
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+so that
+
+
+νı̂ − ν∗ ≤ max 3 F −1 (pn ) − ν∗ , ∆2 = ∆dmax{2,cKpn }e .
+
+We treat the case when 3 F −1 (pn) − ν∗ ≤ ∆2 and the alternative separately.
+
+First assume 3 F −1 (pn ) − ν∗ > ∆2 so that  = 4 F −1 (pn ) − ν∗ and H(F, γ, n, δ, ) =
+H(F, γ, n, δ). We also have
+
+ −1
+−α
+γ −1 F (p4n )−ν∗ ≤ c F −1 (pn ) − ν∗
+≤ c ∆−α
+dpn Ke
+and
+Z 1
+pn
+
+−1
+∗
+γ −1 ( F (t)−ν
+)dt =
+4
+
+Z 1
+F −1 (p
+
+n)
+
+c
+∗
+γ −1 ( x−ν
+4 )dF (x) ≤ K
+
+K
+X
+
+∆−α
+i
+
+i=dpn Ke
+
+so that
+Z 1
+H(F, γ, n, δ) = 2n
+pn
+
+γ −1 ( F
+
+−1 (t)−ν
+∗
+
+4
+
+≤ c∆−α
+dpn Ke log(1/δ) +
+
+−1
+)dt + 10
+3 log(2/δ)γ
+
+cn
+K
+
+K
+X
+
+
+
+F −1 (pn )−ν∗
+4
+
+
+
+∆−α
+i .
+
+i=dpn Ke
+
+
+Now consider the case when 3 F −1 (pn ) − ν∗ ≤ ∆2 . In this case F (ν∗ + /4) = 1/K,
+
+R∞
+PK
+−α
+
+−1 t−ν∗
+so that
+γ −1 16
+≤ c∆−α
+2 , and ν∗ +/4 γ ( 4 )dF (t) ≤ c
+i=2 ∆i
+Z ∞
+H(F, γ, n, δ, ) = 2n
+ν∗ +/4
+
+∗
+γ −1 ( t−ν
+4 )dF (t) +
+
+4
+3 log(2/δ) + 2nF (ν∗ + /4)
+
+
+
+cn
+≤ c(log(1/δ) + n/K)∆−α
+2 +
+K
+
+K
+X
+
+γ −1
+
+
+16
+
+
+
+∆−α
+i .
+
+i=2
+
+Step 2: Solve for (Bk,l , nk,l ) in terms
+ of ∆. Note there is no improvement possible
+once pnk,l ≤ 1/K since 3 F −1 (1/K) − ν∗ ≤ ∆2 . That is, when pnk,l ≤ 1/K the algorithm
+has found the best arm but will continue to take samples indefinetely. Thus, we only
+consider the case when q = 1/K and q > 1/K. Fix ∆ > 0. Our strategy is to describe
+3 /δ)
+nk,l in terms of q. In particular, parameterize nk,l such that pnk,l = c log(4k
+= q so that
+nk,l
+nk,l = cq −1 log(4k 3 /δ) so
+(
+
+n
+nk,l PK
+−α
+if 5 F −1 (pnk,l ) − ν∗ ≤ ∆2
+(log(1/δk,l ) + Kk,l )∆−α
+2 + K
+i=2 ∆i
+H(F, γ, nk,l , δk,l , k,l ) ≤ c
+nk,l PK
+−α
+∆−α
+log(1/δ
+)
++
+if otherwise
+k,l
+i=dpnk,l Ke ∆i
+K
+dpnk,l Ke
+(
+P
+K
+−α
+∆−α
+if q = 1/K
+2 +
+i=2 ∆i
+P
+≤ c log(k/δ)
+K
+−α
+−α
+1
+∆dqKe + qK i=dqKe ∆i
+if q > 1/K.
+≤ c log(k/δ)∆−α
+dmax{2,qK}e +
+
+47
+
+1
+qK
+
+K
+X
+i=dmax{2,qK}e
+
+∆−α
+i
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+Using the upperbound dlog(nk,l )e ≤ c log(log(k/δ)q −1 ) ≤ c log(log(k/δ)) log(q −1 ) and letting
+−α
+1 PK
+zq = log(q −1 )(∆−α
+i=dmax{2,qK}e ∆i ), we apply the exact sequence of steps
+dmax{2,qK}e + qK
+as in the proof of Theorem 5 to obtain
+T ≤ czq log(log(zq )/δ)log(zq log(log(zq )/δ))
+Because the output arm is just the empirical best, there is some error associated with using the
+k−1
+empirical estimate. The arm returned on round (k, l) is pulled d 2 l e ≥ cBk,l / log(Bk,l ) times
+
+
+
+1/α
+log(Bk,l ) 1/α
+log(T )2 log(log(T ))
+so the possible error is bounded by γ(Bk,l / log(Bk,l )) ≤ c
+≤
+c
+.
+Bk,l
+T
+This is dominated by ∆dmax{2,qK}e for the value of T prescribed by the above calculation,
+completing the proof.
+
+B.7 Proof of Theorem 8
+Proof Let s denote the index of the last stage, to be determined later. If rek = Rη k−s and
+n
+ek = nη −k so that rk = be
+rk c and nk = be
+nk c then
+s
+X
+k=0
+
+nk rk ≤
+
+s
+X
+
+n
+ek rek = nR(s + 1)η −s ≤ B
+
+k=0
+
+since, by definition, s = min{t ∈ N : nR(t + 1)η −t ≤ B, t ≤ logη (min{R, n})}. It is
+straightforward to verify that B ≥ zSH ensures that r0 ≥ 1 and ns ≥ 1.
+The proof for Theorem 1 holds here with a few modifications. First, we derive a lower
+bound on the resource per arm rk per round if B ≥ zSH with generalized elimination rate η:
+B
+−1
+|Sk |(blogη (n)c + 1)
+
+
+
+  νi − ν1 
+η
+−1
+≥
+max i 1 + min R, γ
+max ,
+−1
+|Sk | i=2,...,n
+4
+2
+
+
+
+  νb|Sk |/2c+1 − ν1 
+η
+−1
+≥
+−1
+(b|Sk |/ηc + 1) 1 + min R, γ
+max ,
+|Sk |
+4
+2
+
+
+
+  νb|Sk |/2c+1 − ν1 
+≥ 1 + min R, γ −1 max ,
+−1
+4
+2
+
+  νb|Sk |/2c+1 − ν1 
+= min R, γ −1 max ,
+.
+4
+2
+
+rk ≥
+
+Also, note that γ(R) = 0, hence if the minimum is ever active, `i,R = νi and we know the
+true loss. The rest of the proof is same as that for Theorem 1 for η in place of 2.
+In addition, we note that
+
+n
+o X
+
+
+
+
+−1
+ νns +1 −ν1
+1
+1
+max i γ −1 max 4 , νi −ν
+≤
+n
+γ
+max
+,
++
+γ −1 max 4 , νi −ν
+.
+s
+2
+4
+2
+2
+i=ns +1,...,n
+
+i>ns
+
+48
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+References
+A. Agarwal, J. Duchi, P. L. Bartlett, and C. Levrard. Oracle inequalities for computationally
+budgeted model selection. In Conference On Learning Theory (COLT), 2011.
+A. Agarwal, S. Kakade, N. Karampatziakis, L. Song, and G. Valiant. Least squares revisited:
+Scalable approaches for multi-class prediction. In International Conference on Machine
+Learning (ICML), pages 541–549, 2014.
+J. Bergstra and Y. Bengio. Random search for hyper-parameter optimization. Journal of
+Machine Learning Research, 13:281–305, 2012.
+J. Bergstra, R. Bardenet, Y. Bengio, and B. Kegl. Algorithms for hyper-parameter optimization. In Neural Information Processing Systems (NIPS), 2011.
+S. Bubeck, R. Munos, and G. Stoltz. Pure exploration in multi-armed bandits problems. In
+International Conference on Algorithmic Learning Theory (ALT), 2009.
+S. Bubeck, R. Munos, G. Stoltz, and C. Szepesvari. X-armed bandits. Journal of Machine
+Learning Research, 12:1655–1695, 2011.
+A. Carpentier and M. Valko. Simple regret for infinitely many armed bandits. In International
+Conference on Machine Learning (ICML), 2015.
+E. Contal, V. Perchet, and N. Vayatis. Gaussian process optimization with mutual information. In International Conference on Machine Learning (ICML), 2014.
+T. Domhan, J. T. Springenberg, and F. Hutter. Speeding up automatic hyperparameter
+optimization of deep neural networks by extrapolation of learning curves. In International
+Joint Conference on Artificial Intelligence (IJCAI), 2015.
+K. Eggensperger et al. Towards an empirical foundation for assessing Bayesian optimization of hyperparameters. In Neural Information Processing Systems (NIPS) Bayesian
+Optimization Workshop, 2013.
+E. Even-Dar, S. Mannor, and Y. Mansour. Action elimination and stopping conditions
+for the multi-armed bandit and reinforcement learning problems. Journal of Machine
+Learning Research, 7:1079–1105, 2006.
+M. Feurer. Personal communication, 2015.
+M. Feurer, J. Springenberg, and F. Hutter. Using meta-learning to initialize Bayesian
+optimization of hyperparameters. In ECAI Workshop on Meta-Learning and Algorithm
+Selection, 2014.
+M. Feurer, A. Klein, K. Eggensperger, J. Springenberg, M. Blum, and F. Hutter. Efficient
+and robust automated machine learning. In Neural Information Processing Systems
+(NIPS), 2015.
+49
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+D. Golovin, B. Sonik, S. Moitra, G. Kochanski, J. Karro, and D.Sculley. Google Vizier: A
+service for black-box optimization. In Knowledge Discovery and Data Mining (KDD),
+2017.
+S. Grünewälder, J. Audibert, M. Opper, and J. Shawe–Taylor. Regret bounds for Gaussian
+process bandit problems. In International Conference on Artificial Intelligence and
+Statistics (AISTATS), 2010.
+A. György and L. Kocsis. Efficient multi-start strategies for local search algorithms. Journal
+of Artificial Intelligence Research, 41:407–444, 2011.
+F. Hutter, H. Hoos, and K. Leyton-Brown. Sequential model-based optimization for general algorithm configuration. In International Conference on Learning and Intelligent
+Optimization (LION), 2011.
+K. Jamieson and R. Nowak. Best-arm identification algorithms for multi-armed bandits in
+the fixed confidence setting. In Conference on Information Sciences and Systems (CISS),
+pages 1–6. IEEE, 2014.
+K. Jamieson and A. Talwalkar. Non-stochastic best arm identification and hyperparameter optimization. In International Conference on Artificial Intelligence and Statistics
+(AISTATS), 2015.
+K. Jamieson, M. Malloy, R. Nowak, and S. Bubeck. lil’UCB: An optimal exploration
+algorithm for multi-armed bandits. In Conference On Learning Theory (COLT), pages
+423–439, 2014.
+K. G. Jamieson, D. Haas, and B. Recht. The power of adaptivity in identifying statistical
+alternatives. In Neural Information Processing Systems (NIPS), pages 775–783, 2016.
+K. Kandasamy, J. Schneider, and B. Póczos. High dimensional Bayesian optimization and
+bandits via additive models. In International Conference on Machine Learning (ICML),
+2015.
+K. Kandasamy, G. Dasarathy, J. B. Oliva, J. G. Schneider, and B. Póczos. Gaussian process
+bandit optimization with multi-fidelity evaluations. In Neural Information Processing
+Systems (NIPS), 2016.
+K. Kandasamy, G. Dasarathy, J. Schneider, and B. Póczos. Multi-fidelity Bayesian optimization with continuous approximation. In International Conference on Machine Learning
+(ICML), 2017.
+Z. Karnin, T. Koren, and O. Somekh. Almost optimal exploration in multi-armed bandits.
+In International Conference on Machine Learning (ICML), 2013.
+E. Kaufmann, O. Cappé, and A. Garivier. On the complexity of best arm identification in
+multi-armed bandit models. Journal of Machine Learning Research, 16:1–42, 2015.
+A. Klein, S. Falkner, S. Bartels, P. Hennig, and F. Hutter. Fast Bayesian optimization
+of machine learning hyperparameters on large datasets. In International Conference on
+Artificial Intelligence and Statistics (AISTATS), 2017a.
+50
+
+Bandit-Based Approach to Hyperparameter Optimization
+
+A. Klein, S. Falkner, J. T. Springenberg, and F. Hutter. Learning curve prediction with
+Bayesian neural networks. In International Conference On Learning Representation
+(ICLR), 2017b.
+A. Krizhevsky. Learning multiple layers of features from tiny images. In Technical report,
+Department of Computer Science, Univsersity of Toronto, 2009.
+T. Krueger, D. Panknin, and M. Braun. Fast cross-validation via sequential testing. Journal
+of Machine Learning Research, 16:1103–1155, 2015.
+H. Larochelle et al. An empirical evaluation of deep architectures on problems with many
+factors of variation. In International Conference on Machine Learning (ICML), 2007.
+L. Li, K. Jamieson, G. DeSalvo, A. Rostamizadeh, and A. Talwalkar. Hyperband: Banditbased configuration evaluation for hyperparameter optimization. In International Conference On Learning Representation (ICLR), 2017.
+O. Maron and A. Moore. The racing algorithm: Model selection for lazy learners. Artificial
+Intelligence Review, 11:193–225, 1997.
+V. Mnih and J.-Y. Audibert. Empirical Bernstein stopping. In International Conference on
+Machine Learning (ICML), 2008.
+Y. Netzer et al. Reading digits in natural images with unsupervised feature learning. In Neural
+Information Processing Systems (NIPS) Workshop on Deep Learning and Unsupervised
+Feature Learning, 2011.
+A. Rahimi and B. Recht. Random features for large-scale kernel machines. In Neural
+Information Processing Systems (NIPS), 2007.
+R. Rifkin and A. Klautau. In defense of one-vs-all classification. Journal of Machine Learning
+Research, 5:101–141, 2004.
+P. Sermanet, S. Chintala, and Y. LeCun. Convolutional neural networks applied to house
+numbers digit classification. In International Conference on Pattern Recognition (ICPR),
+2012.
+J. Snoek, H. Larochelle, and R. Adams. Practical Bayesian optimization of machine learning
+algorithms. In Neural Information Processing Systems (NIPS), 2012.
+J. Snoek, O. Rippel, K. Swersky, R. Kiros, N. Satish, N. Sundaram, M. Patwary, Prabhat, and
+R. Adamst. Scalable Bayesian optimization using deep neural networks. In International
+Conference on Machine Learning (ICML), 2015a.
+J. Snoek, O. Rippel, K. Swersky, R. Kiros, N. Satish, N. Sundaram, M. Patwary, M. Prabhat,
+and R. Adams. Bayesian optimization using deep neural networks. In International
+Conference on Machine Learning (ICML), 2015b.
+E. Sparks, A. Talwalkar, D. Haas, M. J. Franklin, M. I. Jordan, and T. Kraska. Automating
+model search for large scale machine learning,. In ACM Symposium on Cloud Computing
+(SOCC), 2015.
+51
+
+Li, Jamieson, DeSalvo, Rostamizadeh and Talwalkar
+
+J. Springenberg, A. Klein, S. Falkner, and F. Hutter. Bayesian optimization with robust
+Bayesian neural networks. In Neural Information Processing Systems (NIPS), 2016.
+N. Srinivas, A. Krause, M. Seeger, and S. M. Kakade. Gaussian process optimization in
+the bandit setting: No regret and experimental design. In International Conference on
+Machine Learning (ICML), 2010.
+K. Swersky, J. Snoek, and R. Adams. Multi-task Bayesian optimization. In Neural Information Processing Systems (NIPS), 2013.
+K. Swersky, J. Snoek, and R. P. Adams. Freeze-thaw Bayesian optimization. arXiv preprint
+arXiv:1406.3896, 2014.
+C. Thornton et al. Auto-weka: Combined selection and hyperparameter optimization of
+classification algorithms. In Knowledge Discovery and Data Mining (KDD), 2013.
+A. van der Vaart and H. van Zanten. Information rates of nonparametric Gaussian process
+methods. Journal of Machine Learning Research, 12:2095–2119, 2011.
+Z. Wang, M. Zoghi, F. Hutter, D. Matheson, and N. de Freitas. Bayesian optimization in
+high dimensions via random embeddings. In International Joint Conference on Artificial
+Intelligence (IJCAI), 2013.
+Z. Wang, B. Zhou, and S. Jegelka. Optimization as estimation with Gaussian processes
+in bandit settings. In International Conference on Artificial Intelligence and Statistics
+(AISTATS), 2016.
+A. G. Wilson, C. Dann, and H. Nickisch. Thoughts on massively scalable Gaussian processes.
+arXiv:1511.01870, 2015.
+
+52
+
+

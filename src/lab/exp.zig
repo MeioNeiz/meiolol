@@ -9,26 +9,35 @@ const cand = @import("cand");
 const rows = @import("rows.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
+const search = @import("search.zig");
 
 const Io = std.Io;
 
 pub const usage =
-    \\  exp run SNAP CAMPAIGN TARGET [--select] [--desc TEXT] [--lab DIR] [--run ID]
-    \\                                  score the compiled-in candidate on dev (and spend a
+    \\  exp run SNAP CAMPAIGN TARGET [--select] [--fraction F] [--hyp ID] [--desc TEXT]
+    \\          [--lab DIR] [--run ID]  score the compiled-in candidate on dev (and spend a
     \\                                  selection look with --select); TARGET is one of
-    \\                                  win gold14 lanediff14 cs10 deaths15 first_item
+    \\                                  win gold14 lanediff14 cs10 deaths15 first_item;
+    \\                                  --fraction fits dev on a nested share of games
+    \\  exp screen|diagnose SNAP CAMPAIGN TARGET
+    \\                                  dev only: the candidate's features one by one, or
+    \\                                  its residuals by covariate (lab/search.zig)
     \\  exp final SNAP CAMPAIGN TARGET [--lab DIR] [--run ID]
     \\                                  test score, once per campaign: humans only
     \\
 ;
 
 const Args = struct {
-    cmd: enum { run, final },
+    cmd: enum { run, final, screen, diagnose },
     snap: []const u8,
     campaign: []const u8,
     target: api.Outcome,
     select: bool = false,
     desc: []const u8 = "",
+    /// Share of dev's training games (learning curves); dev only
+    fraction: f64 = 1,
+    /// The campaign's hypotheses.tsv id this run tests
+    hyp: []const u8 = "-",
     lab: []const u8,
     run: []const u8,
 };
@@ -59,6 +68,8 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, home: ?[]c
     switch (args.cmd) {
         .run => try run(gpa, arena, io, &data, ranks, c, args, dir, w),
         .final => try final(gpa, arena, io, &data, ranks, c, args, dir, w),
+        .screen => try search.screen(cand, gpa, &data, ranks, c, api.outcomeIndex(args.target), w),
+        .diagnose => try search.diagnose(cand, gpa, &data, ranks, c, api.outcomeIndex(args.target), w),
     }
     try w.flush();
     return 0;
@@ -86,9 +97,14 @@ fn parse(arena: std.mem.Allocator, io: Io, home: ?[]const u8, argv: []const []co
         if (std.mem.eql(u8, o, "--desc")) a.desc = argv[i] //
         else if (std.mem.eql(u8, o, "--lab")) a.lab = argv[i] //
         else if (std.mem.eql(u8, o, "--run")) a.run = argv[i] //
+        else if (std.mem.eql(u8, o, "--hyp")) a.hyp = argv[i] //
+        else if (std.mem.eql(u8, o, "--fraction")) a.fraction = try std.fmt.parseFloat(f64, argv[i]) //
         else return error.UnknownOption;
     }
-    if (a.cmd == .final and a.select) return error.UnknownOption;
+    if (a.cmd != .run and (a.select or a.fraction != 1)) return error.UnknownOption;
+    if (!(a.fraction > 0 and a.fraction <= 1)) return error.BadFraction;
+    // A look on a model fitted to part of train would waste the budget
+    if (a.select and a.fraction != 1) return error.FractionWithSelect;
     // The run dir's name (deploy/lab-run.sh: <stamp>-<name>)
     if (a.run.len == 0) a.run = std.fs.path.basename(try std.process.currentPathAlloc(io, arena));
     const desc = try arena.dupe(u8, a.desc);
@@ -110,7 +126,7 @@ fn run(
     w: *Io.Writer,
 ) !void {
     const k = api.outcomeIndex(args.target);
-    var dev = try harness.score(cand, gpa, d, ranks, c, .dev);
+    var dev = try harness.score(cand, gpa, d, ranks, c, .dev, args.fraction);
     defer dev.deinit(gpa);
     const dev_target = try summary(gpa, io, d, &dev, args);
     try writePreds(gpa, io, d, &dev, "dev.tsv");
@@ -123,7 +139,7 @@ fn run(
         defer lock.close(io);
         const looks_path = try std.fs.path.join(arena, &.{ dir, "looks.tsv" });
         looks = try countLines(gpa, io, looks_path);
-        var sel = try harness.score(cand, gpa, d, ranks, c, .select);
+        var sel = try harness.score(cand, gpa, d, ranks, c, .select, 1);
         defer sel.deinit(gpa);
         const best_path = try std.fs.path.join(arena, &.{ dir, try std.fmt.allocPrint(arena, "best-{t}.tsv", .{args.target}) });
         const best_preds = try readBest(gpa, io, best_path, sel.row.len);
@@ -147,16 +163,18 @@ fn run(
         if (verdict.? == .new_best) try writeBest(io, best_path, args.run, sel.cand, k);
     }
 
-    try appendLine(io, try std.fs.path.join(arena, &.{ dir, "runs.tsv" }), "run\tcampaign\ttarget\tscope\tdev_n\tdev_diff\tdev_half\tselect\tlooks\tdesc\n", try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{t}\t{d}\t{d:.5}\t{d:.5}\t{s}\t{d}\t{s}\n", .{
+    try appendLine(io, try std.fs.path.join(arena, &.{ dir, "runs.tsv" }), "run\tcampaign\ttarget\tscope\tdev_n\tdev_diff\tdev_half\tselect\tlooks\thyp\tfraction\tdesc\n", try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{t}\t{d}\t{d:.5}\t{d:.5}\t{s}\t{d}\t{s}\t{d}\t{s}\n", .{
         args.run,     args.campaign,   args.target,     cand.scope,
         dev_target.n, dev_target.diff, dev_target.half, verdictName(verdict),
-        looks,        args.desc,
+        looks,        args.hyp,        args.fraction,   args.desc,
     }));
     try w.print("RESULT run={s} target={t} dev={d:.5}±{d:.5} n={d} ({s}) select={s}", .{
         args.run,                                                         args.target,          dev_target.diff, dev_target.half, dev_target.n,
         if (dev_target.beats()) "beats baseline" else "not beyond noise", verdictName(verdict),
     });
     if (verdict) |v| if (v == .new_best) try w.print(" gain={d:.5}±{d:.5}", .{ v.new_best.diff, v.new_best.half });
+    // Smallest gain this dev set would show 80% of the time: (1.96 + 0.84) / 1.96 half
+    if (dev_target.half > 0 and std.math.isFinite(dev_target.half)) try w.print(" mde={d:.5}", .{dev_target.half * 1.43});
     try w.print(" looks={d}/{d}\n", .{ looks, harness.look_budget });
 }
 
@@ -320,7 +338,7 @@ fn final(
     dir: []const u8,
     w: *Io.Writer,
 ) !void {
-    var s = try harness.score(cand, gpa, d, ranks, c, .final);
+    var s = try harness.score(cand, gpa, d, ranks, c, .final, 1);
     defer s.deinit(gpa);
     try w.print("# Final: {s} ({s}), test set, scope {t}\n\n| outcome | rows | baseline | candidate | diff |\n|---|---|---|---|---|\n", .{ args.run, args.campaign, cand.scope });
     const finals = try std.fs.path.join(arena, &.{ dir, "finals.tsv" });
@@ -336,4 +354,8 @@ fn final(
             args.run, args.campaign, args.target, o, p.n, p.diff, p.half,
         }));
     }
+}
+
+test {
+    _ = search;
 }
