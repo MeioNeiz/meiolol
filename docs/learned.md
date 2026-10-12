@@ -5,11 +5,20 @@ line each: the finding, the evidence (docs/model.md section or commit), how sure
 what the site or app may say because of it. Numbers and method live in docs/model.md;
 this file is the summary a new session or Jacob reads first.
 
+Headings are the admin page's model categories (Win, Early game, Items, Objectives,
+Playstyle, Player, Data quality): put each line under its category.
+
 Rules: add a line when a result is final (held-out, interval reported), not interim.
 Supersede, don't delete: strike a line with ~~ ~~ and add the new one with its date.
 Platinum IV+ games only unless stated (crawl floor).
 
-## Draft and teams
+## Win
+
+- 2026-10-11: Win alone from the draft does not beat champion base rates (log loss
+  0.6905 vs 0.6902 at 152k games). Evidence: eval, docs/model.md baselines. Sure at
+  this size. Continuous outcomes carry more signal per game
+
+## Early game
 
 - 2026-10-12: Enemy and ally champions shift your early game (gold@14, lane gold diff,
   CS@10, deaths before 15, first item) additively: the same enemy shifts everyone in a
@@ -28,9 +37,12 @@ Platinum IV+ games only unless stated (crawl floor).
 - 2026-10-12: Most of the variation in early numbers is the game, not the draft: the
   draft explains a few % of gold@14, CS@10 and deaths variance. Sure. Site: show spreads
   and intervals, never single predictions
-- 2026-10-11: Win alone from the draft does not beat champion base rates (log loss
-  0.6905 vs 0.6902 at 152k games). Evidence: eval, docs/model.md baselines. Sure at
-  this size. Continuous outcomes carry more signal per game
+
+## Items
+
+## Objectives
+
+## Playstyle
 
 ## Player
 
