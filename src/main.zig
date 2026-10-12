@@ -149,6 +149,11 @@ const usage =
     \\                               else DIR/export)
     \\              --budget SPEC    Riot calls per route, Riot's format (default 20:120)
     \\              --cors ORIGIN    allow a page on ORIGIN (local testing)
+    \\  your-example  one anonymised player's recent games as GET /api/games answers,
+    \\              for your.html's example (src/api/example.zig); read-only
+    \\              --out FILE       default DIR/your-example.json
+    \\              --curves DIR     curves-<patch>.bin files (default DIR/export)
+    \\              --days N         recent days a player is picked from (default 7)
     \\  status      row counts and crawl queue state; read-only, estimates (~) for the
     \\              big tables (src/status.zig)
     \\              --exact          count every row (slow on the box)
@@ -237,6 +242,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "dev", cmdDev },
     .{ "render", cmdRender },
     .{ "api", cmdApi },
+    .{ "your-example", cmdYourExample },
     .{ "status", cmdStatus },
     .{ "admin", cmdAdmin },
     .{ "rebuild", cmdRebuild },
@@ -989,6 +995,38 @@ fn cmdApi(c: *Cmd) !u8 {
     else
         try std.fs.path.join(arena, &.{ c.data_dir, "export" });
     try api.run(c.init.gpa, c.init.io, o);
+    return 0;
+}
+
+fn cmdYourExample(c: *Cmd) !u8 {
+    var out: ?[]const u8 = null;
+    var curves_dir: ?[]const u8 = null;
+    var days: u32 = 7;
+    while (c.next()) |_| {
+        if (c.is("--out")) {
+            out = try c.value();
+        } else if (c.is("--curves")) {
+            curves_dir = try c.value();
+        } else if (c.is("--days")) {
+            days = try c.int(u32);
+        } else return error.Usage;
+    }
+    const arena = c.arena;
+    const io = c.init.io;
+    const path = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "your-example.json" });
+    const dir = curves_dir orelse try std.fs.path.join(arena, &.{ c.data_dir, "export" });
+    const set = try api.loadCurveSet(c.init.gpa, arena, io, dir);
+    const db = try store.schema.openReadOnly(c.init.gpa, c.data_dir);
+    defer db.close();
+    const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
+    const example = try api.example.build(arena, db, set, .{
+        .since_ms = now_ms - @as(i64, days) * std.time.ms_per_day,
+    }) orelse {
+        std.log.err("no player with enough lane games with timelines in the last {d} days", .{days});
+        return 1;
+    };
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = try api.gamesJson(arena, example) });
+    std.log.info("{s}: {d} games", .{ path, example.report.?.games.len });
     return 0;
 }
 

@@ -6,6 +6,9 @@
 const API = ["localhost", "127.0.0.1"].includes(location.hostname) && location.port !== "8090"
   ? "http://127.0.0.1:8090/api"
   : "/api";
+// `meiolol your-example`: an anonymised player in the API's shape, for visitors (and
+// Riot's reviewers) without a Riot ID
+const EXAMPLE = "data/your-example.json";
 const THIN = 200;
 const MIN_N = 10;
 const LANE_END = 14;
@@ -72,6 +75,7 @@ async function lookup(id) {
   clearTimeout(pollTimer);
   lookupId = id;
   const url = new URL(location.href);
+  url.searchParams.delete("example");
   url.searchParams.set("id", id);
   history.replaceState(null, "", url);
   status("Looking up…");
@@ -119,15 +123,37 @@ async function poll() {
   pollTimer = setTimeout(poll, POLL_MS);
 }
 
+async function showExample() {
+  clearTimeout(pollTimer);
+  lookupId = "";
+  const url = new URL(location.href);
+  url.searchParams.delete("id");
+  url.searchParams.set("example", "");
+  history.replaceState(null, "", url);
+  let body;
+  try {
+    body = await (await fetch(EXAMPLE)).json();
+  } catch {
+    status("The example isn't available right now.");
+    return;
+  }
+  body.example = true;
+  current = body;
+  render(body);
+  status("An example: real ranked solo games of one player from our data, with their name left out and dates to the day. Enter your Riot ID above to see your own.");
+}
+
 function render(body) {
   const p = body.player;
   $("player").hidden = false;
-  $("player-name").textContent = `${p.name}#${p.tag}`;
-  const rank = p.tier
-    ? `${titleCase(p.tier)}${p.division && !["MASTER", "GRANDMASTER", "CHALLENGER"].includes(p.tier) ? ` ${p.division}` : ""}, ${p.lp ?? 0} LP`
+  $("player-name").textContent = body.example ? p.name : `${p.name}#${p.tag}`;
+  const tier = p.tier
+    ? `${titleCase(p.tier)}${p.division && !["MASTER", "GRANDMASTER", "CHALLENGER"].includes(p.tier) ? ` ${p.division}` : ""}`
     : "Unranked in solo/duo";
   const updated = p.refreshed ? `, updated ${new Date(p.refreshed * 1000).toLocaleString()}` : "";
-  $("player-rank").textContent = `${p.platform}. Visible solo/duo rank: ${rank}${updated}.`;
+  $("player-rank").textContent = body.example
+    ? `${p.platform}. Solo/duo rank at the newest game: ${tier}.`
+    : `${p.platform}. Visible solo/duo rank: ${p.tier ? `${tier}, ${p.lp ?? 0} LP` : tier}${updated}.`;
   const r = body.report ?? { games: [], weeks: [], matchups: [] };
   renderWeeks(r.weeks);
   renderMatchups(r.matchups);
@@ -416,10 +442,22 @@ async function start() {
   for (const b of $("stat-tabs").querySelectorAll("button")) b.addEventListener("click", () => setStat(b.dataset.stat));
   $("forget").addEventListener("click", () => forget(false));
   $("forget-check").addEventListener("click", () => forget(true));
-  const id = new URLSearchParams(location.search).get("id");
+  $("example-link").addEventListener("click", (e) => {
+    e.preventDefault();
+    showExample();
+  });
+  const params = new URLSearchParams(location.search);
+  const id = params.get("id");
   if (id) {
     $("riot-id").value = id;
     lookup(id);
+  } else if (params.has("example")) {
+    showExample();
+  }
+  try {
+    $("example-offer").hidden = !(await fetch(EXAMPLE, { method: "HEAD" })).ok;
+  } catch {
+    // No example: the offer stays hidden
   }
 }
 

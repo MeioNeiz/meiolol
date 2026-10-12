@@ -16,6 +16,7 @@ const ddragon = @import("../ddragon.zig");
 pub const cache = @import("cache.zig");
 pub const fetch = @import("fetch.zig");
 pub const game = @import("game.zig");
+pub const example = @import("example.zig");
 
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.api);
@@ -56,15 +57,7 @@ pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var ctx: Context = .{ .gpa = gpa, .io = io, .opts = opts, .curves = try loadCurves(gpa, arena, io, opts.curves_dir) };
-    // Item lists change little between patches: the newest curves patch's serves all
-    if (ctx.curves.files.len > 0) {
-        const label = ctx.curves.files[0].label;
-        const patch = label[if (std.mem.indexOfScalar(u8, label, '-')) |d| d + 1 else 0..];
-        if (ddragon.legendaries(arena, io, patch)) |ids| {
-            ctx.curves.legendaries = ids;
-        } else |err| log.warn("legendary items for {s}: {t}; first items left out", .{ patch, err });
-    }
+    var ctx: Context = .{ .gpa = gpa, .io = io, .opts = opts, .curves = try loadCurveSet(gpa, arena, io, opts.curves_dir) };
 
     const db = try cache.open(opts.db_path);
     defer db.close();
@@ -105,6 +98,20 @@ fn work(f: *fetch.Fetcher) void {
 }
 
 /// curves-<label>.bin files, newest patch first, at most max_curve_files
+/// The newest curves files in `dir_path` with the legendary items for first-item timing
+pub fn loadCurveSet(gpa: Allocator, arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
+    var set = try loadCurves(gpa, arena, io, dir_path);
+    // Item lists change little between patches: the newest curves patch's serves all
+    if (set.files.len > 0) {
+        const label = set.files[0].label;
+        const patch = label[if (std.mem.indexOfScalar(u8, label, '-')) |d| d + 1 else 0..];
+        if (ddragon.legendaries(arena, io, patch)) |ids| {
+            set.legendaries = ids;
+        } else |err| log.warn("legendary items for {s}: {t}; first items left out", .{ patch, err });
+    }
+    return set;
+}
+
 fn loadCurves(gpa: Allocator, arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
     var dir = Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => {
@@ -255,7 +262,7 @@ fn riotIdParam(arena: Allocator, query: []const u8) !?[]const u8 {
     return cache.riotIdKey(buf, id[0..hash], id[hash + 1 ..]);
 }
 
-const PlayerOut = struct {
+pub const PlayerOut = struct {
     name: []const u8,
     tag: []const u8,
     platform: []const u8,
@@ -267,7 +274,7 @@ const PlayerOut = struct {
     @"error": ?[]const u8,
 };
 
-const GamesOut = struct {
+pub const GamesOut = struct {
     /// queued: waiting for the fetcher; fetching: in progress; ready; not_found
     state: []const u8,
     /// Jobs ahead in the queue
@@ -340,7 +347,12 @@ fn loadPlayer(arena: Allocator, db: store.Db, puuid: []const u8) !?PlayerOut {
 }
 
 fn reply(arena: Allocator, out: GamesOut) !Reply {
-    return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, out, .{ .emit_null_optional_fields = false }) };
+    return .{ .status = .ok, .body = try gamesJson(arena, out) };
+}
+
+/// GET /api/games' body, also `meiolol your-example`'s file
+pub fn gamesJson(arena: Allocator, out: GamesOut) ![]u8 {
+    return std.json.Stringify.valueAlloc(arena, out, .{ .emit_null_optional_fields = false });
 }
 
 fn busy(arena: Allocator) !Reply {

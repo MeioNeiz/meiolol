@@ -16,6 +16,8 @@
 # DB; in the background at low priority, so a slow run never delays uploads.
 # Builds (`meiolol builds`, EUW and every region, current patch) the same way: daily and
 # on a new patch, in the background; the next site build picks the files up.
+# Daily, `meiolol your-example` (read-only, background) leaves one anonymised player's
+# games in data/your-example.json; each site build gets a copy for your.html's example.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
 # behind basic auth there; the site's rsync leaves that directory alone.
 # A deploy (deploy/box.sh web start) sends SIGUSR1 rather than restarting, unless this
@@ -48,7 +50,7 @@ push_curves() {
 }
 
 last_patch='' last_games=0 last_upload=0
-patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0
+patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0 last_example=0
 last_builds=0 builds_patch='' builds_pid=''
 while true; do
     now=$(date +%s)
@@ -58,6 +60,12 @@ while true; do
             --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
             && mv data/eval-latest.md.new data/eval-latest.md) &
         last_eval=$now
+    fi
+    if (( now - last_example >= 86400 )); then
+        (nice -n 10 bin/meiolol your-example --out data/your-example.json.new \
+            > data/your-example.log 2>&1 \
+            && mv data/your-example.json.new data/your-example.json) &
+        last_example=$now
     fi
     if [[ -n "$patch" ]] && { [[ -z "$builds_pid" ]] || ! kill -0 "$builds_pid" 2> /dev/null; } \
         && { (( now - last_builds >= 86400 )) || [[ "$patch" != "$builds_patch" ]]; }; then
@@ -81,6 +89,7 @@ while true; do
     if out=$(bin/meiolol site --contact "$contact" --out data/site.new --static-min-games 200 \
         "${riot[@]}" 2>&1); then
         site_s=$(( SECONDS - site_start ))
+        [[ -s data/your-example.json ]] && cp data/your-example.json data/site.new/data/
         # First patch line, EUW: "data/site.new/patch/: patch 16.20, 1054 games, ..."
         read -r patch games < <(sed -nE 's/.*: patch ([^,]+), ([0-9]+) games.*/\1 \2/p' \
             <<< "$out")

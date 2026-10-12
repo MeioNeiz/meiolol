@@ -39,6 +39,16 @@ static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy b
   calls), recalls (not in match-v5 timelines), flex or other queues (curves are solo
   only)
 
+## Example
+
+your.html offers "See an example" (and `your.html?example`) when data/your-example.json
+exists, so a visitor or Riot reviewer sees the page without a Riot ID (/api/ sits behind
+basic auth in preview). `meiolol your-example` (src/api/example.zig, read-only, ~25 s on
+the box) picks one EUW player with the most lane games with timelines in the last 7
+days, Gold to Emerald first, never a `forgotten` one, and writes their 10 newest ranked
+solo games through the same report() as the API. No name, PUUID or match id; game starts
+cut to the day (UTC). The web loop runs it daily and copies the file into each site build.
+
 ## API
 
 | Call | Answer |

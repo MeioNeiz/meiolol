@@ -1,5 +1,6 @@
 //! "Your games": a skeleton that static/your.js fills from the service (`meiolol api`,
-//! src/api) at /api/ on the same host. Facts about the player's own lanes against the
+//! src/api) at /api/ on the same host, or from data/your-example.json (`meiolol
+//! your-example`) for the example. Facts about the player's own lanes against the
 //! typical curve, never advice (docs/concept.md).
 
 const std = @import("std");
@@ -17,6 +18,8 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<input id="riot-id" name="id" placeholder="Name#TAG" autocomplete="off" spellcheck="false" required>
         \\<button type="submit">Show my games</button>
         \\</form>
+        \\<p id="example-offer" class="muted" hidden>No Riot ID to hand? <a href="your.html?example" id="example-link">See an example</a>:
+        \\real ranked games of one player from our data, without their name.</p>
         \\<p id="status" class="note" hidden></p>
         \\<div id="player" hidden>
         \\<h2 id="player-name"></h2>
