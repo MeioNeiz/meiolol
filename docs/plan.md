@@ -375,6 +375,14 @@ next steps land here.
   curves to pick up). GPU vs CPU being benchmarked at 1x/4x/16x data (Jacob: test it)
 - Findings ledger: docs/learned.md (plain one-liners, evidence, what the site may say)
 - Lab campaign gold14-a running (meiolol-39, from 3c-team, no spend cap, Jacob)
+- Results (meiolol-b0, 7ed9fe5, docs/model.md): 3c-team2 (adds the lane opponent's own
+  effect and role x patch) is the new reference for early outcomes, beating 3c-team on
+  all five and 2a-lane on cs10 and deaths15. Objectives add beyond the gold/XP lead at
+  every minute (dragon ~1000 gold equivalent, soul ~4000, elder ~4800, inhib 900-2300).
+  Items: given state at purchase, the item adds nothing measurable at 2.9M rows, so no
+  build-by-win-rate claims; timing and lead matter. Items x enemy team deprioritised
+- Win (meiolol-88): joint ratings first to beat champion baseline on dev (-0.0031 ±
+  0.0017); win rows need duration_s >= 900 (leaver forfeits out)
 - Experience term (src/experience.zig): rerun at 300+ train / 100+ test per variant; if
   "user only" beats no-experience beyond its interval, wire it into recommend() as the
   "your pool" reason (wasm `pool` field). Mastery is a post-match snapshot and flatters
