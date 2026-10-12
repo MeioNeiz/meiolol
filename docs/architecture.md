@@ -521,4 +521,6 @@ and a three-question check, then unlimited practice drafts. No streaks or timers
 - `zig build desktop-shot -- --stats F --curves F [--out DIR] [--min-games N]`: the
   window's states (fixture champ selects in desktop_shot.zig) as PNGs at 100%, 150% and
   full height, drawn by desktop/raster.zig (premultiplied "over" blending, top-left
-  fill rule); no screen or client needed. `zig build ci` compiles both
+  fill rule); no screen or client needed. `zig build ci` compiles both. Test data
+  (data/desktop, gitignored): `deploy/box.sh run stats --platform all --out FILE` on the
+  box (3 s, 171k games on 2026-10-12) plus data/export/all-recent-curves.bin, copied down

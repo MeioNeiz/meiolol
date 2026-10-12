@@ -56,7 +56,10 @@ pub fn build(b: *std.Build) void {
     if (desktopExe(b, windows, optimize)) |exe| desktop_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
     const shot_step = b.step("desktop-shot", "Render the desktop window's states to PNG " ++
         "(-- --stats FILE --curves FILE [--out DIR])");
-    if (desktopShot(b, target, optimize)) |exe| {
+    // Once per build: dvui's module takes the raster backend as an import, so a second
+    // copy would rewire the first
+    const shot = desktopShot(b, target, optimize);
+    if (shot) |exe| {
         const run = b.addRunArtifact(exe);
         run.addPassthruArgs();
         shot_step.dependOn(&run.step);
@@ -73,7 +76,7 @@ pub fn build(b: *std.Build) void {
         }
     }
     if (desktopExe(b, windows, .Debug)) |exe| ci.dependOn(&exe.step);
-    if (desktopShot(b, target, .Debug)) |exe| ci.dependOn(&exe.step);
+    if (shot) |exe| ci.dependOn(&exe.step);
     ci.dependOn(lint(b, "shellcheck", "shellcheck -S warning deploy/*.sh deploy/hooks/*"));
     ci.dependOn(lint(b, "node", "for f in src/site/static/*.js; do node --check \"$f\" || exit 1; done"));
 }
