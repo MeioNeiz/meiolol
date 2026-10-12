@@ -88,12 +88,14 @@ test "fixture games to stats, curves and the website" {
         // No daily: puzzles need three other options for a slot, more than 10 champions
         .curves = @splat(curves_path),
         .builds = .{ null, builds_path, null, builds_path },
+        .filter_champions = &.{"darius"},
     });
     for ([_][]const u8{
         "index.html",
         "champions.html",
         "role/top.html",
         "table.js",
+        "filters.js",
         "patch/index.html",
         "all/patch/index.html",
         "data/stats.bin",
@@ -117,8 +119,13 @@ test "fixture games to stats, curves and the website" {
         // Champion table and page: raw win rate with its interval, every lane opponent
         // (few games: shown, faded) with the curve's gold at 14 linking to the matchup page
         .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "At least" } },
-        .{ "champion/darius.html", &.{ "Lane opponents", "href=\"../matchup/top/mordekaiser-vs-darius.html\"", "Gold at 14", "Search opponent", "<tr data-name=\"Mordekaiser\" class=\"thin\">" } },
+        .{ "champion/darius.html", &.{ "Lane opponents", "href=\"../matchup/top/mordekaiser-vs-darius.html\"", "Gold at 14", "Search opponent", "data-name=\"Mordekaiser\" class=\"thin\">" } },
         .{ "champion/darius.html", &.{"href=\"../patch/build/darius-top.html\""} },
+        // Filter prototype: the champion's counts by region, rank, patch, role and
+        // opponent, and the bar that sums them, defaulting to the page's view
+        .{ "data/filters/darius.json", &.{ "\"platforms\":[\"EUW1\"]", "\"roles\":[\"top\"", "\"rows\":[[" } },
+        .{ "champion/darius.html", &.{ "class=\"filter-bar\"", "data-region=\"EUW1\" data-period=\"days30\"", "filters.js", "data-id=\"" } },
+        .{ "all/patch/champion/darius.html", &.{"data-src=\"../../../data/filters/darius.json\""} },
         .{ "all/champion/darius.html", &.{"href=\"../../all/patch/build/darius-top.html\""} },
         // Lane curves: the estimate (curvefit.zig) on the page, k on the method page
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "estimated average", "First finished item", "More data needed" } },

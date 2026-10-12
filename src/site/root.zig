@@ -19,6 +19,7 @@ const learning_page = @import("learning.zig");
 const learning = @import("../learning.zig");
 const builds_page = @import("builds.zig");
 const builds = @import("../builds.zig");
+const filters = @import("filters.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -53,6 +54,8 @@ pub const Options = struct {
     curves: [html.View.count]?[]const u8 = @splat(null),
     /// Builds file per view (`meiolol builds`): build pages in the patch views where set
     builds: [html.View.count]?[]const u8 = @splat(null),
+    /// Champion slugs whose pages get the filter bar (filters.zig; a prototype)
+    filter_champions: []const []const u8 = &.{"ahri"},
 };
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
@@ -271,9 +274,11 @@ fn generateView(
         try site.writeShared("your.js", @embedFile("static/your.js"));
         try site.writeShared("learn.js", @embedFile("static/learn.js"));
         try site.writeShared("table.js", @embedFile("static/table.js"));
+        try site.writeShared("filters.js", @embedFile("static/filters.js"));
         try site.writeShared("meiolol.wasm", @embedFile("draft.wasm"));
         if (opts.riot_txt) |t| try site.writeShared("riot.txt", t);
         try site.writeShared("robots.txt", if (opts.public) "User-agent: *\nAllow: /\n" else "User-agent: *\nDisallow: /\n");
+        try filters.write(&site, db, all_opts);
     }
     try site.write("data/stats.bin", model_bytes);
     try writeChampionsJson(&site);
@@ -768,7 +773,7 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
     }
     std.mem.sort(Role, roles[0..n_roles], RoleGames{ .st = st, .c = ch.c }, RoleGames.more);
     try w.print(
-        "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"64\" height=\"64\"><div><h1>{f}</h1><p class=\"muted\">Ranked solo/duo {s}, {s}, all ranks.",
+        "<div class=\"hero\"><img src=\"{s}\" alt=\"\" width=\"64\" height=\"64\"><div><h1>{f}</h1><p class=\"muted\">Ranked solo/duo <span data-scope>{s}, {s}, all ranks</span>.",
         .{ site.icon(ch), esc(ch.name), site.view.region.in(), site.when },
     );
     if (n_roles > 1) {
@@ -781,19 +786,23 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
     }
     try w.writeAll("</p></div></div>\n");
     try earlyNote(site, w);
+    const filtered = for (site.opts.filter_champions) |f| {
+        if (std.mem.eql(u8, f, ch.slug)) break true;
+    } else false;
+    if (filtered) try filterBar(site, w, ch);
     if (n_roles == 0) try w.writeAll("<p>No games yet.</p>\n");
 
     for (roles[0..n_roles]) |r| {
         const cr = st.champRole(r, ch.c);
         const iv = wilson(cr.wins, cr.games);
         try w.print("<section id=\"{s}\"><h2>{s}</h2>\n<div class=\"tiles\">", .{ roleSlug(r), roleName(r) });
-        try w.print("<div><span>Win rate</span><b class=\"{s}\">", .{side(iv)});
+        try w.print("<div data-tile=\"wr\"><span>Win rate</span><b class=\"{s}\">", .{side(iv)});
         try pct(w, cr.wins, cr.games);
-        try w.print("</b><small>{d:.1}% to {d:.1}%</small></div><div><span>Pick rate</span><b>", .{ 100 * iv[0], 100 * iv[1] });
+        try w.print("</b><small>{d:.1}% to {d:.1}%</small></div><div data-tile=\"view\"><span>Pick rate</span><b>", .{ 100 * iv[0], 100 * iv[1] });
         try pct(w, cr.games, site.games);
-        try w.writeAll("</b><small>of games</small></div><div><span>Ban rate</span><b>");
+        try w.writeAll("</b><small>of games</small></div><div data-tile=\"view\"><span>Ban rate</span><b>");
         try pct(w, ch.banned, site.games);
-        try w.print("</b><small>of games</small></div><div><span>Games</span><b>{d}</b><small>{s} lane</small></div></div>\n", .{ cr.games, roleName(r) });
+        try w.print("</b><small>of games</small></div><div data-tile=\"games\"><span>Games</span><b>{d}</b><small>{s} lane</small></div></div>\n", .{ cr.games, roleName(r) });
 
         var opps: std.ArrayList(Opponent) = .empty;
         for (site.champs) |other| {
@@ -810,8 +819,26 @@ fn writeChampion(site: *const Site, ch: Champ) !void {
     try learning_page.section(w, &site.learning, ch);
     try w.print("<p class=\"muted small\">Win rates are raw: no pulling toward 50%. Bars are 95% Wilson intervals. Gold at {d} min is the lane curve's estimate (± two standard errors). <a href=\"{s}method.html\">Method</a>.</p>\n", .{ core.curvesfile.lane_minute, site.toShared(path) });
     try w.print("<script src=\"../{s}table.js\" defer></script>\n", .{site.view.up()});
+    if (filtered) try w.print("<script src=\"../{s}filters.js\" defer></script>\n", .{site.view.up()});
     try html.foot(w, p);
     try site.write(path, aw.written());
+}
+
+/// Filter bar (filters.zig, static/filters.js): hidden until the script fills it from
+/// the champion's filter data. Its defaults are this view's region and period
+fn filterBar(site: *const Site, w: *Writer, ch: Champ) !void {
+    try w.print(
+        "<div class=\"filter-bar\" hidden data-src=\"../{s}data/filters/{s}.json\" data-champions=\"../data/champions.json\" data-ddragon=\"{s}\" data-region=\"{s}\" data-period=\"{s}\">",
+        .{ site.view.up(), ch.slug, site.ddragon_version, if (site.view.region == .euw) site.opts.platforms[0] else "all", @tagName(site.view.period) },
+    );
+    try w.writeAll(
+        \\<label>Region <select data-f="region"></select></label>
+        \\<label>Rank <select data-f="rank"></select></label>
+        \\<label>Period <select data-f="period"></select></label>
+        \\<label>Opponents <select data-f="min"></select></label>
+        \\<button class="link" data-reset hidden>Reset</button></div>
+        \\
+    );
 }
 
 /// Every lane opponent: win rate with its interval and the lane curve's gold difference at
@@ -840,7 +867,7 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Oppo
     for (opps) |o| {
         const thin = o.games < min_opponent_games;
         if (thin) few += 1;
-        try w.print("<tr data-name=\"{f}\"{s}><td class=\"l\">", .{ esc(o.other.name), if (thin) " class=\"thin\"" else "" });
+        try w.print("<tr data-id=\"{d}\" data-name=\"{f}\"{s}><td class=\"l\">", .{ o.other.id, esc(o.other.name), if (thin) " class=\"thin\"" else "" });
         try site.champLink(w, o.other, "../");
         try w.writeAll("</td>");
         try winRateCell(w, o.wins, o.games, 0.25);
