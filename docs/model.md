@@ -511,6 +511,77 @@ Reading:
 - Lesson material at most, with intervals; one sd of any style is worth under 2.5 pp
   once the state is known
 
+### Champion given the state (scaling), 2026-10-13 (meiolol-b0's successor)
+
+`meiolol scaling --data SNAP --platform all --preds DIR --table FILE` (src/scaling.zig),
+same split, games reaching 15:00 (117,806 train, 10,604 test), ten rows per game at the
+draft (minute 0) and at 10/15/20/25/30 while still going. Baseline per minute: logistic
+win from the own team's gold lead (with objectives' curve term) and XP lead. On top, in
+log-odds: champion x role per minute (the scaling curve), and champion x role x team gold
+lead (converts a lead / comes back), each shrunk by a method-of-moments prior per role,
+fitted by IRLS backfitting (8 passes). A first version added the effects in probability
+space and lost on test after 20 min (predictions pushed past 0/1 in decided games); the
+log-odds fit fixed it. Effects reported as win pp in an even game (log-odds x 25) and as
+the team gold lead worth the same at that minute. Train-time: the state; use-time:
+lessons and aggregate facts only. Preds: 3c-scale-{state,pooled,champ,slope}.tsv
+(match_id, slot, minute); every champion-role by minute in 3c-scale-table.tsv, full
+report 3c-scale-report.md (same dir).
+
+Test log loss gain, nats per row ± 95% clustered by game (state: log loss, [win pp per
+1000 gold lead in an even game]):
+
+| minute | test rows | state | champion, one effect for 10-30 min vs state | champion by minute vs state | by minute vs one effect (scaling curve) | + champion x gold lead |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 106,040 | 0.6931 | - | 0.00028 ± 0.00018 | - | 0.00000 ± 0.00000 |
+| 10 | 106,040 | 0.5914 [9.4] | 0.00138 ± 0.00044 | 0.00159 ± 0.00033 | 0.00021 ± 0.00018 | -0.00002 ± 0.00005 |
+| 15 | 106,040 | 0.5229 [6.8] | 0.00198 ± 0.00040 | 0.00210 ± 0.00038 | 0.00011 ± 0.00011 | -0.00009 ± 0.00009 |
+| 20 | 98,850 | 0.4718 [6.0] | 0.00223 ± 0.00039 | 0.00236 ± 0.00041 | 0.00013 ± 0.00010 | -0.00008 ± 0.00008 |
+| 25 | 81,680 | 0.4353 [4.9] | 0.00205 ± 0.00042 | 0.00235 ± 0.00045 | 0.00030 ± 0.00016 | -0.00000 ± 0.00005 |
+| 30 | 46,300 | 0.4668 [4.5] | 0.00194 ± 0.00057 | 0.00207 ± 0.00057 | 0.00013 ± 0.00032 | 0.00003 ± 0.00006 |
+
+Spread of true effects beyond the state (sd across champions, win pp in an even game):
+
+| role | draft | 10 | 15 | 20 | 25 | 30 |
+| --- | --- | --- | --- | --- | --- | --- |
+| top | 3.3 | 3.2 | 3.3 | 3.3 | 3.5 | 1.0 |
+| jungle | 3.9 | 2.1 | 2.8 | 3.8 | 4.8 | 6.1 |
+| middle | 3.7 | 4.3 | 4.0 | 5.4 | 5.3 | 5.4 |
+| bottom | 1.0 | 3.7 | 4.8 | 4.4 | 5.1 | 8.5 |
+| utility | 4.7 | 7.4 | 8.8 | 11.2 | 9.5 | 7.5 |
+
+Lead slopes: spread 0 in most role-minutes, at most 2 pp per 1000 (jungle 10-20), and
+never a test gain. Examples (shrunk, ± 95%, [gold lead worth the same]; 500+ train games):
+
+| role | wins more than its gold says, at 25 | wins less | scaling (25 minus 10 min) |
+| --- | --- | --- | --- |
+| top | Kayle +13.9 ± 2.7 [2900], Ornn +9.5 ± 2.3 [1900] | Akali -6.2 ± 2.5 [-1300], K'Sante -5.5 ± 2.3 [-1100] | Kayle +7.6 ± 3.4, Ornn +5.1 ± 2.8; Warwick -6.4 ± 4.0, Urgot -4.3 ± 3.2 |
+| jungle | Bel'Veth +11.8 ± 2.8 [2400], Rammus +9.1 ± 2.7, Cho'Gath +8.6 ± 1.6 | Hecarim -6.7 ± 2.1 [-1400], Zed -5.2 ± 2.6 | Bel'Veth +6.7 ± 3.4, Cho'Gath +6.3 ± 2.0; Talon -4.1 ± 2.3 |
+| middle | Aurelion Sol +11.8 ± 3.0 [2400], Kassadin +8.3 ± 2.6 | Irelia -8.7 ± 2.6 [-1800], Locke -7.3 ± 1.7 [-1500] | Aurelion Sol +5.6 ± 3.7; Fizz -4.0 ± 2.2, Akali -3.2 ± 2.2 |
+| bottom | Smolder +9.3 ± 1.8 [1900], Jinx +7.5 ± 1.1 [1500], Twitch +6.2 ± 1.8 | Draven -7.7 ± 2.2 [-1600], Ezreal -7.4 ± 1.3 [-1500], Varus -7.3 ± 2.5 | Aphelios +4.6 ± 1.9, Caitlyn +3.1 ± 1.3; Kai'Sa -5.9 ± 1.3 |
+| utility | Sona +8.3 ± 2.8 [1700], Yuumi +7.8 ± 2.0, Milio +7.7 ± 1.8, Lulu +6.3 ± 1.3 | Pyke -12.7 ± 1.8 [-2600], Camille -10.4 ± 3.3, Sylas -8.1 ± 3.7 | Seraphine +4.6 ± 2.0, Yuumi +4.3 ± 2.4; Pyke -4.6 ± 2.2, Leona -3.5 ± 1.9 |
+
+Reading:
+- The same gold lead is worth very different amounts depending on who holds the
+  champions: a typical spread (one sd) of 3-11 pp in an even game, worth 500-2300 gold
+  of lead, about one or two dragons. Champions beat their draft win rate given the
+  state because their team's gold usually says something else: Kayle wins at an average
+  rate overall (draft +0.4) while usually behind on gold, so at equal gold it wins far
+  more
+- Two mechanisms show in the lists, not separated here: gold on low-gold or
+  late-scaling champions (enchanter supports, Kayle, Aurelion Sol, Smolder, Jinx) is
+  worth more than its count; gold taken by champions that convert kills into their own
+  gold early (Pyke, Camille and Sylas support, Draven, Ezreal, Irelia) is worth less.
+  The model sees team gold, not who holds it
+- Most of a champion's value beyond the state is the same at every minute (one effect
+  for 10-30 gets 85-95% of the gain); a real but small scaling curve on top (+0.0001-0.0003
+  nats at 10, 20, 25). Bottom laners' spread grows with the game (3.7 at 10 to 8.5 at
+  30), top's shrinks after 25
+- No champion converts a lead or comes back from behind measurably differently from its
+  general value: "from 2k behind at 15" is the same effect as at even, at 118k games
+  (any difference under ~1 pp per 1000 gold)
+- Descriptive: who picks the champion and the rest of their team are not held fixed.
+  Lesson material with intervals, never a pick reason
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

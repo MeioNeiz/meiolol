@@ -21,6 +21,23 @@ How to write a line:
 
 ## Win
 
+- 2026-10-13: The same gold lead is worth more or less depending on the champions:
+  at 25 minutes a team with Kayle top wins as often as an average team about 2,900
+  gold further ahead, and a team with Pyke support as often as one about 2,600 gold
+  further behind. Gold on enchanter supports, Kayle, Aurelion Sol, Smolder and Jinx
+  counts for more than it shows; gold taken by Pyke, Camille or Sylas support, Draven,
+  Ezreal and Irelia counts for less. Sure: 118k games, better on held-out games at
+  every minute from 10 to 30; common picks known to about ±1-3 percentage points.
+  Site: lessons such as "on Kayle, 1,500 gold behind at 15 is par", with the
+  interval; never a pick reason (who plays the champion isn't held fixed). Evidence:
+  docs/model.md "Champion given the state (scaling)"
+- 2026-10-13: No champion is measurably better at coming back from behind, or at
+  closing out a lead, than at an even game: 2,000 gold behind at 15, a champion makes
+  the same difference as at even. A champion's value beyond the gold mostly stays the
+  same from minute 10 to 30, with a small real scaling curve (bot laners matter more
+  late). Sure: 118k games; any comeback difference is under about 1 percentage point
+  per 1,000 gold. Site: no "comeback champion" labels; scaling only as the effect by
+  minute with intervals. Evidence: docs/model.md "Champion given the state (scaling)"
 - 2026-10-12 (early): Our best draft model picks the winner 53.3% of the time (a coin
   flip is 50%, LoLDraftAI reports 55-56%), and it is still getting better with every
   doubling of games, with no sign of levelling off. Counters and ally synergy don't add

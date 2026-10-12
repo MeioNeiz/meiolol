@@ -1,0 +1,619 @@
+//! `meiolol scaling`: which champions win more than the game state says, and when?
+//! Rows: every player at minute 0 (the draft) and 10/15/20/25/30 of games reaching
+//! 15:00 and still going then. A logistic baseline per minute gives the win chance from
+//! the team gold and XP lead (objectives.zig's lead features); on top of it, in log-odds,
+//! the champion in its role (by minute: the scaling curve) and the champion's slope on
+//! the team gold lead (converts a lead, or comes back from behind), each shrunk toward 0
+//! by a method-of-moments prior per role (as items.zig, on IRLS weights). Descriptive:
+//! a champion's players and teams differ in ways the state misses. Use-time: lessons and
+//! aggregate facts ("from 2k behind at 15, X comes back more often than Y").
+//! Split as docs/model.md "Shared protocol, 2026-10-12".
+
+const std = @import("std");
+const store = @import("store");
+const core = @import("core");
+const timeline = @import("riot/timeline.zig");
+const stats = @import("stats.zig");
+const eval = @import("eval.zig");
+const logreg = @import("logreg.zig");
+const objectives = @import("objectives.zig");
+const Date = @import("date.zig").Date;
+const Role = core.Role;
+const Io = std.Io;
+
+pub const Options = struct {
+    test_share: f64 = 0.2,
+    test_platform: []const u8 = "EUW1",
+    passes: u32 = 8,
+    /// One TSV per model of every test row's prediction
+    preds_dir: ?[]const u8 = null,
+    /// TSV of every champion-role's effect and lead slope by minute
+    table: ?[]const u8 = null,
+};
+
+const minute_ms = 60_000;
+/// 0: the draft, no state
+const minutes = [_]u8{0} ++ objectives.minutes;
+const n_min = minutes.len;
+/// Champion-roles shown in the markdown need this many train games
+const shown_games = 500;
+
+/// One player at one minute
+const Row = struct {
+    game: u32,
+    /// participant id - 1
+    slot: u8,
+    role: u8,
+    champ: u16,
+    /// own side's team leads, thousands
+    gold: f32,
+    xp: f32,
+    won: bool,
+};
+
+const Game = struct {
+    match_id: []const u8,
+    /// [side][role]: participant id - 1
+    slot: [2][Role.count]u8,
+    /// blue's gold and XP lead, thousands (null: ended by then)
+    leads: [n_min]?[2]f32,
+};
+
+const Map = std.AutoHashMapUnmanaged(u64, Game);
+
+fn load(
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    db: store.Db,
+    chosen: []const []const u8,
+    platforms: []const []const u8,
+) !Map {
+    const patch_json = try std.json.Stringify.valueAlloc(arena, chosen, .{});
+    const platform_json = try std.json.Stringify.valueAlloc(arena, platforms, .{});
+    var q = try db.prepare(
+        \\SELECT m.match_id, t.data
+        \\FROM matches m JOIN timeline.timelines t USING (match_id)
+        \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
+        \\  AND m.platform IN (SELECT value FROM json_each(?))
+        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
+    );
+    defer q.deinit();
+    try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
+    var players = try db.prepare("SELECT slot, team_id, position FROM participants WHERE match_id = ?");
+    defer players.deinit();
+
+    var map: Map = .empty;
+    errdefer map.deinit(gpa);
+    var scratch_state: std.heap.ArenaAllocator = .init(gpa);
+    defer scratch_state.deinit();
+    while (try q.step()) {
+        _ = scratch_state.reset(.retain_capacity);
+        const scratch = scratch_state.allocator();
+        const t = timeline.decode(scratch, store.raw.decompress(scratch, q.bytes(1)) catch continue) catch continue;
+        if (t.participants != 10 or t.frames.len < 16 or t.frames[15].t_ms < 15 * minute_ms) continue;
+
+        try players.bind(.{q.bytes(0)});
+        var pid: [2][Role.count]u8 = @splat(@splat(0));
+        while (try players.step()) {
+            const side: usize = switch (players.int(1)) {
+                100 => 0,
+                200 => 1,
+                else => continue,
+            };
+            const r = Role.fromLcu(if (players.isNull(2)) "" else players.bytes(2)) orelse continue;
+            const slot = players.int(0);
+            if (slot < 0 or slot >= t.participants) continue;
+            pid[side][@backingInt(r)] = @intCast(slot + 1);
+        }
+        if (std.mem.indexOfScalar(u8, std.mem.asBytes(&pid), 0) != null) continue;
+        // Participant ids 1-5 are blue in match-v5
+        var g: Game = .{ .match_id = undefined, .slot = undefined, .leads = undefined };
+        var ok = true;
+        for (0..2) |side| for (0..Role.count) |ri| {
+            ok = ok and (pid[side][ri] <= 5) == (side == 0);
+            g.slot[side][ri] = pid[side][ri] -% 1;
+        };
+        if (!ok) continue;
+        for (minutes, &g.leads) |m, *l| {
+            l.* = if (m == 0) .{ 0, 0 } else if (objectives.stateAt(t, m)) |s|
+                .{ s[@backingInt(objectives.Feat.gold)], s[@backingInt(objectives.Feat.xp)] }
+            else
+                null;
+        }
+        g.match_id = try arena.dupe(u8, q.bytes(0));
+        try map.put(gpa, stats.matchKey(q.bytes(0)), g);
+    }
+    return map;
+}
+
+/// Win chance from the state alone; minute 0 has only the intercept
+fn baseRow(r: Row) logreg.Row {
+    var b: logreg.Row = .{ .y = @floatFromInt(@intFromBool(r.won)) };
+    b.add(0, 1);
+    b.add(1, r.gold);
+    b.add(2, r.gold * @abs(r.gold) / 10);
+    b.add(3, r.xp);
+    return b;
+}
+const base_dims = 4;
+
+/// Cells with fewer rows are left out of the spread estimates
+const eb_min_rows = 10;
+/// Fewer cells in a role and the term is off for it
+const eb_min_cells = 20;
+
+/// Shrunk log-odds effects per champion-role cell, times x (x = 1: a shift; x = gold
+/// lead: a slope per 1000), fitted by Newton steps on the working residual of the whole
+/// model (IRLS: weight p(1-p)), with a method-of-moments prior on their spread per role
+const Term = struct {
+    b: []f64,
+    /// sum of p(1-p) x^2 per cell: the information behind each effect
+    sxx: []f64,
+    n: []f64,
+    /// [role]: spread of true effects (0: off)
+    tau: [Role.count]f64 = @splat(0),
+
+    fn init(gpa: std.mem.Allocator, cells: usize) !Term {
+        const t: Term = .{
+            .b = try gpa.alloc(f64, cells),
+            .sxx = try gpa.alloc(f64, cells),
+            .n = try gpa.alloc(f64, cells),
+        };
+        @memset(t.b, 0);
+        return t;
+    }
+
+    fn deinit(t: Term, gpa: std.mem.Allocator) void {
+        gpa.free(t.b);
+        gpa.free(t.sxx);
+        gpa.free(t.n);
+    }
+
+    /// Posterior sd of a cell's effect (0 when the term is off for its role)
+    fn sd(t: Term, cell: usize, champs: usize) f64 {
+        const tau = t.tau[cell / champs];
+        if (tau == 0) return 0;
+        return 1 / @sqrt(t.sxx[cell] + 1 / (tau * tau));
+    }
+};
+
+fn covariate(slope: bool, r: Row) f64 {
+    return if (slope) r.gold else 1;
+}
+
+fn cellOf(champs: usize, r: Row) usize {
+    return @as(usize, r.role) * champs + r.champ;
+}
+
+/// One backfitting step for `t`; `eta` is each row's log-odds from the whole model
+/// (updated in place)
+fn update(gpa: std.mem.Allocator, t: *Term, slope: bool, champs: usize, rows: []const Row, eta: []f64) !void {
+    const sxr = try gpa.alloc(f64, t.b.len);
+    defer gpa.free(sxr);
+    @memset(sxr, 0);
+    @memset(t.sxx, 0);
+    @memset(t.n, 0);
+    for (rows, eta) |r, e| {
+        const c = cellOf(champs, r);
+        const x = covariate(slope, r);
+        const p = logreg.sigmoid(e);
+        const wx2 = p * (1 - p) * x * x;
+        // sum w x z for the working response z = (y - p) / w + b x
+        sxr[c] += x * (@as(f64, @floatFromInt(@intFromBool(r.won))) - p) + t.b[c] * wx2;
+        t.sxx[c] += wx2;
+        t.n[c] += 1;
+    }
+    const old = try gpa.dupe(f64, t.b);
+    defer gpa.free(old);
+    for (0..Role.count) |ri| {
+        const lo = ri * champs;
+        var cells: f64 = 0;
+        var excess: f64 = 0;
+        for (sxr[lo..][0..champs], t.sxx[lo..][0..champs], t.n[lo..][0..champs]) |xr, xx, n| {
+            if (n < eb_min_rows or xx == 0) continue;
+            const est = xr / xx;
+            cells += 1;
+            excess += est * est - 1 / xx;
+        }
+        const tau2 = if (cells < eb_min_cells or excess <= 0) 0 else excess / cells;
+        t.tau[ri] = @sqrt(tau2);
+        for (t.b[lo..][0..champs], sxr[lo..][0..champs], t.sxx[lo..][0..champs]) |*b, xr, xx| {
+            b.* = if (tau2 == 0 or xx == 0) 0 else xr / (xx + 1 / tau2);
+        }
+    }
+    for (rows, eta) |r, *e| {
+        const c = cellOf(champs, r);
+        e.* += (t.b[c] - old[c]) * covariate(slope, r);
+    }
+}
+
+fn logLoss(p: f64, y: f64) f64 {
+    const q = std.math.clamp(p, 1e-4, 1 - 1e-4);
+    return -(y * @log(q) + (1 - y) * @log(1 - q));
+}
+
+const Gain = struct { mean: f64, half_width: f64 };
+
+/// Mean of before - after per row, ± 95% with rows clustered by game (rows sorted by game)
+fn pairedGain(rows: []const Row, before: []const f64, after: []const f64) Gain {
+    var total: f64 = 0;
+    var sum_sq: f64 = 0;
+    var n_games: f64 = 0;
+    var i: usize = 0;
+    while (i < rows.len) {
+        var d: f64 = 0;
+        const g = rows[i].game;
+        while (i < rows.len and rows[i].game == g) : (i += 1) d += before[i] - after[i];
+        total += d;
+        sum_sq += d * d;
+        n_games += 1;
+    }
+    const n_rows: f64 = @floatFromInt(rows.len);
+    const mean_d = total / n_games;
+    const var_d = sum_sq / n_games - mean_d * mean_d;
+    return .{ .mean = total / n_rows, .half_width = 1.96 * @sqrt(n_games * var_d) / n_rows };
+}
+
+const GameList = struct {
+    gpa: std.mem.Allocator,
+    items: std.ArrayList(stats.Row) = .empty,
+
+    pub fn add(l: *GameList, g: stats.Row) !void {
+        try l.items.append(l.gpa, g);
+    }
+};
+
+const Model = struct { label: []const u8, file: []const u8 };
+
+const models = [_]Model{
+    .{ .label = "state", .file = "3c-scale-state" },
+    .{ .label = "champion, one effect for minutes 10-30", .file = "3c-scale-pooled" },
+    .{ .label = "champion by minute", .file = "3c-scale-champ" },
+    .{ .label = "champion x gold lead", .file = "3c-scale-slope" },
+};
+const pooled_model = 1;
+
+/// Gain columns: model, against model
+const gains = [_][2]usize{ .{ 1, 0 }, .{ 2, 0 }, .{ 2, 1 }, .{ 3, 2 } };
+
+/// One minute's rows, baseline and fits
+const Minute = struct {
+    train: std.ArrayList(Row) = .empty,
+    tests: std.ArrayList(Row) = .empty,
+    /// baseline log-odds per row
+    base_train: []f64 = &.{},
+    base_test: []f64 = &.{},
+    /// the baseline's log-odds per 1000 team gold lead, at an even game
+    gold_w: f64 = 0,
+    champ: ?Term = null,
+    slope: ?Term = null,
+};
+
+pub fn run(
+    gpa: std.mem.Allocator,
+    io: Io,
+    db: store.Db,
+    patches: []const []const u8,
+    platforms: []const []const u8,
+    opts: Options,
+    w: *Io.Writer,
+) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var list: GameList = .{ .gpa = gpa };
+    defer list.items.deinit(gpa);
+    _ = try stats.scan(gpa, db, patches, platforms, 0, &list);
+    var split = try eval.split(gpa, list.items.items, platforms, .{ .test_share = opts.test_share, .test_platform = opts.test_platform });
+    defer split.deinit(gpa);
+    const cutoff = split.tests[0].start;
+
+    var map = try load(gpa, arena, db, patches, platforms);
+    defer map.deinit(gpa);
+
+    var champ_index: std.AutoHashMapUnmanaged(u32, u16) = .empty;
+    defer champ_index.deinit(gpa);
+    var champ_ids: std.ArrayList(u32) = .empty;
+    defer champ_ids.deinit(gpa);
+    var test_ids: std.ArrayList([]const u8) = .empty;
+    defer test_ids.deinit(gpa);
+    var at: [n_min]Minute = @splat(.{});
+    defer for (&at) |*m| {
+        m.train.deinit(gpa);
+        m.tests.deinit(gpa);
+        if (m.champ) |t| t.deinit(gpa);
+        if (m.slope) |t| t.deinit(gpa);
+    };
+    var n_games: [2]u32 = @splat(0);
+    for ([_][]const stats.Row{ split.train, split.tests }, [_]bool{ false, true }) |part, is_test| for (part) |g| {
+        const gm = map.get(g.id) orelse continue;
+        if (is_test) try test_ids.append(gpa, gm.match_id);
+        const game = n_games[@intFromBool(is_test)];
+        n_games[@intFromBool(is_test)] += 1;
+        for (0..2) |side| for (0..Role.count) |ri| {
+            const e = try champ_index.getOrPut(gpa, g.teams[side][ri]);
+            if (!e.found_existing) {
+                e.value_ptr.* = @intCast(champ_ids.items.len);
+                try champ_ids.append(gpa, g.teams[side][ri]);
+            }
+            const sign: f32 = if (side == 0) 1 else -1;
+            for (gm.leads, &at) |l, *m| {
+                const lead = l orelse continue;
+                try (if (is_test) &m.tests else &m.train).append(gpa, .{
+                    .game = game,
+                    .slot = gm.slot[side][ri],
+                    .role = @intCast(ri),
+                    .champ = e.value_ptr.*,
+                    .gold = sign * lead[0],
+                    .xp = sign * lead[1],
+                    .won = g.winner == side,
+                });
+            }
+        };
+    };
+    if (at[0].train.items.len == 0 or at[0].tests.items.len == 0) return error.TooFewGames;
+    const champs = champ_ids.items.len;
+    const cells = Role.count * champs;
+
+    try w.print("# meiolol scaling\n\nTrain: {d} games reaching 15:00, every scanned platform, " ++
+        "started before {f} ({d}). Test: {d} {s} games from then. Ten rows per game and " ++
+        "minute while it is still going; minute 0 is the draft (no state).\n", .{
+        n_games[0], Date.fromMs(cutoff), cutoff, n_games[1], opts.test_platform,
+    });
+
+    for (&at) |*m| {
+        const rows = try gpa.alloc(logreg.Row, m.train.items.len);
+        defer gpa.free(rows);
+        for (rows, m.train.items) |*b, x| b.* = baseRow(x);
+        // Minute 0: the lead features are all 0, so they stay 0
+        const wt = try logreg.fit(gpa, base_dims, rows, 1);
+        defer gpa.free(wt);
+        m.gold_w = wt[1];
+        m.base_train = try arena.alloc(f64, m.train.items.len);
+        for (m.base_train, rows) |*e, b| e.* = b.dot(wt);
+        m.base_test = try arena.alloc(f64, m.tests.items.len);
+        for (m.base_test, m.tests.items) |*e, x| e.* = baseRow(x).dot(wt);
+    }
+
+    var pooled = try Term.init(gpa, cells);
+    defer pooled.deinit(gpa);
+    {
+        var rows: std.ArrayList(Row) = .empty;
+        defer rows.deinit(gpa);
+        var eta: std.ArrayList(f64) = .empty;
+        defer eta.deinit(gpa);
+        for (at[1..]) |m| {
+            try rows.appendSlice(gpa, m.train.items);
+            try eta.appendSlice(gpa, m.base_train);
+        }
+        for (0..opts.passes) |_| try update(gpa, &pooled, false, champs, rows.items, eta.items);
+    }
+
+    for (&at) |*m| {
+        const eta = try gpa.dupe(f64, m.base_train);
+        defer gpa.free(eta);
+        var champ = try Term.init(gpa, cells);
+        errdefer champ.deinit(gpa);
+        var slope = try Term.init(gpa, cells);
+        errdefer slope.deinit(gpa);
+        for (0..opts.passes) |_| {
+            try update(gpa, &champ, false, champs, m.train.items, eta);
+            try update(gpa, &slope, true, champs, m.train.items, eta);
+        }
+        m.champ = champ;
+        m.slope = slope;
+    }
+
+    var files: [models.len]?Io.File = @splat(null);
+    var bufs: [models.len][16 * 1024]u8 = undefined;
+    var writers: [models.len]Io.File.Writer = undefined;
+    defer for (files) |f| if (f) |x| x.close(io);
+    if (opts.preds_dir) |dir| {
+        const cwd = Io.Dir.cwd();
+        try cwd.createDirPath(io, dir);
+        for (models, 0..) |m, i| {
+            const path = try std.fmt.allocPrint(arena, "{s}/{s}.tsv", .{ dir, m.file });
+            files[i] = try cwd.createFile(io, path, .{});
+            writers[i] = files[i].?.writer(io, &bufs[i]);
+            try writers[i].interface.writeAll("match_id\tslot\tminute\ty\tpred\n");
+        }
+    }
+
+    try w.writeAll("\nTest log loss of the player's win, nats per row; gain = drop in it, ± 95% " ++
+        "clustered by game. State: the team gold and XP lead (minute 0: the train win " ++
+        "rate); its win pp per 1000 gold lead in an even game in brackets.\n\n" ++
+        "| minute | train rows | test rows | state |");
+    for (gains) |g| try w.print(" {s} vs {s} |", .{ models[g[0]].label, models[g[1]].label });
+    try w.writeAll("\n| --- | --- | --- | --- |");
+    for (gains) |_| try w.writeAll(" --- |");
+    try w.writeAll("\n");
+    for (at, minutes) |m, minute| {
+        var loss: [models.len][]f64 = undefined;
+        for (&loss) |*l| l.* = try arena.alloc(f64, m.tests.items.len);
+        for (m.tests.items, m.base_test, 0..) |r, e0, i| {
+            const c = cellOf(champs, r);
+            const y: f64 = @floatFromInt(@intFromBool(r.won));
+            const eta = [models.len]f64{
+                e0,
+                e0 + if (minute == 0) 0 else pooled.b[c],
+                e0 + m.champ.?.b[c],
+                e0 + m.champ.?.b[c] + m.slope.?.b[c] * r.gold,
+            };
+            for (loss, eta, 0..) |l, e, k| {
+                const x = logreg.sigmoid(e);
+                l[i] = logLoss(x, y);
+                if (opts.preds_dir != null) try writers[k].interface.print("{s}\t{d}\t{d}\t{d}\t{d:.4}\n", .{
+                    test_ids.items[r.game], r.slot, minute, y, std.math.clamp(x, 1e-4, 1 - 1e-4),
+                });
+            }
+        }
+        try w.print("| {d} | {d} | {d} | {d:.4} [{d:.1}] |", .{
+            minute, m.train.items.len, m.tests.items.len, mean(loss[0]), 25 * m.gold_w,
+        });
+        for (gains) |pair| {
+            if (minute == 0 and (pair[0] == pooled_model or pair[1] == pooled_model)) {
+                try w.writeAll(" - |");
+                continue;
+            }
+            const g = pairedGain(m.tests.items, loss[pair[1]], loss[pair[0]]);
+            try w.print(" {d:.5} ± {d:.5} |", .{ g.mean, g.half_width });
+        }
+        try w.writeAll("\n");
+    }
+    try w.writeAll("\nChampion by minute vs one effect for minutes 10-30 measures the scaling " ++
+        "curve: whether a champion's value beyond the state changes with the minute.\n");
+
+    try w.writeAll("\nSpread of true effects (sd across champions in the role): champion " ++
+        "given the state, win pp in an even game (log-odds x 25); [its slope on the team " ++
+        "gold lead, pp per 1000]\n\n| role |");
+    for (minutes) |minute| try w.print(" {d} min |", .{minute});
+    try w.writeAll("\n| --- |");
+    for (minutes) |_| try w.writeAll(" --- |");
+    try w.writeAll("\n");
+    for (Role.all, 0..) |role, ri| {
+        try w.print("| {t} |", .{role});
+        for (at, minutes) |m, minute| {
+            try w.print(" {d:.1}", .{25 * m.champ.?.tau[ri]});
+            if (minute > 0) try w.print(" [{d:.2}]", .{25 * m.slope.?.tau[ri]});
+            try w.writeAll(" |");
+        }
+        try w.writeAll("\n");
+    }
+
+    var name = try db.prepare("SELECT name FROM champions WHERE id = ?");
+    defer name.deinit();
+    const names = try arena.alloc([]const u8, champs);
+    for (names, champ_ids.items) |*n, id| {
+        try name.bind(.{@as(i64, id)});
+        n.* = if (try name.step()) try arena.dupe(u8, name.bytes(0)) else try std.fmt.allocPrint(arena, "#{d}", .{id});
+    }
+
+    if (opts.table) |path| {
+        const cwd = Io.Dir.cwd();
+        const f = try cwd.createFile(io, path, .{});
+        defer f.close(io);
+        var buf: [16 * 1024]u8 = undefined;
+        var fw = f.writer(io, &buf);
+        try fw.interface.writeAll("champion\trole\tminute\ttrain_rows\teffect\teffect_sd\tslope\tslope_sd\n");
+        for (0..cells) |c| for (at, minutes) |m, minute| {
+            const n = m.champ.?.n[c];
+            if (n == 0) continue;
+            try fw.interface.print("{s}\t{t}\t{d}\t{d}\t{d:.4}\t{d:.4}\t{d:.4}\t{d:.4}\n", .{
+                names[c % champs], @as(Role, @fromBackingInt(@intCast(c / champs))), minute,         n,
+                m.champ.?.b[c],    m.champ.?.sd(c, champs),                          m.slope.?.b[c], m.slope.?.sd(c, champs),
+            });
+        };
+        try fw.interface.flush();
+    }
+
+    try lessons(w, arena, &at, champs, names);
+    for (files, &writers) |f, *x| if (f != null) try x.interface.flush();
+}
+
+/// Index of a minute in `minutes`
+fn mi(minute: u8) usize {
+    return std.mem.indexOfScalar(u8, &minutes, minute).?;
+}
+
+const Shown = struct { cell: usize, key: f64, sd: f64 };
+
+fn byKey(_: void, a: Shown, b: Shown) bool {
+    return a.key > b.key;
+}
+
+/// Per role: the champions that gain most from minute 10 to 25, and the ones that win
+/// most beyond the state at 15 and 25, also as the gold lead worth the same
+fn lessons(w: *Io.Writer, arena: std.mem.Allocator, at: *const [n_min]Minute, champs: usize, names: []const []const u8) !void {
+    const m10 = at[mi(10)].champ.?;
+    const draft = at[0].champ.?;
+    try w.print("\nPer role, champions with {d}+ train games. Effects in win pp in an even game " ++
+        "(log-odds x 25) beyond the state (the team gold and XP lead then), against an average champion in the role, ± 95%. " ++
+        "Scaling: effect at 25 minus at 10. At 15 / 25: the effect then, and [the team gold " ++
+        "lead worth the same then, in an even game].\n", .{shown_games});
+    for (Role.all, 0..) |role, ri| {
+        var list: std.ArrayList(Shown) = .empty;
+        for (0..champs) |ci| {
+            const c = ri * champs + ci;
+            if (draft.n[c] < shown_games) continue;
+            try list.append(arena, .{ .cell = c, .key = 0, .sd = 0 });
+        }
+        if (list.items.len == 0) continue;
+        try w.print("\n#### {t}\n\n| list | champion | draft | 10 min | 15 min | 20 min | 25 min | 30 min | " ++
+            "key ± 95% | games |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n", .{role});
+        const Kind = enum { scaling, at_15, at_25 };
+        for ([_]Kind{ .scaling, .at_15, .at_25 }) |kind| {
+            const then: ?Minute = switch (kind) {
+                .scaling => null,
+                .at_15 => at[mi(15)],
+                .at_25 => at[mi(25)],
+            };
+            for (list.items) |*s| {
+                const c = s.cell;
+                const m = (then orelse at[mi(25)]).champ.?;
+                s.key = m.b[c] - if (then == null) m10.b[c] else 0;
+                s.sd = if (then == null) std.math.hypot(m.sd(c, champs), m10.sd(c, champs)) else m.sd(c, champs);
+            }
+            std.mem.sort(Shown, list.items, {}, byKey);
+            const k = @min(5, list.items.len / 2);
+            for ([_][]const Shown{ list.items[0..k], list.items[list.items.len - k ..] }, [_][]const u8{ "most", "least" }) |part, which| {
+                for (part) |s| {
+                    try w.print("| {t}, {s} | {s} |", .{ kind, which, names[s.cell % champs] });
+                    for (at) |m| try w.print(" {d:.1} |", .{25 * m.champ.?.b[s.cell]});
+                    try w.print(" {d:.1} ± {d:.1}", .{ 25 * s.key, 25 * 1.96 * s.sd });
+                    if (then) |m| try w.print(" [{d:.0}]", .{1000 * s.key / m.gold_w});
+                    try w.print(" | {d:.0} |\n", .{draft.n[s.cell]});
+                }
+            }
+        }
+    }
+}
+
+fn mean(xs: []const f64) f64 {
+    var sum: f64 = 0;
+    for (xs) |x| sum += x;
+    return sum / @as(f64, @floatFromInt(xs.len));
+}
+
+const testing = std.testing;
+
+test "shrunk effects recover a champion's shift and slope" {
+    const gpa = testing.allocator;
+    const champs = 30;
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    var prng: std.Random.DefaultPrng = .init(1);
+    const rand = prng.random();
+    for (0..150_000) |i| {
+        const champ: u16 = @intCast(i % champs);
+        const gold: f32 = @floatCast(rand.floatNorm(f64) * 3);
+        // Log-odds: champions 0-14 shift by +-0.3; 0-9 also gain or lose 0.1 per 1000 gold
+        const shift: f64 = if (champ < 15) (if (champ % 2 == 0) 0.3 else -0.3) else 0;
+        const slope: f64 = if (champ < 10) (if (champ % 3 == 1) 0.1 else -0.1) else 0;
+        const won = rand.float(f64) < logreg.sigmoid(shift + slope * gold);
+        try rows.append(gpa, .{ .game = @intCast(i), .slot = 0, .role = 0, .champ = champ, .gold = gold, .xp = 0, .won = won });
+    }
+    const eta = try gpa.alloc(f64, rows.items.len);
+    defer gpa.free(eta);
+    @memset(eta, 0);
+    var champ = try Term.init(gpa, Role.count * champs);
+    defer champ.deinit(gpa);
+    var slope = try Term.init(gpa, Role.count * champs);
+    defer slope.deinit(gpa);
+    for (0..8) |_| {
+        try update(gpa, &champ, false, champs, rows.items, eta);
+        try update(gpa, &slope, true, champs, rows.items, eta);
+    }
+    // Sampling sd: about 0.04 for a shift, 0.015 for a slope
+    try testing.expectApproxEqAbs(0.3, champ.b[0], 0.1);
+    try testing.expectApproxEqAbs(-0.3, champ.b[1], 0.1);
+    try testing.expectApproxEqAbs(0, champ.b[20], 0.1);
+    try testing.expectApproxEqAbs(0.1, slope.b[1], 0.035);
+    try testing.expectApproxEqAbs(-0.1, slope.b[2], 0.035);
+    try testing.expectApproxEqAbs(0, slope.b[20], 0.035);
+    // Half the champions at +-0.3: sd 0.21
+    try testing.expect(champ.tau[0] > 0.17 and champ.tau[0] < 0.25);
+    try testing.expect(champ.sd(0, champs) > 0.02 and champ.sd(0, champs) < 0.06);
+    // No other role has rows: off
+    try testing.expectEqual(0, champ.tau[1]);
+}

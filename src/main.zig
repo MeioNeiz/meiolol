@@ -22,6 +22,7 @@ pub const objectives = @import("objectives.zig");
 pub const winchance = @import("winchance.zig");
 pub const items = @import("items.zig");
 pub const playstyle = @import("playstyle.zig");
+pub const scaling = @import("scaling.zig");
 pub const archive = @import("archive.zig");
 pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
@@ -150,6 +151,15 @@ const usage =
     \\              --test-platform P  test on P's newest games (default EUW1)
     \\              --test-share F   newest share of P's games held out (default 0.2)
     \\              --preds DIR      one TSV of test predictions per model
+    \\  scaling     which champions win more than the gold and XP lead says, by minute
+    \\              (scaling) and by the lead (converting it, coming back)? (markdown on
+    \\              stdout; docs/model.md)
+    \\              --patch P        as for stats (default: every patch, pooled)
+    \\              --platform P     as for stats (train uses every one given)
+    \\              --test-platform P  test on P's newest games (default EUW1)
+    \\              --test-share F   newest share of P's games held out (default 0.2)
+    \\              --preds DIR      one TSV of test predictions per model
+    \\              --table FILE     TSV of every champion-role's effect and slope by minute
     \\  raw-export  raw archive, box side (archive.zig): write raw summaries, raw timelines
     \\              and mastery fetched since the last export to DIR/raw-FROM-TO.db and
     \\              print its name and counts (nothing when there is nothing new)
@@ -294,6 +304,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "winchance", cmdWinchance },
     .{ "items", cmdItems },
     .{ "playstyle", cmdPlaystyle },
+    .{ "scaling", cmdScaling },
     .{ "raw-export", cmdRawExport },
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
@@ -905,6 +916,34 @@ fn cmdPlaystyle(c: *Cmd) !u8 {
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
     try playstyle.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
+    try stdout.interface.flush();
+    return 0;
+}
+
+fn cmdScaling(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var o: scaling.Options = .{};
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--test-share")) {
+            o.test_share = try c.float();
+            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
+        } else if (c.is("--test-platform")) {
+            o.test_platform = try c.value();
+        } else if (c.is("--preds")) {
+            o.preds_dir = try c.value();
+        } else if (c.is("--table")) {
+            o.table = try c.value();
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    const platforms = g.platformIds();
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
+    var buf: [64 * 1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    try scaling.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
     try stdout.interface.flush();
     return 0;
 }
