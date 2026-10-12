@@ -308,6 +308,13 @@ button.ghost.icon[aria-pressed="true"] { color: var(--warn); border-color: var(-
 .card.bans { margin-top: 12px; }
 .card.bans .chips { margin-bottom: 8px; }
 input.bansearch { width: 100%; }
+button.slot .fb { color: var(--warn); font-size: 12px; }
+.suggest { margin: 0 0 8px; }
+.suggest h4 { margin: 0 0 4px; font-size: 13px; }
+.suggest ol { margin: 0; padding-left: 20px; font-size: 13px; }
+.suggest li { margin: 2px 0; }
+button.link { font: inherit; font-weight: 600; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+button.link:hover { text-decoration: underline; }
 .health.warn { border-left-color: var(--warn); }
 .fillbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
 details.fillmenu { margin-top: 0; padding: 4px 12px; flex: 1 1 260px; }

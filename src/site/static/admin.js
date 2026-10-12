@@ -1720,7 +1720,7 @@ const DRAFT = { model: undefined, ref: null, err: null, check: null, m: null };
 
 function draftState() {
   const d = stored("draft2", null) || {};
-  return { blue: d.blue || {}, red: d.red || {}, locks: d.locks || {}, bans: d.bans || [], open: d.open || null, sort: d.sort || "played" };
+  return { blue: d.blue || {}, red: d.red || {}, locks: d.locks || {}, fb: d.fb || {}, bans: d.bans || [], open: d.open || null, sort: d.sort || "played" };
 }
 function saveDraft(d) { store("draft2", d); render(true); }
 
@@ -1885,9 +1885,10 @@ function draftView(body) {
       const key = side + "." + role, id = d[side][role], open = d.open === key, locked = !!d.locks[key];
       col.append(el("div", { class: "slotrow" + (open ? " open" : "") },
         el("span", { class: "role" }, label),
-        el("button", { type: "button", class: "slot", "aria-expanded": String(open), onclick: () => { d.open = open ? null : key; saveDraft(d); } }, id != null ? name(id) : el("span", { class: "muted" }, "empty")),
+        el("button", { type: "button", class: "slot", "aria-expanded": String(open), title: d.fb[key] ? `Fallback: ${d.fb[key]}` : null, onclick: () => { d.open = open ? null : key; saveDraft(d); } },
+          id != null ? name(id) : el("span", { class: "muted" }, "empty"), d.fb[key] && id != null ? el("span", { class: "fb" }, ` (${d.fb[key]})`) : null),
         el("button", { type: "button", class: "ghost icon", "aria-pressed": String(locked), title: locked ? "Unlock" : "Lock (random keeps it)", onclick: () => { d.locks[key] = !locked; saveDraft(d); } }, locked ? "locked" : "lock"),
-        id != null ? el("button", { type: "button", class: "ghost icon", title: "Clear", "aria-label": "Clear " + name(id), onclick: () => { delete d[side][role]; saveDraft(d); } }, "×") : null));
+        id != null ? el("button", { type: "button", class: "ghost icon", title: "Clear", "aria-label": "Clear " + name(id), onclick: () => { delete d[side][role]; delete d.fb[key]; saveDraft(d); } }, "×") : null));
       if (open) col.append(slotPicker(m, d, side, role));
     }
     board.append(col);
@@ -1928,14 +1929,21 @@ async function loadTags() {
   if (ui.tab === "models" && ui.cat === "draft") render(true);
 }
 
-// Fill unlocked slots of `sides` with pick(role) -> id; `pool(role)` gives role-legal ids
+// Fill unlocked slots of `sides` with pick(role, taken) -> id, or {id, fb} when the pick
+// fell back from what the fill asked for (shown on the slot)
 function fillSlots(d, sides, pick) {
   const taken = takenIn(d);
   for (const side of sides) for (const [role] of DRAFT_ROLES) {
-    if (d.locks[side + "." + role]) continue;
+    const key = side + "." + role;
+    if (d.locks[key]) continue;
     if (d[side][role] != null) taken.delete(String(d[side][role]));
-    const id = pick(role, taken);
-    if (id == null) delete d[side][role]; else { d[side][role] = id; taken.add(String(id)); }
+    delete d.fb[key];
+    const x = pick(role, taken);
+    const id = x != null && typeof x === "object" ? x.id : x;
+    if (id == null) { delete d[side][role]; continue; }
+    d[side][role] = id;
+    taken.add(String(id));
+    if (x.fb) d.fb[key] = x.fb;
   }
 }
 
@@ -1947,7 +1955,17 @@ function fillMenu(m, d) {
     return (pool.find(c => (x -= m.rate(c.id, role)) <= 0) || pool[pool.length - 1] || {}).id;
   };
   const top = (role, n) => legal(role).sort((a, b) => m.rate(b.id, role) - m.rate(a.id, role)).slice(0, n);
-  const tagged = f => (role, taken) => weighted(legal(role).filter(c => DRAFT.tags.has(c.id) && f(DRAFT.tags.get(c.id))), role, taken);
+  // Tag fills try each [test, note] in turn, so a role whose pool runs out takes the closest
+  // class, then any role-legal champion, marked with the note
+  const tagged = (...steps) => (role, taken) => {
+    for (const [f, fb] of [...steps, [null, "any champion"]]) {
+      const pool = f ? legal(role).filter(c => DRAFT.tags.has(c.id) && f(DRAFT.tags.get(c.id))) : legal(role);
+      const id = weighted(pool, role, taken);
+      if (id != null) return fb ? { id, fb } : id;
+    }
+  };
+  const has = tag => t => t.tags.includes(tag);
+  const fighter = [has("Fighter"), "fighter"];
   const go = f => () => { f(); d.open = null; saveDraft(d); };
   const both = ["blue", "red"];
   const btn = (label, f, title) => el("button", { type: "button", class: "action", title, onclick: go(f) }, label);
@@ -1957,33 +1975,36 @@ function fillMenu(m, d) {
       btn("Random generic", () => fillSlots(d, both, (r, t) => weighted(top(r, 15), r, t)), "Each slot from the role's 15 most played"),
       btn("Swap sides", () => {
         [d.blue, d.red] = [d.red, d.blue];
-        d.locks = Object.fromEntries(Object.entries(d.locks).map(([k, v]) => [k.replace(/^(blue|red)/, x => x === "blue" ? "red" : "blue"), v]));
+        const flip = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.replace(/^(blue|red)/, x => x === "blue" ? "red" : "blue"), v]));
+        d.locks = flip(d.locks);
+        d.fb = flip(d.fb);
       }, "Same champions, sides swapped: a symmetry check"),
     ]],
   ];
   const tags = DRAFT.tags instanceof Map;
   if (tags) {
-    const ad = t => t.attack > t.magic, ap = t => t.magic > t.attack;
+    const ad = tagged([t => t.attack > t.magic], [t => t.attack === t.magic, "mixed damage"]);
+    const ap = tagged([t => t.magic > t.attack], [t => t.attack === t.magic, "mixed damage"]);
     groups.push(["Team styles", [
-      btn("Blue full AD", () => fillSlots(d, ["blue"], tagged(ad))), btn("Red full AD", () => fillSlots(d, ["red"], tagged(ad))),
-      btn("Blue full AP", () => fillSlots(d, ["blue"], tagged(ap))), btn("Red full AP", () => fillSlots(d, ["red"], tagged(ap))),
+      btn("Blue full AD", () => fillSlots(d, ["blue"], ad)), btn("Red full AD", () => fillSlots(d, ["red"], ad)),
+      btn("Blue full AP", () => fillSlots(d, ["blue"], ap)), btn("Red full AP", () => fillSlots(d, ["red"], ap)),
     ]]);
   }
   const debug = [];
   if (tags) {
-    debug.push(btn("All tanks", () => fillSlots(d, both, tagged(t => t.tags.includes("Tank")))),
-      btn("All assassins", () => fillSlots(d, both, tagged(t => t.tags.includes("Assassin")))));
+    debug.push(btn("All tanks", () => fillSlots(d, both, tagged([has("Tank")], fighter))),
+      btn("All assassins", () => fillSlots(d, both, tagged([has("Assassin")], fighter))));
   }
   debug.push(
-    btn("Mirror", () => { for (const side of both) for (const [role] of DRAFT_ROLES) { const c = top(role, 1)[0]; if (c) d[side][role] = c.id; } }, "The most played champion in every role on both sides: only the intercept (blue side) should remain, about 50%"),
-    btn("Empty board", () => { d.blue = {}; d.red = {}; d.locks = {}; }, "Every slot the role average"));
+    btn("Mirror", () => fillSlots(d, both, r => (top(r, 1)[0] || {}).id), "The most played champion in every role on both sides: only the intercept (blue side) should remain, about 50%"),
+    btn("Empty board", () => { d.blue = {}; d.red = {}; d.locks = {}; d.fb = {}; }, "Every slot the role average"));
   groups.push(["Debug", debug]);
   const menu = el("details", { class: "fillmenu" }, el("summary", {}, "Fill…"));
   for (const [title, buttons] of groups) menu.append(el("div", { class: "fillgroup" }, el("span", { class: "sub" }, title), el("div", { class: "actions" }, ...buttons)));
   if (!tags) menu.append(el("p", { class: "sub" }, DRAFT.tags === null ? "AD, AP, tank and assassin fills need Data Dragon, which didn't answer." : "Loading Data Dragon tags…"));
   return el("div", { class: "fillbar" },
     el("button", { type: "button", class: "action", onclick: go(() => fillSlots(d, both, (r, t) => weighted(legal(r), r, t))) }, "Random game"),
-    el("button", { type: "button", class: "action", onclick: go(() => { const taken = takenIn(d); for (const side of both) for (const [r] of DRAFT_ROLES) if (d[side][r] == null && !d.locks[side + "." + r]) { const id = weighted(legal(r), r, taken); if (id != null) { d[side][r] = id; taken.add(String(id)); } } }) }, "Fill empty"),
+    el("button", { type: "button", class: "action", onclick: go(() => { const taken = takenIn(d); for (const side of both) for (const [r] of DRAFT_ROLES) if (d[side][r] == null && !d.locks[side + "." + r]) { const id = weighted(legal(r), r, taken); if (id != null) { d[side][r] = id; delete d.fb[side + "." + r]; taken.add(String(id)); } } }) }, "Fill empty"),
     menu);
 }
 
@@ -2022,7 +2043,7 @@ function slotPicker(m, d, side, role) {
     sortBtn.append(el("button", { type: "button", "aria-pressed": String(d.sort === k), onclick: () => { d.sort = k; saveDraft(d); } }, label));
   }
   const list = el("div", { class: "cands", role: "listbox" });
-  const pick = id => { d[side][role] = id; d.open = null; saveDraft(d); };
+  const pick = id => { d[side][role] = id; delete d.fb[side + "." + role]; d.open = null; saveDraft(d); };
   const fill = () => {
     const q = champKey(input.value);
     const hits = all.filter(x => !q || champKey(x.c.name).includes(q) || champKey(x.c.alias).includes(q))
@@ -2040,10 +2061,28 @@ function slotPicker(m, d, side, role) {
     if (ev.key === "Enter") { const b = list.querySelector("button"); if (b) b.click(); }
     if (ev.key === "Escape") { d.open = null; saveDraft(d); }
   });
+  box.append(suggest(all, q.options, cur, now, side, pick));
   box.append(el("div", { class: "pickhead" }, input, sortBtn), el("p", { class: "sub" }, `Share of the role's games on the newest patch, then the change to ${side}'s win chance ${now != null ? "against the current pick" : "against an empty slot"}. An average pick here: ${pct(q.average)}.`), list);
   fill();
   setTimeout(() => input.focus({ preventScroll: true }), 0);
   return box;
+}
+
+// Suggestions for the open slot, each with its reason as a plain sentence. Lane-opponent
+// and blind-pick lists wait for the early-game model's lane-effects export
+function suggest(all, options, cur, now, side, pick) {
+  const byId = new Map(options.map(o => [o.champion, o]));
+  const best = all.filter(x => String(x.c.id) !== String(cur)).sort((a, b) => b.p - a.p).slice(0, 5);
+  const ol = el("ol", {});
+  for (const x of best) {
+    const o = byId.get(x.c.id);
+    const delta = x.change - (now ?? 0);
+    ol.append(el("li", {}, el("button", { type: "button", class: "link", onclick: () => pick(x.c.id) }, x.c.name), ": ",
+      `${side} would win ${pct(x.p)} of games (likely ${pct(o.lo)} to ${pct(o.hi)}), ${delta >= 0 ? "+" : "−"}${Math.abs(delta * 100).toFixed(1)} points against ${now != null ? "the current pick" : "an empty slot"}, from ${num(o.games)} games in the role.`));
+  }
+  return el("div", { class: "suggest" }, el("h4", {}, "Best for this draft"),
+    best.length ? ol : el("p", { class: "muted" }, "No candidates left for this slot."),
+    el("p", { class: "sub" }, "Best into your lane opponent and safest blind pick come with the early-game lane export."));
 }
 
 // ---------- models: shell ----------
