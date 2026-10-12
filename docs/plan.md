@@ -317,6 +317,14 @@ next steps land here.
   inputs; analysis snapshots hash PUUIDs with a salt, drop forgotten players, deleted
   when replaced; gpu-box long runs OK while League isn't running (watcher pauses);
   box WAL fix (meiolol-83)
+- Retention (Jacob, 2026-10-12 ~22:45, applied by meiolol-3c on the box, crawl.args;
+  old copy crawl.args.bak-20261012): keep more data until the models show what we
+  need. Raw summaries forever (--raw-match-days 0), raw timelines 3 days until the
+  archive takes them, compact rows forever (--keep-days 0), mastery on. --timelines
+  stays 50 (100% not decided). Disk runway ~30 days, so the gpu-box raw archive
+  (meiolol-3c: `meiolol raw-export`, salted-hash pseudonymised, pull timer with acks,
+  prune after ack, forget coverage) must be live within ~3 weeks. No study window yet.
+  Privacy draft (30 days) needs updating to match (meiolol-83)
 - Experience term (src/experience.zig): rerun at 300+ train / 100+ test per variant; if
   "user only" beats no-experience beyond its interval, wire it into recommend() as the
   "your pool" reason (wasm `pool` field). Mastery is a post-match snapshot and flatters
