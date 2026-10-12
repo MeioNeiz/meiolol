@@ -66,8 +66,9 @@ pub fn build(b: *std.Build) void {
     }
 
     // Host build for Mac CPU jobs in zig-out/bin, gpu-box build in zig-out/gpu-box
-    const lab_mod = labModule(b, target, optimize);
-    const lab = b.addExecutable(.{ .name = "meiolol-lab", .root_module = labModule(b, b.resolveTargetQuery(gpu_box), .ReleaseFast) });
+    const cand = b.option([]const u8, "cand", "Lab agent candidate dir (docs/lab-agent.md)") orelse "src/lab/cand/base";
+    const lab_mod = labModule(b, target, optimize, cand);
+    const lab = b.addExecutable(.{ .name = "meiolol-lab", .root_module = labModule(b, b.resolveTargetQuery(gpu_box), .ReleaseFast, cand) });
     const lab_step = b.step("lab", "Build meiolol-lab for this machine and the gpu-box (x86_64 Linux, CUDA)");
     lab_step.dependOn(&b.addInstallArtifact(b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_mod }), .{}).step);
     lab_step.dependOn(&b.addInstallArtifact(lab, .{ .dest_dir = .{ .override = .{ .custom = "gpu-box" } } }).step);
@@ -253,7 +254,9 @@ const gpu_box: std.Target.Query = .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi
 
 /// Modelling experiments (src/lab_main.zig). Kernels (src/gpu/kernels.zig) go to PTX, which
 /// the driver compiles for the card at load; without libcuda the GPU commands fail soft
-fn labModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) *std.Build.Module {
+/// A lab agent candidate (cand) sees only std and src/lab/api.zig: Zig refuses imports
+/// outside a module's own directory, so it can't reach the snapshot, split or labels
+fn labModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode, cand: []const u8) *std.Build.Module {
     const kernels = b.addObject(.{
         .name = "kernels",
         .root_module = b.createModule(.{
@@ -277,6 +280,14 @@ fn labModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang
             .{ .name = "core", .module = m.core },
         },
     });
+    const api = b.createModule(.{ .root_source_file = b.path("src/lab/api.zig"), .target = target, .optimize = optimize });
+    mod.addImport("api", api);
+    mod.addImport("cand", b.createModule(.{
+        .root_source_file = b.path(b.fmt("{s}/root.zig", .{cand})),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "api", .module = api }},
+    }));
     mod.addAnonymousImport("kernels.ptx", .{ .root_source_file = kernels.getEmittedAsm() });
     return mod;
 }

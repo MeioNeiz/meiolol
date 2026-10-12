@@ -5,7 +5,8 @@
 # On the gpu-box, deploy/lab-watch.sh pauses every run while League is open (Jacob's
 # rule); `watch-install` sets it up. docs/compute.md
 #
-#   deploy/lab-run.sh start HOST NAME [--meiolol] [--no-build] -- ARGS...
+#   deploy/lab-run.sh start HOST NAME [--meiolol] [--no-build] [--build-arg A]... [--with PATH]...
+#                           -- ARGS...
 #   deploy/lab-run.sh status [HOST]
 #   deploy/lab-run.sh logs HOST RUN [LINES]
 #   deploy/lab-run.sh stop HOST RUN
@@ -16,10 +17,14 @@
 # spaces and run by bash in the run directory on the host, so ~ and globs expand there:
 #   deploy/lab-run.sh start gpu-box smoke -- gpu-smoke
 #   deploy/lab-run.sh start mac eval --meiolol -- eval --data "~/ml/snaps/X" ">" eval.md
+# --build-arg goes to zig build (deploy/lab-exp.sh: -Dcand=DIR); --with copies a file or
+# directory into the run dir (the candidate's source, kept with its scores)
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 RUNS=ml/runs
+BUILD_ARGS=()
+WITH=()
 WATCH=meiolol-lab-watch
 
 on() {
@@ -31,8 +36,8 @@ on() {
 copy() {
     local host=$1 dst=$2
     shift 2
-    if [[ "$host" == mac ]]; then cp "$@" "$HOME/$dst/"
-    else scp -q "$@" "$host:$dst/"; fi
+    if [[ "$host" == mac ]]; then cp -R "$@" "$HOME/$dst/"
+    else scp -qr "$@" "$host:$dst/"; fi
 }
 
 check_host() {
@@ -44,7 +49,11 @@ check_host() {
 # Prints the binary's path. Own prefix per host and binary, so zig-out/bin is left alone
 build() {
     local host=$1 bin=$2 prefix="$ROOT/zig-out/lab-run/$1"
-    local args=(--prefix "$prefix" -Doptimize=ReleaseFast) dir=bin
+    # Own prefix per set of build args, so concurrent candidate builds don't swap binaries
+    if (( ${#BUILD_ARGS[@]} )); then
+        prefix+=-$(printf '%s\n' "${BUILD_ARGS[@]}" | shasum | cut -c1-8)
+    fi
+    local args=(--prefix "$prefix" -Doptimize=ReleaseFast ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}) dir=bin
     # `zig build lab` installs a host build in bin and the gpu-box one in gpu-box
     if [[ "$bin" == meiolol-lab ]]; then
         args+=(lab)
@@ -63,6 +72,8 @@ start() {
         case "$1" in
             --meiolol) bin=meiolol ;;
             --no-build) build=0 ;;
+            --build-arg) BUILD_ARGS+=("$2"); shift ;;
+            --with) WITH+=("$2"); shift ;;
             --) shift; break ;;
             *) echo "unknown option $1"; exit 2 ;;
         esac
@@ -88,6 +99,8 @@ start() {
         echo "head $(git -C "$ROOT" rev-parse HEAD)"
         echo "dirty $(git -C "$ROOT" status --porcelain -- src build.zig | wc -l) files"
         echo "args $*"
+        if (( ${#BUILD_ARGS[@]} )); then echo "build ${BUILD_ARGS[*]}"; fi
+        if (( ${#WITH[@]} )); then echo "with ${WITH[*]}"; fi
     } > "$tmp/meta"
     git -C "$ROOT" diff HEAD -- src build.zig > "$tmp/src.diff"
     # caffeinate: a Mac asleep mid-run looks like a hung run
@@ -106,6 +119,7 @@ EOF
     chmod +x "$tmp/job.sh"
     on "$host" "mkdir -p $RUNS/$run"
     copy "$host" "$RUNS/$run" "$path" "$tmp/meta" "$tmp/src.diff" "$tmp/job.sh"
+    if (( ${#WITH[@]} )); then copy "$host" "$RUNS/$run" "${WITH[@]}"; fi
     # Braces: only the job goes to the background, so nothing keeps ssh's output open
     on "$host" "cd $RUNS/$run && { nohup perl -e 'setpgrp(0,0); exec @ARGV' ./job.sh \
         > log 2>&1 < /dev/null & }"
@@ -163,6 +177,13 @@ case "${1:-}" in
         on gpu-box "mkdir -p ml/bin $RUNS .config/systemd/user"
         scp -q "$ROOT/deploy/lab-watch.sh" gpu-box:ml/bin/
         scp -q "$ROOT/deploy/systemd/$WATCH.service" gpu-box:.config/systemd/user/
+        # Windows side (deploy/windows) to %USERPROFILE%\.meiolol, CRLF for Windows
+        # shellcheck disable=SC2016 # expands on the host
+        win='$(wslpath "$(cd /mnt/c && /mnt/c/Windows/System32/cmd.exe /c "echo %USERPROFILE%" </dev/null | tr -d "\r")")/.meiolol'
+        on gpu-box "mkdir -p \"$win\""
+        for f in "$ROOT"/deploy/windows/*; do
+            sed 's/$/\r/' "$f" | on gpu-box "cat > \"$win/$(basename "$f")\""
+        done
         on gpu-box "loginctl enable-linger \$USER; systemctl --user daemon-reload \
             && systemctl --user enable -q $WATCH \
             && systemctl --user restart $WATCH && systemctl --user is-active $WATCH"

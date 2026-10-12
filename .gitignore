@@ -5,3 +5,6 @@ data/
 .env
 CLAUDE.local.md
 .DS_Store
+
+# lab agent: candidates restored for `deploy/lab-exp.sh final`
+src/lab/cand/_final/

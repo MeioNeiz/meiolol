@@ -8,6 +8,8 @@ const anonymise = @import("lab/anonymise.zig");
 const protocol = @import("lab/protocol.zig");
 const rows = @import("lab/rows.zig");
 const enemy = @import("lab/enemy.zig");
+const exp = @import("lab/exp.zig");
+const harness = @import("lab/harness.zig");
 
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
 
@@ -23,7 +25,7 @@ const usage =
     \\  enemy SNAP_DIR [PREDS_DIR]      base, additive and pairwise champion-role models on the
     \\                                  continuous outcomes (lab/enemy.zig); markdown table
     \\
-;
+++ exp.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
@@ -67,6 +69,9 @@ pub fn main(init: std.process.Init) !u8 {
         try enemy.run(init.gpa, init.io, &data, .{ .preds_dir = if (argv.len >= 4) argv[3] else null }, &stdout.interface);
         try stdout.interface.flush();
         return 0;
+    }
+    if (std.mem.eql(u8, cmd, "exp")) {
+        return exp.main(init.gpa, arena, init.io, init.environ_map.get("HOME"), argv[2..]);
     }
     if (std.mem.eql(u8, cmd, "rows") and argv.len >= 3) {
         var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
@@ -123,4 +128,6 @@ test {
     _ = protocol;
     _ = rows;
     _ = enemy;
+    _ = harness;
+    _ = exp;
 }
