@@ -10,6 +10,7 @@ const protocol = @import("lab/protocol.zig");
 const rows = @import("lab/rows.zig");
 const enemy = @import("lab/enemy.zig");
 const pairs = @import("lab/pairs.zig");
+const lanebuckets = @import("lab/lanebuckets.zig");
 const exp = @import("lab/exp.zig");
 const harness = @import("lab/harness.zig");
 
@@ -33,6 +34,7 @@ const usage =
     \\                                  continuous outcomes (lab/enemy.zig); markdown table
     \\  pairs BASE REF [PREDS...]       paired MSE gains of prediction TSVs on shared rows,
     \\                                  % of BASE's MSE, intervals vs REF clustered by game
+    \\  lanebuckets SNAP BASE A B       A's gain over B by lane pair train games (lab/lanebuckets.zig)
     \\
 ++ exp.usage;
 
@@ -89,6 +91,17 @@ pub fn main(init: std.process.Init) !u8 {
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
         try protocol.writeSplit(init.gpa, init.io, argv[2], &stdout.interface);
+        try stdout.interface.flush();
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "lanebuckets") and argv.len >= 6) {
+        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
+        defer legendaries.deinit(init.gpa);
+        var data = try rows.load(init.gpa, argv[2], &legendaries);
+        defer data.deinit();
+        var buf: [4096]u8 = undefined;
+        var stdout = std.Io.File.stdout().writer(init.io, &buf);
+        try lanebuckets.run(init.gpa, init.io, &data, argv[3], argv[4], argv[5], &stdout.interface);
         try stdout.interface.flush();
         return 0;
     }
@@ -171,6 +184,7 @@ test {
     _ = rows;
     _ = enemy;
     _ = pairs;
+    _ = lanebuckets;
     _ = harness;
     _ = exp;
 }

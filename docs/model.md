@@ -259,6 +259,25 @@ Reading:
 - Compute: each fit is 1-5 s single-threaded on 1.2M rows; a whole run (5 outcomes x
   4 models x grid) is ~5 minutes on one gpu-box core. No GPU needed at this size
 
+Where the lane model's gain over 3c-team comes from (`meiolol-lab lanebuckets`,
+src/lab/lanebuckets.zig): test rows bucketed by their lane pair's train rows (my
+champion and role against the enemy champion in my role), gain as % of base MSE within
+the bucket:
+
+| pair train rows (test rows) | gold14 | lanediff14 | cs10 | deaths15 | first_item |
+| --- | --- | --- | --- | --- | --- |
+| <25 (16.4k) | 0.92 ± 0.48 | 2.37 ± 0.61 | 2.20 ± 0.71 | 1.10 ± 0.45 | 0.85 ± 0.44 |
+| 25-99 (28.7k) | 0.40 ± 0.28 | 0.96 ± 0.40 | 0.11 ± 0.35 | 0.73 ± 0.25 | 0.43 ± 0.26 |
+| 100-399 (44.7k) | -0.07 ± 0.17 | 0.24 ± 0.24 | -0.30 ± 0.23 | 0.24 ± 0.15 | -0.45 ± 0.69 |
+| 400+ (16.2k) | 0.00 ± 0.24 | 0.33 ± 0.34 | -0.39 ± 0.31 | -0.08 ± 0.17 | 0.02 ± 0.20 |
+
+- The gain is the thin pairs': under 25 games the embeddings beat the shrunk cells
+  clearly on every outcome, 25-99 still on gold, lane diff, deaths and item timing; from
+  100 games on the cells are as good (cs10 slightly better)
+- For the site's lane curves: use the embedding estimate for matchups under ~100 games
+  and the pair cells above, or blend by count. A sixth of test rows sit in pairs under
+  25 games, so it matters on many pages
+
 ## Next steps
 
 - Experience term: rerun once the daily eval shows 300+ train and 100+ test games per
