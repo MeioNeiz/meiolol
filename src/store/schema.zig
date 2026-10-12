@@ -297,6 +297,7 @@ pub fn connect(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
         \\PRAGMA raw.synchronous=NORMAL;
         \\PRAGMA timeline.synchronous=NORMAL;
     );
+    try mapFiles(db);
     return db;
 }
 
@@ -311,7 +312,25 @@ pub fn openReadOnly(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
     try attach(gpa, db, dir);
     // Sorts (GROUP BY without an index) in memory: no temp files on the box's disk
     try db.exec("PRAGMA query_only=ON; PRAGMA temp_store=MEMORY");
+    try mapFiles(db);
+    try db.exec(std.fmt.comptimePrint("PRAGMA main.cache_size = -{d}", .{read_cache_kib}));
     return db;
+}
+
+/// Reads map the files rather than copy pages into each connection's cache, so the
+/// crawler's 20 connections and a build share the OS page cache instead of holding 20
+/// private copies. Costs address space, not RAM. SQLite's compile-time cap
+/// (SQLITE_MAX_MMAP_SIZE, 2 GB on 64-bit) clamps it: main is past that
+const mmap_bytes = 0x7fff0000;
+
+/// One-off readers (status, lab, example) are the only connection in their process;
+/// their index walks over a multi-GB main miss the 2 MB default constantly
+const read_cache_kib = 64 * 1024;
+
+fn mapFiles(db: sqlite.Db) !void {
+    inline for (.{ "main", "raw", "timeline" }) |name| {
+        try db.exec(std.fmt.comptimePrint("PRAGMA {s}.mmap_size = {d}", .{ name, mmap_bytes }));
+    }
 }
 
 fn attach(gpa: std.mem.Allocator, db: sqlite.Db, dir: []const u8) !void {
