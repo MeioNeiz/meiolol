@@ -1,0 +1,31 @@
+[Unit]
+Description=meiolol site traffic for the admin page (deploy/traffic.sh, web server)
+
+# Reads only /var/log/nginx (adm for the logs, everything else under /var/log hidden),
+# writes its state and /var/www/meiolol-ops. Installed by hand: docs/hosting.md
+[Service]
+Type=oneshot
+User=meiolol-traffic
+Group=meiolol-traffic
+SupplementaryGroups=adm
+ExecStart=/usr/local/bin/meiolol-traffic
+StateDirectory=meiolol-traffic
+ReadWritePaths=/var/www/meiolol-ops
+TemporaryFileSystem=/var/log
+BindReadOnlyPaths=/var/log/nginx
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+SystemCallFilter=@system-service
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=50%
+MemoryMax=256M

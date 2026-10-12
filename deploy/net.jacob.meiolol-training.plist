@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Install: deploy/lab-push.sh install (copies to ~/Library/LaunchAgents, loads it) -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>net.jacob.meiolol-training</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>exec "$HOME/personal/meiolol/deploy/lab-push.sh"</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>30</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>/tmp/meiolol-training.err</string>
+</dict>
+</plist>

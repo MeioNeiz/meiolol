@@ -37,6 +37,72 @@ sync() {
     fi
 }
 
+# Draft model accuracy as data grows: the daily `meiolol eval` (web-loop.sh) scores held-out
+# EUW games and appends a line to data/eval-history.tsv. eval.log is truncated when a run
+# starts and eval-latest.md replaced when it succeeds, so their mtimes time the last run
+model() {
+    local rows=$1 out state started finished
+    out=$(ssh "$HOST" "cd $DIR/data && bash -s" <<'EOF'
+if pgrep -f '^bin/meiolol eval' > /dev/null; then s=running; else s=idle; fi
+echo "$s $(stat -c %Y eval.log 2>/dev/null || echo 0) $(stat -c %Y eval-latest.md 2>/dev/null || echo 0)"
+cat eval-history.tsv 2>/dev/null
+EOF
+    )
+    read -r state started finished <<< "$(head -n 1 <<< "$out")"
+    local at='+%a %d %b %H:%M'
+    echo "Draft model, daily eval on held-out EUW games (docs/model.md), $(date +%H:%M:%S)"
+    if [[ "$state" == running ]]; then
+        echo "eval running for $(( ($(date +%s) - started) / 60 )) min, since $(date -r "$started" "$at")"
+    elif (( finished >= started && started > 0 )); then
+        echo "last eval $(date -r "$started" "$at") ($(( (finished - started) / 60 )) min)," \
+            "next about $(date -r $((started + 86400)) "$at")"
+    else
+        echo "last eval, started $(date -r "$started" "$at"), failed: data/eval.log on the box"
+    fi
+    tail -n +2 <<< "$out" | awk -v rows="$rows" '
+        BEGIN {
+            FS = "\t"
+            split("▁ ▂ ▃ ▄ ▅ ▆ ▇ █", bar, " ")
+            split("base current eb joint", key, " ")
+            split("base current shrunk joint", name, " ")
+        }
+        NR == 1 { for (i = 1; i <= NF; i++) col[$i] = i; next }
+        {
+            n++
+            date[n] = $col["date"]; games[n] = $col["games"]; tests[n] = $col["test"]
+            coin[n] = $col["ll_coin"]
+            for (k = 1; k <= 4; k++) {
+                auc[n, k] = $col["auc_" key[k]]
+                ll[n, k] = $col["ll_" key[k]]
+            }
+        }
+        END {
+            if (n == 0) { print "no eval history yet"; exit }
+            from = n > 60 ? n - 59 : 1
+            lo = 1; hi = 0
+            for (i = from; i <= n; i++) for (k = 1; k <= 4; k++) {
+                if (auc[i, k] < lo) lo = auc[i, k]
+                if (auc[i, k] > hi) hi = auc[i, k]
+            }
+            printf "\nAUC over the last %d runs (%.3f to %.3f; 0.5 is a coin flip)\n", n - from + 1, lo, hi
+            for (k = 1; k <= 4; k++) {
+                line = ""
+                for (i = from; i <= n; i++)
+                    line = line bar[hi > lo ? 1 + int((auc[i, k] - lo) / (hi - lo) * 7.999) : 1]
+                printf "%-8s %s  %.4f\n", name[k], line, auc[n, k]
+            }
+            printf "\n%-10s %8s %6s %8s %8s %8s %8s  %s\n", "date", "games", "test",
+                "base", "current", "shrunk", "joint", "best log loss (vs coin)"
+            for (i = n > rows ? n - rows + 1 : 1; i <= n; i++) {
+                best = 1
+                for (k = 2; k <= 4; k++) if (ll[i, k] < ll[i, best]) best = k
+                printf "%-10s %8d %6d %8.4f %8.4f %8.4f %8.4f  %.5f %s (%+.4f)\n", date[i],
+                    games[i], tests[i], auc[i, 1], auc[i, 2], auc[i, 3], auc[i, 4],
+                    ll[i, best], name[best], ll[i, best] - coin[i]
+            }
+        }'
+}
+
 case "${1:-}" in
     sync) sync ;;
     start)
@@ -57,6 +123,22 @@ case "${1:-}" in
             tail -n 3 data/crawl.log 2>/dev/null; du -sh data 2>/dev/null"
         ;;
     logs) ssh "$HOST" "tail -n ${2:-40} $DIR/data/crawl.log" ;;
+    model)
+        # deploy/box.sh model [ROWS] [-f]: -f redraws every minute until ctrl-c
+        rows=15 follow=0
+        for a in "${@:2}"; do
+            if [[ "$a" == -f ]]; then follow=1; else rows=$a; fi
+        done
+        if (( follow )); then
+            while true; do
+                view=$(model "$rows" 2>&1)
+                clear
+                echo "$view"
+                sleep 60
+            done
+        fi
+        model "$rows"
+        ;;
     site)
         # Generate the website on the box (the data is there) and copy it to data/site
         [[ -n "${2:-}" ]] || { echo "usage: deploy/box.sh site <contact email> [meiolol site args]"; exit 2; }
@@ -242,6 +324,6 @@ SQL
             *) echo "usage: deploy/box.sh watch install|uninstall"; exit 2 ;;
         esac
         ;;
-    *) echo "usage: deploy/box.sh sync|start|stop|status|logs [n]|run <meiolol args>|snapshot|preview [static|stop]|site <contact>|web start [contact]|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
+    *) echo "usage: deploy/box.sh sync|start|stop|status|logs [n]|model [rows] [-f]|run <meiolol args>|snapshot|preview [static|stop]|site <contact>|web start [contact]|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
        exit 2 ;;
 esac
