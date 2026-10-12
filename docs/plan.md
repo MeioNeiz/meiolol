@@ -332,6 +332,14 @@ next steps land here.
   solo-queue accuracy (research loldraftai#^f6, #^f7). Lever is data volume: dev curve
   -0.0008 log loss per doubling, no plateau at 90k games; interactions not yet
   detectable; pool regions. Rank features need rank at game start (rank_history)
+  Research answered (research/questions/draft-predictor-methods.md): honest draft-only
+  ceiling ~53-54% on a time split (we are there); LoLDraftAI's 55-56% uses a random
+  split, test-chosen checkpoint and stomp filters. Levers in order: data volume, player x
+  champion experience before game start (internal scope only, meiolol-db; coverage 26%
+  of rows today, mastery for all players is Jacob's call), factorised pairs from ~1M
+  games, per-patch offset, deep MLP only at 10M+. Report both our split and a
+  LoLDraftAI-style split. Admin Draft tester (meiolol-3b) with presets and a champion
+  suggester (win model + team2 lane effects export from meiolol-39)
 - Lab agent (docs/lab-agent.md, brief docs/lab-brief.md; built 2026-10-12, meiolol-f2):
   LLM campaigns on candidates behind a harness (scope and leakage by construction,
   ladder of 50 selection looks per snapshot, screen and diagnose tools, sandboxed
