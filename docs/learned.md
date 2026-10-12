@@ -42,9 +42,9 @@ Platinum IV+ games only unless stated (crawl floor).
 - 2026-10-12: ~3,400 of 230k games (1.5%) end before 15:00 without the remake flag,
   ~90% by surrender (gameEndedInSurrender true, gameEndedInEarlySurrender false):
   leaver forfeits, real results for LP but decided by the leaver. Plus a few
-  endOfGameResult Abort_AntiCheatExit (aborted, no real result). Remakes proper (5,205) are flagged. Evidence:
-  snap-20261012T2055Z raw summaries (coordinator check). Models: exclude from win and
-  stats; continuous outcomes already need 15:00
+  endOfGameResult Abort_AntiCheatExit (aborted, no real result). Remakes proper (5,205)
+  are flagged. Evidence: snap-20261012T2055Z raw summaries (coordinator check). Models:
+  exclude from win and stats; continuous outcomes already need 15:00
 - 2026-10-12: Players nearly always finish a legendary before the game ends (top 1.1%,
   support 1.3% never do in games past 15:00), so first-item time is usable for all
   roles. Evidence: model.md "Team effects"
