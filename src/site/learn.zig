@@ -10,6 +10,7 @@ const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const tpl = html.tpl;
 const matchup = @import("matchup.zig");
 const learn = @import("../learn.zig");
 
@@ -20,7 +21,6 @@ const score = core.score;
 const curvesfile = core.curvesfile;
 const Site = root.Site;
 const Champ = root.Champ;
-const esc = html.esc;
 
 /// Pairs (matchups, duos) with fewer games are not used as examples
 const min_pair_games = 20;
@@ -73,11 +73,12 @@ fn tip(comptime key: []const u8) []const u8 {
     @compileError("no glossary entry " ++ key);
 }
 
-/// `text` with a tip for glossary entry `key`
-fn term(w: *Writer, comptime key: []const u8, text: []const u8) !void {
-    try w.print("<dfn class=\"term\" tabindex=\"0\" data-tip=\"{f}\">{s}</dfn>", .{
-        esc(tip(key)), text,
-    });
+const term_html = "<dfn class=\"term\" tabindex=\"0\" data-tip=\"{tip}\">{text}</dfn>";
+const Dfn = tpl.Template(term_html, struct { tip: []const u8, text: []const u8 });
+
+/// `text` with a tip for glossary entry `key`, for a template hole
+fn term(comptime key: []const u8, text: []const u8) Dfn {
+    return .{ .args = .{ .tip = tip(key), .text = text } };
 }
 
 const Choice = struct { t: []const u8, id: ?u32 = null };
@@ -92,10 +93,6 @@ const Ctx = struct {
         return ctx.a.print(fmt, args);
     }
 
-    fn champ(ctx: Ctx, ch: Champ, w: *Writer) !void {
-        try ctx.site.champLink(w, ch, "");
-    }
-
     fn choice(ch: Champ) Choice {
         return .{ .t = ch.name, .id = ch.id };
     }
@@ -104,6 +101,10 @@ const Ctx = struct {
 fn rate(n: Counts) f64 {
     if (n.games == 0) return 0;
     return @as(f64, @floatFromInt(n.wins)) / @as(f64, @floatFromInt(n.games));
+}
+
+fn champ(w: *Writer, ctx: Ctx, ch: Champ) !void {
+    try ctx.site.champLink(w, ch, "");
 }
 
 fn pctOf(n: Counts) u32 {
@@ -129,12 +130,12 @@ pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
         \\<h2 id="lessons">Lessons</h2>
         \\
     );
-    if (site.games < early_games) try w.print(
-        \\<p class="note">Early data: {d} games so far on patch {s}. The examples below are
+    if (site.games < early_games) try tpl.render(w,
+        \\<p class="note">Early data: {games} games so far on patch {patch}. The examples below are
         \\picked from those games and change as more come in; with few games, some will be
         \\chance.</p>
         \\
-    , .{ site.games, site.patch });
+    , .{ .games = site.games, .patch = site.patch });
     try w.writeAll("<div class=\"lessons\">\n");
     const ctx: Ctx = .{ .site = site, .facts = facts, .a = a };
     const Lesson = struct {
@@ -158,19 +159,19 @@ pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
     var checks: Writer.Allocating = .init(a);
     try checks.writer.writeByte('{');
     for (lessons, 1..) |l, i| {
-        try w.print(
-            \\<details class="card lesson" id="lesson-{s}" data-lesson="{s}">
-            \\<summary><span class="lesson-n">{d}</span><span><b>{s}</b>
-            \\<span class="muted">{s}</span></span><span class="lesson-done"></span></summary>
+        try tpl.renderPart(w,
+            \\<details class="card lesson" id="lesson-{key}" data-lesson="{key}">
+            \\<summary><span class="lesson-n">{n}</span><span><b>{title}</b>
+            \\<span class="muted">{sub}</span></span><span class="lesson-done"></span></summary>
             \\<div class="lesson-body">
             \\
-        , .{ l.key, l.key, i, l.title, l.sub });
+        , .{ .key = l.key, .n = i, .title = l.title, .sub = l.sub });
         const qs = try l.body(ctx, w);
-        try w.print(
-            \\<div class="check" data-lesson="{s}"><h3>Check yourself</h3></div>
+        try tpl.renderPart(w,
+            \\<div class="check" data-lesson="{key}"><h3>Check yourself</h3></div>
             \\</div></details>
             \\
-        , .{l.key});
+        , .{ .key = l.key });
         if (i > 1) try checks.writer.writeByte(',');
         try checks.writer.print("\"{s}\":", .{l.key});
         try std.json.Stringify.value(qs, .{}, &checks.writer);
@@ -248,9 +249,9 @@ fn practiceSection(w: *Writer) !void {
     );
 }
 
-fn champLinks(ctx: Ctx, w: *Writer, list: []const Champ) !void {
+fn champLinks(w: *Writer, ctx: Ctx, list: []const Champ) !void {
     try w.writeAll("<span class=\"champ-row\">");
-    for (list) |ch| try ctx.champ(ch, w);
+    for (list) |ch| try champ(w, ctx, ch);
     try w.writeAll("</span>");
 }
 
@@ -301,19 +302,21 @@ fn mostPlayed(ctx: Ctx, r: Role, comptime n: usize) ![]Champ {
 fn roles(ctx: Ctx, w: *Writer) ![]const Question {
     const site = ctx.site;
     const st = &site.stats;
-    try w.writeAll(
+    try tpl.renderPart(w,
         \\<p>Every team has five players, one per role. Each role has a place on the map and a
-        \\job. Knowing the five helps you read any draft: who you will face in your
-    );
-    try w.writeByte(' ');
-    try term(w, "lane", "lane");
-    try w.writeAll(", and who will help you.</p>\n<ul class=\"roles\">\n");
+        \\job. Knowing the five helps you read any draft: who you will face in your {lane}, and who will help you.</p>
+        \\<ul class="roles">
+        \\
+    , .{ .lane = term("lane", "lane") });
     for (Role.all, role_jobs) |r, job| {
-        try w.print("<li><b>{s}</b>: {s} <span class=\"muted\">Most played this patch:</span> ", .{
-            root.roleName(r), job,
+        try tpl.render(w,
+            \\<li><b>{role}</b>: {job} <span class="muted">Most played this patch:</span> {champs}</li>
+            \\
+        , .{
+            .role = root.roleName(r),
+            .job = job,
+            .champs = tpl.call(champLinks, .{ ctx, try mostPlayed(ctx, r, 3) }),
         });
-        try champLinks(ctx, w, try mostPlayed(ctx, r, 3));
-        try w.writeAll("</li>\n");
     }
     try w.writeAll(
         \\</ul>
@@ -382,49 +385,38 @@ fn byPp(_: void, p: Pair, q: Pair) bool {
 fn counters(ctx: Ctx, w: *Writer) ![]const Question {
     const st = &ctx.site.stats;
     const pairs = try lanePairs(ctx);
-    try w.writeAll("<p>A ");
-    try term(w, "counter", "counter");
-    try w.writeAll(
-        \\ is a champion that tends to do well against another, usually the one in the same
+    try tpl.render(w,
+        \\<p>A {counter} is a champion that tends to do well against another, usually the one in the same
         \\lane. Some abilities simply answer others: a champion that dashes in struggles
         \\against one that can stop dashes.</p>
         \\
-    );
+    , .{ .counter = term("counter", "counter") });
     if (pairs.len > 0) {
         const p = pairs[0];
-        const lane = root.roleName(p.r);
-        try w.writeAll("<p class=\"example\">");
-        try ctx.champ(p.x, w);
-        try w.print(" won {d}% of {d} games against ", .{ pctOf(p.n), p.n.games });
-        try ctx.champ(p.y, w);
-        try w.print(
-            \\ in {s} lane this patch, the clearest case so far. Across all their {s} games,
-            \\{f} wins {d}% and {f} {d}%.</p>
+        try tpl.render(w,
+            \\<p class="example">{x} won {pct}% of {games} games against {y} in {lane} lane this patch, the clearest case so far. Across all their {lane} games,
+            \\{x_name} wins {x_pct}% and {y_name} {y_pct}%.</p>
             \\
         , .{
-            lane,          lane,
-            esc(p.x.name), pctOf(st.champRole(p.r, p.x.c)),
-            esc(p.y.name), pctOf(st.champRole(p.r, p.y.c)),
+            .x = tpl.call(champ, .{ ctx, p.x }),
+            .pct = pctOf(p.n),
+            .games = p.n.games,
+            .y = tpl.call(champ, .{ ctx, p.y }),
+            .lane = root.roleName(p.r),
+            .x_name = p.x.name,
+            .x_pct = pctOf(st.champRole(p.r, p.x.c)),
+            .y_name = p.y.name,
+            .y_pct = pctOf(st.champRole(p.r, p.y.c)),
         });
     }
-    try w.writeAll(
+    try tpl.render(w,
         \\<p><b>Your own champion matters more.</b> A community analysis of over a million
-        \\ranked games found players on a champion with under 10,000
-    );
-    try w.writeByte(' ');
-    try term(w, "mastery", "mastery");
-    try w.writeAll(
-        \\ points (about 20 games) won around 44%, against 51.5% once they knew it. That gap
-        \\of 7
-    );
-    try w.writeByte(' ');
-    try term(w, "points", "points");
-    try w.print(
-        \\ is bigger than almost any counter: counters usually move win rates by a few points
+        \\ranked games found players on a champion with under 10,000 {mastery} points (about 20 games) won around 44%, against 51.5% once they knew it. That gap
+        \\of 7 {points} is bigger than almost any counter: counters usually move win rates by a few points
         \\(players often quote 2 to 4). So at most ranks, a champion you know well beats a
-        \\counter you have rarely played. <a href="{s}" rel="noopener">Source</a>.</p>
+        \\counter you have rarely played. <a href="{source}" rel="noopener">Source</a>.</p>
         \\
-    , .{mastery_source});
+    , .{ .mastery = term("mastery", "mastery"), .points = term("points", "points"), .source = mastery_source });
 
     var qs: std.ArrayList(Question) = .empty;
     if (pairs.len >= 3) {
@@ -510,50 +502,53 @@ fn lengthLabel(b: usize) []const u8 {
     };
 }
 
-fn lengthBars(ctx: Ctx, w: *Writer, t: Timing) !void {
-    try w.writeAll("<div class=\"lenbars\"><div class=\"lenbars-head\">");
-    try ctx.champ(t.ch, w);
-    try w.print(" <span class=\"muted\">{s}</span></div>\n", .{root.roleName(t.r)});
+fn lengthBars(w: *Writer, ctx: Ctx, t: Timing) !void {
+    try tpl.renderPart(w, "<div class=\"lenbars\"><div class=\"lenbars-head\">{champ} <span class=\"muted\">{role}</span></div>\n", .{
+        .champ = tpl.call(champ, .{ ctx, t.ch }),
+        .role = root.roleName(t.r),
+    });
     for (t.n, 0..) |n, b| {
         const p = pctOf(n);
         // Bars start at 30% so differences around 50% are visible
         const width = (std.math.clamp(p, 30, 70) - 30) * 100 / 40;
-        try w.print(
-            \\<div class="lenbar"><span>{s}</span><span class="bar"><i style="width:{d}%"{s}></i>
-            \\</span><span class="num">{d}% of {d}</span></div>
+        try tpl.render(w,
+            \\<div class="lenbar"><span>{label}</span><span class="bar"><i style="width:{width}%"{up}></i>
+            \\</span><span class="num">{p}% of {games}</span></div>
             \\
-        , .{ lengthLabel(b), width, if (p >= 50) " class=\"up\"" else "", p, n.games });
+        , .{
+            .label = lengthLabel(b),
+            .width = width,
+            .up = tpl.flag(p >= 50, "class=\"up\""),
+            .p = p,
+            .games = n.games,
+        });
     }
     try w.writeAll("</div>\n");
 }
 
 fn timing(ctx: Ctx, w: *Writer) ![]const Question {
     const list = try timings(ctx);
-    try w.writeAll(
+    try tpl.render(w,
         \\<p>Champions grow at different speeds. Some are strongest in the first minutes and
-        \\have a
-    );
-    try w.writeByte(' ');
-    try term(w, "spike", "power spike");
-    try w.writeAll(" early; others start weak and ");
-    try term(w, "scaling", "scale");
-    try w.writeAll(
-        \\: they get stronger with every level and item. Knowing which is which tells you when
+        \\have a {spike} early; others start weak and {scale}: they get stronger with every level and item. Knowing which is which tells you when
         \\your team wants to fight and when it wants to wait.</p>
         \\
-    );
+    , .{ .spike = term("spike", "power spike"), .scale = term("scaling", "scale") });
     if (list.len >= 2) {
         const late = list[0];
         const early = list[list.len - 1];
-        try w.print(
-            \\<p>Win rate by game length this patch. {f} wins more the longer games go; {f} the
+        try tpl.render(w,
+            \\<p>Win rate by game length this patch. {late} wins more the longer games go; {early} the
             \\other way round.</p>
             \\<div class="grid">
+            \\{late_bars}{early_bars}</div>
             \\
-        , .{ esc(late.ch.name), esc(early.ch.name) });
-        try lengthBars(ctx, w, late);
-        try lengthBars(ctx, w, early);
-        try w.writeAll("</div>\n");
+        , .{
+            .late = late.ch.name,
+            .early = early.ch.name,
+            .late_bars = tpl.call(lengthBars, .{ ctx, late }),
+            .early_bars = tpl.call(lengthBars, .{ ctx, early }),
+        });
     }
     if (ctx.site.curves) |*c| try laneExample(ctx, w, c);
 
@@ -619,19 +614,20 @@ fn laneExample(ctx: Ctx, w: *Writer, c: *const curvesfile.Curves) !void {
     const lo, const hi = if (b.x.id < b.y.id) .{ b.x, b.y } else .{ b.y, b.x };
     const x_wins: Counts = .{ .games = b.v.games(), .wins = b.v.wins() };
     const ahead_win = if (b.gold >= 0) rate(x_wins) else 1 - rate(x_wins);
-    try w.writeAll("<p class=\"example\">In lane: ");
-    try ctx.champ(ahead, w);
-    try w.print(" is typically {d} ", .{@abs(b.gold)});
-    try term(w, "gold", "gold");
-    try w.writeAll(" ahead of ");
-    try ctx.champ(behind, w);
-    try w.print(
-        \\ at {d} minutes in {s} lane, and wins {d:.0}% of those {d} games.
-        \\<a href="{s}">See the lane minute by minute</a>.</p>
+    try tpl.render(w,
+        \\<p class="example">In lane: {ahead} is typically {lead} {gold} ahead of {behind} at {minute} minutes in {lane} lane, and wins {win:.0}% of those {games} games.
+        \\<a href="{href}">See the lane minute by minute</a>.</p>
         \\
     , .{
-        curvesfile.lane_minute,               root.roleName(b.r), 100 * ahead_win, b.v.games(),
-        try matchup.path(ctx.a, b.r, lo, hi),
+        .ahead = tpl.call(champ, .{ ctx, ahead }),
+        .lead = @abs(b.gold),
+        .gold = term("gold", "gold"),
+        .behind = tpl.call(champ, .{ ctx, behind }),
+        .minute = curvesfile.lane_minute,
+        .lane = root.roleName(b.r),
+        .win = 100 * ahead_win,
+        .games = b.v.games(),
+        .href = try matchup.path(ctx.a, b.r, lo, hi),
     });
 }
 
@@ -670,17 +666,15 @@ fn byDamage(ctx: Ctx, r: Role, lo: f64, hi: f64, skip: []const Champ) ![]Champ {
 }
 
 fn damage(ctx: Ctx, w: *Writer) ![]const Question {
-    try w.writeAll("<p>Damage comes in two main kinds. ");
-    try term(w, "physical", "Physical damage");
-    try w.writeAll(" is blocked by ");
-    try term(w, "armour", "armour");
-    try w.writeAll("; ");
-    try term(w, "magic", "magic damage");
-    try w.writeAll(
-        \\ by magic resist. If nearly all of a team's damage is one kind, the enemy can buy
+    try tpl.render(w,
+        \\<p>Damage comes in two main kinds. {physical} is blocked by {armour}; {magic} by magic resist. If nearly all of a team's damage is one kind, the enemy can buy
         \\just that one defence and every item counts twice.</p>
         \\
-    );
+    , .{
+        .physical = term("physical", "Physical damage"),
+        .armour = term("armour", "armour"),
+        .magic = term("magic", "magic damage"),
+    });
     var total: u32 = 0;
     for (ctx.facts.mix) |m| total += m.games;
     if (total > 0) {
@@ -690,10 +684,15 @@ fn damage(ctx: Ctx, w: *Writer) ![]const Question {
             \\
         );
         for (ctx.facts.mix, 0..) |m, b| {
-            try w.print(
-                \\<tr{s}><td>{s}</td><td class="num">{d}%</td><td class="num">{d}</td></tr>
+            try tpl.render(w,
+                \\<tr{thin}><td>{name}</td><td class="num">{p}%</td><td class="num">{games}</td></tr>
                 \\
-            , .{ if (m.games < 200) " class=\"thin\"" else "", mixName(b), pctOf(m), m.games });
+            , .{
+                .thin = tpl.flag(m.games < 200, "class=\"thin\""),
+                .name = mixName(b),
+                .p = pctOf(m),
+                .games = m.games,
+            });
         }
         try w.writeAll(
             \\</tbody></table></div>
@@ -712,19 +711,16 @@ fn damage(ctx: Ctx, w: *Writer) ![]const Question {
         if (list.len > 0) try team.append(ctx.a, list[0]);
     }
     if (mid_magic.len > 0 and mid_physical.len > 0) {
-        try w.writeAll("<p>Mostly magic in mid: ");
-        try champLinks(ctx, w, mid_magic[0..@min(mid_magic.len, 4)]);
-        try w.writeAll("<br>Mostly physical in mid: ");
-        try champLinks(ctx, w, mid_physical[0..@min(mid_physical.len, 4)]);
-        try w.writeAll("</p>\n");
+        try tpl.render(w, "<p>Mostly magic in mid: {magic}<br>Mostly physical in mid: {physical}</p>\n", .{
+            .magic = tpl.call(champLinks, .{ ctx, mid_magic[0..@min(mid_magic.len, 4)] }),
+            .physical = tpl.call(champLinks, .{ ctx, mid_physical[0..@min(mid_physical.len, 4)] }),
+        });
     }
-    try w.writeAll("<p>Teams also like a ");
-    try term(w, "frontline", "frontline");
-    try w.writeAll(
-        \\: someone tough enough to stand in front. You do not need all of this in every
+    try tpl.render(w,
+        \\<p>Teams also like a {frontline}: someone tough enough to stand in front. You do not need all of this in every
         \\draft; it is one more thing to glance at when two picks seem equal.</p>
         \\
-    );
+    , .{ .frontline = term("frontline", "frontline") });
 
     var qs: std.ArrayList(Question) = .empty;
     if (mid_magic.len < 3 or mid_physical.len < 3) return qs.items;
@@ -797,14 +793,12 @@ fn duoName(ctx: Ctx, p: Pair) ![]const u8 {
 
 fn synergy(ctx: Ctx, w: *Writer) ![]const Question {
     const duos = try duoPairs(ctx);
-    try w.writeAll("<p>Some champions win more together than either does alone. A ");
-    try term(w, "duo", "duo");
-    try w.writeAll(
-        \\ works when one champion covers what the other lacks, or sets up its abilities: a
+    try tpl.render(w,
+        \\<p>Some champions win more together than either does alone. A {duo} works when one champion covers what the other lacks, or sets up its abilities: a
         \\support that holds an enemy still for a bot laner who needs time to hit, or a jungler
         \\who arrives just as the mid laner's crowd control lands.</p>
         \\
-    );
+    , .{ .duo = term("duo", "duo") });
     if (duos.len >= 3) {
         try w.writeAll(
             \\<p>Pairs that win most together this patch, beyond what each champion usually
@@ -813,15 +807,18 @@ fn synergy(ctx: Ctx, w: *Writer) ![]const Question {
             \\
         );
         for (duos[0..3]) |p| {
-            try w.writeAll("<li>");
-            try ctx.champ(p.x, w);
-            try w.print("<span class=\"muted\">{s}</span> + ", .{root.roleName(p.r)});
-            try ctx.champ(p.y, w);
-            try w.print(
-                \\<span class="muted">{s}</span>
-                \\<span class="num">won {d}% of {d} games together</span></li>
+            try tpl.render(w,
+                \\<li>{x}<span class="muted">{x_role}</span> + {y}<span class="muted">{y_role}</span>
+                \\<span class="num">won {p}% of {games} games together</span></li>
                 \\
-            , .{ root.roleName(p.yr), pctOf(p.n), p.n.games });
+            , .{
+                .x = tpl.call(champ, .{ ctx, p.x }),
+                .x_role = root.roleName(p.r),
+                .y = tpl.call(champ, .{ ctx, p.y }),
+                .y_role = root.roleName(p.yr),
+                .p = pctOf(p.n),
+                .games = p.n.games,
+            });
         }
         try w.writeAll(
             \\</ul>
