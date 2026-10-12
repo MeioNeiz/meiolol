@@ -107,7 +107,7 @@ pub const Model = struct {
     }
 
     /// Adds d(loss)/d(params) for one example with residual r = pred - y (squared loss / 2)
-    fn grad(m: *const Model, e: *const Example, r: f32, gr: []f32) void {
+    pub fn grad(m: *const Model, e: *const Example, r: f32, gr: []f32) void {
         const off_b = m.offset(m.b);
         const off_a = m.offset(m.a);
         const off_g = m.offset(m.g);
@@ -145,12 +145,8 @@ pub const Fit = struct { model: Model, epochs: u32, val_loss: f64 };
 /// Trains on train, stopping on val and returning the model at its best validation
 /// epoch; without val, runs cfg.max_epochs and keeps the last
 pub fn fit(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const Example, val: ?[]const Example) !Fit {
-    var mu: f64 = 0;
-    for (train) |e| mu += e.y;
-    mu /= @floatFromInt(@max(train.len, 1));
-    var m: Model = try .init(gpa, cfg, n, @floatCast(mu));
+    var m = try start(gpa, cfg, n, train);
     errdefer m.deinit(gpa);
-    try warmStart(gpa, &m, train);
     const best = try gpa.alloc(f32, m.p.len);
     defer gpa.free(best);
     const gr = try gpa.alloc(f32, m.p.len);
@@ -164,13 +160,11 @@ pub fn fit(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const Example
     const order = try gpa.alloc(u32, train.len);
     defer gpa.free(order);
     for (order, 0..) |*o, i| o.* = @intCast(i);
-    var rng: std.Random.DefaultPrng = .init(cfg.seed ^ 0x9e3779b97f4a7c15);
+    var rng = shuffler(cfg);
 
     var best_loss = std.math.inf(f64);
     var best_epoch: u32 = 0;
     var step: u32 = 0;
-    const b1: f32 = 0.9;
-    const b2: f32 = 0.999;
     var epoch: u32 = 0;
     while (epoch < cfg.max_epochs) : (epoch += 1) {
         rng.random().shuffle(u32, order);
@@ -182,16 +176,9 @@ pub fn fit(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const Example
                 const e = &train[i];
                 m.grad(e, m.predict(e) - e.y, gr);
             }
-            const scale = 1 / @as(f32, @floatFromInt(batch.len));
             step += 1;
-            const c1 = 1 - std.math.pow(f32, b1, @floatFromInt(step));
-            const c2 = 1 - std.math.pow(f32, b2, @floatFromInt(step));
-            for (m.p, gr, m1, m2) |*p, g0, *s1, *s2| {
-                const g = g0 * scale + cfg.l2 * p.*;
-                s1.* = b1 * s1.* + (1 - b1) * g;
-                s2.* = b2 * s2.* + (1 - b2) * g * g;
-                p.* -= cfg.lr * (s1.* / c1) / (@sqrt(s2.* / c2) + 1e-8);
-            }
+            const a: Adam = .init(&cfg, step, batch.len);
+            for (m.p, gr, m1, m2) |*p, g, *s1, *s2| a.update(p, g, s1, s2);
         }
         const v = val orelse {
             best_epoch = epoch + 1;
@@ -207,6 +194,52 @@ pub fn fit(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const Example
     if (val != null) @memcpy(m.p, best);
     return .{ .model = m, .epochs = best_epoch, .val_loss = best_loss };
 }
+
+/// The model before its first step: mu the train mean, b and pl warm-started
+pub fn start(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const Example) !Model {
+    var mu: f64 = 0;
+    for (train) |e| mu += e.y;
+    mu /= @floatFromInt(@max(train.len, 1));
+    var m: Model = try .init(gpa, cfg, n, @floatCast(mu));
+    errdefer m.deinit(gpa);
+    try warmStart(gpa, &m, train);
+    return m;
+}
+
+/// Shuffles train's order once per epoch; bench.zig's fits draw the same orders
+pub fn shuffler(cfg: Config) std.Random.DefaultPrng {
+    return .init(cfg.seed ^ 0x9e3779b97f4a7c15);
+}
+
+/// Adam with L2 for one minibatch step (kernels.zig's fm_adam is the same on the GPU)
+pub const Adam = struct {
+    lr: f32,
+    l2: f32,
+    scale: f32,
+    c1: f32,
+    c2: f32,
+
+    pub const b1: f32 = 0.9;
+    pub const b2: f32 = 0.999;
+
+    pub fn init(cfg: *const Config, step: u32, batch_len: usize) Adam {
+        return .{
+            .lr = cfg.lr,
+            .l2 = cfg.l2,
+            .scale = 1 / @as(f32, @floatFromInt(batch_len)),
+            .c1 = 1 - std.math.pow(f32, b1, @floatFromInt(step)),
+            .c2 = 1 - std.math.pow(f32, b2, @floatFromInt(step)),
+        };
+    }
+
+    /// g0: the batch's summed gradient for p
+    pub inline fn update(a: *const Adam, p: *f32, g0: f32, s1: *f32, s2: *f32) void {
+        const g = g0 * a.scale + a.l2 * p.*;
+        s1.* = b1 * s1.* + (1 - b1) * g;
+        s2.* = b2 * s2.* + (1 - b2) * g * g;
+        p.* -= a.lr * (s1.* / a.c1) / (@sqrt(s2.* / a.c2) + 1e-8);
+    }
+};
 
 /// Trains for a fixed number of epochs (the refit on all of train)
 pub fn fitEpochs(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const Example, epochs: u32) !Model {

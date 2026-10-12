@@ -51,7 +51,16 @@ pub const Set = struct {
     }
 };
 
-pub const Sets = struct { inner: Set = .{}, val: Set = .{}, train: Set = .{}, tests: Set = .{} };
+pub const Sets = struct {
+    inner: Set = .{},
+    val: Set = .{},
+    train: Set = .{},
+    tests: Set = .{},
+
+    pub fn deinit(s: *Sets, gpa: std.mem.Allocator) void {
+        inline for (.{ &s.inner, &s.val, &s.train, &s.tests }) |set| set.deinit(gpa);
+    }
+};
 
 pub fn buildSets(gpa: std.mem.Allocator, d: *const rows.Data, ids: *const Ids, k: rows.Outcome, mean: *f64, sd: *f64) !Sets {
     // Games are in start order, train first; the newest 20% of train games validate
@@ -173,12 +182,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, d: *const rows.Data, opts: Option
         var mean: f64 = 0;
         var sd: f64 = 1;
         var sets = try buildSets(gpa, d, &ids, k, &mean, &sd);
-        defer {
-            sets.inner.deinit(gpa);
-            sets.val.deinit(gpa);
-            sets.train.deinit(gpa);
-            sets.tests.deinit(gpa);
-        }
+        defer sets.deinit(gpa);
         const tests = sets.tests.ex.items;
         const ys = try gpa.alloc(f32, tests.len);
         defer gpa.free(ys);
