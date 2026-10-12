@@ -1720,7 +1720,7 @@ const DRAFT = { model: undefined, ref: null, err: null, check: null, m: null };
 
 function draftState() {
   const d = stored("draft2", null) || {};
-  return { blue: d.blue || {}, red: d.red || {}, locks: d.locks || {}, fb: d.fb || {}, bans: d.bans || [], open: d.open || null, sort: d.sort || "played" };
+  return { blue: d.blue || {}, red: d.red || {}, locks: d.locks || {}, fb: d.fb || {}, bans: d.bans || [], open: d.open || null, sort: d.sort || "played", rank: d.rank || "low" };
 }
 function saveDraft(d) { store("draft2", d); render(true); }
 
@@ -2061,18 +2061,24 @@ function slotPicker(m, d, side, role) {
     if (ev.key === "Enter") { const b = list.querySelector("button"); if (b) b.click(); }
     if (ev.key === "Escape") { d.open = null; saveDraft(d); }
   });
-  box.append(suggest(all, q.options, cur, now, side, pick));
+  box.append(suggest(d, all, q.options, cur, now, side, pick));
   box.append(el("div", { class: "pickhead" }, input, sortBtn), el("p", { class: "sub" }, `Share of the role's games on the newest patch, then the change to ${side}'s win chance ${now != null ? "against the current pick" : "against an empty slot"}. An average pick here: ${pct(q.average)}.`), list);
   fill();
   setTimeout(() => input.focus({ preventScroll: true }), 0);
   return box;
 }
 
-// Suggestions for the open slot, each with its reason as a plain sentence. Lane-opponent
-// and blind-pick lists wait for the early-game model's lane-effects export
-function suggest(all, options, cur, now, side, pick) {
+// Suggestions for the open slot, each with its reason as a plain sentence. Ranked by the
+// range's low end by default, so a champion on few games can't top the list (as the site's
+// lane opponents). Lane-opponent and blind-pick lists wait for the early-game lane export
+function suggest(d, all, options, cur, now, side, pick) {
   const byId = new Map(options.map(o => [o.champion, o]));
-  const best = all.filter(x => String(x.c.id) !== String(cur)).sort((a, b) => b.p - a.p).slice(0, 5);
+  const by = d.rank === "guess" ? x => x.p : x => byId.get(x.c.id).lo;
+  const best = all.filter(x => String(x.c.id) !== String(cur)).sort((a, b) => by(b) - by(a)).slice(0, 5);
+  const rank = el("nav", { class: "switch", "aria-label": "Rank by" });
+  for (const [k, label] of [["low", "Likely (low end)"], ["guess", "Best guess"]]) {
+    rank.append(el("button", { type: "button", "aria-pressed": String(d.rank === k), onclick: () => { d.rank = k; saveDraft(d); } }, label));
+  }
   const ol = el("ol", {});
   for (const x of best) {
     const o = byId.get(x.c.id);
@@ -2080,7 +2086,7 @@ function suggest(all, options, cur, now, side, pick) {
     ol.append(el("li", {}, el("button", { type: "button", class: "link", onclick: () => pick(x.c.id) }, x.c.name), ": ",
       `${side} would win ${pct(x.p)} of games (likely ${pct(o.lo)} to ${pct(o.hi)}), ${delta >= 0 ? "+" : "−"}${Math.abs(delta * 100).toFixed(1)} points against ${now != null ? "the current pick" : "an empty slot"}, from ${num(o.games)} games in the role.`));
   }
-  return el("div", { class: "suggest" }, el("h4", {}, "Best for this draft"),
+  return el("div", { class: "suggest" }, el("div", { class: "suggesthead" }, el("h4", {}, "Best for this draft"), el("span", { class: "sub" }, "Rank by"), rank),
     best.length ? ol : el("p", { class: "muted" }, "No candidates left for this slot."),
     el("p", { class: "sub" }, "Best into your lane opponent and safest blind pick come with the early-game lane export."));
 }
