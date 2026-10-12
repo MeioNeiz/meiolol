@@ -6,7 +6,8 @@
 # changed, or every 5 min while a run is live so the page can tell a quiet run from a Mac
 # that went to sleep. Also sent: docs/learned.md and docs/model.md from this checkout, each
 # lab campaign's digest.md and hypotheses.tsv (~/ml/agent/<campaign>, LAB_CANDS), and a
-# run's result.tsv, findings.tsv and effects-*.tsv (meiolol-lab). The gpu-box (home network only) is staged over ssh at most once a
+# run's result.tsv, findings.tsv and effects-*.tsv (meiolol-lab); the newest run's
+# draft-model.json and draft-ref.json also as the admin Draft tester's model. The gpu-box (home network only) is staged over ssh at most once a
 # minute; when unreachable its last staged copy is sent and hosts.tsv says when it was
 # last reached. launchd calls it every 30 s
 # once installed. Upload: a gzipped tar over ssh with a key whose forced command is
@@ -61,7 +62,7 @@ stage_runs() {
         # meiolol-lab's plain results: result.tsv (the run's record, category, error removed),
         # findings.tsv (one sentence per line) and its effects-*.tsv tables
         found=''
-        for f in result.tsv findings.tsv "$runs/$d"/effects-*.tsv; do
+        for f in result.tsv findings.tsv draft-model.json draft-ref.json "$runs/$d"/effects-*.tsv; do
             f=${f##*/}
             if [[ -f "$runs/$d/$f" ]]; then cp "$runs/$d/$f" "$out/runs/$d/"; found=1; fi
         done
@@ -110,6 +111,10 @@ stage() {
     cp -R "$out/mac/runs/." "$out/runs/"
     [[ -d "$STATE/gpu/runs" ]] && cp -R "$STATE/gpu/runs/." "$out/runs/"
     rm -rf "$out/mac"
+    # The admin Draft tester's model: the newest run that exported one (meiolol-lab draft
+    # --export), with its reference drafts
+    d=$(cd "$out/runs" && find . -mindepth 2 -maxdepth 2 -name draft-model.json | cut -d/ -f2 | sort | tail -n 1)
+    if [[ -n "$d" ]]; then cp "$out/runs/$d"/draft-*.json "$out/"; fi
     cp "$ROOT/docs/learned.md" "$ROOT/docs/model.md" "$out/" 2>/dev/null || true
     mkdir -p "$out/campaigns"
     for d in "$CAMPAIGNS"/*/; do
