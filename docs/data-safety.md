@@ -114,6 +114,8 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | forgotten | PUUID and date added: the suppression list |
 | Daily Draft (daily/used.txt, puzzles) | nothing: match ids and anonymous puzzles only |
 | backup files | `--backups /mnt/d/meiolol-backups` scrubs every state and segment file at once |
+| raw archive (gpu-box) | ingest leaves out documents naming a forgotten PUUID; each pull runs `meiolol-lab archive-forget` for PUUIDs new on the box's list, which drops every archived summary, timeline and mastery line naming them (hashed with the salt) |
+| raw exports (box, data/archive-out) | short-lived: deleted on ack; an export holds what raw.db held when it was made |
 | Mac mirror | follows on its next daily sync (rsync replaces the scrubbed files) |
 | Your games (api.db on the web server) | `forget --data /var/lib/meiolol-api` there: `api.cache.forget` deletes and adds to `blocked` |
 | analysis snapshots (Mac, gpu-box) | re-erased when made, hashed, deleted when replaced (Analysis snapshots, below) |
@@ -163,6 +165,34 @@ Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
 - Disposable: a snapshot is deleted from the Mac and the gpu-box when a newer one
   replaces it, so an erasure reaches analysis copies within one snapshot cycle. Not in
   git, not published
+
+### Raw archive
+
+Every raw document (match summaries, timelines, mastery snapshots) kept on the gpu-box,
+pseudonymised (Jacob, 2026-10-12: keep raw until we understand it, and until player ids
+would be blanked anyway). Box side src/archive.zig (`meiolol raw-export`); gpu-box side
+src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-pull
+(hourly, skipped while League is open).
+
+- Box: an export writes everything fetched since the last one to
+  data/archive-out/raw-FROM-TO.db, as stored (real ids: the salt never comes to the
+  box). The gpu-box's key in ~/.ssh/authorized_keys may only run
+  deploy/archive-serve.sh (export, list, send, ack, forgotten, status)
+- gpu-box: fetch, check the size, `meiolol-lab archive` (anonymise.rewriteMatch: PUUIDs
+  and match ids salted-hashed as in snapshots, so the ids match; Riot IDs, summoner ids
+  and names blanked; profile icons 0), zstd -15 --long, test, then ack. Layout:
+  ARCHIVE/YYYY-MM-DD/{summaries,timelines}-NAME.jsonl.zst, mastery-NAME.tsv.zst (hashed
+  PUUID, platform, fetched_at, champions, compact blob in hex), ARCHIVE/index.tsv
+- The salt is on the gpu-box too (~/.config/meiolol/snap-salt, 600), never on the box
+  or in git
+- The box drops raw documents only once acked and 2 days old (`--ack NAME --keep-days
+  2`); unacked ones stay whatever their age (crawl.args `--raw-match-days 0`, long
+  `--raw-timeline-days`). A stopped pull shows in Health alerts: gpu-box (no ack for
+  12h) and raw held (free disk under twice the raw held)
+- 24 months: `meiolol-lab archive-age` (every pull) blanks every hashed PUUID in days
+  older than 730 and deletes their mastery files, as the crawler blanks participants
+- ~4.5 GB/day at today's rate. ARCHIVE is ~/ml/archive (unit drop-in) until the 1 TB
+  partition is attached at /mnt/wsl/archive
 
 ### Key switch (rekey)
 
