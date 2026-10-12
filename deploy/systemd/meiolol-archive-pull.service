@@ -1,0 +1,6 @@
+[Unit]
+Description=meiolol raw archive pull from the box (deploy/archive-pull.sh, gpu-box)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'exec %h/ml/bin/archive-pull.sh >> %h/ml/archive-pull.log 2>&1'

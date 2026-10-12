@@ -115,9 +115,61 @@ anything.
 | Objectives | elite monster, building, plate events with time; per-minute gold; positions; soul state | yes (compact); bounty state dropped | to be measured |
 | Playstyle | positions per minute, kills with x/y, wards (counts), CS; challenges (roams, solo kills, skillshots, vision) | positions yes; challenges dropped | to be measured |
 
-## Open measurements
+## Measured 2026-10-12
 
-- Signal per field (meiolol-2a, every-field model) and per feature group (meiolol-3c,
-  shrunk additive models): decides what compact rows keep
-- Compact size if championStats and the damage split per minute were added
-- Batch compression of raw docs (a day's summaries in one zstd stream vs gzip per doc)
+- What carries signal (docs/model.md, `meiolol outcomes`, 118k Platinum+ games): lane
+  opponent, bot lane partners, junglers and the rest of both teams each shift gold@14,
+  CS@10, deaths before 15 and first item time beyond noise, additively. Own champion x
+  enemy class and own champion x enemy champion interactions: not detectable (true
+  spread under ~20 gold at 14). Timelines are where the signal is; interactions need
+  far more games than one patch gives
+- Raw summary, per doc: 11.8 KB gzip as stored; 4.7 KB in a zstd -19 --long stream of
+  3,000 docs (2.5x). Raw timeline: 63 KB gzip, 36 KB zstd -19 alone (1.75x); a batch
+  likely ~25 KB (to measure on the first archived day)
+- Compact timeline additions, from the fixture game (gzip of delta text, rough): per
+  minute championStats +3.5 KB, damage split +4 KB, death recaps (victimDamageReceived
+  and Dealt) +3-6 KB, on today's 8.6 KB
+- Box (2026-10-12 21:30Z, after the WAL fix): 129 GB free, ~172k matches/day, compact
+  rows ~1.5 GB/day
+- Still open: signal per field (meiolol-2a's every-field model) decides what compact
+  rows keep
+
+## Decided (Jacob, 2026-10-12)
+
+"We need to keep more data while we figure out what we need"; keep anything per player
+that might help training, within the law; "for now keep raw data until we understand it
+better". Applied on the box 2026-10-12 ~21:30-21:45Z (crawl.args; the previous one in
+crawl.args.bak-20261012):
+
+- Compact rows and timelines forever (`--keep-days 0`); raw summaries kept on the box
+  until archived (`--raw-match-days 0`); raw timelines 3 days until the archive runs
+- Every match gets a timeline (`--timelines 100`, coordinator for Jacob): every result
+  with signal comes from timelines
+- Mastery on. Today that is one snapshot per sampled ladder player (1 in 16), dropped
+  and refetched after 30 days; the archive keeps each snapshot, so history builds up.
+  Proposal: mastery for match participants near game time (crawler change, not made)
+- Tier floor stays Platinum IV+
+
+Raw archive (src/archive.zig box side, src/lab/archive.zig gpu-box side,
+deploy/archive-pull.sh, docs/data-safety.md "Raw archive"):
+
+- Box: `meiolol raw-export` writes everything fetched since the last export (raw
+  summaries, raw timelines, mastery snapshots) to data/archive-out as stored; real ids
+  never leave the box except over this ssh link, and the salt never comes to the box.
+  The gpu-box's key may only run deploy/archive-serve.sh (export, list, send, ack,
+  forgotten)
+- gpu-box, hourly, not while League is open: fetch, pseudonymise with the snapshot salt
+  (archive ids = snapshot ids; Riot IDs and names blanked; per-player links kept: the
+  same hashed PUUID in every game), zstd -15 --long per kind per export, test, ack.
+  Archive at /mnt/wsl/archive (1 TB partition on the NVMe)
+- Box drops raw documents only once acked and 2 days old; unacked ones stay, so the PC
+  can be off until the box disk runs short (health alert: no ack for 3 days)
+- Kept until player ids would be blanked anyway: days past 24 months lose every hashed
+  PUUID and their mastery (`archive-age`), as the crawler blanks its own rows. Forgotten
+  players: left out at ingest, erased from archived days (`archive-forget`) each round
+- Size: ~172k summaries/day x ~4 KB and ~130k timelines/day x ~30 KB at -15: ~4.5 GB/day,
+  ~1.6 TB/year; the 1 TB partition lasts ~7 months, then more disk (Jacob plans to buy)
+
+Next, after the models: compact v2 with what they choose. Likely regardless: damage by
+type to champions and taken (6 ints in participants); death recaps for the post-game
+"how you died" (~+50% compact size); a challenges subset if any carry signal

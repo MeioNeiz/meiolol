@@ -18,6 +18,7 @@ pub const learning = @import("learning.zig");
 pub const patchday = @import("patchday.zig");
 pub const eval = @import("eval.zig");
 pub const outcomes = @import("outcomes.zig");
+pub const archive = @import("archive.zig");
 pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
 pub const forget = @import("forget.zig");
@@ -118,6 +119,14 @@ const usage =
     \\              --test-platform P  test on P's newest games (default EUW1)
     \\              --test-share F   newest share of P's games held out (default 0.2)
     \\              --preds DIR      one TSV of test predictions per model
+    \\  raw-export  raw archive, box side (archive.zig): write raw summaries, raw timelines
+    \\              and mastery fetched since the last export to DIR/raw-FROM-TO.db and
+    \\              print its name and counts (nothing when there is nothing new)
+    \\              --out DIR        default DATA/archive-out
+    \\              --ack NAME       the gpu-box archived NAME: delete it, then drop raw
+    \\                               documents acked and older than --keep-days
+    \\              --keep-days N    acked raw kept on the box this long (default 2)
+    \\              --status         seconds since the last ack, unacked exports
     \\  site       write the public website (static files): EUW over the last 30 days
     \\              at the root, the patch under patch/, every region under all/ and
     \\              all/patch/ (lane curves and builds: the curves and builds
@@ -249,6 +258,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "pool", cmdPool },
     .{ "eval", cmdEval },
     .{ "outcomes", cmdOutcomes },
+    .{ "raw-export", cmdRawExport },
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
     .{ "dev", cmdDev },
@@ -742,6 +752,42 @@ fn cmdOutcomes(c: *Cmd) !u8 {
     var stdout = std.Io.File.stdout().writer(io, &buf);
     try outcomes.run(c.init.gpa, io, db, chosen, platforms, &legendaries, o, &stdout.interface);
     try stdout.interface.flush();
+    return 0;
+}
+
+fn cmdRawExport(c: *Cmd) !u8 {
+    var dir: []const u8 = try std.fs.path.join(c.arena, &.{ c.data_dir, "archive-out" });
+    var ack_name: ?[]const u8 = null;
+    var keep_days: u32 = 2;
+    var show_status = false;
+    while (c.next()) |_| {
+        if (c.is("--out")) {
+            dir = try c.value();
+        } else if (c.is("--ack")) {
+            ack_name = try c.value();
+        } else if (c.is("--keep-days")) {
+            keep_days = try c.int(u32);
+        } else if (c.is("--status")) {
+            show_status = true;
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const now = std.Io.Clock.real.now(io).toSeconds();
+    const db = try c.open();
+    defer db.close();
+    var buf: [1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    const w = &stdout.interface;
+    if (show_status) {
+        const s = try archive.status(db, now);
+        try w.print("since_ack_s {?d}\nunacked {d}\noldest_unacked_s {?d}\n", .{ s.since_ack_s, s.unacked, s.oldest_unacked_s });
+    } else if (ack_name) |name| {
+        const p = try archive.ack(io, db, dir, name, keep_days, now);
+        try w.print("acked {s}; dropped {d} raw summaries, {d} raw timelines\n", .{ name, p.summaries, p.timelines });
+    } else if (try archive.exportNew(c.arena, io, db, dir, now)) |e| {
+        try w.print("{s}\t{d}\t{d}\t{d}\n", .{ e.name, e.summaries, e.timelines, e.mastery });
+    }
+    try w.flush();
     return 0;
 }
 

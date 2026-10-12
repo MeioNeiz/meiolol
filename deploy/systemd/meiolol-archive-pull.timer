@@ -1,0 +1,10 @@
+[Unit]
+Description=meiolol raw archive pull every hour (meiolol-archive-pull.service, gpu-box)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

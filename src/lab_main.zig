@@ -5,6 +5,7 @@
 const std = @import("std");
 const cuda = @import("gpu/cuda.zig");
 const anonymise = @import("lab/anonymise.zig");
+const archive = @import("lab/archive.zig");
 const protocol = @import("lab/protocol.zig");
 const rows = @import("lab/rows.zig");
 const enemy = @import("lab/enemy.zig");
@@ -19,6 +20,11 @@ const usage =
     \\  anonymise SRC DST [SALT_FILE]   copy snapshot SRC to DST with PUUIDs and match ids
     \\                                  hashed (salt: 32 bytes, default
     \\                                  ~/.config/meiolol/snap-salt; docs/data-safety.md)
+    \\  archive EXPORT ARCHIVE [SALT_FILE] [FORGOTTEN]  pseudonymise one raw export from
+    \\                                  the box into ARCHIVE (lab/archive.zig; zstd on PATH)
+    \\  archive-forget ARCHIVE FORGOTTEN [SALT_FILE]  drop archived documents naming a
+    \\                                  forgotten PUUID (plain, one per line)
+    \\  archive-age ARCHIVE [DAYS]      blank hashed PUUIDs in days older than DAYS (730)
     \\  split SNAP_DIR                  the shared held-out split (eval's, tested on EUW1):
     \\                                  prints it, writes SNAP_DIR/split.tsv
     \\  rows SNAP_DIR                   load the model rows, print outcome counts and means
@@ -49,6 +55,31 @@ pub fn main(init: std.process.Init) !u8 {
             return 1;
         }
         try anonymise.run(init.gpa, init.io, argv[2], argv[3], bytes[0..32]);
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "archive") and argv.len >= 4) {
+        const salt = try readSalt(init, arena, if (argv.len >= 5) argv[4] else null) orelse return 1;
+        const n = try archive.run(init.gpa, init.io, argv[2], argv[3], salt, if (argv.len >= 6) argv[5] else null);
+        std.log.info("archived {s}: {d} summaries, {d} timelines, {d} mastery, {d} forgotten left out", .{
+            argv[2], n.summaries, n.timelines, n.mastery, n.forgotten,
+        });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "archive-forget") and argv.len >= 4) {
+        const salt = try readSalt(init, arena, if (argv.len >= 5) argv[4] else null) orelse return 1;
+        const text = try std.Io.Dir.cwd().readFileAlloc(init.io, argv[3], arena, .limited(1 << 30));
+        var list: std.ArrayList([]const u8) = .empty;
+        var lines = std.mem.tokenizeAny(u8, text, " \t\r\n");
+        while (lines.next()) |p| try list.append(arena, p);
+        const n = try archive.forget(init.gpa, init.io, argv[2], salt, list.items);
+        std.log.info("archive: {d} lines dropped for {d} forgotten players", .{ n, list.items.len });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "archive-age") and argv.len >= 3) {
+        const max_days = if (argv.len >= 4) try std.fmt.parseInt(u32, argv[3], 10) else 730;
+        const today = @divFloor(std.Io.Clock.real.now(init.io).toSeconds(), std.time.s_per_day);
+        const n = try archive.age(init.gpa, init.io, argv[2], today, max_days);
+        std.log.info("archive: {d} days aged past {d} days", .{ n, max_days });
         return 0;
     }
     if (std.mem.eql(u8, cmd, "split") and argv.len >= 3) {
@@ -125,9 +156,24 @@ fn gpuSmoke(gpa: std.mem.Allocator) !void {
 
 test {
     _ = anonymise;
+    _ = archive;
     _ = protocol;
     _ = rows;
     _ = enemy;
     _ = harness;
     _ = exp;
+}
+
+/// The snapshot salt: SALT_FILE or ~/.config/meiolol/snap-salt (docs/data-safety.md);
+/// null after logging when it is not 32 bytes
+fn readSalt(init: std.process.Init, arena: std.mem.Allocator, path: ?[]const u8) !?*const anonymise.Salt {
+    const salt_path = path orelse try std.fs.path.join(arena, &.{
+        init.environ_map.get("HOME") orelse return error.NoHome, ".config/meiolol/snap-salt",
+    });
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, salt_path, arena, .limited(64));
+    if (bytes.len != 32) {
+        std.log.err("{s}: want 32 bytes, found {d}", .{ salt_path, bytes.len });
+        return null;
+    }
+    return bytes[0..32];
 }
