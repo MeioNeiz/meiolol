@@ -36,6 +36,7 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `seo` | ops | search engines: indexing, crawl budget, sitemaps, spam policies, page speed |
 | `render` | ops | when pages are built: static generation, on-demand rendering, caching, ISR |
 | `ops` | ops | hosting, object storage, backups off-site, free tiers, prices, provider terms |
+| `lab` | stats | LLM agents that run modelling experiments: loops, tools, search, tracking, guards |
 | `ux/charts` | | chart design, axes, chart types |
 | `ux/uncertainty` | | showing spread, error bars, sample size, thin data |
 | `ux/colour` | | colour, colour-blind, contrast |
