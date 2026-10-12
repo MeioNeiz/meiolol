@@ -1106,9 +1106,19 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         ) else null,
         .no_matchups = html.tpl.when(matchups == 0, @as([]const u8, "When each side of a lane matchup tends to get ahead, by how much, and whether winning lane wins the game. Curves appear as match timelines come in.")),
     });
-    try w.print("<h2>Champions</h2>\n<p class=\"muted\"><b>{d}</b> ranked solo/duo games {s}, {s}, all ranks. <a href=\"{s}method.html\">How the numbers are made</a></p>\n", .{ site.games, site.view.region.in(), site.when, site.view.up() });
-    try earlyNote(site, w, false);
-    try tierTable(site, w, null, "");
+    // The full table is champions.html: on this page it was 90% of the bytes
+    try html.tpl.render(w,
+        \\<h2>Champions</h2>
+        \\<p><a href="champions.html">Win rate, pick and ban rate of every champion</a>, from
+        \\<b>{games}</b> ranked solo/duo games {in}, {when}, all ranks.
+        \\<a href="{method}">How the numbers are made</a>.</p>
+        \\
+    , .{
+        .games = site.games,
+        .in = site.view.region.in(),
+        .when = site.when,
+        .method = html.Link{ .root = site.view.up(), .path = "method.html" },
+    });
     try html.foot(w, p);
 }
 
