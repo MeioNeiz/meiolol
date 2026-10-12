@@ -106,14 +106,16 @@ outcomes and readings decided by Jacob the same day.
   hashes, forgotten players dropped, deleted when a newer snapshot replaces it.
   Snapshot snap-20261012T2055Z (hashed; data/snap-20261012T2055Z on the Mac,
   ~/ml/snaps/ on the gpu-box): 224,910 games scanned, patches 16.19-16.20, 15
-  platforms. Test from game_start 1791709711585 (11 Oct): 10,759 EUW1 games, 10,618
-  with a timeline to minute 15; train 174,575 games, 117,948 with one. Every test game
-  and its frame count in split.tsv, finished items per patch in legendaries.tsv (both in
-  the snapshot dir)
+  platforms. Test from game_start 1791709711585 (11 Oct): 10,759 EUW1 games, 10,604
+  reaching 15:00 with a timeline; train 174,575 games, 117,806 reaching 15:00. Every
+  test game and its frame count in split.tsv, finished items per patch in
+  legendaries.tsv (both in the snapshot dir)
 - Split: eval's. Test = newest 20% of EUW1 games by gameCreation; train = older games,
   every platform. Tuning by folds inside train only; test touched once per model
 - Rows: ranked solo, non-remake, complete roles (stats.scan rules). Continuous outcomes
-  also need a compact timeline with frame 15. Platinum IV+ only (crawl floor)
+  also need a compact timeline that reached 15:00: frames[15].t_ms >= 900000 (frame 15
+  exists is not enough: games ending 14:09-14:59 have it as their end frame). Platinum
+  IV+ only (crawl floor)
 - Outcomes:
   - win: log loss, paired interval vs champion base rates
   - gold14: total_gold at frame 14
