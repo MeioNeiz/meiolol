@@ -21,7 +21,7 @@ const TIERS = ["CHALLENGER", "GRANDMASTER", "MASTER", "DIAMOND", "EMERALD", "PLA
 const BAD = "#e66767";
 const TABS = [
   ["overview", "Overview"], ["crawler", "Crawler"], ["riot", "Riot API"], ["storage", "Storage"],
-  ["ingest", "Ingest"], ["model", "Model"], ["training", "Training"], ["traffic", "Traffic"],
+  ["ingest", "Ingest"], ["models", "Models"], ["traffic", "Traffic"],
   ["ops", "Controls"],
 ];
 // Tabs whose charts follow the time range switch
@@ -105,8 +105,16 @@ function store(key, value) {
   try { localStorage.setItem("admin-" + key, JSON.stringify(value)); } catch (e) { /* storage blocked */ }
 }
 
+// Old tab names (#model, #training) open the Models tab
+const hashTab = () => {
+  const [t, sub] = location.hash.slice(1).split("/");
+  return t === "model" ? ["models", "win"] : t === "training" ? ["models", "all"] : [t || "overview", sub];
+};
+const CATS_KEYS = ["all", "win", "early", "items", "objectives", "playstyle", "player", "data", "lab"];
 const ui = {
-  tab: (location.hash.slice(1).split("/")[0]) || "overview",
+  tab: hashTab()[0],
+  cat: hashTab()[0] === "models" && hashTab()[1] ? hashTab()[1] : stored("cat", "all"),
+  outcome: stored("outcome", null),
   range: stored("range2", "24h"),
   regions: new Set(stored("regions", REGION_ORDER)),
   hidden: new Set(stored("hidden", [])),
@@ -118,6 +126,7 @@ const ui = {
   log: { file: "crawl", lines: 300, filter: "", follow: false },
 };
 if (!TABS.some(([k]) => k === ui.tab)) ui.tab = "overview";
+if (!CATS_KEYS.includes(ui.cat)) ui.cat = "all";
 
 // ---------- DOM ----------
 
@@ -500,7 +509,7 @@ function reportTables(md) {
   const out = {}, lines = (md || "").replace(/\r/g, "").split("\n");
   let sec = "", intro = "";
   for (let i = 0; i < lines.length; i++) {
-    const h = lines[i].match(/^##\s+(.*)/);
+    const h = lines[i].match(/^#{2,4}\s+(.*)/);
     if (h) { sec = h[1].trim(); intro = ""; continue; }
     if (isTableAt(lines, i)) {
       const head = mdCells(lines[i]), rows = [];
@@ -526,7 +535,7 @@ function markdown(text) {
   const lines = text.replace(/\r/g, "").split("\n");
   const inline = s => {
     const frag = document.createDocumentFragment();
-    const re = /(`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~)/g;
+    const re = /(`[^`]+`|\*\*[^*]+\*\*|~~.+?~~)/g;
     let at = 0, m;
     while ((m = re.exec(s))) {
       if (m.index > at) frag.append(s.slice(at, m.index));
@@ -609,8 +618,20 @@ async function pollTraffic() {
 }
 async function pollTraining() {
   try {
-    const [runs, pushed] = await Promise.all([getText("training/runs.tsv"), getText("training/pushed.txt").catch(() => "")]);
-    TRAIN = { runs: tsvRaw(runs).reverse(), pushed: +pushed.trim() || null };
+    const opt = p => getText("training/" + p).catch(() => null);
+    const [runs, pushed, hosts, learned, modelMd, camps] = await Promise.all([getText("training/runs.tsv"),
+      opt("pushed.txt"), opt("hosts.tsv"), opt("learned.md"), opt("model.md"), opt("campaigns.txt")]);
+    TRAIN = {
+      runs: tsvRaw(runs).reverse(), pushed: +(pushed || "").trim() || null,
+      hosts: Object.fromEntries(tsvRaw(hosts || "").map(h => [h.host, +h.seen || null])),
+    };
+    MODELS.learned = learnedByCat(learned);
+    await loadFindings(TRAIN.runs.filter(r => r.findings));
+    MODELS.modelMd = modelMd;
+    MODELS.campaigns = await Promise.all((camps || "").split("\n").filter(Boolean).map(async name => {
+      const [digest, hyp] = await Promise.all([opt(`campaigns/${name}/digest.md`), opt(`campaigns/${name}/hypotheses.tsv`)]);
+      return { name, digest, hyp: tsvRaw(hyp || "") };
+    }));
     trainErr = null;
   } catch (e) { trainErr = e.message; }
   refreshView("training");
@@ -676,7 +697,7 @@ let lastRender = 0;
 function setTab(tab) {
   ui.tab = tab;
   ui.zoom = null;
-  history.replaceState(null, "", "#" + tab);
+  history.replaceState(null, "", "#" + tab + (tab === "models" ? "/" + ui.cat : ""));
   render();
   window.scrollTo(0, 0);
 }
@@ -694,10 +715,10 @@ function setZoom(z) {
 // Re-render the open tab when its data changed, keeping scroll and open details
 function refreshView(source) {
   const uses = {
-    live: ["overview", "crawler", "riot", "storage", "model", "ops"],
-    snapshot: TABS.map(t => t[0]).filter(t => t !== "traffic" && t !== "training"),
+    live: ["overview", "crawler", "riot", "storage", "models", "ops"],
+    snapshot: TABS.map(t => t[0]).filter(t => t !== "traffic"),
     traffic: ["overview", "traffic"],
-    training: ["overview", "training"],
+    training: ["overview", "models"],
   }[source];
   renderStatus();
   if (!uses || !uses.includes(ui.tab)) return;
@@ -812,12 +833,12 @@ VIEWS.overview = body => {
   if (ev.length) {
     const e = ev[ev.length - 1];
     const best = ["base", "current", "eb", "joint"].reduce((a, k) => (e["auc_" + k] ?? 0) > (e["auc_" + a] ?? 0) ? k : a, "base");
-    tile(tiles, "Model AUC", (e["auc_" + best] ?? 0).toFixed(3), `best: ${best === "eb" ? "shrunk" : best}, ${num(e.games)} games`, null, () => setTab("model"));
+    tile(tiles, "Model AUC", (e["auc_" + best] ?? 0).toFixed(3), `best: ${best === "eb" ? "shrunk" : best}, ${num(e.games)} games`, null, () => { ui.cat = "win"; setTab("models"); });
   }
   if (TRAIN && TRAIN.runs.length) {
     const live = TRAIN.runs.filter(r => r.state === "running" || r.state === "paused");
     const r = live[0] || TRAIN.runs[0];
-    tile(tiles, "Training", live.length ? `${live.length} running` : "idle", `${shortRun(r.run)}: ${runState(r.state)}`, null, () => setTab("training"));
+    tile(tiles, "Training", live.length ? `${live.length} running` : "idle", `${shortRun(r.run)}: ${runState(r.state)}`, null, () => { ui.cat = "all"; setTab("models"); });
   }
 
   const { from, to } = crawlFor(ui.range);
@@ -860,12 +881,55 @@ function healthBanner(parent) {
     problems.length ? el("ul", {}, ...problems.map(p => el("li", {}, p))) : el("span", {}, " crawler, site loop, upload age, disk, backups")));
 }
 
+// What the crawl's counters say: rates now against the week, queue direction, retention
+function crawlReadings(body) {
+  const h = tsv(D.history);
+  if (h.length < 2) return;
+  const sec = section(body, "Readings", "From the 15-minute snapshots (data/admin-history.tsv): least-squares rates, so one odd snapshot doesn't swing them.");
+  const tiles = grid(sec, "tiles");
+  const rate = (col, days) => growthPerDay(col, days);
+  const trend = (col, label) => {
+    const r6 = rate(col, 0.25), r24 = rate(col, 1), wk = rate(col, 7);
+    const shift = r6 != null && r24 ? r6 / r24 - 1 : null;
+    tile(tiles, label + " / day", num(r24), `last 6 h ${num(r6)}, week ${num(wk)}` + (shift != null && Math.abs(shift) > 0.25 ? ` · ${shift > 0 ? "up" : "down"} ${Math.round(Math.abs(shift) * 100)}% lately` : ""),
+      shift != null && shift < -0.5 ? "warn" : null);
+  };
+  trend("matches", "Matches");
+  trend("timelines", "Timelines");
+  const m24 = rate("matches", 1), t24 = rate("timelines", 1);
+  if (m24 > 0 && t24 != null) {
+    const args = (D.riot && D.riot.crawl_args) || "";
+    const want = (args.match(/--timelines\s+(\d+)/) || [])[1];
+    tile(tiles, "Timelines per new match", pct(t24 / m24), want ? `crawler asks for ${want}%` : "share of matches that get a timeline");
+  }
+  const last = h[h.length - 1];
+  for (const [col, label] of [["match_queue", "Match queue"], ["timeline_queue", "Timeline queue"]]) {
+    const r = rate(col, 1), n = last[col];
+    if (n == null || r == null) continue;
+    const text = Math.abs(r) < n * 0.02 ? "steady over the last day" : r < 0 ? `shrinking ${num(-r)} / day: empty in ~${span(n / -r * 86400)}` : `growing ${num(r)} / day: the crawler falls behind`;
+    tile(tiles, label, num(n), text, r > 0 && Math.abs(r) >= n * 0.02 ? "warn" : null);
+  }
+  const ms = rate("mastery", 1);
+  if (ms != null) tile(tiles, "Mastery rows / day", num(ms), ms > 0 ? "collecting" : "not collecting (off in crawl.args?)");
+  const args = (D.riot && D.riot.crawl_args) || "";
+  const flag = (k, d) => { const m = args.match(new RegExp("--" + k + "\\s+(\\S+)")); return m ? m[1] : d; };
+  if (args) {
+    const keep = v => v === "0" ? "forever" : `${v} days`;
+    const lines = [
+      `Raw match summaries on the box: kept ${keep(flag("raw-match-days", "?"))}. Raw timelines: ${keep(flag("raw-timeline-days", "?"))} (the gpu-box archive takes them hourly). Compact rows: ${keep(flag("keep-days", "?"))}.`,
+      `Ladder floor ${cap(flag("min-tier", "?"))}; ${flag("ladder-per-hour", "?")} ladder pages an hour, refreshed every ${flag("ladder-refresh-hours", "?")} h; ${flag("reserve", "0")}% of the key held back for the site.`,
+    ];
+    sec.append(el("ul", { class: "readings" }, ...lines.map(t => el("li", {}, t))));
+  }
+}
+
 VIEWS.crawler = body => {
   const cv = crawlFor(ui.range);
   const C = cv.C;
   const S = crawlSeries(C, cv.from);
   const common = { x: S.xs, step: C.step, markers: C.restarts, xMin: cv.from, xMax: cv.to, time: true };
   const per = C.step >= 600 ? "per 10 min" : "per minute";
+  crawlReadings(body);
   const sec = section(body, "Crawler", `From the crawler's minute report lines${C === D.crawl ? "" : " (live, last 3 hours)"}; gaps = crawler not running, dashed = crawler start. Drag across a chart to zoom, double-click to reset.`);
   const g = grid(sec);
   chart(g, { ...common, title: "Matches stored per hour", type: "area", series: S.byRegion(b => b.m) });
@@ -1151,81 +1215,570 @@ VIEWS.ingest = body => {
   bars(cards, "Matches by patch", D.by_patch.map(g => ({ label: g.key, value: g.n, color: PALETTE[5] })));
 };
 
-VIEWS.model = body => {
-  const ev = tsv(D.eval);
-  const running = L && L.running && L.running.eval;
-  const head = [];
-  head.push(actionButton("eval-run", running ? `Eval running (${span(nowS() - running)})` : "Run eval now", { disabled: !!running || !L, confirm: "Run meiolol eval now? About 10 minutes at low priority on the box." }));
-  const sec = section(body, "Draft model", "meiolol eval, daily: held-out EUW games (docs/model.md). Higher AUC is better; 0.5 is a coin.", ...head);
-  if (ev.length) {
-    const e = ev[ev.length - 1];
-    const tiles = grid(sec, "tiles");
-    const names = { base: "base", current: "current", eb: "shrunk", joint: "joint" };
-    for (const k of Object.keys(names)) {
-      const prev = ev.length > 1 ? ev[ev.length - 2]["auc_" + k] : null;
-      const d = prev == null || e["auc_" + k] == null ? "" : `, AUC ${e["auc_" + k] >= prev ? "+" : ""}${(e["auc_" + k] - prev).toFixed(4)} vs previous run`;
-      tile(tiles, "AUC, " + names[k], e["auc_" + k] == null ? "–" : e["auc_" + k].toFixed(4), `log loss ${e["ll_" + k] == null ? "–" : e["ll_" + k].toFixed(4)}${d}`);
+// ---------- models ----------
+//
+// One tab over every model: categories (docs/learned.md's ## headings), each with what we
+// learnt in plain sentences, the best result against its baseline, its runs, then run
+// health (curves, logs) last. Sources: the eval report and history (box snapshot), the
+// training view the Mac uploads (deploy/lab-push.sh: runs of the Mac and the gpu-box,
+// learned.md, model.md, lab campaigns, run findings)
+
+const CATS = [
+  ["all", "All"], ["win", "Win (draft)"], ["early", "Early game"], ["items", "Items"],
+  ["objectives", "Objectives"], ["playstyle", "Playstyle"], ["player", "Player"],
+  ["data", "Data quality"], ["lab", "Lab campaigns"],
+];
+const CAT_OF_HEADING = {
+  "win": "win", "early game": "early", "items": "items", "objectives": "objectives",
+  "playstyle": "playstyle", "player": "player", "data quality": "data",
+};
+// Lab targets: label, unit of the outcome
+const OUTCOMES = {
+  win: ["Win", ""], gold14: ["Gold at 14 min", "gold"], lanediff14: ["Lane gold lead at 14 min", "gold"],
+  cs10: ["CS at 10 min", "CS"], deaths15: ["Deaths before 15 min", "deaths"], first_item: ["First finished item", "minutes"],
+};
+const CAT_OF_TARGET = { win: "win", gold14: "early", lanediff14: "early", cs10: "early", deaths15: "early", first_item: "early" };
+// Published draft-only models (docs/model.md "Method"): ~55-57% accuracy, log loss ~0.687
+const LL_COIN = 0.6931, LL_PUBLISHED = 0.687;
+
+// meiolol-lab's RESULT line (lab-push.sh puts it in `last` when a run has no metrics)
+function labResult(last) {
+  if (!last) return null;
+  const kind = (last.match(/^(\w+)[ =]/) || [])[1];
+  if (!kind) return null;
+  const f = { kind: kind === "run" ? "run" : kind };
+  for (const m of last.matchAll(/(\w+)=(\S+)/g)) f[m[1]] = m[2];
+  const verdict = last.match(/\(([^)]*)\)/);
+  f.verdict = verdict ? verdict[1] : null;
+  f.dev = pmIn(f.dev);
+  f.gain = pmIn(f.gain);
+  f.bias = pmIn(f.bias);
+  return f;
+}
+
+function runInfo(r) {
+  const a = (r.args || "").split(/\s+/);
+  const lab = a[0] === "exp" ? { cmd: a[1], campaign: a[3], target: a[4] } : null;
+  const res = labResult(r.last);
+  const target = (res && res.target) || (lab && lab.target) || Object.keys(OUTCOMES).find(k => a.includes(k)) || null;
+  const synthetic = a[0] === "train-demo";
+  let cat = target && CAT_OF_TARGET[target];
+  if (!cat && /^(enemy|outcomes|fm|pairs|team)/.test(a[0] || "")) cat = "early";
+  if (!cat && /item/.test(r.args)) cat = "items";
+  if (!cat && /objective/.test(r.args)) cat = "objectives";
+  if (!cat && /playstyle/.test(r.args)) cat = "playstyle";
+  return { ...r, host: r.host || "mac", lab, res, target, synthetic, cat: cat || null, campaign: lab && lab.campaign };
+}
+
+// What a run found, in a sentence a non-statistician can read
+function runSentence(i) {
+  const res = i.res, out = OUTCOMES[i.target];
+  const what = out ? out[0].toLowerCase() : i.target || "the outcome";
+  if (i.synthetic) return "Synthetic: random curves from a test script, not a model.";
+  if (!res) return i.last ? i.last : "";
+  if (res.kind === "run" && res.dev && !res.dev.ci) return `Reference run for ${what}: the baseline scored against itself.`;
+  if (res.kind === "run" && res.dev) {
+    const better = res.dev.mean + res.dev.ci < 0, worse = res.dev.mean - res.dev.ci > 0;
+    // Scores are squared error in the role's standard deviation, so dev x 100 is about
+    // the % of the outcome's spread
+    const size = `${(Math.abs(res.dev.mean) * 100).toFixed(1)}% (± ${(res.dev.ci * 100).toFixed(1)})`;
+    let s = better ? `Predicts ${what} better than champion averages: error down ${size} on practice games.`
+      : worse ? `Predicts ${what} worse than champion averages: error up ${size}.`
+        : `No measurable difference from champion averages for ${what}.`;
+    if (res.select === "new-best") s += " Confirmed on the held-back selection games: the new best.";
+    else if (res.select === "no-change") s += " Not better on the held-back selection games.";
+    return s;
+  }
+  if (res.kind === "diagnose" && res.bias) return `Check of where the model is off for ${what}: overall bias ${signed(res.bias.mean, 3)} standard deviations.`;
+  if (res.kind === "screen") return `Screened ${res.features} candidate inputs for ${what}: ${res.clear} clear of noise.`;
+  if (res.kind === "preds") return `Wrote ${num(+res.rows)} predictions for comparison.`;
+  return i.last;
+}
+
+// docs/learned.md by category: markdown list items, newest first as written
+function learnedByCat(md) {
+  const out = {};
+  let cat = null, item = null;
+  const flush = () => { if (item && cat) (out[cat] = out[cat] || []).push(item); item = null; };
+  for (const l of (md || "").replace(/\r/g, "").split("\n")) {
+    const h = l.match(/^##\s+(.*)/);
+    if (h) { flush(); cat = CAT_OF_HEADING[h[1].trim().toLowerCase()] || null; continue; }
+    if (/^\s*-\s+/.test(l)) { flush(); item = l.replace(/^\s*-\s+/, ""); continue; }
+    if (item && /^\s{2,}\S/.test(l)) item += " " + l.trim();
+    else flush();
+  }
+  flush();
+  return out;
+}
+
+// short: the finding's first sentence only (no evidence or use), for the All view
+function learnedList(parent, items, limit, short) {
+  let shown = (items || []).filter(t => !(short && /^~~/.test(t))).slice(0, limit || Infinity);
+  if (short) shown = shown.map(t => t.split(/\. (?=Evidence|Sure|Site|Use|Models)/)[0].replace(/\.$/, "") + ".");
+  if (!shown.length) { parent.append(el("p", { class: "muted" }, "Nothing final yet.")); return; }
+  const md = markdown(shown.map(t => "- " + t).join("\n"));
+  md.classList.add("learned");
+  parent.append(md);
+}
+
+// Estimates with 95% intervals: a dot and whiskers per row, a line at zero.
+// rows: [{label, value, ci, color?}]; o.fmt for values, o.left / o.right label the ends
+function intervalChart(parent, o) {
+  const fig = el("figure", { class: "chart ichart" }, el("div", { class: "chart-head" }, el("h3", {}, o.title)));
+  const box = el("div", { class: "plot" });
+  fig.append(box);
+  if (o.caption) fig.append(el("figcaption", {}, o.caption));
+  parent.append(fig);
+  const fmt = o.fmt || (v => (+v.toPrecision(3)).toString());
+  const draw = () => {
+    box.replaceChildren();
+    const W = Math.max(box.clientWidth, 240), rowH = 22, T = o.left || o.right ? 18 : 4, B = 22;
+    const labelW = Math.min(W * 0.4, 230), L = labelW + 8, R = 64;
+    const H = T + B + rowH * o.rows.length;
+    const ends = o.rows.filter(r => !r.gap).flatMap(r => [r.value - (r.ci || 0), r.value + (r.ci || 0)]);
+    let lo = Math.min(0, ...ends), hi = Math.max(0, ...ends);
+    const st = niceStep(hi - lo || 1, Math.max(2, Math.floor((W - L - R) / 70)));
+    lo = Math.floor(lo / st) * st; hi = Math.ceil(hi / st) * st;
+    if (hi === lo) hi = lo + st;
+    const px = v => L + (v - lo) / (hi - lo) * (W - L - R);
+    const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": o.title });
+    for (let v = lo; v <= hi + st * 1e-9; v += st) {
+      s.append(svg("line", { class: Math.abs(v) < st * 1e-9 ? "base" : "grid", x1: px(v), x2: px(v), y1: T, y2: H - B }));
+      const t = svg("text", { x: px(v), y: H - 6, "text-anchor": "middle" });
+      t.textContent = fmt(+v.toPrecision(12));
+      s.append(t);
     }
-    tile(tiles, "Latest run", e.date, `${num(e.games)} games, ${num(e.test)} held out`);
-    const g = grid(sec);
+    const end = (text, x, anchor) => {
+      const t = svg("text", { x, y: 12, "text-anchor": anchor, class: "end" });
+      t.textContent = text;
+      s.append(t);
+    };
+    if (o.left) end("← " + o.left, L, "start");
+    if (o.right) end(o.right + " →", W - R, "end");
+    const chars = Math.max(8, Math.floor(labelW / 6.4));
+    o.rows.forEach((r, i) => {
+      const y = T + rowH * i + rowH / 2;
+      const label = svg("text", { x: 0, y: y + 4, class: "label" });
+      label.textContent = r.label.length > chars ? r.label.slice(0, chars - 1) + "…" : r.label;
+      const full = svg("title");
+      full.textContent = `${r.label}: ${fmt(r.value)}${r.ci ? " ± " + fmt(r.ci) : ""}${r.n ? `, ${num(r.n)} rows` : ""}`;
+      label.append(full);
+      s.append(label);
+      if (r.gap) return;
+      const color = r.color || (r.ci && (r.value - r.ci > 0 || r.value + r.ci < 0) ? PALETTE[0] : "#5b6478");
+      if (r.ci) s.append(svg("line", { class: "whisker", x1: px(r.value - r.ci), x2: px(r.value + r.ci), y1: y, y2: y, stroke: color }));
+      s.append(svg("circle", { cx: px(r.value), cy: y, r: 4, fill: color }));
+      const v = svg("text", { x: W, y: y + 4, "text-anchor": "end" });
+      v.textContent = fmt(r.value);
+      s.append(v);
+    });
+    box.append(s);
+  };
+  let w = 0;
+  new ResizeObserver(() => { if (box.clientWidth !== w) { w = box.clientWidth; draw(); } }).observe(box);
+  return fig;
+}
+
+// ---------- models: win (draft) ----------
+
+// The eval report's tables, read into plain findings
+function winReadings() {
+  const R = reportTables(D.eval_report);
+  const full = (R["Full draft, held-out games"] || [])[0];
+  if (!full) return null;
+  const name = full.head[0], vs = full.head[full.head.length - 1];
+  const rows = full.rows.map(r => ({
+    label: r[name], ll: numIn(r["log loss"]), acc: numIn(r.accuracy) / 100, auc: numIn(r.AUC), d: pmIn(r[vs]),
+  }));
+  const games = numIn(name.match(/\(([\d,]+) games\)/)?.[1]?.replace(/,/g, ""));
+  const find = re => rows.find(r => re.test(r.label));
+  const base = find(/base only/), current = find(/^current/);
+  const real = rows.filter(r => !/coin|blue side/.test(r.label));
+  const best = real.reduce((a, r) => r.ll < a.ll ? r : a, real[0]);
+  const out = { rows, games, base, current, best, lines: [] };
+  const L = out.lines;
+  if (best) {
+    const share = Math.max(0, (LL_COIN - best.ll) / (LL_COIN - LL_PUBLISHED));
+    L.push(`From the draft alone the best model calls the winner of ${num(games)} new EUW games right ${pct(best.acc)} of the time (a coin flip: 50%). Published draft models trained on millions of games reach about 55 to 57%; by log loss we are ${Math.round(100 * share)}% of the way there.`);
+  }
+  if (base && current && base.d) {
+    const b = base.d;
+    L.push(Math.abs(b.mean) <= b.ci
+      ? `The model the site and app use is no better than each champion's own win rate (difference ${pmText(b)}, inside noise): its matchup and duo terms add nothing measurable yet.`
+      : b.mean < 0 ? `Champion win rates alone beat the model the site uses (${pmText(b)}): its pair terms add noise.`
+        : `The model the site uses beats champion win rates alone (${pmText({ mean: -b.mean, ci: b.ci })}).`);
+  }
+  const winners = rows.filter(r => r.d && r.d.mean + r.d.ci < 0 && !/coin|blue side|base only/.test(r.label));
+  if (winners.length) {
+    const tuning = (D.eval_report || "").match(/Term weights[^:]*:\s*([^\n]+)/);
+    const w = tuning ? Object.fromEntries([...tuning[1].matchAll(/(\w+) (-?[\d.]+)/g)].map(m => [m[1], +m[2]])) : {};
+    let why = "";
+    if (w.lane > 1.3) why += ` The tuning weighs lane matchups ${w.lane.toFixed(1)} times the default: lane matchups carry signal the shipped model shrinks away.`;
+    if (w.duo != null && w.duo < 0.85) why += ` Duo terms are shrunk to ${w.duo.toFixed(2)}: mostly noise.`;
+    L.push(`Beats the shipped model beyond noise: ${winners.map(r => `${r.label} (${pmText(r.d)})`).join(", ")}. The eval runs several times a day, so check it holds run after run (chart below).${why}`);
+  }
+  const pick = ((R["Pick metric"] || [])[0] || { rows: [] }).rows.find(r => /^current/.test(r.model));
+  if (pick) {
+    const col = Object.keys(pick).find(k => /top 10%/.test(k));
+    const m = String(pick[col] || "").match(/([\d.]+)% of (\d+)/);
+    if (m) {
+      const p = +m[1] / 100, n = +m[2], z = (p - 0.5) / Math.sqrt(0.25 / n);
+      L.push(z >= 3
+        ? `Picks the shipped model ranks in its top 10% for their slot won ${pct(p)} of ${num(n)} games: a small but real edge of ${((p - 0.5) * 100).toFixed(1)} points (about ${z.toFixed(0)} standard errors; fewer in truth, as picks in one team share a result).`
+        : `Picks the shipped model ranks in its top 10% won ${pct(p)} of ${num(n)} games: not yet distinguishable from 50%.`);
+    }
+  }
+  const cal = (R["Full draft, held-out games"] || []).find(t => t.head[0] === "decile");
+  if (cal) {
+    const c = cal.rows.map(r => ({ p: numIn(r["mean predicted"]), y: numIn(r["blue won"]), n: numIn(r.games) }));
+    const miss = Math.max(...c.map(r => Math.abs(r.p - r.y)));
+    const se = 100 * Math.sqrt(0.25 / (c[0].n || 1));
+    L.push(`Its percentages can be read at face value: predictions run from ${c[0].p}% to ${c[c.length - 1].p}% and each tenth of games landed within ${miss.toFixed(1)} points of its prediction (noise alone is about ±${(2 * se).toFixed(1)}).`);
+  }
+  const lc = learningCurve(R);
+  if (lc && lc.perDoubling > 0) {
+    const need = (lc.last - LL_PUBLISHED) / lc.perDoubling;
+    const target = lc.n * Math.pow(2, need);
+    const perDay = growthPerDay("matches");
+    L.push(`More games help slowly: each doubling of games improves champion win rates by ${lc.perDoubling.toFixed(4)} log loss. At that pace reaching published accuracy takes about ${need.toFixed(0)} more doublings, ~${num(target)} games` + (perDay > 0 ? ` (~${num((target - lc.n) / perDay)} days of crawling at today's rate, while patches change every two weeks)` : "") + ". Gains have to come from better inputs too, not volume alone.");
+  }
+  const exp = ((R["Player experience"] || [])[0] || { rows: [] }).rows.find(r => r.source === "history" && /user/.test(r.players));
+  if (exp) {
+    const d = pmIn(exp.difference), bins = String(exp["effect per bin (pp)"] || "").split(/\s+/).map(Number).filter(isFinite);
+    if (d && Math.abs(d.mean) <= d.ci) {
+      L.push(`Knowing how many games the player has on the champion doesn't improve the prediction yet (${pmText(d)}).` +
+        (bins.length && bins.every(b => b > 0) ? " Every experience band shows a positive effect against unknown players, which fits selection (crawled players come from the current ladder, where winners sit) better than skill." : ""));
+    }
+  }
+  const gold = ((R["Lane gold at 14 minutes"] || [])[0] || { rows: [] }).rows;
+  const g = gold.find(r => /lane gold \(stacked\)/.test(r[Object.keys(r)[0]])), eb = gold.find(r => /empirical/.test(r[Object.keys(r)[0]]));
+  if (g && eb) L.push(`Adding typical lane gold at 14 min (from timelines) to the draft: accuracy ${g.accuracy} vs ${eb.accuracy}, log loss ${g["log loss"]} vs ${eb["log loss"]}.`);
+  return out;
+}
+
+// Learning curve on fixed test games: log loss by train size, slope per doubling over
+// the largest four sizes
+function learningCurve(R) {
+  const t = (R["Learning curve"] || [])[0];
+  if (!t || t.rows.length < 3) return null;
+  const rows = t.rows.map(r => ({ n: numIn(r["train games"]), r }));
+  const pts = rows.slice(-4).map(x => [Math.log2(x.n), numIn(x.r["base only"])]);
+  return { t, rows, perDoubling: -slope(pts), last: pts[pts.length - 1][1], n: rows[rows.length - 1].n };
+}
+
+function winView(body) {
+  const ev = tsv(D.eval);
+  const W = winReadings();
+  const running = L && L.running && L.running.eval;
+  const head = actionButton("eval-run", running ? `Eval running (${span(nowS() - running)})` : "Run eval now", { disabled: !!running || !L, confirm: "Run meiolol eval now? About 10 minutes at low priority on the box." });
+  const learnt = section(body, "What we learnt", "Final findings for predicting the winner (docs/learned.md).");
+  learnedList(learnt, MODELS.learned.win);
+  runFindings(learnt, "win");
+  const sec = section(body, "Best model against the baseline", ev.length ? `Daily eval (docs/model.md), newest ${ev[ev.length - 1].date}: models built from older games, scored on the newest EUW games they never saw.` : "Daily eval (docs/model.md).", head);
+  if (!W) { sec.append(el("p", { class: "muted" }, "No eval report yet.")); return; }
+  sec.append(el("ul", { class: "readings" }, ...W.lines.map(t => el("li", {}, t))));
+  const g = grid(sec);
+  const cmp = W.rows.filter(r => r.d && r !== W.current);
+  if (cmp.length) {
+    intervalChart(g, {
+      title: "Each model against the one the site uses", left: "better", right: "worse",
+      fmt: v => (v > 0 ? "+" : "") + (+v.toFixed(4)).toString(),
+      rows: cmp.map(r => ({ label: r.label, value: r.d.mean, ci: r.d.ci, color: r.d.mean + r.d.ci < 0 ? PALETTE[2] : r.d.mean - r.d.ci > 0 ? PALETTE[1] : null })),
+      caption: `Log loss per game against the shipped model on the same ${num(W.games)} games, with 95% intervals. Green: better beyond noise.`,
+    });
+  }
+  const lc = learningCurve(reportTables(D.eval_report));
+  if (lc) {
+    const cols = lc.t.head.filter(h => !/train games|AUC/.test(h));
+    chart(g, {
+      id: "learning-curve", title: "Does more data help? Same test games, more training games", type: "line", fit: true,
+      x: lc.rows.map(x => Math.log2(x.n)), xFmt: v => num(Math.pow(2, v)) + " games",
+      xTicks: (a, b, w) => lc.rows.filter((_, i) => i % Math.max(1, Math.ceil(lc.rows.length / Math.max(2, Math.floor(w / 70)))) === 0).map(x => [Math.log2(x.n), num(x.n)]),
+      fmt: v => v == null ? "–" : v.toFixed(4),
+      series: cols.map((c, i) => ({ name: c, color: PALETTE[i % PALETTE.length], values: lc.rows.map(x => numIn(x.r[c])) })),
+      ref: { value: LL_COIN, label: "coin flip" },
+      caption: "Log loss, lower is better. Each point doubles the training games; the test games stay the same, so this is the honest accuracy-by-data curve.",
+    });
+  }
+  if (ev.length > 1) {
     const ex = ev.map((_, i) => i);
     const evFmt = i => ev[i] ? `${ev[i].date}, ${num(ev[i].games)} games` : "";
     const evTicks = (a, b, w) => {
       const every = Math.max(1, Math.ceil(ev.length / Math.max(2, Math.floor(w / 90))));
       return ev.map((r, i) => [i, num(r.games)]).filter((_, i) => i % every === 0);
     };
-    const models = [["base", "base"], ["current", "current"], ["eb", "shrunk"], ["joint", "joint"]];
+    const rel = k => ev.map(r => r["ll_" + k] == null || r.ll_base == null ? null : r["ll_" + k] - r.ll_base);
     chart(g, {
-      x: ex, title: "AUC by games used", type: "line", fit: true, xFmt: evFmt, xTicks: evTicks, fmt: v => v == null ? "–" : v.toFixed(3),
-      series: models.map(([k, name], i) => ({ name, color: PALETTE[i], values: ev.map(r => r["auc_" + k]) })),
+      x: ex, id: "eval-vs-base", title: "Run by run: each model against champion win rates", type: "line", fit: true, xFmt: evFmt, xTicks: evTicks,
+      fmt: v => v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(4),
+      series: [["current", "site's model"], ["eb", "shrunk priors"], ["joint", "joint ratings"], ["tunedw", "tuned + weights"]]
+        .map(([k, name], i) => ({ name, color: PALETTE[i], values: rel(k) })).filter(s => s.values.some(v => v != null)),
+      ref: { value: 0, label: "champion win rates" },
+      caption: "Below the line beats champion win rates. Each run holds out a different, growing set of games, so raw scores across runs don't compare; differences on the same games do.",
     });
-    chart(g, {
-      x: ex, title: "Log loss by games used", type: "line", fit: true, xFmt: evFmt, xTicks: evTicks, fmt: v => v == null ? "–" : v.toFixed(4),
-      series: models.map(([k, name], i) => ({ name, color: PALETTE[i], values: ev.map(r => r["ll_" + k]) })),
-      caption: "Coin flip is 0.6931; lower is better.",
-    });
-    const d = el("details", {}, el("summary", {}, `Every run (${ev.length})`));
-    sec.append(d);
-    table(d, "eval-runs", [
-      { key: "date", label: "Date" }, { key: "games", label: "Games", num: true }, { key: "test", label: "Test", num: true },
-      ...models.map(([k, name]) => ({ key: "auc_" + k, label: "AUC " + name, num: true, fmt: v => v == null ? "–" : v.toFixed(4) })),
-      { key: "ll_coin", label: "Coin log loss", num: true, fmt: v => v == null ? "–" : v.toFixed(4) },
-    ], ev.map((r, i) => ({ ...r, i })), { sort: { key: "i", dir: "desc" } });
-  } else sec.append(el("p", { class: "muted" }, "No eval runs yet."));
-  if (D.eval_report) {
-    const r = section(body, "Latest eval report", "data/eval-latest.md from the newest run.");
-    r.append(el("div", { class: "card report" }, markdown(D.eval_report)));
+    const picks = ev.map(r => r.pick_top10_win ?? null);
+    if (picks.some(v => v != null)) {
+      chart(g, {
+        x: ex, id: "eval-picks", title: "Win rate of the site model's top-10% picks", type: "line", fit: true, xFmt: evFmt, xTicks: evTicks,
+        fmt: v => v == null ? "–" : pct(v), series: [{ name: "top-10% picks", color: PALETTE[2], values: picks }],
+        ref: { value: 0.5, label: "50%" },
+      });
+    }
   }
-};
+  const d = el("details", {}, el("summary", {}, "Full eval report (for model work)"));
+  if (D.eval_report) d.append(el("div", { class: "report" }, markdown(D.eval_report)));
+  sec.append(d);
+  const r = el("details", {}, el("summary", {}, `Every eval run (${ev.length})`));
+  table(r, "eval-runs", [
+    { key: "date", label: "Date" }, { key: "games", label: "Games", num: true }, { key: "test", label: "Held out", num: true },
+    { key: "ll_base", label: "Win rates", num: true, fmt: v => v == null ? "–" : v.toFixed(4) },
+    { key: "ll_current", label: "Site model", num: true, fmt: v => v == null ? "–" : v.toFixed(4) },
+    { key: "ll_eb", label: "Shrunk", num: true, fmt: v => v == null ? "–" : v.toFixed(4) },
+  ], ev.map((x, i) => ({ ...x, i })), { sort: { key: "i", dir: "desc" } });
+  sec.append(r);
+}
 
-// ---------- training ----------
+// ---------- models: early game ----------
+
+// docs/model.md "Team effects on early outcomes": % of the outcome's variation each part
+// of the draft explains beyond the parts above it
+function teamEffects() {
+  const R = reportTables(MODELS.modelMd);
+  const key = Object.keys(R).find(k => /^Team effects on early outcomes/.test(k));
+  const t = key && R[key].find(x => x.head[0] === "step");
+  return t ? { title: key, t } : null;
+}
+
+function earlyView(body) {
+  const learnt = section(body, "What we learnt", "Final findings on the first 15 minutes: gold, CS, deaths, first item (docs/learned.md).");
+  learnedList(learnt, MODELS.learned.early);
+  runFindings(learnt, "early");
+  const sec = section(body, "Best model against the baseline", "How much of each early-game number the draft explains beyond champion averages.");
+  const te = teamEffects();
+  if (te) {
+    const outs = te.t.head.slice(1);
+    if (!outs.includes(ui.outcome)) ui.outcome = outs.includes("lanediff14") ? "lanediff14" : outs[0];
+    const pick = el("nav", { class: "cats", "aria-label": "Outcome" });
+    for (const o of outs) pick.append(el("button", { type: "button", "aria-pressed": String(o === ui.outcome), onclick: () => { ui.outcome = o; store("outcome", o); render(true); } }, (OUTCOMES[o] || [o])[0]));
+    sec.append(pick);
+    const rows = te.t.rows.filter(r => !/^total/.test(r.step)).map(r => ({ label: r.step.replace(/^\+ /, ""), ...(pmIn(r[ui.outcome]) || { mean: 0, ci: 0 }) }));
+    const total = te.t.rows.find(r => /^total/.test(r.step));
+    const tot = total && pmIn(total[ui.outcome]);
+    const top = rows.slice().sort((a, b) => b.mean - a.mean)[0];
+    const name = (OUTCOMES[ui.outcome] || [ui.outcome])[0].toLowerCase();
+    const lines = [];
+    if (tot) lines.push(`Who is in the game explains ${tot.mean.toFixed(1)}% (± ${tot.ci.toFixed(1)}) of the differences in ${name} beyond each champion's average. The rest is the game itself: players, decisions, luck.`);
+    if (top) lines.push(`The biggest single part: ${top.label} (${top.mean.toFixed(1)}%).`);
+    const nothing = rows.filter(r => Math.abs(r.mean) <= r.ci).map(r => r.label);
+    if (nothing.length) lines.push(`Adds nothing measurable: ${nothing.join("; ")}.`);
+    sec.append(el("ul", { class: "readings" }, ...lines.map(t => el("li", {}, t))));
+    const g = grid(sec);
+    intervalChart(g, {
+      title: `What each part of the draft adds to ${name}`, right: "explains more", fmt: v => (+v.toFixed(2)).toString() + "%",
+      rows: rows.map(r => ({ label: r.label, value: r.mean, ci: r.ci })),
+      caption: `% of the variation in ${name} explained, each part on top of the ones above it, 95% intervals (docs/model.md, "${te.title}"). Blue: clear of zero.`,
+    });
+    labBest(g, Object.keys(OUTCOMES).filter(k => CAT_OF_TARGET[k] === "early"));
+  } else {
+    sec.append(el("p", { class: "muted" }, MODELS.modelMd == null ? "Loading docs/model.md…" : "No team effects table in docs/model.md yet."));
+    labBest(grid(sec), Object.keys(OUTCOMES).filter(k => CAT_OF_TARGET[k] === "early"));
+  }
+  runsBlock(body, MODELS.runs.filter(r => r.cat === "early"));
+}
+
+// The best lab run per target (practice games, `exp run`), as a dot chart
+function labBest(parent, targets) {
+  const best = {};
+  for (const r of MODELS.runs) {
+    // ci 0: a reference run scoring the baseline against itself
+    if (!r.res || r.res.kind !== "run" || !r.res.dev || !r.res.dev.ci || !targets.includes(r.target)) continue;
+    const b = best[r.target];
+    if (!b || r.res.dev.mean < b.res.dev.mean) best[r.target] = r;
+  }
+  const rows = targets.filter(t => best[t]).map(t => ({ label: `${OUTCOMES[t][0]}: ${best[t].campaign || shortRun(best[t].run)}`, value: -best[t].res.dev.mean * 100, ci: best[t].res.dev.ci * 100 }));
+  if (!rows.length) return;
+  intervalChart(parent, {
+    title: "Best lab model so far, per outcome", right: "less error", fmt: v => (+v.toFixed(1)).toString() + "%",
+    rows, caption: "Error removed against champion averages on the lab's practice games (not the final test), 95% intervals. Lab runs are listed below.",
+  });
+}
+
+// ---------- models: lab campaigns ----------
+
+function labView(body) {
+  const sec = section(body, "Lab campaigns", "Each campaign is an agent improving one model inside the lab's rules (docs/lab-agent.md): ideas it tried, what held up.");
+  if (!MODELS.campaigns.length) sec.append(el("p", { class: "muted" }, "No campaigns yet."));
+  for (const c of MODELS.campaigns) {
+    const card = el("div", { class: "card campaign" }, el("h3", {}, c.name));
+    sec.append(card);
+    const runs = MODELS.runs.filter(r => r.campaign === c.name);
+    const newBest = runs.filter(r => r.res && r.res.select === "new-best");
+    card.append(el("p", { class: "sub" }, `${runs.length} runs, ${newBest.length} confirmed improvement${newBest.length === 1 ? "" : "s"} on held-back games.`));
+    if (c.hyp && c.hyp.length) {
+      const ul = el("ul", { class: "hyps" });
+      for (const h of c.hyp) {
+        const st = (h.status || "").toLowerCase();
+        ul.append(el("li", {}, el("span", { class: "pill " + (st === "confirmed" ? "good" : st === "rejected" || st === "parked" ? "warn" : "") }, h.status || "?"), " ", h.hypothesis || ""));
+      }
+      card.append(ul);
+    }
+    if (c.digest && c.digest.split("\n").filter(l => l.trim() && !/^#|^What worked/.test(l)).length) {
+      const d = el("details", {}, el("summary", {}, "Digest"), markdown(c.digest));
+      card.append(d);
+    }
+  }
+  runsBlock(body, MODELS.runs.filter(r => r.lab));
+}
+
+// ---------- models: run findings ----------
+
+// A run's findings.tsv (campaign, finding, effect_file, category; meiolol-lab) and the
+// effect files it names: "# title | unit | what higher means", then label, effect, ci, n
+async function loadFindings(runs) {
+  for (const r of runs) {
+    const key = r.run + "|" + r.state + "|" + r.ended;
+    if (MODELS.findings.get(r.run)?.key === key) continue;
+    const base = "training/runs/" + encodeURIComponent(r.run) + "/";
+    const rows = tsvRaw(await getText(base + "findings.tsv").catch(() => ""));
+    for (const f of rows) {
+      if (!f.effect_file) continue;
+      const text = await getText(base + encodeURIComponent(f.effect_file.split("/").pop())).catch(() => null);
+      if (!text) continue;
+      const lines = text.split("\n");
+      const meta = lines[0].startsWith("#") ? lines.shift().slice(1).split("|").map(x => x.trim()) : [];
+      f.effect = { title: meta[0] || f.effect_file, unit: meta[1] || "", higher: meta[2] || "", rows: tsvRaw(lines.join("\n")).map(x => ({ label: x.label, value: +x.effect, ci: +x.ci || 0, n: +x.n || null })).filter(x => isFinite(x.value)) };
+    }
+    MODELS.findings.set(r.run, { key, rows });
+  }
+}
+
+// Findings from runs in a category, newest first, each with its effect chart
+function runFindings(parent, cat) {
+  const out = [];
+  for (const r of MODELS.runs) {
+    const f = MODELS.findings.get(r.run);
+    if (!f) continue;
+    for (const x of f.rows) if ((x.category ? x.category.toLowerCase().replace(/ game$/, "") : r.cat) === cat || (x.category || "").toLowerCase() === CATS.find(c => c[0] === cat)?.[1].toLowerCase()) out.push({ r, x });
+  }
+  if (!out.length) return;
+  parent.append(el("h3", { class: "subhead" }, "From recent runs"));
+  parent.append(el("ul", { class: "readings" }, ...out.map(({ r, x }) => el("li", {}, x.finding || "", el("span", { class: "sub" }, ` (${x.campaign || r.campaign || shortRun(r.run)}, ${uk(Date.parse(r.started) / 1000)})`)))));
+  const g = grid(parent);
+  for (const { x } of out) {
+    const e = x.effect;
+    if (!e || !e.rows.length) continue;
+    let rows = e.rows.slice().sort((a, b) => b.value - a.value);
+    // Long lists: the ten largest and ten smallest
+    if (rows.length > 20) rows = [...rows.slice(0, 10), { label: "…", value: 0, gap: true }, ...rows.slice(-10)];
+    intervalChart(g, {
+      title: e.title, right: e.higher || null, fmt: v => (+v.toPrecision(3)).toString() + (e.unit ? " " + e.unit : ""), rows,
+      caption: `95% intervals${e.rows.length > 20 ? `; top and bottom 10 of ${e.rows.length}` : ""}. Blue: clear of zero.`,
+    });
+  }
+}
+
+// ---------- models: shell ----------
+
+const MODELS = { learned: {}, modelMd: null, campaigns: [], runs: [], findings: new Map() };
+
+function modelsData() {
+  MODELS.runs = TRAIN ? TRAIN.runs.map(runInfo) : [];
+  return MODELS;
+}
+
+// Model runs as cards; the lab's checks (diagnose, screen, preds) folded under them
+function runsBlock(body, all) {
+  const isCheck = r => r.res && r.res.kind !== "run";
+  const runs = all.filter(r => !isCheck(r)), checks = all.filter(isCheck);
+  const sec = section(body, "Runs", runs.length ? "Newest first. Pick one to see its health below." : null);
+  if (checks.length) {
+    const d = el("details", {}, el("summary", {}, `Checks and screens (${checks.length}): where models are off, which inputs look useful`));
+    d.append(el("ul", { class: "readings checks" }, ...checks.slice(0, 40).map(r => el("li", {}, el("b", {}, shortRun(r.run)), ` (${r.host === "gpu-box" ? "gpu-box" : "Mac"}, ${uk(Date.parse(r.started) / 1000)}): `, runSentence(r)))));
+    sec.append(d);
+  }
+  if (!runs.length) { sec.append(el("p", { class: "muted" }, "No model runs in this category yet.")); return; }
+  const gpu = TRAIN && TRAIN.hosts && TRAIN.hosts["gpu-box"];
+  if (gpu && nowS() - gpu > 1800 && runs.some(r => r.host === "gpu-box")) {
+    sec.append(el("div", { class: "health bad" }, el("b", {}, `gpu-box last reached ${ago(gpu)}: `), "its runs below may be out of date (the Mac reaches it on the home network only)."));
+  }
+  if (!ui.run || !runs.some(r => r.run === ui.run)) ui.run = runs[0].run;
+  const list = el("div", { class: "runcards" });
+  for (const r of runs.slice(0, 24)) {
+    const started = Date.parse(r.started) / 1000;
+    const state = r.synthetic ? "synthetic" : runState(r.state);
+    list.append(el("button", { type: "button", class: "run", "aria-current": r.run === ui.run ? "true" : null, onclick: () => { ui.run = r.run; render(true); } },
+      el("span", { class: "top" }, el("b", {}, shortRun(r.run)), el("span", { class: "pill " + (r.synthetic ? "warn" : runClass(r.state)) }, state)),
+      el("span", { class: "sub" }, [r.host === "gpu-box" ? "gpu-box" : "Mac", r.target && OUTCOMES[r.target] ? OUTCOMES[r.target][0] : null, isFinite(started) ? uk(started) : null].filter(Boolean).join(" · ")),
+      el("span", { class: "finding" }, runSentence(r))));
+  }
+  sec.append(list);
+  if (runs.length > 24) sec.append(el("p", { class: "sub" }, `${runs.length - 24} older runs not shown.`));
+  const health = el("details", { class: "health-block" }, el("summary", {}, `Run health: ${shortRun(ui.run)} (curves, log)`));
+  sec.append(health);
+  const detail = el("div", { class: "detail" });
+  health.append(detail);
+  runDetail(detail, runs.find(r => r.run === ui.run));
+}
+
+function categoryView(body, cat) {
+  const learnt = section(body, "What we learnt", "Final findings (docs/learned.md).");
+  learnedList(learnt, MODELS.learned[cat]);
+  runFindings(learnt, cat);
+  const runs = MODELS.runs.filter(r => r.cat === cat);
+  const targets = Object.keys(OUTCOMES).filter(k => CAT_OF_TARGET[k] === cat);
+  if (targets.length) labBest(grid(section(body, "Best model against the baseline", null)), targets);
+  runsBlock(body, runs);
+}
+
+function allView(body) {
+  const sec = section(body, "What we learnt", "The newest findings per category (docs/learned.md); open a category for its evidence, best model and runs.");
+  const cards = grid(sec, "cards");
+  const W = winReadings();
+  const te = teamEffects();
+  for (const [cat, label] of CATS.slice(1)) {
+    const items = MODELS.learned[cat] || [];
+    const runs = MODELS.runs.filter(r => (cat === "lab" ? r.lab : r.cat === cat));
+    const live = runs.filter(r => r.state === "running" || r.state === "paused").length;
+    const card = el("button", { type: "button", class: "card catcard", onclick: () => setCat(cat) }, el("h3", {}, label));
+    if (cat === "win" && W && W.best) card.append(el("p", { class: "headline" }, `Best model right ${pct(W.best.acc)} of the time (coin flip 50%).`));
+    if (cat === "early" && te) {
+      const tot = te.t.rows.find(r => /^total/.test(r.step));
+      const v = tot && pmIn(tot.lanediff14);
+      if (v) card.append(el("p", { class: "headline" }, `The draft explains ${v.mean.toFixed(1)}% of lane gold leads at 14 min beyond champion averages.`));
+    }
+    if (cat === "lab") card.append(el("p", { class: "headline" }, `${MODELS.campaigns.length} campaign${MODELS.campaigns.length === 1 ? "" : "s"}.`));
+    if (items.length) learnedList(card, items, 2, true);
+    else if (cat !== "lab") card.append(el("p", { class: "muted" }, "Nothing final yet."));
+    card.append(el("p", { class: "sub" }, `${runs.length} run${runs.length === 1 ? "" : "s"}` + (live ? `, ${live} running` : "") + (items.length > 2 ? ` · ${items.length} findings` : "")));
+    cards.append(card);
+  }
+  const live = MODELS.runs.filter(r => r.state === "running" || r.state === "paused");
+  if (live.length) runsBlock(body, live);
+}
+
+function setCat(cat) {
+  ui.cat = cat;
+  store("cat", cat);
+  history.replaceState(null, "", "#models/" + cat);
+  render();
+  window.scrollTo(0, 0);
+}
+
+VIEWS.models = body => {
+  modelsData();
+  const nav = el("nav", { class: "cats", "aria-label": "Model categories" });
+  for (const [k, label] of CATS) {
+    nav.append(el("button", { type: "button", "aria-pressed": String(k === ui.cat), onclick: () => setCat(k) }, label));
+  }
+  body.append(nav);
+  if (!TRAIN && !trainErr) body.append(el("p", { class: "muted" }, "Loading runs and findings…"));
+  if (trainErr) body.append(el("div", { class: "health bad" }, el("b", {}, "Could not load the training view: "), trainErr));
+  ({ all: allView, win: winView, early: earlyView, lab: labView }[ui.cat] || (b => categoryView(b, ui.cat)))(body);
+};
 
 const shortRun = run => (run || "").replace(/^\d{8}T\d{4}Z-/, "");
 const runState = s => s === "exit 0" ? "finished" : /^exit/.test(s) ? `failed (${s})` : s;
 const runClass = s => s === "exit 0" ? "good" : /^exit|died/.test(s) ? "bad" : s === "paused" ? "warn" : s === "running" ? "live" : "";
-
-VIEWS.training = body => {
-  const sec = section(body, "Training runs", TRAIN && TRAIN.pushed ? `The Mac's lab runs (deploy/lab-push.sh), sent ${ago(TRAIN.pushed)}.` : "The Mac's lab runs (deploy/lab-push.sh).");
-  if (!TRAIN) { sec.append(el("p", { class: "muted" }, trainErr ? `Could not load training/: ${trainErr}` : "Loading…")); return; }
-  if (!TRAIN.runs.length) { sec.append(el("p", { class: "muted" }, "No runs yet. Start one with deploy/lab-run.sh start mac NAME -- ARGS.")); return; }
-  const live = TRAIN.runs.some(r => r.state === "running" || r.state === "paused");
-  if (live && TRAIN.pushed && nowS() - TRAIN.pushed > 600) sec.append(el("div", { class: "health bad" }, el("b", {}, "No upload for " + span(nowS() - TRAIN.pushed) + ": "), "the Mac may be asleep or offline."));
-  if (!ui.run || !TRAIN.runs.some(r => r.run === ui.run)) ui.run = TRAIN.runs[0].run;
-  const layout = el("div", { class: "split" });
-  sec.append(layout);
-  const list = el("div", { class: "runs" });
-  for (const r of TRAIN.runs) {
-    const started = Date.parse(r.started) / 1000;
-    const ended = r.ended ? Date.parse(r.ended) / 1000 : null;
-    list.append(el("button", { type: "button", class: "run", "aria-current": r.run === ui.run ? "true" : null, onclick: () => { ui.run = r.run; render(true); } },
-      el("span", { class: "top" }, el("b", {}, shortRun(r.run)), el("span", { class: "pill " + runClass(r.state) }, runState(r.state))),
-      el("span", { class: "sub" }, `${isFinite(started) ? uk(started) : "–"}, ${span((ended || nowS()) - started)}`),
-      r.last ? el("span", { class: "sub last" }, r.last) : null));
-  }
-  const detail = el("div", { class: "card detail" });
-  layout.append(list, detail);
-  runDetail(detail, TRAIN.runs.find(r => r.run === ui.run));
-};
 
 async function runDetail(box, r) {
   const started = Date.parse(r.started) / 1000;
@@ -1496,7 +2049,8 @@ function logViewer(parent) {
 // ---------- start ----------
 
 window.addEventListener("hashchange", () => {
-  const t = location.hash.slice(1).split("/")[0];
+  const [t, sub] = hashTab();
+  if (t === "models" && sub && sub !== ui.cat) { ui.cat = sub; if (t === ui.tab) render(); }
   if (TABS.some(([k]) => k === t) && t !== ui.tab) setTab(t);
 });
 window.addEventListener("keydown", ev => {
@@ -1514,5 +2068,5 @@ pollTraining();
 setInterval(() => { if (!document.hidden) pollLive(); }, LIVE_MS);
 setInterval(() => { if (!document.hidden) pollSnapshot(); }, SNAPSHOT_MS);
 setInterval(() => { if (!document.hidden) pollTraffic(); }, TRAFFIC_MS);
-setInterval(() => { if (!document.hidden && (ui.tab === "training" || ui.tab === "overview")) pollTraining(); }, TRAINING_MS);
+setInterval(() => { if (!document.hidden && (ui.tab === "models" || ui.tab === "overview")) pollTraining(); }, TRAINING_MS);
 setInterval(renderStatus, 5000);

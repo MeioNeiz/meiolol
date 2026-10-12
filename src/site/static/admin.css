@@ -233,3 +233,34 @@ button.run .sub { font-size: 12px; overflow-wrap: anywhere; }
   .tile b { font-size: 19px; }
   header.top .controls { margin-left: 0; }
 }
+
+/* Models tab: categories, plain readings, run cards, interval charts */
+nav.cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+nav.cats button {
+  font: inherit; font-size: 13px; color: var(--muted); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 12px; cursor: pointer;
+}
+nav.cats button:hover { color: var(--text); }
+nav.cats button[aria-pressed="true"] { color: var(--text); border-color: var(--accent); background: var(--panel-2); }
+ul.readings { margin: 0 0 14px; padding-left: 20px; display: grid; gap: 6px; max-width: 900px; }
+ul.readings li { line-height: 1.5; }
+.md.learned ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 900px; }
+.md.learned del { color: var(--faint); }
+button.card.catcard { font: inherit; color: inherit; text-align: left; cursor: pointer; display: block; width: 100%; }
+button.card.catcard:hover { border-color: var(--axis); background: var(--panel-2); }
+.catcard .headline { margin: 0 0 6px; font-weight: 600; }
+.catcard .md.learned ul { font-size: 13px; }
+.catcard p.sub { margin: 8px 0 0; }
+.runcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 8px; }
+button.run .finding { font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+details.health-block .detail { min-width: 0; }
+.ichart .plot text.label { fill: var(--text); font-size: 12px; }
+.ichart .plot text.end { fill: var(--faint); font-size: 11px; }
+.ichart .plot line.whisker { stroke-width: 2; stroke-linecap: round; }
+.card.campaign { margin-top: 10px; }
+ul.hyps { margin: 6px 0 0; padding-left: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; overflow-wrap: anywhere; }
+.report table { width: auto; }
+button.card.catcard { display: flex; flex-direction: column; justify-content: flex-start; }
+.catcard .sub:last-child { margin-top: auto; padding-top: 8px; }
+ul.readings.checks { font-size: 13px; margin-top: 4px; }
+h3.subhead { margin: 16px 0 6px; }

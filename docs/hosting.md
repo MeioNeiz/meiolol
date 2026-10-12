@@ -74,8 +74,9 @@ The static upload leaves out matchup pages under 200 games (`meiolol site
   try_files, then `@render` (upstream meiolol_render: the box twice, for the retry): proxy cache /var/cache/nginx/meiolol (2 GB, key $uri), 200s
   10 min, 404s 1 min, stale copies while the box is down or refreshing, one render per
   page under a burst. Header X-Meiolol-Render: HIT, MISS, STALE, UPDATING
-- Training view (/admin/training/, same basic auth as /admin/): the Mac's lab runs,
-  uploaded by deploy/lab-push.sh (launchd, every 30 s when changed). Served from
+- Training view (/admin/training/, same basic auth as /admin/; data for the admin Models
+  tab): lab runs of the Mac and the gpu-box (staged over ssh, home network only), learned.md,
+  model.md, campaigns, uploaded by deploy/lab-push.sh (launchd, every 30 s when changed). Served from
   /var/www/meiolol-training/current (symlink; outside /var/www/meiolol, whose uploads
   --delete). Mac key ~/.ssh/meiolol-training, in user meiolol's authorized_keys with forced
   command /usr/local/bin/meiolol-training-receive (deploy/training-receive.sh, reinstall

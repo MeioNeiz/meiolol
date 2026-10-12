@@ -15,11 +15,16 @@ Copy of the box DB without touching the live one (python3 on the box, read-only 
 The box runs it daily (deploy/web-loop.sh, ~9 min) into data/eval-history.tsv. Watch it
 from here: `deploy/box.sh model [ROWS] [-f]` (run state, AUC sparklines per model, last
 runs with the best log loss vs coin flip; -f redraws every minute). Charts and the latest
-report: the admin page's Model tab.
+report: the admin page's Models tab (https://meiolol.jomify.lol/admin/#models/win).
 
-Training runs on the Mac (deploy/lab-run.sh start mac ...) show live in the admin page's
-Training tab (https://meiolol.jomify.lol/admin/#training; deploy/lab-push.sh,
-docs/hosting.md). A run reports progress by appending to metrics.tsv in its run directory
+Models tab: one category per docs/learned.md heading, each with what we learnt, the best
+model against its baseline, run cards (plain sentence from meiolol-lab's RESULT line or
+the run's findings.tsv) and run health. Runs of the Mac and the gpu-box (deploy/lab-run.sh)
+show live there via deploy/lab-push.sh (docs/hosting.md), which also sends learned.md,
+model.md (the team effects table), lab campaigns and run findings: findings.tsv with
+columns campaign, finding, effect_file, category; each effect file a first line
+`# title | unit | what higher means`, then a TSV of label, effect, ci (95% half-width), n.
+A run reports progress by appending to metrics.tsv in its run directory
 (the working directory): a header, then a row per evaluation, first column the x axis
 (step, epoch, games), the rest numbers.
 Columns sharing the part after the last `_` share a chart (`train_loss`, `test_loss`),
