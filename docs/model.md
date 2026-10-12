@@ -139,6 +139,66 @@ outcomes and readings decided by Jacob the same day.
   Other players' stats and end-of-game stats: training covariates or post-game lessons,
   never champ-select inputs
 
+### Team effects on early outcomes, 2026-10-12 (meiolol-3c)
+
+`meiolol outcomes --data SNAP --platform all --preds DIR` (src/outcomes.zig) on
+snap-20261012T2055Z. Train 117,806 games, test 10,604 EUW1 games (rows above, with the
+game reaching 15:00: frames[15] at 900000 ms or later), ten rows per game.
+
+Additive models, each group of effects fitted in turn on the others' residual
+(backfitting) and shrunk toward 0 by a method-of-moments prior per group and role;
+outcomes standardised per role on train. Groups: platform; champion; lane opponent
+(own champion x opponent); bot lane partners (bottom and support, ally and enemy);
+junglers (for laners); the rest of both teams; own class x enemy class counts (Data
+Dragon first tag); own champion x enemy class counts; own champion x each non-lane
+enemy champion. Train-time and use-time features: champions and roles only (all
+champ-select legal). Preds: data/preds/snap-20261012T2055Z/ (base-champrole, 3c-*).
+
+Gains are % of the champion-role-mean test MSE removed by each step over the one
+before it, ± 95% interval clustered by game:
+
+| step | gold14 | lanediff14 | cs10 | deaths15 | first_item |
+| --- | --- | --- | --- | --- | --- |
+| platform + champion (shrunk) | 0.13 ± 0.04 | 0.03 ± 0.02 | 2.26 ± 0.16 | 0.18 ± 0.06 | 0.27 ± 0.06 |
+| + lane opponent | 1.13 ± 0.15 | 3.47 ± 0.26 | 2.94 ± 0.21 | 1.62 ± 0.16 | 0.97 ± 0.13 |
+| + bot lane partners | 0.80 ± 0.11 | 0.64 ± 0.13 | 0.94 ± 0.12 | 0.70 ± 0.10 | 0.52 ± 0.10 |
+| + junglers | 0.23 ± 0.06 | 0.17 ± 0.06 | 0.06 ± 0.04 | 0.32 ± 0.08 | 0.06 ± 0.03 |
+| + rest of both teams | 0.32 ± 0.08 | 0.24 ± 0.09 | 0.36 ± 0.09 | 0.78 ± 0.13 | 0.09 ± 0.05 |
+| total, additive (3c-team) | 2.61 ± 0.22 | 4.55 ± 0.33 | 6.55 ± 0.31 | 3.60 ± 0.27 | 1.90 ± 0.19 |
+| + own class x enemy classes | 0.03 ± 0.02 | 0.06 ± 0.04 | -0.00 ± 0.03 | 0.04 ± 0.03 | 0.02 ± 0.02 |
+| + own champion x enemy classes | -0.02 ± 0.02 | -0.01 ± 0.02 | -0.03 ± 0.03 | -0.03 ± 0.03 | -0.04 ± 0.03 |
+| + own champion x enemy champion (on 3c-team) | 0.00 ± 0.01 | 0.00 ± 0.00 | -0.02 ± 0.04 | 0.00 ± 0.00 | 0.00 ± 0.01 |
+
+Test RMSE, champion-role mean -> 3c-team, by role (top, jungle, mid, bot, support):
+gold14 898/784/820/982/567 -> 884/779/810/965/560 gold; lanediff14
+1586/1201/1359/1647/807 -> 1551/1180/1330/1612/780 gold; cs10 13.0/9.8/11.8/11.6/4.8 ->
+12.4/9.4/11.4/11.3/4.7; deaths15 1.8/1.5/1.7/1.8/1.7 -> 1.8/1.5/1.7/1.7/1.7; first_item
+2.4/1.7/1.9/2.0/2.5 -> 2.3/1.7/1.9/2.0/2.5 minutes. Most of the spread is the game itself, not
+the draft.
+
+Spread of true effects (sd of shrunk-model effects, gold at 14): own champion 270-360;
+lane opponent 74-196 (27 jungle vs jungle); bot partners 100-180 for bottom and support;
+a jungler 20-65; anyone else 15-50 per champion; own class x enemy classes 0-33; own
+champion x enemy classes 0-46 (2 of 5 roles), own champion x enemy champion 0-21 (off
+in 3 roles). Deaths before 15: lane 0.1-0.35, a jungler 0.1-0.17, anyone else
+0.04-0.11 per champion; interactions under 0.13.
+
+first_item censoring (no finished item by game end, games past 15:00): top 1.1%,
+support 1.3%, others 0.4% or less. Supports do finish a legendary in nearly every game,
+so their effects are usable.
+
+Reading:
+- Who is in the game matters beyond the lane: the bot lane partners, the junglers and
+  the other three each shift gold, CS, deaths and item timing, all clear of 0. Deaths
+  before 15 move most with the rest of the enemy team (0.78%, about half the lane's)
+- It is additive: the same enemy shifts everyone in a role about equally. "Your
+  champion against this enemy team" (by class or by champion) adds nothing detectable
+  at 118k games; the shrinkage switches most of it off. So today "vs the five" can be
+  shown as lane matchup plus the sum of each enemy's effect, not as a champion-specific
+  team counter. 2a's embedding and interaction models must beat 3c-team to show more
+- Gains are small in MSE terms (a lane matchup is ~1-3.5%) because one game's numbers
+  are mostly the game. They are real: intervals are a tenth of the gains
+
 ## Next steps
 
 - Experience term: rerun once the daily eval shows 300+ train and 100+ test games per
