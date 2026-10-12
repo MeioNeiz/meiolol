@@ -55,6 +55,14 @@ A run takes ~2 minutes. RESULT gives the dev gain vs the champion-role baseline 
 for `--select` the ladder's answer: `new-best` or `no-change`, never a number otherwise.
 50 selection looks per snapshot, shared with every other campaign.
 
+## Your starting point
+
+Your candidate starts as meiolol-3c's additive team model (src/lab/cand/team: champion,
+lane opponent, bot partners, junglers, rest of both teams, platform; shrunk, backfitted).
+RESULT's dev diff is against champion-role means, so first run the candidate unchanged
+(`run CAMPAIGN ref TARGET --hyp H0`): a change only counts if it beats that run's diff
+by more than its interval. Its win prediction is the baseline's: for win, add your own.
+
 ## How to work: Box's loop, not brute force
 
 1. **Diagnose** first: `diagnose` names slices where the current candidate is biased
@@ -103,5 +111,12 @@ stop and say so rather than working around it.
 
 - Win: nothing beats champion base rates at this volume (docs/model.md)
 - gold14: own rank helps (screen r 0.11, dev -0.0067 ± 0.0011); diagnose flags rank
-  tiers (higher ranks under-predicted); dev-val runs ~0.03 sd above its training games
-  (drift); dev-val is patch 16.20 only
+  tiers for champion-role means and for the team model alike
+- A 4-run probe from champion-role means: lane opponent effect, then own rank tier per
+  role: dev -0.017 ± 0.0016 on gold14; jungler effects and a time trend below mde
+- Level shifts on dev-val (EUW1 only, newer than its all-platform training games): for
+  cs10 it is region mix (the team model's platform term removes it); for gold14 the team
+  model keeps -0.022 ± 0.007 sd, about two thirds of which a per-patch offset removed
+  from champion-role means: a patch term is worth trying
+- Own rank is champ-select legal, but within Platinum+ it is partly "better players get
+  more gold": lesson material ("at your rank, expect X"), not a pick reason

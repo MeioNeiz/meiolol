@@ -9,12 +9,16 @@
 #   deploy/lab-agent.sh settings CAMPAIGN               print the session's permissions
 #
 # Env: LAB_CANDS (campaign dirs, ~/ml/agent), LAB_AGENT_USD (spend cap per session, 20),
-# LAB_AGENT_MODEL (default model when unset), plus lab-exp.sh's LAB_* settings
+# LAB_AGENT_FROM (starting candidate, team), LAB_AGENT_MODEL (default model when unset),
+# plus lab-exp.sh's LAB_* settings. Cost, measured 2026-10-12: $1.09 for a 4-run probe
+# (36 turns, 12 min); per run it grows with the session's context
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export LAB_CANDS=${LAB_CANDS:-$HOME/ml/agent}
 USD=${LAB_AGENT_USD:-20}
+# 3c-team: campaigns start from what's known, not from champion-role means
+FROM=${LAB_AGENT_FROM:-team}
 
 prompt() {
     local campaign=$1 target=$2 focus=${3:-}
@@ -66,7 +70,7 @@ campaign=$2 target=$3 focus=${4:-}
 case "$cmd" in
     prompt) prompt "$campaign" "$target" "$focus" ;;
     start)
-        "$ROOT/deploy/lab-exp.sh" new "$campaign"
+        "$ROOT/deploy/lab-exp.sh" new "$campaign" "$FROM"
         dir=$LAB_CANDS/$campaign
         settings "$dir" > "$dir/agent-settings.json"
         model=()
