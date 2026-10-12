@@ -1,6 +1,7 @@
 //! meiolol-b0's 3c-team2 (src/outcomes.zig) as a candidate, the start for early-outcome
-//! campaigns: src/lab/cand/team plus the lane opponent's own effect (fitted before the
-//! pair cell) and role x patch. Each continuous outcome is standardised per role, then
+//! campaigns: meiolol-3c's additive team model (champion, lane pair, bot partners,
+//! junglers, rest of both teams, platform) plus the lane opponent's own effect (fitted
+//! before the pair cell) and role x patch. Each continuous outcome is standardised per role, then
 //! groups of effects are fitted in turn on the residual of the others (backfitting, 12
 //! passes), each shrunk toward 0 with a prior strength from the method of moments per
 //! group and role (platform and patch unshrunk). Win: no opinion (scored as the baseline)
