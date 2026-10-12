@@ -28,13 +28,19 @@ How to write a line:
 - 2026-10-13: The same gold lead is worth more or less depending on the champions:
   at 25 minutes a team with Kayle top wins as often as an average team about 2,900
   gold further ahead, and a team with Pyke support as often as one about 2,600 gold
-  further behind. Gold on enchanter supports, Kayle, Aurelion Sol, Smolder and Jinx
-  counts for more than it shows; gold taken by Pyke, Camille or Sylas support, Draven,
-  Ezreal and Irelia counts for less. Sure: 118k games, better on held-out games at
-  every minute from 10 to 30; common picks known to about ±1-3 percentage points.
+  further behind. It holds at equal gold in every role and with the same objectives
+  taken, so it is the champion itself (late-game strength, fighting), not where the
+  gold sits. Sure: 118k games, better on held-out games at every minute from 10 to 30; common picks known to about ±1-3 percentage points.
   Site: lessons such as "on Kayle, 1,500 gold behind at 15 is par", with the
   interval; never a pick reason (who plays the champion isn't held fixed). Evidence:
   docs/model.md "Champion given the state (scaling)"
+- 2026-10-13: Gold on your support barely moves your team's chances: 1,000 gold more
+  on the support is worth 1-3 percentage points, against 6-12 on the bot laner, 4-11
+  on jungle and mid and 4-8 on top; the bot laner's gold counts most at every minute.
+  Sure: 118k games, better on held-out games at every minute from 15 to 30. Site:
+  lessons ("your bot laner's gold lead matters most"); post-game leads may be weighted
+  by role. Evidence: docs/model.md "Champion given the state (scaling)", who holds the
+  gold
 - 2026-10-13: We found no champion that is better at coming back from behind, or at
   closing out a lead, than at an even game: 2,000 gold behind at 15, a champion makes
   the same difference as at even. A champion's value beyond the gold mostly stays the

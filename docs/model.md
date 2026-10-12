@@ -572,11 +572,9 @@ Reading:
   state because their team's gold usually says something else: Kayle wins at an average
   rate overall (draft +0.4) while usually behind on gold, so at equal gold it wins far
   more
-- Two mechanisms show in the lists, not separated here: gold on low-gold or
-  late-scaling champions (enchanter supports, Kayle, Aurelion Sol, Smolder, Jinx) is
-  worth more than its count; gold taken by champions that convert kills into their own
-  gold early (Pyke, Camille and Sylas support, Draven, Ezreal, Irelia) is worth less.
-  The model sees team gold, not who holds it
+- Not who holds the gold: with gold by role in the state (below) the champion effects
+  barely move, so they are the champion's value at equal gold, not gold sitting on a
+  low-value role
 - Most of a champion's value beyond the state is the same at every minute (one effect
   for 10-30 gets 85-95% of the gain); a real but small scaling curve on top (+0.0001-0.0003
   nats at 10, 20, 25). Bottom laners' spread grows with the game (3.7 at 10 to 8.5 at
@@ -587,6 +585,48 @@ Reading:
   ~2 pp per 1000 gold (jungle 10-20); a bootstrap over games would give a real bound
 - Descriptive: who picks the champion and the rest of their team are not held fixed.
   Lesson material with intervals, never a pick reason
+
+Who holds the gold, and objectives (sensitivity, 2026-10-13). `--state roles` replaces
+the team gold lead with the gold lead at each role (plus the team curve term and XP);
+`--slope own` makes the champion's slope its own gold minus its lane opponent's (is gold
+on this champion worth more than on others in the role?). `--state objectives` uses
+objectives' lead + held (winchance's state). Protocol note: all three variants were
+scored on test after the first run, as sensitivity checks of one reported model, not to
+pick one; nothing ships from them. Preds 3c-scale-*-{roles-own,roles-team,
+objectives-team}.tsv, reports 3c-scale-report-{roles-own,objectives-team}.md, tables
+3c-scale-table-*.tsv.
+
+| minute | roles state vs team-gold state | objectives state vs team-gold state | champion by minute, roles state | champion by minute, objectives state | own-gold slope, roles state |
+| --- | --- | --- | --- | --- | --- |
+| 10 | 0.00180 ± 0.00138 | 0.00826 ± 0.00233 | 0.00157 ± 0.00032 | 0.00171 ± 0.00034 | 0.00006 ± 0.00010 |
+| 15 | 0.00375 ± 0.00184 | 0.01190 ± 0.00276 | 0.00198 ± 0.00036 | 0.00225 ± 0.00040 | 0.00003 ± 0.00007 |
+| 20 | 0.00448 ± 0.00190 | 0.01253 ± 0.00320 | 0.00217 ± 0.00039 | 0.00256 ± 0.00043 | -0.00004 ± 0.00006 |
+| 25 | 0.00389 ± 0.00174 | 0.01581 ± 0.00388 | 0.00221 ± 0.00043 | 0.00259 ± 0.00048 | -0.00002 ± 0.00008 |
+| 30 | 0.00345 ± 0.00210 | 0.01725 ± 0.00587 | 0.00197 ± 0.00055 | 0.00248 ± 0.00063 | -0.00000 ± 0.00005 |
+
+Win pp per 1000 gold lead at each role in an even game (roles state): top 8.0 / 4.5 /
+4.7 / 4.3 / 4.2 at 10/15/20/25/30; jungle 10.9 / 7.6 / 6.3 / 4.8 / 4.0; middle 10.6 /
+6.8 / 5.5 / 4.5 / 4.2; bottom 12.0 / 9.0 / 8.1 / 6.5 / 5.7; utility 2.4 / 0.9 / 1.8 /
+2.4 / 3.2 (XP 5.0 to 2.4 per 1000).
+
+Champion effects, win pp in an even game at 15 / 25 (team gold state; roles; objectives):
+Kayle top 10.3/13.9; 8.4/13.6; 9.9/15.7. Pyke support -9.7/-12.7; -8.6/-11.5;
+-10.3/-12.1. Camille support -9.9/-10.4; -6.8/-7.8; -10.3/-10.0. Yuumi 5.6/7.8; 4.2/5.8;
+6.7/10.2. Bel'Veth 8.6/11.8; 9.6/11.6; 10.4/15.1. Aurelion Sol mid 8.9/11.8; 9.1/11.2;
+9.6/13.2. Draven -8.2/-7.7; -9.6/-10.1; -8.8/-7.8. Spreads by role move by under 2 pp
+(utility 8.8 to 7.1 at 15 with roles).
+
+Reading:
+- Who holds the gold matters in general: gold on the support is worth a fifth to a
+  third of gold on the bot laner, and bot gold is worth the most at every minute. That
+  is in the baseline now, and the champion effects stay: Kayle's team still wins like
+  one far ahead at equal gold by role, Pyke's still loses more. So the effects are the
+  champion's value at equal gold (scaling, fighting), not gold on a low-value role. Only
+  the support kill-takers shrink a little (Camille -10.4 to -7.8 at 25)
+- No champion's own gold is measurably worth more than another's in the role (own-gold
+  slopes: no test gain)
+- With objectives in the state the champion effects hold or grow slightly: champions'
+  value is not through the objectives their teams take
 
 ### Draft model file (meiolol-lab draft --export)
 

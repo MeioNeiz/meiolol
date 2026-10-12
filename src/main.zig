@@ -160,6 +160,10 @@ const usage =
     \\              --test-share F   newest share of P's games held out (default 0.2)
     \\              --preds DIR      one TSV of test predictions per model
     \\              --table FILE     TSV of every champion-role's effect and slope by minute
+    \\              --state S        baseline: lead (team gold, XP; default), roles (gold
+    \\                               by role: who holds it), objectives (+ objectives held)
+    \\              --slope L        champion x lead term: team (default) or own (own gold
+    \\                               minus the lane opponent's)
     \\  raw-export  raw archive, box side (archive.zig): write raw summaries, raw timelines
     \\              and mastery fetched since the last export to DIR/raw-FROM-TO.db and
     \\              print its name and counts (nothing when there is nothing new)
@@ -934,6 +938,10 @@ fn cmdScaling(c: *Cmd) !u8 {
             o.preds_dir = try c.value();
         } else if (c.is("--table")) {
             o.table = try c.value();
+        } else if (c.is("--state")) {
+            o.state = std.meta.stringToEnum(scaling.State, try c.value()) orelse return error.Usage;
+        } else if (c.is("--slope")) {
+            o.slope = std.meta.stringToEnum(scaling.Slope, try c.value()) orelse return error.Usage;
         } else return error.Usage;
     }
     const io = c.init.io;
