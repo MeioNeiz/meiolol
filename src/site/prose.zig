@@ -130,12 +130,14 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\<li><b>How sure a win rate is</b>: every win rate is the raw share of games won,
         \\never pulled toward 50%. Its bar is the 95% Wilson interval: where the true rate
         \\likely is given the games so far. "At least" is the bar's low end. Colour runs
-        \\from red (low) through amber to green (high) by the rate alone; how sure it is
-        \\shows in the bar's width, so check the bar before trusting a strong colour.</li>
+        \\from orange (low) through grey (50%) to blue (high) by the rate alone, not red
+        \\and green, which colour-blind readers can't tell apart; how sure it is shows in
+        \\the bar's width, so check the bar before trusting a strong colour.</li>
         \\<li><b>Lane opponents</b>: the champion's win rate against each lane opponent, with
         \\its interval, and the lane curve's gold difference at 14 minutes. Every opponent
-        \\is listed, hardest first; those with under 10 games are faded and listed last, so
-        \\a few lucky games don't top the list.</li>
+        \\is listed, hardest first by the top of its bar: an opponent leads the list only
+        \\if it is hard even at the best the games allow, so a few unlucky games can't put
+        \\it there. Those with under 10 games are faded and listed last.</li>
         \\</ul>
         \\<h2 id="builds">Builds</h2>
         \\<ul>
