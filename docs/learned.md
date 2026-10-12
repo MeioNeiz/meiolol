@@ -55,8 +55,9 @@ How to write a line:
   from Emerald to Master is worth about 200 gold for a jungler, 145 mid and bot, 90 top
   and 20 support, and Iron to Challenger spans 400-850 gold outside support. Sure: dev
   and one selection check on 85k EUW1 rows, the typical gold miss drops from 823 to 809
-  (3% of it, give or take 0.3%); test not touched; ranks are end-of-season snapshots, so
-  slightly flattering. Site: lesson material ("at your rank, expect about X gold at 14
+  (3% of it, give or take 0.3%); test not touched; the rank is the one recorded after
+  the game, not at its start (a small leak, one game rarely changes a tier): hold the
+  final until a rerun with rank at game start. Site: lesson material ("at your rank, expect about X gold at 14
   in this matchup"), not a pick reason: it is mostly better players earning more.
   Evidence: lab campaign gold14-a, run 20261012T2322Z-gold14-a-rankfx (effects-rank.tsv),
   selection 20261012T2332Z-gold14-a-rank-sel new-best
