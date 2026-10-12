@@ -18,6 +18,7 @@ const stats = @import("stats.zig");
 const logreg = @import("logreg.zig");
 const lanegold = @import("lanegold.zig");
 const experience = @import("experience.zig");
+const par = @import("par.zig");
 const Date = @import("date.zig").Date;
 const score = core.score;
 const Role = core.Role;
@@ -43,6 +44,7 @@ const eb_min_games = 30;
 
 pub fn run(
     gpa: std.mem.Allocator,
+    io: std.Io,
     db: store.Db,
     patches: []const []const u8,
     platforms: []const []const u8,
@@ -73,7 +75,7 @@ pub fn run(
         tests.len, Date.fromMs(tests[0].start), Date.fromMs(tests[tests.len - 1].start),
     });
 
-    const tuned = try tune(gpa, champs, train, opts.folds, w);
+    const tuned = try tune(gpa, io, champs, train, opts.folds, w);
 
     var full: Model = try .build(gpa, champs, train, null);
     defer full.deinit(gpa);
@@ -152,11 +154,11 @@ pub fn run(
         }
     }
 
-    const gold = try laneGoldSection(gpa, db, patches, platforms, champs, &full.stats, train, tests, opts.folds, &.{
+    const gold = try laneGoldSection(gpa, io, db, patches, platforms, champs, &full.stats, train, tests, opts.folds, &.{
         base_only, model, empirical, joint,
     }, w);
 
-    try experienceSection(gpa, db, platforms, champs, &full.stats, train, tests, opts.folds, w);
+    try experienceSection(gpa, io, db, platforms, champs, &full.stats, train, tests, opts.folds, w);
 
     var line: History = .{
         .platforms = platforms.len,
@@ -178,7 +180,7 @@ pub fn run(
     try w.writeAll("| model | picks ranked | winners' mean pct | losers' mean pct | " ++
         "AUC pct vs win | win rate, picks in model's top 10% |\n| --- | --- | --- | --- | --- | --- |\n");
     for ([_]Predictor{ model, tuned_priors, empirical }) |p| {
-        try pickMetric(gpa, &full.stats, tests, p, opts.pick_min_games, w);
+        try pickMetric(gpa, io, &full.stats, tests, p, opts.pick_min_games, w);
     }
 
     try w.writeAll("\n## Role inference\n\n");
@@ -266,6 +268,7 @@ const min_gold_games = 500;
 /// games that have timelines
 fn laneGoldSection(
     gpa: std.mem.Allocator,
+    io: std.Io,
     db: store.Db,
     patches: []const []const u8,
     platforms: []const []const u8,
@@ -291,22 +294,44 @@ fn laneGoldSection(
         return null;
     }
 
-    // Out-of-fold features for the stack's weights
+    // Out-of-fold features for the stack's weights, in fold order then game order
+    const feats = try gpa.alloc(Weights, train.len);
+    defer gpa.free(feats);
+    const Fill = struct {
+        gpa: std.mem.Allocator,
+        champs: []const core.statsfile.Champion,
+        train: []const Game,
+        map: *const lanegold.Map,
+        folds: u32,
+        feats: []Weights,
+
+        fn fold(c: @This(), k: usize) !void {
+            var m: Model = try .build(c.gpa, c.champs, c.train, .{ .k = k, .folds = c.folds });
+            defer m.deinit(c.gpa);
+            var gm: lanegold.Model = try .build(c.gpa, &m.stats, c.train, c.map, .{ .k = k, .folds = c.folds });
+            defer gm.deinit(c.gpa);
+            const o = score.empiricalPriors(&m.stats, eb_min_games).apply(.{});
+            for (c.train, c.feats, 0..) |g, *x, i| if (i % c.folds == k and c.map.contains(g.id)) {
+                x.* = goldFeatures(&m.stats, o, &gm, g);
+            };
+        }
+    };
+    try par.forEach(io, folds, Fill{
+        .gpa = gpa,
+        .champs = champs,
+        .train = train,
+        .map = &map,
+        .folds = folds,
+        .feats = feats,
+    }, Fill.fold);
     var xs: std.ArrayList(Weights) = .empty;
     defer xs.deinit(gpa);
     var ys: std.ArrayList(f64) = .empty;
     defer ys.deinit(gpa);
-    for (0..folds) |k| {
-        var m: Model = try .build(gpa, champs, train, .{ .k = k, .folds = folds });
-        defer m.deinit(gpa);
-        var gm: lanegold.Model = try .build(gpa, &m.stats, train, &map, .{ .k = k, .folds = folds });
-        defer gm.deinit(gpa);
-        const o = score.empiricalPriors(&m.stats, eb_min_games).apply(.{});
-        for (train, 0..) |g, i| if (i % folds == k and map.contains(g.id)) {
-            try xs.append(gpa, goldFeatures(&m.stats, o, &gm, g));
-            try ys.append(gpa, blueWon(g));
-        };
-    }
+    for (0..folds) |k| for (train, feats, 0..) |g, x, i| if (i % folds == k and map.contains(g.id)) {
+        try xs.append(gpa, x);
+        try ys.append(gpa, blueWon(g));
+    };
     const weights = fitLogistic(xs.items, ys.items, 1.0);
 
     var gm: lanegold.Model = try .build(gpa, full, train, &map, null);
@@ -363,6 +388,7 @@ const ExperienceSource = enum { history, mastery };
 /// (an upper bound) and one player per game (the user, all the app can know)
 fn experienceSection(
     gpa: std.mem.Allocator,
+    io: std.Io,
     db: store.Db,
     platforms: []const []const u8,
     champs: []const core.statsfile.Champion,
@@ -381,7 +407,7 @@ fn experienceSection(
         "numbers on the champion (1-5, 6-20, 21-50, 51+, crawled history only); mastery bins " ++
         "points (<10k, 10-50k, 50-200k, 200k+; snapshot after the match, so flattering).\n\n");
 
-    const oof = try oofTerms(gpa, champs, train, folds);
+    const oof = try oofTerms(gpa, io, champs, train, folds);
     defer gpa.free(oof);
     const eb = score.empiricalPriors(full, eb_min_games).apply(.{});
 
@@ -453,20 +479,36 @@ fn experienceSection(
 /// fold model's empirical-Bayes priors
 fn oofTerms(
     gpa: std.mem.Allocator,
+    io: std.Io,
     champs: []const core.statsfile.Champion,
     train: []const Game,
     folds: u32,
 ) ![]score.DraftTerms {
     const out = try gpa.alloc(score.DraftTerms, train.len);
     errdefer gpa.free(out);
-    for (0..folds) |k| {
-        var m: Model = try .build(gpa, champs, train, .{ .k = k, .folds = folds });
-        defer m.deinit(gpa);
-        const o = score.empiricalPriors(&m.stats, eb_min_games).apply(.{});
-        for (train, out, 0..) |g, *t, i| if (i % folds == k) {
-            t.* = score.draftTerms(&m.stats, o, g.teams);
-        };
-    }
+    const Fill = struct {
+        gpa: std.mem.Allocator,
+        champs: []const core.statsfile.Champion,
+        train: []const Game,
+        folds: u32,
+        out: []score.DraftTerms,
+
+        fn fold(c: @This(), k: usize) !void {
+            var m: Model = try .build(c.gpa, c.champs, c.train, .{ .k = k, .folds = c.folds });
+            defer m.deinit(c.gpa);
+            const o = score.empiricalPriors(&m.stats, eb_min_games).apply(.{});
+            for (c.train, c.out, 0..) |g, *t, i| if (i % c.folds == k) {
+                t.* = score.draftTerms(&m.stats, o, g.teams);
+            };
+        }
+    };
+    try par.forEach(io, folds, Fill{
+        .gpa = gpa,
+        .champs = champs,
+        .train = train,
+        .folds = folds,
+        .out = out,
+    }, Fill.fold);
     return out;
 }
 
@@ -629,6 +671,39 @@ const Model = struct {
 };
 
 const Fold = struct { k: usize, folds: usize };
+
+/// One model per fold, each leaving that fold out, built in parallel (freeModels)
+fn foldModels(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    champs: []const core.statsfile.Champion,
+    train: []const Game,
+    folds: u32,
+) ![]Model {
+    const slots = try gpa.alloc(?Model, folds);
+    defer gpa.free(slots);
+    @memset(slots, null);
+    errdefer for (slots) |*s| if (s.*) |*m| m.deinit(gpa);
+    const Build = struct {
+        gpa: std.mem.Allocator,
+        champs: []const core.statsfile.Champion,
+        train: []const Game,
+        slots: []?Model,
+
+        fn one(c: @This(), k: usize) !void {
+            c.slots[k] = try .build(c.gpa, c.champs, c.train, .{ .k = k, .folds = c.slots.len });
+        }
+    };
+    try par.forEach(io, folds, Build{ .gpa = gpa, .champs = champs, .train = train, .slots = slots }, Build.one);
+    const models = try gpa.alloc(Model, folds);
+    for (models, slots) |*m, s| m.* = s.?;
+    return models;
+}
+
+fn freeModels(gpa: std.mem.Allocator, models: []Model) void {
+    for (models) |*m| m.deinit(gpa);
+    gpa.free(models);
+}
 
 /// Logistic weights on a draft's terms: intercept (blue side), base, duo, lane, matchup
 const Weights = [5]f64;
@@ -822,35 +897,43 @@ const Tuned = struct { opts: score.Options, weights: Weights, joint_l2: f64 };
 /// on the terms of those out-of-fold drafts
 fn tune(
     gpa: std.mem.Allocator,
+    io: std.Io,
     champs: []const core.statsfile.Champion,
     train: []const Game,
     folds: u32,
     w: *std.Io.Writer,
 ) !Tuned {
-    const models = try gpa.alloc(Model, folds);
-    var built: usize = 0;
-    defer {
-        for (models[0..built]) |*m| m.deinit(gpa);
-        gpa.free(models);
-    }
-    for (models, 0..) |*m, k| {
-        m.* = try .build(gpa, champs, train, .{ .k = k, .folds = folds });
-        built += 1;
-    }
+    const models = try foldModels(gpa, io, champs, train, folds);
+    defer freeModels(gpa, models);
 
     var losses: [prior_grid.len][prior_grid.len]f64 = undefined;
+    const Grid = struct {
+        models: []const Model,
+        train: []const Game,
+        losses: *[prior_grid.len][prior_grid.len]f64,
+
+        fn cell(c: @This(), at: usize) !void {
+            const i = at / prior_grid.len;
+            const j = at % prior_grid.len;
+            const o: score.Options = .{ .base_prior_games = prior_grid[i], .prior_games = prior_grid[j] };
+            var sum: f64 = 0;
+            for (c.train, 0..) |g, gi| {
+                sum += logLoss(score.draftWin(&c.models[gi % c.models.len].stats, o, g.teams), blueWon(g));
+            }
+            c.losses[i][j] = sum / @as(f64, @floatFromInt(c.train.len));
+        }
+    };
+    try par.forEach(io, prior_grid.len * prior_grid.len, Grid{
+        .models = models,
+        .train = train,
+        .losses = &losses,
+    }, Grid.cell);
     var best: score.Options = .{};
     var best_loss = std.math.inf(f64);
     for (prior_grid, 0..) |bp, i| for (prior_grid, 0..) |pp, j| {
-        const o: score.Options = .{ .base_prior_games = bp, .prior_games = pp };
-        var sum: f64 = 0;
-        for (train, 0..) |g, gi| {
-            sum += logLoss(score.draftWin(&models[gi % folds].stats, o, g.teams), blueWon(g));
-        }
-        losses[i][j] = sum / @as(f64, @floatFromInt(train.len));
         if (losses[i][j] < best_loss) {
             best_loss = losses[i][j];
-            best = o;
+            best = .{ .base_prior_games = bp, .prior_games = pp };
         }
     };
 
@@ -887,22 +970,48 @@ fn tune(
         wloss, weights[0], weights[1], weights[2], weights[3], weights[4],
     });
 
-    // Joint ratings: L2 strength by out-of-fold log loss. Prior 1000 games ~ l2 300
+    // Joint ratings: L2 strength by out-of-fold log loss. Prior 1000 games ~ l2 300.
+    // One fit per strength and fold; per-game losses summed in the serial order after
+    const game_loss = try gpa.alloc(f64, joint_l2_grid.len * train.len);
+    defer gpa.free(game_loss);
+    const Joint = struct {
+        gpa: std.mem.Allocator,
+        st: *const core.Stats,
+        train: []const Game,
+        folds: u32,
+        game_loss: []f64,
+
+        fn fit(c: @This(), at: usize) !void {
+            const l = at / c.folds;
+            const k = at % c.folds;
+            var fold_train: std.ArrayList(Game) = .empty;
+            defer fold_train.deinit(c.gpa);
+            for (c.train, 0..) |g, gi| if (gi % c.folds != k) try fold_train.append(c.gpa, g);
+            const jw = try fitJoint(c.gpa, c.st, fold_train.items, joint_l2_grid[l]);
+            defer c.gpa.free(jw);
+            const out = c.game_loss[l * c.train.len ..][0..c.train.len];
+            for (c.train, out, 0..) |g, *x, gi| if (gi % c.folds == k) {
+                x.* = logLoss(sigmoid(jointRow(c.st, g).dot(jw)), blueWon(g));
+            };
+        }
+    };
     const st = &models[0].stats;
-    var fold_train: std.ArrayList(Game) = .empty;
-    defer fold_train.deinit(gpa);
+    try par.forEach(io, joint_l2_grid.len * folds, Joint{
+        .gpa = gpa,
+        .st = st,
+        .train = train,
+        .folds = folds,
+        .game_loss = game_loss,
+    }, Joint.fit);
     var best_l2: f64 = 0;
     var best_joint = std.math.inf(f64);
     try w.writeAll("Joint ratings, out-of-fold log loss by L2 strength:");
-    for (joint_l2_grid) |l2| {
+    for (joint_l2_grid, 0..) |l2, l| {
+        const out = game_loss[l * train.len ..][0..train.len];
         var sum: f64 = 0;
         for (0..folds) |k| {
-            fold_train.clearRetainingCapacity();
-            for (train, 0..) |g, gi| if (gi % folds != k) try fold_train.append(gpa, g);
-            const jw = try fitJoint(gpa, st, fold_train.items, l2);
-            defer gpa.free(jw);
-            for (train, 0..) |g, gi| if (gi % folds == k) {
-                sum += logLoss(sigmoid(jointRow(st, g).dot(jw)), blueWon(g));
+            for (out, 0..) |x, gi| if (gi % folds == k) {
+                sum += x;
             };
         }
         const loss = sum / @as(f64, @floatFromInt(train.len));
@@ -979,6 +1088,7 @@ fn solve(comptime d: usize, a_in: [d][d]f64, v_in: [d]f64) ?[d]f64 {
 
 fn pickMetric(
     gpa: std.mem.Allocator,
+    io: std.Io,
     st: *const core.Stats,
     games: []const Game,
     pr: Predictor,
@@ -990,36 +1100,66 @@ fn pickMetric(
         else => unreachable,
     };
     candidates.min_games = min_games;
-    const out = try gpa.alloc(score.Suggestion, st.n);
-    defer gpa.free(out);
+    // Per hidden pick (game, side, role): its percentile, or why it has none
+    const Ranked = union(enum) { missed, short, pct: f64 };
+    const ranked = try gpa.alloc(Ranked, games.len * 2 * Role.count);
+    defer gpa.free(ranked);
+    const Rank = struct {
+        gpa: std.mem.Allocator,
+        st: *const core.Stats,
+        games: []const Game,
+        candidates: score.Options,
+        ranked: []Ranked,
+
+        fn game(c: @This(), gi: usize) !void {
+            const out = try c.gpa.alloc(score.Suggestion, c.st.n);
+            defer c.gpa.free(out);
+            const g = c.games[gi];
+            for (0..2) |s| for (Role.all) |r| {
+                var allies: [4]score.Pick = undefined;
+                var n_allies: usize = 0;
+                for (Role.all) |ar| if (ar != r) {
+                    allies[n_allies] = .{ .champion = g.teams[s][@backingInt(ar)], .role = ar };
+                    n_allies += 1;
+                };
+                var enemies: [5]score.Pick = undefined;
+                for (Role.all, &enemies) |er, *e| e.* = .{ .champion = g.teams[1 - s][@backingInt(er)], .role = er };
+                const list = score.recommend(c.st, .{
+                    .role = r,
+                    .allies = &allies,
+                    .enemies = &enemies,
+                }, c.candidates, out);
+                const hidden = g.teams[s][@backingInt(r)];
+                c.ranked[(gi * 2 + s) * Role.count + @backingInt(r)] = for (list, 0..) |sg, i| {
+                    if (sg.champion != hidden) continue;
+                    if (list.len < 2) break .short;
+                    break .{ .pct = 1 - @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(list.len - 1)) };
+                } else .missed;
+            };
+        }
+    };
+    try par.forEach(io, games.len, Rank{
+        .gpa = gpa,
+        .st = st,
+        .games = games,
+        .candidates = candidates,
+        .ranked = ranked,
+    }, Rank.game);
+
     var pct: std.ArrayList(f64) = .empty;
     defer pct.deinit(gpa);
     var won: std.ArrayList(Game) = .empty;
     defer won.deinit(gpa);
     var missed: usize = 0;
-    for (games) |g| for (0..2) |s| for (Role.all) |r| {
-        var allies: [4]score.Pick = undefined;
-        var n_allies: usize = 0;
-        for (Role.all) |ar| if (ar != r) {
-            allies[n_allies] = .{ .champion = g.teams[s][@backingInt(ar)], .role = ar };
-            n_allies += 1;
-        };
-        var enemies: [5]score.Pick = undefined;
-        for (Role.all, &enemies) |er, *e| e.* = .{ .champion = g.teams[1 - s][@backingInt(er)], .role = er };
-        const list = score.recommend(st, .{
-            .role = r,
-            .allies = &allies,
-            .enemies = &enemies,
-        }, candidates, out);
-        const hidden = g.teams[s][@backingInt(r)];
-        const rank = for (list, 0..) |sg, i| {
-            if (sg.champion == hidden) break i;
-        } else {
-            missed += 1;
-            continue;
-        };
-        if (list.len < 2) continue;
-        try pct.append(gpa, 1 - @as(f64, @floatFromInt(rank)) / @as(f64, @floatFromInt(list.len - 1)));
+    for (games, 0..) |g, gi| for (0..2) |s| for (Role.all) |r| {
+        try pct.append(gpa, switch (ranked[(gi * 2 + s) * Role.count + @backingInt(r)]) {
+            .missed => {
+                missed += 1;
+                continue;
+            },
+            .short => continue,
+            .pct => |q| q,
+        });
         // Reuse the AUC helper: "blue won" here means this pick's side won
         var fake = g;
         fake.winner = if (g.winner == s) 0 else 1;

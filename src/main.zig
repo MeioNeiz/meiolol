@@ -694,7 +694,7 @@ fn cmdEval(c: *Cmd) !u8 {
     const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
-    const line = try eval.run(c.init.gpa, db, chosen, platforms, o, &stdout.interface);
+    const line = try eval.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
     try stdout.interface.flush();
     if (history) |path| {
         const today: Date = .fromMs(std.Io.Clock.real.now(io).toMilliseconds());
