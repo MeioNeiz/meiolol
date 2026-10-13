@@ -1,0 +1,1038 @@
+From Trajectories to Evidence: Auditable Experimental Records
+for Industrial Research Agents
+Zijie Zhuang∗ , Changxin Lao∗ , Pengbo Xu∗ , Hanwen Xu∗ , Ruochen Yang, Yingzhi He,
+Peng Zhang, Jiangxia Cao, Yusheng Huang, Guohong Mu, Jian Liang, Ruiming Tang,
+Shuang Yang† , Zhaojie Liu, Wenwu Ou, Kun Gai
+Kuaishou Technology, Beijing, China
+{zhuangzijie, laochangxin, xupengbo03, xuhanwen03, yangruochen, yangshuang08}@kuaishou.com
+
+arXiv:2608.05235v1 [cs.IR] 5 Aug 2026
+
+Abstract
+Research agents increasingly conduct multi-round machinelearning experiments in industrial recommendation settings
+and retain the resulting trajectories to guide later decisions.
+Yet a completed trajectory is not automatically evidence:
+generated artifacts may be unsupported or incomplete, executed rounds may be invalid or confounded, and later modifications may obscure earlier findings. We study trajectoryto-evidence conversion, asking what a completed research
+process has actually established. We introduce an evidencegrounded framework that couples bounded verification of consequential artifacts with post-execution claim qualification.
+A context-isolated generate–verify–repair process checks artifacts for evidence violations and missing downstream requirements before release. After execution, validity and attribution checks consolidate evidence across rounds, qualify intervention-level claims as actionable repairs, diagnostic
+guards, or withheld findings, and preserve admitted claims as
+auditable records with explicit provenance and applicability
+boundaries. A hybrid LLM-assisted controller subsequently
+applies, defers, or rejects records based on available target
+evidence. Record audits characterize which claims survive
+qualification, while downstream diagnostics identify affirmative applicability judgment as a bottleneck for the tested controller. Across paper-to-target adaptations, later rounds often
+improve on the first, while final rounds frequently underperform an earlier best, exposing non-monotonic trajectory evolution. Candidates produced through the complete workflow
+also yielded positive online lifts relative to deployed baselines.
+
+Introduction
+Research agents increasingly automate iterative machinelearning experimentation. Given a research objective or paper, an agent may propose an intervention, modify code,
+construct and execute an experiment, interpret the result,
+and revise its next action based on the resulting observations (Huang et al. 2023; Starace et al. 2025; Lu et al. 2024;
+Schmidgall et al. 2025). Unlike a single model output, this
+∗
+
+These authors contributed equally.
+Corresponding author.
+Copyright © 2027, Association for the Advancement of Artificial
+Intelligence (www.aaai.org). All rights reserved.
+†
+
+process produces an extended experimental trajectory containing proposals, code states, execution logs, measurements,
+failures, and revisions. Such accumulated trajectories are increasingly retained as evolving memory so that prior experience can guide subsequent decisions (Shinn et al. 2023; Zhu
+et al. 2026; Wei et al. 2025).
+An accumulated trajectory records what an agent attempted, but does not directly specify which conclusions are
+supported by the resulting evidence. LLM-generated proposals, implementations, and summaries may contain unsupported content or omit information required by downstream steps (Manakul, Liusie, and Gales 2023; Farquhar
+et al. 2024). Successful execution does not establish that the
+intended intervention was faithfully realized, the comparison was valid, or the observed change was attributable to the
+intervention. Trajectories also mix valid experiments with
+abandoned hypotheses, retries, failures, and later modifications that may erase earlier gains. Even a valid result supports
+a claim only under its observed mechanism, target condition,
+and evaluation protocol. Completing a trajectory therefore
+does not establish which experimental claims are supported
+strongly enough to be retained.
+Existing research agents use feedback and memory primarily to improve subsequent actions. Self-Evolving Recommendation System (Wang et al. 2026) coordinates optimization
+through a shared experiment journal, while NOVA (Liu et al.
+2026) combines semantic verification and historical knowledge to guide architecture search. Together, they show how
+experimental feedback and retained history can guide continued optimization, while leaving the qualification of persistent
+experimental claims largely implicit.
+We formulate this problem as trajectory-to-evidence conversion. Rather than treating each completed round or the
+final state as experimental knowledge, we consolidate evidence across rounds at the level of experimental claims. Only
+findings supported under explicit conditions are preserved as
+records. This view separates the evidence established by a
+trajectory from the sequence of events it contains.
+Our framework couples bounded artifact verification
+with post-execution evidence qualification. First, a bounded
+generate–verify–repair process checks consequential artifacts before they affect downstream reasoning or execution.
+
+Second, evidence across executed rounds is consolidated and
+assessed for execution validity, attribution, and applicability
+boundaries before supported findings are preserved. Findings that pass these checks can be retained with the provenance and conditions needed to audit their interpretation. For
+downstream use, we evaluate the decisions of a hybrid LLMassisted controller separately against reference applicability
+and post-execution outcomes. We evaluate the framework
+in industrial recommendation experiments, focusing on trajectory evolution, artifact verification, record construction,
+downstream applicability, and production case studies. The
+contributions of this work are threefold:
+• We formulate trajectory-to-evidence conversion as the
+problem of determining which intervention-level claims
+are supported by evidence distributed across researchagent trajectories.
+• We introduce a framework that combines bounded verification with cross-round evidence qualification, retaining
+supported findings with explicit provenance and applicability boundaries.
+• Through stage-wise analysis, we identify non-monotonic
+adaptation and unreliable affirmative applicability decisions by the tested LLM-assisted controller as bottlenecks
+in record construction and downstream use.
+
+Related Work
+
+and reproducibility (Vartak et al. 2016; Zaharia et al. 2018),
+but lineage alone does not establish what an experiment supports. Our work instead consolidates evidence across rounds
+at the intervention-claim level and retains qualified findings
+with explicit provenance and applicability boundaries.
+
+Method
+Framework Overview
+Figure 1 summarizes three stages: source adaptation, claim
+qualification, and downstream reuse. During source adaptation, the agent produces proposals, code changes, experiment specifications, and result summaries. Before any consequential output moves to the next step, the verification
+harness checks it against the available evidence, constraints,
+and downstream requirements. The producer repairs identified problems, and the harness withholds outputs that still
+contain unresolved issues after the attempt limit.
+After execution, the system groups rounds that address the
+same intervention and locus and determines which claims
+their evidence supports and under what observed conditions. Only qualified claims become records. We freeze these
+records before downstream reuse. Given a target mechanism,
+target conditions, and available observations, the controller
+applies, defers, or rejects each candidate record. An applied
+Repair becomes a method contract, whereas an applied Guard
+constrains or redirects subsequent planning.
+
+Research Agents and Automated Experimentation
+Research agents increasingly automate extended scientific
+workflows spanning grounding, planning, experimentation,
+validation, and reporting (Tie et al. 2026). MLAgentBench (Huang et al. 2023) evaluates agents that modify code
+and run iterative machine-learning experiments, while PaperBench (Starace et al. 2025) evaluates the reproduction of
+published research from paper descriptions. The AI Scientist (Lu et al. 2024) and Agent Laboratory (Schmidgall et al.
+2025) connect ideation, implementation, experimentation,
+and writing in broader research pipelines. These systems establish task-level capabilities for executing and reproducing
+research workflows, but do not explicitly study which resulting findings warrant retention beyond the current task.
+
+Trajectory Memory and Experience Reuse
+Language agents retain prior experience to improve subsequent decisions. Reflexion (Shinn et al. 2023) stores verbal
+reflections, ExpeL (Zhao et al. 2024) extracts reusable experience, and Agent Workflow Memory (Wang et al. 2025) induces workflows from trajectories. Recent studies further examine evolving memory over task streams and long-horizon
+environments (Wei et al. 2025; Zhu et al. 2026). In industrial
+recommendation, agent systems retain experimental history
+for continued optimization and hypothesis generation (Wang
+et al. 2026; Wu et al. 2026). NOVA (Liu et al. 2026) is
+the closest verification-aware system, combining semantic
+verification with round-level records and trajectory memory
+for architecture search. These approaches use prior trajectories to improve later actions. Systems such as ModelDB
+and MLflow preserve experimental lineage for traceability
+
+Problem Setting
+A paper-to-target adaptation task τ adapts a paper p to a target setting c while preserving its defining mechanism m. The
+target setting includes the initial repository, data, evaluation
+utility, and implementation and deployment constraints. The
+defining mechanism identifies the part of the paper that an
+adaptation must preserve; changes that remove this mechanism do not constitute successful adaptations of p.
+Starting from an initial implementation, the agent proposes
+interventions and may dispatch up to B machine-executed
+experiments. Each execution produces a code state, runtime
+observations, and a measured outcome. The resource limit
+B counts dispatched machine experiments; it limits machine
+execution rather than agent-side verification. The trajectory
+may contain invalid experiments, retries, and non-monotonic
+outcomes. We therefore build claims from evidence across
+rounds rather than copying completed rounds or the final
+state.
+Our setting contains a set of source adaptation tasks
+Tsrc = {τi }ni=1 and a target adaptation task τ ⋆ . Source and
+target denote roles in the evaluation protocol rather than disjoint paper identities: they may involve the same paper or
+method, provided that record construction and downstream
+use occur in separately initialized episodes. We construct
+a record registry M = ConstructRecords(Tsrc ) from the
+source trajectories and freeze it before downstream evaluation. We refer to this frozen record registry as memory when
+it conditions downstream adaptation. Only claims qualified
+as a Repair or Guard yield reusable records; Withheld candidates remain documented but unavailable for reuse. Each
+
+Figure 1: Overview of trajectory-to-evidence conversion. (a) Verified artifacts from a source adaptation trajectory are qualified
+as Repair, Guard, or Withheld; only supported Repair and Guard claims enter the registry with provenance and applicability
+boundaries. Frozen records are then evaluated in a separately initialized target episode through applicability decisions, paired
+adaptations for applied Repairs, and outcome audit; applied Guards constrain subsequent planning. (b) At each consequential
+handoff, identified issues or omissions trigger bounded repair, and outputs with no remaining issues or omissions are released
+to the next step.
+record ri contains five semantic blocks: source context, intervention, measured outcome, supporting evidence, and applicability boundary. The context identifies the source mechanism, target condition, and triggering observation, while the
+intervention includes both the action and its locus.
+
+Per-Step Verification Harness
+A workflow step is consequential if its output changes a
+downstream input, determines whether an experiment is dispatched, or contributes to an experimental claim. For such a
+step st , let xt denote the step input, Et the evidence available
+for verification, zt the output artifact, and gt+1 the receiving
+step’s input contract. The producer samples an initial artifact
+(0)
+zt ∼ Gt (· | xt ), such as an intervention proposal, code
+change, experiment specification, or result summary. Before
+releasing zt , the harness checks two things. First, it checks
+whether the artifact conflicts with the available evidence or
+constraints. Second, it checks whether the artifact omits information required by the next step.
+The producer, evidence-and-constraint verifier, and requirement reviewer operate in separate contexts. The producer’s private rationale is not shared across these contexts;
+they communicate only through typed artifacts and explicit
+issue sets.
+Evidence and Constraint Check The evidence-andconstraint verifier receives the step input, the candidate artifact, and the evidence available at that point in the workflow.
+It returns a set of localized objections,
+
+
+(k)
+(k)
+Ct = Vtec xt , zt , Et ,
+(1)
+
+where Et may include the source paper, repository state, tool
+output, execution logs, or measured results. An empty set
+indicates that the verifier found no unsupported statement,
+inconsistent action, or violated step constraint. The verifier
+is instructed to identify concrete problems rather than rewrite
+the artifact or propose unrelated improvements.
+Verification criteria are instantiated according to the artifact type. Depending on the handoff, these criteria cover
+consistency with the paper mechanism and observed failure,
+code semantics and interfaces, experimental comparison and
+resource constraints, or support for reported conclusions.
+Downstream Requirement Check A verifier that reads
+only the candidate artifact may identify erroneous content
+while overlooking information that the producer never emitted. We therefore construct the second check from the next
+step’s information requirements. The requirement reviewer
+receives xt and the downstream contract gt+1 , but neither the
+(k)
+candidate artifact zt nor the producer’s private rationale.
+It independently reconstructs the set of information required
+for the next step:
+Rt = Vtreq (xt , gt+1 ),
+
+
+(k)
+(k)
+Ot = Missing Rt , zt
+.
+
+(2)
+
+The producer receives only the unsatisfied requirements,
+without access to the reviewer’s hidden reasoning or a replacement artifact. The reviewer constructs Rt without ac(k)
+cess to zt . Afterward, the harness compares Rt with the
+(k)
+candidate to return only the missing requirements Ot . This
+design keeps the completeness criterion independent of the
+candidate artifact.
+
+The downstream contract similarly specifies the implementation details, execution interfaces, attribution evidence,
+or boundary information required by the receiving step.
+Repair and Handoff At iteration k, the producer receives
+(k)
+the current artifact, the objections Ct , and the missing re(k)
+quirements Ot . If both sets are empty, the artifact is released to st+1 . Otherwise, the producer revises the artifact,
+and the revised artifact is independently checked again by
+both verifiers. This generate–verify–repair process continues for at most Kt repair attempts after the initial generation.
+If no candidate passes within this limit, the harness stops the
+current branch, rolls back to a previously validated state, or
+requests escalation. The artifact is released when both checkers report no unresolved issues or omissions. The limit Kt
+controls agent-side verification effort.
+
+Experimental Claim Qualification
+Passing the harness establishes artifact readiness for downstream execution, whereas intervention effectiveness is assessed from the resulting experiment. After the pre-execution
+artifacts pass, the system dispatches eb ; its implementation,
+outcome, interpretation, and summary re-enter the harness
+as experimental evidence.
+We distinguish execution validity from claim attribution.
+An experiment is execution-valid when the implementation
+realizes the proposed intervention, the prescribed run completes, the comparison follows the evaluation protocol, and
+the paper’s defining mechanism is preserved. A negative or
+null result may remain a valid execution, but it supports a
+persistent Repair or Guard only when the observed effect is
+attributable and explicitly bounded to the tested conditions.
+Let Gexec denote the implementation-fidelity, execution,
+evaluation, and mechanism-preservation gates. An executed
+round is valid only when all four gates pass:
+^
+ExecutionValid(eb ) =
+Ig (eb ).
+(3)
+g∈Gexec
+
+Implementation fidelity checks that the code realizes the proposed intervention, and execution requires the prescribed run
+to complete. Evaluation checks the comparison protocol, and
+mechanism preservation checks that the adaptation retains
+the paper’s defining mechanism. These gates may combine
+deterministic tests, execution evidence, controlled comparisons, and structured assessments. Runs that fail an execution
+gate are retained as operational diagnostics but excluded from
+persistent claims. Attribution is assessed separately during
+claim qualification; an execution-valid run with insufficient
+attribution is likewise retained only as a diagnostic.
+The qualification step groups rounds that address the same
+intervention and locus, then reads their verified code changes,
+execution logs, measurements, and parent comparisons. Related execution-valid rounds may provide primary, corroborating, or boundary evidence; invalid, confounded, duplicated, or superseded rounds are excluded. Based on this
+evidence, the qualification step labels the candidate as an
+actionable Repair, a diagnostic Guard, or Withheld.
+A Repair requires execution-valid and attributable evidence for an implementable intervention, together with an
+
+explicit trigger and applicability boundary. A negative or null
+result yields a Guard only when it establishes an attributable
+failure mode under explicit observed conditions. The system
+withholds a candidate when the execution-valid rounds do
+not support a consistent claim, attribution is insufficient, or
+the trigger or boundary cannot be established.
+Each Repair or Guard becomes a record ri . The record
+states why the intervention was attempted and where it acts,
+and links to the implementation diff, execution status, protocol, measurements, and attribution checks. It also records the
+observed conditions that limit reuse. Each qualified record
+therefore represents a source-supported claim with an explicit applicability boundary.
+
+Downstream Use of Experimental Records
+For a target adaptation task, the controller queries the frozen
+record registry M and forms
+qt⋆ = ⟨m⋆ , c⋆ , o⋆t ⟩ ,
+d(ri , qt⋆ ) ∈ {Apply, Defer, Reject},
+
+(4)
+
+from the target method’s defining mechanism, target conditions, and available target observations. Retrieval first identifies records with potentially compatible mechanisms and
+conditions, after which the adaptation controller assigns each
+candidate record a reuse decision. The controller combines
+deterministic checks over structured record and target fields
+with an LLM-based assessment of mechanism, condition,
+and intervention compatibility.
+The controller assigns Apply when its assessment supports mechanism and locus compatibility, required triggers,
+boundary compliance, and preservation of the target mechanism. It assigns Defer when the intervention locus may
+be compatible but a required trigger, boundary fact, or observable remains missing or ambiguous. It assigns Reject
+when the evidence indicates an incompatible mechanism or
+intervention locus, a boundary violation, or an inability to
+preserve the target method’s defining mechanism. An Apply
+decision activates a target-specific experiment based on the
+available record and observations; its scientific outcome is
+determined after execution.
+An applied Repair becomes an implementable method
+contract specifying its intervention locus, connection to
+the target method, required interfaces, configuration, and
+mechanism-preservation constraints. The contract is evaluated by the same per-step harness as a newly generated proposal before execution. An applied Guard instead becomes
+a planning constraint or diagnostic directive and does not by
+itself dispatch an intervention.
+
+Experiments
+Experimental Setup
+Agent model and verification setup. All LLM components, including the controller’s semantic assessment, use
+GLM-5.2 (GLM-5 Team 2026) self-hosted on our GPU infrastructure, with separate contexts for generation, evidence
+checking, and requirement review. Because GPU-backed
+training and evaluation dominate cost and latency in our
+setting, we budget dispatched machine experiments rather
+
+than inference tokens. Agent-side verification is controlled
+by the fixed retry limit Kt and runs before dispatch to reduce
+the risk that invalid artifacts consume the experiment budget.
+Evaluation scope. We align each evaluation with its corresponding stage-level question: whether consequential artifacts satisfy downstream requirements, whether persistent
+records are supported and traceable, and how record use
+relates to reference applicability and observed outcomes.
+We report performance differences for valid, mechanismpreserving executions. We reserve intervention-level attribution for pairs in which code inspection confirms equivalent base implementations and isolates memory as the intervention. Other matched executions are interpreted at the
+task level. Accordingly, we report stage-level effects and
+candidate-level production outcomes rather than an aggregate causal estimate of the complete workflow.
+
+Non-Monotonic Adaptation Trajectories
+We use a production implementation of RankMixer (Zhu
+et al. 2025) as the shared baseline and adapt modules from
+30 source papers to it. For each paper, the research agent
+conducts multiple rounds of intervention, implementation,
+execution, and evaluation. We retain the first, best, and last
+valid round and report their metric differences from the production baseline. Figure 2 summarizes the resulting 30 industrial paper-to-target adaptations. For 26 methods, at least one
+later valid round outperforms the first, showing that continued experimentation often discovers a better observed state.
+However, these gains are not preserved monotonically: for
+22 methods, the last round falls below an earlier best, and
+later modifications sometimes partially or completely erase
+a previously observed gain.
+Thus, the final state of an adaptation trajectory is not necessarily its most useful experimental knowledge. This observation motivates constructing memory from validated intermediate interventions and outcomes instead of copying the
+trajectory endpoint.
+
+Bounded Self-Verification
+Table 1 summarizes two context-isolated verification handoffs. At the paper-to-proposal handoff, generation, evidenceand-constraint verification, and requirement review use mutually isolated contexts of the same GLM-5.2 model. Of the
+15 paper-reproduction bundles, 11 pass on the first attempt;
+allowing up to three verification-and-repair retries increases
+gate acceptance from 73.3% to 100%, without manual correction. At the proposal-to-code handoff, the loop increases
+implementation completeness from 92% to 97% and observability from 67% to 100%, while alignment changes only
+marginally from 50% to 52%.
+Overall, the observed gains come mainly from improved
+completeness and observability, rather than tighter alignment
+with the proposal. Because generation and verification share
+the same model parameters, context isolation prevents direct
+rationale sharing but may leave correlated blind spots. Table 1
+evaluates loop behavior at two handoffs, whereas Table 2
+independently audits the final accepted bundles. All audited
+evidence spans are traceable and all core-mechanism groups
+
+Criterion
+
+Baseline (%)
+
+Loop (%)
+
+73.3
+92
+50
+67
+
+100
+97
+52
+100
+
+Proposal gate acceptance
+Code completeness
+Code alignment
+Code observability
+
+Table 1: Context-isolated self-verification at two representative consequential handoffs. Proposal results compare the
+first attempt with the accepted output; code results compare
+artifacts produced without and with the loop.
+Criterion
+Source-traceable spans
+Source-supported mechanisms
+Covered Method sections
+Covered Method blocks
+
+Pass / Total
+479/479 (100%)
+107/107 (100%)
+129/139 (92.8%)
+458/524 (87.4%)
+
+Table 2: Post-hoc source-support and coverage audit of the
+final paper-reproduction bundles.
+
+have source support, although coverage of the source papers’
+Method sections remains incomplete. Together, these results
+indicate that same-model verification provides a measurable
+but incomplete correction signal.
+
+Automated Reproduction on a Public Benchmark
+To assess whether the agent pipeline can translate paper specifications into executable experiments, we apply the adaptation pipeline to five models on the Amazon Electronics subset of the Amazon product-review dataset (McAuley et al.
+2015). Table 3 shows that the reproduced results preserve
+the reported ordering (Spearman ρ = 1.0), and every reproduced non-FM model remains above FM.
+
+Experimental Record Audit
+We audit the conversion from completed trajectories to persistent experimental records. The pipeline consolidates 14
+candidate claims: eight are qualified as actionable Repairs,
+one as a diagnostic Guard, and five are Withheld. Only the
+Repairs and Guard produce records, yielding a frozen registry of nine records, as summarized in Table 4.
+All nine records contain the five semantic blocks defined
+in our method and specify an explicit trigger and boundary.
+The eight Repairs can be compiled into executable method
+contracts, while the Guard encodes a downstream planning
+constraint. All 34 referenced source artifacts match their
+archived SHA-256 values, and all five Withheld candidates
+are excluded from reusable entries. The registry snapshot
+was frozen before the downstream record-use diagnostics.
+Table 5 illustrates how evidence structure, rather than outcome sign alone, determines qualification: an attributable
+intervention supports a Repair, a repeated and bounded failure supports a Guard, and an unresolved trigger remains
+Withheld.
+
+Agent Method Evolution
++0.010
+
+Other evaluated rounds
+
+First round
+
+Best round
+
+Last round
+
+ΔAUC
+
++0.005
+
+0.000 (base)
+
+-0.005
+
+er
+In
+
+te
+
+rF
+or
+
+m
+
+er
+
+U
+
+m
+
+ST
+H
+
+yF
+or
+
+m
+Fo
+r
+
+H
+
+ni
+U
+
+H
+
+m
+or
+if
+
+er
+-T
+IM
+
+er
+
+er
+
+et
+
+m
+
+FN
+
+Fo
+r
+
+IN
+
+ix
+M
+
+oE
+
+K
+un
+lu
+To
+n
+ke
+nF
+or
+m
+er
+O
+ne
+Tr
+an
+s
+
+ix
+
+IM
+D
+
+TS
+
+D
+L
+M
+
+H
+
+eM
+
+th
+
+SN
+M
+
+ni
+Ze
+
+Lo
+op
+CT
+To
+R
+ke
+nM
+ix
+er
+-L
+
+r
+
+ix
+er
+M
+ni
+
+U
+
+M
+
+be
+
+SI
+
+im
+Cl
+
+e
+
+uk
+on
+g
+W
+
+p
+kU
+
+Sc
+al
+ni
+
+an
+R
+
+U
+
+U
+
+ER
+
+ST
+
+N
+G
+
+-H
+
+U
+
+LT
+R
+A
+
+-S
+LA
+M
+
+LO
+
+2
+
+eq
+
+ES
+
+-V
+IN
+
+TW
+
+SS
+R
+
+SM
+
+ed
+fi
+ni
+U
+
+ES
+
+TC
+
+SA
+
+≤ -0.010
+
+Figure 2: Iterative adaptation is effective but non-monotonic. Starting from the same industrial RankMixer baseline, our
+agent adapts methods from 30 papers through multiple experimental rounds. For 26 of the 30 methods, at least one subsequent
+round outperforms the first; however, for 22 methods, the final round performs worse than an earlier best. These results show
+that iterative adaptation often discovers a better observed state but does not preserve gains monotonically.
+
+Model
+
+AUC
+
+∆FM
+
+Reported Reproduced Reported Reproduced
+InterFormer
+DIN
+DHEN
+Wukong
+FM
+
+Type
+
+Claims Records Main reason
+
+Rank
+1
+2
+3
+4
+5
+
+0.8865
+0.8848
+0.8790
+0.8765
+0.8485
+
+0.8522
+0.8470
+0.8436
+0.8413
+0.7974
+
++0.0380
++0.0363
++0.0305
++0.0280
+–
+
++0.0548
++0.0496
++0.0462
++0.0439
+–
+
+Repair
+
+8
+
+Guard
+
+1
+
+Withheld
+
+5
+
+Total
+
+14
+
+Table 3: Comparison of reported and agent-produced results
+on Amazon Electronics.
+
+Memory-Conditioned Adaptation
+We conduct a paired diagnostic of how a frozen source
+memory changes the initial outcome of target adaptation.
+The diagnostic set contains eight target–memory pairs covering seven target methods. For each pair, we independently
+execute a no-memory run and a memory-conditioned run
+sharing target paper, initial baseline, data, evaluation protocol, random seed, machine-experiment allowance, and defining mechanism. The no-memory run receives only the target Method, whereas the memory-conditioned run adds one
+source-derived intervention. We fix the record before launching either arm, and outcomes from the pair neither modify
+that record nor enter the frozen registry. These interventions
+cover normalization, expert density, optimization schedules,
+token budgets, feature sharing, and mixer depth.
+Before execution, an outcome-blind reference audit labels
+each pair from the target mechanism, observed conditions,
+and recorded boundary. To separate applicability from controller error, we execute all five reference-Apply pairs and
+three reference-Defer/Reject pairs with the gate bypassed.
+All eight pass the execution gates and are task-level comparable under the protocol above. After execution, we separately classify the task-level outcome as beneficial, neutral,
+or harmful.
+Table 6 shows that memory reuse is conditional. Of the five
+
+8 Attributable intervention with
+an explicit trigger and boundary
+1 Attributable negative evidence
+supporting a bounded failure
+mode
+0 Confounded or insufficient evidence, an unresolved trigger,
+or an outcome inconsistent with
+the claim
+9 –
+
+Table 4: Qualification outcomes for the 14 candidate claims.
+
+Apply pairs, three are beneficial, one is neutral, and one is
+harmful. Of the three manually dispatched Defer or Reject
+pairs, two are harmful and one is neutral. Reference applicability filters plausible reuse, whereas execution determines
+the target-specific outcome.
+
+Controller Error Analysis
+We separately characterize how the adaptation controller
+maps available target evidence to Apply, Defer, or Reject
+on a frozen diagnostic set of 64 target–record pairs. The
+reference decisions follow the same outcome-blind applicability protocol used in Table 6. Table 7 reports the resulting
+confusion counts.
+The hybrid controller issued four Apply decisions, only
+one of which matched the reference, yielding an affirmative
+precision of 25%; the remaining three corresponded to one
+reference-Defer and two reference-Reject cases. Its overall
+accuracy was 67.2%, below the 79.7% obtained by an alwaysReject rule on this class-imbalanced set. However, always
+rejecting yields zero Apply recall and dispatches no recordconditioned experiments, so it cannot generate target-local
+
+Type
+
+Representative case
+
+Evidence
+
+Qualification decision
+
+Repair
+
+EST: pre-head RMSNorm
+
+An ablation showed that removing RMSNorm
+reduced mean AUC from 0.6526 to 0.5433,
+raised the head-input standard deviation to 5340,
+and collapsed three of four datasets to AUC 0.5.
+Similar backbone diagnostics localized the failure to the prediction interface.
+
+Repair: normalize an observably unstable final representation before the
+head. The supported claim is localized to the prediction interface.
+
+Guard
+
+RankMixer: inactive sparse Across three successive repair attempts on four
+gate
+datasets, gate activity remained near zero. Neither connecting the gate to the task path nor
+reducing the L1 penalty tenfold restored it; the
+latter also reduced AUC by 0.0226.
+
+Guard: avoid further unguided gate
+tuning and inspect gradient reachability, initialization, and sparsity pressure. No Repair is admitted.
+
+Withheld
+
+TokenMixer: Wdown initial- Reducing the initialization scale from 0.01 to Withheld: the trigger remains unreization
+0.001 did not restore the intended residual signal solved, with no supported repair or
+and produced only a negligible AUC change.
+reusable boundary.
+
+Table 5: Representative outcomes of experimental claim qualification.
+Target
+
+Transferred intervention
+
+Reference applicability
+
+∆AUC
+
+Outcome
+
+TokenFormer
+RankMixer
+InterFormer
+MixFormer
+TokenFormer
+OneTrans
+HiFormer
+HeMix
+
+Branch-output RMSNorm
+Sparse-to-dense experts
+Residual-output RMSNorm
+Pre-head RMSNorm
+Warmup + higher LR
+Per-feature token cap
+FFN shared across features
+Single mixer block
+
+Reject
+Reject
+Defer
+Apply
+Apply
+Apply
+Apply
+Apply
+
+-0.0227
++0.0003
+-0.0032
++0.0030
++0.0034
++0.0101
+-0.0187
+-0.0007
+
+Harmful
+Neutral
+Harmful
+Beneficial
+Beneficial
+Beneficial
+Harmful
+Neutral
+
+Table 6: Memory-conditioned adaptation results. ∆AUC is the memory-conditioned AUC minus the no-memory AUC. Values
+with ∆AUC > 0.001, ∆AUC < −0.001, and |∆AUC| ≤ 0.001 are labeled Beneficial, Harmful, and Neutral, respectively.
+
+Reference
+Apply
+Defer
+Reject
+
+Apply
+
+Defer
+
+Reject
+
+1
+1
+2
+
+1
+9
+16
+
+0
+1
+33
+
+Table 7: Controller decisions on a frozen diagnostic set.
+Columns are controller outputs.
+
+Scenario
+
+Business metric
+
+Online gain
+
+Live streaming
+User growth
+
+Page duration
+Net growth utility
+
++0.75%
++6.34%
+
+Table 8: Observed online lifts of two candidates produced
+through the complete workflow over production baselines.
+
+evidence from reuse. Aggregate accuracy therefore rewards
+inactivity and is not an adequate operational objective in this
+setting. The observed false affirmatives show that the tested
+controller has not yet achieved a reliable balance between
+conservative filtering and experimental progress. We therefore treat an Apply decision as a hypothesis for execution
+rather than a confirmation of applicability.
+
+shown in Table 8, two candidates from the complete workflow
+yielded positive online lifts over frozen production baselines
+in real-world A/B tests.
+
+Production Case Studies
+
+The production case studies establish candidate-level online
+performance against frozen baselines rather than frameworklevel attribution, which would require a parallel plain-agent
+or no-memory arm. Because stochastic upstream changes
+alter downstream artifacts, attribution is interpreted at the
+task level except for code-inspected equivalent implementations. The record-use diagnostic contains only eight singlerun pairs, and the controller evaluation is class-imbalanced,
+limiting conclusions about generalization.
+
+Although the previous diagnostics expose limitations in
+record use, they do not prevent the workflow from producing deployable candidates. Each candidate originated from
+a paper-derived intervention and passed artifact verification,
+machine evaluation, and claim qualification before online
+testing. These cases connect trajectory-to-evidence conversion with model evaluation under production constraints. As
+
+Limitations
+
+Conclusion
+We present a framework that verifies research-agent experiments and converts supported findings into auditable,
+boundary-aware records. Across paper-to-target adaptations,
+final states often lose earlier gains, and several candidate
+claims lack sufficient evidence for retention. Downstream diagnostics identify affirmative applicability judgment by the
+tested controller as a remaining bottleneck. Separately, two
+candidates produced through the complete workflow yielded
+positive online lifts over frozen production baselines. Overall, our results support treating a trajectory as a source of
+candidate evidence requiring explicit verification, rather than
+as experimental knowledge by itself.
+
+References
+Farquhar, S.; Kossen, J.; Kuhn, L.; and Gal, Y. 2024. Detecting Hallucinations in Large Language Models Using Semantic Entropy. Nature, 630: 625–630.
+GLM-5 Team. 2026. GLM-5: From Vibe Coding to Agentic
+Engineering. arXiv:2602.15763.
+Huang, Q.; Vora, J.; Liang, P.; and Leskovec, J. 2023. MLAgentBench: Evaluating Language Agents on Machine Learning Experimentation. arXiv preprint arXiv:2310.03302.
+Liu, S.; Fang, L.; Sun, Y.; Huang, S.; Luo, Q.; Liu, S.; Chen,
+X.; Liu, D.; Ma, C.; Chai, Z.; Wang, H.; Quan, S.; Cui,
+C.; Zhu, Z.; Chen, P.; Xu, W.; Xiao, L.; Gu, H.; and Jiang,
+J. 2026. NOVA: A Verification-Aware Agent Harness for
+Architecture Evolution in Industrial Recommender Systems.
+arXiv preprint arXiv:2606.27243.
+Lu, C.; Lu, C.; Lange, R. T.; Foerster, J.; Clune, J.; and
+Ha, D. 2024. The AI Scientist: Towards Fully Automated Open-Ended Scientific Discovery. arXiv preprint
+arXiv:2408.06292.
+Manakul, P.; Liusie, A.; and Gales, M. J. F. 2023. SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for
+Generative Large Language Models. In Proceedings of the
+2023 Conference on Empirical Methods in Natural Language
+Processing, 9004–9017. Association for Computational Linguistics.
+McAuley, J.; Targett, C.; Shi, Q.; and van den Hengel, A.
+2015. Image-Based Recommendations on Styles and Substitutes. In Proceedings of the 38th International ACM SIGIR
+Conference on Research and Development in Information
+Retrieval, 43–52.
+Schmidgall, S.; Su, Y.; Wang, Z.; Sun, X.; Wu, J.; Yu, X.;
+Liu, J.; Moor, M.; Liu, Z.; and Barsoum, E. 2025. Agent Laboratory: Using LLM Agents as Research Assistants. arXiv
+preprint arXiv:2501.04227.
+Shinn, N.; Cassano, F.; Berman, E.; Gopinath, A.;
+Narasimhan, K.; and Yao, S. 2023. Reflexion: Language
+Agents with Verbal Reinforcement Learning. arXiv preprint
+arXiv:2303.11366.
+Starace, G.; Jaffe, O.; Sherburn, D.; Aung, J.; Chan, J. S.;
+Maksin, L.; Dias, R.; Mays, E.; Kinsella, B.; Thompson, W.;
+Heidecke, J.; Glaese, A.; and Patwardhan, T. 2025. PaperBench: Evaluating AI’s Ability to Replicate AI Research.
+arXiv preprint arXiv:2504.01848.
+
+Tie, G.; Shi, J.; Song, D.; Huang, Y.; Sheng, Z.; Zhou, X.;
+Liu, D.; Zhou, P.; Chen, Y.; Xu, R.; He, L.; Wen, Q.; Li, M.;
+Lu, C.; Li, S.; Xie, P.; Yuan, Y.; Meng, R.; Xing, L.; Sun,
+L.; Xiong, C.; Yu, P. S.; and Gao, J. 2026. AutoResearch
+AI: Towards AI-Powered Research Automation for Scientific
+Discovery. arXiv preprint arXiv:2605.23204.
+Vartak, M.; Subramanyam, H.; Lee, W.-E.; Viswanathan, S.;
+Husnoo, S.; Madden, S.; and Zaharia, M. 2016. ModelDB:
+A System for Machine Learning Model Management. In
+Proceedings of the Workshop on Human-In-the-Loop Data
+Analytics, 1–3. Association for Computing Machinery.
+Wang, H.; Wu, Y.; Chang, D.; Wei, L.; and Heldt, L. 2026.
+Self-Evolving Recommendation System: End-to-End Autonomous Model Optimization with LLM Agents. arXiv
+preprint arXiv:2602.10226.
+Wang, Z. Z.; Mao, J.; Fried, D.; and Neubig, G. 2025. Agent
+Workflow Memory. In Proceedings of the 42nd International
+Conference on Machine Learning, volume 267 of Proceedings of Machine Learning Research, 63897–63911. PMLR.
+Wei, T.; Sachdeva, N.; Coleman, B.; He, Z.; Bei, Y.; Ning, X.;
+Ai, M.; Li, Y.; He, J.; Chi, E. H.; Wang, C.; Chen, S.; Pereira,
+F.; Kang, W.-C.; and Cheng, D. Z. 2025. Evo-Memory:
+Benchmarking LLM Agent Test-Time Learning with SelfEvolving Memory. arXiv preprint arXiv:2511.20857.
+Wu, X.; Zhuan, Y.; Wei, R.; Chen, H.; Bai, D.; Liu, J.;
+Wang, X.; Wang, X.; Wang, L.; and Cheng, X. 2026.
+AgenticRecTune: Multi-Agent with Self-Evolving Skillhub
+for Recommendation System Optimization. arXiv preprint
+arXiv:2604.26969.
+Zaharia, M.; Chen, A.; Davidson, A.; Ghodsi, A.; Hong,
+S. A.; Konwinski, A.; Murching, S.; Nykodym, T.; Ogilvie,
+P.; Parkhe, M.; Xie, F.; and Zumar, C. 2018. Accelerating
+the Machine Learning Lifecycle with MLflow. IEEE Data
+Engineering Bulletin, 41(4): 39–45.
+Zhao, A.; Huang, D.; Xu, Q.; Lin, M.; Liu, Y.-J.; and Huang,
+G. 2024. ExpeL: LLM Agents Are Experiential Learners.
+In Proceedings of the AAAI Conference on Artificial Intelligence, volume 38, 19632–19642.
+Zhu, D.; Zhou, X.; Qin, S.; Zhu, X.; Ding, H.; Zhong, S.;
+Wen, Z.; Xie, Z.; Gou, C.; Ren, L.; Wang, Y.; Zhong, J.;
+Liu, R.; Gao, T.; Lin, Y.; Zhang, J.; Song, M.; Qi, X.; Wu,
+J.; Zhang, C.; Piao, Y.; Niu, Z.; Lin, H.; Meng, L.; Tang, P.;
+Tang, C.; Wu, S.; Zheng, H.; Liu, Y.; Zhu, L.; Wang, H.; Ding,
+M.; Wan, Z.; Liu, H.; Wang, S.; Zhu, H.; Zhang, X.; Chai,
+N.; Liu, Y.; Lai, P.; Yuan, S.; Su, Z.; Zhang, G.; Zhou, W.;
+Du, Y.; Huang, W.; and Shi, G. 2026. EdgeBench: Unveiling
+Scaling Laws of Learning from Real-World Environments.
+arXiv preprint arXiv:2607.05155.
+Zhu, J.; Fan, Z.; Zhu, X.; Jiang, Y.; Wang, H.; Han, X.;
+Ding, H.; Wang, X.; Zhao, W.; Gong, Z.; Yang, H.; Chai,
+Z.; Chen, Z.; Zheng, Y.; Chen, Q.; Zhang, F.; Zhou, X.;
+Xu, P.; Yang, X.; Wu, D.; and Liu, Z. 2025. RankMixer:
+Scaling Up Ranking Models in Industrial Recommenders.
+In Proceedings of the 34th ACM International Conference
+on Information and Knowledge Management, 6309–6316.
+
+
