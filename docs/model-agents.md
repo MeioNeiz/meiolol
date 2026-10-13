@@ -40,6 +40,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-2c | comp features coordinator (Jacob, 2026-10-13): champion profiles (damage type mix, tankiness, armour vs MR, CC, utility, range) into the win model so the Draft tester reacts to the draft; api Row.stats (53323f9). Briefs: model.md "Comp features" when results land |
 | meiolol-ea [fc19bb] | comp data: `meiolol-lab seat-stats` (SNAP/seat_stats.tsv from raw.db), rows/harness load on training rows only |
 | meiolol-0d [b5e038] | comp model: src/lab/cand/win-comp (profile prior, team balance, cross-team terms), dev ablation vs ratings; name clashes with the older meiolol-0d, use the ref |
+| meiolol-ad | comp research: which comp interactions have measured win effects (research/questions, josearch); shortlist to 0d and 2c |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
 shows. When an agent hands over, get the successor's name and tell the others.
