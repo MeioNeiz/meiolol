@@ -63,6 +63,8 @@ pub const usage =
     \\                                  --fit-preds 1 (teacher preds for distillation:
     \\                                  each block's fit games scored by nets fitted
     \\                                  without their hashed fifth, DIR/fit-preds.tsv)
+    \\                                  --shuffle-ids SEED (control: training games'
+    \\                                  champion rows permuted, labels and offsets kept)
     \\                                  --threads N --out DIR
     \\                                  --split random:SEED (one block, LoLDraftAI's
     \\                                  random tenth) --filter ldai (its filters)
@@ -118,6 +120,10 @@ pub const Options = struct {
     /// --fit-preds 1: also score every block's fit games, each from a fit without its
     /// cross-fit fifth (effects.zig --soft reads them)
     fit_preds: bool = false,
+    /// --shuffle-ids SEED: a control for nets on fitted offsets; every training set's
+    /// champion-id rows (all 10 seats together) permuted across its games, labels and
+    /// offsets kept, scored games untouched: a residual net can then only recalibrate
+    shuffle_ids: ?u32 = null,
     /// --filter ldai: LoLDraftAI's 15-minute filters on fit and scored games
     ldai: bool = false,
     /// CPU threads for small and resid fits (one seed per thread) and big on the CPU
@@ -311,6 +317,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.ldai = true;
         } else if (std.mem.eql(u8, k, "--fraction")) {
             o.fraction = try std.fmt.parseFloat(f64, v);
+        } else if (std.mem.eql(u8, k, "--shuffle-ids")) {
+            o.shuffle_ids = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--fit-preds")) {
             o.fit_preds = std.mem.eql(u8, v, "1");
         } else if (std.mem.eql(u8, k, "--resample")) {
@@ -465,6 +473,16 @@ pub const NetGame = struct {
     /// The candidate's logit for blue (resid), else 0
     off: f32,
 };
+
+fn shuffleIds(games: []NetGame, seed: u32, set: usize) void {
+    var rng: std.Random.DefaultPrng = .init((@as(u64, seed) << 8) | set);
+    const r = rng.random();
+    var i = games.len;
+    while (i > 1) {
+        i -= 1;
+        std.mem.swap([10]u32, &games[i].ids, &games[r.uintLessThan(usize, i + 1)].ids);
+    }
+}
 
 /// The candidate fitted on the games `keep` accepts: blue's chance per data game index,
 /// written for the games `want` marks only
@@ -649,6 +667,7 @@ fn runBlock(
     defer gpa.free(g_fit);
     const g_scored = try netGames(gpa, d, scored.items, &vocab_all, if (resid) p_all else null);
     defer gpa.free(g_scored);
+    if (opts.shuffle_ids) |seed| for ([_][]NetGame{ g_inner, g_val, g_fit }, 0..) |set, k| shuffleIds(set, seed, k);
 
     const n_s = opts.seeds.len;
     const fits = try gpa.alloc(Fitted, n_s);
@@ -1247,6 +1266,18 @@ fn trainSmall(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, trai
     return .{ .net = n, .steps = best_step, .epochs = epochs, .val_loss = best_loss };
 }
 
+/// For meiolol-lab health: the small (or resid) net trained on `train` for `steps` (0: at
+/// init, no validation), then blue's chance on `scored` into pred; returns the parameters
+/// (caller frees)
+pub fn healthFit(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, train: []const NetGame, steps: u64, scored: []const NetGame, pred: []f32) ![]f32 {
+    const t = try trainSmall(gpa, opts, seed, n_ids, train, null, steps, null);
+    errdefer gpa.free(t.net.p);
+    const w: Work = try .init(gpa, t.net.l);
+    defer w.deinit(gpa);
+    predictSmall(&t.net, scored, &w, pred);
+    return t.net.p;
+}
+
 fn fitSmall(gpa: std.mem.Allocator, io: Io, opts: Options, seed: u32, s: Sets) !Fitted {
     const t0 = Io.Clock.awake.now(io);
     var table: ?EmbTable = if (opts.emb_init) |dir| try .load(gpa, io, dir, s.block, seed, opts.emb) else null;
@@ -1442,4 +1473,37 @@ test "fit preds: a fifth's net never fits a game it scores, the fifths cover the
 
 test {
     _ = setnet;
+}
+
+test "shuffle ids: whole champion rows move together, labels and offsets stay" {
+    var games: [50]NetGame = undefined;
+    for (&games, 0..) |*g, i| {
+        const k: u32 = @intCast(i);
+        g.* = .{ .ids = .{ k, k + 100, k + 200, k + 300, k + 400, k + 500, k + 600, k + 700, k + 800, k + 900 }, .platform = 0, .y = @floatFromInt(i % 2), .off = @floatFromInt(i) };
+    }
+    shuffleIds(&games, 7, 0);
+    var seen: [50]bool = @splat(false);
+    var moved: usize = 0;
+    for (games, 0..) |g, i| {
+        const k = g.ids[0];
+        for (g.ids, 0..) |id, s| try testing.expectEqual(k + 100 * @as(u32, @intCast(s)), id);
+        try testing.expect(!seen[k]);
+        seen[k] = true;
+        if (k != i) moved += 1;
+        try testing.expectEqual(@as(f32, @floatFromInt(i % 2)), g.y);
+        try testing.expectEqual(@as(f32, @floatFromInt(i)), g.off);
+    }
+    try testing.expect(moved > 25);
+}
+
+test "health fit: a resid net at step 0 predicts its offsets" {
+    const gpa = testing.allocator;
+    var o: Options = .{};
+    o.net = .resid;
+    var games: [8]NetGame = undefined;
+    for (&games, 0..) |*g, i| g.* = .{ .ids = .{ 5, 6, 2, 3, 4, 0, 1, 2, 3, 4 }, .platform = 0, .y = 1, .off = @as(f32, @floatFromInt(i)) / 4 - 1 };
+    var pred: [8]f32 = undefined;
+    const p = try healthFit(gpa, o, 1, 8, &games, 0, &games, &pred);
+    defer gpa.free(p);
+    for (pred, games) |q, g| try testing.expectApproxEqAbs(sigmoid(g.off), q, 1e-6);
 }
