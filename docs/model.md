@@ -210,7 +210,11 @@ Spread of true effects (sd of shrunk-model effects, gold at 14): own champion 27
 lane opponent 74-196 (27 jungle vs jungle); bot partners 100-180 for bottom and support;
 a jungler 20-65; anyone else 15-50 per champion; own class x enemy classes 0-33; own
 champion x enemy classes 0-46 (2 of 5 roles), own champion x enemy champion 0-21 (off
-in 3 roles). Deaths before 15: lane 0.1-0.35, a jungler 0.1-0.17, anyone else
+in 3 roles). Upper 95% bounds on those three spreads (analysis.spreadBounds, 2026-10-13:
+the uncut moment estimate, at least 0, + 1.645 sd over 200 resamples of train games),
+gold at 14 by role top/jungle/mid/bottom/support: own class x enemy classes
+24/13/22/51/31, own champion x enemy classes 55/53/77/84/73, own champion x enemy
+champion 41/35/41/44/37. Deaths before 15, own champion x enemy champion under 0.07-0.09. Deaths before 15: lane 0.1-0.35, a jungler 0.1-0.17, anyone else
 0.04-0.11 per champion; interactions under 0.13.
 
 first_item censoring (no finished item by game end, games past 15:00): top 1.1%,
@@ -404,7 +408,8 @@ Preds: 3c-items-{state,champ,item,champitem}.tsv (match_id, slot, k).
 
 Spread of true effects (sd, win pp): champion given the state 5.2-9.3 by role; item in
 role and slot top 1.0, jungle 1.5, off in mid, bottom and support; item on the champion
-off in every role (no detectable spread). Largest item effects (shrunk, 500+ rows):
+off in every role (no detectable spread; upper 95% bound 2.7-3.3 win pp by role,
+analysis.spreadBounds, 2026-10-13). Largest item effects (shrunk, 500+ rows):
 jungle Edge of Night 2nd +2.9, Youmuu's 1st -2.9, Guardian Angel 3rd +2.8, Malignance 1st
 -2.4, Death's Dance 2nd +2.0; top Sundered Sky 3rd -1.9, Frozen Heart 1st +1.6, Black
 Cleaver 1st +1.5.
@@ -585,8 +590,13 @@ Reading:
   30), top's shrinks after 25
 - No champion converts a lead or comes back from behind measurably differently from its
   general value: "from 2k behind at 15" is the same effect as at even, at 118k games.
-  Not detected rather than bounded: the spread estimate is truncated at 0 and reaches
-  ~2 pp per 1000 gold (jungle 10-20); a bootstrap over games would give a real bound
+  The spread estimate is cut at 0 and reaches ~2 pp per 1000 gold (jungle 10-20).
+  Upper 95% bound across champions (analysis.spreadBounds, 2026-10-13: the uncut
+  moment estimate, at least 0, + 1.645 sd over 200 resamples of train games), pp per
+  1000 team gold lead, top/jungle/mid/bottom/support: 10 min 3.2/4.4/3.0/4.5/3.4,
+  15 min 2.0/3.4/2.5/2.8/2.6, 20 min 1.6/3.8/1.7/2.2/1.9, 25 min 1.8/2.0/1.6/3.2/3.0,
+  30 min 1.5/1.9/1.7/2.2/2.0. So at 15:00 and 2,000 gold behind, a champion one sd from
+  its role's average comes back at most ~4-7 pp better or worse than its even-game value
 - Descriptive: who picks the champion and the rest of their team are not held fixed.
   Lesson material with intervals, never a pick reason
 

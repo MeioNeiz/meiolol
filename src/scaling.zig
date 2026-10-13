@@ -271,6 +271,25 @@ fn update(gpa: std.mem.Allocator, t: *Term, cov: Cov, champs: usize, rows: []con
     }
 }
 
+/// spreadBounds for a fitted term, on its working response at the final `eta`
+fn slopeBounds(gpa: std.mem.Allocator, t: *const Term, cov: Cov, champs: usize, rows: []const Row, eta: []const f64, n_games: usize) ![Role.count]?f64 {
+    const parts = try gpa.alloc(analysis.Part, rows.len);
+    defer gpa.free(parts);
+    for (parts, rows, eta) |*part, r, e| {
+        const c = cellOf(champs, r);
+        const x = covariate(cov, r);
+        const p = logreg.sigmoid(e);
+        const wx2 = p * (1 - p) * x * x;
+        part.* = .{
+            .game = r.game,
+            .cell = @intCast(c),
+            .xr = x * (@as(f64, @floatFromInt(@intFromBool(r.won))) - p) + t.b[c] * wx2,
+            .xx = wx2,
+        };
+    }
+    return analysis.spreadBounds(gpa, parts, n_games, champs, true, 1);
+}
+
 const Model = struct { label: []const u8, file: []const u8 };
 
 const models = [_]Model{
@@ -297,6 +316,8 @@ const Minute = struct {
     base_w: [max_x]f64 = @splat(0),
     champ: ?Term = null,
     slope: ?Term = null,
+    /// [role]: upper 95% bound on the slope's spread (analysis.spreadBounds)
+    slope_bound: [Role.count]?f64 = @splat(null),
 };
 
 pub fn run(
@@ -397,7 +418,7 @@ pub fn run(
         for (0..opts.passes) |_| try update(gpa, &pooled, .one, champs, rows.items, eta.items);
     }
 
-    for (&at) |*m| {
+    for (&at, minutes) |*m, minute| {
         const eta = try gpa.dupe(f64, m.base_train);
         defer gpa.free(eta);
         var champ = try Term.init(gpa, cells);
@@ -410,6 +431,7 @@ pub fn run(
         }
         m.champ = champ;
         m.slope = slope;
+        if (minute > 0) m.slope_bound = try slopeBounds(gpa, &slope, slope_cov, champs, m.train.items, eta, n_games[0]);
     }
 
     var names: [models.len][]const u8 = undefined;
@@ -495,6 +517,19 @@ pub fn run(
             if (minute > 0) try w.print(" [{d:.2}]", .{25 * m.slope.?.tau[ri]});
             try w.writeAll(" |");
         }
+        try w.writeAll("\n");
+    }
+
+    try w.print("\nUpper 95% bound on the slope's spread, pp per 1000 ({d} resamples of " ++
+        "train games, analysis.spreadBounds; the estimate above is cut at 0, this is not)" ++
+        "\n\n| role |", .{analysis.bound_reps});
+    for (minutes[1..]) |minute| try w.print(" {d} min |", .{minute});
+    try w.writeAll("\n| --- |");
+    for (minutes[1..]) |_| try w.writeAll(" --- |");
+    try w.writeAll("\n");
+    for (Role.all, 0..) |role, ri| {
+        try w.print("| {t} |", .{role});
+        for (at[1..]) |m| if (m.slope_bound[ri]) |b| try w.print(" {d:.2} |", .{25 * b}) else try w.writeAll(" - |");
         try w.writeAll("\n");
     }
 

@@ -478,6 +478,20 @@ pub fn run(
             }
             try w.writeAll("\n");
         }
+
+        // The interactions are nulls: bound how large they could still be
+        try w.print("\nUpper 95% bound on the spread of the interactions (sd, outcome units; " ++
+            "{d} resamples of train games, analysis.spreadBounds):\n\n| group |", .{analysis.bound_reps});
+        for (Role.all) |r| try w.print(" {t} |", .{r});
+        try w.writeAll("\n| --- |");
+        for (Role.all) |_| try w.writeAll(" --- |");
+        try w.writeAll("\n");
+        for (shown[8..11]) |sh| {
+            const bounds = try analysis.backfitBounds(Group, gpa, &fits[sh[1]], space, train.items, z, sh[0], train_games);
+            try w.print("| {t} |", .{sh[0]});
+            for (bounds, sd) |b, s| if (b) |x| try w.print(" {d:.2} |", .{x * s}) else try w.writeAll(" - |");
+            try w.writeAll("\n");
+        }
     }
     try preds.flush();
 }

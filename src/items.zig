@@ -361,6 +361,12 @@ pub fn run(
         }
         try w.writeAll("\n");
     }
+    // The champion-specific term is a null: bound how large it could still be
+    const bounds = try analysis.backfitBounds(Group, gpa, full, space, train.items, z, .champ_item, n_games[0]);
+    try w.writeAll("| champ_item, upper 95% bound |");
+    for (bounds) |b| if (b) |x| try w.print(" {d:.2} |", .{100 * x}) else try w.writeAll(" - |");
+    try w.print("\n\nThe bound: {d} resamples of train games (analysis.spreadBounds); the " ++
+        "estimate above is cut at 0, the bound is not.\n", .{analysis.bound_reps});
 
     try topEffects(w, arena, db, space, full, .item, champ_index.ids.items, item_index.ids.items, 500);
     try topEffects(w, arena, db, space, full, .champ_item, champ_index.ids.items, item_index.ids.items, 300);

@@ -97,11 +97,21 @@ How to write a line:
   closing out a lead, than at an even game: 2,000 gold behind at 15, a champion makes
   the same difference as at even. A champion's value beyond the gold mostly stays the
   same from minute 10 to 30, with a small real scaling curve (bot laners matter more
+  late). Sure: 118k games; not detected, and bounded: at 15:00 a typical champion's
+  comeback differs from its role's average by at most 2-3.5 percentage points per
+  1,000 gold (1.5-4.5 across roles and minutes 10-30), so at most ~4-7 points from
+  2,000 behind; modelling it never improved held-out games. Site: no "comeback
+  champion" labels; scaling only as the effect by minute with intervals. Evidence:
+  docs/model.md "Champion given the state (scaling)"
+- ~~2026-10-13: We found no champion that is better at coming back from behind, or at
+  closing out a lead, than at an even game: 2,000 gold behind at 15, a champion makes
+  the same difference as at even. A champion's value beyond the gold mostly stays the
+  same from minute 10 to 30, with a small real scaling curve (bot laners matter more
   late). Sure: 118k games; not detected rather than ruled out: the estimate is zero in
   most roles and minutes, at most about 2 percentage points per 1,000 gold (jungle,
   10-20 min), and modelling it never improved held-out games. Site: no "comeback
   champion" labels; scaling only as the effect by minute with intervals. Evidence:
-  docs/model.md "Champion given the state (scaling)"
+  docs/model.md "Champion given the state (scaling)"~~
 - ~~2026-10-12 (early): Our best draft model picks the winner 53.3% of the time, still
   getting better with every doubling of games. Withdrawn 2026-10-13: 53.3 was the old
   eval's pick percentile (reported there as no signal), not an accuracy, and the curve
@@ -173,12 +183,19 @@ How to write a line:
   opponent by 75-200, a jungler by 20-65 and each other enemy by 15-50. Sure: 118k
   games. Site: "what your lane matchup and this enemy team typically do to your early
   game", with ranges. Evidence: docs/model.md "Team effects on early outcomes"
-- 2026-10-12: Whether your champion in particular is good or bad against this enemy
+- 2026-10-13: Whether your champion in particular is good or bad against this enemy
+  team doesn't show up beyond your lane. Sure: two different model types agree at 118k
+  games; not detected, and bounded: a typical champion-against-enemy-champion pairing
+  moves your gold at 14 by at most 35-45 gold, and against the enemy's classes by at
+  most 50-85 (your lane opponent alone moves it 75-200). Site: no team counters or
+  "best pick against this comp". Evidence: docs/model.md "Team effects", "Champion
+  embeddings against the enemy team"
+- ~~2026-10-12: Whether your champion in particular is good or bad against this enemy
   team doesn't show up beyond your lane. Sure: two different model types agree at 118k
   games; not detected rather than ruled out (the estimate is 0-21 gold at 14 and is
   switched off as noise in 3 of 5 roles). Site: no team counters or "best
   pick against this comp". Evidence: docs/model.md "Team effects", "Champion
-  embeddings against the enemy team"
+  embeddings against the enemy team"~~
 - ~~2026-10-12: Real interactions live in the lane: champion embeddings help only in
   matchups with few games. Superseded the same day by the lane opponent's general
   effect above, which explains most of it~~
@@ -188,13 +205,21 @@ How to write a line:
 
 ## Items
 
-- 2026-10-12: Which item you finish adds almost nothing to predicting the win once you
+- 2026-10-13: Which item you finish adds almost nothing to predicting the win once you
+  know when you bought it and how far ahead you were (a twentieth of what the champion
+  adds). Sure: 118k games (2.9M first-three-item purchases); an item being better on one
+  champion than on others in its role is not detected, and is at most about 3
+  percentage points for a typical champion-item pair; no item-only model was fitted, so
+  how much of "win rate by item" is the lead is not measured. Site: no "best build" or
+  "this item wins more"; buying time and the lead at purchase are fair lessons.
+  Evidence: docs/model.md "Items given the state at purchase"
+- ~~2026-10-12: Which item you finish adds almost nothing to predicting the win once you
   know when you bought it and how far ahead you were (a twentieth of what the champion
   adds). Sure: 118k games (2.9M first-three-item purchases); the champion-specific item
   term is not detected; no item-only model was fitted, so how much of "win rate by item"
   is the lead is not measured. Site: no "best build"
   or "this item wins more"; buying time and the lead at purchase are fair lessons.
-  Evidence: docs/model.md "Items given the state at purchase"
+  Evidence: docs/model.md "Items given the state at purchase"~~
 
 ## Objectives
 
