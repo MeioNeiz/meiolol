@@ -45,6 +45,9 @@ pub const usage =
     \\                                  plant:SPEC:PATH (minimum detectable effect);
     \\                                  --permute-profiles: profiles shuffled among a
     \\                                  role's champions, a control (expect ~0 passes)
+    \\  comps SNAP --export-teams         every team of blocks 1-5 and dev-val with its
+    \\                                  archetype and traits (profiles from games before
+    \\                                  its block, no outcomes): teams.tsv
     \\  comps SNAP --confirm FILE [--carry FILE]
     \\                                  the sealed blocks 4-5 and dev-val, for the
     \\                                  candidate names in FILE only (pre-declared)
@@ -1064,7 +1067,7 @@ fn bhThreshold(gpa: Allocator, p: []const f64, q: f64) !f64 {
 
 // ---------------------------------------------------------------- main
 
-const Mode = enum { screen, confirm };
+const Mode = enum { screen, confirm, export_teams };
 
 pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) !u8 {
     if (argv.len < 2) {
@@ -1086,6 +1089,8 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         const a = argv[i];
         if (std.mem.eql(u8, a, "--screen")) {
             mode = .screen;
+        } else if (std.mem.eql(u8, a, "--export-teams")) {
+            mode = .export_teams;
         } else if (std.mem.eql(u8, a, "--confirm") and i + 1 < argv.len) {
             mode = .confirm;
             i += 1;
@@ -1220,10 +1225,17 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         break :blk a;
     };
 
+    if (m == .export_teams) {
+        try exportTeams(gpa, arena, io, d, extra, c, bounds, &arch, permute, w);
+        try w.flush();
+        return 0;
+    }
+
     // Blocks: screen 0-2; sealed 3-4 and dev-val (5)
     const blocks: []const u8 = switch (m) {
         .screen => &.{ 0, 1, 2 },
         .confirm => &.{ 0, 1, 2, 3, 4, 5 },
+        .export_teams => unreachable,
     };
     var units: std.ArrayList(Unit) = .empty;
     defer units.deinit(gpa);
@@ -1299,6 +1311,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     };
     switch (m) {
         .screen => try screen(gpa, arena, io, cands, units.items, xcol, shuffles, w),
+        .export_teams => unreachable,
         .confirm => try confirm(gpa, arena, io, cands, units.items, xcol, confirm_path.?, w),
     }
     try w.flush();
@@ -1306,6 +1319,52 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
 }
 
 const nan32 = std.math.nan(f32);
+
+/// Traits written per team by --export-teams (Agg values)
+const export_aggs = [_]Agg{ .magic_share, .early, .scaling, .engage, .peel, .dive, .tank, .range, .siege, .pick, .wave, .roam, .front };
+
+fn exportTeams(
+    gpa: Allocator,
+    arena: Allocator,
+    io: Io,
+    d: *const rows.Data,
+    extra: []const ?compstats.Seat,
+    c: harness.Cuts,
+    bounds: [nnexport.folds + 1]i64,
+    arch: *const Archetypes,
+    permute: u64,
+    w: *Io.Writer,
+) !void {
+    _ = arena;
+    var file = try Io.Dir.cwd().createFile(io, "teams.tsv", .{});
+    defer file.close(io);
+    var fbuf: [64 * 1024]u8 = undefined;
+    var fw = file.writer(io, &fbuf);
+    const t = &fw.interface;
+    try t.writeAll("match_id\tblock\tside\tarchetype");
+    for (export_aggs) |g| try t.print("\t{s}", .{@tagName(g)});
+    try t.writeAll("\n");
+    for (0..6) |b| {
+        const before = if (b == 5) c.dev else bounds[b];
+        const hi = if (b == 5) c.select else @min(bounds[b + 1], c.dev);
+        var p = try buildProfiles(gpa, d, extra, .{ .c = c, .before = before }, permute);
+        defer p.deinit(gpa);
+        var n: usize = 0;
+        for (d.games) |g| {
+            const in = if (b == 5) harness.scored(.dev, c, g) else harness.visible(.dev, c, g) and g.start >= before and g.start < hi;
+            if (!in) continue;
+            for (g.teams, 0..) |team, side| {
+                const tm = makeTeam(&p, team);
+                if (b == 5) try t.print("{s}\tdev\t{d}\t{d}", .{ g.match_id, side, arch.assign(&tm) }) else try t.print("{s}\t{d}\t{d}\t{d}", .{ g.match_id, b + 1, side, arch.assign(&tm) });
+                for (export_aggs) |a| try t.print("\t{d:.4}", .{agg(&tm, a)});
+                try t.writeAll("\n");
+            }
+            n += 1;
+        }
+        try w.print("block {s}: {d} games\n", .{ if (b == 5) "dev" else &[_]u8{'1' + @as(u8, @intCast(b))}, n });
+    }
+    try t.flush();
+}
 
 fn teamCuts(gpa: Allocator, arena: Allocator, d: *const rows.Data, p: *const Profiles, fit: Fit) !TeamCuts {
     var early: std.ArrayList(f64) = .empty;
