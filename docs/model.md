@@ -1106,8 +1106,9 @@ pair_games from Scorer.value; the page's JS must match them to 0.01.
   game. Rule: use a row for a game only if fetched_at < game_start (ms), else missing.
   For most games pre-game mastery exists only in the raw archive's fetch history
   (hourly mastery-NAME.tsv.zst, salted hashes, fetched_at): a loader takes each
-  player's latest fetch before game start. Check the archive's salt matches the
-  snapshot's before joining
+  player's latest fetch before game start. Same salt as the snapshots (11): from 19
+  Oct the snapshot carries a mastery_pre table (match id, player hash, fetched_at),
+  built on the gpu-box from the archive
 
 - Next lab campaign, rank at game start on 3c-team2 (agreed with meiolol-78; runs on the
   snapshot 78 pins after ~a week of rank_history, with a fresh test set: rank_start
