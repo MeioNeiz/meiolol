@@ -8,6 +8,8 @@
 #   deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --commit SHA | --bin KEY]
 #                           [--no-build] [--build-arg A]... [--with PATH]...
 #                           [--res cpu|gpu|none|auto] [--literal] [--dry-run] -- ARGS...
+#   deploy/lab-run.sh start [gpu-box] NAME --python SCRIPT [--with PATH]... [--res R]
+#                           -- ARGS...
 #   deploy/lab-run.sh status [HOST]
 #   deploy/lab-run.sh wait RUN... [--timeout S]  until each has ended: state, RESULT lines
 #   deploy/lab-run.sh logs HOST RUN [LINES]
@@ -39,6 +41,12 @@
 # --no-build the current inputs' binary if built, never a build. Meta records src KEY.
 # --build-arg goes to zig build (deploy/lab-exp.sh: -Dcand=DIR); --with copies a file or
 # directory into the run dir (the candidate's source, kept with its scores)
+# --python SCRIPT: no build; SCRIPT and the other *.py in its directory (it may import
+# them), with py/labpy.py, py/pyproject.toml and py/uv.lock, are copied into the run dir
+# and SCRIPT runs there with ARGS in the shared env of py/uv.lock (~/ml/pyenv/HASH, made
+# on first use). Meta: `bin python HASH` (of those *.py), pyenv HASH. Slots as for any
+# run; OMP_NUM_THREADS is the slot's share of the cores, and on a gpu slot torch gets
+# 0.95/N of the card's memory (N gpu slots), so jobs fit together
 # Queue: a run waits for its resource's lock on the host (~/ml/locks/RES; cpu by default,
 # since every run uses all cores via par.zig), so runs go one after another, not over each
 # other. A GPU run takes gpu and can share the PC with a cpu one. Waiting runs are
@@ -93,6 +101,7 @@ RTREE=ml/lab-build/tree
 RCACHE=ml/lab-build/cache
 COMMIT=
 PIN=
+PY=
 
 # "blob path" per build input under src, build.zig and build.zig.zon: at commit $1, else
 # in directory $2 (the working tree, untracked files too)
@@ -283,6 +292,21 @@ snapcmd() {
         echo "snap '"$1"' $h"'
 }
 
+# The shared Python env of py/uv.lock on the gpu-box, ~/ml/pyenv/HASH/venv (HASH of
+# py/pyproject.toml and py/uv.lock), made on first use under a lock there. Prints HASH
+pyenv() {
+    local h
+    h=$(cat "$ROOT/py/pyproject.toml" "$ROOT/py/uv.lock" | shasum | cut -c1-16)
+    on gpu-box "[[ -f ml/pyenv/$h/done ]]" && { echo "$h"; return; }
+    echo "making python env $h on gpu-box" >&2
+    on gpu-box "mkdir -p ml/pyenv/$h" \
+        && scp -q "$ROOT/py/pyproject.toml" "$ROOT/py/uv.lock" "gpu-box:ml/pyenv/$h/" \
+        && on gpu-box "cd ml/pyenv/$h && flock .lock bash -c '[[ -f done ]] || {
+            UV_PROJECT_ENVIRONMENT=\$PWD/venv ~/.local/bin/uv sync --frozen -q && touch done; }'" \
+            >&2 || return 1
+    echo "$h"
+}
+
 # Keeps store dir $1 to the newest 40 keys, and anything used in the last 3 days: a
 # script for the host holding it
 # shellcheck disable=SC2016 # expands on the host
@@ -303,6 +327,7 @@ start() {
     while (( $# )); do
         case "$1" in
             --meiolol) bin=meiolol ;;
+            --python) PY=$2 bin=python; shift ;;
             --no-build) build=0 ;;
             --head) COMMIT=HEAD ;;
             --commit) COMMIT=$2; shift ;;
@@ -317,7 +342,7 @@ start() {
         esac
         shift
     done
-    (( $# )) || { echo "nothing to run: give ARGS after --"; exit 2; }
+    (( $# )) || [[ "$bin" == python ]] || { echo "nothing to run: give ARGS after --"; exit 2; }
     # An unquoted ~ expands here first; this Mac's home never exists on the gpu-box
     local tilde="~"
     [[ "$host" == mac ]] || set -- "${@/#$HOME/$tilde}"
@@ -346,28 +371,38 @@ start() {
         exit 1
     fi
     (( DRY )) && exit 0
-    local commit="" key dir path
-    if [[ -n "$COMMIT" ]]; then
-        commit=$(git -C "$ROOT" rev-parse --verify -q "$COMMIT^{commit}") \
-            || { echo "--commit: no commit $COMMIT"; exit 2; }
-    fi
-    if [[ -n "$PIN" ]]; then
-        [[ "$PIN" =~ ^[0-9a-f]{16}$ ]] || { echo "--bin: a 16-digit KEY from a start"; exit 2; }
-        [[ -z "$commit" ]] || { echo "--bin with --head/--commit: give one"; exit 2; }
-        key=$PIN build=0
+    local commit="" key=- dir path info env=""
+    if [[ "$bin" == python ]]; then
+        [[ "$host" == gpu-box ]] || { echo "--python runs on the gpu-box"; exit 2; }
+        [[ -z "$COMMIT$PIN${BUILD_ARGS[*]-}" ]] \
+            || { echo "--python: no --head, --commit, --bin or --build-arg"; exit 2; }
+        [[ -f "$PY" ]] || { echo "--python: no file $PY"; exit 2; }
+        env=$(pyenv) || { echo "python env failed: not started"; exit 1; }
+        path=$PY
+        info=$(cat "$(dirname "$PY")"/*.py | shasum -a 256 | cut -c1-16)$'\n-'
     else
-        key=$(key "$commit" "$ROOT")
+        if [[ -n "$COMMIT" ]]; then
+            commit=$(git -C "$ROOT" rev-parse --verify -q "$COMMIT^{commit}") \
+                || { echo "--commit: no commit $COMMIT"; exit 2; }
+        fi
+        if [[ -n "$PIN" ]]; then
+            [[ "$PIN" =~ ^[0-9a-f]{16}$ ]] || { echo "--bin: a 16-digit KEY from a start"; exit 2; }
+            [[ -z "$commit" ]] || { echo "--bin with --head/--commit: give one"; exit 2; }
+            key=$PIN build=0
+        else
+            key=$(key "$commit" "$ROOT")
+        fi
+        dir=$(ensure "$host" "$bin" "$key" "$commit" "$build") || exit 1
+        key=$(basename "$(dirname "$dir")")
+        path=$(binpath "$dir" "$host" "$bin")
+        # One round trip: the binary's hash, then its harness key
+        info=$(on "$host" "[[ -x $path ]] \
+            && { sha256sum $path 2> /dev/null || shasum -a 256 $path; } | cut -c1-16 \
+            && { cat $dir/harness 2> /dev/null || echo -; }") \
+            || { echo "no binary at $path on $host"; exit 1; }
+        echo "binary $key"
+        bash -c "$(prune_cmd "$STORE")"
     fi
-    dir=$(ensure "$host" "$bin" "$key" "$commit" "$build") || exit 1
-    key=$(basename "$(dirname "$dir")")
-    path=$(binpath "$dir" "$host" "$bin")
-    # One round trip: the binary's hash, then its harness key
-    local info
-    info=$(on "$host" "[[ -x $path ]] && { sha256sum $path 2> /dev/null || shasum -a 256 $path; } \
-        | cut -c1-16 && { cat $dir/harness 2> /dev/null || echo -; }") \
-        || { echo "no binary at $path on $host"; exit 1; }
-    echo "binary $key"
-    bash -c "$(prune_cmd "$STORE")"
     local tmp
     tmp=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now: tmp is local
@@ -396,6 +431,10 @@ start() {
         done
         if [[ -n "$commit" ]]; then echo "head $commit"; echo "dirty 0 files (--commit)"
         elif [[ -n "$PIN" ]]; then echo "head - (--bin)"; echo "dirty - (--bin)"
+        elif [[ -n "$env" ]]; then
+            echo "head $(git -C "$ROOT" rev-parse HEAD)"
+            echo "dirty $(git -C "$ROOT" status --porcelain -- "$(dirname "$PY")" py 2> /dev/null \
+                | wc -l) files (py)"
         else
             echo "head $(git -C "$ROOT" rev-parse HEAD)"
             echo "dirty $(git -C "$ROOT" status --porcelain -- src build.zig | wc -l) files"
@@ -403,12 +442,13 @@ start() {
         echo "args $*"
         echo "res $RES"
         if (( ${#BUILD_ARGS[@]} )); then echo "build ${BUILD_ARGS[*]}"; fi
+        if [[ -n "$env" ]]; then echo "python $PY"; echo "pyenv $env"; fi
         if (( ${#WITH[@]} )); then echo "with ${WITH[*]}"; fi
     } > "$tmp/meta"
     # Seconds of running time expected (deploy/lab-place.pl), and why: status checks it
     [[ "$predicted" == - ]] || printf "%s\t%s\n" "$predicted" "$why" > "$tmp/predicted"
     : > "$tmp/src.diff"
-    [[ -n "$commit$PIN" ]] || git -C "$ROOT" diff HEAD -- src build.zig > "$tmp/src.diff"
+    [[ -n "$commit$PIN$env" ]] || git -C "$ROOT" diff HEAD -- src build.zig > "$tmp/src.diff"
     # caffeinate: a Mac asleep mid-run looks like a hung run
     local awake=""
     [[ "$host" == mac ]] && awake="caffeinate -i "
@@ -437,16 +477,27 @@ while [[ -z $slot ]]; do
     [[ -n $slot ]] || sleep 5
 done
 rm queued
-echo "@RES@.$slot of $n" > slot'
+echo "@RES@.$slot of $n" > slot
+# Not nproc: it honours OMP_NUM_THREADS
+c=$(getconf _NPROCESSORS_ONLN)
+export OMP_NUM_THREADS=$(( c / n ))'
     # shellcheck disable=SC2016 # expands on the host
     [[ "$RES" == cpu ]] && lock+='
 pin=
 if command -v taskset > /dev/null; then
-    k=$(( $(nproc) / n )); lo=$(( slot * k ))
+    k=$(( c / n )); lo=$(( slot * k ))
     pin="taskset -c $lo-$(( lo + k - 1 ))"
     echo "cores $lo-$(( lo + k - 1 ))" >> slot
 fi' pin='$pin '
+    # shellcheck disable=SC2016 # expands on the host
+    [[ "$RES" == gpu ]] && lock+='
+printf -v LAB_GPU_FRACTION "0.%03d" $(( 950 / n ))
+export LAB_GPU_FRACTION'
     lock=${lock//@RES@/$RES}
+    local cmd="./$bin"
+    # shellcheck disable=SC2088 # expands on the host
+    [[ -z "$env" ]] || cmd="env PYTHONUNBUFFERED=1 ~/ml/pyenv/$env/venv/bin/python labpy.py"
+    [[ -z "$env" ]] || cmd+=" $(basename "$PY")"
     cat > "$tmp/job.sh" <<EOF
 #!/usr/bin/env bash
 cd "\$(dirname "\$0")"
@@ -454,7 +505,7 @@ echo \$\$ > job.pgid
 rm -f started
 $lock
 date -u +%FT%TZ > started
-${awake}${pin}nice -n 10 ./$bin $*
+${awake}${pin}nice -n 10 $cmd $*
 echo \$? > exit
 date -u +%FT%TZ > ended
 EOF
@@ -463,7 +514,11 @@ EOF
     on "$host" "mkdir -p $RUNS && mkdir $RUNS/$run" \
         || { echo "$run already exists on $host: not started"; exit 1; }
     local files=("$tmp/meta" "$tmp/src.diff" "$tmp/job.sh")
-    if [[ "$host" == gpu-box ]]; then on gpu-box "cp $path $RUNS/$run/"; else files+=("$path"); fi
+    if [[ -n "$env" ]]; then
+        files+=("$(dirname "$PY")"/*.py "$ROOT/py/labpy.py" "$ROOT/py/pyproject.toml" \
+            "$ROOT/py/uv.lock")
+    elif [[ "$host" == gpu-box ]]; then on gpu-box "cp $path $RUNS/$run/"
+    else files+=("$path"); fi
     copy "$host" "$RUNS/$run" "${files[@]}"
     [[ -f "$tmp/predicted" ]] && copy "$host" "$RUNS/$run" "$tmp/predicted"
     if (( ${#WITH[@]} )); then copy "$host" "$RUNS/$run" "${WITH[@]}"; fi
@@ -596,7 +651,7 @@ wait_runs() {
 main() {
 case "${1:-}" in
     start)
-        (( $# >= 3 )) || { sed -n '8,16p' "$0"; exit 2; }
+        (( $# >= 3 )) || { sed -n '8,18p' "$0"; exit 2; }
         # No HOST (start NAME [OPTIONS] -- ARGS): placed by predicted finish, as auto
         if [[ "$2" != mac && "$2" != gpu-box && "$2" != auto && "$3" == -* ]]; then
             set -- start auto "${@:2}"
@@ -668,7 +723,7 @@ case "${1:-}" in
             && systemctl --user restart $WATCH && systemctl --user start meiolol-archive-pull.timer \
             && systemctl --user is-active $WATCH meiolol-archive-pull.timer"
         ;;
-    *) sed -n '8,16p' "$0"; exit 2 ;;
+    *) sed -n '8,18p' "$0"; exit 2 ;;
 esac
 }
 

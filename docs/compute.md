@@ -64,6 +64,16 @@ deploy/lab-run.sh watch-install
   `binary KEY`: --bin KEY starts that binary whatever the tree holds now (lab-sweep's
   jobs after the first), --no-build the current inputs' binary if built, never a build.
   Newest 40 keys kept in each store, plus any used in the last 3 days
+- Python (cross-checks of Zig models; nothing shipped): `start [gpu-box] NAME --python
+  SCRIPT [--res cpu|gpu] -- ARGS`, never plain python on the box. No build; SCRIPT and
+  the other *.py in its directory, plus py/labpy.py, py/pyproject.toml and py/uv.lock,
+  go into the run dir, the cwd; ARGS as for any run (~ and ~/ml/snaps/SNAP expand
+  there). One env per uv.lock hash, ~/ml/pyenv/HASH/venv (torch cu128, numpy, scipy,
+  pandas, scikit-learn, lightgbm), made on the first start that needs it (uv sync
+  --frozen); change deps in py/pyproject.toml and `uv lock` on the gpu-box. Slots, League
+  pauses, meta (`bin python HASH` of the *.py, `pyenv HASH`) and status as for any run.
+  OMP_NUM_THREADS is the slot's share of the cores; on a gpu slot labpy.py caps torch at
+  LAB_GPU_FRACTION = 0.95/N of the card (N gpu slots)
 - `wait RUN...` blocks until each run has ended on whichever host has it, then prints
   its state and RESULT lines: exit 0 when all exited 0, 3 on --timeout, else 1. Use it
   instead of until-loops over status
