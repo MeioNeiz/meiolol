@@ -27,16 +27,17 @@ How to write a line:
 
 - 2026-10-14 (early): A small neural network that reads what each team's champions
   typically do in games (damage type, tankiness, crowd control, healing, range) finds
-  the same thing as the lopsided-damage line below and nothing else: about two-thirds
-  of what the one hand-made damage-mix term gives, from the same lopsided teams; what
-  the enemy picks adds nothing, and on top of the damage-mix term it is not confirmed to
-  add more. Sure: dev only, 5 rounds of held-out games (44,353; 44-89k training games a
-  round), confirmed with fresh seeds and two resamples by the narrowest margin (-0.00037
-  ± 0.00021 nats per game, honest size about 0.00015-0.0004), nothing on the 8,500
-  dev-val games; on top of the damage-mix term -0.00025 ± 0.00017, not confirmed;
-  shuffled profiles or shuffled results give nothing. Site: nothing, the recommender
-  keeps the ratings and the damage-mix term. Evidence: docs/model.md "Set net: DeepSets
-  on champion profiles", audit meiolol-33
+  mostly the same thing as the lopsided-damage line below: up to about two-thirds of
+  what the one hand-made damage-mix term gives, from the same lopsided teams; adding the
+  enemy's champions didn't help, and on top of the damage-mix term it is not confirmed
+  to add more. Sure: dev only, 5 rounds of held-out games (44,353; 44-89k training games
+  a round), confirmed with fresh seeds and two resamples by the narrowest margin
+  (-0.00037 ± 0.00021 nats per game, honest size about 0.00015-0.0004, a quarter to
+  two-thirds of the term's), nothing on the 8,500 dev-val games; on top of the
+  damage-mix term -0.00025 ± 0.00017, not confirmed. As a pipeline check (first seeds,
+  default net) shuffled profiles or shuffled results gave nothing. Site: nothing, the
+  recommender keeps the ratings and the damage-mix term. Evidence: docs/model.md "Set
+  net: DeepSets on champion profiles", audit meiolol-33
 - 2026-10-13 (early): A large neural network that reads the whole draft predicts wins no
   better than each champion's own win record in its role: one trained copy is worse, and
   only averaging ten or more copies brings it level; tuning its settings didn't help.
