@@ -2209,6 +2209,164 @@ blocks beside the label fit's. Gate (research C5): distil only from a teacher th
 the shrunk label fit on the folds. Today no champ-select teacher does (best big-net
 ensembles tie ratings; the additive model is at -0.0013), so it waits for one.
 
+### Carry and impact, 2026-10-14 (meiolol-61)
+
+Jacob (2026-10-13): which champions carry, and which have less effect on the game?
+`meiolol carry --cuts ...` (src/carry.zig), pinned snap-20261012T2055Z, run
+20261013T223040Z-carry-a (64ada94); test look 20261013T231146Z-carry-final (3f8b9d6,
+look 8 in SNAP/test-looks.tsv; the same models plus a per-role breakdown, folds and
+dev-val identical). Rows: every player at the draft and at
+10/15/20/25/30 of games reaching 15:00 while still going (117,806 train games, ten rows
+per game and minute). Blocks: the lab's (compcheck --folds 5, c1's cuts): folds 1-5 fit
+on train games before the block and score every platform's games in it, dev-val fits
+before the dev cut and scores EUW1; test = the protocol's 10,604 EUW1 games, fit on every
+train game, one look (go from meiolol-bd for Jacob, readings declared before: (a) gold
+by role vs team gold at 15 and 25, (b) champion x own gold lead at 15 and 25, (c)
+champion x experience at the draft).
+
+Model, log-odds of the player's team winning, nested steps: team state at the minute
+(team gold, gold curve, XP, held objectives as objectives.zig); gold split by role (each
+role's own minus lane opponent's); + kills minus deaths and share of team damage to
+champions so far, by role; + champion-role shift; + champion-role slope on the seat's
+own gold lead over its lane opponent ("leverage": does this champion turn its own lead
+into wins more than its role does); + slopes on its own kills minus deaths and damage
+share. Champion terms shrunk per role by a method-of-moments prior (as scaling). Draft:
+win rate; + a slope per role on log1p(the player's earlier ranked solo games on the
+champion in the snapshot, 16 days; 1+ for 24% of player-games); + champion shift; +
+champion-role slope on it ("skill sensitivity"). Outcome spread: how far from a coin
+flip (|team-state chance - 50|, pp) the champion's teams stand at each minute, Gaussian
+shift per champion-role vs the role mean. Train-time: the state and seat stats at the
+minute; use-time: post-game lessons and aggregate facts only (docs/production-key.md).
+Like with like: same minute, same team state; the before/after framing of meiolol-08's
+event values (state just before vs with the event) here is "the same team state with the
+gold on another seat".
+
+Gains, nats per row ± 95% clustered by game; [k/5] folds better:
+
+| minute | step | folds 1-5 [k/5] | dev-val | test |
+| --- | --- | --- | --- | --- |
+| 0 | + experience slope by role | 0.00009 ± 0.00002 [5/5] | 0.00005 ± 0.00007 | 0.00018 ± 0.00007 |
+| 0 | + champion shift | 0.00015 ± 0.00012 [4/5] | 0.00022 ± 0.00021 | 0.00026 ± 0.00017 |
+| 0 | (c) + champion x experience | -0.00006 ± 0.00003 [0/5] | -0.00013 ± 0.00009 | **-0.00001 ± 0.00004** |
+| 10 | gold by role (vs team gold) | 0.00253 ± 0.00080 [5/5] | 0.00307 ± 0.00149 | 0.00173 ± 0.00135 |
+| 10 | + kills, damage share by role | 0.00036 ± 0.00046 [3/5] | 0.00043 ± 0.00082 | 0.00077 ± 0.00068 |
+| 10 | + champion shift | 0.00113 ± 0.00020 [5/5] | 0.00127 ± 0.00038 | 0.00166 ± 0.00033 |
+| 10 | + champion x own gold lead | -0.00006 ± 0.00007 [1/5] | -0.00015 ± 0.00015 | -0.00014 ± 0.00015 |
+| 10 | + champion x own kills, damage share | -0.00004 ± 0.00005 [1/5] | -0.00002 ± 0.00008 | -0.00000 ± 0.00004 |
+| 15 | (a) gold by role (vs team gold) | 0.00413 ± 0.00100 [5/5] | 0.00401 ± 0.00184 | **0.00251 ± 0.00167** |
+| 15 | + kills, damage share by role | 0.00064 ± 0.00050 [5/5] | 0.00108 ± 0.00092 | 0.00114 ± 0.00079 |
+| 15 | + champion shift | 0.00145 ± 0.00022 [5/5] | 0.00151 ± 0.00040 | 0.00206 ± 0.00037 |
+| 15 | (b) + champion x own gold lead | -0.00004 ± 0.00005 [1/5] | -0.00009 ± 0.00011 | **0.00003 ± 0.00007** |
+| 15 | + champion x own kills, damage share | -0.00005 ± 0.00005 [1/5] | -0.00007 ± 0.00010 | -0.00004 ± 0.00006 |
+| 20 | gold by role (vs team gold) | 0.00520 ± 0.00113 [5/5] | 0.00332 ± 0.00213 | 0.00393 ± 0.00187 |
+| 20 | + kills, damage share by role | 0.00071 ± 0.00060 [5/5] | 0.00123 ± 0.00105 | 0.00107 ± 0.00092 |
+| 20 | + champion shift | 0.00158 ± 0.00023 [5/5] | 0.00163 ± 0.00042 | 0.00228 ± 0.00040 |
+| 20 | + champion x own gold lead | -0.00001 ± 0.00003 [1/5] | 0.00002 ± 0.00010 | 0.00001 ± 0.00005 |
+| 20 | + champion x own kills, damage share | -0.00010 ± 0.00007 [0/5] | -0.00009 ± 0.00007 | -0.00002 ± 0.00004 |
+| 25 | (a) gold by role (vs team gold) | 0.00473 ± 0.00121 [5/5] | 0.00212 ± 0.00232 | **0.00410 ± 0.00192** |
+| 25 | + kills, damage share by role | 0.00126 ± 0.00073 [5/5] | 0.00073 ± 0.00139 | 0.00121 ± 0.00110 |
+| 25 | + champion shift | 0.00135 ± 0.00024 [5/5] | 0.00171 ± 0.00045 | 0.00232 ± 0.00045 |
+| 25 | (b) + champion x own gold lead | -0.00002 ± 0.00004 [2/5] | -0.00005 ± 0.00011 | **0.00001 ± 0.00008** |
+| 25 | + champion x own kills, damage share | -0.00014 ± 0.00007 [0/5] | 0.00002 ± 0.00007 | 0.00007 ± 0.00006 |
+| 30 | gold by role (vs team gold) | 0.00515 ± 0.00166 [5/5] | 0.00335 ± 0.00326 | 0.00421 ± 0.00264 |
+| 30 | + kills, damage share by role | 0.00111 ± 0.00098 [4/5] | 0.00055 ± 0.00185 | 0.00118 ± 0.00156 |
+| 30 | + champion shift | 0.00110 ± 0.00030 [5/5] | 0.00158 ± 0.00060 | 0.00227 ± 0.00059 |
+| 30 | + champion x own gold lead | -0.00016 ± 0.00009 [0/5] | -0.00007 ± 0.00015 | -0.00004 ± 0.00007 |
+| 30 | + champion x own kills, damage share | -0.00016 ± 0.00012 [1/5] | 0.00002 ± 0.00006 | -0.00006 ± 0.00007 |
+
+Bold: the three pre-declared test readings; the other test cells are secondary
+description (not readings). Decided (champion vs role mean of |chance - 50|, MSE in
+pp^2): folds +0.004 ± 0.017, -0.002 ± 0.035, -0.016 ± 0.024, -0.000 ± 0.021, +0.005 ±
+0.059 at 10-30 (2-3/5), dev-val alike; not scored on test. By role (the champion x own
+gold step's rows of one role; in the run's carry.md): no role clears zero on folds at
+any minute (best: support at 10, +0.00009 ± 0.00014, 4/5), nor on test.
+
+Whose seat decides (every train game, team state fixed; win pp in an even game per
+unit of a role's lead over its lane opponent, ± 95% clustered by game; per sd: times the
+lead's spread at that minute; each cell top / jungle / mid / bottom / support):
+
+| minute | per 1000 gold | per sd of gold lead (sd, thousands) | per kill minus death | per 10 points of damage share |
+| --- | --- | --- | --- | --- |
+| 10 | 7.6 / 10.2 / 9.6 / 11.4 / 1.4 (± 0.6-0.8) | 7.5 / 8.5 / 8.3 / 11.5 / 0.8 (1.0 / 0.8 / 0.9 / 1.0 / 0.6) | 0.1 / -0.2 / -0.2 / -0.3 / -0.2 (± 0.2) | -0.4 / 0.5 / 0.6 / 1.3 / -2.0 (± 0.3-0.4) |
+| 15 | 4.5 / 6.9 / 5.9 / 8.2 / -0.1 (± 0.4-0.6) | 8.1 / 9.5 / 9.1 / 14.9 / -0.1 (1.8 / 1.4 / 1.5 / 1.8 / 0.9) | 0.1 / 0.0 / -0.3 / -0.2 / 0.0 (± 0.15) | -0.5 / 0.9 / 1.0 / 1.5 / -2.9 (± 0.4-0.5) |
+| 20 | 3.9 / 5.3 / 4.3 / 7.0 / 0.1 (± 0.4-0.5) | 9.1 / 10.6 / 9.0 / 16.9 / 0.1 (2.4 / 2.0 / 2.1 / 2.4 / 1.2) | -0.1 / 0.0 / -0.3 / -0.3 / 0.0 (± 0.13) | -0.2 / 0.8 / 1.3 / 1.8 / -3.7 (± 0.4-0.6) |
+| 25 | 2.9 / 3.5 / 3.0 / 5.3 / 0.2 (± 0.4-0.5) | 8.1 / 9.1 / 7.6 / 15.5 / 0.3 (2.8 / 2.6 / 2.6 / 2.9 / 1.5) | -0.2 / -0.0 / -0.3 / -0.4 / 0.1 (± 0.12) | 0.1 / 0.9 / 1.5 / 1.7 / -4.1 (± 0.5-0.7) |
+| 30 | 2.2 / 2.2 / 2.2 / 4.2 / 0.5 (± 0.5) | 6.8 / 6.7 / 6.3 / 13.8 / 0.8 (3.1 / 3.0 / 2.9 / 3.3 / 1.7) | -0.2 / -0.0 / -0.3 / -0.4 / 0.1 (± 0.12) | 0.4 / 0.6 / 1.0 / 1.8 / -3.8 (± 0.7-0.8) |
+
+Gold columns from the gold-by-role baseline (held objectives in it), kills and damage
+share from the full one (so beyond gold). Spread across champions in a role (every
+train game; shrinkage sd [upper 95% bound, analysis.spreadBounds], win pp per 1000 own
+gold): mostly 0, at most 3.8 (jungle 10), 5.9 (support 10), 3.1 / 2.8 (bottom 10 / 15);
+bounds 2.3-11.9 (tightest top and mid, 2.3-6.0). Kills minus deaths: 0-0.8 [0.9-2.8];
+damage share 0-3.9 per 10 points [4.3-17.3]; experience at the draft 0 except jungle 3.0
+[6.6-8.5] per log1p game. Champion shift beyond the full state: 2.6-8.9 pp in every
+role and minute but jungle at 10 (0), as scaling. Per champion-role values:
+carry-table.tsv in the run dir; per-fold leverage, scaling and skill for comp screens:
+carry-folds.tsv (meiolol-c1).
+
+Train-fit leanings (unshrunk, ± 95%; did not hold on held-out games, so not findings):
+own gold worth more than the role's at 15 for Sivir (+3.1 ± 1.1 pp per 1000 over
+bottom's 8.0), Aphelios (+2.4 ± 0.8), Bel'Veth jungle (+3.6 ± 1.8), Bard support
+(+2.5 ± 2.1 over support's 1.8 in the full model); less for bot-lane mages Viktor and
+Ziggs (-1.7, -1.6 ± 1.6-1.9), Alistar and Braum support (-2.5, -2.3 ± 2.0).
+
+Planted checks (`--plant COV:SD`, winners redrawn from the full-state baseline plus a
+champion-role slope drawn with sd SD in win pp per unit, summed over all ten seats; runs
+20261013T2236..2237Z-carry-plant-*):
+
+| planted | folds: champion slope step at 10 / 15 / 20 / 25 / 30 | recovery corr at 15 / 25 |
+| --- | --- | --- |
+| own gold, sd 0 (null) | -0.00009 / -0.00003 / -0.00005 / -0.00012 / -0.00004 (0-1/5) | - |
+| own gold, sd 1 pp per 1000 | -0.00005 (2/5) / 0.00007 ± 0.00007 (3/5) / 0.00006 (3/5) / 0.00020 ± 0.00011 (5/5) / 0.00021 ± 0.00013 (5/5) | 0.57 / 0.72 |
+| own gold, sd 2 | 0.00013 ± 0.00008 (4/5) / 0.00052 ± 0.00012 / 0.00073 ± 0.00014 / 0.00144 ± 0.00024 / 0.00213 ± 0.00033 (5/5) | 0.84 / 0.57 |
+| own gold, sd 4 | 0.00119 / 0.00289 / 0.00466 / 0.00598 / 0.00811 (5/5) | 0.94 / 0.97 |
+| experience, sd 2 pp per log1p game | 0.00004 ± 0.00004 (5/5, draft) | 0.44 |
+| experience, sd 4 | 0.00020 ± 0.00007 (5/5) | 0.39 |
+| experience, sd 8 | 0.00077 ± 0.00009 (5/5) | 0.84 |
+
+Reading:
+- Whose seat decides (clear on folds, dev-val and the test look): with the team's state
+  held fixed, the gold lead on the bot laner moves the win chance most at every minute:
+  per typical lead (one sd) 11.5 pp at 10 rising to 15-17 at 15-25, against 7-10.6 for
+  jungle, mid and top and about 0 for the support. Per 1000 gold: bottom 11.4 at 10 to
+  4.2 at 30; jungle and mid 10 to 2; top 7.6 to 2.2; support 1.4 at 10 and 0 after.
+  This confirms learned.md's "the bot laner's gold counts most" (scaling, team-gold
+  state with roles) by a different model (held objectives in the state too, a per-sd
+  scale, lab fold blocks and its own test look): same order and sizes within ~1-2 pp
+  per 1000 (scaling: bottom 12.0 / 9.0 / 8.1 / 6.5 / 5.7, support 2.4 / 0.9 / 1.8 / 2.4
+  / 3.2; here lower, as objectives take part of it). No second learned.md line
+- Beyond the gold, damage share by role (5/5 folds at 15-25, test consistent but not a
+  reading): at equal gold, a team whose bot laner or mid does more of its damage wins
+  more (+1.3 to +1.8 pp per 10 points of share), one whose support does more wins less
+  (-2 to -4 pp per 10 points). Kills minus deaths add nothing beyond gold. Description:
+  damage share also records who had to fight and who was ahead
+- Leverage per champion (does a champion turn its own gold into wins more than its
+  role?): not detected at any minute (pre-declared test at 15 and 25: +0.00003 ± 0.00007,
+  +0.00001 ± 0.00008; folds 0-2/5), nor for its kills or damage share. The plant says a
+  spread of 2 pp per 1000 gold across champions would show in 5/5 folds at 15-30 (4/5 at
+  10) and 1 pp at 25-30 only; so champions in a role differ by less than about 2 pp per
+  1000 in what their own lead is worth, while roles differ by 4-10. "Which champions
+  carry" is answered by role, not champion: the bot laner's lead is the carry lead
+- Skill sensitivity per champion: not detected (test -0.00001 ± 0.00004; folds 0/5). One
+  slope per role does help (5/5, test +0.00018 ± 0.00007). Plant: a champion-to-champion
+  spread of 4 pp per log1p game (about ±10 pp from 0 to 10 games for a champion one sd
+  off its role) shows 5/5, 2 pp not. With 16 days of history (24% of player-games with
+  an earlier game on the champion), "high skill ceiling" champions smaller than that
+  can't be seen; same answer as the per-champion skill slopes in "Player experience".
+  Mastery: 0.5% of rows and taken after the game, not used. Rerun on a snapshot with
+  more history (1954Z has 43% of test rows with an earlier game on the champion)
+- Outcome spread: no champion makes its games measurably more or less decided at any
+  minute (folds 2-3/5, around zero). Early vs late carries: the champion's value beyond
+  the full state is real at every minute (5/5, test +0.0017 to +0.0023) and changes with
+  the minute (scaling's curve); "late carry" is that curve, not a bigger lead value
+- Shrinkage spread estimates (tau) above 0 are not evidence on their own: the null plant
+  gave 1-3 pp in some role-minutes; the held-out step gain decides
+- Causal reading: everything here is at equal team state and the same minute, so "being
+  ahead" is held fixed; what remains is description, with the player's own skill
+  (unmeasured) behind both the seat's lead and the win. The role ordering is likely
+  partly cause (gold on a carry buys damage), the damage-share signs partly record
+  fights. In-game stats: post-game lessons only (docs/production-key.md)
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
