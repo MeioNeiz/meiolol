@@ -433,6 +433,8 @@ function suggest(m, d, all, options, cur, now, side, role, pick) {
   };
   const pts = x => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)} points`;
   const gold = x => `${x >= 0 ? "+" : "−"}${Math.abs(Math.round(x)).toLocaleString("en-GB")}`;
+  // "320 gold ahead of Ahri", "40 gold behind"
+  const lead = (x, who) => `${Math.abs(Math.round(x)).toLocaleString("en-GB")} gold ${x >= 0 ? "ahead" : "behind"}${who ? (x >= 0 ? " of " : " ") + who : ""}`;
 
   const best = cands.slice().sort((a, b) => low ? byId.get(b.c.id).lo - byId.get(a.c.id).lo : b.p - a.p).slice(0, 5);
   list("Best for this draft", best.map(x => {
@@ -449,7 +451,7 @@ function suggest(m, d, all, options, cur, now, side, role, pick) {
   if (opp != null) {
     const rows = cands.map(x => [x.c.id, lm.value(x.c.id, +opp, ri)]).sort((a, b) => by(b[1]) - by(a[1])).slice(0, 5);
     list(`Best into ${nameOf(opp)}`, rows.map(([id, r]) => [id,
-      `${gold(r.value[G])} gold over ${nameOf(opp)} at 14 (likely ${gold(r.lo[G])} to ${gold(r.hi[G])}), ${r.value[C].toFixed(0)} CS at 10 and ${r.value[D].toFixed(1)} deaths before 15, ` +
+      `${lead(r.value[G], nameOf(opp))} at 14 (likely ${gold(r.lo[G])} to ${gold(r.hi[G])}), ${r.value[C].toFixed(0)} CS at 10 and ${r.value[D].toFixed(1)} deaths before 15, ` +
       (r.pair_games ? `from ${num(r.pair_games)} games of this matchup and ${num(r.champ_games)} on ${nameOf(id)} in the ${roleName} role.` : `from ${num(r.champ_games)} games on ${nameOf(id)} in the ${roleName} role; no games of this matchup yet, so averages only.`)]), "No candidates left for this slot.");
   } else {
     box.append(el("h5", {}, "Best into your lane opponent"), el("p", { class: "muted" }, `Pick ${other}'s ${roleName} first: that's the lane opponent.`));
@@ -464,8 +466,8 @@ function suggest(m, d, all, options, cur, now, side, role, pick) {
   }).sort((a, b) => by(b[1]) - by(a[1])).slice(0, 5);
   list("Safest blind pick", blind.map(([id, r]) => {
     const worst = r.each.slice().sort((a, b) => b.w - a.w).slice(0, 10).sort((a, b) => a.value[G] - b.value[G])[0];
-    return [id, `${gold(r.value[G])} gold over the lane opponent at 14 on average across likely opponents (likely ${gold(r.lo[G])} to ${gold(r.hi[G])})` +
-      (worst ? `; worst common matchup ${nameOf(worst.id)}, ${gold(worst.value[G])} gold` : "") + `; from ${num(r.champ_games)} games on ${nameOf(id)} in the ${roleName} role.`];
+    return [id, `${lead(r.value[G], "the lane opponent")} at 14 on average across likely opponents (likely ${gold(r.lo[G])} to ${gold(r.hi[G])})` +
+      (worst ? `; worst common matchup ${nameOf(worst.id)}, ${lead(worst.value[G])}` : "") + `; from ${num(r.champ_games)} games on ${nameOf(id)} in the ${roleName} role.`];
   }), "No candidates left for this slot.");
   return box;
 }
