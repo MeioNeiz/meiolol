@@ -630,6 +630,56 @@ Reading:
 - With objectives in the state the champion effects hold or grow slightly: champions'
   value is not through the objectives their teams take
 
+### Player experience and everything pre-game, dev only, 2026-10-13
+
+Scope internal (api.Scope: Jacob's research predictor, never the site or app; sees all
+ten players' experience and ranks). rows.fillExperience: per player-row, that player's
+ranked solo games in the snapshot that ended before this game's start (games under
+15:00 left out): games and wins on the champion and on any, mean KDA, mean lane gold
+diff at 14 and deaths before 15 (games reaching 15:00). Only what we crawled: 16 days
+(2026-09-26 to 10-12). Coverage of rows: 1+ earlier games on the champion 26%, 10+
+2.5%, 50+ 0.1%; 1+ on any champion 56% (every region alike). Mastery (0.5% of rows,
+snapshot after the game) and rank at game start (rank_history begins 2026-10-12) are
+not in yet.
+
+win-ratings cfg (ratings kind plus): champ_exp (per role, blue minus red: log1p games
+on the champion, its win rate's log-odds with 5 pseudo-games at 50%), form (the same on
+any champion, plus KDA, lane gold diff and deaths, each times n / (n + 3) around the
+training mean), skill (champ_exp plus each champion-role's own slope on log1p games,
+shrunk by the ratings' L2). Same setup as above: fit on ~90k games older than dev-val,
+scored on dev-val (8,500 EUW1 games over 15:00, 85,000 rows), paired ± clustered by
+game.
+
+| model | log loss | accuracy | AUC | vs champions |
+| --- | --- | --- | --- | --- |
+| champions (ratings) | 0.68969 | 53.70% | 0.549 | - |
+| + experience on the champion | 0.68850 | 54.26% | 0.557 | -0.00119 ± 0.00139 |
+| + form (any champion) | 0.68861 | 53.97% | 0.556 | -0.00108 ± 0.00163 |
+| + both: everything pre-game | 0.68781 | 54.08% | 0.559 | -0.00189 ± 0.00184 |
+| + per-champion skill slope (vs experience) | 0.68892 | 53.75% | 0.554 | +0.00042 ± 0.00079 vs experience |
+| champions + post-game rank (leaky) | 0.65851 | 63.78% | 0.673 | -0.03118 ± 0.00498 |
+| everything + post-game rank (leaky) | 0.65818 | 62.80% | 0.665 | -0.03152 ± 0.00523 |
+
+Learning curve, everything minus champions at nested fractions of training games: 0.1
++0.0012 ± 0.0026, 0.35 -0.0019 ± 0.0019, 0.5 -0.0014 ± 0.0022, 0.75 -0.0020 ± 0.0023,
+1 -0.0019 ± 0.0018. Experience alone: -0.0009 to -0.0018 at every fraction. The gain is
+set by how much history we hold per player, not by training games (20-35 weights).
+
+Reading:
+- Experience and form point the same way at every size and each adds about 0.001
+  nats; together they sit at the edge of noise. Expect more as history accumulates
+  (most players have no earlier game in our 16 days)
+- Per-champion skill slopes: worse than one slope per role. Each champion's "0 to 50
+  earlier games" effect has a ±7-10 pp interval, and 50 games is far past our data
+  (0.1% of rows): effects-skill-<role>.tsv in the run dir, not a finding
+- participants.tier is the rank when the match was stored, after the game. It lifts
+  accuracy by 10 points, far beyond what draft-time data gives, so most of it is
+  probably the result leaking (wins between the game and the store push rank up). Not
+  separable until rank at game start exists (rank_history from 2026-10-12)
+- Weights (experience-only fit, log-odds per unit, top/jungle/mid/bot/support): log1p
+  games on the champion 0.065/0.062/0.090/0.067/0.010 (10 games vs none: about +4 pp
+  for one player outside support); its win rate's log-odds 0.09/-0.02/0.06/0.03/0.03
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

@@ -25,6 +25,29 @@ How to write a line:
 
 ## Win
 
+- 2026-10-13 (early): Knowing how much each player has played before the game adds a
+  little to the draft: with every player's earlier games and wins on their champion and
+  their recent form (games, win rate, KDA, lane gold, deaths) on top of the ten
+  champions, our model picks the winner 54.1% of the time instead of 53.7% and ranks a
+  winning team above a losing one 56% of the time instead of 55%. Sure: dev games only,
+  8,500 EUW games scored, 90k training games; the gain is at the edge of noise, and we
+  hold only 16 days of history (74% of players have no earlier game on their champion
+  in our data), so it should grow. Site: nothing; research only, since other players'
+  history isn't for the app. Evidence: docs/model.md "Player experience and everything
+  pre-game" (log loss 0.6878 vs 0.6897, -0.0019 ± 0.0018)
+- 2026-10-13 (early): We can't yet tell which champions reward a practised player most:
+  giving each champion its own gain from earlier games on it predicted worse than one
+  gain per role, and every champion's estimate is uncertain by 7-10 percentage points.
+  Sure: not detected, dev only; only 0.1% of players have 50+ earlier games on their
+  champion in our data. Site: no "champions that reward mastery" list. Evidence:
+  docs/model.md "Player experience and everything pre-game"
+- 2026-10-13 (early): The rank we store for each player is looked up after the game, and
+  with it the model picks the winner 63.8% of the time instead of 53.7%; most of that
+  is probably the result leaking into the rank, so it says nothing yet about what rank
+  is worth before a game. Sure: dev only; leak and real effect can't be separated until
+  rank at game start is recorded (from 2026-10-12). Site: never use the stored rank as a
+  pre-game input. Evidence: docs/model.md "Player experience and everything pre-game"
+
 - 2026-10-13: The same gold lead is worth more or less depending on the champions:
   at 25 minutes a team with Kayle top wins as often as an average team about 2,900
   gold further ahead, and a team with Pyke support as often as one about 2,600 gold
