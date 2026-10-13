@@ -4,10 +4,14 @@
 //! base rate's, the net is antisymmetric (swapping sides gives the other side's chance),
 //! training loss falls, it can overfit a tiny set, the same seed gives identical
 //! parameters, another seed others, no NaN. A table of checks; exit 1 when one fails.
+//! Families: the big net (draftnet), small and resid (winnet.healthFit), set
+//! (setnet.healthFit)
 //! `zig build test` runs the quick subset
 
 const std = @import("std");
 const draftnet = @import("draftnet.zig");
+const winnet = @import("winnet.zig");
+const setnet = @import("setnet.zig");
 const dn = @import("../gpu/draftnet_layout.zig");
 
 const Io = std.Io;
@@ -207,6 +211,248 @@ fn checkBig(gpa: std.mem.Allocator, io: Io, r: *Report, threads: usize, s: Sizes
     }
 }
 
+/// The CPU nets of netcheck through their healthFit hooks (winnet small and resid,
+/// setnet): one generic set of checks. A family gives its game type and
+///   games(gpa, n, sd, seed): n games, ids 5 + 5k + role of `net_ids`; blue's logit the
+///     ids' strengths (sd `sd`, 0 for coin flips), the offset (resid) another strength
+///     set, so a residual net has something left to learn
+///   fit(gpa, seed, train, steps, scored, pred, overfit) params; overfit drops dropout
+///     and decay where the hook allows
+///   swap(game): sides exchanged (ids, profiles, y, offset)
+fn Small(comptime resid: bool) type {
+    return struct {
+        const name = if (resid) "resid (winnet)" else "small (winnet)";
+        const Game = winnet.NetGame;
+        const batch = (winnet.Options{}).batch;
+        const overfit_limit = 0.1;
+
+        fn games(gpa: std.mem.Allocator, n: usize, sd: f32, seed: u64) ![]Game {
+            var prng: std.Random.DefaultPrng = .init(seed);
+            const r = prng.random();
+            const st = try strengths(gpa, r, sd);
+            defer for (st) |x| gpa.free(x);
+            const out = try gpa.alloc(Game, n);
+            for (out) |*g| {
+                g.* = .{ .ids = undefined, .platform = 0, .y = 0, .off = 0 };
+                drawIds(r, &g.ids);
+                const z = teamSum(st[0], &g.ids);
+                g.off = if (resid) teamSum(st[1], &g.ids) else 0;
+                g.y = coin(r, z + g.off);
+            }
+            return out;
+        }
+
+        fn fit(gpa: std.mem.Allocator, seed: u32, train: []const Game, steps: u64, scored: []const Game, pred: []f32, overfit: bool) ![]f32 {
+            var o: winnet.Options = .{ .net = if (resid) .resid else .small };
+            if (overfit) {
+                o.dropout = 0;
+                o.wd = 0;
+                o.clip = 0;
+                o.lr = 3e-3;
+                o.batch = @intCast(train.len);
+            }
+            return winnet.healthFit(gpa, o, seed, net_ids, train, steps, scored, pred);
+        }
+
+        fn swap(g: Game) Game {
+            var out = g;
+            out.ids[0..5].* = g.ids[5..10].*;
+            out.ids[5..10].* = g.ids[0..5].*;
+            out.y = 1 - g.y;
+            out.off = -g.off;
+            return out;
+        }
+
+        fn label(g: Game) f32 {
+            return g.y;
+        }
+
+        fn offset(g: Game) f32 {
+            return g.off;
+        }
+    };
+}
+
+const Set = struct {
+    const name = "set (setnet)";
+    const Game = setnet.SetGame;
+    const batch = (winnet.Options{}).batch;
+    /// healthFit keeps netcheck's dropout 0.2 and decay 0.1: no exact overfit
+    const overfit_limit = 0.45;
+
+    fn games(gpa: std.mem.Allocator, n: usize, sd: f32, seed: u64) ![]Game {
+        var prng: std.Random.DefaultPrng = .init(seed);
+        const r = prng.random();
+        const out = try gpa.alloc(Game, n);
+        for (out) |*g| {
+            g.* = .{ .g = .{ .ids = undefined, .platform = 0, .y = 0, .off = 0 }, .z = undefined };
+            drawIds(r, &g.g.ids);
+            var z: f32 = 0;
+            for (&g.z, 0..) |*zs, slot| {
+                for (zs) |*x| x.* = r.floatNorm(f32);
+                // The first profile feature carries the strength
+                z += if (slot < 5) sd * zs[0] else -sd * zs[0];
+            }
+            g.g.y = coin(r, z);
+        }
+        return out;
+    }
+
+    fn fit(gpa: std.mem.Allocator, seed: u32, train: []const Game, steps: u64, scored: []const Game, pred: []f32, overfit: bool) ![]f32 {
+        _ = overfit;
+        return setnet.healthFit(gpa, .{}, seed, net_ids, train, steps, scored, pred);
+    }
+
+    fn swap(g: Game) Game {
+        var out = g;
+        out.g.ids[0..5].* = g.g.ids[5..10].*;
+        out.g.ids[5..10].* = g.g.ids[0..5].*;
+        out.z[0..5].* = g.z[5..10].*;
+        out.z[5..10].* = g.z[0..5].*;
+        out.g.y = 1 - g.g.y;
+        out.g.off = -g.g.off;
+        return out;
+    }
+
+    fn label(g: Game) f32 {
+        return g.g.y;
+    }
+
+    fn offset(g: Game) f32 {
+        return g.g.off;
+    }
+};
+
+const net_ids: u32 = 205;
+
+fn strengths(gpa: std.mem.Allocator, r: std.Random, sd: f32) ![2][]f32 {
+    var out: [2][]f32 = undefined;
+    for (&out) |*s| {
+        s.* = try gpa.alloc(f32, net_ids);
+        for (s.*) |*x| x.* = sd * r.floatNorm(f32);
+    }
+    return out;
+}
+
+/// Ten distinct ids, 5 + 5k + role
+fn drawIds(r: std.Random, ids: *[10]u32) void {
+    for (ids, 0..) |*id, slot| id.* = while (true) {
+        const x = 5 + 5 * r.uintLessThan(u32, (net_ids - 5) / 5) + @as(u32, @intCast(slot % 5));
+        if (std.mem.indexOfScalar(u32, ids[0..slot], x) == null) break x;
+    };
+}
+
+fn teamSum(st: []const f32, ids: *const [10]u32) f32 {
+    var z: f32 = 0;
+    for (ids, 0..) |id, slot| z += if (slot < 5) st[id] else -st[id];
+    return z;
+}
+
+fn coin(r: std.Random, z: f32) f32 {
+    return if (r.float(f32) < 1 / (1 + @exp(-z))) 1 else 0;
+}
+
+fn meanLoss(comptime F: type, games: []const F.Game, pred: ?[]const f32) f64 {
+    var l: f64 = 0;
+    for (games, 0..) |g, i| {
+        const p: f64 = if (pred) |ps| ps[i] else 1 / (1 + @exp(-@as(f64, F.offset(g))));
+        const q = std.math.clamp(p, 1e-7, 1 - 1e-7);
+        l -= if (F.label(g) > 0.5) @log(q) else @log(1 - q);
+    }
+    return l / @as(f64, @floatFromInt(games.len));
+}
+
+/// Loss of the offset alone, or of the labels' mean when there's none
+fn refLoss(comptime F: type, games: []const F.Game) f64 {
+    var any = false;
+    for (games) |g| any = any or F.offset(g) != 0;
+    if (any) return meanLoss(F, games, null);
+    var m: f64 = 0;
+    for (games) |g| m += F.label(g);
+    m /= @floatFromInt(games.len);
+    if (m <= 0 or m >= 1) return 0;
+    return -(m * @log(m) + (1 - m) * @log(1 - m));
+}
+
+fn spread(comptime F: type, gpa: std.mem.Allocator, seed: u32, train: []const F.Game, steps: u64, games: []const F.Game) !f64 {
+    const sw = try gpa.alloc(F.Game, games.len);
+    defer gpa.free(sw);
+    for (sw, games) |*s, g| s.* = F.swap(g);
+    const a = try gpa.alloc(f32, games.len);
+    defer gpa.free(a);
+    const b = try gpa.alloc(f32, games.len);
+    defer gpa.free(b);
+    // healthFit returns predictions for one scored set: refit (deterministic) for the other
+    gpa.free(try F.fit(gpa, seed, train, steps, games, a, false));
+    gpa.free(try F.fit(gpa, seed, train, steps, sw, b, false));
+    var lo: f64 = std.math.inf(f64);
+    var hi: f64 = -std.math.inf(f64);
+    for (a, b) |x, y| {
+        const sm = logit(x) + logit(y);
+        lo = @min(lo, sm);
+        hi = @max(hi, sm);
+    }
+    return hi - lo;
+}
+
+fn checkFamily(comptime F: type, gpa: std.mem.Allocator, r: *Report, s: Sizes) !void {
+    const fam = F.name;
+    {
+        const games = try F.games(gpa, 2000, 0, 21);
+        defer gpa.free(games);
+        const pred = try gpa.alloc(f32, games.len);
+        defer gpa.free(pred);
+        const p = try F.fit(gpa, 1, games, 0, games, pred, false);
+        defer gpa.free(p);
+        try r.add(gpa, .{ .family = fam, .name = "init loss minus base rate's (offset's when resid)", .value = @abs(meanLoss(F, games, pred) - refLoss(F, games)), .limit = 0.01 });
+        try r.add(gpa, .{ .family = fam, .name = "init: logit sum spread, sides swapped", .value = try spread(F, gpa, 1, games, 0, games), .limit = 1e-4 });
+        try r.add(gpa, .{ .family = fam, .name = "init: non-finite parameters", .value = @floatFromInt(@intFromBool(!allFinite(p))), .limit = 0.5 });
+    }
+    if (s.learn_games > 0) {
+        const all = try F.games(gpa, s.learn_games + 4000, 0.5, 22);
+        defer gpa.free(all);
+        const train = all[0..s.learn_games];
+        const held = all[s.learn_games..];
+        const steps = s.learn_epochs * draftnet.stepsPerEpoch(train.len, F.batch);
+        const pred = try gpa.alloc(f32, held.len);
+        defer gpa.free(pred);
+        const p = try F.fit(gpa, 1, train, steps, held, pred, false);
+        defer gpa.free(p);
+        try r.add(gpa, .{ .family = fam, .name = "held-out loss after training, below base rate's (offset's) by", .value = refLoss(F, held) - meanLoss(F, held, pred), .limit = 0.03, .below = false });
+        try r.add(gpa, .{ .family = fam, .name = "trained: logit sum spread, sides swapped", .value = try spread(F, gpa, 1, train, steps, held), .limit = 1e-3 });
+        try r.add(gpa, .{ .family = fam, .name = "trained: non-finite parameters", .value = @floatFromInt(@intFromBool(!allFinite(p))), .limit = 0.5 });
+    }
+    if (s.tiny_steps > 0) {
+        const tiny = try F.games(gpa, s.tiny_games, 0, 23);
+        defer gpa.free(tiny);
+        const pred = try gpa.alloc(f32, tiny.len);
+        defer gpa.free(pred);
+        const p = try F.fit(gpa, 1, tiny, s.tiny_steps, tiny, pred, true);
+        defer gpa.free(p);
+        try r.add(gpa, .{ .family = fam, .name = "tiny set (random labels): train loss after overfitting", .value = meanLoss(F, tiny, pred), .limit = F.overfit_limit });
+    }
+    {
+        const tiny = try F.games(gpa, s.tiny_games, 0.5, 24);
+        defer gpa.free(tiny);
+        const pred = try gpa.alloc(f32, tiny.len);
+        defer gpa.free(pred);
+        const a = try F.fit(gpa, 1, tiny, s.seed_steps, tiny, pred, false);
+        defer gpa.free(a);
+        const b = try F.fit(gpa, 1, tiny, s.seed_steps, tiny, pred, false);
+        defer gpa.free(b);
+        const o = try F.fit(gpa, 2, tiny, s.seed_steps, tiny, pred, false);
+        defer gpa.free(o);
+        var same: f64 = 0;
+        var other: f64 = 0;
+        for (a, b, o) |x, y, z| {
+            same = @max(same, @abs(x - y));
+            other = @max(other, @abs(x - z));
+        }
+        try r.add(gpa, .{ .family = fam, .name = "same seed: largest parameter difference", .value = same, .limit = 1e-30 });
+        try r.add(gpa, .{ .family = fam, .name = "seed 2: largest parameter difference", .value = other, .limit = 1e-3, .below = false });
+    }
+}
+
 pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
     _ = arena;
     var threads: usize = std.Thread.getCpuCount() catch 1;
@@ -220,6 +466,9 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var r: Report = .{};
     defer r.checks.deinit(gpa);
     try checkBig(gpa, io, &r, threads, full);
+    try checkFamily(Small(false), gpa, &r, full);
+    try checkFamily(Small(true), gpa, &r, full);
+    try checkFamily(Set, gpa, &r, full);
     var buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &buf);
     const w = &stdout.interface;
@@ -231,11 +480,14 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     return if (bad == 0) 0 else 1;
 }
 
-test "health: big net, quick checks" {
+test "health: nets, quick checks" {
     const gpa = std.testing.allocator;
     var r: Report = .{};
     defer r.checks.deinit(gpa);
     try checkBig(gpa, std.testing.io, &r, 1, quick);
+    try checkFamily(Small(false), gpa, &r, quick);
+    try checkFamily(Small(true), gpa, &r, quick);
+    try checkFamily(Set, gpa, &r, quick);
     for (r.checks.items) |c| {
         if (!c.ok()) std.debug.print("{s}: {s} = {d}\n", .{ c.family, c.name, c.value });
         try std.testing.expect(c.ok());
