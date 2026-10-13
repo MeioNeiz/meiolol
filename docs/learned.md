@@ -34,8 +34,8 @@ How to write a line:
   conditions (front-to-back, dive vs peel, poke vs engage, split vs waveclear, healing vs
   anti-heal) are each within about ±1 point per sd. Sure: sealed blocks 4-5 and dev-val,
   26,242 games, z -4.1, Holm over 27 pre-declared names; not detected rather than ruled
-  out (about 1 point per sd for continuous traits, about 3 points for flags one team in
-  ten has, from planted effects). Adding the mix to ratings doesn't measurably improve
+  out: a planted mix effect of 1.6 points per team sd (estimated at about 1) was found,
+  1.1 was not; flags one team in ten has need about 3 points estimated, about 5 true. Adding the mix to ratings doesn't measurably improve
   log loss on the sealed games (-0.00028 ± 0.00042 nats). Site: nothing new; good and
   bad comps stay the damage-mix reason only. Evidence: docs/model.md "Comp discovery",
   audit meiolol-33

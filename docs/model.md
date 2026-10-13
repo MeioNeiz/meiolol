@@ -1435,10 +1435,14 @@ from a scratch tree before comps.zig was committed (3df16c6); the -2.25 plant an
 permuted control are on the committed build. Plants come back at about 60% of their
 planted size, so the estimates below are likely shrunk towards 0.
 
-Minimum detectable effect (screen, 80% power): about 1 pp per team sd for a continuous
-trait, about 3 pp for a flag one team in ten has (pp per sd of the blue-minus-red
-difference: about 2; "per team sd" is that over sqrt 2, which assumes the two teams'
-values are independent). The plant runs also showed proxies of a real effect pass too (armour
+Minimum detectable effect (screen): plants are in pp per sd of the blue-minus-red
+difference (synth.zig), estimates in pp per team sd (that over sqrt 2, which assumes the
+two teams' values are independent). In team-sd units: planted 2.12 (mix -3) came back as
+1.26, planted 1.59 (-2.25) as 0.95 and was found, planted 1.06 (-1.5, earlier build) was
+missed. So true effects of about 1.6 pp per team sd are found and 1.1 not; on the
+estimate's scale the screen needs about 0.8-1 (z 3.7 at se 0.21). For a flag one team in
+ten has (se 0.77 pp) it needs about 3 pp estimated, about 5 pp true if flags shrink like
+the mix (not planted). The plant runs also showed proxies of a real effect pass too (armour
 pen items, the enchanter archetype under a planted mix), hence the beside-mix column.
 
 Screen, run 20261013T231749Z-comps-screen: 7 passes at q 0.05, 12 at q 0.10 (top rows;
