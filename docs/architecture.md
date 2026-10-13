@@ -45,7 +45,8 @@ src/
   lab_main.zig       `meiolol-lab`: modelling experiments (docs/model.md, compute.md);
                      lab/rows.zig model rows from a snapshot, lab/pack.zig packed rows,
                      lab/mastery_pre.zig pre-game mastery from the raw archive,
-                     lab/seatstats.zig end-of-game seat stats (rows.Row.stats)
+                     lab/seatstats.zig end-of-game seat stats (rows.Row.stats),
+                     lab/nnexport.zig tensors for the draft nets (SNAP/nn/)
   lanecard.zig       the lane card's content (pure): opponent, sentence, curve, options
   desktop_main.zig   `meiolol-desktop`: the lane card in a window (dvui, Direct3D 11)
   desktop/           ui.zig (the window, drawn from a View), raster.zig (dvui backend
@@ -267,6 +268,17 @@ minute-15 resists need raw timelines (championStats), archived only from 2026-10
 rows.loadSql joins it into rows.Row.stats by (match_id, slot); the pack stamps it, so
 writing it makes the pack stale until `meiolol-lab pack` runs again. The harness copies
 stats into api.Row for visible (training) games only; a Query has none.
+
+`meiolol-lab nn-export SNAP` (src/lab/nnexport.zig) writes SNAP/nn/: rows.Data as one
+little-endian file per column, one game per index, for GPU loaders (format agreed with
+meiolol-f1; nnexport.read loads it back). champ.u8 [n][10] (dense index into
+meta.champions, slot = side * 5 + role), platform.u8, patch.u8, start.i64, duration.u16,
+blue_win.u8, split.u8 (0 dev's older half, 1-5 win-comp's forward-chaining fold blocks,
+6 dev-val, 7 other platforms in dev-val's period, 8 selection, 9 other platforms in
+selection's period, 10 test), flags.u8 (1 played 15:00+, 2 timeline to 15:00), aux.f32
+[n][10][22] (the five early outcomes then SeatStat: targets, never inputs). meta.json:
+names, cut times, fold bounds and, per fit set (folds, dev-val, selection, final) and
+role, the aux mean, sd and count over played fit games only. nn.tmp, then renamed.
 
 ## Lane curves (src/curves.zig, src/core/curvesfile.zig, curvefit.zig, src/site/matchup.zig)
 
