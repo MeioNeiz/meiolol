@@ -1359,6 +1359,12 @@ Milli-nats/game on the 44,353 fold games:
   (small) and ±0.55 (big), vs the reported ±0.30 and ±0.43: widen paired intervals ~1.6x
   (small-sized models) or ~1.3x (big)
 - Single big seeds within a block spread with sd up to 4: never read one seed
+- Ratings' own seed noise is small (meiolol-58's torch cross-check of Zig's procedure,
+  gpu-box 20261013T224459Z-xratings-spread, 10 seeds: pooled-fold sd 0.06, per block
+  0.09-0.26, dev-val 0.12), so most of ratings' A/A spread is which games it was fitted
+  on and the L2 pick. Keeping the candidate at seed 1 is fine for pooled gains; name it.
+  Per game, seeds move ratings' logit by 0.02-0.03 on average, which matters for
+  per-game uses (resid offsets, stacking inputs, effects tables)
 Rule from here: a gain under about 0.5 milli-nats/game on the folds is inside the floor
 and needs sealed confirmation seeds and a second resample before a write-up. Today that
 covers big (-0.28), resid (-0.05), pretrain d8 (-0.24), set net (-0.42), patch (-0.14);
