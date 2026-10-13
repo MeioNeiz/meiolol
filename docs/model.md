@@ -2136,7 +2136,20 @@ at ec9224a/0c75817, `meiolol-lab compare`):
   (seed_offset 3, pt-d12-s456) on the 5 folds only, vs win-comp from the same build:
   mean below 0 by more than 1.6x its paired half-width, and vs the shuffled-E control
   with seeds 4-6 below 0. No --resample run: a 90% fit set has no E learnt on exactly it,
-  and embfiles refuses any other (pretrain on the resampled sets would be needed)
+  and embfiles refuses any other (pretrain on the resampled sets would be needed). 4b's
+  caveat: seeds don't cover the main noise source (which games are fitted), so a pass
+  would be "sealed seeds confirm", not "survives resampling"
+- Sealed result (E seeds 4-6 from pretrain at 99bc305, 20261013T230928Z-pt-d12-s456;
+  a88db2d no longer builds under lab-run, the only difference is 74e059d's target-z
+  scaling): nc-sealed-all (99bc305), nc-sealed-shuf (e771256), nc-sealed-comp
+  (99bc305), embx-sealed-cmp. Folds only: all vs win-comp -0.00037 ± 0.00024 (negative
+  in 5 of 5 folds, 2 detected; dev-val -0.00005 ± 0.00044); vs shuffled -0.00052 ±
+  0.00025; shuffled vs win-comp +0.00015 ± 0.00019. The size repeats exactly, but
+  1.6 x 0.00024 = 0.00038 > 0.00037: the declared rule is not passed (by 0.00001).
+  Reading: a consistent -0.4 milli-nats/game from all-pairs forms on pretrained E, real
+  content (beats shuffled twice), not confirmed at the floor. Next: the new pin
+  (snap-20261013T2253Z, about twice the games) with E per block and a pretrain
+  --resample leg
 - The gain is the seed average: single seeds tie with win-comp (about -0.0001 to
   +0.0002), mix gains nothing from averaging, all and shuffled gain ~0.0003-0.0004
   each from it. So the E content matters (all beats shuffled by the same averaging), but
