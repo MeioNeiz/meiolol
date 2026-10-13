@@ -837,6 +837,7 @@ fn exportFiles(
         }
     }
     try drafts.append(arena, refDraft("empty board", sc, @splat(@splat(0))));
+    try drafts.append(arena, refDraft("every slot a champion with no term in its role", sc, noTerms(sc, champs)));
     try compRefs(arena, sc, champs, &drafts, &slots);
 
     try Io.Dir.cwd().createDirPath(io, dir);
@@ -877,6 +878,23 @@ fn compRefs(arena: std.mem.Allocator, sc: *const Scorer, champs: *const Champion
         d.teams[0][1] = rammus;
         try drafts.append(arena, refDraft(try std.fmt.allocPrint(arena, "Rammus jungle into {s}", .{red.label}), sc, d.bySide()));
     }
+}
+
+/// Each slot the lowest-id champion without a term in that role, a different one per
+/// slot: scored as the role average, as an empty slot, but reached through a champion id
+fn noTerms(sc: *const Scorer, champs: *const Champions) [2][n_role]u32 {
+    var teams: [2][n_role]u32 = @splat(@splat(0));
+    var after: u32 = 0;
+    for (0..2) |side| for (0..n_role) |r| {
+        var best: u32 = std.math.maxInt(u32);
+        var it = champs.names.keyIterator();
+        while (it.next()) |id| {
+            if (id.* > after and id.* < best and !sc.terms.contains(Champions.key(id.*, r))) best = id.*;
+        }
+        teams[side][r] = best;
+        after = best;
+    };
+    return teams;
 }
 
 /// Some champion not in the game, for a ban
@@ -921,6 +939,38 @@ test "scorer: the documented formula on known parameters" {
     // An empty top slot is the role average, b 0.05, with no sd
     teams[1][0] = 0;
     try std.testing.expectApproxEqAbs(sigmoid(0.04 + 0.2 - 0.05), sc.blue(teams).p, 1e-6);
+}
+
+test "scorer: a champion with no term in its role scores as the empty slot" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var champs: Champions = .{ .patch_total = 4 };
+    for (1..13) |id| try champs.names.put(arena, @intCast(id), "x");
+    try champs.patch_games.put(arena, Champions.key(1, 0), 2);
+    try champs.patch_games.put(arena, Champions.key(2, 0), 2);
+    const terms = [_]Term{
+        .{ .champion = 1, .role = 0, .games = 400, .b = 0.2, .sd = 0.1, .p = &.{ 1, 0 } },
+        .{ .champion = 2, .role = 0, .games = 400, .b = -0.1, .sd = 0.1, .p = &.{ 0, 1 } },
+    };
+    const zero: [4]f32 = @splat(0);
+    var intercept: [256]f32 = @splat(0);
+    intercept[6] = 0.04;
+    const sc = try Scorer.init(arena, .{
+        .kind = "comp",
+        .dim = 0,
+        .intercept = &intercept,
+        .w = @splat(0),
+        .z = @splat(0),
+        .terms = &terms,
+        .comp = .{ .stats = &.{ .{ .name = "a", .label = "a" }, .{ .name = "b", .label = "b" } }, .S = &.{ 0.5, 0.1, 0.1, -0.2 }, .A = &.{ 0, 0.3, -0.3, 0 }, .S_sd = &zero, .A_sd = &zero },
+    }, 6, &champs);
+    const teams = noTerms(&sc, &champs);
+    // Blue top skips 1 and 2, which have top terms; then one new id per slot
+    try std.testing.expectEqual(@as(u32, 3), teams[0][0]);
+    try std.testing.expectEqual(@as(u32, 12), teams[1][4]);
+    try std.testing.expectEqual(sc.blue(@splat(@splat(0))), sc.blue(teams));
+    try std.testing.expectEqual(sc.compOf(@splat(@splat(0))), sc.compOf(teams));
 }
 
 test "scorer: comp terms on team-summed profiles" {
