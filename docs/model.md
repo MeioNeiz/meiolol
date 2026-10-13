@@ -1304,6 +1304,23 @@ No group shows a gain for win-comp: lopsided team +1.9 ± 4.5, both balanced +0.
 strength mismatch Q1 to Q4 +2.3, +2.1, +0.1, -0.1 (each ±2.8), no frontline-ish pick
 +1.3 ± 2.0. Dev-val is EUW only, so the EUW/rest split needs fold predictions.
 
+On the 5 forward folds (44,353 games, units 20261013T205116Z-compcheck-folds5-units;
+per-game preds from f1's netcheck runs in data/netcheck/f1, all games matched, every "all"
+row equals the published number; milli-nats/game, negative = A better; 9 groups per
+comparison, so a lone group just past zero is not a finding):
+- win-comp vs ratings -0.57 ± 0.28, of which lopsided-team games -2.11 ± 1.08 (8,727
+  games, about three quarters of the total), both balanced -0.19 ± 0.23. The gain sits
+  where the model-free effect is: win-comp works through the damage mix as claimed.
+  EUW1 -0.44 ± 0.53, other platforms -0.62 ± 0.33, not different
+- big net vs ratings -0.28 ± 0.39: leans to lopsided teams (-0.96 ± 0.90) and the widest
+  strength quarter (-1.06 ± 0.90), neither clear. Against win-comp +0.29 ± 0.49, lopsided
+  +1.16 ± 1.43: it picks up less of the comp effect than win-comp's explicit terms
+- small net vs ratings +0.66 ± 0.29 worse, worst in the widest strength quarter
+  (+1.58 ± 0.72): it underfits the strong champion edges the ratings carry
+- resid on ratings (cross-fitted) -0.05 ± 0.07; every group within ±0.25, strength Q3's
+  -0.22 ± 0.13 the only one past zero, one of 9
+Rows in docs/nn-results/gains.tsv.
+
 Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
 Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
 only" covers dev, select, final); rows.load holds only eval's train (older than the first

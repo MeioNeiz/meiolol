@@ -1,5 +1,55 @@
 # title: Where does a model's gain sit, by draft type? (model-free check)
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+win-comp, all games	ratings	folds	-0.00057	0.00028	1			44353		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	
+win-comp, a lopsided team	ratings	folds	-0.00211	0.00108	1			8727		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	magic share <20% or 60%+
+win-comp, both balanced	ratings	folds	-0.00019	0.00023	1			35626		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	
+win-comp, strength mismatch Q1	ratings	folds	-0.00033	0.00058	1			11105		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	closest quarter by lift difference
+win-comp, strength mismatch Q2	ratings	folds	-0.00096	0.00057	1			11088		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	
+win-comp, strength mismatch Q3	ratings	folds	-0.00038	0.00057	1			11083		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	
+win-comp, strength mismatch Q4	ratings	folds	-0.00062	0.00055	1			11077		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	widest quarter
+win-comp, a team with no frontline-ish pick	ratings	folds	-0.00035	0.00040	1			20889		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	best mitigated share < 0.51
+win-comp, EUW1	ratings	folds	-0.00044	0.00053	1			11168		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	
+win-comp, other platforms	ratings	folds	-0.00062	0.00033	1			33185		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	
+big net, all games	ratings	folds	-0.00028	0.00039	3			44353		netcheck m-big (f1)	
+big net, a lopsided team	ratings	folds	-0.00096	0.00090	3			8727		netcheck m-big (f1)	magic share <20% or 60%+
+big net, both balanced	ratings	folds	-0.00011	0.00043	3			35626		netcheck m-big (f1)	
+big net, strength mismatch Q1	ratings	folds	0.00020	0.00069	3			11105		netcheck m-big (f1)	closest quarter by lift difference
+big net, strength mismatch Q2	ratings	folds	0.00025	0.00072	3			11088		netcheck m-big (f1)	
+big net, strength mismatch Q3	ratings	folds	-0.00049	0.00076	3			11083		netcheck m-big (f1)	
+big net, strength mismatch Q4	ratings	folds	-0.00106	0.00090	3			11077		netcheck m-big (f1)	widest quarter
+big net, a team with no frontline-ish pick	ratings	folds	-0.00049	0.00057	3			20889		netcheck m-big (f1)	best mitigated share < 0.51
+big net, EUW1	ratings	folds	-0.00037	0.00067	3			11168		netcheck m-big (f1)	
+big net, other platforms	ratings	folds	-0.00024	0.00046	3			33185		netcheck m-big (f1)	
+small net, all games	ratings	folds	0.00066	0.00029	3			44353		netcheck m-small (f1)	
+small net, a lopsided team	ratings	folds	0.00113	0.00068	3			8727		netcheck m-small (f1)	magic share <20% or 60%+
+small net, both balanced	ratings	folds	0.00054	0.00032	3			35626		netcheck m-small (f1)	
+small net, strength mismatch Q1	ratings	folds	0.00056	0.00047	3			11105		netcheck m-small (f1)	closest quarter by lift difference
+small net, strength mismatch Q2	ratings	folds	0.00058	0.00051	3			11088		netcheck m-small (f1)	
+small net, strength mismatch Q3	ratings	folds	-0.00008	0.00056	3			11083		netcheck m-small (f1)	
+small net, strength mismatch Q4	ratings	folds	0.00158	0.00072	3			11077		netcheck m-small (f1)	widest quarter
+small net, a team with no frontline-ish pick	ratings	folds	0.00090	0.00042	3			20889		netcheck m-small (f1)	best mitigated share < 0.51
+small net, EUW1	ratings	folds	0.00083	0.00058	3			11168		netcheck m-small (f1)	
+small net, other platforms	ratings	folds	0.00060	0.00033	3			33185		netcheck m-small (f1)	
+resid net on ratings, all games	ratings	folds	-0.00005	0.00007	3			44353		netcheck x-resid (f1, cross-fitted)	
+resid net on ratings, a lopsided team	ratings	folds	-0.00008	0.00016	3			8727		netcheck x-resid (f1, cross-fitted)	magic share <20% or 60%+
+resid net on ratings, both balanced	ratings	folds	-0.00004	0.00008	3			35626		netcheck x-resid (f1, cross-fitted)	
+resid net on ratings, strength mismatch Q1	ratings	folds	0.00002	0.00011	3			11105		netcheck x-resid (f1, cross-fitted)	closest quarter by lift difference
+resid net on ratings, strength mismatch Q2	ratings	folds	0.00005	0.00012	3			11088		netcheck x-resid (f1, cross-fitted)	
+resid net on ratings, strength mismatch Q3	ratings	folds	-0.00022	0.00013	3			11083		netcheck x-resid (f1, cross-fitted)	
+resid net on ratings, strength mismatch Q4	ratings	folds	-0.00006	0.00018	3			11077		netcheck x-resid (f1, cross-fitted)	widest quarter
+resid net on ratings, a team with no frontline-ish pick	ratings	folds	-0.00003	0.00010	3			20889		netcheck x-resid (f1, cross-fitted)	best mitigated share < 0.51
+resid net on ratings, EUW1	ratings	folds	-0.00012	0.00014	3			11168		netcheck x-resid (f1, cross-fitted)	
+resid net on ratings, other platforms	ratings	folds	-0.00003	0.00008	3			33185		netcheck x-resid (f1, cross-fitted)	
+big net, all games	win-comp	folds	0.00029	0.00049	3			44353		netcheck w-big (f1)	
+big net, a lopsided team	win-comp	folds	0.00116	0.00143	3			8727		netcheck w-big (f1)	magic share <20% or 60%+
+big net, both balanced	win-comp	folds	0.00008	0.00049	3			35626		netcheck w-big (f1)	
+big net, strength mismatch Q1	win-comp	folds	0.00053	0.00090	3			11105		netcheck w-big (f1)	closest quarter by lift difference
+big net, strength mismatch Q2	win-comp	folds	0.00120	0.00093	3			11088		netcheck w-big (f1)	
+big net, strength mismatch Q3	win-comp	folds	-0.00011	0.00097	3			11083		netcheck w-big (f1)	
+big net, strength mismatch Q4	win-comp	folds	-0.00044	0.00107	3			11077		netcheck w-big (f1)	widest quarter
+big net, a team with no frontline-ish pick	win-comp	folds	-0.00014	0.00071	3			20889		netcheck w-big (f1)	best mitigated share < 0.51
+big net, EUW1	win-comp	folds	0.00006	0.00087	3			11168		netcheck w-big (f1)	
+big net, other platforms	win-comp	folds	0.00037	0.00058	3			33185		netcheck w-big (f1)	
 win-comp, all games	ratings	dev-val	0.00109	0.00141	1			8500		20261013T190836Z-wc-a-full	gains reproduces 0d's own dev-val number
 win-comp, games with a lopsided team	ratings	dev-val	0.00189	0.00453	1			1648		20261013T190836Z-wc-a-full	magic share <20% or 60%+
 win-comp, games with both teams balanced	ratings	dev-val	0.00090	0.00137	1			6852		20261013T190836Z-wc-a-full	
