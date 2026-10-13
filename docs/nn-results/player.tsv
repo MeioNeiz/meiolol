@@ -10,3 +10,7 @@ player net on ratings alone	ratings	folds	-0.00254	0.00065	3	-0.00237	-0.00193	4
 player net on ratings alone	ratings	dev-val	-0.00143	0.00184	3	-0.00175	-0.00094	8500		playernet-20261013
 player net without champion embedding, on ratings + experience	ratings	folds	-0.00267	0.00079	3	-0.00258	-0.00222	44353		playernet-20261013	no champion x experience interaction found: same as with the embedding
 control: per-slot net without player features	ratings	folds	-0.00004	0.00007	3	-0.00001	0.00001	44353		playernet-20261013	the gain comes from the player features
+hand-made experience terms (1954Z, unpinned)	ratings	folds	-0.00378	0.00064	1			76041		playernet 1954Z (Mac)	more history per player, bigger gain (2055Z: -0.00261)
+player net on ratings + experience terms (1954Z)	hand-made experience terms	folds	-0.00025	0.00012	3			76041		20261013T224012Z-pn9-exp	under the noise floor (~0.0005): not established; sealed seeds 4-6 -0.00018 ± 0.00014
+control: player features permuted (1954Z)	hand-made experience terms	folds	0.00021	0.00012	3			76041		20261013T224037Z-pn9-exp-pfeat	no leak: permuted features don't help
+played-the-champion-before step (win-exp-first, 1954Z)	hand-made experience terms	folds	-0.00012	0.00017	1			76041		20261013T224941Z-player-first	fixes part of a 2 pp calibration gap, no detectable log loss gain
