@@ -2162,6 +2162,16 @@ at ec9224a/0c75817, `meiolol-lab compare`):
   confirmed: sealed E seeds 4-6 (pt-d12-s456 at a88db2d) are the confirmation, then the
   new snapshot (pairs gain most from more games). Nothing for learned.md before 4b's
   audit
+- New pin (snap-20261013T2253Z after meiolol-73's seat_stats repack; meiolol-64),
+  declared before any run: E from pretrain at daa56a0 per block (dev, 1-5) on the
+  repacked snapshot. Development: win-embx all, E seeds 1-3, at 21412d3 (pairs with
+  meiolol-04's win-comp preds), plus shuffled E seeds 1-3; reported, not the decision.
+  Pass needs all three on the 5 folds only, paired per game vs win-comp from the same
+  build: (1) sealed E seeds 4-6 (seed_offset 3), mean below 0 by more than 1.6x its
+  95% half-width; (2) sealed shuffled E seeds 4-6, all vs it below 0; (3) resample leg:
+  pretrain --resample 1 (E on netcheck --resample 1's 90% fit sets, seeds 1-3), then
+  netcheck --resample 1 for win-embx all and win-comp, mean below 0. Fold sign count
+  beside each. Pass = detected; anything else = not detected, and the line closes
 
 #### Set net: DeepSets on champion profiles (meiolol-35 [397394], was meiolol-0d)
 
