@@ -1593,6 +1593,46 @@ and must stay below 0 there. Variants tried (all reported): d12, d12 without the
 term, d8, d16, d12 without the outcome-like targets (gold14, lanediff14, cs10, deaths15,
 first_item, minutes, dmg_buildings).
 
+#### Patch and rank context (meiolol-48)
+
+Do champion strengths shift by patch or by lobby rank enough to predict better than one
+stationary rating? `src/lab/cand/win-context` (3d11c31): win-ratings' joint ratings plus
+offsets on a stationary rating (draft-predictor-methods C14): rating(c, patch) = r_c +
+o[c][patch], o shrunk to 0 (to the champion-role's rating) by its own L2, a multiple of
+ratings' L2 picked on the newest 10% of fit games; none when no multiple beats ratings
+there (win-comp's rule). The rank version, o[c][bracket] from the lobby's median
+rank_start (3+ known), is built but has nothing to fit (below). cfg.folds: win-comp's 5
+forward folds, nested chain ratings, +patch, then a control: the same offsets with each
+game's patch slot drawn from a hash of its start (shuffled labels; its gain must be ~0).
+
+Runs, snap-20261012T2055Z, champ_select scope: gpu-box 20261013T214649Z-ctx-patch-ctl
+(--head 3d11c31); the Mac runs before it (20261013T211837Z-ctx-patch-folds5b, dev-val
+pair 20261013T205545Z-ctx-folds5 vs win-ratings 20261013T205856Z-ctx-wr-ref) gave the
+same numbers. Ratings 0.69090 on the folds, as f1's and 0d's. One fit per model
+(seed 1): ratings-type fits barely vary by seed.
+
+| model | folds vs ratings (44,353 games) | folds better in | dev-val vs ratings (8,500) |
+| --- | --- | --- | --- |
+| +patch | -0.00014 ± 0.00020 | 2 of 5 (2 tie: no offsets chosen) | +0.00043 ± 0.00054 |
+| shuffled patch (control) | -0.00008 ± 0.00012 | 1 of 5 | |
+
+Per fold, +patch: -0.00027 ± 0.00043, -0.00064 ± 0.00072, +0.00023 ± 0.00058, 0, 0.
++patch vs the control: -0.00005 ± 0.00019. Largest offsets ~0.03 logit (under 1 pp).
+
+Reading (dev, no test look):
+- Per-patch offsets: not detected, and no better than shuffled labels. Weak test: our
+  data has one patch boundary (16.19: 54,750 games, then 16.20; the 13 Oct snapshot
+  adds only 16.20 games), and dev-val and folds 2-5 score 16.20 games from fits that
+  hold plenty of 16.20 already. The question is really "does a new patch move
+  champions": needs 16.21 in dev
+- Rank brackets: no data yet. rank_start is 0 of 887,060 rows on the pinned snapshot:
+  rank_history begins 12 Oct and rank_start takes a rank from a day before the game's,
+  so only games from 13 Oct have one, and those are in test on every snapshot so far.
+  rank_start is null below Platinum IV, so the brackets are Platinum, Emerald, Diamond,
+  Master+. At a champ-select query only the user's own rank is known: predict uses it
+  as the lobby's bracket
+- Net embeddings of patch and rank (brief step 3): skipped, nothing to embed
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
@@ -1709,6 +1749,11 @@ pair cell and an unknown champion (id 0), each with value, lo, hi, champ_games a
 pair_games from Scorer.value; the page's JS must match them to 0.01.
 
 ## Next steps
+
+- Patch and rank context (meiolol-48, 2026-10-13; cand/win-context, model.md "Patch
+  and rank context"): rerun per-patch offsets (cfg.folds with the shuffled control) once
+  a snapshot has 16.21 games in dev; rank brackets (cfg.bracket) on the 19 Oct weekly
+  snapshot, the first with rank_start in dev: report coverage by bracket first
 
 - Your usual style (parked, 2026-10-13, meiolol-3f): style from a player's earlier games
   is use-time valid for the user's own; measure it on early outcomes over 3c-team2 and

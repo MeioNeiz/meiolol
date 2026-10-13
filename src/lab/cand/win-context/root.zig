@@ -34,7 +34,7 @@ pub const scope: api.Scope = .champ_select;
 const n_role = 5;
 const n_platform = 256;
 const max_patch = 32;
-const n_bracket = 5;
+const n_bracket = 4;
 const none: u8 = 255;
 /// Known ranks a lobby needs for a bracket
 const min_known = 3;
@@ -48,14 +48,14 @@ const l2_grid = [_]f32{ 3e-4, 1e-3, 3e-3, 1e-2 };
 /// Offsets' L2 as a multiple of the ratings'
 const mult_grid = [_]f32{ 1, 3, 10, 30, 100 };
 
-/// rank 0 Iron IV .. 39 Challenger I, 4 per tier: Iron-Silver, Gold, Platinum, Emerald,
-/// Diamond and up
+/// rank 0 Iron IV .. 39 Challenger I, 4 per tier. rank_start is null below Platinum IV
+/// (rows.zig), so: Platinum, Emerald, Diamond, Master and up
 fn bracketOf(rank: u8) u8 {
     const tier = rank / 4;
-    return if (tier <= 2) 0 else @min(tier - 2, n_bracket - 1);
+    return if (tier <= 4) 0 else @min(tier - 4, n_bracket - 1);
 }
 
-const bracket_names = [n_bracket][]const u8{ "iron-silver", "gold", "platinum", "emerald", "diamond+" };
+const bracket_names = [n_bracket][]const u8{ "platinum", "emerald", "diamond", "master+" };
 
 const Game = struct {
     ids: [2][n_role]u16,
@@ -278,7 +278,7 @@ fn printCoverage(m: *const Model, t: *const api.Train) void {
     var games: u32 = 0;
     for (m.known) |k| games += k;
     std.debug.print("win-context: {d} games by known rank_start count 0..10: {any}\n", .{ games, m.known });
-    std.debug.print("win-context: lobby brackets ({d}+ known; iron-silver, gold, platinum, emerald, diamond+) {any}\n", .{ min_known, m.by_bracket });
+    std.debug.print("win-context: lobby brackets ({d}+ known; platinum, emerald, diamond, master+) {any}\n", .{ min_known, m.by_bracket });
     std.debug.print("win-context: patches {any}\n", .{m.patch_list[0..m.n_patch]});
     var rows_ranked: u64 = 0;
     for (t.rows) |r| rows_ranked += @intFromBool(r.rank != null);
@@ -618,10 +618,10 @@ test "folds: a planted patch effect shows against ratings" {
 test "lobby bracket: median of known ranks, none under min_known" {
     var ranks: [2][5]?u8 = @splat(@splat(null));
     try std.testing.expectEqual(none, lobbyBracket(ranks).bracket);
-    ranks[0][0] = 13;
-    ranks[0][1] = 14;
+    ranks[0][0] = 20;
+    ranks[0][1] = 21;
     ranks[1][3] = 30;
     try std.testing.expectEqual(@as(u8, 1), lobbyBracket(ranks).bracket);
-    try std.testing.expectEqual(@as(u8, 0), bracketOf(11));
-    try std.testing.expectEqual(@as(u8, 4), bracketOf(39));
+    try std.testing.expectEqual(@as(u8, 0), bracketOf(16));
+    try std.testing.expectEqual(@as(u8, 3), bracketOf(39));
 }

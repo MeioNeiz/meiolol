@@ -1,0 +1,5 @@
+# title: Do champion strengths shift by patch or lobby rank enough to predict better?
+model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+ratings + per-patch offsets	ratings	folds	-0.00014	0.00020	1			44353		20261013T214649Z-ctx-patch-ctl	better in 2 of 5 folds; one patch boundary (16.19 to 16.20) in our data
+ratings + per-patch offsets	ratings	dev-val	0.00043	0.00054	1			8500	88706	20261013T205545Z-ctx-folds5	all dev-val games on 16.20
+shuffled patch labels (control)	ratings	folds	-0.00008	0.00012	1			44353		20261013T214649Z-ctx-patch-ctl	random labels gain about as much as real patches

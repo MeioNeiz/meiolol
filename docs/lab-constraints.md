@@ -55,3 +55,5 @@ Same error twice on one line of work: restore the last good state, don't try a t
 
 2026-10-13 | times | lab-exp run ~2 min: ~80 s build, ~16 s scoring (gpu-box) | rows load: 0.14 s packed, 15-17 s gpu-box / 31-37 s Mac from SQLite | eval 26.6k games: 7 s gpu-box, 13 s Mac | pack write 17-34 s | pre-push ci ~30 s
 2026-10-13 | times | draft net epoch at 175k games: 0.52 s on the 3080, 2.02 s on 20 threads, 11.9 s one core | netcheck big trial ~2 s (fit 0.6 s), +250 MiB GPU memory | 40 trials x 20 epochs at 16x data ~40 min on the 3080
+2026-10-13 | mac | lab-run start failed: "pinned to Zig 0.17.x, found 0.16.0" | Homebrew zig on the Mac is 0.16 again; 0.17 is ~/.local/bin/zig | ~/.local/bin first on PATH for zig build and lab-run (meiolol-48)
+2026-10-13 | data | rank context had no games: lobby brackets all empty | rank_start comes from rank_history (days 12, 13 Oct): only games from 13 Oct have one, and those are in test on every snapshot so far | check rank_start coverage on dev before a rank model; first dev coverage on the 19 Oct weekly snapshot (meiolol-48)
