@@ -46,7 +46,7 @@ accounts may use Always Free only in the home region).
   (MEIOLOL_BACKUPS, MEIOLOL_NO_EVAL=1 on the micro)
 - systemd --user services, lingering: meiolol-crawl, meiolol-web, meiolol-backup,
   meiolol-health (deploy/systemd). `systemctl --user status meiolol-crawl`; logs in data/
-- crawl.args (2026-10-13): `--reserve 20 --timelines 100 --raw-timeline-days 3650
+- crawl.args (2026-10-13): `--proxy 10.0.0.3:8092 --timelines 100 --raw-timeline-days 3650
   --raw-match-days 0 --keep-days 0 --ladder-per-hour 500 --ladder-refresh-hours 12
   --player-sample 16 --min-tier PLATINUM --cache-mb 512 --patch-only` (keep everything;
   raw leaves the box only through the archive: `raw-export --ack` prunes acked raw older

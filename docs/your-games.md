@@ -151,8 +151,12 @@ Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB
   `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's
   push deploy: after a change to src/api or the curves file format (curvesfile.zig
   version), rebuild, `scp` to /tmp, `sudo install`, then `sudo systemctl restart
-  meiolol-api`. Installed: e58975f (smooth win chance weights, 6c7d50d), 2026-10-13
-  00:26Z; previous binary (33c523b) kept as /usr/local/bin/meiolol.bak-pre-e58975f
+  meiolol-api`. Installed: bfea7b8 (Riot via the crawler's proxy, b2863a5; all four
+  queues), 2026-10-13 00:52Z; previous binary (e58975f) kept as
+  /usr/local/bin/meiolol.bak-pre-bfea7b8, the unit before the proxy as
+  /etc/meiolol-api.service.bak-pre-proxy; /etc/meiolol-api.env (the key) shredded.
+  First lookup through the proxy: 9 new games (4 id lists, rank, 9 matches and
+  timelines) in ~5 s, no 429s
 - User `meiolol-api` (system, no shell). /var/lib/meiolol-api (750): api.db. Exchange
   /var/lib/meiolol-api/exchange (meiolol:meiolol-api, 2770; `meiolol` is in the group):
   curves/ from the box, forgotten.txt out, box-forgotten.txt in
