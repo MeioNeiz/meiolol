@@ -23,6 +23,7 @@ pub const winchance = @import("winchance.zig");
 pub const items = @import("items.zig");
 pub const playstyle = @import("playstyle.zig");
 pub const scaling = @import("scaling.zig");
+pub const carry = @import("carry.zig");
 pub const archive = @import("archive.zig");
 pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
@@ -172,6 +173,18 @@ const usage =
     \\                               by role: who holds it), objectives (+ objectives held)
     \\              --slope L        champion x lead term: team (default) or own (own gold
     \\                               minus the lane opponent's)
+    \\  carry       which champions turn their own lead into wins, whose seat decides games,
+    \\              which reward experience, which make games more decided? (markdown on
+    \\              stdout; docs/model.md "Carry and impact")
+    \\              --cuts A,B,C,D,E,DEV,SELECT  ms: the lab's 5 fold block starts, dev
+    \\                               and select cuts (compcheck --folds 5), required
+    \\              --patch P, --platform P, --test-platform P, --test-share F  as scaling
+    \\              --final          also score the test games (one look per model)
+    \\              --table FILE     TSV of every champion-role's terms by minute
+    \\              --fold-table FILE  per fold and dev: leverage, scaling, skill per
+    \\                               champion-role fitted before the block
+    \\              --plant COV:SD[:SEED]  redraw winners with a planted champion slope on
+    \\                               lane, kd, dmg or exp, sd SD win pp per unit
     \\  raw-export  raw archive, box side (archive.zig): write raw summaries, raw timelines
     \\              and mastery fetched since the last export to DIR/raw-FROM-TO.db and
     \\              print its name and counts (nothing when there is nothing new)
@@ -318,6 +331,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "items", cmdItems },
     .{ "playstyle", cmdPlaystyle },
     .{ "scaling", cmdScaling },
+    .{ "carry", cmdCarry },
     .{ "raw-export", cmdRawExport },
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
@@ -939,6 +953,48 @@ fn cmdPlaystyle(c: *Cmd) !u8 {
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
     try playstyle.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
+    try stdout.interface.flush();
+    return 0;
+}
+
+fn cmdCarry(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var o: carry.Options = .{};
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--test-share")) {
+            o.test_share = try c.float();
+            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
+        } else if (c.is("--test-platform")) {
+            o.test_platform = try c.value();
+        } else if (c.is("--cuts")) {
+            var it = std.mem.splitScalar(u8, try c.value(), ',');
+            for (&o.cuts) |*x| x.* = std.fmt.parseInt(i64, it.next() orelse return error.Usage, 10) catch return error.Usage;
+            if (it.next() != null) return error.Usage;
+        } else if (c.is("--final")) {
+            o.final = true;
+        } else if (c.is("--table")) {
+            o.table = try c.value();
+        } else if (c.is("--fold-table")) {
+            o.fold_table = try c.value();
+        } else if (c.is("--plant")) {
+            var it = std.mem.splitScalar(u8, try c.value(), ':');
+            const cov = std.meta.stringToEnum(carry.Cov, it.next().?) orelse return error.Usage;
+            const sd = std.fmt.parseFloat(f64, it.next() orelse return error.Usage) catch return error.Usage;
+            const seed = if (it.next()) |x| std.fmt.parseInt(u64, x, 10) catch return error.Usage else 1;
+            if (cov == .one) return error.Usage;
+            o.plant = .{ .cov = cov, .sd = sd, .seed = seed };
+        } else return error.Usage;
+    }
+    if (o.cuts[0] == 0) return error.Usage;
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    const platforms = g.platformIds();
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
+    var buf: [64 * 1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    try carry.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
     try stdout.interface.flush();
     return 0;
 }
