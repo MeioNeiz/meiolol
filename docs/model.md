@@ -1284,6 +1284,12 @@ teams' predicted 50.7% vs balanced 49.9%). Contrast **consistent**: the interval
 lopsided damage mix costs about 3 points beyond the champions, in EUW too. The <20%
 side is too small on test (±4.4) to check the folds' -5.3 on its own.
 
+Calibration from the same look: win-ratings is slightly overconfident at the extremes on
+EUW test (strongest and weakest lift quartiles each 1.4 ± 1.3 pp less extreme than
+predicted; the two quartiles mirror each other, one game's two teams, so one number). On
+the research lever list: temperature scaling (one scale on the logit, fitted on the
+newest visible games).
+
 Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
 Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
 only" covers dev, select, final); rows.load holds only eval's train (older than the first

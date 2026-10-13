@@ -52,8 +52,11 @@ How to write a line:
   weakest-frontline quarter -0.9 ± 0.8 and least-CC quarter -0.8 ± 0.8, just past zero
   but not once seven tests are allowed for; armour-heavy picks into magic damage not
   detected (-2.5 ± 2.6); these and the <20% size are from the blocks only, the test
-  checked lopsided minus balanced alone. Site: a lopsided-damage warning with its size
-  (about 3 points); no frontline or CC warnings. Evidence: docs/model.md "Comp features
+  checked lopsided minus balanced alone. Site: the admin Draft tester may show the size
+  (about 3 points); the public site and app may give it only as a reason without a number
+  ("your team's damage is almost all physical; mixed damage tends to do better", never
+  "+X% win rate", docs/production-key.md), once the production key allows anything
+  public; no frontline or CC warnings. Evidence: docs/model.md "Comp features
   from champion profiles", model-free cross-check (folds and test look)
 - ~~2026-10-13 (early, to be updated with the larger held-out check and the win-comp
   model): Whether a team's damage is mostly magic or mostly physical, how many tanky
