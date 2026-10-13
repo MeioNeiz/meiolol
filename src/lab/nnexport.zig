@@ -7,6 +7,7 @@
 //!   harness neither fits nor scores shorter games; bit1 timeline reaches 15:00)
 //!   aux.f32 [n][10][k]  targets only, never inputs: the early outcomes, then
 //!                      SeatStat (rows.Row.stats); NaN unknown, raw game values
+//!   match_id.txt       rows.Game.match_id, one line per game in index order (a join key)
 //!   meta.json          counts, names, cut times, fold bounds, and per fit set and role
 //!                      the aux mean, sd and count over its played games only
 //! Written to nn.tmp, then renamed over nn/
@@ -65,6 +66,7 @@ pub const Export = struct {
     flags: []u8,
     /// [n][10][k]
     aux: []f32,
+    match_id: []const []const u8,
     /// Index -> champion id
     champions: []u32,
     /// Index -> stats.patchKey
@@ -125,6 +127,9 @@ pub fn build(gpa: Allocator, d: *const rows.Data, c: harness.Cuts) !Export {
     e.split = try a.alloc(u8, n);
     e.flags = try a.alloc(u8, n);
     e.aux = try a.alloc(f32, n * 10 * k);
+    const ids = try a.alloc([]const u8, n);
+    for (ids, d.games) |*id, g| id.* = try a.dupe(u8, g.match_id);
+    e.match_id = ids;
     @memset(e.aux, std.math.nan(f32));
     e.cut_dev = c.dev;
     e.cut_select = c.select;
@@ -203,6 +208,12 @@ pub fn write(gpa: Allocator, io: Io, snap: []const u8, e: *const Export) !void {
         inline for (files) |f| try dir.writeFile(io, .{ .sub_path = f[1], .data = bytesOf(@field(e, f[0])) });
         var out: Io.Writer.Allocating = .init(gpa);
         defer out.deinit();
+        for (e.match_id) |id| {
+            try out.writer.writeAll(id);
+            try out.writer.writeByte('\n');
+        }
+        try dir.writeFile(io, .{ .sub_path = "match_id.txt", .data = out.written() });
+        out.clearRetainingCapacity();
         try meta(gpa, e, &out.writer);
         try dir.writeFile(io, .{ .sub_path = "meta.json", .data = out.written() });
     }
@@ -216,7 +227,7 @@ fn meta(gpa: Allocator, e: *const Export, w: *Io.Writer) !void {
     try w.print("{{\"format\":\"meiolol-nn\",\"version\":1,\"n\":{d},\"k\":{d},\n", .{ e.len(), k });
     try w.writeAll("\"columns\":{\"champ.u8\":[\"n\",10],\"platform.u8\":[\"n\"],\"patch.u8\":[\"n\"]," ++
         "\"start.i64\":[\"n\"],\"duration.u16\":[\"n\"],\"blue_win.u8\":[\"n\"],\"split.u8\":[\"n\"]," ++
-        "\"flags.u8\":[\"n\"],\"aux.f32\":[\"n\",10,\"k\"]},\n");
+        "\"flags.u8\":[\"n\"],\"aux.f32\":[\"n\",10,\"k\"],\"match_id.txt\":[\"n\",\"line\"]},\n");
     try w.writeAll("\"slots\":\"side * 5 + role; side 0 blue; roles top, jungle, middle, bottom, utility\",\n");
     try w.writeAll("\"flags\":{\"played\":1,\"timeline15\":2},\n\"splits\":[");
     inline for (@typeInfo(Split).@"enum".field_names, 0..) |name, i| {
@@ -314,6 +325,15 @@ pub fn read(gpa: Allocator, io: Io, snap: []const u8) !Export {
         if (bytes.len != want) return error.NnExportSize;
         @field(e, f[0]) = @as([*]T, @ptrCast(bytes.ptr))[0..count];
     }
+    // Exports from before match_id.txt read without it
+    e.match_id = &.{};
+    if (dir.readFileAlloc(io, "match_id.txt", a, .limited(1 << 30))) |id_text| {
+        const ids = try a.alloc([]const u8, m.n);
+        var lines = std.mem.splitScalar(u8, id_text, '\n');
+        for (ids) |*id| id.* = lines.next() orelse return error.NnExportSize;
+        if (!std.mem.eql(u8, lines.rest(), "")) return error.NnExportSize;
+        e.match_id = ids;
+    } else |err| if (err != error.FileNotFound) return err;
     return e;
 }
 
@@ -386,4 +406,9 @@ test "split codes match the harness's phases and win-comp's fold blocks; files r
     try testing.expectEqualSlices(u32, e.champions, back.champions);
     try testing.expectEqualSlices(u32, e.patches, back.patches);
     try testing.expectEqual(e.bounds, back.bounds);
+    try testing.expectEqual(e.match_id.len, back.match_id.len);
+    for (e.match_id, back.match_id, f.data.games) |want, got, g| {
+        try testing.expectEqualStrings(g.match_id, want);
+        try testing.expectEqualStrings(want, got);
+    }
 }
