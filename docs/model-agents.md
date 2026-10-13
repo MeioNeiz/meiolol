@@ -25,7 +25,7 @@ Where things live:
 
 ## Sessions and what they own (2026-10-13 ~01:10; names change on handover)
 
-Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
+Coordinator: meiolol-76 (from meiolol-2c, from meiolol-78, 2026-10-13).
 
 | Session | Owns |
 | --- | --- |
@@ -37,7 +37,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-fa | box, archive operation, snapshots (weekly Sun 04:00, first 19 Oct, with mastery_pre and coverage report; from 1e9a446 snapshot.sh also fetches Data Dragon per patch and runs seat-stats before pack, a Data Dragon outage fails the make: check the first run; 30450b4 fixed an empty patch list that left resists NaN; mid-week snap-20261013T1954Z taken by ea on 13 Oct, unpinned, learning curve only: prune it with the others once a new one is pinned), flex daily count, mastery catch-up, pushes (from meiolol-11 [1f36a8]); snapshot.sh push also links ~/ml/snaps/<snap> to data/<snap> on the Mac, so lab-run placement can use either host (1c, 2026-10-13) |
 | meiolol-47 | overnight code review; shared src/analysis.zig refactor committed (3324cd3..c2b1a73), all analysis files free |
 | meiolol-82 | Riot application text (drafted; waits on Jacob: ownership, privacy.md 24-month retention, meiolol-ef's deploy) |
-| meiolol-2c | coordinator, neural net programme (Jacob's big goal, 2026-10-13; brief in docs/model.md "Neural draft models"), after the comp features campaign (api Row.stats 53323f9) |
+| meiolol-76 (from meiolol-2c) | coordinator, neural net programme (Jacob's big goal, 2026-10-13; brief in docs/model.md "Neural draft models"), after the comp features campaign (api Row.stats 53323f9) |
 | meiolol-4a (from meiolol-ea) | NN data: pack mtime fix (second precision), gpu-box repack of 1954Z; multi-task targets (Row.y, Row.stats as auxiliary), tensor export for the GPU, extra games count (comp data done: 25737aa, 1e9a446) |
 | meiolol-35 [397394] (was meiolol-c2, from meiolol-0d) | structured nets on profiles (profile inputs, DeepSets/attention, residual on ratings); win-comp done (7a2de11, test: mix effect holds, prediction gain not detected) |
 | meiolol-97 [7beeb6] (was meiolol-52, from meiolol-ad) | NN pretraining: champion-role embeddings from aux targets, used in f1's nets and as a ratings prior (src/lab/pretrain.zig) (research done: 9530584, fbc5df5) |
