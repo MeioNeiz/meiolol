@@ -242,7 +242,7 @@ const Wins = std.AutoHashMapUnmanaged(u64, [2]f64);
 
 /// Profiles, lifts and the offset from games before `before`; scored: dev-val (block
 /// null, harness.score as exp run does) or every visible game in [block[0], block[1])
-const Source = struct {
+pub const Source = struct {
     before: i64,
     block: ?[2]i64 = null,
     /// dev: dev-val as exp run scores it; final: test, fitted on every train game
@@ -361,7 +361,7 @@ fn addUnits(
     });
 }
 
-fn offset(
+pub fn offset(
     gpa: std.mem.Allocator,
     d: *const rows.Data,
     players: []const harness.Players,

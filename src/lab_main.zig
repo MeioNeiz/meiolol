@@ -26,6 +26,7 @@ const embfiles = @import("lab/embfiles.zig");
 const fields = @import("lab/fields.zig");
 const style = @import("lab/style.zig");
 const compcheck = @import("lab/compcheck.zig");
+const comps = @import("lab/comps.zig");
 const events = @import("lab/events.zig");
 const randsplit = @import("lab/randsplit.zig");
 const winnet = @import("lab/winnet.zig");
@@ -87,7 +88,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ events.usage ++ randsplit.usage ++ gains.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ eventvalue.usage ++ compare.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ comps.usage ++ events.usage ++ randsplit.usage ++ gains.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ eventvalue.usage ++ compare.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -331,6 +332,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "ldai-filter")) {
         return randsplit.main(init.gpa, init.io, argv[2..]);
     }
+    if (std.mem.eql(u8, cmd, "comps")) {
+        return comps.main(init.gpa, arena, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "compcheck")) {
         return compcheck.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -441,6 +445,7 @@ test {
     _ = fields;
     _ = style;
     _ = compcheck;
+    _ = comps;
     _ = events;
     _ = randsplit;
     _ = winnet;
