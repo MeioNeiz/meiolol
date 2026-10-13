@@ -22,6 +22,7 @@ const harness = @import("harness.zig");
 const seatstats = @import("seatstats.zig");
 const additive = @import("additive.zig");
 const par = @import("../par.zig");
+const winnet = @import("winnet.zig");
 
 const Io = std.Io;
 const A = additive;
@@ -31,6 +32,8 @@ pub const usage =
     \\                                  [--null N] (shuffled-outcome refits per table)
     \\                                  [--threads N] [--soft FILE --alpha X]
     \\                                  [--shuffle SEED] (labels permuted: a control)
+    \\                                  [--resample N] (fold fits on netcheck's seeded
+    \\                                  90% of fit games, the candidate's too)
     \\                                  shrunk additive model (champion strength, ally
     \\                                  and enemy role-pair blocks, damage mix) vs the
     \\                                  -Dcand candidate on dev-val and the 5 forward
@@ -54,6 +57,9 @@ const Options = struct {
     /// Shuffled-label control: game results (win and gold together) permuted across games
     /// before anything is fitted; every gain and block sd must come out ~0
     shuffle: ?u64 = null,
+    /// Noise-floor refits: every block's fit games (the candidate's too) on netcheck's
+    /// seeded 90% (winnet.inResample), so a gain's refit spread shows
+    resample: ?u32 = null,
 };
 
 const Block = enum { dev, f1, f2, f3, f4, f5 };
@@ -66,8 +72,10 @@ const Spec = struct {
     lo: i64,
     hi: i64,
     dev: bool,
+    resample: ?u32 = null,
 
     fn fits(s: Spec, c: harness.Cuts, g: rows.Game) bool {
+        if (s.resample) |r| if (!winnet.inResample(g, r)) return false;
         return harness.visible(.dev, c, g) and g.start < s.before;
     }
 
@@ -86,6 +94,61 @@ const FitKeep = struct {
         return k.spec.fits(k.c, g);
     }
 };
+
+/// A spread from the blocks' variances: block a's sd, plus block b's when set (an enemy
+/// matchup's two sides; b == a counts the block twice)
+const Pick = struct {
+    a: usize,
+    b: ?usize = null,
+
+    fn of(p: Pick, s2: [A.n_groups]f64) f64 {
+        const x = @sqrt(@max(s2[p.a], 0));
+        return if (p.b) |b| x + @sqrt(@max(s2[b], 0)) else x;
+    }
+};
+
+const Summary = struct {
+    sd: f64,
+    /// 95% from the half-samples
+    lo: f64,
+    hi: f64,
+    half_mean: f64,
+    /// Shuffled-outcome refits: mean square and 95th percentile
+    null_ms: f64,
+    null_q95: f64,
+    detected: bool,
+
+    /// Corrected for the null: sqrt(x^2 - null mean square)
+    fn above(x: f64, v: f64) f64 {
+        return @sqrt(@max(x * x - v, 0));
+    }
+};
+
+fn summarise(arena: std.mem.Allocator, pick: Pick, sigma2: [A.n_groups]f64, boots: []const [A.n_groups]f64, nulls: []const [A.n_groups]f64) !Summary {
+    // Var of the full-data estimate ~ Var over half-samples / 2
+    var hm: f64 = 0;
+    var hm2: f64 = 0;
+    for (boots) |b| {
+        const x = pick.of(b);
+        hm += x;
+        hm2 += x * x;
+    }
+    const nb: f64 = @floatFromInt(@max(boots.len, 1));
+    hm /= nb;
+    const se = @sqrt(@max(hm2 / nb - hm * hm, 0) * nb / @max(nb - 1, 1) / 2);
+    const sd = pick.of(sigma2);
+    const lo = @max(sd - 1.96 * se, 0);
+    var nv: f64 = 0;
+    const nsd = try arena.alloc(f64, nulls.len);
+    for (nulls, nsd) |nl, *x| {
+        x.* = pick.of(nl);
+        nv += x.* * x.*;
+    }
+    nv /= @floatFromInt(@max(nulls.len, 1));
+    std.mem.sort(f64, nsd, {}, std.sort.asc(f64));
+    const q95 = if (nulls.len > 0) nsd[@min(nulls.len - 1, @as(usize, @intFromFloat(@ceil(0.95 * @as(f64, @floatFromInt(nulls.len))))) -| 1)] else 0;
+    return .{ .sd = sd, .lo = lo, .hi = sd + 1.96 * se, .half_mean = hm, .null_ms = nv, .null_q95 = q95, .detected = sd > q95 and lo > q95 };
+}
 
 fn quantile(xs: []const i64, x: f64) i64 {
     if (x >= 1) return std.math.maxInt(i64);
@@ -822,36 +885,15 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
             if (n_cells == 0) continue;
             var games_in: u64 = 0;
             for (p.param_start[g]..p.param_start[g + 1]) |j| games_in += p.count[j];
-            // Var of the full-data estimate ~ Var over half-samples / 2
-            var hm: f64 = 0;
-            var hm2: f64 = 0;
-            for (boots) |b| {
-                hm += @sqrt(b[g]);
-                hm2 += b[g];
-            }
-            const nb: f64 = @floatFromInt(@max(opts.boot, 1));
-            hm /= nb;
-            const se = @sqrt(@max(hm2 / nb - hm * hm, 0) * nb / @max(nb - 1, 1) / 2);
-            const sd = @sqrt(f.sigma2[g]);
-            const lo = @max(sd - 1.96 * se, 0);
-            const hi = sd + 1.96 * se;
-            // Null: mean variance and 95th percentile sd; corrected = sqrt(sd^2 - null
-            // mean variance), the same for the interval's ends
-            var nv: f64 = 0;
-            const nsd = try arena.alloc(f64, opts.null);
-            for (nulls, nsd) |nl, *x| {
-                nv += nl[g];
-                x.* = @sqrt(nl[g]);
-            }
-            nv /= @floatFromInt(@max(opts.null, 1));
-            std.mem.sort(f64, nsd, {}, std.sort.asc(f64));
-            const q95 = if (opts.null > 0) nsd[@min(opts.null - 1, @as(usize, @intFromFloat(@ceil(0.95 * @as(f64, @floatFromInt(opts.null))))) -| 1)] else 0;
-            const corr = struct {
-                fn above(x: f64, v: f64) f64 {
-                    return @sqrt(@max(x * x - v, 0));
-                }
-            }.above;
-            const detected = sd > q95 and lo > q95;
+            const sm = try summarise(arena, .{ .a = g }, f.sigma2, boots, nulls);
+            const sd = sm.sd;
+            const lo = sm.lo;
+            const hi = sm.hi;
+            const hm = sm.half_mean;
+            const nv = sm.null_ms;
+            const q95 = sm.null_q95;
+            const corr = Summary.above;
+            const detected = sm.detected;
             const label = A.groupName(&nbuf, g);
             try cw.interface.print("{s}\t{s}\t{d}\t{d:.1}\t{d:.1}\t{d:.5}\t{d:.5}\t{d:.5}\t{d:.3}\t{d:.3}\t{d:.3}\t{d}\t{d:.5}\t{d:.5}\t{d:.3}\t{d:.3}\t{d:.3}\t{d}\n", .{
                 outcome,              label,                  n_cells,              @as(f64, @floatFromInt(games_in)) / @as(f64, @floatFromInt(n_cells)),
@@ -870,6 +912,36 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
                 try lw.interface.print("{s}\t{s}\t#{d}\t#{d}\t{d}\t{d:.3}\t{d:.3}\t{s}\n", .{ outcome, label, cl.a, cl.b, p.count[j], f.theta[j] * to_unit, half * to_unit, if (in_gold) "gold" else "pp" });
             }
         }
+        // A matchup X vs Y enters as cell(r vs q)(X, Y) - cell(q vs r)(Y, X): the fit
+        // splits its effect between the two blocks by their variances (half each when
+        // r == q, the same block twice), so the matchup's spread is the two cell sds
+        // summed (planted lane matchups: one block's sd is half the planted spread)
+        try w.print("{s}: enemy matchups, spread of X-facing-Y's effect (both blocks' cell sds summed; a same-role block twice), [half-sample mean]\n", .{outcome});
+        for (0..A.n_role) |r| for (r..A.n_role) |q| {
+            const ga = A.enemyGroup(r, q);
+            const gb = A.enemyGroup(q, r);
+            if (p.param_start[ga + 1] == p.param_start[ga] or p.param_start[gb + 1] == p.param_start[gb]) continue;
+            const pick: Pick = .{ .a = ga, .b = gb };
+            const sm = try summarise(arena, pick, f.sigma2, boots, nulls);
+            const label = try std.fmt.allocPrint(arena, "matchup {s}-{s}", .{ A.role_names[r], A.role_names[q] });
+            var n_cells: usize = 0;
+            var games_in: u64 = 0;
+            var gamma: f64 = 0;
+            for ([2]usize{ ga, gb }, 0..) |g, k| if (k == 0 or gb != ga) {
+                n_cells += p.param_start[g + 1] - p.param_start[g];
+                for (p.param_start[g]..p.param_start[g + 1]) |jj| games_in += p.count[jj];
+                gamma += f.gamma[g];
+            };
+            const corr = Summary.above;
+            try cw.interface.print("{s}\t{s}\t{d}\t{d:.1}\t{d:.1}\t{d:.5}\t{d:.5}\t{d:.5}\t{d:.3}\t{d:.3}\t{d:.3}\t{d}\t{d:.5}\t{d:.5}\t{d:.3}\t{d:.3}\t{d:.3}\t{d}\n", .{
+                outcome,                         label,                     n_cells,                         @as(f64, @floatFromInt(games_in)) / @as(f64, @floatFromInt(n_cells)),
+                gamma,                           sm.sd,                     sm.lo,                           sm.hi,
+                sm.sd * to_pp,                   sm.lo * to_pp,             sm.hi * to_pp,                   opts.boot,
+                @sqrt(sm.null_ms),               sm.null_q95,               corr(sm.sd, sm.null_ms) * to_pp, corr(sm.lo, sm.null_ms) * to_pp,
+                corr(sm.hi, sm.null_ms) * to_pp, @intFromBool(sm.detected),
+            });
+            try w.print("  {s:<26} {d:>6} cells  sd {d:.2} [{d:.2}, {d:.2}] [{d:.2}]  null {d:.2} (95th {d:.2})  corrected {d:.2} [{d:.2}, {d:.2}] {s} {s}\n", .{ label, n_cells, sm.sd * to_unit, sm.lo * to_unit, sm.hi * to_unit, sm.half_mean * to_unit, @sqrt(sm.null_ms) * to_unit, sm.null_q95 * to_unit, corr(sm.sd, sm.null_ms) * to_unit, corr(sm.lo, sm.null_ms) * to_unit, corr(sm.hi, sm.null_ms) * to_unit, if (in_gold) "gold" else "pp", if (sm.detected) "DETECTED" else "" });
+        };
         // Comp: the damage mix, per sd of the blue-minus-red term
         var s: f64 = 0;
         var s2: f64 = 0;
@@ -941,6 +1013,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.soft = v;
         } else if (std.mem.eql(u8, k, "--shuffle")) {
             o.shuffle = try std.fmt.parseInt(u64, v, 10);
+        } else if (std.mem.eql(u8, k, "--resample")) {
+            o.resample = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--alpha")) {
             o.alpha = try std.fmt.parseFloat(f32, v);
         } else return error.UnknownOption;
@@ -998,7 +1072,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
-    try w.print("# effects vs {s}: blocks {any}, drop {}, half-samples {d}, soft {s} alpha {d}, shuffle {?d}\n\n", .{ cand_name, opts.blocks, opts.drop, opts.boot, opts.soft orelse "-", opts.alpha, opts.shuffle });
+    try w.print("# effects vs {s}: blocks {any}, drop {}, half-samples {d}, soft {s} alpha {d}, shuffle {?d}, resample {?d}\n\n", .{ cand_name, opts.blocks, opts.drop, opts.boot, opts.soft orelse "-", opts.alpha, opts.shuffle, opts.resample });
     if (opts.shuffle != null) try w.writeAll("SHUFFLED LABELS: a control, every gain and sd must be ~0 (the candidate fits the real labels: its rows' y)\n\n");
     try w.flush();
 
@@ -1032,13 +1106,13 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     defer pooled.deinit(gpa);
     for (opts.blocks) |b| {
         const spec: Spec = switch (b) {
-            .dev => .{ .before = c.dev, .lo = c.dev, .hi = c.select, .dev = true },
+            .dev => .{ .before = c.dev, .lo = c.dev, .hi = c.select, .dev = true, .resample = opts.resample },
             else => blk: {
                 const f: f64 = @floatFromInt(@backingInt(b) - 1);
                 const k: f64 = n_folds;
                 const lo = quantile(starts.items, 0.5 + 0.5 * f / k);
                 const hi = @min(quantile(starts.items, 0.5 + 0.5 * (f + 1) / k), c.dev);
-                break :blk .{ .before = lo, .lo = lo, .hi = hi, .dev = false };
+                break :blk .{ .before = lo, .lo = lo, .hi = hi, .dev = false, .resample = opts.resample };
             },
         };
         var block_arena: std.heap.ArenaAllocator = .init(gpa);
@@ -1092,4 +1166,31 @@ fn anyStats(d: *const rows.Data) bool {
 
 test {
     _ = additive;
+}
+
+test "effects options: resample" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const o = try parseOptions(arena.allocator(), &.{ "--resample", "2", "--blocks", "1" });
+    try std.testing.expectEqual(@as(?u32, 2), o.resample);
+    try std.testing.expectEqual(null, (try parseOptions(arena.allocator(), &.{})).resample);
+}
+
+test "effects matchup spread: a same-role block twice, a crossed pair summed" {
+    var s2: [A.n_groups]f64 = @splat(0);
+    s2[A.enemyGroup(0, 0)] = 0.01;
+    s2[A.enemyGroup(3, 4)] = 0.04;
+    s2[A.enemyGroup(4, 3)] = 0.01;
+    try std.testing.expectApproxEqAbs(0.2, (Pick{ .a = A.enemyGroup(0, 0), .b = A.enemyGroup(0, 0) }).of(s2), 1e-12);
+    try std.testing.expectApproxEqAbs(0.3, (Pick{ .a = A.enemyGroup(3, 4), .b = A.enemyGroup(4, 3) }).of(s2), 1e-12);
+    try std.testing.expectApproxEqAbs(0.2, (Pick{ .a = A.enemyGroup(3, 4) }).of(s2), 1e-12);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    // Halves 0.1 and 0.3 around 0.2: se = 0.1 * sqrt(2) / sqrt(2) = 0.1
+    var b: [2][A.n_groups]f64 = .{ s2, s2 };
+    b[0][A.enemyGroup(3, 4)] = 0.01;
+    b[1][A.enemyGroup(3, 4)] = 0.09;
+    const sm = try summarise(arena.allocator(), .{ .a = A.enemyGroup(3, 4) }, s2, &b, &.{});
+    try std.testing.expectApproxEqAbs(0.2, sm.sd, 1e-12);
+    try std.testing.expectApproxEqAbs(0.2 + 1.96 * 0.1, sm.hi, 1e-9);
 }
