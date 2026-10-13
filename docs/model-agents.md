@@ -30,7 +30,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | Session | Owns |
 | --- | --- |
 | (none) | win / draft predictor rerun: closed (meiolol-db done 2026-10-13); new session when the coordinator pins a snapshot with ~a week of rank_history and pre-game mastery (model.md Next steps) |
-| meiolol-ff [f6a37d] | bootstrap bounds on analysis.Prior.estimate (winchance fix live 00:26Z, playstyle intervals done) |
+| meiolol-ff (closed) | review fixes done: winchance smooth weights (live), playstyle clustered intervals, bootstrap bounds (31338cb) |
 | meiolol-3f | playstyle clustering (from meiolol-48; field ranking done, d94c875) |
 | meiolol-12 (closing) | lab harness: rank_start done (9eb6982, after_game_rank dev-only gate); campaign plan in model.md Next steps; fresh lab session at the pin |
 | meiolol-0d (closing) | admin Models tab, Draft tester: lane, blind and draft lists live with the 1% role floor; last check: Models tab renders struck lines |
@@ -86,6 +86,11 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
   early outcomes (association); early stats add <0.5% beyond 14:00 state; kit and
   lane opponent explain much of skillshot/CC/ward stats
 - Jacob: keep the five champ-select fields in compact rows? (recommended: yes)
+- Collected: bootstrap upper bounds (ff, 31338cb): comeback slope per champion under
+  ~2-4.5 pp per 1000 gold (4-7 pp from 2k behind at 15:00), so "not detected", not
+  ruled out; team counters and champion x item bounded in model.md
+- Jacob: may a session check Your games live with a Riot ID (his own)? If yes, fresh
+  session checks the win chance turning minute live
 - Results to collect: mastery and flex live
   with matches/day before and after (11), next snapshot pinned in docs/model.md
 - Admin follow-ups for the next admin session (0d, not done: admin.js held by
