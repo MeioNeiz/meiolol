@@ -54,13 +54,15 @@ deploy/lab-run.sh watch-install
   gpu-box binaries are built on the gpu-box (Mac load 20-38 from lab builds,
   2026-10-13): the inputs are copied to a stage on the Mac and keyed there (an edit
   landing mid-build can't produce a binary under the wrong key), rsynced to the fixed
-  mirror ~/ml/lab-build/tree (its zig-pkg stays, zig cache ~/ml/lab-build/cache), built
-  at nice 10 into ~/ml/lab-store/KEY and copied into the run dir there. Pinned zig
+  mirror ~/ml/lab-build/tree.SLOT (its zig-pkg stays, zig cache ~/ml/lab-build/cache),
+  built at nice 0 (ahead of runs) into ~/ml/lab-store/KEY and copied into the run dir there. Pinned zig
   0.17.0 in the gpu-box's ~/.local/bin. A key built before then, only in the Mac's
   store, is copied across instead of rebuilt. Mac builds (LAB_ALLOW_MAC=1) keep
   zig-out/lab-run/KEY and the mirror zig-out/lab-run/tree, zig-pkg linked to the
   checkout's (a fresh temp tree per build unpacked ~560 MB again, the 5-13 min --head
-  builds of 2026-10-13). One build lock per host, on this Mac. Every start prints
+  builds of 2026-10-13). Locks on this Mac: gpu-box 2 build slots (one at a time held
+  starts up for many minutes; a build there takes 2-3 min beside a full run queue) plus a
+  lock per key, so one key is built once; Mac one. Copying a Mac key takes no lock. Every start prints
   `binary KEY`: --bin KEY starts that binary whatever the tree holds now (lab-sweep's
   jobs after the first), --no-build the current inputs' binary if built, never a build.
   Newest 40 keys kept in each store, plus any used in the last 3 days

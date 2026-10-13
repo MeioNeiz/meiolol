@@ -95,10 +95,13 @@ ZIG=zig
 # in the main checkout, so they outlive it
 STORE=${LAB_STORE:-$ROOT/zig-out/lab-run}
 CACHE=${ZIG_LOCAL_CACHE_DIR:-$ROOT/.zig-cache}
-# The gpu-box's store, mirror tree (its zig-pkg stays there) and zig cache, under ~
+# The gpu-box's store, mirror trees (one per build slot, ml/lab-build/tree.I; their
+# zig-pkg stays there) and zig cache, under ~. Builds on it at once: a build there takes
+# 2-3 min beside a full queue of runs, and one at a time held starts up for many minutes
 RSTORE=ml/lab-store
 RTREE=ml/lab-build/tree
 RCACHE=ml/lab-build/cache
+RBUILDS=2
 COMMIT=
 PIN=
 PY=
@@ -165,9 +168,9 @@ zig_args() {
 }
 
 # Builds BIN for HOST into store dir PREFIX from the inputs in STAGE, through the host's
-# mirror tree: a fixed path keeps zig's cache warm
+# mirror tree (gpu-box: tree.SLOT): a fixed path keeps zig's cache warm
 build() {
-    local host=$1 bin=$2 prefix=$3 stage=$4 a q=""
+    local host=$1 bin=$2 prefix=$3 stage=$4 slot=$5 a q=""
     if [[ "$host" == gpu-box ]]; then
         for a in ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}; do
             [[ "$a" != -D*=/* ]] && continue
@@ -176,12 +179,14 @@ build() {
         done
         zig_args "$host" "$bin"
         for a in "${ZARGS[@]}"; do q+=" $(printf '%q' "$a")"; done
-        on gpu-box "mkdir -p $RTREE $RCACHE" || return 1
+        local tree=$RTREE.$slot
+        on gpu-box "mkdir -p $tree $RCACHE" || return 1
         # zig-pkg: zig 0.17 keeps fetched packages (sqlite, translate-c) in the build
         # root; the mirror's stays, so they are fetched once
-        rsync -a --delete --checksum --exclude /zig-pkg "$stage/" "gpu-box:$RTREE/" || return 1
-        # Runs' niceness: at 19 a build starved behind 8 runs (2.5 min)
-        on gpu-box "cd $RTREE && nice -n 10 ~/.local/bin/zig build --prefix ~/$prefix$q" \
+        rsync -a --delete --checksum --exclude /zig-pkg "$stage/" "gpu-box:$tree/" || return 1
+        # Ahead of runs (nice 10): a start waits on its build, and at 19 a build starved
+        # behind 8 runs
+        on gpu-box "cd $tree && nice -n 0 ~/.local/bin/zig build --prefix ~/$prefix$q" \
             "--cache-dir ~/$RCACHE" >&2
         return
     fi
@@ -205,6 +210,30 @@ lock8() {
     perl -MFcntl=:flock -e 'open(my $f, q{>&=}, 8) or die; flock($f, LOCK_EX) or die'
 }
 
+# lock8 on fd 7
+lock7() {
+    exec 7>> "$1"
+    perl -MFcntl=:flock -e 'open(my $f, q{>&=}, 7) or die; flock($f, LOCK_EX) or die'
+}
+
+# Holds the first free of N locks $1.0 .. $1.N-1 on fd 8, as lock8; its number in SLOT8
+# (not printed: a command substitution's subshell would let go of the lock)
+slot8() {
+    local i
+    while :; do
+        for (( i = 0; i < $2; i++ )); do
+            exec 8>> "$1.$i"
+            if perl -MFcntl=:flock -e 'open(my $f, q{>&=}, 8) or die
+                flock($f, LOCK_EX | LOCK_NB) or exit 1'; then
+                SLOT8=$i
+                return
+            fi
+            exec 8>&-
+        done
+        sleep 2
+    done
+}
+
 # The store dir of KEY's BIN on HOST; the gpu-box's relative to its ~
 storedir() {
     if [[ "$1" == gpu-box ]]; then echo "$RSTORE/$3/$1-$2"; else echo "$STORE/$3/$1-$2"; fi
@@ -216,14 +245,16 @@ built() {
 }
 
 # Copies KEY's BIN for the gpu-box from this Mac's store (built here before builds moved
-# to the gpu-box), if it is there
+# to the gpu-box), if it is there. No lock: each copy has its own part dir, and mv -T
+# won't replace a dir another copy finished first
 carry() {
-    local old=$STORE/$3/$1-$2 dir
+    local old=$STORE/$3/$1-$2 dir part
     [[ "$1" == gpu-box && -f "$old/done" ]] || return 1
     dir=$(storedir "$1" "$2" "$3")
+    part=$dir.part$$
     echo "copying $3 for $1 $2 from this Mac's store" >&2
-    on gpu-box "mkdir -p $RSTORE/$3 && rm -rf $dir.part" && scp -qr "$old" "gpu-box:$dir.part" \
-        && on gpu-box "mv $dir.part $dir"
+    on gpu-box "mkdir -p $RSTORE/$3" && scp -qr "$old" "gpu-box:$part" \
+        && on gpu-box "mv -T $part $dir 2> /dev/null || rm -rf $part; [[ -f $dir/done ]]"
 }
 
 # Prints the store dir holding BIN for HOST built from the inputs keyed KEY (from commit
@@ -233,14 +264,14 @@ carry() {
 # `done` and is never written again. The key printed can differ from KEY when the tree
 # moved on since
 ensure() {
-    local host=$1 bin=$2 key=$3 commit=$4 build=$5 dir stage harness
+    local host=$1 bin=$2 key=$3 commit=$4 build=$5 dir stage harness slot=0
     dir=$(storedir "$host" "$bin" "$key")
-    if ! built "$host" "$dir"; then
+    if ! built "$host" "$dir" && ! carry "$host" "$bin" "$key"; then
         mkdir -p "$STORE"
-        # A lock per host: gpu-box builds don't queue behind the Mac's
-        if [[ "$host" == gpu-box ]]; then lock8 "$STORE/build-gpu-box.lock"
+        # Locks per host: gpu-box builds don't queue behind the Mac's
+        if [[ "$host" == gpu-box ]]; then slot8 "$STORE/build-gpu-box" "$RBUILDS"; slot=$SLOT8
         else lock8 "$STORE/build.lock"; fi
-        if ! built "$host" "$dir" && ! carry "$host" "$bin" "$key"; then
+        if ! built "$host" "$dir"; then
             if (( ! build )); then
                 exec 8>&-
                 echo "no binary $key for $host $bin: start once without --no-build/--bin" >&2
@@ -257,19 +288,23 @@ ensure() {
                 key=$(key "" "$stage")
                 dir=$(storedir "$host" "$bin" "$key")
             fi
+            # Two build slots could otherwise build one key at once, into one dir
+            mkdir -p "$STORE/keys"
+            lock7 "$STORE/keys/$host-$bin-$key"
             if ! built "$host" "$dir" && ! carry "$host" "$bin" "$key"; then
                 echo "building $key for $host $bin" >&2
                 harness=$(inputs "" "$stage" | grep -v ' src/lab/cand/' | shasum | cut -c1-16)
                 on "$host" "rm -rf $dir"
-                if ! build "$host" "$bin" "$dir" "$stage"; then
+                if ! build "$host" "$bin" "$dir" "$stage" "$slot"; then
                     on "$host" "rm -rf $dir"
                     rm -rf "$stage"
-                    exec 8>&-
+                    exec 7>&- 8>&-
                     echo "build failed: not started" >&2
                     return 1
                 fi
                 on "$host" "echo $harness > $dir/harness && touch $dir/done"
             fi
+            exec 7>&-
             rm -rf "$stage"
         fi
         exec 8>&-
@@ -277,6 +312,7 @@ ensure() {
     # Newest first in prune's eyes
     if [[ "$host" == gpu-box ]]; then on gpu-box "touch $RSTORE/$key; $(prune_cmd "$RSTORE")"
     else touch "$STORE/$key"; fi
+    find "$STORE/keys" -type f -mtime +3 -delete 2> /dev/null || true
     echo "$dir"
 }
 
