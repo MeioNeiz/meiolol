@@ -138,9 +138,11 @@ outcomes and readings decided by Jacob the same day.
   exists is not enough: games ending 14:09-14:59 have it as their end frame). Win also
   needs duration_s >= 900: earlier endings are remakes, leaver forfeits (surrender
   without the remake flag, ~1.5%) or aborts, likely decided by the leaver, not the draft
-  (2026-10-12). A choice, not yet measured: compare win runs with and without them
-  (dev only) before treating it as settled; stats.scan, eval and draft --export keep
-  them. Platinum IV+ only (crawl floor)
+  (2026-10-12). Measured 2026-10-13 (meiolol-db, dev, same HEAD): fitting with or
+  without them differs by +0.00003 ± 0.00025 nats/row on win, early outcomes
+  bit-identical (already NaN), so kept for the cleaner definition. Harness and draft
+  --export fit on 900 s+ games (07564cc, 3500fd3); stats.scan and eval keep them.
+  Platinum IV+ only (crawl floor)
 - Outcomes:
   - win: log loss, paired interval vs champion base rates
   - gold14: total_gold at frame 14

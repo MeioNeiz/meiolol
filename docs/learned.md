@@ -162,13 +162,23 @@ How to write a line:
   coming (in every game with 2+ dragons); only team 100 or 200 means a soul was taken.
   Sure: 1,683 of 2,209 such events are team 0 in archived timelines. Models read soul
   from team 100/200 only (src/objectives.zig)
-- 2026-10-12: About 1.5% of games end before 15:00 without being flagged as remakes,
+- 2026-10-13: Leaving out the games that end before 15:00 without a remake flag (about
+  1.5%, mostly surrenders after someone left) makes no difference we can detect to
+  draft win predictions, and early-game numbers are identical either way, since those
+  games never reach 15:00. Sure: dev only, 8,608 games, same code apart from the
+  filter; win log loss differs by +0.00003 ± 0.00025 nats per row, so the largest
+  effect the data allows is about 0.0003 nats either way. Models: the lab harness and the draft export fit on games that lasted
+  15:00 (07564cc, 3500fd3), kept for the cleaner definition; the site's stats and
+  meiolol eval still keep them. Evidence: meiolol-db, win-ratings champ_select,
+  harness.min_duration_s 900 vs 0 at 4478aeb
+- ~~2026-10-12: About 1.5% of games end before 15:00 without being flagged as remakes,
   mostly surrenders after someone left, likely decided by the leaver; a few are
   anti-cheat aborts with no real result. Real remakes are flagged correctly. Sure:
   3,400 of 230k games, raw summaries checked. Models: not settled. The lab harness
   leaves them out of win fitting and scoring (07564cc); the site's stats, meiolol eval
   and the draft export keep them. Whether leaving them out helps is untested: compare
-  win runs with and without first. Early-game outcomes need 15:00 by definition
+  win runs with and without first. Early-game outcomes need 15:00 by definition.
+  Superseded 2026-10-13 by the measured line above~~
 - 2026-10-12: Nearly everyone finishes an item before the game ends (only 1.1% of top
   laners and 1.3% of supports in games past 15:00 never do), so first-item time works
   for every role. Sure. Evidence: docs/model.md "Team effects"
