@@ -279,3 +279,17 @@ each host; the old key must still work, so switch before revoking it):
    runs archive-forget over the whole archive (the new forgotten list looks all new
    next to forgotten-applied.txt): slow, harmless
 
+
+Incident 2026-10-13, a key from another app (not a switch): 20:54Z a key from a
+different Riot app went into .env and the box; every stored PUUID then gave 400
+"Exception decrypting", match discovery stopped (139k to 28k matches/day) and the
+crawler stored what that key returned. Fixed 22:35Z by restoring the MEIOLOL app's key
+(here, box, vault meiolol/local). Box cleanup (one transaction, crawler stopped): the
+1,938 matches fetched 1791924840-1791930898 (unix s) kept, their 19,380 participant
+PUUIDs set NULL; 21,817 players (seen_at in the window) and 2,361 mastery rows
+(fetched_at in it) deleted; spot check 4/4 window players 400, 4/4 earlier 200. Left:
+rank rows keyed by those PUUIDs (orphans); the window's raw summaries and timelines
+(wrong-app PUUIDs and Riot IDs) go at ack + 2 days as usual; the raw archive holds them
+with hashed wrong-app PUUIDs that an erasure by real PUUID can't reach, so blank those
+games' PUUIDs there as runbook step 6 does (open). Guard (open): crawl start should
+stop if a stored PUUID gets a decrypt 400, before writing anything
