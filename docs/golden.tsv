@@ -1,10 +1,10 @@
-# Golden numbers: reference models on the pinned snapshot must reproduce their published
+# Golden numbers: reference models on each pinned snapshot must reproduce their published
 # log loss to the last digit (deploy/golden.sh). A miss is a finding: report it, never edit
 # the expected value to match
-# case	cand	args (SNAP = the pinned snapshot)	row	field	expected	published
-ratings-dev	win-ratings	exp run SNAP golden win --lab lab && cat summary.md	| win |	6	0.68969	model.md "Comp features from champion profiles" (dev-val, 8,500 EUW1 games)
-comp-dev	win-comp	exp run SNAP golden win --lab lab && cat summary.md	| win |	6	0.68999	model.md "Comp features from champion profiles" (committed cfg)
-ratings-folds	win-ratings	netcheck SNAP --net small --max-epochs 1 --seeds 1 --out .	| folds |	5	0.69090	model.md "Big, small and residual nets" (5 forward folds, 44,353 games)
-comp-folds	win-comp	netcheck SNAP --net small --max-epochs 1 --seeds 1 --out .	| folds |	5	0.69033	model.md "Big, small and residual nets" (against win-comp)
-ratings-test	win-ratings	exp final SNAP golden win --lab lab	| win |	5	0.69064	model.md test look 20261013T195618Z-final-win-ratings (106,040 EUW1 test rows)
-comp-test	win-comp	exp final SNAP golden win --lab lab	| win |	5	0.69065	model.md test look 20261013T195708Z-final-win-comp
+# case	snap	cand	args (SNAP = ~/ml/snaps/snap-<snap> on the gpu-box)	row	field	expected	published
+ratings-dev	20261012T2055Z	win-ratings	exp run SNAP golden win --lab lab && cat summary.md	| win |	6	0.68969	model.md "Comp features from champion profiles" (dev-val, 8,500 EUW1 games)
+comp-dev	20261012T2055Z	win-comp	exp run SNAP golden win --lab lab && cat summary.md	| win |	6	0.68999	model.md "Comp features from champion profiles" (committed cfg)
+ratings-folds	20261012T2055Z	win-ratings	netcheck SNAP --net small --max-epochs 1 --seeds 1 --out .	| folds |	5	0.69090	model.md "Big, small and residual nets" (5 forward folds, 44,353 games)
+comp-folds	20261012T2055Z	win-comp	netcheck SNAP --net small --max-epochs 1 --seeds 1 --out .	| folds |	5	0.69033	model.md "Big, small and residual nets" (against win-comp)
+ratings-test	20261012T2055Z	win-ratings	exp final SNAP golden win --lab lab	| win |	5	0.69064	model.md test look 20261013T195618Z-final-win-ratings (106,040 EUW1 test rows)
+comp-test	20261012T2055Z	win-comp	exp final SNAP golden win --lab lab	| win |	5	0.69065	model.md test look 20261013T195708Z-final-win-comp
