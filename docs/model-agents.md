@@ -37,14 +37,14 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-fa | box, archive operation, snapshots (weekly Sun 04:00, first 19 Oct, with mastery_pre and coverage report; from 1e9a446 snapshot.sh also fetches Data Dragon per patch and runs seat-stats before pack, a Data Dragon outage fails the make: check the first run), flex daily count, mastery catch-up, pushes (from meiolol-11 [1f36a8]) |
 | meiolol-47 | overnight code review; shared src/analysis.zig refactor committed (3324cd3..c2b1a73), all analysis files free |
 | meiolol-82 | Riot application text (drafted; waits on Jacob: ownership, privacy.md 24-month retention, meiolol-ef's deploy) |
-| meiolol-2c | comp features coordinator (Jacob, 2026-10-13): champion profiles (damage type mix, tankiness, armour vs MR, CC, utility, range) into the win model so the Draft tester reacts to the draft; api Row.stats (53323f9). Briefs: model.md "Comp features" when results land |
-| meiolol-ea [fc19bb] | comp data (done: 25737aa, 1e9a446): `meiolol-lab seat-stats` (SNAP/seat_stats.tsv from raw.db), rows/harness load on training rows only |
-| meiolol-0d [b5e038] | comp model: src/lab/cand/win-comp (profile prior, team balance, cross-team terms), dev ablation vs ratings; name clashes with the older meiolol-0d, use the ref |
-| meiolol-ad | comp research: which comp interactions have measured win effects (research/questions, josearch); shortlist to 0d and 2c |
-| meiolol-ba | comp tester: draft export format and admin-draft.js scorer for win-comp terms (owns src/lab/draft.zig, admin-draft.js) |
-| meiolol-49 | comp verifier: leakage review of ea and 0d, model-free dev cross-check (src/lab/compcheck.zig) |
-| meiolol-1c | lab-run auto placement: host and resource by predicted finish (wait + run time from past runs), deploy/lab-run.sh |
-| meiolol-f1 | comp neural nets: draftnet, small, residual-on-ratings and profile-input nets scored on 0d's folds vs ratings and win-comp, learning curve (gpu-box 3080) |
+| meiolol-2c | coordinator, neural net programme (Jacob's big goal, 2026-10-13; brief in docs/model.md "Neural draft models"), after the comp features campaign (api Row.stats 53323f9) |
+| meiolol-ea [fc19bb] | NN data: multi-task targets (Row.y, Row.stats as auxiliary), tensor export for the GPU, extra games count (comp data done: 25737aa, 1e9a446) |
+| meiolol-0d [b5e038] | win-comp fold ablation (finishing), then structured nets on profiles (profile inputs, DeepSets/attention, residual on ratings); name clashes with the older meiolol-0d, use the ref |
+| meiolol-ad | NN research: neural draft models at 100k-1M games, configs and pitfalls for f1 and 0d (comp research done: 9530584) |
+| meiolol-ba | NN tester: draft-model.json net kind, Zig reference scorer and JS forward pass (comp tester done: 2be13f3, 7423f29) |
+| meiolol-49 | comp platform split and test-look plan, then NN verifier: leakage audits, seed variance, paired checks |
+| meiolol-1c | GPU sweep runner for nets (random search on the 3080 via lab-run) (lab-run auto placement done: 371bec8, e050551) |
+| meiolol-f1 | lead NN modeller: draftnet big, small, residual on ratings, learning curve, on 0d's folds |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
 shows. When an agent hands over, get the successor's name and tell the others.
