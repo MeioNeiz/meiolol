@@ -1087,7 +1087,29 @@ Reading:
   (team -0.0011 there vs -0.0006 on folds): judge on the folds
 - Freeze the ratings in the comp stage: refitting them jointly from a warm start loses
   about 0.0002 on the folds
-- Test look: not yet (meiolol-2c's go). Run dirs ~/ml/runs/*-wc-{a,b,c}-* on the gpu-box
+- Run dirs ~/ml/runs/*-wc-{a,b,c}-* on the gpu-box
+
+Test look (meiolol-2c's go, one look): committed cfg (ratings + mix, frozen) fitted on
+all 172,144 train games, scored on the 106,040 EUW1 test rows, run
+20261013T195118Z-final-win-comp on 7d2ae5a. For a per-row pair, exp final gained
+test.tsv and AUC (c26ffa8); on c26ffa8 win-ratings `ratings` had its first look
+(20261013T195618Z-final-win-ratings) and win-comp was rerun
+(20261013T195708Z-final-win-comp), a reproduction of the 7d2ae5a look for per-row
+output, not a second look: identical 0.69065 and -0.00222 ± 0.00182.
+
+| model (test) | log loss | AUC | vs base rates | vs ratings |
+| --- | --- | --- | --- | --- |
+| champion base rates | 0.69287 | 0.514 | - | |
+| ratings | 0.69064 | 0.544 | -0.00223 ± 0.00170 | - |
+| ratings + mix (win-comp) | 0.69065 | 0.544 | -0.00222 ± 0.00182 | +0.00002 ± 0.00048 |
+
+Reading: on test the damage-mix term adds nothing detectable over ratings (+0.00002 ±
+0.00048, so a gain over ~0.0005 is ruled out); the folds' -0.00057 ± 0.00028 sits at
+the edge of that interval, so the real gain is at most about half the folds' estimate.
+Mix effect, train fits: -1.50 ± 0.33 pp per sd (dev phase); the final fit's weight isn't
+printed (exp final writes no effect tables; its inner val kept the term at -0.00031).
+Ratings alone beat champion base rates on test (-0.0022 ± 0.0017), win-ratings' first
+test result
 
 #### Model-free cross-check (meiolol-49)
 
