@@ -42,6 +42,8 @@ pub const usage =
     \\                                  --emb N --hidden N --depth N --dropout X --wd X
     \\                                  --emb-wd X --lr X --clip X --batch N --evals N
     \\                                  --patience N --max-epochs N --min-games N
+    \\                                  (big: --evals defaults to 1; patience counts
+    \\                                  evaluations)
     \\                                  --fix-offset 0|1
     \\                                  --emb-init DIR (small, resid: champion-role
     \\                                  embeddings from DIR/emb-<block>-s<seed>.tsv,
@@ -274,9 +276,10 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
     if (o.net == .big) {
         if (o.emb_init != null) return error.EmbInitNotForBig;
         // draftnet's shape is fixed (dn: 10 x 32, 512, 256, dropout 0.1)
-        for ([_][]const u8{ "--emb", "--hidden", "--depth", "--dropout", "--emb-wd", "--clip", "--evals" }) |k| if (set.contains(k)) return error.FixedForBig;
+        for ([_][]const u8{ "--emb", "--hidden", "--depth", "--dropout", "--emb-wd", "--clip" }) |k| if (set.contains(k)) return error.FixedForBig;
         const d: draftnet.Config = .{};
         if (!set.contains("--min-games")) o.min_games = 30;
+        if (!set.contains("--evals")) o.evals = 1;
         if (!set.contains("--batch")) o.batch = d.batch;
         if (!set.contains("--wd")) o.wd = d.wd;
         if (!set.contains("--lr")) o.lr = d.lr;
@@ -579,16 +582,17 @@ fn runBlock(
                 io: Io,
                 opts: Options,
                 sets: Sets,
+                seeds: []const u32,
                 fits: []Fitted,
                 fn one(x: @This(), i: usize) !void {
-                    x.fits[i] = try fitSmall(x.gpa, x.io, x.opts, x.opts.seeds[i], x.sets);
+                    x.fits[i] = try fitSmall(x.gpa, x.io, x.opts, x.seeds[i], x.sets);
                 }
             };
             // One seed per thread, at most opts.threads at once
             var at: usize = 0;
             while (at < n_s) : (at += opts.threads) {
                 const n = @min(opts.threads, n_s - at);
-                try par.forEach(io, n, Ctx{ .gpa = gpa, .io = io, .opts = opts, .sets = sets, .fits = fits[at..][0..n] }, Ctx.one);
+                try par.forEach(io, n, Ctx{ .gpa = gpa, .io = io, .opts = opts, .sets = sets, .seeds = opts.seeds[at..][0..n], .fits = fits[at..][0..n] }, Ctx.one);
             }
         },
     }
@@ -818,9 +822,11 @@ const EmbTable = struct {
 
 const EmbInit = struct { table: *const EmbTable, vocab: *const Vocab };
 
-/// A tenth more games: a tenth more epochs (as win-ratings and win-comp)
-fn refitEpochs(e: u32) u32 {
-    return @max(1, e + e / 10);
+/// Steps for the refit on n games: a tenth more games, a tenth more epochs (as
+/// win-ratings and win-comp)
+fn refitSteps(epochs: f64, n: usize, batch: u32) u64 {
+    const per: f64 = @floatFromInt(stepsPerEpoch(n, batch));
+    return @max(1, @as(u64, @intFromFloat(@round(epochs * 1.1 * per))));
 }
 
 fn fitBig(gpa: std.mem.Allocator, io: Io, gpu: ?*const cuda.Gpu, opts: Options, seed: u32, s: Sets) !Fitted {
@@ -834,23 +840,23 @@ fn fitBig(gpa: std.mem.Allocator, io: Io, gpu: ?*const cuda.Gpu, opts: Options, 
     defer gpa.free(all);
     const scored = try dnGames(gpa, s.scored);
     defer gpa.free(scored);
-    var watch: draftnet.Watch = .{ .val = val, .patience = opts.patience };
+    var watch: draftnet.Watch = .{ .val = val, .patience = opts.patience, .evals = opts.evals };
     {
-        var net = try fitBigOn(gpa, io, gpu, cfg, s.n_inner, inner, opts.max_epochs, opts.threads, &watch);
+        var net = try fitBigOn(gpa, io, gpu, cfg, s.n_inner, inner, opts.max_epochs * stepsPerEpoch(inner.len, cfg.batch), opts.threads, &watch);
         net.deinit(gpa);
     }
-    var net = try fitBigOn(gpa, io, gpu, cfg, s.n_all, all, refitEpochs(watch.best_epoch), opts.threads, null);
+    var net = try fitBigOn(gpa, io, gpu, cfg, s.n_all, all, refitSteps(watch.bestEpochs(), all.len, cfg.batch), opts.threads, null);
     defer net.deinit(gpa);
     const pred = try gpa.alloc(f32, scored.len);
     try net.predict(gpa, io, scored, pred);
-    return .{ .pred = pred, .epochs = @floatFromInt(watch.best_epoch), .val_loss = watch.best_loss, .seconds = secondsSince(io, t0) };
+    return .{ .pred = pred, .epochs = watch.bestEpochs(), .val_loss = watch.best_loss, .seconds = secondsSince(io, t0) };
 }
 
-fn fitBigOn(gpa: std.mem.Allocator, io: Io, gpu: ?*const cuda.Gpu, cfg: draftnet.Config, n_ids: u32, games: []const dn.Game, epochs: u32, threads: u32, watch: ?*draftnet.Watch) !draftnet.Net {
-    const g = gpu orelse return draftnet.fitCpu(gpa, io, cfg, n_ids, games, epochs, threads, watch);
+fn fitBigOn(gpa: std.mem.Allocator, io: Io, gpu: ?*const cuda.Gpu, cfg: draftnet.Config, n_ids: u32, games: []const dn.Game, steps: u64, threads: u32, watch: ?*draftnet.Watch) !draftnet.Net {
+    const g = gpu orelse return draftnet.fitCpu(gpa, io, cfg, n_ids, games, steps, threads, watch);
     var dev: draftnet.DeviceGames = try .init(g, games);
     defer dev.deinit();
-    return draftnet.fitGpu(gpa, io, g, &dev, cfg, n_ids, games, epochs, watch);
+    return draftnet.fitGpu(gpa, io, g, &dev, cfg, n_ids, games, steps, watch);
 }
 
 /// The small net's flat parameters: platform intercepts, the offset's weight (resid) and
@@ -1043,9 +1049,7 @@ const Work = struct {
 
 const Trained = struct { net: SmallNet, steps: u64, epochs: f64, val_loss: f64 };
 
-fn stepsPerEpoch(n: usize, batch: u32) u64 {
-    return @max(1, (n + batch - 1) / batch);
-}
+const stepsPerEpoch = draftnet.stepsPerEpoch;
 
 /// AdamW over shuffled batches for at most max_steps; with val, evaluated opts.evals
 /// times an epoch, stopping after `patience` evaluations without a new best and keeping
@@ -1151,10 +1155,7 @@ fn fitSmall(gpa: std.mem.Allocator, io: Io, opts: Options, seed: u32, s: Sets) !
     const init_all: ?EmbInit = if (table) |*t| .{ .table = t, .vocab = s.vocab_all } else null;
     const tuned = try trainSmall(gpa, opts, seed, s.n_inner, s.inner, s.val, opts.max_epochs * stepsPerEpoch(s.inner.len, opts.batch), init_inner);
     gpa.free(tuned.net.p);
-    // A tenth more games: a tenth more epochs (as win-ratings and win-comp)
-    const per = stepsPerEpoch(s.fit.len, opts.batch);
-    const steps: u64 = @max(1, @as(u64, @intFromFloat(@round(tuned.epochs * 1.1 * @as(f64, @floatFromInt(per))))));
-    const full = try trainSmall(gpa, opts, seed, s.n_all, s.fit, null, steps, init_all);
+    const full = try trainSmall(gpa, opts, seed, s.n_all, s.fit, null, refitSteps(tuned.epochs, s.fit.len, opts.batch), init_all);
     defer gpa.free(full.net.p);
     const w: Work = try .init(gpa, full.net.l);
     defer w.deinit(gpa);
