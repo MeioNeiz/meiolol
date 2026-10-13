@@ -4,10 +4,10 @@
 //
 // One table per question from docs/nn-results/<question>.tsv (format in its README.md),
 // sent by deploy/lab-push.sh as training/nn/ with training/nn.txt listing the files, so the
-// numbers come from what the modellers record, not from model.md's prose
+// numbers come from what the modellers record, not from model.md's prose. learned.md lines
+// show when a row's `learned` cell names one (its date and first words)
 
 const NN = { at: undefined, files: [], err: null };
-const NN_START = "2026-10-13";
 const NN_ORDER = ["nets", "structured", "comp", "embx", "pretrain", "stack", "context", "player", "ldai", "gains", "scaling"];
 const NN_VS = { ratings: "today's model", "win-comp": "win-comp", base: "champion win rates" };
 const NN_BLOCK = {
@@ -24,7 +24,7 @@ async function loadNn() {
     NN.files = await Promise.all(list.map(async name => nnFile(name.replace(/\.tsv$/, ""), await getText("training/nn/" + encodeURIComponent(name)))));
     NN.err = null;
   } catch (e) { NN.files = []; NN.err = /^404/.test(e.message) ? null : e.message; }
-  if (ui.tab === "models" && ui.cat === "nn") render(true);
+  if (ui.tab === "models" && (ui.cat === "nn" || ui.cat === "all")) render(true);
 }
 
 function nnFile(key, text) {
@@ -49,11 +49,12 @@ const nnDiff = r => signed(r.diff, 5) + (r.ci != null ? " ± " + r.ci.toFixed(5)
 const nnBlock = r => NN_BLOCK[r.block] || r.block || "–";
 
 // The row that best answers a question: a test look first, then the folds, then dev-val;
-// among those, the comparison with today's model, lowest diff
+// among those, the comparison with today's model, first in the file (never the best
+// diff: in a breakdown by subset that would pick the luckiest subset)
 function nnHeadline(f) {
   const rank = { test: 0, folds: 1, "dev-val": 2, random: 3 };
   const rows = f.rows.filter(r => r.vs !== "-" && r.block in rank);
-  rows.sort((a, b) => rank[a.block] - rank[b.block] || (a.vs === "ratings" ? 0 : 1) - (b.vs === "ratings" ? 0 : 1) || a.diff - b.diff);
+  rows.sort((a, b) => rank[a.block] - rank[b.block] || (a.vs === "ratings" ? 0 : 1) - (b.vs === "ratings" ? 0 : 1));
   return rows[0] || null;
 }
 
@@ -66,24 +67,17 @@ function nnView(body) {
     "Dev results come from older games scored on newer ones; a test look is the one check on held-back games per model.");
   if (NN.err) intro.append(el("div", { class: "health bad" }, el("b", {}, "Could not load the results: "), NN.err));
   if (NN.at === undefined) { intro.append(el("p", { class: "muted" }, "Loading results…")); return; }
-  const files = NN.files.slice().sort((a, b) => nnRank(a.key) - nnRank(b.key));
+  const files = nnSorted();
   if (!files.length) { intro.append(el("p", { class: "muted" }, "No results yet (docs/nn-results/).")); return; }
 
-  const ul = el("ul", { class: "readings" });
-  for (const f of files.filter(f => f.key !== "scaling")) {
-    const h = nnHeadline(f);
-    if (!h) continue;
-    const v = nnVerdict(h);
-    ul.append(el("li", {}, el("b", {}, f.title), " ", h.model, ": ", el("span", { class: "pill " + v.cls }, v.text),
-      ` on ${nnBlock(h)}, ${nnDiff(h)}`, h.block === "test" ? el("span", { class: "pill warn" }, "test look") : null));
-  }
-  intro.append(ul);
+  intro.append(nnHeadlines(files, true));
 
-  const learnt = section(body, "What we learnt", `Final findings on winning from the draft since the programme began (docs/learned.md, from ${NN_START}).`);
-  const lines = (MODELS.learned.win || []).filter(t => !/^~~/.test(t) && (t.match(/^(\d{4}-\d{2}-\d{2})/) || [])[1] >= NN_START);
-  learnedList(learnt, lines, 3, true);
-  if (lines.length) {
-    const d = el("details", {}, el("summary", {}, `All ${lines.length} in full, with evidence`));
+  const learnt = section(body, "What we learnt", "Final findings the results below link to (docs/learned.md).");
+  const lines = [...new Set(files.flatMap(nnLearned))];
+  if (!lines.length) learnt.append(el("p", { class: "muted" }, "None linked yet (the learned column in docs/nn-results)."));
+  else {
+    learnedList(learnt, lines, 0, true);
+    const d = el("details", {}, el("summary", {}, "In full, with evidence"));
     learnedList(d, lines);
     learnt.append(d);
   }
@@ -91,6 +85,37 @@ function nnView(body) {
   for (const f of files) (f.key === "scaling" ? nnScaling : nnQuestion)(body, f);
 }
 const nnRank = k => { const i = NN_ORDER.indexOf(k); return i < 0 ? NN_ORDER.length - 1 : i; };
+const nnSorted = () => NN.files.slice().sort((a, b) => nnRank(a.key) - nnRank(b.key));
+
+// One line per question: its headline row's verdict (full: with model, block and numbers)
+function nnHeadlines(files, full) {
+  const ul = el("ul", { class: "readings" });
+  for (const f of files.filter(f => f.key !== "scaling")) {
+    const h = nnHeadline(f);
+    if (!h) continue;
+    const v = nnVerdict(h);
+    const look = h.block === "test" ? el("span", { class: "pill warn" }, "test look") : null;
+    if (full) ul.append(el("li", {}, el("b", {}, f.title), " ", h.model, ": ", el("span", { class: "pill " + v.cls }, v.text), ` on ${nnBlock(h)}, ${nnDiff(h)}`, look));
+    else ul.append(el("li", {}, f.title, " ", el("span", { class: "pill " + v.cls }, v.text), look));
+  }
+  return ul;
+}
+
+// The All view's card
+function nnCard(cards) {
+  loadNn();
+  const card = el("button", { type: "button", class: "card catcard", onclick: () => setCat("nn") }, el("h3", {}, "Neural nets"));
+  if (NN.files.length) card.append(nnHeadlines(nnSorted(), false));
+  else card.append(el("p", { class: "muted" }, NN.at === undefined ? "Loading results…" : "No results yet."));
+  cards.append(card);
+}
+
+// learned.md lines (any heading, not struck) a question's rows name in their learned cell
+function nnLearned(f) {
+  const all = Object.values(MODELS.learned).flat().filter(t => !/^~~/.test(t));
+  const keys = [...new Set(f.rows.map(r => (r.learned || "").trim()).filter(Boolean))];
+  return keys.flatMap(k => all.filter(t => t.startsWith(k)));
+}
 
 function nnQuestion(body, f) {
   const sec = section(body, f.title, `docs/nn-results/${f.key}.tsv`);
@@ -105,6 +130,8 @@ function nnQuestion(body, f) {
     { key: "games", label: "Games", num: true },
     { key: "source", label: "Source", fmt: v => v ? el("code", {}, v) : "–" },
   ], rows);
+  const learnt = nnLearned(f);
+  if (learnt.length) learnedList(sec, learnt, 0, true);
   const shown = f.rows.filter(r => r.vs !== "-" && r.block !== "projection");
   if (shown.length) {
     intervalChart(grid(sec), {

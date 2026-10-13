@@ -1778,6 +1778,7 @@ function allView(body) {
     else if (cat !== "lab") card.append(el("p", { class: "muted" }, "Nothing final yet."));
     card.append(el("p", { class: "sub" }, `${runs.length} run${runs.length === 1 ? "" : "s"}` + (live ? `, ${live} running` : "") + (items.length > 2 ? ` · ${items.length} findings` : "")));
     cards.append(card);
+    if (cat === "win") nnCard(cards);
   }
   const live = MODELS.runs.filter(r => r.state === "running" || r.state === "paused");
   if (live.length) runsBlock(body, live);

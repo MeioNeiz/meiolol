@@ -22,6 +22,14 @@ header and one row per comparison, tab-separated, blank cell for unknown:
 - games: scored games; fit_games: fit games, a count or a share like `25%` (the scaling
   chart's x)
 - source: commit or run name; note: one plain sentence, optional
+- learned: optional, a docs/learned.md line this row supports, named by its start
+  (`2026-10-13: Knowing that a team's damage`); the page shows the lines named (once
+  each) under the question and in "What we learnt". Add the column to the header when
+  you first use it
+
+The headline for a question (top of the page, All view card) is its first row compared
+with ratings on the best block there is (test, then folds, then dev-val): put the
+question's main answer first, a breakdown by subset after it.
 
 The page labels each row from diff and ci: below zero by more than ci "better", above by
 more than ci "worse", else "tie (not detected)".

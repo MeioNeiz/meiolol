@@ -1,6 +1,6 @@
 # title: Does team composition (damage mix) add anything?
-model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
-win-comp (ratings + damage mix)	ratings	folds	-0.00057	0.00028	1			44353		7a2de11
+model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note	learned
+win-comp (ratings + damage mix)	ratings	folds	-0.00057	0.00028	1			44353		7a2de11		2026-10-13: A team that deals under a fifth
 win-comp (ratings + damage mix)	ratings	dev-val	0.00030		1			8500		a189f10
-win-comp (ratings + damage mix)	ratings	test	0.00002	0.00048	1			10604	172144	20261013T195708Z-final-win-comp	one test look
+win-comp (ratings + damage mix)	ratings	test	0.00002	0.00048	1			10604	172144	20261013T195708Z-final-win-comp	one test look	2026-10-13: Knowing that a team's damage is lopsided
 ratings	base	test	-0.00223	0.00170	1			10604	172144	20261013T195618Z-final-win-ratings	one test look
