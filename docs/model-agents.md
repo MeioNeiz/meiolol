@@ -34,11 +34,11 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-3f (closing) | playstyle clustering done (47fdfb2, 57d50d0): beyond the full 14:00 state style adds almost nothing; types and sequence net not detected |
 | meiolol-12 (closing) | lab harness: rank_start done (9eb6982, after_game_rank dev-only gate); campaign plan in model.md Next steps; fresh lab session at the pin |
 | meiolol-0d (closing) | admin Models tab, Draft tester: lane, blind and draft lists live with the 1% role floor; last check: Models tab renders struck lines |
-| meiolol-fa | box, archive operation, snapshots (weekly Sun 04:00, first 19 Oct, with mastery_pre and coverage report), flex daily count, mastery catch-up, pushes (from meiolol-11 [1f36a8]) |
+| meiolol-fa | box, archive operation, snapshots (weekly Sun 04:00, first 19 Oct, with mastery_pre and coverage report; from 1e9a446 snapshot.sh also fetches Data Dragon per patch and runs seat-stats before pack, a Data Dragon outage fails the make: check the first run), flex daily count, mastery catch-up, pushes (from meiolol-11 [1f36a8]) |
 | meiolol-47 | overnight code review; shared src/analysis.zig refactor committed (3324cd3..c2b1a73), all analysis files free |
 | meiolol-82 | Riot application text (drafted; waits on Jacob: ownership, privacy.md 24-month retention, meiolol-ef's deploy) |
 | meiolol-2c | comp features coordinator (Jacob, 2026-10-13): champion profiles (damage type mix, tankiness, armour vs MR, CC, utility, range) into the win model so the Draft tester reacts to the draft; api Row.stats (53323f9). Briefs: model.md "Comp features" when results land |
-| meiolol-ea [fc19bb] | comp data: `meiolol-lab seat-stats` (SNAP/seat_stats.tsv from raw.db), rows/harness load on training rows only |
+| meiolol-ea [fc19bb] | comp data (done: 25737aa, 1e9a446): `meiolol-lab seat-stats` (SNAP/seat_stats.tsv from raw.db), rows/harness load on training rows only |
 | meiolol-0d [b5e038] | comp model: src/lab/cand/win-comp (profile prior, team balance, cross-team terms), dev ablation vs ratings; name clashes with the older meiolol-0d, use the ref |
 | meiolol-ad | comp research: which comp interactions have measured win effects (research/questions, josearch); shortlist to 0d and 2c |
 | meiolol-ba | comp tester: draft export format and admin-draft.js scorer for win-comp terms (owns src/lab/draft.zig, admin-draft.js) |
