@@ -1521,9 +1521,12 @@ On win-comp (-Dcand=src/lab/cand/win-comp, folds 0.69033), t23's config, 10 seed
 | big as a residual on win-comp's offset (bigres) | -0.00034 ± 0.00035 | 3 of 5 | +0.00026 to +0.00286 | -0.00023 ± 0.00043 | 0.837 (0.62-1.13) |
 | control: bigres, training games' champion rows shuffled (`--shuffle-ids 1`) | +0.00042 ± 0.00034 | 0 of 5 | +0.00054 to +0.00154 | +0.00052 ± 0.00061 | 0.882 (0.77-1.32) |
 
-- bigres minus its control, paired: -0.00076 ± 0.00046 on the folds: the champion rows
-  carry something, but against win-comp itself the residual is not detected (4b's floor
-  for a net vs its candidate is ~1.3x the paired interval)
+- bigres minus its control, paired: -0.00076 ± 0.00046 on the folds, but not a gain: the
+  control is handicapped (below), so this partly measures the handicap. Against win-comp
+  itself the residual is not detected (4b's floor for a net vs its candidate is ~1.3x the
+  paired interval, ±0.00046 here). Audited by meiolol-4b: numbers reproduce
+- A clean control needs the same stopping on both sides (both --evals 4, or one small
+  fixed step budget), so the pair stays paired
 - The control is worse, not ~0: early stopping checks val once an epoch, so even shuffled
   ids get a full epoch of fitting noise first (41 of its 60 fits stop at that first
   check). No sign of a leak (a leak would make the control better than win-comp). Both
@@ -1702,12 +1705,40 @@ Reading (dev, no test look):
 - Limit: 16 days of history, most rows with no earlier game on the champion; rank at
   game start and mastery absent. The lever is history per player, not model shape
 
-Next (plan): rerun on snap-20261013T1954Z (Mac data/, gpu-box ~/ml/snaps; ~292k games
-in rows, more days of history, rank at game start from 12 Oct for 13 Oct games) once
-meiolol-ea's mastery_pre.tsv is there and the coordinator pins it: same four rows plus
-`--feats champ,any,form` vs all (what rank and mastery add), coverage per block, and
-rows split by whether the player has rank or mastery. Test look for the player net on
-ratings + exp only on meiolol-2c's go; on this snapshot it would be a tie by the folds.
+Rerun on snap-20261013T1954Z (unpinned, dev only, 76,041 fold games, 13,478 dev-val;
+gpu-box from 22:07, Mac before; `--feats champ,any,form,rank`; mastery off, as
+mastery_pre covers 0.15% of participants there). Coverage of rows: 1+ earlier game fit
+34-48%, scored 52-68%, test 81%; on the champion fit 13-20%, test 43%; rank at game start
+fit 0%, test 16% (rank_history from 12 Oct), so rank adds nothing to learn yet.
+
+| model (1954Z, folds) | vs | diff | better in |
+| --- | --- | --- | --- |
+| hand-made experience terms (win-exp) | ratings | -0.00378 ± 0.00064 | 5 of 5 |
+| player net on ratings | ratings | -0.00352 ± 0.00057 | 5 of 5 |
+| player net on win-exp, seeds 1-3 | win-exp | -0.00027 ± 0.00015 | 5 of 5 |
+| same, sealed seeds 4-6 | win-exp | -0.00018 ± 0.00014 | |
+| same, one build with step-0 early stopping (9cee34a) | win-exp | -0.00025 ± 0.00012 | |
+| same, offset weight fixed at 1 | win-exp | -0.00021 ± 0.00011 | |
+| control: player features permuted within role (training sets) | win-exp | +0.00021 ± 0.00012 | |
+| same control, offset fixed | win-exp | +0.00019 ± 0.00009 | |
+| win-exp-first (+ played the champion before) | win-exp | -0.00012 ± 0.00017 | |
+
+- The experience gain grows with history: -0.0026 on 2055Z (16 days), -0.0038 on 1954Z
+- Beyond the hand-made terms the net shows -0.0002 to -0.0003 in every run, under the
+  noise floor (~0.0005, 4b): not established. The permuted-feature control is worse, not
+  better (no leak: 4b's pass rule); the learnt offset weight stays 0.90-1.00, so the gain
+  isn't offset recalibration. A shuffled-label control was uninformative (the net learns
+  to drop the offset: +0.0063)
+- Calibration by history bucket (data/runs/playernet-20261013/calib.sh; blue minus red
+  players with games on their champion): win-exp is off by +1.9 pp at <= -2 (blue wins
+  44.5%), +1.0 at -1, -0.9 at >= 2, alike on both snapshots: log1p(games on the
+  champion) under-reacts to who has played their champion. win-exp-first (a played
+  before step, src/lab/cand/win-exp-first) narrows it to +1.25 / -0.3 pp but its log
+  loss gain is not detected (2055Z -0.00019 ± 0.00016, 1954Z -0.00012 ± 0.00017)
+- New inputs (abb57f3): Row.player (dense id, internal only) and history means over
+  earlier games (gold, CS, damage per minute; off-role share; days since the last game),
+  playernet's `prior` group (QuickSkill-style). First runs queued (pq-exp, pq-exp-prior,
+  pq-exp-prior-pfeat); next on the new pinned snapshot
 
 #### Pretrained champion-role embeddings (meiolol-97 [7beeb6], was meiolol-52)
 
