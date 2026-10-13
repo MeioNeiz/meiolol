@@ -32,6 +32,7 @@ Same error twice on one line of work: restore the last good state, don't try a t
 2026-10-13 | process | exp: UnknownOption from a lab-run start | lab-run joins ARGS with spaces and bash splits them again, so `--desc "two words"` became two arguments | one-word values in lab-run ARGS, or --literal (deecc3f run 20261013T215745Z)
 
 2026-10-14 | process | meiolol-lab curve failed FileNotFound on the gpu-box | lab-run ARGS go through bash, which expands ~ only at the start of a word, so NAME:COL:LABEL:~/ml/... stayed literal | write $HOME/ inside such words (single-quoted locally so the Mac doesn't expand it)
+2026-10-14 | build | `lab-run start gpu-box ... --meiolol --commit 3f8b9d6` printed only "build failed: not started" after ~20 min waiting on a build slot; the same start rerun built the same key and ran | cause unknown: the compiler output went to the start's stderr, which a `| grep started` hid; the commit builds | keep the whole start output (`> log 2>&1`), never grep it; a failed build uses no test look, retry once (meiolol-61)
 ## Zig 0.17 (docs/zig-0.17.md; check APIs with LSP hover, std moved a lot)
 
 2026-10-12 | zig | Allocator.dupeZ / fmt.bufPrintZ not found | removed in 0.17 | dupeSentinel(.., 0), mem.printSentinel(.., 0)
