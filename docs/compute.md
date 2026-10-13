@@ -102,6 +102,11 @@ run time.
   same command (exp: action, campaign, target) and candidate (-Dcand) on the same
   snapshot, else any candidate there, else that command on any snapshot, else the bare
   subcommand. A new campaign with no runs falls back to other campaigns' times
+- gpu slots share one card: a gpu run's time counts over its sharing (the gpu runs
+  holding slots on average while it ran, itself included), and a new one is predicted at
+  that x min(slots, live gpu runs + 1). big1b (13 Oct): netcheck --net big 73-134 s at ~2
+  sharing, 272-358 s at ~4.9, i.e. ~72-92 s alone either way. cpu slots are pinned to
+  their own cores: no slowdown seen, not scaled
 - A host with none borrows the other host's, times their speed ratio: median over
   commands on the same snapshot run on both (5 s or more). None yet: the Mac assumed 2x
   slower (eval 13 vs 7 s). No history anywhere: gpu-box cpu, as before, and it says so

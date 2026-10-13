@@ -10,10 +10,12 @@
 #                                            "HOST RES SECONDS" (- if unknown), then why
 #   lab-place.pl status HOST                 status lines, predicted vs actual run time
 #
-# Run time = ended - started - paused (League). Estimate: median of the last 5 runs that
-# exited 0 with the same args and build, else the same command (exp: action, campaign,
-# target) and candidate (-Dcand) on the same snapshot, else any candidate there, else
-# that command on any snapshot, else the bare subcommand. A host
+# Run time = ended - started - paused (League); on a shared resource (%SHARED) over
+# sharing, the runs holding its slots on average while it ran (itself included), and a new
+# run there is predicted at that x min(slots, live runs + 1). Estimate: median of the last
+# 5 runs that exited 0 with the same args and build, else the same command (exp: action,
+# campaign, target) and candidate (-Dcand) on the same snapshot, else any candidate there,
+# else that command on any snapshot, else the bare subcommand. A host
 # with none borrows the other's, scaled by the hosts' speed ratio (median over commands
 # run on both)
 use strict;
@@ -30,6 +32,10 @@ my @HOSTS = ('gpu-box', 'mac');
 # Where auto may place: Jacob, 2026-10-13: model runs on the gpu-box only, they slow his
 # Mac down. LAB_AUTO_MAC=1 lets auto use the Mac again; an explicit `start mac` still runs
 my @AUTO = $ENV{LAB_AUTO_MAC} ? @HOSTS : ('gpu-box');
+# Resources whose slots share one device: gpu runs slow about linearly with the runs
+# beside them (big1b, 13 Oct: netcheck --net big 73-134 s at ~2 sharing, 272-358 s at
+# ~4.9). cpu slots are pinned to their own cores (taskset): no slowdown seen
+my %SHARED = (gpu => 1);
 
 my $mode = shift @ARGV // '';
 
@@ -60,6 +66,7 @@ while (my $line = <STDIN>) {
         push @runs, \%r;
     }
 }
+$_->{solo} = solo($_) for @runs;
 my %ratio = ratios();
 
 if ($mode eq 'place') { place(@ARGV) }
@@ -99,6 +106,23 @@ sub ran {
     # WSL's clock can step back a second: never below 0
     my $t = $r->{ended} - $r->{started} - paused($r, $r->{started}, $r->{ended});
     return $t > 0 ? $t : 0;
+}
+
+# Run time alone: ran over sharing (time-weighted runs holding RES slots on HOST beside
+# it, itself included). Runs on unshared resources, or with no overlap known, keep ran
+sub solo {
+    my ($r) = @_;
+    return $r->{ran} unless defined $r->{ran} && $SHARED{$r->{res} // q()};
+    my ($s, $e) = ($r->{started}, $r->{ended});
+    return $r->{ran} unless $e > $s;
+    my $held = 0;
+    for my $o (grep { $_->{host} eq $r->{host} } @runs) {
+        next unless defined $o->{started} && ($o->{res} // q()) eq $r->{res};
+        my $oe = $o->{ended} // (live($o) ? $now{$o->{host}} : undef);
+        $held += clip($o->{started}, $oe, $s, $e) if defined $oe;
+    }
+    my $share = $held / ($e - $s);
+    return $share > 1 ? $r->{ran} / $share : $r->{ran};
 }
 
 sub median {
@@ -158,7 +182,7 @@ sub times_for {
     unless (%times) {
         my @done = grep { defined $_->{ran} } @runs;
         for my $r (sort { $a->{started} <=> $b->{started} } @done) {
-            push @{$times{$r->{host}}{$_->[0]}}, $r->{ran}
+            push @{$times{$r->{host}}{$_->[0]}}, $r->{solo}
                 for keys_for($r->{bin}, $r->{args}, $r->{build});
         }
     }
@@ -309,6 +333,11 @@ sub place {
             if ($why_not) { push @out, "$name: $why_not"; next }
             my ($run, $why) = estimate($h, $bin, $args, $build);
             my ($wait, $live, $n_slots) = $res eq 'none' ? (0, 0, 0) : wait_for($h, $res);
+            if (defined $run && $SHARED{$res}) {
+                my $share = $live + 1 < $n_slots ? $live + 1 : $n_slots;
+                $run *= $share;
+                $why .= ", x $share sharing $res" if $share > 1;
+            }
             my ($pen, $pen_why) = league_penalty($h);
             push @cands, {host => $h, res => $res, run => $run, wait => $wait + $pen,
                 total => defined $run ? $wait + $pen + $run : undef,
