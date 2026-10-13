@@ -124,14 +124,15 @@ How to write a line:
   players, about 4 with three or more, and nothing extra beyond five. Not causal:
   players with history are the more active, crawled ones, and this can't separate that;
   our crawl finds games through known players, so a random lobby has less history than
-  our games. Sure: one snapshot (snap-20261012T2055Z, 52,853 games, folds + dev-val
-  pooled, one row per game); win-exp vs win-ratings, both deterministic, so no seed
-  spread; far past the ~0.5 milli-nat noise floor; the same gradient with each time
-  block weighted equally (4b). Held until a rerun: the second snapshot's larger gain
-  (1954Z, its champions-only run built while the build lock was broken). Site: internal
-  only; it's player data, check production-key.md before any public use. Evidence: f7's
-  player-exp-cal and player-rat-cal preds (gpu-box ~/ml/runs/20261013T221917Z-...,
-  20261013T223643Z-...), ~/ml/analysis/histgain-4a.py; audited by meiolol-4b
+  our games. Sure: snap-20261012T2055Z (52,853 games, folds + dev-val pooled, one row
+  per game); win-exp vs win-ratings, both deterministic, so no seed spread; far past the
+  ~0.5 milli-nat noise floor; the same gradient with each time block weighted equally
+  (4b). A snapshot two days longer (snap-20261013T1954Z, 89,519 games) gives the same
+  buckets and more games with history, so the average gain rose from 2.5 to 4.0. Site:
+  internal only; it's player data, check production-key.md before any public use.
+  Evidence: f7's player-exp-cal and player-rat-cal preds (gpu-box
+  ~/ml/runs/*-player-{exp,rat}-cal-*), ~/ml/analysis/histgain-4a.py; audited by
+  meiolol-4b
 - 2026-10-13: On games we held back, the ten champions alone pick the winner 53.2% of
   the time, and adding how much each player has played before the game (earlier games
   and wins on their champion, recent games, win rate, KDA, lane gold and deaths) lifts
