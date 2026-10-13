@@ -51,6 +51,8 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-30 | scaling curves for ratings, win-comp and nets, a*N^-b + c, projection to production-key volumes |
 | meiolol-ab | interactions on pretrained embeddings: low-rank cross and within-team terms (cand/win-embx) |
 | meiolol-2a (new) | admin Models tab dashboard of the NN programme results |
+| meiolol-e3 | research: how AI agents run ML experiments well (josearch), ranked changes for our lab setup |
+| meiolol-16 | lab tooling from evidence: results store and checked comparisons, immutable run binaries, standard preds files, snapshot completeness checks |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
 shows. When an agent hands over, get the successor's name and tell the others.
