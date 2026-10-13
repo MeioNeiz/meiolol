@@ -3,7 +3,7 @@ all/data/champions.json 00926860dfeebe26
 all/data/learning.json c0076574631dc78e
 all/data/pool.json c49c24af4a83207c
 all/data/stats.bin bffab0c56008909d
-all/index.html e9320489956c12a3
+all/index.html a7bd9f645d02c9c3
 all/matchup/bot/twitch-vs-kaisa.html 4c1850620f93fdf0
 all/matchup/index.html 16ce9374d43b8dea
 all/matchup/jungle/amumu-vs-leesin.html 6dc271032a16576f
@@ -25,7 +25,7 @@ all/patch/data/champions.json 00926860dfeebe26
 all/patch/data/learning.json c0076574631dc78e
 all/patch/data/pool.json 7d1d4f7e19454d8f
 all/patch/data/stats.bin e8331f5e09d9aebc
-all/patch/index.html 8416bb54d55b7863
+all/patch/index.html c0793d7398f36ad0
 all/patch/matchup/bot/twitch-vs-kaisa.html b7e9cab06eca7b84
 all/patch/matchup/index.html f1a5dca95ef603bc
 all/patch/matchup/jungle/amumu-vs-leesin.html 86996ac8b36e8ab6
@@ -72,7 +72,7 @@ data/learning.json c0076574631dc78e
 data/pool.json c49c24af4a83207c
 data/stats.bin bffab0c56008909d
 download.html 210d7338f1f2a5ec
-index.html 7fb33e7c29ae4cd2
+index.html 79d1d74c72b6f112
 learn.html b241d4e82efafa16
 learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c
@@ -98,7 +98,7 @@ patch/data/champions.json 00926860dfeebe26
 patch/data/learning.json c0076574631dc78e
 patch/data/pool.json 7d1d4f7e19454d8f
 patch/data/stats.bin e8331f5e09d9aebc
-patch/index.html 75c040d8bf2f80e4
+patch/index.html ecb74db4b35f984c
 patch/matchup/bot/twitch-vs-kaisa.html da03ef2cf913b7f3
 patch/matchup/index.html 91c2ff41d9afadd1
 patch/matchup/jungle/amumu-vs-leesin.html cd349ab12c3f625b

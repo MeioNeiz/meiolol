@@ -268,7 +268,7 @@ pub const lookup_submit =
 ;
 
 /// The mark: a win chance line through its turning minute
-const logo =
+pub const logo =
     \\<svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#8b7cf6"/><path d="M6 21.5 11.5 14l5 4.5L26 7" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16.5" cy="18.5" r="2.6" fill="#f5c451"/></svg>
 ;
 

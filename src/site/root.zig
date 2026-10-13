@@ -1167,20 +1167,27 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
     const up = site.view.up();
     try tpl.render(w,
         \\<section class="home-top"><div>
-        \\<span class="tagline"><b>Free</b>Game review for League of Legends</span>
-        \\<h1>See the minute your game was <em>won or lost</em></h1>
-        \\<p class="lead">Look yourself up. Every recent game, reviewed: your team's win
-        \\chance minute by minute, the moments that moved it, what each death cost, and your
-        \\lane against the typical game at your rank.</p>
+        \\<p class="wordmark">{logo}<span>meiolol</span></p>
+        \\<h1>Game review for<br>League of Legends</h1>
+        \\<p class="lead">Type your Riot ID and meiolol reviews your recent games, the way
+        \\chess.com reviews a chess game: your team's chance to win at every minute, the
+        \\minute the game turned, what each of your deaths cost, and how your lane went
+        \\against players at your rank in the same matchup.</p>
         \\<form class="search" action="{your}" method="get" role="search"{submit}>
         \\<input name="id" placeholder="Riot ID, like Name#EUW" aria-label="Riot ID, as Name#TAG" autocomplete="off" spellcheck="false" required>
         \\<button type="submit">Review my games</button>
         \\</form>
+        \\<ol class="steps">
+        \\<li><b>1</b><span>Enter your Riot ID</span></li>
+        \\<li><b>2</b><span>We fetch your last 60 days of games from Riot</span></li>
+        \\<li><b>3</b><span>Open any game for its review</span></li>
+        \\</ol>
         \\<p class="sub-links"><a href="{example}">See an example review →</a><a href="{method}">How the numbers are made</a></p>
-        \\<div class="trust"><span><b>{games}</b>ranked games, {when}</span><span><b>No sign-up</b>just your Riot ID</span><span><b>Every queue</b>solo/duo, flex, draft, Swiftplay</span></div>
+        \\<p class="fine">Free, no sign-up. Solo/duo, flex, draft and Swiftplay games. Measured
+        \\against {games} ranked games in EUW, {when}.</p>
         \\</div>
         \\<div id="demo" class="panel demo" hidden>
-        \\<div class="panel-h"><b>Game review</b><span class="live"><i></i>the example player's real game</span></div>
+        \\<div class="panel-h"><b>Example: one real game, reviewed</b><span class="live"><i></i>playing through its key moments</span></div>
         \\</div>
         \\</section>
         \\<section class="home-sec">
@@ -1212,6 +1219,7 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
     , .{
         .your = html.Link{ .root = up, .path = "your.html" },
         .submit = tpl.trusted(html.lookup_submit),
+        .logo = tpl.trusted(html.logo),
         .example = html.Link{ .root = up, .path = "your.html#example" },
         .method = html.Link{ .root = up, .path = "method.html" },
         .games = try thousands(site.arena, site.games),
@@ -1574,7 +1582,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<form class=\"search\" action=\"../your.html\"",
         "<script src=\"../review.js\" defer></script>",
         "<script src=\"../home.js\" data-root=\"../\" defer></script>",
-        "<b>2</b>ranked games",
+        "against 2 ranked games",
     }) |s| try std.testing.expect(std.mem.indexOf(u8, home, s) != null);
     try std.testing.expect(std.mem.indexOf(u8, home, "class=\"subbar\"") == null);
     const your = try read(arena, out, "your.html");

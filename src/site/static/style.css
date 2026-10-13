@@ -531,13 +531,15 @@ td.wrap { white-space: normal; min-width: 140px; }
 
 /* Home: the lookup, and a game review playing through its moments */
 .home-top { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 48px; align-items: center; padding: 32px 0 8px; }
-.tagline { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t2); border: 1px solid var(--line-2); border-radius: 999px; padding: 4px 10px 4px 6px; background: var(--panel); }
-.tagline b { background: rgba(139, 124, 246, 0.16); color: #c4bbff; font-weight: 600; border-radius: 999px; padding: 1px 7px; font-size: 11px; }
-.home-top h1 { font-size: 40px; line-height: 1.1; letter-spacing: -0.035em; margin: 16px 0 12px; }
-.home-top h1 em { font-style: normal; background: linear-gradient(90deg, var(--turn), var(--cost) 55%, var(--brand)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.home-top .lead { font-size: 15.5px; max-width: 450px; margin: 0 0 24px; }
-.trust { display: flex; flex-wrap: wrap; gap: 12px 28px; margin-top: 34px; color: var(--muted); font-size: 12.5px; }
-.trust b { display: block; color: var(--text); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.wordmark { display: flex; align-items: center; gap: 10px; margin: 0 0 22px; font-size: 22px; font-weight: 700; letter-spacing: -0.03em; }
+.wordmark svg { width: 30px; height: 30px; }
+.home-top h1 { font-size: 36px; line-height: 1.12; letter-spacing: -0.035em; margin: 0 0 12px; }
+.home-top .lead { font-size: 15.5px; max-width: 480px; margin: 0 0 22px; }
+.steps { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 480px; margin: 18px 0 0; padding: 0; }
+.steps li { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--t2); line-height: 1.4; }
+.steps b { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--panel-3); border: 1px solid var(--line-2); font-size: 11px; color: var(--text); }
+.home-top .sub-links { margin-top: 18px; }
+.fine { color: var(--faint); font-size: 12px; max-width: 480px; margin: 14px 0 0; }
 .demo .panel { border: 0; border-radius: 0; background: none; box-shadow: none; }
 .demo .panel > .panel-h { display: none; }
 .demo .rv-strip { padding: 12px 14px 0; gap: 8px 12px; }
@@ -584,7 +586,8 @@ td.wrap { white-space: normal; min-width: 140px; }
   header .look { display: none; }
   header nav a { padding: 5px 7px; font-size: 13px; }
   .subbar .filters { margin-left: 0; }
-  .home-top h1 { font-size: 30px; }
+  .home-top h1 { font-size: 28px; }
+  .steps { grid-template-columns: 1fr; gap: 8px; }
   .three { grid-template-columns: 1fr; }
   .counts { grid-template-columns: 1fr 1fr; }
   .counts div:nth-child(2) { border-right: 0; }
