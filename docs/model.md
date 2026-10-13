@@ -1486,11 +1486,14 @@ Results (dev only; audit by meiolol-4b pending, nothing in learned.md yet):
 | small net - win-comp | +0.00055 ± 0.00047 | +0.00050 ± 0.00057 |
 | win-comp - ratings | -0.00055 ± 0.00037 | -0.00048 ± 0.00041 |
 
-- The random split doesn't flatter our models: on EUW1 games, ratings score worse on a
-  random tenth than on the time split (0.69174 vs 0.68969, AUC 0.532 vs 0.550; different
-  games, so unpaired, ±0.0015 and ±0.0019 log loss). Every platform together: 53.07%,
-  AUC 0.543. Nothing near LoLDraftAI's 55-56%; the champions-only exp run above
-  (54.15%, AUC 0.556, EUW1 rows) is a different fit (exp, all rows), not this setup
+- No inflation seen here: on EUW1 games, ratings score worse on a random tenth than on
+  the time split (0.69174 vs 0.68969, AUC 0.532 vs 0.550; different games, so unpaired,
+  ±0.0015 and ±0.0019 log loss). Every platform together: 53.07%, AUC 0.543. Nothing
+  near LoLDraftAI's 55-56%. Not like for like: the random tenth spreads over the whole
+  dev era (older games), dev-val is its newest EUW1 games. It conflicts with the exp
+  comparison above (1abb887: a random tenth of all non-test games, selection period
+  included, one seed: 54.15%, AUC 0.556 vs 53.70%, 0.549), which learned.md cites as
+  "flatters by about half a point". Open: a paired check on the same scored games
 - The small net never beats its candidate: ties ratings on the random split, worse than
   win-comp there (+0.00055 ± 0.00047), and worse than both on dev-val (+0.00060 ±
   0.00052 vs ratings, +0.00030 ± 0.00078 vs win-comp). Single seeds: none below 0 by
@@ -1502,9 +1505,9 @@ Results (dev only; audit by meiolol-4b pending, nothing in learned.md yet):
   are worse by +0.00064 ± 0.00041 (random) and +0.00014 ± 0.00077 (time, a tie). They
   drop 0.25% of games by LoLDraftAI's rules, and 29% for having no timeline to judge
   (36% off EUW1, 11% EUW1), so fit games fall by 30% (110k to 78k): mostly fewer games
-- So LoLDraftAI's 55-56% isn't the split or the filters on our data. What's left: its
-  checkpoint picked on its test split, its larger window (52 patches), its own data mix;
-  none reproduced here
+- So on our data neither the split nor the filters gets near LoLDraftAI's 55-56%.
+  Left: its checkpoint picked on its test split, its larger window (52 patches), its own
+  data mix; none reproduced here
 
 #### Results dashboard (meiolol-2a)
 

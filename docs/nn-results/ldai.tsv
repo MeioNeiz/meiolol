@@ -1,0 +1,13 @@
+# title: Does LoLDraftAI's random split flatter draft models, and does a net beat ratings on it?
+model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+small net, LoLDraftAI-style random split	ratings	random	-0.00000	0.00032	3	0.00002	0.00062	36909	110k	ldaiall-ratings-r1..3-none (f09e507)	3 random tenths of dev-era games, every platform scored; the net does no better than ratings where LoLDraftAI reports 55-56%
+small net, random split + LoLDraftAI's filters	ratings	random	0.00003	0.00044	3	-0.00012	0.00097	26091	78k	ldaiall-ratings-r1..3-ldai (f09e507)	its 15-minute filters, mostly dropping games without a timeline (30%)
+small net, random split, EUW1 games only	ratings	random	0.00049	0.00058	3	0.00055	0.00099	10222	110k	ldaiall-ratings-r1..3-none (f09e507)	
+small net, random split, against win-comp	win-comp	random	0.00055	0.00047	3	0.00057	0.00117	36909	110k	ldaiall-comp-r1..3-none (f09e507)	
+win-comp (ratings + damage mix), random split	ratings	random	-0.00055	0.00037	1			36909	110k	ldaiall-comp-r1..3-none (f09e507)	
+win-comp, random split + LoLDraftAI's filters	ratings	random	-0.00048	0.00041	1			26091	78k	ldaiall-comp-r1..3-ldai (f09e507)	
+win-comp, random split, EUW1 games only	ratings	random	-0.00013	0.00064	1			10222	110k	ldaiall-comp-r1..3-none (f09e507)	
+ratings, our time split (newest EUW1 dev games)	-	dev-val	0.68969	0.00187	1			8500	88706	20261013T2010-2034Z ldai-ratings-dev-none	accuracy 53.72%, AUC 0.550; the honest number
+ratings, random split, EUW1 games	-	random	0.69174	0.00148	1			10222	110k	ldaiall-ratings-r1..3-none (f09e507)	accuracy 52.55%, AUC 0.532; same games' platform as the time split: worse, not inflated
+ratings, random split, every platform	-	random	0.69025	0.00084	1			36909	110k	ldaiall-ratings-r1..3-none (f09e507)	accuracy 53.07%, AUC 0.543
+ratings, random split + LoLDraftAI's filters, every platform	-	random	0.69167	0.00115	1			26091	78k	ldaiall-ratings-r1..3-ldai (f09e507)	accuracy 52.51%, AUC 0.535
