@@ -885,19 +885,29 @@ pub fn run(
         "\n| --- | --- | --- | --- | --- |\n");
     for (minutes, 0..) |minute, mi| {
         const labels: []const []const u8 = if (minute == 0) &draft_models else &game_models;
+        // the champion slope step, also by role
+        const slope_step: usize = if (minute == 0) 3 else 4;
         for (1..labels.len) |k| {
-            var sums: analysis.PairedSums = .{};
-            var better: usize = 0;
-            for (0..n_folds) |f| {
-                const j = job(jobs, nb, mi, f);
-                const g = analysis.pairedGain(j.scored, j.loss[k - 1], j.loss[k]);
-                better += @intFromBool(g.mean > 0);
-                addGames(&sums, j.scored, j.loss[k - 1], j.loss[k]);
+            const roles: []const ?u8 = if (k == slope_step) &.{ null, 0, 1, 2, 3, 4 } else &.{null};
+            for (roles) |role| {
+                var sums: analysis.PairedSums = .{};
+                var better: usize = 0;
+                for (0..n_folds) |f| {
+                    const j = job(jobs, nb, mi, f);
+                    var one: analysis.PairedSums = .{};
+                    addGames(&one, j.scored, j.loss[k - 1], j.loss[k], role);
+                    better += @intFromBool(one.gain().mean > 0);
+                    addGames(&sums, j.scored, j.loss[k - 1], j.loss[k], role);
+                }
+                const g = sums.gain();
+                const dj = job(jobs, nb, mi, n_folds);
+                var dev: analysis.PairedSums = .{};
+                addGames(&dev, dj.scored, dj.loss[k - 1], dj.loss[k], role);
+                const d = dev.gain();
+                try w.print("| {d} | {s}", .{ minute, labels[k] });
+                if (role) |r| try w.print(", {t} rows", .{@as(Role, @fromBackingInt(@intCast(r)))});
+                try w.print(" | {d:.5} ± {d:.5} | {d}/5 | {d:.5} ± {d:.5} |\n", .{ g.mean, g.half_width, better, d.mean, d.half_width });
             }
-            const g = sums.gain();
-            const dj = job(jobs, nb, mi, n_folds);
-            const d = analysis.pairedGain(dj.scored, dj.loss[k - 1], dj.loss[k]);
-            try w.print("| {d} | {s} | {d:.5} ± {d:.5} | {d}/5 | {d:.5} ± {d:.5} |\n", .{ minute, labels[k], g.mean, g.half_width, better, d.mean, d.half_width });
         }
         if (minute != 0) {
             var sums: analysis.PairedSums = .{};
@@ -905,7 +915,7 @@ pub fn run(
             for (0..n_folds) |f| {
                 const j = job(jobs, nb, mi, f);
                 better += @intFromBool(analysis.pairedGain(j.scored, j.sq[0], j.sq[1]).mean > 0);
-                addGames(&sums, j.scored, j.sq[0], j.sq[1]);
+                addGames(&sums, j.scored, j.sq[0], j.sq[1], null);
             }
             const g = sums.gain();
             const dj = job(jobs, nb, mi, n_folds);
@@ -915,8 +925,15 @@ pub fn run(
         if (opts.final) {
             const tj = job(jobs, nb, mi, nb - 1);
             for (1..labels.len) |k| {
-                const g = analysis.pairedGain(tj.scored, tj.loss[k - 1], tj.loss[k]);
-                try w.print("| {d} | TEST {s} | {d:.5} ± {d:.5} | | |\n", .{ minute, labels[k], g.mean, g.half_width });
+                const roles: []const ?u8 = if (k == slope_step) &.{ null, 0, 1, 2, 3, 4 } else &.{null};
+                for (roles) |role| {
+                    var t: analysis.PairedSums = .{};
+                    addGames(&t, tj.scored, tj.loss[k - 1], tj.loss[k], role);
+                    const g = t.gain();
+                    try w.print("| {d} | TEST {s}", .{ minute, labels[k] });
+                    if (role) |r| try w.print(", {t} rows", .{@as(Role, @fromBackingInt(@intCast(r)))});
+                    try w.print(" | {d:.5} ± {d:.5} | | |\n", .{ g.mean, g.half_width });
+                }
             }
         }
     }
@@ -1060,18 +1077,20 @@ fn mi_of(minute: u8) usize {
     return std.mem.indexOfScalar(u8, &minutes, minute).?;
 }
 
-/// Adds a block's per-game paired sums (rows sorted by game) to pooled sums
-fn addGames(s: *analysis.PairedSums, rows: []const Row, before: []const f64, after: []const f64) void {
+/// Adds a block's per-game paired sums (rows sorted by game) to pooled sums; with
+/// `role`, only that role's rows
+fn addGames(s: *analysis.PairedSums, rows: []const Row, before: []const f64, after: []const f64, role: ?u8) void {
     var i: usize = 0;
     while (i < rows.len) {
         var d: f64 = 0;
         var n: f64 = 0;
         const g = rows[i].game;
         while (i < rows.len and rows[i].game == g) : (i += 1) {
+            if (role) |r| if (rows[i].role != r) continue;
             d += before[i] - after[i];
             n += 1;
         }
-        s.add(d, n);
+        if (n > 0) s.add(d, n);
     }
 }
 
