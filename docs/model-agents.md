@@ -43,6 +43,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-ad | comp research: which comp interactions have measured win effects (research/questions, josearch); shortlist to 0d and 2c |
 | meiolol-ba | comp tester: draft export format and admin-draft.js scorer for win-comp terms (owns src/lab/draft.zig, admin-draft.js) |
 | meiolol-49 | comp verifier: leakage review of ea and 0d, model-free dev cross-check (src/lab/compcheck.zig) |
+| meiolol-1c | lab-run auto placement: host and resource by predicted finish (wait + run time from past runs), deploy/lab-run.sh |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
 shows. When an agent hands over, get the successor's name and tell the others.
