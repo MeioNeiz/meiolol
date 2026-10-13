@@ -39,7 +39,8 @@ pub const Job = struct {
     arena: std.heap.ArenaAllocator,
     seq: u64 = 0,
     kind: Kind,
-    /// Set by apply, counted once the batch commits
+    /// Set by applyOne, counted once the batch commits: false when the job stored nothing
+    /// (a document that was refused, a timeline that failed to parse)
     stored: bool = false,
 
     pub fn create(gpa: std.mem.Allocator, kind: Kind) !*Job {
@@ -288,7 +289,7 @@ pub const Writer = struct {
     fn applyOne(wr: *Writer, db: store.Db, s: *Stmts, job: *Job) !void {
         job.stored = false;
         try db.exec("SAVEPOINT job");
-        wr.apply(db, s, job) catch |err| {
+        const stored = wr.apply(db, s, job) catch |err| {
             db.exec("ROLLBACK TO job") catch {};
             try db.exec("RELEASE job");
             if (err != error.Sqlite) return err;
@@ -308,10 +309,11 @@ pub const Writer = struct {
             return;
         };
         try db.exec("RELEASE job");
-        job.stored = true;
+        job.stored = stored;
     }
 
-    fn apply(wr: *Writer, db: store.Db, s: *Stmts, job: *Job) !void {
+    /// False when the job stored nothing it should be counted for
+    fn apply(wr: *Writer, db: store.Db, s: *Stmts, job: *Job) !bool {
         switch (job.kind) {
             .none => {},
             .ladder => |l| {
@@ -346,8 +348,8 @@ pub const Writer = struct {
                 q.found = @intCast(db.totalChanges() - before);
             },
             .checked => |ch| try s.checked.exec(.{ ch.t, ch.puuid }),
-            .match => |m| try wr.storeMatch(s, m.region, m.id, m.doc, m.raw, m.t, m.timeline),
-            .timeline => |t| try wr.storeTimeline(s, t.id, t.raw, t.compact, t.t),
+            .match => |m| return try wr.storeMatch(s, m.region, m.id, m.doc, m.raw, m.t, m.timeline),
+            .timeline => |t| return try wr.storeTimeline(s, t.id, t.raw, t.compact, t.t),
             .queue => |q| switch (q.which) {
                 .match => switch (q.status) {
                     .attempt => try s.match_attempt.exec(.{q.id}),
@@ -359,15 +361,16 @@ pub const Writer = struct {
                 },
             },
         }
+        return true;
     }
 
-    fn storeMatch(wr: *Writer, s: *Stmts, r: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64, want_timeline: bool) !void {
+    fn storeMatch(wr: *Writer, s: *Stmts, r: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64, want_timeline: bool) !bool {
         // Rows are keyed by the document's id and the queue by the requested one: were
         // they to differ, blanking and forget would miss the rows. Never seen; fail it
         if (!std.mem.eql(u8, doc.metadata.matchId, id)) {
             log.warn("match {s} came back as {s}", .{ id, doc.metadata.matchId });
             try s.match_status.exec(.{ "failed", id });
-            return;
+            return false;
         }
         const existed = try s.exists(id);
         var any_forgotten = false;
@@ -399,9 +402,10 @@ pub const Writer = struct {
         if (!existed or try s.drafts.taken(id)) _ = try s.drafts.write(id);
         if (want_timeline and !match.isRemake(doc) and wr.c.wantTimeline(id)) try s.timeline_queue.exec(.{ id, @tagName(r), t });
         try s.match_done.exec(.{id});
+        return true;
     }
 
-    fn storeTimeline(wr: *Writer, s: *Stmts, id: []const u8, raw: ?[]const u8, compact: ?crawl.Compact, t: i64) !void {
+    fn storeTimeline(wr: *Writer, s: *Stmts, id: []const u8, raw: ?[]const u8, compact: ?crawl.Compact, t: i64) !bool {
         // Raw timelines carry PUUIDs: none kept when a player is blank (forgotten, or a
         // match from before a rekey)
         try s.blank.bind(.{id});
@@ -410,13 +414,16 @@ pub const Writer = struct {
         if (!blank and (wr.c.opts.raw_timeline_days > 0 or compact == null)) {
             if (raw) |bytes| try s.raw_timeline.exec(.{ id, t, store.Blob{ .bytes = bytes } });
         }
-        if (compact) |ct| {
-            try s.timeline.exec(.{ id, ct.frames, ct.events, store.Blob{ .bytes = ct.blob } });
-            for (0..ct.participants) |slot| {
-                try s.gold.exec(.{ ct.gold[0][slot], ct.gold[1][slot], ct.gold[2][slot], id, slot });
-            }
-            try s.timeline_done.exec(.{id});
-        } else try s.timeline_status.exec(.{ "failed", id });
+        const ct = compact orelse {
+            try s.timeline_status.exec(.{ "failed", id });
+            return false;
+        };
+        try s.timeline.exec(.{ id, ct.frames, ct.events, store.Blob{ .bytes = ct.blob } });
+        for (0..ct.participants) |slot| {
+            try s.gold.exec(.{ ct.gold[0][slot], ct.gold[1][slot], ct.gold[2][slot], id, slot });
+        }
+        try s.timeline_done.exec(.{id});
+        return true;
     }
 };
 
@@ -885,6 +892,38 @@ test "stored matches leave the queue and are not queued again" {
         .{ "SELECT count(*) FROM players WHERE source = 'participant'", 10 },
     };
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
+}
+
+test "a match whose document names another id is failed, not counted as stored" {
+    // Its warning is expected
+    const saved = std.testing.log_level;
+    defer std.testing.log_level = saved;
+    std.testing.log_level = .err;
+    const gpa = std.testing.allocator;
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const db = try store.schema.memory();
+    defer db.close();
+    var c: crawl.Crawler = .{ .gpa = gpa, .io = std.testing.io, .opts = .{ .data_dir = "", .key = "" } };
+    var wr: Writer = .{ .c = &c };
+    defer wr.deinit();
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+
+    try db.exec("INSERT INTO match_queue (match_id, discovered_at, region) VALUES ('EUW1_1', 1, 'europe')");
+    var doc = try match.parse(arena.allocator(), @embedFile("testdata/match.json"));
+    doc.metadata.matchId = "EUW1_9";
+    var jobs = [_]*Job{
+        try .create(gpa, .{ .match = .{ .region = .europe, .id = "EUW1_1", .doc = doc, .raw = "r", .t = 2 } }),
+        try .create(gpa, .{ .timeline = .{ .region = .europe, .id = "EUW1_2", .raw = "x", .compact = null, .t = 2 } }),
+    };
+    defer for (jobs) |job| job.destroy(gpa);
+    try wr.commit(db, &s, &jobs);
+    try std.testing.expect(!jobs[0].stored and !jobs[1].stored);
+    wr.counted(&jobs);
+    try std.testing.expectEqual(0, c.counters.region[@backingInt(ep.Region.europe)].matches.load(.monotonic));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM match_queue WHERE status = 'failed'", .{}));
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM matches", .{}));
 }
 
 test "truncateWal empties main's WAL" {
