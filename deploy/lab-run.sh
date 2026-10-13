@@ -272,6 +272,10 @@ case "${1:-}" in
         on gpu-box "mkdir -p ml/bin $RUNS .config/systemd/user"
         scp -q "$ROOT/deploy/lab-watch.sh" gpu-box:ml/bin/
         scp -q "$ROOT/deploy/systemd/$WATCH.service" gpu-box:.config/systemd/user/
+        # The raw archive's hourly pull (docs/data-safety.md "Raw archive") rides along:
+        # nothing else syncs it. Its unit's environment drop-ins on the host are kept
+        scp -q "$ROOT/deploy/archive-pull.sh" gpu-box:ml/bin/
+        scp -q "$ROOT/deploy/systemd/meiolol-archive-pull".{service,timer} gpu-box:.config/systemd/user/
         # Windows side (deploy/windows) to %USERPROFILE%\.meiolol, CRLF for Windows. WSL
         # can write there, so nothing there runs elevated: the archive mount (admin) is
         # installed once, by hand, by install-watchdog.ps1 (docs/compute.md). cmd.exe
@@ -284,8 +288,9 @@ case "${1:-}" in
             sed 's/$/\r/' "$f" | on gpu-box "cat > '$win/$(basename "$f")'"
         done
         on gpu-box "loginctl enable-linger \$USER; systemctl --user daemon-reload \
-            && systemctl --user enable -q $WATCH \
-            && systemctl --user restart $WATCH && systemctl --user is-active $WATCH"
+            && systemctl --user enable -q $WATCH meiolol-archive-pull.timer \
+            && systemctl --user restart $WATCH && systemctl --user start meiolol-archive-pull.timer \
+            && systemctl --user is-active $WATCH meiolol-archive-pull.timer"
         ;;
     *) sed -n '8,14p' "$0"; exit 2 ;;
 esac
