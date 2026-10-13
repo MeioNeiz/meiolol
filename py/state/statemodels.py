@@ -75,9 +75,10 @@ class Smooth:
 
 GBDT_PARAMS = dict(
     objective="binary",
-    learning_rate=0.05,
-    num_leaves=63,
-    min_data_in_leaf=500,
+    learning_rate=0.1,
+    num_leaves=31,
+    max_bin=63,
+    min_data_in_leaf=1000,
     feature_fraction=0.8,
     bagging_fraction=0.8,
     bagging_freq=1,
@@ -94,7 +95,7 @@ def fit_gbdt(X, minute, y, val_mask, init=None, seed=0):
     sub = (lambda a, m: None) if init is None else (lambda a, m: a[m])
     tr = lgb.Dataset(Xm[~val_mask], y[~val_mask], init_score=sub(init, ~val_mask))
     va = lgb.Dataset(Xm[val_mask], y[val_mask], init_score=sub(init, val_mask), reference=tr)
-    m = lgb.train(params, tr, 4000, valid_sets=[va], callbacks=[lgb.early_stopping(100, verbose=False)])
+    m = lgb.train(params, tr, 1500, valid_sets=[va], callbacks=[lgb.early_stopping(50, verbose=False)])
     best = m.best_iteration
     full = lgb.train(params, lgb.Dataset(Xm, y, init_score=init), int(best * 1.1) + 1)
     return full, best
