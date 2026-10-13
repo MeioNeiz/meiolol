@@ -30,6 +30,8 @@ pub const Config = struct {
     /// A champion-role embedding (opts.emb wide) beside the profile
     ids: bool = false,
     control: Control = .none,
+    /// Write the net's inputs per block (first seed): dumpPart
+    dump: bool = false,
 };
 
 /// Null controls (a gain under either means a leak or a gain from something else):
@@ -50,6 +52,8 @@ pub fn parseOption(c: *Config, k: []const u8, v: []const u8) !bool {
         c.ids = (try std.fmt.parseInt(u1, v, 10)) == 1;
     } else if (std.mem.eql(u8, k, "--control")) {
         c.control = std.meta.stringToEnum(Control, v) orelse return error.UnknownControl;
+    } else if (std.mem.eql(u8, k, "--dump")) {
+        c.dump = (try std.fmt.parseInt(u1, v, 10)) == 1;
     } else return false;
     if (c.phi == 0 or c.rho == 0) return error.BadValue;
     return true;
@@ -581,6 +585,11 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
     defer gpa.free(inner);
     const val = try setGames(gpa, d, seat, &p_inner, s.idx.val, s.val, false);
     defer gpa.free(val);
+    const dumping = cfg.dump and seed == opts.seeds[0];
+    if (dumping) {
+        try dumpPart(gpa, io, opts.out, s.block, "inner", d, s.idx.inner, inner);
+        try dumpPart(gpa, io, opts.out, s.block, "val", d, s.idx.val, val);
+    }
     const tuned = try train(gpa, opts, seed, s.n_inner, inner, val, opts.max_epochs * winnet.stepsPerEpoch(inner.len, opts.batch));
     gpa.free(tuned.net.p);
 
@@ -591,6 +600,10 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
     defer gpa.free(all);
     const scored = try setGames(gpa, d, seat, &p_all, s.idx.scored, s.scored, false);
     defer gpa.free(scored);
+    if (dumping) {
+        try dumpPart(gpa, io, opts.out, s.block, "fit", d, s.idx.fit, all);
+        try dumpPart(gpa, io, opts.out, s.block, "scored", d, s.idx.scored, scored);
+    }
     const steps = if (tuned.steps == 0) 0 else winnet.refitSteps(tuned.epochs, all.len, opts.batch);
     const full = try train(gpa, opts, seed, s.n_all, all, null, steps);
     defer gpa.free(full.net.p);
@@ -600,6 +613,40 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
     predict(&full.net, scored, &w, pred);
     std.debug.print("netcheck: seed {d}: set net {d:.2} epochs, offset weight {d:.3}\n", .{ seed, tuned.epochs, full.net.p[full.net.l.a] });
     return .{ .pred = pred, .epochs = tuned.epochs, .val_loss = tuned.val_loss, .seconds = winnet.secondsSince(io, t0) };
+}
+
+/// --dump 1 (meiolol-58's PyTorch cross-check): one set of a block as the net sees it.
+/// DIR/set-<block>-<part>.f32: games x 10 slots (blue by role, then red) x n_prof z,
+/// little-endian f32 (leave-one-out for inner and fit); .tsv: match_id, platform index,
+/// y (blue won, as trained on), offset (the candidate's blue logit), the 10 vocab ids
+/// (champion-role with min_games fit games, else the role's 0..4; inner and val use the
+/// inner games' vocab), same order
+fn dumpPart(gpa: std.mem.Allocator, io: Io, out: []const u8, block: winnet.Block, part: []const u8, d: *const rows.Data, games: []const u32, set: []const SetGame) !void {
+    var dir = try Io.Dir.cwd().openDir(io, out, .{});
+    defer dir.close(io);
+    var buf: [64 * 1024]u8 = undefined;
+    const bin = try std.fmt.allocPrint(gpa, "set-{s}-{s}.f32", .{ @tagName(block), part });
+    defer gpa.free(bin);
+    var bf = try dir.createFile(io, bin, .{});
+    defer bf.close(io);
+    var bw = bf.writer(io, &buf);
+    for (set) |*g| try bw.interface.writeAll(std.mem.sliceAsBytes(&g.z));
+    try bw.interface.flush();
+    const tsv = try std.fmt.allocPrint(gpa, "set-{s}-{s}.tsv", .{ @tagName(block), part });
+    defer gpa.free(tsv);
+    var tf = try dir.createFile(io, tsv, .{});
+    defer tf.close(io);
+    var tw = tf.writer(io, &buf);
+    const w = &tw.interface;
+    try w.writeAll("match_id\tplatform\ty\toff");
+    for (0..10) |slot| try w.print("\tid{d}", .{slot});
+    try w.writeAll("\n");
+    for (games, set) |gi, *g| {
+        try w.print("{s}\t{d}\t{d}\t{d:.6}", .{ d.games[gi].match_id, g.g.platform, g.g.y, g.g.off });
+        for (g.g.ids) |id| try w.print("\t{d}", .{id});
+        try w.writeAll("\n");
+    }
+    try w.flush();
 }
 
 /// Training-health entry (lab/health.zig): netcheck's default options with `cfg`, fitted
@@ -780,4 +827,32 @@ test "profiles: shrunk halves, z in role, leave-one-out" {
     const qid = q.index.get(key(1, 2)).?;
     try testing.expectApproxEqAbs(@as(f64, 200 + 210), q.acc[qid][1][f][0], 1e-9);
     try testing.expectApproxEqAbs(@as(f64, 220 + 230), q.acc[qid][0][f][0], 1e-9);
+}
+
+test "dump: the net's inputs per game, z as f32 and a tsv line each" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer gpa.free(dir);
+    var games: [2]rows.Game = undefined;
+    for (&games, 0..) |*g, i| g.* = .{ .match_id = if (i == 0) "EUW1_1" else "EUW1_2", .start = 0, .patch = 0, .platform = 0, .is_test = false, .teams = @splat(@splat(0)), .winner = 0 };
+    const d: rows.Data = .{ .arena = .init(gpa), .games = &games, .rows = &.{} };
+    var rng: std.Random.DefaultPrng = .init(2);
+    var set: [2]SetGame = .{ testGame(rng.random(), 30), testGame(rng.random(), 30) };
+    set[1].g.y = 1;
+    set[1].g.off = -0.25;
+    try dumpPart(gpa, io, dir, .f3, "scored", &d, &.{ 1, 0 }, &set);
+    const bin = try tmp.dir.readFileAlloc(io, "set-f3-scored.f32", gpa, .limited(1 << 20));
+    defer gpa.free(bin);
+    try testing.expectEqual(2 * 10 * n_prof * 4, bin.len);
+    try testing.expectEqualSlices(u8, std.mem.sliceAsBytes(&set[1].z), bin[10 * n_prof * 4 ..]);
+    const tsv = try tmp.dir.readFileAlloc(io, "set-f3-scored.tsv", gpa, .limited(1 << 20));
+    defer gpa.free(tsv);
+    var lines = std.mem.tokenizeScalar(u8, tsv, '\n');
+    _ = lines.next();
+    try testing.expect(std.mem.startsWith(u8, lines.next().?, "EUW1_2\t"));
+    try testing.expect(std.mem.startsWith(u8, lines.next().?, "EUW1_1\t"));
+    try testing.expect(lines.next() == null);
 }
