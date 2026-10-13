@@ -399,6 +399,8 @@ pub fn run(
     const d = dims.total();
     const rows = try gpa.alloc(logreg.Row, train.items.len);
     defer gpa.free(rows);
+    const row_games = try arena.alloc(u32, train.items.len);
+    for (row_games, train.items) |*g, r| g.* = r.game;
 
     var files: [models.len]?Io.File = @splat(null);
     var bufs: [models.len][16 * 1024]u8 = undefined;
@@ -424,7 +426,8 @@ pub fn run(
         for (rows, train.items) |*b, r| b.* = dims.row(m, r);
         const wt = try logreg.fit(gpa, d, rows, 1);
         defer gpa.free(wt);
-        const se = try logreg.stdErrors(gpa, d, rows, wt, 1);
+        // A game's ten rows share its outcome and mirrored state: not ten independent rows
+        const se = try logreg.clusteredStdErrors(gpa, d, rows, row_games, wt, 1);
         defer gpa.free(se);
         weights[k] = try arena.dupe(f64, wt);
         errors[k] = try arena.dupe(f64, se);
@@ -446,7 +449,7 @@ pub fn run(
 
     for ([_]usize{ 1, 3 }) |k| {
         try w.print("\n### Style weights, {s}: win percentage points per +1 sd (log-odds x 25), " ++
-            "± 95%\n\n| feature |", .{models[k].label});
+            "± 95% clustered by game\n\n| feature |", .{models[k].label});
         for (Role.all) |r| try w.print(" {t} |", .{r});
         try w.writeAll("\n| --- |");
         for (Role.all) |_| try w.writeAll(" --- |");

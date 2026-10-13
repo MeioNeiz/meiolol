@@ -169,7 +169,16 @@ How to write a line:
 
 ## Playstyle
 
-- 2026-10-12: Early aggression, roaming and time in the enemy half look like they win
+- 2026-10-13: Early aggression, roaming and time in the enemy half look like they win
+  games, but almost all of that is just being ahead; once the gold and XP leads at
+  14:00 are known, style adds very little. What survives is small: bot laners and mids
+  who trade more damage win a bit more (about +2.4 and +1.7 percentage points per step),
+  supports who roam and fight and laners who take spare camps a little more. Sure:
+  118k games; each style number is within about 0.2-0.35 percentage points either way
+  (counting a game's ten players together), and the ones above clear zero. Site: no
+  "play aggressive to win"; post-game may show your own style against your role's
+  spread. Evidence: docs/model.md "Playstyle given the state"
+- ~~2026-10-12: Early aggression, roaming and time in the enemy half look like they win
   games, but almost all of that is just being ahead; once the gold and XP leads at
   14:00 are known, style adds very little. What survives is small: bot laners and mids
   who trade more damage win a bit more (about +2.4 and +1.7 percentage points per step),
@@ -177,7 +186,7 @@ How to write a line:
   118k games for the overall result; the per-style numbers' intervals treat the ten
   players of a game as independent, so they are too narrow until refitted by game.
   Site: no "play aggressive to win"; post-game may show your own style against your
-  role's spread. Evidence: docs/model.md "Playstyle given the state"
+  role's spread. Evidence: docs/model.md "Playstyle given the state"~~
 
 ## Player
 

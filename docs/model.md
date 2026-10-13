@@ -487,20 +487,21 @@ role). Use-time: the user's own style, post-game only. Preds: 3c-style-*.tsv.
 | champion + state at 14:00 | 0.5314 | 0.16158 ± 0.00930 (vs champion) |
 | + style, given the state | 0.5310 | 0.00038 ± 0.00015 |
 
-Style weights given the state, win pp per +1 sd (± 95% about ±0.25-0.4, from the
-Hessian with rows treated as independent: ten per game, mirrored state features, so
-too narrow until refitted with errors clustered by game):
+Style weights given the state, win pp per +1 sd ± 95% clustered by game (sandwich,
+logreg.clusteredStdErrors; 2026-10-13). The unclustered Hessian gave about the same
+widths: a game's ten rows are half winners and half losers with mirrored state, so their
+scores partly cancel rather than add:
 
 | feature | top | jungle | middle | bottom | utility |
 | --- | --- | --- | --- | --- | --- |
-| away | 0.23 | -0.85 | 0.31 | 0.69 | 0.64 |
-| enemy_half | -0.23 | 0.46 | 0.16 | -0.31 | 0.98 |
-| fights | 0.39 | -0.60 | -0.20 | -1.10 | 0.91 |
-| damage | 0.44 | 1.04 | 1.65 | 2.36 | 0.65 |
-| wards | 0.57 | 0.20 | 0.70 | 0.26 | 0.65 |
-| control_wards | -0.41 | 0.01 | -0.66 | -0.58 | -0.29 |
-| ward_kills | 0.56 | 0.32 | 0.43 | 0.53 | 0.31 |
-| off_role_cs | 0.29 | -0.15 | 0.67 | 0.77 | 0.56 |
+| away | 0.23 ± 0.23 | -0.85 ± 0.24 | 0.31 ± 0.22 | 0.69 ± 0.22 | 0.64 ± 0.22 |
+| enemy_half | -0.23 ± 0.35 | 0.46 ± 0.26 | 0.16 ± 0.32 | -0.31 ± 0.33 | 0.98 ± 0.32 |
+| fights | 0.39 ± 0.19 | -0.60 ± 0.30 | -0.20 ± 0.24 | -1.10 ± 0.24 | 0.91 ± 0.21 |
+| damage | 0.44 ± 0.31 | 1.04 ± 0.36 | 1.65 ± 0.35 | 2.36 ± 0.34 | 0.65 ± 0.36 |
+| wards | 0.57 ± 0.27 | 0.20 ± 0.29 | 0.70 ± 0.30 | 0.26 ± 0.28 | 0.65 ± 0.28 |
+| control_wards | -0.41 ± 0.27 | 0.01 ± 0.28 | -0.66 ± 0.31 | -0.58 ± 0.28 | -0.29 ± 0.30 |
+| ward_kills | 0.56 ± 0.24 | 0.32 ± 0.26 | 0.43 ± 0.24 | 0.53 ± 0.23 | 0.31 ± 0.25 |
+| off_role_cs | 0.29 ± 0.26 | -0.15 ± 0.25 | 0.67 ± 0.26 | 0.77 ± 0.25 | 0.56 ± 0.25 |
 
 Without the state the same features look large (enemy_half 5.5-8.9 pp per sd, damage
 4.5-7.4, support fights 5.3): that is mostly being ahead, not style.
@@ -513,8 +514,9 @@ Reading:
   clearing wards (+0.2-0.7), laners taking spare camps (+0.3-0.8), supports roaming and
   fighting (+0.6-1.0). Fighting more for the same gold hurts bottom (-1.1); junglers
   who spend more time in lanes than the state rewards lose a little (-0.85). Control
-  wards bought for the same gold lead go with losing (-0.3 to -0.7): likely behind
-  teams buy them, not that they hurt
+  wards bought for the same gold lead go with losing (-0.4 to -0.7 top, mid, bottom;
+  not detected for supports or junglers): likely behind teams buy them, not that they
+  hurt
 - Lesson material at most, with intervals; one sd of any style is worth under 2.5 pp
   once the state is known
 

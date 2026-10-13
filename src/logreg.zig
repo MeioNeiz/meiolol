@@ -74,8 +74,85 @@ pub fn fit(gpa: std.mem.Allocator, d: usize, rows: []const Row, l2: f64) ![]f64 
 /// Standard error of each weight from `fit`: square roots of the inverse penalised
 /// Hessian's diagonal (caller frees)
 pub fn stdErrors(gpa: std.mem.Allocator, d: usize, rows: []const Row, w: []const f64, l2: f64) ![]f64 {
-    const hess = try gpa.alloc(f64, d * d);
+    const hess = try factoredHessian(gpa, d, rows, w, l2);
     defer gpa.free(hess);
+    const se = try gpa.alloc(f64, d);
+    errdefer gpa.free(se);
+    const e = try gpa.alloc(f64, d);
+    defer gpa.free(e);
+    for (se, 0..) |*s, i| {
+        @memset(e, 0);
+        e[i] = 1;
+        solveInPlace(hess, d, e);
+        s.* = @sqrt(e[i]);
+    }
+    return se;
+}
+
+/// As stdErrors, but rows with the same `cluster` (adjacent) may depend on each other,
+/// like the ten player rows of one game: sandwich H^-1 M H^-1, M the sum over clusters
+/// of the outer product of each cluster's summed score (caller frees)
+pub fn clusteredStdErrors(gpa: std.mem.Allocator, d: usize, rows: []const Row, cluster: []const u32, w: []const f64, l2: f64) ![]f64 {
+    std.debug.assert(cluster.len == rows.len);
+    const hess = try factoredHessian(gpa, d, rows, w, l2);
+    defer gpa.free(hess);
+    const meat = try gpa.alloc(f64, d * d);
+    defer gpa.free(meat);
+    @memset(meat, 0);
+    const score = try gpa.alloc(f64, d);
+    defer gpa.free(score);
+    @memset(score, 0);
+    const seen = try gpa.alloc(bool, d);
+    defer gpa.free(seen);
+    @memset(seen, false);
+    var touched: std.ArrayList(u32) = .empty;
+    defer touched.deinit(gpa);
+    var i: usize = 0;
+    while (i < rows.len) {
+        const c = cluster[i];
+        while (i < rows.len and cluster[i] == c) : (i += 1) {
+            const r = &rows[i];
+            const g = sigmoid(r.dot(w)) - r.y;
+            for (r.feats[0..r.n]) |f| {
+                if (!seen[f.i]) try touched.append(gpa, f.i);
+                seen[f.i] = true;
+                score[f.i] += g * f.v;
+            }
+        }
+        for (touched.items) |a| for (touched.items) |b| {
+            meat[a * d + b] += score[a] * score[b];
+        };
+        for (touched.items) |a| {
+            score[a] = 0;
+            seen[a] = false;
+        }
+        touched.clearRetainingCapacity();
+    }
+
+    const se = try gpa.alloc(f64, d);
+    errdefer gpa.free(se);
+    const e = try gpa.alloc(f64, d);
+    defer gpa.free(e);
+    for (se, 0..) |*s, k| {
+        @memset(e, 0);
+        e[k] = 1;
+        solveInPlace(hess, d, e);
+        var v: f64 = 0;
+        for (0..d) |a| {
+            if (e[a] == 0) continue;
+            var t: f64 = 0;
+            for (0..d) |b| t += meat[a * d + b] * e[b];
+            v += e[a] * t;
+        }
+        s.* = @sqrt(v);
+    }
+    return se;
+}
+
+/// The penalised Hessian of the loss at `w`, Cholesky-factored (caller frees)
+fn factoredHessian(gpa: std.mem.Allocator, d: usize, rows: []const Row, w: []const f64, l2: f64) ![]f64 {
+    const hess = try gpa.alloc(f64, d * d);
+    errdefer gpa.free(hess);
     @memset(hess, 0);
     for (rows) |*r| {
         const p = sigmoid(r.dot(w));
@@ -89,17 +166,7 @@ pub fn stdErrors(gpa: std.mem.Allocator, d: usize, rows: []const Row, w: []const
         hess[i * d + i] = 1;
     };
     try cholesky(hess, d);
-    const se = try gpa.alloc(f64, d);
-    errdefer gpa.free(se);
-    const e = try gpa.alloc(f64, d);
-    defer gpa.free(e);
-    for (se, 0..) |*s, i| {
-        @memset(e, 0);
-        e[i] = 1;
-        solveInPlace(hess, d, e);
-        s.* = @sqrt(e[i]);
-    }
-    return se;
+    return hess;
 }
 
 /// Lower-triangular L with L L^T = a, in place (a is symmetric positive definite)
@@ -162,4 +229,35 @@ test "recovers ratings" {
     try testing.expectApproxEqAbs(1.386, w[1] - w[2], 0.02);
     try testing.expectApproxEqAbs(0, w[0], 0.01);
     try testing.expectEqual(0, w[3]);
+}
+
+test "clustered errors count a copied row once" {
+    const gpa = testing.allocator;
+    var once: [400]Row = undefined;
+    var twice: [800]Row = undefined;
+    var singles: [400]u32 = undefined;
+    var pairs: [800]u32 = undefined;
+    for (&once, &singles, 0..) |*r, *c, i| {
+        const x: f64 = @floatFromInt(i % 7);
+        r.* = .{ .y = if ((i * 37) % 10 < 3 + i % 7) 1 else 0 };
+        r.add(0, 1);
+        r.add(1, x - 3);
+        c.* = @intCast(i);
+        twice[2 * i] = r.*;
+        twice[2 * i + 1] = r.*;
+        pairs[2 * i] = @intCast(i);
+        pairs[2 * i + 1] = @intCast(i);
+    }
+    const w = try fit(gpa, 2, &once, 0);
+    defer gpa.free(w);
+    const naive = try stdErrors(gpa, 2, &twice, w, 0);
+    defer gpa.free(naive);
+    const copied = try clusteredStdErrors(gpa, 2, &twice, &pairs, w, 0);
+    defer gpa.free(copied);
+    const single = try clusteredStdErrors(gpa, 2, &once, &singles, w, 0);
+    defer gpa.free(single);
+    // Copies add no information: the clustered error matches the data seen once, while
+    // the naive one shrinks by sqrt(2)
+    try testing.expectApproxEqRel(single[1], copied[1], 1e-9);
+    try testing.expect(copied[1] > 1.3 * naive[1]);
 }
