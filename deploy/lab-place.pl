@@ -26,6 +26,9 @@ my %ASSUMED = (mac => 2.0, 'gpu-box' => 0.5);
 # A League session's length before watcher.log has seen one end
 my $LEAGUE_DEFAULT = 1800;
 my @HOSTS = ('gpu-box', 'mac');
+# Where auto may place: Jacob, 2026-10-13: model runs on the gpu-box only, they slow his
+# Mac down. LAB_AUTO_MAC=1 lets auto use the Mac again; an explicit `start mac` still runs
+my @AUTO = $ENV{LAB_AUTO_MAC} ? @HOSTS : ('gpu-box');
 
 my $mode = shift @ARGV // '';
 
@@ -281,7 +284,7 @@ sub place {
     my ($want_host, $want_res, $bin, $args, $build) = @_;
     my $cuda = cuda_use($bin, $args);
     my (@cands, @out);
-    for my $h ($want_host eq 'auto' ? @HOSTS : $want_host) {
+    for my $h ($want_host eq 'auto' ? @AUTO : $want_host) {
         my @res = $want_res ne 'auto' ? ($want_res) : $cuda eq 'gpu' ? ('gpu') : ('cpu');
         for my $res (@res) {
             my $name = "$h/$res";

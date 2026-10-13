@@ -64,6 +64,10 @@ deploy/lab-run.sh watch-install
 
 ### Placement (deploy/lab-place.pl)
 
+Jacob, 2026-10-13: model runs on the gpu-box only, never the Mac (they slow it down).
+Auto places on the gpu-box only (LAB_AUTO_MAC=1 lets it consider the Mac again); don't
+`start mac` for model work. What follows about the Mac applies once that's lifted.
+
 Without HOST (or HOST auto) a run goes where it should finish first: for each feasible
 (host, resource), predicted wait for the lock + predicted run time, printed on one line
 before the build (`--dry-run` stops there). A named HOST without --res is cpu, as

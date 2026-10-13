@@ -84,6 +84,7 @@ shows. When an agent hands over, get the successor's name and tell the others.
 - Hand over past ~40% context with a focused brief; tell the coordinator the new name
 - Lab runs: `deploy/lab-run.sh start NAME -- ARGS` (no HOST) picks host and resource by
   predicted finish and queues on ~/ml/locks; name a HOST only when it must run there.
+  Model runs on the gpu-box only, never the Mac (Jacob, 2026-10-13); auto respects it.
   League pauses gpu-box runs (placement allows for it)
 
 ## Open, waiting
