@@ -1,0 +1,915 @@
+Distill-and-Compare: Auditing Black-Box Models
+Using Transparent Model Distillation
+Sarah Tan∗
+
+Rich Caruana
+
+Giles Hooker
+
+Yin Lou
+
+Cornell University
+ht395@cornell.edu
+
+Microsoft Research
+rcaruana@microsoft.com
+
+Cornell University
+gjh27@cornell.edu
+
+Ant Financial
+yin.lou@antfin.com
+
+arXiv:1710.06169v4 [stat.ML] 11 Oct 2018
+
+ABSTRACT
+Black-box risk scoring models permeate our lives, yet are typically
+proprietary or opaque. We propose Distill-and-Compare, a model
+distillation and comparison approach to audit such models. To gain
+insight into black-box models, we treat them as teachers, training
+transparent student models to mimic the risk scores assigned by
+black-box models. We compare the student model trained with
+distillation to a second un-distilled transparent model trained on
+ground-truth outcomes, and use differences between the two models to gain insight into the black-box model. Our approach can be
+applied in a realistic setting, without probing the black-box model
+API. We demonstrate the approach on four public data sets: COMPAS, Stop-and-Frisk, Chicago Police, and Lending Club. We also
+propose a statistical test to determine if a data set is missing key
+features used to train the black-box model. Our test finds that the
+ProPublica data is likely missing key feature(s) used in COMPAS.
+
+CCS CONCEPTS
+• Computing methodologies → Model verification and validation; • Mathematics of computing → Hypothesis testing and
+confidence interval computation; • Applied computing → Law,
+social and behavioral sciences;
+
+KEYWORDS
+Interpretability; Black-box models; Distillation; Fairness
+ACM Reference Format:
+Sarah Tan, Rich Caruana, Giles Hooker, and Yin Lou. 2018. Distill-andCompare: Auditing Black-Box Models Using Transparent Model Distillation.
+In 2018 AAAI/ACM Conference on AI, Ethics, and Society (AIES ’18), February
+2–3, 2018, New Orleans, LA, USA. ACM, New York, NY, USA, 8 pages. https:
+//doi.org/10.1145/3278721.3278725
+
+1
+
+INTRODUCTION
+
+Risk scoring models have a long history of usage in criminal justice, finance, hiring, and other critical domains [12, 26]. They are
+designed to predict a future outcome, for example defaulting on
+a loan. Worryingly, risk scoring models are increasingly used for
+high-stakes decisions, yet are typically proprietary or opaque.
+∗ Work done while interning at Microsoft Research.
+
+Permission to make digital or hard copies of part or all of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for third-party components of this work must be honored.
+For all other uses, contact the owner/author(s).
+AIES ’18, February 2–3, 2018, New Orleans, LA, USA
+© 2018 Copyright held by the owner/author(s).
+ACM ISBN 978-1-4503-6012-8/18/02.
+https://doi . org/10 . 1145/3278721 . 3278725
+
+Several approaches have been proposed [1, 2, 13, 17, 20, 33]
+to audit black-box risk scoring models: remove, permute, or obscure a protected feature, then see how the the model’s predictions
+change after retraining the model or probing the model API with
+the transformed data. However, with many risk scoring models
+being proprietary, commercial model creators often do not provide
+unrestricted access to model APIs, much less release the model
+form or training data.
+In this paper, we study a more realistic setting where we only
+have a data set labeled with the risk score as produced by the risk
+scoring model, the information on the ground-truth outcome, and
+some or all features; we are not able to probe the model API with
+new data. We call this data set the audit data. We add two potential
+complications: the audit data may not be the original training data,
+and the audit data may not have all features used to train the risk
+scoring model. For example, ProPublica obtained data for their
+COMPAS study [4] not from the company that created COMPAS,
+but through a public records request to Broward County, a US
+jurisdiction that used COMPAS in their criminal justice system [3],
+and ProPublica may not have had access to all the features Broward
+County used to get COMPAS scores.
+We propose a two-step approach to audit black-box risk scoring models, using audit data with both black-box risk scores and
+ground-truth outcomes. First, we use a Distill-and-Compare approach (Section 2.1) to understand how features (in the audit data)
+affect the risk scores. Then, we use a statistical test (Section 2.2) to
+determine if the black-box model used additional features we do
+not have access to (i.e. features not in the audit data).
+The contributions of this paper are: 1) We propose an approach
+using model distillation and comparison to audit black-box risk
+scoring models under realistic conditions. 2) We show the importance of calibrating risk scores to remove scale distortions that may
+have been introduced during the training of the black-box model.
+3) We apply the approach to audit four risk scoring models. 4) We
+propose a statistical test to determine if the audit data is missing
+key features used to train the black-box model. 5) An ancillary
+contribution of this paper is a new confidence interval estimate
+for iGAM [9, 24, 25], a type of transparent model, to compare two
+models of this class.
+
+2
+
+AUDIT APPROACH
+
+Our goal is to gain insight into the input-output relationships of a
+black-box risk scoring model. We draw from model distillation and
+model comparison techniques to develop our approach.
+
+2.1
+
+Distill and Compare
+
+Model distillation was first introduced to transfer knowledge from
+a large, complex model (teacher) to a faster, simpler model (student)
+
+[6, 8, 21]. This was done by running unlabeled samples (either new
+unlabeled data or training data with labels discarded) through the
+teacher model to obtain the teacher’s outputs, then training the
+student model to mimic the teacher’s outputs. We draw parallels
+to our setting, taking the risk scoring model to be the teacher and
+the audit data to be unlabeled samples ran through the teacher
+(risk scoring model) to obtain the teacher’s output (risk scores). We
+train the mimic model to minimize mean squared error between
+the teacher and student, i.e.
+T
+2
+1 Õ t
+L(S, ˆ
+S) =
+(1)
+S(x ) − ˆ
+S(x t )
+T t =1
+where x t is the t-th sample in the audit data, S(x t ) is the output of
+ˆ t ) is the output
+the teacher model (risk scores) for sample x t , S(x
+t
+of the mimic model for sample x , and T is the number of samples.
+Throughout this paper, we will call the teacher model the black-box
+model and the student model the mimic model.
+Next, we leverage the ground-truth outcome information. We
+train our own risk scoring model on the audit data to predict the
+ground-truth outcome, i.e.
+T
+
+
+1 Õn
+L(O, Ô) =
+O(x t ) log P(Ô(x t ) = 1) +
+T t =1
+
+o
+(1 − O(x t )) log P(Ô(x t ) = 0)
+(2)
+where O(x t ) ∈ {0, 1} is the ground-truth outcome for sample x t and
+Ô(x t ) ∈ {0, 1} is the output of the model for sample x t . Throughout
+this paper, we call this model the outcome model. Note that the
+outcome model is not a mimic model.
+Loan default risk score: 3
+
+Black-box
+risk scoring
+model
+
+Model
+distillation
+on audit data
+
+Loan default: yes or no
+
+True
+outcome
+
+meant to predict
+
+Train our
+own model
+
+on audit data using
+same model class
+
+Model comparison
+Transparent
+mimic model
+
+Transparent
+outcome model
+
+Figure 1: Auditing a loan risk scoring model by training
+transparent models on data labeled with the risk scores and
+with ground-truth outcomes for loan defaults.
+It is critical that both the mimic model and outcome model are
+trained using the same model class that allows for interpretation
+and comparison. Not all model classes have the property that two
+models of that class can be compared. E.g. it is not obvious how
+to compare two decision trees, random forests or neural nets. We
+want a model class that is as rich and complex as possible so that
+the mimic model can be faithful to the black-box model and the
+outcome model can accurately predict ground-truth outcomes. But
+this model class should still be transparent [16] so that we can
+understand how the input features affect the models’ outputs—the
+goal of our audit. We focus on a particular transparent model class,
+iGAM (Section 2.3.1) in this paper; other choices are possible.
+
+The risk score and the ground-truth outcome are closely related—
+the ground-truth outcome is what the black-box model was meant
+to predict. If the black-box model is accurate and generalizes to the
+audit data, it would predict the ground-truth outcomes in the audit
+data correctly; the converse is true if the black-box model is not
+accurate or does not generalize to the audit data.
+Because both the mimic and outcome models are trained with
+the same model class on the same audit data using the same features, the more faithful the mimic model, and the more accurate
+the outcome model, the more likely it is that differences observed
+between the mimic and outcome models result from differences
+between the ground-truth outcomes and risk scores assigned by
+the black-box risk scoring model. Moreover, similarities between
+the mimic and outcome models (e.g. on COMPAS in Section 3.2,
+the Number of Priors feature is modeled very similarly by the two
+models) increases confidence that the mimic model is a faithful
+representation of the black-box model, and that any differences
+observed on other features are meaningful.
+Related work. Adler et al. [2] trained a model to predict outcomes
+and then a second model to predict the first’s predictions. This is
+a different distillation setup from ours, as we use both risk scores
+and outcomes. Adebayo and Kagal [1] also learned their own risk
+scoring models when the black-box model cannot be queried. Some
+papers also compare two models, but not risk scores and outcomes
+at the same time. Wang et al. [34] trained a model to predict outcomes and another to predict membership in a protected subgroup.
+Chouldechova and GâĂŹSell [11] trained two different outcome
+models then identified subgroups where the two models differed.
+Other papers work on a single outcome or risk score model [32, 35].
+
+2.2
+
+Testing for Missing Features
+
+If the audit data is missing features used by the black-box model, the
+audit data alone may be insufficient to audit the black-box model.
+We propose a statistical test to test if there are important missing
+features based on the following observation:
+If the black-box model used features that are missing
+from the audit data but are useful for predicting the
+ground-truth outcome, the error between the mimic
+model (learned on the audit data) and the risk score,
+||Sˆ − S ||E , should be positively correlated with the error
+between the outcome model (learned on the audit data)
+and ground-truth outcome, ||Ô − O ||E .
+Since the test involves predictions from the mimic and outcome
+models, both models need to be trained (Sections 2.1) prior to performing this test; this test merely checks if the results of our audit
+are significantly affected by missing features. We perform this test
+on all the risk scoring models we audit in this paper in Section 3.4.
+Independent of our audit approach, this test can standalone as a
+test for whether a data set is missing key features that were used to
+train a black-box model. Transparency of the mimic and outcome
+models is not a requirement for this test.
+
+2.3
+
+Comparing Mimic and Outcome Models
+
+In this section, we provide technical details on how to train the
+mimic and outcome models so that they are comparable, and detect
+statistically significant differences.
+
+Feature Contribution, h i (x i )
+Feature Contribution, h i (x i )
+
+Feature Contribution, h i (x i )
+Feature Contribution, h i (x i )
+
+Figure 2: Eight features the Chicago Police says are used in
+their risk scoring model. Best seen on screen.
+
+Figure 3: Eight features the Chicago Police says are not used
+in their risk scoring model. Best seen on screen.
+
+2.3.1 Choice of model class. As noted in Section 2.1, we train the
+mimic model and outcome model using the same transparent model
+class—in this paper, iGAM [9, 24, 25]. We point the reader to [9,
+24, 25] to learn more about iGAMs and to [31] for a distillation
+example where it was used as a student. Briefly, iGAM has the form
+Õ
+Õ
+д(y) = h 0 +
+hi (x i ) +
+hi j (x i , x j )
+(3)
+
+models, as it makes the targets for the two models (risk scores and
+outcomes) linearly related on a scale that their outputs will later be
+compared on. We select this scale to be logit probabilities (since the
+outcome model’s outputs are already on this scale), and perform
+this calibration step for Chicago Police and Lending Club but not
+COMPAS and Stop-and-Frisk, since the latter two already exhibit
+the desired linear relationships.
+
+i
+
+i,j
+
+where the contribution of any one feature x i or pair of features
+x i and x j to the prediction can be visualized in graphs such as
+Figure 2 that plot x i on the x-axis and hi (x i ) on the y-axis. For
+classification, д is the logistic function. For regression, д is the
+identity function. For classical GAMS [19], feature contributions h(·)
+are fitted using splines; for iGAM, they are fitted using ensembles
+of short trees. Crucially, since iGAM is an additive model, two
+iGAM models can be compared by simply taking a difference of
+their feature contributions h(·), which we exploit in Section 2.3.3
+to detect differences between the mimic and outcome models.
+2.3.2 Calibrating model inputs. Calibration is the process of matching predicted and empirical probabilities [14, 28]. If a risk score is
+well-calibrated, the relationship between the risk score and empirical probabilities will be linear (e.g. COMPAS and Stop-and-Frisk
+in the top row of Figure 6 in the Appendix). While developing our
+approach, we discovered that not all risk scores exhibit the desired
+linear relationship with outcomes in the audit data. For example,
+the Chicago Police risk score (third column of Figure 6 in the Appendix) is rather flat for risk scores less than 350, then exhibits a
+sharp kink upwards.
+One possible explanation for any nonlinear relationship is that
+the risk score was well-calibrated on its original training data, but
+the audit data has a different distribution (data shift) [29]. Another
+explanation is post-processing by risk scoring model creators to
+reduce sensitivity in less important parts of the risk score scale and
+enhance separation in more important parts of the scale [23].
+We make the reasonable assumption that risk scores should be
+monotonic and well-calibrated [23] and use this assumption to undo
+distortions or audit data shift. Specifically, we learn a nonlinear
+transformation of the risk score (the blue line in Figure 6 in the
+Appendix), similar to isotonic regression [28], to make the risk
+scores and outcomes linearly related on a scale of choice. The
+mimic model is then trained on these transformed risk scores. This
+calibration step is necessary to compare the mimic and outcome
+
+2.3.3 Detecting differences. To not mistake random noise for real
+differences between the mimic and outcome models, we control
+potential sources of noise during the training process. To avoid data
+sample-specific effects, we train the mimic and outcome models on
+the same data sample. We then calculate the difference in feature
+x i ’s contribution to the models, shi (x i ) − ohi (x i ). If this number
+is positive, the mimic model assigns more risk than the outcome
+model for feature x i ; the converse is true if this number is negative.
+We construct a confidence interval for this difference to tell
+if it is statistically significant. One ancillary contribution of this
+paper is a new method to estimate confidence intervals for the
+iGAM model class, by employing a bootstrap-of-little-bags approach
+[30] to estimate the variance of hi (x i ) and shi (x i ) − ohi (x i ). See
+Appendix A for details. The resulting confidence intervals are the
+dotted lines in Figures 2, 3, and 4.
+
+3 RESULTS
+3.1 Validating the Audit Approach
+In this section, we demonstrate the approach on risk scoring models
+where we have some information on how they were trained, and
+check that our approach can recover this information.
+3.1.1 Stop-and-Frisk. Using the New York Police Department’s
+Stop-and-Frisk data1 , Goel et al. [18] proposed a simple risk scoring
+model for weapon possession: S = 3 × 1P S + 1 × 1AS + 1 × 1Bulдe ,
+where S is the risk score, PS denotes primary stop circumstance is
+presence of suspicious object, AS denotes secondary stop circumstance is sight or sound of criminal activity, and Bulдe denotes bulge
+in clothing [18]. Since we know the model’s functional form, we
+can verify that the mimic model correctly recovers its coefficients.
+We apply the risk scoring model to label 2012 data (T=126,457, p=40)
+after following Goel et al.’s data pre-processing steps [18].
+1 http://www1.nyc.gov/site/nypd/stats/reports-analysis/stopfrisk.page
+
+Feature Contribution, h i (x i )
+
+Figure 4: Feature contributions of four features to the COMPAS mimic model (in red) and outcome model (in green).
+Result. The mimic model recovers the coefficients of (3, 1, 1) for
+the three features used in the risk scoring model (PS, AS, Bulдe)
+and 0 for the remaining features.
+3.1.2 Chicago Police “Strategic Subject”. The Chicago Police Department released arrest data2 from 2012 to 2016 that was used
+to create a risk score for the probability of an individual being involved in a shooting incident as a victim or offender. This data set
+contains 16 features, but only 8 are used by the black-box model,
+which gives us an opportunity to test if our approach can accurately
+detect which features are and are not used by a black-box model.
+We trained a mimic model, intentionally including all 16 features.
+Figure 2 shows the feature contributions of the mimic model (in
+red) and outcome model (in green) for the 8 features the Chicago
+Police says were used by the black-box model; Figure 3 shows the
+8 features the Chicago Police says were not used in their model.
+Result. There is a striking difference between Figure 2 and Figure 3:
+the mimic model (in red) assigns importance to the features in
+Figure 2, but does not assign any importance to the features in
+Figure 3. This agrees with Chicago Police’s statement about which
+features were and were not used in the black-box model. We also
+note that the outcome model (in green) does assign importance
+to the unused features (Figure 3), suggesting that there is signal
+available in the 8 unused features that the Chicago Police risk
+scoring model could have used, but chose not to use. Race and
+sex are 2 of these 8 features, which the Chicago Police especially
+emphasize are not used.
+These experiments confirm that the mimic models can provide
+insights into the black-box models, and demonstrate the advantages
+of using the outcome information available in the audit data.
+
+3.2
+
+Auditing COMPAS
+
+COMPAS, a proprietary score developed to predict recidivism risk,
+has been the subject of scrutiny for racial bias [4, 7, 10, 12, 15, 22].
+We do not know what model class, input features or data were used
+to train COMPAS. As described in Section 1, the COMPAS audit
+data3 was collected by ProPublica; it is likely different from the
+original COMPAS training data. Figure 4 compares the COMPAS
+mimic model (in red) and outcome model (in green) for four features:
+Age, Race, Number of Priors, and Gender. The dotted lines are 95%
+pointwise confidence intervals. We observe the following:
+2 https://data . cityofchicago . org/Public-Safety/Strategic-Subject-List/4aki-r3np
+
+3 https://github . com/propublica/COMPAS-analysis
+
+COMPAS agrees with ground-truth outcomes regarding the
+number of priors. In the 3rd plot in Figure 4, the mimic model
+and outcome model agree on the impact of Number of Priors on
+risk; their confidence intervals overlap through most of its range.
+COMPAS disagrees with ground-truth outcomes for some
+age and race groups. The 1st and 2nd plots in Figure 4 show
+the effect of Age and Race on the mimic and outcome models. The
+mimic model (red) and the outcome model (green) are very similar
+between ages 20 to 70, and their confidence intervals overlap. For
+ages greater than 70, there is evidence that the models disagree as
+the confidence intervals do not overlap.
+The mimic and outcome models are also different for ages 18
+and 19: the mimic model predicts low risk for young individuals,
+but we see no evidence to support this in the outcome model, with
+risk appearing to be highest for young individuals.
+The mimic model predicts that African Americans are even
+higher risk, and Caucasians lower risk, than the ground-truth outcomes suggest is warranted. Note that the ground-truth outcomes
+might themselves be biased due to historical discrimination against
+African Americans.
+Gender has opposite effects on COMPAS compared to groundtruth outcome. In the 4th plot in Figure 4, we see a discrepancy
+between the mimic model and outcome model on Gender. The
+mimic model predicts higher risk than warranted by ground-truth
+outcomes for females, and conversely for males.
+Explaining differences between mimic and outcome models.
+Each observed difference between the two models could have several different explanations. We propose to leverage the observed
+differences to gain insight into the black-box model, by asking the
+question, “what could be happening in the black-box model, that
+could explain the differences we are seeing”? We provide several
+examples below.
+(1) Some feature regions may be underrepresented in the blackbox model’s training data and/or the audit data. For example,
+in the COMPAS audit data (collected by ProPublica), only
+3% of samples are between 18 and 20 years old, only 0.5%
+are older than 70 years old, and only 19% are female, which
+makes learning accurate models in these regions harder.
+(2) The black-box model may have a more simple or complex
+form than the outcome model. For example, we saw that the
+mimic model predicts low risk for young individuals, but
+there is no evidence to support this in the outcome model.
+
+Feature Contribution, h i j (x i , x j )
+
+Table 1: Statistical test for likelihood of audit data missing
+key features used by black-box model.
+
+Figure 5: Interaction between loan issue year and home ownership in Lending Club mimic model (in red) and outcome
+model (in green).
+We trained an iGAM model with interactions between pairs
+of features, and observed strong interactions between very
+young age and other variables such as Gender, Charge Degree, and Length of Stay. If COMPAS does not model interactions well, this may explain why COMPAS needs to predict
+low risk for very young individuals (because it cannot otherwise predict a reduced risk via interactions of age with other
+variables).
+(3) The black-box model may be deliberately simple for some
+feature regions. For example, for ages greater than 70, the
+outcome model has much wider confidence intervals than
+the mimic model. The ground-truth outcomes are potentially high-variance in this region, yet the black-box model’s
+scoring function may have been kept deliberately simple for
+extreme feature values like this.
+(4) The black-box model may be using additional features missing from the audit data, that interact with the non-missing
+features. We provide a statistical test to determine the likelihood of this (Section 3.4).
+and so on. We cannot tell (without further testing) the definitive
+reason that explains a particular difference between the mimic and
+outcome models. However, we suggest that this form of reasoning
+coupled with the use of transparent models surfaces differences
+that we did not a priori know, but can then proceed to check and
+reason about, to gain insight into the black-box model.
+
+3.3
+
+Auditing Lending Club
+
+Lending Club, an online peer-to-peer lending company, rates loans
+it finances and releases data4 on these loans. We use a subset of
+five years (2007-2011) of loans that have matured, so that we have
+ground-truth on whether the loan defaulted. We do not know what
+model class or input features Lending Club used to train their risk
+scoring model. We believe the data sample we have is similar to
+the data they would have used to train their models. According to
+Lending Club, their models are refreshed periodically.
+We use this Lending Club example to discuss an insight we
+gained into the black-box model from examining interactions revealed by our transparent models. Figure 5 shows the interaction
+of loan issue year and home ownership in the Lending Club risk
+scoring mimic model (in red) and ground-truth outcome model (in
+4 https://www . lendingclub . com/info/download-data . action
+
+Risk Score
+
+Pearson ρ
+
+Spearman ρ
+
+Kendall τ
+
+COMPAS
+Lending Club
+Stop-and-Frisk
+Chicago Police
+
+[0.10, 0.13]
+[0.00, 0.03]
+[0.00, 0.01]
+[0.00, 0.01]
+
+[0.10, 0.14]
+[-0.01, 0.01]
+[-0.03, 0.01]
+[0.01, 0.03]
+
+[0.08, 0.10]
+[-0.01, 0.01]
+[-0.02, 0.01]
+[0.01, 0.02]
+
+green). Having a home mortgage in 2007-2008 increases the loan
+default risk more than having a home mortgage in 2009 and beyond.
+Recall that 2007-2008 is around the time of the subprime housing
+crisis. Note the difference in ranges between the two plots—the
+range goes up to 0.2 for the outcome model (in green) whereas
+the range is much lower for the mimic model (in red). This could
+indicate that the Lending Club risk scoring model is updated conservatively, with some lag time, instead of being rapidly updated
+as economic conditions and behavior change.
+
+3.4
+
+Testing for Features Missing from
+Audit Data
+
+As black-box models may use additional features we do not have
+access to, we developed a test (Section 2.2) to assess the impact
+missing features could have on our analysis. Table 1 provides 95%
+confidence intervals for three linear and nonlinear measures of
+correlation used in the test. If zero is in the confidence interval, the
+error of the mimic model (trained on the audit data) is not correlated
+to the error of the outcome model (also trained on the audit data).
+Then, it is unlikely that the audit data is missing key feature(s) that
+are a) predictive of outcomes (and hence will negatively affect the
+error of the outcome model if missing); and b) used in the blackbox model (and hence will negatively affect the error of the mimic
+model if missing).
+In Lending Club and Stop-and-Frisk we cannot distinguish these
+correlations from zero, suggesting that no key features are missing
+from the audit data. For Chicago Police, the confidence intervals
+contain 0 or are very close to 0 (lower limit 0.01), hence there is little
+evidence of the audit data missing key features. For COMPAS there
+is evidence of positive correlation, indicating that the ProPublica
+data may be missing key features used in the COMPAS model. This
+is supported by our findings in Section 3.5 that no mimic models
+trained on the ProPublica data, however powerful (e.g. random
+forests), could mimic COMPAS well.
+
+3.5
+
+Fidelity and Accuracy
+
+To quantitatively evaluate our audit approach, we report fidelity
+(how well the mimic model predicts the black-box model’s risk
+scores, measured in RMSE) and accuracy (how well the outcome
+model predicts the ground-truth outcomes, measured in AUC) for
+all the risk scoring models we audit in Table 2. For comparison,
+we also train linear models (a simpler model class than iGAM) and
+random forests (more complex, but less interpretable).
+For COMPAS, all model classes (linear model, iGAM, random
+forest) have roughly equal fidelity and accuracy. Interestingly, none
+obtained RMSE lower than 2 on a 1-10 scale. Comparing outcome
+model AUCs across different model classes, iGAM’s results are
+
+Table 2: Fidelity of mimic model and accuracy of outcome model. Lower RMSE is better, higher AUC is better.
+Risk Score
+
+Metric
+
+Linear model
+
+iGAM
+
+iGAM w/ interactions
+
+Random Forest
+
+Fidelity
+of mimic
+model
+
+COMPAS
+Lending Club
+Chicago Police
+Stop-and-Frisk
+
+RMSE (1-10)
+RMSE (2-36)
+RMSE (0-500)
+RMSE (0-5)
+
+2.11 ± 0.057
+3.27 ± 0.037
+17.4 ± 0.102
+0.00 ± 2 × 10−15
+
+2.01 ± 0.045
+2.60 ± 0.049
+17.2 ± 0.125
+0.00 ± 1 × 10−5
+
+2.00 ± 0.047
+2.52 ± 0.051
+16.5 ± 0.130
+0.00 ± 2 × 10−5
+
+2.02 ± 0.053
+2.48 ± 0.033
+14.0 ± 0.280
+0.01 ± 2 × 10−3
+
+Accuracy
+of outcome
+model
+
+COMPAS
+Lending Club
+Chicago Police
+Stop-and-Frisk
+
+AUC
+AUC
+AUC
+AUC
+
+0.73 ± 0.029
+0.69 ± 0.006
+0.95 ± 0.007
+0.84 ± 0.020
+
+0.74 ± 0.027
+0.69 ± 0.016
+0.95 ± 0.007
+0.85 ± 0.020
+
+0.75 ± 0.029
+0.69 ± 0.014
+0.95 ± 0.007
+0.85 ± 0.020
+
+0.73 ± 0.026
+0.68 ± 0.020
+0.929 ± 0.009
+0.87 ± 0.024
+
+generally comparable to (or slightly better than) more complex
+random forests (Table 2). For the risk score mimic models, random
+forests are competitive for Lending Club and Chicago Police. Linear
+mimic models are not far behind iGAMs for several risk scoring
+models (COMPAS, Chicago Police, Stop-and-Frisk), suggesting that
+the black-box model’s functional form might be very simple. We
+know this to be true for Stop-and-Frisk from Section 3.1.1 where
+the model was a simple linear model.
+COMPAS deep dive. One possible reason why COMPAS is challenging to mimic may be that the ProPublica data set is missing
+key features. This agrees with the results of the statistical test in
+Section 3.4. Another possible reason is the small sample size (less
+than 7,000 samples).
+One advantage of using a model distillation approach to inspect
+black-box models is that the approach may be able to benefit from
+additional unlabeled data if the black-box teacher model can be
+queried to label the additional data [8]. We found an additional 3,000
+individuals in the ProPublica data with COMPAS risk scores but no
+ground-truth outcomes. Adding them to the training (not testing)
+data for the mimic model and retraining the mimic model, we find
+marginal improvement in the mimic model’s fidelity (from RMSE 2.0
+to 1.98). Doing the opposite—removing individuals from the training
+data in 1,000 increments—decreased the mimic model’s fidelity only
+marginally (to RMSE 2.1, training on only 1,000 individuals). These
+analyses suggest that for COMPAS, missing key features is a more
+pressing issue than insufficient data.
+
+4
+
+DISCUSSION
+
+Sometimes we are interested in detecting bias on features intentionally excluded from the black-box model. For example, a credit
+risk scoring model is probably not allowed to use race as an input.
+Unfortunately, not using race does not prevent the model from
+learning to be biased. Racial bias in a data set is likely to be in the
+outcomes — the labels used for learning; not using race as an input
+feature does not remove the bias from the labels.
+If race were uncorrelated with all other features (and combinations of features) provided to the model, then removing race
+would prevent the model from learning to be racially biased because it would not have any input features on which to model this
+bias. Unfortunately, in any large, real-world data set, there is massive correlation among the high-dimensional features, and a model
+trained to predict credit risk will learn to be biased from correlation
+
+of the excluded race feature with other features that likely remain
+in the model (e.g., income or education).
+Hence, removing a protected feature like race or gender does
+not prevent a model from learning to be biased. Instead, removing
+protected features make it harder to detect how the model is biased,
+or correct the bias, because the bias is now spread in a complex way
+among all the correlated features throughout the model instead
+of being localized to the protected features. The main benefit of
+excluding protected features like race or gender from the inputs of
+a machine learning model is that it allows the group deploying the
+model to claim (incorrectly) that their model is not biased because
+it did not use these features.
+When training a transparent student model to mimic a blackbox model, we intentionally include all features—even protected
+features like race and gender—specifically because we are interested
+in seeing what the models could learn from them. If, when the mimic
+model mimics the black-box model, it does not see any signal on
+the race or gender features and learns to model them as flat (zero)
+functions, this indicates whether the teacher model (the black-box
+model) did or did not use these features, but also if the teacher
+model exhibits race or gender bias even if the model did not use
+race or gender as inputs.
+
+5
+
+CONCLUSION
+
+Our Distill-and-Compare approach to auditing black-box models
+was motivated by a realistic setting where access to the black-box
+model API is not available; only a data set labeled with the risk
+score as produced by the risk scoring model and the ground-truth
+outcome is available. The efficacy of the Distill-and-Compare audit
+approach increases when a model class that can be highly faithful to
+the black-box model and highly accurate at predicting the groundtruth outcomes is used, and when the audit data is not missing key
+features used in the black-box model.
+A key advantage of using transparent models to audit blackbox models is that we do not need to know in advance what to
+look for. Many current auditing approaches focus on one or two
+protected features selected in advance, and thus are less likely to
+detect biases that are not a priori known. The Distill-and-Compare
+audit approach, using transparent models, can hence be most useful
+for complicated, real-world data with unknown sources of biases.
+
+REFERENCES
+[1] Julius Adebayo and Lalana Kagal. 2016. Iterative Orthogonal Feature Projection
+for Diagnosing Bias in Black-Box Models. In FATML Workshop.
+[2] Philip Adler, Casey Falk, Sorelle A. Friedler, Gabriel Rybeck, Carlos Eduardo
+Scheidegger, Brandon Smith, and Suresh Venkatasubramanian. 2016. Auditing
+Black-Box Models for Indirect Influence. In ICDM.
+[3] Julia Angwin, Jeff Larson, Surya Mattu, and Lauren Kirchner. 2016. How we
+analyzed the compas recidivism algorithm. https://www . propublica . org/article/
+how-we-analyzed-the-compas-recidivism-algorithm Accessed May 26, 2017.
+[4] Julia Angwin, Jeff Larson, Surya Mattu, and Lauren Kirchner. 2016. Machine
+Bias: There’s software used across the country to predict future criminals. And
+it’s biased against blacks. https://www . propublica . org/article/machine-biasrisk-assessments-in-criminal-sentencing Accessed May 26, 2017.
+[5] Susan Athey, Julie Tibshirani, and Stefan Wager. 2017. Generalized Random
+Forests. arXiv preprint arXiv:1610.01271 (2017).
+[6] Jimmy Ba and Rich Caruana. 2014. Do Deep Nets Really Need to be Deep?. In
+NIPS.
+[7] Thomas Blomberg, William Bales, Karen Mann, Ryan Meldrum, and Joe Nedelec.
+2010. Validation of the COMPAS risk assessment classification instrument. Technical
+Report. Florida State University.
+[8] Cristian Bucilua, Rich Caruana, and Alexandru Niculescu-Mizil. 2006. Model
+compression. In KDD.
+[9] Rich Caruana, Yin Lou, Johannes Gehrke, Paul Koch, Marc Sturm, and Noemie
+Elhadad. 2015. Intelligible models for healthcare: Predicting pneumonia risk and
+hospital 30-day readmission. In KDD.
+[10] Alexandra Chouldechova. 2017. Fair prediction with disparate impact: A study
+of bias in recidivism prediction instruments. Big Data (2017).
+[11] Alexandra Chouldechova and Max G’Sell. 2017. Fairer and more accurate, but
+for whom?. In FATML Workshop.
+[12] Sam Corbett-Davies, Emma Pierson, Avi Feller, Sharad Goel, and Aziz Huq. 2017.
+Algorithmic decision making and the cost of fairness. In KDD.
+[13] A. Datta, S. Sen, and Y. Zick. 2016. Algorithmic Transparency via Quantitative Input Influence: Theory and Experiments with Learning Systems. In IEEE
+Symposium on Security and Privacy.
+[14] Morris H. DeGroot and Stephen E. Fienberg. 1983. The Comparison and Evaluation of Forecasters. Journal of the Royal Statistical Society. Series D (1983).
+[15] William Dieterich, Christina Mendoza, and Tim Brennan. 2016. COMPAS risk
+scales: Demonstrating accuracy equity and predictive parity. Technical Report.
+Northpointe Inc.
+[16] Finale Doshi-Velez and Been Kim. 2017. Towards A Rigorous Science of Interpretable Machine Learning. arXiv preprint arXiv:1702.08608 (2017).
+[17] Michael Feldman, Sorelle A. Friedler, John Moeller, Carlos Scheidegger, and
+Suresh Venkatasubramanian. 2015. Certifying and Removing Disparate Impact.
+In KDD.
+[18] Sharad Goel, Justin M. Rao, and Ravi Shroff. 2016. Precinct or prejudice? Understanding racial disparities in New York CityâĂŹs stop-and-frisk policy. (2016).
+[19] Trevor J Hastie and Robert J Tibshirani. 1990. Generalized additive models. CRC
+press.
+[20] Andreas Henelius, Kai PuolamÃďki, Henrik BostrÃűm, Lars Asker, and Panagiotis Papapetrou. 2014. A peek into the black box: exploring classifiers by
+randomization. Data Mining and Knowledge Discovery (2014).
+[21] Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. 2014. Distilling the Knowledge in
+a Neural Network. In NIPS Deep Learning and Representation Learning Workshop.
+[22] Jon Kleinberg, Sendhil Mullainathan, and Manish Raghavan. 2017. Inherent
+trade-offs in the fair determination of risk scores. In Innovations in Theoretical
+Computer Science.
+[23] Manuel Lingo and Gerhard Winkler. 2008. Discriminatory power-an obsolete
+validation criterion? Journal of Risk Model Validation (2008).
+[24] Yin Lou, Rich Caruana, and Johannes Gehrke. 2012. Intelligible models for
+classification and regression. In KDD.
+[25] Yin Lou, Rich Caruana, Johannes Gehrke, and Giles Hooker. 2013. Accurate
+intelligible models with pairwise interactions. In KDD.
+[26] Francisco Louzada, Anderson Ara, and Guilherme B Fernandes. 2016. Classification methods applied to credit scoring: Systematic review and overall comparison.
+Surveys in Operations Research and Management Science (2016).
+[27] Lucas Mentch and Giles Hooker. 2016. Quantifying uncertainty in random forests
+via confidence intervals and hypothesis tests. The Journal of Machine Learning
+Research (2016).
+[28] Alexandru Niculescu-Mizil and Rich Caruana. 2005. Predicting Good Probabilities
+with Supervised Learning. In ICML.
+[29] Richard D Riley, Joie Ensor, Kym IE Snell, Thomas PA Debray, Doug G Altman,
+Karel GM Moons, and Gary S Collins. 2016. External validation of clinical
+prediction models using big datasets from e-health records or IPD meta-analysis:
+opportunities and challenges. The BMJ (2016).
+[30] Joseph Sexton and Petter Laake. 2009. Standard Errors for Bagged and Random
+Forest Estimators. Computational Statistics and Data Analysis (2009).
+
+[31] Sarah Tan, Rich Caruana, Giles Hooker, and Albert Gordo. 2018. Transparent
+Model Distillation. arXiv preprint arXiv:1801.08640 (2018).
+[32] Florian Tramer, Vaggelis Atlidakis, Roxana Geambasu, Daniel Hsu, Jean-Pierre
+Hubaux, Mathias Humbert, Ari Juels, and Huang Lin. 2017. FairTest: Discovering Unwarranted Associations in Data-Driven Applications. In IEEE European
+Symposium on Security and Privacy.
+[33] Sandra Wachter, Brent Mittelstadt, and Chris Russell. 2018. Counterfactual
+Explanations without Opening the Black Box: Automated Decisions and the
+GDPR. Harvard Journal of Law & Technology (2018).
+[34] Hao Wang, Berk Ustun, and Flavio P. Calmon. 2018. On the Direction of Discrimination: An Information-Theoretic Analysis of Disparate Impact in Machine
+Learning. In International Symposium on Information Theory.
+[35] Zhe Zhang and Daniel B. Neill. 2017. Identifying Significant Predictive Bias in
+Classifiers. In FATML Workshop.
+
+A
+
+A NEW CONFIDENCE INTERVAL
+ESTIMATE FOR IGAM
+
+It is not trivial to estimate confidence intervals for nonparametric
+learners such as trees [27]; iGAM’s base learners are short trees.
+We employ a bootstrap-of-little-bags approach originally developed
+for bagged models in [30] to estimate the variance of feature x i ’s
+contribution to the model, hi (x i ), and difference in feature x i ’s
+contribution to the mimic and outcome models, shi (x i ) − ohi (x i ).
+Bootstrap-of-little-bags exploits two-level structured
+cross-validation (e.g. 15% of data points are selected for the test
+set, with the remaining 85% split into training (70%) and validation
+(15%) sets). Repeating this inner splitting L times and outer splitting
+K times gives a total of KL bags on which we train the mimic
+model and outcome model. Let hlk
+i (x i ) be x i ’s feature contribution
+estimated by the model in the lth inner and kth outer fold. Its
+variance can then be estimated as
+!2
+K
+L
+l K
+1 Õ 1 Õ kl
+1 Õ Õ kl
+c
+Var(hi (x i )) =
+hi (x i ) −
+hi (x i )
+K
+L
+KL
+k =1
+
+l =1
+
+l =1 k =1
+
+and its mean hi (x i ) is the average of the KL models.
+We can now construct pointwise confidence intervals for feature
+contributions to iGAM models. The confidence interval
+q for feature
+x i ’s contribution to the model, hi (x i ), is hi (x i ) ± 1.96 c
+Var(hi (x i ))
+and the confidence interval for the difference in feature x i ’s contribution to the mimicqand outcome models, shi (x i ) − ohi (x i ), is
+
+c i (x i )) − 2Cov(sh
+d i (x i ), ohi (x i ))
+c i (x i )) + Var(oh
+shi (x i ) − ohi (x i )±1.96 Var(sh
+with d
+Cov(shi (x i ), ohi (x i )) also estimated using bootstrap-of-littlebags.
+This variance estimate is conservative (meaning it overestimates
+true variability), however, given that we are trying to detect differences, overestimating means we are less likely to mistake random
+noise for real differences. For large K and L, consistency of this
+estimate was established in [5].
+Note that are pointwise, not uniform, confidence intervals. That
+is, they capture the variability of the effect of age at age=50, not the
+entire effect of age. Uniform confidence intervals can be constructed
+by adjusting the critical value of the confidence interval.
+
+CALIBRATION PLOTS
+
+% Data
+
+logit(p )
+
+Fraction of Positive Outcomes, p
+
+B
+
+logit(p )
+
+Figure 6: Empirical probability (y-axis) vs. risk score (x-axis) for four risk scores on probability scale (top row) and logit probability scale (middle row). The red lines are best-fit straight lines. A good fit (COMPAS and Stop-and-Frisk) suggests that the risk
+score and outcomes logit probability (middle row) have a linear relationship; the mimic model can then be trained directly on
+the raw risk score. When the relationship is not linear (Chicago Police and Lending Club), the risk score must be calibrated
+(Section 2.3.2). The blue monotonic curves are the learned nonlinear transformations. See Figure 7 for the transformed risk
+score. The bottom row describes the distribution of the risk scores.
+
+Figure 7: Logit empirical probability (y-axis) vs. risk score after applying nonlinear transformation (x-axis). The red lines are
+best-fit straight lines. A good fit suggests that the transformed risk score and outcomes logit probability now have a linear
+relationship; the mimic model can now be traineed on the transformed risk score. See Section 2.3.2 for details.
+
+

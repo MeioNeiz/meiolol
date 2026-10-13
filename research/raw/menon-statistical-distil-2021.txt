@@ -1,0 +1,1624 @@
+Why distillation helps: a statistical perspective
+
+arXiv:2005.10419v1 [cs.LG] 21 May 2020
+
+Aditya Krishna Menon
+Ankit Singh Rawat
+Sashank J. Reddi
+Seungyeon Kim
+Sanjiv Kumar
+Google Research, New York
+{adityakmenon,ankitsrawat,sashank,seungyeonk,sanjivk}@google.com
+May 22, 2020
+Abstract
+Knowledge distillation is a technique for improving the performance of a simple “student”
+model by replacing its one-hot training labels with a distribution over labels obtained from a
+complex “teacher” model. Despite proving widely effective, a basic question remains unresolved:
+why does distillation help? In this paper, we present a statistical perspective on distillation which
+provides one answer to this question and suggests a novel application to multiclass retrieval. Our
+core observation is that the teacher seeks to estimate the underlying (Bayes) class-probability
+function. Building on this, we establish a fundamental bias-variance tradeoff for the student: this
+quantifies how approximate knowledge of these class-probabilities can significantly aid learning.
+Finally, we extend this statistical perspective to multiclass retrieval settings, and propose a
+double-distillation objective which encourages a good ranking over labels. We empirically validate
+our analysis, and demonstrate the value of double-distillation for retrieval.
+
+1
+
+Introduction
+
+Distillation is the process of using a “teacher” model to improve the performance of a “student”
+model [Craven and Shavlik, 1995, Breiman and Shang, 1996, Bucilǎ et al., 2006, Xue et al., 2013,
+Ba and Caruana, 2014, Hinton et al., 2015]. In its simplest form, rather than fitting to raw labels,
+one trains the student to fit the teacher’s distribution over labels. While originally devised with the
+aim of model compression, distillation has proven successful in iteratively improving a fixed-capacity
+model [Rusu et al., 2016, Furlanello et al., 2018, Yang et al., 2019, Xie et al., 2019], and found use
+in many other settings [Papernot et al., 2016, Tang et al., 2016, Czarnecki et al., 2017, Celik et al.,
+2017, Yim et al., 2017, Li and Hoiem, 2018, Liu et al., 2019, Nayak et al., 2019].
+Given its empirical successes, it is natural to ask: why does distillation help? Hinton et al. [2015]
+argued that distillation provides “dark knowledge” via teacher logits on the “wrong” labels y 0 6= y
+for an example (x, y), which effectively weights samples differently [Furlanello et al., 2018]. Various
+theoretical analyses of distillation have subsequently been developed [Lopez-Paz et al., 2016, Phuong
+and Lampert, 2019, Foster et al., 2019, Dong et al., 2019, Mobahi et al., 2020], with particular focus
+on its optimisation and regularisation effects.
+In this paper, we present a novel statistical perspective on distillation which sheds light on why it
+aids performance. Our analysis centers on a simple observation: a good teacher accurately models the
+true (Bayes) class-probabilities. This is a stricter requirement than the teacher merely having high
+accuracy. We quantify how such probability estimates improve generalisation compared to learning
+from raw labels. Building on this, we show how distillation is also useful in selecting informative
+labels for multiclass retrieval, wherein we wish to order labels according to their relevance [Jain et al.,
+2019]. In sum, our contributions are:
+
+1
+
+Log loss
+
+Top-1 accuracy
+
+0.70
+0.68
+0.66
+0.64
+0.62
+0.60
+0.58
+
+teacher
+student
+
+8
+
+14
+
+20
+
+32
+
+Teacher depth
+
+44
+
+56
+
+1.60
+1.55
+1.50
+1.45
+1.40
+1.35
+1.30
+1.25
+
+teacher
+student
+
+8
+
+14
+
+Expected calibration error
+
+(a) Top-1 accuracy.
+
+0.0040
+0.0035
+0.0030
+0.0025
+0.0020
+0.0015
+0.0010
+0.0005
+
+20
+
+32
+
+Teacher depth
+
+44
+
+56
+
+(b) Log-loss.
+
+teacher
+student
+8
+
+14
+
+20
+
+32
+
+Teacher depth
+
+44
+
+56
+
+(c) Expected calibration error.
+
+Figure 1: Illustration of how better teacher modelling of underlying (Bayes) class-probabilities
+influences student generalisation, per our statistical perspective. Here, we train ResNets of varying
+depths on the CIFAR-100 dataset, and use these as teachers to distill to a student ResNet of fixed
+depth 8. Figure 1(a) reveals that the teacher model gets increasingly more accurate as its depth
+increases; however, from 1(b) the corresponding log-loss starts increasing beyond a depth of 14. The
+calibration error is also seen to worsen with increasing depth in 1(c). This indicates the teacher’s
+probability estimates become progressively poorer approximations of the Bayes class-probability
+distribution p∗ (x) after certain depth. Intuitively, the teacher’s approximation of p∗ is governed by
+balancing the bias and variance in its predictions. The accuracy of the student model also degrades
+beyond a teacher depth of 14, reflecting the bound in Proposition 3. See §5.2 for more details,
+and §3.2 for illustration of a general bias-variance tradeoff.
+(i) We establish the statistical benefit of using the Bayes class-probabilities in place of one-hot
+labels, and quantify a bias-variance tradeoff when using approximate class-probabilities (§3).
+(ii) We propose double-distillation, a novel application of distillation for multiclass retrieval wherein
+teacher probabilities guide a ranking over labels (§4).
+(iii) We experimentally validate the value of both approximate class-probabilities in terms of
+generalisation, and of double-distillation in multiclass retrieval (§5).
+Contribution (i) gives a statistical perspective on the value of “dark knowledge”: for an example
+(x, y), the logits on “wrong” labels y 0 6= y encode information about the underlying data distribution.
+This view elucidates how a teacher’s probability calibration rather than accuracy can influence a
+student’s generalisation; see Figure 1 for an illustration. Contribution (ii) shows a practical benefit
+of this statistical view of distillation, by showing how multiclass retrieval objectives benefit from
+approximate class-probabilities.
+
+2
+
+2
+
+Background and notation
+
+We review multiclass classification, retrieval, & distillation.
+
+2.1
+
+Multiclass classification
+.
+
+N
+In multiclass classification, we are given a training sample S = {(xn , yn )}N
+n=1 ∼ P , for unknown
+.
+distribution P over instances X and labels Y = [L] = {1, 2, . . . , L}. Our goal is to learn a predictor
+f : X → RL so as to minimise the risk of f , i.e., its expected loss for a random instance and label:
+.
+
+R(f ) =
+
+[`(y, f (x))] .
+
+E
+
+(1)
+
+(x,y)∼P
+
+Here, ` : [L] × RL → R+ is a loss function, where for label y ∈ [L] and prediction vector f (x) ∈ RL ,
+`(y, f (x)) is the loss incurred for predicting f (x) when the true label is y. A canonical example is
+the softmax cross-entropy loss,
+
+
+X
+`(y, f (x)) = −fy (x) + log 
+efy0 (x)  .
+(2)
+y 0 ∈[L]
+
+We may approximate the risk R(f ) via the empirical risk
+X
+1 X T
+. 1
+R̂(f ; S) =
+`(yn , f (xn )) =
+eyn `(f (xn )),
+N
+N
+n∈[N ]
+
+(3)
+
+n∈[N ]
+
+
+.
+where ey ∈ {0, 1} denotes the one-hot encoding of y ∈ [L] and `(f (x)) = `(1, f (x)), . . . , `(L, f (x)) ∈
+RL
++ denotes the vector of losses for each possible label.
+L
+
+In a multiclass retrieval setting, our goal is to ensure that the top-ranked labels in f (x) ∈ RL include
+the true label [Lapin et al., 2018]. Formally, we seek to minimise the top-k loss
+.
+
+`ret(k) (y, f (x)) = Jy ∈
+/ topk (f (x))K,
+
+(4)
+
+where topk (f ) denotes the top-k highest scoring labels. When k = 1, this loss reduces to the standard
+0-1 error.
+
+2.2
+
+Knowledge distillation
+
+Distillation involves using a “teacher” model to improve the performance of a “student” model [Bucilǎ
+et al., 2006, Hinton et al., 2015]. In the simplest form, one trains the teacher model and obtains
+class-probability estimator pt : X → ∆Y , where ∆ denotes the simplex. Each pty (x) estimates how
+likely x is to be classified as y. In place of the empirical risk (3), the student now minimises the
+distilled risk
+1 X t
+R̃(f ; S) =
+p (xn )T `(f (xn )),
+(5)
+N
+n∈[N ]
+
+so that the one-hot encoding of labels is replaced with the teacher’s distribution over labels. Distillation
+may be used when the student has access to a large pool of unlabelled samples; in this case, distillation
+is a means of semi-supervised learning [Radosavovic et al., 2018].
+While originally conceived in settings where the student has lower capacity than the teacher [Bucilǎ
+et al., 2006, Hinton et al., 2015], distillation has proven useful when both models have the same
+capacity [Breiman and Shang, 1996, Furlanello et al., 2018, Xie et al., 2019]. More precisely, distillation
+t
+involves training a teacher on Nt labelled samples S t ∼ PN , using a function class Ft . Classic
+distillation assumes that N t  N , and that the capacity of Ft is greater than that of F. “Born-again”
+distillation assumes that S t = S, and Ft = F, i.e., one iteratively trains versions of the same model,
+using past predictions to improve performance.
+3
+
+2.3
+
+Existing explanations for distillation
+
+While it is well-accepted that distillation is empirically useful, there is less consensus as to why
+this is the case. Hinton et al. [2015] attributed the success of distillation (at least in part) to the
+encoding of “dark knowledge” in the probabilities the teacher assigns to the “wrong” labels y 0 6= y for
+example (x, y). This richer information plausibly aids the student, providing for example a weighting
+on the samples [Furlanello et al., 2018, Tang et al., 2020]. Further, when ` is the softmax crossentropy, the gradient of the distillation objective with respect to the student logits is the difference
+in the probability estimates for the two, implying a form of logit matching in high-temperature
+regimes [Hinton et al., 2015].
+Lopez-Paz et al. [2016] related distillation to learning from privileged information under a noise-free
+setting. Phuong and Lampert [2019] analysed the dynamics of student learning, assuming a deep
+linear model for binary classification. Foster et al. [2019] provided a generalisation bound for the
+student, under the assumption that it learns a model close to the teacher. This does not, however,
+explicate what constitutes an “ideal” teacher, nor quantify how an approximation to this ideal teacher
+will affect the student generalisation. Gotmare et al. [2019] studied the effect of distillation on
+discrimination versus feature extraction layers of the student network. [Dong et al., 2019] argued that
+distillation has a similar effect to early stopping, and studied its ability to denoise labels. Our focus,
+by contrast, is in settings where there is no exogenous label noise, and in studying the statistical
+rather than optimisation effects of distillation. [Mobahi et al., 2020] analysed the special setting of
+self-distillation – wherein the student and teacher employ the same model class – and showed that
+for kernelised models, this is equivalent to increasing the regularisation strength.
+
+3
+
+Distillation through a class-probability lens
+
+We now present a statistical perspective of distillation, which gives insight into why it can aid
+generalisation. Central to our perspective are two observations:
+(i) the risk (1) we seek to minimise inherently smooths labels by the class-probability distribution
+P(y | x);
+(ii) a teacher’s predictions provide an approximation to the class-probability distribution P(y | x),
+which can thus yield a better approximation to the risk (1) than one-hot labels.
+Building on these, we show how sufficiently accurate teacher approximations can improve student
+generalisation.
+
+3.1
+
+Bayes knows best: distilling class-probabilities
+
+Our starting point is the following elementary observation: the underlying risk R(f ) for a predictor
+f : X → RL is
+
+
+R(f ) = E E [`(y, f (x))]
+x y|x
+
+
+= E p∗ (x)T `(f (x)) ,
+(6)
+x
+
+. 
+.
+where p∗ (x) = P(y | x) y∈[L] ∈ ∆Y=[L]
+is the Bayes class-probability distribution. Intuitively, P(y | x)
+inherently captures the suitability of label y for instance x. Thus, the risk involves drawing an
+instance x ∼ P(x), and then computing the average loss of f (x) over all labels y ∈ [L], weighted
+by their Bayes probabilities P(y | x). When p∗ (x) is not concentrated on a single label, there is an
+inherent confusion amongst the labels for the instance x.
+Given an (xn , yn ) ∼ P, the empirical risk (3) approximates the distribution p∗ (xn ) with the one-hot
+eyn , which is only supported on one label. While this is an unbiased estimate, it is a significant
+4
+
+reduction in granularity. By contrast, consider the following Bayes-distilled risk on a sample S ∼ PN :
+N
+
+.
+
+R̂∗ (f ; S) =
+
+1 X ∗
+p (xn )T `(f (xn )).
+N n=1
+
+(7)
+
+This is a distillation objective (cf. (5)) using a Bayes teacher, who provides the student with the
+true class-probabilities. Rather than fitting to a single label realisation yn ∼ p∗ (xn ), a student
+minimising (7) considers all alternate label realisations, weighted by their likelihood.1 Observe that
+when ` is the cross-entropy, (7) is simply the KL divergence between the Bayes class-probabilities
+and our predictions.
+Both the standard empirical risk R̂(f ; S) in (3) and Bayes-distilled risk R̂∗ (f ; S) in (7) are unbiased
+estimates of the population risk R(f ). But intuitively, we expect that a student minimising (7) ought
+to generalise better from a finite sample. We can make this intuition precise by establishing that the
+Bayes-distilled risk has lower variance, considering fresh draws of the training sample.
+Lemma 1. For any fixed predictor f : X → RL ,
+h
+i
+h
+i
+VS∼PN R̂∗ (f ; S) ≤ VS∼PN R̂(f ; S) ,
+where V denotes variance, and equality holds iff ∀x ∈ X, the loss values `(f (x)) are constant on the
+support of p∗ (x).
+Proof of Lemma 1. By definition,
+
+
+1
+· V p∗ (x)T `(f (x))
+N
+
+
+1
+=
+· V E [`(y, f (x))]
+N
+y|x
+
+2
+
+2
+1
+1
+· E E [`(y, f (x))] −
+· E E [`(y, f (x))] .
+=
+x y|x
+N x y|x
+N
+
+LHS =
+
+1
+· V [`(y, f (x))]
+N
+
+2
+
+
+1
+1
+2
+=
+· E E `(y, f (x)) −
+· E E [`(y, f (x))] .
+x y|x
+N x y|x
+N
+
+RHS =
+
+In both cases, the second term simply equals R(f )2 since both estimates are unbiased. For fixed
+.
+x ∈ X, the result follows by Jensen’s inequality applied to the random variable Z = `(y, f (x)).
+Equality occurs iff Z is constant, which requires the loss to be constant on the support of p∗ (x).
+The condition when the Bayes-distilled and empirical risks have the same variance is intuitive: the two
+risks trivially agree when f is non-discriminative (attaining equal loss on all labels), or when a label
+is inherently deterministic (the class-probability is concentrated on one label). For discriminative
+predictors and non-deterministic labels, however, the Bayes-distilled risk can have significantly lower
+variance.
+The reward of reducing variance is better generalisation: a student minimising (7), will better
+minimise the population risk, compared to using one-hot labels. In fact, we may quantify how the
+empirical variance of the Bayes-distilled loss values influences generalisation as follows.
+1 While the student could trivially memorise the training class-probabilities, this would not generalise to test
+samples.
+
+5
+
+Proposition 2. Pick any bounded loss `. Fix a hypothesis class F of predictors f : X → RL , with
+.
+induced class H∗ ⊂ [0, 1]X of functions h(x) = p∗ (x)T `(f (x)). Suppose H∗ has uniform covering
+number N∞ . Then, for any δ ∈ (0, 1), with probability at least 1 − δ over S ∼ PN ,
+
+s
+M∗
+M∗
+N
+N
+log
+log
+δ
+δ 
+,
++
+R(f ) ≤ R̂∗ (f ; S) + O  V∗N (f ) ·
+N
+N
+.
+
+where M∗N = N∞ ( N1 , H∗ , 2N ) and V∗N (f ) is the empirical variance of the loss values {p∗ (xn )T `(f (xn ))}N
+n=1 .
+Proof of Proposition 2. This a simple consequence of Maurer and Pontil [2009, Theorem 6], which is
+a uniform convergence version of Bennet’s inequality [Bennett, 1962].
+The above may be contrast to the bound achievable for the standard empirical risk using one-hot
+labels: by Maurer and Pontil [2009, Theorem 6],
+s
+
+log MδN
+log MδN
+,
+R(f ) ≤ R̂(f ; S) + O  VN (f ) ·
++
+N
+N
+where here we consider a function class H comprising functions h(x, y) = eT
+y `(f (x)), with uniform
+covering number MN . Combining the above with Lemma 1, we see that the Bayes-distilled empirical
+risk results in a lower variance penalty.
+To summarise the statistical perspective espoused above, a student should ideally have access to the
+underlying class-probabilities p∗ (x), rather than a single realisation y ∼ p∗ (x). As a final comment,
+the above provides a statistical perspective on the value of “dark knowledge”: the teacher’s “wrong”
+logits y 0 6= y for an example (x, y) provide approximate information about the Bayes class-probabilities.
+This results in a lower-variance student objective, aiding generalisation.
+
+3.2
+
+Distilling from an imperfect teacher
+
+The previous section explicates how an idealised “Bayes teacher” can be beneficial to a student. How
+does this translate to more realistic settings, where one obtains predictions from a teacher which
+itself is learned form data?
+Our first observation is that a teacher’s predictor pt can typically be seen as an imperfect estimate of
+the true p∗ . Indeed, if the teacher is trained with a loss that is proper [Savage, 1971, Schervish, 1989,
+Buja et al., 2005], then
+
+
+R(f ) = E D(p∗ (x)kpt (x)) + constant,
+(8)
+x
+
+where D(·k·) is a (loss-dependent) divergence between the true and estimated class-probability
+functions. For example, the softmax cross-entropy corresponds to D(·k·) being the KL divergence
+between the distributions. The teacher’s goal is thus fundamentally to ensure that their predictions
+align with the true class-probability function.
+Of course, a teacher learned from finite samples is unlikely to achieve zero divergence in (8). Indeed,
+even high-capacity teacher models may not be rich enough capture the true p∗ . Further, even if the
+teacher can represent p∗ , it may not be able to learn this perfectly given a finite sample, owing to
+both statistical (e.g., the risk of overfitting) and optimisation (e.g., non-convexity of the objective)
+issues. We must thus treat pt as an imperfect estimate of p∗ . The natural question is: will such an
+estimate still improve generalisation?
+To answer this, we establish a fundamental bias-variance tradeoff when performing distillation.
+Specifically, we show the difference between the distilled risk R̃(f ; S) (cf. (5)) and population risks
+R(f ) (cf. (6)) depends on how variable the loss under the teacher is, and how well the teacher
+6
+
+estimates p∗ in a squared-error sense. Intuitively, the latter captures how well the teacher estimates
+p∗ on average (bias), and how variable the teacher’s predictions are (variance).
+Proposition 3. Pick any bounded loss `. Suppose we have a teacher model pt with corresponding
+distilled empirical risk in (5). For constant C > 0 and any predictor f : X → RL ,
+h
+i
+ 
+
+
+2
+1
+E (R̃(f ; S) − R(f ))2 ≤
+· V pt (x)T `(f (x)) + C · E kpt (x) − p∗ (x)k2
+N
+ 
+
+
+
+
+
+1
+≤
+· V pt (x)T `(f (x)) + C · kE pt (x) − p∗ (x)k22 + V pt (x) ,
+N
+
+(9)
+(10)
+
+where V [·] denotes the sum of coordinate-wise variance.
+.
+
+Proof of Proposition 3. Let ∆ = R̃(f ; S) − R(f ). Then,
+i
+h
+ 
+2
+E (R̃(f ; S) − R(f ))2 = E ∆2 = V[∆] + E [∆] .
+Observe that
+
+
+E [∆] = E (pt (x) − p∗ (x))T `(f (x))
+x
+
+
+≤ E kpt (x) − p∗ (x)k2 · k`(f (x))k2
+x
+
+
+≤ E kpt (x) − p∗ (x)k2 · C · k`(f (x))k∞
+x
+
+
+≤ C · E kpt (x) − p∗ (x)k2 ,
+x
+
+where the second line is by the Cauchy-Schwartz inequality, and the third line by the equivalence of
+norms. Now, (9) follows since R(f ) is a constant, implying
+V[∆] = V[R̃(f ; S)] =
+
+
+
+1
+· V pt (x)T `(f (x)) .
+N
+
+For (10), by Jensen’s inequality, and the definition of variance,
+ 
+
+
+2
+≤ E kpt (x) − p∗ (x)k22
+E kpt (x) − p∗ (x)k2
+x
+x
+
+
+
+
+= kE pt (x) − p∗ (x)k22 + V pt (x) .
+
+Unpacking the above, the fidelity of the distilled risk’s approximation to the true one depends on
+three factors: how variable the expected loss is for a random instance; how well the teacher’s pt
+approximates the true p∗ on average; and how variable the teacher’s predictions are. Mirroring the
+previous section, we may convert Proposition 3 into a generalisation bound for the student:
+
+R(f ) ≤ R̃(f ; S) + C(F, N ) + O Ekpt (x) − p∗ (x)k2 ,
+(11)
+where C is the penalty term from Proposition 2. As is intuitive, using an imperfect teacher invokes
+an additional penalty depending on how far the predictions are from the Bayes, in a squared-error
+sense. For completeness, a formal statement is provided in Proposition 5 in Appendix A.
+
+3.3
+
+Discussion and implications
+
+Our statistical perspective gives a simple yet powerful means of understanding distillation. Our
+formal results follow readily from this perspective, but their implications are subtle, and merit further
+discussion.
+7
+
+. Why accuracy is not enough. Our bias-variance result establishes that if the teacher provides
+good class-probabilities, in the sense of approximating p∗ in a mean-square sense, then the resulting
+student should generalise well. In deep networks, this does not imply providing the teacher having
+higher accuracy; such models may be accurate while being overly confident [Guo et al., 2017, Rothfuss
+et al., 2019]. Our result thus potentially illuminates why more accurate teachers may lead to poorer
+students, as has been noted empirically [Müller et al., 2019]; see also §5.2.
+In practice, the precise bound derived above is expected to be loose. However, its qualitative trend
+may be observed in practice. Figure 1 (see also §5.2) illustrates how increasing the depth of a ResNet
+model may increase accuracy, but degrade probabilistic calibration. This is seen to directly relate to
+the quality of a student distilled from these models.
+Temperature scaling [Hinton et al., 2015], a very common and empirically successful trick in distillation,
+can also be analysed through this perspective. Usually, teachers are highly complex and optimised to
+maximise accuracy; hence, they often become overly confident. Increasing the temperature can help
+the student-target be closer to the true distribution, and not just convey the most accurate label.
+. Teacher variance and model capacity. Proposition 3 allows for pt to be random (e.g., owing to the
+t
+teacher being learned from some independent sample S t ∼ PN ). Consequently, the variance terms
+not only reflect how diffused the teacher’s predictions are, but also how much these predictions vary
+over fresh draws of the teacher sample. High-capacity teachers may yield vastly different predictions
+when trained on fresh samples. This variability incurs a penalty in the third term in Proposition 3.
+At the same time, such teachers can better estimate the Bayes p∗ (x), which incurs a lower bias. The
+delicate tradeoff between these concerns translates into (student) generalisation.
+We may understand the label smoothing trick [Szegedy et al., 2016] in light of the above. This
+α
+corresponds to mixing the student labels with uniform predictions, yielding pt (x) = (1 − α) · ey + L
+·1
+∗
+for α ∈ [0, 1]. From the perspective of modelling p , choosing α > 0 introduces a bias. However, pt (x)
+has lower variance than the one-hot labels ey ’s, owing to the (1 − α) scaling. Provided the bias is
+not too large, smoothing can thus aid generalisation.
+We remark also that the first variance term in Proposition 3 vanishes as N → ∞. This is intuitive:
+in the limit of infinite student samples, the quality of the distilled objective is wholly determined by
+how well the teacher probabilities model the Bayes probabilities. For small N , this term measures
+how diffused the losses are when weighted by the teacher probabilities (similar to Lemma 1).
+. How much teacher bias is admissible? When pt 6= p∗ , Proposition 3 reveals that a distilled student’s
+generalisation gap depends on the bias and variance in pt . By contrast, from a labelled sample, the
+student’s generalisation gap depends on the complexity of its model class F. Distillation can be
+expected to help when the first gap is lower than the second.
+Concretely, when trained from limited labelled samples, the student will find minf ∈F R̂(f ; S), which
+incurs a high statistical error. Now suppose we have a large amount of unlabelled data N → ∞. A
+distilled student can then reliably find the minimiser (following (8))
+
+
+min E D(pt (x)kf (x)) ,
+f ∈F x
+
+with essentially no statistical error, but an approximation error given by the teacher’s bias. In this
+setting, we thus need the teacher’s bias to be lower than the statistical error.
+. On teacher versus student samples A qualifier to our results is that they assume a disjoint set of
+samples for the teacher and student. For example, it may be that the teacher is trained on a pool of
+labelled samples, while the student is trained on a larger pool of unlabelled samples. The results thus
+do not directly hold for the settings of self- or co-distillation [Furlanello et al., 2018, Anil et al., 2018],
+wherein the same sample is used for both models. Combining our results with recent analyses from
+the perspective of regularisation [Mobahi et al., 2020] and data-dependent function classes [Foster
+et al., 2019] would be of interest in future work.
+
+8
+
+4
+
+Distillation meets multiclass retrieval
+
+Our statistical view has thus far given insight into the potential value of distillation. We now show
+a distinct practical benefit of this view, by leveraging it for a novel application of distillation to
+multiclass retrieval. Our basic idea is to construct a double-distillation objective, wherein distillation
+informs the loss as to the relative confidence of both “positive” and “negative” labels.
+
+4.1
+
+Double-distillation for multiclass retrieval
+
+Recall from (4) that in multiclass retrieval, we wish to ensure that the top-ranked labels in our
+predictor f (x) ∈ RL contain the true label. The softmax-cross entropy `(y, f (x)) in (2) offers a
+reasonable surrogate loss for this task, since
+
+
+X
+1
+eγ·(fy0 (x)−fy (x))  = max
+fy0 (x) − fy (x).
+lim · log 
+γ→0 γ
+y 0 6=y
+0
+y ∈[L]
+
+The latter is related to the Cramer-Singer loss [Crammer and Singer, 2002], which bounds the
+top-1 retrieval loss. Given a sample {(xn , yn )}N
+n=1 , we thus seek to minimise `(yn , f (xn )). From our
+statistical view, there is value in instead computing p∗ (xn )T `(f (xn )): intuitively, each y ∈ [L] acts a
+“smooth positive”, weighted by the Bayes probability p∗y (xn ).
+We observe, however, that such smoothing does not affect the innards of the loss itself. In particular,
+one critique of (2) is that it assigns equal importance to each y 0 ∈ [L]. Intuitively, mistakes on labels
+y 0 that are a poor explanation for x — i.e., have low p∗y0 (x) — ought to be strongly penalised. On the
+other hand, if under the Bayes probabilities some y 0 6= y strongly explains x, it ought to be ignored.
+To this end, consider a generalised softmax cross-entropy:
+h
+i
+.
+`(y, f (x)) = log 0 E
+efy0 (x)−fy (x) ,
+y ∼P (x)
+
+(12)
+
+where P (x) ∈ ∆L is a distribution over labels. When P (x) is uniform, this is exactly the standard
+cross-entropy loss (cf. (2)) plus a constant. For non-uniform P (x), however, the loss is encouraged to
+focus on ensuring fy (x)  fy0 (x) for those y 0 with large Py0 (x).
+Continuing our statistical view, we posit that an ideal choice of P is P (x) = Ψ(p∗ (x)), where Ψ(·) is
+some decreasing function. Concretely, our new loss for a given (x, y) is
+X
+`(y, f (x)) = log
+Ψ(p∗y0 (x)) · efy0 (x)−fy (x) .
+y 0 ∈[L]
+
+Intuitively, the loss treats y as a “positive” label for x, and each y 0 ∈ [L] where y 0 6= y as a “negative”
+label. The loss seeks to score the positive label over all labels which poorly explain x. Compared to
+the standard softmax cross-entropy, we avoid penalisation when y 0 plausibly explains x as well.
+Recall that under a distillation setup, a teacher model provides us estimates pt (x) of p∗ (x). Consequently, to estimate this risk on a finite sample S = {(xn , yn )}N
+n=1 , we may construct the following
+double-distillation objective:
+N
+
+1 X t
+p (xn )T `(f (xn ))
+N n=1
+h
+i
+`(y, f (xn )) = log pt (xn )T ef (xn )−fy (xn ) ,
+R̃(f ; S) =
+
+.
+
+where pt (x) = Ψ(pt (x)); unrolling, this corresponds to the objective
+
+
+N
+X
+1 X X t
+R̃(f ; S) =
+p (y | xn ) · log 
+pt (y 0 | xn ) · efy0 (xn )−fy (xn )  .
+N n=1
+0
+y ∈[L]
+
+y∈[L]
+
+9
+
+(13)
+
+Observe that (13) uses the teacher in two ways: the first is the standard use of distillation to smooth
+the “positive” training labels. The second is a novel use of distillation to smooth the “negative” labels.
+Here, for any candidate “positive” label y, we apply varying weights to “negative” labels y 0 6= y when
+computing each `(y, f (x)).
+It remains to specify the precise form of Ψ(·) in (13). A natural choice of 1 − pt (x); however, since the
+entries of pt (x) sum to one, this may not allow the loss to sufficiently ignore other “positive” labels.
+Concretely, suppose there are L+ plausible “positive” labels, which have most of the probability mass
+under pt (x). Then, the total weight assigned to these labels will be roughly L+ − 1; this is of the
+order of L+ , which is what we would get from uniform weights.
+To resolve this, we may instead use weights proportional to 1 − σ(a · sy (x)), where σ(·) is the sigmoid
+function, sy (x) is the teacher logit, and a > 0 is a scaling parameter which may be tuned. This
+parameterisation allows for multiple labels to have high (or low) weights. In the above example, each
+“positive” label can individually get a score close to 0. The total weight of the “positives” can thus
+also be close to 0, and so the loss can learn to ignore them.
+
+4.2
+
+Discussion and implications
+
+The viability of distillation as a means of smoothing negatives has not, to our knowledge, been
+explored in the literature. The proposal is, however, a natural consequence of our statistical view of
+distillation developed in §3.
+The double-distillation objective in (13) relates to ranking losses. In bipartite ranking settings [Cohen
+et al., 1999], one assumes an instance space X and binary labels Y = {0, 1} denoting that items are
+either relevant, or irrelevant. Rudin [2009] proposed the following push loss for this task:
+ 
+
+.
+Rpush (h) = E g 0 E [φ(h(z 0 ) − h(z))]
+z∼P+
+
+z ∼P−
+
+where P+ and P− are distributions over positive and negative instances respectively, and g(·), φ(·)
+are convex non-decreasing functions. Similar losses have also been studied in Yun et al. [2014]. The
+generalised softmax cross-entropy in (12) can be seen as a contextual version of this objective for each
+x ∈ X, where g(z) = log(1 + z) and φ(z) = e−z . In double-distillation, the contextual distributions
+P± (x) are approximated using the teacher’s predictions pt (x).
+There is a broad literature on using a weight on “negatives” in the softmax [Liu et al., 2016, 2017,
+Wang et al., 2018, Li et al., 2019, Cao et al., 2019]; this is typically motivated by ensuring a varying
+margin for different classes. The resulting weighting is thus either constant or label-dependent, rather
+than the label- and example-dependent weights provided by distillation. Closer still to our framework
+is the recent work of Khan et al. [2019], which employs uncertainty estimates in the predictions for a
+given example and label to adjust the desired margin in the softmax. While not explicitly couched
+in terms of distillation, this may be understood as a “self-distillation” setup, wherein the current
+predictions of a model are used to progressively refine future iterates. Compared to double-distillation,
+however, the nature of the weighting employed is considerably more complicated.
+There is a rich literature on the problem of label ranking, where typically it is assumed that one
+observes a (partial) ground-truth ranking over labels [Dekel et al., 2003, Fürnkranz et al., 2008,
+Vembu and Gärtner, 2011]. We remark also that the view of the softmax as a ranking loss has received
+recent attention [Bruch et al., 2019, Bruch, 2019]. Exploiting the statistical view of distillation in
+these regimes is a promising future direction. Tang and Wang [2018] explored distillation in a related
+learning-to-rank framework. While similar in spirit, this focusses on pointwise losses, wherein the
+distinction between positive and negative smoothing is absent.
+Finally, we note that while our discussion has focussed on the softmax cross-entropy, double-distillation
+may be useful for a broader class of losses, e.g., order-weighted losses as explored in Usunier et al.
+[2009], Reddi et al. [2019].
+10
+
+1.0
+0.9
+
+Student AUC
+
+Student AUC
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+
+One-hot
+Bayes-distillation
+5
+
+10
+
+50
+
+100
+
+Training samples
+
+0.8
+0.7
+0.6
+One-hot
+Bayes-distillation
+
+0.5
+0.4
+
+500
+
+(a) Student AUC versus # of training samples.
+
+0.125
+
+0.25
+
+0.5
+
+1.0
+
+Class separation (r)
+
+2.0
+
+(b) Student AUC versus class separation.
+
+Figure 2: Distillation with Bayes-teacher on synthetic data comprising Gaussian class-conditionals.
+Distillation offers a noticeable gain over the standard one-hot encoding, particularly in the smallsample regime (left), and when the underlying problem is noisier (right).
+
+5
+
+Experimental results
+
+We now present experiments illustrating three key points:
+(i) we show that distilling with true (Bayes) class-probabilities improves generalisation over one-hot
+labels, validating our statistical view of distillation.
+(ii) we illustrate our bias-variance tradeoff on synthetic and real-world datasets, confirming that
+teachers with good estimates of p∗ can be usefully distilled.
+(iii) we finally show that double-distillation performs well on real-world multiclass retrieval datasets,
+confirming the broader value in our statistical perspective.
+
+5.1
+
+Is Bayes a good teacher for distillation?
+
+To illustrate our statistical perspective, we conduct a synthetic experiment where p∗ (x) is known,
+and show that distilling these Bayes class-probabilities benefits learning.
+We generate training samples S = {(xn , yn )}N
+i=1 from a distribution P comprising class-conditionals
+which are each 10-dimensional Gaussians, with means ±(1, 1, . . . , 1) respectively. By construction,
+the Bayes class-probability distribution is p∗ (x) = (P(y = 0 | x), P(y = 1 | x)) where P(y = 1 | x) =
+.
+σ((θ∗ )T x), for θ∗ = (2, 2, . . . , 2).
+We compare two training procedures: standard logistic regression on S, and Bayes-distilled logistic
+regression using p∗ (xn ) per (7). Logistic regression is well-specified for this problem, i.e., as N → ∞,
+the standard learner will learn θ∗ . However, we will demonstrate that on finite samples, the Bayesdistilled learner’s knowledge of p∗ (xn ) will be beneficial. We reiterate that while this learner could
+trivially memorise the training p∗ (xn ), this would not generalise.
+Figure 2(a) compares the performance of these two approaches for varying training set sizes, where
+for each training set size we perform 100 independent trials and measure the AUC-ROC on a test set
+of 104 samples. We observe two key trends: first, Bayes-distillation generally offers a noticeable gain
+over the standard one-hot encoding, in line with our theoretical guarantee of low variance.
+Second, both methods see improved performance with more samples, but the gains are greater for the
+one-hot encoding. This in line with our intuition that distillation effectively augments each training
+sample: when N is large to begin with, the marginal gain of such augmentation is minimal.
+Figure 2(b) continues the exploration of this setting. We now vary the distance r between the means
+of each of the Gaussians. When r is small, the two distributions grow closer together, making the
+classification problem more challenging. We thus observe that both methods see worse performance
+11
+
+as r is smaller. At the same time, smaller r makes the one-hot labels have higher variance compared
+to the Bayes class-probabilities. Consequently, the gains of distillation over the one-hot encoding are
+greater for this setting, in line with our guarantee on the lower-variance Bayes-distilled risk aiding
+generalisation (Proposition 2).
+As a final experiment, we verify the claim that teacher accuracy does not suffice for improving student
+generalisation, since this does not necessarily correlate with the quality of the teacher’s probability
+estimates. We assess this by artificially distorting the teacher probabilities so as to perfectly preserve
+teacher accuracy, while degrading their approximation to p∗ . Appendix B.2 presents plots confirming
+that such degradation progressively reduces the gains of distillation.
+
+5.2
+
+Illustration of bias-variance tradeoff
+
+We next illustrate our analysis on the bias-variance tradeoff in distillation from §3.2 on synthetic and
+real-world datasets.
+Synthetic. We now train a series of increasingly complex teacher models pt , and assess their
+resulting distillation benefit on a synthetic problem. Here, the data is sampled from a marginal
+P(x) which is a zero-mean isotropic Gaussian in 2D. The class-probability function is given by
+η(x) = σ(2 · (kxk∞ − 0.5)), so that the negatives are concentrated in a rectangular slab.
+We consider teachers that are random forests of a fixed depth d ∈ {1, 2, 4, 8, 16}, with 3 base
+estimators. Increasing d has the effect of reducing teacher bias (since the class of depth-d trees can
+better approximate p∗ ), but increasing teacher variance (since the class of depth-d trees can induce
+complex decision boundaries). For fixed d, we train a teacher model on the given training sample
+S (with N = 100). We then distill the teacher predictions to a student model, which is a depth 4
+tree. For each such teacher, we compute its MSE, as well as the test set AUC of the corresponding
+distilled student. We repeat this for 100 independent trials.
+Figure 3(a) and 3(b) show how the teacher’s depth affects its MSE in modelling p∗ , as well as the
+AUC of the resulting distilled student. There is an optimal depth d = 8 at which the teacher achieves
+the best MSE approximation of p∗ . In keeping with the theory, this also corresponds to the teacher
+whose resulting student generalises the best. Figure 4(a) combines these plots to explicitly show the
+relationship between the the teacher’s MSE and the student’s AUC. In line with the theory, more
+accurate estimates of p∗ result in better students.
+Note that at depth 10, the teacher model is expected to have lower bias; however, it results in a
+slightly worse distilled student. This verifies that one may favour a higher-bias teacher if it has lower
+variance: a teacher may achieve a lower MSE – and thus distill better – by slightly increasing its
+bias while lowering variance. See Appendix B.1 for additional bias-variance experiments on synthetic
+data.
+Fashion MNIST. It is challenging to assess the bias-variance tradeoff on real-world datasets, where
+the Bayes p∗ (x) is unknown. As a proxy, we take the fashion MNIST dataset, and treat a powerful
+teacher model as our p∗ . We train an MLP teacher with two hidden layers with 128 and 10 dimensions.
+This achieves a test accuracy of ∼ 89%.
+We then inject bias and noise per (16), and distill the result to a linear logistic regression model. To
+amplify the effects of distillation, we constrain the student by only offering it the top 2500 samples
+that the original teacher deems most uncertain. Figures 4(b) demonstrates similar trend to the
+synthetic dataset, with the best MSE approximator to the original teacher generally yielding the
+best student.
+CIFAR-100. We verify that accurate probabilty estimation by the teacher strongly influences
+student generalisation, and that this can be at odds with accuracy. We revisit the plots introduced
+in Figure 1. Here, we train ResNets of varying depths on the CIFAR-100 dataset, and use these
+as teachers to distill to a student ResNet of fixed depth 8. Figure 1(a) reveals that the teacher
+
+12
+
+Student AUC
+
+Teacher MSE
+
+0.010
+0.008
+0.006
+0.004
+
+2.0
+
+4.0
+
+6.0
+
+8.0
+
+Teacher depth
+
+0.86
+0.84
+0.82
+0.80
+
+10.0
+
+(a) Teacher depth versus MSE.
+
+2.0
+
+4.0
+
+6.0
+
+8.0
+
+Teacher depth
+
+10.0
+
+(b) Teacher depth versus student AUC.
+
+Figure 3: Relationship between depth of teacher’s decision tree model (model complexity) and its
+MSE in modelling p∗ , as well as the AUC of the resulting distilled student, on a synthetic problem.
+There is an optimal depth d = 8 at which the teacher achieves the best MSE approximation of p∗ . In
+keeping with the theory, this corresponds to the teacher whose resulting student generalises the best.
+
+Student accuracy
+
+Student AUC
+
+0.86
+0.85
+0.84
+0.83
+0.82
+0.004
+
+0.006
+
+0.008
+
+Teacher MSE
+
+0.010
+
+0.60
+0.55
+0.50
+0.45
+0.40
+0.35
+0.30
+0.25
+0.00 0.02 0.04 0.06 0.08 0.10 0.12
+
+Teacher MSE
+
+(a) Synthetic dataset.
+
+(b) Fashion MNIST dataset.
+
+Figure 4: Relationship between teacher’s MSE against true class-probability and student’s test set
+AUC. In keeping with the theory, teachers which better approximate p∗ in an MSE sense yield better
+students.
+model gets increasingly more accurate as its depth increases; however, the corresponding log-loss
+starts increasing beyond a depth of 14. This indicates the teacher’s probability estimates become
+progressively poorer approximations of the Bayes class-probability distribution p∗ (x). The accuracy
+of the student model also degrades beyond a teacher depth of 14, reflecting the bias-variance bound
+in Proposition 3.
+
+5.3
+
+Double-distillation for multiclass retrieval
+
+Our final set of experiments confirm the value in our double-distillation objective in (13). To do so, we
+use the AmazonCat-13K and Amazon-670K benchmark datasets for multiclass retrieval [McAuley
+and Leskovec, 2013, Bhatia et al., 2015]. The data is multilabel ; following Reddi et al. [2019], we
+make it multiclass by creating a single example (x, y) for each label y associated with x.
+We construct a “teacher” model using a feedforward network with a single (linear) hidden layer of
+width 512, trained to minimise the softmax cross-entropy loss. We then construct a “student” model
+using the same architecture, but with a hidden layer of width 8 for AmazonCat-13K and 64 for
+
+13
+
+Method
+
+P@1
+
+P@3
+
+P@5
+
+Teacher
+
+0.8495
+
+0.7412
+
+0.6109
+
+Student
+Student + distillation
+Student + double-distillation
+
+0.7913
+0.8131
+0.8560
+
+0.6156
+0.6363
+0.7148
+
+0.4774
+0.4918
+0.5715
+
+Method
+
+P@1
+
+P@3
+
+P@5
+
+Teacher
+
+0.3983
+
+0.3598
+
+0.3298
+
+Student
+Student + distillation
+Student + double-distillation
+
+0.3307
+0.3461
+0.3480
+
+0.3004
+0.3151
+0.3161
+
+0.2753
+0.2892
+0.2865
+
+Table 1: Precision@k metrics for double-distillation objective against standard distillation and student
+baseline on AmazonCat-13K (left) and AmazonCat-670K (right). With double-distillation, the
+student is seen to significantly improve performance over training with one-hot labels, but also a
+distilled model which applies uniform weighting of all negatives.
+Amazon-670K because Amazon-670K is significantly larger than AmazonCat-13K (670k vs 13k
+labels). This student model is compared to a distilled student, where the teacher logits are used
+in place of the one-hot training labels. Both methods are then compared to the double-distillation
+objective, where the teacher logits are used to smooth the negatives in the softmax per (12) and (13).
+We compare all methods using the precision@k metric with k ∈ {1, 3, 5}, averaging these over multiple
+runs. Table 1 summarises our findings. We see that distillation offers a small but consistent bump in
+performance over the student baseline. Double-distillation further improves upon this, especially at
+the head of the prediction (P@1 and P@3), confirming the value of weighing negatives differently.
+The gains are particularly significant on AmazonCat-13K, where the double-distilled student can
+improve upon the teacher model itself. Overall, our findings illustrate the broader value of the
+statistical perspective of distillation.
+
+6
+
+Conclusion
+
+We presented a statistical perspective on distillation, building on a simple observation: distilling the
+Bayes class-probabilities yields a more reliable estimate of the population risk. Viewing distillation in
+this light, we formalised a bias-variance tradeoff to quantify the effect of approximate teacher classprobability estimates on student generalisation, and also studied a novel application of distillation to
+multiclass retrieval. Towards developing a comprehensive understanding of distillation, studying the
+optimisation aspects of this viewpoint, and the setting of overparametrised teacher models [Zhang
+et al., 2018] would be of interest.
+
+References
+Rohan Anil, Gabriel Pereyra, Alexandre Passos, Robert Ormandi, George E. Dahl, and Geoffrey E.
+Hinton. Large scale distributed neural network training through online distillation. In International Conference on Learning Representations, 2018. URL https://openreview.net/forum?id=
+rkr1UDeC-.
+Jimmy Ba and Rich Caruana. Do deep nets really need to be deep? In Z. Ghahramani, M. Welling,
+C. Cortes, N. D. Lawrence, and K. Q. Weinberger, editors, Advances in Neural Information
+Processing Systems 27, pages 2654–2662. Curran Associates, Inc., 2014.
+14
+
+George Bennett. Probability inequalities for the sum of independent random variables. Journal of
+the American Statistical Association, 57(297):33–45, 1962.
+Kush Bhatia, Himanshu Jain, Purushottam Kar, Manik Varma, and Prateek Jain. Sparse local
+embeddings for extreme multi-label classification. In Advances in Neural Information Processing
+Systems, pages 730–738, 2015.
+Leo Breiman and Nong Shang. Born again trees. https://pdfs.semanticscholar.org/b6ba/
+5374ed8e09845996626bc62cc6d938e83fee.pdf, 1996.
+Sebastian Bruch. An alternative cross entropy loss for learning-to-rank. CoRR, abs/1911.09798, 2019.
+Sebastian Bruch, Xuanhui Wang, Michael Bendersky, and Marc Najork. An analysis of the softmax
+cross entropy loss for learning-to-rank with binary relevance. In Proceedings of the 2019 ACM
+SIGIR International Conference on Theory of Information Retrieval, ICTIR ’19, page 75–78, New
+York, NY, USA, 2019. Association for Computing Machinery. ISBN 9781450368810.
+Cristian Bucilǎ, Rich Caruana, and Alexandru Niculescu-Mizil. Model compression. In Proceedings
+of the 12th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining,
+KDD ’06, pages 535–541, New York, NY, USA, 2006. ACM.
+Andreas Buja, Werner Stuetzle, and Yi Shen. Loss functions for binary class probability estimation
+and classification: Structure and applications. Technical report, UPenn, 2005.
+Kaidi Cao, Colin Wei, Adrien Gaidon, Nikos Aréchiga, and Tengyu Ma. Learning imbalanced datasets
+with label-distribution-aware margin loss. In Advances in Neural Information Processing Systems
+32: Annual Conference on Neural Information Processing Systems 2019, NeurIPS 2019, 8-14
+December 2019, Vancouver, BC, Canada, pages 1565–1576, 2019.
+Z. B. Celik, D. Lopez-Paz, and P. McDaniel. Patient-driven privacy control through generalized
+distillation. In 2017 IEEE Symposium on Privacy-Aware Computing (PAC), pages 1–12, Aug 2017.
+William W. Cohen, Robert E. Schapire, and Yoram Singer. Learning to order things. J. Artif. Intell.
+Res., 10:243–270, 1999.
+Koby Crammer and Yoram Singer. On the algorithmic implementation of multiclass kernel-based
+vector machines. J. Mach. Learn. Res., 2:265–292, March 2002. ISSN 1532-4435.
+Mark W. Craven and Jude W. Shavlik. Extracting tree-structured representations of trained networks.
+In Proceedings of the 8th International Conference on Neural Information Processing Systems,
+NIPS’95, pages 24–30, Cambridge, MA, USA, 1995. MIT Press.
+Wojciech M. Czarnecki, Simon Osindero, Max Jaderberg, Grzegorz Swirszcz, and Razvan Pascanu.
+Sobolev training for neural networks. In I. Guyon, U. V. Luxburg, S. Bengio, H. Wallach, R. Fergus,
+S. Vishwanathan, and R. Garnett, editors, Advances in Neural Information Processing Systems 30,
+pages 4278–4287. Curran Associates, Inc., 2017.
+Ofer Dekel, Christopher D. Manning, and Yoram Singer. Log-linear models for label ranking. In
+Advances in Neural Information Processing Systems 16, pages 497–504, 2003.
+Bin Dong, Jikai Hou, Yiping Lu, and Zhihua Zhang. Distillation ≈ early stopping? harvesting dark
+knowledge utilizing anisotropic information retrieval for overparameterized neural network, 2019.
+Dylan J Foster, Spencer Greenberg, Satyen Kale, Haipeng Luo, Mehryar Mohri, and Karthik Sridharan.
+Hypothesis set stability and generalization. In Advances in Neural Information Processing Systems
+32, pages 6726–6736. Curran Associates, Inc., 2019.
+Tommaso Furlanello, Zachary Chase Lipton, Michael Tschannen, Laurent Itti, and Anima Anandkumar. Born-again neural networks. In Proceedings of the 35th International Conference on Machine
+Learning, ICML 2018, Stockholmsmässan, Stockholm, Sweden, July 10-15, 2018, pages 1602–1611,
+2018.
+15
+
+Johannes Fürnkranz, Eyke Hüllermeier, Eneldo Loza Mencía, and Klaus Brinker. Multilabel classification via calibrated label ranking. Machine Learning, 73(2):133–153, 2008.
+Akhilesh Gotmare, Nitish Shirish Keskar, Caiming Xiong, and Richard Socher. A closer look at deep
+learning heuristics: Learning rate restarts, warmup and distillation. In International Conference
+on Learning Representations, 2019.
+Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q. Weinberger. On calibration of modern neural
+networks. In Proceedings of the 34th International Conference on Machine Learning, ICML 2017,
+Sydney, NSW, Australia, 6-11 August 2017, pages 1321–1330, 2017.
+Geoffrey E. Hinton, Oriol Vinyals, and Jeffrey Dean. Distilling the knowledge in a neural network.
+CoRR, abs/1503.02531, 2015.
+Himanshu Jain, Venkatesh Balasubramanian, Bhanu Chunduri, and Manik Varma. Slice: Scalable
+linear extreme classifiers trained on 100 million labels for related searches. In Proceedings of
+the Twelfth ACM International Conference on Web Search and Data Mining, WSDM ’19, pages
+528–536, New York, NY, USA, 2019. ACM.
+S. Khan, M. Hayat, S. W. Zamir, J. Shen, and L. Shao. Striking the right balance with uncertainty.
+In 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pages
+103–112, 2019.
+M. Lapin, M. Hein, and B. Schiele. Analysis and optimization of loss functions for multiclass, top-k,
+and multilabel classification. IEEE Transactions on Pattern Analysis and Machine Intelligence, 40
+(7):1533–1554, July 2018.
+Z. Li and D. Hoiem. Learning without forgetting. IEEE Transactions on Pattern Analysis and
+Machine Intelligence, 40(12):2935–2947, Dec 2018. ISSN 1939-3539.
+Zeju Li, Konstantinos Kamnitsas, and Ben Glocker. Overfitting of neural nets under class imbalance:
+Analysis and improvements for segmentation. In Dinggang Shen, Tianming Liu, Terry M. Peters,
+Lawrence H. Staib, Caroline Essert, Sean Zhou, Pew-Thian Yap, and Ali Khan, editors, Medical
+Image Computing and Computer Assisted Intervention – MICCAI 2019, pages 402–410, Cham,
+2019. Springer International Publishing.
+Weiyang Liu, Yandong Wen, Zhiding Yu, and Meng Yang. Large-margin softmax loss for convolutional
+neural networks. In Proceedings of the 33rd International Conference on International Conference
+on Machine Learning - Volume 48, ICML’16, page 507–516. JMLR.org, 2016.
+Weiyang Liu, Yandong Wen, Zhiding Yu, Ming Li, Bhiksha Raj, and Le Song. Sphereface: Deep
+hypersphere embedding for face recognition. In 2017 IEEE Conference on Computer Vision and
+Pattern Recognition, CVPR 2017, Honolulu, HI, USA, July 21-26, 2017, pages 6738–6746, 2017.
+Yu Liu, Xuhui Jia, Mingxing Tan, Raviteja Vemulapalli, Yukun Zhu, Bradley Green, and Xiaogang
+Wang. Search to distill: Pearls are everywhere but not the eyes, 2019.
+D. Lopez-Paz, B. Schölkopf, L. Bottou, and V. Vapnik. Unifying distillation and privileged information.
+In International Conference on Learning Representations (ICLR), November 2016.
+Andreas Maurer and Massimiliano Pontil. Empirical bernstein bounds and sample-variance penalization. In COLT 2009 - The 22nd Conference on Learning Theory, Montreal, Quebec, Canada, June
+18-21, 2009, 2009.
+Julian McAuley and Jure Leskovec. Hidden factors and hidden topics: Understanding rating
+dimensions with review text. In Proceedings of the 7th ACM Conference on Recommender Systems,
+RecSys ’13, page 165–172, New York, NY, USA, 2013. Association for Computing Machinery.
+ISBN 9781450324090.
+
+16
+
+Hossein Mobahi, Mehrdad Farajtabar, and Peter L. Bartlett. Self-distillation amplifies regularization
+in hilbert space, 2020.
+Rafael Müller, Simon Kornblith, and Geoffrey E. Hinton. When does label smoothing help? In
+Advances in Neural Information Processing Systems 32: Annual Conference on Neural Information
+Processing Systems 2019, NeurIPS 2019, 8-14 December 2019, Vancouver, BC, Canada, pages
+4696–4705, 2019.
+Gaurav Kumar Nayak, Konda Reddy Mopuri, Vaisakh Shaj, Venkatesh Babu Radhakrishnan, and
+Anirban Chakraborty. Zero-shot knowledge distillation in deep networks. In Proceedings of the
+36th International Conference on Machine Learning, ICML 2019, 9-15 June 2019, Long Beach,
+California, USA, pages 4743–4751, 2019.
+Nicolas Papernot, Patrick D. McDaniel, Xi Wu, Somesh Jha, and Ananthram Swami. Distillation
+as a defense to adversarial perturbations against deep neural networks. In IEEE Symposium on
+Security and Privacy, SP 2016, San Jose, CA, USA, May 22-26, 2016, pages 582–597, 2016.
+Mary Phuong and Christoph Lampert. Towards understanding knowledge distillation. In Kamalika
+Chaudhuri and Ruslan Salakhutdinov, editors, Proceedings of the 36th International Conference
+on Machine Learning, volume 97 of Proceedings of Machine Learning Research, pages 5142–5151,
+Long Beach, California, USA, 09–15 Jun 2019. PMLR.
+Ilija Radosavovic, Piotr Dollár, Ross B. Girshick, Georgia Gkioxari, and Kaiming He. Data distillation:
+Towards omni-supervised learning. In 2018 IEEE Conference on Computer Vision and Pattern
+Recognition, CVPR 2018, Salt Lake City, UT, USA, June 18-22, 2018, pages 4119–4128, 2018.
+Sashank J. Reddi, Satyen Kale, Felix Yu, Daniel Holtmann-Rice, Jiecao Chen, and Sanjiv Kumar.
+Stochastic negative mining for learning with large output spaces. In Proceedings of Machine
+Learning Research, volume 89 of Proceedings of Machine Learning Research, pages 1940–1949.
+PMLR, 16–18 Apr 2019.
+Jonas Rothfuss, Fabio Ferreira, Simon Boehm, Simon Walther, Maxim Ulrich, Tamim Asfour, and
+Andreas Krause. Noise regularization for conditional density estimation, 2019.
+Cynthia Rudin. The P-Norm Push: A simple convex ranking algorithm that concentrates at the top
+of the list. Journal of Machine Learning Research, 10:2233–2271, Oct 2009.
+Andrei A. Rusu, Sergio Gomez Colmenarejo, Çaglar Gülçehre, Guillaume Desjardins, James Kirkpatrick, Razvan Pascanu, Volodymyr Mnih, Koray Kavukcuoglu, and Raia Hadsell. Policy
+distillation. In 4th International Conference on Learning Representations, ICLR 2016, San Juan,
+Puerto Rico, May 2-4, 2016, Conference Track Proceedings, 2016.
+Leonard J. Savage. Elicitation of personal probabilities and expectations. Journal of the American
+Statistical Association, 66(336):783–801, 1971. ISSN 01621459.
+Mark J. Schervish. A general method for comparing probability assessors. Ann. Statist., 17(4):
+1856–1879, 12 1989.
+Christian Szegedy, Vincent Vanhoucke, Sergey Ioffe, Jonathon Shlens, and Zbigniew Wojna. Rethinking the inception architecture for computer vision. In 2016 IEEE Conference on Computer Vision
+and Pattern Recognition, CVPR 2016, Las Vegas, NV, USA, June 27-30, 2016, pages 2818–2826,
+2016.
+Jiaxi Tang and Ke Wang. Ranking distillation: Learning compact ranking models with high
+performance for recommender system. In Proceedings of the 24th ACM SIGKDD International
+Conference on Knowledge Discovery & Data Mining, KDD ’18, page 2289–2298, New York, NY,
+USA, 2018. Association for Computing Machinery. ISBN 9781450355520.
+
+17
+
+Jiaxi Tang, Rakesh Shivanna, Zhe Zhao, Dong Lin, Anima Singh, Ed H. Chi, and Sagar Jain.
+Understanding and improving knowledge distillation. CoRR, abs/2002.03532, 2020. URL https:
+//arxiv.org/abs/2002.03532.
+Zhiyuan Tang, Dong Wang, and Zhiyong Zhang. Recurrent neural network training with dark
+knowledge transfer. In 2016 IEEE International Conference on Acoustics, Speech and Signal
+Processing, ICASSP 2016, Shanghai, China, March 20-25, 2016, pages 5900–5904, 2016.
+Nicolas Usunier, David Buffoni, and Patrick Gallinari. Ranking with ordered weighted pairwise
+classification. In Proceedings of the 26th Annual International Conference on Machine Learning,
+ICML ’09, pages 1057–1064, New York, NY, USA, 2009. ACM.
+Shankar Vembu and Thomas Gärtner. Label Ranking Algorithms: A Survey, pages 45–64. Springer
+Berlin Heidelberg, Berlin, Heidelberg, 2011.
+F. Wang, J. Cheng, W. Liu, and H. Liu. Additive margin softmax for face verification. IEEE Signal
+Processing Letters, 25(7):926–930, 2018.
+Qizhe Xie, Eduard Hovy, Minh-Thang Luong, and Quoc V. Le. Self-training with noisy student
+improves imagenet classification, 2019.
+Jian Xue, Jinyu Li, and Yifan Gong. Restructuring of deep neural network acoustic models with
+singular value decomposition. In Interspeech, January 2013.
+Chenglin Yang, Lingxi Xie, Siyuan Qiao, and Alan L. Yuille. Training deep neural networks in
+generations: A more tolerant teacher educates better students. In The Thirty-Third AAAI
+Conference on Artificial Intelligence, AAAI 2019, pages 5628–5635, 2019.
+J. Yim, D. Joo, J. Bae, and J. Kim. A gift from knowledge distillation: Fast optimization, network
+minimization and transfer learning. In 2017 IEEE Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 7130–7138, July 2017.
+Hyokun Yun, Parameswaran Raman, and S. V. N. Vishwanathan. Ranking via robust binary
+classification. In Advances in Neural Information Processing Systems 27: Annual Conference on
+Neural Information Processing Systems 2014, December 8-13 2014, Montreal, Quebec, Canada,
+pages 2582–2590, 2014.
+Hongyi Zhang, Moustapha Cisse, Yann N. Dauphin, and David Lopez-Paz. mixup: Beyond empirical
+risk minimization. In International Conference on Learning Representations, 2018.
+
+18
+
+Supplementary material for “Why distillation helps: a
+statistical perspective”
+A
+
+Theory: additional results
+
+Proposition 4. Suppose we have a teacher model pt with corresponding distilled empirical risk (5).
+Furthermore, assume pt is unbiased, i.e., E [pt (x)] = p∗ (x) for all x ∈ X. Then, for any predictor
+f : X → RL ,
+h
+i
+h
+i
+E (R̂∗ (f ; S) − R(f ))2 ≤ E (R̃(f ; S) − R(f ))2
+for some constant C > 0.
+.
+.
+ˆ =
+ˆ∗ =
+Proof of Proposition 4. Let ∆
+R̃(f ; S) − R̂∗ (f ; S) and ∆
+R̂∗ (f ; S) − R(f ). Then,
+h
+i
+h
+i
+ˆ +∆
+ˆ ∗ )2 .
+E (R̃(f ; S) − R(f ))2 = E (∆
+h i
+ˆ = 0 since pt is an unbiased estimator of p∗ . Using this fact, we obtain the desired
+Note that Et ∆
+p
+
+result as follows:
+h
+i
+h
+i
+ˆ2 + ∆
+ˆ 2∗
+E (R̃(f ; S) − R(f ))2 = E ∆
+h i
+ˆ 2∗ .
+≥E ∆
+
+Proposition 5. Pick any bounded loss `. Fix a hypothesis class F of predictors f : X → RL , with
+.
+induced class H ⊂ [0, 1]X of functions h(x) = pt (x)T `(f (x)). Suppose H has uniform covering number
+N∞ . Then, for any δ ∈ (0, 1), with probability at least 1 − δ over S ∼ PN ,
+s
+
+
+log MδN
+log MδN
+ + O Ekpt (x) − p∗ (x)k2 ,
+R(f ) ≤ R̃(f ; S) + O  ṼN (f ) ·
++
+N
+N
+.
+
+where MN = N∞ ( N1 , H, 2N ) and ṼN (f ) is the empirical variance of the loss values.
+h
+i
+.
+Proof of Proposition 5. Let R̃(f ) = E R̃(f ; S) and ∆ = R̃(f ; S) − R(f ). We note that with
+probability 1 − δ,
+
+s
+MN
+MN
+log δ
+log δ
+,
+R̃(f ) ≤ R̃(f ; S) + O  ṼN (f ) ·
++
+(14)
+N
+N
+.
+
+where MN = N∞ ( N1 , H, 2N ) and ṼN (f ) is the empirical variance of the loss values. Furthermore,
+the following holds
+h
+i
+h
+i
+|R̃(f ) − R(f )| = E R̃(f ; S) − E R̂∗ (f ; S)
+
+
+≤ E kpt (x) − p∗ (x)k2 · k`(f (x))k2 .
+Thus, we have
+
+
+R(f ) ≤ R̃(f ) + C · E kpt (x) − p∗ (x)k2 .
+for some constant C > 0. The result follows by combining (14) and (15).
+
+19
+
+(15)
+
+B
+
+Experiments: additional results
+
+B.1
+
+Bias-variance tradeoff
+
+Continuing the same synthetic Gaussian data as in §5.1, we now consider a family of teachers of the
+form
+α
+pt (x) = (1 − α) · Ψ((θ∗ )T x + σ 2 · ) + ,
+(16)
+2
+.
+
+where Ψ(z) = (1 + e−z )−1 is the sigmoid, α ∈ [0, 1], σ > 0, and and  ∼ N(0, 1) comprises independent
+Gaussian noise. Increasing α induces a bias in the teacher’s estimate of p∗ (x), while increasing σ
+induces a variance in the
+draws. Combined, these induce the teacher’s mean
+ teacher over fresh
+
+squared error (MSE) E kp∗ (x) − pt (x)k22 , which by Proposition 3 bounds the gap between the
+population and distilled empirical risk.
+
+Student AUC
+
+For each such teacher, we compute its MSE, as well as the test set AUC of the corresponding distilled
+student. Figure 5 shows the relationship between the the teacher’s MSE and the student’s AUC. In
+line with the theory, more accurate estimates of p∗ result in better students. Figure 6 also shows
+how the teacher’s MSE depends on the choice of σ and α, demonstrating that multiple such pairs
+can achieve a similar MSE. As before, we see that a teacher may trade-off bias for variance in order
+to achieve a low MSE.
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9
+
+Teacher MSE
+
+Figure 5: Relationship between teacher’s MSE against true class-probability and student’s test set
+AUC. In keeping with the theory, teachers which better approximate p∗ yield better students.
+
+0.40
+0.35
+0.30
+0.25
+0.20
+0.15
+0.10
+0.05
+
+0.1
+σ
+
+1.0
+10.0
+
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+
+100.0
+α
+
+Figure 6: Relationship between teacher’s bias and variance, and corresponding MSE against true
+class-probability. The teacher can achieve a given MSE through multiple possible bias-variance
+combinations.
+
+20
+
+B.2
+
+Uncalibrated teachers may distill worse
+
+We now illustrate the importance of the teacher probabilities needing to be meaningful reflections of
+the true p∗ (x). We continue our exploration of the synthetic Gaussian problem, where p∗ takes on a
+sigmoid form. We now distort these probabilities as follows: for α ≥ 1, we construct
+p̄(x) = Ψα (p∗ (x))
+(
+1
+· (2 · u)α
+Ψα (u) = 21
+1/α
+2 + (2 · u − 1)
+
+if u ≤ 12
+if u ≥ 12 .
+
+The new class-probability function p̄(x) preserves the classification boundary p∗ (x) = 12 , but squashes
+the probabilities themselves as α gets larger. We now consider using p̄(x) as teacher probabilities to
+distill to a student. This teacher has the same accuracy, but significantly worse calibration than the
+Bayes-teacher using p∗ (x).
+Figure 7 confirms that as α increases, the effect of distilling on the student is harmed. This validates
+our claim that teacher accuracy is insufficient to judge whether distillation will be useful.
+
+1.0
+
+Student AUC
+
+Ψ α (u)
+
+0.8
+0.6
+0.4
+
+α=1
+α=2
+α=4
+α=8
+
+0.2
+0.0
+0.0
+
+0.2
+
+0.4
+
+u
+
+0.6
+
+0.8
+
+1.0
+
+(a) As tuning parameter α is increased, the teacher
+probabilities p̄(x) = Ψα (p∗ (x)) increasingly deviate
+from the Bayes probabilities p∗ (x).
+
+0.95
+0.90
+0.85
+0.80
+0.75
+0.70
+0.65
+0.60
+
+1
+
+2
+
+4
+
+8
+
+16
+
+Teacher distortion α
+
+32
+
+(b) As tuning parameter α is increased — so that the
+teacher probabilities are increasingly uncalibrated —
+the student AUC becomes progressively worse.
+
+Figure 7: Effect of distorting the Bayes probabilities p∗ (x) so as to preserve the classification decision
+boundary (p∗ (x) = 21 ), but degrade the calibration of the scores.
+
+21
+
+

@@ -1,0 +1,1866 @@
+Applied Data Science Track Paper
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+OptMatch: Optimized Matchmaking via Modeling the
+High-Order Interactions on the Arena
+Linxia Gong1 , Xiaochuan Feng1 , Dezhi Ye1 , Hao Li1 , Runze Wu1 ,
+Jianrong Tao1 , Changjie Fan1 , Peng Cui2
+1 Fuxi AI Lab, NetEase Inc., Hangzhou, China
+
+2 Tsinghua University, China
+{gonglinxia,fengxiaochuan,yedezhi,lihao01,wurunze1,hztaojianrong,fanchangjie}@corp.netease.com,
+cuip@tsinghua.edu.cn
+
+ABSTRACT
+
+Modeling the High-Order Interactions on the Arena. In Proceedings of the
+26th ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+(KDD’20), August 23–27, 2020, Virtual Event, CA, USA. ACM, NY, NY, USA,
+11 pages. https://doi.org/10.1145/3394486.3403279
+
+Matchmaking is a core problem for the e-sports and online games,
+which determines the player satisfaction and further influences the
+life cycle of the gaming products. Most of matchmaking systems
+take the form of grouping the queuing players into two opposing
+teams by following certain rules. The design and implementation
+of matchmaking systems are usually product-specific and laborintensive.
+This paper proposes a two-stage data-driven matchmaking framework (namely OptMatch), which is applicable to most of gaming
+products and has the minimal product knowledge required. OptMatch contains an offline learning stage and an online planning
+stage. The offline learning stage includes (1) relationship mining
+modules to learn the low-dimensional representations of individuals by capturing the high-order inter-personal interactions, and
+(2) a neural network to incorporate the team-up effect and predict
+the match outcomes. The online planning stage optimizes the gross
+player utilities (i.e., satisfaction) during the matchmaking process,
+by leveraging the learned representations and predictive model.
+Quantitative evaluations on four real-world datasets and an online experiment on Fever Basketball1 game are conducted to empirically demonstrate the effectiveness of OptMatch.
+
+1
+
+INTRODUCTION
+
+Matchmaking arranges multiple players into player-versus-player
+(PvP) competitions. With large number of players requesting the
+gaming service and indicating their availability, the matchmaking
+system forms teams for queuing players and brings up every two
+teams into one combat.
+Matchmaking is ubiquitous in the sporting events, especially
+in e-sports and online games. Most matchmaking systems in the
+market are skill-based[1, 7, 8, 12, 19] or feature-based[3, 4] and
+require profound industrial knowledge for the product designers.
+To facilitate the matchmaking mechanism design, this paper
+investigates the high-order inter-personal interactions on the arena,
+and proposes a generalized data-driven matchmaking framework
+OptMatch that gives optimized matchmaking results based on the
+captured interactions.
+Heroes Relationship
+
+CCS CONCEPTS
+• Information systems → Data mining; Massively multiplayer
+online games; • Computing methodologies → Learning latent representations.
+
+KEYWORDS
+
+Tlose
+
+VS
+
+Synergy:
+
+Twin
+Suppression:
+
+win together
+lose together
+defeat
+
+Figure 1: Relationships between individuals in one match.
+
+matchmaking; graph embedding; player satisfaction; user modeling
+In terms of high-order interactions on the arena, intuitively, an
+individual can be complementary, incompatible or even suppressive
+to others because of their abilities difference, competing styles or
+social effects. These mutual impacts are revealed by match outcome
+as shown in Figure 1, and the interpersonal interactions can be then
+identified throughout the numerous collected matches.
+In order to acquire the high-order interactions among individuals, OptMatch concludes two types of relations from the match
+records to represent the tacit interplay of players, i.e., (1) synergy
+relation built from the win/lose together relationship, and (2) suppression relation indicating the advantage of one over another. In
+addition, OptMatch adopts an attention-based model that explicitly
+incorporates the intra-team and inter-team interactions to predict
+the match results and players’ utilities. Finally, during the online
+
+ACM Reference Format:
+Linxia Gong, Xiaochuan Feng, Dezhi Ye, Hao Li, Runze Wu, and Jianrong
+Tao, Changjie Fan, Peng Cui. 2020. OptMatch: Optimized Matchmaking via
+1 https://chao.163.com/index.html
+
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee. Request permissions from permissions@acm.org.
+KDD ’20, August 23–27, 2020, Virtual Event, CA, USA
+© 2020 Association for Computing Machinery.
+ACM ISBN 978-1-4503-7998-4/20/08. . . $15.00
+https://doi.org/10.1145/3394486.3403279
+
+2300
+
+Applied Data Science Track Paper
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+service, OptMatch uses a heuristic planning method combined with
+the interactions and patterns learned from past matches, to optimize
+the future matchmaking results.
+In summary, the main contributions of this paper include:
+• a generalized data-driven matchmaking system that optimizes the match qualities and player utilities;
+• two interpersonal relations for representing and understanding tacit coordination interactions among players;
+• corresponding graph embedding methods to incorporate the
+high-order interactions, together with the comparison of
+various graph embedding algorithms;
+• a model to encode team-up effect and predict the match
+outcome.
+• a github page2 that contains the datasets and models mentioned in the paper.
+The empirical results show that OptMatch gains an improvement
+of 6% ∼ 17% in the offline prediction tasks for the match outcomes
+on four real-world datasets, and an improvement of around 40% in
+the match quality during an online experiment.
+
+space, in which geometric distance reflects their structural similarity. The widely applied graph embedding approaches include
+FM [22], DeepFM [11], DeepWalk [6, 21], Node2vec [10], LINE [27],
+SDNE [29], Struc2Vec [23]. Factorization based methods [11, 22] are
+computationally expensive and cannot be implemented in parallel.
+The other methods, learn the representation vectors of vertices
+based on the comparison of the neighborhoods of them.
+In the use cases of this paper, the graphs are usually denselyconnected, but the homophily hypothesis (i.e., nodes that are highly
+interconnected and belong to similar network clusters or communities should be embedded closely together, adopted by [6, 10, 21, 29])
+on the graph is not always valid. In addition, the local structure
+of the vertices [23] is not the focus of this paper. Therefore, we
+adjust the graph embedding method of LINE [27] to learn the latent
+representation of vertices in this paper.
+
+3 PROBLEM DEFINITION
+3.1 Online Games and E-sports Preliminaries
+• Hero: the graphical representation of the user in the virtual
+worlds. It usually takes a three-dimensional form of character
+in games.
+• PVP: Player(s)-versus-player(s), is a type of multiplayer interactive conflict within a game between two or more live
+participants. It is used to describe any game, or aspect of a
+game, where players compete against each other.
+
+2 RELATED WORK
+2.1 Team Formation and Matchmaking
+Extensive prior research has studied the matchup strategies to
+form comparable teams for each competition. The mainstream
+matchmaking strategies are skill-based and concentrate on building
+accurate skill rating systems. In this case, one player is assigned with
+one score that describes her absolute strength. This ability score
+is usually derived from the probabilistic algorithms like BradleyTerry, ELO, Glicko, TrueSkill [1, 7, 8, 12, 19], and their extensions
+[5, 13, 17, 18, 24, 31]. The ability of the team is then modeled as the
+summation of the team members’ scores.
+Considering that using a single scalar is an oversimplification,
+subsequent strategies [4] extend the skill-based models to incorporate additional player information by inputting players’ feature
+vectors and some [3] propose new model structures to take into
+account the domain-specific concerns.
+Meanwhile, some strategies [16, 25, 26] look into the cooperative
+effect in the team composition. They aim to study the interplay between a player’s performance improvement (resp., decline) throughout matches in the presence of beneficial (resp., disadvantageous)
+teammates by computing the pairwise strength weights between
+individuals.
+The existing work mostly emphasizes the tracking of individual
+skills, either by inferring the synthetic ability score, or by constructing feature vectors based on expert knowledge. Some other research
+about the interpersonal effects limits to the pairwise influence and
+analyzes only players or heroes in each experiment. Despite the
+efforts of depicting individual abilities and mutual interplay, the
+exploitation of the high-order interactions among the heroes and
+players is inadequately studied.
+
+3.2
+
+Matchmaking
+
+We define the matchmaking into two stages: the offline learning
+stage to learn the patterns from past matches; an online planning
+stage to optimize the players’ satisfaction for future matches.
+3.2.1 Offline Learning. Given a dataset with 𝑀 observed matches,
+a population of heroes H = {ℎ 1, ..., ℎ𝐻 } and players P = {𝑝 1, ..., 𝑝 𝑁 }
+are involved. In each game, two disjoint teams competed with each
+other, which are denoted as 𝑇𝑤𝑖𝑛 , 𝑇𝑙𝑜𝑠𝑒 by the outcome. For simplicity, we assume each team has 𝑘 members, where 𝑘 = |𝑇𝑤𝑖𝑛 | = |𝑇𝑙𝑜𝑠𝑒 |.
+Offline learning aims to grasp the relations among the individuals (heroes/players) from the 𝑇𝑤𝑖𝑛 , 𝑇𝑙𝑜𝑠𝑒 records, and identify the
+competition patterns throughout the matches.
+3.2.2 Online Planning. In practice, matchmaking is applied to
+a pool of players P𝑡 = {𝑝 1, . . . , 𝑝𝑛 }, who are waiting to start the
+𝑘-vs-𝑘 matches at the moment 𝑡. The goal of matchmaking is to
+find the optimal assignments for players to maximize the total
+utility (i.e., the gross players’ satisfaction). With U𝑚 denoting the
+utility gained by the match 𝑚, the system makes the match-making
+Í𝑀
+decision to maximizing 𝑚=0
+U𝑚 for the matches it creates. Mostly,
+the utility U𝑚 of one single game is regarded as the accumulation
+of its players’ utilities
+𝑛
+𝑚
+Õ
+U𝑚 =
+U𝑚,𝑖
+(1)
+𝑖=0
+
+2.2
+
+The player utility refers to a quantitative measure of a player’s satisfaction gained from a match, for example, the reverse of churn risk
+for this player after a certain match. This requires the matchmaking
+system to pick right teammates and good opponents for as many
+players as possible.
+
+Graph Embedding
+
+Representation learning on graphs has been proposed to transform
+instances in topological space into fixed-size vectors in Euclidean
+2 https://fuxiailab.github.io/OptMatch/
+
+2301
+
+Applied Data Science Track Paper
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+Player (P)
+
+Hero2Vec
+&
+Player2Vec
+
+Hero (H)
+
+Synergy Embedding
+Suppression Embedding
+
+Online Planning
+
+Game Server
+
+Players
+
+Offline Learning
+• Hero2Vec
+• Player2Vec
+• OptMatch-Net Training
+
+User Profiles
+
+Game Result Logs
+
+Relationship Graphs
+Construction
+
+Concatenate
+
+Handcrafted Feature
+Construction
+
+Feature Vectors
+
+Training
+Data
+
+OptMatch-Net
+
+Players Interactions
+
+(b) Offline Learning
+
+Data Storage
+
+Players Pool
+
+Data Flow
+Game log data
+
+Model
+Training
+
+Datasets
+Construction
+
+Dashboards
+
+Presort
+
+Request Flow
+
+Team-up
+Quality
+Estimation
+
+Best
+team-up
+Solution
+
+OptMatch-Net
+
+(a) The OptMatch System Overview
+
+Game Start
+
+Game server
+
+(c) Online Planning
+
+Figure 2: The OptMatch System framework. (a) shows the structure of the two-stage iterative matchmaking system, with
+arrows to indicate its data flows and request flows. (b) shows the iterative offline learning phase, which contains the feature
+engineering (handcrafted features building and auto feature mining from relationships), and the model updating. (c) shows
+the online planning phase that matches up the players to start games.
+
+3.3
+
+Given a graph, graph embedding aims to represent each vertex
+𝑣 ∈ V into a low-dimensional space R𝑑 , i.e., learning a function
+𝑓𝐺 : V → R𝑑 , where 𝑑 ≪ |V |. In the space R𝑑 , the first-order
+proximity and the second-order proximity between the vertices are
+preserved.
+First-order Proximity. The first-order proximity in a graph is
+the local pairwise proximity between two vertices. For each pair
+of vertices linked by an edge (𝑎, 𝑏), the weight on that edge 𝑤𝑎,𝑏
+indicates the first-order proximity between 𝑎 and 𝑏 [27].
+In the matchmaking and competition context, the first-order
+proximity implies the compatibility of two individuals, i.e., 𝑤𝑎,𝑏 > 0
+implies the beneficial interplay between the two heroes/players,
+while 𝑤𝑎,𝑏 < 0 implies the disadvantageous interplay.
+Second-order Proximity. The second-order proximity between
+a pair of vertices (𝑎, 𝑏) in a graph is the similarity between their
+neighborhood graph structures. Let 𝑝𝑎 = (𝑤𝑎,1, . . . , 𝑤𝑎, | V | ) denote
+the first-order proximity of 𝑎 with all the other vertices, then the
+second-order proximity between 𝑎 and 𝑏 is determined by the similarity between 𝑝𝑎 and 𝑝𝑏 (if no vertex is linked from/to both 𝑎 and
+𝑏, the second-order proximity is 0) [27].
+Likewise, in the matchmaking context, the second-order proximity implies that individuals who share similar compatible/incompatible
+teammates, or share similar suppressive opponents, tend to be similar to each other.
+
+Game Outcome
+
+In each game, a team’s outcome 𝑜𝑡 can be observed in two forms:
+the binary indicator of win/loss (𝑜𝑡 ∈ {+1, −1}), or the value of
+score (𝑜𝑡 ∈ R).
+With richer information about the game, the 𝑜𝑡 of score record
+is usually preferred when it’s available. Conventional methods for
+utilizing the score information are to predict the score difference
+values. This leads to two limitations: firstly, it constrains the data
+aggregation among the datasets with scores and the datasets with
+only binary results; and secondly, the fitting values are greatly
+influenced by the magnitude of the score measure designs and the
+competitive intensity of each game. For example, a game with a
+score of 0vs10 should be different from a game with a score of
+90vs100 intuitively but they are treated the same if only score
+difference is concerned.
+For the aforementioned considerations, we convert the outcome
+into its relative form: (the ˆ symbol denotes the ground truth values,
+for distinguishing them from the model prediction values in the
+latter sections)
+𝑜ˆrela = ±
+
+|𝑜 𝑤𝑖𝑛 − 𝑜𝑙𝑜𝑠𝑒 |
+|𝑜 𝑤𝑖𝑛 | + |𝑜𝑙𝑜𝑠𝑒 |
+
+(2)
+
+where the sign of the relative outcome is determined by which
+team it refers to (+1 for the winning team and −1 for the losing
+one). This relative outcome unifies the two forms of observed game
+results, rescales the team score values to the range [−1, +1], and
+keeps the binary results in {+1, −1} that can be interpreted as a
+special scenario of the former form.
+
+3.4
+
+4
+
+MATCHMAKING SYSTEM
+
+PvP competitions usually involve two opposing teams in many
+sporting events and online games. In the context of e-sports and
+online games, players compete by controlling selected heroes, each
+of which is designed with different strengths and weaknesses. While
+in traditional sports, in one sense, each player can be considered as
+one hero to fit in the OptMatch system.
+
+Graph Embedding in Matchmaking
+
+Graph Embedding. Similar to [27], in matchmaking problem, a
+graph is defined as G = (V, E), where V is the set of vertices, each
+representing an individual (hero or player) and E is the set of edges
+between the vertices, each representing a relationship between two
+individuals. Each edge 𝑒 ∈ E is an ordered pair 𝑒 = (𝑎, 𝑏) and is
+associated with a weight that indicates the strength of the relation.
+
+4.1
+
+System Overview
+
+The OptMatch system consists of two phases: offline learning and
+online planning. The offline learning phase contains:
+
+2302
+
+Applied Data Science Track Paper
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+• Hero2Vec learns the low-dimensional representations of heroes
+that incorporates their relationship in the competitions. The
+embedding vectors that represent different relations can be
+trained separately and parallelly.
+• Player2Vec constructs the representation vectors of players
+based on the hero representations learned in Hero2Vec, as
+well as the features built from players’ records.
+• OptMatch-Net model takes the players’ representations and
+team-up information to predict the match results. The model
+incorporates the inter-player interactions and learns the
+competition patterns.
+The online planning service, afterwards, leverages the representation vectors of players and OptMatch-Net model to maximize the
+(predicted) gross utilities for the queuing players.
+
+4.2
+
+Hero2Vec
+
+showed up in the winning (resp., losing) side of the match. To construct the synergy graph, we go through the winning and losing
+teams respectively and build an edge between each pair of heroes.
+The edge weight is defined as:
+(3)
+
+𝑠𝑦𝑛
+
+𝑤𝑖𝑛
+𝑙𝑜𝑠𝑒
+𝑤𝑎,𝑏 = 𝑓𝑎,𝑏
+− 𝑓𝑎,𝑏
+
+𝑤𝑖𝑛 refers to the times when the heroes (ℎ , ℎ ) co-occurred
+where 𝑓𝑎,𝑏
+𝑎 𝑏
+𝑙𝑜𝑠𝑒
+in the winning teams throughout the collected matches, while 𝑓𝑎,𝑏
+refers to the co-occurrence of the heroes (ℎ𝑎 , ℎ𝑏 ) in the losing teams.
+
+Therefore, the synergy graph is a signed undirected graph.
+b) Suppression Graph Construction. Different from the synergy relation above, suppression is a directional relation, which
+indicates that one hero ℎ𝑎 defeated another hero ℎ𝑏 . The weight
+for an order pair (𝑎, 𝑏) is defined as:
+suppr
+
+4.2.1 Graph Construction. To grasp the interplay among heroes
+in Figure 1, we first need to extract and construct the relationship
+graphs that reflect their mutual impact. In the intense and fast-paced
+competitions, tacit coordination plays a larger role than verbal
+communication [15]. Also, the complementary data of chatting or
+friendship is usually hard to acquire. Considering these reasons, we
+focus only on the relationships that can be refined from the match
+records. After the examination of the match characteristics, we
+identify two types of relations out of the two opposing 𝑘-individual
+teams 𝑇𝑤𝑖𝑛 , 𝑇𝑙𝑜𝑠𝑒 , as shown in Figure 3:
+
+36
+
+43
+
+where 𝑓 (𝑎 defeat 𝑏) is the times when the hero 𝑎 defeated the hero 𝑏,
+suppr
+and vice versa for the link weight 𝑤 (𝑏,𝑎) .
+4.2.2 Graph Embedding. After building the graphs that represent the structural relationships among heroes, we start to train the
+function to project the heroes into low-dimensional vectors while
+maintaining the necessary information in the meanwhile.
+a) Graph Embedding on Synergy Graph (a signed undirected graph): As the Synergy Graph has both positive and negative connections, the graph embedding method in [27] and the
+signed proximity term proposed in [14] is adopted to learn the
+compact low-dimensional representation of the heroes.
+The first-order proximity in the Synergy Graph. We formulate the
+joint probability between hero 𝑎 and hero 𝑏 as:
+
+53
+
+27
+
+4
+
+51
+
+52
+
+8
+
+43
+
+(4)
+
+𝑤 (𝑎,𝑏) = 𝑓 (𝑎 defeat 𝑏)
+
+1
+
+41
+
+54
+
+41
+
+5
+
+55
+
+53
+
+35
+
+23
+
+17
+
+47
+
+44
+46
+
+13
+
+40
+
+39
+
+4
+
+12
+49
+
+47
+
+35
+
+8
+
+30
+16
+
+55
+
+44
+
+39
+
+12
+
+36
+
+5
+
+38
+
+25
+2
+
+34
+
+21
+37
+
+16
+
+29
+
+18
+
+48
+
+21
+
+(a) Synergy Graph
+
+𝑝ˆ1 (𝑎, 𝑏) = Í
+
+54
+
+34
+
+38
+
+42
+
+2
+
+17
+
+18
+
+30
+
+23
+
+13
+
+46
+
+(5)
+
+25
+
+49
+
+11
+
+29
+
+33
+
+11
+
+40
+
+33
+
+1 + exp(−sign(𝑎, 𝑏) · 𝑒®𝑇𝑎 · 𝑒®𝑏 )
+
+where 𝑒®𝑎 ∈ R𝑑 is the low-dimensional embedding vector of vertex
+𝑎. Meanwhile, its empirical probability can be defined as
+
+45
+
+28
+
+27
+
+42
+
+37
+
+52
+
+51
+
+45
+
+𝑝 1 (𝑎, 𝑏) = 𝜎 (®
+𝑒𝑇𝑎 · 𝑒®𝑏 ) =
+
+14
+
+28
+
+14
+
+48
+
+|𝑤𝑎,𝑏 |
+(𝑎,𝑏) ∈ E |𝑤 𝑎,𝑏 |
+
+(6)
+
+To preserve the first-order proximity, we need to minimize the
+distance between the two distributions 𝑝 1 and 𝑝ˆ1 . By choosing the
+KL-divergence as the distance measure and omitting the constants,
+we get the objective function:
+Õ
+𝑂1 = −
+|𝑤𝑎,𝑏 | · log 𝑝 1 (𝑎, 𝑏)
+(7)
+
+(b) Suppression Graph
+
+Figure 3: The relationship graphs of heroes in Fever Basketball dataset, where the node size is proportional to
+its occurrence frequency and link width to the relation
+strength. (a) Synergy graph represents the compatibility of
+heroes, wherein the orange links are associated with positive weights and the gray with negative weights; (b) Suppression graph represents the advantage/disadvantage that
+a hero has over another, with the arrows indicating the suppressing relation.
+
+(𝑎,𝑏) ∈ E
+
+The second-order proximity in the Synergy Graph. The secondorder proximity in [27] assumes that vertices sharing many neighborhoods are similar to each other. That is, each vertex is treated
+as a specific "context" and vertices with similar distributions over
+the "contexts" are assumed to be similar. We use the vector 𝑒®𝑎 to
+represent vertex 𝑎, and 𝑒®𝑎′ to represent the "context" of vertex 𝑎. For
+each edge (𝑎, 𝑏), the probability of "context" 𝑒®𝑏′ generated by vertex
+𝑒®𝑎 is formulated as:
+
+a) Synergy Graph Construction. Synergy describes the compatibility between heroes, which is defined as the beneficial (resp.,
+disadvantageous) relation between two heroes when they both
+
+′
+
+𝑝 2 (𝑏 |𝑎) = Í
+
+exp(sign(𝑎, 𝑏) · 𝑒®𝑏𝑇 · 𝑒®𝑎 )
+
+′
+|V |
+exp(sign(𝑎, 𝑘) · 𝑒®𝑘𝑇 · 𝑒®𝑎 )
+𝑘=1
+
+2303
+
+(8)
+
+Applied Data Science Track Paper
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+By combining the empirical distribution 𝑝ˆ2 (𝑏 |𝑎) = Í
+
+|𝑤𝑎,𝑏 |
+
+modes where players compete with fixed heroes, we can simply
+employ the vectors of heroes to represent the players.
+For the game modes with selectable heroes for players, the projection can be performed by building and learning a heterogeneous
+graph that contains the several relationships among players, among
+heroes and inbetween. Whereas, for the concern of deployment
+efficiency, we adopt a straightforward solution, which projects the
+players through average-pooling over their hero-selection to encode the players’ preference, and the hero-mastery to encode their
+proficiency. For each player, we have the representation vectors as
+
+𝑘 ∈𝑁 (𝑎) |𝑤𝑎,𝑘 |
+
+with 𝑁 (𝑖) denoting the out-neighbors of vertex 𝑎, and the KLdivergence function, we get the objective function:
+Õ
+𝑂2 = −
+|𝑤𝑎,𝑏 | · log 𝑝 2 (𝑏 |𝑎)
+(9)
+(𝑎,𝑏) ∈ E
+
+Then the first-order proximity and second-order proximity in
+the Synergy Graph can be preserved during the graph embedding,
+by jointly training the objective function (7) and (9).
+′
+The signed proximity term 𝑠𝑖𝑔𝑛(𝑎, 𝑏) ·𝑒®𝑇𝑎 ·𝑒®𝑏 and 𝑠𝑖𝑔𝑛(𝑎, 𝑏) ·𝑒®𝑏𝑇 ·𝑒®𝑎
+are the signed inner product of two vectors, introduced by [14]. For
+positive connected nodes, likelihood value increases as the inner
+product increases. Negative and noise pairs, on the other hand, have
+higher likelihood value when the inner product similarity is lower.
+b) Graph Embedding on Suppression Graph (an unsigned
+directed graph): Note that the first-order proximity is only applicable for undirected graphs, not for directed graphs. This fits the
+intuition that a pair of heroes (ℎ𝑎 , ℎ𝑏 ) who has pairwise suppressive relation doesn’t show the local proximity. Therefore, only the
+second-order proximity is preserved in the Suppression Graph.
+The graph embedding on the Suppression Graph defines the
+probability distributions and minimizes the objective function as
+follows:
+′
+exp(®
+𝑒𝑏𝑇 · 𝑒®𝑎 )
+𝑝 2 (𝑏 |𝑎) = Í
+′
+|V |
+exp(®
+𝑒𝑘𝑇 · 𝑒®𝑎 )
+(10)
+𝑘=1
+𝑤𝑎,𝑏
+𝑝ˆ2 (𝑏 |𝑎) = Í
+𝑘 ∈𝑁 (𝑎) 𝑤 𝑎,𝑘
+Õ
+𝑂2 = −
+𝑤𝑎,𝑏 · log 𝑝 2 (𝑏 |𝑎)
+(11)
+
+𝑢® = Concat(𝑢®pick , 𝑢®win )
+𝑢®pick =
+
+𝑢®𝑤𝑖𝑛 =
+
+ℎ=1
+
+𝐻
+Õ
+
+(12)
+
+𝑝ℎ𝑤𝑖𝑛 · 𝑒®ℎ
+
+ℎ=1
+
+in both synergy subspace and suppression subspace (denoted as
+pick
+𝑢®syn and 𝑢®suppr for latter reference). In (12), 𝑝ℎ is the pick rate
+of hero ℎ, and 𝑝ℎ𝑤𝑖𝑛 is the pick rate of hero ℎ when we investigate
+only the winning matches of this player.
+
+4.4
+
+OptMatch-Net
+
+OptMatch-Net model is to predict the utility of the match 𝑚, defined
+as (1). Work like [4] computed utility U𝑚 by predicting the utility of
+every player U𝑚,𝑖 in the match one by one. In our work, we simplify
+the computation by adopting the assumption that fair games lead
+to better player experience. Thus we reformulate the utility of a
+match U𝑚 in equation (1) into the drawn probability of the match:
+U𝑚 = 𝑃𝑚 (𝑑𝑟𝑎𝑤𝑛) = 1 − |𝑜 rela |
+
+(13)
+
+With (13), we design the OptMatch-Net as in Figure 4. Note that
+OptMatch-Net is able to compute the match utility U𝑚 in (1) without the simplification, by slightly changing the structure as [4].
+
+(𝑎,𝑏) ∈ E
+
+By learning {®
+𝑒𝑖 }𝑖=1,..., | V | and {®
+𝑒𝑖′ }𝑖=1,..., | V | that minimize the objective (11), we get the d-dimensional vector 𝑒®𝑖 to represent each
+vertex 𝑖, 𝑖 ∈ V.
+
+! = #$%&'
+Synergy Embedding
+Suppression Embedding
+
+Weighted Sum
+
+Note: Apart from the graph construction and embedding method
+above, many other ways to count the link weights and learn the
+vertex embedding are available in the matchmaking scenario. The
+comparison of various network construction and embedding methods is provided in Appendix B.
+
+4.3
+
+𝐻
+Õ
+pick
+𝑝ℎ · 𝑒®ℎ ,
+
+User Features Vector
+
+TeamComparison
+ComparisonLayer
+Layer
+Team
+Team
+Comparison Layer
+MatMul
+SoftMax
+
+Player2Vec
+
+Player2Vec constructs the representation vectors for players, which
+includes the handcrafted features that identified and calculated
+from the players’ profiles, as well as the relational representation
+vectors that are learned from relationship mining.
+
+P1
+
+…
+
+T1
+
+Pk
+
+Pk+1
+
+…
+
+T2
+
+(a) OptMatch-Net
+
+Tanh
+
+Scale
+
+Team2VecLayer
+Layer
+Team2Vec
+Layer
+Team2Vec
+
+MatMul
+
+MatMul
+P2k
+
+Q
+
+K
+
+h
+
+Subtract
+
+V
+
+P1, …, Pk
+(b) Team2Vec Layer
+
+T1
+
+T2
+
+(c) Team Comparison Layer
+
+Figure 4: The OptMatch-Net model to evaluate the matchmaking quality.
+
+4.3.1 Player Feature Vector. As the traditional machine learning
+methods do, we calculate several indexes that imply the ability of
+players and make an effect on the competition outcome. The indexes
+are usually designed by the experts in the domain and are greatly
+case-specific. An example of feature design that we implemented
+on the Fever Basketball dataset is given in the Appendix B.1.
+
+4.4.1 Input Layer. With the players’ representation vectors learned
+in 4.3, we start to learn the collective representations of each team
+and compare the two teams by their team representation vectors.
+As the input of OptMatch-Net model, two teams of players
+𝑇1 = {𝑝 1, 𝑝 2, . . . , 𝑝𝑘 }, 𝑇2 = {𝑝𝑘+1, 𝑝𝑘+2, . . . , 𝑝 2𝑘 } are given, and each
+player has several embedding vectors (that is, relational embedding
+vectors 𝑢®syn , 𝑢®suppr and player feature vector 𝑢®ftr ).
+
+4.3.2 Player Representations in the Hero Spaces. In the other way,
+we project the players into the subspaces that encode the hero
+relationships respectively. For the use cases of sports and the game
+
+2304
+
+Applied Data Science Track Paper
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+To facilitate the model training efficiency and interpretability,
+the players’ embedding vectors sets(i.e., 𝑈 syn , 𝑈 suppr and 𝑈 ftr ) are
+fed into the model separately to get a prediction value respectively.
+The final output is the weighted sum of those prediction values.
+
+On the other hand, in our task, the competition results take the
+form of relative score difference between the two teams, which
+from another perspective can be seen as the empirical probability
+distribution of the advantage of 𝑖 over 𝑗:
+𝑠𝑖 − 𝑠 𝑗
+Â(𝑖 beats 𝑗) = 𝑜ˆrela =
+Â ∈ R, −1 ≤ Â ≤ 1
+(19)
+𝑠𝑖 + 𝑠 𝑗
+
+4.4.2 Team2Vec Layer. Precedent literature [4, 12] treated the team
+as the simple summation or concatenation of its members. Instead,
+we utilize a multi-head self-attentive mechanism proposed by [28]
+to incorporate the intra-team interactions to construct the representations of a team.
+Particularly, given a team of players with their embedding vectors 𝑈 where 𝑈 ∈ {𝑈 syn, 𝑈 suppr, 𝑈 ftr }, we compute the output after
+the multi-head attention function as:
+𝑥 = [𝑢®1, · · · , 𝑢®𝑘 ]
+𝑄𝐾𝑇
+Attention(𝑄, 𝐾, 𝑉 ) = softmax( p )𝑉 , 𝐾 ∈ R𝑑𝐾
+𝑑𝐾
+MultiHead(𝑄, 𝐾, 𝑉 ) = Concat(ℎ𝑒𝑎𝑑 1, · · · , ℎ𝑒𝑎𝑑ℎ )𝑊 𝑜
+
+where 𝑠𝑖 and 𝑠 𝑗 are the scores of two teams.
+To fit the empirical probability distribution form in (19), we adjust
+the win probability definition in (16) and (17) into the advantage
+probability as
+exp(𝛼𝑖 ) − exp(𝛼 𝑗 )
+𝑐𝑖 − 𝑐 𝑗
+=
+𝑐 𝑗 + 𝑐𝑖
+exp(𝛼𝑖 ) + exp(𝛼 𝑗 )
+exp(𝛼𝑖 − 𝛼 𝑗 ) − 1
+=
+= tanh(Δ(𝑖, 𝑗))
+exp(𝛼𝑖 − 𝛼 𝑗 ) + 1
+exp(2𝑥) − 1
+and tanh(𝑥) =
+exp(2𝑥) + 1
+
+A(𝑖 beats 𝑗) =
+
+(14)
+
+where the matchup function Δ(𝑖, 𝑗) should have the properties:
+• when Δ(𝑖, 𝑗) → +∞, A(𝑖 beats 𝑗) → 1
+• when Δ(𝑖, 𝑗) → −∞, A(𝑖 beats 𝑗) → −1
+• when Δ(𝑖, 𝑗) = 0, A(𝑖 beats 𝑗) = 0
+As the matchup function Δ(𝑖, 𝑗) in (18) satisfies the aforementioned requirements, we simply build the team comparison layer
+with a neural network that gives the prediction:
+
+where ℎ𝑒𝑎𝑑𝑖 = Attention(𝑥𝑊𝑖 , 𝑥𝑊𝑖𝐾 , 𝑥𝑊𝑖𝑉 )
+𝑄
+
+And finally with the multi-head attention output, we feed it into
+a neural network with a Relu activation function[9], to generate
+the 𝑑 team -dimensional representation vector of the team:
+𝑇® = Relu(𝑊 · MultiHead(𝑄, 𝐾, 𝑉 ) + 𝑏),
+
+𝑇® ∈ R𝑑team
+
+(15)
+
+where 𝑊 is the weight matrix, 𝑏 is the bias vector, and 𝑇® refers to
+the team representation.
+In the competition circumstances that we studied, there are no
+different restrictions between the two teams. Hence, the parameters
+of the Team2Vec layer are shared between 𝑇1 and 𝑇2 . In other cases,
+however, when the two teams have different goals such as attacking
+and defensing, the layer parameters shall not be shared.
+
+𝑜 rela = tanh(𝑊 𝑇 (𝑇®1 − 𝑇®2 ) + 𝑏)
+
+4.4.4 Output Layer. On each embedding vectors set 𝑈 , where 𝑈 ∈
+{𝑈 syn, 𝑈 suppr, 𝑈 ftr }, the corresponding team representations (𝑇®1 , 𝑇®2 )
+and comparison prediction 𝑜 rela can be computed.
+Each prediction value can be viewed as a team strength difference
+measure from one perspective. To learn a comprehensive team
+comparison result, we leverage the weighted summation of all the
+predictions. The output of OptMatch-Net is then
+syn
+
+ftr
+
++ 𝑤 ftr ∗ 𝑜 rela
+
+(22)
+
+where the weights 𝑤 syn , 𝑤 suppr and 𝑤 ftr are learned during the
+training as well.
+
+where 𝑐𝑖 , 𝑐 𝑗
+two competing individuals or groups. According to Blade-Chest[2],
+the formula (16) can be transformed as:
+
+4.4.5 Objective Function. With the different forms of match results
+available in the dataset, OptMatch-Net fulfills different tasks and is
+trained with different objective functions.
+a) For relative score difference task, the match result 𝑦ˆ𝑖 ∈ (−1, 1) is
+a continuous value, therefore OptMatch-Net takes the mean square
+Í𝑁
+error as the loss function, i.e., L (𝑜 rela ) = 𝑁1 𝑖=1
+(𝑦𝑖 − 𝑦ˆ𝑖 ) 2 .
+b) For win prediction task, the match result 𝑦ˆ𝑖 ∈ {−1, 1} is a
+binary result, therefore OptMatch-Net takes the hinge loss as the
+Í
+loss function, i.e., L (𝑤𝑖𝑛) = 𝑖𝑁 max(0, 1 − 𝑦𝑖 · 𝑦ˆ𝑖 ).
+
+(17)
+
+where 𝛼𝑖 represents the strength of player 𝑖, 𝜎 (·) is the sigmoid
+function, and Δ(𝑖, 𝑗) is the matchup function that measures the edge
+given to player 𝑖 when matched up against player 𝑗. In the BradleyTerry algorithm, it is modeled as Δ(𝑖, 𝑗) = 𝛼𝑖 − 𝛼 𝑗 , the difference
+of capability values between two players. While the Blade-Chest
+algorithm extends (16) to incorporate additional player information,
+by modeling each player’s strength as a weighted sum 𝛼𝑖 = 𝑊 𝑇 𝑢®𝑖 ,
+the matchup function turns to be
+Δ(𝑖, 𝑗) = 𝑊 𝑇 (𝑢®𝑖 − 𝑢® 𝑗 )
+
+suppr
+
+𝑦 = 𝑤 syn ∗ 𝑜 rela + 𝑤 suppr ∗ 𝑜 rela
+
+∈ R+ are the capability values of 𝑖 and 𝑗, and (𝑖, 𝑗) can be
+
+exp(𝛼𝑖 )
+1
+=
+exp(𝛼𝑖 ) + exp(𝛼 𝑗 ) 1 + exp(−(𝛼𝑖 − 𝛼 𝑗 ))
+= 𝜎 (Δ(𝑖, 𝑗))
+
+(21)
+
+where the 𝑇®1 and 𝑇®2 are the representation of two competing teams,
+yielded by the Team2Vec layer.
+
+4.4.3 Team Comparison Layer. This layer aims to compare the abilities of the two teams and predict the competition result. Classical
+win prediction models, such as ELO and Bradley-Terry[1], estimate
+the probability of the pairwise comparison result based on their
+pre-evaluated capabilities:
+𝑐𝑖
+P(𝑖 beats 𝑗) =
+(16)
+𝑐 𝑗 + 𝑐𝑖
+
+P(𝑖 beats 𝑗) =
+
+(20)
+
+4.5
+
+Online Planning
+
+The goal of online planning is to ensure high-quality matchups in
+every game, or at least as many games as possible.
+Additionally, as one matchmaking service request usually involves 102 to 103 players and is required to be responded in ≤ 100ms,
+
+(18)
+
+2305
+
+Applied Data Science Track Paper
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+the exhaustive search is infeasible. In this case, we apply a heuristic
+method to split players queue into several units each of which has
+𝑛𝑚 players, by the players’ ability ranking tiers. On a unit of 𝑛𝑚
+players, we acquire several match-up candidates based on the team
+formation methods in [30], which are proved to be ex post Pareto
+efficient. Then we predict the gross utility of those 𝑛𝑚 players for
+each match-up candidate with OptMatch-Net, and keep the maximum value as the utility U𝑚 together with the corresponding
+match-up candidate as the matchmaking assignment.
+
+6.1
+
+Performance of OptMatch-Net
+
+6.1.1
+
+Baselines. OptMatch-Net is compared with five methods:
+• LR [20]: A linear model with logistic loss.
+• XGBoost [26]: A scalable tree-based model for feature learning and game outcome prediction.
+• BalanceNet [4]: A multi-layer neural network method widely
+deployed in online games.
+• Blade-Chest [2]: A model that incorporates the intransitivity
+in competition and predicts the match results.
+• HOI [16]: A factorization based model which takes pairinteraction of players into consideration.
+
+5 DATASETS
+5.1 Dataset Statistics
+
+6.1.2 Model Variants. As the team comparison layer adopts a
+simple form in OptMatch-Net, we investigate only the contribution
+of the team2vec layer, which employs the attention mechanism.
+
+Public and industrial datasets are used to measure the performance
+of OptMatch. The statistics of datasets are given in Table 1.
+
+• OptMatch-Net-no-attention: A variant that uses averagepooling to replace the self-attention mechanism.
+
+Table 1: Statistics of the datasets
+Dataset
+
+Matches
+
+Heroes
+
+Players
+
+Dota2 (5v5)
+LOL (5v5)
+NBA
+Fever Basketball (3v3)
+
+50,000
+187,588
+3,342
+851,648
+
+113
+139
+/
+40
+
+10,815
+43,706
+949
+33,873
+
+6.1.3 Evaluation Metrics. For datasets(Dota2, LOL and NBA) with
+only binary result marks (win/loss) available, Accuracy(Acc) is used
+to measure the models.
+For dataset(Fever Basketball) with both team scores and win/loss
+flags available, we perform two prediction tasks: win prediction
+and relative score difference prediction. Accuracy (Acc) is used as
+the evaluation metric for the former task, and Mean Absolute Error
+(MAE), Root Mean Squared Error (RMSE) for the latter.
+Additionally, we test the model trained with the score difference
+on the win prediction task, which verifies the robustness and portability of our method. We define a Transfer Accuracy (Acctrans ) as
+the evaluation metric:
+
+𝑛
+1 𝑥≥0
+1Õ
+I(𝑦𝑖 = 𝐻 (𝑦ˆ𝑖 )), with 𝐻 (𝑥) =
+Acctrans =
+(23)
+−1 𝑥 < 0
+𝑛
+
+Public Datasets:
+• Dota2, LOL(League of Legends) are datasets of the famous
+5v5 Multiplayer Online Battle Arena (MOBA) games, in
+which players control heroes of different abilities to fight.
+Dota2 contains 50,000 matches, 113 heroes and 10,815 players. LOL(League of Legends) contains 187,588 matches, 139
+heroes and 43,706 players.
+• NBA contains 3,342 matches3 of 2018-2019, with the top
+points, top rebounds and top assists players of each game
+(949 basketball players in total).
+
+𝑖=1
+
+6.1.4 Prediction Performance Comparison (Table 2). We can observe that OptMatch-Net significantly outperforms all the compared baselines across all the datasets and prediction tasks. Besides,
+the comparison between OptMatch-Net variants verifies the effect
+of Team2Vec layer for capturing the intra-team interactions. It manifests that our model adopts a more principled way to leverage
+statistic features and interaction relations. Moreover, the improvement on the metric Acctrans indicates the reusability and mobility
+of the models.
+
+Industrial Dataset:
+• Fever basketball is an online basketball game4 released by
+Netease. We work on the competitive 3v3 ranking mode and
+collect a large-scale dataset of recent matches. The dataset
+contains 851,648 matches, 40 heroes and 33,873 players.
+
+5.2
+
+Dataset Split
+
+Matches are sorted by the time for each dataset. Then we take
+the first 80% matches as the training set and the remaining 20%
+matches as the test set. The feature vectors and network embeddings
+of players are learned from the records in the training set. This
+ensures no leak of result information from the test set.
+
+6
+
+6.2
+
+Effectiveness of Graph Embedding
+
+Figure 5 visualizes the representations of heroes and players.
+The leftmost subfigures in 5(a) and 5(b) are the representation
+vectors of heroes in the synergy and suppression space. We can see
+that heroes of the same category congregate with each other while
+heroes of different categories stay distant, which fits our intuitions
+that those heroes of the same category are designed to be similar,
+and different categories are designed to suppress one another to
+some degree. If, in the application cases, a hero doesn’t behave as its
+expected roles in the games, its representation vectors will appear
+in the spots away from its category, with a big Euclidean distance
+value. This feature helps the diagnosis of the game design.
+
+EXPERIMENTS
+
+Extensive experiments are conducted to compare our algorithm
+with state-of-art algorithms and demonstrate the effectiveness of
+the proposed framework.
+Details of the experiments setting are given in appendix B.
+3 https://rapidapi.com/api-sports/api/api-nba
+
+4 https://chao.163.com/index.html
+
+2306
+
+Applied Data Science Track Paper
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+Table 2: Performance comparison for different methods. (The best results of baselines are indicated with *).
+Algorithm
+LR
+XGBoost
+BalanceNet
+Blade-Chest
+HOI
+OptMatch-Net-no-attention
+OptMatch-Net
+
+MAE
+0.178
+0.184
+0.175*
+0.177
+0.208
+0.172
+0.169
+
+Fever Basketball
+RMSE
+Acc
+Acctrans
+0.227
+0.613
+0.642*
+0.233 0.639*
+0.631
+0.224* 0.628
+0.639
+0.231
+0.629
+0.634
+0.243 0.639*
+0.640
+0.222
+0.648
+0.653
+0.218 0.660
+0.670
+
+Point Guard(hero)
+
+Dota2
+Acc
+0.596
+0.602
+0.614
+0.623
+0.628*
+0.645
+0.652
+
+LOL
+Acc
+0.599
+0.613
+0.624
+0.636
+0.639*
+0.655
+0.661
+
+Match Quality. The perceived quality of the matchmaking system is in terms of the score difference in the matches. To evaluate
+the ability of the two matchmaking systems, we compare the absolute score difference and relative score difference (defined in equation
+Heroes:
+Smallby
+Forward
+Powerespectively
+Forward in Figure
+(2)) of the Center
+games assigned
+the two systems
+Shooting
+Guard
+Point
+Guard
+Heroes:
+Center
+Small
+Forward
+Power
+Forward
+6. The matches assigned by OptMatch have generally
+smaller score
+Players:
+Shooting
+Guard
+Point
+Guard
+difference, which refer to fairer games and better match quality.
+Players:
+With the original matchmaking system yielding
+matches with an
+average absolute score difference of 10.108 and average relative
+Heroes:
+score difference of 0.370, OptMatch yields these indexes of 6.123
+Heroes:
+and 0.203, giving an improvement of around 40%.
+
+Player
+Small Forward(hero)
+Power Forward(hero)
+Shooting Guard(hero)
+Point Guard(hero)
+Player
+Center(hero)
+Small Forward(hero)
+Power Forward(hero)
+
+Shooting Guard(hero)
+
+NBA
+Acc
+0.602
+0.635*
+0.619
+0.589
+0.597
+0.637
+0.646
+
+Center(hero)
+
+(a) Visualization of graph embedding results on Synergy graph
+
+(b) Visualization of graph embedding results on Suppression graph
+
+Figure 5: Visualization of the graph embedding results on
+Fever Basketball dataset.
+Heroes:
+
+Center
+
+Small Forward
+
+Power Forward
+
+Heroes:
+
+Center
+
+Small Forward
+
+Power Forward
+
+The two subfigures on the right of Figure 5(a) and 5(b), encode the
+players into the vector space of heroes, showing that players have
+diverse preference of picking heroes and proficiency in controlling.
+
+Figure 6: The distribution of score difference throughout online matches. (Smaller value in x-axis refers to better match
+quality.)
+
+Table 3: Model performance with only feature vectors
+Algorithm
+LR
+XGBoost
+BalanceNet
+Blade-Chest
+OptMatch-Net
+
+System Performance. According to the online service records,
+OptMatch system takes ∼100ms in average with a setting of 4 CPU
+and 16GB memory to respond to one matchmaking query.
+
+Fever Basketball
+MAE
+RMSE
+0.209 (↓ 17.4%) 0.254 (↓ 11.8%)
+0.220 (↓ 19.5%) 0.253 (↓ 13.4%)
+0.185 (↓ 5.7%)
+0.236 (↓ 5.3%)
+0.204 (↓ 15.2%) 0.251 (↓ 8.6%)
+0.209 (↓ 23.6%) 0.251 (↓ 15.1%)
+
+7
+
+CONCLUSION
+
+This paper introduces a generalized data-driven matchmaking framework (OptMatch) that learns the high-order interpersonal interactions and optimize the player satisfaction.
+The advantages of OptMatch over most prior work are that
+(1) it is applicable to most of use cases, including sports, e-sports
+and online games with minimal requirements for product-specific
+knowledge, as the interactions OptMatch incorporates exist in most
+competitions; (2) it has minimal requirements of data to work,
+as only the basic team-up information and match outcome are
+necessary; (3) it is sensitive and efficient to trace the data changes
+by iteratively updating the players’ representation vectors as well
+as the prediction model; (4) it gives the matchmaking results that
+lead to optimized gross player utilities.
+
+To verify the effectiveness of the relational representations, we
+test the model performance with only players’ feature vectors. The
+results in Table 3 show a performance decrease of 5.6% to 23.6%.
+
+6.3
+
+Shooting
+Guard
+Point Guard
+(a) Distribution of Absolute Score Differ- (b) Distribution of Relative Score DifferPlayers:
+ence
+Shooting Guard
+Point Guard ence
+Players:
+
+Online Matchmaking System Experiments
+
+In order to assess the performance of the OptMatch framework, we
+conduct online A/B tests on Fever Basketball, where we distribute
+the matchmaking requests randomly into OptMatch service and
+its original matchmaking service (designed with sophisticated skill
+system and matchmaking rules).
+
+2307
+
+Applied Data Science Track Paper
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+REFERENCES
+
+and Social Computing. ACM, 2316–2329.
+[16] Yao Li, Minhao Cheng, Kevin Fujii, Fushing Hsieh, and Cho-Jui Hsieh. 2018. Learning from group comparisons: exploiting higher order interactions. In Advances
+in Neural Information Processing Systems. 4981–4990.
+[17] Rahul Makhijani and Johan Ugander. 2019. Parametric Models for Intransitivity
+in Pairwise Rankings. In The World Wide Web Conference. ACM, 3056–3062.
+[18] Joshua E Menke, C Shane Reese, and Tony R Martinez. 2007. Hierarchical models
+for estimating individual ratings from group competitions. In American Statistical
+Association. Citeseer.
+[19] Tom Minka, Ryan Cleven, and Yordan Zaykov. 2018. Trueskill 2: An improved
+bayesian skill rating system. Tech. Rep. (2018).
+[20] Andrew Y Ng and Michael I Jordan. 2002. On discriminative vs. generative
+classifiers: A comparison of logistic regression and naive bayes. In Advances in
+neural information processing systems. 841–848.
+[21] Bryan Perozzi, Rami Al-Rfou, and Steven Skiena. 2014. Deepwalk: Online learning
+of social representations. In Proceedings of the 20th ACM SIGKDD international
+conference on Knowledge discovery and data mining. ACM, 701–710.
+[22] Steffen Rendle. 2010. Factorization machines. In 2010 IEEE International Conference on Data Mining. IEEE, 995–1000.
+[23] Leonardo FR Ribeiro, Pedro HP Saverese, and Daniel R Figueiredo. 2017. struc2vec:
+Learning node representations from structural identity. In Proceedings of the 23rd
+ACM SIGKDD International Conference on Knowledge Discovery and Data Mining.
+385–394.
+[24] Ilya O Ryzhov, Awais Tariq, and Warren B Powell. 2011. May the best man win:
+simulation optimization for match-making in e-sports. In Proceedings of the 2011
+Winter Simulation Conference (WSC). IEEE, 4234–4245.
+[25] Anna Sapienza, Palash Goyal, and Emilio Ferrara. 2018. Deep Neural Networks
+for Optimal Team Composition. arXiv preprint arXiv:1805.03285 (2018).
+[26] Aleksandr Semenov, Peter Romov, Sergey Korolev, Daniil Yashkov, and Kirill
+Neklyudov. 2016. Performance of machine learning algorithms in predicting
+game outcome from drafts in Dota 2. In International Conference on Analysis of
+Images, Social Networks and Texts. Springer, 26–37.
+[27] Jian Tang, Meng Qu, Mingzhe Wang, Ming Zhang, Jun Yan, and Qiaozhu Mei.
+2015. Line: Large-scale information network embedding. In Proceedings of the
+24th international conference on world wide web. International World Wide Web
+Conferences Steering Committee, 1067–1077.
+[28] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
+Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. 2017. Attention is all
+you need. In Advances in neural information processing systems. 5998–6008.
+[29] Daixin Wang, Peng Cui, and Wenwu Zhu. 2016. Structural deep network embedding. In Proceedings of the 22nd ACM SIGKDD international conference on
+Knowledge discovery and data mining. ACM, 1225–1234.
+[30] Mason Wright and Yevgeniy Vorobeychik. 2015. Mechanism design for team
+formation. In Twenty-Ninth AAAI Conference on Artificial Intelligence.
+[31] Lei Zhang, Jun Wu, Zhong-Cun Wang, and Chong-Jun Wang. 2010. A factor-based
+model for context-sensitive skill rating systems. In 2010 22nd IEEE International
+Conference on Tools with Artificial Intelligence, Vol. 2. IEEE, 249–255.
+
+[1] Ralph Allan Bradley and Milton E Terry. 1952. Rank analysis of incomplete block
+designs: I. The method of paired comparisons. Biometrika 39, 3/4 (1952), 324–345.
+[2] Shuo Chen and Thorsten Joachims. 2016. Modeling intransitivity in matchup
+and comparison data. In Proceedings of the ninth acm international conference on
+web search and data mining. ACM, 227–236.
+[3] Shuo Chen and Thorsten Joachims. 2016. Predicting matchups and preferences
+in context. In Proceedings of the 22nd ACM SIGKDD International Conference on
+Knowledge Discovery and Data Mining. ACM, 775–784.
+[4] Olivier Delalleau, Emile Contal, Eric Thibodeau-Laufer, Raul Chandias Ferrari,
+Yoshua Bengio, and Frank Zhang. 2012. Beyond skill rating: Advanced matchmaking in ghost recon online. IEEE Transactions on Computational Intelligence
+and AI in Games 4, 3 (2012), 167–177.
+[5] Colin DeLong, Nishith Pathak, Kendrick Erickson, Eric Perrino, Kyong Shim,
+and Jaideep Srivastava. 2011. TeamSkill: modeling team chemistry in online
+multi-player games. In Pacific-Asia Conference on Knowledge Discovery and Data
+Mining. Springer, 519–531.
+[6] Yuxiao Dong, Nitesh V Chawla, and Ananthram Swami. 2017. metapath2vec:
+Scalable representation learning for heterogeneous networks. In Proceedings of
+the 23rd ACM SIGKDD international conference on knowledge discovery and data
+mining. ACM, 135–144.
+[7] Arpad E Elo. 1978. The rating of chessplayers, past and present. Arco Pub.
+[8] Mark E Glickman. 1999. Parameter estimation in large dynamic paired comparison experiments. Journal of the Royal Statistical Society: Series C (Applied
+Statistics) 48, 3 (1999), 377–394.
+[9] Xavier Glorot, Antoine Bordes, and Yoshua Bengio. 2011. Deep sparse rectifier
+neural networks. In Proceedings of the fourteenth international conference on
+artificial intelligence and statistics. 315–323.
+[10] Aditya Grover and Jure Leskovec. 2016. node2vec: Scalable feature learning for
+networks. In Proceedings of the 22nd ACM SIGKDD international conference on
+Knowledge discovery and data mining. ACM, 855–864.
+[11] Huifeng Guo, Ruiming Tang, Yunming Ye, Zhenguo Li, and Xiuqiang He. 2017.
+DeepFM: a factorization-machine based neural network for CTR prediction. arXiv
+preprint arXiv:1703.04247 (2017).
+[12] Ralf Herbrich, Tom Minka, and Thore Graepel. 2007. TrueSkill™: a Bayesian skill
+rating system. In Advances in neural information processing systems. 569–576.
+[13] Tzu-Kuo Huang, Chih-Jen Lin, and Ruby C Weng. 2008. Ranking individuals
+by group comparisons. Journal of Machine Learning Research 9, Oct (2008),
+2187–2216.
+[14] Junghwan Kim, Haekyu Park, Ji-Eun Lee, and U Kang. 2018. Side: Representation
+learning in signed directed networks. In Proceedings of the 2018 World Wide Web
+Conference. 509–518.
+[15] Young Ji Kim, David Engel, Anita Williams Woolley, Jeffrey Yu-Ting Lin, Naomi
+McArthur, and Thomas W Malone. 2017. What makes a strong team?: Using
+collective intelligence to predict team performance in League of Legends. In
+Proceedings of the 2017 ACM Conference on Computer Supported Cooperative Work
+
+2308
+
+Applied Data Science Track Paper
+
+A
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+Table 4: List of players in NBA dataset.
+
+DATA ANALYSIS ON NBA DATASET
+
+Figure 7 shows the Synergy Graph and Suppression Graph built
+from the records in NBA dataset, alongside the description of typical
+players in Table 4.
+
+player id
+
+player name
+
+team
+
+20
+327
+314
+255
+479
+527
+153
+204
+124
+514
+216
+92
+415
+279
+366
+383
+319
+544
+488
+..
+.
+
+Giannis Antetokounmpo
+Kyle Lowry
+Kawhi Leonard
+Serge Ibaka
+Pascal Siakam
+Fred VanVleet
+Kevin Durant
+Draymond Green
+Stephen Curry
+Klay Thompson
+James Harden
+Clint Capela
+Chris Paul
+Nikola Jokic
+Jamal Murray
+Paul Millsap
+Damian Lillard
+Russell Westbrook
+Ish Smith
+..
+.
+
+Milwaukee Bucks
+Raptors
+Raptors
+Raptors
+Raptors
+Raptors
+Warriors
+Warriors
+Warriors
+Warriors
+Rockets
+Rockets
+Rockets
+Nuggets
+Nuggets
+Nuggets
+Trail Blazers
+Thunder
+Pistons
+..
+.
+
+(a) Synergy Graph
+
+(1) It tends to have local communities on the graph, as the cooperation usually occur among a group of certain players.
+(2) The size of vertices is proportional to the appearance frequency of the players, and this dataset collects only the top
+points/rebounces/assists players of each team in a match,
+so we can speculate that players like James Harden(216),
+Giannis Antetokounmpo(20) and Damian Lillard(319) had
+good performance within their teams.
+(3) The remarkable combination of players, i.e., the orange triangle of James Harden(261), Chris Paul(415), Clint Capela(92),
+is related to the fact that the team Rockets had seldom lost
+the games when these three players participated.
+(4) The local community of Kyle Lowry(327), Kawhi Leonard(314),
+Serge Ibaka(255), Pascal Siakam(479) and Fred VanVleet(527),
+corresponds to the NBA Champion of the 2018-2019 season.
+It’s commented that Raptors won the champion under the
+leadership of Kawhi Leonard(314) and Kyle Lowry(327), and
+another three teammates are believed to have made big contribution.
+Suppression Graph: Unlike the suppression graph that indicates the advantage of one individual over another in online games,
+the suppressive relation in NBA dataset is more related to the relation that one team defeated another.
+(1) The links pointing from Nikola Jokic(279) and Jamal Murray(366) to Damian Lillard(319) imply an advantage of the
+team Nuggets over the team Trail Blazers.
+(2) Similarly, the team Thunder had a perfect record against
+the team Pistons, which is reflected by the link from Russell
+Westbrook(544) to Ish Smith(488).
+
+(b) Suppression Graph
+
+Figure 7: Relationship Graphs in NBA dataset
+Several interesting observations are found here:
+Synergy Graph: In online games, usually from the synergy
+graph we can conclude which pairs of nodes have beneficial interactions (from the orange links) when teamed up. In NBA games,
+players usually stay in only one team during a match season. Therefore, the synergy graph shows a bit different characteristics:
+
+2309
+
+Applied Data Science Track Paper
+
+KDD '20, August 23–27, 2020, Virtual Event, USA
+
+B.3
+
+B
+
+EXPERIMENT DETAILS ON FEVER
+BASKETBALL DATASET
+B.1 Feature Design
+
+Table 5 lists the handcrafted features we built for players in Fever
+Basketball dataset alongside their descriptions.
+Table 5: Handcrafted features for prediction on the Fever
+Backetball dataset. (The average operation is performed at
+match-wise)
+Feature
+
+Description
+
+role_level
+ass_num_avg
+ballblk_num_avg
+ballpass_num_avg
+ballstolen_num_avg
+balltouch_num_avg
+blk_num_avg
+game_times
+win_game_times
+lose_game_times
+mentor_id_times_avg
+mvp_rate
+overtime_rate
+reb_num_avg
+role_score_avg
+skill_use_times_avg
+steal_num_avg
+three_point_fieldgoal_avg
+three_point_shoot_avg
+two_point_fieldgoal_avg
+two_point_shoot_avg
+wideopen_num_avg
+
+role level of the player account
+average assistance
+average times of being blocked
+average passes
+average times of being stolen
+average times of ball touching
+average blocks
+total game times
+total win game times
+total lose game times
+average times of mentor guidance
+the mvp rate
+the overtime rate
+average rebounces
+average scores by player
+statistics of skill uses
+average steal times
+average 3-point fieldgoals
+average 3-point shoots
+average 2-point fieldgoals
+average 2-point shoots
+average wideopen scores
+
+B.2
+
+Comparison of Hero2Vec Methods
+
+B.3.1 Unsupervised Hero2Vec. Various definitions of link weights
+to construct the relationship graphs are available. We tried different
+definitions to build the graphs and testify their effects with the
+downstream prediction task. For the win/lose prediction task on
+Fever Basketball dataset, Table 6 and Table 7 show the prediction
+performance evaluated with prediction accuracy.
+Table 6: Comparison of network construction methods for
+synergy graph. 𝑓𝑤𝑖𝑛 is the times of winning together; 𝑝 𝑤𝑖𝑛
+′
+is the win rate of the pair of heroes; 𝑝 𝑤𝑖𝑛
+is the win rate
+counted only on the matches where the hero pair appeared
+at one side.
+Link Weight
+Definition
+𝑓𝑤𝑖𝑛 − 𝑓𝑙𝑜𝑠𝑒
+𝑝 𝑤𝑖𝑛 − 𝑝𝑙𝑜𝑠𝑒
+′
+′
+𝑝 𝑤𝑖𝑛
+− 𝑝𝑙𝑜𝑠𝑒
+
+Prediction Algorithms
+LR
+XGBOOST OptMatch
+0.619
+0.615
+0.639
+0.594
+0.617
+0.625
+0.613
+0.609
+0.630
+
+Table 7: Comparison of network construction methods for
+suppression graph. 𝑓 refers to the times and 𝑝 refers to the
+defeat rate.
+Link Weight
+Definition
+𝑓 (𝑎 defeat 𝑏)
+𝑓 (𝑎 defeat 𝑏) − 𝑓 (𝑏 defeat 𝑎)
+𝑝 (𝑎 defeat 𝑏)
+
+Prediction Algorithms
+LR
+XGBOOST OptMatch
+0.621
+0.617
+0.640
+0.601
+0.607
+0.619
+0.618
+0.619
+0.630
+
+It’s important to note that no definition of link weights is promised
+to outperform the others. Depending on the dataset, different definitions encode different information to some degree. It’s worth
+trying different construction methods and pick the most suitable
+one for a given case.
+B.3.2 Supervised Hero2Vec. Another question arises naturally after looking into the offline learn phase of OptMatch: What is the
+advantage of building the relationship graphs and learning the
+latent vectors, comparing to adding one embedding layer in the
+Neural Network? To investigate this problem, we test the prediction
+performance of the OptMatch-Net model, by adopting pre-trained
+embedding like claimed in the paper, and by adding an embedding
+layer before OptMatch-Net. Results are provided in Table 8.
+
+Experimental Setup
+
+The offline/online experiments are performed in Python.
+• Logistic Regression is implemented with scikit-learn Python
+package5 . We used SAGA as the solver for the optimization.
+• XGBoost is implemented with its official Python package6 .
+We trained 1000 trees of maximum depth 4 with a learning
+rate of 0.1 using 8 parallel threads.
+• BalanceNet implements a multilayer neural network with
+Keras Python package whose input is players’ feature vectors
+and output is the probability/score difference that team A
+wins over team B.
+• Blade-Chest employs a blade layer and a chest layer in the
+neural network, through which each team gets a blade vector
+and a chest vector. The model predicts match outcome based
+on these two vectors.
+• HOI implements a factorization-based model to describe
+pairwise interactions between players by tensorflow.
+
+Table 8: Comparison of network embedding methods.
+Embedding Category
+
+Accuracy
+
+Pre-trained Embedding
+Embedding Layer
+
+0.639
+0.637
+
+Time Efficiency
+Train
+Predict
+24.85s 5.52 × 10−7 s
+259.59s
+0.33s
+
+With the research in existing literature and the experiment results, we are able to conclude that pre-trained embedding vectors
+lead to comparable performance with adding the embedding layer
+in the neural network. Pre-trained embedding vectors can be considered somehow incorporating the expert knowledge. Besides,
+with much fewer parameters to employ, methods with pre-trained
+embedding vectors gain a great improvement in time efficiency.
+
+5 https://scikit-learn.org/stable/modules/classes.html#module-sklearn.linear_model
+6 https://xgboost.ai
+
+2310
+
+

@@ -1,0 +1,1179 @@
+arXiv:2011.01324v2 [cs.AI] 4 Nov 2020
+
+Valuing Player Actions in Counter-Strike: Global
+Offensive
+Peter Xenopoulos
+
+Harish Doraiswamy
+
+Claudio Silva
+
+New York University
+New York, NY
+xenopoulos@nyu.edu
+
+New York University
+New York, NY
+harishd@nyu.edu
+
+New York University
+New York, NY
+csilva@nyu.edu
+
+Abstract—Esports, despite its expanding interest, lacks fundamental sports analytics resources such as accessible data or
+proven and reproducible analytical frameworks. Even CounterStrike: Global Offensive (CSGO), the second most popular
+esport, suffers from these problems. Thus, quantitative evaluation
+of CSGO players, a task important to teams, media, bettors
+and fans, is difficult. To address this, we introduce (1) a data
+model for CSGO with an open-source implementation; (2) a
+graph distance measure for defining distances in CSGO; and
+(3) a context-aware framework to value players’ actions based
+on changes in their team’s chances of winning. Using over 70
+million in-game CSGO events, we demonstrate our framework’s
+consistency and independence compared to existing valuation
+frameworks. We also provide use cases demonstrating highimpact play identification and uncertainty estimation.
+Index Terms—sports analytics, esports data, event stream data
+
+I. I NTRODUCTION
+Esports, or professional video gaming, is one of the fastest
+growing sports in the world. The advent of video streaming has
+allowed esports to garner viewership as popular sports events
+like the FIFA World Cup or the College Football National
+Championship. Accordingly, there has been increased interest
+in esports from investors looking to create teams, gamblers
+seeking to wager, and media conglomerates pursuing new,
+captivated audiences [1]. Yet, esports has attracted limited
+sports analytics work, unlike traditional sports such as baseball, basketball or soccer.
+A common task in sports analytics is to derive quantitative
+valuations of players. Valuing players is crucial for teams,
+bettors, media and fans alike. For example, teams may use
+valuation data to drive efficient player acquisition, bettors may
+use quantitative metrics to find profitable bets, and media organizations may create data-derived player rankings for curious
+fans. However, literature on valuing esports players is sparse.
+Existing frameworks rely on simple, non-contextual statistics
+that count player outcomes, such as kills, deaths and assists. A
+downside to this approach is that players are currently being
+valued as if they are each facing the same situations. However,
+this is seldom the case, since player outcomes are heavily
+dependent on context, as some game situations are inherently
+978-1-7281-6251-5/20/$31.00 ©2020 IEEE
+
+harder or easier than others. Furthermore, existing frameworks
+can be hard to reproduce and lack measures of uncertainty.
+The key factor affecting the development of involved analytics in esports is the lack of easily accessible and clean esports
+data. Improved data capture, along with publicly accessible
+data, has traditionally enabled analytics to grow in a sport [2].
+Since esports are played entirely virtually, one would expect
+data capture to be straightforward. However, the tools for
+data acquisition are surprisingly limited and undocumented.
+Furthermore, esports data is often stored in esoteric formats
+that are riddled with inconsistencies and lacks a commonly
+accepted data model [3]. These aforementioned issues have
+hampered the availability of easy to use public esports data,
+severely limiting the analytics efforts.
+In this paper, we provide the following contributions towards analyzing esports data and valuing players. We first
+define a data model for Counter-Strike: Global Offensive
+(CSGO), one of the most popular first person shooter games in
+the world. We will also make available the implementation of
+our data model as an open-source library 1 . Next, we introduce
+a graph-based measure to define distances in CSGO, which
+we then use to derive spatial features from the data. Finally,
+we outline a reproducible, context-aware player valuation
+framework based on how players change their team’s chance of
+winning. Like similar frameworks in other sports, we call our
+framework Win Probability Added (WPA). We demonstrate
+the effectiveness of our framework, using over 70 million
+CSGO events, with a variety of use cases. We find that WPA
+is both a consistent and unique dimension to value CSGO
+players, compared to existing frameworks.
+The rest of the paper is structured as follows. In Section II,
+we provide a literature review of quantitative player valuation
+in sports. In Section III, we define our data model and
+our graph-based measure for describing distances in CSGO.
+In Section IV, we introduce our context-aware player valuation framework and setup for predicting win probability.
+In Section V, we describe our results and provide insight
+into our model’s calibration. In Section VI, we compare our
+framework with existing ones and demonstrate use cases such
+as identifying high-impact plays and estimating uncertainty.
+Finally, we conclude the paper in Section VII.
+1 csgo GitHub (https://github.com/pnxenopoulos/csgo)
+
+II. R ELATED W ORK
+One of the fundamental objectives of sports analytics is to
+quantitatively evaluate players. Although major sports, such as
+soccer and American football, have extensive player valuation
+literature, esports lags behind. A common player valuation
+approach is to assess players based on the cumulative value
+of their actions, where actions are valued by how they change
+their team’s chances of winning or scoring. This approach
+was employed effectively in soccer, where Decroos et al. [4]
+presented a machine learning approach to analyze how player
+actions change their team’s chance of scoring or conceding.
+Their approach estimated the probability of scoring from the
+most recent sequences of game events. As player actions
+transition the game from one discrete state to the next, players
+are valued by how they change their team’s chance of scoring
+or conceding. For American football, Yurko et al. [5] not only
+introduced public NFL play-by-play data, but also a regression
+based framework to value players based on how their plays
+change a team’s win probability or expected score. Specifically, they estimated expected points and win probability at
+each play, and valued players by how they changed their team’s
+expected score.
+Central to the aforementioned player valuation frameworks
+is the idea of estimating win probability or points scored
+from a given game state. Early attempts used methods such
+as random forests and ridge regression, applied on discrete
+play level data, to estimate win probability or points, such
+as work by Lock et al. [6] for football and Macdonald [7]
+for ice hockey. As sports data has become more granular, we
+have seen more continuous time and spatiotemporal models.
+Cervone et al. [8] utilized Markov chains to estimate the
+expected points of a basketball possession in real time. More
+recently, we have seen more neural inspired approaches.
+Yurko et al. [9] designed a framework to estimate American
+football play values in near-continuous time using player
+tracking data. Their approach used a long short-term memory
+recurrent neural network to estimate the expected gain in yards
+at any point of a play, conditioned on the spatial characteristics
+of players. Fernandez et al. [10] developed a deep learning
+approach to estimate the expected goals of a soccer possession
+using player tracking data to estimate the likelihood of scoring
+or conceding. Similarly, Sicilia et al. [11] presented a deep
+learning framework to estimate the value of micro-actions in
+basketball. Finally, Liu et al. [12] used a deep reinforcement
+learning approach to value ice hockey players as the aggregate
+of the value of their actions.
+Specific to esports, Yang et al. [13] first estimated win
+probabilities in Defense of the Ancients 2 (DOTA2), a popular
+esport game, using logistic regression, and considered both
+real-time and pre-match factors. Hodge et al. [14] attained
+similar performance on DOTA2 data and suggested that ensembles may provide the best performance when trying to
+predict win probability. For Counter-Strike: Global Offensive
+(CSGO), Makarov et al. [15] presented an ensemble approach
+using TrueSkill, decision trees and logistic regression to pre-
+
+dict round winners. We see another CSGO player valuation
+framework in Bednarek et al. [16] which utilized the spatial
+information to cluster death locations to create player ratings.
+Specifically, they argue that encounters vary in importance
+by location and cluster deaths using k-means to create death
+heatmaps. Although the above esports works made good
+progress in valuing CSGO players, they lack a reproducible,
+context-aware player valuation framework.
+III. A DATA M ODEL FOR CSGO
+A. CSGO Game Description
+CSGO is a first-person shooter video game where two
+teams of 5 players compete to achieve a variety of objectives.
+These two teams play as both the Terrorist (T) and CounterTerrorist (CT) sides over the course of a professional match. A
+professional match consists of a collection of performances on
+one or more maps, which are distinct virtual worlds. Typically,
+competitions are structured as best of three or five maps. In
+professional competitions, maps are standardized and selected
+from a known pool of seven maps. On each map, teams are
+initially assigned T or CT and then play for 15 rounds as
+their assigned side. Teams switch sides after the 15th round.
+Whichever team wins 16 rounds out of 30 wins the map.
+The T and CT sides can win a round through a variety
+of methods. Both teams can win a round if they eliminate
+the opposing side. Players start with 100 health points (HP)
+and are eliminated from the round when they reach 0 HP.
+Specifically, players lose HP when other players damage
+them via guns or grenades. Players buy equipment, such as
+guns, grenades and armor, at the beginning of a round, using
+money earned from doing well in previous rounds. Beyond
+eliminating the opposition, the T side can win a round by
+planting and exploding a bomb at one of two bombsites on a
+map, denoted A or B. One T player is randomly assigned the
+bomb at the start of each round, and this bomb can only be
+planted at one of the two bombsites. Once planted, the bomb
+explodes in 35 seconds, unless defused. The CT side can win
+the round by defusing a planted bomb.
+B. CSGO Data
+Each professional match typically generates recordings of
+the game called a demofile. Every map in a match will generate
+its own demofile. This demofile contains a serialization of the
+data transferred between the host (game server) and its clients
+(players). Data transferred to and from the server occurs at
+a predefined tick rate, which defines when client inputs are
+resolved with the server. For professional games, the server
+tick rate is usually 128 ticks per second, meaning each tick
+represents around 7.8 milliseconds. Client inputs represent
+player actions, such as movement, attacks or grenade throws.
+Non-client events also register in the demofile, such as round
+starts and ends. For a detailed overview of CSGO demofiles,
+see Bednarek et al. [3].
+
+Footstep
++ Tick: int
++ PlayerName: string
+Parsed Demoﬁle Text
+Round
+
+John damages Bob for 47 HP
+Jack defuses the bomb
+Round 7 starts
+Match
+
+Map (*.dem)
+Jack walks to 34.4, 57.2, 108.9
+Bob walks to 37.8, 56.6, 115.2
+Sal damages Rick for 88 HP
+...
+
+...
+
++ StartTick: int
+Damage
++ EndTick: int
++ Tick: int
+...
++ PlayerName: string
++ Footsteps: List[Footstep]
+...
++ Damages: List[Damage]
++ BombEvents: List[BombEvent]
+
+BombEvent
++ Tick: int
++ PlayerName: string
+...
+
+Fig. 1. Unstructured demofile data is structured under an extensible model.
+
+C. CSGO Data Model
+Since CSGO demofiles are essentially data transferred between the clients and the game server, the data is simply
+stored as a text of sequential set of events with no contextual
+information, such as round or map location. Thus, due to
+the highly unstructured nature of these low level CSGO data
+streams, akin to log files, performing any complex analytic
+tasks becomes impossible without modeling this data formally
+into a useful data structure. We therefore propose a hierarchical
+data model for CSGO data as illustrated in Figure 1. Given a
+specific map’s demofile, we split this data into multiple Round
+objects, each of which contains relevant round information,
+such as start and end ticks, score, round results and events that
+happened during the round. All events that occurred during
+a round are stored in lists of objects corresponding to the
+type of event. For example, each Round object contains a list
+of Footstep objects that correspond to player movement
+events. Although we only detail an example using footstep,
+damage and bomb events, our data model is easily extensible
+to include other events such as grenade throws or shooting
+events.
+The events in Round objects also occur within a logical
+ordering based on their timestamp. These events progress the
+round through a series of game states. We define a game
+state Gi,t as an object that holds all of the current game
+information in round i at tick t. A game state Gi,t could
+contain attributes derived from round data, such as the map
+and score differential, temporal data such as the tick, spatial
+data such as player locations and other information such as the
+players remaining on each side or whether or not the bomb
+has been planted. When a player performs an action, such as
+damaging opponents or planting the bomb, the game advances
+from Gi,t to Gi,t+1 . For purpose of this work, we define a
+game state with the attributes for each team outlined below:
+Map: the map where the game state occurred
+Ticks Since Start: how many ticks since the round start
+Equipment Value: the total round start equipment value
+
+Players Remaining: the total numbers of players remaining
+HP Remaining: the total health points remaining
+Bomb Planted: a flag indicating if the bomb is planted
+Bomb Plant Site: if the bomb is planted, at which site
+Team Bombsite Distance: Minimum player distance to both
+bombsites for each side
+While various CSGO demofile parsers exist, they simply
+read the demofiles as a sequence of text, thus making it
+difficult to integrate them with modern data science pipelines.
+Moreover, some existing parsers are also operating system
+specific, or are written in programming languages without
+broad support in the data science community. On the other
+hand, the Round object, along with its corresponding events
+and game states, can each easily be stored as dictionaries
+or data frames, which make our data model congruent with
+contemporary data science workflows. Additionally, the data
+model is congruent to services that deliver JSON data, like
+many APIs. Our CSGO data model is implemented as Python
+library, which we will make available as an open source
+library so that it can be used by the growing esports analytics
+community.
+D. CSGO Spatial Data
+Spatiotemporal data in contemporary sports is becoming
+valued as tracking systems become more reliable [17]. Despite
+this trend, player tracking data is still virtually unused in
+esports. Spatial data in sports is often used to create distance
+based metrics. For example, Yurko et al. [9] uses many
+distance based features, such as distance to closest defender, to
+estimate the expected yards gained from an NFL ball carrier’s
+current position. Similarly, Decroos et al. [4] uses distance
+based features, such as distance to the goal, for soccer goal
+prediction. For most sports, distance based metrics are based
+on euclidean distance, since sports like American football,
+soccer, basketball and baseball can be summarized on 2D
+surfaces with no obstructions.
+Despite euclidean distance’s ubiquity, it may not be useful in
+the spaces considered in esports. Firstly, esports maps often
+
+A
+
+B
+
+Fig. 2. One can simply jump down from point A to point B via the orange
+path. However, to get from point B to point A, one must take the purple path,
+which illustrates the non-symmetric nature of distance in CSGO.
+
+contain obstructions, like walls or buildings, where players
+are prohibited from moving. Secondly, because the world is
+3D, distance symmetry doesn’t always hold. For example, one
+might be able to jump down to a position, but not back up to
+where they once were. We illustrate the non-symmetric nature
+of distance in CSGO in Figure 2. To address these issues, we
+propose a graph-based distance measure which uses a graph
+that discretizes a CSGO map.
+Although there are infinitely many ways to discretize the
+3D map space in CSGO, we take an approach drawing from
+AI-controlled bot movement. A bot is an AI-controlled player
+which plays against real players, and CSGO provides the
+functionality for players to play against bots. Bots use navigation meshes, which provide information on all traversable
+surfaces of the map, to move around the map [18]. Part of the
+information included for each surface includes all neighboring
+surfaces. From the navigation mesh, we can create a directed
+graph that represents the map. Each node represents a surface
+in the navigation mesh, while each directed vertex from node
+a to node b denotes a path available from a to b, given a and b
+are adjacent. Each player at any given time in a round can be
+assigned a node in the graph depending on which surface they
+occupy. Using the A∗ algorithm, we can then find the shortest
+path from one node to another, which we call graph distance.
+We show an example of graph distance in Figure 3. We see that
+although both C and A are equidistant to B using euclidean
+distance, the graph distances reveal that A (via the green tiles)
+is about twice as close to B than is C (via the orange tiles).
+Furthermore, we see that B is closer to C (via the purple path)
+than C is to B. This is because of a height difference in the
+map that allows B to jump down to C, whereas C must take
+the long way around.
+IV. VALUING P LAYERS
+A. Existing Frameworks
+Although CSGO analytics literature is sparse, there exist
+a few basic player valuation frameworks. For example, the
+simplest way to value a player is by using some function of
+
+Fig. 3. Although B and C are equidistant in euclidean space to A, A-toC is closer in graph distance (13 nodes) than A-to-B (15 nodes in orange).
+Additionally, the green path (19 nodes) from B-to-A shows the non-symmetry
+of graph distance, since the map is 3D. The black space between C and B
+represent off limits/walled off areas. Each traversable surface is indicated as
+a blue shaded region with a red border.
+
+their total kills and deaths. Intuitively, good players will have
+more kills than deaths. While we can simply tabulate a player’s
+raw number of kills or deaths, we can also find their kill-death
+ratio, defined as
+Kills
+(1)
+KDR =
+Deaths
+One of the immediate drawbacks of valuing players using
+KDR is that players are only rewarded for attaining a kill
+and not for damaging other players or getting assists.
+Two metrics that attempt to address KDR’s shortcomings
+include average damage per round (ADR) and KAST% [19].
+ADR is simply a player’s total damage output over rounds
+played. One of the downsides of ADR is that damage dealt
+may depend heavily on contextual factors such as the number of players remaining on each team or equipment value.
+KAST% measures the proportion of rounds that a player
+achieves a beneficial event, defined as a kill, assist, survival
+or trade. Some drawbacks to KAST% include all four events
+being valued the same, along with inconsistent definitions
+across the CSGO community for a “trade”, which is loosely
+defined when a player kills another player but is shortly killed
+after. Furthermore, a player can attain a perfect KAST% score
+by purposely disengaging with enemies the entire match. ADR
+and KAST% are calculated as
+ADR
+KAST %
+
+Damage
+= TotalRounds
+
+(2)
+
+= Kills+Assists+Survivals+Trades
+Rounds
+
+(3)
+
+To create a more comprehensive player valuation metric,
+the popular CSGO website HLTV developed HLTV Rating
+1.0 and 2.0. HLTV Rating 1.0 is defined as
+Rating1.0 =
+
+RatingK + 0.7 × RatingS + RatingM K
+(4)
+2.7
+
+device kills woxic
+T +17%
+chrisJ kills dupreeh
+CT +20%
+
+gla1ve kills chrisJ
+T +16%
+
+Fig. 4. A team’s win probability changes as players conduct actions such as movement, damages and bomb plants/defuses. Players are credited for their
+actions’ increase or decrease to their team’s win probability.
+
+where RatingK , RatingS and RatingM K are a player’s kill
+rating, survival rating and multiple kills rating, respectively.
+These ratings are functions of a player’s kills and deaths [20].
+To account for kills being worth more than survivals, Rating 1.0 weighs RatingS less. Although HLTV’s Rating 1.0
+methodology was public, the Rating 2.0 system methodology
+is not. HLTV’s Rating 2.0 includes more ratings, such as a
+KAST and Damage rating, along with different rating calculations for both T and CT performances [19]. While HLTV
+Rating 2.0 takes a step in the right direction by calculating
+separate T and CT ratings, its exact mechanisms are still
+unknown making it impossible to reproduce. Furthermore,
+beyond controlling for side, additional features can influence
+the difficulty of game situations. To address the shortcomings
+of the aforementioned player valuation systems, we introduce
+a context-aware player valuation framework based on game
+state transitions.
+
+our estimate of Yi changes as well. We can value the player’s
+action as the difference in win probability between the two
+states, formally defined as
+
+B. Valuation Framework
+
+C. Estimating Win Probability
+
+Over a course of a round, player actions transition the
+game through a sequence of game states Gi,1 , ..., Gi,t , as
+described in Section III-C. Each game state is also associated
+with a round outcome, Yi , which is coded as 1 if the CT
+sides wins round i and 0 otherwise. We are interested in
+estimating P (Yi = 1 | Gi,t ). Let Ybi,t be the estimated win
+probability given a game state Gi,t . Thus, Ybi,t changes based
+on the game state, and can change drastically depending on the
+game scenario. We can see an example of how win probability
+changes according to player actions in Figure 4.
+Now, assume a player committed an action in round i at time
+t, denoted as ai,t . Although this action could be any event,
+such as a footstep or bomb plant, we only define damage
+events as actions for our framework. Once action ai,t has
+occurred, the game state transitions from Gi,t to Gi,t+1 , and
+
+Previous work on estimating win probability formulated the
+problem as a classification task and utilized methods such
+as logistic regression [5], [7], [13], tree based classifiers [4],
+[14] or neural networks [9], [12]. We use a similar set up,
+since estimating Yi conditioned on Gi,t presents a classic
+binary classification problem. We structure our observations as
+a collection of game states, where our features are the game
+state attributes described in Section III-C.
+Our data consists 4,682 local area network (LAN) matches
+that contain public demofiles. We use LAN matches because
+they are typical professional matches played in a tournament
+setting. We downloaded the demofiles used in our study, along
+with each matches’ ADR, KAST and HLTV Rating 2.0 from
+HLTV, one of the most popular CSGO websites that contains
+news, match statistics and demofiles. We construct a training
+
+V (ai,t ) = Ybi,t+1 − Ybi,t
+
+(5)
+
+It is clear that for any action, V (ai,t ) ∈ [−1, 1]. Since Yi is
+defined as a CT win, any action beneficial to the T side will
+return a negative value. Because we want to credit players on
+both T and CT positively for beneficial actions to their teams,
+we normalize V (ai,t ) to the team of the player committing
+action. The player on the receiving side of the action (e.g.
+the player receiving damage) is credited with the negative of
+V (ai,t ). To determine a player’s total contribution, we can
+tabulate their Win Probability Added (WPA), defined as the
+sum of the player’s total action values over all games. To
+standardize the metric, we report WPA as WPA per round,
+since games have a variable number of rounds.
+
+D. Hyperparameter Tuning
+We trained all of our models on a server running Ubuntu
+16.04 with 2x Intel Xeon E5-2695 2.4 GHz, 256GB of RAM
+and 3 NVIDIA Titan GPUs. We utilized the scikit-learn
+implementation of logistic regression with the SAGA solver
+and no regularization, along with the catboost and xgboost
+packages for our CatBoost and XGBoost implementations. To
+tune our parameters, we used a train/validation split where 23
+of the data was used for training and 13 was used to validate
+our models. Unless stated, we left the parameters set to their
+defaults. We used a log loss scoring function.
+1) XGBoost Tuning: We performed a grid search across the
+parameters shown in Table I. The optimal parameter set is in
+bold. We set the number of estimators to 100. Our final model
+reported in the paper is the one chosen by the search. We used
+the hist tree method [26].
+2) CatBoost Tuning: We performed a grid search across
+the parameters shown in Table I. The optimal parameter set
+is in bold. We set the number of iterations to 100. Our final
+model reported in the paper is the one chosen by the search.
+We trained our model using all available GPUs.
+TABLE I
+XGB OOST AND C AT B OOST PARAMETER S PACES
+Model
+
+Parameter
+
+Values
+
+max_depth
+min_child_weight
+
+6, 8, 10, 12
+1, 3, 5, 7
+
+depth
+l2_leaf_reg
+
+6, 8, 10, 12
+1, 3, 5, 7
+
+XGBoost
+
+CatBoost
+
+V. M ODEL R ESULTS
+A. Model Performance
+As Decroos et al. [4] note, assessing the performance of a
+player valuation system is difficult as there exists no ground
+
+1.0
+
+True Probability
+
+set of 55 million game states from matches from October 23rd,
+2016 to May 31st, 2019 and a test set of 18 million game states
+from matches occurring from June 1st, 2019 to December
+22nd, 2019. We observe a game state whenever a footstep,
+damage or bomb event occurred. However, to calculate WPA,
+we only consider damage events.
+Since WPA is highly dependent on obtaining good estimates
+for Yi , we focus on a selection of models that can produce
+well calibrated probabilities. Specifically, we consider logistic
+regression, CatBoost [21] and XGBoost [22]. We focus on
+boosted ensembles for their demonstrated tendency to produce
+well calibrated probabilities [23], [24]. As we are interested in
+estimating probabilities, we define performance using both the
+log loss and the Brier loss, which are standard in probabilistic
+prediction problems, as well as AUC [25]. Additionally, we
+consider a baseline model which predicts a game state’s map
+average CT win rate. We outline our model tuning procedures
+and computing environment below.
+
+Logistic Regression
+XGBoost
+CatBoost
+
+0.8
+0.6
+0.4
+0.2
+0.0
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Predicted Probability
+
+0.8
+
+1.0
+
+Fig. 5. Calibration curves on test data for each model show that XGBoost
+produced the most well calibrated win probabilities.
+
+truth for player valuation. Therefore, we first assess our system
+through the performance of our win probability model and
+the insights the model provides. Then, we provide a comprehensive comparison of WPA against other metrics along
+with different use cases of the metric. We begin by assessing
+the performance of our win probability model. We present
+a performance comparison of logistic regression, CatBoost
+and XGBoost for predicting the round winner in Table II.
+We see that all models perform significantly better than the
+map average benchmark, and that XGBoost performs the best
+across all metrics.
+TABLE II
+W IN PROBABILITY MODEL PERFORMANCE ON TEST DATA . XGB OOST
+OUTPERFORMED ALL OTHER CANDIDATE MODELS ACROSS ALL METRICS .
+
+Method
+
+Log Loss
+
+Brier Score
+
+AUC
+
+Logistic Regression
+CatBoost
+XGBoost
+
+0.5539
+0.5443
+0.5353
+
+0.1912
+0.1875
+0.1842
+
+0.7743
+0.7851
+0.7913
+
+Map Average
+
+0.6917
+
+0.2493
+
+0.5303
+
+B. Model Calibration
+Beyond comparing model performance in log loss, Brier
+score or AUC, it is also important to know if our models are producing well calibrated probabilities, since these
+probabilities are crucial for calculating WPA. We present a
+calibration plot of our three models in Figure 5. We generate
+this calibration plot by creating 100 equal width bins of
+predictions, where we plot each bin’s mean predicted probability on the x-axis and the bin’s mean true probability on
+the y-axis. While we observe that all of our models were
+well calibrated, XGBoost seemed to produce the most well
+calibrated probabilities, as it most closely follows the perfect
+calibration line in gray.
+Another way to assess our win probability model is to
+investigate its performance at different timestamps in a round.
+We would expect our model to predict the winner of a round
+much better closer to the end of a round than at the beginning,
+since the time horizon to the round end is smaller. In Figure 6,
+we see that, as expected, log loss and Brier score decrease,
+
+0.0
+
+Brier Score
+0.2
+0.1
+
+90
+
+60
+
+30
+
+0
+
+0.0
+Seconds Since Start
+
+100
+75
+50
+25
+0
+
+Accuracy
+
+90
+
+0.2
+
+60
+
+0.4
+
+30
+
+0.6
+
+AUC
+
+1.00
+0.75
+0.50
+0.25
+0.00
+
+0
+
+Log Loss
+
+Seconds Since Start
+
+Fig. 6. Win probability model performance by round time indicates that our
+win probability model becomes more powerful later in rounds.
+
+while AUC and accuracy increase as the rounds progress. This
+finding gives our win probability model utility in applications
+such as live betting or media coverage of an event, aside from
+its use in valuing CSGO players. One criticism of the model
+training methodology is that many of the training examples
+are highly correlated, such as adjacent game states. However,
+given that the test data is completely independent from the
+training data, along with both intuitive and strong model
+performance, we see that our model still generalizes well.
+C. Feature Importance
+One of the benefits of the XGBoost algorithm is that it
+provides feature importances through analyzing the total gain
+provided by each feature. Understanding what features are
+driving the model can help teams consider relevant aspects
+of their gameplay. In Figure 7, we show the normalized
+importances for each feature in our win probability model.
+The scores are normalized so the sum of all importances is
+100.
+From Figure 7, it is apparent that a team’s equipment value
+is the lead determinant of a team’s chances of winning. This
+is intuitive, since teams gain a significant advantage in the
+game when they have better equipment. We then see that HP
+remaining for both sides is another strong factor for predicting
+what side wins a round. What is interesting is that these factors
+rank higher than the players remaining, which may suggest
+that while having a numerical advantage is important, the team
+health may be more important for winning a round. Ultimately,
+these features can change win probability drastically, as seen
+Figure 4. In this particular example, note that the kill events
+drive the majority of win probability changes.
+Another interesting consequence from the feature importance plot is the nature of the Map feature. While solely
+using the Map feature leads to significantly worse prediction
+performance, as indicated in Table II under Map Average,
+the feature is still ranked fifth in feature importance. This
+relationship suggests that the Map feature provided important
+context in the presence of other features. This finding also
+
+Fig. 7. Intuitively, team equipment and HP remaining had the highest feature
+importance. Additionally, the map the round took place on was also quite
+important, highlighting its interaction effects with the other features.
+
+suggests that there may exist optimal map strategies under
+certain team equipment, HP and players left constraints.
+VI. D ISCUSSION
+A. Comparison with Existing Frameworks
+While WPA certainly accounts for deeper context than
+existing metrics through an underlying reproducible, interpretable and performant model, it is also important to assess
+the usefulness of WPA as a sports metric. Franks et al. [27]
+suggest that a useful sports metric exhibits the following three
+traits:
+Stability: The metric’s ability to measure the same quantity
+over time
+Discrimination: The metric’s ability to differentiate players
+Independence: The metric’s ability to provide new information
+In the following analysis, we focus on stability and independence. If a new metric is too closely correlated with existing
+measures, it could be measuring the same underlying quantity
+as the existing measures, rendering the new metric useless.
+Additionally, if a new metric doesn’t give consistent measurements of player, it may not be adopted by key stakeholders,
+such as teams, media or gamblers.
+WPA should act as a reliable measure of player talent in
+that it should measure the same quantity over time. That
+is, if we take multiple measures of a player’s talent, the
+sampled measures are consistent. To compare WPA’s stability
+to existing metrics, we calculated the month-to-month correlation for the various existing measures and WPA. We use
+a month-to-month correlation as it is unlikely that a player’s
+talent level changes significantly in such a short time frame.
+Furthermore, a month-to-month design is similar to the seasonto-season approach in [27]. Using players in our dataset who
+played at least 100 rounds each month from June 2019 to
+December 2019 (n = 479), we show the month-to-month
+correlation across all metrics in Table IV. Using the Fisher
+
+TABLE III
+T OP 10 FOR ALL ROUNDS AND PISTOL ROUNDS ONLY. D ISCREPANCIES BETWEEN WPA AND HLTV RANKINGS FURTHER DENOTE THE UNIQUENESS OF
+WPA COMPARED TO TRADITIONAL METRICS .
+All Rounds
+WPA
+HLTV Rank
+0.044
+1
+0.033
+27
+0.028
+3
+0.027
+36
+0.025
+31
+0.025
+21
+0.022
+9
+0.022
+7
+0.021
+5
+0.021
+14
+
+r-to-z transformation to assess the significance of difference
+between WPA’s month-to-month correlation, we see that it
+attains significantly greater stability than ADR (p = 0.0029),
+KAST% (p = 0.0392) and Rating 2.0 (p = 0.0268), where
+the parenthesis report one-sided difference-in-correlation test
+p-values [28]. WPA’s stability improvement over KDR’s was
+not statistically significantly (p = 0.3594). We see that the
+evidence supports the notion that WPA is more stable than
+many of the current advanced CSGO player metrics today.
+One of the chief downsides of popular CSGO player valuation metrics is that they correlate highly with kill-death
+ratio (KDR). Thus, many existing CSGO metrics violate the
+independence trait described above. We observe the correlation between KDR, existing valuation metrics and WPA
+in Table IV. Using the same Fisher r-to-z transformation
+methodology as above, we report the following one-sided
+p-values to show that WPA is not more independent with
+KDR than ADR (p = 0.9656), but more independent with
+KDR than KAST% (p = 0.0139) and HLTV Rating 2.0
+(p = 0.0000). The difference in correlation can be attributed
+to the consideration for the relevant context in which kills
+and damages occur. We believe the correlation between WPA
+and existing metrics can be further lowered by considering
+non-damage player actions, such as bomb plants, defuses and
+movement. Our results give us confidence that WPA is a useful
+sports metric since, unlike existing metrics, it provides a more
+consistent measure of a quantity that is less correlated with
+KDR.
+TABLE IV
+WPA ATTAINS THE HIGHEST MONTH TO MONTH (M- TO -M)
+CORRELATION , INDICATING ITS STABILITY. WPA ALSO IS SIGNIFICANTLY
+LESS CORRELATED WITH KDR THAN R ATING 2.0, DEMONSTRATING ITS
+HIGHER DEGREE OF INDEPENDENCE AS A METRIC .
+Metric
+
+M-to-M
+
+KDR
+
+KDR
+ADR
+KAST%
+Rating 2.0
+
+0.38
+0.24
+0.30
+0.29
+
+1.00
+0.67
+0.79
+0.93
+
+WPA
+
+0.40
+
+0.73
+
+While we have shown that WPA is both a consistent and
+independent metric when compared to other CSGO player
+
+Pistol Rounds
+Player
+WPA
+HLTV Rank
+cadiaN
+0.080
+9
+ZywOo
+0.068
+11
+EliGE
+0.067
+40
+electronic
+0.057
+32
+huNter0.051
+7
+shox
+0.051
+60
+KSCERATO
+0.048
+26
+Brehze
+0.045
+10
+dexter
+0.042
+6
+device
+0.042
+28
+
+device
+dupreeh
+gla1ve
+
+80
+
+Density
+
+Player
+ZywOo
+KSCERATO
+s1mple
+acoR
+woxic
+ropz
+xsepower
+device
+EliGE
+Jame
+
+60
+40
+20
+0
+
+0.02
+
+0.01
+
+0.00
+
+0.01
+
+0.02
+
+Average WPA per Round
+
+0.03
+
+0.04
+
+Fig. 8. WPA per round estimates for device (red), dupreeh (blue) and
+gla1ve (green). Although gla1ve has the worst average WPA per round,
+he also has the lowest variance.
+
+metrics, it is important to verify that it produces intuitive
+results. In Table III, we present the top 10 players using WPA
+per round. While there is some agreement between WPA and
+HLTV Ranking, players outside of the standard top 10 are
+included in WPA’s top 10. Seeing well-accepted names give
+credence in WPA’s ability to detect good players. However, the
+discrepancies also further highlight how WPA is independent
+of HLTV Rating 2.0, which is strongly correlated with KDR.
+One of the benefits of WPA is that we can calculate WPA
+for a variety of scenarios. We can calculate WPA for certain
+round contexts by filtering game states on certain attributes
+such as players remaining or win probability. For example,
+the pistol round is considered an important round, as it occurs
+on the first and 16th rounds. In this round, players on each
+team start with only pistols. Winning the pistol round allows
+the winning team to gain a significant money advantage in
+game. With this in mind, we calculate the WPA per round on
+pistol rounds for our data and present the results in Table III.
+It is clear that there is far more variation, supporting WPA’s
+independence from traditional metrics like HLTV Rating and
+KDR.
+B. Uncertainty Estimation
+Player valuation frameworks typically only report a point
+estimate. However, understanding the variability of estimates
+is important for a variety of stakeholders. For example, media
+and fans may speculate on the upside of players, teams may be
+
+ZywOo kills B1NGO
+T +67%
+
+ZywOo plants bomb
+T +4%
+
+Fig. 9. A 67% win probability increase due to a kill in a 1-vs-2 situation by ZywOo demonstrates a high impact play which is easily discovered through
+using win probability.
+
+concerned with finding consistent players and bettors may be
+want to limit risk in their betting portfolio. However, even if
+we knew a player’s true talent, there would still be variation in
+the player’s outcomes. Similar to the work in [5], [29], we use
+a resampling strategy to understand player outcome variability
+by generating distributions of each player’s mean WPA per
+round. Specifically, we resample each round a player has taken
+part in, with replacement. Then, we calculate a player’s WPA
+per round.
+To illustrate our uncertainty estimation procedure, consider the following three players: device, dupreeh and
+gla1ve. These three are members of Astralis, a top-tier
+CSGO team. In Figure 8, we plot their resampled mean
+WPA per game from games occurring between June 1st, 2019
+and December 22nd, 2019 using 100 bootstrapped samples.
+Specifically, we resampled events that occurred between June
+1st, 2019 to December 22nd, 2019. It is clear from our
+distributional estimates that there is a substantial difference
+between each of the players. For example, the players each
+exhibit different variances. We see that gla1ve’s distribution has a smaller standard deviation (0.0038) than device
+(0.0041) or dupreeh (0.0041). At the same time, can see
+that device exhibits a far higher average WPA per round,
+where as dupreeh and gla1ve are far more similar.
+C. Identifying High Impact Plays
+While WPA has clear uses for player scouting, tactical planning or betting, media and fans can also use win probability
+models to find high leverage or impactful plays. Information
+on these plays can be used for commentating or drafting articles and highlights. By assigning each action a value, we can
+easily query actions based on their change in win probability,
+or query actions based on the current win probability.
+In Figure 9, we see an example of one of the highest
+win probability swings for a round in our data. The T
+player ZywOo, considered the best player by both our WPA
+
+framework and HLTV Rating 2.0, came from behind with just
+13 health points to defeat the two remaining CT. The highest
+valued action in this sequence was a headshot on B1NGO, a
+player from EHOME, which provided a gain of 67% in win
+probability. ZywOo then killed the remaining CT player to
+win the round.
+Because the value function in Equation 5 takes two arbitrary
+game states as arguments, we can apply this function on two
+non-sequential game states. In the context of finding impactful
+plays, we can use this property to assess the total impact of a
+series of actions. In Figure 9, ZywOo became the sole player
+left on the T side around 100 seconds into the round. At this
+point, the 1-vs-2 situation presents under a 3% chance of the
+T side winning. With this in mind, ZywOo effectively turned
+an untenable game situation into a round win.
+D. Limitations and Future Work
+One of the limitations of the current WPA framework is
+that it only considers damage events. However, there are many
+events besides damages attributable to players such as bomb
+plants/defuses and movement. Oftentimes, these events can
+have unclear attributions. For example, if the T side plants the
+bomb and there are three CT remaining, it is not immediately
+obvious how the loss in win probability should be divided.
+A naive method could be to distribute the loss equally. On
+the other hand, it might not be accurate to detract from a
+player who had no part in losing control of the bombsite. In
+the future, we will consider a broader set of actions when
+calculating WPA. Another action type to consider are grenade
+throws. Grenades change the context of the game, in a nondamage point of view, by blinding opponents or obstructing
+views. It is clear that killing an opponent who is blinded
+is easier than an opponent who is not. Additionally, many
+kills through smoke grenades often occur through players
+randomly attacking through the smoke. Our future work will
+acknowledge how grenades change the context of the game.
+
+In future work, we want to fully explore spatially derived
+features using our graph distance measure. For example, distances between players in a team or between their opponents
+may reveal tactics that influence a team’s win probability. We
+plan to use this spatial information to automatically classify
+certain movements, plays or tactics. We also intend to explore
+other distance measures. One of the downsides of our graph
+distance metric is that tile size in the navigation mesh is not
+uniform. Therefore, using a metric such as geodesic distance
+could further improve our performance.
+It is important to note that our framework does not consider
+the level of the match being played. Thus, a strong assumption
+of the WPA framework is that analyzed teams are of similar
+skill categories. Win probability based valuation models in
+other sports also tend to disregard the level of the teams
+involved in the match, as it is very hard to obtain reliable
+estimates of team performance. One method to explore in
+the future is using pre-match betting spread or rankings in
+the win probability model, to capture the skill differences
+between the teams. In this way, WPA could be used across
+all settings. Sports such as baseball, basketball and soccer
+have significant literature on developing team ranking systems
+that future work may consider, such as the works described in
+Lopez et. al. [30].
+VII. C ONCLUSION
+This paper introduces (1) a data model for CSGO designed
+to facilitate CSGO data analysis, (2) a graph based distance
+measure to describe distances in esports and (3) WPA, a
+context-aware framework to value players based on their
+actions. We find that WPA provides a reproducible, consistent
+and unique dimension by which teams, fans, media and
+gamblers can assess the skill and variability of CSGO players
+at all levels of the sport.
+ACKNOWLEDGMENTS
+This work was partially supported by NSF awards: CNS1229185, CCF-1533564, CNS-1544753, CNS-1626098, CNS1730396, CNS-1828576; and the NYU Moore Sloan Data
+Science Environment.
+R EFERENCES
+[1] M. C. Keiper, R. D. Manning, S. Jenny, T. Olrich, and C. Croft, “No
+reason to lol at lol: the addition of esports to intercollegiate athletic
+departments,” Journal for the Study of Sports and Athletes in Education,
+vol. 11, no. 2, pp. 143–160, 2017.
+[2] R. Assunção and K. Pelechrinis, “Sports analytics in the era of big data:
+Moving toward the next frontier,” 2018.
+[3] D. Bednárek, M. Kruliš, J. Yaghob, and F. Zavoral, “Data preprocessing
+of esport game records,” in Proceedings of the 6th International Conference on Data Science, Technology and Applications. SCITEPRESSScience and Technology Publications, Lda, 2017, pp. 269–276.
+[4] T. Decroos, L. Bransen, J. Van Haaren, and J. Davis, “Actions speak
+louder than goals: Valuing player actions in soccer,” in Proceedings
+of the 25th ACM SIGKDD International Conference on Knowledge
+Discovery & Data Mining, 2019, pp. 1851–1861.
+[5] R. Yurko, S. Ventura, and M. Horowitz, “nflwar: A reproducible method
+for offensive player evaluation in football,” Journal of Quantitative
+Analysis in Sports, vol. 15, no. 3, pp. 163–183, 2019.
+[6] D. Lock and D. Nettleton, “Using random forests to estimate win
+probability before each play of an nfl game,” Journal of Quantitative
+Analysis in Sports, vol. 10, no. 2, pp. 197–205, 2014.
+
+[7] B. Macdonald, “An expected goals model for evaluating nhl teams
+and players,” in Proceedings of the 2012 MIT Sloan Sports Analytics
+Conference, http://www. sloansportsconference. com, 2012.
+[8] D. Cervone, A. D’Amour, L. Bornn, and K. Goldsberry, “A multiresolution stochastic process model for predicting basketball possession
+outcomes,” Journal of the American Statistical Association, vol. 111,
+no. 514, pp. 585–599, 2016.
+[9] R. Yurko, F. Matano, L. F. Richardson, N. Granered, T. Pospisil,
+K. Pelechrinis, and S. L. Ventura, “Going deep: Models for continuoustime within-play valuation of game outcomes in american football with
+tracking data,” arXiv preprint arXiv:1906.01760, 2019.
+[10] J. Fernández, L. Bornn, and D. Cervone, “Decomposing the immeasurable sport: A deep learning expected possession value framework for
+soccer,” in 13th MIT Sloan Sports Analytics Conference, 2019.
+[11] A. Sicilia, K. Pelechrinis, and K. Goldsberry, “Deephoops: Evaluating
+micro-actions in basketball using deep feature representations of spatiotemporal data,” in Proceedings of the 25th ACM SIGKDD International
+Conference on Knowledge Discovery & Data Mining, 2019, pp. 2096–
+2104.
+[12] G. Liu and O. Schulte, “Deep reinforcement learning in ice hockey for
+context-aware player evaluation,” in Proceedings of the 27th International Joint Conference on Artificial Intelligence, 2018, pp. 3442–3448.
+[13] Y. Yang, T. Qin, and Y.-H. Lei, “Real-time esports match result prediction,” arXiv preprint arXiv:1701.03162, 2016.
+[14] V. Hodge, S. Devlin, N. Sephton, F. Block, P. Cowling, and A. Drachen,
+“Win prediction in multi-player esports: Live professional match prediction,” IEEE Transactions on Games, 2019.
+[15] I. Makarov, D. Savostyanov, B. Litvyakov, and D. I. Ignatov, “Predicting
+winning team and probabilistic ratings in “dota 2” and “counter-strike:
+Global offensive” video games,” in International Conference on Analysis
+of Images, Social Networks and Texts. Springer, 2017, pp. 183–196.
+[16] D. Bednárek, M. Kruliš, J. Yaghob, and F. Zavoral, “Player performance evaluation in team-based first-person shooter esport,” in International Conference on Data Management Technologies and Applications.
+Springer, 2017, pp. 154–175.
+[17] J. Gudmundsson and M. Horton, “Spatio-temporal analysis of team
+sports,” ACM Computing Surveys (CSUR), vol. 50, no. 2, pp. 1–34,
+2017.
+[18] “Navigation meshes,” Feb 2008. [Online]. Available: https://developer.
+valvesoftware.com/wiki/Navigation Meshes
+[19] P. Milanovic, “Introducing rating 2.0,” Jun 2017. [Online]. Available:
+https://www.hltv.org/news/20695/introducing-rating-20
+[20] ——, “What is that rating thing in stats?” Apr 2010. [Online]. Available:
+https://www.hltv.org/news/4094/what-is-that-rating-thing-in-stats
+[21] L. Prokhorenkova, G. Gusev, A. Vorobev, A. V. Dorogush, and A. Gulin,
+“Catboost: unbiased boosting with categorical features,” in Advances in
+Neural Information Processing Systems, 2018, pp. 6638–6648.
+[22] T. Chen and C. Guestrin, “Xgboost: A scalable tree boosting system,”
+in Proceedings of the 22nd ACM SIGKDD International Conference on
+Knowledge Discovery & Data Mining, 2016, pp. 785–794.
+[23] A. Niculescu-Mizil and R. Caruana, “Obtaining calibrated probabilities
+from boosting.” in UAI, 2005, p. 413.
+[24] ——, “Predicting good probabilities with supervised learning,” in Proceedings of the 22nd International Conference on Machine Learning,
+2005, pp. 625–632.
+[25] V. Vovk, “The fundamental nature of the log loss function,” in Fields of
+Logic and Computation II. Springer, 2015, pp. 307–318.
+[26] “Xgboost parameters¶.” [Online]. Available: https://xgboost.readthedocs.
+io/en/latest/parameter.html
+[27] A. M. Franks, A. D’Amour, D. Cervone, and L. Bornn, “Meta-analytics:
+tools for understanding the statistical properties of sports metrics,”
+Journal of Quantitative Analysis in Sports, vol. 12, no. 4, pp. 151–165,
+2016.
+[28] R. A. Fisher, “Frequency distribution of the values of the correlation
+coefficient in samples from an indefinitely large population,” Biometrika,
+vol. 10, no. 4, pp. 507–521, 1915.
+[29] B. S. Baumer, S. T. Jensen, and G. J. Matthews, “openwar: An open
+source system for evaluating overall player performance in major league
+baseball,” Journal of Quantitative Analysis in Sports, vol. 11, no. 2, pp.
+69–84, 2015.
+[30] M. J. Lopez, G. J. Matthews, B. S. Baumer et al., “How often does
+the best team win? a unified approach to understanding randomness in
+north american sport,” The Annals of Applied Statistics, vol. 12, no. 4,
+pp. 2483–2516, 2018.
+
+

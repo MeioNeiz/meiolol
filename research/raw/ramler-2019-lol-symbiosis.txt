@@ -1,0 +1,328 @@
+JSM 2019 - Section on Statistics in Sports
+
+Identifying Symbiotic Relationships between Champions in
+League of Legends
+Ivan Ramler, Choong-Soo Lee, Michael Schuckers
+
+Department of Mathematics, Computer Science, and Statistics,
+
+St. Lawrence University Canton, NY 13617
+
+Abstract
+League of Legends (LoL) is a multiplayer online battle arena game where teams of five
+players compete against each other. Over the years, players have formed a metagaming
+strategy, consisting of five distinct roles, which has been widely adopted. This study uses
+logistic regression models to identify symbiotic relationships (such as Mutualism,
+Commensalism, and Parasitic) between two of the roles: Attack Damage Carries (ADC)
+and Supports. We use an adaptation of the traditional regression adjusted plus minus
+model commonly used in other sports for this study. Results from the 2015 LoL North
+American Ranked season indicate only 5% of observed champion pairs are beneficial to
+both the ADC and Support and these pairs made up over 10% of matches played. Further,
+about 28% of pairs had at least one of the ADC of Support be negatively impacted and
+they made up over 40% of observed matches. Win rates for Mutualism and
+Commensalism pairs were substantially higher than the other categories.
+Key Words: sports; esports; video games; amateur
+1. Introduction
+Esports games have become more popular over the past decade both professionally and
+casually, with revenue expected to exceed one billion USD in 20191. One of the most
+successful esports games is a Multiplayer Online Battle Arena (MOBA) game called
+League of Legends (LoL) by Riot Games. League of Legends was released in late 2009,
+and in 2017 (the most recent year of data) over 100 million players played it on a
+monthly basis2.
+Typical game play in the flagship mode called “Summoner’s Rift” consists of participants
+picking in-game characters (called champions3 in LoL) and form two teams of five to
+compete on a map consisting of three lanes (and the surrounding area called the jungle).
+Over the years, players have formulated a strategy, commonly referred to as metagaming
+(Carter, Gibbs, and Harrop 2012). In LoL, metagaming strategy (also known as meta) is a
+product of the wisdom of the crowd, and it has stabilized to a team of five unique roles:
+(Solo) Top, Jungle, (Solo) Mid, Attack damage carry (aka “ADC”), and Support. Figure 1
+
+https://newzoo.com/insights/articles/newzoo-global-esports-economy-will-top-1-billion-for-thefirst-time-in-2019
+2
+https://rankedkings.com/blog/how-many-people-play-league-of-legends
+3
+As of May 2019 there were 144 champions. See https://na.leagueoflegends.com/en/gameinfo/champions/ for the complete list.
+1
+
+2362
+
+JSM 2019 - Section on Statistics in Sports
+
+shows how the typical meta roles distribute themselves amongst the three lanes (and
+jungle) on the LoL map.
+
+Figure 1: Map of Summoner’s Rift game mode with meta role designations.
+The bottom lane in Summoner’s Rift is the only region in which two players on the same
+team regularly share the same space. As a result, champions played in the two meta roles,
+Attack Damage Carry (ADC) and Support, should pick two champions that complement
+each other. In particular, Table 1 breakdowns some of the complementary design aspects
+of these characters.
+Table 1: Examples of complementary design aspects between ADCs and
+Support champions
+
+
+
+ADC
+Heavily dependent on optimizing lane
+resources (such as minion kills) to
+increase their power
+
+
+
+
+
+Weak in early game, can “carry team”
+if powered up properly
+
+
+
+
+
+Cannot easily create kill opportunities
+
+
+
+Support
+Is not as dependent on items to increase
+fighting potential
+Initial goal is to assist their more
+vulnerable teammate (i.e., the ADC)
+through the earliest stages of the game
+Creates kill opportunities for the ADC
+
+One interesting gameplay aspect of LoL is learning which champions work well with one
+another when on the same team and which do not. Historically, players have in-game
+experience or from fan sites that make suggestions4. Several data-driven studies about
+team compositions exist and they tend to focus on the interaction of champions and/or
+use machine-learning algorithms to identify viable team compositions. See Chen et al.
+(2018), da Costa Oliveira et al. (2017), Lee and Ramler (2017), and Lee and Ramler,
+(2019) as recent examples. However, many of these studied use methods that limit the
+understanding of each individual’s contribution and do not attempt to dig deeper into the
+composition of the interaction.
+See
+https://www.reddit.com/r/leagueoflegends/comments/43xm9h/useful_lol_websites_and_resources
+_2016_edition/ for a list of example fan sites
+4
+
+2363
+
+JSM 2019 - Section on Statistics in Sports
+
+In this paper, we define models that separately measures the impact on game performance
+metrics when using “champion A” given that it is paired with “champion B” (and vice
+versa). This conditional modeling approach treats the two involved champions as separate
+entities allowing for relationships to be more broadly classified than just whether or not
+the pair is synergistic 5 . More specifically, we apply this idea to modeling win rates
+between Attack Damage Carries (ADC) champions and Support champions using League
+of Legends data made available by Lee and Ramler (2017).
+The rest of this paper is as follows: Section 2 defines the methodology used in classifying
+champion pairs, Section 3 highlights some of the main results of the applying the
+methodology to the League of Legends data, and Section 4 summarizes our findings and
+outlines considerations for future work.
+2. Methodology
+The basic goal of the approach is to build a series of conditional models to better
+understand the nature of the interaction between ADC champions and Support
+champions. In essence, each ADC will have their own model with predictors for each
+Support and vice versa.
+More formally, for each match involving the 𝑖𝑡ℎ 𝐴𝐷𝐶, let
+1 𝐴𝐷𝐶𝑖 and 𝑆𝑢𝑝𝑝𝑜𝑟𝑡𝑗 are on the team together
+𝑆𝑗|𝑖 = {
+.
+0
+otherwise
+Then, we formulate a GLM:
+𝜔𝑖 = 𝛽0|𝑖 + 𝛽1|𝑖 𝑆1|𝑖 + ⋯ + 𝛽𝑗|𝑖 𝑆𝑗|𝑖 + 𝛽𝐽|𝑖 𝑆𝐽|𝑖 ,
+where the family and link are appropriate for the chosen response.
+𝑝
+(For example, 𝜔𝑖 = ln (1−𝑝𝑖 ) is the logit link for win rates (𝑝𝑖 ) of 𝐴𝐷𝐶𝑖 .)
+𝑖
+
+We then construct a similar set of models using Support as the condition and ADCs as the
+predictors.
+i.e., for each match involving the 𝑗𝑡ℎ Support, let
+1 𝐴𝐷𝐶𝑖 and 𝑆𝑢𝑝𝑝𝑜𝑟𝑡𝑗 are on the team together
+𝐴𝑖|𝑗 = {
+,
+0
+otherwise
+and the GLM be represented by
+𝜈𝑗 = 𝜂0|𝑗 + 𝜂1|𝑗 𝐴1|𝑗 + ⋯ + 𝜂𝑖|𝑗 𝐴𝑖|𝑗 + 𝜂𝐼|𝑗 𝐴𝐼|𝑗 .
+The regression coefficients (𝛽𝑗|𝑖 ) measure the impact on win rates of the ith ADC being
+paired with Support j. Positive regression coefficients indicate that the ADC benefits
+from a particular Support while negative values indicate that the ADC does not benefit.
+The regression coefficients defined for the Support models (𝜂𝑖|𝑗 ) can be interpreted in a
+similar way.
+In a classic interaction model, being synergistic would imply a positive slope coefficient on the
+interaction term between two champions.
+5
+
+2364
+
+JSM 2019 - Section on Statistics in Sports
+
+One advantage of separate models for ADC and Supports is that this allows us to estimate
+one-way relationships between champions. Thus, the relationship between ADC by
+Support pairs can be viewed in a similar fashion to symbiosis in biological organisms
+(Morin, 2011). Figure 2 displays the symbiosis terminology and Table 2 shows its
+connection to the ADC-Support models.
+
+Figure 2: Chart of symbiotic relationship terms between two organisms6.
+Table 2: Connection between symbiotic relationship and
+ADC by Support pairs
+
+Relationship
+Mutualism
+
+Connection to models
+Both 𝛽𝑗|𝑖 and 𝜂𝑖|𝑗 are greater than zero
+
+Commensalism
+
+One slope coefficient is positive, the other is zero
+
+Neutralism/Regular
+
+Both 𝛽𝑗|𝑖 and 𝜂𝑖|𝑗 are equal to zero
+
+Amensalism
+
+One slope coefficient is negative, the other is zero
+
+Parasitic
+Competitive
+
+One slope coefficient is positive, the other is negative
+Both 𝛽𝑗|𝑖 and 𝜂𝑖|𝑗 are less than zero
+
+3. Results
+Using the above methodology, we constructed models based on the 2015 Ranked Solo
+and Ranked Team data collected by Lee and Ramler (2017). It consisted of 19 Supports
+and 17 ADCs (all that were in the game at the time) and all 323 ADC by Support pairs
+were observed. Sample sizes used in the models ranged from roughly 13,000 for the least
+popular champions to 700,000 for the most popular. We classified the ADC by Support
+relationships into one of the six categories based on whether or not a Bonferroni adjusted
+p-value associated with the regression coefficient (𝛽𝑗|𝑖 or 𝜂𝑖|𝑗 ) is less than 0.05. The
+models were then used to make predictions across the four tiers of competition (called
+“queues”) in LoL: Ranked Team, Ranked Solo, Normal Draft, and Normal Blind.
+
+By Ian Alexander - Own work, CC BY-SA 4.0,
+https://commons.wikimedia.org/w/index.php?curid=71067142
+6
+
+2365
+
+JSM 2019 - Section on Statistics in Sports
+
+The fifth column in figure 3 shows that the majority of ADC by Support pairs were
+classified as having a “regular relationship” (white). Only about 5% of pairs (17 of 323)
+were beneficial to both the ADC and Support (Mutualism, dark green) while another 14%
+were beneficial to one without negatively impacting the other (Commensalism, light
+green). About 28% were in either a Parasitic, Amensalism, or Competitive relationship.
+Further, as seen in the first four columns the percent of matches with each type of pair
+was relatively consistent across queues. In them, about 25 – 30% of matches are
+beneficial (green) while over 40 – 45% of matches contain harmful relationships (purple).
+
+Figure 3: Prevalence of each ADC by Support relationship category. The first four
+columns represent the percent of observed matches in each category across the
+competition tiers. The last column is the percent of the 323 pairs in each category.
+Figure 4 displays the win rates across the relationship categories for each queue type. Not
+surprisingly, those with benefial pairing had higher rates (about 53% for mutualism)
+while this decreased to around 45 - 47% for competition. The variability in win rates
+across the relationships was slightly less for the most competitive queue, Ranked Team.
+
+Figure 4: Win percentage for each category across the different queues.
+
+2366
+
+JSM 2019 - Section on Statistics in Sports
+
+Figure 5: Bipartite graph representing the Mutualism relationship pairs.
+Figure 5 displays the 17 Mutualism pairs as spread across nine Supports and four ADCs.
+As seen in the figure, three ADCs (Jinx, Sivir, and Vayne) dominate the graph, with each
+having multiple Supports that they interact well with. A general tendency here seems that
+the many of the Support champions have abilities in which they slow, immobilize, or
+otherwise hinder an opposing champion. For example, Annie has an ability that will
+incapacitate opposing targets. ADCs like Jinx and Sivir each have abilities that can
+capitalize of the reduced movement of their enemy. (e.g., Sivir has a “boomerang” ability
+that can heavily damage a target twice if they remain in its path.)
+Figures 6 – 9 in the Appendix show the equivalent relationship pairs for the
+Commensalism (Figure 6), Parasitic (Figure 7), Amensalism (Figure 8), and Competition
+(Figure 9) categories.
+4. Discussion
+The approach described here provides a way to show the potentially one-sided nature of
+relationships between ADCs and Supports in LoL. The general trends in the results
+indicated that while only a few pairs benefit greatly from each other, they are popular in
+play. Interestingly, the reverse is also true. Compared to the proportion of negative
+relationships out of the 323 observed pairs, the Competitive, Parasitic, and Amensalism
+pairs appear in over 40% of matches. This leads to a series of other interesting research
+questions for future work. In particular, with recent changes to what type of data is
+available, information about both the “selections and bans 7 ” from a match can be
+obtained. This might give insight on the champion selection process of players and see if
+they are knowingly forgoing synergistic pairings. Another interesting question would be
+whether popular fan sites offer suggestions that are reflected in the data. For example, are
+they suggesting the pairs identified in the Mutual category (Figure 5) but missing out on
+those in the Commensalism (Figure 6)? Do they focus on counter picks8 which can be
+thought of as a defensive move instead of attempting to pair their ADC and Support
+
+7
+8
+
+https://leagueoflegends.fandom.com/wiki/Draft_Pick
+http://forums.na.leagueoflegends.com/board/showthread.php?t=849597
+
+2367
+
+JSM 2019 - Section on Statistics in Sports
+
+together? These, and numerous others, are all questions that can be investigated to better
+understand champion selection in LoL.
+The model described in Section 2 can be extended to investigate game statistics other
+than win rates. This may also have practical use for players as it can help them
+understand how pairs of champions interact. For example, win rates may measure if they
+interact, but do not answer how they interact. Additionally, the interaction partition
+models introduced in this paper could have applications in other esports as well as in
+other sports. Other potentially useful game statistics could be gold earned, minion kills,
+and structures destroyed. While not all of these metrics are available in the data used in
+this study, new data could be collected to investigate these. Finally, the method is easy to
+apply to new seasons of LoL and can be extended to other positions, other player
+rankings, and other games with similar character interactions such as Overwatch, Defense
+of the Ancients 2, and Clash Royale.
+References
+Carter, M., Gibbs, M., and Harrop, M. 2012. Metagames, Paragames and Orthogames: A
+NewVocabulary. In Proceedings of the International Conference on the Foundations
+of Digital Games. ACM, New York, NY, USA, 11–17.
+Chen, Z., Nguyen, T., Xu, Y., Amato, C., Cooper, S., Sun, Y., and El-Nasr, M. 2018.
+“The art of drafting: a team-oriented hero recommendation system for multiplayer
+online battle arena games.” In Proceedings of the 12th ACM Conference on
+Recommender Systems (RecSys '18). ACM, New York, NY, USA, 200-208
+da Costa Oliveira, V., Placides, B., Baffa, M, and Machado, A. 2017. “A Hybrid
+Approach to Build Automatic Team Composition in League of Legends.” In
+Proceedings of SBGames 2017.
+Lee, C. and Ramler, I. 2017. “Identifying and Evaluating Successful non-Meta Strategies
+in League of Legends” In Proceedings of Foundations of Digital Games (FDG)
+2017. ACM, New York, NY, USA,
+Lee, C.S. and Ramler, I., 2019. A Data Science Approach to Exploring Hero Roles in
+Multiplayer Online Battle Arena Games. Data Analytics Applications in Gaming and
+Entertainment, p.49. New York, NY: Auerbach Publications
+Morin, P.J. 2011. Community Ecology. 2nd edition. Wiley-Blackwell, Oxford.
+
+2368
+
+JSM 2019 - Section on Statistics in Sports
+
+A. Appendix
+
+This appendix contains the bipartite graph representations for the,
+Commensalism, Parasitic, Amensalism, and Competition relationship pairings.
+
+Figure 6: Bipartite graph representing the Commensalism relationship pairs.
+
+Figure 7: Bipartite graph representing the Parasitic relationship pairs.
+
+Figure 8: Bipartite graph representing the Amensalism relationship pairs.
+
+Figure 9: Bipartite graph representing the Competition relationship pairs.
+
+2369
+
+

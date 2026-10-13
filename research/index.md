@@ -9,10 +9,10 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 4 | 105 | 417 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 4 | 113 | 436 |
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 2 | 112 | 460 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 93 | 248 |
-| [stats](areas/stats.md) | estimation and recommendation methods | 7 | 157 | 1173 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 110 | 265 |
+| [stats](areas/stats.md) | estimation and recommendation methods | 11 | 200 | 1534 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 4 | 74 | 272 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 4 | 74 | 259 |
 
@@ -47,9 +47,13 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
 | answered | now | [What practices and tools make AI coding agents run, train and analyse ML experiments faster and more reliably?](questions/agent-ml-practice.md): What practices and tools make AI coding agents run, train and analyse ML experiments faster and more reliably? | 14 strong, 7 moderate, 1 weak | 29 | 15 (growing) | 16 |
-| answered | now | [How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games?](questions/draft-predictor-methods.md): How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games? | 11 strong, 4 moderate, 4 weak, 2 contested | 45 | 48 (growing) | 17 |
-| answered | now | [What neural draft models work at 100k-1M games, with what architecture, size, regularisation, training tricks and pretraining, and how much did they beat a logistic baseline on a time split?](questions/nn-draft-models.md): What neural draft models work at 100k-1M games, with what architecture, size, regularisation, training tricks and pretraining, and how much did they beat a logistic baseline on a time split? | 6 strong, 4 moderate, 4 weak, 1 contested | 23 | 22 (saturated) | 10 |
+| answered | now | [How do you distil GPU-trained models into small CPU models that stay explainable?](questions/distil-explainable.md): How do you distil GPU-trained models into small CPU models that stay explainable? | 5 strong, 8 moderate, 1 contested | 12 | 6 (growing) | 3 |
+| answered | now | [How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games?](questions/draft-predictor-methods.md): How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games? | 11 strong, 4 moderate, 4 weak, 2 contested | 45 | 48 (growing) | 16 |
+| answered | now | [How do sports and esports analytics isolate the value of in-game events and of pairwise synergy and counters?](questions/effect-isolation.md): How do sports and esports analytics isolate the value of in-game events and of pairwise synergy and counters? | 9 strong, 4 moderate, 2 weak | 16 | 28 (growing) | 7 |
+| answered | now | [What neural draft models work at 100k-1M games, with what architecture, size, regularisation, training tricks and pretraining, and how much did they beat a logistic baseline on a time split?](questions/nn-draft-models.md): What neural draft models work at 100k-1M games, with what architecture, size, regularisation, training tricks and pretraining, and how much did they beat a logistic baseline on a time split? | 6 strong, 4 moderate, 4 weak, 1 contested | 23 | 22 (saturated) | 9 |
+| answered | now | [How do the best systems model a player's pre-game skill?](questions/pregame-player-skill.md): How do the best systems model a player's pre-game skill? | 5 strong, 5 moderate | 10 | 12 (growing) | 4 |
 | answered | soon | [Which team-composition features built from champion attributes (damage type mix and balance, frontline/tankiness, crowd control, range/poke vs engage, healing vs anti-heal, scaling) have measured, non-additive effects on win in LoL or Dota 2 data, how big, and how were they built?](questions/comp-attribute-features.md): Which team-composition features built from champion attributes (damage type mix and balance, frontline/tankiness, crowd control, range/poke vs engage, healing vs anti-heal, scaling) have measured, non-additive effects on win in LoL or Dota 2 data, how big, and how were they built? | 2 strong, 3 moderate, 6 weak | 12 | 25 (slowing) | 5 |
+| answered | soon | [Have graph neural nets helped match outcome prediction, and where?](questions/gnn-match-outcome.md): Have graph neural nets helped match outcome prediction, and where? | 1 strong, 6 moderate, 1 contested | 10 | 17 (saturated) | 2 |
 | answered | soon | [How should an LLM agent run meiolol's modelling experiments, and which tools should it get?](questions/llm-experiment-agent.md): How should an LLM agent run meiolol's modelling experiments, and which tools should it get? | 14 strong, 6 moderate, 1 contested | 22 | 11 (growing) | 7 |
 | answered | soon | [How should an experiment agent choose what to try next, instead of brute-forcing many runs?](questions/smart-experiment-search.md): How should an experiment agent choose what to try next, instead of brute-forcing many runs? | 7 strong, 5 moderate | 12 | 7 (growing) | 5 |
 | decided | now | [How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin?](questions/curve-statistics-method.md): How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin? | 9 strong, 2 moderate | 14 | 21 (growing) | 2 |
@@ -74,6 +78,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 24 questions, 380 sources, 2573 findings
-- Open leads: 105 (`josearch leads`)
+- 28 questions, 423 sources, 2958 findings
+- Open leads: 119 (`josearch leads`)
 - Lint: 0 errors, 1 warnings (`josearch lint`)

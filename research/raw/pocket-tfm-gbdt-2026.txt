@@ -1,0 +1,2354 @@
+arXiv:2605.18654v1 [cs.LG] 18 May 2026
+
+Aditya Tanna, Nassim Bouarour, Mohamed Bouadi,
+Vinay kumar Sankarapu, Pratinav Seth
+Lexsi Labs
+Abstract
+A fraud scorer needs to answer in under 2 ms. The best tabular foundation models (TFMs) take 151 to
+1,275 ms on GPU. We close this gap by distilling the TFM offline into an XGBoost or CatBoost student that
+runs natively on CPU. The central obstacle is specific to in-context learning (ICL) teachers: they leak labels
+when scoring their own training set, so the soft targets collapse to near-one-hot vectors with no inter-class
+structure left to distill. Stratified out-of-fold (OOF) teacher labeling prevents this. Across 153 classification
+datasets drawn from TALENT, OpenML-CC18, TabZilla, and TabArena, distilling TabICLv2 into XGBoost
+gives 0.882 macro-mean AUC (96.5% of teacher AUC) at 1.9 ms on CPU, a 38× to 860× speedup across
+teacher–student pairs with a statistically significant edge over a tuned CatBoost baseline (Wilcoxon p=0.0008;
+51% win rate). Four further findings: teacher rank transfers exactly to student rank; gains concentrate on
+low-dimensional data (≤21 features: +0.011 over CatBoost vs. >21 features: +0.001); multi-teacher
+averaging helps MLP students (+0.006, p=0.003) but adds less than 0.001 for tree students; and on
+high-dimensional tasks where the teacher itself trails CatBoost, distillation makes things worse rather than
+better. The full pipeline is open-sourced as part of the TabTune library.
+Keywords: knowledge distillation, tabular foundation models, gradient-boosted trees, inference efficiency,
+OpenML, model compression, in-context learning
+
+1
+
+Introduction
+
+Tabular ML has a deployment problem that accuracy benchmarks hide. The strongest models for small structured
+datasets, TFMs like TabICLv2 [1], TabPFNv2.6 [2], and LimiX [3], predict by attending to the entire training set
+through a large transformer at query time, taking 151 ms per batch on an A100. No fraud alert, credit score, or patient
+triage can wait that long, and GPU cost plus CPU-only production constraints make the picture worse.
+Knowledge distillation [4] is a practical way out: train a GBDT student on the TFM’s soft labels and keep most of
+the teacher’s accuracy at <2 ms CPU latency. One obstacle is specific to in-context learning (ICL) models: when an
+ICL teacher scores examples that already sit in its context, its outputs collapse to near-one-hot vectors and there is no
+inter-class structure left to distill [5]. The fix is stratified out-of-fold (OOF) teacher labeling. It is simple but
+critical: skip it and ICL distillation produces students that are worse than hard-label training.
+We benchmark this pipeline across 153 classification datasets, 4 TFM teachers, 4 student families, and 5 multi-teacher
+label-averaging combinations. The headline is that distillation works, its gains are predictable, and it fails gracefully
+when the teacher itself cannot outperform a well-tuned GBDT.
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+Contributions.
+1. OOF labeling is mandatory, not optional, for ICL-based TFMs: without it, the teacher scores in its own context and
+produces degenerate targets that destroy the soft-label signal.
+2. Distilling TabICLv2 into XGBoost beats a tuned CatBoost baseline on 51% of 153 datasets (Wilcoxon p=0.0008) at
+a 38× to 860× latency reduction.
+3. Teacher selection requires no architecture search: teacher rank-by-solo-AUC on a held-out sample picks the best
+student-producing teacher across all four student families we test.
+4. Gains cluster on low-dimensional data (≤21 features: +0.011 over CatBoost vs. >21 features: +0.001).
+5. Multi-teacher averaging helps MLP students (+0.006, p=0.003) but is practically negligible for tree students
+(+0.0004).
+
+2
+
+Related Work
+
+2.1
+
+Tabular foundation models.
+
+TabPFN [6] showed that a transformer pretrained on synthetic tabular tasks could match tuned GBDTs via in-context
+learning; TabPFNv2 [7] extended coverage to larger datasets. Concurrent models, including TabICLv2 [1], LimiX [3],
+TabDPT [8], Orion-Bix [9] and Orion-MSP [10], compete on the same accuracy-versus-compute frontier. Largescale evaluations have moved from per-paper claims to shared benchmark pools: OpenML-CC18 [11], TabZilla [12],
+TALENT [13], and TabArena [14] now provide the standard comparison ground.
+
+2.2
+
+Knowledge distillation for non-neural targets.
+
+Hinton et al. [4] introduced soft-label distillation to transfer dark knowledge between neural networks. Born-again
+networks [15] showed that a student can match or exceed its teacher with the right training targets. Distilling into
+tree-based students via per-class regression is less studied [16]; most prior work assumes a neural teacher and a neural
+student. Out-of-fold label collection is standard in tabular stacking [17]; applying it to ICL-based teachers is the method
+contribution here. The ICL leakage problem is identified in [5]. The closest prior work on tabular model compression is
+TabNet [18] and GBDT-to-linear transfer [19]; neither targets ICL-based TFMs at scale.
+
+2.3
+
+Calibration and soft-label fidelity.
+
+A student that matches its teacher in AUC may still differ in calibration. Platt scaling [20] and temperature scaling [21]
+are the standard post-hoc fixes, and [22] compared them across classifier families. We adopt temperature scaling
+on the teacher side as part of the Hinton loss in Equation (1), and report that tree students inherit teacher calibration
+reasonably well while MLP students do not; we discuss this in Section 5. Recent work on soft-label leakage in distilled
+benchmarks [23] reinforces the OOF requirement we make here.
+
+3
+
+Method
+
+3.1
+
+Why OOF matters.
+
+An ICL teacher fT (· | C) attends to its context C = {(xj , yj )} when predicting over a query set. When xi ∈ C, the
+answer is already in context and p̃i ≈ eyi [5]: there is no inter-class structure left for the student to absorb. The teacher’s
+confidence on its own training examples is not a model of the data, it is recall.
+A concrete way to see this: on a 5-class dataset, a teacher scoring out-of-context examples typically produces probability
+vectors with non-trivial mass on 2–3 classes (mean entropy around 0.6–0.9 nats). The same teacher scoring in-context
+examples produces vectors with >99.9% mass on the true class (mean entropy near 10−3 nats). Hinton’s loss with
+these targets has no second-place class to push the student toward, so the KL term collapses to one-hot cross-entropy at
+the wrong temperature and the student learns nothing the hard labels did not already say.
+(k)
+
+With K=5 stratified folds, teacher fT fits on D \ Dk and labels only Dk , which removes the leakage. For M >1
+teachers, per-fold predictions are averaged before the soft-label matrix is assembled (Figure 1). We chose K=5 as a
+compromise between per-fold teacher quality (more training data per fit) and label coverage (fewer folds means coarser
+per-fold splits); K ∈ {3, 5, 10} produced indistinguishable downstream AUC on a held-out probe of 20 datasets.
+2
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+(a) Data
+
+(b) Teachers
+
+(c) OOF labels
+
+D, K=5
+D1
+D2
+D3
+D4
+D5
+
+e
+Y
+(1)
+fT :
+(2)
+fT :
+(3)
+fT :
+(4)
+fT :
+(5)
+fT :
+
+(d) Ensemble
+
+TabICLv2
+
+D\D2 → D2
+
+y
+eD2
+
+LimiX
+
+D\D3 → D3
+
+y
+eD3
+
+TabDPT
+
+D\D4 → D4
+
+y
+eD4
+
+D\D5 → D5
+
+y
+eD5
+
+(k)
+
+Leakage-aware: each y
+ei comes from fT
+
+L=α
+
+TabPFNv2.6
+
+y
+eD1
+
+D\D1 → D1
+
+(f) Deploy
+
+(e) Hinton loss
+X
+
+T
+
+2
+
+T
+
+pi i∥qi i )
+wi Ti KL(e
+
+i
+
++ (1−α)
+
+Student fS
+X
+
+wi ℓCE (yi , qi )
+
+i
+
+LGBM, CatBoost,
+XGBoost, or MLP
+
+adaptive Ti , weight wi
+1
+p
+ei = M
+
+(m)
+ei
+mp
+
+P
+
+α=0.7, Ti ∈ [1, 5]
+
+(M TFM families)
+
+wi ∝ e−(H−µ) /2σ
+
+2
+
+2
+
+CPU inference
+
+that never observed yi
+
+Figure 1 Leakage-aware out-of-fold distillation pipeline. (a) The training set D is partitioned into K=5 stratified folds
+(k)
+D1 , . . . , D5 . (b) For each fold k, a teacher TFM fT is conditioned on D\Dk and predicts only on Dk . (c) The fold-wise
+predictions are concatenated into the out-of-fold soft-label set e
+Y, so no soft target yei is generated by a teacher that conditioned on yi .
+(d) In the multi-teacher setting, OOF labels from M different TFM families (TabPFNv2.6, TabICLv2, LimiX, TabDPT, . . .) are
+averaged with equal weights. (e) The student is trained with a Hinton mixed loss combining temperature-scaled KL on the soft
+targets and cross-entropy on the hard labels, with per-sample adaptive temperature Ti ∈ [1, 5] and confidence weight wi peaking on
+moderate-entropy teacher predictions. (f) The trained student is deployed on CPU
+
+3.2
+
+Student objective.
+
+We minimize the Hinton mixed loss [4]:
+X
+X
+
+L=α
+wi Ti2 KL p̂Ti i ∥ qiTi + (1−α)
+wi ℓCE (yi , qi ),
+i
+
+(1)
+
+i
+
+with α=0.7. Here p̂i are temperature-scaled teacher soft labels, qi are student outputs, and wi are per-sample confidence
+weights. The per-sample temperature Ti ∈ [1, 5] scales with teacher entropy; wi = exp(−(H(p̃i )−0.7)2 /0.08)
+down-weights both overconfident and near-random samples. For tree students the KL term reduces to per-class MSE
+regression on soft-label logits.
+
+3.3
+
+Putting it together.
+
+The full procedure is shown in Algorithm 1. Two implementation notes are worth flagging. First, every fold-k teacher is
+fit on D\Dk , so its context window never contains the queries in Dk ; this is what makes the soft labels leakage-free.
+Second, the temperature and confidence weight in step 5 are computed once from the assembled soft-label matrix
+and are fixed for the rest of training, so the student fit in step 6 is a single optimization run rather than an alternating
+procedure.
+Algorithm 1 Out-of-Fold Soft-Label Distillation
+(m)
+
+M
+Require: Dataset D = {(xi , yi )}N
+i=1 ; teacher class fT (or ensemble {fT }m=1 ); student class fS ; folds K=5; loss
+weight α=0.7
+Ensure: Trained student fS ready for CPU deployment
+1: Partition D into K stratified folds {Dk }K
+k=1
+2: for k = 1 to K do
+(k)
+3:
+Fit teacher(s) on D \ Dk : fT ← Fit(fT , D \ Dk )
+(k)
+4:
+Predict on Dk : p̃i ← fT (xi ) for xi ∈ Dk
+5:
+if M > 1 then
+PM
+(k,m)
+1
+(xi )
+▷ equal-weight teacher averaging
+6:
+p̃i ← M
+m=1 fT
+7:
+end if
+8: end for
+9: For each sample i, set per-sample temperature Ti ∈ [1, 5] from H(p̃i ), and weight wi = exp(−(H(p̃i ) −
+0.7)2 /0.08)
+10: Train fS on {(xi , p̃i , yi , Ti , wi )}N
+i=1 by minimizing Equation 1
+11: return fS
+
+4
+
+Experiments
+
+Datasets. We evaluate on 153 classification datasets drawn from TALENT, OpenML-CC18, TabZilla, and TabArena.
+Dataset sizes span 128 to 581,012 instances (median 3,196), with 5 to 1,777 input features (median 22) and 2 to 10 target
+3
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+Table 1 Macro-mean ROC-AUC, retention, and win rate vs CatBoost across 153 datasets (single seed). Bold+underline: best in
+group. Ret. = AUC / best-teacher-per-dataset AUC. Win%: fraction of 153 datasets beating CatBoost. Multi-teacher rows omit Ret.
+because the reference teacher varies per dataset.
+
+a
+b
+c
+
+Type
+
+Model
+
+AUC
+
+Ret.
+
+Win%
+
+Baseline
+
+CatBoost
+LightGBM
+XGBoost
+
+.876 ± .126
+.872 ± .125
+.872 ± .127
+
+–
+–
+–
+
+–
+–
+–
+
+Teacher
+
+TabICLv2
+TabPFNv2.6
+LimiX
+OrionMSP v1.5
+
+.908 ± .071
+.902 ± .076
+.900 ± .077
+.878 ± .087
+
+–
+–
+–
+–
+
+–
+–
+–
+–
+
+Single
+→XGB
+
+TabICLv2→XGB
+TabPFNv2.6→XGB
+LimiX→XGB
+OrionMSP→XGB
+
+.882 ± .112
+.881 ± .114
+.878 ± .121
+.860 ± .131
+
+96.5%
+96.3%
+95.9%
+93.9%
+
+51.0%a
+50.2%
+49.4%
+22.6%
+
+Single
+→CB
+
+TabICLv2→CB
+TabPFNv2.6→CB
+LimiX→CB
+
+.882 ± .113
+.879 ± .119
+.875 ± .119
+
+96.4%
+96.1%
+95.7%
+
+53.3%a
+51.4%
+47.5%
+
+Single
+→MLP
+
+TabPFNv2.6→MLP
+TabICLv2→MLP
+
+.846 ± .131
+.842 ± .137
+
+92.4%
+92.0%
+
+28.8%
+26.5%
+
+Multi
+→XGB
+
+[PFN+ICL+Limix]→XGB
+[PFN+ICL]→XGB
+[PFN+Orion+Limix]→XGB
+
+.883 ± .110
+.883 ± .112
+.879 ± .114
+
+–
+–
+–
+
+56.8%b
+56.8%
+49.4%
+
+Multi
+→MLP
+
+[PFN+Limix]→MLP
+[PFN+ICL]→MLP
+
+.852 ± .130
+.843 ± .136
+
+–
+–
+
+28.4%c
+26.8%
+
+Wilcoxon vs CatBoost: p=0.0008; wins avg +0.021, losses avg −0.010.
+Wilcoxon vs TabICLv2→XGB: p=0.019, macro-mean ∆=+0.0006.
+Wilcoxon vs TabPFNv2.6→MLP: p=0.003, ∆=+0.006.
+
+classes. The 153 are the shared-coverage subset where every configuration in the benchmark completed successfully, so
+all comparisons use the same denominator.
+Teachers. Four current TFMs as solo teachers: TabICLv2 [1], TabPFNv2.6 [2], LimiX [3], and Orion-MSP
+v1.5 [10]. Five multi-teacher combinations via equal-weight fold-level label averaging: [PFN+ICL], [PFN+Limix],
+[PFN+ICL+Limix], [PFN+Orion+Limix], and [PFN+ICL+Limix+DPT].
+Students. XGBoost [24], CatBoost [25], LightGBM [26] (all: 300 trees, depth 6, patience-30 early stopping), and
+an MLP (min(8d, 128) embedding, cosine LR with warmup, label smoothing 0.05, SWA on the last 20% of training,
+entropy-collapse detector restart).
+Baselines. LogisticRegression, XGBoost, LightGBM, and CatBoost with the same 300-tree, depth-6 configuration
+on zero-imputed inputs and no per-task tuning. All models use identical preprocessing via TabTune [27].
+Metrics. Macro-mean ROC-AUC across 153 datasets. Retention = student AUC / best-teacher-per-dataset AUC ×
+100. Win rate is the fraction of datasets where the distilled student exceeds CatBoost. We use the Friedman test for
+overall method differences and pairwise Wilcoxon signed-rank for specific comparisons. Single experimental seed per
+configuration.
+
+4.1
+
+Main Results
+
+Table 1 shows representative configurations; the full 48-model breakdown is in Section B. A Friedman test across the 8
+methods in Table 1 confirms real performance differences (χ2 =240.7, p<10−48 ).
+Distillation edges past GBDT baselines, but not everywhere. TabICLv2→XGB wins on 51% of the 153
+datasets, with wins averaging +0.021 AUC over CatBoost against losses of −0.010. That asymmetry over a large
+sample drives the Wilcoxon p=0.0008; the 0.006 macro-mean gap alone undersells the finding. OrionMSP is the
+exception. Its solo AUC (0.878) barely clears CatBoost (0.876), and its distilled students win on only 22.6% of datasets.
+4
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+Pick the best teacher and get the best student. TabICLv2 is the strongest teacher (0.908) and produces the
+strongest student in every family. TabPFNv2.6 ranks second at both levels; LimiX third; OrionMSP last. The ranking is
+exact: no weaker teacher outranks a stronger one in any student family. Teacher selection is therefore a one-decision
+problem: run each candidate on a small held-out sample, pick the highest solo AUC, and distill from that one.
+Multi-teacher tree: detectable but negligible. [PFN+ICL+Limix]→XGB and [PFN+ICL]→XGB both reach
+0.883, each beating TabICLv2→XGB (0.8823) on 56.8% of datasets. The 5.8 pp improvement in win rate is
+statistically real (Wilcoxon p=0.019), but the macro-mean gap is 0.0006. Adding more teachers does not help:
+[PFN+ICL+Limix+DPT]→XGB (0.881) and [PFN+Orion+Limix]→XGB (0.879) both score below the two-teacher
+combination. Adding OrionMSP to any ensemble reduces AUC: its outputs add noise on the datasets where PFN and
+ICL are already strong, and it does not compensate on the rest. For tree students, using a single strong teacher is the
+practical recommendation.
+Multi-teacher MLP: worth the cost. [PFN+Limix]→MLP (0.852) beats TabPFNv2.6→MLP (0.846) by 0.006
+(Wilcoxon p=0.003). The gain is statistically significant and consistent across datasets, but it does not lift the win rate
+against CatBoost (28.8% to 28.4%): MLP students sit below CatBoost on most datasets regardless of which teacher they
+were trained on, so the AUC improvement shows up in the continuous distribution rather than at the binary win/loss
+threshold. An MLP has less capacity to memorize a single teacher’s precise probability distribution; ensemble averaging
+acts as label smoothing that compensates. Tree students do not need this. They already overfit a single teacher’s output
+distribution reliably.
+
+4.2
+
+Where Distillation Works and Where It Does Not
+
+Macro-means can hide the full story. Table 2 shows three datasets from the benchmark that span the feature-count
+range, all using TabICLv2→XGB.
+Table 2 TabICLv2→XGB on three benchmark datasets. The teacher beats CatBoost on low-dimensional tasks; distillation transfers
+that advantage. On a high-dimensional task the teacher already trails CatBoost, and distillation falls further.
+Dataset
+cmc
+kc2
+internet-ads
+
+d
+
+n
+
+CatBoost
+
+Teacher
+
+Distilled
+
+9
+21
+1,558
+
+1,104
+391
+2,459
+
+.721
+.750
+.978
+
+.766
+.763
+.972
+
+.774
+.768
+.950
+
+All three use TabICLv2 teacher; speedup ≈107× (cmc), 189× (kc2), 122× (internet-ads) vs. teacher. Bold = best on row.
+
+On cmc and kc2 (small, low-dimensional tasks), the distilled student beats both the teacher and CatBoost. The teacher
+captures inter-class geometry that gradient-boosted trees miss; the student inherits it and, by averaging five OOF folds,
+smooths out per-fold teacher noise. On internet-ads (1,558 features), the teacher itself trails CatBoost by 0.006.
+Distillation inherits that weakness and amplifies it: the student drops to 0.950, 0.028 below the CatBoost baseline.
+Splitting the 153 datasets at the median feature count (21): ≤21 features give a mean TabICLv2→XGB gain of +0.011
+over CatBoost (n=79); >21 features give +0.001 (n=74). On high-dimensional tasks, distillation is effectively a coin
+flip against a well-tuned CatBoost, and a slower one at that.
+
+4.3
+
+Inference Latency
+
+The fastest teacher (TabICLv2, 151 ms) is 38× to 79× slower than distilled tree students (1.9 to 4.0 ms). OrionMSP
+(1,275 ms) is 340× to 850× slower than MLP students (1.5 ms). CatBoost (1.2 ms) is faster than any distilled tree
+student, so real accuracy gains have to be on the table before adopting the distillation pipeline.
+
+4.4
+
+Ablation: MLP Student Pipeline
+
+Table 4 ablates the MLP pipeline components using TabPFNv2.6 as teacher on 5 low-dimensional binary classification
+datasets (3 to 30 features, 74 to 5,000 training examples) that are representative of the low-dimensional benchmark
+tasks where distillation gains are largest.
+Hard-label OOF training (α=0) outperforms the full Hinton pipeline (α=0.7) by 0.034 (p=0.004). On clean, lowdimensional data the soft-label machinery (adaptive temperature, confidence weighting, KL term) adds no measurable
+benefit. The only component that is not optional is OOF labeling itself. Without it, ICL teachers score in-context
+examples with near-certainty, the student has no inter-class structure to learn from, and the procedure reduces to
+5
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+Table 3 Macro-mean latency from benchmark runs. Teachers: GPU (A100-class). Students and baselines: single CPU core.
+Model
+
+Latency (ms)
+
+AUC
+
+1.2
+1.4
+
+.876
+.872
+
+TFM teachers (GPU)
+TabICLv2
+TabPFNv2.6
+LimiX
+OrionMSP v1.5
+
+151
+327
+448
+1,275
+
+.908
+.902
+.900
+.878
+
+Distilled students (CPU)
+TabICLv2→MLP
+TabICLv2→XGB
+TabICLv2→CB
+TabICLv2→LGBM
+
+1.5
+1.9
+2.7
+4.0
+
+.842
+.882
+.882
+.878
+
+Baselines (CPU)
+CatBoost
+LightGBM
+
+Table 4 MLP student ablation (TabPFNv2.6 teacher, 5 datasets, single seed). ∆ = difference vs full pipeline; p = Wilcoxon
+signed-rank on per-dataset deltas.
+Configuration
+
+AUC
+
+∆
+
+p
+
+Full (α=0.7, adaptive T , OOF)
+Hard labels (α=0, OOF)
+Soft only (α=1)
+No adaptive temperature
+No confidence weighting
+Low Tmax =1
+High Tmax =5
+
+.829
+.863
+.814
+.809
+.828
+.855
+.810
+
+–
++.034
+−.014
+−.020
+−.001
++.027
+−.018
+
+–
+.004
+.54
+.49
+.93
+.06
+.19
+
+memorizing hard labels with extra steps. On low-dimensional structured data practitioners can safely use α=0 (hard
+labels, OOF teacher) and skip the Hinton-loss machinery.
+
+5
+
+Discussion
+
+5.1
+
+Why the teacher rank transfers.
+
+A distilled student inherits its teacher’s decision boundary, smoothed by the five-fold averaging and the student’s own
+inductive bias. As long as the student has enough capacity to fit the soft-label surface, a stronger teacher gives a strictly
+better target, and the ranking carries through. Tree students at 300 trees and depth 6 hit this capacity ceiling cleanly: their
+retention is 97–98% of teacher AUC across all four teachers (Figure 2). MLP students at the configurations we tested
+top out earlier (92–94% retention), which is why their absolute ranking is slightly noisier but still teacher-dominant on
+average. The practical consequence is the same in both cases: spend compute on picking a strong teacher, not on tuning
+the student.
+
+5.2
+
+Multi-teacher: a label-smoothing story.
+
+Equal-weight averaging of multiple teachers is mathematically equivalent to mixing their soft-label distributions. For
+tree students, which already fit a single teacher’s distribution accurately, the mix adds no new information and the
+gain is statistical noise (Wilcoxon detectable, macro-mean <0.001). For MLP students, which under-fit a single
+teacher, the mix functions as a regularizer: it broadens the target distribution, smooths over per-teacher idiosyncrasies,
+and yields a real +0.006 AUC gain. The asymmetry is consistent with the broader literature on label smoothing for
+underparameterized students.
+
+5.3
+
+Calibration.
+
+We tracked ECE alongside AUC throughout. Tree students inherit teacher calibration to within ∼0.01 on average; MLP
+students tend to be 0.02–0.04 worse-calibrated than their teacher (the entropy-collapse detector reduces but does not
+eliminate this). Post-hoc temperature scaling on a 5% validation split recovers most of the gap for MLP students. We
+6
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+did not include a full ECE table because the AUC ranking is what changes deployment decisions in the settings we
+target.
+
+6
+
+Limitations
+
+6.1
+
+Single seed per configuration.
+
+All results use one experimental seed. The ± standard deviations in tables reflect cross-dataset spread, not repeatedmeasurement variance, so per-dataset numbers should be treated as point estimates. We expect the macro-mean rankings
+to be stable under reseeding given the 153-dataset denominator, but a multi-seed re-run would tighten the per-dataset
+confidence intervals.
+
+6.2
+
+Distributional assumptions.
+
+Whether the teacher-rank preservation, the high-dimensional failure mode, or the multi-teacher MLP gain holds under
+distributional shift, on time-series structured data, or under heavy missingness is untested. The 153-dataset evaluation is
+IID per dataset.
+
+6.3
+
+Latency assumptions.
+
+The inference-latency numbers assume a single CPU core. Multi-core or batched serving would tighten the gap between
+teachers and students for tasks where the teacher can be served in batches; the speedup figures we report are a per-query
+lower bound, not an end-to-end serving comparison.
+
+7
+
+Conclusion
+
+Distilling TabICLv2 into XGBoost via out-of-fold soft labeling produces a student that runs at 1.9 ms on CPU (79×
+faster than the teacher), retains 96.5% of teacher AUC, and beats a tuned CatBoost baseline on 51% of 153 benchmark
+datasets (p=0.0008). The picture is sharpened by three secondary findings: teacher AUC rank transfers exactly to
+student rank, so teacher selection is a one-decision problem; gains concentrate on low-dimensional tasks (≤21 features:
++0.011 over CatBoost, n=79) and are effectively absent on high-dimensional ones (n=74); and multi-teacher averaging
+adds a real +0.006 for MLP students (p=0.003) but is practically negligible for tree students (+0.0006).
+The pipeline is useful, its benefits are predictable, and it fails cleanly when the teacher itself underperforms a tuned
+GBDT. Skip it on an ICL-based teacher and the soft labels collapse to one-hot recall. Run it and the student inherits
+the inter-class structure that gives the teacher its edge, at 1% of the inference cost. Everything else in the pipeline is
+optional on clean, low-dimensional data.
+
+References
+[1] Jingang Qu, David Holzmüller, Gaël Varoquaux, and Marine Le Morvan. Tabiclv2: A better, faster, scalable, and
+open tabular foundation model. arXiv preprint arXiv:2602.11139, 2026.
+[2] Léo Grinsztajn, Klemens Flöge, Oscar Key, Felix Birkel, Philipp Jund, Brendan Roof, Benjamin Jäger, Dominik
+Safaric, Simone Alessi, Adrian Hayler, et al. Tabpfn-2.5: Advancing the state of the art in tabular foundation
+models. arXiv preprint arXiv:2511.08667, 2025.
+[3] Xingxuan Zhang, Gang Ren, Han Yu, Hao Yuan, Hui Wang, Jiansheng Li, Jiayun Wu, Lang Mo, et al. LimiX:
+Unleashing structured-data modeling capability for generalist intelligence. arXiv preprint arXiv:2509.03505,
+2025.
+[4] Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distilling the knowledge in a neural network. In NIPS Deep
+Learning Workshop, 2015.
+[5] Jonibek Mansurov, Akhmed Sakip, and Alham Fikri Aji. Data laundering: Artificially boosting benchmark results
+through knowledge distillation. arXiv preprint arXiv:2412.15255, 2024.
+[6] Noah Hollmann, Samuel Müller, Katharina Eggensperger, and Frank Hutter. TabPFN: A transformer that solves
+small tabular classification problems in a second. In International Conference on Learning Representations, 2023.
+[7] Noah Hollmann, Samuel Müller, Lennart Purucker, Arjun Krishnakumar, Max Körfer, Shi Bin Hoo, Robin Tibor
+Schirrmeister, and Frank Hutter. Accurate predictions on small data with a tabular foundation model. Nature,
+637:319–326, 2025.
+7
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+[8] Junwei Ma, Valentin Thomas, Rasa Hosseinzadeh, Alex Labach, Hamidreza Kamkari, Jesse C Cresswell, Keyvan
+Golestan, Guangwei Yu, Anthony L Caterini, and Maksims Volkovs. Tabdpt: Scaling tabular foundation models
+on real data. arXiv preprint arXiv:2410.18164, 2024.
+[9] Mohamed Bouadi, Pratinav Seth, Aditya Tanna, and Vinay Kumar Sankarapu. Orion-Bix: Bi-axial attention for
+tabular in-context learning. In Proceedings of the ACM Web Conference 2026, pages 8673–8676, 2026.
+[10] Mohamed Bouadi, Pratinav Seth, Aditya Tanna, and Vinay Kumar Sankarapu. Orion-MSP: Multi-scale sparse
+attention for tabular in-context learning. arXiv preprint arXiv:2511.02818, 2025.
+[11] Bernd Bischl, Giuseppe Casalicchio, Matthias Feurer, Pieter Gijsbers, Frank Hutter, Michel Lang, Rafael G.
+Mantovani, Jan N. van Rijn, and Joaquin Vanschoren. OpenML benchmarking suites. In Advances in Neural
+Information Processing Systems, volume 34, 2021.
+[12] Duncan McElfresh, Sujay Khandagale, Jonathan Valverde, Vishak Prasad C, Ganesh Ramakrishnan, Micah
+Goldblum, and Colin White. When do neural nets outperform boosted trees on tabular data? Advances in Neural
+Information Processing Systems, 36:76336–76369, 2023.
+[13] Léo Grinsztajn, Edouard Oyallon, and Gaël Varoquaux. Why tree-based models still outperform deep learning on
+tabular data. In Advances in Neural Information Processing Systems, volume 35, 2022.
+[14] Nick Erickson, Lennart Purucker, Andrej Tschalzev, David Holzmüller, Prateek Desai, David Salinas, and Frank
+Hutter. Tabarena: A living benchmark for machine learning on tabular data. Advances in Neural Information
+Processing Systems, 38, 2026.
+[15] Tommaso Furlanello, Zachary C. Lipton, Michael Tschannen, Laurent Itti, and Anima Anandkumar. Born again
+neural networks. In International Conference on Machine Learning, pages 1607–1616, 2018.
+[16] Jimmy Ba and Rich Caruana. Do deep nets really need to be deep? In Advances in Neural Information Processing
+Systems, volume 27, 2014.
+[17] Eric C. Polley and Mark J. van der Laan. Super learner in prediction. Technical Report 266, U.C. Berkeley
+Division of Biostatistics Working Paper Series, 2010.
+[18] Sercan Ö. Arik and Tomas Pfister. TabNet: Attentive interpretable tabular learning. In Proceedings of the AAAI
+Conference on Artificial Intelligence, volume 35, pages 6679–6687, 2021.
+[19] Xinran He, Junfeng Pan, Ou Jin, Tianbing Xu, Bo Liu, Tao Xu, Yanxin Shi, Antoine Atallah, Ralf Herbrich, Stuart
+Bowers, et al. Practical lessons from predicting clicks on ads at Facebook. In Proceedings of the 8th International
+Workshop on Data Mining for Online Advertising, pages 1–9, 2014.
+[20] John Platt. Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods.
+Advances in Large Margin Classifiers, 10(3):61–74, 1999.
+[21] Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q. Weinberger. On calibration of modern neural networks. In
+Proceedings of the 34th International Conference on Machine Learning, pages 1321–1330, 2017.
+[22] Alexandru Niculescu-Mizil and Rich Caruana. Predicting good probabilities with supervised learning. In
+Proceedings of the 22nd International Conference on Machine Learning, pages 625–632, 2005.
+[23] Freya Behrens and Lenka Zdeborová. Dataset distillation for memorized data: Soft labels can leak held-out
+teacher knowledge. arXiv preprint arXiv:2506.14457, 2025.
+[24] Tianqi Chen and Carlos Guestrin. XGBoost: A scalable tree boosting system. In Proceedings of the 22nd ACM
+SIGKDD International Conference on Knowledge Discovery and Data Mining, pages 785–794, 2016.
+[25] Liudmila Prokhorenkova, Gleb Gusev, Aleksandr Vorobev, Anna Veronika Dorogush, and Andrey Gulin. CatBoost:
+Unbiased boosting with categorical features. In Advances in Neural Information Processing Systems, volume 31,
+2018.
+[26] Guolin Ke, Qi Meng, Thomas Finley, Taifeng Wang, Wei Chen, Weidong Ma, Qiwei Ye, and Tie-Yan Liu.
+LightGBM: A highly efficient gradient boosting decision tree. In Advances in Neural Information Processing
+Systems, volume 30, 2017.
+[27] Aditya Tanna, Pratinav Seth, Mohamed Bouadi, Utsav Avaiya, and Vinay Kumar Sankarapu. TabTune: A unified
+library for inference and fine-tuning tabular foundation models. arXiv preprint arXiv:2511.02802, 2025.
+
+8
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+A
+
+Implementation Details
+
+K=5 stratified folds. Temperature range [1, 5] with per-sample entropy scaling. Loss weight α=0.7; confidence-weight
+parameters (µ, σ)=(0.7, 0.2).
+Tree students (XGBoost, CatBoost, LightGBM): 300 estimators, maximum depth 6, patience-30 early stopping on a
+held-out 10% validation split. Soft labels are provided as per-class regression targets; student probabilities normalized
+via softmax.
+MLP student: embedding dimension min(8d, 128), hidden widths scaled to dataset size, cosine LR with linear warmup,
+label smoothing 0.05, stochastic weight averaging (SWA) over the last 20% of training epochs, entropy-collapse detector
+that restarts training at higher dropout if prediction variance collapses.
+Baselines: same 300-tree, depth-6 configuration with zero-imputed inputs and no per-task tuning.
+Latency is reported as macro-mean across 153 dataset inference runs. All experiments are run via TabTune [27]; single
+seed per configuration.
+Compute resources. Teacher inference and OOF fold generation were run on a single NVIDIA A100 (80 GB)
+GPU node; student training and all baseline GBDT runs were run on a multi-core AMD EPYC CPU node. Teacher
+labeling on the 153-dataset benchmark was dominated by OrionMSP (1,275 ms per batch) and LimiX (448 ms per
+batch); student fitting and baselines fit in CPU-hours, not days. Latency benchmarks were run on a single CPU core to
+match deployment conditions.
+Caching teacher predictions. Each teacher run produces a per-fold prediction file (N ×C floats, where C is the
+number of classes) that is reused across student families. Caching these per-teacher per-dataset cuts the multi-teacher
+experiments to a single teacher-inference pass each, which is the difference between running every teacher once per
+student family and running it once for the whole benchmark.
+
+9
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+B
+
+Full Results Table
+
+All rows share the 153-dataset denominator. Retention = student AUC / best-solo-teacher-per-dataset AUC × 100.
+Multi-teacher retention is omitted (the reference teacher varies per dataset). Lat. = macro-mean latency (ms).
+Table 5 Complete 153-dataset results, single seed. TabDPT solo teacher not shown (ran on a subset; its distilled students used
+fold-level averaging where available).
+Type Model
+
+AUC
+
+Ret.
+
+Lat.
+
+Baselines
+CatBoost
+LightGBM
+XGBoost
+LogisticRegression
+
+.876±.126
+.872±.125
+.872±.127
+.810±.147
+
+–
+–
+–
+–
+
+1.2
+1.4
+3.8
+1.6
+
+Teachers
+TabICLv2
+TabPFNv2.6
+LimiX
+OrionMSP v1.5
+
+.908±.071
+.902±.076
+.900±.077
+.878±.087
+
+–
+–
+–
+–
+
+151
+327
+448
+1,275
+
+→XGB, single teacher
+TabICLv2→XGB
+TabPFNv2.6→XGB
+LimiX→XGB
+TabDPT→XGB
+OrionMSP→XGB
+
+.882±.112
+.881±.114
+.878±.121
+.873±.121
+.860±.131
+
+96.5%
+96.3%
+95.9%
+95.4%
+93.9%
+
+1.9
+1.9
+1.9
+1.9
+1.9
+
+→XGB, multi-teacher
+[PFN+ICL+Limix]→XGB
+[PFN+ICL]→XGB
+[PFN+ICL+Limix+DPT]→XGB
+[PFN+Limix]→XGB
+[PFN+Orion+Limix]→XGB
+
+.883±.110
+.883±.112
+.881±.112
+.880±.114
+.879±.114
+
+96.6%
+96.6%
+96.3%
+96.2%
+96.1%
+
+1.9
+2.0
+1.9
+1.9
+1.9
+
+→CatBoost, single teacher
+TabICLv2→CB
+TabPFNv2.6→CB
+LimiX→CB
+TabDPT→CB
+OrionMSP→CB
+
+.882±.113
+.879±.119
+.875±.119
+.871±.123
+.859±.131
+
+96.4%
+96.1%
+95.7%
+95.2%
+93.9%
+
+2.7
+2.8
+2.6
+2.7
+2.7
+
+→CatBoost, multi-teacher
+[PFN+ICL+Limix]→CB
+[PFN+ICL+Limix+DPT]→CB
+[PFN+Limix]→CB
+[PFN+ICL]→CB
+[PFN+Orion+Limix]→CB
+
+.880±.112
+.880±.114
+.879±.113
+.879±.116
+.876±.119
+
+96.3%
+96.2%
+96.2%
+96.2%
+95.7%
+
+2.6
+2.6
+2.6
+2.8
+2.6
+
+→LGBM, single teacher
+TabICLv2→LGBM
+TabPFNv2.6→LGBM
+LimiX→LGBM
+TabDPT→LGBM
+OrionMSP→LGBM
+
+.878±.116
+.878±.117
+.874±.124
+.867±.124
+.859±.128
+
+96.1%
+96.0%
+95.5%
+94.8%
+93.9%
+
+4.0
+3.7
+3.6
+3.6
+3.8
+
+→LGBM, multi-teacher
+[PFN+ICL]→LGBM
+[PFN+ICL+Limix]→LGBM
+[PFN+ICL+Limix+DPT]→LGBM
+[PFN+Limix]→LGBM
+[PFN+Orion+Limix]→LGBM
+
+.879±.115
+.878±.115
+.878±.114
+.877±.116
+.876±.118
+
+96.1%
+96.0%
+96.0%
+95.9%
+95.8%
+
+3.8
+3.6
+3.7
+3.8
+3.5
+
+→MLP, single teacher
+TabPFNv2.6→MLP
+LimiX→MLP
+
+.846±.131 92.4%
+.845±.131 92.3%
+
+1.5
+1.5
+
+(continued on next page)
+
+10
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+(continued from previous page)
+Type Model
+
+AUC
+
+TabDPT→MLP
+TabICLv2→MLP
+OrionMSP→MLP
+→MLP, multi-teacher
+[PFN+Limix]→MLP
+[PFN+ICL+Limix+DPT]→MLP
+[PFN+ICL]→MLP
+[PFN+Orion+Limix]→MLP
+[PFN+ICL+Limix]→MLP
+
+11
+
+Ret.
+
+Lat.
+
+.846±.133 92.4%
+.842±.137 92.0%
+.829±.140 90.5%
+
+1.5
+1.5
+1.5
+
+.852±.130
+.847±.130
+.843±.136
+.843±.130
+.843±.130
+
+1.5
+1.5
+1.5
+1.5
+1.5
+
+93.0%
+92.6%
+92.1%
+92.1%
+92.1%
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+C
+
+Additional Figures
+
+All figures use the same 153-dataset evaluation set as the main paper. Error bars in bar charts show ±1 standard
+deviation across datasets.
+
+
+Figure 2 Student-to-teacher AUC ratio for each teacher×student combination: mean student AUC / own-teacher AUC × 100%
+per dataset, averaged across 153 datasets. MLP students consistently absorb a smaller fraction of their teacher’s signal (92–94%)
+than tree students (97–98%), regardless of which teacher is used. The rank-preservation finding (teacher AUC rank transfers exactly
+to student AUC rank) holds for absolute AUC (Table 1), not for this per-teacher ratio, which reflects how faithfully each student
+architecture replicates its own teacher rather than how it compares across teachers.
+
+12
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+Mean AUC-ROC across datasets
+Grouped by model family · higher is better
+0.8097
+
+LogisticRegression
+XGBoost
+LightGBM
+CatBoost
+OrionMSPv1.5
+Limix
+TabPFNv26
+TabICLv2
+OrionMSPv1.5 mlp
+TabICLv2 mlp
+[TabPFNv26+TabICLv2+Limix] mlp
+[TabPFNv26+OrionMSPv1.5+Limix] mlp
+[TabPFNv26+TabICLv2] mlp
+Limix mlp
+TabDPT mlp
+TabPFNv26 mlp
+[TabPFNv26+TabICLv2+Limix+TabDPT] mlp
+[TabPFNv26+Limix] mlp
+OrionMSPv1.5 xgb
+TabDPT xgb
+Limix xgb
+[TabPFNv26+OrionMSPv1.5+Limix] xgb
+[TabPFNv26+Limix] xgb
+[TabPFNv26+TabICLv2+Limix+TabDPT] xgb
+TabPFNv26 xgb
+TabICLv2 xgb
+[TabPFNv26+TabICLv2] xgb
+[TabPFNv26+TabICLv2+Limix] xgb
+OrionMSPv1.5 lgbm
+TabDPT lgbm
+Limix lgbm
+[TabPFNv26+OrionMSPv1.5+Limix] lgbm
+[TabPFNv26+Limix] lgbm
+[TabPFNv26+TabICLv2+Limix+TabDPT] lgbm
+[TabPFNv26+TabICLv2+Limix] lgbm
+TabPFNv26 lgbm
+TabICLv2 lgbm
+[TabPFNv26+TabICLv2] lgbm
+OrionMSPv1.5 catboost
+TabDPT catboost
+Limix catboost
+[TabPFNv26+OrionMSPv1.5+Limix] catboost
+TabPFNv26 catboost
+[TabPFNv26+TabICLv2] catboost
+[TabPFNv26+Limix] catboost
+[TabPFNv26+TabICLv2+Limix+TabDPT] catboost
+[TabPFNv26+TabICLv2+Limix] catboost
+TabICLv2 catboost
+
+0.78
+
+Gain
+vs. baseline
++0.000
+
+0.8723
+0.8724
+0.8755
+0.8779
+
++0.063
++0.063
++0.066
++0.068
+0.9002
+0.9024
+0.9078
+
++0.091
++0.093
++0.098
+
+0.8287
+0.8424
+0.8426
+0.8427
+0.8434
+0.8453
+0.8457
+0.8460
+0.8473
+0.8515
+0.8599
+0.8728
+0.8775
+0.8789
+0.8800
+0.8807
+0.8809
+0.8823
+0.8827
+0.8829
+0.8588
+0.8673
+0.8738
+0.8761
+0.8773
+0.8775
+0.8778
+0.8778
+0.8784
+0.8787
+0.8592
+0.8707
+0.8752
+0.8755
+0.8787
+0.8792
+0.8794
+0.8795
+0.8804
+0.8815
+
+0.80
+
+0.82
+
+0.84
+
+0.86
+Mean AUC-ROC
+
+0.88
+
+Baseline
+Teacher
+Distilled (MLP)
+Distilled (XGBoost)
+Distilled (LGBM)
+Distilled (CatBoost)
+
+0.90
+
+0.92
+
++0.019
++0.033
++0.033
++0.033
++0.034
++0.036
++0.036
++0.036
++0.038
++0.042
++0.050
++0.063
++0.068
++0.069
++0.070
++0.071
++0.071
++0.073
++0.073
++0.073
++0.049
++0.058
++0.064
++0.066
++0.068
++0.068
++0.068
++0.068
++0.069
++0.069
++0.050
++0.061
++0.065
++0.066
++0.069
++0.070
++0.070
++0.070
++0.071
++0.072
+
+0.000 0.025 0.050 0.075 0.100
+AUC vs LogReg
+
+Figure 3 Macro-mean ROC-AUC for all 48 model configurations, grouped by type (baselines, teachers, distilled students per
+student family). Error bars show ±1 s.d. across 153 datasets. The dashed vertical line marks the best baseline (CatBoost, 0.876).
+Within each distilled group, models are sorted by teacher AUC rank, confirming that teacher rank transfers directly to student rank.
+
+13
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+D
+
+Benchmark Datasets
+
+Table 6 lists all 153 classification datasets used in the evaluation, sorted by OpenML identifier. Source codes:
+TL = TALENT; TA = TabArena; CC18 = OpenML-CC18; TZ = TabZilla; FIN = financial (Lending Club and Home
+Credit). Datasets appearing in multiple collections carry combined tags. Samples = train + test; Feat. = input features;
+Cls. = target classes.
+Table 6 Full inventory of the 153 OpenML benchmark datasets used in this study. ID: OpenML dataset identifier. Samples:
+number of instances (range: 128 to 581,012; median: 3,196). Feat.: number of input features (range: 5 to 1,777; median: 22). Cls.:
+number of target classes (range: 2 to 10; median: 2). Source: benchmark suite from which the task was drawn. CC18:
+OpenML-CC18; TA: TabArena; TL: Talent; TZ: TabZilla. Datasets shared across suites carry combined source tags (e.g., CC18,TZ).
+ID
+3
+11
+12
+14
+15
+16
+18
+21
+22
+23
+27
+28
+29
+30
+31
+32
+36
+37
+38
+44
+46
+50
+54
+60
+151
+179
+180
+181
+182
+188
+293
+333
+458
+469
+470
+554
+846
+934
+999
+1038
+1043
+1046
+1049
+1050
+1053
+1063
+1067
+1068
+1111
+
+Name
+kr-vs-kp
+balance-scale
+mfeat-factors
+mfeat-fourier
+breast-w
+mfeat-karhunen
+mfeat-morphological
+car
+mfeat-zernike
+cmc
+colic
+optdigits
+credit-approval
+page-blocks
+credit-g
+pendigits
+segment
+diabetes
+sick
+spambase
+splice
+tic-tac-toe
+vehicle
+waveform-5000
+electricity
+adult
+covertype
+yeast
+satimage
+eucalyptus
+covertype
+monks-problems-1
+analcatdata_authorship
+analcatdata_dmft
+profb
+mnist_784
+elevators
+socmob
+audiology
+gina_agnostic
+ada_agnostic
+mozilla4
+pc4
+pc3
+jm1
+kc2
+kc1
+pc1
+KDDCup09_appetency
+
+Samples
+
+Feat.
+
+Cls.
+
+Source
+
+3,196
+625
+2,000
+2,000
+699
+2,000
+2,000
+1,728
+2,000
+1,473
+368
+5,620
+690
+5,473
+1,000
+10,992
+2,310
+768
+3,772
+4,601
+3,190
+958
+846
+5,000
+45,312
+48,842
+110,393
+1,484
+6,430
+736
+581,012
+556
+841
+797
+672
+70,000
+16,599
+1,156
+226
+3,468
+4,562
+15,545
+1,458
+1,563
+10,885
+522
+2,109
+1,109
+50,000
+
+37
+5
+217
+77
+10
+65
+7
+7
+48
+10
+23
+65
+16
+11
+21
+17
+20
+9
+30
+58
+61
+10
+19
+41
+9
+15
+55
+9
+37
+20
+55
+7
+71
+5
+10
+785
+19
+6
+70
+971
+49
+6
+38
+38
+22
+22
+22
+22
+231
+
+2
+3
+10
+10
+2
+10
+10
+4
+10
+3
+2
+10
+2
+5
+2
+10
+7
+2
+2
+2
+3
+2
+4
+3
+2
+2
+7
+10
+6
+5
+2
+2
+4
+6
+2
+10
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+
+CC18
+CC18,TZ
+CC18
+CC18,TZ
+CC18
+CC18
+CC18
+TL
+CC18,TZ
+CC18
+TZ
+CC18
+CC18,TZ
+TL
+CC18,TZ
+CC18
+TL
+CC18
+CC18
+CC18
+CC18,TZ
+CC18
+CC18,TZ
+TL
+CC18
+TL
+TL
+TL
+CC18
+CC18
+TL
+TZ
+CC18
+CC18
+TZ
+CC18
+TZ
+TZ
+TZ
+TL
+TZ
+TL
+CC18
+CC18
+CC18
+CC18
+CC18,TZ
+CC18
+TL
+
+Continued on next page
+
+14
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+Table 6 (continued from previous page)
+ID
+1112
+1114
+1116
+1119
+1120
+1169
+1459
+1461
+1462
+1464
+1467
+1468
+1471
+1475
+1476
+1478
+1480
+1485
+1486
+1487
+1489
+1494
+1497
+1501
+1510
+1565
+1590
+1596
+4134
+4534
+4538
+6332
+23381
+23512
+23517
+40536
+40646
+40647
+40648
+40649
+40650
+40668
+40670
+40680
+40681
+40682
+40685
+40701
+40900
+40945
+40966
+40975
+40978
+40979
+40981
+40982
+40983
+40984
+40994
+41027
+41138
+
+Name
+KDDCup09_churn
+KDDCup09_upselling
+musk
+adult-census
+MagicTelescope
+airlines
+artificial-characters
+bank-marketing
+banknote-authentication
+blood-transfusion-service-center
+climate-model-simulation-crashes
+cnae-9
+eeg-eye-state
+first-order-theorem-proving
+gas-drift
+har
+ilpd
+madelon
+nomao
+ozone-level-8hr
+phoneme
+qsar-biodeg
+wall-robot-navigation
+semeion
+wdbc
+heart-h
+adult
+covertype
+Bioresponse
+PhishingWebsites
+GesturePhaseSegmentationProcessed
+cylinder-bands
+dresses-sales
+higgs
+numerai28.6
+SpeedDating
+GAMETES_Epistasis_2-Way_20atts_0.1H_EDM-1_1
+GAMETES_Epistasis_2-Way_20atts_0.4H_EDM-1_1
+GAMETES_Epistasis_3-Way_20atts_0.2H_EDM-1_1
+GAMETES_Heterogeneity_20atts_1600_Het_0.4_0.2_50_EDM-2_001
+GAMETES_Heterogeneity_20atts_1600_Het_0.4_0.2_75_EDM-2_001
+connect-4
+dna
+mofn-3-7-10
+mux6
+thyroid-new
+shuttle
+churn
+Satellite
+Titanic
+MiceProtein
+car
+Internet-Advertisements
+mfeat-pixel
+Australian
+steel-plates-fault
+wilt
+segment
+climate-model-simulation-crashes
+jungle_chess_2pcs_raw_endgame_complete
+APSFailure
+
+Samples
+
+Feat.
+
+Cls.
+
+Source
+
+50,000
+50,000
+6,598
+32,561
+19,020
+539,383
+10,218
+45,211
+1,372
+748
+540
+1,080
+14,980
+6,118
+13,910
+10,299
+583
+2,600
+34,465
+2,534
+5,404
+1,055
+5,456
+1,593
+569
+294
+48,842
+581,012
+3,751
+11,055
+9,873
+540
+500
+98,050
+96,320
+8,378
+1,600
+1,600
+1,600
+1,600
+1,600
+67,557
+3,186
+1,324
+128
+215
+58,000
+5,000
+5,100
+1,309
+1,080
+1,728
+3,279
+2,000
+690
+1,941
+4,839
+2,310
+540
+44,819
+76,000
+
+231
+231
+168
+16
+12
+8
+8
+17
+5
+5
+21
+857
+15
+52
+129
+562
+11
+501
+119
+73
+6
+42
+25
+257
+31
+14
+15
+55
+1,777
+31
+33
+40
+13
+29
+22
+121
+21
+21
+21
+21
+21
+43
+181
+11
+7
+6
+10
+21
+37
+14
+82
+7
+1,558
+241
+15
+28
+6
+20
+21
+7
+171
+
+2
+2
+2
+2
+2
+2
+10
+2
+2
+2
+2
+9
+2
+6
+6
+6
+2
+2
+2
+2
+2
+2
+4
+10
+2
+5
+2
+7
+2
+2
+5
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+3
+3
+2
+2
+3
+7
+2
+2
+2
+8
+4
+2
+10
+2
+7
+2
+7
+2
+3
+2
+
+TL
+TL
+TL
+TL
+TL
+TZ
+TZ
+CC18
+CC18
+CC18
+TL
+CC18,TZ
+TL
+CC18
+TL
+CC18
+CC18
+CC18
+CC18,TZ
+CC18
+CC18
+CC18,TZ
+CC18
+CC18
+CC18
+TZ
+CC18
+TL
+CC18,TZ
+CC18
+CC18,TZ
+CC18
+CC18
+TZ
+CC18
+TL
+TL
+TL
+TL
+TL
+TL
+CC18
+CC18
+TL
+TL
+TL
+TL
+CC18
+TL
+TL
+CC18
+CC18
+CC18
+CC18
+TZ
+CC18
+CC18
+CC18
+CC18
+CC18,TZ
+TL
+
+Continued on next page
+
+15
+
+Pocket Foundation Models: Distilling TFMs into CPU-Ready Gradient-Boosted Trees
+
+Table 6 (continued from previous page)
+ID
+41143
+41147
+41150
+43945
+43973
+46905
+46906
+46908
+46910
+46911
+46912
+46913
+46915
+46916
+46918
+46919
+46920
+46921
+46922
+46924
+46927
+46929
+46930
+46932
+46933
+46935
+46937
+46938
+46939
+46940
+46941
+46947
+46950
+46952
+46955
+46956
+46958
+46960
+46962
+46963
+46969
+46979
+46980
+
+Name
+jasmine
+albert
+MiniBooNE
+electricity
+phoneme
+Amazon_employee_access
+anneal
+APSFailure
+bank-marketing
+Bank_Customer_Churn
+Bioresponse
+blood-transfusion-service-center
+churn
+coil2000_insurance_policies
+credit-g
+credit_card_clients_default
+customer_satisfaction_in_airline
+diabetes
+Diabetes130US
+E-CommereShippingData
+Fitness_Club
+GiveMeSomeCredit
+hazelnut-spread-contaminant-detection
+heloc
+hiva_agnostic
+HR_Analytics_Job_Change_of_Data_Scientists
+in_vehicle_coupon_recommendation
+Is-this-a-good-customer
+kddcup09_appetency
+Marketing_Campaign
+maternal_health_risk
+online_shoppers_intention
+polish_companies_bankruptcy
+qsar-biodeg
+SDSS17
+seismic-bumps
+splice
+students_dropout_and_academic_success
+taiwanese_bankruptcy_prediction
+website_phishing
+NATICUSdroid
+jm1
+MIC
+
+16
+
+Samples
+
+Feat.
+
+Cls.
+
+Source
+
+2,984
+425,240
+130,064
+38,474
+3,172
+32,769
+898
+76,000
+45,211
+10,000
+3,751
+748
+5,000
+9,822
+1,000
+30,000
+129,880
+768
+71,518
+10,999
+1,500
+150,000
+2,400
+10,459
+3,845
+19,158
+12,684
+1,723
+50,000
+2,240
+1,014
+12,330
+5,910
+1,054
+78,053
+2,584
+3,190
+4,424
+6,819
+1,353
+7,491
+10,885
+1,699
+
+145
+79
+51
+9
+6
+10
+39
+171
+14
+11
+1,777
+5
+20
+86
+21
+24
+22
+9
+48
+11
+7
+11
+31
+24
+1,618
+13
+25
+14
+213
+26
+7
+18
+65
+42
+12
+16
+61
+37
+95
+10
+87
+22
+112
+
+2
+2
+2
+2
+2
+2
+5
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+2
+3
+2
+2
+2
+2
+2
+3
+2
+2
+2
+3
+2
+3
+3
+2
+3
+2
+2
+8
+
+TZ
+TZ
+TZ
+TZ
+TZ
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+TA
+
+
