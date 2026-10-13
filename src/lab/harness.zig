@@ -57,11 +57,12 @@ pub fn needsStats(comptime C: type) bool {
     return @hasDecl(C, "needs_stats") and C.needs_stats;
 }
 
-/// C.fit, but a needs_stats candidate given training rows whose seat stats are all NaN
-/// fails with error.NoSeatStats: SNAP/seat_stats.tsv is missing (`meiolol-lab seat-stats`
-/// then `pack`). Every caller fits through here
+/// C.fit, but a needs_stats candidate fails when a seat stat is NaN in every training row:
+/// error.NoSeatStats when all are (SNAP/seat_stats.tsv is missing: `meiolol-lab
+/// seat-stats` then `pack`), error.SeatStatAllNaN when some are (a broken column, as when
+/// every Data Dragon value was NaN, 30450b4). Every caller fits through here
 pub fn fit(comptime C: type, gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !C.Model {
-    if (needsStats(C) and t.rows.len > 0 and !anyStats(t.rows)) return error.NoSeatStats;
+    if (needsStats(C) and t.rows.len > 0) try statsPresent(t.rows);
     var o = opts;
     if (o.embeddings == null) o.embeddings = embeddings;
     if (needsEmbeddings(C) and o.embeddings == null) return error.NoEmbeddings;
@@ -75,9 +76,17 @@ pub fn needsEmbeddings(comptime C: type) bool {
     return @hasDecl(C, "needs_embeddings") and C.needs_embeddings;
 }
 
-fn anyStats(rs: []const api.Row) bool {
-    for (rs) |r| for (r.stats) |x| if (!std.math.isNan(x)) return true;
-    return false;
+fn statsPresent(rs: []const api.Row) !void {
+    var seen: [api.seat_stat_count]bool = @splat(false);
+    for (rs) |r| for (r.stats, &seen) |x, *s| {
+        if (!std.math.isNan(x)) s.* = true;
+    };
+    if (std.mem.indexOfScalar(bool, &seen, true) == null) return error.NoSeatStats;
+    if (std.mem.indexOfScalar(bool, &seen, false)) |i| {
+        // The test runner fails a test that writes to stderr
+        if (!@import("builtin").is_test) std.debug.print("harness: seat stat {s} is NaN in every training row\n", .{@typeInfo(api.SeatStat).@"enum".field_names[i]});
+        return error.SeatStatAllNaN;
+    }
 }
 
 /// Scored games of a phase start at or after its cut; its visible games are older
@@ -659,11 +668,13 @@ test "a candidate that needs seat stats fails without them" {
     for ([_]Phase{ .dev, .select, .final }) |p| {
         try std.testing.expectError(error.NoSeatStats, score(NeedsStats, gpa, &f.data, players, c, p, .{}));
     }
-    // One known value anywhere in the fit set is enough; others don't ask
-    f.data.rows[0].stats[0] = 30;
+    // Each stat known somewhere in the fit set is enough; a stat NaN everywhere isn't
+    f.data.rows[0].stats = @splat(30);
     var s = try score(NeedsStats, gpa, &f.data, players, c, .dev, .{});
     s.deinit(gpa);
-    f.data.rows[0].stats[0] = std.math.nan(f32);
+    f.data.rows[0].stats[3] = std.math.nan(f32);
+    try std.testing.expectError(error.SeatStatAllNaN, score(NeedsStats, gpa, &f.data, players, c, .dev, .{}));
+    f.data.rows[0].stats = @splat(std.math.nan(f32));
     var plain = try score(Spy, gpa, &f.data, players, c, .dev, .{});
     plain.deinit(gpa);
 }
