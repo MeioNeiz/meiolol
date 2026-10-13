@@ -31,6 +31,7 @@ const effects = @import("lab/effects.zig");
 const pretrain = @import("lab/pretrain.zig");
 const playernet = @import("lab/playernet.zig");
 const gains = @import("lab/gains.zig");
+const stack = @import("lab/stack.zig");
 const curve = @import("lab/curve.zig");
 const synth = @import("lab/synth.zig");
 const compare = @import("lab/compare.zig");
@@ -79,7 +80,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ randsplit.usage ++ gains.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ effects.usage ++ compare.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ randsplit.usage ++ gains.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ effects.usage ++ compare.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -288,6 +289,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "style")) {
         return style.main(init.gpa, arena, init.io, argv[2..]);
     }
+    if (std.mem.eql(u8, cmd, "stack")) {
+        return stack.main(init.gpa, arena, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "gains")) {
         return gains.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -384,6 +388,7 @@ fn gpuSmoke(gpa: std.mem.Allocator) !void {
 }
 
 test {
+    _ = stack;
     _ = anonymise;
     _ = curve;
     _ = synth;
