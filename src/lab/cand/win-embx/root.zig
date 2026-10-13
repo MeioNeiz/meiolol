@@ -100,7 +100,7 @@ fn variantCfg(v: Variant) Cfg {
 const variant: Variant = .all;
 const cfg: Cfg = variantCfg(variant);
 /// Sealed confirmation seeds: 3 maps the harness's seeds 1-3 to E (and fit) seeds 4-6
-const seed_offset: u64 = 0;
+const seed_offset: u64 = 3;
 
 pub const name = "win-embx";
 
