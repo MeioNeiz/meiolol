@@ -1256,6 +1256,77 @@ one test look per final model. The learning curve (25/50/100% of fit games, then
 ~350k-game unpinned snapshot) says whether the gap to ratings closes with data. Sessions:
 docs/model-agents.md. Read every table as log loss vs ratings, negative is better.
 
+#### Big, small and residual nets (meiolol-f1)
+
+`meiolol-lab netcheck SNAP --net big|small|resid` (src/lab/winnet.zig, c709ca4), built
+with -Dcand=win-ratings or win-comp: per block (dev-val; win-comp's 5 forward folds,
+compcheck's bounds) the candidate and the net fit on the same games and score the same
+games. Ids (champion-roles with 10+ fit games, else the role's; big 30+), early stopping
+(newest 10% of the fit games, 4 checks an epoch; big once an epoch) and the refit (all fit
+games, a tenth more epochs) from fit games only. All antisymmetric: logit = (f(blue, red) -
+f(red, blue)) / 2 + side intercept per platform.
+- big: draftnet.zig as built (champion-role + role embeddings 10 x 32, MLP 320-512-256-1,
+  ReLU, dropout 0.1, AdamW lr 1e-3 wd 1e-4, batch 1024)
+- small: embeddings 16, one hidden layer of 64, dropout 0.2, AdamW wd 0.1 (decoupled),
+  batch 512, gradient norm clipped at 1; small A (meiolol-ad's starting config):
+  embeddings 8, two layers of 128, dropout 0.1, wd 3e-4, no decay on embeddings
+- resid: small with the candidate's logit as an offset (trainable weight from 1, or
+  `--fix-offset 1`), output weights from 0, so it starts as the candidate. Training
+  games' offsets are cross-fitted (each from a candidate fitted without the game's
+  hashed fifth of the fit games; again inside the inner games for early stopping),
+  val and scored offsets from the candidate on all inner / all fit games. A first
+  version with in-sample offsets (meiolol-49's audit) is discarded
+- Pipeline audited (meiolol-49, recheck meiolol-4b): fit and scored games disjoint in
+  every mode, no offset from a fit holding its game (test "cross-fit")
+
+Mac, snap-20261012T2055Z (rows identical to the gpu-box: ratings 0.69090 on the folds as
+0d's), 3 seeds, the ensemble is the seeds' mean chance. Folds: 44,353 games pooled; dev-val
+8,500 EUW1 games. ± is 95%, paired per game (= clustered by game); seed sd is the sd of the
+single seeds' differences.
+
+| net | folds vs ratings | single seeds | dev-val vs ratings | folds AUC (ratings 0.5397) |
+| --- | --- | --- | --- | --- |
+| small | +0.00066 ± 0.00029 | +0.00078 to +0.00122 | +0.00060 ± 0.00052 | 0.5372 |
+| small A | +0.00073 ± 0.00036 | +0.00131 to +0.00304 | +0.00016 ± 0.00057 | |
+| big | -0.00028 ± 0.00039 | +0.00032 to +0.00054 | -0.00035 ± 0.00065 | 0.5396 |
+| resid | -0.00005 ± 0.00007 | -0.00006 to +0.00001 | +0.00001 ± 0.00012 | 0.5399 |
+| resid A | -0.00001 ± 0.00007 | -0.00001 to +0.00011 | +0.00002 ± 0.00016 | |
+| resid, offset weight fixed at 1 | +0.00000 ± 0.00005 | 0 to +0.00006 | -0.00001 ± 0.00003 | |
+
+Against win-comp (-Dcand=src/lab/cand/win-comp, the mix model; folds 0.69033, i.e.
+-0.00057 vs ratings as 0d's; dev-val 0.68999, +0.00030 vs ratings): small +0.00123 ±
+0.00040, big +0.00029 ± 0.00049, resid on win-comp's offset -0.00004 ± 0.00008 (dev-val
+-0.00011 ± 0.00018).
+
+Learning curve (each fold's fit games kept by harness.inFraction, nested; scored games
+unchanged; folds pooled):
+
+| share of fit games | 25% (11-20k games) | 50% | 100% (44-80k) |
+| --- | --- | --- | --- |
+| ratings log loss | 0.69203 | 0.69134 | 0.69090 |
+| small vs ratings | +0.00028 ± 0.00024 | +0.00043 ± 0.00031 | +0.00066 ± 0.00029 |
+| big vs ratings | -0.00004 ± 0.00028 | +0.00013 ± 0.00029 | -0.00028 ± 0.00039 |
+| resid vs ratings | -0.00004 ± 0.00010 | -0.00005 ± 0.00008 | -0.00005 ± 0.00007 |
+
+Reading (dev, no test look):
+- No net beats ratings or win-comp. The best, the big net's 3-seed mean, is -0.00028 ±
+  0.00039 on the folds: not detected, at most ~0.0007 nats/game better; each single big
+  seed is worse (+0.0003 to +0.0005): the ensemble is what brings it level, as research
+  predicts (seed averaging is most of a net's gain at this size). win-comp's mix term
+  beats every net on the folds
+- The small net from scratch is worse than ratings, and its gap does not close as data
+  doubles (+0.0003, +0.0004, +0.0007): ratings gain more from more games than it does.
+  The big net's gap wanders within noise (±0.0003) at every size. So nothing here
+  suggests nets would overtake ratings at 2x or 4x our data; the 350k snapshot will say
+- Residual on ratings (cross-fitted): adds nothing detectable, at most ~0.0001 nats/game,
+  the tightest bound here. Early stopping picks 0.25-3 epochs; the learnt offset weight
+  goes to ~0.9 (ratings a little over-confident), which is all it finds; fixed at 1 it is
+  exactly ratings. On win-comp's offset the same
+- Nets early-stop at 1-4 epochs (big at 1-2): they overfit almost at once at 40-90k games
+- Next: hyperparameter sweeps on the 3080 (meiolol-1c, ranked on inner validation),
+  pretrained embeddings (meiolol-52, `--emb-init`), more seeds for the big ensemble,
+  the 350k-game snapshot for the curve
+
 #### LoLDraftAI's evaluation beside ours (meiolol-ba)
 
 Why: LoLDraftAI reports 55-56% on a seeded random 90/10 file split, with in-game
