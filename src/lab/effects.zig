@@ -29,6 +29,7 @@ const A = additive;
 pub const usage =
     \\  effects SNAP [--out DIR] [--blocks dev,1,2,3,4,5] [--boot N] [--drop 0|1]
     \\                                  [--threads N] [--soft FILE --alpha X]
+    \\                                  [--shuffle SEED] (labels permuted: a control)
     \\                                  shrunk additive model (champion strength, ally
     \\                                  and enemy role-pair blocks, damage mix) vs the
     \\                                  -Dcand candidate on dev-val and the 5 forward
@@ -46,6 +47,9 @@ const Options = struct {
     threads: u32 = 10,
     soft: ?[]const u8 = null,
     alpha: f32 = 0.5,
+    /// Shuffled-label control: game results (win and gold together) permuted across games
+    /// before anything is fitted; every gain and block sd must come out ~0
+    shuffle: ?u64 = null,
 };
 
 const Block = enum { dev, f1, f2, f3, f4, f5 };
@@ -165,6 +169,12 @@ const Mix = struct {
     /// key -> [half][feature][sum, n]
     acc: std.AutoHashMapUnmanaged(u64, [2][2][2]f64) = .empty,
     role_mean: [A.n_role][2]f64 = @splat(@splat(0)),
+    /// Blue won, per game (Inputs.win: shuffled under --shuffle)
+    win: []const f32 = &.{},
+
+    fn rowWon(m: *const Mix, r: *const rows.Row) bool {
+        return (m.win[r.game] > 0.5) == (r.side == 0);
+    }
 
     fn key(champion: u32, role: usize) u64 {
         return @as(u64, champion) << 3 | role;
@@ -186,17 +196,15 @@ const Mix = struct {
         };
     }
 
-    fn init(gpa: std.mem.Allocator, d: *const rows.Data, fit: []const bool) !Mix {
-        var m: Mix = .{};
+    fn init(gpa: std.mem.Allocator, d: *const rows.Data, fit: []const bool, win: []const f32) !Mix {
+        var m: Mix = .{ .win = win };
         var role_acc: [A.n_role][2][2]f64 = @splat(@splat(@splat(0)));
-        for (d.rows) |r| {
+        for (d.rows) |*r| {
             if (!fit[r.game]) continue;
-            const y = r.y[api.outcomeIndex(.win)];
-            if (std.math.isNan(y)) continue;
             const v = values(&r.stats);
             const role: usize = @backingInt(r.role);
             const e = try m.acc.getOrPutValue(gpa, key(r.champion, role), @splat(@splat(@splat(0))));
-            const half: usize = @intFromBool(y > 0.5);
+            const half: usize = @intFromBool(m.rowWon(r));
             for (0..2) |f| {
                 if (std.math.isNan(v[f]) or std.math.isInf(v[f])) continue;
                 e.value_ptr[half][f][0] += v[f];
@@ -222,15 +230,12 @@ const Mix = struct {
         var drop: [2][2]f64 = @splat(@splat(0));
         var drop_n: [2][2]f64 = @splat(@splat(0));
         if (own) |r| {
-            const y = r.y[api.outcomeIndex(.win)];
-            if (!std.math.isNan(y)) {
-                const v = values(&r.stats);
-                const half: usize = @intFromBool(y > 0.5);
-                for (0..2) |f| if (!std.math.isNan(v[f]) and !std.math.isInf(v[f])) {
-                    drop[half][f] = v[f];
-                    drop_n[half][f] = 1;
-                };
-            }
+            const v = values(&r.stats);
+            const half: usize = @intFromBool(m.rowWon(r));
+            for (0..2) |f| if (!std.math.isNan(v[f]) and !std.math.isInf(v[f])) {
+                drop[half][f] = v[f];
+                drop_n[half][f] = 1;
+            };
         }
         var out: [2]f64 = undefined;
         for (0..2) |f| {
@@ -412,7 +417,7 @@ fn runBlock(
         if (f.*) try fit_idx.append(gpa, @intCast(i));
         if (spec.scores(c, g)) try scored.append(gpa, @intCast(i));
     }
-    var mix = try Mix.init(gpa, d, is_fit);
+    var mix = try Mix.init(gpa, d, is_fit, in.win);
     defer mix.deinit(gpa);
 
     // Fit games per target: win, teacher logit, mix, gold (known gold only)
@@ -592,6 +597,7 @@ fn runBlock(
     if (block != .dev) {
         for (scored.items, pc) |gi, p| {
             try pooled.y.append(gpa, in.win[gi]);
+            try pooled.fold.append(gpa, @intCast(@backingInt(block)));
             try pooled.ref.append(gpa, p);
         }
         if (pooled.preds.len == 0) {
@@ -603,16 +609,37 @@ fn runBlock(
 }
 
 const Pooled = struct {
+    /// Fold of each pooled game (1..5)
+    fold: std.ArrayList(u8) = .empty,
     y: std.ArrayList(f32) = .empty,
     ref: std.ArrayList(f64) = .empty,
     preds: []std.ArrayList(f64) = &.{},
 
     fn deinit(p: *Pooled, gpa: std.mem.Allocator) void {
         p.y.deinit(gpa);
+        p.fold.deinit(gpa);
         p.ref.deinit(gpa);
         for (p.preds) |*x| x.deinit(gpa);
     }
 };
+
+/// b's log loss minus a's per game (negative: b better), and the folds where b is better
+fn pairedFolds(p: Pooled, a: []const f64, b: []const f64) struct { mean: f64, se: f64, better: u32 } {
+    var s: f64 = 0;
+    var s2: f64 = 0;
+    var per: [n_folds + 1]f64 = @splat(0);
+    for (p.y.items, p.fold.items, a, b) |y, f, pa, pb| {
+        const v = loss1(y, pb) - loss1(y, pa);
+        s += v;
+        s2 += v * v;
+        per[f] += v;
+    }
+    const n: f64 = @floatFromInt(@max(p.y.items.len, 1));
+    const mean = s / n;
+    var better: u32 = 0;
+    for (per[1..]) |x| better += @intFromBool(x < 0);
+    return .{ .mean = mean, .se = @sqrt(@max(s2 / n - mean * mean, 0) / @max(n - 1, 1)), .better = better };
+}
 
 const cand_name: []const u8 = if (@hasDecl(cand, "name")) cand.name else "cand";
 
@@ -647,7 +674,9 @@ const Files = struct {
 // ---------------------------------------------------------------- effects on all games
 
 /// The full model (win, and gold) on every dev-visible game: per block sigma with a
-/// bootstrap interval (Poisson game weights, warm-started refits), and single cells
+/// half-sampling interval (warm-started refits on random halves of the games; a
+/// bootstrap's duplicated games make thin pair cells look consistent and inflate their
+/// blocks), and single cells
 fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *const rows.Data, in: Inputs, c: harness.Cuts, opts: Options, soft: ?*const Soft, dir: Io.Dir, w: *Io.Writer) !void {
     const is_fit = try gpa.alloc(bool, d.games.len);
     defer gpa.free(is_fit);
@@ -657,7 +686,7 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
         f.* = harness.visible(.dev, c, g);
         if (f.*) try idx.append(gpa, @intCast(i));
     }
-    var mix = try Mix.init(gpa, d, is_fit);
+    var mix = try Mix.init(gpa, d, is_fit, in.win);
     defer mix.deinit(gpa);
     var win_games: std.ArrayList(A.GameIn) = .empty;
     var gold_games: std.ArrayList(A.GameIn) = .empty;
@@ -716,7 +745,7 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
         };
         // win and the teacher's logit in win pp at 50%, gold in gold
         const in_gold = target == .gold;
-        // Bootstrap: Poisson(1) weights per game, each rep warm-started from f
+        // Half-samples: each rep fits a random half of the games (weight 0 or 1)
         const boots = try arena.alloc([A.n_groups]f64, opts.boot);
         const Ctx = struct {
             gpa: std.mem.Allocator,
@@ -727,7 +756,8 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
                 const ws = try x.gpa.alloc(f32, x.p.games.len);
                 defer x.gpa.free(ws);
                 var rng: std.Random.DefaultPrng = .init(0xb007 +% i);
-                for (ws) |*v| v.* = @floatFromInt(poisson1(rng.random()));
+                const r = rng.random();
+                for (ws) |*v| v.* = if (r.boolean()) 1 else 0;
                 var b = try A.fit(x.gpa, x.p, .{ .outer = 15 }, ws, x.f);
                 defer b.deinit(x.gpa);
                 x.boots[i] = b.sigma2;
@@ -742,25 +772,32 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
         const to_unit: f64 = if (in_gold) 1000 else 25;
         const to_pp: f64 = if (in_gold) 25 * slope else 25;
         var nbuf: [64]u8 = undefined;
-        try w.print("\n{s}: per block sd of true effects ({s}), 95% bootstrap ({d} reps)\n", .{ outcome, if (in_gold) "gold" else "win pp", opts.boot });
+        try w.print("\n{s}: per block sd of true effects ({s}), 95% from {d} half-samples (sd of the halves / sqrt 2), [half-sample mean]\n", .{ outcome, if (in_gold) "gold" else "win pp", opts.boot });
         for (1..A.n_groups) |g| {
             const n_cells = p.param_start[g + 1] - p.param_start[g];
             if (n_cells == 0) continue;
             var games_in: u64 = 0;
             for (p.param_start[g]..p.param_start[g + 1]) |j| games_in += p.count[j];
-            const sds = try arena.alloc(f64, opts.boot);
-            for (boots, sds) |b, *s| s.* = @sqrt(b[g]);
-            std.mem.sort(f64, sds, {}, std.sort.asc(f64));
-            const lo = if (opts.boot > 0) sds[@intFromFloat(@as(f64, @floatFromInt(opts.boot)) * 0.025)] else std.math.nan(f64);
-            const hi = if (opts.boot > 0) sds[@min(opts.boot - 1, @as(usize, @intFromFloat(@as(f64, @floatFromInt(opts.boot)) * 0.975)))] else std.math.nan(f64);
+            // Var of the full-data estimate ~ Var over half-samples / 2
+            var hm: f64 = 0;
+            var hm2: f64 = 0;
+            for (boots) |b| {
+                hm += @sqrt(b[g]);
+                hm2 += b[g];
+            }
+            const nb: f64 = @floatFromInt(@max(opts.boot, 1));
+            hm /= nb;
+            const se = @sqrt(@max(hm2 / nb - hm * hm, 0) * nb / @max(nb - 1, 1) / 2);
             const sd = @sqrt(f.sigma2[g]);
+            const lo = @max(sd - 1.96 * se, 0);
+            const hi = sd + 1.96 * se;
             const label = A.groupName(&nbuf, g);
             try cw.interface.print("{s}\t{s}\t{d}\t{d:.1}\t{d:.1}\t{d:.5}\t{d:.5}\t{d:.5}\t{d:.3}\t{d:.3}\t{d:.3}\t{d}\n", .{
                 outcome,    label,      n_cells,    @as(f64, @floatFromInt(games_in)) / @as(f64, @floatFromInt(n_cells)),
                 f.gamma[g], sd,         lo,         hi,
                 sd * to_pp, lo * to_pp, hi * to_pp, opts.boot,
             });
-            try w.print("  {s:<26} {d:>6} cells  sd {d:.2} [{d:.2}, {d:.2}] {s}\n", .{ label, n_cells, sd * to_unit, lo * to_unit, hi * to_unit, if (in_gold) "gold" else "pp" });
+            try w.print("  {s:<26} {d:>6} cells  sd {d:.2} [{d:.2}, {d:.2}] [{d:.2}] {s}\n", .{ label, n_cells, sd * to_unit, lo * to_unit, hi * to_unit, hm * to_unit, if (in_gold) "gold" else "pp" });
             // Single cells whose posterior interval clears 0 (pair blocks only)
             if (g < A.g_ally) continue;
             for (p.param_start[g]..p.param_start[g + 1]) |j| {
@@ -780,6 +817,19 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
         const n: f64 = @floatFromInt(games.len);
         const sdx = @sqrt(@max(s2 / n - (s / n) * (s / n), 0));
         const j = A.n_platforms;
+        {
+            // Diagnostic: the mix term alone (one-variable logistic on the fit games)
+            const xs = try arena.alloc(f32, games.len);
+            const ys = try arena.alloc(f32, games.len);
+            for (games, xs, ys) |g, *x, *y| {
+                x.* = g.cont[0];
+                y.* = g.y;
+            }
+            if (target == .win) {
+                const one = goldSlope(xs, ys);
+                try w.print("  damage mix alone: {d:.2} +- {d:.2} pp per sd (sd of the term {d:.4}, mean |term| {d:.4})\n", .{ one[1] * sdx * 25, 1.96 * one[2] * sdx * 25, sdx, meanAbs(xs) });
+            }
+        }
         try w.print("  damage mix, per sd of blue minus red: {d:.2} +- {d:.2} {s}\n", .{ f.theta[j] * sdx * to_unit, 1.96 / @sqrt(f.h[j]) * sdx * to_unit, if (in_gold) "gold" else "pp" });
         try cw.interface.print("{s}\tdamage mix (per sd)\t\t\t\t{d:.5}\t{d:.5}\t{d:.5}\t{d:.3}\t\t\t\n", .{ outcome, f.theta[j] * sdx, (f.theta[j] - 1.96 / @sqrt(f.h[j])) * sdx, (f.theta[j] + 1.96 / @sqrt(f.h[j])) * sdx, f.theta[j] * sdx * to_pp });
         if (in_gold) try w.print("  residual sd {d:.0} gold; gold slope {d:.3} logit per 1000\n", .{ @sqrt(f.noise) * 1000, slope });
@@ -787,18 +837,6 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
     }
     try cw.interface.flush();
     try lw.interface.flush();
-}
-
-/// Knuth's method; mean 1
-fn poisson1(r: std.Random) u32 {
-    const l = @exp(-1.0);
-    var k: u32 = 0;
-    var p: f64 = 1;
-    while (true) {
-        p *= r.float(f64);
-        if (p <= l) return k;
-        k += 1;
-    }
 }
 
 // ---------------------------------------------------------------- main
@@ -835,6 +873,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.threads = @max(1, try std.fmt.parseInt(u32, v, 10));
         } else if (std.mem.eql(u8, k, "--soft")) {
             o.soft = v;
+        } else if (std.mem.eql(u8, k, "--shuffle")) {
+            o.shuffle = try std.fmt.parseInt(u64, v, 10);
         } else if (std.mem.eql(u8, k, "--alpha")) {
             o.alpha = try std.fmt.parseFloat(f32, v);
         } else return error.UnknownOption;
@@ -866,6 +906,17 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     } else return error.TestPlatformNotScanned;
     const c = try harness.cuts(gpa, &data, eu);
     const in = try inputs(arena, &data);
+    if (opts.shuffle) |seed| {
+        var rng: std.Random.DefaultPrng = .init(seed);
+        const r = rng.random();
+        var i = in.win.len;
+        while (i > 1) {
+            i -= 1;
+            const j = r.uintLessThan(usize, i + 1);
+            std.mem.swap(f32, &in.win[i], &in.win[j]);
+            std.mem.swap(f32, &in.gold[i], &in.gold[j]);
+        }
+    }
     var soft: ?Soft = if (opts.soft) |s| try Soft.load(gpa, arena, io, s) else null;
     defer if (soft) |*s| s.map.deinit(gpa);
 
@@ -881,7 +932,8 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
-    try w.print("# effects vs {s}: blocks {any}, drop {}, boot {d}, soft {s} alpha {d}\n\n", .{ cand_name, opts.blocks, opts.drop, opts.boot, opts.soft orelse "-", opts.alpha });
+    try w.print("# effects vs {s}: blocks {any}, drop {}, half-samples {d}, soft {s} alpha {d}, shuffle {?d}\n\n", .{ cand_name, opts.blocks, opts.drop, opts.boot, opts.soft orelse "-", opts.alpha, opts.shuffle });
+    if (opts.shuffle != null) try w.writeAll("SHUFFLED LABELS: a control, every gain and sd must be ~0 (the candidate fits the real labels: its rows' y)\n\n");
     try w.flush();
 
     const ms = try models(arena);
@@ -943,6 +995,15 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             try w.print("  {s:<40} {d:.5} +- {d:.5}\n", .{ t.label, mean, 1.96 * se });
             try fw.interface.print("folds\t{s}\t\t{d}\t\t\t{d:.6}\t{d:.6}\n", .{ t.label, pooled.y.items.len, mean, se });
         }
+        // Between variants: each vs mains; each drop-one vs full
+        try w.print("\nfolds pooled, paired between variants (folds of 5 better):\n", .{});
+        for (tasks.items, pooled.preds, 0..) |t, x, ti| {
+            if (ti == 0) continue;
+            const base: usize = if (t.without != 0) full_model else 0;
+            const g = pairedFolds(pooled, pooled.preds[base].items, x.items);
+            try w.print("  {s:<40} vs {s:<5} {d:.5} +- {d:.5}  better in {d} of 5\n", .{ t.label, tasks.items[base].label, g.mean, 1.96 * g.se, g.better });
+            try fw.interface.print("folds\t{s} vs {s}\t\t{d}\t\t\t{d:.6}\t{d:.6}\n", .{ t.label, tasks.items[base].label, pooled.y.items.len, g.mean, g.se });
+        }
     }
     try fw.interface.flush();
     try files.close(io);
@@ -950,6 +1011,12 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     try components(gpa, arena, io, &data, in, c, opts, if (soft) |*s| s else null, dir, w);
     try w.flush();
     return 0;
+}
+
+fn meanAbs(xs: []const f32) f64 {
+    var s: f64 = 0;
+    for (xs) |x| s += @abs(x);
+    return s / @as(f64, @floatFromInt(@max(xs.len, 1)));
 }
 
 fn anyStats(d: *const rows.Data) bool {
