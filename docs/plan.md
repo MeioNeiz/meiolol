@@ -372,9 +372,9 @@ next steps land here.
   box WAL fix (meiolol-83)
 - Retention (Jacob, 2026-10-12 ~22:45, applied by meiolol-3c on the box, crawl.args;
   old copy crawl.args.bak-20261012): keep more data until the models show what we
-  need. Raw summaries forever (--raw-match-days 0), raw timelines 3 days until the
-  archive takes them, compact rows forever (--keep-days 0), mastery on. --timelines
-  -> 100 (coordinator's call, Jacob deferred: only timeline outcomes show signal so far;
+  need. Raw summaries forever (--raw-match-days 0), raw timelines 3 days and never
+  before the archive has them (the prune stops at the acked point), compact rows
+  forever (--keep-days 0), mastery on. --timelines -> 100 (coordinator's call, Jacob deferred: only timeline outcomes show signal so far;
   revert if models show matches outside EUW matter more). Disk is not a constraint:
   Jacob plans to buy more space (see Storage and hosting under Open decisions). Disk runway ~30 days, so the gpu-box raw archive
   (meiolol-3c: `meiolol raw-export`, salted-hash pseudonymised, pull timer with acks,

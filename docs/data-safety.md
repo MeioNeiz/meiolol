@@ -84,7 +84,7 @@ deploy/health.sh runs on the box and prints one line per problem:
 | site | tmux `meiolol-web` gone, or last upload in web.log older than 26h |
 | disk | /mnt/c or / at 80%, /mnt/d at 90% (it was 86% before backups) |
 | backup | tmux `meiolol-backup` gone, or newest state snapshot older than 26h |
-| gpu-box | no raw archive ack for 12h (ACK_H): PC off, asleep or WSL down; first export never acked |
+| gpu-box | no raw archive ack for 12h (ACK_H): PC off, asleep or WSL down; first export never acked; one export unacked for 12h while others are acked (see archive-pull.log on the gpu-box) |
 | gpu-box disks | C: (holds the WSL disk) or the WSL disk or the archive partition at 85%, or the partition not attached; reported by each archive pull |
 | raw held | free disk under twice raw.db + timeline.db + archive-out (raw stays until acked) |
 
@@ -187,9 +187,19 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
 - The salt is on the gpu-box too (~/.config/meiolol/snap-salt, 600), never on the box
   or in git
 - The box drops raw documents only once acked and 2 days old (`--ack NAME --keep-days
-  2`); unacked ones stay whatever their age (crawl.args `--raw-match-days 0`, long
-  `--raw-timeline-days`). A stopped pull shows in Health alerts: gpu-box (no ack for
+  2`); unacked ones stay whatever their age: once an export exists, the crawler's own
+  raw prune (`--raw-timeline-days`, `--raw-match-days`) also stops at the start of the
+  oldest unacked export. A stopped pull shows in Health alerts: gpu-box (no ack for
   12h) and raw held (free disk under twice the raw held)
+- An export holds no lock the crawler waits on: each table is copied in one statement
+  that reads its own snapshot. Windows go by fetched_at, which the crawler's writer sets
+  when it begins the transaction that stores the document, and an export stops 300 s
+  short of now, so a document still being written goes in the next one
+- Crash safety: an export is written as raw-FROM-TO.db.tmp, recorded in
+  raw.archive_exports, then renamed. The next export deletes leftover .tmp files and
+  the newest record whose file never got its name (that window is exported again). An
+  ack of a name with no record deletes the file and prunes nothing; a failed ack is
+  logged and the pull carries on with the rest
 - 24 months: `meiolol-lab archive-age` (every pull) blanks every hashed PUUID in days
   older than 730 and deletes their mastery files, as the crawler blanks participants
 - ~6.6 GB/day at today's rate (first pull, 2026-10-12: summaries 4.3 KB, timelines

@@ -104,6 +104,10 @@ pub const Writer = struct {
     waiters: u32 = 0,
     stats: Stats = .{},
     prune: Prune = .{},
+    /// When the current transaction began: fetched_at of the raw documents and mastery
+    /// it stores, rather than each job's fetch time, so a raw archive export (archive.zig)
+    /// never misses a document whose job waited long in the queue
+    stamp: i64 = 0,
 
     pub fn deinit(wr: *Writer) void {
         for (wr.pending.items) |job| job.destroy(wr.c.gpa);
@@ -261,6 +265,7 @@ pub const Writer = struct {
     }
 
     fn commit(wr: *Writer, db: store.Db, s: *Stmts, jobs: []const *Job) !void {
+        wr.stamp = std.Io.Clock.real.now(wr.c.io).toSeconds();
         try db.begin();
         errdefer db.rollback();
         for (jobs) |job| try wr.applyOne(db, s, job);
@@ -336,7 +341,7 @@ pub const Writer = struct {
                 try s.ladder_page.exec(.{ l.platform.id, l.tier, l.division, l.page, l.entries.len, l.t });
             },
             .mastery => |m| if (m.blob) |blob| {
-                try s.mastery.exec(.{ m.puuid, m.platform, m.t, m.champions, store.Blob{ .bytes = blob } });
+                try s.mastery.exec(.{ m.puuid, m.platform, wr.stamp, m.champions, store.Blob{ .bytes = blob } });
             } else {
                 // Riot does not know the PUUID: an erased or moved account. Forget it
                 // now rather than wait for the 30-day unseen expiry
@@ -350,7 +355,7 @@ pub const Writer = struct {
             },
             .checked => |ch| try s.checked.exec(.{ ch.t, ch.puuid }),
             .match => |m| return try wr.storeMatch(s, m.region, m.id, m.doc, m.raw, m.t, m.timeline),
-            .timeline => |t| return try wr.storeTimeline(s, t.id, t.raw, t.compact, t.t),
+            .timeline => |t| return try wr.storeTimeline(s, t.id, t.raw, t.compact),
             .queue => |q| switch (q.which) {
                 .match => switch (q.status) {
                     .attempt => try s.match_attempt.exec(.{q.id}),
@@ -379,7 +384,7 @@ pub const Writer = struct {
             if (p.puuid) |puuid| any_forgotten = any_forgotten or try s.isForgotten(puuid);
         }
         // The raw JSON names every player, so none is kept for a forgotten one's match
-        if (!any_forgotten) try s.raw_doc.exec(.{ "riot_match", id, t, store.Blob{ .bytes = raw } });
+        if (!any_forgotten) try s.raw_doc.exec(.{ "riot_match", id, wr.stamp, store.Blob{ .bytes = raw } });
         try s.rows.write(doc, "riot", existed);
         const platform = doc.info.platformId orelse if (ep.platformOf(id)) |p| p.id else null;
         for (doc.info.participants, 0..) |p, slot| {
@@ -406,14 +411,14 @@ pub const Writer = struct {
         return true;
     }
 
-    fn storeTimeline(wr: *Writer, s: *Stmts, id: []const u8, raw: ?[]const u8, compact: ?crawl.Compact, t: i64) !bool {
+    fn storeTimeline(wr: *Writer, s: *Stmts, id: []const u8, raw: ?[]const u8, compact: ?crawl.Compact) !bool {
         // Raw timelines carry PUUIDs: none kept when a player is blank (forgotten, or a
         // match from before a rekey)
         try s.blank.bind(.{id});
         const blank = try s.blank.step() and s.blank.int(0) == 1;
         s.blank.reset();
         if (!blank and (wr.c.opts.raw_timeline_days > 0 or compact == null)) {
-            if (raw) |bytes| try s.raw_timeline.exec(.{ id, t, store.Blob{ .bytes = bytes } });
+            if (raw) |bytes| try s.raw_timeline.exec(.{ id, wr.stamp, store.Blob{ .bytes = bytes } });
         }
         const ct = compact orelse {
             try s.timeline_status.exec(.{ "failed", id });

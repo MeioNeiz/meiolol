@@ -142,7 +142,8 @@ better". Applied on the box 2026-10-12 ~21:30-21:45Z (crawl.args; the previous o
 crawl.args.bak-20261012):
 
 - Compact rows and timelines forever (`--keep-days 0`); raw summaries kept on the box
-  until archived (`--raw-match-days 0`); raw timelines 3 days until the archive runs
+  until archived (`--raw-match-days 0`); raw timelines 3 days (`--raw-timeline-days 3`),
+  but never before the archive has them: the crawler's raw prune stops at the acked point
 - Every match gets a timeline (`--timelines 100`, coordinator for Jacob): every result
   with signal comes from timelines
 - Mastery on. Today that is one snapshot per sampled ladder player (1 in 16), dropped
@@ -163,7 +164,7 @@ deploy/archive-pull.sh, docs/data-safety.md "Raw archive"):
   same hashed PUUID in every game), zstd -15 --long per kind per export, test, ack.
   Archive at /mnt/wsl/archive (1 TB partition on the NVMe)
 - Box drops raw documents only once acked and 2 days old; unacked ones stay, so the PC
-  can be off until the box disk runs short (health alert: no ack for 3 days)
+  can be off until the box disk runs short (health alert: no ack for 12h)
 - Kept until player ids would be blanked anyway: days past 24 months lose every hashed
   PUUID and their mastery (`archive-age`), as the crawler blanks its own rows. Forgotten
   players: left out at ingest, erased from archived days (`archive-forget`) each round

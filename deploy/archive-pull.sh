@@ -57,7 +57,9 @@ while read -r name size; do
         mv "$work/$name.part" "$work/$name"
         nice -n 10 "$lab" archive "$work/$name" "$archive" "$salt" "$work/forgotten.txt"
     fi
-    ssh -n "$box" ack "$name"
+    # One export the box won't ack must not stop the rest: the box's health check
+    # reports an export left unacked
+    ssh -n "$box" ack "$name" || log "$name: ack failed"
     rm -f "$work/$name"
 done < "$work/list.txt"
 

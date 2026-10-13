@@ -77,6 +77,11 @@ if archive=$(bin/meiolol raw-export --data data --status 2>&1); then
         problems+=("gpu-box: no archive ack since $last ($unacked exports waiting)")
     elif [[ "$since" == null && "$oldest" =~ ^[0-9]+$ ]] && (( oldest > ACK_H * 3600 )); then
         problems+=("gpu-box: first archive export never acked")
+    elif [[ "$oldest" =~ ^[0-9]+$ ]] && (( oldest > ACK_H * 3600 )); then
+        # Acks go on, but one export stays: its raw documents and everything newer stay
+        # on the box (see archive-pull.log on the gpu-box)
+        made=$(date -u -d "@$(( now - oldest ))" '+%F %H:%MZ')
+        problems+=("gpu-box: archive export made $made still not acked")
     fi
 else
     problems+=("archive status failed: $(head -n 1 <<< "$archive")")
