@@ -44,7 +44,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-ba | NN tester: draft-model.json net kind, Zig reference scorer and JS forward pass (comp tester done: 2be13f3, 7423f29) |
 | meiolol-4b (from meiolol-49) | comp test look reading (20261013T195844Z-final-compcheck, c26ffa8), then NN verifier: leakage audits, seed variance, paired checks |
 | meiolol-1c | GPU sweep runner for nets (random search on the 3080 via lab-run) (lab-run auto placement done: 371bec8, e050551) |
-| meiolol-f1 | lead NN modeller: draftnet big, small, residual on ratings, learning curve, on 0d's folds |
+| meiolol-0a (from meiolol-f1) | lead NN modeller: big net seed ensembles and sweep with 1c, learning curve on the ~350k snapshot (f1 results: a189f10, no net beats ratings or win-comp) |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
 shows. When an agent hands over, get the successor's name and tell the others.
