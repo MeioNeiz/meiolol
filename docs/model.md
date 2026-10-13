@@ -1125,6 +1125,44 @@ Reading:
   detected, at most about -5 and -4 pp
 - Dev only, no test look. A final needs the test look agreed with meiolol-2c
 
+By platform (same folds, 9e452b9, run 20261013T193312Z-compcheck-folds5-pf; pooled
+numbers unchanged). Lopsided = profile magic share under 20% or 60%+:
+
+| platform | games | lopsided teams | <20% magic | 60%+ magic | raw, pp | after win-ratings, pp |
+| --- | --- | --- | --- | --- | --- | --- |
+| EUW1 | 11,168 | 10.7% | 2.4% | 8.3% | -2.14 ± 2.12 | -2.60 ± 2.12 |
+| rest | 33,185 | 10.3% | 3.7% | 6.6% | -2.77 ± 1.25 | -3.09 ± 1.25 |
+| NA1 | 3,452 | 10.7% | 2.8% | 7.9% | -2.57 ± 3.84 | -2.72 ± 3.84 |
+| BR1 | 2,389 | 13.1% | 4.1% | 9.0% | -3.13 ± 4.15 | -3.30 ± 4.14 |
+| KR | 10,102 | 9.0% | 2.9% | 6.2% | -3.82 ± 2.38 | -4.18 ± 2.38 |
+| VN2 | 8,757 | 10.0% | 5.0% | 5.0% | -4.49 ± 2.44 | -4.65 ± 2.43 |
+
+EUW1 minus the rest +0.49 ± 2.46 pp: EUW is not detectably different, and dev-val's
+-0.32 ± 2.47 sits within it. About one team in ten is lopsided, in EUW mostly the magic
+side (8.3% vs 2.4%), while the larger cost per team is on the physical side.
+
+Test-look plan (pre-declared 2026-10-13, before any look; one look, on meiolol-2c's go,
+same build as 0d's win-comp look):
+- Command: `meiolol-lab compcheck SNAP --final` (165895b or later with compcheck.zig
+  unchanged), built with -Dcand=src/lab/cand/win-ratings, snap-20261012T2055Z. It prints
+  the positive control and this contrast only
+- Units: both teams of every EUW1 test game of 15:00+ (~10,600 games). Offset:
+  win-ratings fitted by harness.score(.final) on every train game. Profiles: per-minute
+  damage to champions by type, summed over the team's five champion-roles' profiles
+  from every train game (all older than the first test game); champion fallback below
+  30 rows. Lopsided: team magic share < 0.20 or >= 0.60; balanced otherwise
+- Estimate: mean (observed - win-ratings) over lopsided teams minus over balanced
+  teams, 95% interval clustered by game; raw (observed - 50%) beside it; the <20% and
+  60%+ sides shown, not tested
+- Reported whatever it shows, as an estimate, not pass/fail. Expected interval ~±2.2 pp
+  (EUW folds ±2.1 on 11k games), so at the folds' -3.0 a z of about 1.4. Reading fixed
+  now: the effect's existence rests on the folds (z ~5.4); the test says whether its
+  size carries to new EUW games. Consistent if the interval covers -3.0; the size is in
+  doubt if the interval lies wholly above -3.0 (then learned.md says so and gives both
+  numbers); a sign flip (lower end above 0) would mark the fold result as not holding
+- The positive control must show the strength gradient (raw Q1 and Q4 at least ±3 pp)
+  and win-ratings absorbing it, or the look's contrast isn't read
+
 Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
 Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
 only" covers dev, select, final); rows.load holds only eval's train (older than the first
