@@ -8,6 +8,8 @@ const root = @import("root.zig");
 const html = @import("html.zig");
 const tpl = html.tpl;
 const matchup = @import("matchup.zig");
+const text = @import("text.zig");
+const percent = text.percent;
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -50,7 +52,7 @@ pub fn section(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !
             .x = x.name,
             .rate = tpl.call(percent, .{ head.wins, head.games }),
             .games = head.games,
-            .s = matchup.plural(head.games),
+            .s = text.plural(head.games),
             .all = all,
         });
     } else {
@@ -128,9 +130,4 @@ test "comeback section from both sides" {
     // Darius is 500 to 1,500 ahead: its row 3 shows 67%; the headline row is empty
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "More data needed") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "67%") != null);
-}
-
-fn percent(w: *Writer, part: u64, whole: u64) !void {
-    if (whole == 0) return w.writeAll("-");
-    try w.print("{d:.0}%", .{100 * @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole))});
 }

@@ -8,6 +8,7 @@ const root = @import("root.zig");
 const html = @import("html.zig");
 const comeback = @import("comeback.zig");
 const lanechart = @import("lanechart.zig");
+const text = @import("text.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -18,6 +19,8 @@ const Bracket = curvesfile.Bracket;
 const Site = root.Site;
 const Champ = root.Champ;
 const tpl = html.tpl;
+const plural = text.plural;
+const percent = text.percent;
 
 /// Below this many games a curve is greyed out as "more data needed"
 pub const thin_games = 200;
@@ -38,10 +41,6 @@ fn period(a: std.mem.Allocator, curves: *const Curves) ![]const u8 {
     const label = curves.patch();
     if (label.len > 0 and std.ascii.isDigit(label[0])) return a.print("patch {s}", .{label});
     return label;
-}
-
-pub fn plural(n: u64) []const u8 {
-    return if (n == 1) "" else "s";
 }
 
 pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
@@ -380,11 +379,6 @@ fn amount(w: *Writer, value: i16, unit: []const u8) !void {
         .unit = unit,
         .side = if (value > 0) "ahead" else "behind",
     });
-}
-
-fn percent(w: *Writer, part: u64, whole: u64) !void {
-    if (whole == 0) return w.writeAll("-");
-    try w.print("{d:.0}%", .{100 * @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole))});
 }
 
 /// Minutes drawn: while at least minuteFloor games are still going

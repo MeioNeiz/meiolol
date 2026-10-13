@@ -9,6 +9,7 @@ const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
 const tpl = html.tpl;
+const plural = @import("text.zig").plural;
 const builds = @import("../builds.zig");
 const ddragon = @import("../ddragon.zig");
 
@@ -131,10 +132,6 @@ pub fn rankLabel(a: std.mem.Allocator, tier: []const u8) ![]const u8 {
     name[0] = std.ascii.toUpper(name[0]);
     const apex = std.mem.eql(u8, tier, "MASTER") or std.mem.eql(u8, tier, "GRANDMASTER") or std.mem.eql(u8, tier, "CHALLENGER");
     return a.print("{s}{s} and up", .{ name, if (apex) "" else " IV" });
-}
-
-fn plural(n: u64) []const u8 {
-    return if (n == 1) "" else "s";
 }
 
 fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, b: File.Build) !void {
