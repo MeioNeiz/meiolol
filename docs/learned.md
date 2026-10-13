@@ -83,6 +83,15 @@ How to write a line:
   gold14-a (built on 3c-team), run 20261012T2322Z-gold14-a-rankfx (effects-rank.tsv)
   paired vs 20261012T2222Z-gold14-a-ref on dev; final 20261012T2343Z-final-gold14-a,
   its test preds paired vs 3c-team.tsv (`meiolol-lab pairs`)
+- 2026-10-13: Carries played off-role really do earn their usual gold at 14: Draven top
+  (+840 over the average top laner, 87 games) matches Draven bot (+840), and Twitch,
+  Locke and Briar support sit 810-870 above the average support. Sure: on 80k dev rows,
+  letting each off-role champion lean on its own level in other roles changes no
+  prediction (all five early numbers within 0.02% of the error) and moves these by
+  under 70 gold; whether it is the champion or the one-trick players who pick it
+  off-role is not separated. Site: the Draft tester keeps champions with 1%+ of the
+  role's games. Evidence: dev runs 20261012T235952Z-t2ref-ref and
+  20261013T000332Z-champlevel-cl (effects-champ.tsv), paired (`meiolol-lab pairs`)
 - 2026-10-13 (early): For your own gold at 14, it is who the enemy laner is that counts,
   not how your champion matches up against theirs: knowing the enemy laner's champion
   does as well as knowing the exact matchup. Sure: dev only, 80k rows, the two within
