@@ -111,7 +111,8 @@ builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps
   gain_se epochs seconds val_logloss auc
 - `table` ranks by val_logloss (inner validation on fit games), never by the fold gain,
   which is the honest score: picking on it would select on the scored blocks. Columns:
-  fold gain vs ratings (pooled by games, mean over seeds, paired 95%), seed sd, dev gain,
+  fold gain vs ratings (pooled by games, mean over seeds, paired 95%), folds better (of
+  5, mean over seeds: the sign consistency the reliability rules ask for), seed sd, dev gain,
   epochs, GPU seconds, config
 - --pack K runs K trials at once in one job, for when one trial leaves the GPU idle.
   Measured 2026-10-13 (netcheck --net big, one seed, one block): +250 MiB of the 3080's
