@@ -334,10 +334,12 @@ const Task = struct {
 const Result = struct { pred: []f64 = &.{} };
 
 /// Logit of blue's win per unit of gold difference at 14 (thousands), from the fit
-/// games' real gold: what a predicted gold edge is worth (one-variable logistic)
-fn goldSlope(gold: []const f32, win: []const f32) [2]f64 {
+/// games' real gold: what a predicted gold edge is worth (one-variable logistic).
+/// Intercept, slope, slope's standard error
+fn goldSlope(gold: []const f32, win: []const f32) [3]f64 {
     var b0: f64 = 0;
     var b1: f64 = 0;
+    var se: f64 = std.math.nan(f64);
     for (0..50) |_| {
         var g0: f64 = 0;
         var g1: f64 = 0;
@@ -356,10 +358,11 @@ fn goldSlope(gold: []const f32, win: []const f32) [2]f64 {
         }
         const det = h00 * h11 - h01 * h01;
         if (det <= 0) break;
+        se = @sqrt(h00 / det);
         b0 += (h11 * g0 - h01 * g1) / det;
         b1 += (h00 * g1 - h01 * g0) / det;
     }
-    return .{ b0, b1 };
+    return .{ b0, b1, se };
 }
 
 fn runBlock(
@@ -460,7 +463,7 @@ fn runBlock(
         fit_soft: []const A.GameIn,
         fit_gold: []const A.GameIn,
         scored: []const A.GameIn,
-        slope: [2]f64,
+        slope: [3]f64,
         fn one(x: @This(), i: usize) !void {
             const t = x.tasks[i];
             var v = t.model.variant;
@@ -520,14 +523,26 @@ fn runBlock(
         const se = @sqrt(@max(s2 / n_sc - mean * mean, 0) / @max(n_sc - 1, 1));
         try w.print("  {s}: {d:.5}, vs {s} {d:.5} +- {d:.5}\n", .{ t.label, l / n_sc, cand_name, mean, 1.96 * se });
         try files.folds.print("{s}\t{s}\t{d}\t{d}\t{d:.6}\t{d:.6}\t{d:.6}\t{d:.6}\n", .{ name, t.label, fit_idx.items.len, scored.items.len, l / n_sc, ref_loss / n_sc, mean, se });
+        if (t.model.kind == .gaussian) {
+            // Diagnostic, from the scored games' outcomes: what the draft's predicted
+            // gold edge is worth in win, beside in-game gold's slope from the fit games
+            const edge = try arena.alloc(f32, scored.items.len);
+            const ys = try arena.alloc(f32, scored.items.len);
+            for (scored.items, r.pred, edge, ys) |gi, q, *e, *y| {
+                e.* = @floatCast((@log(q / (1 - q)) - slope[0]) / slope[1]);
+                y.* = in.win[gi];
+            }
+            const ds = goldSlope(edge, ys);
+            try w.print("    draft gold edge on scored games: {d:.3} +- {d:.3} logit per 1000 (in-game gold {d:.3})\n", .{ ds[1], 1.96 * ds[2], slope[1] });
+        }
     }
     try w.flush();
     try files.folds.flush();
 
-    const gw = try files.gamesFor(arena, io, cand_name);
+    const gw = try files.gamesFor(io, cand_name);
     for (scored.items, pc) |gi, p| try gw.print("{s}\t0\twin\t{d}\t{d:.6}\t{s}\n", .{ d.games[gi].match_id, in.win[gi], p, name });
     for (tasks, results) |t, r| {
-        const tw = try files.gamesFor(arena, io, t.label);
+        const tw = try files.gamesFor(io, t.label);
         for (scored.items, r.pred) |gi, p| try tw.print("{s}\t0\twin\t{d}\t{d:.6}\t{s}\n", .{ d.games[gi].match_id, in.win[gi], p, name });
     }
     if (block != .dev) {
@@ -536,7 +551,7 @@ fn runBlock(
             try pooled.ref.append(gpa, p);
         }
         if (pooled.preds.len == 0) {
-            pooled.preds = try arena.alloc(std.ArrayList(f64), tasks.len);
+            pooled.preds = try files.arena.alloc(std.ArrayList(f64), tasks.len);
             for (pooled.preds) |*x| x.* = .empty;
         }
         for (pooled.preds, results) |*x, r| try x.appendSlice(gpa, r.pred);
@@ -557,12 +572,15 @@ const Pooled = struct {
 
 const cand_name: []const u8 = if (@hasDecl(cand, "name")) cand.name else "cand";
 
+/// Lives the whole run: its writers come from the run's arena, not a block's
 const Files = struct {
+    arena: std.mem.Allocator,
     dir: Io.Dir,
     folds: *Io.Writer,
     games: std.StringHashMapUnmanaged(*Io.File.Writer) = .empty,
 
-    fn gamesFor(f: *Files, arena: std.mem.Allocator, io: Io, label: []const u8) !*Io.Writer {
+    fn gamesFor(f: *Files, io: Io, label: []const u8) !*Io.Writer {
+        const arena = f.arena;
         if (f.games.get(label)) |x| return &x.interface;
         const file = try f.dir.createFile(io, try std.fmt.allocPrint(arena, "games-{s}.tsv", .{label}), .{});
         const buf = try arena.alloc(u8, 64 * 1024);
@@ -792,7 +810,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var fbuf: [16 * 1024]u8 = undefined;
     var fw = folds_file.writer(io, &fbuf);
     try fw.interface.print("block\tmodel\tfit_games\tscored\tloss\t{s}_loss\tdiff\tse\n", .{cand_name});
-    var files: Files = .{ .dir = dir, .folds = &fw.interface };
+    var files: Files = .{ .arena = arena, .dir = dir, .folds = &fw.interface };
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
