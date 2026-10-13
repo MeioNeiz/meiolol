@@ -150,6 +150,8 @@ builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps
   at once fit easily; check utilisation in the first packed sweep
 - --res cpu for nets on CPU threads (netcheck small, resid)
 - netcheck's `ens` rows (the seeds' averaged predictions) get their own column
+- A SPACE line `ref --flag V ...` (every flag) adds trial `ref`, run first with the same
+  seeds: the table shows it on top as the bar, unnumbered and never the pick
 - Sweep jobs are lab-run runs, so their GPU times feed placement's history
 
 ## Lab agent limits

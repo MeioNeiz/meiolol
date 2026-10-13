@@ -6,7 +6,8 @@
 #
 # SPACE: one flag per line, `--name DIST ARGS`; # comments. DIST: choice V..., uniform LO
 # HI, loguniform LO HI, int LO HI, logint LO HI. Values reach a shell on the gpu-box, so
-# only letters, digits and . , + - _
+# only letters, digits and . , + - _. `ref --name V ...` (every flag) adds a reference
+# trial, `ref`, run first: shown in the table, never ranked, so never the pick
 #
 # table reads stdin: `TRIAL<tab>LINE` for each line of each trial's folds.tsv (header
 # included), as lab-sweep.sh fetches them. folds.tsv (meiolol-f1's netcheck): seed fold
@@ -27,11 +28,19 @@ sub sample {
     die "TRIALS: a number\n" unless defined $n && $n =~ /^\d+$/;
     die "RNG: a number\n" unless defined $rng && $rng =~ /^\d+$/;
     open my $f, '<', $space or die "$space: $!\n";
-    my @dims;
+    my (@dims, @ref);
     while (<$f>) {
         s/#.*//;
         my ($flag, $dist, @a) = split ' ';
         next unless defined $flag;
+        if ($flag eq 'ref') {
+            die "$space:$.: one ref line\n" if @ref;
+            @ref = ($dist // (), @a);
+            die "$space:$.: ref --name V ...\n" if !@ref || @ref % 2;
+            die "$space:$.: values: letters, digits . , + - _\n"
+                if grep { !/^[A-Za-z0-9.,+_-]+$/ } @ref;
+            next;
+        }
         die "$space:$.: --name DIST ARGS\n" unless $flag =~ /^--[a-z][a-z0-9-]*$/ && $dist;
         die "$space:$.: values: letters, digits . , + - _\n"
             if grep { !/^[A-Za-z0-9.,+_-]+$/ } @a;
@@ -46,6 +55,13 @@ sub sample {
     die "$space: no flags\n" unless @dims;
     srand($rng);
     print join("\t", 'trial', map { $_->[0] } @dims), "\n";
+    if (@ref) {
+        my %v = @ref;
+        my @miss = grep { !defined $v{$_->[0]} } @dims;
+        die "$space: ref lacks " . join(' ', map { $_->[0] } @miss) . "\n" if @miss;
+        die "$space: ref sets flags the space doesn't\n" if keys %v > @dims;
+        print join("\t", 'ref', map { $v{$_->[0]} } @dims), "\n";
+    }
     for my $t (1 .. $n) {
         my @v = map { draw(@$_) } @dims;
         print join("\t", sprintf('t%02d', $t), @v), "\n";
@@ -152,7 +168,10 @@ sub table {
     print "milli-nats per game, positive = net better: folds pooled by games, mean over\n";
     print "seeds ± its paired 95% half-width; better in = folds whose mean over seeds\n";
     print "favours the net; seed sd = spread of the per-seed gain;\n";
-    print "ens = the seeds' averaged predictions (netcheck's ens rows), folds pooled.\n\n";
+    print "ens = the seeds' averaged predictions (netcheck's ens rows), folds pooled.\n";
+    print "ref = SPACE's reference config: the bar, never ranked.\n"
+        if grep { $_->{t} eq 'ref' } @done;
+    print "\n";
     print "| # | trial | val log loss | fold gain | better in | seed sd | ens gain ",
         "| dev gain | seeds x blocks | epochs | GPU s | config |\n";
     print "| --- " x 12, "|\n";
@@ -160,10 +179,14 @@ sub table {
     my $full = 0;
     for (@done) { $full = $_->{rows} if $_->{rows} > $full }
     my $i = 0;
-    for my $d (sort { ($a->{val} // 9) <=> ($b->{val} // 9) } @done) {
-        printf "| %d | %s | %s | %s ± %s | %d of %d | %s | %s | %s | %d x %d | %s | %.0f "
+    # The reference row first, unnumbered: it is the bar, not a candidate
+    my @ranked = sort { ($a->{val} // 9) <=> ($b->{val} // 9) }
+        grep { $_->{t} ne 'ref' } @done;
+    for my $d ((grep { $_->{t} eq 'ref' } @done), @ranked) {
+        printf "| %s | %s | %s | %s ± %s | %d of %d | %s | %s | %s | %d x %d | %s | %.0f "
             . "| %s |\n",
-            ++$i, $d->{t} . ($d->{rows} < $full ? ' (partial)' : ''),
+            $d->{t} eq 'ref' ? 'ref' : ++$i,
+            $d->{t} . ($d->{rows} < $full ? ' (partial)' : ''),
             defined $d->{val} ? sprintf('%.5f', $d->{val}) : '-', $m->($d->{gain}),
             $p->(defined $d->{se} ? 1.96 * $d->{se} : undef), $d->{better}, $d->{blocks},
             $p->($d->{seed_sd}),
