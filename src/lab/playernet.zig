@@ -16,8 +16,9 @@
 //! any champion, share of games on this one; form: mean KDA, lane gold diff at 14, deaths
 //! before 15 (0 when unknown); rank: rank at game start and known; mastery: log1p
 //! pre-game points on the champion and known (SNAP/mastery_pre.tsv when present).
-//! Writes DIR/folds.tsv, DIR/preds.tsv (as netcheck's) and DIR/coverage.tsv (feature
-//! coverage of rows per block and part; test rows' features only, never outcomes)
+//! Writes DIR/folds.tsv, DIR/preds.tsv (as netcheck's, plus how many of the ten players
+//! have history, champion history, rank, mastery) and DIR/coverage.tsv (feature coverage
+//! of rows per block and part; test rows' features only, never outcomes)
 
 const std = @import("std");
 const api = @import("api");
@@ -152,7 +153,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var pw = preds_file.writer(io, &pbuf);
     try pw.interface.writeAll("fold\tmatch_id\tplatform\ty\tcand");
     for (opts.seeds) |s| try pw.interface.print("\tseed{d}", .{s});
-    try pw.interface.writeAll("\tens\n");
+    try pw.interface.writeAll("\tens\tn_history\tn_champ\tn_rank\tn_mastery\n");
     var cov_file = try dir.createFile(io, "coverage.tsv", .{});
     defer cov_file.close(io);
     var cbuf: [16 * 1024]u8 = undefined;
@@ -780,7 +781,17 @@ fn runBlock(
         const g = d.games[gi];
         try pw.print("{s}\t{s}\t{s}\t{d}\t{d:.6}", .{ name, g.match_id, plat[g.platform], ys[i], pc[i] });
         for (fits) |f| try pw.print("\t{d:.6}", .{f.pred[i]});
-        try pw.print("\t{d:.6}\n", .{ens[i]});
+        try pw.print("\t{d:.6}", .{ens[i]});
+        // Players of the ten with each kind of history, to split gains by coverage
+        var n: [4]u8 = @splat(0);
+        for (row_of[gi]) |ri| if (ri != no_row) {
+            const r = d.rows[ri];
+            n[0] += @intFromBool(r.games_before > 0);
+            n[1] += @intFromBool(r.champ_games > 0);
+            n[2] += @intFromBool(r.rank_start != null);
+            n[3] += @intFromBool(raw[ri][@backingInt(Feat.mastery_known)] > 0);
+        };
+        try pw.print("\t{d}\t{d}\t{d}\t{d}\n", .{ n[0], n[1], n[2], n[3] });
     }
     if (!spec.dev) {
         try pooled.ys.appendSlice(gpa, ys);

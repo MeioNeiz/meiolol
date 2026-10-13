@@ -1518,8 +1518,8 @@ share on this one), form (mean KDA, lane gold diff at 14, deaths before 15), ran
 at game start + known), mastery (log1p pre-game points + known, from SNAP/mastery_pre.tsv
 when present). Writes coverage.tsv per block (test rows: features only, no outcomes).
 Gradient and antisymmetry unit tests. Ratings + experience as a candidate: win-ratings
-with `.champ_exp = true, .form = true` (generated copy, gitignored
-src/lab/cand/_final/player-exp; kept with the runs in data/runs/playernet-20261013).
+with `.champ_exp = true, .form = true`: src/lab/cand/win-exp (a copy, as a candidate
+imports only std and api). Runs in data/runs/playernet-20261013.
 
 Coverage of rows, snap-20261012T2055Z: 1+ earlier game (any champion) fit 24-36%,
 scored 36-56% by block, test 73%; on this champion fit 10-15%, dev-val 26%, test 36%;
@@ -1530,7 +1530,7 @@ and form only.
 Mac, 3 seeds, folds pooled (44,353 games) and dev-val (8,500); diff = log loss minus
 the reference's, ± 95% paired per game; seeds: single seeds' range on the same block.
 Reference pairs across two builds (ratings, ratings + experience) are joined on match
-id (same fit and scored games; pair.py in the run dir).
+id (same fit and scored games; pair.sh in the run dir).
 
 | model | vs | folds | seeds (folds) | dev-val |
 | --- | --- | --- | --- | --- |
