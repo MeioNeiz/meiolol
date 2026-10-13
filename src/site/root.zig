@@ -1177,7 +1177,7 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         \\<button type="submit">Review my games</button>
         \\</form>
         \\<p class="sub-links"><a href="{example}">See an example review →</a><a href="{method}">How the numbers are made</a></p>
-        \\<div class="trust"><span><b>{games}</b>ranked games, {when}</span><span><b>No sign-up</b>just your Riot ID</span><span><b>Facts only</b>never verdicts on other players</span></div>
+        \\<div class="trust"><span><b>{games}</b>ranked games, {when}</span><span><b>No sign-up</b>just your Riot ID</span><span><b>Every queue</b>solo/duo, flex, draft, Swiftplay</span></div>
         \\</div>
         \\<div id="demo" class="panel demo" hidden>
         \\<div class="panel-h"><b>Game review</b><span class="live"><i></i>the example player's real game</span></div>
