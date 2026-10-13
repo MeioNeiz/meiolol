@@ -109,11 +109,14 @@ EOF
 # OUT/seat_stats.tsv (rows.Row.stats), with resists and range from Data Dragon of each
 # queue 420 patch in OUT/ddragon/PATCH; a patch Data Dragon lacks gets NaN there
 seat_stats() {
-    local bin=$1 out=$2 versions patch v f
+    local bin=$1 out=$2 versions patches patch v f
     versions=$(curl -sf https://ddragon.leagueoflegends.com/api/versions.json) \
         || die "Data Dragon versions.json unreachable"
-    for patch in $(sqlite3 "file:$out/meiolol.db?mode=ro" \
-        "SELECT DISTINCT patch FROM matches WHERE queue_id = 420"); do
+    # Not ?mode=ro: a read-only open fails (14) while the WAL has no -shm yet
+    patches=$(sqlite3 "$out/meiolol.db" "SELECT DISTINCT patch FROM matches WHERE queue_id = 420") \
+        || die "$out/meiolol.db: no patches"
+    [[ -n "$patches" ]] || die "$out/meiolol.db: no queue 420 patches"
+    for patch in $patches; do
         v=$(grep -o "\"${patch//./\\.}\.[0-9]*\"" <<< "$versions" | head -n 1 | tr -d '"')
         [[ -n "$v" ]] || { log "no Data Dragon version for $patch"; continue; }
         mkdir -p "$out/ddragon/$patch"
