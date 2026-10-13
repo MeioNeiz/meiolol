@@ -36,7 +36,8 @@ pub const usage =
     \\                                  --lr X --batch N --evals N --patience N
     \\                                  --max-epochs N --drop NAME,NAME --win-adjust 0|1
     \\                                  --rare N --seeds 1,2,3 --blocks dev,1,2,3,4,5
-    \\                                  --out DIR
+    \\                                  --shuffle SEED (control: win labels permuted
+    \\                                  over all games first) --out DIR
     \\
 ;
 
@@ -66,6 +67,9 @@ pub const Options = struct {
     rare: u32 = 200,
     seeds: []const u32 = &.{ 1, 2, 3 },
     blocks: []const Block = &.{ .dev, .f1, .f2, .f3, .f4, .f5 },
+    /// Shuffled-label control: the games' win labels permuted before anything is fitted,
+    /// so a prior's gain must be ~0
+    shuffle: ?u64 = null,
     out: []const u8 = ".",
 };
 
@@ -120,6 +124,10 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var e = try nnexport.build(gpa, &data, c);
     defer e.deinit();
     perMinute(e.aux);
+    if (opts.shuffle) |seed| {
+        var rng: std.Random.DefaultPrng = .init(seed);
+        rng.random().shuffle(u8, e.blue_win);
+    }
 
     try Io.Dir.cwd().createDirPath(io, opts.out);
     var dir = try Io.Dir.cwd().openDir(io, opts.out, .{});
@@ -127,8 +135,8 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
-    try w.print("# pretrain: dim {d} min_games {d} l2 {any} lr {d} batch {d} evals {d} patience {d} max_epochs {d} drop 0x{x} win_adjust {} rare {d} seeds {any}\n\n", .{
-        opts.dim, opts.min_games, opts.l2, opts.lr, opts.batch, opts.evals, opts.patience, opts.max_epochs, opts.drop, opts.win_adjust, opts.rare, opts.seeds,
+    try w.print("# pretrain: dim {d} min_games {d} l2 {any} lr {d} batch {d} evals {d} patience {d} max_epochs {d} drop 0x{x} win_adjust {} rare {d} seeds {any} shuffle {?d}\n\n", .{
+        opts.dim, opts.min_games, opts.l2, opts.lr, opts.batch, opts.evals, opts.patience, opts.max_epochs, opts.drop, opts.win_adjust, opts.rare, opts.seeds, opts.shuffle,
     });
     try w.flush();
 
@@ -200,6 +208,8 @@ fn parseOptions(arena: Allocator, args: []const []const u8) !Options {
             else
                 @fromBackingInt(@intCast(try std.fmt.parseInt(u3, s, 10))));
             o.blocks = out.items;
+        } else if (std.mem.eql(u8, key, "--shuffle")) {
+            o.shuffle = try std.fmt.parseInt(u64, v, 10);
         } else if (std.mem.eql(u8, key, "--out")) {
             o.out = v;
         } else return error.UnknownOption;
