@@ -5,13 +5,14 @@
 //! training loss falls, it can overfit a tiny set, the same seed gives identical
 //! parameters, another seed others, no NaN. A table of checks; exit 1 when one fails.
 //! Families: the big net (draftnet), small and resid (winnet.healthFit), set
-//! (setnet.healthFit)
+//! (setnet.healthFit), player history (playernet.healthFit)
 //! `zig build test` runs the quick subset
 
 const std = @import("std");
 const draftnet = @import("draftnet.zig");
 const winnet = @import("winnet.zig");
 const setnet = @import("setnet.zig");
+const playernet = @import("playernet.zig");
 const dn = @import("../gpu/draftnet_layout.zig");
 
 const Io = std.Io;
@@ -323,6 +324,66 @@ const Set = struct {
     }
 };
 
+/// Player-history net: residual on the offset (the candidate's logit), players' features
+/// carry the rest; the first feature holds each player's strength
+const Player = struct {
+    const name = "player (playernet)";
+    const Game = playernet.NetGame;
+    const batch = (playernet.Options{}).batch;
+    const overfit_limit = 0.1;
+
+    fn games(gpa: std.mem.Allocator, n: usize, sd: f32, seed: u64) ![]Game {
+        var prng: std.Random.DefaultPrng = .init(seed);
+        const r = prng.random();
+        const st = try strengths(gpa, r, 0.5);
+        defer for (st) |x| gpa.free(x);
+        const out = try gpa.alloc(Game, n);
+        for (out) |*g| {
+            g.* = .{ .ids = undefined, .x = undefined, .platform = 0, .y = 0, .off = 0 };
+            drawIds(r, &g.ids);
+            var z: f32 = 0;
+            for (&g.x, 0..) |*xs, slot| {
+                for (xs) |*x| x.* = r.floatNorm(f32);
+                z += if (slot < 5) sd * xs[0] else -sd * xs[0];
+            }
+            g.off = if (sd > 0) teamSum(st[0], &g.ids) else 0;
+            g.y = coin(r, z + g.off);
+        }
+        return out;
+    }
+
+    fn fit(gpa: std.mem.Allocator, seed: u32, train: []const Game, steps: u64, scored: []const Game, pred: []f32, overfit: bool) ![]f32 {
+        var o: playernet.Options = .{};
+        if (overfit) {
+            o.dropout = 0;
+            o.wd = 0;
+            o.clip = 0;
+            o.lr = 3e-3;
+            o.batch = @intCast(train.len);
+        }
+        return playernet.healthFit(gpa, o, seed, net_ids, train, steps, scored, pred);
+    }
+
+    fn swap(g: Game) Game {
+        var out = g;
+        out.ids[0..5].* = g.ids[5..10].*;
+        out.ids[5..10].* = g.ids[0..5].*;
+        out.x[0..5].* = g.x[5..10].*;
+        out.x[5..10].* = g.x[0..5].*;
+        out.y = 1 - g.y;
+        out.off = -g.off;
+        return out;
+    }
+
+    fn label(g: Game) f32 {
+        return g.y;
+    }
+
+    fn offset(g: Game) f32 {
+        return g.off;
+    }
+};
+
 const net_ids: u32 = 205;
 
 fn strengths(gpa: std.mem.Allocator, r: std.Random, sd: f32) ![2][]f32 {
@@ -469,6 +530,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     try checkFamily(Small(false), gpa, &r, full);
     try checkFamily(Small(true), gpa, &r, full);
     try checkFamily(Set, gpa, &r, full);
+    try checkFamily(Player, gpa, &r, full);
     var buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &buf);
     const w = &stdout.interface;
@@ -488,6 +550,7 @@ test "health: nets, quick checks" {
     try checkFamily(Small(false), gpa, &r, quick);
     try checkFamily(Small(true), gpa, &r, quick);
     try checkFamily(Set, gpa, &r, quick);
+    try checkFamily(Player, gpa, &r, quick);
     for (r.checks.items) |c| {
         if (!c.ok()) std.debug.print("{s}: {s} = {d}\n", .{ c.family, c.name, c.value });
         try std.testing.expect(c.ok());
