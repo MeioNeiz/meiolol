@@ -97,12 +97,44 @@ const Term = struct {
     s: []const f32 = &.{},
     /// Profile, z-scored within the role; empty without comp terms
     p: []const f32 = &.{},
+    /// The profile in raw units, every stat of win-comp's Feature order (raw_len), for
+    /// team terms; empty without them
+    raw: []const f32 = &.{},
 };
 
 const Stat = struct { name: []const u8, label: []const u8 };
 
-/// Nonlinear within-team term; no kind is defined yet, so any one stops the export
-const TeamTerm = struct { kind: []const u8, stat: u32, centre: f32 = 0, weight: f32 };
+/// Nonlinear within-team term on f, the team's damage-weighted magic share
+/// (sum raw.dmg * raw.magic / sum raw.dmg over the five slots, 0.5 without damage):
+/// mix w (f - centre)^2, ad_heavy w min(f - centre, 0)^2, ap_heavy w max(f - centre, 0)^2.
+/// Blue's logit adds the term of blue's team minus red's; sd 0 when not exported
+const TeamTerm = struct { kind: []const u8, stat: u32, centre: f32 = 0, weight: f32, sd: f32 = 0 };
+
+const TeamKind = enum { mix, ad_heavy, ap_heavy };
+
+/// win-comp's Feature order: magic share of damage first, damage per minute third
+const raw_len = 12;
+const raw_magic = 0;
+const raw_dmg = 2;
+
+fn magicShare(sl: *const [n_role]Slot) f64 {
+    var num: f64 = 0;
+    var den: f64 = 0;
+    for (sl) |x| {
+        num += @as(f64, x.raw[raw_dmg]) * x.raw[raw_magic];
+        den += x.raw[raw_dmg];
+    }
+    return if (den > 0) num / den else 0.5;
+}
+
+fn teamForm(kind: TeamKind, f: f64, centre: f64) f64 {
+    const d = f - centre;
+    return switch (kind) {
+        .mix => d * d,
+        .ad_heavy => @min(d, 0) * @min(d, 0),
+        .ap_heavy => @max(d, 0) * @max(d, 0),
+    };
+}
 
 /// Comp terms on team-summed profiles P: P_b'S P_b - P_r'S P_r + P_b'A P_r
 const Comp = struct {
@@ -137,13 +169,17 @@ fn paramsOf(arena: std.mem.Allocator, e: anytype) !Params {
     for (terms, e.terms) |*t, x| {
         t.* = .{ .champion = x.champion, .role = x.role, .games = x.games, .b = x.b, .sd = x.sd, .u = x.u, .v = x.v, .s = x.s };
         if (@hasField(@TypeOf(x), "p")) t.p = x.p;
+        if (@hasField(@TypeOf(x), "raw")) t.raw = x.raw;
     }
     var out: Params = .{ .kind = e.kind, .dim = e.dim, .intercept = e.intercept, .w = e.w, .z = e.z, .terms = terms };
     if (@hasField(@TypeOf(e), "comp")) if (e.comp) |c| {
         const stats = try arena.alloc(Stat, c.stats.len);
         for (stats, c.stats) |*st, x| st.* = .{ .name = x.name, .label = x.label };
         const team = try arena.alloc(TeamTerm, c.team.len);
-        for (team, c.team) |*tt, x| tt.* = .{ .kind = x.kind, .stat = x.stat, .centre = x.centre, .weight = x.weight };
+        for (team, c.team) |*tt, x| {
+            tt.* = .{ .kind = x.kind, .stat = x.stat, .centre = x.centre, .weight = x.weight };
+            if (@hasField(@TypeOf(x), "sd")) tt.sd = x.sd;
+        }
         out.comp = .{ .stats = stats, .S = c.S, .A = c.A, .S_sd = c.S_sd, .A_sd = c.A_sd, .team = team, .beta = c.beta };
     };
     return out;
@@ -157,6 +193,7 @@ const Slot = struct {
     v: []const f32,
     s: []const f32,
     p: []const f32,
+    raw: []const f32,
 };
 
 /// The reference scorer (docs/model.md "Draft model file"), from exported parameters only
@@ -167,19 +204,25 @@ const Scorer = struct {
     average: [n_role]Slot,
     /// Profile length, 0 without comp terms
     k: usize = 0,
+    /// comp.team's kinds, parsed
+    kinds: []const TeamKind = &.{},
 
     fn init(arena: std.mem.Allocator, e: Params, platform: u8, champs: *const Champions) !Scorer {
         var sc: Scorer = .{ .e = e, .platform = platform, .average = undefined };
         if (e.comp) |c| {
             sc.k = c.stats.len;
             if (sc.k > max_k or c.S.len != sc.k * sc.k or c.A.len != sc.k * sc.k) return error.BadCompShape;
-            if (c.team.len > 0) return error.UnknownTeamTerm;
             for (e.terms) |t| if (t.p.len != sc.k) return error.BadCompShape;
+            const kinds = try arena.alloc(TeamKind, c.team.len);
+            for (kinds, c.team) |*kd, t| kd.* = std.meta.stringToEnum(TeamKind, t.kind) orelse return error.UnknownTeamTerm;
+            sc.kinds = kinds;
+            if (kinds.len > 0) for (e.terms) |t| if (t.raw.len != raw_len) return error.BadCompShape;
         }
+        const n_raw: usize = if (sc.kinds.len > 0) raw_len else 0;
         for (e.terms, 0..) |t, i| try sc.terms.put(arena, Champions.key(t.champion, t.role), @intCast(i));
         // Role average: play-rate-weighted mean of b and the vectors on the newest patch
         for (&sc.average, 0..) |*avg, r| {
-            const vecs = try arena.alloc(f32, 3 * e.dim + sc.k);
+            const vecs = try arena.alloc(f32, 3 * e.dim + sc.k + n_raw);
             @memset(vecs, 0);
             var b: f64 = 0;
             var total: f64 = 0;
@@ -192,7 +235,8 @@ const Scorer = struct {
                 for (vecs[0..e.dim], t.u) |*x, y| x.* += @floatCast(share * y);
                 for (vecs[e.dim .. 2 * e.dim], t.v) |*x, y| x.* += @floatCast(share * y);
                 for (vecs[2 * e.dim .. 3 * e.dim], t.s) |*x, y| x.* += @floatCast(share * y);
-                for (vecs[3 * e.dim ..], t.p) |*x, y| x.* += @floatCast(share * y);
+                for (vecs[3 * e.dim ..][0..sc.k], t.p) |*x, y| x.* += @floatCast(share * y);
+                for (vecs[3 * e.dim + sc.k ..], t.raw[0..n_raw]) |*x, y| x.* += @floatCast(share * y);
             }
             const inv = if (total > 0) 1 / total else 0;
             for (vecs) |*x| x.* = @floatCast(x.* * inv);
@@ -202,7 +246,8 @@ const Scorer = struct {
                 .u = vecs[0..e.dim],
                 .v = vecs[e.dim .. 2 * e.dim],
                 .s = if (std.mem.eql(u8, e.kind, "full")) vecs[2 * e.dim .. 3 * e.dim] else &.{},
-                .p = vecs[3 * e.dim ..],
+                .p = vecs[3 * e.dim ..][0..sc.k],
+                .raw = vecs[3 * e.dim + sc.k ..],
             };
         }
         return sc;
@@ -211,7 +256,7 @@ const Scorer = struct {
     fn slot(sc: *const Scorer, champion: u32, role: usize) Slot {
         const i = sc.terms.get(Champions.key(champion, role)) orelse return sc.average[role];
         const t = sc.e.terms[i];
-        return .{ .b = t.b, .sd = t.sd, .u = t.u, .v = t.v, .s = t.s, .p = t.p };
+        return .{ .b = t.b, .sd = t.sd, .u = t.u, .v = t.v, .s = t.s, .p = t.p, .raw = t.raw };
     }
 
     fn dot(a: []const f32, b: []const f32) f64 {
@@ -256,6 +301,10 @@ const Scorer = struct {
             out += c.S[i * k + j] * (P[0][i] * P[0][j] - P[1][i] * P[1][j]);
             out += c.A[i * k + j] * P[0][i] * P[1][j];
         };
+        if (sc.kinds.len > 0) {
+            const f = [2]f64{ magicShare(&sl[0]), magicShare(&sl[1]) };
+            for (c.team, sc.kinds) |t, kind| out += t.weight * (teamForm(kind, f[0], t.centre) - teamForm(kind, f[1], t.centre));
+        }
         return out;
     }
 
@@ -971,6 +1020,50 @@ test "scorer: a champion with no term in its role scores as the empty slot" {
     try std.testing.expectEqual(@as(u32, 12), teams[1][4]);
     try std.testing.expectEqual(sc.blue(@splat(@splat(0))), sc.blue(teams));
     try std.testing.expectEqual(sc.compOf(@splat(@splat(0))), sc.compOf(teams));
+}
+
+test "scorer: team term on the damage-weighted magic share" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var champs: Champions = .{ .patch_total = 4 };
+    try champs.patch_games.put(arena, Champions.key(1, 0), 2);
+    try champs.patch_games.put(arena, Champions.key(2, 0), 2);
+    var raw1: [raw_len]f32 = @splat(0);
+    raw1[raw_magic] = 0.8;
+    raw1[raw_dmg] = 10;
+    var raw2: [raw_len]f32 = @splat(0);
+    raw2[raw_magic] = 0.1;
+    raw2[raw_dmg] = 20;
+    const terms = [_]Term{
+        .{ .champion = 1, .role = 0, .games = 400, .b = 0, .sd = 0.1, .p = &.{0}, .raw = &raw1 },
+        .{ .champion = 2, .role = 0, .games = 400, .b = 0, .sd = 0.1, .p = &.{0}, .raw = &raw2 },
+    };
+    var intercept: [256]f32 = @splat(0);
+    const sc = try Scorer.init(arena, .{
+        .kind = "comp",
+        .dim = 0,
+        .intercept = &intercept,
+        .w = @splat(0),
+        .z = @splat(0),
+        .terms = &terms,
+        .comp = .{
+            .stats = &.{.{ .name = "magic", .label = "magic" }},
+            .S = &.{0},
+            .A = &.{0},
+            .S_sd = &.{0},
+            .A_sd = &.{0},
+            .team = &.{.{ .kind = "mix", .stat = 0, .centre = 0.5, .weight = -2 }},
+        },
+    }, 6, &champs);
+    var teams: [2][n_role]u32 = @splat(@splat(0));
+    teams[0][0] = 1;
+    teams[1][0] = 2;
+    // Only top slots deal damage: blue 0.8 magic, red 0.1; -2 (0.3^2 - 0.4^2)
+    try std.testing.expectApproxEqAbs(0.14, sc.compOf(teams), 1e-6);
+    // Red top empty: the role average, magic 0.45 on damage 15
+    teams[1][0] = 0;
+    try std.testing.expectApproxEqAbs(-2 * (0.09 - 0.0025), sc.compOf(teams), 1e-6);
 }
 
 test "scorer: comp terms on team-summed profiles" {

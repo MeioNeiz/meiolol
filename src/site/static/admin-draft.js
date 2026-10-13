@@ -49,10 +49,20 @@ function draftModel(M) {
   if (!M || M.format !== "meiolol-draft-model" || (M.version !== 1 && M.version !== 2)) return null;
   const terms = new Map(M.model.terms.map(t => [t.champion + ":" + t.role, t]));
   const cells = new Map(M.cells.map(c => [c.champion + ":" + c.role, c]));
-  const avg = M.average.map(a => ({ p: [], ...a, sd: 0 }));
+  const avg = M.average.map(a => ({ p: [], raw: [], ...a, sd: 0 }));
   const { intercept, w, z } = M.model;
   const comp = M.model.comp || null;
-  if (comp && (comp.team || []).length) throw new Error(`draft-model.json has team terms (${comp.team.map(t => t.kind).join(", ")}) this page can't score yet`);
+  // Team terms on f, the team's damage-weighted magic share (draft.zig TeamTerm)
+  const FORMS = { mix: d => d * d, ad_heavy: d => Math.min(d, 0) ** 2, ap_heavy: d => Math.max(d, 0) ** 2 };
+  const RAW_MAGIC = 0, RAW_DMG = 2;
+  const team = comp ? comp.team || [] : [];
+  const unknown = team.filter(t => !FORMS[t.kind]);
+  if (unknown.length) throw new Error(`draft-model.json has team terms (${unknown.map(t => t.kind).join(", ")}) this page can't score yet`);
+  const magicShare = T => {
+    let num = 0, den = 0;
+    for (const x of T) { num += x.raw[RAW_DMG] * x.raw[RAW_MAGIC]; den += x.raw[RAW_DMG]; }
+    return den > 0 ? num / den : 0.5;
+  };
   const k = comp ? comp.stats.length : 0;
   const dot = (a, b) => { let x = 0; for (let i = 0; i < a.length; i++) x += a[i] * b[i]; return x; };
   const sig = x => 1 / (1 + Math.exp(-x));
@@ -66,6 +76,10 @@ function draftModel(M) {
     for (let i = 0; i < k; i++) for (let j = 0; j < k; j++) {
       x += comp.S[i * k + j] * (Pb[i] * Pb[j] - Pr[i] * Pr[j]);
       x += comp.A[i * k + j] * Pb[i] * Pr[j];
+    }
+    if (team.length) {
+      const fb = magicShare(B), fr = magicShare(R);
+      for (const t of team) x += t.weight * (FORMS[t.kind](fb - t.centre) - FORMS[t.kind](fr - t.centre));
     }
     return x;
   };
@@ -96,7 +110,7 @@ function draftModel(M) {
     const at = c => {
       t[side][r] = c;
       const sl = slots(t), p = score(t).p, q = side ? 1 - p : p;
-      return { M: prof(sl[side]), T: prof(sl[1 - side]), logit: Math.log(q / (1 - q)) };
+      return { M: prof(sl[side]), T: prof(sl[1 - side]), f: team.length ? magicShare(sl[side]) : 0, logit: Math.log(q / (1 - q)) };
     };
     const x0 = at(0), x1 = at(id), l0 = x0.logit, l1 = x1.logit;
     const slope = Math.abs(l1 - l0) > 1e-9 ? (sig(l1) - sig(l0)) / (l1 - l0) : sig(l1) * (1 - sig(l1));
@@ -114,6 +128,10 @@ function draftModel(M) {
       if (!comp.A[i * k + j]) continue;
       const d = x1.M[i] * x1.T[j] - x0.M[i] * x0.T[j];
       add(comp.A[i * k + j] * d, comp.A_sd[i * k + j] * Math.abs(d), `enemy ${st[j].label} ${lean(x1.T[j])} × your ${st[i].label} ${lean(x1.M[i])}`);
+    }
+    for (const tt of team) {
+      const d = FORMS[tt.kind](x1.f - tt.centre) - FORMS[tt.kind](x0.f - tt.centre);
+      add(tt.weight * d, (tt.sd || 0) * Math.abs(d), `your team's damage ${Math.round(100 * x1.f)}% magic (from ${Math.round(100 * x0.f)}%)`);
     }
     return out.sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp));
   };
@@ -469,7 +487,7 @@ function compWhy(m, d, si, ri, id) {
   if (!m.comp) return null;
   const top = m.compReasons(m.teamsOf(d), si, ri, +id).slice(0, 2);
   if (!top.length || Math.abs(top[0].pp) < 0.05) return "team comp changes little";
-  return top.map(x => `${x.what}: ${x.pp >= 0 ? "+" : "−"}${Math.abs(x.pp).toFixed(1)} pp (±${x.half.toFixed(1)})`).join("; ");
+  return top.map(x => `${x.what}: ${x.pp >= 0 ? "+" : "−"}${Math.abs(x.pp).toFixed(1)} pp (${x.half > 0 ? "±" + x.half.toFixed(1) : "no range exported"})`).join("; ");
 }
 
 // Suggestions for the open slot, each with its reason as a plain sentence. Ranked by the

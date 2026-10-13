@@ -1263,17 +1263,20 @@ draft-model.json (format meiolol-draft-model, version 2; 1 had no p and no comp)
 - cells [{champion, role, games, patch_games, patch_share}]: training games in the role
   (every patch); games and share of the role's games on the newest patch (random games,
   picker order, role averages)
-- average[role] {b, u, v, s, p}: the empty-slot term, patch_share-weighted mean of the
+- average[role] {b, u, v, s, p, raw}: the empty-slot term, patch_share-weighted mean of the
   role's terms on the newest patch
 - model {kind, dim, intercept, w[25], z[25], terms [{champion, role, games, b, sd, u, v,
-  s, p}], comp}: u, v, s are length dim (empty for rates and ratings); w and z row-major
-  5 x 5; p the champion-role's profile (k numbers, z-scored within the role; empty
-  without comp). b already holds any profile prior
+  s, p, raw}], comp}: u, v, s are length dim (empty for rates and ratings); w and z
+  row-major 5 x 5; p the champion-role's profile (k numbers, z-scored within the role;
+  empty without comp); raw the profile in raw units, all 12 of win-comp's Feature order
+  (magic share of damage first, damage per minute third; empty without team terms). b
+  already holds any profile prior
 - comp (null without comp terms, win-comp): stats [{name, label}] (k; label plain English
   for the tester's reasons), S and A (k x k row-major; S symmetric, an off-diagonal pair's
   weight split half and half; A antisymmetric), S_sd and A_sd (Laplace sd per entry), team
-  (nonlinear within-team terms: none defined yet, and the scorer and page refuse any),
-  beta (5 x k profile prior per role, shown only)
+  [{kind, stat (unused), centre, weight, sd (optional)}] (within-team terms on f, the
+  team's damage-weighted magic share: kinds mix, ad_heavy, ap_heavy; any other kind stops
+  the export and the page), beta (5 x k profile prior per role, shown only)
 
 Scoring (Scorer in draft.zig, the reference). Each slot is a champion-role term; an
 empty slot, or a champion with no term in that role, is average[role] with sd 0. B_r and
@@ -1284,6 +1287,9 @@ logit = intercept + sum_r (B_r.b - R_r.b)
       + sum_{ri,rj} w[ri*5+rj] * (<B_ri.u, R_rj.v> - <R_ri.u, B_rj.v>)
       + sum_{a<b} z[a*5+b] * (<B_a.s, B_b.s> - <R_a.s, R_b.s>)
       + P_b' S P_b - P_r' S P_r + P_b' A P_r     P_b = sum_r B_r.p, P_r = sum_r R_r.p
+      + sum_team weight * (form(f_b - centre) - form(f_r - centre))
+f = sum_r raw.dmg * raw.magic / sum_r raw.dmg (0.5 if no damage); form: mix d^2,
+ad_heavy min(d, 0)^2, ap_heavy max(d, 0)^2
 blue = 1 / (1 + exp(-logit)); red = 1 - blue
 var = sum over the 10 slots of sd^2;  interval = sigmoid(logit -/+ 1.96 sqrt(var))
 ```
@@ -1294,10 +1300,10 @@ Slot query (the tester's list): candidates are champions with games >= min_games
 role, not picked by either team and not banned; win is the user's team's chance with it
 in the slot, change = win minus the chance with the slot empty, and "an average pick" is
 the mean of the candidates' win weighted by their games in the role.
-Comp reasons (the tester, with comp terms): each S and A entry's part of the picking side's
-logit change when the candidate fills the empty slot (A from that side: mine'A theirs),
-in pp through the sigmoid's secant over the whole change, +-1.96 sd of the entry; the two
-largest by size are shown. The win interval stays ratings-only.
+Comp reasons (the tester, with comp terms): each S and A entry's and team term's part of
+the picking side's logit change when the candidate fills the empty slot (A from that
+side: mine'A theirs), in pp through the sigmoid's secant over the whole change, +-1.96 sd
+of the entry ("no range exported" without one); the two largest by size are shown. The win interval stays ratings-only.
 
 draft-ref.json: `tolerance` 1e-9; `drafts` [{label, teams[side][role] (0 empty), blue
 {p, lo, hi}, comp (the comp part of blue's logit)}] (three EUW1 test games whole and with
