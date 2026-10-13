@@ -137,6 +137,8 @@ seat_stats() {
 # mastery_pre.tsv there (pre-game mastery from the raw archive, which lives there only)
 push_snap() {
     local name=$1
+    # Same path on both hosts, so deploy/lab-run.sh can place a run on either
+    mkdir -p ~/ml/snaps && ln -sfn "$ROOT/data/$name" ~/ml/snaps/"$name"
     ssh -o ConnectTimeout=10 -o BatchMode=yes "$GPU" true 2> /dev/null || return 1
     log "to $GPU:ml/snaps/$name"
     rsync -a "$ROOT/data/$name" "$GPU:ml/snaps/"
@@ -212,6 +214,8 @@ prune() {
     # Only snap-STAMP dirs: data/ also holds hand-made copies (snap, snap-3c)
     find "$ROOT/data" -maxdepth 1 -type d -regex '.*/snap-[0-9]\{8\}T[0-9]\{4\}Z' \
         ! -name "$keep" -print -exec rm -rf {} +
+    find ~/ml/snaps -maxdepth 1 -type l -name 'snap-*T*Z' ! -name "$keep" -delete \
+        2> /dev/null || true
     ssh "$GPU" "find ml/snaps -maxdepth 1 -type d -name 'snap-*T*Z' ! -name '$keep' -print \
         -exec rm -rf {} +"
 }
