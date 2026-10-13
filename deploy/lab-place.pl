@@ -49,7 +49,8 @@ while (my $line = <STDIN>) {
         $r{host} = $host;
         $r{$_} = ts($r{$_}) for qw(started ended);
         $r{pred} = $r{pred} =~ /^(\d+)/ ? $1 : undef;
-        $r{pauses} = [map { /^(\S+) (STOP|CONT)$/ ? [ts($1), $2] : () } split /,/, $r{pauses}];
+        $r{pauses} = [map { /^(\S+) (STOP|CONT)$/ ? [ts($1), $2] : () }
+            split /,/, $r{pauses}];
         $r{ran} = ran(\%r);
         push @runs, \%r;
     }
@@ -88,7 +89,8 @@ sub clip {
 
 sub ran {
     my ($r) = @_;
-    return undef unless $r->{state} eq 'exit 0' && defined $r->{started} && defined $r->{ended};
+    return undef
+        unless $r->{state} eq 'exit 0' && defined $r->{started} && defined $r->{ended};
     # WSL's clock can step back a second: never below 0
     my $t = $r->{ended} - $r->{started} - paused($r, $r->{started}, $r->{ended});
     return $t > 0 ? $t : 0;
@@ -111,7 +113,8 @@ sub words {
 sub inputs {
     my ($args) = @_;
     return grep { !/\.\./ }
-        map { m{^["']?((?:~/|/)[A-Za-z0-9_.+/-]*?snap-[A-Za-z0-9_.+-]+)} ? $1 : () } words($args);
+        map { m{^["']?((?:~/|/)[A-Za-z0-9_.+/-]*?snap-[A-Za-z0-9_.+-]+)} ? $1 : () }
+        words($args);
 }
 
 # Keys from most to least specific, with a label for the explanation
@@ -129,7 +132,8 @@ sub keys_for {
     my ($cand) = $build =~ m{-Dcand=(?:\S*/)?([^/\s]+)};
     my $with = defined $cand ? "$fine, candidate $cand" : $fine;
     my @keys = (["args $bin $build $args", "same args", "args"]);
-    push @keys, ["$with \@ $snap", "$with on $snap", "snap"], ["$fine \@ $snap", "$fine on $snap", "snap"]
+    push @keys, ["$with \@ $snap", "$with on $snap", "snap"],
+        ["$fine \@ $snap", "$fine on $snap", "snap"]
         if defined $snap;
     push @keys, [$fine, $fine, "cmd"], [$cmd, $cmd, "cmd"];
     my %seen;
@@ -141,8 +145,10 @@ my %times;
 sub times_for {
     my ($host, $key) = @_;
     unless (%times) {
-        for my $r (sort { $a->{started} <=> $b->{started} } grep { defined $_->{ran} } @runs) {
-            push @{$times{$r->{host}}{$_->[0]}}, $r->{ran} for keys_for($r->{bin}, $r->{args}, $r->{build});
+        my @done = grep { defined $_->{ran} } @runs;
+        for my $r (sort { $a->{started} <=> $b->{started} } @done) {
+            push @{$times{$r->{host}}{$_->[0]}}, $r->{ran}
+                for keys_for($r->{bin}, $r->{args}, $r->{build});
         }
     }
     return @{$times{$host}{$key} // []};
@@ -163,7 +169,8 @@ sub ratios {
                 my ($mh, $mo) = map { median(recent(times_for($_, $k))) } $h, $o;
                 push @rs, $mh / $mo if defined $mh && defined $mo && $mh >= 5 && $mo >= 5;
             }
-            $r{$h}{$o} = @rs ? [median(@rs), scalar(@rs) . (@rs == 1 ? ' command' : ' commands') . ' on both']
+            my $on = scalar(@rs) . (@rs == 1 ? ' command' : ' commands') . ' on both';
+            $r{$h}{$o} = @rs ? [median(@rs), $on]
                 : [$ASSUMED{$h}, 'assumed'];
         }
     }
@@ -183,7 +190,8 @@ sub estimate {
             next unless @to;
             my ($x, $why) = @{$ratio{$host}{$o}};
             return (median(@to) * $x,
-                sprintf('%s median of %d x %.2f (%s), %s', $o, scalar @to, $x, $why, $k->[1]));
+                sprintf('%s median of %d x %.2f (%s), %s',
+                    $o, scalar @to, $x, $why, $k->[1]));
         }
     }
     return ();
@@ -198,7 +206,8 @@ sub wait_for {
     my ($total, $n) = (0, 0);
     for my $r (grep { $_->{host} eq $host && $_->{res} eq $res && live($_) } @runs) {
         my $pred = $r->{pred} // (estimate($host, $r->{bin}, $r->{args}, $r->{build}))[0]
-            // median(map { $_->{ran} } grep { $_->{host} eq $host && defined $_->{ran} } @runs)
+            // median(map { $_->{ran} }
+                grep { $_->{host} eq $host && defined $_->{ran} } @runs)
             // 60;
         $n++;
         if (defined $r->{started} && $r->{state} !~ /^queued/) {
@@ -242,6 +251,11 @@ sub cuda_use {
     my @w = words($args);
     my $cmd = $w[0] // '';
     return 'gpu' if $cmd eq 'gpu-smoke';
+    # netcheck: only the big net is on the GPU (small and resid on CPU threads)
+    if ($cmd eq 'netcheck') {
+        my %f = map { $w[$_] => $w[$_ + 1] } grep { $w[$_] =~ /^--/ } 0 .. $#w - 1;
+        return ($f{'--net'} // '') eq 'big' ? 'gpu' : 'none';
+    }
     return 'none' unless $cmd eq 'bench' || $cmd eq 'draftbench';
     my $devices = 'cpu1,cpu,gpu';
     for my $i (0 .. $#w - 1) { $devices = $w[$i + 1] if $w[$i] eq '--devices' }
@@ -308,7 +322,8 @@ sub status {
         if (defined $r->{ran}) {
             $t = join ', ', 'ran ' . fmt($r->{ran}), $pred || ();
             # Runs of seconds are mostly startup and rounding: no percentage
-            $t .= sprintf(' (%+.0f%%)', 100 * ($r->{ran} / $r->{pred} - 1)) if $pred && $r->{pred} >= 30;
+            $t .= sprintf(' (%+.0f%%)', 100 * ($r->{ran} / $r->{pred} - 1))
+                if $pred && $r->{pred} >= 30;
         } elsif (defined $r->{started} && $r->{state} =~ /^(running|paused)/) {
             my $done = $now{$host} - $r->{started} - paused($r, $r->{started}, $now{$host});
             $t = join ', ', 'so far ' . fmt($done), $pred || ();
@@ -322,5 +337,6 @@ sub status {
 
 sub iso {
     my @t = gmtime $_[0];
-    return sprintf('%04d-%02d-%02dT%02d:%02d:%02dZ', $t[5] + 1900, $t[4] + 1, @t[3, 2, 1, 0]);
+    return sprintf('%04d-%02d-%02dT%02d:%02d:%02dZ',
+        $t[5] + 1900, $t[4] + 1, @t[3, 2, 1, 0]);
 }

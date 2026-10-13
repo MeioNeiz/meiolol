@@ -3,15 +3,16 @@
 # 3080, queued on deploy/lab-run.sh's gpu lock. docs/compute.md "Sweeps"
 #
 #   deploy/lab-sweep.sh start SWEEP SPACE [--trials N] [--rng S] [--pack K] [--head]
-#                             [--build-arg A]... [--dry-run] -- CMD ARGS...
+#                             [--build-arg A]... [--res gpu|cpu] [--dry-run] -- CMD ARGS...
 #   deploy/lab-sweep.sh status SWEEP      its jobs, as deploy/lab-run.sh status shows them
 #   deploy/lab-sweep.sh table SWEEP       trials ranked by inner validation, to table.md
 #   deploy/lab-sweep.sh stop SWEEP        stops its queued and running jobs
 #
 # start samples N trials (default 32, --rng 1) from SPACE (deploy/lab-sweep.pl says the
 # format), builds meiolol-lab once and queues one lab-run job per K trials (--pack,
-# default 1; K > 1 runs K processes at once, if the GPU's memory allows). Trial tNN runs
-# `meiolol-lab CMD ARGS <its flags> --out tNN` in its job's run dir, output in tNN.log;
+# default 1; K > 1 runs K processes at once, if the GPU's memory allows). --res cpu for
+# nets on CPU threads (netcheck --net small or resid; only big uses the GPU). Trial tNN
+# runs `meiolol-lab CMD ARGS <its flags> --out tNN` in its job's run dir, output in tNN.log;
 # CMD writes tNN/folds.tsv (meiolol-f1's netcheck contract, lab-sweep.pl). State here, in
 # data/sweeps/SWEEP: space, trials.tsv, jobs.tsv (job, run dir, trials), table.md
 #   deploy/lab-sweep.sh start big1 big.space --trials 40 --head \
@@ -37,13 +38,14 @@ sweep_dir() {
 runs() { tail -n +2 "$1/jobs.tsv" | cut -f 2; }
 
 start() {
-    local sweep=$1 space=$2 trials=32 rng=1 pack=1 dry=0 opts=()
+    local sweep=$1 space=$2 trials=32 rng=1 pack=1 dry=0 res=gpu opts=()
     shift 2
     while (( $# )); do
         case "$1" in
             --trials) trials=$2; shift ;;
             --rng) rng=$2; shift ;;
             --pack) pack=$2; shift ;;
+            --res) res=$2; shift ;;
             --head) opts+=(--head) ;;
             --build-arg) opts+=(--build-arg "$2"); shift ;;
             --dry-run) dry=1 ;;
@@ -57,6 +59,7 @@ start() {
     local tilde="~"
     set -- "${@/#$HOME/$tilde}"
     [[ "$pack" =~ ^[1-9][0-9]*$ ]] || { echo "--pack: a number"; exit 2; }
+    [[ "$res" == gpu || "$res" == cpu ]] || { echo "--res: gpu or cpu"; exit 2; }
     local dir
     dir=$(sweep_dir "$sweep")
     [[ -e "$dir" ]] && (( ! dry )) && { echo "$dir exists: another SWEEP name"; exit 1; }
@@ -88,9 +91,10 @@ start() {
 
     if (( dry )); then
         column -t -s $'\t' <<< "$plan"
-        echo "${#jobs[@]} jobs on $HOST/gpu, the first:"
+        echo "${#jobs[@]} jobs on $HOST/$res, the first:"
         echo "  $(cut -c1-300 <<< "${jobs[0]}")"
-        "$RUN" start "$HOST" "$sweep-j01" --res gpu --no-build --dry-run -- "${jobs[0]}" || true
+        "$RUN" start "$HOST" "$sweep-j01" --res "$res" --no-build --dry-run \
+            -- "${jobs[0]}" || true
         return
     fi
 
@@ -102,15 +106,16 @@ start() {
     for (( k = 0; k < ${#jobs[@]}; k++ )); do
         # Built once; the rest reuse that binary (lab-run.sh copies it into each run dir)
         (( k == 0 )) || build=(--no-build)
-        out=$("$RUN" start "$HOST" "$sweep-j$(printf %02d $((k + 1)))" --res gpu \
-            ${opts[@]+"${opts[@]}"} ${build[@]+"${build[@]}"} -- "${jobs[k]}") || { echo "$out"; exit 1; }
+        out=$("$RUN" start "$HOST" "$sweep-j$(printf %02d $((k + 1)))" --res "$res" \
+            ${opts[@]+"${opts[@]}"} ${build[@]+"${build[@]}"} -- "${jobs[k]}") \
+            || { echo "$out"; exit 1; }
         run=$(sed -n 's/^started \([^ ]*\) on .*/\1/p' <<< "$out")
         [[ -n "$run" ]] || { echo "$out"; exit 1; }
         (( k == 0 )) && grep '^predicted' <<< "$out" || true
         printf 'j%02d\t%s\t%s\t%s\n' $((k + 1)) "$run" "${names[k]}" "$*" >> "$dir/jobs.tsv"
         echo "queued $run (${names[k]})"
     done
-    echo "${#jobs[@]} jobs queued on $HOST/gpu; deploy/lab-sweep.sh status|table $sweep"
+    echo "${#jobs[@]} jobs queued on $HOST/$res; deploy/lab-sweep.sh status|table $sweep"
 }
 
 status() {
@@ -119,11 +124,12 @@ status() {
 }
 
 table() {
-    local dir=$1 script="" run t
+    local dir=$1 script="" run t f
     # tNN<tab>line for each line of each trial's folds.tsv
     while IFS=$'\t' read -r _ run ids _; do
         for t in ${ids//,/ }; do
-            script+="[[ -f ml/runs/$run/$t/folds.tsv ]] && sed 's/^/$t\t/' ml/runs/$run/$t/folds.tsv
+            f=ml/runs/$run/$t/folds.tsv
+            script+="[[ -f $f ]] && sed 's/^/$t\t/' $f
 "
         done
     done < <(tail -n +2 "$dir/jobs.tsv")

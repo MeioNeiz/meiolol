@@ -33,7 +33,8 @@ sub sample {
         my ($flag, $dist, @a) = split ' ';
         next unless defined $flag;
         die "$space:$.: --name DIST ARGS\n" unless $flag =~ /^--[a-z][a-z0-9-]*$/ && $dist;
-        die "$space:$.: values: letters, digits . , + - _\n" if grep { !/^[A-Za-z0-9.,+_-]+$/ } @a;
+        die "$space:$.: values: letters, digits . , + - _\n"
+            if grep { !/^[A-Za-z0-9.,+_-]+$/ } @a;
         if ($dist eq 'choice') { die "$space:$.: choice needs values\n" unless @a }
         elsif ($dist =~ /^(uniform|loguniform|int|logint)$/) {
             die "$space:$.: $dist LO HI\n" unless @a == 2 && $a[0] =~ /^[-+.\deE]+$/
@@ -106,7 +107,8 @@ sub table {
         my (%by_seed, @dev, @val, @ep);
         my $secs = 0;
         for my $r (@r) {
-            push @val, $r->{val_logloss} if defined $r->{val_logloss} && $r->{val_logloss} ne '';
+            my $v = $r->{val_logloss};
+            push @val, $v if defined $v && $v ne '';
             push @ep, $r->{epochs};
             $secs += $r->{seconds} // 0;
             if ($r->{fold} eq 'dev') { push @dev, $r->{gain} }
@@ -137,11 +139,13 @@ sub table {
     print "Ranked by inner-validation log loss (fit games only). Gains vs ratings in\n";
     print "milli-nats per game, positive = net better: folds pooled by games, mean over\n";
     print "seeds ± its paired 95% half-width; seed sd = spread of the per-seed gain.\n\n";
-    print "| # | trial | val log loss | fold gain | seed sd | dev gain | seeds x blocks | epochs | GPU s | config |\n";
+    print "| # | trial | val log loss | fold gain | seed sd | dev gain | seeds x blocks ",
+        "| epochs | GPU s | config |\n";
     print "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n";
     my $i = 0;
     for my $d (sort { ($a->{val} // 9) <=> ($b->{val} // 9) } @done) {
-        printf "| %d | %s | %s | %s ± %s | %s | %s | %d x %d | %s | %.0f | %s |\n", ++$i, $d->{t},
+        printf "| %d | %s | %s | %s ± %s | %s | %s | %d x %d | %s | %.0f | %s |\n",
+            ++$i, $d->{t},
             defined $d->{val} ? sprintf('%.5f', $d->{val}) : '-', $m->($d->{gain}),
             $p->(defined $d->{se} ? 1.96 * $d->{se} : undef), $p->($d->{seed_sd}),
             $m->($d->{dev}), $d->{seeds}, $d->{blocks}, $d->{epochs} // '-', $d->{secs},
