@@ -27,8 +27,10 @@ Where things live:
   gain that has held. The coordinator tracks fit games per comparison against games
   crawled, and re-pins when the crawl has added half again (or weekly, whichever comes
   first), never waiting on a fixed date. Training always uses every game (Jacob,
-  2026-10-14): only the EUW1 test set is held out, and no split or filter may drop
-  games a model can fit on (draft-only models need no timeline). meiolol-4a owns crawl volume and coverage and
+  2026-10-14): only the test set is held out (one global time cut over all
+  platforms, so test reflects the training sources, EUW1 a slice), shipped models fit on
+  everything after the test look, and no split or filter may drop games a model can fit
+  on (draft-only models need no timeline). meiolol-4a owns crawl volume and coverage and
   reports both with each snapshot
 
 ## Sessions and what they own (2026-10-13 ~01:10; names change on handover)
