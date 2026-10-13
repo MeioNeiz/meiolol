@@ -390,7 +390,7 @@ fn offset(
     defer gpa.free(sum);
     @memset(sum, 0);
     for (1..n_seeds + 1) |seed| {
-        var m = try cand.fit(gpa, &v.train, .{ .seed = seed });
+        var m = try harness.fit(cand, gpa, &v.train, .{ .seed = seed });
         defer cand.deinit(&m, gpa);
         for (d.rows, sum) |r, *acc| {
             const g = d.games[r.game];

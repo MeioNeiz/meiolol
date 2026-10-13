@@ -104,7 +104,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var train_arena: std.heap.ArenaAllocator = .init(gpa);
     defer train_arena.deinit();
     const t = try trainOf(train_arena.allocator(), &data);
-    var m = try cand.fit(gpa, &t, .{});
+    var m = try harness.fit(cand, gpa, &t, .{});
     defer cand.deinit(&m, gpa);
     const ex = try rounded(arena, try cand.exportLane(&m, arena, eu, min_pair_games));
     const sc = try Scorer.init(arena, ex);

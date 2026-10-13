@@ -52,6 +52,24 @@ pub fn afterGameRank(comptime C: type) bool {
     return @hasDecl(C, "after_game_rank") and C.after_game_rank;
 }
 
+/// A candidate with `pub const needs_stats = true` uses api.Row.stats (profiles)
+pub fn needsStats(comptime C: type) bool {
+    return @hasDecl(C, "needs_stats") and C.needs_stats;
+}
+
+/// C.fit, but a needs_stats candidate given training rows whose seat stats are all NaN
+/// fails with error.NoSeatStats: SNAP/seat_stats.tsv is missing (`meiolol-lab seat-stats`
+/// then `pack`). Every caller fits through here
+pub fn fit(comptime C: type, gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !C.Model {
+    if (needsStats(C) and t.rows.len > 0 and !anyStats(t.rows)) return error.NoSeatStats;
+    return C.fit(gpa, t, opts);
+}
+
+fn anyStats(rs: []const api.Row) bool {
+    for (rs) |r| for (r.stats) |x| if (!std.math.isNan(x)) return true;
+    return false;
+}
+
 /// Scored games of a phase start at or after its cut; its visible games are older
 pub const Cuts = struct {
     dev: i64,
@@ -382,7 +400,7 @@ pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, play
     const n_seeds: u64 = if (@hasDecl(C, "seeded") and C.seeded) seeds else 1;
     var effects: []const api.Effects = &.{};
     for (1..n_seeds + 1) |seed| {
-        var m = try C.fit(gpa, &v.train, .{ .seed = seed });
+        var m = try fit(C, gpa, &v.train, .{ .seed = seed });
         defer C.deinit(&m, gpa);
         if (@hasDecl(C, "effects") and seed == 1) if (opts.effects_for) |o| {
             effects = try C.effects(&m, opts.effects_arena.?, o);
@@ -605,6 +623,39 @@ fn SpyIn(comptime s: api.Scope) type {
 
         pub fn deinit(_: *Model, _: std.mem.Allocator) void {}
     };
+}
+
+/// Wants seat stats; fits nothing
+const NeedsStats = struct {
+    pub const scope: api.Scope = .champ_select;
+    pub const needs_stats = true;
+    pub const Model = struct {};
+    pub fn fit(_: std.mem.Allocator, _: *const api.Train, _: api.Options) !Model {
+        return .{};
+    }
+    pub fn predict(_: *const Model, _: *const api.Query) api.Prediction {
+        return api.no_opinion;
+    }
+    pub fn deinit(_: *Model, _: std.mem.Allocator) void {}
+};
+
+test "a candidate that needs seat stats fails without them" {
+    const gpa = std.testing.allocator;
+    var f = try Fixture.init(gpa, 600, 12);
+    defer f.data.deinit();
+    const players = try gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
+    const c = try cuts(gpa, &f.data, 0);
+    for ([_]Phase{ .dev, .select, .final }) |p| {
+        try std.testing.expectError(error.NoSeatStats, score(NeedsStats, gpa, &f.data, players, c, p, .{}));
+    }
+    // One known value anywhere in the fit set is enough; others don't ask
+    f.data.rows[0].stats[0] = 30;
+    var s = try score(NeedsStats, gpa, &f.data, players, c, .dev, .{});
+    s.deinit(gpa);
+    f.data.rows[0].stats[0] = std.math.nan(f32);
+    var plain = try score(Spy, gpa, &f.data, players, c, .dev, .{});
+    plain.deinit(gpa);
 }
 
 /// Seat stats in fit: fixture rows carry their game's start minute as minutes

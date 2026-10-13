@@ -527,7 +527,7 @@ fn fitAll(gpa: std.mem.Allocator, d: *const rows.Data) !cand.Model {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const t = try trainOf(arena_state.allocator(), d);
-    return cand.fit(gpa, &t, .{});
+    return harness.fit(cand, gpa, &t, .{});
 }
 
 fn run(arena: std.mem.Allocator, sc: *const Scorer, champs: *const Champions, args: []const []const u8, w: *Io.Writer) !void {

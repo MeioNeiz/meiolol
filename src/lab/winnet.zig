@@ -396,7 +396,7 @@ fn candBlue(gpa: std.mem.Allocator, d: *const rows.Data, players: []const harnes
     @memset(sum, 0);
     @memset(cnt, 0);
     for (1..n_seeds + 1) |seed| {
-        var m = try cand.fit(gpa, &v.train, .{ .seed = seed });
+        var m = try harness.fit(cand, gpa, &v.train, .{ .seed = seed });
         defer cand.deinit(&m, gpa);
         for (d.rows) |r| {
             if (!want[r.game]) continue;

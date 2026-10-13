@@ -58,6 +58,8 @@ const cfg: Cfg = .{ .team = true, .forms = &.{.mix}, .freeze = true };
 pub const name = "win-comp";
 
 pub const scope: api.Scope = .champ_select;
+/// Profiles come from Row.stats: without SNAP/seat_stats.tsv the fit fails, not ratings
+pub const needs_stats = true;
 
 const n_role = 5;
 const n_platform = 256;

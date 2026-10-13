@@ -57,7 +57,7 @@ fn screenFeatures(
     var base = try harness.Baseline.fit(gpa, &v.train);
     defer base.deinit(gpa);
     const sd = base.sd();
-    var m = try C.fit(gpa, &v.train, .{});
+    var m = try harness.fit(C, gpa, &v.train, .{});
     defer C.deinit(&m, gpa);
 
     // Pass 1: features and residuals of dev-train rows; per champion-role feature means

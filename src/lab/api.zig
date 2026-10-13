@@ -12,7 +12,9 @@
 //!   pub fn predict(m: *const Model, q: *const api.Query) api.Prediction
 //!   pub fn deinit(m: *Model, gpa: std.mem.Allocator) void
 //! and optionally `pub const seeded = true` (the harness then averages 3 seeds),
-//! `pub const after_game_rank = true` (rank_after below: dev runs only) and
+//! `pub const after_game_rank = true` (rank_after below: dev runs only),
+//! `pub const needs_stats = true` (fit refuses a training set whose Row.stats are all
+//! NaN, so a missing SNAP/seat_stats.tsv fails instead of fitting without them) and
 //!   pub fn effects(m: *const Model, arena: std.mem.Allocator, target: Outcome) ![]const Effects
 //! (what the fitted terms say about the game, in the target's units; the harness writes
 //! each table to the run dir as effects-<name>.tsv)
