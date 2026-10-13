@@ -1,8 +1,9 @@
 //! `meiolol admin`: private ops page (crawl rates, storage growth, ingest mix, queues,
 //! model accuracy, site uploads) as one static page plus admin.js, which draws the
-//! charts. The box rebuilds it every 15 min with the site (deploy/web-loop.sh); nginx
-//! serves it at /admin/ behind the /api/ basic auth. Aggregates only: no PUUIDs, Riot
-//! IDs or match ids (log messages are normalised before they are counted).
+//! charts, and admin-draft.js, the Draft tester. The box rebuilds it every 15 min with
+//! the site (deploy/web-loop.sh); nginx serves it at /admin/ behind the /api/ basic auth.
+//! Aggregates only: no PUUIDs, Riot IDs or match ids (log messages are normalised before
+//! they are counted).
 
 const std = @import("std");
 const store = @import("store");
@@ -174,6 +175,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     try w.writeAll(safe);
     try w.writeAll(
         \\</script>
+        \\<script src="admin-draft.js"></script>
         \\<script src="admin.js"></script>
         \\</body>
         \\</html>
@@ -185,6 +187,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     try writeGz(gpa, io, dir, "index.html", out.written());
     // The same data for the page to poll between rebuilds
     try writeGz(gpa, io, dir, "data.json", json);
+    try writeGz(gpa, io, dir, "admin-draft.js", @embedFile("site/static/admin-draft.js"));
     try writeGz(gpa, io, dir, "admin.js", @embedFile("site/static/admin.js"));
     try writeGz(gpa, io, dir, "admin.css", @embedFile("site/static/admin.css"));
 }
