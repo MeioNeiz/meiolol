@@ -60,6 +60,9 @@ pub const usage =
     \\                                  --resample N (A/A noise floor: fit on a seeded
     \\                                  random 90% of the fit games, the same for the
     \\                                  candidate; scored games unchanged)
+    \\                                  --fit-preds 1 (teacher preds for distillation:
+    \\                                  each block's fit games scored by nets fitted
+    \\                                  without their hashed fifth, DIR/fit-preds.tsv)
     \\                                  --threads N --out DIR
     \\                                  --split random:SEED (one block, LoLDraftAI's
     \\                                  random tenth) --filter ldai (its filters)
@@ -112,6 +115,9 @@ pub const Options = struct {
     split_seed: ?u32 = null,
     /// --resample N: fit games and the candidate's on a seeded random share (A/A runs)
     resample: ?u32 = null,
+    /// --fit-preds 1: also score every block's fit games, each from a fit without its
+    /// cross-fit fifth (effects.zig --soft reads them)
+    fit_preds: bool = false,
     /// --filter ldai: LoLDraftAI's 15-minute filters on fit and scored games
     ldai: bool = false,
     /// CPU threads for small and resid fits (one seed per thread) and big on the CPU
@@ -184,7 +190,12 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var nbuf: [64 * 1024]u8 = undefined;
     var nw = net_file.writer(io, &nbuf);
     try nw.interface.writeAll(game_head);
-    const out: Out = .{ .folds = &fw.interface, .preds = &pw.interface, .cand = &cw.interface, .net = &nw.interface };
+    const fit_file: ?Io.File = if (opts.fit_preds) try dir.createFile(io, "fit-preds.tsv", .{}) else null;
+    defer if (fit_file) |f| f.close(io);
+    var fpbuf: [64 * 1024]u8 = undefined;
+    var fpw: ?Io.File.Writer = if (fit_file) |f| f.writer(io, &fpbuf) else null;
+    if (fpw) |*x| try x.interface.writeAll("match_id\tblock\tseed\tp_blue\n");
+    const out: Out = .{ .folds = &fw.interface, .preds = &pw.interface, .cand = &cw.interface, .net = &nw.interface, .fit = if (fpw) |*x| &x.interface else null };
 
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
@@ -221,6 +232,11 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         spec.filter = if (filter) |*f| f else null;
         spec.resample = opts.resample;
         try runBlock(gpa, io, &data, players, c, spec, b, opts, if (gpu) |*g| g else null, out, w, &pooled);
+        if (opts.fit_preds) for (0..cross_folds) |f| {
+            var sf = spec;
+            sf.fifth = @intCast(f);
+            try runBlock(gpa, io, &data, players, c, sf, b, opts, if (gpu) |*g| g else null, out, w, &pooled);
+        };
     }
     if (pooled.cand.items.len > 0) {
         try w.writeAll("\nfolds pooled (blocks 1-5 run here):\n");
@@ -228,6 +244,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         try summaryRow(gpa, w, "folds", pooled.ys.items, pooled.cand.items, pooled.ens.items, null);
     }
     for ([_]*Io.Writer{ out.folds, out.preds, out.cand, out.net }) |x| try x.flush();
+    if (out.fit) |x| try x.flush();
     try w.flush();
     return 0;
 }
@@ -294,6 +311,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.ldai = true;
         } else if (std.mem.eql(u8, k, "--fraction")) {
             o.fraction = try std.fmt.parseFloat(f64, v);
+        } else if (std.mem.eql(u8, k, "--fit-preds")) {
+            o.fit_preds = std.mem.eql(u8, v, "1");
         } else if (std.mem.eql(u8, k, "--resample")) {
             o.resample = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--threads")) {
@@ -347,8 +366,15 @@ const Spec = struct {
     random: ?u32 = null,
     filter: ?*const randsplit.Filter = null,
     resample: ?u32 = null,
+    /// --fit-preds: fit without this cross-fit fifth of the fit games, score that fifth
+    fifth: ?u8 = null,
 
     fn fits(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
+        if (s.fifth) |f| if (crossFold(g) == f) return false;
+        return s.fitsAll(c, g, fraction);
+    }
+
+    fn fitsAll(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
         if (s.filter) |f| if (!f.keep(g)) return false;
         if (!harness.inFraction(g, fraction)) return false;
         if (s.resample) |r| if (!inResample(g, r)) return false;
@@ -356,7 +382,8 @@ const Spec = struct {
         return harness.visible(.dev, c, g) and g.start < s.before;
     }
 
-    fn scores(s: Spec, c: harness.Cuts, g: rows.Game) bool {
+    fn scores(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
+        if (s.fifth) |f| return crossFold(g) == f and s.fitsAll(c, g, fraction);
         if (s.filter) |f| if (!f.keep(g)) return false;
         if (s.random) |seed| return devEra(c, g) and randsplit.inTest(g, seed);
         if (s.dev) return harness.scored(.dev, c, g);
@@ -543,7 +570,7 @@ pub const Fitted = struct {
 };
 
 /// netcheck's output files: folds.tsv, preds.tsv, games-<cand>.tsv, games-<net>.tsv
-const Out = struct { folds: *Io.Writer, preds: *Io.Writer, cand: *Io.Writer, net: *Io.Writer };
+const Out = struct { folds: *Io.Writer, preds: *Io.Writer, cand: *Io.Writer, net: *Io.Writer, fit: ?*Io.Writer = null };
 
 fn runBlock(
     gpa: std.mem.Allocator,
@@ -569,7 +596,7 @@ fn runBlock(
     defer scored.deinit(gpa);
     for (d.games, 0..) |g, i| {
         if (spec.fits(c, g, opts.fraction)) try fit.append(gpa, @intCast(i));
-        if (spec.scores(c, g)) try scored.append(gpa, @intCast(i));
+        if (spec.scores(c, g, opts.fraction)) try scored.append(gpa, @intCast(i));
     }
     // Validation cut: the newest tenth of the fit games
     const fit_starts = try gpa.alloc(i64, fit.items.len);
@@ -669,6 +696,15 @@ fn runBlock(
         e.* = s / @as(f32, @floatFromInt(n_s));
     }
     const name = blockName(block);
+    if (spec.fifth) |f| {
+        const fpw = out.fit.?;
+        for (scored.items, 0..) |gi, i| for (opts.seeds, fits) |seed, ft| {
+            try fpw.print("{s}\t{s}\t{d}\t{d:.6}\n", .{ d.games[gi].match_id, name, seed, ft.pred[i] });
+        };
+        try w.print("block {s} fifth {d}: fit {d} games, scored {d} of the block's fit games\n", .{ name, f, fit.items.len, scored.items.len });
+        try w.flush();
+        return;
+    }
     try w.print("block {s}: fit {d} games (inner {d}, val {d}, ids {d}), scored {d}; candidate {d:.1} s\n", .{ name, fit.items.len, inner.items.len, val.items.len, vocab_all.n, scored.items.len, t_cand });
     if (resid) {
         var vl: f64 = 0;
@@ -1376,6 +1412,32 @@ test "cross-fit: a game's offset never comes from a fit that holds it" {
         }
     }
     for (seen) |n| try testing.expect(n > 50);
+}
+
+test "fit preds: a fifth's net never fits a game it scores, the fifths cover the fit games" {
+    const c: harness.Cuts = .{ .dev = 10_000, .select = 20_000, .eu = 0 };
+    const spec: Spec = .{ .before = 8_000, .lo = 8_000, .hi = 10_000, .dev = false };
+    for (0..800) |i| {
+        const g: rows.Game = .{
+            .match_id = "",
+            .start = @intCast(i * 13),
+            .patch = 0,
+            .platform = @intCast(i % 3),
+            .is_test = false,
+            .teams = @splat(@splat(0)),
+            .winner = 0,
+            .duration_s = 1800,
+        };
+        var scored_in: u32 = 0;
+        for (0..cross_folds) |f| {
+            var sf = spec;
+            sf.fifth = @intCast(f);
+            const sc = sf.scores(c, g, 1);
+            try testing.expect(!(sc and sf.fits(c, g, 1)));
+            if (sc) scored_in += 1;
+        }
+        try testing.expectEqual(@as(u32, @intFromBool(spec.fits(c, g, 1))), scored_in);
+    }
 }
 
 test {
