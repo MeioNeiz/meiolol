@@ -621,7 +621,14 @@ const Prune = struct {
         const days = cutoffDays(s, opts) orelse return p.advance();
         try db.begin();
         errdefer db.rollback();
-        const cutoff = now - @as(i64, days) * 86400;
+        var cutoff = now - @as(i64, days) * 86400;
+        switch (s.days) {
+            // Once the raw archive is in use, unarchived documents stay whatever their age
+            .raw_timeline, .raw_match => if (try store.schema.archivedUntil(db)) |until| {
+                cutoff = @min(cutoff, until);
+            },
+            else => {},
+        }
         const n = try s.run(db, p.since[p.next], cutoff);
         try db.commit();
         p.total += n;
@@ -981,6 +988,40 @@ test "rolling window prunes old matches with their rows" {
     }
     try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM players", .{}));
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM mastery", .{}));
+}
+
+test "raw prune: by age without the archive, and never past its acked point with it" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try tune(db, 1);
+    const day = std.time.s_per_day;
+    const now = std.Io.Clock.real.now(std.testing.io).toSeconds();
+    const opts: crawl.Options = .{ .data_dir = "", .key = "", .raw_timeline_days = 3, .raw_match_days = 3 };
+    const fills = [_][]const u8{
+        "INSERT INTO raw.timeline_docs VALUES ('A', ?1, x''), ('B', ?2, x'')",
+        "INSERT INTO raw.raw_docs VALUES ('riot_match', 'A', ?1, x''), ('riot_match', 'B', ?2, x'')",
+    };
+    const left = "SELECT (SELECT count(*) FROM raw.timeline_docs) + (SELECT count(*) FROM raw.raw_docs)";
+    {
+        for (fills) |fill| try db.run(fill, .{ now - 10 * day, now - 5 * day });
+        var p: Prune = .{ .started_at = 1 };
+        for (0..40) |_| try p.step(db, std.testing.io, opts);
+        try std.testing.expectEqual(@as(?i64, 0), try db.scalar(left, .{}));
+    }
+    // Archived up to 7 days ago: B, 5 days old, waits for its ack
+    try db.exec(
+        \\CREATE TABLE raw.archive_exports (name TEXT PRIMARY KEY, from_s INTEGER NOT NULL,
+        \\    to_s INTEGER NOT NULL, summaries INTEGER NOT NULL, timelines INTEGER NOT NULL,
+        \\    mastery INTEGER NOT NULL, made_at INTEGER NOT NULL, acked_at INTEGER);
+    );
+    try db.run("INSERT INTO raw.archive_exports VALUES ('a', 0, ?1, 0, 0, 0, ?1, ?1), ('b', ?1, ?2, 0, 0, 0, ?2, NULL)", .{
+        now - 7 * day, now - day,
+    });
+    for (fills) |fill| try db.run(fill, .{ now - 10 * day, now - 5 * day });
+    var p: Prune = .{ .started_at = 1 };
+    for (0..40) |_| try p.step(db, std.testing.io, opts);
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar(left, .{}));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM raw.timeline_docs WHERE match_id = 'B'", .{}));
 }
 
 test "ladder: ranks for everyone, player rows for the sample; matches take ranks" {

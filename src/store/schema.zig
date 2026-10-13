@@ -496,6 +496,18 @@ pub fn rekeyRows(db: sqlite.Db) !void {
         "DELETE FROM raw.raw_docs WHERE source = 'riot_mastery';");
 }
 
+/// Raw documents fetched before this are in an acked raw archive export (archive.zig):
+/// the start of the oldest unacked export, else the end of the newest. null when the
+/// archive is not in use (no export yet)
+pub fn archivedUntil(db: sqlite.Db) !?i64 {
+    const exists = try db.scalar("SELECT 1 FROM raw.sqlite_master WHERE name = 'archive_exports'", .{});
+    if (exists == null) return null;
+    return try db.scalar(
+        \\SELECT coalesce(min(CASE WHEN acked_at IS NULL THEN from_s END), max(to_s))
+        \\FROM raw.archive_exports HAVING count(*) > 0
+    , .{});
+}
+
 fn hasColumn(db: sqlite.Db, table: []const u8, column: []const u8) !bool {
     const n = try db.scalar("SELECT count(*) FROM pragma_table_info(?) WHERE name = ?", .{
         table, column,
