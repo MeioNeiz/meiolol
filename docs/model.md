@@ -1021,6 +1021,71 @@ games only (test "seat stats reach fit on visible games only"), a Query has no s
 
 #### Model-free cross-check (meiolol-49)
 
+`meiolol-lab compcheck SNAP` (src/lab/compcheck.zig, 71faf36; built with
+-Dcand=src/lab/cand/win-ratings), dev only, run 20261013T191005Z-compcheck2 (gpu-box).
+win-ratings' dev predictions are the offset (same build, same 8,500 dev-val games as any
+candidate's dev run). Each game gives two team units, observed win minus predicted chance;
+teams are binned by profiles: per-minute means of seat stats over the 88,706 visible
+games before the dev cut (99.97% of rows with stats; 293 of 85,000 dev picks fell back to
+the champion's all-role profile), never a scored game's own stats. Intervals 95%,
+clustered by game. Per-team units in compcheck.tsv in the run dir.
+
+Positive control (champion strength, a real effect): with a coin as the offset, dev teams
+by their five champion-roles' summed training lifts (shrunk log-odds, prior 1000) minus
+the enemy's:
+
+| lift difference quartile | lifts say | observed | observed - 50%, pp | observed - win-ratings, pp |
+| --- | --- | --- | --- | --- |
+| Q1 | 45.4% | 44.4% | -5.59 ± 1.49 | -0.15 ± 1.49 |
+| Q2 | 48.8% | 48.2% | -1.79 ± 1.50 | -0.43 ± 1.50 |
+| Q3 | 51.2% | 51.8% | 1.79 ± 1.50 | 0.43 ± 1.50 |
+| Q4 | 54.6% | 55.6% | 5.59 ± 1.49 | 0.16 ± 1.49 |
+
+The check finds a training-derived team effect on dev at its predicted size, and
+win-ratings absorbs all of it. With ~4,250 teams a bin, a quartile's ± is ~1.3-1.5 pp, so
+effects of ~2 pp per quartile are within reach. (A plumbing check, a champion-role's
+lift taken out of the offset and found again, matches to 0.05 pp.)
+
+Pre-declared contrasts (observed minus win-ratings, pp; raw = observed minus 50%):
+
+| hypothesis | contrast | raw | after win-ratings |
+| --- | --- | --- | --- |
+| team magic share (<20, 20-40, 40-60, 60%+) | lopsided minus balanced | 0.38 ± 2.48 | -0.32 ± 2.47 |
+| physical share, iTero's bins (<20, 20-80, 80%+) | lopsided minus 20-80% | -4.52 ± 8.12 | -4.88 ± 8.12 |
+| frontline count (taken + mitigated/min, top 20% of picks) | none minus some | -0.79 ± 1.79 | -0.08 ± 1.78 |
+| team's best mitigated share (win-comp's frontline form) | lowest quartile minus rest | -2.40 ± 1.74 | -1.65 ± 1.74 |
+| team CC time/min | lowest quartile minus rest | 0.02 ± 1.75 | 0.90 ± 1.74 |
+| 2+ frontline x enemy magic share | edge into 50%+ magic minus into <30% | | 3.43 ± 5.84 |
+| team armour lean (armor_end - mr_end vs role) x enemy magic | armour minus MR-leaning, into 50%+ minus <30% | | -4.83 ± 6.08 |
+
+Reading:
+- Not detected: none of the seven contrasts excludes 0, raw or after win-ratings. Of ~40
+  single bins (full tables in the run's log) four are just past ±1.96 se (armour-leaning
+  into <30% magic +3.5 ± 3.4, best mitigated Q1 -1.2 ± 1.3 and Q2 +1.7 ± 1.3, CC Q2
+  -1.7 ± 1.3) with no pattern between neighbours: about the two expected by chance
+- The largest effect the data allows (interval ends, after win-ratings): a lopsided
+  magic/physical mix within ±2.8 pp of a balanced one on the 20/60 bins; no frontline
+  at most -1.9 pp; the weakest-frontline quartile at most -3.4 pp; low CC at most
+  -0.8 pp. The cross-team terms are wide (±6 pp): too few teams in the extreme cells
+- iTero's gap (about -9 pp under 20% AD, -6 pp over 80%, unadjusted, research) can't be
+  tested with profiles: averaged kits put only 76 and 69 of 17,000 dev teams in those
+  bins (raw -5.3 ± 11.3 and -3.6 ± 11.9). iTero's shares are the game's own damage,
+  which winning reshapes, so its gap mixes comp with result
+- A bin holding both teams of most games (20-80% physical: 99%) has mean residual ~0 by
+  construction (the two units cancel); compare minority bins against it, as above
+- For win-comp: any claimed comp effect of a few pp at the team-quartile scale should
+  show here; a claim this check can't see at all is either below ~2 pp per quartile or
+  in a feature not binned here
+
+Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
+Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
+only" covers dev, select, final); rows.load holds only eval's train (older than the first
+test game) and test, so final's profiles are older than every test game; a Query has no
+stats. win-comp built profiles for its inner validation from every visible game, the val
+games included (their own stats in their profiles); fixed by 0d: tuning on fit-set
+profiles, refit rebuilds them on all visible rows; forward-chaining folds rebuild
+everything per fold (foldAblation calls fitWith on older games only).
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
