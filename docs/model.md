@@ -2064,6 +2064,9 @@ resamples' means are negative.
 
 Runs 20261013T223405Z-conf-a, 223644Z-conf-b, 224930Z-conf-a-r1, 225421Z-conf-a-r2,
 225244Z-conf-b-r1, 225808Z-conf-b-r2 (the net and controls unchanged since d8f1ebf).
+Verdict pending meiolol-a0's binary key check: the four resample runs were built
+22:48-23:05Z while lab-run's build lock was broken, so a binary may hold another key's
+files; if one differs, they are rerun under the same declared rule.
 
 Reading (dev, no test look):
 - The set net's gain is profile content: permuting profiles among champion-roles takes
