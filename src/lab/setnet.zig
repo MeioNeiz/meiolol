@@ -602,6 +602,20 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
     return .{ .pred = pred, .epochs = tuned.epochs, .val_loss = tuned.val_loss, .seconds = winnet.secondsSince(io, t0) };
 }
 
+/// Training-health entry (lab/health.zig): netcheck's default options with `cfg`, fitted
+/// on `set` for `steps` (0: at init) without early stopping; blue's chance per `scored`
+/// game into pred. Returns the parameters (caller frees)
+pub fn healthFit(gpa: std.mem.Allocator, cfg: Config, seed: u32, n_ids: u32, set: []const SetGame, steps: u64, scored: []const SetGame, pred: []f32) ![]f32 {
+    var opts: winnet.Options = .{ .net = .set };
+    opts.set = cfg;
+    const t = try train(gpa, opts, seed, n_ids, set, null, steps);
+    errdefer gpa.free(t.net.p);
+    const w: Work = try .init(gpa, t.net.l);
+    defer w.deinit(gpa);
+    predict(&t.net, scored, &w, pred);
+    return t.net.p;
+}
+
 const testing = std.testing;
 
 fn testGame(r: std.Random, n_ids: u32) SetGame {
