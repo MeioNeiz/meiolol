@@ -1980,10 +1980,22 @@ at ec9224a/0c75817, `meiolol-lab compare`):
 | win-comp (mix) | - | -0.00058 ± 0.00029 | -0.00059 .. -0.00057 |
 
 - all vs win-comp, per block (netcheck): negative in 5 of 5 folds (one detected),
-  dev-val a tie (+0.00007 ± 0.00035, 8,500 games); folds + dev-val -0.00030 ± 0.00020.
-  all vs the shuffled-E control: -0.00041 ± 0.00022, negative in all 6 blocks; shuffled
-  vs win-comp a tie (+0.00011 ± 0.00015). Two builds reproduced all's per-game file
-  exactly
+  dev-val a tie (+0.00007 ± 0.00035, 8,500 games). Folds only (44,353 games, netcheck's
+  win-comp, 4b): -0.00037 ± 0.00023; folds + dev-val -0.00030 ± 0.00020. all vs the
+  shuffled-E control: folds only -0.00046 ± 0.00025 (folds + dev -0.00041 ± 0.00022),
+  negative in all 6 blocks; shuffled vs win-comp a tie (folds only +0.00009 ± 0.00017).
+  Two builds reproduced all's per-game file exactly
+- Verifier (meiolol-4b, 2026-10-13): no leak sign. Per-block E fitted on that block's fit
+  games only, scored games never in E's fit; training games' features use E learnt on
+  them (no leave-one-out), a bias towards overfitting, not a fake scored gain, and the
+  shuffled-E control shows none. d12 predates 74e059d's target-z fix (scaling only). By
+  gains split: lopsided -0.71 ± 0.62, EUW -0.56 ± 0.48, rest -0.31 ± 0.26. At the floor
+  (needs 1.6x widening, ±0.37)
+- Pass rule, declared before the sealed seeds land: win-embx all with E seeds 4-6
+  (seed_offset 3, pt-d12-s456) on the 5 folds only, vs win-comp from the same build:
+  mean below 0 by more than 1.6x its paired half-width, and vs the shuffled-E control
+  with seeds 4-6 below 0. No --resample run: a 90% fit set has no E learnt on exactly it,
+  and embfiles refuses any other (pretrain on the resampled sets would be needed)
 - The gain is the seed average: single seeds tie with win-comp (about -0.0001 to
   +0.0002), mix gains nothing from averaging, all and shuffled gain ~0.0003-0.0004
   each from it. So the E content matters (all beats shuffled by the same averaging), but
