@@ -53,9 +53,9 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
   game set: start new models on it only once the coordinator pins it in docs/model.md,
   and rescore any reference model on it before comparing. Re-packs (SNAP/pack/) never
   change rows; code changes can
-- Both sides of a paired comparison from the same build and CPU target (gpu-box lab
-  moves to x86_64_v3 with FMA, 2026-10-13: last-bit changes); rerun the older side if
-  a pair straddles a switch
+- Both sides of a paired comparison from the same build; rerun the older side if a
+  pair straddles a numeric change. The gpu-box x86_64_v3 switch (516fce3) is not one:
+  byte-identical output (strict float mode), 2x faster
 - Condition on game state for items, objectives, playstyle (teams ahead buy and take)
 - Rank in participants is post-game (leaks); rank at game start comes from
   rank_history (from 12 Oct, so later snapshots)
