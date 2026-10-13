@@ -434,6 +434,8 @@ fn analyse(
     try strengthControl(gpa, arena, units.items, resid, in_a, w);
     if (plumbing) |wins| try control(gpa, d, wins, units.items, resid, in_a, w);
 
+    try byPlatform(gpa, d, units.items, res, in_a, in_b, w);
+
     // win-comp's largest train-fit terms (meiolol-0d, dev run wc-a-full), as blue minus
     // red features: the residual's slope per 1 sd, to set against its claimed pp per sd
     {
@@ -695,6 +697,60 @@ fn interaction(units: []const Unit, resid: []const f64, group: []const ?u1) Est 
 /// Per team unit: observed minus win-ratings' chance, and observed minus 50% (raw)
 const Res = struct { model: []const f64, raw: []const f64 };
 
+/// Lopsided as H1 (magic share under 20% or 60%+), the test look's contrast
+fn lopsided(u: Unit) bool {
+    return u.magic_share < 0.2 or u.magic_share >= 0.6;
+}
+
+/// The lopsided contrast and how common lopsided teams are: EUW1 (the test platform)
+/// against the rest, then each platform with enough games
+fn byPlatform(gpa: std.mem.Allocator, d: *const rows.Data, units: []const Unit, res: Res, in_a: []bool, in_b: []bool, w: *Io.Writer) !void {
+    const min_games = 2000;
+    const ids = protocol.platformIds();
+    const eu: u8 = for (ids, 0..) |id, i| {
+        if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
+    } else unreachable;
+    var games: [ids.len]usize = @splat(0);
+    for (units) |u| if (u.side == 0) {
+        games[d.games[u.game].platform] += 1;
+    };
+    try w.writeAll("## Lopsided (magic <20% or 60%+) minus balanced, by platform\n\n");
+    try w.writeAll("| platform | games | lopsided teams | <20% magic | 60%+ magic | raw, pp | after win-ratings, pp |\n| --- | --- | --- | --- | --- | --- | --- |\n");
+    const Group = struct { label: []const u8, eu: ?bool, platform: ?u8 };
+    var groups: std.ArrayList(Group) = .empty;
+    defer groups.deinit(gpa);
+    try groups.append(gpa, .{ .label = "EUW1", .eu = true, .platform = null });
+    try groups.append(gpa, .{ .label = "rest", .eu = false, .platform = null });
+    for (ids, games, 0..) |id, n, pi| if (n >= min_games and pi != eu) try groups.append(gpa, .{ .label = id, .eu = null, .platform = @intCast(pi) });
+    var split: [2]Est = undefined;
+    for (groups.items, 0..) |gr, gi| {
+        var n_teams: usize = 0;
+        var n_ad: usize = 0;
+        var n_ap: usize = 0;
+        for (in_a, in_b, units) |*a, *b, u| {
+            const pf = d.games[u.game].platform;
+            const in = if (gr.eu) |e| (pf == eu) == e else pf == gr.platform.?;
+            a.* = in and lopsided(u);
+            b.* = in and !lopsided(u);
+            if (!in) continue;
+            n_teams += 1;
+            n_ad += @intFromBool(u.magic_share < 0.2);
+            n_ap += @intFromBool(u.magic_share >= 0.6);
+        }
+        const raw = contrast(units, res.raw, in_a, in_b);
+        const adj = contrast(units, res.model, in_a, in_b);
+        if (gi < 2) split[gi] = adj;
+        try w.print("| {s} | {d} | {d:.1}% | {d:.1}% | {d:.1}% | {d:.2} ± {d:.2} | {d:.2} ± {d:.2} |\n", .{
+            gr.label,      n_teams / 2,    pct(n_ad + n_ap, n_teams), pct(n_ad, n_teams), pct(n_ap, n_teams),
+            raw.est * 100, raw.half * 100, adj.est * 100,             adj.half * 100,
+        });
+    }
+    // Disjoint games, so the two intervals combine as independent
+    const diff = split[0].est - split[1].est;
+    const half = @sqrt(split[0].half * split[0].half + split[1].half * split[1].half);
+    try w.print("\nEUW1 minus the rest, after win-ratings: {d:.2} ± {d:.2} pp\n\n", .{ diff * 100, half * 100 });
+}
+
 /// Least-squares slope of r on x scaled to sd 1, in pp, with a robust 95% interval (one
 /// value per game, so games are the clusters)
 fn slopeLine(w: *Io.Writer, label: []const u8, x: []const f64, r: []const f64) !void {
@@ -858,9 +914,10 @@ fn writeUnits(io: Io, d: *const rows.Data, units: []const Unit) !void {
     var buf: [64 * 1024]u8 = undefined;
     var fw = file.writer(io, &buf);
     const w = &fw.interface;
-    try w.writeAll("match_id\tside\ty\tpred\tmagic_share\tfrontline\tcc\tenemy_magic_share\tenemy_frontline\tarmour_lean\n");
-    for (units) |u| try w.print("{s}\t{d}\t{d}\t{d:.4}\t{d:.4}\t{d}\t{d:.3}\t{d:.4}\t{d}\t{d:.2}\n", .{
-        d.games[u.game].match_id, u.side, u.y, u.p, u.magic_share, u.frontline, u.cc, u.enemy_magic_share, u.enemy_frontline, u.armour_lean,
+    try w.writeAll("match_id\tplatform\tside\ty\tpred\tmagic_share\tfrontline\tcc\tenemy_magic_share\tenemy_frontline\tarmour_lean\n");
+    const ids = protocol.platformIds();
+    for (units) |u| try w.print("{s}\t{s}\t{d}\t{d}\t{d:.4}\t{d:.4}\t{d}\t{d:.3}\t{d:.4}\t{d}\t{d:.2}\n", .{
+        d.games[u.game].match_id, ids[d.games[u.game].platform], u.side, u.y, u.p, u.magic_share, u.frontline, u.cc, u.enemy_magic_share, u.enemy_frontline, u.armour_lean,
     });
     try w.flush();
 }
