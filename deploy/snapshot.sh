@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# Analysis snapshot end to end, run on the Mac (it holds the salt; docs/data-safety.md
+# "Analysis snapshots", docs/model.md "Shared protocol"): box VACUUM INTO, streamed here,
+# checked, anonymised, checked again, split, legendaries and pack, then to the gpu-box.
+# The real-id copies (box and here) are deleted on every exit, success or not.
+#
+#   deploy/snapshot.sh make            new data/snap-STAMP here and ~/ml/snaps on the gpu-box
+#   deploy/snapshot.sh prune KEEP      delete every other snap-* here and on the gpu-box
+#   deploy/snapshot.sh schedule install|uninstall   weekly make (launchd, Sundays 04:00)
+#
+# Builds from committed HEAD in a temp tree (other sessions edit the shared checkout).
+# The lab agent's snapshot is LAB_SNAP in deploy/lab-exp.sh: move it to the new one
+# before prune. Env: SNAP_BOX (meiolol-cloud), SNAP_GPU (gpu-box)
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+BOX=${SNAP_BOX:-meiolol-cloud}
+GPU=${SNAP_GPU:-gpu-box}
+DBS="meiolol timeline raw"
+
+# Keepalives: VACUUM INTO prints nothing for minutes, and an idle session was dropped
+box() { ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=6 "$BOX" "$@"; }
+log() { echo "$(date -u +%FT%TZ) $*"; }
+# A toast too: weekly runs have no one watching (wz is the Mac's notifier)
+die() {
+    log "$*"
+    command -v wz > /dev/null && wz notify --for 60 meiolol "snapshot failed: $*"
+    exit 1
+}
+count() { sqlite3 "file:$1?mode=ro" "SELECT count(*) FROM $2"; }
+
+make_snap() {
+    local stamp name raw out bin tree
+    stamp=$(date -u +%Y%m%dT%H%MZ)
+    name=snap-$stamp
+    raw=$ROOT/data/$name-raw
+    out=$ROOT/data/$name
+    bin=$ROOT/zig-out/snapshot
+    [[ -e "$out" || -e "$raw" ]] && die "$out exists"
+    [[ -f ~/.config/meiolol/snap-salt ]] || die "no salt at ~/.config/meiolol/snap-salt"
+    # Here: the real-id copy and the anonymised one side by side, ~2x the box's dbs
+    local need
+    need=$(box "du -cb ~/ml/meiolol/data/{meiolol,timeline,raw}.db | tail -n 1 | cut -f1")
+    (( $(df -k "$ROOT/data" | awk 'NR == 2 { print $4 }') * 1024 > 3 * need )) \
+        || die "not enough space in data/ for 3x $need bytes"
+
+    tree=$(mktemp -d)
+    # Real ids must not outlive the run, whatever happens
+    # shellcheck disable=SC2064 # expand now
+    trap "rm -rf '$raw' '$tree'; box 'rm -rf ~/$name'" EXIT
+    log "building HEAD $(git -C "$ROOT" rev-parse --short HEAD)"
+    git -C "$ROOT" archive HEAD | tar -x -C "$tree"
+    (cd "$tree" && zig build --prefix "$bin" -Doptimize=ReleaseFast --cache-dir "$ROOT/.zig-cache" \
+        && zig build lab --prefix "$bin" -Doptimize=ReleaseFast --cache-dir "$ROOT/.zig-cache")
+
+    # Each VACUUM INTO holds a read that blocks WAL checkpoints while it runs: one at a time
+    log "box: VACUUM INTO ~/$name"
+    # shellcheck disable=SC2087 # expands here on purpose: name and DBS
+    box bash -s <<EOF
+set -euo pipefail
+cd ~/ml/meiolol/data
+need=\$(du -cb meiolol.db timeline.db raw.db | tail -n 1 | cut -f1)
+free=\$(df --output=avail -B1 ~ | tail -n 1)
+(( free > 2 * need )) || { echo "box: \$free bytes free for \$need"; exit 1; }
+mkdir ~/$name
+for d in $DBS; do nice -n 10 sqlite3 "file:\$PWD/\$d.db?mode=ro" "VACUUM INTO '\$HOME/$name/\$d.db'"; done
+EOF
+    log "streaming to $raw"
+    mkdir -p "$raw"
+    box "cd ~/$name && tar cf - *.db | zstd -3 -T2 -q" | zstd -d -q | tar x -C "$raw"
+    box "rm -rf ~/$name"
+    for d in $DBS; do
+        [[ "$(sqlite3 "file:$raw/$d.db?mode=ro" 'PRAGMA quick_check')" == ok ]] || die "$d.db: quick_check failed"
+    done
+
+    log "anonymising"
+    "$bin/bin/meiolol-lab" anonymise "$raw" "$out"
+    check "$raw" "$out"
+    rm -rf "$raw"
+
+    log "split, legendaries, pack"
+    "$bin/bin/meiolol-lab" split "$out" > /dev/null
+    "$bin/bin/meiolol" legendaries --data "$out" --platform all
+    "$bin/bin/meiolol-lab" pack "$out"
+
+    log "to $GPU:ml/snaps/$name"
+    rsync -a "$out" "$GPU:ml/snaps/"
+    log "done: $name. Next: LAB_SNAP in deploy/lab-exp.sh, then deploy/snapshot.sh prune $name"
+    command -v wz > /dev/null && wz notify meiolol "snapshot $name ready (here and gpu-box)"
+    return 0
+}
+
+# The anonymised copy against its source: same rows (but the forgotten list and raw
+# timelines, left out on purpose), no real PUUID, no real match id. Tables keyed by
+# puuidKey (ranks, rank_history) keep only keys of a PUUID the snapshot holds: fewer
+check() {
+    local src=$1 dst=$2 d t a b id
+    [[ "$(count "$dst/meiolol.db" anon_meta)" == 1 ]] || die "check: no anon_meta"
+    for d in $DBS; do
+        for t in $(sqlite3 "file:$src/$d.db?mode=ro" \
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+             AND name NOT IN ('forgotten', 'timeline_docs')"); do
+            a=$(count "$src/$d.db" "$t")
+            b=$(count "$dst/$d.db" "$t")
+            if [[ "$d $t" == "meiolol ranks" || "$d $t" == "meiolol rank_history" ]]; then
+                (( b > 0 && b <= a )) || die "check: $d.$t has $b rows, source $a"
+                log "$t: $b of $a rows (keys without a PUUID left out)"
+            else
+                [[ "$a" == "$b" ]] || die "check: $d.$t has $b rows, source $a"
+            fi
+        done
+    done
+    for t in participants players mastery; do
+        a=$(sqlite3 "file:$dst/meiolol.db?mode=ro" "SELECT count(*) FROM $t WHERE length(puuid) != 16")
+        [[ "$a" == 0 ]] || die "check: $a unhashed PUUIDs in $t"
+    done
+    id=$(sqlite3 "file:$src/meiolol.db?mode=ro" "SELECT match_id FROM matches LIMIT 1")
+    a=$(sqlite3 "file:$dst/meiolol.db?mode=ro" "SELECT count(*) FROM participants WHERE match_id = '$id'")
+    [[ "$a" == 0 ]] || die "check: real match id $id in participants"
+    log "checks passed"
+}
+
+prune() {
+    local keep=$1
+    [[ "$keep" =~ ^snap-[0-9]{8}T[0-9]{4}Z$ ]] || die "KEEP: snap-STAMP"
+    [[ -d "$ROOT/data/$keep" ]] || die "no data/$keep here"
+    ssh "$GPU" "test -d ml/snaps/$keep" || die "no ml/snaps/$keep on $GPU"
+    grep -q "LAB_SNAP:-$keep" "$ROOT/deploy/lab-exp.sh" || die "LAB_SNAP isn't $keep yet"
+    # Only snap-STAMP dirs: data/ also holds hand-made copies (snap, snap-3c)
+    find "$ROOT/data" -maxdepth 1 -type d -regex '.*/snap-[0-9]\{8\}T[0-9]\{4\}Z' \
+        ! -name "$keep" -print -exec rm -rf {} +
+    ssh "$GPU" "find ml/snaps -maxdepth 1 -type d -name 'snap-*T*Z' ! -name '$keep' -print \
+        -exec rm -rf {} +"
+}
+
+schedule() {
+    local plist=net.jacob.meiolol-snapshot.plist
+    case "${1:-}" in
+        install)
+            cp "$ROOT/deploy/$plist" ~/Library/LaunchAgents/
+            launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/$plist
+            echo "installed $plist (log /tmp/meiolol-snapshot.log)"
+            ;;
+        uninstall)
+            launchctl bootout "gui/$(id -u)/${plist%.plist}" || true
+            rm -f ~/Library/LaunchAgents/$plist
+            ;;
+        *) sed -n '7,9p' "$0"; exit 2 ;;
+    esac
+}
+
+case "${1:-}" in
+    make) make_snap ;;
+    schedule) schedule "${2:-}" ;;
+    prune) (( $# == 2 )) || { sed -n '7,9p' "$0"; exit 2; }; prune "$2" ;;
+    *) sed -n '7,9p' "$0"; exit 2 ;;
+esac

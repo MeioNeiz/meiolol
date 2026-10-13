@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Install: deploy/snapshot.sh schedule install. Sundays 04:00; a Mac asleep then runs
+     it on waking -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>net.jacob.meiolol-snapshot</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>exec caffeinate -i "$HOME/personal/meiolol/deploy/snapshot.sh" make</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/tmp/meiolol-snapshot.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/meiolol-snapshot.log</string>
+</dict>
+</plist>

@@ -163,9 +163,11 @@ first.
 
 ### 2. Data for models (with meiolol-2a, who owns snapshots)
 
-- Snapshot cadence: box -> Mac (anonymise, salt stays off the box) -> gpu-box
-  ~/ml/snaps, weekly or per patch, the older one deleted (shared protocol). Scripted
-  end to end instead of by hand; from the raw archive once it exists, not the live DB
+- Snapshot cadence (done, 2026-10-13): `deploy/snapshot.sh make` on the Mac (box
+  VACUUM INTO, anonymise, checks, split, legendaries, pack, to the gpu-box; ~30 min),
+  weekly by launchd (Sundays 04:00, `schedule install`); `prune KEEP` once LAB_SNAP
+  moves. Still from the live DB: meiolol.db and timeline.db need the box anyway, so
+  the archive would only save the raw step
 - Packed rows (done, 2026-10-12): `meiolol-lab pack SNAP` writes rows.Data as
   fixed-width column files in SNAP/pack/ (docs/architecture.md "Packed rows"); rows.load
   reads them when they match the snapshot, else SQLite, so every lab command gets it.

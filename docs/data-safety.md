@@ -153,14 +153,17 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 
 Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
 
-- Made with `VACUUM INTO` on the box, streamed to the Mac (data/snap-STAMP/, gitignored)
-  and the box copy deleted at once. Before anyone models on it, `meiolol-lab anonymise
+- Made by deploy/snapshot.sh (weekly, launchd on the Mac): `VACUUM INTO` on the box,
+  streamed to the Mac (data/snap-STAMP/, gitignored) and the box copy deleted at once. Before anyone models on it, `meiolol-lab anonymise
   SRC DST` (src/lab/anonymise.zig) on the Mac writes a fresh copy: PUUIDs and match ids
   replaced by salted hashes (HMAC-SHA256), Riot IDs, summoner ids and names blanked,
   profile icons zeroed, raw timelines and the forgotten list left out (it refuses a
   snapshot still holding a forgotten player's rows). Then SRC is deleted. Match ids are
   hashed too: a real one gives back the ten players through the API. Only the hashed
-  copy goes to the gpu-box (~/ml/snaps/STAMP/)
+  copy goes to the gpu-box (~/ml/snaps/STAMP/). The script deletes both real-id copies
+  on any exit and checks the result: row counts against the source (fewer only in
+  puuidKey tables, whose keys without a PUUID are left out), every PUUID hashed, a real
+  match id absent
 - The salt is ~/.config/meiolol/snap-salt on the Mac: never in git, never on the box.
   Without it a hash can't be linked back to a PUUID; with it only by hashing candidates
 - Disposable: a snapshot is deleted from the Mac and the gpu-box when a newer one
