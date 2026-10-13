@@ -25,6 +25,20 @@ How to write a line:
 
 ## Win
 
+- 2026-10-14: Screening 252 team traits and team-vs-team matchups beyond champion
+  strength finds only the damage mix: lopsided damage (team magic share far from half)
+  costs about 0.9 percentage points of win chance per team sd, reproducing win-comp's
+  term on games already used for it, and near zero on the newest games alone (-0.1). No
+  other trait, win condition or archetype holds: AD share x enemy armour, 4+ ranged and
+  2+ catch-and-kill engagers passed the screen but not the sealed games; coaching win
+  conditions (front-to-back, dive vs peel, poke vs engage, split vs waveclear, healing vs
+  anti-heal) are each within about ±1 point per sd. Sure: sealed blocks 4-5 and dev-val,
+  26,242 games, z -4.1, Holm over 27 pre-declared names; not detected rather than ruled
+  out (about 1 point per sd for continuous traits, about 3 points for flags one team in
+  ten has, from planted effects). Adding the mix to ratings doesn't measurably improve
+  log loss on the sealed games (-0.00028 ± 0.00042 nats). Site: nothing new; good and
+  bad comps stay the damage-mix reason only. Evidence: docs/model.md "Comp discovery",
+  audit meiolol-33
 - 2026-10-14: No champion was found to turn its own gold lead into wins better than
   others in its role: what 1,000 gold on your champion is worth depends on the role, at
   15 minutes about 8 percentage points for the bot laner, 4.5-7 for top, jungle and mid

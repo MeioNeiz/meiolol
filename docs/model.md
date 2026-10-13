@@ -1408,8 +1408,9 @@ ranged, 4+ melee, no win condition, power-curve shape, front-to-back, hard engag
 objective champion), 21 cross-team coaching products (our X x their Y, centred,
 antisymmetrised), 6 k-means archetypes (fitted once on teams before block 1) and their 15
 pairings, 12 carry terms from meiolol-61's per-fold table (leverage at 10 and 25 minutes,
-scaling): 252 in all, every one in the FDR count (10 were untestable: role-level flags
-every team has, e.g. 1+ top vision is always the support). Per game: blue's residual (won
+scaling): 252 in all, every one in the FDR count (12 rows came out NaN, untestable:
+role-level flags every team has, e.g. 1+ top vision is always the support; still counted
+in m, which is conservative). Per game: blue's residual (won
 minus ratings' chance) on x = trait(blue) - trait(red), OLS slope, robust se; effects in
 win pp per team sd (flags: pp for having it when the other team doesn't). Folds:
 win-comp's blocks (nnexport.foldBounds), ratings and profiles refitted on older games.
@@ -1429,9 +1430,15 @@ Controls (same build, same 252 candidates):
 | planted mix -2.25 | 20261013T230832Z-comps-plant-mix2p25 | mix -4.4, lopsided -4.6 | found |
 | planted mix -1.5 | 20261013T224432Z (pre-fix build) | mix -0.15 ± 0.42 | missed |
 
+The mix -3 and -1.5 plant runs' meta says "dirty 0" (2890cd9, a08ce85) but they were built
+from a scratch tree before comps.zig was committed (3df16c6); the -2.25 plant and the
+permuted control are on the committed build. Plants come back at about 60% of their
+planted size, so the estimates below are likely shrunk towards 0.
+
 Minimum detectable effect (screen, 80% power): about 1 pp per team sd for a continuous
 trait, about 3 pp for a flag one team in ten has (pp per sd of the blue-minus-red
-difference: about 2). The plant runs also showed proxies of a real effect pass too (armour
+difference: about 2; "per team sd" is that over sqrt 2, which assumes the two teams'
+values are independent). The plant runs also showed proxies of a real effect pass too (armour
 pen items, the enchanter archetype under a planted mix), hence the beside-mix column.
 
 Screen, run 20261013T231749Z-comps-screen: 7 passes at q 0.05, 12 at q 0.10 (top rows;
@@ -1461,7 +1468,9 @@ screen; cells within about ±2.5-3 pp (pairings) and ±1.1-1.4 pp (archetypes).
 Mechanism (screen, after an additive champion baseline per block): the mix works neither
 through lane gold (team gold at 14 +11 ± 37 per sd) nor first tower or dragons; its win
 effect is the same in games under 25 and 25-32 minutes (-1.5) and smaller after 32 (-0.6),
-so it is a fight effect, not a late-game one.
+so it works neither through lane gold, first tower nor dragons, and is weaker after 32
+minutes (nothing here tested fights directly). The sealed estimate by block: block 4
+-1.14, block 5 -1.29, dev-val (the newest games) -0.13: about nothing on the newest.
 
 Logistic comp layer on ratings' logit (fit on blocks 1-3, scored on the sealed games,
 nats/game, paired by game): ratings + mix -0.00028 ± 0.00042 (blocks 4-5 -0.00062 ±
@@ -1470,10 +1479,14 @@ nats/game, paired by game): ratings + mix -0.00028 ± 0.00042 (blocks 4-5 -0.000
 empty: the list's three degenerate traits dropped every row (fix: leave NaN columns out).
 
 Reading:
-- Good and bad comps, as far as this data shows: balanced damage is good, lopsided (most
-  of all under a fifth magic) is bad, and that is the only comp trait that holds. It is
-  win-comp's term found again, unprompted, at the top of 252 candidates, and on sealed
-  games (-0.9 pp per team sd, z -4.1)
+- Good and bad comps, as far as this data shows: balanced damage is good, lopsided is
+  bad, and that is the only comp trait that holds (-0.9 pp per team sd, z -4.1). Under a
+  fifth magic adds nothing beyond the curve (0.04 ± 3.42 beside the mix). It reproduces
+  win-comp's term with a new pipeline; it is not a sealed find for the mix: win-comp is
+  ratings + mix, a declared hypothesis already measured on blocks 1-5
+  (compcheck-folds5, -1.90 ± 0.46), so blocks 4-5 were sealed only for the other 26.
+  On dev-val alone it is about nothing (-0.13), and ratings + mix in log loss on the
+  sealed games is not a measurable gain (-0.00028 ± 0.00042; dev-val +0.00043)
 - Everything else is "not detected", bounded by the MDE above: no other team trait is
   worth more than about 1 pp per team sd or 3 pp as a one-in-ten flag. Coaching win
   conditions (front-to-back, dive vs peel, poke vs engage, scaling vs early, split vs
@@ -1484,8 +1497,9 @@ Reading:
   screen effects near the threshold overstate): don't build on them
 - For meiolol-08's additive CPU model and meiolol-35's set nets: the mix term only; the
   rest as candidates with the bounds above
-- Not yet audited by meiolol-4b; nothing in learned.md. Next: rerun on
-  snap-20261013T2253Z (more games), same pre-declared rules
+- Audited by meiolol-33 (14 Oct): cleared with the wording above; learned.md line
+  "2026-10-14: Screening 252 team traits". Next: rerun on snap-20261013T2253Z (more
+  games), same pre-declared rules (meiolol-94)
 
 ### Neural draft models, 2026-10-13 (meiolol-2c)
 
