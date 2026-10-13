@@ -86,7 +86,6 @@ const V = enum {
     lane_cs10,
     cs_pm,
     jungle_pm,
-    wave_burst,
     kills_pm,
     deaths_pm,
     assists_pm,
@@ -188,7 +187,6 @@ fn rowValues(r: rows.Row, extra: ?*const compstats.Seat, g: rows.Game) [nv]f64 {
             out[vi(.lane_cs10)] = c(e, "laneMinionsFirst10Minutes");
             out[vi(.cs_pm)] = c(e, "totalMinionsKilled") / m;
             out[vi(.jungle_pm)] = c(e, "neutralMinionsKilled") / m;
-            out[vi(.wave_burst)] = c(e, "twentyMinionsIn3SecondsCount") / m;
             out[vi(.kills_pm)] = c(e, "kills") / m;
             out[vi(.deaths_pm)] = c(e, "deaths") / m;
             out[vi(.assists_pm)] = c(e, "assists") / m;
@@ -447,6 +445,14 @@ fn countAbove(t: *const Team, v: V, cut: f64) f64 {
     return n;
 }
 
+fn countZAbove(t: *const Team, vs: []const V, cut: f64) usize {
+    var n: usize = 0;
+    for (t.z) |zr| n += @intFromBool(for (vs) |v| {
+        if (zr[vi(v)] >= cut) break true;
+    } else false);
+    return n;
+}
+
 fn makeTeam(p: *const Profiles, champs: [5]u32) Team {
     var t: Team = undefined;
     var phys: f64 = 0;
@@ -489,7 +495,8 @@ fn makeTeam(p: *const Profiles, champs: [5]u32) Team {
     a[@backingInt(Agg.scaling)] = sumZ(&t, &.{.scaling});
     a[@backingInt(Agg.split)] = maxZ(&t, .solo_turrets);
     a[@backingInt(Agg.siege)] = sumZ(&t, &.{ .build_pm, .range });
-    a[@backingInt(Agg.wave)] = sumZ(&t, &.{.wave_burst});
+    // twentyMinionsIn3SecondsCount is 0 in all but ~1 in 200k seats: minions per minute instead
+    a[@backingInt(Agg.wave)] = sumZ(&t, &.{.cs_pm});
     a[@backingInt(Agg.lane)] = sumZ(&t, &.{.lane_cs10});
     a[@backingInt(Agg.vision)] = sumZ(&t, &.{.vision_pm});
     a[@backingInt(Agg.roam)] = sumZ(&t, &.{.roam});
@@ -504,12 +511,13 @@ fn agg(t: *const Team, a: Agg) f64 {
     return t.agg[@backingInt(a)];
 }
 
-/// Profile values that get "has one" / "has two" flags (top share of picks)
+/// Profile values that get "has one" / "has two" flags (top share of picks). Not vision or
+/// epic damage: the support and the jungler always hold the top share, so no team differs
 const flag_vars = [_]V{
-    .taken_share, .tank_share,   .immob_kills, .knock_kills,  .ally_pm,  .save_ally,
-    .wave_burst,  .solo_turrets, .dive_kills,  .hidden_kills, .antiheal, .armour_pen,
-    .magic_pen,   .true_share,   .range,       .scaling,      .early_td, .vision_pm,
-    .build_pm,    .roam,         .dmg_share,   .selfheal_pm,  .immob_pm, .epic_pm,
+    .taken_share,  .tank_share,  .immob_kills,  .knock_kills, .ally_pm,    .save_ally,
+    .solo_turrets, .dive_kills,  .hidden_kills, .antiheal,    .armour_pen, .magic_pen,
+    .true_share,   .range,       .scaling,      .early_td,    .build_pm,   .roam,
+    .dmg_share,    .selfheal_pm, .immob_pm,
 };
 /// Sums kept as controls: additive in the champions, so ratings should hold them (~0)
 const control_vars = [_]V{ .magic_dpm, .taken_pm, .cc_pm, .ally_pm, .build_pm, .gold14, .scaling, .vision_pm };
@@ -534,7 +542,7 @@ const Special = enum {
     front_to_back,
     /// A frontline and an engage, nothing to protect
     hard_engage,
-    /// No champion in the top share for epic monster damage, dragons or heralds
+    /// No seat 1+ role sd above its role in epic monster damage, dragons or heralds
     no_objective,
 };
 
@@ -734,8 +742,7 @@ fn special(s: Special, t: *const Team, p: *const Profiles, tc: *const TeamCuts) 
             t.z[@backingInt(api.Role.bottom)][vi(.dmg_share)] > 0),
         .hard_engage => b(agg(t, .front) >= 1 and countAbove(t, .immob_kills, p.cut[vi(.immob_kills)]) +
             countAbove(t, .knock_kills, p.cut[vi(.knock_kills)]) >= 1),
-        .no_objective => b(countAbove(t, .epic_pm, p.cut[vi(.epic_pm)]) + countAbove(t, .dragon_td, p.cut[vi(.dragon_td)]) +
-            countAbove(t, .herald_td, p.cut[vi(.herald_td)]) == 0),
+        .no_objective => b(countZAbove(t, &.{ .epic_pm, .dragon_td, .herald_td }, 1) == 0),
     };
 }
 
@@ -1746,9 +1753,11 @@ fn confirm(gpa: Allocator, arena: Allocator, io: Io, cands: []const Cand, units:
     try t.writeAll("name\tunit\teffect_pp\tci_pp\tz\tblock4\tblock5\tdev_val\tbeside_mix_pp\tbeside_mix_ci\tjoint_pp\tjoint_ci\n");
     try w.writeAll("| candidate | sealed effect | z | block 4 / 5 / dev-val | beside mix | jointly with all |\n| --- | --- | --- | --- | --- | --- |\n");
 
-    // Joint OLS on sealed: every listed candidate plus mix
+    // Joint OLS on sealed: every listed candidate plus mix. A column with no estimate of its
+    // own (constant, or NaN for every game) would empty the fit, so it stays out
     var joint_idx: std.ArrayList(usize) = .empty;
-    for (names.items) |k| if (k != mix_k) try joint_idx.append(arena, k);
+    for (names.items) |k| if (k != mix_k and !std.math.isNan(slope(xcol[k * nu ..][0..nu], resid, sealed).beta))
+        try joint_idx.append(arena, k);
     try joint_idx.append(arena, mix_k);
     const joint = try ols(gpa, arena, xcol, nu, joint_idx.items, resid, sealed);
 
@@ -1763,16 +1772,18 @@ fn confirm(gpa: Allocator, arena: Allocator, io: Io, cands: []const Cand, units:
             b.* = slope(x, resid, keep).beta * sc;
         }
         const pair = try ols(gpa, arena, xcol, nu, if (k == mix_k) &.{k} else &.{ k, mix_k }, resid, sealed);
-        const ji = std.mem.indexOfScalar(usize, joint_idx.items, k).?;
+        const ji = std.mem.indexOfScalar(usize, joint_idx.items, k);
+        const jb = if (ji) |j| joint.beta[j] else nan;
+        const js = if (ji) |j| joint.se[j] else nan;
         try t.print("{s}\t{s}\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\n", .{
-            cd.name,             if (cd.flag) "pp" else "pp/sd", r.beta * sc, 1.96 * r.se * sc,  r.beta / r.se,
-            bl[0],               bl[1],                          bl[2],       pair.beta[0] * sc, 1.96 * pair.se[0] * sc,
-            joint.beta[ji] * sc, 1.96 * joint.se[ji] * sc,
+            cd.name, if (cd.flag) "pp" else "pp/sd", r.beta * sc, 1.96 * r.se * sc,  r.beta / r.se,
+            bl[0],   bl[1],                          bl[2],       pair.beta[0] * sc, 1.96 * pair.se[0] * sc,
+            jb * sc, 1.96 * js * sc,
         });
         try w.print("| {s} | {d:.2} ± {d:.2} {s} | {d:.2} | {d:.1} / {d:.1} / {d:.1} | {d:.2} ± {d:.2} | {d:.2} ± {d:.2} |\n", .{
-            cd.name,             r.beta * sc,              1.96 * r.se * sc, if (cd.flag) "pp" else "pp/sd", r.beta / r.se,
-            bl[0],               bl[1],                    bl[2],            pair.beta[0] * sc,              1.96 * pair.se[0] * sc,
-            joint.beta[ji] * sc, 1.96 * joint.se[ji] * sc,
+            cd.name, r.beta * sc,    1.96 * r.se * sc, if (cd.flag) "pp" else "pp/sd", r.beta / r.se,
+            bl[0],   bl[1],          bl[2],            pair.beta[0] * sc,              1.96 * pair.se[0] * sc,
+            jb * sc, 1.96 * js * sc,
         });
     }
     try t.flush();
