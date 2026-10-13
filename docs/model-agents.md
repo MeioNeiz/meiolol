@@ -79,7 +79,10 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
   now, campaign on the pinned snapshot
 - Collected: GPU vs CPU (6f, ccfbd95, docs/compute.md): deep draft net on the 3080
   (3.9x at 175k games, ~11x from 2.8M); fm and additive models on the CPU (sweeps tie)
-- Results to collect: winchance fix (ff), mastery and flex live
+- Collected: winchance smooth weights (ff, 6c7d50d; ties per-minute refit on test, jump
+  from weights 19.2 -> 4.4 pp; ff installs the jomove API binary); playstyle clustered
+  intervals (8c84735, about the same width)
+- Results to collect: mastery and flex live
   with matches/day before and after (11), next snapshot pinned in docs/model.md
 - meiolol-58's solo/duo lookup commit: Jacob must type "commit" in its window (pane
   657); meiolol-11's mastery crawl.zig commit waits on it
