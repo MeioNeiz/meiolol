@@ -1,0 +1,10 @@
+# title: Where does a model's gain sit, by draft type? (model-free check)
+model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+win-comp, all games	ratings	dev-val	0.00109	0.00141	1			8500		20261013T190836Z-wc-a-full	gains reproduces 0d's own dev-val number
+win-comp, games with a lopsided team	ratings	dev-val	0.00189	0.00453	1			1648		20261013T190836Z-wc-a-full	magic share <20% or 60%+
+win-comp, games with both teams balanced	ratings	dev-val	0.00090	0.00137	1			6852		20261013T190836Z-wc-a-full	
+win-comp, closest strength quarter	ratings	dev-val	0.00226	0.00287	1			2130		20261013T190836Z-wc-a-full	
+win-comp, 2nd strength quarter	ratings	dev-val	0.00210	0.00293	1			2121		20261013T190836Z-wc-a-full	
+win-comp, 3rd strength quarter	ratings	dev-val	0.00008	0.00270	1			2127		20261013T190836Z-wc-a-full	
+win-comp, widest strength quarter	ratings	dev-val	-0.00006	0.00277	1			2122		20261013T190836Z-wc-a-full	
+win-comp, games with a team without a frontline-ish pick	ratings	dev-val	0.00130	0.00199	1			4112		20261013T190836Z-wc-a-full	best mitigated share < 0.51
