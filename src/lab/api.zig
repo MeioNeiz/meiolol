@@ -76,7 +76,35 @@ pub const Row = struct {
     exp: Experience,
     /// NaN when unknown (no timeline to minute 15, no completed item)
     y: [outcome_count]f32,
+    /// What the player did this game (SeatStat): training rows only, never in a Query, so
+    /// a candidate may average them into champion profiles but never see a scored game's
+    stats: [seat_stat_count]f32 = @splat(std.math.nan(f32)),
 };
+
+/// Per player per game, raw values from the raw summary and timeline
+/// (SNAP/seat_stats.tsv, `meiolol-lab seat-stats`); NaN when unknown. Damage to and from
+/// champions only; armor15 and mr15 from the timeline's championStats at minute 15;
+/// attack_range from the champion's static data
+pub const SeatStat = enum {
+    minutes,
+    dmg_phys,
+    dmg_magic,
+    dmg_true,
+    taken_phys,
+    taken_magic,
+    taken_true,
+    mitigated,
+    cc_time,
+    immobilisations,
+    heal,
+    heal_allies,
+    shield_allies,
+    dmg_buildings,
+    armor15,
+    mr15,
+    attack_range,
+};
+pub const seat_stat_count = @typeInfo(SeatStat).@"enum".field_names.len;
 
 /// Every visible game older than the scored ones; rows of a game are adjacent
 pub const Train = struct {
