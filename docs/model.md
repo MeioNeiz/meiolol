@@ -1233,6 +1233,35 @@ same build as 0d's win-comp look):
 - The positive control must show the strength gradient (raw Q1 and Q4 at least ±3 pp)
   and win-ratings absorbing it, or the look's contrast isn't read
 
+Test look (2026-10-13, meiolol-4b; run 20261013T195844Z-final-compcheck, gpu-box, clean
+clone of c26ffa8; 0d's win-comp look ran on 7d2ae5a, and compcheck.zig, harness.zig and
+rows.zig are unchanged between the two, so one build): 10,604 EUW1 test games, 21,208
+team units; profiles from 1,721,440 training rows (100.0% with seat stats), champion
+fallback for 115 of 106,040 picks.
+
+| lift difference quartile | teams | lifts say | observed | observed - 50%, pp | observed - win-ratings, pp |
+| --- | --- | --- | --- | --- | --- |
+| Q1 | 5,303 | 45.1% | 45.6% | -4.42 ± 1.34 | +1.44 ± 1.34 |
+| Q2 | 5,302 | 48.7% | 48.0% | -1.98 ± 1.34 | -0.48 ± 1.34 |
+| Q3 | 5,302 | 51.3% | 52.0% | +1.98 ± 1.34 | +0.48 ± 1.34 |
+| Q4 | 5,301 | 54.9% | 54.4% | +4.42 ± 1.34 | -1.44 ± 1.34 |
+
+| magic share | teams | win-ratings | observed | observed - 50%, pp | observed - win-ratings, pp |
+| --- | --- | --- | --- | --- | --- |
+| lopsided | 2,183 (10.3%) | 50.7% | 48.3% | -1.67 ± 1.98 | -2.40 ± 1.98 |
+| <20% | 497 (2.3%) | 48.6% | 46.3% | -3.72 ± 4.33 | -2.28 ± 4.36 |
+| 60%+ | 1,686 (7.9%) | 51.4% | 48.9% | -1.07 ± 2.29 | -2.43 ± 2.28 |
+| balanced | 19,025 | 49.9% | 50.2% | +0.19 ± 0.23 | +0.27 ± 0.23 |
+
+Pre-declared contrast, lopsided minus balanced: -2.67 ± 2.21 pp after win-ratings
+(-1.86 ± 2.21 raw). Read by the plan: control holds (raw Q1/Q4 ±4.4; win-ratings takes
+the gradient out, leaving a reversed +1.4 ± 1.3 at the ends, i.e. win-ratings a little
+overconfident on test, small beside the gradient and not lopsided-specific: lopsided
+teams' predicted 50.7% vs balanced 49.9%). Contrast **consistent**: the interval
+(-4.9 to -0.5) covers the folds' -3.0, and also excludes 0. Folds and test together: a
+lopsided damage mix costs about 3 points beyond the champions, in EUW too. The <20%
+side is too small on test (±4.4) to check the folds' -5.3 on its own.
+
 Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
 Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
 only" covers dev, select, final); rows.load holds only eval's train (older than the first

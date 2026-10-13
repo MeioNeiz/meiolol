@@ -25,14 +25,15 @@ How to write a line:
 
 ## Win
 
-- 2026-10-13 (early): A team that deals under a fifth of its damage as magic wins about
+- 2026-10-13: A team that deals under a fifth of its damage as magic wins about
   5 percentage points less often than its champions alone suggest, and lopsided teams
   (that, or over 60% magic) about 3 points less than balanced ones; how many
   tanky champions a team has and how much crowd control it brings make about a point of
   difference at most. Sure: 44,353 games from every region in five forward time blocks
-  (dev, no test look), each team's mix from its champions' averages over the games before
+  (dev), each team's mix from its champions' averages over the games before
   its block, beyond a champion-strength model fitted on the same older games. Lopsided
-  minus balanced -3.0 ± 1.1 points, in every block (-2.4 to -3.6); the 3% of teams under
+  minus balanced -3.0 ± 1.1 points, in every block (-2.4 to -3.6); on 10,604 held-out
+  EUW test games (one pre-declared look) -2.7 ± 2.2, consistent; the 3% of teams under
   20% magic damage -5.3 ± 1.7. In iTero's rarer extremes (under 20% or over 80%
   physical, 1% of teams) -10 ± 5 and -8 ± 4, like iTero's unadjusted -9 and -6, so their
   gap is not just which champions sit in those comps. About one team in ten is
@@ -40,9 +41,10 @@ How to write a line:
   (+0.5 ± 2.5; the 8,500 newest EUW games showed -0.3 ± 2.5). No frontline -0.4 ± 0.8;
   weakest-frontline quarter -0.9 ± 0.8 and least-CC quarter -0.8 ± 0.8, just past zero
   but not once seven tests are allowed for; armour-heavy picks into magic damage not
-  detected (-2.5 ± 2.6). Site: nothing yet; after a test look, a lopsided-damage warning
-  with its size; no frontline or CC warnings. Evidence: docs/model.md "Comp features from
-  champion profiles", model-free cross-check (folds)
+  detected (-2.5 ± 2.6); these and the <20% size are from the blocks only, the test
+  checked lopsided minus balanced alone. Site: a lopsided-damage warning with its size
+  (about 3 points); no frontline or CC warnings. Evidence: docs/model.md "Comp features
+  from champion profiles", model-free cross-check (folds and test look)
 - ~~2026-10-13 (early, to be updated with the larger held-out check and the win-comp
   model): Whether a team's damage is mostly magic or mostly physical, how many tanky
   champions it has, or how much crowd control it brings does not detectably change its
