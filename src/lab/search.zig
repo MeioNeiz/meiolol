@@ -52,7 +52,7 @@ fn screenFeatures(
     w: *Io.Writer,
 ) !void {
     const nf = C.feature_names.len;
-    var v = try harness.buildTrain(gpa, d, players, .dev, c, 1);
+    var v = try harness.buildTrain(gpa, d, players, .dev, c, 1, harness.afterGameRank(C));
     defer v.deinit();
     var base = try harness.Baseline.fit(gpa, &v.train);
     defer base.deinit(gpa);
@@ -74,7 +74,7 @@ fn screenFeatures(
     for (d.rows) |r| {
         const g = d.games[r.game];
         if (!harness.visible(.dev, c, g) or std.math.isNan(r.y[k])) continue;
-        const q = harness.query(C.scope, g, players[r.game], r);
+        const q = harness.query(C.scope, g, players[r.game], r, harness.afterGameRank(C));
         var f: [nf]f32 = undefined;
         C.features(&m, &q, &f);
         const key = cellKey(q.champion, q.role);
@@ -116,7 +116,7 @@ fn screenFeatures(
     for (d.rows) |r| {
         const g = d.games[r.game];
         if (!harness.scored(.dev, c, g) or std.math.isNan(r.y[k])) continue;
-        const q = harness.query(C.scope, g, players[r.game], r);
+        const q = harness.query(C.scope, g, players[r.game], r, harness.afterGameRank(C));
         var f: [nf]f32 = undefined;
         C.features(&m, &q, &f);
         const cell = cells.get(cellKey(q.champion, q.role)) orelse Cell{};
@@ -216,7 +216,7 @@ pub fn diagnose(
             return dd.rows[ri].side;
         }
         fn tier(dd: *const rows.Data, ri: u32) ?u64 {
-            return if (dd.rows[ri].rank) |x| x / 4 else 10;
+            return if (dd.rows[ri].rank_after) |x| x / 4 else 10;
         }
         fn patch(dd: *const rows.Data, ri: u32) ?u64 {
             return dd.games[dd.rows[ri].game].patch;

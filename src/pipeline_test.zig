@@ -243,7 +243,7 @@ test "admin page from the fixture games and a crawl log" {
     try tmp.dir.writeFile(io, .{ .sub_path = "admin-actions.log", .data = "2025-10-11T23:05:00Z\tcrawl-restart\tok\t\n" });
     try tmp.dir.createDirPath(io, "backups/segments");
     try tmp.dir.writeFile(io, .{ .sub_path = "backups/segments/a", .data = "12345" });
-    try tmp.dir.writeFile(io, .{ .sub_path = "crawl.args", .data = "--reserve 20\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "crawl.args", .data = "--proxy 10.0.0.3:8092\n" });
 
     const out = try std.fs.path.join(arena, &.{ dir, "admin" });
     for (0..2) |_| try admin.generate(gpa, io, db, .{
@@ -275,7 +275,7 @@ test "admin page from the fixture games and a crawl log" {
         "\"storage\":{\"generated\":",
         "\"rows\":[[\"meiolol\",\"matches\",\"table\",4096,12]]",
         "\"backups\":{\"bytes\":5,\"files\":1,\"newest\":",
-        "\"riot\":{\"app_limit\":\"20:1,100:120\",\"method_limits\":{},\"crawl_args\":\"--reserve 20\"," ++
+        "\"riot\":{\"app_limit\":\"20:1,100:120\",\"method_limits\":{},\"crawl_args\":\"--proxy 10.0.0.3:8092\"," ++
             "\"key_problems\":[[1760223780,\"error(riot): N on /lol/match/vN/matches/…: key missing or expired\"]," ++
             "[1760223780,\"KEY REJECTED\"]]}",
     }) |want| if (std.mem.indexOf(u8, json, want) == null) {
@@ -320,6 +320,7 @@ test "fixture games to lab rows, from SQLite and packed" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     const snap = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path });
+    var day0: i64 = 0;
     {
         const db = try store.schema.open(gpa, snap);
         defer db.close();
@@ -329,6 +330,12 @@ test "fixture games to lab rows, from SQLite and packed" {
             "WHEN 1 THEN NULL ELSE 'DIAMOND' END, division = 'II'");
         // The same player in each slot of every game, slot 9 unknown: experience fills in
         try db.exec("UPDATE participants SET puuid = CASE slot WHEN 9 THEN NULL ELSE 'p' || slot END");
+        // Ladder: p0 changes rank on the third day (Gold II before, Diamond I from then);
+        // p1 last seen on the first day; the rest unknown before their game's day
+        day0 = @divFloor((try db.scalar("SELECT min(game_start) FROM matches", .{})).?, 86_400_000);
+        const p0 = store.schema.puuidKey("p0");
+        try db.run("INSERT INTO rank_history VALUES (?1, ?2, 25, 0, 1, 0), (?1, ?3, 12, 0, 2, 0)", .{ p0, day0, day0 + 2 });
+        try db.run("INSERT INTO ranks VALUES (?1, 12, ?2, 0, 2, 0), (?3, 25, ?4, 0, 1, 0)", .{ p0, day0 + 5, store.schema.puuidKey("p1"), day0 });
     }
     var legendaries: std.AutoHashMapUnmanaged(u64, void) = .empty;
     defer legendaries.deinit(gpa);
@@ -339,7 +346,7 @@ test "fixture games to lab rows, from SQLite and packed" {
     // The fixture covers what the pack must carry: both sides of the split, two
     // platforms, games with and without timeline outcomes, ranked and unranked rows,
     // players with and without earlier games
-    var seen: struct { tests: usize = 0, na: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0, exp: usize = 0 } = .{};
+    var seen: struct { tests: usize = 0, na: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0, exp: usize = 0, start: [3]usize = @splat(0) } = .{};
     for (sql.games) |g| {
         try testing.expect(g.duration_s > 1000 and g.duration_s <= 1620);
         seen.tests += @intFromBool(g.is_test);
@@ -347,7 +354,16 @@ test "fixture games to lab rows, from SQLite and packed" {
         seen.tl += @intFromBool(g.timeline15);
     }
     for (sql.rows) |r| {
-        seen.unranked += @intFromBool(r.rank == null);
+        seen.unranked += @intFromBool(r.rank_after == null);
+        // Gold II = 14, Diamond I = 27 (0 Iron IV): only a sighting on an earlier day counts
+        const day = @divFloor(sql.games[r.game].start, 86_400_000) - day0;
+        if (r.slot == 0) {
+            const want: ?u8 = if (day < 1) null else if (day < 3) 14 else 27;
+            try testing.expectEqual(want, r.rank_start);
+            seen.start[@min(@as(usize, @intCast(day)), 2)] += 1;
+        } else if (r.slot == 1) {
+            try testing.expectEqual(@as(?u8, if (day < 1) null else 14), r.rank_start);
+        } else try testing.expectEqual(null, r.rank_start);
         seen.items += @intFromBool(!std.math.isNan(r.y[@backingInt(lab_rows.Outcome.first_item)]));
         seen.exp += @intFromBool(r.champ_games > 0);
     }
@@ -355,6 +371,7 @@ test "fixture games to lab rows, from SQLite and packed" {
     try testing.expect(seen.tests > 0 and seen.tests < sql.games.len and seen.na > 0);
     try testing.expect(seen.tl > 0 and seen.tl < sql.games.len and seen.unranked > 0 and seen.items > 0);
     try testing.expect(seen.exp > 0 and seen.exp < sql.rows.len);
+    for (seen.start) |n| try testing.expect(n > 0);
 
     try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &legendaries));
     _ = try lab_pack.write(gpa, io, snap, &legendaries);

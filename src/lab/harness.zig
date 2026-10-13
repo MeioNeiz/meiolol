@@ -43,6 +43,13 @@ pub fn checkCandidate(comptime C: type) void {
     _ = @as(api.Scope, C.scope);
 }
 
+/// A candidate with `pub const after_game_rank = true` also gets rows.Row.rank_after
+/// (api.Row and api.Query rank_after), the rank looked up after the game: a dev-only
+/// diagnostic for how much that rank leaks, never selection, final or test preds
+pub fn afterGameRank(comptime C: type) bool {
+    return @hasDecl(C, "after_game_rank") and C.after_game_rank;
+}
+
 /// Scored games of a phase start at or after its cut; its visible games are older
 pub const Cuts = struct {
     dev: i64,
@@ -111,7 +118,7 @@ pub fn gamePlayers(gpa: std.mem.Allocator, d: *const rows.Data) ![]Players {
     const out = try gpa.alloc(Players, d.games.len);
     @memset(out, .{});
     for (d.rows) |r| {
-        out[r.game].ranks[r.side][@backingInt(r.role)] = r.rank;
+        out[r.game].ranks[r.side][@backingInt(r.role)] = r.rank_start;
         out[r.game].exp[r.side][@backingInt(r.role)] = experience(r);
     }
     return out;
@@ -130,7 +137,8 @@ pub fn experience(r: rows.Row) api.Experience {
     };
 }
 
-pub fn query(scope: api.Scope, g: rows.Game, players: Players, r: rows.Row) api.Query {
+/// after: fill rank_after (afterGameRank, dev only)
+pub fn query(scope: api.Scope, g: rows.Game, players: Players, r: rows.Row, after: bool) api.Query {
     return .{
         .start = g.start,
         .patch = g.patch,
@@ -138,7 +146,8 @@ pub fn query(scope: api.Scope, g: rows.Game, players: Players, r: rows.Row) api.
         .side = r.side,
         .role = role(r.role),
         .champion = r.champion,
-        .rank = r.rank,
+        .rank = r.rank_start,
+        .rank_after = if (after) r.rank_after else null,
         .teams = g.teams,
         .ranks = switch (scope) {
             .champ_select => null,
@@ -163,9 +172,10 @@ pub const Visible = struct {
 };
 
 /// fraction: share of the visible games kept (dev only: selection and test always fit
-/// on everything)
-pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, p: Phase, c: Cuts, fraction: f64) !Visible {
+/// on everything). after: fill rank_after (afterGameRank, dev only)
+pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, p: Phase, c: Cuts, fraction: f64, after: bool) !Visible {
     std.debug.assert(p == .dev or fraction >= 1);
+    std.debug.assert(p == .dev or !after);
     var v: Visible = .{ .arena = .init(gpa), .train = .{ .games = &.{}, .rows = &.{} } };
     errdefer v.deinit();
     const a = v.arena.allocator();
@@ -186,7 +196,8 @@ pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, players: []const 
             .side = r.side,
             .role = role(r.role),
             .champion = r.champion,
-            .rank = r.rank,
+            .rank = r.rank_start,
+            .rank_after = if (after) r.rank_after else null,
             .exp = experience(r),
             .y = r.y,
         });
@@ -317,7 +328,8 @@ pub const ScoreOptions = struct {
 
 pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, c: Cuts, p: Phase, opts: ScoreOptions) !Scores {
     comptime checkCandidate(C);
-    var v = try buildTrain(gpa, d, players, p, c, opts.fraction);
+    if (afterGameRank(C) and p != .dev) return error.AfterGameRankDevOnly;
+    var v = try buildTrain(gpa, d, players, p, c, opts.fraction, afterGameRank(C));
     defer v.deinit();
     var base = try Baseline.fit(gpa, &v.train);
     defer base.deinit(gpa);
@@ -351,7 +363,7 @@ pub fn score(comptime C: type, gpa: std.mem.Allocator, d: *const rows.Data, play
         };
         for (row.items, cand, count) |ri, *o, *cnt| {
             const r = d.rows[ri];
-            const q = query(C.scope, d.games[r.game], players[r.game], r);
+            const q = query(C.scope, d.games[r.game], players[r.game], r, afterGameRank(C));
             const pred = C.predict(&m, &q);
             for (pred, o, cnt) |x, *acc, *nk| if (!std.math.isNan(x)) {
                 acc.* += x;
@@ -499,7 +511,8 @@ pub const Fixture = struct {
                     .side = side,
                     .role = ro,
                     .champion = ch,
-                    .rank = @intCast(rnd.intRangeLessThan(u8, 16, 28)),
+                    .rank_start = @intCast(rnd.intRangeLessThan(u8, 16, 28)),
+                    .rank_after = @intCast(rnd.intRangeLessThan(u8, 16, 28)),
                     .y = y,
                 });
                 try players.append(gpa, player_prng.random().intRangeLessThan(u32, 0, 200));
@@ -521,6 +534,8 @@ fn SpyIn(comptime s: api.Scope) type {
         pub const scope: api.Scope = s;
         pub const Model = struct { newest: i64 };
         var saw_ranks = false;
+        /// rank_after in a training row or a query
+        var saw_after = false;
         var saw_exps = false;
         var exps_nonzero = false;
         /// The query's own exp differs from its slot in exps
@@ -530,6 +545,7 @@ fn SpyIn(comptime s: api.Scope) type {
 
         fn reset() void {
             saw_ranks = false;
+            saw_after = false;
             saw_exps = false;
             exps_nonzero = false;
             exps_mismatch = false;
@@ -538,6 +554,9 @@ fn SpyIn(comptime s: api.Scope) type {
 
         pub fn fit(_: std.mem.Allocator, t: *const api.Train, _: api.Options) !Model {
             train_games = t.games.len;
+            for (t.rows) |r| if (r.rank_after != null) {
+                saw_after = true;
+            };
             var newest: i64 = std.math.minInt(i64);
             for (t.games) |g| newest = @max(newest, g.start);
             return .{ .newest = newest };
@@ -545,6 +564,7 @@ fn SpyIn(comptime s: api.Scope) type {
 
         pub fn predict(_: *const Model, q: *const api.Query) api.Prediction {
             if (q.ranks != null) saw_ranks = true;
+            if (q.rank_after != null) saw_after = true;
             if (q.exps) |e| {
                 saw_exps = true;
                 const own = e[q.side][@backingInt(q.role)];
@@ -623,7 +643,7 @@ test "candidates see no scored games and no other ranks in champ select" {
     const c = try cuts(gpa, &f.data, 0);
     for ([_]Phase{ .dev, .select, .final }) |p| {
         Spy.reset();
-        var v = try buildTrain(gpa, &f.data, players, p, c, 1);
+        var v = try buildTrain(gpa, &f.data, players, p, c, 1, false);
         defer v.deinit();
         var newest: i64 = std.math.minInt(i64);
         for (v.train.games) |g| newest = @max(newest, g.start);
@@ -632,6 +652,7 @@ test "candidates see no scored games and no other ranks in champ select" {
         try std.testing.expect(s.row.len > 0);
         try std.testing.expect(newest < Spy.newest_query);
         try std.testing.expect(!Spy.saw_ranks);
+        try std.testing.expect(!Spy.saw_after);
         try std.testing.expect(!Spy.saw_exps);
         // No opinion everywhere: scored exactly as the baseline
         try std.testing.expectEqual(s.row.len, s.no_opinion[0]);
@@ -656,6 +677,36 @@ test "others' experience only in internal scope, ranks in post-game and internal
             try std.testing.expectEqual(sc == .internal, S.exps_nonzero);
             try std.testing.expect(!S.exps_mismatch);
         }
+    }
+}
+
+/// Spy that asks for the after-game rank
+const AfterSpy = struct {
+    pub const scope: api.Scope = .champ_select;
+    pub const after_game_rank = true;
+    pub const Model = Spy.Model;
+    pub const fit = Spy.fit;
+    pub const predict = Spy.predict;
+    pub const deinit = Spy.deinit;
+};
+
+test "the after-game rank reaches only candidates that ask, in dev runs only" {
+    const gpa = std.testing.allocator;
+    var f = try Fixture.init(gpa, 600, 9);
+    defer f.data.deinit();
+    const players = try gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
+    const c = try cuts(gpa, &f.data, 0);
+    Spy.reset();
+    var s = try score(AfterSpy, gpa, &f.data, players, c, .dev, .{});
+    s.deinit(gpa);
+    try std.testing.expect(Spy.saw_after);
+    for ([_]Phase{ .select, .final }) |p| {
+        try std.testing.expectError(error.AfterGameRankDevOnly, score(AfterSpy, gpa, &f.data, players, c, p, .{}));
+    }
+    // Everyone else's ranks are the pre-game ones
+    for (f.data.rows) |r| {
+        try std.testing.expectEqual(r.rank_start, players[r.game].ranks[r.side][@backingInt(r.role)]);
     }
 }
 

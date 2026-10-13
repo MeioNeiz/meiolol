@@ -355,7 +355,7 @@ fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
             .side = r.side,
             .role = @fromBackingInt(@backingInt(r.role)),
             .champion = r.champion,
-            .rank = r.rank,
+            .rank = r.rank_start,
             .exp = harness.experience(r),
             .y = r.y,
         });

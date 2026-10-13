@@ -35,8 +35,12 @@ pub const Row = struct {
     side: u1,
     role: core.Role,
     champion: u32,
-    /// Higher is better: 0 Iron IV .. 39 Challenger I; null unranked
-    rank: ?u8,
+    /// Higher is better: 0 Iron IV .. 39 Challenger I; null unranked or unknown.
+    /// participants.tier, looked up after the game (sometimes days later), so it knows
+    /// recent results: a dev-only diagnostic and report slices, never a model feature
+    rank_after: ?u8 = null,
+    /// The ladder rank before the game's day (fillRankStart); null when unknown
+    rank_start: ?u8 = null,
     /// Per participant; win as 0/1. NaN when unknown (no timeline, no completed item)
     y: [outcome_count]f32,
     /// This player's games in the data that ended before this one started (fillExperience):
@@ -143,6 +147,8 @@ pub fn loadSql(
     defer player_ids.deinit(gpa);
     var by_game: std.AutoHashMapUnmanaged(u32, [10]u32) = .empty;
     defer by_game.deinit(gpa);
+    var keys: std.ArrayList(?i64) = .empty;
+    defer keys.deinit(gpa);
     {
         var q = try db.prepare(
             \\SELECT match_id, slot, team_id, position, champion_id, tier, division, gold14, puuid,
@@ -171,6 +177,7 @@ pub fn loadSql(
                 break :blk p.value_ptr.*;
             };
             try players.append(gpa, player);
+            try keys.append(gpa, if (q.isNull(8)) null else store.schema.puuidKey(q.bytes(8)));
             const deaths: f32 = @floatFromInt(@max(q.optInt(10) orelse 0, 1));
             try kdas.append(gpa, @as(f32, @floatFromInt((q.optInt(9) orelse 0) + (q.optInt(11) orelse 0))) / deaths);
             try rows.append(arena, .{
@@ -179,7 +186,7 @@ pub fn loadSql(
                 .side = side,
                 .role = role,
                 .champion = @intCast(q.int(4)),
-                .rank = if (packed_rank) |r| @intCast(39 - r) else null,
+                .rank_after = if (packed_rank) |r| ladderRank(r) else null,
                 .y = y,
             });
         }
@@ -229,12 +236,73 @@ pub fn loadSql(
     }
 
     try fillExperience(gpa, games.items, rows.items, players.items, kdas.items);
+    try fillRankStart(gpa, db, games.items, rows.items, keys.items);
     data.games = games.items;
     data.rows = rows.items;
     return data;
 }
 
 pub const no_player = std.math.maxInt(u32);
+
+/// store.schema.packRank (0 Challenger I) to Row's order (0 Iron IV); null out of range
+fn ladderRank(packed_rank: i64) ?u8 {
+    return if (packed_rank >= 0 and packed_rank <= 39) @intCast(39 - packed_rank) else null;
+}
+
+const ms_per_day = 86_400_000;
+
+/// Row.rank_start: the player's ladder rank as last seen on a UTC day before the game's,
+/// from ranks when its last sighting (seen_day) is that old, else rank_history's latest
+/// change before that day (a row per day the ladder showed a change, from 2026-10-12).
+/// A sighting on the game's own day may come after the game, so it never counts.
+/// keys[i] is rows[i]'s schema.puuidKey, null when the PUUID is unknown
+fn fillRankStart(gpa: std.mem.Allocator, db: store.Db, games: []const Game, rws: []Row, keys: []const ?i64) !void {
+    std.debug.assert(rws.len == keys.len);
+    const Player = struct { rank: i64 = -1, seen_day: i64 = std.math.maxInt(i64), first: u32 = 0, len: u32 = 0 };
+    const Change = struct { day: i64, rank: i64 };
+    var want: std.AutoHashMapUnmanaged(i64, Player) = .empty;
+    defer want.deinit(gpa);
+    for (keys) |k| if (k) |key| try want.put(gpa, key, .{});
+    {
+        var q = try db.prepare("SELECT key, rank, seen_day FROM ranks");
+        defer q.deinit();
+        try q.bind(.{});
+        while (try q.step()) {
+            const p = want.getPtr(q.int(0)) orelse continue;
+            p.rank = q.int(1);
+            p.seen_day = q.int(2);
+        }
+    }
+    var changes: std.ArrayList(Change) = .empty;
+    defer changes.deinit(gpa);
+    {
+        var q = try db.prepare("SELECT key, day, rank FROM rank_history ORDER BY key, day");
+        defer q.deinit();
+        try q.bind(.{});
+        while (try q.step()) {
+            const p = want.getPtr(q.int(0)) orelse continue;
+            if (p.len == 0) p.first = @intCast(changes.items.len);
+            p.len += 1;
+            try changes.append(gpa, .{ .day = q.int(1), .rank = q.int(2) });
+        }
+    }
+    for (rws, keys) |*r, k| {
+        const p = want.get(k orelse continue).?;
+        const day = @divFloor(games[r.game].start, ms_per_day);
+        if (p.seen_day < day) {
+            r.rank_start = ladderRank(p.rank);
+            continue;
+        }
+        var i = p.len;
+        while (i > 0) : (i -= 1) {
+            const c = changes.items[p.first + i - 1];
+            if (c.day < day) {
+                r.rank_start = ladderRank(c.rank);
+                break;
+            }
+        }
+    }
+}
 
 /// Games over before 15:00 (remakes, early forfeits) don't count as experience; the
 /// harness's min_duration_s
@@ -461,7 +529,6 @@ test "experience counts only games that ended before the start" {
                 .side = @intCast(slot / 5),
                 .role = @fromBackingInt(@as(u3, @intCast(slot % 5))),
                 .champion = rnd.intRangeLessThan(u32, 1, 4),
-                .rank = null,
                 .y = y: {
                     var y: [outcome_count]f32 = @splat(std.math.nan(f32));
                     if (gi % 3 != 0) {

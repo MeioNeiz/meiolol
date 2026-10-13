@@ -2,7 +2,8 @@
 //! src/lab/cand/<campaign>/root.zig, that can import only std and this file. It fits on
 //! the training games the harness hands it, then predicts one query at a time; a query
 //! never carries an outcome, and carries other players' ranks only in post-game and
-//! internal scope, their experience only in internal.
+//! internal scope, their experience only in internal. Ranks are as of the day before the
+//! game (rows.zig fillRankStart): every scope sees pre-game data only.
 //!
 //! A candidate declares:
 //!   pub const scope: api.Scope
@@ -10,7 +11,8 @@
 //!   pub fn fit(gpa: std.mem.Allocator, train: *const api.Train, opts: api.Options) !Model
 //!   pub fn predict(m: *const Model, q: *const api.Query) api.Prediction
 //!   pub fn deinit(m: *Model, gpa: std.mem.Allocator) void
-//! and optionally `pub const seeded = true` (the harness then averages 3 seeds) and
+//! and optionally `pub const seeded = true` (the harness then averages 3 seeds),
+//! `pub const after_game_rank = true` (rank_after below: dev runs only) and
 //!   pub fn effects(m: *const Model, arena: std.mem.Allocator, target: Outcome) ![]const Effects
 //! (what the fitted terms say about the game, in the target's units; the harness writes
 //! each table to the run dir as effects-<name>.tsv)
@@ -65,8 +67,12 @@ pub const Row = struct {
     side: u1,
     role: Role,
     champion: u32,
-    /// Higher is better: 0 Iron IV .. 39 Challenger I; null unranked
+    /// Higher is better: 0 Iron IV .. 39 Challenger I; the ladder rank on a day before the
+    /// game's; null unranked or unknown (rank history begins 2026-10-12)
     rank: ?u8,
+    /// The rank looked up after the game, which knows recent results: only for a
+    /// candidate declaring after_game_rank, in dev runs (a leak diagnostic), else null
+    rank_after: ?u8 = null,
     exp: Experience,
     /// NaN when unknown (no timeline to minute 15, no completed item)
     y: [outcome_count]f32,
@@ -86,8 +92,10 @@ pub const Query = struct {
     side: u1,
     role: Role,
     champion: u32,
-    /// The user's own rank
+    /// The user's own rank, as Row.rank
     rank: ?u8,
+    /// As Row.rank_after
+    rank_after: ?u8 = null,
     /// Champion ids by side (0 blue) and role, the user included
     teams: [2][5]u32,
     /// Everyone's ranks: post_game and internal scope, null in champ_select

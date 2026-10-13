@@ -52,6 +52,11 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, home: ?[]c
         std.debug.print("exp: {t}\nusage:\n{s}", .{ err, usage });
         return 2;
     };
+    if (harness.afterGameRank(cand) and (args.select or args.cmd == .final or args.cmd == .preds)) {
+        std.debug.print("exp: an after_game_rank candidate is a dev-only leak diagnostic: " ++
+            "no --select, final or preds (src/lab/api.zig)\n", .{});
+        return 2;
+    }
     var legendaries = try rows.loadLegendaries(gpa, io, args.snap);
     defer legendaries.deinit(gpa);
     var data = try rows.load(gpa, args.snap, &legendaries);
@@ -415,10 +420,10 @@ fn summary(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, s: *const harnes
         try sliceRow(w, try std.fmt.bufPrint(&name, "{d}.{d}", .{ p / 1000, p % 1000 }), harness.paired(s.game, la, lb, keep));
     }
 
-    try w.print("\n## {t} by rank tier\n\n| tier | rows | diff |\n|---|---|---|\n", .{args.target});
+    try w.print("\n## {t} by rank tier (after-game rank, report only)\n\n| tier | rows | diff |\n|---|---|---|\n", .{args.target});
     const tiers = [_][]const u8{ "iron", "bronze", "silver", "gold", "platinum", "emerald", "diamond", "master", "grandmaster", "challenger" };
     for (0..tiers.len + 1) |t| {
-        for (keep, s.row) |*kp, ri| kp.* = if (d.rows[ri].rank) |r| r / 4 == t else t == tiers.len;
+        for (keep, s.row) |*kp, ri| kp.* = if (d.rows[ri].rank_after) |r| r / 4 == t else t == tiers.len;
         try sliceRow(w, if (t < tiers.len) tiers[t] else "unranked", harness.paired(s.game, la, lb, keep));
     }
     try Io.Dir.cwd().writeFile(io, .{ .sub_path = "summary.md", .data = aw.written() });

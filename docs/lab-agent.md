@@ -53,7 +53,9 @@ pub const seeded = true; // optional: the harness averages 3 seeds
 
 - Train: the phase's visible games and rows, every outcome (training labels)
 - Query: one player in one game as champ select knows it: start, patch, platform, side,
-  role, champion, own rank, both teams' champions by role. Never an outcome; other
+  role, champion, own rank (the ladder's on a day before the game, rows.zig
+  fillRankStart; the after-game rank only to an `after_game_rank` candidate in dev
+  runs, a leak diagnostic), both teams' champions by role. Never an outcome; other
   players' ranks only for `post_game` (docs/production-key.md; meiolol-cf's two rules:
   scope enforced by the harness, no leakage by construction). A test checks Query has
   no outcome field

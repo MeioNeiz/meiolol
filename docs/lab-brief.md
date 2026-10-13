@@ -135,6 +135,8 @@ stop and say so rather than working around it.
 - Quote a number that isn't in a RESULT line or `show`/`table` output
 - Read or infer selection or test outcomes any other way than the ladder's answer
 - Use other players' ranks or any outcome at predict time
+- Declare `after_game_rank`: the rank looked up after the game is a human's dev-only leak
+  diagnostic; ranks you get are as of the day before the game (null before 2026-10-12)
 - Use internal scope for app-facing work: it is Jacob's research predictor only, and its
   results and findings never feed the site or app. App-facing campaigns use champ_select
 
