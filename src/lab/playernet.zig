@@ -17,7 +17,8 @@
 //! before 15 (0 when unknown); rank: rank at game start and known; mastery: log1p
 //! pre-game points on the champion and known (SNAP/mastery_pre.tsv when present); prior
 //! (QuickSkill-style): gold, CS and damage per minute over earlier games, off-role share,
-//! log1p days since the last game.
+//! log1p days since the last game, teammates played with before and the most games with
+//! one of them (premade).
 //! Writes DIR/folds.tsv, DIR/preds.tsv (as netcheck's, plus per side b_/r_: players with
 //! history, with games on their champion, games on their champions, games, players with
 //! rank, with mastery) and DIR/coverage.tsv (feature coverage of rows per block and part;
@@ -74,6 +75,8 @@ const Feat = enum {
     dpm,
     offrole,
     days_since,
+    duo_mates,
+    duo_games,
 
     fn group(f: Feat) Group {
         return switch (f) {
@@ -82,7 +85,7 @@ const Feat = enum {
             .kda, .lanediff14, .deaths15 => .form,
             .rank, .rank_known => .rank,
             .mastery, .mastery_known => .mastery,
-            .gpm, .cspm, .dpm, .offrole, .days_since => .prior,
+            .gpm, .cspm, .dpm, .offrole, .days_since, .duo_mates, .duo_games => .prior,
         };
     }
 
@@ -345,9 +348,11 @@ const Mastery = struct {
 
 /// Per row, before scaling; NaN unknown (form without games, rank, mastery)
 fn rawFeatures(gpa: std.mem.Allocator, d: *const rows.Data, m: *const Mastery) ![][n_feat]f32 {
+    const duo = try coPlay(gpa, d);
+    defer gpa.free(duo);
     const out = try gpa.alloc([n_feat]f32, d.rows.len);
     const nan = std.math.nan(f32);
-    for (out, d.rows) |*o, r| {
+    for (out, d.rows, 0..) |*o, r, i| {
         const cg: f32 = @floatFromInt(r.champ_games);
         const cw: f32 = @floatFromInt(r.champ_wins);
         const ag: f32 = @floatFromInt(r.games_before);
@@ -375,8 +380,79 @@ fn rawFeatures(gpa: std.mem.Allocator, d: *const rows.Data, m: *const Mastery) !
         o[@backingInt(Feat.dpm)] = r.dpm_before;
         o[@backingInt(Feat.offrole)] = r.offrole_before;
         o[@backingInt(Feat.days_since)] = std.math.log1p(r.days_since_last);
+        o[@backingInt(Feat.duo_mates)] = @floatFromInt(duo[i][0]);
+        o[@backingInt(Feat.duo_games)] = std.math.log1p(@as(f32, @floatFromInt(duo[i][1])));
     }
     return out;
+}
+
+/// Per row: teammates this player had played with on the same team before, and the most
+/// games with any one of them (games ended by this one's start, as fillExperience;
+/// TrueSkill 2's premade signal)
+fn coPlay(gpa: std.mem.Allocator, d: *const rows.Data) ![][2]u16 {
+    const out = try gpa.alloc([2]u16, d.rows.len);
+    @memset(out, @splat(0));
+    const by_game = try gpa.alloc([10]u32, d.games.len);
+    defer gpa.free(by_game);
+    @memset(by_game, @splat(no_row));
+    for (d.rows, 0..) |r, i| by_game[r.game][@as(usize, r.side) * 5 + @backingInt(r.role)] = @intCast(i);
+    const by_start = try gpa.alloc(u32, d.games.len);
+    defer gpa.free(by_start);
+    const by_end = try gpa.alloc(u32, d.games.len);
+    defer gpa.free(by_end);
+    for (by_start, by_end, 0..) |*a, *b, i| {
+        a.* = @intCast(i);
+        b.* = @intCast(i);
+    }
+    const Order = struct {
+        games: []const rows.Game,
+        fn end(o: @This(), i: u32) i64 {
+            return o.games[i].start + @as(i64, o.games[i].duration_s) * 1000;
+        }
+        fn byStart(o: @This(), a: u32, b: u32) bool {
+            return o.games[a].start < o.games[b].start;
+        }
+        fn byEnd(o: @This(), a: u32, b: u32) bool {
+            return o.end(a) < o.end(b);
+        }
+    };
+    const order: Order = .{ .games = d.games };
+    std.mem.sort(u32, by_start, order, Order.byStart);
+    std.mem.sort(u32, by_end, order, Order.byEnd);
+    var pairs: std.AutoHashMapUnmanaged(u64, u16) = .empty;
+    defer pairs.deinit(gpa);
+    var done: usize = 0;
+    for (by_start) |gi| {
+        while (done < by_end.len and order.end(by_end[done]) <= d.games[gi].start) : (done += 1) {
+            const slots = by_game[by_end[done]];
+            for (0..2) |side| for (0..5) |a| for (a + 1..5) |b| {
+                const k = pairKey(d, slots[side * 5 + a], slots[side * 5 + b]) orelse continue;
+                const e = try pairs.getOrPutValue(gpa, k, 0);
+                e.value_ptr.* +|= 1;
+            };
+        }
+        const slots = by_game[gi];
+        for (0..10) |s| {
+            if (slots[s] == no_row) continue;
+            const side = s / 5;
+            for (0..5) |b| {
+                if (side * 5 + b == s) continue;
+                const k = pairKey(d, slots[s], slots[side * 5 + b]) orelse continue;
+                const n = pairs.get(k) orelse 0;
+                out[slots[s]][0] += @intFromBool(n > 0);
+                out[slots[s]][1] = @max(out[slots[s]][1], n);
+            }
+        }
+    }
+    return out;
+}
+
+fn pairKey(d: *const rows.Data, ra: u32, rb: u32) ?u64 {
+    if (ra == no_row or rb == no_row) return null;
+    const a = d.rows[ra].player;
+    const b = d.rows[rb].player;
+    if (a == rows.no_player or b == rows.no_player) return null;
+    return (@as(u64, @min(a, b)) << 32) | @max(a, b);
 }
 
 fn coverageLine(w: *Io.Writer, block: []const u8, part: []const u8, d: *const rows.Data, raw: []const [n_feat]f32, which: []const u32) !void {
@@ -1380,4 +1456,19 @@ test "playernet healthFit at init is the candidate" {
     const p = try healthFit(testing.allocator, .{}, 1, 5, (&g)[0..1], 0, (&g)[0..1], &pred);
     defer testing.allocator.free(p);
     try testing.expectApproxEqAbs(sigmoid(0.7), pred[0], 1e-6);
+}
+
+test "playernet coPlay counts earlier games together on one team" {
+    const gpa = testing.allocator;
+    // Three games an hour apart, 30 minutes long: players 1 and 2 together on blue in
+    // games 0 and 1, then again in game 2; player 3 against them in game 0, with them in 2
+    var games: [3]rows.Game = undefined;
+    for (&games, 0..) |*g, i| g.* = .{ .match_id = "", .start = @intCast(i * 3_600_000), .patch = 0, .platform = 0, .is_test = false, .teams = @splat(@splat(0)), .winner = 0, .duration_s = 1800 };
+    const spec = [_][3]u32{ .{ 0, 0, 1 }, .{ 0, 1, 2 }, .{ 0, 5, 3 }, .{ 1, 0, 1 }, .{ 1, 1, 2 }, .{ 2, 0, 1 }, .{ 2, 1, 2 }, .{ 2, 2, 3 } };
+    var rws: [spec.len]rows.Row = undefined;
+    for (&rws, spec) |*r, x| r.* = .{ .game = x[0], .slot = @intCast(x[1]), .side = @intCast(x[1] / 5), .role = @fromBackingInt(@as(u3, @intCast(x[1] % 5))), .champion = 1, .y = @splat(0), .player = x[2] };
+    const d: rows.Data = .{ .arena = .init(gpa), .games = &games, .rows = &rws };
+    const got = try coPlay(gpa, &d);
+    defer gpa.free(got);
+    try testing.expectEqualSlices([2]u16, &.{ .{ 0, 0 }, .{ 0, 0 }, .{ 0, 0 }, .{ 1, 1 }, .{ 1, 1 }, .{ 1, 2 }, .{ 1, 2 }, .{ 0, 0 } }, got);
 }
