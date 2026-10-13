@@ -156,8 +156,7 @@ pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
         .{ .key = "damage", .title = "Mixing damage", .sub = "Magic and physical", .body = damage },
         .{ .key = "synergy", .title = "Synergy", .sub = "Champions that work together", .body = synergy },
     };
-    var checks: Writer.Allocating = .init(a);
-    try checks.writer.writeByte('{');
+    var checks: std.json.ArrayHashMap([]const Question) = .{};
     for (lessons, 1..) |l, i| {
         try tpl.renderPart(w,
             \\<details class="card lesson" id="lesson-{key}" data-lesson="{key}">
@@ -172,35 +171,19 @@ pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
             \\</div></details>
             \\
         , .{ .key = l.key });
-        if (i > 1) try checks.writer.writeByte(',');
-        try checks.writer.print("\"{s}\":", .{l.key});
-        try std.json.Stringify.value(qs, .{}, &checks.writer);
+        try checks.map.put(a, l.key, qs);
     }
-    try checks.writer.writeByte('}');
     try w.writeAll("</div>\n");
     try practiceSection(w);
-    try w.writeAll("<script type=\"application/json\" id=\"checks\">");
-    try writeScriptSafe(w, checks.written());
-    try w.writeAll("</script>\n<script type=\"application/json\" id=\"glossary\">{");
-    for (glossary, 0..) |t, i| {
-        if (i > 0) try w.writeByte(',');
-        try std.json.Stringify.value(t[0], .{}, w);
-        try w.writeByte(':');
-        try std.json.Stringify.value(t[1], .{}, w);
-    }
-    try w.writeAll("}</script>\n<script src=\"learn.js\" defer></script>\n");
+    var terms: std.json.ArrayHashMap([]const u8) = .{};
+    for (glossary) |t| try terms.map.put(a, t[0], t[1]);
+    try tpl.render(w,
+        \\<script type="application/json" id="checks">{checks}</script>
+        \\<script type="application/json" id="glossary">{terms}</script>
+        \\<script src="learn.js" defer></script>
+        \\
+    , .{ .checks = tpl.json(checks), .terms = tpl.json(terms) });
     try html.foot(w, p);
-}
-
-/// In a script element only "</" can end it early; JSON may escape it as "<\/"
-fn writeScriptSafe(w: *Writer, json: []const u8) !void {
-    var start: usize = 0;
-    while (std.mem.indexOfPos(u8, json, start, "</")) |i| {
-        try w.writeAll(json[start..i]);
-        try w.writeAll("<\\/");
-        start = i + 2;
-    }
-    try w.writeAll(json[start..]);
 }
 
 fn practiceSection(w: *Writer) !void {
