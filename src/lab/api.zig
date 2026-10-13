@@ -14,7 +14,9 @@
 //! and optionally `pub const seeded = true` (the harness then averages 3 seeds),
 //! `pub const after_game_rank = true` (rank_after below: dev runs only),
 //! `pub const needs_stats = true` (fit refuses a training set whose Row.stats are all
-//! NaN, so a missing SNAP/seat_stats.tsv fails instead of fitting without them) and
+//! NaN, so a missing SNAP/seat_stats.tsv fails instead of fitting without them),
+//! `pub const needs_embeddings = true` (fit refuses to start without Options.embeddings)
+//! and
 //!   pub fn effects(m: *const Model, arena: std.mem.Allocator, target: Outcome) ![]const Effects
 //! (what the fitted terms say about the game, in the target's units; the harness writes
 //! each table to the run dir as effects-<name>.tsv)
@@ -141,6 +143,42 @@ pub const Query = struct {
 
 pub const Options = struct {
     seed: u64 = 1,
+    /// `meiolol-lab --emb DIR`: champion-role embeddings for a fit set, for a candidate declaring
+    /// needs_embeddings; null otherwise
+    embeddings: ?*const EmbeddingSource = null,
+};
+
+/// One champion-role's vector; champion 0 is the role's shared vector for champion-roles
+/// the file has no own row for
+pub const EmbeddingRow = struct {
+    champion: u32,
+    role: Role,
+    /// Fit games of the set E was learnt on
+    games: u32,
+    e: []const f32,
+};
+
+pub const Embeddings = struct {
+    dim: u32,
+    rows: []const EmbeddingRow,
+
+    pub fn deinit(e: *Embeddings, gpa: std.mem.Allocator) void {
+        for (e.rows) |r| gpa.free(r.e);
+        gpa.free(e.rows);
+    }
+};
+
+/// The harness reads `meiolol-lab pretrain`'s files and returns the one learnt on exactly
+/// this training set's games (per champion-role counts equal), else
+/// error.NoEmbeddingsForFitSet: E never saw a game the candidate scores, and the candidate
+/// does no IO. Any subset a candidate fits on (its own folds) can ask too
+pub const EmbeddingSource = struct {
+    ctx: *const anyopaque,
+    forFitFn: *const fn (ctx: *const anyopaque, gpa: std.mem.Allocator, t: *const Train, seed: u64) anyerror!Embeddings,
+
+    pub fn forFit(s: *const EmbeddingSource, gpa: std.mem.Allocator, t: *const Train, seed: u64) !Embeddings {
+        return s.forFitFn(s.ctx, gpa, t, seed);
+    }
 };
 
 /// Per outcome; win is the chance the user's team wins. NaN means "no opinion": the

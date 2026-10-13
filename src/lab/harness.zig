@@ -62,7 +62,17 @@ pub fn needsStats(comptime C: type) bool {
 /// then `pack`). Every caller fits through here
 pub fn fit(comptime C: type, gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !C.Model {
     if (needsStats(C) and t.rows.len > 0 and !anyStats(t.rows)) return error.NoSeatStats;
-    return C.fit(gpa, t, opts);
+    var o = opts;
+    if (o.embeddings == null) o.embeddings = embeddings;
+    if (needsEmbeddings(C) and o.embeddings == null) return error.NoEmbeddings;
+    return C.fit(gpa, t, o);
+}
+
+/// `meiolol-lab --emb DIR` (lab/embfiles.zig): handed to every fit as Options.embeddings
+pub var embeddings: ?*const api.EmbeddingSource = null;
+
+pub fn needsEmbeddings(comptime C: type) bool {
+    return @hasDecl(C, "needs_embeddings") and C.needs_embeddings;
 }
 
 fn anyStats(rs: []const api.Row) bool {

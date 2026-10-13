@@ -21,11 +21,13 @@ const exp = @import("lab/exp.zig");
 const draft = @import("lab/draft.zig");
 const lane = @import("lab/lane.zig");
 const harness = @import("lab/harness.zig");
+const embfiles = @import("lab/embfiles.zig");
 const fields = @import("lab/fields.zig");
 const style = @import("lab/style.zig");
 const compcheck = @import("lab/compcheck.zig");
 const randsplit = @import("lab/randsplit.zig");
 const winnet = @import("lab/winnet.zig");
+const effects = @import("lab/effects.zig");
 const pretrain = @import("lab/pretrain.zig");
 const playernet = @import("lab/playernet.zig");
 const gains = @import("lab/gains.zig");
@@ -34,7 +36,10 @@ const curve = @import("lab/curve.zig");
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
 
 const usage =
-    \\meiolol-lab COMMAND
+    \\meiolol-lab [--emb DIR] COMMAND
+    \\  --emb DIR                       pretrain's embeddings for a needs_embeddings
+    \\                                  candidate, in any command that fits one
+    \\                                  (lab/embfiles.zig)
     \\  gpu-smoke                       add two vectors on the GPU, check against the CPU
     \\  anonymise SRC DST [SALT_FILE]   copy snapshot SRC to DST with PUUIDs and match ids
     \\                                  hashed (salt: 32 bytes, default
@@ -72,12 +77,21 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ randsplit.usage ++ gains.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ randsplit.usage ++ gains.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ effects.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
     const arena = init.arena.allocator();
-    const argv = try init.minimal.args.toSlice(arena);
+    var argv = try init.minimal.args.toSlice(arena);
+    const emb_dir: embfiles.Dir = .{ .io = init.io, .path = if (argv.len >= 3 and std.mem.eql(u8, argv[1], "--emb")) argv[2] else "" };
+    const emb_source = emb_dir.source();
+    if (emb_dir.path.len > 0) {
+        harness.embeddings = &emb_source;
+        const rest = try arena.alloc(@TypeOf(argv[0]), argv.len - 2);
+        rest[0] = argv[0];
+        @memcpy(rest[1..], argv[3..]);
+        argv = rest;
+    }
     if (argv.len < 2) {
         std.debug.print("{s}", .{usage});
         return 2;
@@ -287,6 +301,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "netcheck")) {
         return winnet.main(init.gpa, arena, init.io, argv[2..], ptx);
     }
+    if (std.mem.eql(u8, cmd, "effects")) {
+        return effects.main(init.gpa, arena, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "playernet")) {
         return playernet.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -384,6 +401,7 @@ test {
     _ = winnet;
     _ = pretrain;
     _ = playernet;
+    _ = effects;
     _ = gains;
 }
 
