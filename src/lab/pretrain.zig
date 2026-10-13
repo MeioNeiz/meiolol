@@ -37,7 +37,9 @@ pub const usage =
     \\                                  --max-epochs N --drop NAME,NAME --win-adjust 0|1
     \\                                  --rare N --seeds 1,2,3 --blocks dev,1,2,3,4,5
     \\                                  --shuffle SEED (control: win labels permuted
-    \\                                  over all games first) --out DIR
+    \\                                  over all games first) --resample N (fit
+    \\                                  games on netcheck --resample N's seeded 90%,
+    \\                                  for embx's resample leg) --out DIR
     \\
 ;
 
@@ -70,6 +72,9 @@ pub const Options = struct {
     /// Shuffled-label control: the games' win labels permuted before anything is fitted,
     /// so a prior's gain must be ~0
     shuffle: ?u64 = null,
+    /// Fit games on netcheck --resample N's 90% (harness.inResample), so a candidate fitted
+    /// there finds E learnt on exactly its games
+    resample: ?u32 = null,
     out: []const u8 = ".",
 };
 
@@ -135,8 +140,8 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
-    try w.print("# pretrain: dim {d} min_games {d} l2 {any} lr {d} batch {d} evals {d} patience {d} max_epochs {d} drop 0x{x} win_adjust {} rare {d} seeds {any} shuffle {?d}\n\n", .{
-        opts.dim, opts.min_games, opts.l2, opts.lr, opts.batch, opts.evals, opts.patience, opts.max_epochs, opts.drop, opts.win_adjust, opts.rare, opts.seeds, opts.shuffle,
+    try w.print("# pretrain: dim {d} min_games {d} l2 {any} lr {d} batch {d} evals {d} patience {d} max_epochs {d} drop 0x{x} win_adjust {} rare {d} seeds {any} shuffle {?d} resample {?d}\n\n", .{
+        opts.dim, opts.min_games, opts.l2, opts.lr, opts.batch, opts.evals, opts.patience, opts.max_epochs, opts.drop, opts.win_adjust, opts.rare, opts.seeds, opts.shuffle, opts.resample,
     });
     try w.flush();
 
@@ -210,6 +215,8 @@ fn parseOptions(arena: Allocator, args: []const []const u8) !Options {
             o.blocks = out.items;
         } else if (std.mem.eql(u8, key, "--shuffle")) {
             o.shuffle = try std.fmt.parseInt(u64, v, 10);
+        } else if (std.mem.eql(u8, key, "--resample")) {
+            o.resample = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, key, "--out")) {
             o.out = v;
         } else return error.UnknownOption;
@@ -241,6 +248,11 @@ fn perMinute(aux: []f32) void {
 
 fn played(e: *const nnexport.Export, gi: usize) bool {
     return e.flags[gi] & nnexport.flag_played != 0;
+}
+
+fn inResample(e: *const nnexport.Export, gi: usize, resample: ?u32) bool {
+    const r = resample orelse return true;
+    return harness.inResample(e.start[gi], e.platform[gi], r);
 }
 
 fn keyOf(e: *const nnexport.Export, gi: usize, slot: usize) u32 {
@@ -966,7 +978,7 @@ fn job(gpa: Allocator, io: Io, e: *const nnexport.Export, opts: Options, block: 
     errdefer scored.deinit(gpa);
     for (0..e.len()) |gi| {
         if (!played(e, gi)) continue;
-        if (fits(block, e.split[gi])) try fit.append(gpa, @intCast(gi));
+        if (fits(block, e.split[gi]) and inResample(e, gi, opts.resample)) try fit.append(gpa, @intCast(gi));
         if (scores(block, e.split[gi])) try scored.append(gpa, @intCast(gi));
     }
     if (fit.items.len < 20) return error.TooFewGames;
@@ -1447,4 +1459,25 @@ test "pretrain on the fixture: E carries the planted stats, every variant scores
     defer out.deinit();
     try summary(gpa, &out.writer, &fx.e, opts, outs);
     try testing.expect(std.mem.indexOf(u8, out.written(), "| folds | emb |") != null);
+}
+
+test "pretrain resample: fits on netcheck's 90% only" {
+    const gpa = testing.allocator;
+    var fx = try fixtureExport(gpa, 3000);
+    defer fx.f.data.deinit();
+    defer fx.e.deinit();
+    const opts: Options = .{ .dim = 2, .min_games = 5, .batch = 64, .max_epochs = 2, .seeds = &.{1}, .blocks = &.{.f5}, .resample = 2 };
+    const outs = try runAll(gpa, testing.io, &fx.e, opts);
+    defer {
+        for (outs) |*o| o.deinit(gpa);
+        gpa.free(outs);
+    }
+    var all: usize = 0;
+    var kept: usize = 0;
+    for (0..fx.e.len()) |gi| if (played(&fx.e, gi) and fits(.f5, fx.e.split[gi])) {
+        all += 1;
+        if (harness.inResample(fx.e.start[gi], fx.e.platform[gi], 2)) kept += 1;
+    };
+    try testing.expectEqual(kept, outs[0].fit_games);
+    try testing.expect(kept < all and kept * 10 > all * 8);
 }

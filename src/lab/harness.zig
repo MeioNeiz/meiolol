@@ -161,6 +161,19 @@ pub fn inFraction(g: rows.Game, fraction: f64) bool {
     return u / @as(f64, 1 << 53) < fraction;
 }
 
+/// --resample N's seeded 90% (A/A noise-floor fits), by start and platform so pretrain's
+/// nn-export games and netcheck's rows agree. Independent of inFraction's and winnet's
+/// crossFold hashes, so two seeds' 90% share 81%
+pub fn inResample(start: i64, platform: u8, seed: u32) bool {
+    var h = std.hash.Wyhash.init(0xa1a0 +% @as(u64, seed));
+    h.update(std.mem.asBytes(&start));
+    h.update(std.mem.asBytes(&platform));
+    const u: f64 = @floatFromInt(h.final() >> 11);
+    return u / @as(f64, 1 << 53) < resample_share;
+}
+
+const resample_share = 0.9;
+
 /// docs/model.md "Rows": a game over before 15:00 is a remake, leaver forfeit or abort,
 /// decided by the leaver, not the draft
 pub const min_duration_s = 900;

@@ -419,15 +419,8 @@ const FitKeep = struct {
     }
 };
 
-const resample_share = 0.9;
-
-/// Independent of inFraction's and crossFold's hashes, so two seeds' 90% share 81%
 pub fn inResample(g: rows.Game, seed: u32) bool {
-    var h = std.hash.Wyhash.init(0xa1a0 +% @as(u64, seed));
-    h.update(std.mem.asBytes(&g.start));
-    h.update(std.mem.asBytes(&g.platform));
-    const u: f64 = @floatFromInt(h.final() >> 11);
-    return u / @as(f64, 1 << 53) < resample_share;
+    return harness.inResample(g.start, g.platform, seed);
 }
 
 /// resid's offsets on its own training games come from candidates fitted without them:
