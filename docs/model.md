@@ -632,6 +632,54 @@ Reading:
 - With objectives in the state the champion effects hold or grow slightly: champions'
   value is not through the objectives their teams take
 
+### Win chance by minute (Your games), 2026-10-13 (meiolol-8a's successor)
+
+`meiolol winchance --data SNAP [--dev] [--knots 1,5,...]` (src/winchance.zig), weights
+in src/winchance_weights.zig, read by Your games (win chance, turning minute, death
+cost). State: objectives.zig's lead + held (gold, gold curve, XP, towers, inhibitors
+down, dragons, soul point, soul, elder, grubs, herald, baron; blue minus red), ranked
+solo games of 15:00+, every minute 1-40 while the game is going. Split: test = newest
+fifth of EUW1 games in this set (cutoff 1791717443682, 9,648 games; the set needs a
+timeline but not complete roles, so the cutoff is a little later than the protocol's),
+train = older games, every platform (120,690). Dev: every fifth train game by match id.
+
+Fix for a live bug (meiolol-47's review): one logistic fit per minute, no minimum
+count, so rare features got wild weights (towers +0.08, +0.60, -0.81, -0.15 at minutes
+6-9), and an early tower near 8:00 could move win chance ~13-20 pp and become the
+"turning minute". Now one fit over every game-minute, each weight linear in minute
+between knots (hat basis, L2 1), written out per minute so the file format and
+winchance.blue are unchanged.
+
+Chosen on dev (24,056 games), log loss summed over a game's minutes vs per-minute fits
+(± 95% over games), and win chance moved by the next minute's weights alone with the
+state held (pp over game-minutes, the artefact Your games shows):
+
+| variant | log loss vs per minute | moved: mean / 99th pct / largest |
+| --- | --- | --- |
+| per minute (old method) | - | 0.64 / 2.42 / 31.3 |
+| per minute, feature zeroed under 300 train games | +0.0001 ± 0.0002 | 0.64 / 2.42 / 18.0 |
+| knots 1,3,5,8,11,14,17,20,24,28,32,36,40 | -0.0001 ± 0.0003 | 0.59 / 1.79 / 6.1 |
+| knots every 5 min (1,5,...,40), chosen | +0.0002 ± 0.0004 | 0.57 / 1.75 / 5.4 |
+| knots 1,2,3,5,7,...,36,40 | -0.0002 ± 0.0002 | 0.60 / 2.05 / 7.2 |
+
+Log loss ties everywhere; every 5 minutes is the smoothest. The 300-game floor does not
+fix it (a weight switching on is itself a jump). Test, touched once for the chosen knots
+(the turning-minute and shipped rows were added to the report afterwards, same fit):
+
+| model | log loss vs per minute | moved: mean / 99th / largest | turning minute: mean jump, differs from smooth |
+| --- | --- | --- | --- |
+| per minute, refit on train | - | 0.62 / 2.35 / 14.4 | 20.1 pp, 5.5% of games |
+| smooth, every 5 min | -0.0000 ± 0.0006 | 0.56 / 1.73 / 4.4 | 20.1 pp, - |
+| shipped file before this (per minute, 148,200 games) | -0.0024 ± 0.0021 | 0.62 / 2.29 / 19.2 | 20.1 pp, 5.5% |
+
+The shipped file's small edge is not a fair comparison: it was fit on every fifth game
+held out by match id, so most of these test games were in its training. Where the
+turning minute moves it is the early-tower artefact, e.g. EUW1_7864005401808869: shipped
+9:00 (+22 pp), smooth 3:00 (+8); EUW1_2012568456711544: shipped 8:00 (+23), smooth 12:00
+(+18). Early towers given the gold lead now weigh about -0.2 to -0.26 at 5-10 min
+(fitted from minutes 5-15 together) instead of swinging sign each minute. A test in
+winchance.zig fails if adjacent minutes' weights differ by 0.3 or more.
+
 ### Player experience and everything pre-game, dev only, 2026-10-13
 
 Scope internal (api.Scope: Jacob's research predictor, never the site or app; sees all
