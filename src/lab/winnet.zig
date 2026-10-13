@@ -55,6 +55,9 @@ pub const usage =
     \\                                  meiolol-lab pretrain) --emb-freeze 0|1
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
     \\                                  --fraction X (nested share of fit games)
+    \\                                  --resample N (A/A noise floor: fit on a seeded
+    \\                                  random 90% of the fit games, the same for the
+    \\                                  candidate; scored games unchanged)
     \\                                  --threads N --out DIR
     \\                                  --split random:SEED (one block, LoLDraftAI's
     \\                                  random tenth) --filter ldai (its filters)
@@ -101,6 +104,8 @@ pub const Options = struct {
     fraction: f64 = 1,
     /// --split random:SEED: LoLDraftAI's random tenth instead of the blocks
     split_seed: ?u32 = null,
+    /// --resample N: fit games and the candidate's on a seeded random share (A/A runs)
+    resample: ?u32 = null,
     /// --filter ldai: LoLDraftAI's 15-minute filters on fit and scored games
     ldai: bool = false,
     /// CPU threads for small and resid fits (one seed per thread) and big on the CPU
@@ -178,7 +183,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
-    try w.print("# netcheck: {s} net vs {s}, fraction {d}, seeds {any}\n\n", .{ @tagName(opts.net), if (@hasDecl(cand, "name")) cand.name else "cand", opts.fraction, opts.seeds });
+    try w.print("# netcheck: {s} net vs {s}, fraction {d}, resample {?d}, seeds {any}\n\n", .{ @tagName(opts.net), if (@hasDecl(cand, "name")) cand.name else "cand", opts.fraction, opts.resample, opts.seeds });
     try w.print("options: emb {d} hidden {d} depth {d} dropout {d} wd {d} emb_wd {d} lr {d} clip {d} batch {d} evals {d} patience {d} min_games {d} emb_init {s} emb_freeze {}\n\n", .{
         opts.emb, opts.hidden, opts.depth, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games, opts.emb_init orelse "-", opts.emb_freeze,
     });
@@ -208,6 +213,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             },
         };
         spec.filter = if (filter) |*f| f else null;
+        spec.resample = opts.resample;
         try runBlock(gpa, io, &data, players, c, spec, b, opts, if (gpu) |*g| g else null, out, w, &pooled);
     }
     if (pooled.cand.items.len > 0) {
@@ -282,6 +288,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.ldai = true;
         } else if (std.mem.eql(u8, k, "--fraction")) {
             o.fraction = try std.fmt.parseFloat(f64, v);
+        } else if (std.mem.eql(u8, k, "--resample")) {
+            o.resample = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--threads")) {
             o.threads = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--emb-init")) {
@@ -330,10 +338,12 @@ const Spec = struct {
     dev: bool,
     random: ?u32 = null,
     filter: ?*const randsplit.Filter = null,
+    resample: ?u32 = null,
 
     fn fits(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
         if (s.filter) |f| if (!f.keep(g)) return false;
         if (!harness.inFraction(g, fraction)) return false;
+        if (s.resample) |r| if (!inResample(g, r)) return false;
         if (s.random) |seed| return devEra(c, g) and !randsplit.inTest(g, seed);
         return harness.visible(.dev, c, g) and g.start < s.before;
     }
@@ -365,6 +375,17 @@ const FitKeep = struct {
         return k.spec.fits(k.c, g, k.fraction) and g.start < k.before;
     }
 };
+
+const resample_share = 0.9;
+
+/// Independent of inFraction's and crossFold's hashes, so two seeds' 90% share 81%
+fn inResample(g: rows.Game, seed: u32) bool {
+    var h = std.hash.Wyhash.init(0xa1a0 +% @as(u64, seed));
+    h.update(std.mem.asBytes(&g.start));
+    h.update(std.mem.asBytes(&g.platform));
+    const u: f64 = @floatFromInt(h.final() >> 11);
+    return u / @as(f64, 1 << 53) < resample_share;
+}
 
 /// resid's offsets on its own training games come from candidates fitted without them:
 /// an in-sample offset is more confident than the out-of-sample one it is scored with
