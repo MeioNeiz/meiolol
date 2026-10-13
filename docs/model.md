@@ -1458,6 +1458,55 @@ Reading (dev, no test look):
   pretrained embeddings (meiolol-52, `--emb-init`), more seeds for the big ensemble,
   the 350k-game snapshot for the curve
 
+#### Big net: tuning, seed ensembles, confirmation (meiolol-0a)
+
+f1's work continued on the gpu-box (snap-20261012T2055Z, -Dcand=win-ratings unless said).
+Code: `--evals N` for big (val checked N times an epoch; refit = best epochs x 1.1 in
+steps, as small; 9ace58d, which also fixed seed 3 refitting seed 1 when --threads <
+--seeds; f1's runs used 3 threads for 3 seeds, unaffected); per-game prediction files
+DIR/games-<cand>.tsv, games-<net>.tsv for gains and stacking (0696aad); `--net bigres`, the
+big net as a residual on the cross-fitted offset (f996ce0, 521c004); `--shuffle-ids SEED`,
+the control for nets on fitted offsets (f29a170).
+
+| run | folds vs ratings | better in | single seeds | dev-val vs ratings |
+| --- | --- | --- | --- | --- |
+| big, val checked 4x an epoch, minus 1x (3 seeds, paired) | +0.00031 ± 0.00026 | | | +0.00051 ± 0.00059 |
+| big, default config, seeds 1-10 | -0.00039 ± 0.00033 | 4 of 5 | +0.00060 to +0.00188 | -0.00006 ± 0.00070 |
+| big, default config, sealed seeds 11-20 | -0.00012 ± 0.00036 | | +0.00084 to +0.00347 | -0.00001 ± 0.00050 |
+| big, default config, all 20 seeds | -0.00034 ± 0.00032 | 4 of 5 | | -0.00014 ± 0.00053 |
+| big, default config, 10 seeds, 90% resample (ratings refitted on it) | -0.00010 ± 0.00035 | 2 of 5 | | -0.00016 ± 0.00061 |
+| big, sweep pick t23, seeds 1-10 | -0.00009 ± 0.00046 | 3 of 5 | +0.00082 to +0.00433 | -0.00006 ± 0.00061 |
+
+- Default config: lr 1e-3, wd 1e-4, batch 1024, patience 5, val once an epoch. Seed
+  ensemble size, folds: 1 seed +0.00116, 3 -0.00011, 5 -0.00019, 10 -0.00039
+- Sweep big1b (meiolol-1c, deploy/lab-sweep.sh, data/sweeps/big1b/table.md): 32 random
+  trials over lr 1e-4..3e-3, wd 1e-5..1e-1, batch 256..2048, patience 2|3|5, 5 seeds each,
+  ranked on inner validation only. Every trial's single seeds are worse than ratings (-1.0
+  to -3.2 milli-nats a seed); its 5-seed ensembles -0.6 to +0.2. The top 12 trials sit
+  within 0.0002 of val loss, and val favours fast configs (high lr, batch 256, stopping at
+  the first check) that do worse on the folds than slow ones. The pick by the rule fixed
+  beforehand, t23 (lr 0.002159, wd 0.0002976, batch 256, patience 3), is level with
+  ratings and +0.00031 ± 0.00038 against the default's 10 seeds (worse, not detected).
+  The 8 trials of an abandoned first sweep (big1, val checks per epoch in the space) were
+  left out of the pick
+- More val checks an epoch didn't help: they stop at the same 1-2 epochs, and the min over
+  4x as many noisy checks biases val loss low, so a sweep ranked on val would favour them
+  for the wrong reason
+- On dev-val, default seeds that stop after 2 epochs are ~0.003 worse than those stopping
+  after 1: val (the newest tenth of fit games) and the next games disagree on how long to
+  train. meiolol-fd's sweep big1c tries slower configs (lr 3e-5..3e-4, batch 1024-4096)
+- Pretrained champion-role embeddings for the small net (meiolol-52/5b's d12, scratch vs
+  init vs frozen): no form helps; numbers in that section
+
+Reading (dev, no test look): the big net's seed ensemble is level with ratings, leaning
+slightly better, at the noise floor (~0.5 milli-nats on the folds); not a usable gain.
+The 20-seed pool just clears zero (upper end -0.00002), but each confirmation came in
+smaller than the first ten seeds (-0.00039, then -0.00012 sealed, -0.00010 resampled),
+which reads as the first ten being lucky. Tuning on inner validation finds nothing better
+than the default. Every single seed is worse than ratings; only averaging seeds brings the
+net level. Whether anything stacks on win-comp (big net as a residual on its offset, with
+the shuffled-ids control) is the next question.
+
 #### LoLDraftAI's evaluation beside ours (meiolol-ba)
 
 Why: LoLDraftAI reports 55-56% on a seeded random 90/10 file split, with in-game
