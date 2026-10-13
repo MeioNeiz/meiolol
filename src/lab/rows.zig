@@ -10,6 +10,7 @@ const eval = @import("../eval.zig");
 const timeline = @import("../riot/timeline.zig");
 const protocol = @import("protocol.zig");
 const pack = @import("pack.zig");
+const seatstats = @import("seatstats.zig");
 
 pub const Outcome = enum { win, gold14, lanediff14, cs10, deaths15, first_item };
 pub const outcome_count = @typeInfo(Outcome).@"enum".field_names.len;
@@ -56,6 +57,9 @@ pub const Row = struct {
     perf_games: u16 = 0,
     lanediff14_before: f32 = 0,
     deaths15_before: f32 = 0,
+    /// What the player did this game (SNAP/seat_stats.tsv, seatstats.SeatStat), NaN when
+    /// unknown or the file is missing. Like y: training rows only, never a query
+    stats: seatstats.Stats = seatstats.unknown,
 };
 
 pub const Data = struct {
@@ -237,6 +241,19 @@ pub fn loadSql(
 
     try fillExperience(gpa, games.items, rows.items, players.items, kdas.items);
     try fillRankStart(gpa, db, games.items, rows.items, keys.items);
+    const SeatRows = struct {
+        index: *const std.AutoHashMapUnmanaged(u64, u32),
+        by_game: *const std.AutoHashMapUnmanaged(u32, [10]u32),
+        rows: []Row,
+        pub fn at(sr: @This(), match_id: []const u8, slot: u8) ?*seatstats.Stats {
+            const gi = sr.index.get(stats.matchKey(match_id)) orelse return null;
+            const slots = sr.by_game.get(gi) orelse return null;
+            if (slot >= 10 or slots[slot] == std.math.maxInt(u32)) return null;
+            return &sr.rows[slots[slot]].stats;
+        }
+    };
+    const io = std.Io.Threaded.global_single_threaded.io();
+    _ = try seatstats.fill(io, snap, SeatRows{ .index = &index, .by_game = &by_game, .rows = rows.items });
     data.games = games.items;
     data.rows = rows.items;
     return data;

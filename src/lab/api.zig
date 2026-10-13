@@ -81,10 +81,13 @@ pub const Row = struct {
     stats: [seat_stat_count]f32 = @splat(std.math.nan(f32)),
 };
 
-/// Per player per game, raw values from the raw summary and timeline
-/// (SNAP/seat_stats.tsv, `meiolol-lab seat-stats`); NaN when unknown. Damage to and from
-/// champions only; armor15 and mr15 from the timeline's championStats at minute 15;
-/// attack_range from the champion's static data
+/// Per player per game, raw values from the raw summary (SNAP/seat_stats.tsv,
+/// `meiolol-lab seat-stats`); NaN when unknown. Damage to and from champions only.
+/// From Data Dragon of the game's patch: armor_end, mr_end = two parts summed: the
+/// champion's base + growth at level 15, plus the flat armour/MR of the items held at the
+/// end of the game; ability resists (Rammus W, Malphite's passive) not included, though
+/// builds mostly reflect them. attack_range the champion's base range. heal is Riot's
+/// totalHeal, which includes heal_allies (totalHealsOnTeammates)
 pub const SeatStat = enum {
     minutes,
     dmg_phys,
@@ -100,8 +103,8 @@ pub const SeatStat = enum {
     heal_allies,
     shield_allies,
     dmg_buildings,
-    armor15,
-    mr15,
+    armor_end,
+    mr_end,
     attack_range,
 };
 pub const seat_stat_count = @typeInfo(SeatStat).@"enum".field_names.len;

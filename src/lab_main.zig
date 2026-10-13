@@ -7,6 +7,7 @@ const cuda = @import("gpu/cuda.zig");
 const anonymise = @import("lab/anonymise.zig");
 const archive = @import("lab/archive.zig");
 const mastery_pre = @import("lab/mastery_pre.zig");
+const seatstats = @import("lab/seatstats.zig");
 const protocol = @import("lab/protocol.zig");
 const rows = @import("lab/rows.zig");
 const pack = @import("lab/pack.zig");
@@ -21,6 +22,7 @@ const lane = @import("lab/lane.zig");
 const harness = @import("lab/harness.zig");
 const fields = @import("lab/fields.zig");
 const style = @import("lab/style.zig");
+const compcheck = @import("lab/compcheck.zig");
 
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
 
@@ -38,6 +40,10 @@ const usage =
     \\  mastery-pre SNAP ARCHIVE        each ranked participant's latest archived mastery
     \\                                  fetch before game start: SNAP/mastery_pre.tsv
     \\                                  (lab/mastery_pre.zig; zstd on PATH)
+    \\  seat-stats SNAP [DDRAGON]       each ranked seat's end-of-game damage dealt and
+    \\                                  taken, CC, healing from raw.db, resists and range
+    \\                                  from DDRAGON/<patch>/{champion,item}.json:
+    \\                                  SNAP/seat_stats.tsv (lab/seatstats.zig); rows load it
     \\  split SNAP_DIR                  the shared held-out split (eval's, tested on EUW1):
     \\                                  prints it, writes SNAP_DIR/split.tsv
     \\  rows SNAP_DIR                   load the model rows, print outcome counts and means
@@ -56,7 +62,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -113,6 +119,14 @@ pub fn main(init: std.process.Init) !u8 {
         std.log.info("mastery-pre: {d} rows, {d} with a pre-game fetch, median gap {d:.1} h " ++
             "({d} archive files read, {d} begun after the last game skipped)", .{
             n.rows, n.pre_game, n.median_gap_h, n.files_read, n.files_skipped,
+        });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "seat-stats") and argv.len >= 3) {
+        const n = try seatstats.run(init.gpa, init.io, argv[2], if (argv.len >= 4) argv[3] else null);
+        std.log.info("seat-stats: {d} lines ({d} with Data Dragon values) from {d} of {d} games' " ++
+            "summaries; {d} unreadable, {d} seats with another champion left out", .{
+            n.lines, n.with_static, n.docs, n.games, n.bad_docs, n.mismatch,
         });
         return 0;
     }
@@ -232,6 +246,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "style")) {
         return style.main(init.gpa, arena, init.io, argv[2..]);
     }
+    if (std.mem.eql(u8, cmd, "compcheck")) {
+        return compcheck.main(init.gpa, arena, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "lane")) {
         return lane.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -301,6 +318,7 @@ test {
     _ = anonymise;
     _ = archive;
     _ = mastery_pre;
+    _ = seatstats;
     _ = protocol;
     _ = rows;
     _ = pack;
@@ -315,6 +333,7 @@ test {
     _ = lane;
     _ = fields;
     _ = style;
+    _ = compcheck;
 }
 
 /// x86 SSE runs ~100x slower on denormal floats, which Adam's decaying moments of rarely

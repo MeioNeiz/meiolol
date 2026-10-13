@@ -15,6 +15,7 @@ const admin = @import("admin.zig");
 const api = @import("api/root.zig");
 const lab_rows = @import("lab/rows.zig");
 const lab_pack = @import("lab/pack.zig");
+const lab_seatstats = @import("lab/seatstats.zig");
 
 const testing = std.testing;
 const games = 3;
@@ -413,6 +414,31 @@ test "fixture games to lab rows, from SQLite and packed" {
     var loaded2 = (try lab_pack.read(gpa, io, snap, &legendaries)).?;
     defer loaded2.deinit();
     try expectSameRows(&sql2, &loaded2);
+    for (loaded2.rows) |r| for (r.stats) |x| try testing.expect(std.math.isNan(x));
+
+    // seat_stats.tsv appearing makes the pack stale; its seats fill in, the rest stay NaN
+    const seat_game = loaded2.games[loaded2.rows[0].game].match_id;
+    {
+        var line: std.Io.Writer.Allocating = .init(arena);
+        try line.writer.print("{s}{s}\t{d}", .{ lab_seatstats.header, seat_game, loaded2.rows[0].slot });
+        for (0..lab_seatstats.count) |i| try line.writer.print("\t{d}", .{i});
+        try line.writer.writeByte('\n');
+        const path = try std.fs.path.join(arena, &.{ snap, lab_seatstats.file_name });
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = line.written() });
+    }
+    try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &legendaries));
+    _ = try lab_pack.write(gpa, io, snap, &legendaries);
+    var seated = (try lab_pack.read(gpa, io, snap, &legendaries)).?;
+    defer seated.deinit();
+    var filled: usize = 0;
+    for (seated.rows) |r| {
+        if (std.math.isNan(r.stats[0])) continue;
+        filled += 1;
+        try testing.expectEqualStrings(seat_game, seated.games[r.game].match_id);
+        try testing.expectEqual(loaded2.rows[0].slot, r.slot);
+        try testing.expectEqual(@as(f32, lab_seatstats.count - 1), r.stats[lab_seatstats.count - 1]);
+    }
+    try testing.expectEqual(1, filled);
 }
 
 /// Every generated file's hash, against src/testdata/site-files.txt: a refactor that

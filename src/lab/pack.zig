@@ -4,6 +4,7 @@
 
 const std = @import("std");
 const rows = @import("rows.zig");
+const seatstats = @import("seatstats.zig");
 
 const Io = std.Io;
 const Data = rows.Data;
@@ -19,8 +20,9 @@ const dbs = [_][]const u8{ "meiolol.db", "raw.db", "timeline.db" };
 /// Any edit to these makes older packs stale. eval.split, timeline.decode and the like
 /// change often for other reasons and aren't hashed: bump `version` if they change rows
 const sources = [_][]const u8{
-    @embedFile("rows.zig"),     @embedFile("pack.zig"),
-    @embedFile("protocol.zig"), @embedFile("../stats.zig"),
+    @embedFile("rows.zig"),      @embedFile("pack.zig"),
+    @embedFile("protocol.zig"),  @embedFile("../stats.zig"),
+    @embedFile("seatstats.zig"),
 };
 
 pub const Written = struct { games: usize, rows: usize, bytes: u64 };
@@ -141,7 +143,7 @@ pub fn read(
 }
 
 /// The manifest lines a pack must match to be read: format, code, legendaries, the
-/// source databases (size and mtime, of the WAL too) and the columns
+/// source databases (size and mtime, of the WAL too), seat_stats.tsv and the columns
 fn head(
     gpa: std.mem.Allocator,
     io: Io,
@@ -174,6 +176,9 @@ fn head(
             name, db.size, db.mtime, wal.size, if (wal.size == 0) 0 else wal.mtime,
         });
     }
+    // Optional input (rows.Row.stats): appearing, changing or going makes the pack stale
+    const seats = try stamp(gpa, io, snap, seatstats.file_name) orelse Stamp{ .size = 0, .mtime = 0 };
+    try w.print("{s} {d} {d}\n", .{ seatstats.file_name, seats.size, seats.mtime });
     try columns(Game, "games", w);
     try columns(Row, "rows", w);
     return out.toOwnedSlice();

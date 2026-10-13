@@ -9,6 +9,7 @@ const std = @import("std");
 const api = @import("api");
 const core = @import("core");
 const rows = @import("rows.zig");
+const seatstats = @import("seatstats.zig");
 
 pub const Phase = enum { dev, select, final };
 
@@ -27,6 +28,7 @@ const seeds = 3;
 comptime {
     sameNames(core.Role, api.Role);
     sameNames(rows.Outcome, api.Outcome);
+    sameNames(seatstats.SeatStat, api.SeatStat);
 }
 
 fn sameNames(comptime A: type, comptime B: type) void {
@@ -200,6 +202,7 @@ pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, players: []const 
             .rank_after = if (after) r.rank_after else null,
             .exp = experience(r),
             .y = r.y,
+            .stats = r.stats,
         });
     }
     v.train = .{ .games = games.items, .rows = out.items };
@@ -579,6 +582,76 @@ fn SpyIn(comptime s: api.Scope) type {
 
         pub fn deinit(_: *Model, _: std.mem.Allocator) void {}
     };
+}
+
+/// Seat stats in fit: fixture rows carry their game's start minute as minutes
+const StatsSpy = struct {
+    pub const scope: api.Scope = .internal;
+    pub const Model = struct {};
+    /// Latest game whose stats reached fit, rows with stats, rows whose stats aren't
+    /// their own game's
+    var newest_stat: f32 = -1;
+    var with_stats: usize = 0;
+    var wrong_game: usize = 0;
+    var newest_query: i64 = std.math.maxInt(i64);
+
+    fn reset() void {
+        newest_stat = -1;
+        with_stats = 0;
+        wrong_game = 0;
+        newest_query = std.math.maxInt(i64);
+    }
+
+    pub fn fit(_: std.mem.Allocator, t: *const api.Train, _: api.Options) !Model {
+        for (t.rows) |r| {
+            const m = r.stats[@backingInt(api.SeatStat.minutes)];
+            if (std.math.isNan(m)) continue;
+            with_stats += 1;
+            newest_stat = @max(newest_stat, m);
+            if (m != @as(f32, @floatFromInt(@divExact(t.games[r.game].start, 60_000)))) wrong_game += 1;
+        }
+        return .{};
+    }
+
+    pub fn predict(_: *const Model, q: *const api.Query) api.Prediction {
+        newest_query = @min(newest_query, q.start);
+        return api.no_opinion;
+    }
+
+    pub fn deinit(_: *Model, _: std.mem.Allocator) void {}
+};
+
+test "seat stats reach fit on visible games only, never a scored game's" {
+    const gpa = std.testing.allocator;
+    var f = try Fixture.init(gpa, 600, 10);
+    defer f.data.deinit();
+    const players = try gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
+    const c = try cuts(gpa, &f.data, 0);
+
+    // No seat_stats.tsv: every stat NaN
+    StatsSpy.reset();
+    var s0 = try score(StatsSpy, gpa, &f.data, players, c, .dev, .{});
+    s0.deinit(gpa);
+    try std.testing.expectEqual(0, StatsSpy.with_stats);
+
+    for (f.data.rows) |*r| r.stats[@backingInt(api.SeatStat.minutes)] = @floatFromInt(@divExact(f.data.games[r.game].start, 60_000));
+    for ([_]Phase{ .dev, .select, .final }) |p| {
+        StatsSpy.reset();
+        var s = try score(StatsSpy, gpa, &f.data, players, c, p, .{});
+        defer s.deinit(gpa);
+        try std.testing.expect(s.row.len > 0 and StatsSpy.with_stats > 0);
+        try std.testing.expectEqual(0, StatsSpy.wrong_game);
+        var visible_rows: usize = 0;
+        for (f.data.rows) |r| visible_rows += @intFromBool(visible(p, c, f.data.games[r.game]));
+        try std.testing.expectEqual(visible_rows, StatsSpy.with_stats);
+        for (s.row) |ri| {
+            const scored_min: f32 = @floatFromInt(@divExact(f.data.games[f.data.rows[ri].game].start, 60_000));
+            try std.testing.expect(StatsSpy.newest_stat < scored_min);
+        }
+    }
+    // A query has no stats field at all
+    try std.testing.expect(!@hasField(api.Query, "stats"));
 }
 
 /// The baseline's own champion-role means plus a little noise: must not get past the
