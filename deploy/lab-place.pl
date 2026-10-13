@@ -300,9 +300,13 @@ sub live { return $_[0]{state} =~ /^(running|paused|queued)/ }
 
 # Seconds until one of RES's N slots on HOST is free for a new run: running runs hold a
 # slot for what they have left (overdue: a fifth of their time so far), queued ones take
-# the first slot to free up, oldest first, then the new run does
+# the first slot to free up in lab-run's ticket order (a0, 94068f0): fast ones (predicted
+# <= 60 s) first, then the rest, each oldest first. A FAST new run waits only for queued
+# fast ones, the rest for every queued run
+sub fast { return defined $_[0] && int($_[0]) <= 60 }
+
 sub wait_for {
-    my ($host, $res) = @_;
+    my ($host, $res, $fast) = @_;
     my $n_slots = $slots{$host}{$res} // 1;
     $n_slots = 1 unless $n_slots =~ /^\d+$/ && $n_slots > 0;
     my (@free, @queued, $n);
@@ -317,12 +321,14 @@ sub wait_for {
             my $done = $now{$host} - $r->{started} - paused($r, $r->{started}, $now{$host});
             push @free, $pred - $done > $done / 5 ? $pred - $done : $done / 5;
         } else {
-            push @queued, $pred;
+            # A start without a prediction is normal, whatever we estimate for it
+            push @queued, [fast($r->{pred}) ? 0 : 1, $pred];
         }
     }
     push @free, 0 while @free < $n_slots;
     @free = sort { $a <=> $b } @free;
-    for my $q (@queued) {
+    for my $q (map { $_->[1] } sort { $a->[0] <=> $b->[0] }
+        grep { !$fast || $_->[0] == 0 } @queued) {
         my $at = shift @free;
         @free = sort { $a <=> $b } @free, $at + $q;
     }
@@ -401,6 +407,10 @@ sub place {
                 my $share = $live + 1 < $n_slots ? $live + 1 : $n_slots;
                 $run *= $share;
                 $why .= ", x $share sharing $res" if $share > 1;
+            }
+            if ($res ne 'none' && fast($run)) {
+                ($wait) = wait_for($h, $res, 1);
+                $why .= ', fast lane';
             }
             my ($pen, $pen_why) = league_penalty($h);
             push @cands, {host => $h, res => $res, run => $run, wait => $wait + $pen,

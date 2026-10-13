@@ -148,9 +148,9 @@ run time.
   slower (eval 13 vs 7 s). No history anywhere: gpu-box cpu, as before, and it says so
 - Wait = until one of the resource's N slots (~/ml/locks/RES.slots, default 4) is free
   for the new run: running runs hold theirs for prediction minus time so far (overdue: a
-  fifth of their time so far), queued ones take the first slot to free up, oldest first.
-  A cpu slot gets 1/N of the cores, so history from whole-machine runs (before
-  2026-10-13 ~23:00) underestimates; it corrects as slot runs finish
+  fifth of their time so far), queued ones take the first slot to free up in lab-run's
+  ticket order: fast ones (predicted <= 60 s) first, then the rest, each oldest first. A
+  fast new run waits only for queued fast ones. Whole-machine history: see the ratio above
 - Feasible: the GPU only for CUDA commands (gpu-smoke; bench and draftbench when
   --devices has gpu; with CPU devices too they take the cpu lock, as their timings need
   it); the Mac never for CUDA; a host only if the args' snapshot paths (any `~/...snap-X`
