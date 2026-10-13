@@ -251,8 +251,15 @@ fn lint(b: *std.Build, tool: []const u8, script: []const u8) *std.Build.Step {
     return &run.step;
 }
 
-/// glibc, not musl: libcuda is a glibc library loaded with dlopen
-const gpu_box: std.Target.Query = .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu };
+/// glibc, not musl: libcuda is a glibc library loaded with dlopen. x86_64_v3: the
+/// i5-13600KF has AVX2 and FMA (baseline x86-64 has neither); deploy/lab-run.sh's meta
+/// records it, since float results differ in the last bits from a baseline build
+const gpu_box: std.Target.Query = .{
+    .cpu_arch = .x86_64,
+    .cpu_model = .{ .explicit = &std.Target.x86.cpu.x86_64_v3 },
+    .os_tag = .linux,
+    .abi = .gnu,
+};
 
 /// Modelling experiments (src/lab_main.zig). Kernels (src/gpu/kernels.zig) go to PTX, which
 /// the driver compiles for the card at load; without libcuda the GPU commands fail soft

@@ -148,6 +148,10 @@ start() {
     {
         echo "host $host"
         echo "bin $bin $(shasum -a 256 "$path" | cut -c1-16)"
+        # Float results differ in the last bits between CPU targets (FMA): paired
+        # comparisons need both sides from the same one. gpu-box: build.zig's gpu_box
+        # query and --meiolol's -Dcpu, both x86_64_v3 since 2026-10-13
+        if [[ "$host" == gpu-box ]]; then echo "cpu x86_64_v3"; else echo "cpu native"; fi
         echo "head $(git -C "$ROOT" rev-parse HEAD)"
         if (( HEAD_ONLY )); then echo "dirty 0 files (--head)"; else
             echo "dirty $(git -C "$ROOT" status --porcelain -- src build.zig | wc -l) files"
