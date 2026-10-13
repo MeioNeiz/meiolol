@@ -100,14 +100,23 @@ research/questions/agent-ml-practice.md.
    Thread count needn't be in meta
 2. Throughput: concurrent mixes on the gpu-box, nvidia-smi
    (/usr/lib/wsl/lib/nvidia-smi) and load; slot counts and default --pack from models
-   per hour; weighted slots; utilisation per run in the run dir
-3. Cheap run gates (< 1% of run time): NaN share per declared input, constant or NaN
-   preds, initial loss vs base rate; heavy checks (same seed twice, planted effects,
-   golden) are meiolol-tests' (synth.zig, golden.sh)
-4. Failed-run stub: lab-run appends command, exit and last error line to
-   docs/lab-constraints.md (e3's file) on a non-zero exit
+   per hour; weighted slots; utilisation per run in the run dir. So far: gpu.slots 2
+   (meiolol-fd's timings: 4 bought nothing over 2 for netcheck big); load reached 80 on
+   20 cores at 00:12Z 2026-10-14, so cpu slots plus gpu jobs' CPU overcommit
+3. Cheap run gates: done for preds (deploy/lab-gates.sh after every run: NaN/inf or
+   constant prediction columns, 83918fa) and seat stats (a needs_stats fit fails on any
+   all-NaN stat, e30cec4). Left: initial loss vs base rate in the nets (health.zig
+   checks it on synthetic games); heavy checks are meiolol-tests'
+4. Done: failed runs logged on the gpu-box, `lab-run.sh failures`, wait points at
+   docs/lab-constraints.md (90cc294; not appended to the tracked file: it would sit
+   dirty for other sessions' commits to sweep)
 5. --control shuffle harness-wide, generalising playernet's --shuffle-labels (8ea54ff),
-   same flag name
+   same flag name (76: --control shuffle|permute, --shuffle-labels an alias)
 6. Run key hash(binary, snapshot, args, seed): `lab-run` answers "same as RUN"
-7. Pre-commit import check; per-file command registration; looks ledger; one block
-   runner
+7. Done: pre-commit import check (7449671), looks ledger (95d9e96). Left: per-file
+   command registration; one block runner (meiolol-f7's list of winnet/playernet
+   duplicates)
+
+Also done (meiolol-a0, 2026-10-13/14): gpu-box binaries built on the gpu-box (df6d5c6),
+2 build slots and per-key locks (98cadb6; its lock never locked, fixed 59d0d27, locks
+now checked held), `lab-run --python` (1d9a334, py/)
