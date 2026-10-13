@@ -1,6 +1,6 @@
 # title: Do champion-role embeddings learnt from in-game stats improve the ratings?
-model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
-embedding prior, d8	ratings	folds	-0.00024	0.00025	3	-0.00029	-0.00019	44353		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	picked by inner validation on fit games (-0.00020 vs none); better in 5 of 5 folds
+model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note	learned
+embedding prior, d8	ratings	folds	-0.00024	0.00025	3	-0.00029	-0.00019	44353		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	picked by inner validation on fit games (-0.00020 vs none); better in 5 of 5 folds	2026-10-13 (early): Knowing how each champion plays in its role
 embedding prior, d8 (rare picks)	ratings	folds	-0.00076	0.00052	3	-0.00082	-0.00069	13735		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	games with a pick under 200 fit games
 embedding prior, d8	ratings	dev-val	0.00004	0.00040	3	-0.00012	0.00020	8500		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	
 embedding prior, d8 (rare picks)	ratings	dev-val	0.00021	0.00124	3	0.00011	0.00051	1850		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	games with a pick under 200 fit games

@@ -1460,12 +1460,51 @@ protocol, and never touches the test set.
   early-stops on the fit games' newest tenth, so our random-split number is the honest
   version of theirs)
 - `netcheck --split random:SEED`: one block. Fit on the non-test games older than the
-  selection cut outside the seed's random tenth (every platform); score the tenth's EUW1
-  games, as dev-val scores EUW1. `--filter ldai` drops filtered games from fit and scored
+  selection cut outside the seed's random tenth; score the whole tenth, every platform,
+  as LoLDraftAI (a75878b, meiolol-76's call: 3x the games; was EUW1 only, the EUW1 rows
+  of the new runs equal the old runs' exactly). `--filter ldai` drops filtered games from fit and scored
   games of any block. The candidate (-Dcand: win-ratings, win-comp) and the net fit on
   the same games; preds.tsv carries match ids, so runs can be compared on common games
-- Runs (pending): per candidate, `--blocks dev` and `--split random:1|2|3`, each with and
-  without `--filter ldai`, `--net small` at defaults (f1 adds its chosen nets)
+- Runs (gpu-box, snap-20261012T2055Z, `--net small --seeds 1,2,3` at defaults): per
+  candidate, `--blocks dev` (runs *-ldai-{ratings,comp}-dev-*) and `--split random:1|2|3`
+  (*-ldaiall-*, f09e507), each with and without `--filter ldai`. Table: the three random
+  tenths pooled (36,909 scored rows, 33,331 games: the tenths overlap), intervals 95%
+  clustered by game; the net is the 3-seed mean. Rows in docs/nn-results/ldai.tsv
+
+Results (dev only; audit by meiolol-4b pending, nothing in learned.md yet):
+
+| ratings scored on | fit games | games | log loss | accuracy | AUC |
+| --- | --- | --- | --- | --- | --- |
+| time split, dev-val (EUW1) | 88,706 | 8,500 | 0.68969 | 53.72% | 0.550 |
+| random split, EUW1 | ~110k | 10,222 | 0.69174 | 52.55% | 0.532 |
+| random split, every platform | ~110k | 36,909 | 0.69025 | 53.07% | 0.543 |
+| random split + filters, every platform | ~78k | 26,091 | 0.69167 | 52.51% | 0.535 |
+
+| comparison (random split, every platform) | no filters | LoLDraftAI's filters |
+| --- | --- | --- |
+| small net - ratings | -0.00000 ± 0.00032 | +0.00003 ± 0.00044 |
+| small net - win-comp | +0.00055 ± 0.00047 | +0.00050 ± 0.00057 |
+| win-comp - ratings | -0.00055 ± 0.00037 | -0.00048 ± 0.00041 |
+
+- The random split doesn't flatter our models: on EUW1 games, ratings score worse on a
+  random tenth than on the time split (0.69174 vs 0.68969, AUC 0.532 vs 0.550; different
+  games, so unpaired, ±0.0015 and ±0.0019 log loss). Every platform together: 53.07%,
+  AUC 0.543. Nothing near LoLDraftAI's 55-56%; the champions-only exp run above
+  (54.15%, AUC 0.556, EUW1 rows) is a different fit (exp, all rows), not this setup
+- The small net never beats its candidate: ties ratings on the random split, worse than
+  win-comp there (+0.00055 ± 0.00047), and worse than both on dev-val (+0.00060 ±
+  0.00052 vs ratings, +0.00030 ± 0.00078 vs win-comp). Single seeds: none below 0 by
+  more than 0.00012
+- win-comp beats ratings on the random split, every platform (-0.00055 ± 0.00037; EUW1
+  alone -0.00013 ± 0.00064, a tie), as on the forward folds (-0.00057 ± 0.00028); a tie
+  on dev-val (+0.00030 ± 0.00059)
+- The filters cost, not help: on the games both runs score, ratings with the filters
+  are worse by +0.00064 ± 0.00041 (random) and +0.00014 ± 0.00077 (time, a tie). They
+  drop 0.25% of games by LoLDraftAI's rules, and 29% for having no timeline to judge
+  (36% off EUW1, 11% EUW1), so fit games fall by 30% (110k to 78k): mostly fewer games
+- So LoLDraftAI's 55-56% isn't the split or the filters on our data. What's left: its
+  checkpoint picked on its test split, its larger window (52 patches), its own data mix;
+  none reproduced here
 
 #### Results dashboard (meiolol-2a)
 
@@ -1635,8 +1674,12 @@ Reading (dev, no test look):
   +0.00028 ± 0.00014 (worse on every fold): no spurious gain, a small overfit cost
 - In nets the vectors add nothing (0a's rows): a net's own embedding already has what
   the in-game stats give, or the small net cannot use it
-- Test look: needs a `final` block (fit on every non-test game, emb-final-s<seed>.tsv)
-  and the coordinator's go; not run
+- Audit (4b, f5b5499): no leakage, the rule followed, all 5 variants counted. With the
+  noise across 90% fit resamples (sd ~0.19 milli-nats on top of the per-game se) the
+  honest 95% half-width is ~±0.00048, so d8's -0.00024 is well inside: not detected.
+  The rare-pick gain is one subgroup of several looked at
+- No test look (coordinator): borderline, and a test look at this size can't settle it.
+  Next steps has the rerun on a bigger snapshot
 
 #### Patch and rank context (meiolol-48)
 

@@ -25,6 +25,15 @@ How to write a line:
 
 ## Win
 
+- 2026-10-13 (early): Knowing how each champion plays in its role (gold, CS, deaths,
+  damage and early lead, learnt from past games) does not measurably improve win
+  predictions beyond each champion's own win record; any help is in rarely played
+  picks, and even there it is within noise. Sure: not detected, dev only (5 rounds of
+  held-out games, 44,353, plus 8,500 dev-val), better in every round but by at most
+  about 0.0007 nats per game the data still allows (-0.00024 ± 0.00048 with resample
+  noise); random vectors and shuffled labels give nothing. Site: nothing, the
+  recommender keeps the ratings. Evidence: docs/model.md "Pretrained champion-role
+  embeddings", audit meiolol-4b
 - 2026-10-13: Knowing that a team's damage is lopsided makes win predictions only a
   little better overall, because only about one team in ten is lopsided: the gain was at
   the edge of noise over five rounds of held-out games and not detected on the test set.
