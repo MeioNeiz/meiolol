@@ -1633,6 +1633,84 @@ Reading (dev, no test look):
   as the lobby's bracket
 - Net embeddings of patch and rank (brief step 3): skipped, nothing to embed
 
+#### Stacking, calibration and trees (meiolol-97 [5c523c])
+
+`meiolol-lab stack NAME=FILE:COL... --ref A,B [--feat compcheck.tsv]... [--permute SEED]
+[--shuffle-y SEED]` (src/lab/stack.zig, src/lab/gbdt.zig): per-game out-of-sample
+predictions already made by netcheck, pretrain and f7's win-exp (fold 1-5 and dev-val
+blocks, joined by match id, 52,853 games), combined with nothing refitted underneath.
+Everything fitted here is fitted forward: fold k from folds 1..k-1, dev-val from folds
+1-5 (all inside each block's fit games), so fitted rows score folds 2-5 (35,483 games)
+and dev-val; fold 1 has nothing before it. Rows:
+- temperature: one scale on each model's logit, no intercept
+- average: the mean of the inputs' chances, nothing fitted
+- stacker: logistic regression on the inputs' logits plus an intercept, L2 1e-4 x games
+  (1e-2 was worse: -0.00034 vs ratings)
+- trees: histogram gradient boosting (depth 3, rate 0.05, 32 quantile bins, Newton
+  leaves, L2 1) on top of ratings' logit, over the inputs' logits and, with --feat,
+  compcheck's six team profile features per side (magic share, frontline, CC, the
+  enemy's magic share and frontline, armour lean; profiles built per fold from older
+  games). Each game enters from both sides and predictions are the antisymmetric part;
+  tree count by early stopping on the newest fit fold (fold 2: every fifth game of fold
+  1), then a refit on all fit games
+Inputs: ratings and win-comp (netcheck's cand columns, 0a's data/netcheck/f1 m-big and
+w-big), big 3-seed ensemble (m-big), resid (x-resid), small (m-small), pretrained-prior
+ratings (52's data/pretrain/d12 `emb`, seed mean), win-exp (f7's r-exp games-cand.tsv:
+ratings plus champion experience and form, internal scope). Runs: data/runs/
+20261013T21*-stk-* and 20261013T220*-stk-gb*. Dev only, no test look.
+
+Log loss difference per game, 95% paired by game, folds 2-5 | dev-val; "k of 4": folds
+better than the reference.
+
+| model | vs ratings | vs win-comp | vs win-exp |
+| --- | --- | --- | --- |
+| ratings, temperature | -0.00002 ± 0.00014 \| +0.00006 ± 0.00037 (2 of 4) | | |
+| win-comp, temperature | | +0.00005 ± 0.00014 \| -0.00009 ± 0.00034 | |
+| average of 6 (no win-exp) | -0.00040 ± 0.00013 \| -0.00006 ± 0.00020 (4 of 4) | +0.00006 ± 0.00027 \| -0.00036 ± 0.00052 | |
+| average of ratings, win-comp, big, prior | -0.00061 ± 0.00019 \| -0.00016 ± 0.00025 | -0.00015 ± 0.00027 \| -0.00046 ± 0.00048 | |
+| stacker, 6 inputs (no win-exp) | -0.00079 ± 0.00047 \| +0.00009 ± 0.00070 (4 of 4) | -0.00034 ± 0.00035 \| -0.00021 ± 0.00044 (4 of 4) | |
+| same, nets' single seeds 1/2/3 instead of the ensemble | -0.00052 / -0.00061 / -0.00082 | -0.00006 / -0.00016 / -0.00036 | |
+| control: inputs but ratings shuffled within blocks (2 seeds) | +0.00005 ± 0.00022, +0.00010 ± 0.00024 | | |
+| stacker, 7 inputs (with win-exp) | -0.00348 ± 0.00084 \| -0.00194 ± 0.00180 | -0.00302 ± 0.00078 \| -0.00224 ± 0.00174 | -0.00049 ± 0.00046 \| -0.00005 ± 0.00067 (4 of 4) |
+| trees on the 7 logits | -0.00216 ± 0.00059 \| -0.00176 ± 0.00184 | | +0.00082 ± 0.00055 \| +0.00013 ± 0.00103 (1 of 4) |
+| trees on the logits and team profiles | -0.00253 ± 0.00064 \| -0.00149 ± 0.00178 | | +0.00045 ± 0.00064 \| +0.00040 ± 0.00120 (1 of 4) |
+| control: outcomes shuffled within blocks for every fitted row (2 seeds) | stacker +0.0026, +0.0018; trees +0.0013, +0.0010 | | |
+
+For reference on the same games (folds 2-5 | dev-val vs ratings): win-comp -0.00046 |
++0.00030, big -0.00034 | -0.00035, prior -0.00040 | +0.00022, win-exp -0.00298 |
+-0.00189.
+
+Fitted temperatures (scale on the logit, fold 2..5 and dev): ratings 1.02, 0.79, 0.74,
+0.82, 0.80; win-comp 0.83-1.08; win-exp 0.80-0.91; prior 0.76-0.85; big 0.87-0.99 (its
+ensemble is calibrated; single big seeds 0.65-1.15); small 0.59-0.69. Calibration by
+predicted chance (folds 2-5 and dev-val): ratings' top bin (60%+, 1,138 games) predicted
+62.3%, observed 57.5 ± 2.9%; temperature moves it to 61.4%.
+
+Reading (dev, no test look):
+- Temperature scaling buys nothing measurable: ratings -0.00002 ± 0.00014 on the folds,
+  though its fitted scale is ~0.8 every fold (it is overconfident, as the test look
+  said). Most games sit near 50%, where a scale changes little; it matters for the
+  extreme picks shown, not the headline. Same for win-comp, prior, win-exp
+- Diverse weak draft models add up a little against ratings (average -0.0004, 4 of 4
+  folds; stacker -0.0008), but against win-comp nothing is detected (stacker -0.00034 ±
+  0.00035, dev-val -0.00021 ± 0.00044): what the stack finds over ratings is mostly
+  win-comp's mix term plus the pretrained prior. Its weights put about -0.5 on ratings
+  and +0.9 on win-comp, i.e. it scales the mix term up, plus ~0.5 on big and ~0.4 on
+  prior
+- With f7's win-exp the stack is -0.00049 ± 0.00046 vs win-exp on the folds (4 of 4) and
+  -0.00005 ± 0.00067 on dev-val: at the noise floor, not detected on dev-val. If real,
+  draft-only nets add ~0.0005 on top of player experience
+- Trees lose to the logistic stacker on the same inputs (vs win-exp +0.0008 logits only,
+  +0.0005 with team profiles, both worse than win-exp itself); team profiles help the
+  trees a little (-0.0004 between the two tree rows) but no tree row beats win-exp. At
+  ~35k fit games a depth-3 booster over a handful of dense logits is not a better
+  combiner than a linear one
+- Controls: shuffling every input but ratings gives ~0 (+0.00005, +0.00010), so the
+  forward fit does not leak. Shuffled outcomes make every fitted row worse than ratings
+  (it learns to pull ratings towards 50%), never better, as it must
+- Next: rerun on 0a's sweep ensemble and f7's ~350k-game win-exp when they land; a test
+  look only for the 7-input stacker vs win-exp, if the coordinator wants one
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

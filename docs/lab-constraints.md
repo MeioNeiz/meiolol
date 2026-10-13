@@ -26,6 +26,7 @@ Same error twice on one line of work: restore the last good state, don't try a t
 2026-10-13 | build | lab-run start failed "pinned to Zig 0.17.x, found 0.16.0" in a resumed Claude session | the new shell had Homebrew's zig first on PATH | export PATH=$HOME/.local/zig/zig-aarch64-macos-0.17.0:$PATH (or ~/.local/bin first) before lab-run or zig build
 2026-10-13 | process | pretrain variant runs vanished, no exit file | started as plain background shells from a Claude pane, killed when the pane closed | long runs only through deploy/lab-run.sh (own process group, survives the session)
 2026-10-13 | nets | set net's run said "vs cand" with candidate log loss 0.6927 on the folds (ratings: 0.6909) | lab-run --head without --build-arg -Dcand: build.zig's default candidate is src/lab/cand/base (champion base rates) | always pass -Dcand=src/lab/cand/win-ratings (or win-comp) to netcheck and other cand-built commands; the log's first line names the candidate ("vs win-ratings"), check it
+2026-10-13 | build | a new lab subcommand can't be built or committed alone: lab_main.zig holds other sessions' uncommitted hunks | shared file, commit by path takes all hunks | build from a copy: git archive HEAD into a dir, add your files and your lab_main lines, git init there, run that tree's deploy/lab-run.sh (PATH=~/.local/bin first); ask the coordinator to sequence the lab_main commit (meiolol-97 [5c523c])
 
 ## Zig 0.17 (docs/zig-0.17.md; check APIs with LSP hover, std moved a lot)
 
@@ -37,6 +38,7 @@ Same error twice on one line of work: restore the last good state, don't try a t
 2026-10-12 | zig | `.initEmpty()`, `**` on strings, @typeInfo(T).@"struct".fields fail | 0.17 changes | `.empty`; comptime loop; `.field_names` / `.field_types`
 2026-10-12 | zig | std.mem.containsAtLeastScalar gives wrong answers, still compiles | element and minimum arguments swapped in 0.17 | check argument order with LSP before use
 2026-10-12 | zig | StaticBitSet, ArrayList getLast deprecated | renamed, break in 0.18 | std.bit_set.Static, last().?
+2026-10-13 | zig | print format {d:+.5} fails at comptime (expected . or }, found '+') | no sign flag in 0.17's float format | print the sign yourself or drop it (meiolol-97 [5c523c])
 
 ## gpu-box and CUDA (docs/compute.md)
 

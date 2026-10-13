@@ -1,0 +1,13 @@
+# title: Do the models combined beat the best single one, and does calibration help?
+model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+stacker, 6 draft-only models	ratings	folds	-0.00079	0.00047	3	-0.00082	-0.00052	35483		20261013T215044Z-stk-all2	seed range: nets' single seeds instead of their ensemble
+stacker, 6 draft-only models	ratings	dev-val	0.00009	0.00070	3			8500		20261013T215044Z-stk-all2	
+stacker, 6 draft-only models	win-comp	folds	-0.00034	0.00035	3	-0.00036	-0.00006	35483		20261013T215044Z-stk-all2	not detected over win-comp
+stacker, 6 draft-only models	win-comp	dev-val	-0.00021	0.00044	3			8500		20261013T215044Z-stk-all2	
+stacker, all 7 models incl. win-exp	win-exp	folds	-0.00049	0.00046	3			35483		20261013T220120Z-stk-gb	folds 2-5, fitted forward on earlier folds; better in 4 of 4 folds; at the noise floor
+stacker, all 7 models incl. win-exp	win-exp	dev-val	-0.00005	0.00067	3			8500		20261013T220120Z-stk-gb	fitted on folds 1-5
+average of 6 draft-only models	ratings	folds	-0.00040	0.00013	3			35483		20261013T215044Z-stk-all2	nothing fitted
+temperature on ratings	ratings	folds	-0.00002	0.00014	1			35483		20261013T215044Z-stk-all2	fitted scale ~0.8 (overconfident) yet no measurable gain
+temperature on ratings	ratings	dev-val	0.00006	0.00037	1			8500		20261013T215044Z-stk-all2	
+trees (GBDT) on 7 logits and team profiles	win-exp	folds	0.00045	0.00064	3			35483		20261013T220120Z-stk-gb	worse than the linear stacker
+control: stacker, inputs shuffled	ratings	folds	0.00005	0.00022	3			35483		20261013T215105Z-stk-perm1	must be ~0: no leak
