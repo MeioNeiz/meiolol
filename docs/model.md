@@ -130,7 +130,8 @@ outcomes and readings decided by Jacob the same day.
   legendaries.tsv (both in the snapshot dir). Win rows after duration_s >= 900 (player
   rows, ten per game): test 106,040 (10,604 games, the same games as the early
   outcomes), lab selection 84,820, lab dev-val 85,000; champion base rates call 51.2%
-  of dev games right
+  of dev games right. snap-20261013T1954Z (13 Oct, 292,075 games): unpinned, learning
+  curve only ("Data for nets" below)
 - Split: eval's. Test = newest 20% of EUW1 games by gameCreation; train = older games,
   every platform. Tuning by folds inside train only; test touched once per model
 - Rows: ranked solo, non-remake, complete roles (stats.scan rules). Continuous outcomes
@@ -1439,6 +1440,25 @@ worse than the named model; test looks marked.
   per question so commits by path don't sweep in others' rows). deploy/lab-push.sh sends
   them as training/nn/ with nn.txt; the page shows them on the next push (30 s)
 - Seeded from f1's table and learning curve (a189f10) and win-comp's folds and test look
+
+#### Data for nets (meiolol-ea)
+
+- Tensor export `meiolol-lab nn-export SNAP` (563e063; layout docs/architecture.md, agreed
+  with f1): SNAP/nn/, one game per index; split.u8 codes 0 dev's older half, 1-5
+  win-comp's forward-chaining fold blocks, 6 dev-val, 7 other platforms in dev-val's
+  period, 8 selection, 9 other platforms then, 10 test (tested against harness.visible/
+  scored and the fold bounds); aux.f32 [10][22]: gold14, lanediff14, cs10, deaths15,
+  first_item, then the 17 SeatStat, as multi-task targets only, with fit-only mean/sd per
+  fit set and role in meta.json. snap-20261012T2055Z: 185,334 games, 173 champions, 1 s
+- Guard (9b2d122): a candidate declaring `needs_stats` (win-comp) fails with
+  error.NoSeatStats when its fit rows carry no seat stats, after a Mac copy of the pinned
+  snapshot without seat_stats.tsv turned win-comp into plain ratings unnoticed
+- More games: the box held 361,833 queue 420 games on 13 Oct vs 230,399 in the pinned
+  snapshot (+57%, 108k of them older games backfilled since); ~17-20k new a day. The raw
+  archive holds nothing beyond the box. Snapshot snap-20261013T1954Z (Mac data/, gpu-box
+  ~/ml/snaps/): unpinned, learning curve only, different test set, no test looks. 363,120
+  queue 420 games, 292,075 in rows (2,920,750 rows), seat_stats.tsv for 356,468 games
+  (raw.db keeps 30 days), patches 16.19-16.20
 
 ### Draft model file (meiolol-lab draft --export)
 
