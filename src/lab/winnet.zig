@@ -15,6 +15,11 @@
 //! All antisymmetric: logit = (f(blue, red) - f(red, blue)) / 2 + c[platform] (+ offset).
 //! Writes DIR/folds.tsv (per seed and block, plus the seed-averaged `ens`) and
 //! DIR/preds.tsv (per game); gains paired per game (= clustered by game)
+//! LoLDraftAI's evaluation beside ours (lab/randsplit.zig, dev only): --split random:SEED
+//! replaces the blocks by one, fitted on the non-test games before the selection cut
+//! outside that seed's random tenth (every platform) and scored on the tenth's EUW1
+//! games; --filter ldai drops LoLDraftAI's 15-minute filtered games from fit and scored
+//! games of any block (SNAP/ldai_filter.tsv, meiolol-lab ldai-filter)
 
 const std = @import("std");
 const api = @import("api");
@@ -22,6 +27,7 @@ const cand = @import("cand");
 const rows = @import("rows.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
+const randsplit = @import("randsplit.zig");
 const draftnet = @import("draftnet.zig");
 const par = @import("../par.zig");
 const cuda = @import("../gpu/cuda.zig");
@@ -39,6 +45,8 @@ pub const usage =
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
     \\                                  --fraction X (nested share of fit games)
     \\                                  --threads N --out DIR
+    \\                                  --split random:SEED (one block, LoLDraftAI's
+    \\                                  random tenth) --filter ldai (its filters)
     \\
 ;
 
@@ -68,12 +76,16 @@ pub const Options = struct {
     seeds: []const u32 = &.{1},
     blocks: []const Block = &.{ .dev, .f1, .f2, .f3, .f4, .f5 },
     fraction: f64 = 1,
+    /// --split random:SEED: LoLDraftAI's random tenth instead of the blocks
+    split_seed: ?u32 = null,
+    /// --filter ldai: LoLDraftAI's 15-minute filters on fit and scored games
+    ldai: bool = false,
     /// CPU threads for small and resid fits (one seed per thread) and big on the CPU
     threads: u32 = 3,
     out: []const u8 = ".",
 };
 
-pub const Block = enum { dev, f1, f2, f3, f4, f5 };
+pub const Block = enum { dev, f1, f2, f3, f4, f5, random };
 const n_folds = 5;
 const val_share = 0.1;
 const n_platforms = 16;
@@ -106,6 +118,8 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
     } else return error.TestPlatformNotScanned;
     const c = try harness.cuts(gpa, &data, eu);
+    var filter: ?randsplit.Filter = if (opts.ldai) try randsplit.loadFilter(gpa, io, snap) else null;
+    defer if (filter) |*f| f.deinit(gpa);
 
     try Io.Dir.cwd().createDirPath(io, opts.out);
     var dir = try Io.Dir.cwd().openDir(io, opts.out, .{});
@@ -130,6 +144,9 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     try w.print("options: emb {d} hidden {d} depth {d} dropout {d} wd {d} emb_wd {d} lr {d} clip {d} batch {d} evals {d} patience {d} min_games {d}\n\n", .{
         opts.emb, opts.hidden, opts.depth, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games,
     });
+    if (opts.split_seed != null or opts.ldai) {
+        try w.print("split: {s}{s}; dev only, the test set untouched\n\n", .{ if (opts.split_seed != null) "LoLDraftAI's random tenth" else "time", if (opts.ldai) ", LoLDraftAI's filters" else "" });
+    }
     try w.flush();
 
     // Fold bounds: compcheck's (win-comp's foldAblation), over every dev-visible game
@@ -141,8 +158,9 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var pooled: Pooled = .{};
     defer pooled.deinit(gpa);
     for (opts.blocks) |b| {
-        const spec: Spec = switch (b) {
+        var spec: Spec = switch (b) {
             .dev => .{ .before = c.dev, .lo = c.dev, .hi = c.select, .dev = true },
+            .random => .{ .before = c.select, .lo = 0, .hi = 0, .dev = false, .random = opts.split_seed.? },
             else => blk: {
                 const f: f64 = @floatFromInt(@backingInt(b) - 1);
                 const k: f64 = n_folds;
@@ -151,6 +169,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
                 break :blk .{ .before = lo, .lo = lo, .hi = hi, .dev = false };
             },
         };
+        spec.filter = if (filter) |*f| f else null;
         try runBlock(gpa, io, &data, players, c, spec, b, opts, if (gpu) |*g| g else null, &fw.interface, &pw.interface, w, &pooled);
     }
     if (pooled.cand.items.len > 0) {
@@ -216,6 +235,12 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             else
                 @fromBackingInt(@intCast(try std.fmt.parseInt(u3, s, 10))));
             o.blocks = out.items;
+        } else if (std.mem.eql(u8, k, "--split")) {
+            if (!std.mem.startsWith(u8, v, "random:")) return error.UnknownSplit;
+            o.split_seed = try std.fmt.parseInt(u32, v["random:".len..], 10);
+        } else if (std.mem.eql(u8, k, "--filter")) {
+            if (!std.mem.eql(u8, v, "ldai")) return error.UnknownFilter;
+            o.ldai = true;
         } else if (std.mem.eql(u8, k, "--fraction")) {
             o.fraction = try std.fmt.parseFloat(f64, v);
         } else if (std.mem.eql(u8, k, "--threads")) {
@@ -223,6 +248,10 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         } else if (std.mem.eql(u8, k, "--out")) {
             o.out = v;
         } else return error.UnknownOption;
+    }
+    if (o.split_seed != null) {
+        if (set.contains("--blocks")) return error.SplitReplacesBlocks;
+        o.blocks = &.{.random};
     }
     if (o.net == .big) {
         // draftnet's shape is fixed (dn: 10 x 32, 512, 256, dropout 0.1)
@@ -246,16 +275,44 @@ fn quantile(xs: []const i64, x: f64) i64 {
 }
 
 /// Fit on dev-visible games before `before`; score dev-val (dev) or dev-visible games in
-/// [lo, hi)
+/// [lo, hi). random: LoLDraftAI's split instead (randsplit.zig); filter: its filters
 const Spec = struct {
     before: i64,
     lo: i64,
     hi: i64,
     dev: bool,
+    random: ?u32 = null,
+    filter: ?*const randsplit.Filter = null,
+
+    fn fits(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
+        if (s.filter) |f| if (!f.keep(g)) return false;
+        if (!harness.inFraction(g, fraction)) return false;
+        if (s.random) |seed| return devEra(c, g) and !randsplit.inTest(g, seed);
+        return harness.visible(.dev, c, g) and g.start < s.before;
+    }
 
     fn scores(s: Spec, c: harness.Cuts, g: rows.Game) bool {
+        if (s.filter) |f| if (!f.keep(g)) return false;
+        if (s.random) |seed| return devEra(c, g) and g.platform == c.eu and randsplit.inTest(g, seed);
         if (s.dev) return harness.scored(.dev, c, g);
         return harness.visible(.dev, c, g) and g.start >= s.lo and g.start < s.hi;
+    }
+
+    /// The random split's games: played, not test, older than the selection games
+    fn devEra(c: harness.Cuts, g: rows.Game) bool {
+        return !g.is_test and g.duration_s >= harness.min_duration_s and g.start < c.select;
+    }
+};
+
+/// The candidate's fit games: the spec's, older than `before` (resid's inner fit)
+const FitKeep = struct {
+    spec: Spec,
+    c: harness.Cuts,
+    fraction: f64,
+    before: i64 = std.math.maxInt(i64),
+
+    pub fn keep(k: FitKeep, g: rows.Game) bool {
+        return k.spec.fits(k.c, g, k.fraction) and g.start < k.before;
     }
 };
 
@@ -280,12 +337,11 @@ const NetGame = struct {
     off: f32,
 };
 
-/// The candidate fitted on the dev-visible games before `before` (kept by fraction):
-/// blue's chance per data game index, for the games `want` marks; NaN elsewhere
-fn candBlue(gpa: std.mem.Allocator, d: *const rows.Data, players: []const harness.Players, c: harness.Cuts, before: i64, fraction: f64, want: []const bool, out: []f32) !void {
+/// The candidate fitted on the games `keep` accepts: blue's chance per data game index,
+/// for the games `want` marks; NaN elsewhere
+fn candBlue(gpa: std.mem.Allocator, d: *const rows.Data, players: []const harness.Players, keep: FitKeep, want: []const bool, out: []f32) !void {
     const k = api.outcomeIndex(.win);
-    const fit_cuts: harness.Cuts = .{ .dev = before, .select = before, .eu = c.eu };
-    var v = try harness.buildTrain(gpa, d, players, .dev, fit_cuts, fraction, false);
+    var v = try harness.buildTrainWhere(gpa, d, players, keep);
     defer v.deinit();
     const n_seeds: u64 = if (@hasDecl(cand, "seeded") and cand.seeded) 3 else 1;
     const sum = try gpa.alloc(f64, d.games.len);
@@ -404,7 +460,7 @@ fn runBlock(
     var scored: std.ArrayList(u32) = .empty;
     defer scored.deinit(gpa);
     for (d.games, 0..) |g, i| {
-        if (harness.visible(.dev, c, g) and g.start < spec.before and harness.inFraction(g, opts.fraction)) try fit.append(gpa, @intCast(i));
+        if (spec.fits(c, g, opts.fraction)) try fit.append(gpa, @intCast(i));
         if (spec.scores(c, g)) try scored.append(gpa, @intCast(i));
     }
     // Validation cut: the newest tenth of the fit games
@@ -430,13 +486,13 @@ fn runBlock(
     };
     const p_all = try gpa.alloc(f32, d.games.len);
     defer gpa.free(p_all);
-    try candBlue(gpa, d, players, c, spec.before, opts.fraction, want, p_all);
+    try candBlue(gpa, d, players, .{ .spec = spec, .c = c, .fraction = opts.fraction }, want, p_all);
     const p_inner = try gpa.alloc(f32, d.games.len);
     defer gpa.free(p_inner);
     if (opts.net == .resid) {
         @memset(want, false);
         for (fit.items) |gi| want[gi] = true;
-        try candBlue(gpa, d, players, c, cut, opts.fraction, want, p_inner);
+        try candBlue(gpa, d, players, .{ .spec = spec, .c = c, .fraction = opts.fraction, .before = cut }, want, p_inner);
     }
     const t_cand = secondsSince(io, t0);
 
@@ -542,7 +598,7 @@ fn runBlock(
         for (fits) |f| try pw.print("\t{d:.6}", .{f.pred[i]});
         try pw.print("\t{d:.6}\n", .{ens[i]});
     }
-    if (!spec.dev) {
+    if (!spec.dev and spec.random == null) {
         try pooled.ys.appendSlice(gpa, ys);
         try pooled.cand.appendSlice(gpa, pc);
         try pooled.ens.appendSlice(gpa, ens);
@@ -557,6 +613,7 @@ fn blockName(b: Block) []const u8 {
         .f3 => "3",
         .f4 => "4",
         .f5 => "5",
+        .random => "random",
     };
 }
 

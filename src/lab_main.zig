@@ -24,6 +24,7 @@ const harness = @import("lab/harness.zig");
 const fields = @import("lab/fields.zig");
 const style = @import("lab/style.zig");
 const compcheck = @import("lab/compcheck.zig");
+const randsplit = @import("lab/randsplit.zig");
 const winnet = @import("lab/winnet.zig");
 const gains = @import("lab/gains.zig");
 
@@ -68,7 +69,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ gains.usage ++ winnet.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ randsplit.usage ++ gains.usage ++ winnet.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -271,6 +272,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "gains")) {
         return gains.main(init.gpa, arena, init.io, argv[2..]);
     }
+    if (std.mem.eql(u8, cmd, "ldai-filter")) {
+        return randsplit.main(init.gpa, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "compcheck")) {
         return compcheck.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -363,6 +367,7 @@ test {
     _ = fields;
     _ = style;
     _ = compcheck;
+    _ = randsplit;
     _ = winnet;
     _ = gains;
 }
