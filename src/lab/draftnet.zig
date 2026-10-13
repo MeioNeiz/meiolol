@@ -336,11 +336,13 @@ fn bias(step: u32) [2]f32 {
 }
 
 /// Trains epochs passes on the CPU over threads (1: one core)
-pub fn fitCpu(gpa: std.mem.Allocator, io: std.Io, cfg: Config, n_ids: u32, train: []const dn.Game, epochs: u32, threads: usize) !Net {
+pub fn fitCpu(gpa: std.mem.Allocator, io: std.Io, cfg: Config, n_ids: u32, train: []const dn.Game, epochs: u32, threads: usize, watch: ?*Watch) !Net {
     const parts = chunks(threads);
     var n: Net = try .init(gpa, n_ids, cfg.seed);
     errdefer n.deinit(gpa);
     const l = n.l;
+    if (watch) |x| try x.start(gpa, l.len);
+    defer if (watch) |x| x.end(gpa, &n);
     var w: Work = try .init(gpa, cfg.batch);
     defer w.deinit(gpa);
     const gr = try gpa.alloc(f32, l.len);
@@ -423,8 +425,58 @@ pub fn fitCpu(gpa: std.mem.Allocator, io: std.Io, cfg: Config, n_ids: u32, train
             const a: Adam = .{ .p = n.p, .gr = gr, .m1 = m1, .m2 = m2, .lr = cfg.lr, .wd = cfg.wd, .decay_from = l.decay, .c = bias(step), .parts = parts };
             try split(io, parts, a, Adam.run);
         }
+        if (watch) |x| if (try x.epochDone(gpa, io, &n)) break;
     }
     return n;
+}
+
+/// Early stopping: the log loss on held-out games after every epoch; a fit stops after
+/// `patience` epochs without a new best and returns the best epoch's parameters
+pub const Watch = struct {
+    val: []const dn.Game,
+    patience: u32,
+    best_loss: f64 = std.math.inf(f64),
+    best_epoch: u32 = 0,
+    epoch: u32 = 0,
+    best: []f32 = &.{},
+    pred: []f32 = &.{},
+
+    fn start(w: *Watch, gpa: std.mem.Allocator, len: u32) !void {
+        w.best = try gpa.alloc(f32, len);
+        errdefer gpa.free(w.best);
+        w.pred = try gpa.alloc(f32, w.val.len);
+        w.best_loss = std.math.inf(f64);
+        w.best_epoch = 0;
+        w.epoch = 0;
+    }
+
+    fn end(w: *Watch, gpa: std.mem.Allocator, n: *Net) void {
+        if (w.best_epoch > 0) @memcpy(n.p, w.best);
+        gpa.free(w.best);
+        gpa.free(w.pred);
+        w.best = &.{};
+        w.pred = &.{};
+    }
+
+    /// true: stop
+    fn epochDone(w: *Watch, gpa: std.mem.Allocator, io: std.Io, n: *const Net) !bool {
+        w.epoch += 1;
+        try n.predict(gpa, io, w.val, w.pred);
+        const loss = logLoss(w.pred, w.val);
+        if (loss < w.best_loss - 1e-7) {
+            w.best_loss = loss;
+            w.best_epoch = w.epoch;
+            @memcpy(w.best, n.p);
+        }
+        return w.epoch - w.best_epoch >= w.patience;
+    }
+};
+
+/// Mean log loss of blue's predicted chances
+pub fn logLoss(pred: []const f32, games: []const dn.Game) f64 {
+    var ll: f64 = 0;
+    for (pred, games) |q, g| ll -= if (g.y > 0.5) @log(@max(q, 1e-7)) else @log(@max(1 - q, 1e-7));
+    return ll / @as(f64, @floatFromInt(@max(games.len, 1)));
 }
 
 /// Train games on the device, uploaded once per data size
@@ -447,10 +499,12 @@ pub const DeviceGames = struct {
 };
 
 /// fitCpu on the GPU: the same steps as kernels (kernels.zig dn_* and gemm)
-pub fn fitGpu(gpa: std.mem.Allocator, gpu: *const cuda.Gpu, dev: *DeviceGames, cfg: Config, n_ids: u32, train: []const dn.Game, epochs: u32) !Net {
+pub fn fitGpu(gpa: std.mem.Allocator, io: std.Io, gpu: *const cuda.Gpu, dev: *DeviceGames, cfg: Config, n_ids: u32, train: []const dn.Game, epochs: u32, watch: ?*Watch) !Net {
     var n: Net = try .init(gpa, n_ids, cfg.seed);
     errdefer n.deinit(gpa);
     const l = n.l;
+    if (watch) |x| try x.start(gpa, l.len);
+    defer if (watch) |x| x.end(gpa, &n);
     var b: Buffers = try .init(gpu, l.len, 2 * cfg.batch);
     defer b.deinit(gpu);
     try gpu.upload(f32, b.p, n.p);
@@ -505,6 +559,11 @@ pub fn fitGpu(gpa: std.mem.Allocator, gpu: *const cuda.Gpu, dev: *DeviceGames, c
             var c1 = c[0];
             var c2 = c[1];
             try gpu.launch(k.adamw, l.len, &.{ @ptrCast(&b.p), @ptrCast(&b.gr), @ptrCast(&b.m1), @ptrCast(&b.m2), @ptrCast(&len), @ptrCast(&lr), @ptrCast(&wd), @ptrCast(&decay), @ptrCast(&c1), @ptrCast(&c2) });
+        }
+        if (watch) |x| {
+            try gpu.sync();
+            try gpu.download(f32, n.p, b.p);
+            if (try x.epochDone(gpa, io, &n)) break;
         }
     }
     try gpu.sync();
@@ -642,21 +701,19 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, d: *const rows.Data, opts: Option
             if (device == .gpu and gpu == null) continue;
             const t0 = std.Io.Clock.awake.now(io);
             var net = switch (device) {
-                .cpu1 => try fitCpu(gpa, io, .{}, games.n_ids, train, opts.epochs, 1),
-                .cpu => try fitCpu(gpa, io, .{}, games.n_ids, train, opts.epochs, threads),
-                .gpu => try fitGpu(gpa, gpu.?, &dev.?, .{}, games.n_ids, train, opts.epochs),
+                .cpu1 => try fitCpu(gpa, io, .{}, games.n_ids, train, opts.epochs, 1, null),
+                .cpu => try fitCpu(gpa, io, .{}, games.n_ids, train, opts.epochs, threads, null),
+                .gpu => try fitGpu(gpa, io, gpu.?, &dev.?, .{}, games.n_ids, train, opts.epochs, null),
             };
             defer net.deinit(gpa);
             const ns = t0.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
             const secs = @as(f64, @floatFromInt(ns)) / 1e9;
             try net.predict(gpa, io, games.tests, pred);
-            var ll: f64 = 0;
-            for (pred, games.tests) |q, g| ll -= if (g.y > 0.5) @log(@max(q, 1e-7)) else @log(@max(1 - q, 1e-7));
             if (di == 0) @memcpy(ref, pred);
             var diff: f32 = 0;
             for (pred, ref) |a, b| diff = @max(diff, @abs(a - b));
             try w.print("| {d}x | {d} | {s} | {d:.2} | {d:.5} | {e:.2} |\n", .{
-                scale, train.len, @tagName(device), secs / @as(f64, @floatFromInt(opts.epochs)), ll / @as(f64, @floatFromInt(pred.len)), diff,
+                scale, train.len, @tagName(device), secs / @as(f64, @floatFromInt(opts.epochs)), logLoss(pred, games.tests), diff,
             });
             try w.flush();
         }
@@ -673,14 +730,14 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, d: *const rows.Data, opts: Option
                         train: []const dn.Game,
                         epochs: u32,
                         fn one(c: @This(), i: usize) !void {
-                            var net = try fitCpu(c.gpa, c.io, .{ .seed = @intCast(i + 1) }, c.n_ids, c.train, c.epochs, 1);
+                            var net = try fitCpu(c.gpa, c.io, .{ .seed = @intCast(i + 1) }, c.n_ids, c.train, c.epochs, 1, null);
                             net.deinit(c.gpa);
                         }
                     };
                     try par.forEach(io, opts.sweep, Ctx{ .gpa = gpa, .io = io, .n_ids = games.n_ids, .train = train, .epochs = opts.epochs }, Ctx.one);
                 },
                 .gpu => for (0..opts.sweep) |i| {
-                    var net = try fitGpu(gpa, gpu.?, &dev.?, .{ .seed = @intCast(i + 1) }, games.n_ids, train, opts.epochs);
+                    var net = try fitGpu(gpa, io, gpu.?, &dev.?, .{ .seed = @intCast(i + 1) }, games.n_ids, train, opts.epochs, null);
                     net.deinit(gpa);
                 },
             }
@@ -711,9 +768,9 @@ test "draft net: threaded fit matches one core, loss falls on a learnable signal
         g.y = if (r.float(f32) < edge) 1 else 0;
     }
     const cfg: Config = .{ .batch = 64 };
-    var a = try fitCpu(gpa, testing.io, cfg, n_ids, train, 3, 1);
+    var a = try fitCpu(gpa, testing.io, cfg, n_ids, train, 3, 1, null);
     defer a.deinit(gpa);
-    var b = try fitCpu(gpa, testing.io, cfg, n_ids, train, 3, 4);
+    var b = try fitCpu(gpa, testing.io, cfg, n_ids, train, 3, 4, null);
     defer b.deinit(gpa);
     const pa = try gpa.alloc(f32, 200);
     defer gpa.free(pa);
