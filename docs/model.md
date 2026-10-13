@@ -2109,8 +2109,8 @@ games as netcheck (dev-val, win-comp's 5 forward folds), paired per game with wi
 fitted on the same games. Planted tests: a block's sd recovered within ~0.05 logit,
 empty blocks shrink to ~0.
 
-Run 20261013T225421Z-eff-d (4ace29b; built during the lab-run lock bug window, being
-re-checked by meiolol-a0). Folds pooled, 44,353 games, log loss vs ratings, ± 95% paired
+Run 20261013T225421Z-eff-d (4ace29b; built during the lab-run lock bug window, cleared by
+meiolol-a0: its stripped binary equals a clean rebuild). Folds pooled, 44,353 games, log loss vs ratings, ± 95% paired
 per game, folds better of 5:
 
 | model | vs ratings | vs champion strength only |
@@ -2141,13 +2141,44 @@ Per-block spread of true effects: a shuffled-label control (20261013T223344Z-eff
 gave held-out gains of ~0 (full vs strength -0.00000 ± 0.00012) and champion strength sd
 0.00-0.01 pp, but pair blocks still 0.1-0.9 pp: with 1-3 games per cell the variance
 estimate finds spread in noise. A Poisson bootstrap made it worse (duplicated games look
-consistent). So each block is read against a shuffled-outcome null (`--null 20`) with
-half-sample intervals; table from run eff-e below.
+consistent). So each block is read against a shuffled-outcome null (`--null 20`: the same
+fit with results and gold permuted across games, drafts kept) with intervals from 30
+half-samples (sd of the halves / sqrt 2). Corrected = sqrt(sd^2 - null mean square);
+detected = the block's sd and its lower bound both above the null's 95th percentile.
 
-Gold at 14 (team gold, blue minus red, gaussian, same blocks): spread of true effects,
-gold (eff-c; the null-corrected table follows with eff-e): champion strength 300-375 per
-role (3c: 270-360); lane top 133, middle 103, bottom-support across 86, bottom 56,
-jungle 56; ally pairs 9-71; off-lane enemy pairs 9-41. The draft predicts gold at 14
+Run 20261013T231222Z-eff-e (4f3d007), fitted on dev's 88,706 fit games (64,931 with gold at
+14). Spread of true effects across a block's cells, corrected, [95%]; win in pp at 50%,
+gold at 14 in team gold:
+
+| block | win pp | gold at 14 |
+| --- | --- | --- |
+| champion strength top | 1.48 [1.24, 1.72] detected | 376 [352, 399] detected |
+| champion strength jungle | 1.00 [0.69, 1.31] detected | 321 [301, 340] detected |
+| champion strength middle | 1.94 [1.72, 2.16] detected | 362 [345, 380] detected |
+| champion strength bottom | 1.52 [1.33, 1.71] detected | 327 [305, 348] detected |
+| champion strength support | 2.17 [1.83, 2.52] detected | 301 [280, 322] detected |
+| ally bottom-support | 1.21 [0.83, 1.58] detected | 41 [17, 58] |
+| ally top-bottom | 0.68 [0.43, 0.91] (null 95th 0.91) | 0 [0, 0] |
+| ally jungle-bottom | 0.42 [0, 0.68] | 18 [0, 40] |
+| other 7 ally pairs | 0 (upper 0-0.38) | 0-12 (upper 0-43) |
+| top vs their top | 1.23 [0.99, 1.47] detected | 127 [98, 155] detected |
+| middle vs their middle | 0.67 [0.38, 0.91] | 96 [76, 115] detected |
+| bottom vs their bottom | 0.64 [0.34, 0.93] | 54 [31, 76] detected |
+| bottom vs their support (and support vs their bottom) | 0.28 / 0.24 [0, 0.45] | 83 [56, 110] detected / 10 [6, 13] |
+| jungle vs their jungle | 0.54 [0.22, 0.79] | 39 [0, 70] |
+| support vs their support | 0.41 [0, 0.66] | 37 [0, 68] |
+| other 18 enemy pairs | 0-0.36 (upper 0-0.51) | 0-18 (upper 0-30) |
+
+Damage mix: -1.94 ± 0.33 pp per sd of the term (-2.72 ± 0.33 per sd of blue minus red);
+on gold at 14 -11 ± 27 (none: the mix is a late-game term). So the draft's information is
+champion strength in every role (1-2 pp of spread each, 300-375 gold), the damage mix,
+one ally pair (bottom-support, 1.2 pp) and the lanes: top vs top on both win and gold,
+middle and bottom lanes on gold at 14 with at most ~0.9 pp on win. Not detected: ally
+top-bottom (0.68) and jungle vs jungle (0.54) sit under the null's 95th; the other 7 ally
+and 18 enemy role pairs are at most 0.4 pp (upper ends 0.5). Single pairs: not reported
+(1-3 games per cell; the blocks are the answer).
+
+The draft predicts gold at 14
 (held-out R^2 5-8% of team gold's 3,600 sd), but the predicted gold edge carries no win:
 -0.02, -0.04, +0.05, -0.02, -0.02, +0.04 logit per 1000 (± 0.05) on dev and the five
 folds' scored games, against 0.405 for real gold at 14. Gold at 14 then to win through
@@ -2156,7 +2187,7 @@ the state model (+0.018 vs ratings) is ruled out: drafts that win early gold giv
 #### In-game events
 
 `meiolol-lab eventvalue SNAP` (src/lab/eventvalue.zig, 706b2c4, on meiolol-4a's
-SNAP/events.tsv), run 20261013T225443Z-ev-a (being re-checked by a0, as eff-d). 130,229
+SNAP/events.tsv), run 20261013T225443Z-ev-a (build cleared by a0, as eff-d). 130,229
 games with a timeline, 3.55M game-minutes. Per game-minute (frame m to m+1): blue's win
 chance change under winchance.zig's state model, and blue's gold lead change, regressed
 on that minute's events (+1 blue, -1 red) by minute band, so events of one fight share
