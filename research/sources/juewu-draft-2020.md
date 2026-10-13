@@ -3,7 +3,7 @@ title: 'Which Heroes to Pick? Learning to Draft in MOBA Games with Neural Networ
 url: https://arxiv.org/pdf/2012.10171
 kind: paper
 commit:
-for: [draft-predictor-methods]
+for: [draft-predictor-methods, nn-draft-models]
 looked: 2026-10-12
 depth: docs (win-rate predictor sections III.C, IV.A-B)
 relevance: medium
@@ -51,9 +51,14 @@ beat LR and GBDT at that scale?
   [[draftrec-2022#^f4]]). Possible reasons: much more data supports more interaction
   terms, or a weak LR baseline; unresolved. ^f6
 
+- [method] Win-rate predictor training: Adam, learning rate 1e-4; heroes as indices 0-94. Checked, not there: layer widths, embedding size, dropout, epochs, batch size for the predictor (the batch 400 and L2 1e-4 in section IV.C are for the MCTS policy and value network). Section IV.B-C ^f7
+  > heroes of each match are distinguished with indices ranging in [0, 94], while the match outcome is used as the label. The learning rate is set to 10−4 with Adam optimizer.
+
 ## Read
 
 - Abstract, sections III.C (predictor), IV.A-B, Fig. 7
+
+- 2026-10-13: section IV.C training details
 
 ## Not read
 

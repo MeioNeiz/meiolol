@@ -1,0 +1,37 @@
+{
+  "constant": {},
+  "logreg_strength": {
+    "C": 0.01,
+    "pair_scale": 1.0
+  },
+  "logreg_pairs": {
+    "C": 0.01,
+    "pair_scale": 0.5
+  },
+  "factorization_machine": {
+    "lam_interaction": 20.0,
+    "k": 4,
+    "lr_strength": 0.001,
+    "lr_interaction": 0.001,
+    "batch_size": 1024,
+    "max_epochs": 30,
+    "patience": 5,
+    "lam_strength": 50.0,
+    "epochs": 14
+  },
+  "xgboost": {
+    "max_depth": 4,
+    "rounds": 731
+  },
+  "transformer": {
+    "lam_interaction": 1.0,
+    "k": 32,
+    "lr_strength": 0.001,
+    "lr_interaction": 0.001,
+    "batch_size": 512,
+    "max_epochs": 30,
+    "patience": 3,
+    "lam_strength": 50.0,
+    "epochs": 2
+  }
+}

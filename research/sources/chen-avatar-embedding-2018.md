@@ -3,7 +3,7 @@ title: 'Modeling Game Avatar Synergy and Opposition through Embedding in MOBA Ga
 url: https://arxiv.org/pdf/1803.10402
 kind: paper
 commit:
-for: [draft-predictor-methods]
+for: [draft-predictor-methods, nn-draft-models]
 looked: 2026-10-12
 depth: docs (model, outcome prediction experiment, human evaluation)
 relevance: high
@@ -60,11 +60,17 @@ strength in draft-only prediction, at millions of games, and does GBDT beat them
   Dota, 0.64 HotS, 0.62 HoN. The ceiling is set by the game's balance, not the model;
   LoL ranked at 0.55 (ours) sits below all three. ^f9
 
+- [method] Optimiser: AdaGrad on mini-batches of matches; hyperparameters (regularisation, latent dimension K, trees) chosen per fold on the validation split; K = 75 in the Dota case study. Checked, not there: the chosen K and penalty per game in the AUC table, epochs. Eqn. 5, Performance Evaluation, case study ^f10
+  > For parameter learning, we use AdaGrad (Duchi, Hazan, and Singer 2011) to update parameters based on a small batch of matches in each iteration.
+  > the best hyperparameters is determined according to the classification performance on the validation dataset
+
 ## Read
 
 - Abstract, related work, model, relation to FM, outcome prediction experiment, human
   evaluation, case study start
 
+- 2026-10-13: learning paragraph, tuning protocol, case study K
+
 ## Not read
 
-- Pick recommender case study details, hyperparameters (K = 75 for Dota case study)
+- Pick recommender case study details

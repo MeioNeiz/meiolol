@@ -3,7 +3,7 @@ title: LoLDraftAI public monorepo archive (May 2025 state)
 url: https://github.com/Looyyd/loldraftai-monorepo-public
 kind: project
 commit: 10e7e2f86a0a0d0efb71ea3e3b128a96cd89d105
-for: [riot-production-key, draft-predictor-methods]
+for: [riot-production-key, draft-predictor-methods, nn-draft-models]
 looked: 2026-10-11
 depth: code (README, data-collection rate limiter, desktop footer, blog posts, apps/machine-learning model, data prep, training)
 relevance: high
@@ -81,11 +81,35 @@ Why: the nearest precedent to meiolol's design (ML model trained on Riot ranked 
 - [method] Pro model: fine-tune with a new queue embedding, other embeddings frozen, mixing in solo queue data to avoid catastrophic forgetting. `apps/machine-learning/README.md` ^f27
   > The model is finetune while keeping a significant portion of data from solo queue matches, to avoid catastrophic forgetting
 
+- [method] Learning-rate schedule: one-cycle with cosine annealing, peak 8e-4 reached at 20% of steps, start at peak/10, end at peak/(10 x 3e4); continued (online) training instead uses a flat 4e-4 with no schedule. `config.py`, `train.py` ^f28
+  > self.pct_start = 0.2
+  > self.learning_rate = 4e-4  # Lower LR for continued training
+  > anneal_strategy="cos",  # cosine annealing
+- [method] Gradient clipping at global norm 1.0; bfloat16 autocast on CUDA; fused AdamW. `config.py`, `train.py` ^f29
+  > self.max_grad_norm = 1.0
+  > with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+- [method] Weight decay 0.05 applies only to MLP weights: all embeddings, biases and norm layers are excluded (minGPT convention). `train_utils.py` ^f30
+  > # 1. Standard embedding layers (embeddings.*.weight and champion_embedding.weight)
+- [method] [stats] Checked, not there: no early stopping; all 50 epochs run, the best-validation-loss state is saved each time it improves and a timestamped checkpoint every epoch. `train.py` ^f31
+  > # save with timestamp anyways
+- [method] Embedding init is PyTorch default (no custom init in the archived model); class-based champion init was tried earlier and removed. MLP blocks are Linear (no bias), BatchNorm, GELU, Dropout, with half dropout on the last block. `model.py`, `apps/machine-learning/README.md` ^f32
+  > nn.Linear(prev_dim, hidden_dims[0], bias=False),
+  > custom embedding initialization depending on champion class
+- [method] Batch size 20,480 on CUDA (4,096 otherwise), last partial batch dropped. `utils/match_prediction/__init__.py`, `train.py` ^f33
+  > TRAIN_BATCH_SIZE = 2048 * 10  # Used during training
+- [stats] Validation runs on both the plain and a masked copy of the test split every epoch; `validation.py` (subgroup losses by elo, patch and champion play rate, quantile ECE, matchup calibration) is marked as out of date for the current architecture. `train.py`, `validation.py` ^f34
+  > # TODO: needs to be updated for new model architecture
+  > def compute_ece(y_true, y_prob, n_bins=20, strategy="quantile"):
+- [method] Checked, not there: no training time, GPU type or wall-clock figure in the READMEs (epoch time goes only to W&B). ^f35
+
 ## Read
 
 - `README.md`, `processMatches.ts` lines 1-70, desktop `Layout.tsx` footer, correction blog post; grep for policy terms over the repo
 - 2026-10-12: `apps/machine-learning` README, model, config, masking, dataset, column and task definitions, `prepare_data.py`, `train.py` (loop, validation, checkpointing), `download_data.py`; DraftGap comparison post
+- 2026-10-13: `config.py` in full, `train.py` (optimiser, scheduler, loop), `train_utils.py`
+  (parameter groups), `__init__.py` (batch size), `validation.py` (header, function list)
 
 ## Not read
 
-- `apps/desktop` LCU integration details; `train_pro.py`, `validation.py` (subgroup and calibration report, marked as needing update), `adapt_model.py`; W&B runs (external)
+- `apps/desktop` LCU integration details; `train_pro.py`, `adapt_model.py`; `validation.py`
+  body beyond function list; W&B runs (external, would give training time)

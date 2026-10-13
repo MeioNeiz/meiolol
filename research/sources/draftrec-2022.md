@@ -3,7 +3,7 @@ title: 'DraftRec: Personalized Draft Recommendation for Winning in MOBA Games (W
 url: https://arxiv.org/pdf/2204.12750
 kind: paper
 commit:
-for: [draft-predictor-methods]
+for: [draft-predictor-methods, nn-draft-models]
 looked: 2026-10-12
 depth: docs (setup, outcome results, appendix B)
 relevance: high
@@ -65,11 +65,22 @@ fair time-split benchmark, and how much player history adds.
   same models; mixed ranks and the 2015 meta (stronger heroes, more imbalance) are
   likely causes, so Dota accuracies do not transfer as targets for ranked LoL. ^f10
 
+- [method] Training setup for all re-implemented models: 2 layers, Adam (0.9, 0.999), gradient clipping at l2 norm 5, 64 dims per attention head. Section 5.2 ^f11
+  > we set the number of layers 𝑁 = 2 and used the Adam optimizer with 𝛽 1 = 0.9, 𝛽 2 = 0.999 with gradient clipping when its 𝑙 2 norm exceeds 5.
+- [method] Common tuning grid: learning rate {1e-2, 1e-3, 1e-4} with cosine annealing, l2 {1e-2 to 1e-5}, dropout {0, 0.1, 0.2}, hidden size d {64, 128, 256}, batch {256, 512}; history length L {0 to 100} for history models. Checked, not there: chosen values per model, epoch counts, early stopping rule. Section 5.2 ^f12
+  > learning rate 𝑙𝑟 ranges from {0.01, 0.001, 0.0001} and anneal with a cosine scheduler
+  > dropout rate 𝑝 from {0, 0.1, 0.2}, hidden dimension size 𝑑 from {64, 128, 256}, and batch size from {256, 512}
+- [method] Multi-task: DraftRec's outcome head is trained jointly with the champion recommendation head; team vectors are average-pooled player representations, subtracted, then two fully connected layers and a sigmoid. Section 4.3 ^f13
+  > We jointly perform the match outcome prediction by comparing the representations of the two teams.
+  > we subtract the two team representations and apply two fully-connected layers followed by a sigmoid function
+
 ## Read
 
 - Abstract, sections 2, 5.1-5.3, appendix B.1-B.2, Tables 1, 3, 9
 
+- 2026-10-13: section 5.2 training details, outcome head (section 4.3)
+
 ## Not read
 
-- Recommendation method details, user survey (Table 5), feature tables 6-7 (in-game
+- Recommendation method details beyond the outcome head, loss weighting between the two heads, user survey (Table 5), feature tables 6-7 (in-game
   stats in the history encoding)

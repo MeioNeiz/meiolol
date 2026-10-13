@@ -3,7 +3,7 @@ title: 'NeuralAC: Learning Cooperation and Competition Effects for Match Outcome
 url: https://ojs.aaai.org/index.php/AAAI/article/download/16528/16335
 kind: paper
 commit:
-for: [draft-predictor-methods]
+for: [draft-predictor-methods, nn-draft-models]
 looked: 2026-10-12
 depth: docs (datasets, baselines, Table 2, ablations)
 relevance: high
@@ -53,9 +53,21 @@ strength, and how do GBDT and FM compare, on hero-only inputs at ~0.6-0.8M games
   0.01 (FM, LightGBM) to 0.03 AUC (NeuralAC) over additive LR, i.e. 1-2 accuracy
   points; Dota 2018 is less predictable from heroes than Dota 2015 (0.612 vs 0.633 LR). ^f6
 
+- [method] NeuralAC config: hidden layers of width 50, ReLU, Kaiming init, dropout 0.2; embedding size k = 20 for HOI and NeuralAC (OptMatch searched 20-320). Experimental setup ^f7
+  > For NeuralAC model, the dimension of hidden layers is set to 50, and ReLu is used as activation function.
+  > applied with the drop probability set to 0.2.
+  > NeuralAC, we set embedding size k to 20.
+- [method] Training: Adam, learning rate 0.001, weight decay 0.0001, batch size 256 for HOI, OptMatch and NeuralAC; LR, TrueSkill and LightGBM from standard packages. Checked, not there: epochs, early stopping, schedule. Experimental setup ^f8
+  > We choose Adam (Kingma and Ba 2014) as the optimizer, with 0.001 of learning rate and 0.0001 of weight decay coefficient
+  > the batch size is set to 256 for HOI, OptMatch and NeuralAC on all datasets.
+- [method] Larger embeddings did not help: with other settings fixed, accuracy and AUC did not improve as k grew (Fig. 4, Dota2018 and LoL). Hyperparameters Effects ^f9
+  > the model does not learn better when embedding size increases.
+
 ## Read
 
 - Sections 1, datasets, baselines, setup, results, ablations; Table 1-2
+
+- 2026-10-13: experimental setup paragraph, hyperparameter effects (Fig. 4 text)
 
 ## Not read
 

@@ -1,0 +1,755 @@
+Learning Team Synergy from Team Composition with a Siamese Transformer
+Xiaomeng Ye1 * , Elliot Mayo1 , Joseph Cuthbert2 , Anthony Head1
+1
+
+2
+
+Berry College
+Georgia Institute of Technology
+
+Abstract
+Predicting match outcomes typically depends on rich performance statistics. This work investigates whether it is possible
+to extract team synergy from only team composition and use
+it for sports outcome prediction. We model each player as
+a token and use a Siamese transformer to learn within-team
+interactions and compare team representations to predict the
+win probability. Across multiple datasets, the model consistently outperforms classical baselines such as multilayer
+perceptrons and non-Siamese transformers. Results suggest
+that synergy between teammates can be captured from team
+composition alone. When optional auxiliary information is
+available, a parallel Siamese branch yields additional performance gains. Overall, this study shows that team composition
+alone contains meaningful predictive structure that modern
+attention-based models can effectively extract.
+
+Sports outcome prediction is the task of predicting a game’s
+outcome based on information such as team composition,
+player statistics, skill assessments, past performance, and
+environmental factors. Human experts often rely on news
+reports, historical trends, and their intuition to make predictions (Jones et al., 2021). These predictions, while insightful,
+can vary significantly in accuracy due to biases, limited data
+access, or subjective judgments (Park et al., 2022).
+The machine learning community commonly formulates
+sports outcome prediction as a classification task. A wide
+range of models—including Bayesian approaches (SantosFernandez, Wu, and Mengersen, 2019), random forests
+(Smithies et al., 2021), and neural networks (Xenopoulos and Silva, 2021)—have been developed to incorporate
+player and team statistics as well as contextual factors such
+as home advantage and weather conditions (Bunker and Susnjak, 2022).
+However, minimal research focuses only on team synergy.
+Considering a basketball team composed of five excellent
+point guards, even if each individual player has high performance ratings, the team would struggle in a real game because it would lack size for rebounding and rim protection,
+suffer against bigger matchups, and miss the role diversity
+needed for balanced, effective team play.
+* Corresponding author: xye@berry.edu
+Copyright © 2026 by the authors. Open access article published
+under the Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
+
+This work proposes the unique perspective that a transformer’s attention mechanism can capture team synergy directly from team composition: each player is treated as a token whose query, key, and value representations correspond
+to the support the player seeks, provides, and contributes
+within a team. To examine this hypothesis, a Siamese transformer architecture is constructed and evaluated across diverse datasets, including an NBA dataset, two League of
+Legends datasets, a Valorant dataset, and two synthetic
+benchmarks. The results indicate that attention mechanisms
+can learn meaningful teammate interaction patterns, which
+can contribute to accurate game outcome prediction.
+
+Related Work
+Transformer
+The Transformer architecture is originally developed for
+processing sequential data through self-attention mechanisms (Vaswani et al., 2017). In an encoder-only configuration, the encoder consists of stacked layers, each containing
+a multi-head self-attention mechanism and a position-wise
+feedforward network. The multi-head self-attention mechanism computes attention across all tokens in the sequence,
+allowing the model to capture both local and global dependencies.
+Existing studies have effectively utilized transformers for
+predicting game outcomes. Nguyen and Santamaria (2020)
+represents players as a vector of their historical numerical
+statistics and uses transformers to learn the relationship between an individual player and their respective statistics to
+forecast a team’s point production. Simpson et al. (2022)
+uses a transformer to predict the next match event by learning from sequential game states and event histories, capturing complex temporal dependencies and contextual information with a transformer. Based on the recently developed
+TCDformer: A transformer framework for non-stationary
+time series forecasting (Wan et al., 2024), Liu et al. (2024)
+proposed using TCDformer to learn a momentum encoding
+module and use it to predict long-term sports outcomes.
+The novelty of this study lies in its focus on team composition, treating each player as a token and leveraging the
+transformer’s attention mechanism to uncover synergistic interactions within a team.
+
+Sports Outcome Prediction using AI
+Various AI models have been used to predict the outcome
+of a sports game. Bayesian models (Santos-Fernandez, Wu,
+and Mengersen, 2019), random forests (Smithies et al.,
+2021), and neural networks (Xenopoulos and Silva, 2021)
+are used to process player and team statistics, along with
+environmental factors such as home advantage and weather
+conditions (Bunker and Susnjak, 2022). Beal et al. (2021)
+uses statistical match data and sports journal articles to predict the outcomes of the football matches.
+(E)Sport datasets often contain detailed player, team, and
+game statistics. Choosing an adequate subset of the given
+features is challenging for a few reasons (Islam et al., 2022):
+(1) The process of feature selection is susceptible to bias in
+humans or the selection method used (Davis et al., 2024;
+FiveThirtyEight, 2019). (2) Some features may inadvertently reveal details about the result of a game, causing data
+leakage (Larsen, 2018). (3) Certain attributes are concealed
+and are not adequately reflected by current features.
+Given the prominent role of feature selection in sports
+outcome prediction, a natural question arises: Is it possible
+to construct a machine learning model that can identify team
+synergy among players and predict game outcomes with sufficient accuracy while minimally relying on detailed player-,
+team-, and game-level statistics?
+
+Predicting Game Outcome with Team
+Composition
+Data Collection and Generation
+NBA An NBA dataset was compiled from BasketballReference (Sports Reference LLC, 2021, 2020). For each
+game, we extracted player participation from the box score
+and selected a fixed-size lineup of six players per team: the
+five starters plus the highest-minute bench player. This produced a 12-player composition record per game (6 home, 6
+away). All other box-score statistics were discarded so that
+prediction relied only on team composition.
+LoL We use two League of Legends (LoL) datasets: one
+amateur and one professional.12 In our context, LoL is a 5v5
+multiplayer online battle arena game in which each team selects five heroes. After preprocessing, each match is represented by two teams of five selected heroes and the game
+outcome. The amateur dataset also includes auxiliary hero
+information such as role position, gold earned, and wards
+bought.
+Valorant We also use a Valorant dataset.3 In our context,
+Valorant is a 5v5 tactical shooter in which each team selects
+1
+
+Collected from Kaggle: https://oracleselixir.
+com/. This dataset contains e-sports matches from 2014 to 2024.
+2
+Collected
+from
+Kaggle:
+https://
+www.kaggle.com/datasets/paololol/
+league-of-legends-ranked-matches. This dataset
+contains ranked games from 2014.
+3
+Collected
+from
+Kaggle:
+https://www.
+kaggle.com/datasets/qualidea1217/
+valorant-pro-matches-since-april-2021.
+This
+dataset consists of match data from April 2021 to April 2023.
+
+five agents. Similar to LoL, each match is represented by
+two teams of five heroes and the outcome. Auxiliary information includes kills, first deaths, and average combat score
+for each hero.
+Synthetic Dataset We generated two artificial datasets in
+order to simulate a team-based game where team composition directly determines game outcome. Each character is
+a feature vector of 3 randomly generated attributes h =<
+k, q, v >: a key k ∈ [0, 1] represents the kind of support the
+character provides to its teammates, a query q ∈ [0, 1] represents the kind of support it seeks from teammates, and a
+value v ∈ [1, 4] represents a character’s overall skill level.
+The character vector design is directly motivated by Query,
+Key, Value (QKV) Attention (Vaswani et al., 2017).
+Let a team T be composite of p characters, T =
+{h1 , h2 , ..., hp }. A character hi ’s final performance pi is a
+reflection of its skill after being supported by its teammates
+in team T as:
+pi = Σj̸=i (1 − |qi − kj |)vi vj
+When qi and kj are close, hi is maximally supported by
+hj by the amount up to vi vj ; when qi and kj are drastically
+different, for example qi = 1 and kj = 0, hi is minimally
+supported. Note that the support is not mutual, as the support
+for hj from hi depends on |qj − ki | instead.
+Lastly, a team’s performance T p is the summation of individual characters’ performance: T p = Σi pi .
+Each game is a match-up between two teams, and the
+team with higher performance wins the game. In summary,
+a team’s performance is the sum of all team members’ performance. Each team member’s performance is amplified by
+teammates who offer compatible support.
+Using this design of the team-based game, we created two
+datasets: (1) The Heroes10 dataset with 10 random characters, 1000 games of two teams, and each team is a random
+set of 3 characters; (2) The Heroes20 dataset with 20 random characters, 1000 games of two teams, and each team is
+a random set of 10 characters. Heroes20 can be considered
+a more complicated version of Heroes10.
+To avoid ambiguity in terminology, the members of a
+team are referred to as “characters” throughout this work, regardless of whether they correspond to players (e.g., in basketball) or heroes (e.g., in LoL, Valorant, or Heroes10/20).
+
+Data Preprocessing
+All datasets follow the same format after collection. Each
+sample concatenates the two teams’ composition tokens
+(length 2p) and, when available, auxiliary features for both
+teams. The label indicates whether team 1 wins.
+Label embeddings for characters. A label encoder and
+an embedding layer maps each character to a continuous vector representation. Similar to natural-language applications (Mikolov et al., 2013), these embedding layers
+can learn through training to capture semantic relationships
+among entities.
+Down-sampling Before training, all datasets were downsampled to ensure an equal number of wins and losses, reducing class imbalance and mitigating potential bias.
+
+Dataset Characteristics The characteristics of the
+datasets used in this study after preprocessing are summarized in Table 1. In general, datasets with a larger number
+of games, fewer characters per team, and fewer unique
+characters tend to yield an easier prediction task. Among
+the datasets considered, the NBA dataset contains relatively
+few games but a large number of characters; however, many
+characters remain on the same team over extended periods,
+effectively increasing the amount of usable information
+for learning underlying patterns. In contrast, the LoL Pro,
+LoL Amateur, and Valorant datasets contain fewer unique
+characters, yet teams may appear in a wide variety of
+combinations, making outcome prediction challenging in
+the absence of auxiliary data. The artificial Heroes10 and
+Heroes20 datasets provide a controlled environment in
+which outcomes are precisely determined by team composition. Between the two, Heroes20 constitutes the more
+difficult prediction task due to larger team and character set.
+NBA
+LoL Pro
+LoL Amateur
++ aux info
+Valorant
++ aux info
+Heroes10
+Heroes20
+
+games
+10360
+76318
+156348
+156348
+12473
+12473
+1000
+1000
+
+dimension
+12
+10
+10
+70
+10
+50
+6
+20
+
+characters
+977
+168
+136
+136
+28
+28
+10
+20
+
+Table 1: Dataset Characteristics
+
+The Proposed Model
+Figure 1 summarizes the proposed architecture. Each matchup input is represented as X = [ c1 , c2 , a1 , a2 ], where
+ct = (ct1 , . . . , ctp ) is the length-p team composition (integer
+character IDs) for team t ∈ {1, 2}, and at ∈ Rda is the da dimensional auxiliary feature vector for the team (e.g., aggregated character/team statistics after preprocessing). The
+model predicts the probability that team 1 wins, ŷ ∈ (0, 1),
+using a two-branch Siamese design (Bromley et al., 1993).
+Composition branch (Siamese transformer). A shared
+embedding table E ∈ RV ×de maps each character ID to
+a dense vector, where V denotes the size of the character
+vocabulary and de the embedding dimension:
+etj = E[ctj ] ∈ Rde ,
+
+Et = [ et1 ; . . . ; etp ] ∈ Rp×de .
+
+Et represents the embedding vector for the team t. To stabilize representation magnitude and encourage a geometry
+suitable for similarity-style interaction, we apply a spherical
+projection (row-wise ℓ2 normalization) to each embedding
+vector. This ensures that all player embeddings lie on a unit
+hyper sphere, removing differences in vector magnitude and
+focusing the model on angular relationships between players. Even when performance gains are modest, spherical projection Ẽ contributes to more stable training and a more interpretable embedding space.
+
+Comp info
+[c1, c1]
+
+Aux info
+[a1, a2]
+
+Split c1
+
+Split c2
+
+Embedding/
+Spherical
+Projection
+
+Embedding/
+Spherical
+Projection
+
+Transformer
+Encoder
+
+Transformer
+Encoder
+
+= (
+
+-
+
+)
+
+Split a1
+
+Split a2
+
+MLP
+
+MLP
+
+= (
+
+-
+
+)
+
+Prediction
+
+Figure 1: Architecture for the proposed Siamese Transformer (left). A Siamese MLP (right) is used to process
+auxiliary information if provided. The dotted line between
+boxes indicates Siamese structures using shared parameters.
+A transformer encoder models within-team interactions
+through self-attention. It omits positional encoding because
+team composition is order-invariant. A mean pooling over
+the token representations yields the team vector:
+p
+1X
+p×de
+Ht,j .
+Ht = Enc(Ẽt ) ∈ R
+,
+ht =
+p j=1
+Finally, a shared linear head produces a bounded team descriptor. Intuitively, scomp
+represents a team’s strength int
+ferred from its composition as a do -dimensional feature vector:
+= σ(Wc ht + bc ) ∈ Rdo ,
+scomp
+t
+do ×de
+where Wc ∈ R
+and bc ∈ Rdo are shared parameters,
+and σ(·) is the sigmoid function applied element-wise to
+bound each feature in (0, 1) for stable comparison and fusion with the auxiliary branch. The composition branch then
+contrasts the two teams by a coordinate-wise difference, followed by a sigmoid:
+) ∈ Rd o .
+z comp = σ(scomp
+− scomp
+1
+2
+Auxiliary branch (Siamese MLP). In parallel, auxiliary
+team features are encoded using a shared multilayer perceptron (MLP), denoted by the function ϕ(·), which represents a feed-forward network with ReLU nonlinearities.
+Each team’s auxiliary input is given by at ∈ Rda . The MLP
+produces a do -dimensional representation:
+
+saux
+= σ ϕ(at ) ∈ Rdo .
+t
+Analogous to the composition branch, an auxiliary comparison vector is constructed as
+do
+z aux = σ(saux
+− saux
+1
+2 )∈R .
+
+Fusion and win prediction. The two comparison vectors
+are combined using a learned scalar mixing weight α (implemented as a trainable parameter; ablations fix α = 0 to
+disable the auxiliary branch):
+
+6. Siamese Network + Siamese MLP. An ablation of the
+two-branch design where the composition branch is replaced by Model 2, and the auxiliary encoder is the same
+as the proposed model.
+
+z = (1 − α) z comp + α z aux ∈ Rdo .
+
+7. Siamese Transformer + Siamese MLP. This is the proposed model described earlier (described in the previous
+section and shown in Figure 1).
+
+A final sigmoid layer maps z to the predicted win probability
+of team 1:
+ŷ = σ(w⊤ z + b) ∈ (0, 1).
+
+Methods
+Models for Comparison
+The following architectures are evaluated for modeling team
+compositions [ c1 , c2 ] and, when applicable, auxiliary information [ a1 , a2 ]. Among these, only Model 5-7 utilize auxiliary features, whereas others rely exclusively on team composition. Throughout, de denotes the embedding dimension,
+p the number of characters per team, and V the size of
+the character vocabulary. All models employ an embedding
+layer that maps each character to an 8-dimensional embedding vector (de = 8). All transformer-based architectures
+use a single TransformerEncoder layer with two attention
+heads and a feed-forward dimension of 64.
+1. Neural Network. Character embeddings for both teams
+are concatenated into a vector of length 2pde . This vector
+is processed by three fully connected layers with ReLU
+activations, containing (2pde , 16, 8) units, respectively.
+The final layer outputs a scalar corresponding to the predicted probability that team 1 wins.
+2. Siamese Network. Each team composition ct is embedded and flattened into a vector of dimension pde , which is
+then processed by the shared three-layer feed-forward network (identical in structure to Model 1). The shared network outputs one scalar score per team, interpreted as its
+predicted performance. The predicted winner is the team
+with the higher score.
+3. Transformer. The concatenated roster [ c1 ; c2 ] ∈ [V ]2p
+is treated as a sequence of 2p tokens and processed using
+an encoder-only transformer. Each token is embedded in
+Rde , producing a matrix of shape (2p) × de that is fed into
+a TransformerEncoder. Positional encodings are omitted
+to preserve the order-invariance of the roster set. The encoder outputs are mean-pooled to obtain a de -dimensional
+vector, which is passed through a linear layer to produce a
+scalar logit; applying a sigmoid activation yields the predicted win probability for team 1.
+4. Siamese Transformer. This is an ablated version of the
+proposed model, with only the compositional branch to
+process [ c1 , c2 ]. This can also be considered a Siamese
+version of Model 3.
+5. None + Siamese MLP. An ablation of the two-branch design where the composition branch is not active, and the
+auxiliary encoder is the same as the proposed model. The
+model predicts solely based on auxiliary information.
+
+Implementation Details
+All model configurations and parameter choices were determined through empirical tuning, and increasing model complexity did not yield additional performance gains. All models are trained using the Adam optimizer with a learning rate
+of 1 × 10−5 and binary cross-entropy loss, consistent with
+the binary (win/loss) prediction task.4
+
+Evaluation Procedure
+All datasets are evaluated using 10-fold cross-validation
+with 80%/10%/10% train/validation/test splits. Training
+stops after 40 epochs without validation improvement, and
+the checkpoint with the lowest validation loss is used for
+testing. Accuracy, precision, recall, and F1 are averaged
+across folds. The same protocol is applied to all models for
+fair comparison.
+
+Results and Discussion
+All results are shown in Table 2. This leads to the following
+observations and discussions:
+
+Concept Aligned Modeling is Good Modeling
+Across benchmarks, the proposed Siamese Transformer attains performance that is comparable to, and often higher
+than, the alternative architectures.
+This advantage is largely attributed to two architectural
+choices. First, the Siamese design encodes each team’s composition independently and symmetrically using shared parameters, encouraging a comparable representation space for
+both teams and supporting a fair, structured comparison. The
+benefit of this inductive bias is reflected in the consistent
+improvements observed when moving from non-Siamese
+to Siamese formulations (i.e., Siamese Transformer >
+Transformer and Siamese Network > Neural Network).
+Second, incorporating a transformer encoder enables withinteam interaction modeling through self-attention, improving
+performance relative to a purely feed-forward Siamese baseline (i.e., Siamese Transformer > Siamese Network).
+In contrast, the non-Siamese transformer performs worst
+and remains near chance across datasets despite having comparable capacity and a similar transformer backbone. The
+transformer may entangle two team’s information in ways
+that break symmetry and therefore fail to extract meaningful patterns. This suggests that model complexity alone is
+insufficient when the architecture does not reflect the target
+concept.
+4
+All code is available at https://github.com/Heuzi/
+Team-Synergy-Transformer.
+
+Table 2: Average Model Performance Across Datasets. The best performance in each category for each dataset is highlighted
+in bold, and the second best is underlined.
+Dataset
+Model
+Accuracy (%)
+Precision (%)
+Recall (%)
+F1 Score (%)
+NBA
+
+Neural Network
+Siamese Network
+Transformer
+Siamese Transformer
+
+56.1
+62.3
+49.0
+63.3
+
+56.1
+61.2
+49.2
+60.2
+
+54.0
+63.6
+50.5
+72.4
+
+54.8
+62.4
+49.6
+65.7
+
+LoL Pro
+
+Neural Network
+Siamese Network
+Transformer
+Siamese Transformer
+
+52.0
+52.5
+50.4
+53.7
+
+52.0
+52.9
+50.4
+53.7
+
+50.4
+52.6
+49.5
+54.0
+
+51.2
+52.6
+49.9
+53.8
+
+Heroes10
+
+Neural Network
+Siamese Network
+Transformer
+Siamese Transformer
+
+90.0
+94.0
+47.0
+96.8
+
+89.7
+95.6
+46.2
+95.5
+
+90.5
+91.7
+62.5
+97.7
+
+90.0
+93.6
+53.1
+96.6
+
+Heroes20
+
+Neural Network
+Siamese Network
+Transformer
+Siamese Transformer
+
+66.4
+83.1
+59.0
+91.0
+
+66.3
+80.4
+56.8
+89.8
+
+75.5
+84.1
+47.7
+91.7
+
+69.2
+82.2
+51.2
+90.7
+
+Neural Network
+Siamese Network
+Transformer
+Siamese Transformer
+None + Siamese MLP
+Siamese Network + Siamese MLP
+Siamese Transformer + Siamese MLP
+
+51.0
+53.2
+50.1
+54.2
+88.9
+92.7
+94.9
+
+51.0
+52.5
+50.1
+53.9
+89.0
+93.5
+94.9
+
+50.6
+53.0
+53.8
+54.2
+88.9
+91.4
+94.9
+
+50.8
+52.7
+51.8
+54.1
+89.0
+92.5
+94.9
+
+Neural Network
+Siamese Network
+Transformer
+Siamese Transformer
+None + Siamese MLP
+Siamese Network + Siamese MLP
+Siamese Transformer + Siamese MLP
+
+52.1
+59.3
+50.8
+52.4
+92.5
+94.3
+97.2
+
+49.8
+53.4
+51.2
+51.6
+92.9
+98.1
+96.5
+
+50.6
+57.7
+51.6
+72.3
+92.9
+91.1
+98.2
+
+51.2
+55.3
+53.7
+62.7
+92.9
+94.4
+97.3
+
+LoL Amateur
+
++ aux info
+
+Valorant
+
++ aux info
+
+Team Composition is Limited but Useful
+Without auxiliary information, all models struggle on the
+more challenging datasets. This is expected because team
+composition alone provides limited predictive signal: the
+data drifts over time as rules, strategies, and participant
+pools evolve; outcomes also depend on unobserved factors
+such as player condition, home advantage, coaching, and
+match context; and real-world matchups are often balanced
+games, reducing separability from composition alone. These
+patterns are especially evident in the LoL Pro and LoL
+Amateur datasets where heroes are modified through game
+patches, games are highly complex and involve multiple objectives and phases, and the game system will match players
+of similar skill ratings.
+On the other hand, team composition remains an important contributor to sports outcome prediction. When
+auxiliary features are available (as in the LoL Amateur and
+Valorant datasets), Siamese Transformer + Siamese MLP >
+Siamese Network + Siamese MLP, indicating that self-
+
+attention provides additional benefit for modeling composition. Moreover, both fusion models outperform the variant
+(None + Siamese MLP) that discards team composition and
+relies on auxiliary information alone. These findings suggest that composition, while limited in isolation, provides
+complementary information that improves final predictive
+performance when combined with auxiliary features.
+
+Conclusion
+The proposed Siamese Transformer demonstrates that meaningful predictive structure can be extracted from team composition, providing a consistent advantage in outcome prediction. This performance gain is attributed to an architecture that encodes each team symmetrically while modeling
+within-team interactions via self-attention. Future work may
+extend this framework by integrating richer game-related
+signals to further improve accuracy and robustness across
+domains. This framework opens up future directions in draft
+optimization, roster analytics, and game balance analysis.
+
+References
+Beal, R.; Middleton, S. E.; Norman, T. J.; and Ramchurn,
+S. D. 2021. Combining machine learning and human experts to predict match outcomes in football: A baseline
+model. In Proceedings of the AAAI Conference on Artificial Intelligence, volume 35, 15447–15451.
+Bromley, J.; Bentz, J. W.; Bottou, L.; Guyon, I.; LeCun, Y.;
+Moore, C.; Sackinger, E.; and Shah, R. 1993. Signature
+verification using a siamese time delay neural network.
+International Journal of Pattern Recognition and Artificial Intelligence 7(04):669–688.
+Bunker, R., and Susnjak, T. 2022. The application of machine learning techniques for predicting match results in
+team sport: A review. J. Artif. Int. Res. 73.
+Davis, J.; Bransen, L.; Devos, L.; Jaspers, A.; Meert, W.;
+Robberechts, P.; Van Haaren, J.; and Van Roy, M. 2024.
+Methodology and evaluation in sports analytics: challenges, approaches, and lessons learned. Mach. Learn.
+113(9):6977–7010.
+FiveThirtyEight. 2019. Introducing raptor: Our new metric
+for the modern nba. Accessed: 2025-01-25.
+Islam, M. R.; Lima, A. A.; Das, S. C.; Mridha, M. F.;
+Prodeep, A. R.; and Watanobe, Y. 2022. A comprehensive survey on the process, methods, evaluation, and
+challenges of feature selection. IEEE Access 10:99595–
+99632.
+Jones, J.; Johnston, K.; Farah, L.; and Baker, J. 2021.
+Predicting seasonal performance in professional sport: A
+30-year analysis of sports illustrated predictions. Sports
+9:163.
+Larsen, K. R. 2018. Seven types of target leakage in machine learning and an exercise. In Machine Learning for
+Business Analytics. Wiley. Chapter 24.
+Liu, H.; Gu, J.; Huang, X.; Shi, J.; Feng, T.; and He, N.
+2024. Tcdformer-based momentum transfer model for
+long-term sports prediction.
+Mikolov, T.; Chen, K.; Corrado, G.; and Dean, J. 2013. Efficient estimation of word representations in vector space.
+In Proceedings of the First International Conference on
+Learning Representations.
+Nguyen, B. D., and Santamaria, M. 2020. Beating the odds
+– nba analytics.
+Park, I.; Windschitl, P. D.; Miller, J. E.; Smith, A. R.; Stuart, J. O.; and Biangmano, M. 2022. People express
+more bias in their predictions than in their likelihood judgments. Journal of experimental psychology. General.
+Santos-Fernandez, E.; Wu, P.; and Mengersen, K. L. 2019.
+Bayesian statistics meets sports: a comprehensive review.
+Journal of Quantitative Analysis in Sports 15(4):289–312.
+Simpson, I.; Beal, R. J.; Locke, D.; and Norman, T. J.
+2022. Seq2event: Learning the language of soccer using
+transformer-based match event prediction. In Proceedings of the 28th ACM SIGKDD Conference on Knowledge
+Discovery and Data Mining, KDD ’22, 3898–3908. New
+York, NY, USA: Association for Computing Machinery.
+
+Smithies, T.; Campbell, M.; Ramsbottom, N.; and Toth, A.
+2021. A random forest approach to identify metrics that
+best predict match outcome and player ranking in the esport rocket league. Scientific Reports 11(1). Publisher
+Copyright: © 2021, The Author(s).
+Sports Reference LLC.
+2020.
+Golden state warriors at brooklyn nets box score, december 22,
+2020. https://www.basketball-reference.
+com/boxscores/202012220BRK.html. Accessed
+January 7, 2026.
+Sports Reference LLC.
+2021.
+2020–21 NBA
+schedule
+and
+results.
+https://www.
+basketball-reference.com/leagues/NBA_
+2021_games.html. Accessed January 7, 2026.
+Vaswani, A.; Shazeer, N.; Parmar, N.; Uszkoreit, J.; Jones,
+L.; Gomez, A. N.; Kaiser, L.; and Polosukhin, I. 2017.
+Attention is all you need. In Proceedings of the 31st International Conference on Neural Information Processing Systems, NIPS’17, 6000–6010. Red Hook, NY, USA:
+Curran Associates Inc.
+Wan, J.; Xia, N.; Yin, Y.; Pan, X.; Hu, J.; and Yi, J. 2024.
+Tcdformer: A transformer framework for non-stationary
+time series forecasting based on trend and change-point
+detection. Neural Networks 173:106196.
+Xenopoulos, P., and Silva, C. 2021. Graph neural networks
+to predict sports outcomes. In 2021 IEEE International
+Conference on Big Data (Big Data), 1757–1763.
+
+

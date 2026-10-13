@@ -1,0 +1,1849 @@
+Practical Knowledge Distillation: Using DNNs to Beat DNNs
+
+arXiv:2302.12360v2 [cs.LG] 1 Mar 2023
+
+CHUNG-WEI LEE, USC, USA
+PAVLOS ATHANASIOS APOSTOLOPULOS and IGOR L. MARKOV, Meta, USA
+For tabular data sets, we explore data and model distillation, as well as data
+denoising. These techniques improve both gradient-boosting models and a
+specialized DNN architecture. While gradient boosting is known to outperform DNNs on tabular data, we close the gap for datasets with 100K+ rows
+and give DNNs an advantage on small data sets. We extend these results with
+input-data distillation and optimized ensembling to help DNN performance
+match or exceed that of gradient boosting. As a theoretical justification of
+our practical method, we prove its equivalence to classical cross-entropy
+knowledge distillation. We also qualitatively explain the superiority of DNN
+ensembles over XGBoost on small data sets. For an industry end-to-end realtime ML platform with 4M production inferences per second, we develop a
+model-training workflow based on data sampling that distills ensembles of
+models into a single gradient-boosting model favored for high-performance
+real-time inference, without performance loss. Empirical evaluation shows
+that the proposed combination of methods consistently improves model accuracy over prior best models across several production applications deployed
+worldwide.
+CCS Concepts: • Computing methodologies → Machine learning.
+Additional Key Words and Phrases: Machine Learning, DNN, Gradient Boosting, tabular data, knowledge distillation, data denoising
+
+1
+
+INTRODUCTION
+
+As machine learning is applied to more applications, higher-quality
+models require improving data quality, increasing data volume, using more sophisticated model types, optimizing hyperparameters,
+and training more effectively. These paths are backed by theory,
+but practical contexts are not always in line with assumptions in
+formal analyses, while real-world considerations may not favor the
+models preferred by theory. Such disconnects can be illustrated by
+the significance of resource consumption at inference in real-time
+ML platforms that favors simpler models. In terms of model quality,
+gradient boosting tends to outperform Deep Learning models on
+tabular data, for reasons that have been carefully analysed only
+recently [18, 20, 40]. Moreover, combining multiple methods tends
+to give better results in practice [16]. Hence, our work is motivated
+by practical considerations and uses tabular data from Platform,
+a high-performance end-to-end real-time ML platform [removed
+for blind review]but also offers theoretical insights that match and
+explain empirical results. Hundreds of production use cases running
+on this platform cumulatively perform millions of inferences per
+second. Hence, both ML quality and the efficiency of inference are
+critical. Real-time inference is valuable to many applications on
+this platform, but limits the types of models during inference. In
+particular, gradient boosting models are often favored for their small
+memory footprint and fast inference, whereas model ensembles are
+not supported easily. While vibrant ML research introduces new
+model architectures daily, an industry ML platform cannot realistically support high-performance inference for all new model types
+that show promising results during training. Our work shows that
+Authors’ addresses: Chung-Wei Lee, leechung@usc.edu, USC, Los Angeles, CA, USA,
+90098; Pavlos Athanasios Apostolopulos, pavlosapost@meta.com; Igor L. Markov,
+imarkov@meta.com, Meta, Menlo Park, CA, USA, 94025.
+
+model distillation helps not only to improve an individual models’
+performance, but also to leverage new model types as teachers to
+train simpler student models fully supported by the platform. In
+many production use cases, labels capture human behavior or the
+environment, and therefore suffer noise, inconsistencies and other
+irregularities. Generic data denoising [8, 17, 43] and data distillation
+[26, 29] methods may be applied before model training to improve
+ML models. But such methods must be automated when production ML models are retrained daily to handle nonstationary data
+distributions [28].
+To address relevant ML applications, we explore recent advancements in ML research: (𝑖) data and model distillation, (𝑖𝑖) denoising
+and uncertainty mitigation, and (𝑖𝑖𝑖) deep tabular learning.
+Knowledge distillation [23] was originally proposed to transfer
+knowledge from a “teacher” model with a larger capacity to a “student” model with a smaller capacity, to achieve model compression.
+When training a student model, an extra term in the loss function
+encourages the student model to mimic the teacher model. Surprisingly, the paper on Born-Again Neural Networks [15] shows that
+when the student uses the same architecture and capacity as the
+teacher model, the student model may outperform the teacher using
+dark knowledge (a term introduced by G.Hinton) extracted from
+the teacher model. Moreover, the performance is further enhanced
+by averaging the predictions from multiple sequentially-trained
+student models (where the student becomes a teacher) and by using knowledge distillation (i.e., building an ensemble model). This
+generic way to boost an ML model has only been evaluated for DNN
+models so far.
+Uncertainty and noise are frequently observed in practical ML
+applications in several forms. An important distinction is between
+epistemic and aleatoric uncertainty [24]. Epistemic uncertainty is
+associated with insufficient information carried by a given data sample (drawn randomly or not) and can be reduced by adding more
+data — training ML models on larger datasets often improves results.
+In contrast, aleatoric uncertainty is associated with individual data
+rows and cannot be mitigated by adding more data. The practical
+model-training workflow deveveloped and evaluated in this paper
+addresses aleatoric uncertainty (including label noise) by dropping
+a small fraction of carefully selected data rows. Additionally, we
+demonstrate that ensembles of distilled DNNs hold significant advantage over gradient boosting models on small training datasets,
+where gradient boosting overfits but DNN ensembles generalize
+well and thus address epistemic uncertainty.
+Tabular data and deep learning. Much of ML literature on label
+denoising and knowledge distillation deals with image data and
+DNN-based model architectures. However, industrial applications
+like ours deal with tabular data by building better-performing gradient boosting models, such as XGBoost [10]. In our work, we consider
+both XGBoost and TabNet [4], a recent DNN architecture for tabular data. TabNet employs the attention mechanism for soft feature
+selection, enabling interpretability, and has shown performance
+
+2 •
+
+Chung-Wei Lee, Pavlos Athanasios Apostolopulos, and Igor L. Markov
+
+Original
+training
+data
+
+DNN
+training
+
+DNN
+model
+iter=1
+
+Data
+distillation &
+denoising
+
+Training
+data
+iter=2
+
+Data
+distillation
+
+Training
+data
+final
+
+DNN
+training
+
+DNN
+model
+iter=2
+
+Data
+distillation &
+denoising
+
+…
+
+Ensemble weight optimization
+using Differential Evolution
+
+Ensemble
+model
+
+Production
+model training
+
+Production
+model
+
+Fig. 1. High-level workflow developed in this paper. Original training data assumes discrete labels. Distilled data replaces labels with model scores, which
+include dark knowledge. Denoising removes data rows where model scores differ too much from input labels or scores. Iterations of model training and data
+distillation repeat, while training models of the same architecture and capacity (self-distillation). Each new model is trained using the last iteration of distilled
+and denoised training data as well as the original training data. Model quality improvement is not required for each new model. An ensemble model combines
+all intermediate models and, possibly, models of additional types trained on original data. A weight-optimized ensemble model is distilled again into a simpler
+production model.
+
+competitive to XGBoost on public tabular datasets. Given that XGBoost dominates DNNs for tabular data in comparisons on open
+datasets [18, 20, 40] and in industry ML platforms [28], one of our
+goals is to explore if TabNet (or more sophisticated models built
+from it) can compete with XGBoost on tabular datasets.
+Our emphasis on tabular data has significant impact not only
+on the choice of ML model type, but also on the applicability of
+denoising methods. In particular, denoising methods often exploit
+correlated features (such as image pixels) and redundant information (from nearby video frames, from different parts of an image
+sufficient for classification decisions, etc). However, features in tabular data are typically unrelated and may be on different scales,
+while redundancies are uncommon. Less obviously, the diversity
+of feature/column types in tabular data undermines the notions of
+distance and similarity that are natural to multimedia data. In turn,
+this invalidates denoising methods that rely on K nearest neighbors, similarity clustering and other distance-based techniques (that
+assume that similar inputs must lead to similar correct outputs).
+In this work, we combine denoising with data and model distillation in the context of deep tabular learning. We observe that
+TabNet underperforms XGBoost on larger datasets (100K rows).
+This is counterintuitive as DNNs are assumed to perform well on
+large datasets, but recent literature made similar observations and
+explained them [18, 20, 40]. With an eye on easy-to-implement
+optimizations of TabNet-based models, we assemble a series of practical improvements (Figure 1). Empirical validation indicates that
+resulting TabNet ensembles are competitive with XGBoost and in
+some cases superior to XGBoost. Ensembling them with XGBoost
+produces even better models. However, supporting such mixed ensemble for high-performance real-time inference runs into platform
+limitations. We then use our distillation via weighted datasets to
+distill across models of different types: we distill our best XGBoost
++ TabNet ensemble into a single XGBoost model with no loss of
+
+performance. Implementation is easy and helps us outperform ML
+models previously deployed on the ML platform for all tested use
+cases (Table 13). More generally, in an end-to-end ML platform, this
+simple shortcut can extend the benefits of new ML model types
+with promising training results toward high-performance inference
+without impacting the complexity of inference infrastructure.
+
+2
+
+RELATED WORK
+
+Knowledge distillation. Large deep neural networks [12, 22] have
+led to impressive feats in real-world applications with large-scale
+data [50]. However, their deployment in industry-scale applications for real-time inference, poses challenges due to computational complexity, storage requirements and inference latency. In response, knowledge distillation (KD) [23] was introduced as a modelcompression technique that distills the knowledge from a larger
+neural network to a smaller network [33, 44, 46]. Despite KD’s great
+success in natural language processing, computer vision, etc [2, 19],
+its theoretical and empirical understanding remains limited [11, 35].
+Also, while KD trains student models in supervision of a teacher
+model, researchers developed several promising domain-specific
+learning schemes [19] that select teacher’s components and determine how they are used in training: response-based knowledge
+[30], feature-based knowledge [47], and relation-based knowledge [9].
+Other practical KD techniques include adversarial distillation [31],
+multi-teacher distillation [49], cross-modal distillation [53]. Applications of these algorithms often rely on heavily-tuned implementations [52] whereas many practical uses encourage full automation
+to support regular model retraining to follow nonstationary data.
+Our work largely draws on self-distillation, where the architecture
+and capacity of the network does not change during training.
+Training on noisy data, is widely recognized as a practical circumstance that may limit success of Machine Learning (ML) [32]. In the
+
+Practical Knowledge Distillation: Using DNNs to Beat DNNs • 3
+
+context of DNNs, the problem is covered well in the literature, due to
+both the popularity of DNNs and DNN’s propensity to overfit [25].
+For instance, the work in [51] shows that sufficiently large DNNs can
+easily fit an entire training dataset with any ratio of corrupted labels.
+The noisy-label problem can be viewed from several perspectives
+[42]. The feature-class dependency checks if noise levels dependent
+on the labels alone or also on the features. The open-close dichotomy
+arises when the set of possible labels is large (open set) and a correct
+label may not even be observed, whereas the close-set alternative
+assumes correct labels to be among observed labels. In any case,
+training with noise is often related to the memorization effect of deep
+learning [5], and proposed mitigation techniques usually seek to
+downweigh or skip errouneous labels. Solutions have been inspired
+by the freedom to select DNN model architectures [21], loss-based
+regularization conditions [34], semi-supervised learning [6] and
+meta-learning [39]. Common limitations include limited scalability
+and and specificity to DNN architectures [14, 41]. Techniques to
+deal with noise usually rely on the assumption that similar inputs
+(images with similar pixels, words or sentences with similar embedding vectors) must produce the same model output. However,
+tabular data often lack a well-defined notion of distance (e.g., different timestamps added to a data row may be superflouous in some
+cases and important in other cases; also, combining floating-point
+features with categorical features to define a distance is ambiguous).
+Therefore, many existing techniques for training with noise are not
+helpful with tabular data.
+Ensemble learning, such as averaging the outputs of several models, is common in ML practice and especially in ML contests [36].
+An ensemble of ML models combines predictions of multiple constituent models, possibly of different types, to diminish overfitting.
+This tends to offer greater benefits for DNNs [48], likely because
+DNNs are initialized with random weights, leading to diverse DNNs
+with comparable ML performance. While simple averaging of models often shows promising results, linear and non-linear functions
+can aggregate models using additional parameters that can be optimized [37, 38]. For example, averaging can be extended by adding
+a handful of tunable weights to optimize, e.g., the performance of
+the resulting classifier. Traditional optimization methods would be
+difficult to apply here because the dependence of the end metric on
+the parameters is not captured by an explicit formula. Therefore,
+one resorts to gradient-free black-box methods, such as Differential
+Evolution [1] that maintains a population of configurations and
+creates new configurations using a randomized crossover operator.
+
+the student’s and the teacher’s predictions:
+𝑁
+∑︁
+
+Adding this term to the loss function encourages the student model
+to mimic the teacher’s output. Needless to say, not every ML model
+can accommodate this approach. Additionally, our industry setting
+encourages black-box components with clean interfaces. To this
+end, we explore a different approach to transfer knowledge from
+the teacher model — we train 𝑓1 on a weighted dataset, where each
+(𝑥𝑖 , 0) has a weight 1−𝑓0 (𝑥𝑖 ) and each (𝑥𝑖 , 1) has a weight 𝑓0 (𝑥 0 ). We
+term this approach input-data distillation. Intuitively, the weighted
+dataset summarizes the teacher model’s belief on the training data.
+In practice, the model-training pipeline can interpret the weights
+as row-sampling probabilities for the data loader (when forming a
+batch), which enables this approach with any eligible ML model
+that might not even support training with weighted datasets.
+
+3.1
+
+3
+
+PROBLEM SETTING AND MOTIVATION
+
+Motivational Experiments on image datasets
+
+We first replicate the results of knowledge distillation with Bornagain networks [15] using authors’ code, on open image datasets
+MNIST and CIFAR10 (60K images) using ResNet50, we also add
+XGBoost. In Table 1, the figure of merit is accuracy. We observe that
+distillation does not necessarily improve individual student models,
+but their ensembles demonstrate consistent improvement. In each
+column, the best results (highlighted) are attained by ensembles.
+Thus, knowledge distillation with ensembles promises to improve
+initial models, but the DNN model (ResNet50) has more to gain than
+XGBoost (we return to this trend later).
+Table 1. XGBoost and ResNet performance on CIFAR10 and MNIST with
+knowledge distillation; generations and ensembles are indicated in rows.
+The best-performing row is highligted.
+
+Dataset
+Model
+Gen 0 (𝑓0 )
+Gen 1 (𝑓1 )
+Gen 2 (𝑓2 )
+Ens 0+1
+Ens 0+1+2
+
+3.2
+
+We focus on binary classification with the ROC AUC objective, for
+simplicity. Consider 𝑁 training samples {(𝑥𝑖 , 𝑦𝑖 )}, where 𝑥𝑖 ∈ 𝑅𝑑
+and 𝑦𝑖 ∈ {0, 1}. A machine learning model implements a function
+𝑓 : R𝑛 → [0, 1] that maps each 𝑥𝑖 to Prob[𝑦𝑖 = 1].
+A model 𝑓0 trained on the original dataset {(𝑥𝑖 , 𝑦𝑖 )} is termed a
+teacher model. The key idea of model distillation is then to transfer
+the knowledge of the teacher 𝑓𝑜 to a student model 𝑓1 . The latter is
+traditionally done by training with a cross-entropy term between
+
+−𝑓0 (𝑥𝑖 ) log(𝑓1 (𝑥𝑖 )) − 𝑓0 (1 − 𝑥𝑖 ) log(𝑓1 (1 − 𝑥𝑖 )).
+
+𝑖=1
+
+CIFAR10
+XGBoost
+0.5440
+0.5356
+0.5284
+0.5499
+0.5517
+
+CIFAR10
+ResNet50
+0.8339
+0.8257
+0.8358
+0.8593
+0.8703
+
+MNIST
+XGBoost
+0.9735
+0.9745
+0.9734
+0.9749
+0.9752
+
+MNIST
+ResNet50
+0.9901
+0.9864
+0.9892
+0.9913
+0.9922
+
+Motivational experiments on tabular datasets
+
+In this paper, we focus on tabular data sets deployed in production use cases on the high-performance end-to-end real-time ML
+platform. Unlike in image data, columns of tabular data are often
+at different scales, may be of different types, may carry different
+amounts of noise, and do not correlate like nearby image pixels do
+[18, 20, 40]. Shift-invariance (a letter “O” can be moved by several
+pixels up or down) rarely arises in tabular data, which negates the
+advantages of ConvNets.
+Given that we study binary classification, the figure of merit is
+ROC AUC. A collection of Platformdata sets is described in Table
+12. These data sets represent applications deployed (𝑖) in a major
+
+4
+
+•
+
+Chung-Wei Lee, Pavlos Athanasios Apostolopulos, and Igor L. Markov
+
+social network, (𝑖𝑖) on an internal corporate system, (𝑖𝑖𝑖) in a popular
+augmented-reality system. They are used for final evaluation in Table 13. For evaluating individual improvements, we found Dataset
+B representative and complement it with other datasets on occasion
+(the text refers to table in the Appendix). We start by replicating past
+work and testing simple ideas, as groundwork for more advanced
+techniques in Section 4. For all experiments with DNN models, we
+use TabNet [4] (the implementation posted by the authors for public
+use) and compare it with XGBoost [10].
+TabNet gains more from ensembling than XGBoost does, but
+still lags behind. We first evaluated plain TabNet and XGBoost
+“out of the box” without any hyperparameter tuning. Per Table 2,
+both benefited from knowledge distillation, but the gain for TabNet
+was greater than for XGBoost. XGBoost still outperforms TabNet.
+We observed similar results on other datasets and with the patience
+hyperparameter for TabNet increased by 3× (by default, TabNet
+stops training after 10 consecutive nonimproving epochs).
+Table 2. XGBoost and TabNet ensembles on Dataset B (100K sampled rows)
+
+Gen
+
+TabNet
+AUC (n)
+
+TabNet Ens
+AUC (1+..+n)
+
+XGBoost
+AUC (n)
+
+0
+1
+2
+3
+4
+5
+
+0.60982
+0.61859
+0.58359
+0.57927
+0.57336
+0.57793
+
+0.61995
+0.61519
+0.61867
+0.6233
+0.62547
+
+0.67722
+0.70136
+0.72189
+0.72304
+0.72406
+0.72369
+
+XGBoost
+Ensemble
+AUC (1+..+n)
+0.70052
+0.71317
+0.71944
+0.72273
+0.72418
+
+Removing noisy labels improves performance — a simple, but
+powerful idea. When trainig with knowledge distillation, we remove
+data rows whose predictions are too far from the teacher model’s
+predictions, that is, we remove data 𝑖 if Δ = |𝑓 (𝑥𝑖 ) −𝑦𝑖 | ≥ threshold.
+A threshold equal to 1 keeps all rows. Per Table 3, threshold 0.99
+leads to good performance and consistently improves results.
+Constant columns degrade DNN but not XGBoost performance.
+Removing constant columns/features improves the performance of
+TabNet. Table 4 indicates that adding a constant feature column
+degrades the performance of TabNet significantly, while XGBoost
+is unaffected, as one might expect. Similar observations were made
+recently and discussed in [18, 20, 40]. Our industry datasets have
+constant columns, and removing them improves the teacher model
+and the best ensembles. Tables 6, 17 and 14 summarize combined
+performance of denoising and removing constant columns.
+Order-preserving feature transforms have little effect on TabNet due to its built-in batch normalization. Unlike models based
+on decision trees, DNNs tend to be sensitive to the scale of input
+data. Therefore, we evaluated the impact of common transforms
+such as Box-Cox, Standardize, and Quantile on all features. Results in Table 5 indicate that TabNet’s performance is unaffected by
+the Box Cox and Quantile transforms, while the performance dips
+after the Standardize transform. This appears related to the use of
+batch normalization in TabNet, the paper explains “TabNet inputs
+raw tabular data without any preprocessing and is trained using
+
+gradient descent-based optimization, enabling flexible integration
+into end-to-end learning.” Therefore, we do not apply feature transforms in subsequent experiments, but admit that individual features
+in some datasets could be amenable to such transforms. XGBoost
+is insensitive to order-preserving feature transforms, as one might
+expect for a model based on decision trees.
+
+3.3
+
+DNNs vs. XGBoost on small data sets
+
+We found that TabNet significantly outperforms XGBoost when
+we train the models on smaller sample sizes. Moreover, TabNet
+gains a much greater boost from ensembling, as seen in Table 7
+for 10K random samples from Dataset B. Yet, XGBoost generally
+outperforms TabNet-based models on large data sets, at least without
+additional optimizations for TabNet (Tables 9 and 10).
+To explain this phenomenon, we note the stochasticity of DNN
+models. Compared to XGBoost, DNNs are initialized with random
+weights and trained by stochastic gradient descent. This training
+process explores different directions in the parameter space more
+easily, and hence may find better model parameters when the data
+are limited. To verify this hypothesis, we calculate the Pearson’s correlation coefficient between generations (of knowledge distillation)
+for both XGBoost and TabNet. The results are strikingly different.
+For TabNet, the correlations are <0.36 even for consecutive generations, while for XGBoost, the correlations are all >0.78. Hence,
+DNNs produce more diverse models across generations. Another
+observation is that XGBoost tends to overfit on small datasets. In
+some of our experiments, XGBoost exhibited all-1 ROC AUC scores
+on the original training dataset across all generations, while TabNet’s ROC scores range between 0.61 to 0.74, similar to the ones on
+the test dataset.
+
+3.4
+
+Self-distillation from an ensemble
+
+Self-distillation trains the generation 𝑁 + 1 using generation 𝑁 as
+the teacher, then ensembles all the generations. Since ensembles
+usually outperform single models, one can also use a full ensemble
+of prior generations as a teacher to distill the next generation. Our
+experiments in Tables 15 and 16 compare these two options, but
+show no serious differences on average. When appropriate training
+resources are available, one can run both methods and pick the
+better model one every time.
+
+4
+
+ADVANCED CONSIDERATIONS
+
+In this section, we prove equivalence between classic knowledge
+distillation and the more practical method introduced in Section 3
+(in the context of cross-entropy loss). In Section 4.2, we combine
+this method with several other practical techniques, to be evaluated
+experimentally in Section 5.
+
+4.1
+
+Equivalence between distillation via weighted datasets
+and distillation via loss functions
+
+We consider 𝑘-class classification, X ⊆ R𝑑 being the feature space,
+Y = {1, . . . , 𝑘 } being the label space, and D = {𝒙𝑖 , 𝑦𝑖 }𝑛𝑖=1, (𝒙𝑖 , 𝑦𝑖 ) ∈
+X × Y being the training set. We consider function 𝑓 (·; 𝜃 ) : X →
+R𝑘 parameterized by 𝜃 and 𝜎 being the softmax function. the loss
+
+Practical Knowledge Distillation: Using DNNs to Beat DNNs • 5
+
+Table 3. Data denoising during TabNet distillation using different thresholds on Dataset B
+
+threshold = 1
+Individual Ensemble
+0.63163
+0.59024
+0.6494
+0.5779
+0.66526
+0.56244
+0.65684
+0.58737
+0.67351
+0.60204
+0.67694
+
+Gen
+0
+1
+2
+3
+4
+5
+
+threshold=0.999
+Individual Ensemble
+0.63163
+0.61461
+0.64885
+0.61024
+0.642
+0.5987
+0.65274
+0.57877
+0.66111
+0.60059
+0.67656
+
+threshold=0.99
+Individual Ensemble
+0.63163
+0.61452
+0.65071
+0.62124
+0.65261
+0.58315
+0.64608
+0.58441
+0.65452
+0.68675
+0.65737
+
+threshold=0.9
+Individual Ensemble
+0.63163
+0.70889
+0.70904
+0.60639
+0.69421
+0.59152
+0.68818
+0.60011
+0.68156
+0.56188
+0.69705
+
+threshold=0.5
+Individual Ensemble
+0.63163
+0.58429
+0.63813
+0.60553
+0.62765
+0.56906
+0.60846
+0.63707
+0.63133
+0.63219
+0.63531
+
+Table 4. Removing and adding constant columns impacts TabNet results on Dataset B
+
+Gen
+0
+1
+2
+3
+4
+5
+6
+7
+
+Original
+Individual
+0.56688
+0.60085
+0.67693
+0.63902
+0.52586
+0.58079
+0.55747
+0.57857
+
+Ensemble
+0.6386
+0.70935
+0.72011
+0.74692
+0.7463
+0.74603
+0.74603
+
+Add 5 all-one features
+Individual Ensemble
+0.56318
+0.56646
+0.57848
+0.54981
+0.57872
+0.5343
+0.57885
+0.56674
+0.57992
+0.51794
+0.57889
+0.55657
+0.58351
+0.55601
+0.58593
+
+Remove const features
+Individual Ensemble
+0.6255
+0.63731
+0.64534
+0.56475
+0.65157
+0.56526
+0.65985
+0.59496
+0.70593
+0.64536
+0.73507
+0.69509
+0.76678
+0.59661
+0.73137
+
+Table 5. Impact of feature transforms the quality of TabNet distillation, Dataset B
+
+Gen
+0
+1
+2
+3
+4
+5
+
+Original
+Individual
+0.56688
+0.60085
+0.67693
+0.63902
+0.52586
+0.58079
+
+Ensemble
+0.6386
+0.70935
+0.72011
+0.74692
+0.7463
+
+w/ Standardize
+Individual Ensemble
+0.61268
+0.61748
+0.63207
+0.57437
+0.64157
+0.62771
+0.6668
+0.65891
+0.69058
+0.60042
+0.66963
+
+Table 6. Removing constants and large Δs, Dataset B (100K sampled rows)
+leads to small but consistent improvements
+
+0
+1
+2
+3
+4
+5
+6
+
+TabNet
+0.68346
+0.67571
+0.65953
+0.59195
+0.62141
+0.57723
+0.57172
+0.57622
+
+improved
+0.6899
+0.69008
+0.68981
+0.69022
+0.68757
+0.68869
+0.68623
+
+XGBoost
+0.66495
+0.68899
+0.70212
+0.70517
+0.70411
+0.70599
+0.70799
+0.70833
+
+improved
+0.68422
+0.69445
+0.69951
+0.70213
+0.70388
+0.70529
+0.70633
+
+w/ Quantile
+Individual Ensemble
+0.56688
+0.60085
+0.6386
+0.67693
+0.70935
+0.63902
+0.72011
+0.52586
+0.74692
+0.58079
+0.7463
+
+w/ Box Cox
+Individual Ensemble
+0.56688
+0.60085
+0.6386
+0.67693
+0.70935
+0.63902
+0.72011
+0.52586
+0.74692
+0.58079
+0.7463
+
+Table 7. DNNs vs. XGBoost on Dataset B (10K sampled rows)
+
+Gen
+0
+1
+2
+3
+4
+5
+
+TabNet
+Individual
+0.68011
+0.69234
+0.71806
+0.71872
+0.73702
+0.70074
+
+Ensemble
+0.71789
+0.75358
+0.76891
+0.78404
+0.79210
+
+XGBoost
+Individual
+0.66868
+0.68036
+0.67826
+0.68020
+0.65533
+0.68001
+
+Ensemble
+0.68254
+0.69169
+0.69137
+0.68468
+0.68335
+
+function L : R𝑘 × R𝑘 → R is cross-entropy by default:
+L (𝒒, 𝒑) = −
+
+𝑘
+∑︁
+𝑗=1
+
+𝑞 𝑗 log 𝑝 𝑗 .
+
+6 •
+
+Chung-Wei Lee, Pavlos Athanasios Apostolopulos, and Igor L. Markov
+
+When writing L (𝑦, 𝒑) for some 𝑦 ∈ Y, it refers to L (1𝑦 , 𝒑), where
+1𝑦 is a one-hot vector in R𝑘 with 𝑦-th entry being 1. Given a teacher
+model 𝑔, Knowledge Distillation refers to a training process for a student model 𝑓 , where both 𝑓 and 𝑔 are functions for the 𝑘-class classification but they may have different architectures (hide parameterdependency here from simplicity). Specifically, for every 𝑖 defining
+𝒒𝑖 = 𝜎 (𝑔(𝒙𝑖 )) and 𝒑𝑖 = 𝜎 (𝑓 (𝒙𝑖 )), we define the following objective
+function L𝑘𝑑 for Knowledge Distillation (KD):
+L𝑘𝑑 (𝑔, 𝑓 ) =
+
+𝑁
+∑︁
+
+[𝛼 L (𝒒𝑖 , 𝒑𝑖 ) + (1 − 𝛼)L (𝑦𝑖 , 𝒑𝑖 )] .
+
+Label Smoothing [45] refers to a regularization method replacing
+L (𝑦, 𝜎 (𝑓 (𝒙))) with L (𝒒𝜖 , 𝜎 (𝑓 (𝒙))), where 𝜖 > 0 and 𝑞𝜖𝑗 = (1 −
+𝜖) 1{ 𝑗 = 𝑦} + 𝑘𝜖 for every entry 𝑗; in other words, 𝒒𝜖 = 𝜖𝒖 + (1 −𝜖)1𝑦
+is the ground truth vector 1𝑦 mixed with a uniform distribution 𝒖.
+For a single data pair (𝒙, 𝑦), the KD loss is
+𝛼 L (𝒒, 𝒑) + (1 − 𝛼)L (𝑦, 𝒑),
+where 𝒒 = 𝜎 (𝑔(𝒙)), 𝒑 = 𝜎 (𝑓 (𝒙)).
+When L is the cross-entropy, then the KD loss is equal to
+𝑘
+∑︁
+
+=
+
+𝑖=1
+𝑁
+∑︁ 𝑘
+∑︁
+
+log 𝑝 𝑗 𝛼𝑞 𝑗 + (1 − 𝛼) 1{ 𝑗 = 𝑦}
+
+
+
+Therefore, we can view L𝑤𝑠 as an unbiased estimator of the
+KD loss, which has the same size as the original dataset, and can
+be calculated without implementation of probabilistic labels or a
+customized KD loss.
+Moreover, when the optimization algorithm involves stochastic
+gradient descent, sampling across instances is also applied by the
+original KD loss. In this case, our method is close to the original
+method but differs in how sampling is performed, which also provides an unbiased stochastic gradient. To see that, suppose we pick
+𝐼 uniformly at random from {1, . . . , 𝑁 }. Then the expectation of
+gradient is
+#
+"
+𝑁
+1 ∑︁
+∇L (𝑧𝑖 , 𝒑𝑖 )
+E [∇L (𝑧𝐼 , 𝒑𝐼 )] = E
+𝑁 𝑖=1
+
+𝑗=1
+
+=
+therefore it can be seen as L (𝛼𝒒 + (1 − 𝛼)1𝑦 , 𝒑); instance-specific
+label smoothing with 𝒒𝑖 for every data 𝑖.
+We propose a variant of knowledge distillation via a weighted dataset.
+Specifically, fixing an 𝑖, we let
+𝒒𝑖′ = 𝛼𝒒𝑖 + (1 − 𝛼)1𝑦𝑖 .
+Then we define 𝑘 pairs (𝒙𝑖 , 𝑗) with weight 𝑞𝑖′ ( 𝑗). There are multiple
+ways to implement this. The first one is by using a weighted loss
+function. Specifically the weighted total loss is
+𝑁
+∑︁
+
+[𝑠𝑖 · L (1, 𝑓1 (𝑥𝑖 )) + (1 − 𝑠𝑖 ) · L (0, 𝑓1 (𝑥𝑖 ))]
+
+𝑖=1
+
+Note also that:
+L𝑤𝑙 (𝑔, 𝑓 ) =
+
+𝑁 ∑︁
+𝑘
+∑︁
+
+𝑞𝑖′ ( 𝑗)L ( 𝑗, 𝒑𝑖 )
+
+𝑖=1 𝑗=1
+
+=−
+
+𝑁
+∑︁ 𝑘
+∑︁
+
+log 𝑝𝑖 ( 𝑗) (𝛼𝑞𝑖 ( 𝑗) + (1 − 𝛼) 1{ 𝑗 = 𝑦𝑖 })
+
+𝑖=1 𝑗=1
+
+=
+
+𝑁
+∑︁
+
+𝑞𝑖′ ( 𝑗)L ( 𝑗, 𝒑𝑖 )
+
+𝑖=1 𝑗=1
+
+= L𝑤𝑙 (𝑔, 𝑓 ) = L𝑘𝑑 (𝑔, 𝑓 ).
+
+𝑖=1
+
+−
+
+𝒙𝑖 as class 𝑗 with probability 𝑞𝑖′ ( 𝑗). Considering the expectation of
+the total loss of this implementation L𝑤𝑠 (𝑔, 𝑓 ), we see that
+"𝑁
+#
+∑︁
+E [L𝑤𝑠 (𝑔, 𝑓 )] = E
+L (𝑧𝑖 , 𝒑𝑖 )
+
+(𝛼 L (𝒒𝑖 , 𝒑𝑖 ) + (1 − 𝛼)L (𝑦𝑖 , 𝒑𝑖 ))
+
+𝑖=1
+
+= L𝑘𝑑 (𝑔, 𝑓 ),
+and this again recovers knowledge distillation. However, the dataset
+becomes 𝑘 times bigger, which significantly increases training time
+when there are many classes. We can therefore consider another
+implementation of weighted datasets by sampling. Specifically, for
+each instance 𝑖, we sample a label 𝑧𝑖 from a categorical distribution
+with parameter 𝒒𝑖′ supported on {1, . . . , 𝑘 }. In other words, we label
+
+4.2
+
+1
+∇L𝑘𝑑 (𝑔, 𝑓 ).
+𝑁
+
+Practical techniques
+
+Based on the above equivalence, we use distillation based on weighted
+datasets. We perform straightforward yet impactful hyperparameter
+optimization, and also also optimize ensemble weights.
+Refined distillation on input data. The knowledge-distillation
+literature uses a teacher model 𝑓0 to train a student model 𝑓1 with
+the following loss function
+!
+!
+𝑁
+𝑁
+∑︁
+∑︁
+𝛽
+𝐻 (𝑓0 (𝑥𝑖 ), 𝑓1 (𝑥𝑖 )) + (1 − 𝛽)
+𝐻 (𝑦𝑖 , 𝑓1 (𝑥𝑖 ))
+𝑖=1
+
+𝑖=1
+
+where 𝐻 (𝑎, 𝑏) = −𝑎 log 𝑏 − (1 − 𝑎) log(1 − 𝑏) is the cross entropy
+function. 𝛽 is a hyperparameter. When 𝛽 = 0, it corresponds to the
+normal binary classification loss function (without any knowledge
+from 𝑓0 ). In this project, we trained 𝑓1 on a weighted dataset, where
+each (𝑥𝑖 , 0) has a weight 1 − 𝑓0 (𝑥𝑖 ) and each (𝑥𝑖 , 1) has a weight
+𝑓0 (𝑥 0 ). This is similar to the case 𝛽 = 1 for the loss function above. Although this forces the student model to learn and match the teacher
+model’s prediction on the data, it prevents the student from seeing
+the ground truth. We found that student models in later generations
+tend to perform worse. We explain that by the loss of ground-truth
+information during the sequential knowledge-distillation process.
+Consequently, similar to the loss function, we mix the ground
+truth information into our weighted input. Specifically, we define
+positive and negative weights for each pair of data points ((𝑥𝑖 , 1)
+and (𝑥𝑖 , 0)) as follows
+𝛽 𝑓0 (𝑥𝑖 ) + (1 − 𝛽)𝑦𝑖 and 𝛽 (1 − 𝑓0 (𝑥𝑖 )) + (1 − 𝛽)(1 − 𝑦𝑖 )
+respectively. Likewise, 𝛽 = 0 corresponds to the original dataset, and
+our original distillation approach corresponds to 𝛽 = 1. Empirically,
+
+Practical Knowledge Distillation: Using DNNs to Beat DNNs • 7
+
+we found that setting 𝛽 = 0.7 effectively prevents quality loss in
+subsequent models.
+Tuning TabNet’s hyperparameters. Just like we used XGBoost
+“out of the box,” we used default hyperparameters in TabNet. The
+deteriorating performance of TabNet on larger datasets in our earlier
+experiments might be explained by the need to scale the model size
+and architecture parameters with the size of the dataset. Therefore,
+we optimize three major parameters:
+• 𝑛𝑎 — the attention layer dimension (8 by default).
+• 𝑛𝑑 — the prediction layer dimension (8 by default).
+• 𝑛𝑠𝑡𝑒𝑝𝑠 — the number of decision steps in the sequential encoding process (3 by default).
+Results for Dataset V are shown in Table 8.
+Optimizing ensemble weights. As our experimental results indicate, ensembles of teacher and student models usually outperform
+every individual model. Previously we obtained an ensemble by
+simply averaging the predictions of models. To improve upon that,
+we assign a weight to each model and consider weighted averages of
+the predictions, where the weights are optimized. The result of such
+optimization should not be worse than any individual model and the
+average ensemble we used before (but overfitting is possible with
+insufficient data). Optimizing ensemble weights may look like a linear problem at the first sight, but the overall classifier performance
+depends on ensemble weights in nonlinear ways [13]. Interactions
+between the (highly-correlated) models in the ensemble complicate this dependence and make optimization difficult. Ensembling
+models of different types tends to be more impactful than homogeneous ensembling in practice, but makes weight optimization even
+more challenging. To optimize the weights, we use the Differential Evolution method, following the discussion in [7]. The choice
+of optimization method is not essential. Tables 9 and 10 evaluate
+the optimization of ensemble weights on two datasets, using the
+default TabNet architecture and one with optimized hyperparameters. The results are compared to those for XGBoost. The entire
+strategy (including our prior optimizations) improves ROC AUC by
+0.01–0.03 over single models. We observed that this optimization
+often produces some very small weights, so we round such small
+weights down to zero to simplify the ensembles and reduce possible
+overfitting (the remaining weights are re-optimized after models
+with zero weights are removed from the ensemble).
+
+5
+
+EMPIRICAL VALIDATION AND DEPLOYMENT
+
+We now assemble individual techniques developed and evaluated
+in previous sections into an overall workflow that produces a final
+high-quality model optimized for real-time inference. This workflow is illustrated in Figure 1. Additionally, we continue exploring
+comparisons between TabNet and XGBoost on data sets with 100K
+sampled rows (in the style of Section 3). In the results below, we
+observe that the new techniques introduced in Section 4 allow TabNet to catch up with XGBoost in performance and even beat it by a
+significant amount on some datasets.
+
+5.1
+
+Combining XGBoost and TabNet
+
+Hoping for further improvement, we combine TabNet and XGBoost.
+Similar to the optimizing ensemble weights technique in the previous section, here we ensemble generations from both XGBoost
+and TabNet. We obtain a score better than every single ensemble
+we observed — not a surprising result, but significant nevertheless.
+Upon careful inspection, we observe that only the first few XGBoost generations are used. This reconfirms a more general trend
+we’ve discussed — DNNs gain more from knowledge distillation
+than XGBoost models do.
+
+5.2
+
+Optimizing XGBoost hyperparameters
+
+Now we also optimize XGBoost, since we used default hyperparameters so far. 𝑛𝑒𝑠𝑡𝑖𝑚𝑎𝑡𝑜𝑟𝑠 is the number of boosting rounds and
+thus the number of trees built. In Table 11, we compare the default
+XGBoost (100 trees) to XGBoost models with 200, 400, and 1000
+trees. As 𝑛𝑒𝑠𝑡𝑖𝑚𝑎𝑡𝑜𝑟𝑠 grows, model performance continues improving, seemingly without saturation. With 1000 trees, it even beats
+the ensemble of the original XGBoost and TabNet we showed above,
+confirming that XGBoost is very competitive for tabular data. Tuning additional hyperparameters may further improve results, but
+risks diminishing returns.
+
+5.3
+
+Deployment considerations
+
+As seen in Section 5, with multiple advanced training techniques,
+TabNet ensembles become competitive with XGBoost, and combining such models further improves resuts. As these results are
+validated on data from the industry Platformplatform, we explore
+application deployment with an eye on any obstacles. To this end, we
+implemented all proposed techniques within the training workflow
+in Platform. However, the infrastructure available to us does not currently support highly-optimized real-time inference for TabNet and
+ensembles of multiple models. Rather than implement such support
+(a considerable ML infrastructure project), we propose a shortcut
+— training a comparable model of supported type. Here we again
+rely on knowledge distillation: we distill the best available ensemble
+model into a simpler model supported for high-performance realtime inference via our distillation via a weighted dataset. This can
+be accomplished by creating a weighted dataset table and launching
+an appropriate API-driven model flow —- a routine task, much simpler than implementing the entire self-distillation procedure from
+scratch. More importantly, the resulting model exhibits practically
+the same performance and preserves the consistent improvements
+we have observed for more sophisticated (best) models across the
+Platformuse cases we worked with. Results in Table 13 show compelling ROC AUC improvements for all use cases. Gains range from
+0.07% for Dataset R to 7.14% for Dataset C. Large gains are mostly
+associated with initial models that don’t exhibit strong performance,
+whereas improving strong models is difficult (no surprises here).
+
+6
+
+CONCLUSIONS AND FUTURE WORK
+
+We developed a self-distillation method, made it practical, and successfully validated it on data from an industry high-performance
+end-to-end real-time ML platform. As theoretical justification for
+
+8 •
+
+Chung-Wei Lee, Pavlos Athanasios Apostolopulos, and Igor L. Markov
+
+Table 8. Hyperparameter tuning for TabNet on Dataset V
+
+𝑛𝑑
+𝑛𝑠𝑡𝑒𝑝𝑠
+# of params
+0
+1
+2
+3
+4
+5
+Ensemble 0-5
+
+4
+3
+61560
+0.91009
+0.91837
+0.92251
+0.92083
+0.91714
+0.91995
+0.93162
+
+5
+3
+73370
+0.91396
+0.9217
+0.92362
+0.92053
+0.92001
+0.91673
+0.93056
+
+7
+3
+97422
+0.91959
+0.92674
+0.92803
+0.92209
+0.91858
+0.917
+0.93579
+
+8
+3
+109664
+0.91267
+0.92167
+0.92427
+0.92181
+0.91949
+0.91821
+0.93362
+
+9
+4
+140970
+0.91346
+0.91932
+0.92297
+0.92414
+0.92329
+0.91976
+0.93058
+
+12
+7
+259080
+0.90885
+0.91935
+0.92169
+0.92273
+0.92095
+0.9214
+0.93053
+
+16
+6
+311712
+0.91816
+0.92674
+0.92154
+0.92095
+0.91837
+0.91701
+0.93658
+
+Table 9. Optimizing ensemble weights for the default and tuned TabNet architectures on Dataset B (100K sampled rows)
+
+0
+1
+2
+3
+4
+5
+Opt
+
+TabNet tuned
+(𝑛𝑑 =12, 𝑛𝑎 =12, 𝑛𝑠𝑡𝑒𝑝𝑠 =6)
+Params: 28288
+Single
+Ensemble
+0.70157
+0.70878 0.71064
+0.71408 0.71687
+0.69722 0.71523
+0.6857
+0.71393
+0.68283 0.71314
+0.72662
+
+TabNet default
+(𝑛𝑑 =8, 𝑛𝑎 =8, 𝑛𝑠𝑡𝑒𝑝𝑠 = 3)
+Params: 11455
+Single
+Ensemble
+0.68744
+0.67698 0.69067
+0.68061 0.69452
+0.6821
+0.69408
+0.67939 0.69226
+0.67189
+0.69095
+0.69521
+
+XGBoost default
+Nodes: 6938–7544
+Single
+Ensemble
+0.67354
+0.69761 0.69321
+0.70562 0.70138
+0.70228 0.70368
+0.70469 0.70515
+0.70371 0.70562
+
+Table 10. Optimizing ensemble weights for the default and tuned TabNet architectures on Dataset V
+
+0
+1
+2
+3
+4
+5
+Opt
+
+TabNet tuned
+(𝑛𝑑 =16, 𝑛𝑎 =16, 𝑛𝑠𝑡𝑒𝑝𝑠 =6)
+Params: 311712
+Single Ensemble
+0.91816
+0.92674 0.9276
+0.92154 0.93151
+0.92095 0.93406
+0.91837 0.9351
+0.91701 0.93658
+0.93692
+
+Table 11. Optimizing XGBoost on Dataset V
+
+# of Trees
+Avg Nodes
+0
+1
+2
+3
+4
+5
+
+100
+10000
+0.94064
+0.93624
+0.93177
+0.92886
+0.92699
+0.92568
+
+18000
+0.94454
+0.94277
+0.94008
+0.93771
+0.93629
+0.93333
+
+400
+34500
+0.94848
+0.94767
+0.94798
+0.94556
+0.94543
+0.94457
+
+83000
+0.9528
+0.95268
+0.95113
+0.95179
+0.95205
+0.95101
+
+TabNet default
+(𝑛𝑑 =8, 𝑛𝑎 =8, 𝑛𝑠𝑡𝑒𝑝𝑠 = 3)
+Params: 109664
+Single Ensemble
+0.91267
+0.92167 0.9235
+0.92427 0.92797
+0.92181 0.9303
+0.91949 0.93209
+0.91821 0.93362
+0.93391
+
+XGBoost default
+Nodes: 9276-10488
+Single
+Ensemble
+0.94064
+0.93624 0.94123
+0.93177 0.93964
+0.92886 0.93795
+0.92699 0.93648
+0.92568 0.93524
+
+it, we proved the equivalence between our approach and the classical knowledge distillation in terms of (the expectation of) the loss
+function. In addition to using self-distillation to produce powerful
+ensembles of DNNs and optimizing those ensembles using Differential Evolution, we distill these ensembles into simpler models
+appropriate for high-performance real-time inference in practice.
+What we have accomplished looks paradoxical. Recall that the
+prior status quo had DNN models such as TabNet lose to gradient
+boosting on tabular data [18, 20, 40]. Since knowledge distillation
+improves TabNet more than it improves XGBoost, twe reduce he
+performance gap, and TabNet ensembles start winning on small
+data sets because they leverage diversity and avoid overfitting. With
+
+Practical Knowledge Distillation: Using DNNs to Beat DNNs • 9
+
+additional enhancements, TabNet ensembles are improved further
+and exhibit superior performance. However, their implementation
+complexity obstructs their use in high-performance real-time inference in the end-to-end ML platform. Therefore, we distill these
+advanced models into compact XGBoost models. Thus, we have
+used DNNs to help XGBoost beat (single) DNNs by a larger margin on tabular data and then match the performance of powerful
+DNN ensembles. For large non-tabular datasets, gradient-boosting
+models might lack the capacity to compete with DNN architectures.
+However, our tabular datasets reach into respectable sizes, and we
+did not observe such trends. The results presented in this paper
+use proprietary datasets, but the trends we report, in all likelihood,
+carry over to public tabular data sets used in [18, 20, 40].
+Our techniques and results involving gradient boosting on tabular data may be of particular interest in the context of resourceconstrained high-performance inference on tabular data. On the
+other hand, our empirical results are limited to data sets without
+sparse features, such as any kind of ID numbers, because XGBoost
+does handle them well. Today, sparse features are best handled by
+trained latent-space embeddings within specialized DNN architectures, and such extensions can be adapted to TabNet. To this end,
+our data denoising and distillation techniques should carry over
+verbatim to produce DNN ensembles with improved performance.
+Gradient boosting models lack comparable facilities for sparse features, but can be combined with DNN architectures through stacking,
+i.e. by considering tree leaves as features for DNNs. Overall, our
+techniques can be viewed in a larger universe of hybrid ML models
+for supervised learning. In addition, recent findings on knowledge
+distillation in the context of Reinforcement Learning (RL) [27] suggest adapting our techniques to RL applications, e.g., [3].
+
+REFERENCES
+[1] Mohamad Faiz Ahmad, Nor Ashidi Mat Isa, Wei Hong Lim, and Koon Meng Ang.
+2022. Differential evolution: A recent review based on state-of-the-art works.
+Alexandria Engineering Journal 61, 5 (2022), 3831–3872. https://doi.org/10.1016/j.
+aej.2021.09.013
+[2] Abdolmaged Alkhulaifi, Fahad Alsahli, and Irfan Ahmad. 2021. Knowledge distillation in deep learning and its applications. PeerJ Computer Science 7 (2021),
+e474.
+[3] Pavlos Athanasios Apostolopoulos, Zehui Wang, Hanson Wang, Chad Zhou,
+Kittipat Virochsiri, Norm Zhou, and Igor L. Markov. 2021. Personalization for
+Web-based Services using Offline Reinforcement Learning. (2021). https://doi.
+
+Table 12. Shapes of industry use cases. Letter labels are derived from full
+names of company-internal use cases, rather than taken as consecutive
+letters of the alphabet (e.g., there is no Dataset D).
+
+Use Case
+
+# examples
+
+Dataset A
+Dataset B
+Dataset C
+Dataset I
+Dataset J
+Dataset P
+Dataset R
+Dataset S
+Dataset V
+Dataset W
+
+19,835
+1,202,700
+2,338
+186,854
+1,291,701
+127,850
+2,118,670
+1,032,414
+103,883
+73,100
+
+# of each type of features
+bool int float categorical
+1
+2
+9
+0
+0
+38
+23
+5
+5
+58
+6
+10
+4
+16
+612
+9
+15
+65
+10
+15
+50
+121
+79
+20
+4
+37
+13
+8
+5
+7
+20
+10
+7
+66
+46
+5
+2
+9
+2
+10
+
+Table 13. The ROC AUC scores for the use cases.
+
+Use Case
+Dataset A
+Dataset B
+Dataset C
+Dataset I
+Dataset J
+Dataset P
+Dataset R
+Dataset S
+Dataset W
+
+Ours
+0.89828
+0.70414
+0.91071
+0.98536
+0.98320
+0.63069
+0.87349
+0.70414
+0.64012
+
+Baseline
+0.89555
+0.68417
+0.83928
+0.98520
+0.98258
+0.59525
+0.87276
+0.68417
+0.63156
+
+Gain
+0.27%
+2.00%
+7.14%
+0.02%
+0.06%
+3.54%
+0.07%
+2.00%
+0.86%
+
+Table 14. Removing constant columns and large Δs on Dataset V leads to
+small but consistent improvements.
+
+Gen
+0
+1
+2
+3
+4
+5
+
+TabNet
+0.90733
+0.90965
+0.91034
+0.91057
+0.90888
+0.90816
+
+improved
+0.91146
+0.91314
+0.91414
+0.91439
+0.91435
+
+XGBoost
+0.93608
+0.93362
+0.93033
+0.92783
+0.92562
+0.92363
+
+improved
+0.93784
+0.93693
+0.93568
+0.93439
+0.93326
+
+Table 15. XGBoost distilled from last vs. from ensemble on Dataset B. No
+substantial difference in results is observed,
+
+Gen
+0
+1
+2
+3
+4
+5
+
+XGBoost (dist. from last)
+Individual Ensemble
+0.89705
+0.89864
+0.90038
+0.89986
+0.90108
+0.90062
+0.90164
+0.90080
+0.90212
+0.89997
+0.90218
+
+XGBoost (dist. from ens.)
+Individual Ensemble
+0.89705
+0.89864
+0.90038
+0.90018
+0.90155
+0.90030
+0.90190
+0.90019
+0.90201
+0.90057
+0.90222
+
+Table 16. TabNet distilled from last vs. from ensemble on Dataset B. No
+substantial difference in results is observed,
+
+Gen
+0
+1
+2
+3
+4
+5
+
+TabNet (dist. from last)
+Individual Ensemble
+0.88899
+0.89321
+0.89462
+0.89316
+0.89535
+0.89489
+0.89682
+0.89520
+0.89750
+0.89418
+0.89791
+
+TabNet (dist. from ens.)
+Individual Ensemble
+0.88899
+0.89321
+0.89462
+0.89483
+0.89659
+0.89297
+0.89720
+0.89411
+0.89789
+0.89360
+0.89833
+
+org/10.48550/ARXIV.2102.05612
+[4] Sercan Ö. Arik and Tomas Pfister. 2021. TabNet: Attentive interpretable tabular
+learning. AAAI 35(8), 6679–6687.
+[5] Devansh Arpit, Stanisław Jastrzębski, Nicolas Ballas, David Krueger, Emmanuel
+Bengio, Maxinder S Kanwal, Tegan Maharaj, Asja Fischer, Aaron Courville, Yoshua
+Bengio, et al. 2017. A closer look at memorization in deep networks. In International conference on machine learning. PMLR, 233–242.
+[6] David Berthelot, Nicholas Carlini, Ian Goodfellow, Nicolas Papernot, Avital Oliver,
+and Colin Raffel. 2019. MixMatch: A Holistic Approach to Semi-Supervised
+
+10
+
+•
+
+Chung-Wei Lee, Pavlos Athanasios Apostolopulos, and Igor L. Markov
+
+Table 17. Removing constants and large Δs on Dataset R (100K sampled rows) leads to improvements
+
+0
+1
+2
+3
+4
+5
+
+TabNet
+0.87384
+0.87543
+0.87563
+0.87558
+0.87514
+0.8746
+
+Δ = 0.001
+0.87556
+0.87623
+0.8766
+0.87663
+0.87658
+
+TabNet
+0.87384
+0.87534
+0.8755
+0.87556
+0.87571
+0.87561
+
+Learning. https://doi.org/10.48550/ARXIV.1905.02249
+[7] Jason Brownlee. 2020. How to Develop a Weighted Average Ensemble for Deep
+Learning Neural Networks. https://tinyurl.com/wavg4dnn
+[8] Derek Chen, Zhou Yu, and Samuel R Bowman. 2021. Learning with noisy labels
+by targeted relabeling. arXiv preprint arXiv:2110.08355 (2021).
+[9] Hanting Chen, Yunhe Wang, Chang Xu, Chao Xu, and Dacheng Tao. 2020. Learning student networks via feature embedding. IEEE Transactions on Neural Networks
+and Learning Systems 32, 1 (2020), 25–35.
+[10] Tianqi Chen and Carlos Guestrin. 2016. XGBoost: A scalable tree boosting system.
+KDD, 785–794.
+[11] Xu Cheng, Zhefan Rao, Yilan Chen, and Quanshi Zhang. 2020. Explaining knowledge distillation by quantifying the knowledge. In Proceedings of the IEEE/CVF
+conference on computer vision and pattern recognition. 12925–12935.
+[12] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2018. Bert:
+Pre-training of deep bidirectional transformers for language understanding. arXiv
+preprint arXiv:1810.04805 (2018).
+[13] Xibin Dong, Zhiwen Yu, Wenming Cao, Yifan Shi, and Qianli Ma. 2020. A survey
+on ensemble learning. Frontiers of Computer Science 14, 2 (2020), 241–258.
+[14] Teodor Fredriksson, David Issa Mattos, Jan Bosch, and Helena Holmström Olsson.
+2020. Data Labeling: An Empirical Investigation into Industrial Challenges and
+Mitigation Strategies. In Product-Focused Software Process Improvement, Maurizio
+Morisio, Marco Torchiano, and Andreas Jedlitschka (Eds.). Springer International
+Publishing, Cham, 202–216.
+[15] Tommaso Furlanello, Zachary Lipton, Michael Tschannen, Laurent Itti, and Anima
+Anandkumar. 2018. Born again neural networks. ICML, 1607–1616.
+[16] Mudasir A Ganaie, Minghui Hu, et al. 2021. Ensemble deep learning: A review.
+arXiv preprint arXiv:2104.02395 (2021).
+[17] Chen Gong, Yongliang Ding, Bo Han, Gang Niu, Jian Yang, Jane J. You, Dacheng
+Tao, and Masashi Sugiyama. 2022. Class-Wise Denoising for Robust Learning
+under Label Noise. IEEE Transactions on Pattern Analysis and Machine Intelligence
+(2022), 1–1. https://doi.org/10.1109/TPAMI.2022.3178690
+[18] Yury Gorishniy, Ivan Rubachev, Valentin Khrulkov, and Artem Babenko. 2021.
+Revisiting Deep Learning Models for Tabular Data. (2021). https://doi.org/10.
+48550/ARXIV.2106.11959
+[19] Jianping Gou, Baosheng Yu, Stephen J Maybank, and Dacheng Tao. 2021. Knowledge distillation: A survey. International Journal of Computer Vision 129, 6 (2021),
+1789–1819.
+[20] Léo Grinsztajn, Edouard Oyallon, and Gaël Varoquaux. 2022. Why do tree-based
+models still outperform deep learning on tabular data? arXiv:2207.08815 (2022).
+[21] Bo Han, Quanming Yao, Xingrui Yu, Gang Niu, Miao Xu, Weihua Hu, Ivor Tsang,
+and Masashi Sugiyama. 2018. Co-teaching: Robust Training of Deep Neural
+Networks with Extremely Noisy Labels. https://doi.org/10.48550/ARXIV.1804.
+06872
+[22] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. 2015. Deep Residual
+Learning for Image Recognition. https://doi.org/10.48550/ARXIV.1512.03385
+[23] Geoffrey Hinton, Oriol Vinyals, Jeff Dean, et al. 2015. Distilling the knowledge in
+a neural network. arXiv preprint arXiv:1503.02531 2, 7 (2015).
+[24] Eyke Hüllermeier and Willem Waegeman. 2021. Aleatoric and epistemic uncertainty in machine learning: An introduction to concepts and methods. Machine
+Learning 110, 3 (2021), 457–506.
+[25] Jonathan Krause, Benjamin Sapp, Andrew Howard, Howard Zhou, Alexander
+Toshev, Tom Duerig, James Philbin, and Li Fei-Fei. 2016. The unreasonable
+effectiveness of noisy data for fine-grained recognition. In European Conference
+on Computer Vision. Springer, 301–320.
+[26] Harashta Tatimma Larasati, Aji Teguh Prihatno, Howon Kim, et al. 2022. A
+Review of Dataset Distillation for Deep Learning. In 2022 International Conference
+on Platform Technology and Service (PlatCon). IEEE, 34–37.
+[27] Zhao-Hua Li, Yang Yu, Yingfeng Chen, Ke Chen, Zhipeng Hu, and Changjie Fan.
+2021. Neural-to-Tree Policy Distillation with Policy Improvement Criterion. arXiv
+preprint arXiv:2108.06898 (2021).
+[28] Igor L. Markov, Hanson Wang, Nitya Kasturi, Shaun Singh, Sze Wai Yuen, Mia
+Garrard, Sarah Tran, Yin Huang, Zehui Wang, Igor Glotov, et al. 2022. Looper:
+
+Δ = 0.01
+0.87562
+0.87578
+0.87602
+0.87621
+0.87643
+
+XGBoost
+0.88393
+0.88631
+0.88653
+0.8852
+0.88338
+0.88284
+
+0.88811
+0.88911
+0.88922
+0.88899
+0.88872
+
+An end-to-end ML platform for product decisions. KDD (2022).
+[29] Dmitry Medvedev and Alexander D’yakonov. 2021. New properties of the data
+distillation method when working with tabular data. In International Conference
+on Analysis of Images, Social Networks and Texts. Springer, 379–390.
+[30] Zhong Meng, Jinyu Li, Yong Zhao, and Yifan Gong. 2019. Conditional teacherstudent learning. In ICASSP 2019-2019 IEEE International Conference on Acoustics,
+Speech and Signal Processing (ICASSP). IEEE, 6445–6449.
+[31] Seyed Iman Mirzadeh, Mehrdad Farajtabar, Ang Li, Nir Levine, Akihiro Matsukawa, and Hassan Ghasemzadeh. 2020. Improved knowledge distillation via
+teacher assistant. In Proceedings of the AAAI conference on artificial intelligence,
+Vol. 34. 5191–5198.
+[32] Nitika Nigam, Tanima Dutta, and Hari Prabhat Gupta. 2020. Impact of noisy labels
+in learning techniques: a survey. In Advances in data and information sciences.
+Springer, 403–411.
+[33] Sankaran Panchapagesan, Daniel S Park, Chung-Cheng Chiu, Yuan Shangguan,
+Qiao Liang, and Alexander Gruenstein. 2021. Efficient knowledge distillation
+for rnn-transducer models. In ICASSP 2021-2021 IEEE International Conference on
+Acoustics, Speech and Signal Processing (ICASSP). IEEE, 5639–5643.
+[34] Giorgio Patrini, Alessandro Rozza, Aditya Krishna Menon, Richard Nock, and
+Lizhen Qu. 2017. Making deep neural networks robust to label noise: A loss
+correction approach. In Proceedings of the IEEE conference on computer vision and
+pattern recognition. 1944–1952.
+[35] Mary Phuong and Christoph Lampert. 2019. Towards understanding knowledge
+distillation. In International Conference on Machine Learning. PMLR, 5142–5151.
+[36] Omer Sagi and Lior Rokach. 2018. Ensemble learning: A survey. WIREs Data
+Mining and Knowledge Discovery 8, 4 (2018), e1249. https://doi.org/10.1002/widm.
+1249 arXiv:https://wires.onlinelibrary.wiley.com/doi/pdf/10.1002/widm.1249
+[37] Mohsen Shahhosseini, Guiping Hu, and Hieu Pham. 2019. Optimizing Ensemble Weights and Hyperparameters of Machine Learning Models for Regression
+Problems. https://doi.org/10.48550/ARXIV.1908.05287
+[38] Mohsen Shahhosseini, Guiping Hu, and Hieu Pham. 2020. Optimizing Ensemble
+Weights for Machine Learning Models: A Case Study for Housing Price Prediction.
+In Smart Service Systems, Operations Management, and Analytics, Hui Yang, Robin
+Qiu, and Weiwei Chen (Eds.). Springer International Publishing, Cham, 87–97.
+[39] Jun Shu, Qi Xie, Lixuan Yi, Qian Zhao, Sanping Zhou, Zongben Xu, and Deyu
+Meng. 2019. Meta-weight-net: Learning an explicit mapping for sample weighting.
+Advances in neural information processing systems 32 (2019).
+[40] Ravid Shwartz-Ziv and Amitai Armon. 2022. Tabular data: Deep learning is not
+all you need. Information Fusion 81 (2022), 84–90.
+[41] Niclas Simmler, Pascal Sager, Philipp Andermatt, Ricardo Chavarriaga, FrankPeter Schilling, Matthias Rosenthal, and Thilo Stadelmann. 2021. A Survey of
+Un-, Weakly-, and Semi-Supervised Learning Methods for Noisy, Missing and
+Partial Labels in Industrial Vision Applications. In 2021 8th Swiss Conference on
+Data Science (SDS). 26–31. https://doi.org/10.1109/SDS51136.2021.00012
+[42] Hwanjun Song, Minseok Kim, Dongmin Park, Yooju Shin, and Jae-Gil Lee. 2020.
+Learning from Noisy Labels with Deep Neural Networks: A Survey. https:
+//doi.org/10.48550/ARXIV.2007.08199
+[43] Hwanjun Song, Minseok Kim, Dongmin Park, Yooju Shin, and Jae-Gil Lee. 2022.
+Learning from noisy labels with deep neural networks: A survey. IEEE Transactions
+on Neural Networks and Learning Systems (2022).
+[44] Siqi Sun, Yu Cheng, Zhe Gan, and Jingjing Liu. 2019. Patient knowledge distillation
+for bert model compression. arXiv preprint arXiv:1908.09355 (2019).
+[45] Christian Szegedy, Vincent Vanhoucke, Sergey Ioffe, Jon Shlens, and Zbigniew
+Wojna. 2016. Rethinking the inception architecture for computer vision. CVPR,
+2818–2826.
+[46] Gregor Urban, Krzysztof J Geras, Samira Ebrahimi Kahou, Ozlem Aslan, Shengjie
+Wang, Rich Caruana, Abdelrahman Mohamed, Matthai Philipose, and Matt
+Richardson. 2016. Do deep convolutional nets really need to be deep and convolutional? arXiv preprint arXiv:1603.05691 (2016).
+[47] Xiaobo Wang, Tianyu Fu, Shengcai Liao, Shuo Wang, Zhen Lei, and Tao Mei. 2020.
+Exclusivity-consistency regularized knowledge distillation for face recognition.
+In European Conference on Computer Vision. Springer, 325–342.
+
+Practical Knowledge Distillation: Using DNNs to Beat DNNs •
+
+[48] Yongquan Yang, Haijun Lv, and Ning Chen. 2022. A Survey on ensemble learning
+under the era of deep learning. Artificial Intelligence Review (nov 2022). https:
+//doi.org/10.1007/s10462-022-10283-5
+[49] Ze Yang, Linjun Shou, Ming Gong, Wutao Lin, and Daxin Jiang. 2020. Model
+compression with two-stage multi-teacher knowledge distillation for web question
+answering system. In Proceedings of the 13th International Conference on Web Search
+and Data Mining. 690–698.
+[50] Yang You, Jing Li, Sashank Reddi, Jonathan Hseu, Sanjiv Kumar, Srinadh Bhojanapalli, Xiaodan Song, James Demmel, Kurt Keutzer, and Cho-Jui Hsieh. 2019. Large
+batch optimization for deep learning: Training bert in 76 minutes. arXiv preprint
+arXiv:1904.00962 (2019).
+
+11
+
+[51] Chiyuan Zhang, Samy Bengio, Moritz Hardt, Benjamin Recht, and Oriol Vinyals.
+2021. Understanding deep learning (still) requires rethinking generalization.
+Commun. ACM 64, 3 (2021), 107–115.
+[52] Shiwen Zhang, Sheng Guo, Limin Wang, Weilin Huang, and Matthew Scott. 2020.
+Knowledge integration networks for action recognition. In Proceedings of the
+AAAI Conference on Artificial Intelligence, Vol. 34. 12862–12869.
+[53] Long Zhao, Xi Peng, Yuxiao Chen, Mubbasir Kapadia, and Dimitris N Metaxas.
+2020. Knowledge as priors: Cross-modal knowledge generalization for datasets
+without superior knowledge. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. 6528–6537.
+
+

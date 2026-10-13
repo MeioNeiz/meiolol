@@ -1,0 +1,133 @@
+                                                     EDITORIAL: YES, WE CANN!
+
+
+
+
+               The aim of this editorial is to increase the acceptance of neural net modeling
+               in the actuarial community. Neural nets may substantially improve classical
+               actuarial models, if appropriately applied. We illustrate this on a toy example
+               but, in fact, this should be understood as a universal concept. Assume we have
+               a classical regression problem where the distribution of a response Y = Y (x)
+               can be described by covariates x. A common actuarial problem is to determine
+               the premium μ(x) = E[Y (x)] as a function of the covariates x. Actuaries have
+               developed excellent skills to solve such problems through finding appropriate
+               regression functions x  → μ(x). This editorial shows how these skills can fur-
+               ther be improved using the toolbox of neural nets. For this, the following two
+               assumptions are crucial:
+               (1) There exists a sufficiently good classical parametric actuarial model for
+                   describing the responses. The parameters of this model can efficiently be
+                   estimated with maximum likelihood estimation (MLE) methods.
+               (2) Embedding of the classical actuarial model in a neural net is feasible.
+               If (1) and (2) are fulfilled, then one proceeds as follows:
+               (3) The calibration of the neural net uses the classical actuarial model as initial
+                   value in the gradient descent algorithm with the deviance loss as objective
+                   function.
+               This embedding of the classical actuarial model in a neural net can be inter-
+               preted as model blending or as neural net boosting of the actuarial model. We
+               describe this on an easy example and call it the Combined Actuarial Neural
+               Net (CANN) approach.
+
+               (1) The existence of a classical parametric actuarial model that describes the
+               responses sufficiently accurately is the starting point, and (2) and (3) aim at
+               challenging this model. MLE maximizes the likelihood function or, equiv-
+               alently, minimizes the deviance loss. As toy example we choose a simple
+               generalized linear model (GLM) with regression function
+
+                                                                                 
+                                                        x  → μGLM (x) = exp x, β ,
+
+               where x, β denotes the scalar product between the covariate x and the model
+               parameter β. For illustration, we choose an exponential response function. We
+               assume an efficient MLE of β denoted by β MLE .
+
+               Astin Bulletin 49(1), 1-3. doi:10.1017/asb.2018.42 c
+                                                                  2018 by Astin Bulletin. All rights reserved.
+
+
+
+
+https://doi.org/10.1017/asb.2018.42 Published online by Cambridge University Press
+               2                                                    EDITORIAL
+
+
+               (2) In a first step, we describe the classical parametric actuarial model in a (first)
+               neural net architecture. Neural nets offer great flexibility, and in many/most
+               cases this first step is possible. For our GLM this is straightforward, we choose
+               one neuron in the output layer with weights β and exponential activation
+               function.
+                   In a second step, we choose a second neural net architecture that describes
+               the same regression problem. In our toy example, we assume that this second
+               neural net has two hidden layers with hyperbolic tangent activation function
+               and neurons z(1) in the first hidden layer and neurons z(2) in the second hid-
+               den layer. This is schematically shown by the following two sets of hidden
+               neurons
+                                                                                               
+                  x  → z(1) (x) = tanh b1 + B1 x     and x  → z(2) (x) = tanh b2 + B2 z(1) (x) ,
+               with intercept vectors b1 and b2 , and weight matrices B1 and B2 . Remark that
+               tanh ( · ) is applied element-wise. This provides a neural net regression function
+                                                                            
+                                        x  → μNN (x) = exp b3 + B3 z(2) (x) ,
+               with exponential activation function, intercept b3 , and weights B3 in the output
+               layer. The art of neural net designing is first to find a good architecture and
+               second a good calibration of that architecture.
+                   In the last step, we blend the two regression functions μGLM and μNN to the
+               following CANN regression function
+                                                                                 
+                                  x  → μCANN (x) = exp x, β + b3 + B3 z(2) (x) .
+               In machine learning jargon, this is called adding a skip connection to the
+               feed-forward neural net μNN . This skip connection exactly contains the clas-
+               sical actuarial regression function log (μGLM ). This blended model has network
+               parameter θ = (β, b1 , b2 , b3 , B1 , B2 , B3 ). State-of-the-art neural net modeling
+               uses versions of the gradient descent algorithm to minimize the objective
+               function for finding a good network parameter θ.
+
+               (3) As described above, we use a version of the gradient descent algorithm for
+               finding a good network parameter θ. To be consistent with the GLM approach
+               of (1) we choose the deviance loss function as the objective function in the gra-
+               dient descent algorithm. The second important ingredient for gradient descent
+               is the initial value θ0 for θ in the algorithm. We choose as initial value θ0 the
+               MLE β  MLE of (1) for β, and we set b3 = 0 and B3 = 0. This initialization is
+               the crucial and subtle point in our concept, it implies that the gradient descent
+               algorithm starts in μGLM , and the blended model μCANN can be understood
+               as a boosting enhancement where the gradient descent algorithm challenges
+               μGLM for additional model structure. In particular, the gradient descent algo-
+               rithm tries to reduce the initial GLM deviance loss (in-sample) by exploring the
+               CANN structure.
+
+
+
+
+https://doi.org/10.1017/asb.2018.42 Published online by Cambridge University Press
+                                                                   EDITORIAL                   3
+
+               We close with remarks.
+               • If the blended model μCANN provides a substantial improvement in the
+                 deviance loss (subject to over-fitting), then μGLM misses important model
+                 structure and the CANN approach μCANN should be used. Otherwise we
+                 should stay with the GLM.
+               • If we have a sufficiently good GLM from (1), we expect fast (near) conver-
+                 gence of the gradient descent algorithm because we are already starting the
+                 algorithm in a model that is close to optimal. In particular, this implies that
+                 bootstrapping of neural nets becomes feasible.
+               • In the gradient descent algorithm described in (3) we may either train β
+                 or declare the initial value β MLE to be an untrainable weight. We may
+                 also modify the corresponding GLM part to x, α β      MLE  with a trainable
+                 weight α ∈ (0, 1) and letting βMLE
+                                                      being untrainable. In this latter case α is
+                 interpreted as the credibility weight assigned to the GLM part.
+               • The CANN approach can be applied to a huge variety of classical paramet-
+                 ric actuarial models, in particular, we can easily treat categorical covariates
+                 using embedding layers in neural nets.
+               • Furthermore, the CANN approach even works if we consider several port-
+                 folios simultaneously in one blended neural net. This then allows learning
+                 across different portfolios. Another option is to have several parametric
+                 actuarial models in different skip connections, and letting them compete
+                 against each other.
+
+               MARIO V. WÜTHRICH AND MICHAEL MERZ
+
+
+
+
+https://doi.org/10.1017/asb.2018.42 Published online by Cambridge University Press
+

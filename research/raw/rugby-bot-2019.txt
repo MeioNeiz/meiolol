@@ -1,0 +1,1023 @@
+RUGBY-B OT: U TILIZING M ULTI -TASK L EARNING &
+F INE -G RAINED F EATURES FOR RUGBY L EAGUE A NALYSIS
+
+arXiv:1910.07410v1 [cs.LG] 16 Oct 2019
+
+A P REPRINT
+Matthew Holbrook
+STATS, LLC
+Chicago, IL
+mholbrook@stats.com
+
+Jennifer Hobbs
+STATS, LLC
+Chicago, IL
+jhobbs@stats.com
+
+Patrick Lucey
+STATS, LLC
+Chicago, IL
+plucey@stats.com
+
+October 17, 2019
+
+A BSTRACT
+Sporting events are extremely complex and require a multitude of metrics to accurate describe the
+event. When making multiple predictions, one should make them from a single source to keep
+consistency across the predictions. We present a multi-task learning method of generating multiple
+predictions for analysis via a single prediction source. To enable this approach, we utilize a fine-grain
+representation using fine-grain spatial data using a wide-and-deep learning approach. Additionally,
+our approach can predict distributions rather than single point values. We highlighted the utility of
+our approach on the sport of Rugby League and call our prediction engine “Rugby-Bot”.
+Keywords Mixture Density Network · Multi-Task Learning · Embeddings · Rugby League · DVOA
+
+1
+
+Introduction
+
+For the past decade in sports analytics, the holy grail has been to find “the one best metric” which can best capture
+the performance of players and teams through the lens of winning. For example, expected metrics such as wins-above
+replacement (WAR) in baseball [1], expected point value (EPV) and efficiency metrics in basketball [2, 3] and expected
+goal value in soccer [4] are used as the gold-standard in team and player analysis. In American Football, DefenseAdjusted Value Over Average (DVOA) [5], is perhaps the most respected and utilized advanced metric in the NFL
+which utilizes both an expected value and efficiency metric, and analyzes the value of a play compared to expected for
+every play and also normalizes for team, drive and game context. Win probability has also been widely used as the
+go-to metric for analyzing plays and performance across sports [6, 7, 8].
+Although the works mentioned above are all impressive and have improved analysis and decision making across sports,
+we believe the overall hypothesis of having a single metric to explain all performance is limiting. By its very nature,
+sport is extremely complex and lends itself to many queries for different contexts and temporal resolutions. Instead of
+having a single predictor (or metric), we believe we need many predictors to enable these analyses. For example, if a
+team has won the title, we want predictors that highlight their dominant attributes across the season (i.e., offensively
+and/or defensively strong, and if so which locations and times). Or if a team has won or lost a single match, we want
+predictors which highlight which plays or play was decisive or of note.
+While we believe that a multitude of predictors are required to enable multi-resolution analyses, we believe there should
+be a single source or brain that generates these predictors. For example, if we are predicting the expected point value
+of a drive in American Football and that jumps based on a big play, that should be correlated/co-occurring with a
+jump with the win-probability – otherwise this would possibly be contradictory and cause the user not to trust the
+model. Additionally, we believe the predictors should go beyond “expected metrics” which compare solely to the league
+average and produce distributions to enable deeper analysis (i.e., instead of comparing to the league average, why can’t
+we compare against the top 20% or 10% of teams). To effectively do this we need four ingredients: i) a fine-grained
+representation of performance at the play-level which can be aggregated up to different resolutions, ii) fine-grain spatial
+
+A PREPRINT - O CTOBER 17, 2019
+
+data to enable the representation, iii) a multi-task learning approach where we train the predictors simultaneously, and
+iv) a method which can generate distributions instead of just point values.
+In this paper, we show how we can do this. We focus on the sport of Rugby League which has an abundance of spatial
+information available across many seasons. Specifically, we focus our analysis on the 2018 NRL Season which was the
+closest regular season in the 110-year history of Rugby League in Australia (and the history of all sport). Our single
+source prediction engine – which we call Rugby-Bot – showcases how our engine can highlight how we can uncover
+how the league was won. In Figure 1 we showcase Rugby-Bot and in the next section we describe it.
+
+2
+
+What is Rugby League and What is Rugby-Bot?
+
+Rugby League is a continuous and dynamic game played between 2 teams of 13 players (7 forwards and 6 backs) across
+2x40 minute halves with the goal of “scoring a try” and obtaining points by carrying the ball across the opponent’s
+goal-line. Rugby League has numerous similarities to American Football: it is played on a similar size pitch (100m x
+70m) with a “set of 6 tackles” per possession (in place of “4 downs”) in which a team has the opportunity to score a try.
+The scoring convention of Rugby League is: 4 points for a try and 2 points for the subsequent successful conversion; 2
+points for a successful penalty kick; and 1 point for a successful field-goal.
+The most popular Rugby League competition in the world is the “National Rugby League (NRL)”, which consists of 16
+teams across Australia and New Zealand. The NRL is the most viewed and attended Rugby League competition in the
+world. The 2018 NRL season was particularly noteworthy as it was the most competitive regular season in history of the
+league, and we believe in the history of sport. After 25 rounds of the regular season competition (where each team plays
+24 games), the top 8 teams were separated by one win. Specifically, the top four teams (Roosters, Storm, Rabbitohs and
+Sharks) all finished with 16 wins. The next four teams (Panthers, Broncos, Warriors and Tigers) finished with 15 wins.
+The minor premiership – which goes to the team that finishes first during the regular season was determined by point
+differential – saw the Sydney Roosters win it for the fourth time in the past six years. To achieve this feat, the Roosters
+had to beat the Parramatta Eels by a margin of 27 points on the last day of the regular season, which they did with a
+44-10 victory. The result meant they pushed the Melbourne Storm out of top spot, with a point differential of just +8.
+Given the closeness of the competition, it would be useful to have many measurement tools to dissect how the league
+was won – which is what Rugby-Bot enables.
+An example of Rugby-Bot tool is depicted in Figure 1. In the example we show a complete “set” (i.e., Rugby League’s
+equivalent of a “drive” in American Football) from the Round of 25 of the 2018 NRL Season with the Roosters in
+possession against the Eels. In the “Set Summary” (Second Row - left), Rugby-Bot tracks the likelihood the Roosters
+will score a try (exTrySet) during that set at the start of each tackle. We see that they initially field the ball in terrible
+field position and only a 3.5% likelihood of scoring. However, a great return boosts their exTrySet to 7.4% at the start
+of their first tackle. A huge run during the second tackle raised their exTrySet further to 11.5%, and good central field
+position on the fourth tackle sees it grow to 15.2%. Unfortunately for the Roosters, after a bad fifth tackle they elect to
+kick in an attempt to recover the ball and turn the ball over. Rugby-Bot also allows us to analyze that decision making,
+which we will explore later. We can dig further into the spatial context of the big run by exploring the expected meters
+gained as a function of field location in the “Contextual Spatial Insights” panel (Second Row – right). This panel shows
+the expected meters as a function of not only the field position, but the full context: tackle number, team, scoreline, and
+opponent. In the plot we see the advantaged gained by starting a tackle near the middle of the pitch.
+An important concept in Rugby League is that of “Momentum” during a set of six tackles. This is done in Rugby-Bot
+by comparing the current exTrySet to the average for that context (field position, time, scoreline, team identities). In the
+example shown in Figure 1 (Third Row), we see a boost in momentum both from the runback after the initial possession
+as well as the big run on tackle 2. Rugby-Bot enables us to identify big runs not just in terms of the meters gained, but
+in how exceptional that run was given that context. Next to the video player we see a “Big Play Highlight” indicator
+showing the distribution of meters gained expected under the conditions of tackle 2 and where the actual ran fell in this
+distribution, indicated by the red arrow.
+Finally, in the bottom row, we see the Scoreline Prediction tracker. In this plot, we not only track the current score
+differential (red dashed line), we predict the end-of-game score differential. Note that because of our approach, which
+we will explore in the next section, our predictor is not just a final value, but a distribution, displayed here as the 90-10%
+confidence interval (black lines) around the mean (green line). We will dive into analyzing this plot more in Section 5.
+2
+
+A PREPRINT - O CTOBER 17, 2019
+
+26:30
+
+H1
+
+0
+
+8
+Big Play Highlight
+
+Round 25
+
+Big Run
+
+September 1, 2018
+Venue: ANZ Stadium
+
+-10
+
+0
+
+10
+20
+Expected Meters
+
+30
+
+Context: Tackle Number, Score, Field Position
+
+Set Summary
+11.5%
+
+Contextual Spatial Insight
+
+T3
+
+T0
+
+3.5%
+
+T4
+
+15.2%
+7.8%
+
+T2
+
+T2
+
+T1
+
+7.4%
+
+0
+
+2
+
+4
+
+6
+
+8
+
+Expected Meters
+
+10
+
+Set Momentum
+Average
+Actual
+
+T0
+
+T1
+
+T2
+
+T3
+
+T4
+
+Scoreline Prediction
+SYD
+Score Differential
+
+90%
+
+PAR
+
+Mean
+Actual
+
+10%
+
+H1 40
+
+H1 20
+
+26.30
+
+H2 40
+
+H2 20
+
+EOG
+
+Game Clock
+
+Figure 1: An example of our Rugby-Bot tool used to analyze a Round 25 match from the 2018 NRL Season which
+consists of the following components: (Top) Shows the video and game information, as well as an indicator of a
+“highlight” using our anomaly detector. (Second Row) Shows the spatial information of each tackle in addition to
+the Expected TrySet Value for that set at each tackle. Additionally, “Contextual Spatial Insights”, can be gleaned by
+looking at the expected meters gained for each location on the field under for a given context. (Third Row) The “Set
+Momentum” is monitored by tracking the current Expected Try Value at each tackle relative to average value. (Bottom
+Row) The final scoreline predictor tracks the current scoreline (red) and final prediction distribution (mean in green,
+90-10% confidence interval in black).
+
+3
+
+A PREPRINT - O CTOBER 17, 2019
+
+3
+
+Multi-Task Learning using Fine-Grain Spatial Data
+
+Rugby-Bot is designed to analyze the state of the game across multiple time resolutions: play, set, and game. That is, in
+any given situation, we would like to know how likely various outcomes are. In particular, we predict:
+• Play Selection [yp ]: likelihood a team will perform an offensive kick, defensive kick, run a normal offensive
+play on the next tackle
+• Expected Meters (Tackle) [ym ]: predicted meters gained/lost on the next tackle
+• Expected Try (Tackle) [ytt ]: likelihood of scoring a try on the next tackle
+• Expected Try (Set) [yts ]: likelihood of scoring a try at some point during that set
+• Win Probability [yw ]: likelihood of winning the game
+• Scoreline Prediction [ys ]: predicted final score of each team
+Simply constructing a model “or specialist” for each task leaves much to be desired: it fails to share information and
+structure that is common across tasks and is an (unnecessary) hassle to maintain in a production environment. Instead
+we strategically frame this problem as a model whose output can be thought of as a “state-vector” of the match.
+3.1
+
+National Rugby League (NRL) Dataset
+
+Rugby-Bot is built on data from the 2015-2018 National Rugby League seasons which includes over 750 games and
+more than 250,000 distinct tackles (i.e., plays). For our analysis, the continuous event data was transformed into a
+segmented dataset with each data point representing a distinct tackle in the match. At each tackle, we have information
+about the position of the ball, the subsequent play-by-play event sequence, the players and teams involved, the team in
+possession of the ball, as well as game-context (e.g. tackle number, score, time remaining). Data is split 80-train/20-test
+for modeling.
+3.2
+
+Modeling Approach
+
+Our approach draws on three key approaches used throughout the machine learning and deep learning communities.
+First, it draws on “wide and deep” models commonly used for recommendation tasks [9]. Second, we cast this as
+a multi-task learning approach, predicting all outcomes from the same model, thereby sharing common features
+throughout. Finally, we use a mixture density network which enables us to produce a distribution of outcomes, thereby
+capturing the uncertainty in the network. The advantage to this is three-fold. First, the Bayesian nature of MDNs
+afford us the ability to treat all losses in terms of a probabilistic likelihood and therefore enable us to do regression
+and classification tasks simultaneously. Next, it is intrinsically multi-task which forces the model to learn globally
+relevant features about the game. Finally, by modeling the outputs as a multi-dimensional distribution, it captures the
+relationships between the outputs as well as providing uncertainties about the predictions. The model architecture is
+shown in Figure 2 and we will explore how each component contributes to the prediction task and the advantages that
+this architecture offers.
+3.2.1
+
+Capturing Spatial and Contextual Information through Wide and Deep Models
+
+Our goal is to leverage both spatial and contextual information to make predictions about the outcome at the play,
+possession, and game-level. Some of the challenges in modeling this data include:
+• Raw spatial data is low-dimensional and densely represented
+• Spatial features are inherently non-linear
+• Contextual features (e.g. teams, tackle) are discrete and may be sparse
+• The relationship between the spatial and contextual features is non-linear
+To address these points, we draw on inspiration from the wide and deep models of [9]. Following the approaches
+there, we pass each categorical feature through its own deep portion of the network to construct higher-level, dense
+features from the originally sparse inputs, creating an embedding vector. These embeddings are then concatenated with
+the remaining dense features (such as time and position) before passing through 2 final dense layers to capture their
+non-linear relationships.
+A uniqueness to our approach is in how we represented the interactions of certain categorical (i.e. contextual) features
+such as season and team/opponent identity. As is common practice, we represented each as a one-hot vector. As
+4
+
+A PREPRINT - O CTOBER 17, 2019
+
+Position
+(x, y)
+Tackle #,
+Back-To-Back
+
+Team ID,
+Season ID
+
+Opponent ID,
+Season ID
+
+Score
+Time
+Position
+Diﬀerence Remaining
+(x, y)
+
+v v
+
+Fully Connected
+Fully Connected
+Mixture Density Layer
+ym, ytt, yts, yw, ys
+
+Figure 2: Our base network architecture is a Mixture Density Network (MDN). Categorical features as well as field
+position (x, y) are passed through embedding layers (green) to create a dense representation. These are then concatenated
+with the continuous features (blue) and passed through two fully connected layers (black). The mixture density layer
+consists of 5 mixture each with a prediction for µ and σ. Expected meters (ym ), expected try tackle (ytt ), expected try
+set (yts ), win probability (yw ), and final scoreline (ys ) are all predicted simultaneously.
+opposed to creating an embedding for season, team, and opponent independently, however, we instead concatenated the
+one-hot vector of season with the one-hot vector of team (and similarly for opponent). This enables us to more directly
+share identity information across seasons, capturing the notion that teams maintain a level of similarity across years
+while also picking up on league-wide trends over different seasons. We used a similar approach to capture the tackle
+number (1-6) and back-to-back sets (represented as a binary flag).
+The other key innovation in our approach is the manner in which high-level features are extracted from the field position;
+this addresses the first point above. The field position is a dense, two-dimensional x, y input. In a traditional wide and
+deep model, this value would simply be concatenated at the embedding layer. However, the shallowness of the wide
+portion of these models prevents extraction of higher-level spatial features. To address this, we treat field position as
+both a sparse and dense feature.
+For the sparse portion, we pass the two-dimensional position through several layers just like the categorical features.
+Note that we initially boost from the original two-dimensions up to 50 at the first hidden layer. This gives the
+network sufficient dimensionality to “mix” the inputs and create the desired higher-level features. This is a key insight.
+Traditionally, the low dimensionality of the spatial input has been addressed by fully discretizing the field position,
+that is, by treating the field as a grid and representing the position as a 1-hot vector indicating the occupancy in that
+bin [10, 11]. This has several limitations. First, the discrete representation is inherently lossy as positions are effectively
+rounded during the binning process. Second, the resulting dimensionality may be massive (e.g. a 70m x 100m field
+broken into 13 m × 13 m bins results in a 63,000 dimensional input). While we would like to increase our dimensionality
+above 2, expanding to the thousands or tens-of-thousands is unnecessarily high and results in an extremely sparse
+representation, requiring more neurons and more data. Our approach avoids these pitfalls by working directly on the
+raw spatial input, moderately increasing the dimensionality in the first hidden layer, and then enabling the network to
+extract important spatial relationships directly from the data.
+Finally, because of the importance of the field position in all of these prediction tasks, we also include the position again
+as a dense feature. This enables us to capture both low-level (i.e. raw), as well as high-level (i.e. embedded) spatial
+information.
+3.2.2
+
+Mixture Density Network for simplified Multi-Task Learning
+
+Multi-task learning has been commonplace within the machine learning because of its ability to exploit common
+structures and characteristics across tasks [12]. Often a difficult with multi-task learning comes when one would like to
+perform both regression (which would use a loss such as RMSE) and classification (which would use a loss such as
+cross entropy) simultaneously. For example, in predicting both win probability and final score-line, how much should a
+1% likelihood in winning be weighted relative to a 1pt change in the score? Even when all tasks are of the same type
+(classification or regression), how each loss is scaled and/or weighted can be somewhat arbitrary: how should 1m error
+in the predicted meters gained be waited against 1pt error in the final scoreline?
+Mixture density networks (MDN) are a class of models which combine neural networks and mixture density models [13].
+As such it is naturally Bayesian and allows us to model the conditional probability distribution p(t|x) where t are the
+5
+
+A PREPRINT - O CTOBER 17, 2019
+
+parameters which describe the distributions generating our game-state vector [yp , ym , ytt , yts , yw , ys ] and x is our input
+feature vector. Therefore, we have a single loss for our prediction: the negative log-likelihood that a game-state is
+observed given the current game-state. This dramatically simplifies our loss function. Additionally, the loss over the full
+distribution constrains the model to learn the relationships between the outputs, for example, that it would be unlikely
+to observe a high value for meters gained but very low value for an expected try.
+The “mixture” part of the MDN allows us to capture the multi-modality of the underlying distribution. This produces
+various “modes” of the game, such as lopsided contests or very close scenarios. MDNs also give us insight into the
+uncertainty of our models “for free”. This enables us to generate a distribution of outcomes - as opposed to just a mean for any given prediction.
+Cross entropy is used as the loss for training. Our test loss is .051. Note that this is a single loss for across the
+entire state-vector: even if several components in a prediction are very good, the loss may be quite high if the state is
+inconsistent (e.g. a positive final scoreline prediction, but a low win probability are inconsistent and therefore would
+have a high loss).
+
+3.2.3
+
+Modeling decision-making on the “last tackle”
+
+Similar to the decision-making opportunities on 4th-down in American Football (punt, kick, go-for-it), in Rugby League
+teams must decide whether to kick defensive (equivalent to a punt), kick offensively (in an attempt to regain the ball for
+back-to-back sets), or “go-for-it” on the last tackle. For this task we use a simple logistic regressor. We elect to model
+this decision separately because it only pertains to the last tackle and is therefore “silent” on most downs unlike the
+other tasks which are active every single tackle. The test loss for this model is .64.
+
+4
+
+2018 NRL Season Analysis: DVOA for Rugby League
+
+Football Outsider’s DVOA (Defense-adjusted Value Over Average) has become arguably the most popular advanced
+statistic in the NFL. It aims to correctly value each play and its impact on scoring and winning. DVOA factors in the
+context such as opponent, time, and score to compare performance to a baseline for a situation [5]. It can be broken
+down and applied in several ways, but the most popular application is to measure team strength.
+Rugby-Bot can be used to create to a DVOA for Rugby League. Like American Football, Rugby League has segmented
+plays where the fight for field position is key and not all yards/meters are equal even though they appear so in the box
+score. The Expected Try (set) prediction generates the predicted chance of scoring during the set for every play. The
+prediction, like football’s DVOA, considers the score, time, opponent, and location. Taking the difference between this
+expected value and the actual value we can see which teams outperform their expectation. To create a more interpretable
+‘DVOA’ the values are scaled with a mean of 0. A positive offensive DVOA and negative defensive DVOA correspond
+to strong offenses and defenses, respectively.
+We can use our Rugby League DVOA to analyze the 2018 NRL Season as seen in Table 4. 2018 was an extraordinarily
+close season in which the top 4 teams all had the same number of points and wins. The top two teams had similar meters
+for and against, however, the context under which those meters were gained and conceded strongly favored the Roosters
+as indicated by their DVOA differential. The champion Roosters had the top DVOA per play mostly due to their strong
+defense, surpassing the next strongest defensive team (the Storm) by more than 1.5 defensive DVOA pts per play.
+Next we examine the Roosters form over the course of the season. Figures 3A and 3B break down the offensive and
+defensive strength over the season. In Figure 3A we see that initially the Roosters got off to a slow start, largely on-par
+with the league average (they started the season with a 4-4 record). However, by mid-season, they began to find their
+form. The offensive DVOA allows us to track how the Roosters went from average to great in the 2nd half of the season.
+Defensively, the Roosters were dominant all season long as seen in Figure 3B. They maintained their strong form even
+as the league worsened in Defensive DOVA.
+With our individual play valuation we can dive deeper in the Roosters success and reveal where their defense outperformed their opponents. Figure 3C shows that the Roosters defense was average during plays occurring in the first 34 of
+the field. (Note that both the Roosters and the league average have a negative DVOA in these situations as they rarely
+result in scoring.) However, in critical moments, in the final 25m of the pitch, they were incredibly strong in the last 25
+yards with their Defensive DVOA being maintained at 0.12 while the league-average shot to over 0.15 in key situations.
+6
+
+A PREPRINT - O CTOBER 17, 2019
+
+Table 1: The points, wins, losses, meters for and against, meter differential (for-against), offensive and defensive DVOA,
+and differential DVOA (offensive-defensive) is shown for each team during the 2018 NRL season. A large positive
+number for Offensive DVOA and a large negative number for Defensive DVOA indicate a strong offense and defense,
+respectively.
+Rank
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+
+Team
+Roosters
+Storm
+Rabbitohs
+Sharks
+Panthers
+Broncos
+Dragons
+Warriors
+West Tigers
+Raiders
+Knights
+Bulldogs
+Cowboys
+Titans
+Sea Eagles
+Eels
+
+Pts
+34
+34
+34
+34
+32
+32
+32
+32
+26
+22
+20
+18
+18
+18
+16
+14
+
+Losses
+8
+8
+8
+8
+9
+9
+9
+9
+12
+14
+15
+16
+16
+16
+17
+18
+
+Meters For
+542
+536
+582
+519
+517
+556
+519
+472
+377
+563
+414
+428
+449
+472
+500
+374
+
+Meters Against
+361
+363
+437
+423
+461
+500
+472
+447
+460
+540
+607
+474
+521
+582
+622
+550
+
+Meters Diff
+181
+173
+145
+96
+56
+56
+47
+25
+-83
+23
+-193
+-46
+-72
+-110
+-122
+-176
+
+DVOA Offense
+1.62
+0.57
+2.37
+1.72
+0.39
+0.99
+3.62
+1.96
+-2.77
+3.62
+-0.28
+-3.57
+-2.58
+-0.85
+1.5
+-3.96
+
+B
+
+Round
+
+DVOA Defense
+-5.75
+-4.17
+-0.97
+-1.84
+-1.67
+0.29
+1.92
+0.91
+1.41
+1.92
+3.6
+0.29
+0.95
+3.74
+4.42
+2.15
+
+DVOA Diff
+7.37
+4.74
+3.35
+3.56
+2.05
+0.7
+1.7
+2.87
+-1.35
+1.7
+-3.88
+-3.86
+-3.54
+-4.59
+-2.88
+-6.11
+
+C
+DVOA
+
+Cumulative DVOA
+
+Cumulative DVOA
+
+A
+
+Wins
+16
+16
+16
+16
+15
+15
+15
+15
+12
+10
+9
+8
+8
+8
+7
+6
+
+Round
+
+Tackle Meter Line
+
+Figure 3: (A) The cumulative Offensive DOVA for the Roosters (red) and the League-average (green); the Roosters
+got off to a slow start offensively then began to pull away from the field. (B) The cumulated Defensive DVOA for
+the Roosters (red) and League-average (green); the Roosters dominated defensively (indicated by a negative value for
+defense) through-out the season. (C) Comparison of the Roosters to the League when their opponents were on offense
+and in normal field position versus the near the goal (within the 75m line).
+
+5
+
+Rugby League Game and Play Analysis
+
+5.1
+
+Distributed Scoreline Prediction: Intelligent Game Analysis
+
+We return now to the critical Round of 25 matchup between the Roosters and the Eels which was shown earlier. Recall
+that to clinch the title, the Roosters needed to win this match by 27 points. In Figure 1, we viewed final scoreline
+prediction only a few minutes into the match when the Roosters lead by only 8 pts. Is the title within reach? To
+answer this question we need to be able to predict not only the final score differential, but the uncertainty around this
+measurement. Rugby-Bot enables us to do this. Similar to the approaches used in [5] our MDN allows us to predict a
+range of likely final scorelines at each point in the match.
+Now we plot the full scoreline predictor over the course of the match in Figure 4. The actual score is shown in red and
+the predicted mean score in green with the 90-10% confidence interval shown in black around it. Note that although we
+are showing the mean here, the mean need not be the most likely value; as our model is a mixture of gaussians it is
+inherently multimodal and the most likely outcome could occur at a mode away from the mean. At any point in the
+game we can view the full shape of the predicted distribution, but here the mean and 90-10 bounds are presented for
+visual simplicity. Also note that because it is a mixture model, the distribution complex and not necessarily symmetric:
+the values of the mean, 90-bound, and 10-bound trend together, but are not identical.
+7
+
+A PREPRINT - O CTOBER 17, 2019
+
+SYD
+Score Differential
+
+90%
+
+PAR
+
+Mean
+Actual
+
+10%
+
+H1 40
+
+H1 20
+
+H2 40
+
+H2 20
+
+EOG
+
+Game Clock
+
+Figure 4: (A) The predictor of the final scoreline for the Round of 25 matchup between the Roosters and Eels. The
+actual score is shown in red, the mean of the predicted distribution is shown in green, and the 90-10% confidence
+interval is shown in black.
+
+There are several interesting observations we can draw from this analysis. First, with 10 minutes remaining in the first
+half, the game appears to be largely over: the lower 10% bound has moved about a score differential of 0, making a
+comeback unlikely. It dips back down ever so slightly after the start of the second half and stays here for the next few
+minutes until by H2 33:32, the 90-10 interval never includes 0 for the remainder of the game. At this point we can say
+the same is effectively over. This is interesting in recreating the story of the game, but is also useful for analyses such as
+quantifying “garbage time” or understanding the risk impact of substitutions to rest key players late in a game.
+Although the game is “over” shortly into the second half, the fate of the season is still uncertain. The Roosters must win
+by 27 and at H2 33:32, they are up only by 14. Furthermore, even the 90-10 confidence interval does not include a 27
+point victory for the Roosters. This does not occur until H2 18:13 when the Roosters go up by 22. Now the title is
+within reach.
+Note that as the game progresses, the width of the confidence interval shrinks. Early in the game the outcome is very
+uncertain, but as the game progresses, the range of possible outcomes shrinks until it is identically known once the
+game is over. Even in the remaining few minutes, there is still some uncertainty as to the final score, as there is always a
+possibility for a last-minute score or turnover. However, the model has learned that at most the score will fluctuate by is
+the value of a single try and conversion.
+
+5.2
+
+Valuing and Comparing Individual Plays Across Different Contexts
+
+Rugby-Bot allows us to determine the value of each play in a game. To demonstrate this, we can compare two plays
+from the Round 25 Eels v Roosters Game. It is obvious that a big run will increase a team’s chance of scoring, but not
+all meters are created equal. Figure 5 shows two different sets in the match; on the left is the same set in Figure 1, and
+on the right is another set occurring near the end of the first half.
+We can evaluate tackle 3 from the example shown on the left, and tackle 4 in example shown on the right in Figure 5.
+Both runs were over 22 meters and over 95th percentile of predicted expected meters. In example shown on the left, the
+run is made closer to the goal line and earlier in the set. This causes the exTrySet value to go up 3.8% while the run in
+example shown on the right is late in the set and far from the goal line so it only increases the exTrySet 1.2%. This
+quantifies the conclusion that an observer would create that the meters gain in the example of the right were not as
+valuable as the chances of scoring are still miniscule. Taking these deltas between plays allows us to pinpoint the plays
+in the match that are impactful outside of just yards or scoring.
+To further highlight how good this play on the left of Figure 5 was – we can use a distribution of predictions to easily
+identify big plays and analyze individual play performance. Figure 6 visualizes the 22 meter run through a different
+lens. The blue dot corresponds to the starting position of the play and the red dot is where the play ended up. We can
+see based on the context (x, y) starting position, tackle number and game context), this play was in the top 5% of plays
+(or in the 95th percentile). Effectively, we can value each play and determine whether it was within the “top-plays” in
+any situation.
+8
+
+A PREPRINT - O CTOBER 17, 2019
+
+7.4%
+T1
+
+T2
+
+7.8%
+
+3.6%
+T2
+
+13.5%
+
+3.3%
+
+T4
+
+T1
+T0
+
+3.5% T
+
+T3
+
+3.4%
+
+3.6%
+
+0
+
+T3
+
+T4
+
+4.6%
+
+11.5%
+
+Figure 5: The likelihood of scoring a try at each tackle (exTrySet) is shown for two different sets. Plays have been
+normalized so the offensive team is always going left to right.
+Table 2: Within the opponent’s 20 meter line, teams consistently make conservative decisions, electing to kick when
+running produces more than twice the expected points.
+
+5.3
+
+Play Decision
+
+Frequency
+
+Expected Points
+
+Run
+Kick
+
+32%
+68%
+
+1.15
+0.53
+
+Analyzing Decision Making on the Last Tackle
+
+The first five tackles in a set in Rugby League are largely uniform in their objective: score a try or gain the most meters
+possible towards the tryline. On the last tackle, however, teams may elect to kick defensively (similar to a punt in
+American Football), kick offensively (in an attempt to score or regain the ball for back-to-back sets), or run a standard
+play in an attempt to score as they have to turn the possession of the ball over to the opposition at end of the tackle.
+Rugby-Bot enables us to predict what a given team is likely to do, analyze the outcome of that decision, and assess the
+impact of that decision on the game relative to another choice having been made.
+Given the last tackle is often the most exciting and variable play – it enables us to investigate some interesting behavioral
+questions. One such question is “do teams make the best decision on the last tackle, or are they naturally conservative
+in their play calling?” To answer this requires us to analyze both the position as well as context surrounding the sixth
+tackle. Using our predictions of play call (run, defensive kick, offense kick) and our play values, we can value each
+decision on each part of the field. In Table 2, we see that in the “Red Zone” attempting to run the ball for a Try is more
+valuable than kicking. Despite this fact, teams tend to be conservative and attempt to run it on only 32% of plays.
+Table 5.3 displays how the most aggressive team in the 2018 season, the Canberra Raiders, also have the most points
+over expected. Two of the best teams, the Roosters and Storm, do not run the ball often on final tackle. This could be
+because, as more talented teams, they can afford to be risk averse.
+Returning to our example set from Round 25 (Figure 1), we saw the Roosters in outstanding field position before the
+final tackle, with an exTrySet value well above average. However, instead of running the ball, which they had done
+with great success during that set, they elected to kick to the far touch-line, consistent with their style of running far
+less than any other team in the league on the final tackle. The ball was mishandled, lost out of bounds, and possession
+was lost to the Eels. The Eels mounted an extended drive to the shadow of the Roosters’ goal, only to fail to convert.
+The Roosters’ defense again came to their rescue. Overall, the analysis shown in Table 3is effectively the “Red Zone
+efficiency”, which teams can utilize to see how effective they are in the most important area of the field.
+
+6
+
+Summary
+
+In this paper, we presented a multi-task learning method of generating multiple predictions for analysis via a single
+prediction source. To enable this approach, we utilized a fine-grain representation using fine-grain spatial data using a
+wide-and-deep learning approach. Additionally, our approach can predict distributions rather than single point values.
+We highlighted the utility of our approach on the sport of Rugby League and call our prediction engine “Rugby-Bot”.
+Utilizing our slue of prediction tools, we showed how Rugby-Bot could be used to discover how the Sydney Roosters
+9
+
+A PREPRINT - O CTOBER 17, 2019
+
+Table 3: 2018 Season performance on last tackle. Each team has roughly the same Expected Points on their final tackle,
+but the actual points obtained varies dramatically.
+Team
+Canberra Raiders
+Brisbane Broncos
+Penrith Panthers
+Newcastle Knights
+Cronulla-Sutherland Sharks
+Manly-Warringah Sea Eagles
+North Queensland Cowboys
+South Sydney Rabbitohs
+Sydney Roosters
+Gold Coast Titans
+Canterbury Bulldogs
+St. George Illawarra Dragons
+Melbourne Storm
+New Zealand Warriors
+Wests Tigers
+Parramatta Eels
+
+Expected Points
+
+Actual Points
+
+Over Expected
+
+Run(%)
+
+Run(%) Rank
+
+Over Expected Rank
+
+0.56
+0.54
+0.56
+0.56
+0.52
+0.55
+0.56
+0.55
+0.58
+0.54
+0.55
+0.55
+0.53
+0.53
+0.56
+0.55
+
+1.04
+0.97
+0.78
+0.73
+0.68
+0.66
+0.65
+0.6
+0.57
+0.5
+0.51
+0.51
+0.48
+0.46
+0.42
+0.38
+
+0.47
+0.43
+0.22
+0.18
+0.16
+0.11
+0.09
+0.04
+-0.01
+-0.04
+-0.04
+-0.05
+-0.06
+-0.07
+-0.13
+-0.17
+
+41.67%
+37.18%
+38.39%
+39.80%
+30.58%
+25.89%
+19.58%
+24.47%
+16.16%
+38.46%
+33.79%
+39.39%
+25.24%
+20.56%
+37.17%
+25.00%
+
+1
+6
+5
+2
+9
+10
+15
+13
+16
+4
+8
+3
+11
+14
+7
+12
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+
+95th
+Percentile
+
+Figure 6: The blue dot corresponds to the starting position of the play and the red dot is where the play ended up. Using
+our distribution analysis, we can see that this play was in the top 5% of plays (or in the 95th percentile).
+
+won the 2018 NRL minor premiership (the closest in the history of the sport). Additionally, we showed how it can be
+used to value each individual play, accurate predict the outcome of the match as well as investigate play behavior in
+Rugby League – specifically behavior on the last tackle.
+
+References
+[1] Steve Slowinski. What is war? https://library.fangraphs.com/misc/war/, February 2010.
+[2] Dan Cervone, Alexander D’Amour, Luke Bornn, and Kirk Goldsberry. Pointwise : Predicting points and valuing
+decisions in real time with nba optical tracking data. 2014.
+[3] Dean Oliver. Basketball on paper : rules and tools for performance analysis. Washington, D.C. : Brassey’s, Inc,
+1st ed edition, 2004. Includes bibliographical references and index.
+[4] Patrick Lucey, Alina Bialkowski, Mathew Monfort, Peter Carr, and Iain Matthews. Quality vs quantity: Improved
+shot prediction in soccer using strategic features from spatiotemporal data. In Proc. 8th annual mit sloan sports
+analytics conference, pages 1–9, 2014.
+[5] Football Outsiders. Methods to our madness. https://www.footballoutsiders.com/info/methods.
+[6] Michael Beuoy. Updated nba win probability calculator updated nba win probability calculator. http://www.
+inpredictable.com/2015/02/updated-nba-win-probability-calculator.html.
+10
+
+A PREPRINT - O CTOBER 17, 2019
+
+[7] Konstantinos Pelechrinis. iwinrnfl: A simple, interpretable & well-calibrated in-game win probability model for
+nfl. arXiv e-prints, page arXiv:1704.00197, April 2017.
+[8] Sujoy Ganguly and Nathan Frank. The problem with win probability. In MIT Sloan Sports Analytics Conference,
+2018.
+[9] Heng-Tze Cheng, Levent Koc, Jeremiah Harmsen, Tal Shaked, Tushar Chandra, Hrishi Aradhye, Glen Anderson,
+Greg Corrado, Wei Chai, Mustafa Ispir, et al. Wide & deep learning for recommender systems. In Proceedings of
+the 1st Workshop on Deep Learning for Recommender Systems, pages 7–10. ACM, 2016.
+[10] Yisong Yue, Patrick Lucey, Peter Carr, Alina Bialkowski, and Iain A. Matthews. Learning fine-grained spatial
+models for dynamic sports play prediction. In 2014 IEEE International Conference on Data Mining, ICDM 2014,
+Shenzhen, China, December 14-17, 2014, pages 670–679. IEEE Computer Society, 2014.
+[11] Andrew Miller, Luke Bornn, Ryan Adams, and Kirk Goldsberry. Factorized point process intensities: A spatial
+analysis of professional basketball. In International Conference on Machine Learning, pages 235–243, 2014.
+[12] Rich Caruana. Multitask learning. Machine learning, 28(1):41–75, 1997.
+[13] Christopher M Bishop. Mixture density networks. Technical report, Aston University, Birmingham, UK, 2 1994.
+
+11
+
+

@@ -3,9 +3,9 @@ title: 'Grinsztajn, Oyallon, Varoquaux 2022: Why do tree-based models still outp
 url: https://arxiv.org/abs/2207.08815
 kind: paper
 commit: 
-for: [draft-predictor-methods]
+for: [draft-predictor-methods, nn-draft-models]
 looked: 2026-10-12
-depth: skimmed (abstract, 1, 3 benchmark rules, 4 results, 6, appendix A.2 large-sized)
+depth: skimmed (abstract, 1, 3 benchmark rules, 4 results, 6, appendix A.2 large-sized, A.3 NN hyperparameter spaces)
 relevance: medium
 grade: A/strong
 description: NeurIPS 2022 datasets track benchmark (Inria) of 45 tabular datasets with 20,000 compute hours of random search: trees beat NNs at ~10k rows; why (uninformative features, irregular targets, rotation)
@@ -54,10 +54,30 @@ signal).
   uninformative or skewed numerical features, a smooth additive target (champion
   strength) plus small interactions, and 10x to 1000x more rows. Their result does
   not transfer; it neither favours nor rules out NNs for us. ^f7
+- [method] NN protocol: 300 epochs with early stopping and checkpointing (best
+  validation model kept), patience 40 for MLP, ResNet and FT-Transformer; their MLP adds
+  ReduceOnPlateau lr scheduling. Appendix, 4.1 ^f8
+  > All neural networks are run for 300 epochs, with early stopping and checkpointing (the best model on the validation set is kept).
+  > Early stopping patience is 40 for MLP, Resnet, and FT Transformer, and 10 for SAINT.
+  > The only improvement beyond a simple MLP is using Pytorch’s ReduceOnPlateau learning rate scheduler.
+- [method] MLP space and default: 1-8 layers (default 4), width 16-1024 (256), dropout
+  0-0.5 (0.2), lr LogUniform[1e-5, 1e-2] (1e-3), category embedding 64-512 (128), lr
+  scheduler on, batch {256, 512, 1024} (512). Table 3 ^f9
+  > Table 3: MLP hyperparameters space
+  > LogUniform[1e − 5, 1e − 2] 1e − 3
+- [method] FT-Transformer space reuses Gorishniy's (default 3 layers, 192 dims, attention
+  dropout 0.2, FFN dropout 0.1, lr 1e-4, wd 1e-5) and adds batch {256, 512, 1024},
+  default 512, no lr scheduler by default. Table 1 ^f10
+  > Table 1: FT Transformer hyperparameters space
+  > LogUniform [1e − 6, 1e − 3] 1e − 5
+- [method] ResNet default: 8 blocks of 256, hidden factor 2, hidden and residual dropout
+  0.2, lr 1e-3, weight decay 1e-7, batchnorm, scheduler on, batch 512. Table 2 ^f11
+  > Table 2: Resnet hyperparameters space
 
 ## Read
 
 - Abstract, 1, 3 (dataset criteria, benchmark procedure), 4 results, 6, A.2
+- Appendix hyperparameter spaces (Tables 1-3)
 
 ## Not read
 

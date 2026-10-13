@@ -1,0 +1,8641 @@
+Neural networks for insurance pricing with frequency
+and severity data:
+
+arXiv:2310.12671v4 [cs.LG] 17 Jan 2025
+
+a benchmark study from data preprocessing to technical tariff
+Freek Holvoeta,c , Katrien Antonioa,b,c , and Roel Henckaertsa
+a
+
+Faculty of Economics and Business, KU Leuven, Belgium.
+Faculty of Economics and Business, University of Amsterdam, The Netherlands.
+c
+LRisk, Leuven Research Center on Insurance and Financial Risk Analysis, KU Leuven, Belgium.
+b
+
+January 20, 2025
+
+Abstract
+Insurers usually turn to generalized linear models for modeling claim frequency and severity
+data. Due to their success in other fields, machine learning techniques are gaining popularity
+within the actuarial toolbox. Our paper contributes to the literature on frequency-severity
+insurance pricing with machine learning via deep learning structures. We present a benchmark study on four insurance data sets with frequency and severity targets in the presence
+of multiple types of input features. We compare in detail the performance of: a generalized
+linear model on binned input data, a gradient-boosted tree model, a feed-forward neural network (FFNN), and the combined actuarial neural network (CANN). The CANNs combine a
+baseline prediction established with a GLM and GBM, respectively, with a neural network
+correction. We explain the data preprocessing steps with specific focus on the multiple types
+of input features typically present in tabular insurance data sets, such as postal codes, numeric and categorical covariates. Autoencoders are used to embed the categorical variables
+into the neural network, and we explore their potential advantages in a frequency-severity
+setting. Model performance is evaluated not only on out-of-sample deviance but also using
+statistical and calibration performance criteria and managerial tools to get more nuanced
+insights. Finally, we construct global surrogate models for the neural nets’ frequency and
+severity models. These surrogates enable the translation of the essential insights captured
+by the FFNNs or CANNs to GLMs. As such, a technical tariff table results that can easily
+be deployed in practice.
+Practical applications summary: This paper explores how insights captured with deep
+learning models can enhance the insurance pricing practice. Hereto, we discuss the required
+data preprocessing and calibration steps, and we present a workflow to construct GLMs for
+frequency and severity data by leveraging the insights obtained with a carefully designed
+neural network.
+JEL classification: G22
+Key words: property and casualty insurance, pricing, neural networks, embeddings, interpretable machine learning, model comparison, predictive performance
+
+Neural networks for insurance pricing with frequency and severity data
+
+1
+
+2
+
+Introduction
+
+One of the central problems in actuarial science is the technical pricing of insurance contracts.
+Premiums are determined at the time of underwriting, while the actual cost of the contract
+is only known when claims are processed. The technical premium is defined as the expected
+loss on a contract. In property and casualty insurance (P&C), expected losses are often estimated by independently modeling the frequency and severity of claims in function of policy and
+policyholder information. Hence, the use of historical data sets, with policyholder characteristics and the observed claim frequency and severity, is key in the design of predictive models.
+These historical data sets are of tabular structure, containing numerical, categorical and spatial
+variables.
+Industry-standard is the use of generalized linear models (GLM), introduced by Nelder and
+Wedderburn (1972), as a predictive modeling tool for claim frequency and severity. For instance,
+Haberman and Renshaw (1996), De Jong and Heller (2008), Ohlsson and Johansson (2010) and
+Denuit et al. (2019) apply GLMs for non-life insurance pricing. Frees and Valdez (2008) and
+Antonio et al. (2010) convert the numerical inputs to categorical format for use in a frequency
+GLM. Henckaerts et al. (2018) present a data-driven method for constructing both a frequency
+and severity GLM on categorized input data, by combining evolutionary trees and generalized
+additive models to convert the numerical inputs to categorical variables.
+In recent years, machine learning techniques for actuarial purposes have been rising in popularity
+because of their strong predictive powers, see, for example, Blier-Wong et al. (2021) for an
+overview in insurance pricing and reserving. Both Wüthrich and Buser (2021) and Denuit et al.
+(2020) detail the use of tree-based models in an actuarial context. Liu et al. (2014) use Adaboost
+for claim frequency modeling. Henckaerts et al. (2021) compare the performance of decision
+trees, random forests, and gradient boosted trees for modeling claim frequency and severity.
+Moreover, their paper studies a range of interpretational tools to look under the hood of these
+predictive models and compares the resulting technical tariffs with managerial tools. Instead
+of modeling the claim frequency and severity independently, the total loss random variable can
+be modeled directly via a gradient boosting model with Tweedie distributional assumption, see
+Yang et al. (2018) and Hainaut et al. (2022). Henckaerts and Antonio (2022) combine tabular
+policy and policyholder specific information with telematics data in a gradient boosting model
+for usage-based pricing. Henckaerts et al. (2022) construct a global surrogate for a gradient
+boosting model (GBM) to translate the insights captured by the GBM into a tariff table. A
+benchmark study on six data sets then examines the robustness of the proposed strategy.
+Deep learning methods have been popular in the field of machine learning for many years.
+An early study of deep learning in an actuarial context is Dugas et al. (2003), comparing
+the performance of a GLM, decision tree, neural network and a support vector machine for
+the construction of a technical insurance tariff. Ferrario et al. (2020) use neural networks for
+frequency modeling and discuss various preprocessing steps. Wüthrich (2019) compares the
+performance of neural networks and GLMs on a frequency case study. Both Wüthrich (2019)
+and Schelldorfer and Wüthrich (2019) propose a combined actuarial neural network (CANN)
+for claim frequency modeling. The CANN starts with a GLM and builds a neural network
+adjustment on top of the GLM predictions, via a skip connection between input and output
+layer. Shi and Shi (2024) use deep learning for dependent frequency-severity modeling, including
+a demonstration of regularization to select variables in the construction of the network. Shi et al.
+(2024) incorporate dynamic weather information into a deep learning model to enhance pricing
+accuracy within a frequency-severity framework for a property damage portfolio.
+Categorical or factor data must be transformed into numerical representations in order to be
+
+Neural networks for insurance pricing with frequency and severity data
+
+3
+
+utilized by neural networks (Guo and Berkhahn, 2016). This transformation is known in the
+literature as embedding, which maps categorical variables into numerical vectors. The choice of
+embedding technique can significantly impact the neural network’s performance; see, for example, the claim severity study by Kuo and Richman (2021) on both feed-forward neural networks
+and transformer networks to demonstrate the enhanced performance when using embedding
+layers. Embedding layers are a type of supervised learning that allows a neural network to
+learn meaningful representations from the categorical inputs during the training of the neural
+network. Shi and Shi (2022) detail the use of embedding layers in neural network structures
+for insurance pricing. Their study demonstrates that models with embedding layers outperform
+those using one-hot encoding in terms of Gini index. Additionally, they show that embedding
+layers trained through supervised learning can be effectively transferred to models with limited
+data. Delong and Kozak (2023) suggest using autoencoders as an alternative method for categorical embedding using unsupervised learning. An autoencoder is a type of neural network that
+learns to compress and to reconstruct data in an unsupervised manner. Using an autoencoder,
+a compact, numerical representation of the factor input data results that can then be used in
+both frequency as well as severity modeling. Delong and Kozak (2023) compare different setups
+of the autoencoder for claim frequency modeling and highlight the importance of normalization
+of the resulting numerical representation before using it in a feed-forward neural network. Meng
+et al. (2022) use the same technique in a claim frequency case study with telematic input data
+and extend the autoencoder with convolutional layers to process input data in image format.
+Table 1 gives an overview of the discussed literature on deep learning for insurance pricing. We
+list the treatment techniques applied to categorical input data, the model architectures used and
+the extent of the case studies covered by these papers. Lastly, we summarize the interpretation
+tools used by the authors to extract insights from the model architectures.
+Historical claim data sets are often of tabular structure, meaning they can be represented in
+matrix notation, with each column representing an input variable and each row representing
+a vector of policy and policyholder information. Several papers recently questioned the performance of neural networks on tabular data. Borisov et al. (2022) compare 23 deep learning
+models on five tabular data sets and show how different tree-based ensemble methods outperform them. They highlight the predictive powers of combinations of gradient boosting models
+and neural network models, such as DeepGBM (Ke et al., 2019), which combines a GBM and a
+neural network for, respectively, numerical and categorical input features and TabNN (Ke et al.,
+2018), which bins the input features based on a GBM and uses the resulting bins in a neural
+network. Shwartz-Ziv and Armon (2022) analyze eight tabular data sets and compare five ensemble methods with four deep learning methods, concluding that the best performer combines
+gradient-boosted trees and a neural network. Grinsztajn et al. (2022) compare the performance
+of gradient-boosted trees, a random forest and different neural network structures on 45 tabular
+data sets, highlighting the importance of data normalization and categorical treatment for deep
+learning models.
+In light of these recent papers questioning the performance of deep learning architectures on
+tabular data, this paper aims to explore the added value of deep learning for non-life insurance
+pricing using tabular frequency and severity data. For this, we extend the analyses performed
+in Henckaerts et al. (2021) to deep learning models. Our study is an extension of the existing
+literature in five directions. First, we extend the CANN model architecture from Schelldorfer
+and Wüthrich (2019) by combining a GBM baseline with neural network adjustments. Moreover, we study both trainable and non-trainable adjustments. Second, we compare a neural
+network, the proposed CANN structures, and two benchmark models, a GLM and a GBM, by
+considering out-of-sample deviance, statistical performance and calibration criteria, and inter-
+
+Neural networks for insurance pricing with frequency and severity data
+
+4
+
+Categorical
+treatment
+
+Model
+architecture
+
+# Data
+sets
+
+Case
+study
+
+Interpretation
+tools
+
+Dugas et al. (2003)
+
+−
+
+LR, GLM, DT, NN,
+SVM
+
+1
+
+Tech. tariff
+
+−
+
+Yang et al. (2018)
+
+−
+
+TDBoost
+
+1
+
+Tweedie
+compound
+
+PDP, VIP
+
+−
+
+GLM
+
+1
+
+Freq, sev
+
+−
+
+Contribution
+
+Henckaerts et al. (2018)
+Wüthrich (2019)
+
+Dummy encoding,
+embedding layers
+
+GLM, NN, CANN
+
+1
+
+Freq
+
+Avg. neuron
+activation
+
+Schelldorfer and Wüthrich (2019)
+
+Embedding layers
+
+CANN
+
+1
+
+Freq
+
+−
+
+Ferrario et al. (2020)
+
+One-hot encoding
+
+Boosted trees, NN
+
+1
+
+Freq
+
+−
+
+Noll et al. (2020)
+
+Dummy encoding,
+empirical means,
+one-hot encoding
+
+GLM, DT, Boosted
+trees, NN
+
+1
+
+Freq
+
+Loss-per-label
+
+Henckaerts et al. (2021)
+
+−
+
+DT, RF, GBM
+
+1
+
+Freq, sev,
+tech. tariff
+
+PDP, VIP, ICE
+
+Kuo and Richman (2021)
+
+One-hot encoding,
+embedding layers,
+attention layers
+
+GLM, NN,
+Transformer,
+TabNET
+
+1
+
+Sev
+
+−
+
+Convolutional
+autoencoder
+
+GLM
+
+1
+
+Freq
+
+−
+
+−
+
+GBM
+
+6
+
+Freq
+
+PDP, SHAP,
+Surrogates
+
+One-hot encoding,
+embedding layers
+
+NN
+
+1
+
+Freq
+
+−
+
+Autoencoder
+
+NN
+
+1
+
+Freq
+
+−
+
+Shi and Shi (2024)
+
+One-hot encoding,
+embedding layers
+
+GLM, NN,
+deep-GLM
+
+1
+
+Freq, sev,
+tech. tariff
+
+−
+
+Shi et al. (2024)
+
+Embedding layers
+
+NN
+
+1
+
+Freq, sev,
+tech. tariff
+
+−
+
+Autoencoder
+
+GLM, GBM, NN,
+CANN
+
+4
+
+Freq, sev,
+tech. tariff
+
+PDP, VIP,
+surrogates,
+Shapley
+
+Meng et al. (2022)
+Henckaerts et al. (2022)
+Shi and Shi (2022)
+Delong and Kozak (2023)
+
+This paper
+
+Table 1: Overview of the literature on deep learning for insurance pricing. Categorical treatment describes the
+preprocessing steps taken for categorical input variables. Model architecture lists the different models
+compared in the paper. We give the number of benchmark data sets in # Data sets and the focus of
+the case study in Case study. Lastly, Interpretational tools list the tools used to look under the hood of
+the fitted models. The used abbreviations are: linear regression (LR), generalized linear model (GLM),
+decision tree (DT), neural network (NN), support vector machine (SVM), Tweedie boosted tree model
+(TDBoost), combined actuarial neural network (CANN), random forest (RF), gradient boosting model
+(GBM), deep generalized linear model (deep-GLM), frequency case study (freq), severity case study (sev),
+technical tariff structure (tech. tariff), partial dependency plot (PDP), variable importance plot (VIP),
+individual conditional expectation (ICE) and Shapley additive explanations (SHAP).
+
+pretation and managerial tools. The GLM is constructed on categorized input data, following
+the approach outlined in Henckaerts et al. (2018); the GBM follows the setup from Henckaerts
+et al. (2021). We compare models not only based on out-of-sample deviance but look at the
+underlying structure and calibration of the predictions and use Murphy diagrams (Ehm et al.,
+2016) and Diebold-Mariano tests (Diebold and Mariano, 1994) to see whether a model with
+lower deviance is really a statistical improvement. This provides a more nuanced understanding
+of model performance, moving beyond simple deviance comparison, towards a more robust and
+reliable model evaluation framework. Third, we study the autoencoder embedding technique
+from Delong and Kozak (2023) and highlight its importance in frequency-severity modeling.
+
+Neural networks for insurance pricing with frequency and severity data
+
+5
+
+Because the autoencoder is trained in an unsupervised setting, the embedding can be learned
+on the frequency data and transferred to the severity setting, where we typically have fewer
+data points. Fourth, our case study is not limited to frequency modeling only but studies both
+frequency and severity modeling. We use four different insurance data sets to study the impact
+of sample size and the composition of the input data. Lastly, we use a set of interpretation
+techniques to capture insights from the constructed frequency and severity models and construct a GLM as a global surrogate for the neural networks, along the ideas of Henckaerts et al.
+(2022). We compare the resulting technical tariffs based on their (ordered) Lorenz curves and
+Gini indices and look at the balance achieved by each model at portfolio level. This allows us
+to get a robust look at the possibilities of neural networks for frequency-severity pricing, from
+preprocessing steps to technical tariff.
+
+2
+
+Technical insurance pricing: notation and set-up
+
+This paper assumes access to an insurance data set with tabular structure, meaning the data
+can be written in matrix notation, with each column representing a variable and each row representing a data point. We denote a data set as D = (xi , yi )ni=1 , where each xi is a p-dimensional
+data point with response yi . Each data point xi can be written as a vector (xi,1 , . . . , xi,p ), where
+each entry xi,j represents the value of input variable j for data point i. When not referencing
+a specific observation i, we often omit the subscript i and write (x, y), with x = (x1 , . . . , xp ),
+each xj representing a variable in our data set D.
+The variables in our data sets can be either numerical or categorical. Assuming c categorical
+variables, we order the variables in D as follows:
+
+D=
+x1 , . . . , xp−c , xp−c+1 , . . . , xp ,
+y
+.
+|
+{z
+} |
+{z
+}
+|{z}
+numerical variables categorical variables response variable
+
+Insurance data sets can also contain spatial information. A spatial variable is either numerical,
+i.e., latitude and longitude coordinates, or categorical, i.e., postal code of residence. We do
+not denote spatial variables separately, but count them as a numerical or categorical variable.
+When introducing a data set, we specify how the spatial information is encoded.
+For frequency-severity modeling, we work with a frequency data set Dfreq and a severity data set
+Dsev , where a data point xi represents information about policyholder i. In Dfreq , the response
+yi is the number of claims reported by policyholder i. The severity data set Dsev consists of the
+policyholders from Dfreq who had at least one claim. In Dsev we use the average claim size over
+the corresponding reported claims as the response y. Because Dsev ⊆ Dfreq , but with a different
+response, we often omit the superscript freq and use D and Dsev . We denote the number of
+observations as nf for D and ns for Dsev , with ns ≤ nf . Note that for both D and Dsev , we have
+the same variables x1 , . . . , xp , except that we add the extra variable exposure-to-risk e to the
+frequency data set. Exposure is the fraction of the year the insurance covered the policyholder.
+This is only relevant for frequency modeling, hence we do not add this variable to the severity
+data set. In Dsev we do take into account the observed number of claims for each data point,
+to be used as a weight in the loss function.
+For a regression model f (·) with input covariates (x1 , . . . , xp ) and target response y, we write
+the model prediction for data point i as f (xi,1 , . . . , xi,p ) = ŷi . We train f (·) on a training set,
+train ⊂ D, by choosing the model-specific parameters that minimize a chosen loss
+denoted as
+PD
+function i:xi ∈Dtrain L (ŷi , yi ). The out-of-sample performance of a trained model is calculated
+
+Neural networks for insurance pricing with frequency and severity data
+
+6
+
+P
+on the test set Dtest = D\Dtrain as i:xi ∈Dtest L (ŷi , yi ). We follow the loss functions proposed
+by Wüthrich and Buser (2021) and Henckaerts et al. (2021) for modeling claim frequency and
+severity. For claim frequency modeling, where the claim count is typically assumed to be Poisson
+distributed, we use the Poisson deviance:
+
+DPoisson (f (x), y) =
+
+
+nf 
+2 X
+yi
+yi ln
+− (yi − f (xi )) .
+nf
+f (xi )
+
+(1)
+
+i=1
+
+Note that when using the exposure-to-risk e in the frequency model, we replace each prediction
+f (xi ) with ei · f (xi ) in the Poisson loss function. Claim severity data are often assumed to be
+long-tailed and right-skewed, so we use the gamma deviance given by
+n
+
+s
+2 X
+Dgamma (f (x), y) =
+αi
+ns
+
+i=1
+
+
+
+yi − f (xi )
+yi
+− ln
+f (xi )
+f (xi )
+
+
+,
+
+(2)
+
+where the weight αi is the observed number of claims for data point i.
+
+3
+
+Deep learning architectures and preprocessing steps
+
+3.1
+
+Neural network architectures
+
+Feed-forward neural network A feed-forward neural network (FFNN) is a type of machine
+learning model that utilizes interconnected layers, represented by z (m) with m = 0, . . . , M + 1.
+The input layer z (0) provides the network with input data, while the output layer z (M +1) gives
+the network’s prediction. Between the input and output layers, there can be one or more hidden
+layers z (1) , . . . , z (M ) . When there are two or more hidden layers, we call the neural network
+a deep 
+learning model. Each layer z (m) consists of qm nodes and can be written as a vector
+(m)
+(m)
+z (m) = z1 , . . . , zqm .
+Each node in a layer, excluding the input layer, is connected to all nodes in the previous layer
+through weights Wm ∈ Rqm ×qm−1 , and a bias term bm ∈ Rqm . An activation function σ (m) (·),
+m = 1, . . . , M +1, adds non-linearity to the network and allows it to learn complex relationships
+between inputs and outputs. The activation function is applied to the weighted sum of inputs
+to a node, along with its bias. Each layer z (m) can be written in function of the previous layer
+as follows:
+
+
+z (m) = σ (m) Wm · z (m−1) + bm .
+(3)
+Calculating the output of the FFNN in function of the input consists of performing a matrix
+multiplication for each layer and applying the activation function. The value of a layer z (m) for
+(m)
+(m)
+input xi is denoted as z i and the value of a specific node j as zij . When referencing a node
+(m)
+
+without a specific input, we omit the subscript i and write zj
+
+.
+
+The inputs of the neural network are the data points in a data set D, the dimension q0 of the
+input layer is equal to the number of variables p in the data set.1 We write the input layer as
+(x1 , . . . , xp ) to indicate that each node in the input layer represents an input variable from the
+data set. The target variable y in our insurance data sets is one-dimensional, so the output
+layer z (M +1) has only one node and qM +1 = 1. We write the output node as ŷ. Figure 1 gives
+a schematic overview of a feed-forward neural network.
+1
+
+The dimension of the input layer can be larger than p when using an encoding technique, such as one-hot
+encoding.
+
+Neural networks for insurance pricing with frequency and severity data
+
+7
+
+Figure 1: Structure of a feed-forward neural network with p-dimensional input layer, hidden layers
+z (1) , . . . , z (M ) , with q1 , . . . , qM nodes, respectively. The network has a single output node ŷ.
+
+When modeling claim frequency and severity data with GLMs, an actuary typically relies on a
+Poisson GLM with a log-link function for frequency and a gamma GLM with a log-link function
+for severity modeling. To mimic this log-link relationship between covariates and output in the
+FFNN, we use an exponential activation function for the output layer in both the frequency
+and the severity model. As such, we obtain strictly positive predictions for claim counts and
+claim amounts.
+Combined actuarial neural networks Wüthrich (2019) and Schelldorfer and Wüthrich
+(2019) propose a combination of a GLM with a FFNN, called the Combined Actuarial Neural
+Network (CANN). A CANN model calibrates a neural network adjustment on top of the GLM
+prediction. We refer to the GLM prediction as the initial model prediction, denoted as ŷ IN . We
+use ŷ IN as an input node in a FFNN but do not connect this node to the hidden layers. Instead,
+ŷ IN directly connects to the output node of the FFNN via a so-called skip connection. The
+adjustment made by the neural network on the initial model prediction is called the adjustment
+model prediction and denoted as ŷ NN . The combination of the initial model prediction and the
+adjustment calibrated by the neural net is the resulting CANN model prediction, denoted as ŷ.
+Figure 2 shows the structure of the CANN model.
+The output node of the CANN model, ŷ, is only connected to the initial model input ŷ IN and
+the neural network adjustment ŷ NN . We use the exponential activation function in the output
+layer to ensure the log-link relationship between inputs and the predicted output. Because
+ŷ IN is a prediction at the level of the response, we apply a log transform on the initial model
+predictions. The output of the CANN model is then calculated as:
+
+
+ŷ = exp wNN · ŷ NN + wIN · ln ŷ IN + b .
+
+(4)
+
+The case study in Schelldorfer and Wüthrich (2019) fixes the weights and bias in the output of
+
+Neural networks for insurance pricing with frequency and severity data
+
+8
+
+Figure 2: Structure of a Combined Actuarial Neural Network (CANN). The initial model prediction
+ŷ IN is connected via a skip-connection to the output node of the FFNN.
+
+the CANN as follows
+wNN = 1, wIN = 1 and b = 0.
+Following Gielis (2020), we call this the fixed CANN, as the output weights are fixed and not
+trainable. In our case study, we also run experiments with trainable weights in the output layer
+and refer to this model as the flexible CANN. This flexibility allows the training of the neural
+network to put more, or less, weight on the initial model prediction. This can potentially improve
+the predictive accuracy of the flexible CANN compared to the fixed CANN. Moreover, the initial
+model input is not restricted to GLM predictions and we will also run experiments in Section
+4.5 with an input prediction established with a carefully trained GBM. According to Henckaerts
+et al. (2021) the GBMs are capable of achieving a higher predictive accuracy compared to a
+GLM. Using the GBM predictions as initial model input can therefore potentially increase the
+performance of the CANN model, compared to a CANN using the GLM predictions.
+
+3.2
+
+Preprocessing steps
+
+Continuous variables We normalize the continuous input variables to ensure that each
+variable in the input data has a similar scale. This is important because most neural network
+training algorithms use gradient-based optimization, which can be sensitive to the scale of the
+input data (Sola and Sevilla, 1997). For a continuous variable xj in the input data D, we use
+normalization around zero as a scaling technique. Hereto, we replace each value xi,j as follows:
+xi,j 7→ x̃i,j =
+
+xi,j − µxj
+,
+σxj
+
+(5)
+
+Neural networks for insurance pricing with frequency and severity data
+
+9
+
+where µxj and σxj are the mean and standard deviation of the variable xj in the data set D.
+When using a subset Dtrain ⊂ D to train the model, we calculate the µxj and σxj only on the
+data set Dtrain to avoid data leakage.
+Categorical variables The FFNN and CANN models generate output by performing matrix
+multiplications and applying activation functions. Therefore, all inputs must be in numerical
+format. So-called embedding techniques convert categorical input variables to a numerical format. In this study, we utilize the autoencoder embedding proposed by Delong and Kozak (2023).
+Autoencoders are neural networks commonly used for dimensionality reduction (Goodfellow
+et al., 2016). They consist of two components: an encoder and a decoder. The encoder maps
+a numerical input vector to a lower-dimensional representation, while the decoder reconstructs
+the original input from this representation. During training, the autoencoder minimizes the
+difference between the original and reconstructed inputs, resulting in an encoder that captures
+the most important characteristics of the data.
+Figure 3a shows the general structure of such an autoencoder. It consists of an input layer,
+one hidden layer z enc of dimension d, and an output layer of the same dimension as the input
+layer. The encoding layer is defined by the activation function σ (enc) (·), weight matrix Wenc and
+bias vector benc . Similarly, the output layer is defined by activation function σ (dec) (·), weight
+matrix Wdec and bias vector bdec . For an input xi , the encoded and decoded representations
+are calculated as
+z enc
+= σ (enc) (Wenc · xi + benc ) ,
+i
+
+(6)
+
+xdec
+= σ (dec) (Wdec · z enc
++ bdec ) .
+i
+i
+
+To set-up an autoencoder for embedding multiple categorical input variables, we first construct
+the one-hot encoded representation of each categorical variable (Ferrario et al., 2020).
+One-hot
+
+
+(j)
+(j)
+OH
+encoding maps a categorical variable xj with Lj levels to a binary vector xj = x1 , . . . , xLj
+in the space {0, 1}Lj . IfP
+we have c categorical variables, the dimension of all one-hot representations together equals cj=1 Lj .
+Second, we train an autoencoder using the one-hot representations
+Pcof the categorical variables
+as input nodes. As such, the input layer has a dimension of
+j=1 Lj . The input layer is
+connected to an
+P encoded layer of dimension d, which is then connected back to the output layer
+of dimension cj=1 Lj . We use the identity function as activation function for both σ (enc) (·)
+and σ (dec) (·) in Equation (6).
+Following Delong and Kozak (2023), we apply a softmax activation function to the output
+as calculated by Equation (6). For each categorical variable
+layer xdec
+i of the autoencoder
+
+(j)
+
+(j)
+
+xOH
+= x1 , . . . , xLj
+j
+(j,dec)
+
+node xh
+
+and for each h ∈ {1, . . . , Lj }, the softmax transformation of the output
+
+is defined as:
+
+(j,dec)
+
+xh
+
+(j,dec)
+
+7→ x̃h
+
+=
+
+
+
+(j,dec)
+exp xh
+
+
+,
+(j,dec)
+(j,dec)
+exp x1
++ . . . + xLj
+
+h = 1, . . . , Lj .
+
+(7)
+
+The
+use of the softmax
+activation function ensures that the values of the decoded vectors
+
+
+(j,dec)
+(j,dec)
+x1
+, . . . , xLj
+sum up to one for each variable xj .
+
+Neural networks for insurance pricing with frequency and severity data
+
+(a) General structure of an autoencoder
+neural network. The connections between the input layer and the encoded layer are called the encoder,
+highlighted in red, the connections between encoded layer and decoded output layer are called the decoder. After training, the encoded vector is a
+d-dimensional representation of the input.
+
+10
+
+(b) The CANN model where the last input nodes represent the one-hot encoding of the categorical variables in the data set. Using the encoder part of the
+pretrained autoencoder, shown with the red box, we embed the categorical
+variables into a d-dimensional numerical representation, and connect the embeddings to the CANN model structure.
+
+Figure 3: Our proposed network structure combines the autoencoder embedding technique from Delong
+and Kozak (2023) and the CANN structure from Schelldorfer and Wüthrich (2019).
+
+To train the autoencoder, we use the cross-entropy loss function, which is suitable because of
+the 0/1 values in its input data. With xOH
+the one-hot encoding of all categorical variables
+i
+for policyholder i and x̃dec
+the
+values
+of
+the
+autoencoder’s
+output layer for policyholder i, the
+i
+cross-entropy loss function is defined as:
+
+X
+i:xi ∈D
+
+
+
+
+
+OH
+L CE x̃dec
+=
+i , xi
+
+X
+i:xi ∈D
+
+−
+
+Lj
+c X
+X
+
+
+(j)
+
+
+
+(j,dec)
+
+xih · log x̃ih
+
+
+
+.
+
+(8)
+
+j=1 h=1
+
+When training the autoencoder until an acceptable low loss between xOH
+and x̃dec
+i , the vector of
+i
+enc
+enc
+categorical inputs (xi,p−c+1 , . . . , xi,p ) is represented in the vector (zi1 , . . . , zid ) in an accurate,
+compact and numerical way. We call the vector z enc
+the embedding of the categorical inputs
+i
+of xi . To use the embedding together with the numerical features of xi , we normalize the
+values in the nodes z1enc , . . . , zdenc by scaling the weight matrix Wenc and bias vector benc of the
+trained encoder. With µ1 , . . . , µd the means, and σ1 , . . . , σd the standard deviations, of the
+enc , . . . , z enc for all x ∈ D train , we scale the weight matrix W
+values zi1
+i
+enc and bias vector benc of
+id
+the pre-trained encoder as follows:
+
+Neural networks for insurance pricing with frequency and severity data
+
+ w
+
+11
+σ1
+
+ w21
+ σ
+ 2
+ .
+Wenc 7→ W̃enc =  ..
+
+ wd−1,1
+ σd−1
+wd1
+σd
+
+w12
+σ1
+w12
+σ2
+
+..
+.
+
+wd−1,2
+σd−1
+wd2
+σd
+
+...
+...
+..
+.
+...
+...
+
+w1 P Lj
+σ1
+w1 P Lj
+σ2
+
+
+
+11
+
+
+
+b1 −µ1
+σ1
+b2 −µ2
+σ2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+..
+..
+ , benc 7→ b̃enc = 
+.
+.
+.
+
+
+
+wd−1,P Lj 
+ bd−1 −µd−1 
+
+ σd−1 
+σd−1
+wd P Lj
+σd
+
+(9)
+
+bd −µd
+σd
+
+The normalised embedding z̃ enc
+is then calculated as
+i
+
+
+z̃ enc
+= σ (enc) W̃enc · xi + b̃enc .
+i
+
+(10)
+
+Having access to the trained and scaled autoencoder, we now add the encoder part to the FFNN
+and the CANN structures by replacing the input nodes of the categorical variables in Figure 1
+and 2 with the encoding part of the trained autoencoder, as shown in Figure 3b for the CANN.
+For clarity, we omit the one-hot encoding notation of each variable in Figure 3. We say the
+autoencoder is pre-trained because we perform a first training and scaling of the autoencoder
+before training the neural network architectures equipped with the added encoder. Adding the
+encoder to the network allows the network to finetune the weights and biases of the pre-trained
+encoder with respect to the considered regression task and its applicable loss function as in
+Equation (1) or Equation (2).
+Autoencoders used to embed categorical variables provide several advantages over one-hot encoding (Delong and Kozak, 2023). Firstly, they allow for a significantly smaller dimension of
+the encoding compared to the dimension resulting from one-hot encoding. Secondly, autoencoders enable the encoding of all categorical variables together, capturing interactions between
+variables more effectively than variable specific encoding does. Lastly, autoencoders prove advantageous in multi-task scenarios such as frequency-severity modeling. Learning to encode
+categorical variables solely on the severity dataset can be problematic due to its smaller size.
+Since autoencoders are unsupervised learning methods, we can train the autoencoder using all
+data available, and add the resulting pre-trained encoder to both frequency and severity models.
+
+3.3
+
+Training and tuning neural networks
+
+We train the FFNN and CANN models using the Adam optimization algorithm. Adam, introduced by Kingma and Ba (2014), is a stochastic gradient descent algorithm with an adaptive
+learning rate. Iteratively, the Adam algorithm changes the weights and biases in the network to
+minimize the loss between predictions and the observed responses. We use batches of training
+data for each training iteration to speed up optimization; see Keskar et al. (2016). The size of
+the batches is a parameter that needs to be tuned. The network size is also tuned; the number
+of hidden layers M , and the number of nodes in each layer q1 , . . . , qM are tuning parameters.
+We use a drop-out rate (Srivastava et al., 2014) to avoid overfitting, and consider this rate to
+be a tuning parameter as well. The drop-out rate is the percentage of nodes in each layer that
+are disconnected from the next and previous layer during each iteration of the Adam algorithm.
+Finally, the choice of the activation functions σ (1) (·), . . . , σ (M ) (·) is a tuning parameter. To
+simplify the tuning process, we use layers of equal sizes, q1 = . . . = qM = q, and apply the same
+activation function for all hidden layers, σ (1) (·) = . . . = σ (M ) (·) = σ(·). Hence, only the value
+for q and the choice of the activation function σ(·) are tuned and applied to each hidden layer.
+
+Neural networks for insurance pricing with frequency and severity data
+
+12
+
+We deploy a random grid search, introduced by Bergstra and Bengio (2012), to determine the
+optimal tuning parameters. For each tuning parameter tk , with k = 1, . . . , K, and K the
+total number of tuning parameters under consideration, we define a range of possible values
+[tk,min , tk,max ]. The search space S is the space consisting of all possible values for all tuning
+parameters:
+S = [t1,min , t1,max ] × . . . × [tK,min , tK,max ] .
+The random grid R ⊂ S consists of randomly drawn points in the search space S. Each s ∈ R
+represents a set of candidate tuning parameter values. Out of the random grid R, we select
+the optimal s∗ via a cross-validation scheme. In Figure 4, we give an example of a search space
+defined by two tuning parameters and a random grid of size nine sampled in the search space.
+
+Figure 4: Example of random grid search with two tuning parameters t1 and t2 . The search space
+S = [t1,min , t1,max ] × [t2,min , t2,max ] is shown in the figure by the dotted square. The random
+grid R consists of nine randomly drawn s1 , . . . , s9 from S. The optimal s∗ ∈ R is then
+selected via a cross-validation scheme.
+
+We use the extensive cross-validation scheme proposed by Henckaerts et al. (2021), as sketched
+in Figure 5. We divide the data set D in six disjoint and stratified subsets D1 , . . . , D6 . We
+define six data folds; in data fold ℓ, for ℓ = 1, . . . , 6, we select a hold-out test set Dℓ and use
+five-fold cross-validation (Hastie et al., 2009) on the data set D\Dℓ . Each cross-validation loop
+uses four out of the five data subsets in D\Dℓ to train the neural network. The fifth subset is
+used both for early stopping and to calculate the validation error. The cross-validation error
+is the average validation error over the five validation sets. We then determine the optimal
+s∗ℓ ∈ R which minimizes the cross-validation error for data fold ℓ. We use the six optimal
+tuning parameter sets s∗1 , . . . , s∗6 to determine the out-of-sample performance on the test set
+D1 , . . . , D6 of each data fold ℓ = 1, . . . , 6. As such, we obtain an out-of-sample prediction for
+every data point in the data set.
+
+4
+
+Performative comparison between benchmark models and deep
+learning architectures
+
+Section 4.1 introduces four data sets that are used in our benchmark study. In this study
+we compare the performance of the deep learning architectures against two benchmark models introduced in Section 4.2. Section 4.3 covers the tuning parameter grid used for both the
+
+Neural networks for insurance pricing with frequency and severity data
+
+13
+
+Full data set D
+D1
+
+D2
+
+D3
+
+D4
+
+D5
+
+D6
+
+Zoom in on training in fold 1
+D2
+
+Data fold 1
+
+D3
+
+D4
+
+D5
+
+D6
+
+Data fold 2
+Data fold 3
+Data fold 4
+Data fold 5
+Data fold 6
+Train Valid.
+
+Test
+
+Figure 5: Representation of the 6 times 5-fold cross-validation scheme; figure from Henckaerts et al.
+(2021).
+
+autoencoder and the deep learning architectures. Section 4.4 compares the autoencoder embedding against the one-hot encoding when used in the deep learning models under consideration.
+Lastly, Section 4.5 sketches our proposed model evaluation framework and compares the models
+under consideration.
+
+4.1
+
+Data sets
+
+The used data sets are an Australian, Belgian, French2 and Norwegian motor-third-partyliability (MTPL) data set. The French dataset is available through Schelldorfer and Wüthrich
+(2019), the Australian, Belgian, and Norwegian data sets through the R packages CASdatasets
+(Dutang and Charpentier, 2019) and maidrr (Henckaerts and Antonio, 2022; Henckaerts, 2021).
+Table 2 gives an overview of the number of data points for each data set and the number of continuous, categorical and spatial variables. These four data sets were chosen for the benchmark
+study for three reasons. First, the data sets have been used in many other studies, facilitating
+a comparison of the results obtained with the existing literature. Second, the four data sets
+provide a mix of large and small data sets, which is relevant to explore the link between data
+set size and performance of neural network structures; see Goodfellow et al. (2016, Section 5.2).
+Third, the data sets have different amounts of continuous, categorical, and spatial variables
+allowing us to investigate the effect of the data set structure on model performance.
+The spatial variables are listed separately in Table 2. The Belgian spatial variable is the postal
+code, which is converted to two continuous variables, the latitude and longitude coordinates
+of the center of that postal code. The French data set includes two spatial variables: the
+French district, which is categorical, and the logarithm of the population density of the place
+of residence of the policyholder, which is a continuous variable. The Norwegian data set has
+one spatial variable denoting the population density of the region of residence as a categorical
+variable. Appendix A gives an overview of all variables in each data set.
+2
+
+The French data set in the Schelldorfer and Wüthrich (2019) package contains 35 560 claims, but only 24 000
+claims have a claim amount. We exclude the policies with claims but without claim amount from our study.
+
+Neural networks for insurance pricing with frequency and severity data
+
+Australian MTPL
+
+14
+
+Belgian MTPL
+
+French MTPL
+
+Norwegian MTPL
+
+Number of observations
+Frequency
+
+67 856
+
+163 212
+
+668 897
+
+183 999
+
+Severity
+
+4 624
+
+18 276
+
+24 944
+
+8 444
+
+Covariates: number and type
+Continuous
+
+1
+
+4
+
+2
+
+0
+
+Categorical
+
+4
+
+5
+
+5
+
+3
+
+Spatial
+
+0
+
+1
+
+2
+
+1
+
+Table 2: Overview of the structure of the data sets used in the benchmark study. The number of data
+points for both frequency and severity modeling is given, as well as the number of different
+input variables per type. The acronym MTPL stands for motor-third-party-liability.
+
+4.2
+
+Benchmark models
+
+To enable an assessment of the predictive performance of the neural network and CANN structures we construct two benchmark models: a generalized linear model (GLM) and a gradient
+boosting model (GBM), for both frequency as well as severity. Predictions from these benchmark models are then also used as the initial model inputs in the CANN models. For the
+Belgian data set we use the GLM constructed in Henckaerts et al. (2018) and the GBM from
+Henckaerts et al. (2021).
+For the construction of the GLM, we follow the strategy proposed in Henckaerts et al. (2018)
+and start from a generalized additive model (GAM), including interaction effects between continuous variables. Based on the insights from the GAM, we bin the continuous variables using
+a regression tree. On the binned input data, we fit a GLM. We repeat the construction of
+the GLM six times, each time withholding a subset Dℓ , ℓ = 1, . . . , 6. This way, we obtain
+GLM-based out-of-sample predictions for all observations in the data set D.
+GBM is an ensemble method combining multiple decision trees (Friedman, 2001). A GBM has
+two tuning parameters: the number of trees and the depth of each tree. We use a tuning grid
+with the following values:
+Number of trees: {100, 300, 500, . . . , 5 000},
+Depth of each tree: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}.
+We use three hyperparameters of which the values are not tuned: shrinkage = 0.01, bagging
+fraction = 0.75, and minimum observations per node is 0.75% of the number of data points in the
+training data. The loss functions in Equation (1) and Equation (2) are used for, respectively,
+frequency and severity modeling. We follow the repeated 5-fold cross-validation scheme as
+described in Section 3.3. With optimal tuning parameters, we fit a GBM for each data fold and
+obtain the predictions for the observations in the corresponding test set. As such, we obtain an
+out-of-sample prediction for every data point in the portfolio.
+
+4.3
+
+Neural network models
+
+For each test set Dℓ , the pre-training of the autoencoder uses the Adam optimizer algorithm,
+a batch size of 1 000 and a randomly selected validation set of 20% of the training set D \ Dℓ
+
+Neural networks for insurance pricing with frequency and severity data
+
+15
+
+for early stopping. The number of nodes d in the encoding layer is tuned, testing across the
+values {5, 10, 15}, selecting the lowest value of d while the cross-entropy loss L CE (·, ·) < 0.001,
+as calculated with Equation (8). After the autoencoder is trained and scaled, the encoder is
+used in each FFNN and CANN structure, for both frequency and severity modeling.
+For both the FFNN and the CANN models, a random grid R of size 40 is sampled from the
+search space S defined by the tuning parameters and their respective ranges as shown in Table
+3.
+Tuning parameter
+
+Range
+
+Activation function for hidden layers
+
+ReLU, sigmoid, softmax3
+
+Batch size
+
+[10 000, 50 000]
+[200, 10 000]
+
+Number of hidden layers
+
+[1, 4]
+
+Nodes per hidden layer
+
+[10, 50]
+
+Dropout rate
+
+[0, 0.1]
+
+Frequency
+Severity
+
+Table 3: Collection of tuning parameters and their respective ranges for the random grid search tuning
+strategy. This range is used for both the FFNN and CANN structures.
+
+The cross-validation scheme is shown in Algorithm 1, starting with the pre-processing steps, and
+resulting in out-of-sample performances for each holdout test set D1 , . . . , D6 . For ℓ = 1, . . . , 6,
+we train a network on the data D\Dℓ , choosing a random validation set consisting of 20% of
+the training data for early stopping. With this model, we construct out-of-sample predictions
+on the test set Dℓ and calculate the out-of-sample loss using the loss functions in Equation (1)
+and (2). Because optimization in a neural network is dependent on the random initialization of
+the weights, we train each model three times and use the average out-of-sample loss over the
+three training runs. This ensures an objective out-of-sample loss evaluation without the risk of
+accidentally getting well or badly initialized weights.
+
+4.4
+
+Comparison of categorical embedding methods
+
+We investigate the impact of the autoencoder embedding compared to directly utilizing one-hot
+encoded categorical variables. For each data set, we train a FFNN and a CANN model using
+the one-hot encoding of each categorical variable and a FFNN and a CANN model using the
+autoencoder embedding. For this investigation, we do not tune the models but choose a set of
+tuning parameters that we apply to all the models shown. This means the deviance of each
+model is not relevant here, only the difference in deviance between the model with one-hot
+encoding and the model with autoencoder embedding. This approach allows to isolate the
+embedding technique’s effect on a model’s predictive performance. Each model is trained on
+D \ D1 , and the out-of-sample performance is calculated on the out-of-sample test set D1 . We
+provide a comparison with limited tuning of parameters, but refer to Delong and Kozak (2023)
+for a more in-depth comparison between the embedding methodologies, including the effect of
+tuning the model architectures.
+Figure 6 displays the predictive accuracy, as captured with the deviance, of each model under
+consideration, with the frequency models in the top and the severity models in the bottom
+3
+
+The softmax activation function is applied on the collection of all nodes in a hidden layer, rather than
+individually at each node within the layer.
+
+Neural networks for insurance pricing with frequency and severity data
+
+16
+
+Input: model class (mclass) and corresponding tuning grid R
+data D with 6 disjoint stratified subsets D1 , . . . , D6 ;
+for ℓ = 1, . . . , 6 do
+leave out Dℓ as test set;
+
+(j)
+
+(j)
+
+construct one-hot encoding x1 , . . . , xLj
+
+of variable xj ;
+
+for d ∈ {5, 10, 15} do
+train an autoencoder fdAE using the one-hot encoding of all categorical variables in
+D\Dℓ as input and d nodes in the encoding layer, using a randomly selected validation
+set for early stopping;
+evaluate the model performance on D \ Dℓ using loss function L CE (·, ·);
+select fdAE with the lowest d while L CE (·, ·) < 0.001;
+calculate the scaled W̃enc and bias vector b̃enc for the encoder part of fdAE ;
+add the encoder part of fdAE , with W̃enc and b̃enc , to the model class mclass;
+
+pre-processing steps
+
+foreach continuous variable xj ∈ D do
+calculate mean µxj and standard deviation σxj on the data D \ Dℓ ;
+normalize the variable xj in the data set D along Equation (5);
+foreach categorical variable xj∈ D do
+
+
+foreach tuning parameter point s ∈ R do
+for k ∈ {1, . . . , 6} \ ℓ do
+train a model fℓk of mclass on D \ {Dℓ , Dk };
+evaluate the model performance
+on Dk using loss function L (·, ·);
+P
+valid errorℓk ← |D1k |
+L {yi , fℓk (xi )};
+i:xi ∈Dk
+P
+valid errorℓ ← 15 k∈{1,...,6}\ℓ valid errorℓk ;
+optimal parameter point s∗ℓ ∈ R minimizes valid errorℓ ;
+
+cross-validation steps
+
+for rep ∈ {1, 2, 3} do
+select a validation set Dval containing 20% of the records in D \ Dℓ ;
+train a model fℓ,rep of mclass on D \ {Dℓ , Dval } using the optimal parameter point
+s∗ℓ and using Dval for early stopping;
+evaluate the model performance
+on Dℓ using loss function L (·, ·);
+P
+1
+test errorℓ,rep ← |Dℓ |
+L {yi , fℓ,rep (xi )};
+i:xi ∈Dℓ
+P
+test errorℓ ← 13 rep test errorℓ,rep ;
+
+out-of-sample performance
+
+Output: optimal tuning parameters + performance measure for each of the six folds.
+Algorithm 1: Pseudocode to sketch the pipeline for calculating out-of-sample performances with
+the neural network structures from Section 3.1, including the data pre-processing steps, the crossvalidation scheme as outlined in Henckaerts et al. (2021) with the random grid search methodology
+and the repeated out-of-sample loss calculation to avoid local minima solutions.
+
+row. The numerical relative difference between the autoencoder models and the one-hot encoding models is given in the graph. For frequency modeling, the autoencoder embedding has
+the most pronounced effect on the performance of the FFNNs, leading to lower deviance com-
+
+Neural networks for insurance pricing with frequency and severity data
+
+Australian data
+Poisson deviance
+
+0.40
+
+French data
+
+0.540
+
+0.35
+
+0.39
+
+0.535
+
+0.34
+
+0.38
+
+0.530
+
+Norwegian data
+0.31
+
+−0.04%
+
+0.30
+
+−0.48%
+
+−0.61%
+0.29
+
+−1.06%
+
+0.33
+0.28
+
+−0.04%
+0.00%
+0.37
+
+0.525
+One−Hot
+
+Autoencoder
+
+1.58
+
+Gamma deviance
+
+Belgian data
+
+17
+
+0.32
+One−Hot
+
+Autoencoder
+
+2.250
+
+1.57
++0.02%
+
+0.27
+One−Hot
+
+Autoencoder
+
+1.9
+
+2.245
+
+−3.40%
+
+2.240
+
+1.140
+−0.12%
+
+−0.29%
+
+1.7
+
+2.235
+−0.53%
+One−Hot
+
+Autoencoder
+
+Autoencoder
+
+1.145
+
+1.8
+
+1.55
+
+1.53
+
+One−Hot
+
+1.150
+
+1.56
+
+1.54
+
+−0.02%
+
+−0.08%
+
+1.135
+−0.01%
+
+2.230
+One−Hot
+
+Model
+
+1.6
+
+Autoencoder
+
+CANN GBM flex
+
+−2.08%
+One−Hot
+
+Autoencoder
+
+−0.39%
+
+1.130
+One−Hot
+
+Autoencoder
+
+FFNN
+
+Figure 6: Comparison of one-hot encoding and autoencoder embedding on the out-of-sample performance of both the FFNN and the CANN model. Top row shows the effect on frequency
+modeling and bottom row on severity modeling. The numerical relative difference between
+the model using the autoencoder and the model using one-hot encoding is given in the graph.
+
+pared to models utilizing one-hot encoding. However, the impact on CANN models appears
+to be negligible. In the case of severity modeling, both FFNNs and CANNs demonstrate an
+improved predictive performance when using the autoencoder embedding. Only the FFNN on
+the Australian data set and the CANN model on the Belgian data set perform similarly when
+comparing the one-hot encoding and the autoencoder embedding for claim severity modeling.
+The reduced deviance in most severity models highlights the benefits of unsupervised learning
+through the autoencoder approach.
+
+4.5
+
+Model evaluation framework
+
+The two benchmark models enable a comparison with the proposed neural network architectures.
+Moreover, they serve as initial model input for the CANN models. We investigate the predictive
+performance of seven models for each data set: GLM, GBM, neural network, the CANN with
+GLM input, with fixed and flexible output layer, and the CANN with GBM input, with both
+fixed and flexible output layer.
+Inspired by Fissler et al. (2023) and Gneiting and Resin (2023), we evaluate and compare
+the performance of these models along four dimensions. We compare the out-of-sample performances of the models using the Poisson and gamma deviance. We employ the statistical
+Diebold-Mariano test to compare the predictive accuracy of the models to determine whether
+a lower out-of-sample deviance corresponds to a statistically more accurate model. We examine the prediction structure, which provides deeper insights into the model’s behavior and
+potential biases. This includes assessing the calibration of predictions to ensure that predicted
+values align well with observed outcomes. Lastly, we use Murphy diagrams to verify if the
+model performance rankings based on the Poisson and gamma deviance hold across various
+scoring functions, ranking the models for predictive dominance. This set of model evaluation
+tools provides a nuanced view of model performance. We refer to Fissler et al. (2023) for a
+
+Neural networks for insurance pricing with frequency and severity data
+
+18
+
+more complete overview of different model evaluation techniques. With the exception of the
+comparison of out-of-sample deviances, we restrict this section to the frequency models. The
+comparison between the severity models can be found in Appendix C.
+Comparison on out-of-sample deviances We first compare out-of-sample performances of
+the benchmark models and the neural network structures by looking at the Poisson deviance (1)
+or gamma deviance (2) for each withheld test set. Figure 7 shows the deviance for the frequency
+models on the left-hand side and the severity models on the right-hand side. An accompanying
+table with the numerical values of these deviances is in Appendix B.
+Among the four data sets analyzed, the combination of a neural network and a gradient boosting model (CANN GBM flex) consistently yields the lowest deviance when modeling claim
+frequency. This aligns with recent research highlighting the predictive performance of combining a gradient boosting model with a neural network (Borisov et al., 2022; Ke et al., 2019;
+Shwartz-Ziv and Armon, 2022). However, for the Norwegian data set, which has few input
+variables, the impact was less pronounced, with similar performance observed across all models
+except for the feed-forward neural network, which exhibits slightly higher deviance. Regarding claim severity modeling, no single model consistently achieves the lowest deviance across
+all data sets. For the Australian and Norwegian data sets, all models perform comparably in
+terms of deviance. The CANN models with GBM input demonstrate the lowest deviance for
+the Belgian data set, while for the French data set, the CANN model with GLM input achieves
+the best results. Notably, the CANN models with a flexible output layer structure outperform
+those with a fixed output layer in most cases, for both frequency and severity modeling. This
+suggests that the more adaptable combination of the initial model input and the neural network
+adjustment leads to reduced deviance.
+Diebold-Mariano statistical tests for predictive accuracy In addition to examining
+the out-of-sample deviances, we use the statistical Diebold-Mariano test to determine whether
+a model with a lower deviance demonstrates greater predictive accuracy. We say two models
+fA and fB have the same predictive accuracy under loss function L (·, ·) if
+E [L (fA (X), Y ) − L (fB (X), Y )] = 0. We test this hypothesis using a t-test, known as the
+Diebold–Mariano test (Diebold and Mariano, 1994; Diebold, 2015). We follow the approach in
+Fissler et al. (2023). The equal predictive null hypothesis of the Diebold-Mariano test is
+H0 : E [L (fA (X), Y ) − L (fB (X), Y )] = 0.
+As alternative hypothesis, we use
+H1 : E [L (fA (X), Y ) − L (fB (X), Y )] > 0
+to test for the predictive superiority of model B over model A. We reject the null hypothesis
+if our test statistic has a p-value < 0.05. Note that failing to reject the null hypothesis does
+not exclude the possibility that model A is more accurate than model B, as we only used the
+alternative hypothesis H1 that model B is statistically more accurate than model A.
+Table 4 shows the result of the Diebold-Mariano test for the frequency models on each data set
+under consideration. We look at the results on the test set D1 to isolate the effects of the models
+themselves and to avoid influences from variations across different test sets. Each row represents
+model A, and each column represents model B. A checkmark (✓) is used if the null hypothesis
+is not rejected and an ✕ if H0 is rejected in favor of the alternative hypothesis. A column full of
+✕ marks indicates that we always reject the null hypothesis when using this model as model B,
+
+Neural networks for insurance pricing with frequency and severity data
+
+Out−of−sample Poisson deviance
+
+19
+
+Out−of−sample gamma deviance
+1.9
+
+Australian Data
+
+0.380
+1.8
+0.375
+1.7
+0.370
+1.6
+0.365
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+2.30
+
+Belgian Data
+
+0.534
+2.28
+0.532
+2.26
+0.530
+2.24
+0.528
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+French Data
+
+2.6
+0.27
+
+2.4
+
+0.26
+
+2.2
+
+0.25
+
+2.0
+
+0.24
+
+1.8
+
+0.23
+
+1.6
+
+0.22
+1.4
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+Norwegian Data
+
+0.280
+
+0.275
+
+1.10
+
+0.270
+
+1.05
+
+0.265
+1.00
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+Test set
+
+Test set
+
+GLM
+
+GBM
+
+FFNN
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+Model
+CANN GBM flex
+
+Figure 7: Out-of-sample performance comparison between the different models for each data set. The
+left-hand side shows the performance of the frequency models and the right-hand side for
+the severity models. From top to bottom, we show the results on the Australian, Belgian,
+French and Norwegian data sets. The deviances for the GLM and GBM on the Belgian data
+correspond to the results reported in, respectively, Henckaerts et al. (2018) and Henckaerts
+et al. (2021).
+
+Neural networks for insurance pricing with frequency and severity data
+
+20
+
+meaning this model is consistently seen as statistically more accurate compared to the others.
+Conversely, a row full of ✕ marks means that when comparing to this model, the null hypothesis
+is always rejected in favor of the other models. Rows or columns with exclusively ✕ marks are
+highlighted. In the first row of Table 4b for the Belgian data, we see that according to the
+Diebold-Mariano test, the GLM has equal predictive performance as the neural network and
+the CANN GLM fixed, although the out-of-sample deviance of the CANN GLM fixed is lower
+on D1 as seen in Figure 7. Looking at the CANN GBM flexible as model A, we can never reject
+H0 in favor of another model; using the other models as model A, the test rejects H0 in favor
+of the CANN GBM flexible each time, except for the CANN GLM flexible. This shows that
+the CANN GBM flexible, which has the lowest deviance on the test set, is statistically more
+accurate than the other model types, except for the CANN GLM flexible, where we cannot
+reject H0 . For the Australian data, Table 4a, and the French data, Table 4c, the CANN GBM
+flexible is always seen as more statistically accurate when compared to the other models. Table
+4d shows the results on the Norwegian data, where the test only rejects H0 when looking at
+the neural network as model A. This is in line with the out-of-sample performance in Figure 7,
+where we can see that each frequency model on the Norwegian data has very similar deviance,
+except for the neural network.
+Prediction structure analysis and calibration Following Denuit et al. (2021), we examine
+the prediction structures to gain deeper insights into the model’s behavior to facilitate comparisons and to identify outliers. Figure 8 shows the histograms of the predictions made on the
+out-of-sample test set D1 of each frequency model. Such histograms facilitate a visual inspection
+of the predictive distributions and their alignment across different models, for instance, with
+respect to dispersion and outliers. For the Australian, French, and Norwegian data, we observe
+that the dispersion of predictions is very similar between models, except for the neural network
+(in green), where the predictions are more concentrated. This behavior is not observed in the
+Belgian data, where for each model, the predictive distribution shows a similar dispersion.
+In Figure 9 we examine the calibration of the different frequency models by plotting E [Y |f (x) = s]
+over the binned range of possible predictions s, following the approach in Denuit et al. (2021).
+We detail the construction of these graphs in Appendix F. When E [Y |f (x) = s] > s, meaning
+the plot lies above the diagonal, the model underestimates the number of claims. Conversely,
+when E [Y |f (x) = s] < s, the model overestimates the number of claims. A model where
+E [Y |f (x) = s] ∼ s for all s is considered well-calibrated, meaning the predictions accurately
+match the observed number of claims. Comparing the calibration between models can help
+to identify biases in the predictions that might not be evident from a comparison based on
+out-of-sample deviance. Both benchmark models seem similarly well calibrated, except for the
+slight overestimation for the higher prediction ranges in the Australian and Belgian data sets.
+With the exception of the Belgian data, the NN shows a worse calibration than the benchmark
+models. The calibration of the CANN GLM fixed and CANN GBM fixed is comparable to that
+of the GLM and GBM, respectively, but with an improved calibration for the high prediction
+range in the French data set. For all data sets, the CANN GLM flexible and CANN GBM flexible demonstrate the best calibration, exhibiting a better calibration than their counterparts
+with a fixed output layer.
+Murphy diagrams for predictive dominance Following the methodology outlined in
+Fissler et al. (2023), we employ Murphy diagrams (Ehm et al., 2016) to evaluate whether
+the model rankings based on the out-of-sample deviances shown in Figure 7 are influenced by
+the choice of loss function. While Figure 7 indicates which model performs best according to
+
+Neural networks for insurance pricing with frequency and severity data
+
+21
+
+Model B
+
+GLM
+
+✕
+
+GBM
+
+✓
+
+✓
+
+✕
+
+✓
+
+✕
+
+✓
+
+✕
+
+✕
+
+✕
+
+✕
+
+✕
+
+✕
+
+CANN GLM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✕
+
+CANN GBM fixed
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✕
+✓
+
+(a) Australian data set
+
+✓
+
+✓
+
+✕
+
+✕
+
+✕
+
+✓
+
+✓
+
+✕
+
+✓
+
+✕
+
+✓
+
+✕
+
+✕
+
+✕
+
+✕
+
+✕
+
+✕
+
+FFNN
+
+✓
+
+✕
+
+CANN GLM fixed
+
+✓
+
+✕
+
+✓
+
+CANN GLM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM fixed
+
+✓
+
+✓
+
+✓
+
+✓
+
+✕
+
+CANN GBM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM flex
+✓
+
+✕
+
+✕
+
+✕
+
+✕
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✕
+
+GLM
+
+✕
+
+✕
+
+GBM
+
+✓
+
+✓
+
+✓
+
+✓
+
+✕
+
+FFNN
+
+✕
+
+✕
+
+✕
+
+✕
+
+✕
+
+CANN GLM fixed
+
+✓
+
+✓
+
+✓
+
+✕
+
+✕
+
+CANN GLM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM fixed
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GLM fixed
+
+✓
+
+✕
+
+✕
+
+CANN GLM flex
+
+✓
+
+✕
+
+✕
+
+✓
+
+CANN GBM fixed
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✕
+✓
+
+Model A
+
+FFNN
+
+✓
+
+CANN GLM flex
+
+✕
+
+✓
+
+CANN GLM fixed
+
+✕
+
+✓
+
+FFNN
+
+✓
+
+✓
+
+GBM
+
+✕
+
+✓
+
+GLM
+
+CANN GBM flex
+
+✓
+
+CANN GBM fixed
+
+✓
+✓
+
+CANN GLM flex
+
+✓
+✓
+
+CANN GLM fixed
+
+✓
+✓
+
+FFNN
+
+✓
+✓
+
+GBM
+
+GLM
+
+Model A
+
+✓
+
+Model B
+
+✕
+
+GBM
+
+(c) French data set
+
+✓
+✕
+
+(b) Belgian data set
+
+Model B
+
+GLM
+
+✓
+
+CANN GBM fixed
+
+✓
+
+Model A
+
+FFNN
+CANN GLM fixed
+
+✕
+
+CANN GBM flex
+
+✕
+
+✓
+
+CANN GBM fixed
+
+✕
+
+✓
+
+CANN GLM flex
+
+✕
+
+✓
+
+CANN GLM fixed
+
+CANN GBM flex
+
+✓
+
+✓
+
+FFNN
+
+CANN GBM fixed
+
+✓
+
+GBM
+
+CANN GLM flex
+
+✕
+
+GLM
+
+CANN GLM fixed
+
+✓
+
+FFNN
+
+Model A
+
+GLM
+GBM
+
+GBM
+
+GLM
+
+Model B
+
+✓
+✓
+
+(d) Norwegian data set
+
+Table 4: Results of the Diebold-Mariano test for the frequency models on test set D1 for each
+data set. The table indicates whether we cannot reject (✓) the null hypothesis H0 :
+E [L (fA (X), Y ) − L (fB (X), Y )] = 0, or if we reject H0 (✕) in favor of the alternative hypothesis H1 : E [L (fA (X), Y ) − L (fB (X), Y )] > 0. Highlighted cells indicate columns or
+rows filled exclusively with ✕ marks, signifying that the model is either consistently seen as
+statistically more accurate (column) or that, for this model, the null hypothesis is always
+rejected in favor of the other models (row).
+
+the Poisson or gamma deviance, Murphy diagrams allow testing whether this ranking holds
+true across a variety of other scoring functions. By doing so, we confirm whether the observed
+performance differences are consistent and not merely artifacts of using a specific loss function.
+The Murphy diagram for a model f displays (θ, Sθ (f (x), y)), for all (xi , yi ) in the test set with
+i = 1, . . . , n, where Sθ (f (x), y) is the elementary scoring function for parameter θ, defined by
+
+Neural networks for insurance pricing with frequency and severity data
+
+GLM
+
+GBM
+
+FFNN
+
+CANN GLM fixed
+
+22
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+Australian Data
+
+Density
+
+1000
+
+500
+
+0
+0.0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.0
+
+0.1
+
+0.2
+
+GLM
+
+0.3
+
+0.4
+
+0.0
+
+0.1
+
+0.2
+
+GBM
+
+0.3
+
+0.4
+
+0.0
+
+FFNN
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.0
+
+CANN GLM fixed
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.0
+
+CANN GLM flex
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.0
+
+CANN GBM fixed
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+CANN GBM flex
+
+Density
+
+Belgian Data
+
+3000
+2000
+1000
+0
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.0
+
+0.2
+
+GLM
+
+0.4
+
+0.6
+
+0.0
+
+0.2
+
+GBM
+
+0.4
+
+0.6
+
+0.0
+
+FFNN
+
+0.2
+
+0.4
+
+0.6
+
+0.0
+
+CANN GLM fixed
+
+0.2
+
+0.4
+
+0.6
+
+0.0
+
+CANN GLM flex
+
+0.2
+
+0.4
+
+0.6
+
+0.0
+
+CANN GBM fixed
+
+0.2
+
+0.4
+
+0.6
+
+CANN GBM flex
+
+French Data
+
+Density
+
+40000
+30000
+20000
+10000
+0
+0.0
+
+0.3
+
+0.6
+
+0.9
+
+0.0
+
+0.3
+
+GLM
+
+0.6
+
+0.9
+
+0.0
+
+GBM
+
+0.3
+
+0.6
+
+0.9
+
+0.0
+
+FFNN
+
+0.3
+
+0.6
+
+0.9
+
+0.0
+
+CANN GLM fixed
+
+0.3
+
+0.6
+
+0.9
+
+0.0
+
+CANN GLM flex
+
+0.3
+
+0.6
+
+0.9
+
+0.0
+
+CANN GBM fixed
+
+0.3
+
+0.6
+
+0.9
+
+CANN GBM flex
+
+Norwegian Data
+
+Density
+
+6000
+4000
+2000
+0
+0.0
+
+0.2
+
+0.4
+
+0.0
+
+0.2
+
+0.4
+
+0.0
+
+0.2
+
+0.4
+
+0.0
+
+0.2
+
+0.4
+
+0.0
+
+0.2
+
+0.4
+
+0.0
+
+0.2
+
+0.4
+
+0.0
+
+0.2
+
+0.4
+
+Predictions
+
+Model
+
+GLM
+
+GBM
+
+FFNN
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+Figure 8: Histogram of predictions for the test set D1 obtained from each frequency model, illustrating
+the distribution and concentration of predictions for each model to identify differences in
+prediction patterns and potential outliers.
+
+Ehm et al. (2016) as
+n
+
+Sθ (f (x), y) =
+
+1X
+|θ − yi |1{min (f (xi ), yi ) ≤ θ < max (f (xi ), yi )}.
+n
+i=1
+
+The predictions from model fA are said to dominate the predictions of model fB , if and only
+if Sθ (fA (x), y) ≤ Sθ (fB (x), y) for all θ ∈ R, see Ehm et al. (2016, Section 3.4). By examining
+the rankings between models according to the loss Sθ for a range of θ values, we can determine
+whether a model with a lower Poisson or gamma deviance consistently maintains this lower
+loss across all scoring functions Sθ . Furthermore, if a model shows predictive dominance over
+another model as determined by the elementary scoring functions for all θ, then the ranking
+of these models will be preserved across all consistent loss functions, see Ehm et al. (2016,
+Proposition 2b).
+
+Neural networks for insurance pricing with frequency and severity data
+
+GBM
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+0.05
+
+0.00
+0.05
+
+0.10
+
+0.15 0.00
+
+0.05
+
+GLM
+
+0.10
+
+0.15 0.00
+
+0.05
+
+GBM
+
+0.10
+
+0.15 0.00
+
+FFNN
+
+0.05
+
+0.10
+
+0.15 0.00
+
+0.05
+
+CANN GLM fixed
+
+0.10
+
+0.15 0.00
+
+CANN GLM flex
+
+0.05
+
+0.10
+
+0.15 0.00
+
+CANN GBM fixed
+
+0.05
+
+0.10
+
+0.15
+
+CANN GBM flex
+
+0.20
+
+Belgian Data
+
+Observed number of claims
+
+CANN GLM fixed
+
+0.10
+
+0.00
+
+0.15
+
+0.10
+
+0.05
+0.05
+
+0.10
+
+0.15
+
+0.200.05
+
+0.10
+
+GLM
+
+0.15
+
+0.200.05
+
+0.10
+
+GBM
+
+0.15
+
+0.200.05
+
+FFNN
+
+0.10
+
+0.15
+
+0.200.05
+
+0.10
+
+CANN GLM fixed
+
+0.15
+
+0.200.05
+
+CANN GLM flex
+
+0.10
+
+0.15
+
+0.200.05
+
+CANN GBM fixed
+
+0.10
+
+0.15
+
+0.20
+
+CANN GBM flex
+
+0.100
+
+French Data
+
+Observed number of claims
+
+FFNN
+
+0.15
+
+Australian Data
+
+Observed number of claims
+
+GLM
+
+23
+
+0.075
+0.050
+0.025
+0.000
+0.000 0.025 0.050 0.075 0.100.000 0.025 0.050 0.075 0.100.000 0.025 0.050 0.075 0.100.000 0.025 0.050 0.075 0.100.000 0.025 0.050 0.075 0.100.000 0.025 0.050 0.075 0.100.000 0.025 0.050 0.075 0.100
+
+GBM
+
+FFNN
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+Norwegian Data
+
+Observed number of claims
+
+GLM
+
+0.075
+
+0.050
+
+0.025
+
+0.025
+
+0.050
+
+0.075
+
+0.100
+
+0.025
+
+0.050
+
+0.075
+
+0.100
+
+0.025
+
+0.050
+
+0.075
+
+0.100
+
+0.025
+
+0.050
+
+0.075
+
+0.100
+
+0.025
+
+0.050
+
+0.075
+
+0.100
+
+0.025
+
+0.050
+
+0.075
+
+0.100
+
+0.025
+
+0.050
+
+0.075
+
+Predicted number of claims
+
+Model
+
+GLM
+
+GBM
+
+FFNN
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+Figure 9: Plot of E [Y |f (X) = s] over the binned range of predictions s for each model type. Predictions
+are made on test set D1 . A line above (below) the diagonal indicates that the model is
+underestimating (overestimating) the true number of claims in the data. Comparison between
+models allows us to assess how well the predicted values align with observed outcomes.
+
+Figure 10 shows the Murphy diagrams for the frequency models calibrated on the different data
+sets with the loss evaluated on the test set D1 . For the French data, we see that the GBM
+and the CANN GBM fixed and flexible models have a lower value Sθ for all θ, meaning they
+have predictive dominance over the GLM, NN, and CANN GLM models. Between these three
+models, however, none is consistently lower than the others, so we cannot say that one model
+has predictive dominance over all others according to the Murphy diagram. For the Norwegian
+data set, all models, except the neural network, have almost identical values of Sθ over all θ.
+The values for the neural network are, however, consistently higher. Therefore, we conclude
+that all model types have predictive dominance over the neural network. The Murphy diagrams
+for the Australian and Belgian data show no model with clear predictive dominance.
+Model evaluation framework conclusions We can draw comprehensive and well-supported
+
+0.100
+
+Neural networks for insurance pricing with frequency and severity data
+
+Australian data
+
+Belgian data
+
+24
+
+French data
+
+Norwegian data
+
+0.05
+0.020
+0.030
+0.015
+0.04
+
+Score
+
+0.015
+
+0.025
+
+0.010
+0.010
+
+0.03
+
+0.005
+
+0.005
+0.020
+0.05
+
+0.10
+
+0.15
+
+0.20
+
+0.1
+
+Theta
+
+0.2
+
+0.3
+
+0.0
+
+Theta
+
+Model
+
+GLM
+
+GBM
+
+FFNN
+
+0.1
+
+0.2
+
+0.3
+
+0.00
+
+Theta
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+0.05
+
+0.10
+
+0.15
+
+Theta
+
+CANN GBM flex
+
+Figure 10: Murphy diagram for the frequency models on test set D1 for each data set to compare the
+ranking of models across a range of scoring functions. We plot the losses for each model
+according to the elementary scoring functions Sθ over a range of values for the parameter
+θ.
+
+conclusions about model performance and reliability for all four data sets by consolidating insights from the different techniques in the model evaluation framework. For the frequency
+models on the Australian data set, we see the CANN GBM flexible leads to the lowest outof-sample Poisson deviance. The model is statistically more accurate as determined by the
+Diebold-Mariano test, although the Murphy diagram does not show predictive dominance for
+all values of θ. Furthermore, the histogram of the predictions made by the CANN GBM flexible
+does not show unexpected outliers, and the model is well calibrated, leading to the conclusion
+that the CANN GBM flexible model is the most accurate for modeling claim frequency on the
+Australian data set. We draw the same conclusion for the French data set, where the Murphy
+diagram shows that the CANN GBM flexible has predictive dominance compared to the GLM,
+the FFNN, and the CANN GLM models. On the Belgian data set, the CANN GBM flexible
+also leads to the lowest out-of-sample Poisson deviance, but according to the Diebold-Mariano
+test, its accuracy is equal to that of the CANN GLM flexible. Neither model shows predictive
+dominance according to the Murphy diagram, and both are well-calibrated without unexpected
+outliers, showing both models are suitable choices when modeling claim frequency on the Belgian data set. The frequency models on the Norwegian data set have similar out-of-sample
+deviances, except for the neural network, for which the Diebold-Mariano test always rejects
+the null hypothesis when using the neural network as model A. The Murphy diagram shows no
+model has predictive dominance over the other models, although all models have (slightly) lower
+values for Sθ for all θ, meaning they have predictive dominance over the neural network. To
+model claim frequency on the Norwegian data set, we conclude that the NN is the least suitable
+model, while other models perform comparably. Therefore, the more intuitive and explainable
+GLM seems sufficient.
+
+5
+
+Looking under the hood: interpretation tools and surrogate
+models
+
+We now consider two model interpretation tools to look under the hood of the constructed
+models. Then, we translate the model insights into a tariff structure by constructing GLM
+surrogates along the workflow presented in Henckaerts et al. (2022). All results shown in this
+
+0.20
+
+0.25
+
+Neural networks for insurance pricing with frequency and severity data
+
+25
+
+section are calculated using data fold one, meaning the models are trained using data subsets
+D2 , . . . , D6 and the shown results are calculated on the test set D1 . We show the results from
+these tools only for the GBM, FFNN, and CANN GBM flexible models. This illustrates how
+the interpretation techniques work and how we can extract insights from them while keeping
+the results easily readable.
+
+5.1
+
+Variable importance
+
+We measure variable importance using the permutation method from Olden et al. (2004).
+Hereby, we consider the average change in predictions when a variable is randomly permuted.
+For a trained model f , we measure the importance of a variable xj by calculating
+X
+
+VIPxj =
+
+
+abs f (xi,1 , . . . , xi,j , . . . , xi,p ) − f (xi,1 , . . . , x̃i,j , . . . , xi,p ) ,
+
+(11)
+
+i:xi ∈D
+
+where x̃i,j is a random permutation of the values observed for xj in the data set D. A large value
+for VIPxj indicates that the variable significantly influences the model output and is therefore
+considered important. Figure 11 shows the variable importance of each variable in the four data
+sets for both frequency and severity modeling. For clarity, we show the relative VIP of each
+variable, calculated as
+VIPxj
+,
+xj ∈D VIPxj
+
+where the sum runs over all over all variables xj .
+
+VIPxj = P
+Australia
+
+Belgium
+
+Policyholder age
+
+France
+
+Bonus-malus scale
+
+Bonus-malus scale
+
+Postalcode
+
+Vehicle age
+
+Frequency
+
+Policyholder age
+
+Norway
+
+Distance limit
+
+Vehicle brand
+
+Vehicle value
+Vehicle power
+
+Population density of region
+
+Policyholder age
+
+Fuel type
+Vehicle build type
+
+District of residence
+Coverage type
+Vehicle power
+
+Vehicle age
+Vehicle age
+
+Policyholder gender
+
+0.0
+
+0.1
+
+0.2
+
+0.3
+
+Fleet car
+
+Fuel type
+
+Vehicle usage
+
+Area of residence
+
+0.4
+
+Policyholder age
+
+Policyholder gender
+
+Population density of area
+
+Policyholder gender
+
+0.0
+
+0.1
+
+0.2
+
+0.3
+
+Policyholder age
+
+0.00
+
+Bonus-malus scale
+
+Bonus-malus scale
+
+Postalcode
+
+Vehicle age
+
+Policyholder age
+
+0.05
+
+0.10
+
+0.15
+
+0.20
+
+0.0
+
+0.2
+
+0.0
+
+0.2
+
+0.4
+
+Distance limit
+
+Vehicle brand
+
+Vehicle value
+
+Severity
+
+(12)
+
+Vehicle power
+
+Population density of region
+
+Policyholder age
+
+Fuel type
+Vehicle build type
+
+District of residence
+Coverage type
+Vehicle power
+
+Vehicle age
+Vehicle age
+
+Policyholder gender
+
+0.0
+
+0.1
+
+0.2
+
+0.3
+
+Policyholder gender
+
+Population density of area
+
+Policyholder gender
+Fleet car
+
+Fuel type
+
+Vehicle usage
+
+Area of residence
+0.0
+
+0.1
+
+0.2
+
+Model
+
+0.3
+
+GBM
+
+0.4
+
+FFNN
+
+Policyholder age
+
+0.00
+
+0.05
+
+0.10
+
+0.15
+
+0.20
+
+0.25
+
+CANN GBM flexible
+
+Figure 11: Relative variable importance in the GBM, the FFNN and the CANN GBM flexible. Top
+row shows the effects for the frequency models, the bottom row for the severity models.
+
+By comparing the variable importance of the GBM with the CANN model, we can evaluate
+the impact of the neural network adjustment component within the CANN. In general, most
+
+0.4
+
+0.6
+
+Neural networks for insurance pricing with frequency and severity data
+
+26
+
+variables show similar importance in both the GBM and the CANN GBM flexible models,
+indicating that the adjustment calibrated by the neural network does not substantially alter the
+importance of the relationships between the input variables and the response variable. However,
+notable changes are observed for certain variables, such as the postal code in the frequency model
+for the Belgian data set and the vehicle age and brand in the frequency model for the French
+data set. When we compare the variable importance of the GBM and the CANN GBM with
+the FFNN, we observe more substantial changes, particularly in claim severity modeling. This
+shows that the FFNN captures a significantly different relationship between the input variables
+and the response variable when compared to the GBM and CANN GBM flexible model.
+
+5.2
+
+Partial dependence effects
+
+We consider partial dependence effects (Hastie et al., 2009; Henckaerts et al., 2021) to explore
+the relationship between an input variable and the model output. Let the variable space Xj be
+the vector containing all possible values for variable xj . In case the variable xj is continuous,
+we discretize Xj by dividing the range between the smallest and largest possible values for xj
+into intervals using the smallest step size that occurs in the data. For a trained model f , the
+partial dependency effect of a variable xj is the vector calculated as
+
+PDxj =
+
+
+ 1 X
+ |D|
+
+f (xi,1 , . . . , Xo,j , . . . , xi,p ) ; ∀Xo,j ∈ Xj
+
+
+
+
+,
+
+(13)
+
+
+
+xi ∈D
+
+where (xi,1 , . . . , Xo,j , . . . , xi,p ) is the data point xi ∈ D with element xi,j replaced by the value
+Xo,j ∈ Xj . The vector PDxj can be seen as the average prediction on D, while letting the
+variable xj range over all possible values in the variable space Xj . A partial dependence plot is
+the plotted effect between Xj and PDxj . Equation (13) can be extended to a two-way interaction
+partial dependence effect by letting two variables range over their respective variable spaces.
+Australia
+
+France
+
+Belgium
+
+Norway
+0.05
+
+0.04
+
+0.15
+
+0.03
+
+0.04
+
+0.050
+0.12
+
+0.02
+0.02
+
+0.025
+
+0.01
+
+0.09
+
+0[
+
+70
+
+Young
+
+Old
+
+≥
+
+0[
+
+,7
+
+0[
+
+,5
+
+[5
+0
+
+[4
+0
+
+0[
+
+,4
+[3
+0
+
+6[
+
+,3
+
+,2
+
+[2
+6
+
+21
+<
+
+Policyholder age
+
+[2
+1
+
+le
+
+0.00
+
+ol
+
+de
+
+st
+
+pe
+
+pe
+d
+
+75
+
+de
+
+ol
+
+50
+
+op
+
+op
+
+le
+
+le
+
+op
+
+op
+k.
+
+pe
+
+pe
+ng
+ki
+or
+
+25
+
+ol
+
+w
+
+rw
+or
+
+le
+
+op
+pe
+
+op
+
+g
+
+pe
+st
+
+un
+yo
+
+ge
+un
+
+le
+
+0.00
+
+le
+
+0.000
+
+yo
+
+Partial dependence effect
+
+0.06
+0.075
+
+Model
+
+GBM
+
+FFNN
+
+CANN GBM flexible
+
+Figure 12: Partial dependence effect of the policyholder’s age across the four data sets, claim frequency
+models. We compare the benchmark GBM, the FFNN and the CANN GBM flexible.
+
+Figure 12 shows the partial dependence effect between the policyholder’s age and the predicted
+claim frequency across the four data sets in the benchmark study. We compare the effects of
+the benchmark GBM, the FFNN and the CANN GBM flexible. The effect in all three models is
+similar for the Australian, French and Norwegian data. However, for the Belgian data set, the
+GBM and CANN GBM flexible show a similar partial dependence effect, while the FFNN shows
+
+Neural networks for insurance pricing with frequency and severity data
+
+27
+
+a very different pattern. The partial dependence effect of this FFNN shows a less complex, less
+nuanced relationship between age of the policyholder and claim frequency. Across the four data
+sets, the average predicted claim frequency decreases with age, which is an expected relationship
+between age and claim frequency. For the Belgian and French data sets, we observe an increasing
+effect for the older ages.
+Australia
+
+France
+
+Belgium
+
+Norway
+25000
+
+1450
+
+2000
+
+20000
+
+1400
+1500
+
+1500
+
+15000
+
+1350
+1000
+
+1000
+
+10000
+
+500
+
+5000
+
+0
+
+0
+
+1300
+500
+
+0[
+
+70
+
+Old
+
+≥
+
+0[
+
+[5
+0,
+7
+
+0[
+
+[4
+0,
+5
+
+0[
+
+[3
+0,
+4
+
+pe
+
+Young
+
+ol
+
+de
+st
+
+Policyholder age
+
+[2
+6,
+3
+
+21
+
+75
+
+<
+
+op
+l
+
+50
+
+[2
+1,
+2
+
+e
+
+e
+
+e
+
+op
+l
+pe
+
+or
+k.
+pe
+op
+l
+
+w
+er
+
+25
+
+ol
+d
+
+ol
+d
+
+e
+
+e
+
+pe
+op
+l
+
+pe
+op
+l
+
+Model
+
+GBM
+
+FFNN
+
+CANN GBM flexible
+
+Figure 13: Partial dependence effect of the policyholder’s age across the four data sets, claim severity
+models. We compare the benchmark GBM, the FFNN and the CANN GBM flexible.
+
+Figure 13 displays the partial dependence effect of the policyholder’s age when calibrated on
+the claim severity data. Similar to the effects portrayed in Figure 12, the three models applied
+to the Australian and Norwegian data sets exhibit a comparable effect. For the Belgian and
+French data sets, the FFNN showcases a notably distinct partial dependence effect. Specifically
+for the French data, the FFNN model reveals an almost flat effect across all age groups.
+France
+
+Belgium
+0.25
+
+0.20
+
+Partial dependence effect
+
+tp
+
+g
+or
+ki
+n
+w
+
+yo
+
+ng
+es
+
+un
+g
+
+eo
+pl
+e
+
+0
+
+6[
+
+1250
+
+yo
+u
+
+Partial dependence effect
+
+2000
+
+0.20
+
+0.15
+
+0.16
+
+0.10
+0.12
+
+0.05
+
+0
+
+5
+
+10
+
+15
+
+20
+
+50
+
+Bonus-malus scale
+Model
+
+100
+
+150
+
+200
+
+Bonus-malus scale
+GBM
+
+FFNN
+
+CANN GBM flexible
+
+Figure 14: Partial dependence effect of the bonus-malus score for the Belgian data set, claim frequency
+model (left) and claim severity model (right). We compare the benchmark GBM, the FFNN
+and the CANN GBM flexible.
+
+Figure 14 shows the partial dependence effect of the bonus-malus score for the Belgian and
+French frequency data sets. For both data sets, the three models show an increasing relation
+between the level occupied in the bonus-malus scale and the expected claim frequency. According to the FFNN, the partial dependence is a distinctly smoother effect compared to the effect
+
+Neural networks for insurance pricing with frequency and severity data
+
+28
+
+calibrated by the GBM and CANN GBM flexible, showing again the less complex, less nuanced
+relationships captured by the FFNN.
+GBM
+
+CANN GBM flexible
+
+Partial dependence effect
+
+Partial dependence effect
+
+0.05
+0.10
+0.15
+0.20
+
+FFNN
+
+Partial dependence effect
+0.05
+0.10
+0.15
+0.20
+
+0.05
+0.10
+0.15
+0.20
+
+Emperical claim frequency
+
+Emperical number of claims
+0.05
+0.10
+0.15
+0.20
+No Policyholders
+
+Figure 15: Partial dependence relationship of the spatial variable and the expected number of claims in
+the GBM, FFNN and CANN GBM flexible for the Belgian data. We compare the modelled
+effects with the empirical claim frequency in the Belgian data set.
+
+We display the partial dependence effect of the postal code in the Belgian frequency data set
+in Figure 15. We compare the partial dependence effect with the empirical claim frequency in
+the Belgian data, calculated as the number of claims per postal code divided by the sum of
+the exposure for that postal code. The effect in the GBM and CANN GBM flexible is very
+similar, with a higher expected claim frequency around the capital of Belgium. The effect in
+the FFNN also shows a higher expected number of claims in the capital but the calibrated
+spatial effect is much smoother. This aligns with the smoother partial dependence effects for
+the policyholder age and bonus-malus in the Belgian frequency FFNN model. Empirically, we
+see a higher concentration of claims per unit of exposure in and around the capital and for some
+postal codes in the west and east of Belgium. This effect is visible for the GBM and CANN
+model but not for the FFNN.
+
+5.3
+
+Surrogate models for practical applications
+
+Surrogate model construction Henckaerts et al. (2022) present a workflow for constructing
+a surrogate GLM by leveraging insights obtained with a black box model. In our study, we apply
+this technique to the CANN model with GBM input, as discussed in Section 3 and calibrated
+in Section 4. To create the surrogates, we first calculate the partial dependence effect for each
+
+Neural networks for insurance pricing with frequency and severity data
+
+29
+
+0.20
+
+0.06
+
+0.15
+
+0.04
+
+0.10
+
+0.02
+
+0.05
+
+Partial dependence
+effect
+
+[
+
+70
+≥
+
+70
+
+[
+
+0,
+
+0.0484
+0.0492
+0.0537
+0.0556
+0.0587
+0.0606
+0.0645
+
+[5
+
+[
+
+50
+0,
+[4
+
+[
+
+40
+
+30
+
+0,
+[3
+
+[
+[2
+
+Bonus-malus score
+
+6,
+
+26
+
+200
+
+[2
+
+150
+
+1,
+
+100
+
+21
+
+0.00
+50
+
+<
+
+Partial dependence effect
+
+individual variable and for interactions between any two variables, as discussed in Section 5.2.
+Next, we use the dynamic programming algorithm introduced by Wang and Song (2011) to
+segment the input data into homogeneous groups based on these partial dependence effects. On
+the resulting binned dataset, we fit a generalized linear model for all combinations of segmented
+input variables and then select the optimal GLM based on BIC. Constructing the surrogate
+GLM on the segmented frequency and severity data leads to a tabular premium structure
+incorporating the insights captured by the CANN architectures.
+
+Policyholder age
+
+Figure 16: Partial dependence plots for three variables in the French data set; left to right: bonusmalus scale, policyholder age and region. In color, we show the binning of the input data
+used in the frequency surrogate GLM. Each color represents one bin of the input variable.
+
+Figure 16 shows the partial dependence effects of the CANN GBM flexible for the bonus-malus
+score, the policyholder age and the region variable from the French data set, with respect to
+frequency modeling. The color coding shows the obtained data segmentation. Note that when
+segmenting a categorical variable encoded using an autoencoder, the segmentation is performed
+on the original dataset D, not on the encoded values. The so-called surrogate GLM is fitted on
+the segmented input data. The benchmark GLM used in the comparative analysis in Section 4.5
+is also fitted on binned data. However, as explained in Section 4.2, this GLM was constructed
+by binning the smooth effects calibrated by a GAM. Therefore, it is insightful to compare both
+the predictive accuracy and the selected variables as obtained with both techniques. To avoid
+data leakage in the comparison between two models, we compare the predictive accuracy on the
+withheld test set D1 .
+Table 5 shows the variables included in the benchmark GLMs and the surrogate GLMs for the
+Australian, Belgian and French data set. The out-of-sample performances of these models are
+evaluated on the withheld data set D1 . We excluded the Norwegian data set from the surrogate
+fitting, as this data set only consists of categorical variables. The surrogate technique selects
+more variables and performs better on the out-of-sample test set than the benchmark GLM.
+This finding is consistent across all three data sets. Hence, the surrogate GLM benefits from
+the insights learned from the neural network adjustments in the CANN compared to the direct
+construction of the benchmark GLM.
+Identification of risk profiles We estimate the expected number of claims and the expected
+claim severity using the surrogate models constructed for the frequency and severity CANN
+GBM flexible, respectively.
+
+Neural networks for insurance pricing with frequency and severity data
+
+30
+
+Benchmark GLM
+
+Surrogate GLM
+
+Benchmark GLM
+
+Surrogate GLM
+
+Benchmark GLM
+
+Surrogate GLM
+
+VehValue
+
+VehValue
+
+ageph
+
+ageph
+
+VehValue
+
+VehPower
+
+DrivAge
+
+DrivAge
+
+bm
+
+bm
+
+VehAge
+
+VehAge
+
+VehBody
+
+power
+
+power
+
+DrivAge
+
+DrivAge
+
+VehValue × DrivAge
+
+coverage
+
+coverage
+
+BonusMalus
+
+BonusMalus
+
+agec
+
+VehGas
+
+VehGas
+
+fuel
+
+Density
+
+Density
+
+0.3817
+
+0.3805
+
+(a) Australian data set
+
+fuel
+
+postcode
+
+fleet
+
+VehBrand
+
+sex
+
+Region
+VehBrand × Region
+
+postcode
+
+ageph × power
+
+Density × Region
+
+0.5314
+
+VehPower × Region
+
+0.5308
+
+VehPower × VehBrand
+
+(b) Belgian data set
+
+DrivAge × Region
+BonusMalus × Region
+VehBrand × Density
+BonusMalus × VehBrand
+DrivAge × BonusMalus
+0.2761
+
+0.2738
+
+(c) French data set
+
+Table 5: Comparison between the benchmark GLM and the surrogate GLM for frequency modeling on
+the Australian, Belgian and French data sets. The surrogate GLM is constructed from the
+CANN with GBM input and flexible output layer. The last row shows the Poisson deviance
+of both GLMs on the out-of-sample data set D1 .
+
+Variables
+
+Low risk
+
+Medium risk
+
+High risk
+
+Vehicle power
+
+4
+
+6
+
+9
+
+Vehicle age
+
+3
+
+2
+
+1
+
+Policyholder age
+
+21
+
+34
+
+72
+
+Bonus-malus scale
+
+50
+
+70
+
+190
+
+Vehicle brand
+
+B12
+
+B5
+
+B11
+
+Regular
+
+Regular
+
+Diesel
+
+2.71
+
+665.14
+
+22 026.47
+
+Midi-Pyrenees
+
+Basse-Normandie
+
+Corse
+
+Fuel type
+Population density of area
+District of residence
+
+Predicted number of claims
+Surrogate GLM
+
+0.020
+
+0.106
+
+0.361
+
+CANN GBM flexible
+
+0.021
+
+0.101
+
+0.519
+
+Table 6: Example of a low, medium and high risk profile for the French data set, using the surrogate
+GLM constructed for the CANN model with GBM input and flexible output layer, withholding
+test set one. We compare the predicted number of claims for each profile.
+
+We select a low, medium, and high-risk profile from the French data set based on the frequency
+surrogate GLM. Table 6 compares these profiles via their expected claim frequency according
+to the surrogate GLM and the CANN GBM flexible model. We compare the influence of each
+variable on the assessed risk using two local interpretation tools in Figure 17. For the GLM,
+
+Neural networks for insurance pricing with frequency and severity data
+
+31
+
+we show the fitted coefficients on the response scale. A value lower (higher) than one means
+the feature’s value leads to a lower (higher) prediction than the baseline prediction obtained
+with the intercept of the GLM. The uncertainty of each contribution is shown with the 95%
+confidence interval. Shapley values (Shapley et al., 1953) are used to compare the feature
+contributions in the GLM to the influences in the CANN model. A positive (negative) Shapley
+value indicates that this feature’s value leads to a higher (lower) than average prediction. The
+effects in the GLM and CANN models mostly align. We see a strong impact of the variables
+region, driver age and bonus-malus score on the predicted number of claims. The variable area
+was not selected in the surrogate GLM construction, and its Shapley value is negligible in all
+three risk profiles.
+
+CANN GBM flexible
+
+Low risk
+
+Medium risk
+
+Area=A
+
+BonusMalus=70
+
+High risk
+BonusMalus=190
+
+DrivAge=2
+
+VehBrand=B5
+
+DrivAge=7
+
+VehBrand=B12
+
+VehAge=2
+
+VehBrand=B11
+VehPower=9
+
+VehPower=4
+
+Density=6.5
+
+VehGas=Regular
+
+Area=B
+
+Area=C
+
+VehAge=3
+
+VehGas=Regular
+
+VehAge=1
+
+Region=Midi-Pyrenees
+
+Region=Basse-Normandie
+
+VehGas=Diesel
+
+BonusMalus=50
+
+VehPower=6
+
+Density=10
+
+Density=1
+
+DrivAge=4
+
+Region=Corse
+
+-0.008
+
+-0.006
+
+-0.004
+
+-0.002
+
+0.000
+
+-0.02
+
+0.00
+
+Shapley value
+
+0.02
+
+0.04
+
+1.0
+
+Feature contribution
+
+0.1
+
+1.2
+
+0.2
+
+Shapley value
+
+BonusMalus=70
+BonusMalus_Region
+BonusMalus_VehBrand
+VehPower=6
+VehBrand=B5
+VehAge=2
+Density=6.5
+VehPower_Region
+DrivAge_Region
+Density_Region
+VehBrand_Density
+VehBrand_Region
+VehPower_VehBrand
+VehGas=Regular
+Region=Basse-Normandie
+DrivAge=4
+DrivAge_BonusMalus
+
+Surrogate GLM
+
+Density_Region
+BonusMalus_Region
+BonusMalus_VehBrand
+VehBrand_Region
+DrivAge_Region
+DrivAge_BonusMalus
+VehBrand_Density
+VehPower=4
+VehPower_VehBrand
+VehPower_Region
+VehGas=Regular
+VehAge=3
+DrivAge=2
+VehBrand=B12
+BonusMalus=50
+Density=1
+Region=Midi-Pyrenees
+0.8
+
+0.0
+
+Shapley value
+BonusMalus=190
+Density=10
+VehBrand=B11
+DrivAge=7
+VehPower=9
+VehBrand_Density
+Region=Corse
+VehGas=Diesel
+VehAge=1
+VehPower_Region
+DrivAge_BonusMalus
+VehBrand_Region
+Density_Region
+BonusMalus_VehBrand
+BonusMalus_Region
+VehPower_VehBrand
+DrivAge_Region
+0.8
+
+1.0
+
+1.2
+
+1.4
+
+Feature contribution
+
+1.6
+
+2.5
+
+5.0
+
+7.5
+
+Feature contribution
+
+Figure 17: Comparison between the low, medium and high risk profiles in the frequency models on the
+French data set according to the Shapley values of the CANN GBM flexible model (top
+row) and the fitted coefficients in the surrogate GLM (bottom row).
+
+Model evaluation framework We use the model evaluation framework from Section 4.5
+to compare the predictions’ structure and to evaluate the predictive dominance and predictive
+accuracy of the surrogate GLM when compared to the benchmark GLM. This type of comparison is valuable as it directly measures whether a GLM with integrated deep-learning insights
+can compete with an industry-standard GLM, offering insights into its practical applicability
+and potential for adoption. We restrict this section to the comparison between the frequency
+surrogate GLM and refer to Appendix D for the results on the severity surrogate GLM and
+to Appendix E for the comparison between the surrogate GLM and the CANN GBM flexible.
+The out-of-sample deviances are shown in Table 5, where we see that the surrogate GLM leads
+to lower deviance on the test set when compared to the benchmark GLM. Table 7 shows the
+results of the Diebold-Mariano test, comparing the predictive accuracy of the benchmark GLM
+and the surrogate model. For both the Australian and Belgian data, we cannot reject the
+null hypothesis for any model. For the French data, when looking at the benchmark GLM as
+model A, the Diebold-Mariano test rejects the null hypothesis in favor of model B, meaning the
+
+10.0
+
+Neural networks for insurance pricing with frequency and severity data
+
+32
+
+surrogate has higher predictive accuracy than the benchmark GLM.
+
+Surrogate GLM
+
+(a) Australian data set
+
+✓
+
+(b) Belgian data set
+
+✕
+
+Benchmark GLM
+Surrogate GLM
+
+Surrogate GLM
+
+Benchmark GLM
+
+Model A
+
+✓
+
+Benchmark GLM
+
+✓
+
+Model B
+
+Surrogate GLM
+
+Benchmark GLM
+
+Model A
+
+✓
+
+Benchmark GLM
+Surrogate GLM
+
+Model B
+
+Surrogate GLM
+
+Benchmark GLM
+
+Model A
+
+Model B
+
+✓
+
+(c) French data set
+
+Table 7: Results of the Diebold-Mariano test comparing the predictive accuracy between the benchmark
+GLM and the surrogate GLM. The table indicates whether we cannot reject (✓) the null
+hypothesis H0 : accuracy(Model A) = accuracy(Model B), or if we reject H0 (✕) in favor of
+the alternative hypothesis H1 : accuracy(Model B) > accuracy(Model A). Highlighted cells
+indicate when the null hypothesis is rejected.
+
+Figure 18 shows the histogram of the predictions made by the benchmark GLM compared to
+those from the surrogate model. These prediction structures are very comparable between the
+two models for all three data sets, meaning the surrogate does not lead to a significantly different
+dispersion in the predictions.
+Australian data
+
+Belgian data
+
+Benchmark GLM
+
+Surrogate GLM
+
+French data
+
+Benchmark GLM
+
+Surrogate GLM
+
+Benchmark GLM
+
+500
+
+Surrogate GLM
+
+30000
+
+3000
+
+Density
+
+400
+20000
+
+2000
+
+300
+200
+
+10000
+
+1000
+100
+0
+
+0
+0.0
+
+0.1
+
+0.2
+
+0.30.0
+
+0.1
+
+0.2
+
+0.3
+
+0
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.0
+
+0.3
+
+0.6
+
+0.9
+
+0.0
+
+0.3
+
+0.6
+
+Predictions
+Model
+
+Benchmark GLM
+
+Surrogate GLM
+
+Figure 18: Dispersion of predictions made by the GLM compared to the surrogate model based on the
+CANN GBM flexible.
+
+Figure 19 shows the plot of E [Y |f (X) = s] over all s for both the benchmark GLM and the
+surrogate GLM. For the Australian data, the plot of the benchmark GLM is close to the diagonal
+for all s, while the plot for the surrogate is slightly more volatile. On the Belgian data, both
+GLMs seem well calibrated, with underestimation only for high values of s in the surrogate
+GLM. This also holds for the French data set with both GLMs being well calibrated but the
+surrogate GLM slightly underestimating for high values of s. As the plots are constructed on a
+rather small test set, the slight differences between the calibration of the benchmark GLM and
+the surrogate GLM do not lead to a conclusion on whether one model is preferable over the
+other.
+Figure 20 shows the Murphy diagram for the benchmark GLM compared with the surrogate
+model. For both the Australian and Belgian data, the score of the surrogate model is not
+lower than that of the GLM for all θ, so we cannot conclude the surrogate model has predictive
+dominance over the benchmark GLM, nor that the benchmark GLM has predictive dominance
+
+0.9
+
+Neural networks for insurance pricing with frequency and severity data
+
+Australian data
+
+Belgian data
+
+Benchmark GLM
+
+Surrogate GLM
+
+French data
+
+Benchmark GLM
+
+Surrogate GLM
+
+Benchmark GLM
+
+Surrogate GLM
+
+0.125
+
+0.16
+0.16
+
+0.100
+
+0.12
+0.075
+
+0.12
+0.08
+
+0.050
+0.08
+0.04
+
+0.025
+
+0.00
+
+0.05
+
+0.10
+
+0.15 0.00
+
+0.05
+
+0.10
+
+0.15
+
+0.04
+
+0.05
+
+0.10
+
+0.15
+
+0.200.05
+
+0.10
+
+0.15
+
+0.20
+
+0.000 0.025 0.050 0.075 0.100
+0.000 0.025 0.050 0.075 0.100
+
+Predicted number of claims
+Model
+
+Benchmark GLM
+
+Surrogate GLM
+
+Figure 19: Plot of E [Y |f (X) = s] over the range of predictions s for the benchmark GLM and the
+surrogate GLM. Predictions are made on test set D1 . A line above (below) the diagonal
+indicates that the model is underestimating (overestimating) the true number of claims in
+the data.
+
+over the surrogate. For the French data, however, the surrogate model leads to a lower value of
+Sθ for all θ, so the surrogate does have predictive dominance over the benchmark GLM. This
+is in line with the results of the Diebold-Mariano test in Table 7.
+Australian data
+
+Belgian data
+
+French data
+
+0.05
+
+0.030
+0.015
+0.04
+
+Score
+
+Observed number of claims
+
+33
+
+0.025
+0.010
+0.03
+
+0.005
+
+0.020
+0.05
+
+0.10
+
+0.15
+
+0.20
+
+0.1
+
+Theta
+
+0.2
+
+Theta
+
+Model
+
+Benchmark GLM
+
+0.3
+
+0.0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+Theta
+
+Surrogate GLM
+
+Figure 20: Murphy diagrams to compare predictive dominance between the benchmark GLM model
+and the surrogate GLM based on the CANN GBM flexible.
+
+Combining the insights of the model evaluation techniques, we conclude that for frequency
+modeling on the Australian and Belgian data set, the surrogate GLM is statistically as accurate
+as the benchmark GLM according to the Diebold-Mariano test, even though the surrogate GLM
+has a lower out-of-sample deviance. The prediction structure shows that the surrogate GLM is
+less well-calibrated when compared to the benchmark GLM, and the Murphy diagram shows
+that no model has predictive dominance over the other. On the French data set, the DieboldMariano test shows the surrogate model has a higher predictive accuracy than the benchmark
+GLM and has predictive dominance according to the Murphy diagram. Hence, for this data
+set, there is added value in leveraging the construction of the GLM with insights captured with
+more advanced deep learning architectures.
+
+Neural networks for insurance pricing with frequency and severity data
+
+6
+
+34
+
+Managerial insights: a comparison between technical tariff
+structures
+
+We now combine the predictions for claim frequency and severity into a technical tariff. For each
+data set and each fold, we evaluate the predictions for all observations in the test set Dℓ , using
+the model trained on the data subsets D \ Dℓ . As such, we obtain out-of-sample predictions for
+the expected number of claims and the expected claim severities for each policyholder in the
+data set. The predicted loss, or technical tariff, for each policyholder is the expected number of
+claims times the expected claim severity. This section focuses on comparing the tariff structures
+of the binned GLM with the surrogate GLM and evaluating whether the CANN model with
+GBM input offers added value over the original GBM.
+Table 8 shows the total predicted loss next to the total loss observed in each data set; we also
+show the ratio of predicted losses over the observed losses. A ratio of one means the model has
+a perfect balance at portfolio level. For the Norwegian data set, the predicted losses are very
+close to the observed losses for all models. For the Australian and Belgian data, both tariffs
+constructed from GLM models are close to balance, meaning the predicted losses are close to
+the observed losses. Although a canonical link GLM satisfies the balance property (Nelder and
+Wedderburn, 1972), our severity models use a gamma distribution with non-canonical log-link,
+and the tariff structures shown here are based on out-of-sample predictions. The tariff obtained
+with GBM and the CANN model deviates slightly from perfect balance.
+Observed
+
+Benchmark
+GLM
+
+GBM
+
+CANN
+GBM flex
+
+Surrogate
+GLM
+
+Observed and predicted losses
+Australia (AU$)
+
+9 314 604
+
+9 345 113
+
+9 136 324
+
+9 154 467
+
+9 355 718
+
+Belgium (e)
+
+26 464 970
+
+26 399 027
+
+26 079 709
+
+25 720 143
+
+26 345 969
+
+France (e)
+
+58 872 147
+
+56 053 341
+
+56 207 993
+
+58 629 584
+
+57 048 375
+
+Norway (NOK)
+
+206 649 080
+
+206 634 401
+
+206 475 980
+
+206 494 683
+
+-
+
+Ratio of predicted losses over observed losses
+Australia
+
+-
+
+1.00
+
+0.98
+
+0.98
+
+1.00
+
+Belgium
+
+-
+
+1.00
+
+0.99
+
+0.97
+
+1.00
+
+France
+
+-
+
+0.95
+
+0.95
+
+1.00
+
+0.97
+
+Norway
+
+-
+
+1.00
+
+1.00
+
+1.00
+
+-
+
+Table 8: Comparison between the total observed losses for each data set and the total predicted losses
+for the benchmark GLM, GBM, CANN GBM flex and the surrogate GLM. Each prediction is
+made out-of-sample. We also show the ratio of total predicted losses over observed losses.
+
+To compare tariff structures, we follow the methodology from Henckaerts and Antonio (2022)
+using risk scores. For a model f , let Fn be the empirical cumulative distribution function of the
+predictions made by the model f . For each policyholder i, the risk score rif is the evaluation of
+Fn in f (xi ). The risk score is calculated as
+rif = Fn (f (xi )) .
+
+(14)
+
+For frequency-severity modeling, with a frequency model f freq and a severity model f sev , we
+replace f (xi ) with f freq (xi ) × f sev (xi ).
+We compare the risk scores of multiple models using Lorenz curves (Lorenz, 1905). For a model
+f , the Lorenz curve evaluated in s ∈ [0, 1] is
+
+Neural networks for insurance pricing with frequency and severity data
+
+1
+
+Li {rif ≤ s}
+i=1P
+,
+n
+i=1 Li
+
+Pn
+
+f
+
+LC (s) =
+
+35
+
+(15)
+
+with Li the observed loss for policyholder i. We visualize the Lorenz curve by plotting the pairs
+s, LC f (s) , for s ∈ [0, 1]. The Lorenz curves shows the accumulation of losses, ordered by risk
+score rif obtained with model f . A model with a better risk classification accumulates losses
+slower for low risk scores and faster for high risk scores. A Lorenz curve further away from the
+equality line at 45%, represents a better risk classification.
+Belgium
+
+French
+
+0.75
+
+0.75
+
+0.75
+
+0.75
+
+0.50
+
+0.25
+
+0.50
+
+0.25
+
+0.00
+0.00
+
+0.25
+
+0.50
+
+0.75
+
+1.00
+
+0.50
+
+0.25
+
+0.00
+0.00
+
+0.25
+
+Risk score
+
+0.50
+
+0.75
+
+1.00
+
+0.75
+
+0.25
+
+0.00
+
+Lorenz curve
+
+0.75
+
+Lorenz curve
+
+0.75
+
+0.50
+
+0.50
+
+0.25
+
+0.00
+0.50
+
+Risk score
+
+0.75
+
+1.00
+
+0.50
+
+0.75
+
+1.00
+
+Risk score
+
+1.00
+
+0.25
+
+0.25
+
+Risk score
+
+1.00
+
+0.50
+
+0.25
+
+0.00
+0.00
+
+1.00
+
+0.00
+
+Lorenz curve
+
+1.00
+
+Lorenz curve
+
+1.00
+
+0.00
+
+Lorenz curve
+
+Norwegian
+
+1.00
+
+Lorenz curve
+
+Lorenz curve
+
+Australia
+1.00
+
+0.00
+
+0.25
+
+0.50
+
+0.75
+
+Risk score
+
+0.50
+
+0.25
+
+0.00
+0.00
+
+0.25
+
+0.50
+
+0.75
+
+1.00
+
+0.00
+
+Risk score
+Model
+
+GBM
+
+0.25
+
+0.50
+
+0.75
+
+1.00
+
+Risk score
+CANN GBM flex
+
+GLM
+
+Surrogate GLM
+
+Figure 21: Lorenz curve comparison between the GBM benchmark model and the CANN GBM flexible
+model in the top row. Bottom row compares the GLM benchmark with the surrogate GLM.
+A dashed line is added to show the line of equality.
+
+The top row in Figure 21 shows the Lorenz curves of the GBM versus the CANN GBM flexible,
+while the bottom row shows the benchmark GLM versus the surrogate GLM. For the Australian
+and French data sets, the tariff structure from the CANN model is (slightly) preferred to that of
+the benchmark GBM according to the Lorenz curve. For the Belgian and Norwegian data sets,
+the CANN model is also preferred, but the two curves are very similar. For the Australian,
+Belgian and French data sets, the Lorenz curves of the benchmark GLM and the surrogate
+GLM show a very similar pattern, with the surrogate model having a preferable curve over
+the benchmark GLM, showing that the higher predictive accuracy of the surrogate model also
+results in a slightly better risk classification in the tariff structure.
+Next to the visual comparison on risk classification using the Lorenz curves, we use the ordered
+Lorenz curve, introduced by Frees et al. (2014), to directly compare the tariff structure under
+one model relative to another. The ordered Lorenz curve is constructed by looking at the
+accumulation of losses ordered by relativities instead of risk scores. For two models fA and fB ,
+we define the relativities of model B over model A as
+
+1.00
+
+Neural networks for insurance pricing with frequency and severity data
+
+(A,B)
+
+reli
+
+=
+
+36
+
+fB (xi )
+.
+fA (xi )
+
+(16)
+(A,B)
+
+With Fn the empirical distribution function of the relativities reli
+ordered Lorenz curve is defined as
+n
+
+
+
+
+
+P
+
+1 Fn rel(A,B)
+≤s
+i
+
+
+
+Pn
+
+n
+i=1 fA (xi )
+
+i=1 fA (xi )
+
+o P
+,
+
+n
+i=1 Li
+
+n
+
+
+
+over all i ∈ 1, . . . , n, the
+
+
+
+o
+
+1 Fn rel(A,B)
+≤s
+i
+Pn
+
+i=1 Li
+
+,
+
+(17)
+
+over s ∈ [0, 1]. When working with frequency-severity models, we replace the predictions f (xi )
+with f freq (xi ) × f sev (xi ). Intuitively, the ordered Lorenz curve illustrates the potential improvement in risk classification an insurer can achieve by switching from a model fA to a model
+fB . An ordered Lorenz curve below the diagonal line indicates that the new tariff based on
+model fB improves risk classification. Conversely, an ordered Lorenz curve above the diagonal
+line suggests that switching to a tariff based on model fB results in worse risk classification
+compared to using model fA .
+Frees et al. (2014) extend the Gini-index (Gini, 1912) to ordered Lorenz curves as twice the area
+between the diagonal line of equality and the ordered Lorenz curve. A large positive Gini index
+indicates that choosing model fB over model fA results in a tariff structure with a better risk
+classification. A negative Gini index means the ordered Lorenz curve lies above the diagonal,
+meaning the tariff under model fB leads to a worse risk classification. Table 9 presents the
+Gini indices, comparing the benchmark GLM, GBM, CANN GBM flexible, and the surrogate
+model. For each row, we highlight the maximum Gini index, signifying that switching from the
+tariff under model A to the model B with the highest Gini index results in the most significant
+improvement in risk classification. For instance, the Gini indices for the Australian data in
+Table 9a show that with the benchmark GLM as model A, each model shows an improvement
+in risk classification, but the improvement is greatest when switching to the tariff under the
+CANN GBM flexible.
+We apply the min-max strategy from Frees et al. (2014), selecting model A, which yields the
+lowest maximum Gini index, indicating the least potential for improvement in risk classification.
+For the Australian, Belgian, and French data sets, the min-max strategy selects the tariff
+structure under the CANN GBM flexible model. For the Norwegian data, the benchmark
+GLM is chosen. When comparing the benchmark GLM to the surrogate GLM, the Australian
+tariff structure under the benchmark GLM is preferred, whereas, for the Belgian and French
+data, the surrogate GLM is favored. This preference aligns with the insights from the Murphy
+diagrams in Figure 20 and the Diebold-Mariano test results in Table 7 for the Australian and
+French data. However, for the Belgian data, while Murphy diagram and Diebold-Mariano tests
+show none of the GLMs has predictive dominance over the other, combining the frequency and
+severity models in a tariff structure leads to a more favorable outcome under the surrogate
+GLMs according to the Gini index.
+
+7
+
+Conclusion
+
+This paper explores the potential of deep learning models for the analysis of tabular frequency
+and severity data in non-life insurance pricing. We detail a benchmark study using extensive
+cross-validation on multiple model architectures. Categorical input features are embedded by
+
+Neural networks for insurance pricing with frequency and severity data
+
+37
+
+16.48
+
+Surrogate GLM
+
+10.82
+
+12.48
+
+−3.18
+−10.19
+
+21.50
+
+(a) Australian data set
+
+3.86
+0.14
+
+−6.48
+
+Surrogate GLM
+
+5.68
+
+6.83
+
+5.00
+
+Surrogate GLM
+
+4.55
+
+19.57
+
+(c) French data set
+
+−2.90
+21.04
+
+Model A
+
+−4.60
+
+Benchmark GLM
+
+CANN GBM flex
+
+−0.23
+
+Surrogate GLM
+
+GBM
+
+Benchmark GLM
+
+Model A
+
+18.35
+
+6.34
+
+CANN GBM flex
+
+2.69
+−1.85
+
+11.63
+
+Model B
+
+28.08
+
+−2.48
+
+9.71
+
+(b) Belgian data set
+
+26.82
+
+GBM
+
+Surrogate GLM
+
+GBM
+CANN GBM flex
+
+Model B
+
+Benchmark GLM
+
+6.37
+
+Benchmark GLM
+
+1.12
+
+GBM
+
+1.98
+
+CANN GBM flex
+
+3.10
+
+2.65
+
+Surrogate GLM
+
+-
+
+-
+
+Surrogate GLM
+
+−10.68
+
+10.49
+
+CANN GBM flex
+
+3.35
+−6.41
+
+6.59
+
+GBM
+
+GBM
+CANN GBM flex
+
+Benchmark GLM
+
+CANN GBM flex
+
+1.90
+
+GBM
+
+16.59
+
+Benchmark GLM
+
+Surrogate GLM
+
+5.30
+
+Model A
+
+CANN GBM flex
+
+Benchmark GLM
+
+Model B
+
+GBM
+
+Model A
+
+Benchmark GLM
+
+Model B
+
+0.45
+
+-
+
+−1.02
+
+-
+
+-
+
+(d) Norwegian data set
+
+Table 9: Gini indexes comparing the tariff structures between the benchmark GLM, GBM, CANN
+GBM flexible and the surrogate GLM. The Gini index is calculated as twice the area under
+the ordered Lorenz curve for model B relative to model A, showing the possible improvements
+in tariff structure when switching from pricing under model A to model B. A negative Gini
+index means the ordered Lorenz curve lies above the diagonal, showing that the tariff structure
+under model B leads to a worse risk classification than the tariff under model A. For each row,
+the maximum Gini index is given in bold. The min-max strategy selects model A with the
+lowest maximum Gini-index, shown by the highlighted cells and underlined model.
+
+use of an autoencoder of which the encoder part is integrated into the deep learning structures.
+Our results demonstrate the performance gains achieved using the autoencoder embedding technique for categorical input variables, especially in modeling claim severities. Interpretation tools
+are applied to both frequency and severity modeling. Next to comparing the performance of
+models based on out-of-sample deviance, we analyze the prediction dispersion and calibration,
+and we use Murphy diagrams and Diebold-Mariano tests to see whether a model with lower
+deviance has predictive dominance and/or is a significant improvement. Together, these techniques provide a robust and reliable model evaluation framework, allowing assessment of whether
+certain modeling techniques have an added benefit compared to industry-standard techniques.
+The literature often questions the value created when analyzing tabular data with deep learning
+models. Indeed, our feed-forward neural network does not improve upon a carefully designed
+GLM or GBM. Combining gradient-boosted trees and neural networks leads to a lower outof-sample deviance when modeling claim frequencies. This aligns with what we see in other
+
+-
+
+Neural networks for insurance pricing with frequency and severity data
+
+38
+
+fields, where GBM and neural network combinations outperform the corresponding stand-alone
+models on tabular data. However, using Murphy diagrams and the Diebold-Mariano tests, we
+see the (slightly) lower out-of-sample deviance is not always significant and does not always
+lead to predictive dominance. These results show the importance of a robust model evaluation
+framework, going beyond the comparison on out-of-sample deviance. In modeling the severity
+data, out-of-sample deviances are relatively similar across benchmark models and deep learning
+architectures. This suggests that the added value created by using the deep learning approach is
+limited when applied to these datasets. Using interpretation tools applied to the deep learning
+models, we create a GLM that is carefully designed as a global surrogate for the deep learning
+model. Hence, this surrogate GLM leverages the insights from the deep learning models. The
+workflow to construct a GLM as a global surrogate for a deep learning model can potentially be
+of interest to insurance companies aiming to harvest refined insights from their available data
+while aiming for an interpretable and explainable model. The latter consideration is of much
+interest in light of the GDPR algorithmic accountability clause.
+The end result of our study is a comparison of the technical tariffs constructed from our benchmark and deep learning models based on (ordered) Lorenz curves and Gini indices. Based on
+the model evaluation framework for the frequency and severity models and the comparison of
+the technical tariffs, the CANN GBM flexible model is most often the preferred model architecture, except on the Norwegian data set, which only contains a few input variables. When
+comparing the benchmark GLM with the surrogate GLM, the surrogate leads to the highest
+Gini index, meaning it has an improved risk classification compared to the benchmark GLM.
+These findings are particularly valuable for actuaries, as they show that not only can machine
+learning models offer higher predictive accuracy, but they can also be adapted into interpretable
+and explainable surrogate models, making them suitable for practical implementation.
+Data sets with a high dimensional set of input variables and/or complex input features might
+benefit more from using deep learning models to model claim frequency and severity data.
+This aligns with our observation that deep learning models show limited improvement on the
+Norwegian dataset, which consists of only four input variables. Gao et al. (2022), for instance,
+use deep learning models to analyze high-frequency time series of telematics data, and BlierWong et al. (2024) use convolutional neural networks to embed images for pricing with GLMs.
+Further research could look into data sets with high dimensional feature sets, including features
+with images, text or times series, and explore the value of deep learning architectures via a
+carefully designed benchmark study, with an extensive model evaluation framework, as outlined
+in this paper.
+
+Acknowledgements
+Katrien Antonio gratefully acknowledges funding from the FWO and Fonds De La Recherche
+Scientifique - FNRS (F.R.S.-FNRS) under the Excellence of Science (EOS) program, project
+ASTeRISK Research Foundation Flanders [grant number 40007517]. The authors gratefully
+acknowledge support from the Ageas research chair on insurance analytics at KU Leuven, from
+the Chaire DIALog sponsored by CNP Assurances and the FWO network W001021N. The
+authors thank Simon Gielis for his contributions (as MSc student) in the early stage of the
+research. We also express our gratitude to the editor and reviewers for their valuable feedback,
+which has greatly enhanced the quality of this article.
+
+Neural networks for insurance pricing with frequency and severity data
+
+39
+
+Declaration of interest statement
+The authors declare no potential conflicts of interest.
+
+Supplemental material
+The results in this paper were obtained using R. All code is available through Github: https://
+github.com/freekholvoet/NNforFreqSevPricing. An R Markdown demonstration is available on that GitHub page, called NNforFreqSevPricing.nb.html.
+
+References
+Katrien Antonio, Edward W Frees, and Emiliano A Valdez. A multilevel analysis of intercompany claim
+counts. ASTIN Bulletin: The Journal of the International Actuarial Association, 40(1):151–177, 2010.
+James Bergstra and Yoshua Bengio. Random search for hyper-parameter optimization. Journal of
+machine learning research, 13(2):281–305, 2012.
+Christopher Blier-Wong, Hélène Cossette, Luc Lamontagne, and Etienne Marceau. Machine learning in
+P&C insurance: A review for pricing and reserving. Risks, 2021.
+Christopher Blier-Wong, Luc Lamontagne, and Etienne Marceau. A representation-learning approach
+for insurance pricing with images. ASTIN Bulletin: The Journal of the IAA, pages 1–30, March 2024.
+Vadim Borisov, Tobias Leemann, Kathrin Sessler, Johannes Haug, Martin Pawelczyk, and Gjergji Kasneci. Deep neural networks and tabular data: A survey. IEEE transaction on neural networks and
+learning systems, PP:1–21, 2022.
+Piet De Jong and Gillian Z. Heller. Generalized linear models for insurance data. Cambridge University
+Press, 2008.
+Lukasz Delong and Anna Kozak. The use of autoencoders for training neural networks with mixed
+categorical and numerical features. ASTIN Bulletin : The Journal of the International Actuarial
+Association, 53(2):213–232, 2023.
+Michel. Denuit, Donatien Hainaut, and Julien Trufin. Effective Statistical Learning Methods for Actuaries
+I: GLMs and Extensions. Springer Actuarial Lecture Notes. Springer International Publishing, 2019.
+Michel. Denuit, Donatien Hainaut, and Julien Trufin. Effective Statistical Learning Methods for Actuaries
+II: Tree-Based Methods and Extensions. Springer Actuarial Lecture Notes. Springer International
+Publishing, 2020.
+Michel Denuit, Arthur Charpentier, and Julien Trufin. Autocalibration and tweedie-dominance for
+insurance pricing with machine learning. Insurance: Mathematics and Economics, 101:485–497, 2021.
+Francis X. Diebold. Comparing predictive accuracy, twenty years later: A personal perspective on the
+use and abuse of Diebold–Mariano tests. Journal of Business & Economic Statistics, 33(1):1–1, 2015.
+Francis X. Diebold and Roberto S. Mariano. Comparing Predictive Accuracy. National Bureau of
+Economic Research, 1994.
+Charles Dugas, Yoshua Bengio, Nicolas Chapados, Pascal Vincent, Germain Denoncourt, and Christian
+Fournier. Statistical learning algorithms applied to automobile insurance ratemaking. In CAS Forum,
+volume 1, pages 179–214. Citeseer, 2003.
+Christophe Dutang and Arthur Charpentier. CASdatasets: insurance datasets. http://cas.uqam.ca,
+2019. R package version 1.0.10.
+Werner Ehm, Tilmann Gneiting, Alexander Jordan, and Fabian Krüger. Of quantiles and expectiles:
+consistent scoring functions, choquet representations and forecast rankings. Journal of the Royal
+Statistical Society Series B: Statistical Methodology, 78(3):505–562, 2016.
+Andrea Ferrario, Alexander Noll, and Mario V Wüthrich. Insights from inside neural networks. Available
+at SSRN 3226852, 2020. URL https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3226852.
+
+Neural networks for insurance pricing with frequency and severity data
+
+40
+
+Tobias Fissler, Christian Lorentzen, and Michael Mayer. Model comparison and calibration assessment:
+User guide for consistent scoring functions in machine learning and actuarial practice. arXiv preprint
+arXiv:2202.12780, 2023. URL https://arxiv.org/abs/2202.12780.
+Edward W Frees and Emiliano A Valdez. Hierarchical insurance claims modeling. Journal of the American Statistical Association, 103(484):1457–1469, 2008.
+Edward W. (Jed) Frees, Glenn Meyers, and A. David Cummings. Insurance ratemaking and a Gini
+index. The Journal of Risk and Insurance, 81(2):335–366, 2014.
+Jerome H Friedman. Greedy function approximation: a gradient boosting machine. The Annals of
+Statistics, 29:1189–1232, 2001.
+Guangyuan Gao, Shengwang Meng, and Mario V. Wüthrich. What can we learn from telematics car
+driving data: A survey. Insurance: Mathematics and Economics, 104:185–199, 2022.
+Simon Gielis. Neural networks for non-life insurance pricing, 2020. [Master’s thesis, KU Leuven].
+Corrado Gini. Variabilità e mutabilità [Variability and mutability]. Tipografia Di Paola Cuppini, 1912.
+Tilmann Gneiting and Johannes Resin. Regression diagnostics meets forecast evaluation: conditional
+calibration, reliability diagrams, and coefficient of determination. Electronic Journal of Statistics, 17
+(2):3226–3286, 2023.
+Ian Goodfellow, Yoshua Bengio, and Aaron Courville. Deep Learning. MIT Press, 2016. http://www.
+deeplearningbook.org.
+Leo Grinsztajn, Edouard Oyallon, and Gael Varoquaux. Why do tree-based models still outperform
+deep learning on typical tabular data? In Thirty-sixth Conference on Neural Information Processing
+Systems Datasets and Benchmarks Track, 2022.
+Cheng Guo and Felix Berkhahn. Entity embeddings of categorical variables. arXiv preprint, 2016. URL
+https://arxiv.org/abs/1604.06737.
+Steven Haberman and Arthur E. Renshaw. Generalized linear models and actuarial science. Journal of
+the Royal Statistical Society. Series D (The Statistician), 45(4):407–436, 1996.
+Donatien Hainaut, Julien Trufin, and Michel Denuit. Response versus gradient boosting trees, GLMs and
+neural networks under Tweedie loss and log-link. Scandinavian Actuarial Journal, 2022(10):841–866,
+2022.
+Trevor Hastie, Robert Tibshirani, and Jerome H Friedman. The elements of statistical learning: data
+mining, inference, and prediction, volume 2. Springer, 2009.
+Roel Henckaerts. maidrr: Model-Agnostic Interpretable Data-driven suRRogate. http://github.com/
+henckr/maidrr, 2021. R package version 1.0.0.
+Roel Henckaerts and Katrien Antonio. The added value of dynamically updating motor insurance prices
+with telematics collected driving behavior data. Insurance: Mathematics and Economics, 105:79–95,
+2022.
+Roel Henckaerts, Katrien Antonio, Maxime Clijsters, and Roel Verbelen. A data driven binning strategy
+for the construction of insurance tariff classes. Scandinavian Actuarial Journal, 2018(8):681–705, 2018.
+Roel Henckaerts, Marie-Pier Côté, Katrien Antonio, and Roel Verbelen. Boosting insights in insurance
+tariff plans with tree-based machine learning methods. North American Actuarial Journal, 25(2):
+255–285, 2021.
+Roel Henckaerts, Katrien Antonio, and Marie-Pier Côté. When stakes are high: balancing accuracy
+and transparency with Model-Agnostic Interpretable Data-driven suRRogates. Expert Systems with
+Applications, 202:117230, 2022.
+Guolin Ke, Jia Zhang, Zhenhui Xu, Jiang Bian, and Tie-Yan Liu. TabNN: a universal neural network
+solution for tabular data. 2018. URL https://openreview.net/forum.
+Guolin Ke, Zhenhui Xu, Jia Zhang, Jiang Bian, and Tie-Yan Liu. DeepGBM: A deep learning framework
+distilled by GBDT for online prediction tasks. In Proceedings of the 25th ACM SIGKDD International
+Conference on Knowledge Discovery & Data Mining, pages 384–394, 2019.
+Nitish Shirish Keskar, Dheevatsa Mudigere, Jorge Nocedal, Mikhail Smelyanskiy, and Ping Tak Peter
+Tang. On large-batch training for deep learning: Generalization gap and sharp minima. arXiv preprint
+arXiv:1609.04836, 2016.
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint
+arXiv:1412.6980, 2014. URL https://arxiv.org/abs/1412.6980.
+
+Neural networks for insurance pricing with frequency and severity data
+
+41
+
+Kevin Kuo and Ronald Richman. Embeddings and attention in predictive modeling. arXiv preprint,
+2021. URL https://arxiv.org/abs/2104.03545.
+Yue Liu, Bing-Jie Wang, and Shao-Gao Lv. Using multi-class Adaboost tree for prediction frequency of
+auto insurance. Journal of Applied Finance and Banking, 4(5):45, 2014.
+Max O Lorenz. Methods of measuring the concentration of wealth. Publications of the American Statistical Association, 9(70):209–219, 1905.
+Shengwang Meng, He Wang, Yanlin Shi, and Guangyuan Gao. Improving automobile insurance claims
+frequency prediction with telematics car driving data. ASTIN Bulletin: The Journal of the International Actuarial Association, 52(2):363–391, 2022.
+John Ashworth Nelder and Robert WM Wedderburn. Generalized linear models. Journal of the Royal
+Statistical Society: Series A (General), 135(3):370–384, 1972.
+Alexander Noll, Robert Salzmann, and Mario V Wüthrich. Case study: French motor third-party
+liability claims. Available at SSRN 3164764, 2020. URL https://papers.ssrn.com/sol3/papers.
+cfm?abstract_id=3164764.
+Esbjörn Ohlsson and Björn Johansson. Non-life insurance pricing with generalized linear models, volume
+174. Springer, 2010.
+Julian D. Olden, Michael K. Joy, and Russell G. Death. An accurate comparison of methods for quantifying variable importance in artificial neural networks using simulated data. Ecological modelling, 178
+(3-4):389–397, 2004.
+Jürg Schelldorfer and Mario V Wüthrich. Nesting classical actuarial models into neural networks.
+Available at SSRN 3320525, 2019. URL https://papers.ssrn.com/sol3/papers.cfm?abstract_
+id=3320525.
+Lloyd S Shapley et al. A value for n-person games. 1953.
+Kun Shi and Peng Shi. A sparse deep two-part model for nonlife insurance claims. Variance, 17(1), April
+2024.
+Peng Shi and Kun Shi. Non-life insurance risk classification using categorical embedding. North American
+Actuarial Journal, 27(3):1–23, 2022.
+Peng Shi, Wei Zhang, and Kun Shi. Leveraging weather dynamics in insurance claims triage using deep
+learning. Journal of the American Statistical Association, 119(546):825–838, April 2024.
+Ravid Shwartz-Ziv and Amitai Armon. Tabular data: Deep learning is not all you need. Information
+Fusion, 81:84–90, 2022.
+J. Sola and J. Sevilla. Importance of input data normalization for the application of neural networks to
+complex industrial problems. IEEE Transactions on Nuclear Science, 44(3):1464–1468, 1997.
+Nitish Srivastava, Geoffrey Hinton, Alex Krizhevsky, Ilya Sutskever, and Ruslan Salakhutdinov. Dropout:
+a simple way to prevent neural networks from overfitting. The Journal of Machine Learning Research,
+15(1):1929–1958, 2014.
+Haizhou Wang and Mingzhou Song. Ckmeans. 1d. dp: optimal k-means clustering in one dimension by
+dynamic programming. The R journal, 3(2):29, 2011.
+Mario V Wüthrich. From generalized linear models to neural networks, and back. Available at SSRN
+3491790, 2019. URL https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3491790.
+Mario V Wüthrich and Christoph Buser. Data analytics for non-life insurance pricing. Swiss Finance Institute Research Paper, (16-68), 2021. URL https://papers.ssrn.com/sol3/papers.cfm?
+abstract_id=2870308.
+Yi Yang, Wei Qian, and Hui Zou. Insurance premium prediction via gradient tree-boosted Tweedie
+compound Poisson models. Journal of Business & Economic Statistics, 36(3):456–470, 2018.
+
+Neural networks for insurance pricing with frequency and severity data
+
+A
+
+42
+
+Data sets
+
+Tables for each of the four data sets with the variable names and their explanations.
+Variable
+
+Description
+
+VehValue
+
+The vehicle value in thousands of
+AUD.
+
+Type
+Cont.
+
+VehAge
+
+The vehicle age group.
+
+Cat.
+(4)(4)
+
+VehBody
+
+The vehicle body group.
+
+Cat.
+(13)(13)
+
+Gender
+
+The gender of the policyholder.
+
+Cat.
+(2)(2)
+
+DrivAge
+
+The age of the policyholder.
+
+Cat.
+(6)(6)
+
+(a) Australian data set, as defined in CASdatasets (Dutang
+and Charpentier, 2019).
+
+Variable
+
+Description
+
+Type
+
+ageph
+
+Policyholder age in years.
+
+Cont.
+
+power
+
+Horsepower of the vehicle in kilowatts.
+
+Cont.
+
+agec
+
+Vehicle age in years.
+
+Cont.
+
+bm
+
+Belgian bonus-malus score of the policyholder.
+
+Cont.
+
+coverage
+
+Type of coverage.
+
+Cat. (3)
+
+fuel
+
+Fuel type of the vehicle.
+
+Cat. (2)
+
+sex
+
+Policyholder gender.
+
+Cat. (2)
+
+use
+
+Main use of the vehicle, private or
+work.
+
+Cat. (2)
+
+fleet
+
+Whether or not the vehicle is part of a
+fleet.
+
+Cat. (2)
+
+postalcode
+
+Postal code of the municipality of residence of the policyholder. Replaced
+by latitude and longitude coordinate of
+the center of the municipality.
+
+Cont.
+
+(b) Belgian data set, as defined in Henckaerts et al. (2018).
+
+Variable
+
+Description
+
+Type
+
+VehPower
+
+The power of the car.
+
+Cat.
+(12)(12)
+
+VehAge
+
+The vehicle age.
+
+Cat. (3)
+
+DrivAge
+
+The driver age, grouped.
+
+Cat. (7)
+
+BonusMalus
+
+French bonus-malus score of the policyholder.
+
+Cont.
+
+VehBrand
+
+Car brand grouped in unknown categories.
+
+Cat. (11)
+
+VehGas
+
+The car gas, Diesel or regular.
+
+Cat. (2)
+
+Area
+
+Area type of the city where the policyholder lives in six groups, from ‘A’ for
+rural areas to ‘F’ for urban centers.
+
+Cat. (6)
+
+Density
+
+The numerical population density per
+square kilometer of inhabitants of the
+city where the policyholder lives.
+
+Cont.
+
+Region
+
+The policy region in France (based on
+the 1970-2015 classification).
+
+Cat. (21)
+
+Variable
+
+Description
+
+Type
+
+Male
+
+Binary variable with value one if the
+policyholder is male and zero otherwise.
+
+Cat. (2)
+
+Young
+
+Binary variable with value one if the
+policyholder is less than 26 years of age
+and zero otherwise.
+
+Cat. (2)
+
+DistLimit
+
+Maximum number of kilometers per
+year allowed as stated in the insurance
+contract. There are six different limits
+possible.
+
+Cat. (6)
+
+GeoRegion
+
+Density of the geographical region
+binned in six groups.
+
+Cat. (6)
+
+(d) Norwegian data set, as defined in CASdatasets (Dutang
+and Charpentier, 2019).
+
+(c) French data set, from Schelldorfer and Wüthrich (2019).
+
+Table 10: Overview of the variables and their meaning in the four data sets used in the benchmark
+study. The column Type shows whether the variable is continuous (Cont.) or categorical
+(Cat.). For categorical variables, we note the number of levels between brackets.
+
+B
+
+Numerical out-of-sample Poisson and gamma deviances
+
+We show the numerical values behind the out-of-sample deviances from Figure 7 in Table 11 for the
+claim frequency models and Table 12 for the claim severity models.
+
+Neural networks for insurance pricing with frequency and severity data
+
+43
+
+Test fold
+
+Norway
+
+France
+
+Belgium
+
+Australia
+
+GLM
+
+D1
+
+D2
+
+D3
+
+D4
+
+D5
+
+D6
+
+0.3816
+
+0.3797
+
+0.3648
+
+0.3704
+
+0.3735
+
+0.3770
+
+GBM
+
+0.3804
+
+0.3800
+
+0.3644
+
+0.3701
+
+0.3732
+
+0.3761
+
+FFNN
+
+0.3816
+
+0.3794
+
+0.3657
+
+0.3748
+
+0.3748
+
+0.3769
+
+CANN GLM fixed
+
+0.3820
+
+0.3800
+
+0.3647
+
+0.3709
+
+0.3730
+
+0.3769
+
+CANN GLM flex
+
+0.3793
+
+0.3786
+
+0.3635
+
+0.3700
+
+0.3717
+
+0.3750
+
+CANN GBM fixed
+
+0.3805
+
+0.3800
+
+0.3644
+
+0.3701
+
+0.3731
+
+0.3761
+
+CANN GBM flex
+
+0.3782
+
+0.3781
+
+0.3639
+
+0.3700
+
+0.3719
+
+0.3737
+
+GLM
+
+0.5314
+
+0.5341
+
+0.5332
+
+0.5323
+
+0.5292
+
+0.5313
+
+GBM
+
+0.5295
+
+0.5316
+
+0.5308
+
+0.5299
+
+0.5284
+
+0.5295
+
+FFNN
+
+0.5319
+
+0.5351
+
+0.5322
+
+0.5327
+
+0.5325
+
+0.5317
+
+CANN GLM fixed
+
+0.5307
+
+0.5343
+
+0.5324
+
+0.5321
+
+0.5294
+
+0.5307
+
+CANN GLM flex
+
+0.5283
+
+0.5324
+
+0.5293
+
+0.5297
+
+0.5277
+
+0.5288
+
+CANN GBM fixed
+
+0.5295
+
+0.5316
+
+0.5308
+
+0.5299
+
+0.5284
+
+0.5295
+
+CANN GBM flex
+
+0.5279
+
+0.5306
+
+0.5291
+
+0.5287
+
+0.5276
+
+0.5291
+
+GLM
+
+0.2762
+
+0.2386
+
+0.2450
+
+0.2455
+
+0.2421
+
+0.2186
+
+GBM
+
+0.2714
+
+0.2351
+
+0.2417
+
+0.2415
+
+0.2384
+
+0.2158
+
+FFNN
+
+0.2706
+
+0.2355
+
+0.2413
+
+0.2415
+
+0.2399
+
+0.2156
+
+CANN GLM fixed
+
+0.2765
+
+0.2383
+
+0.2437
+
+0.2447
+
+0.2417
+
+0.2184
+
+CANN GLM flex
+
+0.2743
+
+0.2362
+
+0.2429
+
+0.2434
+
+0.2396
+
+0.2164
+
+CANN GBM fixed
+
+0.2711
+
+0.2353
+
+0.2417
+
+0.2415
+
+0.2385
+
+0.2160
+
+CANN GBM flex
+
+0.2695
+
+0.2341
+
+0.2406
+
+0.2401
+
+0.2373
+
+0.2148
+
+GLM
+
+0.2779
+
+0.2723
+
+0.2700
+
+0.2672
+
+0.2708
+
+0.2624
+
+GBM
+
+0.2778
+
+0.2724
+
+0.2699
+
+0.2671
+
+0.2708
+
+0.2624
+
+FFNN
+
+0.2799
+
+0.2742
+
+0.2709
+
+0.2688
+
+0.2728
+
+0.2640
+
+CANN GLM fixed
+
+0.2778
+
+0.2723
+
+0.2698
+
+0.2672
+
+0.2708
+
+0.2624
+
+CANN GLM flex
+
+0.2779
+
+0.2723
+
+0.2698
+
+0.2672
+
+0.2708
+
+0.2624
+
+CANN GBM fixed
+
+0.2777
+
+0.2724
+
+0.2699
+
+0.2671
+
+0.2708
+
+0.2624
+
+CANN GBM flex
+
+0.2778
+
+0.2724
+
+0.2699
+
+0.2671
+
+0.2708
+
+0.2624
+
+Table 11: Numerical values behind the left-hand side of Figure 7, showing the out-of-sample deviances
+for the claim frequency models on all four data sets.
+
+C
+
+Model evaluation framework applied on the claim severity
+models
+
+Next to the out-of-sample gamma deviances in Figure 7, we apply the other model evaluation techniques
+from Section 4.5 to the claim severity models. For each of the four data sets, the results of the DieboldMariano tests are given in Table 13. For the Australian data, the null hypothesis is rejected in favor
+of the CANN GBM models when compared to the CANN GLM fixed and FFNN models but not when
+compared to the benchmark GLM and GBM. For the Belgian data, the null hypothesis is always rejected
+when comparing either CANN GLM model with other model architectures, meaning the other model
+architects are seen as statistically more accurate than the CANN GLM models when modeling claim
+severity. For the French data set, the null hypothesis is most often rejected in favor of the GBM and
+CANN GBM fixed but cannot be rejected when comparing those to each other, meaning both seem
+suitable choices for modeling claim severity on the French data set. On the Norwegian data set, we
+see that the null hypothesis is never rejected, meaning each model is seen as having statistically similar
+accuracy. Figure 22 shows the prediction histograms for each severity model, and Figure 23 shows the
+
+Neural networks for insurance pricing with frequency and severity data
+
+44
+
+Test fold
+
+Norway
+
+France
+
+Belgium
+
+Australia
+
+GLM
+
+D1
+
+D2
+
+D3
+
+D4
+
+D5
+
+D6
+
+1.5562
+
+1.7005
+
+1.7145
+
+1.6531
+
+1.6745
+
+1.5749
+
+GBM
+
+1.5359
+
+1.6864
+
+1.7396
+
+1.6589
+
+1.6355
+
+1.5565
+
+FFNN
+
+1.5752
+
+1.7059
+
+1.8833
+
+1.6734
+
+1.6574
+
+1.5877
+
+CANN GLM fixed
+
+1.5414
+
+1.7008
+
+1.7101
+
+1.6635
+
+1.6557
+
+1.5772
+
+CANN GLM flex
+
+1.5508
+
+1.7099
+
+1.7117
+
+1.6561
+
+1.6643
+
+1.5751
+
+CANN GBM fixed
+
+1.5357
+
+1.6905
+
+1.7336
+
+1.6636
+
+1.6356
+
+1.5749
+
+CANN GBM flex
+
+1.5395
+
+1.6854
+
+1.7329
+
+1.6624
+
+1.6390
+
+1.5573
+
+GLM
+
+2.2280
+
+2.2631
+
+2.2937
+
+2.2802
+
+2.2709
+
+2.2508
+
+GBM
+
+2.2365
+
+2.2475
+
+2.2845
+
+2.2806
+
+2.2789
+
+2.2290
+
+FFNN
+
+2.2436
+
+2.2690
+
+2.2946
+
+2.3010
+
+2.2955
+
+2.2330
+
+CANN GLM fixed
+
+2.2284
+
+2.2634
+
+2.2933
+
+2.2813
+
+2.2709
+
+2.2652
+
+CANN GLM flex
+
+2.2284
+
+2.2637
+
+2.2956
+
+2.2859
+
+2.2711
+
+2.2513
+
+CANN GBM fixed
+
+2.2364
+
+2.2486
+
+2.2852
+
+2.2827
+
+2.2793
+
+2.2290
+
+CANN GBM flex
+
+2.2365
+
+2.2472
+
+2.2848
+
+2.2824
+
+2.2801
+
+2.2262
+
+GLM
+
+1.7083
+
+1.6943
+
+1.8824
+
+2.0947
+
+2.0557
+
+1.4111
+
+GBM
+
+1.6471
+
+1.6294
+
+1.8053
+
+2.1109
+
+1.9616
+
+1.3800
+
+FFNN
+
+1.6104
+
+1.8199
+
+1.8131
+
+2.5473
+
+2.0442
+
+1.4390
+
+CANN GLM fixed
+
+1.7132
+
+1.6973
+
+1.8813
+
+2.0854
+
+2.0334
+
+1.4119
+
+CANN GLM flex
+
+1.7124
+
+1.6956
+
+1.8877
+
+2.0965
+
+2.0325
+
+1.4143
+
+CANN GBM fixed
+
+1.6472
+
+1.6317
+
+1.8084
+
+2.1101
+
+1.9562
+
+1.3837
+
+CANN GBM flex
+
+1.7153
+
+1.6784
+
+1.8457
+
+2.2282
+
+1.9652
+
+1.3854
+
+GLM
+
+1.1355
+
+0.9900
+
+1.0667
+
+1.0727
+
+1.0076
+
+1.0285
+
+GBM
+
+1.1370
+
+0.9932
+
+1.0694
+
+1.0736
+
+1.0077
+
+1.0277
+
+FFNN
+
+1.1353
+
+0.9898
+
+1.0657
+
+1.0739
+
+1.0080
+
+1.0417
+
+CANN GLM fixed
+
+1.1373
+
+0.9888
+
+1.0695
+
+1.0731
+
+1.0082
+
+1.0284
+
+CANN GLM flex
+
+1.1358
+
+0.9897
+
+1.0717
+
+1.0722
+
+1.0085
+
+1.0284
+
+CANN GBM fixed
+
+1.1374
+
+0.9918
+
+1.0695
+
+1.0734
+
+1.0074
+
+1.0281
+
+CANN GBM flex
+
+1.1378
+
+0.9923
+
+1.0693
+
+1.0731
+
+1.0086
+
+1.0283
+
+Table 12: Numerical values behind the right-hand side of Figure 7, showing the out-of-sample deviances
+for the claim severity models on all four data sets.
+
+graph of E [Y |f (X) = s] over the binned range of predictions s. We note that these techniques are more
+difficult to draw conclusions from, as the smaller severity data sets lead to more concentrated dispersions
+and more volatile calibration plots. The Murphy diagrams are shown in Figure 24. We see on the Belgian
+data set, that each model has predictive dominance over both CANN GLM models, which aligns with
+the findings of the Diebold-Mariano test. For the other data sets, no model seems to have clear predictive
+dominance over the others.
+
+D
+
+Comparison between benchmark GLM and surrogate GLM
+for claim severity modeling
+
+We compare the surrogate GLM based on the severity CANN GBM flexible with the benchmark GLM.
+Table 14 shows the selected variables for the benchmark GLM and the surrogate GLM together with the
+out-of-sample gamma deviance on test set D1 . Only on the surrogate GLM on Australian data has a
+
+Neural networks for insurance pricing with frequency and severity data
+
+45
+
+Model B
+
+GBM
+
+FFNN
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✕
+
+✕
+
+✕
+
+✕
+
+✓
+
+✓
+
+✓
+
+✕
+
+✓
+
+✓
+
+GLM
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+GBM
+
+✓
+
+✓
+
+✓
+
+✕
+
+✕
+
+FFNN
+
+✓
+
+✓
+
+✕
+
+✕
+
+✕
+
+CANN GLM fixed
+
+✕
+
+✕
+
+✕
+
+✓
+
+✓
+
+CANN GLM flex
+
+✕
+
+✕
+
+✕
+
+✓
+
+CANN GBM fixed
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GLM fixed
+
+✓
+
+✓
+
+✓
+
+CANN GLM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM fixed
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+Model A
+
+✕
+
+GLM
+
+CANN GBM flex
+
+✓
+
+✓
+
+CANN GBM fixed
+
+✓
+
+✓
+
+CANN GLM flex
+
+FFNN
+
+✓
+
+CANN GLM fixed
+
+✓
+
+FFNN
+
+Model A
+
+GLM
+GBM
+
+GBM
+
+GLM
+
+Model B
+
+✕
+✓
+
+(a) Australian data set
+
+(b) Belgian data set
+
+GBM
+
+FFNN
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✕
+
+✓
+
+✓
+
+✓
+
+✕
+
+✓
+
+GLM
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+GBM
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+FFNN
+
+✓
+
+✓
+
+✓
+
+✕
+
+✓
+
+CANN GLM fixed
+
+✓
+
+✓
+
+✓
+
+✕
+
+✓
+
+CANN GLM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM fixed
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM flex
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+FFNN
+
+✓
+
+✓
+
+CANN GLM fixed
+
+✓
+
+✕
+
+✓
+
+CANN GLM flex
+
+✕
+
+✕
+
+✓
+
+✓
+
+CANN GBM fixed
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+CANN GBM flex
+
+✕
+
+✕
+
+✕
+
+✓
+
+✓
+
+(c) French data set
+
+✓
+✕
+
+Model A
+
+GBM
+
+GLM
+
+CANN GBM flex
+
+✓
+
+✓
+
+CANN GBM fixed
+
+✓
+
+✓
+
+CANN GLM flex
+
+✓
+
+CANN GLM fixed
+
+✓
+
+FFNN
+
+Model A
+
+Model B
+
+GBM
+
+GLM
+
+Model B
+
+GLM
+
+✓
+✓
+
+✓
+✓
+
+(d) Norwegian data set
+
+Table 13: Results of the Diebold-Mariano test for the severity models on test set D1 for each
+data set. The table indicates whether we cannot reject (✓) the null hypothesis H0 :
+E [L (fA (X), Y ) − L (fB (X), Y )] = 0, or if we reject H0 (✕) in favor of the alternative
+hypothesis H1 : E [L (fA (X), Y ) − L (fB (X), Y )] > 0. Highlighted cells indicate columns or
+rows filled almost exclusively with ✕ marks, signifying that the model is either consistently
+seen as statistically more accurate (column) or that, for this model, the null hypothesis is
+always rejected in favor of the other models (row).
+
+lower out-of-sample deviance compared to the benchmark GLM. The Diebold-Mariano test cannot reject
+the null hypothesis in favor of either the benchmark GLM or the surrogate GLM on the Australian
+and Belgian data. On the French data set, even though the surrogate GLM has a higher out-of-sample
+deviance, the Diebold-Mariano test shows the surrogate is statistically more accurate than the benchmark
+GLM. The prediction histogram in Figure 18 shows that the benchmark GLM and the surrogate GLM
+have a similar prediction dispersion for the Belgian and French data set, but on the Australian data, the
+predictions of the benchmark GLM are more concentrated than those of the surrogate GLM. Figure 19
+shows no model is significantly better calibrated than the other on each of the four data sets. However,
+the calibration plots are more volatile due to the limited severity data sets. The Murhpy diagram in
+
+Neural networks for insurance pricing with frequency and severity data
+
+GLM
+
+GBM
+
+FFNN
+
+CANN GLM fixed
+
+46
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+800
+
+Australian Data
+
+Density
+
+600
+400
+200
+0
+2000
+
+4000
+
+2000
+
+GLM
+
+4000
+
+2000
+
+GBM
+
+4000
+
+2000
+
+FFNN
+
+4000
+
+2000
+
+CANN GLM fixed
+
+4000
+
+2000
+
+CANN GLM flex
+
+4000
+
+2000
+
+CANN GBM fixed
+
+4000
+
+CANN GBM flex
+
+Density
+
+Belgian Data
+
+1500
+1000
+500
+0
+1000
+
+2000
+
+1000
+
+GLM
+
+2000
+
+1000
+
+GBM
+
+2000
+
+1000
+
+FFNN
+
+2000
+
+1000
+
+2000
+
+1000
+
+2000
+
+1000
+
+2000
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+5000 10000 15000 20000
+
+5000 10000 15000 20000
+
+5000 10000 15000 20000
+
+5000 10000 15000 20000
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+French Data
+
+Density
+
+4000
+3000
+2000
+1000
+0
+0
+
+5000 10000 15000 20000
+
+5000 10000 15000 20000
+
+GLM
+
+5000 10000 15000 20000
+
+GBM
+
+FFNN
+
+Norwegian Data
+
+Density
+
+1500
+
+1000
+
+500
+
+0
+15000
+
+20000
+
+25000
+
+15000
+
+20000
+
+25000
+
+15000
+
+20000
+
+25000
+
+15000
+
+20000
+
+25000
+
+15000
+
+20000
+
+25000
+
+15000
+
+20000
+
+25000
+
+15000
+
+20000
+
+25000
+
+Predictions
+
+Model
+
+GLM
+
+GBM
+
+FFNN
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+Figure 22: Histogram of predictions for the test set D1 obtained from each severity model, illustrating
+the distribution and concentration of predictions for each model to identify differences in
+prediction patterns and potential outliers.
+
+Figure 20 shows that neither model has predictive dominance over the other for all θ.
+
+E
+
+Comparison between surrogate GLM and the CANN GBM
+flexible
+
+We compare the performance of the claim frequency surrogate GLM based on the insights from the
+CANN GBM flexible, as constructed in Section 5.3, with the performance of the CANN GBM flexible.
+Table 16 shows the results of the Diebold-Mariano test, as well as the out-of-sample Poisson deviance of
+both models on test set D1 . Figure 28 shows the comparison of prediction dispersion, Figure 29 compares
+the calibration, and Figure 30 shows the Murphy diagrams for both models.
+
+Neural networks for insurance pricing with frequency and severity data
+
+GBM
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+3000
+2000
+1000
+1750
+
+2000
+
+2250
+
+25001500
+
+1750
+
+GLM
+
+2000
+
+2250
+
+25001500
+
+1750
+
+GBM
+
+2000
+
+2250
+
+25001500
+
+FFNN
+
+1750
+
+2000
+
+2250
+
+25001500
+
+1750
+
+CANN GLM fixed
+
+2000
+
+2250
+
+25001500
+
+CANN GLM flex
+
+1750
+
+2000
+
+2250
+
+25001500
+
+CANN GBM fixed
+
+1750
+
+2000
+
+2250
+
+2500
+
+CANN GBM flex
+
+2000
+
+Belgian Data
+
+Observed claim amount
+
+CANN GLM fixed
+
+4000
+
+1500
+
+1500
+
+1000
+
+1000
+
+1200
+
+1400
+
+1600 1000
+
+1200
+
+GLM
+
+1400
+
+1600 1000
+
+GBM
+
+1200
+
+1400
+
+1600 1000
+
+FFNN
+
+1200
+
+1400
+
+1600 1000
+
+CANN GLM fixed
+
+1200
+
+1400
+
+1600 1000
+
+CANN GLM flex
+
+1200
+
+1400
+
+1600 1000
+
+CANN GBM fixed
+
+1200
+
+1400
+
+1600
+
+CANN GBM flex
+
+4000
+
+French Data
+
+Observed claim amount
+
+FFNN
+
+5000
+
+Australian Data
+
+Observed claim amount
+
+GLM
+
+47
+
+3000
+
+2000
+
+1000
+1500
+
+2000
+
+2500
+
+3000 1500
+
+2000
+
+3000 1500
+
+GBM
+
+2000
+
+2500
+
+3000 1500
+
+FFNN
+
+2000
+
+2500
+
+3000 1500
+
+CANN GLM fixed
+
+2000
+
+2500
+
+3000 1500
+
+CANN GLM flex
+
+2000
+
+2500
+
+3000 1500
+
+CANN GBM fixed
+
+2000
+
+2500
+
+3000
+
+CANN GBM flex
+
+50000
+
+Norwegian Data
+
+Observed claim amount
+
+GLM
+
+2500
+
+40000
+30000
+20000
+10000
+22000
+
+23000
+
+24000
+
+25000
+22000
+
+23000
+
+24000
+
+25000
+22000
+
+23000
+
+24000
+
+25000
+22000
+
+23000
+
+24000
+
+25000
+22000
+
+23000
+
+24000
+
+25000
+22000
+
+23000
+
+24000
+
+25000
+22000
+
+23000
+
+24000
+
+Predicted claim amount
+
+Model
+
+GLM
+
+GBM
+
+FFNN
+
+CANN GLM fixed
+
+CANN GLM flex
+
+CANN GBM fixed
+
+CANN GBM flex
+
+Figure 23: Plot of E [yi |f (xi ) = s] over the binned range of predictions s for each severity model type.
+Predictions are made on test set D1 . A line above (below) the diagonal indicates that the
+model is underestimating (overestimating) the true number of claims in the data. Comparison between models allows us to assess how well the predicted values align with observed
+outcomes.
+
+F
+
+Construction of the prediction calibration plots
+
+In Figure 9, 19, 26, and 29 we examine the graph of E [Y |f (x) = s], which shows the relationship between
+predicted values and the corresponding average response variable. To construct this graph, we divide
+the range of predictions s into splitpoints s1 , . . . , sm . The first interval boundary, s1 , is set at the 10th
+percentile and the last, sm , at the 90th percentile. The remaining split points are determined to ensure
+a sufficient number of observations in each bin [sγ , sγ+1 ], for γ in 1, . . . , m − 1. The Murphy diagram is
+constructed by looking at the average response for each bin:
+X
+yi
+,
+E [Y |f (x) ∈ [sγ , sγ+1 ]] =
+nγ,γ+1
+i:f (xi )∈[sγ ,sγ+1 ]
+
+25000
+
+Neural networks for insurance pricing with frequency and severity data
+
+Australian data
+
+Belgian data
+
+48
+
+French data
+
+Norwegian data
+4500
+
+500
+300
+400
+400
+4000
+
+Score
+
+300
+
+200
+300
+
+200
+3500
+100
+
+200
+
+100
+
+0
+
+100
+
+0
+0
+
+1000
+
+2000
+
+3000
+
+4000
+
+5000
+
+0
+
+1000
+
+2000
+
+Theta
+
+3000
+
+4000
+
+3000
+
+5000
+
+5000
+
+Theta
+
+Model
+
+GLM
+
+GBM
+
+10000
+
+15000
+
+20000
+
+20000
+
+22000
+
+Theta
+
+FFNN
+
+CANN GLM fixed
+
+CANN GLM flex
+
+24000
+
+26000
+
+28000
+
+30000
+
+Theta
+
+CANN GBM fixed
+
+CANN GBM flex
+
+Figure 24: Murphy diagram for the severity models on test set D1 for each data set to compare the
+ranking of models across a range of scoring functions. We plot the losses for each model
+according to the elementary scoring functions Sθ over a range of values for the parameter
+θ.
+Benchmark GLM
+
+Surrogate GLM
+
+Benchmark GLM
+
+Surrogate GLM
+
+Benchmark GLM
+
+Surrogate GLM
+
+Gender
+
+Gender
+
+ageph
+
+ageph
+
+VehPower
+
+VehPower
+
+VehAge
+
+agec
+
+agec
+
+DrivAge
+
+DrivAge
+
+VehBody
+
+coverage
+
+coverage
+
+BonusMalus
+
+BonusMalus
+
+DrivAge
+
+bm
+
+VehBrand
+
+VehBrand
+
+VehValue
+
+power
+
+Area
+
+Area
+
+1.5433
+
+postcode
+
+Density
+
+Density
+
+2.2437
+
+Region
+
+Region
+
+1.5562
+
+(a) Australian data set
+
+2.2280
+
+VehAge
+
+(b) Belgian data set
+
+VehGas
+1.7083
+
+1.7796
+
+(c) French data set
+
+Table 14: Comparison between the benchmark GLM and the surrogate GLM for claim severity modeling on the Australian, Belgian, and French data sets. The surrogate GLM is constructed
+from the CANN with GBM input and flexible output layer. The last row shows the gamma
+deviance of both GLMs on the out-of-sample data set D1 .
+Australian data
+Benchmark GLM
+
+Belgian data
+Surrogate GLM
+
+French data
+
+Benchmark GLM
+
+Surrogate GLM
+
+Benchmark GLM
+
+Surrogate GLM
+
+1000
+400
+
+2500
+
+Density
+
+800
+2000
+
+300
+600
+
+1500
+200
+
+400
+
+100
+
+200
+
+0
+
+0
+1000 2000 3000 4000
+
+1000 2000 3000 4000
+
+1000
+500
+0
+1000
+
+2000
+
+3000
+
+4000
+
+1000
+
+2000
+
+3000
+
+4000
+
+0
+
+5000 10000 15000 200000
+
+5000 10000 15000 20000
+
+Predictions
+Model
+
+Benchmark GLM
+
+Surrogate GLM
+
+Figure 25: Dispersion of predictions made by the GLM compared to the surrogate model based on the
+CANN GBM flexible.
+
+Neural networks for insurance pricing with frequency and severity data
+
+✓
+
+(a) Australian data set
+
+✕
+
+Benchmark GLM
+
+✓
+
+Surrogate GLM
+
+(b) Belgian data set
+
+Surrogate GLM
+
+Benchmark GLM
+
+Model A
+
+✓
+
+Benchmark GLM
+Surrogate GLM
+
+Model B
+
+Surrogate GLM
+
+Benchmark GLM
+
+Model A
+
+✓
+
+Benchmark GLM
+Surrogate GLM
+
+Model B
+
+Surrogate GLM
+
+Benchmark GLM
+
+Model A
+
+Model B
+
+49
+
+✓
+
+(c) French data set
+
+Table 15: Results of the Diebold-Mariano test comparing the predictive accuracy between the benchmark GLM and the surrogate GLM for claim severity modeling. The table indicates whether
+we cannot reject (✓) the null hypothesis H0 : E [L (fA (X), Y ) − L (fB (X), Y )] = 0, or if we
+reject H0 (✕) in favor of the alternative hypothesis H1 : E [L (fA (X), Y ) − L (fB (X), Y )] >
+0. Highlighted cells indicate when the null hypothesis is rejected.
+Australian data
+Benchmark GLM
+
+Belgian data
+Surrogate GLM
+
+French data
+
+Benchmark GLM
+
+Surrogate GLM
+
+Benchmark GLM
+
+Surrogate GLM
+
+2000
+
+Observed claim amount
+
+3500
+1750
+
+4000
+
+3000
+1500
+2500
+
+3000
+1250
+
+2000
+2000
+
+1000
+1500
+750
+1500 1750 2000 2250 25001500 1750 2000 2250 2500
+
+1000
+
+1200
+
+1400
+
+1600 1000
+
+1200
+
+1400
+
+1600
+
+1500
+
+2000
+
+2500
+
+3000 1500
+
+2000
+
+2500
+
+Predicted claim amount
+Model
+
+Benchmark GLM
+
+Surrogate GLM
+
+Figure 26: Plot of E [Y |f (X) = s] over the range of predictions s made by the benchmark GLM and
+the surrogate GLM for claim severity modeling. Predictions are made on test set D1 . A line
+above (below) the diagonal indicates that the model is underestimating (overestimating)
+the true number of claims in the data.
+
+where nγ,γ+1 denotes the number of elements in the set {f (xi )|f (xi ) ∈ [sγ , sγ+1 ]}. This approach
+provides a smoothed representation of the average response as a function of the predicted value. Table
+17 gives the used bins for each data set.
+
+3000
+
+Neural networks for insurance pricing with frequency and severity data
+
+Australian data
+
+50
+
+Belgian data
+
+French data
+500
+
+300
+400
+
+400
+
+Score
+
+300
+
+200
+300
+
+200
+100
+200
+100
+
+0
+
+100
+
+0
+0
+
+1000
+
+2000
+
+3000
+
+4000
+
+5000
+
+0
+
+1000
+
+2000
+
+Theta
+
+3000
+
+4000
+
+5000
+
+5000
+
+10000
+
+Theta
+
+Model
+
+15000
+
+20000
+
+Theta
+
+Benchmark GLM
+
+Surrogate GLM
+
+Figure 27: Murphy diagram to compare predictive dominance between the benchmark GLM severity
+model and the surrogate GLM based on the CANN GBM flexible severity model.
+
+✕
+
+Poisson deviance
+
+0.3782
+
+Surrogate GLM
+
+✕
+
+Poisson deviance
+
+0.5279
+
+0.5308
+
+✕
+
+CANN GBM flex
+Surrogate GLM
+
+✕
+
+Poisson deviance
+
+0.2695
+
+0.2738
+
+(c) French data set
+
+(b) Belgian data set
+
+(a) Australian data set
+
+Surrogate GLM
+
+CANN GBM flex
+
+Surrogate GLM
+✓
+
+CANN GBM flex
+
+0.3805
+
+Model A
+
+Surrogate GLM
+
+CANN GBM flex
+
+Model A
+
+Surrogate GLM
+
+CANN GBM flex
+
+Model A
+
+✓
+
+CANN GBM flex
+
+Model B
+
+Model B
+
+Model B
+
+Table 16: Results of the Diebold-Mariano test comparing the predictive accuracy between the frequency CANN GBM flexible and the surrogate GLM based on the insights of the CANN
+GBM flexible. The table indicates whether we cannot reject (✓) the null hypothesis
+H0 : E [L (fA (X), Y ) − L (fB (X), Y )] = 0, or if we reject H0 (✕) in favor of the alternative hypothesis H1 : E [L (fA (X), Y ) − L (fB (X), Y )] > 0. Highlighted cells indicate
+when the null hypothesis is rejected.
+Australian data
+
+Belgian data
+
+CANN GBM flex
+
+Surrogate GLM
+
+French data
+
+CANN GBM flex
+
+Surrogate GLM
+
+CANN GBM flex
+
+Surrogate GLM
+
+500
+
+Density
+
+30000
+
+3000
+
+400
+300
+
+2000
+
+20000
+
+1000
+
+10000
+
+200
+100
+0
+
+0
+0.0
+
+0.1
+
+0.2
+
+0.30.0
+
+0.1
+
+0.2
+
+0.3
+
+0
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.0
+
+0.3
+
+0.6
+
+0.9
+
+0.0
+
+0.3
+
+0.6
+
+Predictions
+Model
+
+CANN GBM flex
+
+Surrogate GLM
+
+Figure 28: Dispersion of predictions made by the GLM compared to the surrogate model based on the
+CANN GBM flexible.
+
+0.9
+
+Neural networks for insurance pricing with frequency and severity data
+
+Australian data
+
+51
+
+Belgian data
+
+CANN GBM flex
+
+Surrogate GLM
+
+French data
+
+CANN GBM flex
+
+Surrogate GLM
+
+CANN GBM flex
+
+Surrogate GLM
+
+0.100
+
+0.12
+0.15
+
+0.075
+0.08
+0.050
+
+0.10
+0.04
+
+0.025
+0.05
+0.00
+
+0.05
+
+0.10
+
+0.15 0.00
+
+0.05
+
+0.10
+
+0.15
+
+0.05
+
+0.10
+
+0.15
+
+0.200.05
+
+0.10
+
+0.15
+
+0.20
+
+0.000 0.025 0.050 0.075 0.100
+0.000 0.025 0.050 0.075 0.100
+
+Predicted number of claims
+Model
+
+CANN GBM flex
+
+Surrogate GLM
+
+Figure 29: Plot of E [Y |f (X) = s] over the range of predictions s made by the CANN GBM flexible for
+frequency modeling and the surrogate GLM based on the CANN GBM flexible. Predictions
+are made on test set D1 . A line above (below) the diagonal indicates that the model is
+underestimating (overestimating) the true number of claims in the data.
+
+Australian data
+
+Belgian data
+
+French data
+
+0.05
+
+0.030
+0.015
+0.04
+
+Score
+
+Observed number of claims
+
+0.125
+0.20
+
+0.025
+
+0.010
+0.03
+
+0.005
+
+0.020
+0.05
+
+0.10
+
+0.15
+
+0.20
+
+0.1
+
+Theta
+
+0.2
+
+0.3
+
+0.0
+
+0.1
+
+Theta
+
+Model
+
+CANN GBM flex
+
+0.2
+
+0.3
+
+0.4
+
+Theta
+
+Surrogate GLM
+
+Figure 30: Murphy diagram to compare predictive dominance between the CANN GBM flexible for
+claim frequency modeling and the surrogate GLM based on the CANN GBM flexible.
+
+Data set
+
+Frequency modeling
+
+Australian
+
+s = [< 0.01, 0.01 − 0.02, . . . , 0.15 − 0.16, > 0.16]
+
+Belgian
+
+s = [< 0.06, 0.06 − 0.07, . . . , 0.19 − 0.20, > 0.20]
+
+French
+
+s = [< 0.005, 0.005 − 0.01, . . . , 0.095 − 0.1, > 0.1]
+
+Norwegian
+
+s = [< 0.02, 0.02 − 0.03, . . . , 0.09 − 0.1, > 0.1]
+Severity modeling
+
+Australian
+
+s = [< 1 500, 1 500 − 1 600, . . . , 2 400 − 2 500, > 2 500]
+
+Belgian
+
+s = [< 990, 990 − 1 040, . . . , 1 590 − 1 640, > 1 640]
+
+French
+Norwegian
+
+s = [< 1 400, 1 400 − 1 500, . . . , 2 900 − 3 000, > 3 000]
+s = [< 22 000, 22 000 − 22 150, . . . , 24 850 − 25 000, > 25 000]
+
+Table 17: Binned range of predictions used in the construction of Figure 9, 19, 26, and 29.
+
+
