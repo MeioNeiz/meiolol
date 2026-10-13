@@ -70,7 +70,10 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
 - Jacob: none pending at handover
 - Collected: gold14-a final (rank on 3c-team holds on test at half dev size, learned.md
   e4f8335; recheck with rank at game start and on team2 in the next campaign)
-- Results to collect: champlevel shrinkage on dev (12, off-role lane cells), sub-15:00 verdict (db), experience and
+- Collected: sub-15:00 exclusion makes no detectable difference (db, 289f63a; kept);
+  champlevel shrinkage no gain on dev (12, 3b28e60): off-role lane cells are real
+  farming, the Draft tester's 1% role floor is the fix
+- Results to collect: experience and
   everything-pre-game (db), GPU table (6f), winchance fix (ff), mastery and flex live
   with matches/day before and after (11), next snapshot pinned in docs/model.md
 - meiolol-58's solo/duo lookup commit: Jacob must type "commit" in its window (pane
