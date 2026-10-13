@@ -15,7 +15,9 @@
 //! shrunk win rate's log-odds (5 pseudo-games at 50%), played it before; any: the same on
 //! any champion, share of games on this one; form: mean KDA, lane gold diff at 14, deaths
 //! before 15 (0 when unknown); rank: rank at game start and known; mastery: log1p
-//! pre-game points on the champion and known (SNAP/mastery_pre.tsv when present).
+//! pre-game points on the champion and known (SNAP/mastery_pre.tsv when present); prior
+//! (QuickSkill-style): gold, CS and damage per minute over earlier games, off-role share,
+//! log1p days since the last game.
 //! Writes DIR/folds.tsv, DIR/preds.tsv (as netcheck's, plus per side b_/r_: players with
 //! history, with games on their champion, games on their champions, games, players with
 //! rank, with mastery) and DIR/coverage.tsv (feature coverage of rows per block and part;
@@ -43,14 +45,14 @@ pub const usage =
     \\                                  permuted outcomes, scored on real ones)
     \\                                  --shuffle-feats 0|1 (control: players' feature
     \\                                  vectors permuted within role in training sets)
-    \\                                  --feats champ,any,form,rank,mastery|none
+    \\                                  --feats champ,any,form,rank,mastery,prior|none
     \\                                  --emb-init DIR (pretrain's emb-<block>-s<seed>.tsv)
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
     \\                                  --fraction X --threads N --out DIR
     \\
 ;
 
-pub const Group = enum { champ, any, form, rank, mastery };
+pub const Group = enum { champ, any, form, rank, mastery, prior };
 
 const Feat = enum {
     champ_games,
@@ -67,6 +69,11 @@ const Feat = enum {
     rank_known,
     mastery,
     mastery_known,
+    gpm,
+    cspm,
+    dpm,
+    offrole,
+    days_since,
 
     fn group(f: Feat) Group {
         return switch (f) {
@@ -75,6 +82,7 @@ const Feat = enum {
             .kda, .lanediff14, .deaths15 => .form,
             .rank, .rank_known => .rank,
             .mastery, .mastery_known => .mastery,
+            .gpm, .cspm, .dpm, .offrole, .days_since => .prior,
         };
     }
 
@@ -87,6 +95,7 @@ const Feat = enum {
     }
 };
 const n_feat = @typeInfo(Feat).@"enum".field_names.len;
+const n_group = @typeInfo(Group).@"enum".field_names.len;
 
 pub const Options = struct {
     /// 0: no champion-role or role embedding, the player's features only
@@ -104,7 +113,7 @@ pub const Options = struct {
     /// in the training and validation sets (outcomes and offsets real, scored games
     /// untouched); a gain well past the noise floor means a leak
     shuffle_feats: bool = false,
-    groups: [5]bool = @splat(true),
+    groups: [@typeInfo(Group).@"enum".field_names.len]bool = @splat(true),
     emb_init: ?[]const u8 = null,
     evals: u32 = 4,
     lr: f32 = 1e-3,
@@ -361,6 +370,11 @@ fn rawFeatures(gpa: std.mem.Allocator, d: *const rows.Data, m: *const Mastery) !
         o[@backingInt(Feat.rank_known)] = @floatFromInt(@intFromBool(r.rank_start != null));
         if (pts) |p| o[@backingInt(Feat.mastery)] = std.math.log1p(@as(f32, @floatFromInt(p)));
         o[@backingInt(Feat.mastery_known)] = @floatFromInt(@intFromBool(pts != null));
+        o[@backingInt(Feat.gpm)] = r.gpm_before;
+        o[@backingInt(Feat.cspm)] = r.cspm_before;
+        o[@backingInt(Feat.dpm)] = r.dpm_before;
+        o[@backingInt(Feat.offrole)] = r.offrole_before;
+        o[@backingInt(Feat.days_since)] = std.math.log1p(r.days_since_last);
     }
     return out;
 }
@@ -409,7 +423,7 @@ const Scale = struct {
     }
 
     /// Unknown values sit at the fit mean (0 after scaling); groups off are 0
-    fn apply(s: Scale, x: [n_feat]f32, groups: [5]bool) [n_feat]f32 {
+    fn apply(s: Scale, x: [n_feat]f32, groups: [n_group]bool) [n_feat]f32 {
         var out: [n_feat]f32 = @splat(0);
         for (x, 0..) |v, f| {
             if (!groups[@backingInt(@as(Feat, @fromBackingInt(@intCast(f))).group())] or std.math.isNan(v)) continue;
@@ -573,7 +587,7 @@ pub const NetGame = struct {
     off: f32,
 };
 
-fn netGames(gpa: std.mem.Allocator, d: *const rows.Data, raw: []const [n_feat]f32, row_of: []const [10]u32, games: []const u32, vocab: *const Vocab, scale: Scale, groups: [5]bool, off: []const f32) ![]NetGame {
+fn netGames(gpa: std.mem.Allocator, d: *const rows.Data, raw: []const [n_feat]f32, row_of: []const [10]u32, games: []const u32, vocab: *const Vocab, scale: Scale, groups: [n_group]bool, off: []const f32) ![]NetGame {
     const out = try gpa.alloc(NetGame, games.len);
     for (out, games) |*o, gi| {
         const g = d.games[gi];
