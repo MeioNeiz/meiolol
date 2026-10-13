@@ -1,5 +1,5 @@
-//! Shared by the held-out analyses (eval, outcomes, items, objectives, scaling;
-//! docs/model.md "Shared protocol"): the train/test split of the scanned games,
+//! Shared by the held-out analyses (eval, outcomes, items, objectives, playstyle,
+//! scaling; docs/model.md "Shared protocol"): the train/test split of the scanned games,
 //! games with a timeline and their players by role, paired gains, shrinkage priors and
 //! additive backfitting, prediction files.
 

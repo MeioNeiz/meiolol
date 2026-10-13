@@ -11,7 +11,7 @@ const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
-const eval = @import("eval.zig");
+const analysis = @import("analysis.zig");
 const logreg = @import("logreg.zig");
 const Date = @import("date.zig").Date;
 const Role = core.Role;
@@ -147,55 +147,21 @@ fn load(
     chosen: []const []const u8,
     platforms: []const []const u8,
 ) !Map {
-    const patch_json = try std.json.Stringify.valueAlloc(arena, chosen, .{});
-    const platform_json = try std.json.Stringify.valueAlloc(arena, platforms, .{});
-    var q = try db.prepare(
-        \\SELECT m.match_id, t.data
-        \\FROM matches m JOIN timeline.timelines t USING (match_id)
-        \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
-        \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
-    );
-    defer q.deinit();
-    try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
-    var players = try db.prepare("SELECT slot, team_id, position FROM participants WHERE match_id = ?");
-    defer players.deinit();
-
+    var games: analysis.TimelineGames = try .init(gpa, db, chosen, platforms);
+    defer games.deinit();
     var map: Map = .empty;
     errdefer map.deinit(gpa);
-    var scratch_state: std.heap.ArenaAllocator = .init(gpa);
-    defer scratch_state.deinit();
-    while (try q.step()) {
-        _ = scratch_state.reset(.retain_capacity);
-        const scratch = scratch_state.allocator();
-        const t = timeline.decode(scratch, store.raw.decompress(scratch, q.bytes(1)) catch continue) catch continue;
+    while (try games.next()) |game| {
+        const t = game.t;
         if (t.participants != 10 or t.frames.len < 16 or t.frames[15].t_ms < 15 * minute_ms) continue;
-
-        try players.bind(.{q.bytes(0)});
-        var pid: [2][Role.count]u8 = @splat(@splat(0));
-        while (try players.step()) {
-            const side: usize = switch (players.int(1)) {
-                100 => 0,
-                200 => 1,
-                else => continue,
-            };
-            const r = Role.fromLcu(if (players.isNull(2)) "" else players.bytes(2)) orelse continue;
-            const slot = players.int(0);
-            if (slot < 0 or slot >= t.participants) continue;
-            pid[side][@backingInt(r)] = @intCast(slot + 1);
-        }
-        if (std.mem.indexOfScalar(u8, std.mem.asBytes(&pid), 0) != null) continue;
-        // Participant ids 1-5 are blue in match-v5
+        const pid = try games.pids(game, true) orelse continue;
         var roles: [10]Role = undefined;
         var opponent: [10]u8 = undefined;
-        var ok = true;
         for (0..2) |side| for (0..Role.count) |ri| {
             const p = pid[side][ri];
-            ok = ok and (p <= 5) == (side == 0);
             roles[p - 1] = @fromBackingInt(@intCast(ri));
             opponent[p - 1] = pid[1 - side][ri];
         };
-        if (!ok) continue;
 
         const f = t.frames[until_minute];
         var st: State = .{ .team_gold = 0, .team_xp = 0, .lane = undefined };
@@ -206,7 +172,7 @@ fn load(
             st.lane[p - 1] = @as(f32, @floatFromInt(f.get(@intCast(p), .total_gold) - f.get(opponent[p - 1], .total_gold))) / 1000;
         }
         var g: Game = .{
-            .match_id = try arena.dupe(u8, q.bytes(0)),
+            .match_id = try arena.dupe(u8, game.match_id),
             .slot = undefined,
             .feats = features(t, roles),
             .state = st,
@@ -214,7 +180,7 @@ fn load(
         for (0..2) |side| for (0..Role.count) |ri| {
             g.slot[side][ri] = pid[side][ri] - 1;
         };
-        try map.put(gpa, stats.matchKey(q.bytes(0)), g);
+        try map.put(gpa, stats.matchKey(game.match_id), g);
     }
     return map;
 }
@@ -272,37 +238,6 @@ fn logLoss(p: f64, y: f64) f64 {
     return -(y * @log(q) + (1 - y) * @log(1 - q));
 }
 
-const Gain = struct { mean: f64, half_width: f64 };
-
-/// Mean of before - after per row, ± 95% clustered by game (rows sorted by game)
-fn pairedGain(rows: []const Row, before: []const f64, after: []const f64) Gain {
-    var total: f64 = 0;
-    var sum_sq: f64 = 0;
-    var n_games: f64 = 0;
-    var i: usize = 0;
-    while (i < rows.len) {
-        var d: f64 = 0;
-        const g = rows[i].game;
-        while (i < rows.len and rows[i].game == g) : (i += 1) d += before[i] - after[i];
-        total += d;
-        sum_sq += d * d;
-        n_games += 1;
-    }
-    const n_rows: f64 = @floatFromInt(rows.len);
-    const mean_d = total / n_games;
-    const var_d = sum_sq / n_games - mean_d * mean_d;
-    return .{ .mean = total / n_rows, .half_width = 1.96 * @sqrt(n_games * var_d) / n_rows };
-}
-
-const GameList = struct {
-    gpa: std.mem.Allocator,
-    items: std.ArrayList(stats.Row) = .empty,
-
-    pub fn add(l: *GameList, g: stats.Row) !void {
-        try l.items.append(l.gpa, g);
-    }
-};
-
 pub fn run(
     gpa: std.mem.Allocator,
     io: Io,
@@ -316,17 +251,13 @@ pub fn run(
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var list: GameList = .{ .gpa = gpa };
-    defer list.items.deinit(gpa);
-    _ = try stats.scan(gpa, db, patches, platforms, 0, &list);
-    var split = try eval.split(gpa, list.items.items, platforms, .{ .test_share = opts.test_share, .test_platform = opts.test_platform });
-    defer split.deinit(gpa);
-    const cutoff = split.tests[0].start;
+    var split = try analysis.heldOut(gpa, db, patches, platforms, opts.test_share, opts.test_platform);
+    defer split.deinit();
 
     var map = try load(gpa, arena, db, patches, platforms);
     defer map.deinit(gpa);
 
-    var index: std.AutoHashMapUnmanaged(u32, u16) = .empty;
+    var index: analysis.DenseIndex = .{};
     defer index.deinit(gpa);
     var train: std.ArrayList(Row) = .empty;
     defer train.deinit(gpa);
@@ -335,22 +266,21 @@ pub fn run(
     var test_ids: std.ArrayList([]const u8) = .empty;
     defer test_ids.deinit(gpa);
     var n_games: [2]u32 = @splat(0);
-    for ([_][]const stats.Row{ split.train, split.tests }, [_]bool{ false, true }) |part, is_test| for (part) |g| {
+    for (split.parts(), [_]bool{ false, true }) |part, is_test| for (part) |g| {
         const gm = map.get(g.id) orelse continue;
         const out = if (is_test) &tests else &train;
         if (is_test) try test_ids.append(gpa, gm.match_id);
         const game = n_games[@intFromBool(is_test)];
         n_games[@intFromBool(is_test)] += 1;
         for (0..2) |side| for (0..Role.count) |ri| {
-            const e = try index.getOrPut(gpa, g.teams[side][ri]);
-            if (!e.found_existing) e.value_ptr.* = @intCast(index.count() - 1);
+            const champ = try index.get(gpa, g.teams[side][ri]);
             const p = gm.slot[side][ri];
             const sign: f32 = if (side == 0) 1 else -1;
             try out.append(gpa, .{
                 .game = game,
                 .slot = p,
                 .role = @intCast(ri),
-                .champ = e.value_ptr.*,
+                .champ = champ,
                 .x = gm.feats[p],
                 .state = .{ sign * gm.state.team_gold, sign * gm.state.team_xp, gm.state.lane[p] },
                 .won = g.winner == side,
@@ -382,7 +312,7 @@ pub fn run(
         "started before {f} ({d}). Test: {d} {s} games from then, ten rows each. Style from " ++
         "minutes 0-{d} (positions from minute {d}); state at {d}:00.\n\nRole mean (sd) of each " ++
         "feature on train:\n\n| feature |", .{
-        n_games[0],           Date.fromMs(cutoff), cutoff, n_games[1], opts.test_platform, until_minute - 1,
+        n_games[0],           Date.fromMs(split.cutoff), split.cutoff, n_games[1], opts.test_platform, until_minute - 1,
         first_position_frame, until_minute,
     });
     for (Role.all) |r| try w.print(" {t} |", .{r});
@@ -402,20 +332,10 @@ pub fn run(
     const row_games = try arena.alloc(u32, train.items.len);
     for (row_games, train.items) |*g, r| g.* = r.game;
 
-    var files: [models.len]?Io.File = @splat(null);
-    var bufs: [models.len][16 * 1024]u8 = undefined;
-    var writers: [models.len]Io.File.Writer = undefined;
-    defer for (files) |f| if (f) |x| x.close(io);
-    if (opts.preds_dir) |dir| {
-        const cwd = Io.Dir.cwd();
-        try cwd.createDirPath(io, dir);
-        for (models, 0..) |m, i| {
-            const path = try std.fmt.allocPrint(arena, "{s}/{s}.tsv", .{ dir, m.file });
-            files[i] = try cwd.createFile(io, path, .{});
-            writers[i] = files[i].?.writer(io, &bufs[i]);
-            try writers[i].interface.writeAll("match_id\tslot\toutcome\ty\tpred\n");
-        }
-    }
+    var names: [models.len][]const u8 = undefined;
+    for (&names, models) |*n, m| n.* = m.file;
+    const preds: analysis.Preds = try .init(arena, io, opts.preds_dir, &names, "match_id\tslot\toutcome\ty\tpred\n");
+    defer preds.close(io);
 
     try w.writeAll("\nTest log loss of the player's win, nats per row; gain = drop from the model " ++
         "named, ± 95% clustered by game.\n\n| model | test log loss | gain |\n| --- | --- | --- |\n");
@@ -436,13 +356,13 @@ pub fn run(
             const b = dims.row(m, r);
             const p = logreg.sigmoid(b.dot(wt));
             l.* = logLoss(p, b.y);
-            if (opts.preds_dir != null) try writers[k].interface.print("{s}\t{d}\twin\t{d}\t{d:.4}\n", .{
+            if (preds.on()) try preds.at(k).print("{s}\t{d}\twin\t{d}\t{d:.4}\n", .{
                 test_ids.items[r.game], r.slot, b.y, p,
             });
         }
-        try w.print("| {s} | {d:.4} |", .{ m.label, nanFree(loss[k]) });
+        try w.print("| {s} | {d:.4} |", .{ m.label, analysis.mean(loss[k]) });
         if (m.after) |a| {
-            const g = pairedGain(tests.items, loss[a], loss[k]);
+            const g = analysis.pairedGain(tests.items, loss[a], loss[k]);
             try w.print(" {d:.5} ± {d:.5} vs {s} |\n", .{ g.mean, g.half_width, models[a].label });
         } else try w.writeAll(" - |\n");
     }
@@ -474,13 +394,7 @@ pub fn run(
         for (0..Role.count) |ri| try w.print(" {d:.2} |", .{25 * weights[2][dims.state(@intCast(ri), i)]});
         try w.writeAll("\n");
     }
-    for (files, &writers) |f, *x| if (f != null) try x.interface.flush();
-}
-
-fn nanFree(xs: []const f64) f64 {
-    var sum: f64 = 0;
-    for (xs) |x| sum += x;
-    return sum / @as(f64, @floatFromInt(xs.len));
+    try preds.flush();
 }
 
 const testing = std.testing;
