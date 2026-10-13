@@ -81,6 +81,9 @@ deploy/lab-run.sh watch-install
   threads floated over the cpu slots' cores; cpu slots split the other c - r. Set: r 5,
   cpu.slots 3 (5 cores each), gpu.slots 2. Both files are read when a job takes its
   slot, so tuning needs no code change
+- Slot queue: tickets in ~/ml/locks/RES.q, only the oldest live one tries the slots
+  (first come, first served; polling let newcomers win); runs predicted <= 60 s sort
+  ahead (fast lane); a dead waiter's ticket is dropped
 - Prediction gates (deploy/lab-gates.sh, run by job.sh after the program, before
   `exit`): every preds*.tsv, dev.tsv and test.tsv in the run dir (two levels down) must
   have no NaN or inf and no constant prediction column; `GATE ok|FAIL` lines in the log,

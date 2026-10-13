@@ -518,19 +518,32 @@ start() {
     [[ "$RES" == none ]] || lock='mkdir -p ~/ml/locks
 n=$(cat ~/ml/locks/@RES@.slots 2> /dev/null || echo 4)
 echo @RES@ > queued
+# First come, first served: only the oldest live ticket tries the slots (polling alone
+# let a lucky newcomer win every release); runs predicted <= 60 s sort first
+q=~/ml/locks/@RES@.q
+mkdir -p $q
+ticket=@PRIO@$(date +%s%N)-$$
+: > $q/$ticket
 slot=
 while [[ -z $slot ]]; do
-    for (( i = 0; i < n; i++ )); do
-        exec 9>> ~/ml/locks/@RES@.$i
-        if perl -MFcntl=:flock -e '"'"'open(my $f, q{>&=}, 9) or die; flock($f, LOCK_EX | LOCK_NB) or exit 1'"'"'; then
-            slot=$i
-            break
-        fi
-        exec 9>&-
+    head=
+    for t in $(ls $q); do
+        if kill -0 ${t##*-} 2> /dev/null; then head=$t; break; fi
+        rm -f $q/$t
     done
-    [[ -n $slot ]] || sleep 5
+    if [[ $head == "$ticket" ]]; then
+        for (( i = 0; i < n; i++ )); do
+            exec 9>> ~/ml/locks/@RES@.$i
+            if perl -MFcntl=:flock -e '"'"'open(my $f, q{>&=}, 9) or die; flock($f, LOCK_EX | LOCK_NB) or exit 1'"'"'; then
+                slot=$i
+                break
+            fi
+            exec 9>&-
+        done
+    fi
+    [[ -n $slot ]] || sleep 2
 done
-rm queued
+rm -f $q/$ticket queued
 echo "@RES@.$slot of $n" > slot
 # Not nproc: it honours OMP_NUM_THREADS. The top r cores (~/ml/locks/reserve) are kept
 # for gpu jobs, whose host threads otherwise float over the cores of the cpu slots
@@ -567,6 +580,9 @@ if (( r > 0 && r < c )) && command -v taskset > /dev/null; then
     pin="taskset -c $(( c - r ))-$(( c - 1 ))"
 fi' pin='$pin '
     lock=${lock//@RES@/$RES}
+    local prio=1
+    [[ "${predicted%.*}" =~ ^[0-9]+$ ]] && (( ${predicted%.*} <= 60 )) && prio=0
+    lock=${lock//@PRIO@/$prio}
     local cmd="./$bin"
     # shellcheck disable=SC2088 # expands on the host
     [[ -z "$env" ]] || cmd="env PYTHONUNBUFFERED=1 ~/ml/pyenv/$env/venv/bin/python labpy.py"
