@@ -197,14 +197,12 @@ every bucket runs at its cap. Ladder pages are never priority (~100x a match in
 writes). This replaced a gate on europe's measured slack (2026-10-11), which took up to
 1.5 h after every restart to let the other regions start.
 
-Each bucket's limiter paces requests evenly (one per window / limit) instead of filling
-a window in a burst, and `--reserve PCT` (box: 20) only applies while another process
-uses the key: Riot counts in fixed windows (its -Count falls back to 1 when one starts),
-so the limiter counts its own requests in Riot's current window and anything over that
-is another process's. Not judged until a Riot window restarts after start (a previous
-run's requests) or after an answer without counts (service 429s, dropped connections).
-Then for 10 minutes the crawler keeps under 100 - PCT of the limit. The log says "another process is using the key".
-So the crawler takes the whole key unless the Your games service is busy.
+One limiter per routing value (ratelimit.zig `Limiters`), shared by the route's crawl
+thread and `--proxy` (proxy.zig, box: 10.0.0.3:8092), through which the Your games
+service makes its Riot calls. The crawl paces requests evenly (one per window / limit)
+instead of filling a window in a burst, so a slot frees every pace; proxied calls take
+priority, unpaced, and the crawl holds back while one waits. So the crawler has the
+whole key except for the slots a lookup takes (docs/your-games.md, Rate limits).
 Only Riot's key errors, OOM and SQLite errors outside a match stop the crawler; a bad
 page, player or match (including one SQLite cannot store) is logged and skipped.
 Limits come from Riot's headers (X-App/Method-Rate-Limit and their -Count, which also
@@ -488,8 +486,8 @@ edges with games (greyed under 200), and each option's points with reasons.
 
 `meiolol api` on the jomove server behind nginx at /api/; details, privacy decisions and
 deploy steps in docs/your-games.md. Requests answer from api.db (own SQLite file, not
-the crawler's) and queue jobs; one fetcher task makes every Riot call within a budget per
-route (default 20 per 2 min) on top of the shared Limiter. Matches cached by id (summary
+the crawler's) and queue jobs; one fetcher task makes every Riot call, through the
+crawler's proxy at priority. Matches cached by id (summary
 without names, PUUIDs hashed; compact timeline). Per-game numbers come from curves.zig
 `lane()`, compared with `Curves.get` for the player's visible-tier bracket. Objection:
 profile-icon check, then delete and block the PUUID. Players not looked up for 30 days

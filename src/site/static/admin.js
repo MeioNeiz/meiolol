@@ -674,10 +674,9 @@ function newestCrawl() {
   return live ? { C: live, now: L.now } : { C: D.crawl, now: D.now };
 }
 // null while the snapshot has no crawl.args
-function reserveShare() {
+function yourGamesProxy() {
   if (!D.riot || D.riot.crawl_args == null) return null;
-  const m = D.riot.crawl_args.match(/--reserve\s+(\d+)/);
-  return m ? +m[1] / 100 : 0;
+  return /--proxy\s/.test(D.riot.crawl_args);
 }
 
 // ---------- shell ----------
@@ -908,7 +907,7 @@ function crawlReadings(body) {
     const keep = v => v === "0" ? "forever" : `${v} days`;
     const lines = [
       `Raw match summaries on the box: kept ${keep(flag("raw-match-days", "?"))}. Raw timelines: ${keep(flag("raw-timeline-days", "?"))} (the gpu-box archive takes them hourly). Compact rows: ${keep(flag("keep-days", "?"))}.`,
-      `Ladder floor ${cap(flag("min-tier", "?"))}; ${flag("ladder-per-hour", "?")} ladder pages an hour, refreshed every ${flag("ladder-refresh-hours", "?")} h; ${flag("reserve", "0")}% of the key held back for the site.`,
+      `Ladder floor ${cap(flag("min-tier", "?"))}; ${flag("ladder-per-hour", "?")} ladder pages an hour, refreshed every ${flag("ladder-refresh-hours", "?")} h.`,
     ];
     sec.append(el("ul", { class: "readings" }, ...lines.map(t => el("li", {}, t))));
   }
@@ -989,7 +988,7 @@ VIEWS.riot = body => {
   const S = crawlSeries(C, cv.from);
   const common = { x: S.xs, step: C.step, markers: C.restarts, xMin: cv.from, xMax: cv.to, time: true };
   const { C: NC, now } = newestCrawl();
-  const reserve = reserveShare();
+  const proxy = yourGamesProxy();
   // Before the box sends its limits: the personal key's documented app limit
   const R = D.riot || { app_limit: "20:1,100:120" };
   const sec = section(body, "Riot API key", "Personal key: limits per routing value (region). Usage from the crawler's report lines.");
@@ -1006,11 +1005,10 @@ VIEWS.riot = body => {
   tile(tiles, "Riot 5xx, 24 h", num(sumR(day.map(b => b.warnings[srvIdx]))), "server errors");
   const kp = R.key_problems || [];
   tile(tiles, "Key problems", kp.length ? num(kp.length) : "none", kp.length ? `last ${ago(kp[kp.length - 1][0])}` : "no 401/403 in the window", kp.length ? "bad" : "good");
-  tile(tiles, "Reserve", reserve == null ? "–" : pct(reserve), "left for the Your games service");
+  tile(tiles, "Your games", proxy == null ? "–" : proxy ? "first in line" : "no proxy", proxy === false ? "the crawler runs without --proxy: lookups cannot fetch" : "its calls take the crawler's next free slot", proxy === false ? "bad" : null);
 
   const g = grid(sec);
   const refs = [{ value: KEY_PER_MIN, label: "key limit (100 / 2 min)" }];
-  if (reserve) refs.push({ value: KEY_PER_MIN * (1 - reserve), label: `crawler target (${pct(reserve)} reserve)` });
   chart(g, { ...common, title: "Requests per minute, by region", type: "line", series: S.byRegion(b => b.req, 60), ref: refs });
   chart(g, {
     ...common, title: "Platform route requests per minute", type: "line",

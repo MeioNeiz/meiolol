@@ -10,18 +10,20 @@ HOST=${MEIOLOL_HOST:-meiolol-cloud}
 DIR=ml/meiolol
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
-# Builds a clean checkout of REV (default HEAD), never the working tree: other sessions
-# keep uncommitted work there. The box logs each deploy in DEPLOYED
+# Builds a clean checkout of REV (default HEAD) in deploy/build-tree.sh's tree, never the
+# working tree: other sessions keep uncommitted work there. The binary and scripts are
+# staged so the tree is free again before the copy. The box logs each deploy in DEPLOYED
 sync() {
     local rev tree target
     rev=$(git -C "$ROOT" rev-parse "${REV:-HEAD}")
     target=$(ssh "$HOST" uname -m)-linux-musl
     tree=$(mktemp -d)
-    git -C "$ROOT" worktree add -q --detach "$tree" "$rev"
     # shellcheck disable=SC2064 # expand now: tree is local to sync
-    trap "git -C '$ROOT' worktree remove --force '$tree'" EXIT
-    (cd "$tree" && zig build -Dtarget="$target" -Doptimize=ReleaseSafe \
-        --prefix zig-out/box --cache-dir "$ROOT/.zig-cache")
+    trap "rm -rf '$tree'" EXIT
+    "$ROOT/deploy/build-tree.sh" box "$rev" sh -c 'zig build -Dtarget="$1" \
+        -Doptimize=ReleaseSafe --prefix zig-out/box --cache-dir "$2/.zig-cache" \
+        && mkdir "$3/zig-out" && cp -R zig-out/box "$3/zig-out/" && cp -R deploy "$3/"' \
+        _ "$target" "$ROOT" "$tree"
     ssh "$HOST" "mkdir -p $DIR/bin $DIR/data .config/systemd/user"
     scp -q "$tree/zig-out/box/bin/meiolol" "$HOST:$DIR/bin/meiolol.new"
     local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh render-swap.sh archive-serve.sh" s
@@ -107,11 +109,11 @@ case "${1:-}" in
     sync) sync ;;
     start)
         # Extra arguments go to `meiolol crawl` (kept in crawl.args on the box). Default
-        # --reserve 20: the Your games service on the web server shares the key
-        # (docs/your-games.md); it applies only while the service is calling. The
-        # service stops on exit 3 (key rejected) rather than hammer Riot
+        # --proxy on the private address: the Your games service on the web server makes
+        # its Riot calls through the crawler (docs/your-games.md). The crawler stops on
+        # exit 3 (key rejected) rather than hammer Riot
         shift
-        (( $# )) || set -- --reserve 20
+        (( $# )) || set -- --proxy 10.0.0.3:8092
         sync
         ssh "$HOST" "cd $DIR && echo '$*' > crawl.args \
             && systemctl --user enable -q meiolol-crawl && systemctl --user restart meiolol-crawl"

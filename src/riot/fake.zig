@@ -119,7 +119,8 @@ fn ladder(gpa: std.mem.Allocator, host: []const u8, path: []const u8) ![]u8 {
 
 fn matchIds(gpa: std.mem.Allocator, region: []const u8, rest: []const u8) ![]u8 {
     const puuid = rest[0 .. std.mem.indexOfScalar(u8, rest, '/') orelse rest.len];
-    if (std.mem.indexOf(u8, rest, "&start=0&") == null) return gpa.dupe(u8, "[]");
+    // The fixture is a solo game; other queues have none
+    if (std.mem.indexOf(u8, rest, "&start=0&") == null or std.mem.indexOf(u8, rest, "queue=420&") == null) return gpa.dupe(u8, "[]");
     const platform = if (std.mem.eql(u8, region, "europe")) "EUW1" else if (std.mem.eql(u8, region, "asia"))
         "KR"
     else if (std.mem.eql(u8, region, "sea")) "OC1" else "NA1";

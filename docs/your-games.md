@@ -10,7 +10,8 @@ static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy b
 
 - Lookups never call Riot in the request. GET /api/games?id=Name%23TAG answers from
   api.db at once and queues a job; one fetcher task (src/api/fetch.zig) is the only Riot
-  caller and works the queue oldest first; the page polls every 3 s and shows progress
+  caller, through the crawler's proxy (Rate limits), and works the queue oldest first;
+  the page polls every 3 s and shows progress
 - Per new Riot ID: account-v1 by Riot ID and active region (europe route), league-v4
   by PUUID (visible rank), match-v5 ids (last 60 days, one list per queue: solo 420,
   flex 440, draft 400, Swiftplay 480), then match + timeline for up to 10 games not yet
@@ -37,9 +38,10 @@ static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy b
   weekly games, wins, mean gold difference at 14 and mean against typical; per matchup
   the gold difference at 10 oldest to newest and the older vs newer half's mean
 - Whole game (any role, lane opponent or not): the team's win chance per minute
-  (src/winchance.zig: objectives.zig's "+ objectives held" state model fitted at every
-  minute by `meiolol winchance`; weights in src/winchance_weights.zig, refit when the
-  game changes), the turning minute (biggest one-minute change, with that minute's
+  (src/winchance.zig: objectives.zig's "+ objectives held" state model fitted over all
+  minutes at once by `meiolol winchance`, each weight linear in minute between knots
+  every 5 minutes (docs/model.md "Win chance by minute"); weights per minute in
+  src/winchance_weights.zig, refit when the game changes), the turning minute (biggest one-minute change, with that minute's
   kills, deaths and objectives) and death cost per death (bounty and shutdown gold to
   the enemy, objectives the enemy took in the next minute, win chance before and after).
   Plate events after 14:00 are ignored (Riot sends them, worth nothing then)
@@ -74,17 +76,24 @@ Queue capped at 30 jobs (503 "busy" beyond); objection checks jump the queue.
 
 ## Rate limits
 
-The service shares the Riot key, so Riot's per-route app limits (100 per 2 min on a
-personal key) with the crawler. On top of Riot's own limits (the shared Limiter, synced
-from Riot's -Count headers, so it sees the crawler's calls), the service keeps to its own
-budget: `--budget 20:120` per route by default. The crawler leaves room with
-`meiolol crawl --reserve 20` (meiolol-de, c2a8d67): without it a lookup waits behind a
-saturated bucket (measured 2026-10-11: 429 on the first call, ~2 min queued). The
-reserve only applies for 10 minutes after the crawler sees the service's requests in
-Riot's counts, and the crawler paces its requests evenly, so the first call finds a
-slot within seconds and the rest of a lookup gets 20 per 2 min (docs/architecture.md,
-Crawler). So a first lookup fits in about one budget window; a few lookups a minute is
-the most the personal key allows, which is plenty in preview.
+The service and the crawler share one key, so one set of per-route app limits (100 per
+2 min on a personal key). The service makes no Riot call itself: it asks the crawler's
+proxy (src/riot/proxy.zig, `meiolol crawl --proxy 10.0.0.3:8092`, the box's private
+address; service `--riot-proxy http://10.0.0.3:8092`), which makes the call through the
+crawler's own limiter for that route at priority. The crawler paces its calls evenly
+(one per 1.2 s per route on a personal key), so a priority call waits at most about one
+pace for the next free slot, unpaced, and the crawler holds back while one waits. So a
+first lookup (~26 calls) takes ~30 s, and the crawler has the whole key the rest of
+the time. This replaced `--reserve 20` and the service's own `--budget 20:120`
+(2026-10-13): the crawler gave up 20% for 10 minutes after each lookup and a lookup
+still got only 20 calls per 2 min.
+
+The proxy answers as Riot would (200, 404), 401 when Riot rejects the box's key, 503
+when the crawler's tries ran out, 400 for an unknown route. The service retries an
+unreachable proxy (a crawler restart, every push) for ~2 min, then the job fails; it
+never stops on a rejected key, since the key is the box's to renew. Only jomify may
+connect: security list rule and iptables on the box (Deploy). Without `--riot-proxy`
+the service calls Riot itself with RIOT_API_KEY (local testing).
 
 ## Privacy: what is stored and shown, and why
 
@@ -142,14 +151,15 @@ Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB
   `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's
   push deploy: after a change to src/api or the curves file format (curvesfile.zig
   version), rebuild, `scp` to /tmp, `sudo install`, then `sudo systemctl restart
-  meiolol-api`. Installed: 33c523b (win chance, death cost), 2026-10-12 22:55Z; previous
-  binary kept as /usr/local/bin/meiolol.bak-pre-33c523b
+  meiolol-api`. Installed: e58975f (smooth win chance weights, 6c7d50d), 2026-10-13
+  00:26Z; previous binary (33c523b) kept as /usr/local/bin/meiolol.bak-pre-e58975f
 - User `meiolol-api` (system, no shell). /var/lib/meiolol-api (750): api.db. Exchange
   /var/lib/meiolol-api/exchange (meiolol:meiolol-api, 2770; `meiolol` is in the group):
   curves/ from the box, forgotten.txt out, box-forgotten.txt in
-- Key: /etc/meiolol-api.env (root 600, RIOT_API_KEY only), the same key as the box
+- No key on jomify: Riot calls go through the crawler's proxy (Rate limits)
 - systemd: meiolol-api.service (`meiolol api --data /var/lib/meiolol-api --exchange
-  /var/lib/meiolol-api/exchange`, UMask 0007, Restart=on-failure, not on exit 3,
+  /var/lib/meiolol-api/exchange --riot-proxy http://10.0.0.3:8092`, UMask 0007,
+  Restart=on-failure, not on exit 3,
   MemoryMax 400M, ProtectSystem=strict); meiolol-api-reload.path watches exchange/curves
   and restarts the service through meiolol-api-reload.service. Logs: `sudo journalctl
   -u meiolol-api`
@@ -169,7 +179,10 @@ Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB
   /var/www/meiolol). deploy/web-loop.sh pushes the newest two curves files after each
   `meiolol curves` (push_curves); deploy/backup-loop.sh swaps the forgotten lists daily
   (data-safety-af)
-- Crawler: `deploy/box.sh start` now defaults to `--reserve 20`
+- Crawler: `deploy/box.sh start` defaults to `--proxy 10.0.0.3:8092`; the box's
+  crawl.args has it too. Security list rule "meiolol-proxy: Your games service to the
+  crawler" (TCP 8092 from 10.0.0.214/32) and an iptables ACCEPT on the box before its
+  REJECT (netfilter-persistent), as for render (docs/hosting.md)
 - Check: `curl -s -o /dev/null -w '%{http_code}' https://meiolol.jomify.lol/api/health`
   answers 401; with the password, {"ok":true,"jobs":N}. Live lookup tested through nginx
   on 2026-10-11 (10 games)

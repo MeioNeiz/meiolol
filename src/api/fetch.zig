@@ -1,7 +1,8 @@
 //! The service's only Riot caller: one task working through the jobs table, oldest
-//! first. Shares the API key (and so Riot's per-route limits) with the crawler, so on
-//! top of Riot's own limits it keeps to a small budget per route and fetches only a
-//! few new games per refresh; everything fetched is cached by match id.
+//! first. Calls go through the crawler's proxy (riot/proxy.zig), which takes the
+//! crawler's next free slot for each, so the key's limits are shared without either
+//! side holding back. Fetches only a few new games per refresh; everything fetched is
+//! cached by match id.
 
 const std = @import("std");
 const store = @import("store");
@@ -17,9 +18,9 @@ const endpoints = riot.endpoints;
 const log = std.log.scoped(.api);
 
 pub const Options = struct {
-    /// Riot calls the service may make per route, as a Riot limit spec. The crawler
-    /// gets the rest of the key's 100 per 2 minutes
-    budget: []const u8 = "20:120",
+    /// Base URL of the crawler's proxy; null calls Riot with `key` (local testing)
+    proxy: ?[]const u8 = null,
+    key: []const u8 = "",
     /// New games fetched per refresh (~2 calls each); older ones on later refreshes
     max_new: u32 = 10,
     /// How far back to list match ids
@@ -35,38 +36,41 @@ pub const Options = struct {
 /// Account lookups go to the nearest account-v1 cluster; any answers for any player
 const account_route: endpoints.Region = .europe;
 
+/// Summoner's Rift queues with lanes, one id list call each per refresh. Curves come
+/// from solo games only; the page says so on other queues' charts. Not ARAM or Arena
+/// (no lanes) and not the unfiltered list: it holds private ARAM Mayhem ids (403) that
+/// would take the new-game slots on every refresh
+const queues = [_]u16{ endpoints.ranked_solo, endpoints.ranked_flex, endpoints.normal_draft, endpoints.swiftplay };
+
 pub const Fetcher = struct {
     gpa: Allocator,
     io: std.Io,
-    key: []const u8,
     db: store.Db,
     opts: Options,
     /// One client (and so one limiter, as Riot counts) per routing value
     clients: std.StringHashMapUnmanaged(*Route) = .empty,
 
-    const Route = struct { client: Client, budget: Limiter };
+    const Route = struct { client: Client, limiter: Limiter };
 
     pub fn deinit(f: *Fetcher) void {
         var it = f.clients.valueIterator();
         while (it.next()) |r| {
             r.*.client.deinit();
-            r.*.budget.deinit();
+            r.*.limiter.deinit();
             f.gpa.destroy(r.*);
         }
         f.clients.deinit(f.gpa);
     }
 
-    /// Spends one call of `route`'s budget and returns its client
     fn route(f: *Fetcher, name: []const u8) !*Client {
         const gop = try f.clients.getOrPut(f.gpa, name);
         if (!gop.found_existing) {
             const r = try f.gpa.create(Route);
             errdefer f.gpa.destroy(r);
-            r.* = .{ .client = try .init(f.gpa, f.io, f.key), .budget = try .init(f.gpa, f.io) };
-            try r.budget.update("budget", .{ .app_limit = f.opts.budget });
+            r.limiter = try .init(f.gpa, f.io);
+            r.client = if (f.opts.proxy) |base| .initProxy(f.gpa, f.io, base) else .init(f.gpa, f.io, f.opts.key, &r.limiter);
             gop.value_ptr.* = r;
         }
-        try gop.value_ptr.*.budget.acquire("budget");
         return &gop.value_ptr.*.client;
     }
 
@@ -228,12 +232,16 @@ pub const Fetcher = struct {
         try f.db.run("UPDATE players SET tier = ?, division = ?, lp = ? WHERE puuid = ?", .{ rank.tier, rank.division, rank.lp, puuid });
 
         const now = f.seconds();
-        const ids_body = try endpoints.matchIds(try f.route(@tagName(region)), region, puuid, now - f.opts.since_days * std.time.s_per_day, now, 0) orelse
-            return error.NoMatchIds;
-        const ids = try endpoints.parse([]const []const u8, arena, ids_body);
+        var ids: std.ArrayList([]const u8) = .empty;
+        for (queues) |queue| {
+            const body = try endpoints.matchIds(try f.route(@tagName(region)), region, puuid, queue, now - f.opts.since_days * std.time.s_per_day, now, 0) orelse
+                return error.NoMatchIds;
+            try ids.appendSlice(arena, try endpoints.parse([]const []const u8, arena, body));
+        }
+        newestFirst(ids.items);
 
         var wanted: std.ArrayList([]const u8) = .empty;
-        for (ids) |id| {
+        for (ids.items) |id| {
             if (wanted.items.len == f.opts.max_new) break;
             const have = try f.db.scalar("SELECT 1 FROM player_games WHERE puuid = ? AND match_id = ?", .{ puuid, id });
             if (have == null) try wanted.append(arena, id);
@@ -378,6 +386,25 @@ test pickIcon {
     }
     const any = pickIcon(std.testing.io, 5000);
     try std.testing.expect(any >= 0 and any < starter_icons);
+}
+
+/// Match ids from several lists, newest first: within a platform, ids count up
+fn newestFirst(ids: [][]const u8) void {
+    std.mem.sort([]const u8, ids, {}, struct {
+        fn newer(_: void, a: []const u8, b: []const u8) bool {
+            return number(a) > number(b);
+        }
+        fn number(id: []const u8) u64 {
+            const sep = std.mem.lastIndexOfScalar(u8, id, '_') orelse return 0;
+            return std.fmt.parseInt(u64, id[sep + 1 ..], 10) catch 0;
+        }
+    }.newer);
+}
+
+test newestFirst {
+    var ids = [_][]const u8{ "EUW1_7000000002", "EUW1_7000000010", "EUW1_999", "EUW1_7000000005" };
+    newestFirst(&ids);
+    try std.testing.expectEqualDeep([_][]const u8{ "EUW1_7000000010", "EUW1_7000000005", "EUW1_7000000002", "EUW1_999" }, ids);
 }
 
 pub fn readSummary(arena: Allocator, blob: []const u8) !game.Summary {

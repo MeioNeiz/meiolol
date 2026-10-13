@@ -112,7 +112,7 @@ patch/role/mid.html 9e832068613b4f94
 patch/role/support.html 27a68820b622cfee
 patch/role/top.html 587f26fb48470ea7
 pool.html e501fccf63cb5656
-privacy.html c30238510ea047b4
+privacy.html bbb9bfba4faccd75
 robots.txt 331ea9090db0c9f6
 role/bot.html 545ebf587fa0d326
 role/jungle.html ab22055d5618aa53

@@ -73,8 +73,9 @@ const usage =
     \\              --min-tier T     lowest tier walked on the ladder and scanned for
     \\                               matches (e.g. PLATINUM: Platinum IV and up;
     \\                               default IRON, everyone)
-    \\              --reserve PCT    leave PCT of each rate limit to other processes
-    \\                               on the key while one is using it (default 0)
+    \\              --proxy HOST:PORT  serve the Your games service's Riot calls
+    \\                               through the crawler's limiters, ahead of the crawl
+    \\                               (box: 10.0.0.3:8092, the private address)
     \\  stats       write the model file the app reads (ranked solo, no remakes)
     \\              --patch P        patch to include, repeatable or comma separated
     \\                               (default: the newest patch)
@@ -128,8 +129,12 @@ const usage =
     \\              data (Data Dragon; outcomes and meiolol-lab's first_item read it)
     \\              --patch P, --platform P  as for stats
     \\  winchance   fit win chance by minute from the game state (Your games' turning
-    \\              minute and death cost): weights as Zig source, check on stdout
+    \\              minute and death cost): weights as Zig source, check on test games
+    \\              (docs/model.md protocol) on stdout
     \\              --out FILE       default src/winchance_weights.zig
+    \\              --dev            score every fifth train game instead (no weights
+    \\                               unless --out)
+    \\              --knots 1,5,...  the smooth fit's knot minutes
     \\  objectives  what is an objective worth beyond its gold? win from the state at
     \\              10-30 min (markdown on stdout; docs/model.md)
     \\              --patch P        as for stats (default: every patch, pooled)
@@ -204,15 +209,16 @@ const usage =
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8080
     \\              --out DIR        site directory to serve
-    \\  api         the "Your games" service: JSON at /api/ (src/api/root.zig; needs
-    \\              RIOT_API_KEY). Cache in DIR/api.db
+    \\  api         the "Your games" service: JSON at /api/ (src/api/root.zig). Cache in
+    \\              DIR/api.db. Riot calls through the crawler's proxy, else
+    \\              straight to Riot with RIOT_API_KEY (testing)
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8090
     \\              --exchange DIR   shared with the box: curves/ in, forgotten
     \\                               PUUID lists both ways (docs/your-games.md)
     \\              --curves DIR     curves-<patch>.bin files (default EXCHANGE/curves,
     \\                               else DIR/export)
-    \\              --budget SPEC    Riot calls per route, Riot's format (default 20:120)
+    \\              --riot-proxy URL the crawler's --proxy (box: http://10.0.0.3:8092)
     \\              --cors ORIGIN    allow a page on ORIGIN (local testing)
     \\  your-example  one anonymised player's recent games as GET /api/games answers,
     \\              for your.html's example (src/api/example.zig); read-only
@@ -492,9 +498,8 @@ fn cmdCrawl(c: *Cmd) !u8 {
             o.min_tier = for (store.schema.tiers, 0..) |t, i| {
                 if (std.ascii.eqlIgnoreCase(t, tier)) break i;
             } else return error.Usage;
-        } else if (c.is("--reserve")) {
-            o.reserve_pct = try c.int(u8);
-            if (o.reserve_pct > 90) return error.Usage;
+        } else if (c.is("--proxy")) {
+            o.proxy = try c.value();
         } else if (c.is("--fake-api")) {
             // Benchmark only, not in usage: canned answers after MS ms (deploy/bench-crawl.sh)
             fake_api_ms = try c.int(u32);
@@ -847,10 +852,18 @@ fn cmdObjectives(c: *Cmd) !u8 {
 }
 
 fn cmdWinchance(c: *Cmd) !u8 {
-    var out: []const u8 = "src/winchance_weights.zig";
+    var out: ?[]const u8 = null;
+    var o: winchance.Options = .{};
+    var knots: std.ArrayList(u8) = .empty;
     while (c.next()) |_| {
         if (c.is("--out")) {
             out = try c.value();
+        } else if (c.is("--dev")) {
+            o.dev = true;
+        } else if (c.is("--knots")) {
+            var it = std.mem.splitScalar(u8, try c.value(), ',');
+            while (it.next()) |k| try knots.append(c.arena, std.fmt.parseInt(u8, k, 10) catch return error.Usage);
+            o.knots = knots.items;
         } else return error.Usage;
     }
     const io = c.init.io;
@@ -859,9 +872,10 @@ fn cmdWinchance(c: *Cmd) !u8 {
     var src: std.Io.Writer.Allocating = .init(c.arena);
     var buf: [16 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
-    try winchance.fit(c.init.gpa, db, &src.writer, &stdout.interface);
+    if (out == null and !o.dev) out = "src/winchance_weights.zig";
+    try winchance.fitWith(c.init.gpa, db, o, if (out != null) &src.writer else null, &stdout.interface);
     try stdout.interface.flush();
-    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = out, .data = src.written() });
+    if (out) |path| try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = src.written() });
     return 0;
 }
 
@@ -1273,7 +1287,7 @@ fn cmdServe(c: *Cmd) !u8 {
 }
 
 fn cmdApi(c: *Cmd) !u8 {
-    var o: api.Options = .{ .db_path = "", .curves_dir = "", .key = "" };
+    var o: api.Options = .{ .db_path = "", .curves_dir = "" };
     var curves_dir: ?[]const u8 = null;
     while (c.next()) |_| {
         if (c.is("--host")) {
@@ -1284,14 +1298,14 @@ fn cmdApi(c: *Cmd) !u8 {
             o.fetch.exchange_dir = try c.value();
         } else if (c.is("--curves")) {
             curves_dir = try c.value();
-        } else if (c.is("--budget")) {
-            o.fetch.budget = try c.value();
+        } else if (c.is("--riot-proxy")) {
+            o.fetch.proxy = try c.value();
         } else if (c.is("--cors")) {
             o.cors = try c.value();
         } else return error.Usage;
     }
     const arena = c.arena;
-    o.key = try c.apiKey();
+    if (o.fetch.proxy == null) o.fetch.key = try c.apiKey();
     o.db_path = try arena.printSentinel("{s}/api.db", .{c.data_dir}, 0);
     o.curves_dir = curves_dir orelse if (o.fetch.exchange_dir) |x|
         try std.fs.path.join(arena, &.{ x, "curves" })
@@ -1442,9 +1456,13 @@ fn cmdRekey(c: *Cmd) !u8 {
         std.log.warn("RIOT_API_KEY_OLD not set and nothing erased: not checking the keys", .{});
         return try rekeyApply(c, db, api_db, &.{}, dry_run);
     };
-    var old: riot.client.Client = try .init(gpa, io, old_key);
+    var old_limiter: riot.ratelimit.Limiter = try .init(gpa, io);
+    defer old_limiter.deinit();
+    var old: riot.client.Client = .init(gpa, io, old_key, &old_limiter);
     defer old.deinit();
-    var new: riot.client.Client = try .init(gpa, io, new_key);
+    var new_limiter: riot.ratelimit.Limiter = try .init(gpa, io);
+    defer new_limiter.deinit();
+    var new: riot.client.Client = .init(gpa, io, new_key, &new_limiter);
     defer new.deinit();
     if (fake_api) {
         old.fake = &fakes[0];
@@ -1631,6 +1649,8 @@ fn cmdForget(c: *Cmd) !u8 {
         return error.Usage;
     }
     const now = std.Io.Clock.real.now(io).toSeconds();
+    var limiter: riot.ratelimit.Limiter = try .init(c.init.gpa, io);
+    defer limiter.deinit();
     var client: ?riot.client.Client = null;
     defer if (client) |*cl| cl.deinit();
     // The box holds the crawler databases, the web server the Your games cache; open
@@ -1652,7 +1672,7 @@ fn cmdForget(c: *Cmd) !u8 {
     var already: usize = 0;
     for (ids) |id| {
         const puuid = if (std.mem.indexOfScalar(u8, id, '#') == null) id else blk: {
-            if (client == null) client = try .init(c.init.gpa, io, try c.apiKey());
+            if (client == null) client = .init(c.init.gpa, io, try c.apiKey(), &limiter);
             break :blk try forget.resolveRiotId(arena, &client.?, id) orelse {
                 unresolved += 1;
                 continue;

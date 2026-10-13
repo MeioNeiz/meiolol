@@ -26,7 +26,6 @@ pub const Options = struct {
     db_path: [:0]const u8,
     /// Directory with curves-<patch>.bin files (`meiolol curves`); may be empty
     curves_dir: []const u8,
-    key: []const u8,
     host: []const u8 = "127.0.0.1",
     port: u16 = 8090,
     /// Access-Control-Allow-Origin, for a page served from another origin in testing
@@ -61,14 +60,14 @@ pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
 
     const db = try cache.open(opts.db_path);
     defer db.close();
-    var fetcher: fetch.Fetcher = .{ .gpa = gpa, .io = io, .key = opts.key, .db = db, .opts = opts.fetch };
+    var fetcher: fetch.Fetcher = .{ .gpa = gpa, .io = io, .db = db, .opts = opts.fetch };
     defer fetcher.deinit();
 
     const address = try Io.net.IpAddress.parse(opts.host, opts.port);
     var server = try address.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
-    log.info("api on http://{s}:{d}/api/, {d} curves files, budget {s} per route", .{
-        opts.host, opts.port, ctx.curves.files.len, opts.fetch.budget,
+    log.info("api on http://{s}:{d}/api/, {d} curves files, Riot via {s}", .{
+        opts.host, opts.port, ctx.curves.files.len, opts.fetch.proxy orelse "this process's key",
     });
 
     var group: Io.Group = .init;

@@ -156,6 +156,8 @@ pub const Report = struct {
 
 pub const Game = struct {
     start_ms: i64,
+    /// Riot queue id: 420 solo/duo, 440 flex, 400 draft, 480 Swiftplay
+    queue: i64,
     patch: []const u8,
     duration_s: i64,
     remake: bool,
@@ -309,6 +311,7 @@ pub fn analyse(arena: Allocator, in: Input, rank: Rank, set: CurveSet) !Game {
     const role = Role.fromLcu(me.position);
     var g: Game = .{
         .start_ms = s.start_ms,
+        .queue = s.queue,
         .patch = s.patch,
         .duration_s = s.duration_s,
         .remake = s.remake,

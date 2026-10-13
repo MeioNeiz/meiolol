@@ -165,12 +165,15 @@ const testing = std.testing;
 const Keys = struct {
     fakes: [2]riot.fake.Fake,
     clients: [2]Client,
+    /// Unused: fakes answer before the limiter
+    limiter: riot.ratelimit.Limiter,
 
     fn init(k: *Keys, new_encryption: u8) !void {
+        k.limiter = try .init(testing.allocator, testing.io);
         for (&k.fakes, &k.clients, [2]u8{ 0, new_encryption }) |*f, *c, e| {
             f.* = try .init(testing.allocator, testing.io, 0);
             f.encryption = e;
-            c.* = try .init(testing.allocator, testing.io, "fake");
+            c.* = .init(testing.allocator, testing.io, "fake", &k.limiter);
             c.fake = f;
         }
     }
@@ -180,6 +183,7 @@ const Keys = struct {
             c.deinit();
             f.deinit(testing.allocator);
         }
+        k.limiter.deinit();
     }
 };
 

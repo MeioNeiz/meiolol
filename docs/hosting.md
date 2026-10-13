@@ -70,7 +70,9 @@ The static upload leaves out matchup pages under 200 games (`meiolol site
 - Network: jomify (10.0.0.214) and the box share subnet 10.0.0.0/24. Security list rule
   "meiolol-render: jomify nginx to the box" (TCP 8091 from 10.0.0.214/32; the list as it
   was is in .git/oci-ingress-before-render.json on the Mac) and an iptables ACCEPT on the
-  box before its REJECT (saved with netfilter-persistent). Jacob's OK 2026-10-12
+  box before its REJECT (saved with netfilter-persistent). Jacob's OK 2026-10-12. The
+  same for the crawler's Your games proxy: "meiolol-proxy: Your games service to the
+  crawler", TCP 8092 from 10.0.0.214/32 (Jacob's OK 2026-10-13)
 - jomify nginx (/etc/nginx/conf.d/meiolol.conf; before: meiolol.conf.bak-2026-10-12-render):
   try_files, then `@render` (upstream meiolol_render: the box twice, for the retry): proxy cache /var/cache/nginx/meiolol (2 GB, key $uri), 200s
   10 min, 404s 1 min, stale copies while the box is down or refreshing, one render per

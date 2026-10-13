@@ -3,15 +3,19 @@
 //! - RegionCrawler (europe, asia, ...): match ids per player of its platforms, match
 //!   details, then their timelines
 //! - PlatformCrawler (euw1, kr, ...): ladder seeding for every tier, then mastery with
-//!   spare budget
-//! Each thread owns a Bucket: HTTP client, limiter and a DB connection it only reads
-//! with; one writer thread (writer.zig) makes every write. `--priority` platforms (EUW1)
+//!   spare budget: sampled ladder players, then every player of the week's new matches
+//! Each thread owns a Bucket: HTTP client, its route's limiter and a DB connection it
+//! only reads with; one writer thread (writer.zig) makes every write. `--proxy` serves
+//! the Your games service's calls through the same limiters, ahead of the crawl
+//! (proxy.zig). `--priority` platforms (EUW1)
 //! come first in their region's queues, and their region's jobs first at the writer
 //! when the machine falls behind. The main thread reports.
 
 const std = @import("std");
 const store = @import("store");
 const Client = @import("client.zig").Client;
+const Limiters = @import("ratelimit.zig").Limiters;
+const Proxy = @import("proxy.zig").Proxy;
 const ep = @import("endpoints.zig");
 const match = @import("match.zig");
 const timeline = @import("timeline.zig");
@@ -78,9 +82,8 @@ pub const Options = struct {
     /// Lowest tier the ladder walks and the scan pool takes, an index into `tiers`
     /// (PLATINUM: Platinum IV and up); the last tier takes everyone
     min_tier: usize = tiers.len - 1,
-    /// Share of each bucket left to other processes on the key (the Your games service)
-    /// while one is using it (Limiter.reserve_pct)
-    reserve_pct: u8 = 0,
+    /// Address the Your games proxy listens on ("10.0.0.3:8092"); none when null
+    proxy: ?[]const u8 = null,
     fake: ?*const @import("fake.zig").Fake = null,
 };
 
@@ -112,8 +115,20 @@ pub const Crawler = struct {
     writer: writer.Writer = undefined,
     /// From the database at start; each RegionCrawler keeps its own copy up to date
     patches: Patches = .{},
+    /// Set up by run(): shared by the bucket threads and the proxy
+    limiters: Limiters = undefined,
 
     pub fn run(c: *Crawler) !void {
+        c.limiters = try .init(c.gpa, c.io);
+        defer c.limiters.deinit();
+        for (&c.limiters.all) |*l| l.paced = true;
+        // First, so a lookup waits only for the restart itself
+        var proxy: Proxy = .{ .gpa = c.gpa, .io = c.io, .key = c.opts.key, .limiters = &c.limiters, .fake = c.opts.fake };
+        var proxy_server = if (c.opts.proxy) |address| try proxy.listen(address) else null;
+        defer if (proxy_server) |*s| s.deinit(c.io);
+        var serving = if (proxy_server) |*s| try c.io.concurrent(Proxy.serve, .{ &proxy, s }) else null;
+        defer if (serving) |*f| f.cancel(c.io);
+
         // Opening once here migrates the schema before the threads connect
         const db = try store.open(c.gpa, c.opts.data_dir);
         defer db.close();
@@ -361,10 +376,7 @@ const Bucket = struct {
     fn init(c: *Crawler, name: []const u8, priority: bool, requests: *std.atomic.Value(u64)) !Bucket {
         const db = try store.schema.connect(c.gpa, c.opts.data_dir);
         errdefer db.close();
-        var client: Client = try .init(c.gpa, c.io, c.opts.key);
-        errdefer client.deinit();
-        client.limiter.setReserve(c.opts.reserve_pct);
-        client.limiter.paced = true;
+        var client: Client = .init(c.gpa, c.io, c.opts.key, c.limiters.get(name).?);
         client.fake = c.opts.fake;
         return .{ .c = c, .name = name, .db = db, .client = client, .priority = priority, .requests = requests };
     }
@@ -667,7 +679,7 @@ const RegionCrawler = struct {
         if (c.opts.patch_only) start_time = @max(start_time, rc.patches.start(platform) orelse 0);
         var start: u32 = 0;
         while (true) : (start += 100) {
-            const got = try ep.matchIds(&rc.b.client, rc.region, puuid, start_time, end, start);
+            const got = try ep.matchIds(&rc.b.client, rc.region, puuid, ep.ranked_solo, start_time, end, start);
             defer if (got) |b| c.gpa.free(b);
             const body = got orelse "[]";
             _ = rc.counters().ids_calls.fetchAdd(1, .monotonic);
@@ -758,6 +770,9 @@ const PlatformCrawler = struct {
     /// Last PUUID given mastery, so each batch resumes instead of rescanning done players
     mastery_cursor: [128]u8 = undefined,
     mastery_cursor_len: usize = 0,
+    /// matches.rowid up to which participants have been given mastery; null until the
+    /// first pass, which starts at the past week's matches
+    match_cursor: ?i64 = null,
     /// When this thread last fetched a ladder page (--ladder-per-hour)
     last_ladder: i64 = 0,
 
@@ -770,6 +785,7 @@ const PlatformCrawler = struct {
     fn step(pc: *PlatformCrawler) !void {
         if (try pc.seedLadder() > 0) return;
         if (pc.b.c.opts.mastery and try pc.fetchMasteries(50) > 0) return;
+        if (pc.b.c.opts.mastery and try pc.fetchParticipantMasteries(20)) return;
         try pc.b.nap(60);
     }
 
@@ -874,6 +890,56 @@ const PlatformCrawler = struct {
             }
         }
         return @intCast(puuids.len);
+    }
+
+    /// Snapshots near game time for the experience features: a refresh once a player's
+    /// is older than this, so an active player gets about one a week. Riot asks for
+    /// monthly refreshes; the writer drops snapshots after 30 days
+    const participant_refresh_s = 7 * std.time.s_per_day;
+
+    /// Where the first pass starts: the past week's matches, in storage order
+    pub const match_cursor_start =
+        \\SELECT coalesce((SELECT min(rowid) FROM matches WHERE game_start > ?) - 1,
+        \\    (SELECT max(rowid) FROM matches), 0)
+    ;
+    /// Storage order, not game time: matches found late (a player's older games) still
+    /// get theirs. The rowid of the batch's last match on this platform
+    pub const match_batch_end =
+        \\SELECT max(rowid) FROM
+        \\    (SELECT rowid FROM matches WHERE rowid > ? AND platform = ? ORDER BY rowid LIMIT ?)
+    ;
+    /// Players of the batch's games from the past week without a snapshot this recent
+    pub const participant_masteries =
+        \\SELECT DISTINCT p.puuid FROM matches m JOIN participants p USING (match_id)
+        \\WHERE m.rowid > ?1 AND m.rowid <= ?2 AND m.platform = ?3 AND m.game_start > ?4
+        \\    AND p.puuid IS NOT NULL AND NOT EXISTS
+        \\    (SELECT 1 FROM mastery x WHERE x.puuid = p.puuid AND x.fetched_at > ?5)
+    ;
+
+    /// Mastery for every player of up to n newly stored matches; false when none are new
+    fn fetchParticipantMasteries(pc: *PlatformCrawler, n: u32) !bool {
+        var arena: std.heap.ArenaAllocator = .init(pc.b.c.gpa);
+        defer arena.deinit();
+        const db = pc.b.db;
+        const now = pc.b.now();
+        const week_ago_ms = (now - participant_refresh_s) * 1000;
+        const from = pc.match_cursor orelse try db.scalar(match_cursor_start, .{week_ago_ms}) orelse 0;
+        pc.match_cursor = from;
+        // max() of no rows is NULL, read as 0
+        const to = try db.scalar(match_batch_end, .{ from, pc.platform.id, n }) orelse 0;
+        if (to <= from) return false;
+        const puuids = try column(db, arena.allocator(), participant_masteries, .{
+            from, to, pc.platform.id, week_ago_ms, now - participant_refresh_s,
+        });
+        for (puuids) |puuid| {
+            try pc.b.check();
+            pc.fetchMastery(arena.allocator(), puuid) catch |err| {
+                if (fatal(err)) return err;
+                log.warn("{s} mastery: {t}", .{ pc.platform.host, err });
+            };
+        }
+        pc.match_cursor = to;
+        return true;
     }
 
     fn masteryCursor(pc: *PlatformCrawler) []const u8 {
@@ -993,6 +1059,54 @@ test "queues: priority platforms first, matches oldest first, timelines newest" 
         try std.testing.expectEqual(c[1].len, got.len);
         for (c[1], got) |e, g| try std.testing.expectEqualStrings(e, g);
     }
+}
+
+test "participant mastery: the week's new matches in storage order, stale snapshots only" {
+    const db = try store.schema.memory();
+    defer db.close();
+    const day_ms = std.time.ms_per_day;
+    const now_s = 100 * std.time.s_per_day;
+    const week_ago_ms = (now_s - PlatformCrawler.participant_refresh_s) * 1000;
+    // rowid order: an old game, then this week's, one KR game between, one found late
+    try db.run(
+        \\INSERT INTO matches (match_id, source, platform, queue_id, patch, game_version,
+        \\    game_start, duration_s, remake) VALUES
+        \\    ('EUW1_old', 's', 'EUW1', 420, '16.20', 'v', ?1, 1800, 0),
+        \\    ('EUW1_a', 's', 'EUW1', 420, '16.20', 'v', ?2, 1800, 0),
+        \\    ('KR_a', 's', 'KR', 420, '16.20', 'v', ?2, 1800, 0),
+        \\    ('EUW1_b', 's', 'EUW1', 420, '16.20', 'v', ?2, 1800, 0),
+        \\    ('EUW1_late', 's', 'EUW1', 420, '16.20', 'v', ?3, 1800, 0)
+    , .{ 80 * day_ms, 99 * day_ms, 95 * day_ms });
+    try db.exec(
+        \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position,
+        \\    individual_position, win) VALUES
+        \\    ('EUW1_old', 0, 100, 'o', 1, 'TOP', 'TOP', 1),
+        \\    ('EUW1_a', 0, 100, 'fresh', 1, 'TOP', 'TOP', 1),
+        \\    ('EUW1_a', 1, 100, 'stale', 1, 'TOP', 'TOP', 1),
+        \\    ('EUW1_a', 2, 100, NULL, 1, 'TOP', 'TOP', 1),
+        \\    ('KR_a', 0, 100, 'kr', 1, 'TOP', 'TOP', 1),
+        \\    ('EUW1_b', 0, 100, 'stale', 1, 'TOP', 'TOP', 1),
+        \\    ('EUW1_b', 1, 100, 'new', 1, 'TOP', 'TOP', 1),
+        \\    ('EUW1_late', 0, 100, 'late', 1, 'TOP', 'TOP', 1);
+    );
+    try db.run(
+        \\INSERT INTO mastery VALUES ('fresh', 'EUW1', ?1, 0, x''), ('stale', 'EUW1', ?2, 0, x'')
+    , .{ now_s - 3600, now_s - 8 * std.time.s_per_day });
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const from = (try db.scalar(PlatformCrawler.match_cursor_start, .{week_ago_ms})).?;
+    try std.testing.expectEqual(1, from);
+    const to = (try db.scalar(PlatformCrawler.match_batch_end, .{ from, "EUW1", 2 })).?;
+    try std.testing.expectEqual(4, to);
+    const got = try column(db, arena.allocator(), "SELECT * FROM (" ++
+        PlatformCrawler.participant_masteries ++ ") ORDER BY 1", .{
+        from, to, "EUW1", week_ago_ms, now_s - PlatformCrawler.participant_refresh_s,
+    });
+    try std.testing.expectEqual(2, got.len);
+    try std.testing.expectEqualStrings("new", got[0]);
+    try std.testing.expectEqualStrings("stale", got[1]);
+    try std.testing.expectEqual(5, (try db.scalar(PlatformCrawler.match_batch_end, .{ to, "EUW1", 2 })).?);
+    try std.testing.expectEqual(0, (try db.scalar(PlatformCrawler.match_batch_end, .{ 5, "EUW1", 2 })).?);
 }
 
 test "scan pool: players below --min-tier are not scanned" {

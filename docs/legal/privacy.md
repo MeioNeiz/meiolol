@@ -18,10 +18,11 @@ goes live or into the production application.
   players, unless the processing is "occasional" and low risk. A 24/7 crawler is hard to
   call occasional. Paid services cost roughly £100 to £300 a year (not researched). Until
   you decide, the section below stays commented out
-- **Retention of crawled match rows.** Today the match tables are kept forever, keyed by
-  PUUID. Proposed: drop the PUUID from match rows 24 months after the game (the
-  statistics keep the anonymous row), as Counterwatch does. The text below assumes this;
-  it needs a `meiolol` job before going live
+- **Retention of crawled match rows.** 24 months (Jacob, 2026-10-13): the crawler blanks
+  PUUIDs 24 months after the game, as Counterwatch does. Not built yet, needed before
+  going live: deleting archive files at 24 months (gpu-box), and the same sweep over
+  backup segments, which are append-only and never rotated, so their PUUIDs and rank
+  history outlive 24 months today
 - **30-day refresh.** Riot recommends refreshing stored players every 30 days and
   dropping accounts it has erased. Implemented by meiolol-de: ladders refresh daily,
   mastery at least every 30 days, and a 404 for a PUUID deletes the player at once
@@ -70,8 +71,9 @@ items, runes, bans, game length, result), each player's per-minute gold, experie
 level, CS and map position (the match timeline), each player's visible rank when the game
 was collected, and champion mastery. Players are identified by a PUUID, an identifier
 Riot encrypts separately for each application, so it means nothing outside meiolol. Raw
-match records from Riot also contain Riot IDs (name and tag); we keep those only inside
-the raw copy, which is deleted after 30 days.
+match records from Riot also contain Riot IDs (name and tag). These stay on our server
+only until the record is copied to our archive, usually within a few days; the archive
+copy has Riot IDs removed and player identifiers replaced by one-way codes.
 
 **Why.** To compute champion level and aggregate statistics: matchup curves, champion
 win rates, the Daily Draft. And to show a player their own games when someone looks up
@@ -85,15 +87,18 @@ statistics sites, we collect only what the game exposes, we publish only aggrega
 never contact players, build advertising profiles or sell data, and anyone can object.
 
 **Where.** On a computer in the United Kingdom run by us. The public website is served
-from Oracle Cloud in London. Backups are kept on our own machines, rotated within five
-weeks, and erasures are applied to them at the same time as to the live data. Raw
-records from Riot are not backed up, so the limits below apply to backups too.
+from Oracle Cloud in London. Backups and the archive are kept on our own machines, and
+erasures are applied to them at the same time as to the live data.
 
 **How long.**
-- Raw match records from Riot (which contain Riot IDs): 30 days; raw timelines: 7 days
+- Raw match records from Riot (which contain Riot IDs): on our server until archived,
+  usually a few days
+- Archive of raw match records, without Riot IDs and with player identifiers replaced
+  by one-way codes: 24 months after the game, then deleted
 - Compact match and timeline data used for the statistics: the player identifier
   (PUUID) is removed 24 months after the game; the anonymous match stays for the
   statistics
+- Rank history per player: 24 months after the player's most recent rank
 - Rank and champion mastery per player: refreshed regularly; removed when the player
   has not appeared in a collected game for 24 months
 - We refresh stored players at least every 30 days and delete any account Riot reports
@@ -108,8 +113,8 @@ are never sent to us; clearing this site's data removes them.
 
 ## Your games
 
-When you enter a Riot ID, we ask the Riot Games API for that player's recent ranked
-games and show their own lane against the typical curve for each matchup. Anyone can
+When you enter a Riot ID, we ask the Riot Games API for that player's recent Summoner's
+Rift games and show their own lane against the typical curve for each matchup. Anyone can
 look up any Riot ID, as on other League statistics sites (legal basis: legitimate
 interests). The page shows only that player's games: their champion, their lane
 opponent's champion and the numbers, never other players' names.

@@ -218,8 +218,8 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\approximate rank tier and team totals.</p>
         \\<h2>Your games</h2>
         \\<p>When you enter a Riot ID on <a href="your.html">Your games</a>, we ask the Riot
-        \\Games API for that player's recent ranked games and show their own lane against
-        \\the typical curve for each matchup. Anyone can look up any Riot ID, as on other
+        \\Games API for that player's recent Summoner's Rift games and show their own lane
+        \\against the typical curve for each matchup. Anyone can look up any Riot ID, as on other
         \\League statistics sites (legal basis: legitimate interests). The page shows only
         \\that player's games: their champion, their lane opponent's champion and the
         \\numbers, never other players' names.</p>
@@ -244,7 +244,9 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\API. Raw match records, which include Riot's per-application encrypted player
         \\identifiers, are stored privately and used only to compute and improve
         \\champion level and aggregate statistics. Nothing identifying a player is
-        \\published. Deletion requests passed on by Riot Games are honoured, and you can ask
+        \\published. Riot IDs in raw records are removed within days, when the records are
+        \\archived, and player identifiers are removed from stored games 24 months after
+        \\the game. Deletion requests passed on by Riot Games are honoured, and you can ask
         \\us directly to delete any data about your account.</p>
         \\<h2>Contact</h2>
         \\<p>Questions or requests: <a href="mailto:{contact}">{contact}</a>.</p>

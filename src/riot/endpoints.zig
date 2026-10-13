@@ -5,6 +5,9 @@ const std = @import("std");
 const Client = @import("client.zig").Client;
 
 pub const ranked_solo = 420;
+pub const ranked_flex = 440;
+pub const normal_draft = 400;
+pub const swiftplay = 480;
 
 /// match-v5 routing values. Each has its own rate limit bucket on a personal key, as
 /// does every platform
@@ -59,13 +62,13 @@ pub fn leagueEntries(c: *Client, p: Platform, tier: []const u8, division: []cons
     return c.get(p.host, path, "league-exp-v4.entries");
 }
 
-pub fn matchIds(c: *Client, r: Region, puuid: []const u8, start_time: i64, end_time: i64, start: u32) !?[]u8 {
+pub fn matchIds(c: *Client, r: Region, puuid: []const u8, queue: u16, start_time: i64, end_time: i64, start: u32) !?[]u8 {
     var buf: [512]u8 = undefined;
     const path = try std.mem.print(
         &buf,
         "/lol/match/v5/matches/by-puuid/{s}/ids?queue={d}&startTime={d}&endTime={d}" ++
             "&start={d}&count=100",
-        .{ puuid, ranked_solo, start_time, end_time, start },
+        .{ puuid, queue, start_time, end_time, start },
     );
     return c.get(@tagName(r), path, "match-v5.ids");
 }
