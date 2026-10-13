@@ -22,7 +22,7 @@ async function loadDraftModel() {
   try {
     DRAFT.model = await getJson("training/draft-model.json");
     DRAFT.m = draftModel(DRAFT.model);
-    if (!DRAFT.m) throw new Error(`draft-model.json is format "${DRAFT.model.format}" version ${DRAFT.model.version}; this page reads meiolol-draft-model versions 1 and 2`);
+    if (!DRAFT.m) throw new Error(`draft-model.json is format "${DRAFT.model.format}" version ${DRAFT.model.version}; this page reads meiolol-draft-model versions 1 to 3`);
     DRAFT.ref = await getJson("training/draft-ref.json").catch(() => null);
     DRAFT.err = null;
     DRAFT.check = DRAFT.m && DRAFT.ref ? draftCheck(DRAFT.m, DRAFT.ref) : null;
@@ -44,13 +44,15 @@ async function loadDraftModel() {
 // 95% interval for a draft, and the candidates for a slot. A draft here is
 // {blue: {role: id}, red: {role: id}}; an empty slot, or a champion with no term in the
 // role, is average[role] with sd 0. Version 2 adds comp terms (model.comp, null without):
-// each slot's profile p summed per team, P_b'S P_b - P_r'S P_r + P_b'A P_r
+// each slot's profile p summed per team, P_b'S P_b - P_r'S P_r + P_b'A P_r. Version 3 adds
+// model.temperature: chances are sigmoid(temperature * logit) (calibration, draft.zig)
 function draftModel(M) {
-  if (!M || M.format !== "meiolol-draft-model" || (M.version !== 1 && M.version !== 2)) return null;
+  if (!M || M.format !== "meiolol-draft-model" || ![1, 2, 3].includes(M.version)) return null;
   const terms = new Map(M.model.terms.map(t => [t.champion + ":" + t.role, t]));
   const cells = new Map(M.cells.map(c => [c.champion + ":" + c.role, c]));
   const avg = M.average.map(a => ({ p: [], raw: [], ...a, sd: 0 }));
   const { intercept, w, z } = M.model;
+  const temp = M.model.temperature ?? 1;
   const comp = M.model.comp || null;
   // Team terms on f, the team's damage-weighted magic share (draft.zig TeamTerm)
   const FORMS = { mix: d => d * d, ad_heavy: d => Math.min(d, 0) ** 2, ap_heavy: d => Math.max(d, 0) ** 2 };
@@ -96,7 +98,7 @@ function draftModel(M) {
       for (let a = 0; a < 5; a++) for (let b = a + 1; b < 5; b++) logit += z[a * 5 + b] * (dot(B[a].s, B[b].s) - dot(R[a].s, R[b].s));
     }
     const h = 1.96 * Math.sqrt(v);
-    return { p: sig(logit), lo: sig(logit - h), hi: sig(logit + h) };
+    return { p: sig(temp * logit), lo: sig(temp * (logit - h)), hi: sig(temp * (logit + h)) };
   };
   const teamsOf = d => SIDES.map(([side]) => DRAFT_ROLES.map(([role]) => +d[side][role] || 0));
   const roleIdx = Object.fromEntries(DRAFT_ROLES.map(([r], i) => [r, i]));
@@ -115,7 +117,8 @@ function draftModel(M) {
     const x0 = at(0), x1 = at(id), l0 = x0.logit, l1 = x1.logit;
     const slope = Math.abs(l1 - l0) > 1e-9 ? (sig(l1) - sig(l0)) / (l1 - l0) : sig(l1) * (1 - sig(l1));
     const out = [];
-    const add = (logit, sd, what) => out.push({ pp: 100 * slope * logit, half: 100 * slope * 1.96 * sd, what });
+    // Parts are in the model's logit; the shown chance moves by temperature times them
+    const add = (logit, sd, what) => out.push({ pp: 100 * slope * temp * logit, half: 100 * slope * temp * 1.96 * sd, what });
     const st = comp.stats, lean = x => x >= 0 ? "high" : "low";
     for (let i = 0; i < k; i++) for (let j = i; j < k; j++) {
       // S symmetric: an off-diagonal pair counts both halves
@@ -152,8 +155,8 @@ function draftModel(M) {
       }));
       const c = compPart(slots(teams));
       const lin = intercept + c + sumR(rows.map(x => x.part));
-      const p = score(teams);
-      return { intercept, rows, comp: c, pairs: Math.log(p.p / (1 - p.p)) - lin, logit: Math.log(p.p / (1 - p.p)), p };
+      const p = score(teams), logit = Math.log(p.p / (1 - p.p)) / temp;
+      return { intercept, rows, comp: c, pairs: logit - lin, logit, temp, p };
     },
     // A slot's candidates: games in the role >= min_games, not picked, not banned; win and
     // change for the side filling it, sorted by win then champion id (as draft-ref.json)
@@ -433,7 +436,7 @@ function draftDebug(m, d, name) {
     el("li", {}, `Intercept (blue side, ${m.M.meta.platform || "EUW1"}): ${x.intercept >= 0 ? "+" : ""}${x.intercept.toFixed(4)}.`),
     el("li", {}, `Pair terms: ${m.M.has_pairs ? (x.pairs >= 0 ? "+" : "") + x.pairs.toFixed(4) : "none in this model"}.`),
     el("li", {}, `Comp terms: ${m.comp ? (x.comp >= 0 ? "+" : "") + x.comp.toFixed(4) : "none in this model"}.`),
-    el("li", {}, `Logit ${x.logit.toFixed(4)}, so blue ${pct(x.p.p)} (range ${pct(x.p.lo)} to ${pct(x.p.hi)}).`),
+    el("li", {}, `Logit ${x.logit.toFixed(4)}${x.temp !== 1 ? `, times the calibration temperature ${x.temp} = ${(x.temp * x.logit).toFixed(4)}` : ""}, so blue ${pct(x.p.p)} (range ${pct(x.p.lo)} to ${pct(x.p.hi)}).`),
     el("li", {}, `Sides swapped: blue would have ${pct(swapped)}; the two add up to ${pct(x.p.p + swapped)} (exactly 100% only without a side term).`)));
   return box;
 }

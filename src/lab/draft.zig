@@ -21,14 +21,21 @@ pub const usage =
     \\                                  drafts line by line. DRAFT: --role mid [--side red]
     \\                                  [--ally top=Darius,jungle=Lee Sin] [--enemy mid=Ahri,
     \\                                  Jinx] [--ban Yasuo] [--top 10] [--min-games 100]
-    \\  draft SNAP --export DIR         write DIR/draft-model.json and DIR/draft-ref.json for
-    \\                                  the admin draft board (docs/model.md)
+    \\  draft SNAP --export DIR [--temperature T]
+    \\                                  write DIR/draft-model.json and DIR/draft-ref.json for
+    \\                                  the admin draft board (docs/model.md); T scales every
+    \\                                  logit (calibration, default_temperature)
     \\
 ;
 
 const n_role = 5;
 const default_min_games = 100;
 const z95 = 1.96;
+/// Shown chances are sigmoid(T * logit): win-ratings is over-confident on held-out games.
+/// One temperature fitted on its preds on win-comp's 5 forward folds of snap-20261012T2055Z
+/// (44,353 games): 0.80 +- 0.11 (netcheck f1 runs and effects eff-d agree; the top tenth
+/// said 58.6% and won 55.8%). Refit when the shipped model or the snapshot changes
+pub const default_temperature = 0.80;
 
 const Champions = struct {
     names: std.AutoHashMapUnmanaged(u32, []const u8) = .empty,
@@ -162,6 +169,8 @@ const Params = struct {
     z: [25]f32,
     terms: []const Term,
     comp: ?Comp = null,
+    /// Multiplies the whole logit (and the interval's half-width)
+    temperature: f64 = 1,
 };
 
 fn paramsOf(arena: std.mem.Allocator, e: anytype) !Params {
@@ -284,8 +293,9 @@ const Scorer = struct {
             const z = sc.e.z[ri * n_role + rj];
             if (z != 0 and ri < rj) logit += z * (dot(sl[0][ri].s, sl[0][rj].s) - dot(sl[1][ri].s, sl[1][rj].s));
         };
+        const t = sc.e.temperature;
         const half = z95 * @sqrt(v);
-        return .{ .p = sigmoid(logit), .lo = sigmoid(logit - half), .hi = sigmoid(logit + half) };
+        return .{ .p = sigmoid(t * logit), .lo = sigmoid(t * (logit - half)), .hi = sigmoid(t * (logit + half)) };
     }
 
     /// The comp terms' part of blue's logit, 0 without them
@@ -423,10 +433,19 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var champs = try loadChampions(gpa, arena, snap, &data);
     var m = try fitAll(gpa, &data);
     defer cand.deinit(&m, gpa);
-    const sc = try Scorer.init(arena, try paramsOf(arena, try cand.exportModel(&m, arena)), eu, &champs);
-    try w.print("win model fitted on {d} games; --min-games guards against thin samples\n", .{data.games.len});
+    const export_mode = argv.len >= 3 and std.mem.eql(u8, argv[1], "--export");
+    var params = try paramsOf(arena, try cand.exportModel(&m, arena));
+    params.temperature = default_temperature;
+    if (export_mode and argv.len == 5 and std.mem.eql(u8, argv[3], "--temperature")) {
+        params.temperature = try std.fmt.parseFloat(f64, argv[4]);
+    } else if (export_mode and argv.len != 3) {
+        std.debug.print("usage:\n{s}", .{usage});
+        return 2;
+    }
+    const sc = try Scorer.init(arena, params, eu, &champs);
+    try w.print("win model fitted on {d} games; --min-games guards against thin samples; chances at temperature {d}\n", .{ data.games.len, params.temperature });
 
-    if (argv.len == 3 and std.mem.eql(u8, argv[1], "--export")) {
+    if (export_mode) {
         try exportFiles(gpa, arena, io, snap, &data, &m, &sc, &champs, argv[2], w);
         return 0;
     }
@@ -727,7 +746,7 @@ const CellOut = struct { champion: u32, role: u8, games: u32, patch_games: u32, 
 
 const ModelFile = struct {
     format: []const u8 = "meiolol-draft-model",
-    version: u32 = 2,
+    version: u32 = 3,
     meta: struct {
         name: []const u8,
         run: []const u8,
@@ -744,7 +763,7 @@ const ModelFile = struct {
     champions: []const ChampionOut,
     cells: []const CellOut,
     average: [n_role]AverageOut,
-    model: struct { kind: []const u8, dim: u32, intercept: f64, w: [25]f32, z: [25]f32, terms: []const Term, comp: ?Comp },
+    model: struct { kind: []const u8, dim: u32, intercept: f64, w: [25]f32, z: [25]f32, terms: []const Term, comp: ?Comp, temperature: f64 },
 };
 
 const AverageOut = struct { b: f64, u: []const f32, v: []const f32, s: []const f32, p: []const f32 };
@@ -801,7 +820,8 @@ fn exportFiles(
         if (!g.is_test or checked == 500) continue;
         checked += 1;
         const q: api.Query = .{ .start = g.start, .patch = g.patch, .platform = sc.platform, .side = 0, .role = .top, .champion = g.teams[0][0], .rank = null, .teams = g.teams, .ranks = null, .exp = .{}, .exps = null };
-        const want: f64 = cand.predict(m, &q)[api.outcomeIndex(.win)];
+        const raw: f64 = cand.predict(m, &q)[api.outcomeIndex(.win)];
+        const want = sigmoid(sc.e.temperature * @log(raw / (1 - raw)));
         worst = @max(worst, @abs(sc.blue(g.teams).p - want));
     }
     try w.print("scorer vs candidate on {d} test games: max |diff| {e}\n", .{ checked, worst });
@@ -848,7 +868,7 @@ fn exportFiles(
         .champions = champions.items,
         .cells = cells.items,
         .average = average,
-        .model = .{ .kind = e.kind, .dim = e.dim, .intercept = e.intercept[sc.platform], .w = e.w, .z = e.z, .terms = e.terms, .comp = e.comp },
+        .model = .{ .kind = e.kind, .dim = e.dim, .intercept = e.intercept[sc.platform], .w = e.w, .z = e.z, .terms = e.terms, .comp = e.comp, .temperature = e.temperature },
     };
 
     // References: real test games whole and partly open, an empty board, two slot queries
@@ -989,6 +1009,34 @@ test "scorer: the documented formula on known parameters" {
     // An empty top slot is the role average, b 0.05, with no sd
     teams[1][0] = 0;
     try std.testing.expectApproxEqAbs(sigmoid(0.04 + 0.2 - 0.05), sc.blue(teams).p, 1e-6);
+}
+
+test "scorer: temperature scales the logit and the interval, 1 changes nothing" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var champs: Champions = .{ .patch_total = 4 };
+    try champs.patch_games.put(arena, Champions.key(1, 0), 2);
+    try champs.patch_games.put(arena, Champions.key(2, 0), 2);
+    const terms = [_]Term{
+        .{ .champion = 1, .role = 0, .games = 400, .b = 0.2, .sd = 0.1 },
+        .{ .champion = 2, .role = 0, .games = 400, .b = -0.1, .sd = 0.1 },
+    };
+    var intercept: [256]f32 = @splat(0);
+    intercept[6] = 0.04;
+    var teams: [2][n_role]u32 = @splat(@splat(0));
+    teams[0][0] = 1;
+    teams[1][0] = 2;
+    const base: Params = .{ .kind = "ratings", .dim = 0, .intercept = &intercept, .w = @splat(0), .z = @splat(0), .terms = &terms };
+    var hot = base;
+    hot.temperature = 0.8;
+    const one = (try Scorer.init(arena, base, 6, &champs)).blue(teams);
+    const c = (try Scorer.init(arena, hot, 6, &champs)).blue(teams);
+    // logit 0.34 as in the formula test; 0.8 of it, and of the interval's ends
+    try std.testing.expectApproxEqAbs(sigmoid(0.34), one.p, 1e-6);
+    try std.testing.expectApproxEqAbs(sigmoid(0.8 * 0.34), c.p, 1e-6);
+    try std.testing.expectApproxEqAbs(sigmoid(0.8 * (0.34 + 1.96 * @sqrt(0.02))), c.hi, 1e-6);
+    try std.testing.expect(c.p < one.p and c.p > 0.5);
 }
 
 test "scorer: a champion with no term in its role scores as the empty slot" {

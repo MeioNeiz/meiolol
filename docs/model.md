@@ -2091,7 +2091,8 @@ DIR/draft-model.json and DIR/draft-ref.json for the admin draft board (meiolol-3
 Admin only: the public site never shows "this draft wins X%" (docs/learned.md). Run it
 into a run dir on the Mac (~/ml/runs/<stamp>-draft-export); lab-push.sh sends the newest.
 
-draft-model.json (format meiolol-draft-model, version 2; 1 had no p and no comp):
+draft-model.json (format meiolol-draft-model, version 3; 2 had no temperature, 1 no p
+and no comp):
 - meta: name ("win-ratings (ratings)"), run, snapshot, newest_game, training_games
   (games that lasted 15:00, as the harness fits), patch (newest), platform (EUW1: the intercept used), dev {what, games, log_loss,
   baseline_log_loss, coin_log_loss, accuracy, auc}: a refit on dev's games, scored on
@@ -2107,7 +2108,12 @@ draft-model.json (format meiolol-draft-model, version 2; 1 had no p and no comp)
 - average[role] {b, u, v, s, p, raw}: the empty-slot term, patch_share-weighted mean of the
   role's terms on the newest patch
 - model {kind, dim, intercept, w[25], z[25], terms [{champion, role, games, b, sd, u, v,
-  s, p, raw}], comp}: u, v, s are length dim (empty for rates and ratings); w and z
+  s, p, raw}], comp, temperature}: temperature multiplies the whole logit and the
+  interval's ends (calibration; draft.zig default_temperature 0.80: win-ratings' preds on
+  win-comp's 5 forward folds of 2055Z, 44,353 games, fitted 0.80 ± 0.11, its top tenth
+  said 58.6% and won 55.8%; `--temperature T` overrides, 1 is the raw model). Every shown
+  chance, slot list and comp reason uses it; ratings, comp parts and the debug trace's
+  terms stay in the model's own logit; u, v, s are length dim (empty for rates and ratings); w and z
   row-major 5 x 5; p the champion-role's profile (k numbers, z-scored within the role;
   empty without comp); raw the profile in raw units, all 12 of win-comp's Feature order
   (magic share of damage first, damage per minute third; empty without team terms). b
@@ -2131,8 +2137,8 @@ logit = intercept + sum_r (B_r.b - R_r.b)
       + sum_team weight * (form(f_b - centre) - form(f_r - centre))
 f = sum_r raw.dmg * raw.magic / sum_r raw.dmg (0.5 if no damage); form: mix d^2,
 ad_heavy min(d, 0)^2, ap_heavy max(d, 0)^2
-blue = 1 / (1 + exp(-logit)); red = 1 - blue
-var = sum over the 10 slots of sd^2;  interval = sigmoid(logit -/+ 1.96 sqrt(var))
+blue = 1 / (1 + exp(-T logit)); red = 1 - blue          T = model.temperature (1 if absent)
+var = sum over the 10 slots of sd^2;  interval = sigmoid(T (logit -/+ 1.96 sqrt(var)))
 ```
 
 sd is a Laplace approximation of each rating's own uncertainty, 1 / sqrt(games / 4 +
@@ -2153,8 +2159,8 @@ Rammus jungle alone into a full AP and a full AD red team); `slots` [{label, rol
 teams (by side), bans, min_games, empty, average, options [{champion, games, win, lo, hi,
 change}] sorted by win, then champion id}] (blue middle to fill, red middle to fill, blue
 jungle to fill into 5 AP and into 5 AD). Export
-checks the scorer against the candidate's own predict on 500 test games and stops if
-they differ by more than 1e-4 (f32: ~5e-8 measured).
+checks the scorer against the candidate's own predict (through the same temperature) on
+500 test games and stops if they differ by more than 1e-4 (f32: ~5e-8 measured).
 
 ### Lane model file (meiolol-lab lane --export)
 
