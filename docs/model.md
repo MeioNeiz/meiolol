@@ -1107,8 +1107,10 @@ pair_games from Scorer.value; the page's JS must match them to 0.01.
   For most games pre-game mastery exists only in the raw archive's fetch history
   (hourly mastery-NAME.tsv.zst, salted hashes, fetched_at): a loader takes each
   player's latest fetch before game start. Same salt as the snapshots (11): from 19
-  Oct the snapshot carries a mastery_pre table (match id, player hash, fetched_at),
-  built on the gpu-box from the archive
+  Oct the snapshot carries SNAP/mastery_pre.tsv (`meiolol-lab mastery-pre`, b424a24):
+  match_id, slot, fetched_at, level, points, last_play (game's champion), champions,
+  total_points; join on (match_id, slot); no line = no pre-game fetch. Coverage ~0
+  before 13 Oct, growing with weekly refreshes: report it per split first
 
 - Next lab campaign, rank at game start on 3c-team2 (agreed with meiolol-78; runs on the
   snapshot 78 pins after ~a week of rank_history, with a fresh test set: rank_start
