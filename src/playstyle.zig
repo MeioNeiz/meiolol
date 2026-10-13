@@ -46,7 +46,7 @@ pub const Feat = enum {
     /// laners: jungle camps taken; junglers: lane minions
     off_role_cs,
 };
-const n_feat: u32 = @typeInfo(Feat).@"enum".field_names.len;
+pub const n_feat: u32 = @typeInfo(Feat).@"enum".field_names.len;
 
 const Zone = enum { blue_base, red_base, top, mid, bot, other };
 
@@ -71,7 +71,7 @@ fn laneZone(role: Role) ?Zone {
 }
 
 /// Style features of every player, by participant id - 1
-fn features(t: timeline.Timeline, roles: [10]Role) [10][n_feat]f32 {
+pub fn features(t: timeline.Timeline, roles: [10]Role) [10][n_feat]f32 {
     var out: [10][n_feat]f32 = @splat(@splat(0));
     const last = @min(until_minute, t.frames.len - 1);
     for (0..10) |p| {

@@ -19,6 +19,7 @@ const draft = @import("lab/draft.zig");
 const lane = @import("lab/lane.zig");
 const harness = @import("lab/harness.zig");
 const fields = @import("lab/fields.zig");
+const style = @import("lab/style.zig");
 
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
 
@@ -51,7 +52,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -216,6 +217,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "fields")) {
         return fields.main(init.gpa, arena, init.io, argv[2..]);
     }
+    if (std.mem.eql(u8, cmd, "style")) {
+        return style.main(init.gpa, arena, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "lane")) {
         return lane.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -297,6 +301,7 @@ test {
     _ = draft;
     _ = lane;
     _ = fields;
+    _ = style;
 }
 
 /// x86 SSE runs ~100x slower on denormal floats, which Adam's decaying moments of rarely

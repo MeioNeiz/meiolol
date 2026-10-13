@@ -492,7 +492,7 @@ fn load(gpa: std.mem.Allocator, io: Io, snap: []const u8, d: *const rows.Data, c
 // ---- statistics ----
 
 /// Standard normal upper tail, Abramowitz and Stegun 7.1.26 (error under 1.5e-7)
-fn upperTail(z: f64) f64 {
+pub fn upperTail(z: f64) f64 {
     const x = @abs(z) / std.math.sqrt2;
     const k = 1 / (1 + 0.3275911 * x);
     const poly = k * (0.254829592 + k * (-0.284496736 + k * (1.421413741 + k * (-1.453152027 + k * 1.061405429))));
