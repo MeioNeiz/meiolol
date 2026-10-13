@@ -15,9 +15,10 @@
 # run there is predicted at that x min(slots, live runs + 1). Estimate: median of the last
 # 5 runs that exited 0 with the same args and build, else the same command (exp: action,
 # campaign, target) and candidate (-Dcand) on the same snapshot, else any candidate there,
-# else that command on any snapshot, else the bare subcommand. A host
-# with none borrows the other's, scaled by the hosts' speed ratio (median over commands
-# run on both)
+# else that command on any snapshot, else the bare subcommand; past the same args, times
+# scale by flags whose work is linear (%LINEAR). A host with none borrows the other's,
+# scaled by the hosts' speed ratio (median over commands run on both). gpu-box cpu runs
+# from before slots (no SLOT) had every core: scaled by the slot/whole-machine ratio
 use strict;
 use warnings;
 use Time::Local qw(timegm);
@@ -36,6 +37,12 @@ my @AUTO = $ENV{LAB_AUTO_MAC} ? @HOSTS : ('gpu-box');
 # beside them (big1b, 13 Oct: netcheck --net big 73-134 s at ~2 sharing, 272-358 s at
 # ~4.9). cpu slots are pinned to their own cores (taskset): no slowdown seen
 my %SHARED = (gpu => 1);
+# Flags whose value scales a run's work: time x new/old when history differs (dp-shape-a,
+# 13 Oct: --boot 40 ran 22 m, predicted 1.9 m from a --boot 2 smoke). A list counts items
+my %LINEAR = map { $_ => 1 } qw(--boot --seeds);
+# A cpu slot's run vs the same run with the whole gpu-box, before history has both:
+# meiolol-1b, 13 Oct, ~4x (5 of 20 cores)
+my $WIDE_ASSUMED = 4;
 
 my $mode = shift @ARGV // '';
 
@@ -67,6 +74,7 @@ while (my $line = <STDIN>) {
     }
 }
 $_->{solo} = solo($_) for @runs;
+my @wide = widen();
 my %ratio = ratios();
 
 if ($mode eq 'place') { place(@ARGV) }
@@ -151,7 +159,8 @@ sub keys_for {
     my ($bin, $args, $build) = @_;
     $build //= '';
     my @w = words($args);
-    my $cmd = join ' ', grep { defined } $bin, $w[0];
+    # python: the script is the command (BIN python/SCRIPT), its first arg a path
+    my $cmd = $bin =~ /^python/ ? $bin : join ' ', grep { defined } $bin, $w[0];
     my $fine = $cmd;
     if (($w[0] // '') eq 'exp' && @w >= 2) {
         $cmd .= " $w[1]";
@@ -175,18 +184,71 @@ sub keys_for {
     return grep { !$seen{$_->[0]}++ } @keys;
 }
 
-# Run times on HOST with key KEY, oldest first
+# Finished runs on HOST with key KEY, oldest first
 my %times;
-sub times_for {
+sub runs_for {
     my ($host, $key) = @_;
     unless (%times) {
         my @done = grep { defined $_->{ran} } @runs;
         for my $r (sort { $a->{started} <=> $b->{started} } @done) {
-            push @{$times{$r->{host}}{$_->[0]}}, $r->{solo}
+            push @{$times{$r->{host}}{$_->[0]}}, $r
                 for keys_for($r->{bin}, $r->{args}, $r->{build});
         }
     }
     return @{$times{$host}{$key} // []};
+}
+
+sub times_for { return map { $_->{solo} } runs_for(@_) }
+
+# %LINEAR flags' values in ARGS (a comma list counts its items)
+sub work {
+    my @w = words($_[0]);
+    my %v;
+    for my $i (0 .. $#w - 1) {
+        next unless $LINEAR{$w[$i]};
+        my $n = $w[$i + 1] =~ /^\d+(\.\d+)?$/ ? $w[$i + 1]
+            : $w[$i + 1] =~ /^[^-]/ ? scalar(split /,/, $w[$i + 1]) : undef;
+        $v{$w[$i]} = $n if $n;
+    }
+    return \%v;
+}
+
+# RUNS' times, each scaled to ARGS's work, and the flags that scaled any
+sub scaled {
+    my ($args, @rs) = @_;
+    my $want = work($args);
+    my (@t, %used);
+    for my $r (@rs) {
+        my $have = work($r->{args});
+        my $x = 1;
+        for (grep { defined $have->{$_} } keys %$want) {
+            next if $want->{$_} == $have->{$_};
+            $x *= $want->{$_} / $have->{$_};
+            $used{$_} = 1;
+        }
+        push @t, $r->{solo} * $x;
+    }
+    return (\@t, join ' ', sort keys %used);
+}
+
+# Scales gpu-box cpu runs from before slots (no SLOT: every core) to a slot's width, by
+# the median over commands with both kinds of run of slot / whole machine. --res none and
+# gpu runs keep theirs: no way to tell when their width changed (lab-run 8bf0e69)
+sub widen {
+    my $narrow = sub { $_[0]{host} eq 'gpu-box' && ($_[0]{res} // '') =~ /^(cpu|)$/ };
+    my (%by, @rs);
+    for my $r (grep { defined $_->{ran} && $narrow->($_) } @runs) {
+        for (grep { $_->[2] ne 'cmd' } keys_for($r->{bin}, $r->{args}, $r->{build})) {
+            push @{$by{$_->[0]}{$r->{slot} ? 'slot' : 'all'}}, $r->{solo};
+        }
+    }
+    for my $k (sort keys %by) {
+        my ($s, $w) = map { median(@{$by{$k}{$_} // []}) } qw(slot all);
+        push @rs, $s / $w if defined $s && defined $w && $s >= 5 && $w >= 5;
+    }
+    my $x = @rs ? median(@rs) : $WIDE_ASSUMED;
+    $_->{solo} *= $x for grep { defined $_->{ran} && $narrow->($_) && !$_->{slot} } @runs;
+    return ($x, @rs ? scalar(@rs) . ' commands' : 'assumed');
 }
 
 # ratio{a}{b}: a run on a takes ratio times as long as on b. Over the same command on the
@@ -218,15 +280,17 @@ sub recent { return @_ > $RECENT ? @_[-$RECENT .. -1] : @_ }
 sub estimate {
     my ($host, $bin, $args, $build) = @_;
     for my $k (keys_for($bin, $args, $build)) {
-        my @t = recent(times_for($host, $k->[0]));
-        return (median(@t), sprintf('median of %d here, %s', scalar @t, $k->[1])) if @t;
+        my ($t, $by) = scaled($args, recent(runs_for($host, $k->[0])));
+        my $sc = $by ? ", scaled by $by" : '';
+        return (median(@$t), sprintf('median of %d here, %s%s', scalar @$t, $k->[1], $sc))
+            if @$t;
         for my $o (grep { $_ ne $host } @HOSTS) {
-            my @to = recent(times_for($o, $k->[0]));
-            next unless @to;
+            my ($to, $oby) = scaled($args, recent(runs_for($o, $k->[0])));
+            next unless @$to;
             my ($x, $why) = @{$ratio{$host}{$o}};
-            return (median(@to) * $x,
-                sprintf('%s median of %d x %.2f (%s), %s',
-                    $o, scalar @to, $x, $why, $k->[1]));
+            return (median(@$to) * $x,
+                sprintf('%s median of %d x %.2f (%s), %s%s',
+                    $o, scalar @$to, $x, $why, $k->[1], $oby ? ", scaled by $oby" : ''));
         }
     }
     return ();

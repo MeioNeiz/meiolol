@@ -137,6 +137,12 @@ run time.
   that x min(slots, live gpu runs + 1). big1b (13 Oct): netcheck --net big 73-134 s at ~2
   sharing, 272-358 s at ~4.9, i.e. ~72-92 s alone either way. cpu slots are pinned to
   their own cores: no slowdown seen, not scaled
+- Past the same args, history scales by flags whose work is linear (`--boot N`, the
+  `--seeds` count): time x new/old. python runs are keyed by script once the listing
+  carries it (BIN python/SCRIPT); until then all scripts on a snapshot share a key
+- gpu-box cpu runs from before slots (no slot) had all 20 cores: their times count x the
+  median slot / whole-machine ratio over commands run both ways (3.7 over 17 commands,
+  14 Oct; 4 assumed without any). --res none and gpu runs aren't rescaled
 - A host with none borrows the other host's, times their speed ratio: median over
   commands on the same snapshot run on both (5 s or more). None yet: the Mac assumed 2x
   slower (eval 13 vs 7 s). No history anywhere: gpu-box cpu, as before, and it says so
