@@ -52,6 +52,8 @@ pub const usage =
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
     \\                                  --resample N (fit games and the candidate's on
     \\                                  netcheck's seeded 90%; scored games unchanged)
+    \\                                  --dump 0|1 (the net's inputs per block and set
+    \\                                  to DIR/net-*.bin, for cross-checks)
     \\                                  --fraction X --threads N --out DIR
     \\
 ;
@@ -133,6 +135,8 @@ pub const Options = struct {
     fraction: f64 = 1,
     /// Fit games and the candidate's on netcheck's seeded random 90% (noise-floor resamples)
     resample: ?u32 = null,
+    /// Write each block's net inputs (dumpSet) for re-implementations to train on
+    dump: bool = false,
     threads: u32 = 3,
     out: []const u8 = ".",
 };
@@ -301,6 +305,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             else
                 @fromBackingInt(@intCast(try std.fmt.parseInt(u3, s, 10))));
             o.blocks = out.items;
+        } else if (std.mem.eql(u8, k, "--dump")) {
+            o.dump = (try std.fmt.parseInt(u1, v, 10)) == 1;
         } else if (std.mem.eql(u8, k, "--resample")) {
             o.resample = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--fraction")) {
@@ -665,6 +671,44 @@ fn logit(p: f32) f32 {
 }
 
 /// One game as the net sees it: slots blue by role, then red
+/// DIR/net-BLOCK-PART.bin: per game, little-endian 4-byte values: ids u32[10] (slots blue
+/// top..support then red; 0 = rare or unseen champion-role), x f32[10][n_feat] (scaled as
+/// the net sees them, after any --shuffle-feats), platform, y (blue won), off (the
+/// candidate's logit) as f32. DIR/net-BLOCK-PART.txt: n_ids, n_feat and feature names on
+/// one line, then the match ids in record order. inner and val share a vocabulary and
+/// scaling; fit and scored share the other
+const dump_len = 10 + 10 * n_feat + 3;
+
+fn dumpSet(io: Io, d: *const rows.Data, out: []const u8, block: []const u8, part: []const u8, set: []const NetGame, games: []const u32, n_ids: usize) !void {
+    var dir = try Io.Dir.cwd().openDir(io, out, .{});
+    defer dir.close(io);
+    var name_buf: [64]u8 = undefined;
+    var bin = try dir.createFile(io, try std.fmt.bufPrint(&name_buf, "net-{s}-{s}.bin", .{ block, part }), .{});
+    defer bin.close(io);
+    var bbuf: [64 * 1024]u8 = undefined;
+    var bw = bin.writer(io, &bbuf);
+    comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
+    for (set) |g| {
+        var rec: [dump_len]u32 = undefined;
+        for (g.ids, 0..) |id, i| rec[i] = id;
+        for (g.x, 0..) |x, slot| for (x, 0..) |v, f| {
+            rec[10 + slot * n_feat + f] = @bitCast(v);
+        };
+        for ([_]f32{ @floatFromInt(g.platform), g.y, g.off }, 0..) |v, i| rec[10 + 10 * n_feat + i] = @bitCast(v);
+        try bw.interface.writeAll(std.mem.sliceAsBytes(&rec));
+    }
+    try bw.interface.flush();
+    var txt = try dir.createFile(io, try std.fmt.bufPrint(&name_buf, "net-{s}-{s}.txt", .{ block, part }), .{});
+    defer txt.close(io);
+    var tbuf: [64 * 1024]u8 = undefined;
+    var tw = txt.writer(io, &tbuf);
+    try tw.interface.print("n_ids {d} n_feat {d}", .{ n_ids, n_feat });
+    for (@typeInfo(Feat).@"enum".field_names) |f| try tw.interface.print(" {s}", .{f});
+    try tw.interface.writeAll("\n");
+    for (games) |gi| try tw.interface.print("{s}\n", .{d.games[gi].match_id});
+    try tw.interface.flush();
+}
+
 pub const NetGame = struct {
     ids: [10]u32,
     x: [10][n_feat]f32,
@@ -849,6 +893,9 @@ fn runBlock(
     defer gpa.free(g_scored);
     if (opts.shuffle_labels) for ([_][]NetGame{ g_inner, g_val, g_fit }, 0..) |set, k| shuffleLabels(set, 0x5f1 + k);
     if (opts.shuffle_feats) for ([_][]NetGame{ g_inner, g_val, g_fit }, 0..) |set, k| shuffleFeats(set, 0x5f2 + k);
+    if (opts.dump) for ([_][]const NetGame{ g_inner, g_val, g_fit, g_scored }, [_][]const u32{ inner.items, val.items, fit.items, scored.items }, [_][]const u8{ "inner", "val", "fit", "scored" }) |set, games, part| {
+        try dumpSet(io, d, opts.out, name, part, set, games, if (std.mem.eql(u8, part, "inner") or std.mem.eql(u8, part, "val")) vocab_inner.n else vocab_all.n);
+    };
 
     const n_s = opts.seeds.len;
     const fits = try gpa.alloc(Fitted, n_s);
@@ -1482,4 +1529,33 @@ test "playernet coPlay counts earlier games together on one team" {
     const got = try coPlay(gpa, &d);
     defer gpa.free(got);
     try testing.expectEqualSlices([2]u16, &.{ .{ 0, 0 }, .{ 0, 0 }, .{ 0, 0 }, .{ 1, 1 }, .{ 1, 1 }, .{ 1, 2 }, .{ 1, 2 }, .{ 0, 0 } }, got);
+}
+
+test "playernet dumpSet writes one record per game and the match ids in order" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer gpa.free(base);
+    var games: [2]rows.Game = undefined;
+    for (&games, [_][]const u8{ "EUW1_1", "EUW1_2" }) |*g, id| g.* = .{ .match_id = id, .start = 0, .patch = 0, .platform = 3, .is_test = false, .teams = @splat(@splat(0)), .winner = 0, .duration_s = 1800 };
+    const d: rows.Data = .{ .arena = .init(gpa), .games = &games, .rows = &.{} };
+    var set: [2]NetGame = undefined;
+    for (&set, 0..) |*g, i| g.* = .{ .ids = @splat(@intCast(i + 1)), .x = @splat(@splat(0.5)), .platform = 3, .y = 1, .off = -0.25 };
+    set[1].x[9][n_feat - 1] = 2;
+    try dumpSet(io, &d, base, "dev", "fit", &set, &.{ 1, 0 }, 7);
+    var dir = try Io.Dir.cwd().openDir(io, base, .{});
+    defer dir.close(io);
+    const bin = try dir.readFileAlloc(io, "net-dev-fit.bin", gpa, .limited(1 << 20));
+    defer gpa.free(bin);
+    try testing.expectEqual(2 * dump_len * 4, bin.len);
+    const vals = std.mem.bytesAsSlice(u32, bin);
+    try testing.expectEqual(@as(u32, 2), vals[dump_len]);
+    try testing.expectEqual(@as(f32, 2), @as(f32, @bitCast(vals[2 * dump_len - 4])));
+    try testing.expectEqual(@as(f32, -0.25), @as(f32, @bitCast(vals[2 * dump_len - 1])));
+    const txt = try dir.readFileAlloc(io, "net-dev-fit.txt", gpa, .limited(1 << 20));
+    defer gpa.free(txt);
+    try testing.expect(std.mem.startsWith(u8, txt, "n_ids 7 n_feat "));
+    try testing.expect(std.mem.endsWith(u8, txt, "\nEUW1_2\nEUW1_1\n"));
 }
