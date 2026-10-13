@@ -29,7 +29,14 @@ pub const Config = struct {
     cross: bool = true,
     /// A champion-role embedding (opts.emb wide) beside the profile
     ids: bool = false,
+    control: Control = .none,
 };
+
+/// Null controls (a gain under either means a leak or a gain from something else):
+/// shuffle: the fit games' results permuted (seeded) for both the profiles' halves and
+/// the net's labels, offsets as they are (run with --fix-offset 1): gain ~0 or below;
+/// permute: each champion-role gets another of its role's profile: no profile content
+pub const Control = enum { none, shuffle, permute };
 
 /// Parses a set-only option; false when `k` isn't one
 pub fn parseOption(c: *Config, k: []const u8, v: []const u8) !bool {
@@ -41,6 +48,8 @@ pub fn parseOption(c: *Config, k: []const u8, v: []const u8) !bool {
         c.cross = (try std.fmt.parseInt(u1, v, 10)) == 1;
     } else if (std.mem.eql(u8, k, "--ids")) {
         c.ids = (try std.fmt.parseInt(u1, v, 10)) == 1;
+    } else if (std.mem.eql(u8, k, "--control")) {
+        c.control = std.meta.stringToEnum(Control, v) orelse return error.UnknownControl;
     } else return false;
     if (c.phi == 0 or c.rho == 0) return error.BadValue;
     return true;
@@ -120,9 +129,18 @@ const Profiles = struct {
     role_mean: [5][n_prof]f64 = @splat(@splat(0)),
     z_mean: [5][n_prof]f64 = @splat(@splat(0)),
     z_sd: [5][n_prof]f64 = @splat(@splat(0)),
+    /// Blue won, per data game index, in place of the real result (Control.shuffle)
+    won: ?[]const u1 = null,
+    /// Profile id read for each id (Control.permute)
+    perm: ?[]u32 = null,
 
-    fn build(gpa: std.mem.Allocator, d: *const rows.Data, seat: []const u32, games: []const u32) !Profiles {
-        var p: Profiles = .{};
+    fn rowY(p: *const Profiles, r: *const rows.Row) f32 {
+        const won = p.won orelse return r.y[win];
+        return @floatFromInt(@intFromBool(won[r.game] == 1 - @as(u1, r.side)));
+    }
+
+    fn build(gpa: std.mem.Allocator, d: *const rows.Data, seat: []const u32, games: []const u32, won: ?[]const u1) !Profiles {
+        var p: Profiles = .{ .won = won };
         errdefer p.deinit(gpa);
         for (games) |gi| for (0..10) |s| {
             const ri = seat[@as(usize, gi) * 10 + s];
@@ -141,7 +159,7 @@ const Profiles = struct {
             const ri = seat[@as(usize, gi) * 10 + s];
             if (ri == std.math.maxInt(u32)) continue;
             const r = &d.rows[ri];
-            const y = r.y[win];
+            const y = p.rowY(r);
             if (std.math.isNan(y)) continue;
             const id = p.index.get(key(r.champion, s % 5)).?;
             p.seen[id] += 1;
@@ -186,6 +204,29 @@ const Profiles = struct {
         p.index.deinit(gpa);
         gpa.free(p.acc);
         gpa.free(p.seen);
+        if (p.perm) |x| gpa.free(x);
+    }
+
+    /// Control.permute: each id reads a random other id of its role (seeded)
+    fn permute(p: *Profiles, gpa: std.mem.Allocator, seed: u32) !void {
+        const perm = try gpa.alloc(u32, p.index.count());
+        p.perm = perm;
+        var by_role: [5]std.ArrayList(u32) = @splat(.empty);
+        defer for (&by_role) |*b| b.deinit(gpa);
+        // Sorted keys, so the permutation doesn't depend on hash order
+        var keys: std.ArrayList(u64) = .empty;
+        defer keys.deinit(gpa);
+        var it = p.index.keyIterator();
+        while (it.next()) |k| try keys.append(gpa, k.*);
+        std.mem.sort(u64, keys.items, {}, std.sort.asc(u64));
+        for (keys.items) |k| try by_role[k & 7].append(gpa, p.index.get(k).?);
+        var rng: std.Random.DefaultPrng = .init(0x9e37 +% seed);
+        for (by_role) |b| {
+            const to = try gpa.dupe(u32, b.items);
+            defer gpa.free(to);
+            rng.random().shuffle(u32, to);
+            for (b.items, to) |from, x| perm[from] = x;
+        }
     }
 
     /// The shrunk outcome-balanced mean; without: leave out that seat's own values
@@ -205,13 +246,15 @@ const Profiles = struct {
 
     /// A seat's z profile; loo: without its own row (a fit game)
     fn z(p: *const Profiles, r: *const rows.Row, role: usize, loo: bool, out: *[n_prof]f32) void {
-        const id = p.index.get(key(r.champion, role)) orelse {
+        const own_id = p.index.get(key(r.champion, role)) orelse {
             out.* = @splat(0);
             return;
         };
-        const y = r.y[win];
+        // Another champion-role's profile never holds this row
+        const id = if (p.perm) |x| x[own_id] else own_id;
+        const y = p.rowY(r);
         const own: Without = .{ .half = @intFromBool(y > 0.5), .v = rowValues(&r.stats) };
-        const without: ?*const Without = if (loo and !std.math.isNan(y)) &own else null;
+        const without: ?*const Without = if (loo and id == own_id and !std.math.isNan(y)) &own else null;
         for (out, 0..) |*o, f| {
             const sd = p.z_sd[role][f];
             const v = p.raw(id, role, f, without);
@@ -229,11 +272,26 @@ pub const SetGame = struct {
     z: [10][n_prof]f32,
 };
 
+/// Blue won per data game index: the fit games' results in a seeded random order (other
+/// games keep theirs; only fit games are read)
+fn shuffledResults(gpa: std.mem.Allocator, d: *const rows.Data, fit_games: []const u32, seed: u32) ![]u1 {
+    const won = try gpa.alloc(u1, d.games.len);
+    for (won, d.games) |*w, g| w.* = 1 - g.winner;
+    const ys = try gpa.alloc(u1, fit_games.len);
+    defer gpa.free(ys);
+    for (ys, fit_games) |*y, gi| y.* = won[gi];
+    var rng: std.Random.DefaultPrng = .init(0x5f1e +% seed);
+    rng.random().shuffle(u1, ys);
+    for (ys, fit_games) |y, gi| won[gi] = y;
+    return won;
+}
+
 /// Each of `games` with its slots' profiles from `p`; loo for the games `p` was built on
 fn setGames(gpa: std.mem.Allocator, d: *const rows.Data, seat: []const u32, p: *const Profiles, games: []const u32, nets: []const NetGame, loo: bool) ![]SetGame {
     const out = try gpa.alloc(SetGame, games.len);
     for (out, games, nets) |*o, gi, g| {
         o.g = g;
+        if (p.won) |w| o.g.y = @floatFromInt(w[gi]);
         for (&o.z, 0..) |*z, s| {
             const ri = seat[@as(usize, gi) * 10 + s];
             if (ri == std.math.maxInt(u32)) z.* = @splat(0) else p.z(&d.rows[ri], s % 5, loo, z);
@@ -513,8 +571,12 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
     const d = s.d;
     const seat = try seatRows(gpa, d);
     defer gpa.free(seat);
-    var p_inner: Profiles = try .build(gpa, d, seat, s.idx.inner);
+    const cfg = opts.set;
+    const won: ?[]u1 = if (cfg.control == .shuffle) try shuffledResults(gpa, d, s.idx.fit, seed) else null;
+    defer if (won) |x| gpa.free(x);
+    var p_inner: Profiles = try .build(gpa, d, seat, s.idx.inner, won);
     defer p_inner.deinit(gpa);
+    if (cfg.control == .permute) try p_inner.permute(gpa, seed);
     const inner = try setGames(gpa, d, seat, &p_inner, s.idx.inner, s.inner, true);
     defer gpa.free(inner);
     const val = try setGames(gpa, d, seat, &p_inner, s.idx.val, s.val, false);
@@ -522,8 +584,9 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
     const tuned = try train(gpa, opts, seed, s.n_inner, inner, val, opts.max_epochs * winnet.stepsPerEpoch(inner.len, opts.batch));
     gpa.free(tuned.net.p);
 
-    var p_all: Profiles = try .build(gpa, d, seat, s.idx.fit);
+    var p_all: Profiles = try .build(gpa, d, seat, s.idx.fit, won);
     defer p_all.deinit(gpa);
+    if (cfg.control == .permute) try p_all.permute(gpa, seed);
     const all = try setGames(gpa, d, seat, &p_all, s.idx.fit, s.fit, true);
     defer gpa.free(all);
     const scored = try setGames(gpa, d, seat, &p_all, s.idx.scored, s.scored, false);
@@ -660,7 +723,7 @@ test "profiles: shrunk halves, z in role, leave-one-out" {
     const d: rows.Data = .{ .arena = .init(gpa), .games = &games, .rows = &rs };
     const seat = try seatRows(gpa, &d);
     defer gpa.free(seat);
-    var p: Profiles = try .build(gpa, &d, seat, &.{ 0, 1, 2, 3 });
+    var p: Profiles = try .build(gpa, &d, seat, &.{ 0, 1, 2, 3 }, null);
     defer p.deinit(gpa);
     const f = @backingInt(Feature.range);
     // Mid (role 2), champion 1 (blue): ranges 200, 210, 220, 230; blue won games 0, 2
@@ -681,4 +744,26 @@ test "profiles: shrunk halves, z in role, leave-one-out" {
     try testing.expectApproxEqAbs(@as(f32, @floatCast(want)), z_loo[f], 1e-4);
     // Unknown stats give z 0 (no spread)
     try testing.expectEqual(@as(f32, 0), z[@backingInt(Feature.magic)]);
+
+    // permute: a permutation within each role; a row reading another profile isn't left out
+    try p.permute(gpa, 3);
+    var hit: [10]bool = @splat(false);
+    var it = p.index.iterator();
+    while (it.next()) |e| {
+        const to = p.perm.?[e.value_ptr.*];
+        hit[to] = true;
+        var kt = p.index.iterator();
+        while (kt.next()) |x| if (x.value_ptr.* == to) try testing.expectEqual(e.key_ptr.* & 7, x.key_ptr.* & 7);
+    }
+    for (hit) |h| try testing.expect(h);
+    p.z(&rs[0 * 10 + 2], 2, true, &z_loo);
+    if (p.perm.?[id] != id) try testing.expectApproxEqAbs(@as(f32, 1), z_loo[f], 1e-4);
+
+    // shuffle: results from `won`
+    const shuffled: [4]u1 = .{ 1, 1, 0, 0 };
+    var q: Profiles = try .build(gpa, &d, seat, &.{ 0, 1, 2, 3 }, &shuffled);
+    defer q.deinit(gpa);
+    const qid = q.index.get(key(1, 2)).?;
+    try testing.expectApproxEqAbs(@as(f64, 200 + 210), q.acc[qid][1][f][0], 1e-9);
+    try testing.expectApproxEqAbs(@as(f64, 220 + 230), q.acc[qid][0][f][0], 1e-9);
 }
