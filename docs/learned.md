@@ -241,7 +241,20 @@ How to write a line:
   take. Sure: 10,604 held-out games, all clear. Site: a champ-select lesson can forecast
   these from the matchup ("against X expect to dodge more"); they don't measure skill.
   Evidence: docs/model.md "Field ranking" (A2)
-- 2026-10-13: Early aggression, roaming and time in the enemy half look like they win
+- 2026-10-13: Beyond the gold, XP and objectives at 14:00, how you play adds almost
+  nothing measurable: your early style moves your win chance by about 0.7 percentage
+  points on average (under 1.6 for nine players in ten). There are no distinct
+  "playstyle types" once champion and state are known, and a neural net reading play
+  minute by minute found nothing more. Small leanings remain for players in the same
+  state: mids and junglers who farm rather than fight win slightly more (about +1.8 and
+  +1.2 percentage points per step), bot laners slightly less (-1.7). Sure: 10,604
+  held-out games, one look; the style measures together are clear but tiny, the
+  leanings survive a correction for testing 50 of them; types and the net: not detected
+  (the net could not have seen effects quite this small). Site: no "play aggressive to
+  win" and no "you are a type X player"; post-game may show your own style against your
+  role's spread, as an association. Evidence: docs/model.md "Playstyle clusters and
+  sequence net"
+- ~~2026-10-13: Early aggression, roaming and time in the enemy half look like they win
   games, but almost all of that is just being ahead; once the gold and XP leads at
   14:00 are known, style adds very little. What survives is small: bot laners and mids
   who trade more damage win a bit more (about +2.4 and +1.7 percentage points per step),
@@ -249,7 +262,8 @@ How to write a line:
   118k games; each style number is within about 0.2-0.35 percentage points either way
   (counting a game's ten players together), and the ones above clear zero. Site: no
   "play aggressive to win"; post-game may show your own style against your role's
-  spread. Evidence: docs/model.md "Playstyle given the state"
+  spread. Evidence: docs/model.md "Playstyle given the state". Superseded 2026-10-13 by
+  the line above (objectives in the state too)~~
 - ~~2026-10-12: Early aggression, roaming and time in the enemy half look like they win
   games, but almost all of that is just being ahead; once the gold and XP leads at
   14:00 are known, style adds very little. What survives is small: bot laners and mids

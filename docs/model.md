@@ -524,6 +524,9 @@ Reading:
   hurt
 - Lesson material at most, with intervals; one sd of any style is worth under 2.5 pp
   once the state is known
+- Superseded in part (2026-10-13, meiolol-3f): with objectives held at 14:00 in the
+  state too, these eight features' gain halves (test +0.00020 ± 0.00011) and nothing
+  beyond them is detected; see "Playstyle clusters and sequence net"
 
 ### Champion given the state (scaling), 2026-10-13 (meiolol-b0's successor)
 
@@ -872,6 +875,108 @@ the 14:00 state, and the whole-game ones mostly restate the result. Next: lens B
 team end-state base (kills, towers, objectives) to find the player-level fields beyond
 the team's result; per-champion check of the ward-takedown traps.
 
+### Playstyle clusters and sequence net, 2026-10-13 (meiolol-3f)
+
+`meiolol-lab style SNAP OUT [--final K] [--net all|N,..] [--net-offset champ]`
+(src/lab/style.zig, src/lab/stylenet.zig). Harness dev cut (fit 64,931 games, dev 8,011),
+then one test look (fit 117,806, test 10,604); ten rows a game, outcome win, games
+reaching 15:00 and 900 s+. Use-time: the user's own style, post-game only.
+
+- Style per player, minutes 0-13: share of position frames in 14 zones (bases, each
+  lane's own and enemy half, river top and bottom, own and enemy jungle top and bottom
+  side) in minutes 3-7 and 8-13, red mirrored across x + y = 14800 (keeps top lane top);
+  mean step between minute positions; counts before 14:00 of damage dealt and taken, CC,
+  lane and jungle CS, kills, deaths, assists, wards, control wards, ward kills, plates,
+  epic monster takes, minutes with a purchase from 1:30 (backs), first such minute. 44
+  dims, residualised within role on champion-role (mean shrunk to the role's, 20 rows)
+  and linearly on the 14:00 state, standardised per role, clipped at ±4 sd
+- State: team gold, XP and lane gold leads, plates, towers, dragons, grubs, herald (own
+  side minus the other; objectives.stateAt). Objectives were added at meiolol-78's
+  request after look 2. Base "b0": b0's model (champion x role, state x role, b0's eight
+  style features x role) on this state
+- Clusters: k-means++ per role on the residuals, k 3, 4, 6, 8, best of 5 restarts; the
+  largest cluster is each role's reference. Components: 10 PCs per role of the same
+  residuals, in sd units
+- Net: f = MLP 433 -> H -> B -> 1 (ReLU, dropout after layer 1) on the per-minute
+  sequence (14 minutes x zone one-hot, x, y, the minute's damage dealt and taken, CC,
+  lane and jungle CS, kills, deaths, assists, wards, control wards, ward kills, plates,
+  epics, purchases) plus role and state, standardised; logit = b0's log-odds + f. AdamW
+  lr 1e-3, wd 1e-4, batch 512; epoch picked on the latest tenth of fit games
+- Looks: dev 1 (gold/XP state: four k and the components), dev 2 (clip fix after rare
+  zones standardised to 40-70 sd took whole clusters; component table), dev 3 (full
+  state); net: the eight configs fixed beforehand plus one positive control. Test,
+  declared before it: (a) b0 + 10 components vs b0, (b) b0 + clusters k=3 vs b0 (best
+  on dev), (c) the component table with BH, (e) b0 vs champion + state. (d), the net,
+  went to test only if its dev gain beat its interval: it did not
+
+Win log loss gain, nats per row ± 95% clustered by game:
+
+| comparison | dev, gold/XP state (look 2) | dev, full state (look 3) | test, full state |
+| --- | --- | --- | --- |
+| b0's style over champion + state | 0.00030 ± 0.00016 | 0.00014 ± 0.00013 | 0.00020 ± 0.00011 |
+| b0 + 10 components over b0 | 0.00080 ± 0.00035 | 0.00004 ± 0.00012 | -0.00001 ± 0.00009 |
+| b0 + clusters k=3 over b0 | 0.00003 ± 0.00005 | 0.00001 ± 0.00004 | -0.00000 ± 0.00003 |
+| b0 + clusters k=4 over b0 | -0.00000 ± 0.00005 | -0.00001 ± 0.00004 | - |
+| b0 + clusters k=6 over b0 | 0.00003 ± 0.00007 | -0.00004 ± 0.00005 | - |
+| b0 + clusters k=8 over b0 | -0.00006 ± 0.00009 | -0.00009 ± 0.00007 | - |
+
+Log loss of b0: dev 0.5408 on the gold/XP state, 0.5302 on the full state; test 0.51954
+(champion + state 0.51974). On test, b0's style moves a player's win chance by 0.66 pp
+on average (median 0.48, 90% under 1.6) against champion + state.
+
+Net on dev, full state, over b0 (seconds per epoch on the Mac M5, 10 cores):
+
+| config | hidden | bottleneck | dropout | emb | best epoch | s per epoch | gain over b0 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 64 | 8 | 0.1 | 0 | 1 | 0.8 | -0.00006 ± 0.00004 |
+| 2 | 128 | 8 | 0.1 | 0 | 2 | 1.8 | -0.00002 ± 0.00010 |
+| 3 | 256 | 8 | 0.1 | 0 | 3 | 3.3 | 0.00001 ± 0.00002 |
+| 4 | 128 | 8 | 0.3 | 0 | 0 | 1.5 | 0 (offset kept) |
+| 5 | 256 | 8 | 0.3 | 0 | 0 | 2.8 | 0 (offset kept) |
+| 6 | 128 | 8 | 0.1 | 8 | 1 | 1.8 | -0.00000 ± 0.00001 |
+| 7 | 128 | 16 | 0.1 | 0 | 2 | 1.6 | -0.00020 ± 0.00015 |
+| 8 | 512 | 8 | 0.3 | 0 | 0 | 5.5 | 0 (offset kept) |
+| control: 2 over champion + state | 128 | 8 | 0.1 | 0 | 2 | 1.4 | -0.00012 ± 0.00020 |
+
+Components passing BH on test (17 of 50 at q < 0.05), win pp per +1 sd given b0's
+features and the state; zones = share of squared loadings on position dims; the sign
+of a component is arbitrary, so read the effect with its loadings:
+
+| role | pc | effect | zones | loadings (largest) |
+| --- | --- | --- | --- | --- |
+| middle | 1 | 1.76 ± 0.70 | 0.12 | taken -0.38, deaths -0.38, damage -0.34, kills -0.34, shops -0.33, lane CS 0.31 |
+| bottom | 1 | -1.72 ± 0.65 | 0.07 | taken -0.42, deaths -0.40, damage -0.37, shops -0.35, kills -0.35, lane CS 0.27 |
+| bottom | 4 | 1.53 ± 1.06 | 0.46 | wards -0.45, control wards -0.40, early bot own half 0.34, ward kills -0.27 |
+| jungle | 1 | 1.15 ± 0.73 | 0.04 | deaths -0.45, damage -0.43, taken -0.41, kills -0.31, jungle CS 0.31 |
+| middle | 3 | 1.01 ± 0.58 | 0.78 | mid enemy half early 0.55, late 0.45, mid own half early -0.44, plates 0.24 |
+| middle | 7 | 0.90 ± 0.32 | 0.51 | epics 0.45, base late -0.37, base early 0.33, first shop -0.29 |
+| bottom | 2 | -0.85 ± 0.46 | 0.67 | bot own half early -0.44, step 0.43, late -0.40, base early 0.31, late 0.29 |
+
+Ten more between ±0.3 and ±0.7 pp (top, jungle and support pathing and assists); all
+in the report (data/style/final/final-report.md on the Mac).
+
+Reading:
+- Beyond the full state at 14:00 (leads and objectives held), early style adds almost
+  nothing: b0's eight features are worth half of what they were over gold and XP alone,
+  and nothing measured here adds to them. The look-2 gain of the components (+0.0008)
+  and its largest effect (supports roaming to epic monsters, +4.6 pp per sd) were
+  objectives held: both vanish once those are in the state
+- No playstyle types: once champion and state are out, style has no cluster shape (the
+  first component explains 7-13% of the variance by role, the rest is flat), so k-means
+  cuts a continuum into arbitrary parts; clusters add nothing at any k on dev or test.
+  The large clusters are "fights more" vs "fights less" and holding vs leaving the lane
+- The net finds nothing nonlinear. Its positive control (over champion + state, where
+  b0's features alone gain +0.00014) also finds nothing, and every config overfits after
+  epoch 1-3: so not detected, with the net unable to resolve effects below about 0.0003
+  nats, not "absent"
+- Single directions on test, as associations in the same state and beyond b0's
+  features: mids and junglers who farm rather than fight win slightly more (+1.8, +1.2 pp
+  per sd), bot laners slightly less (-1.7); bot laners who ward less but hold lane early
+  win more (+1.5); mids in the enemy half of mid early +1.0. Together they predict
+  nothing (component block -0.00001 ± 0.00009)
+- Compute: Mac CPU throughout (the whole clustering run 30-40 s; the net 0.8-5.5 s an
+  epoch at 0.6M rows): the GPU path is not worth new kernels at this size
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
@@ -967,6 +1072,12 @@ pair cell and an unknown champion (id 0), each with value, lo, hi, champ_games a
 pair_games from Scorer.value; the page's JS must match them to 0.01.
 
 ## Next steps
+
+- Your usual style (parked, 2026-10-13, meiolol-3f): style from a player's earlier games
+  is use-time valid for the user's own; measure it on early outcomes over 3c-team2 and
+  on win over b0's model on the full 14:00 state (`meiolol-lab style`, model.md
+  "Playstyle clusters and sequence net"). If the net is retried: fewer inputs (zone
+  shares per minute), stronger regularisation, and the positive control first
 
 - Field ranking follow-ups (parked, 2026-10-13): lens B over a team end-state base
   (team kills, towers, objectives) so player-level fields beyond the team's result show;
