@@ -11,6 +11,7 @@ const timeline = @import("../riot/timeline.zig");
 const protocol = @import("protocol.zig");
 const pack = @import("pack.zig");
 const seatstats = @import("seatstats.zig");
+const synth = @import("synth.zig");
 
 pub const Outcome = enum { win, gold14, lanediff14, cs10, deaths15, first_item };
 pub const outcome_count = @typeInfo(Outcome).@"enum".field_names.len;
@@ -82,7 +83,9 @@ const GameList = struct {
 };
 
 /// From SNAP/pack/ when it matches the snapshot (lab/pack.zig), else from SQLite.
-/// legendaries: (patch key, item id) of completed items, for first_item; may be empty
+/// legendaries: (patch key, item id) of completed items, for first_item; may be empty.
+/// SNAP `plant:SPEC:PATH` loads PATH with winners re-drawn from planted effects
+/// (lab/synth.zig)
 pub fn load(
     gpa: std.mem.Allocator,
     snap: []const u8,
@@ -90,6 +93,24 @@ pub fn load(
 ) !Data {
     // Plain blocking reads, on the global Io so every caller gets the pack unchanged
     const io = std.Io.Threaded.global_single_threaded.io();
+    if (try synth.parseArg(snap)) |arg| {
+        // The caller looked for legendaries.tsv under "plant:..."; the pack's manifest wants PATH's
+        var own = try loadLegendaries(gpa, io, arg.path);
+        defer own.deinit(gpa);
+        var d = try loadPlain(gpa, io, arg.path, &own);
+        errdefer d.deinit();
+        try synth.plant(gpa, &d, arg.spec);
+        return d;
+    }
+    return loadPlain(gpa, io, snap, legendaries);
+}
+
+fn loadPlain(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    snap: []const u8,
+    legendaries: *const std.AutoHashMapUnmanaged(u64, void),
+) !Data {
     if (try pack.read(gpa, io, snap, legendaries)) |d| return d;
     return loadSql(gpa, snap, legendaries);
 }
@@ -512,6 +533,10 @@ pub fn summary(d: *const Data, w: *std.Io.Writer) !void {
             sum[1] / @as(f64, @floatFromInt(@max(n[1], 1))),
         });
     }
+}
+
+test {
+    _ = synth;
 }
 
 test "experience counts only games that ended before the start" {
