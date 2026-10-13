@@ -102,7 +102,8 @@ pub fn main(gpa: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
         return 2;
     }
     const snap = argv[0];
-    var legendaries: std.AutoHashMapUnmanaged(u64, void) = .empty;
+    var legendaries = try rows.loadLegendaries(gpa, io, snap);
+    defer legendaries.deinit(gpa);
     var d = try rows.load(gpa, snap, &legendaries);
     defer d.deinit();
 
