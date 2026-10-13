@@ -744,6 +744,124 @@ games as dev-val (EUW1 rows scored), fit on the rest: log loss 0.68824, accuracy
 54.15%, AUC 0.556, against 0.68969, 53.70%, 0.549 on the time split. Skill slopes and
 post-game rank: no final (rejected on dev; leaky).
 
+### Field ranking, 2026-10-13 (meiolol-48)
+
+`meiolol-lab fields SNAP OUT [--final LIST] [--ref PREDS]` (src/lab/fields.zig, Mac CPU,
+ReleaseFast, ~50 s). Every number and bool of the raw summary per player: participant
+fields (p.), challenges (c.), missions (m.), PlayerBehavior (b.), the team's objectives
+(t.) and champ select fields worked out from it (d.: spell pair, keystone, primary and
+secondary tree, shards, role assignment status from selectedRolePreferences, +10 when
+played off the assigned role). 315 fields; ids (items, augments, champion id) skipped.
+Rows: the protocol's games that reached 15:00 and ran 900 s+. Ranked on the harness's
+dev cut (fit: 65k games before it, scored: 8,011 EUW dev games), then one test look
+(fit: all train, 117,806 games; scored: 10,604 test games) at a list written before it
+(OUT/final-list.tsv, below). Intervals 95%, paired, clustered by game; p from them,
+Benjamini-Hochberg within each table. Each field has a class: early (a fixed window
+before 15:00), game (whole game), result (end of game or losing it: nexus, inhibitors,
+surrender, team objective totals, length), draft (set in champ select by the player).
+
+- B, post-game: win log loss of a logistic model per field over a game-state base (team
+  gold diff at 14, game length; base test log loss 0.4989). Field terms per role:
+  within-champion-role z of the value and of the value per minute, a missing flag.
+  Association, not cause: whole-game fields mostly record winning
+- A2, draft forecast: each end-of-game stat as a target; % of its role-mean MSE (raw
+  units, pooled) removed by shrunk champion-role means, then by shrunk (champion-role,
+  lane opponent) cells on the residual. Never a champ-select input
+- A1, champ select: the player's own seat fields; shrunk (role, category) effects, then
+  (champion-role, category) on their residual, over the champion-role mean (win shrunk
+  to the role's at 1000 rows, as the harness); on test also added to 3c-team2's preds.
+  Use-time legal for the user's own seat only; docs/production-key.md before any is shown
+  as advice
+
+Dev: B ranks 220 game fields (144 clear after BH), 24 early (7 clear), 40 result (28);
+champ select fields as numbers add nothing to win (account level -0.02 ± 0.03 mnats).
+Pre-declared for test: B top 10 game and top 10 early (result left out: consequences),
+A2 top 10 by draft share and top 10 more by lane share, A1 all six on all outcomes.
+
+B on test (mnats per row; % of base log loss; winners minus losers in sd):
+
+| field | class | gain, mnats | % | win - loss |
+| --- | --- | --- | --- | --- |
+| c.maxKillDeficit | game | 347.4 ± 7.8 | 69.6 | +0.99 |
+| c.turretTakedowns (= p.) | game | 180.7 ± 5.1 | 36.2 | +1.24 |
+| c.teamBaronKills | game | 131.1 ± 8.2 | 26.3 | +0.95 |
+| c.earliestBaron | game | 128.7 ± 7.8 | 25.8 | -0.22 |
+| c.baronBuffGoldAdvantageOverThreshold | game | 128.4 ± 6.3 | 25.7 | +0.22 |
+| c.turretPlatesTaken | game | 114.9 ± 4.3 | 23.0 | +1.10 |
+| p.champExperience | game | 114.0 ± 3.7 | 22.9 | +0.48 |
+| p.damageDealtToObjectives | game | 103.5 ± 4.1 | 20.7 | +1.00 |
+| p.champLevel | game | 99.6 ± 3.4 | 20.0 | +0.49 |
+| c.firstTurretKilledTime | early | 2.43 ± 1.24 | 0.49 | -0.17 |
+| c.firstTurretKilled | early | 1.94 ± 1.12 | 0.39 | +0.75 |
+| c.takedownsFirstXMinutes | early | 0.91 ± 0.21 | 0.18 | +0.49 |
+| c.takedownOnFirstTurret | early | 0.47 ± 0.20 | 0.09 | +0.29 |
+| c.laningPhaseGoldExpAdvantage | early | 0.29 ± 0.12 | 0.06 | +0.35 |
+| p.firstTowerKill | early | 0.24 ± 0.13 | 0.05 | +0.23 |
+| c.earlyLaningPhaseGoldExpAdvantage | early | 0.07 ± 0.07 | 0.01 | +0.19 |
+| c.jungleCsBefore10Minutes | early | 0.06 ± 0.09 | 0.01 | +0.09 |
+| c.kTurretsDestroyedBeforePlatesFall | early | 0.03 ± 0.07 | 0.01 | +0.29 |
+| c.laneMinionsFirst10Minutes | early | 0.02 ± 0.06 | 0.00 | +0.13 |
+
+All but the last four clear after BH (q < 0.001); those four are not detected. The whole
+game rows are the game's result seen from one player; the early ones are what the 14:00
+state misses, at most half a percent of the log loss.
+
+A2 on test (% of role-mean MSE; all 20 clear after BH):
+
+| field | draft | champion | lane opponent |
+| --- | --- | --- | --- |
+| c.skillshotsHit | 82.4 ± 5.3 | 82.0 | 0.36 ± 0.19 |
+| c.landSkillShotsEarlyGame | 81.0 ± 7.1 | 80.5 | 0.54 ± 0.41 |
+| p.spell1Casts | 79.5 ± 2.2 | 79.4 | 0.08 ± 0.03 |
+| c.enemyChampionImmobilizations | 77.8 ± 1.7 | 76.9 | 0.94 ± 0.11 |
+| p.spell4Casts | 72.9 ± 3.4 | 73.0 | -0.08 ± 0.13 |
+| p.spell2Casts | 72.0 ± 1.3 | 71.9 | 0.09 ± 0.04 |
+| c.knockEnemyIntoTeamAndKill | 70.7 ± 1.5 | 70.7 | 0.08 ± 0.07 |
+| p.spell3Casts | 70.3 ± 2.4 | 70.3 | 0.06 ± 0.04 |
+| p.magicDamageDealt | 69.7 ± 1.3 | 69.7 | 0.04 ± 0.06 |
+| p.totalTimeCCDealt | 69.5 ± 2.1 | 68.9 | 0.61 ± 0.20 |
+| c.survivedThreeImmobilizesInFight | 45.1 ± 1.9 | 4.4 | 40.7 ± 1.7 |
+| c.skillshotsDodged | 34.7 ± 1.8 | 2.7 | 32.0 ± 1.7 |
+| c.wardTakedownsBefore20M | 34.4 ± 4.6 | 3.6 | 30.8 ± 4.6 |
+| c.dodgeSkillShotsSmallWindow | 32.2 ± 2.2 | 1.3 | 30.9 ± 2.1 |
+| p.physicalDamageTaken | 23.6 ± 0.9 | 18.6 | 5.0 ± 0.3 |
+| c.wardTakedowns | 21.6 ± 2.4 | 5.7 | 15.9 ± 2.4 |
+| p.trueDamageTaken | 21.5 ± 1.1 | 10.5 | 11.0 ± 0.8 |
+| p.magicDamageTaken | 20.2 ± 0.8 | 8.3 | 11.9 ± 0.5 |
+| c.laneMinionsFirst10Minutes | 13.4 ± 0.6 | 9.1 | 4.3 ± 0.3 |
+| c.maxCsAdvantageOnLaneOpponent | 12.8 ± 0.6 | 8.1 | 4.7 ± 0.3 |
+
+Your own kit sets what you deal; the lane opponent's sets what you dodge, survive and
+take. Ward takedowns likely count traps (Teemo, Shaco, Nidalee and the like) as wards:
+not checked per champion. Dev ranked the same way (dev-a2.tsv: 197 of 283 clear).
+
+A1 on test (continuous: % of base MSE, over the champion-role mean, then over 3c-team2;
+win: mnats; top and bottom: the largest shrunk category effects with 1000+ train rows):
+
+| field | win | gold14 | lanediff14 | cs10 | deaths15 | first_item |
+| --- | --- | --- | --- | --- | --- | --- |
+| assignment | -0.03 ± 0.08 | 0.07 ± 0.04 / 0.05 ± 0.04 | 0.06 ± 0.03 / 0.05 ± 0.03 | 0.26 ± 0.06 / 0.10 ± 0.06 | 0.16 ± 0.05 / 0.06 ± 0.05 | 0.06 ± 0.04 / 0.01 ± 0.04 |
+| keystone | 0.04 ± 0.12 | 0.56 ± 0.09 / 0.53 ± 0.10 | 0.19 ± 0.05 / 0.19 ± 0.05 | 0.48 ± 0.09 / 0.26 ± 0.09 | 0.26 ± 0.06 / 0.24 ± 0.07 | 0.48 ± 0.09 / 0.45 ± 0.09 |
+| shards | -0.02 ± 0.09 | 0.38 ± 0.09 / 0.36 ± 0.09 | 0.15 ± 0.06 / 0.17 ± 0.06 | 0.57 ± 0.12 / 0.44 ± 0.12 | 0.10 ± 0.05 / 0.11 ± 0.05 | 0.50 ± 0.09 / 0.49 ± 0.09 |
+| spells | -0.06 ± 0.09 | 0.19 ± 0.06 / 0.16 ± 0.06 | 0.09 ± 0.04 / 0.08 ± 0.04 | 0.49 ± 0.11 / 0.46 ± 0.11 | 0.16 ± 0.05 / 0.15 ± 0.05 | 0.23 ± 0.07 / 0.21 ± 0.07 |
+| trees | 0.09 ± 0.13 | 0.81 ± 0.12 / 0.80 ± 0.12 | 0.27 ± 0.06 / 0.28 ± 0.06 | 0.58 ± 0.10 / 0.36 ± 0.11 | 0.25 ± 0.06 / 0.27 ± 0.06 | 1.08 ± 0.13 / 1.04 ± 0.14 |
+| account level | 0.01 ± 0.11 | 0.13 ± 0.04 / 0.12 ± 0.04 | 0.10 ± 0.04 / 0.10 ± 0.04 | 0.11 ± 0.06 / 0.02 ± 0.06 | 0.00 ± 0.03 / 0.00 ± 0.03 | 0.06 ± 0.04 / 0.05 ± 0.04 |
+
+Every continuous cell over the champion-role mean clears BH except account level on
+deaths15; win clears for none (largest single category effects about 1.5 points either
+way, not enough to improve held-out log loss). Largest effects: First Strike +118 gold
+at 14; Inspiration with Domination +148 gold, Precision with Sorcery -69; Teleport and
+Ignite +103 gold and +2.1 CS at 10; autofilled +0.22 deaths before 15; queued as Fill
+first -102 lane gold diff; got their first choice but swapped in champ select +139 gold
+at 14. Associations within champion and role (who takes a rune also differs), not advice.
+
+What this says for compact rows (docs/fields.md): the champ select fields (spells,
+keystone, trees, shards, assignment status) carry draft-time signal on every early
+outcome and cost a few bytes per player; challenges add almost nothing to win beyond
+the 14:00 state, and the whole-game ones mostly restate the result. Next: lens B over a
+team end-state base (kills, towers, objectives) to find the player-level fields beyond
+the team's result; per-champion check of the ward-takedown traps.
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

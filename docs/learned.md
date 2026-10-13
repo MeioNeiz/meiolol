@@ -25,6 +25,21 @@ How to write a line:
 
 ## Win
 
+- 2026-10-13: Once you know each team's gold at 14:00 and how long the game ran, the
+  early-game stats Riot records (first tower, takedowns in the first minutes, the
+  laning-phase gold and XP lead) barely help tell the winner: the best adds under half a
+  percent. Sure: 10,604 held-out EUW games, fields picked on dev before one test look;
+  first tower, early takedowns and the laning-phase lead clear zero after correcting for
+  the many fields tested; lane CS and jungle CS before 10 and the early-laning lead not
+  detected. Whole-game stats (towers, barons, level, biggest kill deficit) explain far
+  more but mostly record who won. Site: no "take first tower to win"; post-game may show
+  them as what happened, not why. Evidence: docs/model.md "Field ranking" (B)
+- 2026-10-13: What you set in champ select for yourself (summoner spells, runes, stat
+  shards, being autofilled, account level) does not detectably change your chance of
+  winning on the same champion and role. Sure: 10,604 held-out games; none improved
+  held-out win predictions; the largest single-option effects were about 1.5 percentage
+  points either way, within noise. Site: no win claims for runes, spells or autofill.
+  Evidence: docs/model.md "Field ranking" (A1)
 - 2026-10-13: On games we held back, the ten champions alone pick the winner 53.2% of
   the time, and adding how much each player has played before the game (earlier games
   and wins on their champion, recent games, win rate, KDA, lane gold and deaths) lifts
@@ -105,6 +120,17 @@ How to write a line:
 
 ## Early game
 
+- 2026-10-13: On the same champion and role, rune and spell choices go with different
+  early games: First Strike players have about 120 more gold at 14, Inspiration with
+  Domination about 150 more, Teleport with Ignite about 100 more gold and 2 more CS at
+  10; autofilled players die about 0.2 more times before 15, and players who queue as
+  Fill first end lane about 100 gold behind their opponent at 14. Sure: 10,604
+  held-out games; runes, shards and spells each explain 0.2-1% of the spread in gold at
+  14, CS at 10 and first item time, also on top of the best draft model; single-option
+  numbers are shrunk estimates without their own intervals. Who-picks-what, not cause:
+  players who take First Strike may play differently anyway. Site: no advice until
+  docs/production-key.md is checked; lesson wording "players who take X tend to".
+  Evidence: docs/model.md "Field ranking" (A1)
 - 2026-10-13: A higher rank means more gold at 14 in the same matchup: going from
   Emerald to Master is worth about 200 gold for a jungler, 145 mid and bot, 90 top and
   20 support, and Iron to Challenger spans 400-850 gold outside support. Sure: on
@@ -182,6 +208,14 @@ How to write a line:
 
 ## Playstyle
 
+- 2026-10-13: Your champion decides most of how many skillshots you land, spells you
+  cast and how much crowd control you deal (70-82% of the spread); your lane opponent
+  decides about a third of how many skillshots you dodge, how often you survive three
+  stuns in a fight and how many wards you clear before 20 minutes (likely because some
+  champions' traps count as wards), and about a tenth of the magic and true damage you
+  take. Sure: 10,604 held-out games, all clear. Site: a champ-select lesson can forecast
+  these from the matchup ("against X expect to dodge more"); they don't measure skill.
+  Evidence: docs/model.md "Field ranking" (A2)
 - 2026-10-13: Early aggression, roaming and time in the enemy half look like they win
   games, but almost all of that is just being ahead; once the gold and XP leads at
   14:00 are known, style adds very little. What survives is small: bot laners and mids

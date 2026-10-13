@@ -131,8 +131,11 @@ anything.
   and Dealt) +3-6 KB, on today's 8.6 KB
 - Box (2026-10-12 21:30Z, after the WAL fix): 129 GB free, ~172k matches/day, compact
   rows ~1.5 GB/day
-- Still open: signal per field (meiolol-2a's every-field model) decides what compact
-  rows keep
+- Signal per field (2026-10-13, docs/model.md "Field ranking"): champ select fields
+  (spells, keystone, trees, shards, role assignment status) carry draft-time signal on
+  every early outcome, a few bytes per player: recommended for compact rows (not yet
+  decided). Challenges add almost nothing to win beyond the 14:00 state; whole-game
+  ones mostly restate the result
 
 ## Decided (Jacob, 2026-10-12)
 
