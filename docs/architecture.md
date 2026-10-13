@@ -44,7 +44,8 @@ src/
   app_main.zig       `meiolol-app`: suggest (offline), watch (live), session, get
   lab_main.zig       `meiolol-lab`: modelling experiments (docs/model.md, compute.md);
                      lab/rows.zig model rows from a snapshot, lab/pack.zig packed rows,
-                     lab/mastery_pre.zig pre-game mastery from the raw archive
+                     lab/mastery_pre.zig pre-game mastery from the raw archive,
+                     lab/seatstats.zig end-of-game seat stats (rows.Row.stats)
   lanecard.zig       the lane card's content (pure): opponent, sentence, curve, options
   desktop_main.zig   `meiolol-desktop`: the lane card in a window (dvui, Direct3D 11)
   desktop/           ui.zig (the window, drawn from a View), raster.zig (dvui backend
@@ -230,11 +231,11 @@ note; `rows`, `enemy`, `exp` and the rest all go through rows.load.
 - games.FIELD, rows.FIELD: little-endian, COUNT values per game or row in game/row
   order (rows.game indexes games). bool and u1 as u8 0/1, enums as their tag (u8),
   rank ?u8 with 255 as null, teams 10 u32 (side major), y 6 f32 per row (Outcome order,
-  NaN unknown). Strings: games.match_id the bytes concatenated, games.match_id.end u64
+  NaN unknown), stats 17 f32 per row (SeatStat order, NaN unknown). Strings: games.match_id the bytes concatenated, games.match_id.end u64
   end offsets
 - manifest (text): `meiolol-lab pack VERSION`, `code` (hash of rows.zig, pack.zig,
-  protocol.zig, stats.zig), `legendaries` (count, hash), per db its size and mtime (ns)
-  and its WAL's, one `column NAME TYPE COUNT` line per file, then `games N`, `rows N`.
+  protocol.zig, stats.zig, seatstats.zig), `legendaries` (count, hash), per db its size
+  and mtime (ns) and its WAL's, seat_stats.tsv's size and mtime (0 0 when absent), one `column NAME TYPE COUNT` line per file, then `games N`, `rows N`.
   Everything above the counts must equal what the loading binary computes, else the
   pack is stale. Bump pack.version when rows change through code not hashed (eval.split,
   timeline.decode)
@@ -249,6 +250,23 @@ champion, 0s if absent from the fetch), champions, total_points (the whole fetch
 line without such a fetch. Two zstd -dc passes over ARCHIVE's mastery files (the first
 keeps one best fetched_at per participant, the second decodes only the chosen blobs);
 exports begun after the last game are skipped. Temp file, then rename.
+
+`meiolol-lab seat-stats SNAP [DDRAGON]` (src/lab/seatstats.zig) adds seat_stats.tsv: per
+queue 420 seat, what the player did (api.SeatStat), for comp features. Header line, then
+match_id, slot, 17 f32 columns in SeatStat order, `nan` unknown; no line when the game
+has no raw summary or the summary names another champion. From raw.db's riot_match
+summaries (parallel decode, par.zig): minutes (gameDuration / 60), damage dealt to and
+taken from champions by type, damageSelfMitigated, timeCCingOthers,
+challenges.enemyChampionImmobilizations, totalHeal (includes heals on teammates),
+totalHealsOnTeammates, totalDamageShieldedOnTeammates, damageDealtToBuildings. From Data
+Dragon of the game's own patch (DDRAGON/<patch>/champion.json and item.json, patch from
+gameVersion; fetched by hand per patch, the snapshot keeps them in SNAP/ddragon/):
+armor_end, mr_end = base + growth at level 15 (Riot's curve) plus the flat armour/MR of
+item0..item6 at the end, no ability resists; attack_range the base range. Real
+minute-15 resists need raw timelines (championStats), archived only from 2026-10-12.
+rows.loadSql joins it into rows.Row.stats by (match_id, slot); the pack stamps it, so
+writing it makes the pack stale until `meiolol-lab pack` runs again. The harness copies
+stats into api.Row for visible (training) games only; a Query has none.
 
 ## Lane curves (src/curves.zig, src/core/curvesfile.zig, curvefit.zig, src/site/matchup.zig)
 
