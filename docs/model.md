@@ -669,8 +669,8 @@ set by how much history we hold per player, not by training games (20-35 weights
 
 Reading:
 - Experience and form point the same way at every size and each adds about 0.001
-  nats; together they sit at the edge of noise. Expect more as history accumulates
-  (most players have no earlier game in our 16 days)
+  nats; together they sit at the edge of noise on dev. More history per player may
+  help (not yet tested: most players have no earlier game in our 16 days)
 - Per-champion skill slopes: worse than one slope per role. Each champion's "0 to 50
   earlier games" effect has a ±7-10 pp interval, and 50 games is far past our data
   (0.1% of rows): effects-skill-<role>.tsv in the run dir, not a finding
@@ -681,6 +681,20 @@ Reading:
 - Weights (experience-only fit, log-odds per unit, top/jungle/mid/bot/support): log1p
   games on the champion 0.065/0.062/0.090/0.067/0.010 (10 games vs none: about +4 pp
   for one player outside support); its win rate's log-odds 0.09/-0.02/0.06/0.03/0.03
+
+Test finals (2026-10-13, go from meiolol-78; one look each, `exp final` into ~/ml/lab
+on the Mac, accuracy and AUC from `exp preds` of the same fit; 10,604 EUW1 test games,
+106,040 rows):
+
+| model | log loss | accuracy | AUC | vs champion base rates | vs champions |
+| --- | --- | --- | --- | --- | --- |
+| champions (ratings) | 0.69064 | 53.20% | 0.544 | -0.00223 ± 0.00170 | - |
+| everything pre-game (both) | 0.68834 | 54.52% | 0.562 | -0.00453 ± 0.00274 | -0.00230 ± 0.00217 |
+
+Not our protocol (LoLDraftAI-style): champions-only on a random tenth of non-test
+games as dev-val (EUW1 rows scored), fit on the rest: log loss 0.68824, accuracy
+54.15%, AUC 0.556, against 0.68969, 53.70%, 0.549 on the time split. Skill slopes and
+post-game rank: no final (rejected on dev; leaky).
 
 ### Draft model file (meiolol-lab draft --export)
 
@@ -777,6 +791,15 @@ pair cell and an unknown champion (id 0), each with value, lo, hi, champ_games a
 pair_games from Scorer.value; the page's JS must match them to 0.01.
 
 ## Next steps
+
+- Player experience and everything pre-game (win-ratings, internal scope): rerun when
+  meiolol-78 pins a snapshot with about a week of rank_history and pre-game mastery
+  (fetch time before game_start), on its fresh test set. Add rank at game start and the
+  lobby rank spread as a group, mastery as a group, then the rank-sensitivity slope per
+  champion-role beside the experience one (shrunk to the role's). Same ablation table,
+  dev first, final on the coordinator's go. Scratch scripts (variants from a clean
+  tree, paired dev.tsv comparisons) are simple to redo: see "Player experience and
+  everything pre-game"
 
 - Next lab campaign, rank at game start on 3c-team2 (agreed with meiolol-78; runs on the
   snapshot 78 pins after ~a week of rank_history, with a fresh test set: rank_start

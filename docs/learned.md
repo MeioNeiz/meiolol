@@ -25,7 +25,19 @@ How to write a line:
 
 ## Win
 
-- 2026-10-13 (early): Knowing how much each player has played before the game adds a
+- 2026-10-13: On games we held back, the ten champions alone pick the winner 53.2% of
+  the time, and adding how much each player has played before the game (earlier games
+  and wins on their champion, recent games, win rate, KDA, lane gold and deaths) lifts
+  that to 54.5%; it ranks a winning team above a losing one 56% of the time instead of
+  54%. Sure: 10,604 held-out EUW games, one look each, models picked on dev; the gain is
+  just beyond noise. We hold only 16 days of history (74% of players have no earlier
+  game on their champion in our data); the gain may grow as history builds up (not yet
+  tested). A random split of the same games, as LoLDraftAI reports, flatters the
+  champions-only model by about half a point (54.2% on dev). Site: nothing; research
+  only, since other players' history isn't for the app. Evidence: docs/model.md
+  "Player experience and everything pre-game" (test log loss 0.6906 and 0.6883, paired
+  -0.0023 ± 0.0022)
+- ~~2026-10-13 (early): Knowing how much each player has played before the game adds a
   little to the draft: with every player's earlier games and wins on their champion and
   their recent form (games, win rate, KDA, lane gold, deaths) on top of the ten
   champions, our model picks the winner 54.1% of the time instead of 53.7% and ranks a
@@ -34,7 +46,8 @@ How to write a line:
   hold only 16 days of history (74% of players have no earlier game on their champion
   in our data), so it should grow. Site: nothing; research only, since other players'
   history isn't for the app. Evidence: docs/model.md "Player experience and everything
-  pre-game" (log loss 0.6878 vs 0.6897, -0.0019 ± 0.0018)
+  pre-game" (log loss 0.6878 vs 0.6897, -0.0019 ± 0.0018). Superseded the same day by
+  the held-out result above~~
 - 2026-10-13 (early): We can't yet tell which champions reward a practised player most:
   giving each champion its own gain from earlier games on it predicted worse than one
   gain per role, and every champion's estimate is uncertain by 7-10 percentage points.
