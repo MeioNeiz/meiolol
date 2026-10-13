@@ -1341,7 +1341,8 @@ Verifier audits, 2026-10-13 (meiolol-4b; same units and gains, folds):
   top of them -0.02 ± 0.20: the net finds nothing beyond the hand terms. The gain is
   flat over draft types (lopsided -2.51, balanced -2.54, strength Q1 -2.85, Q4 -2.57),
   as a player effect should be, and over four times any draft model's. The r-exp
-  candidate (cand-player-exp.zig) lives only in the run dir: commit it before citing
+  candidate is src/lab/cand/win-exp (b274481, checked identical to the run's copy bar
+  its name); mastery, when on, only from SNAP/mastery_pre.tsv (pre-game fetches)
 
 Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
 Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
