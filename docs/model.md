@@ -2064,9 +2064,15 @@ resamples' means are negative.
 
 Runs 20261013T223405Z-conf-a, 223644Z-conf-b, 224930Z-conf-a-r1, 225421Z-conf-a-r2,
 225244Z-conf-b-r1, 225808Z-conf-b-r2 (the net and controls unchanged since d8f1ebf).
-Verdict pending meiolol-a0's binary key check: the four resample runs were built
-22:48-23:05Z while lab-run's build lock was broken, so a binary may hold another key's
-files; if one differs, they are rerun under the same declared rule.
+Audit (meiolol-33, recomputed from the games files): A confirmed, barely (mean + 1.6x
+half-width -0.036); B not confirmed whatever its resamples say. Binaries: conf-a and
+conf-b built before the broken build-lock window (22:48-23:05Z), all four resample runs
+byte-equal to meiolol-a0's clean rebuilds; conf-a's ratings and conf-b's
+win-comp preds byte-equal to the reference files. Caveats: the resample means are 35-45%
+of the full-data one, so the honest size is ~0.15-0.4 milli-nats, not 0.37; block 5
+carries most of it (-1.01, -0.75, -0.87 across the three runs), block 3 nothing; it sits
+on lopsided games (-1.11 ± 0.53 vs balanced -0.19 ± 0.23). win-comp vs A's net on the
+same folds: -0.20 ± 0.31, a tie (win-comp vs ratings -0.57 ± 0.28).
 
 Reading (dev, no test look):
 - The set net's gain is profile content: permuting profiles among champion-roles takes
@@ -2077,11 +2083,12 @@ Reading (dev, no test look):
   nothing either
 - The gain sits on lopsided-damage teams, the same effect as win-comp's mix term; on
   ratings the net does not beat that one hand-made term (+0.15 ± 0.33 vs win-comp)
-- Within-team on ratings passes its sealed confirmation by the narrowest margin; on
-  top of win-comp it does not. So: a real but small comp effect (~0.2-0.4 milli-nats/game
-  on folds, nothing on dev-val), which one explicit term already captures. Not worth
-  exporting; the 2253Z pin (about twice the games) is where to look again (4b's rerun
-  list, item e). Nothing for learned.md before 4b audits the sealed runs
+- Within-team on ratings passes its sealed confirmation by the narrowest margin (audit
+  meiolol-33): a real but small comp effect, ~0.15-0.4 milli-nats/game on folds, nothing
+  on dev-val, about two-thirds of win-comp's gain from the same lopsided-damage games.
+  On top of win-comp it is not confirmed (all point estimates negative, -0.17 to -0.25,
+  the bound reaching +0.02). Not worth exporting; the 2253Z pin (about twice the games)
+  is where to look again (rerun list item e). learned.md Win line 2026-10-14
 
 ### Effects and the CPU model, 2026-10-14 (meiolol-08)
 
