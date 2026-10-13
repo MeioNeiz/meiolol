@@ -31,7 +31,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | --- | --- |
 | (none) | win / draft predictor rerun: closed (meiolol-db done 2026-10-13); new session when the coordinator pins a snapshot with ~a week of rank_history and pre-game mastery (model.md Next steps) |
 | meiolol-ff (closed) | review fixes done: winchance smooth weights (live), playstyle clustered intervals, bootstrap bounds (31338cb) |
-| meiolol-3f | playstyle clustering (from meiolol-48; field ranking done, d94c875) |
+| meiolol-3f (closing) | playstyle clustering done (47fdfb2, 57d50d0): beyond the full 14:00 state style adds almost nothing; types and sequence net not detected |
 | meiolol-12 (closing) | lab harness: rank_start done (9eb6982, after_game_rank dev-only gate); campaign plan in model.md Next steps; fresh lab session at the pin |
 | meiolol-0d (closing) | admin Models tab, Draft tester: lane, blind and draft lists live with the 1% role floor; last check: Models tab renders struck lines |
 | meiolol-11 [1f36a8] | box, archive operation, rows.zig, snapshots (weekly Sun, first 19 Oct), mastery for all players, flex sample |
@@ -56,6 +56,9 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
 - Both sides of a paired comparison from the same build; rerun the older side if a
   pair straddles a numeric change. The gpu-box x86_64_v3 switch (516fce3) is not one:
   byte-identical output (strict float mode), 2x faster
+- An effect table from the train fit is not a test result, however clear: per-effect
+  claims in learned.md need the effect to hold on held-out games (test refit with
+  train-derived features, or a pre-declared test), with train vs test side by side
 - Condition on game state for items, objectives, playstyle (teams ahead buy and take)
 - Rank in participants is post-game (leaks); rank at game start comes from
   rank_history (from 12 Oct, so later snapshots)
@@ -91,6 +94,9 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
   ruled out; team counters and champion x item bounded in model.md
 - Jacob: may a session check Your games live with a Riot ID (his own)? If yes, fresh
   session checks the win chance turning minute live
+- Collected: playstyle (3f): b0's 8 style +0.00020 ± 0.00011 on test with objectives in
+  the state (half the gold/XP-only gain); clusters, components, net not detected;
+  train-fit leanings didn't hold on test, dropped
 - Results to collect: mastery and flex live
   with matches/day before and after (11), next snapshot pinned in docs/model.md
 - Admin follow-ups for the next admin session (0d, not done: admin.js held by
