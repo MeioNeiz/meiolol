@@ -25,6 +25,17 @@ How to write a line:
 
 ## Win
 
+- 2026-10-14: No champion was found to turn its own gold lead into wins better than
+  others in its role: what 1,000 gold on your champion is worth depends on the role, at
+  15 minutes about 8 percentage points for the bot laner, 4.5-7 for top, jungle and mid
+  and about 0 for the support (at 25 minutes: 5, 3-3.5 and 0). Sure: 10,604 held-out
+  EUW games, one pre-declared look at 15 and 25 minutes with the team's gold, XP and
+  objectives held fixed; not detected, but not ruled out: a planted spread of 2 points
+  per 1,000 gold across a role's champions showed in the checks, 1 point didn't, and
+  the data allow spreads up to 3-11 points. Site: no "carry champion" or "low-impact
+  champion" labels; lessons by role ("your bot laner's lead matters most"). Evidence:
+  docs/model.md "Carry and impact" (test +0.00003 ± 0.00007 and +0.00001 ± 0.00008
+  nats; audited by meiolol-33)
 - 2026-10-14 (early): A small neural network that reads what each team's champions
   typically do in games (damage type, tankiness, crowd control, healing, range) finds
   mostly the same thing as the lopsided-damage line below: up to about two-thirds of
@@ -156,12 +167,23 @@ How to write a line:
   history isn't for the app. Evidence: docs/model.md "Player experience and everything
   pre-game" (log loss 0.6878 vs 0.6897, -0.0019 ± 0.0018). Superseded the same day by
   the held-out result above~~
-- 2026-10-13 (early): We can't yet tell which champions reward a practised player most:
+- 2026-10-14: We can't tell which champions reward experience more than others: how
+  much a player's earlier games on a champion add to the win chance looked the same for
+  every champion in a role. Sure: 10,604 held-out EUW games, one pre-declared look; not
+  detected, and only a large difference would show: experience here is the earlier
+  ranked games we stored (16 days; 76% of player-games have none), and a planted
+  difference of about 10 percentage points from 0 to 10 earlier games, for a champion
+  one typical step from its role, showed on the rounds of older games (about three
+  times the test's size) but not on the smaller dev games. Site: no "champions that
+  reward mastery" list. Evidence: docs/model.md "Carry and impact" (test -0.00001 ±
+  0.00004 nats; audited by meiolol-33)
+- ~~2026-10-13 (early): We can't yet tell which champions reward a practised player most:
   giving each champion its own gain from earlier games on it predicted worse than one
   gain per role, and every champion's estimate is uncertain by 7-10 percentage points.
   Sure: not detected, dev only; only 0.1% of players have 50+ earlier games on their
   champion in our data. Site: no "champions that reward mastery" list. Evidence:
-  docs/model.md "Player experience and everything pre-game"
+  docs/model.md "Player experience and everything pre-game". Superseded 2026-10-14 by
+  the held-out line above~~
 - 2026-10-13 (early): The rank we store for each player is looked up after the game, and
   with it the model picks the winner 63.8% of the time instead of 53.7%; most of that
   is probably the result leaking into the rank, so it says nothing yet about what rank
@@ -185,7 +207,9 @@ How to write a line:
   Sure: 118k games, better on held-out games at every minute from 10 to 30. Site:
   lessons ("your bot laner's gold lead matters most"); post-game leads may be weighted
   by role. Evidence: docs/model.md "Champion given the state (scaling)", who holds the
-  gold
+  gold; confirmed with team gold, XP and objectives held fixed: splitting gold by role
+  beat team gold on the test at 15 and 25, the bot-most ordering from the training fit
+  (docs/model.md "Carry and impact", audited by meiolol-33)
 - 2026-10-13: We found no champion that is better at coming back from behind, or at
   closing out a lead, than at an even game: 2,000 gold behind at 15, a champion makes
   the same difference as at even. A champion's value beyond the gold mostly stays the

@@ -2137,8 +2137,13 @@ bottom-support +0.00013 ± 0.00011 (0 of 5 folds better without it); top vs thei
 +0.00010 ± 0.00010 (0 of 5); middle vs their middle +0.00004 ± 0.00006; bottom vs their
 bottom +0.00003 ± 0.00006; every other block within ±0.00002.
 
-Per-block spread of true effects: a shuffled-label control (20261013T223344Z-eff-shuf)
-gave held-out gains of ~0 (full vs strength -0.00000 ± 0.00012) and champion strength sd
+Shuffled-label control on the fixed mix (20261013T231223Z-eff-shuf2, 4f3d007, results
+permuted across games, paired on the same folds): damage mix over strength only +0.00002
+± 0.00003 (real -0.00091), full over strength only +0.00010 ± 0.00011 (real -0.00123):
+the gains vanish, so they are not fitting noise.
+
+Per-block spread of true effects: an earlier shuffled-label control
+(20261013T223344Z-eff-shuf) gave held-out gains of ~0 (full vs strength -0.00000 ± 0.00012) and champion strength sd
 0.00-0.01 pp, but pair blocks still 0.1-0.9 pp: with 1-3 games per cell the variance
 estimate finds spread in noise. A Poisson bootstrap made it worse (duplicated games look
 consistent). So each block is read against a shuffled-outcome null (`--null 20`: the same
@@ -2361,6 +2366,9 @@ Reading:
   per typical lead (one sd) 11.5 pp at 10 rising to 15-17 at 15-25, against 7-10.6 for
   jungle, mid and top and about 0 for the support. Per 1000 gold: bottom 11.4 at 10 to
   4.2 at 30; jungle and mid 10 to 2; top 7.6 to 2.2; support 1.4 at 10 and 0 after.
+  The test confirms that splitting gold by role beats team gold (15 and 25); the
+  ordering is from the train fit (± 0.4-0.6 pp), and at 10 bottom only narrowly beats
+  jungle (11.35 ± 0.61 vs 10.21 ± 0.62); at 25 only games still going.
   This confirms learned.md's "the bot laner's gold counts most" (scaling, team-gold
   state with roles) by a different model (held objectives in the state too, a per-sd
   scale, lab fold blocks and its own test look): same order and sizes within ~1-2 pp
@@ -2373,15 +2381,22 @@ Reading:
   damage share also records who had to fight and who was ahead
 - Leverage per champion (does a champion turn its own gold into wins more than its
   role?): not detected at any minute (pre-declared test at 15 and 25: +0.00003 ± 0.00007,
-  +0.00001 ± 0.00008; folds 0-2/5), nor for its kills or damage share. The plant says a
-  spread of 2 pp per 1000 gold across champions would show in 5/5 folds at 15-30 (4/5 at
-  10) and 1 pp at 25-30 only; so champions in a role differ by less than about 2 pp per
-  1000 in what their own lead is worth, while roles differ by 4-10. "Which champions
-  carry" is answered by role, not champion: the bot laner's lead is the carry lead
+  +0.00001 ± 0.00008; folds 0-2/5), nor for its kills or damage share. Not ruled out: a
+  planted spread (sd across a role's champions) of 2 pp per 1000 gold was detected (5/5
+  folds at 15-30, 4/5 at 10, also on dev-val), 1 pp only at 25-30, and the data's own
+  upper 95% bounds on the spread are 4.4-7.0 pp at 15 and 3.1-10.8 at 25; recovery is
+  poor even when detected (corr 0.57 at 15 for sd 1-2, fitted spread 0 in three roles
+  at 25). Roles by contrast (gold-by-role baseline): at 15 bottom 8.2, top / jungle /
+  mid 4.5-6.9, support ~0 pp per 1000; at 25 bottom 5.3, others 2.9-3.5, support ~0.
+  "Which champions carry" is answered by role here, not champion: the bot laner's lead
+  is the carry lead; champion differences below the bounds are possible
 - Skill sensitivity per champion: not detected (test -0.00001 ± 0.00004; folds 0/5). One
   slope per role does help (5/5, test +0.00018 ± 0.00007). Plant: a champion-to-champion
   spread of 4 pp per log1p game (about ±10 pp from 0 to 10 games for a champion one sd
-  off its role) shows 5/5, 2 pp not. With 16 days of history (24% of player-games with
+  off its role, an extrapolation: 76% of player-games have no earlier game) shows on the
+  folds (0.00020 ± 0.00007, 5/5; ~3x the test's games) but not on dev-val (0.00014 ±
+  0.00017), so at test size it is marginal; 2 pp not (5/5 folds positive, within noise).
+  Experience = earlier ranked games we stored, not real mastery. With 16 days of history (24% of player-games with
   an earlier game on the champion), "high skill ceiling" champions smaller than that
   can't be seen; same answer as the per-champion skill slopes in "Player experience".
   Mastery: 0.5% of rows and taken after the game, not used. Rerun on a snapshot with
