@@ -140,7 +140,7 @@ start() {
     # Placement (auto) or just the prediction (explicit; a failure there changes nothing)
     local placed p_host p_res predicted=- why="" auto=0
     [[ "$host" == auto || "$RES" == auto ]] && auto=1
-    if placed=$(place "$host" "$RES" "$bin" "$*" 2>&1); then
+    if placed=$(place "$host" "$RES" "$bin" "$*" "${BUILD_ARGS[*]-}" 2>&1); then
         read -r p_host p_res predicted <<< "$(head -n 1 <<< "$placed")"
         why=$(sed -n 2p <<< "$placed")
         if (( auto )); then host=$p_host RES=$p_res; echo "placed: $why"
@@ -248,11 +248,11 @@ listing() {
                 else s=running; fi
             else s=died; fi
             m() { sed -n "s/^$1 //p" $d/meta 2>/dev/null | tr "\t" " "; }
-            printf "run\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$d" "$s" \
+            printf "run\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$d" "$s" \
                 "$(cat $d/started 2>/dev/null)" "$(cat $d/ended 2>/dev/null)" \
                 "$(m res)" "$(m bin | cut -d " " -f 1)" "$(m args)" \
                 "$(tr "\n" , 2>/dev/null < $d/pauses.log)" "$(cut -f 1 $d/predicted 2>/dev/null)" \
-                "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80 | tr "\t" " ")"
+                "$(m build)" "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80 | tr "\t" " ")"
         done'
     if [[ "$host" == mac ]]; then on mac "$script"
     else ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" "$script"; fi | sed "s/^/$host	/"

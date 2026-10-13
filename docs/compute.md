@@ -72,9 +72,10 @@ the run dir (`predicted`: seconds, then why) and `status` shows it beside the ac
 run time.
 
 - Run time = ended - started - time paused for League (pauses.log), runs that exited 0.
-  Estimate: median of the last 5 on that host with the same args, else the same command
-  (exp: action, campaign, target) on the same snapshot, else that command on any
-  snapshot, else the bare subcommand
+  Estimate: median of the last 5 on that host with the same args and build, else the
+  same command (exp: action, campaign, target) and candidate (-Dcand) on the same
+  snapshot, else any candidate there, else that command on any snapshot, else the bare
+  subcommand. A new campaign with no runs falls back to other campaigns' times
 - A host with none borrows the other host's, times their speed ratio: median over
   commands on the same snapshot run on both (5 s or more). None yet: the Mac assumed 2x
   slower (eval 13 vs 7 s). No history anywhere: gpu-box cpu, as before, and it says so

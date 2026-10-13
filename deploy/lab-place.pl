@@ -2,16 +2,17 @@
 # Run-time estimates and placement for deploy/lab-run.sh, from the runs on both hosts
 # (docs/compute.md "Placement"). Reads lab-run.sh's listing on stdin, tab-separated:
 #   HOST now TIME | HOST league LINE | HOST have PATH
-#   HOST run DIR STATE STARTED ENDED RES BIN ARGS PAUSES PREDICTED LOGLINE
+#   HOST run DIR STATE STARTED ENDED RES BIN ARGS PAUSES PREDICTED BUILD LOGLINE
 #
 #   lab-place.pl inputs ARGS                 input paths to check on each host
-#   lab-place.pl place HOST|auto RES|auto BIN ARGS
+#   lab-place.pl place HOST|auto RES|auto BIN ARGS [BUILD_ARGS]
 #                                            "HOST RES SECONDS" (- if unknown), then why
 #   lab-place.pl status HOST                 status lines, predicted vs actual run time
 #
 # Run time = ended - started - paused (League). Estimate: median of the last 5 runs that
-# exited 0 with the same args, else the same command (exp: action, campaign, target) on
-# the same snapshot, else that command on any snapshot, else the bare subcommand. A host
+# exited 0 with the same args and build, else the same command (exp: action, campaign,
+# target) and candidate (-Dcand) on the same snapshot, else any candidate there, else
+# that command on any snapshot, else the bare subcommand. A host
 # with none borrows the other's, scaled by the hosts' speed ratio (median over commands
 # run on both)
 use strict;
@@ -44,7 +45,7 @@ while (my $line = <STDIN>) {
     elsif ($kind eq 'have') { $have{$host}{$f[0]} = 1 }
     elsif ($kind eq 'run') {
         my %r;
-        @r{qw(dir state started ended res bin args pauses pred log)} = @f;
+        @r{qw(dir state started ended res bin args pauses pred build log)} = @f;
         $r{host} = $host;
         $r{$_} = ts($r{$_}) for qw(started ended);
         $r{pred} = $r{pred} =~ /^(\d+)/ ? $1 : undef;
@@ -115,7 +116,8 @@ sub inputs {
 
 # Keys from most to least specific, with a label for the explanation
 sub keys_for {
-    my ($bin, $args) = @_;
+    my ($bin, $args, $build) = @_;
+    $build //= '';
     my @w = words($args);
     my $cmd = join ' ', grep { defined } $bin, $w[0];
     my $fine = $cmd;
@@ -124,8 +126,11 @@ sub keys_for {
         $fine = join ' ', grep { defined } $cmd, @w[3, 4];
     }
     my ($snap) = $args =~ m{(snap-[A-Za-z0-9_.+-]+)};
-    my @keys = (["args $bin $args", "same args", "args"]);
-    push @keys, ["$fine \@ $snap", "$fine on $snap", "snap"] if defined $snap;
+    my ($cand) = $build =~ m{-Dcand=(?:\S*/)?([^/\s]+)};
+    my $with = defined $cand ? "$fine, candidate $cand" : $fine;
+    my @keys = (["args $bin $build $args", "same args", "args"]);
+    push @keys, ["$with \@ $snap", "$with on $snap", "snap"], ["$fine \@ $snap", "$fine on $snap", "snap"]
+        if defined $snap;
     push @keys, [$fine, $fine, "cmd"], [$cmd, $cmd, "cmd"];
     my %seen;
     return grep { !$seen{$_->[0]}++ } @keys;
@@ -137,7 +142,7 @@ sub times_for {
     my ($host, $key) = @_;
     unless (%times) {
         for my $r (sort { $a->{started} <=> $b->{started} } grep { defined $_->{ran} } @runs) {
-            push @{$times{$r->{host}}{$_->[0]}}, $r->{ran} for keys_for($r->{bin}, $r->{args});
+            push @{$times{$r->{host}}{$_->[0]}}, $r->{ran} for keys_for($r->{bin}, $r->{args}, $r->{build});
         }
     }
     return @{$times{$host}{$key} // []};
@@ -151,7 +156,7 @@ sub ratios {
         for my $o (grep { $_ ne $h } @HOSTS) {
             my (%keys, @rs);
             for my $run (grep { defined $_->{ran} } @runs) {
-                my @k = keys_for($run->{bin}, $run->{args});
+                my @k = keys_for($run->{bin}, $run->{args}, $run->{build});
                 $keys{$_->[0]} = 1 for grep { $_->[2] eq "snap" } @k;
             }
             for my $k (sort keys %keys) {
@@ -167,10 +172,10 @@ sub ratios {
 
 sub recent { return @_ > $RECENT ? @_[-$RECENT .. -1] : @_ }
 
-# (seconds, why) for BIN ARGS on HOST, or () with no history anywhere
+# (seconds, why) for BIN ARGS BUILD on HOST, or () with no history anywhere
 sub estimate {
-    my ($host, $bin, $args) = @_;
-    for my $k (keys_for($bin, $args)) {
+    my ($host, $bin, $args, $build) = @_;
+    for my $k (keys_for($bin, $args, $build)) {
         my @t = recent(times_for($host, $k->[0]));
         return (median(@t), sprintf('median of %d here, %s', scalar @t, $k->[1])) if @t;
         for my $o (grep { $_ ne $host } @HOSTS) {
@@ -192,7 +197,7 @@ sub wait_for {
     my ($host, $res) = @_;
     my ($total, $n) = (0, 0);
     for my $r (grep { $_->{host} eq $host && $_->{res} eq $res && live($_) } @runs) {
-        my $pred = $r->{pred} // (estimate($host, $r->{bin}, $r->{args}))[0]
+        my $pred = $r->{pred} // (estimate($host, $r->{bin}, $r->{args}, $r->{build}))[0]
             // median(map { $_->{ran} } grep { $_->{host} eq $host && defined $_->{ran} } @runs)
             // 60;
         $n++;
@@ -254,7 +259,7 @@ sub fmt {
 }
 
 sub place {
-    my ($want_host, $want_res, $bin, $args) = @_;
+    my ($want_host, $want_res, $bin, $args, $build) = @_;
     my $cuda = cuda_use($bin, $args);
     my (@cands, @out);
     for my $h ($want_host eq 'auto' ? @HOSTS : $want_host) {
@@ -268,7 +273,7 @@ sub place {
             # Explicit choices are the caller's: only report what we'd predict
             $why_not = '' if $want_host ne 'auto' && $why_not ne 'unreachable';
             if ($why_not) { push @out, "$name: $why_not"; next }
-            my ($run, $why) = estimate($h, $bin, $args);
+            my ($run, $why) = estimate($h, $bin, $args, $build);
             my ($wait, $queued) = $res eq 'none' ? (0, 0) : wait_for($h, $res);
             my ($pen, $pen_why) = league_penalty($h);
             push @cands, {host => $h, res => $res, run => $run, wait => $wait + $pen,
