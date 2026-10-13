@@ -12,8 +12,6 @@ pub const boilerplate = product ++ " isn't endorsed by Riot Games and doesn't re
     "managing Riot Games properties. Riot Games, and all associated properties are " ++
     "trademarks or registered trademarks of Riot Games, Inc.";
 
-pub const esc = tpl.esc;
-
 /// Riot: a personal key may not serve the public while a production key is in review
 const preview_banner =
     \\<div class="preview"><div class="wrap">Preview: this site is in review for a Riot
@@ -123,8 +121,6 @@ pub const Link = struct {
     root: []const u8,
     up: []const u8 = "",
     path: []const u8,
-
-    pub const url = true;
 
     pub fn render(l: Link, w: *Writer) Writer.Error!void {
         try w.writeAll(l.root);
@@ -319,13 +315,6 @@ pub fn foot(w: *Writer, p: Page) Writer.Error!void {
         .download = toSite(p, "download.html"),
         .legal = tpl.trusted(boilerplate),
     });
-}
-
-test "escape" {
-    var buf: [64]u8 = undefined;
-    var w: Writer = .fixed(&buf);
-    try w.print("{f}", .{esc("Nunu & Willump <Kai'Sa>")});
-    try std.testing.expectEqualStrings("Nunu &amp; Willump &lt;Kai&#39;Sa&gt;", w.buffered());
 }
 
 /// Minimum games selector, as on lolalytics (static/min-games.js): lists marked

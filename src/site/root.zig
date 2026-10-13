@@ -430,7 +430,11 @@ fn sitemap(site: *const Site) ![]const u8 {
     try out.appendSlice(a, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
     var paths: std.ArrayList([]const u8) = .empty;
     try paths.appendSlice(a, try pagePathsMin(site, site.opts.index_min_games));
-    if (site.view.index() == 0) try paths.appendSlice(a, &shared_pages);
+    if (site.view.index() == 0) for (shared_pages) |path| {
+        // A failed learn build writes no learn.html
+        if (site.learn == null and std.mem.eql(u8, path, "learn.html")) continue;
+        try paths.append(a, path);
+    };
     for (paths.items) |path| {
         // Paths are slugs and fixed names: nothing XML needs escaped
         try out.print(a, "<url><loc>{s}</loc></url>\n", .{site.canonical(site.view.dir(), path).?});
