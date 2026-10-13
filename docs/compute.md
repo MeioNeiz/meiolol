@@ -203,9 +203,82 @@ first.
   with the host lives in device memory (src/gpu/fm_layout.zig, extern). Float atomics
   (`@atomicRmw(f32, .Add)`) compile to native red.global.add.f32
 - fm kernels (fe3520e): fm_grad (one thread per row, gradients into a dense buffer with
-  atomics) and fm_adam (one thread per parameter). Host side (src/lab/bench.zig) not
-  written yet: upload rows once as fm_layout.Example (72 bytes), host shuffles each
-  epoch so CPU and GPU see identical batches, memset + fm_grad + fm_adam per batch
-- CPU reference: fm.zig's fit takes 1-5 s per fit single-threaded on 1.2M rows (5
-  outcomes x 4 models x grid ~5 min on one core). The GPU vs CPU timing (Jacob: measure,
-  don't assume) is the benchmark in progress
+  atomics) and fm_adam (one thread per parameter). Host: src/lab/bench.zig uploads rows
+  once as fm_layout.Example (72 bytes); the host shuffles each epoch so CPU and GPU see
+  identical batches; memset + fm_grad + fm_adam per batch
+- Draft net kernels (3829314): a tiled GEMM (64x64 tiles in shared memory, 4x4 outputs
+  per thread, FMA; strides give every transpose) and dn_* elementwise kernels; host
+  src/lab/draftnet.zig. Dropout masks are a hash of (seed, step, layer, row, unit), so
+  CPU and GPU train the same function
+- `@exp` has no nvptx libcall: kernels.zig's exp uses ex2.approx
+
+## GPU vs CPU (meiolol-6f, 2026-10-13)
+
+Jacob: "test it, don't just assume". `meiolol-lab bench SNAP` (fm models, gold14) and
+`meiolol-lab draftbench SNAP` (meiolol-88's planned deep draft model: champion-role +
+role embeddings, 10 x 32 into an MLP 320-512-256-1, ReLU, dropout 0.1, antisymmetric,
+AdamW, batch 1024 games) on snap-20261012T2055Z, gpu-box. Same seed, shuffles and init
+on every device. Scale = train rows replicated (1x: 1.18M fm rows, 175k draft games);
+the models overfit replicated data, so only the times mean anything at 4x+.
+
+Devices: 1 core and 20 threads of the i5-13600KF, RTX 3080. CPU rows are the AVX2 +
+flush-to-zero build (see the two fixes below); GPU rows from runs bench1/bench2. No
+other job on the box during a timing (each held the cpu lock); League not running.
+
+fm models, seconds per epoch (a fit is ~10 epochs):
+
+| model | 1x: 1 core, 20 thr, 3080 | 4x | 16x | 3080 vs 20 threads at 16x |
+| --- | --- | --- | --- | --- |
+| additive | 0.064, 0.053, 0.021 | 0.32, 0.21, 0.054 | 1.53, 0.95, 0.28 | 3.4x |
+| lane dim 8 | 0.13, 0.058, 0.039 | 0.67, 0.24, 0.097 | 3.07, 1.07, 0.32 | 3.4x |
+| lane dim 32 | 0.18, 0.067, 0.072 | 0.88, 0.28, 0.15 | 3.96, 1.21, 0.38 | 3.2x |
+| lane dim 128 | 0.44, 0.11, 0.087 | 1.89, 0.47, 0.25 | 8.14, 2.00, 0.77 | 2.6x |
+| pairwise dim 8 | 0.17, 0.065, 0.013 | 0.79, 0.26, 0.13 | 3.68, 1.14, 0.35 | 3.2x |
+| pairwise dim 32 | 0.32, 0.080, 0.039 | 1.42, 0.34, 0.22 | 6.14, 1.45, 0.70 | 2.1x |
+| pairwise dim 128 | 1.09, 0.18, 0.22 | 4.50, 0.72, 0.58 | 18.7, 3.00, 1.98 | 1.5x |
+
+fm sweep of 20 seeds (3 epochs each), seconds per fit: CPU runs one single-threaded fit
+per thread at once, the GPU one fit after another. GPU vs CPU: 1x 0.8-1.2x, 4x 0.9-1.5x,
+16x 0.9-1.2x (pairwise dim 128 at 16x: CPU 5.4, GPU 5.8). A tie at every size.
+
+Draft net, seconds per epoch:
+
+| scale (games) | 1 core | 20 threads | 3080 | 3080 vs 20 threads |
+| --- | --- | --- | --- | --- |
+| 1x (175k) | 11.9 | 2.02 | 0.52 | 3.9x |
+| 4x (698k) | 48.7 | 8.07 | 1.06 | 7.6x |
+| 16x (2.8M) | - | 32.8 | 3.08 | 10.7x |
+| 64x (11.2M) | - | ~131 (4 x 16x) | 12.0 | ~11x |
+
+Draft net sweep of 20 seeds, seconds per fit-epoch: 1x CPU 2.14 (baseline build) vs GPU
+0.21; 4x CPU 6.56 vs GPU 0.76 (8.6x); GPU 3.0 at 16x, 12.0 at 64x. In practice: 40
+trials x 20 epochs at 16x is ~40 min on the 3080 and ~6 h on all 20 threads; one
+20-epoch fit at 64x (LoLDraftAI's scale) is 4 min on the 3080, ~45 min on 20 threads.
+
+Agreement: fm test predictions within 0.03 gold of one core's (test MSE equal to 6-7
+digits). Draft net: 4 steps 6e-8, 40 steps 1e-3 in win chance; a full epoch 1 point (4x:
+up to 16 as the overfitting runs drift), the same log loss. Float sum order compounding
+in a non-convex fit, not a bug.
+
+Crossover and what moves:
+- Draft net (and any MLP or embedding net): GPU at every size measured, 4x faster than
+  all 20 threads at today's 175k games, ~11x from 2.8M games on, ~9x for sweeps. Move it
+  to the 3080 (lab-run --res gpu)
+- fm early-outcome models (and 88's FM "full", the same work per game as pairwise dim
+  8): small and memory-bound. A single fit is 1.5-3.4x faster on the GPU from 4x rows,
+  but a sweep with one fit per CPU thread ties the GPU at every size. Stay on CPU, or
+  run a GPU sweep beside a CPU one to double throughput
+- Our kernels are simple: the GEMM reaches ~1.2 TFLOP/s of the 3080's ~30 peak; the
+  CPU code ~52 GFLOP/s on one core and ~300 on 20 threads (a tuned BLAS might give 2x).
+  Both have headroom; tuning would favour the GPU more
+- Mac M5 (ReleaseFast): draft net 17.9 s per epoch on one core, 8.2 on 10 cores (4x
+  slower than the gpu-box's 20 threads); no GPU path there
+
+Two x86 fixes found on the way:
+- The gpu-box meiolol-lab was built for baseline x86-64 (no AVX2, no FMA). x86_64_v3
+  makes the draft net 1.4x faster on one core (17.1 to 11.9 s). meiolol-11 is setting it
+  in build.zig's gpu_box query
+- Denormals: Adam's decaying moments for rarely seen parameters sit in denormal floats,
+  which SSE runs ~100x slower. fm fits at 16x were 3.5-4.4x slower than they should be
+  (lane dim 32 on one core: 17.5 vs 4.0 s per epoch), with identical results. meiolol-lab
+  flushes them to zero at startup on x86 (252066d). The meiolol binary does not yet
