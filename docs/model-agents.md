@@ -26,8 +26,9 @@ Where things live:
 - More training data is a standing goal (Jacob, 2026-10-14): more games is the only
   gain that has held. The coordinator tracks fit games per comparison against games
   crawled, and re-pins when the crawl has added half again (or weekly, whichever comes
-  first), never waiting on a fixed date. No filter may drop games a model doesn't need
-  (draft-only models need no timeline). meiolol-4a owns crawl volume and coverage and
+  first), never waiting on a fixed date. Training always uses every game (Jacob,
+  2026-10-14): only the EUW1 test set is held out, and no split or filter may drop
+  games a model can fit on (draft-only models need no timeline). meiolol-4a owns crawl volume and coverage and
   reports both with each snapshot
 
 ## Sessions and what they own (2026-10-13 ~01:10; names change on handover)
