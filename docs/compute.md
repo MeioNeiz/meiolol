@@ -76,6 +76,11 @@ deploy/lab-run.sh watch-install
   pauses, meta (`bin python HASH` of the *.py, `pyenv HASH`) and status as for any run.
   OMP_NUM_THREADS is the slot's share of the cores; on a gpu slot labpy.py caps torch at
   LAB_GPU_FRACTION = 0.95/N of the card (N gpu slots)
+- Prediction gates (deploy/lab-gates.sh, run by job.sh after the program, before
+  `exit`): every preds*.tsv, dev.tsv and test.tsv in the run dir (two levels down) must
+  have no NaN or inf and no constant prediction column; `GATE ok|FAIL` lines in the log,
+  FAILs in `gates`, shown by `wait`. The exit code is the program's. Failed runs:
+  ~/ml/runs/failures.tsv, `lab-run.sh failures [N]`
 - `wait RUN...` blocks until each run has ended on whichever host has it, then prints
   its state and RESULT lines: exit 0 when all exited 0, 3 on --timeout, else 1. Use it
   instead of until-loops over status

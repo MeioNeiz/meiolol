@@ -561,6 +561,8 @@ $lock
 date -u +%FT%TZ > started
 ${awake}${pin}nice -n 10 $cmd $*
 code=\$?
+# Before exit: a run counts as ended once exit exists, and wait reads gates then
+bash gates.sh
 echo \$code > exit
 date -u +%FT%TZ > ended
 # lab-run.sh failures: one line per failed run, its last error line
@@ -574,7 +576,8 @@ EOF
     # No -p on the run dir: a second start of NAME in the same second must not share it
     on "$host" "mkdir -p $RUNS && mkdir $RUNS/$run" \
         || { echo "$run already exists on $host: not started"; exit 1; }
-    local files=("$tmp/meta" "$tmp/src.diff" "$tmp/job.sh")
+    cp "$ROOT/deploy/lab-gates.sh" "$tmp/gates.sh"
+    local files=("$tmp/meta" "$tmp/src.diff" "$tmp/job.sh" "$tmp/gates.sh")
     if [[ -n "$env" ]]; then
         files+=("$(dirname "$PY")"/*.py "$ROOT/py/labpy.py" "$ROOT/py/pyproject.toml" \
             "$ROOT/py/uv.lock")
@@ -701,8 +704,9 @@ wait_runs() {
     for i in "${!runs[@]}"; do
         st=${states[i]:-not ended (timeout)}
         echo "${runs[i]} on ${hosts[i]}: $st"
-        on "${hosts[i]}" "grep -a '^RESULT' $RUNS/${runs[i]}/log | tail -n 5" 2> /dev/null \
-            | sed 's/^/  /' || true
+        # RESULT lines, then failed prediction checks (deploy/lab-gates.sh)
+        on "${hosts[i]}" "grep -a '^RESULT' $RUNS/${runs[i]}/log | tail -n 5; \
+            cat $RUNS/${runs[i]}/gates 2> /dev/null" 2> /dev/null | sed 's/^/  /' || true
         if [[ -z "${states[i]}" ]]; then status=3
         elif [[ "$st" != "exit 0" && $status == 0 ]]; then status=1; fi
     done
