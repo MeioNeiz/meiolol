@@ -993,6 +993,30 @@ prior, within-team and cross-team terms. Sessions: docs/model-agents.md.
 
 #### Data: seat_stats.tsv (meiolol-ea)
 
+SNAP/seat_stats.tsv (`meiolol-lab seat-stats SNAP SNAP/ddragon`, 25737aa; layout
+docs/architecture.md "Packed rows"): match_id, slot, then api.SeatStat in enum order,
+`nan` unknown; join on (match_id, slot); no line = unknown (NaN in Row.stats). rows.load
+and the pack carry it as rows.Row.stats; the harness copies it into api.Row for visible
+games only (test "seat stats reach fit on visible games only"), a Query has no stats.
+- From the raw summary: minutes, damage to champions and taken from them by type,
+  mitigated, cc_time (timeCCingOthers), immobilisations, heal (totalHeal, includes
+  heal_allies: below it on 47 of 2.2M seats), heal_allies, shield_allies, dmg_buildings.
+  Totals per game: divide by minutes for rates
+- From Data Dragon of the game's patch (16.19.1, 16.20.1 in SNAP/ddragon/): armor_end,
+  mr_end = base + growth at level 15 plus the flat armour/MR of the end-of-game items, no
+  ability resists (Rammus W, Malphite's passive): the build's lean. Real minute-15
+  resists need raw timelines, archived only from 2026-10-12. attack_range = base range
+- snap-20261012T2055Z (gpu-box, 54 s with the repack): 2,303,750 lines from 230,375 of
+  230,399 queue 420 games (24 without a summary), 0 unreadable, 0 champion mismatches.
+  Seats with a value, games of 15:00+: train (dev fit) 99.97% of 887,530, dev-val 100%
+  of 85,020, selection 100% of 84,730, test 100% of 106,040, same for every stat
+- Role medians on dev-fit games (per minute unless stated): magic share of champion
+  damage top 0.20, jungle 0.13, middle 0.86, bottom 0.09, support 0.79; CC time 0.77,
+  0.73, 0.69, 0.39, 1.28; armor_end 126, 121, 94, 84, 103 and mr_end 59, 59, 56, 48, 55.
+  Spot checks: Rammus jungle armour 265 vs MR 104, magic share 0.65; Brand support and
+  middle magic share 0.92 and 0.95; Jinx physical 0.96; Soraka ally heals 657 a minute,
+  Janna ally shields 206; Tryndamere and Jax lead building damage (455, 406)
+
 #### Model: win-comp ablation (meiolol-0d)
 
 #### Model-free cross-check (meiolol-49)
@@ -1056,10 +1080,11 @@ largest by size are shown. The win interval stays ratings-only.
 
 draft-ref.json: `tolerance` 1e-9; `drafts` [{label, teams[side][role] (0 empty), blue
 {p, lo, hi}, comp (the comp part of blue's logit)}] (three EUW1 test games whole and with
-three slots empty, the empty board, and Rammus jungle alone into a full AP and a full AD
-red team); `slots` [{label, role, side, teams (by side), bans, min_games, empty, average,
-options [{champion, games, win, lo, hi, change}] sorted by win, then champion id}] (blue
-middle to fill, red middle to fill, blue jungle to fill into 5 AP and into 5 AD). Export
+three slots empty, the empty board, every slot a champion with no term in its role, and
+Rammus jungle alone into a full AP and a full AD red team); `slots` [{label, role, side,
+teams (by side), bans, min_games, empty, average, options [{champion, games, win, lo, hi,
+change}] sorted by win, then champion id}] (blue middle to fill, red middle to fill, blue
+jungle to fill into 5 AP and into 5 AD). Export
 checks the scorer against the candidate's own predict on 500 test games and stops if
 they differ by more than 1e-4 (f32: ~5e-8 measured).
 
