@@ -14,8 +14,9 @@
 //!      win-comp-style hand profiles (12, won/lost halves, z in role), or a random E
 //!      (control: the content, not the extra parameters). L2 selection uses P from the
 //!      inner games, the refit P from all fit games
-//! Writes DIR/emb-<block>-s<seed>.tsv (for winnet --emb-init), aux.tsv, ratings.tsv and
-//! preds.tsv; gains paired per game (= clustered by game)
+//! Writes DIR/emb-<block>-s<seed>.tsv (for winnet --emb-init), aux.tsv, ratings.tsv,
+//! preds.tsv and games-<variant>.tsv (netcheck's shape, none as ratings); gains paired
+//! per game (= clustered by game)
 
 const std = @import("std");
 const rows = @import("rows.zig");
@@ -972,14 +973,16 @@ fn job(gpa: Allocator, io: Io, e: *const nnexport.Export, opts: Options, block: 
     for (fit.items) |gi| try (if (e.start[gi] < cut) &inner else &val).append(gpa, gi);
 
     // 1-2: aux embeddings, early stopping and the L2 grid on val, refit on all
+    // Target scaling from the games each pass trains on (tuning: inner only)
+    const norm_inner: Norm = .of(e.aux, inner.items);
     const norm: Norm = .of(e.aux, fit.items);
     var use: [k]bool = undefined;
     for (&use, 0..) |*u, j| u.* = opts.drop & (@as(u32, 1) << @intCast(j)) == 0;
     const d: usize = opts.dim;
     var vocab_inner: Vocab = try .init(gpa, e, inner.items, opts.min_games);
     defer vocab_inner.deinit(gpa);
-    const base_inner = baseMeans(e, &norm, inner.items);
-    const ad_inner: AuxData = .{ .e = e, .norm = &norm, .vocab = vocab_inner.id, .use = use, .win_adjust = opts.win_adjust, .base = &base_inner };
+    const base_inner = baseMeans(e, &norm_inner, inner.items);
+    const ad_inner: AuxData = .{ .e = e, .norm = &norm_inner, .vocab = vocab_inner.id, .use = use, .win_adjust = opts.win_adjust, .base = &base_inner };
     const l_inner: AuxLayout = .init(vocab_inner.n, d);
     var tuned: ?AuxTrained = null;
     var tuned_l2: f32 = 0;
@@ -1198,6 +1201,30 @@ fn writeTables(gpa: Allocator, io: Io, dir: Io.Dir, e: *const nnexport.Export, d
             for (o.pred) |p| try w.print("\t{d:.6}", .{p[i]});
             try w.writeAll("\n");
         };
+        try w.flush();
+    }
+    // games-<variant>.tsv: netcheck's per-game shape (gains, the verifier), the seeds'
+    // mean chance; a block's seeds are consecutive jobs on the same scored games
+    for (std.enums.values(Variant), 0..) |v, vi| {
+        const name = try std.fmt.allocPrint(gpa, "games-{s}.tsv", .{if (v == .none) "ratings" else @tagName(v)});
+        defer gpa.free(name);
+        var f = try dir.createFile(io, name, .{});
+        defer f.close(io);
+        var buf: [64 * 1024]u8 = undefined;
+        var fw = f.writer(io, &buf);
+        const w = &fw.interface;
+        try w.writeAll("match_id\tslot\toutcome\ty\tpred\tblock\n");
+        var at: usize = 0;
+        while (at < outs.len) {
+            var end = at + 1;
+            while (end < outs.len and outs[end].block == outs[at].block) end += 1;
+            for (outs[at].scored, 0..) |gi, i| {
+                var s: f64 = 0;
+                for (outs[at..end]) |o| s += o.pred[vi][i];
+                try w.print("{s}\t0\twin\t{d}\t{d:.6}\t{s}\n", .{ data.games[gi].match_id, e.blue_win[gi], s / @as(f64, @floatFromInt(end - at)), blockName(outs[at].block) });
+            }
+            at = end;
+        }
         try w.flush();
     }
 }
