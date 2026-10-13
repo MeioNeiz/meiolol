@@ -19,3 +19,5 @@ big net as a residual on win-comp, 10 seeds	win-comp	folds	-0.00034	0.00035	10	0
 big net as a residual on win-comp, 10 seeds	win-comp	dev-val	-0.00023	0.00043	10			8500		20261013T224722Z-0a-bigres-t23-wc	
 control: residual on win-comp, champion rows shuffled	win-comp	folds	0.00042	0.00034	10	0.00054	0.00154	44353		20261013T224731Z-0a-bigres-t23-wc-shuf	worse because a full epoch of fitting noise comes before the first stop; no leak
 big net, sweep pick t23, 10 seeds	win-comp	folds	0.00033	0.00055	10			44353		20261013T223641Z-0a-t23-10-win-comp	
+big net, slow-training sweep pick (big1c t09), 3 seeds	ratings	folds	0.00033	0.00038	3			44353		20261013T225253Z-big1c-j05/t09	best of 19 slow configs on inner validation; every slow config worse than ratings, and than the default config's 3-seed ensemble
+big net, default config (big1c reference), 3 seeds	ratings	folds	-0.00012	0.00040	3			44353		20261013T223757Z-big1c-j01/ref	the bar for big1c; averaging seeds gains most for fast fits

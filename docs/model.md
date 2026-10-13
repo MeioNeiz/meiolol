@@ -1609,6 +1609,21 @@ the control for nets on fitted offsets (f29a170).
 - On dev-val, default seeds that stop after 2 epochs are ~0.003 worse than those stopping
   after 1: val (the newest tenth of fit games) and the next games disagree on how long to
   train. meiolol-fd's sweep big1c tries slower configs (lr 3e-5..3e-4, batch 1024-4096)
+- Sweep big1c (meiolol-fd, data/sweeps/big1c/table.md; that table's gains are ratings
+  minus net, so its signs are the reverse of these): slower training doesn't help. 24
+  random trials over lr 3e-5..3e-4, wd 1e-5..1e-1, batch 1024|2048|4096, patience 2|3,
+  plus the default config as a reference trial, 3 seeds each, on inner validation only.
+  19 trials and the reference scored; the last 5 trials were stopped once the
+  result was clear, to free the GPU for the new pin. The slow configs stop after 3-42
+  epochs (no more first-check floor), but inner val is flat (0.69106-0.69117) and every
+  trial is worse than ratings: single seeds +0.00093 to +0.00126 (in 0-1 of 5 folds
+  better), 3-seed ensembles +0.00033 to +0.00051. The reference's 3-seed ensemble is
+  -0.00012 ± 0.00040 (3 of 5 folds), the val pick t09 (lr 0.000275, wd 1.1e-05, batch
+  1024, patience 3) +0.00033 ± 0.00038 (2 of 5); unpaired. What 3 seeds' average gains
+  over a single seed falls with slower training: 0.56-0.59 milli-nats at lr 3e-5..6e-5,
+  0.72-0.81 at lr 2.2e-4..2.8e-4, 1.06 for the reference (lr 1e-3, stops at 1 epoch).
+  Slow fits make more alike predictions, so averaging helps less: ensembles need diverse
+  fast fits. No trial beat the reference, so none went to a 10-seed check (meiolol-bd)
 - Pretrained champion-role embeddings for the small net (meiolol-52/5b's d12, scratch vs
   init vs frozen): no form helps; numbers in that section
 
