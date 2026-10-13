@@ -9,9 +9,15 @@ apart from the blue-side intercept c (hat basis over minute).
 - netd: g also sees champion-role embeddings of both teams (concatenated by role): the
   state's value may depend on the champions themselves
 netd minus nets is what champion-specific draft x state terms add. Early stopping on the
-fit's newest 10% of games; mean of seeds reported, seeds kept. Writes OUT/preds-net.npz.
+fit's newest 10% of games; mean of seeds reported, seeds kept. Writes OUT/preds-net.npz
+and, for lab-sweep (netcheck's contract), OUT/folds.tsv for the first of --kind (others
+OUT/folds-KIND.tsv): reference = the rich smooth logistic (statemodels.py) on the same
+rows, gain = reference minus net log loss per game-minute (positive better), se
+clustered by game.
 
-usage: statenet.py SNAP [--out DIR] [--blocks dev,1,2,3,4,5] [--seeds 3] [--dim 8]
+usage: statenet.py SNAP [--out DIR] [--blocks dev,1,2,3,4,5] [--seeds 3] [--kind netd,nets]
+       [--dim 8] [--hidden 128] [--dropout 0.1] [--lr 1e-3] [--wd 1e-4] [--patience 3]
+       [--epochs 30] [--batch 4096]
 """
 
 import argparse
@@ -23,6 +29,7 @@ import torch
 
 import nnsets
 import statecommon as sc
+from statemodels import Smooth
 
 MINUTES = list(range(1, 41))
 
@@ -32,7 +39,7 @@ def log(*a):
 
 
 class Net(torch.nn.Module):
-    def __init__(self, n_feat, n_ids, dim, hidden=128, use_champs=True):
+    def __init__(self, n_feat, n_ids, dim, hidden=128, dropout=0.1, use_champs=True):
         super().__init__()
         self.use_champs = use_champs
         self.emb = torch.nn.Embedding(n_ids, dim) if use_champs else None
@@ -40,8 +47,8 @@ class Net(torch.nn.Module):
             torch.nn.init.normal_(self.emb.weight, std=0.05)
         n_in = n_feat + len(sc.KNOTS) + (10 * dim if use_champs else 0)
         self.g = torch.nn.Sequential(
-            torch.nn.Linear(n_in, hidden), torch.nn.GELU(), torch.nn.Dropout(0.1),
-            torch.nn.Linear(hidden, hidden), torch.nn.GELU(), torch.nn.Dropout(0.1),
+            torch.nn.Linear(n_in, hidden), torch.nn.GELU(), torch.nn.Dropout(dropout),
+            torch.nn.Linear(hidden, hidden), torch.nn.GELU(), torch.nn.Dropout(dropout),
             torch.nn.Linear(hidden, 1),
         )
         self.c = torch.nn.Parameter(torch.zeros(len(sc.KNOTS)))
@@ -57,9 +64,10 @@ class Net(torch.nn.Module):
         return self.half(x, H, blue, red) - self.half(x * flip, H, red, blue) + H @ self.c
 
 
-def train(net, tensors, tr, va, seed, epochs=30, batch=4096, patience=3, lr=1e-3):
+def train(net, tensors, tr, va, seed, hp):
+    epochs, batch, patience, lr = hp.epochs, hp.batch, hp.patience, hp.lr
     x, flip, H, ids, y = tensors
-    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
+    opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=hp.wd)
     g = torch.Generator(device="cpu").manual_seed(seed)
     best, best_loss, bad = None, float("inf"), 0
     lossf = torch.nn.functional.binary_cross_entropy_with_logits
@@ -85,7 +93,19 @@ def train(net, tensors, tr, va, seed, epochs=30, batch=4096, patience=3, lr=1e-3
     return best_loss, ep
 
 
-def run_block(state, data, block, seeds, dim, dev):
+def auc(y, p):
+    r = np.argsort(np.argsort(p)) + 1
+    n1 = y.sum()
+    return (r[y == 1].sum() - n1 * (n1 + 1) / 2) / (n1 * (len(y) - n1))
+
+
+def gain(y, ref, p, games):
+    """reference minus net log loss per row, se clustered by game"""
+    d, ci, _ = sc.paired(y, ref, p, games)
+    return d, ci / 1.96
+
+
+def run_block(state, data, block, seeds, hp, dev, folds):
     sets = nnsets.sets(data, block)
     has_tl = state.game[:, state.gcols["has_timeline"]] == 1
     logit, l2, _ = sc.draft_logits(data, sets)
@@ -113,21 +133,36 @@ def run_block(state, data, block, seeds, dim, dev):
     is_val = torch.from_numpy(data.start[gf] >= val_cut).to(dev)
     tr, va = torch.nonzero(~is_val).squeeze(1), torch.nonzero(is_val).squeeze(1)
     log(f"block {block}: fit rows {len(gf)} (val {len(va)}), scored {len(gs)}, ids {n_ids}")
-    res = {"block": np.full(len(gs), block), "game": gs, "minute": ms, "y": data.y[gs]}
-    for kind in ("nets", "netd"):
+    ys = data.y[gs]
+    res = {"block": np.full(len(gs), block), "game": gs, "minute": ms, "y": ys}
+    t0 = time.time()
+    res["rich"] = Smooth().fit(Xf, mf, data.y[gf]).predict(Xs, ms)
+    ref_ll, ref_auc = sc.ll(ys, res["rich"]).mean(), auc(ys, res["rich"])
+    log(f"  rich (reference): {ref_ll:.5f}, {time.time() - t0:.0f} s")
+    n_fit, n_sc = len(np.unique(gf)), len(np.unique(gs))
+    for kind in hp.kind.split(","):
+        vls, eps, secs = [], [], []
         for s in seeds:
+            t0 = time.time()
             torch.manual_seed(1000 * s + 7)
-            net = Net(len(names), n_ids, dim, use_champs=kind == "netd").to(dev)
-            vl, ep = train(net, tf, tr, va, s)
+            net = Net(len(names), n_ids, hp.dim, hp.hidden, hp.dropout, use_champs=kind == "netd").to(dev)
+            vl, ep = train(net, tf, tr, va, s, hp)
             net.eval()
             with torch.no_grad():
                 z = torch.cat([net(ts[0][b], flip, ts[2][b], ts[3][b]) for b in torch.arange(len(gs), device=dev).split(65536)])
             p = torch.sigmoid(z).cpu().numpy()
             res[f"{kind}_s{s}"] = p
-            log(f"  {kind} seed {s}: val {vl:.5f} after {ep + 1} epochs, scored {sc.ll(res['y'], p).mean():.5f}")
-        res[kind] = np.mean([res[f"{kind}_s{s}"] for s in seeds], 0)
-    d, ci, n = sc.paired(res["y"], res["netd"], res["nets"], gs)
-    log(f"  netd - nets: {d:+.5f} ± {ci:.5f} ({n} games)")
+            vls.append(vl), eps.append(ep + 1), secs.append(time.time() - t0)
+            gm, gse = gain(ys, res["rich"], p, gs)
+            folds[kind].write(f"{s}\t{block}\t{n_fit}\t{n_sc}\t{sc.ll(ys, p).mean():.6f}\t{ref_ll:.6f}\t{gm:.6f}\t{gse:.6f}\t{ep + 1}\t{secs[-1]:.1f}\t{vl:.6f}\t{auc(ys, p):.5f}\t{ref_auc:.5f}\n")
+            log(f"  {kind} seed {s}: val {vl:.5f} after {ep + 1} epochs, scored {sc.ll(ys, p).mean():.5f}, vs rich {-gm:+.5f}")
+        p = res[kind] = np.mean([res[f"{kind}_s{s}"] for s in seeds], 0)
+        gm, gse = gain(ys, res["rich"], p, gs)
+        folds[kind].write(f"ens\t{block}\t{n_fit}\t{n_sc}\t{sc.ll(ys, p).mean():.6f}\t{ref_ll:.6f}\t{gm:.6f}\t{gse:.6f}\t{np.mean(eps):.2f}\t{sum(secs):.1f}\t{np.mean(vls):.6f}\t{auc(ys, p):.5f}\t{ref_auc:.5f}\n")
+        folds[kind].flush()
+    if "netd" in res and "nets" in res:
+        d, ci, n = sc.paired(ys, res["netd"], res["nets"], gs)
+        log(f"  netd - nets: {d:+.5f} ± {ci:.5f} ({n} games)")
     return res
 
 
@@ -137,7 +172,15 @@ def main():
     ap.add_argument("--out", default="out")
     ap.add_argument("--blocks", default="dev,1,2,3,4,5")
     ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--kind", default="netd,nets")
     ap.add_argument("--dim", type=int, default=8)
+    ap.add_argument("--hidden", type=int, default=128)
+    ap.add_argument("--dropout", type=float, default=0.1)
+    ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--wd", type=float, default=1e-4)
+    ap.add_argument("--patience", type=int, default=3)
+    ap.add_argument("--epochs", type=int, default=30)
+    ap.add_argument("--batch", type=int, default=4096)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
@@ -145,9 +188,14 @@ def main():
     state = sc.State(a.snap)
     sc.check_join(state, data)
     seeds = list(range(1, a.seeds + 1))
+    head = "seed\tfold\tfit_games\tscored_games\tlogloss\tratings_logloss\tgain\tgain_se\tepochs\tseconds\tval_logloss\tauc\tratings_auc\n"
+    kinds = a.kind.split(",")
+    folds = {k: open(os.path.join(a.out, "folds.tsv" if i == 0 else f"folds-{k}.tsv"), "w") for i, k in enumerate(kinds)}
+    for f in folds.values():
+        f.write(head)
     all_res = []
     for b in a.blocks.split(","):
-        all_res.append(run_block(state, data, b, seeds, a.dim, dev))
+        all_res.append(run_block(state, data, b, seeds, a, dev, folds))
         np.savez_compressed(os.path.join(a.out, "preds-net.npz"), **{f"{k}.{i}": v for i, r in enumerate(all_res) for k, v in r.items()})
 
 
