@@ -40,7 +40,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-2c | coordinator, neural net programme (Jacob's big goal, 2026-10-13; brief in docs/model.md "Neural draft models"), after the comp features campaign (api Row.stats 53323f9) |
 | meiolol-ea [fc19bb] | NN data: multi-task targets (Row.y, Row.stats as auxiliary), tensor export for the GPU, extra games count (comp data done: 25737aa, 1e9a446) |
 | meiolol-0d [b5e038] | win-comp fold ablation (finishing), then structured nets on profiles (profile inputs, DeepSets/attention, residual on ratings); name clashes with the older meiolol-0d, use the ref |
-| meiolol-ad | NN pretraining: champion-role embeddings from aux targets, used in f1's nets and as a ratings prior (src/lab/pretrain.zig) (research done: 9530584, fbc5df5) |
+| meiolol-52 (from meiolol-ad) | NN pretraining: champion-role embeddings from aux targets, used in f1's nets and as a ratings prior (src/lab/pretrain.zig) (research done: 9530584, fbc5df5) |
 | meiolol-ba | NN tester: draft-model.json net kind, Zig reference scorer and JS forward pass (comp tester done: 2be13f3, 7423f29) |
 | meiolol-49 | comp platform split and test-look plan, then NN verifier: leakage audits, seed variance, paired checks |
 | meiolol-1c | GPU sweep runner for nets (random search on the 3080 via lab-run) (lab-run auto placement done: 371bec8, e050551) |
