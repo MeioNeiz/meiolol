@@ -532,21 +532,40 @@ while [[ -z $slot ]]; do
 done
 rm queued
 echo "@RES@.$slot of $n" > slot
-# Not nproc: it honours OMP_NUM_THREADS
+# Not nproc: it honours OMP_NUM_THREADS. The top r cores (~/ml/locks/reserve) are kept
+# for gpu jobs, whose host threads otherwise float over the cores of the cpu slots
 c=$(getconf _NPROCESSORS_ONLN)
-export OMP_NUM_THREADS=$(( c / n ))'
+r=$(cat ~/ml/locks/reserve 2> /dev/null || echo 0)
+(( r > 0 && r < c )) || r=0
+export OMP_NUM_THREADS=$(( (c - r) / n ))'
     # shellcheck disable=SC2016 # expands on the host
     [[ "$RES" == cpu ]] && lock+='
 pin=
 if command -v taskset > /dev/null; then
-    k=$(( c / n )); lo=$(( slot * k ))
+    k=$(( (c - r) / n )); lo=$(( slot * k ))
     pin="taskset -c $lo-$(( lo + k - 1 ))"
     echo "cores $lo-$(( lo + k - 1 ))" >> slot
 fi' pin='$pin '
     # shellcheck disable=SC2016 # expands on the host
     [[ "$RES" == gpu ]] && lock+='
 printf -v LAB_GPU_FRACTION "0.%03d" $(( 950 / n ))
-export LAB_GPU_FRACTION'
+export LAB_GPU_FRACTION
+pin=
+if (( r > 0 )) && command -v taskset > /dev/null; then
+    export OMP_NUM_THREADS=$(( r / n > 0 ? r / n : 1 ))
+    pin="taskset -c $(( c - r ))-$(( c - 1 ))"
+    echo "cores $(( c - r ))-$(( c - 1 )) (shared by gpu slots)" >> slot
+fi' pin='$pin '
+
+    # shellcheck disable=SC2016 # expands on the host
+    [[ "$RES" == none ]] && lock='r=$(cat ~/ml/locks/reserve 2> /dev/null || echo 0)
+c=$(getconf _NPROCESSORS_ONLN)
+pin=
+# No slot, so not full width either: the reserved cores, as gpu jobs
+if (( r > 0 && r < c )) && command -v taskset > /dev/null; then
+    export OMP_NUM_THREADS=$r
+    pin="taskset -c $(( c - r ))-$(( c - 1 ))"
+fi' pin='$pin '
     lock=${lock//@RES@/$RES}
     local cmd="./$bin"
     # shellcheck disable=SC2088 # expands on the host

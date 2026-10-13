@@ -76,6 +76,11 @@ deploy/lab-run.sh watch-install
   pauses, meta (`bin python HASH` of the *.py, `pyenv HASH`) and status as for any run.
   OMP_NUM_THREADS is the slot's share of the cores; on a gpu slot labpy.py caps torch at
   LAB_GPU_FRACTION = 0.95/N of the card (N gpu slots)
+- Cores (2026-10-14, load 40-80 on 20 threads): ~/ml/locks/reserve = r keeps the top r
+  cores for gpu-slot jobs and --res none runs (taskset, OMP_NUM_THREADS r/N), whose host
+  threads floated over the cpu slots' cores; cpu slots split the other c - r. Set: r 5,
+  cpu.slots 3 (5 cores each), gpu.slots 2. Both files are read when a job takes its
+  slot, so tuning needs no code change
 - Prediction gates (deploy/lab-gates.sh, run by job.sh after the program, before
   `exit`): every preds*.tsv, dev.tsv and test.tsv in the run dir (two levels down) must
   have no NaN or inf and no constant prediction column; `GATE ok|FAIL` lines in the log,
