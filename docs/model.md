@@ -1242,6 +1242,37 @@ games included (their own stats in their profiles); fixed by 0d: tuning on fit-s
 profiles, refit rebuilds them on all visible rows; forward-chaining folds rebuild
 everything per fold (foldAblation calls fitWith on older games only).
 
+### Neural draft models, 2026-10-13 (meiolol-2c)
+
+#### LoLDraftAI's evaluation beside ours (meiolol-ba)
+
+Why: LoLDraftAI reports 55-56% on a seeded random 90/10 file split, with in-game
+filters, and the checkpoint picked on that same test split (research/sources/loldraftai
+f19, f21, f23). Random splits inflate MOBA results (draft-predictor-methods C5), so its
+number and ours don't compare. Here every model gets both: our time split and its random
+split with its filters, on our games (C17). Dev only: the random split never replaces the
+protocol, and never touches the test set.
+- `meiolol-lab ldai-filter SNAP` (lab/randsplit.zig) writes SNAP/ldai_filter.tsv, one
+  reason per game. It drops a game where any player at frame 15 has under 2400 total gold,
+  over 10 deaths, under 25 CS (lane + jungle minions; supports exempt) or is under level
+  4, in that order, as prepare_data.py. CS and deaths are as LoLDraftAI's
+  matchProcessing.ts computes them (loldraftai f36): deaths from kill events up to that
+  frame. Under 15:00 is `short`. A game of 15:00+ whose timeline doesn't reach 15:00
+  can't be judged (`no_timeline`) and is dropped, as LoLDraftAI drops games missing the
+  columns; that changes the population beyond its filters, so its share is reported
+  by platform
+- Not reproduced: its training window (52 patches, small patches merged), Clash games
+  (queue 700), its elo buckets, and its checkpoint chosen on the test split (netcheck
+  early-stops on the fit games' newest tenth, so our random-split number is the honest
+  version of theirs)
+- `netcheck --split random:SEED`: one block. Fit on the non-test games older than the
+  selection cut outside the seed's random tenth (every platform); score the tenth's EUW1
+  games, as dev-val scores EUW1. `--filter ldai` drops filtered games from fit and scored
+  games of any block. The candidate (-Dcand: win-ratings, win-comp) and the net fit on
+  the same games; preds.tsv carries match ids, so runs can be compared on common games
+- Runs (pending): per candidate, `--blocks dev` and `--split random:1|2|3`, each with and
+  without `--filter ldai`, `--net small` at defaults (f1 adds its chosen nets)
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
