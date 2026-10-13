@@ -56,7 +56,7 @@ Coordinator: meiolol-bd (from meiolol-76, from meiolol-2c, from meiolol-78, 2026
 | meiolol-51 (from meiolol-f7) | player-history nets, internal scope only: experience, mastery_pre, rank_start per slot (src/lab/playernet.zig) |
 | meiolol-48 (closed) | patch and rank context done (3d11c31, e2ed6f4): per-patch offsets not detected; rank brackets wait for the 19 Oct snapshot (model.md Next steps) |
 | meiolol-30 | scaling curves for ratings, win-comp and nets, a*N^-b + c, projection to production-key volumes |
-| meiolol-ab | interactions on pretrained embeddings: low-rank cross and within-team terms (cand/win-embx) |
+| meiolol-64 (from meiolol-ab) | interactions on pretrained embeddings: low-rank cross and within-team terms (cand/win-embx) |
 | meiolol-2a (closed) | admin Models tab dashboard of the NN programme results: done (16ecd0f) |
 | meiolol-e3 (closed) | research: how AI agents run ML experiments well: done (86c8a5f, docs/lab-constraints.md 2680d29); ranked list adopted in briefs and 16's queue |
 | meiolol-tooling (pane 1011, from meiolol-a0, from meiolol-16) | lab tooling from evidence: results store and checked comparisons, immutable run binaries, standard preds files, snapshot completeness checks |
