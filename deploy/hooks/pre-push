@@ -1,17 +1,13 @@
 #!/bin/sh
 # Every push to main deploys (deploy/on-push.sh), so `zig build ci` must pass first.
-# Runs on a clean checkout of the pushed commit, never the working tree: other sessions
-# keep uncommitted work there. Skip once: git push --no-verify
+# Runs on a clean checkout of the pushed commit (deploy/build-tree.sh), never the working
+# tree: other sessions keep uncommitted work there. Skip once: git push --no-verify
 root=$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)
 zero=0000000000000000000000000000000000000000
 while read -r _ sha remote_ref _; do
     [ "$remote_ref" = refs/heads/main ] && [ "$sha" != $zero ] || continue
-    tree=$(mktemp -d)
-    git -C "$root" worktree add -q --detach "$tree" "$sha" || exit 1
     echo "pre-push: zig build ci on $(git -C "$root" rev-parse --short "$sha")"
-    (cd "$tree" && zig build ci --cache-dir "$root/.zig-cache")
-    status=$?
-    git -C "$root" worktree remove --force "$tree"
-    [ $status = 0 ] || { echo "pre-push: ci failed, push refused"; exit 1; }
+    "$root/deploy/build-tree.sh" ci "$sha" zig build ci --cache-dir "$root/.zig-cache" \
+        || { echo "pre-push: ci failed, push refused"; exit 1; }
 done
 exit 0
