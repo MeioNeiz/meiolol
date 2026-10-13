@@ -93,8 +93,10 @@ research/questions/agent-ml-practice.md.
 
 ## Backlog, in order (coordinator's priorities, 2026-10-13)
 
-1. Register compare in lab_main.zig; check same seed at 5 vs 20 cores gives identical
-   preds (taskset slot pinning), else record threads in meta and refuse in compare
+1. Done: compare registered (42ed9d6). Same seed, 5 cores (cpu slot, taskset) vs 20
+   (--res none): netcheck small seeds 1-3, preds.tsv byte-identical, compare B - A
+   0.00000 ± 0.00000; folds.tsv differs only in `seconds` (2026-10-13, meiolol-a0).
+   Thread count needn't be in meta
 2. Throughput: concurrent mixes on the gpu-box, nvidia-smi
    (/usr/lib/wsl/lib/nvidia-smi) and load; slot counts and default --pack from models
    per hour; weighted slots; utilisation per run in the run dir
