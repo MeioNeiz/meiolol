@@ -245,15 +245,13 @@ How to write a line:
   nothing measurable: your early style moves your win chance by about 0.7 percentage
   points on average (under 1.6 for nine players in ten). There are no distinct
   "playstyle types" once champion and state are known, and a neural net reading play
-  minute by minute found nothing more. Small leanings remain for players in the same
-  state: mids and junglers who farm rather than fight win slightly more (about +1.8 and
-  +1.2 percentage points per step), bot laners slightly less (-1.7). Sure: 10,604
-  held-out games, one look; the style measures together are clear but tiny, the
-  leanings survive a correction for testing 50 of them; types and the net: not detected
-  (the net could not have seen effects quite this small). Site: no "play aggressive to
-  win" and no "you are a type X player"; post-game may show your own style against your
-  role's spread, as an association. Evidence: docs/model.md "Playstyle clusters and
-  sequence net"
+  minute by minute found nothing more. Sure: 10,604 held-out games, one look; the style
+  measures together are clear but tiny; types and the net: not detected (the net could
+  not have seen effects quite this small). Single directions (say, farming rather than
+  fighting) look clear in the training games but don't hold up on held-out games. Site:
+  no "play aggressive to win", no "you are a type X player" and no per-style win
+  claims; post-game may show your own style against your role's spread, as description
+  only. Evidence: docs/model.md "Playstyle clusters and sequence net"
 - ~~2026-10-13: Early aggression, roaming and time in the enemy half look like they win
   games, but almost all of that is just being ahead; once the gold and XP leads at
   14:00 are known, style adds very little. What survives is small: bot laners and mids

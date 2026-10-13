@@ -1052,6 +1052,14 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     }
 
     try writePcs(gpa, w, &pca, ctx, fitted[2]);
+    if (phase == .final) {
+        // The component table is fitted on train; refit on test rows (same components)
+        // to see whether its effects carry over
+        const test_games = try arena.alloc(u32, scored_games.items.len);
+        for (test_games, scored_games.items) |*g, r| g.* = r.game;
+        const on_test = try fitModel(gpa, arena, &ctx, specs.items[2], scored_idx.items, scored_idx.items, test_games);
+        try writeCarry(gpa, w, ctx, fitted[2], on_test);
+    }
     for (k_list, 0..) |k, ki| {
         const spec_i = 3 + 2 * ki;
         const f = fitted[spec_i];
@@ -1211,7 +1219,8 @@ fn writePcs(gpa: std.mem.Allocator, w: *Io.Writer, pca: *const Pca, ctx: Ctx, f:
     };
     try fields.adjustBH(gpa, &q);
     try w.writeAll("\n## Style components\n\nEffect: win pp per +1 sd of the component given b0's " ++
-        "features and the state (log-odds x 25) ± 95% clustered by game; q = BH over this table. " ++
+        "features and the state (log-odds x 25), fitted on the fit rows (not the scored ones), " ++
+        "± 95% clustered by game; q = BH over this table. " ++
         "Zones: the share of the component's squared loadings on position (zone) dims, the rest " ++
         "on actions. Loadings: the largest, on standardised residuals (sign of a component is " ++
         "arbitrary).\n\n| role | pc | share | effect | q | zones | loadings |\n" ++
@@ -1228,6 +1237,69 @@ fn writePcs(gpa: std.mem.Allocator, w: *Io.Writer, pca: *const Pca, ctx: Ctx, f:
         try w.print(" {d:.2} |", .{zones});
         try writeTop(w, loading, 6);
         try w.writeAll(" |\n");
+    };
+}
+
+/// The component effects fitted on train against the same model fitted on test rows:
+/// sign agreement, correlation, and how the train-BH survivors fare on test
+fn writeCarry(gpa: std.mem.Allocator, w: *Io.Writer, ctx: Ctx, train: Fitted, on_test: Fitted) !void {
+    const n = Role.count * n_pc;
+    var a: [n]f64 = undefined;
+    var b: [n]f64 = undefined;
+    var q_train: [n]f64 = undefined;
+    var q_test: [n]f64 = undefined;
+    var p_test: [n]f64 = undefined;
+    for (0..Role.count) |role| for (0..n_pc) |c| {
+        const i = ctx.dims.pc(@intCast(role), c);
+        const k = role * n_pc + c;
+        a[k] = 25 * train.w[i];
+        b[k] = 25 * on_test.w[i];
+        q_train[k] = 2 * fields.upperTail(@abs(train.w[i]) / train.se.?[i]);
+        p_test[k] = 2 * fields.upperTail(@abs(on_test.w[i]) / on_test.se.?[i]);
+        q_test[k] = p_test[k];
+    };
+    try fields.adjustBH(gpa, &q_train);
+    try fields.adjustBH(gpa, &q_test);
+    var agree: usize = 0;
+    var ma: f64 = 0;
+    var mb: f64 = 0;
+    for (a, b) |x, y| {
+        agree += @intFromBool((x > 0) == (y > 0));
+        ma += x;
+        mb += y;
+    }
+    ma /= n;
+    mb /= n;
+    var sab: f64 = 0;
+    var saa: f64 = 0;
+    var sbb: f64 = 0;
+    for (a, b) |x, y| {
+        sab += (x - ma) * (y - mb);
+        saa += (x - ma) * (x - ma);
+        sbb += (y - mb) * (y - mb);
+    }
+    var surv: usize = 0;
+    var surv_sign: usize = 0;
+    var surv_p05: usize = 0;
+    var test_bh: usize = 0;
+    for (q_train, q_test, p_test, a, b) |qa, qb, pb, x, y| {
+        test_bh += @intFromBool(qb < 0.05);
+        if (qa >= 0.05) continue;
+        surv += 1;
+        surv_sign += @intFromBool((x > 0) == (y > 0));
+        surv_p05 += @intFromBool((x > 0) == (y > 0) and pb < 0.05);
+    }
+    try w.print("\n## Components: train fit vs a refit on test rows\n\nSame components, same model, " ++
+        "fitted again on the scored rows only. Signs agree {d} of {d}; correlation {d:.2}. Train " ++
+        "BH survivors: {d}, same sign on test {d}, same sign and p < 0.05 on test {d}. Test-fit " ++
+        "effects passing BH on their own: {d}.\n\n| role | pc | train | test fit | test ± |\n" ++
+        "| --- | --- | --- | --- | --- |\n", .{ agree, n, sab / @sqrt(saa * sbb), surv, surv_sign, surv_p05, test_bh });
+    for (0..Role.count) |role| for (0..n_pc) |c| {
+        const i = ctx.dims.pc(@intCast(role), c);
+        const k = role * n_pc + c;
+        try w.print("| {t} | {d} | {d:.2}{s} | {d:.2} | {d:.2} |\n", .{
+            @as(Role, @fromBackingInt(@intCast(role))), c + 1, a[k], if (q_train[k] < 0.05) "*" else "", b[k], 25 * 1.96 * on_test.se.?[i],
+        });
     };
 }
 
