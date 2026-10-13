@@ -1564,6 +1564,35 @@ meiolol-ea's mastery_pre.tsv is there and the coordinator pins it: same four row
 rows split by whether the player has rank or mastery. Test look for the player net on
 ratings + exp only on meiolol-2c's go; on this snapshot it would be a tie by the folds.
 
+#### Pretrained champion-role embeddings (meiolol-97 [7beeb6], was meiolol-52)
+
+`meiolol-lab pretrain SNAP` (src/lab/pretrain.zig, a88db2d; 74e059d). Per block (dev-val,
+the 5 forward folds; nnexport's splits, so the same games as netcheck) and seed:
+champion-role embeddings E (d 12; champion-roles under 20 fit games share their role's
+vector) learnt from far richer signals than win: each seat's 22 aux targets (nn-export's
+early outcomes, and SeatStats per minute; z per role over the fit games, clipped at 4),
+predicted linearly from [E own; E lane opponent; mean E allies; mean E enemies] plus a
+per-role won term (end-of-game stats lean to the winner; the won term keeps that out of
+E). Adam, L2 on E and W, early stopping on the newest 10% of fit games, refit on all for
+a tenth more epochs. Then E is tested frozen as a prior for the ratings: rating = w[role]
+. P + delta, L2 on delta only, otherwise win-ratings' fit (L2 grid and epochs on the
+newest 10%, P from the inner games there, refit with P from all fit games). Controls: P =
+win-comp-style hand profiles (12), P = a random E (same shape: the content, not the extra
+parameters). The no-prior ratings are win-ratings re-implemented: folds 0.69092 (0.69090),
+dev-val 0.68978 (0.68969). Embeddings for nets: netcheck `--emb-init DIR [--emb-freeze 1]`
+(d55e246), files in data/pretrain/d12 (Mac), ~/ml/pretrain/d12 (gpu-box). Audit (4b): no
+leakage; the tuning pass's target scaling now uses the inner games only (74e059d).
+
+Selection rule, fixed before the last variants landed (folds and dev-val are reported for
+every variant but never used to choose): statistic = the embedding prior's ratings log
+loss on the newest 10% of fit games minus the no-prior ratings' on the same games, mean
+over the 6 blocks and 3 seeds. Lowest wins; within 0.00002 of the best, the smaller d,
+then the default targets and won term. If no variant is below 0, "none" wins and there is
+no test look. The winner is rerun on 74e059d (after the audit fix) before any test look,
+and must stay below 0 there. Variants tried (all reported): d12, d12 without the won
+term, d8, d16, d12 without the outcome-like targets (gold14, lanediff14, cs10, deaths15,
+first_item, minutes, dmg_buildings).
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
