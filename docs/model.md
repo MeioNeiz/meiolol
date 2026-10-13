@@ -1019,6 +1019,76 @@ games only (test "seat stats reach fit on visible games only"), a Query has no s
 
 #### Model: win-comp ablation (meiolol-0d)
 
+Candidate src/lab/cand/win-comp (7a2de11): win-ratings' ratings plus terms on 12-number
+champion-role profiles. Train-time: end-of-game stats of training rows, averaged into
+profiles; use-time: champions and roles only (champ_select). Per row: magic and true
+share of champion damage, damage/min, mitigated/(mitigated+taken), taken/min,
+armor_end - mr_end, CC/min, immobilisations/min, ally heal+shield/min, own heal/min
+(heal - heal_allies), attack range, building damage/min. Mean over the champion-role's
+won and lost rows separately, each shrunk to the role mean by 20 pseudo-rows, profile =
+the two halves' average (end-of-game stats lean to the winner: building damage, so a
+plain mean would carry the win rate); z within role, unknown champion-role 0. Training
+games see leave-one-out profiles; tuning builds them from the fit games only (49's
+review). Terms (cfg flags, nested): prior (rating = beta_role . p + delta), balance (P_b'
+S P_b - P_r' S P_r on team sums, S symmetric), team (explicit: frac = the team's
+damage-weighted magic share, mix = (frac - 0.5)^2, or AD-heavy and AP-heavy halves;
+frontline = soft max of mitigated share), cross (P_b' A P_r, A antisymmetric). Comp
+weights fitted after the ratings (warm start; `freeze` keeps the ratings fixed), own L2
+picked on the newest 10% of visible games, none if no L2 beats ratings there.
+
+Profile correlations (champion-roles, game-weighted): none near-duplicate, all kept.
+Largest: taken/min x own heal/min 0.66, mitigated share x armour minus MR 0.59,
+mitigated share x range -0.55, CC/min x immobilisations/min 0.48.
+
+Dev only, gpu-box, `meiolol-lab exp run` with a scratch --lab (no looks), each batch
+from one clean clone of HEAD (61bff7f, c8d3317, e050551) with the reference rerun in
+it. Dev-val: fit on 88,706 games, scored on 85,000 EUW1 rows (8,500 games). Folds
+(cfg.folds = 5): the newest half of the dev phase's visible games in 5 time blocks,
+each scored by models fitted on all older games (profiles rebuilt per fold), 44,353
+games, every platform. Paired ± clustered by game; negative is better.
+
+| model | dev log loss | dev AUC | dev vs ratings | folds vs ratings |
+| --- | --- | --- | --- | --- |
+| ratings (= win-ratings, bit-identical) | 0.68969 | 0.549 | - | - (0.69090) |
+| + prior | 0.68999 | 0.547 | +0.00030 ± 0.00051 | +0.00020 ± 0.00021 |
+| + cross, ratings frozen | 0.68981 | 0.549 | +0.00012 ± 0.00041 | +0.00012 ± 0.00025 |
+| + balance + team, frozen | 0.69035 | 0.546 | +0.00066 ± 0.00108 | -0.00056 ± 0.00040 |
+| + team (mix, frontline), frozen | 0.69006 | 0.547 | +0.00036 ± 0.00067 | -0.00061 ± 0.00029 |
+| + AD-heavy, AP-heavy halves, frozen | 0.69011 | 0.547 | +0.00041 ± 0.00070 | -0.00065 ± 0.00031 |
+| + mix, ratings refitted jointly | 0.69013 | 0.547 | +0.00043 ± 0.00081 | -0.00034 ± 0.00029 |
+| **+ mix, frozen (committed cfg)** | 0.68999 | 0.547 | +0.00030 ± 0.00059 | **-0.00057 ± 0.00028** |
+| all four, frozen | 0.69056 | 0.545 | +0.00087 ± 0.00136 | -0.00017 ± 0.00049 |
+
+All four nested on the folds, each step vs the one before: prior +0.00013 ± 0.00021,
+balance -0.00034 ± 0.00038, team -0.00021 ± 0.00016, cross +0.00025 ± 0.00041.
+
+Train-fit effects (effects-comp-terms.tsv, blue's chance per 1 sd of the blue-minus-red
+term at 50%): mix -1.50 ± 0.33 pp (frozen; -2.83 joint), AD-heavy -1.47 ± 0.33 and
+AP-heavy -1.25 ± 0.33, frontline +0.13 ± 0.33 beside mix. Full model, largest S: magic x
+magic -0.87 ± 0.28 (the mix again), damage/min x buildings/min -0.48, damage/min x
+mitigated +0.39, taken/min x CC +0.37; largest A: magic x enemy immobilise -0.40 ± 0.28
+(49: not seen model-free), true x enemy immobilise -0.38; my magic x enemy armour lean
++0.26 ± 0.28. Sanity (effects-comp-sanity.tsv; Garen, Ahri, Jinx, Thresh with Rammus or
+Graves jungle into Mordekaiser Diana Syndra Ziggs Lux vs Darius Lee Sin Zed Caitlyn
+Pyke): Rammus minus Graves, 5 AP minus 5 AD, ratings +0.09 pp (sigmoid curvature only),
+mix +0.37, all four joint +2.95 (Rammus relatively better into AP: the wrong way). No
+Rammus-into-AD effect.
+
+Reading:
+- One comp term carries anything: a team whose damage is lopsided (mostly AD or mostly
+  AP) loses more often than its champions' ratings say. 44k fold games show it (-0.0006
+  ± 0.0003), 49's model-free bins show it in every block; the 8.5k dev-val games don't
+  (+0.0003 ± 0.0006), within their noise of the fold gain. Both halves, AD-heavy and
+  AP-heavy, about equal
+- Profile prior, cross-team terms (damage type x enemy resists, CC x mobility),
+  frontline and CC: not detected; cross and prior slightly worse. Rammus into AP vs AD:
+  not detected (my magic x enemy armour lean +0.26 ± 0.28 pp per sd)
+- The inner validation (newest 10% of visible games) overstated every comp gain 2-3x
+  (team -0.0011 there vs -0.0006 on folds): judge on the folds
+- Freeze the ratings in the comp stage: refitting them jointly from a warm start loses
+  about 0.0002 on the folds
+- Test look: not yet (meiolol-2c's go). Run dirs ~/ml/runs/*-wc-{a,b,c}-* on the gpu-box
+
 #### Model-free cross-check (meiolol-49)
 
 `meiolol-lab compcheck SNAP` (src/lab/compcheck.zig, 71faf36; built with
