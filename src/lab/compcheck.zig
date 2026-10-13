@@ -156,6 +156,8 @@ const Unit = struct {
     lift_diff: f64,
     cc: f64,
     enemy_magic_share: f64,
+    /// Summed immobilisations per minute
+    immob: f64,
     enemy_frontline: u8,
     /// Sum over the team of armour lean minus its role's mean
     armour_lean: f64,
@@ -303,18 +305,19 @@ fn addUnits(
     for (d.games, 0..) |g, gi| {
         if (blue_n[gi] == 0) continue;
         const pb = blue_sum[gi] / blue_n[gi];
-        var feats: [2]struct { phys: f64, magic: f64, front: u8, cc: f64, lean: f64, best_mit: f64, lift: f64 } = undefined;
+        var feats: [2]struct { phys: f64, magic: f64, front: u8, cc: f64, lean: f64, best_mit: f64, lift: f64, immob: f64 } = undefined;
         for (&feats, g.teams) |*f, team| {
             var phys: f64 = 0;
             var magic: f64 = 0;
             var true_dmg: f64 = 0;
-            f.* = .{ .phys = 0, .magic = 0, .front = 0, .cc = 0, .lean = 0, .best_mit = 0, .lift = 0 };
+            f.* = .{ .phys = 0, .magic = 0, .front = 0, .cc = 0, .lean = 0, .best_mit = 0, .lift = 0, .immob = 0 };
             for (team, 0..) |champ, role| {
                 const p = prof.get(champ, role);
                 phys += p.phys;
                 magic += p.magic;
                 true_dmg += p.true_dmg;
                 f.cc += p.cc;
+                f.immob += p.immob;
                 f.lean += p.armour_lean - role_lean[role];
                 if (p.tank >= tank_cut) f.front += 1;
                 f.best_mit = @max(f.best_mit, p.mitigated_share);
@@ -338,6 +341,7 @@ fn addUnits(
                 .lift_diff = feats[s].lift - feats[1 - s].lift,
                 .cc = feats[s].cc,
                 .enemy_magic_share = feats[1 - s].magic,
+                .immob = feats[s].immob,
                 .enemy_frontline = feats[1 - s].front,
                 .armour_lean = feats[s].lean,
             });
@@ -430,6 +434,42 @@ fn analyse(
     try strengthControl(gpa, arena, units.items, resid, in_a, w);
     if (plumbing) |wins| try control(gpa, d, wins, units.items, resid, in_a, w);
 
+    // win-comp's largest train-fit terms (meiolol-0d, dev run wc-a-full), as blue minus
+    // red features: the residual's slope per 1 sd, to set against its claimed pp per sd
+    {
+        try w.writeAll("## win-comp's claimed terms: observed - win-ratings per 1 sd of the term (blue minus red)\n\n");
+        try w.writeAll("| term | pp per sd |\n| --- | --- |\n");
+        const x = try gpa.alloc(f64, n_units / 2);
+        defer gpa.free(x);
+        const r = try gpa.alloc(f64, n_units / 2);
+        defer gpa.free(r);
+        const us = units.items;
+        for (x, r, 0..) |*xi, *ri, g| {
+            const b = us[2 * g];
+            const e = us[2 * g + 1];
+            std.debug.assert(b.side == 0 and e.side == 1 and b.game == e.game);
+            xi.* = (b.magic_share - 0.5) * (b.magic_share - 0.5) - (e.magic_share - 0.5) * (e.magic_share - 0.5);
+            ri.* = resid[2 * g];
+        }
+        try slopeLine(w, "team magic share off 50%, squared (claimed -1.24 ± 0.28)", x, r);
+        var mm: [2]f64 = .{ 0, 0 };
+        for (us) |u| {
+            mm[0] += u.magic_share;
+            mm[1] += u.immob;
+        }
+        const nu: f64 = @floatFromInt(n_units);
+        for (x, 0..) |*xi, g| {
+            const b = us[2 * g];
+            const e = us[2 * g + 1];
+            const bm = b.magic_share - mm[0] / nu;
+            const em = e.magic_share - mm[0] / nu;
+            const bi = b.immob - mm[1] / nu;
+            const ei = e.immob - mm[1] / nu;
+            xi.* = bm * ei - bi * em;
+        }
+        try slopeLine(w, "magic share x enemy immobilise/min (claimed -0.40)", x, r);
+        try w.writeAll("\n");
+    }
     // H1: team magic share of damage
     {
         const edges = [_]f64{ 0, 0.2, 0.4, 0.6, 2 };
@@ -655,6 +695,35 @@ fn interaction(units: []const Unit, resid: []const f64, group: []const ?u1) Est 
 /// Per team unit: observed minus win-ratings' chance, and observed minus 50% (raw)
 const Res = struct { model: []const f64, raw: []const f64 };
 
+/// Least-squares slope of r on x scaled to sd 1, in pp, with a robust 95% interval (one
+/// value per game, so games are the clusters)
+fn slopeLine(w: *Io.Writer, label: []const u8, x: []const f64, r: []const f64) !void {
+    const n: f64 = @floatFromInt(x.len);
+    var mx: f64 = 0;
+    var mr: f64 = 0;
+    for (x, r) |a, b| {
+        mx += a;
+        mr += b;
+    }
+    mx /= n;
+    mr /= n;
+    var sxx: f64 = 0;
+    var sxr: f64 = 0;
+    for (x, r) |a, b| {
+        sxx += (a - mx) * (a - mx);
+        sxr += (a - mx) * (b - mr);
+    }
+    const slope = sxr / sxx;
+    var meat: f64 = 0;
+    for (x, r) |a, b| {
+        const e = b - mr - slope * (a - mx);
+        meat += (a - mx) * (a - mx) * e * e;
+    }
+    const se = @sqrt(meat) / sxx;
+    const sd = @sqrt(sxx / n);
+    try w.print("| {s} | {d:.2} ± {d:.2} |\n", .{ label, slope * sd * 100, 1.96 * se * sd * 100 });
+}
+
 fn tableHead(w: *Io.Writer, label: []const u8) !void {
     try w.print("| {s} | teams | predicted | observed | observed - 50%, pp | observed - predicted, pp |\n| --- | --- | --- | --- | --- | --- |\n", .{label});
 }
@@ -810,6 +879,7 @@ test "contrast: clustered by game, two teams per game" {
         .frontline = 0,
         .cc = 0,
         .enemy_magic_share = 0,
+        .immob = 0,
         .enemy_frontline = 0,
         .armour_lean = 0,
         .best_mitigated = 0,
