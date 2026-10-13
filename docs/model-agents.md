@@ -9,6 +9,7 @@ Where things live:
   sections). Plain findings: docs/learned.md (wording rule in its header). Decisions and
   next steps: docs/plan.md "Draft model". Research: research/questions/
   draft-predictor-methods.md (honest draft-only ceiling, levers in order)
+- Lab tooling: docs/lab-tooling.md (what sessions lost, fixes, backlog)
 - Compute: docs/compute.md (gpu-box, lab-run, snapshots). Lab: docs/lab-agent.md,
   docs/lab-brief.md. Data fields and retention: docs/fields.md, docs/data-safety.md
 - Admin Models tab and Draft tester: https://meiolol.jomify.lol/admin/#models/all and
