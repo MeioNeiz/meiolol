@@ -1,0 +1,1840 @@
+                                             Understanding Global Feature Contributions With
+                                                     Additive Importance Measures
+
+
+                                                  Ian C. Covert                     Scott Lundberg                          Su-In Lee
+                                             University of Washington              Microsoft Research                University of Washington
+                                                   Seattle, WA                       Redmond, WA                           Seattle, WA
+
+
+
+
+arXiv:2004.00668v2 [cs.LG] 27 Oct 2020
+                                                icovert@uw.edu              scott.lundberg@microsoft.com                suinlee@uw.edu
+
+
+
+                                                                                         Abstract
+                                                      Understanding the inner workings of complex machine learning models is a long-
+                                                      standing problem and most recent research has focused on local interpretability.
+                                                      To assess the role of individual input features in a global sense, we explore the
+                                                      perspective of defining feature importance through the predictive power associated
+                                                      with each feature. We introduce two notions of predictive power (model-based and
+                                                      universal) and formalize this approach with a framework of additive importance
+                                                      measures, which unifies numerous methods in the literature. We then propose
+                                                      SAGE, a model-agnostic method that quantifies predictive power while accounting
+                                                      for feature interactions. Our experiments show that SAGE can be calculated
+                                                      efficiently and that it assigns more accurate importance values than other methods.
+
+
+                                         1        Introduction
+                                         Our limited understanding of the inner workings of complex models is a long-standing problem that
+                                         impedes machine learning adoption in many domains. Most recent research has addressed this by
+                                         focusing on local interpretability, which explains a model’s individual predictions (e.g., the role
+                                         of each feature in a patient’s diagnosis) [27, 32, 36, 40]. However, in some cases users require
+                                         knowledge of a feature’s global importance to understand its role across an entire dataset.
+                                         In this work we seek to understand how much models rely on each feature overall, which is often
+                                         referred to as the problem of global feature importance. The problem is open to many interpretations
+                                         [5, 17, 24, 26, 29], and we present the idea of defining feature importance as the amount of predictive
+                                         power that a feature contributes. This raises the challenge of handling feature interactions, because
+                                         features contribute different amounts of information when introduced in isolation versus into a larger
+                                         set of features. We aim to provide a solution that accounts for these complex interactions.
+                                         We begin by presenting the framework of additive importance measures, a view that unifies numerous
+                                         methods that define feature importance in terms of predictive power (Section 2). We then present
+                                         a new tool for calculating feature importance, SAGE,1 a model-agnostic approach to summarizing
+                                         a model’s dependence on each feature while accounting for complex interactions (Section 3). Our
+                                         work makes the following contributions:
+
+                                         1. We derive SAGE by applying the Shapley value to a function that represents the predictive power
+                                            contained in subsets of features. Many desirable properties result from this approach, including
+                                            invariance to invertible feature transformations and a relationship with SHAP [27].
+                                         2. We introduce a framework of additive importance measures that lets us unify many existing
+                                            methods in the literature. We show that these methods all define feature importance in terms of
+                                            predictive power, but that only SAGE does so while properly accounting for feature interactions.
+                                              1
+                                                  http://github.com/iancovert/sage/
+
+
+                                         34th Conference on Neural Information Processing Systems (NeurIPS 2020), Vancouver, Canada.
+3. To manage tractability challenges with SAGE, we propose an efficient sampling-based approxima-
+   tion that is significantly faster than a naive calculation via local SHAP values. Our approach also
+   provides uncertainty estimates and permits automatic convergence detection.
+Our experiments compare SAGE to several baselines and demonstrate that SAGE’s feature importance
+values are more representative of the predictive power associated with each feature. We also show
+that when a model’s performance is unexpectedly poor, SAGE can help identify corrupted features.
+
+2     Unifying Global Feature Importance Methods
+We introduce two notions of predictive power for subsets of features and then discuss our unifying
+framework of additive importance measures.
+
+2.1   Predictive Power of Feature Subsets
+
+Consider a supervised learning task where a model f is used to predict the response variable Y given
+an input X, where X consists of individual features (X1 , X2 , . . . , Xd ). We use uppercase symbols
+(e.g., X) to denote random variables and lowercase symbols (e.g., x) to denote values.
+The notion of feature importance is open to different interpretations, but we take the perspective that
+a feature’s importance should correspond to how much predictive power it provides to the model.
+Although f is trained using all the features, we can examine its performance when it is given access
+to subsets of features XS ≡ {Xi | i ∈ S} for different S ⊆ D, where D ≡ {1, . . . , d}. We can then
+define “important” features as those whose absence degrades f ’s performance. As a convention for
+evaluating f when deprived of the features S̄ ≡ D \ S, we define the restricted model fS as
+                                                           
+                                  fS (xS ) = E f (X) XS = xS ,                                      (1)
+so that missing features XS̄ are marginalized out using the conditional distribution p(XS̄ |XS = xs ).
+Two special cases are S = ∅ and S = D, which respectively correspond to the mean prediction
+f∅ (x∅ ) = E[f (X)] and the full model prediction fD (x) = f (x). This approach is common in
+recent work [1, 27] and is necessary for later connections with mutual information (Supplement A).
+Using this convention for accommodating subsets of features, we can now measure how much f ’s
+performance degrades
+                      when features
+                                   are removed. Given a loss function `, the population risk for fS
+is defined as E ` fS (XS ), Y where the expectation is taken over the data distribution p(X, Y ). To
+define predictive power as a quantity that increases with model accuracy, we consider the reduction
+in risk over the mean prediction and define the function vf : P(D) 7→ R as follows:
+                                    h            i   h            i
+                         vf (S) = E ` f∅ (X∅ ), Y − E ` fS (XS ), Y .                               (2)
+                                  |      {z       } |      {z       }
+                                     Mean prediction           Using features XS
+
+The domain is the power set P(D), the left term is the loss achieved with the mean prediction
+E[f (X)], and the right term is the loss achieved using the features XS . The function vf (S) quantifies
+the amount of predictive power f derives from the features XS , and we generally expect that including
+more features in S will make vf (S) larger. While vf provides a model-based notion of predictive
+power, we also introduce a notion of universal predictive power. For this, we define the function
+v : P(D) 7→ R as the reduction in risk from XS when using an optimal model:
+                                    h       i      h           i
+                        v(S) = min E ` ŷ, Y − min E ` g(XS ), Y .                                  (3)
+                                 ŷ              g
+                               |    {z       } |       {z        }
+                                 Optimal constant ŷ       Optimal model using XS
+
+The left term is the loss from an optimal constant prediction ŷ and the right term is the loss for an
+optimal model g from the class of all functions (e.g., the Bayes classifier). Intuitively, v represents
+the maximum predictive power that could hypothetically be derived from XS . Since f is typically
+trained using empirical risk minimization [42], the model-based predictive power vf provides an
+approximation to v and the two coincide in certain cases where f is optimal (Supplement B).
+
+
+                                                       2
+2.2   Additive Importance Measures
+
+In certain very simple cases, features contribute predictive power in an additive manner. This means
+that we have v(S ∪ {i}) − v(S) = v(T ∪ {i}) − v(T ) for all subsets S, T such that i ∈    / S, T . In these
+situations, we can define Xi ’s importance as the predictive power it contributes, or φi = v({i})−v(∅).
+However, a feature’s contribution is generally not additive because it depends on which features XS
+are already present.
+We therefore propose a class of additive importance measures that includes any method whose scores
+φ1 , . . . , φd can be understood as performance gains associated with each feature. This framework
+lets us unify numerous methods that either explicitly or implicitly define feature importance in terms
+of predictive power. The class of methods is defined as follows.
+Definition 1. Additive importance measures are methods that assign importance scores φi ∈ R to
+features i = 1, . . . , d and for which there exists a constant φ0 ∈ R so that the additive function
+                                                         X
+                                          u(S) = φ0 +          φi
+                                                         i∈S
+
+provides a proxy for the predictive power of feature subsets, i.e., u(S) ≈ v(S).
+
+For methods in this class, u(S) approximates v(S) up to a constant value φ0 by summing the values
+φi for each included feature i ∈ S. Each φi can be viewed as the performance gain associated with
+Xi , which provides a measure of its importance for the prediction task. Although our definition
+focuses on methods that approximate the universal predictive power v, we also include methods that
+approximate model-based predictive power vf because these implicitly approximate v.
+The function v exhibits non-additive behavior for most prediction problems, so the proxy u often
+cannot perfectly represent each feature’s contribution to the predictive power. Although a crude
+approximation may provide users with some insight, closer approximations give a more accurate sense
+of each feature’s importance. Next, we show that several existing methods manage this challenge by
+providing high quality approximations in specific regions of the domain P(D).
+
+2.3   Existing Additive Importance Measures
+
+Our framework of additive importance measures unifies numerous methods in the feature importance
+literature. These methods can be divided into three categories, representing the parts of the domain
+P(D) in which the additive proxy u models v or vf most accurately. Supplement G provides a table
+that summarizes the methods in each category.
+The first category of methods characterize predictive power when no more than one feature is
+excluded, and they provide an additive function u that accurately approximates v or vf in the
+subdomain D ∪ D \ {i} | i ∈ D ⊂ P(D). The canonical method for this is a feature ablation
+study where, in addition to a model f trained on all features, separate models f1 , f2 , . . . , fd are
+trained with individual features excluded [2, 16, 22]. Importance values φ1 , . . . , φd are then assigned
+based on the degradation in performance, according to the formula
+
+                                                              
+                           φi = E ` fi (XD\{i} ), Y − E ` f (X), Y .                                   (4)
+                                                                                      P
+A natural choice for φ0 in this case is φ0 = minŷ E[`(ŷ, Y )] − E[`(f (X), Y )] −      i∈D φi , because
+then u(D) and u(D \ {i}) approximate v(D) and v(D \ {i}), respectively.
+Several other methods provide similar notions of feature importance using a single model f . Permu-
+tation tests measure performance degradation when each column of the data is permuted [5]. Since
+permutation tests break feature dependencies, one variation suggests using a conditional permutation
+scheme [38]. Finally, in a method we refer to as “mean importance,” performance degradation is
+measured after mean imputing individual features [34]. Although these methods take slightly different
+approaches, they all approximate either v or vf when at most one feature is excluded.
+The second category of methods describe v when no more than onefeatureis included, 
+                                                                                    providing an
+additive function u that accurately describes v in the subdomain ∅ ∪ {i} | i ∈ D ⊂ P(D).
+
+
+                                                    3
+Methods in this category model the bivariate association between Xi and Y to quantify Xi ’s stand-
+alone predictive power. Bivariate association is commonly studied in fields such as computational
+biology (e.g., [25]) and is widely used to identify sensitive features [33]. As an example, the squared
+correlation Corr(Xi , Y )2 is equivalent to the variance explained by a univariate linear model. More
+generally, one can measure the performance of univariate models trained to predict Y given Xi [14].
+Given a model gi for each feature i ∈ D, the importance values are calculated with the formula
+                                                             
+                             φi = min E ` ŷ, Y − E ` gi (Xi ), Y .                                (5)
+                                    ŷ
+
+A natural choice for the constant φ0 is φ0 = 0 in this case, because with these scores we see that
+u(∅) = v(∅) = 0 and that u({i}) approximates v({i}).
+The two previous categories of methods provide imperfect notions of feature importance because
+they do not account for feature interactions. For example, two perfectly correlated features with
+significant predictive power would both be deemed unimportant by a feature ablation study, and two
+complementary features would have their importance underestimated by univariate models. The third
+category of methods addresses these issues by considering all feature subsets S ⊆ D.
+Methods in the third category account for complex feature interactions by modeling v across its entire
+domain P(D). These methods therefore supersede the two other categories, which either exclude or
+include individual features. Our method, SAGE, belongs to this category, and we show that SAGE
+assigns scores by modeling vf optimally via a weighted least squares objective (Section 3.2).
+
+3     Shapley Additive Global Importance
+We now introduce our method, Shapley additive global importance (SAGE), for quantifying a model’s
+dependence on each feature. We present SAGE as an application of the game-theoretic Shapley value
+to vf and then examine its properties, including how it can be understood as an additive importance
+measure. Finally, we propose a practical sampling-based approximation algorithm.
+
+3.1   Shapley Values for Credit Allocation
+
+Recall that the function vf describes the amount of predictive power that a model f derives from
+subsets of features S ⊆ D. We define feature importance via vf to quantify how critical each feature
+Xi is for f to make accurate predictions. It is natural to view vf as a cooperative game, representing
+the profit (predictive power) when each player (feature) participates (is available to the model).
+Research in game theory has extensively analyzed credit allocation for cooperative games, so we
+apply a game theoretic solution known as the Shapley value [35].
+Shapley values are the unique credit allocation scheme that satisfies a set of fairness axioms. For any
+cooperative game w : P(D) 7→ R (such as v or vf ) we may want the scores φi (w) assigned to each
+player to satisfy the following desirable properties:
+                                                                        Pd
+1. (Efficiency) They sum to the total improvement over the empty set, i=1 φi (w) = w(D) − w(∅).
+2. (Symmetry) If two players always make equal contributions, or w(S ∪ {i}) = w(S ∪ {j}) for all
+   S, then φi (w) = φj (w).
+3. (Dummy) If a player makes zero contribution, or w(S) = w(S ∪ {i}) for all S, then φi (w) = 0.
+4. (Monotonicity) If for two games w and w0 a player always make greater contributions to w than
+   w0 , or w(S ∪ {i}) − w(S) ≥ w0 (S ∪ {i}) − w0 (S) for all S, then φi (w) ≥ φi (w0 ).
+                                       Pn
+5. (Linearity) The game w(S) = k=1 ck wk (S),      Pnwhich is a linear combination of multiple games
+   (w1 , . . . , wn ), has scores given by φi (w) = k=1 ck φi (wk ).
+
+The Shapley values φi (w) are the unique credit allocation scheme that satisfies properties 1-5 [35],
+and they are given by the expression:
+                                                     −1 
+                               1    X            d−1                         
+                      φi (w) =                              w(S ∪ {i}) − w(S) .                    (6)
+                               d                  |S|
+                                   S⊆D\{i}
+
+
+                                                     4
+The expression above shows that each Shapley value φi (w) is a weighted average of the incremental
+changes from adding i to subsets S ⊆ D \ {i}. For SAGE, we propose assigning feature importance
+using the Shapley values of our model-based predictive power, or φi (vf ) for i = 1, 2, . . . , d, which
+we refer to as SAGE values.
+SAGE values satisfy many intuitive and desirable properties, arising both from the properties of
+Shapley values and from how vf is defined. These properties include:
+
+1. Due to the efficiency property, SAGE values sum to X’s total predictive power. In other words,
+            Pd
+   we have i=1 φi (vf ) = vf (D).
+2. Due to the symmetry property, pairs of features (Xi , Xj ) with a deterministic relationship (e.g.,
+   perfect correlation) always have equal importance. To see this, remark that fS∪{i} (xS∪{i} ) =
+   fS∪{j} (xS∪{j} ) for all (S, x), so that vf (S ∪ {i}) = vf (S ∪ {j}).
+3. Due to the dummy property, we have φi (vf ) = 0 if Xi is conditionally independent of f (X)
+   given all possible subsets of features XS . However, features may receive non-zero importance
+   even if they are not used by f (which in some cases may be desirable).
+4. Due to the monotonicity property, if we have two response variables (Y, Y 0 ) with models (f, f 0 )
+   and we have vf (S ∪ {i}) − vf (S) ≥ vf 0 (S ∪ {i}) − vf 0 (S) for all S, so that Xi contributes more
+   predictive power for Y than for Y 0 , then the SAGE values satisfy φi (vf ) ≥ φi (vf 0 ).
+5. Due to the linearity property, SAGE values are the expectation of per-instance SHAP values
+   applied to the model loss [26]. By this, we mean the Shapley values φi (vf,x,y ) of the game
+                                                                         
+                                vf,x,y (S) = ` f∅ (x∅ ), y − ` fS (xS ), y .
+   In other words, the SAGE values are given by φi (vf ) = EXY [φi (vf,X,Y )]. These values were
+   used in prior work, but they were not analyzed in depth and are costly to calculate via many local
+   explanations [26].
+6. Due to our definition of vf , SAGE values are invariant to invertible mappings of the features.
+   More precisely, if we apply an invertible function h to a feature Xi and define Zi = h(Xi ), and
+   we then use a model f 0 that applies the inverse h−1 to Zi before f , then the SAGE values of the
+   new model under the new data distribution are unchanged. For example, SAGE values do not
+   depend on whether a model uses gene counts or log gene counts.
+
+Finally, SAGE values have an elegant interpretation when the loss function is cross entropy or mean
+squared error (MSE) and the model f is optimal. With cross entropy loss, the optimal model (the
+Bayes classifier) predicts the conditional distribution f ∗ (x) = p(Y |X = x) and the predictive power
+is vf ∗ (S) = I(Y ; XS ), where I denotes mutual information. The SAGE values are then given by:
+
+                                                             −1
+                                       1     X           d−1
+                          φi (vf ∗ ) =                            I(Y ; Xi | XS ).                  (7)
+                                       d                  |S|
+                                           S⊆D\{i}
+
+
+The expression above represents a weighted average of the conditional mutual information, i.e., the
+reduction in uncertainty for Y when incorporating Xi into different subsets XS . An analogous result
+arises in the MSE case, and in both cases the SAGE values satisfy φi (vf ∗ ) ≥ 0 (Supplement C).
+Through this we see that although SAGE is a tool for model interpretation, it can also provide insight
+into intrinsic relationships in the data when applied with optimal models.
+
+3.2   SAGE as an Additive Importance Measure
+
+Though it not immediately obvious, SAGE is an additive importance measure (Section 2). Prior work
+has shown that Shapley values (Eq. 6) can be understood as the solution to a weighted least squares
+             P From these findings, we see that SAGE provides an additive approximation to vf
+problem [6, 27].
+with u(S) = i∈S φi , where φ1 , . . . , φd are optimal coefficients for the following problem:
+
+                                     X          d−1        X              2
+                          min              d
+                                                               φi − vf (S) .                       (8)
+                                           |S| |S|(d − |S|) i∈S
+                        φ1 ,...,φd
+                                     S⊆D
+
+
+                                                     5
+Understanding SAGE values in this way reveals that SAGE attempts to represent vf across its entire
+domain, modeling it optimally in a weighted least squares sense. Although the weights are perhaps
+not intuitive, this is the unique weighting scheme that leads to SAGE’s desirable properties.
+Using this interpretation of Shapley values, we observe that two more existing methods can be
+categorized as additive importance measures. The mean SHAP value of the loss [26] and Shapley Net
+Effects for linear models [24] are both similar to SAGE, but they involve more expensive calculations
+(explaining every individual prediction, or fitting an exponential number of linear models).
+
+3.3   Practical SAGE Approximation
+
+We now consider how to calculate SAGE values φi (vf ) efficiently. Obtaining these values is
+challenging because (i) there are an exponential number of subsets S ⊆ D and (ii) evaluating a
+restricted model fS requires a Monte Carlo estimate with XS̄ sampled from p(XS̄ |XS = xS ). Like
+previous methods that use Shapley values, we sidestep the inherent exponential complexity using an
+approximation algorithm [9, 20, 27, 39].
+We address the first challenge by sampling random subsets of features S ⊆ D, and the second by
+sampling XS̄ from its marginal distribution. To efficiently generate subsets of features from the
+appropriate distribution, we enumerate over random permutations of the indices D = {1, . . . , d},
+similar to Štrumbelj and Kononenko [20]. Prior work has used sampling from the marginal distribution
+in a similar manner [27], but doing so alters some of SAGE’s properties to align less with the
+information value of each feature and more with the model’s mechanism. Supplement D describes
+the SAGE sampling algorithm (Algorithm 1) and the changes to its properties in more detail.
+In Theorems 1 and 2, we make two claims regarding the estimates from our sampling algorithm (with
+proofs provided in Supplement E). The first result shows that the estimates converge to the correct
+values when run under appropriate conditions, and the second result shows that the estimates have
+variance that reduces at a linear rate.
+Theorem 1. The SAGE value estimates φ̂i (vf ) from Algorithm 1 converge to the correct values
+                                                                                  N
+φi (vf ) when run with n → ∞, m → ∞, with an arbitrarily large dataset (xi , y i ) i=1 , and with
+sampling from the correct conditional distribution p(XS̄ |XS = xS ).
+Theorem 2. The SAGE value estimates φ̂i (vf ) from Algorithm 1 have variance that reduces at the
+rate of O( n1 ).
+
+In practice the algorithm must run for a finite number of iterations, so we propose an approach to
+monitor the estimates’ uncertainty and detect convergence. Theorem 2 implies that for each feature
+Xi there exists a constant σi2 such that the estimate φ̂i (vf ) after n iterations has variance given by
+             
+Var φ̂i (vf ) ≈ σi2 /n. This quantity can be estimated while running the sampling algorithm and can
+then be used to provide confidence intervals on the estimated values. Finally, the algorithm may
+be considered converged when the largest standard deviation is a sufficiently low proportion t (e.g.,
+t = 0.01) of the range in the estimated values, or when the following criterion is satisfied:
+
+                                 σi                                
+                             max √ < t max φ̂i (vf ) − min φ̂i (vf ) .
+                              i   n     i               i
+
+
+
+4     Related Work
+Section 2 described prior work that was unified under the framework of additive importance measures,
+but there are also methods that do not fit into our framework. These are often model-specific heuristics
+that do not directly relate to the predictive power associated with each feature. For linear models, one
+heuristic is the magnitude of model coefficients [15]. For tree-based models, options include Gini
+importance and counting splits based on each feature [12]. And for neural networks, one can examine
+the magnitude of weights or aggregate local explanations [17], such as integrated gradients [40].
+Shapley values have been studied extensively in game theory [35] and have been applied to machine
+learning for both local [7, 9, 27, 39] and global interpretability. For global interpretability, Shapley
+Net Effects proposed training linear models with every combination of features [24], which is similar
+
+
+                                                   6
+Table 1: Comparison of feature importance methods. Agnostic: method works with any model class.
+Performance: scores are related to the performance gains associated with each feature. Interactions:
+feature interactions are considered. Missingness: held out features are accounted for properly (e.g.,
+by training a new model, or marginalizing them out). Tractable: method is computationally efficient.
+The symbol X shows that a property is satisfied, × that it is not, and ∼ that it is to some extent.
+
+      Method                         AGNOSTIC   P ERFORMANCE   I NTERACTIONS   M ISSINGNESS   T RACTABLE
+      Linear Model Coeff. Size          ×            ×              ×               ×             X
+      Gini Importance                   ×            ×              ×               ×             X
+      Number of Splits                  ×            ×              ×               ×             X
+      Neural Network Weights            ×            ×              ×               ×             X
+      Aggregated Local Saliency         ×            ×              ×               ×             X
+      Mean Abs. SHAP                    X            ×              X               ∼             ×
+      Feature Ablation                  X            X              ×               X             ∼
+      Permutation Test                  X            X              ×               ∼             X
+      Conditional Permutation Test      X            X              ×               X             X
+      Mean Importance                   X            X              ×               ×             X
+      Univariate Predictors             ×            X              ×               X             X
+      Squared Correlation               ×            X              ×               X             X
+      Shapley Net Effects               ×            X              X               X             ×
+      Mean Loss SHAP                    X            X              X               ∼             ×
+      SAGE                              X            X              X               ∼             ∼
+
+
+
+to SAGE but often impractical due to the need for model retraining. Some work has considered
+applying Shapley values to function sensitivity, which is a subtly different problem than explaining
+the performance of machine learning models (Supplement F) [3, 29, 30, 37].
+SHAP is a well-known method for local interpretability, but it has only been applied heuristically to
+global importance by calculating the mean absolute attribution value [27] and by using SHAP on
+the model loss rather than the model output [26]. SAGE draws a connection between global and
+local SHAP interpretability (Section 3.1), and our approach can converge hundreds or thousands of
+times faster than a naive calculation via SHAP because it avoids explaining individual instances in
+the dataset (Section 5).
+Table 1 summarizes the related work by comparing a large number of methods. The table is separated
+into four groups, representing the categories of methods discussed in Section 2.3 and the additional
+methods discussed here. Only our approach, SAGE, satisfies each of the properties considered.
+
+
+5   Experiments
+
+We now evaluate SAGE by comparing it with several baseline methods. For simplicity we only
+consider model-agnostic baselines, including permutation tests, mean importance, feature ablation
+and univariate predictors (see Section 2.3). For datasets, we used MNIST [21], a bike sharing demand
+dataset [10], the German credit quality dataset [23], the Portuguese bank marketing dataset [28], and
+a breast cancer (BRCA) subtype classification dataset [4, 41]. We used XGBoost [8] for the bike data,
+CatBoost [31] for the bank and credit data, regularized logistic regression for the BRCA data, and
+a multi-layer perceptron (MLP) for MNIST. Supplement H provides more information about each
+dataset, including how we selected a subset of genes to avoid overfitting with the BRCA data.
+Figure 1 shows examples of global explanations generated for MNIST and BRCA. For MNIST,
+most methods correctly assign high importance to the central region, but permutation tests and
+mean importance assign noisy scores with negative importance for many pixels in the central region.
+Feature ablation provides meaningless scores because removing individual features has a negligible
+impact on retrained models. SAGE and the univariate predictors approach provide the most plausible
+explanations, but their differences should be analyzed using quantitative metrics (see below).
+The BRCA explanation (Figure 1 bottom) shows that genes previously known to be associated
+with BRCA receive the highest SAGE values. The most important gene (BCL11A) has a known
+association with a particularly aggressive form of BRCA [19], and the BRCA1 and BRCA2 genes
+are also highly ranked. Among the genes not associated with BRCA, the most highly ranked gene
+(SLC25A1) has a documented association with lung cancer [11].
+
+
+                                                         7
+                     SAGE           Permutation Test       Mean Importance        Feature Ablation   Univariate Predictors
+
+
+
+
+                                                       Breast Cancer Gene Identification
+              0.20                                                                                   BRCA Associated
+                                                                                                     Not BRCA Associated
+              0.15
+
+
+SAGE Values
+              0.10
+              0.05
+              0.00
+                        BC  L1
+                           E 1A
+                          IGZFH2
+                      SL LFN1R
+                         C2 G
+                         BR5A1
+                             C
+                      SL CSTA1
+                         C2 9L
+                           HR2A5
+                      FLJ CDH1
+                          20 K6
+                         B 48
+                        TSRCA9
+                           P 2
+                          TEAN2
+                         CEX14
+                          M BP
+                        PDDP-E1
+                            LI
+                      RPSFTM4
+                         S6 PD
+                         CK
+                       H CN A5
+                       MOAXDD11
+                       C9RCH0
+                           or 6
+                      SEADCf21
+                         RP Y4
+                             IN
+                       CHTTC I2
+                           CH 31
+                         MR D1
+                             C
+                       ADADML3
+                      FLJ RA R
+                          30 2C
+                             09
+                         RAISLR
+                     AR I 42 B   2
+                       HG WS
+                           A 1
+                         SNP29
+                      C1SCMB1T
+                       WD5orfH1
+                           R 29
+                         CD40B
+                         R   C
+                      FLJ RM 5L
+                       PS10221B
+                       CCMD13
+                           DC 06
+                        ZNEIF59
+                       YT F57B
+                         TDH 0
+                       SCRABC2
+                        TMAMPD
+                            BIM4 1
+
+Figure 1: Global model explanations using SAGE. Top: comparison between SAGE and baseline
+methods for MNIST (blue pixels improve performance, red pixels hurt performance). Bottom:
+relevant gene identification using BRCA model (error bars indicate 95% confidence intervals).
+
+We can also compare methods through quantitative metrics. As a first experiment, we seek to measure
+whether the sum of a method’s importance scores is a reliable proxy for the predictive power of
+subsets of features. We generated several thousand feature subsets for each dataset, re-trained models
+for each subset, and then measured the correlation between the model loss and the total importance of
+the included features. Table 2 displays the results, which show that SAGE is either the best or nearly
+best for all datasets. Feature ablation fails for datasets with moderate numbers of features (BRCA
+and MNIST), but permutation tests and univariate predictors are both sometimes competitive.
+
+                     Table 2: Correlation between total importance and performance of re-trained models.
+
+                                  BANK M ARKETING           B IKE D EMAND      C REDIT Q UALITY      BRCA       MNIST
+        Permutation Test                0.9918                  0.9798               0.9571          0.8581     0.4855
+        Mean Importance                    –                    0.9798                  –            0.8490      0.4824
+        Feature Ablation                0.9779                  0.9651               0.2621          -0.0371    -0.4536
+        Univariate                      0.9666                  0.9587               0.9542          0.8718      0.4865
+        SAGE                            0.9937                  0.9815               0.9565          0.8611      0.4868
+
+
+As another metric, we compared the predictive power of the highest and lowest ranked features
+according to each method. Figure 2 displays feature selection results on MNIST, where models are
+re-trained using the most (least) important features in the hopes of achieving high (low) accuracy. The
+results show that SAGE is most effective at identifying important features while univariate predictors
+are best for identifying unimportant features. Interestingly, most baselines fail to identify features
+with no predictive power (Figure 2 right), while SAGE performs well at both tasks.
+Our experiments have focused thus far on accurate models, but SAGE can also be used to understand
+sub-optimal models. In a model monitoring context, SAGE can identify features that are corrupted or
+incorrectly encoded. Figure 3 shows an example where SAGE values are compared across several
+versions of the bank marketing dataset, including three test sets where the model accuracy decreased
+because a single feature is encoded inconsistently. When the month feature is incremented by one,
+the corresponding SAGE value is much lower than in the validation split; and when the call duration
+is no longer encoded in minutes, the corresponding SAGE values makes this change apparent.
+From a computational perspective, our sampling algorithm (Section 3.3) is significantly faster than a
+naive calculation via local SHAP values. Our approach aims directly at a global explanation, whereas
+with SHAP one must generate and then average local explanations for hundreds or thousands of
+
+
+                                                                   8
+                                            MNIST Important Features                                                              MNIST Unimportant Features
+               0.9                                                                                           0.8
+               0.8
+               0.7                                                                                           0.6
+
+Accuracy       0.6                                                          Permutation Test
+                                                                            Mean Importance 0.4
+                                                                                                                                                         Permutation Test
+                                                                                                                                                         Mean Importance
+               0.5
+                                                                            Feature Ablation                                                             Feature Ablation
+               0.4                                                          Univariate       0.2                                                         Univariate
+               0.3                                                          SAGE                                                                         SAGE
+                                      10             20             30           40           50                           10          20         30        40         50
+                                                             # Features                                                                     # Features
+
+Figure 2: Feature selection with MNIST. Left: important features (higher accuracy is better). Right:
+unimportant features (lower accuracy is better).
+
+                                                    Loss Comparison                                                                 Detecting Corrupted Months
+                                                                    0.870                                        0.075
+                         0.8
+
+
+
+    Cross Entropy Loss
+                                                                                                                 0.050
+
+                                                                                               SAGE Values
+                         0.6                                                                                     0.025
+                                                                             0.507
+                         0.4     0.361                                                                           0.000
+                                                                                      0.300
+                         0.2               0.166            0.204                                                0.025                                        Validation
+                                                                                                                 0.050                                        Month +1
+                         0.0
+                                     ate      in               n           s       rs   +1
+                              eR           Tra            atio         Sec      Hou nth
+                                                                                                                        Du
+                                                                                                                   Pre ratio
+                                                       id
+                                                                                                                      v O Mo n
+                                                                                                                         ut nth
+                           Bas                     Val
+                                                                                                                         Hocome
+                                                                    n
+                                                                                                                            u
+                                                                                                                         C sin
+                                                                                                                       Pre onta g
+                                                                  io          n       o
+                                                                                                                           v D ct
+                                                               at         atio
+                                                                                                                   Pre Da s    ay
+                                                                                     M
+                                                                                                                      vC A y
+                                                          Dur
+                                                                                                                          on ge
+                                                                                                                             tac
+                                                                      Dur
+                                                                                                                       Ed Lo ts
+                                                                                                                         uc an
+                                                                                                                         B ati
+                                                                                                                       Ca alanon
+                                                                                                                         mp cea
+                                                                                                                          Ma ign
+                                                                                                                          De rital
+                                                                                                                             fau  lt
+                                                                                                                                Job
+                                     Detecting Corrupted Duration (Seconds)                                                     Detecting Corrupted Duration (Hours)
+                         0.0                                                                                      0.05
+
+
+SAGE Values                                                                                        SAGE Values
+                                                                                                                  0.00
+                         0.2
+                                                                                                                  0.05
+                         0.4                                                Validation                            0.10                                   Validation
+                                                                            Duration Secs                                                                Duration Hours
+                         0.6                                                                                      0.15
+                              Du  rat
+                            v O Mo ion
+                               ut nth                                                                                   Du  rat
+                                                                                                                      v O Mo ion
+                                                                                                                         ut nth
+                               Hocome
+                                   u
+                               C sin
+                             Pre onta g
+                                 v D ct                                                                                  Hocome
+                                                                                                                             u
+                                                                                                                         C sin
+                                                                                                                       Pre onta g
+                                                                                                                           v D ct
+                         Pre Da s
+                            vC A y
+                                on geay
+                                   tac                                                                             Pre Da s
+                                                                                                                      vC A y
+                                                                                                                          on geay
+                                                                                                                             tac
+                             Ed Lo ts
+                               uc an
+                               B ati
+                             Ca alanon
+                               mp ce                                                                                   Ed Lo ts
+                                                                                                                         uc an
+                                                                                                                         B ati
+                                                                                                                       Ca alanon
+                                                                                                                         mp ce
+                                    a
+                                Ma ign
+                               Pre
+                                De rital
+                                    fau lt                                                                                    a
+                                                                                                                          Ma ign
+                                                                                                                         Pre
+                                                                                                                          De rital
+                                                                                                                              fau lt
+                                      Job                                                                                       Job
+
+Figure 3: Identifying corrupted features with SAGE. Top left: performance comparison across dataset
+versions. Top right: SAGE comparison to identify corruption in month feature. Bottom left: SAGE
+comparison to identify corruption in duration feature (converted to seconds). Bottom right: SAGE
+comparison to identify corruption in duration feature (converted to hours).
+
+
+examples. We found that the indirect approach using SHAP required 2-4 orders of magnitude more
+model evaluations to calculate the same values, which roughly corresponds to the dataset size (see
+Supplement H for details). This shows that SAGE is much faster for providing global explanations.
+
+
+6                        Conclusion
+
+In this work we presented a unifying framework for global feature importance methods, as well as a
+new model-agnostic approach (SAGE) that accounts for complex feature interactions. Our perspective
+of quantifying predictive power shows that numerous existing methods make trade-offs regarding
+how to handle feature interactions; revealing each method’s implicit assumptions allows users to
+reason explicitly about which tools to use. The method we introduced satisfies numerous desirable
+properties, and because of the sampling approach we propose, SAGE values can be calculated orders
+of magnitude faster than with a naive calculation via SHAP values. Future work will focus on
+estimating SAGE values even more efficiently and providing approximations that better model the
+conditional distribution of held out features.
+
+
+                                                                                                   9
+Broader Impact
+
+This work contributes to a growing literature of methods that can provide researchers, engineers,
+and users with an understanding of how machine learning models work. By focusing on global
+explanations, our method produces succinct insights that the target audience may find more digestible
+than a large number of local explanations. Our work aims to contribute positive social impact, but as
+with any model explanation tool, there is a danger of deliberate misuse or adversarial use that could
+provide misleading information or be used to gain approval for bad practices.
+
+
+
+Acknowledgments and Disclosure of Funding
+
+This work was funded by the National Science Foundation [CAREER DBI-1552309, and DBI-
+1759487]; the American Cancer Society [127332-RSG-15-097-01-TBG]; and the National Institutes
+of Health [R35 GM 128638, and R01 NIA AG 061132]. We would like to thank members of the Lee
+Lab and NeurIPS reviewers for feedback that greatly improved this work.
+
+
+
+A    Convention for Handling Missing Features
+
+To examine how a model performs when deprived of certain information, we require a convention for
+evaluating f with arbitrary subsets of features S ⊆ D. For this, we defined the restricted model fS as
+
+
+                                                           
+                                  fS (xS ) = E f (X) XS = xS .
+
+
+Although we use an approximation in practice (Section 3.3), we have several reasons for defining
+SAGE using this convention. The reasons are: (i) the model fS is as close as possible to the full
+model f , (ii) the convention fS yields connections with intrinsic properties of the data distribution
+(such as mutual information), and (iii) alternative conventions often involve evaluating the model off
+the manifold of real data examples. We explain these points in detail below.
+Consider how we can measure the deviation between a model f on all features X and a model g on a
+subset of features XS . We consider this separately for regression tasks and classification tasks. For a
+regression model f that makes prediction in Rp , a natural way to determine how much its prediction
+given x differs from that of g given xS is with the squared Euclidean distance ||f (x) − g(xS )||2 . In
+expectation, the squared deviation between f and g is equal to:
+
+
+ h                 i     h                         i      h                          i
+                 2                               2                                 2
+E f (X) − g(XS )     = EX f (X) − E[f (X) | XS ]     + EXS E[f (X) | XS ] − g(XS )
+                       |          {z               } |              {z               }
+                                   Does not depend on g              Mean squared deviation between
+                                                                       g(XS ) and E[f (X) | XS ]
+
+
+
+From this, it is clear that the model g(xS ) = E[f (X) | XS = xS ] deviates least from f on average.
+Next, consider a classification model f that outputs probabilities for a p-class categorical variable.
+To be explicit that the prediction is a vector of probabilities,
+                                                      Pp         we denote the model output as f (y|x),
+where we have f (i|x) ≥ 0 for i = 1, 2, . . . , p and i=1 f (i|x) = 1. The Kullback-Leibler (KL)
+divergence DKL f (y|x) || g(y|xS ) is a natural way to measure the deviation of the predictions
+from g and f . The mean deviation between f and g can then be expressed as:
+
+
+                                                  10
+      h                       i       h                          i     h       i
+    EX DKL f (y|X) || g(y|XS ) = EX Ey∼f (y|X) − log g(y|XS ) − EX H f (y|X)
+                                        h                               i
+                                 = EXS Ey∼E[f (y|X) | XS ] − log g(y|XS )
+                                          h         i
+                                   − EX H f (y|X)
+                                        h                  i       h        i
+                                 = EXS H E f (y|X) XS           − EX H f (y|X)
+                                           h                              i
+                                   + EXS DKL E f (y|X) XS || g(y|XS )
+                                     |                   {z                  }
+                                                     Mean KL divergence
+                                                                        between
+                                                    g(y|XS ) and E f (y|X) XS
+
+With this way of rewriting the mean KL divergence, it becomes clear that the model g(y|xS ) =
+E[f (y|X) | XS = xS ] is closest to f in expectation.
+These derivations show that in both cases, our convention for fS (marginalizing out features using
+their conditional distribution) yields the model that is closest to f on average. When analyzing the
+performance degradation when f is deprived of certain features, it is most conservative to use a
+restricted model fS that is as faithful to f as possible, because doing otherwise may result in inflated
+estimates of the impact on model performance.
+Next, handling missing features with fS yields connections with intrinsic properties of the data
+distribution, such as mutual information and conditional variance (Section C). That happens because
+when our convention is applied to an optimal model (e.g., the Bayes classifier), it preserves the
+model’s optimality. For example, the Bayes classifier f ∗ (x) = p(y|X = x) becomes the Bayes
+classifier fS∗ (xS ) = p(y|XS = xS ), and the conditional expectation f ∗ (x) = E[Y |X = x] becomes
+the conditional expectation fS∗ (xS ) = E[Y |XS = xS ]. Our definition of fS is the unique convention
+that has this property.
+Finally, the convention fS only considers values of xS̄ such that x = (xS , xS̄ ) has support under
+the full data distribution p(X). That property is a benefit of handling missing features using their
+conditional distribution p(XS̄ |XS = xS ). By contrast, other conventions may lead to implausible
+feature combinations with no support under the data distribution.
+As an example, one alternative is to use the marginal distribution:
+                                                         
+                                           E f (xS , XS̄ ) .
+This is what we do in practice (Section 3.3), but this breaks feature dependencies and may result
+in combinations of values (xS , xS̄ ) that are off-manifold (e.g., if there are two perfectly correlated
+features and one is removed). We view this as an undesirable property and encourage work that
+removes the need for this approximation in practice.
+Another option is to use the mean prediction when the missing features are drawn from the product
+of their marginal distributions, as in QII [9]. This convention is even more likely to result in off-
+manifold examples, because in addition to breaking dependencies between XS and XS̄ , it also breaks
+dependencies within XS̄ .
+
+B    Model-Based and Universal Predictive Power
+In the main text, we introduce two set functions to represent different notions of predictive power.
+The function v represents the universal predictive power and quantifies the amount of signal that can
+hypothetically be derived from a set of features XS :
+                                     h       i      h           i
+                         v(S) = min E ` ŷ, Y − min E ` g(XS ), Y .
+                                   ŷ                   g
+
+In contrast, the function vf represents a model-based notion of predictive power and quantifies how
+much signal f derives from a given set of features:
+
+
+                                                  11
+                                   h             i  h             i
+                         vf (S) = E ` f∅ (X∅ ), Y − E ` fS (XS ), Y .
+
+The two quantities are different but related. To estimate v(S), a natural approach would be to train
+a model using XS , learn the optimal constant prediction ŷ, and then use the performance of those
+models as plug-in estimators for the two terms in v(S). The model-based predictive power vf (S) can
+be viewed as an single-model approximation to this, where, instead of training a model from scratch
+on XS , we obtain the model via an existing model f trained using all features.
+Under certain circumstances when the model f ∗ is optimal, we can see that v and vf ∗ coincide
+exactly for all S ⊆ D. Two simple cases where this holds are (i) for a regression task that uses the
+conditional expectation f ∗ (x) = E[Y |X = x] and mean squared error (MSE) loss, and (ii) for a
+classification task that uses the Bayes classifier f ∗ (x) = p(y|X = x) and cross entropy loss. We
+show equality in the first case as follows:
+
+                                h                i    h                i
+                                      ∗        2                     2
+                    vf ∗ (S) = E Y − f∅ (X∅ )      − E Y − fS∗ (XS )
+                                h            i     h                       i
+                                           2                             2
+                             = E Y − E[Y ]     − E Y − E[Y |XS = xS ]
+                            = v(S)
+
+Similarly, we show equality in the second case as follows:
+
+
+                                          ∗
+                                            (Y |X∅ ) − E − log fS∗ (Y |XS )
+                                                                        
+                      vf ∗ (S) = E − log f∅
+                                                                      
+                               = E − log p(Y ) − E − log p(Y |XS = xS )
+                              = v(S)
+
+Besides these two cases, equality between v and vf ∗ holds for optimal models f ∗ when using a
+specific class of loss function— loss functions ` that satisfy the property that an optimal model f ∗ for
+X yields an optimal model fS∗ for XS . For example, this property holds for all strictly proper scoring
+rules, because optimal models under these loss functions are probabilistic forecasts [13]
+
+
+C     SAGE Properties with Optimal Models
+
+C.1   Properties with Bayes Classifier
+
+Here, we derive the properties of SAGE when it is applied to the Bayes classifier with cross entropy
+loss. We derive the claim from scratch, beginning with a proof that the Bayes classifier is optimal.
+To be explicit that the prediction is a vector of probabilities,
+                                                     Pp          we denote the model output as f (y|x),
+where we have f (i|x) ≥ 0 for i = 1, 2, . . . , p and i=1 f (i|x) = 1. We also use H to denote entropy
+and I to denote mutual information.
+For a classification model trained with cross entropy loss, we decompose the population risk as
+follows to reveal the optimal classifier:
+
+                                               
+                  E ` f (y|X), Y = E − log f (Y |X)
+                                        h                  i
+                                   = EX EY |X − log f (Y |X)
+                                                             
+                                   = EX DKL p(y|X) || f (y|X) + H(Y |X)
+
+The entropy term is constant, so the optimal prediction model is the Bayes classifier f ∗ (x) =
+p(y|X = x). We now consider the application of SAGE to the model f ∗ . The restricted models fS∗
+are the following:
+
+
+                                                   12
+                                fS∗ (y|xS ) = E f ∗ (y|X) XS = xS
+                                                                 
+                                                               
+                                            = E p(y|X) XS = xS
+                                               = p(y|XS = xS )
+
+The risk incurred by the restricted model fS∗ is then:
+
+
+                            E ` fS∗ (y|XS ), Y = E − log fS∗ (Y |XS )
+                                                                   
+                                                                    
+                                                 = E − log p(Y |XS )
+                                                       = H(Y |XS )
+
+We can now see that the cooperative game vf ∗ is:
+
+                                      ∗
+                                           (X∅ ), Y − E ` fS∗ (XS ), Y
+                                                                    
+                         vf ∗ (S) = E ` f∅
+                                  = H(Y ) − H(Y | XS )
+                                  = I(Y ; XS )
+
+In the expression for Shapley values, the weighted summation has terms of the following form:
+
+
+                        v(S ∪ {i}) − v(S) = I(Y ; XS∪{i} ) − I(Y ; XS )
+                                                = H(Y | XS ) − H(Y | XS∪{i} )
+                                                = I(Y ; Xi XS )
+
+This completes the derivation for the result in the main text, because we see that the Shapley values
+are equal to
+                                                               −1
+                                         1    X            d−1
+                          φi (vf ∗ ) =                              I(Y ; Xi | XS ).
+                                         d                  |S|
+                                             S⊆D\{i}
+
+
+C.2   Properties with Conditional Expectation
+
+We now show a similar result for optimal regression models when using mean squared error (MSE)
+loss. We assume that the predictions are scalars, although a similar result holds for vector-valued
+predictions. We first decompose the population risk to determine the optimal model:
+
+                                         2 
+                 E ` f (X), Y = E f (X) − Y
+                                                   2                 2 
+                                = E f (X) − E[Y |X]      + E E[Y |X] − Y
+
+Only the first term depends on f , so it is clear that the conditional expectation function f ∗ (x) =
+E[Y |X = x] is optimal. We now consider the application of SAGE to the model f ∗ . The restricted
+models fS∗ are the following:
+
+
+                                  fS∗ (xS ) = E f ∗ (X) XS = xS
+                                                               
+                                                                 
+                                            = E E[Y |X] XS = xS
+                                              = E[Y |XS = xS ]
+
+The last line follows from the law of iterated expectations. The risk incurred by the restricted model
+fS∗ is then:
+
+
+                                                       13
+                                                                 2 
+                             E ` fS∗ (XS ), Y = E E[Y | XS ] − Y
+                                              
+
+                                                       = E[Var(Y |XS )]
+
+We now see that the cooperative game vf ∗ is:
+
+                                                                       
+                                      vf ∗ (S) = Var(Y ) − E Var(Y |XS )
+                                                             
+                                               = Var E[Y |X]
+
+The last line follows from the law of total variance. The difference terms in the Shapley summation
+are the following:
+
+                                                                           
+                 vf ∗ (S ∪ {i}) − vf ∗ (S) = E Var(Y |XS ) − E Var(Y |XS∪{i} )
+                                                h                        i
+                                           = EXS Var E[Y |XS , Xi ] | XS
+
+The last line also follows from the law of total variance. Intuitively, these terms quantify the average
+amount of variation left in the random variable E[Y | XS , Xi ] when Xi is unknown but distributed
+according to p(X − i|XS ). If the amount of variation is high, then i contains significant incremental
+information about Y . The above expression is analogous to I(Y ; Xi | XS ) from the classification
+case.
+Finally, we see that the SAGE values are equal to
+
+                                                        −1 h
+                                  1     X           d−1                            i
+                   φi (vf ∗ ) =                             E Var E[Y |XS , Xi ] XS .
+                                  d                  |S|
+                                      S⊆D\{i}
+
+
+D     SAGE Sampling
+Here, we describe our sampling algorithm in greater detail and discuss the consequences of using the
+marginal rather than conditional distribution.
+
+D.1   SAGE Sampling Algorithm
+
+Our sampling approach is displayed below in Algorithm 1. In Algorithm 1, each  feature’s score φi (vf)
+is estimated by attempting to average many samples of the form ` fS (xS ), y −` fS∪{i} (xS∪{i} ), y ,
+or the incremental improvement in the loss when incorporating Xi for a particular input-label pair
+(x, y). In each sample, we draw (x, y) from the empirical data distribution, we determine S based on a
+random permutation π of feature indices D, and we estimate fS (xS ) via Monte Carlo approximation
+with a distribution q(XS̄ |XS = xS ) substituted for p(XS̄ |XS = xS ).
+One practical option for the distribution q, which we use in our experiments, is to sample from the
+marginal distribution q(XS̄ |XS = xS ) = p(XS̄ ), which corresponds to an assumption of feature
+independence. Another option is to mean impute the missing features, which corresponds to a further
+assumption of model linearity [27].
+
+D.2   Properties with Marginal Sampling
+
+SAGE’s properties change when Algorithm 1 is run with sampling from the marginal distribution
+p(XS̄ ) rather than the conditional distribution q(XS̄ |XS = xS ). Sampling from the marginal instead
+of the conditional changes the underlying cooperative game and means that we no longer estimate
+the Shapley values φi (vf ), but rather the Shapley values of a different game.
+Sampling from the marginal distribution means that in the inner loop of Algorithm 1, the Monte Carlo
+approximation estimates E[f (xS , XS̄ )]. We adopt the notation f˜S to denote an alternative restricted
+model (instead of fS ):
+
+
+                                                         14
+Algorithm 1 Sampling-based approximation for SAGE values
+                         N
+  Input: data xi , y i i=1 , model f , loss function `, outer samples n, inner samples m
+  Initialize φ̂1 = 0, φ̂2 = 0, . . . , φ̂d = 0
+                          PN
+  marginalPred = N1 i=1 f (xi )
+  for i = 1 to n do                    N
+     Sample (x, y) from xi , y i i=1
+     Sample π, a permutation of D
+     S=∅
+     lossPrev = `(marginalPred, y)
+     for j = 1 to d do
+        S = S ∪ {π[j]}
+        y=0
+        for k = 1 to m do
+           Sample xkS̄ ∼ q(xS̄ |XS = xS )
+           y = y + f (xS , xkS̄ )
+        end for
+               y
+        ȳ = m
+        loss = `(ȳ, y)
+        ∆ = lossPrev − loss
+        φ̂π[j] = φ̂π[j] + ∆
+        lossPrev = loss
+     end for
+  end for
+            φ̂ φ̂          φ̂
+  return n1 , n2 , . . . , nd
+
+
+
+                                         f˜S (xS ) = E[f (xS , XS̄ )].
+
+We then adopt the notation ṽf to denote the new cooperative game using f˜S , which is
+                                      h              i  h              i
+                           ṽf (S) = E ` f˜∅ (X∅ ), Y − E ` f˜S (XS ), Y .
+
+Sampling from the marginal distribution means that we estimate the Shapley values φi (ṽf ) instead
+of φi (vf ). Some of the properties of the importance scores φi (ṽf ) differ from those described in
+Section 3.1:
+                                                          Pd
+1. Due to the efficiency property, the scores satisfy i=1 φi (ṽf ) = ṽf (D) − ṽf (∅). Because we
+   have f˜∅ (x∅ ) = f∅ (x∅ ) and f˜D (x) = fD (x) for all x (i.e., the models are the same given either
+                                                Pd                 Pd
+   all features or no features), we also have i=1 φi (ṽf ) = i=1 φi (vf ) = vf (D).
+2. Due to the symmetry property, we have φi (ṽf ) = φj (ṽf ) when ṽf (S ∪ {i}) = ṽf (S ∪ {j}) for all
+   S. That holds if we have f˜S∪{i} (xS∪{i} ) = f˜S∪{j} (xS∪{j} ) for all (S, x). Given our definition
+   of f˜S , there is no simple sufficient condition for when this holds for (Xi , Xj ). Unlike in the
+   original formulation, perfectly correlated features may not receive equal importance.
+3. Due to the dummy property, we have φi (ṽf ) = 0 if f˜S (xS ) = f˜S∪{i} (xS∪{i} ) for all (S, x). A
+   sufficient condition for this to hold is that the model f is invariant to Xi . That means that the
+   value φi (ṽf ) for a sensitive attribute Xi (e.g., race) may be zero even if the model depends on
+   correlated features (e.g., zip code).
+4. Due to the monotonicity property, if we have two response variables Y, Y 0 with models f, f 0 , and
+   we have ṽf (S ∪ {i}) − ṽf (S) ≥ ṽf 0 (S ∪ {i}) − ṽf 0 (S) for all S, then we have φi (ṽf ) ≥ φi (ṽf 0 ).
+   This means that if Xi contributes more predictive power to Y than to Y 0 , then it receives more
+   importance for Y .
+5. Due to the linearity property, the values φi (ṽf ) are the expectation of per-instance loss SHAP
+   values computed using the marginal distribution. If we define the game ṽf,x,y as
+
+
+                                                      15
+                               ṽf,x,y (S) = ` f˜∅ (x∅ ), y − ` f˜S (xS ), y ,
+                                                                           
+
+                                             
+    then we have φi (ṽf ) = EXY φi (ṽf,X,Y ) . These are loss SHAP values computed with the same
+    feature independence assumption [27].
+6. As in the original formulation, the values φi (ṽf ) are invariant to invertible transformations of the
+   features.
+
+One elegant aspect of the original formulation of SAGE is a connection with intrinsic properties
+of the data distribution when applied with optimal models (e.g., the Bayes classifier). We lose
+these connections when using the marginal distribution because the restricted models f˜S∗ based on
+optimal models f ∗ are no longer optimal for XS . This formulation is therefore less aligned with the
+information value of each feature.
+However, some recent work has advocated for advantages of sampling from the marginal distribution
+in SHAP [18]. The most appealing property is that features that are not used by the model always
+receive zero attribution, a property that we showed also holds for SAGE.
+
+
+E    Proofs
+
+The two results from Section 3.3 of the main text are restated and proved below.
+Theorem 1. The SAGE value estimates φ̂i (vf ) from Algorithm 1 converge to the correct values
+                                                                                  N
+φi (vf ) when run with n → ∞, m → ∞, with an arbitrarily large dataset (xi , y i ) i=1 , and with
+sampling from the correct conditional distribution p(XS̄ |XS = xS ).
+
+
+Proof. At a high level, the algorithm has an outer loop that contributes one sample to each of the
+SAGE value estimates φ̂i (vf ). Each estimate can be interpreted as a sample mean that converges to
+its expectation as n becomes large. Our proof proceeds by considering the value of the expectation
+under the assumptions that m → ∞ and q(XS̄ |XS = xS ) = p(XS̄ |XS = xS ).
+Each estimate φ̂i (vf ) is the average of many samples of the random variable ∆i,m
+                                                                               X,Y,S which we define
+here as
+
+
+                               m
+                            1 X                       m
+                                                     1 X                          
+              ∆i,m
+               x,y,S =     `              k
+                                 f (xS , xS̄ ), y − `     f (xS∪{i} , xlS̄\{i} ), y .                 (9)
+                             m                        m
+                                 k=1                              l=1
+
+
+Specifically, we have
+
+                                                        n
+                                                     1 X i,m
+                                       φ̂i (vf ) =        ∆                                          (10)
+                                                     n j=1 xj ,yj ,Sj
+
+where i, m are fixed and xj , yj and Sj are determined by each iteration of Algorithm 1. Even for
+fixed i, m, x, y, S, note that ∆i,m                                         k        l
+                                x,y,S is a random variable because each xS̄ and xS̄\{i} are independent
+samples from the distributions q(XS̄ |XS = xS ) and q(XS̄\{i} |XS∪{i} = xS∪{i} ) respectively. We
+begin by analyzing the random variable ∆i,m   x,y,S and what it converges to as m → ∞.
+                                                           1
+                                                             Pm               k
+Consider the first term in Eq. 9. The mean prediction m          k=1 f (xS , xS̄ ) provides a Monte Carlo
+approximation of
+
+
+                                       Eq(XS̄ |XS =xS ) [f (xS , XS̄ )].
+
+
+                                                      16
+We assume that
+             Pmsamples are from the true conditional distribution p(XS̄ |XS = xS ), so the average
+           1                k
+prediction m   k=1 f (xS , xS̄ ) is in fact an approximation of fS (xS ). When we let m → ∞ the law
+of large numbers says that
+
+                                        m
+                                     1 X                p
+                                         f (xS , xkS̄ ) → fS (xS )                                (11)
+                                     m
+                                       k=1
+
+       p
+where → denotes convergence in probability. By an identical argument for the second term in Eq. 9,
+because of sampling from p(XS̄\{i} |XS∪{i} = xS∪{i} ), we see that
+
+                                m
+                            1 X                        p
+                                f (xS∪{i} , xlS̄\{i} ) → fS∪{i} (xS∪{i} )                         (12)
+                            m
+                               l=1
+
+as m → ∞. This lets us conclude that for fixed x, y, S, ∆i,m
+                                                         x,y,S converges as m → ∞ as follows:
+
+                                p
+                         ∆i,m
+                                                                      
+                          x,y,S → ` fS (xS ), y − ` fS∪{i} (xS∪{i} ), y .                         (13)
+
+With this result, we define ∆ix,y,S ≡ limm→∞ ∆i,m  x,y,S . We now consider the fact that the final
+estimates φ̂i (vf ) are the average of many samples ∆i,m                          i
+                                                      X,Y,S , or many samples ∆X,Y,S in the limit
+m → ∞. We will determine the expected value of φ̂i (vf ) and argue that it converges to this value as
+n → ∞.
+First, consider the distribution from which S is implicitly drawn. In Algorithm 1, S is determined
+by a permutation π of the feature indices D = {1, . . . , d} and it contains indices that are already
+included when we arrive at feature i. The number of indices |S| preceding i is uniformly distributed
+between 0 and d − 1, and the preceding indices are chosen uniformly at random among the d−1      |S|
+possible combinations. We can therefore write a probability mass function p(S) for subsets S that
+may be included by the time when i is added:
+                                                     −1
+                                                1 d−1
+                                       p(S) =             .                                       (14)
+                                                d |S|
+
+When we take the expectation of ∆ix,y,S over S, we have
+
+           h       i       h                                      i
+      Ep(S) ∆ix,y,S = Ep(S) ` fS (xS ), y − ` fS∪{i} (xS∪{i} ), y
+                                         
+
+                        X 1 d − 1−1                                             
+                     =                       ` fT (xT ), y − ` fT ∪{i} (xT ∪{i} ), y .            (15)
+                              d |T |
+                         T ⊆D\{i}
+
+The expression above already resembles the Shapley value because of the weighted summation over
+subsets. We can now incorporate an expectation over (x, y) pairs drawn from the data distribution
+p(X, Y ) and see that the Shapley value φi (vf ) arises naturally:
+
+                    h       i             h                                    i
+           EXY Ep(S) ∆iX,Y,S = EXY Ep(S) ` fS (XS ), Y − ` fS∪{i} (XS∪{i} ), Y
+                                                         
+                                                           
+                              = Ep(S) vf (S ∪ {i}) − vf (S)
+                                 = φi (vf ).                                                      (16)
+
+Finally, we invoke the law of large numbers again to conclude that in the limit of an arbitrarily large
+                   N
+dataset (xi , y i ) i=1 drawn from p(X, Y ), we have the convergence result
+
+                                                   p
+                                          φ̂i (vf ) → φi (vf )                                    (17)
+
+
+                                                  17
+as n → ∞, m → ∞.
+In summary, our proof is the following:
+
+                                                   n
+                                                1 X i,m
+                                  φ̂i (vf ) =        ∆
+                                                n j=1 xj ,yj ,Sj
+
+                              ∆ix,y,S ≡ lim ∆i,m
+                                          m→∞ x,y,S
+                                                                               
+                                        = ` fS (xS ), y − ` fS∪{i} (xS∪{i} ), y
+                                             n
+                                          1X i
+                          lim φ̂i (vf ) =       ∆
+                         m→∞              n j=1 xj ,yj ,Sj
+
+                     lim lim φ̂i (vf ) = EXY Ep(S) ∆iX,Y,S
+                                                            
+                    n→∞ m→∞
+                                          = φi (vf )
+
+
+We now prove the second result.
+Theorem 2. The SAGE value estimates φ̂i (vf ) from Algorithm 1 have variance that reduces at the
+rate of O( n1 ).
+
+Proof. At a high level, the algorithm has an outer loop that contributes one sample ∆i,m   X,Y,S (see
+Eq. 9) to each of the SAGE estimates φ̂i (vf ), where randomness arises from the sampling of x, y and
+S and the inner loop samples (see Eq. 10). Regardless of how q(XS̄ |XS = xS ) is chosen and the
+number of inner loop samples m, the central limit theorem says that as n becomes large, the sample
+mean φ̂i (vf ) converges in distribution to a Gaussian with mean E[∆i,m
+                                                                      X,Y,S ] and variance equal to
+
+
+                                                Var(∆i,m
+                                                     X,Y,S )
+                                                               .                                     (18)
+                                                       n
+Although we do not have access to the numerator Var(∆i,m
+                                                     X,Y,S ), we can conclude that the variance of
+                            1
+the estimates behaves as O( n ).
+
+
+
+F    Function Sensitivity
+Several recent papers considered a related question of a function’s sensitivity to its various inputs [29,
+30, 37]. We briefly describe the problem to illustrate how it differs from our work.
+For a scalar real-valued function f defined on multiple features x = (x1 , x2 , . . . , xd ), this body of
+work seeks to assign a sensitivity value to each feature. This is done with a variance-based measure
+of the dependence of f on each feature, through an analysis of the cooperative game
+
+                                                                 
+                            wf (S) = Var f (X) − E Var(f (X) | XS )
+                                                     
+                                   = Var E f (X) | XS .                                              (19)
+
+The Shapley values φi (wf ) serve as sensitivity measures for each feature i = 1, 2, . . . , d. In prior
+work, Owen connected this measure of feature importance to the two Sobol’ indices [29], Owen
+and Prieur considered special cases with closed form solutions [30], and Song et al. provided a
+sampling-based approximation algorithm [37].
+Our work considers the problem of assessing feature importance for black-box machine learning
+models. In contrast with the function sensitivity work, we allow for a response variable Y that is
+
+
+                                                       18
+jointly distributed with X, which is not necessarily in R, and we consider how predictive each feature
+is of Y . The work on function sensitivity is equivalent to an application of SAGE to the special case
+where Y ≡ f (X), where the model output is real-valued f (X) ∈ R, and where the loss ` is MSE
+loss.
+For cases with a response variable Y ∈ R, a natural question is whether there is a relationship
+between φi (vf ) and φi (wf ). The only case when these values coincide is when the loss is MSE and
+the model f is the conditional expectation f ∗ (x) = E[Y |X = x]. Equality of the Shapley values
+follows from equality of the cooperative games:
+
+
+                       wf ∗ (S) = Var E[f ∗ (X) | XS ]
+                                                      
+                                                       
+                                = Var E[E[Y | X] | XS ]
+                                                 
+                                = Var E[Y | XS ]
+                                = Var(Y ) − E[Var(Y | XS )]
+                                           ∗
+                                                                    2 
+                                             (X∅ ) − E Y − fS∗ (XS )
+                                                    
+                                = E Y − f∅
+                                = vf ∗ (S)
+
+Outside of this special case, the sensitivity values φi (wf ) differ from the SAGE values φi (vf ).
+
+G     Summary of Additive Importance Measures
+Table 3 summarizes the additive importance measures described in Section 2.3. For each method,
+we indicate which part of the subdomain of P(D) it prioritizes and show whether it approximates v
+(universal predictive power) or vf (model-based predictive power).
+Permutation tests, conditional permutation tests and mean importance assign scores in a similar
+manner. Each of these methods make different assumptions to approximate the difference
+
+                                       h                     i  h          i
+              vf (D \ {i}) − vf (D) = E ` fD\{i} (XD\{i} ), Y − E ` f (X), Y ,
+
+where the restricted model is given by:
+
+                                                                        
+                          fD\{i} (xD\{i} ) = EXi |XD\{i} f (xD\{i} , Xi ) .
+
+Conditional permutation tests make the closest approximation, but they have the expectation over
+Xi outside the loss function instead of inside it. Permutation tests make an assumption of feature
+independence by sampling Xi from its marginal distribution p(Xi ) instead of from its conditional
+distribution p(Xi |XD\{i} = xD\{i} ). And finally, mean importance makes a further assumption of
+model linearity by simply using the marginal mean E[Xi ].
+
+H     Experiment Details
+This section provides more details about our experiments, as well as several additional results.
+
+H.1   Datasets and Hyperparameters
+
+Table 4 provides information about the datasets, models and validation/test splits used in our experi-
+ments. All hyperparameters were chosen using the validation data (number of rounds for decision
+trees, `1 regularization for BRCA, early stopping for the MLP) and the test data were reserved for
+measuring model performance and calculating feature importance.
+The BRCA data required a small amount of pre-processing. We manually selected a small set of
+genes with known BRCA associations and then selected the remaining genes uniformly at random to
+have 50 total genes. A small number of missing expression values were imputed with their mean.
+
+
+                                                  19
+Table 3: Summary of additive importance measures. Approximates: whether the method approximates
+universal or model-based predictive power. Importance values: the values assigned as each method is
+run until convergence, with φ0 indicating the value for which u(S) closely approximates v or vf . For
+Shapley Net Effects and SAGE φi (·) denotes the Shapley value.
+
+
+           S UBDOMAIN              A PPROXIMATES         M ETHOD            I MPORTANCE VALUES
+                                                                                   h                 i    h           i
+                                                                            φi = E ` fi (XD\{i} ), Y    − E ` f (X), Y
+                                         v           Feature Ablation                   h      i     h          i    X
+                                                                            φ0 = min E ` ŷ, Y    − E ` f (X), Y    −     φi
+                                                                                      ŷ
+                                                                                                                                     i∈D
+                                                                                            h      h                         ii
+                                                                            φi = EXY EXi ` f (Xi , XD\{i} ), Y
+                                                                                    h           i
+                                                     Permutation Test            − E ` f (X), Y
+                                                                                      h        i    h           i   X
+                                                                            φ0 = min E ` ŷ, Y    − E ` f (X), Y    −   φi
+                                                                                      ŷ
+                                                                                                                                   i∈D
+  D ∪ {D \ {i}} | i ∈ D
+                                                                                            h                  h       ii
+                                                                            φi = EXY EXi |XD\{i} ` f (Xi , XD\{i} ), Y
+                                        vf
+                                                       Conditional                  h           i
+                                                     Permutation Test            − E ` f (X), Y
+                                                                                      h        i    h           i   X
+                                                                            φ0 = min E ` ŷ, Y    − E ` f (X), Y    −    φi
+                                                                                      ŷ
+                                                                                                                                     i∈D
+                                                                                  h                         i    h           i
+                                                                            φi = E ` f (E[Xi ], XD\{i} ), Y    − E ` f (X), Y
+                                                     Mean Importance                   h        i    h           i    X
+                                                                            φ0 = min E ` ŷ, Y     − E ` f (X), Y    −      φi
+                                                                                      ŷ
+                                                                                                                                     i∈D
+                                                                                       h        i    h              i
+                                                                             φi = min E ` ŷ, Y    − E ` fi (Xi ), Y
+                                                    Univariate Predictors             ŷ
+         
+       ∅ ∪ {i} | i ∈ D                   v                                  φ0 = 0
+                                                                                                       2
+                                                                             φi = Corr(Xi , Yi )
+                                                    Squared Correlation
+                                                                            φ0 = 0
+                                                                             φi = φi (v)                   (Shapley value)
+                                         v          Shapley Net Effects
+                                                                            φ0 = 0
+                P(D)
+                                                                             φi = φi (vf )                 (Shapley value)
+                                        vf                SAGE
+                                                                            φ0 = 0
+
+
+
+Table 4: Summary of datasets. Split size: number of examples used for training, validation and testing.
+Classes: the number of possible classes (where applicable).
+
+      Dataset           Features   Examples          Split Size             Classes             Loss               Model Type
+      Bank Marketing      16       45,211      (36,169, 4,521, 4,521)          2           Cross Entropy            CatBoost
+      Bike Rental         12       10,886       (8,710, 1,088, 1,088)          –               MSE                  XGBoost
+      Credit Default      20        1,000          (800, 100, 100)             2           Cross Entropy            CatBoost
+      Breast Cancer       50         556           (334, 111, 111)             4           Cross Entropy       Logistic Regression
+      MNIST              784       70,000     (54,000, 6,000, 10,000)         10           Cross Entropy        MLP (256, 256)
+
+
+
+When calculating feature importance, our sampling approximation for SAGE (Algorithm 1) was run
+using draws from the marginal distribution. We used a fixed set of 512 background samples for the
+bank, bike and credit datasets, 128 for MNIST, and all 334 training examples for BRCA.
+When generating random subsets for the correlation experiment in the main text, we first sampled the
+number of included features k uniformly at random and then generated a random subset of k indices.
+We used 5,000 random subsets for the bank, bike, credit and BRCA datasets, and 1,500 subsets for
+MNIST.
+
+H.2     Additional Results
+
+Global explanations for several datasets are provided for visual comparison. Figure 4 shows the bank
+marketing explanations, Figure 5 shows the bike demand explanations, and Figure 6 shows the credit
+
+
+                                                           20
+                                 SAGE                    Permutation Test        0.10
+                                                                                          Feature Ablation            Univariate Predictors
+                  0.08                          0.20
+                                                                                 0.08                          0.06
+                  0.06                          0.15
+
+SAGE Values
+                                                                                 0.06
+                                                                                                               0.04
+                  0.04                          0.10                             0.04
+
+                  0.02                          0.05                             0.02                          0.02
+
+                  0.00                          0.00                             0.00                          0.00
+                                     Age
+                                      Job                        Age
+                                                                  Job                             Age
+                                                                                                   Job                          Age
+                                                                                                                                 Job
+                                  Marital
+                               Education                      Marital
+                                                           Education                           Marital
+                                                                                            Education                        Marital
+                                                                                                                          Education
+                                  Default
+                                 Balance                      Default
+                                                             Balance                           Default
+                                                                                              Balance                        Default
+                                                                                                                            Balance
+                                 Housing
+                                    Loan                     Housing
+                                                                Loan                          Housing
+                                                                                                 Loan                       Housing
+                                                                                                                               Loan
+                                 Contact
+                                     Day                     Contact
+                                                                 Day                          Contact
+                                                                                                  Day                       Contact
+                                                                                                                                Day
+                                   Month
+                                Duration                       Month
+                                                            Duration                            Month
+                                                                                             Duration                         Month
+                                                                                                                           Duration
+                               Campaign
+                               Prev Days                   Campaign
+                                                           Prev Days                        Campaign
+                                                                                            Prev Days                     Campaign
+                                                                                                                          Prev Days
+                           Prev Contacts
+                           Prev Outcome                Prev Contacts
+                                                       Prev Outcome                     Prev Contacts
+                                                                                        Prev Outcome                  Prev Contacts
+                                                                                                                      Prev Outcome
+
+                                         Figure 4: Feature importance for bank marketing dataset.
+
+
+
+                               SAGE            Permutation Test   30
+                                                                       Mean Importance             Feature Ablation     Univariate Predictors
+                                                                                                                       15
+                                          40
+
+
+
+
+SAGE Values (×1000)
+                                                                                              15
+                      15
+                                          30                      20                                                   10
+                      10                                                                      10
+                                          20
+                                                                  10                           5                        5
+                       5
+                                          10
+                       0                   0                       0                           0                        0
+                                  Year
+                                Month                 Year
+                                                    Month                     Year
+                                                                            Month                         Year
+                                                                                                        Month                      Year
+                                                                                                                                 Month
+                                  Day
+                                 Hour                 Day
+                                                     Hour                     Day
+                                                                             Hour                         Day
+                                                                                                         Hour                      Day
+                                                                                                                                  Hour
+                              Season
+                              Holiday             Season
+                                                  Holiday                 Season
+                                                                          Holiday                     Season
+                                                                                                      Holiday                  Season
+                                                                                                                               Holiday
+                           Workingday
+                             Weather           Workingday
+                                                 Weather               Workingday
+                                                                         Weather                   Workingday
+                                                                                                     Weather                Workingday
+                                                                                                                              Weather
+                                 Temp
+                               Atemp                 Temp
+                                                   Atemp                     Temp
+                                                                           Atemp                         Temp
+                                                                                                       Atemp                      Temp
+                                                                                                                                Atemp
+                             Humidity
+                           Windspeed             Humidity
+                                               Windspeed                 Humidity
+                                                                       Windspeed                     Humidity
+                                                                                                   Windspeed                  Humidity
+                                                                                                                            Windspeed
+
+                                          Figure 5: Feature importance for bike demand dataset.
+
+
+
+
+quality explanations. The error bars in the SAGE explanations indicate 95% confidence intervals.
+The explanations have clear differences, but the differences are less pronounced than with the higher
+dimensional datasets (MNIST and BRCA).
+To contextualize the computational cost of calculating SAGE values, we performed a direct compari-
+son between our proposed approach and a naive calculation via SHAP. Recall that SAGE values are
+the expectation of loss SHAP values across the entire dataset, which must be calculated separately for
+each instance (see Section 3.1 of the main text). We estimated SAGE values using both approaches to
+compare how quickly each converges.
+To quantify SAGE’s convergence speed, we ran the sampling algorithm for a variable number
+of iterations and then calculated the result’s mean similarity with the correct values, which were
+determined by running the sampling algorithm until the convergence criterion was satisfied for
+t = 0.01 (see Section 3.3 of the main text). For SHAP, we determined the mean number of iterations
+required for a local explanation to converge (again, with t = 0.01) and generated multiple local
+explanations with this number of samples; we then averaged a variable number of local explanations
+and calculated the similarity with the true SAGE explanation.
+Figure 7 shows the results, using both MSE and correlation as metrics. The results show that both
+approaches eventually converge to the correct values, but SHAP requires 2-4 orders of magnitude
+more model evaluations. The results could be made more favorable to SHAP by using a more liberal
+convergence criterion for the local explanations; SAGE shows that spreading computation across
+examples yields the correct result more efficiently. However, these barely-converged SHAP values
+would not be useful as local explanations. We conclude that our sampling approach is far more
+practical when users only require the global explanation.
+
+
+                                                                            21
+                                                                                                                                    Mean Squared Error                                                                                 Mean Squared Error                                                                                  Mean Squared Error                                                                                                                                                 SAGE Values
+                                                                                                                            0.00    0.02       0.04    0.06       0.08                                                          0.0   0.5   1.0    1.5    2.0   2.5       3.0                                                      0.00   0.05   0.10   0.15   0.20   0.25                                                                                                                            0.00   0.02     0.04     0.06   0.08
+                                                                                                                                                                                                                                                                                1e9
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                Checking   Status
+                                                                                                                   104                                                                                                 104                                                                                                                                                                                                                                                         CreditDuration
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           History
+                                                                                                                                                                                                                                                                                                                          105                                                                                                                                                     Credit Purpose
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Amount
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        Savings   Account/Bonds
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                             Employment     Since
+                                                                                                                                                                                                                                                                                                                                                                  SAGE                                                                                                          Installment   Rate
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 Personal Status
+                                                                                                                                                                                                                       105                                                                                                                                        SHAP                                                                                                     Debtors/Guarantors
+                                                                                                                   105                                                                                                                                                                                                                                                                                                                                                     Residence    Duration
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   Property Type                                             SAGE
+                                                                                                                                                                                                                                                                                                                          106                                                                                                                                                  Installment
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        OtherHousing           Age
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             Plans
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                       Number          Ownership
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 Existing  Credits
+                                                                                                                                                                                                                       106                                                                                                                                                                                                                                                                      Job
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  Number    Liable
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       Telephone
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  Foreign  Worker
+                                                                                                                   106                                                                                                                                                                                                    107
+                                                                                                                                                                                                                       107                                                                                                                                                                                                                                                                            0.12
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      0.10
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      0.08
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      0.06
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      0.04
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      0.02
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      0.00
+                                                                                                                                                                                                                       108
+                                                                                                                                                                                                            Model Evaluations
+                                                                                                                                                                                                                                                                                                                          108                                                                                                                                                   Checking   Status
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   CreditDuration
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           History
+                                                                                                                                                                                                                                                                                                               Model Evaluations
+                                                                                                                   107
+                                                                                                        Model Evaluations
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  Credit Purpose
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Amount
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        Savings   Account/Bonds
+                                                                                                                                                                                                                                                                                Bike MSE Convergence                                                                         Bank MSE Convergence
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                             Employment      Since
+                                                                                                                                                                           Credit MSE Convergence
+                                                                                                                                                                                                                       109                                                                                                                                                                                                                                                      Installment
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 Personal     Rate
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            Status
+                                                                                                                                                                                                                                                                                                                          109                                                                                                                                              Debtors/Guarantors
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                           Residence    Duration
+                                                                                                                   108                                                                                                                                                                                                                                                                                                                                                             Property Type
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               Age
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                               Installment
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        OtherHousing         Plans
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       Ownership
+                                                                                                                                                                  SAGE                                                 1010                                         SAGE                                                                                                                                                                                               Number    Existing  Credits
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                Job
+                                                                                                                                                                                                                                                                    SHAP                                                                                                                                                                                                          Number    Liable
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             Permutation Test
+                                                                                                                                                                  SHAP                                                                                                                                                    1010                                                                                                                                                         Telephone
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  Foreign  Worker
+22                                                                                                                                                                                                                                            Correlation
+                                                                                                                                           Correlation                                                                                                                                                                              1.0
+                                                                                                                                                                                                                                                                                                                                    0.9
+                                                                                                                                                                                                                                                                                                                                                 Correlation
+                                                                                                                                                                                                                                0.3   0.4   0.5   0.6   0.7   0.8   0.9   1.0                                                       0.8
+                                                                                                                                                                                                                                                                                                                                    0.7
+                                                                                                                                                                                                                                                                                                                                    0.6
+                                                                                                                                                                                                                                                                                                                                    0.5
+                                                                                                                             0.3   0.4   0.5   0.6    0.7   0.8   0.9    1.0                                                                                                                                                        0.4
+                                                                                                                                                                                                                                                                                                                                    0.3                                                                                                                                                               0.02     0.00          0.02     0.04
+                                                                                                                   104                                                                                                                                                                                                                                                                                                                                                          Checking   Status
+                                                                                                                                                                                                                       104                                                                                                105                                                                                                                                                      CreditDuration
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           History
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         Purpose
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        Savings   Credit  Amount
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  Account/Bonds
+                                                                                                                                                                                                                                                                                                                                                                  SAGE                                                                                                       Employment
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                Installment  Since
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              Rate
+                                                                                                                                                                                                                       105                                                                                                                                                                                                                                                       Personal   Status
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                           Debtors/Guarantors
+                                                                                                                                                                                                                                                                                                                                                                  SHAP                                                                                                     Residence    Duration
+                                                                                                                   105                                                                                                                                                                                                    106                                                                                                                                                      Property Type
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               Age
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                               Installment
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        OtherHousing         Plans
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       Ownership
+                                                                                                                                                                                                                       106                                                                                                                                                                                                                                             Number    Existing  Credits
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                Job
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  Number    Liable
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             Feature Ablation
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       Telephone
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  Foreign  Worker
+                                                                                                                   106                                                                                                                                                                                                    107
+                                                                                                                                                                                                                       107                                                                                                                                                                                                                                                                        0.10
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  0.08
+                                                                                                                                                                                                                                                                                                                                                                                                            Figure 6: Feature importance for credit quality dataset.
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  0.06
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  0.04
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  0.02
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  0.00
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  0.02
+                                                                                                                                                                                                                                                                                                                          108                                                                                                                                                   Checking   Status
+                                                                                                                                                                                                                       108                                                                                                                                                                                                                                                         CreditDuration
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          History
+                                                                                                                                                                                                                                                                                                               Model Evaluations
+                                                                                                                   107
+                                                                                                        Model Evaluations                                                                                   Model Evaluations
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         Purpose
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  Credit Amount
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        Savings   Account/Bonds
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                             Employment     Since
+                                                                                                                                                                                                                       109                                                                                                                                                                                                                                                      Installment
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 Personal    Rate
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           Status
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                           Debtors/Guarantors
+                                                                                                                                                                                                                                                                                Bike Correlation Convergence                                                                 Bank Correlation Convergence
+                                                                                                                                                                                                                                                                                                                          109                                                                                                                                              Residence    Duration
+                                                                                                                                                                           Credit Correlation Convergence
+
+                                                                                                                   108                                                                                                                                                                                                                                                                                                                                                             Property Type
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              Age
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                               Installment
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        OtherHousing        Plans
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       Ownership
+                                                                                                                             SAGE                                                                                      1010      SAGE                                                                                                                                                                                                                                  Number    Existing Credits
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               Job
+                                                                                                                             SHAP                                                                                                SHAP                                                                                                                                                                                                                                             Number   Liable
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       Telephone
+                                                                                                                                                                                                                                                                                                                          1010                                                                                                                                                    Foreign Worker
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             Univariate Predictors
+     Figure 7: Convergence comparison between SAGE and an indirect calculation via local SHAP values.
+References
+ [1] Kjersti Aas, Martin Jullum, and Anders Løland. Explaining individual predictions when
+     features are dependent: More accurate approximations to Shapley values. arXiv preprint
+     arXiv:1903.10464, 2019.
+ [2] Eric Bengtson and Dan Roth. Understanding the value of features for coreference resolution. In
+     Proceedings of the 2008 Conference on Empirical Methods in Natural Language Processing,
+     pages 294–303, 2008.
+ [3] Nazih Benoumechiara and Kevin Elie-Dit-Cosaque. Shapley effects for sensitivity analysis with
+     dependent inputs: bootstrap and kriging-based algorithms. ESAIM: Proceedings and Surveys,
+     65:266–293, 2019.
+ [4] Ashton C Berger, Anil Korkut, Rupa S Kanchi, Apurva M Hegde, Walter Lenoir, Wenbin Liu,
+     Yuexin Liu, Huihui Fan, Hui Shen, Visweswaran Ravikumar, et al. A comprehensive pan-cancer
+     molecular study of gynecologic and breast cancers. Cancer Cell, 33(4):690–705, 2018.
+ [5] Leo Breiman. Random forests. Machine Learning, 45(1):5–32, 2001.
+ [6] A Charnes, B Golany, M Keane, and J Rousseau. Extremal principle solutions of games in char-
+     acteristic function form: core, Chebychev and Shapley value generalizations. In Econometrics
+     of Planning and Efficiency, pages 123–133. Springer, 1988.
+ [7] Jianbo Chen, Le Song, Martin J Wainwright, and Michael I Jordan. L-Shapley and C-Shapley:
+     Efficient model interpretation for structured data. arXiv preprint arXiv:1808.02610, 2018.
+ [8] Tianqi Chen and Carlos Guestrin. Xgboost: A scalable tree boosting system. In Proceedings of
+     the 22nd acm sigkdd international conference on knowledge discovery and data mining, pages
+     785–794, 2016.
+ [9] Anupam Datta, Shayak Sen, and Yair Zick. Algorithmic transparency via quantitative input
+     influence: Theory and experiments with learning systems. In 2016 IEEE Symposium on Security
+     and Privacy (SP), pages 598–617. IEEE, 2016.
+[10] Hadi Fanaee-T and Joao Gama. Event labeling combining ensemble detectors and background
+     knowledge. Progress in Artificial Intelligence, 2(2-3):113–127, 2014.
+[11] Harvey R Fernandez, Shreyas M Gadre, Mingjun Tan, Garrett T Graham, Rami Mosaoa,
+     Martin S Ongkeko, Kyu Ah Kim, Rebecca B Riggins, Erika Parasido, Iacopo Petrini, et al. The
+     mitochondrial citrate carrier, slc25a1, drives stemness and therapy resistance in non-small cell
+     lung cancer. Cell Death & Differentiation, 25(7):1239–1258, 2018.
+[12] Jerome Friedman, Trevor Hastie, and Robert Tibshirani. The Elements of Statistical Learning,
+     volume 1. Springer Series in Statistics New York, 2001.
+[13] Tilmann Gneiting and Adrian E Raftery. Strictly proper scoring rules, prediction, and estimation.
+     Journal of the American Statistical Association, 102(477):359–378, 2007.
+[14] Isabelle Guyon and André Elisseeff. An introduction to variable and feature selection. Journal
+     of Machine Learning Research, 3(Mar):1157–1182, 2003.
+[15] Isabelle Guyon, Jason Weston, Stephen Barnhill, and Vladimir Vapnik. Gene selection for
+     cancer classification using support vector machines. Machine Learning, 46(1-3):389–422, 2002.
+[16] Giles Hooker and Lucas Mentch. Please stop permuting features: An explanation and alterna-
+     tives. arXiv preprint arXiv:1905.03151, 2019.
+[17] Enguerrand Horel, Virgile Mison, Tao Xiong, Kay Giesecke, and Lidia Mangu. Sensitivity
+     based neural networks explanations. arXiv preprint arXiv:1812.01029, 2018.
+[18] Dominik Janzing, Lenon Minorics, and Patrick Blöbaum. Feature relevance quantification in
+     explainable AI: a causality problem. arXiv preprint arXiv:1910.13413, 2019.
+
+
+                                                 23
+[19] Walid T Khaled, Song Choon Lee, John Stingl, Xiongfeng Chen, H Raza Ali, Oscar M Rueda,
+     Fazal Hadi, Juexuan Wang, Yong Yu, Suet-Feung Chin, et al. Bcl11a is a triple-negative breast
+     cancer gene with critical functions in stem and progenitor cells. Nature Communications,
+     6(1):1–10, 2015.
+
+[20] Igor Kononenko et al. An efficient explanation of individual classifications using game theory.
+     Journal of Machine Learning Research, 11(Jan):1–18, 2010.
+
+[21] Yann LeCun, Corinna Cortes, and CJ Burges. Mnist handwritten digit database. at&t labs, 2010.
+
+[22] Jing Lei, Max G’Sell, Alessandro Rinaldo, Ryan J Tibshirani, and Larry Wasserman.
+     Distribution-free predictive inference for regression. Journal of the American Statistical Associ-
+     ation, 113(523):1094–1111, 2018.
+
+[23] Moshe Lichman et al. Uci machine learning repository, 2013.
+
+[24] Stan Lipovetsky and Michael Conklin. Analysis of regression in game theory approach. Applied
+     Stochastic Models in Business and Industry, 17(4):319–330, 2001.
+
+[25] Yao-Zhong Liu, Yu-Fang Pei, Jian-Feng Liu, Fang Yang, Yan Guo, Lei Zhang, Xiao-Gang Liu,
+     Han Yan, Liang Wang, Yin-Ping Zhang, et al. Powerful bivariate genome-wide association
+     analyses suggest the sox6 gene influencing both obesity and osteoporosis phenotypes in males.
+     PloS One, 4(8), 2009.
+
+[26] Scott M. Lundberg, Gabriel Erion, Hugh Chen, Alex DeGrave, Jordan M. Prutkin, Bala Nair,
+     Ronit Katz, Jonathan Himmelfarb, Nisha Bansal, and Su-In Lee. From local explanations to
+     global understanding with explainable AI for trees. Nature Machine Intelligence, 2(1):56–67,
+     2020.
+
+[27] Scott M Lundberg and Su-In Lee. A unified approach to interpreting model predictions. In
+     Advances in Neural Information Processing Systems, pages 4765–4774, 2017.
+
+[28] Sérgio Moro, Paulo Cortez, and Paulo Rita. A data-driven approach to predict the success of
+     bank telemarketing. Decision Support Systems, 62:22–31, 2014.
+
+[29] Art B Owen. Sobol’ indices and Shapley value. SIAM/ASA Journal on Uncertainty Quantifica-
+     tion, 2(1):245–251, 2014.
+
+[30] Art B Owen and Clémentine Prieur. On Shapley value for measuring importance of dependent
+     inputs. SIAM/ASA Journal on Uncertainty Quantification, 5(1):986–1002, 2017.
+
+[31] Liudmila Prokhorenkova, Gleb Gusev, Aleksandr Vorobev, Anna Veronika Dorogush, and
+     Andrey Gulin. Catboost: unbiased boosting with categorical features. In Advances in neural
+     information processing systems, pages 6638–6648, 2018.
+
+[32] Marco Tulio Ribeiro, Sameer Singh, and Carlos Guestrin. “Why should I trust you?” Explaining
+     the predictions of any classifier. In Proceedings of the 22nd ACM SIGKDD International
+     Conference on Knowledge Discovery and Data Mining, pages 1135–1144, 2016.
+
+[33] Andrea Saltelli, Stefano Tarantola, Francesca Campolongo, and Marco Ratto. Sensitivity
+     Analysis in Practice: a Guide to Assessing Scientific Models, volume 1. Wiley Online Library,
+     2004.
+
+[34] Rudy Setiono and Huan Liu. Neural-network feature selector. IEEE Transactions on Neural
+     Networks, 8(3):654–662, 1997.
+
+[35] Lloyd S Shapley. A value for n-person games. Contributions to the Theory of Games, 2(28):307–
+     317, 1953.
+
+[36] Karen Simonyan, Andrea Vedaldi, and Andrew Zisserman. Deep inside convolutional networks:
+     Visualising image classification models and saliency maps. arXiv preprint arXiv:1312.6034,
+     2013.
+
+
+                                                 24
+[37] Eunhye Song, Barry L Nelson, and Jeremy Staum. Shapley effects for global sensitivity analysis:
+     theory and computation. SIAM/ASA Journal on Uncertainty Quantification, 4(1):1060–1083,
+     2016.
+[38] Carolin Strobl, Anne-Laure Boulesteix, Thomas Kneib, Thomas Augustin, and Achim Zeileis.
+     Conditional variable importance for random forests. BMC Bioinformatics, 9(1):307, 2008.
+
+[39] Erik Štrumbelj and Igor Kononenko. Explaining prediction models and individual predictions
+     with feature contributions. Knowledge and Information Systems, 41(3):647–665, 2014.
+[40] Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep networks.
+     In Proceedings of the 34th International Conference on Machine Learning-Volume 70, pages
+     3319–3328. JMLR. org, 2017.
+[41] Katarzyna Tomczak, Patrycja Czerwińska, and Maciej Wiznerowicz. The cancer genome atlas
+     (TCGA): an immeasurable source of knowledge. Contemporary Oncology, 19(1A):A68, 2015.
+[42] Vladimir Vapnik. The nature of statistical learning theory. Springer Science & Business Media,
+     2013.
+
+
+
+
+                                                25
+

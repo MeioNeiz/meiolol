@@ -1,0 +1,2567 @@
+                                           Model-agnostic Feature Importance and Effects with
+                                           Dependent Features–A Conditional Subgroup Approach
+
+                                           Christoph Molnar · Gunnar König ·
+                                           Bernd Bischl · Giuseppe Casalicchio
+
+
+
+
+arXiv:2006.04628v2 [stat.ML] 21 Jun 2021
+                                           Abstract The interpretation of feature importance in machine learning mod-
+                                           els is challenging when features are dependent. Permutation feature impor-
+                                           tance (PFI) ignores such dependencies, which can cause misleading interpre-
+                                           tations due to extrapolation. A possible remedy is more advanced conditional
+                                           PFI approaches that enable the assessment of feature importance conditional
+                                           on all other features. Due to this shift in perspective and in order to en-
+                                           able correct interpretations, it is therefore important that the conditioning
+                                           is transparent and humanly comprehensible. In this paper, we propose a new
+                                           sampling mechanism for the conditional distribution based on permutations in
+                                           conditional subgroups. As these subgroups are constructed using decision trees
+                                           (transformation trees), the conditioning becomes inherently interpretable. This
+                                           not only provides a simple and effective estimator of conditional PFI, but also
+                                           local PFI estimates within the subgroups. In addition, we apply the conditional
+                                           subgroups approach to partial dependence plots (PDP), a popular method for
+                                           describing feature effects that can also suffer from extrapolation when fea-
+                                           tures are dependent and interactions are present in the model. We show that
+                                           PFI and PDP based on conditional subgroups often outperform methods such
+                                           as conditional PFI based on knockoffs, or accumulated local effect plots. Fur-
+                                           thermore, our approach allows for a more fine-grained interpretation of feature
+                                           effects and importance within the conditional subgroups.
+
+                                           C. Molnar1 , G. König2 , B. Bischl3 , G. Casalicchio4
+                                           Department of Statistics, Ludwig-Maximilians-University Munich, Munich, Germany
+                                           C. Molnar1
+                                           Leibniz Institute for Prevention Research and Epidemiology – BIPS GmbH, Bremen, Ger-
+                                           many
+                                           E-mail: christoph.molnar.ai@gmail.com
+                                           CRediT taxonomy: Conceptualization: 1, 2, 3, 4; Methodology: 1, 2, 4; Formal analysis and
+                                           investigation: 1, 2; Writing - original draft preparation: 1, 2; Writing - review and editing: 2,
+                                           3, 4; Visualization: 1; Validation: 1, 2; Software: 1; Funding acquisition: 1, 3, 4; Supervision:
+                                           3, 4
+2                                                                                                          Christoph Molnar et al.
+
+
+
+                               predicted
+                                             2 3 4 5 6
+
+                 1.00
+                                                                                      3.5
+
+
+
+
+                                                                   Model prediction
+                 0.75                                                                 3.0
+
+
+
+    Feature x2
+                 0.50                                                                 2.5
+
+
+                                                                                      2.0
+                 0.25
+
+                                                                                      1.5
+                 0.00
+                        0.00     0.25      0.50      0.75   1.00                            0.00   0.25      0.50      0.75   1.00
+                                        Feature x1                                                        Feature x1
+
+Fig. 1 Misleading PDP. Simulation of features x1 ∼ U (0, 1), x2 ∼ U (0, 1 − x1 ) and a non-
+additive prediction model fˆ(x) = exp(x1 + x2 ). Left: Scatter plot with 100 data points and
+the prediction surface of fˆ. Right: PDP of x1 . The grey dots are observed (x1 , fˆ(x1 , x2 ))-
+pairs. For x1 > 0.75 the PDP suggests higher average predictions than the maximum pre-
+diction observed in the data.
+
+
+Keywords Interpretable Machine Learning, Explainable AI, Permutation
+Feature Importance, Partial Dependence Plot
+
+
+1 Introduction
+
+Many model-agnostic machine learning (ML) interpretation methods (see Mol-
+nar (2019); Guidotti et al. (2018) for an overview) are based on making pre-
+dictions on perturbed input features, such as permutations of features. The
+partial dependence plot (PDP) (Friedman et al., 1991) visualizes how changing
+a feature affects the prediction on average. The permutation feature impor-
+tance (PFI) (Breiman, 2001; Fisher et al., 2019) quantifies the importance of
+a feature as the reduction in model performance after permuting a feature.
+PDP and PFI change feature values without conditioning on the remaining
+features. If features are dependent, such changes can lead to extrapolation to
+areas of the feature space with low density. For non-additive models such as
+tree-based methods or neural networks, extrapolation can result in misleading
+interpretations (Strobl et al., 2008; Toloşi and Lengauer, 2011; Hooker and
+Mentch, 2019; Molnar et al., 2020). An illustration of the problem is given in
+Figure 1.
+    Extrapolation can be avoided by sampling a feature conditional on all
+other features and thereby preserving the joint distribution (Strobl et al.,
+2008; Hooker and Mentch, 2019). This yields conditional variants of the PDP
+and PFI that have to be interpreted differently. While the interpretation of
+marginal PDP and PFI is independent of the other features, the interpretation
+of conditional PDP and PFI is conditional on other features.
+Importance and Effects with Dependent Features                                 3
+
+
+    Figure 2 shows how conditional PFI can be misinterpreted: Features X1
+and X3 have the same coefficient in a linear model and the same marginal PFI,
+but X1 has a lower conditional PFI since it is correlated with feature X2 . The
+conditional PFI must be interpreted as the additional, unique contribution
+of a feature given all features we conditioned on (König et al., 2020; Fisher
+et al., 2019). It therefore has also been called “partial importance” (Debeer
+and Strobl, 2020). If interpreted incorrectly, this can lead to the wrong conclu-
+sion that, for example, two strongly dependent features are irrelevant for the
+prediction model (Figure 2). The correct conclusion would be that a feature
+is less relevant given knowledge of the dependent feature.
+    In Figure 2, the conditional PDP shows a positive effect for a feature that
+has a negative coefficient in a linear regression model. The discrepancy is
+due to correlation of the feature with another feature with a large positive
+coefficient. The conditional effect of a feature is a mix of its marginal effect
+and the marginal effects of all dependent features (Hooker and Mentch, 2019;
+Apley and Zhu, 2016). While conditional PFI might assign a low importance
+to a feature on which the model relied heavily, the conditional PDP has the
+opposite pitfall: it can show an effect for a feature that was not used by the
+model. This interpretation might be undesirable and is similar to the omitted
+variable bias phenomenon, which also happens in Figure 2: regressing fˆ from
+X2 , while ignoring X1 (Apley and Zhu, 2016).
+    The interpretation of conditional PFI and PDP requires knowledge of the
+dependence structure between the feature of interest and the other features.
+Such knowledge of dependence structures would help explain differences be-
+tween a feature’s marginal and conditional PFI and break down the condi-
+tional PDP into the effect of the feature of interest and that of the dependent
+features. However, state-of-the-art conditional sampling mechanisms such as
+knockoffs (Barber et al., 2015; Candes et al., 2018; Watson and Wright, 2019)
+do not provide a readily interpretable conditioning.
+    Our contributions are the following. We propose the conditional subgroup
+PDPs (cs-PDPs) and PFIs (cs-PFIs). Both are based on conditional subgroup
+permutation (cs-permutation), a sampling method for the conditional distribu-
+tion. Standard (i.e., marginal) PDPs and PFIs are computed and interpreted
+within subgroups of the data, enabling a local interpretation of feature effect
+and importance while handling the problem of extrapolation. We construct the
+subgroups for a feature by training a decision tree in which the distribution of
+the feature becomes less dependent on other features. The tree structure allows
+interpretation of how other features influence the effect and importance of the
+feature at hand. We show that the conditional PFI estimate based on cs-PFIs
+can recover the ground truth in simulations and often outperforms related
+approaches. In addition, we study how well different conditional PDP/PFI
+approaches retain the joint distribution of data sets from the OpenML-CC18
+benchmarking suite (Bischl et al., 2019) and show that cs-permutation achieves
+state-of-the-art data fidelity. We demonstrate that the cs-PDPs have a high
+model fidelity, that is, they are closer to the model prediction than other fea-
+ture effect methods. By inspecting the cs-PFIs and cs-PDPs in combination
+4                                                                                            Christoph Molnar et al.
+
+
+                                             cond. PDP    PDP                  conditional       marginal
+
+
+
+
+                                2                                  x1
+
+
+
+
+          Average prediction
+                                0
+                                                                   x2
+
+
+                               −2
+
+                                                                   x3
+
+                               −4
+                                        −2        0         2           0.0   0.3        0.6         0.9
+                                             Feature x2                             Importance
+
+
+Fig. 2 Simulation of a linear model fˆ(x) = x1 − 0.1 · x2 + x3 with x1 , x2 , x3 ∼ N (0, 1) and
+a correlation of 0.978 between x1 and x2 . Left: PDP and conditional PDP for feature x2 .
+The conditional PDP mixes the effects of x1 and x2 and thus shows a positive effect. Right:
+PFI and conditional PFI of x1 , x2 and x3 . The PFI of x1 decreases when x1 is permuted
+conditional on x2 and vice versa.
+
+
+with the respective subgroup descriptions, insights into the model and the
+dependence structure of the data are possible. We show how we can trade
+off human-intelligibility of the subgroups for extrapolation by choosing the
+granularity of the grouping. In an application, we illustrate how cs-PDPs and
+cs-PFIs can reveal new insights into the ML model and the data.
+
+
+2 Notation and Background
+
+We consider ML prediction functions fˆ : Rp 7→ R, where fˆ(x) is a model
+prediction and x ∈ Rp is a p-dimensional feature vector. We use xj ∈ Rn
+to refer to an observed feature (vector) and Xj to refer to the j-th feature
+as a random variable. With x−j we refer to the complementary feature space
+x{1,...,p}\{j} ∈ Rn×(p−1) and with X−j to the corresponding random variables.
+                                                                                                            (i)
+We refer to the value of the j-th feature from the i-th instance as xj and to
+                             
+the tuples D = { x(i) , y (i) }ni=1 as data.
+    The Permutation Feature Importance (PFI) is defined as the increase
+in loss when feature Xj is permuted:
+
+                                    P F Ij = E[L(Y, fˆ(X̃j , X−j ))] − E[L(Y, fˆ(Xj , X−j ))]                     (1)
+
+    If the random variable X̃j has the same marginal distribution as Xj (e.g.,
+permutation), the estimate yields the marginal PFI. If X̃j follows the condi-
+tional distribution X̃j ∼ Xj |X−j , we speak of the conditional PFI. The PFI
+is estimated with the following formula:
+                                n        M
+                                                          !
+                             1 X     1  X
+                                              m(i)    (i)
+                    P
+                    [ F Ij =                L̃     −L )                   (2)
+                             n i=1 M m=1
+Importance and Effects with Dependent Features                                  5
+
+
+where L(i) = L(y (i) , fˆ(x(i) )) is the loss for the i-th observation and L̃(i) =
+               (i)  (i)                      (i)
+L(y (i) , fˆ(x̃j , x−j )) is the loss where xj was replaced by the m-th sample
+ m(i)
+x̃j . The latter refers to the i-th feature value obtained by a sample of xj .
+The sample can be repeated M -times for a more stable estimation of L̃(i) .
+Numerous variations of this formulation exist. Breiman (2001) proposed the
+PFI for random forests, which is computed from the out-of-bag samples of
+individual trees. Subsequently, Fisher et al. (2019) introduced a model-agnostic
+PFI version.
+   The marginal Partial Dependence Plot (PDP) (Friedman et al., 1991)
+describes the average effect of the j-th feature on the prediction.
+                            P DPj (x) = E[fˆ(x, X−j )],                       (3)
+
+If the expectation is conditional on Xj , E[fˆ(x, X−j )|Xj = x], we speak of the
+conditional PDP. The marginal PDP evaluated at feature value x is estimated
+using Monte Carlo integration:
+                                           n
+                                        1Xˆ          (i)
+                           P DP j (x) =
+                           \                  f (x, x−j )                     (4)
+                                        n i=1
+
+
+3 Related Work
+
+In this section, we review conditional variants of PDP and PFI and other
+approaches that try to avoid extrapolation.
+
+
+3.1 Related Work on Conditional PDP
+
+The marginal plot (M-Plot) (Apley and Zhu, 2016) averages the predictions
+locally on the feature grid and mixes effects of dependent features.
+    Hooker (2007) proposed a functional ANOVA decomposition with hierar-
+chically orthogonal components, based on integration using the joint distribu-
+tion of the data, which in practice is difficult to estimate.
+    Accumulated Local Effect (ALE) plots by Apley and Zhu (2016) reduce
+extrapolation by accumulating the finite differences computed within intervals
+of the feature of interest. By definition, interpretations of ALE plots are thus
+only valid locally within the intervals. Furthermore, there is no straightforward
+approach to derive ALE plots for categorical features, since ALE requires
+ordered feature values. Our proposed approach can handle categorical features.
+    Another PDP variant based on stratification was proposed by Parr and
+Wilson (2019). However, this stratified PDP describes only the data and is
+independent of the model.
+    Individual Conditional Expectation (ICE) curves by Goldstein et al. (2015)
+can be used to visualize the interactions underlying a PDP, but they also suf-
+fer from the extrapolation problem. The “conditional” in ICE refers to condi-
+tioning on individual observations and not on certain features. As a solution,
+6                                                          Christoph Molnar et al.
+
+
+Hooker and Mentch (2019) suggested to visually highlight the areas of the ICE
+curves in which the feature combinations are more likely.
+
+
+3.2 Related Work on Conditional PFI
+
+We review approaches that modify the PFI (Breiman, 2001; Fisher et al., 2019)
+in presence of dependent features by using a conditional sampling strategy.
+    Strobl et al. (2008) proposed the conditional variable importance for ran-
+dom forests (CVIRF), which is a conditional PFI variant of Breiman (2001).
+CVIRF was further analyzed and extended by Debeer and Strobl (2020). Both
+CVIRF and our approach rely on permutations based on partitions of decision
+trees. However, there are fundamental differences. CVIRF is specifically devel-
+oped for random forests and relies on the splits of the underlying individual
+trees of the random forest for the conditional sampling. In contrast, our cs-PFI
+approach trains decision trees for each feature using X−j as features and Xj
+as the target. Therefore, the subgroups for each feature are constructed from
+their conditional distributions (conditional on the other features) in a separate
+step, which is decoupled from the machine learning model to be interpreted.
+Our cs-PFI approach is model-agnostic, independent of the target to predict
+and not specific to random forests.
+    Hooker and Mentch (2019) made a general suggestion to replace feature
+values by estimates of E[Xj |X−j ].
+    Fisher et al. (2019) suggested to use matching and imputation techniques
+to generate samples from the conditional distribution. If X−j has few unique
+                                           (i)             (i)
+combinations, they suggested to group xj by unique x−j combinations and
+permute them for these fixed groups. For discrete and low-dimensional fea-
+ture spaces, they suggest non-parametric matching and weighting methods
+to replace Xj values. For continuous or high-dimensional data, they suggest
+imputing Xj with E[Xj |X−j ] and adding residuals (under the assumption of
+homogeneous residuals). Our approach using permutation in subgroups can
+be seen as a model-driven, binary weighting approach extended to continuous
+features.
+    Knockoffs (Candes et al., 2018) are random variables which are “copies”
+of the original features that preserve the joint distribution but are otherwise
+independent of the prediction target. Knockoffs can be used to replace feature
+values for conditional feature importance computation. Watson and Wright
+(2019) developed a testing framework for PFI based on knockoff samplers
+such as Model-X knockoffs (Candes et al., 2018). Our approach is complemen-
+tary since Watson and Wright (2019) is agnostic to the sampling strategy that
+is used. Others have proposed to use generative adversarial networks for gen-
+erating knockoffs (Romano et al., 2019). Knockoffs are not transparent with
+respect to how they condition on the features, while our approach creates
+interpretable subgroups.
+    Conditional importance approaches based on model retraining have been
+proposed (Hooker and Mentch, 2019; Lei et al., 2018; Gregorutti et al., 2017).
+Importance and Effects with Dependent Features                                         7
+
+ Sampling Strategy             Used/Suggested By                     Assumptions
+ No intervention on Xj         Drop-and-Refit,
+                               LOCO (Lei et al., 2018)
+ Permute Xj                    Marginal       PFI        (Breiman,   Xj   |=   X−j
+                               2001;   Fisher    et   al.,  2019),
+                               PDP (Friedman et al., 1991)
+ Replace Xj by knockoff        Knockoffs (Candes et al., 2018),      (Xj , X−j ) ∼ N
+ Zj with (Zj , X−j )  ∼        CPI (Watson and Wright, 2019)
+                    |=
+ (Xj , X−j ) and Zj Y
+              (i)
+ Move each xj to left and      ALE (Apley and Zhu, 2016)                  |=
+                                                                     Xj X−j in inter-
+ right interval bounds                                               vals
+ Permute Xj in subgroups       cs-PFI, cs-PDP                             |=
+                                                                     Xj X−j in sub-
+                                                                     groups
+ Permute Xj in random for-     CVIRF (Strobl et al., 2008; Debeer         |=
+                                                                     Xj X−j      cond.
+ est tree nodes                and Strobl, 2020)                     on tree splits in
+                                                                     X−j to predict Y
+ Impute Xj from X−j            (Fisher et al., 2019)                 Homogeneous
+                                                                     residuals
+Table 1 Sampling strategies for model-agnostic interpretation techniques.
+
+
+
+Retraining the model can be expensive, and answers a fundamentally different
+question, often related to feature selection and not based on a fixed set of
+features. Hence, we focus on approaches that compute conditional PFI for a
+fixed model without retraining.
+    None of the existing approaches makes the dependence structures between
+the features explicit. It is unclear which of the features in X−j influenced the
+replacement of Xj the most and how. Furthermore, little attention has been
+paid on evaluating how well different sampling strategies address the extrapo-
+lation problem. We address this gap with an extensive data fidelity experiment
+on the OpenML-CC18 benchmarking suite. To the best of our knowledge, our
+paper is also the first to conduct experiments using ground truth for the con-
+ditional PFI. Our approach works with any type of feature, be it categori-
+cal, numerical, ordinal and so on, since we rely on decision trees to find the
+subgroups used for conditioning. The differences between the different (con-
+ditional) PDP and PFI approaches ultimately boil down to how they sample
+from the conditional distribution. Table 1 lists different sampling strategies of
+model-agnostic interpretation methods and summarizes their assumptions to
+preserve the joint distribution.
+
+
+4 Conditional Subgroups
+
+We suggest approaching the dependent feature problem by constructing an
+interpretable grouping Gj such that the feature of interest Xj becomes less
+dependent on remaining features X−j within each subgroup. In the best case
+the features become independent: (Xj ⊥ X−j )|Gj . Assuming that we find
+a grouping in which (Xj ⊥ X−j )|Gj holds, sampling from the group-wise
+marginal distribution removes extrapolation (see Figure 3) and within each
+8                                                                                Christoph Molnar et al.
+
+                      1.00                                   1.00
+
+                      0.75                                   0.75
+
+      x2              0.50                              x2   0.50
+
+                      0.25                                   0.25
+
+                      0.00                                   0.00
+                             0     5          10   15               0           5        10     15
+                                       x1                                           x1
+
+
+
+      Density of x1
+                      0.10                                   0.3
+                                                                    x2 < 0. 5
+                                                             0.2
+                      0.05                                                  x2 >= 0. 5
+                                                             0.1
+                      0.00                                   0.0
+                             0     5          10   15               0           5        10     15
+                                 Feature x1                                 Feature x1
+
+Fig. 3 Features X2 ∼ U (0, 1) and X1 ∼ N (0, 1), if X2 < 0.5, else X1 ∼ N (4, 4) (black dots).
+Top left: The crosses are permutations of X1 . For X2 < 0.5, the permutation extrapolates.
+Bottom left: Marginal density of X1 . Top right: Permuting X1 within subgroups based
+on X2 (X2 < 0.5 and X2 ≥ 0.5) reduces extrapolation. Bottom right: Densities of X1
+conditional on the subgroups.
+
+
+
+
+group, the samples from the marginal and the conditional distribution would
+coincide. Such groupings exist when, for example, the features in X−j are cat-
+egorical, or when the conditional distribution of Xj only depends on discrete
+changes in features X−j . Such a grouping would consequently enable (1) the
+application of standard PFI and PDP within each group without extrapolation
+and (2) sampling from the global conditional distribution P (Xj |X−j ) using
+group-wise permutation and aggregation. With our approach we exploit these
+properties to derive both a group-wise marginal interpretation and, for the
+PFI, a global conditional interpretation. Even when such a discrete grouping
+does not exist, e.g., when the true dependence is linear, the cs-permutation
+reduces extrapolation, see Figure 4. Moreover, an accurate interpretation re-
+quires the groupings to be human-intelligible. We can gain insight into how the
+model behaves within specific subgroups which is not possible with approaches
+that directly sample Xj conditional on all features X−j (Candes et al., 2018;
+Strobl et al., 2008; Aas et al., 2019; Fisher et al., 2019; Watson and Wright,
+2019).
+
+    For our approach, any algorithm can be used that splits the data in X−j
+so that the distribution of Xj becomes more homogeneous within a group
+and more heterogeneous between groups. We consider decision tree algorithms
+for this task, which predict Xj based on splits in X−j . Decision tree algo-
+rithms directly or indirectly optimize splits for heterogeneity of some aspects
+of the distribution of Xj in the splits. The partitions in a decision tree can
+be described by decision rules that lead to that terminal leaf. We leverage
+this partitioning to construct an interpretable grouping Gjk based on random
+variable Gj for a specific feature Xj . The new variable can be calculated by
+assigning every observation the indicator of the partition that it lies in (mean-
+Importance and Effects with Dependent Features                                  9
+
+                               (i)
+ing for observation i with x−j ∈ Gjk the group variable’s value is defined as
+ (i)
+gj := k).
+    Transformation trees (trtr) (Hothorn and Zeileis, 2017) are able to
+model the conditional distribution of a variable. This approach partitions the
+feature space so that the distribution of the target (here Xj ) within the result-
+ing subgroups Gjk is homogeneous, which means that the group-wise parame-
+terization of the modeled distribution is independent of X−j . Transformation
+trees directly model the target’s distribution P(Xj ≤ x) = FZ (h(x)), where
+FZ is the chosen (cumulative) distribution function and h a monotone in-
+creasing transformation function (hence the name transformation trees). The
+transformation function is defined as a(y)T θ where a : Xj 7→ Rk is a basis
+function of polynomials or splines. The task of estimating the distribution is
+reduced to estimating θ, and the trees are split based on hypothesis tests for
+differences in θ given X−j , and therefore differences in the distribution of Xj .
+For more detailed explanations of transformation trees please refer to Hothorn
+and Zeileis (2017).
+    In contrast, a simpler approach would be to use classification and re-
+gression trees (CART) (Breiman et al., 1984), which, for regression, min-
+imizes the variance within nodes, effectively finding partitions with different
+means in the distribution of Xj . However, CART’s split criterion only considers
+differences in the expectation of the distribution of Xj given X−j : E[Xj |X−j ].
+This means CART could only make Xj and X−j independent if the distribu-
+tion of Xj only depends in its expectation on X−j (and if the dependence can
+be modeled by partitioning the data). Any differences in higher moments of
+the distribution of Xj such as the variance of Xj |X−j cannot be detected.
+    We evaluated both trtr which are theoretically well equipped for splitting
+distributions and CART, which are established and well-studied. For the re-
+mainder of this paper, we have set the default minimum number of observations
+in a node to 30 for both approaches. For the transformation trees, we used the
+Normal distribution as target distribution and we used Bernstein polynomials
+of degree five for the transformation function. Higher-order polynomials do
+not seem to increase model fit further (Hothorn, 2018).
+    We denote the subgroups by Gjk ⊂ Rp−1 , where k ∈ {1, . . . , Kj } is the
+k-th subgroup for feature j, with Kj groups in total for the j-th feature. The
+                                                                 SK
+subgroups per feature are disjoint: Gjl ∩ Gjk = ∅, ∀l 6= k and k=1 Gjk = Rp−1 .
+Let (yjk , xkj ) be a subset of (y, x) that refers to the data subset belonging to
+the subgroup Gjk . Each subgroup can be described by the decision path that
+leads to the respective terminal node.
+
+
+4.1 Remarks
+
+4.1.1 Continuous Dependencies
+
+For conditional independence Xj ⊥ X−j |Gkj to hold, the chosen decision tree
+approach has to capture the (potentially complex) dependencies between Xj
+10                                                                   Christoph Molnar et al.
+
+
+       2                          2                              2
+
+       1                          1                              1
+
+       0                          0                              0
+ X2
+      −1                         −1                             −1
+
+      −2                         −2                             −2
+
+      −3                         −3                             −3
+           −2          0     2           −2          0     2            −2          0     2
+                Feature x1                    Feature x1                     Feature x1
+
+
+Fig. 4 Left: Simulation of features X1 ∼ N (0, 1) and X2 ∼ N (0, 1) with a covariance of 0.9.
+Middle: Unconditional permutation extrapolates strongly. Right: Permuting on partitions
+found by CART (predicting X2 from X1 ) has greatly reduces extrapolation, but cannot get
+rid of it completely. x1 and x2 remain correlated in the partitions.
+
+
+
+
+and X−j . CART can only capture differences in the expected value of Xj |X−j
+but are insensitive to changes in, for example, the variance. Transformation
+trees are in principle agnostic to the specified distribution and the default
+transformation family of distributions is very general, as empirical results sug-
+gest (Hothorn and Zeileis, 2017). However, the approach is based on the as-
+sumption that the dependence can be modeled with a discrete grouping. For
+example, in the case of linear Gaussian dependencies, the corresponding opti-
+mal variable would be linear Gaussian itself, and would be in conflict with our
+proposed interpretable grouping approach. Even in these settings the approach
+allows an approximation of the conditional distribution. In the case of simple
+linear Gaussian dependencies, partitioning the feature space will still reduce
+extrapolation. But we never get rid of it completely, unless there are only
+individual data points left in each partition, see Figure 4.
+
+
+
+
+4.1.2 Sparse Subgroups
+
+Fewer subgroups are generally desirable for two reasons: (1) for a good approx-
+imation of the marginal distribution within a subgroup, a sufficient number of
+observations per group is required, which might lead to fewer subgroups, and
+(2) a large number of subgroups leads to more complex groups, which reduces
+their human-intelligibility and therefore forfeits the added value of the local,
+subgroup-wise interpretations. As we rely on decision trees, we can adjust the
+granularity of the grouping using hyperparameters such as the maximum tree
+depth. By controlling the maximum tree depth, we can control the trade-off
+between the depth of the tree (and hence its interpretability) and the homo-
+geneity of the distribution within the subgroups.
+Importance and Effects with Dependent Features                                                    11
+
+
+4.2 Conditional Subgroup Permutation Feature Importance (cs-PFI)
+
+We estimate the cs-PFI of feature Xj within a subgroup Gjk as:
+
+                                    M
+                                                                                       !
+            1          X         1 X                  m(i) (i)
+  P F Ijk =                            L(y (i) , fˆ(x̃j , x−j )) − L(y (i) , fˆ(x(i) )) , (5)
+            nk                   M m=1
+                   i:x(i) ∈Gjk
+
+         m(i)
+where x̃j   refers to a feature value obtained from the m-th permutation of xj
+within the subgroup kj . This estimation is exactly the same as the marginal
+PFI (Equation 2), except that it only includes observations from the given
+subgroup. Algorithm 1 describes the estimation of the cs-PFIs for a given
+feature on unseen data.
+
+
+ Algorithm 1: Estimate cs-PFI
+   Input: Model f ; data Dtrain , Dtest ; loss L; feature j; no. permutations M
+ 1 Train tree Tj with target Xj and features X−j using Dtrain
+ 2 Compute subgroups G
+                               k
+                               j for Dtest based on terminal nodes of Tj , k ∈ {1, . . . , Kj }
+ 3 for k ∈ {1, . . . , Kj } do
+
+       Lorig := n1                         (i) , fˆ(x(i) ))
+                        P
+ 4
+                       k   i:x(i) ∈G k L(y
+                                   j
+ 5      for m ∈ {1, . . . , M } do
+ 6          Generate x̃m                                                    k
+                          j by permuting feature values xj within subgroup Gj
+                                            (i) , fˆ(x̃ m(i)    (i)
+            Lm    := 1
+                             P
+ 7              perm       nk     (i)
+                                 i:x  k L(y
+                                       ∈Gj           j       , x ))
+                                                            −j
+                   1 PM
+ 8      cs-PFIkj = M       m
+                      m=1 Lperm − Lorig
+               1   PKj      k     k
+ 9   cs-PFIj = n       k=1 n P F Ij
+
+
+
+
+    The algorithm has two outcomes: We get local importance values for feature
+Xj for each subgroup (cs-PFIkj ; Algorithm 1, line 8) and a global conditional
+feature importance (cs-PFIj ; Algorithm 1, line 9). The latter is equivalent
+to the weighted average of subgroup importances regarding the number of
+observations within each subgroup (see proof in Appendix A).
+                                                   Kj
+                                             1X k
+                                   cs-PFIj =   n P F Ijk
+                                             n
+                                                  k=1
+
+    The cs-PFIs needs the same amount of model evaluations as the PFI
+(O(nM )). On top of that comes the cost for training the respective decision
+trees and making predictions to assign a subgroup to each observation.
+
+Theorem 1 When feature Xj is independent of features X−j for a given
+dataset D, each cs-PFIkj has the same expectation as the marginal PFI, and
+an n/nk -times larger variance, where n and nk are the number of observations
+in the data and the subgroup Gjk .
+12                                                         Christoph Molnar et al.
+
+
+The proof of Theorem 1 is shown in Appendix B. Theorem 1 has the prac-
+tical implication that even in the case of applying cs-PFI to an independent
+feature, we will retrieve the marginal PFI, and not introduce any problem-
+atic interpretations. Equivalence in expectation and higher variance under the
+independence of Xj and X−j holds true even if the partitions Gjk would be
+randomly chosen. Theorem 1 has further consequences regarding overfitting:
+Assuming a node has already reached independence between Xj and X−j ,
+then further splitting the tree based on noise will not change the expected
+cs-PFIs.
+
+
+4.3 Conditional Subgroup Partial Dependence Plots (cs-PDPs)
+
+The conditional PDP has a different interpretation than the marginal PDP,
+as the motivating example in Figure 2 showed: The conditional PDP can be
+interpreted as the effect of a feature on the prediction, given that all other
+features would change according to the joint distribution. This violates a de-
+sirable property that the effect of features that were not used by the model
+should have a zero effect curve. This poses a dilemna for dependent features:
+Either extrapolate using the marginal PDP, or use the conditional PDP with
+undesirable properties for interpretation. Our proposed cs-PDPs reduces ex-
+trapolation while allowing a marginal interpretation within each subgroup. We
+compute the cs-PDPkj for each subgroup Gjk using the marginal PDP formula
+in Equation 4.
+                                      1   X             (i)
+                      cs-PDPkj (x) = k           fˆ(x, x−j )
+                                     n    (i)  k
+                                         i:x   ∈Gj
+
+This results in multiple cs-PDPs per feature, which can be displayed together
+in the same plot as in Figure 12. As shown in Figure 5, even features that do not
+contribute to the prediction at all can have a conditional PDP different from
+zero. We therefore argue that an aggregation of the cs-PDPs to the conditional
+PDP is not meaningful for model interpretation, and we suggest to plot the
+group-wise curves. For the visualization of the cs-PDPs, we suggest to plot
+the PDPs similar to boxplots, where the dense center quartiles are indicated
+with a bold line (see Figure 6). We restrict each cs-PDPkj to the interval
+                                   (1)         (nk )
+[min(xj ), max(xj )], with xj = (xj , · · · , xj j ).
+   Equivalently to PFI, the subgroup PDPs approximate the true marginal
+PDP even if the features are independent.
+
+Theorem 2 When feature Xj is independent of features X−j for a given
+dataset D, each cs-PDPkj has the same expectation as the marginal PDP, and
+an n/nk -times larger variance, where n and nk are the number of observations
+in the data and the subgroup Gjk .
+The proof of Theorem 2 is shown in Appendix C. Theorem 2 has the same
+practical implications as Theorem 1: Even if the features are independent, we
+Importance and Effects with Dependent Features                                                                                       13
+
+
+                                  cond. PDP        PDP
+
+
+                        2                                              2
+
+
+                        1                                              1                                          subgroups
+                                                                                                                     x1 < 0.085 &
+
+
+          Prediction                                     Prediction
+                                                                                                                      x1 < −0.815
+                                                                                                                     x1 < 0.085 &
+                        0                                              0                                              x1 >= −0.815
+                                                                                                                     x1 >= 0.085 &
+                                                                                                                      x1 < 0.905
+                                                                                                                     x1 >= 0.085 &
+                       −1                                             −1
+                                                                                                                      x1 >= 0.905
+
+
+                       −2                                             −2
+                            −6   −3        0       3                       −6   −3        0           3
+                                      Feature x2                                     Feature x2
+
+
+Fig. 5 We simulated a linear model of y = x1 +  with  ∼ N (0, 1) and an additional
+feature X2 which is correlated with X1 (≈ 0.72). The conditional PDP (left) gives the false
+impression that X2 has an influence on the target. The cs-PDPs help in this regard, as the
+effects due to X1 (changes in intercept) are clearly separated from the effect that X2 has
+on the target (slope of the cs-PDPs), which is zero. Unlike the marginal PDP, the cs-PDPs
+reveals that for increasing X2 we expect that the prediction increases due to the correlation
+between X1 and X2 .
+
+
+                       6                                                        6
+                       4                                                        4
+           y
+                       2                                                        2
+                       0                                                        0
+                             0         2           4        6                        0            2           4           6
+                                               x                                                          x
+
+
+
+Fig. 6 Left: Marginal PDP. Bottom right: Boxplot showing the distribution of feature
+X. Top right:
+            √ PDP with boxplot-like emphasis. In the x-range, the PDP is drawn from
+±1.58 · IQR/ n, , where IQR is the range between the 25% and 75% quantile. If this range
+exceeds [min(xj ), max(xj )], the PDP is capped. Outliers are drawn as points. The PDP is
+bold between the 25% and 75% quantiles.
+
+
+
+will, in expectation, get the marginal PDPs. And when trees are grown deeper
+than needed, in expectation the cs-PDPs will yield the same curve.
+    Both the PDP and the set of cs-PDPs need O(nM ) evaluations, since
+PKj k                                 2                         (i)
+  k=1 n = n (and worst case O(n ) if evaluated at each xj value). Again,
+there is an additional cost for training the respective decision trees and making
+predictions.
+
+
+
+5 Training Conditional Sampling Approaches
+
+To ensure that sampling approaches are not overfitting, we suggest to separate
+training and sampling, where training covers all estimation steps that involve
+data. For this purpose, we refer to the training data with Dtrain and to the
+data for importance computation with Dtest . This section both describes how
+14                                                         Christoph Molnar et al.
+
+
+we compared the sampling approaches in the following chapters and serves as
+a general recommendation for how to use the sampling approaches.
+    For our cs-permutation, we trained the CART / transformation trees on
+Dtrain and permuted Xj of Dtest within the terminal nodes of the tree. For
+CVIRF (Strobl et al., 2008; Debeer and Strobl, 2020), which is specific to
+random forests, we trained the random forest on Dtrain to predict the target
+y and permuted Xj of Dtest within the terminal nodes. For Model-X knock-
+offs (Candes et al., 2018), we fitted the second-order knockoffs on Dtrain and
+replaced Xj in Dtest with its knockoffs. For the imputation approach (Fisher
+et al., 2019), we trained a random forest on Dtrain to predict Xj from X−j ,
+and replaced values of Xj in Dtest with their random forest predictions plus a
+random residual. For the interval-based sampling (Apley and Zhu, 2016), we
+computed quantiles of Xj using Dtrain and perturbed Xj in Dtest by moving
+each observation once to the left and once to the right border of the respec-
+tive intervals. The marginal permutation (PFI, PDP) required no training, we
+permuted (i.e., shuffled) the feature Xj in Dtest .
+
+
+
+6 Conditional PFI Ground Truth Simulation
+
+We compared our cs-PFI approach using CART (tree cart) and transformation
+trees (tree trtr), CVIRF (Strobl et al., 2008; Debeer and Strobl, 2020), Model-
+X knockoffs (ko) (Candes et al., 2018) and the imputation approach (impute
+rf) (Fisher et al., 2019) in ground truth simulations. We simulated the fol-
+                                                      (i)   (i)  P10 (i)
+lowing data-generating process: y (i) = f (x(i) ) = x1 · x2 + j=1 xj + (i) ,
+where (i) ∼ N (0, σ ). All features, except feature X1 followed a Gaussian dis-
+tribution: Xj ∼ N (0, 1). Feature X1 was simulated as a function of the other
+                        (i)      (i)
+features plus noise: x1 = g(x−1 ) + x . We simulated the following scenarios
+by changing g and x :
+                                                                           (i)
+ – In the independent scenario, X1 did not depend on any feature: g(x−1 ) =
+   0, x ∼ N (0, 1). This scenario served as a test how the different conditional
+   PFI approaches handle the edge case of independence.
+ – The linear scenario introduces a strong correlation of X1 with feature X2 :
+       (i)     (i)
+   g(x−1 ) = x2 , x ∼ N (0, 1).
+ – In the non-linear scenario, we simulated X1 as a non-linear function of
+                           (i)         (i)             (i)          (i)
+   multiple features: g(x−1 ) = 3·1(x2 > 0)−3·1(x2 ≤ 0)·1(x3 > 0). Here
+                                                                            (i)
+   also the variance of x ∼ N (0, σx ) is a function of x: σx (x(i) ) = 1(x2 >
+                               (i)            (i)          (i)
+   0) + 2 · 1(x(i) ≤ 0) · 1(x3 > 0) + 5 · 1(x2 ≤ 0) · 1(x3 ≤ 0).
+ – For the multiple linear dependencies scenario, we chose X1 to depend
+                            (i)    P10 (i)
+   on many features: g(x−1 ) = j=2 xj , x ∼ N (0, 5).
+   For each scenario, we varied the number of sampled data points n ∈
+{300, 3000} and the number of features p ∈ {9, 90}. To “train” each of the
+cPFI methods, we used 2/3 · n (200 or 2000) data points and the rest (100
+Importance and Effects with Dependent Features                                15
+
+
+/ 1000) to compute the cPFI. The experiment was repeated 1000 times. We
+examined two settings.
+ – In setting (I), we assumed that the model recovered the true model fˆ = f .
+ – In setting (II), we trained a random forest with 100 trees (Breiman, 2001).
+    In both settings, the true conditional distribution of X1 given the remaining
+features is known (function g and error distribution is known). Therefore we
+can compute the ground truth conditional PFI, as defined in Equation 2. We
+generated the samples of X1 according to g to get the X̃1 values and compute
+the increase in loss. The conditonal PFIs differed in settings (I) and (II) since
+in (I) we used the true f , and in (II) the trained random forest fˆ.
+
+
+6.1 Conditional PFI Ground Truth Results
+
+For setting (I), the mean squared errors between the estimated conditional
+PFIs and the ground truth are displayed in Table 2, and the distributions
+of conditional PFI estimates in Figure 7. In the independent scenario, where
+conditional and marginal PFI are equal, all methods performed equally well,
+except in the low n, high p scenario, where the knockoffs sometimes failed. As
+expected, the variance was higher for all methods when n = 300. In the lin-
+ear scenario, the marginal PFI was clearly different from the conditional PFI.
+There was no clear best performing conditional PFI approach, as the results
+differ depending on training size n and number of features p. For low n and low
+p, knockoffs performed best. For high p, regardless of n, the cs-permutation
+approaches worked best, which might be due to the feature selection mech-
+anism inherent to trees. The multiple linear dependencies scenario was the
+only scenario in which the cs-PFI approach was consistently outperformed by
+the other methods. Decision trees already need multiple splits for recovering
+linear relationships, and in this scenario, multiple linear relationships had to
+be recovered. Imputation with random forest worked well when multiple linear
+dependencies are present. For knockoffs, the results were mixed. As expected,
+the cs-PFI approach worked well in the non-linear scenario, and outperformed
+all other approaches. Knockoffs and imputation with random forests both over-
+estimated the conditional PFI (except for knockoffs for n = 300 and p = 90).
+In addition to this bias, they had a larger variance compared to the cs-PFI
+approaches.
+    Generally, the transformation trees performed equal to or outperformed
+CART across all scenarios, except for the multiple linear dependencies sce-
+nario. Our cs-PFI approaches worked well in all scenarios, except when mul-
+tiple (linear) dependencies were present. Even for a single linear dependence,
+the cs-PFI approaches were on par with knockoffs and imputation, and clearly
+outperformed both when the relationship was more complex.
+    In setting (II), a random forest was analyzed, which allowed us to include
+the conditional variable importance for random forests (CVIRF) by Strobl
+et al. (2008); Debeer and Strobl (2020) in the benchmark. The MSEs are
+16                                                                 Christoph Molnar et al.
+
+
+Table 2 MSE comparing estimated and true conditional PFI (scenario I). Legend: impute
+rf: Imputation with a random forest, ko: Model-X knockoffs, mPFI: (marginal) PFI, tree
+cart: cs-permutation based on CART, tree trtr: cs-permutation based on transformation
+trees.
+
+
+     setting           cs-PFI (cart)   cs-PFI (trtr)   impute rf         ko     mPFI
+     independent
+       n=300, p=10             1.33            1.35         1.67       1.47       1.39
+       n=300, p=90             1.50            1.29         1.46       5.81       1.31
+       n=3000, p=10            0.14            0.15         0.16       0.13       0.15
+       n=3000, p=90            0.15            0.14         0.14       0.18       0.13
+     linear
+        n=300, p=10            4.62            4.30        3.64        2.03      44.83
+        n=300, p=90            5.55            5.26       17.53       11.63      45.36
+        n=3000, p=10           0.40            0.26        0.26        0.63      37.40
+        n=3000, p=90           0.45            0.31        3.55        0.38      36.32
+     multi. lin.
+      n=300, p=10           2443.67         2623.54     1276.41     1583.69   2739.83
+      n=300, p=90           2574.54         2896.47     2141.01     6607.73   2988.68
+      n=3000, p=10          1031.83          900.68      140.98      810.78   1548.37
+      n=3000, p=90          1075.95         1041.10      438.25      185.13   1599.59
+     non-linear
+       n=300, p=10            22.00           17.76      265.73      668.34   1204.17
+       n=300, p=90            19.99           19.81      504.53      131.77   1248.74
+       n=3000, p=10            1.18            1.00      144.77      626.80   1156.32
+       n=3000, p=90            1.17            1.13      206.01      579.02   1136.83
+
+
+
+displayed in Appendix D, Table 7, and the distribution of conditional PFI
+estimates in Appendix D in Figure 14. The results for all other approaches are
+comparable to setting (I). For the low n settings, CVIRF worked as well as
+the other approaches in the independent scenario. It outperformed the other
+approaches in the linear scenario and the multiple linear scenario (when n was
+small). The CVIRF approach consistently underestimated the conditional PFI
+in all scenarios with high n, even in the independent scenario. Therefore, we
+would recommend to analyze the conditional PFI for random forests using cs-
+PFI for lower dimensional dependence structures, and imputation for multiple
+(linear) dependencies.
+
+
+
+7 Trading Interpretability for Accuracy
+
+In an additional experiment, we examined the trade-off between the depth of
+the trees and the accuracy with which we recover the true conditional PFI.
+For scenario (I), we trained decision trees with different maximal depths (from
+1 to 10) and analyzed how the resulting number of subgroups influenced the
+conditional PFI estimate. The experiment was repeated 1000 times. Figure
+8 shows that the deeper the transformation trees (and the more subgroups),
+the better the true conditional PFI was approximated. The plot also shows
+Importance and Effects with Dependent Features                                                                                                                                                                                                 17
+
+                              n=300, p=10                                             n=300, p=90                                            n=3000, p=10                                            n=3000, p=90
+      12.5
+
+      10.0
+
+
+
+
+                                                                                                                                                                                                                                             independent
+       7.5
+
+       5.0
+
+       2.5
+
+       0.0
+
+
+
+       20
+
+                                                                                                                                                                                                                                             linear
+       10
+
+
+
+        0
+PFI
+      400
+
+      300
+
+
+                                                                                                                                                                                                                                             multi. lin.
+      200
+
+      100
+
+        0
+
+
+       90
+
+
+
+                                                                                                                                                                                                                                             non−linear
+       60
+
+
+       30
+
+
+        0
+
+
+                                             impute rf                                               impute rf                                               impute rf                                               impute rf
+                                                              mPFI                                                    mPFI                                                    mPFI                                                    mPFI
+
+             cs−PFI (cart)   cs−PFI (trtr)
+                                                         ko
+
+
+                                                                     cs−PFI (cart)   cs−PFI (trtr)
+                                                                                                                 ko
+
+
+                                                                                                                             cs−PFI (cart)   cs−PFI (trtr)
+                                                                                                                                                                         ko
+
+
+                                                                                                                                                                                     cs−PFI (cart)   cs−PFI (trtr)
+                                                                                                                                                                                                                                 ko
+
+
+
+
+Fig. 7 Setting (I) comparing various conditional PFI approaches on the true model against
+the true conditional PFI (horizontal line) based on the data generating process.
+
+
+
+that no overfitting occurred, which is in line with theoretical considerations in
+Theorem 1.
+
+
+8 Data Fidelity Evaluation
+
+PDP and PFI work by data intervention, prediction, and subsequent aggrega-
+tion (Scholbeck et al., 2019). Based on data D, the intervention creates a new
+data set. In order to compare different conditional sampling approaches, we
+define a measure of data fidelity to quantify the ability to preserve the joint
+distribution under intervention. Failing to preserve the joint distribution leads
+to extrapolation when features are dependent. Model-X knockoffs, for exam-
+ple, are directly motivated by preserving the joint distribution, while others,
+such as accumulated local effect plots do so more implicitly.
+18                                                                            Christoph Molnar et al.
+
+
+                                                                cart
+                                              Tree algorithm    trtr
+
+                n=300, p=10           n=300, p=90              n=3000, p=10        n=3000, p=90
+
+        6
+
+
+
+
+                                                                                                  independent
+        5
+
+        4
+
+        3
+
+        2
+
+       10
+
+        8
+
+                                                                                                  linear
+        6
+
+        4
+
+PFI
+
+      180
+
+
+
+                                                                                                  multi. lin.
+      140
+
+
+      100
+
+
+
+
+       20
+
+
+
+
+                                                                                                  non−linear
+       15
+
+
+       10
+
+
+        5
+            2   3   4     5   6   2   3   4      5    6        10        20         10       20
+                                              Number of subgroups
+
+Fig. 8 Conditional PFI estimate using cs-PFI (cart / transformation tree) with increas-
+ing number of subgroups (simulation scenario I). Displayed is the median PFI over 1000
+repetitions along with the 5% and 95% quartiles.
+
+
+
+
+    Data fidelity is the degree to which a sample X̃j of feature Xj preserves
+the joint distribution, that is, the degree to which (X̃j , X−j ) ∼ (Xj , X−j )
+In theory, any measure that compares two multivariate distributions can be
+used to compute the data fidelity. In practice, however, the joint distribution
+is unknown, which makes measures such as the Kullback-Leibler divergence
+impractical. We are dealing with two samples, one data set without and one
+with intervention.
+
+    In this classic two-sample test-scenario, the maximum mean discrepancy
+(MMD) can be used to compare whether two samples come from the same
+distribution (Fortet and Mourier, 1953; Smola et al., 2007; Gretton et al.,
+Importance and Effects with Dependent Features                                    19
+
+
+2007, 2012). The empirical MMD is defined as:
+
+                      1 X           2        X                  1 X
+  MMD(D, D̃) =          2
+                          k(x, z) −                   k(x, z) + 2   k(x, z)      (6)
+                      n             nl                          l
+                        x,z∈D              x∈D,z∈D̃             x,z∈D̃
+
+                (i)   (i)                                            (i)   (i)
+where D = {xj , x−j }ni=1 is the original data set and D̃ = {x̃j , x−j }li=1 a
+                            (i)
+data set with perturbed xj . For both data sets, we scaled numerical features
+to a mean of zero and a standard deviation of one. For the kernel k we used
+the radial basis function kernel for all experiments. For parameter σ of the
+radial basis function kernel, we chose the median L2-distance between data
+points which is a common heuristic (Gretton et al., 2012). We measure data
+fidelity as the negative logarithm of the MMD (−log(MMD)) to obtain a more
+condensed scale where larger values are better.
+
+Definition 1 (MMD-based Data Fidelity) Let D be a dataset, and D̃ be
+another dataset from the same distribution, but with an additional interven-
+tion. We define the data fidelity as: Data Fidelity = −log(MMD(D, D̃)).
+We evaluated how different sampling strategies (see Table 1) affect the data
+fidelity measure for numerous data sets of the OpenML-CC18 benchmarking
+suite (Bischl et al., 2019). We removed all data sets with 7 or fewer features
+and data sets with more than 500 features. See Appendix E for an overview of
+the remaining data sets. For each data set, we removed all categorical features
+from the analysis, as the underlying sampling strategies of ALE plots and
+Model-X knockoffs are not well equipped to handle them. We were foremost
+interested in two questions:
+A) How does cs-permutation compare with other sampling strategies w.r.t.
+   data fidelity?
+B) How do choices of tree algorithm (CART vs. transformation trees) and tree
+   depth parameter affect data fidelity?
+    In each experiment, we selected a data set, randomly sampled a feature
+and computed the data fidelity of various sampling strategies as described in
+the pseudo-code in Algorithm 2.
+    For an unbiased evaluation, we split the data into three pieces: Dtrain
+(40% of rows), Dtest (30% of rows) and Dref (30% of rows). We used Dtrain
+to “train” each sampling method (e.g., train decision trees for cs-permutation,
+see Section 5). We used Dref , which we left unchanged and Dtest , for which the
+chosen feature was perturbed to estimate the data fidelity. For each data set,
+we chose 10 features at random, for which sampling was applied. Marginal per-
+mutation (which ignores the joint distribution) and ”no perturbation” served
+as lower and upper bounds for data fidelity. For CVIRF, we only used one
+tree per random forest as we only compared the general perturbation strategy
+which is the same for each tree.
+    We repeated all experiments 30 times with different random seeds and
+therefore different data splits. All in all this produced 12210 results (42 data
+20                                                              Christoph Molnar et al.
+
+
+ Algorithm 2: Data Fidelity Experiments
+   Input: OpenML-CC18 data sets, sampling strategies
+ 1 for data set D in OpenML-CC18 do
+ 2     Remove prediction target from D (only keep it for CVIRF)
+ 3     Randomly order features in D
+ 4     for features j ∈ {1, . . . , 10} do
+ 5         for repetition ∈ {1, . . . , 30} do
+ 6              Sample min(10.000, n) rows from D
+ 7              Split sample into Dtrain (40%), Dtest (30%) and Dref (30%)
+ 8              for each sampling do
+ 9                  “Train” sampling approach using Dtrain (e.g., construct
+                    subgroups, fit knockoff-generator, ...)
+10                  Generate conditional sample X̃j for Dtest
+11                  Estimate data fidelity as −log(M M D(Dref , Dtest ))
+
+
+12   return Set of data fidelity estimates
+
+
+
+sets × (up to) 10 features × 30 repetitions) per sampling method. All results
+are shown in detail in Appendix E (Figures 15, 16, 17, 18).
+    Since the experiments are repeated across the same data sets and the same
+features, the data fidelity results are not independent. Therefore, we used a
+random intercept model (Bryk and Raudenbush, 1992) to analyze the dif-
+ferences in data fidelity between different sampling approaches. The random
+intercepts were nested for each data set and each feature. We chose “Marginal
+Permutation” as the reference category. We fitted two random intercept mod-
+els: One to compare cs-permutation with fully-grown trees (CART, trtr) with
+other sampling methods and another one to compare different tree depths.
+
+
+8.1 Results A) State-of-the-art comparison
+
+Figure 9 shows the effect estimates of different sampling approaches mod-
+eled with a random intercept model. The results show that cs-permutation
+performed better than all other methods. Model-X knockoffs and the imputa-
+tion approach (with random forests) came in second place and outperformed
+ALE and CVIRF. Knockoffs were proposed to preserve the joint distribution,
+but are based on multivariate Gaussian distribution. This seems to be too
+restrictive for the data sets in our experiments. CVIRF does not have much
+higher data fidelity than marginal permutation. However, results for CVIRF
+must be viewed with caution, since data fidelity regards all features equally
+– regardless of their impact on the model prediction. For example, a feature
+can be highly correlated with the feature of interest, but might not be used
+in the random forest. A more informative experiment for comparing CVIRF
+can be found in Section 6. Figure 15 and Figure 16 in Appendix E show the
+individual data fidelity results for the OpenML-CC18 data sets. Not perturb-
+ing the feature at all has the highest data fidelity and serves as the upper
+bound. The marginal permutation serves as a lower baseline. For most data
+Importance and Effects with Dependent Features                                                                                               21
+
+
+                                     A)                                                                   B)
+                                                                                                 none
+                           none
+
+
+
+
+  Perturbation method                                                    Perturbation method
+                                                                                                trtr30
+                         cs (trtr)                                                             cart30
+                                                                                                cart5
+                        cs (cart)                                                                 trtr5
+                                                                                                cart4
+                             imp                                                                  trtr4
+                                                                                                cart3
+                               ko                                                                 trtr3
+                                                                                                cart2
+                              ale                                                                 trtr2
+                                                                                                cart1
+                            cvirf
+                                                                                                  trtr1
+                                     0.0       0.2     0.4       0.6                                      0.0      0.2        0.4    0.6
+                                           Data fidelity estimates                                                         lower
+
+Fig. 9 Linear regression model coefficients and 95% confidence intervals for the effect of
+different sampling approaches on data fidelity, with (nested) random effects per data set
+and feature. A) Comparing different sampling approaches. No perturbation (”none”) and
+permutation (”perm”) serve as upper and lower bounds. B) Comparing cs-permutation
+using either CART or transformation trees and different tree depths (1,2,3,4,5 and 30).
+Marginal permutation is the reference category.
+
+
+
+
+sets, cs-permutation has a higher data fidelity compared to all other sampling
+approaches. For all the other methods there is at least one data set on which
+they reach a low data fidelity (e.g., “semeion”, “qsar-biodeg” for ALE; “nodel-
+simulation”, “churn” for imputation; “jm1”, “pc1” for knockoffs). In contrast,
+cs-permutation achieves a consistently high data fidelity on all these data sets.
+    Additionally, we review the data fidelity rankings of the sampling methods
+in Table 3. The rankings show a similar picture as the random intercept model
+estimates, except that Model-X knockoffs have a better average ranking than
+imputation. This could be the case since on a few data sets (bank-marketing,
+electricity, see Figure 15 in Appendix E) Model-X knockoffs have a very low
+data fidelity but on most others a higher model fidelity than the imputation
+method.
+
+
+                                             none    cs (trtr)      ko   cs (cart)                          imp      ale     perm    cvirf
+                        Mean ranks           2.50        3.51     3.70        3.76                          4.25    4.61      6.82   6.84
+                               SD            0.73        0.87     1.32        0.91                          1.37    2.07      1.14   1.14
+Table 3 Mean ranks and their standard deviation based on data fidelity of various per-
+turbation methods over data sets, features and repetitions. Legend: none: No intervention,
+which serves as upper benchmark. cart30: cs-permutation with CART with maximal depth
+of 30. trtr30: cs-permutation with transformation trees with maximal depth of 30. imp:
+Imputation approach. ko: Model-X knockoffs Candes et al. (2018) . ale: ALE perturbation
+Apley and Zhu (2016). cvirf: Conditional variable importance for random forests Strobl et al.
+(2008). perm: Unconditional permutation.
+22                                                                    Christoph Molnar et al.
+
+
+8.2 Results B) tree configuration
+
+We included shallow trees with maximum depth parameter from 1 to 5 to
+analyze the trade-off between tree depth and data fidelity. We included trees
+with a maximum depth parameter of 30 (“fully-grown” trees as this was the
+software’s limit) as an upper bound for each decision tree algorithm. Figure 9
+B) shows that the deeper the trees (and the more subgroups), the higher
+the data fidelity. This is to be expected, since deeper trees allow for a more
+fine-grained separation of distributions. More importantly, we are interested
+in the trade-off between depth and data fidelity. Even splitting with a maxi-
+mum depth of only 1 (two subgroups) strongly improves data fidelity over the
+simple marginal permutation for most data sets. A maximum depth of two
+means another huge average improvement in data fidelity, and already puts
+cs-permutation on par with knockoffs. A depth of three to four is almost as
+good as a maximum depth parameter of 30 and already outperforms all other
+methods, while still being interpretable due to their shortness. CART slightly
+outperforms transformation trees clearly when trees are shallow, which is sur-
+prising since transformation trees are, in theory, better equipped to handle
+changes in the distribution. Deeply grown transformation trees (max. depth of
+30) slightly outperform CART. Figure 17 and Figure 18 in Appendix E show
+data fidelity aggregated by data set.
+
+
+9 Model Fidelity
+
+Model fidelity has been defined as how well the predictions of an explanation
+method approximate the ML model (Ribeiro et al., 2016). Similar to Szepan-
+nek (2019), we define model fidelity for feature effects as the mean squared
+error between model prediction and the prediction of the partial function fj
+(which depends only on feature Xj ) defined by the feature effect method, for
+example fj (x) = P DPj (x). For a given data instance with observed feature
+       (i)
+value xj , the predicted outcome of, for example, a PDP can be obtained by
+the value on the y-axis of the PDP at the observed xj value.
+
+                                            Pn                          (i)
+             Model Fidelity(fˆ, fj ) = n1         ˆ
+                                             i=1 (f (x
+                                                         (i)
+                                                               ) − fj (xj ))2 ,          (7)
+    where fj is a feature effect function such as ALE or PDP. In order to eval-
+uate ALE plots, they have to be adjusted such that they are on   Pan comparable
+scale to a PDP (Apley and Zhu, 2016): fjALE,adj = fjALE + n1 i=1 fˆ(x(i) ).
+    We trained random forests (500 trees), linear models and k-nearest neigh-
+bours models (k = 7) on various regression data sets (Table 4). 70% of the data
+were used to train the ML models and the transformation trees / CARTs. This
+ensure that results are not over-confident due to overfitting, see also Section 5.
+The remaining 30% of the data were used to evaluate model fidelity. For each
+model and each data set, we measured model fidelity between effect prediction
+and model prediction (Equation 7), averaged across observations and features.
+Importance and Effects with Dependent Features                                          23
+
+                             wine     satellite    wind       space    pollen   quake
+           No. of rows       6497        6435      6574        3107     3848     2178
+           No. of features     12           37       15           7         6       4
+Table 4 We selected data sets from OpenML Vanschoren et al. (2014); Casalicchio et al.
+(2017) having 1000 to 8000 instances and a maximum of 50 numerical features. We excluded
+data sets with categorical features, since ALE cannot handle them.
+
+
+
+
+    Table 5 shows that the model fidelity of ALE and PDP is similar, while
+the cs-PDPs have the best model fidelity. This is an interesting result since
+the decision trees for the cs-PDPs are neither based on the model nor on the
+real target, but solely on the conditional dependence structure of the features.
+However, the cs-PDPs have the advantage that we obtain multiple plots. We
+did not aggregate the plots to a single conditional PDP, but computed the
+model fidelity for the PDPs within the subgroups (visualized in Figure 12). Our
+cs-PDPs using trees with a maximum depth of 2 have a better model fidelity
+than using a maximum depth of 1. We limited the analysis to interpretable
+conditioning and therefore allowed only trees with a maximum depth of 2,
+since a tree depth of 3 already means up to 8 subgroups which is already an
+impractical number of PDPs to have in one plot. CART sometimes beats trtr
+(e.g., on the “satellite” data set) but sometimes trtr has a lower loss (e.g., on
+the “wind” data set). Using different models (knn or linear model) produced
+similar results, see Appendix F.
+
+
+                             pollen   quake       satellite    space    wind    wine
+                  PDP          9.61    0.04           4.80      0.03    44.84   0.75
+                  ALE          9.91    0.04           4.81      0.03    44.83   0.75
+           cs-PDP trtr1        8.44    0.04           4.49      0.03    29.96   0.71
+           cs-PDP cart1        8.44    0.04           3.71      0.03    31.38   0.73
+           cs-PDP trtr2        8.17    0.04           3.25      0.03    26.56   0.70
+           cs-PDP cart2        8.29    0.04           3.05      0.03    25.96   0.71
+Table 5 Median model fidelity averaged over features in a random forest for various data
+sets. The cPDPs always had a lower loss (i.e. higher model fidelity) than PDP and ALE. The
+loss monotonically decreases with increasing maximum tree depth for subgroup construction.
+
+
+
+
+10 Application
+
+In the following application, we demonstrate that cs-PDPs and cs-PFI are
+valuable tools to understand model and data beyond insights given by PFI,
+PDPs, or ALE plots. We trained a random forest to predict daily bike rentals
+(Dua and Graff, 2017) with given weather and seasonal information. The data
+(n = 731, p = 9) was divided into 70% training and 30% test data.
+24                                                               Christoph Molnar et al.
+
+
+10.1 Analyzing Feature Dependence
+
+The features in the bike data are dependent. For example, the correlation be-
+tween temperature and humidity is 0.13. The data contains both categorical
+and numerical features and we are interested in the multivariate, non-linear
+dependencies. Thus, correlation is an inadequate measure of dependence. We
+therefore indicate the degree of dependence by showing the extent to which
+we can predict each feature from all other features in Table 6. This idea
+is based on the proportional reduction in loss (Cooil and Rust, 1994). Per
+feature, we trained a random forest to predict that feature from all other
+features. We measured the proportion of loss explained to quantify the de-
+pendence of the respective feature on all other features. For numerical fea-
+tures, we used the R-squared measure. For categorical features, we computed
+1−M M CE(yclass , rf (X))/M M CE(yclass , xmode ), where M M CE is the mean
+misclassification error, yclass the true class, rf () the classification function of
+the random forest and xmode the most frequent class in the training data. We
+divided the training data into two folds and trained the random forest on one
+half. Then, we computed the proportion of explained loss on the other half
+and vice versa. Finally, we averaged the results. The feature “work” can be
+fully predicted by weekday and holiday. Season, temperature, humidity and
+weather can be partially predicted and are therefore not independent.
+
+
+      season   yr    holiday   weekday    temp    hum     work    weather    wind
+      45%      8%    29%       14%        66%     43%     100%    46%        12%
+Table 6 Percentage of loss explained by predicting a feature from the remaining features
+with a random forest.
+
+
+
+
+10.2 cs-PDPs and cs-PFI
+
+To construct the subgroups, we used transformation trees with a maximum
+tree depth of 2 which limited the number of possible subgroups to 4. Figure 10
+shows that for most features the biggest change in the estimated conditional
+PFI happens when moving from a maximum depth of 0 (= marginal PFI)
+to a depth of 2. This makes a maximum depth of 2 a reasonable trade-off
+between limiting the number of subgroups and accurately approximating the
+conditional PFI. We compared the marginal and conditional PFI for the bike
+rental predictions, see Figure 11.
+    The most important features, according to (marginal) PFI, were temper-
+ature and year. For the year feature, the marginal and conditional PFI are
+the same. Temperature is less important when we condition on season and hu-
+midity. The season already holds a lot of information about the temperature,
+so this is not a surprise. When we know that a day is in summer, it is not
+as important to know the temperature to make a good prediction. On humid
+Importance and Effects with Dependent Features                                                                              25
+
+
+                                                                                                      feature
+                                                                                                          holiday
+                               600                                                                        hum
+
+
+
+                   cond. PFI
+                                                                                                          season
+                               400                                                                        temp
+                                                                                                          weather
+                                                                                                          weekday
+                               200
+                                                                                                          wind
+                                                                                                          work
+                                0                                                                         yr
+                                      0           1            2     3           4            5
+                                                       Maxdepth parameter
+
+Fig. 10 Conditional feature importance by increasing maximum depth of the trees.
+
+
+
+                                     cs−PFI           PFI
+
+
+
+     temp                                                                season in {winter}
+                                     season,hum
+
+        yr
+                                              hum                  season in {summer} &
+                                                                           hum > 67.292
+    season
+                       temp
+                                                                   season in {summer} &
+                                                                         hum <= 67.292
+      hum
+                 weather,wind,temp
+
+      wind                                                         season in {spring,fall}
+                 season,hum,temp
+
+             0           250          500     750           1000                                  0            200   400
+                               PFI and cs−PFI                                                         temperature cs−PFIs
+
+Fig. 11 Left: Comparison of PFI and cs-PFI for a selection of features. For cs-PFI we also
+show the features that constitute the subgroups. Right: Local cs-PFI of temperature within
+subgroups. The temperature feature is important in spring, fall and winter, but neglectable
+on summer days, especially humid ones.
+
+
+
+summer days, the PFI of temperature is zero. However, in all other cases, it is
+important to know the temperature to predict how many bikes will be rented
+on a given day. The disaggregated cs-PFI in a subgroup can be interpreted as
+“How important is the temperature, given we know that the season and the
+humidity”.
+    Both ALE and PDP show a monotone increase of predicted bike rentals
+up until a temperature of 25 ◦ C and a decrease beyond that. The PDP shows
+a weaker negative effect of very high temperatures which might be caused by
+extrapolation: High temperature days are combined with e.g. winter. A limi-
+tation of the ALE plot is that we should only interpret it locally within each
+interval that was used to construct the ALE plot. In contrast, our cs-PDP
+is explicit about the subgroup conditions in which the interpretation of the
+cs-PDP is valid and shows the distributions in which the feature effect may be
+interpreted. The local cs-PDPs in subgroups reveal a more nuanced picture:
+26                                                                          Christoph Molnar et al.
+
+
+                                                                            season in {summer} &
+                                                  season in {spring,fall}
+                     ale    pdp                                              hum > 67.292
+                                                  season in {summer} &
+                                                                            season in {winter}
+                                                   hum <= 67.292
+
+
+     6000                              6000
+
+
+     5000                              5000
+
+
+     4000                              4000
+
+
+     3000                              3000
+
+
+     2000                              2000
+            0   10         20     30          0            10                 20                   30
+                Temperature                                     Temperature
+
+Fig. 12 Effect of temperature on predicted bike rentals. Left: PDP and ALE plot. Right:
+cs-PDPs for 4 subgroups.
+
+
+For humid summer days, the temperature has no effect on the bike rentals,
+and the average number of rentals are below that of days with similar temper-
+atures in spring, fall and drier summer days. The temperature has a slightly
+negative effect on the predicted number of bike rentals for dry summer days
+(humidity below 70.75). The change in intercepts of the local cs-PDP can be
+interpreted as the effect of the grouping feature (season). The slope can be
+interpreted as the temperature effect within a subgroup.
+We also demonstrate the local cs-PDPs for the season, a categorical feature.
+Figure 13 shows both the PDP and our local cs-PDPs. The normal PDP shows
+that on average there is no difference between spring, summer and fall and only
+slightly less bike rentals in winter. The PDP with four subgroups conditional
+on temperature shows that the marginal PDP is misleading. The PDP indi-
+cates that in spring, summer and fall, around 4500 bikes are rented and in
+winter around 1000 fewer. The cs-PDPs in contrast show that, conditional on
+temperature, the differences between the seasons are much greater, especially
+for low temperatures. Only at high temperatures is the number of rented bikes
+similar between seasons.
+
+
+11 Discussion
+
+We proposed the cs-PFIs and cs-PDPs, wich are variants of PFI and PDP that
+work when features are dependent. Both cs-PFIs and cs-PDPs rely on permu-
+tations in subgroups based on decision trees. The approach is simple: Train
+a decision tree to predict the feature of interest and compute the (marginal)
+PFI / PDP in each terminal node defined by the decision tree.
+    Compared to other approaches, cs-PFIs and cs-PDPs enable a human com-
+prehensible grouping, which carries information how dependencies affect fea-
+ture effects and importance. As we showed in various experiments, our meth-
+ods are on par or outperform other methods in many dependence settings. We
+therefore recommend using cs-PDPs and cs-PFIs to analyze feature effects and
+Importance and Effects with Dependent Features                                                                                   27
+
+
+                                                               temp <= 21.8 & temp <= 21.8 &   temp > 21.8 &    temp > 21.8 &
+                                                                 temp <= 12.1   temp > 12.1     temp <= 23.4      temp > 23.4
+                     8000                               8000
+
+
+
+
+ Predicted rentals
+                     6000                               6000
+
+
+
+                     4000                               4000
+
+
+
+                     2000                               2000
+
+
+                             R     G       ER   FA              R     G     INFA LL                   FA            G       ER
+                            TE   RIN   M           LL          TE   RIN
+                                                                               T
+                                                                           SP ER
+                                                                          SU RIN
+                                                                            M G
+                                                                              M                          LL     RIN        M
+                        IN   SP        M                   IN   SP         SP FA ER
+                                                                                 LL                            SP       M
+                       W          SU                     W                 W  R
+                                                                          SU ING
+                                                                            M M  ER                                   SU
+                                   season                                               season
+
+Fig. 13 Effect of season on predicted rentals. Left: PDP. Right: Local cs-PDPs. The
+cs-PDPs are conditioned on temperature, in which the tree split at 21.5 and at 9.5.
+
+
+importances when features are dependent. However, due to their construction
+with decision trees, cs-PFIs and cs-PDPs do not perform well when the fea-
+ture of interest depends on many other features, but only if it depends on a
+few features. We recommend analyzing the dependence structure beforehand,
+using the imputation approach with random forests in the case of multiple
+dependencies, and cs-PFIs in all other cases.
+    Our framework is flexible regarding the choice of partitioning and we leave
+the evaluation of the rich selection of possible decision tree and decision rules
+approaches to future research.
+    Reproducibility: All experiments were conducted using mlr (Lang et al.,
+2019) and R (R Core Team, 2017). We used the iml package (Molnar et al.,
+2018) for ALE and PDP, party/partykit (Hothorn and Zeileis, 2015) for CVIRF
+and knockoff (Patterson and Sesia, 2020) for Model-X knockoffs. The code
+for all experiments is available at https://github.com/christophM/paper_
+conditional_subgroups.
+
+Acknowledgements This project is funded by the Bavarian State Ministry of Science
+and the Arts, by the Bavarian Research Institute for Digital Transformation (bidt) and
+supported by the German Federal Ministry of Education and Research (BMBF) under Grant
+No. 01IS18036A and by the German Research Foundation (DFG), Emmy Noether Grant
+437611051. The authors of this work take full responsibilities for its content.
+28                                                         Christoph Molnar et al.
+
+
+References
+
+Aas K, Jullum M, Løland A (2019) Explaining individual predictions when
+  features are dependent: More accurate approximations to Shapley values.
+  arXiv preprint arXiv:190310464
+Apley DW, Zhu J (2016) Visualizing the effects of predictor variables in black
+  box supervised learning models. arXiv preprint arXiv:161208468
+Barber RF, Candès EJ, et al. (2015) Controlling the false discovery rate via
+  knockoffs. The Annals of Statistics 43(5):2055–2085
+Bischl B, Casalicchio G, Feurer M, Hutter F, Lang M, Mantovani RG, van
+  Rijn JN, Vanschoren J (2019) Openml benchmarking suites. arXiv preprint
+  arXiv:170803731
+Breiman L (2001) Random forests. Machine learning 45(1):5–32
+Breiman L, Friedman J, Olshen R, Stone C (1984) Classification and Regres-
+  sion Trees. Wadsworth and Brooks
+Bryk AS, Raudenbush SW (1992) Hierarchical linear models: Applications and
+  data analysis methods. Sage Publications, Inc
+Candes E, Fan Y, Janson L, Lv J (2018) Panning for gold:‘model-x’knockoffs
+  for high dimensional controlled variable selection. Journal of the Royal Sta-
+  tistical Society: Series B (Statistical Methodology) 80(3):551–577
+Casalicchio G, Bossek J, Lang M, Kirchhoff D, Kerschke P, Hofner B, Seibold
+  H, Vanschoren J, Bischl B (2017) OpenML: An R package to connect to the
+  machine learning platform OpenML. Comput Stat
+Cooil B, Rust RT (1994) Reliability and expected loss: A unifying principle.
+  Psychometrika 59(2):203–216
+Debeer D, Strobl C (2020) Conditional permutation importance revisited.
+  BMC bioinformatics 21(1):1–30
+Dua D, Graff C (2017) UCI machine learning repository. URL http://
+  archive.ics.uci.edu/ml
+Fisher A, Rudin C, Dominici F (2019) All models are wrong, but many are use-
+  ful: Learning a variable’s importance by studying an entire class of prediction
+  models simultaneously. Journal of Machine Learning Research 20(177):1–81
+Fortet R, Mourier E (1953) Convergence de la répartition empirique vers
+  la répartition théorique. In: Annales scientifiques de l’École Normale
+  Supérieure, vol 70, pp 267–285
+Friedman JH, et al. (1991) Multivariate adaptive regression splines. The annals
+  of statistics 19(1):1–67
+Goldstein A, Kapelner A, Bleich J, Pitkin E (2015) Peeking inside the black
+  box: Visualizing statistical learning with plots of individual conditional ex-
+  pectation. J Comput Graph Stat 24(1):44–65
+Gregorutti B, Michel B, Saint-Pierre P (2017) Correlation and variable impor-
+  tance in random forests. Statistics and Computing 27(3):659–678
+Gretton A, Fukumizu K, Teo CH, Song L, Schölkopf B, Smola AJ, et al.
+  (2007) A kernel statistical test of independence. In: Nips, Citeseer, vol 20,
+  pp 585–592
+Importance and Effects with Dependent Features                               29
+
+
+Gretton A, Borgwardt KM, Rasch MJ, Schölkopf B, Smola A (2012) A kernel
+  two-sample test. The Journal of Machine Learning Research 13(1):723–773
+Guidotti R, Monreale A, Ruggieri S, Turini F, Giannotti F, Pedreschi D (2018)
+  A survey of methods for explaining black box models. ACM computing
+  surveys (CSUR) 51(5):1–42
+Hooker G (2007) Generalized functional anova diagnostics for high-
+  dimensional functions of dependent variables. J Comput Graph Stat 16(3)
+Hooker G, Mentch L (2019) Please stop permuting features: An explanation
+  and alternatives. arXiv preprint arXiv:190503151
+Hothorn T (2018) Top-down transformation choice. Statistical Modelling 18(3-
+  4):274–298
+Hothorn T, Zeileis A (2015) partykit: A modular toolkit for recursive party-
+  tioning in r. The Journal of Machine Learning Research 16(1):3905–3909
+Hothorn T, Zeileis A (2017) Transformation forests. arXiv preprint
+  arXiv:170102110
+König G, Molnar C, Bischl B, Grosse-Wentrup M (2020) Relative feature im-
+  portance. arXiv preprint arXiv:200708283
+Lang M, Binder M, Richter J, Schratz P, Pfisterer F, Coors S, Au Q, Casalic-
+  chio G, Kotthoff L, Bischl B (2019) mlr3: A modern object-oriented machine
+  learning framework in R. Journal of Open Source Software
+Lei J, G’Sell M, Rinaldo A, Tibshirani RJ, Wasserman L (2018) Distribution-
+  free predictive inference for regression. Journal of the American Statistical
+  Association 113(523):1094–1111
+Molnar C (2019) Interpretable Machine Learning. https://christophm.
+  github.io/interpretable-ml-book/
+Molnar C, Bischl B, Casalicchio G (2018) iml: An R package for interpretable
+  machine learning. JOSS 3(26):786
+Molnar C, König G, Herbinger J, Freiesleben T, Dandl S, Scholbeck CA, Casal-
+  icchio G, Grosse-Wentrup M, Bischl B (2020) Pitfalls to avoid when inter-
+  preting machine learning models. arXiv preprint arXiv:200704131
+Parr T, Wilson JD (2019) A stratification approach to partial dependence for
+  codependent variables. arXiv preprint arXiv:190706698
+Patterson E, Sesia M (2020) knockoff: The Knockoff Filter for Controlled Vari-
+  able Selection. URL https://CRAN.R-project.org/package=knockoff, r
+  package version 0.3.3
+R Core Team (2017) R: A Language and Environment for Statistical Comput-
+  ing. R Foundation for Statistical Computing, Vienna, Austria
+Ribeiro MT, Singh S, Guestrin C (2016) Why should i trust you?: Explaining
+  the predictions of any classifier. In: Proceedings of the 22nd ACM SIGKDD
+  international conference on knowledge discovery and data mining, ACM, pp
+  1135–1144
+Romano Y, Sesia M, Candès E (2019) Deep knockoffs. Journal of the American
+  Statistical Association pp 1–12
+Scholbeck CA, Molnar C, Heumann C, Bischl B, Casalicchio G (2019) Sam-
+  pling, intervention, prediction, aggregation: A generalized framework for
+  model-agnostic interpretations. In: Joint European Conference on Machine
+30                                                         Christoph Molnar et al.
+
+
+  Learning and Knowledge Discovery in Databases, Springer, pp 205–216
+Smola A, Gretton A, Song L, Schölkopf B (2007) A hilbert space embedding for
+  distributions. In: International Conference on Algorithmic Learning Theory,
+  Springer, pp 13–31
+Strobl C, Boulesteix AL, Kneib T, Augustin T, Zeileis A (2008) Conditional
+  variable importance for random forests. BMC bioinformatics 9(1):307
+Szepannek G (2019) How much can we see? A note on quantifying explain-
+  ability of machine learning models. arXiv preprint arXiv:191013376
+Toloşi L, Lengauer T (2011) Classification with correlated features: unreliabil-
+  ity of feature ranking and solutions. Bioinformatics 27(14):1986–1994
+Vanschoren J, Van Rijn JN, Bischl B, Torgo L (2014) OpenML: networked sci-
+  ence in machine learning. ACM SIGKDD Explorations Newsletter 15(2):49–
+  60
+Watson DS, Wright MN (2019) Testing conditional independence in supervised
+  learning algorithms. arXiv preprint arXiv:190109917
+Importance and Effects with Dependent Features                                                   31
+
+
+A Decompose conditional PFI into cs-PFIs
+
+Assuming a perfect construction of Gj , it holds that Xj ⊥ X−j |Gj and also that Xj ⊥
+Gj |X−j (as Gj is a compression of X−j ). Therefore
+
+                           P (Xj |X−j ) = P (Xj |X−j , Gj ) = P (Xj |Gj ).                       (8)
+
+                                         (i)             (i)
+When we sample the replacement x̃j for an xj from the marginal within a group (P (Xj |Gj =
+ (i)                                                                           (i)
+gj ), e.g., via permutation) we also sample from the conditional P (Xj |X−j = x−j ). Every
+data point from the global sample can therefore equivalently be seen as a sample from the
+marginal within the group, or as a sample from the global conditional distribution.
+As follows, the weighted sum of marginal subgroup PFIs coincides with the conditional PFI
+(cPFI).
+
+
+                     n
+                     X 1              (i)  (i)                   (i)  (i)
+                                                                                    
+          cP F I =              L(f (x̃j , x−j ), y (i) ) − L(fˆ(xj , x−j ), y (i) )             (9)
+                     i=1
+                         n
+                     K
+                     X   nk X 1         (i)  (i)                   (i)  (i)
+                                                                                      
+                =               k
+                                  L(f (x̃j , x−j ), y (i) ) − L(fˆ(xj , x−j ), y (i) )          (10)
+                     k=1
+                         n i∈G n
+                                    k
+
+                                                                                                (11)
+                     K
+                     X     nk
+                =               PFIk                                                            (12)
+                     k=1
+                           n
+
+
+
+
+B Expectation and Variance of the PFI in a Subgroup
+
+We show that under feature independence the PFI and a PFI in an arbitrary subgroup
+have the same expected value and the subgroup k PFI has a higher variance. Let L̃(i) =
+ 1 PM        (i) , fˆ(x̃m(i) , x(i) ) and L(i) = L(y (i) , fˆ(xm(i) , x(i) ).
+M    m=1 L(y            j       −j                             j       −j
+
+
+Proof
+
+                                                            n
+                                                     "                     #
+                                                         1 X (i)
+                      EX−j [P F Ij ] = EX−j                    (L̃ − L(i) )
+                                                         n i=1
+
+                                     = EX−j [L̃(i) − L(i) ]
+                                                                            
+                                                1     X
+                      E[P F Ijk ]X−j = EX−j                  (L̃(i) − L(i) )
+                                                                            
+                                               nk    (i)    k  i:x   ∈Gj
+                                                                                          
+                                                1                 X
+                                        =         EX−j                      (L̃(i) − L(i) )
+                                                                                           
+                                               nk
+                                                               i:x(i) ∈Gjk
+
+                                                1        h               i
+                                        =         nk EX−j (L̃(i) − L(i) )
+                                               nk
+                                        = EX−j [P F Ij ]
+32                                                                       Christoph Molnar et al.
+
+                                               n
+                                                       "       #
+                                            1 X (i)
+                       VX−j [P F Ij ] = VX−j      (L̃ − L(i) )
+                                            n i=1
+                                      1        h           i
+                                    = 2 nVX−j L̃(i) − L(i)
+                                     n
+                                     1      h            i
+                                    = VX−j L̃(i) − L(i) )
+                                     n
+                                                                
+                                                nk
+                         h
+                               k
+                                  i          1 X (i)         (i) 
+                     VX−j P F Ij ] = VX−j          (L̃ − L )
+                                            nk i=1
+                                            1         h              i
+                                         =   2
+                                               nk VX−j L̃(i) − L(i)
+                                           nk
+                                            1       h              i
+                                         =     VX−j L̃(i) − L(i) )
+                                           nk
+                       VX−j [P F Ijk ]       n
+                                         =
+                       VX−j [P F Ij ]        nk
+
+
+
+
+C Expectation and Variance of the PDP in a Subgroup
+
+We show that under feature independence the PDP and a PDP in an arbitrary subgroup
+have the same expected value and the subgroup k PDP has a higher variance.
+
+Proof
+                                h           i
+        EX−j [P DPj (x)] = EX−j fˆ(x, X−j )
+                                "     nk             #
+                                   1 X   ˆ      (i)      1        h           i
+                  k
+        EX−j [P DPj (x)] = EX−j          f (x, x−j )) =    nk EX−j fˆ(x, X−j ) =
+                                  nk i=1                nk
+                                h           i
+                         = EX−j fˆ(x, X−j )
+
+
+                                                   n
+                                                           "        #
+                                               1Xˆ            (i)
+                       VX−j [P DPj (x)] = VX−j        f (x, x−j )
+                                               n i=1
+                                        1          h              i
+                                      = 2 nVX−j fˆ(x, X−j )
+                                        n
+                                        1      h              i
+                                      = VX−j fˆ(x, X−j )
+                                        n
+                                             "      nk               #
+                         h          i           1 X             (i)
+                     VX−j P DPjk (x) = VX−j             fˆ(x, x−j )
+                                               nk i=1
+                                         1           h               i
+                                      = 2 nkj VX−j fˆ(x, X−j )
+                                        nk
+                                         1       h              i
+                                      =    VX−j fˆ(x, X−j )
+                                        nk
+                      VX−j [P DPjk (x)]           n
+                                             =
+                      VX−j [P DPj (x)]            nk
+Importance and Effects with Dependent Features                                          33
+
+
+Table 7 MSE comparing estimated and true conditional PFI (for random forest, scenario
+II). Legend: impute rf: Imputation with a random forest, ko: Model-X knockoffs, mPFI:
+(marginal) PFI, tree cart: cs-permutation based on CART, tree trtr: cs-permutation based
+on transformation trees, CVIRF: conditional variable importance for random forests.
+
+
+ setting             cs-PFI (cart)   cs-PFI (trtr)      cvirf   impute rf         ko     mPFI
+ independent
+   n=300, p=10                0.26            0.28       0.22        0.27       0.25          0.27
+   n=300, p=90                0.19            0.17       0.14        0.18       0.19          0.17
+   n=3000, p=10               0.07            0.07       1.39        0.07       0.06          0.08
+   n=3000, p=90               0.08            0.08       1.37        0.08       0.08          0.08
+ linear
+    n=300, p=10               1.79            1.69       0.45        1.87       1.10          7.11
+    n=300, p=90               1.93            1.88       1.36        4.25       2.93          7.06
+    n=3000, p=10              0.29            0.22       5.41        0.25       0.40          6.80
+    n=3000, p=90              0.32            0.24       6.98        1.66       0.26          7.02
+ multi. lin.
+  n=300, p=10               667.79         744.48     275.58       335.40    377.35     726.15
+  n=300, p=90               972.42        1098.74     301.26       823.89   1473.67    1065.26
+  n=3000, p=10              715.41         625.99    1790.45       114.71    454.26    1017.53
+  n=3000, p=90              974.37         945.19    5090.09       532.44    110.94    1416.30
+ non-linear
+   n=300, p=10                1.40            1.29       1.37        3.96      12.35     18.51
+   n=300, p=90                1.06            1.03       2.05        6.77       2.38     12.32
+   n=3000, p=10               0.17            0.16       6.53        1.55      15.29     17.56
+   n=3000, p=90               0.15            0.14       9.09        3.28       8.00     11.30
+
+
+
+D cPFI Ground Truth Scenario II
+
+This chapter contains the results for the conditional PFI ground truth simulation, scenario
+II with an intermediate random forest.
+34                                                                                                                                                                                                          Christoph Molnar et al.
+
+                                       n=300, p=10                                                     n=300, p=90                                                 n=3000, p=10                                                      n=3000, p=90
+        4
+
+
+
+
+                                                                                                                                                                                                                                                                              independent
+        3
+        2
+        1
+        0
+
+
+        9
+
+
+                                                                                                                                                                                                                                                                              linear
+        6
+
+        3
+
+        0
+PFI   150
+
+
+
+
+                                                                                                                                                                                                                                                                              multi. lin.
+      100
+
+
+       50
+
+
+        0
+
+
+       10
+
+
+        5                                                                                                                                                                                                                                                                     non−linear
+
+
+        0
+
+                                            cvirf                                                           cvirf                                                           cvirf                                                             cvirf
+                                                    impute rf                                                       impute rf                                                       impute rf                                                         impute rf
+                                                                     mPFI                                                            mPFI                                                            mPFI                                                              mPFI
+
+            cs−PFI (cart)   cs−PFI (trtr)                                   cs−PFI (cart)   cs−PFI (trtr)                                   cs−PFI (cart)   cs−PFI (trtr)                                     cs−PFI (cart)   cs−PFI (trtr)
+                                                                ko                                                              ko                                                              ko                                                                ko
+
+
+
+
+Fig. 14 Experiment (II) comparing various conditional PFI approaches with an intermedi-
+ary a random forest against the true conditional PFI based on the data generating process.
+Importance and Effects with Dependent Features                                        35
+
+
+E Data Fidelity on OpenML-CC18 data sets
+
+
+An overview of data sets from the OpenML-CC18 benchmarking suit. We used a subset of
+42 out of 72 data sets with 7 to 500 continuous features.
+
+
+
+
+ OpenML ID     Name                                  No. Obs.   No. numerical feat.        No. feat.
+       1049    pc4                                       1458                   38               38
+       1050    pc3                                       1563                   38               38
+       1053    jm1                                     10880                    22               22
+       1063    kc2                                        522                   22               22
+       1067    kc1                                       2109                   22               22
+       1068    pc1                                       1109                   22               22
+         12    mfeat-factors                             2000                  217              217
+         14    mfeat-fourier                             2000                   77               77
+       1461    bank-marketing                          45211                     8               17
+       1475    first-order-theorem-proving               6118                   52               52
+       1480    ilpd                                       583                   10               11
+       1486    nomao                                   34465                    90              119
+       1487    ozone-level-8hr                           2534                   73               73
+       1494    qsar-biodeg                               1055                   42               42
+       1497    wall-robot-navigation                     5456                   25               25
+         15    breast-w                                   683                   10               10
+       1501    semeion                                   1593                  257              257
+        151    electricity                             45312                     8                9
+       1510    wdbc                                       569                   31               31
+         16    mfeat-karhunen                            2000                   65               65
+        182    satimage                                  6430                   37               37
+        188    eucalyptus                                 641                   15               20
+         22    mfeat-zernike                             2000                   48               48
+      23517    numerai28.6                             96320                    22               22
+         28    optdigits                                 5620                   63               65
+        307    vowel                                      990                   11               13
+         31    credit-g                                  1000                    8               21
+         32    pendigits                               10992                    17               17
+         37    diabetes                                   768                    9                9
+      40499    texture                                   5500                   41               41
+      40701    churn                                     5000                   17               21
+      40966    MiceProtein                                552                   78               82
+      40979    mfeat-pixel                               2000                  241              241
+      40982    steel-plates-fault                        1941                   28               28
+      40984    segment                                   2310                   19               20
+      40994    climate-model-simulation-crashes           540                   21               21
+         44    spambase                                  4601                   58               58
+       4538    GesturePhaseSegmentationProcessed         9873                   33               33
+        458    analcatdata authorship                     841                   71               71
+         54    vehicle                                    846                   19               19
+          6    letter                                  20000                    17               17
+       6332    cylinder-bands                             378                   19               40
+Table 8 Overview of OpenML CC18 data sets used for the data fidelity experiment.
+36                                                                                                                              Christoph Molnar et al.
+
+
+E.1 Data Fidelity Results
+
+
+
+
+                                 bank−marketing
+                                              climate−model−simulation−crashescylinder−bands               diabetes            electricity               kc1
+                                                  5.40                                                                                          7
+                                                                                                   6.2
+                            8
+                                                                                                                         8
+                                                 5.35                                              6.0                                          6
+                                                                            5.0
+                            7
+                                                 5.30                                              5.8                   7
+                                                                                                                                                5
+                            6                                               4.9
+                                                 5.25
+                                                                                                   5.6
+                                                                                                                         6                      4
+                            5
+                                                 5.20                       4.8
+                                                                                                   5.4
+
+                                     letter             mfeat−factors             mfeat−fourier           mfeat−pixel         mfeat−zernike           MiceProtein
+                                                 6.69
+                           8.0                                                                    6.76
+                                                                                                                        6.9
+                           7.5                   6.67                   6.68                                                                  5.01
+                                                                                                  6.74                  6.8
+                           7.0                   6.65                   6.64                                            6.7                   4.98
+                           6.5                                                                    6.72
+
+
+
+
+Data Fidelity (−log(MMD)
+                                                 6.63                                                                   6.6
+                                                                        6.60                                                                  4.95
+                           6.0
+                                                                                                  6.70                  6.5
+                                                 6.61
+
+                                  numerai28.6             optdigits                pendigits               satimage             segment                 vehicle
+                                                    8                                                                    7
+                                                                            8.0                    8.0
+
+                           8.0                                                                                           6                     5.7
+                                                    6                                              7.5
+                                                                            7.5
+                                                                                                                         5
+                           7.5                                                                                                                 5.4
+                                                                                                   7.0
+                                                    4                       7.0
+                                                                                                                         4
+                                                                                                   6.5                                         5.1
+                           7.0                                              6.5
+                                                    2                                                                    3
+                                                                                                   6.0
+                                                                            6.0                                                                4.8
+                                                                                                          perm
+                                                                                                          cvirf                perm
+                                                                                                                               cvirf                  perm
+                                                                                                                                                      cvirf
+                                                                                                         cart30               cart30                 cart30
+                                     vowel          wall−robot−navigation            wdbc                trtr30
+                                                                                                            ale               trtr30
+                                                                                                                                 ale                 trtr30
+                                                                                                                                                        ale
+                                                                                                            ko
+                                                                                                           imp                   ko
+                                                                                                                                imp                     ko
+                                                                                                                                                       imp
+                                                                            5.0                           none                 none                   none
+
+                           6.2
+                                                 7.75
+                                                                            4.9
+                           6.0
+                                                 7.50
+
+                                                                            4.8
+                           5.8                   7.25
+
+
+                                                                            4.7
+                                                 7.00
+                                  perm
+                                  cvirf                  perm
+                                                         cvirf                     perm
+                                                                                   cvirf
+                                 cart30
+                                 trtr30                 cart30
+                                                        trtr30                    cart30
+                                                                                  trtr30
+                                    ale
+                                    ko                     ale
+                                                           ko                        ale
+                                                                                     ko
+                                   imp
+                                  none                    imp
+                                                         none                       imp
+                                                                                   none
+
+
+
+
+Fig. 15 Data Fidelity experiment with OpenML-CC18 data sets (1/2). Different sam-
+pling types are compared: unconditional permutation (perm), cs-permutation (maximal tree
+depth) with CART (cart30) or transformation trees (trtr30), Model-X knockoffs (ko), data
+imputation with a random forest (imp), ALE (ale), conditional variable importance for ran-
+dom forests (cvirf) and no permutation (none). Each data point in the boxplot represents
+one feature and one data set. Results from repeated experiments have been averaged (mean)
+before using them in the boxplots.
+Importance and Effects with Dependent Features                                                                                                                37
+
+
+                              analcatdata_authorship           breast−w                 churn           credit−g            eucalyptus     first−order−theorem−proving
+                                                   6.0                          7.8                                                          8.0
+                             5.7                                                                  6
+                                                                                7.6                                 5.0
+                                                     5.5                                                                                    7.5
+                             5.6
+                                                                                7.4               5
+
+                             5.5                     5.0                                                            4.5
+                                                                                7.2                                                         7.0
+                                                                                                  4
+                             5.4                                                7.0
+                                                     4.5                                                            4.0
+                                                                                                                                            6.5
+                                                                                6.8
+GesturePhaseSegmentationProcessed                                 ilpd                  jm1               kc2             mfeat−karhunen             nomao
+                          5.4                                                                                      6.60
+                                                                                                 5.2
+                                                                                 8
+                                                                                                                                             8
+                             8.0
+                                                     5.2
+                                                                                                 4.8               6.58
+                                                                                                                                             7
+                             7.5                     5.0                         7
+                                                                                                 4.4               6.56                      6
+
+                             7.0                     4.8
+
+
+
+
+  Data Fidelity (−log(MMD)
+                                                                                                                                             5
+                                                                                 6                                 6.54
+                                                                                                 4.0
+                                                     4.6
+                             6.5                                                                                                             4
+
+
+                                   ozone−level−8hr                pc1                   pc3               pc4              qsar−biodeg              semeion
+                             6.8                                                6.3
+                                                                                                                     6
+                                                     6.0                                          6
+                                                                                                                                           6.35
+                                                                                6.0                                  5
+                             6.6
+                                                     5.5                                          5
+                                                                                                                                           6.30
+                                                                                5.7                                  4
+                             6.4
+                                                     5.0                                          4
+                                                                                5.4                                  3                     6.25
+
+
+                             6.2
+                                                     4.5                        5.1               3                  2                     6.20
+                                                                                                        perm
+                                                                                                        cvirf              perm
+                                                                                                                           cvirf                   perm
+                                                                                                                                                   cvirf
+                                                                                                       cart30             cart30                  cart30
+                                     spambase              steel−plates−fault          texture         trtr30
+                                                                                                          ale             trtr30
+                                                                                                                             ale                  trtr30
+                                                                                                                                                     ale
+                                                                                                          ko
+                                                                                                         imp                 ko
+                                                                                                                            imp                      ko
+                                                                                                                                                    imp
+                                                                                                        none               none                    none
+                                                                                8.0
+                                                     6.6
+                              6
+                                                                                7.5
+
+                                                     6.4
+                                                                                7.0
+                              4
+
+                                                     6.2                        6.5
+
+                              2                                                 6.0
+                                                     6.0
+                                                                                5.5
+                                    perm
+                                    cvirf                   perm
+                                                            cvirf                      perm
+                                                                                       cvirf
+                                   cart30
+                                   trtr30                  cart30
+                                                           trtr30                     cart30
+                                                                                      trtr30
+                                      ale
+                                      ko                      ale
+                                                              ko                         ale
+                                                                                         ko
+                                     imp
+                                    none                     imp
+                                                            none                        imp
+                                                                                       none
+
+
+
+
+Fig. 16 Data Fidelity experiment with OpenML-CC18 data sets (2/2). Different sam-
+pling types are compared: unconditional permutation (perm), cs-permutation (maximal tree
+depth) with CART (cart30) or transformation trees (trtr30), Model-X knockoffs (ko), data
+imputation with a random forest (imp), ALE (ale), conditional variable importance for ran-
+dom forests (cvirf) and no permutation (none). Each data point in the boxplot represents
+one feature and one data set. Results from repeated experiments have been averaged (mean)
+before using them in the boxplots.
+38                                                                                                                      Christoph Molnar et al.
+
+
+                                   bank−marketing   climate−model−simulation−crashes   cylinder−bands             diabetes                  electricity
+                             8.3                                               5.04                     5.90
+                             8.2                    5.365                                                                        8.0
+                                                                                                        5.85
+                             8.1                                               5.02
+                                                    5.360                                               5.80                     7.5
+                             8.0
+                                                    5.355                                               5.75                     7.0
+                             7.9                                               5.00
+                             7.8                    5.350                                               5.70
+                                                                                                                                 6.5
+                             7.7                                               4.98                     5.65
+
+                                        kc1                      letter                mfeat−factors            mfeat−fourier               mfeat−pixel
+                                                                                                                                6.76
+                                                      8.0                                               6.68
+                                                                               6.68
+                             6.5
+                                                                                                        6.67
+                                                                                                                                6.75
+                             6.0                      7.5                      6.66                     6.66
+
+                                                                                                        6.65                    6.74
+                             5.5                      7.0                      6.64                     6.64
+
+                                                                                                        6.63                    6.73
+                             5.0
+
+                                    mfeat−zernike             MiceProtein               numerai28.6               optdigits                  pendigits
+
+
+
+
+ Data Fidelity (−log(MMD)
+                                                     5.03                       8.4                      7.8
+                                                                                                                                 8.0
+                             6.9                     5.02
+                                                                                8.0
+                                                                                                         7.7
+                                                     5.01                                                                        7.5
+                             6.8                                                7.6
+                                                     5.00
+                                                                                                         7.6                     7.0
+                                                                                7.2
+                             6.7                     4.99
+                                                                                                                                 6.5
+
+                                      satimage                  segment                   vehicle                  vowel               wall−robot−navigation
+                                                     7.00
+                             8.0                                                5.8                      6.2
+                                                     6.75                                                                        7.8
+                             7.5                                                5.6                      6.1
+                                                     6.50
+                             7.0                                                5.4                      6.0                     7.6
+                                                     6.25
+                             6.5                                                5.2                      5.9
+                                                     6.00                                                                        7.4
+
+                             6.0                     5.75                       5.0                      5.8
+                                                             trtr1
+                                                             cart1
+                                                             trtr2                     trtr1
+                                                                                       cart1
+                                                                                       trtr2                    trtr1
+                                                                                                                cart1
+                                                                                                                trtr2                   trtr1
+                                                                                                                                        cart1
+                                                                                                                                        trtr2
+                                                             cart2                     cart2                    cart2                   cart2
+                                        wdbc                 trtr3
+                                                             cart3
+                                                             trtr4
+                                                             cart4
+                                                                                       trtr3
+                                                                                       cart3
+                                                                                       trtr4
+                                                                                       cart4
+                                                                                                                trtr3
+                                                                                                                cart3
+                                                                                                                trtr4
+                                                                                                                cart4
+                                                                                                                                        trtr3
+                                                                                                                                        cart3
+                                                                                                                                        trtr4
+                                                                                                                                        cart4
+                                                             trtr5
+                                                             cart5
+                                                            trtr30                     trtr5
+                                                                                       cart5
+                                                                                      trtr30                    trtr5
+                                                                                                                cart5
+                                                                                                               trtr30                   trtr5
+                                                                                                                                        cart5
+                                                                                                                                       trtr30
+                                                            cart30                    cart30                   cart30                  cart30
+                            5.00
+
+                            4.95
+
+                            4.90
+
+                            4.85
+
+
+                                    trtr1
+                                    cart1
+                                    trtr2
+                                    cart2
+                                    trtr3
+                                    cart3
+                                    trtr4
+                                    cart4
+                                    trtr5
+                                    cart5
+                                   trtr30
+                                   cart30
+
+
+
+
+Fig. 17 Data Fidelity experiment with OpenML-CC18 data sets (1/2). Different tree depths
+and tree types (CART and Transformation Trees) are compared. Unconditional permutation
+and lack of permutation serve as lower and upper bound for data fidelity and their median
+data fidelity is plotted as dotted lines. Each data point in the boxplot represents one feature
+and one data set. Results from repeated experiments have been averaged (mean) before
+using them in the boxplots.
+Importance and Effects with Dependent Features                                                                                                          39
+
+
+                                    analcatdata_authorship            breast−w                 churn                 credit−g             eucalyptus
+                            5.735                             6.0                    7.8
+
+                                                                                                                                5.30
+                            5.730                                                    7.7
+                                                              5.5                                             6.1
+                                                                                                                                5.25
+                            5.725                                                    7.6
+                                                                                                              6.0               5.20
+                            5.720                             5.0
+                                                                                     7.5
+                                                                                                                                5.15
+                            5.715                                                                             5.9
+                                                              4.5                    7.4
+
+                              first−order−theorem−proving
+                                                    GesturePhaseSegmentationProcessed           ilpd                   jm1                    kc2
+                                                             8.25                                             8.0                5.2
+                                                                                     5.3
+                              7.8                            8.00                                             7.5
+                                                                                     5.2                                         5.0
+
+                                                             7.75                                             7.0
+                                                                                     5.1
+                              7.6                                                                                                4.8
+                                                                                                              6.5
+                                                             7.50                    5.0
+                                                                                                              6.0                4.6
+                                                                                     4.9
+                              7.4                            7.25
+
+                                       mfeat−karhunen                  nomao               ozone−level−8hr             pc1                    pc3
+
+
+
+
+ Data Fidelity (−log(MMD)
+                             6.59                                                    6.8
+                                                                                                             6.00                6.2
+                                                              8.3                    6.7
+                             6.58
+                                                              8.2                    6.6                     5.75
+                                                                                                                                 6.0
+                             6.57
+                                                              8.1                    6.5                     5.50
+                             6.56                             8.0                    6.4                                         5.8
+                                                                                                             5.25
+                                                                                     6.3
+                             6.55                             7.9
+                                                                                                             5.00
+
+                                             pc4                     qsar−biodeg              semeion                spambase          steel−plates−fault
+                                                                                                                                 6.7
+                              6.3
+                                                                                   6.370                     7.28
+                              6.2                            5.94                                                                6.6
+
+                              6.1                                                  6.368                     7.24
+                                                             5.90                                                                6.5
+                              6.0
+                                                                                   6.366
+                                                             5.86                                            7.20                6.4
+                              5.9
+                                                                                   6.364
+                                                                     trtr1
+                                                                     cart1
+                                                                     trtr2                  trtr1
+                                                                                            cart1
+                                                                                            trtr2                    trtr1
+                                                                                                                     cart1
+                                                                                                                     trtr2              trtr1
+                                                                                                                                        cart1
+                                                                                                                                        trtr2
+                                                                     cart2                  cart2                    cart2              cart2
+                                           texture                   trtr3
+                                                                     cart3
+                                                                     trtr4
+                                                                     cart4
+                                                                                            trtr3
+                                                                                            cart3
+                                                                                            trtr4
+                                                                                            cart4
+                                                                                                                     trtr3
+                                                                                                                     cart3
+                                                                                                                     trtr4
+                                                                                                                     cart4
+                                                                                                                                        trtr3
+                                                                                                                                        cart3
+                                                                                                                                        trtr4
+                                                                                                                                        cart4
+                                                                     trtr5
+                                                                     cart5
+                                                                    trtr30                  trtr5
+                                                                                            cart5
+                                                                                           trtr30                    trtr5
+                                                                                                                     cart5
+                                                                                                                    trtr30              trtr5
+                                                                                                                                        cart5
+                                                                                                                                       trtr30
+                                                                    cart30                 cart30                   cart30             cart30
+                              8.0
+
+                              7.5
+
+                              7.0
+
+                              6.5
+
+                              6.0
+
+                                     trtr1
+                                     cart1
+                                     trtr2
+                                     cart2
+                                     trtr3
+                                     cart3
+                                     trtr4
+                                     cart4
+                                     trtr5
+                                     cart5
+                                    trtr30
+                                    cart30
+
+
+
+
+Fig. 18 Data Fidelity experiment with OpenML-CC18 data sets (2/2). Different tree depths
+and tree types (CART and Transformation Trees) are compared. Unconditional permutation
+and lack of permutation serve as lower and upper bound for data fidelity and their median
+data fidelity is plotted as dotted lines. Each data point in the boxplot represents one feature
+and one data set. Results from repeated experiments have been averaged (mean) before
+using them in the boxplots.
+40                                                                                                                                                                   Christoph Molnar et al.
+
+
+F Model Fidelity Plots
+
+
+
+                            KN                                                                      LM                                                                       RF
+         30
+
+                                                                                                                                                                                                                                       pollen
+         20
+         10
+
+
+
+                                                                                                                                                                                                                                       quake
+       0.044
+       0.040
+       0.036
+
+
+
+                                                                                                                                                                                                                                       satellite
+          5
+          4
+          3
+ MSE
+          2
+         0.6
+                                                                                                                                                                                                                                       space
+         0.4
+         0.2
+         0.0
+          60
+                                                                                                                                                                                                                                       wind
+          50
+          40
+          30
+          20
+        0.85
+        0.80
+                                                                                                                                                                                                                                       wine
+        0.75
+        0.70
+        0.65
+        0.60
+               PDP                                                                     PDP                                                                     PDP
+
+
+                           cs−PDP cart1   cs−PDP trtr1   cs−PDP cart2   cs−PDP trtr2               cs−PDP cart1   cs−PDP trtr1   cs−PDP cart2   cs−PDP trtr2               cs−PDP cart1   cs−PDP trtr1   cs−PDP cart2   cs−PDP trtr2
+                     ALE                                                                     ALE                                                                     ALE
+
+
+
+
+Fig. 19 Comparing the loss between model f and various feature effect methods. Each
+instance in the boxplot is MSE for one feature, summed over the test data.
+

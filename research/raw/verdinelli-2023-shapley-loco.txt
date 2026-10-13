@@ -1,0 +1,1681 @@
+Feature Importance: A Closer Look at
+Shapley Values and LOCO1
+
+arXiv:2303.05981v1 [stat.ME] 10 Mar 2023
+
+Isabella Verdinelli and Larry Wasserman
+
+Abstract. There is much interest lately in explainability in statistics and machine learning. One aspect of explainability is to quantify the importance of
+various features (or covariates). Two popular methods for defining variable
+importance are LOCO (Leave Out COvariates) and Shapley Values. We take
+a look at the properties of these methods and their advantages and disadvantages. We are particularly interested in the effect of correlation between
+features which can obscure interpretability. Contrary to some claims, Shapley values do not eliminate feature correlation. We critique the game theoretic
+axioms for Shapley values and suggest some new axioms. We propose new,
+more statistically oriented axioms for feature importance and some measures
+that satisfy these axioms. However, correcting for correlation is a Faustian
+bargain: removing the effect of correlation creates other forms of bias. Ultimately, we recommend a slightly modified version of LOCO. We briefly
+consider how to modify Shapley values to better address feature correlation.
+Key words and phrases: Feature importance, Shapley values, LOCO, Interpretability.
+
+1. Introduction
+
+feature importance measures the importance of a feature
+in a given estimator without reference to an underlying
+distribution. For example, how much did age affect the
+value µ
+b(x)? Causal feature importance refers to counterfactual claims. For example, how would the outcome have
+changed if Mary had been 5 years younger? We will focus on population level feature importance. Another distinction is global importance versus local importance. The
+former refers to the overall importance of a feature while
+the latter refers to one point in the sample space. This paper deals with global importance.
+
+In this paper, we review some notions of feature (covariate) importance in regression, a topic that has received
+renewed interest lately. There are many different ways of
+defining feature importance. Indeed, as Hama, Mase and
+Owen (2022) say:
+... there is no ground truth for variable importance. Instead, there are multiple definitions of
+what makes a variable important, and choosing a definition involves some tradeoffs.
+
+Even within the realm of population level feature importance there are a number of ways to define importance. We consider two specific measures: LOCO (Leave
+Out COvariates) (Lei et al., 2018; Rinaldo, Wasserman
+and G’Sell, 2019; Williamson et al., 2021, 2020; Gan,
+Zheng and Allen, 2022) and Shapley values (Shapley,
+1953; Lundberg and Lee, 2017; Covert, Lundberg and
+Lee, 2020, 2021; Hama, Mase and Owen, 2022; Chen
+et al., 2022; Kumar et al., 2020). Our main conclusion is
+that Shapley values are much more complicated and expensive than LOCO but have little to offer beyond LOCO.
+In particular, both measures are compromised by correlation between features which makes interpretation difficult. There seems to be some claims in the literature that
+Shapley values reduce the effect of correlation (see Iooss
+
+Population level feature importance is concerned with
+measuring how important a particular feature is in the underlying data generating process. For example, how important is age in a regression function µ(x)? Algorithmic
+Isabella Verdinelli is Professor in Residence, Department of
+Statistics and Data Science, Carnegie Mellon University,
+Pittsburgh, PA USA, (e-mail: isabella@stat.cmu.edu). Larry
+Wasserman is Professor, Department of Statistics and Data
+Science, and Professor, Machine Learning Department,
+Carnegie Mellon University, PA USA, (e-mail:
+larry@stat.cmu.edu).
+1
+
+The authors thank Art Owen for helpful comments.
+
+1
+
+2
+
+and Prieur (2019); Williamson and Feng (2020) for example) but we show that this is not true. It is possible
+to reduce the effect of correlation by modifying LOCO.
+But this modification has a price: the resulting estimator is
+subject to first-order estimation bias (unlike LOCO) and,
+moreover, is subject to further bias when there are regions
+of low density in the sample space. Ultimately, there is no
+perfect measure and we suggest using a minor variation
+of LOCO as being the simplest and most reliable.
+Related Work. The literature on feature importance has
+exploded recently. Some of the recent references on
+LOCO include: Lei et al. (2018); Rinaldo, Wasserman
+and G’Sell (2019); Williamson et al. (2021, 2020); Gan,
+Zheng and Allen (2022). The literature on Shapley values is vast and we cannot attempt an exhaustive list here.
+The references most related to this paper include Shapley
+(1953); Lundberg and Lee (2017); Covert, Lundberg and
+Lee (2020, 2021); Hama, Mase and Owen (2022); Chen
+et al. (2022); Hama, Mase and Owen (2022); Kumar et al.
+(2020); Mase, Owen and Seiler (2022). However, this is
+just the tip of the iceberg. Most papers on Shapley values for feature importance appear in the AI and machine
+learning venues as well as in the applied math literature
+that deals with computer experiments. As mentioned in
+the introduction, there are many other feature importance
+measures besides LOCO and Shapley values. These include LIME (Ribeiro, Singh and Guestrin, 2016), Floodgate (Zhang and Janson, 2020) and the somewhat related
+area of knockoffs (Barber and Candès, 2015).
+Paper Outline. In Section 2 we define LOCO and Shapley values. In Section 3 we discuss the effect of feature
+correlation. In Section 4 we review the axioms that are
+the basis for Shapley values and we consider alternative
+axioms. In Section 5 we discuss methods for obtaining
+correlation free measures of feature importance. We discuss a variety of inferential issues in Section 6. Section 7
+contains a few simulated examples. Groups of features are
+discussed in Section 8. In Section 9 we introduce the idea
+of explicitly modifying Shapley values to address feature
+correlation. Finally, Section 10 contains concluding remarks and recommendations.
+
+2. LOCO and Shapley
+Let X ∈ Rd be a vector of features and let Y ∈ R be an
+outcome. Let µ(x) = E[Y |X = x] be the regression function. We are interested in quantifying the importance of a
+feature Xj . We will use negative subscripts to mean that
+features have been dropped. Specifically, let
+µ−j (x) = E[Y |X−j = x−j ]
+
+denote the regression when Xj is omitted and more generally let
+µ−S (x) = E[Y |X−S = x−S ]
+
+denote the regression when the set of features XS = (Xj :
+j ∈ S) is omitted where S ⊂ {1, . . . , d}. Also, let
+µS (x) = E[Y |XS = xs ]
+
+be the regression of Y on XS = (Xj : j ∈ S). We let E,
+V and C denote expectation, variance and covariance.
+
+2.1 Definitions
+
+The LOCO parameter for Xj is defined by
+(1) ψloco (j) ≡ ψloco (Xj ) = E[(µ(X) − µ−j (X))2 ]
+= E[(Y − µ−j (X))2 ] − E[(Y − µ(X))2 ].
+
+LOCO can be interpreted as the L2 difference between
+the full model and the model without Xj and it can also
+be interpreted as the drop in prediction accuracy when Xj
+is omitted. LOCO is related to two other quantities. First,
+2 ) where σ 2 = V[Y ], and
+ψloco (j) = σ 2 (R2 − R−j
+E[(Y − µ−j (X))2 ]
+E[(Y − µ(X))2 ]
+2
+,
+R
+=
+1−
+.
+−j
+σ2
+σ2
+
+
+Second, it is easy to check that ψloco (j) = E V[µ(X)|X−j ] .
+
+R2 = 1−
+
+The latter expression is known as the upper Sobol’ index
+(Owen and Prieur, 2017; Sobol’, 1990; Sobol’, 1993).
+For a set of features S , LOCO is defined to be
+(2)
+
+ψloco (S) = E[(µ(X) − µ−S (X))2 ].
+
+The values in (1) and (2) refer to the effect of dropping
+Xj or XS from the full model. We can also define LOCO
+when dropping Xj from a submodel M ⊂ {1, . . . , d}.
+Specifically, define
+h
+i
+(3) ψloco (j, M ) = E (E[Y |XM ] − E[Y |XM \{j} ])2 .
+LOCO has been studied in Lei et al. (2018); Rinaldo,
+Wasserman and G’Sell (2019); Williamson et al. (2021,
+2020); Gan, Zheng and Allen (2022). It has several nice
+properties: it is easy to estimate, easy to interpret and relates to the familiar R2 from linear regression. However, it
+has one important drawback: its value depends not just on
+how strongly µ(X) depends on Xj , but also on the correlation between Xj and the other features. In the extreme
+case of perfect dependence, it is 0. This could lead users
+to erroneously conclude that some variables are irrelevant
+even when µ(X) strongly depends on Xj . We refer to this
+as correlation distortion.
+
+3
+
+FEATURE IMPORTANCE
+
+Next we define Shapley values. First, we assign a value
+V (S) to the submodel based on the subset of features S .
+Then the Shapley value for Xj is defined by
+(4)
+
+
+X
+ψshap (j) ≡ ψshap (Xj ) =
+wS V (S ∪{j})−V (S)
+S⊂−{j}
+
+where the sum is over all 2d−1 submodels that don’t include Xj and
+
+
+1 d − 1 −1
+.
+(5)
+wS =
+d |S|
+In this paper, we take V (S) to be the prediction error
+V (S) = E[(Y − µS (X))2 ] in which case, we have
+X
+ψshap (j) =
+wS ψloco (j, S).
+
+where  has mean 0. Assume that the Zi0 s are exchangeable and define
+bj ≡ bj (W, Z1 , . . . , Zj ) = E[Z• |W, Z1 , . . . , Zj ]
+
+where Z• denotes any other Zs with s > j . Note that b0 =
+E[Z• |W ]. After some algebra, the exchangeability of the
+Zi0 s leads to
+ψshap (W ) =
++
+
+γ 2 d2
+2βγd
+β2
+V[W ] +
+V[b0 ] +
+C[W, b0 ]
+d+1
+d+1
+d+1
+d
+
+β2 X 
+E V[W |Z1 , . . . , Zj ]
+d+1
+j=1
+d
+
++
+
+γ2 X
+(d − j)2 E[V[bj |Z1 , . . . , Zj ]]
+d+1
+j=1
+
+S
+
+Thus, with this choice of value function, the Shapley
+value is just a weighted average of the LOCO values over
+submodels. Of course, there are many other choices for
+the value function: see Chen et al. (2022) for a thorough
+discussion. The Shapley value was defined by Shapley
+(1953) in the context of cooperative game theory. It is the
+unique function that satisfies a set of axioms. We discuss
+these axioms in Section 4. The Shapley value can also be
+written as
+"
+#
+
+
+
+1X 
+V S(π, j) − V S(π, j) ∪ {Xj }
+d! π
+where the sum is over all permutations π of {1, . . . , d}
+and S(π, j) denotes all features that appear before Xj in
+permutation π .
+
+2.2 The Linear Model
+
+d
+
+2βγ X
+(d − j)E[C[W, bj |Z1 , . . . , Zj ]].
++
+d+1
+j=1
+
+Even in this simple case we see that the Shapley value is
+a complicated function of the joint distribution.
+
+2.3 Estimation
+
+Given data (X1 , Y1 ), . . . , (Xn , Yn ), let µ
+b(x), µ
+b−j (x) and
+µ
+b−S (x) be estimates of µ(x), µ−j (x) and µ−S (x). The
+plugin estimate of LOCO for Xj is
+1
+ψbloco (j) =
+n
+
+n
+X
+(µ
+b(Xi ) − µ
+b−j (Xi ))2 .
+i=1
+
+The plugin estimate of the Shapley value is
+X
+ψbshap (j) =
+wS ψbloco (j, S).
+S⊂−{j}
+
+An
+P important special case is the linear model µ(x) =
+j βj Xj . Then, it is easy to show that
+ψloco (j) = βj2 E[(Xj − ν(X−j ))2 ]
+
+where ν(x−j ) = E[Xj |X−j = x−j ].
+Owen and Prieur (2017) showed that, assuming that X is
+Gaussian, the Shapley value can be written as
+
+
+T β
+2
+1 X d − 1 −1 C[Xj , X−S
+−S |XS ]
+ψshap (j) =
+,
+d
+|S|
+V[Xj |XS ]
+S
+
+where C[X, Y ] denotes the covariance between random
+variables X and Y . To get more insight, we look at a particular linear model endowed with some symmetries. Let
+X = (W, Z), where W is the feature of interest and let
+Y = βW + γZ1 + · · · + γZd + 
+
+Summing over all 2d−1 subsets is not practical. Instead,
+ψshap (j) is usually estimated by randomly sampling submodels (Williamson and Feng, 2020; Covert, Lundberg
+and Lee, 2020). Specifically, we can estimate the Shapley
+values ψshap (j) by sampling submodels S1 , . . . , SN with
+probabilities wS and letting
+1 Xb
+ψloco (j, Sr ).
+ψbshap (j) =
+N r
+Williamson and Feng (2020) showed that, to get accurate
+estimates, one needs to take N = cn for some c > 0. This
+could mean refitting the model thousands of times when
+the sample size is large. The computational burden should
+not be underestimated. This only estimates the Shapley
+value for Xj . More generally, one can get all the Shapley values by doing a weighted regression as described in
+Williamson and Feng (2020); Covert, Lundberg and Lee
+
+4
+
+(2020). Specifically, the Shapley values can be obtained
+by minimizing
+"
+#2
+X
+X
+d−1
+ψshap (i) − V (S)
+(6)
+
+d
+|S| |S|(d − |S|) i∈S
+S
+
+and Xk that are each marginally predictive,
+previous nonparametric population [variable
+importance measures] would assign zero importance to both variables whereas [Shapley]
+would assign the same positive value to both
+variables.
+
+which is a weighted least squares problem. This formulation also shows that the Shapley values can be interpreted
+as an additive approximation to the value function V (S)
+albeit with non-intuitive
+weights. In other words, V (S) is
+P
+approximated by j∈S ψshap (j).
+
+This is true, but again it is not clear if this really solves the
+problem. To illustrate this issue in more detail, consider a
+simple example. Suppose that
+
+3. Feature Correlation
+
+We want to quantify the importance of X1 . Assume that
+V[X1 ] = 1. We will look at ψloco (1) and ψshap (1). Consider the following four cases:
+
+Correlation between features can cause difficulties with
+interpretation for both LOCO andP
+Shapley. For example,
+consider the linear model µ(x) = j βj xj . Then
+
+Case 1. Suppose that β 6= 0, γ = 0 and the covariates are
+independent. In this case we find that ψloco = ψshap = β 2
+so all the methods correctly find that X1 is an important
+variable.
+
+ψloco (1)
+
+=
+
+β12
+|{z}
+
+intrinsic importance
+
+E[(X1 − ν1 (X))2 ]
+|
+{z
+}
+feature correlation
+
+where ν1 (X) = E[X1 |X2 , . . . , Xd ]. Hence, the LOCO
+value is the product of the intrinsic importance of X1 ,
+given by β12 , and the term E[(X1 − ν(X1 ))2 ] which measures the correlation between X1 and the other features.
+In general, feature correlation can decrease or increase
+the LOCO value. The fact that LOCO depends on feature
+correlations is technically correct. After all, if X1 is perfectly correlated with another feature, then we can drop
+X1 with no loss in prediction accuracy and LOCO would
+be 0 which is correct. But, it seems likely that a user could
+misinterpret this result and conclude that µ(x) does not
+depend on X1 , even though β1 could be large.
+There seem to be some suggestions in the literature that
+the Shapley value overcomes this problem. For example,
+Iooss and Prieur (2019) say
+The Shapley effects were recently introduced
+to overcome this problem [correlation] as they
+allocate the mutual contribution (due to correlation and interaction) of a group of inputs to
+each individual input within the group.
+They are correct that Shapley distributes the signal among
+correlated features. Whether this solves the problems due
+to correlation is debatable. Similarly, Williamson and
+Feng (2020) writes:
+Because [Shapley values] satisfy these properties, they clearly address the issue of correlated features: given collinear variables Xj
+
+Y = βX1 + γX2 + γX3 + · · · + γXd + .
+
+Case 2. Suppose that β 6= 0, γ = 0 but now suppose that
+the covariates are perfectly dependent, that is, P (X1 =
+X2 = · · · = Xd ) = 1. Now we get ψloco = 0 and ψshap =
+β 2 /d which is close to 0 when d is large. In this case,
+LOCO and Shapley are both subject to correlation distortion and mislead us into thinking that X1 is not important.
+Case 3. Suppose that β = 0, γ 6= 0 and the covariates are
+independent. Then ψloco = ψshap = 0. So both methods
+recognize that X1 is not important.
+Case 4. This is the same as Case 3 except that the covariates are perfectly dependent. Then ψloco = 0 but ψshap =
+γ 2 d2 . Here the Shapley value can be large even though Y
+has no functional relationship with X1 .
+This simple example illustrates that both ψloco and ψshap
+can be quite misleading in the presence of correlation.
+
+4. Axioms for Feature Importance
+One reason why Shapley values are gaining popularity is
+their axiomatic basis. The axioms are cited in most papers
+that use Shapley values. Here we review and critique these
+axioms and we suggest some new axioms.
+
+4.1 The Shapley Axioms
+
+Let S denote a subset of {1, . . . , d} and let S denote all
+such subsets. Let V : S → R be a function that measures the value of the submodel XS = (Xj : j ∈ S).
+
+5
+
+FEATURE IMPORTANCE
+
+In our case, we use V (S) = E[(Y − µ(XS ))2 ] where
+µ(XS ) = E[Y |XS ]. Let ψ(j) be the Shapley value for Xj .
+The Shapley axioms are:
+P
+(S1: Efficiency) j ψ(j) = V ({1, . . . , d}).
+S
+S
+(S2: Symmetry) If V (S {i}) = V (S {j}) for all S
+then ψ(i) = ψ(j).
+S
+(S3: Dummy) If V (S {i}) = V (S) for all S then ψ(i) =
+0.
+
+tance. With this in mind, we propose a second set of axioms. Write ψ(j) ≡ ψ(j, P ) to denote a functional which
+measures the importance of XS where P is the distribution of (X, Y ) which has density p(x, y).
+
+(S4: Linearity) If value functions V and V 0 yield Shapley
+values ψ(j) and ψ(j 0 ) then the value function V + V 0
+yields Shapley values ψ(j) + ψ(j 0 ).
+
+where pj is the marginal of Xj and p−j is the marginal
+of X−j . That is, ψ depends on pY |X (y|x) and can depend
+on pX (x) only through the marginals pj and p−j but not
+their joint distribution.
+
+Shapley (1953) proved that the unique ψ(j) that satisfies
+these axioms is (4).
+
+Critique of The Shapley Axioms. Now we discuss some
+problems with Shapley values and their axioms.
+1. The Shapley axioms were intended to define the
+contribution of each player in a cooperative game.
+But when applied to feature importance in statistical models, it is not clear why the axioms should
+refer to all submodels S . Most submodels will be
+poor models with large predictive risk. Why should
+we care how ψ behaves on these submodels?
+2. Axiom S1 requires additivity. But it is not at all
+clear why we would expect feature importance to
+be additive. For example, in the presence of interactions we might expect feature importance to be
+non-additive.
+3. The Shapley value is not interpretable. What does
+a Shapley value of 7.2 mean? Informally, users
+regard larger Shapley values to mean that one
+variable is more important than another. But if
+ψshap (2) = 10ψshap (1) does this mean that X2
+is 10 times more important than X1 ? In contrast,
+LOCO has a clear meaning: it is the increase in
+predictive risk when we drop Xj .
+4. As we have seen, Shapley values suffer from correlation distortion just as LOCO does.
+5. Shapley values are expensive to compute as they involve sums over large numbers of submodels. Recall that Williamson and Feng (2020) showed that
+we need to subsample O(n) submodels for accurate
+inference.
+
+4.2 Alternative Axioms
+
+We view the correlation distortion as a problem when trying to construct interpretable measures of feature impor-
+
+(A1: Functional Dependence) ψ(j, P ) = 0 if and only if
+µ(x) is not a function of xj .
+(A2: Correlation Free)
+
+
+ψ(j, P ) = ψ pY |X (y|x), pj (xj ), p−j (x−j )
+
+In a linear model, there is a natural feature importance
+measure that is automatically correlation-free, namely, the
+regression coefficient. With this in mind, our third axiom
+is:
+P
+(A3: Linear Agreement) If µ(x) = j βj xj then ψ(j, P ) =
+βj2 .
+
+A1 captures the idea that ψ measures how strongly µ depends on Xj .
+A2 expresses the fact that we want ψ to measure how Y
+is affected by Xj but should be insensitive to the relationship between Xj and X−j .
+A3 deserves some discussion. It is our view that in a linear
+model, the regression coefficient provides a clear, unambiguous measure of feature importance. Indeed, some approaches to local feature importance explicitly fit a local
+linear model and use the regression coefficient as a feature importance parameter (Ribeiro, Singh and Guestrin,
+2016). We acknowledge that this point is debatable but we
+use A3 in what follows. However, A3 is not crucial and
+could be dropped without changing the main messages.
+In general, neither Shapley nor LOCO satisfy A2. In fact,
+Shapley also violates A1. However, we can make LOCO
+satisfy A3 by re-defining LOCO as
+(7)
+
+ψloco (j) =
+
+E[(µ−j (X) − µ(X))2 ]
+E[(Xj − νj (X)]2
+
+where νj (x) = E[Xj |X−j = x−j ]. This normalized version of LOCO is the version we will use from now on.
+Interestingly, this version often suffers less correlation
+distortion even in nonlinear models, although it does not
+eliminate it in general.
+
+6
+
+There are a few more desiderata that we would like ψ to
+satisfy. They are too vague to be called axioms but are
+important.
+(V1) ψ should be easy to compute.
+(V2) The plug-in estimate should have second order bias.
+This point is explained in more detail in Section 6.
+(V3) The estimate of ψ should not incur large bias due to
+low density regions in the sample space.
+As mentioned earlier, Williamson (2022) showed that to
+accurately estimate Shapley values, we must subsample
+order n submodels which is quite expensive and so violates V1. We will shortly introduce correlation-corrected
+versions of LOCO but these will, unfortunately, fail V2
+and potentially V3. The effect of low density regions has
+been pointed by Owen and Prieur (2017) and Hooker,
+Mentch and Zhou (2021) and we discuss this in Section 6.
+
+5. Correlation Free Feature Importance
+
+Case 1
+Case 2
+Case 3
+Case 4
+
+ψDloco
+
+ψloco
+
+ψshap
+
+β2
+β2
+0
+0
+
+β2
+β2
+0
+0
+
+β2
+β 2 /d
+0
+2
+γ d2
+
+TABLE 1
+The simple linear example. We compare Decorrelated LOCO,
+LOCO and Shapley.
+
+the average gradient
+Z Z
+ψgrad =
+(µ0 (w, z))2 p(w)p(z)dwdz
+where µ0 (w, z) = ∂µ(w, z)/∂w . Again, it is easy to check
+that this satisfies (D1), (D2) and (D3). This functional
+is
+in Samarov (1993) who uses
+R Rrelated to the definition
+(∂µ(w, z)/∂w)2 dP (w, z).
+Our third functional, which is related to the controlled
+direct effect µ(w1 , z) − µ(w2 , z) from causal inference
+(Robins and Greenland, 1992), is
+RRR
+δ(w1 , w2 , z)p(w1 )p(w2 )p(z)dzdw1 dw2
+ψcde =
+2V[W ]
+where δ(w1 , w2 , z) = (µ(w1 , z) − µ(w2 , z))2 .
+
+In this section, we define some functionals that satisfy A1,
+A2 and A3. For notational simplicity, define X = (W, Z)
+where W ∈ R is the variable of interest and Z are the
+remaining features.
+Our first example of a functional that satisfies A1-A3 is
+the decorrelated LOCO from Verdinelli and Wasserman
+(2021). This is based on the counterfactual question: what
+value would LOCO have taken if W and Z had been
+independent? To answer this question, let p∗ (w, z, y) =
+p(y|w, z)p(w)p(z). This is the closest distribution to p
+in Kullback-Leibler distance that makes W and Z independent. We define the decorrelated LOCO ψDloco (W ) to
+be the value LOCO takes under p∗ . A simple calculation
+shows that
+(8)
+RR
+(µ(w, z) − µ0 (z))2 p(w)p(z)dwdz
+ψDloco (W ) =
+V[W ]
+R
+where µ0 (z) = P
+µ(w, z)p(w)dw . For the linear model
+µ(w, z) = βw + j βj zj we see that ψDloco (W ) = β 2 .
+We estimate ψDloco using the U -statistic
+P
+b(Wi , Zj ) − µ
+b0 (Zj ))2
+1
+i<j (µ
+b
+ψ0 = n
+2
+σ
+bW
+2
+P
+where µ
+b0 (z) = n1 i µ
+b(Wi , z).
+ψDloco will be our main example of a correlation free parameter but we also define two more decorrelated parameters to show other possibilities. Our second example is
+
+Having defined these functionals, let us return to the
+linear example in Section 2.2. Recall that the model is
+Y = βW + γZ1 + γZ2 + · · · γZd +  and that β = 0 in
+Cases 3 and 4. The results are summarized in Table 1.
+Keep in mind that LOCO is now the normalized version.
+Because this is a linear model, ψloco = ψDloco and both
+behave well. But more generally, they are not equal and
+ψloco still suffers correlation distortion. The Shapley value
+can be smaller or larger than ψDloco .
+Case 2 is especially important. In this case, ψDloco (W ) =
+β 2 and ψshap (W ) = β 2 /d. Because of the perfect correlation, any confidence interval for ψDloco would have infinite length. For Shapley we would conclude that none
+of the variables are important which is misleading. For
+ψDloco we would conclude that the importance of W is
+not identified. Which answer is considered correct is a
+matter of opinion. Our view is that it makes sense to say
+that the importance of W is not estimable when W is perfectly correlated with the other features. For LOCO and
+Shapley, the correlation changes the estimand itself. For
+ψDloco , the estimand is unaffected by correlation but it is
+not identified.
+
+6. Inferential Issues
+We now turn to inference. Under some smoothness conditions, constructing asymptotic confidence intervals for
+
+FEATURE IMPORTANCE
+
+LOCO and Shapley is straightforward (Williamson and
+Feng, 2020; Williamson et al., 2021, 2020; Lei et al.,
+2018; Rinaldo, Wasserman and G’Sell, 2019). However,
+as we explain in this section, when we use the same algorithm to construct an interval for the decorrelated LOCO,
+there will be a first order bias and the interval will not
+have correct coverage. It can still be interpreted as a variability interval, that is, an interval which covers the mean
+of the estimator ψ n = E[ψbn ] rather than the parameter itself. The first order bias can, in principle be removed by
+computing the influence function but, as we explain below, this is not practical. Also, the decorrelated LOCO
+suffers from extra bias when there are regions of low density. LOCO and Shapley suffer from some problems due
+to the quadratic nature of the parameter. Here are the details.
+
+6.1 The Effect of Nuisance Functions
+
+A variable importance measure is a functional ψ that depends on nuisance functions. For example, LOCO in (1)
+depends on the nuisance functions µ and µ−j . In general,
+to construct a confidence interval for a parameter ψ , we
+√
+would like n(ψb − ψ) to converge to a mean 0 Normal
+distribution. Now
+√
+√
+√
+n(ψb − ψ) = n(ψb − ψ n ) + n(ψ n − ψ)
+√
+where ψ n = E[ψbn ]. The term n(ψ n − ψ) explodes if the
+b − µ||).
+bias is first order meaning that ψ n − ψ = O(||µ
+For this reason, we would like the bias to be second
+order meaning that ψ n − ψ = O(||µ
+b − µ||2 ). For example, if µ is in a Holder space of
+smoothness τ then
+−τ /(2τ +d) ). Then √n||µ
+||
+µ
+b
+−
+µ||
+=
+O
+(n
+b − µ|| → ∞ but
+P
+√
+n||µ
+b − µ||2 → 0 if τ > d/2. Second order bias is usually
+achieved by correcting the plug-in estimator with the efficient influence function. LOCO and Shapley already have
+second order bias ||µ
+b − µ||2 without correction by the influence function as long as µ(x) satisfies a strong smoothness condition. This is shown in Williamson et al. (2020).
+The decorrelated parameter ψDloco loses this property. In
+principle we can correct this bias using the influence function. But estimating the influence function turns out to
+be difficult. For example, it requires density estimation.
+Moreover, the influence function is poorly estimated especially when there is strong correlation, precisely when
+ψDloco would be most useful and this method turns out to
+be impractical.
+A problem with ψDloco , and any correlation free measure,
+is that there is bias due to regions of low density in the
+sample space. More precisely, we need to estimate the regression function over regions where the density is small
+and this results in extrapolation bias. This problem occurs
+
+7
+
+F IG 1. The elliptical purple area is the bulk of the support of the distribution. The square pink area is the region where p(w, z) is small but
+p(w)p(z) is large. There is little data in this region but any correlation
+free functional depends on the value of the regression function µ(w, z)
+over this region.
+
+for many types of feature importance. Hooker, Mentch
+and Zhou (2021) show that this occurs for Breiman’s permutation measure for random forests. Owen and Prieur
+(2017) call this the data hole problem. See also Mase,
+Owen and Seiler (2022) and Kumar et al. (2020).
+LOCO avoids this bias so there is a tradeoff: correcting
+for correlation eliminates correlation distortion at the expense of introducing a new bias.
+R RTo see the problem, note
+that ψDloco has the form ψR=R
+g(w, z)p(w)p(z)dwdz .
+For any fixed value of z ,
+g(w, z)p(w)p(z)dwdz requires integrating over all values of w . Thus we can end
+up integrating over pairs (w, z) that have very low density; see P
+Figure 1. In particular, the estimator involves
+the sum i,j µ
+b(Wi , Zj ) which includes pairs (Wi , Zj )
+which might lie in regions with no observations. In this
+case, µ
+b(Wi , Zj ) will either have large bias or large variance. For example, a random forest will extrapolate over
+this type of region and have huge bias. LOCO avoids this
+problem as it integrates with respect to the joint distribution p(w, z). To summarize, any nonparametric, correlation free functional requires estimating µ(w, z) over sets
+of low density which contain little data. This raises the
+following question: what is worse: Correlation distortion
+or low density bias? We investigate this question in Section 7 where we consider some examples.
+
+6.2 Problems due to Quadratic Functionals
+
+Another issue that arises is that all these parameters are
+quadratic. It is difficult to get valid confidence intervals
+or even variability intervals for quadratic parameters because their limiting distribution and rate of convergence
+
+8
+
+change as ψ approaches 0. Formally, the influence function vanishes when ψ = 0 and the central limit theorem
+does not hold.
+With sufficient smoothness assumptions, the estimator ψb
+of any of these parameters converges at rate n−1/2 when
+ψ 6= 0 but at the null, where ψ = 0, the influence function
+for the parameter vanishes, the rate becomes n−1 and the
+limiting distribution is typically a combination of χ2 random variables. Near the null, we get behavior in between
+these two cases. A valid confidence interval Cn should
+satisfy P (ψn ∈ Cn ) → 1 − α even if ψn is allowed to
+change with n. In particular, we want to allow ψn → 0.
+Finding a confidence interval with uniformly correct coverage, with length n−1/2 away from the null and length
+n−1 at the null is, to the best of our knowledge, an unsolved problem.
+We are aware of only three proposals for handling this
+problem. Williamson et al. (2020) deal with this problem when estimating ψloco by writing ψloco as a sum of
+two parameters ψloco = ψ1 + ψ2 such that neither ψ1 nor
+ψ2 vanish when ψloco = 0. Then, they estimate ψ1 and
+ψ2 on separate splits
+√of the data. This amounts to adding
+noise of size O(1/ n) to the interval. In fact there are
+infinitely many ways to decompose ψ as a sum of two
+non-degenerate functionals and this is just one.
+Dai,√Shen and Pan (2022) instead add noise of the form
+cZ/ n to the estimator, where Z ∼ N (0, 1). They choose
+c by permuting the data many times and finding a c that
+gives good coverage under the simulated permutations.
+However, this is computationally expensive and adding
+noise seems unnecessary.
+
+Illustration of Cross-Fitting
+
+D1
+
+µ
+b1
+ψb1
+
+from
+from
+
+D2
+
+µ
+b2
+ψb2
+
+D1 , D3 , . . . DK ,
+D2 .
+..
+.
+from D1 , . . . , Dj−1 , Dj+1 , . . . , DK
+from Dj
+..
+.
+from
+D1 . . . DK−1
+from
+DK
+
+..
+.
+Dj
+
+µ
+bj
+ψbj
+
+..
+.
+DK
+
+µ
+bK
+ψbK
+
+D2 . . . D K ,
+D1 .
+
+from
+from
+
+TABLE 2
+In cross-fitting, the nuisance functions are estimated on part of the
+data and the parameter is estimated on the held-out data. This is done
+repeatedly and the final estimator is obtained by averaging over the
+splits.
+
+coverage is ≥ 1 − α by Markov’s inequality. All three approaches are basically the same: they expand the confidence interval by O(n−1/2 ) which maintains validity at
+the expense of efficiency at the null.
+
+6.3 Confidence Intervals
+
+We discuss two methods for constructing confidence
+intervals: cross-fitting and the HulC (Hull-based Confidence) (Kuchibhotla, Balakrishnan and Wasserman,
+2021). For cross-fitting with LOCO we use the following steps (Williamson et al., 2020).
+
+Both of these approaches have the effect of expanding the
+interval by an amount of order O(n−1/2 ). The proposal in
+Verdinelli and Wasserman (2021) is simply to expand the
+interval without adding any additional randomness. Given
+an initial√interval Cn√= [an , bn ], we expand
+P it as Cn =
+2 = n−1
+2
+[an − s/ n, bn + s/ n] where
+s
+i (Yi − Y n ) .
+√
+Any expansion of the form c/ n would work; we choose
+c = s to set the scale to the scale of Y . However, the
+method is quite insensitive to the choice of c.
+
+1. Divide the data into K blocks D1 , . . . , DK .
+2. For block j , estimate µ from the data in the other
+blocks and let
+1 X
+1 X
+ψbj =
+(µ
+b(Wi , Zi ) − µ
+b(Zi ))2 ≡
+Tij
+nj
+nj
+
+All three methods are ad-hoc but we are not aware of
+any other way to deal with the problem. To see why
+these strategies lead to valid coverage, consider an estimator ψbn with the following behavior. When ψn stays
+√
+bounded away from 0, we have n(ψbn − ψ n )/sen
+N (0, 1) where sen is the estimated standard error and
+ψ n = E[ψbn ]. But when ψn → 0, V[ψbn ]  n−γ with γ > 1.
+√
+√
+Let Cn = [ψbn − zα/2 sen − c/ n, ψbn + zα/2 sen + c/ n].
+When ψn stays bounded away from 0, the coverage is
+≥ 1 − α by the central limit theorem. When ψn → 0, the
+
+where s2 is the sample variance of the Tij ’s and c is
+the expansion constant from the previous section.
+
+i∈Dj
+
+i∈Dj
+
+where nj is the number of observations in Dj .
+P
+b
+3. Let ψb = K −1 K
+j=1 ψj .
+√
+√
+4. The confidence interval is ψb ±(zα/2 s/ n+c/ n)
+
+See Table 2.
+An alternative is the HulC (see Table 3) which has accurate coverage and does not require estimating the standard error which is especially useful for the decorrelated
+LOCO whose estimate is a U -statistic. The steps are:
+1. Divide the data into B = dlog(2/α)/ log 2e blocks.
+
+9
+
+FEATURE IMPORTANCE
+
+15
+
+The HulC
+1/5
+
+µ
+b1
+µ
+b2
+·
+µ
+bj
+·
+µ
+bB
+
+ψb1
+ψb2
+·
+ψbj
+·
+ψbB
+
+0
+
+µ(w, 0, 0, 0, 0, 0)
+
+−5
+−10
+−15
+
+D1
+D2
+·
+Dj
+·
+DB
+
+5
+
+10
+
+4/5
+
+TABLE 3
+With the HulC, splitting is done within each block of data.
+
+2. Split each block into two parts. Estimate µ on the
+first part and ψj on the second part. (We use a 4/5
+and 1/5 split.)
+P
+3. The estimator is ψb = B −1 j ψbj .
+4. The confidence
+√interval is
+√
+[minj ψbj − c/ n, maxj ψbj + c/ n].
+Cross-fitting has the advantage that it uses more of the
+data to estimate the nuisance functions. The advantage of
+the HulC is that we do not need to estimate the standard
+error which, as we have mentioned, is intractable for some
+parameters such as the decorrelated LOCO.
+If we assume that µ is in a Holder space of smoothness
+τ , then the validity of the interval for LOCO requires that
+τ > d/2. If this assumption does not hold, the confidence
+intervals will be biased but can still be interpreted as a
+b . That is
+variability interval, meaning that it covers E[ψ]
+P (E[ b
+ψ] ∈ Cn ) → 1 − α.
+For the decorrelated LOCO there is the possibility of additional bias due to the fact that we did not use the influence function and due to low density regions. Again,
+these are probably best regarded as variability intervals.
+For completeness, we record the efficient influence functions for the correlation free parameters (Verdinelli and
+Wasserman, 2021) in case the reader wants to bias correct
+the estimators. For the decorrelated LOCO the influence
+function is
+Z
+φ(X, Y, µ, p) = [µ(x, Z) − µ0 (Z)]2 p(x)dx
+Z
++ [µ(X, z) − µ0 (z)]2 p(z)dz
++2
+
+p(X)p(Z)
+[µ(X, Z) − µ0 (Z)]
+p(X, Z)
+[Y − µ(X, Z)] − 2 ψDloco (p).
+
+The influence function for ψcde is
+Z Z
+φ(X, Y, µ, p) =
+[µ(X1 , z) − µ(x2 , z)]2 p(x2 )p(z)
+
+−3
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+3
+
+w
+
+F IG 2. True regression function µ(x, z) for z fixed at (0, . . . , 0) (black
+solid line). The other curves are the estimates from the random forest
+with correlation rho = .1 (red), rho = .5 (green) and ρ = .9 (blue).
+The forest estimate is very biased.
+
+Z Z
+
+[µ(x1 , z) − µ(X2 , z)]2 p(x1 )p(z)
+
+Z Z
+
+[µ(x1 , Z) − µ(x2 , Z)]2 p(x1 )p(x2 )
+
++
++
+
+Y − µ(X1 , Z)
+p(X1 , Z)
+
+Z
+
++2
+
+Y − µ(X2 , Z)
+p(X2 , Z)
+
+Z
+
+−2
+
+[µ(X1 , Z) − µ(x2 , Z)]p(x2 )dx2
+[µ(x1 , Z) − µ(X2 , Z)]p(x1 )dx1
+
+− 3 ψcde
+
+The lack of intrinsic second order accuracy appears to be
+inevitable for decorrelated parameters. Estimating these
+influence functions is difficult and in particular, requires
+density estimation. Doing so would destroy the simplicity
+of the procedure and violate V1.
+
+6.4 LOCO for Forests
+
+Another issue arises when estimating LOCO using random forests. We illustrate the problem with the followP
+ing example. Let Y = βW + γ ds=1 Zs +  where  ∼
+N (0, 1). We take β = 5, γ = −2, d = 20, (W, Z) ∼
+N (0, Σ) where Σjj = 1 and Σjk = ρ. The normalized
+LOCO is β 2 but the estimate
+P
+(µ
+b(Wi , Zi ) − µ
+b(Zi ))2
+b
+ψ = iP
+b(Zi ))2
+i (Wi − ν
+using off-the-shelf random forests will be biased downwards due to overfitting. (We used the R package grf but
+we verified that the same problem happens with the packages ranger and randomForest). Figure 2 shows the
+estimated function µ
+b(w, z) at several values of w with
+z = (0, 0, 0, 0, 0) using a random forest, for ρ = 0.1, 0.5
+
+Y = 1.5W Z1 I(Z2 > 0) + Z3 Z4 I(Z2 < 0) + .
+
+3
+
+Example 4. This example illustrates a distribution with
+a large region of essentially 0 density. We take W ∼
+N (0, 1), Z1 = 3W 2 + δ , (Z2 , . . . , Z9 ) are standard multivariate Normal, Y = 5W + , δ,  ∼ N (0, 1).
+
+0
+
+1
+
+2
+
+ψ
+
+6
+5
+
+Example 3. This example is from Bénard, Da Veiga and
+Scornet (2021). Here, Z is four dimensional, (W, Z) ∼
+N (0, Σ), Σjj = 1, Σ1,2 = Σ2,1 = Σ4,5 = Σ5,4 = ρ and
+
+4
+
+10
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+ρ
+
+F IG 3. The estimated normalized LOCO as a function of ρ using standard random forests (blue broken line) and the residual forest (black
+solid line). The standard forest is biased toward 0.
+
+and 0.9. The true function is 5w (black, solid line). We
+see that the fitted functions are biased as ρ increases. The
+plot in Figure 3 shows the estimated LOCO as a function
+of ρ on the square root scale (blue broken line).
+The true value is 5. The estimate is biased downwards
+with increasing bias as the correlation ρ increases.
+It seems reasonable to require that an off-the-shelf method
+should have good behavior when the model is linear or
+approximately linear. To achieve this we use a modified
+forest as follows. Let us write
+
+From Figure 4 we clearly see the effect of correlation.
+ψDloco is least affected by correlation as expected but in
+the bottom right plot it is too small due to low density
+bias. The Shapley value is affected by correlation and in
+some cases, it moves in the opposite direction of LOCO
+(top right and bottom left). Most of the time, the normalized LOCO does better than the Shapley value. One
+might have hoped that the Shapley value would lie in between ψDloco and the unnormalized LOCO. This might be
+achieved using a modified Shapley value as described in
+Section 9.
+We also conducted a small simulation to check the coverage of the 90 percent variability intervals using the HulC.
+The results are shown in Figure 5. In most cases the coverages are close to nominal or higher.
+
+µ(x) = L(x) + f (x)
+
+where L(x) = θT x is the projection of µ(x) onto the
+space of linear functions and f (x) is the function orthogonal to L(x). That is, θ minimizes E[(µ(X) − θT X)2 ]
+and f (x) lives in the orthogonal complement. We can fit
+such a function easily by first fitting a linear regression
+and then fitting a forest (or other black box method) to
+the residuals. The black solid line in Figure 3 shows the
+result in our example. We refer to this method as a residual forest and we use this method in all our examples.
+
+7. Examples
+In this section we present four simulated examples. In
+each case, we plot the estimated parameters (averaged
+over 100 simulations) as a function of increasing correlation ρ between the features. In each case, the sample
+size is n = 1000.
+Example 1. Here the model is linear with Y = βW + ,
+ ∼ N (0, 1), β = 5, (W, Z) ∼ N (0, Σ) is 10 dimensional,
+Σjj = 1, Σ12 = Σ21 = ρ and Σij = 0 otherwise.
+Example 2. The structure is the same as in Example 1
+except that Y = 5 cos(W ) + 5 cos(Z1 ) + .
+
+8. Groups of Variables
+So far we have assumed that the feature of interest W is
+scalar. More generally, we can consider a group of variables W ∈ Rg . LOCO is defined in the same way, that
+is,
+ψloco (W ) = E[(µ(W, Z) − µ(Z))2 ]
+
+where again Z denotes the rest of the features. In fact,
+looking at groups of features is another way to deal with
+correlation. Suppose we are interested in a feature Xj . If
+the single feature of interest Xj is highly correlated with
+some other features F then it might be useful to compute LOCO for W = (Xj , F ). In fact, we might consider
+nested subsets W1 ⊂ W2 ⊂ · · · of decreasing correlation
+each containing Xj as a way of exploring the importance
+of Xj . We can form these groups in a forward stepwise
+fashion as follows:
+1. Set W = Xj .
+2. Compute ψloco (W ).
+3. Find the Zj with highest absolute correlation with
+W . Add this Zj to W and compute ψloco (W ).
+4. Continue until all variables are included in W .
+
+11
+
+1.5
+
+2.5
+
+3.0
+
+2.0
+
+3.5
+
+2.5
+
+4.0
+
+4.5
+
+3.0
+
+5.0
+
+FEATURE IMPORTANCE
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+0.0
+
+0.2
+
+0.6
+
+0.8
+
+0.6
+
+0.8
+
+Quadratic
+
+4.4
+
+0.3
+
+4.6
+
+0.4
+
+0.5
+
+4.8
+
+0.6
+
+5.0
+
+0.7
+
+5.2
+
+0.8
+
+Linear
+
+0.4
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+0.0
+
+0.2
+
+0.4
+
+F IG 4. The four examples. Top left, ExampleNonlinear
+1. Top right, Example 2. Bottom left, Example 3. Bottom
+right, Example 4. The blue curve −o− is the
+Interaction
+unnormalized LOCO. The red curve −4− is the normalized LOCO. The purple curve − × − is the Shapley value. The green curve − + − is the
+decorrelated LOCO. The horizontal axis is the correlation ρ. The effect of feature correlation is clear especially for the unnormalized LOCO and
+the Shapley value. In the fourth example (bottom right plot) the decorrelated LOCO is badly biased due to low density bias.
+
+5. Plot ψloco as a function of the number of variables
+in W .
+Any measure of correlation can be used. We used canonical correlation to explore the groups of features behavior in Figure 6. We considered an example where n =
+1000, (W, Z) ∼ N (0, Σ), Σjj = 1, Σ1,2 = Σ1,3 = Σ2,1 =
+Σ3,1 = Σ2,3 = Σ3,2 = .95 and Σj,k = 0 otherwise. The
+dimension of Z is 9 and Y = 2W 2 Z12 + . One can either use the original LOCO or the normalized version.
+Recall that the normalized version was designed to recover the least squares coefficient in linear models dividing by E[(W − ν(Z))2 ] where ν(z) = E[W |Z = z].
+When W is a vector this term becomes a matrix, namely,
+E[(W − ν(Z))(W − ν(Z))T ]. In our example we normalized by the trace of this matrix, but other choices are
+possible. But recovering ||β||2 is not possible. The unnor-
+
+malized LOCO has the advantage that it is non-decreasing
+as the group is grown which may be considered an advantage for interpretation.
+We see that the unnormalized LOCO (blue, broken line)
+suffers correlation distortion that becomes less severe as
+the group is grown. The normalized LOCO (black, solid
+line) suffers less correlation distortion but does not have
+the intuitive monotone behavior that the unnormalized
+LOCO has.
+Extending Shapley values for groups is straightforward. If
+the variables are put into groups G1 , . . . , Gk we can now
+use
+X
+ψshap (Gj ) =
+wS ψloco (Gj , S)
+S
+
+where now the sum is over subsets of groups.
+
+50
+
+Example 2
+
+20
+
+30
+20
+
+15
+
+10
+
+10
+
+0
+
+0
+
+5
+
+0.90
+0.85
+
+0.95
+
+0.90
+0.85
+
+0.95
+
+40
+
+25
+
+Example 1
+
+30
+
+12
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+ρ
+
+ρ
+
+0.8
+
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+ρ
+
+ρ
+
+0.90
+0.85
+
+0.85
+
+0.90
+
+0.95
+
+Example 4
+
+0.95
+
+Example 3
+
+F IG 7. Left panel: The linear model of Section 3 revisited. Right panel:
+nonlinear model with Y = 5X 2 +  and equal correlation ρ between
+all covariates. The decorrelated LOCO (red line), the un-normalized
+LOCO (black line) and the modified Shapley value (blue line) for several values of ρ.
+
+ρ
+
+ρ
+
+Suppose that X = (W, Z) and that there is a subset of features S such that (i) µ(w, z) = µ(w, xS ) and such that (ii)
+W is independent of XS . In that case, it is easy to see that
+ψloco (W, S) (the LOCO value for W in the model based
+on (W, XS )) is equal to ψDloco . Finding a submodel S
+with exactly these properties is unlikely. But if we modify the Shapley value to give high weight to submodels
+that approximately satisfy (i) and (ii) we can get an estimate that is closer to ψDloco than the usual Shapley value.
+Making this idea precise could be a topic for a whole paper. Here, we give one example of how one might define
+such a modified Shapley value, as a proof of concept. (See
+Mase, Owen and Seiler (2022) for further discussion on
+this topic.)
+
+0
+
+5
+
+ψ
+
+10
+
+15
+
+F IG 5. The plots show the coverage of the variability intervals
+using the HulC for the four examples. The nominal level is 0.9.
+Red: LOCO, Blue: Dloco, Orange: Unnormalized LOCO, Purple:
+Shapley. In most cases the coverage is close to nominal for all
+values of the correlation ρ.
+
+the example in Section 3, we had, for the unnormalized
+LOCO that ψloco = 0 while ψshap = β 2 /d which provides at least some improvement. (We focus on the unnormalized LOCO in this section.) We believe that this
+is why some authors claim that Shapley values address
+correlation. Apparently, averaging over submodels can, in
+some cases, partially reduce correlation distortion.
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Group Size
+
+F IG 6. An example showing the un-normalized LOCO (blue, broken
+line) and normalized LOCO (black, solid line) as the group size is
+grown using the forward selection process described in the text. The
+un-normalized LOCO has correlation distortion that decreases as the
+group is grown. This value necessarily increases with group size (apart
+from some random variability involved in the estimation procedure).
+The normalized LOCO is less sensitive to correlation distortion but
+does not have monotone behavior in the group size.
+
+We want to give high weight to any model S that is an
+accurate predictor and such that W is independent of (Zs :
+s ∈ S). Define weights
+acc
+wS ∝
+dep
+where acc is some measure of the accuracy of the submodel (W, ZS ) and dep is a measure of the dependence
+between W and ZS . As a specific case, we can take
+acc = 1/ψloco (S c ) and dep to be the canonical correlation
+between W and S denoted by ρ(W, S). Hence we define
+1
+wS ∝
+.
+c
+ψloco (S )ρ(W, S)
+
+9. Modified Shapley Values
+
+As with the usual Shapley values we use subsampling to
+compute the modified Shapley value.
+
+Although Shapley values do not fix correlation distortion,
+they do sometimes reduce it. For instance, in Case 2 of
+
+Two examples are shown in Figure 7. The left plot is the
+linear model from Section 3. The right plot is a nonlinear example with Y = 5X 2 +  and equal correlation ρ
+
+13
+
+FEATURE IMPORTANCE
+
+between all covariates. In each case, the horizontal red
+line is ψDloco , the black line is LOCO and the blue line
+is the modified Shapley value. The latter better approximates ψDloco for all values of ρ. A full exploration of
+this idea is beyond the scope of this paper, but it is important to be aware that we do not have to feel compelled
+to use the standard definition of Shapley values. Further
+investigation into modified versions of Shapley values is
+an important priority.
+
+TABLE 4
+A comparison of (normalized) LOCO, decorrelated LOCO, and
+Shapley. Each parameter has advantages and disadvantages. Overall,
+LOCO seems the best choice.
+
+10. Conclusions and Recommendations
+
+Other Value Functions. Although we focused on a particular value function V (S), Kumar et al. (2020) show
+that the same issues arise with Shapley values when
+using other value functions. They consider two different value functions: the conditional mean V (S) =
+0
+RE[Y |XS = xS ] and the intervention distribution V (S) =
+µ(xS , xS c )dP (xS c ). The latter is the mean of the counterfactual value of Y if we intervened and set XS to equal
+the specific value of xS . However, caution is warranted
+since this is a causal quantity and the interpretation that
+this measures an intervention depends on a variety of assumptions, especially the assumption of no unmeasured
+confounding. The authors say:
+
+Table 4 summarizes properties of some variable importance measures.
+LOCO. The normalized version of LOCO is easy to compute, has second order bias, does not suffer low density
+bias and is interpretable. In linear models, it is correlation
+free but in general it does suffer from correlation distortion which, as we have seen can deflate or inflate its value.
+Decorrelated LOCO. This parameter is free from correlation distortion. But it suffers first order bias. To correct this bias, we need to estimate the influence function
+which entails density estimation. This parameter is subject to low density bias which does not occur for LOCO.
+Shapley. The main attraction of the Shapley value is its
+axiomatic basis. But as we have pointed out, outside of
+its original game theory setting, the axioms are questionable. The Shapley value is very expensive to compute, is
+difficult to interpret and still suffers correlation distortion.
+There may be specialized circumstances where Shapley
+values are useful — such as computer experiments where
+the distribution of X is under the control of the user, but
+we do not recommend them for general use.
+Variability Intervals versus Confidence Intervals. In
+many applications it may suffice to only have point estimates. But if the user wants a confidence interval, we
+have seen that these can be obtained either through crossfitting or the HulC. These intervals are best interpreted
+as variability intervals not confidence intervals due to the
+estimation bias.
+Modified Shapley Values. The real benefit of Shapley
+values is that they explore submodels which might have
+useful information. The standard definition of the Shapley weights comes from cooperative game theory. But as
+we noted in Section 9 we can easily change the definition
+to suit our purpose. This opens up a wealth of possibilities
+that should be explored.
+
+Correlation free
+Second order bias
+No low density bias
+Fast
+Interpretable
+
+LOCO
+×
+√
+√
+√
+√
+
+dLOCO
+√
+×
+×
+√
+√
+
+Shapley
+×
+√
+√
+×
+×
+
+... we demonstrate that Shapley-value-based explanations
+for feature importance fail to serve their desired purpose
+in general. ... applying the Shapley value to the problem
+of feature importance introduces mathematically formalizable properties which may not align with what we would
+expect from an explanation.
+They point out that when using V (S), the Shapley value
+suffers correlation distortion. They give an extreme example, namely, including or excluding a feature that is perfectly correlated with another feature does not change the
+value of µ(x) but it does change the Shapley value. (This
+corresponds to a violation of our axiom A1.) And when
+using V 0 (S), we get extrapolation bias due to regions in
+the sample space with low density. (This corresponds to a
+violation of our axiom V3.)
+
+Finally, as we mentioned in the introduction, there are
+many other feature importance measures in the statistics
+and machine learning literature. We focused on LOCO
+and Shapley because of their popularity.
+
+References
+BARBER , R. F. and C ANDÈS , E. J. (2015). Controlling the false discovery rate via knockoffs. The Annals of Statistics 43 2055–2085.
+
+14
+B ÉNARD , C., DA V EIGA , S. and S CORNET, E. (2021). MDA for random forests: inconsistency, and a practical solution via the SobolMDA. arXiv preprint arXiv:2102.13347.
+C HEN , H., C OVERT, I. C., L UNDBERG , S. M. and L EE , S.-I. (2022).
+Algorithms to estimate Shapley value feature attributions. arXiv
+preprint arXiv:2207.07605.
+C OVERT, I., L UNDBERG , S. and L EE , S.-I. (2020). Understanding
+global feature contributions through additive importance measures.
+Advances in Neural Information Processing Systems 33 17212–
+17223.
+C OVERT, I., L UNDBERG , S. M. and L EE , S.-I. (2021). Explaining by
+Removing: A Unified Framework for Model Explanation. J. Mach.
+Learn. Res. 22 209–1.
+DAI , B., S HEN , X. and PAN , W. (2022). Significance tests of feature relevance for a black-box learner. IEEE Transactions on Neural Networks and Learning Systems.
+G AN , L., Z HENG , L. and A LLEN , G. I. (2022). Inference for Interpretable Machine Learning: Fast, Model-Agnostic Confidence Intervals for Feature Importance. arXiv preprint arXiv:2206.02088.
+H AMA , N., M ASE , M. and OWEN , A. B. (2022). Model
+free Shapley values for high dimensional data. arXiv preprint
+arXiv:2211.08414.
+H OOKER , G., M ENTCH , L. and Z HOU , S. (2021). Unrestricted permutation forces extrapolation: variable importance requires at least
+one more model, or there is no free variable importance. Statistics
+and Computing 31 1–16.
+I OOSS , B. and P RIEUR , C. (2019). Shapley effects for sensitivity analysis with correlated inputs: comparisons with Sobol’indices, numerical estimation and applications. International Journal for Uncertainty Quantification 9.
+K UCHIBHOTLA , A. K., BALAKRISHNAN , S. and WASSERMAN , L.
+(2021). The hulc: Confidence regions from convex hulls. arXiv
+preprint arXiv:2105.14577.
+K UMAR , I. E., V ENKATASUBRAMANIAN , S., S CHEIDEGGER , C.
+and F RIEDLER , S. (2020). Problems with Shapley-value-based explanations as feature importance measures. In International Conference on Machine Learning 5491–5500. PMLR.
+L EI , J., G’S ELL , M., R INALDO , A., T IBSHIRANI , R. J. and
+WASSERMAN , L. (2018). Distribution-free predictive inference for
+regression. Journal of the American Statistical Association 113
+1094–1111.
+L UNDBERG , S. M. and L EE , S.-I. (2017). A unified approach to interpreting model predictions. Advances in neural information processing systems 30.
+M ASE , M., OWEN , A. B. and S EILER , B. B. (2022). Variable importance without impossible data. arXiv preprint arXiv:2205.15750.
+OWEN , A. B. and P RIEUR , C. (2017). On Shapley value for measuring importance of dependent inputs. SIAM/ASA Journal on Uncertainty Quantification 5 986–1002.
+R IBEIRO , M. T., S INGH , S. and G UESTRIN , C. (2016). Modelagnostic interpretability of machine learning. arXiv preprint
+arXiv:1606.05386.
+R INALDO , A., WASSERMAN , L. and G’S ELL , M. (2019). Bootstrapping and sample splitting for high-dimensional, assumption-lean inference. The Annals of Statistics 47 3438–3469.
+ROBINS , J. M. and G REENLAND , S. (1992). Identifiability and exchangeability for direct and indirect effects. Epidemiology 143–
+155.
+S HAPLEY, L. S. (1953). A Value for n-person games. In Contribution
+to the Theory of Games II 307-317. Princeton University Press.
+S OBOL’, I. M. (1990). On sensitivity estimation for nonlinear mathematical models. Matematicheskoe modelirovanie 2 112–118.
+S OBOL’, I. M. (1993). Sensitivity estimates for nonlinear mathematical models. Math. Model. Comput. Exp 1 407–414.
+
+V ERDINELLI , I. and WASSERMAN , L. (2021). Decorrelated Variable
+Importance. arXiv preprint arXiv:2111.10853.
+W ILLIAMSON , B. and F ENG , J. (2020). Efficient nonparametric statistical inference on population feature importance using Shapley
+values. In International Conference on Machine Learning 10282–
+10291. PMLR.
+W ILLIAMSON , B. D., G ILBERT, P. B., S IMON , N. R. and
+C ARONE , M. (2020). A unified approach for inference
+on algorithm-agnostic variable importance. arXiv preprint
+arXiv:2004.03683.
+W ILLIAMSON , B. D., G ILBERT, P. B., C ARONE , M. and S IMON , N.
+(2021). Nonparametric variable importance assessment using machine learning techniques. Biometrics 77 9–22.
+Z HANG , L. and JANSON , L. (2020). Floodgate: inference for modelfree variable importance. arXiv preprint arXiv:2007.01283.
+
+

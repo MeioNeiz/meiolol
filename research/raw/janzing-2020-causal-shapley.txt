@@ -1,0 +1,946 @@
+arXiv:1910.13413v2 [stat.ML] 27 Nov 2019
+
+Feature relevance quantification in explainable AI:
+A causal problem
+Dominik Janzing, Lenon Minorics, and Patrick Blöbaum
+Amazon Research Tübingen, Germany
+{janzind, minorics, bloebp}@amazon.com
+
+25 November 2019
+
+Abstract
+
+lack of robustness is only one of several different motivations for getting artificial intelligence interpretable. Also
+the demand for getting fair decisions, e.g., Dwork et al.
+(2012); Kilbertus et al. (2017); Barocas et al. (2018), requires understanding of algorithms. In this case, it may
+even be subject of legal and ethical discussions why an
+algorithm came to a certain conclusion.
+
+We discuss promising recent contributions on quantifying feature relevance using Shapley values, where we observed some confusion on which probability distribution
+is the right one for dropped features. We argue that the
+confusion is based on not carefully distinguishing between observational and interventional conditional probabilities and try a clarification based on Pearl’s seminal
+work on causality. We conclude that unconditional rather
+than conditional expectations provide the right notion of
+dropping features in contradiction to the theoretical justification of the software package SHAP. Parts of SHAP
+are unaffected because unconditional expectations (which
+we argue to be conceptually right) are used as approximation for the conditional ones, which encouraged others to
+‘improve’ SHAP in a way that we believe to be flawed.
+
+1
+
+To formalize the problem, we describe the input / output behaviour as a function f : X1 , . . . , Xn → R where
+X1 , . . . , Xn denote the ranges of some input variables
+(X1 , . . . , Xn ) =: X (discrete or continuous), while we
+assume the target variable Y to be real valued for reasons that will become clear later. Given one particular input x := (x1 , . . . , xn ) we want to quantify to what extent each xj is ‘responsible’ for the output f (x1 , . . . , xn ).
+This question makes only sense, of course, after specifying what should one input be instead. Let us first consider
+the case where x is compared to some ‘baseline’ element
+x0 , which has been studied in the literature mostly for the
+case of real-valued inputs and differentiable f . Based on
+a hypothetical scenario where only some of the baseline
+values x0j are replaced with xj while others are kept one
+wants to quantify to what extent each component j contributes to the difference f (x) − f (x0 ). The focus of the
+present paper, however, is a scenario where the baseline
+is defined by the expectation E[f (X)] over some distribution PX . To explain the relevance of each j for the difference f (x) − E[f (X)] one considers a scenario where
+only some values are kept and the remaining ones are averaged over some probability distribution. The main contribution of this paper is to discuss which distribution is
+
+Motivation
+
+Despite several impressive success stories of deep learning, not only researchers in the field have been shocked
+more recently about lack of robustness for algorithms
+that were actually believed to be powerful. Image classifiers, for instance, fail spectacularly once the images
+are subjected to adversarial changes that appear minor
+to humans, see e.g. Goodfellow et al. (2015); Sharif
+et al. (2016); Kurakin et al. (2018); Eykholt et al. (2018);
+Brown et al. (2018). Understanding these failures is challenging since it is hard to analyze which features were decisive for the classification in a particular case. However,
+1
+
+2.1
+
+the right one. Recalling the difference between interventional and observational conditional distributions in the
+field of causality, we explain why we disagree with the
+interesting proposal of Lundberg and Lee (2017) in this
+regard. Further we argue that our criticism is irrelevant
+for any software that ‘approximates’ the conditional expectation (which we consider conceptually wrong) by the
+unconditional expectation, as proposed by Lundberg and
+Lee (2017). The paper is structured as follows. Section 2
+summarizes results from the literature regarding axioms
+for feature attribution for the case where there is a unique
+baseline reference input. Here integrated gradients and
+Shapley values (as the generalization to discrete input)
+are the unique attribution functions for the stated set of
+axioms. Section 3 discusses the attribution problem for
+the case where one averages over unused features as in
+Lundberg and Lee (2017), and then we present our criticism. We think that the big overlap of the present paper with existing literature is justified by aiming at this
+clarification only, while keeping this clarification as selfconsistent as possible. In particular, the very general discussion of Datta et al. (2016) contains all the ideas of
+this work at least implicitly, but since it appeared before
+Lundberg and Lee (2017) it could not explicitly discuss
+the conceptual problems raised by the latter. Our view
+on marginalization over unused features is supported by
+Datta et al. (2016) for similar reasons. In Section 4 we
+present different experiments which illustrate our arguments.
+
+Integrated gradient
+
+Sundararajan et al. (2017), investigated the attribution of
+xi to the difference
+f (x) − f (x0 ),
+
+(1)
+
+where x0 is a given baseline. Under the assumption that
+f is differentiable almost everywhere1 , they defined the
+attribution of xi to (1) as
+IntegratedGradsi (x; f ) :=
+Z 1
+∂f (x0 + α(x − x0 ))
+dα.
+(xi − x0i )
+∂xi
+α=0
+Contrary to LIME, DeepLIFT and LRP, this attribution
+method has the advantage that all of the following 5 properties are satisfied (see Sundararajan et al. (2017) and Aas
+et al. (2019)):
+1. Completeness: If atri (x; f ) denotes the attribution
+of xi to (1), then
+X
+atri (x; f ) = f (x) − f (x0 ).
+i
+
+2. Sensitivity: If f does not depend on xi , then
+atri (x; f ) = 0.
+3. Implementation Invariance:2 If f and f 0 are equal
+for all inputs, then
+atri (x; f ) = atri (x; f 0 ) for all i.
+
+2
+
+4. Linearity: For a, b ∈ R holds
+
+Prior Work
+
+atri (x; af1 + bf2 ) =
+a · atri (x;f1 ) + b · atri (x; f2 ).
+
+The growth of deep neural networks recently motivated
+many researchers to investigate feature attribution, see
+e.g. Shrikumar et al. (2016) for DeepLIFT, Binder et al.
+(2016) for Layer-wise Relevance Propagation (LRP),
+Ribeiro and Singh (2016) for Local Interpretable Modelagnostic Explanations (LIME), and for gradient based
+methods Chattopadhyay et al. (2019). For a summary
+of common architecture agnostic methods, see Molnar
+(2019). We first discuss two closely related concepts that
+arise from an axiomatic approach.
+
+5. Symmetry-Preserving: If f is symmetric in component i and j and xi = xj and x0i = x0j , then
+atri (x; f ) = atrj (x; f ).
+1 see Sundararajan et al. (2017, Proposition 1)
+2 Note that this axiom is pointless if it refers to properties of functions
+rather than properties of algorithms. We have listed it for completeness
+and for consistency with the literature.
+
+2
+
+Integrated gradients can be generalized by integrating
+The quantity φi is called the Shapley value (Shapley,
+over an arbitrary path γ instead of the straight line. This 1953) of i, which can be considered the average contriattribution method is called path method and the follow- bution of i to g(U ). At first glance, Shapley values only
+ing theorem holds.
+solve the attribution problem for binary inputs by canonically identifying subsets T with binary words {0, 1}n . To
+Theorem 1. ((Friedman, 2004, Theorem 1) and (Sun- show that Shapley values also solve the above attribution
+dararajan et al., 2017, Theorem 1)) If an attribution problem, one can simply define a set function by
+method satisfies the properties Completeness, Sensitivity,
+Implementation Invariance and Linearity, then the attrig(T ) := fT (xT ) − f (x0 ),
+bution method is a convex combination of path methods.
+Furthermore, integrated gradients is the only path method for any subset T ⊆ {1, . . . , n}. Here, fT is the ‘simplithat is symmetry preserving.
+fied’ function with the reduced input xT obtained from f
+when all remaining features are taken from the baseline
+Notice that convex combinations of path methods input x0 , that is, f (x ) = f (x0 ).
+∅ ∅
+can also be symmetry preserving even if the attribution
+Since Shapley Values also satisfy Completeness,
+method is not given by integrated gradients.
+Sensitivity, Implementation Invariance and Linearity
+(Aas et al., 2019) with respect to the binary function
+defined by the set function g, they are given by a convex
+combination of path methods. Furthermore, Shapley
+2.2 Shapley values
+Values with respect to g are Symmetry-perserving, but
+To assess feature relevance relative to the average, Lunddon’t coincide with integrated gradients.
+berg and Lee (2017) use a concept that relies on first
+defining an attribution for binary functions, or, equivaDifferent ways of feature attribution based on Shapley
+lently, functions with subset as input (’set functions’). We
+Values were recently investigated by Sundararajan and
+first explain this concept and describe in Section 3 how it
+Najmi (2019). Their main consideration is feature relesolves the attribution relative to the expectation. Assume
+vance relative to an auxiliary baseline, but feature attriwe are given a set with n elements, say U := {1, . . . , n}
+bution relative to the expectation (according to an arbiand a function
+trary distribution) is also mentioned. Furthermore, Sundararajan and Najmi (2019) already discussed that ShapU
+g : 2 → R with g(U ) 6= 0, g(∅) = 0.
+ley Values based on conditional distributions can assign
+We then ask to what extent each single j ∈ U contributes unimportant features non-zero attribution. However, Sunto g(U ). A priori, the contribution of each j depends on dararajan and Najmi (2019) didn’t consider the problem
+the order in which more elements are included. We can from a causal perspective.
+thus define the contribution of j, given T ⊆ U by
+
+3
+
+C(j|T ) := g(T ∪ {j}) − g(T )
+(note that it can be negative and also exceed g(U )). With
+φi :=
+
+X
+
+1
+
+ C(i|T ).
+
+n n−1
+|T |
+T ⊆U \{i}
+
+n
+X
+
+sample
+
+the
+
+We now want to attribute the difference between f (x)
+and the expectation E[f (X)] to individual features. Explaining why the output for one particular input x deviates
+strongly from the average output is particularly interesting
+for understanding ‘outliers’. Let us introduce some notation first. For any T ⊆ U let E[f (xT , XT̄ )|XT = xT ] denote the conditional expectation of f , given XT = xT . By
+E[f (xT , XT̄ )] we denote the expectation of f (xT , XT̄ )
+
+(2)
+
+it then holds
+g(U ) =
+
+How should we
+dropped features?
+
+φi .
+
+i=1
+
+3
+
+with respect to the distribution of XT̄ without conditioning on XT = xT . Let us call this expression ‘marginal
+expectation’ henceforth.
+Accordingly, we now discuss two different options for
+defining ‘simplified functions’ fT where all features from
+T̄ are dropped:
+
+or
+
+fT (x) := E[f (xT , XT̄ )|XT = xT ]
+
+(3)
+
+fT (x) := E[f (xT , XT̄ )]
+
+(4)
+
+?
+
+Z
+
+X1
+
+X2
+
+X3
+
+Y
+Figure 1: A simple causal structure where the observational conditional p(y|x1 ) does not correctly describe how
+Y changes after intervening on X1 because the common
+cause Z ‘confounds’ the relation between X1 and Y .
+
+Lundberg and Lee (2017) propose (3), but since it is difficult to compute they approximate it by (4), which they
+justify by the simplifying assumption of feature independence. Using the set function g(T ) := fT (x) − f∅ (x),
+they compute Shapley values φi according to (2). We will
+argue that using (4) rather than (3) is conceptually the
+right thing in the first place. Our clarification is supposed
+to prevent others from ‘improving’ SHAP by finding an
+approximation for the conditional expectation that is better than the marginal expectation, like, for instance Aas
+et al. (2019) and (Lundberg et al., 2018)3
+To explain our arguments, let us first explain why
+marginal expectations occur naturally in the field of causal
+inference.
+
+Pearl’s do-operator Pearl (2000) instead, which yields
+E[Y |do(X1 = x1 )]
+Z
+= E[Y |x1 , x2 , x3 ]p(x2 , x3 )dx2 dx3 .
+
+(5)
+
+This can be easily verified using the backdoor criterion
+Pearl (2000) since (phrased in Pearl’s language) the variables X2 , X3 ‘block the backdoor path’ X1 ← Z → Y .
+Observations from Z are not needed, we may therefore
+assume Z to be latent, which we have indicated by white
+Observational versus interventional conditional distri- color.
+For our purpose, two observations are important: first,
+butions The main ideas of this paragraph can already be
+(5)
+does not contain the conditional distribution, given
+found in Datta et al. (2016) in more general and abstract
+X
+1 = x1 . Replacing p(x2 , x3 ) with p(x2 , x3 |x1 ) in
+form, see also Friedman (2001) and Zhao and Hastie
+(5)
+would yield the observational conditional expectation
+(2019), but we want to rephrase them in a way that opE[Y
+|X1 = x1 ], which we are not interested in. In other
+timally prepares the reader to the below discussion. Aswords,
+the intervention on X1 breaks the dependences to
+sume we are given the causal structure shown in Figure 1.
+X
+,
+X
+2
+3 . The second observation that is crucial for us is
+Further, assume we are interested in how the expectation
+that
+the
+dependences between X2 , X3 are kept, they are
+of Y changes when we manually set X1 to some value
+unaffected
+by the intervention on X1 .
+x1 . This is not given by E[Y |X1 = x1 ] because observing
+X1 = x1 changes also the distribution of X2 , X3 due to
+the dependences between X1 and X2 , X3 (which are gen- Why observational conditionals are flawed Let us
+erated by the common cause Z). This way, the difference start with a simple example.
+between E[Y ] and E[Y |X1 = x1 ] is not only due to the
+influence of X1 , but can also be caused by the influence Example 1 (irrelevant feature). Assume we have
+of X2 , X3 . The impact of setting X1 to x1 is captured by
+f (x1 , x2 ) = x1 .
+3 Note that TreeExplainer in SHAP has meanwhile been changed accordingly.
+
+Obviously, the feature X2 is irrelevant. Let both X1 , X2
+4
+
+The example is particularly worrisome because we
+mentioned earlier that Shapley values satisfy the axiom
+of sensitivity, while Lemma 1 seems to claim the opposite. The resolve this paradox, note that the Shapley values refer to binary functions (or set functions) and reading
+(6) to (8) as the values of a binary function g̃ with inputs
+(z1 , z2 ) = 00, 10, 01, 11 we clearly observe that g̃ depends also on the second bit. This way, the Shapley values
+do not violate sensitivity for g̃, but we certainly care about
+‘sensitivity for f ’. Note that this distinction between the
+binary function g̃ and f is crucial although in our example
+f is binary itself. Fortunately, the second bit is irrelevant
+for the binary function g̃ defined by (10) and (13) and we
+do not obtain the above paradox.
+To assess the impact of changing the inputs of f , we
+now switch to a more causal language and state that we
+consider the inputs of an algorithm as causes of the output. Although this remark seems trivial it is necessary to
+emphasize that we are not talking about the causal relation
+between any features in the real world outside the computer (where the attribute predicted by Y may be the cause
+of the features), but only about causality of this technical input / output system4 . To facilitate this view, we formally distinguish between the true features X̃1 , . . . , X̃n
+obtained from the objects and the corresponding features
+X1 , . . . , Xn plugged into the algorithm. This way, we are
+able to talk about a hypothetical scenario where the inputs
+are changed compared to the true features. Let us first consider the causal structure in figure 2, top, where the inputs
+are determined by the true features. In contrast, figure 2,
+bottom, shows the causal structure after an intervention on
+X1 , X2 has adjusted these variables to fixed values x1 , x2 .
+We now consider the impact of an hypothetical intervention, which leaves the remaining components unaffected. They are therefore sampled from their natural joint
+distribution without conditioning. Similar to the above
+paragraph, we then obtain
+
+be binaries and
+
+p(x1 , x2 ) =
+
+1/2
+0
+
+for x1 = x2
+.
+otherwise
+
+(1) with conditional expectations:
+= E[f (X1 , X2 )] = 1/2
+
+(6)
+
+f{1} (x)
+
+f∅ (x)
+
+=
+
+E[f (x1 , X2 )|x1 ] = x1
+
+(7)
+
+f{2} (x)
+
+=
+
+E[f (X1 , x2 )|x2 ] = x2
+
+(8)
+
+f{1,2} (x)
+
+=
+
+f (x1 , x2 ) = x1
+
+(9)
+
+Therefore,
+C(2|∅)
+
+=
+
+f{2} (x) − f∅ (x) = x1 − 1/2
+
+C(2|{1})
+
+=
+
+f{1,2} (x) − f{1} (x) = x1 − x1 .
+
+Hence, the Shapley value for X2 reads:
+φ2 =
+
+1
+(x1 − 1/2 + x1 − x1 ) = x1 /2 − 1/4 6= 0.
+2
+
+(2) with marginal expectations:
+f∅ (x)
+
+= E[f (X1 , X2 )] = 1/2
+
+(10)
+
+f{1} (x)
+
+= E[f (x1 , X2 )] = x1
+
+(11)
+
+f{2} (x)
+
+= E[f (X1 , x2 )] = 1/2
+
+(12)
+
+f{1,2} (x)
+
+= f (x1 , x2 ) = x1 .
+
+(13)
+
+We then obtain
+C(2|∅)
+
+=
+
+f{2} (x) − f∅ (x) = 0
+
+C(2|{1})
+
+=
+
+f{1,2} (x) − f{1} (x) = 0,
+
+which yields φ2 = 0.
+The example proves the follow result, which were already discussed in Sundararajan and Najmi (2019):
+
+E[Y |do(XT = xT )] = E[f (xT , XT̄ )].
+
+(14)
+
+Lemma 1 (failure of Sensitivity). When the relevance of
+Our formal separation between the true values of the feaφi is defined by defining ‘simplified’ functions fT via contures X̃j of some object and the corresponding inputs Xj
+ditional expectations
+of the algorithms allows us to be agnostic about the causal
+relations between the true features in the real world, the
+f (x ) := E[f (x)|X = x ],
+T
+
+T
+
+T̄
+
+T̄
+
+4 Accordingly, Y is the output of the system and not a property of the
+external world.
+
+then φi 6= 0 does not imply that f depends on xi .
+5
+
+Probability
+(1 − p) · (1 − q)
+(1 − p) · q
+(1 − q) · p
+p·q
+
+fact that the inputs X1 , . . . , Xn cause the output Y is the
+only causal knowledge needed to compute (14). Since the
+interventional expectations coincide with the marginal expectations, we have thus justified the use of marginal expectations for the Shapley values from the causal perspective.
+
+X1
+1
+1
+2
+2
+
+X2
+1
+2
+1
+2
+
+f = X1 + X2
+2
+3
+3
+4
+
+Figure 3: Table 3 from Sundararajan and Najmi (2019)
+which shows an example for alleged lack of symmetry of
+Shapley Values with respect to the marginal expectation.
+object with features
+X̃1
+
+X̃2
+
+X̃3
+
+X̃4
+
+X̃5
+
+X1
+
+X2
+
+X3
+
+X4
+
+X5
+
+The problem with the symmetry axiom We briefly
+rephrase Example 4.9 of Sundararajan and Najmi (2019)
+showing that the symmetry axiom is violated when Shapley values are used for quantifying the influence relative
+to conditional or marginal expectations. Figure 3 shows
+values and probabilities of two random variables X1 and
+X2 and the values of the function f (X1 , X2 ) = X1 + X2 .
+As explained by Sundararajan and Najmi (2019), for the
+input (x1 , x2 ) = (2, 2) the value x1 gets attribution (1−p)
+and x2 gets attribution (1−q). Therefore, if p 6= q, x1 and
+x2 get different attribution, although f is symmetric. They
+conclude that this is a violation of symmetry. Since X1
+and X2 are independent, this problem occurs regardless
+of whether one defines the simplified function fT with
+respect to marginal or conditional expectations. One can
+argue, however, that this result makes intuitively sense because the value xj that is farther from its mean contributes
+more to the fact that f (x1 , x2 ) deviates from its mean. If
+we have even x1 = E[X1 ], we would certainly say that
+x1 does not contribute to the deviation from the mean at
+all. For this reason we do not follow Sundararajan and
+Najmi (2019) in regarding this phenomenon as a problem
+of this kind of attribution analysis. Recall furthermore that
+we have already mentioned that the symmetry axiom does
+hold for the corresponding binary function defined by including or not certain features (simply because symmetry
+holds for Shapley values). For the above example this binary function is indeed asymmetric. To check this, define
+
+Y
+
+object with features
+X̃1
+
+X̃2
+
+X̃3
+
+X̃4
+
+X̃5
+
+x1
+
+x2
+
+X3
+
+X4
+
+X5
+
+Y
+
+Figure 2: Top: Causal structure of our prediction
+scenario: The output Y is determined by the inputs
+X1 , . . . , Xn . In the usual learning scenario these inputs
+coincide with features X̃1 , . . . , X̃n ob some object, that is
+g̃(z1 , z2 ) := E[f (xT , XT̄ )],
+Xj = X̃j . Bottom: To evaluate the impact of some inputs,
+say X1 , X2 , for the output Y we consider a hypothetical
+scenario where we adjust these inputs to some fixed val- where T is the set of all j for which zj = 1. This funcues x1 , x2 and sample the remaining inputs from the usual tion is not symmetric in Z1 and Z2 , since we have, for
+joint distribution PX3 ,...,Xn .
+instance, g̃(1, 0) = x1 + E[X2 ] 6= g̃(0, 1) = x2 + E[X1 ].
+6
+
+4
+
+Numerical Evidence
+
+To evaluate the conditional expectation, they assume
+feature independence (or weak dependence) to obtain
+E[f (xT , XT̄ )|XT = xT ] ≈ E[f (xT , XT̄ )] and use the
+approximation
+
+In this section, we show numerically that the marginal
+expectation E[f (xT , XT̄ )] is a better choice than
+E[f (xT , XT̄ )|XT = xT ] to quantify the attribution
+of each observation xj of a particular input x =
+(x1 , . . . , xn ) to f (x) − Ef (X).
+
+4.1
+
+fT,KernelSHAP (x) ≈
+
+1 X
+f (xT , xkT̄ ),
+K
+
+(16)
+
+k
+
+where xkT̄ , k = 1, . . . , K are our samples from XT̄ .
+
+Computation of Shapley Values
+
+As explained by Aas et al. (2019, Section 2.3), the implementation of KernelSHAP (Lundberg and Lee, 2017)
+consists of two parts:
+
+4.2
+
+Experiments
+
+To show in an experimental setup that the marginal expectation is a better choice, we consider functions f for
+which we can calculate analytically the attribution of xj .
+This is possible for linear functions
+
+1. Using a representation of Shapley Values as the solution of a weighted least square problem for a computationally tractable approximation.
+2. Approximation of g(T ).
+
+f (x) = α0 +
+
+X
+
+αi xi , αi ∈ R
+
+i
+
+4.1.1
+
+Shapley Values as solution of weighted least
+square problem
+
+since
+
+X
+f (x) − E[f (X)] =
+αi (xi − EXi )
+By Charnes et al. (1988), the Shapley Values to the set
+i
+function g are given as the solution (φ1 , . . . , φn ) of
+
+
+and hence, the attribution of xj is αj (xj − E[Xj ]). Our
+X h
+
+ X i2
+min
+g(T ) −
+φj
+k(U, T ) , (15) experiments are divided into the following setups:
+
+φ1 ,...,φn 
+j∈T
+T ⊆U
+1. We assume that the feature vector X follows a mul
+tivariate Gaussian distribution.
+|
+where k(U, T ) = (|U | − 1)/( |U
+|T |(|U | − |T |)) are the
+|T |
+Shapley kernel
+2. We use a kernel estimation to approximate the conP weights. Since k(U, U ) = ∞, we use the
+constraint j φj = g(U ), or, for numerical calculation,
+ditional expectation.
+we set k(U, U ) to a large number.
+Since the power set of U consists of 2n elements, the For the experiments, we use the KernelExplainer class of
+computation time of the Sharpley Values increases ex- the python SHAP package from Lundberg and Lee (2017)
+ponentially. KernelSHAP therefore samples subsets of U to calculate Shapley Values with respect to the marginal
+according to the probability distribution induced by the expectation and the R package SHAPR, in which the
+Shapley kernel weights.
+methodology of Aas et al. (2019) is implemented, to calculate Shapley Values with respect to the conditional distribution.
+4.1.2 Approximation of the set function
+Notice that calculating Shapley Values is also posAs discussed in the previous sections, Lundberg and Lee sible for non-linear functions. Further, approximating
+(2017) define
+the marginal expectation is computationally inexpensive
+compared to the approximation of the conditional expecfT (x) = E[f (xT , XT̄ )|XT = xT ].
+tation with kernel estimation.
+7
+
+4.2.1
+
+Multivariate Gaussian distribution
+
+If X ∼ N (µ, Σ) with some mean vector µ and covariance matrix Σ , it holds that
+P(XT̄ |XT = xT ) = N (µT̄ |T , ΣT̄ |T )
+(see (Aas et al., 2019, Section 3.1)), where
+
+Figure 4: Histogram showing the error of the Shapley
+Values for multivariate Gaussian distribution in the 3dimensional (left) and 10-dimensional (right) setting with
+α1 = 0. Blue: error using marginal expectation, Red: error using conditional expectation.
+
+µT̄ |T = µT̄ + ΣT̄ T Σ−1
+T T (xT − µT )
+ΣT̄ |T = ΣT̄ T̄ − ΣT̄ T Σ−1
+T T ΣT T̄
+with
+
+µ=
+
+µT
+µT̄
+
+
+
+
+, Σ=
+
+ΣT T
+ΣT̄ T
+
+ΣT T̄
+ΣT̄ T̄
+
+
+.
+
+can provide a good approximation. We take the kernel
+estimation method from Aas et al. (2019) to show how
+strongly the Shapley Values w.r.t. conditional expectation
+deviate from αj (xj − E[Xj ]). Their approximation is as
+follows:
+
+Hence, we can approximate the conditional expectation
+by sampling XT̄ directly from its distribution.
+We simulate Gaussian data and run the experiment for
+different number of features. For every experiment with
+multivariate Gaussian distribution, we set the intercept to
+0, i.e. α0 = 0.
+
+1. Let ΣT be the covariance matrix of our sample from
+XT . To each point xi of the sample, calculate the
+Mahalanobis distance (see Mahalanobis (1936))
+
+Dimension n=3. In the first 3-dimensional experiment,
+we let α1 = 0 and choose in every run α1 and α2 independently from the standard normal distribution. Further, we let µ = (0, 0, 0)T and Σ = ccT , where we
+choose the entries of c in every run independently from
+the standard normal distribution and x also randomly in
+every run. The number of runs and the sample size of
+X is 1000. Figure 4 shows the errors φj − contrj (x) of
+the Shapley Values φj with respect to the set function
+g(T ) = E[f (xT , XT̄ )] − Ef (X) (blue) and the set function g(T ) = E[f (xT , XT̄ )|XT = xT ] − Ef (X) (red).
+The very precise results for the marginal expectation are
+mainly from feature 1.
+
+distT (x,xi ) :=
+s
+i
+(xT − xiT )0 Σ−1
+T (xT − xT )
+,
+|T |
+where (xT − xiT )0 denotes the transpose of (xT −
+xiT ).
+2. Calculate the Kernel weights
+
+
+distT (x, xi )2
+i
+wT (x, x ) := exp −
+.
+2σ 2
+Hereby, σ 2 > 0 is a bandwidth which has to be specified.
+
+Dimension n=10. In 10-dimensions, we take almost the
+same setting with the difference that we set the first 3 coefficients to zero, i.e. α1 = α2 = α3 = 0. Again, the very
+precise results for the marginal expectation are from the
+features whose coefficient we set to 0.
+Approximation via kernel estimation
+
+3. Sort the weights wT (x, xi ) in increasing order and
+let x̃i be the corresponding ordered sampling instances. Then, approximate g(T ) by
+PK
+wT (x, x̃i )f (xiT̄ , xT )
+.
+gcond (T ) := i=1PK
+i
+i=1 wT (x, x̃ )
+
+If we have no information about the underlying distribution, it is hard to approximate the conditional distribution
+sufficiently. However, in low dimensions kernel estimates
+
+For the experiment, we use the real data set Human Activity Recognition Using Smartphones Data Set (see Anguita et al. (2013)) from the UCI repository. The data set
+
+4.2.2
+
+8
+
+consists of 561 features with a training sample size of
+7352 and test sample size of 2948. In this experiment,
+we merge these two samples together and therefore our
+sample size is 10299. We take randomly 4 features and
+train a linear model with 3 of these features as inputs and
+with the 4-th feature as target. We don’t consider the label
+(which is a daily activity performed by the human) of the
+data set, but the different features have the true label as
+a common cause. Notice that we are not interested in the
+quality of the model, but rather in a model for which the
+ground truth of the attribution is known (because we can
+certainly look at the linear model obtained).
+Afterwards, we calculate the Shapley Values with
+SHAP and SHAPR (with σ 2 set to 0.1 in SHAPR which is
+the default value) using the first 1000 samples and approximate the expected value EXj using the whole data set.
+The observation x is also randomly picked from the data
+and we run this experiment 1000 times. Figure 5 shows
+the histogram of the error φj − contrj (x) for the marginal
+expectation (blue) and conditional expectation (red).
+
+though the corresponding theory part of the paper suffers
+from this issue) since they ‘approximates’ the observational expectations by an expression that would have been
+the right one in the first place. We think that this clarification is important since other authors tried to ‘improve’
+the SHAP package in a way that we consider conceptually
+flawed. Moreover, we revisited some properties that were
+stated as desirable in the context of attribution analysis. If
+stated in a too vague manner, there is some room for interpretation. We argued, for instance, why we think that our
+attribution method satisfies a reasonable symmetry property, since attribution via interventional probabilities has
+been criticised for violating alleged desirable symmetry
+properties.
+Acknowledgements: The authors would like to thank
+Scott Lundberg and Anders Løland for their valuable
+feedback and Atalanti Mastakouri for remarks on the presentation.
+
+References
+K. Aas, M. Jullum, and A. Løland. Explaining individual predictions when features are dependent: More
+accurate approximations to Shapley values. ArXiv:
+1903.10464, 2019.
+Figure 5: Histogram showing the error of the Shapley
+Values for the data set Human Activity Recognition Using
+Smartphones Data Set. Blue: error using marginal expectation, Red: error using conditional expectation.
+
+D. Anguita, A. Ghio, L. Oneto, X. Parra, and J. L. ReyesOrtiz. A Public Domain Dataset for Human Activity
+Recognition Using Smartphones. In 21th European
+Symposium on Artificial Neural Networks, Computational Intelligence and Machine Learning, pages 24–
+26, April 2013.
+
+5
+
+S. Barocas, M. Hardt, and A. Narayanan. Fairness and
+Machine Learning. fairmlbook.org, 2018. http://
+www.fairmlbook.org.
+
+Conclusion
+
+In this work we considered the problem of attributing the
+output from one particular multivariate input to individual features. We argued that there is a misconception also
+in recent proposals for feature attribution because they
+use observational conditional distributions rather than interventional distributions. Our arguments are phrased in
+terms of the causal language introduced by Pearl (2000).
+We argue that parts of the package SHAP from Lundberg
+and Lee (2017) are unaffected by this misconception (al-
+
+A. Binder, G. Montavon, S. Lapuschkin, K. R. Mller,
+and W. Samek. Layer-Wise Relevance Propagation for
+Neural Networks with Local Renormalization Layers.
+In Artificial Neural Networks and Machine Learning
+ICANN, volume 9887, 2016.
+T. B. Brown, D. Man, A. Roy, M. Abadi, and J. Gilmer.
+Adversarial Patch. arXiv:1712.09665, 2018.
+9
+
+A. Charnes, B. Golany, M. Keane, and J. Rousseau. Ex- N. Kilbertus, M. Rojas-Carulla, G. Parascandolo,
+tremal Principle Solutions of Games in Characteristic
+M. Hardt, D. Janzing, and B. Schölkopf. Avoiding disFunction Form: Core, Chebychev and Shapley Value
+crimination through causal reasoning. In Proceedings
+Generalizations. Econometrics of Planning and Effifrom the conference ”Neural Information Processing
+ciency, 11:123–133, 1988.
+Systems 2017, pages 656–666. Curran Associates, Inc.,
+December 2017.
+A. Chattopadhyay, P. Manupriya, A. Sarkar, and V. Balasubramanian. Neural network attributions: A causal A. Kurakin, I. J. Goodfellow, and Samy Bengio. Adverperspective. In K. Chaudhuri and R. Salakhutdinov,
+sarial examples in the physical world. In Artificial Ineditors, Proceedings of the 36th International Confertelligence Safety and Security, pages 99–112. Chapman
+ence on Machine Learning, volume 97 of Proceedings
+and Hall/CRC, 2018.
+of Machine Learning Research, pages 981–990, Long
+S. Lundberg and S. Lee. A unified approach to interpretBeach, California, USA, 09–15 Jun 2019. PMLR.
+ing model predictions. In I. Guyon, U. V. Luxburg,
+A. Datta, S. Sen, and Y. Zick. Algorithmic transparency
+S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan,
+via quantitative input influence: Theory and experiand R. Garnett, editors, Advances in Neural Informaments with learning systems. In 2016 IEEE Symposium
+tion Processing Systems 30, pages 4765–4774. Curran
+on Security and Privacy (SP), pages 598–617, 2016.
+Associates, Inc., 2017.
+C. Dwork, M. Hardt, T. Pitassi, O. Reingold, and S. Lundberg, G. Erion, and S. Lee. Consistent inR. Zemel. Fairness through awareness. In Proceeddividualized feature attribution for tree ensembles.
+ings of the 3rd Innovations in Theoretical Computer
+arXiv:1802.03888, 2018.
+Science Conference, ITCS ’12, pages 214–226, New
+York, NY, USA, 2012. ACM. ISBN 978-1-4503-1115- P. C. Mahalanobis. On the generalised distance in statistics. In Proceedings of the National Institute of Sci1. doi: 10.1145/2090236.2090255. URL http://
+ences of India, April 1936.
+doi.acm.org/10.1145/2090236.2090255.
+K. Eykholt, I. Evtimov, E. Fernandes, B. Li, A. Rahmati, C. Molnar. Interpretable Machine Learning. Molnar,
+C. Xiao, A. Prakash, T. Kohno, and D. Song. RoC., 2019. URL https://christophm.github.
+bust Physical-World Attacks on Deep Learning Visual
+io/interpretable-ml-book/.
+Classification. In The IEEE Conference on Computer
+Vision and Pattern Recognition (CVPR), pages 1625– J. Pearl. Causality. Cambridge University Press, 2000.
+1634, 2018.
+M. Ribeiro and C. Singh, S.and Guestrin. ”why should
+i trust you?”: Explaining the predictions of any clasE. J. Friedman. Paths and consistency in additive cost
+sifier. In Proceedings of the 22Nd ACM SIGKDD Insharing. International Journal of Game Theory, 32(4):
+ternational Conference on Knowledge Discovery and
+501–518, 2004.
+Data Mining, KDD ’16, pages 1135–1144, New York,
+J. H. Friedman. Greedy function approximation: A gradiNY, USA, 2016.
+ent boosting machine. Annals of statistics, pages 1189–
+L. Shapley. A value for n-person games. Contributions to
+1232, 2001.
+the Theory of Games (AM-28), 2, 1953.
+I. J. Goodfellow, J. Shlens, and C. Szegedy. Explaining
+and harnessing adversarial examples. In 3rd Interna- M. Sharif, S. Bhagavatula, L. Bauer, and M. K. Reiter.
+tional Conference on Learning Representations, ICLR
+Accessorize to a Crime: Real and Stealthy Attacks on
+2015, San Diego, CA, USA, May 7-9, 2015, Conference
+State-of-the-Art Face Recognition. In Proceedings of
+Track Proceedings, 2015. URL http://arxiv.
+the 2016 ACM SIGSAC Conference on Computer and
+org/abs/1412.6572.
+Communications Security, pages 1528–1540, 2016.
+10
+
+A. Shrikumar, P. Greenside, and A. Kundaje. Not
+Just A Black Box: Learning Important Features
+Through Propagating Activation Differences. In ICML
+(arXiv:1605.01713), 2016.
+M. Sundararajan and A. Najmi. The many Shapley values
+for model explanation. arXiv:1908.08474, 2019.
+M. Sundararajan, A. Taly, and Q. Yan. Axiomatic Attribution for Deep Networks. In Proceedings of the
+34th International Conference on Machine Learning,
+volume 70, pages 3319–3328, August 2017.
+Q. Zhao and T. Hastie. Causal interpretations of blackbox models. Journal of Business & Economic Statistics, 2019.
+
+11
+
+

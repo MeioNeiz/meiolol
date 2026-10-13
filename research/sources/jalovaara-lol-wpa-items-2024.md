@@ -3,7 +3,7 @@ title: 'Jalovaara 2024: Win probability estimation in esports, win probability a
 url: https://sal.aalto.fi/publications/pdf-files/theses/mas/tjal24a_public.pdf
 kind: paper
 commit:
-for: [effect-isolation]
+for: [effect-isolation, live-win-probability]
 looked: 2026-10-13
 depth: docs (sections 1, 4, 5)
 relevance: high
@@ -74,6 +74,20 @@ an explicit split between "chosen when ahead" and "what it adds".
 - [method] (inferred) Their recipe on our data, per event type: W (selection) and
   delta-W (impact) by minute band and lead band, game-clustered bootstrap for intervals,
   and a gold equivalent from the model's win-per-gold slope at that minute. ^f12
+
+- [method] The win model is per state, not a sequence: earlier states are ignored,
+  assuming momentum is negligible (as found in traditional sports). Section 5.1 ^f13
+  > In this approach, the win probability is estimated based on a single game state; the previous game states are not considered
+  > Thus, we do not account for any in-game momentum effects, but previous research has shown that these effects are negligible, at least in traditional sports [13, 19].
+- [method] Secondary report of Silva et al. 2018 (the first LoL in-game RNN): 7,621 pro
+  games 2015-2018, pre-game categorical inputs plus in-game time series, accuracy 63.9%
+  at 5 minutes to 83.5% at 25. Section 3.2 ^f14
+  > They used a data set consisting of 7 621 professional LoL matches played between 2015 and 2018.
+  > in-game prediction accuracies ranging from 63.9% at the start of a match (𝑡 = 5 min) to 83.5% at the later stages of a match (𝑡 = 25 min).
+- [stats] Accuracy falls after the 24-28 minute band: fewer training states late, or
+  Elder and long death timers making late games swingier. Section 5.1 ^f15
+  > The accuracy decreases in the last three time intervals, likely due to the model having less training data in these match stages.
+  > the Elder Dragon combined with long death timers create comeback opportunities for the losing teams
 
 ## Read
 

@@ -1,0 +1,3255 @@
+                                                                     A general framework for inference
+                                                                 on algorithm-agnostic variable importance
+                                                     Brian D. Williamson1 , Peter B. Gilbert1,2 , Noah R. Simon2 and Marco Carone2,1
+                                                 1
+                                                     Vaccine and Infectious Disease Division, Fred Hutchinson Cancer Research Center
+                                                                 2
+                                                                   Department of Biostatistics, University of Washington
+
+
+
+
+arXiv:2004.03683v2 [stat.ME] 13 Sep 2021
+                                                                                       September 15, 2021
+
+
+                                                                                              Abstract
+                                                     In many applications, it is of interest to assess the relative contribution of features (or sub-
+                                                 sets of features) toward the goal of predicting a response — in other words, to gauge the variable
+                                                 importance of features. Most recent work on variable importance assessment has focused on de-
+                                                 scribing the importance of features within the confines of a given prediction algorithm. However,
+                                                 such assessment does not necessarily characterize the prediction potential of features, and may
+                                                 provide a misleading reflection of the intrinsic value of these features. To address this limitation,
+                                                 we propose a general framework for nonparametric inference on interpretable algorithm-agnostic
+                                                 variable importance. We define variable importance as a population-level contrast between the
+                                                 oracle predictiveness of all available features versus all features except those under consideration.
+                                                 We propose a nonparametric efficient estimation procedure that allows the construction of valid
+                                                 confidence intervals, even when machine learning techniques are used. We also outline a valid strat-
+                                                 egy for testing the null importance hypothesis. Through simulations, we show that our proposal
+                                                 has good operating characteristics, and we illustrate its use with data from a study of an antibody
+                                                 against HIV-1 infection.
+
+                                                      Keywords: variable importance; statistical inference; machine learning; targeted learning.
+
+
+
+                                           1    Introduction
+
+                                           In many scientific problems, it is of interest to assess the contribution of features toward the objective of
+
+                                           predicting a response, a notion that has been referred to as variable importance. Various approaches for
+
+                                           quantifying variable importance have been proposed in the literature. In recent applications, variable
+
+                                           importance has often been taken to reflect the extent to which a given algorithm makes use of par-
+
+                                           ticular features in rendering predictions (Breiman, 2001; Lundberg and Lee, 2017; Fisher et al., 2018;
+
+                                           Murdoch et al., 2019). In this case, the goal is thus to characterize a fixed algorithm. While this notion
+
+                                           of variable importance can help provide greater transparency to otherwise opaque black-box prediction
+
+                                           tools (Guidotti et al., 2018; Murdoch et al., 2019), it does not quantify the algorithm-agnostic relevance
+
+
+                                                                                                  1
+of features for the sake of prediction. Thus, a feature that holds great value for prediction may be
+
+deemed unimportant simply because it plays a minimal role in the given algorithm. This motivates the
+
+consideration of approaches in which the focus is instead on measuring the population-level predictive-
+
+ness potential of features, which we can refer to as intrinsic variable importance. By definition, any
+
+measure of intrinsic variable importance should not involve the external specification of a particular
+
+prediction algorithm.
+
+   Traditionally, intrinsic variable importance has been considered in the context of simple population
+
+models (e.g., linear models) (see, e.g., Grömping, 2006; Nathans et al., 2012). For such models, both
+
+the prediction algorithm and the associated variable importance measure (VIM) are easy to compute
+
+from model outputs and straightforward to interpret. Common VIMs based on simple models include,
+
+for example, the difference in R2 and deviance values based on (generalized) linear models (Nelder
+
+and Wedderburn, 1972; Grömping, 2006). However, overly simplistic models can lead to misleading
+
+estimates of intrinsic variable importance with little population relevance. In an effort to improve pre-
+
+diction performance, complex prediction algorithms, including machine learning tools, have been used
+
+as a substitute for algorithms resulting from simple population models. Many variable importance mea-
+
+sures have been proposed for specific algorithms (see, e.g., reviews of the literature in Wei et al., 2015,
+
+Fisher et al., 2018, and Murdoch et al., 2019), with a particularly rich literature on variable importance
+
+for random forests (see, e.g., Breiman, 2001; Strobl et al., 2007; Ishwaran, 2007; Grömping, 2009) and
+
+neural networks (see, e.g., Garson, 1991; Bach et al., 2015; Shrikumar et al., 2017; Sundararajan et al.,
+
+2017). Several recent proposals aim to describe a broad class of fixed algorithms (LeDell et al., 2015;
+
+Ribeiro et al., 2016; Benkeser et al., 2018; Lundberg and Lee, 2017; Aas et al., 2019). However, while
+
+some measures have been recently described for algorithm-independent variable importance (see, e.g.,
+
+van der Laan, 2006; Lei et al., 2017; Williamson et al., 2020), there has been limited work on devel-
+
+oping broad frameworks for algorithm-independent variable importance with corresponding theory for
+
+inference using machine learning tools.
+
+   In this article, we seek to circumvent the limitations of model-based approaches to assessing intrinsic
+
+variable importance. We provide a unified nonparametric approach to formulate variable importance as
+
+a model-agnostic population parameter, that is, a summary of the true but unknown data-generating
+
+mechanism. The VIMs we consider are defined as a contrast between the predictiveness of the best
+
+possible prediction function based on all available features versus all features except those under con-
+
+
+
+                                                    2
+sideration. We allow predictiveness to be defined arbitrarily as relevant and appropriate for the task
+
+at hand, as we illustrate in several examples. In this framework, once a measure of predictiveness
+
+has been selected, estimation of VIM values from data can be carried out similarly as for any other
+
+statistical parameter of interest. This task involves estimation of oracle prediction functions based
+
+on all the features or various subsets of features, and the use of machine learning algorithms is ad-
+
+vantageous for maximizing prediction performance for this purpose. Because we consider variable
+
+importance as a summary of the data-generating mechanism rather than a property of any particular
+
+prediction algorithm, its definition and implementation does not hinge on the use of any particular pre-
+
+diction algorithm. This perspective contrasts with the model-based approach, where the probabilistic
+
+population-level mechanism that generates data and the algorithm that makes predictions based on
+
+data are usually entangled.
+
+   In Williamson et al. (2020), the authors focused on an application of the proposed framework
+
+to infer about a model-agnostic R2 -based variable importance, for which the authors described a
+
+nonparametric efficient estimator. The authors also presented the construction of valid confidence
+
+intervals and hypothesis tests for features with some importance but found it challenging to assess
+
+features with zero-importance. Here, we propose a general framework to study general predictiveness
+
+measures and propose a valid strategy for hypothesis testing. Our framework allows us to tackle
+
+cases involving complex predictiveness measures (e.g., defined in terms of counterfactual outcomes or
+
+involving missing data). It can be used to describe the importance of groups of variables as easily
+
+as individual variables. Our framework formally incorporates the use of machine learning tools to
+
+construct efficient estimators and perform valid statistical inference. We emphasize that the latter is
+
+especially important if high-impact decisions will be made on the basis of the resulting VIM estimates.
+
+   This article is organized as follows. In Section 2, we define variable importance as a contrast in
+
+population-level oracle predictiveness and provide simple examples. In Section 3, we construct an
+
+asymptotically efficient VIM estimator for a large class of measures using flexibly estimated prediction
+
+algorithms (e.g., predictive models constructed via machine learning methods) and provide a valid test
+
+of the zero-importance null hypothesis. These results allow us to analyze nonparametric extensions
+
+of common measures, including the area under the receiver operating characteristic curve (AUC) and
+
+classification accuracy. In Section 4, we explore an extension to deal with more complex predictiveness
+
+measures. In Section 5, we illustrate the use of the proposed approach in numerical experiments and
+
+
+
+                                                   3
+detail its operating characteristics. Finally, we study the importance of various HIV-1 viral protein
+
+sequence features in predicting resistance to neutralization by an antibody in Section 6, and provide
+
+concluding remarks in Section 7. All technical details as well as results from additional simulation
+
+studies and data analyses can be found in the Supplementary Material.
+
+
+
+2     Variable importance
+
+2.1   Data structure and notation
+
+Suppose that observations Z1 , . . . , Zn are drawn independently from a data-generating distribution P0
+
+known only to belong to a rich (nonparametric) class M of distributions. For concreteness, suppose
+
+that Zi = (Xi , Yi ), where Xi = (Xi1 , . . . , Xip ) ∈ X ⊆ Rp is a covariate vector and Yi ∈ Y ⊆ R is the
+
+outcome. Here, X and Y denote the sample spaces of X and Y , respectively. Below, we will use the
+
+shorthand notation E0 to refer to expectation under P0 .
+
+    We denote by s ⊆ {1, . . . , p} the index set of the covariate subgroup of interest, and for any p-
+
+dimensional vector w, we refer to the elements of w with index in ` and not in ` as w` and w−` ,
+
+respectively. We also denote by Xs and X−s the sample space of Xs and X−s , respectively. Finally, we
+
+consider a rich class F of functions from X to Y endowed with a norm k · kF , and define the subset
+
+Fs := {f ∈ F : f (u) = f (v) for all u, v ∈ X satisfying u−s = v−s } of functions in F whose evaluation
+
+ignores elements of the input x with index in s. In all examples we consider, we will take F to be
+
+essentially unrestricted up to regularity conditions. Common choices include the class of all P0 -square-
+
+integrable functions from X to Y endowed with L2 (P0 )-norm f 7→ kf k2,P0 := [ {f (x)}2 dP0 (x)]1/2 , and
+                                                                              R
+
+of all bounded functions from X to Y endowed with the supremum norm f 7→ kf k∞,X := supx∈X |f (x)|.
+
+
+2.2   Oracle predictiveness and variable importance
+
+We now detail how we define variable importance as a population parameter. Suppose that V (f, P )
+
+is a measure of the predictiveness of a given candidate prediction function f ∈ F when P is the true
+
+data-generating distribution, with large values of V (f, P ) implying high predictiveness. Examples of
+
+predictiveness measures — including those based on R2 , deviance, the area under the ROC curve, and
+
+classification accuracy — are discussed in detail in Section 2.3. If the true data-generating mechanism
+
+P0 were known, a natural candidate prediction function would be any P0 -population maximizer f0 of
+
+
+
+                                                    4
+predictiveness over the class F:
+
+
+                                          f0 ∈ argmax V (f, P0 ) .                                        (1)
+                                                  f ∈F
+
+
+This population maximizer can be viewed as the oracle prediction function within F under P0 relative
+
+to V . In particular, the definition of f0 depends on the chosen predictiveness measure and on the
+
+data-generating mechanism. It can also depend on the choice of function class, although in contexts
+
+we consider this is not the case as long as F is sufficiently rich. It is often true that f0 is the underlying
+
+target of machine learning-based prediction algorithms or a transformation thereof, which facilitates
+
+the integration of machine learning tools in the estimation of f0 . The oracle predictiveness V (f0 , P0 )
+
+provides a measure of total prediction potential under P0 . Similarly, defining the oracle prediction
+
+function f0,s that maximizes V (f, P0 ) over all f ∈ Fs , the residual oracle predictiveness V (f0,s , P0 )
+
+quantifies the remaining prediction potential after exclusion of covariate features with index in s.
+
+   We define the population-level importance of the variable (or subgroup of variables) Xs relative to
+
+the full covariate vector X as the amount of oracle predictiveness lost by excluding Xs from X. In
+
+other words, we consider the VIM value defined as
+
+
+                                     ψ0,s := V (f0 , P0 ) − V (f0,s , P0 ) .                              (2)
+
+
+By construction, we note that ψ0,s ≥ 0. Whether or not the loss in oracle predictiveness is sufficiently
+
+large to confer meaningful importance to a given subgroup of covariates depends on context. Once
+
+more, we emphasize that the definition of ψ0,s involves the oracle prediction function within F, and if
+
+F is large enough, this definition is agnostic to this choice.
+
+
+2.3   Examples of predictiveness measures
+
+We now illustrate our definition of variable importance by listing common VIMs that are in this
+
+framework. As we will see, the conditional mean µ0 : x 7→ E0 (Y | X = x) plays a prominent role in
+
+the examples below. This is convenient since µ0 is the implicit target of estimation for many standard
+
+machine learning algorithms for predictive modeling.
+
+Example 1: R2
+
+
+
+                                                         5
+The R2 predictiveness measure is defined as V (f, P0 ) := 1 − E0 {Y − f (X)}2 /σ02 , where we set σ02 :=
+
+E0 {Y − E0 (Y )}2 = E0 [Y − E0 {µ0 (X)}]2 , the variance of Y under P0 . This measure quantifies the
+
+proportion of variability in Y explained by f (X) under P0 . Since µ0 is the unrestricted minimizer of
+
+the mean squared error mapping f 7→ E0 {Y − f (X)}2 , the optimizer of V (f, P0 ) is given by f0 = µ0
+
+as long as µ0 ∈ F.
+
+Example 2: deviance
+
+When Y is binary, the deviance predictiveness measure is defined as
+
+                                         E0 [Y log f (X) + (1 − Y ) log{1 − f (X)}]
+                      V (f, P0 ) = 1 −                                              ,
+                                              π0 log π0 + (1 − π0 ) log(1 − π0 )
+
+where π0 := P0 (Y = 1) is the marginal success probability of Y under P0 . This measure quantifies in
+
+a Kullback-Leibler sense the information gain from using X to predict Y relative to the null model
+
+that does not use X at all. Again, because the conditional mean µ0 is the unconstrained population
+
+maximizer of the average log-likelihood, we find the optimizer of f 7→ V (f, P0 ) to be f0 = µ0 for any
+
+rich enough F. This result similarly holds for a multinomial extension of deviance.
+
+Example 3: classification accuracy
+
+An alternative predictiveness measure in the context of binary outcomes is classification accuracy,
+
+defined as V (f, P0 ) = P0 {Y = f (X)}. This measure quantifies how often the prediction f (X) coincides
+
+with Y , and is commonly used in classification problems. As shown in the Supplementary Material,
+
+the Bayes classifier b0 : x 7→ I{µ0 (x) > 1/2} is the unconstrained maximizer of f 7→ V (f, P0 ), and so,
+
+f0 = b0 as long as b0 ∈ F.
+
+Example 4: area under the ROC curve
+
+The area under the receiver operating characteristic curve (AUC) is another popular predictiveness
+
+measure for use when Y is binary. The AUC corresponding to f is given by V (f, P0 ) = P0 {f (X1 ) <
+
+f (X2 ) | Y1 = 0, Y2 = 1}, where (X1 , Y1 ) and (X2 , Y2 ) represent independent draws from P0 . As shown
+
+in the Supplementary Material, the unrestricted maximizer of f 7→ V (f, P0 ) is the population mean
+
+µ0 , so that once more f0 = µ0 provided µ0 ∈ F.
+
+   In all examples above, the unrestricted oracle prediction function f0 equals or is a simple trans-
+
+formation of the conditional mean function µ0 .           The unrestricted oracle prediction function f0,s
+
+                                                      6
+based on all covariates except those with index in s is obtained similarly but with µ0 replaced by
+
+µ0,s : x 7→ E0 (Y | X−s = x−s ).
+
+
+
+3     Estimation and inference
+
+3.1   Plug-in estimation
+
+In our framework, the variable importance of Xs relative to X under P0 , denoted ψ0,s , is a population
+
+parameter. Thus, assessing variable importance reduces to the task of inferring about ψ0,s from the
+
+available data. More formally, our goal is to construct a nonparametric (asymptotically) efficient
+
+estimator of ψ0,s using independent observations Z1 , . . . , Zn from P0 . Definition (2) suggests considering
+
+the plug-in estimator
+
+
+                                     ψn,s := V (fn , Pn ) − V (fn,s , Pn ) ,                              (3)
+
+
+where Pn is the empirical distribution based on Z1 , . . . , Zn , and fn and fn,s are estimators of the
+
+population optimizers f0 and f0,s , respectively. Often, fn and fn,s are obtained by building a pre-
+
+dictive model for outcome Y using all features in X or only those features in X−s , respectively —
+
+this might be done, for example, using tree-based methods, deep learning, or other machine learning
+
+algorithms, including tuning via cross-validation. Using flexible learning techniques to construct fn
+
+and fn,s minimizes the risk of systematic bias due to model misspecification.
+
+    As an illustration of the form of the resulting plug-in estimates, we note that, in the case of
+
+classification accuracy (Example 3 ), the VIM estimate is given by ψn,s = n1 ni=1 I{Yi = fn (Xi )} −
+                                                                                   P
+
+1 Pn
+n    i=1 I{Yi = fn,s (Xi )}, where fn and fn,s are estimates of the oracle prediction functions f0 and f0,s ,
+
+respectively. Sensible estimates of f0 and f0,s are given by
+
+
+                      fn : x 7→ I {µn (x) > 0.5} and fn,s : x 7→ I {µn,s (x) > 0.5} ,
+
+
+where µn and µn,s are estimates of the conditional mean functions µ0 and µ0,s , respectively. We provide
+
+the explicit form of ψn,s for all examples in the Supplementary Material.
+
+    The simplicity of the plug-in construction makes it particularly appealing. However, the literature
+
+on semiparametric inference and targeted learning suggests that such naively constructed plug-in esti-
+
+
+                                                       7
+mators may fail to even be consistent at rate n−1/2 , let alone efficient, if they involve nuisance functions
+
+— in this case, f0 and f0,s — that are flexibly estimated. This phenomenon is due to the fact that
+
+excess bias is often inherited by the plug-in estimator from the nuisance estimators. Generally, this fact
+
+would motivate the use of debiasing procedures, such as the one-step correction or targeted maximum
+
+likelihood estimation (see, e.g., Pfanzagl, 1982; van der Laan and Rose, 2011). However, Williamson
+
+et al. (2020) noted the intriguing fact that the plug-in estimator of the R2 VIM did not require debi-
+
+asing, being itself already efficient. Below, we show that the same holds true for a large class of VIMs.
+
+These plug-in estimators therefore benefit from a combination of simplicity and statistical optimality.
+
+
+3.2   Large-sample properties
+
+We now study conditions under which ψn,s is an asymptotically linear and nonparametric efficient
+
+estimator of the VIM value ψ0,s , and we describe how to conduct valid inference on ψ0,s . Below, we
+
+explicitly focus on inference for the oracle predictiveness value v0 := V (f0 , P0 ) based on the plug-in
+
+estimator vn := V (fn , Pn ), since results can readily be extended to the residual oracle predictiveness
+
+value v0,s := V (f0,s , P0 ) and thus to the VIM value ψ0,s . The behavior of vn can be studied by first
+
+decomposing
+
+
+                 vn − v0 = {V (f0 , Pn ) − V (f0 , P0 )} + {V (fn , P0 ) − V (f0 , P0 )} + rn ,          (4)
+
+
+where rn := [{V (fn , Pn ) − V (fn , P0 )} − {V (f0 , Pn ) − V (f0 , P0 )}]. Each term on the right-hand side
+
+of (4) can be studied separately to determine the large-sample properties of vn . The first term is the
+
+contribution from having had to estimate the second argument value P0 . The third term is a difference-
+
+of-differences remainder term that can be expected to tend to zero in probability at a rate faster than
+
+n−1/2 under some conditions. We must pay particular attention to the second term, which represents
+
+the contribution from having had to estimate the first argument value f0 . A priori, we may expect
+
+this term to dominate since the rate at which fn − f0 tends to zero (in suitable norms) is generally
+
+slower than n−1/2 when flexible learning techniques are used. However, because f0 is a maximizer of
+
+f 7→ V (f, P0 ) over F, we may reasonably expect that
+
+                                            d
+                                               V (f0, , P0 )     =0
+                                            d                =0
+
+
+
+
+                                                       8
+for any smooth path {f0, : −∞ <  < +∞} ⊂ F through f0 at  = 0, and thus that there is no first-
+
+order contribution of V (fn , P0 ) − V (f0 , P0 ) to the behavior of vn − v0 . Under regularity conditions,
+
+this indeed turns out to be the case, and thus, if fn − f0 does not tend to zero too slowly, the second
+
+term will be asymptotically negligible.
+
+    Our first result will make use of several conditions requiring additional notation. Below, we define
+
+the linear space R := {c(P1 − P2 ) : c ∈ [0, ∞), P1 , P2 ∈ M} of finite signed measures generated by M.
+
+For any R ∈ R, say R = c(P1 − P2 ), we refer to the supremum norm kRk∞ := c · supz |F1 (z) − F2 (z)|,
+
+where F1 and F2 are the distribution functions corresponding to P1 and P2 , respectively. Furthermore,
+
+we denote by V̇ (f, P0 ; h) the Gâteaux derivative of P 7→ V (f, P ) at P0 in the direction h ∈ R, and
+
+define the random function gn : z 7→ V̇ (fn , P0 ; δz − P0 ) − V̇ (f0 , P0 ; δz − P0 ), where δz is the degenerate
+
+distribution on {z}. For any P ∈ M, we also denote by fP any P -population maximizer of f 7→ V (f, P )
+
+over F. Finally, we define the following sets of conditions, classified as being either deterministic (A)
+
+or stochastic (B) in nature:
+
+
+(A1) (optimality) there exists some constant C > 0 such that, for each sequence f1 , f2 , · · · ∈ F such
+
+      that kfj − f0 kF → 0, |V (fj , P0 ) − V (f0 , P0 )| ≤ Ckfj − f0 k2F for each j large enough;
+
+(A2) (differentiability) there exists some constant δ > 0 such that for each sequence 1 , 2 , . . . ∈ R and
+
+      h, h1 , h2 , . . . ∈ R satisfying that j → 0 and khj − hk∞ → 0, it holds that
+
+                                           V (f, P0 + j hj ) − V (f, P0 )
+                              sup                                          − V̇ (f, P0 ; hj ) −→ 0 ;
+                        f ∈F :kf −f0 kF <δ               j
+
+
+(A3) (continuity of optimization) kfP0 +h − f0 kF = O() for each h ∈ R;
+
+(A4) (continuity of derivative) f 7→ V̇ (f, P0 ; h) is continuous at f0 relative to k · kF for each h ∈ R;
+
+(B1) (minimum rate of convergence) kfn − f0 kF = oP (n−1/4 );
+
+(B2) (weak consistency) {gn (z)}2 dP0 (z) = oP (1);
+                       R
+
+
+(B3) (limited complexity) there exists some P0 -Donsker class G0 such that P0 (gn ∈ G0 ) → 1.
+
+
+Theorem 1. If conditions (A1)–(A2) and (B1)–(B3) hold, then vn is an asymptotically linear estimator
+
+
+
+
+                                                         9
+of v0 with influence function equal to φ0 : z 7→ V̇ (f0 , P0 ; δz − P0 ), that is,
+
+                                                  n
+                                               1X
+                              vn − v0 =           V̇ (f0 , P0 ; δZi − P0 ) + oP (n−1/2 )
+                                               n
+                                                 i=1
+
+
+under sampling from P0 . If conditions (A3)–(A4) also hold, then φ0 coincides with the nonparametric
+
+efficient influence function (EIF) of P 7→ V (fP , P ) at P0 , and so, vn is nonparametric efficient.
+
+    This result implies, in particular, that the plug-in estimator vn of v0 is often consistent as well as
+
+asymptotically normal and efficient. A similar theorem applies to the study of the estimator vn,s :=
+
+V (fn,s , Pn ) of residual oracle predictiveness v0,s upon replacing instances of fn , f0 and F by fn,s ,
+
+f0,s and Fs in the conditions above, and denoting the resulting influence function by φ0,s . Thus,
+
+under the collection of all such conditions, the estimator ψn,s of the VIM value ψ0,s is asymptotically
+
+linear with influence function ϕ0,s : z 7→ V̇ (f0 , P0 ; δz − P0 ) − V̇ (f0,s , P0 ; δz − P0 ) and nonparametric
+                                2 := E {ϕ2 (Z)} < ∞, this suggests that the asymptotic variance of
+efficient. If ψ0,s > 0 and 0 < τ0,s   0  0,s
+
+n1/2 (ψn,s − ψ0,s ) can be estimated by
+
+                                   n
+                        2        1 Xh                                                      i2
+                       τn,s :=        V̇ (fn , Pn ; δZi − Pn ) − V̇ (fn,s , Pn ; δZi − Pn ) ,
+                                 n
+                                   i=1
+
+
+and that (ψn,s −z1−α/2 τn,s n−1/2 , ψn,s +z1−α/2 τn,s n−1/2 ) is an interval for ψ0,s with asymptotic coverage
+
+1−α, where z1−α/2 denotes the (1−α/2)th quantile of the standard normal distribution. This procedure
+                                                                                    2 = 0) in
+is summarized in Algorithm 1. We discuss settings in which ψ0,s = 0 (and therefore τ0,s
+
+Section 3.4.
+
+Algorithm 1 Inference on VIM value ψ0,s (valid in non-null settings)
+
+ 1: construct estimators fn of f0 and fn,s of f0,s ;
+ 2: construct empirical distribution estimator Pn of P0 ;
+ 3: compute estimator ψn,s := V (fn , Pn ) − V (fn,s , Pn ) of ψ0,s ;
+ 4: compute estimator
+                                       n
+                           2      1    X
+                          τn,s :=            {V̇ (fn , Pn ; δZi − Pn ) − V̇ (fn,s , Pn ; δZi − Pn )}2
+                                   n
+                                       i=1
+                                2 of n1/2 (ψ
+    of the asymptotic variance τ0,s          n,s − ψ0,s ).
+
+
+
+
+    Condition (A1) ensures that there is no first-order contribution that results from estimation of f0 .
+
+                                                             10
+As indicated above, this condition can generally be established as a consequence of the optimality
+
+of f0 . However, in each particular problem, appropriate regularity conditions on P0 and F must be
+
+determined for this condition to hold. We have provided details for Examples 1–4 in the Supplementary
+
+Material, though we summarize our findings here. In Example 1, we have that |V (f, P0 ) − V (f0 , P0 )| =
+
+E0 {f (X) − f0 (X)}2 /σ02 as long as µ0 ∈ F, and so, condition (A1) holds with C = 1/σ02 and k · kF
+
+taken to be either the L2 (P0 ) or supremum norm. In Example 2, provided that all elements of F are
+
+bounded between γ and 1 − γ for some γ ∈ (0, 1), and that µ0 ∈ F, then condition (A1) holds with
+
+C = {γ log (1 − γ)}−1 and k · kF taken to be either the L2 (P0 ) or supremum norm. In Example 3,
+
+condition (A1) holds for C = 4κ and k · kF the supremum norm provided the classification margin
+
+condition P0 {|µ0 (X) − 0.5| ≤ t} ≤ κt holds for some 0 < κ < ∞ and all t small. Similarly, in Example
+
+4, condition (A1) holds for C = 2κ/{π0 (1 − π0 )} with π0 := P0 (Y = 1) and k · kF the supremum norm
+
+provided the margin condition P0 {|µ0 (X1 ) − µ0 (X2 )| ≤ t} ≤ κt holds for some 0 < κ < ∞ and all t
+
+small, where X1 and X2 are independent draws from P0 .
+
+   Condition (A2) is a form of locally uniform Hadamard differentiability of P 7→ V (f0 , P ) at P0
+
+in a neighborhood of f0 . It can be readily verified in Examples 1–4; in fact, in Examples 1–3, this
+
+condition holds for any δ > 0. Condition (A3) requires that the optimizer fP vary smoothly in P
+
+around P0 , and is often straightforward to verify when fP has a closed analytic form. Condition (A4)
+
+instead requires that the Hadamard derivative of P 7→ V (f, P ) at P0 vary smoothly in f around
+
+f0 . Condition (B1) requires that f0 be estimated at a sufficiently fast rate in order for second-order
+
+terms to be asymptotically negligible, while condition (B2) states that a particular parameter-specific
+
+functional of fn must tend to the corresponding evaluation of f0 , and is thus implied by consistency
+
+of fn with respect to some norm under which this functional is continuous. Condition (B3) restricts
+
+the complexity of the algorithm used to generate fn . We note that conditions (B1)–(B3) depend not
+
+only on the predictiveness measure chosen and on the true data-generating mechanism but also on
+
+properties of the estimator of the oracle prediction function.
+
+
+3.3   Implementation based on cross-fitting
+
+Condition (B3) puts constraints on the complexity of the algorithm used to generate fn . This condition
+
+is prone to violations when flexible machine learning tools are employed, as discussed in Zheng and
+
+van der Laan (2011) and Chernozhukov et al. (2018), for example. However, it can be eliminated
+
+
+
+                                                   11
+by dividing the entire dataset into two parts (say, training and test sets), estimating f0 using the
+
+training data, and then evaluating the predictiveness measure on the test data. This readily extends
+
+to K-fold cross-fitting. To construct a cross-fitted estimator in the current context, we begin by
+
+randomly partitioning the dataset into K subsets of roughly equal size. Setting aside one such subset,
+
+we construct an estimator fk,n of f0 based on the bulk of the data, and then store vk,n := V (fk,n , Pk,n ),
+
+where Pk,n is the empirical distribution estimator based on the data set aside. We note that fk,n and
+
+Pk,n are therefore estimated using non-overlapping subsets of the data. After repeating this operation
+
+for each of the K subsets, we finally construct the cross-fitted estimator vn∗ := K1 nk=1 vk,n of v0 .
+                                                                                    P
+
+    To describe the large-sample behavior of vn∗ , we require an adaptation of the previously defined
+
+conditions (B1) and (B2) to the context of cross-fitted estimators. Below, the random function gk,n is
+
+defined identically as gn but with fn replaced by fk,n .
+
+(B1’) (minimum rate of convergence) kfk,n − f0 kF = oP (n−1/4 ) for each k ∈ {1, . . . , K};
+
+(B2’) (weak consistency) {gk,n (z)}2 dP0 (z) = oP (1) for each k ∈ {1, . . . , K}.
+                        R
+
+
+The resulting cross-fit estimator vn∗ enjoys desirable large-sample properties under weaker conditions
+
+than those imposed on vn , as the theorem below states. In particular, condition (B3), which in practice
+
+limits the complexity of machine learning tools used to estimate f0 , is no longer required.
+
+Theorem 2. If conditions (A1)–(A2) and (B1’)–(B2’) hold, then vn∗ is an asymptotically linear esti-
+
+mator of v0 with influence function equal to φ0 : x 7→ V̇ (f0 , P0 ; δz − P0 ), that is,
+
+                                             n
+                                          1X
+                             vn∗ − v0 =      V̇ (f0 , P0 ; δZi − P0 ) + oP (n−1/2 )
+                                          n
+                                            i=1
+
+
+under sampling from P0 . If conditions (A3)–(A4) also hold, then vn∗ is nonparametric efficient.
+
+                                                                               ∗ of v
+    The cross-fitted construction can be used to obtain an improved estimator vn,s   0,s as well, thereby
+
+                                       ∗ := v ∗ −v ∗ of the VIM value ψ . Cross-fitting can also be used
+resulting in a cross-fitted estimator ψn,s   n    n,s                  0,s
+
+                                 2
+to obtain an improved estimator τn,s,∗                             2 . We summarize this construction
+                                       of the asymptotic variance τ0,s
+                                                  ∗ for Examples 1–4 in the Supplementary Material.
+in Algorithm 2, and provide the explicit form of ψn,s
+                                                              ∗
+As before, Theorem 2 readily provides conditions under which vn,s is an asymptotically linear and
+                                                                 ∗
+nonparametric efficient estimator of v0,s , and so, under which ψn,s is an asymptotically linear and
+
+nonparametric efficient estimator of the VIM value ψ0,s . Based on these theoretical results as well as
+
+                                                      12
+numerical experiments, we recommend this implementation whenever machine learning tools are used
+
+to estimate f0 and f0,s .
+
+
+Algorithm 2 Cross-fitted inference on VIM value ψ0,s (valid in non-null settings)
+
+ 1: generate Bn ∈ {1, . . . , K}n by sampling uniformly from {1, . . . , K} with replacement, and for
+    j = 1, . . . , K, denote by Dj the subset of observations with index in Sj := {i : Bn,i = j};
+ 2: for k = 1, . . . , K do
+ 3: using only data in ∪j6=k Dj , construct estimators fk,n of f0 and fk,n,s of f0,s ;
+ 4: using only data in Dk , construct empirical distribution estimator Pk,n of P0 ;
+                    Pn
+ 5: with nk :=         i=1 I{i ∈ Sk }, compute ψk,n,s := V (fk,n , Pk,n ) − V (fk,n,s , Pk,n ) and
+
+                       2        1 X
+                     τk,n,s :=         {V̇ (fk,n , Pk,n ; δZi − Pk,n ) − V̇ (fk,n,s , Pk,n ; δZi − Pk,n )}2 ;
+                               nk
+                                  i∈Sk
+ 6: end for
+                       ∗ := 1
+                                 PK
+ 7: compute estimator ψn,s  K      k=1 ψk,n,s of ψ0,s ;
+                       2        1 PK     2                                 2        1/2 (ψ ∗ − ψ ).
+ 8: compute estimator τn,s,∗ := K   k=1 τk,n,s of the asymptotic variance τ0,s of n       n,s   0,s
+
+
+
+
+3.4    Inference under the zero-importance null hypothesis
+
+When ψ0,s = 0, in which case the variable group considered has null importance, the influence function
+
+of ψn,s is identically zero. In these cases, even after standardization, ψn,s generally does not tend to
+
+a non-degenerate law. As such, deriving an implementable test of the null hypothesis ψ0,s = 0 or a
+
+confidence interval valid even when ψ0,s = 0 is difficult. In such cases, standard Wald-type confidence
+                              2 will typically have incorrect coverage or type I error, as illustrated
+intervals and tests based on τn,s
+
+in numerical simulations reported in Williamson et al. (2020). While in parametric settings n-rate
+
+inference is possible under this type of degeneracy, this is not expected to be the case in nonparametric
+
+models, because the second-order contribution from estimation of f0 and f0,s will generally have a rate
+
+slower than n−1 .
+
+   We note that, although ψn,s has degenerate behavior under the null, each of vn and vn,s are
+
+asymptotically linear with non-degenerate (but possibly identical) influence functions. Except for
+
+extreme cases in which the entire set of covariates has null predictiveness, we may leverage this fact to
+
+circumvent null degeneracy via sample-splitting. Indeed, if vn and vn,s are constructed using different
+
+subsets of the data, then the resulting estimator ψn,s is asymptotically linear with a non-degenerate
+
+influence function even if ψ0,s = 0, so that a valid Wald test of the strict null H0 : ψ0,s = 0 versus
+
+
+                                                          13
+H1 : ψ0,s > 0 can be constructed using ψn,s and an estimator of the standard error of ψn,s . Of course,
+
+the same holds for the corresponding cross-fitted procedures, as we consider below. We emphasize here
+
+that sample-splitting and cross-fitting are distinct operations with distinct goals. Sample-splitting is
+
+used to ensure valid inference under the zero-importance null hypothesis, whereas cross-fitting is used
+
+to eliminate the need for Donsker class conditions, which otherwise limit how flexible the learning
+
+strategies for estimating the oracle prediction functions can be. Sample-splitting and cross-fitting can
+
+be used simultaneously — Figure 1 provides an illustration of the subdivision of a dataset when equal
+
+subsets are used for sample-splitting and six splits are used for cross-fitting.
+
+   In practice, a group of variables may be considered scientifically unimportant even when ψ0,s is
+
+nonzero but small, yet such grouping would be deemed statistically significant in large enough samples.
+
+For this reason, given a threshold β > 0, it may be more scientifically appropriate to consider testing
+
+the β-null H0 : ψ0,s ∈ [0, β] versus its complement alternative H1 : ψ0,s > β. The β-null approaches
+
+the strict null as β decreases to 0. The idea of sample-splitting also allows us to tackle β-null testing.
+
+Suppose that mutually exclusive portions of the dataset, say of respective sizes n−ns and ns , are used to
+
+construct vn∗ and vn,s
+                   ∗ . Suppose further that η 2 and η 2 are consistent estimators of η 2 := E {φ (Z)}2
+                                             n       n,s                              0      0  0
+
+     2 := E {φ (Z)}2 , respectively. Then, provided v > 0, we may consider rejecting the β-null
+and η0,s   0  0,s                                    0
+
+hypothesis H0 in favor of its complement H1 if and only if
+
+
+                                         −1/2
+                                              vn∗ − vn,s
+                                                     ∗
+                                                            
+                                  tn := ωn,s             − β > z1−α ,                                  (5)
+
+
+where ωn,s := ηn2 /(n − ns ) + ηn,s
+                                2 /n and z
+                                    s
+                                                             th
+                                           1−α is the (1 − α) quantile of the standard normal distribu-
+
+tion. The implementation of the resulting test, including computation of the corresponding p-value, is
+
+summarized in Algorithm 3. Its validity is guaranteed under conditions of Theorem 2 directly applied
+
+on the split used to estimate v0 and modified appropriately (by replacing instances of fn , f0 and F by
+
+fn,s , f0,s and Fs in all conditions) for the split used to estimate v0,s . We note that, although there is
+
+no degeneracy under the β-null whenever ψ0,s ∈ (0, β), sample-splitting is still required for proper type
+
+I error control since the strict null ψ0,s = 0 is contained in the β-null and must therefore be guarded
+
+against. We emphasize here that the use of distinct subsets of the data is critical for constructing vn∗
+     ∗ . If instead ψ
+and vn,s                          ∗      ∗
+                     0,s = 0 and vn and vn,s were constructed using the same data, the behavior of any
+
+testing procedure based on an estimator κn,s of the standard error of ψn,s would depend on the relative
+
+rates of convergence to zero of both ψn,s and κn,s . In particular, this would lead to either uncontrolled
+
+                                                    14
+Figure 1: Illustration of dataset subdivision when sample-splitting and cross-fitting are used simulta-
+neously for valid inference under the zero-importance hypothesis (sample-splitting) without requiring
+Donsker class conditions (cross-fitting). Each row represents the entire dataset with a different subset
+singled out (in grey) as testing set. To estimate v0 , the top three rows are used. In each such row,
+f0 is estimated using data in the white cells, and v0 is estimated using the resulting estimate of f0
+and data in the grey cells. Row-specific estimates of v0 are then averaged. The process is repeated for
+estimating v0,s but instead using the bottom three rows and estimating f0,s rather than f0 .
+
+
+type I error or type I error tending to zero depending on the procedures used to obtain fn and fn,s .
+
+Inference based on a cross-fitted version of this sample-split procedure is described in Algorithm 3.
+
+    The above testing procedure can be readily inverted to yield a one-sided confidence interval for
+
+ψ0,s . Specifically, under regularity conditions and provided v0 > 0, the random interval (vn∗ − vn,s
+                                                                                                  ∗ −
+
+      1/2
+z1−α ωn,s , +∞) contains ψ0,s with probability no less than 1 − α asymptotically, even when ψ0,s = 0.
+
+Then, rejecting the null hypothesis H0 is equivalent to verifying that zero is contained in this one-
+                                                                                         1/2
+sided interval. A two-sided confidence interval is instead given by (vn∗ − vn,s
+                                                                            ∗ −z               ∗    ∗
+                                                                                 1−α/2 ωn,s , vn − vn,s +
+        1/2
+z1−α/2 ωn,s ). While the latter interval has the advantage of giving both a lower and upper bound on
+
+possible values for ψ0,s supported by the data, using it for testing purposes necessarily results in a
+
+reduction in power since the null value of ψ0,s is at the edge of the parameter space.
+
+
+
+4    Extensions to more complex settings
+
+In all examples studied thus far, the primary role P plays in V (f, P ) is to indicate the population
+
+with respect to which a particular measure of prediction performance should be averaged. In these
+
+                                                   15
+Algorithm 3 Sample-split, cross-fitted inference on VIM value ψ0,s
+
+ 1: generate Bn ∈ {1, . . . , 2K}2 by sampling uniformly from {1, 2} with replacement, and for j =
+    1, . . . , 2K, denote by Dj the set of observations with index in Sj := {i : Bn,i = j} and nj := |Dj |;
+ 2: for k = 1, . . . , 2K do
+ 3: using only data in ∪j6=k Dj , construct estimators fk,n of f0 and fk,n,s of f0,s ;
+ 4: using only data in Dk , construct estimator Pn,k of P0 ;
+                                2 := 1                                           2
+                                           P
+ 5: if k is odd, compute ηk,n          nk     i∈Sk V̇ (fk,n , Pk,n ; δZi − Pk,n ) and vk,n := V (fk,n , Pk,n );
+                                 2   := n1k i∈Sk V̇ (fk,n,s , Pk,n ; δZi − Pk,n )2 and vk,n,s := V (fk,n,s , Pk,n );
+                                             P
+ 6: if k is even, compute ηk,n,s
+ 7: end for
+                  ∗ := 1
+                          PK                ∗        1 PK                                ∗       ∗      ∗
+ 8: compute vn          K P k=1 v2k−1,n , vn,s := K P k=1 v2k,n,s and estimator ψn,s := vn − vn,s of ψ0,s ;
+                  2 := 1     K     2        2        1    K      2                              2               2
+ 9: compute ηn          K    k=1 η2k−1,n , ηn,s := K      k=1 η2k,n,s and estimator ωn,s := ηn /(n − ns ) + ηn,s /ns
+    of the variance of ψn,s ∗ ;
+
+10: to test H0 : ψ0,s ∈ [0, β] vs H1 : ψ0,s > β at level 1−α, reject H0 in favor of H1 iff pn := 1−Φ(tn ) < α
+                    −1/2   ∗ − β) and Φ the standard normal distribution function.
+    with tn := ωn,s (ψn,s
+
+
+
+cases, P 7→ V (f, P ) is well-defined on discrete probability measures and sufficiently smooth so that
+
+V (f0 , Pn )−V (f0 , P0 ) is in first order a linear estimator in view of the functional delta method. However,
+
+there are other examples in which this requirement may not be true. In these examples, V (f, P ) involves
+
+P in a complex manner beyond some form of averaging, rendering V (f, P ) undefined for discrete P ,
+
+let alone Hadamard differentiable. Complex predictiveness measures often arise when the sampling
+
+mechanism precludes from observation the ideal data unit on which a (possibly simpler) predictiveness
+
+measure is defined, and identification formulas must therefore be established to express predictiveness
+
+in terms of the observed data-generating distribution.
+
+   As a concrete illustration, we begin with an example from the causal inference literature. As be-
+
+fore, we denote by Y and X the outcome of interest and a covariate vector, respectively. We suppose
+
+that larger values of Y correspond to better clinical outcomes, and consider a binary intervention
+
+A ∈ {0, 1}. A given treatment rule f : X → {0, 1} for assigning the value of A based on X can
+
+be adjudicated, for example, on the basis of the population mean outcome that would arise if every-
+
+one in the population were treated according to f . We can consider the ideal data structure to be
+
+Z := (X, A, Y (0), Y (1)) ∼ P0, where for each a ∈ {0, 1}, Y (a) denotes the counterfactual outcome
+corresponding to the intervention that deterministically sets A = a. The ideal-data predictiveness of f
+
+is then V (f, P0 ) := EP0 {Y (f (X))}. In contrast, the observed data structure is Z := (X, A, Y ) ∼ P0 ,
+
+and we must find some observed-data predictiveness measure V such that V (f, P0 ) = V (f, P0 ) to
+
+
+
+                                                        16
+establish identification and proceed with estimation and inference. Defining the outcome regression
+
+QP (a, x) := EP (Y | A = a, X = x), it is not difficult to verify that
+
+
+                                      V (f, P ) := EP [QP (f (X), X)]
+
+
+provides a valid identification of V (f, P ) under standard causal identification conditions. We note
+
+that this predictiveness measure involves P through more than simple averaging, as the outcome
+
+regression QP also appears in the definition of V (f, P ). Unless the distribution of X is discrete under
+
+P , QP is ill-defined on the empirical distribution Pn , thus violating conditions (A1) and (A4) defined in
+
+Section 3. We also remark that, in this example, the moniker ‘prediction function’ is not entirely fitting
+
+for f , which represents a treatment rule and maps into the treatment (rather than outcome) space.
+
+Nevertheless, the proposed framework for variable importance remains applicable, underscoring the
+
+fact that it is sufficiently flexible to unify a large swath of variable importance problems. Restrictions
+
+imposed on the data structure and on the properties of the prediction function in Section 2 were largely
+
+for the sake of concreteness.
+
+   The simple plug-in approach described in Section 3 may fail in applications with more complex
+
+predictiveness measures. In such cases, we can instead employ a more general strategy based on
+
+nonparametric debiasing techniques to make valid inference about V (f0 , P0 ). For each P ∈ M, we
+
+denote by fP any optimizer of f 7→ V (f, P ) over F, and define the parameter mapping V ∗ : P 7→
+
+V (fP , P ) so that v0 can be expressed as V ∗ (P0 ). If Pbn ∈ M is an estimator of P0 , the plug-in estimator
+
+V ∗ (Pbn ) generally fails to be asymptotically linear unless Pbn was purposefully constructed to ensure
+
+that it is indeed so. This happens because the plug-in estimator V ∗ (Pbn ) generally suffers from excessive
+
+bias whenever flexible learning techniques have been used, for example, because V ∗ (P0 ) involves local
+
+features of P0 (e.g., the conditional mean or density function) — see Pfanzagl (1982) and van der Laan
+
+and Rose (2011). This fact renders the use of debiasing approaches necessary. In contrast, the one-step
+
+estimator
+                                                             n
+                                                ∗        1   X
+                                     vn,OS := V (Pbn ) +           φn (Zi ) ,
+                                                         n
+                                                             i=1
+
+where φn is the nonparametric EIF of V ∗ at Pbn , is nonparametric efficient (Pfanzagl, 1982) under reg-
+
+ularity conditions. Alternatively, the framework of targeted minimum loss-based estimation describes
+
+how to convert Pbn into a revised estimator Pbn∗ such that V ∗ (Pbn∗ ) is itself nonparametric efficient with-
+
+
+                                                     17
+out the need for further debiasing (van der Laan and Rose, 2011). Similarly as in Section 3, cross-fit
+
+versions of these debiasing procedures (see, e.g., Zheng and van der Laan, 2011; Chernozhukov et al.,
+
+2018) can be used to improve performance when flexible estimation algorithms are used.
+
+   The generic approach above relies on deriving the nonparametric EIF of V ∗ . The definition of V ∗
+
+involves P in various ways, including through the P -optimal prediction function fP . While in our
+
+examples fP has a simple closed-form expression, this may not always be so. This fact can greatly
+
+complicate the derivation of the required EIF. However, as we shall see, the optimality of fP often
+
+implies that fP does not contribute to the nonparametric EIF of P 7→ V (fP , P ).
+
+   Before stating a formal result to this effect, we introduce a regularity condition. Below, L02 (P0 )
+
+refers to the subset of all functions in L2 (P0 ) that have mean zero under P0 .
+
+
+(A5) There exists a dense subset H of L02 (P0 ) such that, for each h ∈ H and regular univariate
+
+      parametric submodel {P0, } ⊂ M through P0 at  = 0 and with score for  equal to h at  = 0
+
+      (see, e.g., Bickel et al., 1998), the following conditions hold, with f0, denoting fP0, :
+
+    (A5a) (second-order property of predictiveness perturbations)
+
+           V (f0, , P0, ) − V (f0, , P0 ) = V (f0 , P0, ) − V (f0 , P0 ) + o() holds;
+
+   (A5b) (differentiability) the mapping  7→ V (f0, , P0 ) is differentiable in a neighborhood of  = 0;
+
+    (A5c) (richness of function class) the optimizer f0, is in F for small enough .
+
+
+   Condition (A5a) essentially requires the pathwise derivative of P 7→ V (f, P ) at P0 to be insensitive
+
+to infinitesimal perturbations of f around f0 . In such case, the difference-in-differences term appearing
+
+in the condition can indeed be expected to be second-order in . Condition (A5b) will generally
+
+hold provided the functionals f 7→ V (f, P0 ) and P 7→ fP are sufficiently smooth around f0 and P0 ,
+
+respectively. Finally, condition (A5c) requires that F be sufficiently rich around f0 so that, for a dense
+
+collection of paths through P0 , F contains f0, for small enough  .
+
+Theorem 3. Provided condition (A5) holds, if P 7→ V (f0 , P ) is pathwise differentiable at P0 relative
+
+to the nonparametric model M, then so is P 7→ V (fP , P ), and the two parameters have the same EIF.
+
+   This theorem indicates that, under a regularity condition, the computation of the nonparametric
+
+EIF φ0 can be done treating fP as fixed at f0 , thereby simplifying considerably this calculation. This
+
+fact is also useful because for a fixed prediction function f the parameter P 7→ V (f, P ) will often have
+
+                                                           18
+already been studied in the literature, thereby circumventing the need for any novel derivation. Armed
+
+with this observation, we revisit the motivating example we presented in this section, and also consider
+
+an additional example involving missing data.
+
+Example 5: mean outcome under a binary intervention rule
+
+As described above, in this example, the ideal-data parameter of interest, V (f, P ) := EP {Y (f (X))},
+
+can be identified by the observed-data parameter V (f, P ) = EP {QP (f (X), X)} when the observed
+
+data unit consists of Z = (X, A, Y ) ∼ P . The map f 7→ V (f, P0 ) is maximized over the unrestricted
+
+class F by the intervention rule f0 : x 7→ I{Q0 (1, x) > Q0 (0, x)}, and over its subset Fs by f0,s : x 7→
+
+I{Q0,s (1, x) > Q0,s (0, x)}, where we define Q0,s pointwise as Q0,s (a, x) := E0 {Q0 (a, X) | X−s = x−s }.
+
+Furthermore, the parameter P 7→ V (f0 , P ) is pathwise differentiable at a distribution P0 if, for example,
+
+Q0 (1, W ) − Q0 (0, W ) 6= 0 occurs P0 -almost surely. The nonparametric EIF of P 7→ V (f0 , P ) at P0 is
+
+given by
+                            I{a = f0 (x)}
+                φ0 : z 7→                   {y − Q0 (f0 (x), x)} + Q0 (f0 (x), x) − V (f0 , P0 ) ,
+                             g0 (f0 (x), x)
+
+where we define the propensity score g0 (a, x) := P0 (A = a | X = x) for each a ∈ {0, 1}. Thus, under
+
+regularity conditions, the one-step debiased estimator
+
+                           n                                                                   
+                         1 X I{Ai = fn (Xi )}
+              vn,OS :=                            {Yi − Qn (fn (Xi ), Xi )} + Qn (fn (Xi ), Xi )
+                         n     gn (fn (Xi ), Xi )
+                            i=1
+
+
+of v0 is nonparametric efficient, where Qn and gn are estimators of Q0 and g0 , respectively, and
+
+fn is defined pointwise as fn (x) := I{Qn (1, x) > Qn (0, x)}. The one-step debiased estimator of
+
+v0,s is defined similarly, with fn replaced by any appropriate estimator of f0,s , such as fn,s (x) :=
+
+I{Qn,s (1, x) > Qn,s (0, x)} with Qn,s (a, x) obtained by flexibly regressing outcome Qn (a, X) onto X−s
+
+for each a ∈ {0, 1}.
+
+Example 6: Classification accuracy under outcome missingness
+
+Suppose the ideal-data structure consists of Z := (X, Y ) ∼ P and the predictiveness measure of interest
+
+based on this ideal data structure is the classification accuracy measure, V (f, P ) := P {Y = f (X)},
+
+described in Example 3. Suppose that the outcome Y is subject to missingness, so that the observed
+
+data structure is Z := (X, ∆, U ), where ∆ is the indicator of having observed the outcome Y , and we
+
+
+
+
+                                                        19
+have defined U := ∆Y . The observed-data predictiveness measure
+
+
+                                 V (f, P ) := EP [P {U = f (X) | ∆ = 1, X}]
+
+
+equals the ideal-data accuracy measure provided that (a) ∆ and Y are independent given X, and
+
+(b) P (∆ = 1 | X = x) > 0 for P -almost every value x. In other words, the provided identification
+
+holds provided the outcome is missing at random (relative to X), and there is no subpopulation
+
+of patients (as defined by the value of X) for which the outcome can never be observed. Defining
+
+π0 (x) := P0 (U = 1 | ∆ = 1, X = x), the unrestricted optimizers f0 and f0,s are given pointwise by
+
+f0 (x) = I {π0 (x) > 0.5} and f0,s (x) = I {E0 {π0 (X) | X−s = x−s } > 0.5}. Finally, the nonparametric
+
+EIF of P 7→ V (f0 , P ) at P0 is given by
+
+                                    δ
+                     φ0 : z 7→          [I{u = f0 (x)} − Q0 (x)] + Q0 (x) − V (f0 , P0 ) ,
+                                 g0 (x)
+
+where we now have defined the nuisance parameters g0 (x) := P0 (∆ = 1 | X = x) and Q0 (x) :=
+
+P0 {Y = f0 (x) | ∆ = 1, X = x} = f0 (x)π0 (x) + {1 − f0 (x)}{1 − π0 (x)}, so that Q0 (x) is no more
+
+than a simple transformation of π0 (x). Under regularity conditions, the one-step debiased estimator
+
+                                    n
+                               1 X ∆i
+                      vn,OS :=             [I{Ui = fn (Xi )} − Qn (Xi )] + Qn (Xi )
+                               n  gn (Xi )
+                                   i=1
+
+
+of v0 is nonparametric efficient, where gn and πn are consistent estimators of g0 and π0 , and we define
+
+fn and Qn pointwise as fn (x) := I{πn (x) > 0.5} and Qn (x) := fn (x)πn (x) + {1 − fn (x)}{1 − πn (x)} =
+
+max{πn (x), 1 − πn (x)}. The one-step debiased estimator of v0,s is defined identically except that all
+
+instances of fn are replaced by fn,s , which we define pointwise as fn (x) := I{πn,s (x) > 0.5}, with πn,s
+
+representing an appropriate estimator of π0,s := E0 {π0 (X) | X−s = x−s }, obtained, for example, by
+
+flexibly regressing outcome πn (X) onto X−s .
+
+
+
+5     Numerical experiments
+
+5.1   Simulation setup
+
+We now present empirical results describing the performance of our proposed plug-in VIM estimator.
+
+
+
+                                                       20
+                  Table 1: Approximate values of ψ0,s in the numerical experiments.
+
+                                                           Feature of interest
+                        Importance measure               X1      X2     X3 X4
+                        Accuracy                        0.136 0.236 0          0
+                        Area under the ROC curve        0.105 0.221 0          0
+
+
+In all cases, our simulated dataset included independent replicates of (X, Y ), where X is a covariate
+
+vector with independent components X1 , . . . , Xp each following a standard normal distribution and a
+
+binary outcome Y following a Bernoulli distribution with success probability Φ(β01 x1 + . . . + β0p xp )
+
+conditional on X = x, where Φ is the standard normal distribution function. In Scenario 1, we set
+
+p = 2 and β0 = (2.5, 3.5), whereas in Scenario 2, we took p = 4 and β0 = (2.5, 3.5, 0, 0); thus, in
+
+all cases, the first two features had nonzero importance and the remaining features (if any) had zero
+
+importance. In this specification, Y follows a probit model. For each scenario considered, we generated
+
+1000 random datasets of size n ∈ {100, 500, 1000, . . . , 4000}, and considered the importance of both X1
+
+and X2 in Scenario 1 and the importance of X2 and X3 in Scenario 2. In each scenario, we considered
+
+VIMs based on classification accuracy (Example 3 ) and the area under the ROC curve (Example 4 ).
+
+The true values of these VIMs implied by the data-generating mechanisms considered under Scenarios
+
+1 and 2 are provided in Table 1. All analyses were performed using our R package vimp and may be
+
+reproduced using code available online (see details in the Supplementary Material). Since results were
+
+similar for accuracy and AUC, we only display results for accuracy here but provide results for AUC
+
+in the Supplementary Material.
+
+   In Scenario 1, we investigate the finite-sample properties of our proposal in a setting in which all
+
+features are truly important. We also use this setting to explore the effect of cross-fitting when using
+
+flexible estimators of f0 and f0,s . Specifically, we compare the performance of our estimation procedure
+
+with and without five-fold cross-fitting when using the following estimators of f0 and f0,s : a correctly
+
+specified (parametric) probit regression model; a generalized additive model (GAM; Hastie and Tib-
+
+shirani, 1990, implemented in the R package mgcv); random forests (RF; Breiman, 2001, implemented
+
+in the R package ranger); and the Super Learner (SL; van der Laan et al., 2007, implemented in the
+
+R package SuperLearner). The latter estimator is a particular implementation of stacking (Wolpert,
+
+1992) with favorable finite-sample and asymptotic performance guarantees (van der Laan et al., 2007).
+
+For the Super Learner, we used a library consisting of gradient boosted trees (Friedman, 2001, imple-
+
+mented in the R package xgboost), GAMs (implemented in the R package gam), and random forests,
+
+
+                                                   21
+each with the default tuning parameter choices, in addition to parametric probit regression, with five-
+
+fold cross-validation to determine the optimal convex combination of these learners that minimizes the
+
+cross-validated negative log-likelihood risk. The resulting optimal convex combination of these individ-
+
+ual algorithms is the Super Learner-based conditional mean estimator we adopt in any case where the
+
+Super Learner was fit. We do not use sample-splitting, since the results of Section 3 are valid under the
+
+alternative. We use Algorithm 2 to compute the cross-fitted point and standard error estimators for
+
+the importance of X1 and X2 , from which we computed nominal 95% Wald-type confidence intervals.
+
+We then computed the empirical bias scaled by n1/2 , the empirical variance scaled by n, the empirical
+
+coverage of confidence intervals, and the width of these intervals.
+
+   In Scenario 2, we study the properties of our proposal under the null hypothesis. In this case, we
+
+used sample-splitting since the importance of X3 and X4 is zero. We again ran both cross-fitted and
+
+non-cross-fitted implementations, and considered the same learning strategies as in Scenario 1, with one
+
+exception: in this case, we added the lasso (Tibshirani, 1996, implemented in the R package glmnet)
+
+to the library of candidate learners in the Super Learner. As before, we computed point estimates and
+
+nominal 95% Wald-type confidence intervals but also obtained p-values for the null hypothesis using
+
+the sample-splitting procedure of Algorithm 3. We then computed the empirical bias scaled by n1/2 ,
+
+the empirical variance scaled by n, the empirical coverage of confidence intervals, and the rejection
+
+probability for the proposed hypothesis test.
+
+
+5.2   Primary empirical results
+
+In Figure 2, we display the results of the experiment conducted under Scenario 1, in which both
+
+features have nonzero importance. For ease of visualization, we only display the results for X2 ; the
+
+results for X1 are similar and available in the Supplementary Material. In the top-left panel, we
+
+observe that the bias of the proposed estimators decreases to zero at rate faster than n1/2 for all non-
+
+cross-fitted estimators except those based on random forests and Super Learner, whereas it does so
+
+for all cross-fitted estimators. This reflects the need for cross-fitting in cases where the Donsker class
+
+conditions of Theorem 1 may fail to hold. The top-right panel shows that the variance of all estimators
+
+is approximately proportional to n. In the bottom-left panel, we observe that coverage of nominal 95%
+
+confidence intervals increases to the nominal level with increasing sample size for all cases except the
+
+non-cross-fitted estimators based on random forests and Super Learner. In the bottom-right panel, we
+
+
+
+                                                   22
+Figure 2: Performance of plug-in estimators for estimating (non-zero) importance of X2 in terms of
+accuracy under Scenario 1 (all features have non-zero importance). Clockwise from top left: empirical
+bias of the proposed plug-in estimator scaled by n1/2 ; empirical variance scaled by n; empirical coverage
+of nominal 95% confidence intervals; and average width of these intervals. Circles, triangles, squares
+and plus symbols denote estimators based on the use of generalized additive models (GAMs), probit
+regression (GLM), random forests (RF), and the Super Learner (SL), respectively. Blue and green
+symbols denote non-cross-fitted and cross-fitted estimators, respectively.
+
+
+see that the width of these intervals decreases with increasing sample size, as expected.
+
+   In Figure 3, we display the results pertaining to null feature X3 in the experiments conducted
+
+under Scenario 2. Here, it appears that the bias vanishes at a rate faster than n−1/2 for both the
+
+cross-fitted and non-cross-fitted estimators (top-left panel), but that the variance of the non-cross-
+
+fitted estimators tends to increase with increasing sample size, especially for the more flexible learning
+
+algorithms (top-right panel). We observe that empirical coverage is near the nominal level at all
+
+sample sizes (bottom-left panel). Finally, we see that the type I error of the proposed hypothesis test
+
+is controlled at the nominal level for all cross-fitted procedures, but not so for their non-cross-fitted
+
+counterparts, yielding an inflated type I error in that case (bottom-right panel). In the Supplementary
+
+Material, we present results for the non-null feature X2 , which show that power of the proposed test
+
+is large for all sample sizes considered here.
+
+   This simulation study suggests that the estimation and inferential procedures proposed, including
+
+our null testing approach, have good practical performance and are properly calibrated, as suggested
+
+by theory. Our findings suggest that cross-fitting is critical when flexible algorithms are used, in which
+
+
+
+                                                   23
+Figure 3: Performance of plug-in estimators for estimating (zero) importance of X3 in terms of accuracy
+under Scenario 2. Clockwise from top left: empirical bias of the proposed plug-in estimator scaled by
+n1/2 ; empirical variance scaled by n; empirical coverage of nominal 95% confidence intervals; and
+empirical type I error of the proposed hypothesis test. Circles, triangles, squares and plus symbols
+denote estimators based on the use of generalized additive models (GAMs), probit regression (GLM),
+random forests (RF), and the Super Learner (SL), respectively. Blue and green symbols denote non-
+cross-fitted and cross-fitted estimators, respectively.
+
+
+
+
+                                                  24
+case the estimation procedure without cross-fitting performs poorly while its cross-fitted counterpart
+
+instead shows good performance. This is the case both for point and interval estimation, as we
+
+explicitly show in the Supplementary Material. When correctly-specified parametric regression models
+
+are implemented, both procedures (with and without cross-fitting) perform similarly well. This reflects
+
+the fact that when parametric estimators are used, condition (B3) is typically satisfied and cross-fitting
+
+is then not needed.
+
+
+5.3   Additional empirical results
+
+In the Supplementary Material, we present results for additional features under Scenarios 1 and 2,
+
+observing similar patterns to those presented in Figures 2 and 3. We also consider pairing a non-cross-
+
+fitted standard error estimator with the cross-fitted estimation procedure, observing reduced coverage
+
+compared to the cross-fitted standard error estimator of Algorithm 2. Finally, we present results from
+
+additional investigations scrutinizing the performance of our proposal in higher dimensions, both with
+
+and without correlated features. We found, in small samples, that the presence of many independent
+
+null features results in an increased bias in the estimation of the importance of non-null features, with
+
+a corresponding decrease in empirical interval coverage. However, this inflated bias and undercoverage
+
+dissipate as the sample size increases. A similar pattern was seen in the presence of correlated null
+
+features. This suggests that greater dimensionality indeed increases the difficulty of the statistical
+
+problem at hand, but that correlation between features does not exarcerbate this challenge beyond
+
+rendering more difficult the interpretation of the population VIM values.
+
+
+
+6     Studying an antibody against HIV-1 infection
+
+Broadly neutralizing antibodies (bnAbs) against HIV-1 neutralize a large fraction of genetic variants
+
+of HIV-1. Two harmonized, placebo-controlled randomized trials were conducted to evaluate VRC01,
+
+a promising bnAb, for its ability to prevent HIV-1 infection (Corey et al., 2021). A secondary objec-
+
+tive was to assess how VRC01 prevention efficacy depends on amino acid (AA) sequence features of
+
+HIV-1. Because there are thousands of AA features, the statistical analysis plan for addressing this
+
+objective requires first restricting attention to a subset of AA features that putatively affect prevention
+
+efficacy. Given the underlying assumption that VRC01 prevents infection via in vivo neutralization,
+
+a useful approach may be to rank AA features based on their estimated VIM for predicting in vitro
+
+                                                    25
+neutralization — whether or not an HIV-1 virus is sensitive to neutralization by VRC01 — and select
+
+only the top-ranked features for further analyses.
+
+   In an effort to determine these important AA features, Magaret et al. (2019) analyzed the HIV-1
+
+envelope (Env) AA sequence features of 611 publicly-available HIV-1 Env pseudoviruses made from
+
+blood samples of HIV-1 infected individuals. All analyses accounted for the geographic region of
+
+the infected individuals. Among AA sequence features, approximately 800 individual features and
+
+13 groups of features were of interest, e.g., polymorphic AA positions in Env AA that comprise the
+
+VRC01 antibody footprint to which VRC01 binds. These groups of features are described more fully
+
+in the Methods section of Magaret et al. (2019). There, the authors focused on a definition of variable
+
+importance as the difference in nonparametric R2 , and used as outcome an indicator of whether or not
+
+the 50% inhibitory concentration, IC50 (defined as the concentration of VRC01 necessary to neutralize
+
+50% of viruses in vitro, with large values of the IC50 indicating that the virus was resistant to neu-
+
+tralization; Montefiori, 2009), was right-censored. However, the AMP trials have identified the 80%
+
+inhibitory concentration (IC80 ) as a possible biomarker of prevention efficacy, with 75.4% estimated
+
+efficacy against the most sensitive viruses (IC80 < 1). Since many observations in our dataset are
+
+missing IC80 values, we use as outcome the binary indicator that IC50 < 1. Here, analyzing the same
+
+data set, we compare results based on the outcome of Magaret et al. (2019) with a variable importance
+
+analysis based on classification accuracy and AUC and the AMP-based outcome IC50 < 1. We consider
+
+a marginal VIM value, evaluating the intrinsic importance of each feature group of interest relative to
+
+geographic confounding variables – this can be achieved by considering the full feature vector in (2) to
+
+be simply the geographic confounders plus the feature group of interest. We provide a replication of
+
+Magaret et al. (2019) using a harmonized outcome in the Supplementary Material.
+
+   We used the Super Learner with a large library of candidate learners to estimate the involved
+
+regression functions. These learners included the lasso, random forests, and boosted decision trees, each
+
+with varying tuning parameters. Details on our library of learners are described in the Supplementary
+
+Material. Our resulting estimator is the convex combination of the candidate estimators, where we
+
+used five-fold cross-validation to determine the convex combination that minimized the negative log-
+
+likelihood risk. Finally, to make inference on the VIM values considered, we used the sample-split
+
+cross-fitted method (Algorithm 3) studied in the simulations under Scenario 2.
+
+   In Figure 4, we display the results of this analysis and the feature groups of interest. The top-ranked
+
+
+
+                                                     26
+feature groups do not differ much between different VIMs but the magnitude of both importance and
+
+p-values depends greatly on the measure chosen. Both VIMs result suggest that the CD4 binding
+
+sites, the VRC01 binding footprint, sites with sufficient exposed surface area (ESA sites), sites with
+
+residues that co-vary with the VRC01 binding footprint (co-varying sites), and sites for indicating
+
+N-linked glycosylation (glycosylation sites) are the five most important groups. The finding that CD4
+
+binding sites are in the most important groups across VIMs matches our expectations from basic
+
+science experiments that have identified AA substitutions at CD4 binding sites that altered VRC01
+
+neutralization sensitivity. This result is in line with Magaret et al. (2019). Based on our proposed
+
+hypothesis test, we computed p-values for a test of the strict null hypothesis (that is, β = 0) for
+
+each group. We found that AA features in the CD4 binding sites (group 2), VRC01 binding footprint
+
+(group 1), ESA sites (group 3), co-varying sites (group 5), and glycosylation sites (group 8) had p-
+
+values of 6.98 × 10−9 , 8.14 × 10−9 , 1.69 × 10−7 , 4.66 × 10−6 , and 8.07 × 10−6 , respectively, based on
+
+AUC (denoted by stars in Figure 4). Based on these analyses, AA features in these groups may be
+
+prioritized for the forthcoming trial data analyses. Additionally, taking the set of top-ranked features
+
+above a minimum threshold may help to narrow the set of gp160 AA sequence features to pre-specify
+
+for the analysis of the AMP trial data sets. Our recommendation, nonetheless, is to analyze all feature
+
+sets in secondary or supporting analysis of the AMP trial data sets to ensure that the results generated
+
+are comprehensive.
+
+
+
+7    Discussion
+
+We have proposed a general model-agnostic framework for statistical inference on population-level
+
+VIMs. These measures are summaries of the true data-generating mechanism, defined as a contrast
+
+between the predictiveness of the best possible prediction function based on all available features
+
+versus all features but those under consideration. We found that plug-in estimators of these VIMs are
+
+asymptotically linear and nonparametric efficient under regularity conditions. Through examples, we
+
+showed that many simple and commonly used VIMs fall within this framework. We found in numerical
+
+experiments that our proposed cross-fitted VIM estimator enjoys good operating characteristics, and
+
+that these characteristics match our theoretical expectations. More complex predictiveness measures
+
+and sampling scenarios, including missing data, may also be analyzed within our proposed framework,
+
+though these cases typically require more effort, including the computation of an influence function.
+
+
+                                                   27
+Figure 4: Variable importance measured by accuracy (panel A) and AUC (panel B) for the groups
+defined in panel C. Stars denote importance deemed statistically significantly different from zero at
+the 0.0038 (0.05 / 13) level.
+
+
+Interpretation of the estimated VIMs depends on the application, and may include considering the
+
+ranked VIM values, or considering features with VIM values above some scientifically meaningful
+
+threshold.
+
+   Defining the importance of individual features in cases with large amounts of correlation is chal-
+
+lenging. In practice, we recommend making use of any available background scientific knowledge either
+
+to group variables that are expected to be highly correlated or to develop an appropriate causal model.
+
+In settings where this knowledge is lacking, it may be useful to consider, for example, unsupervised
+
+methods to cluster variables before assessing variable importance; however, further work is needed to
+
+determine how to preserve inferential validity with any such procedure. One alternative approach to
+
+handling correlated features is to consider marginal importance, wherein each feature in turn could
+
+be considered as the ‘full set of covariates’ and its importance could be assessed relative to the null
+
+feature vector; if there are concerns about confounding factors, these can constitute the ‘null feature
+
+vector’ and each feature could be added to the potential confounders. A second alternative approach
+
+is to use measures like the Shapley Population VIM (SPVIM; Williamson and Feng, 2020). Since
+
+SPVIM is defined as the average increase in predictive power from including a particular feature in
+
+all possible subsets of the remaining features, use of this approach comes at the cost of significantly
+
+increased complexity.
+
+                                                  28
+   The inferential procedures following Theorems 1 and 2 can be used whenever it is known a priori
+
+that the features of interest have non-zero importance. We note that, as an alternative, a nonparametric
+
+bootstrap scheme could be used in which f0 and f0,s are not re-estimated over bootstrap samples but
+
+rather fixed at their original estimates. The use of this bootstrap is illustrated in the Supplementary
+
+Material, where it is shown to yield similar results as the inferential procedures described in this paper.
+
+If the features of interest may have zero importance, inference should generally be conducted using
+
+sample-splitting, as described in Section 3.4. There, we propose confidence intervals valid even when
+
+a feature of interest has zero importance and a test of the zero-importance hypothesis. Our numerical
+
+results suggest that the resulting test controls type I error rate at the desired level. However, since
+
+our procedure involves sample-splitting without data reuse, it does not fully exploit the information
+
+available in the data, and may possibly be improved upon. Use of the bootstrap in this context
+
+is complicated by the need to re-estimate f0 and f0,s . Developing a more powerful test of the null
+
+importance hypothesis is an important unresolved need. This objective could be achieved, on one
+
+hand, by considering modifications of our current approach, including averaging results over multiple
+
+splits of the dataset or choosing split sizes more judiciously, or on the other hand, by utilizing more
+
+complex analytical tools, including approximate higher-order influence functions. These ideas are being
+
+pursued in ongoing research.
+
+
+
+Software and supplementary material
+
+We implement the methods discussed above in R and Python packages. Additional technical details
+
+are available in the Supplementary Material. All results may be reproduced using code available online.
+
+The data from Section 6 are available at https://github.com/benkeser/vrc01/tree/1.0.
+
+
+
+Appendix A             Special case: standardized V-measures
+
+Beyond smoothness requirements, the results presented in Section 3 do not impose much structure on
+
+the predictiveness measure. However, it is often the case that the predictiveness measure has the form
+
+V (f, P ) = a + V1 (f, P )/V2 (P ) with
+
+
+                            V1 (f, P ) := EP {G ((Y1 , f (X1 )), . . . , (Ym , f (Xm )))}
+
+
+
+                                                         29
+for some symmetric function G : (Y × Y)m → R, where a ∈ R is a fixed constant, V2 : M → R
+
+is Hadamard differentiable, and the expectation defining V1 is over the distribution of independent
+
+draws (X1 , Y1 ), . . . , (Xm , Ym ) from P . In this case, the plug-in estimator V1 (fn , Pn ) of V1 (f0 , P0 ) is
+
+a V -statistic of degree m (Hoeffding, 1948), whereas the denominator V2 (P0 ) does not depend on f0
+
+and typically serves as a normalization constant. As such, we refer to any predictiveness measure
+
+of this form as a standardized V-measure. We note that each example presented in Section 2.3 is a
+
+standardized V-measure, defined respectively by:
+
+
+[1] a = 1, G((u, v)) = −(u − v)2 , V2 (P ) = varP (Y ), m = 1;
+
+[2] a = 1, G((u, v)) = −{u log v + (1 − u) log(1 − v)},
+
+    V2 (P ) = P (Y = 1) log P (Y = 1) + P (Y = 0) log P (Y = 0) , m = 1;
+
+[3] a = 0, G((u, v)) = I(u = v), V2 (P ) = 1, m = 1;
+
+[4] a = 0, G((u1 , v1 ), (u2 , v2 )) = {I(u1 = 0, u2 = 1, v1 < v2 ) + I(u2 = 0, u1 = 1, v2 < v1 )}/2,
+
+    V2 (P ) = P (Y = 1) P (Y = 0) , m = 2.
+
+
+This is useful to note because whenever V is a standardized V -measure, the influence function φ0
+
+of V (fn , Pn ) can be described more explicitly. Specifically, its pointwise evaluation φ0 (z) at a given
+
+observation value z = (x, y) is given by
+
+                                                                                 
+     E0 {G ((y, f0 (x)), (Y2 , f0 (X2 )), . . . , (Ym , f0 (Xm )))}                  V̇2 (P0 ; δz − P0 )
+   m                                                                − V (f0 , P0 ) −                     V (f0 , P0 )
+                               V2 (P0 )                                                    V2 (P0 )
+
+with V̇2 (P0 ; δz − P0 ) denoting the Gâteaux derivative of V2 at P0 in the direction h = δz − P0 . Except
+
+for the influence function of the normalization estimator V2 (Pn ), which is typically straightforward to
+
+compute, this is an explicit form. In Examples 1–4, the influence function of V (fn , Pn ) can thus be
+
+derived respectively as:
+
+
+[1] φ0 (z) = − {y − µ0 (x)}2 /σ02 + v0 2 − (y − µ0 )2 /σ02 ;
+                                      
+
+
+[2] φ0 (z) = − 2 [y log µ0 (x) + (1 − y) log {1 − µ0 (x)}] /π 0 + v0 [2 log {π0 /(1 − π0 )} (y − π0 )/π 0 − 1] ;
+
+[3] φ0 (z) = yI {µ0 (x) > 0.5} + (1 − y)I {µ0 (x) ≤ 0.5} − v0 ;
+
+[4] φ0 (z) = (1 − y)P0 {µ0 (X) > µ0 (x) | Y = 1} /(1 − π0 ) + yP0 {µ0 (x) > µ0 (X) | Y = 0} /π0
+
+
+                                                          30
+               − v0 [2 + (1 − 2π0 )(y − π0 )/{π0 (1 − π0 )}] ,
+
+
+where here we have used the shorthand notation µ0 (x) := E0 (Y | X = x), µ0 := E0 (Y ), σ02 :=
+
+var0 (Y ), π0 := P0 (Y = 1), and π 0 := π0 log π0 + (1 − π0 ) log(1 − π0 ). Furthermore, for standardized
+
+V -measures, condition (A2) is often easier to verify. For example, if m = 1, then it holds trivially since
+
+V1 (f, P ), the only component of V (f, P ) involving f , is linear in P .
+
+
+
+References
+
+Aas, K., M. Jullum, and A. Løland (2019). Explaining individual predictions when features are dependent:
+  More accurate approximations to Shapley values. arXiv:1903.10464 .
+
+Bach, S., A. Binder, G. Montavon, F. Klauschen, K. Müller, and W. Samek (2015). On pixel-wise explanations
+  for non-linear classifier decisions by layer-wise relevance propagation. PLoS One 10 (7), e0130140.
+
+Benkeser, D., A. Mertens, B. Arnold, J. Colford, A. Hubbard, N. Jumbe, and M. van der Laan (2018).
+  A machine learning-based approach for estimating and testing associations with multivariate outcomes.
+  arXiv:1803.04877 .
+
+Bickel, P., C. Klaasen, Y. Ritov, and J. Wellner (1998). Efficient and Adaptive Estimation for Semiparametric
+  Models. Springer.
+
+Breiman, L. (2001). Random forests. Machine Learning 45 (1), 5–32.
+
+Chernozhukov, V., D. Chetverikov, M. Demirer, E. Duflo, C. Hansen, W. Newey, and J. Robins (2018). Dou-
+  ble/debiased machine learning for treatment and structural parameters.
+
+Corey, L., P. Gilbert, M. Juraska, D. Montefiori, L. Morris, S. Karuna, S. Edupuganti, N. Mgodi, A. deCamp,
+  E. Rudnicki, et al. (2021). Two randomized trials of neutralizing antibodies to prevent HIV-1 acquisition.
+  New England Journal of Medicine 384 (11), 1003–1014.
+
+Fisher, A., C. Rudin, and F. Dominici (2018). All models are wrong but many are useful: variable importance
+  for black-box, proprietary, or misspecified prediction models, using model class reliance. arXiv:1801.01489 .
+
+Frangakis, C. E., T. Qian, Z. Wu, and I. Diaz (2015). Deductive derivation and turing-computerization of
+  semiparametric efficient estimation. Biometrics 71 (4), 867–874.
+
+Friedman, J. (2001). Greedy function approximation: a gradient boosting machine. Annals of Statistics 29 (5),
+  1189–1232.
+
+                                                      31
+Garson, D. (1991). Interpreting neural network connection weights. Artificial Intelligence Expert.
+
+Grömping, U. (2006). Relative importance for linear regression in r: the package relaimpo. Journal of Statistical
+  Software.
+
+Grömping, U. (2009). Variable importance in regression: linear regression versus random forest. The American
+  Statistician 63 (4), 308–319.
+
+Guidotti, R., A. Monreale, S. Ruggieri, F. Turini, F. Giannotti, and D. Pedreschi (2018). A survey of methods
+  for explaining black box models. ACM Computer Surveys 51 (5), 93:1–93:42.
+
+Hastie, T. and R. Tibshirani (1990). Generalized Additive Models, Volume 43. CRC Press.
+
+Hoeffding, W. (1948). A class of statistics with asymptotically normal distribution. The Annals of Mathematical
+  Statistics 19 (3), 293–325.
+
+Ishwaran, H. (2007). Variable importance in binary regression trees and forests. Electronic Journal of Statistics 1,
+  519–537.
+
+LeDell, E., M. Petersen, and M. van der Laan (2015). Computationally efficient confidence intervals for cross-
+  validated area under the ROC curve estimates. Electronic Journal of Statistics.
+
+Lei, J., M. G’Sell, A. Rinaldo, R. Tibshirani, and L. Wasserman (2017). Distribution-free predictive inference
+  for regression. Journal of the American Statistical Association.
+
+Luedtke, A. and M. van der Laan (2016). Statistical inference for the mean outcome under a possibly non-unique
+  optimal treatment strategy. The Annals of Statistics 44 (2), 713–742.
+
+Luedtke, A. R., M. Carone, and M. J. van der Laan (2015). Discussion of “deductive derivation and turing-
+  computerization of semiparametric efficient estimation” by frangakis et al. Biometrics 71 (4), 875.
+
+Lundberg, S. and S.-I. Lee (2017). A unified approach to interpreting model predictions. In Advances in Neural
+  Information Processing Systems.
+
+Magaret, C., D. Benkeser, B. Williamson, B. Borate, L. Carpp, et al. (2019). Prediction of VRC01 neutralization
+  sensitivity by HIV-1 gp160 sequence features. PLoS Computational Biology 15 (4), e1006952.
+
+Montefiori, D. (2009). Measuring HIV neutralization in a luciferase reporter gene assay. In: Prasad VR, Kalpana
+  GV (eds) HIV Protocols. Methods in Molecular Biology 485, 395–405.
+
+Murdoch, W., C. Singh, K. Kumbier, R. Abbasi-Asl, and B. Yu (2019). Interpretable machine learning: defini-
+  tions, methods, and applications. arXiv:1901.04592 .
+
+
+                                                        32
+Nathans, L., F. Oswald, and K. Nimon (2012). Interpreting multiple linear regression: A guidebook of variable
+  importance. Practical Assessment, Research & Evaluation 17 (9).
+
+Nelder, J. and R. Wedderburn (1972). Generalized linear models. Journal of the Royal Statistical Society, Series
+  A 135 (3), 370–384.
+
+Pfanzagl, J. (1982). Contributions to a general asymptotic statistical theory. Springer.
+
+Ribeiro, M., S. Singh, and C. Guestrin (2016). Why should I trust you?: Explaining the predictions of any
+  classifier. In Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and
+  Data Mining, pp. 1135–1144.
+
+Shrikumar, A., P. Greenside, and A. Kundaje (2017). Learning important features through propagating activa-
+  tion differences. arXiv:1704.02685 .
+
+Strobl, C., A. Boulesteix, A. Zeileis, and T. Hothorn (2007). Bias in random forest variable importance measures:
+  Illustrations, sources and a solution. BMC Bioinformatics 8 (1), 1.
+
+Sundararajan, M., A. Taly, and Q. Yan (2017). Axiomatic attribution for deep networks. arXiv:1703.01365 .
+
+Tibshirani, R. (1996). Regression shrinkage and selection via the lasso. Journal of the Royal Statistical Society,
+  Series B , 267–288.
+
+van der Laan, M. (2006). Statistical inference for variable importance. The International Journal of Biostatis-
+  tics 2 (1). doi: 10.2202/1557-4679.1008.
+
+van der Laan, M., E. Polley, and A. Hubbard (2007). Super learner. Statistical Applications in Genetics and
+  Molecular Biology 6 (1), Online Article 25.
+
+van der Laan, M. and S. Rose (2011). Targeted learning: causal inference for observational and experimental
+  data. Springer Science & Business Media.
+
+van der Vaart, A. (2000). Asymptotic Statistics, Volume 3. Cambridge University Press.
+
+Wei, P., Z. Lu, and J. Song (2015). Variable importance analysis: a comprehensive review. Reliability Engineering
+  & System Safety 142, 399–432.
+
+Williamson, B. and J. Feng (2020). Efficient nonparametric statistical inference on population feature importance
+  using Shapley values. In Proceedings of the 37th International Conference on Machine Learning, Volume 119
+  of Proceedings of Machine Learning Research, pp. 10282–10291.
+
+Williamson, B., P. Gilbert, M. Carone, and N. Simon (2020). Nonparametric variable importance assessment
+  using machine learning techniques. Biometrics (in press).
+
+
+                                                       33
+Wolpert, D. (1992). Stacked generalization. Neural Networks 5 (2), 241–259.
+
+Zheng, W. and M. van der Laan (2011). Cross-validated targeted minimum-loss-based estimation. In Targeted
+  Learning, pp. 459–474. Springer.
+
+
+
+
+                                                     34
+SUPPLEMENTARY MATERIAL
+
+8     Proof of theorems
+
+8.1    Proof of Theorem 1
+
+Writing rn := {V (fn , Pn ) − V (fn , P0 )} − {V (f0 , Pn ) − V (f0 , P0 )}, we first decompose
+
+
+                   vn − v0 = {V (f0 , Pn ) − V (f0 , P0 )} + {V (fn , P0 ) − V (f0 , P0 )} + rn .
+
+
+In view of condition (A2), the functional delta method is applicable and yields that
+
+
+                     V (f0 , Pn ) − V (f0 , P0 ) = V̇ (f0 , P0 ; Pn − P0 ) + oP (n−1/2 )
+                                                        n
+                                                  1X
+                                                =    V̇ (f0 , P0 ; δZi − P0 ) + oP (n−1/2 ) ,
+                                                  n
+                                                       i=1
+
+
+where V̇ (f0 , P0 ; h) is the Gâteaux derivative of the mapping P 7→ V (f0 , P ) at P0 in the direction h and
+
+δz is the degenerate distribution on z. Under condition (A1), we have that |V (fn , P0 ) − V (f0 , P0 )| ≤
+
+Ckfn − f0 k2F = oP (n−1/2 ) under condition (B1). It remains to show that rn = oP (n−1/2 ) as well. For
+
+any given  > 0, h ∈ Q and f ∈ F, we define
+
+                                             V (f, P0 + h) − V (f, P0 )
+                           R0 (f, , h) :=                               − V̇ (f, P0 ; h) .
+                                                         
+
+Setting n := n−1/2 and hn := n1/2 (Pn − P0 ), we have that
+
+                  [{V (fn , Pn ) − V (fn , P0 )} − {V (f0 , Pn ) − V (f0 , P0 )}]
+      n1/2 rn =
+                                                n
+              = {V̇ (fn , P0 ; hn ) + R0 (fn , n , hn )} − {V̇ (f0 , P0 ; hn ) + R0 (f0 , n ; hn ))} = An + Bn ,
+
+
+where An := V̇ (fn , P0 ; hn ) − V̇ (f0 , P0 ; hn ) and Bn := R0 (fn , n , hn ) − R0 (f0 , n , hn ), and so, we can
+
+write that P0 n1/2 |rn | >  ≤ P0 (|An | > /2) + P0 (|Bn | > /2). On one hand, since we can rewrite
+                               
+
+An = V̇ (fn , P0 ; hn ) − V̇ (f0 , P0 ; hn ) = n1/2 gn (z)d(Pn − P0 )(z), under conditions (B2) and (B3),
+                                                     R
+
+an application of Lemma 19.24 of van der Vaart (2000) yields that An = oP (1) under P0 , and so,
+
+
+
+
+                                                            35
+P0 (|An | > /2) −→ 0. On the other hand, we can write
+
+
+      P0 (|Bn | > /2) = P0 (|Bn | > /2, kfn − f0 kF < δ) + P0 (|Bn | > /2, kfn − f0 kF ≥ δ)
+                                                                               
+            ≤ P0 sup f ∈F :kf −f0 kF <δ R0 (f, n , hn ) > /4, kfn − f0 kF < δ + P0 (kfn − f0 kF ≥ δ)
+                                                              
+            ≤ P0 sup f ∈F :kf −f0 kF <δ R0 (f, n , hn ) > /4 + P0 (kfn − f0 kF ≥ δ) .
+
+
+Since the first and second summands tend to zero by conditions (A2) and (B1), respectively, it follows
+
+that P0 (|Bn | > /2) −→ 0. In summary, under conditions (A1)–(A2) and (B1)–(B3), we find that
+
+                                                    n
+                                                1X
+                                vn − v0 =          V̇ (f0 , P0 ; δZi − P0 ) + oP (n−1/2 )
+                                                n
+                                                  i=1
+
+
+under sampling from P0 , as claimed.
+
+   Now, we verify the claim of asymptotic efficiency. Let s be any bounded element of L02 (P0 ). We
+
+construct the parametric submodel {P0, } with univariate index  defined in a neighborhood of zero and
+                                                                                     R
+with corresponding distribution function defined pointwise as F0, (z) := F0 (z) +  (−∞,z] s(u)F0 (du),
+
+where F0 denotes the distribution function of P0 and (−∞, z] is interpreted as an orthant in the
+                                  R
+dimension of Z. We note that z 7→ (−∞,z] s(u)F0 (du) induces a finite signed measure h(s) ∈ R since
+
+it is cadlag and has finite total variation norm. We then write that
+
+V (f0, , P0, ) − V (f0 , P0 )
+                                − V̇ (f0 , P0 ; h(s))
+                
+    V (f0, , P0, ) − V (f0, , P0 ) + V (f0, , P0 ) − V (f0 , P0 )
+≤                                                                     − V̇ (f0, , P0 ; h(s)) + V̇ (f0, , P0 ; h(s)) − V̇ (f0 , P0 ; h(s))
+                                     
+
+≤ U1 () + U2 () + U3 () ,
+
+
+where we have defined the summands
+
+                  V (f0, , P0, ) − V (f0, , P0 )                                     V (f0, , P0 ) − V (f0 , P0 )
+      U1 () :=                                     − V̇ (f0, , P0 ; h(s)) , U2 () :=
+                                                                                                      
+
+and U3 () := |V̇ (f0, , P0 ; h(s)) − V̇ (f0 , P0 ; h(s))|. By conditions (A1) and (A3), we can bound U2 ()
+
+above by Ckf0, − f0 k2F / = O(). By condition (A4), we have that U3 () = O(). Since kf0, − f0 kF =
+
+
+
+
+                                                              36
+O() by condition (A3), then for small enough  we have that
+
+                                                   V (f, P0, ) − V (f, P0 )
+                     U1 () ≤         sup                                    − V̇ (f, P0 ; h(s)) ,
+                                f ∈F :kf −f0 kF ≤δ              
+
+where the right-hand side of the inequality itself tends to zero as  → 0 in view of condition (A2). In
+
+other words, we find that U1 () = O(). Thus, we find that
+
+                             V (f0, , P0, ) − V (f0 , P0 )
+                                                             − V̇ (f0 , P0 ; h(s)) = O() ,
+                                             
+
+which implies that the derivative  7→ V (f0, , P0, ) at  = 0 equals V̇ (f0 , P0 ; h(s)). In view of Frangakis
+
+et al. (2015) and Luedtke et al. (2015), the evaluation of the nonparametric efficient influence function
+
+at observation value z is obtained by choosing s so that h(s) = δz − P0 , establishing that vn is indeed
+
+asymptotically efficient relative to a nonparametric model.
+
+
+8.2    Proof of Theorem 2
+
+As before, we denote by Bn ∈ {1, . . . , K}n a random vector generated by sampling uniformly from
+
+{1, . . . , K} with replacement, and by Dk the subset of observations with index in {i : Bn,i = k}
+
+for k = 1, . . . , K. Additionally, we denote by fk,n an estimator of f0 constructed using the data
+
+in ∪j6=k Dj , and we write Pk,n for the empirical distribution estimator of P0 based on the data in
+
+Dk . Recalling that vn∗ = K1 K                                            ∗
+                                P
+                                   k=1 V (fk,n , Pk,n ), we note that vn − v0 = A1,K,n + A2,K,n + A3,K,n ,
+
+where A1,K,n := K1 K                                                    1 PK
+                     P
+                        k=1 {V (f0 , Pk,n ) − V (f0 , P0 )}, A2,K,n := K     k=1 {V (fk,n , P0 ) − V (f0 , P0 )} and
+
+A3,K,n := K1 K
+              P
+                k=1 rk,n with rk,n := {V (fk,n , Pk,n ) − V (fk,n , P0 )} − {V (f0 , Pk,n ) − V (f0 , P0 )}. We will
+
+study separately each of these three summands.
+
+    Under condition (A2), the functional delta method can be used to establish the representation
+                                                                 −1/2                                           −1/2
+V (f0 , Pk,n ) − V (f0 , P0 ) = V̇ (f0 , P0 ; Pk,n − P0 ) + oP (nk ) = n1k i∈Dk V̇ (f0 , P0 ; δZi − P0 ) + oP (nk )
+                                                                          P
+
+for each k ∈ {1, . . . , K}, from which it follows that
+
+               n                                                       n                             K
+            1X                                 n       1X                            1 X      −1/2
+ A1,K,n −      V̇ (f0 , P0 ; δZi − P0 ) ≤ max     −1 ·    V̇ (f0 , P0 ; δZi − P0 ) +     oP (nk )
+            n                              k  Knk      n                             K
+              i=1                                                     i=1                            k=1
+
+                                          = OP (n−1 ) + oP (n−1/2 ) = oP (n−1/2 ) .
+
+
+
+
+                                                         37
+Under conditions (A1) and (B1’), we have that
+
+
+            |A2,K,n | ≤ max |V (fk,n , P0 ) − V (f0 , P0 )| ≤ C max kfk,n − f0 k2F = oP (n−1/2 ) .
+                              k                                           k
+
+
+
+Finally, we show that |A3,K,n | = oP (n−1/2 ) by showing that |rk,n | = oP (n−1/2 ) for each k. Similarly
+                                                           −1/2                     1/2
+as in the proof of Theorem 1, setting k,n := nk                  and hk,n := nk (Pk,n − P0 ), we can write that
+ 1/2
+nk rk,n = Ak,n + Bk,n , where we have defined the terms Ak,n := V̇ (fk,n , P0 ; hk,n ) − V̇ (f0 , P0 ; hk,n ) and
+
+Bk,n := R0 (fk,n , k,n , hk,n ) − R0 (f0 , k,n , hk,n ). Following the same argument made for Bn in the proof
+                                                                                    1/2 R
+of Theorem 1, we can show that Bk,n = oP (1). We then note that Ak,n = nk                 gk,n (z)d(Pk,n − P0 )(z).
+
+For any ε > 0, by Chebyshev’s inequality, we have that
+
+                                                                                         2
+                                                                                     P0 gk,n
+                                                      var0 [ gk,n (Z) | ∪j6=k Dj ]
+                   0 ≤ P0 (|Ak,n | > ε | ∪j6=k Dj ) ≤                              ≤         .
+                                                                   ε2                  ε2
+
+Thus, by condition (B2’), we have that P0 (|Ak,n | > ε | ∪j6=k Dj ) = oP (1). Since P0 (|Ak,n | > ε | ∪j6=k Dj )
+
+is uniformly bounded by virtue of being a probability, this implies that E0 [P0 (|Ak,n | > ε | ∪j6=k Dj )] =
+
+o(1), and so, P0 (|Ak,n | > ε) = o(1). Thus, we find that Ak,n = oP (1). As such, we have found that
+                −1/2                        P
+|rk,n | = oP (nk       ), and since n/nk −→ K, this implies that |rk,n | = oP (n−1/2 ).
+
+    The proof of nonparametric asymptotic efficiency is identical to that provided for Theorem 1.
+
+
+8.3    Proof of Theorem 3
+
+Fix an arbitrary h ∈ H, and let {P0, } ⊂ M be an arbitrary regular univariate parametric submodel
+
+through P0 at  = 0 and with score h for  at  = 0. Write f0, := fP0, for brevity. We note that
+
+
+          V (f0, , P0, ) − V (f0 , P0 ) = V (f0, , P0, ) − V (f0 , P0, ) + V (f0 , P0, ) − V (f0 , P0 )
+
+                                         = V (f0, , P0 ) − V (f0 , P0 ) + V (f0 , P0, ) − V (f0 , P0 ) + o() ,   (6)
+
+
+where the second line follows from the first in view of condition (A5a). By the nonparametric pathwise
+                                                                                            R
+differentiability of P 7→ V (f0 , P ) at P0 , we have that V (f0 , P0, ) − V (f0 , P0 ) =  d0 (z)h(z)dP0 (z) +
+
+O(2 ), where d0 is the nonparametric EIF of P 7→ V (f0 , P ) at P0 . Condition (A5b) and (A5c) together
+
+indicate that
+                                                 d
+                                                    V (f0, , P0 )     =0,
+                                                 d                =0
+
+
+
+                                                             38
+and furthermore, that V (f0, , P0 ) − V (f0 , P0 ) = o(). So, in view of equation 6, we obtain the repre-
+                                             R
+sentation V (f0, , P0, ) − V (f0 , P0 ) =  d0 (z)h(z)dP0 (z) + o(), which implies that P 7→ V (fP , P ) is
+
+pathwise differentiable at P0 relative to the nonparametric model M and has nonparametric EIF d0 .
+
+
+
+9    Explicit description of estimation procedure for Examples 1–4
+
+In this section, we provide the explicit form of our proposed estimator for Examples 1–4. For each
+
+example, we describe both the simple plug-in estimator and the cross-fitted estimator. When we
+
+discuss cross-fitting, recall that we generate a random partition assignment vector Bn ∈ {1, . . . , K}n
+
+by sampling uniformly from {1, . . . , K} with replacement, and denote by Dk the subset of observations
+
+with index in {i : Bn,i = k} for k = 1, . . . , K. For each k = 1, . . . , K, we denote by fk,n and fk,n,s
+                                                                    S
+estimators of f0 and f0,s , respectively, constructed on the data in j6=k Dj , and we denote by Pk,n the
+
+empirical distribution estimator of P0 based on the data in Dk .
+
+Example 1: R2
+
+The difference in R2 VIM estimator is
+
+                            Pn                   2     Pn                    2
+                              i=1 {Yi − fn (Xi )}          i=1 {Yi − fn,s (Xi )}
+                   ψn,s = 1 − Pn               2
+                                                     − 1−   Pn               2
+                                                                                   ,
+                                i=1 (Yi − Y n )               i=1 (Yi − Y n )
+
+                  Pn
+where Y n := n1     i=1 Yi is the marginal empirical mean of Y . In this example, fn = µn and fn,s = µn,s ,
+
+where µn and µn,s are estimators of µ0 and µ0,s , respectively. For each k = 1, . . . , K, the fold-specific
+
+difference in R2 VIM estimator is
+
+                               1 P                                         1 P
+                       "                                   2
+                                                               #       "                                2
+                                                                                                            #
+                              nk    i∈Dk {Yi − fk,n (Xi )}                nk    i∈Dk {Yi − fk,n,s (Xi )}
+           ψk,n,s =        1−     1 P                   2
+                                                                   −   1−     1 P                    2
+                                                                                                                ,
+                                 nk   i∈Dk (Yi − Y k,n )                     nk    i∈Dk (Yi − Y k,n )
+
+              Pn                                                                        1 Pn
+where nk :=       i=1 I(i ∈ Dk ) is the number of observations in fold k, and Y k,n := nk  i∈Dk Yi is the
+                                                                            ∗ = 1
+                                                                                                    PK
+marginal empirical mean of Y in fold k. The cross-fitted estimator is then ψn,s K                      k=1 ψk,n,s .
+
+
+Example 2: deviance
+
+The difference in deviance VIM estimator is
+                              "                                                                 #
+                                       1 Pn
+                                       n  i=1 {Yi log fn (Xi ) + (1 − Yi ) log(1 − fn (Xi ))}
+                  ψn,s =          1−
+                                               πn log(πn ) + (1 − πn ) log(1 − πn )
+
+
+
+
+                                                             39
+                                  "                                                                       #
+                                          1 Pn
+                                          n  i=1 {Yi log fn,s (Xi ) + (1 − Yi ) log(1 − fn,s (Xi ))}
+                              − 1−                                                                            ,
+                                                     πn log(πn ) + (1 − πn ) log(1 − πn )
+
+                 Pn
+where πn := n1      i=1 Yi is the empirical estimator of the marginal probability P0 (Y = 1).                         Again, in
+
+this example, fn = µn and fn,s = µn,s . For each k = 1, . . . , K, the fold-specific difference in deviance
+
+VIM estimator is
+
+                                       1 P
+                          "                                                                           #
+                                      nk   i∈Dk {Yi log fk,n (Xi ) + (1 − Yi ) log(1 − fk,n (Xi ))}
+              ψk,n,s =        1−
+                                            πk,n log(πk,n ) + (1 − πk,n ) log(1 − πk,n )
+                                         1
+                              "            P                                                               #
+                                        nk  i∈D k
+                                                  {Yi log fk,n,s (Xi ) + (1 − Y i ) log(1 − fk,n,s (Xi ))}
+                          − 1−                                                                                    ,
+                                                  πk,n log(πk,n ) + (1 − πk,n ) log(1 − πk,n )
+
+
+where πk,n := n1k
+                    P
+                        i∈Dk Yi is the marginal estimator of P0 (Y = 1) in fold k. The cross-fitted estimator
+         ∗ = 1
+                    PK
+is then ψn,s K          k=1 ψk,n,s .
+
+
+Example 3: classification accuracy
+                                                                                 Pn                        1 Pn
+The difference in classification accuracy VIM estimator is ψn,s = n1                 i=1 I{Yi = fn (Xi )}− n  i=1 I{Yi =
+
+fn,s (Xi )}. Sensible estimators of f0 and f0,s are given by
+
+
+                         fn : x 7→ I {µn (x) > 0.5} and fn,s : x 7→ I {µn,s (x) > 0.5} .
+
+
+The fold-specific difference in classification accuracy VIM estimator is
+
+                                      1 X                      1 X
+                      ψk,n,s =            I{Yi = fk,n (Xi )} −     I{Yi = fk,n,s (Xi )} .
+                                      nk                       nk
+                                         i∈Dk                             i∈Dk
+
+
+                                    ∗ = 1
+                                                        PK
+The cross-fitted estimator is then ψn,s K                  k=1 ψk,n,s .
+
+
+Example 4: area under the ROC curve
+
+The difference in AUC VIM estimator is
+
+               n    n                                                       n    n
+        1 XX                                      1 XX
+ψn,s =       I{fn (Xi ) < fn (Xj )}(1 − Yi )Yj −       I{fn,s (Xi ) < fn,s (Xj )}(1 − Yi )Yj ,
+       n0 n1                                     n0 n1
+              i=1 j=1                                                      i=1 j=1
+
+              Pn
+where n1 :=      i=1 Yi is the number of observations with corresponding Y                  = 1 and n0 := n − n1 . As
+
+above, in this example, we can take fn = µn and fn,s = µn,s . The fold-specific difference in AUC VIM
+
+
+
+                                                               40
+estimator is
+
+                                  1      X X
+                    ψk,n,s =                 I{fk,n (Xi ) < fk,n (Xj )}(1 − Yi )Yj
+                               nk,0 nk,1
+                                       i∈Dk j∈Dk
+                                    1      X X
+                               −               I{fk,n,s (Xi ) < fk,n,s (Xj )}(1 − Yi )Yj ,
+                                 nk,0 nk,1
+                                          i∈Dk j∈Dk
+
+                P
+where nk,1 :=      i∈Dk I(Yi = 1) is the number of observations with corresponding Y         = 1 in fold k and
+                                                        ∗ =      1 PK
+nk,0 := nk − nk,1 . The cross-fitted estimator is then ψn,s K        k=1 ψk,n,s .
+
+
+
+
+10      Additional technical details
+
+10.1     Bayes classifier maximizes classification accuracy
+
+Suppose that Y ∈ {0, 1} is a binary random variable. Define the Bayes classifier b0 : x 7→ I{µ0 (x) >
+
+1/2} with µ0 (x) = E0 (Y | X = x). For any fixed x ∈ X , we have that
+
+
+       P0 {f (X) = Y | X = x} = P0 {Y = 1, f (X) = 1 | X = x} + P0 {Y = 0, f (X) = 0 | X = x}
+
+                                  = f (x)P0 (Y = 1 | X = x) + {1 − f (x)}P0 (Y = 0 | X = x)
+
+                                  = f (x)µ0 (x) + {1 − f (x)}{1 − µ0 (x)} ,
+
+
+which allows us to write that
+
+
+               P0 {f (X) = Y | X = x} − P0 {b0 (X) = Y | X = x}
+
+                           = µ0 (x){f (x) − b0 (x)} + {1 − µ0 (x)}[{1 − f (x)} − {1 − b0 (x)}]
+
+                           = {2µ0 (x) − 1}{f (x) − b0 (x)} ≤ 0
+
+
+by definition of b0 . It follows then that
+
+
+       P0 {f (X) = Y } − P0 {b0 (X) = Y } = E0 [P0 {f (X) = Y | X}] − E0 [P0 {b0 (X) = Y | X}]
+
+                                             = E0 [P0 {f (X) = Y | X} − P0 {b0 (X) = Y | X}] ≤ 0 ,
+
+
+so that b0 is the maximizer of the classification accuracy P0 {Y = f (X)}.
+
+
+                                                      41
+10.2    Conditional mean maximizes the area under the ROC curve
+
+Suppose that Y ∈ {0, 1} is a binary random variable. For a given function f ∈ F, we define the
+
+conditional distribution functions
+
+
+         F1 (P0 , f )(c) := P0 {f (X) ≤ c | Y = 1} and F0 (P0 , f )(c) := P0 {f (X) ≤ c | Y = 0} .
+
+
+If Y denotes the presence of a disease, then 1 − F1 (P0 , f )(c) and F0 (P0 , f )(c) denote the sensitivity
+
+and specificity of a medical test that flags the presence of disease if and only if f (X) > c. The AUC
+
+value corresponding to f and P0 can be written as
+
+                                                        Z ∞
+           P0 {f (X1 ) < f (X2 ) | Y1 = 0, Y2 = 1} =           {1 − F1 (P0 , f )(c)} F0 (P0 , f )(dc)
+                                                           0
+                                                        Z 1
+                                                                1 − F1 (P0 , f )(F0−1 (P0 , f )(w)) dw .
+                                                               
+                                                    =
+                                                           0
+
+
+For a fixed w, the integrand 1 − F1 (P0 , f )(F0−1 (P0 , f )(w)) is the sensitivity of a test based on f and a
+
+cutoff that results in specificity w. By an application of the Neyman-Pearson Lemma, it is known that,
+
+for any fixed specificity level, any strictly increasing transformation of the likelihood ratio mapping
+
+x 7→ P0 (Y = 1 | X = x) /P0 (Y = 0 | X = x) = µ0 (x)/{1 − µ0 (x)} gives an optimal choice of f . in
+
+particular, the function f : x 7→ µ0 (x) is optimal. Since this is true irrespective of the fixed specificity
+
+level, it holds uniformly across specificity levels and hence also maximizes the AUC value, as claimed.
+
+
+10.3    Verification of conditions (A1) and (A2) for Examples 1–4
+
+
+Example 1: R2
+
+We have that |V (f, P0 ) − V (f0 , P0 )| = E0 {f (X) − f0 (X)}2 /σ 2 (P0 ) so that |V (f, P0 ) − V (f0 , P0 )| =
+
+O(kf − f0 k2F ) and condition (A1) holds. We can verify that V̇ (f, P0 ; h) = − {y − f (x)}2 h(dz)/σ 2 (P0 ).
+                                                                                 R
+
+Since P 7→ EP {Y − f (X)}2 is linear and thus Hadamard differentiable uniformly in f , condition (A2)
+
+can be shown to hold for any δ > 0 provided the marginal distribution of Y under P0 has bounded
+
+support.
+
+Example 2: deviance
+
+Using that f0 = µ0 and setting a0 := −2/{log P0 (Y = 0) + log P0 (Y = 1)}, a standard argument based
+
+
+
+                                                      42
+on Taylor approximations allows to write that
+
+                                                                                               
+                                                          f (x)                         1 − f (x)
+        |V (f, P0 ) − V (f0 , P0 )| = a0 E0 f0 (X) log             + {1 − f0 (x)} log
+                                                          f0 (x)                        1 − f0 (x)
+                                                                                  
+                                      a0                         f0 (x) 1 − f0 (x)
+                                    ≤    E0 {f (x) − f0 (x)}2          +
+                                       2                         ξ0 (x) 1 − ξ1 (x)
+
+for some ξ0 , ξ1 : X → Y lying pointwise between f and f0 . If f (X), f0 (X) ∈ (δ, 1 − δ) almost surely
+
+under P0 , then we find that |V (f, P0 ) − V (f0 , P0 )| ≤ a0 1−δ   kf − f0 k2F . Thus, condition (A1) then
+                                                                  
+                                                               δ
+
+holds with α = 2. Since P 7→ EP [Y log f (X) + (1 − Y ) log{1 − f (X)}] is linear and thus Hadamard
+
+differentiable uniformly in f , condition (A2) can again be shown to hold for any δ > 0.
+
+Example 3: classification accuracy
+
+Using that f0 : x 7→ I{µ0 (x) > 1/2} is an optimizer of accuracy, and writing any candidate prediction
+
+function f : X → {0, 1} as f (x) = I{µ(x) > 1/2} for some function µ : X → [0, 1], we can write
+
+
+0 ≤ P0 {Y = f0 (X)} − P0 {Y = f (X)} = E0 [I {Y = f0 (X)} − I {Y = f (X)}]
+
+  = P0 {Y = f0 (X), Y 6= f (X)} − P0 {Y 6= f0 (X), Y = f (X)}
+
+  = P0 {f0 (X) = 1, f (X) = 0, Y = 1} + P0 {f0 (X) = 0, f (X) = 1, Y = 0}
+
+       − P0 {f0 (X) = 0, f (X) = 1, Y = 1} − P0 {f0 (X) = 1, f (X) = 0, Y = 0}
+
+  = [P0 {Y = 1 | µ0 (X) ≥ 21 > µ(X)} − P0 {Y = 0 | µ0 (X) ≥ 12 > µ(X)}] P0 {µ0 (X) ≥ 21 > µ(X)}
+
+       + [P0 {Y = 0 | µ(X) ≥ 21 > µ0 (X)} − P0 {Y = 1 | µ(X) ≥ 21 > µ0 (X)}] P0 {µ(X) ≥ 12 > µ0 (X)}
+
+  = [2P0 {Y = 1 | µ0 (X) ≥ 12 > µ(X)} − 1] P {µ0 (X) ≥ 12 > µ(X)}
+
+       + [2P0 {Y = 0 | µ(X) ≥ 21 > µ0 (X)} − 1] P {µ(X) ≥ 21 > µ0 (X)} .
+
+
+Now, on one hand, we note that
+
+
+      P0 {Y = 1 | µ0 (X) ≥ 21 > µ(X)} − 12 = E0 {Y | µ0 (X) ≥ 12 > µ(X)} − 21
+
+              = E0 {µ0 (X) | µ0 (X) ≥ 12 > µ(X)} − 21 = E0 {µ0 (X) − 12 | µ0 (X) ≥ 12 > µ(X)} ,
+
+
+and so it follows that |P0 {Y = 1 | µ0 (X) ≥ 12 > µ(X)} − 21 | ≤ kµ − µ0 k∞ . We can similarly show
+
+that |P0 {Y = 0 | µ(X) ≥ 12 > µ0 (X)} − 21 | ≤ kµ − µ0 k∞ . On the other hand, in view of the margin
+
+
+
+                                                     43
+condition we impose, we have that
+
+
+             P0 {µ0 (X) ≥ 21 > µ(X)} ≤ P0 {|µ0 (X) − 12 | < |µ(X) − µ0 (X)|} ≤ κkµ − µ0 k∞
+
+
+and similarly, P0 {µ(X) ≥ 12 > µ0 (X)} ≤ κkµ − µ0 k∞ . Combining the inequalities we have derived, we
+
+conclude that 0 ≤ P0 {Y = f0 (X)} − P0 {Y = f (X)} ≤ 4κkµ − µ0 k∞ .
+
+Example 4: Area under the ROC curve
+
+We begin by writing
+
+
+      0 ≤ P0 {f0 (X1 ) < f0 (X2 ), Y1 = 0, Y2 = 1} − P0 {f (X1 ) < f (X2 ), Y1 = 0, Y2 = 1}
+
+         = E0 [I {f0 (X1 ) < f0 (X2 ), Y1 = 0, Y2 = 1} − I {f (X1 ) < f (X2 ), Y1 = 0, Y2 = 1}]
+              1
+         =    2 E0 [I {f0 (X1 ) < f0 (X2 ), Y1 = 0, Y2 = 1} + I {f0 (X1 ) ≥ f0 (X2 ), Y1 = 1, Y2 = 0}]
+
+                  − 21 E0 [I {f (X1 ) < f (X2 ), Y1 = 0, Y2 = 1} + I {f (X1 ) ≥ f (X2 ), Y1 = 1, Y2 = 0}]
+              1
+         =    2 E0 [(Y2 − Y1 )I {f0 (X1 ) < f0 (X2 ), f (X1 ) ≥ f (X2 )}]
+
+                  + 21 E0 [(Y1 − Y2 )I {f0 (X1 ) ≥ f0 (X2 ), f (X1 ) < f (X2 )}]
+              1
+         =    2 E0 [{f0 (X2 ) − f0 (X1 )}I {f0 (X1 ) < f0 (X2 ), f (X1 ) ≥ f (X2 )}]
+
+                  + 21 E0 [{f0 (X1 ) − f0 (X2 )}I {f0 (X1 ) ≥ f0 (X2 ), f (X1 ) < f (X2 )}]
+              1
+         ≤    2 E0 [|f0 (X1 ) − f0 (X2 )|I {[f0 (X1 ) − f0 (X2 )][f (X1 ) − f (X2 )] < 0}] .
+
+
+
+Defining A := {f (X1 ) − f0 (X1 )} + {f0 (X2 ) − f (X2 )}, B := f0 (X1 ) − f0 (X2 ) and t : x 7→ |f (x) − f0 (x)|,
+
+we note that
+
+
+      {[f0 (X1 ) − f0 (X2 )][f (X1 ) − f (X2 )] < 0} = {B(A + B) < 0} = {( 12 A + B)2 − 14 A2 < 0}
+
+       = {|A| > |B|, AB < 0} ⊆ {|A| > |B|} ⊆ {|f0 (X1 ) − f0 (X2 )| < t(X1 ) + t(X2 )} .
+
+
+Using this result and the inequality derived above, and defining α0 := {P0 (Y = 1)P0 (Y = 0)}−1 , we
+
+have that
+
+
+         0 ≤ AU C(f0 , P0 ) − AU C(f, P0 )
+
+             = α0 [P0 {f0 (X1 ) < f0 (X2 ), Y1 = 0, Y2 = 1} − P0 {f (X1 ) < f (X2 ), Y1 = 0, Y2 = 1}]
+
+
+                                                          44
+                1
+          ≤     2 α0 E0 [|f0 (X1 ) − f0 (X2 )|I {[f0 (X1 ) − f0 (X2 )][f (X1 ) − f (X2 )] < 0}]
+
+                1
+          ≤     2 α0 E0 [|f0 (X1 ) − f0 (X2 )|I {|f0 (X1 ) − f0 (X2 )| < t(X1 ) + t(X2 )}]
+
+                1
+          ≤     2 α0 E0 [|f0 (X1 ) − f0 (X2 )|I {|f0 (X1 ) − f0 (X2 )| < 2ktk∞ }]
+
+          ≤ α0 ktk∞ P0 {|f0 (X1 ) − f0 (X2 )| < 2ktk∞ } ≤ 2α0 κ ktk2∞ ,
+
+
+where the last inequality follows from the margin condition we impose.
+
+
+10.4   Derivation of the EIFs for Examples 5 and 6
+
+Example 5: Mean outcome under a binary intervention rule
+
+   The nonparametric EIF for this example is derived in, for example, Sections 2 and 3 of Luedtke
+
+and van der Laan (2016) and in Section A.1 of its supplement.
+
+Example 6: Classification accuracy under outcome missingness
+
+   Recall that, in this example, the ideal-data structure consists of Z := (X, Y ) ∼ P , and the observed
+
+data structure is Z := (X, ∆, U ), where ∆ is the indicator of having observed the outcome Y , and we
+
+have defined U := ∆Y . The ideal-data nonparametric EIF at P , following Appendix A, is given by
+
+
+                                    φFP (x, y) = I{y = fP (x)} − V (fP , P ).
+
+
+Based on results in Chapter 25.5.3 of van der Vaart (2000), the observed-data nonparametric EIF at
+
+P is given by
+
+                                                     
+                               δ    F            δ
+                                                        EP {φFP (Z) | ∆ = 1, X = x} .
+                             gP (x) P
+                    φP (z) =       φ (z) + 1 −                                                       (7)
+                                               gP (x)
+
+Defining the nuisance function QP (x) := P {Y = fP (X) | ∆ = 1, X = x}, simple algebraic manipula-
+
+tions then yield that EP {φFP (Z) | ∆ = 1, X = x} = QP (x) − V (fP , P ). Plugging this into (7) yields
+
+the desired form of the EIF.
+
+
+
+
+                                                         45
+                   Table 2: Approximate values of ψ0,s in the numerical experiments.
+
+        Importance measure            Scenario     X1      X2     X3   X4    (X1 , X3 )   (X2 , X4 )
+                                      (1,2,3)     0.136   0.236   0    0      0.136        0.236
+        Accuracy
+                                      4           0.081   0.228   0    0      0.136        0.236
+                                      (1,2,3)     0.105   0.221   0    0      0.105        0.221
+        Area under the ROC curve
+                                      4           0.052   0.211   0    0      0.105        0.221
+
+
+11     Additional numerical experiments
+
+11.1     Replicating all numerical experiments
+
+All numerical experiments presented here and in the main manuscript can be replicated using code
+
+available on GitHub. In all cases, we generate data by:
+
+
+       1 : drawing X ∼ M V N (0, Σ)
+
+       2 : drawing  ∼ N (0, 1) independent of X, and setting Y = I{xβ0 +  > 0} given X = x,
+
+
+where Σ is the p × p identity matrix and β0 = (2.5, 3.5, 0, . . . , 0)> . The dimension p is determined by
+
+the scenario. The approximate true values of variable importance based on accuracy and AUC under
+
+all scenarios considered here are provided in Table 2. The specification of each individual algorithm
+
+for estimating f0 and f0,s is provided in Table 3, while the specification of the candidate algorithms
+
+used in the Super Learner is provided in Table 4.
+
+
+11.2     Properties of our proposal under the alternative hypothesis
+
+In this section, we present additional results under Scenario 1. In this case, p = 2. For each scenario
+
+presented here, we generated 1000 random datasets of size n ∈ {100, 500, 1000, . . . , 4000}, and consid-
+
+ered the importance of both X1 and X2 . We highlight results for both features using the AUC and
+
+for X1 using accuracy, and we provide the coverage of nominal 95% confidence intervals. We assess
+
+performance in the same way as in the main manuscript.
+
+     We present results for AUC and for the accuracy-based importance of X1 in Figures 5–7. The re-
+
+sults for both features and both importance measures are largely similar to those presented in Section
+
+5.2 of the main manuscript. The need for cross-fitting is particularly striking in Figure 7, where we
+
+observed coverage near zero for intervals based on a non-cross-fitted random forest estimator of the
+
+
+
+                                                    46
+             Algorithm                    R             Tuning Parameter(s)       Tuning parameter
+                                   Implementation        and possible values          description
+    Generalized linear models           glm                      –                         –
+   Generalized additive models          mgcv            method = "GCV.Cp"       Smoothing parameter
+                                         (?)                                     estimation method
+          Random forests              ranger                   ntree‡            Number of variables
+                                         (?)                                       to possibly split
+                                                                                   at in each node
+                                                            max.depth‡          Maximum tree depth
+                                                          min.node.size‡         Minimum node size
+
+Table 3: Individual algorithms considered with their R implementation, tuning parameter values,
+and description of the tuning parameters. All tuning parameters besides those listed here are set to
+                                                                                           √
+their default values. In particular, the random forests are grown with 500 trees, mtry = p † , and
+a subsampling fraction of 1; five-fold cross-validation over the grid defined by (ntree, max.depth,
+min.node.size) was used to select the tuning parameter combination that minimized log-likelihood
+loss.
+† : p denotes the total number of predictors.
+‡ : For setting 1, ntree ∈ {100, 500, 1000}, max.depth = 5, min.node.size = 1; for all other settings,
+
+ntree ∈ {500, 1000, 1500, 2000, 5000}, max.depth ∈ {1, 3, 5}, min.node.size = 10.
+
+
+
+
+        Candidate Learner               R               Tuning Parameter         Tuning parameter
+                                  Implementation        and possible values          description
+    Generalized linear models          glm                      –                         –
+   Generalized additive models         gam                  degree = 2         Degree of smooth terms
+                                       (?)
+                                                                    √
+         Random forests              ranger                mtry =       p†      Number of variables
+                                       (?)                                       to possibly split
+                                                                                  at in each node
+        Gradient boosted              xgboost             max.depth = 1         Maximum tree depth
+              trees                      (?)
+          Elastic net‡                 glmnet           mixing parameter α        Trade-off between
+                                         (?)                    =1             `1 and `2 regularization
+
+Table 4: Candidate learners in the Super Learner ensemble along with their R implementation, tuning
+parameter values, and description of the tuning parameters. All tuning parameters besides those
+listed here are set to their default values. In particular, the random forests are grown with 500 trees,
+a minimum node size of 5 for continuous outcomes and 1 for binary outcomes, and a subsampling
+fraction of 1; the boosted trees are grown with a maximum of 1000 trees, shrinkage rate of 0.1, and
+a minimum of 10 observations per node; and the lasso `1 tuning parameter is chosen using 10-fold
+cross-validation.
+† : p denotes the total number of predictors.
+‡ : lasso is only included in cases where p ≥ 4.
+
+
+
+
+                                                   47
+Figure 5: Performance of plug-in estimators for estimating (non-zero) importance of X1 in terms of
+accuracy under Scenario 1 (all features have non-zero importance). Clockwise from top left: empirical
+bias of the proposed plug-in estimator scaled by n1/2 ; empirical variance scaled by n; empirical coverage
+of nominal 95% confidence intervals; and width of these intervals. Circles, triangles, squares, and plus
+symbols denote estimators based on the use of generalized additive models (GAMs), probit regression
+(GLM), random forests (RF) or the Super Learner (SL), respectively. Blue and green symbols denote
+non-cross-fitted and cross-fitted estimators, respectively. This figure appears in color in the electronic
+version of this article.
+
+
+oracle prediction functions. In Figure 8, we show the coverage of nominal 95% intervals based on the
+
+non-cross-fitted standard error estimator. Here, we observe reduced coverage in some cases compared to
+
+the results presented above. Taken together, these results highlight that when using simple estimators
+
+of the conditional mean functions (e.g., estimators based on correctly-specified parametric models),
+
+using cross-fitting appears to have minimal impact on the performance of the proposed inferential
+
+procedures and is therefore not needed. In contrast, when flexible nuisance estimators are used, it
+
+appears important to use cross-fitting when estimating VIM values and standard errors. The elimina-
+
+tion of the constraint on nuisance estimator complexity (i.e., the Donsker class condition) achieved via
+
+cross-fitting does appear to translate into substantially improved practical performance when complex
+
+nuisance estimators are used.
+
+
+11.3    Properties of our proposal under the null hypothesis
+
+In this section, we present additional results under Scenario 2. In this case, p = 4. We again generated
+
+1000 random datasets of size n ∈ {100, 500, 1000, . . . , 4000}, and considered the importance of both X2
+
+                                                   48
+Figure 6: Performance of plug-in estimators for estimating (non-zero) importance of X1 in terms of
+AUC under Scenario 1 (all features have non-zero importance). Clockwise from top left: empirical bias
+of the proposed plug-in estimator scaled by n1/2 ; empirical variance scaled by n; empirical coverage
+of nominal 95% confidence intervals; and width of these intervals. Circles, triangles, squares, and plus
+symbols denote estimators based on the use of generalized additive models (GAMs), probit regression
+(GLM), random forests (RF) or the Super Learner (SL), respectively. Blue and green symbols denote
+non-cross-fitted and cross-fitted estimators, respectively. Coverage of intervals based on the non-cross-
+fitted RF-based estimator never exceeds 0.5 and is as low as zero in some cases. This figure appears
+in color in the electronic version of this article.
+
+
+
+
+                                                   49
+Figure 7: Performance of plug-in estimators for estimating (non-zero) importance of X2 in terms of
+AUC under Scenario 1 (all features have non-zero importance). Clockwise from top left: empirical bias
+of the proposed plug-in estimator scaled by n1/2 ; empirical variance scaled by n; empirical coverage
+of nominal 95% confidence intervals; and width of these intervals. Circles, triangles, squares, and plus
+symbols denote estimators based on the use of generalized additive models (GAMs), probit regression
+(GLM), random forests (RF) or the Super Learner (SL), respectively. Blue and green symbols denote
+non-cross-fitted and cross-fitted estimators, respectively. Coverage of intervals based on the non-cross-
+fitted RF-based estimator never exceeds 0.5 and is as low as zero in some cases. This figure appears
+in color in the electronic version of this article.
+
+
+
+
+                                                   50
+Figure 8: Empirical coverage of confidence intervals based on the non-cross-fitted standard error esti-
+mator under Scenario 1 (all features have non-zero importance). The rows correspond to the feature of
+interest, while the columns correspond to accuracy and AUC, respectively. Circles, triangles, squares,
+and plus symbols denote estimators based on the use of generalized additive models (GAMs), probit
+regression (GLM), random forests (RF) or the Super Learner (SL), respectively. Blue and green sym-
+bols denote non-cross-fitted and cross-fitted VIM estimators, respectively. Coverage of intervals based
+on the non-cross-fitted RF-based estimator (panels b and d) never exceeds 0.5 and is as low as zero in
+some cases. This figure appears in color in the electronic version of this article.
+
+
+
+
+                                                  51
+(a non-null feature) and X3 (a null feature). Here, we highlight results for both features based on the
+
+AUC and for X2 based on accuracy, and we provide the coverage of nominal 95% confidence intervals
+
+and proportion of tests rejected. We assess performance in the same way as in the main manuscript.
+
+   We present the results based on a cross-fitted standard error estimator in Figures 9–11. In Figures 9
+
+and 10, we observe high power across all sample sizes. We again observe residual bias for the non-cross-
+
+fitted VIM estimators based on flexible nuisance estimation (random forests and the Super Learner).
+
+In Figure 11, the cross-fitted VIM estimator based on random forests exhibits some residual bias but
+
+coverage and type I error are still near the nominal level. It is possible that this bias could be mitigated
+
+with cross-validation over a richer grid of tuning parameters. Similarly as in the main manuscript, since
+
+the bias for estimating the null feature appears to be small for the non-cross-fitted estimators, type I
+
+error is not inflated in these simulations. However, we expect in most cases that cross-fitting will yield
+
+a more adequate type I error control. Indeed, we see that this is the case by comparing the results for
+
+the cross-fitted estimator and cross-fitted versus non-cross-fitted standard error estimators (Figure 12).
+
+Here, we see a vastly inflated type I error for the cross-fitted random forests-based estimator, reflecting
+
+that in this case the non-cross-fitted standard error appears to be too small.
+
+
+11.4    Using the bootstrap for interval estimation
+
+In some cases, particularly those with limited sample sizes, it may be of interest to use a bootstrap
+
+scheme for interval estimation rather than a Wald construction using an influence function-based
+
+estimator of the asymptotic variance. Because estimation of f0 and f0,s only contributes to the second-
+
+order behavior of the plug-in VIM estimator, a valid nonparametric bootstrap here would consist of
+
+bootstrapping the empirical distribution Pn but fixing the nuisance estimators fn and fn,s across all
+
+bootstrap runs. Not having to re-fit estimators of the nuisance functions on each bootstrap sample
+
+makes this scheme particularly efficient to implement. Additionally, since we only use the bootstrap for
+
+interval estimation, we do not need to bootstrap the cross-fitting procedure. Our proposed bootstrap
+
+procedure in a case with no sample-splitting (i.e., under the alternative hypothesis) is as follows:
+
+                               ∗ of ψ ;
+  1. obtain estimator ψn,s or ψn,s   0,s
+
+
+  2. obtain estimators fn and fn,s of f0 and f0,s based on the entire dataset;
+
+  3. create B bootstrap resamples of the original dataset;
+
+
+                                                    52
+Figure 9: Performance of plug-in estimators for estimating (non-zero) importance of X2 in terms of
+accuracy under Scenario 2. Clockwise from top left: empirical bias of the proposed plug-in estimator
+scaled by n1/2 ; empirical variance scaled by n; empirical coverage of nominal 95% confidence intervals;
+and empirical power of the proposed hypothesis test. Circles, triangles, squares, and plus symbols
+denote estimators based on the use of generalized additive models (GAMs), probit regression (GLM),
+random forests (RF) or the Super Learner (SL), respectively. Blue and green symbols denote non-cross-
+fitted and cross-fitted estimators, respectively. This figure appears in color in the electronic version of
+this article.
+
+
+
+
+                                                    53
+Figure 10: Performance of plug-in estimators for estimating (non-zero) importance of X2 in terms of
+AUC under Scenario 2. Clockwise from top left: empirical bias of the proposed plug-in estimator scaled
+by n1/2 ; empirical variance scaled by n; empirical coverage of nominal 95% confidence intervals; and
+empirical power of the proposed hypothesis test. Circles, triangles, squares, and plus symbols denote
+estimators based on the use of generalized additive models (GAMs), probit regression (GLM), random
+forests (RF) or the Super Learner (SL), respectively. Blue and green symbols denote non-cross-fitted
+and cross-fitted estimators, respectively. Coverage of intervals based on the non-cross-fitted RF-based
+estimator never exceeds 0.5 and is as low as zero in some cases. This figure appears in color in the
+electronic version of this article.
+
+
+
+
+                                                  54
+Figure 11: Performance of plug-in estimators for estimating (zero) importance of X3 in terms of AUC
+under Scenario 2. Clockwise from top left: empirical bias of the proposed plug-in estimator scaled
+by n1/2 ; empirical variance scaled by n; empirical coverage of nominal 95% confidence intervals; and
+empirical type I error of the proposed hypothesis test. Circles, triangles, squares, and plus symbols
+denote estimators based on the use of generalized additive models (GAMs), probit regression (GLM),
+random forests (RF) or the Super Learner (SL), respectively. Blue and green symbols denote non-cross-
+fitted and cross-fitted estimators, respectively. This figure appears in color in the electronic version of
+this article.
+
+
+
+
+                                                    55
+Figure 12: Empirical coverage of confidence intervals (A) and proportion of tests rejected (B) based
+on the non-cross-fitted standard error estimator under Scenario 2. The rows correspond to X2 and
+X3 , respectively, while the columns correspond to accuracy (a,c) and AUC (b,d), respectively. Circles,
+triangles, squares, and plus symbols denote estimators based on the use of generalized additive models
+(GAMs), probit regression (GLM), random forests (RF) or the Super Learner (SL), respectively. Blue
+and green symbols denote non-cross-fitted and cross-fitted estimators, respectively. Coverage of inter-
+vals based on the non-cross-fitted RF-based estimator of importance of X2 (panel bA) never exceeds
+0.5 and is as low as zero in some cases. This figure appears in color in the electronic version of this
+article.
+
+
+  4. For b = 1, 2, . . . , B:
+
+      (a) obtain vn,b := V (fn , Pn,b ) and vn,s,b := V (fn,s , Pn,b ) using the nuisance functions estimated
+
+           on the entire dataset and the bootstrap empirical distribution Pn,b ;
+
+      (b) set ψn,s,b := vn,b − vn,s,b ;
+
+                                                            PB                    PB            2
+                                           2
+  5. compute bootstrap variance estimator τn,s,B := B1         b=1   ψn,s,b − B1    b=1 ψn,s,b        and resulting
+                                            ∗ or ψ ), or form a percentile-based confidence interval
+     Wald-type confidence intervals (using ψn,s   n,s
+
+     with endpoints given by the 5th and 95th sample percentiles of {ψn,s,1 , ψn,s,2 , . . . , ψn,s,B }.
+
+   We consider again Scenario 1, where p = 2. For each scenario presented here, we generated 1000
+
+random datasets of size n ∈ {100, 500, 1000, . . . , 4000}, and considered the importance of both X1
+
+and X2 . We assess performance in the same way as in the main manuscript, though we use the
+
+bootstrap-based intervals in place of those based on the influence function. We present the results of
+
+this experiment in Figures 13–16. The results for bias and variance are unchanged from the previous
+
+experiments. Encouragingly, both coverage and width for the bootstrap-based intervals are similar
+
+
+                                                     56
+Figure 13: Performance of plug-in estimators for estimating (non-zero) importance of X1 in terms
+of accuracy under Scenario 1, using the bootstrap for interval estimation. Clockwise from top left:
+empirical bias of the proposed plug-in estimator scaled by n1/2 ; empirical variance scaled by n; empirical
+coverage of nominal 95% confidence intervals; and average width of these intervals. Circles, triangles,
+squares and plus symbols denote estimators based on the use of generalized additive models (GAMs),
+probit regression (GLM), random forests (RF), and the Super Learner (SL), respectively. Blue and
+green symbols denote non-cross-fitted and cross-fitted estimators, respectively. This figure appears in
+color in the electronic version of this article.
+
+
+to the coverage and width of the IF-based intervals, though in the smaller sample size settings the
+
+bootstrap-based intervals are slightly narrower than the IF-based intervals.
+
+
+11.5    Higher dimensions and correlated features
+
+We now consider two scenarios under increasing dimension, both with and without correlated features.
+
+Here, p ∈ {50, 100, 200} and Σ is either a p × p identity matrix (Scenario 3) or a p × p diagonal
+
+matrix with 1 on the diagonal and all off-diagonal elements equal to zero except Σ1,3 = Σ3,1 = 0.7
+
+and Σ2,4 = Σ4,2 = 0.2 (Scenario 4). Thus, in Scenario 4, X3 and X4 are not directly important for
+
+predicting the outcome, but might be found to be important in isolation due to their correlation with
+
+the important features X1 and X2 . In these experiments, we considered n ∈ {500, 3000} for each
+
+p, and assessed the importance of each individual feature as well as the feature groups (X1 , X3 ) and
+
+(X2 , X4 ), again using both accuracy and AUC. We use cross-fitting to estimate the VIM value in all
+
+cases, and we use the Super Learner with candidate library consisting of boosted trees, random forests,
+
+and the lasso to estimate f0 and f0,s . We then compute the empirical bias scaled by n1/2 , the empirical
+
+                                                    57
+Figure 14: Performance of plug-in estimators for estimating (non-zero) importance of X2 in terms
+of accuracy under Scenario 1, using the bootstrap for interval estimation. Clockwise from top left:
+empirical bias of the proposed plug-in estimator scaled by n1/2 ; empirical variance scaled by n; empirical
+coverage of nominal 95% confidence intervals; and average width of these intervals. Circles, triangles,
+squares and plus symbols denote estimators based on the use of generalized additive models (GAMs),
+probit regression (GLM), random forests (RF), and the Super Learner (SL), respectively. Blue and
+green symbols denote non-cross-fitted and cross-fitted estimators, respectively. This figure appears in
+color in the electronic version of this article.
+
+
+
+
+                                                    58
+Figure 15: Performance of plug-in estimators for estimating (non-zero) importance of X1 in terms of
+AUC under Scenario 1, using the bootstrap for interval estimation. Clockwise from top left: empirical
+bias of the proposed plug-in estimator scaled by n1/2 ; empirical variance scaled by n; empirical coverage
+of nominal 95% confidence intervals; and average width of these intervals. Circles, triangles, squares
+and plus symbols denote estimators based on the use of generalized additive models (GAMs), probit
+regression (GLM), random forests (RF), and the Super Learner (SL), respectively. Blue and green
+symbols denote non-cross-fitted and cross-fitted estimators, respectively. Coverage of intervals based
+on the non-cross-fitted RF-based estimator never exceeds 0.5 and is as low as zero in some cases. This
+figure appears in color in the electronic version of this article.
+
+
+
+
+                                                   59
+Figure 16: Performance of plug-in estimators for estimating (non-zero) importance of X2 in terms of
+AUC under Scenario 1, using the bootstrap for interval estimation. Clockwise from top left: empir-
+ical bias of the proposed plug-in estimator scaled by n1/2 ; empirical variance scaled by n; empirical
+coverage of nominal 95% confidence intervals; and average width of these intervals. Circles, triangles,
+squares and plus symbols denote estimators based on the use of generalized additive models (GAMs),
+probit regression (GLM), random forests (RF), and the Super Learner (SL), respectively. Blue and
+green symbols denote non-cross-fitted and cross-fitted estimators, respectively. In this experiment, the
+coverage of non-cross-fitted RF was never above 0.5, and was as low as zero. This figure appears in
+color in the electronic version of this article.
+
+
+
+
+                                                  60
+Figure 17: Performance of plug-in estimators for estimating importance in terms of accuracy under
+Scenario 3 (all features are independent). Clockwise from top left: empirical bias for the proposed
+plug-in estimator scaled by n1/2 ; empirical variance scaled by n; empirical coverage of nominal 95%
+confidence intervals for the true importance; and empirical type I error of the proposed hypothesis test.
+The different symbols denote the feature(s) of interest.
+
+
+variance scaled by n, the empirical coverage of nominal 95% confidence intervals, and the proportion
+
+of tests rejected.
+
+    We display the results under Scenario 3 in Figures 17 and 18. Here, we find that at the smaller
+
+sample size (n = 500), there is some excess bias for the features with non-null importance, and that
+
+this bias increases with increasing p; this is accompanied by a decrease in coverage. However, with a
+
+larger sample size (n = 3000), we recover similar performance to that observed in Section 5 of the main
+
+manuscript and the preceeding sections of this supplement. Type I error is controlled at the nominal
+
+level in all cases.
+
+
+
+
+                                                   61
+Figure 18: Performance of plug-in estimators for estimating importance in terms of AUC under Scenario
+3 (all features are independent). Clockwise from top left: empirical bias for the proposed plug-in
+estimator scaled by n1/2 ; empirical variance scaled by n; empirical coverage of nominal 95% confidence
+intervals for the true importance; and empirical type I error of the proposed hypothesis test. The
+different symbols denote the feature(s) of interest.
+
+
+
+
+                                                  62
+Figure 19: Performance of plug-in estimators for estimating importance in terms of accuracy under
+Scenario 4 (some features are correlated). Clockwise from top left: empirical bias for the proposed
+plug-in estimator scaled by n1/2 ; empirical variance scaled by n; empirical coverage of nominal 95%
+confidence intervals for the true importance; and empirical type I error of the proposed hypothesis test.
+The different symbols denote the feature(s) of interest.
+
+
+   We display the results under Scenario 4 in Figures 19 and 20. We find similar results overall to those
+
+from Scenario 3. In smaller samples, it appears to be advantageous to consider groups of correlated
+
+features rather than the features alone; this is particularly striking in Figure 20. As the sample size
+
+grows, the difference in performance diminishes.
+
+   Overall, the statistical performance of our procedure appear to be impacted more strongly by
+
+noise covariates in small samples than in large samples, regardless of the level of correlation among
+
+covariates. It is possible that this performance could be improved in small samples by including more
+
+aggressive sparsity-inducing algorithms in our ensemble. Indeed, the performance of our estimator of
+
+each VIM value depends on the rate at which the nuisance functions can be estimated, and this rate
+
+
+                                                   63
+Figure 20: Performance of plug-in estimators for estimating importance in terms of AUC under Scenario
+4 (some features are correlated). Clockwise from top left: empirical bias for the proposed plug-in
+estimator scaled by n1/2 ; empirical variance scaled by n; empirical coverage of nominal 95% confidence
+intervals for the true importance; and empirical type I error of the proposed hypothesis test. The
+different symbols denote the feature(s) of interest.
+
+
+
+
+                                                  64
+certainly slows down as the number of covariates grows, unless we can leverage stronger structure. We
+
+note that, while perhaps minimally impacting the statistical performance of our procedure, correlated
+
+features nevertheless render the interpretation of individual-variable importance more challenging: the
+
+population-level importance value itself changes in the presence of correlation. This difficulty can be
+
+partially mitigated by assessing group variable importance instead; however, this requires groups to
+
+either be known a priori (as in Section 6 of the main manuscript) or estimated, and in this latter case,
+
+further work must be done to ensure that the desired inferential properties (e.g., correct coverage) are
+
+preserved.
+
+
+
+12     Additional details for the study of an antibody against HIV-1
+
+12.1    Harmonized analysis with Magaret et al. (2019)
+
+In Figure 21, we display the results of an analysis harmonized to use the same outcome as in Magaret
+
+et al. (2019). This sensitivity outcome is the indicator of whether or not the IC50 value was right-
+
+censored. Viruses with right-censored IC50 values are thought to be resistant to VRC01, while viruses
+
+with non-censored IC50 values may instead be more sensitive to VRC01. In this case, we consider
+
+the conditional importance of each group of features relative to the remaining features. Overall, these
+
+results are largely in line with both Magaret et al. (2019) and with the results presented in the main
+
+manuscript. However, we see here that only the VRC01 binding footprint has p-value less than 0.0038
+
+(denoted by stars in Figure 21; this value results from a Bonferroni correction from testing 13 groups
+
+and an initial level of 0.05), and only for the AUC measure. The exact p-value is given by 6.1 × 10−4 .
+
+
+12.2    Library of candidate learning algorithms
+
+In this section, we describe the library of candidate learning algorithms used in our analysis replicating
+
+the results of Magaret et al. (2019). We used a wide array of flexible machine learning-based algorithms
+
+in the hope that this large library would yield a cross-validated algorithm with good predictive perfor-
+
+mance. The particular machine learning techniques included were: the lasso with logit link function
+
+(implemented in the glmnet R package), random forests (implemented in the ranger R package), and
+
+gradient boosted decision trees (implemented in the xgboost R package), each with a variety of choices
+
+for the tuning parameters. In Table 5, we provide a description of each candidate learning algorithm
+
+
+
+                                                   65
+Figure 21: Variable importance measured by accuracy (panel A) and AUC (panel B) for the groups
+defined in panel C. Stars denote importance deemed statistically significantly different from zero at
+the 0.0038 (0.05 / 13) level.
+
+
+in our library. Our final estimator is the convex combination of these algorithms chosen to minimize
+
+the ten-fold cross-validated negative log likelihood. In all cases, we adjusted for geographic region as
+
+a potential confounding variable.
+
+
+12.3    Super Learner performance
+
+We now describe the empirical performance of the Super Learner in this application for both the
+
+outcome considered in the main manuscript (IC50 < 1) and the IC50 censored outcome described above.
+
+In Table 6, we show the coefficients of each candidate learner in the final Super Learner ensemble for
+
+each outcome. The rows of this table are each of the ten cross-validation folds broken down by outcome,
+
+while the columns are the individual learners. Here, we see that for the IC50 censored outcome, the
+
+most commonly chosen algorithms in the final ensemble were boosted trees with maximum depth of
+
+2 or 4, random forests with a large number of features chosen at each split, and the elastic net with
+
+various values of α. For the IC50 < 1 outcome, the most commonly chosen algorithms were again
+
+boosted trees with maximum depth of 2, 4, or 6, random forests with a medium and large number of
+
+features chosen at each split; the elastic net was often not chosen by the Super Learner.
+
+   In Figure 22, we display the cross-validated AUC and 95% confidence intervals (obtained on the
+
+logit scale and then inverted; thus, the intervals may not be symmetric about the point estimate of
+
+                                                  66
+                   Table 5: Library of canididate learners for the Super Learner with descriptions.
+
+  Function name                Description
+  SL.mean                      intercept only regression
+  SL.xgboost1                  boosted regression trees with maximum depth of 1
+  SL.xgboost2                  boosted regression trees with maximum depth of 2
+  SL.xgboost4                  boosted regression trees with maximum depth of 4
+  SL.xgboost6                  boosted regression trees with maximum depth of 6
+  SL.xgboost8                  boosted regression trees with maximum depth of 8
+  SL.ranger.small              random forest with mtry equal to one-half times square root of number of predictors
+  SL.ranger.reg                random forest with mtry equal to square root of number of predictors
+  SL.ranger.large              random forest with mtry equal to two times square root of number of predictors
+  SL.glmnet.0                  GLMNET with lambda selected by 5-fold CV and alpha equal to 0
+  SL.glmnet.25                 GLMNET with lambda selected by 5-fold CV and alpha equal to 0.25
+  SL.glmnet.50                 GLMNET with lambda selected by 5-fold CV and alpha equal to 0.5
+  SL.glmnet.75                 GLMNET with lambda selected by 5-fold CV and alpha equal to 0.75
+  SL.glmnet.1                  GLMNET with lambda selected by CV and alpha equal to 1
+
+
+
+
+Table 6: Table of Super Learner weights for each outcome, candidate learner and cross-validation fold.
+We have removed ‘SL.’ from the name of each learner.
+ mean xgboost1      xgboost2   xgboost4   xgboost6   xgboost8   ranger.small   ranger.reg   ranger.large   glmnet.0   glmnet.25   glmnet.50   glmnet.75   glmnet.1   fold
+ IC50 censored
+    0          0        0.05       0.00       0.00       0.00             0         0.00           0.74          0         0.00        0.21        0.00       0.00     1
+    0          0        0.08       0.00       0.00       0.00             0         0.00           0.62          0         0.00        0.30        0.00       0.00     2
+    0          0        0.01       0.00       0.00       0.00             0         0.00           0.50          0         0.48        0.00        0.00       0.00     3
+    0          0        0.00       0.08       0.00       0.00             0         0.00           0.51          0         0.40        0.00        0.00       0.00     4
+    0          0        0.00       0.04       0.00       0.00             0         0.00           0.58          0         0.00        0.38        0.00       0.00     5
+    0          0        0.11       0.00       0.00       0.00             0         0.00           0.62          0         0.27        0.00        0.00       0.00     6
+    0          0        0.11       0.00       0.00       0.00             0         0.00           0.51          0         0.07        0.00        0.31       0.00     7
+    0          0        0.05       0.00       0.00       0.00             0         0.00           0.74          0         0.00        0.14        0.00       0.08     8
+    0          0        0.01       0.01       0.00       0.00             0         0.00           0.62          0         0.23        0.00        0.12       0.00     9
+    0          0        0.07       0.00       0.00       0.00             0         0.00           0.36          0         0.27        0.00        0.00       0.31    10
+ IC50 < 1
+    0          0        0.00       0.13       0.00       0.00             0         0.00           0.87          0         0.00        0.00        0.00       0.00     1
+    0          0        0.00       0.18       0.00       0.00             0         0.00           0.82          0         0.00        0.00        0.00       0.00     2
+    0          0        0.00       0.00       0.16       0.00             0         0.00           0.84          0         0.00        0.00        0.00       0.00     3
+    0          0        0.00       0.06       0.06       0.00             0         0.00           0.89          0         0.00        0.00        0.00       0.00     4
+    0          0        0.02       0.12       0.05       0.00             0         0.00           0.82          0         0.00        0.00        0.00       0.00     5
+    0          0        0.11       0.00       0.00       0.03             0         0.00           0.86          0         0.00        0.00        0.00       0.00     6
+    0          0        0.05       0.00       0.00       0.00             0         0.11           0.84          0         0.00        0.00        0.00       0.00     7
+    0          0        0.00       0.00       0.07       0.03             0         0.00           0.90          0         0.00        0.00        0.00       0.00     8
+    0          0        0.12       0.00       0.00       0.00             0         0.39           0.41          0         0.00        0.00        0.07       0.00     9
+    0          0        0.00       0.00       0.07       0.00             0         0.00           0.93          0         0.00        0.00        0.00       0.00    10
+
+
+
+
+                                                                                 67
+Figure 22: Point estimates of cross-validated AUC with 95% confidence intervals for each candidate
+learning algorithm in the Super Learner for each outcome.
+
+
+AUC) for both outcomes and each of the candidate learning algorithms in the Super Learner, along with
+
+the Super Learner ensemble algorithm and the classical cross-validated selector (the “discrete Super
+
+Learner”). We used the R package cvAUC to compute these point and interval estimates. Similarly
+
+to Magaret et al. (2019), we see that, of all the individual algorithms, random forests have the best
+
+performance in this application for both outcomes, followed by the lasso and boosted trees (for the
+
+IC50 censored outcome) and the reverse for the IC50 < 1 outcome. Additionally, we estimate the
+
+cross-validated AUC of the overall Super Learner to be 0.90 for the IC50 censored outcome, with a 95%
+
+confidence interval of (0.87, 0.94). For the IC50 < 1 outcome, we estimate the cross-validated AUC
+
+of the overall Super Learner to be 0.83 (0.80, 0.86). Magaret et al. (2019) performed an analysis for
+
+IC50 censored separately on two independent splits of these data, and obtained cross-validated AUCs
+
+of 0.86 (0.81, 0.92) and 0.87 (0.81, 0.93) on these two subsets.
+
+   In Figure 23, we display cross-validated ROC curves for the Super Learner, discrete Super Learner,
+
+and the top-performing individual algorithm. These ROC curves are similar to those presented in
+
+Magaret et al. (2019) — in both analyses, we see a large cross-validated true positive rate for each
+
+chosen cross-validated false positive rate. These results suggest that for both outcomes, our predictor
+
+is well-calibrated for discriminating between the outcome classes.
+
+
+
+
+                                                   68
+Figure 23: Cross-validated ROC curves for each outcome for the Super Learner (light green), discrete
+Super Learner (gray), and top-performing individual algorithm (random forests). IC50 censored is
+displayed in panel A, while IC50 < 1 is displayed in panel B.
+
+
+
+
+                                                69
+

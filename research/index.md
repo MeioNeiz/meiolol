@@ -9,10 +9,10 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 4 | 113 | 436 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 4 | 115 | 440 |
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 2 | 112 | 460 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 110 | 265 |
-| [stats](areas/stats.md) | estimation and recommendation methods | 11 | 200 | 1534 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 119 | 279 |
+| [stats](areas/stats.md) | estimation and recommendation methods | 14 | 225 | 1783 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 4 | 74 | 272 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 4 | 74 | 259 |
 
@@ -47,9 +47,12 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
 | answered | now | [What practices and tools make AI coding agents run, train and analyse ML experiments faster and more reliably?](questions/agent-ml-practice.md): What practices and tools make AI coding agents run, train and analyse ML experiments faster and more reliably? | 14 strong, 7 moderate, 1 weak | 29 | 15 (growing) | 16 |
+| answered | now | [Which feature importance and attribution methods hold up under correlated features, for saying how much each thing matters to win prediction?](questions/correlated-importance.md): Which feature importance and attribution methods hold up under correlated features, for saying how much each thing matters to win prediction? | 6 strong, 1 moderate | 10 | 7 (growing) | 9 |
 | answered | now | [How do you distil GPU-trained models into small CPU models that stay explainable?](questions/distil-explainable.md): How do you distil GPU-trained models into small CPU models that stay explainable? | 5 strong, 8 moderate, 1 contested | 12 | 6 (growing) | 3 |
+| answered | now | [How do you measure how much of the draft's effect on winning runs through the early-game state, and what are the pitfalls?](questions/draft-mediation.md): How do you measure how much of the draft's effect on winning runs through the early-game state, and what are the pitfalls? | 7 strong, 2 moderate | 7 | 12 (growing) | 9 |
 | answered | now | [How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games?](questions/draft-predictor-methods.md): How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games? | 11 strong, 4 moderate, 4 weak, 2 contested | 45 | 48 (growing) | 16 |
 | answered | now | [How do sports and esports analytics isolate the value of in-game events and of pairwise synergy and counters?](questions/effect-isolation.md): How do sports and esports analytics isolate the value of in-game events and of pairwise synergy and counters? | 9 strong, 4 moderate, 2 weak | 16 | 28 (growing) | 7 |
+| answered | now | [How do live win-probability models in LoL and Dota 2 predict the winner from draft and in-game state, and what beat what?](questions/live-win-probability.md): How do live win-probability models in LoL and Dota 2 predict the winner from draft and in-game state, and what beat what? | 1 strong, 6 moderate, 2 weak, 1 contested | 11 | 10 (growing) | 2 |
 | answered | now | [What neural draft models work at 100k-1M games, with what architecture, size, regularisation, training tricks and pretraining, and how much did they beat a logistic baseline on a time split?](questions/nn-draft-models.md): What neural draft models work at 100k-1M games, with what architecture, size, regularisation, training tricks and pretraining, and how much did they beat a logistic baseline on a time split? | 6 strong, 4 moderate, 4 weak, 1 contested | 23 | 22 (saturated) | 9 |
 | answered | now | [How do the best systems model a player's pre-game skill?](questions/pregame-player-skill.md): How do the best systems model a player's pre-game skill? | 5 strong, 5 moderate | 10 | 12 (growing) | 4 |
 | answered | soon | [Which team-composition features built from champion attributes (damage type mix and balance, frontline/tankiness, crowd control, range/poke vs engage, healing vs anti-heal, scaling) have measured, non-additive effects on win in LoL or Dota 2 data, how big, and how were they built?](questions/comp-attribute-features.md): Which team-composition features built from champion attributes (damage type mix and balance, frontline/tankiness, crowd control, range/poke vs engage, healing vs anti-heal, scaling) have measured, non-additive effects on win in LoL or Dota 2 data, how big, and how were they built? | 2 strong, 3 moderate, 6 weak | 12 | 25 (slowing) | 5 |
@@ -78,6 +81,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 28 questions, 423 sources, 2958 findings
-- Open leads: 119 (`josearch leads`)
+- 31 questions, 448 sources, 3218 findings
+- Open leads: 139 (`josearch leads`)
 - Lint: 0 errors, 1 warnings (`josearch lint`)

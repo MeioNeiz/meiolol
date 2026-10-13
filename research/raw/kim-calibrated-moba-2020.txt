@@ -1,0 +1,488 @@
+A Confidence-Calibrated MOBA Game Winner
+Predictor
+Dong-Hee Kim
+
+Changwoo Lee
+
+Ki-Seok Chung
+
+arXiv:2006.15521v1 [cs.LG] 28 Jun 2020
+
+Dept. of Electronics and Computer Engineering
+IUCF
+Dept. of Electronics and Computer Engineering
+Hanyang University
+Hanyang University
+Hanyang University
+Seoul, South Korea
+Seoul, South Korea
+Seoul, South Korea
+kchung@hanyang.ac.kr
+cwl30@hanyang.ac.kr
+dongheekim@hanyang.ac.kr
+
+Abstract—In this paper, we propose a confidence-calibration
+method for predicting the winner of a famous multiplayer online
+battle arena (MOBA) game, League of Legends. In MOBA games,
+the dataset may contain a large amount of input-dependent noise;
+not all of such noise is observable. Hence, it is desirable to attempt
+a confidence-calibrated prediction. Unfortunately, most existing
+confidence calibration methods are pertaining to image and
+document classification tasks where consideration on uncertainty
+is not crucial. In this paper, we propose a novel calibration
+method that takes data uncertainty into consideration. The proposed method achieves an outstanding expected calibration error
+(ECE) (0.57%) mainly owing to data uncertainty consideration,
+compared to a conventional temperature scaling method of which
+ECE value is 1.11%.
+Index Terms—Esports, MOBA game, League of Legends,
+Winning Probability, Confidence-Calibration
+
+Fig. 1. Confidence histograms of Cifar10 and LoL dataset.
+
+I. I NTRODUCTION
+League of Legends (LoL) is arguably one of the most
+popular multiplayer online battle arena (MOBA) games in the
+world. It is the game in which the red team and the blue
+team compete against each other to destroy the opponent’s
+main structure first. It was reported that the 2019 LoL World
+Championship was the most watched esports event in 2019
+[1]. Thus, from both academia and industry, forecasting the
+outcome of the game in real time has drawn lots of attention.
+However, it is a challenging problem to predict the actual
+winning probability because the outcome of the game may
+change due to various reasons.
+Many existing efforts to predict the match outcome of the
+MOBA game in real time have employed machine learning techniques to attain a good prediction accuracy [2]–[4].
+However, we claim that focusing on achieving accuracy may
+not be adequate for the eSports winner prediction; instead,
+the predictor should be able to calculate the actual winning
+probability. To achieve this goal, confidence calibration of
+neural networks [5] should be taken into consideration. Wellcalibrated confidence leads to more bountiful and intuitive
+interpretations of a given data point. For instance, it may not
+be meaningful to predict the winning team when the predicted
+winning probability is around 50%.
+How to avoid poorly calibrated models has drawn lots
+of attention among machine learning researchers. Especially,
+978-1-7281-4533-4/20/$31.00 ©2020 IEEE
+
+deep neural networks for image and document classification
+are mostly overconfident, and there have been several studies
+to overcome this overconfidence issue [5], [6]. From our
+experiments, we have observed that for over 90% of samples,
+the confidence level has turned out to be over 90% when we
+trained Cifar10 [7] by ResNet-50 [8] as shown in Fig. 1.
+Therefore, several attempts to train a confidence-calibrated
+neural network were made to overcome such overconfidence
+issue.
+To train a neural network to predict the outcome of the
+game, over 93000 matches in-game data per minute have
+been collected. Because of the uncertainty of the game, the
+confidence distribution of the LoL datasets seems evenly
+distributed contrary to Cifar10 as shown in Fig. 1. Owing to
+this characteristic, not only overconfidence but also underconfidence should become a concern. This concern makes it less
+effective to adopt conventional calibration methods to the LoL
+dataset. Hence, how to tame the uncertainty in the LoL data
+is claimed to be the key for predicting the outcome of LoL.
+In this paper, we propose a data-uncertainty taming
+confidence-calibration method for the winning probability estimation in the LoL environment. The outcome of the proposed
+method will be the winning probability of a certain team in the
+LoL game. In Section 2, we will briefly address the evaluation
+metrics and introduce some existing methods. In Section 3, we
+propose a data-uncertainty loss function and we will show how
+
+it makes the model well-calibrated. We describe the dataset we
+used and present experimental results in Sections 4. Finally,
+Section 5 concludes this paper.
+II. BACKGROUND
+In this section, we look over commonly used calibration
+metrics and related existing methods. Typically, reliability
+diagrams are used to show the calibration performance that
+corresponds to differences between the accuracy and the
+confidence level. The differences are evaluated in terms of
+either expected calibration error (ECE), maximum calibration
+error (MCE), or negative log-likelihood (NLL) [5]. These
+metrics will have lower values for better calibrated neural
+networks. The calibration method that we adopt is Platt scaling
+[9], which is a straightforward, yet practical approach for
+calibrating neural networks.
+First of all, we divide the dataset into M bins based on the
+confidence level. The interval of the mth bin is expressed as
+m
+Im = m−1
+M , M and we denote the set of samples of which
+predicted confidence level belongs to Im as Bm . We formally
+compute the accuracy and the confidence level as:
+acc(Bm ) =
+
+1
+|Bm |
+
+conf(Bm ) =
+
+1(ŷi = yi )
+
+X
+i:xi ∈Bm
+
+1
+|Bm |
+
+X
+
+(1)
+pˆi
+
+i:xi ∈Bm
+
+where 1 is an indicator function, yi and yˆi denote the true
+label and the predicted label of the ith sample, respectively,
+and pˆi denotes the predicted confidence of the ith sample. The
+reliability diagram plots the confidence level and the accuracy
+in one graph. Also, from the accuracy and the confidence level
+of each bin, ECE and MCE can be calculated where ECE
+and MCE represent the average error and the maximum error,
+respectively. ECE and MCE are computed as:
+ECE =
+
+M
+X
+|Bm |
+
+n
+
+m=1
+
+MCE =
+
+max
+
+|acc(Bm ) − conf(Bm )|
+|acc(Bm ) − conf(Bm )|
+
+NLL is another way to measure the calibration performance
+and it is computed as:
+n
+X
+NLL = −
+log p(yi |xi , θ)
+(3)
+i=1
+
+Platt scaling [9], which is a parametric calibration method,
+shows good calibration results at image and document classification tasks [5]. A method called Matrix scaling is an
+extension to the Platt scaling method. In Matrix scaling, logits
+vector zi , which denotes raw outputs of a neural network, is
+generated from the trained model. Then, a linear transformation is applied to the logits to compute the modified confidence
+level q̂i and the predicted label ŷi0 , respectively, as follows:
+q̂i = max Softmax(Wzi + b)(k)
+k
+
+ŷi0 = argmax(Wzi + b)(k)
+k
+
+k
+
+Again, the best T is found in such a way that the NLL value on
+the validation set is minimized. When T > 1, the temperature
+scaling method tries to avoid overconfidence by making the
+softmax smaller.
+III. P ROPOSED M ETHOD
+The aforementioned Platt scaling is dependent only on
+logits. Therefore, it will generate the same scaling result for
+two different inputs as long as the two inputs have the same
+logits. This limitation is not a problem when the confidence
+level is quite high as in the case of image classification shown
+in Fig. 1. For the LoL outcome prediction, however, the
+uncertainty that is inherent in the input data should be taken
+into consideration when logits are scaled for calibration. Thus,
+we propose a novel uncertainty-aware calibration method for
+training a confidence-calibrated model.
+A. Data uncertainty loss function
+In this section, we describe how uncertainty in the input
+data is measured and how the data uncertainty loss function
+builds a calibrated model. The data uncertainty is defined as
+the amount of noise inherent in the input data distribution, and
+it can be computed as follows:
+Ud (y|x) = E[Var(y|x)]
+
+(2)
+
+m∈{1,...,M }
+
+where k is the number of classes. We optimize matrix W and
+bias b in such a way that the NLL value on the validation set
+is minimized. Vector scaling is similar to Matrix scaling, but
+it is slightly different in the sense that W is restricted to be
+a diagonal matrix and b is set to be 0.
+Temperature scaling is a simplified version of Platt scaling
+method in the sense that it relies only on a single positive
+parameter T . Temperature scaling scales a ogits vector zi as
+follows:
+p̂i = max Softmax(zi /T )(k)
+(5)
+
+(4)
+
+(6)
+
+One way to measure the data uncertainty is to utilize a
+model called density network [10], [11]. First, we will discuss
+about regression tasks. Let µ(x) and σ(x) denote the mean
+and the standard deviation of logits from input x, respectively.
+Since the standard deviation is a nonnegative number, we take
+an exponential to the raw output s(x) to predict σ(x) so that
+σ(x) is defined as es(x) . With µ and σ, we assume that y is
+approximated as follows:
+y ∼ N (µ(x), σ(x)2 )
+
+(7)
+
+In our classification, we get the output of the neural network
+as logits vector µ(x) and variance σ(x)2 . Therefore, we
+estimate the probability p as follows:
+u ∼ N (µ(x), diag(σ(x)2 ))
+
+(8)
+
+p = Softmax(u)
+
+(9)
+
+Still, re-parametering is necessary to have a differentiable loss
+function because (8) is not differentiable when the backpropagation is carried out. To induce the loss function to estimate
+
+Fig. 2. Illustration of the sigmoid function to describe how data uncertainty loss function makes the neural network well-calibrated. Red arrows denote the
+winning probability variation of each situation. (a) Alleviation of overconfidence using uncertainty σ, (b) The adjusted value for calibration is determined by
+input uncertainty And (c) High confidence input should not be much swayed by uncertainty.
+
+uncertainty, a Monte Carlo integration is used to derive the
+probability as in [10]:
+u(k) ∼ µ(x) + diag(σ(x)),  ∼ N (0, I)
+E[p] ≈
+
+1
+K
+
+K
+X
+
+Softmax(u(k) )
+
+(10)
+(11)
+
+k=1
+
+where u is sampled K times. Consequently, the loss function
+includes data uncertainty as:
+Lclf = H(y, E[p])
+
+(12)
+
+Here, function H computes the cross-entropy.
+
+IV. E XPERIMENTAL RESULTS
+
+B. Calibration effects in data uncertainty loss function
+In this section, we explain why this uncertainty-based loss
+function makes the model better calibrated. Suppose there are
+two outputs as in a binary classification task:
+u(1) = µ1 + σ1
+u(2) = µ2 + σ2
+
+In our approach, the calibration effect depends on the input’s
+uncertainty. Fig.2-(b) shows another data of which output has
+(µc , σ0) and σ0 > σ. Even if this dataset has the same µc and
+the larger uncertainty σ0, the logit value is smaller to result in
+more uncertain results. Temperature scaling, however, changes
+µc all at once without considering the characteristics of each
+input. Another effect of uncertainty σ’ can be seen with respect
+to different µc values. With µc > 0, if the logit increases
+in proportion to µc 0 as shown in Fig.2-(c), the influence of
+uncertainty is mitigated. It also helps the neural network better
+calibrated, because the detrimental influence of the uncertainty
+is tamed.
+
+(13)
+
+After the Softmax layer, the probability of class 1 is derived
+as:
+
+TABLE I
+C OMPARISON BETWEEN CALIBRATION METHODS
+Method
+No calibration
+Temp. Scaling
+Vector Scaling
+Matrix Scaling
+DU Loss (Proposed)
+
+Accuracy[%]
+72.95
+72.95
+72.71
+73.05
+73.81
+
+ECE[%]
+4.47
+1.11
+4.63
+4.43
+0.57
+
+MCE[%]
+6.76
+1.87
+6.66
+6.90
+1.26
+
+NLL
+0.515
+0.505
+0.536
+0.540
+0.515
+
+p1 = exp(u(1) )/(exp(u(1) ) + exp(u(2) ))
+= 1/(1 + exp(u(2) − u(1) ))
+= 1/(1 + exp(−((µ1 − µ2 ) + σ(1 − 2 ))))
+
+(14)
+
+= Sigmoid(µc + σc )
+Here, we note that µc is an input-dependent constant and c
+will have a different value for every sampling.
+Fig. 2 shows parts of the sigmoid function around output
+x = µc . The first thing to note is that the data uncertainty loss
+function can alleviate the concerns related to the confidence
+level, notably overconfidence. When c is sampled at two
+points that have the same absolute value with the opposite
+signs, the probability p1 does not change equally. In Fig.2,
+(a) shows how the probability can change with µc and σc .
+Because of the gradient of the sigmoid function is decreasing
+gradually at µc > 0, the probability is changing steeper when
+c is sampled at the negative side compared to the sample at
+the positive side with the same absolute value.
+
+We implement a [295, 256, 256, 2] shape multi-layer
+perceptron using Pytorch to predict which team will win. The
+learning rate chosen at 1e-4 with the Adam optimizer [12]
+during 20 epochs. The size of all M bins is set to uniformly
+10. As the dataset, we collected information on 83875 matches
+as the train data and that on 10000 matches as the test data.
+The length of the input vector of the neural network is 295 and
+it consists of in-game time, champion composition, gold and
+experience difference and numbers of kills so far. All matches
+were played between the top 0.01% players.
+The reliability diagram of the trained network with the LoL
+dataset is shown in Fig. 3. The model without calibration
+shows the biggest difference between the predicted confidence
+level and the accuracy across all bins. Especially, for the
+intervals from I5 to I7 , the gap between the confidence level
+and the accuracy is bigger than 6%. Among all the Platt scaling
+techniques that we have tried, Temperature scaling turns out
+
+Fig. 3. Reliability diagrams of the trained network with a League of Legends dataset. The model without calibration shows a large gap between the predicted
+confidence and the accuracy. On the other hand, a model which is trained with the data uncertainty loss function achieves a remarkably small gap.
+
+to be the best, and our experimental results show that the
+difference is much smaller with Temperature scaling across all
+intervals. However, the model that is trained with the proposed
+calibrated confidence under data uncertainty loss consideration
+shows almost the same results.
+Table I summarizes the accuracy for all of the compared calibration methods. For brevity, the calibration with the proposed
+data uncertainty loss function turns out to be the best method
+in terms of the accuracy. The model without calibration shows
+72.95% accuracy while Matrix scaling, which shows the best
+performance among Platt scaling, achieves 73.05% accuracy.
+The proposed calibration method achieves the highest accuracy
+at 73.81%
+We also compared the calibration methods in terms of ECE,
+MCE and NLL. The results are summarized in Table I. Vector
+scaling and Matrix scaling have 4.63% and 4.43% ECE values,
+which are worse than other calibration methods. Temperature
+scaling scores 1.11% ECE that is the best score among Platt
+scaling methods. Furthermore, Temperature scaling achieves
+the best NLL value with 0.505. The proposed method achieves
+0.57% ECE and 1.26% MCE values, both of them are the
+best among all compared methods. The model trained with the
+proposed method achieves a 0.515 NLL result, and it’s slightly
+worse than Temperature scaling, but it is not a significant
+difference.
+V. C ONCLUSION
+In this paper, we propose a confidence-calibration method
+for predicting the winner of a famous multiplayer online battle
+arena (MOBA) game, League of Legends in real time. Unlike
+image and document classification, in MOBA games, datasets
+contain a large amount of unobservable input-dependent noise.
+The proposed method takes the uncertainty into consideration
+to calibrate the confidence level better. We compare the
+calibration capability of the proposed method with commonly
+used Platt scaling methods in terms of various metrics. Our
+experiments verify that the proposed method achieves the best
+calibration capability in terms of both expected calibration
+
+error (ECE) (0.57%) and maximum calibration error (MCE)
+(1.26%) among all compared methods.
+ACKNOWLEDGMENT
+This paper was supported by Korea Institute for Advancement of Technology(KIAT) grant funded by the Korea Government(MOTIE)(N0001883, The Competency Development
+Program for Industry Specialist)
+R EFERENCES
+
+[1] A.
+Starkey,
+“League
+of
+legends
+worlds
+2019
+final
+breaks
+twitch
+record
+with
+1.7
+million
+viewer,”
+Nov
+2019.
+[Online].
+Available:
+https://metro.co.uk/2019/11/11/
+league-legends-worlds-2019-final-beats-fortnite-break-twitch-record-1-7-million-view
+[2] Y. Yang, T. Qin, and Y.-H. Lei, “Real-time esports match result prediction,” arXiv preprint arXiv:1701.03162, 2016.
+[3] A. L. C. Silva, G. L. Pappa, and L. Chaimowicz, “Continuous outcome
+prediction of league of legends competitive matches using recurrent
+neural networks,” in SBC-Proceedings of SBCGames, 2018, pp. 2179–
+2259.
+[4] V. J. Hodge, S. M. Devlin, N. J. Sephton, F. O. Block, P. I. Cowling, and
+A. Drachen, “Win prediction in multi-player esports: Live professional
+match prediction,” IEEE Transactions on Games, 2019.
+[5] C. Guo, G. Pleiss, Y. Sun, and K. Q. Weinberger, “On calibration
+of modern neural networks,” in Proceedings of the 34th International
+Conference on Machine Learning-Volume 70. JMLR. org, 2017, pp.
+1321–1330.
+[6] S. Seo, P. H. Seo, and B. Han, “Learning for single-shot confidence
+calibration in deep neural networks through stochastic inferences,” in
+Proceedings of the IEEE Conference on Computer Vision and Pattern
+Recognition, 2019, pp. 9030–9038.
+[7] A. Krizhevsky, G. Hinton et al., “Learning multiple layers of features
+from tiny images,” 2009.
+[8] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image
+recognition,” in Proceedings of the IEEE conference on computer vision
+and pattern recognition, 2016, pp. 770–778.
+[9] J. Platt et al., “Probabilistic outputs for support vector machines and
+comparisons to regularized likelihood methods,” Advances in large
+margin classifiers, vol. 10, no. 3, pp. 61–74, 1999.
+[10] A. Kendall and Y. Gal, “What uncertainties do we need in bayesian
+deep learning for computer vision?” in Advances in neural information
+processing systems, 2017, pp. 5574–5584.
+[11] B. Lakshminarayanan, A. Pritzel, and C. Blundell, “Simple and scalable
+predictive uncertainty estimation using deep ensembles,” in Advances in
+neural information processing systems, 2017, pp. 6402–6413.
+[12] D. P. Kingma and J. Ba, “Adam: A method for stochastic optimization,”
+arXiv preprint arXiv:1412.6980, 2014.
+
+

@@ -1,0 +1,1643 @@
+Ukrainian Catholic University
+Bachelor Thesis
+
+Time-Slice Win Probability Prediction in
+Dota 2
+
+Author:
+Andrii Pletinka
+
+Supervisor:
+Dr. Taras Firman
+
+A thesis submitted in fulfillment of the requirements
+for the degree of Bachelor of Science
+in the
+Department of Computer Sciences and Information Technologies
+Faculty of Applied Sciences
+
+Lviv 2025
+
+i
+
+“Now the general who wins a battle makes many calculations in his temple ere the
+battle is fought. The general who loses a battle makes but few calculations beforehand.
+Thus do many calculations lead to victory, and few calculations to defeat: how much
+more no calculation at all! It is by attention to this point that I can foresee who is
+likely to win or lose. ”
+Sun Tzu
+
+ii
+
+UKRAINIAN CATHOLIC UNIVERSITY
+Faculty of Applied Sciences
+Bachelor of Science
+Time-Slice Win Probability Prediction in Dota 2
+by Andrii Pletinka
+
+Abstract
+Estimating win probabilities in multiplayer online battle arena games like Dota 2 provides actionable insights for players on in-game events. However, it remains challenging due to high-dimensional and rapidly evolving game states. This thesis presents a
+two-stage, time-slice-based machine learning pipeline for estimating teams’ win probabilities throughout the game. First, a Transformer-based encoder consumes sequences
+of fixed-interval snapshots of the game states. Then, it is trained in a self-supervised
+manner on the next token prediction task to internalize game dynamics. Second, a
+lightweight MLP classifier maps the final embedding given by the encoder to a winning probability of one of the teams. The combined model achieves high accuracy and
+well-calibrated probability estimates, giving responsive win-probability outputs that
+adapt to pivotal in-game events such as team fights, objective captures, and dramatic
+comebacks.
+
+iii
+
+Acknowledgements
+I want to express gratitude to my project advisor, Dr. Taras Firman, for his invaluable
+guidance and insightful feedback throughout my work on this research. His expertise
+and encouragement were instrumental in shaping both the technical direction and
+broader vision of this thesis.
+I also extend heartfelt thanks to my parents for providing me with the possibility
+of pursuing a degree and to my friends Mykhailo and Dimitrii for their continuous
+support throughout my academic journey. Their encouragement made the challenges
+far more manageable and the successes even more rewarding.
+
+iv
+
+Contents
+Abstract
+
+ii
+
+Acknowledgements
+
+iii
+
+1 Introduction
+1.1 Motivation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.2 Domain Overview . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.2.1 What is Dota 2 . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.2.2 Dota 2 and Analytics . . . . . . . . . . . . . . . . . . . . . . . .
+1.3 Problem Definition . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.4 Aim and Objectives . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1.5 Player Skill Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+1
+1
+1
+1
+1
+3
+3
+4
+
+2 Theoretical Background
+2.1 Game Mechanics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2.2 Transformer models . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2.3 Multi-Layer Perceptron Classifier . . . . . . . . . . . . . . . . . . . . .
+2.4 Sequence Modeling and Next Token Prediction . . . . . . . . . . . . .
+
+5
+5
+6
+6
+6
+
+3 Data
+3.1 Collecting Match Data . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3.2 Processing Replay Files . . . . . . . . . . . . . . . . . . . . . . . . . .
+3.3 Developing a Replay Parser . . . . . . . . . . . . . . . . . . . . . . . .
+3.4 Parsed Replays Postprocessing . . . . . . . . . . . . . . . . . . . . . .
+3.5 Feature Engineering . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+8
+8
+8
+9
+10
+10
+
+4 Proposed Solution
+4.1 System Architecture Overview . . . . . . . . . . . . . . . . . . . . . . .
+4.2 Transformer Time–Slice Sequence Encoder Model . . . . . . . . . . . .
+4.2.1 Input Representation . . . . . . . . . . . . . . . . . . . . . . . .
+4.2.2 Positional Encoding . . . . . . . . . . . . . . . . . . . . . . . .
+4.2.3 Transformer Encoder . . . . . . . . . . . . . . . . . . . . . . . .
+4.2.4 Decoder for Next-State Prediction . . . . . . . . . . . . . . . .
+4.2.5 Embedding Extraction and Outcome Head . . . . . . . . . . . .
+4.2.6 Parameter Count . . . . . . . . . . . . . . . . . . . . . . . . . .
+4.2.7 Design Rationale . . . . . . . . . . . . . . . . . . . . . . . . . .
+4.3 Win Probability Predictor . . . . . . . . . . . . . . . . . . . . . . . . .
+
+12
+12
+13
+13
+13
+13
+14
+14
+14
+14
+14
+
+5 Experiments and Results
+5.1 Training Models . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+5.1.1 Transformer . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+5.1.2 MLP . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+5.2 Model Scores Calibration . . . . . . . . . . . . . . . . . . . . . . . . .
+
+16
+16
+16
+16
+16
+
+v
+5.3
+
+Inference Quality Assessment . . . . . . . . . . . . . . . . . . . . . . .
+5.3.1 Definition of a Good Probability Curve . . . . . . . . . . . . . .
+5.3.2 Case Studies . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+Case 1: Early-game uncertainty, Event responsiveness. . . . . .
+Case 2: Comeback detection. . . . . . . . . . . . . . . . . . . .
+Case 3: Monotonic trends. . . . . . . . . . . . . . . . . . . . . .
+
+17
+17
+18
+18
+20
+21
+
+6 Conclusions
+6.1 Achievements . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+6.2 Room for Improvement . . . . . . . . . . . . . . . . . . . . . . . . . . .
+6.3 Final Thoughts . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+22
+22
+22
+23
+
+Signatures
+
+23
+
+A Appendix
+A.1 Example Time-Slice Snapshot . . . . . . . . . . . . . . . . . . . . . . .
+A.2 Training Loss Curves . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+A.3 Code Repository . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+24
+24
+26
+27
+
+Bibliography
+
+28
+
+vi
+
+List of Figures
+1.1
+1.2
+
+Dota 2 Map . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+In-client graph for Dota Plus subscribers . . . . . . . . . . . . . . . . .
+
+2
+2
+
+4.1
+4.2
+
+Diagram of the pipeline. . . . . . . . . . . . . . . . . . . . . . . . . . .
+Block diagram of the Transformer. . . . . . . . . . . . . . . . . . . . .
+
+12
+13
+
+5.1
+5.2
+5.3
+5.4
+5.5
+5.6
+5.7
+
+Example of the uncalibrated probability curve. . . . . . . . . . . . . .
+Calibrated probability curve. . . . . . . . . . . . . . . . . . . . . . . .
+Win probability graph for match 8156671486. . . . . . . . . . . . . . .
+Dota Plus graph for match 8156671486. . . . . . . . . . . . . . . . . .
+Win probability graph for match 8154891997. . . . . . . . . . . . . . .
+Dota Plus graph for match 8154891997. . . . . . . . . . . . . . . . . .
+Win probability graph for match 7963873762. . . . . . . . . . . . . . .
+
+16
+17
+19
+19
+20
+20
+21
+
+A.1 Training and validation loss across 11 epochs. . . . . . . . . . . . . . .
+A.2 Training and validation loss across 3 epochs. . . . . . . . . . . . . . . .
+
+26
+27
+
+vii
+
+List of Abbreviations
+DotA
+MOBA
+LSTM
+MLP
+MSE
+GELU
+BCE
+
+Defense of the Ancients
+Multiplayer Online Battle Arena
+Long Short-Term Memory
+Multi-layer Perceptron
+Mean Squared Error
+Gaussian Error Linear Unit
+Binary Cross Entropy
+
+1
+
+Chapter 1
+
+Introduction
+1.1
+
+Motivation
+
+During the 21st century, computer games have become one of the top ways for people
+to spend their free time. They have evolved from simple pastimes into a global cultural
+phenomenon, captivating millions of players across all ages and demographics.
+Beyond casual entertainment, many individuals pursue gaming as a competitive
+endeavor, encouraging them to refine their gameplay by improving their reflexes, teamplay, and critical thinking abilities. This competitive spirit has given rise to e-sports
+and professional gaming tournaments that gather full stadiums of people, attract substantial sponsorship, and have significant media coverage. As competition grows, both
+professional and amateur players seek ways to surpass skill thresholds, forcing them to
+adapt and utilize data-driven training methods. Simply playing the game is no longer
+sufficient, making targeted practice and analysis of performance patterns crucial in
+achieving meaningful improvements. To improve strategic decision-making, a player
+should understand exactly why a match has ended in a win or a loss.
+This thesis proposes a way of using in-game metrics to analyze matches in Dota 2
+1 and estimating winning probabilities throughout the game, highlighting key events
+that happened during the match, offering players a way to extract actionable insights
+to accelerate their skill development and competitive success.
+
+1.2
+
+Domain Overview
+
+1.2.1
+
+What is Dota 2
+
+Dota 2 is a computer game of the MOBA genre, where two teams, Radiant and Dire,
+consisting of 5 players, face each other with the goal of defeating the opposing team.
+Each match takes place on a square map divided into three lanes, with the objective
+of destroying the enemy’s Ancient, both of which are placed in the opposite corners of
+the map, while protecting their own. The game requires strategic thinking, teamwork,
+and individual skills, as players select unique heroes with special abilities to outsmart
+and overpower their opponents, leading to a victory.
+
+1.2.2
+
+Dota 2 and Analytics
+
+Given the strategic depth of Dota 2, various analytics tools are available to help
+interpret the game. In-client tools provide basic graphs for net worth (accumulated
+gold) and experience advantage, and for Dota Plus2 subscribers, a win probability
+1
+2
+
+Dota 2 Webpage: https://www.dota2.com/
+Dota Plus: https://www.dota2.com/plus/
+
+2
+
+Chapter 1. Introduction
+
+Figure 1.1: Dota 2 Map
+
+graph, indicating each team’s win chances over time, either after the game or in realtime for spectators.
+
+Figure 1.2: In-client graph for Dota Plus subscribers
+
+On the other hand, third-party tools for Dota 2 analytics are also widely used
+among Dota 2 players. For example, websites like Dotabuff3 or Stratz4 offer their
+users access to detailed match statistics, player performance metrics, hero trends,
+and various insights that help players analyze and further improve their gameplay.
+OpenDota5 is also a commonly used open-source service that provides free access
+to match records and statistics by extracting data from replay files. These tools
+underline the community’s interest in analyzing Dota 2 matches but do not provide
+win probability estimations.
+3
+
+Dotabuff: https://www.dotabuff.com/
+Stratz: https://www.stratz.com/
+5
+OpenDota: https://www.opendota.com/
+4
+
+Chapter 1. Introduction
+
+1.3
+
+3
+
+Problem Definition
+
+Win probability prediction in Dota 2 is the task of estimating the likelihood that a
+given team will win the match based on the current state of the game. Formally,
+at any discrete time t in a match, given the sequence of game states up to t, the
+goal is to compute P (win|seqt ) for one of the teams (e.g., Radiant). This problem is
+challenging because Dota 2’s game state is high-dimensional, and the game’s dynamics
+are complex and nonlinear. Sometimes, small advantages can snowball into significant
+leads, and one team fight can turn the tables and drastically reverse the lead.
+Existing systems like the Dota Plus win probability graph use undisclosed proprietary models to make these predictions. The way to address this problem is to use
+time-slice sequences of game data as input and predict the outcome probability as
+output. A core challenge is capturing the temporal aspect of how the game evolves
+over time. Instead of treating each state in isolation, the model must understand
+sequential patterns. Therefore, the problem can be seen as a sequence modeling task
+with a prediction target at the end of the sequence representing a team’s probability
+of winning the game.
+
+1.4
+
+Aim and Objectives
+
+The primary aim of this work is to develop a machine learning-based system that
+predicts win probabilities throughout a Dota 2 match and to do so in a way that is
+accurate, interpretable, and accessible. To achieve this aim, the following objectives
+are set:
+• Data Collection and Processing
+Gather a substantial dataset of Dota 2 replays, parse them into time-slice data
+containing information about the state of the game at the time of the snapshot,
+and structure it in a format suitable for machine learning.
+• Feature Engineering
+Using parsed data provided by the game engine, turn raw statistics into features
+with more descriptive power, such as turning positions of heroes on the map into
+features that describe the whole team coordination.
+• Developing a Modeling Approach
+Develop a sequence modeling approach for win probability estimation by utilizing a neural network to encode sequences of game states that will capture the
+temporal dynamics of Dota 2 matches. Then, using encoded sequences, train a
+supervised classifier that outputs the probability of the Radiant team winning.
+• Benchmarking and Evaluation
+Evaluate the model’s performance against existing tools.
+By successfully meeting the outlined objectives, this project will create a proofof-concept analytics tool for Dota 2. The goal is not only to accurately predict match
+outcomes but also to improve players’ learning experiences by offering an accessible
+method for detailed game analysis.
+
+Chapter 1. Introduction
+
+4
+
+Most research on Dota 2 outcome prediction follows two main lines. Early draft–only
+studies encode each hero as a one-hot vector and apply simple classifiers such as Naı̈ve
+Bayes, yielding roughly 60–70% accuracy [9].
+Later work expands those vectors with hand-engineered hero attributes and treebased models, pushing pregame accuracy past 70% [10]. Another works use live game
+state data: recurrent models that ingest minute-by-minute game state achieve 90%
+accuracy within the first few minutes of play [1].
+The newer approach treats the hero draft order as a sentence, learning wordto-vector hero embeddings and using attention-based LSTMs for modest gains over
+earlier draft-only baselines [8]. Overall, accuracy improves as representations move
+from static hero rosters to richer descriptors and real-time game dynamics.
+Some authors also developed a framework for time-slice evaluation of MOBA games
+and applied it to Dota 2, comparing it to Dota Plus, assistant, and claimed to achieve
+a slightly higher prediction accuracy [11]. However, their modeling approach does
+not capture the game’s temporal dependencies, as they treat game snapshots independently and use a discounted evaluation function, which depends both on who will
+win and how much time remains until the game ends instead of the ground truth for
+training their model.
+OpenAI [5] trained a self-play agent that achieved superhuman performance, whose
+LSTM backbone was augmented with a win probability estimation head, producing
+well-calibrated victory estimates during matches. They also defined a rich observation
+space consisting of global timers, per-hero stats, per-unit positions, item cooldowns,
+and more. Their success reveals two lessons: sequence models can track long-term
+credit assignments, and a broad, structured feature set supports accurate win forecasts.
+
+1.5
+
+Player Skill Analysis
+
+Drachen et al. [2] provided a large-scale study of how team cohesion and frequency of
+changing zones correlate with players’ skills in Dota 2. By clustering hero positions,
+they showed that professional teams maintain tighter formations and switch map
+zones more often than their lower-tier peers. These spatial patterns often prepare the
+ground for decisive team fights or objective trades, suggesting that explicit spatial
+metrics, such as average pairwise hero distance, could provide valuable information to
+models estimating win probability.
+Pengmatchaya and Natwichai [6] proposed a pipeline that uses OpenDota to extract three types of features: basic stats (kills, deaths, assists), tactical decisions
+(team-fight participation, lane efficiency), and spatio-temporal coverage (map zones
+change, team spread) to predict a player’s skill tier. Their results show that richly
+engineered behavioral and spatial descriptors substantially boost the quality of predictions. Although their modeling target is estimating player skill level rather than game
+outcome, many of their features are directly relevant to estimating on-field advantage
+since higher-skilled teams transform map control into game lead more reliably.
+These studies collectively show that rich and time-aware representations of game
+states and player behaviors drive the strongest predictions in Dota 2 analytics. Beyond
+outcome prediction, explicit modeling of team cohesion and spatial spread demonstrate that both map control and small tactical decisions are crucial. Finally, the
+power of sequence models and broad observation spaces are highlighted as beneficial
+for good win estimates.
+
+5
+
+Chapter 2
+
+Theoretical Background
+2.1
+
+Game Mechanics
+
+The analysis conducted in this work is based on version 7.37 of Dota 2. At this point
+in the game’s evolution, players can choose from 124 unique heroes and purchase over
+200 items, creating many strategic possibilities.
+In addition to the primary objective of destroying the enemy Ancient, players
+must account for a variety of secondary objectives across the map, including towers,
+barracks, active runes, and the powerful neutral boss Roshan, killing which gives a
+significant advantage by providing a second life for a single player as well as gold and
+experience for the whole team.
+Each player is commonly assigned to a role such as carry, support, offlaner, and
+midlaner, and success depends not only on individual skill but also on effective team
+composition and coordination. Throughout the game, players earn experience to level
+up their heroes and accumulate gold to purchase items that make them stronger.
+The Dota 2 map features a dynamic day and night cycle, which alters map visibility
+throughout the game. Players must utilize observer and sentry wards, objects that
+allow vision control across the environment, which is critical for map dominance by
+providing additional information.
+During the match’s early stages, players participate in the laning phase, where they
+position themselves along one of the three lanes: top, middle, or bottom. Each lane is
+defended by three towers sequentially placed along the lane and waves of computercontrolled units, known as creeps, that spawn every 30 seconds at the beginning of the
+lane. Players aim to secure "last hits" on enemy creeps to gain gold while denying the
+same to opponents, all while avoiding taking excessive damage from enemy heroes.
+The laning phase is critical for setting the game’s pace, allowing players to accumulate
+resources, and establishing early advantages, allowing a better map control.
+In addition to lane creeps, the map contains camps of neutral creeps located in
+the jungle areas between lanes. These neutral units are not aligned with either team
+and provide opportunities for heroes to farm gold and experience outside the lanes.
+Contesting and controlling access to jungle areas is thus a significant part of the
+mid-game and late-game stages.
+Moreover, resource management is amplified through active runes that spawn at
+fixed intervals at specific locations on the river, dividing the map into two halves.
+These runes provide powerful temporary effects, such as regeneration, double damage,
+or invisibility, and securing them can swing fights in a team’s favor.
+Effectively managing laning efficiency, jungle control, vision placement, and securing objectives shapes the gameplay of Dota 2. Teams that can coordinate their
+movements, optimize resource collection, and take advantage of their opponents’ errors are often rewarded with success. The intricacy of Dota 2 arises from its vast
+selection of heroes, diverse range of items, and the ongoing necessity for real-time
+
+Chapter 2. Theoretical Background
+
+6
+
+strategic thinking. Each match introduces unique situations, compelling players to
+constantly adjust their strategies.
+
+2.2
+
+Transformer models
+
+Transformer models, introduced in the landmark paper "Attention is All You Need"
+[7], are the dominant architecture for sequence modeling tasks across various fields,
+including natural language processing, computer vision, and time-series prediction.
+At the core of the Transformer lies the attention mechanism, which allows the
+model to weigh the importance of different elements within a sequence when making predictions. In particular, the self-attention operation computes a weighted sum
+of all input elements for each position in the sequence, enabling the model to focus
+on relevant input parts dynamically regardless of their distance. This approach contrasts with recurrent neural networks, which process sequences sequentially and often
+struggle with long-range dependencies due to vanishing gradients.
+Each Transformer layer typically consists of two main components: a multi-head
+self-attention module and a position-wise feed-forward network. The multi-head mechanism allows the model to attend to information from different representation subspaces simultaneously, enhancing its ability to model complex relationships.
+For sequence modeling, the attention mechanism provides a key advantage of capturing both local and global relationships, making Transformers particularly effective
+for tasks where the entire sequence context is important for accurate prediction.
+In the context of modeling time-evolving game states, such as in Dota 2, the Transformer architecture is well-suited due to its capacity to model complex, non-linear
+interactions between multiple entities across consecutive time steps. By encoding the
+state of the game at each moment and allowing attention across past observations,
+the model can infer patterns and predict future outcomes with high fidelity.
+
+2.3
+
+Multi-Layer Perceptron Classifier
+
+A Multilayer Perceptron (MLP) is a feed-forward neural network for classification
+and regression tasks. It consists of multiple layers of neurons: an input layer that
+takes features, one or more hidden layers that perform nonlinear transformations, and
+an output layer that produces the final prediction. Each neuron in a layer is fully
+connected to the neurons in the next layer, and an activation function like ReLU is
+applied to introduce non-linearity. In theory, an MLP with even a single hidden layer
+can model any continuous relationship between inputs and output given sufficient
+neurons.
+In the context of this thesis, the MLP plays the role of the win probability predictor
+once given an encoded representation of the game state. After the transformer has
+processed a sequence of time slices and produced a feature vector for the current state,
+this vector is fed into the MLP. The MLP then outputs a single value between 0 and
+1, representing the probability that the Radiant team will win the match. A value
+near 1 means Radiant will almost certainly win, and near 0 means that Dire is likely
+to win.
+
+2.4
+
+Sequence Modeling and Next Token Prediction
+
+Predicting win probability in a time-sliced approach can be viewed through the lens
+of sequence modeling. In sequence modeling, whether applied to time series or human
+
+Chapter 2. Theoretical Background
+
+7
+
+language, there is one common training strategy for next token prediction. Here, the
+model is trained to use an observed sequence of game states to predict the next state.
+Each time-slice’s game state is treated as a token in this setting. The Transformer
+is trained to predict the state at time t given the states at times t−c, t−c−1, . . . , t−1,
+where c is the size of the context window.
+Once pretraining via next-token prediction is complete, only the Transformer’s
+encoder is retained to encode the input sequence into embeddings. These embeddings
+are assumed to encapsulate the critical factors of game dynamics that determine
+future state evolution and features that should also be highly informative for win/loss
+probability estimation.
+This approach mirrors the training of large language models, which learn representations through next-word prediction and are subsequently fine-tuned or used for
+classification by leveraging those learned embeddings. In the proposed pipeline, the
+pre-trained Transformer embeddings feed into an MLP classifier (see Section 2.3),
+which is then trained on the actual match outcome.
+Next-token training provides a form of self-supervised—pretraining on replay data.
+By mastering short-term forecasting, the model gains a rich internal understanding of
+temporal patterns in Dota 2, enabling the supervised probability estimation task to
+be more data efficient and accurate.
+
+8
+
+Chapter 3
+
+Data
+3.1
+
+Collecting Match Data
+
+The primary data source for this work is the OpenDota API1 because of its extensive documentation and open-source nature. OpenDota allows API users to send
+SQL queries addressed directly to their database containing public data on recorded
+matches of Dota 2, making it easy to access necessary records.
+The collected dataset contains 12000 pro league matches played on the 7.37 version
+of the game. Each sample contains the following fields:
+• match_id: A unique identifier is assigned to each match. It is used to distinguish individual games.
+• match_seq_num: The sequence number of the match relative to all matches
+played globally reflects the chronological order in which games were recorded.
+• replay_salt: A number associated with the match that, together with the
+match ID, can be used to retrieve the correct replay file.
+• patch: The version of the game at the time the match was played. Game
+patches introduce balance changes, new features, and bug fixes, and can significantly affect gameplay dynamics.
+• game_mode: A numerical code indicating the type of match played.
+• duration: The total length of the match in seconds, measuring how long the
+game lasted from start to finish.
+• start_time: The Unix timestamp marking when the match began.
+• cluster: The server cluster ID where the match was hosted corresponds to a
+specific geographical region.
+• radiant_win: A boolean value indicating the outcome of the match, where
+true means the Radiant team won and false means the Dire team won.
+
+3.2
+
+Processing Replay Files
+
+The replay files need to be downloaded and parsed to extract in-game match data.
+Having match ID, replay salt, and server cluster ID, a URL of where the compressed
+replay file is stored can be constructed. After downloading the file, it must be decompressed and parsed using a specialized replay parser that can interpret Dota 2’s
+engine internal messages.
+1
+
+OpenDota API Documentation: https://docs.opendota.com/
+
+Chapter 3. Data
+
+9
+
+The replay contains a chronological sequence of game state updates, player actions,
+and system events. By parsing these updates, detailed information about the match at
+different points in time can be reconstructed, such as player positions, hero statuses,
+item inventories, gold and experience values, objectives on the map, and more.
+
+3.3
+
+Developing a Replay Parser
+
+There are some existing Dota 2 replay parser implementations, for example, OpenDota’s parser2 , but none of them had the required functionality of extracting structured sequential game state snapshots. Therefore, it was necessary to implement a
+custom solution. For this task, a dedicated parser was developed using the open-source
+clarity parsing framework3 . The resulting implementation had capabilities of reading every in-game tick4 and aggregating the gathered data into structured sequential
+snapshots of the game state.
+Each parsed replay is serialized as a single JSON object whose top-level keys
+correspond to in-game time in seconds. Consecutive keys differ by 30 since it was
+a chosen frequency for sampling the state of the game. For every timestamp t, the
+value is a dictionary with two symmetric entries, radiant and dire, each encoding
+the complete state of the respective team:
+• teamId: internal identifier (2 for Radiant, 3 for Dire).
+• players: an array of five player objects. Each player object stores
+– static identifiers (key, steamId, name, heroId, heroVariant);
+– economy-related features (networth, totalGold, currentGold);
+– progression features (level, xp, kills, deaths, assists, lastHits, denies);
+– combat metrics (heroDamage, towerDamage, damageTakenPreReduction,
+damageTakenPostReduction, healing, teamfightParticipation);
+– status flags (lifeState, respawnSeconds, buybackCooldown);
+– ward placing statistics (obsPlaced, senPlaced);
+– spatial coordinates (x, y) in Dota 2’s internal map system;
+– inventory: a list of up to six item slots, each storing id, slot index, and
+(where applicable) charge counts.
+• buildings: a dictionary containing the states of every destroyable structure
+belonging to the corresponding team: 11 towers, 3 pairs of barracks, and the
+Ancient. Each entry records the remaining health of the structure.
+• observerWards: a list of ward locations, each given by (x,y) coordinates.
+• totalCampsStacked, totalRunePickups, totalTowersKilled, totalRoshansKilled, totalSmokesUsed: cumulative team-level counters up to the given
+time-slice t.
+This schema yields a time-ordered sequence of raw game state snapshots, enabling
+downstream models to access local per-hero and global team and objectives features.
+2
+
+OpenDota Replay Parser Implementation: https://github.com/odota/parser
+Skadistats Clarity: https://github.com/skadistats/clarity
+4
+Dota 2 advances at the frame rate of 30 ticks per second.
+3
+
+10
+
+Chapter 3. Data
+
+3.4
+
+Parsed Replays Postprocessing
+
+After parsing the replay files, they still contain some redundant information that
+does not contain descriptive power for estimating winning probabilities, like players’
+account names or names of players’ hero units that carry essentially the same information as the hero IDs. These keys are removed from the game state representations, and
+only essential informative fields suitable for modeling remain. Removed keys include:
+• From each player object:
+– key, value, team: internal slot indices and team flags
+– name, steamId: account identifiers
+– heroVariant, unit: redundant hero-model strings
+– damageTakenPreReduction: only post-reduction damage is kept
+– slot, num_charges: inventory items metadata, keeping only the item’s
+unique name identifier
+• From the buildings dictionary:
+– name, team: structure identifiers and team flags, leaving only the building’s
+HP
+Now, all remaining fields correspond directly to numeric features and categorical
+IDs and are ready to be fed into the predictive model.
+
+3.5
+
+Feature Engineering
+
+In addition to the raw numeric fields, every team snapshot is augmented with spatial
+and vision-related summary statistics that capture team cohesion and observer ward
+coverage. Let each team’s surviving hero positions at time t be
+X = { xi = (xi , yi ) ∈ R2 : hero i is alive}.
+Let the set of observer-ward positions be
+W = { wj = (wjx , wjy ) ∈ R2 }.
+The following derived features are defined the next way:
+
+1. Pairwise hero distances. Compute all n2 Euclidean inter-hero distances
+dij = ∥xi − xj ∥2 =
+
+q
+(xi − xj )2 + (yi − yj )2 ,
+
+xi , xj ∈ X .
+
+Then, form the team-level statistics:
+pdistMean =
+
+X
+2
+dij ,
+n(n − 1)
+
+(3.1)
+
+i<j
+
+pdistMax = max dij ,
+i<j
+
+s
+pdistStd =
+
+X
+2
+2
+dij − pdistMean .
+n(n − 1)
+i<j
+
+(3.2)
+
+(3.3)
+
+11
+
+Chapter 3. Data
+These capture how spread out or clustered the team is on the map.
+2. Team Centroid to Ward average distance. Let the hero centroid be
+n
+1X
+x̄ =
+xi (or 0 if n = 0). Then
+n
+i=1
+
+|W|
+
+1 X
+∥x̄ − wj ∥2 .
+centroidWardMean =
+|W|
+j=1
+
+This measures the average distance from the team’s center to all wards, reflecting
+how the team plays around its vision.
+3. Hero-ward nearest distances. Form the distance matrix D ∈ Rn×m with
+Dij = ∥xi − wj ∥2 . For each hero i, let δi = minj Dij . Then compute
+n
+
+hwMean =
+
+1X
+δi ,
+n
+i=1
+
+hwMin = min δi ,
+i
+
+hwMax = max δi .
+i
+
+These quantify how well each hero is guarded by nearby wards, capturing local
+vision support. Whenever either set is empty, hero-ward features default to the
+map diagonal length of 256 units, signaling maximal separation.
+Why these features are effective.
+• Team cohesion: closely grouped teams can coordinate more effectively in fights,
+while highly dispersed teams risk being picked off.
+• Vision coverage: good ward placement near the team’s centroid and close to
+individual heroes reduces the chance of ambushes and grants the team better
+control of the area where they are currently located.
+Altogether, these engineered spatial and vision metrics complement raw economy and
+combat stats, yielding a more informative feature set.
+Before downloading and parsing the replay files, 718 of the collected matches,
+which had lengths less than 20 or more than 60 minutes, were filtered out. Also,
+replays of 15 files could not be accessed for downloading, leaving 11267 parsed replays
+prepared for model training. A final processed time-slice snapshot example can be
+seen at A.1.
+
+12
+
+Chapter 4
+
+Proposed Solution
+4.1
+
+System Architecture Overview
+
+The proposed solution pipeline consists of a Transformer-based machine learning
+model for feature extraction and an MLP for win/lose classification. Figure 4.1 shows
+the overall pipeline diagram.
+self-supervised pretraining
+
+Time-slice
+Sequence
+
+Transformer
+Encoder
+
+Latent
+Embedding ht
+
+MLP
+Classifier
+
+Win Prob.
+p̂t
+
+Figure 4.1: Diagram of the pipeline.
+
+The pipeline proceeds as follows:
+1. Input A Dota 2 replay is already parsed into a sequence of time-slice feature
+vectors.
+2. Transformer Encoder A sliding window of length c = 20 is fed to the Transformer with positional encodings. Through self-attention layers, it produces the
+embeddings ht ∈ Rd for each time slice, turning sequential game state data into
+embeddings that serve as a compact representation of the game’s situation.
+3. MLP Classifier ht−19 , . . . , ht−1 are passed through a Multi-Layer Perceptron
+with a final sigmoid output:
+p̂t = σ(todo)
+where p̂t ∈ (0, 1) is the predicted Radiant win probability at time t.
+4. Output The probability p̂t can be reported numerically or plotted over time to
+form a win-probability curve.
+5. Training Phases
+• Pretraining: The Transformer is trained on the next token prediction task
+using unlabeled sequences of size c.
+• Fine-tuning: The MLP is trained on labeled match outcomes, given the
+last window of size c of the match and ground truth of which team had
+won the game, using the frozen Transformer’s encoder by treating it as a
+feature extractor.
+This modular design captures temporal patterns via the Transformer and yields a
+direct probability output via the MLP. A 20-slice window, corresponding to 10 minutes
+
+13
+
+Chapter 4. Proposed Solution
+
+of in-game time, balances recency and long-term trends. Shorter windows risk missing
+slow burns, while longer windows increase complexity and memory usage. Empirically,
+a 20-slice window proved to be a good choice.
+
+4.2
+
+Transformer Time–Slice Sequence Encoder Model
+
+This section details the custom Transformer implementation. The model converts a
+sequence of c time-slice feature tensors into a fixed-dimensional embedding ht ∈ Rd
+for the latest slice and, during pretraining, predict the numeric fields of the next slice
+(Figure 4.2).
+Next slice prediction
+
+Per-slice Features
+
+Hero & Item
+Embeddings
+
+Input
+Projection
+
+Transformer
+Encoder
+
+Transformer
+Decoder
+
+Prediction
+Head
+
+Figure 4.2: Block diagram of the Transformer.
+
+4.2.1
+
+Input Representation
+
+• Heroes. Each of the ten player heroes is mapped to an index h ∈ {0, . . . , H−1}
+and embedded into a vector representation via ehero ∈ Rdh with dh =16.
+• Items. Six inventory slots are embedded independently (di =8) and concatenated, giving 6di dimensions per hero. A special padding is used if a player has
+less than six items in their inventory.
+• Numeric player features. 19 scalar statistics are appended unchanged.
+• Numeric team features. 31 scalar team-level features are concatenated for
+Radiant and Dire.
+Hence the per–hero categorical sub-vector is dh + 6di = 16 + 48 = 64 dimensions, the
+full per–hero feature length is 64 + 19 = 83, and the entire flattened input for one
+time-slice is
+Dslice = 10 × 83 + 2 × 31 = 892.
+A linear projection Win ∈ Rd×892 with d=512 maps each slice to the Transformer
+dimension.
+
+4.2.2
+
+Positional Encoding
+
+Fixed sinusoidal encodings [7] are pre-computed:
+PE(t,2k) = sin
+
+t
+,
+100002k/d
+
+PE(t,2k+1) = cos
+
+t
+.
+100002k/d
+
+They are added to the projected slice vectors and stored in a non-trainable buffer for
+fast lookup.
+
+4.2.3
+
+Transformer Encoder
+
+An 8-layer Transformer encoder is used, each layer having multi-head self-attention
+(nhead =16) followed by a GELU-activated[4] feed-forward block (dff =1024). Layer
+Normalization and residual connections follow the original design.
+
+14
+
+Chapter 4. Proposed Solution
+
+4.2.4
+
+Decoder for Next-State Prediction
+
+During self-supervised pre-training a single start-of-slice token s ∈ Rd is placed at
+the beginning of the sequence and fed through the 8-layer Transformer decoder that
+attends to the encoder memory. Its last output token zt is passed through a linear
+head Wpred ∈ Ro×d , o = 10 × 19 + 2 × 31 = 252, to regress the numeric fields of
+time t+1 using MSE.
+
+4.2.5
+
+Embedding Extraction and Outcome Head
+
+For outcome prediction, the decoder is removed and only the encoder memory vector
+of the last slice is used,
+
+ht = Encoder xt−c+1 : t last ,
+which serves as a learned representation of the current match state.
+
+4.2.6
+
+Parameter Count
+
+The model counts a total of |θ| = 42 650 364 parameters. The major contributions
+are:
+Hero embeddings: H × dh ,
+Item embeddings: V × di ,
+Input projection: Dslice × d,
+
+
+Transformer encoder: N × 4 d2 + 2 d dff ,
+
+
+Transformer decoder: N × 6 d2 + 2 d dff ,
+Prediction head: d × o,
+with parameters
+H = 125,
+
+dh = 16,
+
+V = 326,
+
+N = 8,
+
+di = 8,
+
+dff = 1024,
+
+Dslice = 892,
+
+d = 512,
+
+o = 252.
+
+Plugging in these values yields a total of |θw | = 39 242 240 parameters and the remaining number corresponds to the bias parameters.
+
+4.2.7
+
+Design Rationale
+
+Self-attention captures long-range dependencies more effectively than recurrent models, and the concatenation strategy preserves explicit per-hero and per-team granularity while allowing the Transformer to learn cross–entity dependencies through
+self-attention. A relatively deep encoder plus moderate hidden size balances capacity
+and training speed. GELU activations match current best practices and improve convergence over ReLU. Self-supervised learning on abundant unlabeled replays reduces
+reliance on labeled data and forces the model to learn general game dynamics rather
+than trying to fit end-game statistics.
+
+4.3
+
+Win Probability Predictor
+
+The outcome predictor is a lightweight MLP that maps the Transformer’s d-dimensional
+embedding to a scalar logit. Its architecture is the following:
+• Input: ht ∈ Rd : Transformer hidden size 512.
+
+Chapter 4. Proposed Solution
+
+15
+
+• Hidden layer: one Linear layer of 128 units, followed by GELU activation and
+Dropout(p = 0.1).
+• Output layer: one Linear unit with no activation, producing logit zt .
+• Prediction: pt = σ(zt ) ∈ [0, 1] is the Radiant win probability (Dire win probability would calculate as 1 − pt ).
+
+16
+
+Chapter 5
+
+Experiments and Results
+5.1
+
+Training Models
+
+5.1.1
+
+Transformer
+
+The Transformer is trained for a fixed number of 11 epochs using the Adam optimizer
+with a learning rate of 1 × 10−4 . At each epoch, the model processes all training
+batches in a self-supervised manner, predicting the next slice after a given sequence
+and minimizing the mean squared error of the numeric fields of the subsequent time
+slice. The train-validation split is 85% to 15%. After each epoch, the average training
+and validation losses are recorded (see Appendix A.2, Figure A.1).
+
+5.1.2
+
+MLP
+
+Training is performed for 3 epochs using the Adam optimizer and the learning rate
+10−3 using BCE loss with logits:
+
+
+L = − y log σ(z) + (1 − y) log(1 − σ(z)) ,
+where y ∈ {0, 1} is the final-outcome label.
+At inference, for each time-slice embedding given a preceding window of size c − 1,
+the trained MLP estimates win probability. For the outcome prediction given the last
+20 slices of the game, the trained model achieves 99% accuracy on both training and
+validation sets (see Appendix A.2, Figure A.2).
+
+5.2
+
+Model Scores Calibration
+
+Figure 5.1: Example of the uncalibrated probability curve.
+
+Chapter 5. Experiments and Results
+
+17
+
+Performing inference on sample matches showed that the probability outputs of
+the MLP p̂t often exhibit overconfidence, producing probabilities excessively close to
+0 or 1 (Figure 5.1). To correct this, a temperature scaling step is applied to the logits
+zt before the sigmoid activation:
+
+pt = σ zt /T ,
+where T is a scalar temperature parameter that scales logits to be more compressed
+toward zero, yielding softer probabilities if T > 1 [3].
+In principle, the optimal T could be found by minimizing the negative log-likelihood
+on a held-out validation set:
+T ∗ = arg min
+T >0
+
+N h
+X
+i
+yi log σ(zi /T ) + (1 − yi ) log 1 − σ(zi /T ) .
+i=1
+
+In practice, given the absence of unique "true" time-series labels, a manual grid
+search was performed over T ∈ [2, 4] with a step of 0.5 to select the value that
+produced probability curves that best matched intuitive expectations. The resulting
+chosen T = 2.5 (Figure 5.2).
+
+Figure 5.2: Calibrated probability curve.
+
+Notice that the first 10-minute slice of the game does not have estimated probabilities because the model requires a whole context window of 20 consecutive time
+slices before producing its first prediction.
+
+5.3
+
+Inference Quality Assessment
+
+5.3.1
+
+Definition of a Good Probability Curve
+
+Quantitative evaluation of win-probability curves against a "ground truth" is inherently problematic since there is no provider of the true winning probability at each
+moment in a match. While final outcome labels allow the score of a binary classifier
+at the game end, intermediate probabilities have no objective reference. In particular:
+• No true time-series labels. There is only an observation of one team winning
+or losing at tend , leading to an absence of measurements such as "Radiant had
+71% chance of winning at minute 29."
+• Subjectivity of estimation. Human experts may disagree on when a lead is
+decisive. What feels like an "80% win chance" to one analyst may be "60%" to
+another.
+
+Chapter 5. Experiments and Results
+
+18
+
+Accordingly, in this section, an assessment of inference quality is performed via
+case studies and visual inspection:
+• Event responsiveness. Representative matches should demonstrate that the
+curve reacts sharply to key events (team fights, Roshan kills, barracks destructions) and remains stable during low-action intervals.
+• Monotonic trends. In one-sided games, the win probability should advance
+steadily toward 1 or 0 without erratic reversals.
+• Comeback detection. Matches with major lead swings should reveal that the
+curve reflects both the timing and magnitude of comebacks, rising appropriately
+after pivotal turning points.
+• Early-game uncertainty. During the game’s first minutes, when statistical
+advantages are minimal, the curve should remain close to 0.5, diverging only
+after clear resource advantage or kill differentials emerge.
+Ensuring that these qualitative aspects are present would suggest that the model’s
+outputs are interpretable, actionable, and consistent with intuitive notions of match
+dynamics, even without definitive time-series ground truth.
+
+5.3.2
+
+Case Studies
+
+Case 1: Early-game uncertainty, Event responsiveness.
+Key in-game events, such as team fights, Roshan kills, and objective destructions,
+should provoke shifts in the win-probability curve. Consider match 81566714861 where
+two pro teams face each other in a tournament, a relatively balanced game until a
+big team-fight engagement started at minute 17. A minute before, the probability
+hovers around the area of 0.5, followed by a team fight at the beginning of which
+team Dire takes two kills. The curve leans to favor the Dire team. However, within
+the next minute, team Radiant retaliates by chasing down and killing three enemy
+heroes, reflecting the sudden swing back into Radiant’s advantage. At minute 25,
+team Radiant destroys the enemy tier 2 middle tower, places observer wards granting
+vision deep into the enemy’s territory, and shortly after gets two more kills. The
+Radiant’s win probability then drastically shifts to a high number, reflecting earned
+advantage. During the period from minute 27 to minute 28, the Dire team kills the
+enemy midlaner, takes Roshan, and then also kills Radiant’s offlaner, which makes
+the game even again. Numerous other skirmishes, objective contests, and resource
+plays occurred throughout the game, each contributing to the curve’s fluctuations, for
+example, the Dire team’s failed offense on Radiant’s base high ground at minute 46
+(Figure 5.3).
+This behavior demonstrates that the model not only tracks gradual resource accumulation but also reacts promptly to high-impact moments, aligning probability
+shifts with the timing and magnitude of critical game events.
+Comparison to Dota Plus. When compared to the win probability graph provided by Dota Plus (Figure 5.4), it can be seen that both curves trace the same
+overall narrative. Approximately even early game, a Radiant surge after minute 25,
+and a dramatic late equalization around minute 28 followed by Dire momentum. The
+1
+
+https://dotabuff.com/matches/8156671486
+
+Chapter 5. Experiments and Results
+
+Figure 5.3: Win probability graph for match 8156671486.
+
+Figure 5.4: Dota Plus graph for match 8156671486.
+
+19
+
+Chapter 5. Experiments and Results
+
+20
+
+correspondence indicates that the proposed model captures the same broad shifts in
+advantage detected by the proprietary Dota Plus system. The inferred win probability
+curve reacts more abruptly to clustered events, while the Dota Plus line is noticeably
+smoother and aligns with the trends of net worth and experience differences. Overall, the side-by-side inspection confirms that the proposed pipeline yields probability
+trajectories consistent with an established commercial benchmark and offers finer
+event-level granularity and complete transparency of the underlying method.
+Case 2: Comeback detection.
+In match 81548919972 that lasted 55 minutes, team Radiant accumulated a solid
+advantage enough to win the game. However, most of their core heroes died with no
+possibility of buying back into the game during the attempt to destroy Dire’s barracks
+at minute 53. Such a mistake led to the opponent team turning the tables and ending
+the game while part of the Radiant team was still dead.
+
+Figure 5.5: Win probability graph for match 8154891997.
+
+Figure 5.6: Dota Plus graph for match 8154891997.
+2
+
+https://dotabuff.com/matches/8154891997
+
+Chapter 5. Experiments and Results
+
+21
+
+It can be seen from Figure 5.6 that the Dota Plus assistant still did find that the
+Radiant team was more likely to win, which is not the case since team Dire destroyed
+Radiant’s ancient. On the other hand, the proposed model captured the sudden
+change of events and adjusted the estimations displayed on the curve (Figure 5.5).
+Case 3: Monotonic trends.
+In one-sided matches where one team heavily dominates, the predicted win probability curve should move smoothly toward the inevitability of one side’s victory. For
+example, in match 79638737623 , where the Radiant side has won the game in only
+27 minutes, the model’s output rises monotonically from about 0.8 at minute 10 to
+almost 1 by 25th minute, with no intermediate dips (Figure 5.7).
+
+Figure 5.7: Win probability graph for match 7963873762.
+
+3
+
+https://dotabuff.com/matches/7963873762
+
+22
+
+Chapter 6
+
+Conclusions
+6.1
+
+Achievements
+
+• End–to–end pipeline. A complete pipeline was implemented that converts
+raw Dota 2 replay files into time-aligned numerical snapshots, encodes sequential
+context with a custom Transformer, and produces calibrated win-probability
+curves through a lightweight MLP classifier.
+• Replay parser and dataset. More than 11000 professional matches were
+collected, parsed at 30-second resolution, and enriched with engineered spatial
+features, yielding a time-slice dataset of considerable size.
+• Self-supervised pre-training. The next-slice prediction was demonstrated as
+a practical approach to training the encoder without relying on outcome labels
+and providing expressive embeddings for downstream tasks.
+• Qualitative fidelity. Case studies showed sharp event responsiveness, comeback detection, monotonic convergence in one-sided games, and early-game uncertainty behaviors aligned with expectations defined using domain knowledge.
+They also compared the presented approach to the in-game paid feature Dota
+Plus assistant.
+• Probabilistic calibration. Temperature scaling of logits reduced the overconfidence of the model and produced well-calibrated probabilities.
+
+6.2
+
+Room for Improvement
+
+• Extending early-game coverage. Since the first 20 slices are required to fill
+the context window, no predictions are produced before minute 10. Introducing
+a simple startup predictor that would generate probabilities based on heroes’
+draft and landing statistics, such as harassing and resource managing, until the
+whole Transformer’s context window is available, would solve this problem.
+• Patch generalisation. The model is trained on a single patch. Investigating
+continual learning techniques may improve robustness across game updates.
+• Richer state encoding. Augment each slice with additional game signals, such
+as hero ability cooldowns, buff/debuff statuses, and precise creep wave metrics
+to capture a broader tactical context.
+
+23
+
+Chapter 6. Conclusions
+
+6.3
+
+Final Thoughts
+
+This thesis demonstrates that modern sequence models and self-supervised learning
+can extract actionable insight from complex, high-dimensional e-sports data. Although qualitative evaluation suggests parity with proprietary solutions, substantial
+headroom remains—particularly in cross-patch robustness and objective probability
+curve scoring. This research establishes a reproducible foundation upon which subsequent work can iterate, introducing roads for deeper strategic analysis, real-time
+broadcasting tools, and cross-title generalization within multiplayer online battle arenas.
+
+Author
+
+Andrii Pletinka
+
+Supervisor
+
+Dr. Taras Firman
+
+24
+
+Appendix A
+
+Appendix
+A.1
+
+Example Time-Slice Snapshot
+
+Listing A.1 shows a single time-slice JSON snapshot at the 1909th second of the game.
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+
+{"1909": {
+" dire ": {
+" players ": [
+{
+" heroId ": 129 ,
+" level ": 18 ,
+" xp ": 18798 ,
+" networth ": 15663 ,
+" totalGold ": 16497 ,
+" currentGold ": 733 ,
+" lifeState ": 0 ,
+" respawnSeconds ": 0 ,
+" buybackCooldown ": 0.0 ,
+" heroDamage ": 9403 ,
+" towerDamage ": 161 ,
+" d a m a g e T a k e n P o s t R e d u c t i o n ": 13807 ,
+" kills ": 5 ,
+" deaths ": 3 ,
+" assists ": 6 ,
+" lastHits ": 244 ,
+" denies ": 18 ,
+" t e a m f i g h t P a r t i c i p a t i o n ": 0.6875 ,
+" obsPlaced ": 0 ,
+" senPlaced ": 0 ,
+" inventory ": [
+{
+" id ": " i te m _b l ac k _ ki n g_ b a r "
+},
+{
+" id ": " item_nullifier "
+},
+{
+" id ": " item_soul_ring "
+},
+{
+" id ": " item_phase_boots "
+},
+{
+" id ": " item_blink "
+},
+{
+
+Appendix A. Appendix
+" id ": " item_magic_wand "
+
+42
+43
+44
+
+},
+{
+" id ": " item_famango "
+
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+
+}
+]
+},
+// ...
+],
+" buildings ": {
+" ancient ": {
+" health ": 4500
+},
+" botRaxMelee ": {
+" health ": 2200
+},
+" botRaxRanged ": {
+" health ": 1300
+},
+" botTier1 ": {
+" health ": 545
+},
+" botTier2 ": {
+" health ": 2500
+},
+" botTier3 ": {
+" health ": 2500
+},
+" midRaxMelee ": {
+" health ": 2200
+},
+" midRaxRanged ": {
+" health ": 1300
+},
+" midTier1 ": {
+" health ": 0
+},
+" midTier2 ": {
+" health ": 2453
+},
+" midTier3 ": {
+" health ": 2500
+},
+" tier4a ": {
+" health ": 2600
+},
+" tier4b ": {
+" health ": 2600
+},
+" topRaxMelee ": {
+" health ": 2200
+},
+" topRaxRanged ": {
+" health ": 1300
+},
+" topTier1 ": {
+" health ": 0
+
+25
+
+26
+
+Appendix A. Appendix
+},
+" topTier2 ":
+" health ":
+},
+" topTier3 ":
+" health ":
+}
+
+99
+100
+101
+102
+103
+104
+105
+
+{
+920
+{
+2500
+
+},
+" totalCam psStacke d ": 17 ,
+" totalRunePickups ": 25 ,
+" totalTow ersKille d ": 2 ,
+" to ta lR osh an sK ill ed ": 1 ,
+" totalSmokesUsed ": 5 ,
+" numWards ": 1 ,
+" pdistMean ": 33.83 ,
+" pdistMax ": 33.83 ,
+" pdistStd ": 0.0 ,
+" centroidWardMean ": 20.95 ,
+" hwMean ": 22.78 ,
+" hwMin ": 8.41 ,
+" hwMax ": 37.14
+
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+
+},
+" radiant ": {
+// ...
+
+120
+121
+122
+
+Listing A.1: Example of the time-slice snapshot during the 32th
+minute.
+
+A.2
+
+Training Loss Curves
+
+Figure A.1 shows the mean squared error on both the training and validation sets over
+the 11 epochs of self-supervised next-slice prediction pretraining of the Transformer.
+
+Figure A.1: Training and validation loss across 11 epochs.
+
+Figure A.2 shows the BCE with logits loss on both the training and validation
+sets over the 3 epochs of training the MLP. The model state saved after completing
+the second epoch is used for inference.
+
+Appendix A. Appendix
+
+27
+
+Figure A.2: Training and validation loss across 3 epochs.
+
+A.3
+
+Code Repository
+
+All source code, data processing scripts, trained model weights, and example notebooks for reproducing the experiments in this thesis are publicly available on GitHub:
+• Repository:
+https://github.com/andriipletinka/dota2-time-slice-win-probability-prediction
+
+28
+
+Bibliography
+[1]
+
+Kodirjon Akhmedov and Anh Huy Phan. “Machine learning models for DOTA 2
+outcomes prediction”. In: arXiv preprint arXiv:2106.01782 (2021). url: https:
+//arxiv.org/abs/2106.01782.
+
+[2]
+
+Anders Drachen et al. “Skill-Based Differences in Spatio-Temporal Team Behaviour in Defence of The Ancients 2 (DotA 2)”. In: 2014 IEEE Games Media
+Entertainment (2014). doi: 10.1109/GEM.2014.7048109.
+
+[3]
+
+Chuan Guo et al. “On Calibration of Modern Neural Networks”. In: CoRR
+abs/1706.04599 (2017). arXiv: 1706 . 04599. url: http : / / arxiv . org / abs /
+1706.04599.
+
+[4]
+
+Dan Hendrycks and Kevin Gimpel. “Bridging Nonlinearities and Stochastic Regularizers with Gaussian Error Linear Units”. In: CoRR abs/1606.08415 (2016).
+arXiv: 1606.08415. url: http://arxiv.org/abs/1606.08415.
+
+[5]
+
+OpenAI. Dota 2 with Large Scale Deep Reinforcement Learning. 2019. url:
+https://arxiv.org/abs/1912.06680.
+
+[6]
+
+Methasit Pengmatchaya and Juggapong Natwichai. “Identifying Player Skill of
+Dota 2 Using Machine Learning Pipeline”. In: Discover Artificial Intelligence
+(2024). doi: 10.1007/s44163-024-00139-y.
+
+[7]
+
+Ashish Vaswani et al. “Attention Is All You Need”. In: CoRR abs/1706.03762
+(2017). arXiv: 1706.03762. url: http://arxiv.org/abs/1706.03762.
+
+[8]
+
+Ziping Wan, Bálint Sándor, and Vladimir Tarasov. “Predicting Game Outcome
+in Dota 2 with NLP and Machine Learning Algorithms”. In: url: https://api.
+semanticscholar.org/CorpusID:270261909.
+
+[9]
+
+Kaixiang Wang and Wenqian Shang. “Outcome prediction of DOTA2 based
+on Naı̈ve Bayes classifier”. In: 2017 IEEE International Conference on Computer and Information Science (ICIS). IEEE, 2017. doi: 10.1109/ICIS.2017.
+7960061.
+
+[10]
+
+Nanzhi Wang et al. “Outcome Prediction of DOTA2 Using Machine Learning
+Methods”. In: Proceedings of the 2018 International Conference on Mathematics
+and Artificial Intelligence. 2018. doi: 10.1145/3208788.3208800.
+
+[11]
+
+Lijun Yu et al. “MOBA-Slice: A Time Slice Based Evaluation Framework of
+Relative Advantage Between Teams in MOBA Games”. In: Computer Games
+Workshop at IJCAI 2018, Stockholm. 2018. doi: https://doi.org/10.48550/
+arXiv.1807.08360.
+
+

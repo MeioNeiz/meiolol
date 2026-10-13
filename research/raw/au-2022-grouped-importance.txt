@@ -1,0 +1,2667 @@
+myjournal manuscript No.
+(will be inserted by the editor)
+
+Grouped Feature Importance and Combined Features
+Effect Plot
+Quay Au* · Julia Herbinger* · Clemens
+Stachl · Bernd Bischl · Giuseppe
+Casalicchio
+
+arXiv:2104.11688v1 [stat.ML] 23 Apr 2021
+
+Received: date / Accepted: date
+
+Abstract Interpretable machine learning has become a very active area of
+research due to the rising popularity of machine learning algorithms and their
+inherently challenging interpretability. Most work in this area has been focused
+on the interpretation of single features in a model. However, for researchers
+and practitioners, it is often equally important to quantify the importance or
+visualize the effect of feature groups. To address this research gap, we provide
+a comprehensive overview of how existing model-agnostic techniques can be
+defined for feature groups to assess the grouped feature importance, focusing
+on permutation-based, refitting, and Shapley-based methods. We also introduce an importance-based sequential procedure that identifies a stable and
+well-performing combination of features in the grouped feature space. Furthermore, we introduce the combined features effect plot, which is a technique
+to visualize the effect of a group of features based on a sparse, interpretable
+linear combination of features. We used simulation studies and a real data example from computational psychology to analyze, compare, and discuss these
+methods.
+Keywords Grouped Feature Importance · Combined Features Effects ·
+Dimension Reduction · Interpretable Machine Learning
+Q. Au1 · J. Herbinger2 · B. Bischl3 · G. Casalicchio4
+Department of Statistics, Ludwig-Maximilians-University Munich, 80539 Munich, Germany
+E-mail: quayau@gmail.com, julia.herbinger@stat.uni-muenchen.de, bernd.bischl@stat.unimuenchen.de, giuseppe.casalicchio@stat.uni-muenchen.de
+C. Stachl5
+Department of Communication, Stanford University, 94305 Stanford, CA, USA
+E-mail: cstachl@stanford.edu
+* These authors contributed equally to this work.
+· CRediT taxonomy: Conceptualization: 1, 2, 3, 4; Methodology: 1, 2, 4; Formal analysis
+and investigation: 1, 2, 4; Writing - original draft preparation: 1, 2; Writing - review and
+editing: 3, 4, 5; Investigation: 1, 2; Visualization: 1, 2; Validation: 1, 2, 4; Software: 1, 2;
+Funding acquisition: 3, 5; Supervision: 3, 4
+
+2
+
+Au and Herbinger
+
+1 Introduction
+The popularity of machine learning (ML) algorithms has grown considerably
+in recent years, especially because they have often demonstrated outstanding
+performance in modeling complex and non-linear relationships. ML algorithms
+are nowadays used in many diverse fields such as medicine (Shipp et al., 2002),
+criminology (Berk et al., 2009), and increasingly in the social sciences (Stachl
+et al., 2020b; Yarkoni and Westfall, 2017). Well-performing ML models often
+come along with a lack of interpretability. However, interpretable models are
+paramount in many high-stakes settings such as medical and juridical applications (Lipton, 2018). In the context of interpretable ML (IML) research, several
+model-agnostic methods to understand the influence of a single feature’s importance or effect have been developed (Molnar, 2019). Examples include the
+permutation feature importance (PFI; Fisher et al., 2019), leave-one-covariate
+out (LOCO) importance (Lei et al., 2018), SHAP values (Lundberg and Lee,
+2017), or partial dependence plots (PDP; Friedman, 2001).
+In many applications, it can be more informative to quantify the importance or effect of a group of features. From a computational and run-time
+perspective, this might be more efficient and relevant for high-dimensional
+datasets, especially when groups of features can either be defined in a datadriven or in a knowledge-driven way (He and Yu, 2010). In data-driven grouping, an algorithmic approach can be used to define groups of features, which
+can be useful in the case of highly correlated feature spaces such as in genetic applications (Park et al., 2006; Toloşi and Lengauer, 2011). Besides the
+computational advantage, there are theoretical and practical reasons in favor of the grouped feature perspective. One such reason is that many IML
+techniques rely on the assumption of independent features. Hence, applying
+these methods to individual features might lead to misleading results. However, features can be grouped in such a way that the underlying assumptions
+hold, yielding more meaningful interpretations. If groups can be naturally defined by the user (knowledge-driven grouping) such as in applications with
+sensor data (Chakraborty and Pal, 2008), quantifying or visualizing the influence of feature groups might be more informative or might lead to additional
+insights. There are also use cases where the interpretation of single features
+might be misleading. Examples include datasets with time-lagged or categorical features (e.g., one-hot encoded categories) and the presence of feature
+interactions (Gregorutti et al., 2015).
+Although the grouped feature perspective is relevant in many applications,
+most of the IML research has focused on methods that try to provide explanations on a single feature level. Model-agnostic methods for feature groups
+are rare and not well-studied. We provide a comprehensive overview and extensions of available approaches and introduce two new methods. A sequential
+grouped feature importance procedure and the combined features effect plot
+(CFEP) which visualizes the effect of a group of features on the prediction.
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+3
+
+1.1 Related Work
+A well-known model that handles grouped features is the group LASSO (Yuan
+and Lin, 2006), which extends the LASSO (Tibshirani, 1996) for feature selection based on groups. Moreover, other extensions, e.g., to obtain sparse
+groups of features (Friedman et al., 2010), to support classification tasks (Meier
+et al., 2008) or non-linear effects (Gregorova et al., 2018) exist. However, group
+LASSO is a modeling technique that focuses on selecting groups in the feature
+space rather than quantifying their importance.
+A large body of research already exists regarding the importance of individual features (see, e.g., Fisher et al., 2019; Hooker and Mentch, 2019). Hooker
+and Mentch (2019) distinguish between two major approaches to measure the
+feature importance based on loss functions, namely permutation methods and
+refitting methods. Permutation methods measure the increase in error after
+permuting a feature while the model remains untouched. Refitting methods
+measure the increase in error after leaving out the feature of interest completely
+and refitting the model. Gregorutti et al. (2015) introduced a model-specific,
+grouped permutation feature importance (PFI) score for random forests and
+applied this approach to functional data analysis. Valentin et al. (2020) introduced a model-agnostic grouped version of the model reliance score (Fisher
+et al., 2019). However, they are focusing more on the application and leaving out a detailed theoretical foundation. Recently, a general refitting framework to measure the importance of (groups of) features was introduced by
+Williamson et al. (2020). In their approach, the feature importance measurement is detached from the model level and defined by an algorithm-agnostic
+version to measure the intrinsic importance of features. The importance score
+is defined by the difference between the performance of the full model and the
+performance based on all features except the group of interest.
+While permutation methods have the advantage that evaluations are often
+cheaper than those of refitting methods, it has been shown that PFI often fails
+when features are dependent since the method extrapolates in regions without
+any or just a few observations (Hooker and Mentch, 2019). Hence, interpretations in these regions might be misleading. To avoid this problem, alternatives
+based on conditional distributions or refitting have been suggested (e.g., Strobl
+et al., 2008; Nicodemus et al., 2010; Hooker and Mentch, 2019; Watson and
+Wright, 2019; Molnar et al., 2020). Although the conditional PFI provides a
+solution to this problem, the interpretation of the score changes. Conditional
+PFI can only be interpreted depending on the underlying conditional distribution, meaning it “must be interpreted as the additional, unique contribution
+of a feature given all remaining features we condition on were known” (Molnar
+et al., 2020). This property complicates the comparison with non-conditional
+interpretation methods. Therefore, we do not consider any conditional variants
+in this paper. Refitting methods, on the other hand, are computationally more
+expensive, in particular in a large feature space.
+A third group of importance measures is based on Shapley values (Shapley,
+1953), a theoretical concept of game theory. The additive feature importance
+
+4
+
+Au and Herbinger
+
+measure SHAP (Lundberg and Lee, 2017) quantifies the attribution of each
+feature to the predicted outcome and refers to a permutation-based method.
+It has the advantage that contributions of interactions are distributed fairly
+between features. Besides being computationally more expensive, SHAP itself is based on the model’s outcome rather than its performance. Casalicchio
+et al. (2019) extended the concept of Shapley values to fairly distribute the
+model’s performance among features and called it Shapley Feature IMPortance (SFIMP). A similar approach has also been proposed by Covert et al.
+(2020), who showed the benefits of the method on various simulation studies.
+One approach that uses Shapley values to explain grouped features was introduced by de Mijolla et al. (2020). However, they derived latent variables of
+the feature groups and applied an adjusted version of Shapley values on these
+variables instead of using the underlying features themselves. Also, Amoukou
+et al. (2021) investigated grouping approaches for Shapley values in the case
+of encoded categorical features and subset selection of important features for
+tree-based methods. The calculation of Shapley values on groups of features
+based on performance values has only been applied with regards to feature
+subset selection methods and not for interpretation purposes (Cohen et al.,
+2005; Tripathi et al., 2020).
+After identifying which groups of features are important, the user is often interested in how they (especially the important groups) influence the
+model’s prediction. Therefore, several techniques to visualize single-feature effects exist. These include partial dependence plots (PDP) (Friedman, 2001),
+individual conditional expectation (ICE) curves (Goldstein et al., 2013), SHAP
+dependence plots (Lundberg et al., 2018), and accumulated local effects (ALE)
+plots (Apley and Zhu, 2019). While the first three mentioned methods inherit
+similar disadvantages as PFI, ALE is more suitable if features are correlated.
+However, in the case of high-dimensional feature spaces, it is not feasible for
+the user to compute, visualize and interpret single-feature plots for all (important) features. If features are grouped, visualization techniques become computationally more complex and it may become even harder to visualize the
+results in an easily interpretable way. In the case of low-dimensional feature
+spaces, this might still be feasible, for example by using two-features PDPs or
+ALE plots. Recently, effect plots that visualize the combined effect of multiple
+features have been introduced by Seedorff and Brown (2021) and Brenning
+(2021). They use PCA to reduce the dimension of the feature space and calculate marginal effect curves for the principal components. However, the used
+dimension reduction method lacks in including information about the target
+variable and lacks in sparsity and hence interpretability.
+
+1.2 Contribution
+Our contributions can be summarized as follows: We extend the permutationbased and refitting grouped feature importance methods introduced by Valentin
+et al. (2020) and Williamson et al. (2020) by not only comparing to the full
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+5
+
+model (i.e., taking into account all features) but also to a null model (i.e., ignoring all features). Hence, we can quantify how much a group itself contributes to
+the prediction of a model without the presence of other groups. Furthermore,
+we introduce Shapley importance for feature groups and how these scores can
+be decomposed into single-feature importance scores of the respective groups.
+Moreover, we define a new algorithm to sequentially add groups of features depending on their importance and with that being able to find well-performing
+combinations of groups. We compare all methods regarding the main challenges that arise when quantifying grouped feature importance by creating
+small simulation examples. Therefore, we provide recommendations for using and interpreting the respective methods correctly. The main challenges
+are finding good and sparse combinations of features (i.e., groups) when dependencies between groups are present, managing varying correlations within
+groups of features, and handling varying group sizes. Finally, we introduce
+a model-agnostic method to visualize the joint effect of a group of features.
+Hereby, we use a suitable dimension reduction technique and the conceptual
+idea of PDPs to calculate and plot the mean prediction of a sparse group of
+features regarding their linear combination. This novel method finally enables
+the user to visualize effects for groups of features. We showcase the usefulness
+of all these methods in a real data example from computational psychology.
+The structure of this paper is as follows: In Section 2, we formally define the grouped feature importance methods and introduce the sequential
+grouped feature importance procedure. We compare these methods for different scenarios in Section 3. In Section 4, we introduce the CFEP to visualize
+the effects of feature groups based on a supervised dimension reduction technique. Therefore, we also show the suitability of this technique compared to
+its unsupervised counterpart in a simulation study. Finally, in Section 5, all
+methods are applied to a real data example before summarizing and giving a
+prospect in Section 6.
+
+1.3 Reproducibility and Open Science
+The implementation of the proposed methods and reproducible scripts for
+the experimental analysis are provided in the following public git-repository
+https://github.com/JuliaHerbinger/grouped_feat_imp_and_effects.
+
+2 Feature Importance for Groups
+Analogous to Casalicchio et al. (2019), we use the term feature importance
+as the influence of a feature or a group of features on a model’s predictive
+performance, which we measure by the expected loss when we perturb these
+features in a permutation approach or remove these features in a refitting
+approach.
+
+6
+
+Au and Herbinger
+
+In the upcoming chapters, we provide a general notion and formal definitions for permutation and refitting methods and explain them by answering
+the following questions:
+a) How much does a group of features contribute to the model’s performance
+in the presence of other groups?
+b) How much does a group itself increase the expected loss if it is added to a
+null model like the mean prediction of the target for refitting methods?
+c) How can we fairly distribute the expected loss among all groups and all
+features within a group?
+d) How can we find well-performing combinations of groups?
+The definitions of all grouped feature importance scores are based on loss
+functions. They are defined in such a way that important groups will yield
+positive grouped feature importance scores. The question of how to interpret
+the differing results of these methods is addressed in Section 3.
+
+2.1 General Notation
+Consider a p-dimensional feature space X = (X1 × ... × Xp ) and a one dimensional target space Y. The corresponding random variables, which are
+generated from these spaces are denoted by X = (X1 , ..., Xp ) and Y . Furthermore, assume that there is an unknown functional relation f : X −→ Y.
+ML algorithms try to learn this functional relationship using n ∈ N i.i.d.
+observations drawn from the joint space X × Y with unknown probability distribution P. We denote this by the dataset D = {(x(i) , y (i) )}ni=1 , where the
+(i)
+(i)
+vector x(i) = (x1 , ..., xp )| ∈ X is the i-th observation associated with the
+(1)
+(n)
+(i)
+target variable y ∈ Y. The j-th feature is denoted by xj = (xj , ..., xj )| ,
+for j = 1, ..., p. The dataset D can also be written in matrix form
+
+
+
+
+ (1) 
+(1)
+(1)
+(1)
+(1)
+y
+x1 . . . x p
+x1 . . . xp y (1)
+
+
+ . .
+
+. 
+.. 
+ = X, Y , with X =  .. . . . ..  and Y = 
+ . . . ..
+ ..  .
+. 
+.
+. 
+ .
+ .
+y (n)
+(1)
+The generalization error GE(fˆ, P) = E(L(fˆ(X), Y )) of a learned model fˆ
+is measured by a loss function L on test data drawn independently from P.
+Hence, in this case, the generalization error is defined by the expected loss of
+a learned model and therefore can be estimated by taking the mean of the loss
+function on unseen test data Dtest
+(n)
+
+x1
+
+(n)
+
+. . . xp
+
+(n)
+
+y (n)
+
+d
+GE(fˆ, Dtest ) =
+
+x1
+
+1
+|Dtest |
+
+X
+
+(n)
+
+. . . xp
+
+L(fˆ(x), y).
+
+(2)
+
+(x,y)∈Dtest
+
+The application of an algorithm a to a given dataset D results in a fitted
+model a(D) = fˆD . The expected generalization error of an algorithm a takes
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+7
+
+into account the variability introduced by sampling different datasets D of
+equal size n from P and is defined by
+GE(a, P, n) = E|D|=n (GE(a(D), P)).
+
+(3)
+
+In practice, resampling techniques on the available dataset D are used to
+estimate Eq. (3). Resampling techniques usually split the dataset D into k ∈ N
+i
+training datasets Dtrain
+, i = 1, ..., k, of roughly the same size ntrain < n. The
+estimate of an algorithm’s generalization error is the average of the estimations
+on each test dataset
+k
+X
+i
+d fˆDi , Dtest
+d D, ntrain ) = 1
+).
+GE(
+GE(a,
+train
+k i=1
+
+(4)
+
+In the following, we often associate the set of numbers {1, ..., p} in a one-toone manner with the features x1 , ..., xp and refer the number i ∈ {1, ..., p} as
+feature xi .We call G ⊂ {1, ..., p} a group of features.
+2.2 Permutation Methods
+Inspired by the PFI measure used in random forests (Breiman, 2001), Fisher
+et al. (2019) proposed a model-agnostic version. The PFI score of feature j of
+a fitted model fˆ is defined as the increase in expected loss after permuting the
+feature values
+PFIj (fˆ) = E(L(fˆ(X[j] ), Y )) − E(L(fˆ(X), Y )).
+
+(5)
+
+Here, X[j] = (X1 , ..., Xj−1 , X̃j , Xj+1 , ..., Xp ) is the p dimensional random variable vector of features, where X̃j is an independent replication of Xj . The
+random variable X̃j has the same distribution as Xj , but is independent of
+all other features and the target variable. In practice, this is done by permuting the values in the data column of the j−th feature. The idea behind this
+method is to break the association between the j−th feature and the target
+variable by permuting the feature values. If a feature is not useful for predicting an outcome, changing its values by permuting, will not increase the
+expected loss. The larger the PFI score of feature j, the more substantial the
+increase in error and the more important the considered feature1 .
+This procedure can be performed for each feature j = 1, ..., p to quantify
+the respective importance scores. The estimation relies on the repeated permutation of a feature for a predefined number of times to form a distribution
+of importance scores. On feature level, these scores are summarized by their
+means to provide a final score that can be compared across different features.
+For an accurate estimation of Eq. (5), we would need to calculate all possible
+permutation vectors over the observation index set {1, ..., n}, see also Casalicchio et al. (2019) for an in-depth discussion on this topic. However, Eq. (5)
+1
+
+Here, we solely consider the case of loss functions that are to be minimized.
+
+8
+
+Au and Herbinger
+
+can also be approximated on a dataset D with n observations by Monte Carlo
+integration using m random permutations:
+(i)
+
+(τ
+k
+ˆ (i)
+d j (fˆ,D)= 1 Pn Pm
+PFI
+i=1
+k=1 L f ((x1 ,...,xj
+nm
+
+)
+
+!
+!
+(i)
+,...,x(i)
+) −L(fˆ(x(i) ,y (i) )) ,
+p ),y
+
+(6)
+
+where τk is a random permutation vector of the index set {1, ..., n} for k =
+(i)
+1, ..., m. An example for n = 3 would be τ1 = (1, 3, 2)| with τ1 being the
+i−th entry of that vector.
+It should be noted that the PFI measure in random forest models is computed on naturally occurring out-of-bag samples (Breiman, 2001). The procedure above could also be embedded into a resampling technique, where the
+permutation is always applied on the held-out test set of each resampling iteration (Fisher et al., 2019). However, this leads to refits and is computationally
+more expensive. The resulting resampling-based PFI is estimated by
+k
+X
+res
+d j (fˆDi , Di ),
+d (a, D, ntrain ) = 1
+PFI
+PFI
+test
+j
+train
+k i=1
+
+(7)
+
+i
+where the permutation strategy is applied on the test sets Dtest
+. In the following, we extend this existing definition of permutation importance to groups of
+features and introduce the GPFI (Grouped Permutation Feature Importance)
+and GOPFI (Group Only Permutation Feature Importance) scores. For ease
+of notation, we will only define these scores for a given model (see Eq. (5)).
+
+2.2.1 Grouped Permutation Feature Importance
+For the definition of GPFI which is based on the definitions of Gregorutti et al.
+(2015) and Valentin et al. (2020), let G ⊂ {1, ..., p} be a group of features. With
+slight abuse of notation to index the feature groups included in G, we define
+the grouped permutation feature importance of G as
+GPFIG = E(L(fˆ(X̃G , X−G ), Y )) − E(L(fˆ(X), Y )).
+
+(8)
+
+Here, X̃G = (X̃j )j∈G is a |G|-dimensional random vector of features, which
+is an independent replication of XG = (Xj )j∈G . Also this random vector is
+independent of both the target variable and the random vector of remaining
+features, which we define by X−G := (Xj )j∈{1,...,p}\G . It extends Eq. (5) to
+groups of features so that the interpretation of GPFI scores always refers to the
+importance when the feature values of the group defined by G are permuted
+jointly (i.e., without destroying the dependencies of the features within the
+group). Similar to Eq. (7), the grouped permutation feature importance can
+be estimated by monte carlo integration:
+
+n m 
+(i)
+1 XX
+(τ )
+(i)
+\
+GPFIG =
+L(fˆ(xG k , x−G ), y (i) ) − L(fˆ(x(i) , y (i) )) .
+(9)
+nm i=1
+k=1
+
+The GPFI measures the contribution of one group to the model’s performance
+if all other groups are present in the model (see (a) from Section 2).
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+9
+
+2.2.2 Group Only Permutation Feature Importance
+To evaluate how much a group itself contributes to a model’s performance,
+one can also use a slightly different measure. As an alternative to Eq. 9, we
+can also compare the expected loss after permuting all features jointly with
+the expected loss after permuting all features except the considered group. We
+define this group only permutation feature importance (GOPFI) for a group
+G ⊂ {1, ..., p} as
+GOPFIG = E(L(fˆ(X̃), Y )) − E(L(fˆ(XG , X̃−G ), Y )),
+
+(10)
+
+which can be approximated by
+
+n X
+m 
+(j)
+X
+(j)
+(τk )
+(j)
+\ G= 1
+), y (j) ) . (11)
+L(fˆ(x(τk ) , y (j) )) − L(fˆ(xG , x−G
+GOPFI
+nm j=1
+k=1
+
+Furthermore, GOPFI is technically useful for the permutation variant of the
+Shapley importance (see Eq. (14)).
+2.3 Refitting Methods
+Another possibility to determine the importance of features is based on refitting. Permutation methods do not require any refits to calculate the importance scores. Hence, they are often computationally cheaper to compute
+than refitting methods. However, since the model remains untouched in the
+former approach, interpretations are solely based on the specific model, while
+interpretations for refitting methods can be generalized to the underlying algorithm. In Lei et al. (2018) a model-agnostic feature importance measure,
+namely leave-one-covariate-out (LOCO), was introduced. This approach calculates the feature importance of single features by removing them and refitting the model. The feature importance value is defined as the difference in
+expected loss between the full model and the model that was fitted on the
+reduced dataset. In situations with many features, this can quickly become
+computationally challenging, since for each feature and every resampling iteration a separate model has to be fit. However, if the features are being grouped
+and the number of groups is reasonably small, this method can be feasible in
+many applications. In the following chapters, we will introduce two LOCObased refitting methods for groups of features. The first definition is similar
+to the one introduced in Williamson et al. (2020).
+2.3.1 Leave-One-Group-Out Importance
+(i)
+
+For a subset G ⊂ {1, ..., p}, we define the reduced dataset D̃ := {(x−G , y (i) )}ni=1 .
+Given an algorithm a, which generates models a(D) = fˆD and a(D̃) = fˆD̃ , we
+define the Leave-One-Group-Out Importance (LOGO) as
+LOGO(G) = E(L(fˆD̃ (X−G ), Y )) − E(L(fˆD (X), Y )).
+
+(12)
+
+10
+
+Au and Herbinger
+
+The LOGO can be estimated by using the algorithm a on D̃ and should be
+embedded in a resampling technique:
+d D̃, ntrain ) − GE(a,
+d D, ntrain )
+\
+LOGO(G)
+= GE(a,
+=
+
+k
+k
+1 Xd ˆ
+1 Xd ˆ
+i
+i
+i
+, Dtest
+GE(fD̃i , D̃test
+)−
+GE(fDtrain
+).
+train
+k i=1
+k i=1
+
+It follows that we compare the loss increase relative to the full model’s expected
+loss when leaving out a group of features and performing a refit.
+2.3.2 Leave-One-Group-In Importance
+While it may be too limiting to estimate the performance of a model based on
+one feature only, it can be informative to see how much a group of features(e.g.,
+all measurements from a specific medical device) can reduce the expected loss
+in contrast to a null model. The Leave-One-Group-In (LOGI) method could
+be particularly helpful in settings where information on additional groups of
+measures will inflict significant costs (e.g., adding functional imaging data for
+a diagnosis) and or limited resources are available (e.g., in order to be costcovering only one group of measures can be acquired). The LOGI method can
+also be useful for theory development in the natural and social sciences (e.g.,
+which group of behaviors is most predictive by itself).
+Let anull be a null algorithm, which results in a null model fˆnull , that only
+guesses the mean (or majority class for classification) of the target variable for
+any dataset. We additionally define an algorithm a, which generates a model
+(i)
+a(D̊) = fˆD̊ for a dataset D̊ := {(xG , y (i) )}ni=1 , which only contains features
+defined by G ⊂ {1, ..., p}. We define the LOGI of a group G as
+LOGI(G) = E(L(fˆnull , Y )) − E(L(fˆD̊ (XG ), Y )).
+
+(13)
+(i)
+
+The LOGI can be estimated by using the algorithm a on D̊ = {(xG , y(i) )}ni=1
+and should be embedded in a resampling technique:
+\
+LOGI(G) = d
+GE(anull , D, ntrain ) − d
+GE(a, D̊, ntrain )
+=
+
+k
+k
+1 Xd ˆ
+1 Xd ˆ
+i
+i
+GE(fnull , Dtest
+)−
+GE(fD̊i , D̊test
+).
+train
+k i=1
+k i=1
+
+2.4 Grouped Shapley Importance
+The importance measures defined above either exclude (or permute) individual
+groups of features from the total set of features or consider only the importance
+of groups omitting (or permuting) all other features. The grouped importance
+scores are usually not affected if interactions within the groups are present.
+However, they can be affected if features from different groups interact since
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+11
+
+permuting a group of features jointly destroys any interactions with other features outside the considered group. We, therefore, define the grouped Shapley
+importance (GSI) based on Shapley values (Shapley, 1953). GSI scores account for feature interactions as they measure the average contribution of a
+given group to all possible combinations of groups and fairly distribute the
+importance value caused by interaction values among all groups.
+Given a set of groups G = {G1 , ..., Gl }, with Gi ⊂ {1, ..., p}, for i = 1, ..., l.
+In our grouped feature context, the value function v : P(G) −→ R assigns a
+“payout” to each possible group or combination of groups included in G. With
+slight abuse of notation, we define the value function for a subset S ⊂ G as
+v(S) := v (∪Gi ∈S Gi ) .
+We define the value function for a group G ∈ G calculated by a refitting or a
+permutation method by
+vrefit (G) = LOGI(G) or vperm (G) = GOP F I(G),
+
+(14)
+
+respectively. The marginal contribution of a group G ∈ G, with S ⊂ G is given
+by
+∆G (S) = v(S ∪ G) − v(S).
+The GSI of the feature group G is then defined as
+φ(G) =
+
+X (|G| − 1 − |S|)! · |S|!
+∆G (S),
+|G|!
+
+(15)
+
+S⊂G\G
+
+which is a weighted average of marginal contributions to all possible combinations of groups.
+The GSI cannot always be calculated in a time-efficient way, because the
+number of coalitions S ⊂ G\G can become large very quickly. In practice, the
+Shapley value is often approximated (Casalicchio et al., 2019; Covert et al.,
+2020) by drawing M ≤ |G|! different coalitions S ⊂ G\G and averaging the
+marginal, weighted contributions:
+M
+
+φ̂M (G) =
+
+1 X
+(|G| − 1 − |Sm |)! · |Sm |! · ∆G (Sm ),
+M m=1
+
+(16)
+
+with Sm ⊂ G\G, for all m = 1, ..., M .
+While the GSI can be calculated with permutation- as well as refittingbased approaches, we will apply only the permutation-based approach in the
+upcoming simulation studies and the real-world example.
+
+12
+
+Au and Herbinger
+
+2.4.1 Properties of the Grouped Shapley Importance
+For single features2 xi ∈ {1, ..., p}, which are divided into l groups, we define
+the marginal contribution for xi as
+∆{xi } (S) = v(S ∪ {xi }) − v(S),
+for S ⊂ {1, ..., p}\{xi }. The Shapley importance for single features φ(xi ) can
+also be defined analogously to (15). One interesting question is, does the GSI
+for a group G ⊂ {1, ..., p} decompose into the sum of Shapley importances of
+features in G? In the following, we want to analyze the remainder
+X
+R = φ(G) −
+φ(xi ).
+(17)
+i∈G
+
+Similar to the functional ANOVA decomposition (Hooker, 2007), we assume, that the value function for a coalition S ⊂ {1, ..., p} can be broken
+down into main and interaction effects
+X
+X
+X
+v(S) =
+v(xi ) +
+ij +
+ijk + ...,
+(18)
+xi ∈S
+
+i6=j
+
+i6=j6=k
+
+where i...m is the effect of the interaction between the features xi , ..., xm ∈
+S. Note, v(G1 ) cancels out, meaning that these interaction terms cannot be
+computed directly but are assumed to affect the “payout” of the value function.
+With the assumption in Eq. (18), it follows that the Shapley importance
+of a single feature x1 (without loss of generality) can be written as
+
+
+
+
+p
+p
+X
+X
+1
+1
+1
+1i  + 
+1ij  + ... + 1...p .
+(19)
+φ(x1 ) = v(x1 ) + 
+2
+3
+p
+i6=1
+
+i6=j6=1
+
+The value function of the feature x1 contributes to the Shapley importance
+with the weight 1 and all possible interaction effects with feature x1 contribute
+with the reciprocal length of the interaction effect. We proved this assertion in
+Appendix A. Similar to (19), the GSI of a group G1 (w.l.o.g.) can be written
+as
+
+
+
+
+k
+k
+X
+1 X
+1
+1
+φ(G1 ) = v(G1 ) +
+G 1 G i  + 
+G1 Gi Gj  + ... + G1 ...Gk , (20)
+2
+3
+k
+i6=1
+
+i6=j6=1
+
+where G1 ...Gk is the (non-computable) interaction effect between features of
+groups G1 , ..., Gk , where each group provides at least one feature. By using
+Eq. (18) on v(G1 ), we get:
+X
+X
+X
+v(G1 ) =
+v(xi ) +
+ij +
+ijk + ...
+(21)
+i∈G1
+2
+
+i6=j∈G1
+
+i6=j6=k∈G1
+
+Remember the one-to-one association of the numbers 1, ..., p and the features x1 , ..., xp
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+13
+
+Looking back at Eq. (17), a lot of terms cancel out by using Eq. (19) and Eq.
+(21). The term v(G1 ), meaning all main effects v(xi ), i ∈ G1 , and all interaction
+effects i,...,k , 1 ≤ k ≤ |G1 | between features within G1 , cancels out entirely.
+Furthermore, at least all two-way interaction effects between groups G1 Gi , i =
+2, ..., k cancel out. A combination of higher-order interaction terms between
+features of G1 and {1, ..., p}\G1 remain.3 This means that the remainder R
+is (usually) not equal to zero in case the applied algorithm learned a higherorder interaction between features of the regarded group and other groups. The
+higher the remainder, the larger the higher-order interaction effect. Thus, the
+remainder can be used as a quantification of learned higher-order interaction
+effects between features of different groups.
+
+2.5 Sequential Grouped Feature Importance
+In general, feature groups do not necessarily have to be distinct or independent of each other. When groups partly contain the same or highly correlated
+features, we may obtain high grouped feature importance scores for similar
+groups. This can lead to misleading conclusions regarding the importance of
+groups. Quantifying the importance of different combinations of groups is especially relevant in applications where extra costs are associated with using
+additional features from other data sources. In this case, one might be interested in the sparest, yet most important combination of groups or in understanding the interplay of different combinations of groups. Hence, in practical
+settings, it is often important to decide which additional group of features to
+make available (e.g., buy or implement) for modeling and how groups should
+be prioritized under economic considerations.
+Gregorutti et al. (2015) introduced a method called grouped variable selection, which is an adaptation of the recursive feature elimination algorithm
+from Guyon et al. (2002) and uses permutation-based grouped feature importance scores for the selection of feature groups. In Algorithm 1, we introduce
+a sequential procedure which is based on the idea of stability selection (Meinshausen and Bühlmann, 2010). The procedure primarily aims at understanding the interplay of different combinations of groups by analyzing how the
+importance scores change after including other groups in a sequential manner.
+We prefer a refitting-based over a permutation-based grouped feature importance score when the secondary goal is to find well-performing combinations
+of groups. The basic idea is to start with an empty set of features and to
+sequentially add the next best group in terms of LOGI until no further substantial improvement can be achieved. Our sequential procedure is based on
+a greedy forward search and creates an implicit ranking by showing the order
+in which feature groups are added to the model. To account for the variability
+introduced by the model, we propose to use repeated subsampling or bootstrap with sufficient repetitions (e.g. 100 repetitions). In Figure 1 and 10, we
+3 They mostly only partly cancel out, depending on the number of features within the
+groups G1 , ..., Gk .
+
+14
+
+Au and Herbinger
+
+Algorithm 1: Sequential Grouped Feature Importance
+input : Set of groups G = {G1 , ..., Gk }.
+Improvement threshold δ > 0.
+Number of repetitions for the outer data splitting.
+output: For every outer data split: a good combination B ⊂ {1, ..., p}.
+1 for Every outer data split do
+2
+Let B = ∅;
+3
+for i = 1, ..., k do
+4
+if i = 1 then
+n
+o
+5
+6
+
+G̃ ∈ P(G) |G̃| = 1 ;
+
+
+\ G̃) ;
+Find best working single group G∗ = arg max LOGI(
+Define candidate set B̃ :=
+
+G̃∈B̃
+7
+8
+9
+10
+11
+12
+
+if \
+LOGI(G∗ ) > δ then
+B = G∗
+∗)
+\
+Li−1 = LOGI(G
+if i > 1 and B 6= ∅ then
+o
+G̃ ∈ P(G) |G̃| = i and B ⊂ G̃ ;
+S
+
+\
+Find best working combination G∗ = arg max LOGI
+0
+
+Define candidate set B̃ :=
+
+n
+
+G ∈G̃ G
+
+0
+
+
+;
+
+G̃∈B̃
+13
+14
+15
+16
+17
+
+
+S
+0 −L
+\
+if LOGI
+i−1 > δ then
+S G0 ∈G∗ G
+0
+B = G0 ∈G∗ G
+
+S
+0
+\
+Li−1 = LOGI
+0
+∗ G
+G ∈G
+
+else
+break for loop
+
+visualize the results in alluvial charts (Allaire et al., 2017) to illustrate how we
+can gain further insights about the interplay of good combinations of groups of
+features using this sequential grouped feature importance procedure. It shows
+how frequently a group was selected given that another group was already
+included and thereby highlights robust combinations of groups.
+Given a set of groups G = {G1 , ..., Gk }, with Gi ⊂ {1, ..., p}, for iS= 1, ..., k,
+we are looking for a well-performing combination of groups B = i∈I Gi ⊂
+{1, ..., p}, I ⊂ {1, ..., j}. Starting with an empty set B = ∅, the LOGI scores
+of each group G1 , ..., Gk are assessed individually using an inner resampling
+strategy for LOGI where the data splits are the same for each group. Without
+loss of generality, let G1 be the best performing set of groups according to
+the mean LOGI score on the test datasets. If the grouped feature importance
+score of G1 exceeds a given threshold δ > 0, we define B = G1 and continue
+looking for a group to add. In other words, how well are the combinations
+{G1 , G2 }, ..., {G1 , Gk } performing? We define the LOGI score of sets of subsets
+as the LOGI score of the union of all subsets. Thus, we assess the LOGI scores
+of G1 ∪ G2 , ..., G1 ∪ Gk , and find the best performing combination of two
+groups, which contain the best working previous group. This procedure of
+iteratively adding a group is repeated until the performance threshold is no
+longer exceeded, yielding a well-working combination of groups, for example,
+B = G1 ∪ G3 ∪ G5 .
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+15
+
+3 Comparison of Grouped Feature Importance Methods
+After introducing the methodological background of the different loss-based
+grouped feature importance measures in Section 2, we will now compare them
+in different simulation settings. We analyze the impact on all methods for
+settings where (1) groups are dependent, (2) correlations within groups vary,
+and (3) group sizes differ.
+
+3.1 Dependencies between Groups and Sparsity
+In this chapter, we compare refitting- and permutation-based grouped feature
+importance methods and show how different dependencies between groups can
+influence the importance scores. We demonstrate the benefits of the sequential
+grouped feature importance procedure and conclude with a recommendation
+when to use refitting or permutation-based methods depending on the usecase.
+We simulate a data matrix X with n = 1000 instances and 3 groups
+G1 , G2 , G3 with each of them containing 10 normally distributed features.
+While features in G3 are created such that they are almost uncorrelated with
+features of the other groups, G1 and G2 are highly dependent. For this purpose, we generate the 10 features of group G1 based on a normally distributed
+prototype vector U ∼ N (0, 1) as follows: For every feature included in group
+G1 , we alter 10% of the observations by adding a normally distributed error
+term  ∼ N (0, 0.5) (for a similar approach, see Toloşi and Lengauer, 2011). G2
+is generated by copying features of G1 and adding a small normally distributed
+error term  ∼ N (0, 0.01) to the copied features. Features of the group G3 are
+generated similar to group G1 but using a prototype vector V which is independent of U. The target vector Y is generated by Y = 2U + 1V + , with
+ ∼ N (0, 0.1). We fitted a support vector machine with a radial basis function
+kernel4 , as an example of a black-box algorithm.
+The results in Table 1 show that there can be major differences depending
+on how the grouped feature importance is calculated. Permutation methods
+(GOPFI & GPFI & GSI) reflect the importance of the groups based on a model
+trained on a fixed dataset. In contrast, refitting methods (LOGI & LOGO) retrain the model on a reduced dataset and can therefore learn new relationships.
+Looking at the results from the permutation methods, we can see, that the
+groups G1 and G2 share the same importance and are more important than
+G3 . The results from the refitting methods, however, can reveal some interesting relationships between the groups. The refitting methods highlight that G1
+and G2 are more or less interchangeable, hence do not complement each other.
+This is reflected by the near-zero LOGO scores, which indicate, that leaving
+each group out of the full model does not change the model’s expected loss
+considerably.
+4 Epsilon regression,  = 0.1, C = 1 with heuristically chosen kernel width according to
+(Caputo et al., 2002) (here: σ = 0.079).
+
+16
+
+Au and Herbinger
+
+G1, MSE = 1.204, n = 46
+
+G1.G3, MSE = 0.206, n = 46
+G1.G2.G3, MSE = 0.196, n = 15
+
+G2, MSE = 1.219, n = 54
+
+G2.G3, MSE = 0.206, n = 54
+
+Fig. 1: Sequential grouped feature importance for the simulation in Section
+3.1. 100 times repeated subsampling. Improvement threshold δ = 0.001. Vertical bars show one step of the sequential procedure (left to right). Height of
+the vertical bars represent the number of subsampling iterations a combination of groups was chosen. M SE scores show predictive performance. Streams
+represent the addition of a group.
+
+Figure 1 illustrates the results of the sequential procedure introduced in
+Algorithm 1. We see that across 100 subsampling iterations, G1 was chosen
+46 times as the most important first group, and G2 was chosen 54 times with
+similar predictive performance for both groups. In the second step, the group
+G3 was added in all cases to either G1 or G2 . This step resulted in an onaverage drop in the MSE score from 1.2 to 0.2. Only in a few cases (15 out of
+100), the final addition of either G1 or G2 to a full model was exceeding the
+very low chosen threshold of δ = 0.001. This reveals that these two groups are
+rather interchangeable and do not benefit from one another.
+Group
+G1
+G2
+G3
+
+GOPFI
+6.04 (± 0.37)
+5.90 (± 0.35)
+1.76 (± 0.39)
+
+GPFI
+2.64 (± 0.07)
+2.57 (± 0.09)
+1.75 (± 0.05)
+
+GSI
+4.12 (± 0.45)
+4.01 (± 0.47)
+1.54 (± 0.39)
+
+LOGI
+3.93 (± 0.75)
+3.93 (± 0.76)
+0.58 (± 1.01)
+
+LOGO
+-0.01 (± 0.02)
+-0.00 (± 0.02)
+1.01 (± 0.22)
+
+Table 1: Results of different feature importance calculations of the simulation. GSI scores were calculated without approximation with vperm as value
+function. All results were averaged by a 10-fold cross validation scheme with
+standard deviations reported in parentheses.
+
+The choice between using permutation or refitting grouped feature importance methods might depend on the number of groups and correlation strength
+between the different groups. If feature groups are distinct, and features between the groups are almost uncorrelated, we might prefer permutation over
+refitting methods due to lower computation time. In cases where groups are
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+17
+
+correlated with each other (e.g., because some features belong to multiple
+groups), refitting methods might be preferable as they are not misleading in
+correlated settings. Since the number of groups is usually smaller than the
+number of features in a dataset, refitting methods for groups of features could
+become a viable choice. Furthermore, with the sequential grouped feature importance procedure it is possible to find sparse and good combinations of
+groups in an interpretable manner and thus helps to better understand dependencies and interactions between groups.
+
+3.2 Varying Correlations within Groups
+In many use cases, it is quite common to group similar and therefore often
+correlated features together while groups of features may be almost independent of each other. However, compared to Section 3.1 correlations of features
+within groups might differ. We created a data matrix X with n = 1000 instances and 4 groups G1 , G2 , G3 , G4 with each of them containing 10 normally
+distributed features. Using 5-fold cross-validation, we fitted a random forest
+with 2000 trees and a support vector regression with a radial basis function
+kernel5 . The univariate target vector Y is defined as follows:
+Zj = 3X2Gj ,3 − 4XGj ,5 − 6XGj ,7 + 5XGj ,9 · dj ,
+Y=
+
+3
+X
+
+j ∈ {1, 2, 3}
+
+Zj + 
+
+j=1
+
+with
+
+(
+1,
+dj =
+0,
+
+if mean(XGj ,8 ) > 0
+otherwise
+
+iid
+
+and  ∼ N (0, 1). The i−th feature of the j-th group is denoted by XGj ,i . We
+repeated the simulation 20 times.
+It follows that G1 , G2 , G3 have the same influence on the target variable
+while G4 has no influence on Y. Therefore, all features are generated from a
+prototype vector U, which is sampled by a normal distribution N (0, 1). For
+every feature, we alter a specific percentage of the observations by taking a
+weighted average between U (20%) and an independent standard normally
+distributed random variable (80%). For the results shown in Figure 2, we
+set this percentage to 10% for all features within the same group. Hence,
+correlations within groups are the same (around 90%) for all groups, while
+groups themselves are independent of each other. The plots show that all
+methods correctly attribute the same importance to the first three groups,
+while the fourth group being not important for predicting Y. LOGI seems to
+be a bit less robust and can also take negative values in the case of group 4.
+5 We used a cost parameter of C = 1 and estimate the kernel width based on the heuristic
+introduced by (Caputo et al., 2002)
+
+18
+
+Au and Herbinger
+
+In Figure 3, on the other hand, correlations within groups vary across
+groups. The altering percentage is set to 10% for features of G1 and G4 , to
+30% for features of G2 and to 60% for features of G3 . Hence, features in
+G1 and G4 are highly correlated within the respective group while features
+within G2 and G3 show a medium and small correlation, respectively. While
+G4 is still recognized to be unimportant, the relative importance of groups
+1 to 3 drops with decreasing within-group correlation. This artifact seems to
+be even more severe for the random forest compared to the support vector
+machine. For example, G3 is on average less than half as important as G1 for
+permutation-based methods. Thus, none of the methods reflect the underlying
+true importance of the different groups. However, this might be due to the
+actually learned effects of different models, since grouped structures are not
+regarded in the modeling approach. Another possibility to quantify feature
+importance when using random forests is to extract the information on how
+often a feature has been used as a splitting variable for the different trees. The
+feature chosen for the first split has the most influence within each tree. Hence,
+we calculated for each repetition the percentage of how often a feature has
+been chosen as the first splitting feature. The distribution over all repetitions
+is displayed in Figure 4. Each of the features of G1 is on average chosen more
+often as the first splitting feature than all features of the other groups, no
+matter if it has an influence on the target or not. The influential features of
+G3 (which has the lowest within-group correlation) are barely chosen as the
+first splitting feature.
+Hence, users need to be careful in case there are varying dependency structures when using grouped feature importance methods on models that have
+been trained on single-feature space. Random forests are especially prone to
+bias in this case as shown in this simulation example as well as in other work
+such as Strobl et al. (2008).
+
+3.3 Varying Sizes of Groups
+Another factor to consider when calculating grouped instead of individual feature importance scores is that differing group sizes might influence the ranking
+of the scores. Groups with more features might often have higher grouped importance scores and might contain more noise features than smaller groups.
+Therefore, Gregorutti et al. (2015) argue that in case one needs to decide between two groups that have an equal importance score, one would prefer the
+group with fewer features. Following from that, they normalize the grouped
+feature importance scores regarding the group size with the factor |G|−1 . This
+is also used in the default definition of the grouped model reliance score in
+Valentin et al. (2020). However, the usefulness of normalization highly depends
+on the question the user would like to answer. This is illustrated in a simulation
+example in Figure 5. We created a data matrix X with n = 2000 instances and
+2 groups with G1 containing {x1 , . . . x6 } and G2 containing {x7 , x8 } i.i.d. uniformly distributed features on the interval [0, 1]. The univariate target variable
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+19
+
+Fig. 2: Grouped relative importance scores in case of equally sized within-group
+correlations for random forest (left) and SVM (right). Relative importance is
+calculated by dividing each of the absolute group importance scores by the
+importance score of G2 . Hence, relative importance of G1 is 1. The boxplots
+illustrate the variation between different repetitions.
+
+Fig. 3: Grouped relative importance scores in case of varying sizes of withingroup correlations for random forest (left) and SVM (right). Relative importance is calculated by dividing each of the absolute group importance scores
+by the importance score of G2 . Hence, relative importance of G1 is 1. The
+boxplots illustrate the variation between different repetitions.
+
+20
+
+Au and Herbinger
+
+Fig. 4: The figure shows the percentage of how often each feature is chosen
+as first splitting feature within the trained random forests. Results have been
+averaged over the cross validation folds for each repetition. The boxplots show
+the distribution over all 20 repetitions.
+
+Y is defined as follows:
+
+Y = 2X1 + 2X3 + 2X7 + ,
+
+iid
+
+with  ∼ N (0, 1).
+
+We used 1000 observations for fitting a random forest with 2000 trees and
+1000 observations for prediction and calculating the GSI as defined in Section
+2.4 with a permutation-based value function. This was repeated 20 times.
+Figure 5 shows that G1 is about twice as important as G2 . As shown in Section
+2.4 we can compare the GSI with the Shapley importance on feature level. In
+case there are no higher-order interaction terms between groups modeled by
+the random forest, the single feature importance scores will approximately sum
+up to the grouped importance score as shown in this example. This provides
+a more detailed view of how many and which features have been important
+within each group. In this case, there are two equally important features in G1
+and one equally important feature in G2 . If we use the normalization constant
+in this example, we would divide the grouped importance score of G1 by 6 and
+the one of G2 by 2, and hence G2 would be regarded as more important than
+G2 . It follows that if we need to decide between two groups, we would choose
+G2 when we follow the approach of Gregorutti et al. (2015) although the user
+might prefer G1 since there are two features with the same importance as the
+one of G2 and hence G1 contains more information. Furthermore, breaking
+down the GSI to the single feature Shapley importance scores puts the user in
+the position to define sparser groups by excluding non-influential features.
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+21
+
+Fig. 5: Shapley importance on group (left) and on feature level (right). Boxplots show the variation between the 20 repetitions of the experiment.
+
+4 Feature Effects for Groups
+Feature effect methods quantify or visualize the influence of features on the
+model’s prediction. For a linear regression model, we can easily summarize the
+feature effect in one number making interpretation very simple: If we change
+feature x1 by 1 unit, our prediction will change by the corresponding coefficient
+estimate β̂1 (positively or negatively depending on the sign of the coefficient).
+For more complex non-linear models like generalized additive models, such a
+simplified summary of the feature effect is not adequate since the magnitude
+and sign of the effect might change over the feature’s value range. Hence, it
+is more common to visualize the marginal effect of the feature of interest on
+the predicted outcome. Since ML models are often complex non-linear models,
+different visualization techniques for the feature effect have been introduced in
+recent years. Common methods are PDP, ICE curves or ALE (Friedman, 2001;
+Goldstein et al., 2013; Apley and Zhu, 2019), which show how changes in the
+feature values affect the predictions of the model. However, these are usually
+only defined for a maximum of two features. For larger groups of features,
+this becomes more challenging since it is difficult to simultaneously visualize
+the influence of several features. The approach described in this section aims
+to create effect plots for a predefined group of features that have a similar
+interpretation to the single-feature PDP. To achieve this, we transform the
+high-dimensional space of the feature group into a low-dimensional space by
+using a supervised dimension reduction method which is discussed in Section
+4.1. We want to find a few underlying factors that are attributed to a sparse and
+interpretable combination of features that explain the effect of the regarded
+group on the model’s expected loss. We provide a detailed description of this
+method in Section 4.3 and introduce the resulting CFEP. In Section 4.4, we
+
+22
+
+Au and Herbinger
+
+illustrate the advantages of applying a supervised instead of an unsupervised
+dimension reduction method and compare our method to the totalvis effect
+plot introduced in Seedorff and Brown (2021).
+
+4.1 Choice of Dimension Reduction Method
+The probably most prominent dimension reduction technique is the principal
+component analysis (PCA). PCA finds a projection V ∈ Rp×p , which maximizes the total variance of projected data XV through an Eigen decomposition
+of the sample covariance matrix. PCA is restricted to explaining most of the
+variance of the feature space and the identified projections are not related
+to the target variable. Because we want to visualize the mean prediction of
+combined features as a result of the dimension reduction process, we prefer supervised procedures that maximize dependencies between the projected data
+XV and the target vector Y (as we show in Section 4.4). Many methods for
+supervised PCA (SPCA) have been established, see for example Bair et al.
+(2006), who used a subset of features that were selected based on their linear correlation with the target variable. Another very popular method that
+maximizes the covariance between features and the target variable is partial
+least squares (PLS) (Wold et al., 1984). The main difference of these methods
+compared to the SPCA introduced by Barshan et al. (2011) is that the SPCA
+is based on a more general measure of dependence, called the Hilbert-Schmidt
+Independence Criterion (HSIC). This independence measure is constructed to
+be zero, if and only if any bounded continuous function between the feature
+and target space is uncorrelated. In practice, an empirical version of the HSIC
+criterion is calculated with kernel matrices. It follows that while this SPCA
+technique can cover all kinds of linear and non-linear dependencies between
+X and Y by choosing an appropriate kernel, the other suggested methods are
+only able to model linear dependencies between the features and the target
+variable. Probably best suited for our application of finding interpretable sets
+of features in a high-dimensional dataset is the method called sparse SPCA,
+described in Sharifzadeh et al. (2017). Similar to the SPCA method from Barshan et al. (2011), sparse SPCA uses the HSIC criterion to maximize the dependency between projected data XV and the target Y but also incorporates
+a L1 penalty of the projection V for sparsity. The sparse SPCA problem can
+be solved with a penalized matrix decomposition (Witten et al., 2009). More
+theoretical details on the sparse SPCA, including the HSIC criterion and how
+it can be calculated empirically, and the choice of kernels and hyperparameters
+can be found in Appendix B.
+
+4.2 Totalvis Effect Plot
+Seedorff and Brown (2021) recently introduced a method that aims to plot
+the combined effect of multiple features by using PCA. Their approach can
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+23
+
+be described as follows: First, they apply PCA on the regarded feature space
+to receive the principal components matrix after rotation. For the principal
+component of interest, they create an equidistant grid. Second, for each grid
+value, they replace all values of the selected principal component with this
+grid value and transform the matrix back to the original feature space. Third,
+The ML model is applied on these feature values and a mean prediction for
+the grid point of the regarded principal component is calculated. Steps 2 and
+3 are repeated for all grid points.
+Hence, with this method combined effect plots for up to p principal components can be created. Thus, Seedorff and Brown (2021) do not focus on
+explaining groups of features explicitly. Furthermore, they use PCA for dimension reduction which is unsupervised, and thus projections might not be
+related to the target. Since using PCA and not sparse PCA, the results might
+be hard to interpret since many or all features might have an influence on the
+principal component. Last but not least, with the back-transformation from
+the principal component matrix to the original feature space, all feature values change and might not be meaningful anymore. For example, in the case of
+integer features, the back-transformation might lead to real feature values. We
+illustrate the disadvantages of the method compared to the CFEP in Section
+4.4.
+4.3 Combined Features Effect Plot
+To construct a CFEP for a defined group of features we first need to apply a
+dimension reduction method on this feature group to create a low-dimensional
+representation. In the case of sparse SPCA, we can obtain a reasonable number
+of influential features for each principal component. The CFEP illustrates the
+mean predictions for the sparse combination of features on observation level.
+The estimation of these mean predictions is explained in Figure 6. In this
+illustrative example, we have two predefined groups of features where the first
+group contains x1 , x2 and x3 and features x4 and x5 belong to the second
+group. To calculate the (grouped) mean prediction for the first group and
+first observation (shown in red), we replace the values of each instance in the
+dataset for the first group by the values of the first observation and predict
+(1)
+ŷrep with the previously trained model. The value on the y-axis for the red
+point in the graph below corresponds to the mean over all predictions for
+(1)
+the first observation: ¯
+ŷ rep = (0.8 + 0.2 + 0.7 + 0.6 + 0.4 + 0.3)/6 = 0.5. The
+value on the x-axis is the linear projection of the first observation for the
+regarded principal component. Hence, it is calculated by the weighted sum
+(i)
+(i)
+of feature values x1 to x3 where the weights are defined by the loadings of
+the respective principal component that we receive with sparse SPCA. Hence,
+this method is computationally cheaper than totalvis, since we do not need
+any back transformations to the original feature space and we only need to
+calculate predictions once for each group of features and not for every principal
+component.
+
+24
+
+Au and Herbinger
+
+x1
+1
+-2
+2.3
+-6.5
+0.5
+4
+
+Group 1
+x2
+x3
+-1
+2
+1.5
+3
+4
+-1
+8
+0
+1
+2
+-2
+2
+
+Group 2
+x4
+x5
+2.5
+3
+-2
+-1
+6
+2
+5
+1
+4
+2
+3
+3
+
+Group 1
+(1)
+
+→
+
+x1
+1
+1
+1
+1
+1
+1
+
+(1)
+
+x2
+-1
+-1
+-1
+-1
+-1
+-1
+
+Group 2
+(1)
+
+x3
+2
+2
+2
+2
+2
+2
+
+x4
+2.5
+-2
+6
+5
+4
+3
+
+x5
+3
+-1
+2
+1
+2
+3
+
+(1)
+
+→
+
+predict
+
+ŷrep
+0.8
+0.2
+0.7
+0.6
+0.4
+0.3
+
+Mean Prediction
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+1.0
+
+1.5
+
+2.0
+
+2.5
+
+PC1 = 0.3x1 + 0.6x2 + 0.5x3
+
+Fig. 6: Explanation of estimating and visualizing CFEP; the x-coordinate reflects the linear combination of features with non-zero loadings for PC1 and
+(i)
+the y-coordinate the mean predictions ¯
+ŷ rep for each observation i.
+In contrast to PDP or totalvis effect plots we receive a point cloud instead
+of a curve. The CFEP is, mathematically speaking, not a function, since points
+on the x-axis correspond to linear projections from a group of features. A point
+z on the x-axis can have multiple combinations of features, which lead to z
+and have different mean predictions on the y-axis. However, we have now the
+possibility to interpret the shape of the point cloud and can draw conclusions
+about the behavior of the mean prediction of the model regarding the principal
+component.
+This procedure is defined in a more general way in Algorithm 2. For this,
+let G ⊂ {1, ..., p} be a group of features with G = {i1 , ..., ik } and XG :=
+Xi1 × ... × Xik . A dimension reduction is a function g : XG −→ R that can be
+reasonably interpreted, like a linear projection.
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+25
+
+Algorithm 2: Combined Features Effect Plot
+input : Dataset D = {(x(i) , y (i) )}n
+i=1 , group-defining subset G ⊂ {1, ..., p},
+dimension reduction function g : XG −→ R, model fˆ trained on D.
+output: Combined Features Effect Plot
+1 for i ∈ {1, ..., n} do
+(i)
+2
+get feature values (xj )j∈G ;
+3
+
+4
+5
+6
+
+(i)
+
+create Drep by replacing feature values of every other observation with these
+feature values;
+(i)
+(i)
+predict ŷrep by applying fˆ on Drep ;
+(i)
+
+(i)
+
+¯
+calculate the mean prediction ŷ
+rep of ŷrep ;
+(i)
+¯(i) ] as x- and y-coordinates of observation i for the CFEP;
+save [g((x )j∈G ), ŷ
+j
+
+rep
+
+4.4 Experiments on Supervised vs. Unsupervised Dimension Reduction
+As discussed in Section 4.1, PCA might be the most popular method regarding dimension reduction and thus for example used in Seedorff and Brown
+(2021) in a related approach. However, since PCA is unsupervised, it does not
+account for the dependency between feature space and the target variable. To
+evaluate how much this drawback influences CFEP, we look at two regression
+problems on simulated data. The first is defined by a single underlying factor
+depending on a sparse set of features, which can be represented by a single
+principal component. The linear combination of this feature set is also linearly
+correlated with the target variable. The second regression problem contains
+two underlying factors depending on two sparse sets of features. While the
+linear combination of the first feature set is also linearly correlated with the
+target, the second factor has a quadratic effect on Y. In both cases, we compare the usage of sparse supervised and unsupervised PCA (sparse SPCA and
+sparse PCA) as dimension reduction methods within CFEP and compare it to
+the totalvis effect plot. Here, we investigate if the respective dimension reduction method does correctly identify the sparse set of features for each group.
+Additionally, we determine how accurately we can predict the true underlying
+relationship between the linear combination of these features and the target
+variable. Since we simulated the data, we know the number of underlying
+factors (principal components).
+4.4.1 One Factor
+In this example, we created a data matrix X with 500 instances of 50 standard
+normally distributed features with decreasing correlations. Therefore, all features are generated from a prototype vector U , which is sampled by a normal
+distribution N (0, 1). For every feature, we alter a specific percentage of the
+observations by taking a weighted average between U (20%) and an independent standard normally distributed random variable (80%). This percentage
+is set to 20% for the first 10 features, to 40% for the next 10 features up to
+
+26
+
+Au and Herbinger
+
+100% for the last ten features. Thus, while the first ten features are highly
+correlated with each other, the last ten features are almost uncorrelated. The
+sparse subgroup defined by the variable Z is a linear combination of five features from X and has itself a linear effect on the univariate target variable
+Y:
+Z = X5 − 2X8 − 4X25 + 8X47 + 4X49
+Y = Z + ,
+
+with
+
+iid
+
+ ∼ N (0, 1).
+
+Hence, according to our notation, GZ is defined by GZ = {5, 8, 25, 47, 49} and
+thus XGZ is the related subset of all features. We drew 100 samples and fitted
+each time a random forest with 2000 trees. We used the 10-fold cross-validated
+results to perform sparse SPCA. For each dimension reduction method, we
+estimated Ẑ by summing up the (sparse) loading vector (estimated by the
+dimension reduction method) multiplied by the feature matrix X. Therefore,
+¯
+XGẐ is defined by the received sparse feature set. The mean prediction Ŷrep
+for the CFEP was calculated as described in Section 4.3.
+The impact of choosing a supervised over an unsupervised sparse PCA
+approach is shown in Figure 7, which also shows the average linear trend
+and 95% confidence bands of CFEP for the simulation results. To evaluate
+¯
+how well the estimated mean prediction Ŷrep approximates the underlying
+trend, we assume that we know that Z has a linear influence on the target.
+Thus, we fit on each simulation result a linear model. To compare the received
+regression lines, we evaluate each of them on a predefined grid and average
+over all 100 samples (represented by the red line). The confidence bands are
+then calculated by taking the standard deviation over all estimated regression
+lines on grid level and calculating the 2.5% and 97.5% quantiles using the
+standard normal approximation. The associated calculation steps for each of
+the 100 samples can be summarized as follows:
+1) Estimate a linear model fˆ(XGẐ ) ∼ Z.
+2) Define an equi-distant grid of length 50 within the range of Z.
+3) Apply the linear model estimated in 1) on the grid defined in 2).
+4) Repeat steps 1 to 3 for fˆ(XGZ ) hence using the true underlying features
+of Z to calculate the combined features dependencies which we call the
+ground truth.
+The left plot in Figure 7 clearly shows a similar linear trend of the estimated
+CFEP compared to the average ground truth (represented by the blue line)
+while the red line in the right plot varies around 0. By using sparse SPCA,
+the underlying feature set XGẐ is better approximated than with sparse PCA
+which is reflected in the MSE between Z and Ẑ of 0.7 for sparse SPCA and 1.9
+for sparse PCA. Figure 8 provides an explanation for those differences. While
+sparse SPCA puts on average higher weights on features that have a high
+influence on the target, impactful loading weights for sparse PCA are solely
+distributed over highly correlated features in X that explain the most variance
+in feature space. Thus, including the relationship between the target and X
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+27
+
+Fig. 7: Average linear trend and confidence bands of CFEP over all samples
+using sparse SPCA (left) and sparse PCA (middle) compared to estimated
+totalvis effect curves over all 100 samples for first principal component (black)
+and the average linear trend (red) (right).
+
+Loading Weights
+
+1.00
+
+0.75
+
+Feature in Z
+0.50
+
+No
+Yes
+
+0.25
+
+0.00
+V1 V2 V3 V4 V5 V6 V7 V8 V9 V10V11V12V13V14V15V16V17V18V19V20V21V22V23V24V25V26V27V28V29V30V31V32V33V34V35V36V37V38V39V40V41V42V43V44V45V46V47V48V49V50
+
+Features
+
+Loading Weights
+
+1.0
+
+0.5
+
+Feature in Z
+0.0
+
+No
+Yes
+
+−0.5
+
+−1.0
+V1 V2 V3 V4 V5 V6 V7 V8 V9 V10V11V12V13V14V15V16V17V18V19V20V21V22V23V24V25V26V27V28V29V30V31V32V33V34V35V36V37V38V39V40V41V42V43V44V45V46V47V48V49V50
+
+Features
+
+Fig. 8: Distribution of feature loadings in sparse SPCA (top) and sparse PCA
+(bottom) over all samples; the rhombuses denote the mean values with the
+blue ones indicating the features that have an influence on the target in the
+underlying model formula.
+
+in the dimension reduction method may have a huge influence on correctly
+approximating the underlying factor and hence also on the CFEP.
+Similar to using sparse PCA as a dimension reduction method within
+CFEP, the totalvis effect curves based on PCA do not show a clear positive linear trend on average (see Figure 7). For almost half of the samples, we
+
+28
+
+Au and Herbinger
+
+even receive a negative instead of a positive trend for the underlying factor.
+Thus, the interpretation is opposite to the actual effect and hence misleading.
+4.4.2 Two Factors
+In real-world data, it is usually the case that we have more than one underlying
+factor and also non-linear relationships of those on the target. Hence, we are
+now looking at a more complex simulation setting to see if we can observe the
+same behavior that we observed for the simple case. Therefore, we simulated
+a data matrix X with 500 instances for two feature sets each containing 20
+standard normally distributed features. The data for each feature set is generated as described in the one-factor example but with an altering proportion of
+15% and 35% for the features in the first set and 55% and 85% in the second
+set. Hence, the first ten features of each set show a higher correlation among
+each other than the last ten features and features of the first set are on average higher correlated than the second set. Features between the two sets are
+uncorrelated. The first factor Z1 is a linear combination of four features from
+the first set and Z2 of two features from the second set. Z1 has a linear and
+Z2 a quadratic effect on Y.
+Z1 = 3X3 − 2X8 − 4X13 + 8X18
+Z2 = 2X25 + 4X35
+Y = Z1 + Z22 + ,
+
+iid
+
+with  ∼ N (0, 1).
+
+Again we drew 100 samples and fitted each time a random forest with 2000
+trees. The approach is the same as described for one factor with the difference
+that we use the first two principal components as we want to find two sparse
+feature sets instead of one.
+In Figure 9 the average linear and quadratic trend of the underlying CFEPs
+of Z1 and Z2 are depicted for both dimension reduction methods. While the
+average linear regression line of sparse SPCA matches the average ground
+truth almost perfectly for Z1 , the associated line of sparse PCA shows only
+a very slightly positive trend and differs a lot from the average ground truth.
+A similar propensity can be observed for the quadratic shape regarding Z2 .
+Again, this behavior is because sparse SPCA puts on average higher weights on
+features that have a high effect on the target, while the unsupervised version
+focuses on features that explain the most variance in X.
+The estimated linear trend of the totalvis effect curves for the first principal
+component is negative instead of positive and thus for most of the samples and
+on average completely misleading (see Figure 9). The quadratic shape of the
+second component is on average and for almost all samples steeper than the
+average ground truth. Also here, the deviation is higher than for CFEP with
+sparse SPCA.
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+29
+
+Fig. 9: Top (Z1 ): Average linear trend and confidence bands of CFEP over
+all samples using sparse SPCA (left) and sparse PCA (middle) compared to
+estimated totalvis effect curves over all 100 samples for first principal component (black) and the average linear trend (red) (right). Bottom (Z2 ): Same
+structure as for Z1 , but showing the quadratic trend of Z2 .
+
+5 Real Data Example: Smartphone Sensor Data
+Smartphones and other consumer electronics have increasingly been used to
+collect data for research (Miller, 2012; Raento et al., 2009). The emerging popularity of these devices for data collection is grounded in their connectivity, the
+number of built-in sensors, and their widespread use. Moreover, smartphones
+are enabling users to perform a wide variety of activities (e.g., communication,
+shopping, dating, banking, navigation, listening to music) and thus provide an
+ideal way to study human behavior in naturalistic contexts, over extended
+periods of time, and at fine granularity (Harari et al., 2015, 2016, 2017). In
+this regard, smartphone data has been used to investigate individual differences in personality traits (Stachl et al., 2017; Harari et al., 2019), in human
+emotion and well-being (Servia-Rodrı́guez et al., 2017; Rachuri et al., 2010;
+Saeb et al., 2016; Thomée, 2018; Onnela and Rauch, 2016), and in day and
+nighttime activity patterns (Schoedel et al., 2020).
+We use a dataset on human behavior, collected with smartphones, to illustrate methods for group-based feature importance. The PhoneStudy dataset
+
+30
+
+Au and Herbinger
+
+has been created from three separate datasets (Stachl et al., 2017; Schuwerk
+et al., 2019; Schoedel et al., 2018). It consists of 1821 features on smartphonesensed behavior and 35 target variables on self-reported Big Five personality
+trait dimensions and subdimensions. The dataset has been published online
+and is openly available6 . The original study (Stachl et al., 2020a) used the behavioral variables to predict self-reported Big Five personality trait scores on
+35 dimensions and explored which classes of behaviors were most predictive
+for each personality trait dimension and overall. The personality prediction
+task is challenging because, (1) the dataset contains many variables on similar
+behaviors, (2) these variables are often correlated, and (3) effects with the
+targets are interactive, very small, and partially non-linear. Many variables
+in the dataset can be manually grouped into classes of behavior (e.g., communication and social activity, app-usage, music consumption, overall phone
+activity, mobility).
+We use this dataset to illustrate the idea of grouped feature importance
+with regard to the prediction of personality trait scores for the dimension
+of Conscientiousness. Conscientiousness is a personality trait dimension that
+globally describes people’s propensity to be reliable, dutiful, orderly, ambitious, and cautious (Jackson et al., 2010). We (1) fit a random forest model to
+predict the personality dimension of Conscientiousness, (2) compute the introduced methods for grouped feature importance (GOPFI, GPFI, GSI, LOGI,
+LOGO), (3) use the proposed sequential grouped feature importance procedure to investigate which groups were most important in combination, and
+(4) visualize the combined effect of app-usage variables with CFEPs. After
+the importance of individual groups has been quantified, CFEPs can be helpful to further explore the variables in these groups with regard to the criterion
+variable of interest (i.e., Conscientiousness) to generate new hypotheses for
+future research.
+The feature group app usage, as visible in Table 2, consistently has the
+highest grouped feature importance score for all calculated scores and will be
+explored further with the CFEPs.
+In Figure 10, we show a sequential procedure for our personality prediction
+example. The figure shows that the groups overall phone usage and app usage
+lead to the best model performance if used alone and in many cases to even
+better performances if combined. The figure also suggests that the initial usage
+of the app usage more often leads to the smallest expected loss, if only one
+group can be used (mean MSE = 0.519). For a practical application, this would
+indicate that if you can only collect one type of feature from smartphones to
+predict the personality trait Conscientiousness, features on app usage should
+be used. If two groups of data can be collected, overall phone usage should
+also be added (mean MSE = 0.513). Finally, the plot indicates that in some
+cases (n = 9), the additional consideration of music listening behaviors in the
+model could lead to additional, small improvements of the expected loss (mean
+6
+
+https://osf.io/kqjhr/
+
+Grouped Feature Importance and Combined Features Effect Plot
+Group
+mobility (Mo)
+music (Mu)
+communication and social (C)
+overall phone usage (O)
+app usage (A)
+
+GOPFI
+-0.002 (± 0.011)
+-0.001 (± 0.011)
+0.000 (± 0.008)
+0.007 (± 0.011)
+0.032 (± 0.009)
+
+GPFI
+-0.002 (± 0.001)
+0.002 (± 0.002)
+0.001 (± 0.003)
+0.009 (± 0.003)
+0.028 (± 0.005)
+
+GSI
+0.000 (± 0.003)
+0.001 (± 0.006)
+0.004 (± 0.006)
+0.012 (± 0.008)
+0.031 (± 0.012)
+
+31
+LOGI
+-0.011 (± 0.075)
+-0.019 (± 0.074)
+0.008 (± 0.070)
+0.032 (± 0.080)
+0.041 (± 0.069)
+
+LOGO
+0.000 (± 0.006)
+0.001 (± 0.012)
+0.001 (± 0.010)
+0.009 (± 0.014)
+0.011 (± 0.019)
+
+Table 2: Grouped feature importance values for predicting the personality trait
+Conscientiousness based on MSE. GOPFI (permutation-based): Expected loss
+decrease, when permuting all other features except the features in a group,
+compared to permuting all features. GPFI (permutation-based): Expected
+loss increase, when all features of a group are permuted. GSI (permutationbased): Average contribution of a group to all possible combinations of groups.
+LOGI (refitting method): Expected loss decrease compared to guessing baseline. LOGO (refitting method): Expected loss increase compared to full model.
+All values were calculated by using a resampling method (10-times crossvalidation).
+
+A, MSE = 0.519, n = 82
+
+A.O.Mu, MSE = 0.508, n = 9
+A.O, MSE = 0.513, n = 73
+
+O, MSE = 0.526, n = 18
+
+Fig. 10: Sequential grouped feature importance procedure for smartphone sensor data predicting Conscientiousness. 100 times repeated subsampling. Inner
+resampling strategy: 10-fold cross validation. Improvement threshold δ = 0.01.
+Abbreviations: app-usage (A), communication & social (C), music (Mu), overall phone activity (O), mobility (Mo). Vertical bars show one step in the greedy
+forward search algorithm. Height of the vertical bars represent the number of
+subsampling iterations a combination of groups was chosen (for example, out
+of 100 subsampling iterations the group app-usage (A) was chosen 82 times as
+the best first group. Streams indicate proportion of iterations that additionally
+benefited from a consequent step. Only streams containing at least 5 iterations
+and better mean performance at the end are displayed.
+MSE= 0.508). Interestingly, the feature group music alone shows very low (or
+even negative) grouped feature importance scores.
+To additionally explore meaningful and predictive directions in the featurespace of the app usage group, we use a CFEP for visualization. Figure 11
+shows that combinations of higher values in features on Weather app usage on
+average lead to higher mean values in the personality trait Conscientiousness.
+
+32
+
+Au and Herbinger
+
+●
+●
+●
+●
+●● ● ●
+●
+●●
+●
+● ● ● ●●
+●
+●● ●
+●
+● ● ●●
+●
+●
+●● ●
+●●●● ●
+●●
+●●
+●
+●
+●
+●
+●
+●
+●●
+● ●
+● ● ●● ●
+● ●
+●●
+●
+●
+●
+● ● ●
+●
+●
+●
+●●●● ●●● ●
+●
+●
+●
+●●●●
+●
+●
+●● ●
+●● ●●
+● ●●
+●● ●●
+● ●
+●
+●
+● ● ●●
+●
+
+−0.06
+
+●
+●●● ●
+●●
+● ●●
+●
+●●
+
+●
+
+●
+
+●● ●
+●
+
+● ●
+●● ●●
+
+●●
+● ●
+● ●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+●●●
+
+● ●
+
+●
+
+●
+●
+
+●
+
+●
+
+●
+●
+● ●
+●
+●
+●
+●
+●
+● ●
+●
+●
+●● ●
+●
+●
+●●
+● ● ●
+●
+●●
+●
+●●
+●●
+●
+● ●
+●
+●●
+●
+●
+●
+●
+● ●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+● ●
+●
+●
+●
+●
+●
+●
+●
+● ●
+●
+●
+●
+●
+●
+●
+●
+●
+●●
+●
+●
+
+mean prediction
+
+−0.07
+
+●
+
+●
+●
+
+x1 = daily_mean_num_unique_Weather_weekend
+x2 = daily_mean_num_Weather
+x3 = daily_mean_num_unique_Weather_week
+x4 = daily_mean_num_unique_Weather
+
+●
+●
+●
+●
+
+−0.08
+
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+●●
+●
+●
+● ●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+●
+
+−0.09
+
+●
+●
+
+●
+
+0
+
+2
+
+4
+
+6
+
+8
+
+0.42x1 + 0.12x2 + 0.55x3 + 0.71x4
+
+Fig. 11: CFEP for the prediction of the personality trait Conscientiousness.
+CFEP was calculated for the group app usage and the first principal component was chosen.
+The increased frequency in weather app usage could signify the preparedness of
+conscientious people for future eventualities (e.g., bad weather; Jackson et al.,
+2010).
+
+6 Conclusion
+We introduced various techniques to analyze the importance and effect of
+user-defined feature groups on predictions of ML models. We provided formal definitions and distinction criteria for grouped feature importance methods and distinguished between permutation- and refitting-based methods. For
+both approaches, we defined two calculation strategies that either start with
+a null model or with the full model. Based on these two definitions, we introduced Shapley importance scores for groups which we defined for permutation
+as well as refitting methods. Moreover, we introduced a sequential grouped
+feature importance procedure to find good and stable combinations of feature
+groups. To contrast the newly proposed methods with existing ones, we compared them for different scenarios. The key recommendations for the user can
+be summarized for four scenarios: (1) If high correlations between groups are
+present, refitting methods should be preferred over permutation methods since
+they often deliver more meaningful results in these scenarios. Moreover, if the
+number of groups is reasonably small, refitting methods become computationally feasible. (2) If a sparse set of feature groups is of interest (e.g. due to data
+availability), the introduced sequential procedure can be useful. It provides
+insights regarding the most important groups, which sparse group combinations are stable in the sense that they are frequently selected and achieve a
+good performance. These criteria can be critically informative in situations
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+33
+
+where feature groups have to be obtained from different data sources that are
+associated with further costs. (3) If the correlation strengths of features within
+groups are very diverse, all of the introduced methods might fail to reflect the
+true underlying importance of the feature groups. The size of this effect depends heavily on how well the model captures the true underlying relationship
+between features. Especially when using random forests, we showed that all of
+the methods lead to misleading results. (4) Groups with many features might
+tend to have a higher grouped importance score than groups with fewer features. Normalizing the grouped importance score leads to an average score per
+feature. However, this might result in choosing groups with grouped scores being smaller than those of other groups and hence choosing groups that contain
+less information than others. When using GSI, users can extract additional
+feature-level information to gain more insights into the group scores. Specifically, we showed that single feature Shapley importance scores add up to GSI
+when no higher-order interactions between groups are present.
+We also proposed the CFEP, which is another global interpretation method
+that allows to visualize the combined effect of multiple features on the prediction of an ML model. By applying a supervised SPCA, we received more
+meaningful and interpretable results for the final CFEP than for its unsupervised counterpart. Although we only considered numeric feature spaces in all
+our scenarios and the real data example, all our methods are in general also
+applicable to mixed feature spaces. However, in presence of categorical features
+a suitable dimension reduction method for CFEP has to be chosen.
+Here, we have focused on knowledge-driven feature groupings. However,
+the introduced methods could also be applied to data-driven groups (e.g., via
+shared variance). Obviously, their interpretation is only meaningful if groups
+can be described by some underlying factor. This might be a good application
+for interpretable latent variables to find causal relationships between feature
+groups and predictions of ML models. Also with regard to highly correlated
+feature groups that cannot be grouped naturally, a data-driven approach might
+be more suitable.
+We hope that this article provides a helpful reference for researchers in
+selecting appropriate interpretation methods when features can be grouped
+and that it inspires future research in this area.
+Acknowledgements This work has been partially supported by the German Federal Ministry of Education and Research (BMBF) under Grant No. 01IS18036A, by the Bavarian
+State Ministry of Science and the Arts in the framework of the Centre Digitisation.Bavaria
+(ZD.B), a Google research grant, the LMU-excellence initiative, and the National Science
+Foundation (NSF) Award SES-1758835. The authors of this work take full responsibilities
+for its content.
+
+34
+
+Au and Herbinger
+
+References
+Allaire J, Gandrud C, Russell K, Yetman C (2017) networkD3: D3 JavaScript
+network graphs from R. URL https://CRAN.R-project.org/package=
+networkD3, R package version 0.4
+Amoukou SI, Brunel NJB, Salaün T (2021) The shapley value of coalition of
+variables provides better explanations. arXiv:2103.13342
+Apley DW, Zhu J (2019) Visualizing the effects of predictor variables in black
+box supervised learning models. arXiv:1612.08468
+Bair E, Hastie T, Paul D, Tibshirani R (2006) Prediction by supervised
+principal components. Journal of the American Statistical Association
+101(473):119–137
+Barshan E, Ghodsi A, Azimifar Z, Jahromi MZ (2011) Supervised principal
+component analysis: Visualization, classification and regression on subspaces
+and submanifolds. Pattern Recognition 44(7):1357–1371
+Berk R, Sherman L, Barnes G, Kurtz E, Ahlman L (2009) Forecasting murder
+within a population of probationers and parolees: A high stakes application
+of statistical learning. Journal of the Royal Statistical Society: Series A
+(Statistics in Society) 172(1):191–211
+Breiman L (2001) Random forests. Machine Learning 45(1):5–32
+Brenning A (2021) Transforming feature space to interpret machine learning
+models. arXiv:210404295
+Caputo B, Sim K, Furesjö F, Smola A (2002) Appearance-based object recognition using svms: Which kernel should I use. In: Proc of NIPS workshop
+on statistical methods for computational experiments in visual processing
+and computer vision, Red Hook, NY, USA
+Casalicchio G, Molnar C, Bischl B (2019) Visualizing the Feature Importance
+for Black Box Models, Springer International Publishing. Machine Learning
+and Knowledge Discovery in Databases, pp 655–670
+Chakraborty D, Pal NR (2008) Selecting useful groups of features in a connectionist framework. IEEE Transactions on Neural Networks 19(3):381–396
+Cohen SB, Ruppin E, Dror G (2005) Feature selection based on the shapley value. In: Kaelbling LP, Saffiotti A (eds) IJCAI-05, Proceedings of the
+Nineteenth International Joint Conference on Artificial Intelligence, Edinburgh, Scotland, UK, July 30 - August 5, 2005, Professional Book Center,
+pp 665–670
+Covert I, Lundberg SM, Lee SI (2020) Understanding global feature contributions with additive importance measures. Advances in Neural Information
+Processing Systems 33
+Eckart C, Young G (1936) The approximation of one matrix by another of
+lower rank. Psychometrika 1(3):211–218
+Fisher A, Rudin C, Dominici F (2019) All models are wrong, but many are useful: Learning a variable’s importance by studying an entire class of prediction
+models simultaneously. Journal of Machine Learning Research 20(177):1–81
+Friedman J, Hastie T, Tibshirani R (2010) A note on the group lasso and a
+sparse group lasso. arXiv:10010736
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+35
+
+Friedman JH (2001) Greedy function approximation: A gradient boosting machine. Annals of statistics pp 1189–1232
+Fukumizu K, Bach FR, Jordan MI (2004) Dimensionality reduction for supervised learning with reproducing kernel hilbert spaces. Journal of Machine
+Learning Research 5(Jan):73–99
+Goldstein A, Kapelner A, Bleich J, Pitkin E (2013) Peeking inside the black
+box: Visualizing statistical learning with plots of individual conditional expectation. Journal of Computational and Graphical Statistics 24
+Gregorova M, Kalousis A, Marchand-Maillet S (2018) Structured nonlinear
+variable selection. In: Globerson A, Silva R (eds) Proceedings of the ThirtyFourth Conference on Uncertainty in Artificial Intelligence, UAI 2018, Monterey, California, USA, August 6-10, 2018, AUAI Press, pp 23–32
+Gregorutti B, Michel B, Saint-Pierre P (2015) Grouped variable importance
+with random forests and application to multiple functional data analysis.
+Computational Statistics & Data Analysis 90:15–35
+Gretton A, Bousquet O, Smola A, Schölkopf B (2005) Measuring statistical
+dependence with hilbert-schmidt norms. In: International conference on algorithmic learning theory, Springer, pp 63–77
+Guyon I, Weston J, Barnhill S, Vapnik V (2002) Gene selection for cancer
+classification using support vector machines. Machine learning 46(1-3):389–
+422
+Harari GM, Gosling SD, Wang R, Campbell AT (2015) Capturing situational
+information with smartphones and mobile sensing methods. European Journal of Personality 29(5):509–511
+Harari GM, Lane ND, Wang R, Crosier BS, Campbell AT, Gosling SD (2016)
+Using smartphones to collect behavioral data in psychological science: Opportunities, practical considerations, and challenges. Perspectives on Psychological Science 11(6):838–854
+Harari GM, Müller SR, Aung MS, Rentfrow PJ (2017) Smartphone sensing
+methods for studying behavior in everyday life. Current Opinion in Behavioral Sciences 18:83–90
+Harari GM, Müller SR, Stachl C, Wang R, Wang W, Bühner M, Rentfrow PJ,
+Campbell AT, Gosling SD (2019) Sensing sociability: Individual differences
+in young adults’ conversation, calling, texting, and app use behaviors in
+daily life. Journal of Personality and Social Psychology
+He Z, Yu W (2010) Stable Feature Selection for Biomarker Discovery, vol 34,
+Computational Biology and Chemistry, pp 215–225
+Hein M, Bousquet O (2004) Kernels, Associated Structures and Generalizations, Max Planck Institute for Biological Cybernetics
+Hooker G (2007) Generalized functional anova diagnostics for highdimensional functions of dependent variables. Journal of Computational and
+Graphical Statistics 16(3):709–732
+Hooker G, Mentch L (2019) Please stop permuting features: An explanation
+and alternatives. arXiv:1905.03151
+Jackson JJ, Wood D, Bogg T, Walton KE, Harms PD, Roberts BW (2010)
+What do conscientious people do? development and validation of the behav-
+
+36
+
+Au and Herbinger
+
+ioral indicators of conscientiousness (bic). Journal of Research in Personality
+44(4):501–511
+Lei J, G’Sell M, Rinaldo A, Tibshirani RJ, Wasserman L (2018) Distributionfree predictive inference for regression. Journal of the American Statistical
+Association 113(523):1094–1111
+Lipton ZC (2018) The mythos of model interpretability: In machine learning, the concept of interpretability is both important and slippery. Queue
+16(3):31–57
+Lundberg SM, Lee SI (2017) A unified approach to interpreting model predictions. In: Proceedings of the 31st International Conference on Neural
+Information Processing Systems, Curran Associates Inc., Red Hook, NY,
+USA, NIPS’17, p 4768–4777
+Lundberg SM, Erion GG, Lee S (2018) Consistent individualized feature attribution for tree ensembles. CoRR abs/1802.03888
+Meier L, Van De Geer S, Bühlmann P (2008) The group lasso for logistic
+regression. Journal of the Royal Statistical Society: Series B (Statistical
+Methodology) 70(1):53–71
+Meinshausen N, Bühlmann P (2010) Stability selection. Journal of the Royal
+Statistical Society: Series B (Statistical Methodology) 72(4):417–473
+de Mijolla D, Frye C, Kunesch M, Mansir J, Feige I (2020) Humaninterpretable model explainability on high-dimensional data. CoRR
+abs/2010.07384
+Miller G (2012) The smartphone psychology manifesto. Perspectives on Psychological Science 7(3):221–237
+Molnar C (2019) Interpretable Machine Learning. https://christophm.
+github.io/interpretable-ml-book/
+Molnar C, König G, Bischl B, Casalicchio G (2020) Model-agnostic feature
+importance and effects with dependent features – a conditional subgroup
+approach. arXiv:2006.04628
+Nicodemus K, Malley J, Strobl C, Ziegler A (2010) The behaviour of random
+forest permutation-based variable importance measures under predictor correlation. BMC Bioinformatics pp 11–110
+Onnela JP, Rauch SL (2016) Harnessing smartphone-based digital phenotyping to enhance behavioral and mental health. Neuropsychopharmacology
+41(7):1691–1696
+Park MY, Hastie T, Tibshirani R (2006) Averaged gene expressions for regression. Biostatistics 8(2):212–227
+Pfister N, Bühlmann P, Schölkopf B, Peters J (2017) Kernel-based tests for
+joint independence. Journal of the Royal Statistical Society: Series B (Statistical Methodology) 80(1):5–31
+Rachuri KK, Musolesi M, Mascolo C, Rentfrow PJ, Longworth C, Aucinas
+A (2010) Emotionsense: A mobile phones based adaptive platform for experimental social psychology research. In: UbiComp’10 - Proceedings of the
+2010 ACM Conference on Ubiquitous Computing
+Raento M, Oulasvirta A, Eagle N (2009) Smartphones: An emerging tool for
+social scientists. Sociological Methods & Research 37(3):426–454
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+37
+
+Saeb S, Lattie EG, Schueller SM, Kording KP, Mohr DC (2016) The relationship between mobile phone location sensor data and depressive symptom
+severity. PeerJ 4:e2537
+Schoedel R, Au Q, Völkel ST, Lehmann F, Becker D, Bühner M, Bischl
+B, Hussmann H, Stachl C (2018) Digital footprints of sensation seeking.
+Zeitschrift für Psychologie 226(4):232–245
+Schoedel R, Pargent F, Au Q, Völkel ST, Schuwerk T, Bühner M, Stachl C
+(2020) To challenge the morning lark and the night owl: Using smartphone
+sensing data to investigate day–night behaviour patterns. European Journal
+of Personality p per.2258
+Schuwerk T, Kaltefleiter LJ, Au JQ, Hoesl A, Stachl C (2019) Enter the wild:
+Autistic traits and their relationship to mentalizing and social interaction
+in everyday life. Journal of Autism and Developmental Disorders pp 1–16
+Seedorff N, Brown G (2021) totalvis: A principal components approach to
+visualizing total effects in black box models. SN Computer Science 2(3):1–
+12
+Servia-Rodrı́guez S, Rachuri KK, Mascolo C, Rentfrow PJ, Lathia N, Sandstrom GM (2017) Mobile sensing at the service of mental well-being: A
+large-scale longitudinal study. In: 26th International World Wide Web Conference, WWW 2017, International World Wide Web Conferences Steering
+Committee, pp 103–112
+Shapley LS (1953) A value for n-person games. Contributions to the Theory
+of Games 2(28):307–317
+Sharifzadeh S, Ghodsi A, Clemmensen LH, Ersbøll BK (2017) Sparse supervised principal component analysis (sspca) for dimension reduction and variable selection. Engineering Applications of Artificial Intelligence 65:168–177
+Shipp MA, Ross KN, Tamayo P, Weng AP, Kutok JL, Aguiar RC, Gaasenbeek M, Angelo M, Reich M, Pinkus GS, et al. (2002) Diffuse large b-cell
+lymphoma outcome prediction by gene-expression profiling and supervised
+machine learning. Nature medicine 8(1):68–74
+Song L, Smola A, Gretton A, Borgwardt KM, Bedo J (2007) Supervised feature selection via dependence estimation. In: Proceedings of the 24th international conference on Machine learning, pp 823–830
+Song L, Smola A, Gretton A, Bedo J, Borgwardt K (2012) Feature selection via dependence maximization. Journal of Machine Learning Research
+13(May):1393–1434
+Stachl C, Hilbert S, Au JQ, Buschek D, De Luca A, Bischl B, Hussmann H,
+Bühner M (2017) Personality traits predict smartphone usage. European
+Journal of Personality 31(6):701–722
+Stachl C, Au Q, Schoedel R, Gosling SD, Harari GM, Buschek D, Theres
+S, Völkel, Schuwerk T, Oldemeier M, Ullmann T, Hussmann H, Bischl B,
+Bühner M (2020a) Predicting personality from patterns of behavior collected
+with smartphones. Proceedings of the National Academy of Sciences
+Stachl C, Pargent F, Hilbert S, Harari GM, Schoedel R, Vaid S, Gosling SD,
+Bühner M (2020b) Personality research and assessment in the era of machine
+learning. European Journal of Personality p per.2257
+
+38
+
+Au and Herbinger
+
+Strobl C, Boulesteix AL, Kneib T, Augustin T, Zeileis A (2008) Conditional
+variable importance for random forests. BMC bioinformatics 9:307
+Thomée S (2018) Mobile phone use and mental health. a review of the research
+that takes a psychological perspective on exposure. International Journal of
+Environmental Research and Public Health 15(12):2692
+Tibshirani R (1996) Regression shrinkage and selection via the lasso. Journal
+of the Royal Statistical Society: Series B (Methodological) 58(1):267–288
+Toloşi L, Lengauer T (2011) Classification with correlated features: Unreliability of feature ranking and solutions. Bioinformatics 27(14):1986–1994
+Tripathi S, Hemachandra N, Trivedi P (2020) Interpretable feature subset
+selection: A shapley value based approach. In: Proceedings of 2020 IEEE
+International Conference on Big Data, Special Session on Explainable Artificial Intelligence in Safety Critical Systems
+Valentin S, Harkotte M, Popov T (2020) Interpreting neural decoding models
+using grouped model reliance. PLOS Computational Biology 16(1):e1007148
+Watson DS, Wright MN (2019) Testing Conditional Independence in Supervised Learning Algorithms. arXiv:190109917
+Williamson BD, Gilbert PB, Simon NR, Carone M (2020) A unified approach
+for inference on algorithm-agnostic variable importance. arXiv:200403683
+Witten D, Tibshirani R (2020) PMA: Penalized Multivariate Analysis. R package version 1.2.1
+Witten DM, Tibshirani R, Hastie T (2009) A penalized matrix decomposition,
+with applications to sparse principal components and canonical correlation
+analysis. Biostatistics 10(3):515–534
+Wold S, Albano C, Dunn WJ, Edlund U, Esbensen K, Geladi P, Hellberg S,
+Johansson E, Lindberg W, Sjöström M (1984) Multivariate Data Analysis
+in Chemistry, Springer Netherlands, Dordrecht, pp 17–95
+Yarkoni T, Westfall J (2017) Choosing prediction over explanation in psychology: Lessons from machine learning. Perspectives on Psychological Science
+12(6):1100–1122
+Yuan M, Lin Y (2006) Model selection and estimation in regression with
+grouped variables. Journal of the Royal Statistical Society: Series B (Statistical Methodology) 68(1):49–67
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+39
+
+A Shapley Importance
+Assume, that the value function for a coalition S ⊂ {x1 , ..., xp } can be broken down into
+main and interaction effects:
+X
+X
+X
+i1 i2 i3 + ...,
+i1 i2 +
+v(S) =
+v(xi ) +
+xi ∈S
+
+i1 6=i2
+
+i1 6=i2 6=i3
+
+the Shapley importance of a single feature x1 can be written as
+
+
+
+
+p
+p
+1 X  1  X
+1
+φ(x1 ) = v(x1 ) +
+1i +
+1ij  + ... + 1...p .
+2 i6=1
+3 i6=j6=1
+p
+Proof:
+Let N = {x2 , ..., xp }. The general formula for the Shapley importance is given by:
+X
+
+φp (x1 ) =
+
+S⊂N \{x1 }
+
+(p − 1 − |S|)! · |S|!
+(v(S ∪ {x1 }) − v(S))
+p!
+
+(22)
+
+With assumption (18) the term v(S ∪ {x1 }) − v(S) will reduce to:
+v(S ∪ {x1 }) − v(S) = v(x1 ) +
+
+p
+X
+i1 6=1
+
+1i1 + ... +
+
+p
+X
+
+1i1 ...i|S|
+
+(23)
+
+i1 6=...6=i|S| 6=1
+
+It is the sum of v(x1 ) and all interactions with feature x1 of sizes 2, ..., |S| + 1. All other
+terms without feature x1 cancel out.
+Equation (22) consists of many summands of the form (23). The term v(x1 ) appears
+
+once for every subset S ⊂ N \{x1 }. There are p−1
+different subsets of size |S|. Only looking
+|S|
+at the summands with the term v(x1 ), equation (22) reduces to
+p−1
+X
+|S|=0
+
+(p − 1 − |S|)! · |S|! p − 1
+v(x1 ) = v(x1 ).
+p!
+|S|
+
+(24)
+
+For the interaction terms, we first start counting the interaction term 12 of size 2, as an
+example. For |S| = 0, there are zero terms of 12 . For |S| = 1, the term 12 only appears
+once, when S = {x2 }. For |S| = 2, the term 12 appears p − 2 times, once for each subset
+
+S = {x2 , xj }, for 3 ≤ j ≤ p. For |S| = 3, we have p−2
+times the term 12 , again, once
+2
+for each subset S = {x2 , xj , xk }, for 3 ≤ j 6= k ≤ p. This pattern goes on until there are
+p−2
+terms of 12 for |S| = p − 1. Now, we look at the interaction terms 1i1 ...ik−1 of
+p−2
+size k. Following the pattern, which we just derived, there are zero terms of 1i1 ...ik−1 for
+p−k 
+|S| ≤ k − 2 and |S|−k+1
+terms of 1i1 ...ik−1 for k ≤ |S| ≤ p − 1. If we only look at the
+interaction terms 1i1 ...ik−1 of size k and following the equation (22) , we get
+p−1
+X
+|S|=k−1
+
+(p − 1 − |S|)! · |S|!  p − k 
+1
+1i1 ...ik−1 = 1i1 ...ik−1 ,
+p!
+|S| − k + 1
+k
+
+which was left to show the assertion.
+
+
+
+B More Details on Dimension Reduction Techniques
+B.1 Principal Component Analysis
+PCA only considers the data matrix X and does not take the target vector Y into account.
+This procedure is thus unsupervised.
+
+40
+
+Au and Herbinger
+Given a centering Matrix
+
+H = I − n−1 eeT ,
+(25)
+where e is an n-dimensional vector of all ones. The centered matrix is XC = HX. The
+sample covariance matrix of X can be written as:
+1
+1 |
+X XC = X| HHX
+(26)
+n C
+n
+The goal is to maximize the total variance of projected data, which is equivalent to maximizing trace of the sample covariance matrix. Eq. (26) can also be written as SX =
+(i) (i)|
+(i)
+1 Pn
+i=1 xC xC , where xC corresponds to the i−th row of XC . By projecting each data
+n
+point by some unknown vectors vj , j = 1, ..., p, we get the projected variance for each
+j = 1, ..., p, which is:
+!
+n
+n
+1 X (i) (i)|
+1 X | (i) (i)|
+vj xC xC vj = vj|
+xC xC
+vj = vj| SX vj .
+n i=1
+n i=1
+SX :=
+
+Let V ∈ Rp×p be the full projection matrix. The projected total variance is tr(V| SX V),
+and by ignoring constant terms, PCA finds a solution to the problem
+argmax tr(V| SX V) = argmax tr(V| X| HHXV)
+V
+
+(27)
+
+V
+
+with an Eigen decomposition of the covariance matrix SX . The resulting Eigen vectors thus
+maximize the variation of projected data.
+
+B.2 Measuring Statistical Dependence with Hilbert Schmidt Norms
+In Gretton et al. (2005) a more generalized measure of dependence between variables X and
+Y was introduced:
+Two random variables X and Y are independent if and only if any bounded continuous
+function of them are uncorrelated.
+In more detail, this means that any pairs (X, Y ), (X, Y 2 ), (X 2 , Y ), (cos(X), log(Y )), ...
+have to be uncorrelated. The resulting independence measure is called the Hilbert-Schmidt
+Independence Criterion (HSIC). For the analysis of this independence measure, it is necessary to analyze functions on random variables. Therefore theory of Hilbert spaces and
+concepts of functional analysis are necessary for a thorough analysis, but they are not part
+of this paper. For an extensive discussion of Hilbert spaces, especially reproducing kernel
+hilbert spaces (RKHS) we refer to Hein and Bousquet (2004).
+Let F be a separable RKHS containing all bounded continuous functions from X to R.
+The associated kernel shall be denoted by K ∈ Rn×n , with Kij = k(xi , xj ). Concurrently,
+let G be a separable RKHS with bounded continuous functions from Y to R and associated
+kernel L ∈ Rn×n , with Lij = l(yi , yj ).
+We are particularly interested in the cross variance between f and g:
+Cov(f (x), g(y)) = Ex,y [f (x)g(y)] − Ex [f (x)]Ey [g(y)]
+
+(28)
+
+A function, which maps one element from one hilbert space to another hilbert space is
+called operator. A theorem (see e.g. Fukumizu et al. (2004)) states, that there exists a
+unique operator CX,Y : G −→ F with
+hf, Cx,y (g)iF = Cov(f (x), g(y)).
+
+(29)
+
+The Hilbert-Schmidt Independence Criterion (HSIC) is defined as the squared HilbertSchmidt norm of the cross-covariance operator C:
+HSIC(PX ,Y , F , G) = ||Cx,y ||2HS
+
+(30)
+
+||Cx,y ||2HS = 0 if and only if the random variables X and Y are independent. For a detailed discussion and derivation of the HSIC independence measure, we refer to Gretton
+et al. (2005). The HSIC measure was used for feature selection in Song et al. (2007) or for
+supervised principal components in Barshan et al. (2011).
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+41
+
+B.2.1 Empirical HSIC
+For a dataset D = {(x(i) , y (i) )}n
+i=1 the empirical HSIC is:
+HSIC(D, F, G) = (n − 1)−2 tr(KHLH) = (n − 1)−2 tr(HKHL),
+
+(31)
+
+where H is the centering matrix from (25). A high level of dependency between two kernels
+yields a high HSIC value.
+
+B.3 Supervised Sparse Principal Components
+In the process of finding interpretable latent variables, which also incorporate dependencies to a target variable, the Sparse Supervised Principal Components (SPCA), which was
+introduced in Sharifzadeh et al. (2017), is a suitable method for our application.
+For sparse SPCA the kernel matrix K ist defined as K = XV V | X | with a constraint
+for unit length and an L1 penalty for sparsity. By ignoring constant terms, we get the
+optimization problem:
+argmax tr(HKHL) = argmax tr(HXVV| X| HL)
+V
+
+(32)
+
+V
+
+= argmax tr(V| X| HLHXV)
+V
+|
+
+s.t. V V = I, |V| ≤ c.
+
+(33)
+(34)
+
+Note, that without the sparsity constraint, (33) reduces to (27), when choosing L = I.
+Already explained in Barshan et al. (2011), PCA is a special form of their Supervised PCA,
+where setting L = I is a kernel, which only captures similarity between a point and itself.
+Maximizing dependency between K and the identiy matrix corresponds to retaining maximal
+diversity between observations.
+Now, an arbitrary L can be decomposed as L = ∆∆| , since L, as a kernel matrix, is
+positive definite and symmetric. Defining Ψ := ∆| HX ∈ Rn×p , the objective function (33)
+can be rewritten as:
+argmax tr(V| Ψ | Ψ V) s.t. V| V = I, |V| ≤ c.
+
+(35)
+
+V
+
+Using the singular value decomposition (SVD), the matrix Ψ with rank(Ψ ) = m ≤ n
+can be written as a product of matrices:
+Ψ = UΛV| s.t. U| U = In , VV| = Ip , Λ = I(λ1 , ..., λm , 0, ..., 0),
+
+(36)
+
+where U ∈ Rn×n and V ∈ Rp×p are orthogonal matrices, and Λ ∈ Rn×p is a diagonal
+matrix, with descending diagonal entries λ1 ≥ λ2 ≥ ... ≥ λm ≥ 0. It is easy to see that
+the columns of V are Eigen vectors of the matrix Ψ | Ψ , since the following Eigen value
+decomposition holds:
+Ψ | Ψ = VΛU| UΛV| = V(Λ2 )V| .
+(37)
+The sparse SPCA problem (35) now becomes a matrix decomposition problem of the
+matrix Ψ , when adding an L1 penalty on the matrix V, since the columns of V, being Eigen
+vectors of Ψ | Ψ , maximize tr(V| Ψ | Ψ V).
+With an L1 penalty on V, this problem is a penalized matrix decomposition problem
+(PMD, Witten et al. (2009)).
+Recalling our original problem of finding interpretable latent variables that also depend
+on a target variable, the rank m matrix decomposition of Ψ may not be desirable. It can be
+shown (e.g. Eckart and Young (1936)) that the best low rank (r ≤ m) approximation of Ψ
+is calculated by the first r singular values of Λ and the first r singular vectors of U and V.
+
+42
+
+Au and Herbinger
+
+With ui being the i−th column of U and vi being the i−th column of V, the best low rank
+approximation can thus be written as:
+r
+X
+i=1
+
+λi ui vi| = argmin||Ψ − Ψ̂ ||2F ,
+
+(38)
+
+Ψ̂
+
+subject to the squared Frobenius-norm (A ∈ Rm×n : ||A||2F =
+following equality was demonstrated in Witten et al. (2009):
+
+Pn
+
+i=1
+
+Pm
+
+2
+j=1 |aij | ).
+
+r
+r
+X |
+1
+1
+1X 2
+||Ψ − UΛV| ||2F = ||Ψ ||2F −
+ui Ψ vi λi +
+λ .
+2
+2
+2 i=1 i
+i=1
+
+The
+
+(39)
+
+The minimization problem (38) thus becomes a maximization problem, by ignoring the
+constant terms. Sharifzadeh et al. (2017) added additional L2 constraints on ui and vi , an
+L1 constaint on vi for sparsity and an orthogonality constraint for ui :
+argmax u|i Ψ vi s.t.||ui ||2 ≤ 1, ||vi ||2 ≤ 1, ||vi ||1 ≤ c, ui ⊥ u1 , ..., ui−1
+
+(40)
+
+ui v i
+
+The L2 constraints do not force unit length to avoid non convex optimization problems. Witten et al. (2009) discuss how to solve many penalized matrix decomposition problems of this kind. Without the orthogonality constraint, they call this particular problem
+PMD(., L1 ). The solution to this problem is discussed in detail in Sharifzadeh et al. (2017).
+A software implementation is available with the R-package PMA by Witten and Tibshirani
+(2020), which we will use for our demonstrations. Problem (40) does not yield orthogonal sparse vectors vi , Witten et al. (2009) state that these vectors are unlikely to be very
+correlated, since the vectors vi are associated with orthogonal vectors ui , i = 1, ..., r.
+
+B.3.1 Choice of the Kernel
+For sparse SPCA the kernel K has been predefined as. The choice of the kernel L, however,
+has a decisive impact on how the dependencies are modeled. Song et al. (2012) discuss the
+kernel choice for different situations. For binary classification, one may simply choose
+l(yi , yj ) = yi yj , where yi , yj ∈ {±1},
+
+(41)
+
+or a weighted version, giving different weights on positive and negative labels. For multiclass
+classification a possible kernel is
+l(yi , yj ) = cy δyi ,yj , where cy > 0.
+
+(42)
+
+For regression one can also use a linear kernel l(yi , yj ) = yi , yj , but then only simple linear
+correlations between features and the target variable can be detected. A more universal
+choice is the radial basis function (RBF) kernel:
+
+
+||yi − yj ||2
+.
+l(yi , yj ) = exp −
+2σ 2
+
+(43)
+
+The choice of the bandwidth 2σ 2 is extremely important. For example, if 2σ 2 → 0, the
+matrix L becomes the identity matrix. Or if 2σ 2 → ∞, all entries of L are 1. In both
+cases, all relevant information of the dependency between features and the target variable is
+lost. Besides the bandwidth 2σ, the kernel matrix L depends only on the pairwise distances
+||yi − yj |||2 . A reasonable, and heuristically
+well performing (Pfister et al., 2017) choice is
+
+2σ 2 = median ||yi − yj ||2 : i > j . However, it might also be possible and advantageous to
+use other kernels that are selected to be particularly efficient in detecting certain kinds of
+dependencies.
+
+Grouped Feature Importance and Combined Features Effect Plot
+
+43
+
+B.3.2 Choice of c
+Witten et al. (2009) explained how PMD can be used to impute missing data. The main idea
+is simply to exclude missing entries from the maximization problem (40) and impute missing
+values by the low rank approximation matrix UΛV| . This procedure can also be used for
+finding optimal values for c by a cross validation approach. The test data consists of leaving
+out some entries of the matrix Ψ (not entire rows or columns, but individual elements of
+the matrix), yielding a matrix with missing entries Ψ̃ . For candidate values ci , i = 1, ..., k,
+calculate the PMD(., L1 ) and record the mean squared error over the missing elements of
+Ψ̃ and the estimate UΛV| . The true values of the missing values of Ψ̃ are available in the
+original data Ψ . The optimal value c∗ corresponds to the best candidate value cj , which
+minimizes the mean squared error.
+However, such a cross-validation approach for the search for c is not always necessary. If
+the method is used as a descriptive method to better understand the underlying structure
+of the data, a small value of c can be chosen to achieve a desired sparsity.
+
+
