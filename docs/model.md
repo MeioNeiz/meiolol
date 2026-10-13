@@ -1100,6 +1100,14 @@ pair_games from Scorer.value; the page's JS must match them to 0.01.
   dev first, final on the coordinator's go. Scratch scripts (variants from a clean
   tree, paired dev.tsv comparisons) are simple to redo: see "Player experience and
   everything pre-game"
+  Mastery source (meiolol-11, 2026-10-13): the box keeps one mastery row per player,
+  overwritten on each refresh (INSERT OR REPLACE, fetched_at in s), and the pass
+  fetches right after a stored game, so a box snapshot's row is post-game for that
+  game. Rule: use a row for a game only if fetched_at < game_start (ms), else missing.
+  For most games pre-game mastery exists only in the raw archive's fetch history
+  (hourly mastery-NAME.tsv.zst, salted hashes, fetched_at): a loader takes each
+  player's latest fetch before game start. Check the archive's salt matches the
+  snapshot's before joining
 
 - Next lab campaign, rank at game start on 3c-team2 (agreed with meiolol-78; runs on the
   snapshot 78 pins after ~a week of rank_history, with a fresh test set: rank_start
