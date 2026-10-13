@@ -2,7 +2,8 @@
 # Run-time estimates and placement for deploy/lab-run.sh, from the runs on both hosts
 # (docs/compute.md "Placement"). Reads lab-run.sh's listing on stdin, tab-separated:
 #   HOST now TIME | HOST league LINE (watcher.log, oldest first) | HOST have PATH
-#   HOST run DIR STATE STARTED ENDED RES BIN ARGS PAUSES PREDICTED BUILD LOGLINE
+#   HOST slots RES N (lab-run.sh's locks per resource)
+#   HOST run DIR STATE STARTED ENDED RES BIN ARGS PAUSES PREDICTED BUILD SLOT LOGLINE
 #
 #   lab-place.pl inputs ARGS                 input paths to check on each host
 #   lab-place.pl place HOST|auto RES|auto BIN ARGS [BUILD_ARGS]
@@ -38,7 +39,7 @@ if ($mode eq 'inputs') {
     exit 0;
 }
 
-my (%now, %league, %have, @runs);
+my (%now, %league, %have, %slots, @runs);
 while (my $line = <STDIN>) {
     chomp $line;
     my ($host, $kind, @f) = split /\t/, $line, -1;
@@ -46,9 +47,10 @@ while (my $line = <STDIN>) {
     if ($kind eq 'now') { $now{$host} = ts($f[0]) }
     elsif ($kind eq 'league') { push @{$league{$host}}, $f[0] }
     elsif ($kind eq 'have') { $have{$host}{$f[0]} = 1 }
+    elsif ($kind eq 'slots') { $slots{$host}{$f[0]} = $f[1] }
     elsif ($kind eq 'run') {
         my %r;
-        @r{qw(dir state started ended res bin args pauses pred build log)} = @f;
+        @r{qw(dir state started ended res bin args pauses pred build slot log)} = @f;
         $r{host} = $host;
         $r{$_} = ts($r{$_}) for qw(started ended);
         $r{pred} = $r{pred} =~ /^(\d+)/ ? $1 : undef;
@@ -208,12 +210,16 @@ sub estimate {
 
 sub live { return $_[0]{state} =~ /^(running|paused|queued)/ }
 
-# Seconds until RES's lock on HOST is free: what the live runs holding or waiting for it
-# have left. Overdue runs are assumed to have a fifth of their time so far still to go
+# Seconds until one of RES's N slots on HOST is free for a new run: running runs hold a
+# slot for what they have left (overdue: a fifth of their time so far), queued ones take
+# the first slot to free up, oldest first, then the new run does
 sub wait_for {
     my ($host, $res) = @_;
-    my ($total, $n) = (0, 0);
-    for my $r (grep { $_->{host} eq $host && $_->{res} eq $res && live($_) } @runs) {
+    my $n_slots = $slots{$host}{$res} // 1;
+    $n_slots = 1 unless $n_slots =~ /^\d+$/ && $n_slots > 0;
+    my (@free, @queued, $n);
+    for my $r (sort { $a->{dir} cmp $b->{dir} }
+        grep { $_->{host} eq $host && $_->{res} eq $res && live($_) } @runs) {
         my $pred = $r->{pred} // (estimate($host, $r->{bin}, $r->{args}, $r->{build}))[0]
             // median(map { $_->{ran} }
                 grep { $_->{host} eq $host && defined $_->{ran} } @runs)
@@ -221,12 +227,18 @@ sub wait_for {
         $n++;
         if (defined $r->{started} && $r->{state} !~ /^queued/) {
             my $done = $now{$host} - $r->{started} - paused($r, $r->{started}, $now{$host});
-            $total += $pred - $done > $done / 5 ? $pred - $done : $done / 5;
+            push @free, $pred - $done > $done / 5 ? $pred - $done : $done / 5;
         } else {
-            $total += $pred;
+            push @queued, $pred;
         }
     }
-    return ($total, $n);
+    push @free, 0 while @free < $n_slots;
+    @free = sort { $a <=> $b } @free;
+    for my $q (@queued) {
+        my $at = shift @free;
+        @free = sort { $a <=> $b } @free, $at + $q;
+    }
+    return ($free[0], $n // 0, $n_slots);
 }
 
 # What League costs a gpu-box run now: nothing while it's down. While it's up (or the
@@ -296,12 +308,13 @@ sub place {
             $why_not = '' if $want_host ne 'auto' && $why_not ne 'unreachable';
             if ($why_not) { push @out, "$name: $why_not"; next }
             my ($run, $why) = estimate($h, $bin, $args, $build);
-            my ($wait, $queued) = $res eq 'none' ? (0, 0) : wait_for($h, $res);
+            my ($wait, $live, $n_slots) = $res eq 'none' ? (0, 0, 0) : wait_for($h, $res);
             my ($pen, $pen_why) = league_penalty($h);
             push @cands, {host => $h, res => $res, run => $run, wait => $wait + $pen,
                 total => defined $run ? $wait + $pen + $run : undef,
-                say => sprintf('%s: %swait %s (%d ahead) + run %s (%s)', $name,
-                    $pen ? $pen_why . fmt($pen) . ', ' : '', fmt($wait), $queued, fmt($run),
+                say => sprintf('%s: %swait %s (%d live, %d slots) + run %s (%s)', $name,
+                    $pen ? $pen_why . fmt($pen) . ', ' : '', fmt($wait), $live, $n_slots,
+                    fmt($run),
                     $why // 'no history')};
         }
     }
@@ -339,7 +352,8 @@ sub status {
             $t = $pred;
         }
         my $started = defined $r->{started} ? iso($r->{started}) : '';
-        print join(' | ', $r->{dir}, $r->{state}, $started, $t, $r->{log}), "\n";
+        my $state = $r->{state} . ($r->{slot} ? " ($r->{slot})" : '');
+        print join(' | ', $r->{dir}, $state, $started, $t, $r->{log}), "\n";
     }
 }
 

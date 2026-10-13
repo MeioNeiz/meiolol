@@ -105,8 +105,11 @@ run time.
 - A host with none borrows the other host's, times their speed ratio: median over
   commands on the same snapshot run on both (5 s or more). None yet: the Mac assumed 2x
   slower (eval 13 vs 7 s). No history anywhere: gpu-box cpu, as before, and it says so
-- Wait = what the live runs on that lock have left: queued ones their prediction,
-  running ones prediction minus time so far (overdue: a fifth of their time so far)
+- Wait = until one of the resource's N slots (~/ml/locks/RES.slots, default 4) is free
+  for the new run: running runs hold theirs for prediction minus time so far (overdue: a
+  fifth of their time so far), queued ones take the first slot to free up, oldest first.
+  A cpu slot gets 1/N of the cores, so history from whole-machine runs (before
+  2026-10-13 ~23:00) underestimates; it corrects as slot runs finish
 - Feasible: the GPU only for CUDA commands (gpu-smoke; bench and draftbench when
   --devices has gpu; with CPU devices too they take the cpu lock, as their timings need
   it); the Mac never for CUDA; a host only if the args' snapshot paths (any `~/...snap-X`

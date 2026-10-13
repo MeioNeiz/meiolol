@@ -423,6 +423,9 @@ listing() {
     local script='printf "now\t%s\n" "$(date -u +%FT%TZ)"
         '"$have"'cd '"$RUNS"' 2>/dev/null || exit 0
         [[ -f watcher.log ]] && grep -a "League " watcher.log | tail -n 200 | sed "s/^/league\t/"
+        for r in cpu gpu; do
+            printf "slots\t%s\t%s\n" $r "$(cat ~/ml/locks/$r.slots 2>/dev/null || echo 4)"
+        done
         for d in */; do
             d=${d%/}; [[ -f $d/job.sh ]] || continue
             pg=$(cat $d/job.pgid 2>/dev/null)
@@ -434,11 +437,12 @@ listing() {
                 else s=running; fi
             else s=died; fi
             m() { sed -n "s/^$1 //p" $d/meta 2>/dev/null | tr "\t" " "; }
-            printf "run\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$d" "$s" \
+            printf "run\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$d" "$s" \
                 "$(cat $d/started 2>/dev/null)" "$(cat $d/ended 2>/dev/null)" \
                 "$(m res)" "$(m bin | cut -d " " -f 1)" "$(m args)" \
                 "$(tr "\n" , 2>/dev/null < $d/pauses.log)" "$(cut -f 1 $d/predicted 2>/dev/null)" \
-                "$(m build)" "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80 | tr "\t" " ")"
+                "$(m build)" "$(head -n 1 $d/slot 2>/dev/null | cut -d " " -f 1)" \
+                "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80 | tr "\t" " ")"
         done'
     if [[ "$host" == mac ]]; then on mac "$script"
     else ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" "$script"; fi | sed "s/^/$host	/"
