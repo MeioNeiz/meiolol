@@ -41,7 +41,7 @@ Coordinator: meiolol-76 (from meiolol-2c, from meiolol-78, 2026-10-13).
 | meiolol-76 (from meiolol-2c) | coordinator, neural net programme (Jacob's big goal, 2026-10-13; brief in docs/model.md "Neural draft models"), after the comp features campaign (api Row.stats 53323f9) |
 | meiolol-4a (from meiolol-ea) | NN data: pack mtime fix (second precision), gpu-box repack of 1954Z; multi-task targets (Row.y, Row.stats as auxiliary), tensor export for the GPU, extra games count (comp data done: 25737aa, 1e9a446) |
 | meiolol-35 [397394] (was meiolol-c2, from meiolol-0d) | structured nets on profiles (profile inputs, DeepSets/attention, residual on ratings); win-comp done (7a2de11, test: mix effect holds, prediction gain not detected) |
-| meiolol-97 [7beeb6] (was meiolol-52, from meiolol-ad) | NN pretraining: champion-role embeddings from aux targets, used in f1's nets and as a ratings prior (src/lab/pretrain.zig) (research done: 9530584, fbc5df5) |
+| meiolol-5b (from meiolol-97 [7beeb6]) | NN pretraining: champion-role embeddings from aux targets, used in f1's nets and as a ratings prior (src/lab/pretrain.zig) (research done: 9530584, fbc5df5) |
 | meiolol-d8 (from meiolol-ba) | NN tester (LoLDraftAI 2x2 write-up, then net exporter when a net qualifies): draft-model.json net kind, Zig reference scorer and JS forward pass (comp tester done: 2be13f3, 7423f29) |
 | meiolol-4b (from meiolol-49) | comp test look reading (20261013T195844Z-final-compcheck, c26ffa8), then NN verifier: leakage audits, seed variance, paired checks |
 | meiolol-1c | GPU sweep runner for nets (random search on the 3080 via lab-run) (lab-run auto placement done: 371bec8, e050551) |
@@ -53,10 +53,12 @@ Coordinator: meiolol-76 (from meiolol-2c, from meiolol-78, 2026-10-13).
 | meiolol-ab | interactions on pretrained embeddings: low-rank cross and within-team terms (cand/win-embx) |
 | meiolol-2a (closed) | admin Models tab dashboard of the NN programme results: done (16ecd0f) |
 | meiolol-e3 (closed) | research: how AI agents run ML experiments well: done (86c8a5f, docs/lab-constraints.md 2680d29); ranked list adopted in briefs and 16's queue |
-| meiolol-16 | lab tooling from evidence: results store and checked comparisons, immutable run binaries, standard preds files, snapshot completeness checks |
+| meiolol-a0 (from meiolol-16) | lab tooling from evidence: results store and checked comparisons, immutable run binaries, standard preds files, snapshot completeness checks |
 | meiolol-08 | effects and the CPU model: one shrunk additive model (champion-role, ally and enemy role-pair terms, comp), effects table in win points and gold, in-game event value (win chance added), distilled from GPU teachers (Jacob 2026-10-13: ship CPU-only models that pick out information) |
 | meiolol-research (was meiolol-f1, new) | research: isolating event, synergy and counter values; pre-game player skill models; distilling GPU models into explainable CPU ones |
 | meiolol-tests (was meiolol-0a, new) | model tests: planted-effect recovery and minimum detectable effects per model, training-health tests, golden numbers on the pinned snapshot |
+| meiolol-c1 | comp discovery: our own champion and team variables (comp_stats.tsv, src/lab/compstats.zig, comps.zig), cross-team matchups, archetypes, FDR screen with a sealed block; survivors to 08 and 35 |
+| meiolol-61 | carry and impact: which champions and roles carry (leverage of a seat's lead, skill sensitivity, outcome spread), src/carry.zig |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
 shows. When an agent hands over, get the successor's name and tell the others.
