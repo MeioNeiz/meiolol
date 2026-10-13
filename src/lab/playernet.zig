@@ -41,6 +41,8 @@ pub const usage =
     \\                                  --min-games N --fix-offset 0|1
     \\                                  --shuffle-labels 0|1 (control: the net trains on
     \\                                  permuted outcomes, scored on real ones)
+    \\                                  --shuffle-feats 0|1 (control: players' feature
+    \\                                  vectors permuted within role in training sets)
     \\                                  --feats champ,any,form,rank,mastery|none
     \\                                  --emb-init DIR (pretrain's emb-<block>-s<seed>.tsv)
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
@@ -98,6 +100,10 @@ pub const Options = struct {
     /// Control: outcomes permuted among the net's training and validation games (offsets
     /// stay the candidate's on real outcomes); its gain on scored games must be ~0 or worse
     shuffle_labels: bool = false,
+    /// Control: each player's feature vector permuted across games and sides within role
+    /// in the training and validation sets (outcomes and offsets real, scored games
+    /// untouched); a gain well past the noise floor means a leak
+    shuffle_feats: bool = false,
     groups: [5]bool = @splat(true),
     emb_init: ?[]const u8 = null,
     evals: u32 = 4,
@@ -172,8 +178,8 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
     try w.print("# playernet vs {s}, fraction {d}, seeds {any}\n\n", .{ if (@hasDecl(cand, "name")) cand.name else "cand", opts.fraction, opts.seeds });
-    try w.print("options: emb {d} hidden {d} dropout {d} wd {d} emb_wd {d} lr {d} clip {d} batch {d} evals {d} patience {d} min_games {d} fix_offset {} shuffle_labels {} emb_init {s} feats", .{
-        opts.emb, opts.hidden, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games, opts.fix_offset, opts.shuffle_labels, opts.emb_init orelse "-",
+    try w.print("options: emb {d} hidden {d} dropout {d} wd {d} emb_wd {d} lr {d} clip {d} batch {d} evals {d} patience {d} min_games {d} fix_offset {} shuffle_labels {} shuffle_feats {} emb_init {s} feats", .{
+        opts.emb, opts.hidden, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games, opts.fix_offset, opts.shuffle_labels, opts.shuffle_feats, opts.emb_init orelse "-",
     });
     for (opts.groups, 0..) |on, gi| if (on) try w.print(" {s}", .{@tagName(@as(Group, @fromBackingInt(@intCast(gi))))});
     try w.print("\nmastery_pre.tsv: {d} participants\n\n", .{mastery.map.count()});
@@ -234,6 +240,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.emb_wd = try std.fmt.parseFloat(f32, v);
         } else if (std.mem.eql(u8, k, "--clip")) {
             o.clip = try std.fmt.parseFloat(f32, v);
+        } else if (std.mem.eql(u8, k, "--shuffle-feats")) {
+            o.shuffle_feats = (try std.fmt.parseInt(u1, v, 10)) == 1;
         } else if (std.mem.eql(u8, k, "--shuffle-labels")) {
             o.shuffle_labels = (try std.fmt.parseInt(u1, v, 10)) == 1;
         } else if (std.mem.eql(u8, k, "--fix-offset")) {
@@ -584,6 +592,19 @@ const no_row = std.math.maxInt(u32);
 const count_names = [_][]const u8{ "history", "champ", "champ_games", "games", "rank", "mastery" };
 
 /// Each game's row index by slot (side * 5 + role)
+fn shuffleFeats(games: []NetGame, seed: u64) void {
+    var rng: std.Random.DefaultPrng = .init(seed);
+    const rnd = rng.random();
+    for (0..5) |role| {
+        // Seat k of 2 * games.len: game k / 2, side k % 2
+        var i = 2 * games.len;
+        while (i > 1) : (i -= 1) {
+            const j = rnd.uintLessThan(usize, i);
+            std.mem.swap([n_feat]f32, &games[(i - 1) / 2].x[(i - 1) % 2 * 5 + role], &games[j / 2].x[j % 2 * 5 + role]);
+        }
+    }
+}
+
 fn shuffleLabels(games: []NetGame, seed: u64) void {
     var rng: std.Random.DefaultPrng = .init(seed);
     const rnd = rng.random();
@@ -726,6 +747,7 @@ fn runBlock(
     const g_scored = try netGames(gpa, d, raw, row_of, scored.items, &vocab_all, scale_all, opts.groups, p_all);
     defer gpa.free(g_scored);
     if (opts.shuffle_labels) for ([_][]NetGame{ g_inner, g_val, g_fit }, 0..) |set, k| shuffleLabels(set, 0x5f1 + k);
+    if (opts.shuffle_feats) for ([_][]NetGame{ g_inner, g_val, g_fit }, 0..) |set, k| shuffleFeats(set, 0x5f2 + k);
 
     const n_s = opts.seeds.len;
     const fits = try gpa.alloc(Fitted, n_s);
@@ -1176,7 +1198,15 @@ fn train(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, games: []
     const per_epoch = stepsPerEpoch(games.len, opts.batch);
     const eval_every = @max(1, per_epoch / @max(opts.evals, 1));
 
+    // Step 0, the candidate alone, can win early stopping
     var best_loss = std.math.inf(f64);
+    if (val) |v| {
+        predict(&n, v, &w, vpred);
+        best_loss = 0;
+        for (v, vpred) |g, q| best_loss += loss1(g.y, q);
+        best_loss /= @floatFromInt(@max(v.len, 1));
+        @memcpy(best, n.p);
+    }
     var best_step: u64 = 0;
     var since_best: u32 = 0;
     var step: u64 = 0;
@@ -1233,7 +1263,7 @@ fn train(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, games: []
             if (since_best >= opts.patience) break;
         }
     }
-    if (val == null) best_step = step else if (best_step > 0) @memcpy(n.p, best);
+    if (val == null) best_step = step else @memcpy(n.p, best);
     const epochs = @as(f64, @floatFromInt(best_step)) / @as(f64, @floatFromInt(per_epoch));
     return .{ .net = n, .steps = best_step, .epochs = epochs, .val_loss = best_loss };
 }
@@ -1246,7 +1276,7 @@ fn fitNet(gpa: std.mem.Allocator, io: Io, opts: Options, seed: u32, s: Sets) !Fi
     const init_all: ?EmbInit = if (table) |*t| .{ .table = t, .vocab = s.vocab_all } else null;
     const tuned = try train(gpa, opts, seed, s.n_inner, s.inner, s.val, opts.max_epochs * stepsPerEpoch(s.inner.len, opts.batch), init_inner);
     gpa.free(tuned.net.p);
-    const full = try train(gpa, opts, seed, s.n_all, s.fit, null, refitSteps(tuned.epochs, s.fit.len, opts.batch), init_all);
+    const full = try train(gpa, opts, seed, s.n_all, s.fit, null, if (tuned.steps == 0) 0 else refitSteps(tuned.epochs, s.fit.len, opts.batch), init_all);
     defer gpa.free(full.net.p);
     const w: Work = try .init(gpa, full.net.l);
     defer w.deinit(gpa);
