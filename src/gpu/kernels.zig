@@ -212,17 +212,19 @@ export fn dn_loss(
     start: u32,
     count: u32,
     c_off: u32,
+    a_off: u32,
     df: [*]f32,
     gr: [*]f32,
 ) callconv(.kernel) void {
     const g = globalId();
     if (g >= count) return;
     const game = &games[order[start + g]];
-    const logit = (f[2 * g] - f[2 * g + 1]) / 2 + p[c_off + game.platform];
+    const logit = (f[2 * g] - f[2 * g + 1]) / 2 + p[c_off + game.platform] + p[a_off] * game.off;
     const dl = (1 / (1 + exp(-logit)) - game.y) / @as(f32, @floatFromInt(count));
     df[2 * g] = dl / 2;
     df[2 * g + 1] = -dl / 2;
     atomicAdd(&gr[c_off + game.platform], dl);
+    if (game.off != 0) atomicAdd(&gr[a_off], dl * game.off);
 }
 
 /// dh becomes dz: through relu and the same dropout as dn_act

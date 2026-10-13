@@ -8,11 +8,13 @@ pub const h1 = 512;
 pub const h2 = 256;
 pub const keep: f32 = 0.9;
 
-/// Champion-role ids, blue's five by role then red's; y 1 when blue won
+/// Champion-role ids, blue's five by role then red's; y 1 when blue won; off: a fixed
+/// logit offset (a residual net's candidate logit), times the learnt weight a
 pub const Game = extern struct {
     ids: [slots]u32,
     platform: u32,
     y: f32,
+    off: f32 = 0,
 };
 
 /// Dropout: whether unit j of batch row i survives at this step and layer. A hash, not an
@@ -27,10 +29,11 @@ pub fn kept(seed: u32, step: u32, layer: u32, i: u32, j: u32) bool {
     return @as(f32, @floatFromInt(h >> 8)) < keep * (1 << 24);
 }
 
-/// Parameter offsets in the flat array. c and the biases get no weight decay: they come
-/// first, decayed from `decay`
+/// Parameter offsets in the flat array. c, the offset weight a and the biases get no
+/// weight decay: they come first, decayed from `decay`
 pub const Layout = struct {
     c: u32,
+    a: u32,
     b1: u32,
     b2: u32,
     decay: u32,
@@ -44,7 +47,8 @@ pub const Layout = struct {
     pub fn init(n_ids: u32, n_platforms: u32) Layout {
         var l: Layout = undefined;
         l.c = 0;
-        l.b1 = n_platforms;
+        l.a = n_platforms;
+        l.b1 = l.a + 1;
         l.b2 = l.b1 + h1;
         l.decay = l.b2 + h2;
         l.e = l.decay;

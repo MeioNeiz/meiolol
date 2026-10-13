@@ -21,6 +21,9 @@ pub const Config = struct {
     wd: f32 = 1e-4,
     batch: u32 = 1024,
     seed: u32 = 1,
+    /// Residual on the games' offsets: output weights start at 0, so the first step's
+    /// logit is the offset (plus c)
+    resid: bool = false,
 };
 
 pub const Games = struct {
@@ -72,7 +75,7 @@ pub const Net = struct {
     l: dn.Layout,
     p: []f32,
 
-    pub fn init(gpa: std.mem.Allocator, n_ids: u32, seed: u32) !Net {
+    pub fn init(gpa: std.mem.Allocator, n_ids: u32, seed: u32, resid: bool) !Net {
         const l: dn.Layout = .init(n_ids, n_platforms);
         const p = try gpa.alloc(f32, l.len);
         @memset(p, 0);
@@ -87,6 +90,8 @@ pub const Net = struct {
         for (blocks) |b| for (p[b.from..b.to]) |*x| {
             x.* = (r.float(f32) * 2 - 1) * b.bound;
         };
+        p[l.a] = 1;
+        if (resid) @memset(p[l.w3..l.len], 0);
         return .{ .l = l, .p = p };
     }
 
@@ -106,7 +111,8 @@ pub const Net = struct {
             const batch = order[at..@min(at + 1024, games.len)];
             try w.forward(io, n, games, batch, 0, 0, chunks(std.Thread.getCpuCount() catch 1));
             for (batch, 0..) |gi, g| {
-                const logit = (w.f[2 * g] - w.f[2 * g + 1]) / 2 + n.p[n.l.c + games[gi].platform];
+                const game = &games[gi];
+                const logit = (w.f[2 * g] - w.f[2 * g + 1]) / 2 + n.p[n.l.c + game.platform] + n.p[n.l.a] * game.off;
                 out[gi] = 1 / (1 + @exp(-logit));
             }
         }
@@ -343,7 +349,7 @@ pub fn stepsPerEpoch(n: usize, batch: u32) u64 {
 /// Trains `steps` batches on the CPU over threads (1: one core), reshuffling every pass
 pub fn fitCpu(gpa: std.mem.Allocator, io: std.Io, cfg: Config, n_ids: u32, train: []const dn.Game, steps: u64, threads: usize, watch: ?*Watch) !Net {
     const parts = chunks(threads);
-    var n: Net = try .init(gpa, n_ids, cfg.seed);
+    var n: Net = try .init(gpa, n_ids, cfg.seed, cfg.resid);
     errdefer n.deinit(gpa);
     const l = n.l;
     if (watch) |x| try x.start(gpa, l.len, stepsPerEpoch(train.len, cfg.batch));
@@ -402,11 +408,12 @@ pub fn fitCpu(gpa: std.mem.Allocator, io: std.Io, cfg: Config, n_ids: u32, train
             const count: f32 = @floatFromInt(batch.len);
             for (batch, 0..) |gi, g| {
                 const game = &train[gi];
-                const logit = (w.f[2 * g] - w.f[2 * g + 1]) / 2 + n.p[l.c + game.platform];
+                const logit = (w.f[2 * g] - w.f[2 * g + 1]) / 2 + n.p[l.c + game.platform] + n.p[l.a] * game.off;
                 const dl = (1 / (1 + @exp(-logit)) - game.y) / count;
                 w.df[2 * g] = dl / 2;
                 w.df[2 * g + 1] = -dl / 2;
                 gr[l.c + game.platform] += dl;
+                gr[l.a] += dl * game.off;
             }
             const w3 = n.p[l.w3..l.len];
             const gw3 = gr[l.w3..l.len];
@@ -524,7 +531,7 @@ pub const DeviceGames = struct {
 
 /// fitCpu on the GPU: the same steps as kernels (kernels.zig dn_* and gemm)
 pub fn fitGpu(gpa: std.mem.Allocator, io: std.Io, gpu: *const cuda.Gpu, dev: *DeviceGames, cfg: Config, n_ids: u32, train: []const dn.Game, steps: u64, watch: ?*Watch) !Net {
-    var n: Net = try .init(gpa, n_ids, cfg.seed);
+    var n: Net = try .init(gpa, n_ids, cfg.seed, cfg.resid);
     errdefer n.deinit(gpa);
     const l = n.l;
     if (watch) |x| try x.start(gpa, l.len, stepsPerEpoch(train.len, cfg.batch));
@@ -546,6 +553,7 @@ pub fn fitGpu(gpa: std.mem.Allocator, io: std.Io, gpu: *const cuda.Gpu, dev: *De
     var e_off = l.e;
     var r_off = l.r;
     var c_off = l.c;
+    var a_off = l.a;
     var step: u32 = 0;
     var at: u32 = @intCast(order.len);
     while (step < steps) {
@@ -567,7 +575,7 @@ pub fn fitGpu(gpa: std.mem.Allocator, io: std.Io, gpu: *const cuda.Gpu, dev: *De
             try k.gemm(b.h1, sub(b.p, l.w2), b.z2, rws, dn.h2, dn.h1, dn.h1, 1, 1, dn.h1);
             try k.act(b.z2, b.p, l.b2, b.h2, rws, dn.h2, seed, step, 2);
             try k.gemm(b.h2, sub(b.p, l.w3), b.f, rws, 1, dn.h2, dn.h2, 1, 1, 0);
-            try gpu.launch(k.loss, count, &.{ @ptrCast(&b.f), @ptrCast(&b.p), @ptrCast(&games), @ptrCast(&dorder), @ptrCast(&start), @ptrCast(&count), @ptrCast(&c_off), @ptrCast(&b.df), @ptrCast(&b.gr) });
+            try gpu.launch(k.loss, count, &.{ @ptrCast(&b.f), @ptrCast(&b.p), @ptrCast(&games), @ptrCast(&dorder), @ptrCast(&start), @ptrCast(&count), @ptrCast(&c_off), @ptrCast(&a_off), @ptrCast(&b.df), @ptrCast(&b.gr) });
             try k.gemm(b.df, b.h2, sub(b.gr, l.w3), 1, dn.h2, rws, 0, 1, dn.h2, 1);
             try k.gemm(b.df, sub(b.p, l.w3), b.dh2, rws, dn.h2, 1, 1, 0, 0, 1);
             try k.actBack(b.dh2, b.z2, rws, dn.h2, seed, step, 2);
@@ -850,4 +858,29 @@ test "draft net: early stopping between epochs keeps the best evaluation's param
     try b.predict(gpa, testing.io, games[800..], pb);
     for (pa, pb) |x, y| try testing.expectApproxEqAbs(x, y, 1e-6);
     try testing.expectApproxEqAbs(watch.best_loss, logLoss(pb, games[800..]), 1e-9);
+}
+
+test "draft net: a residual net starts at its offsets and keeps them when they are right" {
+    const gpa = testing.allocator;
+    var rng: std.Random.DefaultPrng = .init(5);
+    const r = rng.random();
+    const n_ids = 30;
+    const games = try gpa.alloc(dn.Game, 2000);
+    defer gpa.free(games);
+    for (games) |*g| {
+        for (&g.ids) |*id| id.* = r.uintLessThan(u32, n_ids);
+        g.platform = 0;
+        g.off = (r.float(f32) * 2 - 1) * 2;
+        g.y = if (r.float(f32) < 1 / (1 + @exp(-g.off))) 1 else 0;
+    }
+    var start: Net = try .init(gpa, n_ids, 1, true);
+    defer start.deinit(gpa);
+    const pred = try gpa.alloc(f32, games.len);
+    defer gpa.free(pred);
+    try start.predict(gpa, testing.io, games, pred);
+    for (pred, games) |q, g| try testing.expectApproxEqAbs(1 / (1 + @exp(-g.off)), q, 1e-6);
+    const cfg: Config = .{ .batch = 64, .resid = true };
+    var n = try fitCpu(gpa, testing.io, cfg, n_ids, games, 3 * stepsPerEpoch(games.len, cfg.batch), 1, null);
+    defer n.deinit(gpa);
+    try testing.expect(@abs(n.p[n.l.a] - 1) < 0.3);
 }
