@@ -30,6 +30,7 @@ const events = @import("lab/events.zig");
 const randsplit = @import("lab/randsplit.zig");
 const winnet = @import("lab/winnet.zig");
 const effects = @import("lab/effects.zig");
+const eventvalue = @import("lab/eventvalue.zig");
 const pretrain = @import("lab/pretrain.zig");
 const playernet = @import("lab/playernet.zig");
 const gains = @import("lab/gains.zig");
@@ -86,7 +87,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ events.usage ++ randsplit.usage ++ gains.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ compare.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ events.usage ++ randsplit.usage ++ gains.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ eventvalue.usage ++ compare.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -336,6 +337,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "netcheck")) {
         return winnet.main(init.gpa, arena, init.io, argv[2..], ptx);
     }
+    if (std.mem.eql(u8, cmd, "eventvalue")) {
+        return eventvalue.main(init.gpa, arena, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "effects")) {
         return effects.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -443,6 +447,7 @@ test {
     _ = pretrain;
     _ = playernet;
     _ = effects;
+    _ = eventvalue;
     _ = gains;
 }
 
