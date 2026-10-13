@@ -1,0 +1,40 @@
+r/summonerschool search results (via safereddit.com redlib mirror), sort=top, t=year, fetched 2026-10-12.
+Columns: upvotes | comments | posted | title | permalink
+
+=== query: "how to beat"
+160 | 45 | Dec 09 2025, 10: | Midlane champions you hate and how to beat them. | /r/summonerschool/comments/1pi3wi7/midlane_champions_you_hate_and_how_to_beat_them/
+46 | 32 | Jul 01 2026, 23: | Is Nasus Op below dia? How to beat him without lane bullies? | /r/summonerschool/comments/1ul14d5/is_nasus_op_below_dia_how_to_beat_him_without/
+10 | 16 | Aug 30 2026, 15: | How to deal with current Nasus in Top lane solo without team reliance (op gg provided, low elo) + should I prio Nasus or teamfighting? | /r/summonerschool/comments/1w2k7xb/how_to_deal_with_current_nasus_in_top_lane_solo/
+4 | 12 | Feb 03 2026, 22: | How do i play/win vs a yasuo as Xerath/Hwei without help? | /r/summonerschool/comments/1qv5rlh/how_do_i_playwin_vs_a_yasuo_as_xerathhwei_without/
+2 | 15 | Sep 10 2026, 10: | How to beat Illaoi? Is my strategy good or bad? | /r/summonerschool/comments/1wcfpaa/how_to_beat_illaoi_is_my_strategy_good_or_bad/
+0 | 15 | Aug 25 2026, 14: | I do not know where to play anymore :( | /r/summonerschool/comments/1vy1125/i_do_not_know_where_to_play_anymore/
+0 | 49 | Aug 29 2026, 14: | How to beat Darius? Is my strategy good or bad? | /r/summonerschool/comments/1w1nxg0/how_to_beat_darius_is_my_strategy_good_or_bad/
+0 | 15 | Sep 13 2026, 18: | Counterplay vs Irelia if you're ranged or squishy? (op gg provided) | /r/summonerschool/comments/1wffzhq/counterplay_vs_irelia_if_youre_ranged_or_squishy/
+
+=== query: "how to play against"
+163 | 45 | Dec 09 2025, 10: | Midlane champions you hate and how to beat them. | /r/summonerschool/comments/1pi3wi7/midlane_champions_you_hate_and_how_to_beat_them/
+61 | 23 | Nov 22 2025, 18: | Hello, I am BiliBiliBD, challenger top main and the rank one Mundo main in NA. AMA! | /r/summonerschool/comments/1p3ztui/hello_i_am_bilibilibd_challenger_top_main_and_the/
+37 | 33 | Oct 01 2026, 18: | How to play against Syndra? | /r/summonerschool/comments/1wv6kr5/how_to_play_against_syndra/
+35 | 34 | Jan 23 2026, 12: | I cannot understand how to play against melees as a control mage mid | /r/summonerschool/comments/1qkq18z/i_cannot_understand_how_to_play_against_melees_as/
+26 | 15 | Feb 25 2026, 03: | I really do not understand how to play against lane-dominant champions/champions that can kinda just run at you early | /r/summonerschool/comments/1re1vel/i_really_do_not_understand_how_to_play_against/
+26 | 25 | Jan 12 2026, 03: | What am I supposed to do against Juggernauts? | /r/summonerschool/comments/1qak6y8/what_am_i_supposed_to_do_against_juggernauts/
+19 | 54 | Jun 29 2026, 23: | Advice for getting out of Bronze hell | /r/summonerschool/comments/1uj94e0/advice_for_getting_out_of_bronze_hell/
+16 | 102 | Aug 30 2026, 18: | Newer player, feeling like it's impossible to improve | /r/summonerschool/comments/1w2oprs/newer_player_feeling_like_its_impossible_to/
+15 | 5 | Dec 02 2025, 19: | How to play against Naafiri? | /r/summonerschool/comments/1pci9da/how_to_play_against_naafiri/
+14 | 13 | Oct 23 2025, 13: | What do I do against kled? | /r/summonerschool/comments/1oe32fr/what_do_i_do_against_kled/
+11 | 24 | Apr 29 2026, 13: | How do you even learn to play the game in 2026? | /r/summonerschool/comments/1syyxqt/how_do_you_even_learn_to_play_the_game_in_2026/
+10 | 37 | Aug 07 2026, 12: | At what rank does draft start to matter? | /r/summonerschool/comments/1vhz1r9/at_what_rank_does_draft_start_to_matter/
+
+=== query: "what to build"
+42 | 61 | Jan 21 2026, 11: | An honest plea - how to not be the worst player in the lobby? | /r/summonerschool/comments/1qivyot/an_honest_plea_how_to_not_be_the_worst_player_in/
+5 | 3 | Jan 25 2026, 22: | How do i know what to build first? | /r/summonerschool/comments/1qmy96c/how_do_i_know_what_to_build_first/
+6 | 28 | Aug 01 2026, 21: | can you get demoted from iron 1? + need help as a newbie | /r/summonerschool/comments/1vcyqp5/can_you_get_demoted_from_iron_1_need_help_as_a/
+5 | 9 | Dec 31 2025, 10: | How to build and itemize | /r/summonerschool/comments/1q09hts/how_to_build_and_itemize/
+3 | 10 | May 13 2026, 18: | I can’t rank up despite feeling like I’m playing well in my matches. Any advice? | /r/summonerschool/comments/1tc7x29/i_cant_rank_up_despite_feeling_like_im_playing/
+3 | 3 | Apr 30 2026, 17: | Sivir itemization help | /r/summonerschool/comments/1t02d73/sivir_itemization_help/
+2 | 4 | Feb 11 2026, 21: | How to learn team comps? | /r/summonerschool/comments/1r2ako0/how_to_learn_team_comps/
+2 | 11 | Mar 16 2026, 22: | Inconsistent gameplay, Dunno what to do | /r/summonerschool/comments/1rvnrj7/inconsistent_gameplay_dunno_what_to_do/
+1 | ? | Feb 05 2026, 22: | questions re. spells, items, attack/attack-move/target champs only + laning | /r/summonerschool/comments/1qx053x/questions_re_spells_items_attackattackmovetarget/
+1 | 3 | Apr 14 2026, 14: | If you're wondering what to build on draven, this can help (or on all adcs tbh) | /r/summonerschool/comments/1slahv9/if_youre_wondering_what_to_build_on_draven_this/
+1 | 18 | Aug 17 2026, 07: | Long time player in bronze and silver, I feel like I am missing something | /r/summonerschool/comments/1vqkz0s/long_time_player_in_bronze_and_silver_i_feel_like/
+0 | 12 | Feb 13 2026, 22: | Who decides what Champs build | /r/summonerschool/comments/1r43dpa/who_decides_what_champs_build/
