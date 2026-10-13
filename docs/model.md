@@ -1244,6 +1244,18 @@ everything per fold (foldAblation calls fitWith on older games only).
 
 ### Neural draft models, 2026-10-13 (meiolol-2c)
 
+Jacob's goal: the best draft predictor with neural nets, beside the simple models pushed
+as far as they go. Research (research/questions/nn-draft-models.md) expects no net to beat
+logistic ratings beyond noise at 100-300k games on a time split, so the nets are built to
+be data-efficient: small, residual on ratings (cross-fitted offsets), structured over
+teams (profiles, DeepSets/attention, antisymmetric), pretrained champion-role embeddings
+from auxiliary targets, seed-averaged. Protocol: win-comp's 5 forward folds (44,353 games)
+plus dev-val, log loss paired per game vs ratings and win-comp from one build, mean of 3+
+seeds with their spread; hyperparameters chosen on inner validation, never on fold gains;
+one test look per final model. The learning curve (25/50/100% of fit games, then the
+~350k-game unpinned snapshot) says whether the gap to ratings closes with data. Sessions:
+docs/model-agents.md. Read every table as log loss vs ratings, negative is better.
+
 #### LoLDraftAI's evaluation beside ours (meiolol-ba)
 
 Why: LoLDraftAI reports 55-56% on a seeded random 90/10 file split, with in-game
