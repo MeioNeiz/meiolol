@@ -180,9 +180,8 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         try w.writeAll("<nav class=\"tabs\">");
         for (Role.all) |o| {
             if (shown(f, ch.id, o) == null) continue;
-            try tpl.render(w, "<a href=\"{slug}-{role}.html\"{current}>{label}</a>", .{
-                .slug = ch.slug,
-                .role = root.roleSlug(o),
+            try tpl.render(w, "<a href=\"{href}\"{current}>{label}</a>", .{
+                .href = try a.print("{s}-{s}.html", .{ ch.slug, root.roleSlug(o) }),
                 .current = tpl.flag(o == r, "aria-current=\"page\""),
                 .label = root.roleName(o),
             });

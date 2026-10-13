@@ -12,10 +12,14 @@
 //!   attribute break-outs come from escaping by type alone):
 //!   - text: escaped; components write their own markup
 //!   - quoted attribute value: everything escaped, components and `format` included,
-//!     as they stream; `trusted` is a compile error
-//!   - URL attribute (href, src, action...) starting with the hole: a string is also
-//!     scheme-checked (javascript: and the like become about:invalid); components only
-//!     if their type declares `pub const url = true`
+//!     as they stream. `trusted`, `t`, `call` and `each` are compile errors: their
+//!     markup would be escaped, their own holes twice
+//!   - URL attribute (href, src, action...) until its text fixes the scheme (a `:`,
+//!     `/`, `?` or `#` before the hole): strings, components and `format` are
+//!     scheme-checked (javascript: and the like become about:invalid); a second hole
+//!     before the scheme is fixed is a compile error. `attr("href", ...)` the same
+//!   - on* and style values: script after entity decoding, so a string is a compile
+//!     error; numbers, enums and our own `format` types only
 //!   - inside a tag, outside quotes: only `attr`, `flag` or `trusted` (an unquoted
 //!     string could add attributes)
 //!   - <script>, <style>: numbers, `json` or `trusted` (HTML escaping is wrong there);
@@ -45,6 +49,8 @@ pub fn t(comptime src: []const u8, args: anytype) Template(src, @TypeOf(args)) {
 pub fn Template(comptime src: []const u8, comptime Args: type) type {
     return struct {
         args: Args,
+
+        pub const is_template = true;
 
         pub fn render(self: @This(), w: *Writer) !void {
             return renderSegs(w, comptime parse(src, true), src, self.args);
@@ -86,7 +92,8 @@ pub fn Json(comptime T: type) type {
     };
 }
 
-/// ` name="value"`, value escaped; for a hole inside a tag
+/// ` name="value"`, value escaped as in a quoted hole of that attribute; for a hole
+/// inside a tag
 pub fn attr(comptime name: []const u8, value: anytype) Attr(name, @TypeOf(value)) {
     return .{ .value = value };
 }
@@ -98,8 +105,9 @@ pub fn Attr(comptime name: []const u8, comptime T: type) type {
         pub const is_attr = true;
 
         pub fn render(self: @This(), w: *Writer) !void {
+            const ctx: Context = comptime if (isCodeAttr(name)) .code else if (isUrlAttr(name)) .url else .attr;
             try w.writeAll(" " ++ name ++ "=\"");
-            try writeValue(w, self.value, "", .attr);
+            try writeValue(w, self.value, "", ctx, .{ "", "" });
             try w.writeByte('"');
         }
     };
@@ -124,6 +132,8 @@ pub fn Call(comptime func: anytype, comptime Args: type) type {
     return struct {
         args: Args,
 
+        pub const is_template = true;
+
         pub fn render(self: @This(), w: *Writer) @typeInfo(@TypeOf(func)).@"fn".return_type.? {
             return @call(.auto, func, .{w} ++ self.args);
         }
@@ -139,6 +149,8 @@ pub fn Each(comptime Items: type, comptime Ctx: type, comptime func: anytype) ty
     return struct {
         items: Items,
         ctx: Ctx,
+
+        pub const is_template = true;
 
         pub fn render(self: @This(), w: *Writer) @typeInfo(@TypeOf(func)).@"fn".return_type.? {
             for (self.items) |item| try func(self.ctx, w, item);
@@ -170,12 +182,18 @@ pub fn writeEscaped(s: []const u8, w: *Writer) Writer.Error!void {
 
 // --- parsing --------------------------------------------------------------------------
 
-/// Where a hole sits
-const Context = enum { text, attr, url, tag, script };
+/// Where a hole sits; code: an on* or style attribute value
+const Context = enum { text, attr, url, code, tag, script };
 
 const Seg = union(enum) {
     lit: []const u8,
-    hole: struct { name: []const u8, spec: []const u8, ctx: Context },
+    hole: struct {
+        name: []const u8,
+        spec: []const u8,
+        ctx: Context,
+        /// url: the value's text before and after the hole, for the scheme check
+        around: [2][]const u8 = .{ "", "" },
+    },
 };
 
 const void_tags = [_][]const u8{
@@ -202,10 +220,11 @@ fn fail(comptime src: []const u8, comptime at: usize, comptime msg: []const u8) 
 }
 
 fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
-    @setEvalBranchQuota(20_000 + 200 * src.len);
+    @setEvalBranchQuota(20_000 + 100 * src.len);
     comptime {
         var segs: []const Seg = &.{};
-        var lit: []const u8 = "";
+        // Literal text is src[lit_start..i]: slices, not copies
+        var lit_start: usize = 0;
         var stack: []const []const u8 = &.{};
         const State = enum { text, tag, dq, sq, comment, script };
         var state: State = .text;
@@ -219,21 +238,28 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
             const c = src[i];
             if (c == '{' and state != .comment) {
                 if (i + 1 < src.len and src[i + 1] == '{') {
-                    lit = lit ++ "{";
+                    segs = withLit(segs, src[lit_start .. i + 1]);
                     i += 2;
+                    lit_start = i;
                     continue;
                 }
                 if (hole(src, i)) |h| {
-                    if (lit.len > 0) segs = segs ++ [_]Seg{.{ .lit = lit }};
-                    lit = "";
+                    segs = withLit(segs, src[lit_start..i]);
                     const ctx: Context = switch (state) {
                         .text, .comment => .text,
                         .tag => .tag,
-                        .dq, .sq => if (isUrlAttr(attr_name) and i == value_start) .url else .attr,
+                        .dq, .sq => if (isCodeAttr(attr_name)) .code else if (isUrlAttr(attr_name)) .url else .attr,
                         .script => .script,
                     };
-                    segs = segs ++ [_]Seg{.{ .hole = .{ .name = h.name, .spec = h.spec, .ctx = ctx } }};
+                    const around = if (ctx == .url) urlAround(src, value_start, i, h.end) else null;
+                    segs = segs ++ [_]Seg{.{ .hole = .{
+                        .name = h.name,
+                        .spec = h.spec,
+                        .ctx = if (ctx == .url and around == null) .attr else ctx,
+                        .around = around orelse .{ "", "" },
+                    } }};
                     i = h.end;
+                    lit_start = i;
                     continue;
                 }
             }
@@ -241,7 +267,6 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                 state = .text; // the end tag itself is read as text
                 continue;
             }
-            lit = lit ++ [_]u8{c};
             i += 1;
             switch (state) {
                 .text => if (c == '<' and i < src.len) {
@@ -250,7 +275,6 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                     } else if (src[i] == '!') {
                         // doctype: no holes or nesting worth tracking
                         const end = std.mem.indexOfScalarPos(u8, src, i, '>') orelse fail(src, i, "unclosed <!");
-                        lit = lit ++ src[i .. end + 1];
                         i = end + 1;
                     } else if (src[i] == '/') {
                         const end = std.mem.indexOfScalarPos(u8, src, i, '>') orelse fail(src, i, "unclosed end tag");
@@ -264,14 +288,12 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                         } else if (stack.len > 0 and std.mem.eql(u8, stack[stack.len - 1], name)) {
                             stack = stack[0 .. stack.len - 1];
                         }
-                        lit = lit ++ src[i .. end + 1];
                         i = end + 1;
                     } else if (std.ascii.isAlphabetic(src[i])) {
                         var end = i;
                         while (end < src.len and (std.ascii.isAlphanumeric(src[end]) or src[end] == '-')) end += 1;
                         tag_name = src[i..end];
                         tag_start = end;
-                        lit = lit ++ tag_name;
                         i = end;
                         state = .tag;
                     }
@@ -306,7 +328,7 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                 .sq => if (c == '\'') {
                     state = .tag;
                 },
-                .comment => if (std.mem.endsWith(u8, lit, "-->")) {
+                .comment => if (std.mem.endsWith(u8, src[0..i], "-->")) {
                     state = .text;
                 },
                 .script => {},
@@ -314,10 +336,46 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
         }
         if (state != .text) fail(src, src.len, "ends inside a tag, attribute, comment or script");
         if (balanced and stack.len > 0) fail(src, src.len, "<" ++ stack[stack.len - 1] ++ "> is never closed (renderPart for layout pieces)");
-        if (lit.len > 0) segs = segs ++ [_]Seg{.{ .lit = lit }};
+        segs = withLit(segs, src[lit_start..]);
         const out = segs[0..segs.len].*;
         return &out;
     }
+}
+
+fn withLit(comptime segs: []const Seg, comptime lit: []const u8) []const Seg {
+    return if (lit.len == 0) segs else segs ++ [_]Seg{.{ .lit = lit }};
+}
+
+/// A URL attribute's text around a hole that the scheme check must see: none when the
+/// text before it fixes the scheme (a `:`, `/`, `?` or `#`), else that text and what
+/// follows the hole up to a delimiter (`{x}:y` makes a scheme too). Holes aren't text,
+/// so two before the scheme is fixed can't be checked
+fn urlAround(comptime src: []const u8, comptime start: usize, comptime at: usize, comptime end: usize) ?[2][]const u8 {
+    var j = start;
+    var after_hole = false;
+    while (j < at) {
+        if (std.mem.indexOfScalar(u8, ":/?#", src[j]) != null) return null;
+        if (src[j] == '{') if (hole(src, j)) |h| {
+            after_hole = true;
+            j = h.end;
+            continue;
+        };
+        j += 1;
+    }
+    if (after_hole) fail(src, at, "a URL's scheme can't come from two holes");
+    var k = end;
+    while (k < src.len and std.mem.indexOfScalar(u8, "\"'{", src[k]) == null) : (k += 1) {
+        if (std.mem.indexOfScalar(u8, ":/?#", src[k]) != null) {
+            k += 1;
+            break;
+        }
+    }
+    return .{ src[start..at], src[end..k] };
+}
+
+/// on* and style values are script and CSS once entities are decoded
+fn isCodeAttr(comptime name: []const u8) bool {
+    return std.ascii.eqlIgnoreCase(name, "style") or (name.len > 2 and std.ascii.startsWithIgnoreCase(name, "on"));
 }
 
 const url_attrs = [_][]const u8{ "href", "src", "action", "formaction", "poster", "cite", "data", "xlink:href" };
@@ -366,6 +424,15 @@ fn checkAttrs(comptime src: []const u8, comptime start: usize, comptime end: usi
             const name = attrs[i..j];
             for (names) |n| if (std.mem.eql(u8, n, name)) fail(src, start + i, "attribute " ++ name ++ " twice");
             names = names ++ [_][]const u8{name};
+            // An unquoted value (`type=search`) is no attribute name
+            while (j < attrs.len and std.ascii.isWhitespace(attrs[j])) j += 1;
+            if (j < attrs.len and attrs[j] == '=') {
+                j += 1;
+                while (j < attrs.len and std.ascii.isWhitespace(attrs[j])) j += 1;
+                if (j < attrs.len and attrs[j] != '"' and attrs[j] != '\'') {
+                    while (j < attrs.len and !std.ascii.isWhitespace(attrs[j])) j += 1;
+                }
+            }
             i = j;
         } else i += 1;
     }
@@ -404,29 +471,33 @@ fn renderSegs(w: *Writer, comptime segs: []const Seg, comptime src: []const u8, 
         .lit => |l| try w.writeAll(l),
         .hole => |h| {
             if (!@hasField(Args, h.name)) @compileError("template: hole {" ++ h.name ++ "} has no field in the args (" ++ @typeName(Args) ++ ")");
-            try writeValue(w, @field(args, h.name), h.spec, h.ctx);
+            try writeValue(w, @field(args, h.name), h.spec, h.ctx, h.around);
         },
     };
 }
 
-fn writeValue(w: *Writer, v: anytype, comptime spec: []const u8, comptime ctx: Context) !void {
+fn writeValue(w: *Writer, v: anytype, comptime spec: []const u8, comptime ctx: Context, comptime around: [2][]const u8) !void {
     const T = @TypeOf(v);
     comptime check(T, ctx);
     switch (@typeInfo(T)) {
         .int, .comptime_int, .float, .comptime_float => return w.print("{d" ++ (if (spec.len > 0) ":" ++ spec else "") ++ "}", .{v}),
-        .@"enum" => if (!@hasDecl(T, "render")) return writeEscaped(@tagName(v), w),
-        .optional => return if (v) |inner| writeValue(w, inner, spec, ctx),
+        .@"enum" => if (!@hasDecl(T, "render")) return writeText(w, @tagName(v), ctx, around),
+        .optional => return if (v) |inner| writeValue(w, inner, spec, ctx, around),
         .void => return,
         else => {},
     }
-    if (comptime isString(T)) {
-        if (ctx == .url and !safeUrl(v)) return w.writeAll("about:invalid#tpl");
-        return writeEscaped(v, w);
-    }
+    if (comptime isString(T)) return writeText(w, v, ctx, around);
     if (comptime hasDecl(T, "render") or hasDecl(T, "format")) {
         if (T == std.fmt.Alt([]const u8, writeEscaped)) @compileError("template: esc() value would be escaped twice; pass the string");
+        if (ctx == .url) {
+            // Whole, for the scheme check: URLs are short
+            var buf: [2048]u8 = undefined;
+            var url: Writer = .fixed(&buf);
+            if (comptime hasDecl(T, "render")) try v.render(&url) else try url.print("{f}", .{v});
+            return writeText(w, url.buffered(), ctx, around);
+        }
         // Escaped as it streams: in an attribute a component's markup is just text
-        const escape = comptime !hasDecl(T, "render") or ctx == .attr or ctx == .url;
+        const escape = comptime !hasDecl(T, "render") or ctx == .attr or ctx == .code;
         if (!escape) return v.render(w);
         var buf: [64]u8 = undefined;
         var e: Escaping = .init(w, &buf, .html);
@@ -439,19 +510,24 @@ fn writeValue(w: *Writer, v: anytype, comptime spec: []const u8, comptime ctx: C
     }
     switch (@typeInfo(T)) {
         .pointer => |p| if (p.size == .slice) {
-            for (v) |item| try writeValue(w, item, spec, ctx);
+            for (v) |item| try writeValue(w, item, spec, ctx, around);
             return;
         } else if (p.size == .one and @typeInfo(p.child) == .array) {
-            for (v) |item| try writeValue(w, item, spec, ctx);
+            for (v) |item| try writeValue(w, item, spec, ctx, around);
             return;
         },
         .array => {
-            for (v) |item| try writeValue(w, item, spec, ctx);
+            for (v) |item| try writeValue(w, item, spec, ctx, around);
             return;
         },
         else => {},
     }
     @compileError("template: can't write a " ++ @typeName(T));
+}
+
+fn writeText(w: *Writer, s: []const u8, comptime ctx: Context, comptime around: [2][]const u8) !void {
+    if (ctx == .url and !safeUrl(around[0], s, around[1])) return w.writeAll("about:invalid#tpl");
+    return writeEscaped(s, w);
 }
 
 fn isString(comptime T: type) bool {
@@ -487,9 +563,18 @@ fn check(comptime T: type, comptime ctx: Context) void {
     const name = @typeName(T);
     switch (ctx) {
         .text => {},
-        .attr => if (T == Raw) @compileError("template: tpl.trusted HTML inside an attribute value would be escaped; pass the text"),
-        .url => if (!number and !isString(T) and !(hasDecl(T, "url") and T.url)) {
-            @compileError("template: a URL attribute takes a string (scheme-checked) or a type with `pub const url = true`, not " ++ name);
+        .attr, .url, .code => {
+            if (T == Raw) @compileError("template: tpl.trusted HTML inside an attribute value would be escaped; pass the text");
+            if (hasDecl(T, "is_template")) {
+                @compileError("template: a " ++ name ++ " in an attribute writes markup, which would be escaped (its own holes twice); pass text or a `format` value");
+            }
+            const value = number or isString(T) or @typeInfo(T) == .@"enum" or hasDecl(T, "render") or hasDecl(T, "format");
+            if (ctx == .url and !value) {
+                @compileError("template: a URL attribute takes a string, number, enum or a `render` or `format` value (scheme-checked), not " ++ name);
+            }
+            if (ctx == .code and isString(T)) {
+                @compileError("template: a string in an on* or style attribute is script or CSS once entities are decoded; pass a number or a `format` value");
+            }
         },
         .tag => if (T != Raw and !hasDecl(T, "is_attr")) {
             @compileError("template: a " ++ name ++ " hole inside a tag must be quoted, or be tpl.attr, tpl.flag or tpl.trusted");
@@ -501,15 +586,26 @@ fn check(comptime T: type, comptime ctx: Context) void {
 }
 
 /// Relative, or http, https or mailto: what a page links to. Anything else with a
-/// scheme (javascript:, data:, or one hidden by whitespace) is refused
-fn safeUrl(s: []const u8) bool {
-    const end = std.mem.indexOfAny(u8, s, ":/?#") orelse return true;
-    if (s[end] != ':') return true;
-    const scheme = s[0..end];
-    for ([_][]const u8{ "http", "https", "mailto" }) |ok| {
-        if (std.ascii.eqlIgnoreCase(scheme, ok)) return true;
-    }
-    return false;
+/// scheme (javascript:, data:, or one hidden by whitespace) is refused. The URL is
+/// `before ++ s ++ after`
+fn safeUrl(comptime before: []const u8, s: []const u8, comptime after: []const u8) bool {
+    var scheme: [8]u8 = undefined;
+    var n: usize = 0;
+    for ([_][]const u8{ before, s, after }) |part| for (part) |ch| switch (ch) {
+        ':' => {
+            if (n > scheme.len) return false;
+            for ([_][]const u8{ "http", "https", "mailto" }) |ok| {
+                if (std.ascii.eqlIgnoreCase(scheme[0..n], ok)) return true;
+            }
+            return false;
+        },
+        '/', '?', '#' => return true,
+        else => {
+            if (n < scheme.len) scheme[n] = ch;
+            n += 1;
+        },
+    };
+    return true;
 }
 
 /// A Writer that escapes what passes through it into `out`: HTML, or for <script>, the
@@ -651,7 +747,6 @@ test "escaping follows the hole's position" {
         }
     };
     const Link = struct {
-        pub const url = true;
         pub fn render(_: @This(), w: *Writer) Writer.Error!void {
             try w.writeAll("../a.html?x=1&y=2");
         }
@@ -672,4 +767,36 @@ test "json in a script can't end it" {
         "<script type=\"application/json\">{data}</script>",
         .{ .data = json(.{ .name = "</script>", .n = 2 }) },
     );
+}
+
+test "URL holes: the scheme is checked with the text around the hole, components too" {
+    const Js = struct {
+        pub fn render(_: @This(), w: *Writer) Writer.Error!void {
+            try w.writeAll("javascript:alert(1)");
+        }
+    };
+    try expectRender(
+        "<a href=\"about:invalid#tpl:x\"></a><a href=\"learn.html\"></a>" ++
+            "<a href=\"https://x.io/javascript:x\"></a><img src=\"about:invalid#tpl\"><a href=\"../a/x:y\"></a>",
+        "<a href=\"{bad}:x\"></a><a href=\"{page}.html\"></a>" ++
+            "<a href=\"https://x.io/{fixed}\"></a><img src=\"{js}\"><a href=\"{root}a/{slug}\"></a>",
+        .{ .bad = "javascript", .page = "learn", .fixed = "javascript:x", .js = Js{}, .root = "../", .slug = "x:y" },
+    );
+}
+
+test "tpl.attr escapes as a quoted hole of its attribute" {
+    const Colour = struct {
+        pub fn format(_: @This(), w: *Writer) Writer.Error!void {
+            try w.writeAll("color:oklch(0.7 0.1 50)");
+        }
+    };
+    try expectRender(
+        "<a href=\"about:invalid#tpl\" title=\"a&amp;b\"></a><i style=\"color:oklch(0.7 0.1 50)\"></i>",
+        "<a{href}{title}></a><i{style}></i>",
+        .{ .href = attr("href", "javascript:x"), .title = attr("title", "a&b"), .style = attr("style", Colour{}) },
+    );
+}
+
+test "unquoted attribute values aren't names" {
+    try expectRender("<input type=search name=search>", "<input type=search name=search>", .{});
 }

@@ -446,11 +446,12 @@ fn chartOne(
     const last = reach(one.v);
     const figure = .{
         .thin = if (thin(one.v)) " thin" else "",
-        .exp = if (toggle) tpl.t(" exp exp-{key}", .{ .key = one.key }) else null,
+        .exp = tpl.when(toggle, " exp exp-"),
+        .key = tpl.when(toggle, one.key),
     };
     if (last < 2) {
         return tpl.render(w,
-            \\<figure class="chart{thin}{exp}">
+            \\<figure class="chart{thin}{exp}{key}">
             \\<p class="muted">Not enough games yet.</p></figure>
             \\
         , figure);
@@ -463,7 +464,7 @@ fn chartOne(
     }
     var aria_buf: [160]u8 = undefined;
     const aria = std.fmt.bufPrint(&aria_buf, "{s} of {s} minus {s} by minute", .{ unit, x.name, y.name }) catch unit;
-    try tpl.renderPart(w, "<figure class=\"chart{thin}{exp}\">\n", figure);
+    try tpl.renderPart(w, "<figure class=\"chart{thin}{exp}{key}\">\n", figure);
     try lanechart.render(w, .{
         .aria = aria,
         .a = x.name,
