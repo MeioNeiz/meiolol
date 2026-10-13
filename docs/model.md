@@ -2650,6 +2650,118 @@ lane-ref.json: per role the 4 most played pairs, a champion into an opponent wit
 pair cell and an unknown champion (id 0), each with value, lo, hi, champ_games and
 pair_games from Scorer.value; the page's JS must match them to 0.01.
 
+### Model tests, 2026-10-13 (meiolol-tests: meiolol-0a [8b5601], then meiolol-d8)
+
+Question: do the models work and train properly, and could they have detected the effects
+we call "not detected"? Three kinds of check, all on the gpu-box:
+- Golden numbers: `deploy/golden.sh [--commit SHA] [--test] [CASE...]` reruns the reference
+  models of docs/golden.tsv on their snapshot and needs each published log loss to the
+  last digit; a miss is a finding, never a reason to edit the expected value. Test cases
+  (`*-test`) only with `--test` or by name: the test looks ledger (looks.zig) counts each
+  rerun as a look. Run it after any tooling or numeric change (~2 min)
+- Training health: `meiolol-lab health` (src/lab/health.zig, ~25 s) trains each net family
+  on synthetic games with a known logit through its healthFit entry point
+- Planted effects: any command's SNAP may be `plant:SPEC:PATH` (src/lab/synth.zig): the
+  real games, drafts, folds and seat stats, with only who won redrawn from a logit with
+  known planted terms (champion-role strengths, an ally pair, a lane matchup, every ally
+  pair or matchup with its own effect, the damage mix, per-player champion experience).
+  `meiolol-lab plant-score PLANT PREDS.tsv [REF]` then scores any model's per-game preds
+  against the truth: loss vs the reference, the oracle's loss, and the share of each
+  planted part the model's logit carries ("captured": slope on that part, 1 all of it)
+
+Golden, snap-20261012T2055Z: all 6 reproduce to the last digit at d87d8d7 (74cf241); the
+4 non-test cases again at a7961de (f98213f).
+
+| case | published | got |
+| --- | --- | --- |
+| win-ratings dev-val | 0.68969 | 0.68969 |
+| win-comp dev-val | 0.68999 | 0.68999 |
+| win-ratings folds | 0.69090 | 0.69090 |
+| win-comp folds | 0.69033 | 0.69033 |
+| win-ratings test (rerun of look 20261013T195618Z) | 0.69064 | 0.69064 |
+| win-comp test (rerun of look 20261013T195708Z) | 0.69065 | 0.69065 |
+
+Health: 0 of 45 checks failed (run 20261013T225211Z-tst-health3, c3347bb), 9 per family:
+big (draftnet), small and resid (winnet), set (setnet), player (playernet). Per family:
+loss at init within 0.01 of the base rate's (the offset's for residual nets: their output
+weights start at 0); logit sum with sides swapped constant at init and after training
+(antisymmetry); held-out loss below the base rate's by > 0.03 after training (largest
+seen 0.165, smallest 0.145, resid); trains a tiny random-label set to ~0 loss (set net
+0.0012, limit 0.45: dropout and mean pooling); same seed gives identical parameters, seed
+2 differs; no non-finite parameters. Not covered yet: win-ratings, win-comp, stacking and
+GBDT themselves (the golden numbers cover the first two).
+
+Planted sweep 1: netcheck --net small --max-epochs 1 --seeds 1 on planted copies of
+snap-20261012T2055Z (pinned commit d87d8d7), win-ratings or win-comp as the candidate,
+champion sd 2.5 pp (too wide: ratings reach 0.684 on folds vs 0.691 real; later sweeps use
+1.7). Folds, 44,353 games; mix in pp per sd of win-comp's mix form; oracle = what the
+planted term is worth in nats/game to the truth on these games.
+
+| planted mix | win-comp captured, seeds 1/2/3 (± ~0.03) | oracle value |
+| --- | --- | --- |
+| -1 | 0.74 / 0.61 / 1.01 | -0.00018, +0.00003, -0.00022 (± 0.0002) |
+| -2 | 0.91 / 0.60 / 0.99 | -0.00077, -0.00036, -0.00077 (± 0.0004) |
+| -4 | 0.92 / 0.83 / 0.94 | -0.00293, -0.00221, -0.00302 (± 0.0007) |
+
+Runs 20261013T221917Z-tst-wr-none-s1 to 20261013T222133Z-tst-wc-mix4-s3 (17, list in
+the tests progress file), scored by tst-score-*.
+- win-comp finds the planted mix in 9 of 9 runs, down to 1 pp per sd (at ~90k fit games
+  its se is ~0.17 pp, so 1 pp is ~6 se); the captured share's seed spread (0.6-1.0) is
+  estimation noise
+- But a 1 pp/sd effect is worth ~0.0001-0.0002 nats/game, under the folds' paired noise
+  (± ~0.0003, and the floor ± ~0.0005): a real effect of that size shows as an effect
+  estimate yet "not detected" as a gain. So report the effect with its interval beside
+  the gain. The real fit, mix -1.50 ± 0.33 pp/sd with a folds gain of -0.00057 ± 0.00028,
+  is in line with a true effect of ~1.5-2 pp/sd
+- win-ratings alone carries 39% of a planted -4 mix through champion strengths (paired at
+  mix -4, seed 1: win-comp -0.0009 vs ratings, against an oracle -0.0029): a comp term's
+  gain over ratings understates the comp effect
+- Controls (win-ratings, synergy 4, counter 4, skill 1): ratings carry 43% ± 4 of the top
+  ally pair (4,749 team-games) and 29% ± 5 of the top lane matchup (3,789 games) through
+  the two champions' strengths, and 3% ± 2 of skill (no experience input)
+- Nothing planted: win-comp equals win-ratings within 0.00002 (no false mix)
+- Small net, 1 epoch, one seed, is worse than its candidate on planted data (+0.0017 on
+  folds): as on real data, not a health failure
+
+Planted tests of the additive effects model ("Effects and the CPU model"): `effects
+plant:seed=1,champ=1.7[,X]:snap-20261012T2055Z --blocks 1,2,3,4,5 --boot 50 --drop 0`
+(a7961de, --null 10), fitted on dev's 88,706 fit games; block sd = sd_corr_pp, win pp at
+50%; covers = its 95% interval holds the planted value; captured from plant-score of the
+fold games files (44,353 games).
+
+| planted | blocks | mean sd | covers | detected | full: captured, vs ratings |
+| --- | --- | --- | --- | --- | --- |
+| nothing | 10 ally, 25 enemy | 0.00 | 10/10 ally | 0/35 | -, -0.00003 ± 0.00020 |
+| nothing | 5 champion (1.7) | 1.65 | 4/5 | 5/5 | |
+| ally pairs sd 2 | 10 ally | 1.21 | 1/10 | 6/10 | 10%, -0.00114 ± 0.00034 |
+| ally pairs sd 4 | 10 ally | 2.99 | 0/10 | 10/10 | 22%, -0.01272 ± 0.00115 |
+| matchups sd 2 | 5 same-role lanes (cell 1.0) | 0.90 | 2/5 | 3/5 | 13%, -0.00055 ± 0.00027 |
+| matchups sd 4 | 5 same-role lanes (cell 2.0) | 2.02 | 4/5 | 5/5 | 28%, -0.00578 ± 0.00078 |
+| mix -2 pp/sd | damage mix | -1.69 ± 0.33 | yes | yes | 94%, -0.00022 ± 0.00032 |
+
+Runs 20261013T230632Z-tst-eff-none, 230656Z-pair2, 230723Z-pair4, 230751Z-ctr2,
+230817Z-ctr4, 230841Z-mix2; scores 233602Z..233749Z-tst-score-eff-*.
+- No false effects: with nothing planted every pair block is ~0 and the gain is nil
+- Lane blocks are half the matchup's spread: a same-role matchup enters the logit as
+  theta(a, b) - theta(b, a) (additive.cells), so an antisymmetric matchup effect c is fitted
+  as c / 2 per cell. Read "X vs their X" x2 for a matchup's spread (top vs top 1.23 pp:
+  ~2.5 pp per matchup). Bottom vs support across lanes is one matchup split over two
+  blocks (planted 4: 3.43 and 0.00; 2: 0.87 and 0.53): one block, root sum of squares
+- Ally block sds run low, 40% at 2 pp and 25% at 4, always low, and their intervals rarely
+  hold the truth: a reported ally sd is a lower bound, and "not detected" ally blocks
+  could hide ~2 pp (6 of 10 detected at 2 pp)
+- At ally pair sd 4 the jungle and bottom champion blocks collapse to ~0 (strength moved
+  into pair cells); at the real ally sizes (< 1.5) champion blocks hold
+- A big planted pair term is mostly not learnable at 89k games: ally pairs sd 2 are worth
+  -0.016 nats/game to an oracle, the model gets 10% of that. Blocks, not single pairs
+- The mix comes back within its interval and nearly whole (94%), yet its gain over ratings
+  (-0.00022 ± 0.00032) is not detected: as with win-comp, report the effect estimate
+
+Rules of thumb for minimum detectable effects (MDE, 80% power at 5%): a binary term held
+by m games has se ~50/sqrt(m) pp, MDE ~140/sqrt(m) pp (a pair in 5,000 games: ~2 pp; in
+500: ~6 pp); a per-sd term on n games has se ~50/sqrt(n) pp (matches win-comp's -1.50 ±
+0.33 at 89k). As a log-loss gain the bar is far higher (above).
+
 ## Next steps
 
 - Patch and rank context (meiolol-48, 2026-10-13; cand/win-context, model.md "Patch
