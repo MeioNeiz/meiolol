@@ -95,12 +95,10 @@ fn variantCfg(v: Variant) Cfg {
     return c;
 }
 
-/// The variant dev-val scores; folds 5 for the fold table (every variant)
-const cfg: Cfg = blk: {
-    var c = variantCfg(.all);
-    c.folds = 5;
-    break :blk c;
-};
+/// The variant scored (exp, netcheck's per-game blocks); folds = 5 adds the in-candidate
+/// fold table of every variant (deecc3f's run 20261013T215827Z-embx-all)
+const variant: Variant = .all;
+const cfg: Cfg = variantCfg(variant);
 
 pub const name = "win-embx";
 
