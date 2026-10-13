@@ -1285,3 +1285,30 @@ test "emb init: a table's vectors by champion-role, the role's shared one otherw
     defer gpa.free(tr.net.p);
     try testing.expectEqualSlices(f32, n.p[l.e..l.r], tr.net.p[l.e..l.r]);
 }
+
+test "cross-fit: a game's offset never comes from a fit that holds it" {
+    const c: harness.Cuts = .{ .dev = 10_000, .select = 20_000, .eu = 0 };
+    const spec: Spec = .{ .before = 10_000, .lo = 8_000, .hi = 10_000, .dev = false };
+    var seen: [cross_folds]u32 = @splat(0);
+    for (0..500) |i| {
+        const g: rows.Game = .{
+            .match_id = "",
+            .start = @intCast(i * 13),
+            .patch = 0,
+            .platform = @intCast(i % 3),
+            .is_test = false,
+            .teams = @splat(@splat(0)),
+            .winner = 0,
+            .duration_s = 1800,
+        };
+        const all: FitKeep = .{ .spec = spec, .c = c, .fraction = 1 };
+        try testing.expect(all.keep(g));
+        seen[crossFold(g)] += 1;
+        for (0..cross_folds) |f| {
+            var k = all;
+            k.without = @intCast(f);
+            try testing.expectEqual(crossFold(g) != f, k.keep(g));
+        }
+    }
+    for (seen) |n| try testing.expect(n > 50);
+}
