@@ -230,6 +230,15 @@ over before clearing crawl state (src/rekey.zig):
 - Ruled out: keeping a match id and slot per erased player (the new key's match-v5 would
   name the slot's new PUUID) holds more personal data and stops working once Riot drops
   the match; there is no PUUID-to-PUUID endpoint
+- Raw documents: rekey deletes every raw summary and raw timeline on the box. They hold
+  old PUUIDs and Riot IDs, and once participants are blanked an erasure by new PUUID
+  can't find them. With the raw archive in use it first checks that every raw document
+  and mastery snapshot is in an acked export, and stops (RawNotArchived, nothing
+  written) otherwise, so the archive loses nothing
+- Raw archive: the gpu-box's pre-switch days hold hashed old PUUIDs. archive-forget
+  hashes the new PUUIDs it is given, so a later erasure can't reach them. Runbook step
+  6 blanks them, as archive-age does at 24 months: the matches stay but have no player
+  links (Jacob's call: the alternative is keeping links that no erasure can reach)
 - Rehearse on a copy with `--fake-api` (no keys; fake account-v1 in src/riot/fake.zig
   maps any crawled PUUID to a made-up Riot ID and back under a second fake app)
 
@@ -237,10 +246,15 @@ Runbook, with RIOT_API_KEY the new key and RIOT_API_KEY_OLD the old one (env or 
 each host; the old key must still work, so switch before revoking it):
 
 1. Box: stop the crawler and every loop (`deploy/box.sh stop`, then `backup`, `health`
-   and `web` with `stop`): no forgotten exchange may run between the two sides' rekeys
+   and `web` with `stop`): no forgotten exchange may run between the two sides' rekeys.
+   Then wait 5 minutes (an export leaves the newest 300 s to the next one), and run one
+   pull on the gpu-box with League closed (`systemctl --user start
+   meiolol-archive-pull`; log ~/ml/archive-pull.log). `deploy/box.sh run raw-export
+   --status` should show `unacked 0`
 2. Box, each via `deploy/box.sh run`: `backup` (as backup-loop.sh runs it); `rekey
    --dry-run` (expect "N erased players carried over, M accounts gone", or "encryption
-   linked": then stop here, nothing to rekey); `rebuild`; `rekey`; `backup --full`
+   linked": then stop here, nothing to rekey); `rebuild`; `rekey` (if it stops with
+   RawNotArchived, repeat the pull in step 1); `backup --full`
 3. Web server: stop the Your games service; `meiolol rekey --data /var/lib/meiolol-api`;
    delete the exchange dir's forgotten.txt and box-forgotten.txt (old PUUIDs: the
    service would import the box's stale list); start the service
@@ -250,4 +264,10 @@ each host; the old key must still work, so switch before revoking it):
    cannot find: the pre-switch state snapshots (rotate out within 4 weeks; the new full
    segment replaces the old segments), the Mac mirror (follows) and the gpu-box restore
    point. Deleting them once the first new-key backup is restore-tested is Jacob's call
+6. gpu-box, the next UTC day: `~/ml/bin/meiolol-lab archive-age
+   /mnt/wsl/archive/meiolol-raw 0` once. It blanks the hashed PUUIDs and deletes the
+   mastery files of every archived day before today: all pre-switch days, and the
+   switch day's few post-switch hours with them. The first pull after the switch also
+   runs archive-forget over the whole archive (the new forgotten list looks all new
+   next to forgotten-applied.txt): slow, harmless
 

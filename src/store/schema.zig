@@ -5,6 +5,8 @@ const std = @import("std");
 const sqlite = @import("sqlite.zig");
 const draft = @import("draft.zig");
 
+const log = std.log.scoped(.schema);
+
 // Tables migrate() rebuilds, so their DDL lives apart from `schema`. WITHOUT ROWID
 // where the key is text: a rowid table would store the key twice (table + index).
 
@@ -485,15 +487,35 @@ pub fn rekey(db: sqlite.Db) !void {
 }
 
 /// rekey inside the caller's transaction (rekey.zig carries `forgotten` over in the same
-/// one); run apply after the commit, to recreate the dropped tables
+/// one); run apply after the commit, to recreate the dropped tables.
+/// Raw documents go too: they hold old-key PUUIDs and Riot IDs that an erasure by new
+/// PUUID could no longer find, as participants no longer link them to anyone. With the
+/// raw archive in use, error.RawNotArchived unless every raw document and mastery
+/// snapshot is in an acked export, so none is lost to it
 pub fn rekeyRows(db: sqlite.Db) !void {
+    if (try archivedUntil(db)) |until| {
+        const unacked = (try db.scalar(
+            "SELECT count(*) FROM raw.archive_exports WHERE acked_at IS NULL",
+            .{},
+        )).?;
+        const unarchived = (try db.scalar(
+            \\SELECT (SELECT count(*) FROM raw.raw_docs WHERE source = 'riot_match' AND fetched_at >= ?1)
+            \\    + (SELECT count(*) FROM raw.timeline_docs WHERE fetched_at >= ?1)
+            \\    + (SELECT count(*) FROM mastery WHERE fetched_at >= ?1)
+        , .{until})).?;
+        if (unacked > 0 or unarchived > 0) {
+            log.warn("rekey: {d} raw documents not archived, {d} exports not acked: " ++
+                "stop the crawler, let the gpu-box pull and ack, run again", .{ unarchived, unacked });
+            return error.RawNotArchived;
+        }
+    }
     try db.exec(
         \\UPDATE participants SET (tier, division) =
         \\    (SELECT tier, division FROM players p WHERE p.puuid = participants.puuid)
         \\WHERE tier IS NULL;
     ++ "DROP TABLE players; DROP TABLE ladder_pages; DROP TABLE mastery; DELETE FROM ranks;" ++
         "UPDATE participants SET puuid = NULL;" ++
-        "DELETE FROM raw.raw_docs WHERE source = 'riot_mastery';");
+        "DELETE FROM raw.raw_docs; DELETE FROM raw.timeline_docs;");
 }
 
 /// Raw documents fetched before this are in an acked raw archive export (archive.zig):
@@ -603,15 +625,53 @@ test "rekey keeps matches, forgets players" {
         \\INSERT INTO match_queue (match_id, discovered_at) VALUES ('EUW1_1', 9);
         \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, win)
         \\    VALUES ('EUW1_1', 0, 100, 'old', 266, 1);
+        \\INSERT INTO raw.raw_docs VALUES ('riot_match', 'EUW1_1', 5, x'');
+        \\INSERT INTO raw.timeline_docs VALUES ('EUW1_1', 5, x'');
     );
     try rekey(db);
     const t = std.testing;
     try t.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM players", .{}));
+    try t.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM raw.raw_docs", .{}));
+    try t.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM raw.timeline_docs", .{}));
     try t.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM match_queue", .{}));
     try t.expectEqual(@as(?i64, 1), try db.scalar(
         "SELECT count(*) FROM participants WHERE puuid IS NULL AND tier = 'GOLD'",
         .{},
     ));
+}
+
+test "rekey with the raw archive: only once everything is acked" {
+    const db = try memory();
+    defer db.close();
+    const t = std.testing;
+    try t.expectEqual(null, try archivedUntil(db));
+    try db.exec(
+        \\CREATE TABLE raw.archive_exports (name TEXT PRIMARY KEY, from_s INTEGER NOT NULL,
+        \\    to_s INTEGER NOT NULL, summaries INTEGER NOT NULL, timelines INTEGER NOT NULL,
+        \\    mastery INTEGER NOT NULL, made_at INTEGER NOT NULL, acked_at INTEGER);
+    );
+    try t.expectEqual(null, try archivedUntil(db));
+    try db.exec(
+        \\INSERT INTO raw.archive_exports VALUES ('raw-0-10.db', 0, 10, 1, 0, 0, 10, 11),
+        \\    ('raw-10-20.db', 10, 20, 0, 0, 1, 20, NULL);
+        \\INSERT INTO raw.raw_docs VALUES ('riot_match', 'EUW1_1', 5, x'');
+        \\INSERT INTO mastery VALUES ('p', 'EUW1', 15, 0, x'');
+    );
+    try t.expectEqual(10, try archivedUntil(db));
+    const saved = t.log_level;
+    defer t.log_level = saved;
+    t.log_level = .err;
+    try t.expectError(error.RawNotArchived, rekey(db));
+    try t.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM mastery", .{}));
+    try db.exec("UPDATE raw.archive_exports SET acked_at = 21");
+    try t.expectEqual(20, try archivedUntil(db));
+    // Fetched after the last export
+    try db.exec("INSERT INTO raw.timeline_docs VALUES ('EUW1_1', 25, x'')");
+    try t.expectError(error.RawNotArchived, rekey(db));
+    try db.exec("UPDATE raw.archive_exports SET to_s = 30 WHERE name = 'raw-10-20.db'");
+    try rekey(db);
+    try t.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM raw.raw_docs", .{}));
+    try t.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM mastery", .{}));
 }
 
 test "drafts: a database from before them lists its matches for the backfill" {
