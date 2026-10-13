@@ -178,6 +178,30 @@ pub const Visible = struct {
 pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, p: Phase, c: Cuts, fraction: f64, after: bool) !Visible {
     std.debug.assert(p == .dev or fraction >= 1);
     std.debug.assert(p == .dev or !after);
+    const Keep = struct {
+        p: Phase,
+        c: Cuts,
+        fraction: f64,
+        pub fn keep(k: @This(), g: rows.Game) bool {
+            return visible(k.p, k.c, g) and inFraction(g, k.fraction);
+        }
+    };
+    return buildTrainBy(gpa, d, players, Keep{ .p = p, .c = c, .fraction = fraction }, after);
+}
+
+/// The training set of the games `k.keep(g)` accepts, a split other than the phases' (a
+/// random split, a filter: dev only). Test games and games under 15:00 never enter
+pub fn buildTrainWhere(gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, k: anytype) !Visible {
+    const Keep = struct {
+        inner: @TypeOf(k),
+        pub fn keep(x: @This(), g: rows.Game) bool {
+            return !g.is_test and played(g) and x.inner.keep(g);
+        }
+    };
+    return buildTrainBy(gpa, d, players, Keep{ .inner = k }, false);
+}
+
+fn buildTrainBy(gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, k: anytype, after: bool) !Visible {
     var v: Visible = .{ .arena = .init(gpa), .train = .{ .games = &.{}, .rows = &.{} } };
     errdefer v.deinit();
     const a = v.arena.allocator();
@@ -185,14 +209,13 @@ pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, players: []const 
     defer gpa.free(index);
     var games: std.ArrayList(api.Game) = .empty;
     for (d.games, index, players) |g, *i, pl| {
-        if (!visible(p, c, g) or !inFraction(g, fraction)) continue;
+        if (!k.keep(g)) continue;
         i.* = @intCast(games.items.len);
         try games.append(a, .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = pl.ranks, .exp = pl.exp });
     }
     var out: std.ArrayList(api.Row) = .empty;
     for (d.rows) |r| {
-        const g = d.games[r.game];
-        if (!visible(p, c, g) or !inFraction(g, fraction)) continue;
+        if (!k.keep(d.games[r.game])) continue;
         try out.append(a, .{
             .game = index[r.game],
             .side = r.side,
@@ -905,4 +928,28 @@ test "games over before 15:00 are neither fitted on nor scored" {
     var long: usize = 0;
     for (f.data.games) |g| long += @intFromBool(!g.is_test and g.start < c.dev and g.duration_s >= min_duration_s);
     try std.testing.expectEqual(long, Spy.train_games);
+}
+
+test "buildTrainWhere: the predicate's games, never test games or games under 15:00" {
+    const gpa = std.testing.allocator;
+    var f = try Fixture.init(gpa, 600, 11);
+    defer f.data.deinit();
+    for (f.data.games, 0..) |*g, gi| if (gi % 5 == 0) {
+        g.duration_s = 720;
+    };
+    const players = try gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
+    const Odd = struct {
+        pub fn keep(_: @This(), g: rows.Game) bool {
+            return @mod(@divFloor(g.start, 60_000), 2) == 1;
+        }
+    };
+    var v = try buildTrainWhere(gpa, &f.data, players, Odd{});
+    defer v.deinit();
+    var want: usize = 0;
+    for (f.data.games) |g| want += @intFromBool(!g.is_test and g.duration_s >= min_duration_s and (Odd{}).keep(g));
+    try std.testing.expect(want > 0);
+    try std.testing.expectEqual(want, v.train.games.len);
+    for (v.train.games) |g| try std.testing.expect(@mod(@divFloor(g.start, 60_000), 2) == 1);
+    try std.testing.expectEqual(10 * want, v.train.rows.len);
 }
