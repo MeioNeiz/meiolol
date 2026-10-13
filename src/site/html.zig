@@ -196,7 +196,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
 /// Jacob's menu link to the admin Draft tester: the admin page (behind basic auth) stores
 /// it in this origin's localStorage, so visitors' pages carry neither link nor admin path
 const admin_link =
-    \\<script>try{const l=JSON.parse(localStorage.getItem("admin-link"));if(l){const a=document.createElement("a");
+    \\<script>try{const l=JSON.parse(localStorage.getItem("admin-link"));if(l&&typeof l.href=="string"&&l.href.startsWith("/admin/")){const a=document.createElement("a");
     \\a.href=l.href;a.textContent=l.label;document.querySelector("header.top nav").append(a)}}catch(e){}</script>
     \\
 ;
