@@ -2653,7 +2653,11 @@ and no comp):
   s, p, raw}], comp, temperature}: temperature multiplies the whole logit and the
   interval's ends (calibration; draft.zig default_temperature 0.80: win-ratings' preds on
   win-comp's 5 forward folds of 2055Z, 44,353 games, fitted 0.80 ± 0.11, its top tenth
-  said 58.6% and won 55.8%; `--temperature T` overrides, 1 is the raw model). Every shown
+  said 58.6% and won 55.8%; `--temperature T` overrides, 1 is the raw model; refitted per
+  pin on that pin's fold preds: snap-20261013T2253Z, 78,036 fold games, 0.89 ± 0.04, folds
+  0.71-1.30, dev-val 1.02 ± 0.10, so with ~2x the fit games ratings is less over-confident;
+  the shipped fit has more games than any fold, so the folds' T may shrink slightly too
+  much). Every shown
   chance, slot list and comp reason uses it; ratings, comp parts and the debug trace's
   terms stay in the model's own logit; u, v, s are length dim (empty for rates and ratings); w and z
   row-major 5 x 5; p the champion-role's profile (k numbers, z-scored within the role;
