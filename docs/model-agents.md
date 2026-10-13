@@ -97,13 +97,12 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
 - Collected: playstyle (3f): b0's 8 style +0.00020 ± 0.00011 on test with objectives in
   the state (half the gold/XP-only gain); clusters, components, net not detected;
   train-fit leanings didn't hold on test, dropped
-- Results to collect: mastery and flex live
-  with matches/day before and after (11), next snapshot pinned in docs/model.md
+- Collected: mastery for all participants live (11, 170e409, 02:16Z): matches/day
+  127,914 before, 130,215 after; catch-up ~2.5 days, then ~25k mastery calls/day
+- Results to collect: flex sample live with matches/day (11), next snapshot pinned in docs/model.md
 - Admin follow-ups for the next admin session (0d, not done: admin.js held by
   meiolol-9f's Your games proxy edits): All-view cards take a category's first two
   learned.md lines in file order, so replacement lines can hide newer ones; stable-sort
   by leading date newest first in learnedList's short mode before slice(0, 2), don't
   reorder learned.md. Run detail fetches metrics.tsv for every run (404s on runs
   without one); lab-push.sh lists it in runs.tsv, runDetail fetches only when listed
-- meiolol-58's solo/duo lookup commit: Jacob must type "commit" in its window (pane
-  657); meiolol-11's mastery crawl.zig commit waits on it
