@@ -1,0 +1,1840 @@
+arXiv:1902.06432v1 [cs.CY] 18 Feb 2019
+
+What Makes a Good Team? A Large-scale Study
+on the Effect of Team Composition in Honor of Kings
+Ziqiang Cheng
+
+Yang Yang
+
+Chenhao Tan
+
+Zhejiang University
+petecheng@zju.edu.cn
+
+Zhejiang University
+yangya@zju.edu.cn
+
+University of Colorado Boulder
+chenhao@chenhaot.com
+
+Denny Cheng
+
+Yueting Zhuang
+
+Alex Cheng
+
+Tencent Corporation
+dennycheng@tencent.com
+
+Zhejiang University
+yzhuang@zju.edu.cn
+
+Tencent Corporation
+alexcheng@tencent.com
+
+ABSTRACT
+Team composition is a central factor in determining the effectiveness of a team. In this paper, we present a large-scale study on the effect of team composition on multiple measures of team effectiveness.
+We use a dataset from the largest multiplayer online battle arena
+(MOBA) game, Honor of Kings, with 96 million matches involving 100 million players. We measure team effectiveness based on
+team performance (whether a team is going to win), team tenacity
+(whether a team is going to surrender), and team rapport (whether
+a team uses abusive language). Our results confirm the importance
+of team diversity and show that diversity has varying effects on
+team effectiveness: although diverse teams perform well and show
+tenacity in adversity, they are more likely to abuse when losing
+than less diverse teams. Our study also contributes to the situation
+vs. personality debate and show that abusive players tend to choose
+the leading role and players do not become more abusive when
+taking such roles. We further demonstrate the predictive power of
+features based on team composition in prediction experiments. 1
+
+CCS CONCEPTS
+• Applied computing → Law, social and behavioral sciences.
+
+KEYWORDS
+team composition, team performance, tenacity, toxic behavior, MOBA
+
+1
+
+INTRODUCTION
+
+The increasing complexity and scale of tasks in modern society
+require individuals to work together as a team [14, 45]. Crucial to
+the effectiveness of a team are the individuals in the team, i.e., team
+composition. Extensive prior research has studied team roles to
+analyze team composition [6, 7, 34, 35, 41, 43]. The most influential work is Belbin’s team role framework, also known as Belbin
+Team Inventory. A central hypothesis in Belbin’s framework is that
+balance in team roles is associated with team performance. Belbin
+[7] defines nine roles 2 , and finds that teams with certain role combinations result in poor performance, even if they are formed by
+members with the sharpest mind and the most experience. However, team roles are usually implicit in real life and it is difficult to
+identify such nine roles in most contexts.
+1 This is a long version of our WWW’19 short paper with additional analysis and
+
+prediction experiments: https:/doi.org/10.1145/3308558.3312504
+2 See https://en.wikipedia.org/wiki/Team_Role_Inventories for a quick explanation.
+
+Figure 1: Illustration of games in Honor of Kings: 1) a matching system groups 10 players into two similarly competitive
+teams; 2) players in each team choose a character to control,
+which is designed to play a certain role (note that multiple
+players can choose the same role); 3) two teams battle to destroy opponents’ base. See the description of roles in Table 1.
+Another challenge in studying the effect of team composition on
+team effectiveness arises from the definition of effectiveness. Team
+performance is the most straightforward definition and has been
+studied in a battery of studies [10, 14, 17, 39]. Example measures of
+team performance include the impact of published papers from a
+team [45], winning a sports game [4, 27], etc. However, the effectiveness of a team can also be reflected by the tenacity in face of
+adversity, and the rapport between team members [9]. The effect
+of team composition likely depends on the definition of team effectiveness. Therefore, it is important to understand the effect of team
+composition on the effectiveness of teams in multiple measures.
+To address these two challenges, we identify multiplayer online
+battle arena (MOBA) as an ideal testbed and provide a large-scale
+study on the effect of team compositions on multiple measures
+of team effectiveness. We use a dataset from Honor of Kings, the
+largest MOBA game in the world, and Fig. 1 illustrates the process
+of an example game. This platform is ideal for studying the effect
+of team composition for three reasons. First, there are defined roles
+in the game and players choose their roles to form a team. Given
+that there are five players in each team, we are able to enumerate
+all possible team compositions. We also have information about
+
+the characteristics of each role. Second, the popularity of Honor of
+Kings leads to digital traces of hundreds of millions of players in
+hundreds of millions of games. These detailed game records allow
+us to explore the notion of team “effectiveness” beyond the simple
+measure of team performance, winning or losing. For instance, we
+study the effect of team composition on abusive language use, which
+reflects the rapport in a team. This research question naturally
+connects to the literature on toxic behavior in online communities
+and gaming [12, 13, 29].
+Finally, we have access to the past history of players for capturing
+their background and experience. Historical information enables us
+to investigate questions in the “situation vs. personality” debate [18,
+25]: how much of our behavior is determined by fixed personality
+traits or by the specific situation at hand? We will explore this
+question in the context of toxic behavior in online gaming.
+
+Figure 2: Role co-occurrence graph. Edges between two roles
+represent their co-occurrence in the same team. The width
+of edges is proportional to the square root of frequency. The
+three most common role pairs are warrior-warrior (
+,
+, 47.8%), and mage-marksman
+50.4%), warrior-mage (
+(
+, 43.8%).
+
+Organization and paper highlights. In this paper, we conduct
+a large-scale study on the effect of team composition in the context of online gaming. Our dataset comes from a popular MOBA
+game in China, Honor of Kings, and includes 96 million games and
+100 million players in total. We provide details of the dataset and
+character roles in §2.
+We quantitatively study the effect of team composition on three
+distinct definitions of team effectiveness: (§3) team performance —
+whether a team is going to win — is directly based on the result/goal
+in a game and is the most common measure in prior studies; (§4)
+team tenacity — whether a team is going to surrender — indicates a
+team’s resilience to adversity and is understudied in existing literature as most studies only look at individual tenacity or perseverance
+[5, 21]; (§5) toxic behavior, i.e., abusive language use, reflects the
+rapport in a team and is extracted from the activities during a game.
+Our results on team effectiveness confirm the theory that balance
+in team roles is important for effective teams. We find that diverse
+teams are more likely to win. Furthermore, diverse teams are less
+likely to surrender, indicating a higher level of tenacity. Note that
+the likelihood to surrender does not correlate with winning rate for
+commonly used team compositions. However, we observe diverging
+effects on abusive language use: diverse teams are more likely to
+abuse when losing, but are less likely to abuse when winning.
+In addition to exploring the effect of team composition on team
+effectiveness, we investigate individual-level abusive language use
+to understand how teamwork influences individuals and shed light
+on the “situation vs. personality” debate [18, 25]. We find that
+players who choose assassins (the leading role in a team) are more
+likely to abuse. We further demonstrate that the reason is that
+abusive players are more likely to choose assassins, instead of the
+alternative explanation that a player becomes more abusive when
+playing assassins. In a similar vein, we find that experienced players
+are more likely to abuse, but not when their teammates are also
+experienced. A design implication is that matching players with
+similarly experienced players can improve the rapport in a team.
+To demonstrate the effectiveness of modeling team composition,
+we formulate predictions tasks for all three measures of team effectiveness in §6. We show that features based on team compositions
+can consistently outperform individual player information. In fact,
+modeling single roles and two-role combinations provides most of
+
+the predictive power. Finally, we present related work in §7 and
+offer our concluding thoughts in §8.
+
+2
+
+DATASET
+
+Our dataset is provided by Tencent3 and comes from a multiplayer
+online battle arena (MOBA) game: Honor of Kings, the most profitable game in the world4 . Similar to many other MOBA games such
+as Dota2 and League of Legends, Honor of Kings involves two teams
+to battle with each other. Each team consists of five players and
+the success of a team depends on the chemistry and collaboration
+between the five team members. The main motivation of our study
+is that players are expected to take certain roles when they select
+characters. These roles are designed to complement each other and
+“good” teams usually require particular compositions of roles. In
+this paper, we aim to explore the effect of team composition on
+different measures of team effectiveness.
+There are multiple types of games in Honor of Kings. Ranked
+games are used to estimate a player’s rank level in the game; while
+the other games are for practice or for fun. Since players care much
+less about unranked games than ranked games, all of our analyses
+are based on ranked games. Unranked games are only used to
+analyze players’ role preferences.
+Dataset description. Our dataset is derived from daily logs spanning three weeks in the August of 2017. Specifically, we first randomly sample 20K games in each day of the third week, thereby
+obtaining 140K games and 1.3M players participating in these games.
+Among them, there are 78K ranked games. Our prediction experiments in §6 are based on these ranked games, which we refer
+to as prediction games. We then retrieve all the games involving
+any of these 1.3M players in the first two weeks to obtain player
+information for prediction. In total, we obtain 95.6M games and
+100.2M players. Among these games, there are 54.4M ranked games
+on which most analyses in §3, §4, and §5 are based, as under those
+analytical settings, we do not need historical information of every
+3 Honor of Kings is developed and published by Tencent, which is one of the largest
+
+Internet companies and also the largest game service provider in China.
+4 See https://en.wikipedia.org/wiki/Wangzhe_Rongyao for an introduction of the native
+
+version of Honor of Kings (Wangzhe Rongyao).
+2
+
+Role
+warrior
+
+mage
+
+marksman
+
+assassin
+
+support
+
+Description
+Warriors have a large pool of health and
+considerable damage; they often undertake
+the stress from enemies in side lanes.
+Mages have heavy spell damage, but a small
+pool of health; they often take the middle
+lane and prepare to assist teammates.
+Marksmen have a small pool of heath but
+can cause heavy damage; they need
+protection and may need time to grow.
+Assassins are explosive and control the pace,
+but the health pool is often small; they are
+usually the leading role in a team.
+Supports always aid teammates; they absorb
+damage while disrupting opponents by
+stunning and displacing them.
+
+Freq.(%)
+
+Statistics
+
+Overall statistics
+#ranked games
+54, 434, 817
+#team compositions
+126
+#surrender games
+5, 807, 005 (10.7%)
+#abusing games
+30, 668, 577 (56.3%)
+#early games(t ≤ 11 min)
+5, 049, 934 (9.3%)
+#middle games(11 < t ≤ 16 min) 23, 089, 993 (42.4%)
+#late games(t > 16 min)
+26, 294, 890 (48.3%)
+Top five frequent combinations
+−
+−
+−
+−
+16, 186, 003 (14.9%)
+−
+−
+−
+−
+14, 516, 443 (13.3%)
+−
+−
+−
+−
+12, 630, 805 (11.6%)
+−
+−
+−
+−
+9, 124, 177 (8.4%)
+−
+−
+−
+−
+8, 929, 680 (8.2%)
+Personal statistics
+#target players
+1, 306, 754
+#target players who have played 1, 173, 372
+ranked games
+#ranked games each player has
+48.4 (0.05)
+average winrate
+52.4% (1.0 × 10−4 )
+average abusing probability
+9.3% (1.0 × 10−4 )
+average surrender probability
+5.0% (6.9 × 10−5 )
+#target players who have played 758, 494 (58.0%)
+at least 20 ranked games
+
+27.1
+
+25.8
+
+25.7
+
+11.5
+
+9.9
+
+Table 1: Description and frequency of each role.
+player in a team. There are several exceptions where we need historical statistics of every team member, so we use prediction games
+in those cases and will point out in the text.
+The log of each game includes its start time, end time, result
+(which team wins), gaming stats recorded when the game ends, and
+text messages in the chat room with abusive labels. In addition, we
+have access to basic player information beyond our dataset, e.g.,
+number of winning games, number of games played as MVP (Most
+Valuable Player) and total number of games in the past ten ranked
+games, etc. See Table 5 in §A for details.
+
+Table 2: Statistics of the dataset.
+
+Team roles. There are five roles in Honor of Kings: warrior (
+),
+mage (
+), marksman (
+), assassin (
+), and support (
+).
+A team is composed of different roles depending on each player’s
+choice. Henceforth, we use five icons to represent a team composition. For instance, (
+,
+,
+,
+,
+) stands for a team
+with one warrior, two mages, two assassins, and no marksman
+or support. In total, there exist 126 team compositions. Table 1
+presents the characteristics and frequency of each role5 . Figure 2
+shows the frequency of two roles co-occurring in the same team
+and Table 3 shows several role combinations with its winning rate
+and frequency. We can clearly see that team compositions are not
+used equally by players: single roles and pairs of roles both vary
+greatly in frequency. Please refer Table 2 for detailed statistics of
+our dataset.
+
+3
+
+Number(fraction/SEM)
+
+#winning games
+
+of winning games,
+. Fig. 3a shows that the winning
+#games
+rate of different team compositions spans a wide range, from 8.3%
+to 53.6%. It seems that some team compositions are doomed to lose.
+In addition, the figure also shows the cumulative distribution of
+#teams for each team composition, which suggests that most losing
+teams do not occur frequently. Notice that a similar plot will also be
+made for surrendering and abusing and we will see that the CDFs
+present very different shapes.
+Team compositions
+
+TEAM COMPOSITION AND WINNING
+
+We first investigate the effect of team composition on whether a
+team wins or not, a direct measure of team performance. Although
+the matching system in online gaming is designed to balance the
+ability of two teams, we observe that the winning rate of most team
+compositions is significantly lower than 50%, indicating that some
+role combinations cannot effectively work with each other.
+Although two teams are with similar “skills”, there exist winning and losing team compositions (Fig. 3a). Since we have
+126 different team compositions in total, it is straightforward to estimate the winning rate of each team composition using the fraction
+
+Win rate
+
+Used frequency(%)
+
+−
+−
+−
+
+team compositions with the highest winning rate
+−
+−
+−
+53.6%
+−
+−
+−
+53.2%
+−
+−
+−
+52.6%
+
+−
+−
+−
+
+team compositions with the lowest winning rate
+−
+−
+−
+19.7%
+3.1 × 10−3
+−
+−
+−
+17.4%
+2.2 × 10−2
+−
+−
+−
+8.3%
+7.0 × 10−4
+
+−
+−
+−
+
+−
+−
+−
+
+team compositions that are most used
+−
+−
+52.6%
+−
+−
+52.0%
+−
+−
+48.5%
+
+0.3
+2.0
+14.9
+
+14.9
+13.3
+11.6
+
+Table 3: Example team compositions and winning rates.
+The fluctuation of winning rate between different team compositions among all games may not due to the effect of team compositions; another possible explanation is the ability of individual
+
+5 The boundary between roles can sometimes be blurry, especially considering different
+
+player tactics.
+3
+
+40
+
+20
+
+20
+
+10
+20
+60
+100
+team composition
+
+0
+
+(a) Sorted winning rate of different
+team compositions.
+
+δ > 0(59.9%)
+
+60
+40
+
+δ < 0(28.7%)
+
+20
+0
+
+40
+30
+
+15
+
+(b) Distribution of rank gap (δ )
+between two teams.
+
+40
+
+1
+
+2
+3
+4
+number of roles
+
+5
+
+31.5%
+
+30
+20
+10
+
+20
+−10 −5 0
+5 10
+average rank gap(δ)
+
+52.4%
+
+50
+fraction(%)
+
+60
+
+80
+
+60
+
+50
+
+CDF(δ)
+win rate(%)
+
+30
+
+80
+
+100
+CDF(#games)(%)
+
+40
+
+δ=0
+δ≤4
+CDF(#teams)(%)
+
+CDF(#teams)(%)
+
+winning rate.(%)
+
+100
+50
+
+0
+
+14.9%
+0.02% 1.1%
+1
+2
+3
+4
+number of roles
+
+5
+
+(c) Winning rate vs. team diver- (d) Frequency of teams vs. team
+sity (rank gap δ = 0).
+diversity.
+
+Figure 3: Team composition and winning rates. In Fig. 3a, x-value corresponds to the index of a team composition, and is sorted
+by winning rate. The CDF of #teams shows the cumulative distribution in #teams according to the order in the x-axis. Fig. 3b
+shows the distribution of the rank gap between two teams. Fig. 3c shows that a diverse team with more role categories is more
+likely to win (error bars represent standard errors). Fig. 3d shows that most teams are rationale and cover at least 3 roles.
+players: only relatively bad players choose certain bad team compositions. Although a matching system is designed to balance the
+ability of the players in two teams, it is difficult to always make
+sure that two teams exactly have the same ability. Fig. 3b shows
+the distribution of the rank level gap (δ ) between two teams6 . To
+calculate δ , we sum up the individual rank level in a team, and
+subtract the result of losing team from that of winning team. By
+the effect of the matching system, the rank gaps in over 90% games
+are relatively small (within ±5). These minor gaps, however, are
+still associated with a significant difference in winning rate: only
+28.7% games end up with the winning of the lower ranked team.
+Therefore, to demonstrate the influence of team compositions on
+winning rates and to exclude the ability factor, we control the rank
+gap between teams in Fig. 3a: we focus on games with δ = 0 (red
+plots) and δ ≤ 4 (gray plots) respectively.
+To further illustrate winning and losing team compositions, we
+present team compositions with the highest (lowest) winning rate
+in Table 37 (controlling the rank gap δ = 0). Upon a careful examination, these losing teams do not often occur, reflected also by the
+cumulative distribution curve in Fig. 3a. In total, the bottom 90 losing team compositions only take 11.1% of all teams. This suggests
+that most players choose a reasonable team composition. However,
+the last three rows in Table 3 show that the most common team
+compositions still vary in winning rates, from 48.5% to 52.6%.
+
+is consistent with the observation in Fig. 3a that the losing team
+compositions on the left are not usually used.
+
+4
+
+TEAM COMPOSITION AND
+SURRENDERING
+
+As nothing worth achieving is going to be easy, tenacity is an important characteristic of an effective team. In the context of Honor
+of Kings, team tenacity can be reflected by not surrendering easily.
+The surrendering procedure is as follows: a player can propose to
+surrender and if at least four of five team members agree, the team
+will surrender as a whole and lose immediately. In this section, we
+examine the effect of team composition on team tenacity.
+Surrender probability varies across team compositions in early
+games (Fig. 4a, 4b). Similar to winning, surrender happens at the
+end of a game. But surrender requires extra careful analysis because
+surrender may not always reflect team tenacity in Honor of Kings
+and other MOBA games. For example, when the opponents are
+destroying the team base and all team members are killed, it is time
+to move on and surrender is simply a sign of “game over”. This
+is common in late games. Therefore, it is necessary to distinguish
+surrender in different game stages.
+We examine the mean and the standard deviation of surrender
+probability across team compositions conditioned on game duration in Fig. 4a. We make two observations. First, the surrender
+probability monotonically decreases as game duration increases,
+partly because a team is only allowed to surrender starting from the
+6th minute and games end in 6-8 minutes mostly because a team
+surrenders. Second, the standard deviation across team compositions first increases and then decreases as game duration increases,
+indicating that in late games every team surrenders with similar
+probability to signal game over. Based on Fig. 4a, we define three
+game stages: early games (t ≤ 11), where the surrender probability has great mean and great std; late games (t > 16), where the
+surrender probability has small mean and small std; middle games
+(11 < t ≤ 16), the middle part8 . Proportions of games in each stages
+are shown in Table 2.
+
+Diverse teams tend to perform well (Fig. 3c, 3d). An observation that stands out in Table 3 is that teams with the highest
+winning rate consist of more role categories than teams with the
+lowest winning rate. For instance, support (
+) or assassin(
+)
+dominates the two compositions with the lowest winning rate,
+while all the top winning teams have at least four roles.
+We further explore this observation by examining how winning
+rate changes as the number of roles in a team grows (Fig. 3c). We
+find that diverse team compositions are much more likely to win.
+One explanation is that these roles are designed to complement
+each other and teams with too few roles have weaknesses to be
+exploited. For instance, a team with no mage (
+) or marksman
+(
+) cannot cause sufficient damage in a game. Fig. 3d shows that
+most teams are employing at least three role categories, which
+
+8 A gaming related reason for this split is that 11-minutes marks a watershed because
+
+the “Overlord” and “Dark Tyrant” (two important non-player characters) appear at
+the 10th minute and game state can change significantly from 11 to 16 minutes when
+the characters get killed.
+
+6 Rank level indicates a player’s gaming skill and ranges from 0 to 26.
+7 We make similar tables as Table 3 for surrendering and abusing. See §A for reference.
+
+4
+
+0.06
+
+60
+40
+20
+
+x=11min
+x=16min
+
+0.04
+0.02
+
+0
+0.0
+0 8 11 14 17 20 23 26 29
+game duration t (min)
+
+(a) Surrender probability vs. game duration.
+
+20
+
+80
+t ≤11min
+60
+11< t ≤16min
+t >16min
+40
+CDF(#teams)(%)
+20
+
+0
+
+0
+
+60
+40
+
+20
+60
+100
+team composition
+
+surrender prob.(%)
+
+mean(sur-prob.)
+
+100
+
+80
+
+CDF(#teams)(%)
+
+0.08
+
+surrender prob.(%)
+
+80
+
+std(sur-prob.)
+
+std(surrender prob.)
+
+surrender prob.(%)
+
+100
+
+50
+t ≤11min
+11 < t ≤16min
+t >16min
+
+30
+10
+1
+
+(b) Surrender prob. vs. team composition.
+
+2
+3
+4
+number of roles
+
+5
+
+(c) Surrender prob. vs. team diversity.
+
+Figure 4: Team composition and surrender probability. Fig. 4a shows the mean and standard deviation of surrender probability across team compositions conditioned on game duration. Fig. 4b shows that team compositions have varying surrender
+probabilities in games that end within 11 minutes, but have similar ones in longer games. Fig. 4c shows that diverse teams are
+less likely to surrender in early games (error bars represent standard errors).
+
+80
+
+t ≤ 11min
+slope: -0.53 *
+p-value: 6.1×10−6
+
+t > 16min
+40 11< t ≤ 16min
+slope: 0.01 slope: 0.04 *
+p-val: 0.77 p-val: 2.5×10−4
+0
+
+0 10 20 30 40 50 60 70 80
+win rate(%)
+
+(a) All team compositions.
+
+80
+surrender prob.(%)
+
+surrender prob.(%)
+
+Having established the three types of games, we hypothesize
+that surrender in early games is the most indicative of team tenacity
+and varies across team compositions, while surrender in middle
+and late games is more of a formality and should not depend on
+team compositions. To study that, we sort team compositions by
+surrender probability in early games in Fig. 4b. According to the
+same order, we show the surrender probability in middle games
+and late games, as well as the cumulative distribution function of
+#teams. Consistent with our hypothesis, the surrender probability
+of different team compositions span a wide range from 33.6% to
+84.6% in early games, but is pretty stable in middle games and late
+games. The CDF of #teams presents a different shape from that in
+Fig. 3a: commonly used team compositions are neither the most
+tenacious nor the least tenacious. Table 6 shows the most tenacious
+and the least tenacious team compositions.
+
+t ≤ 11min
+slope: -0.05
+p-value: 0.85
+
+60
+
+t > 16min
+11< t ≤ 16min
+slope: 0.04*
+slope: 0.04 p-val: 1.5×10−3
+20
+p-val: 0.22
+40
+
+0
+
+10
+
+20
+
+30 40 50
+win rate(%)
+
+60
+
+(b) Filtering infrequent team
+compositions.
+
+Figure 5: Surrender probability vs. winning rate. In both
+figures, each dot denotes a team composition with its xvalue for winning rate and y-value for surrender probability. Fig. 5a shows results for all team compositions. Fig. 5b
+shows the results after removing infrequent compositions,
+where surrender is not correlated with winning rate.
+
+Diverse teams tend to be tenacious (Fig. 4c). Role diversity
+influences surrender probability in early games, especially when
+the number of roles is large. It seems that diverse teams with five
+roles are the most tenacious in early games. In comparison, the
+influence on middle and late games is minimal.
+
+5
+
+TEAM COMPOSITION AND ABUSIVE
+LANGUAGE USE
+
+Our final measure of team effectiveness is concerned with the rapport in a team during the game. We use abusive language use to
+capture the rapport. Toxic behavior in online communities and gaming has received significant interests from our research community
+recently [12, 13, 29]. Here we provide the first systematic study on
+the effect of team composition on team-level abusive language use.
+
+A weak team can still be tenacious (Fig. 5). We have shown
+that diverse teams tend to both perform well and show tenacity in
+adversity. One concern is that these two measures are correlated
+and tenacity is simply a side effect of team strength (winning).
+This hypothesis suggests that winning team compositions should
+be less likely to surrender. To further understand this issue, we
+study the correlation between surrender probability and winning
+rate for different team compositions. Fig. 5a shows that there is
+indeed a negative correlation between winning rate and surrender
+probability in early games. There is little correlation in middle
+and late games.9 However, it seems that the correlation between
+winning rate and surrender probability in early games is dominated
+by a few outliers with very low winning rates. Given that we know
+that these teams only take a small fraction of all games in §3, we
+filter infrequent team compositions that appear less than 10,000
+times and find that in the remaining team compositions (98.7% of
+all teams), surrender probability is not correlated with winning rate
+in all game stages (Fig. 5b), suggesting that team tenacity is almost
+independent of team strength/performance.
+
+5.1
+
+Team-level Abusive Language Use
+
+Team compositions vary in abusing probability (Fig. 6a). In
+our dataset, we have a label of whether a message uses abusive
+language for all text messages based on a dictionary-based method
+officially used by Tencent.10 A team abuses if any player in that team
+abuses. For each team composition, we define abusing probability
+as the fraction of games that this team composition abuses.
+We find that similar to winning and surrendering, team compositions vary in abusing probability, ranging from 28.7% to 56.2%.
+The cumulative distribution function of #teams looks much more
+similar to surrendering in Fig. 4b than winning in Fig. 3a: most
+commonly used team compositions are neither the most nor the
+least abusive. Table 7 shows team compositions with the highest
+
+9 In fact, there is a small significantly positive coefficient in late games, which is another
+
+10 Players may abuse using voice messages; here we only consider text messages.
+
+evidence that strength does not entail tenacity.
+5
+
+45
+
+60
+
+40
+35
+30
+
+abusing prob.
+CDF(#teams)(%)
+20
+60
+100
+team composition
+
+40
+20
+0
+
+60
+
+slope: -0.41*
+p-value: 5.2×10−4
+
+50
+40
+30
+10
+
+(a) Sorted abusing probability.
+
+abusing prob.(%)
+
+80
+
+abusing prob.(%)
+
+abusing prob.(%)
+
+50
+
+CDF(#teams)(%)
+
+100
+
+55
+
+20
+
+30
+40
+win rate(%)
+
+50
+
+(b) Abusing probability vs. winning rate.
+
+win team
+lose team
+
+55
+45
+35
+25
+1
+
+2
+3
+4
+number of roles
+
+5
+
+(c) Abusing probability vs. team diversity.
+
+Figure 6: Team composition and abusive language use. Fig. 6a presents sorted abusing probability for different team compositions and its corresponding cumulative distribution function in #teams. In Fig. 6b, each dot represents a team composition
+after filtering infrequent team compositions; x-value represents winning rate and y-value represents abusing probability. In
+Fig. 6c, x-axis represents the number of roles in a team, and y-axis represents team-level abusing probability.
+and lowest abusing probability. It is striking that all the top teams
+have multiple assassins (
+) and all the bottom teams have multiple supports (
+). We will investigate further the interaction of
+individual-level abusing and team-level abusing in §5.2.
+
+[7]. Therefore, we examine the discrepancy between observed values and expected values to understand how team composition influences individual players. This analysis is done on prediction games
+since it requires historical information of every team member.
+Figure 7a shows the difference between observed and expected
+values for winning and losing teams, where win/lose diff. refers to
+the disparity between observed and expected number of abusing
+players(O(#abusing players) − E(#abusing players)). For most team
+compositions, the difference between observed values and expected
+values is not zero, indicating that individuals abuse differently depending on team compositions. In particular, in the most commonly
+used teams (when the CDF grows quickly on the right of the plot),
+individuals are more likely to abuse than expected when losing.
+
+Losing teams are more likely to abuse (Fig. 6b). We hypothesize that losing teams are more likely to abuse because winning
+usually brings positive team morale, while losing leads to frustration and dissatisfaction [29]. This is indeed the case as shown in
+Fig. 6b. Therefore, it is important to distinguish abusing probability
+between winning teams and losing teams.
+Diverse teams tend to abuse more when losing and abuse
+less when winning (Fig. 6c). We further explore the effect of
+role diversity on team-level abusing. We observe different trends in
+winning teams and losing teams. When a team wins, team diversity
+is associated with low abusing probability; but it becomes the other
+way around if a team loses.
+
+5.2
+
+Players who prefer leading roles are more abusive (Fig. 7b,
+7c, 7d). There always exists a leader or a major contributor in a
+team. In Honor of Kings, assassins usually take this role in a team
+because of their explosiveness: assassins can carry the team and
+control game pace. A failed assassin may lead the team to lose.
+Fig. 7b shows that assassins are more likely to abuse than other
+roles. We call this the “abusive assassin” phenomenon. One natural
+question arises: are assassins more abusive because abusive players
+tend to choose assassins, or players become more abusive when
+choosing assassins?
+To answer this question, we compare the abusing probability
+of the same roles chosen by different players and the same player
+choosing different roles. We define the experienced role for a player
+if that player chooses a role frequently, i.e., playing in more than
+50% of games. This procedure identifies experienced assassin players, experienced warrior players, etc. Fig. 7c presents the abusing
+probability of experienced assassin players when they choose each
+role (the same player choosing different roles). We observe that
+these experienced assassin players are much more likely to abuse
+than other players no matter what role they choose.
+Fig. 7d examines the alternative hypothesis: players become more
+abusive when choosing assassins. We compare the same player’s
+abusing probability when they choose assassins with choosing other
+roles, grouped by their experienced roles. We find that players do
+not become more abusive when choosing assassins. If anything,
+experienced mages and experienced marksmen are actually more
+abusive when they choose roles other than assassins.
+
+Individual-level Abusive Language Use
+
+Different from winning and surrendering, abusive language use
+is an individual behavior. It provides a great opportunity to understand the effect of team composition on individual behavior
+and shed light on the “situation vs. personality” debate [18, 25].
+Note that we conduct this part of experiments on players who have
+played at least 20 games to ensure sufficient samples for statistics.
+A team does not equal the sum of individuals (Fig. 7a). We
+define individual abusing probability based on the fraction of games
+that a player abuses in.11 Because of linearity of expectation, the
+total number of expected abusing players in a team is simply the
+sum of each player’s abusing probability:
+Õ
+E(#abusing players in a team) =
+Pabuse (v)
+(1)
+v ∈team
+
+where Pabuse is estimated separately when a player wins or loses
+because abusing is associated with losing. This expectation is only
+valid if all players act independently in a team, but studies on teamwork have shown that a team does not equal the sum of individuals
+11 All individual abusing probability is based on individual level samples. Individual
+
+samples can be grouped based on criteria other than all games played by a single
+player, e.g., we compute individual abusing probability for all winning (losing) games
+of a player in Fig. 7a and for all players who choose a particular role in Fig. 7b.
+6
+
+40
+20
+10
+20
+30
+team composition
+
+0
+40
+
+19.0
+
+18
+16
+14
+
+16.0
+14.0 13.9
+13.6
+Assa. Warr. Mage Mark. Supp.
+role
+
+(a) Observed #abusing players − ex- (b) Abusing probability vs. roles.
+pected values.
+
+14
+
+experienced assassins
+others
+
+10
+6
+2
+
+Assa. Warr. Mage. Mark. Supp.
+chosen role
+
+(c) Abusing probability of the
+same roles by different players.
+
+individual abusing prob.(%)
+
+60
+
+20
+
+individual abusing prob.(%)
+
+80
+
+-0.1
+-0.2
+0
+
+individual abusing prob(%)
+
+0.0
+
+100
+CDF(#teams)
+lose diff.
+win diff.
+
+CDF(#teams)(%)
+
+diff. in#(abusing players)
+
+0.1
+
+12
+
+choose assassin
+choose others
+
+10
+8
+6
+
+Assa. Warr. Mage. Mark. Supp.
+experienced role
+
+(d) Abusing probability of the
+same player with different roles.
+
+18
+14
+
+inexperienced role
+experienced role
+
+10
+6
+2
+50%
+60%
+70%
+experienced threshold
+
+(a) Abusing probability
+(in)experienced roles.
+
+individual abusing prob.(%)
+
+individual abusing prob.(%)
+
+Figure 7: Fig. 7a shows the difference between the observed number of abusing players and the expected value based on individual abusing probability. The right three figures investigate the “abusive” assassin phenomenon. Fig. 7b shows individual
+abusive probability grouped by roles. Fig. 7c compares the abusing probability of players who usually play assassins with those
+who usually play other roles, grouped by their chosen role. Fig. 7d compares the abusing probability when a player choose
+assassin with when the same player chooses other roles, grouped by his experienced role. Error bars represent standard errors.
+
+6
+
+16
+threshold 50%
+threshold 60%
+threshold 70%
+
+14
+12
+10
+8
+0
+
+1
+2
+3
+number of teammates
+
+PREDICTION EXPERIMENTS
+
+In this section, we set up three prediction tasks for winning, surrendering, and abusing respectively to further examine the effect of
+team composition in a predictive setting. Overall, we find that features based on team composition consistently outperform features
+based on individual players.
+4
+
+vs. (b) Abusing probability vs. #experienced roles in teammates.
+
+6.1
+
+Figure 8: Individual abusing probability and experienced
+roles. Fig. 8a compares the abusing probability when a
+player plays his experienced role with when playing inexperienced roles. In Fig. 8b, x-axis denotes the number of experienced roles (defined by given threshold) among teammates,
+while y-axis denotes individual abusing probability.
+
+Experiment Setup
+
+Prediction tasks and evaluation metrics. Our goal is to evaluate whether modeling team composition brings extra predictive
+power to modeling individual players. Because team composition
+cannot be altered after a game starts, we focus on making predictions before a game starts and consider the following three prediction tasks. Our results can potentially inform both players in
+choosing roles and the matching-making system to match players.
+• Winning team prediction[46]. This task aims to predict which
+team will win before the game starts. We randomly swap the
+order of two teams and label a game positive if the first team wins
+and negative if the second team wins. This leads to a balanced
+dataset, so we use accuracy for evaluation.
+• Surrender prediction. This task aims to predict whether the losing
+team surrenders in a game. Only 8K games (10.5%) end with
+surrender, so we use F1 as evaluation metric in this task.
+• Abuse prediction. Before a game starts, this task predicts whether
+abusive language use happens in the game. Abusive language use
+happens in 44K games (57.93%), so we use accuracy for evaluation
+in this task.
+
+Overall, our results in Honor of Kings support the hypothesis
+that abusive players tend to choose assassins, the leading role in a
+team, and players do not become abusive when choosing assassins.
+Experienced players are more likely to abuse, but not when
+they play with other experienced players (Fig. 8). Studies have
+shown that experienced individuals tend to abuse novices [23]. We
+hypothesize that a player is more likely to abuse when playing his
+experienced role. In addition to using 50% as a threshold to define
+experienced roles, we also use 70% and 60% here. Fig. 8a shows that
+players are more abusive when playing their experienced roles no
+matter what threshold is.
+We next further explore how players are influenced by teammates when choosing experienced roles. Fig. 8b shows that as the
+number of experienced roles increases among a player’s teammates,
+his individual abusing probability player decreases (since this analysis requires historical information of every team member, it is done
+on prediction games). This observation indicates that a player becomes more likely to abuse when choosing experienced roles partly
+because other less experienced players do not meet this experienced
+player’s expectation and cause frustration.
+
+Feature sets. We consider the following feature sets.
+• Baseline. People’s mood varies over time and is associated with
+abusive language use [12]. Our baseline features include day of
+the week and hour of the day encoded as one-hot vectors.
+• Player information. Depending on the task, we compute each
+player’s rank level, winning rates in the last 10 ranked games,
+surrender probability, and abusing probability from historical
+games. We use the average, max, min, and standard deviation of
+those properties of all players in a team as features.
+7
+
+49.9%
+baseline player role
+info. prop.
+
+56
+
+(a) Winning team prediction
+
+53.3%
+
+52
+49.9%
+baseline player role
+info. prop.
+
+total
+
+0.3
+0.28 0.278
+
+(b) Winning team prediction on
+games where the rank gap δ = 0
+
+67.8%
+
+0.312
+0.304
+
+0.26
+
+70
+
+0.319
+
+0.32
+
+54.9%
+
+54
+
+50
+total
+
+56.3%
+
+accuracy(%)
+
+60
+
+50
+
+58
+
+70.4%
+
+F1 score
+
+67.7% 68.6%
+
+accuracy(%)
+
+accuracy(%)
+
+70
+
+66
+62
+58
+
+baseline player role
+info. prop.
+
+total
+
+65.0%
+
+66.3%
+
+57.8%
+baseline player role
+info. prop.
+
+(c) Surrender prediction
+
+total
+
+(d) Abuse prediction
+
+Figure 9: Prediction results. Gray lines indicate the performance of a majority baseline in Fig. 9a and 9d, and a random baseline
+in 9c. Features that incorporate role combinations with player information (role prop.) consistently outperform others.
+
+69.5
+68.5
+
+baseline+player info.
+role prop.
+
+67.5
+1
+
+2
+
+3
+4
+k-role prop.
+
+5
+
+(a) Winning team prediction.
+
+67.0
+baseline+player info.
+role prop.
+
+66.0
+65.0
+1
+
+2
+
+3
+4
+k-role prop.
+
+5
+
+(b) Abuse prediction.
+
+Figure 10: Effect of role combinations. It shows that modeling two-role combinations is sufficient to capture the effect
+of team composition.
+
+composition is further amplified when the rank gap being controlled: 56.3% vs 53.3%. The difference is the least prominent in
+the prediction of surrender, as this behavior is often highly influenced by teammates and various situations during games, while
+role properties still improve the performance by 1.5% in surrender
+prediction.
+Recall that Fig. 3b shows a clear influence of rank level on winning rate. Therefore, to further understand the effect of team compositions, we report the performance on games where the rank
+level gap δ = 0 in Fig. 9b. We find that after the rank level gap is
+controlled, this task becomes much more challenging and the performance of all feature sets drop significantly compared to Fig. 9a.
+However, the difference between role properties and player information almost doubles (1.6% vs. 0.9%), demonstrating the effectiveness of incorporating team compositions, especially when the two
+teams are similarly skilled. In contrast, rank level does not affect
+the performance when predicting surrender or abuse.
+
+Prediction setup. For each task, we conduct 5-fold nested crossvalidations on prediction games in the third week and player information is extracted from historical games in the first two weeks. We
+use Xgboost [11] since it is often the winning solution in Kaggle
+competitions and shows strong performance compared to other
+methods such as logistic regression in our preliminary experiments.
+We grid search hyperparameters in max depth ({1, 3, 5, 7, 9}), learning rate ({0.1, 0.2}), and number of estimators ({100, 200, 300}).
+
+6.2
+
+68.0
+
+70.5
+
+abusing accuracy(%)
+
+winrate accuracy(%)
+
+• Role properties. A role combination of k refers to all possible
+combinations of k roles. For instance, one-role combinations refer to the five roles in Table 1, two-role combinations
+refer to 15
+
+possible combinations of two roles ( 51 + 52 ). We further incorporate player information in role combinations of both teams.
+For each role combination in a team, we compute the average of
+role-based player information in an instance of that combination
+and then use the average, max, min, and std of all instances in
+that combination as features. Taking an example to further explain role-based player information, the feature winning rate of
+role c for player v is defined as the probability of v wins when she
+plays c. We only consider up to two-role combinations (k ≤ 2)
+when comparing prediction performances. Later we will explore
+the effect of considering three-role combinations up to five-role
+combinations, i.e., full team compositions.
+We also use the union of all feature sets (“total”). Because we
+find that game duration plays an important role in surrender, we
+add game duration to every feature set for surrender prediction. In
+abuse prediction, we do not distinguish two teams.
+
+Experiment Results
+
+Prediction performance (Fig. 9a, 9b, 9c, and 9d). In all prediction tasks, we observe a consistent pattern that total > role property
+> player information > baseline. Player information achieves relatively better performance than baselines since individual characteristics definitely influence team effectiveness in some degree.
+By incorporating player information with role combinations, role
+properties consistently outperform player information. The extra
+predictive power from modeling team composition can be reflected
+by the difference between total and player information: e.g., 70.4%
+vs 67.7% in winning prediction for all games, and 67.8% vs 65.0%
+in abusing prediction. In winning prediction, the effect of team
+
+Modeling two-role combinations is sufficient to capture the
+effect of team composition (Fig. 10). To further illustrate the
+effect of team compositions, we examine the performance of adding
+k-role combinations to player information and baseline one by
+one: we first add single-role features, then add features based on
+two-role combinations, until adding features based on entire team
+compositions. Taking winning team (on all games) and abuse prediction as examples, Fig. 10 shows that the performance improvement
+8
+
+rank
+#7
+#8
+#9
+#10
+#11
+
+features
+minimum winrate of
+minimum winrate of
+minimum winrate of
+std(rank level) of
+average rank level of
+
+−
+−
+−
+
+influence of such social interactions have been examined in many
+studies [19, 22, 24, 32, 44].
+Team performance is the most heavily studied topic among our
+three measures of effectiveness. Pobiedina et al. [37, 38] explore
+factors that influence player’s performance in Dota 2 and reveal that
+team-level interactions, especially the number of friends in a team,
+relate to team performance. Similar to our work, prior studies such
+as [1, 15] demonstrate that different role combinations may greatly
+influence team performance. Deep learning based recommendation
+systems are also built to recommend heroes or roles to players[40].
+Furthermore, gamification can also potentially play an important role in education and scientific discovery [26]. In particular,
+Petter [36] suggests that researchers should embrace the growing
+popularity of online gaming and seek opportunities in studying
+online gaming in the context of education, individual, and team
+behavior. In addition to these exciting opportunities, online gaming
+leads to issues such as addiction and depression [28, 42].
+
+importance(%)
+1.1
+1.1
+1.0
+1.0
+0.9
+
+Table 4: Top five role property features in winning team prediction. Feature importance is defined as the frequency of a
+feature being used in a tree.
+saturates after adding two-role combinations. It suggests that modeling single roles and two-role combinations provides most of the
+predictive power.
+Feature analysis. We finally explore the importance of features by
+using winning team prediction task as an example. When combining
+role properties and player information, average rank levels of two
+teams are the most important features (ranked top-2), as well as
+average individual winning probability (in top-5). To understand
+the key features in role properties, we show the top five features
+in role properties in Table 4. Consistent with the characteristics
+of roles where mage (
+), marksman (
+) and warrior (
+) are
+most commonly used, the combinations of these roles are more
+important in role properties. And as marksman (
+) and mage
+(
+) are the key roles to cause damages, role combinations related
+with these roles are particularly significant. The first three of the top
+five are all two-role features, which again indicates that modeling
+two-role combinations is effective to capture the team performance.
+
+7
+
+8
+
+CONCLUSION
+
+In this paper, we study the effect of team composition in the largest
+multiplayer online battle arena (MOBA) game: Honor of Kings. We
+quantitatively show the varying effects of team composition on
+team performance (winning), team tenacity (surrender), and team
+rapport (abusive language use): although diverse teams tend to
+perform well and show tenacity in adversity, they are more likely
+to abuse when losing. The double-edged influence of team diversity
+suggests the importance of balancing team composition. We also
+examine how team composition influences individual behavior in
+abusive language use. In addition to showing that a team is not
+the sum of independent individuals, we contribute to the “situation vs. personality” debate and show that assassins abuse more
+because abusive players tend to choose assassins instead of players
+becoming abusive when choosing assassins. Our work suggests
+that the gaming environment may be improved by adjusting team
+matching and preventing players from using team compositions
+that correlate with increased abusive language use.
+
+RELATED WORK
+
+In addition to studies mentioned throughout the paper, we discuss
+additional related work in three strands.
+Team formation. Researchers from the data mining community
+have formulated the problem of team formulation as a constrained
+optimization problem based on each individual’s skills and their social networks [2, 3, 30, 31]. For instance, Anagnostopoulos et al. [3]
+take into account of the task requirements, individual workloads,
+and team communication costs. Li et al. [31] study a family of problems in team enhancement including team member replacement,
+team expansion, and team shrinkage.
+
+Limitations. Although we control for roles in the analyses and
+further validate our results through prediction experiments, our
+study is observational and can be strengthened through experimental studies. We would like to highlight that experimental studies on
+team compositions are non-trivial because of the great number of
+possible combinations. Our work is also limited by the data that we
+have access to. Due to privacy issues, we do not have sensitive individual information like location and consumption record. Moreover,
+although Honor of Kings is the largest MOBA game, the selection
+bias in our data may limit the generalizability of our findings.
+
+Social/team roles. Digitalization of human traces have increasingly made implicit social/team roles explicit and enabled largescale study on theories of social/team roles [6–8, 47]. Yang et al. [49]
+study how social roles influence the process of online information
+diffusion. Danescu-Niculescu-Mizil et al. [16] demonstrate changes
+in language use after a Wikipedia user becomes an administrator.
+Yang et al. [47] infer editor roles on Wikipedia based on behavior
+traces. In the context of gaming, Stetina et al. [42] examined problematic gaming behavior and depressive tendencies among people
+who play different types of online-games.
+
+Future directions. Several promising directions arise from our
+work. Our prediction experiments show that it is important to incorporate individual player information with role combinations.
+It remains challenging to develop a holistic model that captures
+the interaction between individual members, learns novel representations for role combinations, and makes even more accurate
+predictions. Furthermore, although MOBA games provide an ideal
+environment for understanding the effect of team composition, it
+is important to validate our findings in other scenarios, e.g., with
+implicit roles beyond gaming.
+
+Online gaming. Many researchers have recognized that online
+gaming, especially MOBA and MMOGs (Massively Multiplayer Online Games), can serve as a platform for studying individual and
+team behavior, group norms, and communities [20, 27]. In such
+games, players not only develop individual skills, but also coordinate and communicate with others. The existence, significance, and
+9
+
+REFERENCES
+
+players. the National Academy of Sciences 108, 47 (2011), 18949–18953.
+[27] Young Ji Kim, David Engel, Anita Williams Woolley, Jeffrey Yu-Ting Lin, Naomi
+McArthur, and Thomas W. Malone. 2017. What Makes a Strong Team?: Using
+Collective Intelligence to Predict Team Performance in League of Legends. In
+CSCW.
+[28] Daria J Kuss, Jorik Louws, and Reinout W Wiers. 2012. Online gaming addiction?
+Motives predict addictive play behavior in massively multiplayer online roleplaying games. Cyberpsychology, Behavior, and Social Networking 15, 9 (2012),
+480–485.
+[29] Haewoon Kwak, Jeremy Blackburn, and Seungyeop Han. 2015. Exploring Cyberbullying and Other Toxic Behavior in Team Competition Online Games. In
+CHI.
+[30] Theodoros Lappas, Kun Liu, and Evimaria Terzi. 2009. Finding a team of experts
+in social networks. In KDD.
+[31] Liangyue Li, Hanghang Tong, Nan Cao, Kate Ehrlich, Yu-Ru Lin, and Norbou
+Buchler. 2017. Enhancing Team Composition in Professional Networks: Problem
+Definitions and Fast Solutions. IEEE Trans Knowl Data Eng 29, 3 (2017), 613–626.
+[32] Alexandru Losup, Ruud Van De Bovenkamp, Siqi Shen, Adele Lu Jia, and Fernando
+Kuipers. 2014. Analyzing implicit social networks in multiplayer online games.
+IEEE Internet Computing 3 (2014), 36–44.
+[33] Dwight R Norms and Robert E Niebuhr. 1980. Group variables and gaming
+success. Simulation & Games 11, 3 (1980), 301–312.
+[34] Glenn M Parker. 1990. Team players and teamwork. Jossey-Bass San Francisco,
+CA.
+[35] David Partington and Hilary Harris. 1999. Team role balance and team performance: an empirical study. Journal of Management Development 18, 8 (1999),
+694–705.
+[36] Stacie Petter. 2017. More Than Child’s Play: Embracing the Study of Online
+Gaming in Information Systems Research. SIGMIS Database 48, 4 (Nov. 2017),
+9–13.
+[37] Nataliia Pobiedina, Julia Neidhardt, Maria del Carmen Calatrava Moreno, and
+Hannes Werthner. 2013. Ranking factors of team success. In Proceedings of the
+22nd International Conference on World Wide Web. ACM, 1185–1194.
+[38] Nataliia Pobiedina, Julia Neidhardt, Maria del Carmen Calatrava Moreno, Laszlo
+Grad-Gyenge, and Hannes Werthner. 2013. On successful team formation: Statistical analysis of a multiplayer online game. In Business Informatics (CBI), 2013
+IEEE 15th Conference on. IEEE, 55–62.
+[39] Eduardo Salas, Nancy J Cooke, and Michael A Rosen. 2008. On teams, teamwork,
+and team performance: Discoveries and developments. Human factors 50, 3 (2008),
+540–547.
+[40] Anna Sapienza, Palash Goyal, and Emilio Ferrara. 2018. Deep Neural Networks
+for Optimal Team Composition. arXiv preprint arXiv:1805.03285 (2018).
+[41] Barbara Senior. 1997. Team roles and team performance: Is there ’really’ a link?
+Journal of Occupational and Organizational Psychology 70, 3 (1997), 241–258.
+[42] Birgit U. Stetina, Oswald D. Kothgassner, Mario Lehenbauer, and Ilse KryspinExner. 2011. Beyond the fascination of online-games: Probing addictive behavior
+and depression in the world of online-gaming. Computers in Human Behavior 27,
+1 (2011), 473 – 479. Current Research Topics in Cognitive Load Theory.
+[43] Greg L. Stewart, Ingrid S. Fulmer, and Murray R. Barrick. 2005. An exploration
+of member roles as a multilevel linking mechanism for individual traits and team
+outcomes. Personnel Psychology 58, 2 (2005), 343–365.
+[44] Michael Szell and Stefan Thurner. 2010. Measuring social dynamics in a massive
+multiplayer online game. Social networks 32, 4 (2010), 313–329.
+[45] Stefan Wuchty, Benjamin F Jones, and Brian Uzzi. 2007. The Increasing Dominance of Teams in Production of Knowledge. Science 316, 5827 (2007), 1036–1039.
+[46] Bang Xia, Huiwen Wang, and Ronggang Zhou. 2017. What Contributes to Success
+in MOBA Games? An Empirical Study of Defense of the Ancients 2. Games and
+Culture (2017), 1555412017710599.
+[47] Diyi Yang, Aaron Halfaker, Robert Kraut, and Eduard Hovy. 2016. Who Did What:
+Editor Role Identification in Wikipedia. In ICWSM.
+[48] Pu Yang, Brent E Harrison, and David L Roberts. 2014. Identifying patterns in
+combat that are predictive of success in MOBA games.. In FDG.
+[49] Yang Yang, Jie Tang, Cane Wing-ki Leung, Yizhou Sun, Qicong Chen, Juanzi
+Li, and Qiang Yang. 2015. RAIN: Social Role-Aware Information Diffusion. In
+AAAI’15. 367–373.
+
+[1] Atish Agarwala and Michael Pearce. 2014. Learning Dota 2 team compositions.
+Technical Report. Technical report, Stanford University.
+[2] Aris Anagnostopoulos, Luca Becchetti, Carlos Castillo, Aristides Gionis, and
+Stefano Leonardi. 2010. Power in unity: forming teams in large-scale community
+systems. In CIKM.
+[3] Aris Anagnostopoulos, Luca Becchetti, Carlos Castillo, Aristides Gionis, and
+Stefano Leonardi. 2012. Online team formation in social networks. In WWW.
+[4] Rick Audas, Stephen Dobson, and John Goddard. 2002. The impact of managerial
+change on team performance in professional sports. Journal of Economics and
+Business 54, 6 (2002), 633–650.
+[5] J Robert Baum and Edwin A Locke. 2004. The relationship of entrepreneurial
+traits, skill, and motivation to subsequent venture growth. Journal of applied
+psychology 89, 4 (2004), 587.
+[6] R Meredith Belbin. 2011. Management teams: Why they succeed or fail. Human
+Resource Management International Digest 19, 3 (2011).
+[7] R Meredith Belbin. 2012. Team roles at work. Routledge.
+[8] Bruce J Biddle. 1986. Recent developments in role theory. Annual review of
+sociology 12, 1 (1986), 67–92.
+[9] Erin Bradner, Gloria Mark, and Tammie D Hertel. 2005. Team size and technology
+fit: Participation, awareness, and rapport in distributed teams. IEEE Transactions
+on Professional Communication 48, 1 (2005), 68–77.
+[10] Michael T. Brannick, Regina M. Roach, and Eduardo Salas. 1993. Understanding
+Team Performance: A Multimethod Study. Human Performance 6, 4 (1993), 287–
+308.
+[11] Tianqi Chen and Carlos Guestrin. 2016. Xgboost: A scalable tree boosting system.
+In KDD.
+[12] Justin Cheng, Michael Bernstein, Cristian Danescu-Niculescu-Mizil, and Jure
+Leskovec. 2017. Anyone can become a troll: Causes of trolling behavior in online
+discussions. In CSCW.
+[13] Justin Cheng, Cristian Danescu-Niculescu-Mizil, and Jure Leskovec. 2015. Antisocial Behavior in Online Discussion Communities. In ICWSM.
+[14] Susan G. Cohen and Diane E. Bailey. 1997. What Makes Teams Work: Group
+Effectiveness Research from the Shop Floor to the Executive Suite. Journal of
+Management 23, 3 (1997), 239–290.
+[15] Kevin Conley and Daniel Perry. 2013. How does he saw me? A recommendation
+engine for picking heroes in Dota 2. Np, nd Web 7 (2013).
+[16] Cristian Danescu-Niculescu-Mizil, Lillian Lee, Bo Pang, and Jon Kleinberg. 2012.
+Echoes of Power: Language Effects and Power Differences in Social Interaction.
+In WWW.
+[17] Kurt T Dirks. 1999. The effects of interpersonal trust on work group performance.
+Journal of applied psychology 84, 3 (1999), 445.
+[18] M. Brent Donellan, Richard E. Lucas, and William Fleeson (Eds.). 2009. Personality
+and Assessment at Age 40: Reflections on the Past Person-Situation Debate and
+Emerging Directions of Future Person-Situation Integration [Special Issue].
+[19] Nicolas Ducheneaut, Nicholas Yee, Eric Nickell, and Robert J Moore. 2006. Alone
+together?: exploring the social dynamics of massively multiplayer online games.
+In Proceedings of the SIGCHI conference on Human Factors in computing systems.
+ACM, 407–416.
+[20] Nicolas Ducheneaut, Nicholas Yee, Eric Nickell, and Robert J. Moore. 2007. The
+Life and Death of Online Gaming Communities. In CHI.
+[21] Angela L Duckworth, Christopher Peterson, Michael D Matthews, and Dennis R
+Kelly. 2007. Grit: perseverance and passion for long-term goals. Journal of
+personality and social psychology 92, 6 (2007), 1087.
+[22] Guo Freeman. 2018. Multiplayer Online Games: Origins, Players, and Social Dynamics. AK Peters/CRC Press.
+[23] Courtenay Honeycutt. 2005. Hazing as a process of boundary maintenance in
+an online community. Journal of computer-mediated communication 10, 2 (2005),
+JCMC1021.
+[24] Matthew Hudson and Paul Cairns. 2014. Measuring social presence in teambased digital games. Interacting with Presence: HCI and the Sense of Presence in
+Computer-mediated Environments (2014), 83.
+[25] Douglas T Kenrick and David C Funder. 1988. Profiting from controversy: Lessons
+from the person-situation debate. American Psychologist 43, 1 (1988), 23.
+[26] Firas Khatib, Seth Cooper, Michael D Tyka, Kefan Xu, Ilya Makedon, Zoran
+Popović, and David Baker. 2011. Algorithm discovery by protein folding game
+
+10
+
+Team compositions
+
+Abusing prob.
+
+A.2
+
+Used frequency(%)
+
+Detailed Statistics
+
+−
+−
+−
+
+team compositions with the highest abusing rates
+−
+−
+−
+56.2%
+2.2 × 10−3
+−
+−
+−
+55.9%
+2.6 × 10−3
+−
+−
+−
+55.6%
+7.2 × 10−3
+
+We present team compositions with the highest (lowest) surrendering probability in Table 6, and those with the highest (lowest)
+abusing probability in Table 7 .
+
+team compositions with the lowest abusing rates
+−
+−
+−
+30.6%
+1.7 × 10−3
+−
+−
+−
+29.7%
+1.5 × 10−5
+−
+−
+−
+28.7%
+8.6 × 10−5
+
+Team compositions
+
+−
+−
+−
+
+Table 7: Team compositions with the highest and lowest
+abusing probability.
+
+A APPENDIX
+A.1 Game information
+
+Used frequency(%)
+
+−
+−
+−
+
+team compositions with the highest surrendering rates
+−
+−
+−
+84.6%
+3.0 × 10−4
+−
+−
+−
+82.4%
+6.6 × 10−4
+−
+−
+−
+79.8%
+9.7 × 10−5
+
+−
+−
+−
+
+team compositions with the lowest surrendering rates
+−
+−
+−
+34.8%
+4.6 × 10−4
+−
+−
+−
+34.3%
+2.1 × 10−5
+−
+−
+−
+33.6%
+1.5 × 10−4
+
+Table 6: Team compositions with the highest and lowest surrender probability (t ≤ 11min).
+
+Table 5 shows the detailed information contained in the game
+records.
+Table 5: The list of available information for each game.
+Tag
+
+Surrender prob.
+
+Description
+
+Player’s basic information
+#grade-of-rank
+Player’s rank level, 0-26.
+#heroid
+Hero that player uses in this game.
+Game’s basic information
+#game-time
+UTC timestamp, game start time.
+#duration
+Time duration of the game.
+#gameresult
+Win/lose result for the player.
+#surrender-tag
+The tag of whether the game ends
+with surrendering.
+In-game information
+#kill-cnt
+Number of kills.
+#dead-cnt
+Number of deaths.
+#assist-cnt
+Number of assistance kills.
+coin-cnt
+Amount of coins.
+Player’s historical records
+rank-mvp
+Number of mvp he/she got in
+his/her last 10 ranked games.
+#ten-rank-win
+The number of winning in his/her
+last 10 ranked games.
+#ten-rank-total
+Total number of previous 10 ranked
+games.
+Chat information(if exists)
+#timestamp
+UTC timestamp, the time of one
+chat record.
+#abuse-tag
+The tag of whether this chat record
+includes abusing words.
+
+11
+
+

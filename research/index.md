@@ -9,10 +9,10 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 4 | 97 | 390 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 4 | 105 | 417 |
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 2 | 112 | 460 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 82 | 233 |
-| [stats](areas/stats.md) | estimation and recommendation methods | 4 | 106 | 703 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 87 | 239 |
+| [stats](areas/stats.md) | estimation and recommendation methods | 5 | 115 | 742 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 4 | 74 | 272 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 4 | 74 | 259 |
 
@@ -46,7 +46,8 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
-| answered | now | [How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games?](questions/draft-predictor-methods.md): How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games? | 11 strong, 4 moderate, 4 weak, 2 contested | 45 | 48 (growing) | 19 |
+| answered | now | [How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games?](questions/draft-predictor-methods.md): How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games? | 11 strong, 4 moderate, 4 weak, 2 contested | 45 | 48 (growing) | 18 |
+| answered | soon | [Which team-composition features built from champion attributes (damage type mix and balance, frontline/tankiness, crowd control, range/poke vs engage, healing vs anti-heal, scaling) have measured, non-additive effects on win in LoL or Dota 2 data, how big, and how were they built?](questions/comp-attribute-features.md): Which team-composition features built from champion attributes (damage type mix and balance, frontline/tankiness, crowd control, range/poke vs engage, healing vs anti-heal, scaling) have measured, non-additive effects on win in LoL or Dota 2 data, how big, and how were they built? | 2 strong, 3 moderate, 6 weak | 12 | 25 (slowing) | 5 |
 | answered | soon | [How should an LLM agent run meiolol's modelling experiments, and which tools should it get?](questions/llm-experiment-agent.md): How should an LLM agent run meiolol's modelling experiments, and which tools should it get? | 14 strong, 6 moderate, 1 contested | 20 | 11 (growing) | 9 |
 | answered | soon | [How should an experiment agent choose what to try next, instead of brute-forcing many runs?](questions/smart-experiment-search.md): How should an experiment agent choose what to try next, instead of brute-forcing many runs? | 7 strong, 5 moderate | 11 | 7 (growing) | 7 |
 | decided | now | [How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin?](questions/curve-statistics-method.md): How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin? | 9 strong, 2 moderate | 14 | 21 (growing) | 2 |
@@ -71,6 +72,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 21 questions, 329 sources, 2076 findings
-- Open leads: 80 (`josearch leads`)
+- 22 questions, 338 sources, 2141 findings
+- Open leads: 84 (`josearch leads`)
 - Lint: 0 errors, 1 warnings (`josearch lint`)
