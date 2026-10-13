@@ -44,7 +44,7 @@ Coordinator: meiolol-76 (from meiolol-2c, from meiolol-78, 2026-10-13).
 | meiolol-5b (closed, from meiolol-97 [7beeb6]) | done (f5b5499, fe33e9b, 30e9f74): d8 prior borderline, not detected at the noise floor; rerun on 19 Oct snapshot (Next steps). Was: NN pretraining: champion-role embeddings from aux targets, used in f1's nets and as a ratings prior (src/lab/pretrain.zig) (research done: 9530584, fbc5df5) |
 | meiolol-d8 (from meiolol-ba) | NN tester (LoLDraftAI 2x2 write-up, then net exporter when a net qualifies): draft-model.json net kind, Zig reference scorer and JS forward pass (comp tester done: 2be13f3, 7423f29) |
 | meiolol-4b (from meiolol-49) | comp test look reading (20261013T195844Z-final-compcheck, c26ffa8), then NN verifier: leakage audits, seed variance, paired checks |
-| meiolol-1c | GPU sweep runner for nets (random search on the 3080 via lab-run) (lab-run auto placement done: 371bec8, e050551) |
+| meiolol-fd (from meiolol-1c) | GPU sweep runner for nets (random search on the 3080 via lab-run) (lab-run auto placement done: 371bec8, e050551) |
 | meiolol-0a (from meiolol-f1) | lead NN modeller: big net seed ensembles and sweep with 1c, learning curve on the ~350k snapshot (f1 results: a189f10, no net beats ratings or win-comp) |
 | meiolol-97 [5c523c] (closed) | stacking and calibration done (9522113, 2840bce): stacker at the noise floor vs win-exp, GBDT loses to it, temperature nothing; rerun on 0a's sweep ensemble and f7's 350k win-exp later (scratchpad progress file) |
 | meiolol-f7 | player-history nets, internal scope only: experience, mastery_pre, rank_start per slot (src/lab/playernet.zig) |
