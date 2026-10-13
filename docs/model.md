@@ -1821,6 +1821,14 @@ Reading (dev, no test look):
   (it learns to pull ratings towards 50%), never better, as it must
 - Next: rerun on 0a's sweep ensemble and f7's ~350k-game win-exp when they land; a test
   look only for the 7-input stacker vs win-exp, if the coordinator wants one
+- Verifier (meiolol-4b, 2026-10-13): no leakage; forward fitting confirmed, every input
+  an audited per-block out-of-sample prediction. The stacker's L2 (1e-4 over 1e-2) and
+  the 4-input subset were picked on the scored folds, so the stacker's -0.00079 is
+  optimistic. The honest number is the unfitted 4-input average, replicated
+  independently: -0.00061 ± 0.00019 on folds 2-5 (35,483 games), past the A/A floor
+  (~0.5 milli-nats, "Noise floor on the folds"). The leak control is inputs permuted
+  within block with real outcomes (~0); the outcome-shuffled rows are worse by design and
+  can't show a leak. stack.zig and gbdt.zig were uncommitted at audit: cite a hash
 
 ### Draft model file (meiolol-lab draft --export)
 
@@ -1942,7 +1950,9 @@ pair_games from Scorer.value; the page's JS must match them to 0.01.
 - Patch and rank context (meiolol-48, 2026-10-13; cand/win-context, model.md "Patch
   and rank context"): rerun per-patch offsets (cfg.folds with the shuffled control) once
   a snapshot has 16.21 games in dev; rank brackets (cfg.bracket) on the 19 Oct weekly
-  snapshot, the first with rank_start in dev: report coverage by bracket first
+  snapshot, the first with rank_start in dev: report coverage by bracket first. With the
+  16.21 rerun, report per fold the share of scored games on a patch the fit has seen
+  (unseen patches get no offset, so a null there is not a test; verifier, meiolol-4b)
 
 - Pretrained embeddings (meiolol-5b, 2026-10-13; `meiolol-lab pretrain`, model.md
   "Pretrained champion-role embeddings"): borderline, no test look (consistent sign on
