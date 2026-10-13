@@ -1460,6 +1460,70 @@ worse than the named model; test looks marked.
   queue 420 games, 292,075 in rows (2,920,750 rows), seat_stats.tsv for 356,468 games
   (raw.db keeps 30 days), patches 16.19-16.20
 
+#### Player-history nets, internal scope (meiolol-f7)
+
+Question: does a net use player x champion interactions (experience on this champion,
+form) better than win-ratings' hand-made experience terms ("Player experience and
+everything pre-game" above: champ_exp + form, linear per role)? Internal scope only:
+all ten players' pre-game history, never the site or app.
+
+`meiolol-lab playernet SNAP` (src/lab/playernet.zig): per slot, the champion-role
+embedding (+ role's; 8 wide, `--emb 0` drops it) beside that player's pre-game features
+goes through one hidden ReLU layer (32, dropout 0.1, AdamW wd 0.1) to a number; a team's
+value is its five slots' sum, logit = blue's - red's + platform intercept + a x the
+-Dcand logit (antisymmetric by construction; output weights from 0, so it starts as the
+candidate). Offsets, blocks, early stopping and refit as winnet's resid (cross-fitted
+training offsets). Features (`--feats` groups), scaled on fit rows: champ (log1p games on
+the champion, shrunk win rate log-odds, played before), any (the same on any champion,
+share on this one), form (mean KDA, lane gold diff at 14, deaths before 15), rank (rank
+at game start + known), mastery (log1p pre-game points + known, from SNAP/mastery_pre.tsv
+when present). Writes coverage.tsv per block (test rows: features only, no outcomes).
+Gradient and antisymmetry unit tests. Ratings + experience as a candidate: win-ratings
+with `.champ_exp = true, .form = true` (generated copy, gitignored
+src/lab/cand/_final/player-exp; kept with the runs in data/runs/playernet-20261013).
+
+Coverage of rows, snap-20261012T2055Z: 1+ earlier game (any champion) fit 24-36%,
+scored 36-56% by block, test 73%; on this champion fit 10-15%, dev-val 26%, test 36%;
+10+ on it ~1-4%. Rank at game start 0.0% (fit and scored), 0.06% of test rows; mastery
+none (no mastery_pre.tsv in this snapshot). So on this snapshot the net sees experience
+and form only.
+
+Mac, 3 seeds, folds pooled (44,353 games) and dev-val (8,500); diff = log loss minus
+the reference's, ± 95% paired per game; seeds: single seeds' range on the same block.
+Reference pairs across two builds (ratings, ratings + experience) are joined on match
+id (same fit and scored games; pair.py in the run dir).
+
+| model | vs | folds | seeds (folds) | dev-val |
+| --- | --- | --- | --- | --- |
+| hand-made experience terms (ratings + exp) | ratings | -0.00261 ± 0.00069 | | -0.00189 ± 0.00184 |
+| player net on ratings | ratings | -0.00254 ± 0.00065 | -0.00237 to -0.00193 | -0.00143 ± 0.00184 |
+| player net on ratings | ratings + exp | +0.00007 ± 0.00037 | | +0.00045 ± 0.00106 |
+| player net on ratings + exp | ratings + exp | -0.00002 ± 0.00020 | 0 to +0.00033 | -0.00024 ± 0.00034 |
+| same, no champion embedding (`--emb 0`) | ratings + exp | -0.00006 ± 0.00021 | +0.00003 to +0.00039 | -0.00024 ± 0.00043 |
+| control: no player features (`--feats none`) | ratings | -0.00004 ± 0.00007 | -0.00001 to +0.00001 | +0.00015 ± 0.00018 |
+
+Reading (dev, no test look):
+- Pre-game experience is the clearest gain any model here has shown over ratings on the
+  folds: -0.0026 nats/game, over 7 standard errors, from either the hand-made terms or
+  the net. The net finds it by itself from raw counts and form, but no more: it ties the
+  hand-made terms (+0.00007 ± 0.00037)
+- On top of the hand-made terms the net adds nothing detectable: -0.00002 ± 0.00020,
+  at most ~0.0002 nats/game. With or without the champion embedding alike, so champion
+  x experience interactions (some champions rewarding experience more) are not found at
+  this coverage; the per-champion skill slopes above said the same
+- The control without player features is ratings (as f1's resid), so the gain comes
+  from the player features, not the per-slot net. Early stopping at 1-3.5 epochs; the
+  offset weight ~0.93 (ratings a little over-confident, as f1's)
+- Limit: 16 days of history, most rows with no earlier game on the champion; rank at
+  game start and mastery absent. The lever is history per player, not model shape
+
+Next (plan): rerun on snap-20261013T1954Z (Mac data/, gpu-box ~/ml/snaps; ~292k games
+in rows, more days of history, rank at game start from 12 Oct for 13 Oct games) once
+meiolol-ea's mastery_pre.tsv is there and the coordinator pins it: same four rows plus
+`--feats champ,any,form` vs all (what rank and mastery add), coverage per block, and
+rows split by whether the player has rank or mastery. Test look for the player net on
+ratings + exp only on meiolol-2c's go; on this snapshot it would be a tie by the folds.
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

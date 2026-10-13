@@ -1,0 +1,10 @@
+# title: Does a net use players' pre-game history (experience, form) better than hand-made terms? (internal scope)
+model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+player net on ratings + experience terms	ratings	folds	-0.00263	0.00076	3	-0.00261	-0.00228	44353		playernet-20261013	ties the hand-made experience terms: -0.00002 ± 0.00020 beyond them
+player net on ratings + experience terms	ratings	dev-val	-0.00213	0.00186	3	-0.00221	-0.00187	8500		playernet-20261013	-0.00024 ± 0.00034 beyond the hand-made terms
+hand-made experience terms (ratings + experience)	ratings	folds	-0.00261	0.00069	1			44353		playernet-20261013	win-ratings with champ_exp and form, linear per role
+hand-made experience terms (ratings + experience)	ratings	dev-val	-0.00189	0.00184	1			8500		playernet-20261013
+player net on ratings alone	ratings	folds	-0.00254	0.00065	3	-0.00237	-0.00193	44353		playernet-20261013	finds the experience gain by itself, no more: +0.00007 ± 0.00037 vs the hand-made terms
+player net on ratings alone	ratings	dev-val	-0.00143	0.00184	3	-0.00175	-0.00094	8500		playernet-20261013
+player net without champion embedding, on ratings + experience	ratings	folds	-0.00267	0.00079	3	-0.00258	-0.00222	44353		playernet-20261013	no champion x experience interaction found: same as with the embedding
+control: per-slot net without player features	ratings	folds	-0.00004	0.00007	3	-0.00001	0.00001	44353		playernet-20261013	the gain comes from the player features
