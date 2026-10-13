@@ -25,6 +25,19 @@ How to write a line:
 
 ## Win
 
+- 2026-10-13 (early, to be updated with the larger held-out check and the win-comp
+  model): Whether a team's damage is mostly magic or mostly physical, how many tanky
+  champions it has, or how much crowd control it brings does not detectably change its
+  chance of winning beyond which champions are in it. Sure: 8,500 dev EUW games, each
+  team's mix from its champions' averages over ~89k older games; not detected: a
+  lopsided damage mix is within about 3 percentage points of a balanced one, no
+  frontline at most 2 points worse, low crowd control at most 1 point worse;
+  armour-heavy picks into magic damage too uncertain to bound under 6 points. The same
+  check finds the 11-point gap between the strongest and weakest quarter of drafts by
+  champion strength. Teams whose champions average under 20% or over 80% physical
+  damage are under 0.5% of teams, so "all-AD comps lose" can't be tested this way. Site:
+  no "your comp lacks AP / a frontline" warnings as fact. Evidence: docs/model.md "Comp
+  features from champion profiles", model-free cross-check
 - 2026-10-13: Once you know each team's gold at 14:00 and how long the game ran, the
   early-game stats Riot records (first tower, takedowns in the first minutes, the
   laning-phase gold and XP lead) barely help tell the winner: the best adds under half a
