@@ -66,7 +66,7 @@ Coordinator: meiolol-bd (from meiolol-76, from meiolol-2c, from meiolol-78, 2026
 | meiolol-58 (new) | PyTorch cross-check of the Zig models (win-ratings, small, big, resid, set net, playernet: same rows, folds, seeds; agreement within a justified tolerance), takes over tests' Python item; runs via lab-run --python (meiolol-a0 adding it) |
 | meiolol-state (new, pane 1000) | live state model and what matters: P(win | draft, full state at minute t) with per-role gold, deaths and respawns, towers by lane and tier, dragons and soul, buffs, items; linear, GBDT and GPU net vs winchance; grouped importance by minute in win points and gold equivalents; momentum and comeback checks |
 | meiolol-draftpath (new, pane 1001) | how drafts win: draft vs state information by minute, what a draft decides (game shape from the draft), mediation of champion and comp effects through the early lead, draft-conditional comebacks |
-| meiolol-c1 | comp discovery: our own champion and team variables (comp_stats.tsv, src/lab/compstats.zig, comps.zig), cross-team matchups, archetypes, FDR screen with a sealed block; survivors to 08 and 35 |
+| meiolol-94 (from meiolol-c1) | comp discovery: our own champion and team variables (comp_stats.tsv, src/lab/compstats.zig, comps.zig), cross-team matchups, archetypes, FDR screen with a sealed block; survivors to 08 and 35 |
 | meiolol-61 | carry and impact: which champions and roles carry (leverage of a seat's lead, skill sensitivity, outcome spread), src/carry.zig |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
