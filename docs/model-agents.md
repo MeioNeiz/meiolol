@@ -31,7 +31,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | --- | --- |
 | (none) | win / draft predictor rerun: closed (meiolol-db done 2026-10-13); new session when the coordinator pins a snapshot with ~a week of rank_history and pre-game mastery (model.md Next steps) |
 | meiolol-ff [f6a37d] | bootstrap bounds on analysis.Prior.estimate (winchance fix live 00:26Z, playstyle intervals done) |
-| meiolol-48 | playstyle clustering (field ranking done, d94c875) |
+| meiolol-3f | playstyle clustering (from meiolol-48; field ranking done, d94c875) |
 | meiolol-12 (closing) | lab harness: rank_start done (9eb6982, after_game_rank dev-only gate); campaign plan in model.md Next steps; fresh lab session at the pin |
 | meiolol-0d (closing) | admin Models tab, Draft tester: lane, blind and draft lists live with the 1% role floor; last check: Models tab renders struck lines |
 | meiolol-11 [1f36a8] | box, archive operation, rows.zig, snapshots (weekly Sun, first 19 Oct), mastery for all players, flex sample |
