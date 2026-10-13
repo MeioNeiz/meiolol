@@ -25,6 +25,7 @@ Same error twice on one line of work: restore the last good state, don't try a t
 2026-10-12 | process | a commit restored an old model.md section | a stale staged copy went into an unrelated commit | commit by explicit path only, never plain git commit after git add (36b326e)
 2026-10-13 | build | lab-run start failed "pinned to Zig 0.17.x, found 0.16.0" in a resumed Claude session | the new shell had Homebrew's zig first on PATH | export PATH=$HOME/.local/zig/zig-aarch64-macos-0.17.0:$PATH (or ~/.local/bin first) before lab-run or zig build
 2026-10-13 | process | pretrain variant runs vanished, no exit file | started as plain background shells from a Claude pane, killed when the pane closed | long runs only through deploy/lab-run.sh (own process group, survives the session)
+2026-10-13 | nets | set net's run said "vs cand" with candidate log loss 0.6927 on the folds (ratings: 0.6909) | lab-run --head without --build-arg -Dcand: build.zig's default candidate is src/lab/cand/base (champion base rates) | always pass -Dcand=src/lab/cand/win-ratings (or win-comp) to netcheck and other cand-built commands; the log's first line names the candidate ("vs win-ratings"), check it
 
 ## Zig 0.17 (docs/zig-0.17.md; check APIs with LSP hover, std moved a lot)
 
