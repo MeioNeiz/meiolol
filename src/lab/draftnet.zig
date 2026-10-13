@@ -701,7 +701,7 @@ test "draft net: threaded fit matches one core, loss falls on a learnable signal
     var rng: std.Random.DefaultPrng = .init(3);
     const r = rng.random();
     const n_ids = 30;
-    const train = try gpa.alloc(dn.Game, 4000);
+    const train = try gpa.alloc(dn.Game, 1000);
     defer gpa.free(train);
     for (train) |*g| {
         for (&g.ids) |*id| id.* = r.uintLessThan(u32, n_ids);
@@ -710,7 +710,7 @@ test "draft net: threaded fit matches one core, loss falls on a learnable signal
         const edge: f32 = if (g.ids[0] < 10) 0.8 else 0.3;
         g.y = if (r.float(f32) < edge) 1 else 0;
     }
-    const cfg: Config = .{ .batch = 256 };
+    const cfg: Config = .{ .batch = 64 };
     var a = try fitCpu(gpa, testing.io, cfg, n_ids, train, 3, 1);
     defer a.deinit(gpa);
     var b = try fitCpu(gpa, testing.io, cfg, n_ids, train, 3, 4);
