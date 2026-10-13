@@ -22,10 +22,11 @@ const Io = std.Io;
 const Stat = seatstats.SeatStat;
 
 pub const usage =
-    \\  compcheck SNAP                  dev only, built with -Dcand=src/lab/cand/win-ratings:
+    \\  compcheck SNAP [--folds K]      dev only, built with -Dcand=src/lab/cand/win-ratings:
     \\                                  observed minus win-ratings' predicted win by team
     \\                                  composition (profiles from dev's training games),
-    \\                                  intervals clustered by game (lab/compcheck.zig)
+    \\                                  intervals clustered by game (lab/compcheck.zig);
+    \\                                  --folds: win-comp's forward-chaining folds instead
     \\
 ;
 
@@ -161,7 +162,12 @@ const Unit = struct {
 };
 
 pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
-    if (argv.len != 1) {
+    const folds: u8 = switch (argv.len) {
+        1 => 0,
+        3 => if (std.mem.eql(u8, argv[1], "--folds")) std.fmt.parseInt(u8, argv[2], 10) catch 0 else 0,
+        else => 0,
+    };
+    if (argv.len != 1 and folds == 0) {
         std.debug.print("usage:\n{s}", .{usage});
         return 2;
     }
@@ -185,29 +191,72 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &buf);
     const w = &stdout.interface;
-    try run(gpa, arena, io, &data, players, c, w);
+    var units: std.ArrayList(Unit) = .empty;
+    defer units.deinit(gpa);
+    var wins: Wins = .empty;
+    defer wins.deinit(gpa);
+    if (folds == 0) {
+        try w.print("# compcheck, dev (scored: EUW1 dev-val; profiles: visible games before the dev cut)\n\n", .{});
+        try addUnits(gpa, &data, players, c, .{ .before = c.dev }, &units, &wins, w);
+    } else {
+        // foldAblation's blocks (win-comp): the newest half of dev's visible games, every
+        // platform, in `folds` blocks by start; each fitted on the games before it
+        var starts: std.ArrayList(i64) = .empty;
+        defer starts.deinit(gpa);
+        for (data.games) |g| if (harness.visible(.dev, c, g)) try starts.append(gpa, g.start);
+        std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
+        try w.print("# compcheck, {d} forward-chaining folds over the newest half of dev's visible games (every platform; offset and profiles refitted per fold on older games)\n\n", .{folds});
+        for (0..folds) |f| {
+            const quantile = struct {
+                fn q(xs: []const i64, x: f64) i64 {
+                    if (x >= 1) return c_dev_sentinel;
+                    return xs[@intFromFloat(@as(f64, @floatFromInt(xs.len)) * x)];
+                }
+            }.q;
+            const fi: f64 = @floatFromInt(f);
+            const k: f64 = @floatFromInt(folds);
+            const lo = quantile(starts.items, 0.5 + 0.5 * fi / k);
+            const hi = @min(quantile(starts.items, 0.5 + 0.5 * (fi + 1) / k), c.dev);
+            wins.clearRetainingCapacity();
+            try w.print("fold {d}: ", .{f + 1});
+            try addUnits(gpa, &data, players, c, .{ .before = lo, .block = .{ lo, hi } }, &units, &wins, w);
+        }
+    }
+    try analyse(gpa, arena, io, &data, units.items, if (folds == 0) &wins else null, w);
     try w.flush();
     return 0;
 }
 
-fn run(
+/// Later than any game: the last fold runs to the dev cut
+const c_dev_sentinel = std.math.maxInt(i64);
+
+const Wins = std.AutoHashMapUnmanaged(u64, [2]f64);
+
+/// Profiles, lifts and the offset from games before `before`; scored: dev-val (block
+/// null, harness.score as exp run does) or every visible game in [block[0], block[1])
+const Source = struct {
+    before: i64,
+    block: ?[2]i64 = null,
+};
+
+fn addUnits(
     gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
-    io: Io,
     d: *const rows.Data,
     players: []const harness.Players,
     c: harness.Cuts,
+    src: Source,
+    units: *std.ArrayList(Unit),
+    wins: *Wins,
     w: *Io.Writer,
 ) !void {
-    // Profiles and the control's lifts: visible rows only
+    // The training side: visible as dev's are, before src.before
+    const fit_cuts: harness.Cuts = .{ .dev = src.before, .select = src.before, .eu = c.eu };
     var prof: Profiles = .{};
     defer prof.deinit(gpa);
-    var wins: std.AutoHashMapUnmanaged(u64, [2]f64) = .empty;
-    defer wins.deinit(gpa);
     var visible_rows: usize = 0;
     var with_stats: usize = 0;
     for (d.rows) |r| {
-        if (!harness.visible(.dev, c, d.games[r.game])) continue;
+        if (!harness.visible(.dev, fit_cuts, d.games[r.game])) continue;
         visible_rows += 1;
         const role: usize = @backingInt(r.role);
         const cell = try prof.cells.getOrPutValue(gpa, cellKey(r.champion, role), .{});
@@ -222,17 +271,16 @@ fn run(
         wr.value_ptr[0] += r.y[api.outcomeIndex(.win)];
         wr.value_ptr[1] += 1;
     }
-    try w.print("# compcheck, dev (scored: EUW1 dev-val; profiles: visible games before the dev cut)\n\n", .{});
-    try w.print("visible rows {d}, with seat stats {d} ({d:.1}%)\n", .{
+    try w.print("training rows {d}, with seat stats {d} ({d:.1}%)\n", .{
         visible_rows, with_stats, pct(with_stats, visible_rows),
     });
-    if (with_stats == 0) try w.writeAll("no seat stats (SNAP/seat_stats.tsv): positive control only\n");
+    if (with_stats == 0) return error.NoSeatStats;
 
     // Frontline threshold: top share of visible picks by their champion-role's tankiness
     var tanks: std.ArrayList(f64) = .empty;
     defer tanks.deinit(gpa);
     for (d.rows) |r| {
-        if (!harness.visible(.dev, c, d.games[r.game])) continue;
+        if (!harness.visible(.dev, fit_cuts, d.games[r.game])) continue;
         try tanks.append(gpa, prof.get(r.champion, @backingInt(r.role)).tank);
     }
     std.mem.sort(f64, tanks.items, {}, std.sort.asc(f64));
@@ -242,25 +290,16 @@ fn run(
     var role_lean: [5]f64 = undefined;
     for (&role_lean, prof.roles) |*l, a| l.* = a.profile().armour_lean;
 
-    // The offset: win-ratings on dev, one chance per game for blue (mean of its rows)
-    var scores = try harness.score(cand, gpa, d, players, c, .dev, .{});
-    defer scores.deinit(gpa);
-    const k = api.outcomeIndex(.win);
+    // The offset: win-ratings' chance for blue per scored game (mean of its rows)
     const blue_sum = try gpa.alloc(f64, d.games.len);
     defer gpa.free(blue_sum);
     const blue_n = try gpa.alloc(f64, d.games.len);
     defer gpa.free(blue_n);
     @memset(blue_sum, 0);
     @memset(blue_n, 0);
-    for (scores.row, scores.cand) |ri, pred| {
-        const r = d.rows[ri];
-        const p = pred[k];
-        blue_sum[r.game] += if (r.side == 0) p else 1 - p;
-        blue_n[r.game] += 1;
-    }
+    try offset(gpa, d, players, c, src, blue_sum, blue_n);
 
-    var units: std.ArrayList(Unit) = .empty;
-    defer units.deinit(gpa);
+    const first = units.items.len;
     for (d.games, 0..) |g, gi| {
         if (blue_n[gi] == 0) continue;
         const pb = blue_sum[gi] / blue_n[gi];
@@ -279,7 +318,7 @@ fn run(
                 f.lean += p.armour_lean - role_lean[role];
                 if (p.tank >= tank_cut) f.front += 1;
                 f.best_mit = @max(f.best_mit, p.mitigated_share);
-                f.lift += liftOf(&wins, champ, role);
+                f.lift += liftOf(wins, champ, role);
             }
             f.magic = magic / (phys + magic + true_dmg);
             f.phys = phys / (phys + magic + true_dmg);
@@ -304,12 +343,75 @@ fn run(
             });
         }
     }
-    const n_units = units.items.len;
-    try w.print("dev games {d} (team units {d}); profile fallbacks: champion {d}, role {d} of {d} picks\n", .{
-        n_units / 2, n_units, prof.fallback_champ, prof.fallback_role, n_units * 5,
+    const added = units.items.len - first;
+    try w.print("scored games {d}; profile fallbacks: champion {d}, role {d} of {d} picks; frontline: taken + mitigated >= {d:.0}/min (top {d:.0}% of picks)\n", .{
+        added / 2, prof.fallback_champ, prof.fallback_role, added * 5, tank_cut, frontline_share * 100,
     });
-    try w.print("frontline: damage taken + mitigated >= {d:.0}/min (top {d:.0}% of picks)\n\n", .{ tank_cut, frontline_share * 100 });
-    try writeUnits(io, d, units.items);
+}
+
+fn offset(
+    gpa: std.mem.Allocator,
+    d: *const rows.Data,
+    players: []const harness.Players,
+    c: harness.Cuts,
+    src: Source,
+    blue_sum: []f64,
+    blue_n: []f64,
+) !void {
+    const k = api.outcomeIndex(.win);
+    const block = src.block orelse {
+        var scores = try harness.score(cand, gpa, d, players, c, .dev, .{});
+        defer scores.deinit(gpa);
+        for (scores.row, scores.cand) |ri, pred| {
+            const r = d.rows[ri];
+            blue_sum[r.game] += if (r.side == 0) pred[k] else 1 - pred[k];
+            blue_n[r.game] += 1;
+        }
+        return;
+    };
+    // As harness.score: the same seeds, the same query
+    const fit_cuts: harness.Cuts = .{ .dev = src.before, .select = src.before, .eu = c.eu };
+    var v = try harness.buildTrain(gpa, d, players, .dev, fit_cuts, 1, false);
+    defer v.deinit();
+    const n_seeds: u64 = if (@hasDecl(cand, "seeded") and cand.seeded) 3 else 1;
+    const sum = try gpa.alloc(f64, d.rows.len);
+    defer gpa.free(sum);
+    @memset(sum, 0);
+    for (1..n_seeds + 1) |seed| {
+        var m = try cand.fit(gpa, &v.train, .{ .seed = seed });
+        defer cand.deinit(&m, gpa);
+        for (d.rows, sum) |r, *acc| {
+            const g = d.games[r.game];
+            if (!inBlock(c, block, g)) continue;
+            const q = harness.query(cand.scope, g, players[r.game], r, false);
+            acc.* += cand.predict(&m, &q)[k];
+        }
+    }
+    for (d.rows, sum) |r, acc| {
+        if (!inBlock(c, block, d.games[r.game])) continue;
+        const p = acc / @as(f64, @floatFromInt(n_seeds));
+        blue_sum[r.game] += if (r.side == 0) p else 1 - p;
+        blue_n[r.game] += 1;
+    }
+}
+
+fn inBlock(c: harness.Cuts, block: [2]i64, g: rows.Game) bool {
+    return harness.visible(.dev, c, g) and g.start >= block[0] and g.start < block[1];
+}
+
+fn analyse(
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    io: Io,
+    d: *const rows.Data,
+    unit_list: []const Unit,
+    plumbing: ?*const Wins,
+    w: *Io.Writer,
+) !void {
+    const n_units = unit_list.len;
+    const units: struct { items: []const Unit } = .{ .items = unit_list };
+    try w.print("\nteam units {d} ({d} games)\n\n", .{ n_units, n_units / 2 });
+    try writeUnits(io, d, unit_list);
 
     const resid = try gpa.alloc(f64, n_units);
     defer gpa.free(resid);
@@ -326,8 +428,7 @@ fn run(
     const res: Res = .{ .model = resid, .raw = raw };
 
     try strengthControl(gpa, arena, units.items, resid, in_a, w);
-    try control(gpa, d, &wins, units.items, resid, in_a, w);
-    if (with_stats == 0) return;
+    if (plumbing) |wins| try control(gpa, d, wins, units.items, resid, in_a, w);
 
     // H1: team magic share of damage
     {
