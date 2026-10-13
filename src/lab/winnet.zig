@@ -9,9 +9,10 @@
 //!   big:   draftnet.zig as built (10 x 32 embeddings, MLP 320-512-256-1), GPU when there
 //!   small: champion-role + role embeddings (emb), one hidden ReLU layer, dropout, AdamW
 //!   resid: small with the candidate's logit as an offset, output weights from 0: it can
-//!          only add what the candidate misses. The offset on fit games is the
-//!          candidate's in-sample prediction; for early stopping, a candidate fitted on
-//!          the games before the validation cut
+//!          only add what the candidate misses. A training game's offset comes from a
+//!          candidate fitted without its hashed fold (cross-fitted); val and scored
+//!          games' from the candidate on all inner / fit games
+//!   bigres: big as a residual on the same offsets (draftnet Config.resid)
 //!   set:   DeepSets over each team on win-comp's profiles, residual like resid
 //!          (lab/setnet.zig)
 //! All antisymmetric: logit = (f(blue, red) - f(red, blue)) / 2 + c[platform] (+ offset).
@@ -40,7 +41,7 @@ const dn = @import("../gpu/draftnet_layout.zig");
 const Io = std.Io;
 
 pub const usage =
-    \\  netcheck SNAP --net big|small|resid|set [OPT VALUE]...
+    \\  netcheck SNAP --net big|small|resid|set|bigres [OPT VALUE]...
     \\                                  neural nets vs the -Dcand candidate on dev-val
     \\                                  and win-comp's 5 forward folds (lab/winnet.zig):
     \\                                  --emb N --hidden N --depth N --dropout X --wd X
@@ -65,11 +66,15 @@ pub const usage =
     \\
 ;
 
-pub const Kind = enum { big, small, resid, set };
+pub const Kind = enum { big, small, resid, set, bigres };
 
 /// Nets fitted on top of the candidate's logit (cross-fitted on training games)
 fn usesOffset(k: Kind) bool {
-    return k == .resid or k == .set;
+    return k == .resid or k == .set or k == .bigres;
+}
+
+fn isBig(k: Kind) bool {
+    return k == .big or k == .bigres;
 }
 
 pub const Options = struct {
@@ -130,7 +135,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         return 2;
     };
     var gpu: ?cuda.Gpu = null;
-    if (opts.net == .big) gpu = cuda.Gpu.init(ptx) catch |e| blk: {
+    if (isBig(opts.net)) gpu = cuda.Gpu.init(ptx) catch |e| blk: {
         std.debug.print("netcheck: no GPU ({s}), big net on {d} CPU threads\n", .{ @errorName(e), opts.threads });
         break :blk null;
     };
@@ -307,8 +312,10 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
     }
     if (o.emb_freeze and o.emb_init == null) return error.FreezeWithoutInit;
     if (o.net == .set and o.emb_init != null) return error.EmbInitNotForSet;
-    if (o.net == .big) {
+    if (isBig(o.net)) {
         if (o.emb_init != null) return error.EmbInitNotForBig;
+        // draftnet's offset weight always trains
+        if (o.fix_offset) return error.FixOffsetNotForBig;
         // draftnet's shape is fixed (dn: 10 x 32, 512, 256, dropout 0.1)
         for ([_][]const u8{ "--emb", "--hidden", "--depth", "--dropout", "--emb-wd", "--clip" }) |k| if (set.contains(k)) return error.FixedForBig;
         const d: draftnet.Config = .{};
@@ -522,7 +529,7 @@ fn netGames(gpa: std.mem.Allocator, d: *const rows.Data, games: []const u32, voc
 
 fn dnGames(gpa: std.mem.Allocator, games: []const NetGame) ![]dn.Game {
     const out = try gpa.alloc(dn.Game, games.len);
-    for (out, games) |*o, g| o.* = .{ .ids = g.ids, .platform = g.platform, .y = g.y };
+    for (out, games) |*o, g| o.* = .{ .ids = g.ids, .platform = g.platform, .y = g.y, .off = g.off };
     return out;
 }
 
@@ -624,7 +631,7 @@ fn runBlock(
     }
     const sets: Sets = .{ .inner = g_inner, .val = g_val, .fit = g_fit, .scored = g_scored, .n_inner = vocab_inner.n, .n_all = vocab_all.n, .block = block, .vocab_inner = &vocab_inner, .vocab_all = &vocab_all, .d = d, .idx = .{ .inner = inner.items, .val = val.items, .fit = fit.items, .scored = scored.items } };
     switch (opts.net) {
-        .big => for (opts.seeds, fits) |seed, *f| {
+        .big, .bigres => for (opts.seeds, fits) |seed, *f| {
             f.* = try fitBig(gpa, io, gpu, opts, seed, sets);
         },
         .small, .resid, .set => {
@@ -887,7 +894,7 @@ pub fn refitSteps(epochs: f64, n: usize, batch: u32) u64 {
 
 fn fitBig(gpa: std.mem.Allocator, io: Io, gpu: ?*const cuda.Gpu, opts: Options, seed: u32, s: Sets) !Fitted {
     const t0 = Io.Clock.awake.now(io);
-    const cfg: draftnet.Config = .{ .lr = opts.lr, .wd = opts.wd, .batch = opts.batch, .seed = seed };
+    const cfg: draftnet.Config = .{ .lr = opts.lr, .wd = opts.wd, .batch = opts.batch, .seed = seed, .resid = opts.net == .bigres };
     const inner = try dnGames(gpa, s.inner);
     defer gpa.free(inner);
     const val = try dnGames(gpa, s.val);
@@ -905,6 +912,7 @@ fn fitBig(gpa: std.mem.Allocator, io: Io, gpu: ?*const cuda.Gpu, opts: Options, 
     defer net.deinit(gpa);
     const pred = try gpa.alloc(f32, scored.len);
     try net.predict(gpa, io, scored, pred);
+    if (opts.net == .bigres) std.debug.print("netcheck: seed {d}: offset weight {d:.3}\n", .{ seed, net.p[net.l.a] });
     return .{ .pred = pred, .epochs = watch.bestEpochs(), .val_loss = watch.best_loss, .seconds = secondsSince(io, t0) };
 }
 
