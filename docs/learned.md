@@ -35,8 +35,9 @@ How to write a line:
   minus balanced -3.0 ± 1.1 points, in every block (-2.4 to -3.6); the 3% of teams under
   20% magic damage -5.3 ± 1.7. In iTero's rarer extremes (under 20% or over 80%
   physical, 1% of teams) -10 ± 5 and -8 ± 4, like iTero's unadjusted -9 and -6, so their
-  gap is not just which champions sit in those comps. The 8,500 newest EUW games alone
-  showed -0.3 ± 2.5 (EUW on its own not measured further). No frontline -0.4 ± 0.8;
+  gap is not just which champions sit in those comps. About one team in ten is
+  lopsided. EUW alone -2.6 ± 2.1 in the blocks, not different from other regions
+  (+0.5 ± 2.5; the 8,500 newest EUW games showed -0.3 ± 2.5). No frontline -0.4 ± 0.8;
   weakest-frontline quarter -0.9 ± 0.8 and least-CC quarter -0.8 ± 0.8, just past zero
   but not once seven tests are allowed for; armour-heavy picks into magic damage not
   detected (-2.5 ± 2.6). Site: nothing yet; after a test look, a lopsided-damage warning
