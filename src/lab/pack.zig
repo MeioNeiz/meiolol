@@ -20,10 +20,13 @@ const dbs = [_][]const u8{ "meiolol.db", "raw.db", "timeline.db" };
 /// Any edit to these makes older packs stale. eval.split, timeline.decode and the like
 /// change often for other reasons and aren't hashed: bump `version` if they change rows
 const sources = [_][]const u8{
-    @embedFile("rows.zig"),      @embedFile("pack.zig"),
+    @embedFile("rowsql.zig"),    @embedFile("pack.zig"),
     @embedFile("protocol.zig"),  @embedFile("../stats.zig"),
     @embedFile("seatstats.zig"),
 };
+
+/// Tests only: stands in for an edit to `sources`
+pub var test_source_edit: []const u8 = "";
 
 pub const Written = struct { games: usize, rows: usize, bytes: u64 };
 
@@ -157,6 +160,7 @@ fn head(
     try w.print("meiolol-lab pack {d}\n", .{version});
     var code: std.hash.Wyhash = .init(0);
     for (sources) |s| code.update(s);
+    if (@import("builtin").is_test) code.update(test_source_edit);
     try w.print("code {x:0>16}\n", .{code.final()});
 
     const keys = try gpa.alloc(u64, legendaries.count());
@@ -471,4 +475,15 @@ fn same(comptime T: type, a: T, b: T) bool {
         .float => @as(Bits(T), @bitCast(a)) == @as(Bits(T), @bitCast(b)),
         else => a == b,
     };
+}
+
+test "row production is hashed, loading and hooks are not" {
+    const has = struct {
+        fn f(text: []const u8) bool {
+            for (sources) |s| if (std.mem.eql(u8, s, text)) return true;
+            return false;
+        }
+    }.f;
+    try std.testing.expect(has(@embedFile("rowsql.zig")));
+    try std.testing.expect(!has(@embedFile("rows.zig")));
 }

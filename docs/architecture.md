@@ -43,7 +43,8 @@ src/
                      me (own mastery and solo tier)
   app_main.zig       `meiolol-app`: suggest (offline), watch (live), session, get
   lab_main.zig       `meiolol-lab`: modelling experiments (docs/model.md, compute.md);
-                     lab/rows.zig model rows from a snapshot, lab/pack.zig packed rows,
+                     lab/rows.zig loads model rows (lab/rowsql.zig: layout, production
+                     from SQLite), lab/pack.zig packed rows,
                      lab/mastery_pre.zig pre-game mastery from the raw archive,
                      lab/seatstats.zig end-of-game seat stats (rows.Row.stats),
                      lab/nnexport.zig tensors for the draft nets (SNAP/nn/)
@@ -234,9 +235,11 @@ note; `rows`, `enemy`, `exp` and the rest all go through rows.load.
   rank ?u8 with 255 as null, teams 10 u32 (side major), y 6 f32 per row (Outcome order,
   NaN unknown), stats 17 f32 per row (SeatStat order, NaN unknown). Strings: games.match_id the bytes concatenated, games.match_id.end u64
   end offsets
-- manifest (text): `meiolol-lab pack VERSION`, `code` (hash of rows.zig, pack.zig,
-  protocol.zig, stats.zig, seatstats.zig), `legendaries` (count, hash), per db its size
-  and mtime (ns) and its WAL's, seat_stats.tsv's size and mtime (0 0 when absent), one `column NAME TYPE COUNT` line per file, then `games N`, `rows N`.
+- manifest (text): `meiolol-lab pack VERSION`, `code` (hash of rowsql.zig, pack.zig,
+  protocol.zig, stats.zig, seatstats.zig; not rows.zig, so loading paths and hooks there
+  leave packs valid), `legendaries` (count, hash), per db its size
+  and mtime (seconds: rsync drops ns) and its WAL's, seat_stats.tsv's size and mtime (0 0
+  when absent), one `column NAME TYPE COUNT` line per file, then `games N`, `rows N`.
   Everything above the counts must equal what the loading binary computes, else the
   pack is stale. Bump pack.version when rows change through code not hashed (eval.split,
   timeline.decode)

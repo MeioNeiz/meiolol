@@ -397,6 +397,13 @@ test "fixture games to lab rows, from SQLite and packed" {
     var copied = (try lab_pack.read(gpa, io, snap, &legendaries)).?;
     copied.deinit();
 
+    // An edit to row production (rowsql.zig) makes the pack stale
+    lab_pack.test_source_edit = "edit";
+    try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &legendaries));
+    lab_pack.test_source_edit = "";
+    var unedited = (try lab_pack.read(gpa, io, snap, &legendaries)).?;
+    unedited.deinit();
+
     // A pack from before a field was added (games.duration_s here) is stale
     {
         const manifest_path = try std.fs.path.join(arena, &.{ snap, "pack", "manifest" });
