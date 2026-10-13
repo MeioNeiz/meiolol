@@ -85,6 +85,70 @@ const Champions = struct {
     }
 };
 
+/// A champion-role's exported parameters: cand.Term, and p from a comp candidate
+const Term = struct {
+    champion: u32,
+    role: u8,
+    games: u32,
+    b: f32,
+    sd: f32,
+    u: []const f32 = &.{},
+    v: []const f32 = &.{},
+    s: []const f32 = &.{},
+    /// Profile, z-scored within the role; empty without comp terms
+    p: []const f32 = &.{},
+};
+
+const Stat = struct { name: []const u8, label: []const u8 };
+
+/// Nonlinear within-team term; no kind is defined yet, so any one stops the export
+const TeamTerm = struct { kind: []const u8, stat: u32, centre: f32 = 0, weight: f32 };
+
+/// Comp terms on team-summed profiles P: P_b'S P_b - P_r'S P_r + P_b'A P_r
+const Comp = struct {
+    stats: []const Stat,
+    /// k x k row-major: S symmetric (within team), A antisymmetric (blue x red)
+    S: []const f32,
+    A: []const f32,
+    /// Laplace sd of each entry, same layout
+    S_sd: []const f32,
+    A_sd: []const f32,
+    team: []const TeamTerm = &.{},
+    /// Profile prior per role (5 x k), already inside every b: shown, not scored
+    beta: []const f32 = &.{},
+};
+
+const max_k = 64;
+
+/// The candidate's exported model as the scorer reads it (cand.Export, and comp if any)
+const Params = struct {
+    kind: []const u8,
+    dim: u32,
+    /// Blue side's intercept by platform index
+    intercept: []const f32,
+    w: [25]f32,
+    z: [25]f32,
+    terms: []const Term,
+    comp: ?Comp = null,
+};
+
+fn paramsOf(arena: std.mem.Allocator, e: anytype) !Params {
+    const terms = try arena.alloc(Term, e.terms.len);
+    for (terms, e.terms) |*t, x| {
+        t.* = .{ .champion = x.champion, .role = x.role, .games = x.games, .b = x.b, .sd = x.sd, .u = x.u, .v = x.v, .s = x.s };
+        if (@hasField(@TypeOf(x), "p")) t.p = x.p;
+    }
+    var out: Params = .{ .kind = e.kind, .dim = e.dim, .intercept = e.intercept, .w = e.w, .z = e.z, .terms = terms };
+    if (@hasField(@TypeOf(e), "comp")) if (e.comp) |c| {
+        const stats = try arena.alloc(Stat, c.stats.len);
+        for (stats, c.stats) |*st, x| st.* = .{ .name = x.name, .label = x.label };
+        const team = try arena.alloc(TeamTerm, c.team.len);
+        for (team, c.team) |*tt, x| tt.* = .{ .kind = x.kind, .stat = x.stat, .centre = x.centre, .weight = x.weight };
+        out.comp = .{ .stats = stats, .S = c.S, .A = c.A, .S_sd = c.S_sd, .A_sd = c.A_sd, .team = team, .beta = c.beta };
+    };
+    return out;
+}
+
 /// One slot's parameters: a champion-role's term, or its role's average pick (sd 0)
 const Slot = struct {
     b: f64,
@@ -92,21 +156,30 @@ const Slot = struct {
     u: []const f32,
     v: []const f32,
     s: []const f32,
+    p: []const f32,
 };
 
 /// The reference scorer (docs/model.md "Draft model file"), from exported parameters only
 const Scorer = struct {
-    e: cand.Export,
+    e: Params,
     platform: u8,
     terms: std.AutoHashMapUnmanaged(u64, u32) = .empty,
     average: [n_role]Slot,
+    /// Profile length, 0 without comp terms
+    k: usize = 0,
 
-    fn init(arena: std.mem.Allocator, e: cand.Export, platform: u8, champs: *const Champions) !Scorer {
+    fn init(arena: std.mem.Allocator, e: Params, platform: u8, champs: *const Champions) !Scorer {
         var sc: Scorer = .{ .e = e, .platform = platform, .average = undefined };
+        if (e.comp) |c| {
+            sc.k = c.stats.len;
+            if (sc.k > max_k or c.S.len != sc.k * sc.k or c.A.len != sc.k * sc.k) return error.BadCompShape;
+            if (c.team.len > 0) return error.UnknownTeamTerm;
+            for (e.terms) |t| if (t.p.len != sc.k) return error.BadCompShape;
+        }
         for (e.terms, 0..) |t, i| try sc.terms.put(arena, Champions.key(t.champion, t.role), @intCast(i));
         // Role average: play-rate-weighted mean of b and the vectors on the newest patch
         for (&sc.average, 0..) |*avg, r| {
-            const vecs = try arena.alloc(f32, 3 * e.dim);
+            const vecs = try arena.alloc(f32, 3 * e.dim + sc.k);
             @memset(vecs, 0);
             var b: f64 = 0;
             var total: f64 = 0;
@@ -118,7 +191,8 @@ const Scorer = struct {
                 total += share;
                 for (vecs[0..e.dim], t.u) |*x, y| x.* += @floatCast(share * y);
                 for (vecs[e.dim .. 2 * e.dim], t.v) |*x, y| x.* += @floatCast(share * y);
-                for (vecs[2 * e.dim ..], t.s) |*x, y| x.* += @floatCast(share * y);
+                for (vecs[2 * e.dim .. 3 * e.dim], t.s) |*x, y| x.* += @floatCast(share * y);
+                for (vecs[3 * e.dim ..], t.p) |*x, y| x.* += @floatCast(share * y);
             }
             const inv = if (total > 0) 1 / total else 0;
             for (vecs) |*x| x.* = @floatCast(x.* * inv);
@@ -127,7 +201,8 @@ const Scorer = struct {
                 .sd = 0,
                 .u = vecs[0..e.dim],
                 .v = vecs[e.dim .. 2 * e.dim],
-                .s = if (std.mem.eql(u8, e.kind, "full")) vecs[2 * e.dim ..] else &.{},
+                .s = if (std.mem.eql(u8, e.kind, "full")) vecs[2 * e.dim .. 3 * e.dim] else &.{},
+                .p = vecs[3 * e.dim ..],
             };
         }
         return sc;
@@ -136,7 +211,7 @@ const Scorer = struct {
     fn slot(sc: *const Scorer, champion: u32, role: usize) Slot {
         const i = sc.terms.get(Champions.key(champion, role)) orelse return sc.average[role];
         const t = sc.e.terms[i];
-        return .{ .b = t.b, .sd = t.sd, .u = t.u, .v = t.v, .s = t.s };
+        return .{ .b = t.b, .sd = t.sd, .u = t.u, .v = t.v, .s = t.s, .p = t.p };
     }
 
     fn dot(a: []const f32, b: []const f32) f64 {
@@ -152,7 +227,7 @@ const Scorer = struct {
         for (0..2) |side| for (0..n_role) |r| {
             sl[side][r] = sc.slot(teams[side][r], r);
         };
-        var logit: f64 = sc.e.intercept[sc.platform];
+        var logit: f64 = sc.e.intercept[sc.platform] + sc.compLogit(&sl);
         var v: f64 = 0;
         for (0..n_role) |r| {
             logit += sl[0][r].b - sl[1][r].b;
@@ -166,6 +241,31 @@ const Scorer = struct {
         };
         const half = z95 * @sqrt(v);
         return .{ .p = sigmoid(logit), .lo = sigmoid(logit - half), .hi = sigmoid(logit + half) };
+    }
+
+    /// The comp terms' part of blue's logit, 0 without them
+    fn compLogit(sc: *const Scorer, sl: *const [2][n_role]Slot) f64 {
+        const c = sc.e.comp orelse return 0;
+        const k = sc.k;
+        var P: [2][max_k]f64 = @splat(@splat(0));
+        for (0..2) |side| for (sl[side]) |x| for (P[side][0..k], x.p) |*y, q| {
+            y.* += q;
+        };
+        var out: f64 = 0;
+        for (0..k) |i| for (0..k) |j| {
+            out += c.S[i * k + j] * (P[0][i] * P[0][j] - P[1][i] * P[1][j]);
+            out += c.A[i * k + j] * P[0][i] * P[1][j];
+        };
+        return out;
+    }
+
+    /// The comp part for whole teams, by side (0 blue) and role
+    fn compOf(sc: *const Scorer, teams: [2][n_role]u32) f64 {
+        var sl: [2][n_role]Slot = undefined;
+        for (0..2) |side| for (0..n_role) |r| {
+            sl[side][r] = sc.slot(teams[side][r], r);
+        };
+        return sc.compLogit(&sl);
     }
 };
 
@@ -274,7 +374,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var champs = try loadChampions(gpa, arena, snap, &data);
     var m = try fitAll(gpa, &data);
     defer cand.deinit(&m, gpa);
-    const sc = try Scorer.init(arena, try cand.exportModel(&m, arena), eu, &champs);
+    const sc = try Scorer.init(arena, try paramsOf(arena, try cand.exportModel(&m, arena)), eu, &champs);
     try w.print("win model fitted on {d} games; --min-games guards against thin samples\n", .{data.games.len});
 
     if (argv.len == 3 and std.mem.eql(u8, argv[1], "--export")) {
@@ -577,7 +677,7 @@ const CellOut = struct { champion: u32, role: u8, games: u32, patch_games: u32, 
 
 const ModelFile = struct {
     format: []const u8 = "meiolol-draft-model",
-    version: u32 = 1,
+    version: u32 = 2,
     meta: struct {
         name: []const u8,
         run: []const u8,
@@ -594,16 +694,18 @@ const ModelFile = struct {
     champions: []const ChampionOut,
     cells: []const CellOut,
     average: [n_role]AverageOut,
-    model: struct { kind: []const u8, dim: u32, intercept: f64, w: [25]f32, z: [25]f32, terms: []const cand.Term },
+    model: struct { kind: []const u8, dim: u32, intercept: f64, w: [25]f32, z: [25]f32, terms: []const Term, comp: ?Comp },
 };
 
-const AverageOut = struct { b: f64, u: []const f32, v: []const f32, s: []const f32 };
+const AverageOut = struct { b: f64, u: []const f32, v: []const f32, s: []const f32, p: []const f32 };
 
 const RefDraft = struct {
     label: []const u8,
     /// By side (0 blue) and role; 0 empty
     teams: [2][n_role]u32,
     blue: Chance,
+    /// The comp terms' part of blue's logit
+    comp: f64,
 };
 
 const RefSlot = struct {
@@ -679,7 +781,7 @@ fn exportFiles(
         try cells.append(arena, .{ .champion = ch.id, .role = @intCast(r), .games = games, .patch_games = patch_games, .patch_share = champs.patchShare(ch.id, r) });
     };
     var average: [n_role]AverageOut = undefined;
-    for (&average, sc.average) |*o, a| o.* = .{ .b = a.b, .u = a.u, .v = a.v, .s = a.s };
+    for (&average, sc.average) |*o, a| o.* = .{ .b = a.b, .u = a.u, .v = a.v, .s = a.s, .p = a.p };
     const e = sc.e;
     const model: ModelFile = .{
         .meta = .{
@@ -696,7 +798,7 @@ fn exportFiles(
         .champions = champions.items,
         .cells = cells.items,
         .average = average,
-        .model = .{ .kind = e.kind, .dim = e.dim, .intercept = e.intercept[sc.platform], .w = e.w, .z = e.z, .terms = e.terms },
+        .model = .{ .kind = e.kind, .dim = e.dim, .intercept = e.intercept[sc.platform], .w = e.w, .z = e.z, .terms = e.terms, .comp = e.comp },
     };
 
     // References: real test games whole and partly open, an empty board, two slot queries
@@ -706,12 +808,12 @@ fn exportFiles(
     for (d.games) |g| {
         if (!g.is_test or shown == 3) continue;
         shown += 1;
-        try drafts.append(arena, .{ .label = "full test game", .teams = g.teams, .blue = sc.blue(g.teams) });
+        try drafts.append(arena, refDraft("full test game", sc, g.teams));
         var part = g.teams;
         part[0][2] = 0;
         part[1][3] = 0;
         part[1][4] = 0;
-        try drafts.append(arena, .{ .label = "blue middle, red bottom and utility empty", .teams = part, .blue = sc.blue(part) });
+        try drafts.append(arena, refDraft("blue middle, red bottom and utility empty", sc, part));
         if (shown == 1) {
             const bans = [_]u32{ g.teams[1][3], firstOther(champs, &g.teams) };
             for ([_]u1{ 0, 1 }) |side| {
@@ -734,7 +836,8 @@ fn exportFiles(
             }
         }
     }
-    try drafts.append(arena, .{ .label = "empty board", .teams = @splat(@splat(0)), .blue = sc.blue(@splat(@splat(0))) });
+    try drafts.append(arena, refDraft("empty board", sc, @splat(@splat(0))));
+    try compRefs(arena, sc, champs, &drafts, &slots);
 
     try Io.Dir.cwd().createDirPath(io, dir);
     const model_json = try std.json.Stringify.valueAlloc(arena, model, .{});
@@ -742,6 +845,38 @@ fn exportFiles(
     const ref_json = try std.json.Stringify.valueAlloc(arena, RefFile{ .drafts = drafts.items, .slots = slots.items }, .{ .whitespace = .indent_1 });
     try Io.Dir.cwd().writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ dir, "draft-ref.json" }), .data = ref_json });
     try w.print("wrote {s}/draft-model.json ({d} KB) and draft-ref.json ({d} KB)\n", .{ dir, model_json.len / 1024, ref_json.len / 1024 });
+}
+
+fn refDraft(label: []const u8, sc: *const Scorer, teams: [2][n_role]u32) RefDraft {
+    return .{ .label = label, .teams = teams, .blue = sc.blue(teams), .comp = sc.compOf(teams) };
+}
+
+/// Rammus jungle into a full AP and a full AD red team, alone and as blue's jungle slot
+/// query: the comp terms' check (any model scores them)
+fn compRefs(arena: std.mem.Allocator, sc: *const Scorer, champs: *const Champions, drafts: *std.ArrayList(RefDraft), slots: *std.ArrayList(RefSlot)) !void {
+    const reds = [_]struct { label: []const u8, names: [n_role][]const u8 }{
+        .{ .label = "5 AP", .names = .{ "Kennen", "Elise", "Syndra", "Ziggs", "Lux" } },
+        .{ .label = "5 AD", .names = .{ "Darius", "Kha'Zix", "Zed", "Jinx", "Pyke" } },
+    };
+    const rammus = champs.find("Rammus") orelse return;
+    for (reds) |red| {
+        var d: Draft = .{ .role = 1 };
+        for (red.names, &d.teams[1]) |n, *c| c.* = champs.find(n) orelse return;
+        const r = try rank(arena, sc, champs, &d);
+        try slots.append(arena, .{
+            .label = try std.fmt.allocPrint(arena, "blue jungle to fill into {s}", .{red.label}),
+            .role = 1,
+            .side = 0,
+            .teams = d.bySide(),
+            .bans = &.{},
+            .min_games = d.min_games,
+            .empty = r.empty,
+            .average = r.average,
+            .options = r.options,
+        });
+        d.teams[0][1] = rammus;
+        try drafts.append(arena, refDraft(try std.fmt.allocPrint(arena, "Rammus jungle into {s}", .{red.label}), sc, d.bySide()));
+    }
 }
 
 /// Some champion not in the game, for a ban
@@ -762,11 +897,6 @@ fn dayOf(arena: std.mem.Allocator, ms: i64) ![]const u8 {
 }
 
 test "scorer: the documented formula on known parameters" {
-    // Built with a candidate that exports (win-ratings); CI's base candidate doesn't
-    if (@hasDecl(cand, "Term")) try scorerFormula() else return error.SkipZigTest;
-}
-
-fn scorerFormula() !void {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -774,9 +904,9 @@ fn scorerFormula() !void {
     // Role top: champion 1 (b 0.2) and 2 (b -0.1), each half the patch's top games
     try champs.patch_games.put(arena, Champions.key(1, 0), 2);
     try champs.patch_games.put(arena, Champions.key(2, 0), 2);
-    const terms = [_]cand.Term{
-        .{ .champion = 1, .role = 0, .games = 400, .b = 0.2, .sd = 0.1, .u = &.{}, .v = &.{}, .s = &.{} },
-        .{ .champion = 2, .role = 0, .games = 400, .b = -0.1, .sd = 0.1, .u = &.{}, .v = &.{}, .s = &.{} },
+    const terms = [_]Term{
+        .{ .champion = 1, .role = 0, .games = 400, .b = 0.2, .sd = 0.1 },
+        .{ .champion = 2, .role = 0, .games = 400, .b = -0.1, .sd = 0.1 },
     };
     var intercept: [256]f32 = @splat(0);
     intercept[6] = 0.04;
@@ -791,6 +921,53 @@ fn scorerFormula() !void {
     // An empty top slot is the role average, b 0.05, with no sd
     teams[1][0] = 0;
     try std.testing.expectApproxEqAbs(sigmoid(0.04 + 0.2 - 0.05), sc.blue(teams).p, 1e-6);
+}
+
+test "scorer: comp terms on team-summed profiles" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var champs: Champions = .{ .patch_total = 4 };
+    try champs.patch_games.put(arena, Champions.key(1, 0), 2);
+    try champs.patch_games.put(arena, Champions.key(2, 0), 2);
+    // As a comp candidate exports them: p on its terms, comp beside them
+    const CandTerm = struct { champion: u32, role: u8, games: u32, b: f32, sd: f32, u: []const f32 = &.{}, v: []const f32 = &.{}, s: []const f32 = &.{}, p: []const f32 };
+    const zero: [4]f32 = @splat(0);
+    var intercept: [256]f32 = @splat(0);
+    intercept[6] = 0.04;
+    const e = .{
+        .kind = "comp",
+        .dim = @as(u32, 0),
+        .intercept = @as([]const f32, &intercept),
+        .w = @as([25]f32, @splat(0)),
+        .z = @as([25]f32, @splat(0)),
+        .terms = &[_]CandTerm{
+            .{ .champion = 1, .role = 0, .games = 400, .b = 0.2, .sd = 0.1, .p = &.{ 1, 0 } },
+            .{ .champion = 2, .role = 0, .games = 400, .b = -0.1, .sd = 0.1, .p = &.{ 0, 1 } },
+        },
+        .comp = @as(?struct { stats: []const Stat, S: []const f32, A: []const f32, S_sd: []const f32, A_sd: []const f32, team: []const TeamTerm, beta: []const f32 }, .{
+            .stats = &.{ .{ .name = "magic", .label = "magic damage" }, .{ .name = "armour", .label = "armour lean" } },
+            .S = &.{ 0.5, 0.1, 0.1, -0.2 },
+            .A = &.{ 0, 0.3, -0.3, 0 },
+            .S_sd = &zero,
+            .A_sd = &zero,
+            .team = &.{},
+            .beta = &.{},
+        }),
+    };
+    const sc = try Scorer.init(arena, try paramsOf(arena, e), 6, &champs);
+    var teams: [2][n_role]u32 = @splat(@splat(0));
+    teams[0][0] = 1;
+    teams[1][0] = 2;
+    // P_b (1, 0), P_r (0, 1): S 0.5 - (-0.2), A 0.3; other roles have no terms, profile 0
+    try std.testing.expectApproxEqAbs(1.0, sc.compOf(teams), 1e-6);
+    try std.testing.expectApproxEqAbs(sigmoid(0.34 + 1.0), sc.blue(teams).p, 1e-6);
+    // Red top empty: the role average, P_r (0.5, 0.5): S 0.5 - 0.125, A 0.15
+    teams[1][0] = 0;
+    try std.testing.expectApproxEqAbs(0.525, sc.compOf(teams), 1e-6);
+    try std.testing.expectApproxEqAbs(sigmoid(0.04 + 0.2 - 0.05 + 0.525), sc.blue(teams).p, 1e-6);
+    // Sides swapped: A antisymmetric and S's sign flips, so the comp part flips
+    try std.testing.expectApproxEqAbs(-0.525, sc.compOf(.{ teams[1], teams[0] }), 1e-6);
 }
 
 test "flags split before --, values keep spaces" {

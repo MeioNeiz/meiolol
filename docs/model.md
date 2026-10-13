@@ -985,6 +985,18 @@ Reading:
 - Compute: Mac CPU throughout (the whole clustering run 30-40 s; the net 0.8-5.5 s an
   epoch at 0.6M rows): the GPU path is not worth new kernels at this size
 
+### Comp features from champion profiles, 2026-10-13 (meiolol-2c)
+
+Champion-role profiles (damage type mix, tankiness, armour vs MR, CC, utility, range,
+split push) averaged from api.Row.stats on training rows, feeding win-comp's profile
+prior, within-team and cross-team terms. Sessions: docs/model-agents.md.
+
+#### Data: seat_stats.tsv (meiolol-ea)
+
+#### Model: win-comp ablation (meiolol-0d)
+
+#### Model-free cross-check (meiolol-49)
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
@@ -993,7 +1005,7 @@ DIR/draft-model.json and DIR/draft-ref.json for the admin draft board (meiolol-3
 Admin only: the public site never shows "this draft wins X%" (docs/learned.md). Run it
 into a run dir on the Mac (~/ml/runs/<stamp>-draft-export); lab-push.sh sends the newest.
 
-draft-model.json:
+draft-model.json (format meiolol-draft-model, version 2; 1 had no p and no comp):
 - meta: name ("win-ratings (ratings)"), run, snapshot, newest_game, training_games
   (games that lasted 15:00, as the harness fits), patch (newest), platform (EUW1: the intercept used), dev {what, games, log_loss,
   baseline_log_loss, coin_log_loss, accuracy, auc}: a refit on dev's games, scored on
@@ -1006,10 +1018,17 @@ draft-model.json:
 - cells [{champion, role, games, patch_games, patch_share}]: training games in the role
   (every patch); games and share of the role's games on the newest patch (random games,
   picker order, role averages)
-- average[role] {b, u, v, s}: the empty-slot term, patch_share-weighted mean of the
+- average[role] {b, u, v, s, p}: the empty-slot term, patch_share-weighted mean of the
   role's terms on the newest patch
 - model {kind, dim, intercept, w[25], z[25], terms [{champion, role, games, b, sd, u, v,
-  s}]}: u, v, s are length dim (empty for rates and ratings); w and z row-major 5 x 5
+  s, p}], comp}: u, v, s are length dim (empty for rates and ratings); w and z row-major
+  5 x 5; p the champion-role's profile (k numbers, z-scored within the role; empty
+  without comp). b already holds any profile prior
+- comp (null without comp terms, win-comp): stats [{name, label}] (k; label plain English
+  for the tester's reasons), S and A (k x k row-major; S symmetric, an off-diagonal pair's
+  weight split half and half; A antisymmetric), S_sd and A_sd (Laplace sd per entry), team
+  (nonlinear within-team terms: none defined yet, and the scorer and page refuse any),
+  beta (5 x k profile prior per role, shown only)
 
 Scoring (Scorer in draft.zig, the reference). Each slot is a champion-role term; an
 empty slot, or a champion with no term in that role, is average[role] with sd 0. B_r and
@@ -1019,6 +1038,7 @@ R_r are blue's and red's slot in role r:
 logit = intercept + sum_r (B_r.b - R_r.b)
       + sum_{ri,rj} w[ri*5+rj] * (<B_ri.u, R_rj.v> - <R_ri.u, B_rj.v>)
       + sum_{a<b} z[a*5+b] * (<B_a.s, B_b.s> - <R_a.s, R_b.s>)
+      + P_b' S P_b - P_r' S P_r + P_b' A P_r     P_b = sum_r B_r.p, P_r = sum_r R_r.p
 blue = 1 / (1 + exp(-logit)); red = 1 - blue
 var = sum over the 10 slots of sd^2;  interval = sigmoid(logit -/+ 1.96 sqrt(var))
 ```
@@ -1029,11 +1049,17 @@ Slot query (the tester's list): candidates are champions with games >= min_games
 role, not picked by either team and not banned; win is the user's team's chance with it
 in the slot, change = win minus the chance with the slot empty, and "an average pick" is
 the mean of the candidates' win weighted by their games in the role.
+Comp reasons (the tester, with comp terms): each S and A entry's part of the picking side's
+logit change when the candidate fills the empty slot (A from that side: mine'A theirs),
+in pp through the sigmoid's secant over the whole change, +-1.96 sd of the entry; the two
+largest by size are shown. The win interval stays ratings-only.
 
 draft-ref.json: `tolerance` 1e-9; `drafts` [{label, teams[side][role] (0 empty), blue
-{p, lo, hi}}] (three EUW1 test games whole and with three slots empty, and the empty
-board); `slots` [{label, role, side, teams (by side), bans, min_games, empty, average,
-options [{champion, games, win, lo, hi, change}] sorted by win, then champion id}]. Export
+{p, lo, hi}, comp (the comp part of blue's logit)}] (three EUW1 test games whole and with
+three slots empty, the empty board, and Rammus jungle alone into a full AP and a full AD
+red team); `slots` [{label, role, side, teams (by side), bans, min_games, empty, average,
+options [{champion, games, win, lo, hi, change}] sorted by win, then champion id}] (blue
+middle to fill, red middle to fill, blue jungle to fill into 5 AP and into 5 AD). Export
 checks the scorer against the candidate's own predict on 500 test games and stops if
 they differ by more than 1e-4 (f32: ~5e-8 measured).
 

@@ -22,7 +22,7 @@ async function loadDraftModel() {
   try {
     DRAFT.model = await getJson("training/draft-model.json");
     DRAFT.m = draftModel(DRAFT.model);
-    if (!DRAFT.m) throw new Error(`draft-model.json is format "${DRAFT.model.format}" version ${DRAFT.model.version}; this page reads meiolol-draft-model version 1`);
+    if (!DRAFT.m) throw new Error(`draft-model.json is format "${DRAFT.model.format}" version ${DRAFT.model.version}; this page reads meiolol-draft-model versions 1 and 2`);
     DRAFT.ref = await getJson("training/draft-ref.json").catch(() => null);
     DRAFT.err = null;
     DRAFT.check = DRAFT.m && DRAFT.ref ? draftCheck(DRAFT.m, DRAFT.ref) : null;
@@ -43,19 +43,36 @@ async function loadDraftModel() {
 // reference): champions, play share per role on the newest patch, blue's win chance with a
 // 95% interval for a draft, and the candidates for a slot. A draft here is
 // {blue: {role: id}, red: {role: id}}; an empty slot, or a champion with no term in the
-// role, is average[role] with sd 0
+// role, is average[role] with sd 0. Version 2 adds comp terms (model.comp, null without):
+// each slot's profile p summed per team, P_b'S P_b - P_r'S P_r + P_b'A P_r
 function draftModel(M) {
-  if (!M || M.format !== "meiolol-draft-model" || M.version !== 1) return null;
+  if (!M || M.format !== "meiolol-draft-model" || (M.version !== 1 && M.version !== 2)) return null;
   const terms = new Map(M.model.terms.map(t => [t.champion + ":" + t.role, t]));
   const cells = new Map(M.cells.map(c => [c.champion + ":" + c.role, c]));
-  const avg = M.average.map(a => ({ ...a, sd: 0 }));
+  const avg = M.average.map(a => ({ p: [], ...a, sd: 0 }));
   const { intercept, w, z } = M.model;
+  const comp = M.model.comp || null;
+  if (comp && (comp.team || []).length) throw new Error(`draft-model.json has team terms (${comp.team.map(t => t.kind).join(", ")}) this page can't score yet`);
+  const k = comp ? comp.stats.length : 0;
   const dot = (a, b) => { let x = 0; for (let i = 0; i < a.length; i++) x += a[i] * b[i]; return x; };
   const sig = x => 1 / (1 + Math.exp(-x));
+  const slots = teams => teams.map(t => t.map((id, r) => (id && terms.get(id + ":" + r)) || avg[r]));
+  // A team's summed profile
+  const prof = T => { const P = new Array(k).fill(0); for (const x of T) for (let i = 0; i < k; i++) P[i] += x.p[i]; return P; };
+  const compPart = ([B, R]) => {
+    if (!comp) return 0;
+    const Pb = prof(B), Pr = prof(R);
+    let x = 0;
+    for (let i = 0; i < k; i++) for (let j = 0; j < k; j++) {
+      x += comp.S[i * k + j] * (Pb[i] * Pb[j] - Pr[i] * Pr[j]);
+      x += comp.A[i * k + j] * Pb[i] * Pr[j];
+    }
+    return x;
+  };
   // teams[side][role]: champion id, 0 empty
   const score = teams => {
-    const [B, R] = teams.map(t => t.map((id, r) => (id && terms.get(id + ":" + r)) || avg[r]));
-    let logit = intercept, v = 0;
+    const sl = slots(teams), [B, R] = sl;
+    let logit = intercept + compPart(sl), v = 0;
     for (let r = 0; r < 5; r++) {
       logit += B[r].b - R[r].b;
       v += B[r].sd ** 2 + R[r].sd ** 2;
@@ -69,8 +86,40 @@ function draftModel(M) {
   };
   const teamsOf = d => SIDES.map(([side]) => DRAFT_ROLES.map(([role]) => +d[side][role] || 0));
   const roleIdx = Object.fromEntries(DRAFT_ROLES.map(([r], i) => [r, i]));
+  // Why the comp terms move a pick: each S and A entry's part of the change in the picking
+  // side's logit when champion `id` fills its empty slot, in pp of that side's win (the
+  // sigmoid's secant over the whole change, so the parts and the ratings add up to the
+  // change), with a 95% half-width from the entry's sd; largest first
+  const compReasons = (teams, side, r, id) => {
+    if (!comp) return [];
+    const t = teams.map(x => x.slice());
+    const at = c => {
+      t[side][r] = c;
+      const sl = slots(t), p = score(t).p, q = side ? 1 - p : p;
+      return { M: prof(sl[side]), T: prof(sl[1 - side]), logit: Math.log(q / (1 - q)) };
+    };
+    const x0 = at(0), x1 = at(id), l0 = x0.logit, l1 = x1.logit;
+    const slope = Math.abs(l1 - l0) > 1e-9 ? (sig(l1) - sig(l0)) / (l1 - l0) : sig(l1) * (1 - sig(l1));
+    const out = [];
+    const add = (logit, sd, what) => out.push({ pp: 100 * slope * logit, half: 100 * slope * 1.96 * sd, what });
+    const st = comp.stats, lean = x => x >= 0 ? "high" : "low";
+    for (let i = 0; i < k; i++) for (let j = i; j < k; j++) {
+      // S symmetric: an off-diagonal pair counts both halves
+      const n = i === j ? 1 : 2, d = n * (x1.M[i] * x1.M[j] - x0.M[i] * x0.M[j]);
+      add(comp.S[i * k + j] * d, comp.S_sd[i * k + j] * Math.abs(d),
+        i === j ? `your ${st[i].label} ${lean(x1.M[i])}` : `your ${st[i].label} ${lean(x1.M[i])} with your ${st[j].label} ${lean(x1.M[j])}`);
+    }
+    // A from the picking side: mine'A theirs for blue, and for red too (A antisymmetric)
+    for (let i = 0; i < k; i++) for (let j = 0; j < k; j++) {
+      if (!comp.A[i * k + j]) continue;
+      const d = x1.M[i] * x1.T[j] - x0.M[i] * x0.T[j];
+      add(comp.A[i * k + j] * d, comp.A_sd[i * k + j] * Math.abs(d), `enemy ${st[j].label} ${lean(x1.T[j])} × your ${st[i].label} ${lean(x1.M[i])}`);
+    }
+    return out.sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp));
+  };
   const m = {
-    M, score, teamsOf,
+    M, score, teamsOf, comp, compReasons,
+    compPart: teams => compPart(slots(teams)),
     champs: M.champions.slice().sort((a, b) => a.name.localeCompare(b.name)),
     rate: (id, role) => (cells.get(id + ":" + roleIdx[role]) || {}).patch_share || 0,
     games: (id, role) => (cells.get(id + ":" + roleIdx[role]) || {}).games || 0,
@@ -83,9 +132,10 @@ function draftModel(M) {
         const x = term || avg[r];
         rows.push({ side, role: r, champion: id || 0, average: !term, b: x.b, sd: x.sd, part: side === 0 ? x.b : -x.b });
       }));
-      const lin = intercept + sumR(rows.map(x => x.part));
+      const c = compPart(slots(teams));
+      const lin = intercept + c + sumR(rows.map(x => x.part));
       const p = score(teams);
-      return { intercept, rows, pairs: Math.log(p.p / (1 - p.p)) - lin, logit: Math.log(p.p / (1 - p.p)), p };
+      return { intercept, rows, comp: c, pairs: Math.log(p.p / (1 - p.p)) - lin, logit: Math.log(p.p / (1 - p.p)), p };
     },
     // A slot's candidates: games in the role >= min_games, not picked, not banned; win and
     // change for the side filling it, sorted by win then champion id (as draft-ref.json)
@@ -119,6 +169,7 @@ function draftCheck(m, ref) {
   for (const x of ref.drafts || []) {
     const s = m.score(x.teams);
     for (const k of ["p", "lo", "hi"]) cmp(s[k], x.blue[k], `${x.label}: ${k}`);
+    if (x.comp != null) cmp(m.compPart(x.teams), x.comp, `${x.label}: comp part`);
   }
   for (const q of ref.slots || []) {
     const s = m.slot(q.teams, q.bans || [], q.side, q.role, q.min_games);
@@ -207,7 +258,9 @@ function draftView(body) {
     sec.append(el("p", { class: "sub" }, `Lane suggestions: early-game model ${lm.name !== "candidate" ? lm.name + " " : ""}on ${num(lm.training_games)} games to ${lm.newest_game}.` +
       (dev ? ` It predicts the gold lead at 14 ${dev.removed_pct.toFixed(0)}% better than champion averages alone, so matchups nudge the numbers rather than decide them.` : "")));
   }
-  if (!M.has_pairs) sec.append(el("div", { class: "health warn" }, el("b", {}, "Caveat: "), "the model has no counter or synergy terms yet. It ranks by champion strength in the role; other picks shift the numbers, not the order."));
+  if (m.comp) sec.append(el("p", { class: "sub" }, `Team comp terms: each champion in a role is described by ${m.comp.stats.length} numbers (${m.comp.stats.map(x => x.label).join(", ")}), summed per team, and the model weighs how they combine within a team and against the enemy. ` +
+    "The range on a win chance covers the champion ratings only; each comp reason shows its own ± range."));
+  else if (!M.has_pairs) sec.append(el("div", { class: "health warn" }, el("b", {}, "Caveat: "), "the model has no counter or synergy terms yet. It ranks by champion strength in the role; other picks shift the numbers, not the order."));
 
   const w = m.win(d);
   sec.append(el("div", { class: "winbar", role: "img", "aria-label": `Blue ${pct(w.p)}, range ${pct(w.lo)} to ${pct(w.hi)}` },
@@ -361,6 +414,7 @@ function draftDebug(m, d, name) {
   box.append(el("ul", { class: "readings" },
     el("li", {}, `Intercept (blue side, ${m.M.meta.platform || "EUW1"}): ${x.intercept >= 0 ? "+" : ""}${x.intercept.toFixed(4)}.`),
     el("li", {}, `Pair terms: ${m.M.has_pairs ? (x.pairs >= 0 ? "+" : "") + x.pairs.toFixed(4) : "none in this model"}.`),
+    el("li", {}, `Comp terms: ${m.comp ? (x.comp >= 0 ? "+" : "") + x.comp.toFixed(4) : "none in this model"}.`),
     el("li", {}, `Logit ${x.logit.toFixed(4)}, so blue ${pct(x.p.p)} (range ${pct(x.p.lo)} to ${pct(x.p.hi)}).`),
     el("li", {}, `Sides swapped: blue would have ${pct(swapped)}; the two add up to ${pct(x.p.p + swapped)} (exactly 100% only without a side term).`)));
   return box;
@@ -389,7 +443,7 @@ function slotPicker(m, d, side, role) {
       .sort(d.sort === "best" ? (a, b) => b.p - a.p : (a, b) => b.rate - a.rate);
     list.replaceChildren(...hits.slice(0, 40).map(x => {
       const delta = x.change - (now ?? 0);
-      return el("button", { type: "button", role: "option", class: String(x.c.id) === String(cur) ? "cur" : null, onclick: () => pick(x.c.id) },
+      return el("button", { type: "button", role: "option", class: String(x.c.id) === String(cur) ? "cur" : null, title: compWhy(m, d, si, ri, x.c.id), onclick: () => pick(x.c.id) },
         el("span", { class: "nm" }, x.c.name), el("span", { class: "rate" }, pct(x.rate)),
         el("b", { class: delta > 0.0005 ? "up" : delta < -0.0005 ? "down" : "" }, (Math.abs(delta) < 0.0005 ? "±" : delta > 0 ? "+" : "−") + Math.abs(delta * 100).toFixed(1) + "%"));
     }));
@@ -408,6 +462,15 @@ function slotPicker(m, d, side, role) {
 }
 
 const SUGGEST_MIN_SHARE = 0.01;
+
+// The two largest comp reasons for champion `id` in slot (si, ri), against an empty slot:
+// "enemy magic damage high × your armour lean low: −1.2 pp (±0.8)"; null without comp terms
+function compWhy(m, d, si, ri, id) {
+  if (!m.comp) return null;
+  const top = m.compReasons(m.teamsOf(d), si, ri, +id).slice(0, 2);
+  if (!top.length || Math.abs(top[0].pp) < 0.05) return "team comp changes little";
+  return top.map(x => `${x.what}: ${x.pp >= 0 ? "+" : "−"}${Math.abs(x.pp).toFixed(1)} pp (±${x.half.toFixed(1)})`).join("; ");
+}
 
 // Suggestions for the open slot, each with its reason as a plain sentence. Ranked by the
 // range's low end by default, so a champion on few games can't top a list (as the site's
@@ -439,7 +502,8 @@ function suggest(m, d, all, options, cur, now, side, role, pick) {
   const best = cands.slice().sort((a, b) => low ? byId.get(b.c.id).lo - byId.get(a.c.id).lo : b.p - a.p).slice(0, 5);
   list("Best for this draft", best.map(x => {
     const o = byId.get(x.c.id);
-    return [x.c.id, `${side} would win ${pct(x.p)} of games (likely ${pct(o.lo)} to ${pct(o.hi)}), ${pts(x.change - (now ?? 0))} against ${now != null ? "the current pick" : "an empty slot"}, from ${num(o.games)} games in the role.`];
+    const why = compWhy(m, d, side === "blue" ? 0 : 1, ri, x.c.id);
+    return [x.c.id, `${side} would win ${pct(x.p)} of games (likely ${pct(o.lo)} to ${pct(o.hi)}), ${pts(x.change - (now ?? 0))} against ${now != null ? "the current pick" : "an empty slot"}, from ${num(o.games)} games in the role.` + (why ? ` Comp, against an empty slot: ${why}.` : "")];
   }), "No candidates left for this slot.");
 
   const lm = DRAFT.lane;
