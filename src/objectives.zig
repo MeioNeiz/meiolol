@@ -11,7 +11,7 @@ const std = @import("std");
 const store = @import("store");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
-const eval = @import("eval.zig");
+const analysis = @import("analysis.zig");
 const logreg = @import("logreg.zig");
 const Date = @import("date.zig").Date;
 const Io = std.Io;
@@ -193,35 +193,20 @@ fn load(
     chosen: []const []const u8,
     platforms: []const []const u8,
 ) !Map {
-    const patch_json = try std.json.Stringify.valueAlloc(arena, chosen, .{});
-    const platform_json = try std.json.Stringify.valueAlloc(arena, platforms, .{});
-    var q = try db.prepare(
-        \\SELECT m.match_id, t.data
-        \\FROM matches m JOIN timeline.timelines t USING (match_id)
-        \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
-        \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
-    );
-    defer q.deinit();
-    try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
-
+    var games: analysis.TimelineGames = try .init(gpa, db, chosen, platforms);
+    defer games.deinit();
     var map: Map = .empty;
     errdefer map.deinit(gpa);
-    var scratch_state: std.heap.ArenaAllocator = .init(gpa);
-    defer scratch_state.deinit();
-    while (try q.step()) {
-        _ = scratch_state.reset(.retain_capacity);
-        const scratch = scratch_state.allocator();
-        const t = timeline.decode(scratch, store.raw.decompress(scratch, q.bytes(1)) catch continue) catch continue;
+    while (try games.next()) |game| {
         var g: Game = .{ .match_id = undefined, .states = undefined };
         var any = false;
         for (minutes, &g.states) |m, *s| {
-            s.* = stateAt(t, m);
+            s.* = stateAt(game.t, m);
             any = any or s.* != null;
         }
         if (!any) continue;
-        g.match_id = try arena.dupe(u8, q.bytes(0));
-        try map.put(gpa, stats.matchKey(q.bytes(0)), g);
+        g.match_id = try arena.dupe(u8, game.match_id);
+        try map.put(gpa, stats.matchKey(game.match_id), g);
     }
     return map;
 }
@@ -246,22 +231,6 @@ fn logLoss(p: f64, y: f64) f64 {
     return -(y * @log(q) + (1 - y) * @log(1 - q));
 }
 
-const Gain = struct { mean: f64, half_width: f64 };
-
-/// Mean of before - after per row (one row per game), ± 95%
-fn pairedGain(before: []const f64, after: []const f64) Gain {
-    var sum: f64 = 0;
-    var sum_sq: f64 = 0;
-    for (before, after) |b, a| {
-        sum += b - a;
-        sum_sq += (b - a) * (b - a);
-    }
-    const n: f64 = @floatFromInt(before.len);
-    const mean = sum / n;
-    const variance = @max(sum_sq / n - mean * mean, 0);
-    return .{ .mean = mean, .half_width = 1.96 * @sqrt(variance / n) };
-}
-
 const Fitted = struct { w: []f64, se: []f64 };
 
 pub fn run(
@@ -277,12 +246,8 @@ pub fn run(
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var list: GameList = .{ .gpa = gpa };
-    defer list.items.deinit(gpa);
-    _ = try stats.scan(gpa, db, patches, platforms, 0, &list);
-    var split = try eval.split(gpa, list.items.items, platforms, .{ .test_share = opts.test_share, .test_platform = opts.test_platform });
-    defer split.deinit(gpa);
-    const cutoff = split.tests[0].start;
+    var split = try analysis.heldOut(gpa, db, patches, platforms, opts.test_share, opts.test_platform);
+    defer split.deinit();
 
     var map = try load(gpa, arena, db, patches, platforms);
     defer map.deinit(gpa);
@@ -291,26 +256,15 @@ pub fn run(
         "{f} ({d}). Test: the newest {s} games from then. One row per game and minute, " ++
         "games still going after that minute. Log loss of blue's win in nats per game; gain " ++
         "= drop in log loss from the step before, ± 95% interval over test games.\n", .{
-        Date.fromMs(cutoff), cutoff, opts.test_platform,
+        Date.fromMs(split.cutoff), split.cutoff, opts.test_platform,
     });
 
-    var files: [models.len]?Io.File = @splat(null);
-    var bufs: [models.len][16 * 1024]u8 = undefined;
-    var writers: [models.len]Io.File.Writer = undefined;
-    defer for (files) |f| if (f) |x| x.close(io);
-    if (opts.preds_dir) |dir| {
-        const cwd = Io.Dir.cwd();
-        try cwd.createDirPath(io, dir);
-        for (models, 0..) |m, i| {
-            const path = try std.fmt.allocPrint(arena, "{s}/{s}.tsv", .{ dir, m.file });
-            files[i] = try cwd.createFile(io, path, .{});
-            writers[i] = files[i].?.writer(io, &bufs[i]);
-            try writers[i].interface.writeAll("match_id\tminute\ty\tpred\n");
-        }
-    }
+    var names: [models.len][]const u8 = undefined;
+    for (&names, models) |*n, m| n.* = m.file;
+    const preds: analysis.Preds = try .init(arena, io, opts.preds_dir, &names, "match_id\tminute\ty\tpred\n");
+    defer preds.close(io);
 
     var fitted: [minutes.len][models.len]Fitted = undefined;
-    var counts: [minutes.len][2]usize = undefined;
     var nonzero: [minutes.len][n_feat]f64 = undefined;
     try w.writeAll("\n| minute | train | test | win rate (blue) |");
     for (models) |m| try w.print(" {s} |", .{m.label});
@@ -324,7 +278,7 @@ pub fn run(
         var test_states: std.ArrayList(State) = .empty;
         var test_y: std.ArrayList(f64) = .empty;
         var test_ids: std.ArrayList([]const u8) = .empty;
-        for ([_][]const stats.Row{ split.train, split.tests }, [_]bool{ false, true }) |part, is_test| for (part) |g| {
+        for (split.parts(), [_]bool{ false, true }) |part, is_test| for (part) |g| {
             const game = map.get(g.id) orelse continue;
             const s = game.states[mi] orelse continue;
             const y: f64 = if (g.winner == 0) 1 else 0;
@@ -337,7 +291,6 @@ pub fn run(
                 try train_y.append(arena, y);
             }
         };
-        counts[mi] = .{ train_states.items.len, test_states.items.len };
         if (train_states.items.len < 100 or test_states.items.len < 20) return error.TooFewGames;
         nonzero[mi] = @splat(0);
         for (train_states.items) |s| for (s, &nonzero[mi]) |x, *n| {
@@ -368,9 +321,9 @@ pub fn run(
                 const r = row(m, s, y);
                 const p = logreg.sigmoid(r.dot(wt));
                 l.* = logLoss(p, y);
-                if (opts.preds_dir != null) try writers[k].interface.print("{s}\t{d}\t{d}\t{d:.4}\n", .{ id, minute, y, p });
+                if (preds.on()) try preds.at(k).print("{s}\t{d}\t{d}\t{d:.4}\n", .{ id, minute, y, p });
             }
-            const g = pairedGain(if (m.after) |a| loss[a] else loss_base, loss[k]);
+            const g = analysis.pairedGainGames(if (m.after) |a| loss[a] else loss_base, loss[k]);
             try w.print(" {d:.4} ± {d:.4} |", .{ g.mean, g.half_width });
         }
         try w.writeAll("\n");
@@ -380,20 +333,19 @@ pub fn run(
     try w.writeAll(" see the gains column's base). Models 2-4 are each a step from the one named " ++
         "in their label.\n");
 
-    try weights(w, &fitted, &counts, &nonzero, held_model, held, "Objectives held, beyond the gold " ++
+    try weights(w, &fitted, &nonzero, held_model, held, "Objectives held, beyond the gold " ++
         "and XP lead (+ objectives held): log-odds of a win per unit blue minus red, ± 95%, " ++
         "and [the gold lead worth the same at that minute]. A dragon: one more than the " ++
         "enemy; buffs and inhibitors: active now");
-    try weights(w, &fitted, &counts, &nonzero, elements_model, held_elements, "Dragons by element (dragons by " ++
+    try weights(w, &fitted, &nonzero, elements_model, held_elements, "Dragons by element (dragons by " ++
         "element model; other rows as above for that model)");
     try interactions(w, &fitted, &nonzero);
-    for (files, &writers) |f, *x| if (f != null) try x.interface.flush();
+    try preds.flush();
 }
 
 fn weights(
     w: *Io.Writer,
     fitted: *const [minutes.len][models.len]Fitted,
-    counts: *const [minutes.len][2]usize,
     nonzero: *const [minutes.len][n_feat]f64,
     k: usize,
     comptime shown: []const Feat,
@@ -409,7 +361,7 @@ fn weights(
     for (lead[0..1] ++ lead[2..] ++ shown) |f| {
         const i = 1 + (std.mem.indexOfScalar(Feat, m.feats, f) orelse continue);
         try w.print("| {t} |", .{f});
-        for (fitted, counts, nonzero) |fm, c, nz| {
+        for (fitted, nonzero) |fm, nz| {
             // Too few games with the feature set to say anything
             if (nz[@backingInt(f)] < 30) {
                 try w.writeAll(" - |");
@@ -420,7 +372,6 @@ fn weights(
             try w.print(" {d:.3} ± {d:.3}", .{ b, 1.96 * se });
             if (f != .gold) try w.print(" [{d:.0}]", .{1000 * b / fm[k].w[gold_i]});
             try w.writeAll(" |");
-            _ = c;
         }
         try w.writeAll("\n");
     }
@@ -458,15 +409,6 @@ fn interactions(
         try w.writeAll("\n");
     }
 }
-
-const GameList = struct {
-    gpa: std.mem.Allocator,
-    items: std.ArrayList(stats.Row) = .empty,
-
-    pub fn add(l: *GameList, g: stats.Row) !void {
-        try l.items.append(l.gpa, g);
-    }
-};
 
 const testing = std.testing;
 

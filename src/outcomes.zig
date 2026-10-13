@@ -16,7 +16,7 @@ const core = @import("core");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
 const ddragon = @import("ddragon.zig");
-const eval = @import("eval.zig");
+const analysis = @import("analysis.zig");
 const Date = @import("date.zig").Date;
 const Role = core.Role;
 const Io = std.Io;
@@ -91,8 +91,6 @@ const Group = enum {
     /// game patch: drift over time the platform mix misses
     patch,
 };
-const n_group = @typeInfo(Group).@"enum".field_names.len;
-const max_terms = @max(Role.count - 1, n_class);
 
 /// How another role relates to ours, for the team groups
 const Relation = enum { duo, jungle, rest };
@@ -134,7 +132,7 @@ const team2_groups: []const Group = &.{
 /// The fullest additive model, the baseline interaction models must beat
 const team_model = 4;
 
-const Term = struct { cell: u32, x: f32 };
+const Term = analysis.Term;
 
 /// Cell layouts, role first so a cell's role is cell / perRole
 const Space = struct {
@@ -145,7 +143,9 @@ const Space = struct {
     /// [role][class]: mean count on the enemy team, train
     class_mean: [Role.count][n_class]f32 = @splat(@splat(0)),
 
-    fn perRole(s: Space, g: Group) u32 {
+    pub const max_terms = @max(Role.count - 1, n_class);
+
+    pub fn perRole(s: Space, g: Group) u32 {
         const c = s.champs;
         return switch (g) {
             .platform => s.platforms,
@@ -160,7 +160,12 @@ const Space = struct {
         };
     }
 
-    fn terms(s: Space, g: Group, r: Row, out: *[max_terms]Term) usize {
+    /// Few cells, many games each: left unshrunk
+    pub fn shrunk(_: Space, g: Group) bool {
+        return g != .platform and g != .patch;
+    }
+
+    pub fn terms(s: Space, g: Group, r: Row, out: *[max_terms]Term) usize {
         const c = s.champs;
         const role: u32 = r.role;
         const own = role * c + r.champ;
@@ -216,112 +221,7 @@ const Space = struct {
     }
 };
 
-/// Cells with fewer (x-weighted) games are left out of the spread estimates
-const eb_min_games = 10;
-/// Fewer cells in a role and the group is off for it (effects 0)
-const eb_min_cells = 20;
-
-/// Shrunk effects of some groups for one outcome
-const Fit = struct {
-    effects: [n_group]?[]f32 = @splat(null),
-    /// [group][role]: prior strength in games (inf: off) and spread of true effects
-    /// (standard deviations of the outcome)
-    k: [n_group][Role.count]f64 = @splat(@splat(0)),
-    tau: [n_group][Role.count]f64 = @splat(@splat(0)),
-
-    fn deinit(f: *Fit, gpa: std.mem.Allocator) void {
-        for (f.effects) |e| if (e) |x| gpa.free(x);
-    }
-
-    fn predict(f: *const Fit, s: Space, r: Row) f32 {
-        var sum: f32 = 0;
-        var buf: [max_terms]Term = undefined;
-        for (f.effects, 0..) |e, gi| if (e) |b| {
-            const n = s.terms(@fromBackingInt(@intCast(gi)), r, &buf);
-            for (buf[0..n]) |t| sum += t.x * b[t.cell];
-        };
-        return sum;
-    }
-};
-
-fn fit(
-    gpa: std.mem.Allocator,
-    s: Space,
-    rows: []const Row,
-    z: []const f32,
-    groups: []const Group,
-    passes: u32,
-) !Fit {
-    var f: Fit = .{};
-    errdefer f.deinit(gpa);
-    const res = try gpa.alloc(f32, rows.len);
-    defer gpa.free(res);
-    @memcpy(res, z);
-    for (groups) |g| {
-        const b = try gpa.alloc(f32, Role.count * s.perRole(g));
-        @memset(b, 0);
-        f.effects[@backingInt(g)] = b;
-    }
-    var sxr: std.ArrayList(f64) = .empty;
-    defer sxr.deinit(gpa);
-    var sxx: std.ArrayList(f64) = .empty;
-    defer sxx.deinit(gpa);
-    var old: std.ArrayList(f32) = .empty;
-    defer old.deinit(gpa);
-    var buf: [max_terms]Term = undefined;
-
-    for (0..passes) |_| for (groups) |g| {
-        const gi = @backingInt(g);
-        const b = f.effects[gi].?;
-        const per_role = s.perRole(g);
-        try sxr.resize(gpa, b.len);
-        try sxx.resize(gpa, b.len);
-        @memset(sxr.items, 0);
-        @memset(sxx.items, 0);
-        var sum_sq: f64 = 0;
-        var n_rows: f64 = 0;
-        for (rows, res) |r, e| {
-            if (std.math.isNan(e)) continue;
-            sum_sq += e * e;
-            n_rows += 1;
-            const n = s.terms(g, r, &buf);
-            for (buf[0..n]) |t| {
-                sxr.items[t.cell] += t.x * (e + t.x * b[t.cell]);
-                sxx.items[t.cell] += t.x * t.x;
-            }
-        }
-        const sigma2 = sum_sq / @max(n_rows, 1);
-        try old.resize(gpa, b.len);
-        @memcpy(old.items, b);
-        for (0..Role.count) |ri| {
-            const lo = ri * per_role;
-            // Few cells, many games each: left unshrunk
-            const k: f64 = if (g == .platform or g == .patch) 1 else blk: {
-                var cells: f64 = 0;
-                var excess: f64 = 0;
-                for (sxr.items[lo..][0..per_role], sxx.items[lo..][0..per_role]) |xr, xx| {
-                    if (xx < eb_min_games) continue;
-                    const est = xr / xx;
-                    cells += 1;
-                    excess += est * est - sigma2 / xx;
-                }
-                if (cells < eb_min_cells or excess <= 0) break :blk std.math.inf(f64);
-                break :blk sigma2 / (excess / cells);
-            };
-            f.k[gi][ri] = k;
-            f.tau[gi][ri] = if (std.math.isInf(k)) 0 else @sqrt(sigma2 / k);
-            for (b[lo..][0..per_role], sxr.items[lo..][0..per_role], sxx.items[lo..][0..per_role]) |*x, xr, xx| {
-                x.* = if (std.math.isInf(k) or xx == 0) 0 else @floatCast(xr / (xx + k));
-            }
-        }
-        for (rows, res) |r, *e| {
-            if (std.math.isNan(e.*)) continue;
-            const n = s.terms(g, r, &buf);
-            for (buf[0..n]) |t| e.* -= t.x * (b[t.cell] - old.items[t.cell]);
-        }
-    };
-    return f;
-}
+const Fit = analysis.Fit(Group);
 
 pub fn run(
     gpa: std.mem.Allocator,
@@ -337,30 +237,21 @@ pub fn run(
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var list: GameList = .{ .gpa = gpa };
-    defer list.items.deinit(gpa);
-    _ = try stats.scan(gpa, db, patches, platforms, 0, &list);
-    const games = list.items.items;
-    var split = try eval.split(gpa, games, platforms, .{ .test_share = opts.test_share, .test_platform = opts.test_platform });
-    defer split.deinit(gpa);
-    const cutoff = split.tests[0].start;
+    var split = try analysis.heldOut(gpa, db, patches, platforms, opts.test_share, opts.test_platform);
+    defer split.deinit();
+    const games = split.list.items.items;
 
     var map = try load(gpa, arena, db, patches, platforms, legendaries);
     defer map.deinit(gpa);
 
     // Dense champion index over the games
-    var index: std.AutoHashMapUnmanaged(u32, u16) = .empty;
+    var index: analysis.DenseIndex = .{};
     defer index.deinit(gpa);
-    var ids: std.ArrayList(u32) = .empty;
-    defer ids.deinit(gpa);
     for (games) |g| for (g.teams) |team| for (team) |id| {
-        const e = try index.getOrPut(gpa, id);
-        if (!e.found_existing) {
-            e.value_ptr.* = @intCast(ids.items.len);
-            try ids.append(gpa, id);
-        }
+        _ = try index.get(gpa, id);
     };
-    const class_of = try championClasses(arena, db, ids.items);
+    const ids = index.ids.items;
+    const class_of = try championClasses(arena, db, ids);
     var patch_index: std.AutoArrayHashMapUnmanaged(u32, void) = .empty;
     defer patch_index.deinit(gpa);
     for (games) |g| try patch_index.put(gpa, g.patch, {});
@@ -372,13 +263,13 @@ pub fn run(
     var test_ids: std.ArrayList([]const u8) = .empty;
     defer test_ids.deinit(gpa);
     var train_games: usize = 0;
-    for ([_][]const stats.Row{ split.train, split.tests }, [_]bool{ false, true }) |part, is_test| for (part) |g| {
+    for (split.parts(), [_]bool{ false, true }) |part, is_test| for (part) |g| {
         const o = map.get(g.id) orelse continue;
         const out = if (is_test) &tests else &train;
         if (is_test) try test_ids.append(gpa, o.match_id) else train_games += 1;
         var team: [2][Role.count]u16 = undefined;
         for (0..2) |side| for (0..Role.count) |ri| {
-            team[side][ri] = index.get(g.teams[side][ri]).?;
+            team[side][ri] = index.map.get(g.teams[side][ri]).?;
         };
         for (0..2) |side| for (0..Role.count) |ri| try out.append(gpa, .{
             .game = @intCast(if (is_test) test_ids.items.len - 1 else train_games - 1),
@@ -395,7 +286,7 @@ pub fn run(
     if (train.items.len == 0 or tests.items.len == 0) return error.TooFewGames;
 
     var space: Space = .{
-        .champs = @intCast(ids.items.len),
+        .champs = index.count(),
         .platforms = @intCast(platforms.len),
         .patches = @intCast(patch_index.count()),
         .class_of = class_of,
@@ -416,25 +307,15 @@ pub fn run(
     try w.print("# meiolol outcomes\n\nTrain: {d} games with a timeline to minute 15, every " ++
         "scanned platform, started before {f} ({d}). Test: {d} {s} games from then. " ++
         "Champions: {d}.\n", .{
-        train_games,        Date.fromMs(cutoff), cutoff, test_ids.items.len,
-        opts.test_platform, ids.items.len,
+        train_games,        Date.fromMs(split.cutoff), split.cutoff, test_ids.items.len,
+        opts.test_platform, ids.len,
     });
 
-    var files: [models.len + 1]?Io.File = @splat(null);
-    var bufs: [models.len + 1][16 * 1024]u8 = undefined;
-    var writers: [models.len + 1]Io.File.Writer = undefined;
-    defer for (files) |f| if (f) |x| x.close(io);
-    if (opts.preds_dir) |dir| {
-        const cwd = Io.Dir.cwd();
-        try cwd.createDirPath(io, dir);
-        for (0..models.len + 1) |i| {
-            const name = if (i == 0) "base-champrole" else models[i - 1].file;
-            const path = try std.fmt.allocPrint(arena, "{s}/{s}.tsv", .{ dir, name });
-            files[i] = try cwd.createFile(io, path, .{});
-            writers[i] = files[i].?.writer(io, &bufs[i]);
-            try writers[i].interface.writeAll("match_id\tslot\toutcome\ty\tpred\n");
-        }
-    }
+    var names: [models.len + 1][]const u8 = undefined;
+    names[0] = "base-champrole";
+    for (names[1..], models) |*n, m| n.* = m.file;
+    const preds: analysis.Preds = try .init(arena, io, opts.preds_dir, &names, "match_id\tslot\toutcome\ty\tpred\n");
+    defer preds.close(io);
 
     const z = try gpa.alloc(f32, train.items.len);
     defer gpa.free(z);
@@ -520,17 +401,17 @@ pub fn run(
             const d = zt - base.get(r);
             e.* = d * d;
         }
-        const base_mse = nanMean(err_base);
+        const base_mse = analysis.nanMean(err_base);
         try w.print("| champion-role mean | {d:.4} | - | - |\n", .{base_mse});
-        if (opts.preds_dir != null) {
-            for (tests.items) |r| try predLine(&writers[0].interface, test_ids.items[r.game], r, outcome, mean, sd, base.get(r));
+        if (preds.on()) {
+            for (tests.items) |r| try predLine(preds.at(0), test_ids.items[r.game], r, outcome, mean, sd, base.get(r));
         }
 
         var fits: [models.len]Fit = undefined;
         var n_fits: usize = 0;
         defer for (fits[0..n_fits]) |*f| f.deinit(gpa);
         for (models, 0..) |m, mi| {
-            fits[mi] = try fit(gpa, space, train.items, z, m.groups, opts.passes);
+            fits[mi] = try analysis.backfit(Group, gpa, space, train.items, z, m.groups, opts.passes);
             n_fits += 1;
             const err_model = err_models[mi];
             for (tests.items, err_model) |r, *e| {
@@ -542,16 +423,17 @@ pub fn run(
                 const d = zt - fits[mi].predict(space, r);
                 e.* = d * d;
             }
-            const gain = pairedGain(tests.items, err_base, err_model, base_mse);
+            const gain = analysis.pairedGain(tests.items, err_base, err_model);
             const before = if (m.after) |a| err_models[a] else err_base;
-            const step = pairedGain(tests.items, before, err_model, base_mse);
+            const step = analysis.pairedGain(tests.items, before, err_model);
+            // As shares of the baseline's MSE
             try w.print("| {s} | {d:.4} | {d:.2}% ± {d:.2} | {d:.2}% ± {d:.2} |\n", .{
-                m.label,         nanMean(err_model),    100 * gain.mean, 100 * gain.half_width,
-                100 * step.mean, 100 * step.half_width,
+                m.label,                      analysis.nanMean(err_model),
+                100 * (gain.mean / base_mse), 100 * (gain.half_width / base_mse),
+                100 * (step.mean / base_mse), 100 * (step.half_width / base_mse),
             });
-            if (opts.preds_dir != null) {
-                const pw = &writers[mi + 1].interface;
-                for (tests.items) |r| try predLine(pw, test_ids.items[r.game], r, outcome, mean, sd, fits[mi].predict(space, r));
+            if (preds.on()) {
+                for (tests.items) |r| try predLine(preds.at(mi + 1), test_ids.items[r.game], r, outcome, mean, sd, fits[mi].predict(space, r));
             }
         }
 
@@ -597,7 +479,7 @@ pub fn run(
             try w.writeAll("\n");
         }
     }
-    for (files, &writers) |f, *x| if (f != null) try x.interface.flush();
+    try preds.flush();
 }
 
 fn predLine(
@@ -616,44 +498,6 @@ fn predLine(
     });
 }
 
-fn nanMean(xs: []const f64) f64 {
-    var sum: f64 = 0;
-    var n: f64 = 0;
-    for (xs) |x| if (!std.math.isNan(x)) {
-        sum += x;
-        n += 1;
-    };
-    return sum / @max(n, 1);
-}
-
-const Gain = struct { mean: f64, half_width: f64 };
-
-/// (base - model) squared error over every row, as a share of the baseline's MSE; the
-/// interval treats games as independent (rows within a game are not)
-fn pairedGain(rows: []const Row, base: []const f64, model: []const f64, base_mse: f64) Gain {
-    var n_rows: f64 = 0;
-    var total: f64 = 0;
-    var sum_sq: f64 = 0;
-    var n_games: f64 = 0;
-    var i: usize = 0;
-    while (i < rows.len) {
-        var d: f64 = 0;
-        const g = rows[i].game;
-        while (i < rows.len and rows[i].game == g) : (i += 1) {
-            if (std.math.isNan(base[i])) continue;
-            d += base[i] - model[i];
-            n_rows += 1;
-        }
-        total += d;
-        sum_sq += d * d;
-        n_games += 1;
-    }
-    const mean_d = total / n_games;
-    const var_d = sum_sq / n_games - mean_d * mean_d;
-    const se = @sqrt(n_games * var_d) / n_rows;
-    return .{ .mean = total / n_rows / base_mse, .half_width = 1.96 * se / base_mse };
-}
-
 /// Outcomes of every game on `chosen` patches and `platforms` whose timeline reaches
 /// minute 15, keyed by stats.matchKey
 fn load(
@@ -664,45 +508,15 @@ fn load(
     platforms: []const []const u8,
     legendaries: *const Legendaries,
 ) !Map {
-    const patch_json = try std.json.Stringify.valueAlloc(arena, chosen, .{});
-    const platform_json = try std.json.Stringify.valueAlloc(arena, platforms, .{});
-    var q = try db.prepare(
-        \\SELECT m.match_id, t.data, m.patch
-        \\FROM matches m JOIN timeline.timelines t USING (match_id)
-        \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
-        \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
-    );
-    defer q.deinit();
-    try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
-    var players = try db.prepare("SELECT slot, team_id, position FROM participants WHERE match_id = ?");
-    defer players.deinit();
-
+    var games: analysis.TimelineGames = try .init(gpa, db, chosen, platforms);
+    defer games.deinit();
     var map: Map = .empty;
     errdefer map.deinit(gpa);
-    var scratch_state: std.heap.ArenaAllocator = .init(gpa);
-    defer scratch_state.deinit();
-    while (try q.step()) {
-        _ = scratch_state.reset(.retain_capacity);
-        const scratch = scratch_state.allocator();
-        const t = timeline.decode(scratch, store.raw.decompress(scratch, q.bytes(1)) catch continue) catch continue;
+    while (try games.next()) |g| {
+        const t = g.t;
         if (t.frames.len < 16 or t.frames[15].t_ms < 15 * minute_ms) continue;
-        const finished = legendaries.get(stats.patchKey(q.bytes(2))) orelse &.{};
-
-        try players.bind(.{q.bytes(0)});
-        var pid: [2][Role.count]u8 = @splat(@splat(0));
-        while (try players.step()) {
-            const side: usize = switch (players.int(1)) {
-                100 => 0,
-                200 => 1,
-                else => continue,
-            };
-            const r = Role.fromLcu(if (players.isNull(2)) "" else players.bytes(2)) orelse continue;
-            const slot = players.int(0);
-            if (slot < 0 or slot >= t.participants) continue;
-            pid[side][@backingInt(r)] = @intCast(slot + 1);
-        }
-        if (std.mem.indexOfScalar(u8, std.mem.asBytes(&pid), 0) != null) continue;
+        const finished = legendaries.get(stats.patchKey(g.patch)) orelse &.{};
+        const pid = try games.pids(g, false) orelse continue;
 
         const n = timeline.max_participants;
         var deaths: [n]u8 = @splat(0);
@@ -734,7 +548,7 @@ fn load(
             else => {},
         };
 
-        var o: GameOutcomes = .{ .match_id = try arena.dupe(u8, q.bytes(0)), .slot = undefined, .y = undefined };
+        var o: GameOutcomes = .{ .match_id = try arena.dupe(u8, g.match_id), .slot = undefined, .y = undefined };
         const f10 = t.frames[10];
         const f14 = t.frames[14];
         for (0..2) |side| for (0..Role.count) |ri| {
@@ -750,7 +564,7 @@ fn load(
                 if (first_ms[p - 1] < 0) std.math.nan(f32) else @floatCast(@as(f64, @floatFromInt(first_ms[p - 1])) / minute_ms),
             };
         };
-        try map.put(gpa, stats.matchKey(q.bytes(0)), o);
+        try map.put(gpa, stats.matchKey(g.match_id), o);
     }
     return map;
 }
@@ -776,15 +590,6 @@ fn championClasses(arena: std.mem.Allocator, db: store.Db, ids: []const u32) ![]
     }
     return out;
 }
-
-const GameList = struct {
-    gpa: std.mem.Allocator,
-    items: std.ArrayList(stats.Row) = .empty,
-
-    pub fn add(l: *GameList, g: stats.Row) !void {
-        try l.items.append(l.gpa, g);
-    }
-};
 
 /// Finished items per patch from `path` (lines "16.20<TAB>3078"), fetching patches the
 /// file lacks from Data Dragon and appending them, so later runs need no network

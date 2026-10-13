@@ -13,7 +13,7 @@ const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
-const eval = @import("eval.zig");
+const analysis = @import("analysis.zig");
 const logreg = @import("logreg.zig");
 const outcomes = @import("outcomes.zig");
 const Date = @import("date.zig").Date;
@@ -70,6 +70,7 @@ const Group = enum {
     champ_item,
 };
 const n_group = @typeInfo(Group).@"enum".field_names.len;
+const Fit = analysis.Fit(Group);
 
 const Model = struct { label: []const u8, file: []const u8, groups: []const Group };
 
@@ -83,7 +84,9 @@ const Space = struct {
     champs: u32,
     items: u32,
 
-    fn perRole(s: Space, g: Group) u32 {
+    pub const max_terms = 1;
+
+    pub fn perRole(s: Space, g: Group) u32 {
         return switch (g) {
             .champ => s.champs,
             .item => slots * s.items,
@@ -99,97 +102,16 @@ const Space = struct {
             .champ_item => (role * s.champs + r.champ) * s.items + r.item,
         };
     }
-};
 
-/// Cells with fewer rows are left out of the spread estimates
-const eb_min_rows = 10;
-/// Fewer cells in a role and the group is off for it
-const eb_min_cells = 20;
-
-const Fit = struct {
-    effects: [n_group]?[]f32 = @splat(null),
-    /// [group][role]: prior strength in rows (inf: off), spread of true effects
-    k: [n_group][Role.count]f64 = @splat(@splat(0)),
-    tau: [n_group][Role.count]f64 = @splat(@splat(0)),
-    /// [group]: rows behind each cell, for reading effects
-    n: [n_group]?[]f32 = @splat(null),
-
-    fn deinit(f: *Fit, gpa: std.mem.Allocator) void {
-        for (f.effects) |e| if (e) |x| gpa.free(x);
-        for (f.n) |e| if (e) |x| gpa.free(x);
+    pub fn terms(s: Space, g: Group, r: Row, out: *[max_terms]analysis.Term) usize {
+        out[0] = .{ .cell = s.cell(g, r), .x = 1 };
+        return 1;
     }
 
-    fn predict(f: *const Fit, s: Space, r: Row) f32 {
-        var sum: f32 = 0;
-        for (f.effects, 0..) |e, gi| if (e) |b| {
-            sum += b[s.cell(@fromBackingInt(@intCast(gi)), r)];
-        };
-        return sum;
+    pub fn shrunk(_: Space, _: Group) bool {
+        return true;
     }
 };
-
-/// Backfitting with shrinkage on residuals `z` (outcomes.zig's fit, one term per row)
-fn fit(gpa: std.mem.Allocator, s: Space, rows: []const Row, z: []const f32, groups: []const Group, passes: u32) !Fit {
-    var f: Fit = .{};
-    errdefer f.deinit(gpa);
-    const res = try gpa.alloc(f32, rows.len);
-    defer gpa.free(res);
-    @memcpy(res, z);
-    for (groups) |g| {
-        const len = Role.count * s.perRole(g);
-        const b = try gpa.alloc(f32, len);
-        @memset(b, 0);
-        f.effects[@backingInt(g)] = b;
-        const n = try gpa.alloc(f32, len);
-        @memset(n, 0);
-        for (rows) |r| n[s.cell(g, r)] += 1;
-        f.n[@backingInt(g)] = n;
-    }
-    var sum_r: std.ArrayList(f64) = .empty;
-    defer sum_r.deinit(gpa);
-    var old: std.ArrayList(f32) = .empty;
-    defer old.deinit(gpa);
-
-    for (0..passes) |_| for (groups) |g| {
-        const gi = @backingInt(g);
-        const b = f.effects[gi].?;
-        const n = f.n[gi].?;
-        const per_role = s.perRole(g);
-        try sum_r.resize(gpa, b.len);
-        @memset(sum_r.items, 0);
-        var sum_sq: f64 = 0;
-        for (rows, res) |r, e| {
-            const c = s.cell(g, r);
-            sum_r.items[c] += e + b[c];
-            sum_sq += e * e;
-        }
-        const sigma2 = sum_sq / @as(f64, @floatFromInt(rows.len));
-        try old.resize(gpa, b.len);
-        @memcpy(old.items, b);
-        for (0..Role.count) |ri| {
-            const lo = ri * per_role;
-            var cells: f64 = 0;
-            var excess: f64 = 0;
-            for (sum_r.items[lo..][0..per_role], n[lo..][0..per_role]) |xr, xn| {
-                if (xn < eb_min_rows) continue;
-                const est = xr / xn;
-                cells += 1;
-                excess += est * est - sigma2 / xn;
-            }
-            const k = if (cells < eb_min_cells or excess <= 0) std.math.inf(f64) else sigma2 / (excess / cells);
-            f.k[gi][ri] = k;
-            f.tau[gi][ri] = if (std.math.isInf(k)) 0 else @sqrt(sigma2 / k);
-            for (b[lo..][0..per_role], sum_r.items[lo..][0..per_role], n[lo..][0..per_role]) |*x, xr, xn| {
-                x.* = if (std.math.isInf(k) or xn == 0) 0 else @floatCast(xr / (xn + k));
-            }
-        }
-        for (rows, res) |r, *e| {
-            const c = s.cell(g, r);
-            e.* -= b[c] - old.items[c];
-        }
-    };
-    return f;
-}
 
 /// The baseline's features for a row: win chance from the purchase's state
 fn baseRow(r: Row, y: f64) logreg.Row {
@@ -214,28 +136,6 @@ fn logLoss(p: f64, y: f64) f64 {
     return -(y * @log(q) + (1 - y) * @log(1 - q));
 }
 
-const Gain = struct { mean: f64, half_width: f64 };
-
-/// Mean of before - after per row, ± 95% with rows clustered by game (rows sorted by game)
-fn pairedGain(rows: []const Row, before: []const f64, after: []const f64) Gain {
-    var total: f64 = 0;
-    var sum_sq: f64 = 0;
-    var n_games: f64 = 0;
-    var i: usize = 0;
-    while (i < rows.len) {
-        var d: f64 = 0;
-        const g = rows[i].game;
-        while (i < rows.len and rows[i].game == g) : (i += 1) d += before[i] - after[i];
-        total += d;
-        sum_sq += d * d;
-        n_games += 1;
-    }
-    const n_rows: f64 = @floatFromInt(rows.len);
-    const mean_d = total / n_games;
-    const var_d = sum_sq / n_games - mean_d * mean_d;
-    return .{ .mean = total / n_rows, .half_width = 1.96 * @sqrt(n_games * var_d) / n_rows };
-}
-
 /// Each player's first `slots` distinct finished items, in games with a timeline
 fn load(
     gpa: std.mem.Allocator,
@@ -245,45 +145,15 @@ fn load(
     platforms: []const []const u8,
     legendaries: *const outcomes.Legendaries,
 ) !Map {
-    const patch_json = try std.json.Stringify.valueAlloc(arena, chosen, .{});
-    const platform_json = try std.json.Stringify.valueAlloc(arena, platforms, .{});
-    var q = try db.prepare(
-        \\SELECT m.match_id, t.data, m.patch
-        \\FROM matches m JOIN timeline.timelines t USING (match_id)
-        \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
-        \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
-    );
-    defer q.deinit();
-    try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
-    var players = try db.prepare("SELECT slot, team_id, position FROM participants WHERE match_id = ?");
-    defer players.deinit();
-
+    var games: analysis.TimelineGames = try .init(gpa, db, chosen, platforms);
+    defer games.deinit();
     var map: Map = .empty;
     errdefer map.deinit(gpa);
-    var scratch_state: std.heap.ArenaAllocator = .init(gpa);
-    defer scratch_state.deinit();
-    while (try q.step()) {
-        _ = scratch_state.reset(.retain_capacity);
-        const scratch = scratch_state.allocator();
-        const t = timeline.decode(scratch, store.raw.decompress(scratch, q.bytes(1)) catch continue) catch continue;
+    while (try games.next()) |game| {
+        const t = game.t;
         if (t.participants != 10 or t.frames.len == 0) continue;
-        const finished = legendaries.get(stats.patchKey(q.bytes(2))) orelse continue;
-
-        try players.bind(.{q.bytes(0)});
-        var pid: [2][Role.count]u8 = @splat(@splat(0));
-        while (try players.step()) {
-            const side: usize = switch (players.int(1)) {
-                100 => 0,
-                200 => 1,
-                else => continue,
-            };
-            const r = Role.fromLcu(if (players.isNull(2)) "" else players.bytes(2)) orelse continue;
-            const slot = players.int(0);
-            if (slot < 0 or slot >= t.participants) continue;
-            pid[side][@backingInt(r)] = @intCast(slot + 1);
-        }
-        if (std.mem.indexOfScalar(u8, std.mem.asBytes(&pid), 0) != null) continue;
+        const finished = legendaries.get(stats.patchKey(game.patch)) orelse continue;
+        const pid = try games.pids(game, false) orelse continue;
         // participant id - 1 -> lane opponent's participant id
         var opponent: [10]u8 = undefined;
         for (0..2) |side| for (0..Role.count) |ri| {
@@ -330,37 +200,19 @@ fn load(
             else => {},
         };
 
-        var g: GameItems = .{ .match_id = try arena.dupe(u8, q.bytes(0)), .slot = undefined, .bought = undefined };
+        var g: GameItems = .{ .match_id = try arena.dupe(u8, game.match_id), .slot = undefined, .bought = undefined };
         for (0..2) |side| for (0..Role.count) |ri| {
             const p = pid[side][ri] - 1;
             g.slot[side][ri] = p;
             for (&g.bought[side][ri], 0..) |*x, k| x.* = if (k < count[p]) bought[p][k] else null;
         };
-        try map.put(gpa, stats.matchKey(q.bytes(0)), g);
+        try map.put(gpa, stats.matchKey(game.match_id), g);
     }
     return map;
 }
 
 fn orderU32(a: u32, b: u32) std.math.Order {
     return std.math.order(a, b);
-}
-
-const GameList = struct {
-    gpa: std.mem.Allocator,
-    items: std.ArrayList(stats.Row) = .empty,
-
-    pub fn add(l: *GameList, g: stats.Row) !void {
-        try l.items.append(l.gpa, g);
-    }
-};
-
-fn denseIndex(gpa: std.mem.Allocator, index: *std.AutoHashMapUnmanaged(u32, u16), ids: *std.ArrayList(u32), id: u32) !u16 {
-    const e = try index.getOrPut(gpa, id);
-    if (!e.found_existing) {
-        e.value_ptr.* = @intCast(ids.items.len);
-        try ids.append(gpa, id);
-    }
-    return e.value_ptr.*;
 }
 
 pub fn run(
@@ -377,24 +229,16 @@ pub fn run(
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    var list: GameList = .{ .gpa = gpa };
-    defer list.items.deinit(gpa);
-    _ = try stats.scan(gpa, db, patches, platforms, 0, &list);
-    var split = try eval.split(gpa, list.items.items, platforms, .{ .test_share = opts.test_share, .test_platform = opts.test_platform });
-    defer split.deinit(gpa);
-    const cutoff = split.tests[0].start;
+    var split = try analysis.heldOut(gpa, db, patches, platforms, opts.test_share, opts.test_platform);
+    defer split.deinit();
 
     var map = try load(gpa, arena, db, patches, platforms, legendaries);
     defer map.deinit(gpa);
 
-    var champ_index: std.AutoHashMapUnmanaged(u32, u16) = .empty;
+    var champ_index: analysis.DenseIndex = .{};
     defer champ_index.deinit(gpa);
-    var champ_ids: std.ArrayList(u32) = .empty;
-    defer champ_ids.deinit(gpa);
-    var item_index: std.AutoHashMapUnmanaged(u32, u16) = .empty;
+    var item_index: analysis.DenseIndex = .{};
     defer item_index.deinit(gpa);
-    var item_ids: std.ArrayList(u32) = .empty;
-    defer item_ids.deinit(gpa);
 
     var train: std.ArrayList(Row) = .empty;
     defer train.deinit(gpa);
@@ -403,14 +247,14 @@ pub fn run(
     var test_ids: std.ArrayList([]const u8) = .empty;
     defer test_ids.deinit(gpa);
     var n_games: [2]u32 = @splat(0);
-    for ([_][]const stats.Row{ split.train, split.tests }, [_]bool{ false, true }) |part, is_test| for (part) |g| {
+    for (split.parts(), [_]bool{ false, true }) |part, is_test| for (part) |g| {
         const gi = map.get(g.id) orelse continue;
         const out = if (is_test) &tests else &train;
         if (is_test) try test_ids.append(gpa, gi.match_id);
         const game = n_games[@intFromBool(is_test)];
         n_games[@intFromBool(is_test)] += 1;
         for (0..2) |side| for (0..Role.count) |ri| {
-            const champ = try denseIndex(gpa, &champ_index, &champ_ids, g.teams[side][ri]);
+            const champ = try champ_index.get(gpa, g.teams[side][ri]);
             for (gi.bought[side][ri], 0..) |x, k| {
                 const b = x orelse break;
                 try out.append(gpa, .{
@@ -418,7 +262,7 @@ pub fn run(
                     .slot = gi.slot[side][ri],
                     .role = @intCast(ri),
                     .champ = champ,
-                    .item = try denseIndex(gpa, &item_index, &item_ids, b.item),
+                    .item = try item_index.get(gpa, b.item),
                     .k = @intCast(k),
                     .minute = @floatCast(@as(f64, @floatFromInt(b.t_ms)) / minute_ms),
                     .team_lead = b.team_lead,
@@ -429,13 +273,13 @@ pub fn run(
         };
     };
     if (train.items.len == 0 or tests.items.len == 0) return error.TooFewGames;
-    const space: Space = .{ .champs = @intCast(champ_ids.items.len), .items = @intCast(item_ids.items.len) };
+    const space: Space = .{ .champs = champ_index.count(), .items = item_index.count() };
 
     try w.print("# meiolol items\n\nTrain: {d} games with a timeline, every scanned platform, " ++
         "started before {f} ({d}). Test: {d} {s} games from then. Rows: each player's first " ++
         "{d} distinct finished items ({d} train, {d} test). Champions {d}, items {d}.\n", .{
-        n_games[0],         Date.fromMs(cutoff), cutoff,          n_games[1],
-        opts.test_platform, slots,               train.items.len, tests.items.len,
+        n_games[0],         Date.fromMs(split.cutoff), split.cutoff,    n_games[1],
+        opts.test_platform, slots,                     train.items.len, tests.items.len,
         space.champs,       space.items,
     });
 
@@ -465,21 +309,13 @@ pub fn run(
         lb.* = logLoss(p.*, y);
     }
 
-    var files: [models.len + 1]?Io.File = @splat(null);
-    var bufs: [models.len + 1][16 * 1024]u8 = undefined;
-    var writers: [models.len + 1]Io.File.Writer = undefined;
-    defer for (files) |f| if (f) |x| x.close(io);
-    if (opts.preds_dir) |dir| {
-        const cwd = Io.Dir.cwd();
-        try cwd.createDirPath(io, dir);
-        for (0..models.len + 1) |i| {
-            const name = if (i == 0) "3c-items-state" else models[i - 1].file;
-            const path = try std.fmt.allocPrint(arena, "{s}/{s}.tsv", .{ dir, name });
-            files[i] = try cwd.createFile(io, path, .{});
-            writers[i] = files[i].?.writer(io, &bufs[i]);
-            try writers[i].interface.writeAll("match_id\tslot\tk\ty\tpred\n");
-        }
-        for (tests.items, p_base) |r, p| try writers[0].interface.print("{s}\t{d}\t{d}\t{d}\t{d:.4}\n", .{
+    var names: [models.len + 1][]const u8 = undefined;
+    names[0] = "3c-items-state";
+    for (names[1..], models) |*n, m| n.* = m.file;
+    const preds: analysis.Preds = try .init(arena, io, opts.preds_dir, &names, "match_id\tslot\tk\ty\tpred\n");
+    defer preds.close(io);
+    if (preds.on()) {
+        for (tests.items, p_base) |r, p| try preds.at(0).print("{s}\t{d}\t{d}\t{d}\t{d:.4}\n", .{
             test_ids.items[r.game], r.slot, r.k, @intFromBool(r.won), p,
         });
     }
@@ -487,10 +323,10 @@ pub fn run(
     try w.writeAll("\nTest log loss of the player's win, nats per row; gain = drop from the step " ++
         "before, ± 95% interval clustered by game.\n\n| model | test log loss | gain |\n" ++
         "| --- | --- | --- |\n");
-    try w.print("| train win rate | {d:.4} | - |\n", .{mean(loss_rate)});
-    const g0 = pairedGain(tests.items, loss_rate, loss_base);
+    try w.print("| train win rate | {d:.4} | - |\n", .{analysis.mean(loss_rate)});
+    const g0 = analysis.pairedGain(tests.items, loss_rate, loss_base);
     try w.print("| state at purchase (minute, team and lane gold lead, slot) | {d:.4} | {d:.5} ± {d:.5} |\n", .{
-        mean(loss_base), g0.mean, g0.half_width,
+        analysis.mean(loss_base), g0.mean, g0.half_width,
     });
 
     var fits: [models.len]Fit = undefined;
@@ -498,18 +334,18 @@ pub fn run(
     defer for (fits[0..n_fits]) |*f| f.deinit(gpa);
     var before = loss_base;
     for (models, 0..) |m, mi| {
-        fits[mi] = try fit(gpa, space, train.items, z, m.groups, opts.passes);
+        fits[mi] = try analysis.backfit(Group, gpa, space, train.items, z, m.groups, opts.passes);
         n_fits += 1;
         const loss = try arena.alloc(f64, tests.items.len);
         for (tests.items, p_base, loss) |r, pb, *l| {
             const p = std.math.clamp(pb + fits[mi].predict(space, r), 0.01, 0.99);
             l.* = logLoss(p, @floatFromInt(@intFromBool(r.won)));
-            if (opts.preds_dir != null) try writers[mi + 1].interface.print("{s}\t{d}\t{d}\t{d}\t{d:.4}\n", .{
+            if (preds.on()) try preds.at(mi + 1).print("{s}\t{d}\t{d}\t{d}\t{d:.4}\n", .{
                 test_ids.items[r.game], r.slot, r.k, @intFromBool(r.won), p,
             });
         }
-        const g = pairedGain(tests.items, before, loss);
-        try w.print("| {s} | {d:.4} | {d:.5} ± {d:.5} |\n", .{ m.label, mean(loss), g.mean, g.half_width });
+        const g = analysis.pairedGain(tests.items, before, loss);
+        try w.print("| {s} | {d:.4} | {d:.5} ± {d:.5} |\n", .{ m.label, analysis.mean(loss), g.mean, g.half_width });
         before = loss;
     }
 
@@ -531,15 +367,9 @@ pub fn run(
         try w.writeAll("\n");
     }
 
-    try topEffects(w, arena, db, space, full, .item, champ_ids.items, item_ids.items, 500);
-    try topEffects(w, arena, db, space, full, .champ_item, champ_ids.items, item_ids.items, 300);
-    for (files, &writers) |f, *x| if (f != null) try x.interface.flush();
-}
-
-fn mean(xs: []const f64) f64 {
-    var sum: f64 = 0;
-    for (xs) |x| sum += x;
-    return sum / @as(f64, @floatFromInt(xs.len));
+    try topEffects(w, arena, db, space, full, .item, champ_index.ids.items, item_index.ids.items, 500);
+    try topEffects(w, arena, db, space, full, .champ_item, champ_index.ids.items, item_index.ids.items, 300);
+    try preds.flush();
 }
 
 /// The largest shrunk effects of a group, cells with `min_rows` train rows or more
@@ -552,10 +382,10 @@ fn topEffects(
     g: Group,
     champ_ids: []const u32,
     item_ids: []const u32,
-    min_rows: f32,
+    min_rows: f64,
 ) !void {
     const b = f.effects[@backingInt(g)] orelse return;
-    const n = f.n[@backingInt(g)].?;
+    const n = f.info[@backingInt(g)].?;
     var cells: std.ArrayList(u32) = .empty;
     for (b, n, 0..) |x, xn, c| if (xn >= min_rows and x != 0) try cells.append(arena, @intCast(c));
     const Order = struct {

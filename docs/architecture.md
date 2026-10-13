@@ -15,6 +15,9 @@ src/
   learning.zig       learning curves: results by games played on a champion
   stats.zig          model file from the matches table (`meiolol stats`)
   eval.zig           draft model on held-out newer games (`meiolol eval`, docs/model.md)
+  analysis.zig       shared by eval, outcomes, items, objectives, scaling: the held-out
+                     split, games with a timeline by role, paired gains,
+                     shrinkage priors and backfitting, prediction files
   api/               "Your games" service (`meiolol api`, docs/your-games.md): cache.zig
                      (api.db), fetch.zig (the one Riot caller), game.zig (lane vs curve)
   admin.zig          `meiolol admin`: private ops page (/admin/, static/admin.js charts)

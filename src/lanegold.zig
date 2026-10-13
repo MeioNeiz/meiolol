@@ -13,6 +13,7 @@ const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
+const analysis = @import("analysis.zig");
 const Role = core.Role;
 
 pub const minute = core.curvesfile.lane_minute;
@@ -30,57 +31,21 @@ pub fn load(
     chosen: []const []const u8,
     platforms: []const []const u8,
 ) !Map {
-    const patch_json = try std.json.Stringify.valueAlloc(gpa, chosen, .{});
-    defer gpa.free(patch_json);
-    const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
-    defer gpa.free(platform_json);
-    var q = try db.prepare(
-        \\SELECT m.match_id, t.data
-        \\FROM matches m JOIN timeline.timelines t USING (match_id)
-        \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
-        \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
-    );
-    defer q.deinit();
-    try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
-    var players = try db.prepare(
-        "SELECT slot, team_id, position FROM participants WHERE match_id = ?",
-    );
-    defer players.deinit();
-
+    var games: analysis.TimelineGames = try .init(gpa, db, chosen, platforms);
+    defer games.deinit();
     var map: Map = .empty;
     errdefer map.deinit(gpa);
-    var arena_state: std.heap.ArenaAllocator = .init(gpa);
-    defer arena_state.deinit();
-    while (try q.step()) {
-        _ = arena_state.reset(.retain_capacity);
-        const arena = arena_state.allocator();
-        const m = q.row(struct { match_id: []const u8, data: []const u8 });
-        const t = timeline.decode(arena, store.raw.decompress(arena, m.data) catch continue) catch continue;
+    while (try games.next()) |g| {
         // Frame k is minute k; the last frame is the game's end, part of a minute
-        if (t.frames.len < minute + 2) continue;
-        try players.bind(.{m.match_id});
-        var pid: [2][Role.count]u8 = @splat(@splat(0));
-        while (try players.step()) {
-            const p = players.row(struct { slot: i64, team_id: i64, position: []const u8 });
-            const side: usize = switch (p.team_id) {
-                100 => 0,
-                200 => 1,
-                else => continue,
-            };
-            const r = Role.fromLcu(p.position) orelse continue;
-            if (p.slot < 0 or p.slot >= t.participants) continue;
-            pid[side][@backingInt(r)] = @intCast(p.slot + 1);
-        }
+        if (g.t.frames.len < minute + 2) continue;
+        const pid = try games.pids(g, false) orelse continue;
         var lanes: Lanes = undefined;
-        const f = t.frames[minute];
-        const complete = for (Role.all) |r| {
-            const a = pid[0][@backingInt(r)];
-            const b = pid[1][@backingInt(r)];
-            if (a == 0 or b == 0) break false;
-            lanes[@backingInt(r)] = @floatFromInt(f.get(a, .total_gold) - f.get(b, .total_gold));
-        } else true;
-        if (complete) try map.put(gpa, stats.matchKey(m.match_id), lanes);
+        const f = g.t.frames[minute];
+        for (Role.all) |r| {
+            const ri = @backingInt(r);
+            lanes[ri] = @floatFromInt(f.get(pid[0][ri], .total_gold) - f.get(pid[1][ri], .total_gold));
+        }
+        try map.put(gpa, stats.matchKey(g.match_id), lanes);
     }
     return map;
 }

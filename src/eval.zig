@@ -21,6 +21,7 @@ const experience = @import("experience.zig");
 const par = @import("par.zig");
 const Date = @import("date.zig").Date;
 const tsvlog = @import("tsvlog.zig");
+const analysis = @import("analysis.zig");
 const score = core.score;
 const Role = core.Role;
 
@@ -54,7 +55,7 @@ pub fn run(
 ) !History {
     const champs = try stats.champions(gpa, db);
     defer stats.freeChampions(gpa, champs);
-    var list: GameList = .{ .gpa = gpa };
+    var list: analysis.GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
     const summary = try stats.scan(gpa, db, patches, platforms, 0, &list);
     const games = list.items.items;
@@ -245,8 +246,8 @@ pub const History = struct {
     tunedw: Result = undefined,
     /// Paired per-game log loss differences to champion base rates: comparable across
     /// runs although each run's test games differ
-    eb_vs_base: Paired = undefined,
-    tunedw_vs_base: Paired = undefined,
+    eb_vs_base: analysis.Gain = undefined,
+    tunedw_vs_base: analysis.Gain = undefined,
     /// The current model's picks
     pick: PickResult = undefined,
 
@@ -268,7 +269,7 @@ pub const History = struct {
             try w.print("\t{d}\t{d:.5}\t{d:.5}\t{d:.4}", .{ g.tests, g.eb_log_loss, g.log_loss, g.auc });
         } else try w.writeAll("\t0\t\t\t");
         try w.print("\t{d:.5}\t{d:.4}", .{ h.tunedw.log_loss, h.tunedw.auc });
-        for ([_]Paired{ h.eb_vs_base, h.tunedw_vs_base }) |d| try w.print("\t{d:.5}\t{d:.5}", .{ d.mean, d.ci });
+        for ([_]analysis.Gain{ h.eb_vs_base, h.tunedw_vs_base }) |d| try w.print("\t{d:.5}\t{d:.5}", .{ d.mean, d.half_width });
         try w.print("\t{d}\t{d:.4}\t{d:.4}\n", .{ h.pick.top_n, h.pick.top_win, h.pick.auc });
     }
 };
@@ -489,7 +490,7 @@ fn experienceSection(
             m_with.log_loss,
             if (diff.mean >= 0) "+" else "",
             diff.mean,
-            diff.ci,
+            diff.half_width,
             m_with.auc,
         });
         const bins = switch (source) {
@@ -566,20 +567,11 @@ fn experienceRow(
     return if (known) r else null;
 }
 
-pub const Paired = struct { mean: f64, ci: f64 };
-
 /// Mean per-game log loss of `a` minus `b`, with a 95% interval
-fn pairedDiff(a: []const f64, b: []const f64, games: []const Game) Paired {
-    var sum: f64 = 0;
-    var sq: f64 = 0;
-    for (a, b, games) |x, y, g| {
-        const d = logLoss(x, blueWon(g)) - logLoss(y, blueWon(g));
-        sum += d;
-        sq += d * d;
-    }
-    const n: f64 = @floatFromInt(games.len);
-    const mean = sum / n;
-    return .{ .mean = mean, .ci = 1.96 * @sqrt(@max(sq / n - mean * mean, 0) / n) };
+fn pairedDiff(a: []const f64, b: []const f64, games: []const Game) analysis.Gain {
+    var sums: analysis.PairedSums = .{};
+    for (a, b, games) |x, y, g| sums.add(logLoss(x, blueWon(g)) - logLoss(y, blueWon(g)), 1);
+    return sums.gain();
 }
 
 /// intercept, base and lane terms (opts), champion gold, pair gold
@@ -607,15 +599,6 @@ fn fitJoint(gpa: std.mem.Allocator, st: *const core.Stats, games: []const Game, 
     for (rows, games) |*r, g| r.* = jointRow(st, g);
     return logreg.fit(gpa, 1 + Role.count * st.n, rows, l2);
 }
-
-const GameList = struct {
-    gpa: std.mem.Allocator,
-    items: std.ArrayList(Game) = .empty,
-
-    pub fn add(l: *GameList, g: Game) !void {
-        try l.items.append(l.gpa, g);
-    }
-};
 
 pub const Split = struct {
     /// Every game older than the first test game, on any platform
@@ -876,8 +859,8 @@ fn fullDraft(
             pr.label, r.m.log_loss, r.m.brier, r.m.auc, 100 * r.m.accuracy,
         });
         const d = pairedDiff(r.p, ref.p, games);
-        if (d.ci == 0) try w.writeAll("- |\n") else {
-            try w.print("{s}{d:.4} ± {d:.4} |\n", .{ if (d.mean >= 0) "+" else "", d.mean, d.ci });
+        if (d.half_width == 0) try w.writeAll("- |\n") else {
+            try w.print("{s}{d:.4} ± {d:.4} |\n", .{ if (d.mean >= 0) "+" else "", d.mean, d.half_width });
         }
     }
 }
