@@ -19,6 +19,9 @@ tasklist=$win/tasklist.exe
 home=$(cd /mnt/c && $win/cmd.exe /c 'echo %USERPROFILE%' 2> /dev/null < /dev/null)
 home=$(wslpath "${home%$'\r'}")/.meiolol
 flag=$home/awake
+# The holder's own log (taken, state every 10 min, released and why), copied in here
+alog=$home/awake.log
+alog_at=$(stat -c %s "$alog" 2> /dev/null || echo 0)
 vbs=$(wslpath -w "$home/meiolol-awake.vbs")
 
 log() { echo "$(date -u +%FT%TZ) $*"; }
@@ -85,5 +88,11 @@ while true; do
     fi
     [[ "$busy" != "$busy_was" ]] && log "awake: ${busy:-no (Windows may sleep)}"
     busy_was=$busy
+    size=$(stat -c %s "$alog" 2> /dev/null || echo 0)
+    (( size < alog_at )) && alog_at=0
+    if (( size > alog_at )); then
+        tail -c +$(( alog_at + 1 )) "$alog" | tr -d '\r' | sed 's/Z awake/Z holder: awake/'
+        alog_at=$size
+    fi
     sleep 5
 done
