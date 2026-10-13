@@ -403,3 +403,79 @@ test "games come from the start and patch indexes, not a walk of every match" {
         }
     }
 }
+
+test "a game's rows, slots and bans, once per game" {
+    const gpa = std.testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const db = try store.schema.memory();
+    defer db.close();
+    // EUW1_1: champions 1-5 (Gold, blue, won) against 6-10 (Platinum, the support off
+    // the ladder), top laners' gold at 14 500 and 300; both teams ban 11. EUW1_2: nine
+    // players, left out
+    try db.exec(
+        \\INSERT INTO matches VALUES ('EUW1_1', 'riot', 'EUW1', 420, '16.20', '16.20.1', 1000, 1800, 100, 0),
+        \\  ('EUW1_2', 'riot', 'EUW1', 420, '16.20', '16.20.1', 1000, 1800, 100, 0);
+        \\INSERT INTO bans VALUES ('EUW1_1', 100, 1, 11), ('EUW1_1', 200, 6, 11), ('EUW1_2', 100, 1, 11);
+    );
+    const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
+    for ([_][]const u8{ "EUW1_1", "EUW1_2" }, [_]usize{ 10, 9 }) |id, players| {
+        for (0..players) |slot| {
+            const blue = slot < 5;
+            const tier: ?[]const u8 = if (slot == 9) null else if (blue) "GOLD" else "PLATINUM";
+            const gold14: ?i64 = switch (slot) {
+                0 => 500,
+                5 => 300,
+                else => null,
+            };
+            try db.run(
+                \\INSERT INTO participants (match_id, slot, team_id, champion_id, position, win, tier, gold14, gold15)
+                \\VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            , .{ id, slot, @as(i64, if (blue) 100 else 200), slot + 1, positions[slot % 5], @intFromBool(blue), tier, gold14, gold14 });
+        }
+    }
+    var champs: [11]root.Champ = undefined;
+    for (&champs, 0..) |*ch, i| {
+        const slug = try a.print("c{d}", .{i + 1});
+        ch.* = .{ .c = i, .id = @intCast(i + 1), .key = slug, .name = slug, .slug = slug, .banned = 0, .games = 0 };
+    }
+    const no_curves: [html.View.count]?core.curvesfile.Curves = @splat(null);
+    const opts: root.Options = .{
+        .out_dir = "",
+        .patches = &.{"16.20"},
+        .since_ms = 0,
+        .all_platforms = &.{"EUW1"},
+        .contact = "",
+        .updated = "",
+    };
+    var site: root.Site = undefined;
+    site.arena = a;
+    site.champs = &champs;
+    site.view_curves = &no_curves;
+    const made = try make(&site, db, opts);
+    try std.testing.expectEqual(champs.len + 1, made.files.len);
+    const file = struct {
+        fn f(files: []const root.File, path: []const u8) []const u8 {
+            for (files) |x| if (std.mem.eql(u8, x.path, path)) return x.data;
+            return "";
+        }
+    }.f;
+    const head = "{\"platforms\":[\"EUW1\"],\"patches\":[\"16.20\"],";
+    // Platform, patch, recent, tier, role, opponent, games, wins, gold n, sum, squares
+    try std.testing.expectEqualStrings(head ++ "\"rows\":[[0,0,1,3,0,6,1,1,1,200,40000]],\"bans\":[],\"gold\":{}}\n", file(made.files, "data/filters/c1.json"));
+    try std.testing.expectEqualStrings(head ++ "\"rows\":[[0,0,1,4,0,1,1,0,1,-200,40000]],\"bans\":[],\"gold\":{}}\n", file(made.files, "data/filters/c6.json"));
+    try std.testing.expectEqualStrings(head ++ "\"rows\":[[0,0,1,10,4,5,1,0,0,0,0]],\"bans\":[],\"gold\":{}}\n", file(made.files, "data/filters/c10.json"));
+    // Banned by both teams: one game, of Gold rank (the players' lower median)
+    try std.testing.expectEqualStrings(head ++ "\"rows\":[],\"bans\":[[0,0,1,3,1]],\"gold\":{}}\n", file(made.files, "data/filters/c11.json"));
+    const meta = file(made.files, "data/filters.json");
+    for ([_][]const u8{
+        "\"roles\":[\"top\",\"jungle\",\"mid\",\"bot\",\"support\"]",
+        "\"slots\":[[0,0,1,3,0,1],[0,0,1,3,1,1],[0,0,1,3,2,1],[0,0,1,3,3,1],[0,0,1,3,4,1]," ++
+            "[0,0,1,4,0,1],[0,0,1,4,1,1],[0,0,1,4,2,1],[0,0,1,4,3,1],[0,0,1,10,4,1]]",
+        "\"games\":[[0,0,1,3,1]]}",
+    }) |want| if (std.mem.indexOf(u8, meta, want) == null) {
+        std.debug.print("data/filters.json lacks {s}:\n{s}\n", .{ want, meta });
+        return error.TestUnexpectedResult;
+    };
+}
