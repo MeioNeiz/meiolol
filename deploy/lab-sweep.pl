@@ -12,7 +12,8 @@
 # table reads stdin: `TRIAL<tab>LINE` for each line of each trial's folds.tsv (header
 # included), as lab-sweep.sh fetches them. folds.tsv (meiolol-f1's netcheck): seed fold
 # fit_games scored_games logloss ratings_logloss gain gain_se epochs seconds val_logloss
-# auc; fold 1..5 (forward folds) or dev; gain = ratings - net in nats per game.
+# auc; fold 1..5 (forward folds) or dev; gain = reference - net in nats per game, the
+# reference being ratings (netcheck) or the -Dcand candidate (playernet: cand_logloss)
 # Trials are ranked by val_logloss (inner validation on fit games), never by the fold
 # gain: picking on the scored blocks would be selection on them (meiolol-f1)
 use strict;
@@ -164,8 +165,9 @@ sub table {
     }
     my $m = sub { defined $_[0] ? sprintf('%+.2f', 1000 * $_[0]) : '-' };
     my $p = sub { defined $_[0] ? sprintf('%.2f', 1000 * $_[0]) : '-' };
-    print "Ranked by inner-validation log loss (fit games only). Gains vs ratings in\n";
-    print "milli-nats per game, positive = net better: folds pooled by games, mean over\n";
+    print "Ranked by inner-validation log loss (fit games only). Gains vs the command's\n";
+    print "reference (netcheck: ratings; playernet: its -Dcand candidate) in milli-nats\n";
+    print "per game, positive = net better: folds pooled by games, mean over\n";
     print "seeds ± its paired 95% half-width; better in = folds whose mean over seeds\n";
     print "favours the net; seed sd = spread of the per-seed gain;\n";
     print "ens = the seeds' averaged predictions (netcheck's ens rows), folds pooled.\n";

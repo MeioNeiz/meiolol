@@ -184,7 +184,10 @@ builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps
   Measured 2026-10-13 (netcheck --net big, one seed, one block): +250 MiB of the 3080's
   10 GB for ~1 s of a 2 s trial (fit 0.6 s; loading and the candidate are CPU), so 4
   at once fit easily; check utilisation in the first packed sweep
-- --res cpu for nets on CPU threads (netcheck small, resid)
+- --res cpu for nets on CPU threads (netcheck small, resid, playernet). --serial runs a
+  job's K trials one after another, so a long CPU sweep holds few cpu slots; packed
+  trials after the first get job.sh's `$pin`, so they stay on their slot's cores.
+  `--commit SHA` builds that commit once (as --head does HEAD); the rest reuse its key
 - netcheck's `ens` rows (the seeds' averaged predictions) get their own column
 - A SPACE line `ref --flag V ...` (every flag) adds trial `ref`, run first with the same
   seeds: the table shows it on top as the bar, unnumbered and never the pick

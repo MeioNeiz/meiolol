@@ -2,16 +2,17 @@
 # Random-search sweeps of one model family (30-64 trials, research C19) on the gpu-box's
 # 3080, queued on deploy/lab-run.sh's gpu lock. docs/compute.md "Sweeps"
 #
-#   deploy/lab-sweep.sh start SWEEP SPACE [--trials N] [--rng S] [--pack K] [--head]
-#                             [--build-arg A]... [--res gpu|cpu] [--skip N] [--dry-run]
-#                             -- CMD ARGS...
+#   deploy/lab-sweep.sh start SWEEP SPACE [--trials N] [--rng S] [--pack K] [--serial]
+#                             [--head | --commit SHA] [--build-arg A]... [--res gpu|cpu]
+#                             [--skip N] [--dry-run] -- CMD ARGS...
 #   deploy/lab-sweep.sh status SWEEP      its jobs, as deploy/lab-run.sh status shows them
 #   deploy/lab-sweep.sh table SWEEP       trials ranked by inner validation, to table.md
 #   deploy/lab-sweep.sh stop SWEEP        stops its queued and running jobs
 #
 # start samples N trials (default 32, --rng 1) from SPACE (deploy/lab-sweep.pl says the
 # format), builds meiolol-lab once and queues one lab-run job per K trials (--pack,
-# default 1; K > 1 runs K processes at once, if the GPU's memory allows). --res cpu for
+# default 1; K > 1 runs K processes at once, if the GPU's memory allows; --serial runs
+# them one after another, so a CPU sweep holds few slots). --res cpu for
 # nets on CPU threads (netcheck --net small or resid; only big uses the GPU). Trial tNN
 # runs `meiolol-lab CMD ARGS <its flags> --out tNN` in its job's run dir, output in tNN.log;
 # CMD writes tNN/folds.tsv (meiolol-f1's netcheck contract, lab-sweep.pl). State here, in
@@ -41,7 +42,7 @@ sweep_dir() {
 runs() { tail -n +2 "$1/jobs.tsv" | cut -f 2; }
 
 start() {
-    local sweep=$1 space=$2 trials=32 rng=1 pack=1 dry=0 res=gpu skip=0 opts=()
+    local sweep=$1 space=$2 trials=32 rng=1 pack=1 dry=0 res=gpu skip=0 serial=0 opts=()
     shift 2
     while (( $# )); do
         case "$1" in
@@ -49,7 +50,9 @@ start() {
             --rng) rng=$2; shift ;;
             --pack) pack=$2; shift ;;
             --res) res=$2; shift ;;
+            --serial) serial=1 ;;
             --head) opts+=(--head) ;;
+            --commit) opts+=(--commit "$2"); shift ;;
             --build-arg) opts+=(--build-arg "$2"); shift ;;
             --dry-run) dry=1 ;;
             --skip) skip=$2; shift ;;
@@ -76,8 +79,11 @@ start() {
     plan=$(perl "$ROOT/deploy/lab-sweep.pl" sample "$space" "$trials" "$rng") || exit 2
 
     # One job's ARGS per line: its trials, each `CMD ARGS flags --out tNN > tNN.log 2>&1`,
-    # joined by `&` when packed (lab-run.sh puts `nice -n 10 ./meiolol-lab` before the
-    # first; the others get it here)
+    # joined by `&` when packed, `;` when --serial (lab-run.sh puts `$pin nice -n 10
+    # ./meiolol-lab` before the first; the others get it here, $pin left for job.sh to
+    # expand: its slot's taskset, else they'd float over every core)
+    local sep='&'
+    (( serial )) && sep=';'
     local flags line t v i jobs=() names=() job="" ids="" n=0
     IFS=$'\t' read -ra flags <<< "$(head -n 1 <<< "$plan")"
     while IFS=$'\t' read -ra line; do
@@ -85,16 +91,18 @@ start() {
         v="$* "
         for (( i = 1; i < ${#line[@]}; i++ )); do v+="${flags[i]} ${line[i]} "; done
         v+="--out $t > $t.log 2>&1"
-        if [[ -z "$job" ]]; then job=$v; else job+=" & nice -n 10 ./meiolol-lab $v"; fi
+        # shellcheck disable=SC2016 # $pin expands in job.sh
+        if [[ -z "$job" ]]; then job=$v
+        else job+=" $sep "'$pin '"nice -n 10 ./meiolol-lab $v"; fi
         ids+="${ids:+,}$t"
         n=$((n + 1))
         if (( n == pack )); then
-            (( pack > 1 )) && job+=" & wait"
+            (( pack > 1 && ! serial )) && job+=" & wait"
             jobs+=("$job"); names+=("$ids"); job="" ids="" n=0
         fi
     done < <(tail -n +2 <<< "$plan")
     if [[ -n "$job" ]]; then
-        (( pack > 1 )) && job+=" & wait"
+        (( pack > 1 && ! serial )) && job+=" & wait"
         jobs+=("$job"); names+=("$ids")
     fi
 
@@ -125,7 +133,13 @@ start() {
             key=$(sed -n 's/^binary \([0-9a-f]*\)$/\1/p' <<< "$out")
             [[ -n "$key" ]] || { echo "no binary key from the first start"; exit 1; }
             kept=()
-            for o in ${opts[@]+"${opts[@]}"}; do [[ "$o" == --head ]] || kept+=("$o"); done
+            # --head and --commit SHA built the binary: the rest start it by its key
+            local skip_next=0
+            for o in ${opts[@]+"${opts[@]}"}; do
+                if (( skip_next )); then skip_next=0; continue; fi
+                [[ "$o" == --commit ]] && { skip_next=1; continue; }
+                [[ "$o" == --head ]] || kept+=("$o")
+            done
             opts=(${kept[@]+"${kept[@]}"} --bin "$key")
         fi
         out=$("$RUN" start "$HOST" "$sweep-j$(printf %02d $((k + 1)))" --res "$res" \
