@@ -530,8 +530,8 @@ pub const Fixture = struct {
         var player_prng: std.Random.DefaultPrng = .init(seed ^ 0x9e37);
         var players: std.ArrayList(u32) = .empty;
         defer players.deinit(gpa);
-        var kdas: std.ArrayList(f32) = .empty;
-        defer kdas.deinit(gpa);
+        var extras: std.ArrayList(rows.Extra) = .empty;
+        defer extras.deinit(gpa);
         const n_test = n / 15;
         for (games, 0..) |*g, gi| {
             var teams: [2][5]u32 = undefined;
@@ -570,10 +570,10 @@ pub const Fixture = struct {
                     .y = y,
                 });
                 try players.append(gpa, player_prng.random().intRangeLessThan(u32, 0, 200));
-                try kdas.append(gpa, 2);
+                try extras.append(gpa, .{ .kda = 2 });
             }
         }
-        try rows.fillExperience(gpa, games, out.items, players.items, kdas.items);
+        try rows.fillExperience(gpa, games, out.items, players.items, extras.items);
         data.games = games;
         data.rows = out.items;
         return .{ .data = data };

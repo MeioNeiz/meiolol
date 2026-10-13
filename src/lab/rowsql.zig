@@ -57,6 +57,20 @@ pub const Row = struct {
     perf_games: u16 = 0,
     lanediff14_before: f32 = 0,
     deaths15_before: f32 = 0,
+    /// Means over earlier games where known, NaN when none: gold, CS and damage to
+    /// champions per minute of game (participants' end-of-game totals)
+    gpm_before: f32 = std.math.nan(f32),
+    cspm_before: f32 = std.math.nan(f32),
+    dpm_before: f32 = std.math.nan(f32),
+    /// Share of games_before played in another role than this row's, NaN when none
+    offrole_before: f32 = std.math.nan(f32),
+    /// Days from the end of the player's last earlier game to this game's start, NaN
+    /// when none
+    days_since_last: f32 = std.math.nan(f32),
+    /// Dense id of the player within this load (fillExperience's), no_player when the
+    /// PUUID is unknown. Internal scope only: never in a Query, an api type or an export;
+    /// rebuilt from the snapshot, so erasure (meiolol forget) carries over
+    player: u32 = no_player,
     /// What the player did this game (SNAP/seat_stats.tsv, seatstats.SeatStat), NaN when
     /// unknown or the file is missing. Like y: training rows only, never a query
     stats: seatstats.Stats = seatstats.unknown,
@@ -132,8 +146,8 @@ pub fn loadSql(
     var rows: std.ArrayList(Row) = .empty;
     var players: std.ArrayList(u32) = .empty;
     defer players.deinit(gpa);
-    var kdas: std.ArrayList(f32) = .empty;
-    defer kdas.deinit(gpa);
+    var extras: std.ArrayList(Extra) = .empty;
+    defer extras.deinit(gpa);
     var player_ids: std.AutoHashMapUnmanaged(u64, u32) = .empty;
     defer player_ids.deinit(gpa);
     var by_game: std.AutoHashMapUnmanaged(u32, [10]u32) = .empty;
@@ -143,7 +157,7 @@ pub fn loadSql(
     {
         var q = try db.prepare(
             \\SELECT match_id, slot, team_id, position, champion_id, tier, division, gold14, puuid,
-            \\    kills, deaths, assists
+            \\    kills, deaths, assists, gold, cs, damage_to_champions
             \\FROM participants ORDER BY match_id, slot
         );
         defer q.deinit();
@@ -170,7 +184,12 @@ pub fn loadSql(
             try players.append(gpa, player);
             try keys.append(gpa, if (q.isNull(8)) null else store.schema.puuidKey(q.bytes(8)));
             const deaths: f32 = @floatFromInt(@max(q.optInt(10) orelse 0, 1));
-            try kdas.append(gpa, @as(f32, @floatFromInt((q.optInt(9) orelse 0) + (q.optInt(11) orelse 0))) / deaths);
+            const minutes: f32 = @as(f32, @floatFromInt(@max(g.duration_s, 60))) / 60;
+            var rate: [3]f32 = @splat(std.math.nan(f32));
+            for (&rate, 12..) |*x, col| if (q.optInt(@intCast(col))) |v| {
+                x.* = @as(f32, @floatFromInt(v)) / minutes;
+            };
+            try extras.append(gpa, .{ .kda = @as(f32, @floatFromInt((q.optInt(9) orelse 0) + (q.optInt(11) orelse 0))) / deaths, .rate = rate });
             try rows.append(arena, .{
                 .game = gi,
                 .slot = slot,
@@ -226,7 +245,7 @@ pub fn loadSql(
         if (!games.items[r.game].timeline15) r.y[@backingInt(Outcome.gold14)] = std.math.nan(f32);
     }
 
-    try fillExperience(gpa, games.items, rows.items, players.items, kdas.items);
+    try fillExperience(gpa, games.items, rows.items, players.items, extras.items);
     try fillRankStart(gpa, db, games.items, rows.items, keys.items);
     const SeatRows = struct {
         index: *const std.AutoHashMapUnmanaged(u64, u32),
@@ -314,10 +333,10 @@ const experience_min_s = 900;
 
 /// Row.champ_games and the like: a game counts once it has ended (start + duration)
 /// at or before this one's start, so its result was known in champ select. players[i]
-/// is rows[i]'s dense player id, no_player when unknown; kda[i] its (kills + assists) /
-/// max(deaths, 1). Counts saturate
-pub fn fillExperience(gpa: std.mem.Allocator, games: []const Game, rws: []Row, players: []const u32, kda: []const f32) !void {
-    std.debug.assert(rws.len == players.len and rws.len == kda.len);
+/// is rows[i]'s dense player id, no_player when unknown (also written to Row.player);
+/// extra[i] its own game's figures. Counts saturate
+pub fn fillExperience(gpa: std.mem.Allocator, games: []const Game, rws: []Row, players: []const u32, extra: []const Extra) !void {
+    std.debug.assert(rws.len == players.len and rws.len == extra.len);
     const by_start = try gpa.alloc(u32, rws.len);
     defer gpa.free(by_start);
     const by_end = try gpa.alloc(u32, rws.len);
@@ -351,7 +370,18 @@ pub fn fillExperience(gpa: std.mem.Allocator, games: []const Game, rws: []Row, p
     for (players) |p| if (p != no_player) {
         n_players = @max(n_players, p + 1);
     };
-    const Totals = struct { games: u16 = 0, wins: u16 = 0, kda: f64 = 0, perf: u16 = 0, lanediff: f64 = 0, deaths: f64 = 0 };
+    const Totals = struct {
+        games: u16 = 0,
+        wins: u16 = 0,
+        kda: f64 = 0,
+        perf: u16 = 0,
+        lanediff: f64 = 0,
+        deaths: f64 = 0,
+        rate: [3]f64 = @splat(0),
+        rate_n: [3]u32 = @splat(0),
+        roles: [5]u16 = @splat(0),
+        last_end: i64 = 0,
+    };
     const totals = try gpa.alloc(Totals, n_players);
     defer gpa.free(totals);
     @memset(totals, .{});
@@ -374,7 +404,13 @@ pub fn fillExperience(gpa: std.mem.Allocator, games: []const Game, rws: []Row, p
             const t = &totals[p];
             t.games +|= 1;
             t.wins +|= won;
-            t.kda += kda[j];
+            t.kda += extra[j].kda;
+            for (extra[j].rate, &t.rate, &t.rate_n) |x, *sum, *n| if (!std.math.isNan(x)) {
+                sum.* += x;
+                n.* += 1;
+            };
+            t.roles[@backingInt(o.role)] +|= 1;
+            t.last_end = @max(t.last_end, order.end(j));
             const ld = o.y[@backingInt(Outcome.lanediff14)];
             const dt = o.y[@backingInt(Outcome.deaths15)];
             if (!std.math.isNan(ld) and !std.math.isNan(dt)) {
@@ -384,6 +420,7 @@ pub fn fillExperience(gpa: std.mem.Allocator, games: []const Game, rws: []Row, p
             }
         }
         const p = players[i];
+        r.player = p;
         if (p == no_player) continue;
         const c = champs.get(champKey(p, r.champion)) orelse @as([2]u16, @splat(0));
         r.champ_games = c[0];
@@ -397,8 +434,23 @@ pub fn fillExperience(gpa: std.mem.Allocator, games: []const Game, rws: []Row, p
             r.lanediff14_before = @floatCast(t.lanediff / @as(f64, @floatFromInt(t.perf)));
             r.deaths15_before = @floatCast(t.deaths / @as(f64, @floatFromInt(t.perf)));
         }
+        for ([_]*f32{ &r.gpm_before, &r.cspm_before, &r.dpm_before }, t.rate, t.rate_n) |out, sum, n| {
+            if (n > 0) out.* = @floatCast(sum / @as(f64, @floatFromInt(n)));
+        }
+        if (t.games > 0) {
+            const off = t.games -| t.roles[@backingInt(r.role)];
+            r.offrole_before = @as(f32, @floatFromInt(off)) / @as(f32, @floatFromInt(t.games));
+            r.days_since_last = @floatCast(@as(f64, @floatFromInt(order.start(i) - t.last_end)) / ms_per_day);
+        }
     }
 }
+
+/// A row's own game for fillExperience: (kills + assists) / max(deaths, 1); gold, CS and
+/// damage to champions per minute, NaN unknown
+pub const Extra = struct {
+    kda: f32,
+    rate: [3]f32 = @splat(std.math.nan(f32)),
+};
 
 fn champKey(player: u32, champion: u32) u64 {
     return (@as(u64, player) << 32) | champion;
@@ -459,8 +511,8 @@ test "experience counts only games that ended before the start" {
     defer rws.deinit(gpa);
     var players: std.ArrayList(u32) = .empty;
     defer players.deinit(gpa);
-    var kdas: std.ArrayList(f32) = .empty;
-    defer kdas.deinit(gpa);
+    var extras: std.ArrayList(Extra) = .empty;
+    defer extras.deinit(gpa);
     for (games, 0..) |*g, gi| {
         // Starts 10 minutes apart, games up to 40 minutes long: many overlap
         g.* = .{
@@ -478,7 +530,8 @@ test "experience counts only games that ended before the start" {
                 .game = @intCast(gi),
                 .slot = @intCast(slot),
                 .side = @intCast(slot / 5),
-                .role = @fromBackingInt(@as(u3, @intCast(slot % 5))),
+                // Players move between roles: rows' roles vary per player
+                .role = @fromBackingInt(@as(u3, @intCast((slot + gi) % 5))),
                 .champion = rnd.intRangeLessThan(u32, 1, 4),
                 .y = y: {
                     var y: [outcome_count]f32 = @splat(std.math.nan(f32));
@@ -490,16 +543,24 @@ test "experience counts only games that ended before the start" {
                 },
             });
             try players.append(gpa, if (slot == 9) no_player else rnd.intRangeLessThan(u32, 0, 30));
-            try kdas.append(gpa, @floatFromInt(rnd.intRangeLessThan(u8, 0, 12)));
+            var rate: [3]f32 = undefined;
+            for (&rate) |*x| x.* = if (rnd.uintLessThan(u8, 5) == 0) std.math.nan(f32) else @floatFromInt(rnd.intRangeLessThan(u16, 1, 900));
+            try extras.append(gpa, .{ .kda = @floatFromInt(rnd.intRangeLessThan(u8, 0, 12)), .rate = rate });
         }
     }
-    try fillExperience(gpa, games, rws.items, players.items, kdas.items);
+    try fillExperience(gpa, games, rws.items, players.items, extras.items);
     var overlapped: usize = 0;
+    var offroled: usize = 0;
     for (rws.items, players.items) |r, p| {
         var want: [4]u16 = @splat(0);
         var form: [3]f64 = @splat(0);
         var perf: u16 = 0;
-        if (p != no_player) for (rws.items, players.items, kdas.items) |o, op, kda| {
+        var rate: [3]f64 = @splat(0);
+        var rate_n: [3]u32 = @splat(0);
+        var off: u16 = 0;
+        var last_end: ?i64 = null;
+        try std.testing.expectEqual(p, r.player);
+        if (p != no_player) for (rws.items, players.items, extras.items) |o, op, e| {
             const g = games[o.game];
             if (op != p or g.duration_s < experience_min_s) continue;
             const ended = g.start + @as(i64, g.duration_s) * 1000 <= games[r.game].start;
@@ -510,7 +571,14 @@ test "experience counts only games that ended before the start" {
             const won: u16 = @intFromBool(o.side == g.winner);
             want[2] += 1;
             want[3] += won;
-            form[0] += kda;
+            form[0] += e.kda;
+            for (e.rate, &rate, &rate_n) |x, *sum, *n| if (!std.math.isNan(x)) {
+                sum.* += x;
+                n.* += 1;
+            };
+            off += @intFromBool(o.role != r.role);
+            const end = g.start + @as(i64, g.duration_s) * 1000;
+            last_end = @max(last_end orelse end, end);
             const ld = o.y[@backingInt(Outcome.lanediff14)];
             if (!std.math.isNan(ld)) {
                 perf += 1;
@@ -529,6 +597,17 @@ test "experience counts only games that ended before the start" {
         try std.testing.expectApproxEqAbs(form[0] / n, r.kda_before, 1e-4);
         try std.testing.expectApproxEqAbs(form[1] / np, r.lanediff14_before, 1e-2);
         try std.testing.expectApproxEqAbs(form[2] / np, r.deaths15_before, 1e-4);
+        for ([_]f32{ r.gpm_before, r.cspm_before, r.dpm_before }, rate, rate_n) |got, sum, k| {
+            if (k == 0) try std.testing.expect(std.math.isNan(got)) else try std.testing.expectApproxEqAbs(sum / @as(f64, @floatFromInt(k)), got, 1e-2);
+        }
+        if (want[2] == 0) {
+            try std.testing.expect(std.math.isNan(r.offrole_before) and std.math.isNan(r.days_since_last));
+        } else {
+            try std.testing.expectApproxEqAbs(@as(f64, @floatFromInt(off)) / n, r.offrole_before, 1e-5);
+            const days = @as(f64, @floatFromInt(games[r.game].start - last_end.?)) / ms_per_day;
+            try std.testing.expectApproxEqAbs(days, r.days_since_last, 1e-4);
+            offroled += @intFromBool(r.offrole_before > 0 and r.offrole_before < 1);
+        }
     }
-    try std.testing.expect(overlapped > 0);
+    try std.testing.expect(overlapped > 0 and offroled > 0);
 }

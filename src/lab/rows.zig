@@ -16,6 +16,7 @@ pub const Data = rowsql.Data;
 pub const loadSql = rowsql.loadSql;
 pub const no_player = rowsql.no_player;
 pub const fillExperience = rowsql.fillExperience;
+pub const Extra = rowsql.Extra;
 pub const legendaryKey = rowsql.legendaryKey;
 
 /// From SNAP/pack/ when it matches the snapshot (lab/pack.zig), else from SQLite.

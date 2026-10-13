@@ -334,8 +334,11 @@ test "fixture games to lab rows, from SQLite and packed" {
         try fillGames(arena, db, 150, true);
         try db.exec("UPDATE participants SET tier = CASE slot % 3 WHEN 0 THEN 'GOLD' " ++
             "WHEN 1 THEN NULL ELSE 'DIAMOND' END, division = 'II'");
-        // The same player in each slot of every game, slot 9 unknown: experience fills in
-        try db.exec("UPDATE participants SET puuid = CASE slot WHEN 9 THEN NULL ELSE 'p' || slot END");
+        // The same player in each slot of every game, slot 9 unknown: experience fills in.
+        // p2 and p3 swap slots (and roles) in odd games: off-role shares between 0 and 1
+        try db.exec("UPDATE participants SET puuid = CASE WHEN slot = 9 THEN NULL " ++
+            "WHEN slot IN (2, 3) AND CAST(substr(match_id, instr(match_id, '_') + 1) AS INTEGER) % 2 = 1 " ++
+            "THEN 'p' || (5 - slot) ELSE 'p' || slot END");
         // Ladder: p0 changes rank on the third day (Gold II before, Diamond I from then);
         // p1 last seen on the first day; the rest unknown before their game's day
         day0 = @divFloor((try db.scalar("SELECT min(game_start) FROM matches", .{})).?, 86_400_000);
@@ -352,7 +355,7 @@ test "fixture games to lab rows, from SQLite and packed" {
     // The fixture covers what the pack must carry: both sides of the split, two
     // platforms, games with and without timeline outcomes, ranked and unranked rows,
     // players with and without earlier games
-    var seen: struct { tests: usize = 0, na: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0, exp: usize = 0, start: [3]usize = @splat(0) } = .{};
+    var seen: struct { tests: usize = 0, na: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0, exp: usize = 0, rates: usize = 0, offrole: usize = 0, days: usize = 0, start: [3]usize = @splat(0) } = .{};
     for (sql.games) |g| {
         try testing.expect(g.duration_s > 1000 and g.duration_s <= 1620);
         seen.tests += @intFromBool(g.is_test);
@@ -372,11 +375,16 @@ test "fixture games to lab rows, from SQLite and packed" {
         } else try testing.expectEqual(null, r.rank_start);
         seen.items += @intFromBool(!std.math.isNan(r.y[@backingInt(lab_rows.Outcome.first_item)]));
         seen.exp += @intFromBool(r.champ_games > 0);
+        seen.rates += @intFromBool(!std.math.isNan(r.gpm_before) and !std.math.isNan(r.cspm_before) and !std.math.isNan(r.dpm_before));
+        seen.offrole += @intFromBool(r.offrole_before > 0 and r.offrole_before < 1);
+        seen.days += @intFromBool(r.days_since_last > 0);
+        try testing.expectEqual(r.slot == 9, r.player == lab_rows.no_player);
     }
     try testing.expect(sql.games.len >= 100);
     try testing.expect(seen.tests > 0 and seen.tests < sql.games.len and seen.na > 0);
     try testing.expect(seen.tl > 0 and seen.tl < sql.games.len and seen.unranked > 0 and seen.items > 0);
     try testing.expect(seen.exp > 0 and seen.exp < sql.rows.len);
+    try testing.expect(seen.rates > 0 and seen.rates < sql.rows.len and seen.offrole > 0 and seen.days > 0);
     for (seen.start) |n| try testing.expect(n > 0);
 
     try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &legendaries));
