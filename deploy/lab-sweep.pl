@@ -139,7 +139,7 @@ sub table {
         push @done, {t => $t, val => mean(@val), gain => mean(@g), se => mean(@se),
             seed_sd => sd(@g), seeds => scalar @g, blocks => scalar(keys %blocks),
             dev => mean(@dev), dev_sd => sd(@dev), epochs => $ep_sorted[$#ep_sorted / 2],
-            secs => $secs, ens => $en ? $esum / $en : undef};
+            secs => $secs, rows => scalar(@val), ens => $en ? $esum / $en : undef};
     }
     my $m = sub { defined $_[0] ? sprintf('%+.2f', 1000 * $_[0]) : '-' };
     my $p = sub { defined $_[0] ? sprintf('%.2f', 1000 * $_[0]) : '-' };
@@ -150,10 +150,13 @@ sub table {
     print "| # | trial | val log loss | fold gain | seed sd | ens gain | dev gain ",
         "| seeds x blocks | epochs | GPU s | config |\n";
     print "| --- " x 11, "|\n";
+    # netcheck writes rows as it goes: fewer than the fullest trial = still running
+    my $full = 0;
+    for (@done) { $full = $_->{rows} if $_->{rows} > $full }
     my $i = 0;
     for my $d (sort { ($a->{val} // 9) <=> ($b->{val} // 9) } @done) {
         printf "| %d | %s | %s | %s ± %s | %s | %s | %s | %d x %d | %s | %.0f | %s |\n",
-            ++$i, $d->{t},
+            ++$i, $d->{t} . ($d->{rows} < $full ? ' (partial)' : ''),
             defined $d->{val} ? sprintf('%.5f', $d->{val}) : '-', $m->($d->{gain}),
             $p->(defined $d->{se} ? 1.96 * $d->{se} : undef), $p->($d->{seed_sd}),
             $m->($d->{ens}), $m->($d->{dev}), $d->{seeds}, $d->{blocks},

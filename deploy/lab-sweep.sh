@@ -3,7 +3,8 @@
 # 3080, queued on deploy/lab-run.sh's gpu lock. docs/compute.md "Sweeps"
 #
 #   deploy/lab-sweep.sh start SWEEP SPACE [--trials N] [--rng S] [--pack K] [--head]
-#                             [--build-arg A]... [--res gpu|cpu] [--dry-run] -- CMD ARGS...
+#                             [--build-arg A]... [--res gpu|cpu] [--skip N] [--dry-run]
+#                             -- CMD ARGS...
 #   deploy/lab-sweep.sh status SWEEP      its jobs, as deploy/lab-run.sh status shows them
 #   deploy/lab-sweep.sh table SWEEP       trials ranked by inner validation, to table.md
 #   deploy/lab-sweep.sh stop SWEEP        stops its queued and running jobs
@@ -15,6 +16,8 @@
 # runs `meiolol-lab CMD ARGS <its flags> --out tNN` in its job's run dir, output in tNN.log;
 # CMD writes tNN/folds.tsv (meiolol-f1's netcheck contract, lab-sweep.pl). State here, in
 # data/sweeps/SWEEP: space, trials.tsv, jobs.tsv (job, run dir, trials), table.md
+# --skip N: a start cut short after queuing jobs 1..N (jobs.tsv lists what it recorded):
+# the rest, with the same SPACE, --trials and --rng
 #   deploy/lab-sweep.sh start big1 big.space --trials 40 --head \
 #       --build-arg -Dcand=src/lab/cand/win-ratings \
 #       -- netcheck "~/ml/snaps/snap-X" --net big --seeds 1,2,3
@@ -25,7 +28,7 @@ RUN=$ROOT/deploy/lab-run.sh
 HOST=gpu-box
 
 usage() {
-    sed -n '5,9p' "$0"
+    sed -n '5,10p' "$0"
     exit 2
 }
 
@@ -38,7 +41,7 @@ sweep_dir() {
 runs() { tail -n +2 "$1/jobs.tsv" | cut -f 2; }
 
 start() {
-    local sweep=$1 space=$2 trials=32 rng=1 pack=1 dry=0 res=gpu opts=()
+    local sweep=$1 space=$2 trials=32 rng=1 pack=1 dry=0 res=gpu skip=0 opts=()
     shift 2
     while (( $# )); do
         case "$1" in
@@ -49,6 +52,7 @@ start() {
             --head) opts+=(--head) ;;
             --build-arg) opts+=(--build-arg "$2"); shift ;;
             --dry-run) dry=1 ;;
+            --skip) skip=$2; shift ;;
             --) shift; break ;;
             *) echo "unknown option $1"; exit 2 ;;
         esac
@@ -62,7 +66,12 @@ start() {
     [[ "$res" == gpu || "$res" == cpu ]] || { echo "--res: gpu or cpu"; exit 2; }
     local dir
     dir=$(sweep_dir "$sweep")
-    [[ -e "$dir" ]] && (( ! dry )) && { echo "$dir exists: another SWEEP name"; exit 1; }
+    [[ "$skip" =~ ^[0-9]+$ ]] || { echo "--skip: a number"; exit 2; }
+    if (( skip )); then
+        [[ -f "$dir/jobs.tsv" ]] || { echo "--skip: no $dir/jobs.tsv to add to"; exit 1; }
+    elif [[ -e "$dir" ]] && (( ! dry )); then
+        echo "$dir exists: another SWEEP name"; exit 1
+    fi
     local plan
     plan=$(perl "$ROOT/deploy/lab-sweep.pl" sample "$space" "$trials" "$rng") || exit 2
 
@@ -98,20 +107,26 @@ start() {
         return
     fi
 
-    mkdir -p "$dir"
-    cp "$space" "$dir/space"
-    echo "$plan" > "$dir/trials.tsv"
-    printf 'job\trun\ttrials\tcmd\n' > "$dir/jobs.tsv"
+    if (( skip )); then
+        # Same SPACE, --trials and --rng sample the same trials: anything else is a new sweep
+        [[ "$plan" == "$(cat "$dir/trials.tsv")" ]] \
+            || { echo "--skip: these trials differ from $dir/trials.tsv"; exit 1; }
+    else
+        mkdir -p "$dir"
+        cp "$space" "$dir/space"
+        echo "$plan" > "$dir/trials.tsv"
+        printf 'job\trun\ttrials\tcmd\n' > "$dir/jobs.tsv"
+    fi
     local k out run build=()
-    for (( k = 0; k < ${#jobs[@]}; k++ )); do
+    for (( k = skip; k < ${#jobs[@]}; k++ )); do
         # Built once; the rest reuse that binary (lab-run.sh copies it into each run dir)
-        (( k == 0 )) || build=(--no-build)
+        (( k == skip )) || build=(--no-build)
         out=$("$RUN" start "$HOST" "$sweep-j$(printf %02d $((k + 1)))" --res "$res" \
             ${opts[@]+"${opts[@]}"} ${build[@]+"${build[@]}"} -- "${jobs[k]}") \
             || { echo "$out"; exit 1; }
         run=$(sed -n 's/^started \([^ ]*\) on .*/\1/p' <<< "$out")
         [[ -n "$run" ]] || { echo "$out"; exit 1; }
-        (( k == 0 )) && grep '^predicted' <<< "$out" || true
+        (( k == skip )) && grep '^predicted' <<< "$out" || true
         printf 'j%02d\t%s\t%s\t%s\n' $((k + 1)) "$run" "${names[k]}" "$*" >> "$dir/jobs.tsv"
         echo "queued $run (${names[k]})"
     done
