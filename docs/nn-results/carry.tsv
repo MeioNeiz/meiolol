@@ -12,3 +12,5 @@ champion x experience on it, draft	role experience slopes	test	0.00001	0.00004	1
 champion x experience on it, draft	role experience slopes	folds	0.00006	0.00003	1					20261013T223040Z-carry-a	better in 0 of 5 folds	2026-10-14: We can't tell which champions
 planted leverage, sd 2 pp per 1000 gold, minute 15	same state model without it	folds	-0.00052	0.00012	1					20261013T223708Z-carry-plant-lane2	planted truth, not real data: what the folds detect	
 planted leverage, sd 1 pp per 1000 gold, minute 15	same state model without it	folds	-0.00007	0.00007	1					20261013T223656Z-carry-plant-lane1	planted truth, not real data: below detection	
+type x own gold lead, minute 15, new pin 2253Z	same state model without it	folds	-0.00005	0.00003	1					20261013T234133Z-carry-types-2253	better in 5 of 5 folds; dev-val -0.00004 ± 0.00006; bot-lane mages' gold worth less than marksmen's	
+type x towers, dragons, baron, XP, team gold (each), minute 15, 2253Z	same state model without it	folds	0.00001	0.00002	1					20261013T234133Z-carry-types-2253	not detected on either snapshot	

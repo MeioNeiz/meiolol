@@ -2575,6 +2575,54 @@ Reading:
   partly cause (gold on a carry buys damage), the damage-share signs partly record
   fights. In-game stats: post-game lessons only (docs/production-key.md)
 
+#### Win conditions by champion type, new pin (meiolol-61, 2026-10-14)
+
+Does what a state is worth depend on the kind of champion, where single champions were
+below detection? Type = the champion's first Data Dragon tag (Assassin, Fighter, Mage,
+Marksman, Support, Tank), cell = role x type, terms after the champion steps above, each
+the deviation from the baseline's common weight, ridge 1 (no shrinkage prior: 30 cells,
+thousands of rows each): type x own gold lead, x team gold lead, x XP lead, x towers, x
+dragons, x baron held. f694030; cuts now computed in carry as the lab does (checked: the
+2055Z run printed c1's seven cuts exactly). Runs 20261013T233827Z-carry-types-2055
+(validation) and 20261013T234133Z-carry-types-2253 (snap-20261013T2253Z, 216,644 train
+games, 30% of player-games with an earlier game on the champion; cuts
+1791399920616,1791440035991,1791471516870,1791503426611,1791538594699, dev
+1791565305815, select 1791667302145). Folds and dev-val only, no test look.
+
+| step (2253Z) | 10 | 15 | 20 | 25 | 30 | dev-val at 15 |
+| --- | --- | --- | --- | --- | --- | --- |
+| + type x own gold lead | 0.00005 ± 0.00003 [5/5] | 0.00005 ± 0.00003 [5/5] | 0.00002 ± 0.00003 [4/5] | 0.00003 ± 0.00003 [5/5] | 0.00001 ± 0.00003 [4/5] | 0.00004 ± 0.00006 |
+| + type x team gold lead | -0.00001 [3/5] | -0.00001 [1/5] | -0.00002 [2/5] | -0.00002 [2/5] | -0.00002 [2/5] | -0.00001 |
+| + type x XP, towers, dragons, baron (each) | -0.00002 to 0.00000 [0-3/5] | -0.00001 to 0.00001 [0-3/5] | -0.00002 to 0.00001 [0-4/5] | -0.00002 to 0.00000 [0-2/5] | -0.00010 to -0.00002 [1/5] | within ± 0.00004 |
+| champion x own gold lead (as above) | 0.00004 ± 0.00004 [5/5] | 0.00001 ± 0.00002 [3/5] | 0.00001 [2/5] | -0.00000 [2/5] | -0.00008 [2/5] | -0.00001 ± 0.00005 |
+| champion x experience, draft | -0.00001 ± 0.00001 [0/5] | | | | | -0.00004 ± 0.00005 |
+
+On 2055Z (118k games) no type step cleared zero at any minute (0-4/5 folds). The carry
+results above hold on 2253Z: gold by role over team gold +0.0031 to +0.0051 (5/5 every
+minute), bot-most ordering (per sd at 15: bottom 14.8, jungle 9.3, mid 9.0, top 8.0,
+support -0.1), damage share beyond gold as before (bot +1.7, support -3.1 per 10 points).
+
+Type x own gold lead, every train game of 2253Z, win pp per 1000 own gold beyond the
+role's slope (± 95%; 3,000+ rows), minute 15 [25]: bottom Mage -1.7 ± 0.5 [-0.6 ± 0.4],
+Marksman +0.6 ± 0.1 [+0.1 ± 0.1]; jungle Marksman +1.5 ± 0.5 [+1.1 ± 0.4], Tank -0.6 ±
+0.5 [-0.4 ± 0.3], Fighter +0.4 ± 0.2; middle Fighter +1.0 ± 0.3 [+0.5 ± 0.2], Assassin
++0.7 ± 0.3 [+0.2 ± 0.2], Mage 0.0 ± 0.2; top Fighter +0.2 ± 0.1, Tank +0.3 ± 0.3;
+support Support (enchanters) +0.6 ± 0.3 [+0.5 ± 0.3]. Full table: carry-types.tsv in
+the run dir.
+
+Reading:
+- A small real-looking pattern on the new pin, folds only: gold on a bot-lane mage is
+  worth about 2 pp per 1000 less than on a marksman at 15, gold on jungle marksmen and on
+  mid fighters and assassins a little more than on their roles' others. It is what the
+  per-champion train leanings hinted (Viktor, Ziggs bot low), now pooled. The gain is
+  tiny (+0.00005 nats per row, about a fiftieth of what gold by role adds) and not clear
+  on dev-val; not on the test; no learned.md line
+- Win conditions beyond gold (team lead, XP, towers, dragons, baron) do not depend on the
+  champion type: not detected on either snapshot. The draft changes what gold on a seat
+  is worth a little, not what objectives are worth. Line up with meiolol-state's net
+  (draft x state)
+- No plant for type cells yet: the size these folds could have missed is not measured
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
