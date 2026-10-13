@@ -5,8 +5,9 @@
 # On the gpu-box, deploy/lab-watch.sh pauses every run while League is open (Jacob's
 # rule); `watch-install` sets it up. docs/compute.md
 #
-#   deploy/lab-run.sh start HOST NAME [--meiolol] [--head | --no-build] [--build-arg A]...
-#                           [--with PATH]... [--res cpu|gpu|none] [--literal] -- ARGS...
+#   deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --no-build] [--build-arg A]...
+#                           [--with PATH]... [--res cpu|gpu|none|auto] [--literal]
+#                           [--dry-run] -- ARGS...
 #   deploy/lab-run.sh status [HOST]
 #   deploy/lab-run.sh logs HOST RUN [LINES]
 #   deploy/lab-run.sh stop HOST RUN
@@ -14,9 +15,13 @@
 #   deploy/lab-run.sh pull HOST RUN          results to data/runs/RUN here
 #   deploy/lab-run.sh watch-install          League watcher on the gpu-box
 #
-# HOST: gpu-box or mac. ARGS go to meiolol-lab (or meiolol with --meiolol), joined with
-# spaces and run by bash in the run directory on the host, so ~ and globs expand there:
-#   deploy/lab-run.sh start gpu-box smoke -- gpu-smoke
+# HOST: gpu-box or mac, or auto (also when left out): host and resource by predicted
+# finish, deploy/lab-place.pl (wait for the lock + run time from past runs; it says why).
+# --res auto with a named HOST picks the resource only; a named HOST without --res is cpu.
+# --dry-run: the placement or prediction only. ARGS go to meiolol-lab (or meiolol with
+# --meiolol), joined with spaces and run by bash in the run directory on the host, so ~
+# and globs expand there:
+#   deploy/lab-run.sh start smoke -- gpu-smoke
 #   deploy/lab-run.sh start mac eval --meiolol -- eval --data "~/ml/snaps/X" ">" eval.md
 # --literal: each ARG reaches the program as one word, nothing expanded but a leading ~/
 # (deploy/lab-exp.sh: its words come from an agent, so they must not run as shell).
@@ -36,7 +41,8 @@ SRC=$ROOT
 HEAD_ONLY=0
 BUILD_ARGS=()
 WITH=()
-RES=cpu
+RES=
+DRY=0
 LITERAL=0
 WATCH=meiolol-lab-watch
 
@@ -109,6 +115,7 @@ start() {
             --with) WITH+=("$2"); shift ;;
             --res) RES=$2; shift ;;
             --literal) LITERAL=1 ;;
+            --dry-run) DRY=1 ;;
             --) shift; break ;;
             *) echo "unknown option $1"; exit 2 ;;
         esac
@@ -119,7 +126,9 @@ start() {
     local tilde="~"
     [[ "$host" == mac ]] || set -- "${@/#$HOME/$tilde}"
     [[ "$name" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "NAME: letters, digits, _ . -"; exit 2; }
-    [[ "$RES" =~ ^(cpu|gpu|none)$ ]] || { echo "--res: cpu, gpu or none"; exit 2; }
+    # Explicit HOST: cpu unless --res says otherwise, as before placement existed
+    [[ -n "$RES" ]] || { if [[ "$host" == auto ]]; then RES=auto; else RES=cpu; fi; }
+    [[ "$RES" =~ ^(cpu|gpu|none|auto)$ ]] || { echo "--res: cpu, gpu, none or auto"; exit 2; }
     if (( LITERAL )); then
         local a quoted=()
         for a in "$@"; do
@@ -128,6 +137,19 @@ start() {
         done
         set -- "${quoted[@]}"
     fi
+    # Placement (auto) or just the prediction (explicit; a failure there changes nothing)
+    local placed p_host p_res predicted=- why="" auto=0
+    [[ "$host" == auto || "$RES" == auto ]] && auto=1
+    if placed=$(place "$host" "$RES" "$bin" "$*" 2>&1); then
+        read -r p_host p_res predicted <<< "$(head -n 1 <<< "$placed")"
+        why=$(sed -n 2p <<< "$placed")
+        if (( auto )); then host=$p_host RES=$p_res; echo "placed: $why"
+        else echo "predicted: $why"; fi
+    elif (( auto )); then
+        echo "not placed: $placed"
+        exit 1
+    fi
+    (( DRY )) && exit 0
     local path
     path=$(binpath "$host" "$bin")
     local tmp
@@ -161,6 +183,8 @@ start() {
         if (( ${#BUILD_ARGS[@]} )); then echo "build ${BUILD_ARGS[*]}"; fi
         if (( ${#WITH[@]} )); then echo "with ${WITH[*]}"; fi
     } > "$tmp/meta"
+    # Seconds of running time expected (deploy/lab-place.pl), and why: status checks it
+    [[ "$predicted" == - ]] || printf "%s\t%s\n" "$predicted" "$why" > "$tmp/predicted"
     : > "$tmp/src.diff"
     (( HEAD_ONLY )) || git -C "$ROOT" diff HEAD -- src build.zig > "$tmp/src.diff"
     # caffeinate: a Mac asleep mid-run looks like a hung run
@@ -191,6 +215,7 @@ EOF
     on "$host" "mkdir -p $RUNS && mkdir $RUNS/$run" \
         || { echo "$run already exists on $host: not started"; exit 1; }
     copy "$host" "$RUNS/$run" "$path" "$tmp/meta" "$tmp/src.diff" "$tmp/job.sh"
+    [[ -f "$tmp/predicted" ]] && copy "$host" "$RUNS/$run" "$tmp/predicted"
     if (( ${#WITH[@]} )); then copy "$host" "$RUNS/$run" "${WITH[@]}"; fi
     on "$host" "cd $RUNS/$run && $LAUNCH"
     echo "started $run on $host"
@@ -200,10 +225,18 @@ EOF
 # to the background, so nothing keeps ssh's output open. deploy/lab-watch.sh has a copy
 LAUNCH="{ nohup perl -e 'setpgrp(0,0); exec @ARGV' ./job.sh >> log 2>&1 < /dev/null & }"
 
-# One line per run: name, state, start, last log line
-status() {
+# What deploy/lab-place.pl reads about HOST, tab-separated, each line led by HOST: its
+# clock, the watcher's last League line, which of PATHS exist (~/ paths, checked by
+# lab-place.pl inputs), and one line per run. Fails if the host can't be reached
+listing() {
+    local host=$1 have="" p
+    shift
+    for p in "$@"; do have+="[[ -e $p ]] && printf 'have\t%s\n' '$p'
+"; done
     # shellcheck disable=SC2016 # expands on the host
-    on "$1" 'cd '"$RUNS"' 2>/dev/null || exit 0
+    local script='printf "now\t%s\n" "$(date -u +%FT%TZ)"
+        '"$have"'cd '"$RUNS"' 2>/dev/null || exit 0
+        [[ -f watcher.log ]] && printf "league\t%s\n" "$(grep -a "League " watcher.log | tail -n 1)"
         for d in */; do
             d=${d%/}; [[ -f $d/job.sh ]] || continue
             pg=$(cat $d/job.pgid 2>/dev/null)
@@ -214,10 +247,35 @@ status() {
                 elif [[ -f $d/queued ]]; then s="queued $(cat $d/queued)"
                 else s=running; fi
             else s=died; fi
-            printf "%s | %s | %s | %s\n" "$d" "$s" "$(cat $d/started 2>/dev/null)" \
-                "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80)"
+            m() { sed -n "s/^$1 //p" $d/meta 2>/dev/null | tr "\t" " "; }
+            printf "run\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$d" "$s" \
+                "$(cat $d/started 2>/dev/null)" "$(cat $d/ended 2>/dev/null)" \
+                "$(m res)" "$(m bin | cut -d " " -f 1)" "$(m args)" \
+                "$(tr "\n" , 2>/dev/null < $d/pauses.log)" "$(cut -f 1 $d/predicted 2>/dev/null)" \
+                "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80 | tr "\t" " ")"
         done'
+    if [[ "$host" == mac ]]; then on mac "$script"
+    else ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" "$script"; fi | sed "s/^/$host	/"
+}
+
+# Prints "HOST RES SECONDS" (- if unknown), then why: deploy/lab-place.pl from both hosts'
+# runs. HOST and RES may be auto
+place() {
+    local paths h
+    paths=$(perl "$ROOT/deploy/lab-place.pl" inputs "$4" | tr '\n' ' ')
+    # shellcheck disable=SC2086 # plain ~/ paths, no spaces (lab-place.pl inputs)
+    for h in gpu-box mac; do listing "$h" $paths || true; done \
+        | perl "$ROOT/deploy/lab-place.pl" place "$@"
+}
+
+# One line per run: name, state, start, run time (so far) against its prediction, last
+# log line
+status() {
+    local out
+    out=$(listing "$1") || return 1
+    perl "$ROOT/deploy/lab-place.pl" status "$1" <<< "$out"
     if [[ "$1" == gpu-box ]]; then
+
         echo "watcher: $(on gpu-box "systemctl --user is-active $WATCH" || true)," \
             "last said: $(on gpu-box "tail -n 1 $RUNS/watcher.log" || true)"
     fi
@@ -225,8 +283,12 @@ status() {
 
 case "${1:-}" in
     start)
-        (( $# >= 3 )) || { sed -n '8,14p' "$0"; exit 2; }
-        check_host "$2"
+        (( $# >= 3 )) || { sed -n '8,15p' "$0"; exit 2; }
+        # No HOST (start NAME [OPTIONS] -- ARGS): placed by predicted finish, as auto
+        if [[ "$2" != mac && "$2" != gpu-box && "$2" != auto && "$3" == -* ]]; then
+            set -- start auto "${@:2}"
+        fi
+        [[ "$2" == auto ]] || check_host "$2"
         start "${@:2}"
         ;;
     status)
@@ -292,5 +354,5 @@ case "${1:-}" in
             && systemctl --user restart $WATCH && systemctl --user start meiolol-archive-pull.timer \
             && systemctl --user is-active $WATCH meiolol-archive-pull.timer"
         ;;
-    *) sed -n '8,14p' "$0"; exit 2 ;;
+    *) sed -n '8,15p' "$0"; exit 2 ;;
 esac

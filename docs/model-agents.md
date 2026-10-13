@@ -73,7 +73,9 @@ shows. When an agent hands over, get the successor's name and tell the others.
 - learned.md lines in plain English first; commit by path only, new files with their
   first import; pre-push CI must pass (one failing commit blocks every push)
 - Hand over past ~40% context with a focused brief; tell the coordinator the new name
-- gpu-box: check League isn't running; lab runs queue on ~/ml/locks
+- Lab runs: `deploy/lab-run.sh start NAME -- ARGS` (no HOST) picks host and resource by
+  predicted finish and queues on ~/ml/locks; name a HOST only when it must run there.
+  League pauses gpu-box runs (placement allows for it)
 
 ## Open, waiting
 

@@ -35,8 +35,8 @@ experiments run on:
 ## Runs (deploy/lab-run.sh)
 
 ```
-deploy/lab-run.sh start HOST NAME [--meiolol] [--head | --no-build] [--res cpu|gpu|none]
-    -- ARGS...
+deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --no-build]
+    [--res cpu|gpu|none|auto] [--dry-run] -- ARGS...
 deploy/lab-run.sh status [HOST] | logs HOST RUN [N] | stop HOST RUN | restart HOST RUN
 deploy/lab-run.sh pull HOST RUN
 deploy/lab-run.sh watch-install
@@ -61,6 +61,33 @@ deploy/lab-run.sh watch-install
 - WSL restarts: lab-watch.sh, starting with WSL, runs again (twice at most) any run that
   was live when WSL went down; `restart` does it by hand. A run over ~1 h should keep
   checkpoints in its run dir and resume from them (none does yet: runs take minutes)
+
+### Placement (deploy/lab-place.pl)
+
+Without HOST (or HOST auto) a run goes where it should finish first: for each feasible
+(host, resource), predicted wait for the lock + predicted run time, printed on one line
+before the build (`--dry-run` stops there). A named HOST without --res is cpu, as
+before; --res auto picks the resource on that host. Every start writes the prediction to
+the run dir (`predicted`: seconds, then why) and `status` shows it beside the actual
+run time.
+
+- Run time = ended - started - time paused for League (pauses.log), runs that exited 0.
+  Estimate: median of the last 5 on that host with the same args, else the same command
+  (exp: action, campaign, target) on the same snapshot, else that command on any
+  snapshot, else the bare subcommand
+- A host with none borrows the other host's, times their speed ratio: median over
+  commands on the same snapshot run on both (5 s or more). None yet: the Mac assumed 2x
+  slower (eval 13 vs 7 s). No history anywhere: gpu-box cpu, as before, and it says so
+- Wait = what the live runs on that lock have left: queued ones their prediction,
+  running ones prediction minus time so far (overdue: a fifth of their time so far)
+- Feasible: the GPU only for CUDA commands (gpu-smoke; bench and draftbench when
+  --devices has gpu; with CPU devices too they take the cpu lock, as their timings need
+  it); the Mac never for CUDA; a host only if the args' snapshot paths (any `~/...snap-X`
+  or absolute path) exist there. The Mac keeps snapshots in ~/personal/meiolol/data, the
+  gpu-box in ~/ml/snaps, so a snapshot path pins its host today; an unreachable host
+  drops out
+- League up (or unknown) on the gpu-box: + the median pause so far (30 min with none)
+- Lab agents (lab-exp.sh) keep LAB_HOST: their ladder lives on the host
 
 ## Lab agent limits
 
