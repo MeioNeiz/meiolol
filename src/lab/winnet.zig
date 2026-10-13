@@ -12,6 +12,8 @@
 //!          only add what the candidate misses. The offset on fit games is the
 //!          candidate's in-sample prediction; for early stopping, a candidate fitted on
 //!          the games before the validation cut
+//!   set:   DeepSets over each team on win-comp's profiles, residual like resid
+//!          (lab/setnet.zig)
 //! All antisymmetric: logit = (f(blue, red) - f(red, blue)) / 2 + c[platform] (+ offset).
 //! Writes DIR/folds.tsv (per seed and block, plus the seed-averaged `ens`) and
 //! DIR/preds.tsv (per game); gains paired per game (= clustered by game)
@@ -29,6 +31,7 @@ const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const randsplit = @import("randsplit.zig");
 const draftnet = @import("draftnet.zig");
+const setnet = @import("setnet.zig");
 const par = @import("../par.zig");
 const cuda = @import("../gpu/cuda.zig");
 const dn = @import("../gpu/draftnet_layout.zig");
@@ -36,7 +39,7 @@ const dn = @import("../gpu/draftnet_layout.zig");
 const Io = std.Io;
 
 pub const usage =
-    \\  netcheck SNAP --net big|small|resid [OPT VALUE]...
+    \\  netcheck SNAP --net big|small|resid|set [OPT VALUE]...
     \\                                  neural nets vs the -Dcand candidate on dev-val
     \\                                  and win-comp's 5 forward folds (lab/winnet.zig):
     \\                                  --emb N --hidden N --depth N --dropout X --wd X
@@ -45,6 +48,8 @@ pub const usage =
     \\                                  (big: --evals defaults to 1; patience counts
     \\                                  evaluations)
     \\                                  --fix-offset 0|1
+    \\                                  set (lab/setnet.zig): --phi N --rho N
+    \\                                  --cross 0|1 --ids 0|1
     \\                                  --emb-init DIR (small, resid: champion-role
     \\                                  embeddings from DIR/emb-<block>-s<seed>.tsv,
     \\                                  meiolol-lab pretrain) --emb-freeze 0|1
@@ -56,7 +61,12 @@ pub const usage =
     \\
 ;
 
-pub const Kind = enum { big, small, resid };
+pub const Kind = enum { big, small, resid, set };
+
+/// Nets fitted on top of the candidate's logit (cross-fitted on training games)
+fn usesOffset(k: Kind) bool {
+    return k == .resid or k == .set;
+}
 
 pub const Options = struct {
     net: Kind = .small,
@@ -96,12 +106,13 @@ pub const Options = struct {
     /// CPU threads for small and resid fits (one seed per thread) and big on the CPU
     threads: u32 = 3,
     out: []const u8 = ".",
+    set: setnet.Config = .{},
 };
 
 pub const Block = enum { dev, f1, f2, f3, f4, f5, random };
 const n_folds = 5;
 const val_share = 0.1;
-const n_platforms = 16;
+pub const n_platforms = 16;
 
 pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []const []const u8, ptx: [:0]const u8) !u8 {
     if (argv.len < 1) {
@@ -149,6 +160,20 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     try pw.interface.writeAll("fold\tmatch_id\tplatform\ty\tcand");
     for (opts.seeds) |s| try pw.interface.print("\tseed{d}", .{s});
     try pw.interface.writeAll("\tens\n");
+    // gains' dev.tsv shape: one row per game, blue's chance, the block last
+    const cand_name = if (@hasDecl(cand, "name")) cand.name else "cand";
+    const game_head = "match_id\tslot\toutcome\ty\tpred\tblock\n";
+    var cand_file = try dir.createFile(io, try std.fmt.allocPrint(arena, "games-{s}.tsv", .{cand_name}), .{});
+    defer cand_file.close(io);
+    var cbuf: [64 * 1024]u8 = undefined;
+    var cw = cand_file.writer(io, &cbuf);
+    try cw.interface.writeAll(game_head);
+    var net_file = try dir.createFile(io, try std.fmt.allocPrint(arena, "games-{s}.tsv", .{@tagName(opts.net)}), .{});
+    defer net_file.close(io);
+    var nbuf: [64 * 1024]u8 = undefined;
+    var nw = net_file.writer(io, &nbuf);
+    try nw.interface.writeAll(game_head);
+    const out: Out = .{ .folds = &fw.interface, .preds = &pw.interface, .cand = &cw.interface, .net = &nw.interface };
 
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
@@ -183,15 +208,14 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             },
         };
         spec.filter = if (filter) |*f| f else null;
-        try runBlock(gpa, io, &data, players, c, spec, b, opts, if (gpu) |*g| g else null, &fw.interface, &pw.interface, w, &pooled);
+        try runBlock(gpa, io, &data, players, c, spec, b, opts, if (gpu) |*g| g else null, out, w, &pooled);
     }
     if (pooled.cand.items.len > 0) {
         try w.writeAll("\nfolds pooled (blocks 1-5 run here):\n");
         try summaryHead(w);
         try summaryRow(gpa, w, "folds", pooled.ys.items, pooled.cand.items, pooled.ens.items, null);
     }
-    try fw.interface.flush();
-    try pw.interface.flush();
+    for ([_]*Io.Writer{ out.folds, out.preds, out.cand, out.net }) |x| try x.flush();
     try w.flush();
     return 0;
 }
@@ -266,13 +290,14 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.emb_freeze = !std.mem.eql(u8, v, "0");
         } else if (std.mem.eql(u8, k, "--out")) {
             o.out = v;
-        } else return error.UnknownOption;
+        } else if (!try setnet.parseOption(&o.set, k, v)) return error.UnknownOption;
     }
     if (o.split_seed != null) {
         if (set.contains("--blocks")) return error.SplitReplacesBlocks;
         o.blocks = &.{.random};
     }
     if (o.emb_freeze and o.emb_init == null) return error.FreezeWithoutInit;
+    if (o.net == .set and o.emb_init != null) return error.EmbInitNotForSet;
     if (o.net == .big) {
         if (o.emb_init != null) return error.EmbInitNotForBig;
         // draftnet's shape is fixed (dn: 10 x 32, 512, 256, dropout 0.1)
@@ -377,7 +402,7 @@ const Pooled = struct {
 };
 
 /// One game as the nets see it: dense ids by slot (blue by role, then red)
-const NetGame = struct {
+pub const NetGame = struct {
     ids: [10]u32,
     platform: u8,
     y: f32,
@@ -459,7 +484,7 @@ fn key(champion: u32, role: usize) u64 {
     return (@as(u64, champion) << 3) | role;
 }
 
-fn logit(p: f32) f32 {
+pub fn logit(p: f32) f32 {
     const q = std.math.clamp(p, 1e-6, 1 - 1e-6);
     return @log(q / (1 - q));
 }
@@ -479,7 +504,7 @@ fn dnGames(gpa: std.mem.Allocator, games: []const NetGame) ![]dn.Game {
     return out;
 }
 
-const Fitted = struct {
+pub const Fitted = struct {
     /// Blue's chance per scored game
     pred: []f32,
     /// Early stopping's choice, on the inner fit games
@@ -487,6 +512,9 @@ const Fitted = struct {
     val_loss: f64,
     seconds: f64,
 };
+
+/// netcheck's output files: folds.tsv, preds.tsv, games-<cand>.tsv, games-<net>.tsv
+const Out = struct { folds: *Io.Writer, preds: *Io.Writer, cand: *Io.Writer, net: *Io.Writer };
 
 fn runBlock(
     gpa: std.mem.Allocator,
@@ -498,11 +526,12 @@ fn runBlock(
     block: Block,
     opts: Options,
     gpu: ?*const cuda.Gpu,
-    fw: *Io.Writer,
-    pw: *Io.Writer,
+    out: Out,
     w: *Io.Writer,
     pooled: *Pooled,
 ) !void {
+    const fw = out.folds;
+    const pw = out.preds;
     const t0 = Io.Clock.awake.now(io);
     // Fit games as buildTrain keeps them; scored games of the block
     var fit: std.ArrayList(u32) = .empty;
@@ -539,7 +568,7 @@ fn runBlock(
     const p_inner = try gpa.alloc(f32, d.games.len);
     defer gpa.free(p_inner);
     @memset(p_inner, std.math.nan(f32));
-    if (opts.net == .resid) {
+    if (usesOffset(opts.net)) {
         // Training games cross-fitted; val (scored) from the candidate on all inner (fit)
         try candCross(gpa, d, players, all_keep, fit.items, want, p_all);
         var inner_keep = all_keep;
@@ -555,7 +584,7 @@ fn runBlock(
     defer vocab_inner.deinit(gpa);
     var vocab_all = try Vocab.init(gpa, d, fit.items, opts.min_games);
     defer vocab_all.deinit(gpa);
-    const resid = opts.net == .resid;
+    const resid = usesOffset(opts.net);
     const g_inner = try netGames(gpa, d, inner.items, &vocab_inner, if (resid) p_inner else null);
     defer gpa.free(g_inner);
     const g_val = try netGames(gpa, d, val.items, &vocab_inner, if (resid) p_inner else null);
@@ -571,12 +600,12 @@ fn runBlock(
         for (fits) |f| gpa.free(f.pred);
         gpa.free(fits);
     }
-    const sets: Sets = .{ .inner = g_inner, .val = g_val, .fit = g_fit, .scored = g_scored, .n_inner = vocab_inner.n, .n_all = vocab_all.n, .block = block, .vocab_inner = &vocab_inner, .vocab_all = &vocab_all };
+    const sets: Sets = .{ .inner = g_inner, .val = g_val, .fit = g_fit, .scored = g_scored, .n_inner = vocab_inner.n, .n_all = vocab_all.n, .block = block, .vocab_inner = &vocab_inner, .vocab_all = &vocab_all, .d = d, .idx = .{ .inner = inner.items, .val = val.items, .fit = fit.items, .scored = scored.items } };
     switch (opts.net) {
         .big => for (opts.seeds, fits) |seed, *f| {
             f.* = try fitBig(gpa, io, gpu, opts, seed, sets);
         },
-        .small, .resid => {
+        .small, .resid, .set => {
             const Ctx = struct {
                 gpa: std.mem.Allocator,
                 io: Io,
@@ -585,7 +614,7 @@ fn runBlock(
                 seeds: []const u32,
                 fits: []Fitted,
                 fn one(x: @This(), i: usize) !void {
-                    x.fits[i] = try fitSmall(x.gpa, x.io, x.opts, x.seeds[i], x.sets);
+                    x.fits[i] = if (x.opts.net == .set) try setnet.fit(x.gpa, x.io, x.opts, x.seeds[i], x.sets) else try fitSmall(x.gpa, x.io, x.opts, x.seeds[i], x.sets);
                 }
             };
             // One seed per thread, at most opts.threads at once
@@ -662,6 +691,8 @@ fn runBlock(
         try pw.print("{s}\t{s}\t{s}\t{d}\t{d:.6}", .{ name, g.match_id, plat[g.platform], ys[i], pc[i] });
         for (fits) |f| try pw.print("\t{d:.6}", .{f.pred[i]});
         try pw.print("\t{d:.6}\n", .{ens[i]});
+        try out.cand.print("{s}\t0\twin\t{d}\t{d:.6}\t{s}\n", .{ g.match_id, ys[i], pc[i], name });
+        try out.net.print("{s}\t0\twin\t{d}\t{d:.6}\t{s}\n", .{ g.match_id, ys[i], ens[i], name });
     }
     if (!spec.dev and spec.random == null) {
         try pooled.ys.appendSlice(gpa, ys);
@@ -682,7 +713,7 @@ fn blockName(b: Block) []const u8 {
     };
 }
 
-fn secondsSince(io: Io, t0: Io.Timestamp) f64 {
+pub fn secondsSince(io: Io, t0: Io.Timestamp) f64 {
     const ns = t0.durationTo(Io.Clock.awake.now(io)).toNanoseconds();
     return @as(f64, @floatFromInt(ns)) / 1e9;
 }
@@ -697,7 +728,7 @@ fn summaryRow(gpa: std.mem.Allocator, w: *Io.Writer, label: []const u8, ys: []co
     if (f) |x| try w.print(" {d:.2} | {d:.5} |\n", .{ x.epochs, x.val_loss }) else try w.writeAll(" | |\n");
 }
 
-fn loss1(y: f32, p: f32) f64 {
+pub fn loss1(y: f32, p: f32) f64 {
     const q: f64 = std.math.clamp(p, 1e-6, 1 - 1e-6);
     return -(y * @log(q) + (1 - y) * @log(1 - q));
 }
@@ -758,7 +789,7 @@ fn auc(gpa: std.mem.Allocator, ys: []const f32, p: []const f32) !f64 {
     return (rank_sum - pos * (pos + 1) / 2) / (pos * neg);
 }
 
-const Sets = struct {
+pub const Sets = struct {
     inner: []const NetGame,
     val: []const NetGame,
     fit: []const NetGame,
@@ -768,6 +799,9 @@ const Sets = struct {
     block: Block,
     vocab_inner: *const Vocab,
     vocab_all: *const Vocab,
+    d: *const rows.Data,
+    /// Data game indices, in the same order as the game sets above
+    idx: struct { inner: []const u32, val: []const u32, fit: []const u32, scored: []const u32 },
 };
 
 /// Pretrained champion-role vectors (pretrain.zig's emb-<block>-s<seed>.tsv: champion,
@@ -824,7 +858,7 @@ const EmbInit = struct { table: *const EmbTable, vocab: *const Vocab };
 
 /// Steps for the refit on n games: a tenth more games, a tenth more epochs (as
 /// win-ratings and win-comp)
-fn refitSteps(epochs: f64, n: usize, batch: u32) u64 {
+pub fn refitSteps(epochs: f64, n: usize, batch: u32) u64 {
     const per: f64 = @floatFromInt(stepsPerEpoch(n, batch));
     return @max(1, @as(u64, @intFromFloat(@round(epochs * 1.1 * per))));
 }
@@ -932,7 +966,7 @@ const View = struct {
     h: [max_depth][]f32,
 };
 
-fn dot(a: []const f32, b: []const f32) f32 {
+pub fn dot(a: []const f32, b: []const f32) f32 {
     const V = @Vector(8, f32);
     var acc: V = @splat(0);
     var i: usize = 0;
@@ -942,7 +976,7 @@ fn dot(a: []const f32, b: []const f32) f32 {
     return s;
 }
 
-fn axpy(y: []f32, s: f32, x: []const f32) void {
+pub fn axpy(y: []f32, s: f32, x: []const f32) void {
     for (y, x) |*a, b| a.* += s * b;
 }
 
@@ -1001,7 +1035,7 @@ fn backward(n: *const SmallNet, g: *const NetGame, swap: bool, v: *const View, d
     }
 }
 
-fn sigmoid(x: f32) f32 {
+pub fn sigmoid(x: f32) f32 {
     return 1 / (1 + @exp(-x));
 }
 
@@ -1049,7 +1083,7 @@ const Work = struct {
 
 const Trained = struct { net: SmallNet, steps: u64, epochs: f64, val_loss: f64 };
 
-const stepsPerEpoch = draftnet.stepsPerEpoch;
+pub const stepsPerEpoch = draftnet.stepsPerEpoch;
 
 /// AdamW over shuffled batches for at most max_steps; with val, evaluated opts.evals
 /// times an epoch, stopping after `patience` evaluations without a new best and keeping
@@ -1312,4 +1346,8 @@ test "cross-fit: a game's offset never comes from a fit that holds it" {
         }
     }
     for (seen) |n| try testing.expect(n > 50);
+}
+
+test {
+    _ = setnet;
 }
