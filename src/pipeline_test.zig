@@ -113,6 +113,7 @@ test "fixture games to stats, curves and the website" {
         .builds = .{ null, builds_path, null, builds_path },
     };
     try site.generate(gpa, io, db, opts);
+    try expectSiteFiles(arena, io, out);
     for ([_][]const u8{
         "index.html",
         "champions.html",
@@ -392,6 +393,46 @@ test "fixture games to lab rows, from SQLite and packed" {
     var loaded2 = (try lab_pack.read(gpa, io, snap, &legendaries)).?;
     defer loaded2.deinit();
     try expectSameRows(&sql2, &loaded2);
+}
+
+/// Every generated file's hash, against src/testdata/site-files.txt: a refactor that
+/// claims the same output shows it, and a change on purpose shows which files it moved.
+/// Assets copied from static/ or compiled (wasm) are left out
+fn expectSiteFiles(arena: std.mem.Allocator, io: std.Io, out: []const u8) !void {
+    var dir = try std.Io.Dir.cwd().openDir(io, out, .{ .iterate = true });
+    defer dir.close(io);
+    var walker = try dir.walk(arena);
+    defer walker.deinit();
+    var lines: std.ArrayList([]const u8) = .empty;
+    while (try walker.next(io)) |e| {
+        if (e.kind != .file) continue;
+        const ext = std.fs.path.extension(e.path);
+        const copied = [_][]const u8{ ".gz", ".js", ".css", ".svg", ".woff2", ".wasm" };
+        if (for (copied) |c| (if (std.mem.eql(u8, c, ext)) break true) else false) continue;
+        var hash: [32]u8 = undefined;
+        std.crypto.hash.sha2.Sha256.hash(try dir.readFileAlloc(io, e.path, arena, .limited(1 << 24)), &hash, .{});
+        try lines.append(arena, try arena.print("{s} {s}\n", .{ e.path, std.fmt.bytesToHex(hash[0..8].*, .lower) }));
+    }
+    std.mem.sort([]const u8, lines.items, {}, struct {
+        fn f(_: void, a: []const u8, b: []const u8) bool {
+            return std.mem.lessThan(u8, a, b);
+        }
+    }.f);
+    const got = try std.mem.concat(arena, u8, lines.items);
+    const want = @embedFile("testdata/site-files.txt");
+    if (std.mem.eql(u8, got, want)) return;
+    // Paths whose line is in one list only
+    for ([_][]const u8{ got, want }, [_][]const u8{ "now", "was" }) |list, label| {
+        var it = std.mem.tokenizeScalar(u8, list, '\n');
+        const other = if (list.ptr == got.ptr) want else got;
+        while (it.next()) |line| {
+            if (std.mem.indexOf(u8, other, line) == null) std.debug.print("site file {s}: {s}\n", .{ label, line });
+        }
+    }
+    const new_path = ".zig-cache/site-files.txt";
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = new_path, .data = got });
+    std.debug.print("site output changed; if on purpose: cp {s} src/testdata/site-files.txt\n", .{new_path});
+    return error.TestUnexpectedResult;
 }
 
 fn expectSameRows(want: *const lab_rows.Data, got: *const lab_rows.Data) !void {
