@@ -43,6 +43,9 @@ pub const usage =
     \\                                  --emb-wd X --lr X --clip X --batch N --evals N
     \\                                  --patience N --max-epochs N --min-games N
     \\                                  --fix-offset 0|1
+    \\                                  --emb-init DIR (small, resid: champion-role
+    \\                                  embeddings from DIR/emb-<block>-s<seed>.tsv,
+    \\                                  meiolol-lab pretrain) --emb-freeze 0|1
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
     \\                                  --fraction X (nested share of fit games)
     \\                                  --threads N --out DIR
@@ -68,6 +71,11 @@ pub const Options = struct {
     clip: f32 = 1,
     /// resid: the offset's weight stays 1
     fix_offset: bool = false,
+    /// Champion-role embeddings start from DIR/emb-<block>-s<seed>.tsv (pretrain.zig;
+    /// s1 when the seed has none); --emb must be their width
+    emb_init: ?[]const u8 = null,
+    /// With emb_init: champion-role embeddings stay as loaded
+    emb_freeze: bool = false,
     /// Validation evaluations per epoch (early stopping; nets overfit within 1-3 epochs)
     evals: u32 = 4,
     lr: f32 = 1e-3,
@@ -144,8 +152,8 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
     try w.print("# netcheck: {s} net vs {s}, fraction {d}, seeds {any}\n\n", .{ @tagName(opts.net), if (@hasDecl(cand, "name")) cand.name else "cand", opts.fraction, opts.seeds });
-    try w.print("options: emb {d} hidden {d} depth {d} dropout {d} wd {d} emb_wd {d} lr {d} clip {d} batch {d} evals {d} patience {d} min_games {d}\n\n", .{
-        opts.emb, opts.hidden, opts.depth, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games,
+    try w.print("options: emb {d} hidden {d} depth {d} dropout {d} wd {d} emb_wd {d} lr {d} clip {d} batch {d} evals {d} patience {d} min_games {d} emb_init {s} emb_freeze {}\n\n", .{
+        opts.emb, opts.hidden, opts.depth, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games, opts.emb_init orelse "-", opts.emb_freeze,
     });
     if (opts.split_seed != null or opts.ldai) {
         try w.print("split: {s}{s}; dev only, the test set untouched\n\n", .{ if (opts.split_seed != null) "LoLDraftAI's random tenth" else "time", if (opts.ldai) ", LoLDraftAI's filters" else "" });
@@ -250,6 +258,10 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.fraction = try std.fmt.parseFloat(f64, v);
         } else if (std.mem.eql(u8, k, "--threads")) {
             o.threads = try std.fmt.parseInt(u32, v, 10);
+        } else if (std.mem.eql(u8, k, "--emb-init")) {
+            o.emb_init = v;
+        } else if (std.mem.eql(u8, k, "--emb-freeze")) {
+            o.emb_freeze = !std.mem.eql(u8, v, "0");
         } else if (std.mem.eql(u8, k, "--out")) {
             o.out = v;
         } else return error.UnknownOption;
@@ -258,7 +270,9 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         if (set.contains("--blocks")) return error.SplitReplacesBlocks;
         o.blocks = &.{.random};
     }
+    if (o.emb_freeze and o.emb_init == null) return error.FreezeWithoutInit;
     if (o.net == .big) {
+        if (o.emb_init != null) return error.EmbInitNotForBig;
         // draftnet's shape is fixed (dn: 10 x 32, 512, 256, dropout 0.1)
         for ([_][]const u8{ "--emb", "--hidden", "--depth", "--dropout", "--emb-wd", "--clip", "--evals" }) |k| if (set.contains(k)) return error.FixedForBig;
         const d: draftnet.Config = .{};
@@ -554,7 +568,7 @@ fn runBlock(
         for (fits) |f| gpa.free(f.pred);
         gpa.free(fits);
     }
-    const sets: Sets = .{ .inner = g_inner, .val = g_val, .fit = g_fit, .scored = g_scored, .n_inner = vocab_inner.n, .n_all = vocab_all.n };
+    const sets: Sets = .{ .inner = g_inner, .val = g_val, .fit = g_fit, .scored = g_scored, .n_inner = vocab_inner.n, .n_all = vocab_all.n, .block = block, .vocab_inner = &vocab_inner, .vocab_all = &vocab_all };
     switch (opts.net) {
         .big => for (opts.seeds, fits) |seed, *f| {
             f.* = try fitBig(gpa, io, gpu, opts, seed, sets);
@@ -747,7 +761,62 @@ const Sets = struct {
     scored: []const NetGame,
     n_inner: u32,
     n_all: u32,
+    block: Block,
+    vocab_inner: *const Vocab,
+    vocab_all: *const Vocab,
 };
+
+/// Pretrained champion-role vectors (pretrain.zig's emb-<block>-s<seed>.tsv: champion,
+/// role, fit games, then d values; champion 0 is the role's shared vector)
+const EmbTable = struct {
+    map: std.AutoHashMapUnmanaged(u64, []f32) = .empty,
+    arena: std.heap.ArenaAllocator,
+
+    fn load(gpa: std.mem.Allocator, io: Io, dir: []const u8, block: Block, seed: u32, d: u32) !EmbTable {
+        var t: EmbTable = .{ .arena = .init(gpa) };
+        errdefer t.arena.deinit();
+        const a = t.arena.allocator();
+        const text = for ([_]u32{ seed, 1 }) |s| {
+            const path = try std.fmt.allocPrint(a, "{s}/emb-{s}-s{d}.tsv", .{ dir, blockName(block), s });
+            break Io.Dir.cwd().readFileAlloc(io, path, a, .limited(64 << 20)) catch |e| switch (e) {
+                error.FileNotFound => continue,
+                else => return e,
+            };
+        } else return error.EmbFileNotFound;
+        var lines = std.mem.tokenizeScalar(u8, text, '\n');
+        _ = lines.next();
+        while (lines.next()) |line| {
+            var it = std.mem.tokenizeScalar(u8, line, '\t');
+            const champion = try std.fmt.parseInt(u32, it.next() orelse return error.EmbFormat, 10);
+            const role = try std.fmt.parseInt(u3, it.next() orelse return error.EmbFormat, 10);
+            _ = it.next() orelse return error.EmbFormat;
+            const v = try a.alloc(f32, d);
+            for (v) |*x| x.* = try std.fmt.parseFloat(f32, it.next() orelse return error.EmbDim);
+            if (it.next() != null) return error.EmbDim;
+            try t.map.put(a, key(champion, role), v);
+        }
+        return t;
+    }
+
+    fn deinit(t: *EmbTable) void {
+        t.arena.deinit();
+    }
+
+    /// Each vocab id's vector: its champion-role's, else its role's shared one
+    fn apply(t: *const EmbTable, v: *const Vocab, l: Layout, p: []f32) !void {
+        for (0..5) |role| {
+            const x = t.map.get(key(0, role)) orelse return error.EmbMissingRole;
+            @memcpy(p[l.e + role * l.emb ..][0..l.emb], x);
+        }
+        var it = v.map.iterator();
+        while (it.next()) |e| {
+            const x = t.map.get(e.key_ptr.*) orelse t.map.get(key(0, e.key_ptr.* & 7)).?;
+            @memcpy(p[l.e + e.value_ptr.* * l.emb ..][0..l.emb], x);
+        }
+    }
+};
+
+const EmbInit = struct { table: *const EmbTable, vocab: *const Vocab };
 
 /// A tenth more games: a tenth more epochs (as win-ratings and win-comp)
 fn refitEpochs(e: u32) u32 {
@@ -981,12 +1050,14 @@ fn stepsPerEpoch(n: usize, batch: u32) u64 {
 /// AdamW over shuffled batches for at most max_steps; with val, evaluated opts.evals
 /// times an epoch, stopping after `patience` evaluations without a new best and keeping
 /// the best one's parameters
-fn trainSmall(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, train: []const NetGame, val: ?[]const NetGame, max_steps: u64) !Trained {
+fn trainSmall(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, train: []const NetGame, val: ?[]const NetGame, max_steps: u64, emb_init: ?EmbInit) !Trained {
     var rng: std.Random.DefaultPrng = .init(seed);
     const rnd = rng.random();
     const l: Layout = .init(n_ids, opts.emb, opts.hidden, opts.depth);
     var n = try SmallNet.init(gpa, l, opts.net == .resid, rnd);
     errdefer gpa.free(n.p);
+    if (emb_init) |ei| try ei.table.apply(ei.vocab, l, n.p);
+    const frozen = emb_init != null and opts.emb_freeze;
     const w: Work = try .init(gpa, l);
     defer w.deinit(gpa);
     const scratch = try gpa.alloc(f32, 4 * l.len);
@@ -1047,6 +1118,7 @@ fn trainSmall(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, trai
             s1.* = 0.9 * s1.* + 0.1 * g;
             s2.* = 0.999 * s2.* + 0.001 * g * g;
             if (i == l.a and opts.fix_offset) continue;
+            if (frozen and i >= l.e and i < l.r) continue;
             const decay: f32 = if (i < l.e) 0 else if (i < l.w) emb_wd * x.* else opts.wd * x.*;
             x.* -= opts.lr * ((s1.* / c1) / (@sqrt(s2.* / c2) + 1e-8) + decay);
         }
@@ -1073,12 +1145,16 @@ fn trainSmall(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, trai
 
 fn fitSmall(gpa: std.mem.Allocator, io: Io, opts: Options, seed: u32, s: Sets) !Fitted {
     const t0 = Io.Clock.awake.now(io);
-    const tuned = try trainSmall(gpa, opts, seed, s.n_inner, s.inner, s.val, opts.max_epochs * stepsPerEpoch(s.inner.len, opts.batch));
+    var table: ?EmbTable = if (opts.emb_init) |dir| try .load(gpa, io, dir, s.block, seed, opts.emb) else null;
+    defer if (table) |*t| t.deinit();
+    const init_inner: ?EmbInit = if (table) |*t| .{ .table = t, .vocab = s.vocab_inner } else null;
+    const init_all: ?EmbInit = if (table) |*t| .{ .table = t, .vocab = s.vocab_all } else null;
+    const tuned = try trainSmall(gpa, opts, seed, s.n_inner, s.inner, s.val, opts.max_epochs * stepsPerEpoch(s.inner.len, opts.batch), init_inner);
     gpa.free(tuned.net.p);
     // A tenth more games: a tenth more epochs (as win-ratings and win-comp)
     const per = stepsPerEpoch(s.fit.len, opts.batch);
     const steps: u64 = @max(1, @as(u64, @intFromFloat(@round(tuned.epochs * 1.1 * @as(f64, @floatFromInt(per))))));
-    const full = try trainSmall(gpa, opts, seed, s.n_all, s.fit, null, steps);
+    const full = try trainSmall(gpa, opts, seed, s.n_all, s.fit, null, steps, init_all);
     defer gpa.free(full.net.p);
     const w: Work = try .init(gpa, full.net.l);
     defer w.deinit(gpa);
@@ -1147,7 +1223,7 @@ test "small net: antisymmetric, learns a planted champion edge, resid starts at 
         g.y = if (r.float(f32) < sigmoid(edge)) 1 else 0;
     }
     const opts: Options = .{ .emb = 8, .hidden = 16, .depth = 2, .dropout = 0, .wd = 0, .lr = 3e-3, .batch = 64 };
-    const t = try trainSmall(gpa, opts, 1, n_ids, train, null, 8 * stepsPerEpoch(train.len, opts.batch));
+    const t = try trainSmall(gpa, opts, 1, n_ids, train, null, 8 * stepsPerEpoch(train.len, opts.batch), null);
     defer gpa.free(t.net.p);
     const w: Work = try .init(gpa, t.net.l);
     defer w.deinit(gpa);
@@ -1164,7 +1240,7 @@ test "small net: antisymmetric, learns a planted champion edge, resid starts at 
 
     var ro = opts;
     ro.net = .resid;
-    const t0 = try trainSmall(gpa, ro, 1, n_ids, train, null, 0);
+    const t0 = try trainSmall(gpa, ro, 1, n_ids, train, null, 0, null);
     defer gpa.free(t0.net.p);
     a.off = 0.7;
     predictSmall(&t0.net, &.{a}, &w, p[0..1]);
@@ -1175,4 +1251,37 @@ test "auc: both orientations, ties share ranks" {
     const gpa = testing.allocator;
     try testing.expectApproxEqAbs(@as(f64, 1), try auc(gpa, &.{ 1, 0, 1 }, &.{ 0.8, 0.3, 0.6 }), 1e-12);
     try testing.expectApproxEqAbs(@as(f64, 0.5), try auc(gpa, &.{ 1, 0 }, &.{ 0.5, 0.5 }), 1e-12);
+}
+
+test "emb init: a table's vectors by champion-role, the role's shared one otherwise, frozen stays" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{ .sub_path = "emb-dev-s1.tsv", .data = "champion\trole\tfit_games\te0\te1\n" ++
+        "0\t0\t5\t0.1\t0.2\n0\t1\t5\t0.3\t0.4\n0\t2\t5\t0\t0\n0\t3\t5\t0\t0\n0\t4\t5\t0\t0\n" ++
+        "7\t0\t90\t1.5\t-2\n" });
+    const dir = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    defer gpa.free(dir);
+    try testing.expectError(error.EmbDim, EmbTable.load(gpa, io, dir, .dev, 2, 3));
+    var t: EmbTable = try .load(gpa, io, dir, .dev, 2, 2);
+    defer t.deinit();
+    var v: Vocab = .{};
+    defer v.deinit(gpa);
+    try v.map.put(gpa, key(7, 0), 5);
+    try v.map.put(gpa, key(9, 1), 6);
+    const l: Layout = .init(7, 2, 4, 1);
+    var rng: std.Random.DefaultPrng = .init(1);
+    var n = try SmallNet.init(gpa, l, false, rng.random());
+    defer gpa.free(n.p);
+    try t.apply(&v, l, n.p);
+    try testing.expectEqualSlices(f32, &.{ 0.1, 0.2 }, n.p[l.e..][0..2]);
+    try testing.expectEqualSlices(f32, &.{ 1.5, -2 }, n.p[l.e + 5 * 2 ..][0..2]);
+    try testing.expectEqualSlices(f32, &.{ 0.3, 0.4 }, n.p[l.e + 6 * 2 ..][0..2]);
+
+    const games: [64]NetGame = @splat(.{ .ids = .{ 5, 6, 2, 3, 4, 0, 1, 2, 3, 4 }, .platform = 0, .y = 1, .off = 0 });
+    const opts: Options = .{ .emb = 2, .hidden = 4, .dropout = 0, .wd = 0, .lr = 1e-2, .batch = 8, .emb_init = dir, .emb_freeze = true };
+    const tr = try trainSmall(gpa, opts, 1, 7, &games, null, 20, .{ .table = &t, .vocab = &v });
+    defer gpa.free(tr.net.p);
+    try testing.expectEqualSlices(f32, n.p[l.e..l.r], tr.net.p[l.e..l.r]);
 }
