@@ -86,7 +86,9 @@ pub fn build(b: *std.Build) void {
     }
     if (desktopExe(b, windows, .Debug)) |exe| ci.dependOn(&exe.step);
     if (shot) |exe| ci.dependOn(&exe.step);
-    ci.dependOn(&lab.step);
+    // Debug: ci only needs it to compile, and ReleaseFast spends up to a minute in LLVM
+    const lab_check = labModule(b, b.resolveTargetQuery(gpu_box), .Debug, cand);
+    ci.dependOn(&b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_check }).step);
     ci.dependOn(lint(b, "shellcheck", "shellcheck -S warning deploy/*.sh deploy/hooks/*"));
     ci.dependOn(lint(b, "node", "for f in src/site/static/*.js; do node --check \"$f\" || exit 1; done"));
 }
