@@ -26,6 +26,7 @@ const embfiles = @import("lab/embfiles.zig");
 const fields = @import("lab/fields.zig");
 const style = @import("lab/style.zig");
 const compcheck = @import("lab/compcheck.zig");
+const events = @import("lab/events.zig");
 const randsplit = @import("lab/randsplit.zig");
 const winnet = @import("lab/winnet.zig");
 const effects = @import("lab/effects.zig");
@@ -85,7 +86,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ randsplit.usage ++ gains.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ compare.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ events.usage ++ randsplit.usage ++ gains.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ compare.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -168,6 +169,12 @@ pub fn main(init: std.process.Init) !u8 {
             "summaries; {d} unreadable, {d} seats with another champion left out", .{
             n.lines, n.with_static, n.docs, n.games, n.bad_docs, n.mismatch,
         });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "events") and argv.len >= 3) {
+        const n = try events.run(init.gpa, init.io, argv[2]);
+        std.log.info("events: {d} lines from {d} timelines of {d} games ({d} with a summary); " ++
+            "{d} epic monsters with an unknown steal", .{ n.lines, n.timelines, n.games, n.summaries, n.steal_unknown });
         return 0;
     }
     if (std.mem.eql(u8, cmd, "nn-export") and argv.len >= 3) {
@@ -430,6 +437,7 @@ test {
     _ = fields;
     _ = style;
     _ = compcheck;
+    _ = events;
     _ = randsplit;
     _ = winnet;
     _ = pretrain;

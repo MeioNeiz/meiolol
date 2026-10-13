@@ -102,13 +102,20 @@ pub fn stateAt(t: timeline.Timeline, minute: u8) ?State {
     if (t.participants != 10 or t.frames.len < @as(usize, minute) + 2) return null;
     const frame = t.frames[minute];
     if (frame.t_ms < @as(i64, minute) * minute_ms) return null;
+    return stateBefore(t, frame, frame.t_ms);
+}
+
+/// Game state from blue's side at `at_ms`: gold and XP from `last` (a 10-participant
+/// frame at or before it), objectives from the events before it, buffs and inhibitor
+/// respawns timed from it
+pub fn stateBefore(t: timeline.Timeline, last: timeline.Frame, at_ms: i64) State {
     var s: State = @splat(0);
     var gold: f32 = 0;
     var xp: f32 = 0;
     for (1..11) |p| {
         const sign: f32 = if (p <= 5) 1 else -1;
-        gold += sign * @as(f32, @floatFromInt(frame.get(@intCast(p), .total_gold)));
-        xp += sign * @as(f32, @floatFromInt(frame.get(@intCast(p), .xp)));
+        gold += sign * @as(f32, @floatFromInt(last.get(@intCast(p), .total_gold)));
+        xp += sign * @as(f32, @floatFromInt(last.get(@intCast(p), .xp)));
     }
     s[@backingInt(Feat.gold)] = gold / 1000;
     s[@backingInt(Feat.gold_curve)] = gold / 1000 * @abs(gold / 1000) / 10;
@@ -117,8 +124,8 @@ pub fn stateAt(t: timeline.Timeline, minute: u8) ?State {
     var dragons: [2]u8 = @splat(0);
     var soul = false;
     for (t.events) |e| {
-        if (e.t_ms >= frame.t_ms) break;
-        const ago = frame.t_ms - e.t_ms;
+        if (e.t_ms >= at_ms) break;
+        const ago = at_ms - e.t_ms;
         switch (e.data) {
             .building_kill => |b| {
                 // team owns the building: the other one took it

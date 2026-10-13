@@ -16,6 +16,8 @@ const api = @import("api/root.zig");
 const lab_rows = @import("lab/rows.zig");
 const lab_pack = @import("lab/pack.zig");
 const lab_seatstats = @import("lab/seatstats.zig");
+const lab_events = @import("lab/events.zig");
+const objectives = @import("objectives.zig");
 
 const testing = std.testing;
 const games = 3;
@@ -506,6 +508,110 @@ fn expectSameRows(want: *const lab_rows.Data, got: *const lab_rows.Data) !void {
         std.debug.print("packed rows differ: {s}\n", .{d});
         return error.TestUnexpectedResult;
     }
+}
+
+test "fixture games to events.tsv" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const snap = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path });
+    {
+        const db = try store.schema.open(gpa, snap);
+        defer db.close();
+        try fillGames(arena, db, 150, true);
+        // EUW1_1's steal counts: slot 6 took two dragons (both stolen), slot 1 a dragon and
+        // baron (one stolen: which is unknown), slot 0 none
+        const doc =
+            \\{"info":{"participants":[{"participantId":1,"challenges":{"epicMonsterSteals":0}},
+            \\{"participantId":2,"challenges":{"epicMonsterSteals":1}},
+            \\{"participantId":7,"challenges":{"epicMonsterSteals":2}}]}}
+        ;
+        try db.run("INSERT INTO raw.raw_docs VALUES ('riot_match', 'EUW1_1', 0, ?)", .{
+            store.Blob{ .bytes = try store.raw.compress(arena, doc) },
+        });
+    }
+    const sum = try lab_events.run(gpa, io, snap);
+    // Lab games (rows.load) with a timeline: fillGames leaves out every 3rd
+    var with_tl: usize = 0;
+    {
+        var none: std.AutoHashMapUnmanaged(u64, void) = .empty;
+        var data = try lab_rows.load(gpa, snap, &none);
+        defer data.deinit();
+        try testing.expectEqual(data.games.len, sum.games);
+        for (data.games) |g| {
+            const n = try std.fmt.parseInt(usize, g.match_id[std.mem.indexOfScalar(u8, g.match_id, '_').? + 1 ..], 10);
+            with_tl += @intFromBool(n % 3 != 0);
+        }
+    }
+    try testing.expect(with_tl > 50);
+    try testing.expectEqual(with_tl, sum.timelines);
+    try testing.expectEqual(@as(usize, 1), sum.summaries);
+    // The fixture timeline: 64 champion kills, 12 towers, an inhibitor, 8 epic monsters
+    try testing.expectEqual(with_tl * (64 + 12 + 1 + 8), sum.lines);
+
+    const path = try std.fs.path.join(arena, &.{ snap, lab_events.file_name });
+    const text = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(64 << 20));
+    try testing.expect(std.mem.startsWith(u8, text, lab_events.header));
+    var cols: std.StringHashMapUnmanaged(usize) = .empty;
+    var names = std.mem.splitScalar(u8, lab_events.header[0 .. lab_events.header.len - 1], '\t');
+    while (names.next()) |n| try cols.put(arena, n, cols.count());
+
+    const json = try store.raw.decompress(arena, @embedFile("riot/testdata/timeline.json.gz"));
+    const ct = try riot.crawl.compactTimeline(arena, json);
+    const t = try riot.timeline.decode(arena, try store.raw.decompress(arena, ct.blob));
+    var lines = std.mem.tokenizeScalar(u8, text[lab_events.header.len..], '\n');
+    var seen: struct { first_blood: usize = 0, steal: usize = 0, baron: bool = false } = .{};
+    while (lines.next()) |line| {
+        var fields: std.ArrayList([]const u8) = .empty;
+        var it = std.mem.splitScalar(u8, line, '\t');
+        while (it.next()) |f| try fields.append(arena, f);
+        try testing.expectEqual(cols.count(), fields.items.len);
+        const f = struct {
+            fn get(c: *const std.StringHashMapUnmanaged(usize), row: []const []const u8, name: []const u8) []const u8 {
+                return row[c.get(name).?];
+            }
+        }.get;
+        const row = fields.items;
+        if (std.mem.eql(u8, f(&cols, row, "first_blood"), "1")) {
+            seen.first_blood += 1;
+            try testing.expectEqualStrings("57862", f(&cols, row, "t_ms"));
+            try testing.expectEqualStrings("200", f(&cols, row, "team"));
+            try testing.expectEqualStrings("400", f(&cols, row, "bounty"));
+        }
+        const game1 = std.mem.eql(u8, f(&cols, row, "match_id"), "EUW1_1");
+        const subtype = f(&cols, row, "subtype");
+        if (game1 and std.mem.eql(u8, subtype, "FIRE_DRAGON")) {
+            try testing.expectEqualStrings("1", f(&cols, row, "steal"));
+            seen.steal += 1;
+        }
+        if (game1 and std.mem.eql(u8, subtype, "BARON_NASHOR")) {
+            try testing.expectEqualStrings("nan", f(&cols, row, "steal"));
+            try testing.expectEqualStrings("100", f(&cols, row, "team"));
+            // Before baron: blue took 4 towers and red 3, red 2 dragons to blue's 1,
+            // blue all 3 grubs; the state matches objectives' at the event's time
+            try testing.expectEqualStrings("1", f(&cols, row, "towers"));
+            try testing.expectEqualStrings("-1", f(&cols, row, "dragons"));
+            try testing.expectEqualStrings("3", f(&cols, row, "grubs"));
+            const at: i64 = try std.fmt.parseInt(i64, f(&cols, row, "t_ms"), 10);
+            var last = t.frames[0];
+            for (t.frames) |fr| if (fr.t_ms <= at) {
+                last = fr;
+            };
+            const want = objectives.stateBefore(t, last, at);
+            const gold = try std.fmt.parseFloat(f32, f(&cols, row, "gold"));
+            try testing.expectApproxEqAbs(want[@backingInt(objectives.Feat.gold)], gold, 1e-3);
+            seen.baron = true;
+        }
+        if (!game1 and std.mem.eql(u8, f(&cols, row, "type"), "monster"))
+            try testing.expectEqualStrings("nan", f(&cols, row, "steal"));
+    }
+    try testing.expectEqual(with_tl, seen.first_blood);
+    try testing.expectEqual(@as(usize, 1), seen.steal);
+    try testing.expect(seen.baron);
 }
 
 /// Data Dragon's classes for the fixture timeline's purchases (16.20): its finished
