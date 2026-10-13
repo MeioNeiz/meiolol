@@ -385,6 +385,18 @@ test "fixture games to lab rows, from SQLite and packed" {
     var packed_rows = (try lab_pack.read(gpa, io, snap, &legendaries)).?;
     packed_rows.deinit();
 
+    // A copy that keeps mtimes only to the second (rsync from the Mac) still matches
+    for ([_][]const u8{ "meiolol.db", "raw.db", "timeline.db" }) |name| {
+        const path = try std.fs.path.join(arena, &.{ snap, name });
+        const st = try std.Io.Dir.cwd().statFile(io, path, .{});
+        const s = st.mtime.toSeconds();
+        try std.Io.Dir.cwd().setTimestamps(io, path, .{
+            .modify_timestamp = .{ .new = .fromNanoseconds(@as(i96, s) * std.time.ns_per_s) },
+        });
+    }
+    var copied = (try lab_pack.read(gpa, io, snap, &legendaries)).?;
+    copied.deinit();
+
     // A pack from before a field was added (games.duration_s here) is stale
     {
         const manifest_path = try std.fs.path.join(arena, &.{ snap, "pack", "manifest" });

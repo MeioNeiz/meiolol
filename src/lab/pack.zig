@@ -143,7 +143,8 @@ pub fn read(
 }
 
 /// The manifest lines a pack must match to be read: format, code, legendaries, the
-/// source databases (size and mtime, of the WAL too), seat_stats.tsv and the columns
+/// source databases (size and mtime to the second, of the WAL too), seat_stats.tsv and
+/// the columns
 fn head(
     gpa: std.mem.Allocator,
     io: Io,
@@ -184,7 +185,8 @@ fn head(
     return out.toOwnedSlice();
 }
 
-const Stamp = struct { size: u64, mtime: i96 };
+/// mtime in whole seconds: rsync (openrsync on the Mac) drops the nanoseconds on copy
+const Stamp = struct { size: u64, mtime: i64 };
 
 fn stamp(gpa: std.mem.Allocator, io: Io, snap: []const u8, name: []const u8) !?Stamp {
     const path = try std.fs.path.join(gpa, &.{ snap, name });
@@ -193,7 +195,7 @@ fn stamp(gpa: std.mem.Allocator, io: Io, snap: []const u8, name: []const u8) !?S
         error.FileNotFound => return null,
         else => return err,
     };
-    return .{ .size = st.size, .mtime = st.mtime.toNanoseconds() };
+    return .{ .size = st.size, .mtime = st.mtime.toSeconds() };
 }
 
 /// "column NAME TYPE COUNT" per file: COUNT values of TYPE (little-endian) per item;
