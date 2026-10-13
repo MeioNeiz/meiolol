@@ -516,6 +516,7 @@ fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
             .rank = r.rank_start,
             .exp = harness.experience(r),
             .y = r.y,
+            .stats = r.stats,
         });
     }
     return .{ .games = games.items, .rows = out.items };
