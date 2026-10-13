@@ -48,12 +48,18 @@ pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
     return a.print("matchup/{s}/{s}-vs-{s}.html", .{ root.roleSlug(r), x.slug, y.slug });
 }
 
+/// A matchup's page curve: all ranks, all games. The file has one per bracket and
+/// experience (and role baselines, champion 0) for each pair
+fn isPage(h: curvesfile.Header) bool {
+    return h.bracket == @backingInt(Bracket.all) and h.experience == @backingInt(curvesfile.Experience.any);
+}
+
 /// A page per lane matchup with an all-ranks curve of `min_games` or more, from the lower
 /// champion id's side
 pub fn paths(site: *const Site, curves: *const Curves, list: *std.ArrayList([]const u8), min_games: u32) !void {
     for (curves.curves) |c| {
         const h = c.header;
-        if (h.bracket != @backingInt(Bracket.all) or h.games < min_games) continue;
+        if (!isPage(h) or h.games < min_games) continue;
         const x = champ(site, h.a) orelse continue;
         const y = champ(site, h.b) orelse continue;
         const r: Role = @fromBackingInt(@intCast(h.role));
@@ -103,7 +109,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         var list: std.ArrayList(IndexEntry) = .empty;
         for (c.curves) |cv| {
             const h = cv.header;
-            if (h.role != @backingInt(r) or h.bracket != 0 or h.experience != 0) continue;
+            if (h.role != @backingInt(r) or !isPage(h)) continue;
             const x = champ(site, h.a) orelse continue;
             const y = champ(site, h.b) orelse continue;
             try list.append(a, .{ .x = x, .y = y, .games = h.games, .thin = thin(.{ .curve = &cv, .flipped = false }) });
@@ -287,7 +293,7 @@ pub fn featured(site: *const Site, w: *Writer, curves: *const Curves, matchups: 
     var best: ?struct { r: Role, x: Champ, y: Champ, v: View, score: f64 } = null;
     for (curves.curves) |c| {
         const h = c.header;
-        if (h.bracket != @backingInt(Bracket.all) or h.experience != 0) continue;
+        if (!isPage(h)) continue;
         const x = champ(site, h.a) orelse continue;
         const y = champ(site, h.b) orelse continue;
         const r: Role = @fromBackingInt(@intCast(h.role));
@@ -624,4 +630,37 @@ test "nice scale" {
     try std.testing.expectEqual(600, lanechart.niceCeil(501));
     try std.testing.expectEqual(2000, lanechart.niceCeil(1001));
     try std.testing.expectEqual(3000, lanechart.niceCeil(2120));
+}
+
+test "one page per matchup, though experienced players' curves share its pair" {
+    const gpa = std.testing.allocator;
+    var b: curvesfile.Builder = .{ .gpa = gpa };
+    defer b.deinit();
+    for (0..40) |i| {
+        try b.addLane(.{
+            .role = .top,
+            .bracket = .mid,
+            .a = 10,
+            .b = 60,
+            .a_won = i % 2 == 0,
+            .minutes = 20,
+            .experienced_a = i % 3 != 0,
+            .experienced_b = i % 3 != 1,
+        });
+        b.addGame();
+    }
+    var aw: Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try b.write(&aw.writer, "16.20", 1);
+    var c: Curves = try .parse(gpa, aw.written());
+    defer c.deinit(gpa);
+    var all_ranks: usize = 0;
+    var pages: usize = 0;
+    for (c.curves) |cv| {
+        if (cv.header.a != 10 or cv.header.b != 60) continue;
+        all_ranks += @intFromBool(cv.header.bracket == @backingInt(Bracket.all));
+        pages += @intFromBool(isPage(cv.header));
+    }
+    try std.testing.expectEqual(3, all_ranks);
+    try std.testing.expectEqual(1, pages);
 }
