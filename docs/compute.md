@@ -90,6 +90,26 @@ run time.
 - League up (or unknown) on the gpu-box: + the median pause so far (30 min with none)
 - Lab agents (lab-exp.sh) keep LAB_HOST: their ladder lives on the host
 
+### Sweeps (deploy/lab-sweep.sh)
+
+Random search over one model family (30-64 trials beat picking among families, research
+C19) on the 3080, one lab-run job per trial on the gpu lock, so sweeps and other GPU work
+take turns. `start SWEEP SPACE [--trials N] [--pack K] [--head] [--build-arg A]... --
+CMD ARGS` samples the trials (SPACE: `--flag DIST ARGS` lines, deploy/lab-sweep.pl),
+builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps/SWEEP.
+
+- Contract (meiolol-f1's `netcheck`): the sweeper appends the sampled `--flag value`
+  pairs and `--out tNN`; the command writes tNN/folds.tsv, one row per seed and block
+  (folds 1-5 and dev): seed fold fit_games scored_games logloss ratings_logloss gain
+  gain_se epochs seconds val_logloss auc
+- `table` ranks by val_logloss (inner validation on fit games), never by the fold gain,
+  which is the honest score: picking on it would select on the scored blocks. Columns:
+  fold gain vs ratings (pooled by games, mean over seeds, paired 95%), seed sd, dev gain,
+  epochs, GPU seconds, config
+- --pack K runs K trials at once in one job, for when one trial leaves the GPU idle;
+  measure memory and throughput first
+- Sweep jobs are lab-run runs, so their GPU times feed placement's history
+
 ## Lab agent limits
 
 A lab agent (docs/lab-agent.md) writes candidate code we build and run on the gpu-box as
