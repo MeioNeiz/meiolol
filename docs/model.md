@@ -2232,6 +2232,14 @@ per game, folds better of 5:
 | full without the mix | -0.00039 ± 0.00040 | -0.00033 ± 0.00019, 5 of 5 |
 | team gold at 14, to win through its slope | +0.01798 ± 0.00188 | |
 
+Audit meiolol-33 (14 Oct, from the games files; in-run ratings equals the reference to
+1e-6, no leak found): reproduces. Clear (early, folds only; dev-val ties): the additive
+model beats ratings on the folds, ~3/4 of it through the damage mix (strength + mix
+-0.97 ± 0.50). Not established: beating win-comp (full vs win-comp -0.72 ± 0.44, 3 of 5,
+bound under the 1.6x rule -0.02) and role pairs adding on top of the mix (full vs
+strength + mix -0.32 ± 0.19, 5 of 5, under the ±0.5 floor). Both go to a pre-declared
+resample test on snap-20261013T2253Z.
+
 Dev-val (8,500 EUW1 games): full +0.00027 ± 0.00103 vs ratings, champion strength + mix
 +0.00042 ± 0.00089 (ties; win-comp's dev-val was +0.0003 too). win-comp on the same folds:
 -0.00057 ± 0.00028. Calibration on the folds (one temperature on the logit): ratings 0.80 ±
