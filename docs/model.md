@@ -2143,9 +2143,9 @@ permuted across games, paired on the same folds): damage mix over strength only 
 the gains vanish, so they are not fitting noise.
 
 Per-block spread of true effects: an earlier shuffled-label control
-(20261013T223344Z-eff-shuf) gave held-out gains of ~0 (full vs strength -0.00000 ± 0.00012) and champion strength sd
-0.00-0.01 pp, but pair blocks still 0.1-0.9 pp: with 1-3 games per cell the variance
-estimate finds spread in noise. A Poisson bootstrap made it worse (duplicated games look
+(20261013T223344Z-eff-shuf) gave held-out gains of ~0 (full vs strength -0.00000 ±
+0.00012) and champion strength sd 0.00-0.01 pp, but pair blocks still 0.1-0.9 pp: with
+1-3 games per cell the variance estimate finds spread in noise. A Poisson bootstrap made it worse (duplicated games look
 consistent). So each block is read against a shuffled-outcome null (`--null 20`: the same
 fit with results and gold permuted across games, drafts kept) with intervals from 30
 half-samples (sd of the halves / sqrt 2). Corrected = sqrt(sd^2 - null mean square);
