@@ -31,6 +31,7 @@ Same error twice on one line of work: restore the last good state, don't try a t
 2026-10-13 | process | HEAD stopped building right after a commit of a shared file (lab_main.zig importing an untracked effects.zig) | another session added its hunks to the file between my diff check and the commit; commit by path takes the whole file | run `git diff FILE` immediately before committing a shared file, and the clean-copy test on exactly those bytes (2b60f64)
 2026-10-13 | process | exp: UnknownOption from a lab-run start | lab-run joins ARGS with spaces and bash splits them again, so `--desc "two words"` became two arguments | one-word values in lab-run ARGS, or --literal (deecc3f run 20261013T215745Z)
 
+2026-10-14 | process | meiolol-lab curve failed FileNotFound on the gpu-box | lab-run ARGS go through bash, which expands ~ only at the start of a word, so NAME:COL:LABEL:~/ml/... stayed literal | write $HOME/ inside such words (single-quoted locally so the Mac doesn't expand it)
 ## Zig 0.17 (docs/zig-0.17.md; check APIs with LSP hover, std moved a lot)
 
 2026-10-12 | zig | Allocator.dupeZ / fmt.bufPrintZ not found | removed in 0.17 | dupeSentinel(.., 0), mem.printSentinel(.., 0)
