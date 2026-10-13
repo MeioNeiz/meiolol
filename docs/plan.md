@@ -352,7 +352,7 @@ next steps land here.
   LLM campaigns on candidates behind a harness (scope and leakage by construction,
   ladder of 50 selection looks per snapshot, screen and diagnose tools, sandboxed
   headless launch, no spend cap: Jacob). 3c-team ported (src/lab/cand/team, matches
-  3c-team.tsv) and the default start. A 4-run probe on smoke records: $1.09, behaved.
+  3c-team.tsv; since folded into cand/team2, the start now) and the default start. A 4-run probe on smoke records: $1.09, behaved.
   Next: first real campaign (`deploy/lab-agent.sh start gold14-a gold14 "patch term,
   own rank, matchup interactions"`), review its digest before more; champion class
   tags in api.Train; port 2a fm once it beats 3c-team; meiolol-88 is starting win-*

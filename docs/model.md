@@ -856,13 +856,20 @@ pair_games from Scorer.value; the page's JS must match them to 0.01.
     base MSE, cs10 +1.40 ±0.15) but used participants.tier, the rank looked up after
     the game, which lifts win from 53.7% to 63.8% called on dev (db). Its share of the
     gold14 and cs10 gains is unknown
-  - Harness first (lab owner; tell meiolol-11, rows.zig's owner, before touching it):
-    rows.Row gets rank_start, the player's last rank_history change on a day before the
-    game's day (else ranks' row if last seen before it; null otherwise: unranked, below
-    Platinum IV or before 12 Oct). champ_select's own `rank` becomes rank_start; every
-    scope, internal included, sees only pre-game data. The post-game rank stays only as
-    a labelled dev-only diagnostic (H2 below), never a feature of a model of record or
-    any final. No-leak test per scope as for experience
+  - Harness (done, 9eb6982): rows.Row.rank_start is the ladder rank as last seen on a
+    UTC day before the game's (ranks when its seen_day is that early, else rank_history's
+    latest earlier change; null otherwise: unranked, below Platinum IV or before 12
+    Oct). Every scope's rank (own and others', internal included) and the lane and draft
+    exports use it: pre-game data only. participants.tier is rows.Row.rank_after, a
+    labelled dev-only diagnostic (H2 below): it reaches only a candidate declaring
+    `after_game_rank`, in dev runs (score refuses select and final; exp refuses
+    --select, final and preds; the brief forbids agents to declare it), never a feature
+    of a model of record or any final. Test: harness "the after-game rank reaches only
+    candidates that ask"; pipeline pack test with rank history
+  - At the pin, first: switch summary.md's tier slices (exp.zig) and diagnose's tier
+    covariate (search.zig) from rank_after to rank_start (rank_after until then: on
+    snap-20261012T2055Z rank_start is almost all null); repack the new snapshot
+    (`meiolol-lab pack`, Mac and gpu-box)
   - Leak check before any campaign run (dev, same candidate both sides): win with
     rank_start vs with the post-game rank, on rows that have both. Near 63.8% with
     rank_start: suspect rank_start first (sample rank_history timestamps against game
