@@ -1321,6 +1321,28 @@ comparison, so a lone group just past zero is not a finding):
   -0.22 ± 0.13 the only one past zero, one of 9
 Rows in docs/nn-results/gains.tsv.
 
+Verifier audits, 2026-10-13 (meiolol-4b; same units and gains, folds):
+- 97's pretrain (a88db2d, data/pretrain/d12): no leakage. Fit = nnexport split < block
+  (dev: <= 5), scored = split == block (dev: dev_val), so test and newer games never fit;
+  aux targets, vocab, base means, hand profiles and ratings L2 from fit games, inner/val
+  split for tuning, refit on all. Minor: the aux z-norm is taken over all fit games, val
+  included, while val picks the aux L2 and epochs (target scaling only, no outcomes).
+  97's ratings equal win-ratings (-0.03 ± 0.08). Embedding prior -0.36 ± 0.27 (seed-mean
+  preds; 3 seeds all below zero, -0.41 to -0.19), random control +0.10 ± 0.22, hand
+  profiles -0.11 ± 0.32; vs win-comp +0.19 ± 0.36. Spread over groups, leaning to the
+  widest strength quarter (-1.00 ± 0.58) and lopsided teams (-0.80 ± 0.68); dev-val
+  alone +0.20 ± 0.52. One of several variants and more runs (d8, d16, targets) coming:
+  pick the winner on folds before any test look and count the variants tried
+- f7's playernet (8e28b3e, data/runs/playernet-20261013): no leakage. Experience from
+  rows.fillExperience (games ended by this game's start), feature scaling on inner / all
+  fit rows, offsets cross-fitted as winnet's resid; rank at start and mastery absent on
+  this snapshot (mastery must be pre-game if added). Its win-ratings equal f1's exactly.
+  Net on ratings -2.54 ± 0.65, the hand-made experience terms -2.61 ± 0.69, the net on
+  top of them -0.02 ± 0.20: the net finds nothing beyond the hand terms. The gain is
+  flat over draft types (lopsided -2.51, balanced -2.54, strength Q1 -2.85, Q4 -2.57),
+  as a player effect should be, and over four times any draft model's. The r-exp
+  candidate (cand-player-exp.zig) lives only in the run dir: commit it before citing
+
 Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
 Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
 only" covers dev, select, final); rows.load holds only eval's train (older than the first

@@ -58,3 +58,31 @@ win-comp, 2nd strength quarter	ratings	dev-val	0.00210	0.00293	1			2121		2026101
 win-comp, 3rd strength quarter	ratings	dev-val	0.00008	0.00270	1			2127		20261013T190836Z-wc-a-full	
 win-comp, widest strength quarter	ratings	dev-val	-0.00006	0.00277	1			2122		20261013T190836Z-wc-a-full	
 win-comp, games with a team without a frontline-ish pick	ratings	dev-val	0.00130	0.00199	1			4112		20261013T190836Z-wc-a-full	best mitigated share < 0.51
+pretrained embeddings as ratings prior (d12), all games	ratings	folds	-0.00036	0.00027	3			44353		pretrain a88db2d, data/pretrain/d12 (97)	
+pretrained embeddings as ratings prior (d12), a lopsided team	ratings	folds	-0.00080	0.00068	3			8727		pretrain a88db2d, data/pretrain/d12 (97)	magic share <20% or 60%+
+pretrained embeddings as ratings prior (d12), both balanced	ratings	folds	-0.00025	0.00029	3			35626		pretrain a88db2d, data/pretrain/d12 (97)	
+pretrained embeddings as ratings prior (d12), strength mismatch Q1	ratings	folds	-0.00009	0.00051	3			11105		pretrain a88db2d, data/pretrain/d12 (97)	closest quarter by lift difference
+pretrained embeddings as ratings prior (d12), strength mismatch Q4	ratings	folds	-0.00100	0.00058	3			11077		pretrain a88db2d, data/pretrain/d12 (97)	widest quarter
+pretrained embeddings as ratings prior (d12), EUW1	ratings	folds	-0.00040	0.00053	3			11168		pretrain a88db2d, data/pretrain/d12 (97)	
+pretrained embeddings as ratings prior (d12), other platforms	ratings	folds	-0.00034	0.00031	3			33185		pretrain a88db2d, data/pretrain/d12 (97)	
+random-embedding control (d12), all games	ratings	folds	0.00010	0.00022	3			44353		pretrain a88db2d, data/pretrain/d12 (97)	
+random-embedding control (d12), a lopsided team	ratings	folds	-0.00004	0.00050	3			8727		pretrain a88db2d, data/pretrain/d12 (97)	magic share <20% or 60%+
+random-embedding control (d12), both balanced	ratings	folds	0.00013	0.00024	3			35626		pretrain a88db2d, data/pretrain/d12 (97)	
+random-embedding control (d12), strength mismatch Q1	ratings	folds	0.00048	0.00038	3			11105		pretrain a88db2d, data/pretrain/d12 (97)	closest quarter by lift difference
+random-embedding control (d12), strength mismatch Q4	ratings	folds	-0.00015	0.00054	3			11077		pretrain a88db2d, data/pretrain/d12 (97)	widest quarter
+random-embedding control (d12), EUW1	ratings	folds	-0.00024	0.00040	3			11168		pretrain a88db2d, data/pretrain/d12 (97)	
+random-embedding control (d12), other platforms	ratings	folds	0.00021	0.00026	3			33185		pretrain a88db2d, data/pretrain/d12 (97)	
+player-history net on ratings, all games	ratings	folds	-0.00254	0.00065	3			44353		playernet 8e28b3e, r-rat (f7)	
+player-history net on ratings, a lopsided team	ratings	folds	-0.00251	0.00144	3			8727		playernet 8e28b3e, r-rat (f7)	magic share <20% or 60%+
+player-history net on ratings, both balanced	ratings	folds	-0.00254	0.00073	3			35626		playernet 8e28b3e, r-rat (f7)	
+player-history net on ratings, strength mismatch Q1	ratings	folds	-0.00285	0.00130	3			11105		playernet 8e28b3e, r-rat (f7)	closest quarter by lift difference
+player-history net on ratings, strength mismatch Q4	ratings	folds	-0.00257	0.00129	3			11077		playernet 8e28b3e, r-rat (f7)	widest quarter
+player-history net on ratings, EUW1	ratings	folds	-0.00220	0.00134	3			11168		playernet 8e28b3e, r-rat (f7)	
+player-history net on ratings, other platforms	ratings	folds	-0.00265	0.00074	3			33185		playernet 8e28b3e, r-rat (f7)	
+player-history net on ratings + experience terms, all games	ratings + experience	folds	-0.00002	0.00020	3			44353		playernet 8e28b3e, r-exp (f7)	
+player-history net on ratings + experience terms, a lopsided team	ratings + experience	folds	-0.00007	0.00044	3			8727		playernet 8e28b3e, r-exp (f7)	magic share <20% or 60%+
+player-history net on ratings + experience terms, both balanced	ratings + experience	folds	-0.00001	0.00022	3			35626		playernet 8e28b3e, r-exp (f7)	
+player-history net on ratings + experience terms, strength mismatch Q1	ratings + experience	folds	-0.00003	0.00037	3			11105		playernet 8e28b3e, r-exp (f7)	closest quarter by lift difference
+player-history net on ratings + experience terms, strength mismatch Q4	ratings + experience	folds	0.00016	0.00042	3			11077		playernet 8e28b3e, r-exp (f7)	widest quarter
+player-history net on ratings + experience terms, EUW1	ratings + experience	folds	-0.00022	0.00041	3			11168		playernet 8e28b3e, r-exp (f7)	
+player-history net on ratings + experience terms, other platforms	ratings + experience	folds	0.00005	0.00022	3			33185		playernet 8e28b3e, r-exp (f7)	
