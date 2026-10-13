@@ -553,7 +553,8 @@ echo "@RES@.$slot of $n" > slot
 c=$(getconf _NPROCESSORS_ONLN)
 r=$(cat ~/ml/locks/reserve 2> /dev/null || echo 0)
 (( r > 0 && r < c )) || r=0
-export OMP_NUM_THREADS=$(( (c - r) / n ))'
+export OMP_NUM_THREADS=$(( (c - r) / n ))
+cores=$OMP_NUM_THREADS'
     # shellcheck disable=SC2016 # expands on the host
     [[ "$RES" == cpu ]] && lock+='
 pin=
@@ -570,6 +571,7 @@ pin=
 if (( r > 0 )) && command -v taskset > /dev/null; then
     export OMP_NUM_THREADS=$(( r / n > 0 ? r / n : 1 ))
     pin="taskset -c $(( c - r ))-$(( c - 1 ))"
+    cores=$r
     echo "cores $(( c - r ))-$(( c - 1 )) (shared by gpu slots)" >> slot
 fi' pin='$pin '
 
@@ -578,9 +580,11 @@ fi' pin='$pin '
 c=$(getconf _NPROCESSORS_ONLN)
 pin=
 # No slot, so not full width either: the reserved cores, as gpu jobs
+cores=
 if (( r > 0 && r < c )) && command -v taskset > /dev/null; then
     export OMP_NUM_THREADS=$r
     pin="taskset -c $(( c - r ))-$(( c - 1 ))"
+    cores=$r
 fi' pin='$pin '
     lock=${lock//@RES@/$RES}
     local prio=1
@@ -597,8 +601,15 @@ echo \$\$ > job.pgid
 rm -f started
 $lock
 date -u +%FT%TZ > started
+t0=\$(date +%s)
+sampler=
+[[ -d /proc ]] && { bash usage.sh sample \$\$ & sampler=\$!; }
 ${awake}${pin}nice -n 10 $cmd $*
 code=\$?
+# The job's CPU time; before the sampler is reaped, so only the job's
+times > times
+[[ -n \$sampler ]] && kill \$sampler 2> /dev/null
+bash usage.sh summary \$t0 "\${cores:-}"
 # Before exit: a run counts as ended once exit exists, and wait reads gates then
 bash gates.sh
 echo \$code > exit
@@ -615,7 +626,8 @@ EOF
     on "$host" "mkdir -p $RUNS && mkdir $RUNS/$run" \
         || { echo "$run already exists on $host: not started"; exit 1; }
     cp "$ROOT/deploy/lab-gates.sh" "$tmp/gates.sh"
-    local files=("$tmp/meta" "$tmp/src.diff" "$tmp/job.sh" "$tmp/gates.sh")
+    cp "$ROOT/deploy/lab-usage.sh" "$tmp/usage.sh"
+    local files=("$tmp/meta" "$tmp/src.diff" "$tmp/job.sh" "$tmp/gates.sh" "$tmp/usage.sh")
     if [[ -n "$env" ]]; then
         files+=("$(dirname "$PY")"/*.py "$ROOT/py/labpy.py" "$ROOT/py/pyproject.toml" \
             "$ROOT/py/uv.lock")

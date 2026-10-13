@@ -75,7 +75,10 @@ deploy/lab-run.sh watch-install
   --frozen); change deps in py/pyproject.toml and `uv lock` on the gpu-box. Slots, League
   pauses, meta (`bin python HASH` of the *.py, `pyenv HASH`) and status as for any run.
   OMP_NUM_THREADS is the slot's share of the cores; on a gpu slot labpy.py caps torch at
-  LAB_GPU_FRACTION = 0.95/N of the card (N gpu slots)
+  LAB_GPU_FRACTION = 0.95/N of the card (N gpu slots). Process pools (ProcessPoolExecutor,
+  multiprocessing Pool) are capped by labpy.py to the slot: workers <= its cores, each
+  worker's BLAS/OpenMP/torch threads cores / workers (threadpoolctl), so any --procs is
+  safe; uncapped, --procs 6 on a 5-core slot ran ~30 threads there, 3x slower
 - Cores (2026-10-14, load 40-80 on 20 threads): ~/ml/locks/reserve = r keeps the top r
   cores for gpu-slot jobs and --res none runs (taskset, OMP_NUM_THREADS r/N), whose host
   threads floated over the cpu slots' cores; cpu slots split the other c - r. Set: r 5,
@@ -84,6 +87,10 @@ deploy/lab-run.sh watch-install
 - Slot queue: tickets in ~/ml/locks/RES.q, only the oldest live one tries the slots
   (first come, first served; polling let newcomers win); runs predicted <= 60 s sort
   ahead (fast lane); a dead waiter's ticket is dropped
+- Usage (deploy/lab-usage.sh, as usage.sh): every 5 s the job's runnable threads and
+  the card's busy %; after it, `usage` in the run dir (cores, active_s with League
+  pauses out, cpu_s, cpu_cores, runnable_per_core, gpu_pct, samples) and a USAGE line in
+  the log. runnable_per_core over 1.5 says oversubscribed; gpu_pct is the whole card
 - Prediction gates (deploy/lab-gates.sh, run by job.sh after the program, before
   `exit`): every preds*.tsv, dev.tsv and test.tsv in the run dir (two levels down) must
   have no NaN or inf and no constant prediction column; `GATE ok|FAIL` lines in the log,
