@@ -158,7 +158,32 @@ pub fn main(gpa: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
         std.debug.print("  {t}: {d} ({d:.1}%)\n", .{ r, n, 100 * @as(f64, @floatFromInt(n)) / @as(f64, @floatFromInt(d.games.len)) });
     }
     std.debug.print("  kept: {d} non-test, {d} test (never scored by the random split)\n", .{ tests[0], tests[1] });
+    try byPlatform(gpa, &d, reasons);
     return 0;
+}
+
+/// Share of each reason by platform, non-test games only (the random split's population),
+/// platforms with 1000+ of them
+fn byPlatform(gpa: std.mem.Allocator, d: *const rows.Data, reasons: []const Reason) !void {
+    const n_reason = std.enums.values(Reason).len;
+    const ids = protocol.platformIds();
+    const counts = try gpa.alloc([n_reason]usize, ids.len);
+    defer gpa.free(counts);
+    @memset(counts, @splat(0));
+    for (d.games, reasons) |g, r| if (!g.is_test) {
+        counts[g.platform][@backingInt(r)] += 1;
+    };
+    std.debug.print("\nnon-test games by platform (share dropped per reason, %):\nplatform\tgames", .{});
+    for (std.enums.values(Reason)) |r| std.debug.print("\t{t}", .{r});
+    std.debug.print("\n", .{});
+    for (ids, counts) |id, c| {
+        var n: usize = 0;
+        for (c) |x| n += x;
+        if (n < 1000) continue;
+        std.debug.print("{s}\t{d}", .{ id, n });
+        for (c) |x| std.debug.print("\t{d:.2}", .{100 * @as(f64, @floatFromInt(x)) / @as(f64, @floatFromInt(n))});
+        std.debug.print("\n", .{});
+    }
 }
 
 /// Every player at frame 15; deaths are champion kills of them up to that frame's time
