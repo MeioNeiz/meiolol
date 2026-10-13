@@ -1944,6 +1944,59 @@ Reading (dev, no test look):
   within block with real outcomes (~0); the outcome-shuffled rows are worse by design and
   can't show a leak. stack.zig and gbdt.zig were uncommitted at audit: cite a hash
 
+#### Interactions on pretrained embeddings (meiolol-ab)
+
+Pair terms failed because pair cells are sparse. Instead: a d x d form over each
+champion-role's frozen pretrained embedding E (d12: dim 12, meiolol-52's pretrain at
+a88db2d, one E per block and seed, learnt on that block's fit games only), on top of
+win-comp (ratings + damage mix), cand/win-embx (deecc3f, 815e201):
+- lane: same-role opponents e_b' A e_r (A antisymmetric, 66) + bot-sup duo e' S e (S
+  symmetric, 78); all: every blue x red pair (A, 66) + every teammate pair (S, 78);
+  cross, within: one of all's halves; both: lane + all; shuffled: all on E permuted
+  within role (control: content, not extra weights)
+- Features standardised; mix's L2 as win-comp, then the E weights' L2 on the newest 10%
+  of fit games (grid 1e-3..1; none if no L2 beats ratings + mix there). Seeds 1-3 pair
+  with E seeds 1-3, predictions averaged per game
+- E reaches the candidate through the harness (`meiolol-lab --emb DIR`, api
+  Options.embeddings, lab/embfiles.zig): only the file whose fit games equal the fit
+  set's per champion-role (and per role for the shared vector) is accepted, so E never
+  saw a scored game (test: a file from other games fails). E did see the inner val
+  games' stats, so L2 choice is optimistic (inner val gains of -0.001 vs mix didn't hold
+  on folds); fold and dev-val scores are clean
+
+Results (snap-20261012T2055Z; folds: the 5 forward folds pooled, 44,353 games, one
+build, 20261013T215827Z-embx-all; per-block pairs and dev-val from netcheck's per-game
+files, nc-win-embx, nc-win-comp, nc-win-ratings at 815e201 and nc2-*, nc-win-embx-shuf
+at ec9224a/0c75817, `meiolol-lab compare`):
+
+| model | vs win-comp, folds | vs ratings, folds | single seeds vs ratings |
+| --- | --- | --- | --- |
+| all | -0.00034 ± 0.00021 | -0.00092 ± 0.00035 | -0.00068 .. -0.00041 |
+| within | -0.00020 ± 0.00018 | -0.00078 ± 0.00033 | -0.00067 .. -0.00047 |
+| cross | -0.00005 ± 0.00014 | -0.00063 ± 0.00031 | -0.00052 .. -0.00035 |
+| both | -0.00006 ± 0.00026 | -0.00063 ± 0.00039 | -0.00019 .. -0.00007 |
+| lane | +0.00026 ± 0.00022 | -0.00031 ± 0.00036 | -0.00010 .. +0.00005 |
+| shuffled E | +0.00012 ± 0.00015 | -0.00046 ± 0.00033 | -0.00044 .. +0.00011 |
+| win-comp (mix) | - | -0.00058 ± 0.00029 | -0.00059 .. -0.00057 |
+
+- all vs win-comp, per block (netcheck): negative in 5 of 5 folds (one detected),
+  dev-val a tie (+0.00007 ± 0.00035, 8,500 games); folds + dev-val -0.00030 ± 0.00020.
+  all vs the shuffled-E control: -0.00041 ± 0.00022, negative in all 6 blocks; shuffled
+  vs win-comp a tie (+0.00011 ± 0.00015). Two builds reproduced all's per-game file
+  exactly
+- The gain is the seed average: single seeds tie with win-comp (about -0.0001 to
+  +0.0002), mix gains nothing from averaging, all and shuffled gain ~0.0003-0.0004
+  each from it. So the E content matters (all beats shuffled by the same averaging), but
+  any one fitted form is noisy
+- Lane-only forms lose (+0.00026): 144 weights on one lane pair each overfit; all-pairs
+  sums average over 25 pairs. Within-team carries most of all's gain, as the set net
+  found (meiolol-35)
+- Reading: a small gain for all-pairs forms on E, -0.3 milli-nats/game vs win-comp,
+  under the ±0.5 A/A floor (4b, "Noise floor on the folds"), dev-val a tie. Not
+  confirmed: sealed E seeds 4-6 (pt-d12-s456 at a88db2d) are the confirmation, then the
+  new snapshot (pairs gain most from more games). Nothing for learned.md before 4b's
+  audit
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
