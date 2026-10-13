@@ -10,4 +10,17 @@ for f in $(git diff --cached --name-only --diff-filter=ACM -- ':(glob)src/**/*.z
     git show ":$f" | zig fmt --stdin --check > /dev/null 2>&1 || { echo "not formatted: $f"; bad=1; }
 done
 [ $bad = 0 ] || echo "run: zig build fmt"
+# A Zig file in this commit must not @import a file the commit lacks (untracked, or left
+# out of a commit by path): HEAD then fails to build for every session, as when other
+# sessions' lab_main.zig hunks were swept in (deecc3f, 42ed9d6). ":path" reads the
+# commit's index, also a by-path commit's temporary one
+for f in $(git diff --cached --name-only --diff-filter=ACM -- '*.zig'); do
+    d=$(dirname "$f")
+    for i in $(git show ":$f" | sed -n 's/.*@import("\([^"]*\.zig\)").*/\1/p'); do
+        p=$(perl -e '$_ = shift; 1 while s{(^|/)\./}{$1}; 1 while s{[^/]+/\.\./}{}; print' "$d/$i")
+        git cat-file -e ":$p" 2> /dev/null && continue
+        echo "$f imports $i, which this commit lacks: commit $p with it, or leave the import out"
+        bad=1
+    done
+done
 exit $bad
