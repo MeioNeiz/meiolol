@@ -25,6 +25,16 @@ How to write a line:
 
 ## Win
 
+- 2026-10-13 (early): A large neural network that reads the whole draft predicts wins no
+  better than each champion's own win record in its role: one trained copy is worse, and
+  only averaging ten or more copies brings it level; tuning its settings didn't help.
+  Sure: not detected, dev only (5 rounds of held-out games, 44,353, plus 8,500 dev-val;
+  44-89k training games a round): sealed confirmation copies -0.00012 ± 0.00036 nats per
+  game and a resample -0.00010 ± 0.00035; 20 copies -0.00034, which with the noise floor
+  (± 0.00042) leaves at most about 0.0008 nats per game of real gain; every single copy
+  is worse (+0.0006 to +0.0035); the best of 32 settings by validation -0.00009 ±
+  0.00046. Site: nothing, the recommender keeps the ratings. Evidence: docs/model.md "Big
+  net: tuning, seed ensembles, confirmation", audit meiolol-4b
 - 2026-10-13 (early): Knowing how each champion plays in its role (gold, CS, deaths,
   damage and early lead, learnt from past games) does not measurably improve win
   predictions beyond each champion's own win record; any help is in rarely played
