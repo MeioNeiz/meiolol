@@ -8,8 +8,9 @@ const api = @import("api");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-/// pretrain's blocks: dev-val and the 5 forward folds
-const blocks = [_][]const u8{ "dev", "1", "2", "3", "4", "5" };
+/// pretrain's blocks: dev-val, the 5 forward folds, and final (every non-test game, for
+/// a test look)
+const blocks = [_][]const u8{ "dev", "1", "2", "3", "4", "5", "final" };
 
 pub const Dir = struct {
     io: Io,

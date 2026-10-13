@@ -99,6 +99,8 @@ fn variantCfg(v: Variant) Cfg {
 /// fold table of every variant (deecc3f's run 20261013T215827Z-embx-all)
 const variant: Variant = .all;
 const cfg: Cfg = variantCfg(variant);
+/// Sealed confirmation seeds: 3 maps the harness's seeds 1-3 to E (and fit) seeds 4-6
+const seed_offset: u64 = 0;
 
 pub const name = "win-embx";
 
@@ -704,7 +706,9 @@ pub const seeded = true;
 pub const needs_embeddings = hasEmb(cfg);
 
 pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Model {
-    var m = try fitWith(gpa, t, opts, cfg);
+    var o = opts;
+    o.seed += seed_offset;
+    var m = try fitWith(gpa, t, o, cfg);
     errdefer deinit(&m, gpa);
     if (cfg.folds > 0 and opts.seed == 1) m.fold_rows = try foldAblation(gpa, t, opts, cfg);
     return m;
@@ -805,7 +809,7 @@ fn foldAblation(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options, 
             sum.clearRetainingCapacity();
             for (0..fold_seeds) |si| {
                 var o = opts;
-                o.seed = si + 1;
+                o.seed = si + 1 + seed_offset;
                 var m = try fitWith(gpa, &sub, o, step);
                 defer deinit(&m, gpa);
                 var at: usize = 0;
