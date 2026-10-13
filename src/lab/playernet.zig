@@ -38,6 +38,8 @@ pub const usage =
     \\                                  --dropout X --wd X --emb-wd X --lr X --clip X
     \\                                  --batch N --evals N --patience N --max-epochs N
     \\                                  --min-games N --fix-offset 0|1
+    \\                                  --shuffle-labels 0|1 (control: the net trains on
+    \\                                  permuted outcomes, scored on real ones)
     \\                                  --feats champ,any,form,rank,mastery|none
     \\                                  --emb-init DIR (pretrain's emb-<block>-s<seed>.tsv)
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
@@ -92,6 +94,9 @@ pub const Options = struct {
     emb_wd: ?f32 = null,
     clip: f32 = 1,
     fix_offset: bool = false,
+    /// Control: outcomes permuted among the net's training and validation games (offsets
+    /// stay the candidate's on real outcomes); its gain on scored games must be ~0 or worse
+    shuffle_labels: bool = false,
     groups: [5]bool = @splat(true),
     emb_init: ?[]const u8 = null,
     evals: u32 = 4,
@@ -164,8 +169,8 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
     try w.print("# playernet vs {s}, fraction {d}, seeds {any}\n\n", .{ if (@hasDecl(cand, "name")) cand.name else "cand", opts.fraction, opts.seeds });
-    try w.print("options: emb {d} hidden {d} dropout {d} wd {d} emb_wd {d} lr {d} clip {d} batch {d} evals {d} patience {d} min_games {d} fix_offset {} emb_init {s} feats", .{
-        opts.emb, opts.hidden, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games, opts.fix_offset, opts.emb_init orelse "-",
+    try w.print("options: emb {d} hidden {d} dropout {d} wd {d} emb_wd {d} lr {d} clip {d} batch {d} evals {d} patience {d} min_games {d} fix_offset {} shuffle_labels {} emb_init {s} feats", .{
+        opts.emb, opts.hidden, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games, opts.fix_offset, opts.shuffle_labels, opts.emb_init orelse "-",
     });
     for (opts.groups, 0..) |on, gi| if (on) try w.print(" {s}", .{@tagName(@as(Group, @fromBackingInt(@intCast(gi))))});
     try w.print("\nmastery_pre.tsv: {d} participants\n\n", .{mastery.map.count()});
@@ -226,6 +231,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.emb_wd = try std.fmt.parseFloat(f32, v);
         } else if (std.mem.eql(u8, k, "--clip")) {
             o.clip = try std.fmt.parseFloat(f32, v);
+        } else if (std.mem.eql(u8, k, "--shuffle-labels")) {
+            o.shuffle_labels = (try std.fmt.parseInt(u1, v, 10)) == 1;
         } else if (std.mem.eql(u8, k, "--fix-offset")) {
             o.fix_offset = (try std.fmt.parseInt(u1, v, 10)) == 1;
         } else if (std.mem.eql(u8, k, "--feats")) {
@@ -572,6 +579,16 @@ fn netGames(gpa: std.mem.Allocator, d: *const rows.Data, raw: []const [n_feat]f3
 const no_row = std.math.maxInt(u32);
 
 /// Each game's row index by slot (side * 5 + role)
+fn shuffleLabels(games: []NetGame, seed: u64) void {
+    var rng: std.Random.DefaultPrng = .init(seed);
+    const rnd = rng.random();
+    var i = games.len;
+    while (i > 1) : (i -= 1) {
+        const j = rnd.uintLessThan(usize, i);
+        std.mem.swap(f32, &games[i - 1].y, &games[j].y);
+    }
+}
+
 fn rowsByGame(gpa: std.mem.Allocator, d: *const rows.Data) ![][10]u32 {
     const out = try gpa.alloc([10]u32, d.games.len);
     @memset(out, @splat(no_row));
@@ -691,6 +708,7 @@ fn runBlock(
     defer gpa.free(g_fit);
     const g_scored = try netGames(gpa, d, raw, row_of, scored.items, &vocab_all, scale_all, opts.groups, p_all);
     defer gpa.free(g_scored);
+    if (opts.shuffle_labels) for ([_][]NetGame{ g_inner, g_val, g_fit }, 0..) |set, k| shuffleLabels(set, 0x5f1 + k);
 
     const n_s = opts.seeds.len;
     const fits = try gpa.alloc(Fitted, n_s);
