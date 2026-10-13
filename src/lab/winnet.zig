@@ -422,7 +422,7 @@ const FitKeep = struct {
 const resample_share = 0.9;
 
 /// Independent of inFraction's and crossFold's hashes, so two seeds' 90% share 81%
-fn inResample(g: rows.Game, seed: u32) bool {
+pub fn inResample(g: rows.Game, seed: u32) bool {
     var h = std.hash.Wyhash.init(0xa1a0 +% @as(u64, seed));
     h.update(std.mem.asBytes(&g.start));
     h.update(std.mem.asBytes(&g.platform));

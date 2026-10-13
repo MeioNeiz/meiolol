@@ -31,6 +31,7 @@ const rows = @import("rows.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const mastery_pre = @import("mastery_pre.zig");
+const winnet = @import("winnet.zig");
 const par = @import("../par.zig");
 
 const Io = std.Io;
@@ -49,6 +50,8 @@ pub const usage =
     \\                                  --feats champ,any,form,rank,mastery,prior,duo|none
     \\                                  --emb-init DIR (pretrain's emb-<block>-s<seed>.tsv)
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
+    \\                                  --resample N (fit games and the candidate's on
+    \\                                  netcheck's seeded 90%; scored games unchanged)
     \\                                  --fraction X --threads N --out DIR
     \\
 ;
@@ -128,6 +131,8 @@ pub const Options = struct {
     seeds: []const u32 = &.{1},
     blocks: []const Block = &.{ .dev, .f1, .f2, .f3, .f4, .f5 },
     fraction: f64 = 1,
+    /// Fit games and the candidate's on netcheck's seeded random 90% (noise-floor resamples)
+    resample: ?u32 = null,
     threads: u32 = 3,
     out: []const u8 = ".",
 };
@@ -190,7 +195,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
-    try w.print("# playernet vs {s}, fraction {d}, seeds {any}\n\n", .{ if (@hasDecl(cand, "name")) cand.name else "cand", opts.fraction, opts.seeds });
+    try w.print("# playernet vs {s}, fraction {d}, resample {?d}, seeds {any}\n\n", .{ if (@hasDecl(cand, "name")) cand.name else "cand", opts.fraction, opts.resample, opts.seeds });
     try w.print("options: emb {d} hidden {d} dropout {d} wd {d} emb_wd {d} lr {d} clip {d} batch {d} evals {d} patience {d} min_games {d} fix_offset {} shuffle_labels {} shuffle_feats {} emb_init {s} feats", .{
         opts.emb, opts.hidden, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games, opts.fix_offset, opts.shuffle_labels, opts.shuffle_feats, opts.emb_init orelse "-",
     });
@@ -214,7 +219,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var pooled: Pooled = .{};
     defer pooled.deinit(gpa);
     for (opts.blocks) |b| {
-        const spec: Spec = switch (b) {
+        var spec: Spec = switch (b) {
             .dev => .{ .before = c.dev, .lo = c.dev, .hi = c.select, .dev = true },
             else => blk: {
                 const f: f64 = @floatFromInt(@backingInt(b) - 1);
@@ -224,6 +229,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
                 break :blk .{ .before = lo, .lo = lo, .hi = hi, .dev = false };
             },
         };
+        spec.resample = opts.resample;
         try runBlock(gpa, io, &data, players, raw, c, spec, b, opts, &fw.interface, &pw.interface, &cw.interface, w, &pooled);
     }
     if (pooled.cand.items.len > 0) {
@@ -295,6 +301,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             else
                 @fromBackingInt(@intCast(try std.fmt.parseInt(u3, s, 10))));
             o.blocks = out.items;
+        } else if (std.mem.eql(u8, k, "--resample")) {
+            o.resample = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--fraction")) {
             o.fraction = try std.fmt.parseFloat(f64, v);
         } else if (std.mem.eql(u8, k, "--threads")) {
@@ -522,8 +530,10 @@ const Spec = struct {
     lo: i64,
     hi: i64,
     dev: bool,
+    resample: ?u32 = null,
 
     fn fits(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
+        if (s.resample) |r| if (!winnet.inResample(g, r)) return false;
         return harness.inFraction(g, fraction) and harness.visible(.dev, c, g) and g.start < s.before;
     }
 
