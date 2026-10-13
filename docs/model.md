@@ -776,27 +776,33 @@ pair_games from Scorer.value; the page's JS must match them to 0.01.
 
 ## Next steps
 
-- Next lab campaign, rank at game start on 3c-team2 (proposed by the lab owner, for
-  meiolol-78 to agree; waits for the snapshot 78 pins after ~a week of rank_history):
+- Next lab campaign, rank at game start on 3c-team2 (agreed with meiolol-78; runs on the
+  snapshot 78 pins after ~a week of rank_history, with a fresh test set: rank_start
+  needs games from 13 Oct on):
   - Why: gold14-a's own-rank term (on 3c-team) held on test (gold14 +0.32 ±0.09% of
     base MSE, cs10 +1.40 ±0.15) but used participants.tier, the rank looked up after
     the game, which lifts win from 53.7% to 63.8% called on dev (db). Its share of the
     gold14 and cs10 gains is unknown
-  - Harness first (lab owner): rows.Row gets rank_start, the player's last rank_history
-    change on a day before the game's day (else ranks' row if last seen before it;
-    null otherwise: unranked, below Platinum IV or before 12 Oct). champ_select's own
-    `rank` becomes rank_start; the post-game rank moves to internal scope only, so no
-    app-facing campaign can use it again. No-leak test per scope as for experience
-  - Leak check before any campaign run (dev, internal scope, same candidate both sides):
-    win with rank_start vs with the post-game rank, on rows that have both. Near 63.8%
-    with rank_start means it still leaks (day granularity) and the campaign waits
-  - Rows: only games after rank_history began have rank_start, so the rank term fits on
-    that subset and is null (no term) elsewhere; report its row counts in train, dev
-    and test before starting. If dev has under ~20k rows with rank_start, wait longer
+  - Harness first (lab owner; tell meiolol-11, rows.zig's owner, before touching it):
+    rows.Row gets rank_start, the player's last rank_history change on a day before the
+    game's day (else ranks' row if last seen before it; null otherwise: unranked, below
+    Platinum IV or before 12 Oct). champ_select's own `rank` becomes rank_start; every
+    scope, internal included, sees only pre-game data. The post-game rank stays only as
+    a labelled dev-only diagnostic (H2 below), never a feature of a model of record or
+    any final. No-leak test per scope as for experience
+  - Leak check before any campaign run (dev, same candidate both sides): win with
+    rank_start vs with the post-game rank, on rows that have both. Near 63.8% with
+    rank_start: suspect rank_start first (sample rank_history timestamps against game
+    start, look for lookups after the game), then decide. Well below it: the gap is the
+    leak's size for win; record it in docs/learned.md
+  - Rows: the rank term fits only on rows with rank_start (null: no term); report row
+    counts in train, dev and test before starting; dev floor 20k rows. At 85k dev rows
+    gold14-a's rank term was ±0.11, so expect about ±0.22 at 20k: enough for a 0.6
+    effect, not for the test's 0.3
   - Campaign: from team2, scope champ_select, targets gold14 then cs10 (lanediff14,
     deaths15 and first_item read from the same runs' dev.tsv, no separate looks). H1
-    gold14-a's term (own tier per role) on team2 with rank_start; H2 the same with the
-    post-game rank on the same rows (internal scope, dev only), so H2 - H1 is the leak's
+    gold14-a's term (own tier per role) on team2 with rank_start; H2 (diagnostic, dev
+    only) the same with the post-game rank on the same rows, so H2 - H1 is the leak's
     share; then tier x role refinements only if H1 beats ref beyond its interval. One
     selection look per target; final by a human, paired vs team2's own test preds from
     the same build
