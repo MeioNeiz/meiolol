@@ -556,7 +556,7 @@ fn logit(p: f32) f32 {
 }
 
 /// One game as the net sees it: slots blue by role, then red
-const NetGame = struct {
+pub const NetGame = struct {
     ids: [10]u32,
     x: [10][n_feat]f32,
     platform: u8,
@@ -599,6 +599,18 @@ fn rowsByGame(gpa: std.mem.Allocator, d: *const rows.Data) ![][10]u32 {
     @memset(out, @splat(no_row));
     for (d.rows, 0..) |r, i| out[r.game][@as(usize, r.side) * 5 + @backingInt(r.role)] = @intCast(i);
     return out;
+}
+
+/// For lab/health.zig's checks on synthetic games: trains `steps` batches on `train`
+/// (0: at init), no early stopping, no IO; writes `scored`'s blue chances to `pred` and
+/// returns the parameters (caller frees). ids index 0..n_ids, 0..4 being the roles'
+pub fn healthFit(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, train_games: []const NetGame, steps: u64, scored: []const NetGame, pred: []f32) ![]f32 {
+    const t = try train(gpa, opts, seed, n_ids, train_games, null, steps, null);
+    errdefer gpa.free(t.net.p);
+    const w: Work = try .init(gpa, t.net.l);
+    defer w.deinit(gpa);
+    predict(&t.net, scored, &w, pred);
+    return t.net.p;
 }
 
 const Fitted = struct {
@@ -1315,4 +1327,13 @@ test "playernet is antisymmetric: swapping sides flips the logit" {
     predict(&n, (&g)[0..1], &w, p[0..1]);
     predict(&n, (&s)[0..1], &w, p[1..2]);
     try testing.expectApproxEqAbs(@as(f32, 1), p[0] + p[1], 1e-5);
+}
+
+test "playernet healthFit at init is the candidate" {
+    var g: NetGame = .{ .ids = @splat(0), .x = @splat(@splat(0.5)), .platform = 1, .y = 1, .off = 0.7 };
+    for (&g.ids, 0..) |*id, slot| id.* = @intCast(slot % 5);
+    var pred: [1]f32 = undefined;
+    const p = try healthFit(testing.allocator, .{}, 1, 5, (&g)[0..1], 0, (&g)[0..1], &pred);
+    defer testing.allocator.free(p);
+    try testing.expectApproxEqAbs(sigmoid(0.7), pred[0], 1e-6);
 }
