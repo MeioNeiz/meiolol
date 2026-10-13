@@ -165,7 +165,8 @@ first.
 
 - Snapshot cadence (done, 2026-10-13): `deploy/snapshot.sh make` on the Mac (box
   VACUUM INTO, anonymise, checks, split, legendaries, pack, to the gpu-box; ~30 min),
-  weekly by launchd (Sundays 04:00, `schedule install`); `prune KEEP` once LAB_SNAP
+  weekly via an hourly launchd tick (due Sundays from 04:00; pushes to the gpu-box wait
+  until it's awake, then mastery-pre runs there); `prune KEEP` once LAB_SNAP
   moves. Still from the live DB: meiolol.db and timeline.db need the box anyway, so
   the archive would only save the raw step
 - Packed rows (done, 2026-10-12): `meiolol-lab pack SNAP` writes rows.Data as

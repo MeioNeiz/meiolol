@@ -4,9 +4,15 @@
 # checked, anonymised, checked again, split, legendaries and pack, then to the gpu-box.
 # The real-id copies (box and here) are deleted on every exit, success or not.
 #
-#   deploy/snapshot.sh make            new data/snap-STAMP here and ~/ml/snaps on the gpu-box
+#   deploy/snapshot.sh make            new data/snap-STAMP here, then push
+#   deploy/snapshot.sh push NAME       to ~/ml/snaps on the gpu-box, then mastery-pre there
+#   deploy/snapshot.sh tick            hourly (launchd): push what waits, make when due
 #   deploy/snapshot.sh prune KEEP      delete every other snap-* here and on the gpu-box
-#   deploy/snapshot.sh schedule install|uninstall   weekly make (launchd, Sundays 04:00)
+#   deploy/snapshot.sh schedule install|uninstall   the hourly tick
+#
+# Due: Sundays from 04:00, or any day once the newest is 8 days old; a failed make waits
+# 6 h before the next try. The gpu-box often sleeps at night: a snapshot it can't take
+# waits in ~/.cache/meiolol-snapshot/pending for a tick that finds it awake
 #
 # Builds from committed HEAD in a temp tree (other sessions edit the shared checkout).
 # The lab agent's snapshot is LAB_SNAP in deploy/lab-exp.sh: move it to the new one
@@ -17,6 +23,9 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BOX=${SNAP_BOX:-meiolol-cloud}
 GPU=${SNAP_GPU:-gpu-box}
 DBS="meiolol timeline raw"
+STATE=$HOME/.cache/meiolol-snapshot
+BIN=$ROOT/zig-out/snapshot
+ARCHIVE=/mnt/wsl/archive/meiolol-raw
 
 # Keepalives: VACUUM INTO prints nothing for minutes, and an idle session was dropped
 box() { ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=6 "$BOX" "$@"; }
@@ -35,7 +44,7 @@ make_snap() {
     name=snap-$stamp
     raw=$ROOT/data/$name-raw
     out=$ROOT/data/$name
-    bin=$ROOT/zig-out/snapshot
+    bin=$BIN
     [[ -e "$out" || -e "$raw" ]] && die "$out exists"
     [[ -f ~/.config/meiolol/snap-salt ]] || die "no salt at ~/.config/meiolol/snap-salt"
     # Here: the real-id copy and the anonymised one side by side, ~2x the box's dbs
@@ -83,11 +92,52 @@ EOF
     "$bin/bin/meiolol" legendaries --data "$out" --platform all
     "$bin/bin/meiolol-lab" pack "$out"
 
+    trap - EXIT
+    rm -rf "$tree"
+    mkdir -p "$STATE"
+    echo "$name" >> "$STATE/pending"
+    log "made $name here"
+    push_snap "$name" || log "$GPU unreachable: $name waits for a tick that finds it awake"
+    return 0
+}
+
+# Copies NAME to the gpu-box with the gpu-box meiolol-lab that make built, then writes
+# mastery_pre.tsv there (pre-game mastery from the raw archive, which lives there only)
+push_snap() {
+    local name=$1
+    ssh -o ConnectTimeout=10 -o BatchMode=yes "$GPU" true 2> /dev/null || return 1
     log "to $GPU:ml/snaps/$name"
-    rsync -a "$out" "$GPU:ml/snaps/"
+    rsync -a "$ROOT/data/$name" "$GPU:ml/snaps/"
+    scp -q "$BIN/gpu-box/meiolol-lab" "$GPU:ml/bin/meiolol-lab-snapshot"
+    if ssh "$GPU" "ml/bin/meiolol-lab-snapshot 2>&1 | grep -q mastery-pre"; then
+        log "mastery-pre on $GPU"
+        ssh "$GPU" "nice -n 10 ml/bin/meiolol-lab-snapshot mastery-pre ml/snaps/$name $ARCHIVE" \
+            || die "mastery-pre failed on $GPU for $name"
+    fi
+    [[ -f "$STATE/pending" ]] && sed -i '' "/^$name\$/d" "$STATE/pending"
     log "done: $name. Next: LAB_SNAP in deploy/lab-exp.sh, then deploy/snapshot.sh prune $name"
     command -v wz > /dev/null && wz notify meiolol "snapshot $name ready (here and gpu-box)"
     return 0
+}
+
+tick() {
+    mkdir -p "$STATE"
+    # One at a time; a lock older than 3 h is from a run that was killed (a Mac asleep)
+    find "$STATE" -maxdepth 1 -name lock -mmin +180 -exec rmdir {} + 2> /dev/null || true
+    mkdir "$STATE/lock" 2> /dev/null || return 0
+    # shellcheck disable=SC2064 # expand now; EXIT, as die exits
+    trap "rmdir '$STATE/lock'" EXIT
+    local name newest age failed
+    for name in $(cat "$STATE/pending" 2> /dev/null); do push_snap "$name" || break; done
+    newest=$(find "$ROOT/data" -maxdepth 1 -type d -name 'snap-*T*Z' | sort | tail -n 1)
+    newest=${newest##*/snap-}
+    age=$(( $(date -u +%s) - $(date -j -u -f %Y%m%dT%H%MZ "${newest:-19700101T0000Z}" +%s) ))
+    failed=$(( $(date +%s) - $(stat -f %m "$STATE/failed" 2> /dev/null || echo 0) ))
+    (( failed > 6 * 3600 )) || return 0
+    if (( age > 8 * 86400 )) || { (( $(date +%u) == 7 && 10#$(date +%H) >= 4 )) && (( age > 3 * 86400 )); }; then
+        touch "$STATE/failed"
+        ( make_snap ) && rm -f "$STATE/failed"
+    fi
 }
 
 # The anonymised copy against its source: same rows (but the forgotten list and raw
@@ -145,13 +195,17 @@ schedule() {
             launchctl bootout "gui/$(id -u)/${plist%.plist}" || true
             rm -f ~/Library/LaunchAgents/$plist
             ;;
-        *) sed -n '7,9p' "$0"; exit 2 ;;
+        *) usage ;;
     esac
 }
 
+usage() { sed -n '7,11p' "$0"; exit 2; }
+
 case "${1:-}" in
     make) make_snap ;;
+    push) (( $# == 2 )) || usage; push_snap "$2" || die "$GPU unreachable" ;;
+    tick) tick ;;
     schedule) schedule "${2:-}" ;;
-    prune) (( $# == 2 )) || { sed -n '7,9p' "$0"; exit 2; }; prune "$2" ;;
-    *) sed -n '7,9p' "$0"; exit 2 ;;
+    prune) (( $# == 2 )) || usage; prune "$2" ;;
+    *) usage ;;
 esac
