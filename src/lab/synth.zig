@@ -12,7 +12,8 @@
 //!             lower champion id
 //!   pairs     every ally pair's own effect, normal with sd `pair_sd` (role-pair blocks)
 //!   counters  every lane matchup's own effect (same role, and bottom and support
-//!             crossed), sd `counter_sd`, antisymmetric
+//!             crossed), sd `counter_sd`, antisymmetric; `lanes` 1 same role only, 2
+//!             bottom and support crossed only
 //!   mix       per sd of win-comp's mix form (f - 0.5)^2, blue minus red; f the team's
 //!             damage-weighted magic share from champion-role profiles over all rows
 //!   skill     per player per log1p(earlier games on the champion), blue minus red
@@ -40,6 +41,8 @@ pub const Spec = struct {
     pair: u32 = 1,
     pair_sd: f64 = 0,
     counter_sd: f64 = 0,
+    /// Which matchups counter_sd covers: 0 all, 1 same role, 2 bottom and support crossed
+    lanes: u32 = 0,
     mix: f64 = 0,
     skill: f64 = 0,
 
@@ -61,7 +64,7 @@ pub const Spec = struct {
             }
             if (!found) return error.BadPlantSpec;
         }
-        if (s.pair == 0) return error.BadPlantSpec;
+        if (s.pair == 0 or s.lanes > 2) return error.BadPlantSpec;
         return s;
     }
 };
@@ -295,6 +298,8 @@ pub fn truth(gpa: std.mem.Allocator, d: *const rows.Data, spec: Spec) !Truth {
         if (blue == matchup[0].champion and red == matchup[1].champion) ctr = 1;
         if (red == matchup[0].champion and blue == matchup[1].champion) ctr = -1;
         if (spec.counter_sd != 0) for (lane_pairs) |lp| {
+            const crossed = lp[0] != lp[1];
+            if ((spec.lanes == 1 and crossed) or (spec.lanes == 2 and !crossed)) continue;
             const kb = key(g.teams[0][lp[0]], lp[0]);
             const kr = key(g.teams[1][lp[1]], lp[1]);
             if (kb == kr) continue;
@@ -777,6 +782,8 @@ test "plant spec and argument parse" {
     try std.testing.expectEqual(@as(f64, 2.5), s.champ);
     try std.testing.expectError(error.BadPlantSpec, Spec.parse("synergy"));
     try std.testing.expectError(error.BadPlantSpec, Spec.parse("synrgy=1"));
+    try std.testing.expectEqual(@as(u32, 2), (try Spec.parse("counter_sd=2,lanes=2")).lanes);
+    try std.testing.expectError(error.BadPlantSpec, Spec.parse("lanes=3"));
     const a = (try parseArg("plant:skill=1:/home/x/snap")).?;
     try std.testing.expectEqualStrings("/home/x/snap", a.path);
     try std.testing.expectEqual(@as(f64, 1), a.spec.skill);
