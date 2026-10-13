@@ -1,6 +1,6 @@
 //! win-exp: win-ratings with champ_exp and form ("everything pre-game", internal scope),
 //! the reference for lab/playernet.zig. A copy, as a candidate imports only std and api:
-//! keep in step with win-ratings (diff: cfg and name)
+//! keep in step with win-ratings (diff: cfg, name, champ_played)
 //!
 //! Win from the draft, one logistic model per game (blue side's chance), nested so each
 //! step's gain is measurable:
@@ -33,6 +33,9 @@ const Cfg = struct {
     own_rank: bool = false,
     all_ranks: bool = false,
     champ_exp: bool = false,
+    /// With champ_exp: a step for having played the champion before (calibration by bucket
+    /// showed log1p alone under-reacts to who has and hasn't)
+    champ_played: bool = false,
     form: bool = false,
     skill: bool = false,
     /// Only games of this platform index (protocol.platformIds order); null for all
@@ -62,8 +65,8 @@ const rank_scale = 1.0 / 4.0;
 
 const rate_prior = 1000;
 
-/// Per player: champ_exp's 2 then form's 5 (expFeatures)
-const n_exp = 7;
+/// Per player: champ_exp's 2 then form's 5 (expFeatures), then champ_played's 1
+const n_exp = if (cfg.champ_played) 8 else 7;
 /// Pseudo-games at 50% in an experience win rate
 const exp_prior = 5;
 
@@ -383,6 +386,7 @@ fn expFeatures(m: *const Model, e: api.Experience) [n_exp]f32 {
             out[6] = (e.deaths15 - m.form_mean[1]) * trust(e.perf_games);
         }
     }
+    if (cfg.champ_played) out[7] = @floatFromInt(@intFromBool(e.champ_games > 0));
     return out;
 }
 
@@ -510,7 +514,7 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
     const refit = try train(gpa, m.sp, best.l2, games.items, null, @max(1, best.epochs + best.epochs / 10), opts.seed);
     m.p = refit.p;
     std.debug.print("win-model: kind {t} dim {d} l2 {d} epochs {d} val {d:.5} on {d} games\n", .{ cfg.kind, best.dim, best.l2, best.epochs, best.loss, games.items.len });
-    if (experience) std.debug.print("win-model: experience weights by role (champ games, champ rate, games, rate, kda, lanediff, deaths15) {any}\n", .{m.p[m.sp.e..][0 .. n_role * n_exp]});
+    if (experience) std.debug.print("win-model: experience weights by role (champ games, champ rate, games, rate, kda, lanediff, deaths15{s}) {any}\n", .{ if (cfg.champ_played) ", played" else "", m.p[m.sp.e..][0 .. n_role * n_exp] });
 
     if (cfg.own_rank) fitOwnRank(&m, t, won);
     return m;
