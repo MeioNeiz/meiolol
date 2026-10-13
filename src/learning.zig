@@ -133,29 +133,62 @@ const GoldMap = std.StringHashMapUnmanaged([10]?i32);
 /// (gold15 set): the last frame is the game's end, part of a minute
 fn goldMap(arena: Allocator, db: store.Db, platform_json: []const u8) !GoldMap {
     var map: GoldMap = .empty;
+    // Each match's lane rows read once and paired here: joining participants to
+    // themselves took 20x the VM steps. CROSS JOIN keeps a match's rows together
     var q = try db.prepare(
-        \\SELECT p.match_id, p.slot, p.gold14 - o.gold14
-        \\FROM matches m JOIN participants p USING (match_id)
-        \\JOIN participants o ON o.match_id = p.match_id AND o.position = p.position
-        \\  AND o.team_id != p.team_id
+        \\SELECT p.match_id, p.slot, p.team_id, p.position, p.gold14
+        \\FROM matches m CROSS JOIN participants p USING (match_id)
         \\WHERE m.queue_id = ? AND m.remake = 0
         \\  AND m.platform IN (SELECT value FROM json_each(?))
         \\  AND p.position IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY')
-        \\  AND p.gold15 IS NOT NULL AND o.gold15 IS NOT NULL
+        \\  AND p.gold15 IS NOT NULL
     );
     defer q.deinit();
     try q.bind(.{ stats.ranked_solo, platform_json });
-    while (try q.step()) {
-        const r = q.row(struct { match_id: []const u8, slot: i64, diff: i32 });
-        if (r.slot < 0 or r.slot >= 10) continue;
-        const e = try map.getOrPut(arena, r.match_id);
-        if (!e.found_existing) {
-            e.key_ptr.* = try arena.dupe(u8, r.match_id);
-            e.value_ptr.* = @splat(null);
+    const Lane = struct { slot: i64, team: i64, position: [8]u8, len: usize, gold14: ?i64 };
+    var match: std.ArrayList(u8) = .empty;
+    var lanes: std.ArrayList(Lane) = .empty;
+    var more = try q.step();
+    while (true) {
+        const r = if (more) q.row(struct {
+            match_id: []const u8,
+            slot: i64,
+            team_id: i64,
+            position: []const u8,
+            gold14: ?i64,
+        }) else undefined;
+        if (!more or !std.mem.eql(u8, r.match_id, match.items)) {
+            try pairLanes(arena, &map, match.items, lanes.items);
+            if (!more) break;
+            match.clearRetainingCapacity();
+            try match.appendSlice(arena, r.match_id);
+            lanes.clearRetainingCapacity();
         }
-        e.value_ptr[@intCast(r.slot)] = r.diff;
+        var lane: Lane = .{ .slot = r.slot, .team = r.team_id, .position = undefined, .len = r.position.len, .gold14 = r.gold14 };
+        if (r.position.len <= lane.position.len) @memcpy(lane.position[0..r.position.len], r.position);
+        try lanes.append(arena, lane);
+        more = try q.step();
     }
     return map;
+}
+
+/// Each lane row's difference to its opponent (same position, other team): the last
+/// opponent by slot when a position repeats, 0 when either lacks gold14
+fn pairLanes(arena: Allocator, map: *GoldMap, match_id: []const u8, lanes: anytype) !void {
+    for (lanes) |p| {
+        if (p.slot < 0 or p.slot >= 10) continue;
+        for (lanes) |o| {
+            if (o.team == p.team or o.len != p.len) continue;
+            if (!std.mem.eql(u8, o.position[0..o.len], p.position[0..p.len])) continue;
+            const e = try map.getOrPut(arena, match_id);
+            if (!e.found_existing) {
+                e.key_ptr.* = try arena.dupe(u8, match_id);
+                e.value_ptr.* = @splat(null);
+            }
+            const diff: i32 = if (p.gold14 != null and o.gold14 != null) @intCast(p.gold14.? - o.gold14.?) else 0;
+            e.value_ptr[@intCast(p.slot)] = diff;
+        }
+    }
 }
 
 /// Every ranked solo game of players whose match history was crawled, all patches
