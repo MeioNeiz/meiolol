@@ -415,7 +415,10 @@ start() {
     # Placement (auto) or just the prediction (explicit; a failure there changes nothing)
     local placed p_host p_res predicted=- why="" auto=0
     [[ "$host" == auto || "$RES" == auto ]] && auto=1
-    if placed=$(place "$host" "$RES" "$bin" "$*" "${BUILD_ARGS[*]-}" 2>&1); then
+    # Python runs are told apart by script in placement's history (meta's bin)
+    local shown=$bin
+    [[ "$bin" == python ]] && shown=python/$(basename "$PY")
+    if placed=$(place "$host" "$RES" "$shown" "$*" "${BUILD_ARGS[*]-}" 2>&1); then
         read -r p_host p_res predicted <<< "$(head -n 1 <<< "$placed")"
         why=$(sed -n 2p <<< "$placed")
         if (( auto )); then host=$p_host RES=$p_res; echo "placed: $why"
@@ -466,7 +469,7 @@ start() {
     run=$(date -u +%Y%m%dT%H%M%SZ)-$name
     {
         echo "host $host"
-        echo "bin $bin $(sed -n 1p <<< "$info")"
+        echo "bin $shown $(sed -n 1p <<< "$info")"
         # Float results differ in the last bits between CPU targets (FMA): paired
         # comparisons need both sides from the same one. gpu-box: build.zig's gpu_box
         # query and --meiolol's -Dcpu, both x86_64_v3 since 2026-10-13
