@@ -12,7 +12,7 @@ research/questions/agent-ml-practice.md.
   (~560 MB) in the build root's zig-pkg, so every fresh temp tree unpacked them again
   and deleted them; 9-15 identical ReleaseFast builds at once, both targets each; Mac
   load 27-38. Done cddffa0: content-keyed store, one build lock, fixed mirror tree,
-  target host only
+  target host only; builds on the gpu-box itself (lab-run, late 2026-10-13)
 - --no-build ran another session's rebuild of a shared prefix (49's compcheck folds
   exit 2; 3f repeated a dev look exactly; 0d hand-audited binary hashes of every pair).
   A failed build hidden by `| tail` ran the old binary (3f, a dev look spent). Done

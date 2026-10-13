@@ -30,8 +30,11 @@
 # --head builds committed HEAD instead, --commit SHA that commit (other sessions edit the
 # working tree; a half-written file there breaks or silently changes the build).
 # Binaries are kept by KEY, a hash of the build's inputs (every file under src, build.zig,
-# the build args and the files they name), in zig-out/lab-run/KEY: built once per KEY
-# under a lock, never replaced, so concurrent starts share one build. Each start prints
+# the build args and the files they name), in the host's store (gpu-box: ~/ml/lab-store/
+# KEY, built there from inputs rsynced to a fixed mirror, so the Mac's CPU stays free;
+# mac: zig-out/lab-run/KEY): built once per KEY under a lock on this Mac, never replaced,
+# so concurrent starts share one build. A key only in the Mac's store (built before
+# late 2026-10-13) is copied across instead of rebuilt. Each start prints
 # `binary KEY`; --bin KEY starts that binary whatever the tree holds now (a sweep's jobs),
 # --no-build the current inputs' binary if built, never a build. Meta records src KEY.
 # --build-arg goes to zig build (deploy/lab-exp.sh: -Dcand=DIR); --with copies a file or
@@ -84,6 +87,10 @@ ZIG=zig
 # in the main checkout, so they outlive it
 STORE=${LAB_STORE:-$ROOT/zig-out/lab-run}
 CACHE=${ZIG_LOCAL_CACHE_DIR:-$ROOT/.zig-cache}
+# The gpu-box's store, mirror tree (its zig-pkg stays there) and zig cache, under ~
+RSTORE=ml/lab-store
+RTREE=ml/lab-build/tree
+RCACHE=ml/lab-build/cache
 COMMIT=
 PIN=
 
@@ -134,18 +141,52 @@ binpath() {
     echo "$1/$dir/$3"
 }
 
-build() {
-    local host=$1 bin=$2 prefix=$3 src=$4
-    local args=(--prefix "$prefix" -Doptimize=ReleaseFast)
-    args+=(${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"})
+# zig build's arguments for BIN on HOST but --prefix, in ZARGS
+zig_args() {
+    local host=$1 bin=$2
+    ZARGS=(-Doptimize=ReleaseFast)
+    ZARGS+=(${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"})
     if [[ "$bin" == meiolol-lab && "$host" == gpu-box ]]; then
-        args+=(lab-gpu-box)
+        ZARGS+=(lab-gpu-box)
     elif [[ "$bin" == meiolol-lab ]]; then
-        args+=(lab-native)
+        ZARGS+=(lab-native)
     elif [[ "$host" == gpu-box ]]; then
-        args+=(-Dtarget=x86_64-linux-musl -Dcpu=x86_64_v3)
+        ZARGS+=(-Dtarget=x86_64-linux-musl -Dcpu=x86_64_v3)
     fi
-    (cd "$src" && "$ZIG" build "${args[@]}" --cache-dir "$CACHE" >&2)
+}
+
+# Builds BIN for HOST into store dir PREFIX from the inputs in STAGE, through the host's
+# mirror tree: a fixed path keeps zig's cache warm
+build() {
+    local host=$1 bin=$2 prefix=$3 stage=$4 a q=""
+    if [[ "$host" == gpu-box ]]; then
+        for a in ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}; do
+            [[ "$a" != -D*=/* ]] && continue
+            echo "--build-arg $a: gpu-box builds take paths inside the tree" >&2
+            return 1
+        done
+        zig_args "$host" "$bin"
+        for a in "${ZARGS[@]}"; do q+=" $(printf '%q' "$a")"; done
+        on gpu-box "mkdir -p $RTREE $RCACHE" || return 1
+        # zig-pkg: zig 0.17 keeps fetched packages (sqlite, translate-c) in the build
+        # root; the mirror's stays, so they are fetched once
+        rsync -a --delete --checksum --exclude /zig-pkg "$stage/" "gpu-box:$RTREE/" || return 1
+        # Runs' niceness: at 19 a build starved behind 8 runs (2.5 min)
+        on gpu-box "cd $RTREE && nice -n 10 ~/.local/bin/zig build --prefix ~/$prefix$q" \
+            "--cache-dir ~/$RCACHE" >&2
+        return
+    fi
+    # A fresh tree per build unpacked all of zig-pkg again (~560 MB, minutes): the mirror
+    # links the main checkout's, also when ROOT is deploy/lab-exp.sh's temp worktree
+    local pkg
+    pkg=$(dirname "$(git -C "$ROOT" rev-parse --path-format=absolute \
+        --git-common-dir)")/zig-pkg
+    mkdir -p "$STORE/tree"
+    [[ -L "$STORE/tree/zig-pkg" ]] || rm -rf "$STORE/tree/zig-pkg"
+    ln -sfn "$pkg" "$STORE/tree/zig-pkg"
+    rsync -a --delete --checksum --exclude /zig-pkg "$stage/" "$STORE/tree/"
+    zig_args "$host" "$bin"
+    (cd "$STORE/tree" && "$ZIG" build --prefix "$prefix" "${ZARGS[@]}" --cache-dir "$CACHE" >&2)
 }
 
 # Holds an exclusive lock on file $1 on fd 8 until `exec 8>&-` (perl: the Mac has no
@@ -155,61 +196,78 @@ lock8() {
     perl -MFcntl=:flock -e 'open(my $f, q{>&=}, 8) or die; flock($f, LOCK_EX) or die'
 }
 
+# The store dir of KEY's BIN on HOST; the gpu-box's relative to its ~
+storedir() {
+    if [[ "$1" == gpu-box ]]; then echo "$RSTORE/$3/$1-$2"; else echo "$STORE/$3/$1-$2"; fi
+}
+
+# Whether store dir DIR on HOST holds a finished build
+built() {
+    if [[ "$1" == gpu-box ]]; then on gpu-box "[[ -f $2/done ]]"; else [[ -f "$2/done" ]]; fi
+}
+
+# Copies KEY's BIN for the gpu-box from this Mac's store (built here before builds moved
+# to the gpu-box), if it is there
+carry() {
+    local old=$STORE/$3/$1-$2 dir
+    [[ "$1" == gpu-box && -f "$old/done" ]] || return 1
+    dir=$(storedir "$1" "$2" "$3")
+    echo "copying $3 for $1 $2 from this Mac's store" >&2
+    on gpu-box "mkdir -p $RSTORE/$3 && rm -rf $dir.part" && scp -qr "$old" "gpu-box:$dir.part" \
+        && on gpu-box "mv $dir.part $dir"
+}
+
 # Prints the store dir holding BIN for HOST built from the inputs keyed KEY (from commit
-# COMMIT, else the working tree), building it unless BUILD is 0. Builds take one lock and
-# go through one mirror dir: the inputs are copied to a stage first and keyed there, so a
-# file another session saves mid-build can't make a binary that matches no key, and the
-# mirror's fixed path keeps zig's cache warm. A finished dir has `done` and is never
-# written again. The key printed can differ from KEY when the tree moved on since
+# COMMIT, else the working tree), building it unless BUILD is 0. Builds take a lock on
+# this Mac: the inputs are copied to a stage first and keyed there, so a file another
+# session saves mid-build can't make a binary that matches no key. A finished dir has
+# `done` and is never written again. The key printed can differ from KEY when the tree
+# moved on since
 ensure() {
-    local host=$1 bin=$2 key=$3 commit=$4 build=$5
-    local dir=$STORE/$key/$host-$bin stage
-    if [[ ! -f "$dir/done" ]]; then
-        (( build )) || {
-            echo "no binary $key for $host $bin: start once without --no-build/--bin" >&2
-            return 1
-        }
+    local host=$1 bin=$2 key=$3 commit=$4 build=$5 dir stage harness
+    dir=$(storedir "$host" "$bin" "$key")
+    if ! built "$host" "$dir"; then
         mkdir -p "$STORE"
-        lock8 "$STORE/build.lock"
-        stage=$(mktemp -d)
-        if [[ -n "$commit" ]]; then
-            git -C "$ROOT" archive "$commit" -- src build.zig build.zig.zon | tar -x -C "$stage"
-        else
-            (cd "$ROOT" && git ls-files -co --exclude-standard -- src build.zig build.zig.zon \
-                | while IFS= read -r f; do [[ -f "$f" ]] && echo "$f"; done \
-                | rsync -a --files-from=- . "$stage/")
-            key=$(key "" "$stage")
-            dir=$STORE/$key/$host-$bin
-        fi
-        if [[ ! -f "$dir/done" ]]; then
-            echo "building $key for $host $bin" >&2
-            local harness
-            harness=$(inputs "" "$stage" | grep -v ' src/lab/cand/' | shasum | cut -c1-16)
-            # zig-pkg: zig 0.17 keeps fetched packages (dvui, sqlite: ~560 MB) in the
-            # build root; a fresh tree per build unpacked them all again (minutes)
-            # The main checkout's, also when ROOT is deploy/lab-exp.sh's temp worktree
-            local pkg
-            pkg=$(dirname "$(git -C "$ROOT" rev-parse --path-format=absolute \
-                --git-common-dir)")/zig-pkg
-            mkdir -p "$STORE/tree"
-            [[ -L "$STORE/tree/zig-pkg" ]] || rm -rf "$STORE/tree/zig-pkg"
-            ln -sfn "$pkg" "$STORE/tree/zig-pkg"
-            rsync -a --delete --checksum --exclude /zig-pkg "$stage/" "$STORE/tree/"
-            rm -rf "$dir"
-            if ! build "$host" "$bin" "$dir" "$STORE/tree"; then
-                rm -rf "$dir" "$stage"
+        # A lock per host: gpu-box builds don't queue behind the Mac's
+        if [[ "$host" == gpu-box ]]; then lock8 "$STORE/build-gpu-box.lock"
+        else lock8 "$STORE/build.lock"; fi
+        if ! built "$host" "$dir" && ! carry "$host" "$bin" "$key"; then
+            if (( ! build )); then
                 exec 8>&-
-                echo "build failed: not started" >&2
+                echo "no binary $key for $host $bin: start once without --no-build/--bin" >&2
                 return 1
             fi
-            echo "$harness" > "$dir/harness"
-            touch "$dir/done"
+            stage=$(mktemp -d)
+            if [[ -n "$commit" ]]; then
+                git -C "$ROOT" archive "$commit" -- src build.zig build.zig.zon \
+                    | tar -x -C "$stage"
+            else
+                (cd "$ROOT" && git ls-files -co --exclude-standard -- src build.zig \
+                    build.zig.zon | while IFS= read -r f; do [[ -f "$f" ]] && echo "$f"; done \
+                    | rsync -a --files-from=- . "$stage/")
+                key=$(key "" "$stage")
+                dir=$(storedir "$host" "$bin" "$key")
+            fi
+            if ! built "$host" "$dir" && ! carry "$host" "$bin" "$key"; then
+                echo "building $key for $host $bin" >&2
+                harness=$(inputs "" "$stage" | grep -v ' src/lab/cand/' | shasum | cut -c1-16)
+                on "$host" "rm -rf $dir"
+                if ! build "$host" "$bin" "$dir" "$stage"; then
+                    on "$host" "rm -rf $dir"
+                    rm -rf "$stage"
+                    exec 8>&-
+                    echo "build failed: not started" >&2
+                    return 1
+                fi
+                on "$host" "echo $harness > $dir/harness && touch $dir/done"
+            fi
+            rm -rf "$stage"
         fi
-        rm -rf "$stage"
         exec 8>&-
     fi
     # Newest first in prune's eyes
-    touch "$STORE/$key"
+    if [[ "$host" == gpu-box ]]; then on gpu-box "touch $RSTORE/$key; $(prune_cmd "$RSTORE")"
+    else touch "$STORE/$key"; fi
     echo "$dir"
 }
 
@@ -225,13 +283,13 @@ snapcmd() {
         echo "snap '"$1"' $h"'
 }
 
-# Keeps the store to the newest 40 keys, and anything used in the last 3 days
-prune() {
-    # shellcheck disable=SC2012 # key dirs: hex names only
-    ls -t "$STORE" 2>/dev/null | tail -n +41 | while IFS= read -r k; do
-        [[ "$k" =~ ^[0-9a-f]{16}$ ]] || continue
-        [[ -n "$(find "$STORE/$k" -maxdepth 0 -mtime +3)" ]] && rm -rf "${STORE:?}/$k"
-    done
+# Keeps store dir $1 to the newest 40 keys, and anything used in the last 3 days: a
+# script for the host holding it
+# shellcheck disable=SC2016 # expands on the host
+prune_cmd() {
+    echo 'cd '"$(printf '%q' "$1")"' 2> /dev/null && ls -t | tail -n +41 | while read -r k; do
+        [[ $k =~ ^[0-9a-f]{16}$ && -n $(find "$k" -maxdepth 0 -mtime +3) ]] && rm -rf "./$k"
+        done; true'
 }
 
 start() {
@@ -303,9 +361,13 @@ start() {
     dir=$(ensure "$host" "$bin" "$key" "$commit" "$build") || exit 1
     key=$(basename "$(dirname "$dir")")
     path=$(binpath "$dir" "$host" "$bin")
-    [[ -x "$path" ]] || { echo "no binary at $path"; exit 1; }
+    # One round trip: the binary's hash, then its harness key
+    local info
+    info=$(on "$host" "[[ -x $path ]] && { sha256sum $path 2> /dev/null || shasum -a 256 $path; } \
+        | cut -c1-16 && { cat $dir/harness 2> /dev/null || echo -; }") \
+        || { echo "no binary at $path on $host"; exit 1; }
     echo "binary $key"
-    prune
+    bash -c "$(prune_cmd "$STORE")"
     local tmp
     tmp=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now: tmp is local
@@ -315,7 +377,7 @@ start() {
     run=$(date -u +%Y%m%dT%H%M%SZ)-$name
     {
         echo "host $host"
-        echo "bin $bin $(shasum -a 256 "$path" | cut -c1-16)"
+        echo "bin $bin $(sed -n 1p <<< "$info")"
         # Float results differ in the last bits between CPU targets (FMA): paired
         # comparisons need both sides from the same one. gpu-box: build.zig's gpu_box
         # query and --meiolol's -Dcpu, both x86_64_v3 since 2026-10-13
@@ -324,7 +386,7 @@ start() {
         # harness: the same without the candidate (src/lab/cand, -Dcand), what
         # `meiolol-lab compare` needs equal on both sides
         echo "src $key"
-        echo "harness $(cat "$dir/harness" 2> /dev/null || echo -)"
+        echo "harness $(sed -n 2p <<< "$info")"
         local w
         # shellcheck disable=SC2048 # the words as the host's bash will split them
         for w in $*; do
@@ -400,7 +462,9 @@ EOF
     # No -p on the run dir: a second start of NAME in the same second must not share it
     on "$host" "mkdir -p $RUNS && mkdir $RUNS/$run" \
         || { echo "$run already exists on $host: not started"; exit 1; }
-    copy "$host" "$RUNS/$run" "$path" "$tmp/meta" "$tmp/src.diff" "$tmp/job.sh"
+    local files=("$tmp/meta" "$tmp/src.diff" "$tmp/job.sh")
+    if [[ "$host" == gpu-box ]]; then on gpu-box "cp $path $RUNS/$run/"; else files+=("$path"); fi
+    copy "$host" "$RUNS/$run" "${files[@]}"
     [[ -f "$tmp/predicted" ]] && copy "$host" "$RUNS/$run" "$tmp/predicted"
     if (( ${#WITH[@]} )); then copy "$host" "$RUNS/$run" "${WITH[@]}"; fi
     on "$host" "cd $RUNS/$run && $LAUNCH"
