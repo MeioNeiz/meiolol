@@ -53,6 +53,7 @@ const usage =
 ++ exp.usage ++ draft.usage ++ lane.usage;
 
 pub fn main(init: std.process.Init) !u8 {
+    flushDenormals();
     const arena = init.arena.allocator();
     const argv = try init.minimal.args.toSlice(arena);
     if (argv.len < 2) {
@@ -291,6 +292,24 @@ test {
     _ = exp;
     _ = draft;
     _ = lane;
+}
+
+/// x86 SSE runs ~100x slower on denormal floats, which Adam's decaying moments of rarely
+/// seen parameters spend thousands of steps in: fm fits on the gpu-box ran 3-4x slower at
+/// 16x rows (docs/compute.md "GPU vs CPU"). Flush them to zero (FTZ, DAZ); fits matched
+/// to the last digit. Threads started afterwards inherit it
+fn flushDenormals() void {
+    if (@import("builtin").cpu.arch != .x86_64) return;
+    var csr: u32 = 0;
+    asm volatile ("stmxcsr (%[p])"
+        :
+        : [p] "r" (&csr),
+        : .{ .memory = true });
+    csr |= (1 << 15) | (1 << 6);
+    asm volatile ("ldmxcsr (%[p])"
+        :
+        : [p] "r" (&csr),
+        : .{ .memory = true });
 }
 
 /// Comma-separated enum tags or integers
