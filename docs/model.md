@@ -1344,6 +1344,26 @@ Verifier audits, 2026-10-13 (meiolol-4b; same units and gains, folds):
   candidate is src/lab/cand/win-exp (b274481, checked identical to the run's copy bar
   its name); mastery, when on, only from SNAP/mastery_pre.tsv (pre-game fetches)
 
+Noise floor on the folds (A/A), 2026-10-13 (meiolol-4b; snap-20261012T2055Z, 885e879
+`netcheck --resample N`: fit games and the candidate's fits on a seeded random 90%,
+scored games unchanged; runs 20261013T213637Z-aa-small, 20261013T221157Z-aa-small2 (12
+resamples, small, seeds 1-36 in disjoint threes), 20261013T221815Z-aa-big4 (4, big)).
+Milli-nats/game on the 44,353 fold games:
+- The same model refit on another 90% with other seeds differs from itself with sd
+  0.22 (ratings), 0.28 (small), 0.29 (big): a 95% A/A spread of ±0.44 to ±0.57, and the
+  per-game paired interval calls ratings r1 vs r3 (-0.47 ± 0.33) a "gain". Part of it is
+  win-ratings' L2 pick, which flips between grid values across resamples
+- A net against its own candidate on the same resample (how every netcheck row is
+  made): the difference moves across resamples with sd 0.19 (small, 12) and 0.17 (big,
+  4), on top of the per-game se 0.15 and 0.22. Honest 95% half-width about ±0.48
+  (small) and ±0.55 (big), vs the reported ±0.30 and ±0.43: widen paired intervals ~1.6x
+  (small-sized models) or ~1.3x (big)
+- Single big seeds within a block spread with sd up to 4: never read one seed
+Rule from here: a gain under about 0.5 milli-nats/game on the folds is inside the floor
+and needs sealed confirmation seeds and a second resample before a write-up. Today that
+covers big (-0.28), resid (-0.05), pretrain d8 (-0.24), set net (-0.42), patch (-0.14);
+win-comp (-0.57), the 4-input average (-0.61) and player experience (-2.5) are past it.
+
 Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
 Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
 only" covers dev, select, final); rows.load holds only eval's train (older than the first

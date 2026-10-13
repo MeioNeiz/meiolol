@@ -1,5 +1,10 @@
 # title: Where does a model's gain sit, by draft type? (model-free check)
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+noise floor: ratings vs itself refit on another 90%	ratings	folds	0.00000	0.00044	1	-0.00047	0.00041	44353	90%	885e879; aa-small, aa-small2, aa-big4	95% A/A spread (2 x pair sd 0.22), 12 resamples; seed_lo/hi: extreme pairs
+noise floor: small net vs itself, other 90% and seeds	-	folds	0.00000	0.00055	3	-0.00035	0.00023	44353	90%	885e879; aa-small, aa-small2, aa-big4	95% A/A spread (pair sd 0.28), 12 resamples
+noise floor: big net vs itself, other 90% and seeds	-	folds	0.00000	0.00057	3	-0.00046	0.00041	44353	90%	885e879; aa-small, aa-small2, aa-big4	95% A/A spread (pair sd 0.29), 4 resamples
+noise floor: honest 95% half-width, small-sized model vs its candidate	ratings	folds	0.00000	0.00048	3			44353		885e879; aa-small, aa-small2, aa-big4	per-game se 0.15 plus resample sd 0.19; reported paired CI ~0.30
+noise floor: honest 95% half-width, big net vs its candidate	ratings	folds	0.00000	0.00055	3			44353		885e879; aa-small, aa-small2, aa-big4	per-game se 0.22 plus resample sd 0.17; reported paired CI ~0.43
 win-comp, all games	ratings	folds	-0.00057	0.00028	1			44353		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	
 win-comp, a lopsided team	ratings	folds	-0.00211	0.00108	1			8727		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	magic share <20% or 60%+
 win-comp, both balanced	ratings	folds	-0.00019	0.00023	1			35626		netcheck w-big, m-big (f1); units 20261013T205116Z-compcheck-folds5-units	
