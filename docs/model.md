@@ -637,8 +637,8 @@ Admin only: the public site never shows "this draft wins X%" (docs/learned.md). 
 into a run dir on the Mac (~/ml/runs/<stamp>-draft-export); lab-push.sh sends the newest.
 
 draft-model.json:
-- meta: name ("win-ratings (ratings)"), run, snapshot, newest_game, training_games,
-  patch (newest), platform (EUW1: the intercept used), dev {what, games, log_loss,
+- meta: name ("win-ratings (ratings)"), run, snapshot, newest_game, training_games
+  (games that lasted 15:00, as the harness fits), patch (newest), platform (EUW1: the intercept used), dev {what, games, log_loss,
   baseline_log_loss, coin_log_loss, accuracy, auc}: a refit on dev's games, scored on
   dev-val, as described in `what`
 - roles: top, jungle, middle, bottom, utility; role fields are indices into it

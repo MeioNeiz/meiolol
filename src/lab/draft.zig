@@ -346,24 +346,33 @@ fn loadChampions(gpa: std.mem.Allocator, arena: std.mem.Allocator, snap: []const
     return c;
 }
 
+/// Games over before 15:00 left out, as the harness fits (docs/model.md "Rows")
 fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
     const players = try harness.gamePlayers(a, d);
-    const games = try a.alloc(api.Game, d.games.len);
-    for (games, d.games, players) |*o, g, pl| o.* = .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = pl.ranks, .exp = pl.exp };
-    const out = try a.alloc(api.Row, d.rows.len);
-    for (out, d.rows) |*o, r| o.* = .{
-        .game = r.game,
-        .side = r.side,
-        .role = @fromBackingInt(@backingInt(r.role)),
-        .champion = r.champion,
-        .rank = r.rank,
-        .exp = harness.experience(r),
-        .y = r.y,
-    };
-    return .{ .games = games, .rows = out };
+    const index = try a.alloc(u32, d.games.len);
+    var games: std.ArrayList(api.Game) = .empty;
+    for (d.games, players, index) |g, pl, *ix| {
+        if (g.duration_s < harness.min_duration_s) continue;
+        ix.* = @intCast(games.items.len);
+        try games.append(a, .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = pl.ranks, .exp = pl.exp });
+    }
+    var out: std.ArrayList(api.Row) = .empty;
+    for (d.rows) |r| {
+        if (d.games[r.game].duration_s < harness.min_duration_s) continue;
+        try out.append(a, .{
+            .game = index[r.game],
+            .side = r.side,
+            .role = @fromBackingInt(@backingInt(r.role)),
+            .champion = r.champion,
+            .rank = r.rank,
+            .exp = harness.experience(r),
+            .y = r.y,
+        });
+    }
+    return .{ .games = games.items, .rows = out.items };
 }
 
-/// A tool, not an evaluation: every game, test games included
+/// A tool, not an evaluation: every game that lasted 15:00, test games included
 fn fitAll(gpa: std.mem.Allocator, d: *const rows.Data) !cand.Model {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
