@@ -223,7 +223,7 @@ slot8() {
     while :; do
         for (( i = 0; i < $2; i++ )); do
             exec 8>> "$1.$i"
-            if perl -MFcntl=:flock -e 'open(my $f, q{>&=}, 8) or die
+            if perl -MFcntl=:flock -e 'open(my $f, q{>&=}, 8) or die;
                 flock($f, LOCK_EX | LOCK_NB) or exit 1'; then
                 SLOT8=$i
                 return
