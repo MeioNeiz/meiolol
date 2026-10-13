@@ -101,6 +101,9 @@ Why: the nearest precedent to meiolol's design (ML model trained on Riot ranked 
   > # TODO: needs to be updated for new model architecture
   > def compute_ece(y_true, y_prob, n_bins=20, strategy="quantile"):
 - [method] Checked, not there: no training time, GPU type or wall-clock figure in the READMEs (epoch time goes only to W&B). ^f35
+- [data] The filters' 15-minute columns come from the timeline frame rounded to 900000 ms: creepScore is lane plus jungle minions, gold is totalGold, level the frame's level, and kills/deaths/assists are counted from the events of every frame up to and including that one. `apps/data-collection/src/utils/matchProcessing.ts` ^f36
+  > participantFrame.minionsKilled + participantFrame.jungleMinionsKilled
+  > Math.round(frame.timestamp / frameInterval) * frameInterval
 
 ## Read
 
