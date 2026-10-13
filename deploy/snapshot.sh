@@ -143,7 +143,8 @@ push_snap() {
     scp -q "$BIN/gpu-box/meiolol-lab" "$GPU:ml/bin/meiolol-lab-snapshot"
     if ssh "$GPU" "ml/bin/meiolol-lab-snapshot 2>&1 | grep -q mastery-pre"; then
         log "mastery-pre on $GPU"
-        ssh "$GPU" "nice -n 10 ml/bin/meiolol-lab-snapshot mastery-pre ml/snaps/$name $ARCHIVE" \
+        # zstd lives in the gpu-box's ~/bin (no sudo there), not on a plain ssh's PATH
+        ssh "$GPU" "PATH=\$HOME/bin:\$PATH nice -n 10 ml/bin/meiolol-lab-snapshot mastery-pre ml/snaps/$name $ARCHIVE" \
             || die "mastery-pre failed on $GPU for $name"
     fi
     [[ -f "$STATE/pending" ]] && sed -i '' "/^$name\$/d" "$STATE/pending"
