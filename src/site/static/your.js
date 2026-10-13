@@ -11,6 +11,10 @@ const API = ["localhost", "127.0.0.1"].includes(location.hostname) && location.p
 // Riot's reviewers) without a Riot ID
 const EXAMPLE = "data/your-example.json";
 const POLL_MS = 3000;
+// Riot lists a game a few minutes after it ends: a check that finds nothing new repeats
+// every minute for a while. The service refuses checks closer than check_at
+const WATCH_MS = 60_000;
+const WATCH_FOR_MS = 10 * 60_000;
 
 const $ = (id) => document.getElementById(id);
 const { el, plural, signed, clock } = Review;
@@ -20,6 +24,10 @@ let current = null;
 let pollTimer = 0;
 let lookupId = "";
 let shown = 0;
+let watchUntil = 0;
+let watchFrom = 0;
+let watchTimer = 0;
+let checkTimer = 0;
 
 // The example's dates are to the day in UTC; a looked-up player's are their own
 function date(g) {
@@ -42,18 +50,19 @@ function setUrl(hash) {
 
 async function lookup(id) {
   clearTimeout(pollTimer);
+  stopWatch();
   lookupId = id;
   setUrl(`id=${encodeURIComponent(id)}`);
   status("Looking up…");
   await poll();
 }
 
-async function poll() {
+async function poll(refresh) {
   const id = lookupId;
   let res;
   let body;
   try {
-    res = await fetch(`${API}/games?id=${encodeURIComponent(id)}`);
+    res = await fetch(`${API}/games?id=${encodeURIComponent(id)}${refresh ? "&refresh=1" : ""}`);
     body = await res.json();
   } catch {
     status("The games service is not reachable right now. Try again later.");
@@ -71,6 +80,7 @@ async function poll() {
     return;
   }
   if (!res.ok) {
+    stopWatch();
     status(body.error || "Something went wrong. Try again in a few minutes.");
     return;
   }
@@ -85,13 +95,76 @@ async function poll() {
   } else {
     const p = body.player;
     status(p?.error ? `Last update failed (${p.error}); showing what is stored.` : "");
+    if (watchUntil) watchStep(body);
+    renderCheck(body);
     return;
   }
+  renderCheck(body);
   pollTimer = setTimeout(poll, POLL_MS);
+}
+
+const newest = (body) => body.report?.games?.[0]?.start_ms ?? 0;
+const hhmm = (ms) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+function renderCheck(body) {
+  const b = $("check");
+  clearTimeout(checkTimer);
+  b.hidden = !!body.example || !body.player;
+  if (b.hidden) return;
+  const busy = body.state === "queued" || body.state === "fetching";
+  const wait = (body.check_at ?? 0) * 1000 - Date.now();
+  b.textContent = watchUntil ? "Stop checking" : "Check for new games";
+  b.disabled = !watchUntil && (busy || wait > 0);
+  b.title = !watchUntil && !busy && wait > 0 ? `Checked just now; again from ${hhmm(body.check_at * 1000)}` : "";
+  if (!watchUntil && !busy && wait > 0) checkTimer = setTimeout(() => renderCheck(current), wait + 500);
+}
+
+function startWatch() {
+  if (watchUntil) {
+    stopWatch();
+    status("");
+    renderCheck(current);
+    return;
+  }
+  watchFrom = newest(current);
+  watchUntil = Date.now() + WATCH_FOR_MS;
+  status("Checking Riot for new games…");
+  clearTimeout(pollTimer);
+  poll(true);
+}
+
+function stopWatch() {
+  watchUntil = 0;
+  clearTimeout(watchTimer);
+}
+
+// After a check: stop when a newer game shows up, else try again a minute on while the
+// tab is open
+function watchStep(body) {
+  if (newest(body) > watchFrom) {
+    const fresh = body.report.games.filter((g) => g.start_ms > watchFrom).length;
+    stopWatch();
+    show(0);
+    status(`${plural(fresh, "new game")} added.`);
+    return;
+  }
+  if (Date.now() >= watchUntil) {
+    stopWatch();
+    status("No new games. If you've just finished one, Riot can take a few minutes to list it: check again shortly.");
+    return;
+  }
+  status(`No new game yet: Riot lists a game a few minutes after it ends. Checking every minute until ${hhmm(watchUntil)}.`);
+  const next = Math.max(WATCH_MS, (body.check_at ?? 0) * 1000 - Date.now() + 1000);
+  watchTimer = setTimeout(function again() {
+    if (!watchUntil) return;
+    if (document.hidden) watchTimer = setTimeout(again, WATCH_MS);
+    else poll(true);
+  }, next);
 }
 
 async function showExample() {
   clearTimeout(pollTimer);
+  stopWatch();
   lookupId = "";
   setUrl("example");
   let body;
@@ -104,6 +177,7 @@ async function showExample() {
   body.example = true;
   current = body;
   render(body, true);
+  renderCheck(body);
   status("An example: real ranked games of one player from our data, with their name left out and dates to the day. Enter your Riot ID above to review your own.");
 }
 
@@ -322,6 +396,7 @@ function forgetState(j) {
     case "done":
       if (forgetId.toLowerCase() === lookupId.toLowerCase()) {
         clearTimeout(pollTimer);
+        stopWatch();
         current = null;
         $("player").hidden = true;
         status("");
@@ -358,6 +433,7 @@ async function start() {
       setTab(a.dataset.tab);
     });
   }
+  $("check").addEventListener("click", startWatch);
   $("forget").addEventListener("click", () => forget(false));
   $("forget-check").addEventListener("click", () => forget(true));
   $("example-link").addEventListener("click", (e) => {

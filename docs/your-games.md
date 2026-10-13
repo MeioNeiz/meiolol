@@ -16,9 +16,14 @@ static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy b
   by PUUID (visible rank), match-v5 ids (last 60 days, one list per queue: solo 420,
   flex 440, draft 400, Swiftplay 480), then match + timeline for up to 10 games not yet
   cached, newest first across the lists. ~26 regional calls plus 1 platform call for a
-  first lookup; a refresh (at most every 30 min, on a visit) costs 5 plus 2 per new game.
+  first lookup; a refresh costs 5 plus 2 per new game.
   Not the unfiltered list: it holds private ARAM Mayhem ids (403) that would take the 10
   new-game slots on every refresh. ARAM and Arena have no lanes to show
+- When to refresh (src/api/root.zig): a visit refreshes when the last refresh is over 5
+  min old. "Check for new games" (&refresh=1) does when it is over 1 min old (the reply's
+  check_at says when). Riot lists a game a few minutes after it ends, so a check that
+  finds nothing new repeats every minute for 10 min while the tab is open, then stops:
+  at most ~50 calls per press, only on a press
 - Cache by match id (api.db `matches`): a summary of the match (champions, positions,
   results, K/D/A; no names) and the compact timeline (riot/timeline.zig, ~8 KB gz). A
   match shared by two looked-up players is fetched once
@@ -114,7 +119,7 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
 - Retention: a player nobody has looked up for 30 days is deleted (hourly prune), with
   matches no remaining player uses: Riot's advice to refresh stored players at least
   every 30 days (C7) and the privacy policy's promise. Each visit refreshes from Riot (at
-  most every 30 min) and restarts the 30 days, so a player who comes back keeps their
+  most every 5 min) and restarts the 30 days, so a player who comes back keeps their
   history for the per-matchup trend
 - Objection and removal, open to anyone who owns the Riot ID: the page issues a random
   starter profile icon (ids 0-28, never the current one), the player sets it in the

@@ -26,7 +26,8 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<p id="status" class="note" hidden></p>
         \\<div id="player" hidden>
         \\<section class="banner">
-        \\<div class="who"><span id="player-rank"></span><h1 id="player-name"></h1></div>
+        \\<div class="who"><span id="player-rank"></span><h1 id="player-name"></h1>
+        \\<button type="button" id="check" class="link" hidden>Check for new games</button></div>
         \\<div id="record" class="record"></div>
         \\</section>
         \\<div class="sec-h"><h2>Your games</h2><span id="games-note"></span></div>

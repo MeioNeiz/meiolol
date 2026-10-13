@@ -3,7 +3,8 @@
 //! job for the fetcher (fetch.zig, the only Riot caller) and return at once; the page
 //! polls until the job is done.
 //!
-//!   GET  /api/games?id=Name%23TAG   state, player, report (game.zig)
+//!   GET  /api/games?id=Name%23TAG   state, player, report (game.zig); &refresh=1 checks
+//!                                   for new games sooner than a visit does
 //!   POST /api/forget?id=Name%23TAG  objection: issue a profile icon; &check=1 checks it
 //!   GET  /api/forget?id=Name%23TAG  the objection's state
 //!   GET  /api/health                queue length
@@ -31,8 +32,11 @@ pub const Options = struct {
     /// Access-Control-Allow-Origin, for a page served from another origin in testing
     cors: ?[]const u8 = null,
     fetch: fetch.Options = .{},
-    /// Refresh a player's games when the last refresh is older than this
-    refresh_after_s: i64 = 30 * 60,
+    /// A visit refreshes a player's games when the last refresh is older than this
+    refresh_after_s: i64 = 5 * 60,
+    /// "Check for new games" (&refresh=1) does when it is older than this. Riot lists a
+    /// game a few minutes after it ends, so the page repeats the check for a while
+    check_after_s: i64 = 60,
     /// Retry an unknown Riot ID after this long
     not_found_s: i64 = 24 * 60 * 60,
     /// More queued lookups than this and new ones are refused (503) until it drains
@@ -286,6 +290,8 @@ pub const GamesOut = struct {
     total: ?i64 = null,
     player: ?PlayerOut = null,
     report: ?game.Report = null,
+    /// Unix seconds from which &refresh=1 starts a refresh
+    check_at: ?i64 = null,
 };
 
 fn games(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Reply {
@@ -313,9 +319,12 @@ fn games(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Repl
     try db.run("UPDATE players SET looked_up = ? WHERE puuid = ?", .{ now, puuid });
     // A job for this player under either key: the Riot ID while resolving, else PUUID
     const job_key = if (try db.scalar("SELECT 1 FROM jobs WHERE key = ?", .{key}) != null) key else puuid;
-    if (now - player.refreshed > ctx.opts.refresh_after_s) _ = try enqueue(ctx, db, job_key, now);
+    const asked = try param(arena, query, "refresh") != null;
+    const gate = if (asked) ctx.opts.check_after_s else ctx.opts.refresh_after_s;
+    if (now - player.refreshed > gate and !try enqueue(ctx, db, job_key, now) and asked) return busy(arena);
 
     var out = try progress(arena, db, job_key, .{ .state = "ready", .player = player });
+    out.check_at = player.refreshed + ctx.opts.check_after_s;
     out.report = try report(ctx, arena, db, puuid, .{ .tier = player.tier, .division = player.division, .lp = player.lp });
     return reply(arena, out);
 }
@@ -482,6 +491,33 @@ test param {
     const v = (try param(arena, "x=1&id=Hide%20on%20bush%23KR1", "id")).?;
     try std.testing.expectEqualStrings("Hide on bush#KR1", v);
     try std.testing.expect(try param(arena, "x=1", "id") == null);
+}
+
+test "games: a visit refreshes after refresh_after_s, a check after check_after_s" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = std.testing.io;
+    var ctx: Context = .{ .gpa = std.testing.allocator, .io = io, .opts = .{ .db_path = ":memory:", .curves_dir = "" }, .curves = .{} };
+    const db = try cache.open(":memory:");
+    defer db.close();
+    const now = std.Io.Clock.real.now(io).toSeconds();
+    try db.run("INSERT INTO accounts VALUES ('a#1', 'p', ?)", .{now});
+    try db.run("INSERT INTO players (puuid, game_name, tag_line, platform, refreshed) VALUES ('p', 'A', '1', 'EUW1', ?)", .{now - 120});
+
+    const visit = try games(&ctx, arena, db, "id=A%231");
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM jobs", .{}));
+    try std.testing.expect(std.mem.indexOf(u8, visit.body, "\"state\":\"ready\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, visit.body, try arena.print("\"check_at\":{d}", .{now - 60})) != null);
+
+    const check = try games(&ctx, arena, db, "id=A%231&refresh=1");
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM jobs WHERE key = 'p'", .{}));
+    try std.testing.expect(std.mem.indexOf(u8, check.body, "\"state\":\"queued\"") != null);
+
+    try db.run("DELETE FROM jobs", .{});
+    try db.run("UPDATE players SET refreshed = ?", .{now - 30});
+    _ = try games(&ctx, arena, db, "id=A%231&refresh=1");
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM jobs", .{}));
 }
 
 test {
