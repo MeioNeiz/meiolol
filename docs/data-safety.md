@@ -169,6 +169,9 @@ Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
 - Disposable: a snapshot is deleted from the Mac and the gpu-box when a newer one
   replaces it, so an erasure reaches analysis copies within one snapshot cycle. Not in
   git, not published
+- mastery_pre.tsv (`meiolol-lab mastery-pre SNAP ARCHIVE`): pre-game mastery joined
+  from the raw archive, keyed by hashed match id and slot only, written inside the
+  snapshot dir, so it stays within the snapshot's rules and goes when the snapshot does
 
 ### Raw archive
 

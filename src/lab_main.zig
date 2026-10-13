@@ -6,6 +6,7 @@ const std = @import("std");
 const cuda = @import("gpu/cuda.zig");
 const anonymise = @import("lab/anonymise.zig");
 const archive = @import("lab/archive.zig");
+const mastery_pre = @import("lab/mastery_pre.zig");
 const protocol = @import("lab/protocol.zig");
 const rows = @import("lab/rows.zig");
 const pack = @import("lab/pack.zig");
@@ -34,6 +35,9 @@ const usage =
     \\  archive-forget ARCHIVE FORGOTTEN [SALT_FILE]  drop archived documents naming a
     \\                                  forgotten PUUID (plain, one per line)
     \\  archive-age ARCHIVE [DAYS]      blank hashed PUUIDs in days older than DAYS (730)
+    \\  mastery-pre SNAP ARCHIVE        each ranked participant's latest archived mastery
+    \\                                  fetch before game start: SNAP/mastery_pre.tsv
+    \\                                  (lab/mastery_pre.zig; zstd on PATH)
     \\  split SNAP_DIR                  the shared held-out split (eval's, tested on EUW1):
     \\                                  prints it, writes SNAP_DIR/split.tsv
     \\  rows SNAP_DIR                   load the model rows, print outcome counts and means
@@ -102,6 +106,14 @@ pub fn main(init: std.process.Init) !u8 {
         const today = @divFloor(std.Io.Clock.real.now(init.io).toSeconds(), std.time.s_per_day);
         const n = try archive.age(init.gpa, init.io, argv[2], today, max_days);
         std.log.info("archive: {d} days aged past {d} days", .{ n, max_days });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "mastery-pre") and argv.len >= 4) {
+        const n = try mastery_pre.run(init.gpa, init.io, argv[2], argv[3]);
+        std.log.info("mastery-pre: {d} rows, {d} with a pre-game fetch, median gap {d:.1} h " ++
+            "({d} archive files read, {d} begun after the last game skipped)", .{
+            n.rows, n.pre_game, n.median_gap_h, n.files_read, n.files_skipped,
+        });
         return 0;
     }
     if (std.mem.eql(u8, cmd, "split") and argv.len >= 3) {
@@ -288,6 +300,7 @@ fn gpuSmoke(gpa: std.mem.Allocator) !void {
 test {
     _ = anonymise;
     _ = archive;
+    _ = mastery_pre;
     _ = protocol;
     _ = rows;
     _ = pack;

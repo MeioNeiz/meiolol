@@ -233,7 +233,7 @@ fn archiveFiles(arena: std.mem.Allocator, io: Io, archive_dir: []const u8, only_
 }
 
 /// "YYYY-MM-DD" -> unix day
-fn parseDay(name: []const u8) ?i64 {
+pub fn parseDay(name: []const u8) ?i64 {
     if (name.len != 10 or name[4] != '-' or name[7] != '-') return null;
     const y = std.fmt.parseInt(u16, name[0..4], 10) catch return null;
     const m = std.fmt.parseInt(u4, name[5..7], 10) catch return null;

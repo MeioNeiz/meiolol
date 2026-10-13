@@ -43,7 +43,8 @@ src/
                      me (own mastery and solo tier)
   app_main.zig       `meiolol-app`: suggest (offline), watch (live), session, get
   lab_main.zig       `meiolol-lab`: modelling experiments (docs/model.md, compute.md);
-                     lab/rows.zig model rows from a snapshot, lab/pack.zig packed rows
+                     lab/rows.zig model rows from a snapshot, lab/pack.zig packed rows,
+                     lab/mastery_pre.zig pre-game mastery from the raw archive
   lanecard.zig       the lane card's content (pure): opponent, sentence, curve, options
   desktop_main.zig   `meiolol-desktop`: the lane card in a window (dvui, Direct3D 11)
   desktop/           ui.zig (the window, drawn from a View), raster.zig (dvui backend
@@ -239,6 +240,15 @@ note; `rows`, `enemy`, `exp` and the rest all go through rows.load.
   timeline.decode)
 - Written to pack.tmp-RANDOM, read back and compared, then renamed over pack/; the
   manifest is written last. A copy keeps the pack only if mtimes survive (rsync -a)
+
+`meiolol-lab mastery-pre SNAP ARCHIVE` (src/lab/mastery_pre.zig) adds mastery_pre.tsv:
+per queue 420 participant, the player's latest raw archive mastery fetch with
+fetched_at < game_start (the snapshot's own mastery table is the latest fetch, mostly
+post-game). Columns match_id, slot, fetched_at, level, points, last_play (the game's
+champion, 0s if absent from the fetch), champions, total_points (the whole fetch); no
+line without such a fetch. Two zstd -dc passes over ARCHIVE's mastery files (the first
+keeps one best fetched_at per participant, the second decodes only the chosen blobs);
+exports begun after the last game are skipped. Temp file, then rename.
 
 ## Lane curves (src/curves.zig, src/core/curvesfile.zig, curvefit.zig, src/site/matchup.zig)
 
