@@ -43,6 +43,7 @@ class Smooth:
         self.l2, self.knots = l2, knots
 
     def fit(self, X, minute, y, max_iter=300):
+        X = X.astype(np.float32)
         self.mu = X.mean(0)
         self.sd = X.std(0) + 1e-6
         Xt = torch.from_numpy((X - self.mu) / self.sd)
@@ -66,7 +67,7 @@ class Smooth:
 
     def logit(self, X, minute):
         H = sc.hat(minute, self.knots)
-        Xs = (X - self.mu) / self.sd
+        Xs = (X.astype(np.float32) - self.mu) / self.sd
         return ((Xs @ self.W) * H).sum(1) + H @ self.b
 
     def predict(self, X, minute):
