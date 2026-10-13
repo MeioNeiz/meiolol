@@ -564,6 +564,82 @@ fn final(
             args.run, args.campaign, args.target, o, p.n, p.diff, p.half,
         }));
     }
+    const kw = api.outcomeIndex(.win);
+    const ys = try gpa.alloc(f32, s.row.len);
+    defer gpa.free(ys);
+    const pc = try gpa.alloc(f64, s.row.len);
+    defer gpa.free(pc);
+    const pb = try gpa.alloc(f64, s.row.len);
+    defer gpa.free(pb);
+    for (ys, pc, pb, s.row, s.cand, s.base) |*y, *c1, *b1, ri, sc, sb| {
+        y.* = d.rows[ri].y[kw];
+        c1.* = sc[kw];
+        b1.* = sb[kw];
+    }
+    try w.print("\nwin AUC per row: baseline {d:.4}, candidate {d:.4}\n", .{ try auc(gpa, ys, pb), try auc(gpa, ys, pc) });
+    try writeTestRows(gpa, io, d, &s, "test.tsv");
+}
+
+/// Rank AUC of predictions p for 0/1 outcomes y (NaN rows skipped), ties averaged
+fn auc(gpa: std.mem.Allocator, y: []const f32, p: []const f64) !f64 {
+    const Pair = struct { p: f64, y: f32 };
+    var xs: std.ArrayList(Pair) = .empty;
+    defer xs.deinit(gpa);
+    for (y, p) |yy, pp| if (!std.math.isNan(yy)) try xs.append(gpa, .{ .p = pp, .y = yy });
+    std.mem.sort(Pair, xs.items, {}, struct {
+        fn less(_: void, a: Pair, b: Pair) bool {
+            return a.p < b.p;
+        }
+    }.less);
+    var rank_sum: f64 = 0;
+    var pos: f64 = 0;
+    var i: usize = 0;
+    while (i < xs.items.len) {
+        var j = i;
+        while (j + 1 < xs.items.len and xs.items[j + 1].p == xs.items[i].p) j += 1;
+        const mid = @as(f64, @floatFromInt(i + j)) / 2 + 1;
+        for (xs.items[i .. j + 1]) |x| if (x.y > 0.5) {
+            rank_sum += mid;
+            pos += 1;
+        };
+        i = j + 1;
+    }
+    const neg = @as(f64, @floatFromInt(xs.items.len)) - pos;
+    return (rank_sum - pos * (pos + 1) / 2) / (pos * neg);
+}
+
+/// The final's per-row test file: writePreds' columns (meiolol-lab pairs reads them) with
+/// 6-digit predictions, plus the row's loss (log loss for win, squared error in role sds
+/// for the rest) and the baseline's
+fn writeTestRows(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, s: *const harness.Scores, path: []const u8) !void {
+    var file = try Io.Dir.cwd().createFile(io, path, .{});
+    defer file.close(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var fw = file.writer(io, &buf);
+    const w = &fw.interface;
+    try w.writeAll("match_id\tslot\toutcome\ty\tpred\tloss\tbase_pred\tbase_loss\n");
+    for (0..api.outcome_count) |k| {
+        const la = try s.losses(gpa, d, k, null, .cand);
+        defer gpa.free(la);
+        const lb = try s.losses(gpa, d, k, null, .base);
+        defer gpa.free(lb);
+        for (s.row, s.cand, s.base, la, lb) |ri, pc, pb, a, b| {
+            const r = d.rows[ri];
+            if (std.math.isNan(r.y[k])) continue;
+            try w.print("{s}\t{d}\t{t}\t{d}\t{d:.6}\t{d:.6}\t{d:.6}\t{d:.6}\n", .{
+                d.games[r.game].match_id, r.slot, api.outcomeAt(k), r.y[k], pc[k], a, pb[k], b,
+            });
+        }
+    }
+    try w.flush();
+}
+
+test "auc: ranks with ties averaged, NaN outcomes skipped" {
+    const gpa = std.testing.allocator;
+    try std.testing.expectEqual(@as(f64, 1), try auc(gpa, &.{ 0, 0, 1, 1 }, &.{ 0.1, 0.2, 0.3, 0.4 }));
+    try std.testing.expectEqual(@as(f64, 0), try auc(gpa, &.{ 1, 0 }, &.{ 0.1, 0.2 }));
+    try std.testing.expectEqual(@as(f64, 0.5), try auc(gpa, &.{ 0, 1, std.math.nan(f32) }, &.{ 0.5, 0.5, 0.9 }));
+    try std.testing.expectEqual(@as(f64, 0.875), try auc(gpa, &.{ 0, 1, 0, 1 }, &.{ 0.1, 0.2, 0.2, 0.3 }));
 }
 
 test "effect labels: champion ids become names, separators become spaces" {

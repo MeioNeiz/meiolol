@@ -875,7 +875,8 @@ pub const Term = struct {
 
 pub const Stat = struct { name: []const u8, label: []const u8 };
 
-pub const TeamTerm = struct { kind: []const u8, stat: u32, centre: f32, weight: f32 };
+/// sd: the weight's Laplace diagonal sd
+pub const TeamTerm = struct { kind: []const u8, stat: u32, centre: f32, weight: f32, sd: f32 };
 
 /// Blue's logit adds P_b' S P_b - P_r' S P_r + P_b' A P_r on team-summed p; k x k
 /// row-major, sd from the weights' Laplace diagonal
@@ -941,7 +942,7 @@ pub fn exportModel(m: *const Model, arena: std.mem.Allocator) !Export {
             at += 1;
         };
         if (c.team) for (c.forms, 0..) |form, i| {
-            try team.append(arena, .{ .kind = @tagName(form), .stat = 0, .centre = 0.5, .weight = w[at + i] * m.x_scale[at + i] });
+            try team.append(arena, .{ .kind = @tagName(form), .stat = 0, .centre = 0.5, .weight = w[at + i] * m.x_scale[at + i], .sd = m.w_sd[at + i] * m.x_scale[at + i] });
         };
     }
     const stats = try arena.alloc(Stat, k);
