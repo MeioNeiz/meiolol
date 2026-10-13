@@ -19,9 +19,10 @@
 //! DIR/preds.tsv (per game); gains paired per game (= clustered by game)
 //! LoLDraftAI's evaluation beside ours (lab/randsplit.zig, dev only): --split random:SEED
 //! replaces the blocks by one, fitted on the non-test games before the selection cut
-//! outside that seed's random tenth (every platform) and scored on the tenth's EUW1
-//! games; --filter ldai drops LoLDraftAI's 15-minute filtered games from fit and scored
-//! games of any block (SNAP/ldai_filter.tsv, meiolol-lab ldai-filter)
+//! outside that seed's random tenth and scored on the whole tenth, every platform, as
+//! LoLDraftAI (preds.tsv's match_id prefix gives EUW1 alone); --filter ldai drops
+//! LoLDraftAI's 15-minute filtered games from fit and scored games of any block
+//! (SNAP/ldai_filter.tsv, meiolol-lab ldai-filter)
 
 const std = @import("std");
 const api = @import("api");
@@ -350,7 +351,7 @@ const Spec = struct {
 
     fn scores(s: Spec, c: harness.Cuts, g: rows.Game) bool {
         if (s.filter) |f| if (!f.keep(g)) return false;
-        if (s.random) |seed| return devEra(c, g) and g.platform == c.eu and randsplit.inTest(g, seed);
+        if (s.random) |seed| return devEra(c, g) and randsplit.inTest(g, seed);
         if (s.dev) return harness.scored(.dev, c, g);
         return harness.visible(.dev, c, g) and g.start >= s.lo and g.start < s.hi;
     }
