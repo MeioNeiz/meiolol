@@ -1,0 +1,30 @@
+# title: Do champion-role embeddings learnt from in-game stats improve the ratings?
+model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+embedding prior, d8	ratings	folds	-0.00024	0.00025	3	-0.00029	-0.00019	44353		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	picked by inner validation on fit games (-0.00020 vs none); better in 5 of 5 folds
+embedding prior, d8 (rare picks)	ratings	folds	-0.00076	0.00052	3	-0.00082	-0.00069	13735		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	games with a pick under 200 fit games
+embedding prior, d8	ratings	dev-val	0.00004	0.00040	3	-0.00012	0.00020	8500		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	
+embedding prior, d8 (rare picks)	ratings	dev-val	0.00021	0.00124	3	0.00011	0.00051	1850		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	games with a pick under 200 fit games
+embedding prior, d8	random-embedding prior	folds	-0.00028	0.00027	3	-0.00074	-0.00025	44353		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	
+embedding prior, d12	ratings	folds	-0.00036	0.00027	3	-0.00041	-0.00019	44353		pretrain a88db2d (before the 74e059d scaling fix), Mac data/pretrain/d12	not picked: inner val -0.00017; better in 5 of 5 folds
+embedding prior, d12 (rare picks)	ratings	folds	-0.00079	0.00056	3	-0.00076	-0.00073	13735		pretrain a88db2d (before the 74e059d scaling fix), Mac data/pretrain/d12	games with a pick under 200 fit games
+embedding prior, d12	ratings	dev-val	0.00016	0.00045	3	0.00000	0.00037	8500		pretrain a88db2d (before the 74e059d scaling fix), Mac data/pretrain/d12	
+embedding prior, d12 no won term	ratings	folds	-0.00037	0.00027	3	-0.00045	-0.00018	44353		pretrain a88db2d (before the 74e059d scaling fix), Mac 20261013T211052Z-pt-nowin	not picked: inner val -0.00019; better in 5 of 5 folds
+embedding prior, d12 no won term (rare picks)	ratings	folds	-0.00088	0.00055	3	-0.00086	-0.00080	13735		pretrain a88db2d (before the 74e059d scaling fix), Mac 20261013T211052Z-pt-nowin	games with a pick under 200 fit games
+embedding prior, d12 no won term	ratings	dev-val	-0.00003	0.00050	3	-0.00024	0.00042	8500		pretrain a88db2d (before the 74e059d scaling fix), Mac 20261013T211052Z-pt-nowin	
+embedding prior, d16	ratings	folds	-0.00030	0.00028	3	-0.00036	-0.00008	44353		pretrain 26276f3, gpu-box 20261013T215019Z-pt-d16	not picked: inner val -0.00015; better in 5 of 5 folds
+embedding prior, d16 (rare picks)	ratings	folds	-0.00081	0.00059	3	-0.00090	-0.00066	13735		pretrain 26276f3, gpu-box 20261013T215019Z-pt-d16	games with a pick under 200 fit games
+embedding prior, d16	ratings	dev-val	0.00004	0.00045	3	-0.00003	0.00037	8500		pretrain 26276f3, gpu-box 20261013T215019Z-pt-d16	
+embedding prior, d12 no outcome-like targets	ratings	folds	-0.00029	0.00026	3	-0.00031	-0.00017	44353		pretrain 26276f3, gpu-box 20261013T215956Z-pt-noout	not picked: inner val -0.00015; better in 5 of 5 folds
+embedding prior, d12 no outcome-like targets (rare picks)	ratings	folds	-0.00079	0.00054	3	-0.00086	-0.00062	13735		pretrain 26276f3, gpu-box 20261013T215956Z-pt-noout	games with a pick under 200 fit games
+embedding prior, d12 no outcome-like targets	ratings	dev-val	-0.00005	0.00039	3	-0.00032	0.00028	8500		pretrain 26276f3, gpu-box 20261013T215956Z-pt-noout	
+hand-profile prior (control)	ratings	folds	-0.00011	0.00032	3	-0.00001	0.00034	44353		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	
+hand-profile prior (control)	ratings	dev-val	0.00009	0.00056	3	0.00011	0.00081	8500		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	
+random-embedding prior, d8 (control)	ratings	folds	0.00004	0.00018	3	0.00006	0.00045	44353		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	
+random-embedding prior, d8 (control)	ratings	dev-val	0.00006	0.00040	3	-0.00018	0.00070	8500		pretrain 26276f3, gpu-box 20261013T213925Z-pt-d8	
+embedding prior d12, shuffled win labels (control)	ratings	folds	0.00028	0.00014	3	0.00017	0.00039	44353		pretrain 26276f3, gpu-box 20261013T220812Z-pt-shuf	win labels permuted before anything is fitted, ratings on the same labels; gain must be ~0
+embedding prior d12, shuffled win labels (control)	ratings	dev-val	0.00028	0.00031	3	-0.00003	0.00065	8500		pretrain 26276f3, gpu-box 20261013T220812Z-pt-shuf	
+small net, from scratch	ratings	folds	0.00022	0.00025	3	0.00032	0.00112	44353		20261013T205649Z-0a-pscr (meiolol-0a)	emb 12, hidden 64, dropout 0.2
+small net, started from the d12 embeddings	ratings	folds	-0.00004	0.00054	3	0.00030	0.00090	44353		20261013T212239Z-0a-pinit (meiolol-0a)	netcheck --emb-init; vs scratch -0.00026 ± 0.00057
+small net, d12 embeddings frozen	ratings	folds	0.00049	0.00068	3			44353		20261013T213554Z-0a-pfrz (meiolol-0a)	netcheck --emb-init --emb-freeze 1
+small net, from scratch	ratings	dev-val	0.00020	0.00062	3			8500		20261013T205649Z-0a-pscr (meiolol-0a)	
+small net, started from the d12 embeddings	ratings	dev-val	-0.00031	0.00106	3			8500		20261013T212239Z-0a-pinit (meiolol-0a)	

@@ -1593,6 +1593,51 @@ and must stay below 0 there. Variants tried (all reported): d12, d12 without the
 term, d8, d16, d12 without the outcome-like targets (gold14, lanediff14, cs10, deaths15,
 first_item, minutes, dmg_buildings).
 
+Runs (snap-20261012T2055Z, 3 seeds each): d12 Mac data/pretrain/d12 and d12 no won term
+Mac ~/ml/runs/20261013T211052Z-pt-nowin (both pretrain a88db2d, before the 74e059d fix);
+gpu-box d8 20261013T213925Z-pt-d8, d16 20261013T215019Z-pt-d16, no outcome-like targets
+20261013T215956Z-pt-noout, shuffled win labels (d12, `--shuffle 1`)
+20261013T220812Z-pt-shuf (pretrain.zig as 26276f3, after the fix). Log loss minus
+ratings (win-ratings re-implemented), seed-mean chance, 95% paired by game; rare = games
+with a pick under 200 fit games (13,735 of 44,353 fold games, 1,850 of 8,500 dev-val);
+inner val = the selection statistic.
+
+| variant | inner val | folds | folds better in | rare, folds | dev-val |
+| --- | --- | --- | --- | --- | --- |
+| d8 (picked) | -0.00020 | -0.00024 ± 0.00025 | 5 of 5 | -0.00076 ± 0.00052 | +0.00004 ± 0.00040 |
+| d12 no won term | -0.00019 | -0.00037 ± 0.00027 | 5 of 5 | -0.00088 ± 0.00055 | -0.00003 ± 0.00050 |
+| d12 | -0.00017 | -0.00036 ± 0.00027 | 5 of 5 | -0.00079 ± 0.00056 | +0.00016 ± 0.00045 |
+| d16 | -0.00015 | -0.00030 ± 0.00028 | 5 of 5 | -0.00081 ± 0.00059 | +0.00004 ± 0.00045 |
+| d12 no outcome-like | -0.00015 | -0.00029 ± 0.00026 | 5 of 5 | -0.00079 ± 0.00054 | -0.00005 ± 0.00039 |
+| hand profiles (control) | +0.00006 | -0.00011 ± 0.00032 | | -0.00048 ± 0.00062 | +0.00009 ± 0.00056 |
+| random E, d8 (control) | +0.00004 | +0.00004 ± 0.00018 | | -0.00018 ± 0.00034 | +0.00006 ± 0.00040 |
+| d12, shuffled win labels | +0.00032 | +0.00028 ± 0.00014 | 0 of 5 | +0.00011 ± 0.00026 | +0.00028 ± 0.00031 |
+
+d8 vs random E d8, folds: -0.00028 ± 0.00027. Seeds, d8 folds: -0.00029 .. -0.00019.
+Per fold, d8: -0.00015, -0.00026, -0.00011, -0.00056, -0.00014. Small net with the d12
+vectors (meiolol-0a, emb 12, vs ratings, folds): scratch +0.00022 ± 0.00025, initialised
+-0.00004 ± 0.00054, frozen +0.00049 ± 0.00068; initialised minus scratch -0.00026 ±
+0.00057. Rows: docs/nn-results/pretrain.tsv.
+
+Reading (dev, no test look):
+- Rule: d8 wins (d12 no won term is within 0.00002, the tie goes to the smaller d). Its
+  run is on post-fix code (pretrain.zig unchanged from 26276f3, which contains 74e059d)
+  and inner val is below 0 there, so the rerun condition is already met. The rule chose
+  the variant that is weakest on the folds, which is what fixing it in advance costs
+- Every variant is better than ratings on all 5 folds, but each pooled gain is about
+  the size of its CI (0.00024 to 0.00037 ± ~0.00027), and dev-val shows nothing
+  (-0.00005 to +0.00016). Borderline, not detected on its own
+- The gain sits in games with a rarely played pick (-0.00076 to -0.00088, 2 to 3x the
+  overall), where ratings have least to go on: the prior lends a rare champion-role the
+  strength of champion-roles that play like it. Same on every variant, so not tuned in
+- Not from extra parameters: random E (same shape) is +0.00004, and E beats it by
+  -0.00028 ± 0.00027. Hand profiles: nothing. With win labels shuffled the prior costs
+  +0.00028 ± 0.00014 (worse on every fold): no spurious gain, a small overfit cost
+- In nets the vectors add nothing (0a's rows): a net's own embedding already has what
+  the in-game stats give, or the small net cannot use it
+- Test look: needs a `final` block (fit on every non-test game, emb-final-s<seed>.tsv)
+  and the coordinator's go; not run
+
 #### Patch and rank context (meiolol-48)
 
 Do champion strengths shift by patch or by lobby rank enough to predict better than one
