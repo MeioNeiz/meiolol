@@ -22,7 +22,8 @@ pub const series = [_]Series{
 };
 
 /// The TSV's lines by its header's column names, sorted by games, one point per games
-/// count (the newest); lines with missing columns skipped
+/// count (the newest); lines with missing columns or values that aren't numbers (nan
+/// and inf parse) skipped
 pub fn parse(arena: std.mem.Allocator, tsv: []const u8) ![]Point {
     var lines = std.mem.tokenizeScalar(u8, tsv, '\n');
     const header = lines.next() orelse return &.{};
@@ -47,7 +48,10 @@ pub fn parse(arena: std.mem.Allocator, tsv: []const u8) ![]Point {
         }
         for (at) |a| if (a.? >= n) continue :lines;
         var p: Point = .{ .games = std.fmt.parseInt(u32, fields[at[0].?], 10) catch continue, .auc = undefined };
-        for (&p.auc, 1..) |*v, k| v.* = std.fmt.parseFloat(f64, fields[at[k].?]) catch continue :lines;
+        for (&p.auc, 1..) |*v, k| {
+            v.* = std.fmt.parseFloat(f64, fields[at[k].?]) catch continue :lines;
+            if (!std.math.isFinite(v.*)) continue :lines;
+        }
         for (out.items) |*q| if (q.games == p.games) {
             q.* = p;
             continue :lines;
@@ -184,7 +188,9 @@ test "parse keeps the newest line per games count, sorted" {
         "d\t9000\t0.51\t0.52\t0.53\n" ++
         "d\t8000\t0.50\t0.51\t0.52\n" ++
         "d\t9000\t0.54\t0.55\t0.56\n" ++
-        "d\tbad\n";
+        "d\tbad\n" ++
+        "d\t7000\tnan\t0.5\t0.5\n" ++
+        "d\t9000\t0.5\tinf\t0.5\n";
     const points = try parse(arena.allocator(), tsv);
     try std.testing.expectEqual(2, points.len);
     try std.testing.expectEqual(8000, points[0].games);
