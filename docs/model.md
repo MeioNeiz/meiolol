@@ -2009,6 +2009,77 @@ at ec9224a/0c75817, `meiolol-lab compare`):
   new snapshot (pairs gain most from more games). Nothing for learned.md before 4b's
   audit
 
+#### Set net: DeepSets on champion profiles (meiolol-35 [397394], was meiolol-0d)
+
+Question: does a net over each team's champion profiles find more than win-comp's one
+damage-mix term? `meiolol-lab netcheck SNAP --net set` (src/lab/setnet.zig, 0696aad;
+controls d8f1ebf), built with -Dcand=win-ratings or win-comp, on netcheck's blocks.
+- Slot input: win-comp's 12 profile z-scores (won and lost halves shrunk to the role
+  mean by 20 pseudo-rows, z within role, unknown champion-role 0) ++ role one-hot ++
+  optional champion-role embedding (`--ids 1`). Profiles from the fit games' Row.stats
+  only (inner games while tuning); fit games see their own slots leave-one-out, val and
+  scored games the full profiles
+- phi: u = ReLU(W1 x + b1), 16 units; team vector t = mean of its 5 u; rho: f = w .
+  ReLU(V [t_own; t_other] + c), 16 units (`--cross 0`: t_own only); logit = (f(blue,
+  red) - f(red, blue)) / 2 + c[platform] + a x candidate logit, the offset cross-fitted
+  on training games as resid. w starts at 0, so the net starts as the candidate; early
+  stopping also scores that start (0 epochs: the candidate alone). Dropout 0.2 on rho,
+  AdamW lr 1e-3 wd 0.1, batch 512
+- Controls: `--control permute` (each champion-role reads another of its role's
+  profiles: no content), `--control shuffle` (fit games' results shuffled for profiles
+  and labels, with `--fix-offset 1`: must not gain)
+
+gpu-box, snap-20261012T2055Z, 3 seeds (1-3), seed-mean net, paired per game vs the
+candidate from the same build. Folds: 44,353 games pooled; dev-val 8,500. Milli-nats per
+game, negative is better; "k/5" = folds where the net is better.
+
+| run | vs | folds | k/5 | single seeds | dev-val |
+| --- | --- | --- | --- | --- | --- |
+| set net | ratings | -0.42 ± 0.23 | 3 | -0.53 to -0.22 | -0.06 ± 0.74 |
+| offset weight fixed at 1 | ratings | -0.24 ± 0.15 | 4 | -0.28 to -0.10 | +0.04 ± 0.07 |
+| within-team only (`--cross 0`) | ratings | -0.49 ± 0.23 | 4 | -0.51 to -0.28 | -0.03 ± 0.53 |
+| + champion-role embedding 8 | ratings | -0.31 ± 0.16 | 5 | -0.34 to -0.01 | -0.22 ± 0.32 |
+| control: profiles permuted | ratings | -0.03 ± 0.05 | 3 | -0.06 to -0.01 | +0.01 ± 0.19 |
+| control: results shuffled | ratings | +0.16 ± 0.23 | 2 | +0.18 to +0.77 | +1.49 ± 0.96 |
+| set net on win-comp's offset | win-comp | -0.20 ± 0.17 | 4 | -0.19 to -0.11 | -0.03 ± 0.20 |
+
+Runs 20261013T214152Z-set-wr, -set-wr-fix, -set-wr-nocross, -set-wr-ids,
+-set-wr-permute, -set-wr-shuffle, 20261013T220534Z-set-wc. 4b's gains on set-wr
+(audit: no leak; ratings equal f1's): lopsided-team games -1.20 ± 0.56 (8,727 games,
+about half the gain), balanced -0.23 ± 0.25; vs win-comp +0.15 ± 0.33 (lopsided +0.91 ±
+1.10): on ratings the set net is not better than win-comp and catches less of the
+lopsided effect. Within-team only: lopsided -1.37 ± 0.59.
+
+Sealed confirmation (declared to 4b before any run; pass rule amended with 4b before any
+result): A = within-team on ratings, B = set net on win-comp; seeds 4-6 on all fit
+games, and again on netcheck `--resample 1` and `2` (90% of fit games, the same draws as
+4b's A/A runs). Pass: the full-data pooled seed mean stays below 0 with 1.6x its paired
+95% half-width (the floor-widened interval, "Noise floor on the folds"), and both
+resamples' means are negative.
+
+| config | full data (k/5) | 1.6x interval | resample 1 | resample 2 | dev-val | verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| A: within-team, on ratings | -0.37 ± 0.21 (4) | -0.71 to -0.03 | -0.13 ± 0.14 | -0.16 ± 0.16 | -0.18 ± 0.45 | confirmed, barely |
+| B: set net, on win-comp | -0.25 ± 0.17 (4) | -0.52 to +0.02 | -0.20 ± 0.15 | -0.17 ± 0.15 | -0.07 ± 0.31 | not confirmed |
+
+Runs 20261013T223405Z-conf-a, 223644Z-conf-b, 224930Z-conf-a-r1, 225421Z-conf-a-r2,
+225244Z-conf-b-r1, 225808Z-conf-b-r2 (the net and controls unchanged since d8f1ebf).
+
+Reading (dev, no test look):
+- The set net's gain is profile content: permuting profiles among champion-roles takes
+  it to ~0, and shuffled results give no fake gain. About half the default gain was
+  recalibration (offset weight learnt at 0.65-0.8; fixed at 1: -0.24)
+- Within-team only is as good as with cross-team terms: the enemy's profile adds
+  nothing, as in win-comp's ablation. Champion-role embeddings beside the profiles add
+  nothing either
+- The gain sits on lopsided-damage teams, the same effect as win-comp's mix term; on
+  ratings the net does not beat that one hand-made term (+0.15 ± 0.33 vs win-comp)
+- Within-team on ratings passes its sealed confirmation by the narrowest margin; on
+  top of win-comp it does not. So: a real but small comp effect (~0.2-0.4 milli-nats/game
+  on folds, nothing on dev-val), which one explicit term already captures. Not worth
+  exporting; the 2253Z pin (about twice the games) is where to look again (4b's rerun
+  list, item e). Nothing for learned.md before 4b audits the sealed runs
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
