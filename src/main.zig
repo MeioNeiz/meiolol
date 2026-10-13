@@ -54,6 +54,9 @@ const usage =
     \\              --regions R      americas,asia,europe,sea (default all)
     \\              --timelines PCT  share of matches that also get a timeline; every
     \\                               --priority match gets one (default 100)
+    \\              --flex-calls-per-day N  ranked flex id lookups a day for --priority
+    \\                               players, a test sample (default 0; queue 420 only on
+    \\                               the site and in models)
     \\              --raw-timeline-days N  keep raw timeline JSON N days (default 7,
     \\                                     0 none)
     \\              --raw-match-days N     keep raw match JSON N days (default 30,
@@ -481,6 +484,8 @@ fn cmdCrawl(c: *Cmd) !u8 {
         } else if (c.is("--timelines")) {
             o.timeline_percent = try c.int(u8);
             if (o.timeline_percent > 100) return error.Usage;
+        } else if (c.is("--flex-calls-per-day")) {
+            o.flex_calls_per_day = try c.int(u32);
         } else if (c.is("--raw-timeline-days")) {
             o.raw_timeline_days = try c.int(u32);
         } else if (c.is("--raw-match-days")) {

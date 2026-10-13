@@ -318,10 +318,11 @@ const DayRow = struct { day: i64, region: [regions.len]u64 };
 fn draftMix(arena: std.mem.Allocator, db: store.Db) !DraftMix {
     var q = try db.prepare(
         \\SELECT day, platform, patch, rank, blue_win, minutes FROM drafts
-        \\WHERE id > (SELECT coalesce(max(id), 0) FROM drafts) - ?
+        \\WHERE id > (SELECT coalesce(max(id), 0) FROM drafts) - ? AND queue = ?
     );
     defer q.deinit();
-    try q.bind(.{@as(i64, draft_tail)});
+    // Solo only, as the models: drafts also holds the flex test sample
+    try q.bind(.{ @as(i64, draft_tail), ep.ranked_solo });
     var mix: DraftMix = .{};
     var days: std.AutoArrayHashMapUnmanaged(i64, [regions.len]u64) = .empty;
     var platforms: std.StringArrayHashMapUnmanaged(i64) = .empty;

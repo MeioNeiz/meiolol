@@ -60,6 +60,10 @@ pub const Options = struct {
     /// Share of non-priority platforms' matches that also get a timeline, chosen by
     /// match id hash; every priority platform match gets one
     timeline_percent: u8 = 100,
+    /// Ranked flex (queue 440) id lookups a day, one page each, for scanned players of
+    /// the --priority platforms: a small test sample (Jacob, 2026-10-13) stored like solo
+    /// games; every stats, site and model reader keeps to queue 420. 0: none
+    flex_calls_per_day: u32 = 0,
     /// Raw timeline JSON kept this long for re-extraction; 0 keeps none
     raw_timeline_days: u32 = 7,
     /// Raw match summaries kept this long (`meiolol rebuild` re-parses them); 0 = forever
@@ -517,6 +521,9 @@ const RegionCrawler = struct {
     b: Bucket,
     region: ep.Region,
     patches: Patches,
+    /// UTC day and flex lookups made on it (--flex-calls-per-day)
+    flex_day: i64 = 0,
+    flex_calls: u32 = 0,
 
     const Of = ep.Region;
 
@@ -679,17 +686,40 @@ const RegionCrawler = struct {
         if (c.opts.patch_only) start_time = @max(start_time, rc.patches.start(platform) orelse 0);
         var start: u32 = 0;
         while (true) : (start += 100) {
-            const got = try ep.matchIds(&rc.b.client, rc.region, puuid, ep.ranked_solo, start_time, end, start);
-            defer if (got) |b| c.gpa.free(b);
-            const body = got orelse "[]";
-            _ = rc.counters().ids_calls.fetchAdd(1, .monotonic);
-            const job = try Job.create(c.gpa, .none);
-            errdefer job.destroy(c.gpa);
-            const ids = try ep.parse([]const []const u8, job.allocator(), try job.allocator().dupe(u8, body));
-            job.kind = .{ .match_ids = .{ .ids = ids, .discovered_at = end, .region = rc.region } };
-            try rc.b.submit(job);
-            if (ids.len < 100) break;
+            if (try rc.queueIds(puuid, ep.ranked_solo, start_time, end, start) < 100) break;
         }
+        // One page: a sample of the player's flex games, not all of them
+        if (rc.flexDue(platform, end)) _ = try rc.queueIds(puuid, ep.ranked_flex, start_time, end, 0);
+    }
+
+    /// One page of the player's match ids in `queue`, onto the match queue; how many
+    fn queueIds(rc: *RegionCrawler, puuid: []const u8, queue: u16, start_time: i64, end: i64, start: u32) !usize {
+        const c = rc.b.c;
+        const got = try ep.matchIds(&rc.b.client, rc.region, puuid, queue, start_time, end, start);
+        defer if (got) |b| c.gpa.free(b);
+        const body = got orelse "[]";
+        _ = rc.counters().ids_calls.fetchAdd(1, .monotonic);
+        const job = try Job.create(c.gpa, .none);
+        errdefer job.destroy(c.gpa);
+        const ids = try ep.parse([]const []const u8, job.allocator(), try job.allocator().dupe(u8, body));
+        job.kind = .{ .match_ids = .{ .ids = ids, .discovered_at = end, .region = rc.region } };
+        try rc.b.submit(job);
+        return ids.len;
+    }
+
+    /// A flex lookup for this player: a --priority platform, and today's are not used up
+    fn flexDue(rc: *RegionCrawler, platform: []const u8, now: i64) bool {
+        const c = rc.b.c;
+        const p = ep.platform(platform) orelse return false;
+        if (c.opts.flex_calls_per_day == 0 or !c.isPriority(p)) return false;
+        const day = @divFloor(now, std.time.s_per_day);
+        if (day != rc.flex_day) {
+            rc.flex_day = day;
+            rc.flex_calls = 0;
+        }
+        if (rc.flex_calls >= c.opts.flex_calls_per_day) return false;
+        rc.flex_calls += 1;
+        return true;
     }
 
     fn fetchMatch(rc: *RegionCrawler, id: []const u8) !void {

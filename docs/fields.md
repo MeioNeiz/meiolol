@@ -150,9 +150,15 @@ crawl.args.bak-20261012):
   crawler's raw prune never passes the acked point
 - Every match gets a timeline (`--timelines 100`, coordinator for Jacob): every result
   with signal comes from timelines
-- Mastery on. Today that is one snapshot per sampled ladder player (1 in 16), dropped
-  and refetched after 30 days; the archive keeps each snapshot, so history builds up.
-  Proposal: mastery for match participants near game time (crawler change, not made)
+- Mastery on (Jacob, 2026-10-13: every player). First every player of the week's new
+  matches, again once their snapshot is over 7 days old, then sampled ladder players
+  (1 in 16) with spare budget; dropped after 30 days. The box keeps each player's latest
+  fetch (fetched_at); the archive keeps each one, so pre-game mastery is the latest
+  archived fetch before game start
+- Ranked flex sample (Jacob, 2026-10-13, test only): `--flex-calls-per-day 500`, one
+  page of flex ids per scanned EUW1 player until the day's lookups are used; stored,
+  timelined and archived like solo. Every stats, site and model reader keeps to queue
+  420 (pipeline test: flex copies of the fixture change no count and no site file)
 - Tier floor stays Platinum IV+
 
 Raw archive (src/archive.zig box side, src/lab/archive.zig gpu-box side,

@@ -35,6 +35,9 @@ test "fixture games to stats, curves and the website" {
     const db = try store.schema.memory();
     defer db.close();
     try fill(arena, db);
+    // Ranked flex copies (the crawler's --flex-calls-per-day sample): every count below
+    // and every site file stays as for the solo games alone
+    try fillFlex(arena, db);
 
     var st = try stats.build(gpa, db, &.{patch}, &.{"EUW1"});
     defer st.builder.deinit();
@@ -499,6 +502,25 @@ fn fillGames(arena: std.mem.Allocator, db: store.Db, n_games: usize, varied: boo
     }
     for (fixture_champions) |c| {
         try db.run("INSERT INTO champions VALUES (?,?,?,'','15.13.1')", .{ c.id, c.key, c.key });
+    }
+}
+
+/// Copies of the fixture game in ranked flex (queue 440), with timelines
+fn fillFlex(arena: std.mem.Allocator, db: store.Db) !void {
+    const body = @embedFile("riot/testdata/match.json");
+    const json = try store.raw.decompress(arena, @embedFile("riot/testdata/timeline.json.gz"));
+    const ct = try riot.crawl.compactTimeline(arena, json);
+    for (0..games) |n| {
+        var doc = try riot.match.parse(arena, body);
+        doc.metadata.matchId = try arena.print("EUW1_{d}", .{1000 + n});
+        doc.info.platformId = "EUW1";
+        doc.info.queueId = riot.endpoints.ranked_flex;
+        doc.info.gameVersion = patch ++ ".1.1";
+        doc.info.gameStartTimestamp = start_ms;
+        try riot.match.storeRows(db, doc, "riot");
+        try db.run("INSERT INTO timeline.timelines VALUES (?,?,?,?)", .{
+            doc.metadata.matchId, ct.frames, ct.events, store.Blob{ .bytes = ct.blob },
+        });
     }
 }
 
