@@ -509,6 +509,264 @@ pub fn mdeLogit(games: f64) f64 {
     return (1.96 + 0.84) * 2 / @sqrt(games);
 }
 
+pub const usage =
+    \\  plant-score plant:SPEC:SNAP PREDS.tsv [REF_COL]
+    \\                                  per-game win predictions (netcheck's preds.tsv,
+    \\                                  games-*.tsv) against the planted truth
+    \\                                  (lab/synth.zig): log loss vs REF_COL (default cand
+    \\                                  or the first) and vs the truth; per planted term
+    \\                                  the share of it each model's logit carries
+    \\
+;
+
+const skip_cols = [_][]const u8{ "fold", "block", "match_id", "platform", "y", "slot", "outcome" };
+
+const Col = struct { name: []const u8, at: usize, p: std.ArrayList(f64) = .empty };
+
+/// Rows of a preds file joined to the planted games, dev and folds apart
+const Group = struct {
+    name: []const u8,
+    games: std.ArrayList(u32) = .empty,
+    y: std.ArrayList(f64) = .empty,
+    cols: []Col,
+};
+
+pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
+    if (argv.len < 2) {
+        std.debug.print("usage:\n{s}", .{usage});
+        return 2;
+    }
+    const arg = try parseArg(argv[0]) orelse {
+        std.debug.print("plant-score: SNAP must be plant:SPEC:PATH\n", .{});
+        return 2;
+    };
+    const empty: std.AutoHashMapUnmanaged(u64, void) = .empty;
+    var d = try rows.load(gpa, argv[0], &empty);
+    defer d.deinit();
+    var t = try truth(gpa, &d, arg.spec);
+    defer t.deinit(gpa);
+
+    var index: std.StringHashMapUnmanaged(u32) = .empty;
+    for (d.games, 0..) |g, gi| try index.put(arena, g.match_id, @intCast(gi));
+
+    const text = try std.Io.Dir.cwd().readFileAlloc(io, argv[1], arena, .limited(1 << 31));
+    var lines = std.mem.tokenizeScalar(u8, text, '\n');
+    var head = std.mem.splitScalar(u8, lines.next() orelse return error.EmptyPreds, '\t');
+    var names: std.ArrayList([]const u8) = .empty;
+    while (head.next()) |h| try names.append(arena, h);
+    const find = struct {
+        fn f(ns: []const []const u8, n: []const u8) ?usize {
+            for (ns, 0..) |x, i| if (std.mem.eql(u8, x, n)) return i;
+            return null;
+        }
+    }.f;
+    const at_id = find(names.items, "match_id") orelse return error.NoMatchId;
+    const at_y = find(names.items, "y") orelse return error.NoY;
+    const at_group = find(names.items, "fold") orelse find(names.items, "block");
+    const at_outcome = find(names.items, "outcome");
+
+    var groups: [2]Group = undefined;
+    for (&groups, [_][]const u8{ "dev", "folds" }) |*g, n| {
+        var cols: std.ArrayList(Col) = .empty;
+        for (names.items, 0..) |nm, i| {
+            for (skip_cols) |sc| {
+                if (std.mem.eql(u8, nm, sc)) break;
+            } else try cols.append(arena, .{ .name = nm, .at = i });
+        }
+        g.* = .{ .name = n, .cols = cols.items };
+    }
+    var unknown: usize = 0;
+    var flipped: usize = 0;
+    var kept: usize = 0;
+    var fields: std.ArrayList([]const u8) = .empty;
+    while (lines.next()) |line| {
+        fields.clearRetainingCapacity();
+        var it = std.mem.splitScalar(u8, line, '\t');
+        while (it.next()) |f| try fields.append(arena, f);
+        if (fields.items.len != names.items.len) return error.RaggedPreds;
+        if (at_outcome) |o| if (!std.mem.eql(u8, fields.items[o], "win")) continue;
+        const gi = index.get(fields.items[at_id]) orelse {
+            unknown += 1;
+            continue;
+        };
+        const y = try std.fmt.parseFloat(f64, fields.items[at_y]);
+        // Blue's outcome and chance, as netcheck writes them; anything else is another
+        // spec's or snapshot's file
+        if ((y > 0.5) != (d.games[gi].winner == 0)) flipped += 1;
+        const dev = if (at_group) |a| std.mem.eql(u8, fields.items[a], "dev") else true;
+        const g = &groups[if (dev) 0 else 1];
+        try g.games.append(arena, gi);
+        try g.y.append(arena, y);
+        for (g.cols) |*c| try c.p.append(arena, try std.fmt.parseFloat(f64, fields.items[c.at]));
+        kept += 1;
+    }
+    if (unknown > 0 or flipped > 0 or kept == 0) {
+        std.debug.print("plant-score: {d} rows kept, {d} match ids not in the snapshot, {d} outcomes unlike the planted winner: preds from another spec or snapshot?\n", .{ kept, unknown, flipped });
+        return 1;
+    }
+
+    var buf: [8192]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    const w = &stdout.interface;
+    try w.print("# plant-score {s}\n\nspec: {s}\npair #{d} {t} + #{d} {t}: {d} team-games; matchup #{d} over #{d} {t}: {d} games; mix sd {d:.5}\n", .{
+        argv[1],               argv[0],                                            t.pair[0].champion, @as(core.Role, @fromBackingInt(t.pair[0].role)),
+        t.pair[1].champion,    @as(core.Role, @fromBackingInt(t.pair[1].role)),    t.pair_games,       t.matchup[0].champion,
+        t.matchup[1].champion, @as(core.Role, @fromBackingInt(t.matchup[0].role)), t.matchup_games,    t.mix_sd,
+    });
+    var planted: std.ArrayList(Term) = .empty;
+    for (std.enums.values(Term)[1..]) |term| {
+        for (d.games, 0..) |_, gi| if (t.parts[gi][@backingInt(term)] != 0) {
+            try planted.append(arena, term);
+            break;
+        };
+    }
+    for (&groups) |*g| {
+        if (g.games.items.len == 0) continue;
+        try scoreGroup(gpa, arena, w, &t, g, planted.items, if (argv.len >= 3) argv[2] else "cand");
+    }
+    try w.flush();
+    return 0;
+}
+
+fn loss(y: f64, p: f64) f64 {
+    const q = std.math.clamp(p, 1e-6, 1 - 1e-6);
+    return -(y * @log(q) + (1 - y) * @log(1 - q));
+}
+
+fn plus(x: f64) []const u8 {
+    return if (x >= 0) "+" else "";
+}
+
+fn logitOf(p: f64) f64 {
+    const q = std.math.clamp(p, 1e-6, 1 - 1e-6);
+    return @log(q / (1 - q));
+}
+
+/// Mean of a - b per game and its standard error (games are independent rows)
+fn paired(a: []const f64, b: []const f64) [2]f64 {
+    var m: f64 = 0;
+    var m2: f64 = 0;
+    for (a, b) |x, y| {
+        m += x - y;
+        m2 += (x - y) * (x - y);
+    }
+    const n: f64 = @floatFromInt(a.len);
+    m /= n;
+    return .{ m, @sqrt(@max(m2 / n - m * m, 0) / n) };
+}
+
+fn scoreGroup(gpa: std.mem.Allocator, arena: std.mem.Allocator, w: *std.Io.Writer, t: *const Truth, g: *const Group, planted: []const Term, ref_name: []const u8) !void {
+    const n = g.games.items.len;
+    const ys = g.y.items;
+    var ref: *const Col = &g.cols[0];
+    for (g.cols) |*c| if (std.mem.eql(u8, c.name, ref_name)) {
+        ref = c;
+    };
+    // The truth, and the truth without the planted terms (what champion strengths alone give)
+    const truth_l = try arena.alloc(f64, n);
+    const base_l = try arena.alloc(f64, n);
+    const base_z = try arena.alloc(f64, n);
+    for (g.games.items, ys, truth_l, base_l, base_z) |gi, y, *tl, *bl, *bz| {
+        tl.* = loss(y, sigmoid(t.logit(gi)));
+        bz.* = t.parts[gi][@backingInt(Term.base)];
+        bl.* = loss(y, sigmoid(bz.*));
+    }
+    const ref_l = try arena.alloc(f64, n);
+    for (ref_l, ys, ref.p.items) |*l, y, p| l.* = loss(y, p);
+    var mean_ref: f64 = 0;
+    for (ref_l) |l| mean_ref += l;
+    mean_ref /= @floatFromInt(n);
+
+    try w.print("\n## {s}: {d} games; log loss vs {s} ({d:.5}), negative is better; captured = slope of the model's logit on each truth part (1 all of it, 0 none), 95% robust\n\n", .{ g.name, n, ref.name, mean_ref });
+    try w.writeAll("| model | log loss | vs ref | base slope |");
+    for (planted) |term| try w.print(" {t} captured |", .{term});
+    try w.writeAll("\n| --- | --- | --- | --- |");
+    for (planted) |_| try w.writeAll(" --- |");
+    try w.writeAll("\n");
+
+    const k = planted.len + 2;
+    const x = try arena.alloc(f64, n * k);
+    for (g.games.items, 0..) |gi, i| {
+        x[i * k] = base_z[i];
+        for (planted, 1..) |term, j| x[i * k + j] = t.parts[gi][@backingInt(term)];
+        x[i * k + k - 1] = 1;
+    }
+    const z = try arena.alloc(f64, n);
+    const l = try arena.alloc(f64, n);
+    for (g.cols) |*c| {
+        var mean: f64 = 0;
+        for (l, z, ys, c.p.items) |*li, *zi, y, p| {
+            li.* = loss(y, p);
+            zi.* = logitOf(p);
+            mean += li.*;
+        }
+        mean /= @floatFromInt(n);
+        const gain = paired(l, ref_l);
+        const fit = try ols(gpa, x, z, k);
+        defer gpa.free(fit);
+        try w.print("| {s} | {d:.5} | {s}{d:.5} ± {d:.5} | {d:.2} ± {d:.2} |", .{ c.name, mean, plus(gain[0]), gain[0], 1.96 * gain[1], fit[0], 1.96 * fit[k] });
+        for (1..planted.len + 1) |j| try w.print(" {d:.2} ± {d:.2} |", .{ fit[j], 1.96 * fit[k + j] });
+        try w.writeAll("\n");
+    }
+    var tm: f64 = 0;
+    for (truth_l) |v| tm += v;
+    const tg = paired(truth_l, ref_l);
+    const bg = paired(base_l, ref_l);
+    const pg = paired(truth_l, base_l);
+    try w.print("| truth | {d:.5} | {s}{d:.5} ± {d:.5} | |\n| truth without plants | | {s}{d:.5} ± {d:.5} | |\n\nThe plants are worth {s}{d:.5} ± {d:.5} nats/game to an oracle on these games\n", .{
+        tm / @as(f64, @floatFromInt(n)), plus(tg[0]), tg[0], 1.96 * tg[1], plus(bg[0]), bg[0], 1.96 * bg[1], plus(pg[0]), pg[0], 1.96 * pg[1],
+    });
+}
+
+/// Least squares of z on x (n rows of k), coefficients then their HC0 robust standard
+/// errors (2k values)
+fn ols(gpa: std.mem.Allocator, x: []const f64, z: []const f64, k: usize) ![]f64 {
+    const xtx = try gpa.alloc(f64, k * k);
+    defer gpa.free(xtx);
+    const inv = try gpa.alloc(f64, k * k);
+    defer gpa.free(inv);
+    const xtz = try gpa.alloc(f64, k);
+    defer gpa.free(xtz);
+    @memset(xtx, 0);
+    @memset(xtz, 0);
+    for (z, 0..) |zi, i| {
+        const row = x[i * k ..][0..k];
+        for (0..k) |a| {
+            xtz[a] += row[a] * zi;
+            for (0..k) |b| xtx[a * k + b] += row[a] * row[b];
+        }
+    }
+    // A planted term absent from these games leaves a zero column: hold its slope at 0
+    for (0..k) |a| if (xtx[a * k + a] == 0) {
+        xtx[a * k + a] = 1;
+    };
+    try invert(xtx, inv, k);
+    const out = try gpa.alloc(f64, 2 * k);
+    @memset(out, 0);
+    for (0..k) |a| for (0..k) |b| {
+        out[a] += inv[a * k + b] * xtz[b];
+    };
+    const meat = try gpa.alloc(f64, k * k);
+    defer gpa.free(meat);
+    @memset(meat, 0);
+    for (z, 0..) |zi, i| {
+        const row = x[i * k ..][0..k];
+        var e = zi;
+        for (row, out[0..k]) |a, b| e -= a * b;
+        for (0..k) |a| for (0..k) |b| {
+            meat[a * k + b] += e * e * row[a] * row[b];
+        };
+    }
+    for (0..k) |a| {
+        var v: f64 = 0;
+        for (0..k) |b| for (0..k) |c| {
+            v += inv[a * k + b] * meat[b * k + c] * inv[c * k + a];
+        };
+        out[k + a] = @sqrt(@max(v, 0));
+    }
+    return out;
+}
+
 test "plant spec and argument parse" {
     const s = try Spec.parse("seed=7,synergy=2.5,mix=-3,pair=2");
     try std.testing.expectEqual(@as(u64, 7), s.seed);
@@ -600,4 +858,27 @@ test "same seed, same winners; another seed, others" {
     defer c.deinit();
     for (a.games, c.games) |x, y| try std.testing.expectEqual(x.winner, y.winner);
     for (c.rows) |r| try std.testing.expectEqual(@as(f32, @floatFromInt(@intFromBool(r.side == c.games[r.game].winner))), r.y[@backingInt(rows.Outcome.win)]);
+}
+
+test "captured share: a model carrying half a planted term reads 0.5" {
+    const gpa = std.testing.allocator;
+    const spec: Spec = .{ .seed = 4, .synergy = 10, .skill = 3 };
+    var d = try draft(gpa, 5000, spec);
+    defer d.deinit();
+    var t = try truth(gpa, &d, spec);
+    defer t.deinit(gpa);
+    const terms = [_]Term{ .base, .synergy, .skill };
+    const x = try design(gpa, &t, &terms);
+    defer gpa.free(x);
+    var prng: std.Random.DefaultPrng = .init(1);
+    const z = try gpa.alloc(f64, d.games.len);
+    defer gpa.free(z);
+    for (z, t.parts) |*v, p| v.* = 0.9 * p[@backingInt(Term.base)] + 0.5 * p[@backingInt(Term.synergy)] + 0.05 * prng.random().floatNorm(f64);
+    const fit = try ols(gpa, x, z, terms.len + 1);
+    defer gpa.free(fit);
+    const k = terms.len + 1;
+    try std.testing.expectApproxEqAbs(@as(f64, 0.9), fit[0], 3 * fit[k]);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.5), fit[1], 3 * fit[k + 1]);
+    try std.testing.expectApproxEqAbs(@as(f64, 0), fit[2], 3 * fit[k + 2]);
+    try std.testing.expect(fit[k + 1] < 0.05);
 }
