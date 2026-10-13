@@ -34,12 +34,12 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-3f (closing) | playstyle clustering done (47fdfb2, 57d50d0): beyond the full 14:00 state style adds almost nothing; types and sequence net not detected |
 | meiolol-12 (closing) | lab harness: rank_start done (9eb6982, after_game_rank dev-only gate); campaign plan in model.md Next steps; fresh lab session at the pin |
 | meiolol-0d (closing) | admin Models tab, Draft tester: lane, blind and draft lists live with the 1% role floor; last check: Models tab renders struck lines |
-| meiolol-11 [1f36a8] | box, archive operation, rows.zig, snapshots (weekly Sun, first 19 Oct), mastery for all players, flex sample |
+| meiolol-fa | box, archive operation, snapshots (weekly Sun 04:00, first 19 Oct, with mastery_pre and coverage report), flex daily count, mastery catch-up, pushes (from meiolol-11 [1f36a8]) |
 | meiolol-47 | overnight code review; shared src/analysis.zig refactor committed (3324cd3..c2b1a73), all analysis files free |
 | meiolol-82 | Riot application text (drafted; waits on Jacob: ownership, privacy.md 24-month retention, meiolol-ef's deploy) |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
-shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an agent hands over, get the successor's name and tell the others.
+shows. When an agent hands over, get the successor's name and tell the others.
 
 ## Rules given to every model agent
 
