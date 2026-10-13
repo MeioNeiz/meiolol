@@ -6,15 +6,20 @@
 # changed, or every 5 min while a run is live so the page can tell a quiet run from a Mac
 # that went to sleep. Also sent: docs/learned.md and docs/model.md from this checkout, each
 # lab campaign's digest.md and hypotheses.tsv (~/ml/agent/<campaign>, LAB_CANDS), and a
-# run's result.tsv, findings.tsv and effects-*.tsv (meiolol-lab); the newest run's
-# draft-model.json and draft-ref.json also as the admin Draft tester's model. The gpu-box (home network only) is staged over ssh at most once a
-# minute; when unreachable its last staged copy is sent and hosts.tsv says when it was
-# last reached. launchd calls it every 30 s
-# once installed. Upload: a gzipped tar over ssh with a key whose forced command is
-# deploy/training-receive.sh on the web server (docs/hosting.md)
+# run's result.tsv, findings.tsv and effects-*.tsv (meiolol-lab); and the admin Draft
+# tester's models (draft-model.json, lane-model.json and their -ref.json) from the export
+# a human chose with `use`, never just the newest (a smoke or agent run may export one).
+# The gpu-box (home network only) is staged over ssh at most once a minute; when
+# unreachable its last staged copy is sent and hosts.tsv says when it was last reached.
+# launchd calls it every 30 s once installed. Upload: a gzipped tar over ssh with a key
+# whose forced command is deploy/training-receive.sh on the web server (docs/hosting.md)
 #
 #   deploy/lab-push.sh [--force]        stage, upload if changed
 #   deploy/lab-push.sh install|uninstall  launchd agent (every 30 s)
+#   deploy/lab-push.sh use draft|lane [RUN|DIR|none]
+#                                       the tester's model: a run (this Mac's or the
+#                                       gpu-box's) or a dir holding <kind>-model.json;
+#                                       no argument shows the choice
 #
 # Runs report progress by appending to metrics.tsv in their run directory: a header, then
 # one row per evaluation; first column the x axis (step, epoch, games), the rest numbers.
@@ -30,6 +35,9 @@ KEY=$HOME/.ssh/meiolol-training
 WEB=meiolol@193.123.180.81
 KEEP=30
 PLIST=net.jacob.meiolol-training.plist
+NEXT=''
+# Not a RETURN trap in push: set -e exits (an unreachable server) skip those
+trap 'rm -rf "${NEXT:-}"' EXIT
 
 # The newest runs under $1 into $2/runs/<run>/ and their runs.tsv rows (no header) into
 # $2/rows; prints 1 when one is live. Runs on the Mac and, sent over ssh, on the gpu-box
@@ -116,15 +124,7 @@ stage() {
     cp -R "$out/mac/runs/." "$out/runs/"
     [[ -d "$STATE/gpu/runs" ]] && cp -R "$STATE/gpu/runs/." "$out/runs/"
     rm -rf "$out/mac"
-    # The admin Draft tester's models: the newest run that exported each (meiolol-lab draft
-    # or lane --export), with its reference values
-    # --export DIR may write into a dir that isn't a lab-run.sh run (no job.sh), so look at
-    # this Mac's run dirs directly too; names start with the UTC stamp
-    for m in draft lane; do
-        d=$( { find "$RUNS" "$out/runs" -mindepth 2 -maxdepth 2 -name "$m-model.json" 2>/dev/null \
-            || true; } | awk -F/ '{ print $(NF-1) "\t" $0 }' | sort | tail -n 1 | cut -f2)
-        if [[ -n "$d" ]]; then cp "${d%/*}/$m"-*.json "$out/"; fi
-    done
+    for m in draft lane; do model "$m" "$out"; done
     cp "$ROOT/docs/learned.md" "$ROOT/docs/model.md" "$out/" 2>/dev/null || true
     mkdir -p "$out/campaigns"
     for d in "$CAMPAIGNS"/*/; do
@@ -141,12 +141,49 @@ stage() {
     echo $(( mac || gpu ))
 }
 
+# The Draft tester's KIND model (meiolol-lab draft or lane --export) into $2, from the
+# export `use` chose: a dir, or a run here or in the gpu-box's staged runs (--export DIR
+# may write into a dir that isn't a lab-run.sh run). Kept in $STATE/model-KIND once
+# found, so a gpu-box run that drops out of the newest $KEEP still serves
+model() {
+    local kind=$1 out=$2 pick cache=$STATE/model-$1 d
+    pick=$(cat "$STATE/use-$kind" 2>/dev/null || true)
+    [[ -n "$pick" ]] || return 0
+    for d in "$pick" "$RUNS/$pick" "$out/runs/$pick"; do
+        if [[ "$d" == /* && -f "$d/$kind-model.json" ]]; then
+            rm -rf "$cache"
+            mkdir -p "$cache"
+            cp "$d/$kind"-*.json "$cache/"
+            echo "$pick" > "$cache/from"
+            break
+        fi
+    done
+    [[ "$(cat "$cache/from" 2>/dev/null)" == "$pick" ]] && cp "$cache/$kind"-*.json "$out/"
+    return 0
+}
+
+use() {
+    local kind=$1 pick=${2:-}
+    [[ "$kind" == draft || "$kind" == lane ]] || { echo "use draft|lane [RUN|DIR|none]"; exit 2; }
+    if [[ -z "$pick" ]]; then
+        echo "$kind: $(cat "$STATE/use-$kind" 2>/dev/null || echo none)"
+    elif [[ "$pick" == none ]]; then
+        rm -f "$STATE/use-$kind"
+        echo "$kind: none (the tester gets no $kind model)"
+    else
+        [[ "$pick" != /* || -f "$pick/$kind-model.json" ]] || { echo "no $pick/$kind-model.json"; exit 1; }
+        [[ "$pick" == /* || "$pick" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "RUN: a run name"; exit 2; }
+        mkdir -p "$STATE"
+        echo "$pick" > "$STATE/use-$kind"
+        echo "$kind: $pick (sent with the next push if it has $kind-model.json)"
+    fi
+}
+
 push() {
     local force=${1:-} next live now last
     mkdir -p "$STATE"
-    next=$(mktemp -d)
-    # shellcheck disable=SC2064 # expand now: next is local
-    trap "rm -rf '$next'" RETURN
+    NEXT=$(mktemp -d)
+    next=$NEXT
     live=$(stage "$next")
     now=$(date +%s)
     last=$(cat "$STATE/pushed" 2>/dev/null || echo 0)
@@ -166,6 +203,7 @@ push() {
 case "${1:-}" in
     '') push ;;
     --force) push force ;;
+    use) use "${2:-}" "${3:-}" ;;
     install)
         cp "$ROOT/deploy/$PLIST" ~/Library/LaunchAgents/
         launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/$PLIST
@@ -175,5 +213,5 @@ case "${1:-}" in
         launchctl bootout "gui/$(id -u)/${PLIST%.plist}" || true
         rm -f ~/Library/LaunchAgents/$PLIST
         ;;
-    *) sed -n '10,11p' "$0"; exit 2 ;;
+    *) sed -n '17,22p' "$0"; exit 2 ;;
 esac
