@@ -24,6 +24,7 @@ pub const items = @import("items.zig");
 pub const playstyle = @import("playstyle.zig");
 pub const scaling = @import("scaling.zig");
 pub const carry = @import("carry.zig");
+const test_looks = @import("lab/looks.zig");
 pub const archive = @import("archive.zig");
 pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
@@ -177,10 +178,11 @@ const usage =
     \\              which reward experience, which make games more decided? (markdown on
     \\              stdout; docs/model.md "Carry and impact")
     \\              --cuts A,B,C,D,E,DEV,SELECT  ms: the lab's 5 fold block starts, dev
-    \\                               and select cuts (compcheck --folds 5), required
+    \\                               and select cuts (default: computed as the lab does)
     \\              --patch P, --platform P, --test-platform P, --test-share F  as scaling
     \\              --final          also score the test games (one look per model)
     \\              --table FILE     TSV of every champion-role's terms by minute
+    \\              --type-table FILE  TSV of champion type x role x state terms by minute
     \\              --fold-table FILE  per fold and dev: leverage, scaling, skill per
     \\                               champion-role fitted before the block
     \\              --plant COV:SD[:SEED]  redraw winners with a planted champion slope on
@@ -977,6 +979,8 @@ fn cmdCarry(c: *Cmd) !u8 {
             o.table = try c.value();
         } else if (c.is("--fold-table")) {
             o.fold_table = try c.value();
+        } else if (c.is("--type-table")) {
+            o.type_table = try c.value();
         } else if (c.is("--plant")) {
             var it = std.mem.splitScalar(u8, try c.value(), ':');
             const cov = std.meta.stringToEnum(carry.Cov, it.next().?) orelse return error.Usage;
@@ -986,7 +990,6 @@ fn cmdCarry(c: *Cmd) !u8 {
             o.plant = .{ .cov = cov, .sd = sd, .seed = seed };
         } else return error.Usage;
     }
-    if (o.cuts[0] == 0) return error.Usage;
     const io = c.init.io;
     const db = try c.open();
     defer db.close();
@@ -994,6 +997,7 @@ fn cmdCarry(c: *Cmd) !u8 {
     const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
+    if (o.final) _ = try test_looks.record(c.init.gpa, io, std.Io.Dir.cwd(), c.data_dir, "meiolol carry", c.args, &stdout.interface);
     try carry.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
     try stdout.interface.flush();
     return 0;
