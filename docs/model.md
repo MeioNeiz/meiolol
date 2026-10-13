@@ -1294,6 +1294,15 @@ scaling fitted on fit games, and bought only -0.00005 ± 0.00007 nats/game on th
 forward folds (weight fixed at 1: 0.00000). So expect it real but ~1e-4 in log loss;
 it matters for the extreme picks shown to players more than for the headline number.
 
+`meiolol-lab gains UNITS A B` (src/lab/gains.zig), the model-free check of where a
+model's gain sits, first run on real files: UNITS from 20261013T195256Z-compcheck-dev5,
+A = 0d's first win-comp dev run (20261013T190836Z-wc-a-full), B = win-ratings
+(20261013T191733Z-wc-a-wr), 8,500 dev-val games, all matched. "All" gives A - B +1.09 ±
+1.41 milli-nats/game, 0d's own +0.0011 ± 0.0014, so the tool reads exp's files right.
+No group shows a gain for win-comp: lopsided team +1.9 ± 4.5, both balanced +0.9 ± 1.4,
+strength mismatch Q1 to Q4 +2.3, +2.1, +0.1, -0.1 (each ±2.8), no frontline-ish pick
++1.3 ± 2.0. Dev-val is EUW only, so the EUW/rest split needs fold predictions.
+
 Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
 Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
 only" covers dev, select, final); rows.load holds only eval's train (older than the first
