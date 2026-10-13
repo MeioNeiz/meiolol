@@ -74,9 +74,10 @@ How to write a line:
   20 support, and Iron to Challenger spans 400-850 gold outside support. Sure: on
   106k held-out test games, adding your rank to the team model (3c-team) makes the
   typical gold miss 811 to 810 (0.3% of the error, give or take 0.1%; dev said 0.6%)
-  and CS at 10 1.4% better (as on dev); lane gold difference and deaths unchanged. Small
-  but real, and not yet checked on top of 3c-team2. The rank is the one recorded after
-  the game, not at its start (a small leak, one game rarely changes a tier). Site:
+  and CS at 10 1.4% better (as on dev); lane gold difference and deaths unchanged.
+  Clear on held-out games with the after-game rank; to recheck with the rank at game
+  start (rank_history, from 12 Oct) before it's settled (see Data quality), and not yet
+  checked on top of 3c-team2. Site:
   lesson material ("at your rank, expect about X gold at 14 in this matchup"), not a
   pick reason: it is mostly better players earning more. Evidence: lab campaign
   gold14-a (built on 3c-team), run 20261012T2322Z-gold14-a-rankfx (effects-rank.tsv)
@@ -146,10 +147,11 @@ How to write a line:
 
 ## Player
 
-- 2026-10-12 (early): Higher-ranked players have more gold at 14 in the same matchup,
+- ~~2026-10-12 (early): Higher-ranked players have more gold at 14 in the same matchup,
   as you'd expect. Sure: partly measured with the post-game rank (see Data quality),
   so not yet trustworthy. Site: lesson material ("at your rank, expect X"), never a
-  reason to pick. Evidence: lab screen r 0.11 on gold14
+  reason to pick. Evidence: lab screen r 0.11 on gold14. Superseded 2026-10-13 by Early
+  game "A higher rank means more gold at 14" (measured on held-out games)~~
 
 ## Data quality
 
