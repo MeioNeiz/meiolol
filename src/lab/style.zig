@@ -10,6 +10,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const rows = @import("rows.zig");
+const looks = @import("looks.zig");
 const harness = @import("harness.zig");
 const protocol = @import("protocol.zig");
 const fields = @import("fields.zig");
@@ -930,6 +931,11 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     const out_dir = argv[1];
     if (final_k) |k| if (k < 2 or k > max_k) return error.BadK;
     const phase: harness.Phase = if (final_k != null) .final else .dev;
+    if (phase == .final) {
+        var lb: [256]u8 = undefined;
+        var lw = Io.File.stdout().writer(io, &lb);
+        _ = try looks.record(gpa, io, Io.Dir.cwd(), snap, "style", argv, &lw.interface);
+    }
     const k_list: []const u8 = if (final_k) |k| &.{k} else &ks;
     try Io.Dir.cwd().createDirPath(io, out_dir);
 

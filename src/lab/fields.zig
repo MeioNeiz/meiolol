@@ -14,6 +14,7 @@
 const std = @import("std");
 const store = @import("store");
 const rows = @import("rows.zig");
+const looks = @import("looks.zig");
 const harness = @import("harness.zig");
 const protocol = @import("protocol.zig");
 const analysis = @import("../analysis.zig");
@@ -1345,6 +1346,11 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         }
     }
     const phase: harness.Phase = if (final_list != null) .final else .dev;
+    if (phase == .final) {
+        var lb: [256]u8 = undefined;
+        var lw = Io.File.stdout().writer(io, &lb);
+        _ = try looks.record(gpa, io, Io.Dir.cwd(), snap, "fields", argv, &lw.interface);
+    }
     try Io.Dir.cwd().createDirPath(io, out_dir);
 
     var legendaries = try rows.loadLegendaries(gpa, io, snap);

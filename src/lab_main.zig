@@ -41,6 +41,7 @@ const curve = @import("lab/curve.zig");
 const synth = @import("lab/synth.zig");
 const health = @import("lab/health.zig");
 const compare = @import("lab/compare.zig");
+const looks = @import("lab/looks.zig");
 
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
 
@@ -89,7 +90,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ comps.usage ++ events.usage ++ randsplit.usage ++ gains.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ eventvalue.usage ++ stateexport.usage ++ compare.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ comps.usage ++ events.usage ++ randsplit.usage ++ gains.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ eventvalue.usage ++ stateexport.usage ++ compare.usage ++ looks.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -318,6 +319,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "gains")) {
         return gains.main(init.gpa, arena, init.io, argv[2..]);
     }
+    if (std.mem.eql(u8, cmd, "looks")) {
+        return looks.main(init.gpa, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "compare")) {
         return compare.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -429,6 +433,7 @@ test {
     _ = synth;
     _ = health;
     _ = compare;
+    _ = looks;
     _ = archive;
     _ = mastery_pre;
     _ = seatstats;

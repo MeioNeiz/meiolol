@@ -14,6 +14,7 @@ const std = @import("std");
 const api = @import("api");
 const cand = @import("cand");
 const rows = @import("rows.zig");
+const looks = @import("looks.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const seatstats = @import("seatstats.zig");
@@ -181,6 +182,11 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         return 2;
     }
     const snap = argv[0];
+    if (final) {
+        var lb: [256]u8 = undefined;
+        var lw = Io.File.stdout().writer(io, &lb);
+        _ = try looks.record(gpa, io, Io.Dir.cwd(), snap, "compcheck", argv, &lw.interface);
+    }
     var legendaries = try rows.loadLegendaries(gpa, io, snap);
     defer legendaries.deinit(gpa);
     var data = try rows.load(gpa, snap, &legendaries);

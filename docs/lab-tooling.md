@@ -64,8 +64,9 @@ research/questions/agent-ml-practice.md.
 - Train-fit effect tables reported as test results (3f, pushed then dropped); dev-val
   "not detected" overturned by the folds minutes later (b9c69fa, 2e52957)
 - Test looks outside the ledger: fields --final, scaling variants scored on test,
-  style looks counted by hand, scratch --lab dirs. Backlog: one looks ledger per
-  snapshot written by every --final
+  style looks counted by hand, scratch --lab dirs. Done: SNAP/test-looks.tsv, appended
+  by exp final and compcheck/fields/style --final before scoring; `meiolol-lab looks
+  SNAP` (lab/looks.zig)
 - Fold code written six times (win-comp foldAblation, compcheck, winnet, playernet,
   pretrain, win-embx, which reads files with std.c.fopen around the candidate rule).
   Backlog: one block runner with cross-fit offsets (f7 listed playernet's copies)

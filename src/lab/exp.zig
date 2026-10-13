@@ -8,6 +8,7 @@ const std = @import("std");
 const api = @import("api");
 const cand = @import("cand");
 const rows = @import("rows.zig");
+const test_looks = @import("looks.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const search = @import("search.zig");
@@ -75,6 +76,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, home: ?[]c
     var buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &buf);
     const w = &stdout.interface;
+    if (args.cmd == .final) _ = try test_looks.record(gpa, io, Io.Dir.cwd(), args.snap, "exp", argv, w);
     switch (args.cmd) {
         .run => try run(gpa, arena, io, &data, players, c, args, dir, w),
         .final => try final(gpa, arena, io, &data, players, c, args, dir, w),
