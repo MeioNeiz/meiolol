@@ -38,7 +38,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-47 | overnight code review; shared src/analysis.zig refactor committed (3324cd3..c2b1a73), all analysis files free |
 | meiolol-82 | Riot application text (drafted; waits on Jacob: ownership, privacy.md 24-month retention, meiolol-ef's deploy) |
 | meiolol-2c | coordinator, neural net programme (Jacob's big goal, 2026-10-13; brief in docs/model.md "Neural draft models"), after the comp features campaign (api Row.stats 53323f9) |
-| meiolol-ea [fc19bb] | NN data: multi-task targets (Row.y, Row.stats as auxiliary), tensor export for the GPU, extra games count (comp data done: 25737aa, 1e9a446) |
+| meiolol-4a (from meiolol-ea) | NN data: pack mtime fix (second precision), gpu-box repack of 1954Z; multi-task targets (Row.y, Row.stats as auxiliary), tensor export for the GPU, extra games count (comp data done: 25737aa, 1e9a446) |
 | meiolol-35 [397394] (was meiolol-c2, from meiolol-0d) | structured nets on profiles (profile inputs, DeepSets/attention, residual on ratings); win-comp done (7a2de11, test: mix effect holds, prediction gain not detected) |
 | meiolol-97 [7beeb6] (was meiolol-52, from meiolol-ad) | NN pretraining: champion-role embeddings from aux targets, used in f1's nets and as a ratings prior (src/lab/pretrain.zig) (research done: 9530584, fbc5df5) |
 | meiolol-ba | NN tester: draft-model.json net kind, Zig reference scorer and JS forward pass (comp tester done: 2be13f3, 7423f29) |
