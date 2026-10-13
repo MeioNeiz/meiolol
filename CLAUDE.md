@@ -1,7 +1,9 @@
 # meiolol
 
 League of Legends champ select pick recommender for normal ranked players, today's
-patch, EUW first. All Zig (0.17, pinned in build.zig; docs/zig-0.17.md); no Python.
+patch, EUW first. Everything shipped is Zig (0.17, pinned in build.zig;
+docs/zig-0.17.md). Python only in the lab, on the gpu-box: experiments and cross-checks
+that Zig models work (e.g. LightGBM, PyTorch); winners get rebuilt in Zig.
 
 **Current goal: get a Riot production key** (more rate limit). Plan and next steps:
 docs/plan.md. Read it first.
