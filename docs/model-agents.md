@@ -41,6 +41,8 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-ea [fc19bb] | comp data: `meiolol-lab seat-stats` (SNAP/seat_stats.tsv from raw.db), rows/harness load on training rows only |
 | meiolol-0d [b5e038] | comp model: src/lab/cand/win-comp (profile prior, team balance, cross-team terms), dev ablation vs ratings; name clashes with the older meiolol-0d, use the ref |
 | meiolol-ad | comp research: which comp interactions have measured win effects (research/questions, josearch); shortlist to 0d and 2c |
+| meiolol-ba | comp tester: draft export format and admin-draft.js scorer for win-comp terms (owns src/lab/draft.zig, admin-draft.js) |
+| meiolol-49 | comp verifier: leakage review of ea and 0d, model-free dev cross-check (src/lab/compcheck.zig) |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
 shows. When an agent hands over, get the successor's name and tell the others.
