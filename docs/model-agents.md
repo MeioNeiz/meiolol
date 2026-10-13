@@ -50,8 +50,8 @@ Coordinator: meiolol-76 (from meiolol-2c, from meiolol-78, 2026-10-13).
 | meiolol-48 (new, not the field-ranking one) | patch and rank context: per-patch champion offsets, lobby-rank brackets (cand/win-context) |
 | meiolol-30 | scaling curves for ratings, win-comp and nets, a*N^-b + c, projection to production-key volumes |
 | meiolol-ab | interactions on pretrained embeddings: low-rank cross and within-team terms (cand/win-embx) |
-| meiolol-2a (new) | admin Models tab dashboard of the NN programme results |
-| meiolol-e3 | research: how AI agents run ML experiments well (josearch), ranked changes for our lab setup |
+| meiolol-2a (closed) | admin Models tab dashboard of the NN programme results: done (16ecd0f) |
+| meiolol-e3 (closed) | research: how AI agents run ML experiments well: done (86c8a5f, docs/lab-constraints.md 2680d29); ranked list adopted in briefs and 16's queue |
 | meiolol-16 | lab tooling from evidence: results store and checked comparisons, immutable run binaries, standard preds files, snapshot completeness checks |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
