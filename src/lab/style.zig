@@ -1,8 +1,8 @@
 //! Playstyle clusters from the first 14 minutes of the compact timeline (docs/model.md
 //! "Playstyle clusters"). Per player: zone shares by phase (positions from minute 3, red
 //! mirrored so everyone plays from blue) and action counts before 14:00, residualised
-//! within role on champion-role and the 14:00 state (style beyond kit and beyond being
-//! ahead), k-means per role. Value: win log loss over b0's state-conditioned model
+//! within role on champion-role and the 14:00 state (leads, objectives held, plates:
+//! style beyond kit and beyond being ahead), k-means per role. Value: win log loss over b0's state-conditioned model
 //! (playstyle.zig) on the harness dev cut; `--final K` scores k = K once on test.
 //! Use-time: the user's own style, post-game only.
 
@@ -16,6 +16,8 @@ const fields = @import("fields.zig");
 const analysis = @import("../analysis.zig");
 const logreg = @import("../logreg.zig");
 const playstyle = @import("../playstyle.zig");
+const objectives = @import("../objectives.zig");
+const stylenet = @import("stylenet.zig");
 const timeline = @import("../riot/timeline.zig");
 const par = @import("../par.zig");
 
@@ -24,10 +26,13 @@ const Role = core.Role;
 const log = std.log.scoped(.style);
 
 pub const usage =
-    \\  style SNAP OUT [--final K]      playstyle clusters per role from minutes 0-13
-    \\                                  (lab/style.zig): value over b0's state model on
-    \\                                  the dev cut for k = 3, 4, 6, 8; --final scores
-    \\                                  k = K once on test. Report in OUT
+    \\  style SNAP OUT [--final K] [--net all|N,..]  playstyle clusters per role from
+    \\                                  minutes 0-13 (lab/style.zig): value over b0's
+    \\                                  state model on the dev cut for k = 3, 4, 6, 8;
+    \\                                  --final scores k = K once on test; --net adds
+    \\                                  the residual nets (lab/stylenet.zig, configs
+    \\                                  1-8; --net-offset champ: over champion + state,
+    \\                                  a positive control). Reports in OUT
     \\
 ;
 
@@ -194,11 +199,88 @@ pub fn summary(t: timeline.Timeline) [10][n_sum]f32 {
     return out;
 }
 
+/// Per-minute bins 0-13, channels per bin: zone one-hot and x, y (blue's view, / 14800;
+/// positions from minute 3), the minute's damage dealt and taken, CC, lane and jungle CS
+/// (frame m + 1 minus frame m), then its kills, deaths, assists, wards, control wards,
+/// ward kills, plates, epics, purchases
+const seq_stats = [_]timeline.Stat{ .damage_to_champions, .damage_taken, .cc_dealt_ms, .minions, .jungle_minions };
+const seq_scale = [_]f32{ 1000, 1000, 1000, 1, 1 };
+const seq_events = n_zone + 2 + seq_stats.len;
+const n_chan = seq_events + 9;
+pub const n_seq = until_minute * n_chan;
+/// Net input: the sequence, role one-hot, the 14:00 state
+const n_in = n_seq + Role.count + n_state;
+
+pub fn sequence(t: timeline.Timeline) [10][n_seq]f32 {
+    var out: [10][n_seq]f32 = @splat(@splat(0));
+    for (&out, 0..) |*o, p| {
+        const pid: u8 = @intCast(p + 1);
+        for (0..until_minute) |m| {
+            const b = o[m * n_chan ..][0..n_chan];
+            const f = t.frames[m];
+            if (m >= phases[0][0]) {
+                const raw = [2]i32{ f.get(pid, .x), f.get(pid, .y) };
+                const pos = if (p < 5) raw else mirror(raw[0], raw[1]);
+                b[@backingInt(zone(pos[0], pos[1]))] = 1;
+                b[n_zone] = @as(f32, @floatFromInt(pos[0])) / 14800;
+                b[n_zone + 1] = @as(f32, @floatFromInt(pos[1])) / 14800;
+            }
+            const g = t.frames[m + 1];
+            for (seq_stats, seq_scale, 0..) |st, sc, k| {
+                b[n_zone + 2 + k] = @as(f32, @floatFromInt(g.get(pid, st) - f.get(pid, st))) / sc;
+            }
+        }
+    }
+    for (t.events) |e| {
+        if (e.t_ms >= until_minute * minute_ms) break;
+        const base: usize = @as(usize, @intCast(@divFloor(e.t_ms, minute_ms))) * n_chan + seq_events;
+        switch (e.data) {
+            .champion_kill => |k| {
+                if (k.killer >= 1 and k.killer <= 10) out[k.killer - 1][base] += 1;
+                if (k.victim >= 1 and k.victim <= 10) out[k.victim - 1][base + 1] += 1;
+                for (k.assists) |a| if (a >= 1 and a <= 10) {
+                    out[a - 1][base + 2] += 1;
+                };
+            },
+            .ward_placed => |wd| if (wd.participant >= 1 and wd.participant <= 10) {
+                const control = std.mem.eql(u8, wd.ward, "CONTROL_WARD");
+                if (control or std.mem.eql(u8, wd.ward, "YELLOW_TRINKET") or
+                    std.mem.eql(u8, wd.ward, "SIGHT_WARD") or std.mem.eql(u8, wd.ward, "BLUE_TRINKET"))
+                {
+                    out[wd.participant - 1][base + 3] += 1;
+                }
+                if (control) out[wd.participant - 1][base + 4] += 1;
+            },
+            .ward_kill => |wd| if (wd.participant >= 1 and wd.participant <= 10) {
+                out[wd.participant - 1][base + 5] += 1;
+            },
+            .turret_plate => |tp| if (tp.killer >= 1 and tp.killer <= 10) {
+                out[tp.killer - 1][base + 6] += 1;
+            },
+            .elite_monster => |m| {
+                if (m.killer >= 1 and m.killer <= 10) out[m.killer - 1][base + 7] += 1;
+                for (m.assists) |a| if (a >= 1 and a <= 10) {
+                    out[a - 1][base + 7] += 1;
+                };
+            },
+            .item_purchased => |it| if (it.participant >= 1 and it.participant <= 10) {
+                out[it.participant - 1][base + 8] += 1;
+            },
+            else => {},
+        }
+    }
+    return out;
+}
+
 const n_b0 = playstyle.n_feat;
 const n_pc = 10;
 const ks = [_]u8{ 3, 4, 6, 8 };
 const max_k = 8;
-const n_state = 3;
+/// Own side minus the other at 14:00: team gold, team XP and lane gold leads (thousands),
+/// then objectives held as objectives.zig counts them (b0 found they matter beyond the
+/// gold they brought) and plates
+const n_state = 8;
+const held = [_]objectives.Feat{ .towers, .dragons, .grubs, .herald };
 
 const Seat = struct {
     game: u32,
@@ -208,7 +290,6 @@ const Seat = struct {
     won: bool,
     fit: bool,
     ok: bool = false,
-    /// own side's team gold lead, team XP lead, lane gold lead at 14:00, thousands
     state: [n_state]f32 = @splat(0),
     /// b0's eight features, standardised per role on fit seats after loading
     b0: [n_b0]f32 = @splat(0),
@@ -217,6 +298,8 @@ const Seat = struct {
 
 const Loaded = struct {
     seats: []Seat,
+    /// seats x n_in net inputs, the sequence part filled at load; empty without --net
+    x: []f32,
     match_ids: []const []const u8,
     n_cr: u32,
 };
@@ -257,7 +340,7 @@ fn selectSeats(gpa: std.mem.Allocator, arena: std.mem.Allocator, d: *const rows.
             });
         }
     }
-    return .{ .seats = seats.items, .match_ids = ids.items, .n_cr = cr_ids.count() };
+    return .{ .seats = seats.items, .x = &.{}, .match_ids = ids.items, .n_cr = cr_ids.count() };
 }
 
 const Batch = struct {
@@ -265,6 +348,7 @@ const Batch = struct {
     bodies: []const []const u8,
     bases: []const u32,
     seats: []Seat,
+    x: []f32,
 
     fn body(b: *const Batch, i: usize) !void {
         var arena: std.heap.ArenaAllocator = .init(b.gpa);
@@ -278,7 +362,20 @@ const Batch = struct {
         for (&roles, seats) |*r, s| r.* = @fromBackingInt(s.role);
         const b0 = playstyle.features(t, roles);
         const sums = summary(t);
+        if (b.x.len > 0) for (sequence(t), b.bases[i]..) |sq, si| {
+            @memcpy(b.x[si * n_in ..][0..n_seq], &sq);
+        };
         const f = t.frames[until_minute];
+        const obj = objectives.stateAt(t, until_minute) orelse return;
+        var plates: f32 = 0;
+        for (t.events) |e| {
+            if (e.t_ms >= f.t_ms) break;
+            // team owns the plate, as building_kill
+            switch (e.data) {
+                .turret_plate => |tp| plates += if (tp.team == 200) 1 else if (tp.team == 100) -1 else 0,
+                else => {},
+            }
+        }
         var gold: [2]f32 = @splat(0);
         var xp: [2]f32 = @splat(0);
         for (0..10) |p| {
@@ -292,7 +389,9 @@ const Batch = struct {
                 if (q / 5 != side and o.role == s.role) break q;
             } else return error.NoLaneOpponent;
             const lane = f.get(@intCast(p + 1), .total_gold) - f.get(@intCast(opp + 1), .total_gold);
-            s.state = .{ gold[side] - gold[1 - side], xp[side] - xp[1 - side], @as(f32, @floatFromInt(lane)) / 1000 };
+            const sign: f32 = if (side == 0) 1 else -1;
+            s.state = .{ gold[side] - gold[1 - side], xp[side] - xp[1 - side], @as(f32, @floatFromInt(lane)) / 1000, sign * plates, 0, 0, 0, 0 };
+            for (held, 0..) |h, k| s.state[4 + k] = sign * obj[@backingInt(h)];
             s.b0 = b0[p];
             s.sum = sums[p];
             s.ok = true;
@@ -300,10 +399,14 @@ const Batch = struct {
     }
 };
 
-fn load(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, snap: []const u8, d: *const rows.Data, c: harness.Cuts, phase: harness.Phase) !Loaded {
+fn load(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, snap: []const u8, d: *const rows.Data, c: harness.Cuts, phase: harness.Phase, net: bool) !Loaded {
     var want: std.StringHashMapUnmanaged(u32) = .empty;
     defer want.deinit(gpa);
-    const l = try selectSeats(gpa, arena, d, c, phase, &want);
+    var l = try selectSeats(gpa, arena, d, c, phase, &want);
+    if (net) {
+        l.x = try arena.alloc(f32, l.seats.len * n_in);
+        @memset(l.x, 0);
+    }
 
     const db = try store.schema.openReadOnly(gpa, snap);
     defer db.close();
@@ -325,7 +428,7 @@ fn load(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, snap: []const 
             try bases.append(gpa, base);
         };
         if (bodies.items.len == batch_len or (!more and bodies.items.len > 0)) {
-            const b: Batch = .{ .gpa = gpa, .bodies = bodies.items, .bases = bases.items, .seats = l.seats };
+            const b: Batch = .{ .gpa = gpa, .bodies = bodies.items, .bases = bases.items, .seats = l.seats, .x = l.x };
             try par.forEach(io, bodies.items.len, &b, Batch.body);
             bodies.clearRetainingCapacity();
             bases.clearRetainingCapacity();
@@ -388,7 +491,7 @@ const Residual = struct {
             };
         };
         for (0..Role.count) |role| for (0..n_sum) |j| {
-            r.coef[role][j] = solve3(xtx[role], xty[role][j]);
+            r.coef[role][j] = solve(n_state, xtx[role], xty[role][j]);
         };
         var ss: [Role.count][n_sum]f64 = @splat(@splat(0));
         for (seats) |s| if (s.fit) {
@@ -440,23 +543,36 @@ const Residual = struct {
     const clip = 4;
 };
 
-/// a x = b for a symmetric 3 x 3 a (Cramer); zero when singular
-fn solve3(a: [3][3]f64, b: [3]f64) [3]f64 {
-    const det = det3(a);
-    if (@abs(det) < 1e-12) return @splat(0);
-    var x: [3]f64 = undefined;
-    for (0..3) |k| {
-        var m = a;
-        for (0..3) |i| m[i][k] = b[i];
-        x[k] = det3(m) / det;
+/// a x = b for a symmetric positive semi-definite a, by Gaussian elimination with a small
+/// ridge (a state column that never varies, say herald before 14:00, gets 0)
+fn solve(comptime n: usize, a_in: [n][n]f64, b_in: [n]f64) [n]f64 {
+    var a = a_in;
+    var b = b_in;
+    var trace: f64 = 0;
+    for (0..n) |i| trace += a[i][i];
+    for (0..n) |i| a[i][i] += 1e-9 * trace + 1e-12;
+    for (0..n) |col| {
+        var piv = col;
+        for (col + 1..n) |r| if (@abs(a[r][col]) > @abs(a[piv][col])) {
+            piv = r;
+        };
+        std.mem.swap([n]f64, &a[col], &a[piv]);
+        std.mem.swap(f64, &b[col], &b[piv]);
+        for (col + 1..n) |r| {
+            const m = a[r][col] / a[col][col];
+            for (col..n) |c| a[r][c] -= m * a[col][c];
+            b[r] -= m * b[col];
+        }
+    }
+    var x: [n]f64 = undefined;
+    var i = n;
+    while (i > 0) {
+        i -= 1;
+        var v = b[i];
+        for (i + 1..n) |c| v -= a[i][c] * x[c];
+        x[i] = v / a[i][i];
     }
     return x;
-}
-
-fn det3(m: [3][3]f64) f64 {
-    return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
-        m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
-        m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
 }
 
 /// Eigenvectors of a symmetric matrix by cyclic Jacobi, columns of `vecs`, sorted by
@@ -777,14 +893,41 @@ fn fitModel(gpa: std.mem.Allocator, arena: std.mem.Allocator, ctx: *const Ctx, m
 
 const GameRow = struct { game: u32 };
 
+/// Fixed before the first dev run (docs/model.md "Playstyle clusters"): at most these
+/// eight looks at dev; epochs by early stopping on an inner validation cut
+const net_configs = [_]stylenet.Config{
+    .{ .hidden = 64 },
+    .{ .hidden = 128 },
+    .{ .hidden = 256 },
+    .{ .hidden = 128, .dropout = 0.3 },
+    .{ .hidden = 256, .dropout = 0.3 },
+    .{ .hidden = 128, .emb = 8 },
+    .{ .hidden = 128, .bottleneck = 16 },
+    .{ .hidden = 512, .dropout = 0.3 },
+};
+
 pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
-    if (argv.len != 2 and !(argv.len == 4 and std.mem.eql(u8, argv[2], "--final"))) {
+    var final_k: ?u8 = null;
+    var net_list: ?[]const u8 = null;
+    // false: the offset is champion + state, a positive control (the net should find
+    // b0's style)
+    var net_on_b0 = true;
+    var arg: usize = 2;
+    while (arg + 1 < argv.len) : (arg += 2) {
+        if (std.mem.eql(u8, argv[arg], "--final")) {
+            final_k = try std.fmt.parseInt(u8, argv[arg + 1], 10);
+        } else if (std.mem.eql(u8, argv[arg], "--net")) {
+            net_list = argv[arg + 1];
+        } else if (std.mem.eql(u8, argv[arg], "--net-offset")) {
+            if (std.mem.eql(u8, argv[arg + 1], "champ")) net_on_b0 = false else if (!std.mem.eql(u8, argv[arg + 1], "b0")) break;
+        } else break;
+    }
+    if (argv.len < 2 or arg != argv.len) {
         std.debug.print("usage:\n{s}", .{usage});
         return 2;
     }
     const snap = argv[0];
     const out_dir = argv[1];
-    const final_k: ?u8 = if (argv.len == 4) try std.fmt.parseInt(u8, argv[3], 10) else null;
     if (final_k) |k| if (k < 2 or k > max_k) return error.BadK;
     const phase: harness.Phase = if (final_k != null) .final else .dev;
     const k_list: []const u8 = if (final_k) |k| &.{k} else &ks;
@@ -800,13 +943,17 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     } else return error.TestPlatformNotScanned;
     const c = try harness.cuts(gpa, &data, eu);
 
-    const l = try load(gpa, arena, io, snap, &data, c, phase);
+    const l = try load(gpa, arena, io, snap, &data, c, phase, net_list != null);
     var missing: usize = 0;
     for (l.seats) |s| missing += @intFromBool(!s.ok);
     // Seats of a game whose timeline failed to load drop out together
     var kept: std.ArrayList(Seat) = .empty;
-    for (l.seats) |s| if (s.ok) try kept.append(arena, s);
+    for (l.seats, 0..) |s, i| if (s.ok) {
+        if (l.x.len > 0) @memmove(l.x[kept.items.len * n_in ..][0..n_in], l.x[i * n_in ..][0..n_in]);
+        try kept.append(arena, s);
+    };
     const seats = kept.items;
+    const net_x = l.x[0..if (l.x.len > 0) seats.len * n_in else 0];
     log.info("{d} seats, {d} without a timeline", .{ seats.len, missing });
 
     // b0's features standardised per role on fit seats, as playstyle.zig does
@@ -865,6 +1012,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         f.* = try fitModel(gpa, arena, &ctx, m, fit_idx.items, scored_idx.items, fit_games.items);
         log.info("{s}: {d:.5}", .{ m.name, analysis.mean(f.loss) });
     }
+    if (net_list) |list| try runNets(gpa, arena, io, list, phase, out_dir, &ctx, specs.items[@intFromBool(net_on_b0)], fitted[@intFromBool(net_on_b0)], net_x, fit_idx.items, scored_idx.items, scored_games.items, l.match_ids);
 
     const stem = if (phase == .final) "final" else "dev";
     const path = try std.fs.path.join(arena, &.{ out_dir, try std.fmt.allocPrint(arena, "{s}-report.md", .{stem}) });
@@ -880,7 +1028,8 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     };
     try w.print("# meiolol-lab style ({s})\n\nFit: {d} games, scored: {d} games ({s}), ten rows each; " ++
         "{d} seats dropped without a timeline. Style from minutes 0-{d} (positions from 3), " ++
-        "residualised within role on champion-role and the state at {d}:00.\n\n", .{
+        "residualised within role on champion-role and the state at {d}:00 (team gold, XP and " ++
+        "lane gold leads, plates, towers, dragons, grubs, herald).\n\n", .{
         stem, n_fit_games, n_scored_games, if (phase == .final) "test" else "dev cut", missing, until_minute - 1, until_minute,
     });
     try w.writeAll("Win log loss per row; gain = drop from b0 (or from champion + state where named), " ++
@@ -931,6 +1080,127 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     return 0;
 }
 
+/// Residual nets over b0's model (its log-odds as the offset; champion + state for the
+/// positive control), each config in `list`
+/// ("all" or 1-based numbers): inner validation = the latest tenth of fit games
+fn runNets(
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    io: Io,
+    list: []const u8,
+    phase: harness.Phase,
+    out_dir: []const u8,
+    ctx: *const Ctx,
+    b0_spec: Spec,
+    b0: Fitted,
+    x: []f32,
+    fit_idx: []const u32,
+    scored_idx: []const u32,
+    scored_games: []const GameRow,
+    match_ids: []const []const u8,
+) !void {
+    const seats = ctx.seats;
+    const offset = try arena.alloc(f32, seats.len);
+    const y = try arena.alloc(f32, seats.len);
+    const ids = try arena.alloc(u32, seats.len);
+    for (seats, offset, y, ids, 0..) |s, *o, *yy, *id, i| {
+        o.* = @floatCast(ctx.row(b0_spec, i).dot(b0.w));
+        yy.* = @floatFromInt(@intFromBool(s.won));
+        id.* = s.cr;
+        const r = x[i * n_in ..][0..n_in];
+        r[n_seq + s.role] = 1;
+        for (s.state, 0..) |v, k| r[n_seq + Role.count + k] = v;
+    }
+    // Standardise every input column on fit rows
+    {
+        var mean: [n_in]f64 = @splat(0);
+        var sq: [n_in]f64 = @splat(0);
+        for (fit_idx) |i| for (x[i * n_in ..][0..n_in], &mean, &sq) |v, *m, *q| {
+            m.* += v;
+            q.* += v * v;
+        };
+        const n: f64 = @floatFromInt(fit_idx.len);
+        for (&mean, &sq) |*m, *q| {
+            m.* /= n;
+            const v = q.* / n - m.* * m.*;
+            q.* = if (v > 1e-12) @sqrt(v) else 1;
+        }
+        for (0..seats.len) |i| for (x[i * n_in ..][0..n_in], mean, sq) |*v, m, sd| {
+            v.* = @floatCast((v.* - m) / sd);
+        };
+    }
+    var cut = fit_idx.len * 9 / 10;
+    while (cut < fit_idx.len and seats[fit_idx[cut]].game == seats[fit_idx[cut - 1]].game) cut += 1;
+    const d: stylenet.Data = .{ .x = x, .n_in = n_in, .ids = ids, .n_ids = ctx.dims.n_cr, .offset = offset, .y = y };
+
+    // b0 from the same f32 offset, so the pair differs only by the net
+    const base = try arena.alloc(f64, scored_idx.len);
+    for (base, scored_idx) |*b, i| b.* = analysis.logLoss(logreg.sigmoid(offset[i]), y[i]);
+
+    const stem = if (phase == .final) "final" else "dev";
+    const path = try std.fs.path.join(arena, &.{ out_dir, try std.fmt.allocPrint(arena, "{s}-net{s}.md", .{ stem, if (b0_spec.b0) "" else "-champ" }) });
+    var file = try Io.Dir.cwd().createFile(io, path, .{});
+    defer file.close(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var fw = file.writer(io, &buf);
+    const w = &fw.interface;
+    try w.print("# meiolol-lab style --net ({s})\n\nResidual net on the per-minute sequence (minutes 0-13, " ++
+        "{d} inputs) over {s} as the offset. Train {d} fit rows, inner validation {d} (the " ++
+        "latest tenth of fit games, picks the epoch), scored {d} rows. Offset alone: {d:.5}. Gain " ++
+        "± 95% clustered by game.\n\n| config | hidden | bottleneck | dropout | emb | epochs | inner val | " ++
+        "s per epoch | log loss | gain vs offset |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n", .{
+        stem, n_in, b0_spec.name, cut, fit_idx.len - cut, scored_idx.len, analysis.mean(base),
+    });
+    try w.flush();
+
+    var preds: std.ArrayList([]f64) = .empty;
+    var names: std.ArrayList(usize) = .empty;
+    for (net_configs, 1..) |cfg, n| {
+        if (!std.mem.eql(u8, list, "all")) {
+            var it = std.mem.tokenizeScalar(u8, list, ',');
+            const on = while (it.next()) |t| {
+                if ((std.fmt.parseInt(usize, t, 10) catch 0) == n) break true;
+            } else false;
+            if (!on) continue;
+        }
+        var net = try stylenet.train(gpa, io, cfg, d, fit_idx[0..cut], fit_idx[cut..]);
+        defer net.deinit(gpa);
+        const loss = try arena.alloc(f64, scored_idx.len);
+        const p = try arena.alloc(f64, scored_idx.len);
+        for (loss, p, scored_idx) |*l, *pp, i| {
+            pp.* = logreg.sigmoid(offset[i] + net.predict(d, i));
+            l.* = analysis.logLoss(pp.*, y[i]);
+        }
+        const g = analysis.pairedGain(scored_games, base, loss);
+        try w.print("| {d} | {d} | {d} | {d:.1} | {d} | {d} | {d:.5} | {d:.1} | {d:.5} | {d:.5} ± {d:.5} |\n", .{
+            n, cfg.hidden, cfg.bottleneck, cfg.dropout, cfg.emb, net.epochs, net.val_loss, net.seconds_per_epoch, analysis.mean(loss), g.mean, g.half_width,
+        });
+        try w.flush();
+        log.info("net {d}: {d:.5} ± {d:.5} vs b0", .{ n, g.mean, g.half_width });
+        try preds.append(arena, p);
+        try names.append(arena, n);
+    }
+    log.info("wrote {s}", .{path});
+
+    if (phase == .final) {
+        const ppath = try std.fs.path.join(arena, &.{ out_dir, "final-net-preds.tsv" });
+        var pf = try Io.Dir.cwd().createFile(io, ppath, .{});
+        defer pf.close(io);
+        var pfw = pf.writer(io, &buf);
+        const pw = &pfw.interface;
+        try pw.writeAll("match_id\tslot\ty\tb0");
+        for (names.items) |n| try pw.print("\tnet{d}", .{n});
+        try pw.writeAll("\n");
+        for (scored_idx, 0..) |si, r| {
+            const s = seats[si];
+            try pw.print("{s}\t{d}\t{d}\t{d:.5}", .{ match_ids[s.game], s.slot, @intFromBool(s.won), logreg.sigmoid(offset[si]) });
+            for (preds.items) |pr| try pw.print("\t{d:.5}", .{pr[r]});
+            try pw.writeAll("\n");
+        }
+        try pw.flush();
+    }
+}
+
 /// Per role and component: variance share, effect given b0 and the state per +1 sd, BH
 /// over the table, largest loadings
 fn writePcs(gpa: std.mem.Allocator, w: *Io.Writer, pca: *const Pca, ctx: Ctx, f: Fitted) !void {
@@ -942,8 +1212,10 @@ fn writePcs(gpa: std.mem.Allocator, w: *Io.Writer, pca: *const Pca, ctx: Ctx, f:
     try fields.adjustBH(gpa, &q);
     try w.writeAll("\n## Style components\n\nEffect: win pp per +1 sd of the component given b0's " ++
         "features and the state (log-odds x 25) ± 95% clustered by game; q = BH over this table. " ++
-        "Loadings: the largest, on standardised residuals (sign of a component is arbitrary).\n\n" ++
-        "| role | pc | share | effect | q | loadings |\n| --- | --- | --- | --- | --- | --- |\n");
+        "Zones: the share of the component's squared loadings on position (zone) dims, the rest " ++
+        "on actions. Loadings: the largest, on standardised residuals (sign of a component is " ++
+        "arbitrary).\n\n| role | pc | share | effect | q | zones | loadings |\n" ++
+        "| --- | --- | --- | --- | --- | --- | --- |\n");
     for (0..Role.count) |role| for (0..n_pc) |c| {
         const i = ctx.dims.pc(@intCast(role), c);
         try w.print("| {t} | {d} | {d:.3} | {d:.2} ± {d:.2} | {d:.3} |", .{
@@ -951,6 +1223,9 @@ fn writePcs(gpa: std.mem.Allocator, w: *Io.Writer, pca: *const Pca, ctx: Ctx, f:
         });
         var loading: [n_sum]f32 = undefined;
         for (&loading, 0..) |*l, k| l.* = @floatCast(pca.vecs[role][k][c]);
+        var zones: f64 = 0;
+        for (loading[0 .. phases.len * n_zone]) |l| zones += l * l;
+        try w.print(" {d:.2} |", .{zones});
         try writeTop(w, loading, 6);
         try w.writeAll(" |\n");
     };
@@ -1145,10 +1420,50 @@ test "k-means finds separated groups" {
     for (pts[0..20]) |p| try testing.expectEqual(nearest(&c, 2, pts[0]), nearest(&c, 2, p));
 }
 
+test "linear solve" {
+    const a = [3][3]f64{ .{ 4, 1, 0 }, .{ 1, 3, 1 }, .{ 0, 1, 2 } };
+    const x = solve(3, a, .{ 5, 5, 3 });
+    for (x) |v| try testing.expectApproxEqAbs(1, v, 1e-6);
+    // A column that never varies gets 0
+    const z = solve(2, .{ .{ 2, 0 }, .{ 0, 0 } }, .{ 2, 0 });
+    try testing.expectApproxEqAbs(1, z[0], 1e-6);
+    try testing.expectApproxEqAbs(0, z[1], 1e-6);
+}
+
+test "sequence channels" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const frames = try arena.alloc(timeline.Frame, 16);
+    for (frames, 0..) |*f, i| {
+        f.* = .{ .t_ms = @intCast(i * minute_ms) };
+        for (0..10) |p| {
+            f.stats[p][@backingInt(timeline.Stat.x)] = 7400;
+            f.stats[p][@backingInt(timeline.Stat.y)] = 7200;
+        }
+        f.stats[0][@backingInt(timeline.Stat.minions)] = @intCast(6 * i);
+    }
+    const events = [_]timeline.Event{
+        .{ .t_ms = 300_000, .data = .{ .champion_kill = .{ .killer = 1, .victim = 6, .x = 0, .y = 0, .bounty = 300, .shutdown = 0, .assists = &.{2} } } },
+    };
+    const out = sequence(.{ .participants = 10, .frames = frames, .events = &events });
+    // Minute 2: no position yet; minute 3: mid, own half (7400 + 7200 < 14800)
+    try testing.expectEqual(0, out[0][2 * n_chan + @backingInt(Zone.mid_own)]);
+    try testing.expectEqual(1, out[0][3 * n_chan + @backingInt(Zone.mid_own)]);
+    try testing.expectEqual(6, out[0][7 * n_chan + n_zone + 2 + 3]);
+    try testing.expectEqual(1, out[0][5 * n_chan + seq_events]);
+    try testing.expectEqual(1, out[5][5 * n_chan + seq_events + 1]);
+    try testing.expectEqual(1, out[1][5 * n_chan + seq_events + 2]);
+}
+
 test "jacobi eigenvectors" {
     const a = [3][3]f64{ .{ 2, 1, 0 }, .{ 1, 2, 0 }, .{ 0, 0, 1 } };
     const e = eigen(3, a);
     try testing.expectApproxEqAbs(3, e.values[0], 1e-9);
     try testing.expectApproxEqAbs(1, e.values[1], 1e-9);
     try testing.expectApproxEqAbs(1 / @sqrt(@as(f64, 2)), @abs(e.vecs[0][0]), 1e-9);
+}
+
+test {
+    _ = stylenet;
 }
