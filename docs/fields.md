@@ -142,8 +142,9 @@ better". Applied on the box 2026-10-12 ~21:30-21:45Z (crawl.args; the previous o
 crawl.args.bak-20261012):
 
 - Compact rows and timelines forever (`--keep-days 0`); raw summaries kept on the box
-  until archived (`--raw-match-days 0`); raw timelines 3 days (`--raw-timeline-days 3`),
-  but never before the archive has them: the crawler's raw prune stops at the acked point
+  until archived (`--raw-match-days 0`); raw timelines likewise (`--raw-timeline-days
+  3650`): acked raw is pruned at ack after 2 days (`raw-export --ack`), and the
+  crawler's raw prune never passes the acked point
 - Every match gets a timeline (`--timelines 100`, coordinator for Jacob): every result
   with signal comes from timelines
 - Mastery on. Today that is one snapshot per sampled ladder player (1 in 16), dropped

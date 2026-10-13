@@ -46,10 +46,11 @@ accounts may use Always Free only in the home region).
   (MEIOLOL_BACKUPS, MEIOLOL_NO_EVAL=1 on the micro)
 - systemd --user services, lingering: meiolol-crawl, meiolol-web, meiolol-backup,
   meiolol-health (deploy/systemd). `systemctl --user status meiolol-crawl`; logs in data/
-- crawl.args: `--reserve 20 --timelines 50 --no-mastery --raw-timeline-days 0
-  --raw-match-days 3 --keep-days 60 --ladder-per-hour 40 --player-sample 16 --min-tier
-  PLATINUM --cache-mb 512` (raw retention cut for the old 50 GB disk; Platinum IV and up
-  only). The 150 GB disk now has room for the plan's "keep more data" retention
+- crawl.args (2026-10-13): `--reserve 20 --timelines 100 --raw-timeline-days 3650
+  --raw-match-days 0 --keep-days 0 --ladder-per-hour 500 --ladder-refresh-hours 12
+  --player-sample 16 --min-tier PLATINUM --cache-mb 512 --patch-only` (keep everything;
+  raw leaves the box only through the archive: `raw-export --ack` prunes acked raw older
+  than 2 days; Platinum IV and up only). Previous copy crawl.args.bak-20261012
 
 ## Rendering on request
 
