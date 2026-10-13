@@ -66,7 +66,51 @@ pub fn fit(comptime C: type, gpa: std.mem.Allocator, t: *const api.Train, opts: 
     var o = opts;
     if (o.embeddings == null) o.embeddings = embeddings;
     if (needsEmbeddings(C) and o.embeddings == null) return error.NoEmbeddings;
+    if (control == .shuffle) {
+        const shuffled = try shuffleOutcomes(gpa, t.rows);
+        defer gpa.free(shuffled);
+        return C.fit(gpa, &.{ .games = t.games, .rows = shuffled }, o);
+    }
     return C.fit(gpa, t, o);
+}
+
+/// `meiolol-lab --control shuffle CMD`: every candidate fit sees its training games'
+/// outcomes permuted between games (scoring keeps the real ones), so a gain over the
+/// baseline must vanish; one that doesn't is a leak or a harness bug. netcheck's own
+/// --control shuffle|permute (setnet) does the same for its nets
+pub const Control = enum { none, shuffle };
+pub var control: Control = .none;
+
+/// A copy of rows whose outcomes come from another training game, seat by seat (side and
+/// role), so each game's outcomes stay one consistent game's. Games missing a seat keep
+/// their own. Seeded by the row count: folds differ, reruns repeat
+fn shuffleOutcomes(gpa: std.mem.Allocator, rs: []const api.Row) ![]api.Row {
+    const none = std.math.maxInt(u32);
+    const out = try gpa.dupe(api.Row, rs);
+    errdefer gpa.free(out);
+    var dense: std.AutoHashMapUnmanaged(u32, u32) = .empty;
+    defer dense.deinit(gpa);
+    var seats: std.ArrayList([10]u32) = .empty;
+    defer seats.deinit(gpa);
+    for (rs, 0..) |r, i| {
+        const g = try dense.getOrPut(gpa, r.game);
+        if (!g.found_existing) {
+            g.value_ptr.* = @intCast(seats.items.len);
+            try seats.append(gpa, @splat(none));
+        }
+        seats.items[g.value_ptr.*][@as(usize, r.side) * 5 + @backingInt(r.role)] = @intCast(i);
+    }
+    var full: std.ArrayList(u32) = .empty;
+    defer full.deinit(gpa);
+    for (seats.items, 0..) |s, gi| if (std.mem.indexOfScalar(u32, &s, none) == null) try full.append(gpa, @intCast(gi));
+    const from = try gpa.dupe(u32, full.items);
+    defer gpa.free(from);
+    var rng: std.Random.DefaultPrng = .init(0x5f1e +% rs.len);
+    rng.random().shuffle(u32, from);
+    for (full.items, from) |to, src| for (seats.items[to], seats.items[src]) |a, b| {
+        out[a].y = rs[b].y;
+    };
+    return out;
 }
 
 /// `meiolol-lab --emb DIR` (lab/embfiles.zig): handed to every fit as Options.embeddings
@@ -657,6 +701,34 @@ const NeedsStats = struct {
     }
     pub fn deinit(_: *Model, _: std.mem.Allocator) void {}
 };
+
+test "shuffled outcomes: whole games moved seat by seat, every game's set kept" {
+    const gpa = std.testing.allocator;
+    var f = try Fixture.init(gpa, 200, 5);
+    defer f.data.deinit();
+    const players = try gamePlayers(gpa, &f.data);
+    defer gpa.free(players);
+    const All = struct {
+        pub fn keep(_: @This(), _: rows.Game) bool {
+            return true;
+        }
+    };
+    var v = try buildTrainBy(gpa, &f.data, players, All{}, false);
+    defer v.deinit();
+    const out = try shuffleOutcomes(gpa, v.train.rows);
+    defer gpa.free(out);
+    var moved: usize = 0;
+    for (v.train.rows, out) |a, b| {
+        try std.testing.expectEqual(a.game, b.game);
+        moved += @intFromBool(a.y[0] != b.y[0]);
+    }
+    try std.testing.expect(moved > out.len / 4);
+    // Blue's and red's wins stay opposite within each game, as in a real one
+    for (out) |r| for (out) |q| if (q.game == r.game and q.side != r.side) {
+        try std.testing.expectEqual(1 - r.y[0], q.y[0]);
+        break;
+    };
+}
 
 test "a candidate that needs seat stats fails without them" {
     const gpa = std.testing.allocator;

@@ -46,10 +46,13 @@ const looks = @import("lab/looks.zig");
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
 
 const usage =
-    \\meiolol-lab [--emb DIR] COMMAND
+    \\meiolol-lab [--emb DIR] [--control shuffle] COMMAND
     \\  --emb DIR                       pretrain's embeddings for a needs_embeddings
     \\                                  candidate, in any command that fits one
     \\                                  (lab/embfiles.zig)
+    \\  --control shuffle               every candidate fit on its training games'
+    \\                                  outcomes permuted between games (scoring keeps
+    \\                                  the real ones): a gain must vanish
     \\  gpu-smoke                       add two vectors on the GPU, check against the CPU
     \\  anonymise SRC DST [SALT_FILE]   copy snapshot SRC to DST with PUUIDs and match ids
     \\                                  hashed (salt: 32 bytes, default
@@ -100,6 +103,16 @@ pub fn main(init: std.process.Init) !u8 {
     const emb_source = emb_dir.source();
     if (emb_dir.path.len > 0) {
         harness.embeddings = &emb_source;
+        const rest = try arena.alloc(@TypeOf(argv[0]), argv.len - 2);
+        rest[0] = argv[0];
+        @memcpy(rest[1..], argv[3..]);
+        argv = rest;
+    }
+    if (argv.len >= 3 and std.mem.eql(u8, argv[1], "--control")) {
+        harness.control = std.meta.stringToEnum(harness.Control, argv[2]) orelse {
+            std.debug.print("--control: shuffle (permute: netcheck --net set's own --control)\n", .{});
+            return 2;
+        };
         const rest = try arena.alloc(@TypeOf(argv[0]), argv.len - 2);
         rest[0] = argv[0];
         @memcpy(rest[1..], argv[3..]);
