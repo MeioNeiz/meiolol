@@ -26,7 +26,7 @@ Where things live:
 
 ## Sessions and what they own (2026-10-13 ~01:10; names change on handover)
 
-Coordinator: meiolol-76 (from meiolol-2c, from meiolol-78, 2026-10-13).
+Coordinator: meiolol-bd (from meiolol-76, from meiolol-2c, from meiolol-78, 2026-10-13).
 
 | Session | Owns |
 | --- | --- |
@@ -38,11 +38,11 @@ Coordinator: meiolol-76 (from meiolol-2c, from meiolol-78, 2026-10-13).
 | meiolol-fa | box, archive operation, snapshots (weekly Sun 04:00, first 19 Oct, with mastery_pre and coverage report; from 1e9a446 snapshot.sh also fetches Data Dragon per patch and runs seat-stats before pack, a Data Dragon outage fails the make: check the first run; 30450b4 fixed an empty patch list that left resists NaN; mid-week snap-20261013T1954Z taken by ea on 13 Oct, unpinned, learning curve only: prune it with the others once a new one is pinned), flex daily count, mastery catch-up, pushes (from meiolol-11 [1f36a8]); snapshot.sh push also links ~/ml/snaps/<snap> to data/<snap> on the Mac, so lab-run placement can use either host (1c, 2026-10-13) |
 | meiolol-47 | overnight code review; shared src/analysis.zig refactor committed (3324cd3..c2b1a73), all analysis files free |
 | meiolol-82 | Riot application text (drafted; waits on Jacob: ownership, privacy.md 24-month retention, meiolol-ef's deploy) |
-| meiolol-76 (from meiolol-2c) | coordinator, neural net programme (Jacob's big goal, 2026-10-13; brief in docs/model.md "Neural draft models"), after the comp features campaign (api Row.stats 53323f9) |
+| meiolol-bd (from meiolol-76, from meiolol-2c) | coordinator, neural net programme (Jacob's big goal, 2026-10-13; brief in docs/model.md "Neural draft models"), after the comp features campaign (api Row.stats 53323f9) |
 | meiolol-4a (from meiolol-ea) | NN data: pack mtime fix (second precision), gpu-box repack of 1954Z; multi-task targets (Row.y, Row.stats as auxiliary), tensor export for the GPU, extra games count (comp data done: 25737aa, 1e9a446) |
 | meiolol-35 [397394] (was meiolol-c2, from meiolol-0d) | structured nets on profiles (profile inputs, DeepSets/attention, residual on ratings); win-comp done (7a2de11, test: mix effect holds, prediction gain not detected) |
 | meiolol-5b (closed, from meiolol-97 [7beeb6]) | done (f5b5499, fe33e9b, 30e9f74): d8 prior borderline, not detected at the noise floor; rerun on 19 Oct snapshot (Next steps). Was: NN pretraining: champion-role embeddings from aux targets, used in f1's nets and as a ratings prior (src/lab/pretrain.zig) (research done: 9530584, fbc5df5) |
-| meiolol-d8 (from meiolol-ba) | NN tester (LoLDraftAI 2x2 write-up, then net exporter when a net qualifies): draft-model.json net kind, Zig reference scorer and JS forward pass (comp tester done: 2be13f3, 7423f29) |
+| meiolol-d8 (closed, from meiolol-ba) | NN tester done: LoLDraftAI 2x2 corrected per 4b (c3bbe11), random split flatters ratings at equal fit size, learned.md stands; net exporter on hold until a net beats ratings. Was: NN tester: draft-model.json net kind, Zig reference scorer and JS forward pass (comp tester done: 2be13f3, 7423f29) |
 | meiolol-4b (from meiolol-49) | comp test look reading (20261013T195844Z-final-compcheck, c26ffa8), then NN verifier: leakage audits, seed variance, paired checks |
 | meiolol-fd (from meiolol-1c) | GPU sweep runner for nets (random search on the 3080 via lab-run) (lab-run auto placement done: 371bec8, e050551) |
 | meiolol-0a (from meiolol-f1) | lead NN modeller: big net seed ensembles and sweep with 1c, learning curve on the ~350k snapshot (f1 results: a189f10, no net beats ratings or win-comp) |
@@ -57,6 +57,7 @@ Coordinator: meiolol-76 (from meiolol-2c, from meiolol-78, 2026-10-13).
 | meiolol-08 | effects and the CPU model: one shrunk additive model (champion-role, ally and enemy role-pair terms, comp), effects table in win points and gold, in-game event value (win chance added), distilled from GPU teachers (Jacob 2026-10-13: ship CPU-only models that pick out information) |
 | meiolol-research (was meiolol-f1, new) | research: isolating event, synergy and counter values; pre-game player skill models; distilling GPU models into explainable CPU ones |
 | meiolol-tests (was meiolol-0a, new) | model tests: planted-effect recovery and minimum detectable effects per model, training-health tests, golden numbers on the pinned snapshot |
+| meiolol-58 (new) | PyTorch cross-check of the Zig models (win-ratings, small, big, resid, set net, playernet: same rows, folds, seeds; agreement within a justified tolerance), takes over tests' Python item; runs via lab-run --python (meiolol-a0 adding it) |
 | meiolol-c1 | comp discovery: our own champion and team variables (comp_stats.tsv, src/lab/compstats.zig, comps.zig), cross-team matchups, archetypes, FDR screen with a sealed block; survivors to 08 and 35 |
 | meiolol-61 | carry and impact: which champions and roles carry (leverage of a seat's lead, skill sensitivity, outcome spread), src/carry.zig |
 
