@@ -1379,6 +1379,114 @@ games included (their own stats in their profiles); fixed by 0d: tuning on fit-s
 profiles, refit rebuilds them on all visible rows; forward-chaining folds rebuild
 everything per fold (foldAblation calls fitWith on older games only).
 
+### Comp discovery, 2026-10-14 (meiolol-c1)
+
+Question (Jacob, 13 Oct): beyond "champions with higher win rates win", which team traits
+and team-vs-team matchups make a comp good or bad? Answer on this snapshot: only the damage
+mix. Hundreds of other traits, coaching win conditions and comp archetypes add nothing
+detectable beyond ratings; three traits that passed the screen did not hold on sealed games.
+
+Data: `meiolol-lab comp-stats SNAP DDRAGON` (src/lab/compstats.zig, 3ab7299) adds
+SNAP/comp_stats.tsv beside seat_stats.tsv (per seat from the raw summary: vision, wards,
+epic monster and turret damage, dragon/baron/herald takedowns, plates, late solo turrets,
+lane CS at 10, kills, deaths, assists, kill share, damage and taken shares, pick, catch,
+dive, defence and save-ally challenges, effective heal and shield, early takedowns and
+roams, skillshots, CC dealt, time dead, gold; item flags held at the end from Data
+Dragon's description: anti-heal "Wounds", armour pen, magic pen, lethality) and
+SNAP/comp_teams.tsv (first and kills per objective). snap-20261012T2055Z: 2,303,750 seats,
+460,750 teams, 0 unreadable. soloTurretsLategame is absent when 0 (never 0 in the data).
+
+Method: `meiolol-lab comps SNAP` (src/lab/comps.zig, 3df16c6, e6588c1), built with
+-Dcand=src/lab/cand/win-ratings. 63 champion-role profile values (seat stats, comp stats,
+gold14/lanediff14/cs10/deaths15/first item, game length, scaling = win rate in 32+ min
+games minus under 25), each the average of the cell's won-game and lost-game means, shrunk
+to the role by 20 rows, z within role; fit games only, rebuilt per block. A team sum of a
+profile is linear in the champions (ratings hold it), so candidates are non-linear: team
+max and min per value (126), "1+"/"2+" picks in the top 20% (48), 8 sums as controls, 14
+specials (mix, lopsided, <20% and 60%+ magic, 80%+ physical, damage concentration, 4+
+ranged, 4+ melee, no win condition, power-curve shape, front-to-back, hard engage, no
+objective champion), 21 cross-team coaching products (our X x their Y, centred,
+antisymmetrised), 6 k-means archetypes (fitted once on teams before block 1) and their 15
+pairings, 12 carry terms from meiolol-61's per-fold table (leverage at 10 and 25 minutes,
+scaling): 252 in all, every one in the FDR count (10 were untestable: role-level flags
+every team has, e.g. 1+ top vision is always the support). Per game: blue's residual (won
+minus ratings' chance) on x = trait(blue) - trait(red), OLS slope, robust se; effects in
+win pp per team sd (flags: pp for having it when the other team doesn't). Folds:
+win-comp's blocks (nnexport.foldBounds), ratings and profiles refitted on older games.
+Screen: blocks 1-3 (26,611 games), Benjamini-Hochberg. Sealed: blocks 4-5 and dev-val
+(26,242 games), opened once for a list fixed beforehand (scratchpad progress-comps.md):
+screen passes at q 0.05 with the same sign in 2 of 3 blocks, plus every coaching
+hypothesis with a predicted sign; read by Holm over the list (27), a screen pass also
+needing |z| >= 2 beside the mix term.
+
+Controls (same build, same 252 candidates):
+
+| control | run | BH passes (q 0.05) | reading |
+| --- | --- | --- | --- |
+| profiles permuted among a role's champions | 20261013T230807Z-comps-permuted | 0 | traits don't pick up ratings misfit |
+| shuffled residuals, 20 shuffles | in each run | 3 passes in 3 of 20 (real screen run) | false passes ~0.15 per screen |
+| planted mix -3 pp (synth) | 20261013T223736Z-comps-plant-mix3 | mix z -5.9, plus mix proxies | found |
+| planted mix -2.25 | 20261013T230832Z-comps-plant-mix2p25 | mix -4.4, lopsided -4.6 | found |
+| planted mix -1.5 | 20261013T224432Z (pre-fix build) | mix -0.15 ± 0.42 | missed |
+
+Minimum detectable effect (screen, 80% power): about 1 pp per team sd for a continuous
+trait, about 3 pp for a flag one team in ten has (pp per sd of the blue-minus-red
+difference: about 2). The plant runs also showed proxies of a real effect pass too (armour
+pen items, the enchanter archetype under a planted mix), hence the beside-mix column.
+
+Screen, run 20261013T231749Z-comps-screen: 7 passes at q 0.05, 12 at q 0.10 (top rows;
+all 252 in its screen.tsv with mechanism columns):
+
+| trait | screen effect | z | blocks 1/2/3 | beside mix | sealed effect | sealed z | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| mix (team magic share off 50%, squared) | -1.22 ± 0.42 pp/sd | -5.67 | -1.7 / -1.2 / -0.8 | | -0.89 ± 0.42 | -4.13 | **confirmed** |
+| lopsided (magic <20% or 60%+) | -3.01 ± 1.51 pp | -3.92 | -3.0 / -4.1 / -2.0 | -1.43 ± 1.67 | -1.98 ± 1.50 | -2.59 | mix family |
+| magic <20% | -4.88 ± 2.55 pp | -3.75 | -6.8 / -5.7 / -1.9 | 0.04 ± 3.42 | -3.79 ± 2.60 | -2.86 | mix family |
+| our AD share x their armour lean | -0.81 ± 0.42 pp/sd | -3.77 | -0.8 / -0.6 / -1.1 | -0.77 ± 0.42 | -0.30 ± 0.42 | -1.38 | not confirmed |
+| 4+ ranged champions | -2.51 ± 1.43 pp | -3.43 | -0.5 / -3.8 / -3.1 | -2.90 ± 1.44 | +0.49 ± 1.46 | 0.66 | not confirmed |
+| 1+ magic pen item champion | +1.69 ± 1.00 pp | 3.31 | 2.5 / 1.8 / 0.8 | 0.68 ± 1.08 | +1.25 ± 1.01 | 2.43 | mix proxy |
+| 2+ catch-and-kill engagers | +1.65 ± 0.99 pp | 3.26 | 1.3 / 1.4 / 2.3 | 1.56 ± 0.99 | +0.75 ± 0.99 | 1.50 | not confirmed |
+
+Coaching hypotheses on the sealed games (none passes Holm; the largest): our tankiness x
+their penetration items +0.65 ± 0.42 pp/sd (z 3.0, opposite to the predicted sign), our
+engage x their disengage +0.41 ± 0.43, our dive x their peel +0.37 ± 0.43 (predicted
+negative), our sustain x their poke -0.35 ± 0.43, front-to-back +0.57 ± 0.90 pp, hard
+engage -0.38 ± 0.92, no win condition -0.18 ± 2.44, healing x their anti-heal +0.20 ±
+0.42, poke x their engage +0.19 ± 0.43; all within about ±1 pp per sd (flags ±2-5 pp).
+Split push x waveclear, siege x waveclear and no objective champion were degenerate (no
+estimate). Archetypes (range/siege, melee tank engage, AD pick, low-early, early
+roam-dive, enchanter): no archetype or archetype pairing past |z| 2.3 of 21 on the
+screen; cells within about ±2.5-3 pp (pairings) and ±1.1-1.4 pp (archetypes).
+
+Mechanism (screen, after an additive champion baseline per block): the mix works neither
+through lane gold (team gold at 14 +11 ± 37 per sd) nor first tower or dragons; its win
+effect is the same in games under 25 and 25-32 minutes (-1.5) and smaller after 32 (-0.6),
+so it is a fight effect, not a late-game one.
+
+Logistic comp layer on ratings' logit (fit on blocks 1-3, scored on the sealed games,
+nats/game, paired by game): ratings + mix -0.00028 ± 0.00042 (blocks 4-5 -0.00062 ±
+0.00052, dev-val +0.00043 ± 0.00070); + the six non-mix screen passes +0.00043 ± 0.00066
+(worse); all with mix vs mix alone +0.00067 ± 0.00058. The joint OLS column came out
+empty: the list's three degenerate traits dropped every row (fix: leave NaN columns out).
+
+Reading:
+- Good and bad comps, as far as this data shows: balanced damage is good, lopsided (most
+  of all under a fifth magic) is bad, and that is the only comp trait that holds. It is
+  win-comp's term found again, unprompted, at the top of 252 candidates, and on sealed
+  games (-0.9 pp per team sd, z -4.1)
+- Everything else is "not detected", bounded by the MDE above: no other team trait is
+  worth more than about 1 pp per team sd or 3 pp as a one-in-ten flag. Coaching win
+  conditions (front-to-back, dive vs peel, poke vs engage, scaling vs early, split vs
+  waveclear, healing vs anti-heal, AD vs armour) are each within about ±1 pp per sd on
+  sealed games. Comp archetypes beyond the champions: not detected
+- Screen passes that failed sealed (AD share x armour, 4+ ranged, 2+ engagers) are the
+  winner's curse a screen expects (about 0.15 false passes per screen by the shuffles, and
+  screen effects near the threshold overstate): don't build on them
+- For meiolol-08's additive CPU model and meiolol-35's set nets: the mix term only; the
+  rest as candidates with the bounds above
+- Not yet audited by meiolol-4b; nothing in learned.md. Next: rerun on
+  snap-20261013T2253Z (more games), same pre-declared rules
+
 ### Neural draft models, 2026-10-13 (meiolol-2c)
 
 Jacob's goal: the best draft predictor with neural nets, beside the simple models pushed
