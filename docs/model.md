@@ -1288,7 +1288,11 @@ Calibration from the same look: win-ratings is slightly overconfident at the ext
 EUW test (strongest and weakest lift quartiles each 1.4 ± 1.3 pp less extreme than
 predicted; the two quartiles mirror each other, one game's two teams, so one number). On
 the research lever list: temperature scaling (one scale on the logit, fitted on the
-newest visible games).
+newest visible games). The dev side agrees: netcheck resid's learnt weight on
+win-ratings' logit settles at ~0.9 on every block (a189f10), which is temperature
+scaling fitted on fit games, and bought only -0.00005 ± 0.00007 nats/game on the 5
+forward folds (weight fixed at 1: 0.00000). So expect it real but ~1e-4 in log loss;
+it matters for the extreme picks shown to players more than for the headline number.
 
 Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
 Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
