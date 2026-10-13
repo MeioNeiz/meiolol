@@ -21,7 +21,7 @@
 
   // The four moments that moved win chance most, played through in time order
   const M = Review.moments(g);
-  const keep = M.map((m, i) => [Math.abs(m.d), i]).sort((a, b) => b[0] - a[0]).slice(0, 4).map((x) => x[1]).sort((a, b) => a - b);
+  const keep = M.map((m, i) => [Math.abs(m.d) * (m.kind === "death" ? 0.3 : 1), i]).sort((a, b) => b[0] - a[0]).slice(0, 4).map((x) => x[1]).sort((a, b) => a - b);
   const demo = document.getElementById("demo");
   const box = el("div");
   demo.append(box);

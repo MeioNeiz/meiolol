@@ -236,6 +236,10 @@ const Review = (() => {
     return s;
   }
 
+  // A death's change is the team's whole minute, which can rise while you die: only a
+  // costly death gets a colour
+  const tone = (m) => (m.kind === "cost" ? "t-cost" : m.kind === "death" ? "" : m.d > 0 ? "t-gain" : "t-cost");
+
   function momentList(M, onPick, keep) {
     const ul = el("ul", "moments");
     M.forEach((m, i) => {
@@ -249,7 +253,7 @@ const Review = (() => {
       if (m.killer !== undefined) sub.append(icon(m.killer));
       sub.append(m.text);
       what.append(sub);
-      li.append(el("span", "t num", clock(m.t_s)), badge(m.kind), what, el("span", `d num ${m.d > 0 ? "t-gain" : m.d <= -COSTLY ? "t-cost" : ""}`, pct(m.d)));
+      li.append(el("span", "t num", clock(m.t_s)), badge(m.kind), what, el("span", `d num ${tone(m)}`, pct(m.d)));
       const go = () => onPick(i);
       li.addEventListener("click", go);
       li.addEventListener("keydown", (e) => {
