@@ -23,6 +23,12 @@ Where things live:
 - Personal: the best League draft predictor (internal). Honest target: beat ~53-54%
   draft-only on a time split; with pre-game player features 55-57%. Report both our
   time split and a LoLDraftAI-style random split for comparison
+- More training data is a standing goal (Jacob, 2026-10-14): more games is the only
+  gain that has held. The coordinator tracks fit games per comparison against games
+  crawled, and re-pins when the crawl has added half again (or weekly, whichever comes
+  first), never waiting on a fixed date. No filter may drop games a model doesn't need
+  (draft-only models need no timeline). meiolol-4a owns crawl volume and coverage and
+  reports both with each snapshot
 
 ## Sessions and what they own (2026-10-13 ~01:10; names change on handover)
 
@@ -73,7 +79,9 @@ shows. When an agent hands over, get the successor's name and tell the others.
 - Label train-time and use-time features; champ-select models use only champions,
   roles, the user's own rank and experience; `internal` scope (Jacob's predictor) may see
   all ten players' pre-game data and never feeds the site or app
-- Snapshot: snap-20261012T2055Z stays pinned for all work in flight (gold14-a, db's
+- Snapshot: moving off snap-20261012T2055Z to a fresh pin (2026-10-14, 4a taking it; rebase
+  checklist from meiolol-4b in the coordinator scratchpad, rebase-checklist-source.md).
+  Was: - Snapshot: snap-20261012T2055Z stays pinned for all work in flight (gold14-a, db's
   models, ff's checks, 6f's bench), so results compare. A new weekly snapshot is a new
   game set: start new models on it only once the coordinator pins it in docs/model.md,
   and rescore any reference model on it before comparing. Re-packs (SNAP/pack/) never
