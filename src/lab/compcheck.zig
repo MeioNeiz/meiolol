@@ -27,6 +27,8 @@ pub const usage =
     \\                                  composition (profiles from dev's training games),
     \\                                  intervals clustered by game (lab/compcheck.zig);
     \\                                  --folds: win-comp's forward-chaining folds instead
+    \\  compcheck SNAP --final          the one test look (EUW1 test, the pre-declared
+    \\                                  contrast only): on meiolol-2c's go
     \\
 ;
 
@@ -165,11 +167,12 @@ const Unit = struct {
 
 pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
     const folds: u8 = switch (argv.len) {
-        1 => 0,
         3 => if (std.mem.eql(u8, argv[1], "--folds")) std.fmt.parseInt(u8, argv[2], 10) catch 0 else 0,
         else => 0,
     };
-    if (argv.len != 1 and folds == 0) {
+    // The test look: once, on meiolol-2c's go (docs/model.md "Model-free cross-check")
+    const final = argv.len == 2 and std.mem.eql(u8, argv[1], "--final");
+    if (argv.len != 1 and folds == 0 and !final) {
         std.debug.print("usage:\n{s}", .{usage});
         return 2;
     }
@@ -197,7 +200,10 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     defer units.deinit(gpa);
     var wins: Wins = .empty;
     defer wins.deinit(gpa);
-    if (folds == 0) {
+    if (final) {
+        try w.print("# compcheck, FINAL (scored: EUW1 test; profiles and win-ratings: every train game)\n\n", .{});
+        try addUnits(gpa, &data, players, c, .{ .before = std.math.maxInt(i64), .phase = .final }, &units, &wins, w);
+    } else if (folds == 0) {
         try w.print("# compcheck, dev (scored: EUW1 dev-val; profiles: visible games before the dev cut)\n\n", .{});
         try addUnits(gpa, &data, players, c, .{ .before = c.dev }, &units, &wins, w);
     } else {
@@ -224,7 +230,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             try addUnits(gpa, &data, players, c, .{ .before = lo, .block = .{ lo, hi } }, &units, &wins, w);
         }
     }
-    try analyse(gpa, arena, io, &data, units.items, if (folds == 0) &wins else null, w);
+    try analyse(gpa, arena, io, &data, units.items, if (folds == 0 and !final) &wins else null, final, w);
     try w.flush();
     return 0;
 }
@@ -239,6 +245,8 @@ const Wins = std.AutoHashMapUnmanaged(u64, [2]f64);
 const Source = struct {
     before: i64,
     block: ?[2]i64 = null,
+    /// dev: dev-val as exp run scores it; final: test, fitted on every train game
+    phase: harness.Phase = .dev,
 };
 
 fn addUnits(
@@ -364,7 +372,7 @@ fn offset(
 ) !void {
     const k = api.outcomeIndex(.win);
     const block = src.block orelse {
-        var scores = try harness.score(cand, gpa, d, players, c, .dev, .{});
+        var scores = try harness.score(cand, gpa, d, players, c, src.phase, .{});
         defer scores.deinit(gpa);
         for (scores.row, scores.cand) |ri, pred| {
             const r = d.rows[ri];
@@ -410,6 +418,7 @@ fn analyse(
     d: *const rows.Data,
     unit_list: []const Unit,
     plumbing: ?*const Wins,
+    final: bool,
     w: *Io.Writer,
 ) !void {
     const n_units = unit_list.len;
@@ -433,6 +442,25 @@ fn analyse(
 
     try strengthControl(gpa, arena, units.items, resid, in_a, w);
     if (plumbing) |wins| try control(gpa, d, wins, units.items, resid, in_a, w);
+    if (final) {
+        // The pre-declared contrast and its two sides, nothing else
+        try tableHead(w, "magic share");
+        for ([_][]const u8{ "lopsided (<20% or 60%+)", "<20%", "60%+", "balanced (20-60%)" }, 0..) |label, b| {
+            for (in_a, units.items) |*a, u| a.* = switch (b) {
+                0 => lopsided(u),
+                1 => u.magic_share < 0.2,
+                2 => u.magic_share >= 0.6,
+                else => !lopsided(u),
+            };
+            try binRow(w, label, units.items, res, in_a);
+        }
+        for (in_a, in_b, units.items) |*a, *b, u| {
+            a.* = lopsided(u);
+            b.* = !a.*;
+        }
+        try contrastLine(w, "PRE-DECLARED lopsided minus balanced", units.items, res, in_a, in_b);
+        return;
+    }
 
     try byPlatform(gpa, d, units.items, res, in_a, in_b, w);
 
