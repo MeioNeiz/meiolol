@@ -247,10 +247,11 @@ const Mix = struct {
     }
 
     /// Blue's mix minus red's for game gi; leave_out: the game is a fit game
-    fn diff(m: *const Mix, d: *const rows.Data, first_row: []const u32, gi: usize, leave_out: bool) f32 {
+    fn diff(m: *const Mix, d: *const rows.Data, in: Inputs, gi: usize, leave_out: bool) f32 {
         var num: [2]f64 = @splat(0);
         var den: [2]f64 = @splat(0);
-        for (d.rows[first_row[gi]..first_row[gi + 1]]) |*r| {
+        for (in.by_game[in.first_row[gi]..in.first_row[gi + 1]]) |ri| {
+            const r = &d.rows[ri];
             const p = m.profile(r.champion, @backingInt(r.role), if (leave_out) r else null);
             num[r.side] += p[1] * p[0];
             den[r.side] += p[1];
@@ -270,7 +271,9 @@ const Inputs = struct {
     win: []f32,
     /// Blue minus red team gold at 14, thousands; NaN unless all ten are known
     gold: []f32,
+    /// Rows of game g: d.rows[by_game[first_row[g]..first_row[g + 1]]]
     first_row: []u32,
+    by_game: []u32,
 };
 
 fn inputs(gpa: std.mem.Allocator, d: *const rows.Data) !Inputs {
@@ -282,22 +285,25 @@ fn inputs(gpa: std.mem.Allocator, d: *const rows.Data) !Inputs {
     var seen = try gpa.alloc(u8, d.games.len);
     defer gpa.free(seen);
     @memset(seen, 0);
-    var at: u32 = 0;
-    var gi: usize = 0;
-    first_row[0] = 0;
-    for (d.rows, 0..) |r, i| {
-        while (gi < r.game) : (gi += 1) first_row[gi + 1] = @intCast(i);
-        std.debug.assert(r.game >= gi);
+    for (d.rows) |r| {
         const y = r.y[api.outcomeIndex(.gold14)];
         gold[r.game] += if (r.side == 0) y / 1000 else -y / 1000;
         seen[r.game] += 1;
-        at = @intCast(i + 1);
     }
-    while (gi < d.games.len) : (gi += 1) first_row[gi + 1] = at;
     for (gold, seen) |*g, n| if (n != 10) {
         g.* = std.math.nan(f32);
     };
-    return .{ .win = win, .gold = gold, .first_row = first_row };
+    // A game's rows by index, whatever order d.rows is in (counting sort)
+    first_row[0] = 0;
+    for (seen, 0..) |n, gi| first_row[gi + 1] = first_row[gi] + n;
+    const by_game = try gpa.alloc(u32, d.rows.len);
+    const next = try gpa.dupe(u32, first_row[0..d.games.len]);
+    defer gpa.free(next);
+    for (d.rows, 0..) |r, i| {
+        by_game[next[r.game]] = @intCast(i);
+        next[r.game] += 1;
+    }
+    return .{ .win = win, .gold = gold, .first_row = first_row, .by_game = by_game };
 }
 
 fn gameIn(d: *const rows.Data, gi: usize, y: f32, mix: f32) A.GameIn {
@@ -429,7 +435,7 @@ fn runBlock(
     var n_soft: usize = 0;
     var kbuf: [128]u8 = undefined;
     for (fit_idx.items, fit_win, fit_logit, fit_mix, fit_goldv) |gi, *fw, *fl, *fm, *gv| {
-        const m = mix.diff(d, in.first_row, gi, true);
+        const m = mix.diff(d, in, gi, true);
         fw.* = gameIn(d, gi, in.win[gi], m);
         fl.* = fw.*;
         fm.* = fw.*;
@@ -446,7 +452,7 @@ fn runBlock(
         return error.SoftTargetsIncomplete;
     }
     const scored_in = try arena.alloc(A.GameIn, scored.items.len);
-    for (scored.items, scored_in) |gi, *s| s.* = gameIn(d, gi, in.win[gi], mix.diff(d, in.first_row, gi, false));
+    for (scored.items, scored_in) |gi, *s| s.* = gameIn(d, gi, in.win[gi], mix.diff(d, in, gi, false));
     const slope = goldSlope(fit_goldv, blk: {
         const ys = try arena.alloc(f32, fit_idx.items.len);
         for (fit_idx.items, ys) |gi, *y| y.* = in.win[gi];
@@ -696,7 +702,7 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
     var teacher_games: std.ArrayList(A.GameIn) = .empty;
     var kbuf: [128]u8 = undefined;
     for (idx.items) |gi| {
-        const m = mix.diff(d, in.first_row, gi, true);
+        const m = mix.diff(d, in, gi, true);
         try win_games.append(arena, gameIn(d, gi, in.win[gi], m));
         if (soft) |sf| if (sf.get(&kbuf, "dev", d.games[gi].match_id)) |z| {
             try teacher_games.append(arena, gameIn(d, gi, @floatCast(z), m));
