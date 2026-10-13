@@ -8,6 +8,7 @@ const anonymise = @import("lab/anonymise.zig");
 const archive = @import("lab/archive.zig");
 const mastery_pre = @import("lab/mastery_pre.zig");
 const seatstats = @import("lab/seatstats.zig");
+const compstats = @import("lab/compstats.zig");
 const nnexport = @import("lab/nnexport.zig");
 const protocol = @import("lab/protocol.zig");
 const rows = @import("lab/rows.zig");
@@ -60,6 +61,9 @@ const usage =
     \\                                  taken, CC, healing from raw.db, resists and range
     \\                                  from DDRAGON/<patch>/{champion,item}.json:
     \\                                  SNAP/seat_stats.tsv (lab/seatstats.zig); rows load it
+    \\  comp-stats SNAP DDRAGON         more per seat (vision, objectives, waveclear, fights,
+    \\                                  roams, item flags) and team objectives from raw.db:
+    \\                                  SNAP/comp_stats.tsv, comp_teams.tsv (lab/compstats.zig)
     \\  nn-export SNAP                  every game as tensors for the draft nets: SNAP/nn/
     \\                                  (lab/nnexport.zig: champions, splits, folds, aux
     \\                                  targets, fit-only norms)
@@ -147,6 +151,14 @@ pub fn main(init: std.process.Init) !u8 {
         std.log.info("mastery-pre: {d} rows, {d} with a pre-game fetch, median gap {d:.1} h " ++
             "({d} archive files read, {d} begun after the last game skipped)", .{
             n.rows, n.pre_game, n.median_gap_h, n.files_read, n.files_skipped,
+        });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "comp-stats") and argv.len == 4) {
+        const n = try compstats.run(init.gpa, init.io, argv[2], argv[3]);
+        std.log.info("comp-stats: {d} seats ({d} with item flags), {d} teams from {d} of {d} games' " ++
+            "summaries; {d} unreadable, {d} seats with another champion left out", .{
+            n.seats, n.with_items, n.teams, n.docs, n.games, n.bad_docs, n.mismatch,
         });
         return 0;
     }
@@ -401,6 +413,7 @@ test {
     _ = archive;
     _ = mastery_pre;
     _ = seatstats;
+    _ = compstats;
     _ = nnexport;
     _ = protocol;
     _ = rows;
