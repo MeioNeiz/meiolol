@@ -89,6 +89,9 @@ shows. When an agent hands over, get the successor's name and tell the others.
   predicted finish and queues on ~/ml/locks; name a HOST only when it must run there.
   Model runs on the gpu-box only, never the Mac (Jacob, 2026-10-13); auto respects it.
   League pauses gpu-box runs (placement allows for it)
+- Always through lab-run, never a binary run directly or a background shell (no meta,
+  no lock, dies with its pane). Wait with `deploy/lab-run.sh wait RUN...`, not loops.
+  Same inputs build once: repeat starts reuse `binary KEY` (--bin KEY pins it)
 
 ## Open, waiting
 

@@ -2,6 +2,9 @@
 # zig fmt on the staged content of staged Zig sources (not the working tree: other
 # sessions share it). Same paths as zig build fmt: research/raw keeps others' code as is.
 # Fix with `zig build fmt`. Skip once: git commit --no-verify
+# Zig through the ~/.local/bin shim (build.zig.zon's pinned version): a plain PATH can
+# find Homebrew's older zig first
+export PATH="$HOME/.local/bin:$PATH"
 bad=0
 for f in $(git diff --cached --name-only --diff-filter=ACM -- ':(glob)src/**/*.zig' build.zig build.zig.zon); do
     git show ":$f" | zig fmt --stdin --check > /dev/null 2>&1 || { echo "not formatted: $f"; bad=1; }

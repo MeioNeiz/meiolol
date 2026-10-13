@@ -5,10 +5,11 @@
 # On the gpu-box, deploy/lab-watch.sh pauses every run while League is open (Jacob's
 # rule); `watch-install` sets it up. docs/compute.md
 #
-#   deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --no-build] [--build-arg A]...
-#                           [--with PATH]... [--res cpu|gpu|none|auto] [--literal]
-#                           [--dry-run] -- ARGS...
+#   deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --commit SHA | --bin KEY]
+#                           [--no-build] [--build-arg A]... [--with PATH]...
+#                           [--res cpu|gpu|none|auto] [--literal] [--dry-run] -- ARGS...
 #   deploy/lab-run.sh status [HOST]
+#   deploy/lab-run.sh wait RUN... [--timeout S]  until each has ended: state, RESULT lines
 #   deploy/lab-run.sh logs HOST RUN [LINES]
 #   deploy/lab-run.sh stop HOST RUN
 #   deploy/lab-run.sh restart HOST RUN       run it again in its dir (after a WSL restart)
@@ -26,8 +27,13 @@
 #   deploy/lab-run.sh start gpu-box eval --meiolol -- eval --data "~/ml/snaps/X" ">" eval.md
 # --literal: each ARG reaches the program as one word, nothing expanded but a leading ~/
 # (deploy/lab-exp.sh: its words come from an agent, so they must not run as shell).
-# --head builds committed HEAD in a temp tree instead (other sessions edit the working
-# tree; a half-written file there breaks or silently changes the build).
+# --head builds committed HEAD instead, --commit SHA that commit (other sessions edit the
+# working tree; a half-written file there breaks or silently changes the build).
+# Binaries are kept by KEY, a hash of the build's inputs (every file under src, build.zig,
+# the build args and the files they name), in zig-out/lab-run/KEY: built once per KEY
+# under a lock, never replaced, so concurrent starts share one build. Each start prints
+# `binary KEY`; --bin KEY starts that binary whatever the tree holds now (a sweep's jobs),
+# --no-build the current inputs' binary if built, never a build. Meta records src KEY.
 # --build-arg goes to zig build (deploy/lab-exp.sh: -Dcand=DIR); --with copies a file or
 # directory into the run dir (the candidate's source, kept with its scores)
 # Queue: a run waits for its resource's lock on the host (~/ml/locks/RES; cpu by default,
@@ -38,8 +44,6 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 RUNS=ml/runs
-SRC=$ROOT
-HEAD_ONLY=0
 BUILD_ARGS=()
 WITH=()
 RES=
@@ -73,35 +77,161 @@ check_run() {
     exit 2
 }
 
-# Prints the binary's path. Own prefix per host and binary, so zig-out/bin is left alone
-prefix() {
-    local prefix="$ROOT/zig-out/lab-run/$1"
-    (( HEAD_ONLY )) && prefix+=-head
-    # Own prefix per set of build args, so concurrent candidate builds don't swap binaries
-    if (( ${#BUILD_ARGS[@]} )); then
-        prefix+=-$(printf '%s\n' "${BUILD_ARGS[@]}" | shasum | cut -c1-8)
-    fi
-    echo "$prefix"
+# Pinned zig: a plain PATH can reach Homebrew's older zig before the ~/.local/bin shim
+ZIG=zig
+[[ -x "$HOME/.local/bin/zig" ]] && ZIG=$HOME/.local/bin/zig
+# deploy/lab-exp.sh runs this script from a temp worktree: binaries and zig's cache stay
+# in the main checkout, so they outlive it
+STORE=${LAB_STORE:-$ROOT/zig-out/lab-run}
+CACHE=${ZIG_LOCAL_CACHE_DIR:-$ROOT/.zig-cache}
+COMMIT=
+PIN=
+
+# "blob path" per build input under src, build.zig and build.zig.zon: at commit $1, else
+# in directory $2 (the working tree, untracked files too)
+inputs() {
+    local paths=(src build.zig build.zig.zon)
+    if [[ -n "$1" ]]; then
+        git -C "$ROOT" ls-tree -r --format='%(objectname) %(path)' "$1" -- "${paths[@]}"
+    else
+        local names
+        if [[ "$2" == "$ROOT" ]]; then
+            names=$(cd "$ROOT" && git ls-files -co --exclude-standard -- "${paths[@]}" \
+                | while IFS= read -r f; do [[ -f "$f" ]] && echo "$f"; done)
+        else
+            names=$(cd "$2" && find "${paths[@]}" -type f)
+        fi
+        paste -d ' ' <(cd "$2" && git -C "$ROOT" hash-object --stdin-paths \
+            <<< "$(sed "s|^|$2/|" <<< "$names")") - <<< "$names"
+    fi | LC_ALL=C sort -k 2
 }
 
-# Where `build` puts BIN for HOST: `zig build lab` installs a host build in bin and the
-# gpu-box one in gpu-box
+# The binary store key: the inputs (inputs' arguments), the build args, and the files of
+# any build arg naming an absolute path (a lab agent's candidate outside the tree)
+key() {
+    local a v f
+    {
+        echo "lab-run store 1"
+        inputs "$@"
+        for a in ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}; do
+            echo "arg $a"
+            [[ "$a" == -D*=* ]] || continue
+            v=${a#*=}
+            [[ "$v" == /* ]] || continue
+            [[ -e "$v" ]] || continue
+            find "$v" -type f | LC_ALL=C sort | while IFS= read -r f; do
+                echo "$(git hash-object "$f") $f"
+            done
+        done
+    } | shasum | cut -c1-16
+}
+
+# Where `build` puts BIN for HOST in the store dir $1: `zig build lab` installs a host
+# build in bin and the gpu-box one in gpu-box
 binpath() {
     local dir=bin
-    [[ "$2" == meiolol-lab && "$1" == gpu-box ]] && dir=gpu-box
-    echo "$(prefix "$1")/$dir/$2"
+    [[ "$3" == meiolol-lab && "$2" == gpu-box ]] && dir=gpu-box
+    echo "$1/$dir/$3"
 }
 
 build() {
-    local host=$1 bin=$2
-    local args=(--prefix "$(prefix "$host")" -Doptimize=ReleaseFast)
+    local host=$1 bin=$2 prefix=$3 src=$4
+    local args=(--prefix "$prefix" -Doptimize=ReleaseFast)
     args+=(${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"})
-    if [[ "$bin" == meiolol-lab ]]; then
-        args+=(lab)
+    if [[ "$bin" == meiolol-lab && "$host" == gpu-box ]]; then
+        args+=(lab-gpu-box)
+    elif [[ "$bin" == meiolol-lab ]]; then
+        args+=(lab-native)
     elif [[ "$host" == gpu-box ]]; then
         args+=(-Dtarget=x86_64-linux-musl -Dcpu=x86_64_v3)
     fi
-    (cd "$SRC" && zig build "${args[@]}" --cache-dir "$ROOT/.zig-cache" >&2)
+    (cd "$src" && "$ZIG" build "${args[@]}" --cache-dir "$CACHE" >&2)
+}
+
+# Holds an exclusive lock on file $1 on fd 8 until `exec 8>&-` (perl: the Mac has no
+# flock(1); the lock lives on the shared open file, so it outlasts perl)
+lock8() {
+    exec 8>> "$1"
+    perl -MFcntl=:flock -e 'open(my $f, q{>&=}, 8) or die; flock($f, LOCK_EX) or die'
+}
+
+# Prints the store dir holding BIN for HOST built from the inputs keyed KEY (from commit
+# COMMIT, else the working tree), building it unless BUILD is 0. Builds take one lock and
+# go through one mirror dir: the inputs are copied to a stage first and keyed there, so a
+# file another session saves mid-build can't make a binary that matches no key, and the
+# mirror's fixed path keeps zig's cache warm. A finished dir has `done` and is never
+# written again. The key printed can differ from KEY when the tree moved on since
+ensure() {
+    local host=$1 bin=$2 key=$3 commit=$4 build=$5
+    local dir=$STORE/$key/$host-$bin stage
+    if [[ ! -f "$dir/done" ]]; then
+        (( build )) || {
+            echo "no binary $key for $host $bin: start once without --no-build/--bin" >&2
+            return 1
+        }
+        mkdir -p "$STORE"
+        lock8 "$STORE/build.lock"
+        stage=$(mktemp -d)
+        if [[ -n "$commit" ]]; then
+            git -C "$ROOT" archive "$commit" -- src build.zig build.zig.zon | tar -x -C "$stage"
+        else
+            (cd "$ROOT" && git ls-files -co --exclude-standard -- src build.zig build.zig.zon \
+                | while IFS= read -r f; do [[ -f "$f" ]] && echo "$f"; done \
+                | rsync -a --files-from=- . "$stage/")
+            key=$(key "" "$stage")
+            dir=$STORE/$key/$host-$bin
+        fi
+        if [[ ! -f "$dir/done" ]]; then
+            echo "building $key for $host $bin" >&2
+            local harness
+            harness=$(inputs "" "$stage" | grep -v ' src/lab/cand/' | shasum | cut -c1-16)
+            # zig-pkg: zig 0.17 keeps fetched packages (dvui, sqlite: ~560 MB) in the
+            # build root; a fresh tree per build unpacked them all again (minutes)
+            # The main checkout's, also when ROOT is deploy/lab-exp.sh's temp worktree
+            local pkg
+            pkg=$(dirname "$(git -C "$ROOT" rev-parse --path-format=absolute \
+                --git-common-dir)")/zig-pkg
+            mkdir -p "$STORE/tree"
+            [[ -L "$STORE/tree/zig-pkg" ]] || rm -rf "$STORE/tree/zig-pkg"
+            ln -sfn "$pkg" "$STORE/tree/zig-pkg"
+            rsync -a --delete --checksum --exclude /zig-pkg "$stage/" "$STORE/tree/"
+            rm -rf "$dir"
+            if ! build "$host" "$bin" "$dir" "$STORE/tree"; then
+                rm -rf "$dir" "$stage"
+                exec 8>&-
+                echo "build failed: not started" >&2
+                return 1
+            fi
+            echo "$harness" > "$dir/harness"
+            touch "$dir/done"
+        fi
+        rm -rf "$stage"
+        exec 8>&-
+    fi
+    # Newest first in prune's eyes
+    touch "$STORE/$key"
+    echo "$dir"
+}
+
+# Prints "snap PATH HASH" when PATH on the host is a snapshot dir: a hash of its input
+# files' names and sizes, the same on both hosts' copies. A copy lacking seat_stats.tsv
+# (the Mac's on 2026-10-13, which turned win-comp into plain ratings) gets another hash
+# shellcheck disable=SC2016 # expands on the host
+snapcmd() {
+    echo 'd='"$1"'; [[ -f $d/meiolol.db ]] || exit 0
+        h=$(cd $d && for f in meiolol.db raw.db timeline.db seat_stats.tsv mastery_pre.tsv \
+            legendaries.tsv; do [[ -f $f ]] && echo "$f $(( $(wc -c < $f) ))"; done \
+            | { sha1sum 2> /dev/null || shasum; } | cut -c1-16)
+        echo "snap '"$1"' $h"'
+}
+
+# Keeps the store to the newest 40 keys, and anything used in the last 3 days
+prune() {
+    # shellcheck disable=SC2012 # key dirs: hex names only
+    ls -t "$STORE" 2>/dev/null | tail -n +41 | while IFS= read -r k; do
+        [[ "$k" =~ ^[0-9a-f]{16}$ ]] || continue
+        [[ -n "$(find "$STORE/$k" -maxdepth 0 -mtime +3)" ]] && rm -rf "${STORE:?}/$k"
+    done
 }
 
 start() {
@@ -116,7 +246,9 @@ start() {
         case "$1" in
             --meiolol) bin=meiolol ;;
             --no-build) build=0 ;;
-            --head) HEAD_ONLY=1 ;;
+            --head) COMMIT=HEAD ;;
+            --commit) COMMIT=$2; shift ;;
+            --bin) PIN=$2; shift ;;
             --build-arg) BUILD_ARGS+=("$2"); shift ;;
             --with) WITH+=("$2"); shift ;;
             --res) RES=$2; shift ;;
@@ -156,20 +288,28 @@ start() {
         exit 1
     fi
     (( DRY )) && exit 0
-    local path
-    path=$(binpath "$host" "$bin")
+    local commit="" key dir path
+    if [[ -n "$COMMIT" ]]; then
+        commit=$(git -C "$ROOT" rev-parse --verify -q "$COMMIT^{commit}") \
+            || { echo "--commit: no commit $COMMIT"; exit 2; }
+    fi
+    if [[ -n "$PIN" ]]; then
+        [[ "$PIN" =~ ^[0-9a-f]{16}$ ]] || { echo "--bin: a 16-digit KEY from a start"; exit 2; }
+        [[ -z "$commit" ]] || { echo "--bin with --head/--commit: give one"; exit 2; }
+        key=$PIN build=0
+    else
+        key=$(key "$commit" "$ROOT")
+    fi
+    dir=$(ensure "$host" "$bin" "$key" "$commit" "$build") || exit 1
+    key=$(basename "$(dirname "$dir")")
+    path=$(binpath "$dir" "$host" "$bin")
+    [[ -x "$path" ]] || { echo "no binary at $path"; exit 1; }
+    echo "binary $key"
+    prune
     local tmp
     tmp=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now: tmp is local
     trap "rm -rf '$tmp'" RETURN
-    if (( HEAD_ONLY )); then
-        mkdir "$tmp/src"
-        git -C "$ROOT" archive HEAD | tar -x -C "$tmp/src"
-        SRC=$tmp/src
-    fi
-    # A failed build must not start a stale binary left at the prefix
-    if (( build )) && ! build "$host" "$bin"; then echo "build failed: not started"; exit 1; fi
-    [[ -x "$path" ]] || { echo "no binary at $path"; exit 1; }
 
     local run
     run=$(date -u +%Y%m%dT%H%M%SZ)-$name
@@ -180,8 +320,22 @@ start() {
         # comparisons need both sides from the same one. gpu-box: build.zig's gpu_box
         # query and --meiolol's -Dcpu, both x86_64_v3 since 2026-10-13
         if [[ "$host" == gpu-box ]]; then echo "cpu x86_64_v3"; else echo "cpu native"; fi
-        echo "head $(git -C "$ROOT" rev-parse HEAD)"
-        if (( HEAD_ONLY )); then echo "dirty 0 files (--head)"; else
+        # src: the store key, the same for any two runs built from the same inputs;
+        # harness: the same without the candidate (src/lab/cand, -Dcand), what
+        # `meiolol-lab compare` needs equal on both sides
+        echo "src $key"
+        echo "harness $(cat "$dir/harness" 2> /dev/null || echo -)"
+        local w
+        # shellcheck disable=SC2048 # the words as the host's bash will split them
+        for w in $*; do
+            w=${w//[\'\"\\]/}
+            [[ "$w" == *snap-* && "$w" =~ ^[A-Za-z0-9_./~-]+$ ]] || continue
+            on "$host" "$(snapcmd "$w")" 2> /dev/null || true
+        done
+        if [[ -n "$commit" ]]; then echo "head $commit"; echo "dirty 0 files (--commit)"
+        elif [[ -n "$PIN" ]]; then echo "head - (--bin)"; echo "dirty - (--bin)"
+        else
+            echo "head $(git -C "$ROOT" rev-parse HEAD)"
             echo "dirty $(git -C "$ROOT" status --porcelain -- src build.zig | wc -l) files"
         fi
         echo "args $*"
@@ -192,19 +346,45 @@ start() {
     # Seconds of running time expected (deploy/lab-place.pl), and why: status checks it
     [[ "$predicted" == - ]] || printf "%s\t%s\n" "$predicted" "$why" > "$tmp/predicted"
     : > "$tmp/src.diff"
-    (( HEAD_ONLY )) || git -C "$ROOT" diff HEAD -- src build.zig > "$tmp/src.diff"
+    [[ -n "$commit$PIN" ]] || git -C "$ROOT" diff HEAD -- src build.zig > "$tmp/src.diff"
     # caffeinate: a Mac asleep mid-run looks like a hung run
     local awake=""
     [[ "$host" == mac ]] && awake="caffeinate -i "
     # $$ is the process group: setpgrp below makes this bash its leader. The lock is on
     # fd 9, which the job inherits, so it is held until the job and this bash are gone.
-    # perl, not flock(1): the Mac has none
-    local lock=""
-    [[ "$RES" == none ]] || lock="mkdir -p ~/ml/locks
-exec 9>> ~/ml/locks/$RES
-echo $RES > queued
-perl -MFcntl=:flock -e 'open(my \$f, q{>&=}, 9) or die; flock(\$f, LOCK_EX) or die' || exit 1
-rm queued"
+    # perl, not flock(1): the Mac has none. Slots: RES has N locks (~/ml/locks/RES.slots on
+    # the host, default 4), so N runs of a resource share the PC; the job takes the first
+    # free one. A cpu slot pins the job to its share of the cores (taskset; par.zig and
+    # Zig's thread pool size themselves from the affinity mask), so runs don't fight over
+    # cores and results don't change: par.zig's loops match serially whatever the count
+    local lock="" pin=""
+    # shellcheck disable=SC2016 # expands on the host
+    [[ "$RES" == none ]] || lock='mkdir -p ~/ml/locks
+n=$(cat ~/ml/locks/@RES@.slots 2> /dev/null || echo 4)
+echo @RES@ > queued
+slot=
+while [[ -z $slot ]]; do
+    for (( i = 0; i < n; i++ )); do
+        exec 9>> ~/ml/locks/@RES@.$i
+        if perl -MFcntl=:flock -e '"'"'open(my $f, q{>&=}, 9) or die; flock($f, LOCK_EX | LOCK_NB) or exit 1'"'"'; then
+            slot=$i
+            break
+        fi
+        exec 9>&-
+    done
+    [[ -n $slot ]] || sleep 5
+done
+rm queued
+echo "@RES@.$slot of $n" > slot'
+    # shellcheck disable=SC2016 # expands on the host
+    [[ "$RES" == cpu ]] && lock+='
+pin=
+if command -v taskset > /dev/null; then
+    k=$(( $(nproc) / n )); lo=$(( slot * k ))
+    pin="taskset -c $lo-$(( lo + k - 1 ))"
+    echo "cores $lo-$(( lo + k - 1 ))" >> slot
+fi' pin='$pin '
+    lock=${lock//@RES@/$RES}
     cat > "$tmp/job.sh" <<EOF
 #!/usr/bin/env bash
 cd "\$(dirname "\$0")"
@@ -212,7 +392,7 @@ echo \$\$ > job.pgid
 rm -f started
 $lock
 date -u +%FT%TZ > started
-${awake}nice -n 10 ./$bin $*
+${awake}${pin}nice -n 10 ./$bin $*
 echo \$? > exit
 date -u +%FT%TZ > ended
 EOF
@@ -287,9 +467,68 @@ status() {
     fi
 }
 
+# Run $1's state on its host: exit N, stopped, died, running (queued and paused too) or
+# missing. No job.pgid yet: the job is still starting
+# shellcheck disable=SC2016 # expands on the host
+state_cmd() {
+    echo 'cd '"$RUNS/$1"' 2>/dev/null || { echo missing; exit; }
+        if [[ -f exit ]]; then echo "exit $(cat exit)"; elif [[ -f stopped ]]; then echo stopped
+        else pg=$(cat job.pgid 2>/dev/null)
+            if [[ -z $pg ]] || kill -0 -- -$pg 2>/dev/null; then echo running; else echo died; fi
+        fi'
+}
+
+# Blocks until every RUN has ended (on whichever host has it), then prints each one's
+# state and RESULT lines. Exit 0 when all exited 0, 3 on timeout, else 1
+wait_runs() {
+    local runs=() hosts=() states=() timeout=0 i h st pending t0=$SECONDS
+    while (( $# )); do
+        case "$1" in
+            --timeout) timeout=${2:-}; shift ;;
+            *) check_run "$1"; runs+=("$1") ;;
+        esac
+        shift
+    done
+    (( ${#runs[@]} )) || { echo "wait RUN... [--timeout S]"; exit 2; }
+    [[ "$timeout" =~ ^[0-9]+$ ]] || { echo "--timeout: seconds"; exit 2; }
+    for i in "${!runs[@]}"; do
+        hosts[i]=
+        for h in mac gpu-box; do
+            if on "$h" "[[ -d $RUNS/${runs[i]} ]]" 2> /dev/null; then hosts[i]=$h; break; fi
+        done
+        [[ -n "${hosts[i]}" ]] || { echo "${runs[i]}: on neither host"; exit 2; }
+        states[i]=
+    done
+    while :; do
+        pending=0
+        for i in "${!runs[@]}"; do
+            [[ -z "${states[i]}" ]] || continue
+            st=$(on "${hosts[i]}" "$(state_cmd "${runs[i]}")" 2> /dev/null) || st=unreachable
+            case "$st" in
+                exit*|stopped|died|missing) states[i]=$st ;;
+                *) pending=1 ;;
+            esac
+        done
+        (( pending )) || break
+        if (( timeout && SECONDS - t0 >= timeout )); then break; fi
+        sleep 20
+    done
+    local status=0
+    for i in "${!runs[@]}"; do
+        st=${states[i]:-not ended (timeout)}
+        echo "${runs[i]} on ${hosts[i]}: $st"
+        on "${hosts[i]}" "grep -a '^RESULT' $RUNS/${runs[i]}/log | tail -n 5" 2> /dev/null \
+            | sed 's/^/  /' || true
+        if [[ -z "${states[i]}" ]]; then status=3
+        elif [[ "$st" != "exit 0" && $status == 0 ]]; then status=1; fi
+    done
+    return $status
+}
+
+main() {
 case "${1:-}" in
     start)
-        (( $# >= 3 )) || { sed -n '8,15p' "$0"; exit 2; }
+        (( $# >= 3 )) || { sed -n '8,16p' "$0"; exit 2; }
         # No HOST (start NAME [OPTIONS] -- ARGS): placed by predicted finish, as auto
         if [[ "$2" != mac && "$2" != gpu-box && "$2" != auto && "$3" == -* ]]; then
             set -- start auto "${@:2}"
@@ -302,6 +541,7 @@ case "${1:-}" in
             for h in gpu-box mac; do echo "== $h"; status "$h" || echo "unreachable"; done
         fi
         ;;
+    wait) shift; wait_runs "$@" ;;
     logs)
         check_host "$2"
         check_run "${3:-}"
@@ -360,5 +600,11 @@ case "${1:-}" in
             && systemctl --user restart $WATCH && systemctl --user start meiolol-archive-pull.timer \
             && systemctl --user is-active $WATCH meiolol-archive-pull.timer"
         ;;
-    *) sed -n '8,15p' "$0"; exit 2 ;;
+    *) sed -n '8,16p' "$0"; exit 2 ;;
 esac
+}
+
+# Bash reads a script as it runs: a commit rewriting this file under a running start would
+# run the new file's bytes from the old offset. main is parsed whole before it runs
+main "$@"
+exit

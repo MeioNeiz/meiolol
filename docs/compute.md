@@ -35,29 +35,51 @@ experiments run on:
 ## Runs (deploy/lab-run.sh)
 
 ```
-deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --no-build]
-    [--res cpu|gpu|none|auto] [--dry-run] -- ARGS...
+deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --commit SHA | --bin KEY]
+    [--no-build] [--res cpu|gpu|none|auto] [--dry-run] -- ARGS...
+deploy/lab-run.sh wait RUN... [--timeout S]
 deploy/lab-run.sh status [HOST] | logs HOST RUN [N] | stop HOST RUN | restart HOST RUN
 deploy/lab-run.sh pull HOST RUN
 deploy/lab-run.sh watch-install
 ```
 
-- Builds from the working tree (experiments are often uncommitted), or with --head
-  from committed HEAD in a temp tree (the shared tree is often mid-edit); a failed build
-  never starts. meiolol-lab by
-  default (`zig build lab`, ReleaseFast: host build for mac, x86_64-linux-gnu for the
-  gpu-box), or meiolol with --meiolol (musl, x86_64_v3 on the gpu-box)
+- Builds from the working tree (experiments are often uncommitted), --head from
+  committed HEAD, --commit SHA from that commit; a failed build never starts. Only the
+  target host's binary: `zig build lab-gpu-box` (x86_64-linux-gnu, CUDA) or lab-native,
+  or meiolol with --meiolol (musl, x86_64_v3 on the gpu-box)
+- Binary store, zig-out/lab-run/KEY: KEY hashes every build input (files under src,
+  build.zig, build.zig.zon, build args and the files of a -D arg naming an absolute
+  path). Built once per KEY and never replaced, so a second start of the same inputs is
+  instant and two sessions starting the same commit share one build. Builds take one
+  lock and go through one fixed mirror tree (zig-out/lab-run/tree, rsync --checksum of a
+  copy of the inputs, keyed after copying, so an edit landing mid-build can't produce a
+  binary under the wrong key; fixed path keeps zig's cache warm; zig-pkg linked to the
+  checkout's, where zig 0.17 keeps fetched packages: a fresh temp tree per build unpacked
+  ~560 MB again, the 5-13 min --head builds of 2026-10-13). Every start prints
+  `binary KEY`: --bin KEY starts that binary whatever the tree holds now (lab-sweep's
+  jobs after the first), --no-build the current inputs' binary if built, never a build.
+  Newest 40 keys kept, plus any used in the last 3 days
+- `wait RUN...` blocks until each run has ended on whichever host has it, then prints
+  its state and RESULT lines: exit 0 when all exited 0, 3 on --timeout, else 1. Use it
+  instead of until-loops over status
 - Run dir ~/ml/runs/<UTC stamp>-<name> on the host: the binary, job.sh, log, meta (host,
-  binary hash, HEAD, dirty count, args), src.diff (src and build.zig vs HEAD), started,
+  binary hash, src KEY, harness (KEY without the candidate: src/lab/cand and -Dcand),
+  snap PATH HASH per snapshot dir in the args (input files' names and sizes, equal on
+  both hosts' copies), HEAD, dirty count, args), src.diff (src and build.zig vs HEAD), started,
   ended, exit, pauses.log
 - ARGS are joined and run by bash in the run dir on the host: ~ and globs expand there,
   relative outputs land in the run dir, `pull` copies it (minus the binary) to
   data/runs/RUN here
 - Jobs run under nice 10 in their own process group (`stop` sends TERM to the group)
-- Queue: a run waits for its resource's lock on the host (~/ml/locks/cpu or gpu) before
-  `started`; status shows it "queued". cpu by default (every run uses all cores), --res
-  gpu for GPU work (it can share the PC with a cpu run), none to skip. lab-exp.sh counts
-  only running time toward its budget, so queued runs aren't killed
+- Queue: a run waits for a slot of its resource on the host before `started`; status
+  shows it "queued". A resource has N slots (locks ~/ml/locks/RES.0..N-1, N in
+  ~/ml/locks/RES.slots, default 4), so N runs of it share the PC; the run dir's `slot`
+  says which ("cpu.2 of 4"). A cpu slot pins its run to nproc/N cores (taskset: Zig's
+  thread pool and par.zig size themselves from the affinity mask, and par.zig's loops
+  give the same results whatever the count). cpu by default, --res gpu for GPU work
+  (it shares the PC with cpu runs; the 3080's 10 GiB holds several of our nets), none
+  to skip. lab-exp.sh counts only running time toward its budget, so queued runs aren't
+  killed
 - WSL restarts: lab-watch.sh, starting with WSL, runs again (twice at most) any run that
   was live when WSL went down; `restart` does it by hand. A run over ~1 h should keep
   checkpoints in its run dir and resume from them (none does yet: runs take minutes)

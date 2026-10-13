@@ -117,12 +117,19 @@ start() {
         echo "$plan" > "$dir/trials.tsv"
         printf 'job\trun\ttrials\tcmd\n' > "$dir/jobs.tsv"
     fi
-    local k out run build=()
+    local k out run key o kept
     for (( k = skip; k < ${#jobs[@]}; k++ )); do
-        # Built once; the rest reuse that binary (lab-run.sh copies it into each run dir)
-        (( k == skip )) || build=(--no-build)
+        # Built once; the rest start that binary by its store key, whatever the tree
+        # holds by then (lab-run.sh copies it into each run dir)
+        if (( k == skip + 1 )); then
+            key=$(sed -n 's/^binary \([0-9a-f]*\)$/\1/p' <<< "$out")
+            [[ -n "$key" ]] || { echo "no binary key from the first start"; exit 1; }
+            kept=()
+            for o in ${opts[@]+"${opts[@]}"}; do [[ "$o" == --head ]] || kept+=("$o"); done
+            opts=(${kept[@]+"${kept[@]}"} --bin "$key")
+        fi
         out=$("$RUN" start "$HOST" "$sweep-j$(printf %02d $((k + 1)))" --res "$res" \
-            ${opts[@]+"${opts[@]}"} ${build[@]+"${build[@]}"} -- "${jobs[k]}") \
+            ${opts[@]+"${opts[@]}"} -- "${jobs[k]}") \
             || { echo "$out"; exit 1; }
         run=$(sed -n 's/^started \([^ ]*\) on .*/\1/p' <<< "$out")
         [[ -n "$run" ]] || { echo "$out"; exit 1; }

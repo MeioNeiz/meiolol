@@ -4,6 +4,9 @@
 # deploy/hooks/reference-transaction; log in .git/meiolol-deploy.log. Pushes during a
 # deploy coalesce into one more run.
 set -u
+# Zig through the ~/.local/bin shim (build.zig.zon's pinned version): a plain PATH can
+# find Homebrew's older zig first
+export PATH="$HOME/.local/bin:$PATH"
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 state=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/meiolol-deploy
 lock=$state.lock

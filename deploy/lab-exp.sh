@@ -111,7 +111,9 @@ start_clean() {
     rm -rf "${tree:?}/$cand"
     mkdir -p "$tree/$cand"
     cp "$src"/*.zig "$tree/$cand/"
-    out=$(ZIG_LOCAL_CACHE_DIR="$ROOT/.zig-cache" "$tree/deploy/lab-run.sh" start "$HOST" "$name" \
+    # The store and zig's cache in this checkout: the temp tree goes after the start
+    out=$(ZIG_LOCAL_CACHE_DIR="$ROOT/.zig-cache" LAB_STORE="$ROOT/zig-out/lab-run" \
+        "$tree/deploy/lab-run.sh" start "$HOST" "$name" \
         --build-arg "-Dcand=$cand" --with "$tree/$cand" --literal -- "$@") || status=$?
     git -C "$ROOT" worktree remove --force "$tree"
     echo "$out"

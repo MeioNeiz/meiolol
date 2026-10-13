@@ -9,6 +9,9 @@ name=$1 rev=$2
 shift 2
 # Hooks may export these; they would point checkout --force and clean at the main tree
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_PREFIX
+# Zig through the ~/.local/bin shim (build.zig.zon's pinned version): a plain PATH can
+# find Homebrew's older zig first
+export PATH="$HOME/.local/bin:$PATH"
 repo=$(dirname "$0")
 common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir) || exit 1
 tree="$common/meiolol-build/$name"
