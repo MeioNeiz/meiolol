@@ -105,16 +105,17 @@ How to write a line:
   held-out win predictions; the largest single-option effects were about 1.5 percentage
   points either way, within noise. Site: no win claims for runes, spells or autofill.
   Evidence: docs/model.md "Field ranking" (A1)
-- 2026-10-13 (early): Knowing players' earlier games helps more the more of them we
-  have: with none of the ten players having played their champion before in our data
-  it adds nothing, with 1-2 such players it improves predictions by about 2-3.5
-  milli-nats per game, and with 3 or more by about 4-5. Two more days of data raised
-  the average gain from 2.5 to 4.0, mostly because more games now have such players.
-  Sure: dev folds only, 53k and 90k games, the same folds and model for both; games
-  with more history also differ in time and in how active their players are, so this
-  is not a clean dose-response. Site: nothing (internal scope). Evidence: meiolol-4a,
-  f7's player-exp-cal and player-rat-cal preds on snap-20261012T2055Z and
-  snap-20261013T1954Z (scratchpad histgain.py; buckets as f7's calibration)
+- 2026-10-13 (early, pending 4b's audit): Knowing players' earlier games helps more the
+  more of them we have: with none of the ten players having played their champion before
+  in our data it adds nothing, with 1-2 such players it improves predictions by about
+  2-3.5 milli-nats per game, and with 3 or more by about 4-5. Two more days of data
+  raised the average gain from 2.5 to 4.0, mostly because more games now have such
+  players. Sure: dev folds only, 53k and 90k games, the same folds and model for both;
+  games with more history also differ in time and in how active their players are, so
+  this is not a clean dose-response. Site: nothing (internal scope). Evidence:
+  meiolol-4a, f7's player-exp-cal and player-rat-cal preds on snap-20261012T2055Z and
+  snap-20261013T1954Z (gpu-box ~/ml/analysis/histgain-4a.py; buckets as f7's
+  calibration)
 - 2026-10-13: On games we held back, the ten champions alone pick the winner 53.2% of
   the time, and adding how much each player has played before the game (earlier games
   and wins on their champion, recent games, win rate, KDA, lane gold and deaths) lifts
