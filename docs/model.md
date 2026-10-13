@@ -1491,7 +1491,7 @@ protocol, and never touches the test set.
   tenths pooled (36,909 scored rows, 33,331 games: the tenths overlap), intervals 95%
   clustered by game; the net is the 3-seed mean. Rows in docs/nn-results/ldai.tsv
 
-Results (dev only; audit by meiolol-4b pending, nothing in learned.md yet):
+Results (dev only; audited by meiolol-4b: every number reproduces from preds.tsv):
 
 | ratings scored on | fit games | games | log loss | accuracy | AUC |
 | --- | --- | --- | --- | --- | --- |
@@ -1506,28 +1506,37 @@ Results (dev only; audit by meiolol-4b pending, nothing in learned.md yet):
 | small net - win-comp | +0.00055 ± 0.00047 | +0.00050 ± 0.00057 |
 | win-comp - ratings | -0.00055 ± 0.00037 | -0.00048 ± 0.00041 |
 
-- No inflation seen here: on EUW1 games, ratings score worse on a random tenth than on
-  the time split (0.69174 vs 0.68969, AUC 0.532 vs 0.550; different games, so unpaired,
-  ±0.0015 and ±0.0019 log loss). Every platform together: 53.07%, AUC 0.543. Nothing
-  near LoLDraftAI's 55-56%. Not like for like: the random tenth spreads over the whole
-  dev era (older games), dev-val is its newest EUW1 games. It conflicts with the exp
-  comparison above (1abb887: a random tenth of all non-test games, selection period
-  included, one seed: 54.15%, AUC 0.556 vs 53.70%, 0.549), which learned.md cites as
-  "flatters by about half a point". Open: a paired check on the same scored games
+- The random split flatters (4b's audit, same games): on the 2,276 dev-val games that
+  also fall in a random tenth (2,545 rows), ratings fit on the random split beat ratings
+  fit on the time split by -0.00269 ± 0.00155 a game (accuracy +2.4 ± 1.5 points); with
+  the random fit cut to the time fit's size (`--fraction 0.807`, 88.7k games, runs
+  *-ldaiall-ratings-r*-size) still -0.00261 ± 0.00165. So the gain is from fitting on
+  newer and same-period games, not more of them. Same direction as 1abb887's exp
+  comparison (learned.md's "flatters by about half a point" stands). On the forward
+  folds' games in the tenths (12,183 games, every platform) a tie: -0.00049 ± 0.00095.
+  Fixed before looking: dev-val primary, upper bound < 0 reads as flatters
+- Unpaired, the random tenth scores worse than dev-val (EUW1 0.69174 vs 0.68969, AUC
+  0.532 vs 0.550): that gap reflects which games each scores (the tenth spreads over the
+  whole dev era, dev-val is its newest EUW1 games), not the split. Every platform:
+  53.07%, AUC 0.543. Nothing near LoLDraftAI's 55-56%
 - The small net never beats its candidate: ties ratings on the random split, worse than
   win-comp there (+0.00055 ± 0.00047), and worse than both on dev-val (+0.00060 ±
   0.00052 vs ratings, +0.00030 ± 0.00078 vs win-comp). Single seeds: none below 0 by
   more than 0.00012
 - win-comp beats ratings on the random split, every platform (-0.00055 ± 0.00037; EUW1
-  alone -0.00013 ± 0.00064, a tie), as on the forward folds (-0.00057 ± 0.00028); a tie
-  on dev-val (+0.00030 ± 0.00059)
+  alone -0.00013 ± 0.00064, a tie), consistent with the forward folds (-0.00057 ±
+  0.00028) but at the ~0.0005 A/A floor ("Noise floor on the folds"), so not a separate
+  confirmation; a tie on dev-val (+0.00030 ± 0.00059)
 - The filters cost, not help: on the games both runs score, ratings with the filters
   are worse by +0.00064 ± 0.00041 (random) and +0.00014 ± 0.00077 (time, a tie). They
   drop 0.25% of games by LoLDraftAI's rules, and 29% for having no timeline to judge
-  (36% off EUW1, 11% EUW1), so fit games fall by 30% (110k to 78k): mostly fewer games
-- So on our data neither the split nor the filters gets near LoLDraftAI's 55-56%.
-  Left: its checkpoint picked on its test split, its larger window (52 patches), its own
-  data mix; none reproduced here
+  (11% on EUW1, 33-38% on other platforms), so fit games fall by 30% (110k to 78k) and
+  the platform mix of fit and scored games shifts towards EUW1: fewer games and a
+  different mix, not cleaner games
+- So on our data the random split flatters by about 0.0027 a game on the same games,
+  the filters don't help, and neither gets near LoLDraftAI's 55-56%. Left: its
+  checkpoint picked on its test split, its larger window (52 patches), its own data
+  mix; none reproduced here
 
 #### Results dashboard (meiolol-2a)
 
@@ -1953,6 +1962,13 @@ pair_games from Scorer.value; the page's JS must match them to 0.01.
   snapshot, the first with rank_start in dev: report coverage by bracket first. With the
   16.21 rerun, report per fold the share of scored games on a patch the fit has seen
   (unseen patches get no offset, so a null there is not a test; verifier, meiolol-4b)
+
+- Net exporter for the tester (meiolol-ba/d8, 2026-10-13): on hold until a net beats
+  ratings (and win-comp) on the folds; none does yet (LoLDraftAI's evaluation, nets
+  tables). Formats agreed when one does: f1's concat-pool net (R[role] added,
+  antisymmetric, residual, seed list, ReLU, empty slot = game-weighted mean input);
+  35's set net (x = p(12) ++ role one-hot(5) ++ optional E, phi dense + ReLU, mean pool,
+  rho on [t_own; t_other], f = w.h, antisymmetric, + a x candidate logit)
 
 - Pretrained embeddings (meiolol-5b, 2026-10-13; `meiolol-lab pretrain`, model.md
   "Pretrained champion-role embeddings"): borderline, no test look (consistent sign on
