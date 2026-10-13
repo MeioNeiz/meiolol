@@ -106,8 +106,8 @@ shows. When an agent hands over, get the successor's name and tell the others.
 - Always through lab-run, never a binary run directly or a background shell (no meta,
   no lock, dies with its pane). Wait with `deploy/lab-run.sh wait RUN...`, not loops.
   Same inputs build once: repeat starts reuse `binary KEY` (--bin KEY pins it)
-- Test looks are counted by the harness, not by hand: exp final and compcheck, fields
-  and style --final append to SNAP/test-looks.tsv on the gpu-box before scoring (a
+- Test looks are counted by the harness, not by hand: exp final, compcheck, fields
+  and style --final and `meiolol carry --final` append to SNAP/test-looks.tsv on the gpu-box before scoring (a
   crashed look counts). `meiolol-lab looks SNAP` prints it; snap-20261012T2055Z
   back-filled to 7 looks from run meta (2026-10-13). Python or other scoring of nnexport's
   test rows (split 10) isn't recorded yet: add a line by hand (look, utc, run, command)
