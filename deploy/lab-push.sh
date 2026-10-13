@@ -4,11 +4,12 @@
 # phone) and the admin page's Training tab. Each call stages the view (page from
 # deploy/training, runs.tsv, each run's metrics.tsv and log tail) and uploads it when it
 # changed, or every 5 min while a run is live so the page can tell a quiet run from a Mac
-# that went to sleep. Also sent: docs/learned.md and docs/model.md from this checkout, each
-# lab campaign's digest.md and hypotheses.tsv (~/ml/agent/<campaign>, LAB_CANDS), and a
-# run's result.tsv, findings.tsv and effects-*.tsv (meiolol-lab); and the admin Draft
-# tester's models (draft-model.json, lane-model.json and their -ref.json) from the export
-# a human chose with `use`, never just the newest (a smoke or agent run may export one).
+# that went to sleep. Also sent: docs/learned.md, docs/model.md and docs/nn-results/*.tsv
+# (nn.txt lists them) from this checkout, each lab campaign's digest.md and hypotheses.tsv
+# (~/ml/agent/<campaign>, LAB_CANDS), and a run's result.tsv, findings.tsv and
+# effects-*.tsv (meiolol-lab); and the admin Draft tester's models (draft-model.json,
+# lane-model.json and their -ref.json) from the export a human chose with `use`, never
+# just the newest (a smoke or agent run may export one).
 # The gpu-box (home network only) is staged over ssh at most once a minute; when
 # unreachable its last staged copy is sent and hosts.tsv says when it was last reached.
 # launchd calls it every 30 s once installed. Upload: a gzipped tar over ssh with a key
@@ -126,6 +127,9 @@ stage() {
     rm -rf "$out/mac"
     for m in draft lane; do model "$m" "$out"; done
     cp "$ROOT/docs/learned.md" "$ROOT/docs/model.md" "$out/" 2>/dev/null || true
+    mkdir -p "$out/nn"
+    cp "$ROOT"/docs/nn-results/*.tsv "$out/nn/" 2>/dev/null || true
+    (cd "$out/nn" && find . -name '*.tsv' | cut -c3- | sort) > "$out/nn.txt"
     mkdir -p "$out/campaigns"
     for d in "$CAMPAIGNS"/*/; do
         [[ -d "$d" ]] || continue

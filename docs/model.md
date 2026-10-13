@@ -1426,6 +1426,20 @@ protocol, and never touches the test set.
 - Runs (pending): per candidate, `--blocks dev` and `--split random:1|2|3`, each with and
   without `--filter ldai`, `--net small` at defaults (f1 adds its chosen nets)
 
+#### Results dashboard (meiolol-2a)
+
+Admin Models tab, "Neural nets" (#models/nn, src/site/static/admin-nn.js): per question a
+one-line headline, a table (model, against, measured on, change in log loss ± 95%,
+verdict, seeds with the single-seed range, games, source) and an interval chart; scaling
+as log loss against fit games plus each model's gap at each size; the newest learned.md
+"Win" lines since 2026-10-13. Verdict from the interval: better / tie (not detected) /
+worse than the named model; test looks marked.
+- Numbers come from docs/nn-results/<question>.tsv, not from this file: each session
+  appends its rows with its write-up here (format: docs/nn-results/README.md; one file
+  per question so commits by path don't sweep in others' rows). deploy/lab-push.sh sends
+  them as training/nn/ with nn.txt; the page shows them on the next push (30 s)
+- Seeded from f1's table and learning curve (a189f10) and win-comp's folds and test look
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

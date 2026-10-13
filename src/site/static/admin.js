@@ -111,7 +111,7 @@ const hashTab = () => {
   const [t, sub] = location.hash.slice(1).split("/");
   return t === "model" ? ["models", "win"] : t === "training" ? ["models", "all"] : [t || "overview", sub];
 };
-const CATS_KEYS = ["all", "win", "draft", "early", "items", "objectives", "playstyle", "player", "data", "lab"];
+const CATS_KEYS = ["all", "win", "draft", "nn", "early", "items", "objectives", "playstyle", "player", "data", "lab"];
 const ui = {
   tab: hashTab()[0],
   cat: hashTab()[0] === "models" && hashTab()[1] ? hashTab()[1] : stored("cat", "all"),
@@ -1212,7 +1212,7 @@ VIEWS.ingest = body => {
 // learned.md, model.md, lab campaigns, run findings)
 
 const CATS = [
-  ["all", "All"], ["win", "Win (draft)"], ["draft", "Draft tester"], ["early", "Early game"], ["items", "Items"],
+  ["all", "All"], ["win", "Win (draft)"], ["draft", "Draft tester"], ["nn", "Neural nets"], ["early", "Early game"], ["items", "Items"],
   ["objectives", "Objectives"], ["playstyle", "Playstyle"], ["player", "Player"],
   ["data", "Data quality"], ["lab", "Lab campaigns"],
 ];
@@ -1762,7 +1762,7 @@ function allView(body) {
   const cards = grid(sec, "cards");
   const W = winReadings();
   const te = teamEffects();
-  for (const [cat, label] of CATS.slice(1).filter(([k]) => k !== "draft")) {
+  for (const [cat, label] of CATS.slice(1).filter(([k]) => k !== "draft" && k !== "nn")) {
     const items = MODELS.learned[cat] || [];
     const runs = MODELS.runs.filter(r => (cat === "lab" ? r.lab : r.cat === cat));
     const live = runs.filter(r => r.state === "running" || r.state === "paused").length;
@@ -1800,7 +1800,7 @@ VIEWS.models = body => {
   body.append(nav);
   if (!TRAIN && !trainErr && ui.cat !== "draft") body.append(el("p", { class: "muted" }, "Loading runs and findings…"));
   if (trainErr) body.append(el("div", { class: "health bad" }, el("b", {}, "Could not load the training view: "), trainErr));
-  ({ all: allView, win: winView, draft: draftView, early: earlyView, lab: labView }[ui.cat] || (b => categoryView(b, ui.cat)))(body);
+  ({ all: allView, win: winView, draft: draftView, nn: nnView, early: earlyView, lab: labView }[ui.cat] || (b => categoryView(b, ui.cat)))(body);
 };
 
 const shortRun = run => (run || "").replace(/^\d{8}T\d{4}(\d{2})?Z-/, "");

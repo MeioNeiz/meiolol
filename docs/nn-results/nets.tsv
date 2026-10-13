@@ -1,0 +1,11 @@
+# title: Do neural nets beat today's model?
+model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+big net	ratings	folds	-0.00028	0.00039	3	0.00032	0.00054	44353		a189f10	each single seed worse, the 3-seed mean brings it level
+big net	ratings	dev-val	-0.00035	0.00065	3			8500		a189f10
+small net	ratings	folds	0.00066	0.00029	3	0.00078	0.00122	44353		a189f10
+small net	ratings	dev-val	0.00060	0.00052	3			8500		a189f10
+residual on ratings	ratings	folds	-0.00005	0.00007	3	-0.00006	0.00001	44353		a189f10	learns only to shrink ratings' logit to ~0.9
+residual on ratings	ratings	dev-val	0.00001	0.00012	3			8500		a189f10
+big net	win-comp	folds	0.00029	0.00049	3			44353		a189f10
+small net	win-comp	folds	0.00123	0.00040	3			44353		a189f10
+residual on win-comp	win-comp	folds	-0.00004	0.00008	3			44353		a189f10

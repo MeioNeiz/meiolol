@@ -1,0 +1,14 @@
+# title: Does the gap close with more games?
+model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+ratings	-	folds	0.69203		1				25%	a189f10	25% of each fold's fit games
+ratings	-	folds	0.69134		1				50%	a189f10
+ratings	-	folds	0.69090		1				100%	a189f10
+small net	ratings	folds	0.00028	0.00024	3				25%	a189f10
+small net	ratings	folds	0.00043	0.00031	3				50%	a189f10
+small net	ratings	folds	0.00066	0.00029	3				100%	a189f10
+big net	ratings	folds	-0.00004	0.00028	3				25%	a189f10
+big net	ratings	folds	0.00013	0.00029	3				50%	a189f10
+big net	ratings	folds	-0.00028	0.00039	3				100%	a189f10
+residual on ratings	ratings	folds	-0.00004	0.00010	3				25%	a189f10
+residual on ratings	ratings	folds	-0.00005	0.00008	3				50%	a189f10
+residual on ratings	ratings	folds	-0.00005	0.00007	3				100%	a189f10
