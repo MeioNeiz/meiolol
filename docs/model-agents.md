@@ -37,6 +37,9 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | meiolol-fa | box, archive operation, snapshots (weekly Sun 04:00, first 19 Oct, with mastery_pre and coverage report), flex daily count, mastery catch-up, pushes (from meiolol-11 [1f36a8]) |
 | meiolol-47 | overnight code review; shared src/analysis.zig refactor committed (3324cd3..c2b1a73), all analysis files free |
 | meiolol-82 | Riot application text (drafted; waits on Jacob: ownership, privacy.md 24-month retention, meiolol-ef's deploy) |
+| meiolol-2c | comp features coordinator (Jacob, 2026-10-13): champion profiles (damage type mix, tankiness, armour vs MR, CC, utility, range) into the win model so the Draft tester reacts to the draft; api Row.stats (53323f9). Briefs: model.md "Comp features" when results land |
+| meiolol-ea [fc19bb] | comp data: `meiolol-lab seat-stats` (SNAP/seat_stats.tsv from raw.db), rows/harness load on training rows only |
+| meiolol-0d [b5e038] | comp model: src/lab/cand/win-comp (profile prior, team balance, cross-team terms), dev ablation vs ratings; name clashes with the older meiolol-0d, use the ref |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
 shows. When an agent hands over, get the successor's name and tell the others.
