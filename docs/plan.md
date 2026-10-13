@@ -422,6 +422,13 @@ next steps land here.
   1000 gold is worth 1-3 pp on the support, 6-12 on bot; champion effects hold with
   objectives in the state. Review fixes queued: winchance weights (live bug in Your
   games), clustered playstyle intervals, after meiolol-47's refactor commit
+- Draft predictor held-out (meiolol-db, 1abb887, snap-20261012T2055Z test, 10,604 EUW
+  games): champions only 53.2% (AUC 0.544); everything pre-game, internal scope 54.5%
+  (AUC 0.562), -0.0023 ± 0.0022 vs champions, just beyond noise. Random split
+  flatters champions-only by ~0.5 pt (dev 54.15 vs 53.70). Per-champion skill slopes
+  not detected; stored rank leaks (63.8% on dev). Next: rerun on a snapshot with ~a
+  week of rank_history and pre-game mastery (coordinator pins it, fresh session);
+  rank at game start campaign plan (meiolol-12) in docs/model.md Next steps, agreed
 - Win (meiolol-88): joint ratings first to beat champion baseline on dev (-0.0031 ±
   0.0017); win rows need duration_s >= 900 (leaver forfeits out)
 - Experience term (src/experience.zig): rerun at 300+ train / 100+ test per variant; if

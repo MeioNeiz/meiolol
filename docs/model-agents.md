@@ -29,7 +29,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 
 | Session | Owns |
 | --- | --- |
-| meiolol-db | win / draft predictor: experience feature (internal scope), everything-pre-game model with per-champion skill slopes, sub-15:00 with/without test on dev |
+| (none) | win / draft predictor rerun: closed (meiolol-db done 2026-10-13); new session when the coordinator pins a snapshot with ~a week of rank_history and pre-game mastery (model.md Next steps) |
 | meiolol-ff [f6a37d] | winchance weights fix (live Your games bug), clustered playstyle intervals (both free now; tell 47 when the playstyle/logreg commit is in), bootstrap bounds (wait for 47's all-clear) |
 | meiolol-6f | GPU vs CPU benchmark (bench1 done at 16x; 1x/4x, sweeps, deep draft net pending), then field ranking, then playstyle clustering |
 | meiolol-12 | lab harness and campaigns, from meiolol-39 (gold14-a final queued behind 6f's bench2, Jacob authorised; cand/team removed; brief fix waits on db's hunk) |
@@ -73,8 +73,11 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
 - Collected: sub-15:00 exclusion makes no detectable difference (db, 289f63a; kept);
   champlevel shrinkage no gain on dev (12, 3b28e60): off-role lane cells are real
   farming, the Draft tester's 1% role floor is the fix
-- Results to collect: experience and
-  everything-pre-game (db), GPU table (6f), winchance fix (ff), mastery and flex live
+- Collected: draft predictor test finals (db, 1abb887): champions only 53.2%,
+  everything pre-game 54.5%; skill slopes not detected; stored rank leaks
+- Agreed: meiolol-12's rank-at-game-start campaign (model.md Next steps); harness work
+  now, campaign on the pinned snapshot
+- Results to collect: GPU table (6f), winchance fix (ff), mastery and flex live
   with matches/day before and after (11), next snapshot pinned in docs/model.md
 - meiolol-58's solo/duo lookup commit: Jacob must type "commit" in its window (pane
   657); meiolol-11's mastery crawl.zig commit waits on it
