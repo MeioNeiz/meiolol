@@ -27,7 +27,8 @@ const Io = std.Io;
 const A = additive;
 
 pub const usage =
-    \\  effects SNAP [--out DIR] [--blocks dev,1,2,3,4,5] [--boot N] [--drop 0|1]
+    \\  effects SNAP [--out DIR] [--blocks dev,1,2,3,4,5|none] [--boot N] [--drop 0|1]
+    \\                                  [--null N] (shuffled-outcome refits per table)
     \\                                  [--threads N] [--soft FILE --alpha X]
     \\                                  [--shuffle SEED] (labels permuted: a control)
     \\                                  shrunk additive model (champion strength, ally
@@ -43,6 +44,9 @@ const Options = struct {
     out: []const u8 = ".",
     blocks: []const Block = &.{ .dev, .f1, .f2, .f3, .f4, .f5 },
     boot: u32 = 100,
+    /// Shuffled-outcome refits per table: thin pair cells give a block spread under no
+    /// effect at all, so a block counts only above its null
+    null: u32 = 10,
     drop: bool = false,
     threads: u32 = 10,
     soft: ?[]const u8 = null,
@@ -718,7 +722,7 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
     var cbuf: [16 * 1024]u8 = undefined;
     var cw = cf.writer(io, &cbuf);
     try cw.interface.print("# fit on {d} dev-visible games ({d} with gold at 14); gold slope {d:.4} logit per 1000 gold\n", .{ win_games.items.len, gold_games.items.len, slope });
-    try cw.interface.writeAll("outcome\tblock\tcells\tgames_per_cell\teff_params\tsd\tsd_lo\tsd_hi\tsd_pp\tsd_pp_lo\tsd_pp_hi\tboot\n");
+    try cw.interface.writeAll("outcome\tblock\tcells\tgames_per_cell\teff_params\tsd\tsd_lo\tsd_hi\tsd_pp\tsd_pp_lo\tsd_pp_hi\tboot\tnull_sd\tnull_q95\tsd_corr_pp\tsd_corr_pp_lo\tsd_corr_pp_hi\tdetected\n");
     var lf = try dir.createFile(io, "cells.tsv", .{});
     defer lf.close(io);
     var lbuf: [16 * 1024]u8 = undefined;
@@ -774,6 +778,40 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
             const n = @min(opts.threads, opts.boot - at);
             try par.forEach(io, n, Ctx{ .gpa = gpa, .p = &p, .f = &f, .boots = boots[at..][0..n] }, Ctx.one);
         }
+        // Null: the same fit with outcomes permuted across games (the draft kept)
+        const nulls = try arena.alloc([A.n_groups]f64, opts.null);
+        const NullCtx = struct {
+            gpa: std.mem.Allocator,
+            kind: A.Kind,
+            variant: A.Variant,
+            games: []const A.GameIn,
+            nulls: [][A.n_groups]f64,
+            base: usize,
+            fn one(x: @This(), i: usize) !void {
+                const gs = try x.gpa.dupe(A.GameIn, x.games);
+                defer x.gpa.free(gs);
+                var rng: std.Random.DefaultPrng = .init(0x9a11 +% (x.base + i));
+                const r = rng.random();
+                var k = gs.len;
+                while (k > 1) {
+                    k -= 1;
+                    const j = r.uintLessThan(usize, k + 1);
+                    std.mem.swap(f32, &gs[k].y, &gs[j].y);
+                }
+                var pn = try A.build(x.gpa, x.kind, x.variant, gs);
+                defer pn.deinit(x.gpa);
+                var fnull = try A.fit(x.gpa, &pn, .{}, null, null);
+                defer fnull.deinit(x.gpa);
+                x.nulls[i] = fnull.sigma2;
+            }
+        };
+        at = 0;
+        // Each null rep builds its own problem: fewer at once
+        const null_threads = @max(opts.threads / 2, 1);
+        while (at < opts.null) : (at += null_threads) {
+            const n = @min(null_threads, opts.null - at);
+            try par.forEach(io, n, NullCtx{ .gpa = gpa, .kind = kind, .variant = full, .games = games, .nulls = nulls[at..][0..n], .base = at }, NullCtx.one);
+        }
         // Effects in win pp at 50% (logit x 25); gold in gold
         const to_unit: f64 = if (in_gold) 1000 else 25;
         const to_pp: f64 = if (in_gold) 25 * slope else 25;
@@ -797,15 +835,34 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
             const sd = @sqrt(f.sigma2[g]);
             const lo = @max(sd - 1.96 * se, 0);
             const hi = sd + 1.96 * se;
+            // Null: mean variance and 95th percentile sd; corrected = sqrt(sd^2 - null
+            // mean variance), the same for the interval's ends
+            var nv: f64 = 0;
+            const nsd = try arena.alloc(f64, opts.null);
+            for (nulls, nsd) |nl, *x| {
+                nv += nl[g];
+                x.* = @sqrt(nl[g]);
+            }
+            nv /= @floatFromInt(@max(opts.null, 1));
+            std.mem.sort(f64, nsd, {}, std.sort.asc(f64));
+            const q95 = if (opts.null > 0) nsd[@min(opts.null - 1, @as(usize, @intFromFloat(@ceil(0.95 * @as(f64, @floatFromInt(opts.null))))) -| 1)] else 0;
+            const corr = struct {
+                fn above(x: f64, v: f64) f64 {
+                    return @sqrt(@max(x * x - v, 0));
+                }
+            }.above;
+            const detected = sd > q95 and lo > q95;
             const label = A.groupName(&nbuf, g);
-            try cw.interface.print("{s}\t{s}\t{d}\t{d:.1}\t{d:.1}\t{d:.5}\t{d:.5}\t{d:.5}\t{d:.3}\t{d:.3}\t{d:.3}\t{d}\n", .{
-                outcome,    label,      n_cells,    @as(f64, @floatFromInt(games_in)) / @as(f64, @floatFromInt(n_cells)),
-                f.gamma[g], sd,         lo,         hi,
-                sd * to_pp, lo * to_pp, hi * to_pp, opts.boot,
+            try cw.interface.print("{s}\t{s}\t{d}\t{d:.1}\t{d:.1}\t{d:.5}\t{d:.5}\t{d:.5}\t{d:.3}\t{d:.3}\t{d:.3}\t{d}\t{d:.5}\t{d:.5}\t{d:.3}\t{d:.3}\t{d:.3}\t{d}\n", .{
+                outcome,              label,                  n_cells,              @as(f64, @floatFromInt(games_in)) / @as(f64, @floatFromInt(n_cells)),
+                f.gamma[g],           sd,                     lo,                   hi,
+                sd * to_pp,           lo * to_pp,             hi * to_pp,           opts.boot,
+                @sqrt(nv),            q95,                    corr(sd, nv) * to_pp, corr(lo, nv) * to_pp,
+                corr(hi, nv) * to_pp, @intFromBool(detected),
             });
-            try w.print("  {s:<26} {d:>6} cells  sd {d:.2} [{d:.2}, {d:.2}] [{d:.2}] {s}\n", .{ label, n_cells, sd * to_unit, lo * to_unit, hi * to_unit, hm * to_unit, if (in_gold) "gold" else "pp" });
-            // Single cells whose posterior interval clears 0 (pair blocks only)
-            if (g < A.g_ally) continue;
+            try w.print("  {s:<26} {d:>6} cells  sd {d:.2} [{d:.2}, {d:.2}] [{d:.2}]  null {d:.2} (95th {d:.2})  corrected {d:.2} [{d:.2}, {d:.2}] {s} {s}\n", .{ label, n_cells, sd * to_unit, lo * to_unit, hi * to_unit, hm * to_unit, @sqrt(nv) * to_unit, q95 * to_unit, corr(sd, nv) * to_unit, corr(lo, nv) * to_unit, corr(hi, nv) * to_unit, if (in_gold) "gold" else "pp", if (detected) "DETECTED" else "" });
+            // Single cells whose posterior interval clears 0, in detected pair blocks only
+            if (g < A.g_ally or !detected) continue;
             for (p.param_start[g]..p.param_start[g + 1]) |j| {
                 const half = 1.96 / @sqrt(f.h[j]);
                 if (@abs(f.theta[j]) <= half) continue;
@@ -860,6 +917,7 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             var out: std.ArrayList(Block) = .empty;
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |b| {
+                if (std.mem.eql(u8, b, "none")) continue;
                 const blk: Block = if (std.mem.eql(u8, b, "dev")) .dev else switch (try std.fmt.parseInt(u8, b, 10)) {
                     1 => .f1,
                     2 => .f2,
@@ -871,6 +929,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
                 try out.append(arena, blk);
             }
             o.blocks = out.items;
+        } else if (std.mem.eql(u8, k, "--null")) {
+            o.null = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--boot")) {
             o.boot = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--drop")) {
