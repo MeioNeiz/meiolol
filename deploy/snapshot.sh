@@ -18,6 +18,9 @@
 # The lab agent's snapshot is LAB_SNAP in deploy/lab-exp.sh: move it to the new one
 # before prune. Env: SNAP_BOX (meiolol-cloud), SNAP_GPU (gpu-box)
 set -euo pipefail
+# launchd's login bash finds Homebrew's zig (0.16) first and no wz: the pinned 0.17 and
+# wz live in ~/.local/bin
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BOX=${SNAP_BOX:-meiolol-cloud}
