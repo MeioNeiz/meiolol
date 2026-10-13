@@ -236,7 +236,7 @@ listing() {
     # shellcheck disable=SC2016 # expands on the host
     local script='printf "now\t%s\n" "$(date -u +%FT%TZ)"
         '"$have"'cd '"$RUNS"' 2>/dev/null || exit 0
-        [[ -f watcher.log ]] && printf "league\t%s\n" "$(grep -a "League " watcher.log | tail -n 1)"
+        [[ -f watcher.log ]] && grep -a "League " watcher.log | tail -n 200 | sed "s/^/league\t/"
         for d in */; do
             d=${d%/}; [[ -f $d/job.sh ]] || continue
             pg=$(cat $d/job.pgid 2>/dev/null)

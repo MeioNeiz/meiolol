@@ -104,9 +104,11 @@ sub table {
     for my $t (@order) {
         my @r = @{$rows{$t} // []};
         next unless @r;
-        my (%by_seed, @dev, @val, @ep);
+        my (%by_seed, @dev, @val, @ep, @ens);
         my $secs = 0;
         for my $r (@r) {
+            # netcheck's seed ensemble: its own column, not another seed
+            if ($r->{seed} eq 'ens') { push @ens, $r if $r->{fold} ne 'dev'; next }
             my $v = $r->{val_logloss};
             push @val, $v if defined $v && $v ne '';
             push @ep, $r->{epochs};
@@ -129,26 +131,33 @@ sub table {
             push @se, sqrt($var) / $n;
         }
         my @ep_sorted = sort { $a <=> $b } @ep;
+        my ($en, $esum) = (0, 0);
+        for my $r (@ens) {
+            $en += $r->{scored_games};
+            $esum += $r->{gain} * $r->{scored_games};
+        }
         push @done, {t => $t, val => mean(@val), gain => mean(@g), se => mean(@se),
             seed_sd => sd(@g), seeds => scalar @g, blocks => scalar(keys %blocks),
             dev => mean(@dev), dev_sd => sd(@dev), epochs => $ep_sorted[$#ep_sorted / 2],
-            secs => $secs};
+            secs => $secs, ens => $en ? $esum / $en : undef};
     }
     my $m = sub { defined $_[0] ? sprintf('%+.2f', 1000 * $_[0]) : '-' };
     my $p = sub { defined $_[0] ? sprintf('%.2f', 1000 * $_[0]) : '-' };
     print "Ranked by inner-validation log loss (fit games only). Gains vs ratings in\n";
     print "milli-nats per game, positive = net better: folds pooled by games, mean over\n";
-    print "seeds ± its paired 95% half-width; seed sd = spread of the per-seed gain.\n\n";
-    print "| # | trial | val log loss | fold gain | seed sd | dev gain | seeds x blocks ",
-        "| epochs | GPU s | config |\n";
-    print "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n";
+    print "seeds ± its paired 95% half-width; seed sd = spread of the per-seed gain;\n";
+    print "ens = the seeds' averaged predictions (netcheck's ens rows), folds pooled.\n\n";
+    print "| # | trial | val log loss | fold gain | seed sd | ens gain | dev gain ",
+        "| seeds x blocks | epochs | GPU s | config |\n";
+    print "| --- " x 11, "|\n";
     my $i = 0;
     for my $d (sort { ($a->{val} // 9) <=> ($b->{val} // 9) } @done) {
-        printf "| %d | %s | %s | %s ± %s | %s | %s | %d x %d | %s | %.0f | %s |\n",
+        printf "| %d | %s | %s | %s ± %s | %s | %s | %s | %d x %d | %s | %.0f | %s |\n",
             ++$i, $d->{t},
             defined $d->{val} ? sprintf('%.5f', $d->{val}) : '-', $m->($d->{gain}),
             $p->(defined $d->{se} ? 1.96 * $d->{se} : undef), $p->($d->{seed_sd}),
-            $m->($d->{dev}), $d->{seeds}, $d->{blocks}, $d->{epochs} // '-', $d->{secs},
+            $m->($d->{ens}), $m->($d->{dev}), $d->{seeds}, $d->{blocks},
+            $d->{epochs} // '-', $d->{secs},
             $config{$d->{t}};
     }
     my @missing = grep { !$rows{$_} } @order;

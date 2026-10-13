@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 # Run-time estimates and placement for deploy/lab-run.sh, from the runs on both hosts
 # (docs/compute.md "Placement"). Reads lab-run.sh's listing on stdin, tab-separated:
-#   HOST now TIME | HOST league LINE | HOST have PATH
+#   HOST now TIME | HOST league LINE (watcher.log, oldest first) | HOST have PATH
 #   HOST run DIR STATE STARTED ENDED RES BIN ARGS PAUSES PREDICTED BUILD LOGLINE
 #
 #   lab-place.pl inputs ARGS                 input paths to check on each host
@@ -23,7 +23,7 @@ my $RECENT = 5;
 # Hosts' speed ratio before any command has run on both: eval was 13 s on the Mac, 7 s
 # on the gpu-box (docs/compute.md "Threads")
 my %ASSUMED = (mac => 2.0, 'gpu-box' => 0.5);
-# A League session's length when no pauses.log has one yet
+# A League session's length before watcher.log has seen one end
 my $LEAGUE_DEFAULT = 1800;
 my @HOSTS = ('gpu-box', 'mac');
 
@@ -41,7 +41,7 @@ while (my $line = <STDIN>) {
     my ($host, $kind, @f) = split /\t/, $line, -1;
     next unless defined $kind;
     if ($kind eq 'now') { $now{$host} = ts($f[0]) }
-    elsif ($kind eq 'league') { $league{$host} = $f[0] }
+    elsif ($kind eq 'league') { push @{$league{$host}}, $f[0] }
     elsif ($kind eq 'have') { $have{$host}{$f[0]} = 1 }
     elsif ($kind eq 'run') {
         my %r;
@@ -127,6 +127,12 @@ sub keys_for {
     if (($w[0] // '') eq 'exp' && @w >= 2) {
         $cmd .= " $w[1]";
         $fine = join ' ', grep { defined } $cmd, @w[3, 4];
+    }
+    # netcheck's nets differ by orders of magnitude (big on the GPU, small, resid)
+    if (($w[0] // '') eq 'netcheck') {
+        my %f = map { $w[$_] => $w[$_ + 1] } grep { $w[$_] =~ /^--/ } 0 .. $#w - 1;
+        $cmd .= ' --net ' . ($f{'--net'} // 'small');
+        $fine = $cmd;
     }
     my ($snap) = $args =~ m{(snap-[A-Za-z0-9_.+-]+)};
     my ($cand) = $build =~ m{-Dcand=(?:\S*/)?([^/\s]+)};
@@ -220,29 +226,28 @@ sub wait_for {
     return ($total, $n);
 }
 
-# What a League session costs a gpu-box run now: nothing while it's down; while it's up
-# (or the watcher can't tell), the median pause so far
+# What League costs a gpu-box run now: nothing while it's down. While it's up (or the
+# watcher can't tell): the median past session (watcher.log's up/down lines) less the
+# time it has been up, but at least that time again (a long session tends to run long)
 sub league_penalty {
     my ($host) = @_;
-    my $l = $league{$host} // '';
-    return (0, '') unless $l =~ /League (up|unknown)/;
+    my @lines = @{$league{$host} // []};
+    return (0, '') unless @lines && $lines[-1] =~ /League (up|unknown)/;
     my $state = $1;
-    my (%seen, @lens);
-    for my $r (grep { $_->{host} eq $host } @runs) {
-        my $since;
-        for my $p (@{$r->{pauses}}) {
-            next unless defined $p->[0];
-            if ($p->[1] eq 'STOP') { $since = $p->[0] }
-            elsif (defined $since) {
-                # Every live run logs the same pause: count it once
-                push @lens, $p->[0] - $since unless $seen{int($since / 60)}++;
-                $since = undef;
-            }
-        }
+    my (@lens, $since);
+    for (@lines) {
+        my $t = ts((split ' ')[0]);
+        next unless defined $t;
+        if (/League (up|unknown)/) { $since //= $t }
+        elsif (/League down/ && defined $since) { push @lens, $t - $since; $since = undef }
     }
+    my $up = defined $since ? $now{$host} - $since : 0;
     my $m = median(@lens);
-    return (defined $m ? $m : $LEAGUE_DEFAULT,
-        "League $state: +" . (defined $m ? 'median pause' : 'assumed') . ' ');
+    my $typical = $m // $LEAGUE_DEFAULT;
+    my $pen = $typical - $up > $up ? $typical - $up : $up;
+    my $past = defined $m ? sprintf('median session %s of %d', fmt($m), scalar @lens)
+        : 'no past session, ' . fmt($LEAGUE_DEFAULT) . ' assumed';
+    return ($pen, sprintf('League %s %s (%s): +', $state, fmt($up), $past));
 }
 
 sub cuda_use {

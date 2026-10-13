@@ -84,10 +84,13 @@ run time.
 - Feasible: the GPU only for CUDA commands (gpu-smoke; bench and draftbench when
   --devices has gpu; with CPU devices too they take the cpu lock, as their timings need
   it); the Mac never for CUDA; a host only if the args' snapshot paths (any `~/...snap-X`
-  or absolute path) exist there. The Mac keeps snapshots in ~/personal/meiolol/data, the
-  gpu-box in ~/ml/snaps, so a snapshot path pins its host today; an unreachable host
-  drops out
-- League up (or unknown) on the gpu-box: + the median pause so far (30 min with none)
+  or absolute path) exist there; an unreachable host drops out. The Mac keeps snapshots
+  in ~/personal/meiolol/data with ~/ml/snaps/<snap> symlinks to them (made by hand
+  2026-10-13; a new snapshot needs its link), so `~/ml/snaps/X` works on both hosts
+- League up (or unknown) on the gpu-box: + the median past League session
+  (watcher.log's up/down lines; 30 min before any) less the time it has been up, but at
+  least that time again: a session already 3 h old costs 3 h, so runs go to the Mac
+- netcheck is keyed by its --net too (big on the GPU, small and resid on CPU threads)
 - Lab agents (lab-exp.sh) keep LAB_HOST: their ladder lives on the host
 
 ### Sweeps (deploy/lab-sweep.sh)
@@ -106,8 +109,12 @@ builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps
   which is the honest score: picking on it would select on the scored blocks. Columns:
   fold gain vs ratings (pooled by games, mean over seeds, paired 95%), seed sd, dev gain,
   epochs, GPU seconds, config
-- --pack K runs K trials at once in one job, for when one trial leaves the GPU idle;
-  measure memory and throughput first
+- --pack K runs K trials at once in one job, for when one trial leaves the GPU idle.
+  Measured 2026-10-13 (netcheck --net big, one seed, one block): +250 MiB of the 3080's
+  10 GB for ~1 s of a 2 s trial (fit 0.6 s; loading and the candidate are CPU), so 4
+  at once fit easily; check utilisation in the first packed sweep
+- --res cpu for nets on CPU threads (netcheck small, resid)
+- netcheck's `ens` rows (the seeds' averaged predictions) get their own column
 - Sweep jobs are lab-run runs, so their GPU times feed placement's history
 
 ## Lab agent limits
