@@ -15,3 +15,7 @@ residual on ratings	ratings	dev-val	0.00001	0.00012	3			8500		a189f10
 big net	win-comp	folds	0.00029	0.00049	3			44353		a189f10
 small net	win-comp	folds	0.00123	0.00040	3			44353		a189f10
 residual on win-comp	win-comp	folds	-0.00004	0.00008	3			44353		a189f10
+big net as a residual on win-comp, 10 seeds	win-comp	folds	-0.00034	0.00035	10	0.00026	0.00286	44353		20261013T224722Z-0a-bigres-t23-wc	t23 config; better in 3 of 5 folds; offset weight median 0.84
+big net as a residual on win-comp, 10 seeds	win-comp	dev-val	-0.00023	0.00043	10			8500		20261013T224722Z-0a-bigres-t23-wc	
+control: residual on win-comp, champion rows shuffled	win-comp	folds	0.00042	0.00034	10	0.00054	0.00154	44353		20261013T224731Z-0a-bigres-t23-wc-shuf	worse because a full epoch of fitting noise comes before the first stop; no leak
+big net, sweep pick t23, 10 seeds	win-comp	folds	0.00033	0.00055	10			44353		20261013T223641Z-0a-t23-10-win-comp	

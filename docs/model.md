@@ -1510,8 +1510,27 @@ The 20-seed pool just clears zero (upper end -0.00002), but each confirmation ca
 smaller than the first ten seeds (-0.00039, then -0.00012 sealed, -0.00010 resampled),
 which reads as the first ten being lucky. Tuning on inner validation finds nothing better
 than the default. Every single seed is worse than ratings; only averaging seeds brings the
-net level. Whether anything stacks on win-comp (big net as a residual on its offset, with
-the shuffled-ids control) is the next question.
+net level.
+
+On win-comp (-Dcand=src/lab/cand/win-comp, folds 0.69033), t23's config, 10 seeds, pinned
+9cee34a:
+
+| run | folds vs win-comp | better in | single seeds | dev-val vs win-comp | offset weight, median of 60 fits |
+| --- | --- | --- | --- | --- | --- |
+| big, plain | +0.00033 ± 0.00055 | | | | |
+| big as a residual on win-comp's offset (bigres) | -0.00034 ± 0.00035 | 3 of 5 | +0.00026 to +0.00286 | -0.00023 ± 0.00043 | 0.837 (0.62-1.13) |
+| control: bigres, training games' champion rows shuffled (`--shuffle-ids 1`) | +0.00042 ± 0.00034 | 0 of 5 | +0.00054 to +0.00154 | +0.00052 ± 0.00061 | 0.882 (0.77-1.32) |
+
+- bigres minus its control, paired: -0.00076 ± 0.00046 on the folds: the champion rows
+  carry something, but against win-comp itself the residual is not detected (4b's floor
+  for a net vs its candidate is ~1.3x the paired interval)
+- The control is worse, not ~0: early stopping checks val once an epoch, so even shuffled
+  ids get a full epoch of fitting noise first (41 of its 60 fits stop at that first
+  check). No sign of a leak (a leak would make the control better than win-comp). Both
+  learn an offset weight under 1, the same shrink of the candidate's logit as resid's ~0.9
+
+Reading: nothing tried here stacks on win-comp beyond noise; the big net as a residual on
+it is at best ~0.3 milli-nats/game better, with every single seed worse.
 
 #### LoLDraftAI's evaluation beside ours (meiolol-ba)
 
