@@ -25,6 +25,16 @@ How to write a line:
 
 ## Win
 
+- 2026-10-13: Knowing that a team's damage is lopsided makes win predictions only a
+  little better overall, because only about one team in ten is lopsided: the gain was at
+  the edge of noise over five rounds of held-out games and not detected on the test set.
+  Sure: 10,604 EUW test games, game by game against the champions-only model; a gain
+  larger than about a fifth of what the champions themselves add is ruled out (the
+  rounds' estimate sits at that edge). The effect itself holds (the lopsided-damage line
+  below); it is the prediction gain that is small. Site: the admin Draft tester may show
+  the term with its interval; lessons quote the effect line. Evidence: docs/model.md
+  "Model: win-comp ablation" (test log loss 0.69065 vs 0.69064, +0.00002 ± 0.00048;
+  rounds -0.00057 ± 0.00028)
 - 2026-10-13: A team that deals under a fifth of its damage as magic wins about
   5 percentage points less often than its champions alone suggest, and lopsided teams
   (that, or over 60% magic) about 3 points less than balanced ones; how many
