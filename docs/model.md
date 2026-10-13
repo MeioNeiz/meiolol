@@ -2083,6 +2083,125 @@ Reading (dev, no test look):
   exporting; the 2253Z pin (about twice the games) is where to look again (4b's rerun
   list, item e). Nothing for learned.md before 4b audits the sealed runs
 
+### Effects and the CPU model, 2026-10-14 (meiolol-08)
+
+Jacob (13 Oct): train heavy on the gpu-box, ship models that run on CPU and say what a
+synergy, a counter, a comp or an objective is worth. Dev only, snap-20261012T2055Z, no test
+look. Unit: win percentage points at 50% (logit x 25); gold for gold at 14.
+
+#### One shrunk additive draft model
+
+`meiolol-lab effects SNAP` (src/lab/effects.zig on src/lab/additive.zig). Blue's logit =
+platform side + champion strength per role (blue minus red) + 10 ally role-pair blocks
+(one cell per champion pair) + 25 enemy role-pair blocks (my role r x their role q) +
+win-comp's damage mix (blue minus red (f - 0.5)^2, profiles from the fit games, own rows
+left out). Every champion-role and pair block is a random effect with its own variance,
+estimated on the fit games (MacKay's fixed point with the diagonal posterior), all fitted
+jointly by block Newton steps; ~80 table lookups per draft, CPU only. Same blocks and
+games as netcheck (dev-val, win-comp's 5 forward folds), paired per game with win-ratings
+fitted on the same games. Planted tests: a block's sd recovered within ~0.05 logit,
+empty blocks shrink to ~0.
+
+Run 20261013T225421Z-eff-d (4ace29b; built during the lab-run lock bug window, being
+re-checked by meiolol-a0). Folds pooled, 44,353 games, log loss vs ratings, ± 95% paired
+per game, folds better of 5:
+
+| model | vs ratings | vs champion strength only |
+| --- | --- | --- |
+| champion strength only | -0.00006 ± 0.00034 | - |
+| + damage mix | -0.00097 ± 0.00050 | -0.00091 ± 0.00037, 5 of 5 |
+| + ally pairs | -0.00112 ± 0.00052 | -0.00106 ± 0.00039, 5 of 5 |
+| + lane pairs (same role, bottom-support across) | -0.00116 ± 0.00052 | -0.00110 ± 0.00040, 5 of 5 |
+| + every enemy pair | -0.00116 ± 0.00052 | -0.00110 ± 0.00040, 5 of 5 |
+| full (all blocks + mix), better in 4 of 5 | -0.00129 ± 0.00054 | -0.00123 ± 0.00041, 5 of 5 |
+| full without the mix | -0.00039 ± 0.00040 | -0.00033 ± 0.00019, 5 of 5 |
+| team gold at 14, to win through its slope | +0.01798 ± 0.00188 | |
+
+Dev-val (8,500 EUW1 games): full +0.00027 ± 0.00103 vs ratings, champion strength + mix
++0.00042 ± 0.00089 (ties; win-comp's dev-val was +0.0003 too). win-comp on the same folds:
+-0.00057 ± 0.00028. Calibration on the folds (one temperature on the logit): ratings 0.80 ±
+0.11 (top tenth said 58.6%, won 55.8%), full additive 0.94 ± 0.10 (58.6 vs 58.9).
+
+Held-out drop-one (run 20261013T223330Z-eff-c, before the mix fix, so without a working
+mix; the full model refitted without one block, pooled folds, positive = the block
+helps): champion strength top +0.00020 ± 0.00019, jungle +0.00019 ± 0.00014, middle
++0.00034 ± 0.00020, bottom +0.00009 ± 0.00023, support +0.00031 ± 0.00026; ally
+bottom-support +0.00013 ± 0.00011 (0 of 5 folds better without it); top vs their top
++0.00010 ± 0.00010 (0 of 5); middle vs their middle +0.00004 ± 0.00006; bottom vs their
+bottom +0.00003 ± 0.00006; every other block within ±0.00002.
+
+Per-block spread of true effects: a shuffled-label control (20261013T223344Z-eff-shuf)
+gave held-out gains of ~0 (full vs strength -0.00000 ± 0.00012) and champion strength sd
+0.00-0.01 pp, but pair blocks still 0.1-0.9 pp: with 1-3 games per cell the variance
+estimate finds spread in noise. A Poisson bootstrap made it worse (duplicated games look
+consistent). So each block is read against a shuffled-outcome null (`--null 20`) with
+half-sample intervals; table from run eff-e below.
+
+Gold at 14 (team gold, blue minus red, gaussian, same blocks): spread of true effects,
+gold (eff-c; the null-corrected table follows with eff-e): champion strength 300-375 per
+role (3c: 270-360); lane top 133, middle 103, bottom-support across 86, bottom 56,
+jungle 56; ally pairs 9-71; off-lane enemy pairs 9-41. The draft predicts gold at 14
+(held-out R^2 5-8% of team gold's 3,600 sd), but the predicted gold edge carries no win:
+-0.02, -0.04, +0.05, -0.02, -0.02, +0.04 logit per 1000 (± 0.05) on dev and the five
+folds' scored games, against 0.405 for real gold at 14. Gold at 14 then to win through
+the state model (+0.018 vs ratings) is ruled out: drafts that win early gold give it back.
+
+#### In-game events
+
+`meiolol-lab eventvalue SNAP` (src/lab/eventvalue.zig, 706b2c4, on meiolol-4a's
+SNAP/events.tsv), run 20261013T225443Z-ev-a (being re-checked by a0, as eff-d). 130,229
+games with a timeline, 3.55M game-minutes. Per game-minute (frame m to m+1): blue's win
+chance change under winchance.zig's state model, and blue's gold lead change, regressed
+on that minute's events (+1 blue, -1 red) by minute band, so events of one fight share
+credit; 95% from 200 game bootstraps. Gold equivalent: the win points over what 1000 gold
+of lead was worth in the same game-minutes.
+
+Caveat first (meiolol-bd, effect-isolation C2): winchance's state has no draft terms, and
+champions are worth 3-11 points at equal state, so these values are what the state model
+credits, likely inflated; redo on meiolol-state's P(win | draft, state) before any line
+goes to learned.md.
+
+| event (taking team) | 10-14 min | 15-19 | 20-24 | 25-29 | 30-40 |
+| --- | --- | --- | --- | --- | --- |
+| dragon (any element), pp | 4.4-4.5 | 4.0-4.1 | 4.0 | 4.0-4.2 | 5.3-5.8 |
+| dragon, gold equivalent | ~740 | ~950 | ~1230 | ~1490 | ~2260 |
+| elder, pp (gold eq.) | | | | 6.0 (3,600) | 9.0 (4,900) |
+| baron, pp (gold eq.) | | | 5.8 (1,960) | 6.7 (2,470) | 8.1 (3,490) |
+| herald, pp (gold eq.) | | 0.7 (150) | | | |
+| grub (1-9 min / 10-14), pp | 0.85 (110 / 125) | | | | |
+| outer tower, pp (gold it brought) | 0.1 (520) | 1.4 (440) | 2.6 (580) | 3.2 (650) | 3.0 (590) |
+| inhibitor, pp | | -0.8 | -0.1 | 1.2 | 3.4 |
+| kill, pp (gold it brought) | 3.8 (520) | 3.2 (560) | 2.8 (590) | 2.6 (620) | 2.6 (660) |
+
+Intervals: ± 0.1-0.2 pp for dragons, baron and kills; first blood adds 2.4 pp to its kill
+at 1-9 min. Dragon elements (assigned by the game, so their differences are causal):
+within ~0.3 pp of each other in every band (mountain lowest early, by 0.1-0.3). Inner,
+base and nexus towers come out negative (-0.6 to -2.3 pp): the state model counts every
+tower the same and weighs towers beyond their gold slightly negative early, so it can't
+value the later ones; read only outer towers.
+
+Cause or being ahead (realised.tsv): after a take, does the taking team win as often as
+the model's next-frame chance says? Overall a little more (dragon +0.4 pp, baron +1.4,
+inhibitor +1.1, elder +2.7): the state model under-credits objectives at the moment of
+taking. Teams behind (chance under 50% before) beat it by more (dragon +1.8, baron +4.9,
+inhibitor +8.6, elder +8.9): what the state misses, e.g. a late-game draft, shows up
+here. Steals are not the coin flip hoped for: a team that stole a dragon then won 37.6%,
+less than its 40.2% just before (herald 34.6% vs 40.4%; baron 42.0%, above its 33.4%
+before but under the model's 44.4% after): a steal marks a fight the other team set up
+and was winning. Contested takes (both teams
+with a kill within 30 s) land close to the model (dragon +0.3, baron +0.3, elder -0.3).
+So no clean causal split yet; the draft-aware state model is the next step.
+
+#### Distillation (parked)
+
+Ready: `netcheck --fit-preds 1` (c2ec378) writes a teacher's chances on every block's
+fit games, each from a fit without the game's hashed fifth; `effects --soft FILE` fits the
+full additive model to the teacher's seed-mean logit by squared error (student-logit) and
+to alpha x result + (1 - alpha) x teacher (student-mix), and tabulates the student's
+blocks beside the label fit's. Gate (research C5): distil only from a teacher that beats
+the shrunk label fit on the folds. Today no champ-select teacher does (best big-net
+ensembles tie ratings; the additive model is at -0.0013), so it waits for one.
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
