@@ -38,7 +38,7 @@ pub fn load(
     while (try games.next()) |g| {
         // Frame k is minute k; the last frame is the game's end, part of a minute
         if (g.t.frames.len < minute + 2) continue;
-        const pid = try games.pids(g, false) orelse continue;
+        const pid = try games.pids(g) orelse continue;
         var lanes: Lanes = undefined;
         const f = g.t.frames[minute];
         for (Role.all) |r| {

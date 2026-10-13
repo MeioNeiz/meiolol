@@ -154,7 +154,7 @@ fn load(
     while (try games.next()) |game| {
         const t = game.t;
         if (t.participants != 10 or t.frames.len < 16 or t.frames[15].t_ms < 15 * minute_ms) continue;
-        const pid = try games.pids(game, true) orelse continue;
+        const pid = try games.pids(game) orelse continue;
         var roles: [10]Role = undefined;
         var opponent: [10]u8 = undefined;
         for (0..2) |side| for (0..Role.count) |ri| {

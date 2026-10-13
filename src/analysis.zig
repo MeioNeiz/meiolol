@@ -126,8 +126,8 @@ pub const TimelineGames = struct {
     }
 
     /// A game's participant ids by side and role; null unless both teams fill every
-    /// role. `blue_first`: also null unless ids 1-5 are blue, as match-v5 numbers them
-    pub fn pids(s: *TimelineGames, g: Game, blue_first: bool) !?Pids {
+    /// role and ids 1-5 are blue, as match-v5 numbers them and timeline sums assume
+    pub fn pids(s: *TimelineGames, g: Game) !?Pids {
         try s.players.bind(.{g.match_id});
         var pid: Pids = @splat(@splat(0));
         while (try s.players.step()) {
@@ -142,7 +142,7 @@ pub const TimelineGames = struct {
             pid[side][@backingInt(r)] = @intCast(slot + 1);
         }
         if (std.mem.indexOfScalar(u8, std.mem.asBytes(&pid), 0) != null) return null;
-        if (blue_first) for (pid, 0..) |team, side| for (team) |p| {
+        for (pid, 0..) |team, side| for (team) |p| {
             if ((p <= 5) != (side == 0)) return null;
         };
         return pid;

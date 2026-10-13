@@ -148,7 +148,7 @@ fn load(
         const t = game.t;
         if (t.participants != 10 or t.frames.len == 0) continue;
         const finished = legendaries.get(stats.patchKey(game.patch)) orelse continue;
-        const pid = try games.pids(game, false) orelse continue;
+        const pid = try games.pids(game) orelse continue;
         // participant id - 1 -> lane opponent's participant id
         var opponent: [10]u8 = undefined;
         for (0..2) |side| for (0..Role.count) |ri| {

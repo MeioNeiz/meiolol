@@ -516,7 +516,7 @@ fn load(
         const t = g.t;
         if (t.frames.len < 16 or t.frames[15].t_ms < 15 * minute_ms) continue;
         const finished = legendaries.get(stats.patchKey(g.patch)) orelse &.{};
-        const pid = try games.pids(g, false) orelse continue;
+        const pid = try games.pids(g) orelse continue;
 
         const n = timeline.max_participants;
         var deaths: [n]u8 = @splat(0);
