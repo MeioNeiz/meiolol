@@ -50,6 +50,8 @@ const Profile = struct {
     true_dmg: f64,
     /// Taken (all types) plus self-mitigated
     tank: f64,
+    /// Mitigated / (mitigated + taken), as win-comp's frontline
+    mitigated_share: f64,
     cc: f64,
     immob: f64,
     heal_shield_allies: f64,
@@ -91,6 +93,11 @@ const Acc = struct {
             .magic = a.rate(.dmg_magic),
             .true_dmg = a.rate(.dmg_true),
             .tank = a.rate(.taken_phys) + a.rate(.taken_magic) + a.rate(.taken_true) + a.rate(.mitigated),
+            .mitigated_share = blk: {
+                const taken = a.rate(.taken_phys) + a.rate(.taken_magic) + a.rate(.taken_true);
+                const mit = a.rate(.mitigated);
+                break :blk if (mit + taken > 0) mit / (mit + taken) else 0;
+            },
             .cc = a.rate(.cc_time),
             .immob = a.rate(.immobilisations),
             .heal_shield_allies = a.rate(.heal_allies) + a.rate(.shield_allies),
@@ -140,7 +147,12 @@ const Unit = struct {
     /// win-ratings' chance for this team
     p: f64,
     magic_share: f64,
+    phys_share: f64,
     frontline: u8,
+    /// The team's highest mitigated share
+    best_mitigated: f64,
+    /// Sum of the team's champion-roles' training lifts (log-odds) minus the enemy's
+    lift_diff: f64,
     cc: f64,
     enemy_magic_share: f64,
     enemy_frontline: u8,
@@ -252,12 +264,12 @@ fn run(
     for (d.games, 0..) |g, gi| {
         if (blue_n[gi] == 0) continue;
         const pb = blue_sum[gi] / blue_n[gi];
-        var feats: [2]struct { magic: f64, front: u8, cc: f64, lean: f64 } = undefined;
+        var feats: [2]struct { phys: f64, magic: f64, front: u8, cc: f64, lean: f64, best_mit: f64, lift: f64 } = undefined;
         for (&feats, g.teams) |*f, team| {
             var phys: f64 = 0;
             var magic: f64 = 0;
             var true_dmg: f64 = 0;
-            f.* = .{ .magic = 0, .front = 0, .cc = 0, .lean = 0 };
+            f.* = .{ .phys = 0, .magic = 0, .front = 0, .cc = 0, .lean = 0, .best_mit = 0, .lift = 0 };
             for (team, 0..) |champ, role| {
                 const p = prof.get(champ, role);
                 phys += p.phys;
@@ -266,8 +278,11 @@ fn run(
                 f.cc += p.cc;
                 f.lean += p.armour_lean - role_lean[role];
                 if (p.tank >= tank_cut) f.front += 1;
+                f.best_mit = @max(f.best_mit, p.mitigated_share);
+                f.lift += liftOf(&wins, champ, role);
             }
             f.magic = magic / (phys + magic + true_dmg);
+            f.phys = phys / (phys + magic + true_dmg);
         }
         for (0..2) |s| {
             const side: u1 = @intCast(s);
@@ -278,7 +293,10 @@ fn run(
                 .y = y,
                 .p = if (side == 0) pb else 1 - pb,
                 .magic_share = feats[s].magic,
+                .phys_share = feats[s].phys,
                 .frontline = feats[s].front,
+                .best_mitigated = feats[s].best_mit,
+                .lift_diff = feats[s].lift - feats[1 - s].lift,
                 .cc = feats[s].cc,
                 .enemy_magic_share = feats[1 - s].magic,
                 .enemy_frontline = feats[1 - s].front,
@@ -302,7 +320,12 @@ fn run(
     defer gpa.free(in_b);
     const group = try gpa.alloc(?u1, n_units);
     defer gpa.free(group);
+    const raw = try gpa.alloc(f64, n_units);
+    defer gpa.free(raw);
+    for (raw, units.items) |*r, u| r.* = u.y - 0.5;
+    const res: Res = .{ .model = resid, .raw = raw };
 
+    try strengthControl(gpa, arena, units.items, resid, in_a, w);
     try control(gpa, d, &wins, units.items, resid, in_a, w);
     if (with_stats == 0) return;
 
@@ -313,13 +336,31 @@ fn run(
         try tableHead(w, "magic share");
         for (0..4) |b| {
             for (in_a, units.items) |*a, u| a.* = u.magic_share >= edges[b] and u.magic_share < edges[b + 1];
-            try binRow(w, try std.fmt.allocPrint(arena, "{d:.0}-{d:.0}%", .{ edges[b] * 100, @min(edges[b + 1], 1) * 100 }), units.items, resid, in_a);
+            try binRow(w, try std.fmt.allocPrint(arena, "{d:.0}-{d:.0}%", .{ edges[b] * 100, @min(edges[b + 1], 1) * 100 }), units.items, res, in_a);
         }
         for (in_a, in_b, units.items) |*a, *b, u| {
             a.* = u.magic_share < 0.2 or u.magic_share >= 0.6;
             b.* = !a.*;
         }
-        try contrastLine(w, "lopsided (<20% or 60%+) minus balanced", units.items, resid, in_a, in_b);
+        try contrastLine(w, "lopsided (<20% or 60%+) minus balanced", units.items, res, in_a, in_b);
+        try w.writeAll("\n");
+    }
+    // H1b: physical share in iTero's bins (research: about -9 pp under 20% AD and -6 pp
+    // over 80%, unadjusted)
+    {
+        const edges = [_]f64{ 0, 0.2, 0.8, 2 };
+        const names = [_][]const u8{ "<20%", "20-80%", "80%+" };
+        try w.writeAll("## Team physical share of damage to champions (iTero's bins)\n\n");
+        try tableHead(w, "physical share");
+        for (0..3) |b| {
+            for (in_a, units.items) |*a, u| a.* = u.phys_share >= edges[b] and u.phys_share < edges[b + 1];
+            try binRow(w, names[b], units.items, res, in_a);
+        }
+        for (in_a, in_b, units.items) |*a, *b, u| {
+            a.* = u.phys_share < 0.2 or u.phys_share >= 0.8;
+            b.* = !a.*;
+        }
+        try contrastLine(w, "lopsided (<20% or 80%+) minus 20-80%", units.items, res, in_a, in_b);
         try w.writeAll("\n");
     }
     // H2: frontline count
@@ -328,13 +369,30 @@ fn run(
         try tableHead(w, "frontline");
         for (0..4) |b| {
             for (in_a, units.items) |*a, u| a.* = if (b == 3) u.frontline >= 3 else u.frontline == b;
-            try binRow(w, try std.fmt.allocPrint(arena, "{d}{s}", .{ b, if (b == 3) "+" else "" }), units.items, resid, in_a);
+            try binRow(w, try std.fmt.allocPrint(arena, "{d}{s}", .{ b, if (b == 3) "+" else "" }), units.items, res, in_a);
         }
         for (in_a, in_b, units.items) |*a, *b, u| {
             a.* = u.frontline == 0;
             b.* = u.frontline > 0;
         }
-        try contrastLine(w, "none minus some", units.items, resid, in_a, in_b);
+        try contrastLine(w, "none minus some", units.items, res, in_a, in_b);
+        try w.writeAll("\n");
+    }
+    // H2b: win-comp's frontline form, the team's best mitigated share, quartiles
+    {
+        const q = try quantiles(4, "best_mitigated", gpa, units.items);
+        try w.writeAll("## Team's best mitigated share (damage mitigated / (mitigated + taken))\n\n");
+        try tableHead(w, "best mitigated quartile");
+        const edges = [_]f64{ -1, q[0], q[1], q[2], 2 };
+        for (0..4) |b| {
+            for (in_a, units.items) |*a, u| a.* = u.best_mitigated > edges[b] and u.best_mitigated <= edges[b + 1];
+            try binRow(w, try std.fmt.allocPrint(arena, "Q{d} ({d:.2}-{d:.2})", .{ b + 1, @max(edges[b], 0), @min(edges[b + 1], 1) }), units.items, res, in_a);
+        }
+        for (in_a, in_b, units.items) |*a, *b, u| {
+            a.* = u.best_mitigated <= q[0];
+            b.* = u.best_mitigated > q[0];
+        }
+        try contrastLine(w, "lowest quartile minus the rest", units.items, res, in_a, in_b);
         try w.writeAll("\n");
     }
     // H3: team CC, quartiles of the dev teams (a draft feature, no outcome in it)
@@ -345,13 +403,13 @@ fn run(
         const edges = [_]f64{ -1, q[0], q[1], q[2], std.math.inf(f64) };
         for (0..4) |b| {
             for (in_a, units.items) |*a, u| a.* = u.cc > edges[b] and u.cc <= edges[b + 1];
-            try binRow(w, try std.fmt.allocPrint(arena, "Q{d} ({d:.1}-{d:.1})", .{ b + 1, @max(edges[b], 0), @min(edges[b + 1], 999) }), units.items, resid, in_a);
+            try binRow(w, try std.fmt.allocPrint(arena, "Q{d} ({d:.1}-{d:.1})", .{ b + 1, @max(edges[b], 0), @min(edges[b + 1], 999) }), units.items, res, in_a);
         }
         for (in_a, in_b, units.items) |*a, *b, u| {
             a.* = u.cc <= q[0];
             b.* = u.cc > q[0];
         }
-        try contrastLine(w, "lowest quartile minus the rest", units.items, resid, in_a, in_b);
+        try contrastLine(w, "lowest quartile minus the rest", units.items, res, in_a, in_b);
         try w.writeAll("\n");
     }
     // H4: cross-team, frontline into magic damage
@@ -363,7 +421,7 @@ fn run(
         const names = [_][]const u8{ "<30%", "30-50%", "50%+" };
         for (0..2) |fg| for (0..3) |eb| {
             for (in_a, units.items) |*a, u| a.* = (u.frontline >= 2) == (fg == 1) and u.enemy_magic_share >= edges[eb] and u.enemy_magic_share < edges[eb + 1];
-            try binRow(w, try std.fmt.allocPrint(arena, "{s}, {s}", .{ groups[fg], names[eb] }), units.items, resid, in_a);
+            try binRow(w, try std.fmt.allocPrint(arena, "{s}, {s}", .{ groups[fg], names[eb] }), units.items, res, in_a);
         };
         for (group, units.items) |*gr, u| gr.* = @intFromBool(u.frontline >= 2);
         const dd = interaction(units.items, resid, group);
@@ -382,7 +440,7 @@ fn run(
                 const t: usize = if (u.armour_lean <= q[0]) 0 else if (u.armour_lean <= q[1]) 1 else 2;
                 a.* = t == lg and u.enemy_magic_share >= edges[eb] and u.enemy_magic_share < edges[eb + 1];
             }
-            try binRow(w, try std.fmt.allocPrint(arena, "{s}, {s}", .{ groups[lg], names[eb] }), units.items, resid, in_a);
+            try binRow(w, try std.fmt.allocPrint(arena, "{s}, {s}", .{ groups[lg], names[eb] }), units.items, res, in_a);
         };
         for (group, units.items) |*gr, u| gr.* = if (u.armour_lean > q[1]) 1 else if (u.armour_lean <= q[0]) 0 else null;
         const dd = interaction(units.items, resid, group);
@@ -493,30 +551,77 @@ fn interaction(units: []const Unit, resid: []const f64, group: []const ?u1) Est 
     return .{ .n = units.len, .est = est, .half = 1.96 * @sqrt(groups / (groups - 1) * ss) };
 }
 
+/// Per team unit: observed minus win-ratings' chance, and observed minus 50% (raw)
+const Res = struct { model: []const f64, raw: []const f64 };
+
 fn tableHead(w: *Io.Writer, label: []const u8) !void {
-    try w.print("| {s} | teams | predicted | observed | observed - predicted, pp |\n| --- | --- | --- | --- | --- |\n", .{label});
+    try w.print("| {s} | teams | predicted | observed | observed - 50%, pp | observed - predicted, pp |\n| --- | --- | --- | --- | --- | --- |\n", .{label});
 }
 
-fn binRow(w: *Io.Writer, label: []const u8, units: []const Unit, resid: []const f64, a: []const bool) !void {
-    const e = contrast(units, resid, a, null);
+fn binRow(w: *Io.Writer, label: []const u8, units: []const Unit, res: Res, a: []const bool) !void {
+    const e = contrast(units, res.model, a, null);
     if (e.n < 2) {
-        try w.print("| {s} | {d} | | | |\n", .{ label, e.n });
+        try w.print("| {s} | {d} | | | | |\n", .{ label, e.n });
         return;
     }
-    try w.print("| {s} | {d} | {d:.1}% | {d:.1}% | {d:.2} ± {d:.2} |\n", .{
-        label, e.n, e.mean_p * 100, (e.mean_p + e.est) * 100, e.est * 100, e.half * 100,
+    const raw = contrast(units, res.raw, a, null);
+    try w.print("| {s} | {d} | {d:.1}% | {d:.1}% | {d:.2} ± {d:.2} | {d:.2} ± {d:.2} |\n", .{
+        label,          e.n,         e.mean_p * 100, 50 + raw.est * 100, raw.est * 100,
+        raw.half * 100, e.est * 100, e.half * 100,
     });
 }
 
-fn contrastLine(w: *Io.Writer, label: []const u8, units: []const Unit, resid: []const f64, a: []const bool, b: []const bool) !void {
-    const e = contrast(units, resid, a, b);
-    try w.print("\n{s}: {d:.2} ± {d:.2} pp\n", .{ label, e.est * 100, e.half * 100 });
+fn contrastLine(w: *Io.Writer, label: []const u8, units: []const Unit, res: Res, a: []const bool, b: []const bool) !void {
+    const e = contrast(units, res.model, a, b);
+    const raw = contrast(units, res.raw, a, b);
+    try w.print("\n{s}: {d:.2} ± {d:.2} pp raw, {d:.2} ± {d:.2} pp after win-ratings\n", .{ label, raw.est * 100, raw.half * 100, e.est * 100, e.half * 100 });
 }
 
 /// The check must find an effect taken out of the offset: for the champion-roles with
 /// the largest training lifts (shrunk log-odds over 50%), teams with one, residual with
 /// the offset as is (should be ~0) and with the lift removed from that team's logit
 /// (should come back as about the lift)
+/// A champion-role's training win rate as log-odds over 50%, shrunk by control_prior
+fn liftOf(wins: *const std.AutoHashMapUnmanaged(u64, [2]f64), champion: u32, role: usize) f64 {
+    const e = wins.get(cellKey(champion, role)) orelse return 0;
+    const rate = (e[0] + 0.5 * control_prior) / (e[1] + control_prior);
+    return @log(rate / (1 - rate));
+}
+
+/// A real effect the check must find: with a coin as the offset, dev teams binned by
+/// their champions' summed training lifts minus the enemy's should win about what the
+/// lifts say; with win-ratings as the offset the gradient should be gone
+fn strengthControl(gpa: std.mem.Allocator, arena: std.mem.Allocator, units: []const Unit, resid: []const f64, in_a: []bool, w: *Io.Writer) !void {
+    const coin = try gpa.alloc(f64, units.len);
+    defer gpa.free(coin);
+    for (coin, units) |*c, u| c.* = u.y - 0.5;
+    const q = try quantiles(4, "lift_diff", gpa, units);
+    const edges = [_]f64{ -std.math.inf(f64), q[0], q[1], q[2], std.math.inf(f64) };
+    try w.writeAll("## Positive control: champion strength from training, found on dev\n\n");
+    try w.writeAll("| lift difference quartile | teams | lifts say | observed | observed - 50%, pp | observed - win-ratings, pp |\n| --- | --- | --- | --- | --- | --- |\n");
+    for (0..4) |b| {
+        var said: f64 = 0;
+        var n: f64 = 0;
+        for (in_a, units) |*a, u| {
+            a.* = u.lift_diff > edges[b] and u.lift_diff <= edges[b + 1];
+            if (a.*) {
+                said += 1 / (1 + @exp(-u.lift_diff));
+                n += 1;
+            }
+        }
+        const vs_coin = contrast(units, coin, in_a, null);
+        const vs_ratings = contrast(units, resid, in_a, null);
+        try w.print("| Q{d} ({s}) | {d} | {d:.1}% | {d:.1}% | {d:.2} ± {d:.2} | {d:.2} ± {d:.2} |\n", .{
+            b + 1,                  try std.fmt.allocPrint(arena, "{d:.2} to {d:.2}", .{ @max(edges[b], -9), @min(edges[b + 1], 9) }),
+            vs_coin.n,              100 * said / n,
+            50 + vs_coin.est * 100, vs_coin.est * 100,
+            vs_coin.half * 100,     vs_ratings.est * 100,
+            vs_ratings.half * 100,
+        });
+    }
+    try w.writeAll("\n");
+}
+
 fn control(
     gpa: std.mem.Allocator,
     d: *const rows.Data,
@@ -544,7 +649,7 @@ fn control(
 
     const shifted = try gpa.alloc(f64, units.len);
     defer gpa.free(shifted);
-    try w.writeAll("## Positive control: a champion-role's training lift removed from the offset\n\n");
+    try w.writeAll("## Plumbing check: a champion-role's training lift removed from the offset (found minus as is should equal it)\n\n");
     try w.writeAll("| champion-role | train rows | lift removed, pp | dev teams | as is, pp | lift removed, found, pp |\n| --- | --- | --- | --- | --- | --- |\n");
     var shown: usize = 0;
     for (cands.items) |ca| {
@@ -600,11 +705,14 @@ test "contrast: clustered by game, two teams per game" {
         .y = 0,
         .p = 0.5,
         .magic_share = 0,
+        .phys_share = 0,
         .frontline = 0,
         .cc = 0,
         .enemy_magic_share = 0,
         .enemy_frontline = 0,
         .armour_lean = 0,
+        .best_mitigated = 0,
+        .lift_diff = 0,
     };
     const a = [_]bool{ true, false, true, false, true, false };
     const one = contrast(&units, &r, &a, null);
