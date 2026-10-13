@@ -188,6 +188,8 @@ builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps
   job's K trials one after another, so a long CPU sweep holds few cpu slots; packed
   trials after the first get job.sh's `$pin`, so they stay on their slot's cores.
   `--commit SHA` builds that commit once (as --head does HEAD); the rest reuse its key
+- `--python SCRIPT [--with PATH]...` sweeps a python net (lab-run's --python): one trial a
+  job, no build; SCRIPT is copied at each start, so leave it alone until all are queued
 - netcheck's `ens` rows (the seeds' averaged predictions) get their own column
 - A SPACE line `ref --flag V ...` (every flag) adds trial `ref`, run first with the same
   seeds: the table shows it on top as the bar, unnumbered and never the pick

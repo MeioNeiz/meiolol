@@ -4,7 +4,8 @@
 #
 #   deploy/lab-sweep.sh start SWEEP SPACE [--trials N] [--rng S] [--pack K] [--serial]
 #                             [--head | --commit SHA] [--build-arg A]... [--res gpu|cpu]
-#                             [--skip N] [--dry-run] -- CMD ARGS...
+#                             [--python SCRIPT [--with PATH]...] [--skip N] [--dry-run]
+#                             -- CMD ARGS...
 #   deploy/lab-sweep.sh status SWEEP      its jobs, as deploy/lab-run.sh status shows them
 #   deploy/lab-sweep.sh table SWEEP       trials ranked by inner validation, to table.md
 #   deploy/lab-sweep.sh stop SWEEP        stops its queued and running jobs
@@ -17,6 +18,9 @@
 # runs `meiolol-lab CMD ARGS <its flags> --out tNN` in its job's run dir, output in tNN.log;
 # CMD writes tNN/folds.tsv (meiolol-f1's netcheck contract, lab-sweep.pl). State here, in
 # data/sweeps/SWEEP: space, trials.tsv, jobs.tsv (job, run dir, trials), table.md
+# --python SCRIPT (--with PATH: lab-run's): trials run `python SCRIPT ARGS <flags> --out
+# tNN` instead, one trial a job (no --pack: lab-run knows the interpreter's path), no
+# build; lab-run copies SCRIPT at each start, so don't edit it until every job is queued
 # --skip N: a start cut short after queuing jobs 1..N (jobs.tsv lists what it recorded):
 # the rest, with the same SPACE, --trials and --rng
 #   deploy/lab-sweep.sh start big1 big.space --trials 40 --head \
@@ -42,7 +46,8 @@ sweep_dir() {
 runs() { tail -n +2 "$1/jobs.tsv" | cut -f 2; }
 
 start() {
-    local sweep=$1 space=$2 trials=32 rng=1 pack=1 dry=0 res=gpu skip=0 serial=0 opts=()
+    local sweep=$1 space=$2 trials=32 rng=1 pack=1 dry=0 res=gpu skip=0 serial=0 py=""
+    local opts=()
     shift 2
     while (( $# )); do
         case "$1" in
@@ -54,6 +59,8 @@ start() {
             --head) opts+=(--head) ;;
             --commit) opts+=(--commit "$2"); shift ;;
             --build-arg) opts+=(--build-arg "$2"); shift ;;
+            --python) py=$2; opts+=(--python "$2"); shift ;;
+            --with) opts+=(--with "$2"); shift ;;
             --dry-run) dry=1 ;;
             --skip) skip=$2; shift ;;
             --) shift; break ;;
@@ -67,6 +74,8 @@ start() {
     set -- "${@/#$HOME/$tilde}"
     [[ "$pack" =~ ^[1-9][0-9]*$ ]] || { echo "--pack: a number"; exit 2; }
     [[ "$res" == gpu || "$res" == cpu ]] || { echo "--res: gpu or cpu"; exit 2; }
+    [[ -z "$py" ]] || (( pack == 1 )) \
+        || { echo "--python: one trial a job, no --pack"; exit 2; }
     local dir
     dir=$(sweep_dir "$sweep")
     [[ "$skip" =~ ^[0-9]+$ ]] || { echo "--skip: a number"; exit 2; }
@@ -110,7 +119,9 @@ start() {
         column -t -s $'\t' <<< "$plan"
         echo "${#jobs[@]} jobs on $HOST/$res, the first:"
         echo "  $(cut -c1-300 <<< "${jobs[0]}")"
-        "$RUN" start "$HOST" "$sweep-j01" --res "$res" --no-build --dry-run \
+        local dopts=(--no-build)
+        [[ -z "$py" ]] || dopts=(${opts[@]+"${opts[@]}"})
+        "$RUN" start "$HOST" "$sweep-j01" --res "$res" "${dopts[@]}" --dry-run \
             -- "${jobs[0]}" || true
         return
     fi
@@ -129,7 +140,7 @@ start() {
     for (( k = skip; k < ${#jobs[@]}; k++ )); do
         # Built once; the rest start that binary by its store key, whatever the tree
         # holds by then (lab-run.sh copies it into each run dir)
-        if (( k == skip + 1 )); then
+        if (( k == skip + 1 )) && [[ -z "$py" ]]; then
             key=$(sed -n 's/^binary \([0-9a-f]*\)$/\1/p' <<< "$out")
             [[ -n "$key" ]] || { echo "no binary key from the first start"; exit 1; }
             kept=()
