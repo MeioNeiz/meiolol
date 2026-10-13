@@ -12,6 +12,13 @@
 //! set it up) against normal takes, contested against not, and on test games. Realised
 //! share = 1 + that excess / the model's credit for the objective (its weight alone).
 //! Dragon elements are assigned by the game, so their differences are causal as given.
+//! --preds FILE: another model's chances instead (meiolol-state's preds-wcd.tsv: match_id,
+//! minute, block, one column per model), e.g. one with draft terms, which winchance lacks.
+//! Then 1000 gold is what the model gives a gold lead change in minutes with no event (by
+//! band), the XP that came with the farm included: under winchance that is ~1.3x its gold
+//! weight alone at 10-14 min, so gold equivalents aren't comparable across the two modes.
+//! A take's credit is the regression's value for its kind. Minutes whose next frame has
+//! no pred (the game's last) are dropped.
 //! Writes DIR/eventvalue.tsv, DIR/realised.tsv
 
 const std = @import("std");
@@ -28,13 +35,15 @@ const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
 pub const usage =
-    \\  eventvalue SNAP [--out DIR] [--boot N]
+    \\  eventvalue SNAP [--out DIR] [--boot N] [--preds FILE --col NAME --block B]
     \\                                  win chance points and gold per in-game event
     \\                                  (towers, dragons by element, grubs, herald,
     \\                                  baron, inhibitors, kills), per minute band, from
     \\                                  the state model; steals and contested takes as a
     \\                                  cause-or-ahead check (lab/eventvalue.zig; needs
-    \\                                  SNAP/events.tsv)
+    \\                                  SNAP/events.tsv); --preds: chances per game-minute
+    \\                                  from FILE's column NAME, rows of block B (e.g.
+    \\                                  cf), not winchance
     \\
 ;
 
@@ -191,6 +200,80 @@ fn loadEvents(gpa: Allocator, arena: Allocator, io: Io, snap: []const u8, out: *
     }
 }
 
+/// Last frame with a pred in --preds files
+const max_minute = 40;
+/// Per game, blue's chance at frames 0..max_minute from --preds (nan where none)
+const Preds = std.AutoHashMapUnmanaged(u64, *[max_minute + 1]f32);
+
+fn colIndex(header: []const u8, name: []const u8) ?usize {
+    var it = std.mem.splitScalar(u8, header, '\t');
+    var i: usize = 0;
+    while (it.next()) |h| : (i += 1) if (std.mem.eql(u8, h, name)) return i;
+    return null;
+}
+
+fn loadPreds(gpa: Allocator, arena: Allocator, io: Io, path: []const u8, col: []const u8, block: []const u8, out: *Preds) !void {
+    var file = try Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
+    var rbuf: [1 << 20]u8 = undefined;
+    var fr = file.reader(io, &rbuf);
+    const r = &fr.interface;
+    const header = (r.takeDelimiter('\n') catch |e| return fr.err orelse e) orelse return error.EmptyPreds;
+    const ci = [4]usize{
+        colIndex(header, "match_id") orelse return error.NoMatchId,
+        colIndex(header, "minute") orelse return error.NoMinute,
+        colIndex(header, "block") orelse return error.NoBlock,
+        colIndex(header, col) orelse {
+            std.debug.print("eventvalue: no column {s} in {s}\n", .{ col, path });
+            return error.NoPredColumn;
+        },
+    };
+    while (r.takeDelimiter('\n') catch |e| return fr.err orelse e) |line| {
+        var f: [4][]const u8 = undefined;
+        var it = std.mem.splitScalar(u8, line, '\t');
+        var i: usize = 0;
+        while (it.next()) |x| : (i += 1) for (ci, 0..) |c, k| if (c == i) {
+            f[k] = x;
+        };
+        if (i <= std.mem.max(usize, &ci)) continue;
+        if (!std.mem.eql(u8, f[2], block)) continue;
+        const m = std.fmt.parseInt(u8, f[1], 10) catch continue;
+        if (m > max_minute) continue;
+        const gop = try out.getOrPut(gpa, stats.matchKey(f[0]));
+        if (!gop.found_existing) {
+            gop.value_ptr.* = try arena.create([max_minute + 1]f32);
+            gop.value_ptr.*.* = @splat(std.math.nan(f32));
+        }
+        gop.value_ptr.*[m] = std.fmt.parseFloat(f32, f[3]) catch std.math.nan(f32);
+    }
+}
+
+/// pp of blue's chance per 1000 gold of lead change, per band, from the minutes with no
+/// event (farming): the model's own gold value when it has no single gold weight
+fn quietSlope(rows: []const Row) [n_band]f64 {
+    var sx: [n_band]f64 = @splat(0);
+    var sy: [n_band]f64 = @splat(0);
+    var sxx: [n_band]f64 = @splat(0);
+    var sxy: [n_band]f64 = @splat(0);
+    var n: [n_band]f64 = @splat(0);
+    for (rows) |r| {
+        if (!std.mem.allEqual(i8, &r.x, 0)) continue;
+        const x: f64 = r.dgold / 1000;
+        const y: f64 = r.dp;
+        sx[r.band] += x;
+        sy[r.band] += y;
+        sxx[r.band] += x * x;
+        sxy[r.band] += x * y;
+        n[r.band] += 1;
+    }
+    var out: [n_band]f64 = undefined;
+    for (&out, 0..) |*o, b| {
+        const vx = sxx[b] - sx[b] * sx[b] / n[b];
+        o.* = if (n[b] > 1 and vx > 0) (sxy[b] - sx[b] * sy[b] / n[b]) / vx else std.math.nan(f64);
+    }
+    return out;
+}
+
 /// One game-minute: the change from frame m to m+1 and that minute's events
 const Row = struct {
     game: u32,
@@ -206,6 +289,7 @@ const Row = struct {
 /// One objective take for the realised-value check
 const Take = struct {
     game: u32,
+    band: u8,
     kind: Kind,
     /// Taking team's chance at frame m and m+1, the model's credit at m+1 (pp, its held
     /// weight alone), and the result
@@ -249,7 +333,7 @@ const Data = struct {
     n_games: u32,
 };
 
-fn collect(gpa: Allocator, arena: Allocator, snap: []const u8, evs: *const std.AutoHashMapUnmanaged(u64, GameEvents)) !Data {
+fn collect(gpa: Allocator, arena: Allocator, snap: []const u8, evs: *const std.AutoHashMapUnmanaged(u64, GameEvents), preds: ?*const Preds) !Data {
     var out_rows: std.ArrayList(Row) = .empty;
     var takes: std.ArrayList(Take) = .empty;
     const db = try store.sqlite.Db.openReadOnly(try std.fs.path.joinZ(arena, &.{ snap, "timeline.db" }));
@@ -261,7 +345,9 @@ fn collect(gpa: Allocator, arena: Allocator, snap: []const u8, evs: *const std.A
     defer tl_arena.deinit();
     var n_games: u32 = 0;
     while (try q.step()) {
-        const ge = evs.get(stats.matchKey(q.bytes(0))) orelse continue;
+        const key = stats.matchKey(q.bytes(0));
+        const ge = evs.get(key) orelse continue;
+        const gp: ?*[max_minute + 1]f32 = if (preds) |p| p.get(key) orelse continue else null;
         _ = tl_arena.reset(.retain_capacity);
         const ta = tl_arena.allocator();
         const raw = try store.raw.decompress(ta, q.bytes(1));
@@ -275,9 +361,14 @@ fn collect(gpa: Allocator, arena: Allocator, snap: []const u8, evs: *const std.A
             const s0 = objectives.stateAt(t, m) orelse break;
             const s1 = objectives.stateAt(t, m + 1) orelse break;
             const band = bandOf(m) orelse break;
-            const p0 = sigmoid(logitAt(m, s0));
+            var p0 = sigmoid(logitAt(m, s0));
             const l1 = logitAt(m + 1, s1);
-            const p1 = sigmoid(l1);
+            var p1 = sigmoid(l1);
+            if (gp) |g| {
+                if (m + 1 > max_minute or std.math.isNan(g[m]) or std.math.isNan(g[m + 1])) break;
+                p0 = g[m];
+                p1 = g[m + 1];
+            }
             var row: Row = .{
                 .game = gi,
                 .band = @intCast(band),
@@ -310,6 +401,7 @@ fn collect(gpa: Allocator, arena: Allocator, snap: []const u8, evs: *const std.A
                     const credit = if (blue) p1 - without else without - p1;
                     try takes.append(arena, .{
                         .game = gi,
+                        .band = @intCast(band),
                         .kind = e.kind,
                         .p0 = @floatCast(p0t),
                         .p1 = @floatCast(p1t),
@@ -488,12 +580,21 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     const snap = argv[0];
     var out_dir: []const u8 = ".";
     var boot: u32 = 200;
+    var preds_path: ?[]const u8 = null;
+    var col: []const u8 = "p_wcd";
+    var block: []const u8 = "cf";
     var i: usize = 1;
     while (i + 1 < argv.len) : (i += 2) {
         if (std.mem.eql(u8, argv[i], "--out")) {
             out_dir = argv[i + 1];
         } else if (std.mem.eql(u8, argv[i], "--boot")) {
             boot = try std.fmt.parseInt(u32, argv[i + 1], 10);
+        } else if (std.mem.eql(u8, argv[i], "--preds")) {
+            preds_path = argv[i + 1];
+        } else if (std.mem.eql(u8, argv[i], "--col")) {
+            col = argv[i + 1];
+        } else if (std.mem.eql(u8, argv[i], "--block")) {
+            block = argv[i + 1];
         } else {
             std.debug.print("eventvalue: unknown {s}\nusage:\n{s}", .{ argv[i], usage });
             return 2;
@@ -506,13 +607,30 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var evs: std.AutoHashMapUnmanaged(u64, GameEvents) = .empty;
     defer evs.deinit(gpa);
     try loadEvents(gpa, arena, io, snap, &evs);
-    const d = try collect(gpa, arena, snap, &evs);
-    try w.print("# eventvalue: {d} games with events and a timeline, {d} game-minutes, {d} objective takes; {d} bootstrap reps\n\n", .{ d.n_games, d.rows.len, d.takes.len, boot });
+    var preds: Preds = .empty;
+    defer preds.deinit(gpa);
+    if (preds_path) |pp| try loadPreds(gpa, arena, io, pp, col, block, &preds);
+    const d = try collect(gpa, arena, snap, &evs, if (preds_path != null) &preds else null);
+    try w.print("# eventvalue: {d} games with events and a timeline, {d} game-minutes, {d} objective takes; {d} bootstrap reps\n", .{ d.n_games, d.rows.len, d.takes.len, boot });
+    if (preds_path) |pp| {
+        try w.print("# chances: {s} column {s}, block {s} ({d} games in the file)\n", .{ pp, col, block, preds.count() });
+    } else try w.writeAll("# chances: winchance's state model (no draft terms)\n");
+    const quiet = quietSlope(d.rows);
+    try w.writeAll("# pp per 1000 gold of lead change in minutes with no event, by band:");
+    for (quiet) |q| try w.print(" {d:.2}", .{q});
+    try w.writeAll(if (preds_path != null) " (the gold unit)\n\n" else " (winchance's slope is the gold unit)\n\n");
     try w.flush();
+    if (preds_path != null) for (d.rows) |*r| {
+        r.marg = @floatCast(quiet[r.band]);
+    };
 
     var est: [2][n_band][n_x]f64 = undefined;
     solve(d, null, 0, &est[0]);
     solve(d, null, 1, &est[1]);
+    // Without the model's weights, a take's credit is what the regression gives its kind
+    if (preds_path != null) for (d.takes) |*t| {
+        t.credit = @floatCast(est[0][t.band][1 + @backingInt(t.kind)] / 100);
+    };
     var real: [real_kinds.len][n_group]Realised = undefined;
     realised(d, null, &real);
 
@@ -626,6 +744,46 @@ test "event regression splits credit between events of one minute" {
     try testing.expectApproxEqAbs(1.0, est[2][1 + @backingInt(Kind.kill)], 0.05);
     solve(.{ .rows = rs.items, .takes = &.{}, .n_games = 4000 }, null, 1, &est);
     try testing.expectApproxEqAbs(300.0, est[2][1 + @backingInt(Kind.tower_outer)], 1e-3);
+}
+
+test "eventvalue quiet slope: gold value from minutes with no event" {
+    var rows: [300]Row = undefined;
+    for (&rows, 0..) |*r, k| {
+        const g: f32 = @floatFromInt(@as(i32, @intCast(k % 7)) - 3);
+        r.* = .{ .game = 0, .band = @intCast(k % 2), .dp = 2.5 * g + 0.1, .dgold = 1000 * g, .marg = 0, .x = @splat(0) };
+        // Minutes with an event don't count
+        if (k % 5 == 0) {
+            r.x[@backingInt(Kind.kill)] = 1;
+            r.dp += 9;
+        }
+    }
+    const q = quietSlope(&rows);
+    try testing.expectApproxEqAbs(2.5, q[0], 1e-6);
+    try testing.expectApproxEqAbs(2.5, q[1], 1e-6);
+    try testing.expect(std.math.isNan(q[2]));
+}
+
+test "eventvalue preds file: block and column by header" {
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{ .sub_path = "p.tsv", .data = "match_id\tminute\tblock\tp_wc\tp_wcd\n" ++
+        "EUW1_1\t1\tcf\t0.5\t0.6\n" ++
+        "EUW1_1\t2\tcf\t0.55\t0.65\n" ++
+        "EUW1_1\t2\t3\t0.1\t0.2\n" ++
+        "EUW1_2\t41\tcf\t0.5\t0.5\n" });
+    const path = try tmp.dir.realPathFileAlloc(io, "p.tsv", testing.allocator);
+    defer testing.allocator.free(path);
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var preds: Preds = .empty;
+    defer preds.deinit(testing.allocator);
+    try loadPreds(testing.allocator, arena.allocator(), io, path, "p_wcd", "cf", &preds);
+    try testing.expectEqual(1, preds.count());
+    const g = preds.get(stats.matchKey("EUW1_1")).?;
+    try testing.expectEqual(0.6, g[1]);
+    try testing.expectEqual(0.65, g[2]);
+    try testing.expect(std.math.isNan(g[3]));
 }
 
 test "kinds from events.tsv" {
