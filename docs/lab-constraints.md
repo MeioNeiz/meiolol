@@ -7,8 +7,9 @@ wrong or outdated, add a new line that supersedes it ("supersedes <date> <sympto
 Add a line when you hit an error or silent wrong result whose cause wasn't obvious, or
 fix the same thing twice. One line per entry, no wrapping:
 `date | area | symptom (what you saw) | cause | fix, banned call or rule (commit)`.
-Areas: data, harness, nets, gpu-box, mac, zig, build, process. A failed lab-run may add
-a stub line (command, exit, last error line): complete its cause and fix.
+Areas: data, harness, nets, gpu-box, mac, zig, build, process. Failed lab-runs are
+logged on the gpu-box (`deploy/lab-run.sh failures`: run, exit, last error line, args;
+`wait` says when one failed): add the line here when the cause wasn't obvious.
 Same error twice on one line of work: restore the last good state, don't try a third fix.
 
 ## Incidents

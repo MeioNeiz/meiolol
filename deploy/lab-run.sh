@@ -12,6 +12,7 @@
 #                           -- ARGS...
 #   deploy/lab-run.sh status [HOST]
 #   deploy/lab-run.sh wait RUN... [--timeout S]  until each has ended: state, RESULT lines
+#   deploy/lab-run.sh failures [N]           the last N failed runs: last error line, args
 #   deploy/lab-run.sh logs HOST RUN [LINES]
 #   deploy/lab-run.sh stop HOST RUN
 #   deploy/lab-run.sh restart HOST RUN       run it again in its dir (after a WSL restart)
@@ -216,6 +217,16 @@ lock7() {
     perl -MFcntl=:flock -e 'open(my $f, q{>&=}, 7) or die; flock($f, LOCK_EX) or die'
 }
 
+# Dies unless lock file $1 is held (by this shell): a lock that silently never locked
+# let several builds share one mirror tree (98cadb6)
+held() {
+    if perl -MFcntl=:flock -e 'open(my $f, ">>", $ARGV[0]) or die;
+        flock($f, LOCK_EX | LOCK_NB) or exit 1' "$1"; then
+        echo "lab-run: lock $1 not held: refusing to build" >&2
+        exit 1
+    fi
+}
+
 # Holds the first free of N locks $1.0 .. $1.N-1 on fd 8, as lock8; its number in SLOT8
 # (not printed: a command substitution's subshell would let go of the lock)
 slot8() {
@@ -269,8 +280,14 @@ ensure() {
     if ! built "$host" "$dir" && ! carry "$host" "$bin" "$key"; then
         mkdir -p "$STORE"
         # Locks per host: gpu-box builds don't queue behind the Mac's
-        if [[ "$host" == gpu-box ]]; then slot8 "$STORE/build-gpu-box" "$RBUILDS"; slot=$SLOT8
-        else lock8 "$STORE/build.lock"; fi
+        if [[ "$host" == gpu-box ]]; then
+            slot8 "$STORE/build-gpu-box" "$RBUILDS"
+            slot=$SLOT8
+            held "$STORE/build-gpu-box.$slot"
+        else
+            lock8 "$STORE/build.lock"
+            held "$STORE/build.lock"
+        fi
         if ! built "$host" "$dir"; then
             if (( ! build )); then
                 exec 8>&-
@@ -291,6 +308,7 @@ ensure() {
             # Two build slots could otherwise build one key at once, into one dir
             mkdir -p "$STORE/keys"
             lock7 "$STORE/keys/$host-$bin-$key"
+            held "$STORE/keys/$host-$bin-$key"
             if ! built "$host" "$dir" && ! carry "$host" "$bin" "$key"; then
                 echo "building $key for $host $bin" >&2
                 harness=$(inputs "" "$stage" | grep -v ' src/lab/cand/' | shasum | cut -c1-16)
@@ -542,8 +560,15 @@ rm -f started
 $lock
 date -u +%FT%TZ > started
 ${awake}${pin}nice -n 10 $cmd $*
-echo \$? > exit
+code=\$?
+echo \$code > exit
 date -u +%FT%TZ > ended
+# lab-run.sh failures: one line per failed run, its last error line
+if (( code )); then
+    printf '%s\t%s\t%s\t%s\n' "\$(cat ended)" "\${PWD##*/}" \$code \\
+        "\$(grep -aiE 'error|panic|fail|refus' log | tail -n 1 | tr '\t' ' ' | cut -c1-200)" \\
+        >> ../failures.tsv
+fi
 EOF
     chmod +x "$tmp/job.sh"
     # No -p on the run dir: a second start of NAME in the same second must not share it
@@ -681,13 +706,15 @@ wait_runs() {
         if [[ -z "${states[i]}" ]]; then status=3
         elif [[ "$st" != "exit 0" && $status == 0 ]]; then status=1; fi
     done
+    (( status != 1 )) || echo "a run failed: if the cause wasn't obvious, add its line to" \
+        "docs/lab-constraints.md (lab-run.sh failures lists failed runs)"
     return $status
 }
 
 main() {
 case "${1:-}" in
     start)
-        (( $# >= 3 )) || { sed -n '8,18p' "$0"; exit 2; }
+        (( $# >= 3 )) || { sed -n '8,20p' "$0"; exit 2; }
         # No HOST (start NAME [OPTIONS] -- ARGS): placed by predicted finish, as auto
         if [[ "$2" != mac && "$2" != gpu-box && "$2" != auto && "$3" == -* ]]; then
             set -- start auto "${@:2}"
@@ -701,6 +728,15 @@ case "${1:-}" in
         fi
         ;;
     wait) shift; wait_runs "$@" ;;
+    failures)
+        [[ "${2:-20}" =~ ^[0-9]+$ ]] || { echo "N: a number"; exit 2; }
+        # shellcheck disable=SC2016 # expands on the host
+        on gpu-box 'cd '"$RUNS"' && tail -n '"${2:-20}"' failures.tsv 2> /dev/null \
+            | while IFS=$'"'"'\t'"'"' read -r t r c e; do
+                echo "$t $r exit $c: $e"
+                echo "  $(sed -n "s/^args //p" $r/meta 2> /dev/null)"
+            done'
+        ;;
     logs)
         check_host "$2"
         check_run "${3:-}"
@@ -759,7 +795,7 @@ case "${1:-}" in
             && systemctl --user restart $WATCH && systemctl --user start meiolol-archive-pull.timer \
             && systemctl --user is-active $WATCH meiolol-archive-pull.timer"
         ;;
-    *) sed -n '8,18p' "$0"; exit 2 ;;
+    *) sed -n '8,20p' "$0"; exit 2 ;;
 esac
 }
 
