@@ -10,6 +10,8 @@
 //! each block's games are; a and b come from N varying within blocks. Comparisons use the
 //! mean c over the blocks every model has. Intervals: Poisson bootstrap over scored games,
 //! one weight per game shared by every point (paired), the whole fit redone per replicate.
+//! Main answer: the paired gap to the reference model, alpha[block] + beta * log2(N): beta
+//! says whether a net gains on it per doubling of fit games, and where it would cross.
 //! Not in the intervals: which fit games a fraction kept, and seed noise (use the seeds'
 //! mean `ens`; netcheck's seed spread says how big that is)
 
@@ -84,6 +86,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
 
     // Replicate 0 is the point estimate (every weight 1)
     const fits = try arena.alloc(Fit, (reps + 1) * nm);
+    const gaps = try arena.alloc(Gap, (reps + 1) * nm);
     const pooled = try arena.alloc(f64, (reps + 1) * c.points.items.len);
     const weights = try gpa.alloc(f64, c.n_games);
     defer gpa.free(weights);
@@ -106,19 +109,20 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             pooled[r * c.points.items.len + k] = s;
         }
         for (0..nm) |m| fits[r * nm + m] = try fitModel(arena, c.points.items, @intCast(m), shared);
+        for (0..nm) |m| gaps[r * nm + m] = try gapFit(arena, c.points.items, @intCast(m), ref_id, shared);
     }
 
     var buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &buf);
     const w = &stdout.interface;
-    try report(arena, &c, shared, fits, reps, ref_id, sizes.items, w);
+    try report(arena, &c, shared, fits, gaps, reps, ref_id, sizes.items, w);
     try w.flush();
     if (tsv) |path| {
         var f = try Io.Dir.cwd().createFile(io, path, .{});
         defer f.close(io);
         var tb: [4096]u8 = undefined;
         var tw = f.writer(io, &tb);
-        try tsvRows(arena, &c, fits, reps, ref_id, sizes.items, &tw.interface);
+        try tsvRows(arena, &c, fits, gaps, reps, ref_id, sizes.items, &tw.interface);
         try tw.interface.flush();
     }
     return 0;
@@ -337,15 +341,64 @@ fn interval(arena: std.mem.Allocator, est: f64, reps: []const f64) !Interval {
     return .{ .est = est, .lo = try quantile(arena, reps, 0.025), .hi = try quantile(arena, reps, 0.975) };
 }
 
-/// First N on a log grid (1e3 to 1e10) where model's curve is at or below ref's; inf if
-/// none
-fn crossing(f: Fit, r: Fit) f64 {
-    var k: usize = 0;
-    while (k <= 700) : (k += 1) {
-        const n = std.math.pow(f64, 10, 3 + @as(f64, @floatFromInt(k)) / 100);
-        if (curveAt(f, n) <= curveAt(r, n)) return n;
+/// Model minus ref on the same block and fit size: gap = alpha[block] + beta * log2(N).
+/// beta is the change in the gap per doubling of fit games; alpha the mean over shared
+/// blocks. Separate power laws for each model barely pin b and c down at our sizes (b
+/// runs to the grid's floor), while the paired gap's slope is what decides a crossing
+const Gap = struct { alpha: f64, beta: f64, n_max: f64 };
+
+fn gapFit(arena: std.mem.Allocator, points: []const Point, m: u32, ref: u32, shared: []const u32) !Gap {
+    const Pair = struct { block: u32, x: f64, d: f64, w: f64 };
+    var pairs: std.ArrayList(Pair) = .empty;
+    var nb: usize = 0;
+    var n_max: f64 = 0;
+    for (points) |p| {
+        if (p.model != m) continue;
+        const q = for (points) |q| {
+            if (q.model == ref and q.block == p.block and q.n_fit == p.n_fit) break q;
+        } else continue;
+        try pairs.append(arena, .{ .block = p.block, .x = std.math.log2(p.n_fit), .d = p.mean - q.mean, .w = @floatFromInt(p.games.len) });
+        nb = @max(nb, p.block + 1);
+        n_max = @max(n_max, p.n_fit);
     }
-    return std.math.inf(f64);
+    const sw = try arena.alloc(f64, nb);
+    const sx = try arena.alloc(f64, nb);
+    const sd = try arena.alloc(f64, nb);
+    @memset(sw, 0);
+    @memset(sx, 0);
+    @memset(sd, 0);
+    for (pairs.items) |p| {
+        sw[p.block] += p.w;
+        sx[p.block] += p.w * p.x;
+        sd[p.block] += p.w * p.d;
+    }
+    var num: f64 = 0;
+    var den: f64 = 0;
+    for (pairs.items) |p| {
+        const dx = p.x - sx[p.block] / sw[p.block];
+        num += p.w * dx * (p.d - sd[p.block] / sw[p.block]);
+        den += p.w * dx * dx;
+    }
+    const beta = if (den > 0) num / den else 0;
+    var as: f64 = 0;
+    var aw: f64 = 0;
+    for (shared) |k| if (k < nb and sw[k] > 0) {
+        as += sd[k] - beta * sx[k];
+        aw += sw[k];
+    };
+    return .{ .alpha = as / @max(aw, 1e-12), .beta = beta, .n_max = n_max };
+}
+
+fn gapAt(g: Gap, n: f64) f64 {
+    return g.alpha + g.beta * std.math.log2(n);
+}
+
+/// Fit games where the gap reaches 0 going up from the largest measured size: that size
+/// when the model is already level or better there, inf when the gap doesn't shrink
+fn crossing(g: Gap) f64 {
+    if (gapAt(g, g.n_max) <= 0) return g.n_max;
+    if (g.beta >= 0) return std.math.inf(f64);
+    return std.math.pow(f64, 2, -g.alpha / g.beta);
 }
 
 /// Pooled over a model's points with one label: games-weighted mean log loss, and the
@@ -416,7 +469,7 @@ fn labels(arena: std.mem.Allocator, c: *const Corpus) ![]const []const u8 {
     return out.items;
 }
 
-fn report(arena: std.mem.Allocator, c: *const Corpus, shared: []const u32, fits: []const Fit, reps: u32, ref: u32, ns: []const f64, w: *Io.Writer) !void {
+fn report(arena: std.mem.Allocator, c: *const Corpus, shared: []const u32, fits: []const Fit, gaps: []const Gap, reps: u32, ref: u32, ns: []const f64, w: *Io.Writer) !void {
     const nm = c.models.items.len;
     try w.print("# curve: {d} models, {d} blocks ({d} shared by all), {d} points, {d} games, {d} bootstrap replicates\n\n", .{ nm, c.block_keys.items.len, shared.len, c.points.items.len, c.n_games, reps });
     try w.writeAll("Blocks: ");
@@ -445,34 +498,53 @@ fn report(arena: std.mem.Allocator, c: *const Corpus, shared: []const u32, fits:
         try w.print("| {s} | {e:.3} | {d:.3} [{d:.3}, {d:.3}] ({d}% of reps flat) | {d:.5} [{d:.5}, {d:.5}] | {} |\n", .{ c.models.items[m], f0.a, bi.est, bi.lo, bi.hi, (reps - finite.items.len) * 100 / @max(reps, 1), ci.est, ci.lo, ci.hi, f0.ok });
     }
 
-    try w.print("\n## Projection: model minus {s} at N fit games (95% bootstrap; P = share of replicates below {s})\n\n| model | N | log loss | vs {s} | P better |\n| --- | --- | --- | --- | --- |\n", .{ c.models.items[ref], c.models.items[ref], c.models.items[ref] });
-    for (0..nm) |m| for (ns) |n| {
-        const est = curveAt(fits[m], n);
-        const d0 = est - curveAt(fits[ref], n);
-        var better: usize = 0;
-        for (tmp, 0..) |*x, r| {
-            x.* = curveAt(fits[(r + 1) * nm + m], n) - curveAt(fits[(r + 1) * nm + ref], n);
-            if (x.* < 0) better += 1;
-        }
-        const d = try interval(arena, d0, tmp);
-        try w.print("| {s} | {d:.0} | {d:.5} | {d:.5} [{d:.5}, {d:.5}] | {d:.2} |\n", .{ c.models.items[m], n, est, d.est, d.lo, d.hi, @as(f64, @floatFromInt(better)) / @as(f64, @floatFromInt(@max(reps, 1))) });
-    };
-
-    try w.print("\n## Crossing: fewest fit games where the model's curve reaches {s}'s (1e3..1e10; inf: never)\n\n| model | N | 95% | reps crossing by 1e7 |\n| --- | --- | --- | --- |\n", .{c.models.items[ref]});
+    const rn = c.models.items[ref];
+    try w.print("\n## Gap vs {s}: model minus {s} = alpha[block] + beta * log2(N) (paired points; 95% bootstrap)\n\n| model | beta per doubling | P beta < 0 | gap at largest N | largest N | crossing N | 95% | reps crossing by 1e7 |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n", .{ rn, rn });
     for (0..nm) |m| {
         if (m == ref) continue;
+        const g0 = gaps[m];
+        var neg: usize = 0;
+        for (tmp, 0..) |*x, r| {
+            x.* = gaps[(r + 1) * nm + m].beta;
+            if (x.* < 0) neg += 1;
+        }
+        const bi = try interval(arena, g0.beta, tmp);
+        for (tmp, 0..) |*x, r| x.* = gapAt(gaps[(r + 1) * nm + m], g0.n_max);
+        const gi = try interval(arena, gapAt(g0, g0.n_max), tmp);
         var by: usize = 0;
         for (tmp, 0..) |*x, r| {
-            x.* = crossing(fits[(r + 1) * nm + m], fits[(r + 1) * nm + ref]);
+            x.* = crossing(gaps[(r + 1) * nm + m]);
             if (x.* <= 1e7) by += 1;
         }
-        const x = try interval(arena, crossing(fits[m], fits[ref]), tmp);
-        try w.print("| {s} | {e:.2} | [{e:.2}, {e:.2}] | {d}% |\n", .{ c.models.items[m], x.est, x.lo, x.hi, by * 100 / @max(reps, 1) });
+        const xi = try interval(arena, crossing(g0), tmp);
+        try w.print("| {s} | {d:.5} [{d:.5}, {d:.5}] | {d:.2} | {d:.5} [{d:.5}, {d:.5}] | {d:.0} | {e:.2} | [{e:.2}, {e:.2}] | {d}% |\n", .{ c.models.items[m], bi.est, bi.lo, bi.hi, frac(neg, reps), gi.est, gi.lo, gi.hi, g0.n_max, xi.est, xi.lo, xi.hi, by * 100 / @max(reps, 1) });
     }
+
+    try w.print("\n## Projection at N fit games: {s}'s power law; others {s} + their gap (95% bootstrap; P = share of replicates below {s})\n\n| model | N | log loss | vs {s} | P better |\n| --- | --- | --- | --- | --- |\n", .{ rn, rn, rn, rn });
+    for (0..nm) |m| for (ns) |n| {
+        const base = curveAt(fits[ref], n);
+        if (m == ref) {
+            for (tmp, 0..) |*x, r| x.* = curveAt(fits[(r + 1) * nm + ref], n);
+            const a = try interval(arena, base, tmp);
+            try w.print("| {s} | {d:.0} | {d:.5} [{d:.5}, {d:.5}] | | |\n", .{ rn, n, a.est, a.lo, a.hi });
+            continue;
+        }
+        var better: usize = 0;
+        for (tmp, 0..) |*x, r| {
+            x.* = gapAt(gaps[(r + 1) * nm + m], n);
+            if (x.* < 0) better += 1;
+        }
+        const d = try interval(arena, gapAt(gaps[m], n), tmp);
+        try w.print("| {s} | {d:.0} | {d:.5} | {d:.5} [{d:.5}, {d:.5}] | {d:.2} |\n", .{ c.models.items[m], n, base + d.est, d.est, d.lo, d.hi, frac(better, reps) });
+    };
+}
+
+fn frac(k: usize, n: u32) f64 {
+    return @as(f64, @floatFromInt(k)) / @as(f64, @floatFromInt(@max(n, 1)));
 }
 
 /// docs/nn-results rows: pooled folds per label (absolute, and vs ref) and projections
-fn tsvRows(arena: std.mem.Allocator, c: *const Corpus, fits: []const Fit, reps: u32, ref: u32, ns: []const f64, w: *Io.Writer) !void {
+fn tsvRows(arena: std.mem.Allocator, c: *const Corpus, fits: []const Fit, gaps: []const Gap, reps: u32, ref: u32, ns: []const f64, w: *Io.Writer) !void {
     const nm = c.models.items.len;
     const rname = c.models.items[ref];
     for (try labels(arena, c)) |l| for (0..nm) |m| {
@@ -485,11 +557,15 @@ fn tsvRows(arena: std.mem.Allocator, c: *const Corpus, fits: []const Fit, reps: 
     };
     const tmp = try arena.alloc(f64, reps);
     for (0..nm) |m| for (ns) |n| {
-        try w.print("{s}\t-\tprojection\t{d:.5}\t\t\t\t\t\t{d:.0}\t\ta*N^-b+c\n", .{ c.models.items[m], curveAt(fits[m], n), n });
-        if (m == ref) continue;
-        for (tmp, 0..) |*x, r| x.* = curveAt(fits[(r + 1) * nm + m], n) - curveAt(fits[(r + 1) * nm + ref], n);
-        const d = try interval(arena, curveAt(fits[m], n) - curveAt(fits[ref], n), tmp);
-        try w.print("{s}\t{s}\tprojection\t{d:.5}\t{d:.5}\t\t\t\t\t{d:.0}\t\tbootstrap interval [{d:.5}, {d:.5}]\n", .{ c.models.items[m], rname, d.est, (d.hi - d.lo) / 2, n, d.lo, d.hi });
+        const base = curveAt(fits[ref], n);
+        if (m == ref) {
+            try w.print("{s}\t-\tprojection\t{d:.5}\t\t\t\t\t\t{d:.0}\t\ta*N^-b+c\n", .{ rname, base, n });
+            continue;
+        }
+        for (tmp, 0..) |*x, r| x.* = gapAt(gaps[(r + 1) * nm + m], n);
+        const d = try interval(arena, gapAt(gaps[m], n), tmp);
+        try w.print("{s}\t-\tprojection\t{d:.5}\t\t\t\t\t\t{d:.0}\t\t{s}'s a*N^-b+c plus the gap's log2 trend\n", .{ c.models.items[m], base + d.est, n, rname });
+        try w.print("{s}\t{s}\tprojection\t{d:.5}\t{d:.5}\t\t\t\t\t{d:.0}\t\tgap's log2 trend, bootstrap [{d:.5}, {d:.5}]\n", .{ c.models.items[m], rname, d.est, (d.hi - d.lo) / 2, n, d.lo, d.hi });
     };
 }
 
@@ -508,4 +584,23 @@ test "fitModel recovers a power law with block offsets" {
     try std.testing.expectApproxEqAbs(0.5, f.b, 0.02);
     try std.testing.expectApproxEqAbs(0.695, f.c, 1e-4);
     try std.testing.expectApproxEqAbs(0.695 + 2.0 * std.math.pow(f64, 1e6, -0.5), curveAt(f, 1e6), 1e-4);
+}
+
+test "gapFit: slope per doubling and crossing past the largest size" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var points: std.ArrayList(Point) = .empty;
+    const g = try arena.alloc(u32, 10);
+    const l = try arena.alloc(f64, 10);
+    for ([_]f64{ 0.69, 0.70 }, 0..) |c0, b| for ([_]f64{ 1e4, 2e4, 4e4 }, 0..) |n, k| {
+        try points.append(arena, .{ .model = 0, .block = @intCast(b), .label = "x", .n_fit = n, .games = g, .loss = l, .mean = c0 });
+        // Gap 0.003 at 1e4, 0.001 less per doubling: level at 8e4
+        const gap = 0.003 - 0.001 * @as(f64, @floatFromInt(k));
+        try points.append(arena, .{ .model = 1, .block = @intCast(b), .label = "x", .n_fit = n, .games = g, .loss = l, .mean = c0 + gap });
+    };
+    const gf = try gapFit(arena, points.items, 1, 0, &.{ 0, 1 });
+    try std.testing.expectApproxEqAbs(-0.001, gf.beta, 1e-9);
+    try std.testing.expectEqual(4e4, gf.n_max);
+    try std.testing.expectApproxEqRel(8e4, crossing(gf), 1e-6);
 }
