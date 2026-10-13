@@ -786,7 +786,7 @@ const PlatformCrawler = struct {
         if (try pc.seedLadder() > 0) return;
         // Participants first: their pass is bounded (each player about weekly), while the
         // sampled ladder players without mastery number ~850k per platform and never run out
-        if (pc.b.c.opts.mastery and try pc.fetchParticipantMasteries(20)) return;
+        if (pc.b.c.opts.mastery and try pc.fetchParticipantMasteries(20, null)) return;
         if (pc.b.c.opts.mastery and try pc.fetchMasteries(50) > 0) return;
         try pc.b.nap(60);
     }
@@ -839,9 +839,11 @@ const PlatformCrawler = struct {
     fn ladderGap(pc: *PlatformCrawler) !void {
         const per_hour = pc.b.c.opts.ladder_per_hour;
         if (per_hour > 0) {
-            while (pc.b.now() < pc.last_ladder + @divTrunc(3600, @as(i64, per_hour))) {
-                // A reseed takes hours of gaps: participant mastery uses them, not a nap
-                if (pc.b.c.opts.mastery and try pc.fetchParticipantMasteries(5)) continue;
+            const next = pc.last_ladder + @divTrunc(3600, @as(i64, per_hour));
+            while (pc.b.now() < next) {
+                // A reseed takes hours of gaps: participant mastery uses them, not a nap,
+                // stopping at the gap's end so ladder pages keep their pace
+                if (pc.b.c.opts.mastery and try pc.fetchParticipantMasteries(5, next)) continue;
                 try pc.b.nap(1);
             }
         }
@@ -922,8 +924,10 @@ const PlatformCrawler = struct {
         \\    (SELECT 1 FROM mastery x WHERE x.puuid = p.puuid AND x.fetched_at > ?5)
     ;
 
-    /// Mastery for every player of up to n newly stored matches; false when none are new
-    fn fetchParticipantMasteries(pc: *PlatformCrawler, n: u32) !bool {
+    /// Mastery for every player of up to n newly stored matches; false when none are new.
+    /// At `deadline` (s) it stops with the batch unfinished: the cursor stays, and the
+    /// next call skips the players this one fetched
+    fn fetchParticipantMasteries(pc: *PlatformCrawler, n: u32, deadline: ?i64) !bool {
         var arena: std.heap.ArenaAllocator = .init(pc.b.c.gpa);
         defer arena.deinit();
         const db = pc.b.db;
@@ -939,6 +943,7 @@ const PlatformCrawler = struct {
         });
         for (puuids) |puuid| {
             try pc.b.check();
+            if (deadline) |d| if (pc.b.now() >= d) return true;
             pc.fetchMastery(arena.allocator(), puuid) catch |err| {
                 if (fatal(err)) return err;
                 log.warn("{s} mastery: {t}", .{ pc.platform.host, err });
