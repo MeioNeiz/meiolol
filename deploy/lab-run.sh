@@ -15,14 +15,15 @@
 #   deploy/lab-run.sh pull HOST RUN          results to data/runs/RUN here
 #   deploy/lab-run.sh watch-install          League watcher on the gpu-box
 #
-# HOST: gpu-box or mac, or auto (also when left out): host and resource by predicted
+# HOST: gpu-box, or auto (also when left out): host and resource by predicted
 # finish, deploy/lab-place.pl (wait for the lock + run time from past runs; it says why).
+# mac only with LAB_ALLOW_MAC=1 (runs slow the Mac down).
 # --res auto with a named HOST picks the resource only; a named HOST without --res is cpu.
 # --dry-run: the placement or prediction only. ARGS go to meiolol-lab (or meiolol with
 # --meiolol), joined with spaces and run by bash in the run directory on the host, so ~
 # and globs expand there:
 #   deploy/lab-run.sh start smoke -- gpu-smoke
-#   deploy/lab-run.sh start mac eval --meiolol -- eval --data "~/ml/snaps/X" ">" eval.md
+#   deploy/lab-run.sh start gpu-box eval --meiolol -- eval --data "~/ml/snaps/X" ">" eval.md
 # --literal: each ARG reaches the program as one word, nothing expanded but a leading ~/
 # (deploy/lab-exp.sh: its words come from an agent, so they must not run as shell).
 # --head builds committed HEAD in a temp tree instead (other sessions edit the working
@@ -106,6 +107,11 @@ build() {
 start() {
     local host=$1 name=$2 bin=meiolol-lab build=1
     shift 2
+    # Runs on the Mac slow Jacob's machine down (2026-10-13): gpu-box only
+    if [[ "$host" == mac && "${LAB_ALLOW_MAC-}" != 1 ]]; then
+        echo "model runs go on the gpu-box: start gpu-box NAME (LAB_ALLOW_MAC=1 overrides)"
+        exit 2
+    fi
     while (( $# )); do
         case "$1" in
             --meiolol) bin=meiolol ;;
