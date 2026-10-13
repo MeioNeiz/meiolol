@@ -51,7 +51,7 @@ Coordinator: meiolol-bd (from meiolol-76, from meiolol-2c, from meiolol-78, 2026
 | meiolol-d8 (closed, from meiolol-ba) | NN tester done: LoLDraftAI 2x2 corrected per 4b (c3bbe11), random split flatters ratings at equal fit size, learned.md stands; net exporter on hold until a net beats ratings. Was: NN tester: draft-model.json net kind, Zig reference scorer and JS forward pass (comp tester done: 2be13f3, 7423f29) |
 | meiolol-4b (from meiolol-49) | comp test look reading (20261013T195844Z-final-compcheck, c26ffa8), then NN verifier: leakage audits, seed variance, paired checks |
 | meiolol-fd (from meiolol-1c) | GPU sweep runner for nets (random search on the 3080 via lab-run) (lab-run auto placement done: 371bec8, e050551) |
-| meiolol-0a (from meiolol-f1) | lead NN modeller: big net seed ensembles and sweep with 1c, learning curve on the ~350k snapshot (f1 results: a189f10, no net beats ratings or win-comp) |
+| meiolol-04 (from meiolol-0a [101155], from meiolol-f1) | lead NN modeller: big net seed ensembles and sweep with 1c, learning curve on the ~350k snapshot (f1 results: a189f10, no net beats ratings or win-comp) |
 | meiolol-97 [5c523c] (closed) | stacking and calibration done (9522113, 2840bce): stacker at the noise floor vs win-exp, GBDT loses to it, temperature nothing; rerun on 0a's sweep ensemble and f7's 350k win-exp later (scratchpad progress file) |
 | meiolol-f7 | player-history nets, internal scope only: experience, mastery_pre, rank_start per slot (src/lab/playernet.zig) |
 | meiolol-48 (closed) | patch and rank context done (3d11c31, e2ed6f4): per-patch offsets not detected; rank brackets wait for the 19 Oct snapshot (model.md Next steps) |
