@@ -25,7 +25,24 @@ How to write a line:
 
 ## Win
 
-- 2026-10-13 (early, to be updated with the larger held-out check and the win-comp
+- 2026-10-13 (early): A team that deals under a fifth of its damage as magic wins about
+  5 percentage points less often than its champions alone suggest, and lopsided teams
+  (that, or over 60% magic) about 3 points less than balanced ones; how many
+  tanky champions a team has and how much crowd control it brings make about a point of
+  difference at most. Sure: 44,353 games from every region in five forward time blocks
+  (dev, no test look), each team's mix from its champions' averages over the games before
+  its block, beyond a champion-strength model fitted on the same older games. Lopsided
+  minus balanced -3.0 ± 1.1 points, in every block (-2.4 to -3.6); the 3% of teams under
+  20% magic damage -5.3 ± 1.7. In iTero's rarer extremes (under 20% or over 80%
+  physical, 1% of teams) -10 ± 5 and -8 ± 4, like iTero's unadjusted -9 and -6, so their
+  gap is not just which champions sit in those comps. The 8,500 newest EUW games alone
+  showed -0.3 ± 2.5 (EUW on its own not measured further). No frontline -0.4 ± 0.8;
+  weakest-frontline quarter -0.9 ± 0.8 and least-CC quarter -0.8 ± 0.8, just past zero
+  but not once seven tests are allowed for; armour-heavy picks into magic damage not
+  detected (-2.5 ± 2.6). Site: nothing yet; after a test look, a lopsided-damage warning
+  with its size; no frontline or CC warnings. Evidence: docs/model.md "Comp features from
+  champion profiles", model-free cross-check (folds)
+- ~~2026-10-13 (early, to be updated with the larger held-out check and the win-comp
   model): Whether a team's damage is mostly magic or mostly physical, how many tanky
   champions it has, or how much crowd control it brings does not detectably change its
   chance of winning beyond which champions are in it. Sure: 8,500 dev EUW games, each
@@ -37,7 +54,7 @@ How to write a line:
   champion strength. Teams whose champions average under 20% or over 80% physical
   damage are under 0.5% of teams, so "all-AD comps lose" can't be tested this way. Site:
   no "your comp lacks AP / a frontline" warnings as fact. Evidence: docs/model.md "Comp
-  features from champion profiles", model-free cross-check
+  features from champion profiles", model-free cross-check~~
 - 2026-10-13: Once you know each team's gold at 14:00 and how long the game ran, the
   early-game stats Riot records (first tower, takedowns in the first minutes, the
   laning-phase gold and XP lead) barely help tell the winner: the best adds under half a

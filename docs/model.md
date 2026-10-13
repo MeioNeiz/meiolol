@@ -1058,7 +1058,7 @@ Pre-declared contrasts (observed minus win-ratings, pp; raw = observed minus 50%
 | 2+ frontline x enemy magic share | edge into 50%+ magic minus into <30% | | 3.43 ± 5.84 |
 | team armour lean (armor_end - mr_end vs role) x enemy magic | armour minus MR-leaning, into 50%+ minus <30% | | -4.83 ± 6.08 |
 
-Reading:
+Reading (dev-val alone; the folds below supersede it):
 - Not detected: none of the seven contrasts excludes 0, raw or after win-ratings. Of ~40
   single bins (full tables in the run's log) four are just past ±1.96 se (armour-leaning
   into <30% magic +3.5 ± 3.4, best mitigated Q1 -1.2 ± 1.3 and Q2 +1.7 ± 1.3, CC Q2
@@ -1076,6 +1076,54 @@ Reading:
 - For win-comp: any claimed comp effect of a few pp at the team-quartile scale should
   show here; a claim this check can't see at all is either below ~2 pp per quartile or
   in a feature not binned here
+
+Forward-chaining folds (`compcheck SNAP --folds 5`, c8d3317, run
+20261013T192745Z-compcheck-folds5): win-comp's foldAblation blocks, the newest half of
+dev's visible games (every platform) in five blocks by start, 44,353 games (88,706 team
+units). Per block, win-ratings refitted and profiles, lifts and the frontline cut rebuilt
+on the games before it (443k to 798k training rows). The dev mode reran bit-identical
+(dev4 = compcheck2). Positive control: coin offset -4.43 / -0.72 / +0.72 / +4.42 ± 0.66
+by strength quartile (lifts say -4.6 / -1.2 / +1.2 / +4.6), after win-ratings within
+±0.46.
+
+| hypothesis | contrast | raw | after win-ratings |
+| --- | --- | --- | --- |
+| team magic share (<20, 20-40, 40-60, 60%+) | lopsided minus balanced | -2.61 ± 1.08 | -2.96 ± 1.07 |
+| same, by bin | <20% magic (2,984 teams) | -5.80 ± 1.75 | -5.30 ± 1.74 |
+| same, by bin | 60%+ magic (6,231 teams) | -0.68 ± 1.20 | -1.38 ± 1.20 |
+| physical share, iTero's bins | lopsided minus 20-80% | -8.81 ± 3.20 | -8.90 ± 3.20 |
+| same, by bin | <20% physical (356 teams) | -8.71 ± 5.12 | -10.12 ± 5.13 |
+| same, by bin | 80%+ physical (567 teams) | -8.73 ± 4.04 | -7.99 ± 4.04 |
+| frontline count | none minus some | -1.01 ± 0.76 | -0.44 ± 0.75 |
+| team's best mitigated share | lowest quartile minus rest | -1.36 ± 0.76 | -0.90 ± 0.76 |
+| team CC time/min | lowest quartile minus rest | -1.58 ± 0.77 | -0.78 ± 0.76 |
+| 2+ frontline x enemy magic share | edge into 50%+ minus <30% | | -1.13 ± 2.50 |
+| armour lean x enemy magic share | armour minus MR-leaning, 50%+ minus <30% | | -2.48 ± 2.59 |
+
+win-comp's train-fit claims (0d, run wc-a-full) against the residual's slope per 1 sd of
+the same blue-minus-red feature: team magic share off 50%, squared, claimed -1.24 ± 0.28,
+found -1.90 ± 0.46 (dev-val alone -0.25 ± 1.06); magic share x enemy immobilise/min,
+claimed -0.40, found +0.30 ± 0.46 (not seen; the interval excludes the claim).
+
+Reading:
+- Damage balance is real at this size: lopsided minus balanced -3.0 ± 1.1 pp after
+  win-ratings, pre-declared, and in every block (lopsided -2.4 to -3.6, under-20%-magic
+  -2.9 to -6.4; scratch per-block split of compcheck.tsv), including block 4, whose
+  ratings fit stopped at epoch 1. Raw and adjusted barely differ: it isn't which
+  champions sit in those comps. Mostly the physical side: under 20% magic -5.3 ± 1.7,
+  over 60% magic -1.4 ± 1.2. The enemy side mirrors it (teams facing <30% magic: +2.2 and
+  +3.7 in the frontline table, +1.1 to +4.3 in the armour table)
+- iTero's gap reproduces: -10 ± 5 and -8 ± 4 in their bins, against their unadjusted -9
+  and -6, after win-ratings as before it
+- EUW dev-val alone gave -0.32 ± 2.47 for lopsided, 1.9 sd from the pooled -2.96: chance
+  or a smaller EUW effect, not separable here (compcheck.tsv has no platform)
+- Frontline and CC: no frontline not detected (-0.4 ± 0.8); weakest-frontline and
+  least-CC quartiles -0.9 and -0.8 ± 0.8, past 0 singly but not with seven contrasts
+  (Bonferroni z 2.69); low CC overlaps with all-physical comps (marksmen, assassins), not
+  separated here
+- Cross-team: armour-heavy into magic -2.5 ± 2.6, frontline into magic -1.1 ± 2.5: not
+  detected, at most about -5 and -4 pp
+- Dev only, no test look. A final needs the test look agreed with meiolol-2c
 
 Leakage review (ea's 25737aa, 0d's win-comp working copy, 2026-10-13): the harness copies
 Row.stats into Train for visible rows only (test "seat stats reach fit on visible games
