@@ -2610,18 +2610,20 @@ Marksman +0.6 ± 0.1 [+0.1 ± 0.1]; jungle Marksman +1.5 ± 0.5 [+1.1 ± 0.4], T
 support Support (enchanters) +0.6 ± 0.3 [+0.5 ± 0.3]. Full table: carry-types.tsv in
 the run dir.
 
-Reading:
-- A small real-looking pattern on the new pin, folds only: gold on a bot-lane mage is
-  worth about 2 pp per 1000 less than on a marksman at 15, gold on jungle marksmen and on
-  mid fighters and assassins a little more than on their roles' others. It is what the
-  per-champion train leanings hinted (Viktor, Ziggs bot low), now pooled. The gain is
-  tiny (+0.00005 nats per row, about a fiftieth of what gold by role adds) and not clear
-  on dev-val; not on the test; no learned.md line
-- Win conditions beyond gold (team lead, XP, towers, dragons, baron) do not depend on the
-  champion type: not detected on either snapshot. The draft changes what gold on a seat
-  is worth a little, not what objectives are worth. Line up with meiolol-state's net
-  (draft x state)
-- No plant for type cells yet: the size these folds could have missed is not measured
+Reading (reworded after meiolol-33's audit):
+- Champion type (Data Dragon's first tag) doesn't measurably change what a seat's gold
+  or the team's objectives are worth. Type x own gold lead shows a tiny gain on the new
+  snapshot (+0.00005 nats/row, 5/5 folds at 10, 15 and 25 min) that 2055Z, a subset of
+  the same games, doesn't show and dev-val doesn't confirm. Minutes share games, so 5/5
+  at three minutes is not three replications, and the type cells' ridge intervals are
+  not clustered by game (a bit narrow). It is ~10x under the ±0.5 floor, with no
+  resample. Type x team gold, XP, towers, dragons, baron: not detected on either
+  snapshot
+- The per-type leanings above (bot mages low, jungle marksmen high) are description of
+  train fits, not established effects
+- No plant for type cells, so no size is ruled out; dev only, no test look, no
+  learned.md line. carry doesn't read seat_stats.tsv, so the 2253Z seat-stat gap does
+  not touch these runs
 
 ### Draft model file (meiolol-lab draft --export)
 
