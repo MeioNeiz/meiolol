@@ -17,8 +17,8 @@
 //! before 15 (0 when unknown); rank: rank at game start and known; mastery: log1p
 //! pre-game points on the champion and known (SNAP/mastery_pre.tsv when present); prior
 //! (QuickSkill-style): gold, CS and damage per minute over earlier games, off-role share,
-//! log1p days since the last game, teammates played with before and the most games with
-//! one of them (premade).
+//! log1p days since the last game; duo: teammates played with before and the most games
+//! with one of them (premade).
 //! Writes DIR/folds.tsv, DIR/preds.tsv (as netcheck's, plus per side b_/r_: players with
 //! history, with games on their champion, games on their champions, games, players with
 //! rank, with mastery) and DIR/coverage.tsv (feature coverage of rows per block and part;
@@ -46,14 +46,14 @@ pub const usage =
     \\                                  permuted outcomes, scored on real ones)
     \\                                  --shuffle-feats 0|1 (control: players' feature
     \\                                  vectors permuted within role in training sets)
-    \\                                  --feats champ,any,form,rank,mastery,prior|none
+    \\                                  --feats champ,any,form,rank,mastery,prior,duo|none
     \\                                  --emb-init DIR (pretrain's emb-<block>-s<seed>.tsv)
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
     \\                                  --fraction X --threads N --out DIR
     \\
 ;
 
-pub const Group = enum { champ, any, form, rank, mastery, prior };
+pub const Group = enum { champ, any, form, rank, mastery, prior, duo };
 
 const Feat = enum {
     champ_games,
@@ -85,7 +85,8 @@ const Feat = enum {
             .kda, .lanediff14, .deaths15 => .form,
             .rank, .rank_known => .rank,
             .mastery, .mastery_known => .mastery,
-            .gpm, .cspm, .dpm, .offrole, .days_since, .duo_mates, .duo_games => .prior,
+            .gpm, .cspm, .dpm, .offrole, .days_since => .prior,
+            .duo_mates, .duo_games => .duo,
         };
     }
 
