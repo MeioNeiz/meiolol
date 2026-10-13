@@ -48,9 +48,12 @@ pub const usage =
     \\  comps SNAP --export-teams         every team of blocks 1-5 and dev-val with its
     \\                                  archetype and traits (profiles from games before
     \\                                  its block, no outcomes): teams.tsv
-    \\  comps SNAP --confirm FILE [--carry FILE]
+    \\  comps SNAP --confirm FILE [--carry FILE] [--seen IDS]
     \\                                  the sealed blocks 4-5 and dev-val, for the
-    \\                                  candidate names in FILE only (pre-declared)
+    \\                                  candidate names in FILE only (pre-declared);
+    \\                                  --seen: match ids (one a line) an earlier
+    \\                                  look already scored, left out of the sealed
+    \\                                  blocks
     \\
 ;
 
@@ -1090,6 +1093,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var shuffles: usize = 20;
     var carry_path: ?[]const u8 = null;
     var confirm_path: ?[]const u8 = null;
+    var seen_path: ?[]const u8 = null;
     var permute: u64 = 0;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
@@ -1111,6 +1115,9 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         } else if (std.mem.eql(u8, a, "--carry") and i + 1 < argv.len) {
             i += 1;
             carry_path = argv[i];
+        } else if (std.mem.eql(u8, a, "--seen") and i + 1 < argv.len) {
+            i += 1;
+            seen_path = argv[i];
         } else {
             std.debug.print("usage:\n{s}", .{usage});
             return 2;
@@ -1214,6 +1221,12 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     for (mech_raw, 0..) |*mr, gi| mr.* = mechOf(d, gi, team_obj, gold);
 
     // Carry columns (meiolol-61): per fold, champion-role values
+    var seen: std.StringHashMapUnmanaged(void) = .empty;
+    if (seen_path) |sp| {
+        const text = try Io.Dir.cwd().readFileAlloc(io, sp, arena, .unlimited);
+        var it = std.mem.tokenizeAny(u8, text, "\r\n");
+        while (it.next()) |id| try seen.put(arena, id, {});
+    }
     var carry: Carry = .{};
     if (carry_path) |cp| carry = try loadCarry(arena, io, cp);
     const cands = try candidates(arena, k_arch, carry.cols);
@@ -1282,8 +1295,13 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         for (&means) |*mm| mm.* /= @max(n_teams, 1);
 
         var n_block: usize = 0;
+        var n_seen: usize = 0;
         for (d.games, 0..) |g, gi| {
             if (blue_n[gi] == 0) continue;
+            if (b >= 3 and seen.contains(g.match_id)) {
+                n_seen += 1;
+                continue;
+            }
             const pb = blue_sum[gi] / blue_n[gi];
             const blue = makeTeam(&p, g.teams[0]);
             const red = makeTeam(&p, g.teams[1]);
@@ -1304,7 +1322,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
             for (cands) |cd| try xs.append(gpa, xOf(cd, &blue, &red, ab, &means, &p, &tc));
             n_block += 1;
         }
-        try w.print("block {d}: fit games before {d}, scored {d} games\n", .{ b + 1, before, n_block });
+        try w.print("block {d}: fit games before {d}, scored {d} games ({d} seen, left out)\n", .{ b + 1, before, n_block, n_seen });
     }
     try w.flush();
 
