@@ -260,7 +260,7 @@ taken from champions by type, damageSelfMitigated, timeCCingOthers,
 challenges.enemyChampionImmobilizations, totalHeal (includes heals on teammates),
 totalHealsOnTeammates, totalDamageShieldedOnTeammates, damageDealtToBuildings. From Data
 Dragon of the game's own patch (DDRAGON/<patch>/champion.json and item.json, patch from
-gameVersion; fetched by hand per patch, the snapshot keeps them in SNAP/ddragon/):
+gameVersion; deploy/snapshot.sh make fetches each queue 420 patch's into SNAP/ddragon/):
 armor_end, mr_end = base + growth at level 15 (Riot's curve) plus the flat armour/MR of
 item0..item6 at the end, no ability resists; attack_range the base range. Real
 minute-15 resists need raw timelines (championStats), archived only from 2026-10-12.

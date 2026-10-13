@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Analysis snapshot end to end, run on the Mac (it holds the salt; docs/data-safety.md
 # "Analysis snapshots", docs/model.md "Shared protocol"): box VACUUM INTO, streamed here,
-# checked, anonymised, checked again, split, legendaries and pack, then to the gpu-box.
+# checked, anonymised, checked again, split, legendaries, seat stats and pack, then to
+# the gpu-box.
 # The real-id copies (box and here) are deleted on every exit, success or not.
 #
 #   deploy/snapshot.sh make            new data/snap-STAMP here, then push
@@ -90,9 +91,10 @@ EOF
     check "$raw" "$out"
     rm -rf "$raw"
 
-    log "split, legendaries, pack"
+    log "split, legendaries, seat stats, pack"
     "$bin/bin/meiolol-lab" split "$out" > /dev/null
     "$bin/bin/meiolol" legendaries --data "$out" --platform all
+    seat_stats "$bin" "$out"
     "$bin/bin/meiolol-lab" pack "$out"
 
     trap - EXIT
@@ -102,6 +104,30 @@ EOF
     log "made $name here"
     push_snap "$name" || log "$GPU unreachable: $name waits for a tick that finds it awake"
     return 0
+}
+
+# OUT/seat_stats.tsv (rows.Row.stats), with resists and range from Data Dragon of each
+# queue 420 patch in OUT/ddragon/PATCH; a patch Data Dragon lacks gets NaN there
+seat_stats() {
+    local bin=$1 out=$2 versions patch v f
+    versions=$(curl -sf https://ddragon.leagueoflegends.com/api/versions.json) \
+        || die "Data Dragon versions.json unreachable"
+    for patch in $(sqlite3 "file:$out/meiolol.db?mode=ro" \
+        "SELECT DISTINCT patch FROM matches WHERE queue_id = 420"); do
+        v=$(grep -o "\"${patch//./\\.}\.[0-9]*\"" <<< "$versions" | head -n 1 | tr -d '"')
+        [[ -n "$v" ]] || { log "no Data Dragon version for $patch"; continue; }
+        mkdir -p "$out/ddragon/$patch"
+        for f in champion item; do
+            curl -sfo "$out/ddragon/$patch/$f.json" \
+                "https://ddragon.leagueoflegends.com/cdn/$v/data/en_US/$f.json" \
+                || die "Data Dragon $v $f.json"
+        done
+    done
+    if [[ -d "$out/ddragon" ]]; then
+        "$bin/bin/meiolol-lab" seat-stats "$out" "$out/ddragon"
+    else
+        "$bin/bin/meiolol-lab" seat-stats "$out"
+    fi
 }
 
 # Copies NAME to the gpu-box with the gpu-box meiolol-lab that make built, then writes
