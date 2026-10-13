@@ -31,7 +31,7 @@ Coordinator: meiolol-78 (from meiolol-cf, 2026-10-13).
 | --- | --- |
 | (none) | win / draft predictor rerun: closed (meiolol-db done 2026-10-13); new session when the coordinator pins a snapshot with ~a week of rank_history and pre-game mastery (model.md Next steps) |
 | meiolol-ff [f6a37d] | winchance weights fix (live Your games bug), clustered playstyle intervals (both free now; tell 47 when the playstyle/logreg commit is in), bootstrap bounds (wait for 47's all-clear) |
-| meiolol-6f | GPU vs CPU benchmark (bench1 done at 16x; 1x/4x, sweeps, deep draft net pending), then field ranking, then playstyle clustering |
+| meiolol-6f (handing over) | field ranking, then playstyle clustering (GPU benchmark done) |
 | meiolol-12 | lab harness and campaigns, from meiolol-39 (gold14-a final queued behind 6f's bench2, Jacob authorised; cand/team removed; brief fix waits on db's hunk) |
 | meiolol-0d | admin page: Models tab, Draft tester (live), suggester lane and blind lists next |
 | meiolol-11 [1f36a8] | box, archive operation, rows.zig, snapshots (weekly Sun, first 19 Oct), mastery for all players, flex sample |
@@ -77,7 +77,9 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
   everything pre-game 54.5%; skill slopes not detected; stored rank leaks
 - Agreed: meiolol-12's rank-at-game-start campaign (model.md Next steps); harness work
   now, campaign on the pinned snapshot
-- Results to collect: GPU table (6f), winchance fix (ff), mastery and flex live
+- Collected: GPU vs CPU (6f, ccfbd95, docs/compute.md): deep draft net on the 3080
+  (3.9x at 175k games, ~11x from 2.8M); fm and additive models on the CPU (sweeps tie)
+- Results to collect: winchance fix (ff), mastery and flex live
   with matches/day before and after (11), next snapshot pinned in docs/model.md
 - meiolol-58's solo/duo lookup commit: Jacob must type "commit" in its window (pane
   657); meiolol-11's mastery crawl.zig commit waits on it
