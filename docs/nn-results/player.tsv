@@ -1,6 +1,8 @@
 # title: Does a net use players' pre-game history (experience, form) better than hand-made terms? (internal scope)
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
 player net on ratings + experience terms	ratings	folds	-0.00263	0.00076	3	-0.00261	-0.00228	44353		playernet-20261013	ties the hand-made experience terms: -0.00002 ± 0.00020 beyond them
+player net on ratings + experience terms	hand-made experience terms	folds	-0.00002	0.00020	3	0.00000	0.00033	44353		playernet-20261013	what the net adds beyond the hand-made terms
+player net on ratings + experience terms	hand-made experience terms	dev-val	-0.00024	0.00034	3	-0.00033	0.00001	8500		playernet-20261013
 player net on ratings + experience terms	ratings	dev-val	-0.00213	0.00186	3	-0.00221	-0.00187	8500		playernet-20261013	-0.00024 ± 0.00034 beyond the hand-made terms
 hand-made experience terms (ratings + experience)	ratings	folds	-0.00261	0.00069	1			44353		playernet-20261013	win-ratings with champ_exp and form, linear per role
 hand-made experience terms (ratings + experience)	ratings	dev-val	-0.00189	0.00184	1			8500		playernet-20261013
