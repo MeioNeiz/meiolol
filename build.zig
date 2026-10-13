@@ -70,8 +70,13 @@ pub fn build(b: *std.Build) void {
     const lab_mod = labModule(b, target, optimize, cand);
     const lab = b.addExecutable(.{ .name = "meiolol-lab", .root_module = labModule(b, b.resolveTargetQuery(gpu_box), .ReleaseFast, cand) });
     const lab_step = b.step("lab", "Build meiolol-lab for this machine and the gpu-box (x86_64 Linux, CUDA)");
-    lab_step.dependOn(&b.addInstallArtifact(b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_mod }), .{}).step);
-    lab_step.dependOn(&b.addInstallArtifact(lab, .{ .dest_dir = .{ .override = .{ .custom = "gpu-box" } } }).step);
+    const lab_native = &b.addInstallArtifact(b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_mod }), .{}).step;
+    const lab_gpu_box = &b.addInstallArtifact(lab, .{ .dest_dir = .{ .override = .{ .custom = "gpu-box" } } }).step;
+    lab_step.dependOn(lab_native);
+    lab_step.dependOn(lab_gpu_box);
+    // One target each: deploy/lab-run.sh builds only the host a run goes to
+    b.step("lab-native", "Build meiolol-lab for this machine only").dependOn(lab_native);
+    b.step("lab-gpu-box", "Build meiolol-lab for the gpu-box only").dependOn(lab_gpu_box);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = lab_mod, .filters = test_filters })).step);
 
     // What the pre-push hook runs (deploy/hooks/pre-push): every push to main deploys
