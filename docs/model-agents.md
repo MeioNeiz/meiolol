@@ -46,9 +46,9 @@ Coordinator: meiolol-76 (from meiolol-2c, from meiolol-78, 2026-10-13).
 | meiolol-4b (from meiolol-49) | comp test look reading (20261013T195844Z-final-compcheck, c26ffa8), then NN verifier: leakage audits, seed variance, paired checks |
 | meiolol-1c | GPU sweep runner for nets (random search on the 3080 via lab-run) (lab-run auto placement done: 371bec8, e050551) |
 | meiolol-0a (from meiolol-f1) | lead NN modeller: big net seed ensembles and sweep with 1c, learning curve on the ~350k snapshot (f1 results: a189f10, no net beats ratings or win-comp) |
-| meiolol-97 | stacking and calibration: temperature per model, logistic stacker on out-of-fold preds (src/lab/stack.zig) |
+| meiolol-97 [5c523c] (closed) | stacking and calibration done (9522113, 2840bce): stacker at the noise floor vs win-exp, GBDT loses to it, temperature nothing; rerun on 0a's sweep ensemble and f7's 350k win-exp later (scratchpad progress file) |
 | meiolol-f7 | player-history nets, internal scope only: experience, mastery_pre, rank_start per slot (src/lab/playernet.zig) |
-| meiolol-48 (new, not the field-ranking one) | patch and rank context: per-patch champion offsets, lobby-rank brackets (cand/win-context) |
+| meiolol-48 (closed) | patch and rank context done (3d11c31, e2ed6f4): per-patch offsets not detected; rank brackets wait for the 19 Oct snapshot (model.md Next steps) |
 | meiolol-30 | scaling curves for ratings, win-comp and nets, a*N^-b + c, projection to production-key volumes |
 | meiolol-ab | interactions on pretrained embeddings: low-rank cross and within-team terms (cand/win-embx) |
 | meiolol-2a (closed) | admin Models tab dashboard of the NN programme results: done (16ecd0f) |
