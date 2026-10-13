@@ -11,7 +11,8 @@
 //!   counter   the `pair`-th most common lane matchup (same role, two champions): to the
 //!             lower champion id
 //!   pairs     every ally pair's own effect, normal with sd `pair_sd` (role-pair blocks)
-//!   counters  every lane matchup's own effect, sd `counter_sd`, antisymmetric
+//!   counters  every lane matchup's own effect (same role, and bottom and support
+//!             crossed), sd `counter_sd`, antisymmetric
 //!   mix       per sd of win-comp's mix form (f - 0.5)^2, blue minus red; f the team's
 //!             damage-weighted magic share from champion-role profiles over all rows
 //!   skill     per player per log1p(earlier games on the champion), blue minus red
@@ -139,6 +140,9 @@ fn gameKey(g: rows.Game) u64 {
     h.update(std.mem.asBytes(&g.platform));
     return h.final();
 }
+
+/// Blue's role against red's: the five lanes, then bottom and support crossed
+const lane_pairs = [_][2]usize{ .{ 0, 0 }, .{ 1, 1 }, .{ 2, 2 }, .{ 3, 3 }, .{ 4, 4 }, .{ 3, 4 }, .{ 4, 3 } };
 
 const Count = struct { key: u64, n: u32 };
 
@@ -286,20 +290,17 @@ pub fn truth(gpa: std.mem.Allocator, d: *const rows.Data, spec: Spec) !Truth {
 
         var ctr: f64 = 0;
         var ctrs: f64 = 0;
-        for (0..5) |r| {
-            const x = g.teams[0][r];
-            const y = g.teams[1][r];
-            if (x == y) continue;
-            const r3: u3 = @intCast(r);
-            if (r3 == matchup[0].role) {
-                if (x == matchup[0].champion and y == matchup[1].champion) ctr += 1;
-                if (y == matchup[0].champion and x == matchup[1].champion) ctr -= 1;
-            }
-            if (spec.counter_sd != 0) {
-                const sign: f64 = if (x < y) 1 else -1;
-                ctrs += sign * hnorm(spec.seed, Stream.counter, pairKey(key(@min(x, y), r), key(@max(x, y), r)));
-            }
-        }
+        const blue = g.teams[0][matchup[0].role];
+        const red = g.teams[1][matchup[0].role];
+        if (blue == matchup[0].champion and red == matchup[1].champion) ctr = 1;
+        if (red == matchup[0].champion and blue == matchup[1].champion) ctr = -1;
+        if (spec.counter_sd != 0) for (lane_pairs) |lp| {
+            const kb = key(g.teams[0][lp[0]], lp[0]);
+            const kr = key(g.teams[1][lp[1]], lp[1]);
+            if (kb == kr) continue;
+            const sign: f64 = if (kb < kr) 1 else -1;
+            ctrs += sign * hnorm(spec.seed, Stream.counter, pairKey(@min(kb, kr), @max(kb, kr)));
+        };
         if (ctr != 0) matchup_games += 1;
         p[@backingInt(Term.counter)] = @floatCast(spec.counter * ctr * pp);
         p[@backingInt(Term.counters)] = @floatCast(spec.counter_sd * ctrs * pp);
