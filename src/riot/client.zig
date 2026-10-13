@@ -142,6 +142,7 @@ pub const Client = struct {
             .redirect_behavior = .not_allowed,
         });
         defer req.deinit();
+        errdefer dropConnection(&req);
         try req.sendBodiless();
         var response = try req.receiveHead(&.{});
         var transfer: [64]u8 = undefined;
@@ -150,6 +151,12 @@ pub const Client = struct {
     }
 
     const Response = struct { status: u16, body: []u8 };
+
+    /// Request.deinit pools a connection whose send failed (no head read, so it looks
+    /// idle): every retry to that host would reuse the dead socket and fail the same way
+    fn dropConnection(req: *std.http.Client.Request) void {
+        if (req.connection) |conn| conn.closing = true;
+    }
 
     /// The path for logs, except where it holds a Riot ID: then the endpoint's name
     fn logged(path: []const u8, method: []const u8) []const u8 {
@@ -163,6 +170,7 @@ pub const Client = struct {
             .redirect_behavior = .not_allowed,
         });
         defer req.deinit();
+        errdefer dropConnection(&req);
         try req.sendBodiless();
         var response = try req.receiveHead(&.{});
         const status: u16 = @backingInt(response.head.status);
