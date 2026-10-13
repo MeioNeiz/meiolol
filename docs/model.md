@@ -1616,8 +1616,8 @@ inner val = the selection statistic.
 d8 vs random E d8, folds: -0.00028 ± 0.00027. Seeds, d8 folds: -0.00029 .. -0.00019.
 Per fold, d8: -0.00015, -0.00026, -0.00011, -0.00056, -0.00014. Small net with the d12
 vectors (meiolol-0a, emb 12, vs ratings, folds): scratch +0.00022 ± 0.00025, initialised
--0.00004 ± 0.00054, frozen +0.00049 ± 0.00068; initialised minus scratch -0.00026 ±
-0.00057. Rows: docs/nn-results/pretrain.tsv.
+-0.00004 ± 0.00054, frozen +0.00049 ± 0.00068 (dev-val +0.00096 ± 0.00158); initialised
+minus scratch -0.00026 ± 0.00057. Rows: docs/nn-results/pretrain.tsv.
 
 Reading (dev, no test look):
 - Rule: d8 wins (d12 no won term is within 0.00002, the tie goes to the smaller d). Its
@@ -1877,6 +1877,13 @@ pair_games from Scorer.value; the page's JS must match them to 0.01.
   and rank context"): rerun per-patch offsets (cfg.folds with the shuffled control) once
   a snapshot has 16.21 games in dev; rank brackets (cfg.bracket) on the 19 Oct weekly
   snapshot, the first with rank_start in dev: report coverage by bracket first
+
+- Pretrained embeddings (meiolol-5b, 2026-10-13; `meiolol-lab pretrain`, model.md
+  "Pretrained champion-role embeddings"): borderline, no test look (consistent sign on
+  5 of 5 folds, interval touching 0, gain in rare picks only). Rerun d8 (`--dim 8`) as
+  a ratings prior on the 19 Oct pinned snapshot (more games, tighter interval), same
+  controls; d8 vectors offered to meiolol-08 as a prior for rare pairs in its additive
+  model
 
 - Your usual style (parked, 2026-10-13, meiolol-3f): style from a player's earlier games
   is use-time valid for the user's own; measure it on early outcomes over 3c-team2 and

@@ -25,6 +25,7 @@ embedding prior d12, shuffled win labels (control)	ratings	folds	0.00028	0.00014
 embedding prior d12, shuffled win labels (control)	ratings	dev-val	0.00028	0.00031	3	-0.00003	0.00065	8500		pretrain 26276f3, gpu-box 20261013T220812Z-pt-shuf	
 small net, from scratch	ratings	folds	0.00022	0.00025	3	0.00032	0.00112	44353		20261013T205649Z-0a-pscr (meiolol-0a)	emb 12, hidden 64, dropout 0.2
 small net, started from the d12 embeddings	ratings	folds	-0.00004	0.00054	3	0.00030	0.00090	44353		20261013T212239Z-0a-pinit (meiolol-0a)	netcheck --emb-init; vs scratch -0.00026 ± 0.00057
-small net, d12 embeddings frozen	ratings	folds	0.00049	0.00068	3			44353		20261013T213554Z-0a-pfrz (meiolol-0a)	netcheck --emb-init --emb-freeze 1
+small net, d12 embeddings frozen	ratings	folds	0.00049	0.00068	3	0.00087	0.00114	44353		20261013T213554Z-0a-pfrz (meiolol-0a)	netcheck --emb-init --emb-freeze 1
 small net, from scratch	ratings	dev-val	0.00020	0.00062	3			8500		20261013T205649Z-0a-pscr (meiolol-0a)	
 small net, started from the d12 embeddings	ratings	dev-val	-0.00031	0.00106	3			8500		20261013T212239Z-0a-pinit (meiolol-0a)	
+small net, d12 embeddings frozen	ratings	dev-val	0.00096	0.00158	3	0.00108	0.00199	8500		20261013T213554Z-0a-pfrz (meiolol-0a)	
