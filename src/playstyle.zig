@@ -233,11 +233,6 @@ const Dims = struct {
     }
 };
 
-fn logLoss(p: f64, y: f64) f64 {
-    const q = std.math.clamp(p, 1e-6, 1 - 1e-6);
-    return -(y * @log(q) + (1 - y) * @log(1 - q));
-}
-
 pub fn run(
     gpa: std.mem.Allocator,
     io: Io,
@@ -355,7 +350,7 @@ pub fn run(
         for (loss[k], tests.items) |*l, r| {
             const b = dims.row(m, r);
             const p = logreg.sigmoid(b.dot(wt));
-            l.* = logLoss(p, b.y);
+            l.* = analysis.logLoss(p, b.y);
             if (preds.on()) try preds.at(k).print("{s}\t{d}\twin\t{d}\t{d:.4}\n", .{
                 test_ids.items[r.game], r.slot, b.y, p,
             });

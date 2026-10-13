@@ -131,11 +131,6 @@ fn baseRow(r: Row, y: f64) logreg.Row {
 }
 const base_dims = 1 + 6 * slots;
 
-fn logLoss(p: f64, y: f64) f64 {
-    const q = std.math.clamp(p, 1e-4, 1 - 1e-4);
-    return -(y * @log(q) + (1 - y) * @log(1 - q));
-}
-
 /// Each player's first `slots` distinct finished items, in games with a timeline
 fn load(
     gpa: std.mem.Allocator,
@@ -305,8 +300,8 @@ pub fn run(
         const y: f64 = @floatFromInt(@intFromBool(r.won));
         const b = baseRow(r, y);
         p.* = logreg.sigmoid(b.dot(wb));
-        lr.* = logLoss(rate, y);
-        lb.* = logLoss(p.*, y);
+        lr.* = analysis.logLoss(rate, y);
+        lb.* = analysis.logLoss(p.*, y);
     }
 
     var names: [models.len + 1][]const u8 = undefined;
@@ -339,7 +334,7 @@ pub fn run(
         const loss = try arena.alloc(f64, tests.items.len);
         for (tests.items, p_base, loss) |r, pb, *l| {
             const p = std.math.clamp(pb + fits[mi].predict(space, r), 0.01, 0.99);
-            l.* = logLoss(p, @floatFromInt(@intFromBool(r.won)));
+            l.* = analysis.logLoss(p, @floatFromInt(@intFromBool(r.won)));
             if (preds.on()) try preds.at(mi + 1).print("{s}\t{d}\t{d}\t{d}\t{d:.4}\n", .{
                 test_ids.items[r.game], r.slot, r.k, @intFromBool(r.won), p,
             });

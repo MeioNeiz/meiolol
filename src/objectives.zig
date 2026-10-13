@@ -226,11 +226,6 @@ fn dims(m: Model) usize {
     return 1 + m.feats.len + if (m.interact) held.len else 0;
 }
 
-fn logLoss(p: f64, y: f64) f64 {
-    const q = std.math.clamp(p, 1e-6, 1 - 1e-6);
-    return -(y * @log(q) + (1 - y) * @log(1 - q));
-}
-
 const Fitted = struct { w: []f64, se: []f64 };
 
 pub fn run(
@@ -301,7 +296,7 @@ pub fn run(
         for (train_y.items) |y| rate += y;
         rate /= @floatFromInt(train_y.items.len);
         const loss_base = try arena.alloc(f64, test_y.items.len);
-        for (loss_base, test_y.items) |*l, y| l.* = logLoss(rate, y);
+        for (loss_base, test_y.items) |*l, y| l.* = analysis.logLoss(rate, y);
         var loss: [models.len][]f64 = undefined;
 
         try w.print("| {d} | {d} | {d} | {d:.1}% |", .{ minute, train_states.items.len, test_states.items.len, 100 * rate });
@@ -320,7 +315,7 @@ pub fn run(
             for (loss[k], test_states.items, test_y.items, test_ids.items) |*l, s, y, id| {
                 const r = row(m, s, y);
                 const p = logreg.sigmoid(r.dot(wt));
-                l.* = logLoss(p, y);
+                l.* = analysis.logLoss(p, y);
                 if (preds.on()) try preds.at(k).print("{s}\t{d}\t{d}\t{d:.4}\n", .{ id, minute, y, p });
             }
             const g = analysis.pairedGainGames(if (m.after) |a| loss[a] else loss_base, loss[k]);

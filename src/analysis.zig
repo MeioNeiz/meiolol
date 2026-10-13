@@ -223,6 +223,13 @@ pub const PairedSums = struct {
     }
 };
 
+/// Log loss of chance p for outcome y in nats. The clamp only keeps log(0) out: one
+/// tighter than a model's most confident chance would hide its confident misses
+pub fn logLoss(p: f64, y: f64) f64 {
+    const q = std.math.clamp(p, 1e-9, 1 - 1e-9);
+    return -(y * @log(q) + (1 - y) * @log(1 - q));
+}
+
 pub fn mean(xs: []const f64) f64 {
     var sum: f64 = 0;
     for (xs) |x| sum += x;

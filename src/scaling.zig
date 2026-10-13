@@ -271,11 +271,6 @@ fn update(gpa: std.mem.Allocator, t: *Term, cov: Cov, champs: usize, rows: []con
     }
 }
 
-fn logLoss(p: f64, y: f64) f64 {
-    const q = std.math.clamp(p, 1e-4, 1 - 1e-4);
-    return -(y * @log(q) + (1 - y) * @log(1 - q));
-}
-
 const Model = struct { label: []const u8, file: []const u8 };
 
 const models = [_]Model{
@@ -450,7 +445,7 @@ pub fn run(
             };
             for (loss, eta, 0..) |l, e, k| {
                 const x = logreg.sigmoid(e);
-                l[i] = logLoss(x, y);
+                l[i] = analysis.logLoss(x, y);
                 if (preds.on()) try preds.at(k).print("{s}\t{d}\t{d}\t{d}\t{d:.4}\n", .{
                     test_ids.items[r.game], r.slot, minute, y, std.math.clamp(x, 1e-4, 1 - 1e-4),
                 });

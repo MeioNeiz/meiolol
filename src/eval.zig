@@ -570,7 +570,7 @@ fn experienceRow(
 /// Mean per-game log loss of `a` minus `b`, with a 95% interval
 fn pairedDiff(a: []const f64, b: []const f64, games: []const Game) analysis.Gain {
     var sums: analysis.PairedSums = .{};
-    for (a, b, games) |x, y, g| sums.add(logLoss(x, blueWon(g)) - logLoss(y, blueWon(g)), 1);
+    for (a, b, games) |x, y, g| sums.add(analysis.logLoss(x, blueWon(g)) - analysis.logLoss(y, blueWon(g)), 1);
     return sums.gain();
 }
 
@@ -780,7 +780,7 @@ fn metrics(gpa: std.mem.Allocator, p: []const f64, games: []const Game) !Metrics
     var m: Metrics = .{ .n = p.len, .log_loss = 0, .brier = 0, .auc = 0, .accuracy = 0 };
     for (p, games) |q, g| {
         const y = blueWon(g);
-        m.log_loss += logLoss(q, y);
+        m.log_loss += analysis.logLoss(q, y);
         m.brier += (q - y) * (q - y);
         if ((q > 0.5) == (y == 1) and q != 0.5) m.accuracy += 1;
         if (q == 0.5) m.accuracy += 0.5;
@@ -791,11 +791,6 @@ fn metrics(gpa: std.mem.Allocator, p: []const f64, games: []const Game) !Metrics
     m.accuracy /= n;
     m.auc = try auc(gpa, p, games);
     return m;
-}
-
-fn logLoss(q: f64, y: f64) f64 {
-    const c = std.math.clamp(q, 1e-9, 1 - 1e-9);
-    return -(y * @log(c) + (1 - y) * @log(1 - c));
 }
 
 /// Mann-Whitney: chance a random blue win scores above a random blue loss; ties half
@@ -918,7 +913,7 @@ fn tune(
             const o: score.Options = .{ .base_prior_games = prior_grid[i], .prior_games = prior_grid[j] };
             var sum: f64 = 0;
             for (c.train, 0..) |g, gi| {
-                sum += logLoss(score.draftWin(&c.models[gi % c.models.len].stats, o, g.teams), blueWon(g));
+                sum += analysis.logLoss(score.draftWin(&c.models[gi % c.models.len].stats, o, g.teams), blueWon(g));
             }
             c.losses[i][j] = sum / @as(f64, @floatFromInt(c.train.len));
         }
@@ -947,7 +942,7 @@ fn tune(
     }
     const weights = fitLogistic(xs, ys, 1.0);
     var wloss: f64 = 0;
-    for (xs, ys) |x, y| wloss += logLoss(sigmoid(dot(weights, x)), y);
+    for (xs, ys) |x, y| wloss += analysis.logLoss(sigmoid(dot(weights, x)), y);
     wloss /= @floatFromInt(train.len);
 
     try w.print("## Tuning ({d}-fold inside train)\n\n", .{folds});
@@ -991,7 +986,7 @@ fn tune(
             defer c.gpa.free(jw);
             const out = c.game_loss[l * c.train.len ..][0..c.train.len];
             for (c.train, out, 0..) |g, *x, gi| if (gi % c.folds == k) {
-                x.* = logLoss(sigmoid(jointRow(c.st, g).dot(jw)), blueWon(g));
+                x.* = analysis.logLoss(sigmoid(jointRow(c.st, g).dot(jw)), blueWon(g));
             };
         }
     };
