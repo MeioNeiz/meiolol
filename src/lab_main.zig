@@ -8,6 +8,7 @@ const anonymise = @import("lab/anonymise.zig");
 const archive = @import("lab/archive.zig");
 const mastery_pre = @import("lab/mastery_pre.zig");
 const seatstats = @import("lab/seatstats.zig");
+const nnexport = @import("lab/nnexport.zig");
 const protocol = @import("lab/protocol.zig");
 const rows = @import("lab/rows.zig");
 const pack = @import("lab/pack.zig");
@@ -23,6 +24,7 @@ const harness = @import("lab/harness.zig");
 const fields = @import("lab/fields.zig");
 const style = @import("lab/style.zig");
 const compcheck = @import("lab/compcheck.zig");
+const gains = @import("lab/gains.zig");
 
 const ptx: [:0]const u8 = @embedFile("kernels.ptx") ++ "";
 
@@ -44,6 +46,9 @@ const usage =
     \\                                  taken, CC, healing from raw.db, resists and range
     \\                                  from DDRAGON/<patch>/{champion,item}.json:
     \\                                  SNAP/seat_stats.tsv (lab/seatstats.zig); rows load it
+    \\  nn-export SNAP                  every game as tensors for the draft nets: SNAP/nn/
+    \\                                  (lab/nnexport.zig: champions, splits, folds, aux
+    \\                                  targets, fit-only norms)
     \\  split SNAP_DIR                  the shared held-out split (eval's, tested on EUW1):
     \\                                  prints it, writes SNAP_DIR/split.tsv
     \\  rows SNAP_DIR                   load the model rows, print outcome counts and means
@@ -62,7 +67,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ gains.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -127,6 +132,22 @@ pub fn main(init: std.process.Init) !u8 {
         std.log.info("seat-stats: {d} lines ({d} with Data Dragon values) from {d} of {d} games' " ++
             "summaries; {d} unreadable, {d} seats with another champion left out", .{
             n.lines, n.with_static, n.docs, n.games, n.bad_docs, n.mismatch,
+        });
+        return 0;
+    }
+    if (std.mem.eql(u8, cmd, "nn-export") and argv.len >= 3) {
+        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
+        defer legendaries.deinit(init.gpa);
+        var data = try rows.load(init.gpa, argv[2], &legendaries);
+        defer data.deinit();
+        const c = try harness.cuts(init.gpa, &data, for (protocol.platformIds(), 0..) |id, i| {
+            if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
+        } else unreachable);
+        var e = try nnexport.build(init.gpa, &data, c);
+        defer e.deinit();
+        try nnexport.write(init.gpa, init.io, argv[2], &e);
+        std.log.info("nn-export: {d} games, {d} champions, {d} patches, k {d} -> {s}/{s}", .{
+            e.len(), e.champions.len, e.patches.len, nnexport.k, argv[2], nnexport.dir_name,
         });
         return 0;
     }
@@ -246,6 +267,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "style")) {
         return style.main(init.gpa, arena, init.io, argv[2..]);
     }
+    if (std.mem.eql(u8, cmd, "gains")) {
+        return gains.main(init.gpa, arena, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "compcheck")) {
         return compcheck.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -319,6 +343,7 @@ test {
     _ = archive;
     _ = mastery_pre;
     _ = seatstats;
+    _ = nnexport;
     _ = protocol;
     _ = rows;
     _ = pack;
@@ -334,6 +359,7 @@ test {
     _ = fields;
     _ = style;
     _ = compcheck;
+    _ = gains;
 }
 
 /// x86 SSE runs ~100x slower on denormal floats, which Adam's decaying moments of rarely

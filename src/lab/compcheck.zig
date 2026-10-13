@@ -942,10 +942,10 @@ fn writeUnits(io: Io, d: *const rows.Data, units: []const Unit) !void {
     var buf: [64 * 1024]u8 = undefined;
     var fw = file.writer(io, &buf);
     const w = &fw.interface;
-    try w.writeAll("match_id\tplatform\tside\ty\tpred\tmagic_share\tfrontline\tcc\tenemy_magic_share\tenemy_frontline\tarmour_lean\n");
+    try w.writeAll("match_id\tplatform\tside\ty\tpred\tmagic_share\tfrontline\tcc\tenemy_magic_share\tenemy_frontline\tarmour_lean\tlift_diff\tbest_mitigated\n");
     const ids = protocol.platformIds();
-    for (units) |u| try w.print("{s}\t{s}\t{d}\t{d}\t{d:.4}\t{d:.4}\t{d}\t{d:.3}\t{d:.4}\t{d}\t{d:.2}\n", .{
-        d.games[u.game].match_id, ids[d.games[u.game].platform], u.side, u.y, u.p, u.magic_share, u.frontline, u.cc, u.enemy_magic_share, u.enemy_frontline, u.armour_lean,
+    for (units) |u| try w.print("{s}\t{s}\t{d}\t{d}\t{d:.4}\t{d:.4}\t{d}\t{d:.3}\t{d:.4}\t{d}\t{d:.2}\t{d:.4}\t{d:.4}\n", .{
+        d.games[u.game].match_id, ids[d.games[u.game].platform], u.side, u.y, u.p, u.magic_share, u.frontline, u.cc, u.enemy_magic_share, u.enemy_frontline, u.armour_lean, u.lift_diff, u.best_mitigated,
     });
     try w.flush();
 }
