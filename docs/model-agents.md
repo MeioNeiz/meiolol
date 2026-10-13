@@ -99,7 +99,10 @@ shows (meiolol-ff [2c6351] and meiolol-11 [b35536] are unrelated chats). When an
   train-fit leanings didn't hold on test, dropped
 - Collected: mastery for all participants live (11, 170e409, 02:16Z): matches/day
   127,914 before, 130,215 after; catch-up ~2.5 days, then ~25k mastery calls/day
-- Results to collect: flex sample live with matches/day (11), next snapshot pinned in docs/model.md
+- Collected: flex sample live (11, 0a4a787, 02:41Z, --flex-calls-per-day 500): 27 EUW1
+  games in 45 min, isolation tested, solo matches/day unchanged (~130k); mastery_pre
+  (b424a24) in snapshots from 19 Oct
+- Results to collect: flex games per full day (11, 14 Oct; lever is the cap), next snapshot pinned in docs/model.md
 - Admin follow-ups for the next admin session (0d, not done: admin.js held by
   meiolol-9f's Your games proxy edits): All-view cards take a category's first two
   learned.md lines in file order, so replacement lines can hide newer ones; stable-sort
