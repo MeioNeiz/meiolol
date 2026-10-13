@@ -958,6 +958,11 @@ pair_games from Scorer.value; the page's JS must match them to 0.01.
 
 ## Next steps
 
+- Field ranking follow-ups (parked, 2026-10-13): lens B over a team end-state base
+  (team kills, towers, objectives) so player-level fields beyond the team's result show;
+  per-champion check of ward takedowns (traps counted as wards?). `meiolol-lab fields`,
+  see "Field ranking"
+
 - Player experience and everything pre-game (win-ratings, internal scope): rerun when
   meiolol-78 pins a snapshot with about a week of rank_history and pre-game mastery
   (fetch time before game_start), on its fresh test set. Add rank at game start and the
