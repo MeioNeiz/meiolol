@@ -53,6 +53,9 @@ Coordinator: meiolol-76 (from meiolol-2c, from meiolol-78, 2026-10-13).
 | meiolol-2a (closed) | admin Models tab dashboard of the NN programme results: done (16ecd0f) |
 | meiolol-e3 (closed) | research: how AI agents run ML experiments well: done (86c8a5f, docs/lab-constraints.md 2680d29); ranked list adopted in briefs and 16's queue |
 | meiolol-16 | lab tooling from evidence: results store and checked comparisons, immutable run binaries, standard preds files, snapshot completeness checks |
+| meiolol-08 | effects and the CPU model: one shrunk additive model (champion-role, ally and enemy role-pair terms, comp), effects table in win points and gold, in-game event value (win chance added), distilled from GPU teachers (Jacob 2026-10-13: ship CPU-only models that pick out information) |
+| meiolol-research (was meiolol-f1, new) | research: isolating event, synergy and counter values; pre-game player skill models; distilling GPU models into explainable CPU ones |
+| meiolol-tests (was meiolol-0a, new) | model tests: planted-effect recovery and minimum detectable effects per model, training-health tests, golden numbers on the pinned snapshot |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
 shows. When an agent hands over, get the successor's name and tell the others.
