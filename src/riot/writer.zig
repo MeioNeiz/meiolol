@@ -24,8 +24,9 @@ const max_pending = 128;
 const busy_pause_s = 5;
 /// journal_size_limit only trims the WAL when it restarts, which needs a moment with
 /// every frame copied back and no reader on it. With nonstop writes and readers always
-/// about that moment never came, and main's WAL reached 57 GB. So force it this often:
-/// main's WAL grows ~1 MB/s while site, builds and eval read, so this caps it ~60 MB
+/// about that moment never came, and main's WAL reached 57 GB. So force it this often,
+/// for raw and timeline too: main's WAL grows ~1 MB/s while site, builds and eval read,
+/// so this caps it ~60 MB; raw's grows ~0.1 MB/s
 const wal_truncate_s = 60;
 /// Short: commits wait while the checkpoint waits on readers; on Busy, try again soon
 const wal_truncate_busy_ms = 250;
@@ -427,11 +428,12 @@ pub const Writer = struct {
     }
 };
 
-/// True once main's WAL is empty; false when a reader or writer kept it busy
+/// True once every attached database's WAL is empty; false when a reader or writer kept
+/// one busy (the others are still truncated)
 fn truncateWal(db: store.Db) !bool {
     db.setBusyTimeout(wal_truncate_busy_ms);
     defer db.setBusyTimeout(store.sqlite.busy_timeout_ms);
-    var s = try db.prepare("PRAGMA main.wal_checkpoint(TRUNCATE)");
+    var s = try db.prepare("PRAGMA wal_checkpoint(TRUNCATE)");
     defer s.deinit();
     return try s.step() and s.int(0) == 0;
 }
@@ -926,23 +928,29 @@ test "a match whose document names another id is failed, not counted as stored" 
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM matches", .{}));
 }
 
-test "truncateWal empties main's WAL" {
+test "truncateWal empties every attached database's WAL" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buf: [256]u8 = undefined;
     const path = try std.mem.printSentinel(&path_buf, ".zig-cache/tmp/{s}/t.db", .{&tmp.sub_path}, 0);
     const db = try store.Db.open(path);
     defer db.close();
+    try db.run("ATTACH ? AS raw", .{try std.mem.printSentinel(&path_buf, ".zig-cache/tmp/{s}/r.db", .{&tmp.sub_path}, 0)});
     try db.exec(
-        \\PRAGMA journal_mode = WAL;
+        \\PRAGMA main.journal_mode = WAL;
+        \\PRAGMA raw.journal_mode = WAL;
         \\CREATE TABLE t (x);
+        \\CREATE TABLE raw.t (x);
         \\INSERT INTO t VALUES (1), (2), (3);
+        \\INSERT INTO raw.t VALUES (1), (2), (3);
     );
     try std.testing.expect(try truncateWal(db));
-    var s = try db.prepare("PRAGMA main.wal_checkpoint(PASSIVE)");
-    defer s.deinit();
-    try std.testing.expect(try s.step());
-    try std.testing.expectEqual(0, s.int(1));
+    inline for (.{ "main", "raw" }) |schema| {
+        var s = try db.prepare("PRAGMA " ++ schema ++ ".wal_checkpoint(PASSIVE)");
+        defer s.deinit();
+        try std.testing.expect(try s.step());
+        try std.testing.expectEqual(0, s.int(1));
+    }
 }
 
 test "rolling window prunes old matches with their rows" {
