@@ -42,6 +42,7 @@ pub const usage =
     \\                                  --emb N --hidden N --depth N --dropout X --wd X
     \\                                  --emb-wd X --lr X --clip X --batch N --evals N
     \\                                  --patience N --max-epochs N --min-games N
+    \\                                  --fix-offset 0|1
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
     \\                                  --fraction X (nested share of fit games)
     \\                                  --threads N --out DIR
@@ -65,6 +66,8 @@ pub const Options = struct {
     emb_wd: ?f32 = null,
     /// Global gradient norm cap per step; 0 off
     clip: f32 = 1,
+    /// resid: the offset's weight stays 1
+    fix_offset: bool = false,
     /// Validation evaluations per epoch (early stopping; nets overfit within 1-3 epochs)
     evals: u32 = 4,
     lr: f32 = 1e-3,
@@ -205,6 +208,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.emb_wd = try std.fmt.parseFloat(f32, v);
         } else if (std.mem.eql(u8, k, "--clip")) {
             o.clip = try std.fmt.parseFloat(f32, v);
+        } else if (std.mem.eql(u8, k, "--fix-offset")) {
+            o.fix_offset = (try std.fmt.parseInt(u1, v, 10)) == 1;
         } else if (std.mem.eql(u8, k, "--evals")) {
             o.evals = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--dropout")) {
@@ -310,11 +315,37 @@ const FitKeep = struct {
     c: harness.Cuts,
     fraction: f64,
     before: i64 = std.math.maxInt(i64),
+    /// Leave out the games of this cross-fit fold
+    without: ?u8 = null,
 
     pub fn keep(k: FitKeep, g: rows.Game) bool {
+        if (k.without) |f| if (crossFold(g) == f) return false;
         return k.spec.fits(k.c, g, k.fraction) and g.start < k.before;
     }
 };
+
+/// resid's offsets on its own training games come from candidates fitted without them:
+/// an in-sample offset is more confident than the out-of-sample one it is scored with
+const cross_folds = 5;
+
+fn crossFold(g: rows.Game) u8 {
+    var h = std.hash.Wyhash.init(0xc705);
+    h.update(std.mem.asBytes(&g.start));
+    h.update(std.mem.asBytes(&g.platform));
+    return @intCast(h.final() % cross_folds);
+}
+
+/// Each `games` entry's blue chance from the candidate fitted on `keep`'s games outside
+/// its cross-fit fold
+fn candCross(gpa: std.mem.Allocator, d: *const rows.Data, players: []const harness.Players, keep: FitKeep, games: []const u32, want: []bool, out: []f32) !void {
+    for (0..cross_folds) |f| {
+        @memset(want, false);
+        for (games) |gi| want[gi] = crossFold(d.games[gi]) == f;
+        var k = keep;
+        k.without = @intCast(f);
+        try candBlue(gpa, d, players, k, want, out);
+    }
+}
 
 const Pooled = struct {
     ys: std.ArrayList(f32) = .empty,
@@ -338,7 +369,7 @@ const NetGame = struct {
 };
 
 /// The candidate fitted on the games `keep` accepts: blue's chance per data game index,
-/// for the games `want` marks; NaN elsewhere
+/// written for the games `want` marks only
 fn candBlue(gpa: std.mem.Allocator, d: *const rows.Data, players: []const harness.Players, keep: FitKeep, want: []const bool, out: []f32) !void {
     const k = api.outcomeIndex(.win);
     var v = try harness.buildTrainWhere(gpa, d, players, keep);
@@ -362,7 +393,9 @@ fn candBlue(gpa: std.mem.Allocator, d: *const rows.Data, players: []const harnes
             cnt[r.game] += 1;
         }
     }
-    for (out, sum, cnt) |*o, s, n| o.* = if (n > 0) @floatCast(s / @as(f64, @floatFromInt(n))) else std.math.nan(f32);
+    for (out, sum, cnt) |*o, s, n| if (n > 0) {
+        o.* = @floatCast(s / @as(f64, @floatFromInt(n)));
+    };
 }
 
 /// Dense ids from `fit` games: champion-roles with min_games get their own, others their
@@ -481,18 +514,23 @@ fn runBlock(
     defer gpa.free(want);
     @memset(want, false);
     for (scored.items) |gi| want[gi] = true;
-    if (opts.net == .resid) for (fit.items) |gi| {
-        want[gi] = true;
-    };
     const p_all = try gpa.alloc(f32, d.games.len);
     defer gpa.free(p_all);
-    try candBlue(gpa, d, players, .{ .spec = spec, .c = c, .fraction = opts.fraction }, want, p_all);
+    @memset(p_all, std.math.nan(f32));
+    const all_keep: FitKeep = .{ .spec = spec, .c = c, .fraction = opts.fraction };
+    try candBlue(gpa, d, players, all_keep, want, p_all);
     const p_inner = try gpa.alloc(f32, d.games.len);
     defer gpa.free(p_inner);
+    @memset(p_inner, std.math.nan(f32));
     if (opts.net == .resid) {
+        // Training games cross-fitted; val (scored) from the candidate on all inner (fit)
+        try candCross(gpa, d, players, all_keep, fit.items, want, p_all);
+        var inner_keep = all_keep;
+        inner_keep.before = cut;
+        try candCross(gpa, d, players, inner_keep, inner.items, want, p_inner);
         @memset(want, false);
-        for (fit.items) |gi| want[gi] = true;
-        try candBlue(gpa, d, players, .{ .spec = spec, .c = c, .fraction = opts.fraction, .before = cut }, want, p_inner);
+        for (val.items) |gi| want[gi] = true;
+        try candBlue(gpa, d, players, inner_keep, want, p_inner);
     }
     const t_cand = secondsSince(io, t0);
 
@@ -587,6 +625,15 @@ fn runBlock(
             name, fit.items.len, scored.items.len, meanLoss(ys, ens), cand_loss, g.mean, g.se, epochs / ns, secs, val_loss / ns, try auc(gpa, ys, ens), cand_auc,
         });
         try summaryRow(gpa, w, "seed mean", ys, pc, ens, null);
+        var m: f64 = 0;
+        var m2: f64 = 0;
+        for (fits) |f| {
+            const x = -pairedGain(ys, pc, f.pred).mean;
+            m += x;
+            m2 += x * x;
+        }
+        m /= ns;
+        try w.print("seed spread: per-seed vs cand mean {d:.5}, sd {d:.5}\n", .{ m, @sqrt(@max(m2 / ns - m * m, 0) * ns / @max(ns - 1, 1)) });
     }
     try w.writeAll("\n");
     try w.flush();
@@ -623,12 +670,12 @@ fn secondsSince(io: Io, t0: Io.Timestamp) f64 {
 }
 
 fn summaryHead(w: *Io.Writer) !void {
-    try w.writeAll("| net | games | log loss | cand log loss | gain, nats/game | AUC | cand AUC | epochs | val log loss |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
+    try w.writeAll("| net | games | log loss | cand log loss | vs cand, nats/game (negative: net better) | AUC | cand AUC | epochs | val log loss |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
 }
 
 fn summaryRow(gpa: std.mem.Allocator, w: *Io.Writer, label: []const u8, ys: []const f32, pc: []const f32, pn: []const f32, f: ?Fitted) !void {
     const g = pairedGain(ys, pc, pn);
-    try w.print("| {s} | {d} | {d:.5} | {d:.5} | {d:.5} ± {d:.5} | {d:.4} | {d:.4} |", .{ label, ys.len, meanLoss(ys, pn), meanLoss(ys, pc), g.mean, 1.96 * g.se, try auc(gpa, ys, pn), try auc(gpa, ys, pc) });
+    try w.print("| {s} | {d} | {d:.5} | {d:.5} | {d:.5} ± {d:.5} | {d:.4} | {d:.4} |", .{ label, ys.len, meanLoss(ys, pn), meanLoss(ys, pc), -g.mean, 1.96 * g.se, try auc(gpa, ys, pn), try auc(gpa, ys, pc) });
     if (f) |x| try w.print(" {d:.2} | {d:.5} |\n", .{ x.epochs, x.val_loss }) else try w.writeAll(" | |\n");
 }
 
@@ -999,6 +1046,7 @@ fn trainSmall(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, trai
         for (n.p, gr, m1, m2, 0..) |*x, g, *s1, *s2, i| {
             s1.* = 0.9 * s1.* + 0.1 * g;
             s2.* = 0.999 * s2.* + 0.001 * g * g;
+            if (i == l.a and opts.fix_offset) continue;
             const decay: f32 = if (i < l.e) 0 else if (i < l.w) emb_wd * x.* else opts.wd * x.*;
             x.* -= opts.lr * ((s1.* / c1) / (@sqrt(s2.* / c2) + 1e-8) + decay);
         }
