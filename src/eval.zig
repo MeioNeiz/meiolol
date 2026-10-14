@@ -31,9 +31,11 @@ pub const Options = struct {
     folds: u32 = 5,
     /// Pick metric candidates: champions with at least this many train games in the role
     pick_min_games: u32 = 10,
-    /// Region filter: test only on this platform's games from the cut on (the cut and
-    /// train still span every platform scanned), and compare with training on it alone
+    /// Region model only; the global model is never scored on a region. Tests only this
+    /// platform's games from the cut on (cut and train span every platform scanned)
     test_platform: ?[]const u8 = null,
+    /// The protocol's cuts from a wider scan (analysis.protocolCuts); null: from these games
+    cuts: ?Cuts = null,
 };
 
 const Game = stats.Row;
@@ -672,7 +674,7 @@ pub fn split(gpa: std.mem.Allocator, games: []Game, platforms: []const []const u
     var starts: std.ArrayList(i64) = .empty;
     defer starts.deinit(gpa);
     for (games) |g| if (g.duration_s >= min_duration_s) try starts.append(gpa, g.start);
-    const cuts = try cutsOf(starts.items, .{ .test_ = opts.test_share });
+    const cuts = opts.cuts orelse try cutsOf(starts.items, .{ .test_ = opts.test_share });
     var n_train: usize = 0;
     while (games[n_train].start < cuts.test_) n_train += 1;
     var tests_list: std.ArrayList(Game) = .empty;

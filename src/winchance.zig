@@ -12,6 +12,7 @@ const timeline = @import("riot/timeline.zig");
 const objectives = @import("objectives.zig");
 const logreg = @import("logreg.zig");
 const stats = @import("stats.zig");
+const analysis = @import("analysis.zig");
 const weights = @import("winchance_weights.zig");
 const Io = std.Io;
 
@@ -63,8 +64,8 @@ const n_models = 4;
 const model_labels = [n_models][]const u8{ "per minute", "per minute, 300+", "smooth", "shipped" };
 
 /// Fits on the ranked solo games with timelines in `db` and writes a held-out check to
-/// `w`. Test: the newest fifth of EUW1 games (docs/model.md protocol); train: older
-/// games, every platform. Weights (the smooth fit, per minute) as Zig source to
+/// `w`. Test: every platform's games from the protocol's test cut (analysis.protocolCuts,
+/// docs/model.md "Shared protocol"); train: older games. Weights (the smooth fit, per minute) as Zig source to
 /// `src_out` when given
 pub fn fit(gpa: std.mem.Allocator, db: store.Db, src_out: *Io.Writer, w: *Io.Writer) !void {
     return fitWith(gpa, db, .{}, src_out, w);
@@ -77,7 +78,7 @@ pub fn fitWith(gpa: std.mem.Allocator, db: store.Db, opts: Options, src_out: ?*I
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    const Loaded = struct { id: []const u8, y: f32, euw: bool, start: i64, key: u64, states: []const objectives.State };
+    const Loaded = struct { id: []const u8, y: f32, start: i64, key: u64, states: []const objectives.State };
     var loaded: std.ArrayList(Loaded) = .empty;
     var q = try db.prepare(
         \\SELECT m.match_id, m.winning_team, m.platform, m.game_start, t.data
@@ -99,7 +100,6 @@ pub fn fitWith(gpa: std.mem.Allocator, db: store.Db, opts: Options, src_out: ?*I
         for (1..max_minute + 1) |m| try states.append(gpa, objectives.stateAt(t, @intCast(m)) orelse break);
         try loaded.append(arena, .{
             .y = if (q.int(1) == 100) 1 else 0,
-            .euw = std.mem.eql(u8, q.bytes(2), "EUW1"),
             .start = q.int(3),
             .id = try arena.dupe(u8, q.bytes(0)),
             .key = stats.matchKey(q.bytes(0)),
@@ -107,16 +107,12 @@ pub fn fitWith(gpa: std.mem.Allocator, db: store.Db, opts: Options, src_out: ?*I
         });
     }
 
-    var euw_starts: std.ArrayList(i64) = .empty;
-    for (loaded.items) |g| if (g.euw) try euw_starts.append(arena, g.start);
-    if (euw_starts.items.len < 100) return error.TooFewGames;
-    std.mem.sort(i64, euw_starts.items, {}, std.sort.asc(i64));
-    const cutoff = euw_starts.items[euw_starts.items.len - euw_starts.items.len / 5];
+    const cutoff = (try analysis.protocolCuts(gpa, db)).test_;
     const games = try arena.alloc(Game, loaded.items.len);
     var n_part: [3]usize = @splat(0);
     for (loaded.items, games) |l, *g| {
         const part: Part = if (l.start >= cutoff)
-            (if (l.euw and !opts.dev) .score else .unused)
+            (if (opts.dev) .unused else .score)
         else if (opts.dev)
             (if (l.key % 5 == 0) .score else .fit)
         else
@@ -134,10 +130,10 @@ pub fn fitWith(gpa: std.mem.Allocator, db: store.Db, opts: Options, src_out: ?*I
     last[3] = weights.w.len;
 
     try w.print("# meiolol winchance\n\nRanked solo games of 15 min or more. {s}: {d} games " ++
-        "(fit on {d}). Test cutoff: EUW1 games started from {d}. Smooth: every weight " ++
+        "(fit on {d}). Test cutoff: games started from {d}, every platform. Smooth: every weight " ++
         "linear in minute between knots {any}. Log loss in nats per game still going at that " ++
         "minute; base: the fit games' win rate.\n\n", .{
-        if (opts.dev) "Dev (every fifth train game)" else "Test (newest fifth of EUW1)",
+        if (opts.dev) "Dev (every fifth train game)" else "Test (the protocol's newest 15%, every platform)",
         n_part[@backingInt(Part.score)],
         n_part[@backingInt(Part.fit)],
         cutoff,

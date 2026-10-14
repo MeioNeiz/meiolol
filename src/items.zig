@@ -13,6 +13,7 @@ const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
+const eval = @import("eval.zig");
 const analysis = @import("analysis.zig");
 const logreg = @import("logreg.zig");
 const outcomes = @import("outcomes.zig");
@@ -21,8 +22,9 @@ const Role = core.Role;
 const Io = std.Io;
 
 pub const Options = struct {
-    test_share: f64 = 0.2,
-    test_platform: []const u8 = "EUW1",
+    test_share: f64 = eval.test_share,
+    /// Region model only; the global model is never scored on a region
+    test_platform: ?[]const u8 = null,
     passes: u32 = 12,
     /// One TSV per model of every test row's prediction
     preds_dir: ?[]const u8 = null,
@@ -273,9 +275,9 @@ pub fn run(
     try w.print("# meiolol items\n\nTrain: {d} games with a timeline, every scanned platform, " ++
         "started before {f} ({d}). Test: {d} {s} games from then. Rows: each player's first " ++
         "{d} distinct finished items ({d} train, {d} test). Champions {d}, items {d}.\n", .{
-        n_games[0],         Date.fromMs(split.cutoff), split.cutoff,    n_games[1],
-        opts.test_platform, slots,                     train.items.len, tests.items.len,
-        space.champs,       space.items,
+        n_games[0],                                   Date.fromMs(split.cutoff), split.cutoff,    n_games[1],
+        opts.test_platform orelse "every platform's", slots,                     train.items.len, tests.items.len,
+        space.champs,                                 space.items,
     });
 
     // Baseline: the purchase's state

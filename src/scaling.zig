@@ -13,6 +13,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
+const eval = @import("eval.zig");
 const analysis = @import("analysis.zig");
 const logreg = @import("logreg.zig");
 const objectives = @import("objectives.zig");
@@ -21,8 +22,9 @@ const Role = core.Role;
 const Io = std.Io;
 
 pub const Options = struct {
-    test_share: f64 = 0.2,
-    test_platform: []const u8 = "EUW1",
+    test_share: f64 = eval.test_share,
+    /// Region model only; the global model is never scored on a region
+    test_platform: ?[]const u8 = null,
     passes: u32 = 8,
     /// One TSV per model of every test row's prediction
     preds_dir: ?[]const u8 = null,
@@ -386,7 +388,7 @@ pub fn run(
         "started before {f} ({d}). Test: {d} {s} games from then. Ten rows per game and " ++
         "minute while it is still going; minute 0 is the draft (no state). State: {t}; " ++
         "slope on the {t} gold lead.\n", .{
-        n_games[0], Date.fromMs(split.cutoff), split.cutoff, n_games[1], opts.test_platform, opts.state, opts.slope,
+        n_games[0], Date.fromMs(split.cutoff), split.cutoff, n_games[1], opts.test_platform orelse "every platform's", opts.state, opts.slope,
     });
 
     for (&at) |*m| {

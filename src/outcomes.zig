@@ -16,6 +16,7 @@ const core = @import("core");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
 const ddragon = @import("ddragon.zig");
+const eval = @import("eval.zig");
 const analysis = @import("analysis.zig");
 const Date = @import("date.zig").Date;
 const Role = core.Role;
@@ -25,8 +26,9 @@ pub const Outcome = enum { gold14, lanediff14, cs10, deaths15, first_item };
 const n_out = @typeInfo(Outcome).@"enum".field_names.len;
 
 pub const Options = struct {
-    test_share: f64 = 0.2,
-    test_platform: []const u8 = "EUW1",
+    test_share: f64 = eval.test_share,
+    /// Region model only; the global model is never scored on a region
+    test_platform: ?[]const u8 = null,
     passes: u32 = 12,
     /// One TSV per model of every test row's prediction (docs/model.md protocol)
     preds_dir: ?[]const u8 = null,
@@ -307,8 +309,8 @@ pub fn run(
     try w.print("# meiolol outcomes\n\nTrain: {d} games with a timeline to minute 15, every " ++
         "scanned platform, started before {f} ({d}). Test: {d} {s} games from then. " ++
         "Champions: {d}.\n", .{
-        train_games,        Date.fromMs(split.cutoff), split.cutoff, test_ids.items.len,
-        opts.test_platform, ids.len,
+        train_games,                                  Date.fromMs(split.cutoff), split.cutoff, test_ids.items.len,
+        opts.test_platform orelse "every platform's", ids.len,
     });
 
     var names: [models.len + 1][]const u8 = undefined;

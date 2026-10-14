@@ -140,8 +140,9 @@ pub const Cuts = struct {
     /// Fold k's block is [bounds[k - 1], bounds[k]) of the dev-visible games, k = 1..5;
     /// dev_old is below bounds[0]; bounds[5] = +inf, so cap fold 5 at `dev`
     bounds: [folds + 1]i64,
-    /// Region filter (a regional fine-tune): scores only this platform's games, while the
-    /// cuts and the fits stay on every platform. null: every platform
+    /// Region model only (the global model fine-tuned on a region); the global model is
+    /// never scored on a region. Scores only this platform's games; cuts and fits stay on
+    /// every platform. null (the default): every platform
     region: ?u8 = null,
 
     /// Fold k's block, capped at the dev cut

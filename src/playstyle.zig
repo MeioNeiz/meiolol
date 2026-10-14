@@ -11,6 +11,7 @@ const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
+const eval = @import("eval.zig");
 const analysis = @import("analysis.zig");
 const logreg = @import("logreg.zig");
 const Date = @import("date.zig").Date;
@@ -18,8 +19,9 @@ const Role = core.Role;
 const Io = std.Io;
 
 pub const Options = struct {
-    test_share: f64 = 0.2,
-    test_platform: []const u8 = "EUW1",
+    test_share: f64 = eval.test_share,
+    /// Region model only; the global model is never scored on a region
+    test_platform: ?[]const u8 = null,
     preds_dir: ?[]const u8 = null,
 };
 
@@ -307,7 +309,7 @@ pub fn run(
         "started before {f} ({d}). Test: {d} {s} games from then, ten rows each. Style from " ++
         "minutes 0-{d} (positions from minute {d}); state at {d}:00.\n\nRole mean (sd) of each " ++
         "feature on train:\n\n| feature |", .{
-        n_games[0],           Date.fromMs(split.cutoff), split.cutoff, n_games[1], opts.test_platform, until_minute - 1,
+        n_games[0],           Date.fromMs(split.cutoff), split.cutoff, n_games[1], opts.test_platform orelse "every platform's", until_minute - 1,
         first_position_frame, until_minute,
     });
     for (Role.all) |r| try w.print(" {t} |", .{r});

@@ -9,6 +9,7 @@ const core = @import("core");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
 const eval = @import("eval.zig");
+const endpoints = @import("riot/endpoints.zig");
 const Role = core.Role;
 const Io = std.Io;
 
@@ -40,9 +41,28 @@ pub const HeldOut = struct {
     }
 };
 
-/// Scans the games on `patches` and `platforms` and splits them as the protocol does: one
-/// time cut from the newest `test_share` of played games, test on every game from it on
-/// (only `test_platform`'s with one), train on older ones
+/// The protocol's cuts (eval.cutsOf) over every platform's and patch's games, as the lab
+/// and `meiolol eval --platform all` set them, whatever subset a tool scans
+pub fn protocolCuts(gpa: std.mem.Allocator, db: store.Db) !eval.Cuts {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var ids: [endpoints.platforms.len][]const u8 = undefined;
+    for (endpoints.platforms, &ids) |p, *id| id.* = p.id;
+    const patches = try stats.patches(arena.allocator(), db, &ids);
+    var list: GameList = .{ .gpa = gpa };
+    defer list.items.deinit(gpa);
+    _ = try stats.scan(gpa, db, patches, &ids, 0, &list);
+    var starts: std.ArrayList(i64) = .empty;
+    defer starts.deinit(gpa);
+    for (list.items.items) |g| if (g.duration_s >= eval.min_duration_s) try starts.append(gpa, g.start);
+    std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
+    return eval.cutsOf(starts.items, .{});
+}
+
+/// Scans the games on `patches` and `platforms` and splits them at the protocol's test
+/// cut (protocolCuts): test on every game from it on, train on older ones. test_share
+/// other than eval.test_share sets a cut of its own over the scanned games instead.
+/// test_platform: region model only; the global model is never scored on a region
 pub fn heldOut(
     gpa: std.mem.Allocator,
     db: store.Db,
@@ -57,6 +77,7 @@ pub fn heldOut(
     const split = try eval.split(gpa, list.items.items, platforms, .{
         .test_share = test_share,
         .test_platform = test_platform,
+        .cuts = if (test_share == eval.test_share) try protocolCuts(gpa, db) else null,
     });
     return .{ .list = list, .split = split, .cutoff = split.cuts.test_ };
 }

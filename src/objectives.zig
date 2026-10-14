@@ -11,14 +11,16 @@ const std = @import("std");
 const store = @import("store");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
+const eval = @import("eval.zig");
 const analysis = @import("analysis.zig");
 const logreg = @import("logreg.zig");
 const Date = @import("date.zig").Date;
 const Io = std.Io;
 
 pub const Options = struct {
-    test_share: f64 = 0.2,
-    test_platform: []const u8 = "EUW1",
+    test_share: f64 = eval.test_share,
+    /// Region model only; the global model is never scored on a region
+    test_platform: ?[]const u8 = null,
     /// One TSV per model of every test row's prediction
     preds_dir: ?[]const u8 = null,
 };
@@ -255,10 +257,10 @@ pub fn run(
     defer map.deinit(gpa);
 
     try w.print("# meiolol objectives\n\nTrain: every scanned platform, games started before " ++
-        "{f} ({d}). Test: the newest {s} games from then. One row per game and minute, " ++
+        "{f} ({d}). Test: {s} games from then. One row per game and minute, " ++
         "games still going after that minute. Log loss of blue's win in nats per game; gain " ++
         "= drop in log loss from the step before, ± 95% interval over test games.\n", .{
-        Date.fromMs(split.cutoff), split.cutoff, opts.test_platform,
+        Date.fromMs(split.cutoff), split.cutoff, opts.test_platform orelse "every platform's",
     });
 
     var names: [models.len][]const u8 = undefined;
