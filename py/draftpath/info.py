@@ -12,7 +12,7 @@ D and DS refit on the games still going at t (the draft's edge given the game la
 L2 on the draft columns from inner val per block and minute. Per-game log loss pairs,
 pooled over the 5 folds (better in k of 5) and dev-val apart.
 
-usage: info.py SNAP [--minutes 0,5,...,30] [--procs 6] [--out .]
+usage: info.py SNAP [--minutes 0,5,...,30] [--procs 6] [--out .] [--shuffle-draft SEED]
 """
 
 import argparse
@@ -91,9 +91,12 @@ def pick(nn, S_all, inner, val, n_state, draft_kw):
 
 
 def run_block(args):
-    snap, block, minutes = args
+    snap, block, minutes, shuffle = args
     t0 = time.time()
     nn = dp.load_nn(snap)
+    if shuffle is not None:
+        # control: whole drafts permuted across games, so the draft says nothing
+        nn.champ = nn.champ[np.random.default_rng(shuffle).permutation(nn.n)]
     st = dp.load_state(snap, nn)
     rng = np.random.default_rng(7)
     s = dp.sets(nn, block)
@@ -151,11 +154,12 @@ def main():
     ap.add_argument("--procs", type=int, default=6)
     ap.add_argument("--blocks", default=",".join(dp.BLOCKS))
     ap.add_argument("--out", default=".")
+    ap.add_argument("--shuffle-draft", type=int, help="control: permute drafts across games (seed)")
     a = ap.parse_args()
     minutes = [int(m) for m in a.minutes.split(",")]
     blocks = a.blocks.split(",")
     with ProcessPoolExecutor(a.procs) as ex:
-        outs = list(ex.map(run_block, [(a.snap, b, minutes) for b in blocks]))
+        outs = list(ex.map(run_block, [(a.snap, b, minutes, a.shuffle_draft) for b in blocks]))
     by = {o["block"]: o for o in outs}
     np.save(os.path.join(a.out, "info-raw.npy"), by, allow_pickle=True)
 
