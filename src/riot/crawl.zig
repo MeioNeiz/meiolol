@@ -800,9 +800,21 @@ const PlatformCrawler = struct {
     /// Last PUUID given mastery, so each batch resumes instead of rescanning done players
     mastery_cursor: [128]u8 = undefined,
     mastery_cursor_len: usize = 0,
+    /// Mastery calls failed in a row; reset by a success
+    mastery_failures: u32 = 0,
+    /// During an outage, when the next mastery call may try (s)
+    mastery_retry_at: i64 = 0,
+    /// The last player whose mastery call worked: after failures in a row, a call for it
+    /// tells an outage (it fails too) from a run of bad PUUIDs (it works)
+    mastery_good: [128]u8 = undefined,
+    mastery_good_len: usize = 0,
     /// matches.rowid up to which participants have been given mastery; null until the
     /// first pass, which starts at the past week's matches
     match_cursor: ?i64 = null,
+    /// Within the batch after match_cursor: the last player tried, so a batch cut short
+    /// by its deadline resumes instead of retrying its failures first
+    batch_cursor: [128]u8 = undefined,
+    batch_cursor_len: usize = 0,
     /// When this thread last fetched a ladder page (--ladder-per-hour)
     last_ladder: i64 = 0,
 
@@ -918,14 +930,12 @@ const PlatformCrawler = struct {
         }
         for (puuids) |puuid| {
             try pc.b.check();
-            pc.fetchMastery(arena.allocator(), puuid) catch |err| {
-                if (fatal(err)) return err;
-                log.warn("{s} mastery: {t}", .{ pc.platform.host, err });
-            };
-            if (puuid.len <= pc.mastery_cursor.len) {
-                @memcpy(pc.mastery_cursor[0..puuid.len], puuid);
-                pc.mastery_cursor_len = puuid.len;
+            // Players skipped here come round again when the cursor wraps
+            if (!try pc.tryMastery(arena.allocator(), puuid)) {
+                try pc.masteryPause(null);
+                break;
             }
+            setCursor(&pc.mastery_cursor, &pc.mastery_cursor_len, puuid);
         }
         return @intCast(puuids.len);
     }
@@ -946,17 +956,20 @@ const PlatformCrawler = struct {
         \\SELECT max(rowid) FROM
         \\    (SELECT rowid FROM matches WHERE rowid > ? AND platform = ? ORDER BY rowid LIMIT ?)
     ;
-    /// Players of the batch's games from the past week without a snapshot this recent
+    /// Players of the batch's games from the past week without a snapshot this recent,
+    /// after ?6 (the batch cursor)
     pub const participant_masteries =
         \\SELECT DISTINCT p.puuid FROM matches m JOIN participants p USING (match_id)
         \\WHERE m.rowid > ?1 AND m.rowid <= ?2 AND m.platform = ?3 AND m.game_start > ?4
-        \\    AND p.puuid IS NOT NULL AND NOT EXISTS
+        \\    AND p.puuid > ?6 AND NOT EXISTS
         \\    (SELECT 1 FROM mastery x WHERE x.puuid = p.puuid AND x.fetched_at > ?5)
+        \\ORDER BY p.puuid
     ;
 
     /// Mastery for every player of up to n newly stored matches; false when none are new.
-    /// At `deadline` (s) it stops with the batch unfinished: the cursor stays, and the
-    /// next call skips the players this one fetched
+    /// At `deadline` (s) it stops with the batch unfinished: the next call resumes after
+    /// the last player tried, so one whose call fails is skipped, not retried until the
+    /// batch can never finish within a ladder gap (11 Oct: wrong-app PUUIDs stalled kr)
     fn fetchParticipantMasteries(pc: *PlatformCrawler, n: u32, deadline: ?i64) !bool {
         var arena: std.heap.ArenaAllocator = .init(pc.b.c.gpa);
         defer arena.deinit();
@@ -969,18 +982,68 @@ const PlatformCrawler = struct {
         const to = try db.scalar(match_batch_end, .{ from, pc.platform.id, n }) orelse 0;
         if (to <= from) return false;
         const puuids = try column(db, arena.allocator(), participant_masteries, .{
-            from, to, pc.platform.id, week_ago_ms, now - participant_refresh_s,
+            from, to, pc.platform.id, week_ago_ms, now - participant_refresh_s, pc.batch_cursor[0..pc.batch_cursor_len],
         });
         for (puuids) |puuid| {
             try pc.b.check();
             if (deadline) |d| if (pc.b.now() >= d) return true;
-            pc.fetchMastery(arena.allocator(), puuid) catch |err| {
-                if (fatal(err)) return err;
-                log.warn("{s} mastery: {t}", .{ pc.platform.host, err });
-            };
+            // An outage keeps the batch cursor before this player, so it gets one after
+            if (!try pc.tryMastery(arena.allocator(), puuid)) {
+                try pc.masteryPause(deadline);
+                return true;
+            }
+            setCursor(&pc.batch_cursor, &pc.batch_cursor_len, puuid);
         }
         pc.match_cursor = to;
+        pc.batch_cursor_len = 0;
         return true;
+    }
+
+    /// Failures in a row that mean the platform's mastery endpoint is down (seen: na1
+    /// 400s for every player for 3 min, ru write failures for 50 min), not one bad player
+    const mastery_outage = 5;
+    const mastery_pause_s = 60;
+
+    /// False during an outage, `puuid` not given one: the caller stops, keeping it for
+    /// later. True when it was tried, failed or not. After `mastery_outage` failures in a
+    /// row the last good player is tried first: if it fails too, an outage, retried every
+    /// `mastery_pause_s`; if it works, the failures were bad PUUIDs and the pass goes on
+    fn tryMastery(pc: *PlatformCrawler, arena: std.mem.Allocator, puuid: []const u8) !bool {
+        const good = pc.mastery_good[0..pc.mastery_good_len];
+        if (pc.mastery_failures >= mastery_outage and good.len > 0) {
+            if (pc.b.now() < pc.mastery_retry_at) return false;
+            pc.fetchMastery(arena, good) catch |err| {
+                if (fatal(err)) return err;
+                pc.mastery_failures += 1;
+                if (pc.mastery_failures == mastery_outage + 1) log.warn("{s} mastery: {d} failures in a row " ++
+                    "and the last good player fails too, trying again every {d}s", .{ pc.platform.host, mastery_outage, mastery_pause_s });
+                pc.mastery_retry_at = pc.b.now() + mastery_pause_s;
+                return false;
+            };
+            if (pc.mastery_failures > mastery_outage) log.info("{s} mastery: back", .{pc.platform.host});
+            pc.mastery_failures = 0;
+        }
+        pc.fetchMastery(arena, puuid) catch |err| {
+            if (fatal(err)) return err;
+            pc.mastery_failures += 1;
+            if (pc.mastery_failures <= mastery_outage) log.warn("{s} mastery: {t}", .{ pc.platform.host, err });
+            return true;
+        };
+        pc.mastery_failures = 0;
+        setCursor(&pc.mastery_good, &pc.mastery_good_len, puuid);
+        return true;
+    }
+
+    /// Until `deadline` (s) at most, so ladder pages keep their pace
+    fn masteryPause(pc: *PlatformCrawler, deadline: ?i64) !void {
+        const end = if (deadline) |d| @min(d, pc.mastery_retry_at) else pc.mastery_retry_at;
+        try pc.b.nap(@intCast(@max(0, end - pc.b.now())));
+    }
+
+    fn setCursor(buf: *[128]u8, len: *usize, puuid: []const u8) void {
+        if (puuid.len > buf.len) return;
+        @memcpy(buf[0..puuid.len], puuid);
+        len.* = puuid.len;
     }
 
     fn masteryCursor(pc: *PlatformCrawler) []const u8 {
@@ -1141,11 +1204,17 @@ test "participant mastery: the week's new matches in storage order, stale snapsh
     try std.testing.expectEqual(4, to);
     const got = try column(db, arena.allocator(), "SELECT * FROM (" ++
         PlatformCrawler.participant_masteries ++ ") ORDER BY 1", .{
-        from, to, "EUW1", week_ago_ms, now_s - PlatformCrawler.participant_refresh_s,
+        from, to, "EUW1", week_ago_ms, now_s - PlatformCrawler.participant_refresh_s, "",
     });
     try std.testing.expectEqual(2, got.len);
     try std.testing.expectEqualStrings("new", got[0]);
     try std.testing.expectEqualStrings("stale", got[1]);
+    // Resumed after a player tried: the rest of the batch, not the failures again
+    const rest = try column(db, arena.allocator(), PlatformCrawler.participant_masteries, .{
+        from, to, "EUW1", week_ago_ms, now_s - PlatformCrawler.participant_refresh_s, "new",
+    });
+    try std.testing.expectEqual(1, rest.len);
+    try std.testing.expectEqualStrings("stale", rest[0]);
     try std.testing.expectEqual(5, (try db.scalar(PlatformCrawler.match_batch_end, .{ to, "EUW1", 2 })).?);
     try std.testing.expectEqual(0, (try db.scalar(PlatformCrawler.match_batch_end, .{ 5, "EUW1", 2 })).?);
 }

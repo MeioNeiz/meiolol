@@ -83,8 +83,11 @@ pub const Client = struct {
                 },
                 else => {
                     c.gpa.free(res.body);
+                    if (res.status < 500) {
+                        log.warn("{d} on {s}", .{ res.status, shown });
+                        return error.UnexpectedStatus;
+                    }
                     log.warn("{d} on {s}, retrying", .{ res.status, shown });
-                    if (res.status < 500) return error.UnexpectedStatus;
                     try c.io.sleep(.fromSeconds(backoff), .awake);
                 },
             }
