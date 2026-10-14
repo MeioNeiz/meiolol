@@ -207,5 +207,5 @@ rename-when-idle jobs still needed (1000 state, 1001 draftpath, 1004 tests, 1011
 - Open for Jacob: meiolol-14 (pane 1016) asked whether to spend the big net's test look
   now; bd recommended "not yet" (level with ratings on folds, slowest gain per doubling)
 - Latest commits after bd's handover include additive v2 (identified matchups, 3a12e02)
-  and its draft-model.json v4 export (951e916); the site still serves the older model
-  until someone runs lab-push use on the new export
+  and its draft-model.json v4 export (951e916); not checked whether `lab-push use` has put
+  it live on the site yet: check before assuming
