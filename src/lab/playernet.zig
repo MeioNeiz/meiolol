@@ -48,6 +48,8 @@ pub const usage =
     \\                                  --shuffle-feats 0|1 (control: players' feature
     \\                                  vectors permuted within role in training sets)
     \\                                  --feats champ,any,form,rank,mastery,prior,duo|none
+    \\                                  --drop FEAT,... (single features off within the
+    \\                                  groups on, e.g. gpm,days_since: ablations)
     \\                                  --emb-init DIR (pretrain's emb-<block>-s<seed>.tsv)
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
     \\                                  --resample N (fit games and the candidate's on
@@ -104,7 +106,6 @@ const Feat = enum {
     }
 };
 const n_feat = @typeInfo(Feat).@"enum".field_names.len;
-const n_group = @typeInfo(Group).@"enum".field_names.len;
 
 pub const Options = struct {
     /// 0: no champion-role or role embedding, the player's features only
@@ -123,6 +124,8 @@ pub const Options = struct {
     /// untouched); a gain well past the noise floor means a leak
     shuffle_feats: bool = false,
     groups: [@typeInfo(Group).@"enum".field_names.len]bool = @splat(true),
+    /// Features off though their group is on (--drop)
+    drop: [n_feat]bool = @splat(false),
     emb_init: ?[]const u8 = null,
     evals: u32 = 4,
     lr: f32 = 1e-3,
@@ -200,6 +203,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         opts.emb, opts.hidden, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games, opts.fix_offset, opts.shuffle_labels, opts.shuffle_feats, opts.emb_init orelse "-",
     });
     for (opts.groups, 0..) |on, gi| if (on) try w.print(" {s}", .{@tagName(@as(Group, @fromBackingInt(@intCast(gi))))});
+    for (opts.drop, 0..) |off, f| if (off) try w.print(" -{s}", .{@tagName(@as(Feat, @fromBackingInt(@intCast(f))))});
     try w.print("\nmastery_pre.tsv: {d} participants\n\n", .{mastery.map.count()});
     try w.flush();
 
@@ -257,6 +261,9 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.shuffle_labels = (try std.fmt.parseInt(u1, v, 10)) == 1;
         } else if (std.mem.eql(u8, k, "--fix-offset")) {
             o.fix_offset = (try std.fmt.parseInt(u1, v, 10)) == 1;
+        } else if (std.mem.eql(u8, k, "--drop")) {
+            var it = std.mem.tokenizeScalar(u8, v, ',');
+            while (it.next()) |f| o.drop[@backingInt(std.meta.stringToEnum(Feat, f) orelse return error.UnknownFeat)] = true;
         } else if (std.mem.eql(u8, k, "--feats")) {
             o.groups = @splat(false);
             if (!std.mem.eql(u8, v, "none")) {
@@ -501,11 +508,11 @@ const Scale = struct {
         return s;
     }
 
-    /// Unknown values sit at the fit mean (0 after scaling); groups off are 0
-    fn apply(s: Scale, x: [n_feat]f32, groups: [n_group]bool) [n_feat]f32 {
+    /// Unknown values sit at the fit mean (0 after scaling); features off are 0
+    fn apply(s: Scale, x: [n_feat]f32, on: [n_feat]bool) [n_feat]f32 {
         var out: [n_feat]f32 = @splat(0);
         for (x, 0..) |v, f| {
-            if (!groups[@backingInt(@as(Feat, @fromBackingInt(@intCast(f))).group())] or std.math.isNan(v)) continue;
+            if (!on[f] or std.math.isNan(v)) continue;
             out[f] = (v - s.mean[f]) / s.sd[f];
         }
         return out;
@@ -701,7 +708,14 @@ pub const NetGame = struct {
     off: f32,
 };
 
-fn netGames(gpa: std.mem.Allocator, d: *const rows.Data, raw: []const [n_feat]f32, row_of: []const [10]u32, games: []const u32, vocab: *const Vocab, scale: Scale, groups: [n_group]bool, off: []const f32) ![]NetGame {
+/// Per feature: its group on and not dropped
+fn featsOn(opts: Options) [n_feat]bool {
+    var on: [n_feat]bool = undefined;
+    for (&on, 0..) |*o, f| o.* = opts.groups[@backingInt(@as(Feat, @fromBackingInt(@intCast(f))).group())] and !opts.drop[f];
+    return on;
+}
+
+fn netGames(gpa: std.mem.Allocator, d: *const rows.Data, raw: []const [n_feat]f32, row_of: []const [10]u32, games: []const u32, vocab: *const Vocab, scale: Scale, on: [n_feat]bool, off: []const f32) ![]NetGame {
     const out = try gpa.alloc(NetGame, games.len);
     for (out, games) |*o, gi| {
         const g = d.games[gi];
@@ -709,7 +723,7 @@ fn netGames(gpa: std.mem.Allocator, d: *const rows.Data, raw: []const [n_feat]f3
         for (0..10) |slot| {
             o.ids[slot] = vocab.id(g.teams[slot / 5][slot % 5], slot % 5);
             const ri = row_of[gi][slot];
-            o.x[slot] = if (ri == no_row) @splat(0) else scale.apply(raw[ri], groups);
+            o.x[slot] = if (ri == no_row) @splat(0) else scale.apply(raw[ri], on);
         }
     }
     return out;
@@ -866,13 +880,13 @@ fn runBlock(
     defer vocab_inner.deinit(gpa);
     var vocab_all = try Vocab.init(gpa, d, fit.items, opts.min_games);
     defer vocab_all.deinit(gpa);
-    const g_inner = try netGames(gpa, d, raw, row_of, inner.items, &vocab_inner, scale_inner, opts.groups, p_inner);
+    const g_inner = try netGames(gpa, d, raw, row_of, inner.items, &vocab_inner, scale_inner, featsOn(opts), p_inner);
     defer gpa.free(g_inner);
-    const g_val = try netGames(gpa, d, raw, row_of, val.items, &vocab_inner, scale_inner, opts.groups, p_inner);
+    const g_val = try netGames(gpa, d, raw, row_of, val.items, &vocab_inner, scale_inner, featsOn(opts), p_inner);
     defer gpa.free(g_val);
-    const g_fit = try netGames(gpa, d, raw, row_of, fit.items, &vocab_all, scale_all, opts.groups, p_all);
+    const g_fit = try netGames(gpa, d, raw, row_of, fit.items, &vocab_all, scale_all, featsOn(opts), p_all);
     defer gpa.free(g_fit);
-    const g_scored = try netGames(gpa, d, raw, row_of, scored.items, &vocab_all, scale_all, opts.groups, p_all);
+    const g_scored = try netGames(gpa, d, raw, row_of, scored.items, &vocab_all, scale_all, featsOn(opts), p_all);
     defer gpa.free(g_scored);
     if (opts.shuffle_labels) for ([_][]NetGame{ g_inner, g_val, g_fit }, 0..) |set, k| shuffleLabels(set, 0x5f1 + k);
     if (opts.shuffle_feats) for ([_][]NetGame{ g_inner, g_val, g_fit }, 0..) |set, k| shuffleFeats(set, 0x5f2 + k);
@@ -1544,4 +1558,19 @@ test "playernet dumpSet writes one record per game and the match ids in order" {
     defer gpa.free(txt);
     try testing.expect(std.mem.startsWith(u8, txt, "n_ids 7 n_feat "));
     try testing.expect(std.mem.endsWith(u8, txt, "\nEUW1_2\nEUW1_1\n"));
+}
+
+test "playernet featsOn: groups on, minus dropped features" {
+    var o: Options = .{};
+    o.groups = @splat(false);
+    o.groups[@backingInt(Group.prior)] = true;
+    o.drop[@backingInt(Feat.gpm)] = true;
+    const on = featsOn(o);
+    try testing.expect(!on[@backingInt(Feat.gpm)] and on[@backingInt(Feat.cspm)] and on[@backingInt(Feat.days_since)]);
+    try testing.expect(!on[@backingInt(Feat.champ_games)] and !on[@backingInt(Feat.duo_mates)]);
+}
+
+test "playernet main and every pub decl compile" {
+    // -Dtest-filter otherwise analyses only what tests reach, not main()'s run path
+    testing.refAllDecls(@This());
 }
