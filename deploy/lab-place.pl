@@ -238,10 +238,12 @@ sub runs_for {
 
 sub times_for { return map { $_->{solo} } runs_for(@_) }
 
-# %LINEAR flags' values in ARGS (a comma list counts its items)
+# %LINEAR flags' values in ARGS (a comma list counts its items), and `trials`: a --serial
+# sweep job's trials, run one after another (lab-sweep.sh joins them by ` ; `). Parallel
+# packs (`&`) share the slot's cores: no clear scale, left out
 sub work {
     my @w = words($_[0]);
-    my %v;
+    my %v = (trials => scalar(grep { /\s--out\s/ } split /\s;\s/, " $_[0] ") || 1);
     for my $i (0 .. $#w - 1) {
         next unless $LINEAR{$w[$i]};
         my $n = $w[$i + 1] =~ /^\d+(\.\d+)?$/ ? $w[$i + 1]

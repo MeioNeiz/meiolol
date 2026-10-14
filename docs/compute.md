@@ -162,7 +162,8 @@ run time.
   runs (14 Oct; 0.7 assumed with under 10). Sublinear: the card is 20-35% busy, the
   shared cores are the limit. cpu slots are pinned to their own cores: not scaled
 - Past the same args, history scales by flags whose work is linear (`--boot N`, the
-  `--seeds` count): time x new/old. python runs are keyed by script once the listing
+  `--seeds` count, a --serial sweep job's trials; not `&` packs, which share the slot's
+  cores): time x new/old. python runs are keyed by script once the listing
   carries it (BIN python/SCRIPT); until then all scripts on a snapshot share a key
 - gpu-box cpu runs from before slots (no slot) had all 20 cores: their times count x the
   median slot / whole-machine ratio over commands run both ways (3.7 over 17 commands,
