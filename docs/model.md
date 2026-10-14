@@ -2425,10 +2425,34 @@ Reading (dev, no test look):
   gap. Open question: whether a big net tuned per size, with 0a's 10-seed ensembles (2055Z
   100%: -0.39 ± 0.33 vs the same run's 3 seeds' -0.11), keeps level with ratings as games
   grow
-- Audit (meiolol-33): cleared with these wording changes. Next: rerun on 2253Z after the
-  re-cut and repack with one training procedure (ratings, small, resid, big, win-comp);
+- Audit (meiolol-33): cleared with these wording changes. The 2253Z rerun below is on the re-cut with one
+  training procedure;
   the withdrawn pre-re-cut 2253Z runs scored 0 of their 54,518 games in the new test (match
   ids vs split.tsv; fit games are older), so they exposed nothing
+
+2253Z on the re-cut protocol (85fd62a; snap-20261013T2253Z repacked, one training procedure
+for every net; folds 5 x 26,875 scored games, dev-val 35,834; runs curvercut-*, fits
+curve-fit-rcut and -rcut-upper; win-comp held until its reference is checked). Mnats vs
+ratings, ± 95% paired per game, better in k of 5 folds:
+
+| fit games (folds mean / dev-val) | ratings accuracy (folds) | ratings log loss | small, folds | big, folds | resid, folds | small, dev-val | big, dev-val |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 18.6k / 27k | 52.09% ± 0.27 | 0.69257 | +0.46 ± 0.18 (1) | -0.47 ± 0.24 (4) | +0.40 ± 0.10 | -0.27 ± 0.25 | +0.64 ± 0.30 |
+| 46.6k / 67k | 52.95% ± 0.27 | 0.69090 | +0.24 ± 0.18 (1) | +0.31 ± 0.25 (1) | -0.06 ± 0.05 | -0.44 ± 0.42 | -0.06 ± 0.40 |
+| 94.0k / 134k | 53.30% ± 0.27 | 0.69005 | -0.18 ± 0.15 (4) | +0.05 ± 0.24 (2) | -0.30 ± 0.11 | -0.62 ± 0.32 | -0.34 ± 0.41 |
+| 188k / 269k | 53.71% ± 0.27 | 0.68901 | -0.22 ± 0.16 (4) | +0.24 ± 0.25 (2) | -0.09 ± 0.09 | -0.73 ± 0.41 | -0.77 ± 0.52 |
+
+- Ratings: +0.46 ± 0.07 pp accuracy and -1.05 ± 0.12 mnats a doubling (above 40k +0.38 ±
+  0.10 pp, -1.01 ± 0.14 mnats)
+- Gap to ratings per doubling (points' scatter): small -0.21 ± 0.07 (above 40k -0.19 ±
+  0.16), big +0.06 ± 0.21 (above 40k -0.12 ± 0.31), resid -0.12 ± 0.10. On these fixed
+  fold blocks the big net's gap does not grow with fit games; the small net's does, and it
+  is ahead of ratings from ~90k fit games (4 of 5 folds at 94k and 188k). Accuracy vs
+  ratings within ±0.4 pp for every net and size
+- Dev-val (one block of the newest dev games) has the big net pulling ahead with size
+  (+0.64 to -0.77): with one block, newer games and more data can't be told apart, and the
+  folds don't show it. meiolol-04's big net (fit 134k +0.3, 242k -0.9, dev-val -1.6) moves
+  scored games and fit size together; this curve holds the scored games fixed
 
 ### Effects and the CPU model, 2026-10-14 (meiolol-08)
 

@@ -79,3 +79,31 @@ ratings, projection	-	projection	0.68703						1000000	curve-fit-two (48a6b33)	ra
 ratings, projection	-	projection	0.68636						1820000	curve-fit-two (48a6b33)	ratings' fit extrapolated (b at the grid floor, so in effect the log trend); 2055Z + 1954Z
 ratings, projection	-	projection	0.68552						3900000	curve-fit-two (48a6b33)	ratings' fit extrapolated (b at the grid floor, so in effect the log trend); 2055Z + 1954Z
 ratings, projection	-	projection	0.68452						10000000	curve-fit-two (48a6b33)	ratings' fit extrapolated (b at the grid floor, so in effect the log trend); 2055Z + 1954Z
+ratings, 2253Z re-cut	-	folds	0.69257		1			134375	18598	curve-fit-rcut (48a6b33)	10% of fit games
+small net, 2253Z re-cut	-	folds	0.69303		3			134375	18598	curve-fit-rcut (48a6b33)	10% of fit games
+small net, 2253Z re-cut	ratings	folds	0.00046	0.00018	3			134375	18598	curve-fit-rcut (48a6b33)	10% of fit games
+residual on ratings, 2253Z re-cut	-	folds	0.69297		3			134375	18598	curve-fit-rcut (48a6b33)	10% of fit games
+residual on ratings, 2253Z re-cut	ratings	folds	0.00040	0.00010	3			134375	18598	curve-fit-rcut (48a6b33)	10% of fit games
+big net, 2253Z re-cut	-	folds	0.69210		3			134375	18598	curve-fit-rcut (48a6b33)	10% of fit games
+big net, 2253Z re-cut	ratings	folds	-0.00047	0.00024	3			134375	18598	curve-fit-rcut (48a6b33)	10% of fit games
+ratings, 2253Z re-cut	-	folds	0.69090		1			134375	46606	curve-fit-rcut (48a6b33)	25% of fit games
+small net, 2253Z re-cut	-	folds	0.69113		3			134375	46606	curve-fit-rcut (48a6b33)	25% of fit games
+small net, 2253Z re-cut	ratings	folds	0.00024	0.00018	3			134375	46606	curve-fit-rcut (48a6b33)	25% of fit games
+residual on ratings, 2253Z re-cut	-	folds	0.69084		3			134375	46606	curve-fit-rcut (48a6b33)	25% of fit games
+residual on ratings, 2253Z re-cut	ratings	folds	-0.00006	0.00005	3			134375	46606	curve-fit-rcut (48a6b33)	25% of fit games
+big net, 2253Z re-cut	-	folds	0.69121		3			134375	46606	curve-fit-rcut (48a6b33)	25% of fit games
+big net, 2253Z re-cut	ratings	folds	0.00031	0.00025	3			134375	46606	curve-fit-rcut (48a6b33)	25% of fit games
+ratings, 2253Z re-cut	-	folds	0.69005		1			134375	93971	curve-fit-rcut (48a6b33)	50% of fit games
+small net, 2253Z re-cut	-	folds	0.68988		3			134375	93971	curve-fit-rcut (48a6b33)	50% of fit games
+small net, 2253Z re-cut	ratings	folds	-0.00018	0.00015	3			134375	93971	curve-fit-rcut (48a6b33)	50% of fit games
+residual on ratings, 2253Z re-cut	-	folds	0.68975		3			134375	93971	curve-fit-rcut (48a6b33)	50% of fit games
+residual on ratings, 2253Z re-cut	ratings	folds	-0.00030	0.00011	3			134375	93971	curve-fit-rcut (48a6b33)	50% of fit games
+big net, 2253Z re-cut	-	folds	0.69010		3			134375	93971	curve-fit-rcut (48a6b33)	50% of fit games
+big net, 2253Z re-cut	ratings	folds	0.00005	0.00024	3			134375	93971	curve-fit-rcut (48a6b33)	50% of fit games
+ratings, 2253Z re-cut	-	folds	0.68901		1			134375	188125	curve-fit-rcut (48a6b33)	100% of fit games
+small net, 2253Z re-cut	-	folds	0.68879		3			134375	188125	curve-fit-rcut (48a6b33)	100% of fit games
+small net, 2253Z re-cut	ratings	folds	-0.00022	0.00016	3			134375	188125	curve-fit-rcut (48a6b33)	100% of fit games
+residual on ratings, 2253Z re-cut	-	folds	0.68892		3			134375	188125	curve-fit-rcut (48a6b33)	100% of fit games
+residual on ratings, 2253Z re-cut	ratings	folds	-0.00009	0.00009	3			134375	188125	curve-fit-rcut (48a6b33)	100% of fit games
+big net, 2253Z re-cut	-	folds	0.68925		3			134375	188125	curve-fit-rcut (48a6b33)	100% of fit games
+big net, 2253Z re-cut	ratings	folds	0.00024	0.00025	3			134375	188125	curve-fit-rcut (48a6b33)	100% of fit games
