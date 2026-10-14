@@ -1530,8 +1530,82 @@ Reading:
 - For meiolol-08's additive CPU model and meiolol-35's set nets: the mix term only; the
   rest as candidates with the bounds above
 - Audited by meiolol-33 (14 Oct): cleared with the wording above; learned.md line
-  "2026-10-14: Screening 252 team traits". Next: rerun on snap-20261013T2253Z (more
-  games), same pre-declared rules (meiolol-94)
+  "2026-10-14: Screening 252 team traits". Rerun on snap-20261013T2253Z below
+
+#### Rerun on snap-20261013T2253Z (meiolol-94, 14 Oct)
+
+Same method on the re-cut pin (shared protocol: test the newest 15% of played games,
+dev-val the next 10%, every platform, five forward folds below; 85fd62a), built at
+0c3e486 with two fixes declared before any look (379a751: waveclear from minions per
+minute, since twentyMinionsIn3SecondsCount is ~always 0; role-determined vision and
+epic-damage flags dropped; no objective champion by role z >= 1; 244 candidates with
+12 carry terms from a carry fold table on the same cuts; one carry row, "none above
+median leverage10", came out NaN and stays in the count). comp_stats.tsv covers 81.5%
+of games: dev_old 59.6%, folds 1-3 ~89%, fold 4 93.5%, fold 5 95.6%, dev-val 99.7%, test
+100%; RU 1%, TR1 47%, the rest 73-87%; missing games don't differ in outcome or duration
+(meiolol-53). None of 2055Z's comps-sealed games fall in the new sealed blocks (they
+land in dev_old and folds 1-2); 27,552 sealed games were in 2055Z's test (8,874) or
+selection windows (18,678), never used by the comps work. Rule declared before the
+screen (scratchpad progress-comps.md, accepted by meiolol-33): sealed list = screen
+passes at q 0.05 with the same sign in 2 of 3 blocks, every coaching hypothesis, and six
+names carried from 2055Z; Holm at 0.05, coaching hypotheses one-sided in the predicted
+direction unless also carried from 2055Z, the rest two-sided; a non-mix screen pass also
+needs |z| >= 2 beside the mix.
+
+| run | what | result |
+| --- | --- | --- |
+| 20261014T005415Z-comps-permuted-2253Z | profiles permuted within role | 0 passes at q 0.05 and 0.10 |
+| 20261014T005437Z-comps-screen-2253Z | screen, blocks 1-3, 80,625 games | 15 passes at q 0.05; 20 shuffles: 0 at q 0.05, 8 at q 0.10 |
+| 20261014T005906Z-comps-confirm-2253Z | sealed 4-5 + dev-val, 89,584 games, 32 names | three findings beside the mix (below) |
+
+| finding | sealed effect | z | blocks 4 / 5 / dev-val | beside mix z | reading |
+| --- | --- | --- | --- | --- | --- |
+| mix (magic share off 50%, squared) | -1.06 ± 0.23 pp/sd | -9.1 | -0.8 / -1.2 / -1.1 | | replicates, now on dev-val too |
+| magic 60%+ | -2.14 ± 0.93 pp | -4.5 | -1.8 / -2.1 / -2.4 | -4.1 | magic-heavy teams lose more than the mix curve says |
+| our AD share x their armour lean | -0.63 ± 0.23 pp/sd | -5.3 | -0.7 / -0.6 / -0.6 | -5.1 | damage type into armour, theory's sign |
+| our AP share x their armour lean | +0.56 ± 0.23 pp/sd | 4.8 | 0.6 / 0.6 / 0.6 | 4.6 | the same finding mirrored, not a second |
+| our tankiness x their pen items | +0.62 ± 0.23 pp/sd | 5.2 | 0.6 / 0.7 / 0.5 | 5.2 | opposite to theory (declared two-sided) |
+
+Lopsided (magic <20% or 60%+, -2.99 ± 0.78 pp, beside mix z -3.9) is magic <20% plus
+magic 60%+, and magic <20% is the mix again (beside mix z -0.12): the same finding as
+magic 60%+, not a second one. Holm passes that are the mix again (beside mix |z| < 2):
+magic <20%, physical 80%+, max magic damage, max magic pen, 1+ magic pen champion. Not
+confirmed: 4+ melee, 4+ ranged, 2+ catch-and-kill engagers, max late solo turrets, and
+every other coaching hypothesis (healing x anti-heal, dive x peel, engage x disengage,
+pick x vision, front-to-back, hard engage, no win condition, split or siege x
+waveclear: all within ±0.4 pp/sd or ±1.4 pp).
+
+Leads for the next pin (pre-declare two-sided there), not confirmed here:
+- Our sustain x their poke -0.58 ± 0.23 pp/sd: the sign agrees between screen (z -3.24)
+  and sealed (z -4.88, all three sealed blocks negative), opposite to theory. As a
+  coaching hypothesis it was one-sided in theory's direction (p ~1); reading it
+  two-sided was decided after the screen, so it doesn't count (meiolol-53)
+- Our poke into their engage +0.37 ± 0.23 pp/sd (sealed z 3.2, screen z -0.04): one item
+  entered twice (our range x their engage is exactly minus our engage x their range),
+  opposite to both one-sided hypotheses. Next time drop exact duplicates before building
+  the list
+
+Mechanism (screen blocks): the armour and pen crosses move gold at 14 by under 20 ± 20
+and objectives by ~0, and are a little larger in games under 25 minutes.
+
+Prediction: the confirmed effects are associations beside the ratings offset; their
+joint log-loss gain beyond the mix (logistic layer on ratings' logit, fit on blocks
+1-3, all 31 listed terms + mix vs ratings + mix, sealed) is -0.34 ± 0.25 mnats/game,
+under the ~0.5 floor, so no prediction gain is claimed; the pp sizes above are not model
+gain. Ratings + mix vs ratings -0.46 ± 0.22 mnats (blocks 4-5 -0.41, dev-val -0.52). The
+joint column came out empty again from exact collinearity in the list (lopsided = magic
+<20% + 60%+; the duplicated poke/engage item); it is not in the decision rule.
+
+Reading:
+- The damage mix replicates on 89,584 unseen games, and on this pin's dev-val as well
+  (-1.1, where 2055Z's dev-val showed -0.1); magic-heavy teams (60%+) lose a further ~2
+  pp beyond the curve
+- Damage type into armour matters a little: physical damage into a team of
+  armour-leaning champions is worse, magic damage into it better (about 0.6 pp per team
+  sd). Tanky teams do better, not worse, against penetration-item champions (0.6 pp per
+  team sd), which needs a mechanism before anyone coaches on it
+- For the CPU model and set nets: mix, magic 60%+, AD share x their armour lean and
+  tankiness x their pen items as candidate terms; none has shown a prediction gain yet
 
 ### Neural draft models, 2026-10-13 (meiolol-2c)
 
@@ -1752,6 +1826,20 @@ Ratings: folds 0.68901 (2055Z 0.69090), accuracy 53.71 ± 0.27% (52.91 ± 0.46%)
 | fold 4 | 215,000 | -0.56 ± 0.36 | -0.70 ± 0.50 | -0.46 ± 0.34 |
 | fold 5 | 241,875 | -0.96 ± 0.45 | -0.85 ± 0.48 | -0.56 ± 0.33 |
 | dev-val | 268,750 | -1.78 ± 0.50 | -1.48 ± 0.46 | -0.67 ± 0.33 |
+
+Noise floor on 2253Z's folds (A/A, 4b's method; 20261014T003438Z-rb-aa-small: 12 resamples,
+small, 3 seeds each; 003501Z-rb-aa-big: 4, big; ratings refitted on each 90%; checked by
+meiolol-53), milli-nats/game on 134,375 games:
+- Net minus ratings moves across resamples with sd 0.16 (small) and 0.21 (big), on top of
+  per-game se 0.085 and 0.13: honest 95% half-widths ~0.35 and ~0.47, 2.1x and 1.9x the
+  reported per-game intervals (2055Z: 1.6x and 1.3x). Three times the scored games shrank
+  the per-game part, not the training noise, so the floor in milli-nats barely moved
+- Ratings refitted on another 90%: log loss sd 0.07; paired rj - r1 from -0.21 to +0.04
+- Small: all 12 resamples below ratings (-0.03 to -0.52, mean -0.27); they share scored
+  games, so roughly -0.27 ± 0.19. Exploratory, not a call
+- The test-look rule uses the additive form: pass when mean + 1.96 x sqrt(se_test^2 +
+  0.21^2) < 0, 0.21 being big's resample sd (4 resamples, itself rough), fixed before
+  the look; ~-0.52 needed on 53,750 test games
 
 Reading (dev, no test look): with ~2x the data the nets are no longer behind ratings; the
 big net's 10-seed ensemble is ahead on the folds by about the size of the noise floor, and

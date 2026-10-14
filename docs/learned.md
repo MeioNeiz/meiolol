@@ -25,7 +25,28 @@ How to write a line:
 
 ## Win
 
-- 2026-10-14: Screening 252 team traits and team-vs-team matchups beyond champion
+- 2026-10-14 (2253Z): Beyond which champions are picked, a comp's damage makes a small
+  measurable difference, each about 1-2 percentage points for a comp clearly off in that
+  way: damage far from half magic loses, magic-heavy teams (60%+ magic) lose about 2
+  points more, and physical damage into a team of armour-leaning champions does worse
+  while magic damage into it does better. Tanky teams do slightly better, not worse,
+  against champions who buy penetration items. No coaching win condition (dive vs peel,
+  engage vs disengage, front-to-back, healing vs anti-heal, split vs waveclear) or comp
+  archetype was found. Sure: 89,584 unseen held-out games (sealed blocks, every
+  platform), 244 traits screened, one pre-declared list of 32 read with Holm: mix -1.1
+  pp per team sd (z -9), magic 60%+ -2.1 ± 0.9 pp, AD share x their armour -0.6 ± 0.2
+  and tankiness x their pen items +0.6 ± 0.2 pp per team sd. These are associations
+  beside champion strength; adding them doesn't measurably improve predictions (-0.34 ±
+  0.25 mnats beyond the mix, under the noise floor). The rest not detected (plants on
+  2055Z: a true 1.6 pp per team sd found, 1.1 not; this pin's intervals are about half
+  as wide, not re-planted). Sustain against poke (-0.6) kept its sign from the screen but
+  wasn't declared for that direction; poke against engage (+0.4) showed only on the
+  sealed games: leads for the next pin.
+  Site: the damage-mix reason as before; "physical damage into armour" may become a
+  reason without a number once the production key allows anything public; no tank vs
+  pen or win-condition advice. Evidence: docs/model.md "Comp discovery" (rerun on
+  snap-20261013T2253Z), audit meiolol-53
+- ~~2026-10-14: Screening 252 team traits and team-vs-team matchups beyond champion
   strength finds only the damage mix: lopsided damage (team magic share far from half)
   costs about 0.9 percentage points of win chance per team sd, reproducing win-comp's
   term on games already used for it, and near zero on the newest games alone (-0.1). No
@@ -39,7 +60,7 @@ How to write a line:
   flags shrink like the mix. Adding the mix to ratings doesn't measurably improve log
   loss on the sealed games (-0.00028 ± 0.00042 nats). Site: nothing new; good and bad
   comps stay the damage-mix reason only. Evidence: docs/model.md "Comp discovery", audit
-  meiolol-33
+  meiolol-33~~ (superseded by the 2253Z line above)
 - 2026-10-14: No champion was found to turn its own gold lead into wins better than
   others in its role: what 1,000 gold on your champion is worth depends on the role, at
   15 minutes about 8 percentage points for the bot laner, 4.5-7 for top, jungle and mid
