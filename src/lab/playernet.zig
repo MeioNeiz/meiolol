@@ -31,7 +31,6 @@ const rows = @import("rows.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const mastery_pre = @import("mastery_pre.zig");
-const winnet = @import("winnet.zig");
 const par = @import("../par.zig");
 
 const Io = std.Io;
@@ -539,7 +538,7 @@ const Spec = struct {
     resample: ?u32 = null,
 
     fn fits(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
-        if (s.resample) |r| if (!winnet.inResample(g, r)) return false;
+        if (s.resample) |r| if (!harness.inResample(g.start, g.platform, r)) return false;
         return harness.inFraction(g, fraction) and harness.visible(.dev, c, g) and g.start < s.before;
     }
 
