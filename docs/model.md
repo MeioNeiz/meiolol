@@ -2126,12 +2126,13 @@ within each draw; the init-loss gate is ok on every fit; offset weights 0.81-0.9
   (1.6x rule, both 90% resamples, 4+ of 5 blocks): win-exp-rates minus win-exp, folds
   -0.00191 ± 0.00036 (1.6x bound -0.00133), 5/5 blocks (-0.00163 to -0.00216); resamples
   -0.00177 and -0.00180 (5/5 each; spread across the three legs 0.00014); dev-val
-  -0.00267 ± 0.00072. Descriptive: the hand terms recover about all of the confirmed
-  net-on-net gain (-0.00191 vs B minus A -0.00195) and ~81% of B's whole gain over
+  -0.00267 ± 0.00072. Descriptive: the hand terms recover most to all of the confirmed
+  net-on-net gain (-0.00191 vs B minus A -0.00195, a point comparison with overlapping
+  intervals) and ~81% of B's whole gain over
   win-exp's candidate (-0.00236); playernet B over win-exp-rates -0.00045 ± 0.00027, and
   playernet on win-exp-rates over its candidate -0.00049 ± 0.00015 (seeds 1-3), both
-  under the ~0.0005 floor: a GLM with three averages per player captures the history
-  means. h-exp's candidate equals c-exp's per game (same win-exp, another build). Runs
+  under the ~0.0005 floor: a GLM with three averages per player captures most of the
+  history means' gain (audited by meiolol-53). h-exp's candidate equals c-exp's per game (same win-exp, another build). Runs
   data/runs/20261014T0344*-h-exp to 0352*-h-rates-net; playernet-20261014/hand.sh
 - Tuning (pn1, meiolol-fd/37; 73be9fe, seeds 10-14, 12 random trials over lr, hidden,
   dropout, wd, emb, emb-wd, batch, patience, min-games, picked on inner val only): no

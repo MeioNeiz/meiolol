@@ -69,12 +69,16 @@ How to write a line:
   we can detect. Sure: snap-20261013T2253Z, 134,375 games in 5 forward folds, a sealed
   pre-declared check (3 new seeds, two 90% resamples, every fold better, a shuffled-
   feature control at zero); the first player term past the noise floor beyond the
-  experience terms; premade not detected (at most ~0.1 milli-nats per game). "Earlier
+  experience terms; premade not detected (at most ~0.1 milli-nats per game). Simple
+  per-player averages of gold, CS and damage per minute added to the experience model
+  capture most to all of it (the net's remaining edge is within noise). "Earlier
   games" means games our crawl holds, so how much history a player has follows crawl
   depth, not what a live lobby would know. Dev folds only, no test look. Site: nothing;
   internal only, other players' history is never for the app. Evidence: docs/model.md
   "Prior and premade, sealed confirmation" (history means -0.00195 ± 0.00031 nats/game
-  beyond the net on win-exp; win-exp -0.00507 vs ratings), audited by meiolol-53
+  beyond the net on win-exp; win-exp -0.00507 vs ratings), audited by meiolol-53; the
+  hand-made rate terms: "History means as hand-made terms" (win-exp-rates -0.00191 ±
+  0.00036 vs win-exp, pre-declared, audited by meiolol-53)
 
 - 2026-10-14 (2253Z): Who faces whom, and who plays beside whom, matters a little beyond
   each champion's own strength. The lane matchups matter most: top vs top (typical
