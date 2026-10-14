@@ -35,6 +35,7 @@ const randsplit = @import("randsplit.zig");
 const draftnet = @import("draftnet.zig");
 const gates = @import("gates.zig");
 const setnet = @import("setnet.zig");
+const looks = @import("looks.zig");
 const par = @import("../par.zig");
 const cuda = @import("../gpu/cuda.zig");
 const dn = @import("../gpu/draftnet_layout.zig");
@@ -57,6 +58,10 @@ pub const usage =
     \\                                  embeddings from DIR/emb-<block>-s<seed>.tsv,
     \\                                  meiolol-lab pretrain) --emb-freeze 0|1
     \\                                  --seeds 1,2,3 --blocks dev,1,2,3,4,5
+    \\                                  --blocks test (alone: the test look, fit on
+    \\                                  every played game before the test cut, scored
+    \\                                  on test and test minus SNAP/test-exclude.tsv;
+    \\                                  ledgered in SNAP/test-looks.tsv first)
     \\                                  --fraction X (nested share of fit games)
     \\                                  --resample N (A/A noise floor: fit on a seeded
     \\                                  random 90% of the fit games, the same for the
@@ -133,7 +138,7 @@ pub const Options = struct {
     set: setnet.Config = .{},
 };
 
-pub const Block = enum { dev, f1, f2, f3, f4, f5, random };
+pub const Block = enum { dev, f1, f2, f3, f4, f5, random, final };
 const val_share = 0.1;
 pub const n_platforms = 16;
 
@@ -211,11 +216,20 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     }
     try w.flush();
 
+    // A test look counts once the test games are read, so the ledger line comes first
+    var exclude: ?looks.Exclude = null;
+    defer if (exclude) |*e| e.deinit(gpa);
+    if (opts.blocks.len == 1 and opts.blocks[0] == .final) {
+        _ = try looks.record(gpa, io, Io.Dir.cwd(), snap, "netcheck", argv, w);
+        exclude = try looks.Exclude.load(gpa, io, Io.Dir.cwd(), snap);
+    }
+
     var pooled: Pooled = .{};
     defer pooled.deinit(gpa);
     for (opts.blocks) |b| {
         var spec: Spec = switch (b) {
             .dev => .{ .before = c.dev, .lo = c.dev, .hi = c.test_, .dev = true },
+            .final => .{ .before = c.test_, .lo = c.test_, .hi = std.math.maxInt(i64), .dev = false, .final = true, .exclude = if (exclude) |*e| e else null },
             .random => .{ .before = c.test_, .lo = 0, .hi = 0, .dev = false, .random = opts.split_seed.? },
             // The shared folds (harness.Cuts, win-comp's foldAblation blocks)
             else => blk: {
@@ -294,6 +308,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |s| try out.append(arena, if (std.mem.eql(u8, s, "dev"))
                 .dev
+            else if (std.mem.eql(u8, s, "test"))
+                .final
             else
                 @fromBackingInt(@intCast(try std.fmt.parseInt(u3, s, 10))));
             o.blocks = out.items;
@@ -325,6 +341,11 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         if (set.contains("--blocks")) return error.SplitReplacesBlocks;
         o.blocks = &.{.random};
     }
+    // A test look is one run of the declared model on all its fit games
+    if (std.mem.indexOfScalar(Block, o.blocks, .final) != null) {
+        if (o.blocks.len != 1) return error.TestBlockAlone;
+        for ([_][]const u8{ "--split", "--filter", "--fraction", "--resample", "--shuffle-ids", "--fit-preds" }) |k| if (set.contains(k)) return error.NotForTest;
+    }
     if (o.emb_freeze and o.emb_init == null) return error.FreezeWithoutInit;
     if (o.net == .set and o.emb_init != null) return error.EmbInitNotForSet;
     if (isBig(o.net)) {
@@ -348,12 +369,16 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
 }
 
 /// Fit on dev-visible games before `before`; score dev-val (dev) or dev-visible games in
-/// [lo, hi). random: LoLDraftAI's split instead (randsplit.zig); filter: its filters
+/// [lo, hi). random: LoLDraftAI's split instead (randsplit.zig); filter: its filters.
+/// final: fit on every played game before the test cut, score the test games
 const Spec = struct {
     before: i64,
     lo: i64,
     hi: i64,
     dev: bool,
+    final: bool = false,
+    /// final: also scored without these (an earlier snapshot's looks saw them)
+    exclude: ?*const looks.Exclude = null,
     random: ?u32 = null,
     filter: ?*const randsplit.Filter = null,
     resample: ?u32 = null,
@@ -370,6 +395,7 @@ const Spec = struct {
         if (!harness.inFraction(g, fraction)) return false;
         if (s.resample) |r| if (!inResample(g, r)) return false;
         if (s.random) |seed| return devEra(c, g) and !randsplit.inTest(g, seed);
+        if (s.final) return harness.visible(.final, c, g) and g.start < s.before;
         return harness.visible(.dev, c, g) and g.start < s.before;
     }
 
@@ -378,6 +404,7 @@ const Spec = struct {
         if (s.filter) |f| if (!f.keep(g)) return false;
         if (s.random) |seed| return devEra(c, g) and randsplit.inTest(g, seed);
         if (s.dev) return harness.scored(.dev, c, g);
+        if (s.final) return harness.scored(.final, c, g);
         return harness.visible(.dev, c, g) and harness.inRegion(c, g) and g.start >= s.lo and g.start < s.hi;
     }
 
@@ -742,6 +769,7 @@ fn runBlock(
         m /= ns;
         try w.print("seed spread: per-seed vs cand mean {d:.5}, sd {d:.5}\n", .{ m, @sqrt(@max(m2 / ns - m * m, 0) * ns / @max(ns - 1, 1)) });
     }
+    if (spec.exclude) |e| try excludedRows(gpa, w, d, scored.items, ys, pc, ens, e);
     try w.writeAll("\n");
     try w.flush();
     try fw.flush();
@@ -754,11 +782,29 @@ fn runBlock(
         try out.cand.print("{s}\t0\twin\t{d}\t{d:.6}\t{s}\n", .{ g.match_id, ys[i], pc[i], name });
         try out.net.print("{s}\t0\twin\t{d}\t{d:.6}\t{s}\n", .{ g.match_id, ys[i], ens[i], name });
     }
-    if (!spec.dev and spec.random == null) {
+    if (!spec.dev and !spec.final and spec.random == null) {
         try pooled.ys.appendSlice(gpa, ys);
         try pooled.cand.appendSlice(gpa, pc);
         try pooled.ens.appendSlice(gpa, ens);
     }
+}
+
+/// The test look's second number: the same predictions without the excluded games
+fn excludedRows(gpa: std.mem.Allocator, w: *Io.Writer, d: *const rows.Data, scored: []const u32, ys: []const f32, pc: []const f32, ens: []const f32, e: *const looks.Exclude) !void {
+    var ky: std.ArrayList(f32) = .empty;
+    defer ky.deinit(gpa);
+    var kc: std.ArrayList(f32) = .empty;
+    defer kc.deinit(gpa);
+    var ke: std.ArrayList(f32) = .empty;
+    defer ke.deinit(gpa);
+    for (scored, ys, pc, ens) |gi, y, c, x| if (!e.has(d.games[gi].match_id)) {
+        try ky.append(gpa, y);
+        try kc.append(gpa, c);
+        try ke.append(gpa, x);
+    };
+    try w.print("\ntest minus {s}: {d} of {d} games\n", .{ looks.exclude_name, ky.items.len, ys.len });
+    try summaryHead(w);
+    try summaryRow(gpa, w, "seed mean", ky.items, kc.items, ke.items, null);
 }
 
 fn blockName(b: Block) []const u8 {
@@ -770,6 +816,7 @@ fn blockName(b: Block) []const u8 {
         .f4 => "4",
         .f5 => "5",
         .random => "random",
+        .final => "test",
     };
 }
 
@@ -1463,6 +1510,44 @@ test "fit preds: a fifth's net never fits a game it scores, the fifths cover the
         }
         try testing.expectEqual(@as(u32, @intFromBool(spec.fits(c, g, 1))), scored_in);
     }
+}
+
+test "test block: fits every played game before the test cut, scores the played test games, alone" {
+    const c: harness.Cuts = .{ .dev = 10_000, .test_ = 20_000, .bounds = @splat(0) };
+    const spec: Spec = .{ .before = c.test_, .lo = c.test_, .hi = std.math.maxInt(i64), .dev = false, .final = true };
+    var n_fit: u32 = 0;
+    var n_dev_val: u32 = 0;
+    var n_scored: u32 = 0;
+    for (0..4000) |i| {
+        const start: i64 = @intCast(i * 7);
+        const played = i % 5 != 0;
+        const g: rows.Game = .{
+            .match_id = "",
+            .start = start,
+            .patch = 0,
+            .platform = @intCast(i % 3),
+            .is_test = start >= c.test_,
+            .teams = @splat(@splat(0)),
+            .winner = 0,
+            .duration_s = if (played) harness.min_duration_s else harness.min_duration_s - 1,
+        };
+        const fit = spec.fits(c, g, 1);
+        const sc = spec.scores(c, g, 1);
+        try testing.expectEqual(played and start < c.test_, fit);
+        try testing.expectEqual(played and start >= c.test_, sc);
+        n_fit += @intFromBool(fit);
+        n_dev_val += @intFromBool(fit and start >= c.dev);
+        n_scored += @intFromBool(sc);
+    }
+    try testing.expect(n_dev_val > 0 and n_scored > 0 and n_fit > n_dev_val);
+
+    const a = testing.allocator;
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const o = try parseOptions(arena.allocator(), &.{ "--net", "big", "--blocks", "test" });
+    try testing.expectEqualSlices(Block, &.{.final}, o.blocks);
+    try testing.expectError(error.TestBlockAlone, parseOptions(arena.allocator(), &.{ "--blocks", "test,1" }));
+    try testing.expectError(error.NotForTest, parseOptions(arena.allocator(), &.{ "--blocks", "test", "--resample", "1" }));
 }
 
 test {
