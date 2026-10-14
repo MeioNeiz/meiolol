@@ -112,7 +112,8 @@ research/questions/agent-ml-practice.md.
    dirty for other sessions' commits to sweep)
 5. --control shuffle harness-wide, generalising playernet's --shuffle-labels (8ea54ff),
    same flag name (76: --control shuffle|permute, --shuffle-labels an alias)
-6. Run key hash(binary, snapshot, args, seed): `lab-run` answers "same as RUN"
+6. Done: run key (meta `runkey`: binary, CPU target, snapshots, args, pyenv, --with
+   files); a start prints "same as RUN (exit N)" and still starts
 7. Done: pre-commit import check (7449671), looks ledger (95d9e96). Left: per-file
    command registration; one block runner (meiolol-f7's list of winnet/playernet
    duplicates)

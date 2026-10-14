@@ -502,6 +502,23 @@ start() {
         if [[ -n "$env" ]]; then echo "python $PY"; echo "pyenv $env"; fi
         if (( ${#WITH[@]} )); then echo "with ${WITH[*]}"; fi
     } > "$tmp/meta"
+    # Run key: the same binary (or *.py and env), CPU target, snapshots, args and --with
+    # files give the same results (seeds are in the args; thread counts don't matter,
+    # 2f5dd85), so a start says which runs it repeats. Told, not refused: timings and
+    # flakiness checks rerun on purpose
+    local runkey same
+    runkey=$( { grep -E '^(bin|cpu|snap|args|pyenv) ' "$tmp/meta"
+        if (( ${#WITH[@]} )); then
+            find "${WITH[@]}" -type f -print0 | LC_ALL=C sort -z | xargs -0 cat
+        fi; } | shasum -a 256 | cut -c1-16)
+    echo "runkey $runkey" >> "$tmp/meta"
+    # shellcheck disable=SC2016 # expands on the host
+    same=$(on "$host" 'cd '"$RUNS"' 2> /dev/null || exit 0
+        for m in $(grep -lx "runkey '"$runkey"'" */meta 2> /dev/null); do
+            d=${m%/meta}; s=running; [[ -f $d/exit ]] && s="exit $(cat $d/exit)"
+            [[ -f $d/stopped ]] && s=stopped; printf "%s (%s), " "$d" "$s"
+        done' 2> /dev/null || true)
+    [[ -z "$same" ]] || echo "same as ${same%, } (run key $runkey)"
     # Seconds of running time expected (deploy/lab-place.pl), and why: status checks it
     [[ "$predicted" == - ]] || printf "%s\t%s\n" "$predicted" "$why" > "$tmp/predicted"
     : > "$tmp/src.diff"

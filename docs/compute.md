@@ -102,8 +102,12 @@ deploy/lab-run.sh watch-install
 - Run dir ~/ml/runs/<UTC stamp>-<name> on the host: the binary, job.sh, log, meta (host,
   binary hash, src KEY, harness (KEY without the candidate: src/lab/cand and -Dcand),
   snap PATH HASH per snapshot dir in the args (input files' names and sizes, equal on
-  both hosts' copies), HEAD, dirty count, args), src.diff (src and build.zig vs HEAD), started,
-  ended, exit, pauses.log
+  both hosts' copies), HEAD, dirty count, args, runkey), src.diff (src and build.zig vs
+  HEAD), started, ended, exit, pauses.log
+- runkey: hash of meta's bin, cpu, snap, args and pyenv lines and the --with files'
+  contents, i.e. what decides the results (seeds are args; thread counts don't change
+  them). A start prints `same as RUN (exit N), ...` for earlier runs with its key: look
+  there before rerunning; it still starts (timings, flakiness)
 - ARGS are joined and run by bash in the run dir on the host: ~ and globs expand there,
   relative outputs land in the run dir, `pull` copies it (minus the binary) to
   data/runs/RUN here
