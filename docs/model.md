@@ -2646,7 +2646,8 @@ run low: ally pairs planted at 2 pp came out 1.21 on average (0.6x; 1 of 10 inte
 covered 2), at 4 pp 2.99 (0.75x, 0 of 10), lane matchups at 2 pp 0.9x. So read the ally
 and matchup sds as lower bounds and their upper ends as too low, by up to ~1.7x for the
 ally blocks (bottom-support 1.21 may be ~2 pp). Cause (unit plant, 20k games, one pair
-block): the known downward bias of Laplace-type variance estimates on binary outcomes
+block; test "planted pair sd: gaussian recovered ..." in src/lab/additive.zig, 4 seeds per
+row in the numbers below, one in the test): the known downward bias of Laplace-type variance estimates on binary outcomes
 with few games per cell, not the diagonal posterior. The same block planted on a
 gaussian outcome comes back at 0.97-1.04x at 6-180 games per cell; on win it comes back
 at 0.96x at 178 games per cell, 0.67x at 25, 0.23x at 6. So win pair sds are lower bounds

@@ -517,3 +517,21 @@ test "group names" {
     try testing.expectEqualStrings("champion support", groupName(&buf, g_main + 4));
     try testing.expectEqual(n_groups, enemyGroup(4, 4) + 1);
 }
+
+test "planted pair sd: gaussian recovered at 6 games per cell, logistic biased low (Laplace)" {
+    // docs/model.md "Effects and the CPU model": why win pair sds are lower bounds
+    const gpa = testing.allocator;
+    const planted = allyGroup(3, 4);
+    var ratio: [2]f64 = undefined;
+    for ([_]Kind{ .gaussian, .logistic }, [_]f64{ 0.3, 0.15 }, &ratio) |kind, s_pair, *out| {
+        const games = try synth(gpa, kind, 20_000, 80, 0.15, planted, s_pair, 100);
+        defer gpa.free(games);
+        var p = try build(gpa, kind, Variant.mains().with(planted), games);
+        defer p.deinit(gpa);
+        var f = try fit(gpa, &p, .{}, null, null);
+        defer f.deinit(gpa);
+        out.* = @sqrt(f.sigma2[planted]) / s_pair;
+    }
+    try testing.expectApproxEqAbs(1.0, ratio[0], 0.15);
+    try testing.expect(ratio[1] < 0.5);
+}
