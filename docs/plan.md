@@ -479,14 +479,32 @@ in-game state model) and to the production review list.
 
 - Privacy/terms into src/site/prose.zig from docs/legal once Jacob fills the placeholders;
   objection by email (`meiolol forget`) until the form is live
-- Site polish: screenshots/GIFs, a short demo video
+- Site polish: reviewer walk 2026-10-14 (desktop and phone, every section): fixed
+  38b940f, 145a898, bbda65c (padding under the preview bar, chart text size, matchup
+  index default 50+ games, build index 404, thousands, lookup note instead of the
+  browser's sign-in prompt). Screenshots: docs/review-shots/. Left: unknown URLs get a
+  plain-text "not found" from meiolol-render (a site 404 page needs nginx error_page);
+  Daily Draft numbers freeze when a puzzle is made (#4 says 7,776 games, every lane
+  "more data needed"); review lists a "Costly death" at +8% win chance; Learn shows
+  lesson 1 "Started" to a first visit; docs/your-games.md "The browser asks once" is
+  now a note with a sign-in button (145a898). GIFs and a short demo video still to do
 - Desktop: lane card built (docs/architecture.md "Desktop window"; `zig build
-  desktop-shot` for PNGs). Next: run meiolol-desktop.exe on the Windows PC (DPI at 150%,
-  fonts, idle CPU, D3DCOMPILER_47.dll; gpu-box was asleep), then a real champ select
-  (`meiolol-app session --save testdata/lcu/session-real.json`; check mastery and
-  ranked replies parse). Not yet: your own record in the matchup (concept part 6; LCU
-  match history, needs a real reply to fix the schema), champion icons, window icon and
-  DPI manifest, the download page shipping the exe with stats and curves
+  desktop-shot` for PNGs). First Windows run 2026-10-14 on the gpu-box (Windows 11 Pro,
+  two 1080p screens at 100%; docs/review-shots/windows-desktop-window.png): opens, per
+  monitor DPI aware, fonts crisp, resizes and closes cleanly; D3DCOMPILER_47.dll is in
+  System32 on Windows 10/11, nothing to ship. Fixed (2911db5): idle 9.6% of a core and
+  6% GPU (dvui's dx11 main drew every vsync) to 0.3% and 0, and a PowerShell process
+  list (~1.5 s CPU each) every ~2 s while the client was closed. Memory: ~470 MB private
+  with EUW recent-curves (158 MB; whole files held, the all-region one is 288 MB).
+  Not checked: 150% (set a display to 150% and open the exe) and the card itself.
+  Jacob, in a real champ select, from C:\Users\jacob\meiolol-desktop-test (exe,
+  meiolol-app.exe, stats-all.bin, v5 recent-curves.bin): open meiolol-desktop.exe and
+  run `meiolol-app.exe session --save session-real.json`, then copy that file to
+  testdata/lcu/session-real.json (check mastery and ranked replies parse). Not yet:
+  your own record in the matchup (concept part 6; LCU match history, needs a real reply
+  to fix the schema), champion icons, window icon (title bar shows dvui's), the download
+  page shipping the exe with stats and curves. DPI manifest not needed: the window
+  already reports per-monitor awareness
 - Zig 0.17 move: done 2026-10-12 (docs/zig-0.17.md). dvui: pin PR #1012 (0.17.x
   branch) until it merges; ZLS built from its main until a 0.17 release
 
