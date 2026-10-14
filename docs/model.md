@@ -2881,6 +2881,57 @@ and was winning. Contested takes (both teams
 with a kill within 30 s) land close to the model (dragon +0.3, baron +0.3, elder -0.3).
 So no clean causal split yet; the draft-aware state model is the next step.
 
+#### In-game events on the draft-aware state (snap-20261013T2253Z re-cut)
+
+bd's C2: winchance's state has no draft, so event values might credit the draft. Rerun
+with `eventvalue --preds` (2d9a8b4) on meiolol-state's cross-fitted chances
+(SNAP/state/preds-wcd.tsv, run 20261014T020129Z-state-preds-2253Zr, block cf: 5-fold
+cross-fit by game over 236,227 dev-visible games, 6.5M game-minutes): wc = winchance's
+state, wcd = wc + the cross-fitted draft logit (win-ratings) with weights by minute, rich
+= per-role gold, XP, levels, deaths and respawn timers, towers by lane and tier, dragons by
+element and soul, buff timers, items, vision. Gold unit per model: what it gives a gold
+lead change in minutes with no event (XP that came with the farm included). Runs
+20261014T035939Z-ev53-p_wc, 035847Z-ev53-p_wcd, 035913Z-ev53-p_rich (f16367e), 200 game
+bootstraps.
+
+Win points for the taking team, wc / wcd [95%] / rich:
+
+| event | 10-14 min | 20-24 | 30-40 |
+| --- | --- | --- | --- |
+| dragon (any element) | 4.5 / 4.4-4.5 [±0.07] / 3.2-4.8 | 4.1 / 4.0-4.1 / 2.1-3.0 | 5.2-5.5 / 5.3-5.5 [±0.13] / 0.0-1.7 |
+| elder | | | 9.2 / 9.2 [9.0, 9.3] / 4.4 |
+| baron | | 5.8 / 5.6 [5.6, 5.7] / 3.8 | 8.0 / 7.9 [7.8, 7.9] / 3.5 |
+| outer tower | 0.1 / 0.2 / -0.3 | 2.6 / 2.7 / 1.4 | 3.0 / 3.0 / 0.0 |
+| inhibitor | | -0.1 / -0.2 / -1.0 | 3.5 / 3.4 [3.3, 3.4] / 2.0 |
+| kill | 3.8 / 3.8 / 3.8 | 2.8 / 2.7 / 3.7 | 2.6 / 2.6 / 6.7 |
+| grub (1-9 / 10-14) | 0.8 / 0.8 / 0.6 | | |
+| herald (15-19) | 0.75 / 0.61 / 0.21 | | |
+
+wcd's gold equivalents (dragon ~570 gold at 10-14, ~1,200 at 30-40; baron 1,180-1,780;
+elder 2,070 at 30-40) are not comparable with rich's, whose no-event gold slope falls to
+0.7 pp per 1000 at 30-40 (its state already holds what the gold bought).
+
+Findings:
+- The draft term changes event values by at most ~0.15 pp (wc vs wcd, every event and
+  band): C2's worry is not detected for a draft term that is fixed through the game. The
+  champion-by-minute term (scaling) is the open part: meiolol-state is adding p_richc.
+- Cause or being ahead (realised.tsv; excess = the taking team's results minus the
+  model's next-frame chance): the draft explains almost none of why teams behind beat the
+  model after an objective (baron +4.7 -> +4.6 pp, inhibitor +8.2 -> +8.0, elder +8.1 ->
+  +7.8, wc -> wcd); the rich state removes most of it (baron +0.6, inhibitor +1.6, elder
+  +1.8) and is calibrated at takes overall (baron +0.1, inhibitor -0.0, elder -0.2, dragon
+  +0.3). So what wc misses is in-game state (items, levels, timers), not the draft.
+- Values depend on what the state holds: rich credits a late kill 6.7 pp (respawn timers
+  in the state open the map) and a late dragon little (soul and element counts already
+  priced as the game goes), wc credits them through gold and counts. Report wcd's as "what
+  the event adds given gold and objectives", rich's as "given the whole board".
+- Steals are not coin flips under any model: after a stolen dragon the stealing team wins
+  9.7 pp less than the model's next-frame chance (wcd [-10.7, -8.5], rich -9.7), herald
+  -8.2 / -8.6, baron -2.8 / -4.6: a steal marks a fight the other team set up and was
+  winning, so steal "value" can't separate cause from being behind.
+- Inner towers and early inhibitors still come out negative in wc and wcd (-2.4 pp inner at
+  10-14): those models count towers alike, so read only outer towers there.
+
 #### Distillation (parked)
 
 Ready: `netcheck --fit-preds 1` (c2ec378) writes a teacher's chances on every block's
