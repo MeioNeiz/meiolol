@@ -2417,18 +2417,17 @@ Reading (dev, no test look):
   poor), not from gaining at the top: in the upper range -0.07 ± 0.16. win-comp's
   damage-mix term is worth a steady 0.2-0.6 mnats at every size (5 of 5 folds at 50-100%)
 - The big net: ahead of ratings at 6k (-0.75 mnats, when ratings has few games per
-  champion-role) and behind at 106k (+0.53, 1 of 5 folds); its gap swings ±0.5 mnats
-  between neighbouring sizes with 3 seeds, and above 40k it gains (-0.47 ± 0.46 mnats a
-  doubling): its trend is not established. Config check at 1954Z 106k (curve350-bigcfg):
-  val 4x an epoch with patience 10 +0.29, the same with lr 3e-4 +0.28, against the
-  default's +0.53, each better in 1 of 5 folds. Tuning recovers ~0.2 mnats but not the
-  gap. Open question: whether a big net tuned per size, with 0a's 10-seed ensembles (2055Z
-  100%: -0.39 ± 0.33 vs the same run's 3 seeds' -0.11), keeps level with ratings as games
-  grow
-- Audit (meiolol-33): cleared with these wording changes. The 2253Z rerun below is on the re-cut with one
-  training procedure;
-  the withdrawn pre-re-cut 2253Z runs scored 0 of their 54,518 games in the new test (match
-  ids vs split.tsv; fit games are older), so they exposed nothing
+champion-role) and behind at 106k (+0.53, 1 of 5 folds); its gap swings ±0.5 mnats between
+neighbouring sizes with 3 seeds, and above 40k it gains (-0.47 ± 0.46 mnats a doubling):
+its trend is not established. Config check at 1954Z 106k (curve350-bigcfg): val 4x an
+epoch with patience 10 +0.29, the same with lr 3e-4 +0.28, against the default's +0.53,
+each better in 1 of 5 folds. Tuning recovers ~0.2 mnats but not the gap. Open question:
+whether a big net tuned per size, with 0a's 10-seed ensembles (2055Z 100%: -0.39 ± 0.33 vs
+the same run's 3 seeds' -0.11), keeps level with ratings as games grow - Audit
+(meiolol-33): cleared with these wording changes. The 2253Z rerun below is on the re-cut
+with one training procedure; the withdrawn pre-re-cut 2253Z runs scored 0 of their 54,518
+games in the new test (match ids vs split.tsv; fit games are older), so they exposed
+nothing
 
 2253Z on the re-cut protocol (85fd62a; snap-20261013T2253Z repacked, one training procedure
 for every net; folds 5 x 26,875 scored games, dev-val 35,834; runs curvercut-*, fits
