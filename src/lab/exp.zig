@@ -513,19 +513,32 @@ fn final(
 ) !void {
     var s = try harness.score(cand, gpa, d, players, c, .final, .{});
     defer s.deinit(gpa);
-    try w.print("# Final: {s} ({s}), test set, scope {t}\n\n| outcome | rows | baseline | candidate | diff |\n|---|---|---|---|---|\n", .{ args.run, args.campaign, cand.scope });
+    // The test minus the games an earlier snapshot's looks saw, from the same predictions
+    var exclude = try test_looks.Exclude.load(gpa, io, Io.Dir.cwd(), args.snap);
+    defer if (exclude) |*e| e.deinit(gpa);
+    const keep = try gpa.alloc(bool, s.game.len);
+    defer gpa.free(keep);
+    for (keep, s.game) |*kp, g| kp.* = if (exclude) |*e| !e.has(d.games[g].match_id) else true;
     const finals = try std.fs.path.join(arena, &.{ dir, "finals.tsv" });
-    for (0..api.outcome_count) |k| {
-        const la = try s.losses(gpa, d, k, null, .cand);
-        defer gpa.free(la);
-        const lb = try s.losses(gpa, d, k, null, .base);
-        defer gpa.free(lb);
-        const p = harness.paired(s.game, la, lb, null);
-        const o = api.outcomeAt(k);
-        try w.print("| {t} | {d} | {d:.5} | {d:.5} | {d:.5} ± {d:.5} |\n", .{ o, p.n, p.b, p.a, p.diff, p.half });
-        try appendLine(io, finals, "run\tcampaign\ttarget\toutcome\tn\tdiff\thalf\n", try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{t}\t{d}\t{d:.5}\t{d:.5}\n", .{
-            args.run, args.campaign, args.target, o, p.n, p.diff, p.half,
-        }));
+    for ([_]?[]const bool{ null, if (exclude != null) keep else null }, 0..) |mask, pass| {
+        if (pass == 1 and mask == null) {
+            try w.print("\nno {s}: the test number above is the only one\n", .{test_looks.exclude_name});
+            continue;
+        }
+        const set = if (pass == 0) "test" else "test minus " ++ test_looks.exclude_name;
+        try w.print("{s}# Final: {s} ({s}), {s}, scope {t}\n\n| outcome | rows | baseline | candidate | diff |\n|---|---|---|---|---|\n", .{ if (pass == 0) "" else "\n", args.run, args.campaign, set, cand.scope });
+        for (0..api.outcome_count) |k| {
+            const la = try s.losses(gpa, d, k, null, .cand);
+            defer gpa.free(la);
+            const lb = try s.losses(gpa, d, k, null, .base);
+            defer gpa.free(lb);
+            const p = harness.paired(s.game, la, lb, mask);
+            const o = api.outcomeAt(k);
+            try w.print("| {t} | {d} | {d:.5} | {d:.5} | {d:.5} ± {d:.5} |\n", .{ o, p.n, p.b, p.a, p.diff, p.half });
+            try appendLine(io, finals, "run\tcampaign\ttarget\toutcome\tset\tn\tdiff\thalf\n", try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{t}\t{s}\t{d}\t{d:.5}\t{d:.5}\n", .{
+                args.run, args.campaign, args.target, o, if (pass == 0) "test" else "test-excl", p.n, p.diff, p.half,
+            }));
+        }
     }
     const kw = api.outcomeIndex(.win);
     const ys = try gpa.alloc(f32, s.row.len);

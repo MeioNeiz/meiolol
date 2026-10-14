@@ -66,9 +66,51 @@ pub fn record(
     try fw.interface.writeAll(line.written());
     try fw.interface.flush();
     try w.print("test look {d} of {s} (ledger {s})\n", .{ n, snap, path });
+    if (try Exclude.load(gpa, io, dir, snap)) |e| {
+        var ex = e;
+        defer ex.deinit(gpa);
+        try w.print("{s}: {d} test games an earlier snapshot's looks saw; report test and test minus them\n", .{ exclude_name, ex.keys.count() });
+    } else try w.print("no {s} on {s}: one test number, nothing excluded\n", .{ exclude_name, snap });
     try w.flush();
     return n;
 }
+
+pub const exclude_name = "test-exclude.tsv";
+
+/// SNAP/test-exclude.tsv (match_id, reason; header line): test games an earlier
+/// snapshot's test looks saw. Every --final reports the full test and the test minus
+/// these (docs/model.md, the 2253Z pin), from the same predictions
+pub const Exclude = struct {
+    keys: std.AutoHashMapUnmanaged(u64, void) = .empty,
+
+    /// null when SNAP has none
+    pub fn load(gpa: Allocator, io: Io, dir: Io.Dir, snap: []const u8) !?Exclude {
+        const path = try std.fs.path.join(gpa, &.{ snap, exclude_name });
+        defer gpa.free(path);
+        const text = dir.readFileAlloc(io, path, gpa, .limited(64 << 20)) catch |err| switch (err) {
+            error.FileNotFound => return null,
+            else => return err,
+        };
+        defer gpa.free(text);
+        var e: Exclude = .{};
+        errdefer e.deinit(gpa);
+        var lines = std.mem.splitScalar(u8, text, '\n');
+        _ = lines.next();
+        while (lines.next()) |line| {
+            const id = std.mem.sliceTo(line, '\t');
+            if (id.len > 0) try e.keys.put(gpa, std.hash.Wyhash.hash(0, id), {});
+        }
+        return e;
+    }
+
+    pub fn deinit(e: *Exclude, gpa: Allocator) void {
+        e.keys.deinit(gpa);
+    }
+
+    pub fn has(e: *const Exclude, match_id: []const u8) bool {
+        return e.keys.contains(std.hash.Wyhash.hash(0, match_id));
+    }
+};
 
 pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
     if (argv.len != 1) {
@@ -122,4 +164,22 @@ test "looks are numbered per snapshot, header once, one line each" {
         try testing.expectEqual(null, cols.next());
     }
     try testing.expectEqualStrings("", lines.next().?);
+}
+
+test "test-exclude.tsv: loaded by match id, said on every look either way" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(testing.io, "snap");
+    var sink: Io.Writer.Allocating = .init(testing.allocator);
+    defer sink.deinit();
+    const args: []const []const u8 = &.{"--final"};
+    try testing.expectEqual(null, try Exclude.load(testing.allocator, testing.io, tmp.dir, "snap"));
+    _ = try record(testing.allocator, testing.io, tmp.dir, "snap", "exp final", args, &sink.writer);
+    try testing.expect(std.mem.indexOf(u8, sink.written(), "no " ++ exclude_name) != null);
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "snap/" ++ exclude_name, .data = "match_id\treason\nEUW1_1\t2055Z test\nKR_2\t2055Z test\n" });
+    var e = (try Exclude.load(testing.allocator, testing.io, tmp.dir, "snap")).?;
+    defer e.deinit(testing.allocator);
+    try testing.expect(e.has("EUW1_1") and e.has("KR_2") and !e.has("EUW1_2") and !e.has("match_id"));
+    _ = try record(testing.allocator, testing.io, tmp.dir, "snap", "exp final", args, &sink.writer);
+    try testing.expect(std.mem.indexOf(u8, sink.written(), exclude_name ++ ": 2 test games") != null);
 }

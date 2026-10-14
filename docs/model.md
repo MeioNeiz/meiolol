@@ -154,7 +154,12 @@ outcomes and readings decided by Jacob the same day.
   VN2 9,261, NA1 4,593, BR1 3,959, rest 8,088; dev-val EUW1 6,741, KR 5,713, NA1 5,685.
   Codes 7-9 empty. Earlier tests landed: 2055Z's 10,759 (8 looks in its ledger) in fold4
   159, fold5 4,724, dev-val 3,991, test 1,885; 1954Z's 17,079 in dev-val 4,387, test
-  12,692. Seat stats: 2253Z's own plus 1954Z's and 2055Z's lines for games the box had
+  12,692 (1954Z: never test-looked, nothing excluded). Scaling curves before the re-cut:
+  0 test games. SNAP/test-exclude.tsv lists the 1,885 (2055Z's looked-at test games now
+  in test). Rule: every --final reports two numbers from the same predictions, the full
+  test and the test minus test-exclude.tsv; a look on a snapshot without the file says
+  so (looks.record prints either). Leak note: fits for a window never see games at or
+  after its cut, same-patch games on other platforms included. Seat stats: 2253Z's own plus 1954Z's and 2055Z's lines for games the box had
   pruned (0 of 5,179,830 shared seats differ), 372,317 games covered
 - Rows: ranked solo, non-remake, complete roles (stats.scan rules). Continuous outcomes
   also need a compact timeline that reached 15:00: frames[15].t_ms >= 900000 (frame 15
@@ -1697,6 +1702,62 @@ On win-comp (-Dcand=src/lab/cand/win-comp, folds 0.69033), t23's config, 10 seed
 
 Reading: nothing tried here stacks on win-comp beyond noise; the big net as a residual on
 it is at best ~0.3 milli-nats/game better, with every single seed worse.
+
+#### Nets on the re-cut 2253Z: rescore and sealed check (meiolol-04 [79f90e])
+
+snap-20261013T2253Z after meiolol-73's re-cut (one time cut over every platform, 85fd62a),
+built at 0c3e486 (with 6cee99b: small and resid fits call the init-loss gate; every fit
+here passed it). Folds 134,375 games (26,875 a block, fit 134k-242k), dev-val 35,834 (fit
+269k); 2055Z had 44,353 and 8,500 (fit 88k). Ratings at seed 1. The game sets differ, so
+compare levels across snapshots, not pairs. Runs (gpu-box ~/ml/runs/): 20261014T002905Z-
+rb-ref-wr (small, resid), 003419Z-rb-big-wr (big 1-10), 003523Z-rb-big-wr-s11 (sealed),
+003501Z-rb-aa-big (--resample 1-4, 3 seeds each). Win-comp runs wait for the verifier.
+
+Ratings: folds 0.68901 (2055Z 0.69090), accuracy 53.71 ± 0.27% (52.91 ± 0.46%); dev-val
+0.68780, 53.75 ± 0.52% (53.72 ± 1.06%); mean |p - 0.5| 0.037 (0.032).
+
+| net vs ratings (milli-nats/game) | folds | better in | single seeds, mean | accuracy, folds | dev-val | accuracy, dev-val |
+| --- | --- | --- | --- | --- | --- | --- |
+| small, seeds 1-5 | -0.34 ± 0.14 | 5 of 5 | +0.08 | +0.04 ± 0.14 pp | -0.67 ± 0.33 | +0.20 ± 0.30 pp |
+| resid, seeds 1-5 | -0.17 ± 0.08 | 4 of 5 | +0.11 | +0.09 ± 0.10 pp | +0.03 ± 0.05 | +0.05 ± 0.08 pp |
+| big, seeds 1-10 | -0.39 ± 0.18 | 4 of 5 | +1.26 | +0.08 ± 0.16 pp | -1.78 ± 0.50 | +0.69 ± 0.38 pp |
+| big, sealed seeds 11-20 | -0.35 ± 0.20 | 3 of 5 | +1.52 | +0.06 ± 0.16 pp | -1.48 ± 0.46 | +0.61 ± 0.36 pp |
+| big, all 20 seeds | -0.48 ± 0.17 | | | | | |
+
+- On 2055Z the small net was +0.66 ± 0.29 (0 of 5): with 1.5-3x the fit games it moves
+  from clearly worse to slightly better. resid's offset weights (median 0.95, 0.68-1.01)
+  say it mostly shrinks ratings' logit: recalibration, not detected
+- Pre-declared rule for a big-net gain (fixed before any result): sealed 11-20 below 0 by
+  more than 1.3x its half-width AND the mean over 4 resamples of ensemble minus ratings
+  below 0. Sealed: -0.35 ± 0.20, past the -0.26 threshold. Resamples: +0.21, +0.12, -0.02,
+  -0.26, mean +0.01 (sd 0.20). Not called by the rule, which is not the same as no gain:
+  the resample leg has less power than the sealed leg (3-seed ensembles on 90% fits; on
+  2055Z a 3-seed ensemble was ~0.3 milli-nats behind a 10-seed one). Audited by meiolol-53
+  from preds.tsv: numbers reproduce, ratings preds identical across runs, blocks match
+  nn/split.u8 by match id
+- Sealed seed 17 is a bad fit: it stopped at 3 epochs on fold 1 with that block's best
+  inner val (0.68960) yet scored +10.5 milli-nats there, +3.30 overall. Inner val doesn't
+  reliably guard against over-training. An ensemble without it is post hoc and not quoted
+- Exploratory: the gain grows block by block, in both independent seed sets and in the
+  small net. Later blocks fit more games but are also newer, so this can't yet separate
+  "nets gain with data" from "nets fit newer games better"; meiolol-30's 2253Z rerun
+  (fractions of the fit games, fixed scored blocks) does
+
+| block | fit games | big 1-10 | big 11-20 | small 1-5 |
+| --- | --- | --- | --- | --- |
+| fold 1 | 134,375 | +0.32 ± 0.40 | +0.20 ± 0.47 | -0.01 ± 0.28 |
+| fold 2 | 161,250 | -0.26 ± 0.32 | +0.15 ± 0.32 | -0.35 ± 0.28 |
+| fold 3 | 188,125 | -0.49 ± 0.46 | -0.55 ± 0.43 | -0.31 ± 0.33 |
+| fold 4 | 215,000 | -0.56 ± 0.36 | -0.70 ± 0.50 | -0.46 ± 0.34 |
+| fold 5 | 241,875 | -0.96 ± 0.45 | -0.85 ± 0.48 | -0.56 ± 0.33 |
+| dev-val | 268,750 | -1.78 ± 0.50 | -1.48 ± 0.46 | -0.67 ± 0.33 |
+
+Reading (dev, no test look): with ~2x the data the nets are no longer behind ratings; the
+big net's 10-seed ensemble is ahead on the folds by about the size of the noise floor, and
+not called by the rule fixed beforehand. The gain growing with block is the first sign
+pointing the nets' way, but it is confounded with time. A test look (seeds 21-30, rule
+pre-declared with meiolol-53, no precondition on dev results) waits for the coordinator's
+and Jacob's go.
 
 #### LoLDraftAI's evaluation beside ours (meiolol-ba)
 
