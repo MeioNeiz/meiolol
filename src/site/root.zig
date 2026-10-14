@@ -997,47 +997,33 @@ fn ratio(part: u64, whole: u64) f64 {
     return if (whole == 0) 0 else @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole));
 }
 
-/// Wilson 95% interval of a win rate: where the true rate likely is, given the games
-pub fn wilson(wins: u32, games: u32) [2]f64 {
-    if (games == 0) return .{ 0, 1 };
-    const z = 1.96;
-    const n: f64 = @floatFromInt(games);
-    const p = @as(f64, @floatFromInt(wins)) / n;
-    const d = 1 + z * z / n;
-    const c = (p + z * z / (2 * n)) / d;
-    const h = z * @sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
-    return .{ c - h, c + h };
+/// Which side of 50% a win rate is, however few the games: they show as fading
+fn side(p: f64) []const u8 {
+    return if (p > 0.5) "up" else if (p < 0.5) "down" else "even";
 }
 
-/// Coloured only when the whole interval is on one side of 50%: no grades, and no
-/// pulling small samples toward 50% either
-fn side(iv: [2]f64) []const u8 {
-    return if (iv[0] > 0.5) "up" else if (iv[1] < 0.5) "down" else "even";
-}
-
-/// Win rate cell: the interval as a bar on an axis 50% ± `span` with the rate as a dot,
-/// then the rate and its ±, coloured by wrColour. data-v for sorting
+/// Win rate cell: a bar from 50% to the rate on an axis 50% ± `span`, then the rate,
+/// coloured by wrColour and fainter with fewer games (curvesfile.fade); nothing in it
+/// narrows as games come in. data-v for sorting
 fn winRateCell(w: *Writer, wins: u32, games: u32, span: f64) !void {
-    const iv = wilson(wins, games);
     const p = ratio(wins, games);
     const at = struct {
         fn f(x: f64, half: f64) f64 {
             return 100 * (std.math.clamp(x, 0.5 - half, 0.5 + half) - (0.5 - half)) / (2 * half);
         }
     }.f;
-    try tpl.render(w, "<td data-v=\"{p:.4}\"><span class=\"wr\" style=\"--c:{colour}\"><span class=\"ci\" title=\"95%: {lo:.1}% to {hi:.1}%, {games} games\">" ++
+    const dot = at(p, span);
+    try tpl.render(w, "<td data-v=\"{p:.4}\"><span class=\"wr\" style=\"--c:{colour};opacity:{fade:.2}\" title=\"{games} games\"><span class=\"ci\">" ++
         "<i class=\"r\" style=\"left:{left:.1}%;width:{width:.1}%\"></i><i class=\"d\" style=\"left:{dot:.1}%\"></i></span>" ++
-        "<b>{rate:.1}%</b><small>±{pm:.1}</small></span></td>", .{
+        "<b>{rate:.1}%</b></span></td>", .{
         .p = p,
         .colour = wrColour(p, span),
-        .lo = 100 * iv[0],
-        .hi = 100 * iv[1],
+        .fade = core.curvesfile.fade(games),
         .games = games,
-        .left = at(iv[0], span),
-        .width = at(iv[1], span) - at(iv[0], span),
-        .dot = at(p, span),
+        .left = @min(dot, 50),
+        .width = @abs(dot - 50),
+        .dot = dot,
         .rate = 100 * p,
-        .pm = 50 * (iv[1] - iv[0]),
     });
 }
 
@@ -1066,7 +1052,7 @@ fn earlyNote(site: *const Site, w: *Writer, filtered: bool) !void {
     const early = site.games < early_games;
     if (!early and !filtered) return;
     try tpl.render(w,
-        \\<p class="note" data-early="{early}"{hidden}>Early data: <span data-early-games>{games} games so far ({when})</span>. Each bar shows where a win rate likely is (95%) and narrows as games come in. Colour runs from orange (low) through grey (50%) to blue (high).</p>
+        \\<p class="note" data-early="{early}"{hidden}>Early data: <span data-early-games>{games} games so far ({when})</span>. Win rates fade the fewer games they have. Colour runs from orange (low) through grey (50%) to blue (high).</p>
         \\
     , .{
         .early = early_games,
@@ -1118,8 +1104,7 @@ pub fn roleName(r: Role) []const u8 {
     };
 }
 
-/// Champions table: win rate with its interval, its low end ("at least"), pick and ban
-/// rate, games. Rows sorted by win rate; rare picks hidden until asked for
+/// Champions table: win rate, pick and ban rate, games. Rows sorted by win rate; rare picks hidden until asked for
 fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void {
     const rows = try tierRows(site, role);
     std.mem.sort(Row, rows, {}, struct {
@@ -1132,7 +1117,7 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     try tpl.renderPart(w,
         \\<input type="search" placeholder="Search champion" data-filter aria-label="Search champion"></div>
         \\<div class="tl-wrap"><table class="tl" data-sortable>
-        \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" class="lo" title="The low end of the bar: the win rate is very likely at least this">At least</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num">Games</th></tr></thead>
+        \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
     , .{ .role = tpl.when(role == null, tpl.t("<th class=\"l\" data-sort=\"text\">Role</th>", .{})) });
@@ -1141,9 +1126,8 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     var n: usize = 0;
     for (rows) |row| {
         if (row.rare) rare += 1 else n += 1;
-        const lo = wilson(row.wins, row.games)[0];
         try tpl.render(w,
-            \\<tr data-name="{name}"{rare}><td class="rank">{n}</td><td class="l">{link}</td>{role}{wr}<td class="dim lo" data-v="{lo:.4}">{lo_pct:.1}%</td><td class="opt" data-v="{games}">{pick}</td><td class="opt" data-v="{banned}">{ban}</td><td class="dim" data-v="{games}">{games}</td></tr>
+            \\<tr data-name="{name}"{rare}><td class="rank">{n}</td><td class="l">{link}</td>{role}{wr}<td class="opt" data-v="{games}">{pick}</td><td class="opt" data-v="{banned}">{ban}</td><td class="dim" data-v="{games}">{games}</td></tr>
             \\
         , .{
             .name = row.ch.name,
@@ -1152,8 +1136,6 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
             .link = tpl.call(champLinkTo, .{ site, row.ch, to_site }),
             .role = tpl.when(role == null, tpl.t("<td class=\"l role\" data-v=\"{role}\">{role}</td>", .{ .role = roleName(row.role) })),
             .wr = tpl.call(winRateCell, .{ row.wins, row.games, @as(f64, 0.12) }),
-            .lo = lo,
-            .lo_pct = 100 * lo,
             .games = row.games,
             .pick = tpl.call(pct, .{ row.games, site.games }),
             .banned = row.ch.banned,
@@ -1315,7 +1297,6 @@ const Opponent = struct {
     other: Champ,
     games: u32,
     wins: u32,
-    iv: [2]f64,
 };
 
 /// One page per champion, from the root view (EUW, 30 days) at the site root; its
@@ -1359,18 +1340,17 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
 
     for (roles[0..n_roles]) |r| {
         const cr = st.champRole(r, ch.c);
-        const iv = wilson(cr.wins, cr.games);
+        const rate = ratio(cr.wins, cr.games);
         try tpl.renderPart(w,
             \\<section id="{slug}"><h2>{role}</h2>
-            \\<div class="tiles"><div data-tile="wr"><span>Win rate</span><b class="{side}">{wr}</b><small>{lo:.1}% to {hi:.1}%</small></div><div data-tile="pick"><span>Pick rate</span><b>{pick}</b><small>of games</small></div><div data-tile="ban"><span>Ban rate</span><b>{ban}</b><small>of games</small></div><div data-tile="games"><span>Games</span><b>{games}</b><small>{role} lane</small></div></div>
+            \\<div class="tiles"><div data-tile="wr"><span>Win rate</span><b class="{side}" style="opacity:{fade:.2}">{wr}</b><small>of games won</small></div><div data-tile="pick"><span>Pick rate</span><b>{pick}</b><small>of games</small></div><div data-tile="ban"><span>Ban rate</span><b>{ban}</b><small>of games</small></div><div data-tile="games"><span>Games</span><b>{games}</b><small>{role} lane</small></div></div>
             \\
         , .{
             .slug = roleSlug(r),
             .role = roleName(r),
-            .side = side(iv),
+            .side = side(rate),
+            .fade = core.curvesfile.fade(cr.games),
             .wr = tpl.call(pct, .{ cr.wins, cr.games }),
-            .lo = 100 * iv[0],
-            .hi = 100 * iv[1],
             .pick = tpl.call(pct, .{ cr.games, site.games }),
             .ban = tpl.call(pct, .{ ch.banned, site.games }),
             .games = cr.games,
@@ -1381,7 +1361,7 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             if (other.c == ch.c) continue;
             const e = st.enemy(r, r, ch.c, other.c);
             if (e.games == 0) continue;
-            try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins, .iv = wilson(e.wins, e.games) });
+            try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins });
         }
         if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean");
         try builds_page.link(site, w, ch, r, path);
@@ -1391,7 +1371,7 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     try pool_page.section(site, w, &site.pool, ch);
     try learning_page.section(w, &site.learning, ch);
     try tpl.render(w,
-        \\<p class="muted small">Win rates are raw: no pulling toward 50%. Bars are 95% Wilson intervals. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); green ahead, red behind, fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
+        \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); green ahead, red behind, fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
         \\<script src="../table.js" defer></script>
         \\<script src="../filters.js" defer></script>
         \\
@@ -1492,12 +1472,11 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Oppo
             const y_thin = y.games < min_opponent_games;
             if (x_thin != y_thin) return y_thin;
             if (x_thin) return x.games > y.games;
-            // The interval's top end: hard even at best, so a few games can't top it
-            return x.iv[1] < y.iv[1];
+            return ratio(x.wins, x.games) < ratio(y.wins, y.games);
         }
     }.f);
     try tpl.renderPart(w,
-        \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{n}, hardest first, by the top of each bar</span></h3>
+        \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{n}, hardest first</span></h3>
         \\<input type="search" placeholder="Search opponent" data-filter aria-label="Search opponent"></div>
         \\<div class="tl-wrap"><table class="tl" data-sortable>
         \\<thead><tr><th class="l" data-sort="text">Opponent</th><th data-sort="num">{name}'s win rate</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent">Gold at {minute}</th><th data-sort="num">Games</th></tr></thead>

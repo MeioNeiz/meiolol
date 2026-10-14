@@ -9,7 +9,7 @@
 "use strict";
 
 // As root.zig opponentTable: by the bar's top end, so few games can't top the list
-const HARDEST = "hardest first, by the top of each bar";
+const HARDEST = "hardest first";
 
 (async () => {
   const bar = document.querySelector(".filter-bar[data-src]");
@@ -219,11 +219,11 @@ const HARDEST = "hardest first, by the top of each bar";
     const tiles = s.el.querySelector(".tiles");
     if (tiles) {
       tiles.innerHTML = s.original.tiles;
-      const iv = wilson(r.wins, r.games);
-      const wr = tiles.querySelector('[data-tile="wr"]');
-      wr.querySelector("b").className = side(iv);
-      wr.querySelector("b").textContent = pct(r.wins, r.games);
-      wr.querySelector("small").textContent = `${(100 * iv[0]).toFixed(1)}% to ${(100 * iv[1]).toFixed(1)}%`;
+      const p = r.games ? r.wins / r.games : 0.5;
+      const b = tiles.querySelector('[data-tile="wr"] b');
+      b.className = p > 0.5 ? "up" : p < 0.5 ? "down" : "even";
+      b.style.opacity = fade(r.games);
+      b.textContent = pct(r.wins, r.games);
       // Two players per role and game
       tiles.querySelector('[data-tile="pick"] b').textContent = pct(2 * r.games, r.slots);
       const ban = tiles.querySelector('[data-tile="ban"]');
@@ -239,7 +239,7 @@ const HARDEST = "hardest first, by the top of each bar";
       const xt = x.games < thin, yt = y.games < thin;
       if (xt !== yt) return xt ? 1 : -1;
       if (xt) return y.games - x.games;
-      return wilson(x.wins, x.games)[1] - wilson(y.wins, y.games)[1];
+      return x.wins / x.games - y.wins / y.games;
     });
     const curve = view ? curveGold(`${view.key}|${f.rank}`) : null;
     const pages = view ? curveGold(`${view.key}|`) : null;
@@ -301,19 +301,19 @@ const HARDEST = "hardest first, by the top of each bar";
     return td;
   }
 
-  // As root.zig winRateCell: the interval as a bar on 50% ± span, the rate as a dot
+  // As root.zig winRateCell: a bar from 50% to the rate on 50% ± span, fainter with
+  // fewer games
   function winRateCell(wins, games, span) {
-    const iv = wilson(wins, games);
     const p = games ? wins / games : 0;
     const at = (x) => (100 * (Math.min(Math.max(x, 0.5 - span), 0.5 + span) - (0.5 - span))) / (2 * span);
+    const dot = at(p);
     const td = document.createElement("td");
     td.dataset.v = p.toFixed(4);
     td.innerHTML =
-      `<span class="wr" style="--c:${wrColour(p, span)}">` +
-      `<span class="ci" title="95%: ${(100 * iv[0]).toFixed(1)}% to ${(100 * iv[1]).toFixed(1)}%, ${games} games">` +
-      `<i class="r" style="left:${at(iv[0]).toFixed(1)}%;width:${(at(iv[1]) - at(iv[0])).toFixed(1)}%"></i>` +
-      `<i class="d" style="left:${at(p).toFixed(1)}%"></i></span>` +
-      `<b>${(100 * p).toFixed(1)}%</b><small>±${(50 * (iv[1] - iv[0])).toFixed(1)}</small></span>`;
+      `<span class="wr" style="--c:${wrColour(p, span)};opacity:${fade(games)}" title="${games} games">` +
+      `<span class="ci"><i class="r" style="left:${Math.min(dot, 50).toFixed(1)}%;width:${Math.abs(dot - 50).toFixed(1)}%"></i>` +
+      `<i class="d" style="left:${dot.toFixed(1)}%"></i></span>` +
+      `<b>${(100 * p).toFixed(1)}%</b></span>`;
     return td;
   }
 
@@ -343,7 +343,7 @@ const HARDEST = "hardest first, by the top of each bar";
     td.dataset.v = m;
     const value = document.createElement(href ? "a" : "span");
     value.className = `gold ${cls}`;
-    value.style.opacity = (0.35 + 0.65 * Math.min(1, Math.sqrt(games / 200))).toFixed(2);
+    value.style.opacity = fade(games);
     if (href) {
       value.href = href;
       value.title = `Lane curves, ${games} games`;
@@ -374,18 +374,9 @@ const HARDEST = "hardest first, by the top of each bar";
   apply();
 })();
 
-// As root.zig wilson: 95% interval of a win rate
-function wilson(wins, games) {
-  if (!games) return [0, 1];
-  const z = 1.96, n = games, p = wins / n;
-  const d = 1 + (z * z) / n;
-  const c = (p + (z * z) / (2 * n)) / d;
-  const h = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / d;
-  return [c - h, c + h];
-}
-
-function side(iv) {
-  return iv[0] > 0.5 ? "up" : iv[1] < 0.5 ? "down" : "even";
+// As curvesfile.fade: opacity from games, full from 200
+function fade(games) {
+  return (0.35 + 0.65 * Math.min(1, Math.sqrt(games / 200))).toFixed(2);
 }
 
 // As root.zig wrColour: orange below 50%, blue above, grey at 50%

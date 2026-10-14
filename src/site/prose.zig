@@ -130,16 +130,13 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\<li><b>Win, pick and ban rate</b>: games won with the champion in that role, share
         \\of games with it in that role, share of games where it was banned.</li>
         \\<li><b>How sure a win rate is</b>: every win rate is the raw share of games won,
-        \\never pulled toward 50%. Its bar is the 95% Wilson interval: where the true rate
-        \\likely is given the games so far. "At least" is the bar's low end. Colour runs
-        \\from orange (low) through grey (50%) to blue (high) by the rate alone, not red
-        \\and green, which colour-blind readers can't tell apart; how sure it is shows in
-        \\the bar's width, so check the bar before trusting a strong colour.</li>
-        \\<li><b>Lane opponents</b>: the champion's win rate against each lane opponent, with
-        \\its interval, and the lane curve's gold difference at 14 minutes. Every opponent
-        \\is listed, hardest first by the top of its bar: an opponent leads the list only
-        \\if it is hard even at the best the games allow, so a few unlucky games can't put
-        \\it there. Those with under 10 games are faded and listed last.</li>
+        \\never pulled toward 50%. Its bar runs from 50% to the rate. Colour runs from
+        \\orange (low) through grey (50%) to blue (high) by the rate alone, not red and
+        \\green, which colour-blind readers can't tell apart. Fewer games make it fainter,
+        \\full from 200: with few games a rate can sit far from the truth.</li>
+        \\<li><b>Lane opponents</b>: the champion's win rate against each lane opponent and
+        \\the lane curve's gold difference at 14 minutes. Every opponent is listed, hardest
+        \\first; those with under 10 games are faded and listed last.</li>
         \\</ul>
         \\
     );
