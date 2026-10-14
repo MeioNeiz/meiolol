@@ -5,8 +5,9 @@
 //!
 //! Anonymised: puzzles carry no Riot IDs, PUUIDs, match ids or game dates, only
 //! champions, bans, patch, a rank tier, game length and team totals. Each puzzle is made
-//! once and kept in DIR/daily/<n>.json (public content); DIR/daily/used.txt lists the
-//! match ids behind them so none repeats, and is never published.
+//! once and kept in DIR/daily/<n>.json (public content), its numbers refreshed while its
+//! patch is current; DIR/daily/used.txt lists the match ids behind them so none repeats,
+//! and is never published.
 
 const std = @import("std");
 const store = @import("store");
@@ -92,8 +93,9 @@ pub const Puzzle = struct {
 pub const File = struct { path: []const u8, data: []const u8 };
 
 /// Makes any missing puzzle up to today + ahead, then returns the site files: every
-/// puzzle up to that day as daily/<n>.json and daily/index.json listing them. Allocates
-/// in `arena`.
+/// puzzle up to that day as daily/<n>.json and daily/index.json listing them. A puzzle
+/// on a patch still in `opts.patches` gets its numbers from `st` (see `refresh`).
+/// Allocates in `arena`.
 pub fn update(
     arena: std.mem.Allocator,
     io: std.Io,
@@ -116,7 +118,7 @@ pub fn update(
         const n = day - first_day + 1;
         const name = try arena.print("{d}.json", .{n});
         const read = dir.readFileAlloc(io, name, arena, .limited(1 << 20));
-        const data = read catch |err| switch (err) {
+        const read_data = read catch |err| switch (err) {
             error.FileNotFound => if (day < opts.today) continue else blk: {
                 const made = try make(arena, db, st, opts, n, day, &used) orelse {
                     log.warn("no draft for puzzle #{d}", .{n});
@@ -129,6 +131,7 @@ pub fn update(
             },
             else => return err,
         };
+        const data = try refresh(arena, io, dir, st, opts, name, read_data);
         const path = try arena.print("daily/{s}", .{name});
         try files.append(arena, .{ .path = path, .data = data });
         if (index.writer.end > 1) try index.writer.writeByte(',');
@@ -137,6 +140,42 @@ pub fn update(
     try index.writer.writeAll("]\n");
     try files.append(arena, .{ .path = "daily/index.json", .data = index.written() });
     return files.toOwnedSlice(arena);
+}
+
+/// A puzzle made early in a patch would keep that day's thin numbers (a few thousand games,
+/// every lane "more data needed"), so while its patch is current its numbers follow
+/// `st` and are saved back; once the patch is gone the last ones stay. Only the numbers
+/// change: champions, the four options, the hidden slot and the winner (the answers
+/// archive results were marked against) are the game's. Kept as made when it does not
+/// parse or `st` cannot score it.
+fn refresh(
+    arena: std.mem.Allocator,
+    io: std.Io,
+    dir: std.Io.Dir,
+    st: *const Stats,
+    opts: Options,
+    name: []const u8,
+    data: []const u8,
+) ![]const u8 {
+    var p = std.json.parseFromSliceLeaky(Puzzle, arena, data, .{}) catch |err| {
+        log.info("{s} kept as made: {t}", .{ name, err });
+        return data;
+    };
+    for (opts.patches) |patch| {
+        if (std.mem.eql(u8, patch, p.patch)) break;
+    } else return data;
+    var ids: [4]u32 = undefined;
+    for (p.options, &ids) |o, *id| id.* = o.id;
+    if (!try numbers(arena, st, &p, ids)) return data;
+    const fresh = try std.json.Stringify.valueAlloc(arena, p, .{});
+    if (std.mem.eql(u8, fresh, data)) return data;
+    // The web loop and the renderer both build the shared view: never a half-written file
+    var tag: [8]u8 = undefined;
+    io.random(&tag);
+    const tmp = try arena.print("{s}.{x}.tmp", .{ name, &tag });
+    try dir.writeFile(io, .{ .sub_path = tmp, .data = fresh });
+    try dir.rename(tmp, dir, name, io);
+    return fresh;
 }
 
 /// Newline-separated match ids, newest last
@@ -272,12 +311,40 @@ pub fn load(
         p.bans = .{ bans[0].items, bans[1].items };
     }
     p.tier = try medianTier(db, match_id);
-    p.games = st.games;
 
     p.hidden_team = rand.int(u1);
     p.hidden_role = Role.all[rand.uintLessThan(usize, Role.count)];
     p.played = p.teams[p.hidden_team][@backingInt(p.hidden_role)];
-    p.options = (try options(arena, st, p, rand)) orelse return null;
+    const ids = (try options(arena, st, p, rand)) orelse return null;
+    if (!try numbers(arena, st, &p, ids)) return null;
+    return p;
+}
+
+/// Fills what `st` says about the draft: games, the options (`ids`, in this order),
+/// blue's win chance and the lanes. False when `st` cannot score one of the champions.
+fn numbers(arena: std.mem.Allocator, st: *const Stats, p: *Puzzle, ids: [4]u32) !bool {
+    for (p.teams) |team| for (team) |id| if (st.index(id) == null) return false;
+    var draft = try hiddenDraft(arena, p.*);
+    draft.pool = &ids;
+    // Scored together with no game minimum, so the played champion always appears
+    var four: [4]core.Suggestion = undefined;
+    const scored = core.recommend(st, draft, .{ .min_games = 0 }, &four);
+    if (scored.len != 4) return false;
+    for (ids, &p.options) |id, *o| {
+        const s = for (scored) |s| {
+            if (s.champion == id) break s;
+        } else return false;
+        const reasons = try arena.alloc(Reason, s.n_reasons);
+        for (s.reasons(), reasons) |r, *dst| dst.* = .{
+            .kind = r.kind,
+            .id = r.champion,
+            .role = r.role,
+            .pp = round1(r.pp),
+            .games = r.games,
+        };
+        o.* = .{ .id = id, .pp = round1(s.pp), .games = s.games, .reasons = reasons };
+    }
+    p.games = st.games;
     p.blue_win = blueWin(st, p.teams);
     for (Role.all) |r| {
         const blue = st.index(p.teams[0][@backingInt(r)]).?;
@@ -287,7 +354,7 @@ pub fn load(
             .games = st.enemy(r, r, blue, red).games,
         };
     }
-    return p;
+    return true;
 }
 
 /// From the rank snapshot stored with the match: players is emptied on a rekey
@@ -334,13 +401,8 @@ pub fn hiddenDraft(arena: std.mem.Allocator, p: Puzzle) !core.Draft {
 /// The played champion and three others from the 20 the numbers rate highest in this
 /// draft, shuffled. Picking among the top keeps them plausible, so the guess is about
 /// the draft rather than spotting the odd one out.
-fn options(
-    arena: std.mem.Allocator,
-    st: *const Stats,
-    p: Puzzle,
-    rand: std.Random,
-) !?[4]Option {
-    var draft = try hiddenDraft(arena, p);
+fn options(arena: std.mem.Allocator, st: *const Stats, p: Puzzle, rand: std.Random) !?[4]u32 {
+    const draft = try hiddenDraft(arena, p);
     var top: [20]core.Suggestion = undefined;
     const ranked = core.recommend(st, draft, .{ .min_games = minGames(st) }, &top);
     var others: std.ArrayList(u32) = .empty;
@@ -349,28 +411,7 @@ fn options(
     rand.shuffle(u32, others.items);
     var ids: [4]u32 = .{ p.played, others.items[0], others.items[1], others.items[2] };
     rand.shuffle(u32, &ids);
-
-    // Scored together with no game minimum, so the played champion always appears
-    draft.pool = &ids;
-    var four: [4]core.Suggestion = undefined;
-    const scored = core.recommend(st, draft, .{ .min_games = 0 }, &four);
-    if (scored.len != 4) return null;
-    var out: [4]Option = undefined;
-    for (ids, &out) |id, *o| {
-        const s = for (scored) |s| {
-            if (s.champion == id) break s;
-        } else return null;
-        const reasons = try arena.alloc(Reason, s.n_reasons);
-        for (s.reasons(), reasons) |r, *dst| dst.* = .{
-            .kind = r.kind,
-            .id = r.champion,
-            .role = r.role,
-            .pp = round1(r.pp),
-            .games = r.games,
-        };
-        o.* = .{ .id = id, .pp = round1(s.pp), .games = s.games, .reasons = reasons };
-    }
-    return out;
+    return ids;
 }
 
 /// Blue's win chance with every slot known: blue's top laner as "me", the rest as
@@ -487,4 +528,26 @@ test "puzzles are made once, anonymised and published" {
     const used_path = try arena.print("{s}/used.txt", .{dir});
     const used = try std.Io.Dir.cwd().readFileAlloc(io, used_path, arena, .unlimited);
     try testing.expectEqual(4, std.mem.count(u8, used, "\n"));
+
+    // Numbers frozen thin on an early day follow the patch's stats; the answers stay.
+    // A puzzle on a patch no longer in the stats keeps what it has.
+    var thin = p;
+    thin.games = 7;
+    thin.lanes = @splat(.{ .pp = 0, .games = 1 });
+    const four = try arena.print("{s}/4.json", .{dir});
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = four,
+        .data = try std.json.Stringify.valueAlloc(arena, thin, .{}),
+    });
+    var old = try std.json.parseFromSliceLeaky(Puzzle, arena, again[1].data, .{});
+    old.patch = "16.19";
+    old.games = 7;
+    const old_data = try std.json.Stringify.valueAlloc(arena, old, .{});
+    const five = try arena.print("{s}/5.json", .{dir});
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = five, .data = old_data });
+    const third = try update(arena, io, db, &st, next);
+    try testing.expectEqualStrings(files[0].data, third[0].data);
+    try testing.expectEqualStrings(old_data, third[1].data);
+    const saved = try std.Io.Dir.cwd().readFileAlloc(io, four, arena, .unlimited);
+    try testing.expectEqualStrings(files[0].data, saved);
 }
