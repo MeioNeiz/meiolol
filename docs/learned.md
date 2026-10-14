@@ -29,8 +29,9 @@ How to write a line:
   minute, how often they played off their role, days since their last game) predicts
   the winner beyond how much they have played: the ten champions alone pick the winner
   53.7% of the time, adding each player's games and wins on their champion and recent
-  form lifts it to 55.5%, and adding these earlier-game averages lifts it to 56.1%
-  (ranking a winning team above a losing one 58.6% of the time instead of 57.7%). The
+  form lifts it to 55.5%, and a model given these earlier-game averages as well picks
+  56.1% against 55.6% for the same model without them (ranking a winning team above a
+  losing one 58.5% of the time instead of 57.8%). The
   gain is bigger when more of the ten have earlier games, about twice as big with all
   ten as with four or fewer. Whether players have queued together before adds nothing
   we can detect. Sure: snap-20261013T2253Z, 134,375 games in 5 forward folds, a sealed

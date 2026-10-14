@@ -2108,7 +2108,8 @@ within each draw; the init-loss gate is ok on every fit; offset weights 0.81-0.9
 - Audited by meiolol-53 (recomputed per game from the ten runs, blocks equal the nn
   split by match id, code read of abb57f3, cb19e68, d43fa92: no leak); learned.md line
   2026-10-14, internal scope (other players' history is never for the app). Folds: pick
-  the winner 53.7% (ratings), 55.5% (win-exp), 56.1% (B); AUC 0.551, 0.577, 0.586. Next: the prior as hand-made terms in win-exp (what an
+  the winner 53.7% (ratings), 55.5% (win-exp), 55.6% (A), 56.1% (B); AUC 0.551, 0.576,
+  0.578, 0.585 (53's check). Next: the prior as hand-made terms in win-exp (what an
   explainable CPU model would ship internally), which feature carries it, and averaging
   the cross-fitted training offsets over partitions (58: two valid implementations'
   training offsets correlate only 0.81-0.91 per game)
