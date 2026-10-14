@@ -2654,6 +2654,267 @@ Reading (reworded after meiolol-33's audit):
   learned.md line. carry doesn't read seat_stats.tsv, so the 2253Z seat-stat gap does
   not touch these runs
 
+### How drafts win, 2026-10-14 (meiolol-41 [36c2ab], draftpath)
+
+Jacob (2026-10-13): understand draft and game state together, and how much each matters.
+Scripts py/draftpath/ (Python on the gpu-box via lab-run --python; nothing ships): dp.py
+(loaders, blocks, designs, fits), info.py and infogbdt.py (Q1), shape.py and
+archsplit.py (Q2), gmed.py and gmedhist.py (Q3), comeback.py (Q4). Pinned
+snap-20261012T2055Z: nn-export (match_id.txt added 13 Oct, run 20261013T225137Z-dp-nnx,
+every other column byte-identical; checked against events.tsv: 130,229 games, durations
+and winners all match), meiolol-41 [701543]'s state-export (659e017; a clean rebuild
+gave byte-identical files), c1's teams.tsv (20261013T230628Z-comps-export-teams). Dev
+only, no test look. Blocks as netcheck: folds 1-5 fit on played games before the block
+and score it (every platform, 8,870 each; 5,855 with a timeline), dev-val fits on splits
+0-5 and scores 8,500 EUW1 games; one row per game, so per-game pairs are clustered by
+game; "k/5" = better in k folds. Draft = platform + signed champion-role one-hot (blue
++1, red -1; summed for game-level targets), ridge or logistic with L2 picked on the
+newest 10% of fit games. State at t (blue minus red): gold lead by role, gold curve, XP,
+kills, towers, inhibitors down, dragons, soul point, soul, elder, grubs, herald, baron.
+Train-time: everything; use-time: none (description and lessons only).
+
+#### Q1: information over time (info.py, run 20261013T225917Z-dp-info-a)
+
+Games with a timeline still going at t, the same games for every model at that minute.
+Log loss gain per game (nats, ± 95%), folds pooled:
+
+| minute | games | draft alone | state alone | draft given state | state given draft | min-0 draft logit given state | its weight |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 29,278 | -0.0011 ± 0.0010 (4/5) | - | - | - | - | - |
+| 5 | 29,278 | | -0.0483 ± 0.0034 | -0.0061 ± 0.0016 (5/5) | -0.0533 | -0.0033 ± 0.0010 | 0.85-2.1 |
+| 10 | 29,278 | | -0.1151 ± 0.0049 | -0.0130 ± 0.0020 (5/5) | -0.1270 | -0.0038 ± 0.0010 | 0.96-2.5 |
+| 15 | 29,278 | | -0.1893 ± 0.0057 | -0.0163 ± 0.0022 (5/5) | -0.2045 | -0.0037 ± 0.0010 | 1.05-2.8 |
+| 20 | 26,798 | -0.0012 | -0.2355 ± 0.0065 | -0.0176 ± 0.0024 (5/5) | -0.2520 | -0.0034 ± 0.0010 | 1.07-2.8 |
+| 25 | 22,018 | -0.0015 | -0.2818 ± 0.0073 | -0.0169 ± 0.0024 (5/5) | -0.2972 | -0.0026 ± 0.0010 | 0.98-2.5 |
+| 30 | 12,766 | -0.0037 ± 0.0017 | -0.2456 ± 0.0093 | -0.0163 ± 0.0032 (5/5) | -0.2581 | -0.0020 ± 0.0013 | 0.86-2.4 |
+
+Dev-val agrees (draft alone -0.0035 ± 0.0015; draft given state -0.0088, -0.0147,
+-0.0171, -0.0195 at 5/10/15/20). The last two columns: state plus the minute-0 draft
+logit (out of fold) with a free weight; weight by block (1-5, dev), 1 = the whole
+pre-game edge still counts at equal state. Each role's pick given state (drop that
+role's champions from draft given state): 0.0019-0.0036 at 10, 0.0024-0.0043 at 15,
+0.0027-0.0050 at 25, 5/5 in nearly every cell; bottom and middle largest, top and
+support smallest. Draft alone by role at minute 0: support -0.0006 ± 0.0005, others
+within ± 0.0005.
+
+A flexible state model (infogbdt.py, run 20261013T234038Z-dp-infogbdt: LightGBM on all
+218 state-export columns as blue minus red, early stopping on val; its out-of-fold logit
+the offset for the draft layer) ties the linear state: GBDT minus linear +0.0009 ±
+0.0010 at 10, +0.0012 ± 0.0011 at 15, -0.0005 ± 0.0016 at 25 (worse or level). The draft
+given GBDT state: -0.0114 ± 0.0019, -0.0137 ± 0.0020, -0.0135 ± 0.0023 at 10/15/25
+(5/5), 84-88% of the linear figure. So the draft's gain is not the draft patching a
+too-simple state model, and no net was tried (GBDT never beat linear).
+
+By comp archetype (archsplit.py, run 20261013T234410Z-dp-arch; games where either team
+has the archetype): draft given state at 15 is largest with a late scaling team (-0.0226
+± 0.0044) or an early dive/roam team (-0.0208 ± 0.0042), against -0.0131 to -0.0156 for
+range/siege, tank/engage, AD dive and enchanter/peel; at 25 late scaling -0.0262 ±
+0.0049, early dive -0.0219 ± 0.0048, the rest -0.0124 to -0.0159.
+
+Reading:
+- Before the game the draft says little (0.0011 nats, ratings' size). Once the state is
+  known it says 15 times more: 0.006 at 5 min, 0.013 at 10, 0.016-0.018 from 15 to 30.
+  The draft and the state are complements, not substitutes: the draft's gain grows with
+  the state (unique share 0.016 at 15 vs 0.0011 alone), so "how much each matters" has
+  no single split; for two groups Shapley gives the draft about 0.009 of 0.21 at 15
+  (4%), the state the rest
+- Nothing is absorbed into gold: the pre-game draft edge keeps its full weight (about 1,
+  often more) beside the state at every minute. Most of the draft's value at equal state
+  is a different signal from its pre-game edge (0.0037 of 0.0163 at 15): which champions
+  turn the same state into wins, the scaling section's effects summed over ten seats
+  (its per-row 0.002 is one seat; per game it is 0.016 here)
+- It grows from 5 to 20 minutes and then holds: scaling, not fading. Within this window
+  (30 min, survivors only) no fade
+- The draft adds most where the state misreads the game most: games with a late scaling
+  or an early dive team
+
+#### Q2: what a draft decides (shape.py, run 20261013T225815Z-dp-shape-a)
+
+Draft-only models of the game's shape, held-out gain over the fit mean or base rate, %
+of base loss (R2 for continuous targets), folds pooled (5/5 for every target; dev-val
+beside): gold lead by role at 10/15/20 (state-export, blue minus red) and at 14
+(nn-export), firsts (taken by blue; minute, either team), length, kill pace.
+
+| target | folds | dev-val |
+| --- | --- | --- |
+| team gold lead at 10 / 15 / 20 | 6.6% / 5.9% / 4.1% | 6.9% / 5.9% / 4.6% |
+| lane gold lead at 15: top, jungle, mid, bottom, support | 6.2, 7.1, 6.3, 6.4, 12.9% | 5.4, 9.1, 7.1, 6.6, 14.0% |
+| support gold lead at 20 | 17.2% | 18.3% |
+| first tower (side) / its minute | 4.2% / 4.8% | 4.0% / 5.0% |
+| first dragon / minute | 2.0% / 6.6% | 2.7% / 3.5% |
+| first herald / grubs / baron / inhibitor / blood (side) | 1.1 / 0.6 / 0.7 / 0.4 / 1.0% | 1.8 / 0.8 / 0.7 / 0.3 / 1.0% |
+| first baron minute / inhibitor minute / first blood minute | 7.6 / 4.8 / 7.2% | 6.4 / 4.5 / 6.2% |
+| game length | 5.0% | 4.6% |
+| kills per minute / kills by 15 | 21.7% / 20.4% | 13.7% / 13.0% |
+| win | 0.25% | 0.55% |
+
+Champion-role effects (dev block's fit, 64,931 games; ridge-shrunk, ± 95% from 40 game
+bootstraps; 500+ games): team gold lead at 15: Irelia top +841 ± 167, Draven +803 ± 143,
+Pyke +751 ± 132, Heimerdinger top +629, Nidalee +622; Kayle -926 ± 193, Smolder bottom
+-835 ± 123, Bel'Veth -733 ± 149, Aurelion Sol mid -731 ± 179, Yuumi -712 ± 151. First
+tower (pp, an average team's chance): Illaoi +16 ± 2, Heimerdinger top +15, Irelia top
++13, Yorick +12; Kayle -14 ± 2, Shen top -11, Vayne bottom -11. First dragon: Nunu +11 ±
+2, Udyr +11 ± 3, Shyvana +8; Bel'Veth -13 ± 2, Zed jungle -8. First herald: Nunu +7,
+Heimerdinger top +6, Irelia top +6; Yuumi -8, Kayle -7. Length (sd of true effects 0.36
+min): Bel'Veth -1.2 ± 0.2 min, Kalista -1.0, Yuumi -0.9, Hecarim -0.8; Teemo support
++1.2 ± 0.3, Shaco +1.0, Veigar bottom +0.9. Kill pace (sd 0.05 a minute): Milio -0.24 ±
+0.01, Soraka -0.20, Janna -0.19; Camille support +0.12, Sylas support +0.12, Pyke +0.12.
+Table: shape-effects.tsv in the run.
+
+By archetype, team view, model-free (folds' scored games; win minus the draft-only
+model's chance, pp, by game length): late scaling teams are 849 gold behind at 15 and
+win -6.0 ± 2.0 under 25 min, +3.1 ± 1.7 over 32; early dive/roam +641 at 15, +2.2 ± 2.0
+and -2.7 ± 1.8; enchanter/peel -304, -2.2 ± 2.5 and +3.6 ± 2.4; range/siege +228, +1.9 ±
+1.9 and -2.4 ± 1.6; tank/engage and AD dive flat. Overall every archetype is within ±1.1
+of its champions' chance (ratings already price it). Length is an outcome, so the length
+bands describe when each archetype's wins come, not a cause.
+
+Reading:
+- The draft decides the shape of the game far more than who wins it: 6-7% of each lane's
+  gold lead (support 13-17%), a fifth of the kill pace, 5% of the length and first-tower
+  side, against 0.25% of the winner
+- Early and late drafts are real and big in gold (a typical one sd of champion effects
+  is several hundred gold at 15), and early-gold champions take first towers, dragons
+  and heralds; none of it shows up in the winner, which is Q3
+
+#### Q3: mediation, what runs through the early lead (gmed.py, gmedhist.py)
+
+Method per meiolol-research's decision (research/questions/draft-mediation, adopted by
+meiolol-bd): interventional direct and indirect effects by g-computation on the
+probability scale; the logistic difference method and the product of coefficients are
+invalid at a 50% outcome and dropped (a first difference-method run,
+20261013T225931Z-dp-mediate-a, is superseded). Draft score d = the draft-only logit out
+of fold (K-fold inside fit games, the block's model for scored games), in sd units of
+the fit games. Outcome model Q: logistic on state at t, d and d x state, fit on the
+block's fit games going at t. Mediator: real states of the block's scored games with d
+within 0.25 sd of the contrast point (no parametric generator). Contrast d = +0.5 vs
+-0.5 sd: total = Q(d1, M1) - Q(d0, M0), indirect = Q(d1, M1) - Q(d1, M0), direct = Q(d1,
+M0) - Q(d0, M0). Folds pooled by game count; ± 95% from 40 bootstraps (refit Q on
+resampled fit games, resample scored games). Runs 20261013T231454Z-dp-gmed-state (joint
+state), 20261013T235130Z-dp-gmed-gold (gold by role and curve only).
+
+| minute | total, pp per sd | indirect (through the state) | direct (equal state) | observed total (model-free) |
+| --- | --- | --- | --- | --- |
+| 5 | +3.39 ± 0.52 | -0.79 ± 0.52 | +4.18 ± 0.24 | +4.54 |
+| 10 | +3.38 ± 0.95 | -0.79 ± 0.97 | +4.18 ± 0.20 | +4.54 |
+| 14 | +3.71 ± 1.02 | -0.32 ± 1.02 | +4.03 ± 0.22 | +4.54 |
+| 20 | +3.32 ± 1.26 | -0.20 ± 1.23 | +3.52 ± 0.17 | +4.65 |
+| dev-val, 10 / 14 / 20 | +6.0 / +6.1 / +7.0 (± 1.9-2.5) | +1.6 / +1.9 / +3.3 (± 1.9-2.5) | +4.5 / +4.2 / +3.7 | +7.0 / +7.0 / +8.2 |
+
+Gold alone as the mediator: the same within 0.2 pp (indirect -0.73 ± 0.95 at 10, -0.28 ±
+1.05 at 14). Curve over draft quintiles at 14 against the middle one: worst fifth total
+-3.5 ± 1.3 (indirect +1.6 ± 1.3, direct -5.1), best fifth +4.9 ± 1.6 (indirect -0.2 ±
+1.5, direct +5.1). Observed total = win rate near +0.5 sd minus near -0.5 sd, about ±
+1.8 pp on the folds, ± 4 on dev-val, so g-computation's total sits inside it.
+
+Player skill (gmedhist.py, run 20261013T231651Z-dp-gmed-hist; internal scope): a history
+score per game h = logit(win-exp) - logit(win-ratings), the netcheck candidate preds of
+meiolol-f7's r-exp and r-rat runs (out of fold, inputs from games ended before each
+game, confirmed by meiolol-51); Q cross-fitted over the folds (no fit-game preds), with
+h and h x d, mediator draws matched within h tercile. Without vs with h, same 44,353
+games: indirect at 10 -0.90 ± 0.90 vs -0.92 ± 1.08, at 14 -0.39 vs -0.40, direct +3.95
+vs +3.96 and +3.66 vs +3.66. Measured history moves nothing; it is a weak skill measure
+here (sd 0.15 logit, 16 days of history).
+
+Skill bias table (state weights in Q scaled by k: only k of the state's win association
+is the state's own, the rest skill unrelated to the draft), folds at 14: k 1, 0.9, 0.75,
+0.5: indirect -0.32, -0.30, -0.27, -0.20; direct +4.03, +4.22, +4.53, +5.07. Skill in
+the state can only pull the indirect part further toward 0 here.
+
+Per champion-role (gmed.py --champions, run 20261013T235144Z-dp-gmed-champ; dev block's
+fit games, train-fit description, 20 bootstraps): swap champion j for its role's average
+pick (draft weight to 0, d minus j's draft weight) with each game's real state shifted
+by j's estimated state effect (ridge of every state column on the draft); indirect =
+through that state shift, direct = at the shifted state; j's team's view, pp. Spread of
+true effects (bootstrap noise removed) at 15 by role, total / indirect / direct: top 0.9
+/ 1.9 / 2.2, jungle 0.9 / 1.9 / 2.4, middle 1.1 / 2.2 / 2.6, bottom 1.4 / 2.0 / 2.8,
+support 1.3 / 1.8 / 2.6; correlation of indirect and direct -0.68 to -0.82 in every role
+and minute (10, 15, 20). Examples at 15 (indirect, direct, total; gold at 15):
+
+| | champion | indirect | direct | total | gold at 15 |
+| --- | --- | --- | --- | --- | --- |
+| early, give it back | Draven bottom | +6.0 ± 1.1 | -6.6 ± 1.4 | -0.6 | +803 |
+| | Irelia top | +5.0 ± 0.8 | -2.2 ± 1.0 | +2.8 | +841 |
+| | Pyke support | +4.8 ± 0.9 | -4.6 ± 1.1 | +0.2 | +751 |
+| | Hecarim jungle | +4.7 ± 0.8 | -5.2 ± 1.3 | -0.5 | +558 |
+| | Irelia middle | +4.5 ± 1.2 | -6.0 ± 2.0 | -1.6 | +676 |
+| late, win it back | Kayle top | -6.3 ± 1.2 | +6.5 ± 2.4 | +0.3 | -926 |
+| | Smolder bottom | -6.5 ± 0.8 | +5.6 ± 1.3 | -0.9 | -835 |
+| | Bel'Veth jungle | -5.8 ± 1.1 | +7.6 ± 1.4 | +1.8 | -733 |
+| | Aurelion Sol middle | -5.7 ± 1.1 | +7.7 ± 2.6 | +2.0 | -731 |
+| | Kassadin middle | -5.2 ± 1.2 | +8.4 ± 1.7 | +3.2 | -644 |
+| direct only | Rammus jungle | -2.9 ± 1.6 | +6.5 ± 1.9 | +3.6 | -251 |
+| | Ornn top | -4.0 ± 1.2 | +6.2 ± 0.9 | +2.2 | -576 |
+| | Mel bottom | +1.6 ± 1.4 | -6.4 ± 2.0 | -4.8 | +134 |
+| | Tristana middle | +1.4 ± 1.7 | -6.0 ± 3.0 | -4.6 | +284 |
+
+Cross-checks: the direct effect at 15 against meiolol-61's champion shift beyond the
+full state (carry-table.tsv, 20261013T223040Z-carry-a, 234 champion-roles) correlates
+0.91; the same champions lead the scaling section (Kayle, Bel'Veth, Aurelion Sol,
+Kassadin above, Pyke, Draven, Irelia below). Indirect vs 61's own-gold leverage
+(lane_raw): 0.07 (none; leverage was not detected anyway). meiolol-08's "the
+draft-predicted gold edge carries no win" is this table summed: per sd of the draft
+score the indirect part is about 0 at 10-20 (folds), because early and late champions
+cancel.
+
+Reading:
+- A champion's win effect is two large opposite parts: what it does to the early state
+  (early-gold champions' teams are ahead, which is worth up to ~6 pp) and what it does
+  at equal state (the same champions win less from that state, by about as much). The
+  net, the champion's win rate, is half the size of either part. This is why the draft
+  predicts gold (Q2) but not the winner
+- For the draft as a whole, almost nothing of its +3.4 pp per sd runs through the early
+  lead on the folds (indirect -0.8 to -0.2 ± 0.5-1.2, so at most +0.2 to +1.0 pp, under
+  a third); dev-val leans the other way (+1.6 to +3.3 ± 2-2.5), within its noise. The
+  good drafts win from equal states, not by getting ahead
+- Description, not cause: the state at t also carries who plays better, so "direct" is
+  the draft's edge among games equally far ahead, and part of each champion's early lead
+  may be who picks it. Measured history moved nothing (weak measure), and scaling the
+  state's weight down only shrinks the indirect part. Gold and objectives measure "being
+  ahead" with noise, which biases the indirect part toward 0: the indirect share is a
+  lower bound
+
+#### Q4: comebacks, mixed teams, lane-only matchups (comeback.py)
+
+Run 20261013T230201Z-dp-comeback-a (report from its raw file:
+20261013T232915Z-dp-comeback-a2). Per block from fit games only: each champion-role's
+effect on the gold lead at 15 (early_j), its draft weight at equal state at 25 minus at
+10 (late_j, log-odds) and the state+draft model at 15 (DS15) as offset; team late z =
+blue minus red sum of late_j in fit-team sd. Pooled over the folds' scored games,
+sandwich se (one row per game), sign by fold.
+
+- Comebacks at 15 (offset DS15): team gold lead x late z -0.0043 ± 0.0103 log-odds per
+  1000 gold x sd (-0.07 ± 0.17 pp), signs by fold -+---; late z beyond DS15 +0.25 ± 0.47
+  pp; gold x early-gold draft +0.12 ± 0.19 pp. Teams 1,500+ gold behind at 15 by late
+  tercile: won 17.6%, 19.1%, 20.4% against DS15's 18.1%, 19.0%, 19.9% (differences -0.4
+  ± 0.9, +0.1 ± 0.9, +0.6 ± 0.9 pp; 6,768 teams each); dev-val -1.0, +1.2, +1.8 (±
+  1.6-1.8). Late drafts do come back more from behind, but exactly as much as their
+  equal-state value says: no extra comeback slope (under about 0.25 pp per 1000 gold per
+  sd of lateness)
+- Two early champions on a late team (offset: draft-only): early champions x team late z
+  -0.32 ± 0.53 pp, "2+ early champions on a team with late z > 0.5" -0.11 ± 1.6 pp;
+  dev-val -1.8 ± 3.6. Not detected
+- Lane matchups (per lane, canonical champion pair one-hot beside the draft, 30+ fit
+  games, own L2 on inner val): lane gold at 14 MSE gain top 0.45% (5/5), middle 0.30%
+  (5/5), bottom 0.10% (5/5), jungle and support 0; win log loss: top -0.00007 ± 0.00005,
+  middle -0.00005 ± 0.00005, bottom -0.00004 ± 0.00008, jungle and support ~0. Matchups
+  beyond the two champions are lane-only: they move the lane's gold and not the winner
+  (any win part under ~0.0001 nats per game)
+
+#### Summary for Jacob
+
+The draft decides how a game goes far more than who wins it. It sets about 6% of each
+lane's gold lead, a fifth of the kill pace and which side takes the first tower and
+dragon, but under half a percent of the winner. Each champion has two opposite effects:
+early champions put their team ahead, then win less from equal states (Draven, Irelia,
+Pyke, Hecarim). Late champions fall behind, then win more from equal states (Kayle,
+Smolder, Bel'Veth, Aurelion Sol). These cancel, so draft win rates are small. Once you
+know the state, the draft is worth 15 times more than before the game, peaking at 20
+minutes and holding to 30. No draft comes back from behind beyond that, mixing early and
+late picks costs nothing measurable, and lane counters stay in the lane. All dev only,
+on one snapshot; rerun on the new pin (2253Z) before any learned.md line; meiolol-4b
+audits from the run dirs.
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
