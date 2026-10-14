@@ -2861,7 +2861,7 @@ until meiolol-tests' crossed-only plant (lanes=2) settles it.
 Damage mix: -1.89 ± 0.19 pp per sd of the term (-2.75 per sd of blue minus red), on gold
 at 14 -21 ± 15. Single cells: not reported.
 
-#### Additive model v2: identified matchups (2253Z re-cut, pre-declared, cf4762d)
+#### Additive model v2: identified matchups (2253Z re-cut, pre-declared, cf4762d; audit pending meiolol-53)
 
 v1's enemy blocks weren't identified: a same-role matchup had two cells, cell(a, b) and
 cell(b, a), of which only the difference enters a game, and "r vs their q" and "q vs
