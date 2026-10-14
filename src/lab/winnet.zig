@@ -33,6 +33,7 @@ const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const randsplit = @import("randsplit.zig");
 const draftnet = @import("draftnet.zig");
+const gates = @import("gates.zig");
 const setnet = @import("setnet.zig");
 const par = @import("../par.zig");
 const cuda = @import("../gpu/cuda.zig");
@@ -1176,6 +1177,7 @@ fn trainSmall(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, trai
     const emb_wd = opts.emb_wd orelse opts.wd;
     const per_epoch = stepsPerEpoch(train.len, opts.batch);
     const eval_every = @max(1, per_epoch / @max(opts.evals, 1));
+    if (val) |v| initGate(&n, v, &w, vpred, opts.net == .resid);
 
     var best_loss = std.math.inf(f64);
     var best_step: u64 = 0;
@@ -1239,6 +1241,23 @@ fn trainSmall(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, trai
     if (val == null) best_step = step else if (best_step > 0) @memcpy(n.p, best);
     const epochs = @as(f64, @floatFromInt(best_step)) / @as(f64, @floatFromInt(per_epoch));
     return .{ .net = n, .steps = best_step, .epochs = epochs, .val_loss = best_loss };
+}
+
+/// gates.initLoss on val before the first step: the base rate's loss, or the offsets'
+/// for resid (its output weights start at 0)
+fn initGate(n: *const SmallNet, val: []const NetGame, w: *const Work, pred: []f32, resid: bool) void {
+    predictSmall(n, val, w, pred);
+    var init: f64 = 0;
+    var off: f64 = 0;
+    var y: f64 = 0;
+    for (val, pred) |g, q| {
+        init += loss1(g.y, q);
+        off += loss1(g.y, sigmoid(g.off));
+        y += g.y;
+    }
+    const k: f64 = @floatFromInt(@max(val.len, 1));
+    const ref = if (resid) off / k else gates.baseLoss(y / k);
+    gates.initLoss(if (resid) "winnet resid" else "winnet small", init / k, ref);
 }
 
 /// For meiolol-lab health: the small (or resid) net trained on `train` for `steps` (0: at
