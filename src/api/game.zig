@@ -843,9 +843,11 @@ test "a real timeline from both sides, with and without a curve" {
     // Whole game: win chance from both sides adds up, deaths match the lane count
     try testing.expect(blue.win_chance.len > lane_end);
     for (blue.win_chance, red.win_chance) |b_pct, r_pct| try testing.expect(@abs(@as(i32, b_pct) + r_pct - 100) <= 1);
-    try testing.expectEqual(@as(u16, 50), blue.win_chance[0]);
+    // 0:00 is the champions alone, not a flat 50
+    try testing.expect(blue.win_chance[0] > 0 and blue.win_chance[0] < 100);
     const json = try std.json.Stringify.valueAlloc(arena, blue, .{});
-    try testing.expect(std.mem.indexOf(u8, json, "\"win_chance\":[50,") != null);
+    const start = try std.fmt.allocPrint(arena, "\"win_chance\":[{d},", .{blue.win_chance[0]});
+    try testing.expect(std.mem.indexOf(u8, json, start) != null);
     const turn = blue.turning.?;
     try testing.expectEqual(turn.minute, red.turning.?.minute);
     try testing.expectEqual(turn.taken.len, red.turning.?.lost.len);
