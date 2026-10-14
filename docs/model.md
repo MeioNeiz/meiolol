@@ -2105,6 +2105,18 @@ within each draw; the init-loss gate is ok on every fit; offset weights 0.81-0.9
 - Coverage grows with crawl depth, so later blocks have more history; per-block gains
   are flat (-0.0017 to -0.0022), so the pooled number isn't one late block
 - The 1954Z first look used seeds 1-3 only; 4-6 were first run here
+- Which history mean carries it (leave one out, 6769b8c `--drop`, seeds 1-3, one build;
+  descriptive, no sealed rule; each minus B's own rerun, -0.00214 ± 0.00035 vs win-exp;
+  folds, positive = worse without it): gold, CS and damage per minute together +0.00160
+  ± 0.00030 (dev-val +0.00237): the per-minute rates are most of the gain. Alone:
+  damage per minute +0.00066 ± 0.00020, gold +0.00004 ± 0.00008, CS -0.00002 ± 0.00010
+  (gold and CS stand in for each other), off-role share +0.00000 ± 0.00011, days since
+  the last game +0.00009 ± 0.00013 (neither detected). Damage per minute also reflects
+  which champions a player plays (mages and marksmen deal more), so part of it may be
+  champion pool, not skill. Runs data/runs/20261014T0132*-ab-* to 0134*-ab-*
+- Data check (meiolol-53's ask; py/player/overlap.py, run 20261014T013134Z-overlap-2253Z):
+  no player has two games overlapping in time (0 pairs over 1,241,856 players, 372,640
+  games)
 - Tuning (pn1, meiolol-fd/37; 73be9fe, seeds 10-14, 12 random trials over lr, hidden,
   dropout, wd, emb, emb-wd, batch, patience, min-games, picked on inner val only): no
   trial beats the default (val 0.68200; best trial 0.68208; all 12 within 0.0007). The
