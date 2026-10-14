@@ -293,3 +293,12 @@ rank rows keyed by those PUUIDs (orphans); the window's raw summaries and timeli
 with hashed wrong-app PUUIDs that an erasure by real PUUID can't reach, so blank those
 games' PUUIDs there as runbook step 6 does (open). Guard (open): crawl start should
 stop if a stored PUUID gets a decrypt 400, before writing anything
+
+Earlier window, found 14 Oct: 2026-10-11 23:25:50-23:28:45Z, same cause (the 22
+match-id 400s at 23:25-23:28). It stored matches rowid 92269-92366 (98, games 3-11 Oct,
+all platforms): every one of their 980 participant PUUIDs (833 distinct, in no other
+match) gives 400 "Exception decrypting"; 81 players rows (36 ladder, 45 participant)
+were first seen then. Matches outside the block give 200, and the block's edges follow
+players' seen_at. Effect: the participant mastery pass's ladder-gap batches never
+finished, so kr mastery stalled from 13 Oct 19Z (fixed in the crawler, e5aabc2).
+Cleanup as above (participant PUUIDs NULL, those players deleted): pending
