@@ -15,7 +15,8 @@ generator):
   direct = Q(d1, M0) - Q(d0, M0)
 Curve: each quintile of d against the middle one, the same way. Pooled over the 5
 folds' scored games, dev-val apart; game bootstrap (refit Q on resampled fit games,
-resample scored games).
+resample scored games). Dev-val also printed with EUW1 and the other platforms apart
+(same Q and bootstrap refits): description only, never a reading (no EUW slice rule).
 
 Per champion-role (--champions, the dev block's fit games, train-fit description): swap
 champion j for its role's average pick: draft coefficient to 0, d minus j's draft
@@ -124,12 +125,31 @@ def run_block(args):
         # model-free check: observed win rate near d1 minus near d0
         near1, near0 = np.abs(dz[sc] - 0.5) < window, np.abs(dz[sc] + 0.5) < window
         res["observed_total"] = (y[sc][near1].mean() - y[sc][near0].mean()) * 100
+        # separate stream so the pooled estimates match runs before the groups existed
+        rng_g = np.random.default_rng(17)
+        groups = {}
+        if block == "dev":
+            euw = nn.meta["platforms"].index("EUW1")
+            for name, keep in (("dev EUW1", nn.platform[sc] == euw), ("dev other", nn.platform[sc] != euw)):
+                g = sc[keep]
+                near1, near0 = np.abs(dz[g] - 0.5) < window, np.abs(dz[g] + 0.5) < window
+                groups[name] = {
+                    "n_scored": len(g),
+                    "games": g,
+                    "est": all_effects(m, F[g], dz[g]),
+                    "observed_total": (y[g][near1].mean() - y[g][near0].mean()) * 100,
+                    "boot": [],
+                }
         bs = []
         for _ in range(boot):
             fb, sb = rng.choice(fit, len(fit)), rng.choice(sc, len(sc))
             mb = fit_q(F[fb], dz[fb], y[fb])
             bs.append(all_effects(mb, F[sb], dz[sb]))
+            for gr in groups.values():
+                gb = rng_g.choice(gr["games"], len(gr["games"]))
+                gr["boot"].append(all_effects(mb, F[gb], dz[gb]))
         res["boot"] = bs
+        res["groups"] = groups
         out["minutes"][t] = res
         print(f"block {block} minute {t}: fit {len(fit)}, scored {len(sc)}, draws {n1}, sd {res['est'][('sd', 1.0)]}, {time.time() - t0:.0f} s", flush=True)
     return out
@@ -237,24 +257,26 @@ def main():
     f = open(os.path.join(a.out, f"gmed-{tag}.tsv"), "w")
     f.write("mediator\tminute\tcontrast\tk\tblocks\ttotal\ttotal_sd\tindirect\tindirect_sd\tdirect\tdirect_sd\tshare_indirect\tobserved_total\n")
     for t in minutes:
-        for name, blocks in (("folds", dp.FOLDS), ("dev", ["dev"])):
+        rows = [("folds", [by[b]["minutes"][t] for b in dp.FOLDS]), ("dev", [by["dev"]["minutes"][t]])]
+        rows += [(g, [r]) for g, r in by["dev"]["minutes"][t]["groups"].items()]
+        for name, rs in rows:
             # pooled: mean of block estimates weighted by scored games; sd from the
             # block bootstraps combined the same way
-            w = np.array([by[b]["minutes"][t]["n_scored"] for b in blocks], float)
+            w = np.array([r["n_scored"] for r in rs], float)
             w /= w.sum()
-            keys = list(by[blocks[0]]["minutes"][t]["est"].keys())
-            obs = sum(wi * by[b]["minutes"][t]["observed_total"] for wi, b in zip(w, blocks))
+            keys = list(rs[0]["est"].keys())
+            obs = sum(wi * r["observed_total"] for wi, r in zip(w, rs))
             for key in keys:
-                est = sum(wi * by[b]["minutes"][t]["est"][key] for wi, b in zip(w, blocks))
-                nb = min(len(by[b]["minutes"][t]["boot"]) for b in blocks)
-                boots = np.array([sum(wi * by[b]["minutes"][t]["boot"][i][key] for wi, b in zip(w, blocks)) for i in range(nb)])
+                est = sum(wi * r["est"][key] for wi, r in zip(w, rs))
+                nb = min(len(r["boot"]) for r in rs)
+                boots = np.array([sum(wi * r["boot"][i][key] for wi, r in zip(w, rs)) for i in range(nb)])
                 sdv = boots.std(0, ddof=1) if nb > 1 else np.full(3, np.nan)
                 share = est[1] / est[0] if np.sign(est[1]) == np.sign(est[0]) else np.nan
                 contrast = "per sd" if key[0] == "sd" else f"quintile {key[1] + 1} vs 3"
                 k = key[1] if key[0] == "sd" else 1.0
                 f.write(f"{tag}\t{t}\t{contrast}\t{k}\t{name}\t{est[0]:.3f}\t{sdv[0]:.3f}\t{est[1]:.3f}\t{sdv[1]:.3f}\t{est[2]:.3f}\t{sdv[2]:.3f}\t{share:.3f}\t{obs:.3f}\n")
                 if key[0] == "sd" or name == "folds":
-                    print(f"{tag} {t:>2} {name:<5} {contrast:<16} k {k}: total {est[0]:+.2f} ± {1.96 * sdv[0]:.2f}, indirect {est[1]:+.2f} ± {1.96 * sdv[1]:.2f}, direct {est[2]:+.2f} ± {1.96 * sdv[2]:.2f} pp, share {share:.2f}, observed total {obs:+.2f}")
+                    print(f"{tag} {t:>2} {name:<9} {contrast:<16} k {k}: total {est[0]:+.2f} ± {1.96 * sdv[0]:.2f}, indirect {est[1]:+.2f} ± {1.96 * sdv[1]:.2f}, direct {est[2]:+.2f} ± {1.96 * sdv[2]:.2f} pp, share {share:.2f}, observed total {obs:+.2f}")
     f.close()
 
 
