@@ -3905,7 +3905,9 @@ Shipped file: run 20261014T211923Z-state-ship-2253Zr (snap-20261013T2253Z re-cut
 rows, ratings L2 1e-3, ridge 1e-5 (newest 10%: 0.50797 at 1e-5, 0.51191 at 3e-4: the
 grid's edge again), champion effect sd by knot 0.09, 0.14, 0.16, 0.16, 0.16, 0.15,
 0.12, 0.09, 0.05; 863 champion-role terms, 48,048 bytes, default intercept 0.023; the
-file against the fit's predict on 500 games (14,087 game-minutes): max |diff| 2.2e-7.
+file against the fit's predict on 500 games (14,087 game-minutes): max |diff| 2.2e-7;
+statemodel.zig from the timelines against the file's chances on the same game-minutes
+(run 20261014T215013Z-state-ship-check, e8cb4b0): max |diff| 2.1e-8.
 Rare champion-roles are shrunk hard (under 30 games: largest effect at any knot 0.10;
 1,000+ games: median 0.19, largest 0.77, Kayle middle late), so effects are those of
 picks seen often.
