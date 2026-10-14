@@ -156,9 +156,10 @@ Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB
   `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's
   push deploy: after a change to src/api or the curves file format (curvesfile.zig
   version), rebuild, `scp` to /tmp, `sudo install`, then `sudo systemctl restart
-  meiolol-api`. Installed: 12b3bd7 (5 min visit refresh, Check for new games),
-  2026-10-13 01:11Z; previous binary (bfea7b8, Riot via the crawler's proxy, all four
-  queues) kept as /usr/local/bin/meiolol.bak-pre-12b3bd7, the unit before the proxy as
+  meiolol-api`. Installed: 8dd457b (curves format v5), 2026-10-14 20:41Z; previous
+  binary (12b3bd7, 5 min visit refresh, Check for new games) kept as
+  /usr/local/bin/meiolol.bak-pre-8dd457b, the one before (bfea7b8) as
+  /usr/local/bin/meiolol.bak-pre-12b3bd7, the unit before the proxy as
   /etc/meiolol-api.service.bak-pre-proxy; /etc/meiolol-api.env (the key) shredded.
   First lookup through the proxy: 9 new games (4 id lists, rank, 9 matches and
   timelines) in ~5 s, no 429s

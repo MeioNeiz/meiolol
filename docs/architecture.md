@@ -303,9 +303,13 @@ matchup's own games. A role baseline record a = b = 0 per bracket counts every l
 both sides: comeback counts, and per minute n and the role's spread (quartiles,
 median 0). Pairs are stored once (lower champion id first, a mirror from blue's side);
 `Curves.get(role, bracket, me, them)` returns a View from `me`'s side that negates and
-swaps quartiles and estimates. The file also holds the fit (per role, bracket, level,
-metric and minute: sigma^2 and tau^2; smoothing per role and metric) for the method
-page. Format at the top of curvesfile.zig; bump the version on any change.
+swaps percentiles (p10, p25, p50, p75, p90) and estimates. The file also holds the fit
+(per role, bracket, level, metric and minute: sigma^2 and tau^2; smoothing per role and
+metric) for the method page. Format at the top of curvesfile.zig; bump the version on
+any change. Rolling a bump out: stop meiolol-web on the box before the push, so the
+deploy restarts the loop, which rebuilds curves before the site (a running loop is only
+signalled and would build the site on old-format curves, dropping the lane pages); then
+the Your games binary (docs/your-games.md, Deploy)
 
 Estimation (src/core/curvefit.zig, research/questions/curve-statistics-method.md), per
 role, metric and minute, closed form: champion effects by ridge least squares on the
