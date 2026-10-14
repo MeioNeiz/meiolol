@@ -16,6 +16,7 @@ const std = @import("std");
 const rows = @import("rows.zig");
 const seatstats = @import("seatstats.zig");
 const winnet = @import("winnet.zig");
+const gates = @import("gates.zig");
 
 const Io = std.Io;
 const NetGame = winnet.NetGame;
@@ -483,6 +484,13 @@ fn meanLoss(n: *const Net, games: []const SetGame, w: *const Work) f64 {
     return s / @as(f64, @floatFromInt(@max(games.len, 1)));
 }
 
+/// The offset alone's loss: a fresh net's reference, since it starts as the offset
+fn offsetLoss(games: []const SetGame) f64 {
+    var s: f64 = 0;
+    for (games) |*g| s += winnet.loss1(g.g.y, sigmoid(g.g.off));
+    return s / @as(f64, @floatFromInt(@max(games.len, 1)));
+}
+
 const Trained = struct { net: Net, steps: u64, epochs: f64, val_loss: f64 };
 
 /// AdamW over shuffled batches for at most max_steps, as netcheck's small net; with val,
@@ -512,7 +520,11 @@ fn train(gpa: std.mem.Allocator, opts: winnet.Options, seed: u32, n_ids: u32, se
     const per_epoch = winnet.stepsPerEpoch(set.len, opts.batch);
     const eval_every = @max(1, per_epoch / @max(opts.evals, 1));
 
-    var best_loss = if (val) |v| meanLoss(&n, v, &w) else std.math.inf(f64);
+    var best_loss = std.math.inf(f64);
+    if (val) |v| {
+        best_loss = meanLoss(&n, v, &w);
+        gates.initLoss("setnet", best_loss, offsetLoss(v));
+    }
     @memcpy(best, n.p);
     var best_step: u64 = 0;
     var since_best: u32 = 0;
