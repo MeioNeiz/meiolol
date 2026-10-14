@@ -28,8 +28,8 @@ Where things live:
   crawled, and re-pins when the crawl has added half again (or weekly, whichever comes
   first), never waiting on a fixed date. Training always uses every game (Jacob,
   2026-10-14): only the test set is held out (one global time cut over all
-  platforms, so test reflects the training sources; a region-specific model would get
-  its own matching train and test), shipped models fit on
+  platforms, so test reflects the training sources; a region model (likely the global model
+  fine-tuned on that region) gets a test from that region), shipped models fit on
   everything after the test look, and no split or filter may drop games a model can fit
   on (draft-only models need no timeline). meiolol-4a owns crawl volume and coverage and
   reports both with each snapshot
