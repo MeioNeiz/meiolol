@@ -88,8 +88,9 @@ deploy/lab-run.sh watch-install
   (first come, first served; polling let newcomers win); runs predicted <= 60 s sort
   ahead (fast lane); a dead waiter's ticket is dropped
 - Usage (deploy/lab-usage.sh, as usage.sh): every 5 s the job's runnable threads and
-  the card's busy %; after it, `usage` in the run dir (cores, active_s with League
-  pauses out, cpu_s, cpu_cores, runnable_per_core, gpu_pct, samples) and a USAGE line in
+  the card's busy % and the group's RSS; after it, `usage` in the run dir (cores,
+  active_s with League pauses out, cpu_s, cpu_cores, runnable_per_core, gpu_pct, samples,
+  peak_rss_gb) and a USAGE line in
   the log. runnable_per_core over 1.5 says oversubscribed; gpu_pct is the whole card
 - Prediction gates (deploy/lab-gates.sh, run by job.sh after the program, before
   `exit`): every preds*.tsv, dev.tsv and test.tsv in the run dir (two levels down) must

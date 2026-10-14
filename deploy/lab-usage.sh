@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # What a lab-run run used of its slot (deploy/lab-run.sh copies this into the run dir as
 # usage.sh; job.sh runs it there).
-#   usage.sh sample PGID      every 5 s until killed: the job's runnable threads and
-#                             the card's busy %, one line each to usage.samples
+#   usage.sh sample PGID      every 5 s until killed: the job's runnable threads, the
+#                             card's busy % and the job's resident memory (KiB), one
+#                             line each to usage.samples
 #   usage.sh summary T0 CORES after the job: `usage` (key value lines) and a USAGE line
 #                             for the log
 # CPU is the job's CPU seconds (bash `times` in job.sh, so `times`) over its active wall
 # time (pauses for League taken out) and its slot's cores. Runnable threads per core well
 # over 1 means the job oversubscribes its slot (process pools that each take the whole
 # OMP_NUM_THREADS); well under 1, cores idle. The card's % is the whole GPU, shared with
-# the other gpu slot's run
+# the other gpu slot's run. Memory sums the group's RSS: forked pool workers' shared pages
+# count once each, so an upper bound
 set -u
 
 sample() {
@@ -20,9 +22,11 @@ sample() {
         [[ -n $smi ]] && gpu=$($smi --query-gpu=utilization.gpu \
             --format=csv,noheader,nounits 2> /dev/null | head -n 1)
         # The sampler shares the job's process group: its own tools don't count
-        printf '%s\t%s\n' "$(ps -eLo pgid=,stat=,comm= | awk -v g="$g" '
+        printf '%s\t%s\t%s\n' "$(ps -eLo pgid=,stat=,comm= | awk -v g="$g" '
             $1 == g && $2 ~ /^R/ && $3 !~ /^(ps|awk|sleep|nvidia-smi|head|bash)$/ { n++ }
-            END { print n + 0 }')" "${gpu:--}"
+            END { print n + 0 }')" "${gpu:--}" \
+            "$(ps -eo pgid=,rss= | awk -v g="$g" '$1 == g { k += $2 }
+                END { print k + 0 }')"
     done >> usage.samples
 }
 
@@ -56,7 +60,8 @@ summary() {
     cpu=$(cpu_seconds)
     [[ -f $f ]] || f=/dev/null
     awk -F '\t' -v cores="$cores" -v active="$active" -v cpu="${cpu:-0}" '
-        { n++; run += $1; if ($2 != "-" && $2 != "") { g++; gpu += $2 } }
+        { n++; run += $1; if ($2 != "-" && $2 != "") { g++; gpu += $2 }
+          if ($3 > rss) rss = $3 }
         END {
             used = cpu / active
             f = "usage"
@@ -65,6 +70,7 @@ summary() {
             rpc = n ? sprintf("%.2f", run / n / cores) : "-"
             printf "runnable_per_core %s\n", rpc > f
             printf "gpu_pct %s\nsamples %d\n", g ? sprintf("%.0f", gpu / g) : "-", n > f
+            printf "peak_rss_gb %s\n", rss ? sprintf("%.1f", rss / 1048576) : "-" > f
             line = sprintf("USAGE cpu %.1f of %d cores over %d s", used, cores, active)
             if (n) {
                 r = run / n / cores
@@ -72,6 +78,7 @@ summary() {
                 if (r > 1.5) line = line " (oversubscribed)"
             }
             if (g) line = line sprintf(", card %.0f%% busy", gpu / g)
+            if (rss) line = line sprintf(", peak %.1f GB", rss / 1048576)
             print line
         }' "$f"
 }
