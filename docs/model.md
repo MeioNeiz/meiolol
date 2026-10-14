@@ -2881,13 +2881,14 @@ and was winning. Contested takes (both teams
 with a kill within 30 s) land close to the model (dragon +0.3, baron +0.3, elder -0.3).
 So no clean causal split yet; the draft-aware state model is the next step.
 
-#### In-game events on the draft-aware state (snap-20261013T2253Z re-cut)
+#### In-game events on the draft-aware state (snap-20261013T2253Z re-cut; cleared as description by meiolol-53)
 
 bd's C2: winchance's state has no draft, so event values might credit the draft. Rerun
 with `eventvalue --preds` (2d9a8b4) on meiolol-state's cross-fitted chances
 (SNAP/state/preds-wcd.tsv, run 20261014T020129Z-state-preds-2253Zr, block cf: 5-fold
-cross-fit by game over 236,227 dev-visible games, 6.5M game-minutes): wc = winchance's
-state, wcd = wc + the cross-fitted draft logit (win-ratings) with weights by minute, rich
+cross-fit by game over 236,227 dev-visible games, 6.5M game-minutes; that run is
+meiolol-state's, not audited here): wc = winchance's state, wcd = wc + the draft logit
+(win-ratings, cross-fitted by game) with weights by minute, rich
 = per-role gold, XP, levels, deaths and respawn timers, towers by lane and tier, dragons by
 element and soul, buff timers, items, vision. Gold unit per model: what it gives a gold
 lead change in minutes with no event (XP that came with the farm included). Runs
@@ -2916,19 +2917,24 @@ Findings:
   band): C2's worry is not detected for a draft term that is fixed through the game. The
   champion-by-minute term (scaling) is the open part: meiolol-state is adding p_richc.
 - Cause or being ahead (realised.tsv; excess = the taking team's results minus the
-  model's next-frame chance): the draft explains almost none of why teams behind beat the
+  model's next-frame chance; "behind" as each model sees it, so the groups differ, e.g.
+  baron takes behind 58,737 under wc, 50,198 under rich, and part of the drop below is a
+  different set of takes): the draft explains almost none of why teams behind beat the
   model after an objective (baron +4.7 -> +4.6 pp, inhibitor +8.2 -> +8.0, elder +8.1 ->
   +7.8, wc -> wcd); the rich state removes most of it (baron +0.6, inhibitor +1.6, elder
-  +1.8) and is calibrated at takes overall (baron +0.1, inhibitor -0.0, elder -0.2, dragon
-  +0.3). So what wc misses is in-game state (items, levels, timers), not the draft.
+  +1.8) and is within ~0.3 pp at takes overall (baron, inhibitor, elder ~0; dragon +0.3).
+  So what wc misses is mostly in-game state (items, levels, timers), not the draft.
 - Values depend on what the state holds: rich credits a late kill 6.7 pp (respawn timers
   in the state open the map) and a late dragon little (soul and element counts already
-  priced as the game goes), wc credits them through gold and counts. Report wcd's as "what
+  priced as the game goes), wc credits them through gold and counts. Comparisons between
+  models are like for like (same code, different chances); absolute values are as fitted,
+  as the regression on --preds has no planted check yet. Report wcd's as "what
   the event adds given gold and objectives", rich's as "given the whole board".
 - Steals are not coin flips under any model: after a stolen dragon the stealing team wins
   9.7 pp less than the model's next-frame chance (wcd [-10.7, -8.5], rich -9.7), herald
-  -8.2 / -8.6, baron -2.8 / -4.6: a steal marks a fight the other team set up and was
-  winning, so steal "value" can't separate cause from being behind.
+  -8.2 / -8.6, baron -2.8 / -4.6. Interpretation, not measured: a steal marks a fight the
+  other team set up and was winning, so steal "value" can't separate cause from being
+  behind.
 - Inner towers and early inhibitors still come out negative in wc and wcd (-2.4 pp inner at
   10-14): those models count towers alike, so read only outer towers there.
 

@@ -450,6 +450,25 @@ How to write a line:
 
 ## Objectives
 
+- 2026-10-14 (2253Z): What a taking team gains at the moment of an objective barely
+  depends on the draft: adding which champions were picked to the game state changes
+  every objective's and kill's value by under 0.2 percentage points of win chance. Given
+  gold and objectives so far, a dragon adds about 4-4.5 points (5-5.5 after 30 minutes),
+  baron 5.6-7.9, elder 9 after 30 minutes, an outer tower 1.5-3 from 15 minutes, a kill
+  2.5-3.8 (5.3 before 10 minutes), a grub under 1, herald 0.6. Teams that were behind and
+  took an objective went on to win more than the simple state model said (baron 4.6
+  points, inhibitor 8, elder 8 more), and a model that also knows items, levels, death
+  timers and buffs explains most of that, the draft almost none. A stolen dragon or
+  herald is followed by the stealing team winning 8-10 points less than expected (baron
+  3-5): don't treat steals as lucky coin flips. Sure: 236,227 games (every platform, dev
+  games, no test), win chances cross-fitted by game, 200 game bootstraps (± 0.1-0.2 points
+  on the values); comparisons between state models are like for like, absolute values as
+  fitted (no planted check of this regression yet); description, not proof an objective
+  caused the win; "behind" is each model's own view. Site: event values may annotate a
+  game timeline as "teams that took this won about X points more often"; no "steal
+  saved the game" claims. Evidence: docs/model.md "In-game events on the draft-aware
+  state", cleared by meiolol-53; chances from meiolol-state's run
+  20261014T020129Z-state-preds-2253Zr
 - 2026-10-12: Teams that take objectives win about as often as teams with this much
   more gold lead: a dragon about 1000, each soul point about 800 more, soul about 4000,
   elder about 4800, baron 400-1000, an inhibitor 900 at 20 minutes to 2300 at 30, a
