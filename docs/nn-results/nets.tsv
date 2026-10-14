@@ -1,5 +1,15 @@
 # title: Do neural nets beat today's model?
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+big net, sealed seeds 11-20 (2253Z)	ratings	folds	-0.00035	0.00020	10	0.00077	0.00330	134375	134375-241875	20261014T003523Z-rb-big-wr-s11	pre-declared rule not met: its 4 resamples average +0.00001; gain grows with block (confounded with time)
+big net, sealed seeds 11-20 (2253Z)	ratings	dev-val	-0.00148	0.00046	10	-0.00030	0.00649	35834	268750	20261014T003523Z-rb-big-wr-s11	reported, not judged; accuracy +0.61 ± 0.36 pp
+big net, seeds 1-10 (2253Z)	ratings	folds	-0.00039	0.00018	10	0.00066	0.00182	134375	134375-241875	20261014T003419Z-rb-big-wr	better in 4 of 5 folds; every single seed worse
+big net, seeds 1-10 (2253Z)	ratings	dev-val	-0.00178	0.00050	10	-0.00003	0.00415	35834	268750	20261014T003419Z-rb-big-wr	accuracy +0.69 ± 0.38 pp
+big net, 20 seeds (2253Z)	ratings	folds	-0.00048	0.00017	20	0.00066	0.00330	134375	134375-241875	20261014T003419Z-rb-big-wr + 20261014T003523Z-rb-big-wr-s11	
+big net, 3 seeds, 90% resamples 1-4 (2253Z)	ratings	folds	0.00001		3	-0.00026	0.00021	134375	90%	20261014T003501Z-rb-aa-big	mean of the 4 resamples' ensembles (+0.21, +0.12, -0.02, -0.26 milli-nats); sd 0.20
+small net, 5 seeds (2253Z)	ratings	folds	-0.00034	0.00014	5	-0.00014	0.00039	134375	134375-241875	20261014T002905Z-rb-ref-wr	better in 5 of 5 folds; was +0.00066 on 2055Z
+small net, 5 seeds (2253Z)	ratings	dev-val	-0.00067	0.00033	5	-0.00039	0.00011	35834	268750	20261014T002905Z-rb-ref-wr	
+residual on ratings, 5 seeds (2253Z)	ratings	folds	-0.00017	0.00008	5	0.00002	0.00020	134375	134375-241875	20261014T002905Z-rb-ref-wr	offset weight median 0.95: mostly recalibration
+residual on ratings, 5 seeds (2253Z)	ratings	dev-val	0.00003	0.00005	5	-0.00001	0.00010	35834	268750	20261014T002905Z-rb-ref-wr	
 big net, sealed seeds 11-20	ratings	folds	-0.00012	0.00036	10	0.00084	0.00347	44353		20261013T222654Z-0a-big-def-s11-20	confirmation seeds, reading fixed beforehand
 big net, 20 seeds	ratings	folds	-0.00034	0.00032	20	0.00060	0.00347	44353		20261013T221051Z-0a-big-def10 + 20261013T222654Z-0a-big-def-s11-20	level with ratings, leaning slightly better, at the noise floor: sealed seeds 11-20 alone -0.00012, a 90% resample -0.00010; every single seed is worse
 big net, 20 seeds	ratings	dev-val	-0.00014	0.00053	20			8500		20261013T221051Z-0a-big-def10 + 20261013T222654Z-0a-big-def-s11-20	
