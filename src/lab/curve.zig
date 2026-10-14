@@ -19,7 +19,7 @@ const std = @import("std");
 const Io = std.Io;
 
 pub const usage =
-    \\  curve [--ref MODEL] [--min-fit N] [--reps N] [--at N,N...] [--tsv FILE] MODEL:COL:LABEL:DIR...
+    \\  curve [--ref MODEL] [--min-fit N] [--max-fit N] [--reps N] [--at N,N...] [--tsv FILE] MODEL:COL:LABEL:DIR...
     \\                                  learning curves a*N^-b + c[block] from netcheck
     \\                                  runs (COL: cand, ens, seedN), game bootstrap,
     \\                                  projections and crossings vs --ref (ratings)
@@ -54,6 +54,7 @@ const b_hi = 3.0;
 pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
     var ref: []const u8 = "ratings";
     var min_fit: f64 = 0;
+    var max_fit: f64 = std.math.inf(f64);
     var reps: u32 = 1000;
     var sizes: std.ArrayList(f64) = .empty;
     var tsv: ?[]const u8 = null;
@@ -67,6 +68,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             const v = argv[i];
             if (std.mem.eql(u8, a, "--ref")) ref = v //
             else if (std.mem.eql(u8, a, "--min-fit")) min_fit = try std.fmt.parseFloat(f64, v) //
+            else if (std.mem.eql(u8, a, "--max-fit")) max_fit = try std.fmt.parseFloat(f64, v) //
             else if (std.mem.eql(u8, a, "--reps")) reps = try std.fmt.parseInt(u32, v, 10) //
             else if (std.mem.eql(u8, a, "--tsv")) tsv = v //
             else if (std.mem.eql(u8, a, "--at")) {
@@ -113,13 +115,13 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             pooled[r * c.points.items.len + k] = s;
         }
         for (0..nm) |m| fits[r * nm + m] = try fitModel(arena, c.points.items, @intCast(m), shared);
-        for (0..nm) |m| gaps[r * nm + m] = try gapFit(arena, c.points.items, @intCast(m), ref_id, shared, min_fit);
+        for (0..nm) |m| gaps[r * nm + m] = try gapFit(arena, c.points.items, @intCast(m), ref_id, shared, min_fit, max_fit);
     }
 
     var buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &buf);
     const w = &stdout.interface;
-    try report(arena, &c, shared, fits, gaps, reps, ref_id, sizes.items, min_fit, w);
+    try report(arena, &c, shared, fits, gaps, reps, ref_id, sizes.items, min_fit, max_fit, w);
     try w.flush();
     if (tsv) |path| {
         var f = try Io.Dir.cwd().createFile(io, path, .{});
@@ -401,11 +403,11 @@ fn slopeFit(arena: std.mem.Allocator, pairs: []const Pair) !Slope {
     return .{ .beta = beta, .se_points = se, .sw = sw, .sx = sx, .sd = sd };
 }
 
-fn gapFit(arena: std.mem.Allocator, points: []const Point, m: u32, ref: u32, shared: []const u32, min_fit: f64) !Gap {
+fn gapFit(arena: std.mem.Allocator, points: []const Point, m: u32, ref: u32, shared: []const u32, min_fit: f64, max_fit: f64) !Gap {
     var pairs: std.ArrayList(Pair) = .empty;
     var n_max: f64 = 0;
     for (points) |p| {
-        if (p.model != m or p.n_fit < min_fit) continue;
+        if (p.model != m or p.n_fit < min_fit or p.n_fit > max_fit) continue;
         const q = for (points) |q| {
             if (q.model == ref and q.block == p.block and q.n_fit == p.n_fit) break q;
         } else continue;
@@ -423,10 +425,10 @@ fn gapFit(arena: std.mem.Allocator, points: []const Point, m: u32, ref: u32, sha
 }
 
 /// A model's own change per doubling of fit games, log loss or accuracy (full data only)
-fn trend(arena: std.mem.Allocator, points: []const Point, m: u32, min_fit: f64, acc: bool) !Slope {
+fn trend(arena: std.mem.Allocator, points: []const Point, m: u32, min_fit: f64, max_fit: f64, acc: bool) !Slope {
     var pairs: std.ArrayList(Pair) = .empty;
     for (points) |p| {
-        if (p.model != m or p.n_fit < min_fit) continue;
+        if (p.model != m or p.n_fit < min_fit or p.n_fit > max_fit) continue;
         const v = if (acc) sum(p.hit) / @as(f64, @floatFromInt(p.hit.len)) else sum(p.loss) / @as(f64, @floatFromInt(p.loss.len));
         try pairs.append(arena, .{ .block = p.block, .x = std.math.log2(p.n_fit), .d = v, .w = @floatFromInt(p.games.len) });
     }
@@ -519,7 +521,7 @@ fn labels(arena: std.mem.Allocator, c: *const Corpus) ![]const []const u8 {
     return out.items;
 }
 
-fn report(arena: std.mem.Allocator, c: *const Corpus, shared: []const u32, fits: []const Fit, gaps: []const Gap, reps: u32, ref: u32, ns: []const f64, min_fit: f64, w: *Io.Writer) !void {
+fn report(arena: std.mem.Allocator, c: *const Corpus, shared: []const u32, fits: []const Fit, gaps: []const Gap, reps: u32, ref: u32, ns: []const f64, min_fit: f64, max_fit: f64, w: *Io.Writer) !void {
     const nm = c.models.items.len;
     try w.print("# curve: {d} models, {d} blocks ({d} shared by all), {d} points, {d} games, {d} bootstrap replicates\n\n", .{ nm, c.block_keys.items.len, shared.len, c.points.items.len, c.n_games, reps });
     try w.writeAll("Blocks: ");
@@ -577,8 +579,8 @@ fn report(arena: std.mem.Allocator, c: *const Corpus, shared: []const u32, fits:
 
     try w.writeAll("\n## Per doubling of fit games: each model's own points, offset per block (2x today = one doubling, 4x = two; ± 95% from the points' scatter)\n\n| model | log loss per doubling | accuracy per doubling, pp |\n| --- | --- | --- |\n");
     for (0..nm) |m| {
-        const tl = try trend(arena, c.points.items, @intCast(m), min_fit, false);
-        const ta = try trend(arena, c.points.items, @intCast(m), min_fit, true);
+        const tl = try trend(arena, c.points.items, @intCast(m), min_fit, max_fit, false);
+        const ta = try trend(arena, c.points.items, @intCast(m), min_fit, max_fit, true);
         try w.print("| {s} | {d:.5} ± {d:.5} | {d:.3} ± {d:.3} |\n", .{ c.models.items[m], tl.beta, 1.96 * tl.se_points, 100 * ta.beta, 196 * ta.se_points });
     }
 
@@ -661,7 +663,7 @@ test "gapFit: slope per doubling and crossing past the largest size" {
         const gap = 0.003 - 0.001 * @as(f64, @floatFromInt(k));
         try points.append(arena, .{ .model = 1, .block = @intCast(b), .label = "x", .n_fit = n, .games = g, .loss = l, .hit = l, .mean = c0 + gap });
     };
-    const gf = try gapFit(arena, points.items, 1, 0, &.{ 0, 1 }, 0);
+    const gf = try gapFit(arena, points.items, 1, 0, &.{ 0, 1 }, 0, std.math.inf(f64));
     try std.testing.expectApproxEqAbs(-0.001, gf.beta, 1e-9);
     try std.testing.expectEqual(4e4, gf.n_max);
     try std.testing.expectApproxEqRel(8e4, crossing(gf), 1e-6);
