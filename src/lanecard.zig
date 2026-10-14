@@ -85,9 +85,10 @@ pub const Option = struct {
 pub const LaneFact = struct {
     /// "vs Syndra: +120 gold at 14 min (1234 games)"
     text: []const u8,
-    /// Ahead or behind only when the estimate is 2 standard errors from even and not
-    /// mostly the champions' baseline
+    /// Who the estimate puts ahead, whatever the games
     lean: enum { ahead, behind, unclear },
+    /// How strongly to show it: curvesfile.fade of the games
+    strength: f32 = 1,
 };
 
 pub const Card = struct {
@@ -287,7 +288,6 @@ fn laneFact(arena: std.mem.Allocator, in: Input, me: u32, them: u32, bracket: Br
     };
     const e = f.view.estimate(.gold, curvesfile.lane_minute - 1);
     const thin = f.view.games() < thin_games or f.view.own() < 0.5;
-    const clear = !thin and @abs(@as(i32, e.mean)) > 2 * @as(i32, e.se);
     return .{
         .text = try std.fmt.allocPrint(arena, "vs {s}: {s}{d} gold at {d} min ({d} games{s})", .{
             name,
@@ -297,7 +297,8 @@ fn laneFact(arena: std.mem.Allocator, in: Input, me: u32, them: u32, bracket: Br
             f.view.games(),
             if (thin) ", mostly baseline" else "",
         }),
-        .lean = if (!clear) .unclear else if (e.mean > 0) .ahead else .behind,
+        .lean = if (e.mean > 0) .ahead else if (e.mean < 0) .behind else .unclear,
+        .strength = @floatCast(curvesfile.fade(f.view.games())),
     };
 }
 
@@ -467,8 +468,10 @@ test "guessed opponent, thin curve, options with reasons" {
     const sett_vs = for (card.options) |o| {
         if (o.champion == sett) break o.lane.?;
     } else unreachable;
-    // 20 games: mostly baseline, so no lean either way
-    try testing.expectEqual(.unclear, sett_vs.lean);
+    // 20 games: a lean, shown faint
+    try testing.expect(sett_vs.lean != .unclear);
+    try testing.expect(sett_vs.strength < 0.7);
+    try testing.expectEqual(1, d.lane.?.strength);
 }
 
 test "before picks: no opponent, no sentence" {

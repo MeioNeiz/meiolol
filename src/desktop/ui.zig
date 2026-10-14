@@ -217,7 +217,7 @@ fn option(i: usize, o: lanecard.Option, stats: *const core.Stats, current: bool)
             .behind => behind_color,
             .unclear => text,
         };
-        tl.addText(l.text, .{ .color_text = .{ .color = color } });
+        tl.addText(l.text, .{ .color_text = .{ .color = color.opacity(l.strength) } });
         if (o.reasons.len > 0) tl.addText("\n", .{});
     }
     for (o.reasons, 0..) |r, j| {

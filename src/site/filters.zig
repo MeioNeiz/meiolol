@@ -50,7 +50,7 @@ const Cell = struct {
     games: u32 = 0,
     wins: u32 = 0,
     /// Games with both players' gold at 14 and a frame after it (as learning.goldMap),
-    /// the difference's sum and sum of squares, for its mean and standard error
+    /// the difference's sum and sum of squares, for its mean and spread
     gold_n: u32 = 0,
     gold_sum: i64 = 0,
     gold_sq: i64 = 0,
@@ -331,7 +331,7 @@ fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches
         const g = k.game;
         try w.print("[{d},{d},{d},{d},{d}]", .{ g.slice.platform, g.slice.patch, @intFromBool(g.slice.recent), g.tier, e.value_ptr.* });
     }
-    // Each view's lane curve gold at 14 per role and opponent: mean and standard error,
+    // Each view's lane curve gold at 14 per role and opponent: mean, games, p10 and p90,
     // keyed "region|period|rank" as the filter bar's values. An all-ranks entry also
     // means the view has that matchup's page
     try w.writeAll("],\"gold\":{");
@@ -358,7 +358,7 @@ fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches
                 const g = matchup.range(view, curves.baseline(r, cr[0]), .gold, i);
                 if (n > 0) try w.writeByte(',');
                 n += 1;
-                try w.print("[{d},{d},{d},{d},{d},{d}]", .{ @backingInt(r), other.id, e.mean, e.se, g[0], g[1] });
+                try w.print("[{d},{d},{d},{d},{d},{d}]", .{ @backingInt(r), other.id, e.mean, view.games(), g[0], g[1] });
             };
             try w.writeByte(']');
         }

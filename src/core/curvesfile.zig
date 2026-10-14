@@ -115,6 +115,17 @@ pub fn medianRank(ranks: []usize) ?usize {
 /// Percentiles of the games' differences: p10 to p90 is where 8 games in 10 end up
 pub const Spread = extern struct { p10: i16 = 0, p25: i16 = 0, p50: i16 = 0, p75: i16 = 0, p90: i16 = 0 };
 
+/// Games from which a matchup's lead shows at full strength
+pub const full_games = 200;
+
+/// Opacity for a lead from `games` games: colour says who is ahead, this how much to go
+/// on it, rising as sqrt(games) (as the noise in an average shrinks) from a floor that
+/// stays readable. filters.js has the same
+pub fn fade(games: u32) f64 {
+    const share = @sqrt(@as(f64, @floatFromInt(games)) / full_games);
+    return 0.35 + 0.65 * @min(1, share);
+}
+
 /// Gold, XP, CS: the order of Minute.est and the fit's metric index
 pub const Metric = enum(u2) { gold, xp, cs };
 pub const metrics = 3;

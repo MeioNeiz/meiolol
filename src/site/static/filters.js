@@ -90,7 +90,7 @@ const HARDEST = "hardest first, by the top of each bar";
   function curveGold(key) {
     if (!gold.has(key)) {
       const m = new Map();
-      for (const [role, opp, mean, se, p10, p90] of data.gold[key] ?? []) m.set(role * 65536 + opp, { mean, se, p10, p90 });
+      for (const [role, opp, mean, games, p10, p90] of data.gold[key] ?? []) m.set(role * 65536 + opp, { mean, games, p10, p90 });
       gold.set(key, m);
     }
     return gold.get(key);
@@ -317,20 +317,20 @@ const HARDEST = "hardest first, by the top of each bar";
     return td;
   }
 
-  // Gold difference at 14, coloured when clear of even by two standard errors, then
-  // where 8 games in 10 end: the lane curve's estimate where the filters are a view with
-  // a curve for the matchup (as root.zig goldCell), else the plain average of the games
-  // picked, its 10th to 90th percentile from the sd as if normal (only sums are sent)
+  // Gold difference at 14, coloured by who is ahead and fainter with fewer games (as
+  // curvesfile.fade), then where 8 games in 10 end: the lane curve's estimate where the
+  // filters are a view with a curve for the matchup (as root.zig goldCell), else the
+  // plain average of the games picked, its 10th to 90th percentile from the sd as if
+  // normal (only sums are sent)
   function goldCell(o, curve, href) {
     const td = document.createElement("td");
-    let mean, margin, p10, p90;
+    let mean, games, p10, p90;
     if (curve) {
-      ({ mean, p10, p90 } = curve);
-      margin = 2 * curve.se;
+      ({ mean, games, p10, p90 } = curve);
     } else if (o.gn >= 2) {
       mean = o.gs / o.gn;
+      games = o.gn;
       const sd = Math.sqrt(Math.max(0, (o.gq - o.gn * mean * mean) / (o.gn - 1)));
-      margin = (2 * sd) / Math.sqrt(o.gn);
       p10 = mean - 1.2816 * sd;
       p90 = mean + 1.2816 * sd;
     } else {
@@ -338,14 +338,15 @@ const HARDEST = "hardest first, by the top of each bar";
       td.dataset.v = "";
       return td;
     }
-    const cls = mean > margin ? "up" : mean < -margin ? "down" : "even";
     const m = Math.round(mean);
+    const cls = m > 0 ? "up" : m < 0 ? "down" : "even";
     td.dataset.v = m;
     const value = document.createElement(href ? "a" : "span");
     value.className = `gold ${cls}`;
+    value.style.opacity = (0.35 + 0.65 * Math.min(1, Math.sqrt(games / 200))).toFixed(2);
     if (href) {
       value.href = href;
-      value.title = "Lane curves";
+      value.title = `Lane curves, ${games} games`;
     }
     if (!curve) value.title = (href ? "Lane curves. " : "") + "Plain average of the games picked";
     value.textContent = `${m > 0 ? "+" : ""}${m}`;

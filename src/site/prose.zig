@@ -94,8 +94,8 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\chosen by fitting on half of the games and checking against the other half.</li>
         \\<li><b>Spread</b>: after an average, "8 games in 10" is where single games end up,
         \\the 10th to 90th percentile of this matchup's games (the role's spread around
-        \\the line while it has few of its own); the band is the middle half. A lead is
-        \\coloured only when the average is more than two standard errors from even.</li>
+        \\the line while it has few of its own); the band is the middle half. In tables,
+        \\colour says who is ahead on average and fades with fewer games, full from 200.</li>
         \\<li><b>Games still going</b>: surrender opens at 15 minutes, so before it nearly
         \\every game is still running. Right of the dotted line at 15 minutes a curve counts
         \\only games still going, which tilts it toward closer games; each chart says what

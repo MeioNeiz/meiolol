@@ -1316,11 +1316,11 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     try pool_page.section(site, w, &site.pool, ch);
     try learning_page.section(w, &site.learning, ch);
     try tpl.render(w,
-        \\<p class="muted small">Win rates are raw: no pulling toward 50%. Bars are 95% Wilson intervals. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); coloured when the estimate is clear of even; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
+        \\<p class="muted small">Win rates are raw: no pulling toward 50%. Bars are 95% Wilson intervals. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); green ahead, red behind, fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
         \\<script src="../table.js" defer></script>
         \\<script src="../filters.js" defer></script>
         \\
-    , .{ .minute = core.curvesfile.lane_minute });
+    , .{ .minute = core.curvesfile.lane_minute, .full = core.curvesfile.full_games });
     try html.foot(w, p);
 }
 
@@ -1461,14 +1461,13 @@ fn goldCell(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !vo
     const v = curves.get(r, .all, ch.id, other.id) orelse return tpl.render(w, none, .{});
     const i = core.curvesfile.lane_minute - 1;
     const e = v.estimate(.gold, i);
-    // Coloured only when the average is clear of 0 by two standard errors; the small
-    // range is the spread of single games
-    const margin = 2 * @as(i32, e.se);
     const g = matchup.range(v, curves.baseline(r, .all), .gold, i);
     const x, const y = if (ch.id < other.id) .{ ch, other } else .{ other, ch };
-    try tpl.render(w, "<td data-v=\"{mean}\"><a class=\"gold {side}\" href=\"../{path}\" title=\"Lane curves\">{sign}{mean}</a><small title=\"8 games in 10\">{p10s}{p10} to {p90s}{p90}</small></td>", .{
+    try tpl.render(w, "<td data-v=\"{mean}\"><a class=\"gold {side}\" style=\"opacity:{fade:.2}\" href=\"../{path}\" title=\"Lane curves, {games} games\">{sign}{mean}</a><small title=\"8 games in 10\">{p10s}{p10} to {p90s}{p90}</small></td>", .{
         .mean = e.mean,
-        .side = if (e.mean > margin) "up" else if (e.mean < -margin) "down" else "even",
+        .side = if (e.mean > 0) "up" else if (e.mean < 0) "down" else "even",
+        .fade = core.curvesfile.fade(v.games()),
+        .games = v.games(),
         .path = try matchup.path(site.arena, r, x, y),
         .sign = if (e.mean > 0) "+" else "",
         .p10s = if (g[0] > 0) "+" else "",
