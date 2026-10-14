@@ -10,10 +10,6 @@ Decided 2026-10-14: controller "Jacob Maschler, trading as meiolol"; contact
 privacy@jomify.lol, a forward to jombirds@gmail.com (jomify.lol already uses Namecheap
 email forwarding: add the alias there before publishing).
 
-- **EEA representative.** EU GDPR requires one for a UK controller that monitors EU
-  players, unless the processing is "occasional" and low risk. A 24/7 crawler is hard to
-  call occasional. Paid services cost roughly £100 to £300 a year (not researched). Until
-  you decide, the section below stays commented out
 - **Retention of crawled match rows.** 24 months (Jacob, 2026-10-13): the crawler blanks
   PUUIDs 24 months after the game, as Counterwatch does. Not built yet, needed before
   going live: deleting archive files at 24 months (gpu-box), and the same sweep over
@@ -45,10 +41,6 @@ what you can ask us to do.
 
 meiolol is run by Jacob Maschler, trading as meiolol, an individual in the United Kingdom,
 who is the controller of the data described here. Contact: privacy@jomify.lol.
-
-<!-- EEA representative (if appointed):
-Our representative in the European Economic Area is [NAME, ADDRESS, EMAIL]. You can
-contact them instead of us about anything in this policy. -->
 
 ## The short version
 

@@ -575,7 +575,7 @@ flashcards with spaced repetition; season "lane story" share cards.
 
 ## Open decisions (Jacob)
 
-- Legal: EEA representative, retention periods (docs/legal/privacy.md top). Decided 14
+- Legal: retention periods (docs/legal/privacy.md top). Decided 14
   Oct: controller "Jacob Maschler, trading as meiolol", contact privacy@jomify.lol
   (Namecheap forward to add)
 - Alerts and backups: an ntfy topic for phone alerts (NTFY_TOPIC in .env; the health loop
