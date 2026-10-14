@@ -2172,7 +2172,8 @@ at ec9224a/0c75817, `meiolol-lab compare`):
   95% half-width; (2) sealed shuffled E seeds 4-6, all vs it below 0; (3) resample leg:
   pretrain --resample 1 (E on netcheck --resample 1's 90% fit sets, seeds 1-3), then
   netcheck --resample 1 for win-embx all and win-comp, mean below 0. Fold sign count
-  beside each. Pass = detected; anything else = not detected, and the line closes
+  beside each. Pass = detected, read as "sealed seeds and one resample draw agree" (one
+  draw, not a resample spread); anything else = not detected, and the line closes
 
 #### Set net: DeepSets on champion profiles (meiolol-35 [397394], was meiolol-0d)
 
