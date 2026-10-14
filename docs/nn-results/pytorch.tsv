@@ -6,3 +6,5 @@ big net, torch	ratings	folds	-0.00015	0.00035	10	0.00102	0.00211	44353	44353-798
 resid on Zig offsets, torch	ratings	folds	0.00007	0.00009	10	0.00000	0.00071	44353	44353-79835	20261014T001607Z-xresid-zoff	Zig 10 seeds -0.00007 ± 0.00006 (zresid10): agree except block 2
 win-ratings, torch with Zig procedure	ratings	folds	0.00002	0.00010	1			44353	44353-79835	20261013T223833Z-xratings	same procedure in torch reproduces Zig ratings
 win-ratings, exact L2 optimum (l2 on val)	ratings	folds	0.00013	0.00018	1			44353	44353-79835	20261013T223833Z-xratings	better in 2 of 5 folds: the baseline stays
+resid, torch, offsets averaged over 5 partitions	resid offsets from 1 partition	folds	0.00001	0.00004	10	-0.00010	0.00016	134375	134375-241875	20261014T032656Z-cmp-oavg-k5-o1-k1	snap-20261013T2253Z; offset seed 11: -0.00010 ± 0.00005; K 10: +0.00004 ± 0.00005; no gain
+resid, torch own offsets (2253Z)	ratings	folds	-0.00019	0.00006	10	-0.00004	0.00020	134375	134375-241875	20261014T025804Z-cmp-oavg-k1-o1-zig	snap-20261013T2253Z; Zig 5 seeds -0.00017 ± 0.00008 (rb-ref-wr): ensembles agree, -0.00003 ± 0.00010

@@ -183,7 +183,7 @@ def offsets_for(data, s, seed, log, o):
     fit's for val, the all-fit one's for scored"""
     import xratings
 
-    def fit_ratings(games):
+    def fit_ratings(games, seed):
         table, n_ids = nnsets.rating_vocab(data, games)
         sub = nnsets.Sets("x", games, *split_val(data, games), np.array([], np.int64))
         tr_inner = xratings.design(data, sub.inner, table)
@@ -196,7 +196,7 @@ def offsets_for(data, s, seed, log, o):
         p, _, _ = xratings.zig_train(n_ids, xratings.design(data, games, table), None, bestl[0], max(1, bestl[1] + bestl[1] // 10), seed)
         return lambda gs: xratings.logits_np(p, *xratings.design(data, gs, table)[:3], n_ids)
 
-    def cross(games):
+    def cross(games, seed):
         out = np.zeros(len(games))
         if o.cross_part == "random":
             fifth = np.random.default_rng(12344 + seed).integers(0, 5, data.n)[games]
@@ -204,14 +204,17 @@ def offsets_for(data, s, seed, log, o):
             fifth = (games * 2654435761 % 2**32) % 5
         for f in range(5):
             m = fifth == f
-            out[m] = fit_ratings(games[~m])(games[m])
+            out[m] = fit_ratings(games[~m], seed)(games[m])
         return out
 
+    # --offset-avg K: training offsets averaged over K partitions and ratings seeds; val
+    # and scored stay one fit at `seed`, so the candidate matches K = 1
     t0 = time.time()
-    off = {"fit": cross(s.fit), "inner": cross(s.inner)}
-    off["val"] = fit_ratings(s.inner)(s.val)
-    off["scored"] = fit_ratings(s.fit)(s.scored)
-    log(f"  offsets: 12 ratings fits in {time.time() - t0:.0f} s")
+    seeds = range(seed, seed + o.offset_avg)
+    off = {k: np.mean([cross(g, sd) for sd in seeds], 0) for k, g in (("fit", s.fit), ("inner", s.inner))}
+    off["val"] = fit_ratings(s.inner, seed)(s.val)
+    off["scored"] = fit_ratings(s.fit, seed)(s.scored)
+    log(f"  offsets: {10 * o.offset_avg + 2} ratings fits in {time.time() - t0:.0f} s")
     return off
 
 
@@ -284,6 +287,7 @@ def main():
     ap.add_argument("--fix-offset", action="store_true")
     ap.add_argument("--cross-part", default="random", choices=["stride", "random"], help="resid: how training games are split into fifths")
     ap.add_argument("--offset-seed", type=int, default=1, help="resid: seed of the offsets' ratings fits and partition")
+    ap.add_argument("--offset-avg", type=int, default=1, help="resid: average the cross-fitted training offsets over this many partitions")
     ap.add_argument("--offsets-only", action="store_true", help="resid: log the offsets' losses and stop")
     ap.add_argument("--offsets-from", help="resid: Zig's offsets from a set-net --dump run dir")
     for k in ["emb", "batch", "evals", "patience", "min_games"]:
@@ -307,7 +311,7 @@ def main():
         logf.write(msg + "\n")
         logf.flush()
 
-    log(f"# xnets {o.net}: " + " ".join(f"{k} {getattr(o, k)}" for k in ["emb", "hidden", "dropout", "wd", "emb_wd", "lr", "clip", "batch", "evals", "patience", "min_games", "max_epochs", "opt", "ema", "fix_offset", "device"]))
+    log(f"# xnets {o.net}: " + " ".join(f"{k} {getattr(o, k)}" for k in ["emb", "hidden", "dropout", "wd", "emb_wd", "lr", "clip", "batch", "evals", "patience", "min_games", "max_epochs", "opt", "ema", "fix_offset", "offset_seed", "offset_avg", "cross_part", "device"]))
     data = nnsets.load(o.snap)
     ref = nnsets.read_preds(o.ref)
     ok, lines = nnsets.check_against(data, ref)

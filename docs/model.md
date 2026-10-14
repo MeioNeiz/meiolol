@@ -3597,6 +3597,15 @@ Reading (dev, no test look):
   their noise and its result moves by ~0.0005 with the realisation. Cheap fix for the
   residual nets (resid, set, player, bigres): average the cross-fitted candidate over a
   few seeds or partitions
+- Offset averaging tested (xnets --offset-avg K, snap-20261013T2253Z re-cut, 10 seeds a
+  side, runs 20261014T0125*-oavg-*, compares 20261014T0327*-cmp-oavg-*): training offsets
+  averaged over K partitions and ratings seeds, val and scored offsets unchanged (same
+  candidate). Ensemble gain over the K = 1 run, folds pooled: K 5 +0.00001 ± 0.00004
+  (offset seed 1), -0.00010 ± 0.00005 (seed 11); K 10 +0.00004 ± 0.00005. Nothing
+  near the noise floor: not worth building for resid. On 2253Z (2-3x the fit games) the
+  realisation matters little anyway: torch's own offsets now agree with Zig (ensembles
+  -0.00003 ± 0.00010 and +0.00004 ± 0.00010 for two offset seeds), both resid ensembles
+  -0.00017 to -0.00019 vs ratings. The 2055Z gap above was small data
 - Tried in torch (cheap there): an exponential average of the weights (EMA 0.99) helps a
   single small net (-0.00024) but not a 10-seed ensemble (-0.00002 ± 0.00010): no
 
