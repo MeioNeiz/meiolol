@@ -2105,6 +2105,12 @@ within each draw; the init-loss gate is ok on every fit; offset weights 0.81-0.9
 - Coverage grows with crawl depth, so later blocks have more history; per-block gains
   are flat (-0.0017 to -0.0022), so the pooled number isn't one late block
 - The 1954Z first look used seeds 1-3 only; 4-6 were first run here
+- Tuning (pn1, meiolol-fd/37; 73be9fe, seeds 10-14, 12 random trials over lr, hidden,
+  dropout, wd, emb, emb-wd, batch, patience, min-games, picked on inner val only): no
+  trial beats the default (val 0.68200; best trial 0.68208; all 12 within 0.0007). The
+  folds agree, context only: default -0.00182 ± 0.00037 vs win-exp (5/5, seed sd 0.00017,
+  5-seed ensemble -0.00231), trials -0.00108 to -0.00165. The default stands; run dirs
+  gpu-box ~/ml/runs/20261014T012811Z-pn1-j01, 012913Z-pn1-j02
 - Audited by meiolol-53 (recomputed per game from the ten runs, blocks equal the nn
   split by match id, code read of abb57f3, cb19e68, d43fa92: no leak); learned.md line
   2026-10-14, internal scope (other players' history is never for the app). Folds: pick
