@@ -3471,6 +3471,14 @@ Reading (dev, no test look):
   first offsets were wrong: fifths from a hash of the row index gave optimistic
   out-of-fold offsets (lab-constraints 2026-10-14); a random partition matches Zig's
   offset losses. Either way resid ties ratings, as f1 found
+- Why the offsets matter (py/xcheck/offcmp.py, run 20261014T004223Z-offcmp, blocks dev-4):
+  per game, torch's and Zig's val and scored offsets (one fit on all inner or fit games)
+  correlate 0.95-0.997, but the cross-fitted training offsets (five fits on 80%) only
+  0.81-0.91, scale ratio 0.70-1.03, at equal log loss. Two valid runs of the same
+  cross-fit give quite different training offsets, so the residual net partly learns
+  their noise and its result moves by ~0.0005 with the realisation. Cheap fix for the
+  residual nets (resid, set, player, bigres): average the cross-fitted candidate over a
+  few seeds or partitions
 - Tried in torch (cheap there): an exponential average of the weights (EMA 0.99) helps a
   single small net (-0.00024) but not a 10-seed ensemble (-0.00002 ± 0.00010): no
 
