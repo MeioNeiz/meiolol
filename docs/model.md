@@ -2281,15 +2281,17 @@ Reading (dev, no test look):
 #### Scaling curves: what more games buy, and does a net pass ratings? (meiolol-30)
 
 Question: how much better does the draft predictor get with more games, and at what
-fit-game count, if any, would a net pass ratings? Method: netcheck at nested shares of each
-block's fit games (10, 25, 50, 100%, harness.inFraction), scored games unchanged, on the
-pinned snap-20261012T2055Z (folds fit 44-80k games at 100%, 8.9k scored a fold) and the
-unpinned snap-20261013T1954Z (folds fit 76-137k, 15.2k scored a fold; its test set differs,
-no test looks). Candidate and net fitted on the same games from one build; nets at netcheck
-defaults, 3 seeds, the seeds' mean. 2055Z 25-100% are f1's runs (data/netcheck/f1), the
-rest gpu-box runs curve-*, curve350-*; fits curve-fit-two, -two-lower, -two-upper
-(`meiolol-lab curve`, src/lab/curve.zig, 48a6b33). Old split (before 85fd62a); a 2253Z
-version on the pre-re-cut split is withdrawn and gets rerun on the re-cut.
+fit-game count, if any, would a net pass ratings? Method: netcheck at nested shares of
+each block's fit games (10, 25, 50, 100%, harness.inFraction), scored games unchanged, on
+the pinned snap-20261012T2055Z (folds fit 44-80k games at 100%, 8.9k scored a fold) and
+the unpinned snap-20261013T1954Z (folds fit 76-137k, 15.2k scored a fold; its test set
+differs, no test looks). Candidate and net fitted on the same games from one build; nets
+at netcheck defaults, a 3-seed ensemble (mean of probabilities; single seeds 0.1-2 mnats
+worse). 2055Z 25-100% are f1's runs (data/netcheck/f1; big there is f1's training before
+9ace58d), the rest gpu-box runs curve-*, curve350-* (big on the newer training: one
+procedure only within 1954Z); fits curve-fit-two, -two-lower, -two-upper (`meiolol-lab
+curve`, src/lab/curve.zig, 48a6b33). Old split (before 85fd62a); a 2253Z version on the
+pre-re-cut split is withdrawn and gets rerun on the re-cut.
 
 Folds pooled, by mean fit games over the 5 folds. Accuracy is the share called right
 (± 95%); the net columns are vs ratings: log loss in milli-nats (negative: better), paired
@@ -2307,13 +2309,16 @@ per game, ± 95%:
 | 106.5k (1954Z) | 53.35% ± 0.35 | 0.68962 | -0.04 ± 0.22 | +0.53 ± 0.39 | -0.12 ± 0.11 | -0.32 ± 0.17 |
 
 Better than ratings in k of 5 folds at the largest size: 2055Z small 0, big 4, resid 4,
-win-comp 5; 1954Z small 3, big 1, resid 4, win-comp 5. Accuracy vs ratings is within ±0.6
+win-comp 5; 1954Z small 3, big 1, resid 4, win-comp 5 (win-comp 5 of 5 at 50-100% on both;
+4 of 5 at 2055Z 10%, 3 of 5 at 1954Z 10% and 25%). Accuracy vs ratings is within ±0.6
 pp for every net and size, mostly inside its interval. Rows of different snapshots score
 different games, so compare within a snapshot.
 
 Per doubling of fit games, fitted with an offset per block (± 95% from the points' scatter
 about the fit, which holds seed noise and which fit games a share kept; the game bootstrap
-alone is ~2x narrower):
+alone is ~2x narrower). The ± treats the 12 blocks as independent, but 57% of 2055Z's
+scored games are scored again in 1954Z and most fit games overlap, and it uses 1.96 where
+the range splits below have ~5 dof (t 2.57): read every ± here as ~30% too narrow:
 
 | model | accuracy, pp | log loss, mnats | gap to ratings, mnats |
 | --- | --- | --- | --- |
@@ -2323,38 +2328,45 @@ alone is ~2x narrower):
 | resid | +0.58 ± 0.09 | -1.04 ± 0.23 | -0.14 ± 0.10 |
 | win-comp | +0.54 ± 0.07 | -0.94 ± 0.15 | -0.04 ± 0.02 |
 
-Flattening check, ratings: up to 40k fit games +0.53 ± 0.20 pp and -0.97 ± 0.33 mnats a
+Flattening check (range splits at 40k fit games per block, not confidence bounds), ratings:
+up to 40k fit games +0.53 ± 0.20 pp and -0.97 ± 0.33 mnats a
 doubling; from 40k up +0.29 ± 0.20 pp and -0.78 ± 0.40 mnats. The last doubling on 1954Z
 gave +0.30 pp against +0.6 to +1.0 for the earlier ones. Smaller gains at the top: not
 established (accuracy difference 0.24 ± 0.28 pp).
 
 Reading (dev, no test look):
 - More games help ratings steadily: about +0.6 pp of accuracy and -0.9 mnats of log loss
-  per doubling from 6k to 152k fit games (51.1% at 6k, 53.4% at 106k on the folds)
+  per doubling over 4k-152k fit games per block (pooled means 6k-106k; 51.1% at 6k, 53.4%
+  at 106k on the folds)
 - Projection from today's ~106k (1954Z folds), ratings: log-linear 2x +0.6 pp, 4x +1.2 pp
-  (-0.9 / -1.8 mnats); with the upper range's slope, 2x +0.3 pp, 4x +0.6 pp (-0.8 / -1.6
-  mnats). So 4x the games: +0.6 to +1.2 pp, about 54-54.5% on these folds. At ~130k
-  matches/day (docs/plan.md) that is days of crawling, if older games keep their value;
-  patch drift is not in these curves (each curve's games share a window). Separate
+  (-0.9 / -1.8 mnats); with the upper range's slope (+0.29 ± 0.26 pp), 4x +0.1 to +1.1 pp.
+  4x is ~425k fit games, ~3x past the largest block: extrapolated beyond the data, about
+  +0.1 to +1.2 pp. Observed growth is ~60k fit games a day (2055Z to 1954Z; ~130k
+  matches/day in docs/plan.md is the free key's all-region ceiling, not observed), and
+  more crawling adds newer games, which these curves don't measure (patch drift: each
+  curve's games share a window). Separate
   a*N^-b + c fits per model don't pin b and c down at these sizes (b runs to the grid's
   floor, so c, the ceiling, is meaningless); the per-doubling trend is the usable summary
-- No net gains on ratings fast enough to pass it. Gaps per doubling: small +0.03 ± 0.10
-  mnats (no trend), big +0.24 ± 0.13 (falls behind), resid -0.14 ± 0.10, win-comp -0.04 ±
-  0.02. resid's slope comes from its weak start (+0.4 to +0.6 mnats worse at 6-10k, when
-  the offsets are poor), not from gaining at the top: in the upper range -0.07 ± 0.16.
-  win-comp's damage-mix term is worth a steady 0.2-0.6 mnats at every size, 5 of 5 folds
+- Nets don't close on ratings over 4k-152k fit games. Gaps per doubling, full range: small
+  +0.03 ± 0.10 mnats, big +0.24 ± 0.13 (set by the smallest shares), resid -0.14 ± 0.10,
+  win-comp -0.04 ± 0.02. Above 40k every net's gap slope points toward ratings (small
+  -0.19 ± 0.39, big -0.47 ± 0.46, resid -0.07 ± 0.16), none established. resid's slope
+  comes from its weak start (+0.4 to +0.6 mnats worse at 6-10k, when the offsets are
+  poor), not from gaining at the top: in the upper range -0.07 ± 0.16. win-comp's
+  damage-mix term is worth a steady 0.2-0.6 mnats at every size (5 of 5 folds at 50-100%)
 - The big net: ahead of ratings at 6k (-0.75 mnats, when ratings has few games per
   champion-role) and behind at 106k (+0.53, 1 of 5 folds); its gap swings ±0.5 mnats
-  between neighbouring sizes with 3 seeds, and the upper range alone has it gaining (-0.47
-  ± 0.46 mnats a doubling), so its trend is not established either way. Config check at
-  1954Z 106k (curve350-bigcfg): val 4x an epoch with patience 10 +0.29, the same with lr
-  3e-4 +0.28, against the default's +0.53, each better in 1 of 5 folds. Tuning recovers
-  ~0.2 mnats but not the gap. Open question: whether a big net tuned per size, with 0a's
-  10-seed ensembles (2055Z 100%: -0.39 ± 0.33 vs 3 seeds' -0.28), keeps level with ratings
-  as games grow
-- Next: rerun on 2253Z after the re-cut and repack (ratings, small, resid, big, win-comp),
-  which adds the ~150k point on the new protocol; count the withdrawn runs' scored games in
-  the new test by match id (goes beside the pin)
+  between neighbouring sizes with 3 seeds, and above 40k it gains (-0.47 ± 0.46 mnats a
+  doubling): its trend is not established. Config check at 1954Z 106k (curve350-bigcfg):
+  val 4x an epoch with patience 10 +0.29, the same with lr 3e-4 +0.28, against the
+  default's +0.53, each better in 1 of 5 folds. Tuning recovers ~0.2 mnats but not the
+  gap. Open question: whether a big net tuned per size, with 0a's 10-seed ensembles (2055Z
+  100%: -0.39 ± 0.33 vs the same run's 3 seeds' -0.11), keeps level with ratings as games
+  grow
+- Audit (meiolol-33): cleared with these wording changes. Next: rerun on 2253Z after the
+  re-cut and repack with one training procedure (ratings, small, resid, big, win-comp);
+  the withdrawn pre-re-cut 2253Z runs scored 0 of their 54,518 games in the new test (match
+  ids vs split.tsv; fit games are older), so they exposed nothing
 
 ### Effects and the CPU model, 2026-10-14 (meiolol-08)
 
