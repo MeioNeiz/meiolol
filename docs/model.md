@@ -3067,7 +3067,7 @@ Reading (reworded after meiolol-33's audit):
   learned.md line. carry doesn't read seat_stats.tsv, so the 2253Z seat-stat gap does
   not touch these runs
 
-### How drafts win, 2026-10-14 (meiolol-41 [36c2ab], draftpath)
+### How drafts win, 2026-10-14 (draftpath: meiolol-41 [36c2ab], then meiolol-draftpath)
 
 Jacob (2026-10-13): understand draft and game state together, and how much each matters.
 Scripts py/draftpath/ (Python on the gpu-box via lab-run --python; nothing ships): dp.py
@@ -3087,31 +3087,45 @@ gold lead by role, gold curve, XP, kills, towers, inhibitors down, dragons, soul
 soul, elder, grubs, herald, baron. Train-time: everything; use-time: none (description
 and lessons only).
 
-#### Q1: information over time (info.py, run 20261013T225917Z-dp-info-a)
+Rerun on snap-20261013T2253Z (meiolol-73's re-cut: one time cut over every platform, no
+EUW1 slice; folds 1-5 26,875 played games each, dev-val 35,834; nn-export with
+match_id.txt, meiolol-state's export 20261014T004121Z-state-export-2253Z-recut, 363,472
+games, order identical): Q1 and Q3 below are 2253Z, read against readings pre-declared
+with meiolol-33 before any run and audited by meiolol-53 (recomputed from the run files).
+Q1 and Q3 use games with a 15-minute timeline: 100,847 of 134,375 fold games, 26,263
+dev-val. Parts marked 2055Z (GBDT state, archetypes, Q2, the per-champion table, Q4)
+await their 2253Z reruns.
 
-Games with a timeline still going at t, the same games for every model at that minute.
-Log loss gain per game (nats, ± 95%), folds pooled:
+#### Q1: information over time (info.py, run 20261014T011058Z-dp-info-2253Z)
+
+Games with a 15-minute timeline still going at t, the same games for every model at that
+minute. Log loss gain per game (nats, ± 95%), folds pooled, 5/5 folds in every cell:
 
 | minute | games | draft alone | state alone | draft given state | state given draft | min-0 draft logit given state | its weight |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0 | 29,278 | -0.0011 ± 0.0010 (4/5) | - | - | - | - | - |
-| 5 | 29,278 | | -0.0483 ± 0.0034 | -0.0061 ± 0.0016 (5/5) | -0.0533 | -0.0033 ± 0.0010 | 0.85-2.1 |
-| 10 | 29,278 | | -0.1151 ± 0.0049 | -0.0130 ± 0.0020 (5/5) | -0.1270 | -0.0038 ± 0.0010 | 0.96-2.5 |
-| 15 | 29,278 | | -0.1893 ± 0.0057 | -0.0163 ± 0.0022 (5/5) | -0.2045 | -0.0037 ± 0.0010 | 1.05-2.8 |
-| 20 | 26,798 | -0.0012 | -0.2355 ± 0.0065 | -0.0176 ± 0.0024 (5/5) | -0.2520 | -0.0034 ± 0.0010 | 1.07-2.8 |
-| 25 | 22,018 | -0.0015 | -0.2818 ± 0.0073 | -0.0169 ± 0.0024 (5/5) | -0.2972 | -0.0026 ± 0.0010 | 0.98-2.5 |
-| 30 | 12,766 | -0.0037 ± 0.0017 | -0.2456 ± 0.0093 | -0.0163 ± 0.0032 (5/5) | -0.2581 | -0.0020 ± 0.0013 | 0.86-2.4 |
+| 0 | 100,848 | -0.0041 ± 0.0006 | - | - | - | - | - |
+| 5 | 100,848 | | -0.0497 ± 0.0019 | -0.0100 ± 0.0009 | -0.0556 | -0.0058 ± 0.0006 | 1.00-1.30 |
+| 10 | 100,848 | | -0.1173 ± 0.0026 | -0.0164 ± 0.0011 | -0.1296 | -0.0057 ± 0.0006 | 1.06-1.41 |
+| 15 | 100,847 | | -0.1913 ± 0.0031 | -0.0201 ± 0.0012 | -0.2073 | -0.0051 ± 0.0006 | 1.09-1.51 |
+| 20 | 92,188 | -0.0044 | -0.2373 ± 0.0034 | -0.0214 ± 0.0013 | -0.2543 | -0.0042 ± 0.0006 | 1.06-1.52 |
+| 25 | 76,456 | -0.0050 | -0.2778 ± 0.0039 | -0.0200 ± 0.0014 | -0.2928 | -0.0032 ± 0.0006 | 0.96-1.41 |
+| 30 | 44,451 | -0.0070 ± 0.0012 | -0.2428 ± 0.0051 | -0.0188 ± 0.0018 | -0.2546 | -0.0026 ± 0.0007 | 0.83-1.22 |
 
-Dev-val agrees (draft alone -0.0035 ± 0.0015; draft given state -0.0088, -0.0147,
--0.0171, -0.0195 at 5/10/15/20). The last two columns: state plus the minute-0 draft
-logit (out of fold) with a free weight; weight by block (1-5, dev), 1 = the whole
-pre-game edge still counts at equal state. Each role's pick given state (drop that
-role's champions from draft given state): 0.0019-0.0036 at 10, 0.0024-0.0043 at 15,
-0.0027-0.0050 at 25, 5/5 in nearly every cell; bottom and middle largest, top and
-support smallest. Draft alone by role at minute 0: support -0.0006 ± 0.0005, others
-within ± 0.0005.
+Dev-val (every platform) agrees: draft alone -0.0052 ± 0.0013; draft given state -0.0114,
+-0.0193, -0.0216, -0.0238, -0.0219, -0.0215 at 5-30. The last two columns: state plus
+the minute-0 draft logit (out of fold) with a free weight; weight by block (1-5, dev), 1
+= the whole pre-game edge still counts at equal state. Each role's pick given state
+(drop that role's champions from draft given state): 0.0026-0.0043 at 10, 0.0031-0.0050
+at 15, 0.0031-0.0052 at 25, 5/5 in every cell; middle and bottom largest, top and
+jungle smallest. Draft alone by role at minute 0: support -0.0012 ± 0.0003, middle and
+bottom -0.0010, top and jungle -0.0005 (4/5 and 5/5).
 
-A flexible state model (infogbdt.py, run 20261013T234038Z-dp-infogbdt: LightGBM on all
+2055Z (pinned before, EUW1 dev-val, 29,278 fold games with a timeline; run
+20261013T225917Z-dp-info-a): draft alone -0.0011 ± 0.0010 (4/5), draft given state
+-0.0061, -0.0130, -0.0163, -0.0176, -0.0169, -0.0163 at 5-30. Draft alone is larger on
+2253Z, but on other games and fit sizes, so that is not a measured growth.
+
+A flexible state model (2055Z; infogbdt.py, run 20261013T234038Z-dp-infogbdt: LightGBM on all
 218 state-export columns as blue minus red, early stopping on val; its out-of-fold logit
 the offset for the draft layer) ties the linear state: GBDT minus linear +0.0009 ±
 0.0010 at 10, +0.0012 ± 0.0011 at 15, -0.0005 ± 0.0016 at 25 (worse or level). The draft
@@ -3120,39 +3134,42 @@ given GBDT state: -0.0114 ± 0.0019, -0.0137 ± 0.0020, -0.0135 ± 0.0023 at 10/
 draft (+0.0038 ± 0.0012 at 15, 0/5). So a flexible state doesn't absorb the draft's
 gain; no net was tried (GBDT never beat linear).
 
-Shuffled-draft control (run 20261014T000413Z-dp-info-shuffle, info.py --shuffle-draft 1:
-whole drafts permuted across games, state and outcome fixed): draft alone +0.00024 ±
-0.00035, draft given state at 15 +0.00015 ± 0.00024 (1/5), every role's pick within ±
-0.00006. The gain needs the real pairing of draft and game; a leak through
+Shuffled-draft controls (info.py --shuffle-draft 1, state and outcome fixed; pre-declared:
+|mean| <= 0.0015 or an interval covering 0, else Q1 void): whole drafts permuted across
+games (run 20261014T011115Z-dp-info-shuffle-2253Z) draft given state at 15 -0.000012 ±
+0.000101 (dev-val +0.00014 ± 0.00021); permuted only within patch x platform, so the
+draft keeps what its patch and platform imply (--shuffle-within, run
+20261014T011132Z-dp-info-shufwithin-2253Z) +0.000006 ± 0.000096 (dev-val +0.00013 ±
+0.00017). The gain needs the real pairing of draft and game; a leak through
 champion-specific state fields is excluded by the code check (meiolol-33's audit:
-state-export reads frames before t only), not by this control. A tighter control
-(permuted within patch x platform) is for the 2253Z rerun.
+state-export reads frames before t only), not by these controls. 2055Z's whole-draft
+shuffle: +0.00015 ± 0.00024.
 
-By comp archetype (archsplit.py, run 20261013T234410Z-dp-arch; games where either team
+By comp archetype (2055Z; descriptive only, archetypes showed no win effect in the comps
+sealed check; archsplit.py, run 20261013T234410Z-dp-arch; games where either team
 has the archetype): draft given state at 15 is largest with a late scaling team (-0.0226
 ± 0.0044) or an early dive/roam team (-0.0208 ± 0.0042), against -0.0131 to -0.0156 for
 range/siege, tank/engage, AD dive and enchanter/peel; at 25 late scaling -0.0262 ±
 0.0049, early dive -0.0219 ± 0.0048, the rest -0.0124 to -0.0159.
 
 Reading:
-- Before the game the draft says little (0.0011 nats, ratings' size). Once the state is
-  known it says much more: 0.006 at 5 min, 0.013 at 10, 0.016-0.018 from 15 to 30, about
-  15x on the folds at 15 (the draft alone, -0.0011 ± 0.0010, is barely above 0, so the
-  ratio is loose) and about 5x on dev-val (-0.0171 vs -0.0035) The draft and the state
-  are complements, not substitutes: the draft's gain grows with the state (unique share
-  0.016 at 15 vs 0.0011 alone), so "how much each matters" has no single split; for two
-  groups Shapley gives the draft about 0.009 of 0.21 at 15 (4%), the state the rest
+- Before the game the draft says little (0.0041 nats on 2253Z). Once the state is known
+  it says much more: 0.010 at 5 min, 0.016 at 10, 0.020-0.021 from 15 to 25, 0.019 at
+  30; about 5x the draft alone on the folds at 15 (-0.0201 vs -0.0041) and about 4x on
+  dev-val (-0.0216 vs -0.0052). The draft and the state are complements, not
+  substitutes: the draft's gain grows with the state, so "how much each matters" has no
+  single split; for two groups Shapley gives the draft about 0.012 of 0.211 at 15 (6%),
+  the state the rest
 - Nothing is absorbed into gold: the pre-game draft edge keeps its full weight (about 1,
   often more) beside the state at every minute. Most of the draft's value at equal state
-  is a different signal from its pre-game edge (0.0037 of 0.0163 at 15): which champions
+  is a different signal from its pre-game edge (0.0051 of 0.0201 at 15): which champions
   turn the same state into wins, the scaling section's effects summed over ten seats
-  (its per-row 0.002 is one seat; per game it is 0.016 here)
-- It grows from 5 to 20 minutes and then holds: scaling, not fading. Within this window
-  (30 min, survivors only) no fade
-- The draft's gain at equal state is largest in games with a late scaling or an early
-  dive team (overlapping subsets, not tested against each other)
+- It grows from 5 to 20 minutes, then eases slightly (0.021 at 20, 0.019 at 30, on
+  fewer games): scaling, not fading, within this window (30 min, survivors only)
+- On 2055Z the draft's gain at equal state was largest in games with a late scaling or
+  an early dive team (overlapping subsets, not tested against each other; description)
 
-#### Q2: what a draft decides (shape.py, run 20261013T225815Z-dp-shape-a)
+#### Q2: what a draft decides (2055Z; shape.py, run 20261013T225815Z-dp-shape-a)
 
 Draft-only models of the game's shape, held-out gain over the fit mean or base rate, %
 of base loss (R2 for continuous targets), folds pooled (5/5 for every target; dev-val
@@ -3217,8 +3234,34 @@ block's fit games going at t. Mediator: real states of the block's scored games 
 within 0.25 sd of the contrast point (no parametric generator). Contrast d = +0.5 vs
 -0.5 sd: total = Q(d1, M1) - Q(d0, M0), indirect = Q(d1, M1) - Q(d1, M0), direct = Q(d1,
 M0) - Q(d0, M0). Folds pooled by game count; ± 95% from 40 bootstraps (refit Q on
-resampled fit games, resample scored games). Runs 20261013T231454Z-dp-gmed-state (joint
-state), 20261013T235130Z-dp-gmed-gold (gold by role and curve only).
+resampled fit games, resample scored games). 2253Z run
+20261014T011149Z-dp-gmed-state-2253Z (joint state); 2055Z runs 20261013T231454Z-dp-gmed-state, 20261013T235130Z-dp-gmed-gold
+(gold by role and curve only).
+
+2253Z, games with a 15-minute timeline:
+
+| minute | total, pp per sd | indirect (through the state) | direct (equal state) | observed total (model-free) |
+| --- | --- | --- | --- | --- |
+| 5 | +4.45 ± 0.38 | -0.55 ± 0.38 | +5.00 ± 0.11 | +4.82 |
+| 10 | +4.65 ± 0.48 | -0.05 ± 0.46 | +4.70 ± 0.09 | +4.82 |
+| 14 | +4.63 ± 0.57 | +0.31 ± 0.58 | +4.32 ± 0.09 | +4.82 |
+| 20 | +4.46 ± 0.69 | +0.77 ± 0.68 | +3.69 ± 0.10 | +4.83 |
+| dev-val, 10 / 14 / 20 | +3.8 / +4.1 / +4.4 (± 0.8-1.5) | -1.04 / -0.29 / +0.80 (± 0.8-1.5) | +4.9 / +4.4 / +3.6 | +4.2 / +4.2 / +4.2 |
+
+Pre-declared reading (with meiolol-33; cells + or - past 2 bootstrap sd, minutes 10/14/20,
+legs folds and dev-val): folds 0/0/+, dev-val -/0/0. Both legs 0 at 2 of 3 minutes and
+neither "both legs - at 2+" nor "both legs + at 2+" fires, so: indirect not detected,
+|indirect| under 2.3 pp per sd (largest |mean| + 2 sd over the six cells, dev-val at
+20), against a total of about 4.6. The bound is about half the total, so this rules out
+only a large indirect part. Each leg has one cell past 2 sd, with opposite signs (folds
++0.77 at 20, dev-val -1.04 at 10). Both legs drift from negative at 5 to positive at 20:
+description, not a finding. Dev-val with EUW1 and the other platforms apart is printed
+in the run (gmed.py 422a528) and not read (no EUW slice). Curve at 14 against the middle
+fifth: worst fifth total -6.2 ± 0.8 (indirect -0.8 ± 0.8, direct -5.4), best fifth +5.4
+± 0.6 (indirect +0.0 ± 0.6, direct +5.4). Skill bias at 14 (folds), k 1, 0.9, 0.75, 0.5:
+indirect +0.31, +0.28, +0.25, +0.18; direct +4.32, +4.53, +4.87, +5.46.
+
+2055Z (EUW1 dev-val), for the record:
 
 | minute | total, pp per sd | indirect (through the state) | direct (equal state) | observed total (model-free) |
 | --- | --- | --- | --- | --- |
@@ -3228,13 +3271,13 @@ state), 20261013T235130Z-dp-gmed-gold (gold by role and curve only).
 | 20 | +3.32 ± 1.26 | -0.20 ± 1.23 | +3.52 ± 0.17 | +4.65 |
 | dev-val, 10 / 14 / 20 | +6.0 / +6.1 / +7.0 (± 1.9-2.5) | +1.6 / +1.9 / +3.3 (± 1.9-2.5) | +4.5 / +4.2 / +3.7 | +7.0 / +7.0 / +8.2 |
 
-Gold alone as the mediator: the same within 0.2 pp (indirect -0.73 ± 0.95 at 10, -0.28 ±
-1.05 at 14). Curve over draft quintiles at 14 against the middle one: worst fifth total
+2055Z: gold alone as the mediator: the same within 0.2 pp (indirect -0.73 ± 0.95 at
+10, -0.28 ± 1.05 at 14). Curve over draft quintiles at 14 against the middle one: worst fifth total
 -3.5 ± 1.3 (indirect +1.6 ± 1.3, direct -5.1), best fifth +4.9 ± 1.6 (indirect -0.2 ±
 1.5, direct +5.1). Observed total = win rate near +0.5 sd minus near -0.5 sd, about ±
 1.8 pp on the folds, ± 4 on dev-val, so g-computation's total sits inside it.
 
-Player skill (gmedhist.py, run 20261013T231651Z-dp-gmed-hist; internal scope; Q is
+Player skill (2055Z; gmedhist.py, run 20261013T231651Z-dp-gmed-hist; internal scope; Q is
 cross-fitted over all five folds, so it fits on later folds too, not forward): a history
 score per game h = logit(win-exp) - logit(win-ratings), the netcheck candidate preds of
 meiolol-f7's r-exp and r-rat runs (out of fold, inputs from games ended before each
@@ -3244,12 +3287,12 @@ h and h x d, mediator draws matched within h tercile. Without vs with h, same ga
 14 -0.39 vs -0.40, direct +3.95 vs +3.96 and +3.66 vs +3.66. Measured history moves
 nothing; it is a weak skill measure here (sd 0.15 logit, 16 days of history).
 
-Skill bias table (state weights in Q scaled by k: only k of the state's win association
+2055Z skill bias table (state weights in Q scaled by k: only k of the state's win association
 is the state's own, the rest skill unrelated to the draft), folds at 14: k 1, 0.9, 0.75,
 0.5: indirect -0.32, -0.30, -0.27, -0.20; direct +4.03, +4.22, +4.53, +5.07. Skill in
 the state can only pull the indirect part further toward 0 here.
 
-Per champion-role (gmed.py --champions, run 20261013T235144Z-dp-gmed-champ; dev block's
+Per champion-role (2055Z; gmed.py --champions, run 20261013T235144Z-dp-gmed-champ; dev block's
 fit games, train-fit description, 20 bootstraps): swap champion j for its role's average
 pick (draft weight to 0, d minus j's draft weight) with each game's real state shifted
 by j's estimated state effect (ridge of every state column on the draft); indirect =
@@ -3282,7 +3325,7 @@ full state (carry-table.tsv, 20261013T223040Z-carry-a, 234 champion-roles) corre
 Kassadin above, Pyke, Draven, Irelia below). Indirect vs 61's own-gold leverage
 (lane_raw): 0.07 (none; leverage was not detected anyway). meiolol-08's "the
 draft-predicted gold edge carries no win" is this table summed: per sd of the draft
-score the indirect part is about 0 at 10-20 (folds), because early and late champions
+score the indirect part is not detected at 10-20, because early and late champions
 cancel.
 
 Reading:
@@ -3291,14 +3334,11 @@ Reading:
   at equal state (the same champions win less from that state, by about as much). The
   net, the champion's win rate, is half the size of either part. This is why the draft
   predicts gold (Q2) but not the winner
-- For the draft as a whole, almost nothing of its +3.4 pp per sd runs through the early
-  lead on the folds (all platforms): the indirect part is about zero or slightly
-  negative (-0.8 to -0.2 ± 0.5-1.2; -0.79 ± 0.52 at 5 min excludes 0). Dev-val (EUW1,
-  newest games) disagrees: +1.6, +1.9, +3.3 at 10/14/20, above zero at 20 (the
-  difference from the folds z about 2.5), so this may be population (EUW1 vs all
-  platforms), not noise. Unresolved; re-measure on 2253Z, whose dev-val is all
-  platforms. The bootstrap holds d and the L2s fixed, so the intervals are slightly
-  narrow
+- For the draft as a whole, no part of its +4.6 pp per sd was detected running through
+  the early lead (2253Z, folds and every-platform dev-val): under 2.3 pp per sd, so only
+  a large indirect part is ruled out. 2055Z's positive dev-val (EUW1 only) did not
+  repeat on every-platform dev-val. The bootstrap holds d and the L2s fixed, so the
+  intervals are slightly narrow
 - The per-champion table is the dev block's fit games (train-fit, not held out). The
   anti-correlation survives noise removal (about -0.9 for top), but kit gold (Draven's
   passive, Pyke's ultimate, support gold items) can read as "early, gives it back"
@@ -3310,7 +3350,7 @@ Reading:
   ahead" with noise, which biases the indirect part toward 0: the indirect share is a
   lower bound
 
-#### Q4: comebacks, mixed teams, lane-only matchups (comeback.py)
+#### Q4: comebacks, mixed teams, lane-only matchups (2055Z; comeback.py)
 
 Run 20261013T230201Z-dp-comeback-a (report from its raw file:
 20261013T232915Z-dp-comeback-a2). Per block from fit games only: each champion-role's
@@ -3348,15 +3388,14 @@ two opposite effects: early champions put their team ahead, then win less from e
 states (Draven, Irelia, Pyke, Hecarim). Late champions fall behind, then win more from
 equal states (Kayle, Smolder, Bel'Veth, Aurelion Sol; dev block, train-fit). These
 cancel, so draft win rates are small. Once you know the state, the draft is worth far
-more than before the game (about 15x on the folds, 5x on dev-val at 15 min), peaking at
-20 minutes and holding to 30. Whether the draft as a whole wins partly by getting ahead
-is unresolved: about zero on all platforms, positive on EUW1. No draft comes back from
-behind beyond its equal-state value, mixing early and late picks costs nothing
-measurable, and lane counters move lane gold with at most a tiny win part. All dev only,
-on one snapshot; rerun on the new pin (2253Z) before any learned.md line; meiolol-33
-(4b's successor) audited 2055Z from the run dirs (no leak; wording fixed as above);
-nothing to learned.md until the 2253Z rerun with the shuffle control and Q3 on
-all-platform dev-val, pre-declared.
+more than before the game (about 5x on the folds, 4x on dev-val at 15 min, 2253Z),
+rising to 20 minutes and easing slightly by 30. For the draft as a whole, no part of its
+edge was detected running through getting ahead early, though the data rule out only a
+large part (over about half). No draft comes back from behind beyond its equal-state
+value, mixing early and late picks costs nothing measurable, and lane counters move
+lane gold with at most a tiny win part. Q1 and Q3 are 2253Z, pre-declared and audited
+(meiolol-53); Q2, Q4, the per-champion table and the archetypes are 2055Z, reruns
+queued. Dev only, no test look.
 
 ### Draft model file (meiolol-lab draft --export)
 
