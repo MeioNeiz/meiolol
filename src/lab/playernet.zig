@@ -142,7 +142,7 @@ pub const Options = struct {
 };
 
 pub const Block = enum { dev, f1, f2, f3, f4, f5 };
-const n_folds = harness.folds;
+const n_folds = 5;
 const val_share = 0.1;
 const n_platforms = 16;
 
@@ -162,8 +162,12 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     defer data.deinit();
     const players = try harness.gamePlayers(gpa, &data);
     defer gpa.free(players);
-    std.debug.assert(protocol.platformIds().len <= n_platforms);
-    const c = try harness.cuts(gpa, &data);
+    const ids = protocol.platformIds();
+    std.debug.assert(ids.len <= n_platforms);
+    const eu: u8 = for (ids, 0..) |id, i| {
+        if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
+    } else return error.TestPlatformNotScanned;
+    const c = try harness.cuts(gpa, &data, eu);
     var mastery = try Mastery.load(gpa, io, snap);
     defer mastery.deinit(gpa);
     const raw = try rawFeatures(gpa, &data, &mastery);
@@ -211,14 +215,22 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         try coverageLine(&cw.interface, "test", "scored", &data, raw, test_rows.items);
     }
 
+    var starts: std.ArrayList(i64) = .empty;
+    defer starts.deinit(gpa);
+    for (data.games) |g| if (harness.visible(.dev, c, g)) try starts.append(gpa, g.start);
+    std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
+
     var pooled: Pooled = .{};
     defer pooled.deinit(gpa);
     for (opts.blocks) |b| {
         var spec: Spec = switch (b) {
-            .dev => .{ .before = c.dev, .lo = c.dev, .hi = c.test_, .dev = true },
+            .dev => .{ .before = c.dev, .lo = c.dev, .hi = c.select, .dev = true },
             else => blk: {
-                const f = c.fold(@backingInt(b));
-                break :blk .{ .before = f.lo, .lo = f.lo, .hi = f.hi, .dev = false };
+                const f: f64 = @floatFromInt(@backingInt(b) - 1);
+                const k: f64 = n_folds;
+                const lo = quantile(starts.items, 0.5 + 0.5 * f / k);
+                const hi = @min(quantile(starts.items, 0.5 + 0.5 * (f + 1) / k), c.dev);
+                break :blk .{ .before = lo, .lo = lo, .hi = hi, .dev = false };
             },
         };
         spec.resample = opts.resample;
@@ -512,6 +524,11 @@ const Scale = struct {
     }
 };
 
+fn quantile(xs: []const i64, x: f64) i64 {
+    if (x >= 1) return std.math.maxInt(i64);
+    return xs[@intFromFloat(@as(f64, @floatFromInt(xs.len)) * x)];
+}
+
 /// Fit on dev-visible games before `before`; score dev-val (dev) or dev-visible games in
 /// [lo, hi)
 const Spec = struct {
@@ -528,7 +545,7 @@ const Spec = struct {
 
     fn scores(s: Spec, c: harness.Cuts, g: rows.Game) bool {
         if (s.dev) return harness.scored(.dev, c, g);
-        return harness.visible(.dev, c, g) and harness.inRegion(c, g) and g.start >= s.lo and g.start < s.hi;
+        return harness.visible(.dev, c, g) and g.start >= s.lo and g.start < s.hi;
     }
 };
 
