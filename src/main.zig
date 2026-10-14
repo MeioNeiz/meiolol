@@ -240,6 +240,9 @@ const usage =
     \\              --euw-only       the EUW views only (root, patch/): a quick preview
     \\              --static-min-games N  leave out matchup pages under N games (for
     \\                               `render` to serve on request)
+    \\              --static core    write only the home page, robots.txt, riot.txt,
+    \\                               the root sitemap and the front-end files;
+    \\                               `render` serves every other page and file
     \\              --origin URL     site URL for canonical links and sitemaps (public)
     \\              --index-min-games N  matchup pages under N games noindex and out of
     \\                               the sitemaps
@@ -247,7 +250,7 @@ const usage =
     \\              once), CSS and JS from src/site/static, live reload; run by
     \\              deploy/dev.sh, which rebuilds on edits. Takes site's flags
     \\              --port P         default 8080
-    \\  render     the pages `site --static-min-games` leaves out, rendered on request
+    \\  render     the pages `site --static` leaves out, rendered on request
     \\              for the web server's nginx (all views loaded up front). Takes
     \\              site's flags (--contact required)
     \\              --host H         default 127.0.0.1 (local only)
@@ -1190,6 +1193,7 @@ const SiteFlags = struct {
     riot_txt: ?[]const u8 = null,
     public: bool = false,
     euw_only: bool = false,
+    static: site.Static = .all,
     static_min_games: u32 = 0,
     origin: ?[]const u8 = null,
     index_min_games: u32 = 0,
@@ -1208,6 +1212,8 @@ const SiteFlags = struct {
             f.public = true;
         } else if (c.is("--euw-only")) {
             f.euw_only = true;
+        } else if (c.is("--static")) {
+            f.static = std.meta.stringToEnum(site.Static, try c.value()) orelse return error.Usage;
         } else if (c.is("--static-min-games")) {
             f.static_min_games = try c.int(u32);
         } else if (c.is("--origin")) {
@@ -1234,10 +1240,12 @@ const SiteFlags = struct {
             .updated = try arena.print("{f}", .{Date.fromMs(now_ms).long()}),
             .public = f.public,
             .euw_only = f.euw_only,
+            .static = f.static,
             .static_min_games = f.static_min_games,
             .origin = f.origin,
             .eval_history = try std.fs.path.join(arena, &.{ c.data_dir, "eval-history.tsv" }),
             .lean = try std.fs.path.join(arena, &.{ c.data_dir, "lean.tsv" }),
+            .your_example = try std.fs.path.join(arena, &.{ c.data_dir, "your-example.json" }),
             .index_min_games = f.index_min_games,
             .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
             // Indexed by site.html.View.index: EUW 30 days, EUW patch, all 30 days, all patch
@@ -1301,12 +1309,12 @@ fn cmdDev(c: *Cmd) !u8 {
     return 0;
 }
 
-/// The pages the static build leaves out (--static-min-games), rendered on request for
-/// the web server's nginx (docs/hosting.md "Rendering on request"), loaded again whenever
-/// the --reload file changes. Beside a running instance (a deploy: deploy/render-swap.sh)
-/// it loads every view, then listens too (SO_REUSEPORT) and is --ready for the old one
-/// to stop. Alone (a boot), it listens at once and serves each view as it loads, the
-/// rest answering 503
+/// The pages and files the static build leaves out (--static, --static-min-games),
+/// rendered on request for the web server's nginx (docs/hosting.md "Rendering on
+/// request"), loaded again whenever the --reload file changes. Beside a running
+/// instance (a deploy: deploy/render-swap.sh) it loads every view, then listens too
+/// (SO_REUSEPORT) and is --ready for the old one to stop. Alone (a boot), it listens at
+/// once and serves each view as it loads, the rest answering 503
 fn cmdRender(c: *Cmd) !u8 {
     var f: SiteFlags = .{};
     var host: []const u8 = "127.0.0.1";

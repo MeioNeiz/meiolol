@@ -227,9 +227,58 @@ test "fixture games to stats, curves and the website" {
         for (try site.pagePaths(&s)) |p| try testing.expect(!std.mem.startsWith(u8, p, "matchup/") or std.mem.eql(u8, p, "matchup/index.html"));
         try testing.expect(try loaded.get(arena, "matchup/top/mordekaiser-vs-darius.html") != null);
     }
-    for ([_][]const u8{ "champion/nobody.html", "all/champion/darius.html", "matchup/top/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html" }) |path| {
+    for ([_][]const u8{ "champion/nobody.html", "all/champion/darius.html", "matchup/top/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html", "patch/", "nosuch/index.html", "data/filters/nobody.json", "data/your-example.json" }) |path| {
         try testing.expectEqual(null, try loaded.get(arena, path));
     }
+
+    // `--static core` (deploy/web-loop.sh): only core_static and the front-end files, all
+    // at the site root; everything the full build writes is still served (public here,
+    // so the pages differ from the full build's by the preview banner), and the core
+    // files are the renderer's bytes too
+    try tmp.dir.writeFile(io, .{ .sub_path = "your-example.json", .data = example_json });
+    var core_opts = opts;
+    core_opts.out_dir = try std.fs.path.join(arena, &.{ dir, "core" });
+    core_opts.static = .core;
+    core_opts.public = true;
+    core_opts.origin = "https://x.io";
+    core_opts.riot_txt = "riot-check";
+    core_opts.your_example = try std.fs.path.join(arena, &.{ dir, "your-example.json" });
+    try site.generate(gpa, io, db, core_opts);
+    const core_loaded = try site.Loaded.init(gpa, io, db, core_opts);
+    defer core_loaded.deinit();
+    var core_dir = try std.Io.Dir.cwd().openDir(io, core_opts.out_dir, .{ .iterate = true });
+    defer core_dir.close(io);
+    var core_walker = try core_dir.walk(gpa);
+    defer core_walker.deinit();
+    var core_files: usize = 0;
+    while (try core_walker.next(io)) |e| {
+        try testing.expect(e.kind == .file);
+        if (std.mem.endsWith(u8, e.path, ".gz")) continue;
+        try testing.expect(site.isStatic(core_opts, "", e.path));
+        const want = try core_dir.readFileAlloc(io, e.path, arena, .limited(1 << 24));
+        try testing.expectEqualStrings(want, (try core_loaded.get(arena, e.path)).?);
+        core_files += 1;
+    }
+    for (site.core_static) |name| try core_dir.access(io, name, .{});
+    walker.deinit();
+    walker = try out_dir.walk(gpa);
+    while (try walker.next(io)) |e| {
+        if (e.kind != .file or std.mem.endsWith(u8, e.path, ".gz")) continue;
+        if (site.isStatic(core_opts, "", e.path)) try core_dir.access(io, e.path, .{});
+        if (try core_loaded.get(arena, e.path) == null) {
+            std.debug.print("not rendered under --static core: {s}\n", .{e.path});
+            return error.TestUnexpectedResult;
+        }
+    }
+    try testing.expect(core_files >= site.core_static.len);
+    try testing.expectEqualStrings(example_json, (try core_loaded.get(arena, "data/your-example.json")).?);
+    // Sitemaps list rendered pages: the root one static, the views' rendered
+    const sitemap = try core_dir.readFileAlloc(io, "sitemap.xml", arena, .limited(1 << 20));
+    for ([_][]const u8{ "https://x.io/champion/darius.html", "https://x.io/matchup/top/mordekaiser-vs-darius.html", "https://x.io/daily.html", "https://x.io/learn.html" }) |want| {
+        try testing.expect(std.mem.indexOf(u8, sitemap, want) != null);
+    }
+    const patch_sitemap = (try core_loaded.get(arena, "patch/sitemap.xml")).?;
+    try testing.expect(std.mem.indexOf(u8, patch_sitemap, "https://x.io/patch/build/darius-top.html") != null);
 }
 
 test "admin page from the fixture games and a crawl log" {

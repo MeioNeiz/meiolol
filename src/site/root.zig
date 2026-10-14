@@ -63,8 +63,9 @@ pub const Options = struct {
     /// Front-end files (css, js) read from here per request instead of embedded: `meiolol
     /// dev`
     static_dir: ?[]const u8 = null,
-    /// Matchup pages with fewer games are left out of the static build: `meiolol render`
-    /// serves them on request
+    /// What the static build writes; `meiolol render` serves the rest on request
+    static: Static = .all,
+    /// Matchup pages with fewer games are left out of the static build (Static.all)
     static_min_games: u32 = 0,
     /// "https://meiolol.jomify.lol": canonical links and sitemaps, when public
     origin: ?[]const u8 = null,
@@ -74,7 +75,34 @@ pub const Options = struct {
     eval_history: ?[]const u8 = null,
     /// `meiolol lean`'s file: the champion pages' early or late line where set
     lean: ?[]const u8 = null,
+    /// `meiolol your-example`'s file, served as data/your-example.json where it exists
+    your_example: ?[]const u8 = null,
 };
+
+pub const Static = enum {
+    /// Every page and file (but thin matchups: Options.static_min_games)
+    all,
+    /// core_static only
+    core,
+};
+
+/// `--static core`: the only files the static build writes, besides the front-end assets
+/// (shared_assets, view_assets); nginx serves them itself and hands every other path to
+/// `meiolol render`. All at the site root: nginx's try_files answers the URL of a
+/// directory that exists with its index.html or 403, never the renderer, so the root
+/// keeps its home page and no subdirectory is written
+pub const core_static = [_][]const u8{
+    "index.html", "sitemap.xml", "robots.txt", "riot.txt", "meiolol.wasm", "chart.wasm",
+};
+
+/// Whether the static build writes the file at `dir` ++ `path` from the site root
+pub fn isStatic(opts: Options, dir: []const u8, path: []const u8) bool {
+    if (opts.static == .all) return true;
+    if (dir.len > 0 or std.mem.indexOfScalar(u8, path, '/') != null) return false;
+    for (core_static) |name| if (std.mem.eql(u8, name, path)) return true;
+    for (shared_assets ++ view_assets) |f| if (std.mem.eql(u8, f.path, path)) return true;
+    return false;
+}
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
 const min_pick_rate = 0.004;
@@ -329,6 +357,8 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     defer gpa.free(gz_window);
     for (html.View.all) |v| {
         if (opts.euw_only and v.region != .euw) continue;
+        // Static.core: only the root's files, from the root view and the shared one
+        if (opts.static == .core and v.index() != 0 and !std.meta.eql(v, html.View.shared)) continue;
         const site = try load(gpa, io, db, opts, v, &extras);
         defer unload(site);
         try writeSite(site, root_dir, gz_window);
@@ -339,17 +369,20 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
 /// twin for nginx's gzip_static
 fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
     const io = site.io;
-    const sub = if (site.view.dir().len == 0) "." else site.view.dir();
-    try root_dir.createDirPath(io, sub);
-    var dir = try root_dir.openDir(io, sub, .{});
-    defer dir.close(io);
+    const opts = site.opts;
+    const vdir = site.view.dir();
+    // Static.core writes nothing into a view's own directory, so makes none
+    const own = vdir.len == 0 or opts.static == .all;
+    if (own and vdir.len > 0) try root_dir.createDirPath(io, vdir);
+    var dir = if (own) try root_dir.openDir(io, if (vdir.len == 0) "." else vdir, .{}) else root_dir;
+    defer if (own) dir.close(io);
     const w: FileWriter = .{ .gpa = site.gpa, .io = io, .gz_window = gz_window };
-    for (site.files) |f| try w.write(dir, f.path, f.data);
-    for (site.shared_files) |f| try w.write(root_dir, f.path, f.data);
+    for (site.files) |f| if (isStatic(opts, vdir, f.path)) try w.write(dir, f.path, f.data);
+    for (site.shared_files) |f| if (isStatic(opts, "", f.path)) try w.write(root_dir, f.path, f.data);
     if (std.meta.eql(site.view, html.View.shared)) {
         for (shared_assets) |f| try w.write(root_dir, f.path, f.data);
     }
-    for (view_assets) |f| try w.write(dir, f.path, f.data);
+    for (view_assets) |f| if (isStatic(opts, vdir, f.path)) try w.write(dir, f.path, f.data);
 
     var page_arena: std.heap.ArenaAllocator = .init(site.gpa);
     defer page_arena.deinit();
@@ -360,6 +393,7 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
     var build_pages: usize = 0;
     var champion_pages: usize = 0;
     for (paths) |path| {
+        if (!isStatic(opts, vdir, path)) continue;
         _ = page_arena.reset(.retain_capacity);
         var aw: Writer.Allocating = .init(s.arena);
         if (!try renderPage(&s, &aw.writer, path)) return error.PageNotRouted;
@@ -369,6 +403,7 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
         if (std.mem.startsWith(u8, path, "champion/")) champion_pages += 1;
     }
     if (std.meta.eql(site.view, html.View.shared)) for (shared_pages) |path| {
+        if (!isStatic(opts, "", path)) continue;
         _ = page_arena.reset(.retain_capacity);
         var aw: Writer.Allocating = .init(s.arena);
         if (!try renderShared(&s, &aw.writer, path)) continue;
@@ -438,11 +473,8 @@ fn sitemap(site: *const Site) ![]const u8 {
     try out.appendSlice(a, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
     var paths: std.ArrayList([]const u8) = .empty;
     try paths.appendSlice(a, try pagePathsMin(site, site.opts.index_min_games));
-    if (site.view.index() == 0) for (shared_pages) |path| {
-        // A failed learn build writes no learn.html
-        if (site.learn == null and std.mem.eql(u8, path, "learn.html")) continue;
-        try paths.append(a, path);
-    };
+    // Listed from the root view, before the shared view (whose learn build may fail) loads
+    if (site.view.index() == 0) try paths.appendSlice(a, &shared_pages);
     for (paths.items) |path| {
         // Paths are slugs and fixed names: nothing XML needs escaped
         try out.print(a, "<url><loc>{s}</loc></url>\n", .{site.canonical(site.view.dir(), path).?});
@@ -603,6 +635,13 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
     if (opts.public and opts.origin != null) {
         try files.append(arena, .{ .path = "sitemap.xml", .data = try sitemap(site) });
     }
+    // Static.core writes none of what follows (rendered on request), and skipping it is
+    // most of the build: the pool tallies alone take minutes on the box
+    if (all_opts.static == .core) {
+        site.files = files.items;
+        site.shared_files = shared_files.items;
+        return site;
+    }
     // The root view's directory is the site root, where champion pages are
     if (view.index() == 0) {
         site.filter = try filters.make(site, db, all_opts);
@@ -639,6 +678,15 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
         };
         try shared_files.appendSlice(arena, daily_files);
     }
+    if (shared) if (opts.your_example) |path| {
+        if (std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(16 << 20))) |json| {
+            try shared_files.append(arena, .{ .path = "data/your-example.json", .data = json });
+        } else |err| switch (err) {
+            // `meiolol your-example` removes it after a failed run
+            error.FileNotFound => {},
+            else => log.warn("your example at {s}: {t}", .{ path, err }),
+        }
+    };
     if (shared) if (opts.eval_history) |path| {
         if (std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(16 << 20))) |tsv| {
             site.eval = try evalchart.parse(arena, tsv);
@@ -687,6 +735,8 @@ pub const Loaded = struct {
     pub fn init(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options) !*Loaded {
         const l = try gpa.create(Loaded);
         l.* = .{ .gpa = gpa, .io = io, .db = db, .opts = opts, .arena_state = .init(gpa), .extras = .{} };
+        // It serves what the static build leaves out, so needs every view's data
+        l.opts.static = .all;
         l.extras = .load(l.arena_state.allocator(), io, opts);
         return l;
     }

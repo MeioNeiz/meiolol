@@ -7,6 +7,7 @@
 const std = @import("std");
 const Io = std.Io;
 const site = @import("site/root.zig");
+const store = @import("store");
 pub const admin_api = @import("admin_api.zig");
 
 const log = std.log.scoped(.serve);
@@ -254,10 +255,30 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
                     body = try std.mem.concat(arena, u8, &.{ body[0..at], reload_script, body[at..] });
                 }
             }
-            return request.respond(body, .{ .extra_headers = &.{
+            // As the static build's .gz twins: jomify's nginx compresses only HTML itself
+            // (stats.bin is ~12 MB raw, ~0.5 MB gzipped), and caches one copy per
+            // Accept-Encoding by Vary
+            const compress = gzip and body.len >= 1024 and !std.mem.eql(u8, std.fs.path.extension(name), ".woff2");
+            if (compress) {
+                const window = try arena.alloc(u8, store.raw.window_len);
+                body = try store.raw.compressWith(arena, window, body);
+            }
+            const headers: [4]std.http.Header = .{
                 .{ .name = "content-type", .value = contentType(name) },
                 .{ .name = "cache-control", .value = "no-cache" },
-            } });
+                .{ .name = "vary", .value = "Accept-Encoding" },
+                .{ .name = "content-encoding", .value = "gzip" },
+            };
+            return request.respond(body, .{ .extra_headers = headers[0..if (compress) 4 else 3] });
+        }
+        // A directory without its slash, as nginx answered when its directory was
+        // uploaded: relative links need the slash
+        if (path.len > 0 and path[path.len - 1] != '/' and std.fs.path.extension(path).len == 0) {
+            const index = try std.mem.concat(arena, u8, &.{ path, "/index.html" });
+            if ((entry.loaded.get(arena, index) catch null) != null) {
+                const to = try std.mem.concat(arena, u8, &.{ "/", path, "/" });
+                return request.respond("", .{ .status = .moved_permanently, .extra_headers = &.{.{ .name = "location", .value = to }} });
+            }
         }
     }
     if (ctx.opts.root != null) for (candidates[0..n]) |name| {
@@ -370,7 +391,6 @@ test "resolve" {
 test "Rendered: a swapped-out site is freed after its last request" {
     const gpa = std.testing.allocator;
     const io = std.testing.io;
-    const store = @import("store");
     const db = try store.schema.memory();
     defer db.close();
     const opts: site.Options = .{ .out_dir = "", .patches = &.{}, .since_ms = 0, .all_platforms = &.{}, .contact = "", .updated = "" };
