@@ -36,6 +36,20 @@ safety nets, doc requirements with no work behind them) and hands out work. Clos
 session once it passes ~30% context: it commits, reports done/next/questions, and its
 next steps land here.
 
+Team size (lesson of the 13-14 Oct night, ~60 sessions, 396 commits): 4-5 agents at
+once. Beyond that, coordination ate the gain: name clashes, a whole snapshot's runs
+voided by a mid-night re-cut, the gpu-box at load 41-58 on 20 threads (jobs 5-10x
+slow), by-path commits sweeping in other sessions' hunks. Fix the split and pin before
+starting runs on a snapshot, not during.
+
+Neural nets paused (14 Oct): big, small, set and embedding nets only draw level with
+ratings at 2253Z, and research (draft-predictor-methods, gnn-match-outcome) puts the
+lever in data volume. Next net run: one rerun of the reference nets on the next re-pin
+(due when the crawl passes +50% of 2253Z's 363k played games, ~545k on the box, about
+15 Oct), against additive v2 as well as ratings. Big net's test look: not yet. Work
+goes to shipping what won (additive v2 in the Draft tester since 14 Oct 21:08, the
+in-game state model) and to the production review list.
+
 ## State (2026-10-11 ~04:15 BST)
 
 - Keys: personal app MEIOLOL (890240), key in .env (`jodrive riot key --app 890240
