@@ -25,6 +25,7 @@ import nnsets
 import statecommon as sc
 
 TIERS = ["outer", "inner", "base"]
+MIN_GAMES = 300
 
 
 def design(state, S, logit):
@@ -59,7 +60,7 @@ def design(state, S, logit):
         "completed item": side("legendaries"),
         "plate": team("plates"),
         "control ward placed": side("ctrl_wards"),
-        "draft logit +0.1": logit / 10,
+        "draft logit +0.1": logit * 10,
     }
     for t in TIERS:
         cols[f"{t} tower"] = sum(team(f"tower_{lane}_{t}") for lane in sc.LANES)
@@ -99,7 +100,8 @@ def main():
         going = ~np.isnan(S[:, 0])
         X, names = design(state, S[going], logit[games[going]])
         y = data.y[games[going]].astype(np.float64)
-        keep = X.std(0) > 0
+        # a column only where 300+ games differ on it (rare cells give wild ratios)
+        keep = (X != 0).sum(0) >= MIN_GAMES
         w0 = np.zeros(X.shape[1])
         w0[keep] = fit(X[:, keep], y)
         rng = np.random.default_rng(m)
