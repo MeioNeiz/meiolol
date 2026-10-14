@@ -278,11 +278,19 @@ next steps land here.
 - Split-half on the box (27k games): for pairs with 50+ games in a half (bot 63,
   support 32), the baseline alone beat shrunk (bot gold rms 173 vs 204, noise 182), so
   the matchup term does not pay yet; a higher k cap did not help. Recheck at volume
-- Curves next: patch decay weights (two patches in the 30-day window now) and n_eff for
-  same-player games; tau^2 smoothed across minutes (k jumps between minutes at 19k
-  games); recheck k and the split-half test at 200k+ games, when pairs reach 50+ per
-  half; brackets for a Platinum IV+ crawl (Iron-Silver is near empty, Gold-Emerald is
-  mostly Platinum-Emerald: maybe Platinum-Emerald, Diamond, Master+; Jacob)
+- Curves checked at 291k games (snap 2253Z, all platforms; meiolol-df, 14 Oct): the
+  estimator stands as is. n_eff for same-player games: within-player correlation of
+  gold@14 in a matchup 0.007-0.04, design effect under 1.015, dropped. Patch decay:
+  16.19 to 16.20 moved matchup means by sd ~44 gold vs a spread of 476, under ~10 gold
+  at any d, deferred to a big patch. tau^2 smoothed across minutes: split-half picks none
+  in 13 of 15 role-metrics, not shipped. k: top 18-57, middle 25-100, jungle and bottom
+  at the cap (100); cap 1000 is mixed (jungle gold all pairs 548 to 555, thick 135 to
+  134), kept. Bot's matchup term now pays (thick pairs shrunk 166 vs baseline 170, noise
+  147). Thin pairs sit at the other half's noise, so an embedding prior for them can't
+  show a split-half gain: not started
+- Curves next: brackets for a Platinum IV+ crawl (Iron-Silver is near empty,
+  Gold-Emerald is mostly Platinum-Emerald: maybe Platinum-Emerald, Diamond, Master+;
+  Jacob)
 - Experienced toggle is starved: the box runs --no-mastery, so 3.7k of 189k participants
   have a mastery row; ~1k matchup pages show it at all. Mastery back on (A1), or
   experience from crawled match history (learning.zig game numbers): Jacob
