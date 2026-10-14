@@ -291,8 +291,9 @@ PUUIDs set NULL; 21,817 players (seen_at in the window) and 2,361 mastery rows
 rank rows keyed by those PUUIDs (orphans); the window's raw summaries and timelines
 (wrong-app PUUIDs and Riot IDs) go at ack + 2 days as usual; the raw archive holds them
 with hashed wrong-app PUUIDs that an erasure by real PUUID can't reach, so blank those
-games' PUUIDs there as runbook step 6 does (open). Guard (open): crawl start should
-stop if a stored PUUID gets a decrypt 400, before writing anything
+games' PUUIDs there as runbook step 6 does (open). Guard: crawl start calls mastery for
+the player most recently given one and exits 3 (as a rejected key) on a 400, before
+writing anything (Crawler.checkKey)
 
 Earlier window, found 14 Oct: 2026-10-11 23:25:50-23:28:45Z, same cause (the 22
 match-id 400s at 23:25-23:28). It stored matches rowid 92269-92366 (98, games 3-11 Oct,

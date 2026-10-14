@@ -139,6 +139,7 @@ pub const Crawler = struct {
         // Opening once here migrates the schema before the threads connect
         const db = try store.open(c.gpa, c.opts.data_dir);
         defer db.close();
+        try c.checkKey(db);
         try c.backfillTimelines(db);
         try dropDoneRows(db);
         if (c.opts.patch_only) {
@@ -171,6 +172,35 @@ pub const Crawler = struct {
         c.stopAll(&threads, writer_thread);
         c.report(c.nowS() - started);
         if (c.failure) |err| return err;
+    }
+
+    /// A key from another Riot app answers every call but gives 400 "Exception
+    /// decrypting" for every stored PUUID (11 and 13 Oct, docs/data-safety.md), and the
+    /// crawl then stores that app's PUUIDs. One call for the player most recently given
+    /// mastery stops it first, as a rejected key does (exit 3)
+    fn checkKey(c: *Crawler, db: store.Db) !void {
+        if (c.opts.fake != null) return;
+        var q = try db.prepare("SELECT puuid, platform FROM mastery WHERE champions > 0 ORDER BY fetched_at DESC LIMIT 1");
+        defer q.deinit();
+        if (!try q.step()) return;
+        const r = q.row(struct { puuid: []const u8, platform: []const u8 });
+        const p = ep.platform(r.platform) orelse return;
+        var client: Client = .init(c.gpa, c.io, c.opts.key, c.limiters.get(p.host).?);
+        defer client.deinit();
+        const got = ep.masteries(&client, p, r.puuid) catch |err| switch (err) {
+            error.UnexpectedStatus => {
+                log.err("a stored {s} PUUID fails with this key: a key from another Riot app? Not crawling", .{p.id});
+                return error.KeyRejected;
+            },
+            error.KeyRejected, error.OutOfMemory, error.Canceled => return err,
+            // Riot down or slow: no answer about the key, so crawl as before
+            else => {
+                log.warn("key check: {t}", .{err});
+                return;
+            },
+        };
+        if (got) |b| c.gpa.free(b);
+        log.info("key check: a stored {s} PUUID decrypts", .{p.id});
     }
 
     /// Bucket threads first: the writer then stores what they queued before stopping
