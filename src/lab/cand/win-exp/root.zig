@@ -1,6 +1,6 @@
 //! win-exp: win-ratings with champ_exp and form ("everything pre-game", internal scope),
 //! the reference for lab/playernet.zig. A copy, as a candidate imports only std and api:
-//! keep in step with win-ratings (diff: cfg, name, champ_played, rates)
+//! keep in step with win-ratings (diff: cfg, name, champ_played, rates, shape)
 //!
 //! Win from the draft, one logistic model per game (blue side's chance), nested so each
 //! step's gain is measurable:
@@ -41,6 +41,10 @@ const Cfg = struct {
     /// training rows and pulled to the role mean by n / (n + 3) (the prior group that
     /// carried playernet's gain, as hand-made terms)
     rates: bool = false,
+    /// One-hot buckets of earlier games (1-19, 20-59, 60-149, 150+) and of games on the
+    /// champion (1-2, 3-9, 10+), 0 the base: the shape log1p misses (calibration by
+    /// history bucket on 2253Z was off by up to 1.4 pp, not monotone in the games gap)
+    shape: bool = false,
     skill: bool = false,
     /// Only games of this platform index (protocol.platformIds order); null for all
     platform: ?u8 = null,
@@ -70,9 +74,12 @@ const rank_scale = 1.0 / 4.0;
 const rate_prior = 1000;
 
 /// Per player: champ_exp's 2 then form's 5 (expFeatures), then champ_played's 1, then
-/// rates' 3
+/// rates' 3, then shape's 7
 const n_played: usize = @intFromBool(cfg.champ_played);
-const n_exp = 7 + n_played + if (cfg.rates) 3 else 0;
+const n_rates: usize = if (cfg.rates) 3 else 0;
+const n_exp = 7 + n_played + n_rates + if (cfg.shape) 7 else 0;
+const games_cuts = [_]u16{ 1, 20, 60, 150 };
+const champ_cuts = [_]u16{ 1, 3, 10 };
 /// Pseudo-games at 50% in an experience win rate
 const exp_prior = 5;
 
@@ -374,6 +381,15 @@ fn logOdds(wins: u16, games: u16) f32 {
     return @log(q / (1 - q));
 }
 
+/// The highest cut n reaches, null below the first
+fn bucket(cuts: []const u16, n: u16) ?usize {
+    var b: ?usize = null;
+    for (cuts, 0..) |c, i| {
+        if (n >= c) b = i;
+    }
+    return b;
+}
+
 /// n / (n + 3): a mean over few games counts for little
 fn trust(n: u16) f32 {
     const x: f32 = @floatFromInt(n);
@@ -399,6 +415,11 @@ fn expFeatures(m: *const Model, e: api.Experience, role: usize) [n_exp]f32 {
     if (cfg.rates and e.rate_games > 0) for ([_]f32{ e.gpm, e.cspm, e.dpm }, 0..) |x, k| {
         out[7 + n_played + k] = (x - m.rate_mean[role][k]) / m.rate_sd[role][k] * trust(e.rate_games);
     };
+    if (cfg.shape) {
+        const at = 7 + n_played + n_rates;
+        if (bucket(&games_cuts, e.games)) |b| out[at + b] = 1;
+        if (bucket(&champ_cuts, e.champ_games)) |b| out[at + games_cuts.len + b] = 1;
+    }
     return out;
 }
 
@@ -545,7 +566,7 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
     const refit = try train(gpa, m.sp, best.l2, games.items, null, @max(1, best.epochs + best.epochs / 10), opts.seed);
     m.p = refit.p;
     std.debug.print("win-model: kind {t} dim {d} l2 {d} epochs {d} val {d:.5} on {d} games\n", .{ cfg.kind, best.dim, best.l2, best.epochs, best.loss, games.items.len });
-    if (experience) std.debug.print("win-model: experience weights by role (champ games, champ rate, games, rate, kda, lanediff, deaths15{s}{s}) {any}\n", .{ if (cfg.champ_played) ", played" else "", if (cfg.rates) ", gpm, cspm, dpm" else "", m.p[m.sp.e..][0 .. n_role * n_exp] });
+    if (experience) std.debug.print("win-model: experience weights by role (champ games, champ rate, games, rate, kda, lanediff, deaths15{s}{s}{s}) {any}\n", .{ if (cfg.champ_played) ", played" else "", if (cfg.rates) ", gpm, cspm, dpm" else "", if (cfg.shape) ", games 1+ 20+ 60+ 150+, champ 1+ 3+ 10+" else "", m.p[m.sp.e..][0 .. n_role * n_exp] });
 
     if (cfg.own_rank) fitOwnRank(&m, t, won);
     return m;
@@ -723,4 +744,12 @@ pub fn deinit(m: *Model, gpa: std.mem.Allocator) void {
     gpa.free(m.id_games);
     gpa.free(m.p);
     m.ids.deinit(gpa);
+}
+
+test "bucket: highest cut reached, null below the first" {
+    try std.testing.expectEqual(@as(?usize, null), bucket(&games_cuts, 0));
+    try std.testing.expectEqual(@as(?usize, 0), bucket(&games_cuts, 19));
+    try std.testing.expectEqual(@as(?usize, 1), bucket(&games_cuts, 20));
+    try std.testing.expectEqual(@as(?usize, 3), bucket(&games_cuts, 400));
+    try std.testing.expectEqual(@as(?usize, 2), bucket(&champ_cuts, 10));
 }
