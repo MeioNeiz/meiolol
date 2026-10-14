@@ -1,5 +1,12 @@
-# title: Does a net use players' pre-game history (experience, form) better than hand-made terms? (internal scope)
+# title: Do players' pre-game history (experience, form, past per-minute stats) improve win prediction beyond ratings, and does a net use them better than hand-made terms? (internal scope)
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
+player net with history means (prior) on ratings + experience terms (2253Z)	ratings	folds	-0.00743	0.00063	3	-0.00708	-0.00703	134375		20261014T003848Z-c-full	re-cut 2253Z, sealed seeds 4-6, build 85fd62a
+player net with history means (prior) on ratings + experience terms (2253Z)	player net on ratings + experience terms	folds	-0.00195	0.00031	3	-0.00188	-0.00168	134375		20261014T003848Z-c-full	pre-declared sealed confirmation passes: 1.6x interval -0.00245 to -0.00145, 5/5 blocks, 90% resamples -0.00172 and -0.00197; permuted-feature control +0.00005
+player net with history means (prior) on ratings + experience terms (2253Z)	player net on ratings + experience terms	dev-val	-0.00284	0.00067	3	-0.00300	-0.00216	35834		20261014T003848Z-c-full	all-platform dev-val
+history means only (no premade), player net on ratings + experience terms (2253Z)	player net on ratings + experience terms	folds	-0.00206	0.00031	3			134375		20261014T004103Z-c-prior	carries the whole gain
+premade (played together before) only, player net on ratings + experience terms (2253Z)	player net on ratings + experience terms	folds	-0.00007	0.00012	3			134375		20261014T004122Z-c-duo	not detected
+hand-made experience terms (2253Z)	ratings	folds	-0.00507	0.00055	1			134375		20261014T004141Z-c-rat	grows with data: -0.00261 (2055Z), -0.00378 (1954Z); dev-val -0.00678 ± 0.00123
+control: history-means net, player features permuted (2253Z)	hand-made experience terms	folds	0.00005	0.00004	3			134375		20261014T003910Z-c-full-pfeat	no leak
 player net on ratings + experience terms	ratings	folds	-0.00263	0.00076	3	-0.00261	-0.00228	44353		playernet-20261013	ties the hand-made experience terms: -0.00002 ± 0.00020 beyond them
 player net on ratings + experience terms	hand-made experience terms	folds	-0.00002	0.00020	3	0.00000	0.00033	44353		playernet-20261013	what the net adds beyond the hand-made terms
 player net on ratings + experience terms	hand-made experience terms	dev-val	-0.00024	0.00034	3	-0.00033	0.00001	8500		playernet-20261013

@@ -2050,8 +2050,62 @@ fit 0%, test 16% (rank_history from 12 Oct), so rank adds nothing to learn yet.
   loss gain is not detected (2055Z -0.00019 ± 0.00016, 1954Z -0.00012 ± 0.00017)
 - New inputs (abb57f3): Row.player (dense id, internal only) and history means over
   earlier games (gold, CS, damage per minute; off-role share; days since the last game),
-  playernet's `prior` group (QuickSkill-style). First runs queued (pq-exp, pq-exp-prior,
-  pq-exp-prior-pfeat); next on the new pinned snapshot
+  playernet's `prior` group (QuickSkill-style), and `duo` (cb19e68, d43fa92): teammates
+  played with before on the same team and the most games with one of them (TrueSkill 2's
+  premade signal; pairs from games ended before this one's start, no outcomes)
+- Win-exp's gain over ratings by how many players have games on their champion (4a,
+  milli-nats/game, 0 / 1-2 / 3-4 / 5+): 2055Z -0.4 / -2.1 / -4.1 / -3.7, 1954Z +0.2 /
+  -3.5 / -5.1 / -5.1: nothing without history, flattening near -5 once 3+ have it
+- First look (1954Z, cb19e68, seeds 1-3, not citable): prior + duo beyond the net on
+  win-exp -0.00134 ± 0.00029, permuted control +0.00024 (runs 20261013T2259*-pd-*)
+
+Prior and premade, sealed confirmation on the re-cut snap-20261013T2253Z (meiolol-51;
+one global time cut, 134,375 fold games in 5 blocks of 26,875, dev-val 35,834 all
+platforms; build 85fd62a, seeds 4-6, declared before any run and accepted by 33). A =
+playernet on win-exp, `--feats champ,any,form,rank`; B = A + `prior,duo`. Statistic: B's
+3-seed ensemble log loss minus A's per game, folds pooled, ± 95% paired by game. Pass:
+full data mean + 1.6x half-width < 0, both 90% resamples (`--resample 1`, `2`, netcheck's
+draws) < 0, 4+ of 5 blocks negative; void if the permuted-feature control beats its
+candidate by more than 0.0005. Runs data/runs/20261014T0038*-c-* and 0039-0041*-c-*;
+data/runs/playernet-20261014/confirm.sh prints every number below.
+
+| B minus A (2253Z) | folds | blocks 1-5 | dev-val |
+| --- | --- | --- | --- |
+| full data | -0.00195 ± 0.00031 (1.6x: -0.00245 to -0.00145) | -0.00173 to -0.00217, 5/5 | -0.00284 ± 0.00067 |
+| resample 1 | -0.00172 ± 0.00031 | -0.00143 to -0.00225, 5/5 | -0.00290 ± 0.00059 |
+| resample 2 | -0.00197 ± 0.00031 | -0.00156 to -0.00234, 5/5 | -0.00306 ± 0.00074 |
+| control: B's features permuted, vs win-exp | +0.00005 ± 0.00004 | | |
+
+Passes on every leg: the first player term past the noise floor beyond the hand-made
+experience terms. Candidate preds are identical across A, B, the control and the splits
+within each draw; the init-loss gate is ok on every fit; offset weights 0.81-0.93 (B),
+0.91-1.00 (control).
+
+| descriptive (2253Z, folds) | vs | diff |
+| --- | --- | --- |
+| A + prior only | A | -0.00206 ± 0.00031 |
+| A + duo (premade) only | A | -0.00007 ± 0.00012 |
+| win-exp (hand-made experience terms) | ratings | -0.00507 ± 0.00055 (dev-val -0.00678 ± 0.00123) |
+
+| B minus A by players (of ten) with any earlier game | games | diff |
+| --- | --- | --- |
+| 0-4 | 14,496 | -0.00130 ± 0.00066 |
+| 5-7 | 52,329 | -0.00142 ± 0.00048 |
+| 8-9 | 52,818 | -0.00236 ± 0.00053 |
+| 10 | 14,732 | -0.00301 ± 0.00108 |
+
+- The gain is the history means (gold, CS, damage per minute, off-role share, days since
+  the last game), not premade: duo alone ties A, and prior alone is as big as both
+- It grows with history, as a player effect should, and the hand-made experience terms
+  keep growing with data: -0.0026 (2055Z), -0.0038 (1954Z), -0.0051 (2253Z) vs ratings
+- Coverage grows with crawl depth, so later blocks have more history; per-block gains
+  are flat (-0.0017 to -0.0022), so the pooled number isn't one late block
+- The 1954Z first look used seeds 1-3 only; 4-6 were first run here
+- Awaiting the verifier's audit before a learned.md line (internal scope: other players'
+  history is never for the app). Next: the prior as hand-made terms in win-exp (what an
+  explainable CPU model would ship internally), which feature carries it, and averaging
+  the cross-fitted training offsets over partitions (58: two valid implementations'
+  training offsets correlate only 0.81-0.91 per game)
 
 #### Pretrained champion-role embeddings (meiolol-97 [7beeb6], was meiolol-52)
 
