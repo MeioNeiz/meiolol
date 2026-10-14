@@ -40,8 +40,9 @@ my @AUTO = $ENV{LAB_AUTO_MAC} ? @HOSTS : ('gpu-box');
 # reserved cores the limit). cpu slots are pinned to their own cores: no slowdown seen
 my %SHARED = (gpu => 1);
 my $BETA_ASSUMED = 0.7;
-# lab-run's memory gate (0723d43): the queue head waits while MemAvailable is under its
-# need (max peak of earlier runs with its key, else 4 GB), at most 20 min
+# lab-run's memory gate (0723d43, edd4d90): the queue head waits while MemAvailable is
+# under its need (max peak of earlier runs with its key, else 4 GB); 20 min after it first
+# saw too little, half its need will do, or no run holding a cpu or gpu slot
 my ($GATE_DEFAULT_GB, $GATE_MAX_WAIT) = (4, 1200);
 # Flags whose value scales a run's work: time x new/old when history differs (dp-shape-a,
 # 13 Oct: --boot 40 ran 22 m, predicted 1.9 m from a --boot 2 smoke). A list counts items
@@ -344,9 +345,10 @@ sub fast { return defined $_[0] && int($_[0]) <= 60 }
 
 #
 # With the host's MemAvailable known, memory is a second resource: a run starts once a
-# slot is free and memory covers its need (or after the gate's 20 min), takes its need
-# and gives it back when it ends; running runs give back theirs (peak, else need) as they
-# end. Upper bounds both ways (peaks count shared pages per process)
+# slot is free and memory covers its need (the gate's late rule past its 20 min), takes
+# its need and gives it back when it ends; running runs give back theirs (peak, else need)
+# as they end. Upper bounds both ways (peaks count shared pages per process). Queued runs
+# of other resources are left out: they take memory and slots this can't see
 sub mem_key {
     my ($bin, $args) = @_;
     return $bin if $bin =~ /^python/;
@@ -369,7 +371,8 @@ sub wait_for {
     my $n_slots = $slots{$host}{$res} // 1;
     $n_slots = 1 unless $n_slots =~ /^\d+$/ && $n_slots > 0;
     my $gated = defined $mem{$host};
-    my (@free, @queued, @ev, $n);
+    # @hold: [start, end] of runs holding a cpu or gpu slot, for the gate's late rule
+    my (@free, @queued, @ev, @hold, $n);
     for my $r (sort { $a->{dir} cmp $b->{dir} }
         grep { $_->{host} eq $host && $_->{res} eq $res && live($_) } @runs) {
         my $pred = $r->{pred} // (estimate($host, $r->{bin}, $r->{args}, $r->{build}))[0]
@@ -383,6 +386,7 @@ sub wait_for {
             my $left = $pred - $done > $done / 5 ? $pred - $done : $done / 5;
             push @free, $left;
             push @ev, [$left, $need];
+            push @hold, [0, $left] if $res =~ /^(cpu|gpu)$/;
         } else {
             # A start without a prediction is normal, whatever we estimate for it
             push @queued, [fast($r->{pred}) ? 0 : 1, $pred, $need];
@@ -394,8 +398,9 @@ sub wait_for {
         my $pred = $r->{pred} // (estimate($host, $r->{bin}, $r->{args}, $r->{build}))[0]
             // 60;
         my $done = $now{$host} - $r->{started} - paused($r, $r->{started}, $now{$host});
-        push @ev, [$pred - $done > $done / 5 ? $pred - $done : $done / 5,
-            $r->{peak} // need($host, $r->{bin}, $r->{args})];
+        my $left = $pred - $done > $done / 5 ? $pred - $done : $done / 5;
+        push @ev, [$left, $r->{peak} // need($host, $r->{bin}, $r->{args})];
+        push @hold, [0, $left] if $r->{res} =~ /^(cpu|gpu)$/;
     }
     push @free, 0 while @free < $n_slots;
     @free = sort { $a <=> $b } @free;
@@ -405,27 +410,44 @@ sub wait_for {
         $m += $_->[1] for grep { $_->[0] <= $_[0] } @ev;
         return $m;
     };
-    # When a run needing NEED can start, a slot being free at T0
+    my $held = sub { my ($t) = @_; return grep { $_->[0] <= $t && $t < $_->[1] } @hold };
+    # When a run needing NEED can start, at the queue's head from HEAD and a slot free at
+    # T0. The gate's clock starts the first time the head sees too little memory, slot or
+    # not; memory and holds change only at events, so those (and clock + 20 min) suffice
     my $start = sub {
-        my ($t0, $need) = @_;
+        my ($head, $t0, $need) = @_;
         return $t0 unless $gated;
-        for my $t (sort { $a <=> $b } $t0, grep { $_ > $t0 } map { $_->[0] } @ev) {
-            return $t0 + $GATE_MAX_WAIT if $t > $t0 + $GATE_MAX_WAIT;
-            return $t if $mem_at->($t) >= $need;
+        my %ts = map { $_ => 1 } grep { $_ >= $head } $head, $t0, (map { $_->[0] } @ev),
+            map { $_->[1] } @hold;
+        my $since;
+        for (my @ts = sort { $a <=> $b } keys %ts; @ts; ) {
+            my $t = shift @ts;
+            my $m = $mem_at->($t);
+            if ($m < $need && !defined $since) {
+                $since = $t;
+                @ts = sort { $a <=> $b } @ts, $t + $GATE_MAX_WAIT;
+            }
+            next if $t < $t0;
+            return $t if $m >= $need;
+            next if $t < $since + $GATE_MAX_WAIT;
+            return $t if $m >= $need / 2 || !$held->($t);
         }
-        return $t0 + $GATE_MAX_WAIT;
+        # Every run has ended by the last event, so no slot is held
+        my $late = defined $since ? $since + $GATE_MAX_WAIT : $t0;
+        return $late > $t0 ? $late : $t0;
     };
     my $prev = 0;
     for my $q (sort { $a->[0] <=> $b->[0] } grep { !$fast || $_->[0] == 0 } @queued) {
         my $t0 = $free[0] > $prev ? $free[0] : $prev;
-        my $at = $start->($t0, $q->[2]);
+        my $at = $start->($prev, $t0, $q->[2]);
         shift @free;
         @free = sort { $a <=> $b } @free, $at + $q->[1];
         push @ev, [$at, -$q->[2]], [$at + $q->[1], $q->[2]];
+        push @hold, [$at, $at + $q->[1]];
         $prev = $at;
     }
     my $t0 = $free[0] > $prev ? $free[0] : $prev;
-    my $at = $start->($t0, $need_new // $GATE_DEFAULT_GB);
+    my $at = $start->($prev, $t0, $need_new // $GATE_DEFAULT_GB);
     return ($at, $n // 0, $n_slots, $at - $t0);
 }
 
