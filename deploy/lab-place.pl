@@ -33,10 +33,12 @@ my @HOSTS = ('gpu-box', 'mac');
 # Where auto may place: Jacob, 2026-10-13: model runs on the gpu-box only, they slow his
 # Mac down. LAB_AUTO_MAC=1 lets auto use the Mac again; an explicit `start mac` still runs
 my @AUTO = $ENV{LAB_AUTO_MAC} ? @HOSTS : ('gpu-box');
-# Resources whose slots share one device: gpu runs slow about linearly with the runs
-# beside them (big1b, 13 Oct: netcheck --net big 73-134 s at ~2 sharing, 272-358 s at
-# ~4.9). cpu slots are pinned to their own cores (taskset): no slowdown seen
+# Resources whose slots share one device: gpu runs slow with the runs beside them as
+# sharing^BETA, BETA fitted on history (log time on log sharing within each command),
+# else assumed: 0.63-0.69 over 26-34 gpu runs on 14 Oct (card 20-35% busy, the shared
+# reserved cores the limit). cpu slots are pinned to their own cores: no slowdown seen
 my %SHARED = (gpu => 1);
+my $BETA_ASSUMED = 0.7;
 # Flags whose value scales a run's work: time x new/old when history differs (dp-shape-a,
 # 13 Oct: --boot 40 ran 22 m, predicted 1.9 m from a --boot 2 smoke). A list counts items
 my %LINEAR = map { $_ => 1 } qw(--boot --seeds);
@@ -73,7 +75,9 @@ while (my $line = <STDIN>) {
         push @runs, \%r;
     }
 }
-$_->{solo} = solo($_) for @runs;
+$_->{share} = sharing($_) for @runs;
+my ($beta, $beta_why) = beta();
+$_->{solo} = defined $_->{ran} ? $_->{ran} / $_->{share}**$beta : undef for @runs;
 my @wide = widen();
 my %ratio = ratios();
 
@@ -116,13 +120,13 @@ sub ran {
     return $t > 0 ? $t : 0;
 }
 
-# Run time alone: ran over sharing (time-weighted runs holding RES slots on HOST beside
-# it, itself included). Runs on unshared resources, or with no overlap known, keep ran
-sub solo {
+# Sharing: time-weighted runs holding RES slots on HOST beside it, itself included; 1 on
+# unshared resources or with no overlap known
+sub sharing {
     my ($r) = @_;
-    return $r->{ran} unless defined $r->{ran} && $SHARED{$r->{res} // q()};
+    return 1 unless defined $r->{ran} && $SHARED{$r->{res} // q()};
     my ($s, $e) = ($r->{started}, $r->{ended});
-    return $r->{ran} unless $e > $s;
+    return 1 unless $e > $s;
     my $held = 0;
     for my $o (grep { $_->{host} eq $r->{host} } @runs) {
         next unless defined $o->{started} && ($o->{res} // q()) eq $r->{res};
@@ -130,7 +134,33 @@ sub solo {
         $held += clip($o->{started}, $oe, $s, $e) if defined $oe;
     }
     my $share = $held / ($e - $s);
-    return $share > 1 ? $r->{ran} / $share : $r->{ran};
+    return $share > 1 ? $share : 1;
+}
+
+# BETA: slope of log time on log sharing within each command (snapshot-level keys with 3+
+# runs), pooled over shared-resource runs of 20 s or more; assumed with fewer than 10
+sub beta {
+    my (%by, $sxy, $sxx, $n);
+    for my $r (grep { defined $_->{ran} && $_->{ran} >= 20 && $SHARED{$_->{res} // q()} }
+        @runs) {
+        my ($k) = grep { $_->[2] eq 'snap' } keys_for($r->{bin}, $r->{args}, $r->{build});
+        push @{$by{"$r->{host} $k->[0]"}}, [log($r->{ran}), log($r->{share})] if $k;
+    }
+    ($sxy, $sxx, $n) = (0, 0, 0);
+    for my $rs (grep { @$_ >= 3 } values %by) {
+        my ($my, $mx) = (0, 0);
+        for (@$rs) { $my += $_->[0] / @$rs; $mx += $_->[1] / @$rs }
+        for (@$rs) {
+            $sxy += ($_->[1] - $mx) * ($_->[0] - $my);
+            $sxx += ($_->[1] - $mx)**2;
+            $n++;
+        }
+    }
+    return ($BETA_ASSUMED, 'assumed') if $n < 10 || $sxx < 1e-9;
+    my $b = $sxy / $sxx;
+    $b = 0 if $b < 0;
+    $b = 1 if $b > 1;
+    return ($b, "$n runs");
 }
 
 sub median {
@@ -405,8 +435,9 @@ sub place {
             my ($wait, $live, $n_slots) = $res eq 'none' ? (0, 0, 0) : wait_for($h, $res);
             if (defined $run && $SHARED{$res}) {
                 my $share = $live + 1 < $n_slots ? $live + 1 : $n_slots;
-                $run *= $share;
-                $why .= ", x $share sharing $res" if $share > 1;
+                $run *= $share**$beta;
+                $why .= sprintf(', x %d sharing %s ^%.2f (%s)', $share, $res, $beta,
+                    $beta_why) if $share > 1;
             }
             if ($res ne 'none' && fast($run)) {
                 ($wait) = wait_for($h, $res, 1);

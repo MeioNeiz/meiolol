@@ -147,11 +147,12 @@ run time.
   same command (exp: action, campaign, target) and candidate (-Dcand) on the same
   snapshot, else any candidate there, else that command on any snapshot, else the bare
   subcommand. A new campaign with no runs falls back to other campaigns' times
-- gpu slots share one card: a gpu run's time counts over its sharing (the gpu runs
-  holding slots on average while it ran, itself included), and a new one is predicted at
-  that x min(slots, live gpu runs + 1). big1b (13 Oct): netcheck --net big 73-134 s at ~2
-  sharing, 272-358 s at ~4.9, i.e. ~72-92 s alone either way. cpu slots are pinned to
-  their own cores: no slowdown seen, not scaled
+- gpu slots share one card (and the reserved cores): a gpu run's time counts over
+  sharing^BETA (sharing = the gpu runs holding slots on average while it ran, itself
+  included), and a new one is predicted at that x min(slots, live gpu runs + 1)^BETA.
+  BETA is fitted on history, log time on log sharing within each command: 0.69 over 34
+  runs (14 Oct; 0.7 assumed with under 10). Sublinear: the card is 20-35% busy, the
+  shared cores are the limit. cpu slots are pinned to their own cores: not scaled
 - Past the same args, history scales by flags whose work is linear (`--boot N`, the
   `--seeds` count): time x new/old. python runs are keyed by script once the listing
   carries it (BIN python/SCRIPT); until then all scripts on a snapshot share a key
