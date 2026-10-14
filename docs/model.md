@@ -145,6 +145,17 @@ outcomes and readings decided by Jacob the same day.
   Leak note: fits for a window never see games at or after its cut, same-patch games on
   other platforms included. Before 2253Z: test = newest 20% of EUW1, train = older
   games, selection and dev-val 20% windows of EUW1
+- Pin snap-20261013T2253Z, re-cut at 85fd62a (14 Oct, meiolol-73): 363,472 games
+  scanned (432 skipped), 358,334 played, patches 16.19-16.20, 15 platforms. Cuts (ms):
+  T 1791795719197, D 1791741249959; b_0-b_4 1791526007256, 1791574830751, 1791628507185,
+  1791670472926, 1791711141905, b_5 +inf. Played games: dev_old 134,375 (16.19 52,604,
+  16.20 81,771), folds 1-5 26,875 each, dev-val 35,834, test 53,750 (all 16.20); under
+  15:00 4,738 more, in their start's window. Test by platform: KR 13,442, EUW1 13,407,
+  VN2 9,261, NA1 4,593, BR1 3,959, rest 8,088; dev-val EUW1 6,741, KR 5,713, NA1 5,685.
+  Codes 7-9 empty. Earlier tests landed: 2055Z's 10,759 (8 looks in its ledger) in fold4
+  159, fold5 4,724, dev-val 3,991, test 1,885; 1954Z's 17,079 in dev-val 4,387, test
+  12,692. Seat stats: 2253Z's own plus 1954Z's and 2055Z's lines for games the box had
+  pruned (0 of 5,179,830 shared seats differ), 372,317 games covered
 - Rows: ranked solo, non-remake, complete roles (stats.scan rules). Continuous outcomes
   also need a compact timeline that reached 15:00: frames[15].t_ms >= 900000 (frame 15
   exists is not enough: games ending 14:09-14:59 have it as their end frame). Win also
