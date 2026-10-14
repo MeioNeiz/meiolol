@@ -3131,10 +3131,11 @@ all 218 state-export columns as blue minus red, early stopping on val; its out-o
 logit the offset for the draft layer) now edges the linear state: GBDT minus linear
 -0.0008 ± 0.0005 at 10 (4/5), -0.0011 ± 0.0005 at 15 (5/5), -0.0034 ± 0.0009 at 25 (5/5;
 2055Z: level or worse). The draft given GBDT state: -0.0146 ± 0.0011, -0.0164 ± 0.0011,
--0.0157 ± 0.0013 at 10/15/25 (5/5), 79-89% of the linear figure (2055Z 84-88%); GBDT
-state + draft is still worse than linear state + draft (+0.0026 ± 0.0006 at 15, 0/5;
-+0.0009 ± 0.0008 at 25). So a flexible state absorbs at most a fifth of the draft's
-gain; no net was tried.
+-0.0157 ± 0.0013 at 10/15/25 (5/5), 79-89% of the linear figure (2055Z 84-88%); but
+GBDT state + draft predicts worse than linear state + draft (+0.0026 ± 0.0006 at 15,
+0/5; +0.0009 ± 0.0008 at 25), so part of the drop is the combined model fitting the
+draft less well, not the state absorbing it: at most a fifth is absorbed, possibly less.
+No net was tried.
 
 Shuffled-draft controls (info.py --shuffle-draft 1, state and outcome fixed; pre-declared:
 |mean| <= 0.0015 or an interval covering 0, else Q1 void): whole drafts permuted across
@@ -3170,8 +3171,8 @@ Reading:
   often more) beside the state at every minute. Most of the draft's value at equal state
   is a different signal from its pre-game edge (0.0051 of 0.0201 at 15): which champions
   turn the same state into wins, the scaling section's effects summed over ten seats
-- It grows from 5 to 20 minutes, then eases slightly (0.021 at 20, 0.019 at 30, on
-  fewer games): scaling, not fading, within this window (30 min, survivors only)
+- It grows from 5 to 20 minutes and is about as large at 30 (0.021 at 20, 0.019 at 30)
+  among games still going, longer games only: scaling, not fading, within this window
 - The draft's gain at equal state is largest in games with a late scaling or an early
   dive team, on both snapshots (overlapping subsets, not tested against each other;
   description)
@@ -3389,8 +3390,11 @@ Pooled over the folds' scored games, sandwich se (one row per game), sign by fol
   dev-val -0.00033 ± 0.00014), bottom -0.00010 ± 0.00006 (5/5), middle -0.00008 ±
   0.00006, support -0.00005, jungle 0. Matchups beyond the two champions move the lane's
   gold, top most; on the win, top lane pairs now clear 0 on the folds and dev-val but
-  stay about half the folds' noise floor (~0.4 milli-nats, 2253Z A/A): not confirmed, a
-  lead for a pre-declared check (2055Z: -0.00007 ± 0.00005)
+  stay about half the folds' noise floor (~0.4 milli-nats, the nets' 2253Z A/A; this
+  model's own floor not measured): not confirmed (2055Z: -0.00007 ± 0.00005). The same
+  signal as learned.md's audited matchup line (top vs top the largest detected matchup,
+  about 2.5 pp spread, meiolol-1d), seen here beside the draft and in lane gold, so a
+  pre-declared check would be a replication, not a new discovery
 
 #### Summary for Jacob
 
@@ -3402,8 +3406,8 @@ from equal states (Draven, Irelia, Pyke, Hecarim). Late champions fall behind, t
 more from equal states (Kayle, Smolder, Bel'Veth, Aurelion Sol; dev block, train-fit).
 These cancel, so draft win rates are small. Once you know the state, the draft is worth
 far more than before the game (about 5x on the folds, 4x on dev-val at 15 min), rising
-to 20 minutes and easing slightly by 30; a flexible state model takes at most a fifth
-of that. For the draft as a whole, no part of its edge was detected running through
+to 20 minutes and about as large at 30 among games still going; a flexible state model
+takes at most a fifth of that. For the draft as a whole, no part of its edge was detected running through
 getting ahead early, though the data rule out only a large part (over about half). No
 draft comes back from behind beyond its equal-state value, mixing early and late picks
 costs nothing measurable, and lane counters move lane gold with at most a tiny win part

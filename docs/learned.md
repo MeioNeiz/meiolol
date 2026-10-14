@@ -25,23 +25,25 @@ How to write a line:
 
 ## Win
 
-- 2026-10-14 (early, 2253Z): The champions tell you far more about who wins once you
-  know how the game stands than before it starts: with each team's gold, kills and
-  objectives at 15 minutes known, the draft adds about five times as much as it does in
-  champ select, rising to 20 minutes and easing only slightly by 30. A draft one
-  standard deviation stronger in draft score wins about 4.6 percentage points more
+- 2026-10-14 (early, 2253Z): The champions tell you far more about who wins once you know
+  how the game stands than before it starts: with each team's gold, kills and objectives
+  at 15 minutes known, the draft adds four to five times as much as it does in champ
+  select, rising to 20 minutes, and about as large at 30 among games still going. A draft
+  one standard deviation stronger in draft score wins about 4.6 percentage points more
   often, and none of that was found to come through getting ahead early, though we can
-  only rule out more than about 2.3 of those points. Sure: snap-20261013T2253Z, 5
-  forward folds, 100,847 games with a 15-minute timeline (dev-val 26,263), readings
-  pre-declared before any run; draft given state at 15 -0.0201 ± 0.0012 nats/game
-  (5/5) against draft alone -0.0041 ± 0.0006 (about 4x on dev-val); two shuffled-draft
-  controls (across games, within patch x platform) at zero. The early-lead part is "not
-  detected": g-computation with the joint state at 10/14/20, |indirect| under 2.3 pp per
-  sd of draft score against a total of about 4.6, so only a large part is ruled out;
-  bootstrap intervals slightly narrow. The state also carries who plays better, so "at
-  equal state" is description, not cause. Dev only, no test look. Site: nothing; no
-  "this draft wins late" or win-chance claims from it. Evidence: docs/model.md "How
-  drafts win" (Q1, Q3), audited by meiolol-53
+  only rule out more than about 2.3 of those points. Sure: snap-20261013T2253Z, 5 forward
+  folds, 100,847 games with a 15-minute timeline (dev-val 26,263), readings pre-declared
+  before any run; draft given state at 15 -0.0201 ± 0.0012 nats/game (5/5) against draft
+  alone -0.0041 ± 0.0006 (about 4x on dev-val; with a GBDT state -0.0164, up to a fifth
+  less); the minute curve is over games still going (100,847 at 15, 76,456 at 25, 44,451
+  at 30), so later minutes are longer games only; two shuffled-draft controls (across
+  games, within patch x platform) at zero. The early-lead part is "not detected":
+  g-computation with the joint state at 10/14/20, |indirect| under 2.3 pp per sd of draft
+  score against a total of about 4.6, so only a large part is ruled out; bootstrap
+  intervals slightly narrow. The state also carries who plays better, so "at equal state"
+  is description, not cause. Dev only, no test look. Site: nothing; no "this draft wins
+  late" or win-chance claims from it. Evidence: docs/model.md "How drafts win" (Q1, Q3),
+  audited by meiolol-53
 
 - 2026-10-14 (2253Z): How players did in their earlier games (gold, CS and damage per
   minute, how often they played off their role, days since their last game) predicts
