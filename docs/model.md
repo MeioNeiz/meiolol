@@ -2666,6 +2666,53 @@ The draft predicts gold at 14
 folds' scored games, against 0.405 for real gold at 14. Gold at 14 then to win through
 the state model (+0.018 vs ratings) is ruled out: drafts that win early gold give it back.
 
+#### Additive model on snap-20261013T2253Z: pre-declared test (audit pending meiolol-53)
+
+The 2055Z audit (meiolol-33) left two claims open, so they were declared with the verifier
+before any 2253Z score was seen (rule and both amendments in the verifier's notes): H1
+full minus win-comp, H2 full minus strength + mix (do role pairs add on top of the mix),
+folds pooled; pass = full-data mean + 1.6 x 95% half-width < 0 and both 90% resamples
+(`--resample 1`, `2`) < 0; void if the shuffled-label control gains; dev-val reported, not
+judged. Re-cut 2253Z (one all-platform cut, 85fd62a), folds 134,375 games, dev-val 35,834,
+the additive model unchanged from 2055Z; results unread until the verifier's gate passed.
+Runs 20261014T002919Z-e53-A0..A2 (vs ratings), 003704Z-e53-B0..B2 (vs win-comp),
+003812Z-e53-C (control), 003833Z-e53-T (table). Checks: in-run ratings and win-comp equal
+the references (04's rb-ref-wr, rb-ref-wc) to 1e-6; the additive preds are identical in the
+A and B runs.
+
+| statistic | full data, 5 folds | resample 1 | resample 2 | dev-val | verdict |
+| --- | --- | --- | --- | --- | --- |
+| H1 full - win-comp | -0.00115 ± 0.00022, 5 of 5 | -0.00126 | -0.00116 | -0.00169 ± 0.00048 | pass (bound -0.00080) |
+| H2 full - (strength + mix) | -0.00082 ± 0.00017, 5 of 5 | -0.00075 | -0.00076 | -0.00132 ± 0.00037 | pass (bound -0.00055) |
+| H0 full - ratings | -0.00163 ± 0.00028, 5 of 5 | -0.00171 | -0.00162 | -0.00219 ± 0.00057 | reported |
+| control, shuffled labels: full - strength | +0.00000 ± 0.00005 | | | | no gain, valid |
+
+So on 3x the fit games the additive model beats win-comp, and its role pairs add on top
+of the mix; the pair gain grew from -0.00033 (2055Z) to -0.00082, as thin cells fill.
+Strength + mix alone vs win-comp: -0.00034 ± 0.00015.
+
+Per-block table (e53-T, 268,750 dev-visible games; corrected spreads [95%]; a value with an
+interval is detected, above the null's 95th, unless marked; as on 2055Z, pair sds are
+lower bounds, planted pairs came out 0.6-0.9x):
+
+| block | win pp | gold at 14 |
+| --- | --- | --- |
+| champion strength top / jungle / middle / bottom / support | 1.84 / 1.68 / 2.45 / 1.63 / 3.37 | 370 / 359 / 375 / 317 / 343 |
+| ally bottom-support | 1.28 [1.07, 1.48] | 83 [68, 98] |
+| other 9 ally pairs | none detected, at most 0.27 (upper 0.39) | none detected, at most 31 (upper 41) |
+| matchup top vs top | 2.51 [2.21, 2.80] | 303 [286, 319] |
+| matchup middle vs middle | 1.90 [1.59, 2.21] | 189 [162, 215] |
+| matchup support vs support | 1.26 [0.96, 1.55] | 131 [103, 159] |
+| matchup bottom vs bottom | 1.18 [0.98, 1.38] | 85 [69, 100] |
+| matchup jungle vs jungle | 1.14 [0.94, 1.34] | 38 [0, 71], not detected |
+| matchup middle vs bottom | 0.89 [0.69, 1.08] | none |
+| matchup bottom vs support (both ways) | 0.88 [0.68, 1.08] | 85 [73, 98] |
+| matchup top vs middle | 0.61 [0.46, 0.74] | 26 [0, 42], not detected |
+| other 7 cross-role matchups | not detected, 0-0.71 (upper 0.94) | at most 26 (upper 40) |
+
+Damage mix: -1.89 ± 0.19 pp per sd of the term (-2.75 per sd of blue minus red), on gold
+at 14 -21 ± 15. Single cells: not reported.
+
 #### In-game events
 
 `meiolol-lab eventvalue SNAP` (src/lab/eventvalue.zig, 706b2c4, on meiolol-4a's
