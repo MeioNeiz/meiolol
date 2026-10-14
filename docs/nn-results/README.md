@@ -3,7 +3,7 @@
 Read by the admin Models tab, "Neural nets" (src/site/static/admin-nn.js); sent by
 deploy/lab-push.sh. One file per question, `<question>.tsv`, owned by the session working
 on it (keys in use: nets comp pretrain stack scaling player context embx ldai gains effects
-draftpath). Append a row when you write the result up in docs/model.md; edit a row when a
+draftpath pytorch). Append a row when you write the result up in docs/model.md; edit a row when a
 rerun replaces it. Commit the file by path with the model.md write-up.
 
 First line `# title: <the question in plain words>`; other `#` lines are ignored. Then a

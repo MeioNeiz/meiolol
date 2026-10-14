@@ -135,6 +135,7 @@ def train(o, seed, n_ids, tr, val, max_steps, dev):
     every = max(1, per // max(o.evals, 1))
     best, best_loss, best_step, since = None, math.inf, 0, 0
     step = 0
+    norms = []
     order, at = None, len(tr)
     while step < max_steps:
         if at >= len(tr):
@@ -147,7 +148,8 @@ def train(o, seed, n_ids, tr, val, max_steps, dev):
         opt.zero_grad(set_to_none=True)
         loss.backward()
         if o.clip > 0:
-            torch.nn.utils.clip_grad_norm_(net.parameters(), o.clip)
+            norm = float(torch.nn.utils.clip_grad_norm_(net.parameters(), o.clip))
+            norms.append(norm)
         opt.step()
         if ema is not None:
             with torch.no_grad():
@@ -164,6 +166,9 @@ def train(o, seed, n_ids, tr, val, max_steps, dev):
             since += 1
             if since >= o.patience:
                 break
+    if norms and o.trace:
+        n = np.array(norms)
+        print(f"    grad norm: median {np.median(n):.3f}, p90 {np.quantile(n, 0.9):.3f}, clipped {np.mean(n > o.clip):.1%} of {len(n)} steps; first 50 median {np.median(n[:50]):.3f}", flush=True)
     if val is None:
         best_step = step
         if ema is not None:
@@ -173,7 +178,7 @@ def train(o, seed, n_ids, tr, val, max_steps, dev):
     return net, best_step / per, best_loss
 
 
-def offsets_for(data, s, seed, log):
+def offsets_for(data, s, seed, log, o):
     """resid offsets (logits) as winnet: cross-fitted on fit and inner games, the inner
     fit's for val, the all-fit one's for scored"""
     import xratings
@@ -185,15 +190,18 @@ def offsets_for(data, s, seed, log):
         tr_val = xratings.design(data, sub.val, table)
         bestl = None
         for l2 in xratings.L2_GRID:
-            _, ep, vl = xratings.zig_train(n_ids, tr_inner, tr_val, l2, xratings.MAX_EPOCHS, 1)
+            _, ep, vl = xratings.zig_train(n_ids, tr_inner, tr_val, l2, xratings.MAX_EPOCHS, seed)
             if bestl is None or vl < bestl[2]:
                 bestl = (l2, ep, vl)
-        p, _, _ = xratings.zig_train(n_ids, xratings.design(data, games, table), None, bestl[0], max(1, bestl[1] + bestl[1] // 10), 1)
+        p, _, _ = xratings.zig_train(n_ids, xratings.design(data, games, table), None, bestl[0], max(1, bestl[1] + bestl[1] // 10), seed)
         return lambda gs: xratings.logits_np(p, *xratings.design(data, gs, table)[:3], n_ids)
 
     def cross(games):
         out = np.zeros(len(games))
-        fifth = (games * 2654435761 % 2**32) % 5
+        if o.cross_part == "random":
+            fifth = np.random.default_rng(12344 + seed).integers(0, 5, data.n)[games]
+        else:
+            fifth = (games * 2654435761 % 2**32) % 5
         for f in range(5):
             m = fifth == f
             out[m] = fit_ratings(games[~m])(games[m])
@@ -207,6 +215,20 @@ def offsets_for(data, s, seed, log):
     return off
 
 
+def dumped_offsets(data, s, d, block):
+    """Zig's cross-fitted offsets from a `netcheck --net set --dump 1` run (same
+    candidate, blocks and crossFold), joined on match id"""
+    name = "dev" if block == "dev" else "f" + block
+    out = {}
+    for part, games in (("inner", s.inner), ("val", s.val), ("fit", s.fit), ("scored", s.scored)):
+        with open(os.path.join(os.path.expanduser(d), f"set-{name}-{part}.tsv")) as f:
+            f.readline()
+            m = {r[0]: float(r[3]) for r in (l.rstrip("\n").split("\t") for l in f if l.strip())}
+        assert len(m) == len(games), (part, len(m), len(games))
+        out[part] = np.array([m[data.match_id[g]] for g in games])
+    return out
+
+
 def split_val(data, games):
     cut = nnsets.val_cut(data.start[games])
     return games[data.start[games] < cut], games[data.start[games] >= cut]
@@ -216,12 +238,20 @@ def run_block(data, block, o, dev, log):
     s = nnsets.sets(data, block)
     t_in, n_in = nnsets.vocab(data, s.inner, o.min_games)
     t_all, n_all = nnsets.vocab(data, s.fit, o.min_games)
-    off = offsets_for(data, s, 1, log) if o.net == "resid" else {}
+    if o.net == "resid" and o.offsets_from:
+        off = dumped_offsets(data, s, o.offsets_from, block)
+    else:
+        off = offsets_for(data, s, o.offset_seed, log, o) if o.net == "resid" else {}
     inner = Games(data, s.inner, t_in, off.get("inner"), dev)
     val = Games(data, s.val, t_in, off.get("val"), dev)
     fit = Games(data, s.fit, t_all, off.get("fit"), dev)
     scored = Games(data, s.scored, t_all, off.get("scored"), dev)
     log(f"block {block}: fit {len(fit)} (inner {len(inner)}, val {len(val)}, ids {n_all}), scored {len(scored)}")
+    if off:
+        alone = {k: mean_loss(g.y.cpu().double(), torch.sigmoid(g.off.cpu()).double()) for k, g in (("inner", inner), ("val", val), ("fit", fit), ("scored", scored))}
+        log("  offset alone: " + ", ".join(f"{k} {v:.5f}" for k, v in alone.items()))
+        if o.offsets_only:
+            return s, np.zeros((0, len(s.scored))), [], None
     preds, info = [], []
     for seed in o.seeds:
         t0 = time.time()
@@ -249,8 +279,13 @@ def main():
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--opt", default="adamw")
     ap.add_argument("--ema", type=float, default=0.0)
+    ap.add_argument("--trace", action="store_true", help="log gradient norm stats per fit")
     ap.add_argument("--max-epochs", type=int, default=60)
     ap.add_argument("--fix-offset", action="store_true")
+    ap.add_argument("--cross-part", default="random", choices=["stride", "random"], help="resid: how training games are split into fifths")
+    ap.add_argument("--offset-seed", type=int, default=1, help="resid: seed of the offsets' ratings fits and partition")
+    ap.add_argument("--offsets-only", action="store_true", help="resid: log the offsets' losses and stop")
+    ap.add_argument("--offsets-from", help="resid: Zig's offsets from a set-net --dump run dir")
     for k in ["emb", "batch", "evals", "patience", "min_games"]:
         ap.add_argument("--" + k.replace("_", "-"), type=int)
     for k in ["dropout", "wd", "emb_wd", "lr", "clip"]:
@@ -287,6 +322,8 @@ def main():
         ff.write("seed\tfold\tepochs\tval_logloss\toffset_weight\n")
         for b in o.blocks.split(","):
             s, preds, info, own = run_block(data, b, o, o.device, log)
+            if o.offsets_only:
+                continue
             ens = preds.mean(0)
             for seed, ep, vl, a in info:
                 ff.write(f"{seed}\t{b}\t{ep:.2f}\t{vl:.6f}\t{a:.4f}\n")

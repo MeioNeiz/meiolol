@@ -51,6 +51,10 @@ def report(name, ra, rb, na, nb):
     print(f"  single seeds vs cand: {na} {sa.mean() - cand:+.5f} (sd {sda:.5f}, k {ka}), {nb} {sb.mean() - cand_b:+.5f} (sd {sdb:.5f}, k {kb})")
     print(f"  {na} - {nb}: single-seed gain vs own cand {d_single:+.5f}, tolerance ±{tol:.5f}: {verdict}")
     print(f"  ensembles vs cand: {na} {ea - cand:+.5f}, {nb} {eb - cand_b:+.5f}; ens {na} - {nb} {d.mean():+.5f} ± {1.96 * d.std(ddof=1) / np.sqrt(len(d)):.5f} (paired); logit corr {corr:.4f}")
+    for nm, r, c in ((na, ra, ra["cand"]), (nb, rb, rb["cand"])):
+        dd = loss(y, r["ens"]) - loss(y, c)
+        per = [(loss(y, sd) - loss(y, c)).mean() for sd in r["seeds"]]
+        print(f"  RESULT {name} {nm}: ens vs its cand {dd.mean():+.5f} ± {1.96 * dd.std(ddof=1) / np.sqrt(len(dd)):.5f}, seeds {min(per):+.5f} to {max(per):+.5f}, k {len(per)}")
     return verdict == "agree"
 
 

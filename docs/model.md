@@ -3426,6 +3426,54 @@ lane-ref.json: per role the 4 most played pairs, a champion into an opponent wit
 pair cell and an unknown champion (id 0), each with value, lo, hi, champ_games and
 pair_games from Scorer.value; the page's JS must match them to 0.01.
 
+### PyTorch cross-check, 2026-10-14 (meiolol-58)
+
+Question: does each Zig model train as written? A second implementation in Python
+(py/xcheck, PyTorch, scipy, sklearn), run on the same games, ids, hyperparameters and early
+stopping, must land within seed noise of the Zig one. A code check, so on the pinned
+snap-20261012T2055Z (the Zig references live there), dev-val and the 5 forward folds only.
+- nnsets.py reads SNAP/nn and rebuilds netcheck's sets; it reproduces every block's fit,
+  inner, val and scored games and ids (counts, labels, order, match ids). Set net and
+  player net train on their commands' own input dumps (`--dump 1`, 35 and 51), so there
+  only the net and its training are reimplemented
+- Agreement: each side's mean single-seed gain over its own candidate, 10 seeds a side;
+  agree if the two differ by at most 2 x sqrt(sd_a^2/10 + sd_b^2/10) (sd over seeds).
+  Single seeds, not ensembles: ensembles of different sizes don't compare
+- Runs: gpu-box ~/ml/runs, *-x* (torch), *-z*10 (Zig, 10 seeds), *-fin-* (comparisons)
+
+Folds pooled (44,353 games); diff = 10-seed ensemble minus its candidate, ± 95% paired:
+
+| model | torch | Zig | single-seed gains, torch - Zig | verdict |
+| --- | --- | --- | --- | --- |
+| win-ratings (torch: Zig's procedure) | 0.69092 | 0.69090 | +0.00002 ± 0.00010 (log loss) | agree |
+| small net | +0.00021 ± 0.00023 | +0.00034 ± 0.00024 | -0.00014, tolerance ±0.00021 | agree, 6 of 6 blocks |
+| big net | -0.00015 ± 0.00035 | -0.00039 ± 0.00033 | +0.00027, ±0.00037 | agree, 5 of 6 |
+| set net (--cross 0) | -0.00043 ± 0.00017 | -0.00045 ± 0.00019 | -0.00001, ±0.00012 | agree, 6 of 6 |
+| player net (on win-exp) | -0.00019 ± 0.00012 | -0.00014 ± 0.00013 | -0.00007, ±0.00013 | agree, 5 of 6 |
+| resid, Zig's offsets | +0.00007 ± 0.00009 | -0.00007 ± 0.00006 | +0.00019, ±0.00015 | block 2 only |
+| resid, torch's own offsets | +0.00021 ± 0.00016 | -0.00007 ± 0.00006 | +0.00045, ±0.00019 | differs |
+
+Reading (dev, no test look):
+- No bug found in the Zig models. Ratings, small, big, set and player nets reproduce
+  within seed noise; the set net's gain over ratings (-0.00043 vs -0.00045) and the
+  player net's over win-exp reproduce in an independent implementation
+- win-ratings is not the L2 optimum: Adam stops after 1-17 epochs, so early stopping does
+  the regularising (its l2 pick is always the smallest, 3e-4). The exact optimum with l2
+  chosen on the same newest 10% ties it (+0.00013 ± 0.00018, better in 2 of 5 folds); at
+  Zig's l2 it is worse (+0.00042 ± 0.00051). So the baseline stays
+- Ratings' own seed noise (10 shuffle seeds): sd of log loss 0.00006 on the pooled folds,
+  0.00009-0.00026 per block, 0.00012 on dev-val; per-game logits move 0.020-0.033 between
+  seeds. Small beside the ±0.5 milli-nat floor; netcheck keeps the candidate at seed 1
+- Resid: given Zig's cross-fitted offsets it agrees in 5 of 6 blocks; block 2 stays apart
+  with 30 seeds a side (+0.00031, tolerance ±0.00027; torch trains ~0.6 epochs longer,
+  twice the seed sd; gradient clipping never fires, norms ~0.03). With torch's own
+  offsets it is worse by ~0.0005 over 3 offset seeds (+0.00045, +0.00061, +0.00044). My
+  first offsets were wrong: fifths from a hash of the row index gave optimistic
+  out-of-fold offsets (lab-constraints 2026-10-14); a random partition matches Zig's
+  offset losses. Either way resid ties ratings, as f1 found
+- Tried in torch (cheap there): an exponential average of the weights (EMA 0.99) helps a
+  single small net (-0.00024) but not a 10-seed ensemble (-0.00002 ± 0.00010): no
+
 ### Model tests, 2026-10-13 (meiolol-tests: meiolol-0a [8b5601], then meiolol-d8)
 
 Question: do the models work and train properly, and could they have detected the effects

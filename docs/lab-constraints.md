@@ -33,6 +33,8 @@ Same error twice on one line of work: restore the last good state, don't try a t
 
 2026-10-14 | process | meiolol-lab curve failed FileNotFound on the gpu-box | lab-run ARGS go through bash, which expands ~ only at the start of a word, so NAME:COL:LABEL:~/ml/... stayed literal | write $HOME/ inside such words (single-quoted locally so the Mac doesn't expand it)
 2026-10-14 | build | `lab-run start gpu-box ... --meiolol --commit 3f8b9d6` printed only "build failed: not started" after ~20 min waiting on a build slot; the same start rerun built the same key and ran | cause unknown: the compiler output went to the start's stderr, which a `| grep started` hid; the commit builds | keep the whole start output (`> log 2>&1`), never grep it; a failed build uses no test look, retry once (meiolol-61)
+2026-10-14 | nets | torch resid (py/xcheck) scored +0.0006 worse than Zig's on the folds although its candidate matched, and its cross-fitted training offsets beat Zig's on every block (e.g. fit 0.69093 vs 0.69154) | fifths assigned by a multiplicative hash of the game's row index: out-of-fold offsets came out optimistic (no duplicate games; same procedure with a random partition matches Zig's to ~0.0003) | assign cross-fit folds by a hash of the game's identity (winnet.crossFold: start, platform) or a seeded random draw, never from row order (meiolol-58)
+
 ## Zig 0.17 (docs/zig-0.17.md; check APIs with LSP hover, std moved a lot)
 
 2026-10-12 | zig | Allocator.dupeZ / fmt.bufPrintZ not found | removed in 0.17 | dupeSentinel(.., 0), mem.printSentinel(.., 0)

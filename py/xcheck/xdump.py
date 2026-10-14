@@ -54,7 +54,7 @@ def load_set(d, block, part):
 
 
 def load_player(d, block, part):
-    stem = os.path.join(d, f"net-{BLOCK_FILE[block]}-{part}")
+    stem = os.path.join(d, f"net-{block}-{part}")
     with open(stem + ".txt") as f:
         head = f.readline().split()
         mids = [l.strip() for l in f if l.strip()]
