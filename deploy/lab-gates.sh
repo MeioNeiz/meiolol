@@ -3,8 +3,8 @@
 # the run dir and job.sh runs it there after the program exits): in every preds*.tsv,
 # dev.tsv and test.tsv down to two levels, each prediction column must have no NaN or
 # inf and must not be constant. Prints `GATE ok|FAIL FILE ...` lines for the log; FAIL
-# lines also go to `gates`, which `lab-run.sh wait` shows. Seconds on 100k rows: well
-# under 1% of a run
+# lines also go to `gates`, which `lab-run.sh wait` shows, with the program's GATE FAIL
+# lines from the log. Seconds on 100k rows: well under 1% of a run
 set -u
 find . -maxdepth 3 \( -name 'preds*.tsv' -o -name dev.tsv -o -name test.tsv \) -type f \
     | LC_ALL=C sort | while IFS= read -r f; do
@@ -38,6 +38,7 @@ find . -maxdepth 3 \( -name 'preds*.tsv' -o -name dev.tsv -o -name test.tsv \) -
         }' "$f"
 done > gates.all
 cat gates.all
-grep '^GATE FAIL' gates.all > gates
+# With the program's own (src/lab/gates.zig: a fresh net's loss far from the base rate's)
+{ grep -a '^GATE FAIL' log 2> /dev/null; grep '^GATE FAIL' gates.all; } > gates
 rm -f gates.all
 true

@@ -11,6 +11,7 @@ const rows = @import("rows.zig");
 const par = @import("../par.zig");
 const cuda = @import("../gpu/cuda.zig");
 const dn = @import("../gpu/draftnet_layout.zig");
+const gates = @import("gates.zig");
 
 const n_platforms = 16;
 /// Champion-roles with fewer train games share their role's id (0..4)
@@ -354,6 +355,7 @@ pub fn fitCpu(gpa: std.mem.Allocator, io: std.Io, cfg: Config, n_ids: u32, train
     const l = n.l;
     if (watch) |x| try x.start(gpa, l.len, stepsPerEpoch(train.len, cfg.batch));
     defer if (watch) |x| x.end(gpa, &n);
+    if (watch) |x| try x.initGate(gpa, io, &n);
     var w: Work = try .init(gpa, cfg.batch);
     defer w.deinit(gpa);
     const gr = try gpa.alloc(f32, l.len);
@@ -470,6 +472,12 @@ pub const Watch = struct {
         w.per_epoch = per_epoch;
     }
 
+    /// gates.initLoss on the held-out games, before the first step
+    fn initGate(w: *Watch, gpa: std.mem.Allocator, io: std.Io, n: *const Net) !void {
+        try n.predict(gpa, io, w.val, w.pred);
+        gates.initLoss("draftnet", logLoss(w.pred, w.val), refLoss(w.val));
+    }
+
     /// Epochs to the best evaluation
     pub fn bestEpochs(w: *const Watch) f64 {
         return @as(f64, @floatFromInt(w.best_step)) / @as(f64, @floatFromInt(w.per_epoch));
@@ -502,6 +510,21 @@ pub const Watch = struct {
         return w.since_best >= w.patience;
     }
 };
+
+/// A fresh net's target loss: the fixed offsets' (residual nets), else the base rate's
+fn refLoss(games: []const dn.Game) f64 {
+    var y: f64 = 0;
+    var off: f64 = 0;
+    var resid = false;
+    for (games) |g| {
+        y += g.y;
+        resid = resid or g.off != 0;
+        const p = 1 / (1 + @exp(-@as(f64, g.off)));
+        off -= if (g.y > 0.5) @log(@max(p, 1e-7)) else @log(@max(1 - p, 1e-7));
+    }
+    const n: f64 = @floatFromInt(@max(games.len, 1));
+    return if (resid) off / n else gates.baseLoss(y / n);
+}
 
 /// Mean log loss of blue's predicted chances
 pub fn logLoss(pred: []const f32, games: []const dn.Game) f64 {
@@ -536,6 +559,7 @@ pub fn fitGpu(gpa: std.mem.Allocator, io: std.Io, gpu: *const cuda.Gpu, dev: *De
     const l = n.l;
     if (watch) |x| try x.start(gpa, l.len, stepsPerEpoch(train.len, cfg.batch));
     defer if (watch) |x| x.end(gpa, &n);
+    if (watch) |x| try x.initGate(gpa, io, &n);
     var b: Buffers = try .init(gpu, l.len, 2 * cfg.batch);
     defer b.deinit(gpu);
     try gpu.upload(f32, b.p, n.p);

@@ -105,8 +105,10 @@ research/questions/agent-ml-practice.md.
    20 cores at 00:12Z 2026-10-14, so cpu slots plus gpu jobs' CPU overcommit
 3. Cheap run gates: done for preds (deploy/lab-gates.sh after every run: NaN/inf or
    constant prediction columns, 83918fa) and seat stats (a needs_stats fit fails on any
-   all-NaN stat, e30cec4). Left: initial loss vs base rate in the nets (health.zig
-   checks it on synthetic games); heavy checks are meiolol-tests'
+   all-NaN stat, e30cec4) and a fresh net's loss vs the base rate's (src/lab/gates.zig,
+   hooked in draftnet's fits: netcheck, winnet big; real 2055Z: 0.69308 vs 0.69301).
+   Left: playernet, setnet, stylenet, winnet small, pretrain call gates.initLoss
+   (their owners); heavy checks are meiolol-tests'
 4. Done: failed runs logged on the gpu-box, `lab-run.sh failures`, wait points at
    docs/lab-constraints.md (90cc294; not appended to the tracked file: it would sit
    dirty for other sessions' commits to sweep)

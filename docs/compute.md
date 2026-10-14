@@ -94,7 +94,10 @@ deploy/lab-run.sh watch-install
 - Prediction gates (deploy/lab-gates.sh, run by job.sh after the program, before
   `exit`): every preds*.tsv, dev.tsv and test.tsv in the run dir (two levels down) must
   have no NaN or inf and no constant prediction column; `GATE ok|FAIL` lines in the log,
-  FAILs in `gates`, shown by `wait`. The exit code is the program's. Failed runs:
+  FAILs in `gates`, shown by `wait`, with the program's own GATE FAIL lines from the log
+  (src/lab/gates.zig: a fresh net's held-out loss more than 0.01 from the base rate's,
+  or the offset's for resid; draftnet's fits, i.e. netcheck and winnet big). The exit
+  code is the program's. Failed runs:
   ~/ml/runs/failures.tsv, `lab-run.sh failures [N]`
 - `wait RUN...` blocks until each run has ended on whichever host has it, then prints
   its state and RESULT lines: exit 0 when all exited 0, 3 on --timeout, else 1. Use it
