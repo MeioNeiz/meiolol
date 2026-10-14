@@ -10,10 +10,8 @@ Decided 2026-10-14: controller "Jacob Maschler, trading as meiolol"; contact
 privacy@jomify.lol, a forward to jombirds@gmail.com (jomify.lol already uses Namecheap
 email forwarding: add the alias there before publishing).
 
-- **ICO fee.** £52 a year (tier 1, micro organisation), or £47 by direct debit. Register
-  at ico.org.uk, then put the registration number in `[ICO REG]`. If you don't register,
-  the ICO assumes tier 3 (£3,763). No exemption fits a public site that stores match
-  histories (research: ico-data-protection-fee, ico-fee-exemptions)
+- **ICO fee.** Paid (Jacob, 2026-10-14). The registration number is not shown on the
+  site: a privacy notice needs the controller's identity and contact, not the number
 - **EEA representative.** EU GDPR requires one for a UK controller that monitors EU
   players, unless the processing is "occasional" and low risk. A 24/7 crawler is hard to
   call occasional. Paid services cost roughly £100 to £300 a year (not researched). Until
@@ -48,8 +46,7 @@ what you can ask us to do.
 ## Who we are
 
 meiolol is run by Jacob Maschler, trading as meiolol, an individual in the United Kingdom,
-who is the controller of the data described here. Contact: privacy@jomify.lol. Registered
-with the UK Information Commissioner's Office as [ICO REG].
+who is the controller of the data described here. Contact: privacy@jomify.lol.
 
 <!-- EEA representative (if appointed):
 Our representative in the European Economic Area is [NAME, ADDRESS, EMAIL]. You can
