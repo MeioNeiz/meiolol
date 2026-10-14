@@ -1,0 +1,142 @@
+diff --git a/docs/learned.md b/docs/learned.md
+index b0081e5..a84985e 100644
+--- a/docs/learned.md
++++ b/docs/learned.md
+@@ -25,7 +25,27 @@ How to write a line:
+ 
+ ## Win
+ 
+-- 2026-10-14: Screening 252 team traits and team-vs-team matchups beyond champion
++- 2026-10-14 (2253Z): Beyond which champions are picked, a comp's damage makes a small
++  measurable difference, each about 1-2 percentage points for a comp clearly off in that
++  way: damage far from half magic loses, magic-heavy teams (60%+ magic) lose about 2
++  points more, and physical damage into a team of armour-leaning champions does worse
++  while magic damage into it does better. Tanky teams do slightly better, not worse,
++  against champions who buy penetration items. No coaching win condition (dive vs peel,
++  engage vs disengage, front-to-back, healing vs anti-heal, split vs waveclear) or comp
++  archetype was found. Sure: 89,584 unseen held-out games (sealed blocks, every
++  platform), 244 traits screened, one pre-declared list of 32 read with Holm: mix -1.1
++  pp per team sd (z -9), magic 60%+ -2.1 ± 0.9 pp, AD share x their armour -0.6 ± 0.2
++  and tankiness x their pen items +0.6 ± 0.2 pp per team sd. These are associations
++  beside champion strength; adding them doesn't measurably improve predictions (-0.34 ±
++  0.25 mnats beyond the mix, under the noise floor). The rest not detected (plants on
++  2055Z: a true 1.6 pp per team sd found, 1.1 not; this pin's intervals are about half
++  as wide, not re-planted). Sustain against poke (-0.6) and poke against engage (+0.4)
++  kept their sign but weren't declared for that direction: leads for the next pin.
++  Site: the damage-mix reason as before; "physical damage into armour" may become a
++  reason without a number once the production key allows anything public; no tank vs
++  pen or win-condition advice. Evidence: docs/model.md "Comp discovery" (rerun on
++  snap-20261013T2253Z), audit meiolol-53
++- ~~2026-10-14: Screening 252 team traits and team-vs-team matchups beyond champion
+   strength finds only the damage mix: lopsided damage (team magic share far from half)
+   costs about 0.9 percentage points of win chance per team sd, reproducing win-comp's
+   term on games already used for it, and near zero on the newest games alone (-0.1). No
+@@ -39,7 +59,7 @@ How to write a line:
+   flags shrink like the mix. Adding the mix to ratings doesn't measurably improve log
+   loss on the sealed games (-0.00028 ± 0.00042 nats). Site: nothing new; good and bad
+   comps stay the damage-mix reason only. Evidence: docs/model.md "Comp discovery", audit
+-  meiolol-33
++  meiolol-33~~ (superseded by the 2253Z line above)
+ - 2026-10-14: No champion was found to turn its own gold lead into wins better than
+   others in its role: what 1,000 gold on your champion is worth depends on the role, at
+   15 minutes about 8 percentage points for the bot laner, 4.5-7 for top, jungle and mid
+diff --git a/docs/model.md b/docs/model.md
+index bc17d54..609ef41 100644
+--- a/docs/model.md
++++ b/docs/model.md
+@@ -1530,8 +1530,80 @@ Reading:
+ - For meiolol-08's additive CPU model and meiolol-35's set nets: the mix term only; the
+   rest as candidates with the bounds above
+ - Audited by meiolol-33 (14 Oct): cleared with the wording above; learned.md line
+-  "2026-10-14: Screening 252 team traits". Next: rerun on snap-20261013T2253Z (more
+-  games), same pre-declared rules (meiolol-94)
++  "2026-10-14: Screening 252 team traits". Rerun on snap-20261013T2253Z below
++
++#### Rerun on snap-20261013T2253Z (meiolol-94, 14 Oct)
++
++Same method on the re-cut pin (shared protocol: test the newest 15% of played games,
++dev-val the next 10%, every platform, five forward folds below; 85fd62a), built at
++0c3e486 with two fixes declared before any look (379a751: waveclear from minions per
++minute, since twentyMinionsIn3SecondsCount is ~always 0; role-determined vision and
++epic-damage flags dropped; no objective champion by role z >= 1; 244 candidates with
++12 carry terms from a carry fold table on the same cuts; one carry row, "none above
++median leverage10", came out NaN and stays in the count). comp_stats.tsv covers 81.5%
++of games: dev_old 59.6%, folds 1-3 ~89%, fold 4 93.5%, fold 5 95.6%, dev-val 99.7%, test
++100%; RU 1%, TR1 47%, the rest 73-87%; missing games don't differ in outcome or duration
++(meiolol-53). None of 2055Z's sealed games fall in the new sealed blocks (they land in
++dev_old and folds 1-2), so every sealed game here is unseen. Rule declared before the
++screen (scratchpad progress-comps.md, accepted by meiolol-33): sealed list = screen
++passes at q 0.05 with the same sign in 2 of 3 blocks, every coaching hypothesis, and six
++names carried from 2055Z; Holm at 0.05, coaching hypotheses one-sided in the predicted
++direction unless also carried from 2055Z, the rest two-sided; a non-mix screen pass also
++needs |z| >= 2 beside the mix.
++
++| run | what | result |
++| --- | --- | --- |
++| 20261014T005415Z-comps-permuted-2253Z | profiles permuted within role | 0 passes at q 0.05 and 0.10 |
++| 20261014T005437Z-comps-screen-2253Z | screen, blocks 1-3, 80,625 games | 15 passes at q 0.05; 20 shuffles: 0 at q 0.05, 8 at q 0.10 |
++| 20261014T005906Z-comps-confirm-2253Z | sealed 4-5 + dev-val, 89,584 games, 32 names | three findings beside the mix (below) |
++
++| finding | sealed effect | z | blocks 4 / 5 / dev-val | beside mix z | reading |
++| --- | --- | --- | --- | --- | --- |
++| mix (magic share off 50%, squared) | -1.06 ± 0.23 pp/sd | -9.1 | -0.8 / -1.2 / -1.1 | | replicates, now on dev-val too |
++| magic 60%+ | -2.14 ± 0.93 pp | -4.5 | -1.8 / -2.1 / -2.4 | -4.1 | magic-heavy teams lose more than the mix curve says |
++| our AD share x their armour lean | -0.63 ± 0.23 pp/sd | -5.3 | -0.7 / -0.6 / -0.6 | -5.1 | damage type into armour, theory's sign |
++| our AP share x their armour lean | +0.56 ± 0.23 pp/sd | 4.8 | 0.6 / 0.6 / 0.6 | 4.6 | the same finding mirrored, not a second |
++| our tankiness x their pen items | +0.62 ± 0.23 pp/sd | 5.2 | 0.6 / 0.7 / 0.5 | 5.2 | opposite to theory (declared two-sided) |
++
++Lopsided (magic <20% or 60%+, -2.99 ± 0.78 pp, beside mix z -3.9) is magic <20% plus
++magic 60%+, and magic <20% is the mix again (beside mix z -0.12): the same finding as
++magic 60%+, not a second one. Holm passes that are the mix again (beside mix |z| < 2):
++magic <20%, physical 80%+, max magic damage, max magic pen, 1+ magic pen champion. Not
++confirmed: 4+ melee, 4+ ranged, 2+ catch-and-kill engagers, max late solo turrets, and
++every other coaching hypothesis (healing x anti-heal, dive x peel, engage x disengage,
++pick x vision, front-to-back, hard engage, no win condition, split or siege x
++waveclear: all within ±0.4 pp/sd or ±1.4 pp).
++
++Leads for the next pin (pre-declare two-sided there), not confirmed here:
++- Our sustain x their poke -0.58 ± 0.23 pp/sd: the sign agrees between screen (z -3.24)
++  and sealed (z -4.88, all three sealed blocks negative), opposite to theory. As a
++  coaching hypothesis it was one-sided in theory's direction (p ~1); reading it
++  two-sided was decided after the screen, so it doesn't count (meiolol-53)
++- Our poke into their engage +0.37 ± 0.23 pp/sd (z 3.2): one item entered twice (our
++  range x their engage is exactly minus our engage x their range), opposite to both
++  one-sided hypotheses. Next time drop exact duplicates before building the list
++
++Mechanism (screen blocks): the armour and pen crosses move gold at 14 by under 20 ± 20
++and objectives by ~0, and are a little larger in games under 25 minutes.
++
++Prediction: the confirmed effects are associations beside the ratings offset; their
++joint log-loss gain beyond the mix (logistic layer on ratings' logit, fit on blocks
++1-3, all 31 listed terms + mix vs ratings + mix, sealed) is -0.34 ± 0.25 mnats/game,
++under the ~0.5 floor, so no prediction gain is claimed; the pp sizes above are not model
++gain. Ratings + mix vs ratings -0.46 ± 0.22 mnats (blocks 4-5 -0.41, dev-val -0.52). The
++joint column came out empty again from exact collinearity in the list (lopsided = magic
++<20% + 60%+; the duplicated poke/engage item); it is not in the decision rule.
++
++Reading:
++- The damage mix replicates on 89,584 unseen games, and on this pin's dev-val as well
++  (-1.1, where 2055Z's dev-val showed -0.1); magic-heavy teams (60%+) lose a further ~2
++  pp beyond the curve
++- Damage type into armour matters a little: physical damage into a team of
++  armour-leaning champions is worse, magic damage into it better (about 0.6 pp per team
++  sd). Tanky teams do better, not worse, against penetration-item champions (0.6 pp per
++  team sd), which needs a mechanism before anyone coaches on it
++- For the CPU model and set nets: mix, magic 60%+, AD share x their armour lean and
++  tankiness x their pen items as candidate terms; none has shown a prediction gain yet
+ 
+ ### Neural draft models, 2026-10-13 (meiolol-2c)
+ 
+diff --git a/docs/nn-results/comps.tsv b/docs/nn-results/comps.tsv
+index 002f538..795a0f2 100644
+--- a/docs/nn-results/comps.tsv
++++ b/docs/nn-results/comps.tsv
+@@ -1,5 +1,8 @@
+ # title: Which team traits and matchups win beyond the champions? (comp discovery)
+ model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note	learned
++ratings + mix (logistic layer, fit blocks 1-3), snap-20261013T2253Z	ratings	folds	-0.00046	0.00022	1			89584		20261014T005906Z-comps-confirm-2253Z	folds here = the sealed blocks 4-5 and dev-val, all unseen; mix replicates (-1.06 ± 0.23 pp/sd); plus magic 60%+, damage type into armour, tankiness x pen items confirmed as effects	2026-10-14 (2253Z): Beyond which champions are picked
++ratings + mix (logistic layer, fit blocks 1-3), snap-20261013T2253Z	ratings	dev-val	-0.00052	0.00034	1			35834		20261014T005906Z-comps-confirm-2253Z
++ratings + 31 listed terms + mix, snap-20261013T2253Z	ratings + mix	folds	-0.00034	0.00025	1			89584		20261014T005906Z-comps-confirm-2253Z	under the ~0.0005 noise floor: no prediction gain claimed for the confirmed crosses
+ ratings + mix (logistic layer, fit blocks 1-3)	ratings	folds	-0.00028	0.00042	1			26242		20261013T233834Z-comps-confirm	folds here = the sealed blocks 4-5 and dev-val; mix is the only comp trait confirmed of 252 screened	2026-10-14: Screening 252 team traits
+ ratings + mix (logistic layer, fit blocks 1-3)	ratings	dev-val	0.00043	0.00070	1			8500		20261013T233834Z-comps-confirm
+ ratings + 6 non-mix screen passes	ratings	folds	0.00043	0.00066	1			26242		20261013T233834Z-comps-confirm	AD share x armour, 4+ ranged, 2+ engagers and mix proxies: worse on sealed games

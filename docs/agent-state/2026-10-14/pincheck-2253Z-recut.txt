@@ -1,0 +1,127 @@
+== /home/jmu/ml/snaps/snap-20261013T2253Z
+ok   present pack/manifest
+ok   present seat_stats.tsv
+ok   present mastery_pre.tsv
+ok   present nn/meta.json
+ok   present split.tsv
+ok   present events.tsv
+ok   present legendaries.tsv
+  manifest head: meiolol-lab pack 1 | code d42d80d57475ed9c
+ok   manifest stamp meiolol.db 3451592704 1791934113 vs file 3451592704 1791934113
+ok   manifest stamp raw.db 3878207488 1791934113 vs file 3878207488 1791934113
+ok   manifest stamp timeline.db 3074723840 1791934113 vs file 3074723840 1791934113
+ok   manifest stamp seat_stats.tsv 400584860 1791935828 vs file 400584860 1791935828
+ok   pack games 363472 = nn n 363472
+ok   nn match ids = pack match ids, same order
+ok   nn starts = pack starts
+  seat_stats 3,723,161 lines, 372,317 games; played games covered 0.9999
+ok   seat_stats covers >95% of played games (report only; see by split)
+  mastery_pre 30,913 lines
+  test platforms: {'KR': 13593, 'EUW1': 13575, 'VN2': 9427, 'NA1': 4657, 'BR1': 4049, 'LA2': 1806, 'LA1': 1793, 'JP1': 1765, 'SG2': 1445, 'OC1': 1281, 'TW2': 950, 'EUN1': 117, 'TR1': 44, 'ME1': 14}
+ok   nn test (54,516) within split.tsv (54,517)
+  GLOBAL cut: test share of played games 0.1500, of all games 0.1500
+ok   test starts after every non-test game (1791795719197 > 1791795716488)
+ok   test = every game at or after T
+ok   test share of all played games 0.1500 (want 0.15)
+ok   dev_val share of all played games 0.1000 (want 0.1)
+ok   no games in dev_val_other
+ok   no games in selection
+ok   no games in selection_other
+ok   meta test_cut 1791795719197 dev_cut 1791741249959
+ok   test_cut = start at index n - round(0.15 n)
+ok   dev_cut = start at index n - round(0.25 n)
+ok   test = every game with start >= T
+ok   dev_val = D <= start < T
+Traceback (most recent call last):
+  File "/home/jmu/ml/analysis/pincheck-33.py", line 121, in <module>
+    check(c["dev"] == D, f"cuts.dev = dev_cut ({c['dev']})")
+          ^
+NameError: name 'c' is not defined
+=====
+scored ids: 91833; new test games: 54516
+exposed test games: 0
+ok   nn test (54,516) within split.tsv (54,516)
+  GLOBAL cut: test share of played games 0.1500, of all games 0.1500
+ok   test starts after every non-test game (1791795719197 > 1791795716488)
+ok   test = every game at or after T
+ok   test share of all played games 0.1500 (want 0.15)
+ok   dev_val share of all played games 0.1000 (want 0.1)
+ok   no games in dev_val_other
+ok   no games in selection
+ok   no games in selection_other
+ok   meta test_cut 1791795719197 dev_cut 1791741249959
+ok   test_cut = start at index n - round(0.15 n)
+ok   dev_cut = start at index n - round(0.25 n)
+ok   test = every game with start >= T
+ok   dev_val = D <= start < T
+ok   cuts.dev = dev_cut (1791741249959)
+  window shares of played games: {'dev_old': 0.375, 'fold1': 0.075, 'fold2': 0.075, 'fold3': 0.075, 'fold4': 0.075, 'fold5': 0.075, 'dev_val': 0.1, 'dev_val_other': 0.0, 'selection': 0.0, 'selection_other': 0.0, 'test': 0.15}
+ok   test looks so far: 0
+ok   fold bounds increasing [1791526007256, 1791574830751, 1791628507185, 1791670472926, 1791711141905, 9223372036854775807]
+Traceback (most recent call last):
+  File "/home/jmu/ml/analysis/pincheck-33.py", line 132, in <module>
+    check(b[-2] < c["dev"] < c["select"], f"last fold bound < dev cut < select cut {c}")
+                             ~^^^^^^^^^^
+KeyError: 'select'
+ok   fold bounds increasing [1791526007256, 1791574830751, 1791628507185, 1791670472926, 1791711141905, 9223372036854775807]
+ok   last fold bound < dev cut < next cut {'dev': 1791741249959, 'test': 1791795719197}
+ok   fold bound 0 = median start of dev-visible games
+ok   fold1 = games in [1791526007256, 1791574830751) before dev cut
+ok   fold2 = games in [1791574830751, 1791628507185) before dev cut
+ok   fold3 = games in [1791628507185, 1791670472926) before dev cut
+ok   fold4 = games in [1791670472926, 1791711141905) before dev cut
+ok   fold5 = games in [1791711141905, 9223372036854775807) before dev cut
+  seat_stats coverage of played games by split:
+    dev_old          0.9998 of 134,375
+    fold1            1.0000 of 26,875
+    fold2            1.0000 of 26,875
+    fold3            1.0000 of 26,875
+    fold4            1.0000 of 26,875
+    fold5            1.0000 of 26,875
+    dev_val          1.0000 of 35,834
+    test             1.0000 of 53,750
+    fold1 fit set: 0.9998 of 134,375
+    fold2 fit set: 0.9999 of 161,250
+    fold3 fit set: 0.9999 of 188,125
+    fold4 fit set: 0.9999 of 215,000
+    fold5 fit set: 0.9999 of 241,875
+  played games by split x platform:
+    dev_old           134,375  EUW1:36545 KR:28389 VN2:22941 NA1:11611 BR1:8728 LA1:5508 LA2:4765 JP1:4382 SG2:4128 OC1:3405 TW2:2764 EUN1:634 TR1:431 RU:113 ME1:31
+    fold1              26,875  KR:7322 EUW1:6646 VN2:5640 NA1:1613 JP1:1087 BR1:1063 SG2:906 TW2:719 OC1:716 LA1:534 LA2:506 EUN1:86 TR1:19 ME1:10 RU:8
+    fold2              26,875  KR:5427 EUW1:4924 VN2:4608 NA1:3699 BR1:2329 LA1:1442 LA2:1304 JP1:884 OC1:846 SG2:785 TW2:535 EUN1:57 TR1:20 RU:14 ME1:1
+    fold3              26,875  EUW1:7742 KR:5900 VN2:4025 BR1:2240 NA1:2197 JP1:946 SG2:874 LA2:848 LA1:747 TW2:704 OC1:488 EUN1:91 TR1:60 RU:10 ME1:3
+    fold4              26,875  KR:5711 VN2:5180 NA1:3738 EUW1:3084 BR1:2501 LA1:1732 LA2:1454 JP1:1114 OC1:922 SG2:826 TW2:559 EUN1:37 TR1:13 ME1:3 RU:1
+    fold5              26,875  KR:7217 EUW1:7180 VN2:4751 BR1:1801 NA1:1417 JP1:1107 SG2:901 TW2:726 LA1:576 OC1:574 LA2:527 EUN1:60 TR1:31 ME1:7
+    dev_val            35,834  EUW1:6741 KR:5713 NA1:5685 VN2:4831 BR1:4551 LA1:2670 LA2:2411 JP1:1125 OC1:822 SG2:773 TW2:431 EUN1:55 TR1:19 ME1:7
+    dev_val_other           0  
+    selection               0  
+    selection_other         0  
+    test               53,750  KR:13442 EUW1:13407 VN2:9261 NA1:4593 BR1:3959 LA2:1787 LA1:1756 JP1:1743 SG2:1429 OC1:1264 TW2:938 EUN1:117 TR1:40 ME1:14
+  folds 1-5 played: scored [26875, 26875, 26875, 26875, 26875] (sum 134,375); fit [134375, 161250, 188125, 215000, 241875]
+  played 358,334 of 363,472; timeline15 286,721
+== vs /home/jmu/ml/snaps/snap-20261012T2055Z
+  old test games (10,759) now in: {'fold5': 4724, 'dev_val': 3991, 'test': 1885, 'fold4': 159}
+FAIL old test games are not in the new test
+ok   every old test game is in the new snapshot
+  old games missing from new: 0; new games 178,138
+
+GATE (items 1, 3, 4 from files): 1 FAIL
+==
+no 1954Z ledger
+ddragon
+events.tsv
+legendaries.tsv
+mastery_pre.tsv
+meiolol.db
+meiolol.db-shm
+meiolol.db-wal
+nn
+pack
+raw.db
+raw.db-shm
+raw.db-wal
+seat_stats.tsv
+split.tsv
+timeline.db
+timeline.db-shm
+timeline.db-wal

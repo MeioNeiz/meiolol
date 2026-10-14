@@ -1,0 +1,71 @@
+== /home/jmu/ml/snaps/snap-20261013T2253Z
+ok   present pack/manifest
+ok   present seat_stats.tsv
+ok   present mastery_pre.tsv
+ok   present nn/meta.json
+ok   present split.tsv
+ok   present events.tsv
+ok   present legendaries.tsv
+  manifest head: meiolol-lab pack 1 | code 628418538a362dcd
+ok   manifest stamp meiolol.db 3451592704 1791934113 vs file 3451592704 1791934113
+ok   manifest stamp raw.db 3878207488 1791934113 vs file 3878207488 1791934113
+ok   manifest stamp timeline.db 3074723840 1791934113 vs file 3074723840 1791934113
+ok   manifest stamp seat_stats.tsv 326384927 1791934155 vs file 326384927 1791934155
+ok   pack games 298944 = nn n 298944
+ok   nn match ids = pack match ids, same order
+ok   nn starts = pack starts
+  seat_stats 3,034,561 lines, 303,457 games; played games covered 0.7753
+FAIL seat_stats covers >95% of played games (report only; see by split)
+  mastery_pre 30,913 lines
+ok   every test game is EUW1
+ok   nn test (17,486) within split.tsv (17,486)
+  split.tsv share of EUW1 games in nn: 0.2000
+ok   test about 20% of EUW1
+ok   test starts after every other EUW1 game (1791752347141 > 1791752332428)
+ok   test looks so far: 0
+ok   fold bounds increasing [1791399920616, 1791440035991, 1791471516870, 1791503426611, 1791538594699, 9223372036854775807]
+ok   last fold bound < dev cut < select cut {'dev': 1791565305815, 'select': 1791667302145}
+ok   fold bound 0 = median start of dev-visible games
+ok   fold1 = games in [1791399920616, 1791440035991) before dev cut
+ok   fold2 = games in [1791440035991, 1791471516870) before dev cut
+ok   fold3 = games in [1791471516870, 1791503426611) before dev cut
+ok   fold4 = games in [1791503426611, 1791538594699) before dev cut
+ok   fold5 = games in [1791538594699, 9223372036854775807) before dev cut
+  seat_stats coverage of played games by split:
+    dev_old          0.3838 of 78,036
+    fold1            0.8880 of 15,607
+    fold2            0.8918 of 15,607
+    fold3            0.8839 of 15,607
+    fold4            0.9032 of 15,607
+    fold5            0.8822 of 15,608
+    dev_val          0.8437 of 13,797
+    dev_val_other    0.9036 of 43,414
+    selection        0.9369 of 13,798
+    selection_other  0.9538 of 50,404
+    test             0.9999 of 17,254
+    fold1 fit set: 0.3838 of 78,036
+    fold2 fit set: 0.4678 of 93,643
+    fold3 fit set: 0.5284 of 109,250
+    fold4 fit set: 0.5728 of 124,857
+    fold5 fit set: 0.6095 of 140,464
+  played games by split x platform:
+    dev_old            78,036  EUW1:23377 KR:16882 VN2:13575 NA1:5008 BR1:4270 LA1:2753 JP1:2746 SG2:2616 OC1:2113 LA2:2009 TW2:1803 EUN1:404 TR1:367 RU:98 ME1:15
+    fold1              15,607  EUW1:3548 NA1:2542 KR:2199 VN2:2160 BR1:1680 LA1:1134 LA2:1125 SG2:341 OC1:326 JP1:292 TW2:156 EUN1:76 TR1:25 ME1:3
+    fold2              15,607  KR:4627 VN2:3685 EUW1:3262 NA1:877 JP1:757 SG2:584 OC1:564 BR1:424 TW2:366 LA1:216 LA2:176 EUN1:46 RU:12 TR1:9 ME1:2
+    fold3              15,607  EUW1:5493 KR:2792 VN2:1763 NA1:1496 BR1:1378 LA2:757 LA1:680 JP1:356 SG2:349 TW2:288 OC1:124 EUN1:92 TR1:30 ME1:6 RU:3
+    fold4              15,607  KR:3713 VN2:3465 NA1:2195 EUW1:1609 BR1:1102 LA1:899 LA2:793 OC1:554 JP1:489 SG2:456 TW2:298 EUN1:26 ME1:8
+    fold5              15,608  KR:4467 EUW1:4131 VN2:3263 JP1:687 NA1:625 BR1:577 SG2:577 TW2:430 OC1:405 LA2:197 LA1:171 EUN1:57 TR1:13 RU:6 ME1:2
+    dev_val            13,797  EUW1:13797
+    dev_val_other      43,414  KR:12201 VN2:9195 NA1:6113 BR1:4696 LA1:2260 LA2:2254 JP1:1946 SG2:1746 TW2:1365 OC1:1358 EUN1:162 TR1:83 RU:26 ME1:9
+    selection          13,798  EUW1:13798
+    selection_other    50,404  KR:14185 VN2:10753 NA1:6600 BR1:5774 LA1:3006 LA2:2610 JP1:2401 SG2:1927 OC1:1540 TW2:1408 EUN1:133 TR1:56 ME1:10 RU:1
+    test               17,254  EUW1:17254
+  folds 1-5 played: scored [15607, 15607, 15607, 15607, 15608] (sum 78,036); fit [78036, 93643, 109250, 124857, 140464]
+  played 294,739 of 298,944; timeline15 233,898
+== vs /home/jmu/ml/snaps/snap-20261012T2055Z
+  old test games (10,759) now in: {'test': 4093, 'selection': 6666}
+FAIL old test games are not in the new test
+ok   every old test game is in the new snapshot
+  old games missing from new: 0; new games 113,610
+
+GATE (items 1, 3, 4 from files): 2 FAIL

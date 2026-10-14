@@ -1,0 +1,334 @@
+--- a/src/lab/rowsql.zig	2026-10-14 07:04:45
++++ b/src/lab/rowsql.zig	2026-10-14 07:10:10
+@@ -67,6 +67,15 @@
+     /// Days from the end of the player's last earlier game to this game's start, NaN
+     /// when none
+     days_since_last: f32 = std.math.nan(f32),
++    /// gpm/cspm/dpm_before relative to the champion-role: each earlier game's value minus
++    /// that champion-role's mean over games ended by the time it was counted (so all
++    /// before this game's start), averaged; NaN when none. Separates skill from pool
++    gpm_rel_before: f32 = std.math.nan(f32),
++    cspm_rel_before: f32 = std.math.nan(f32),
++    dpm_rel_before: f32 = std.math.nan(f32),
++    /// Online skill in logit units from earlier ended games' outcomes, adjusted for the
++    /// other nine players' skills (fillSkill); 0 (the prior) without earlier games
++    skill_before: f32 = 0,
+     /// Dense id of the player within this load (fillExperience's), no_player when the
+     /// PUUID is unknown. Internal scope only: never in a Query, an api type or an export;
+     /// rebuilt from the snapshot, so erasure (meiolol forget) carries over
+@@ -381,12 +390,18 @@
+         rate_n: [3]u32 = @splat(0),
+         roles: [5]u16 = @splat(0),
+         last_end: i64 = 0,
++        rel: [3]f64 = @splat(0),
++        rel_n: [3]u32 = @splat(0),
+     };
+     const totals = try gpa.alloc(Totals, n_players);
+     defer gpa.free(totals);
+     @memset(totals, .{});
+     var champs: std.AutoHashMapUnmanaged(u64, [2]u16) = .empty;
+     defer champs.deinit(gpa);
++    // Per champion-role: sums and counts of the three rates over games counted so far
++    const RateSums = struct { sum: [3]f64 = @splat(0), n: [3]u32 = @splat(0) };
++    var champ_rates: std.AutoHashMapUnmanaged(u64, RateSums) = .empty;
++    defer champ_rates.deinit(gpa);
+ 
+     var done: usize = 0;
+     for (by_start) |i| {
+@@ -408,6 +423,15 @@
+             for (extra[j].rate, &t.rate, &t.rate_n) |x, *sum, *n| if (!std.math.isNan(x)) {
+                 sum.* += x;
+                 n.* += 1;
++            };
++            const cr = try champ_rates.getOrPutValue(gpa, champKey(@backingInt(o.role), o.champion), .{});
++            for (extra[j].rate, 0..) |x, k| if (!std.math.isNan(x)) {
++                if (cr.value_ptr.n[k] > 0) {
++                    t.rel[k] += x - cr.value_ptr.sum[k] / @as(f64, @floatFromInt(cr.value_ptr.n[k]));
++                    t.rel_n[k] += 1;
++                }
++                cr.value_ptr.sum[k] += x;
++                cr.value_ptr.n[k] += 1;
+             };
+             t.roles[@backingInt(o.role)] +|= 1;
+             t.last_end = @max(t.last_end, order.end(j));
+@@ -437,11 +461,83 @@
+         for ([_]*f32{ &r.gpm_before, &r.cspm_before, &r.dpm_before }, t.rate, t.rate_n) |out, sum, n| {
+             if (n > 0) out.* = @floatCast(sum / @as(f64, @floatFromInt(n)));
+         }
++        for ([_]*f32{ &r.gpm_rel_before, &r.cspm_rel_before, &r.dpm_rel_before }, t.rel, t.rel_n) |out, sum, n| {
++            if (n > 0) out.* = @floatCast(sum / @as(f64, @floatFromInt(n)));
++        }
+         if (t.games > 0) {
+             const off = t.games -| t.roles[@backingInt(r.role)];
+             r.offrole_before = @as(f32, @floatFromInt(off)) / @as(f32, @floatFromInt(t.games));
+             r.days_since_last = @floatCast(@as(f64, @floatFromInt(order.start(i) - t.last_end)) / ms_per_day);
++        }
++    }
++    try fillSkill(gpa, games, rws, players);
++}
++
++/// Skill step size: a player's rating moves by skill_lr * n0 / (n0 + n) * (won - p) after
++/// their n-th earlier game, so early games move it most and it settles (an Elo shrunk to 0)
++const skill_lr = 0.1;
++const skill_n0 = 10;
++
++/// Row.skill_before: per player an online rating; for each game ended by a row's start,
++/// p = sigmoid(sum of blue's ratings - red's) and each player moves towards the outcome,
++/// so a rating credits wins against strong lobbies more. Short games (< experience_min_s)
++/// and unknown players are skipped, as in fillExperience
++fn fillSkill(gpa: std.mem.Allocator, games: []const Game, rws: []Row, players: []const u32) !void {
++    var n_players: usize = 0;
++    for (players) |p| if (p != no_player) {
++        n_players = @max(n_players, p + 1);
++    };
++    const rating = try gpa.alloc(f32, n_players);
++    defer gpa.free(rating);
++    @memset(rating, 0);
++    const counted = try gpa.alloc(u32, n_players);
++    defer gpa.free(counted);
++    @memset(counted, 0);
++    const slots = try gpa.alloc([10]u32, games.len);
++    defer gpa.free(slots);
++    @memset(slots, @splat(no_player));
++    for (rws, players) |r, p| slots[r.game][@as(usize, r.side) * 5 + @backingInt(r.role)] = p;
++    const by_end = try gpa.alloc(u32, games.len);
++    defer gpa.free(by_end);
++    for (by_end, 0..) |*e, i| e.* = @intCast(i);
++    const by_start = try gpa.alloc(u32, rws.len);
++    defer gpa.free(by_start);
++    for (by_start, 0..) |*s, i| s.* = @intCast(i);
++    const Order = struct {
++        games: []const Game,
++        rws: []const Row,
++        fn end(o: @This(), g: u32) i64 {
++            return o.games[g].start + @as(i64, o.games[g].duration_s) * 1000;
+         }
++        fn byEnd(o: @This(), a: u32, b: u32) bool {
++            return o.end(a) < o.end(b);
++        }
++        fn byStart(o: @This(), a: u32, b: u32) bool {
++            return o.games[o.rws[a].game].start < o.games[o.rws[b].game].start;
++        }
++    };
++    const order: Order = .{ .games = games, .rws = rws };
++    std.mem.sort(u32, by_end, order, Order.byEnd);
++    std.mem.sort(u32, by_start, order, Order.byStart);
++    var done: usize = 0;
++    for (by_start) |i| {
++        const start = games[rws[i].game].start;
++        while (done < by_end.len and order.end(by_end[done]) <= start) : (done += 1) {
++            const g = by_end[done];
++            if (games[g].duration_s < experience_min_s) continue;
++            var diff: f32 = 0;
++            for (slots[g], 0..) |p, s| if (p != no_player) {
++                diff += if (s < 5) rating[p] else -rating[p];
++            };
++            const p_blue = 1 / (1 + @exp(-diff));
++            const y_blue: f32 = @floatFromInt(@intFromBool(games[g].winner == 0));
++            for (slots[g], 0..) |p, s| if (p != no_player) {
++                const step = skill_lr * skill_n0 / @as(f32, @floatFromInt(skill_n0 + counted[p]));
++                rating[p] += if (s < 5) step * (y_blue - p_blue) else -step * (y_blue - p_blue);
++                counted[p] += 1;
++            };
++        }
++        if (players[i] != no_player) rws[i].skill_before = rating[players[i]];
+     }
+ }
+ 
+@@ -610,4 +706,168 @@
+         }
+     }
+     try std.testing.expect(overlapped > 0 and offroled > 0);
++}
++
++test "relative rates use the champion-role's earlier mean; skill moves with outcomes" {
++    const gpa = std.testing.allocator;
++    // Three 20-minute games an hour apart: player 2 on top champion 1 (red) wins game 0;
++    // player 1 on the same champion and role (blue) wins game 1, then plays game 2
++    var games: [3]Game = undefined;
++    for (&games, [_]u1{ 1, 0, 0 }, 0..) |*g, w, i| g.* = .{ .match_id = "", .start = @intCast(i * 3_600_000), .patch = 0, .platform = 0, .is_test = false, .teams = undefined, .winner = w, .duration_s = 1200 };
++    var rws = [_]Row{
++        .{ .game = 0, .slot = 5, .side = 1, .role = .top, .champion = 1, .y = @splat(0) },
++        .{ .game = 1, .slot = 0, .side = 0, .role = .top, .champion = 1, .y = @splat(0) },
++        .{ .game = 2, .slot = 0, .side = 0, .role = .top, .champion = 1, .y = @splat(0) },
++    };
++    const players = [_]u32{ 2, 1, 1 };
++    const extras = [_]Extra{ .{ .kda = 1, .rate = .{ 600, 9, 900 } }, .{ .kda = 1, .rate = .{ 400, 7, 500 } }, .{ .kda = 1, .rate = .{ 500, 8, 700 } } };
++    try fillExperience(gpa, &games, &rws, &players, &extras);
++    try std.testing.expect(std.math.isNan(rws[1].gpm_rel_before));
++    try std.testing.expectEqual(@as(f32, -200), rws[2].gpm_rel_before);
++    try std.testing.expectEqual(@as(f32, -2), rws[2].cspm_rel_before);
++    try std.testing.expectEqual(@as(f32, -400), rws[2].dpm_rel_before);
++    // Equal ratings, so p = 0.5 and each winner moves up by skill_lr * 0.5
++    try std.testing.expectEqual(@as(f32, 0), rws[0].skill_before);
++    try std.testing.expectEqual(@as(f32, 0), rws[1].skill_before);
++    try std.testing.expectApproxEqAbs(@as(f32, skill_lr * 0.5), rws[2].skill_before, 1e-6);
++}
++
++test "relative rates and skill count only games ended by the start, brute force" {
++    const gpa = std.testing.allocator;
++    var prng: std.Random.DefaultPrng = .init(11);
++    const rnd = prng.random();
++    const n_games = 400;
++    const games = try gpa.alloc(Game, n_games);
++    defer gpa.free(games);
++    var rws: std.ArrayList(Row) = .empty;
++    defer rws.deinit(gpa);
++    var players: std.ArrayList(u32) = .empty;
++    defer players.deinit(gpa);
++    var extras: std.ArrayList(Extra) = .empty;
++    defer extras.deinit(gpa);
++    for (games, 0..) |*g, gi| {
++        // Starts 10 minutes (+ gi ms) apart, up to 40 minutes long: many overlap, and no
++        // two games end on the same ms, so the running means' order is fixed
++        g.* = .{
++            .match_id = "",
++            .start = @intCast(gi * 600_001),
++            .patch = 0,
++            .platform = 0,
++            .is_test = false,
++            .teams = undefined,
++            .winner = rnd.int(u1),
++            .duration_s = rnd.intRangeLessThan(u32, 600, 2400),
++        };
++        // Within a game, players and champions are distinct, as in real games
++        var pool: [30]u32 = undefined;
++        for (&pool, 0..) |*x, k| x.* = @intCast(k);
++        rnd.shuffle(u32, &pool);
++        var champs: [12]u32 = undefined;
++        for (&champs, 0..) |*x, k| x.* = @intCast(k + 1);
++        rnd.shuffle(u32, &champs);
++        for (0..10) |slot| {
++            try rws.append(gpa, .{
++                .game = @intCast(gi),
++                .slot = @intCast(slot),
++                .side = @intCast(slot / 5),
++                .role = @fromBackingInt(@as(u3, @intCast((slot + gi) % 5))),
++                .champion = champs[slot],
++                .y = @splat(std.math.nan(f32)),
++            });
++            try players.append(gpa, if (slot == 9) no_player else pool[slot]);
++            var rate: [3]f32 = undefined;
++            for (&rate) |*x| x.* = if (rnd.uintLessThan(u8, 5) == 0) std.math.nan(f32) else @floatFromInt(rnd.intRangeLessThan(u16, 1, 900));
++            try extras.append(gpa, .{ .kda = 1, .rate = rate });
++        }
++    }
++    try fillExperience(gpa, games, rws.items, players.items, extras.items);
++
++    const end = struct {
++        fn f(g: Game) i64 {
++            return g.start + @as(i64, g.duration_s) * 1000;
++        }
++    }.f;
++    const counts = struct {
++        fn f(g: Game, p: u32) bool {
++            return p != no_player and g.duration_s >= experience_min_s;
++        }
++    }.f;
++    var by_end: [n_games]u32 = undefined;
++    for (&by_end, 0..) |*e, k| e.* = @intCast(k);
++    std.mem.sort(u32, &by_end, @as([]const Game, games), struct {
++        fn lt(gs: []const Game, a: u32, b: u32) bool {
++            return end(gs[a]) < end(gs[b]);
++        }
++    }.lt);
++
++    // Skill: per game, replay from zero every game ended by its start, in end order
++    var overlapped: usize = 0;
++    var rel_seen: usize = 0;
++    var skill_seen: usize = 0;
++    var rating: [30]f32 = undefined;
++    var counted: [30]u32 = undefined;
++    for (games, 0..) |g, gi| {
++        @memset(&rating, 0);
++        @memset(&counted, 0);
++        for (by_end) |h| {
++            const eg = games[h];
++            if (end(eg) > g.start) break;
++            if (eg.duration_s < experience_min_s) continue;
++            const rows = rws.items[h * 10 ..][0..10];
++            const ps = players.items[h * 10 ..][0..10];
++            // fillSkill sums by side * 5 + role; summing in that order keeps f32 rounding
++            var diff: f32 = 0;
++            for (0..10) |s| for (rows, ps) |o, p| {
++                if (p != no_player and @as(usize, o.side) * 5 + @backingInt(o.role) == s)
++                    diff += if (o.side == 0) rating[p] else -rating[p];
++            };
++            const p_blue = 1 / (1 + @exp(-diff));
++            const y_blue: f32 = @floatFromInt(@intFromBool(eg.winner == 0));
++            for (rows, ps) |o, p| if (p != no_player) {
++                const step = skill_lr * skill_n0 / @as(f32, @floatFromInt(skill_n0 + counted[p]));
++                rating[p] += if (o.side == 0) step * (y_blue - p_blue) else -step * (y_blue - p_blue);
++                counted[p] += 1;
++            };
++        }
++        for (rws.items[gi * 10 ..][0..10], players.items[gi * 10 ..][0..10]) |r, p| {
++            const want = if (p == no_player) 0 else rating[p];
++            try std.testing.expectApproxEqAbs(want, r.skill_before, 1e-5);
++            skill_seen += @intFromBool(r.skill_before != 0);
++        }
++    }
++
++    // Relative rates: each earlier game's rate minus the mean over that champion-role's
++    // games ended strictly before it (so never its own game)
++    for (rws.items, players.items) |r, p| {
++        var sum: [3]f64 = @splat(0);
++        var n: [3]u32 = @splat(0);
++        if (p != no_player) for (rws.items, players.items, extras.items) |o, op, e| {
++            const g = games[o.game];
++            if (op != p or !counts(g, op)) continue;
++            if (end(g) > games[r.game].start) {
++                overlapped += @intFromBool(g.start < games[r.game].start);
++                continue;
++            }
++            for (e.rate, 0..) |x, k| if (!std.math.isNan(x)) {
++                var m_sum: f64 = 0;
++                var m_n: u32 = 0;
++                for (rws.items, players.items, extras.items) |m, mp, me| {
++                    const mg = games[m.game];
++                    if (!counts(mg, mp) or m.role != o.role or m.champion != o.champion) continue;
++                    if (end(mg) >= end(g) or std.math.isNan(me.rate[k])) continue;
++                    m_sum += me.rate[k];
++                    m_n += 1;
++                }
++                if (m_n > 0) {
++                    sum[k] += x - m_sum / @as(f64, @floatFromInt(m_n));
++                    n[k] += 1;
++                }
++            };
++        };
++        for ([_]f32{ r.gpm_rel_before, r.cspm_rel_before, r.dpm_rel_before }, sum, n) |got, s, k| {
++            if (k == 0) try std.testing.expect(std.math.isNan(got)) else try std.testing.expectApproxEqAbs(s / @as(f64, @floatFromInt(k)), got, 1e-2);
++        }
++        rel_seen += @intFromBool(!std.math.isNan(r.dpm_rel_before));
++    }
++    try std.testing.expect(overlapped > 0 and rel_seen > 0 and skill_seen > 0);
+ }
+--- a/src/pipeline_test.zig	2026-10-14 07:04:45
++++ b/src/pipeline_test.zig	2026-10-14 07:05:52
+@@ -355,7 +355,7 @@
+     // The fixture covers what the pack must carry: both sides of the split, two
+     // platforms, games with and without timeline outcomes, ranked and unranked rows,
+     // players with and without earlier games
+-    var seen: struct { tests: usize = 0, na: usize = 0, na_tests: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0, exp: usize = 0, rates: usize = 0, offrole: usize = 0, days: usize = 0, start: [3]usize = @splat(0) } = .{};
++    var seen: struct { tests: usize = 0, na: usize = 0, na_tests: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0, exp: usize = 0, rates: usize = 0, offrole: usize = 0, days: usize = 0, rel: usize = 0, skill: usize = 0, start: [3]usize = @splat(0) } = .{};
+     for (sql.games) |g| {
+         try testing.expect(g.duration_s > 1000 and g.duration_s <= 1620);
+         seen.tests += @intFromBool(g.is_test);
+@@ -380,6 +380,8 @@
+         seen.rates += @intFromBool(!std.math.isNan(r.gpm_before) and !std.math.isNan(r.cspm_before) and !std.math.isNan(r.dpm_before));
+         seen.offrole += @intFromBool(r.offrole_before > 0 and r.offrole_before < 1);
+         seen.days += @intFromBool(r.days_since_last > 0);
++        seen.rel += @intFromBool(!std.math.isNan(r.dpm_rel_before) and r.dpm_rel_before != 0);
++        seen.skill += @intFromBool(r.skill_before != 0);
+         try testing.expectEqual(r.slot == 9, r.player == lab_rows.no_player);
+     }
+     try testing.expect(sql.games.len >= 100);
+@@ -387,6 +389,7 @@
+     try testing.expect(seen.tl > 0 and seen.tl < sql.games.len and seen.unranked > 0 and seen.items > 0);
+     try testing.expect(seen.exp > 0 and seen.exp < sql.rows.len);
+     try testing.expect(seen.rates > 0 and seen.rates < sql.rows.len and seen.offrole > 0 and seen.days > 0);
++    try testing.expect(seen.rel > 0 and seen.rel < sql.rows.len and seen.skill > 0 and seen.skill < sql.rows.len);
+     for (seen.start) |n| try testing.expect(n > 0);
+ 
+     try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &legendaries));

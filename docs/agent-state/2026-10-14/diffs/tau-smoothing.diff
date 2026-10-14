@@ -1,0 +1,383 @@
+diff --git a/src/core/curvefit.zig b/src/core/curvefit.zig
+index 47bbfb4..a8770f4 100644
+--- a/src/core/curvefit.zig
++++ b/src/core/curvefit.zig
+@@ -9,6 +9,9 @@
+ //!    curve one level up
+ //! 4. Whittaker smoother across minutes, strength chosen by a split-half test: fit on
+ //!    half the games, score against the other half's raw means
++//! 5. tau^2 is noisy minute to minute where pairs are few, so k would jump: log tau^2 is
++//!    smoothed across minutes first (Whittaker, weighted by pairs), strength chosen by the
++//!    same split-half test
+ //! Per-minute errors of one curve are strongly correlated (gold is cumulative), so
+ //! leave-one-minute-out would pick too little smoothing; whole-game halves do not.
+ 
+@@ -27,6 +30,8 @@ pub const max_k = 100;
+ const tau_floor: f64 = 1.0 / @as(f64, max_k);
+ /// Smoothing strengths tried, relative to a curve's mean minute weight
+ pub const lambdas = [_]f64{ 0, 0.1, 0.3, 1, 3, 10, 30, 100, 300 };
++/// Strengths tried for log tau^2 across minutes; 0 leaves each minute's own estimate
++pub const tau_lambdas = [_]f64{ 0, 1, 10, 100, 1000 };
+ /// The minute the split-half report scores predictors at
+ pub const report_minute = curvesfile.lane_minute;
+ /// Pairs with at least this many games in the fitting half are "thick" in the report
+@@ -149,6 +154,12 @@ pub const Group = struct {
+ pub const Report = struct {
+     pairs: usize = 0,
+     lambda: [metrics]f64 = @splat(0),
++    tau_lambda: [metrics]f64 = @splat(0),
++    /// [metric][tau_lambdas index]: halfScore of the shrunk curves before the mean
++    /// smoother
++    tau_score: [metrics][tau_lambdas.len]f64 = @splat(@splat(0)),
++    /// rms second difference of log k across minutes, raw and as fitted
++    jitter: [metrics][2]f64 = @splat(@splat(0)),
+     /// Pairs scored (games in both halves) and those thick in the fitting half
+     scored: [metrics]usize = @splat(0),
+     scored_thick: [metrics]usize = @splat(0),
+@@ -166,6 +177,7 @@ pub const Report = struct {
+ pub const RoleFit = struct {
+     params: Params = @splat(@splat(@splat(@splat(.{})))),
+     lambda: [metrics]f64 = @splat(0),
++    tau_lambda: [metrics]f64 = @splat(0),
+     report: Report = .{},
+     /// Per group x bracket x experience: index into ests, or none
+     index: []u32,
+@@ -213,7 +225,7 @@ pub fn fitRole(
+     defer gpa.free(est);
+     var params: [metrics][max_minutes]Param = undefined;
+ 
+-    // Smoothing strength from halves; also the report
++    // Smoothing strengths from halves; also the report
+     {
+         const other = try gpa.alloc(Cells, groups.len);
+         defer gpa.free(other);
+@@ -221,12 +233,24 @@ pub fn fitRole(
+             c.* = accumulate(lanes[g.start..g.end], .{ .half = .first });
+             o.* = accumulate(lanes[g.start..g.end], .{ .half = .second });
+         }
+-        try fitTop(gpa, groups, cells, champions, &params, est);
++        for (tau_lambdas, 0..) |tl, li| {
++            try fitTop(gpa, groups, cells, champions, @splat(tl), &params, est);
++            for (0..metrics) |mi| {
++                const score = halfScore(groups, est, other, &params, mi, 0);
++                f.report.tau_score[mi][li] = score;
++                if (li == 0 or score < f.report.tau_score[mi][indexOf(f.tau_lambda[mi])]) f.tau_lambda[mi] = tl;
++            }
++        }
++        f.report.tau_lambda = f.tau_lambda;
++        try fitTop(gpa, groups, cells, champions, f.tau_lambda, &params, est);
+         chooseLambda(&f, groups, cells, other, est, &params);
+     }
+ 
+     for (groups, cells) |g, *c| c.* = accumulate(lanes[g.start..g.end], .{});
+-    try fitTop(gpa, groups, cells, champions, &f.params[0][0], est);
++    try fitTop(gpa, groups, cells, champions, @splat(0), &f.params[0][0], est);
++    for (0..metrics) |mi| f.report.jitter[mi][0] = jitter(&f.params[0][0][mi]);
++    try fitTop(gpa, groups, cells, champions, f.tau_lambda, &f.params[0][0], est);
++    for (0..metrics) |mi| f.report.jitter[mi][1] = jitter(&f.params[0][0][mi]);
+     for (est, 0..) |*e, gi| {
+         smooth(e, f.lambda);
+         try f.put(gpa, gi, .all, .any, e.*);
+@@ -262,7 +286,7 @@ pub fn fitRole(
+                 try rest_cells.append(gpa, rest);
+             };
+             try unit_est.resize(gpa, units.items.len);
+-            nested(units.items, unit_cells.items, rest_cells.items, &f.params[@backingInt(bracket)][@intFromBool(experienced)], unit_est.items);
++            nested(units.items, unit_cells.items, rest_cells.items, f.tau_lambda, &f.params[@backingInt(bracket)][@intFromBool(experienced)], unit_est.items);
+             for (units.items, unit_est.items) |u, *e| {
+                 smooth(e, f.lambda);
+                 try f.put(gpa, u.group, bracket, u.experience, e.*);
+@@ -286,45 +310,102 @@ fn fitTop(
+     groups: []const Group,
+     cells: []const Cells,
+     champions: usize,
++    tau_lambda: [metrics]f64,
+     params: *[metrics][max_minutes]Param,
+     est: []Est,
+ ) !void {
+-    const effects = try gpa.alloc(f64, champions);
+-    defer gpa.free(effects);
++    const all_effects = try gpa.alloc(f64, max_minutes * champions);
++    defer gpa.free(all_effects);
+     const games = try gpa.alloc(f64, champions);
+     defer gpa.free(games);
+     const matrix = try gpa.alloc(f64, champions * champions);
+     defer gpa.free(matrix);
+ 
+-    for (0..metrics) |mi| for (0..max_minutes) |t| {
+-        const sigma2 = pooled(cells, mi, t);
+-        // A first fit with a token ridge only fixes the level (effects sum to ~0)
+-        championEffects(groups, cells, mi, t, 1, matrix, effects, games) catch unreachable;
+-        var tau_e: f64 = 0;
+-        var counted: f64 = 0;
+-        for (effects, games) |e, n| if (n > 0) {
+-            tau_e += e * e - sigma2 / n;
+-            counted += 1;
+-        };
+-        tau_e = @max(tau_floor * sigma2, if (counted > 0) tau_e / counted else 0);
+-        if (sigma2 > 0) championEffects(groups, cells, mi, t, @max(sigma2 / tau_e, 1), matrix, effects, games) catch unreachable;
+-
+-        var tau2: f64 = 0;
+-        var pairs: f64 = 0;
+-        for (groups, cells) |g, c| {
+-            const s = c[mi][t];
+-            if (g.mirror() or s.n < 2) continue;
+-            const r = s.mean() - (effects[g.a] - effects[g.b]);
+-            tau2 += r * r - s.variance() / s.n;
+-            pairs += 1;
++    for (0..metrics) |mi| {
++        var pairs_at: [max_minutes]f64 = @splat(0);
++        for (0..max_minutes) |t| {
++            const effects = all_effects[t * champions ..][0..champions];
++            pairs_at[t] = topParams(groups, cells, mi, t, matrix, effects, games, &params[mi][t]);
+         }
+-        tau2 = @max(tau_floor * sigma2, if (pairs > 0) tau2 / pairs else 0);
+-        params[mi][t] = .{ .sigma2 = @floatCast(sigma2), .tau2 = @floatCast(tau2) };
+-        for (groups, cells, est) |g, c, *e| {
+-            const prior = if (g.mirror()) 0 else effects[g.a] - effects[g.b];
+-            e[mi][t] = shrink(c[mi][t], prior, 0, sigma2, tau2);
++        smoothTau(&params[mi], pairs_at, tau_lambda[mi]);
++        for (0..max_minutes) |t| {
++            const effects = all_effects[t * champions ..][0..champions];
++            const p = params[mi][t];
++            for (groups, cells, est) |g, c, *e| {
++                const prior = if (g.mirror()) 0 else effects[g.a] - effects[g.b];
++                e[mi][t] = shrink(c[mi][t], prior, 0, p.sigma2, p.tau2);
++            }
+         }
++    }
++}
++
++/// One metric and minute of the top level: champion effects into `effects`, sigma^2 and
++/// tau^2 into `p`; returns the pairs tau^2 was estimated from
++fn topParams(
++    groups: []const Group,
++    cells: []const Cells,
++    mi: usize,
++    t: usize,
++    matrix: []f64,
++    effects: []f64,
++    games: []f64,
++    p: *Param,
++) f64 {
++    const sigma2 = pooled(cells, mi, t);
++    // A first fit with a token ridge only fixes the level (effects sum to ~0)
++    championEffects(groups, cells, mi, t, 1, matrix, effects, games) catch unreachable;
++    var tau_e: f64 = 0;
++    var counted: f64 = 0;
++    for (effects, games) |e, n| if (n > 0) {
++        tau_e += e * e - sigma2 / n;
++        counted += 1;
+     };
++    tau_e = @max(tau_floor * sigma2, if (counted > 0) tau_e / counted else 0);
++    if (sigma2 > 0) championEffects(groups, cells, mi, t, @max(sigma2 / tau_e, 1), matrix, effects, games) catch unreachable;
++
++    var tau2: f64 = 0;
++    var pairs: f64 = 0;
++    for (groups, cells) |g, c| {
++        const s = c[mi][t];
++        if (g.mirror() or s.n < 2) continue;
++        const r = s.mean() - (effects[g.a] - effects[g.b]);
++        tau2 += r * r - s.variance() / s.n;
++        pairs += 1;
++    }
++    tau2 = @max(tau_floor * sigma2, if (pairs > 0) tau2 / pairs else 0);
++    p.* = .{ .sigma2 = @floatCast(sigma2), .tau2 = @floatCast(tau2) };
++    return pairs;
++}
++
++/// Whittaker on log tau^2 over the leading minutes that have pairs, weighted by pairs,
++/// floored as before. The smoothed values are the parameters: k follows them
++fn smoothTau(ps: *[max_minutes]Param, pairs: [max_minutes]f64, lambda: f64) void {
++    if (lambda == 0) return;
++    var last: usize = 0;
++    while (last < max_minutes and pairs[last] > 0 and ps[last].tau2 > 0) last += 1;
++    if (last < 3) return;
++    var y: [max_minutes]f64 = undefined;
++    var z: [max_minutes]f64 = undefined;
++    for (0..last) |t| y[t] = @log(@as(f64, ps[t].tau2));
++    whittaker(y[0..last], pairs[0..last], lambda, z[0..last]);
++    for (ps[0..last], z[0..last]) |*p, v| p.tau2 = @floatCast(@max(tau_floor * p.sigma2, @exp(v)));
++}
++
++/// rms second difference of log k over the leading minutes with a k
++fn jitter(ps: *const [max_minutes]Param) f64 {
++    var last: usize = 0;
++    while (last < max_minutes and ps[last].k() > 0) last += 1;
++    if (last < 3) return 0;
++    var ss: f64 = 0;
++    for (1..last - 1) |t| {
++        const d = @log(ps[t - 1].k()) - 2 * @log(ps[t].k()) + @log(ps[t + 1].k());
++        ss += d * d;
++    }
++    return @sqrt(ss / @as(f64, @floatFromInt(last - 2)));
++}
++
++fn indexOf(tau_lambda: f64) usize {
++    return std.mem.indexOfScalar(f64, &tau_lambdas, tau_lambda).?;
+ }
+ 
+ /// Nested level: each unit shrunk toward its parent curve (after smoothing). tau^2
+@@ -335,28 +416,39 @@ fn nested(
+     units: []const Unit,
+     cells: []const Cells,
+     rest: []const Cells,
++    tau_lambda: [metrics]f64,
+     params: *[metrics][max_minutes]Param,
+     est: []Est,
+ ) void {
+-    for (0..metrics) |mi| for (0..max_minutes) |t| {
+-        const sigma2 = pooled(cells, mi, t);
+-        var tau2: f64 = 0;
+-        var counted: f64 = 0;
+-        for (cells, rest) |c, o| {
+-            const s = c[mi][t];
+-            const r = o[mi][t];
+-            if (s.n < 2 or r.n < 2) continue;
+-            const d = s.mean() - r.mean();
+-            tau2 += d * d - s.variance() / s.n - r.variance() / r.n;
+-            counted += 1;
+-        }
+-        tau2 = @max(tau_floor * sigma2, if (counted > 0) tau2 / counted else 0);
+-        params[mi][t] = .{ .sigma2 = @floatCast(sigma2), .tau2 = @floatCast(tau2) };
+-        for (units, cells, est) |u, c, *e| {
+-            const p = u.parent[mi][t];
+-            e[mi][t] = shrink(c[mi][t], p.mean, p.@"var", sigma2, tau2);
++    for (0..metrics) |mi| {
++        var counted_at: [max_minutes]f64 = @splat(0);
++        for (0..max_minutes) |t| counted_at[t] = nestedParams(cells, rest, mi, t, &params[mi][t]);
++        smoothTau(&params[mi], counted_at, tau_lambda[mi]);
++        for (0..max_minutes) |t| {
++            const p = params[mi][t];
++            for (units, cells, est) |u, c, *e| {
++                const parent = u.parent[mi][t];
++                e[mi][t] = shrink(c[mi][t], parent.mean, parent.@"var", p.sigma2, p.tau2);
++            }
+         }
+-    };
++    }
++}
++
++fn nestedParams(cells: []const Cells, rest: []const Cells, mi: usize, t: usize, p: *Param) f64 {
++    const sigma2 = pooled(cells, mi, t);
++    var tau2: f64 = 0;
++    var counted: f64 = 0;
++    for (cells, rest) |c, o| {
++        const s = c[mi][t];
++        const r = o[mi][t];
++        if (s.n < 2 or r.n < 2) continue;
++        const d = s.mean() - r.mean();
++        tau2 += d * d - s.variance() / s.n - r.variance() / r.n;
++        counted += 1;
++    }
++    tau2 = @max(tau_floor * sigma2, if (counted > 0) tau2 / counted else 0);
++    p.* = .{ .sigma2 = @floatCast(sigma2), .tau2 = @floatCast(tau2) };
++    return counted;
+ }
+ 
+ /// Posterior mean and variance of a unit's true mean: prior N(prior, tau2 +
+@@ -494,6 +586,35 @@ pub fn whittaker(y: []const f64, w: []const f64, lambda: f64, z: []f64) void {
+     cholSolve(a[0 .. n * n], z) catch @memcpy(z, y);
+ }
+ 
++/// Error of `est` smoothed with `lambda` against the other half's means, per sigma^2
++/// (so late minutes do not outweigh early ones), less the other half's noise, summed
++/// over minutes and pairs
++fn halfScore(
++    groups: []const Group,
++    est: []const Est,
++    other: []const Cells,
++    params: *const [metrics][max_minutes]Param,
++    mi: usize,
++    lambda: f64,
++) f64 {
++    var score: f64 = 0;
++    for (groups, est, other) |g, e, o| {
++        if (g.mirror()) continue;
++        var one = e;
++        var only: [metrics]f64 = @splat(0);
++        only[mi] = lambda;
++        smooth(&one, only);
++        for (0..max_minutes) |t| {
++            const s = o[mi][t];
++            const sigma2: f64 = params[mi][t].sigma2;
++            if (s.n == 0 or one[mi][t].n == 0 or sigma2 == 0) continue;
++            const d = one[mi][t].mean - s.mean();
++            score += (d * d - sigma2 / s.n) / sigma2;
++        }
++    }
++    return score;
++}
++
+ fn chooseLambda(
+     f: *RoleFit,
+     groups: []const Group,
+@@ -506,22 +627,7 @@ fn chooseLambda(
+     for (0..metrics) |mi| {
+         var best: f64 = std.math.inf(f64);
+         for (lambdas) |lambda| {
+-            var score: f64 = 0;
+-            for (groups, est, other) |g, e, o| {
+-                if (g.mirror()) continue;
+-                var one = e;
+-                var only: [metrics]f64 = @splat(0);
+-                only[mi] = lambda;
+-                smooth(&one, only);
+-                for (0..max_minutes) |t| {
+-                    const s = o[mi][t];
+-                    const sigma2: f64 = params[mi][t].sigma2;
+-                    if (s.n == 0 or one[mi][t].n == 0 or sigma2 == 0) continue;
+-                    const d = one[mi][t].mean - s.mean();
+-                    // Per sigma^2, so late minutes do not outweigh early ones
+-                    score += (d * d - sigma2 / s.n) / sigma2;
+-                }
+-            }
++            const score = halfScore(groups, est, other, params, mi, lambda);
+             if (score < best) {
+                 best = score;
+                 f.lambda[mi] = lambda;
+@@ -642,3 +748,25 @@ test "a thin matchup leans on the champions' baseline, a thick one on its games"
+     try testing.expect(f.get(0, .low, .any) == null);
+     try testing.expect(f.get(0, .mid, .any) != null);
+ }
++
++test "tau^2 smoothed across minutes: k stops jumping, the floor holds" {
++    var ps: [max_minutes]Param = undefined;
++    var pairs: [max_minutes]f64 = @splat(50);
++    for (&ps, 0..) |*p, t| {
++        // Around tau 100, every other minute 4x up
++        const tau2: f64 = if (t % 2 == 0) 100 * 100 else 4 * 100 * 100;
++        p.* = .{ .sigma2 = 400 * 400, .tau2 = @floatCast(tau2) };
++    }
++    pairs[max_minutes - 1] = 0;
++    var raw = ps;
++    smoothTau(&raw, pairs, 0);
++    try testing.expectEqual(ps, raw);
++    const before = jitter(&ps);
++    smoothTau(&ps, pairs, 1000);
++    try testing.expect(jitter(&ps) < before / 10);
++    // Geometric mean of 1 and 4 times 100^2
++    try testing.expectApproxEqRel(2 * 100 * 100, ps[12].tau2, 0.05);
++    // No pairs: left as estimated
++    try testing.expectEqual(100 * 100, ps[max_minutes - 1].tau2);
++    for (ps) |p| try testing.expect(p.k() <= max_k);
++}
+diff --git a/src/core/curvesfile.zig b/src/core/curvesfile.zig
+index 44adc89..ed838ee 100644
+--- a/src/core/curvesfile.zig
++++ b/src/core/curvesfile.zig
+@@ -359,6 +359,14 @@ fn logFit(role: Role, rf: *const curvefit.RoleFit) void {
+             @sqrt(p[19].tau2),   p[19].k(),
+             r.lambda[mi],
+         });
++        const ts = r.tau_score[mi];
++        log.info("{t} {t}: tau smoothing {d} (split-half by strength {d}: {d:.1}, {d}: {d:.1}, {d}: {d:.1}, {d}: {d:.1}, {d}: {d:.1}); log k jitter {d:.3} raw, {d:.3} fitted", .{
++            role,                    m,                       r.tau_lambda[mi],
++            curvefit.tau_lambdas[0], ts[0],                   curvefit.tau_lambdas[1],
++            ts[1],                   curvefit.tau_lambdas[2], ts[2],
++            curvefit.tau_lambdas[3], ts[3],                   curvefit.tau_lambdas[4],
++            ts[4],                   r.jitter[mi][0],         r.jitter[mi][1],
++        });
+         const t14 = lane_minute - 1;
+         const nest = rf.params;
+         log.info("{t} {t}: nested k at {d} min: Iron-Silver {d:.0}, Gold-Emerald {d:.0}, Diamond+ {d:.0}; experienced {d:.0} (tau {d:.0} {d:.0} {d:.0}; {d:.0})", .{

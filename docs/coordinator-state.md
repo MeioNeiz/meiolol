@@ -199,3 +199,13 @@ rename-when-idle jobs still needed (1000 state, 1001 draftpath, 1004 tests, 1011
   rowsql-skill-rel.diff v2 until the re-pin (ping 74 then); 1d's additive model PASSED on
   2253Z (-0.00115 vs win-comp), estimator fix then shipped switch; 51's history means
   passed (53.7 -> 55.5 -> 56.1% folds)
+
+## At the stop (14 Oct ~07:20 BST)
+- Everything committed and pushed; agent scratchpad state copied to
+  docs/agent-state/2026-10-14 (README there lists what's parked vs done)
+- Still running on the gpu-box: 20261014T032052Z-state-richc-2253Zr (meiolol-state)
+- Open for Jacob: meiolol-14 (pane 1016) asked whether to spend the big net's test look
+  now; bd recommended "not yet" (level with ratings on folds, slowest gain per doubling)
+- Latest commits after bd's handover include additive v2 (identified matchups, 3a12e02)
+  and its draft-model.json v4 export (951e916); the site still serves the older model
+  until someone runs lab-push use on the new export
