@@ -2324,8 +2324,12 @@ half-samples (sd of the halves / sqrt 2). Corrected = sqrt(sd^2 - null mean squa
 detected = the block's sd and its lower bound both above the null's 95th percentile.
 
 Run 20261013T231222Z-eff-e (4f3d007), fitted on dev's 88,706 fit games (64,931 with gold at
-14). Spread of true effects across a block's cells, corrected, [95%]; win in pp at 50%,
-gold at 14 in team gold:
+14); matchup rows from 20261013T235224Z-eff-f (d1d22f1, same fit, block rows identical).
+Spread of true effects across cells, corrected, [95%]; win in pp at 50%, gold at 14 in
+team gold. A matchup X vs Y enters as cell(r vs q)(X, Y) minus cell(q vs r)(Y, X), and the
+fit splits its effect between the two blocks by their variances, so a matchup's spread is
+the two blocks' cell sds summed (a same-role block twice). One enemy block alone is not a
+matchup: planted lane matchups of sd 4 pp came out at 2.0 per block (meiolol-tests).
 
 | block | win pp | gold at 14 |
 | --- | --- | --- |
@@ -2338,22 +2342,35 @@ gold at 14 in team gold:
 | ally top-bottom | 0.68 [0.43, 0.91] (null 95th 0.91) | 0 [0, 0] |
 | ally jungle-bottom | 0.42 [0, 0.68] | 18 [0, 40] |
 | other 7 ally pairs | 0 (upper 0-0.38) | 0-12 (upper 0-43) |
-| top vs their top | 1.23 [0.99, 1.47] detected | 127 [98, 155] detected |
-| middle vs their middle | 0.67 [0.38, 0.91] | 96 [76, 115] detected |
-| bottom vs their bottom | 0.64 [0.34, 0.93] | 54 [31, 76] detected |
-| bottom vs their support (and support vs their bottom) | 0.28 / 0.24 [0, 0.45] | 83 [56, 110] detected / 10 [6, 13] |
-| jungle vs their jungle | 0.54 [0.22, 0.79] | 39 [0, 70] |
-| support vs their support | 0.41 [0, 0.66] | 37 [0, 68] |
-| other 18 enemy pairs | 0-0.36 (upper 0-0.51) | 0-18 (upper 0-30) |
+| matchup top vs top | 2.47 [1.98, 2.95] detected | 253 [196, 309] detected |
+| matchup middle vs middle | 1.33 [0.76, 1.83] (null 95th 1.37) | 192 [153, 230] detected |
+| matchup bottom vs bottom | 1.28 [0.69, 1.85] (null 95th 1.05) | 108 [62, 152] detected |
+| matchup bottom vs support (both ways) | 0.52 [0, 0.83] | 96 [65, 125] detected |
+| matchup jungle vs jungle | 1.08 [0.44, 1.58] (null 95th 1.40) | 78 [0, 139] |
+| matchup support vs support | 0.82 [0, 1.33] | 75 [0, 135] |
+| matchup middle vs bottom | 0.68 [0.34, 0.95] (null 95th 0.84) | 0 [0, 0] |
+| other 8 cross-role matchups | 0-0.49 (upper 0-0.77) | 0-32 (upper 0-53) |
+
+Planted checks at this size (meiolol-tests, effects on 2055Z with known effects): nothing
+planted gives every pair block ~0 and no gain; the damage mix is recovered (planted -2,
+fitted -1.69 ± 0.33); champion strength is unbiased at real pair sizes. But pair-block sds
+run low: ally pairs planted at 2 pp came out 1.21 on average (0.6x; 1 of 10 intervals
+covered 2), at 4 pp 2.99 (0.75x, 0 of 10), lane matchups at 2 pp 0.9x. So read the ally
+and matchup sds as lower bounds and their upper ends as too low, by up to ~1.7x for the
+ally blocks (bottom-support 1.21 may be ~2 pp). The likely cause is the variance
+estimate's diagonal posterior (1/H_ii is at most (H^-1)_ii, so it counts too many
+effective parameters and shrinks the variance); fixing it changes the model, so it waits
+for the pre-declared 2253Z test.
 
 Damage mix: -1.94 ± 0.33 pp per sd of the term (-2.72 ± 0.33 per sd of blue minus red);
 on gold at 14 -11 ± 27 (none: the mix is a late-game term). So the draft's information is
 champion strength in every role (1-2 pp of spread each, 300-375 gold), the damage mix,
-one ally pair (bottom-support, 1.2 pp) and the lanes: top vs top on both win and gold,
-middle and bottom lanes on gold at 14 with at most ~0.9 pp on win. Not detected: ally
-top-bottom (0.68) and jungle vs jungle (0.54) sit under the null's 95th; the other 7 ally
-and 18 enemy role pairs are at most 0.4 pp (upper ends 0.5). Single pairs: not reported
-(1-3 games per cell; the blocks are the answer).
+one ally pair (bottom-support, 1.2 pp or more) and the lanes: top vs top on both win
+(2.5 pp) and gold (250), middle, bottom and bottom-support lanes on gold at 14 (100-190)
+with at most ~1.8 pp on win. Not detected on win: ally top-bottom (0.68) and the middle,
+bottom and jungle lanes sit under the null's 95th; the other 7 ally pairs and 8 cross-role
+matchups are at most 0.5 pp as fitted (lower bounds, see above). Single pairs: not
+reported (1-3 games per cell; the blocks are the answer).
 
 The draft predicts gold at 14
 (held-out R^2 5-8% of team gold's 3,600 sd), but the predicted gold edge carries no win:
@@ -2667,7 +2684,8 @@ and no comp):
   pin on that pin's fold preds: snap-20261013T2253Z before its global re-cut, 78,036 fold
   games, 0.89 ± 0.04, folds 0.71-1.30, dev-val 1.02 ± 0.10, so with ~2x the fit games
   ratings is less over-confident; the shipped fit has more games than any fold, so the
-  folds' T may shrink slightly too much). Every shown chance, slot list and comp reason uses it; ratings, comp parts and the debug trace's
+  folds' T may shrink slightly too much). Every shown chance, slot list and comp reason
+  uses it; ratings, comp parts and the debug trace's
   terms stay in the model's own logit; u, v, s are length dim (empty for rates and ratings); w and z
   row-major 5 x 5; p the champion-role's profile (k numbers, z-scored within the role;
   empty without comp); raw the profile in raw units, all 12 of win-comp's Feature order
