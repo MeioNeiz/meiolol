@@ -1,8 +1,9 @@
-//! `meiolol-lab draft`: the compiled-in candidate's win model as a draft tester, and its
-//! export for the admin page's draft board (docs/model.md "Draft model file"). Fits once
-//! on every game in the snapshot. Scores come from the exported parameters through
-//! Scorer, the reference the page's JS must match; an empty slot counts as its role's
-//! average pick on the newest patch.
+//! `meiolol-lab draft`: a win model as a draft tester, and its export for the admin page's
+//! draft board (docs/model.md "Draft model file"): the compiled-in candidate's, or with
+//! --model additive the shrunk additive model (lab/additive.zig, effects' "full", v2).
+//! Fits once on every played game in the snapshot. Scores come from the exported
+//! parameters through Scorer, the reference the page's JS must match; an empty slot counts
+//! as its role's average pick on the newest patch.
 
 const std = @import("std");
 const api = @import("api");
@@ -12,6 +13,8 @@ const store = @import("store");
 const rows = @import("rows.zig");
 const harness = @import("harness.zig");
 const protocol = @import("protocol.zig");
+const additive = @import("additive.zig");
+const addinputs = @import("addinputs.zig");
 
 const Io = std.Io;
 
@@ -25,6 +28,11 @@ pub const usage =
     \\                                  write DIR/draft-model.json and DIR/draft-ref.json for
     \\                                  the admin draft board (docs/model.md); T scales every
     \\                                  logit (calibration, default_temperature)
+    \\  draft SNAP --model additive [--pair-floor N] ...
+    \\                                  either of the above with the additive model (pairs
+    \\                                  and damage mix; needs seat stats, ignores -Dcand);
+    \\                                  pair cells on fewer than N fit games are left out
+    \\                                  (default_pair_floor)
     \\
 ;
 
@@ -36,6 +44,16 @@ const z95 = 1.96;
 /// (44,353 games): 0.80 +- 0.11 (netcheck f1 runs and effects eff-d agree; the top tenth
 /// said 58.6% and won 55.8%). Refit when the shipped model or the snapshot changes
 pub const default_temperature = 0.80;
+/// The additive model's: fitted on effects' v2 "full" preds on the 5 forward folds of
+/// snap-20261013T2253Z (run 20261014T041809Z-e53v2-V0, 134,375 games): 1.01 +- 0.03,
+/// folds 0.96-1.10, dev-val 1.14 +- 0.05; the top tenth said 61.1% and won 61.2%
+pub const default_temperature_additive = 1.01;
+/// Pair cells on fewer fit games are left out of the export (0, the prior mean): heavily
+/// shrunk, so they barely move a draft (the export prints by how much), and they are most
+/// of the cells
+pub const default_pair_floor = 20;
+
+const ModelKind = enum { cand, additive };
 
 const Champions = struct {
     names: std.AutoHashMapUnmanaged(u32, []const u8) = .empty,
@@ -169,9 +187,57 @@ const Params = struct {
     z: [25]f32,
     terms: []const Term,
     comp: ?Comp = null,
+    pairs: ?Pairs = null,
     /// Multiplies the whole logit (and the interval's half-width)
     temperature: f64 = 1,
 };
+
+/// The additive model's pair cells (lab/additive.zig, v2): one cell per pair of champions,
+/// allies in roles r < q, or a matchup of blue's role r against red's role q (r <= q; red's
+/// r against blue's q is the same cell negated; a same-role matchup one cell per unordered
+/// pair, a < b, for a facing b). Cells on fewer than min_games fit games are left out (0)
+const Pairs = struct {
+    min_games: u32,
+    groups: []const PairGroup,
+    cells: []const PairCell,
+};
+
+const PairGroup = struct {
+    name: []const u8,
+    /// "ally" or "matchup"
+    kind: []const u8,
+    r: u8,
+    q: u8,
+    /// The block's sd (logit): the spread of true effects of this kind of pair
+    sd: f32,
+    /// Cells in the fit, and in the export
+    fitted: u32,
+    shipped: u32,
+};
+
+/// Written as [group, a, b, theta, games]: most of the file
+const PairCell = struct {
+    /// Index into Pairs.groups
+    group: u32,
+    a: u32,
+    b: u32,
+    theta: f64,
+    games: u32,
+
+    pub fn jsonStringify(c: *const PairCell, jw: anytype) !void {
+        try jw.beginArray();
+        try jw.write(c.group);
+        try jw.write(c.a);
+        try jw.write(c.b);
+        try jw.write(c.theta);
+        try jw.write(c.games);
+        try jw.endArray();
+    }
+};
+
+fn pairKey(group: usize, a: u32, b: u32) u64 {
+    return @as(u64, group) << 48 | @as(u64, a) << 24 | b;
+}
 
 fn paramsOf(arena: std.mem.Allocator, e: anytype) !Params {
     const terms = try arena.alloc(Term, e.terms.len);
@@ -215,6 +281,8 @@ const Scorer = struct {
     k: usize = 0,
     /// comp.team's kinds, parsed
     kinds: []const TeamKind = &.{},
+    /// pairs.cells by pairKey
+    cells: std.AutoHashMapUnmanaged(u64, f64) = .empty,
 
     fn init(arena: std.mem.Allocator, e: Params, platform: u8, champs: *const Champions) !Scorer {
         var sc: Scorer = .{ .e = e, .platform = platform, .average = undefined };
@@ -226,6 +294,13 @@ const Scorer = struct {
             for (kinds, c.team) |*kd, t| kd.* = std.meta.stringToEnum(TeamKind, t.kind) orelse return error.UnknownTeamTerm;
             sc.kinds = kinds;
             if (kinds.len > 0) for (e.terms) |t| if (t.raw.len != raw_len) return error.BadCompShape;
+        }
+        if (e.pairs) |pr| {
+            for (pr.groups) |g| if (g.r >= n_role or g.q >= n_role or (!std.mem.eql(u8, g.kind, "ally") and !std.mem.eql(u8, g.kind, "matchup"))) return error.BadPairGroup;
+            for (pr.cells) |c| {
+                if (c.group >= pr.groups.len) return error.BadPairGroup;
+                try sc.cells.put(arena, pairKey(c.group, c.a, c.b), c.theta);
+            }
         }
         const n_raw: usize = if (sc.kinds.len > 0) raw_len else 0;
         for (e.terms, 0..) |t, i| try sc.terms.put(arena, Champions.key(t.champion, t.role), @intCast(i));
@@ -281,7 +356,7 @@ const Scorer = struct {
         for (0..2) |side| for (0..n_role) |r| {
             sl[side][r] = sc.slot(teams[side][r], r);
         };
-        var logit: f64 = sc.e.intercept[sc.platform] + sc.compLogit(&sl);
+        var logit: f64 = sc.e.intercept[sc.platform] + sc.compLogit(&sl) + sc.pairLogit(teams);
         var v: f64 = 0;
         for (0..n_role) |r| {
             logit += sl[0][r].b - sl[1][r].b;
@@ -316,6 +391,34 @@ const Scorer = struct {
             for (c.team, sc.kinds) |t, kind| out += t.weight * (teamForm(kind, f[0], t.centre) - teamForm(kind, f[1], t.centre));
         }
         return out;
+    }
+
+    /// The pair cells' part of blue's logit, 0 without them; an empty slot touches no cell
+    /// (the prior mean)
+    fn pairLogit(sc: *const Scorer, t: [2][n_role]u32) f64 {
+        const pr = sc.e.pairs orelse return 0;
+        var out: f64 = 0;
+        for (pr.groups, 0..) |g, gi| {
+            const r = g.r;
+            const q = g.q;
+            if (std.mem.eql(u8, g.kind, "ally")) {
+                out += sc.cell(gi, t[0][r], t[0][q]) - sc.cell(gi, t[1][r], t[1][q]);
+            } else if (r != q) {
+                out += sc.cell(gi, t[0][r], t[1][q]) - sc.cell(gi, t[1][r], t[0][q]);
+            } else {
+                const a = t[0][r];
+                const b = t[1][r];
+                if (a == b) continue;
+                const x = sc.cell(gi, @min(a, b), @max(a, b));
+                out += if (a < b) x else -x;
+            }
+        }
+        return out;
+    }
+
+    fn cell(sc: *const Scorer, group: usize, a: u32, b: u32) f64 {
+        if (a == 0 or b == 0) return 0;
+        return sc.cells.get(pairKey(group, a, b)) orelse 0;
     }
 
     /// The comp part for whole teams, by side (0 blue) and role
@@ -414,11 +517,34 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         std.debug.print("usage:\n{s}", .{usage});
         return 2;
     }
-    if (!@hasDecl(cand, "exportModel")) {
-        std.debug.print("draft: the candidate has no exportModel (src/lab/cand/win-ratings has)\n", .{});
+    const snap = argv[0];
+    // --model and --pair-floor may sit anywhere after SNAP
+    var model: ModelKind = .cand;
+    var floor: u32 = default_pair_floor;
+    var rest: std.ArrayList([]const u8) = .empty;
+    var i: usize = 1;
+    while (i < argv.len) : (i += 1) {
+        const flag = argv[i];
+        if (i + 1 < argv.len and std.mem.eql(u8, flag, "--model")) {
+            i += 1;
+            model = std.meta.stringToEnum(ModelKind, argv[i]) orelse {
+                std.debug.print("draft: --model cand|additive\n", .{});
+                return 2;
+            };
+        } else if (i + 1 < argv.len and std.mem.eql(u8, flag, "--pair-floor")) {
+            i += 1;
+            floor = try std.fmt.parseInt(u32, argv[i], 10);
+        } else try rest.append(arena, flag);
+    }
+    const args = rest.items;
+    const export_mode = args.len >= 2 and std.mem.eql(u8, args[0], "--export");
+    var temperature: f64 = if (model == .additive) default_temperature_additive else default_temperature;
+    if (export_mode and args.len == 4 and std.mem.eql(u8, args[2], "--temperature")) {
+        temperature = try std.fmt.parseFloat(f64, args[3]);
+    } else if (export_mode and args.len != 2) {
+        std.debug.print("usage:\n{s}", .{usage});
         return 2;
     }
-    const snap = argv[0];
     var out_buf: [16 * 1024]u8 = undefined;
     var out_file = Io.File.stdout().writer(io, &out_buf);
     const w = &out_file.interface;
@@ -431,26 +557,46 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     defer data.deinit();
     const eu = euIndex();
     var champs = try loadChampions(gpa, arena, snap, &data);
-    var m = try fitAll(gpa, &data);
-    defer cand.deinit(&m, gpa);
-    const export_mode = argv.len >= 3 and std.mem.eql(u8, argv[1], "--export");
-    var params = try paramsOf(arena, try cand.exportModel(&m, arena));
-    params.temperature = default_temperature;
-    if (export_mode and argv.len == 5 and std.mem.eql(u8, argv[3], "--temperature")) {
-        params.temperature = try std.fmt.parseFloat(f64, argv[4]);
-    } else if (export_mode and argv.len != 3) {
-        std.debug.print("usage:\n{s}", .{usage});
-        return 2;
+
+    var cm: ?cand.Model = null;
+    defer if (cm) |*m| cand.deinit(m, gpa);
+    var af: ?AddFit = null;
+    defer if (af) |*a| a.deinit(gpa);
+    var params: Params = undefined;
+    var training_games = data.games.len;
+    switch (model) {
+        .cand => if (comptime !@hasDecl(cand, "exportModel")) {
+            std.debug.print("draft: the candidate has no exportModel (src/lab/cand/win-ratings has); or --model additive\n", .{});
+            return 2;
+        } else {
+            cm = try fitAll(gpa, &data);
+            params = try paramsOf(arena, try cand.exportModel(&cm.?, arena));
+        },
+        .additive => {
+            const played = try arena.alloc(bool, data.games.len);
+            for (data.games, played) |g, *x| x.* = harness.played(g);
+            af = try fitAdditive(gpa, arena, &data, try addinputs.inputs(arena, &data), played, addinputs.fullVariant(true, 1));
+            params = try paramsOfAdditive(arena, &af.?.p, &af.?.f, &af.?.mix, floor);
+            training_games = af.?.p.games.len;
+        },
     }
+    params.temperature = temperature;
     const sc = try Scorer.init(arena, params, eu, &champs);
-    try w.print("win model fitted on {d} games; --min-games guards against thin samples; chances at temperature {d}\n", .{ data.games.len, params.temperature });
+    try w.print("win model ({s}) fitted on {d} games; --min-games guards against thin samples; chances at temperature {d}\n", .{ params.kind, training_games, params.temperature });
 
     if (export_mode) {
-        try exportFiles(gpa, arena, io, snap, &data, &m, &sc, &champs, argv[2], w);
+        // The scorer must agree with the model it came from on drafts it saw whole
+        const worst = if (cm) |*m| try checkCand(m, &sc, &data, w) else try checkAdditive(arena, &af.?, &sc, &data, floor, w);
+        if (worst > 1e-4) return error.ScorerDisagrees;
+        try w.print("dev score (refits on dev's games)...\n", .{});
+        try w.flush();
+        const dev = if (cm != null) try devScore(gpa, &data) else try devAdditive(gpa, arena, &data, af.?.in);
+        try w.print("dev: log loss {d:.5} (baseline {d:.5}), accuracy {d:.4}, AUC {d:.4} on {d} games\n", .{ dev.log_loss, dev.baseline_log_loss, dev.accuracy, dev.auc, dev.games });
+        try exportFiles(arena, io, snap, &data, &sc, &champs, args[1], dev, training_games, w);
         return 0;
     }
-    if (argv.len > 1) {
-        try run(arena, &sc, &champs, argv[1..], w);
+    if (args.len > 0) {
+        try run(arena, &sc, &champs, args, w);
         return 0;
     }
     var in_buf: [4096]u8 = undefined;
@@ -459,9 +605,9 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         try w.writeAll("draft> ");
         try w.flush();
         const line = try in_file.interface.takeDelimiter('\n') orelse break;
-        const args = try splitFlags(arena, line);
-        if (args.len == 0) continue;
-        run(arena, &sc, &champs, args, w) catch |err| try w.print("{t}\n", .{err});
+        const line_args = try splitFlags(arena, line);
+        if (line_args.len == 0) continue;
+        run(arena, &sc, &champs, line_args, w) catch |err| try w.print("{t}\n", .{err});
     }
     return 0;
 }
@@ -547,6 +693,161 @@ fn fitAll(gpa: std.mem.Allocator, d: *const rows.Data) !cand.Model {
     defer arena_state.deinit();
     const t = try trainOf(arena_state.allocator(), d);
     return harness.fit(cand, gpa, &t, .{});
+}
+
+/// The additive model fitted on the games in `fit`, its damage mix from their rows
+const AddFit = struct {
+    in: addinputs.Inputs,
+    mix: addinputs.Mix,
+    p: additive.Problem,
+    f: additive.Fit,
+
+    fn deinit(a: *AddFit, gpa: std.mem.Allocator) void {
+        a.mix.deinit(gpa);
+        a.p.deinit(gpa);
+        a.f.deinit(gpa);
+    }
+
+    /// Blue's logit for game gi on `platform`'s side term, the mix from every fit row
+    fn logit(a: *const AddFit, d: *const rows.Data, gi: usize, platform: u8, f: *const additive.Fit) f64 {
+        var g = addinputs.gameIn(d, gi, 0, a.mix.diff(d, a.in, gi, false));
+        g.platform = platform;
+        return additive.predict(&a.p, f, &g);
+    }
+};
+
+/// As effects fits a block: fit games see their own rows left out of the mix
+fn fitAdditive(gpa: std.mem.Allocator, arena: std.mem.Allocator, d: *const rows.Data, in: addinputs.Inputs, fit: []const bool, variant: additive.Variant) !AddFit {
+    var mix = try addinputs.Mix.init(gpa, d, fit, in.win);
+    errdefer mix.deinit(gpa);
+    var games: std.ArrayList(additive.GameIn) = .empty;
+    for (fit, 0..) |f, gi| if (f) try games.append(arena, addinputs.gameIn(d, gi, in.win[gi], mix.diff(d, in, gi, true)));
+    var p = try additive.build(gpa, .logistic, variant, games.items);
+    errdefer p.deinit(gpa);
+    const f = try additive.fit(gpa, &p, .{}, null, null);
+    return .{ .in = in, .mix = mix, .p = p, .f = f };
+}
+
+/// Rounding keeps the file small; the scorer and the export check use the rounded values
+fn round5(x: f64) f64 {
+    return @round(x * 1e5) / 1e5;
+}
+
+/// The additive model as Params: champion strength as terms (sd from the posterior
+/// curvature), the damage mix as comp's one team term (raw holds each champion-role's mix
+/// profile: magic share at raw_magic, damage per minute at raw_dmg), pair cells on
+/// floor+ games. mix null: no comp (tests)
+fn paramsOfAdditive(arena: std.mem.Allocator, p: *const additive.Problem, f: *const additive.Fit, mix: ?*const addinputs.Mix, floor: u32) !Params {
+    const A = additive;
+    const intercept = try arena.alloc(f32, A.n_platforms);
+    for (intercept, f.theta[0..A.n_platforms]) |*x, y| x.* = @floatCast(y);
+    var terms: std.ArrayList(Term) = .empty;
+    for (p.param_start[A.g_main]..p.param_start[A.g_ally]) |j| {
+        const cl = A.cellOf(p, j);
+        const role = cl.group - A.g_main;
+        var t: Term = .{ .champion = cl.a, .role = @intCast(role), .games = p.count[j], .b = @floatCast(f.theta[j]), .sd = @floatCast(1 / @sqrt(f.h[j])) };
+        if (mix) |m| {
+            const prof = m.profile(cl.a, role, null);
+            const raw = try arena.alloc(f32, raw_len);
+            @memset(raw, 0);
+            raw[raw_magic] = @floatCast(prof[0]);
+            raw[raw_dmg] = @floatCast(prof[1]);
+            t.raw = raw;
+        }
+        try terms.append(arena, t);
+    }
+    var groups: std.ArrayList(PairGroup) = .empty;
+    var cells: std.ArrayList(PairCell) = .empty;
+    var nbuf: [64]u8 = undefined;
+    for (A.g_ally..A.n_groups) |g| {
+        const lo = p.param_start[g];
+        const hi = p.param_start[g + 1];
+        if (hi == lo) continue;
+        const gr = A.groupRoles(g);
+        const gi: u32 = @intCast(groups.items.len);
+        var shipped: u32 = 0;
+        for (lo..hi) |j| {
+            if (p.count[j] < floor) continue;
+            const cl = A.cellOf(p, j);
+            try cells.append(arena, .{ .group = gi, .a = cl.a, .b = cl.b, .theta = round5(f.theta[j]), .games = p.count[j] });
+            shipped += 1;
+        }
+        try groups.append(arena, .{
+            .name = try arena.dupe(u8, A.groupName(&nbuf, g)),
+            .kind = if (gr.ally) "ally" else "matchup",
+            .r = @intCast(gr.r),
+            .q = @intCast(gr.q),
+            .sd = @floatCast(@sqrt(f.sigma2[g])),
+            .fitted = @intCast(hi - lo),
+            .shipped = shipped,
+        });
+    }
+    var out: Params = .{ .kind = "additive", .dim = 0, .intercept = intercept, .w = @splat(0), .z = @splat(0), .terms = terms.items };
+    out.pairs = .{ .min_games = floor, .groups = groups.items, .cells = cells.items };
+    if (mix != null) {
+        const j = A.n_platforms;
+        const team = try arena.alloc(TeamTerm, 1);
+        team[0] = .{ .kind = "mix", .stat = 0, .centre = 0.5, .weight = @floatCast(f.theta[j]), .sd = @floatCast(1 / @sqrt(f.h[j])) };
+        out.comp = .{ .stats = &.{}, .S = &.{}, .A = &.{}, .S_sd = &.{}, .A_sd = &.{}, .team = team };
+    }
+    return out;
+}
+
+/// The fit as exported: pair cells below the floor 0, the rest rounded as in the file
+fn shippedFit(arena: std.mem.Allocator, p: *const additive.Problem, f: *const additive.Fit, floor: u32) !additive.Fit {
+    var out = f.*;
+    out.theta = try arena.dupe(f64, f.theta);
+    for (p.param_start[additive.g_ally]..p.n_params()) |j| {
+        out.theta[j] = if (p.count[j] < floor) 0 else round5(f.theta[j]);
+    }
+    return out;
+}
+
+/// The scorer against the additive model it came from (as exported) on 500 test games,
+/// and what the pair floor moves on every fit game
+fn checkAdditive(arena: std.mem.Allocator, af: *const AddFit, sc: *const Scorer, d: *const rows.Data, floor: u32, w: *Io.Writer) !f64 {
+    const fs = try shippedFit(arena, &af.p, &af.f, floor);
+    var worst: f64 = 0;
+    var checked: usize = 0;
+    var moved: f64 = 0;
+    var moved_max: f64 = 0;
+    var n: usize = 0;
+    for (d.games, 0..) |g, gi| {
+        if (!harness.played(g)) continue;
+        const shipped = af.logit(d, gi, sc.platform, &fs);
+        const x = @abs(af.logit(d, gi, sc.platform, &af.f) - shipped);
+        moved += x;
+        moved_max = @max(moved_max, x);
+        n += 1;
+        if (!g.is_test or checked == 500) continue;
+        checked += 1;
+        worst = @max(worst, @abs(sc.blue(g.teams).p - sigmoid(sc.e.temperature * shipped)));
+    }
+    var fitted: usize = 0;
+    var shipped: usize = 0;
+    for (sc.e.pairs.?.groups) |g| {
+        fitted += g.fitted;
+        shipped += g.shipped;
+    }
+    try w.print("pair floor {d} games: {d} of {d} pair cells exported; blue's logit moves {d:.5} on average (max {d:.4}) on {d} played games\n", .{ floor, shipped, fitted, moved / @as(f64, @floatFromInt(@max(n, 1))), moved_max, n });
+    try w.print("scorer vs the additive model on {d} test games: max |diff| {e}\n", .{ checked, worst });
+    return worst;
+}
+
+/// The candidate's own predict through the same temperature, on 500 test games
+fn checkCand(m: *const cand.Model, sc: *const Scorer, d: *const rows.Data, w: *Io.Writer) !f64 {
+    var worst: f64 = 0;
+    var checked: usize = 0;
+    for (d.games) |g| {
+        if (!g.is_test or checked == 500) continue;
+        checked += 1;
+        const q: api.Query = .{ .start = g.start, .patch = g.patch, .platform = sc.platform, .side = 0, .role = .top, .champion = g.teams[0][0], .rank = null, .teams = g.teams, .ranks = null, .exp = .{}, .exps = null };
+        const raw: f64 = cand.predict(m, &q)[api.outcomeIndex(.win)];
+        const want = sigmoid(sc.e.temperature * @log(raw / (1 - raw)));
+        worst = @max(worst, @abs(sc.blue(g.teams).p - want));
+    }
+    try w.print("scorer vs candidate on {d} test games: max |diff| {e}\n", .{ checked, worst });
+    return worst;
 }
 
 fn run(arena: std.mem.Allocator, sc: *const Scorer, champs: *const Champions, args: []const []const u8, w: *Io.Writer) !void {
@@ -705,7 +1006,6 @@ fn devScore(gpa: std.mem.Allocator, d: *const rows.Data) !Dev {
     defer gpa.free(lb);
     const p = harness.paired(s.game, la, lb, null);
 
-    const Point = struct { p: f64, y: bool };
     var points: std.ArrayList(Point) = .empty;
     defer points.deinit(gpa);
     var last: ?u32 = null;
@@ -715,29 +1015,71 @@ fn devScore(gpa: std.mem.Allocator, d: *const rows.Data) !Dev {
         last = g;
         try points.append(gpa, .{ .p = pred[k], .y = d.games[g].winner == 0 });
     }
+    const aa = accuracyAuc(points.items);
+    return .{
+        .what = "fitted on the games older than dev-val, scored on dev-val: the 10% of played games before the test cut, every platform (docs/lab-agent.md Splits); log loss per player row of the team's win (baseline: champion averages), accuracy and AUC per game on blue's chance",
+        .games = points.items.len,
+        .log_loss = p.a,
+        .baseline_log_loss = p.b,
+        .accuracy = aa[0],
+        .auc = aa[1],
+    };
+}
+
+const Point = struct { p: f64, y: bool };
+
+/// Accuracy and AUC of blue's chance; sorts points
+fn accuracyAuc(points: []Point) [2]f64 {
     var hits: f64 = 0;
-    for (points.items) |pt| {
+    for (points) |pt| {
         if ((pt.p > 0.5) == pt.y) hits += 1;
     }
-    std.mem.sort(Point, points.items, {}, struct {
+    std.mem.sort(Point, points, {}, struct {
         fn f(_: void, a: Point, b: Point) bool {
             return a.p < b.p;
         }
     }.f);
     var pos: f64 = 0;
     var rank_sum: f64 = 0;
-    for (points.items, 1..) |pt, i| if (pt.y) {
+    for (points, 1..) |pt, i| if (pt.y) {
         pos += 1;
         rank_sum += @floatFromInt(i);
     };
-    const n: f64 = @floatFromInt(points.items.len);
+    const n: f64 = @floatFromInt(points.len);
+    return .{ hits / n, (rank_sum - pos * (pos + 1) / 2) / (pos * (n - pos)) };
+}
+
+/// The additive model refitted on dev's visible games, scored on dev-val per game; the
+/// baseline is champion strength alone (no pairs, no mix)
+fn devAdditive(gpa: std.mem.Allocator, arena: std.mem.Allocator, d: *const rows.Data, in: addinputs.Inputs) !Dev {
+    const c = try harness.cuts(gpa, d);
+    const fit = try arena.alloc(bool, d.games.len);
+    for (d.games, fit) |g, *x| x.* = harness.visible(.dev, c, g);
+    var full = try fitAdditive(gpa, arena, d, in, fit, addinputs.fullVariant(true, 1));
+    defer full.deinit(gpa);
+    var base = try fitAdditive(gpa, arena, d, in, fit, additive.Variant.mains());
+    defer base.deinit(gpa);
+    var points: std.ArrayList(Point) = .empty;
+    var la: f64 = 0;
+    var lb: f64 = 0;
+    for (d.games, 0..) |g, gi| {
+        if (!harness.scored(.dev, c, g)) continue;
+        const y = g.winner == 0;
+        const pa = sigmoid(full.logit(d, gi, g.platform, &full.f));
+        const pb = sigmoid(base.logit(d, gi, g.platform, &base.f));
+        la -= @log(if (y) pa else 1 - pa);
+        lb -= @log(if (y) pb else 1 - pb);
+        try points.append(arena, .{ .p = pa, .y = y });
+    }
+    const n: f64 = @floatFromInt(@max(points.items.len, 1));
+    const aa = accuracyAuc(points.items);
     return .{
-        .what = "fitted on the games older than dev-val, scored on dev-val: the 10% of played games before the test cut, every platform (docs/lab-agent.md Splits); log loss per player row of the team's win, accuracy and AUC per game on blue's chance",
+        .what = "fitted on the games older than dev-val, scored on dev-val: the 10% of played games before the test cut, every platform (docs/lab-agent.md Splits); log loss per game of blue's win (baseline: champion strength alone), accuracy and AUC per game on blue's chance",
         .games = points.items.len,
-        .log_loss = p.a,
-        .baseline_log_loss = p.b,
-        .accuracy = hits / n,
-        .auc = (rank_sum - pos * (pos + 1) / 2) / (pos * (n - pos)),
+        .log_loss = la / n,
+        .baseline_log_loss = lb / n,
+        .accuracy = aa[0],
+        .auc = aa[1],
     };
 }
 
@@ -746,7 +1088,7 @@ const CellOut = struct { champion: u32, role: u8, games: u32, patch_games: u32, 
 
 const ModelFile = struct {
     format: []const u8 = "meiolol-draft-model",
-    version: u32 = 3,
+    version: u32 = 4,
     meta: struct {
         name: []const u8,
         run: []const u8,
@@ -763,10 +1105,10 @@ const ModelFile = struct {
     champions: []const ChampionOut,
     cells: []const CellOut,
     average: [n_role]AverageOut,
-    model: struct { kind: []const u8, dim: u32, intercept: f64, w: [25]f32, z: [25]f32, terms: []const Term, comp: ?Comp, temperature: f64 },
+    model: struct { kind: []const u8, dim: u32, intercept: f64, w: [25]f32, z: [25]f32, terms: []const Term, comp: ?Comp, pairs: ?Pairs, temperature: f64 },
 };
 
-const AverageOut = struct { b: f64, u: []const f32, v: []const f32, s: []const f32, p: []const f32 };
+const AverageOut = struct { b: f64, u: []const f32, v: []const f32, s: []const f32, p: []const f32, raw: []const f32 };
 
 const RefDraft = struct {
     label: []const u8,
@@ -775,6 +1117,8 @@ const RefDraft = struct {
     blue: Chance,
     /// The comp terms' part of blue's logit
     comp: f64,
+    /// The pair cells' part
+    pairs: f64,
 };
 
 const RefSlot = struct {
@@ -798,40 +1142,21 @@ const RefFile = struct {
 };
 
 fn exportFiles(
-    gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     io: Io,
     snap: []const u8,
     d: *const rows.Data,
-    m: *const cand.Model,
     sc: *const Scorer,
     champs: *const Champions,
     dir: []const u8,
+    dev: Dev,
+    training_games: usize,
     w: *Io.Writer,
 ) !void {
-    // The scorer must agree with the candidate on drafts it saw whole
-    var worst: f64 = 0;
     var newest = d.games[0];
     for (d.games) |g| if (g.start > newest.start) {
         newest = g;
     };
-    var checked: usize = 0;
-    for (d.games) |g| {
-        if (!g.is_test or checked == 500) continue;
-        checked += 1;
-        const q: api.Query = .{ .start = g.start, .patch = g.patch, .platform = sc.platform, .side = 0, .role = .top, .champion = g.teams[0][0], .rank = null, .teams = g.teams, .ranks = null, .exp = .{}, .exps = null };
-        const raw: f64 = cand.predict(m, &q)[api.outcomeIndex(.win)];
-        const want = sigmoid(sc.e.temperature * @log(raw / (1 - raw)));
-        worst = @max(worst, @abs(sc.blue(g.teams).p - want));
-    }
-    try w.print("scorer vs candidate on {d} test games: max |diff| {e}\n", .{ checked, worst });
-    if (worst > 1e-4) return error.ScorerDisagrees;
-
-    try w.print("dev score (refits on dev's games)...\n", .{});
-    try w.flush();
-    const dev = try devScore(gpa, d);
-    try w.print("dev: log loss {d:.5} (champion baseline {d:.5}), accuracy {d:.4}, AUC {d:.4} on {d} games\n", .{ dev.log_loss, dev.baseline_log_loss, dev.accuracy, dev.auc, dev.games });
-
     var champions: std.ArrayList(ChampionOut) = .empty;
     var nit = champs.names.iterator();
     while (nit.next()) |e| {
@@ -851,15 +1176,15 @@ fn exportFiles(
         try cells.append(arena, .{ .champion = ch.id, .role = @intCast(r), .games = games, .patch_games = patch_games, .patch_share = champs.patchShare(ch.id, r) });
     };
     var average: [n_role]AverageOut = undefined;
-    for (&average, sc.average) |*o, a| o.* = .{ .b = a.b, .u = a.u, .v = a.v, .s = a.s, .p = a.p };
+    for (&average, sc.average) |*o, a| o.* = .{ .b = a.b, .u = a.u, .v = a.v, .s = a.s, .p = a.p, .raw = a.raw };
     const e = sc.e;
     const model: ModelFile = .{
         .meta = .{
-            .name = try std.fmt.allocPrint(arena, "{s} ({s})", .{ if (@hasDecl(cand, "name")) cand.name else "candidate", e.kind }),
+            .name = if (std.mem.eql(u8, e.kind, "additive")) "additive v2: champion strength, ally pairs, matchups, damage mix" else try std.fmt.allocPrint(arena, "{s} ({s})", .{ if (@hasDecl(cand, "name")) cand.name else "candidate", e.kind }),
             .run = std.fs.path.basename(dir),
             .snapshot = std.fs.path.basename(snap),
             .newest_game = try dayOf(arena, newest.start),
-            .training_games = d.games.len,
+            .training_games = training_games,
             .patch = try std.fmt.allocPrint(arena, "{d}.{d}", .{ champs.patch / 1000, champs.patch % 1000 }),
             .platform = protocol.home_platform,
             .dev = dev,
@@ -868,7 +1193,7 @@ fn exportFiles(
         .champions = champions.items,
         .cells = cells.items,
         .average = average,
-        .model = .{ .kind = e.kind, .dim = e.dim, .intercept = e.intercept[sc.platform], .w = e.w, .z = e.z, .terms = e.terms, .comp = e.comp, .temperature = e.temperature },
+        .model = .{ .kind = e.kind, .dim = e.dim, .intercept = e.intercept[sc.platform], .w = e.w, .z = e.z, .terms = e.terms, .comp = e.comp, .pairs = e.pairs, .temperature = e.temperature },
     };
 
     // References: real test games whole and partly open, an empty board, two slot queries
@@ -919,7 +1244,7 @@ fn exportFiles(
 }
 
 fn refDraft(label: []const u8, sc: *const Scorer, teams: [2][n_role]u32) RefDraft {
-    return .{ .label = label, .teams = teams, .blue = sc.blue(teams), .comp = sc.compOf(teams) };
+    return .{ .label = label, .teams = teams, .blue = sc.blue(teams), .comp = sc.compOf(teams), .pairs = sc.pairLogit(teams) };
 }
 
 /// Rammus jungle into a full AP and a full AD red team, alone and as blue's jungle slot
@@ -1160,6 +1485,46 @@ test "scorer: comp terms on team-summed profiles" {
     try std.testing.expectApproxEqAbs(sigmoid(0.04 + 0.2 - 0.05 + 0.525), sc.blue(teams).p, 1e-6);
     // Sides swapped: A antisymmetric and S's sign flips, so the comp part flips
     try std.testing.expectApproxEqAbs(-0.525, sc.compOf(.{ teams[1], teams[0] }), 1e-6);
+}
+
+test "scorer: additive pair cells and strength reproduce additive.predict" {
+    const gpa = std.testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const A = additive;
+    var rng: std.Random.DefaultPrng = .init(5);
+    const rnd = rng.random();
+    // 6 champions per role, ids shared across roles so mirrors and cross-role pairs occur
+    const games = try arena.alloc(A.GameIn, 3000);
+    for (games) |*g| {
+        g.* = .{ .teams = undefined, .platform = 0, .y = @floatFromInt(rnd.uintLessThan(u8, 2)) };
+        for (0..2) |side| for (0..n_role) |r| {
+            g.teams[side][r] = 1 + rnd.uintLessThan(u32, 6);
+        };
+    }
+    var p = try A.build(gpa, .logistic, addinputs.fullVariant(true, 0), games);
+    defer p.deinit(gpa);
+    var f = try A.fit(gpa, &p, .{ .outer = 2 }, null, null);
+    defer f.deinit(gpa);
+    // Random outcomes shrink every cell to ~0: give them sizes so a wrong sign shows
+    for (A.n_platforms..p.n_params()) |j| f.theta[j] = rnd.floatNorm(f64) * 0.1;
+    const champs: Champions = .{ .patch_total = 1 };
+    const sc = try Scorer.init(arena, try paramsOfAdditive(arena, &p, &f, null, 0), 0, &champs);
+    const fs = try shippedFit(arena, &p, &f, 0);
+    for (games[0..200]) |*g| {
+        const c = sc.blue(g.teams);
+        try std.testing.expectApproxEqAbs(A.predict(&p, &fs, g), @log(c.p / (1 - c.p)), 1e-5);
+    }
+    // An empty slot touches no cell; an empty board has no pair part
+    try std.testing.expectEqual(0, sc.pairLogit(@splat(@splat(0))));
+    var t = games[0].teams;
+    for (&t[1]) |*x| x.* = 0;
+    var ally: f64 = 0;
+    for (sc.e.pairs.?.groups, 0..) |g, gi| {
+        if (std.mem.eql(u8, g.kind, "ally")) ally += sc.cell(gi, t[0][g.r], t[0][g.q]);
+    }
+    try std.testing.expectApproxEqAbs(ally, sc.pairLogit(t), 1e-12);
 }
 
 test "flags split before --, values keep spaces" {

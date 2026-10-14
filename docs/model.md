@@ -3614,18 +3614,22 @@ only, no test look.
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
 `exportModel`, today win-ratings) fits on every game in the snapshot and writes
 DIR/draft-model.json and DIR/draft-ref.json for the admin draft board (meiolol-3b).
+With `--model additive [--pair-floor N]` it fits the additive model instead (effects'
+v2 "full": champion strength, ally pairs, the 15 identified matchup blocks, damage mix;
+src/lab/addinputs.zig builds its inputs for both, so the shipped model is the evaluated
+one) on every played game, -Dcand unused; needs seat stats.
 Admin only: the public site never shows "this draft wins X%" (docs/learned.md). Run it
 into a run dir on the Mac (~/ml/runs/<stamp>-draft-export); lab-push.sh sends the newest.
 
-draft-model.json (format meiolol-draft-model, version 3; 2 had no temperature, 1 no p
-and no comp):
+draft-model.json (format meiolol-draft-model, version 4; 3 had no pairs, 2 no
+temperature, 1 no p and no comp):
 - meta: name ("win-ratings (ratings)"), run, snapshot, newest_game, training_games
   (games that lasted 15:00, as the harness fits), patch (newest), platform (EUW1: the intercept used), dev {what, games, log_loss,
   baseline_log_loss, coin_log_loss, accuracy, auc}: a refit on dev's games, scored on
   dev-val, as described in `what`
 - roles: top, jungle, middle, bottom, utility; role fields are indices into it
 - has_pairs: false for rates and ratings. Then the other picks shift the numbers, not
-  the order of candidates for a slot
+  the order of candidates for a slot. true for embeddings and additive
 - min_games: default floor of training games in the role to list a candidate (100)
 - champions [{id, name, alias}]: alias is the name lowercased, letters and digits only
 - cells [{champion, role, games, patch_games, patch_share}]: training games in the role
@@ -3652,6 +3656,14 @@ and no comp):
   empty without comp); raw the profile in raw units, all 12 of win-comp's Feature order
   (magic share of damage first, damage per minute third; empty without team terms). b
   already holds any profile prior
+- pairs (null except additive): {min_games, groups [{name, kind ("ally" or "matchup"), r,
+  q, sd (the block's sd in logit: spread of true effects), fitted, shipped (cells in the
+  fit and in the file)}], cells [[group, a, b, theta, games]]}: group indexes groups;
+  theta in logit, rounded to 1e-5; cells on fewer than min_games fit games (default 20)
+  are left out and count 0, the prior mean (the export prints how far that moves blue's
+  logit). Additive's terms: b champion strength, sd 1 / sqrt(posterior curvature), raw
+  the champion-role's damage mix profile (magic share at 0, damage per minute at 2,
+  the rest 0); comp has no stats and one team term, mix at centre 0.5
 - comp (null without comp terms, win-comp): stats [{name, label}] (k; label plain English
   for the tester's reasons), S and A (k x k row-major; S symmetric, an off-diagonal pair's
   weight split half and half; A antisymmetric), S_sd and A_sd (Laplace sd per entry), team
@@ -3669,11 +3681,20 @@ logit = intercept + sum_r (B_r.b - R_r.b)
       + sum_{a<b} z[a*5+b] * (<B_a.s, B_b.s> - <R_a.s, R_b.s>)
       + P_b' S P_b - P_r' S P_r + P_b' A P_r     P_b = sum_r B_r.p, P_r = sum_r R_r.p
       + sum_team weight * (form(f_b - centre) - form(f_r - centre))
+      + pairs (below)
 f = sum_r raw.dmg * raw.magic / sum_r raw.dmg (0.5 if no damage); form: mix d^2,
 ad_heavy min(d, 0)^2, ap_heavy max(d, 0)^2
 blue = 1 / (1 + exp(-T logit)); red = 1 - blue          T = model.temperature (1 if absent)
 var = sum over the 10 slots of sd^2;  interval = sigmoid(T (logit -/+ 1.96 sqrt(var)))
 ```
+
+pairs, per group (an empty slot touches no cell): ally cell(B_r, B_q) - cell(R_r, R_q);
+matchup r < q cell(B_r, R_q) - cell(R_r, B_q); matchup r = q with a = B_r, b = R_r: 0
+if a = b, else cell(min, max) signed + if a < b, - if not. Additive's temperature:
+default_temperature_additive 1.01, fitted on effects' v2 "full" preds on 2253Z's 5
+forward folds (run 20261014T041809Z-e53v2-V0, 134,375 games): 1.01 ± 0.03, folds
+0.96-1.10, dev-val 1.14 ± 0.05; the top tenth said 61.1% and won 61.2%. Unlike ratings
+(0.80 on 2055Z, 0.965 on 2253Z) the shrunk additive model needs no calibration.
 
 sd is a Laplace approximation of each rating's own uncertainty, 1 / sqrt(games / 4 +
 prior precision), treated as independent: parameter uncertainty, not the game's.
@@ -3684,17 +3705,22 @@ the mean of the candidates' win weighted by their games in the role.
 Comp reasons (the tester, with comp terms): each S and A entry's and team term's part of
 the picking side's logit change when the candidate fills the empty slot (A from that
 side: mine'A theirs), in pp through the sigmoid's secant over the whole change, +-1.96 sd
-of the entry ("no range exported" without one); the two largest by size are shown. The win interval stays ratings-only.
+of the entry ("no range exported" without one); pair reasons the same way, each cell the
+candidate touches as "with your X" or "against their X", with the cell's games for want
+of an sd; the two largest of either kind are shown. The win interval stays ratings-only.
 
 draft-ref.json: `tolerance` 1e-9; `drafts` [{label, teams[side][role] (0 empty), blue
-{p, lo, hi}, comp (the comp part of blue's logit)}] (three EUW1 test games whole and with
+{p, lo, hi}, comp (the comp part of blue's logit), pairs (the pair part)}] (three EUW1 test games whole and with
 three slots empty, the empty board, every slot a champion with no term in its role, and
 Rammus jungle alone into a full AP and a full AD red team); `slots` [{label, role, side,
 teams (by side), bans, min_games, empty, average, options [{champion, games, win, lo, hi,
 change}] sorted by win, then champion id}] (blue middle to fill, red middle to fill, blue
 jungle to fill into 5 AP and into 5 AD). Export
 checks the scorer against the candidate's own predict (through the same temperature) on
-500 test games and stops if they differ by more than 1e-4 (f32: ~5e-8 measured).
+500 test games and stops if they differ by more than 1e-4 (f32: ~5e-8 measured); for
+additive, against additive.predict with the exported cells (floor and rounding applied),
+the shipped mix profiles and EUW1's side term. meta.dev for additive: log loss per game,
+baseline champion strength alone.
 
 ### Lane model file (meiolol-lab lane --export)
 

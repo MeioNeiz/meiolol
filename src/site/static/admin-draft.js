@@ -22,7 +22,7 @@ async function loadDraftModel() {
   try {
     DRAFT.model = await getJson("training/draft-model.json");
     DRAFT.m = draftModel(DRAFT.model);
-    if (!DRAFT.m) throw new Error(`draft-model.json is format "${DRAFT.model.format}" version ${DRAFT.model.version}; this page reads meiolol-draft-model versions 1 to 3`);
+    if (!DRAFT.m) throw new Error(`draft-model.json is format "${DRAFT.model.format}" version ${DRAFT.model.version}; this page reads meiolol-draft-model versions 1 to 4`);
     DRAFT.ref = await getJson("training/draft-ref.json").catch(() => null);
     DRAFT.err = null;
     DRAFT.check = DRAFT.m && DRAFT.ref ? draftCheck(DRAFT.m, DRAFT.ref) : null;
@@ -45,9 +45,11 @@ async function loadDraftModel() {
 // {blue: {role: id}, red: {role: id}}; an empty slot, or a champion with no term in the
 // role, is average[role] with sd 0. Version 2 adds comp terms (model.comp, null without):
 // each slot's profile p summed per team, P_b'S P_b - P_r'S P_r + P_b'A P_r. Version 3 adds
-// model.temperature: chances are sigmoid(temperature * logit) (calibration, draft.zig)
+// model.temperature: chances are sigmoid(temperature * logit) (calibration, draft.zig).
+// Version 4 adds model.pairs (null without): the additive model's pair cells, one number
+// per pair of champions (Scorer.pairLogit)
 function draftModel(M) {
-  if (!M || M.format !== "meiolol-draft-model" || ![1, 2, 3].includes(M.version)) return null;
+  if (!M || M.format !== "meiolol-draft-model" || ![1, 2, 3, 4].includes(M.version)) return null;
   const terms = new Map(M.model.terms.map(t => [t.champion + ":" + t.role, t]));
   const cells = new Map(M.cells.map(c => [c.champion + ":" + c.role, c]));
   const avg = M.average.map(a => ({ p: [], raw: [], ...a, sd: 0 }));
@@ -69,6 +71,22 @@ function draftModel(M) {
   const dot = (a, b) => { let x = 0; for (let i = 0; i < a.length; i++) x += a[i] * b[i]; return x; };
   const sig = x => 1 / (1 + Math.exp(-x));
   const slots = teams => teams.map(t => t.map((id, r) => (id && terms.get(id + ":" + r)) || avg[r]));
+  // Pair cells by group:a:b, [theta, games]; an empty slot (0) touches none
+  const pairs = M.model.pairs || null;
+  const pcell = new Map(pairs ? pairs.cells.map(([g, a, b, x, n]) => [g + ":" + a + ":" + b, [x, n]]) : []);
+  const cellOf = (g, a, b) => (a && b && pcell.get(g + ":" + a + ":" + b)) || null;
+  const cellX = (g, a, b) => (cellOf(g, a, b) || [0])[0];
+  const pairPart = ([B, R]) => {
+    if (!pairs) return 0;
+    let x = 0;
+    pairs.groups.forEach((g, i) => {
+      const { r, q } = g;
+      if (g.kind === "ally") x += cellX(i, B[r], B[q]) - cellX(i, R[r], R[q]);
+      else if (r !== q) x += cellX(i, B[r], R[q]) - cellX(i, R[r], B[q]);
+      else if (B[r] !== R[r]) x += (B[r] < R[r] ? 1 : -1) * cellX(i, Math.min(B[r], R[r]), Math.max(B[r], R[r]));
+    });
+    return x;
+  };
   // A team's summed profile
   const prof = T => { const P = new Array(k).fill(0); for (const x of T) for (let i = 0; i < k; i++) P[i] += x.p[i]; return P; };
   const compPart = ([B, R]) => {
@@ -88,7 +106,7 @@ function draftModel(M) {
   // teams[side][role]: champion id, 0 empty
   const score = teams => {
     const sl = slots(teams), [B, R] = sl;
-    let logit = intercept + compPart(sl), v = 0;
+    let logit = intercept + compPart(sl) + pairPart(teams), v = 0;
     for (let r = 0; r < 5; r++) {
       logit += B[r].b - R[r].b;
       v += B[r].sd ** 2 + R[r].sd ** 2;
@@ -138,9 +156,41 @@ function draftModel(M) {
     }
     return out.sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp));
   };
+  const names = new Map(M.champions.map(c => [c.id, c.name]));
+  const ROLE = ["top", "jungle", "mid", "bot", "support"];
+  // Each pair cell's part of the picking side's logit when `id` fills its empty slot, in pp
+  // as compReasons (no sd exported: the cell's games instead); largest first
+  const pairReasons = (teams, side, r, id) => {
+    if (!pairs) return [];
+    const t = teams.map(x => x.slice());
+    t[side][r] = 0;
+    const p0 = score(t).p;
+    t[side][r] = id;
+    const p1 = score(t).p;
+    const l0 = Math.log(p0 / (1 - p0)) * (side ? -1 : 1), l1 = Math.log(p1 / (1 - p1)) * (side ? -1 : 1);
+    const slope = Math.abs(l1 - l0) > 1e-9 ? (sig(l1) - sig(l0)) / (l1 - l0) : sig(l1) * (1 - sig(l1));
+    const mine = t[side], theirs = t[1 - side], out = [];
+    const add = (c, sign, who, role, ally) => {
+      if (!c) return;
+      out.push({ pp: 100 * slope * temp * sign * c[0], half: 0, note: `${c[1]} games`, what: `${ally ? "with your" : "against their"} ${names.get(who) || "#" + who} (${ROLE[role]})` });
+    };
+    pairs.groups.forEach((g, i) => {
+      const { r: a, q: b } = g;
+      if (g.kind === "ally") {
+        if (a === r) add(cellOf(i, id, mine[b]), 1, mine[b], b, true);
+        else if (b === r) add(cellOf(i, mine[a], id), 1, mine[a], a, true);
+      } else if (a === b) {
+        const o = theirs[a];
+        if (a === r && o && o !== id) add(cellOf(i, Math.min(id, o), Math.max(id, o)), id < o ? 1 : -1, o, a, false);
+      } else if (a === r) add(cellOf(i, id, theirs[b]), 1, theirs[b], b, false);
+      else if (b === r) add(cellOf(i, theirs[a], id), -1, theirs[a], a, false);
+    });
+    return out.sort((x, y) => Math.abs(y.pp) - Math.abs(x.pp));
+  };
   const m = {
-    M, score, teamsOf, comp, compReasons,
+    M, score, teamsOf, comp, compReasons, pairs, pairReasons,
     compPart: teams => compPart(slots(teams)),
+    pairPart,
     champs: M.champions.slice().sort((a, b) => a.name.localeCompare(b.name)),
     rate: (id, role) => (cells.get(id + ":" + roleIdx[role]) || {}).patch_share || 0,
     games: (id, role) => (cells.get(id + ":" + roleIdx[role]) || {}).games || 0,
@@ -191,6 +241,7 @@ function draftCheck(m, ref) {
     const s = m.score(x.teams);
     for (const k of ["p", "lo", "hi"]) cmp(s[k], x.blue[k], `${x.label}: ${k}`);
     if (x.comp != null) cmp(m.compPart(x.teams), x.comp, `${x.label}: comp part`);
+    if (x.pairs != null) cmp(m.pairPart(x.teams), x.pairs, `${x.label}: pair part`);
   }
   for (const q of ref.slots || []) {
     const s = m.slot(q.teams, q.bans || [], q.side, q.role, q.min_games);
@@ -279,7 +330,9 @@ function draftView(body) {
     sec.append(el("p", { class: "sub" }, `Lane suggestions: early-game model ${lm.name !== "candidate" ? lm.name + " " : ""}on ${num(lm.training_games)} games to ${lm.newest_game}.` +
       (dev ? ` It predicts the gold lead at 14 ${dev.removed_pct.toFixed(0)}% better than champion averages alone, so matchups nudge the numbers rather than decide them.` : "")));
   }
-  if (m.comp) sec.append(el("p", { class: "sub" }, `Team comp terms: each champion in a role is described by ${m.comp.stats.length} numbers (${m.comp.stats.map(x => x.label).join(", ")}), summed per team, and the model weighs how they combine within a team and against the enemy. ` +
+  if (m.pairs) sec.append(el("p", { class: "sub" }, `Pair terms: one learnt number for each pair of allies and each matchup seen in at least ${num(m.pairs.min_games)} games (rarer pairs count as average), plus the team's mix of magic and physical damage. ` +
+    "The range on a win chance covers the champion ratings only; each reason shows the games behind it."));
+  else if (m.comp) sec.append(el("p", { class: "sub" }, `Team comp terms: each champion in a role is described by ${m.comp.stats.length} numbers (${m.comp.stats.map(x => x.label).join(", ")}), summed per team, and the model weighs how they combine within a team and against the enemy. ` +
     "The range on a win chance covers the champion ratings only; each comp reason shows its own ± range."));
   else if (!M.has_pairs) sec.append(el("div", { class: "health warn" }, el("b", {}, "Caveat: "), "the model has no counter or synergy terms yet. It ranks by champion strength in the role; other picks shift the numbers, not the order."));
 
@@ -484,13 +537,15 @@ function slotPicker(m, d, side, role) {
 
 const SUGGEST_MIN_SHARE = 0.01;
 
-// The two largest comp reasons for champion `id` in slot (si, ri), against an empty slot:
-// "enemy magic damage high × your armour lean low: −1.2 pp (±0.8)"; null without comp terms
+// The two largest comp and pair reasons for champion `id` in slot (si, ri), against an
+// empty slot: "enemy magic damage high × your armour lean low: −1.2 pp (±0.8)", "against
+// their Darius (top): −1.4 pp (812 games)"; null without comp or pair terms
 function compWhy(m, d, si, ri, id) {
-  if (!m.comp) return null;
-  const top = m.compReasons(m.teamsOf(d), si, ri, +id).slice(0, 2);
-  if (!top.length || Math.abs(top[0].pp) < 0.05) return "team comp changes little";
-  return top.map(x => `${x.what}: ${x.pp >= 0 ? "+" : "−"}${Math.abs(x.pp).toFixed(1)} pp (${x.half > 0 ? "±" + x.half.toFixed(1) : "no range exported"})`).join("; ");
+  if (!m.comp && !m.pairs) return null;
+  const teams = m.teamsOf(d);
+  const top = [...m.compReasons(teams, si, ri, +id), ...m.pairReasons(teams, si, ri, +id)].sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp)).slice(0, 2);
+  if (!top.length || Math.abs(top[0].pp) < 0.05) return m.pairs ? "the other picks change little" : "team comp changes little";
+  return top.map(x => `${x.what}: ${x.pp >= 0 ? "+" : "−"}${Math.abs(x.pp).toFixed(1)} pp (${x.note || (x.half > 0 ? "±" + x.half.toFixed(1) : "no range exported")})`).join("; ");
 }
 
 // Suggestions for the open slot, each with its reason as a plain sentence. Ranked by the
@@ -524,7 +579,7 @@ function suggest(m, d, all, options, cur, now, side, role, pick) {
   list("Best for this draft", best.map(x => {
     const o = byId.get(x.c.id);
     const why = compWhy(m, d, side === "blue" ? 0 : 1, ri, x.c.id);
-    return [x.c.id, `${side} would win ${pct(x.p)} of games (likely ${pct(o.lo)} to ${pct(o.hi)}), ${pts(x.change - (now ?? 0))} against ${now != null ? "the current pick" : "an empty slot"}, from ${num(o.games)} games in the role.` + (why ? ` Comp, against an empty slot: ${why}.` : "")];
+    return [x.c.id, `${side} would win ${pct(x.p)} of games (likely ${pct(o.lo)} to ${pct(o.hi)}), ${pts(x.change - (now ?? 0))} against ${now != null ? "the current pick" : "an empty slot"}, from ${num(o.games)} games in the role.` + (why ? ` Why, against an empty slot: ${why}.` : "")];
   }), "No candidates left for this slot.");
 
   const lm = DRAFT.lane;

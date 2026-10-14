@@ -49,6 +49,18 @@ pub fn enemyGroup(r: usize, q: usize) usize {
     return g_enemy + r * n_role + q;
 }
 
+/// A pair group's roles: allies in r < q, or a matchup (my role r, their role q)
+pub fn groupRoles(g: usize) struct { ally: bool, r: usize, q: usize } {
+    std.debug.assert(g >= g_ally and g < n_groups);
+    if (g >= g_enemy) return .{ .ally = false, .r = (g - g_enemy) / n_role, .q = (g - g_enemy) % n_role };
+    var k: usize = 0;
+    for (0..n_role) |a| for (a + 1..n_role) |b| {
+        if (g_ally + k == g) return .{ .ally = true, .r = a, .q = b };
+        k += 1;
+    };
+    unreachable;
+}
+
 /// "champion top", "ally jungle-middle", "jungle vs their middle"
 pub fn groupName(buf: []u8, g: usize) []const u8 {
     if (g == g_fixed) return "fixed";
@@ -630,6 +642,10 @@ test "group names" {
     try testing.expectEqualStrings("bottom vs their support", groupName(&buf, enemyGroup(3, 4)));
     try testing.expectEqualStrings("champion support", groupName(&buf, g_main + 4));
     try testing.expectEqual(n_groups, enemyGroup(4, 4) + 1);
+    const al = groupRoles(allyGroup(1, 2));
+    try testing.expect(al.ally and al.r == 1 and al.q == 2);
+    const en = groupRoles(enemyGroup(3, 4));
+    try testing.expect(!en.ally and en.r == 3 and en.q == 4);
 }
 
 test "planted pair sd: gaussian recovered at 6 games per cell, logistic biased low (Laplace)" {
