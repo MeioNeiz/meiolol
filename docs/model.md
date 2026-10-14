@@ -2134,6 +2134,15 @@ within each draw; the init-loss gate is ok on every fit; offset weights 0.81-0.9
   under the ~0.0005 floor: a GLM with three averages per player captures most of the
   history means' gain (audited by meiolol-53). h-exp's candidate equals c-exp's per game (same win-exp, another build). Runs
   data/runs/20261014T0344*-h-exp to 0352*-h-rates-net; playernet-20261014/hand.sh
+- Calibration by history bucket on 2253Z folds (calib.sh; descriptive; gap = mean blue
+  chance minus blue's win rate, win rates ± ~0.6-0.7 pp): the rate terms leave it as
+  win-exp had it. Champion history (blue minus red players with games on their
+  champion) <= -2: +1.06 (win-exp) / +1.01 (win-exp-rates) pp, -1: +0.8, 1: -0.7, >= 2:
+  +0.1; earlier games blue minus red <= -30: -1.42 / -1.39, -29..-10: +1.21 / +1.22,
+  -9..9: +0.2, 10..29: +0.1, >= 30: +0.95 / +0.91. Not monotone in the games gap, so
+  log1p(games) misses a shape (a lead for a declared run: a games-count spline or
+  buckets per role), and the played-the-champion gap remains (win-exp-first narrowed it
+  on 1954Z)
 - Tuning (pn1, meiolol-fd/37; 73be9fe, seeds 10-14, 12 random trials over lr, hidden,
   dropout, wd, emb, emb-wd, batch, patience, min-games, picked on inner val only): no
   trial beats the default (val 0.68200; best trial 0.68208; all 12 within 0.0007). The
