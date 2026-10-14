@@ -76,7 +76,20 @@ need=\$(du -cb meiolol.db timeline.db raw.db | tail -n 1 | cut -f1)
 free=\$(df --output=avail -B1 ~ | tail -n 1)
 (( free > 2 * need )) || { echo "box: \$free bytes free for \$need"; exit 1; }
 mkdir ~/$name
-for d in $DBS; do nice -n 10 sqlite3 "file:\$PWD/\$d.db?mode=ro" "VACUUM INTO '\$HOME/$name/\$d.db'"; done
+for d in meiolol timeline; do
+    nice -n 10 sqlite3 "file:\$PWD/\$d.db?mode=ro" "VACUUM INTO '\$HOME/$name/\$d.db'"
+done
+# raw.db without timeline_docs (most of it): anonymise leaves raw timelines out anyway.
+# One transaction, so every table is read at the same moment
+q() { sqlite3 "file:\$PWD/raw.db?mode=ro" "SELECT \$1 FROM sqlite_schema WHERE type = '\$2'
+    AND name NOT LIKE 'sqlite_%' AND tbl_name != 'timeline_docs' AND sql IS NOT NULL"; }
+{
+    q "sql || ';'" table
+    echo "ATTACH 'file:\$PWD/raw.db?mode=ro' AS s; BEGIN;"
+    for t in \$(q name table); do echo "INSERT INTO main.\$t SELECT * FROM s.\$t;"; done
+    echo "COMMIT;"
+    q "sql || ';'" index
+} | nice -n 10 sqlite3 ~/$name/raw.db
 EOF
     log "streaming to $raw"
     mkdir -p "$raw"
