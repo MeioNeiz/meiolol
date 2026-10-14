@@ -269,7 +269,7 @@ def main():
     if a.coverage:
         coverage(state, data, a.out)
     all_res = []
-    for b in a.blocks.split(","):
+    for b in filter(None, a.blocks.split(",")):
         all_res.append(run_block(state, data, b, models, a.out))
         np.savez_compressed(os.path.join(a.out, "preds.npz"), **{f"{k}.{i}": v for i, r in enumerate(all_res) for k, v in r.items()})
         report(all_res, models, a.out)
