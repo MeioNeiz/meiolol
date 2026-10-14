@@ -5,6 +5,8 @@ sessions agreed, unduplicated and inside policy, collects questions for Jacob wi
 recommendation, and records results. It does not model itself.
 
 Where things live:
+- Lab findings that change how runs are done: docs/lab-findings.md. Coordinator state at
+  the 2026-10-14 stop: docs/coordinator-state.md
 - Results and method: docs/model.md ("Shared protocol, 2026-10-12" first, then dated
   sections). Plain findings: docs/learned.md (wording rule in its header). Decisions and
   next steps: docs/plan.md "Draft model". Research: research/questions/
