@@ -1,14 +1,81 @@
 # title: Does the gap close with more games?
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
-ratings	-	folds	0.69203		1				25%	a189f10	25% of each fold's fit games
-ratings	-	folds	0.69134		1				50%	a189f10
-ratings	-	folds	0.69090		1				100%	a189f10
-small net	ratings	folds	0.00028	0.00024	3				25%	a189f10
-small net	ratings	folds	0.00043	0.00031	3				50%	a189f10
-small net	ratings	folds	0.00066	0.00029	3				100%	a189f10
-big net	ratings	folds	-0.00004	0.00028	3				25%	a189f10
-big net	ratings	folds	0.00013	0.00029	3				50%	a189f10
-big net	ratings	folds	-0.00028	0.00039	3				100%	a189f10
-residual on ratings	ratings	folds	-0.00004	0.00010	3				25%	a189f10
-residual on ratings	ratings	folds	-0.00005	0.00008	3				50%	a189f10
-residual on ratings	ratings	folds	-0.00005	0.00007	3				100%	a189f10
+big net, 106k fit games	ratings	folds	0.00053	0.00039	3			76041	106456	curve-fit-two (48a6b33)	largest size (1954Z): no net passes ratings; gap per doubling small +0.03, big +0.24, resid -0.14, win-comp -0.04 mnats; ratings gains +0.58 pp accuracy and -0.90 mnats a doubling
+ratings, 2055Z	-	folds	0.69376		1			44353	6133	curve-fit-two (48a6b33)	10% of fit games
+small net, 2055Z	-	folds	0.69459		3			44353	6133	curve-fit-two (48a6b33)	10% of fit games
+small net, 2055Z	ratings	folds	0.00083	0.00035	3			44353	6133	curve-fit-two (48a6b33)	10% of fit games
+big net, 2055Z	-	folds	0.69300		3			44353	6133	curve-fit-two (48a6b33)	10% of fit games
+big net, 2055Z	ratings	folds	-0.00075	0.00039	3			44353	6133	curve-fit-two (48a6b33)	10% of fit games
+residual on ratings, 2055Z	-	folds	0.69436		3			44353	6133	curve-fit-two (48a6b33)	10% of fit games
+residual on ratings, 2055Z	ratings	folds	0.00060	0.00018	3			44353	6133	curve-fit-two (48a6b33)	10% of fit games
+win-comp, 2055Z	-	folds	0.69336		1			44353	6133	curve-fit-two (48a6b33)	10% of fit games
+win-comp, 2055Z	ratings	folds	-0.00040	0.00024	1			44353	6133	curve-fit-two (48a6b33)	10% of fit games
+ratings, 2055Z	-	folds	0.69203		1			44353	15397	curve-fit-two (48a6b33)	25% of fit games
+small net, 2055Z	-	folds	0.69230		3			44353	15397	curve-fit-two (48a6b33)	25% of fit games
+small net, 2055Z	ratings	folds	0.00028	0.00024	3			44353	15397	curve-fit-two (48a6b33)	25% of fit games
+big net, 2055Z	-	folds	0.69198		3			44353	15397	curve-fit-two (48a6b33)	25% of fit games
+big net, 2055Z	ratings	folds	-0.00004	0.00028	3			44353	15397	curve-fit-two (48a6b33)	25% of fit games
+residual on ratings, 2055Z	-	folds	0.69199		3			44353	15397	curve-fit-two (48a6b33)	25% of fit games
+residual on ratings, 2055Z	ratings	folds	-0.00004	0.00010	3			44353	15397	curve-fit-two (48a6b33)	25% of fit games
+win-comp, 2055Z	-	folds	0.69150		1			44353	15397	curve-fit-two (48a6b33)	25% of fit games
+win-comp, 2055Z	ratings	folds	-0.00053	0.00029	1			44353	15397	curve-fit-two (48a6b33)	25% of fit games
+ratings, 2055Z	-	folds	0.69134		1			44353	30930	curve-fit-two (48a6b33)	50% of fit games
+small net, 2055Z	-	folds	0.69178		3			44353	30930	curve-fit-two (48a6b33)	50% of fit games
+small net, 2055Z	ratings	folds	0.00043	0.00031	3			44353	30930	curve-fit-two (48a6b33)	50% of fit games
+big net, 2055Z	-	folds	0.69147		3			44353	30930	curve-fit-two (48a6b33)	50% of fit games
+big net, 2055Z	ratings	folds	0.00013	0.00029	3			44353	30930	curve-fit-two (48a6b33)	50% of fit games
+residual on ratings, 2055Z	-	folds	0.69129		3			44353	30930	curve-fit-two (48a6b33)	50% of fit games
+residual on ratings, 2055Z	ratings	folds	-0.00005	0.00008	3			44353	30930	curve-fit-two (48a6b33)	50% of fit games
+win-comp, 2055Z	-	folds	0.69079		1			44353	30930	curve-fit-two (48a6b33)	50% of fit games
+win-comp, 2055Z	ratings	folds	-0.00055	0.00034	1			44353	30930	curve-fit-two (48a6b33)	50% of fit games
+ratings, 2055Z	-	folds	0.69090		1			44353	62094	curve-fit-two (48a6b33)	100% of fit games
+small net, 2055Z	-	folds	0.69156		3			44353	62094	curve-fit-two (48a6b33)	100% of fit games
+small net, 2055Z	ratings	folds	0.00066	0.00029	3			44353	62094	curve-fit-two (48a6b33)	100% of fit games
+big net, 2055Z	-	folds	0.69062		3			44353	62094	curve-fit-two (48a6b33)	100% of fit games
+big net, 2055Z	ratings	folds	-0.00028	0.00039	3			44353	62094	curve-fit-two (48a6b33)	100% of fit games
+residual on ratings, 2055Z	-	folds	0.69084		3			44353	62094	curve-fit-two (48a6b33)	100% of fit games
+residual on ratings, 2055Z	ratings	folds	-0.00005	0.00007	3			44353	62094	curve-fit-two (48a6b33)	100% of fit games
+win-comp, 2055Z	-	folds	0.69033		1			44353	62094	curve-fit-two (48a6b33)	100% of fit games
+win-comp, 2055Z	ratings	folds	-0.00057	0.00028	1			44353	62094	curve-fit-two (48a6b33)	100% of fit games
+ratings, 1954Z	-	folds	0.69261		1			76041	10482	curve-fit-two (48a6b33)	10% of fit games
+small net, 1954Z	-	folds	0.69246		3			76041	10482	curve-fit-two (48a6b33)	10% of fit games
+small net, 1954Z	ratings	folds	-0.00015	0.00021	3			76041	10482	curve-fit-two (48a6b33)	10% of fit games
+big net, 1954Z	-	folds	0.69224		3			76041	10482	curve-fit-two (48a6b33)	10% of fit games
+big net, 1954Z	ratings	folds	-0.00037	0.00025	3			76041	10482	curve-fit-two (48a6b33)	10% of fit games
+residual on ratings, 1954Z	-	folds	0.69304		3			76041	10482	curve-fit-two (48a6b33)	10% of fit games
+residual on ratings, 1954Z	ratings	folds	0.00043	0.00016	3			76041	10482	curve-fit-two (48a6b33)	10% of fit games
+win-comp, 1954Z	-	folds	0.69239		1			76041	10482	curve-fit-two (48a6b33)	10% of fit games
+win-comp, 1954Z	ratings	folds	-0.00022	0.00020	1			76041	10482	curve-fit-two (48a6b33)	10% of fit games
+ratings, 1954Z	-	folds	0.69142		1			76041	26349	curve-fit-two (48a6b33)	25% of fit games
+small net, 1954Z	-	folds	0.69144		3			76041	26349	curve-fit-two (48a6b33)	25% of fit games
+small net, 1954Z	ratings	folds	0.00002	0.00024	3			76041	26349	curve-fit-two (48a6b33)	25% of fit games
+big net, 1954Z	-	folds	0.69168		3			76041	26349	curve-fit-two (48a6b33)	25% of fit games
+big net, 1954Z	ratings	folds	0.00025	0.00032	3			76041	26349	curve-fit-two (48a6b33)	25% of fit games
+residual on ratings, 1954Z	-	folds	0.69142		3			76041	26349	curve-fit-two (48a6b33)	25% of fit games
+residual on ratings, 1954Z	ratings	folds	-0.00000	0.00003	3			76041	26349	curve-fit-two (48a6b33)	25% of fit games
+win-comp, 1954Z	-	folds	0.69120		1			76041	26349	curve-fit-two (48a6b33)	25% of fit games
+win-comp, 1954Z	ratings	folds	-0.00022	0.00015	1			76041	26349	curve-fit-two (48a6b33)	25% of fit games
+ratings, 1954Z	-	folds	0.69030		1			76041	53120	curve-fit-two (48a6b33)	50% of fit games
+small net, 1954Z	-	folds	0.69056		3			76041	53120	curve-fit-two (48a6b33)	50% of fit games
+small net, 1954Z	ratings	folds	0.00026	0.00026	3			76041	53120	curve-fit-two (48a6b33)	50% of fit games
+big net, 1954Z	-	folds	0.69128		3			76041	53120	curve-fit-two (48a6b33)	50% of fit games
+big net, 1954Z	ratings	folds	0.00098	0.00045	3			76041	53120	curve-fit-two (48a6b33)	50% of fit games
+residual on ratings, 1954Z	-	folds	0.69027		3			76041	53120	curve-fit-two (48a6b33)	50% of fit games
+residual on ratings, 1954Z	ratings	folds	-0.00003	0.00010	3			76041	53120	curve-fit-two (48a6b33)	50% of fit games
+win-comp, 1954Z	-	folds	0.69006		1			76041	53120	curve-fit-two (48a6b33)	50% of fit games
+win-comp, 1954Z	ratings	folds	-0.00024	0.00012	1			76041	53120	curve-fit-two (48a6b33)	50% of fit games
+ratings, 1954Z	-	folds	0.68962		1			76041	106456	curve-fit-two (48a6b33)	100% of fit games
+small net, 1954Z	-	folds	0.68957		3			76041	106456	curve-fit-two (48a6b33)	100% of fit games
+small net, 1954Z	ratings	folds	-0.00004	0.00022	3			76041	106456	curve-fit-two (48a6b33)	100% of fit games
+big net, 1954Z	-	folds	0.69015		3			76041	106456	curve-fit-two (48a6b33)	100% of fit games
+big net, 1954Z	ratings	folds	0.00053	0.00039	3			76041	106456	curve-fit-two (48a6b33)	100% of fit games
+residual on ratings, 1954Z	-	folds	0.68949		3			76041	106456	curve-fit-two (48a6b33)	100% of fit games
+residual on ratings, 1954Z	ratings	folds	-0.00012	0.00011	3			76041	106456	curve-fit-two (48a6b33)	100% of fit games
+win-comp, 1954Z	-	folds	0.68930		1			76041	106456	curve-fit-two (48a6b33)	100% of fit games
+win-comp, 1954Z	ratings	folds	-0.00032	0.00017	1			76041	106456	curve-fit-two (48a6b33)	100% of fit games
+ratings, projection	-	projection	0.68977						100000	curve-fit-two (48a6b33)	ratings' fit extrapolated (b at the grid floor, so in effect the log trend); 2055Z + 1954Z
+ratings, projection	-	projection	0.68844						300000	curve-fit-two (48a6b33)	ratings' fit extrapolated (b at the grid floor, so in effect the log trend); 2055Z + 1954Z
+ratings, projection	-	projection	0.68703						1000000	curve-fit-two (48a6b33)	ratings' fit extrapolated (b at the grid floor, so in effect the log trend); 2055Z + 1954Z
+ratings, projection	-	projection	0.68636						1820000	curve-fit-two (48a6b33)	ratings' fit extrapolated (b at the grid floor, so in effect the log trend); 2055Z + 1954Z
+ratings, projection	-	projection	0.68552						3900000	curve-fit-two (48a6b33)	ratings' fit extrapolated (b at the grid floor, so in effect the log trend); 2055Z + 1954Z
+ratings, projection	-	projection	0.68452						10000000	curve-fit-two (48a6b33)	ratings' fit extrapolated (b at the grid floor, so in effect the log trend); 2055Z + 1954Z
