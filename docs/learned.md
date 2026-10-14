@@ -25,6 +25,18 @@ How to write a line:
 
 ## Win
 
+- 2026-10-14 (early, 2253Z): During a game, who wins is read much better from every
+  player's gold, XP, items and death timers plus which champions are playing than from
+  team gold and objectives alone: at 15 minutes the better read ranks the eventual
+  winner above the loser 85% of the time against 83%, and its chances stay honest to
+  within about 1 point on average through 30 minutes. The champions are half of that
+  gain: at the same game state a champion is worth most between 10 and 20 minutes and
+  little after 35. Sure: snap-20261013T2253Z, 5 forward folds (100,848 games with a
+  timeline) and dev-val (26,263), every fold better, intervals from resampling whole
+  games; no test look; ranked solo games that reached 15 minutes. Site: Your games' win
+  chance by minute (post-game review only), no "this draft wins X%". Evidence:
+  docs/model.md "Rich state and champions (richc)" (-0.0245 ± 0.0011 nats per
+  game-minute vs the old form on the folds, audited)
 - 2026-10-14 (2253Z): Champion pairs help a tiny bit once each champion is described by
   how it usually plays (its damage, gold and early-game numbers) rather than by name: how
   every two champions in a game combine predicts the winner slightly

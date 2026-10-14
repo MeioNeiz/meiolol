@@ -722,6 +722,99 @@ turning minute moves it is the early-tower artefact, e.g. EUW1_7864005401808869:
 (fitted from minutes 5-15 together) instead of swinging sign each minute. A test in
 winchance.zig fails if adjacent minutes' weights differ by 0.3 or more.
 
+#### Rich state and champions (richc), snap-20261013T2253Z re-cut, 2026-10-14
+
+Owner meiolol-state (progress: docs/agent-state/2026-10-14/progress-state.md; research:
+research/questions/live-win-probability.md, correlated-importance.md); audited from the
+run dir by the state shipping session. Run 20261014T032052Z-state-richc-2253Zr
+(py/state/statemodels.py at 8e264cd, `--models wc,rich,richc`, gpu-box CPU, exit 0,
+03:39-06:27Z). Data: SNAP/state from state-export run
+20261014T004121Z-state-export-2253Z-recut (src/lab/stateexport.zig; 363,472 games,
+290,825 with a 10-player timeline; game order and match ids equal to SNAP/nn's).
+
+Models, each a logistic regression on blue-minus-red features with every weight and the
+intercept linear in minute between knots 1, 5, ..., 40 (winchance's form; L2 1e-5 on
+standardised weights), rows every game-minute 1-40 while the game is going (fitted on
+every other minute, scored on every minute):
+- wc: winchance's 12 features (objectives lead + held), refitted per block
+- rich: 91 features (py/state/statecommon.py `features`): wc's 12; gold, XP, level, CS,
+  seconds until respawn, completed items, unspent gold and deaths by role; players dead
+  now, kills, damage to champions, total gold in the game; towers by lane and tier, nexus
+  towers, plates; inhibitor respawn seconds, inhibitors ever; dragons and soul by
+  element, elder and baron buff seconds left, barons, elders, grubs, heralds; wards,
+  control wards, wards killed; and the draft logit (win-ratings refitted per block,
+  cross-fitted in 5 parts on fit games)
+- richc: rich plus a champion-role effect by minute (same hat basis, blue's five minus
+  red's five, ridge picked from 1e-5, 3e-5, 1e-4, 3e-4 on the fit's newest 10%, then
+  refitted on every fit game): what a champion is worth beyond the state, minute by
+  minute, with no champion x state term
+
+Log loss per game-minute, model minus wc, folds pooled (5 forward blocks, 100,848
+games with a timeline) and dev-val (26,263); ± 95% clustered by game (statemodels'
+sandwich; a 2,000-draw whole-game bootstrap of the same differences gave the same
+widths, e.g. richc - wc folds [-0.0256, -0.0234], dev-val [-0.0287, -0.0245]):
+
+| minute | games (folds) | wc | rich - wc | richc - wc | dev-val rich - wc | dev-val richc - wc |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 100,848 | 0.6920 | -0.0046 ± 0.0005 | -0.0047 ± 0.0007 | -0.0051 ± 0.0011 | -0.0061 ± 0.0013 |
+| 5 | 100,848 | 0.6450 | -0.0098 ± 0.0009 | -0.0165 ± 0.0012 | -0.0100 ± 0.0017 | -0.0182 ± 0.0023 |
+| 10 | 100,848 | 0.5783 | -0.0097 ± 0.0009 | -0.0221 ± 0.0013 | -0.0112 ± 0.0017 | -0.0254 ± 0.0026 |
+| 15 | 100,847 | 0.5055 | -0.0111 ± 0.0009 | -0.0260 ± 0.0014 | -0.0116 ± 0.0018 | -0.0276 ± 0.0027 |
+| 20 | 92,188 | 0.4602 | -0.0125 ± 0.0010 | -0.0281 ± 0.0015 | -0.0133 ± 0.0020 | -0.0299 ± 0.0029 |
+| 25 | 76,456 | 0.4192 | -0.0135 ± 0.0012 | -0.0278 ± 0.0017 | -0.0145 ± 0.0023 | -0.0290 ± 0.0032 |
+| 30 | 44,451 | 0.4546 | -0.0213 ± 0.0020 | -0.0336 ± 0.0025 | -0.0232 ± 0.0038 | -0.0366 ± 0.0047 |
+| 35 | 17,259 | 0.5162 | -0.0414 ± 0.0042 | -0.0513 ± 0.0048 | -0.0408 ± 0.0079 | -0.0523 ± 0.0089 |
+| all | 100,848 | 0.5351 | -0.0128 ± 0.0008 | -0.0245 ± 0.0011 | -0.0137 ± 0.0015 | -0.0265 ± 0.0022 |
+
+Summed over a game's minutes, richc saves 0.70 nats a game against wc on the folds (rich
+0.36). richc - rich: folds -0.0117 [-0.0125, -0.0108] per game-minute, every fold
+(-0.0092, -0.0118, -0.0125, -0.0118, -0.0133), dev-val -0.0129 [-0.0145, -0.0113].
+Better than wc in 5 of 5 folds, both. AUC at 10 / 15 / 20 / 25 / 30 (folds): wc 0.763 /
+0.829 / 0.863 / 0.888 / 0.867, rich 0.773 / 0.838 / 0.871 / 0.896 / 0.880, richc 0.785
+/ 0.849 / 0.880 / 0.903 / 0.887 (dev-val within 0.004). Calibration, ECE over 10
+equal-mass bins, folds pooled: richc 0.0035-0.0078 from 1 to 30 minutes (wc 0.0026-0.0062,
+rich 0.0037-0.0046), 0.0075 at 35, 0.011 at 40 (4,883 games); a single fold's minute
+up to 0.013 (about 20,000 games a fold, so mostly noise).
+
+Against the champion nets (meiolol-state's run 20261014T025645Z-state-neta-2253Zr: a
+state net plus a separate champions-by-minute net), on the same game-minutes: gain over
+rich, richc vs neta, dev +0.0129 vs +0.0117, folds +0.0092 / +0.0118 / +0.0125 / +0.0118
+/ +0.0133 vs +0.0049 / +0.0086 / +0.0108 / +0.0092 / +0.0122. The owner's test ("if
+richc gets most of neta's gain") holds in every block: the nets' gain is champion value
+by minute, and a ridge on champion-role x minute takes all of it, explainably.
+
+Champion effects (sd across champion-roles, logit, by knot 1 ... 40, dev-val fit): 0.10,
+0.15, 0.16, 0.17, 0.16, 0.15, 0.12, 0.10, 0.05: largest from 10 to 20 minutes, fading
+late, as draftpath's Q1 found (draft given state at 15 adds about 4x what it adds
+before the game; "How drafts win").
+
+Audit (the verifier's checklist, docs/agent-state/2026-10-14/split-rules.md):
+- Snapshot: snap-20261013T2253Z after the all-platform re-cut (85fd62a): nn/ written
+  00:24Z with test_cut 1791795719197 and dev_cut 1791741249959, state/ 01:10Z, run
+  03:39Z. Played games by code: dev_old 134,375, folds 26,875 each, dev_val 35,834, test
+  53,750, codes 7-9 empty; code 10 = start >= T and code 6 = [D, T) exactly
+- Test: no look. Every block's scored games equal nnsets' scored set with a timeline,
+  codes only 1-5 or 6, none at or after T; fits use codes below the block (dev-val:
+  0-5), every fit game older than every scored game. SNAP/test-looks.tsv does not
+  exist on the gpu-box or the Mac: 0 looks on 2253Z by anyone
+- Leak: features come from frame m (Riot's frame at m:00+) and events before it; respawn
+  timers from the level at death; a game counts at minute m only while going (frame m
+  is not the end frame), which is known at m; game-level columns (duration, firsts,
+  shape targets) are not features. Champions and the ratings draft logit are known at
+  draft; the logit is cross-fitted on fit games and full-fit for scored ones; richc's
+  champion vocabulary comes from fit games only
+- Tuning: ridge and ratings L2 picked on the fit's newest 10% only
+- Pre-declared reading (progress-state.md, "if richc gets most of neta's gain"): met
+- Intervals: game-clustered, confirmed by the whole-game bootstrap above (2,000 draws;
+  ~/ml/analysis/stateaudit-ship.py on the gpu-box)
+
+Verdict: cleared. richc is the best in-game model we have on dev, by a wide margin over
+the shipped form (rich halves it, champions halve it again), and it stays calibrated to
+30 minutes. Caveats: dev only (folds and dev-val; no test look); played games only
+(15:00+), as wc, so minutes before 15 are conditioned on the game reaching 15; ranked
+solo only, while Your games also shows flex, draft and Swiftplay; the ridge took the
+smallest value on the grid in all six blocks (a weaker ridge may do slightly better).
+
 ### Player experience and everything pre-game, dev only, 2026-10-13
 
 Scope internal (api.Scope: Jacob's research predictor, never the site or app; sees all
