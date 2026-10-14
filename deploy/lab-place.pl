@@ -3,6 +3,7 @@
 # (docs/compute.md "Placement"). Reads lab-run.sh's listing on stdin, tab-separated:
 #   HOST now TIME | HOST league LINE (watcher.log, oldest first) | HOST have PATH
 #   HOST slots RES N (lab-run.sh's locks per resource) | HOST mem KB (MemAvailable)
+#   HOST memheld KB (what the gate counts as taken: runs <15 min old growing into memneed)
 #   HOST peak DIR GB (a run's peak RSS, after its run line)
 #   HOST run DIR STATE STARTED ENDED RES BIN ARGS PAUSES PREDICTED BUILD SLOT LOGLINE
 #     [SHARE] (gpu slots it holds at once, lab-run --gpu-share; 1 if absent)
@@ -60,7 +61,7 @@ if ($mode eq 'inputs') {
     exit 0;
 }
 
-my (%now, %league, %have, %slots, %mem, %peak, @runs);
+my (%now, %league, %have, %slots, %mem, %held, %peak, @runs);
 while (my $line = <STDIN>) {
     chomp $line;
     my ($host, $kind, @f) = split /\t/, $line, -1;
@@ -70,6 +71,7 @@ while (my $line = <STDIN>) {
     elsif ($kind eq 'have') { $have{$host}{$f[0]} = 1 }
     elsif ($kind eq 'slots') { $slots{$host}{$f[0]} = $f[1] }
     elsif ($kind eq 'mem') { $mem{$host} = $f[0] / 1048576 if $f[0] =~ /^\d+$/ }
+    elsif ($kind eq 'memheld') { $held{$host} = $f[0] / 1048576 if $f[0] =~ /^\d+$/ }
     elsif ($kind eq 'peak') { $peak{$host}{$f[0]} = $f[1] if $f[1] =~ /^[\d.]+$/ }
     elsif ($kind eq 'run') {
         my %r;
@@ -85,6 +87,9 @@ while (my $line = <STDIN>) {
         push @runs, \%r;
     }
 }
+# Free as the gate sees it: a young run's need not yet grown into is taken already, and
+# comes back with the run's peak at its end
+$mem{$_} -= $held{$_} // 0 for keys %mem;
 $_->{peak} = $peak{$_->{host}}{$_->{dir}} for @runs;
 $_->{share} = sharing($_) for @runs;
 my ($beta, $beta_why) = beta();
@@ -371,6 +376,16 @@ sub need {
     return $max // $GATE_DEFAULT_GB;
 }
 
+# A live run's time: the longer of its start's prediction (with sharing in it) and one
+# from today's history, as the start's may predate most of it (st1, 14 Oct: 71 s written
+# from one run, 15 m once more had ended). The ticket's fast lane uses the written one
+sub longer {
+    my ($r) = @_;
+    my ($now) = estimate($r->{host}, $r->{bin}, $r->{args}, $r->{build});
+    my @t = grep { defined } $r->{pred}, $now;
+    return @t ? (sort { $b <=> $a } @t)[0] : undef;
+}
+
 sub wait_for {
     my ($host, $res, $fast, $need_new, $share_new) = @_;
     my $n_slots = $slots{$host}{$res} // 1;
@@ -382,8 +397,7 @@ sub wait_for {
     my (@free, @queued, @ev, @hold, $n);
     for my $r (sort { $a->{dir} cmp $b->{dir} }
         grep { $_->{host} eq $host && $_->{res} eq $res && live($_) } @runs) {
-        my $pred = $r->{pred} // (estimate($host, $r->{bin}, $r->{args}, $r->{build}))[0]
-            // median(map { $_->{ran} }
+        my $pred = longer($r) // median(map { $_->{ran} }
                 grep { $_->{host} eq $host && defined $_->{ran} } @runs)
             // 60;
         $n++;
@@ -402,8 +416,7 @@ sub wait_for {
     # Running runs of the other resources give their memory back too
     for my $r (grep { $_->{host} eq $host && ($_->{res} // '') ne $res && live($_)
         && defined $_->{started} && $_->{state} !~ /^queued/ } @runs) {
-        my $pred = $r->{pred} // (estimate($host, $r->{bin}, $r->{args}, $r->{build}))[0]
-            // 60;
+        my $pred = longer($r) // 60;
         my $done = $now{$host} - $r->{started} - paused($r, $r->{started}, $now{$host});
         my $left = $pred - $done > $done / 5 ? $pred - $done : $done / 5;
         push @ev, [$left, $r->{peak} // need($host, $r->{bin}, $r->{args})];
