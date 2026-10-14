@@ -81,9 +81,15 @@ deploy/lab-run.sh watch-install
   safe; uncapped, --procs 6 on a 5-core slot ran ~30 threads there, 3x slower
 - Cores (2026-10-14, load 40-80 on 20 threads): ~/ml/locks/reserve = r keeps the top r
   cores for gpu-slot jobs and --res none runs (taskset, OMP_NUM_THREADS r/N), whose host
-  threads floated over the cpu slots' cores; cpu slots split the other c - r. Set: r 5,
-  cpu.slots 3 (5 cores each), gpu.slots 2. Both files are read when a job takes its
-  slot, so tuning needs no code change
+  threads floated over the cpu slots' cores; cpu slots split the other c - r. Set
+  (2026-10-14, from usage files: half the cpu runs used ~1 of 5 cores, gpu runs 1-1.5
+  cores and 20-35% of the card): r 4, cpu.slots 4 (4 cores each), gpu.slots 3. The files
+  are read when a job takes its slot, so tuning needs no code change
+- Memory gate: the queue head also waits while MemAvailable is below its kind's peak
+  (max usage peak_rss_gb over earlier runs of its meta bin, plus first arg for Zig
+  bins; 4 GB if none), and goes anyway after 20 min ("waiting for memory" in its log).
+  State jobs peak at 6-8 GB of the gpu-box's 23. listing() gives `mem KB` (MemAvailable)
+  and `peak DIR GB` lines for lab-place.pl
 - Slot queue: tickets in ~/ml/locks/RES.q, only the oldest live one tries the slots
   (first come, first served; polling let newcomers win); runs predicted <= 60 s sort
   ahead (fast lane); a dead waiter's ticket is dropped

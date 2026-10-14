@@ -100,9 +100,10 @@ research/questions/agent-ml-practice.md.
    Thread count needn't be in meta
 2. Throughput: concurrent mixes on the gpu-box, nvidia-smi
    (/usr/lib/wsl/lib/nvidia-smi) and load; slot counts and default --pack from models
-   per hour; weighted slots; utilisation per run in the run dir. So far: gpu.slots 2
-   (meiolol-fd's timings: 4 bought nothing over 2 for netcheck big); load reached 80 on
-   20 cores at 00:12Z 2026-10-14, so cpu slots plus gpu jobs' CPU overcommit
+   per hour; weighted slots. Done 2026-10-14: per-run `usage` (CPU cores, runnable
+   threads per core, card %, peak memory), labpy caps process pools to the slot (load
+   80 on 20 cores was pools x OMP threads), layout r 4 / cpu 4x4 / gpu 3 with a memory
+   gate (compute.md). Left: models per hour per mix, --pack default
 3. Cheap run gates: done for preds (deploy/lab-gates.sh after every run: NaN/inf or
    constant prediction columns, 83918fa) and seat stats (a needs_stats fit fails on any
    all-NaN stat, e30cec4) and a fresh net's loss vs the base rate's (src/lab/gates.zig,

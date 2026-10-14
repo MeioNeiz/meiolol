@@ -544,6 +544,23 @@ q=~/ml/locks/@RES@.q
 mkdir -p $q
 ticket=@PRIO@$(date +%s%N)-$$
 : > $q/$ticket
+# Memory: the head waits while MemAvailable is below the peak its kind of run reached
+# before (usage peak_rss_gb, max over runs of its bin, and command for Zig bins; 4 GB if
+# none), so runs cannot OOM WSL (state jobs peak at 6-8 GB of 23). After 20 min it goes
+# anyway: memory held by runs that never end must not block the queue for good
+need=$(cd ~/ml/runs 2> /dev/null && awk -v bin=@MBIN@ -v cmd=@MCMD@ '"'"'
+    FNR == 1 { d = FILENAME; sub(/\/[^\/]*$/, "", d) }
+    FILENAME ~ /\/meta$/ && $1 == "bin" { b[d] = $2 }
+    FILENAME ~ /\/meta$/ && $1 == "args" { a[d] = $2 }
+    FILENAME ~ /\/usage$/ && $1 == "peak_rss_gb" && $2 != "-" { p[d] = $2 }
+    END {
+        m = 0
+        for (d in p)
+            if (b[d] == bin && (cmd == "" || a[d] == cmd) && p[d] + 0 > m) m = p[d] + 0
+        print m ? m : 4
+    }'"'"' */meta */usage 2> /dev/null)
+need_kb=$(awk -v g="${need:-4}" '"'"'BEGIN { print int(g * 1048576) }'"'"')
+memsince=
 slot=
 while [[ -z $slot ]]; do
     head=
@@ -551,6 +568,16 @@ while [[ -z $slot ]]; do
         if kill -0 ${t##*-} 2> /dev/null; then head=$t; break; fi
         rm -f $q/$t
     done
+    if [[ $head == "$ticket" && -r /proc/meminfo ]]; then
+        avail=$(awk '"'"'/^MemAvailable:/ { print $2 }'"'"' /proc/meminfo)
+        if (( ${avail:-0} < need_kb )); then
+            if [[ -z $memsince ]]; then
+                memsince=$SECONDS
+                echo "waiting for memory: $need GB needed, $(( avail / 1048576 )) GB free"
+            fi
+            (( SECONDS - memsince < 1200 )) && head=
+        fi
+    fi
     if [[ $head == "$ticket" ]]; then
         for (( i = 0; i < n; i++ )); do
             exec 9>> ~/ml/locks/@RES@.$i
@@ -607,6 +634,11 @@ fi' pin='$pin '
     local prio=1
     [[ "${predicted%.*}" =~ ^[0-9]+$ ]] && (( ${predicted%.*} <= 60 )) && prio=0
     lock=${lock//@PRIO@/$prio}
+    # The memory gate's history key: the bin, and for Zig bins the command (first arg)
+    local mcmd=""
+    [[ "$bin" == python ]] || mcmd=${1//[^A-Za-z0-9_.-]/}
+    lock=${lock//@MBIN@/\"$shown\"}
+    lock=${lock//@MCMD@/\"$mcmd\"}
     local cmd="./$bin"
     # shellcheck disable=SC2088 # expands on the host
     [[ -z "$env" ]] || cmd="env PYTHONUNBUFFERED=1 ~/ml/pyenv/$env/venv/bin/python labpy.py"
@@ -676,6 +708,7 @@ listing() {
         for r in cpu gpu; do
             printf "slots\t%s\t%s\n" $r "$(cat ~/ml/locks/$r.slots 2>/dev/null || echo 4)"
         done
+        [[ -r /proc/meminfo ]] && awk "/^MemAvailable:/ { print \"mem\t\" \$2 }" /proc/meminfo
         for d in */; do
             d=${d%/}; [[ -f $d/job.sh ]] || continue
             pg=$(cat $d/job.pgid 2>/dev/null)
@@ -693,6 +726,9 @@ listing() {
                 "$(tr "\n" , 2>/dev/null < $d/pauses.log)" "$(cut -f 1 $d/predicted 2>/dev/null)" \
                 "$(m build)" "$(head -n 1 $d/slot 2>/dev/null | cut -d " " -f 1)" \
                 "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80 | tr "\t" " ")"
+            # The memory gate reads these peaks (usage.sh), by meta bin and first arg
+            pk=$(sed -n "s/^peak_rss_gb //p" $d/usage 2>/dev/null)
+            [[ -n $pk && $pk != - ]] && printf "peak\t%s\t%s\n" "$d" "$pk"
         done'
     if [[ "$host" == mac ]]; then on mac "$script"
     else ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" "$script"; fi | sed "s/^/$host	/"
