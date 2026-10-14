@@ -454,7 +454,7 @@ How to write a line:
   depends on the draft: adding which champions were picked to the game state changes
   every objective's and kill's value by under 0.2 percentage points of win chance. Given
   gold and objectives so far, a dragon adds about 4-4.5 points (5-5.5 after 30 minutes),
-  baron 5.6-7.9, elder 9 after 30 minutes, an outer tower 1.5-3 from 15 minutes, a kill
+  baron 5.6-7.9, elder 9 after 30 minutes, an outer tower 1.5-3.2 from 15 minutes, a kill
   2.5-3.8 (5.3 before 10 minutes), a grub under 1, herald 0.6. Teams that were behind and
   took an objective went on to win more than the simple state model said (baron 4.6
   points, inhibitor 8, elder 8 more), and a model that also knows items, levels, death
@@ -464,9 +464,11 @@ How to write a line:
   games, no test), win chances cross-fitted by game, 200 game bootstraps (± 0.1-0.2 points
   on the values); comparisons between state models are like for like, absolute values as
   fitted (no planted check of this regression yet); description, not proof an objective
-  caused the win; "behind" is each model's own view. Site: event values may annotate a
-  game timeline as "teams that took this won about X points more often"; no "steal
-  saved the game" claims. Evidence: docs/model.md "In-game events on the draft-aware
+  caused the win; "behind" is each model's own view. Site: post-game only (self-review,
+  which Riot's policy encourages; not champ-select advice) and only once the production
+  key allows anything public: a game timeline may note "teams that took this won about X
+  points more often", never "+X% win rate"; no "steal saved the game" claims
+  (docs/production-key.md). Evidence: docs/model.md "In-game events on the draft-aware
   state", cleared by meiolol-53; chances from meiolol-state's run
   20261014T020129Z-state-preds-2253Zr
 - 2026-10-12: Teams that take objectives win about as often as teams with this much
