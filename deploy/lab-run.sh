@@ -7,7 +7,8 @@
 #
 #   deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --commit SHA | --bin KEY]
 #                           [--no-build] [--build-arg A]... [--with PATH]...
-#                           [--res cpu|gpu|none|auto] [--literal] [--dry-run] -- ARGS...
+#                           [--res cpu|gpu|none|auto] [--gpu-share N] [--literal]
+#                           [--dry-run] -- ARGS...
 #   deploy/lab-run.sh start [gpu-box] NAME --python SCRIPT [--with PATH]... [--res R]
 #                           -- ARGS...
 #   deploy/lab-run.sh status [HOST]
@@ -59,6 +60,7 @@ RUNS=ml/runs
 BUILD_ARGS=()
 WITH=()
 RES=
+SHARE=1
 DRY=0
 LITERAL=0
 WATCH=meiolol-lab-watch
@@ -389,6 +391,7 @@ start() {
             --build-arg) BUILD_ARGS+=("$2"); shift ;;
             --with) WITH+=("$2"); shift ;;
             --res) RES=$2; shift ;;
+            --gpu-share) SHARE=$2; shift ;;
             --literal) LITERAL=1 ;;
             --dry-run) DRY=1 ;;
             --) shift; break ;;
@@ -404,6 +407,9 @@ start() {
     # Explicit HOST: cpu unless --res says otherwise, as before placement existed
     [[ -n "$RES" ]] || { if [[ "$host" == auto ]]; then RES=auto; else RES=cpu; fi; }
     [[ "$RES" =~ ^(cpu|gpu|none|auto)$ ]] || { echo "--res: cpu, gpu, none or auto"; exit 2; }
+    [[ "$SHARE" =~ ^[1-9]$ ]] || { echo "--gpu-share: 1-9 gpu slots"; exit 2; }
+    (( SHARE == 1 )) || [[ "$RES" == gpu ]] \
+        || { echo "--gpu-share needs --res gpu"; exit 2; }
     if (( LITERAL )); then
         local a quoted=()
         for a in "$@"; do
@@ -563,9 +569,34 @@ need=$(cd ~/ml/runs 2> /dev/null && awk -v bin=@MBIN@ -v cmd=@MCMD@ '"'"'
     }'"'"' */meta */usage 2> /dev/null)
 need_kb=$(awk -v g="${need:-4}" '"'"'BEGIN { print int(g * 1048576) }'"'"')
 memsince= memlong=
+share=@SHARE@
+(( share <= n )) || share=$n
 say() {
     echo "$*"
     printf "%s %s: %s\n" "$(date -u +%FT%TZ)" "${PWD##*/}" "$*" >> ~/ml/runs/watcher.log
+}
+# KiB that runs started in the last 15 min have yet to grow into (their memneed, the
+# need they passed the gate with, less their RSS now): without it a second head passed
+# right behind a run that had not grown yet, and one of them was OOM-killed (st1, 01:20Z)
+held_back() {
+    local m d out=""
+    for m in ~/ml/runs/*/memneed; do
+        d=${m%/memneed}
+        [[ -f $m && ! -f $d/exit && -f $d/job.pgid ]] || continue
+        out+="$(cat $d/job.pgid) $(cat $m) $(stat -c %Y $m)"$'"'"'\n'"'"'
+    done
+    [[ -n $out ]] || { echo 0; return; }
+    ps -eo pgid=,rss= | awk -v want="$out" -v now="$(date +%s)" '"'"'
+        BEGIN {
+            n = split(want, w, "\n")
+            for (i = 1; i <= n; i++)
+                if (split(w[i], f, " ") == 3 && now - f[3] < 900) need[f[1]] = f[2]
+        }
+        $1 in need { rss[$1] += $2 }
+        END {
+            for (g in rss) if (need[g] > rss[g]) t += need[g] - rss[g]
+            print t + 0
+        }'"'"'
 }
 # Whether any run holds a cpu or gpu slot: its lock cannot be taken
 others() {
@@ -585,6 +616,7 @@ while [[ -z $slot ]]; do
     done
     if [[ $head == "$ticket" && -r /proc/meminfo ]]; then
         avail=$(awk '"'"'/^MemAvailable:/ { print $2 }'"'"' /proc/meminfo)
+        avail=$(( ${avail:-0} - $(held_back) ))
         if (( ${avail:-0} < need_kb )); then
             if [[ -z $memsince ]]; then
                 memsince=$SECONDS
@@ -602,20 +634,28 @@ while [[ -z $slot ]]; do
             fi
         fi
     fi
+    # share slots at once (--gpu-share), on fds 9, 8, ...; all or none
     if [[ $head == "$ticket" ]]; then
-        for (( i = 0; i < n; i++ )); do
-            exec 9>> ~/ml/locks/@RES@.$i
-            if perl -MFcntl=:flock -e '"'"'open(my $f, q{>&=}, 9) or die; flock($f, LOCK_EX | LOCK_NB) or exit 1'"'"'; then
-                slot=$i
-                break
-            fi
-            exec 9>&-
+        got=()
+        for (( i = 0; i < n && ${#got[@]} < share; i++ )); do
+            fd=$(( 9 - ${#got[@]} ))
+            eval "exec $fd>> ~/ml/locks/@RES@.$i"
+            if perl -MFcntl=:flock -e '"'"'open(my $f, q{>&=}, $ARGV[0]) or die;
+                flock($f, LOCK_EX | LOCK_NB) or exit 1'"'"' $fd; then got+=("$i")
+            else eval "exec $fd>&-"; fi
         done
+        if (( ${#got[@]} == share )); then slot=${got[0]}
+        else
+            for (( j = 0; j < ${#got[@]}; j++ )); do eval "exec $(( 9 - j ))>&-"; done
+        fi
     fi
     [[ -n $slot ]] || sleep 2
 done
 rm -f $q/$ticket queued
-echo "@RES@.$slot of $n" > slot
+# First field one slot as before (lab-place.pl reads it); a share names the others after
+if (( share > 1 )); then echo "@RES@.$slot of $n (share ${got[*]})" > slot
+else echo "@RES@.$slot of $n" > slot; fi
+[[ -n $need_kb ]] && echo $need_kb > memneed
 # Not nproc: it honours OMP_NUM_THREADS. The top r cores (~/ml/locks/reserve) are kept
 # for gpu jobs, whose host threads otherwise float over the cores of the cpu slots
 c=$(getconf _NPROCESSORS_ONLN)
@@ -633,7 +673,7 @@ if command -v taskset > /dev/null; then
 fi' pin='$pin '
     # shellcheck disable=SC2016 # expands on the host
     [[ "$RES" == gpu ]] && lock+='
-printf -v LAB_GPU_FRACTION "0.%03d" $(( 950 / n ))
+printf -v LAB_GPU_FRACTION "0.%03d" $(( 950 * share / n ))
 export LAB_GPU_FRACTION
 pin=
 if (( r > 0 )) && command -v taskset > /dev/null; then
@@ -658,6 +698,7 @@ fi' pin='$pin '
     local prio=1
     [[ "${predicted%.*}" =~ ^[0-9]+$ ]] && (( ${predicted%.*} <= 60 )) && prio=0
     lock=${lock//@PRIO@/$prio}
+    lock=${lock//@SHARE@/$SHARE}
     # The memory gate's history key: the bin, and for Zig bins the command (first arg)
     local mcmd=""
     [[ "$bin" == python ]] || mcmd=${1//[^A-Za-z0-9_.-]/}

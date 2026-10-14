@@ -89,7 +89,12 @@ deploy/lab-run.sh watch-install
   (max usage peak_rss_gb over earlier runs of its meta bin, plus first arg for Zig
   bins; 4 GB if none). After 20 min it goes with half that free (peaks are upper
   bounds) or once no run holds a slot, never on time alone: an OOM kill takes a
-  neighbour down. Waits are logged in the run's log and watcher.log.
+  neighbour down. Waits are logged in the run's log and watcher.log. A run that took
+  its slot in the last 15 min counts its need (run dir `memneed`) less its RSS now as
+  taken, so a second head can't pass before the first has grown (st1 j03 OOM-killed)
+- `--gpu-share N` (--res gpu): the run holds N gpu slots at once (all or none, as queue
+  head) and torch gets 0.95 N/slots of the card, for jobs one slot's share can't fit;
+  `slot` reads "gpu.A of S (share A B)"
   State jobs peak at 6-8 GB of the gpu-box's 23. listing() gives `mem KB` (MemAvailable)
   and `peak DIR GB` lines for lab-place.pl
 - Slot queue: tickets in ~/ml/locks/RES.q, only the oldest live one tries the slots
