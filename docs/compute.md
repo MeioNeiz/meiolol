@@ -87,7 +87,9 @@ deploy/lab-run.sh watch-install
   are read when a job takes its slot, so tuning needs no code change
 - Memory gate: the queue head also waits while MemAvailable is below its kind's peak
   (max usage peak_rss_gb over earlier runs of its meta bin, plus first arg for Zig
-  bins; 4 GB if none), and goes anyway after 20 min ("waiting for memory" in its log).
+  bins; 4 GB if none). After 20 min it goes with half that free (peaks are upper
+  bounds) or once no run holds a slot, never on time alone: an OOM kill takes a
+  neighbour down. Waits are logged in the run's log and watcher.log.
   State jobs peak at 6-8 GB of the gpu-box's 23. listing() gives `mem KB` (MemAvailable)
   and `peak DIR GB` lines for lab-place.pl
 - Slot queue: tickets in ~/ml/locks/RES.q, only the oldest live one tries the slots

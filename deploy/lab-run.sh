@@ -546,8 +546,10 @@ ticket=@PRIO@$(date +%s%N)-$$
 : > $q/$ticket
 # Memory: the head waits while MemAvailable is below the peak its kind of run reached
 # before (usage peak_rss_gb, max over runs of its bin, and command for Zig bins; 4 GB if
-# none), so runs cannot OOM WSL (state jobs peak at 6-8 GB of 23). After 20 min it goes
-# anyway: memory held by runs that never end must not block the queue for good
+# none), so runs cannot OOM WSL (state jobs peak at 6-8 GB of 23): an OOM kill takes a
+# neighbour down, worse than a late start. After 20 min it goes with half its peak free
+# (peaks are upper bounds), or once no lab run holds a slot, as then nothing of ours can
+# free more. Both waits go to the log and watcher.log
 need=$(cd ~/ml/runs 2> /dev/null && awk -v bin=@MBIN@ -v cmd=@MCMD@ '"'"'
     FNR == 1 { d = FILENAME; sub(/\/[^\/]*$/, "", d) }
     FILENAME ~ /\/meta$/ && $1 == "bin" { b[d] = $2 }
@@ -560,7 +562,20 @@ need=$(cd ~/ml/runs 2> /dev/null && awk -v bin=@MBIN@ -v cmd=@MCMD@ '"'"'
         print m ? m : 4
     }'"'"' */meta */usage 2> /dev/null)
 need_kb=$(awk -v g="${need:-4}" '"'"'BEGIN { print int(g * 1048576) }'"'"')
-memsince=
+memsince= memlong=
+say() {
+    echo "$*"
+    printf "%s %s: %s\n" "$(date -u +%FT%TZ)" "${PWD##*/}" "$*" >> ~/ml/runs/watcher.log
+}
+# Whether any run holds a cpu or gpu slot: its lock cannot be taken
+others() {
+    local f
+    for f in ~/ml/locks/cpu.[0-9]* ~/ml/locks/gpu.[0-9]*; do
+        perl -MFcntl=:flock -e '"'"'open(my $f, ">>", $ARGV[0]) or exit 1;
+            flock($f, LOCK_EX | LOCK_NB) and exit 1'"'"' "$f" && return 0
+    done
+    return 1
+}
 slot=
 while [[ -z $slot ]]; do
     head=
@@ -573,9 +588,18 @@ while [[ -z $slot ]]; do
         if (( ${avail:-0} < need_kb )); then
             if [[ -z $memsince ]]; then
                 memsince=$SECONDS
-                echo "waiting for memory: $need GB needed, $(( avail / 1048576 )) GB free"
+                say "waiting for memory: $need GB needed, $(( avail / 1048576 )) GB free"
             fi
-            (( SECONDS - memsince < 1200 )) && head=
+            if (( SECONDS - memsince < 1200 )); then head=
+            elif (( avail < need_kb / 2 )) && others; then
+                if [[ -z $memlong ]]; then
+                    memlong=1
+                    say "still waiting for memory after 20 min: $need GB needed," \
+                        "$(( avail / 1048576 )) GB free" \
+                        "(goes at half, or when no slot is held)"
+                fi
+                head=
+            fi
         fi
     fi
     if [[ $head == "$ticket" ]]; then
