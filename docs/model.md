@@ -2645,10 +2645,13 @@ fitted -1.69 ± 0.33); champion strength is unbiased at real pair sizes. But pai
 run low: ally pairs planted at 2 pp came out 1.21 on average (0.6x; 1 of 10 intervals
 covered 2), at 4 pp 2.99 (0.75x, 0 of 10), lane matchups at 2 pp 0.9x. So read the ally
 and matchup sds as lower bounds and their upper ends as too low, by up to ~1.7x for the
-ally blocks (bottom-support 1.21 may be ~2 pp). The likely cause is the variance
-estimate's diagonal posterior (1/H_ii is at most (H^-1)_ii, so it counts too many
-effective parameters and shrinks the variance); fixing it changes the model, so it waits
-for the pre-declared 2253Z test.
+ally blocks (bottom-support 1.21 may be ~2 pp). Cause (unit plant, 20k games, one pair
+block): the known downward bias of Laplace-type variance estimates on binary outcomes
+with few games per cell, not the diagonal posterior. The same block planted on a
+gaussian outcome comes back at 0.97-1.04x at 6-180 games per cell; on win it comes back
+at 0.96x at 178 games per cell, 0.67x at 25, 0.23x at 6. So win pair sds are lower bounds
+and gold-at-14 ones are not; fixing it changes the shipped shrinkage, so it gets its own
+pre-declared check.
 
 Damage mix: -1.94 ± 0.33 pp per sd of the term (-2.72 ± 0.33 per sd of blue minus red);
 on gold at 14 -11 ± 27 (none: the mix is a late-game term). So the draft's information is
