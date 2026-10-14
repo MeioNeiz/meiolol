@@ -1,5 +1,5 @@
 # title: How do drafts win: what the draft adds once the game state is known
-# diff: log loss per game of the win, model minus vs (negative better), games still going at the minute; dev only, not draft predictors; snap-20261013T2253Z (Q1 rows) unless the source run says 2055Z
+# diff: log loss per game of the win, model minus vs (negative better), games still going at the minute; dev only, not draft predictors; snap-20261013T2253Z
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
 draft given state, minute 15	state alone	folds	-0.02009	0.00123	1			100847		20261014T011058Z-dp-info-2253Z	5/5 folds, games with a 15-minute timeline; the draft before the game: -0.0041 ± 0.0006 (ratio ~5x folds, ~4x dev-val; draft alone was -0.0011 on 2055Z, other games and fit sizes, so not a measured growth); pre-declared, audited by meiolol-53
 draft given state, minute 15	state alone	dev-val	-0.02162	0.00238	1			26263		20261014T011058Z-dp-info-2253Z	
@@ -12,8 +12,8 @@ draft given state, minute 20	state alone	folds	-0.02137	0.00130	1			92188		20261
 draft given state, minute 25	state alone	folds	-0.01996	0.00140	1			76456		20261014T011058Z-dp-info-2253Z	5/5; games still going
 draft given state, minute 30	state alone	folds	-0.01884	0.00182	1			44451		20261014T011058Z-dp-info-2253Z	5/5; games still going
 pre-game draft logit given state, minute 15	state alone	folds	-0.00510	0.00060	1			100847		20261014T011058Z-dp-info-2253Z	weight 1.09-1.51 by block: the pre-game edge is not absorbed into the state
-draft given GBDT state, minute 15	GBDT state alone	folds	-0.01368	0.00199	1			29278		20261013T234038Z-dp-infogbdt	GBDT state ties the linear state (+0.0012 ± 0.0011)
-GBDT state, minute 15	linear state	folds	0.00116	0.00114	1			29278		20261013T234038Z-dp-infogbdt	1/5 folds better
-lane matchup pairs beside the draft, top	draft alone	folds	-0.00007	0.00005	1			44353		20261013T230201Z-dp-comeback-a	win: tiny, under the noise floor, not confirmed; the same pairs gain 0.45% of lane gold MSE at 14 (5/5)
-lane matchup pairs beside the draft, middle	draft alone	folds	-0.00005	0.00005	1			44353		20261013T230201Z-dp-comeback-a	win; lane gold 0.30% (5/5)
-lane matchup pairs beside the draft, bottom	draft alone	folds	-0.00004	0.00008	1			44353		20261013T230201Z-dp-comeback-a	win; lane gold 0.10% (5/5)
+draft given GBDT state, minute 15	GBDT state alone	folds	-0.01643	0.00114	1			100847		20261014T011238Z-dp-infogbdt-2253Z	82% of the draft given the linear state; GBDT state + draft still worse than linear state + draft (+0.0026 ± 0.0006, 0/5)
+GBDT state, minute 15	linear state	folds	-0.00106	0.00053	1			100847		20261014T011238Z-dp-infogbdt-2253Z	5/5 folds better (2055Z: level, 1/5); -0.0034 ± 0.0009 at 25
+lane matchup pairs beside the draft, top	draft alone	folds	-0.00021	0.00006	1			134375		20261014T011344Z-dp-comeback-2253Z	win, 5/5, dev-val -0.00033 ± 0.00014: about half the noise floor (~0.4 milli-nats), not confirmed, a lead; lane gold MSE 1.10% at 14 (5/5)
+lane matchup pairs beside the draft, middle	draft alone	folds	-0.00008	0.00006	1			134375		20261014T011344Z-dp-comeback-2253Z	win, 4/5; lane gold 0.55% (5/5)
+lane matchup pairs beside the draft, bottom	draft alone	folds	-0.00010	0.00006	1			134375		20261014T011344Z-dp-comeback-2253Z	win, 5/5; lane gold 0.06% (5/5)
