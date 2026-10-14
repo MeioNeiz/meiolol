@@ -11,7 +11,7 @@ const NN = { at: undefined, files: [], err: null };
 const NN_ORDER = ["nets", "structured", "comp", "embx", "pretrain", "stack", "context", "player", "ldai", "gains", "scaling"];
 const NN_VS = { ratings: "today's model", "win-comp": "win-comp", base: "champion win rates" };
 const NN_BLOCK = {
-  folds: "5 forward rounds", "dev-val": "newest EUW dev games", test: "test look",
+  folds: "5 forward rounds", "dev-val": "newest dev games", test: "test look",
   random: "random split (LoLDraftAI-style)", projection: "projection",
 };
 

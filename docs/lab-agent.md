@@ -68,15 +68,14 @@ pub const seeded = true; // optional: the harness averages 3 seeds
 
 ## Splits
 
-Protocol's split stays (docs/model.md "Shared protocol"): test = newest 20% of EUW1.
-Inside train, by time on EUW1: selection = newest 20% of non-test EUW1 games, dev-val =
-the next 20%. Each phase sees only older games, every platform:
+Protocol's split (docs/model.md "Shared protocol"), one time cut over every platform:
+test = newest 15% of played games, dev-val = the next 10%. No selection window since
+2253Z (`exp run --select` is refused). Each phase sees only older games, every platform:
 
 | phase | visible (fit on) | scored on | who sees the result |
 |---|---|---|---|
 | dev | games older than dev-val | dev-val | the agent, in full |
-| select | games older than selection | selection | the agent, ladder answer only |
-| final | all train | test | `lab-exp.sh final`, humans only |
+| final | all games before test | test | `lab-exp.sh final`, humans only |
 
 A new snapshot moves every boundary forward and starts a fresh look budget.
 
@@ -110,6 +109,9 @@ only loss numbers (meiolol-cf, 2026-10-12). Per run dir:
   sentence per line, written by `lab-exp.sh finding`; the brief says what a finding is
 
 ## The ladder (selection set)
+
+Retired from snap-20261013T2253Z: the one global cut has no selection window, so there
+are no ladder looks. Kept for the record.
 
 The agent never sees a raw selection score. Per snapshot and target the harness keeps
 a current best (the baseline until beaten). A `--select` run answers "new best" with

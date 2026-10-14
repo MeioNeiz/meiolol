@@ -134,7 +134,7 @@ pub fn section(w: *Writer, points: []const Point) !void {
     }
     try tpl.renderPart(w,
         \\</svg>
-        \\<figcaption>AUC on held-out EUW games against the games the models learnt from; one point per daily run. Latest: {l0} {v0:.3}, {l1} {v1:.3}, {l2} {v2:.3}. The draft model in use stays until another beats it beyond noise.</figcaption></figure>
+        \\<figcaption>AUC on held-out games (every platform, from one time cut) against the games the models learnt from; one point per daily run. Latest: {l0} {v0:.3}, {l1} {v1:.3}, {l2} {v2:.3}. The draft model in use stays until another beats it beyond noise.</figcaption></figure>
         \\
     , .{
         .l0 = series[0].label,

@@ -277,10 +277,10 @@ little-endian file per column, one game per index, for GPU loaders (format agree
 meiolol-f1; nnexport.read loads it back). champ.u8 [n][10] (dense index into
 meta.champions, slot = side * 5 + role), platform.u8, patch.u8, start.i64, duration.u16,
 blue_win.u8, split.u8 (0 dev's older half, 1-5 win-comp's forward-chaining fold blocks,
-6 dev-val, 7 other platforms in dev-val's period, 8 selection, 9 other platforms in
-selection's period, 10 test), flags.u8 (1 played 15:00+, 2 timeline to 15:00), aux.f32
+6 dev-val, 10 test, every platform, harness.Cuts; 7-9 empty since the 2253Z re-cut,
+codes kept), flags.u8 (1 played 15:00+, 2 timeline to 15:00), aux.f32
 [n][10][22] (the five early outcomes then SeatStat: targets, never inputs). meta.json:
-names, cut times, fold bounds and, per fit set (folds, dev-val, selection, final) and
+names, test_cut, dev_cut, fold bounds and, per fit set (folds, dev-val, final) and
 role, the aux mean, sd and count over played fit games only. nn.tmp, then renamed.
 
 ## Lane curves (src/curves.zig, src/core/curvesfile.zig, curvefit.zig, src/site/matchup.zig)

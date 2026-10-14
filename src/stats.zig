@@ -64,6 +64,7 @@ pub const Row = struct {
     platform: u8,
     teams: [2][5]u32,
     winner: u1,
+    duration_s: u32 = 0,
 };
 
 pub fn matchKey(match_id: []const u8) u64 {
@@ -122,13 +123,13 @@ pub fn scan(
     // SQLite knows m is in order, and keeps that order guaranteed
     var q = try db.prepare(
         \\WITH m AS MATERIALIZED (
-        \\  SELECT match_id, winning_team, game_start, patch, platform FROM matches m
+        \\  SELECT match_id, winning_team, game_start, patch, platform, duration_s FROM matches m
         \\  WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
         \\    AND m.platform IN (SELECT value FROM json_each(?))
         \\    AND m.remake = 0 AND m.winning_team IS NOT NULL AND m.game_start >= ?
         \\  ORDER BY match_id
         \\)
-        \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, m.platform,
+        \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, m.platform, m.duration_s,
         \\  p.team_id, p.position, p.champion_id
         \\FROM m CROSS JOIN participants p USING (match_id)
         \\ORDER BY m.match_id
@@ -147,6 +148,7 @@ pub fn scan(
             game_start: i64,
             patch: []const u8,
             platform: []const u8,
+            duration_s: i64,
             team_id: i64,
             position: []const u8,
             champion_id: i64,
@@ -161,6 +163,7 @@ pub fn scan(
                 .start = r.game_start,
                 .patch = patchKey(r.patch),
                 .platform = platformIndex(platforms, r.platform),
+                .duration_s = @intCast(r.duration_s),
             };
         }
         game.add(r.team_id, r.position, r.champion_id);
@@ -198,6 +201,7 @@ const Game = struct {
     start: i64 = 0,
     patch: u32 = 0,
     platform: u8 = 0,
+    duration_s: u32 = 0,
     teams: [2][5]u32 = @splat(@splat(0)),
     rows: u8 = 0,
     bad: bool = false,
@@ -242,6 +246,7 @@ const Game = struct {
             .platform = g.platform,
             .teams = g.teams,
             .winner = winner.?,
+            .duration_s = g.duration_s,
         });
         summary.games += 1;
     }

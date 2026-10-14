@@ -1357,11 +1357,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     defer legendaries.deinit(gpa);
     var data = try rows.load(gpa, snap, &legendaries);
     defer data.deinit();
-    const ids = protocol.platformIds();
-    const eu: u8 = for (ids, 0..) |id, k| {
-        if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(k);
-    } else return error.TestPlatformNotScanned;
-    const c = try harness.cuts(gpa, &data, eu);
+    const c = try harness.cuts(gpa, &data);
 
     var t = try load(gpa, io, snap, &data, c, phase);
     defer t.deinit(gpa);

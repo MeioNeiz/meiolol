@@ -17,6 +17,7 @@ const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
 const analysis = @import("analysis.zig");
+const eval = @import("eval.zig");
 const logreg = @import("logreg.zig");
 const objectives = @import("objectives.zig");
 const par = @import("par.zig");
@@ -28,11 +29,12 @@ const Io = std.Io;
 pub const n_folds = 5;
 
 pub const Options = struct {
-    test_share: f64 = 0.2,
-    test_platform: []const u8 = "EUW1",
+    test_share: f64 = eval.test_share,
+    /// Region filter: dev-val and test scored on this platform only (eval.split)
+    test_platform: ?[]const u8 = null,
     passes: u32 = 8,
-    /// Block starts of the 5 folds, the dev cut, the select cut (ms; harness.Cuts and
-    /// compcheck's foldBounds); all 0: computed here the same way
+    /// Block starts of the 5 folds, the dev cut, the test cut (ms; harness.Cuts); all 0:
+    /// from eval.split's cuts, as the lab's
     cuts: [n_folds + 2]i64 = @splat(0),
     /// TSV of every type x role x state term by minute (every train game's fit)
     type_table: ?[]const u8 = null,
@@ -639,13 +641,13 @@ fn fitDecided(gpa: std.mem.Allocator, champs: usize, rows: []const Row, eta: []c
 }
 
 /// A scored block: fit on train games started before `fit_before`, score train games
-/// in [lo, hi) (EUW only for dev-val) or the test games; no scoring for `all`
+/// in [lo, hi) (the region's only for dev-val, with one) or the test games; no scoring for `all`
 const Block = struct {
     label: []const u8,
     fit_before: i64,
     lo: i64 = 0,
     hi: i64 = 0,
-    eu_only: bool = false,
+    region_only: bool = false,
     is_test: bool = false,
     scored: bool = true,
 };
@@ -681,7 +683,7 @@ const Ctx = struct {
     at: *const [n_min]Minute,
     blocks: []const Block,
     games: []const GameInfo,
-    eu: u8,
+    region: ?u8,
     champs: usize,
     type_of: []const u8,
     passes: u32,
@@ -704,7 +706,7 @@ const Ctx = struct {
             for (if (blk.is_test) m.tests.items else train) |r| {
                 const g = c.games[r.game];
                 if (!blk.is_test and (g.start < blk.lo or g.start >= blk.hi)) continue;
-                if (blk.eu_only and g.platform != c.eu) continue;
+                if (blk.region_only) if (c.region) |p| if (g.platform != p) continue;
                 try list.append(gpa, r);
             }
             j.scored = try list.toOwnedSlice(gpa);
@@ -846,9 +848,9 @@ pub fn run(
     defer map.deinit(gpa);
     var exp = try loadExp(gpa, db, platforms);
     defer exp.deinit(gpa);
-    const eu: u8 = for (platforms, 0..) |p, i| {
-        if (std.mem.eql(u8, p, opts.test_platform)) break @intCast(i);
-    } else return error.Usage;
+    const region: ?u8 = if (opts.test_platform) |tp| for (platforms, 0..) |p, i| {
+        if (std.mem.eql(u8, p, tp)) break @intCast(i);
+    } else return error.Usage else null;
 
     var champ_index: analysis.DenseIndex = .{};
     defer champ_index.deinit(gpa);
@@ -899,7 +901,7 @@ pub fn run(
         m.truth = try plantWinners(gpa, m, minute == 0, champs, p);
     };
 
-    const c = if (opts.cuts[n_folds] != 0) opts.cuts else try labCuts(gpa, db, split.split.train, eu);
+    const c = if (opts.cuts[n_folds] != 0) opts.cuts else labCuts(split.split.cuts);
     var blocks: std.ArrayList(Block) = .empty;
     defer blocks.deinit(gpa);
     for (0..n_folds) |f| try blocks.append(gpa, .{
@@ -908,7 +910,7 @@ pub fn run(
         .lo = c[f],
         .hi = c[f + 1],
     });
-    try blocks.append(gpa, .{ .label = "dev", .fit_before = c[n_folds], .lo = c[n_folds], .hi = c[n_folds + 1], .eu_only = true });
+    try blocks.append(gpa, .{ .label = "dev", .fit_before = c[n_folds], .lo = c[n_folds], .hi = c[n_folds + 1], .region_only = true });
     try blocks.append(gpa, .{ .label = "all", .fit_before = std.math.maxInt(i64), .scored = false });
     if (opts.final) try blocks.append(gpa, .{ .label = "test", .fit_before = std.math.maxInt(i64), .is_test = true });
     const all_block = n_folds + 1;
@@ -932,7 +934,7 @@ pub fn run(
         .at = &at,
         .blocks = blocks.items,
         .games = games.items,
-        .eu = eu,
+        .region = region,
         .champs = champs,
         .type_of = type_of,
         .passes = opts.passes,
@@ -957,8 +959,8 @@ pub fn run(
         "{f}; test: {d} {s} games from then{s}. Rows: ten per game and minute while it is going " ++
         "(minute 0: the draft). Earlier games on the champion known (1+) for {d:.1}% of " ++
         "player-games. Blocks: folds 1-5 fit on train games before the block, score every " ++
-        "platform's games in it; dev fits before the dev cut and scores EUW1 dev-val.\n", .{
-        n_games[0],                                                Date.fromMs(split.cutoff),                                                                          n_games[1], opts.test_platform,
+        "platform's games in it; dev fits before the dev cut and scores dev-val.\n", .{
+        n_games[0],                                                Date.fromMs(split.cutoff),                                                                          n_games[1], opts.test_platform orelse "every platform's",
         if (opts.final) " (scored: --final)" else " (not scored)", 100 * @as(f64, @floatFromInt(exp_known)) / @as(f64, @floatFromInt(10 * (n_games[0] + n_games[1]))),
     });
     try w.print("\nCuts (--cuts):", .{});
@@ -1184,36 +1186,12 @@ pub fn run(
     }
 }
 
-/// The lab's blocks (harness.cuts, compcheck --folds 5): dev and select cut off the
-/// newest 40% and 20% of the test platform's non-test games; the folds split the newest
-/// half of the dev phase's visible games (15:00+, before the dev cut, every platform)
-fn labCuts(gpa: std.mem.Allocator, db: store.Db, train: []const stats.Row, eu: u8) ![n_folds + 2]i64 {
-    var duration: std.AutoHashMapUnmanaged(u64, i64) = .empty;
-    defer duration.deinit(gpa);
-    var q = try db.prepare("SELECT match_id, duration_s FROM matches WHERE queue_id = ?");
-    defer q.deinit();
-    try q.bind(.{stats.ranked_solo});
-    while (try q.step()) try duration.put(gpa, stats.matchKey(q.bytes(0)), q.int(1));
-    var starts: std.ArrayList(i64) = .empty;
-    defer starts.deinit(gpa);
-    for (train) |g| if (g.platform == eu) try starts.append(gpa, g.start);
-    std.mem.sort(i64, starts.items, {}, std.sort.desc(i64));
-    const n: usize = @intFromFloat(@round(@as(f64, @floatFromInt(starts.items.len)) * 0.2));
-    if (n < 20) return error.TooFewGames;
+/// The lab's blocks (harness.Cuts): the 5 fold starts, the dev cut, the test cut
+fn labCuts(e: eval.Cuts) [n_folds + 2]i64 {
     var c: [n_folds + 2]i64 = undefined;
-    c[n_folds + 1] = starts.items[n - 1];
-    c[n_folds] = starts.items[2 * n - 1];
-    starts.clearRetainingCapacity();
-    for (train) |g| {
-        if (g.start >= c[n_folds] or (duration.get(g.id) orelse 0) < 900) continue;
-        try starts.append(gpa, g.start);
-    }
-    std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
-    const len: f64 = @floatFromInt(starts.items.len);
-    for (c[0..n_folds], 0..) |*x, f| {
-        const at = 0.5 + 0.5 * @as(f64, @floatFromInt(f)) / n_folds;
-        x.* = starts.items[@intFromFloat(len * at)];
-    }
+    @memcpy(c[0..n_folds], e.bounds[0..n_folds]);
+    c[n_folds] = e.dev;
+    c[n_folds + 1] = e.test_;
     return c;
 }
 

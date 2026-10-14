@@ -137,7 +137,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
 
     try w.print("dev score (refits on dev's games)...\n", .{});
     try w.flush();
-    const dev = try devScore(gpa, &data, eu);
+    const dev = try devScore(gpa, &data);
     for (dev) |x| try w.print("dev {s}: typical miss {d:.2} -> {d:.2} {s} ({d:.2}% of the error removed, ±{d:.2})\n", .{ x.outcome, x.err_base, x.err_cand, x.unit, x.removed_pct, x.removed_half });
 
     const champions = try championList(gpa, arena, snap);
@@ -152,7 +152,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             .newest_game = try dayOf(arena, newest),
             .training_games = t.games.len,
             .patch = try std.fmt.allocPrint(arena, "{d}.{d}", .{ ex.patch / 1000, ex.patch % 1000 }),
-            .platform = protocol.test_platform,
+            .platform = protocol.home_platform,
             .dev = &dev,
         },
         .outcomes = outcomeNames(),
@@ -333,7 +333,7 @@ fn unitOf(o: api.Outcome) []const u8 {
 }
 
 fn euIndex() u8 {
-    for (protocol.platformIds(), 0..) |id, i| if (std.mem.eql(u8, id, protocol.test_platform)) return @intCast(i);
+    for (protocol.platformIds(), 0..) |id, i| if (std.mem.eql(u8, id, protocol.home_platform)) return @intCast(i);
     unreachable;
 }
 
@@ -364,10 +364,10 @@ fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
 }
 
 /// The candidate refitted on dev's visible games, scored on dev-val per lane outcome
-fn devScore(gpa: std.mem.Allocator, d: *const rows.Data, eu: u8) ![n_lane]DevOut {
+fn devScore(gpa: std.mem.Allocator, d: *const rows.Data) ![n_lane]DevOut {
     const players = try harness.gamePlayers(gpa, d);
     defer gpa.free(players);
-    const c = try harness.cuts(gpa, d, eu);
+    const c = try harness.cuts(gpa, d);
     var s = try harness.score(cand, gpa, d, players, c, .dev, .{});
     defer s.deinit(gpa);
     var out: [n_lane]DevOut = undefined;

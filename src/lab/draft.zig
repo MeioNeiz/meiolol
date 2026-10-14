@@ -467,7 +467,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
 }
 
 fn euIndex() u8 {
-    for (protocol.platformIds(), 0..) |id, i| if (std.mem.eql(u8, id, protocol.test_platform)) return @intCast(i);
+    for (protocol.platformIds(), 0..) |id, i| if (std.mem.eql(u8, id, protocol.home_platform)) return @intCast(i);
     unreachable;
 }
 
@@ -692,10 +692,10 @@ const Dev = struct {
 
 /// The candidate refitted on dev's visible games, scored on dev-val (lab-agent.md
 /// "Splits"): log loss per row, accuracy and AUC per game on blue's chance
-fn devScore(gpa: std.mem.Allocator, d: *const rows.Data, eu: u8) !Dev {
+fn devScore(gpa: std.mem.Allocator, d: *const rows.Data) !Dev {
     const players = try harness.gamePlayers(gpa, d);
     defer gpa.free(players);
-    const c = try harness.cuts(gpa, d, eu);
+    const c = try harness.cuts(gpa, d);
     var s = try harness.score(cand, gpa, d, players, c, .dev, .{});
     defer s.deinit(gpa);
     const k = api.outcomeIndex(.win);
@@ -732,7 +732,7 @@ fn devScore(gpa: std.mem.Allocator, d: *const rows.Data, eu: u8) !Dev {
     };
     const n: f64 = @floatFromInt(points.items.len);
     return .{
-        .what = "fitted on the games older than dev-val, scored on dev-val: the newest 20-40% of non-test EUW1 games (docs/lab-agent.md Splits); log loss per player row of the team's win, accuracy and AUC per game on blue's chance",
+        .what = "fitted on the games older than dev-val, scored on dev-val: the 10% of played games before the test cut, every platform (docs/lab-agent.md Splits); log loss per player row of the team's win, accuracy and AUC per game on blue's chance",
         .games = points.items.len,
         .log_loss = p.a,
         .baseline_log_loss = p.b,
@@ -829,7 +829,7 @@ fn exportFiles(
 
     try w.print("dev score (refits on dev's games)...\n", .{});
     try w.flush();
-    const dev = try devScore(gpa, d, sc.platform);
+    const dev = try devScore(gpa, d);
     try w.print("dev: log loss {d:.5} (champion baseline {d:.5}), accuracy {d:.4}, AUC {d:.4} on {d} games\n", .{ dev.log_loss, dev.baseline_log_loss, dev.accuracy, dev.auc, dev.games });
 
     var champions: std.ArrayList(ChampionOut) = .empty;
@@ -861,7 +861,7 @@ fn exportFiles(
             .newest_game = try dayOf(arena, newest.start),
             .training_games = d.games.len,
             .patch = try std.fmt.allocPrint(arena, "{d}.{d}", .{ champs.patch / 1000, champs.patch % 1000 }),
-            .platform = protocol.test_platform,
+            .platform = protocol.home_platform,
             .dev = dev,
         },
         .has_pairs = !std.mem.eql(u8, e.kind, "ratings") and !std.mem.eql(u8, e.kind, "rates"),

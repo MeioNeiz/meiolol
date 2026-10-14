@@ -23,12 +23,12 @@ const Io = std.Io;
 const Stat = seatstats.SeatStat;
 
 pub const usage =
-    \\  compcheck SNAP [--folds K]      dev only, built with -Dcand=src/lab/cand/win-ratings:
+    \\  compcheck SNAP [--folds 5]      dev only, built with -Dcand=src/lab/cand/win-ratings:
     \\                                  observed minus win-ratings' predicted win by team
     \\                                  composition (profiles from dev's training games),
     \\                                  intervals clustered by game (lab/compcheck.zig);
-    \\                                  --folds: win-comp's forward-chaining folds instead
-    \\  compcheck SNAP --final          the one test look (EUW1 test, the pre-declared
+    \\                                  --folds: the shared forward-chaining folds instead
+    \\  compcheck SNAP --final          the one test look (test, the pre-declared
     \\                                  contrast only): on meiolol-2c's go
     \\
 ;
@@ -193,11 +193,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     defer data.deinit();
     const players = try harness.gamePlayers(gpa, &data);
     defer gpa.free(players);
-    const ids = protocol.platformIds();
-    const eu: u8 = for (ids, 0..) |id, i| {
-        if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
-    } else return error.TestPlatformNotScanned;
-    const c = try harness.cuts(gpa, &data, eu);
+    const c = try harness.cuts(gpa, &data);
 
     var buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &buf);
@@ -207,30 +203,20 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var wins: Wins = .empty;
     defer wins.deinit(gpa);
     if (final) {
-        try w.print("# compcheck, FINAL (scored: EUW1 test; profiles and win-ratings: every train game)\n\n", .{});
+        try w.print("# compcheck, FINAL (scored: test; profiles and win-ratings: every train game)\n\n", .{});
         try addUnits(gpa, &data, players, c, .{ .before = std.math.maxInt(i64), .phase = .final }, &units, &wins, w);
     } else if (folds == 0) {
-        try w.print("# compcheck, dev (scored: EUW1 dev-val; profiles: visible games before the dev cut)\n\n", .{});
+        try w.print("# compcheck, dev (scored: dev-val; profiles: visible games before the dev cut)\n\n", .{});
         try addUnits(gpa, &data, players, c, .{ .before = c.dev }, &units, &wins, w);
     } else {
-        // foldAblation's blocks (win-comp): the newest half of dev's visible games, every
-        // platform, in `folds` blocks by start; each fitted on the games before it
-        var starts: std.ArrayList(i64) = .empty;
-        defer starts.deinit(gpa);
-        for (data.games) |g| if (harness.visible(.dev, c, g)) try starts.append(gpa, g.start);
-        std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
+        // The shared folds (harness.Cuts, win-comp's foldAblation blocks), each fitted on
+        // the games before it
+        if (folds != harness.folds) return error.Usage;
         try w.print("# compcheck, {d} forward-chaining folds over the newest half of dev's visible games (every platform; offset and profiles refitted per fold on older games)\n\n", .{folds});
         for (0..folds) |f| {
-            const quantile = struct {
-                fn q(xs: []const i64, x: f64) i64 {
-                    if (x >= 1) return c_dev_sentinel;
-                    return xs[@intFromFloat(@as(f64, @floatFromInt(xs.len)) * x)];
-                }
-            }.q;
-            const fi: f64 = @floatFromInt(f);
-            const k: f64 = @floatFromInt(folds);
-            const lo = quantile(starts.items, 0.5 + 0.5 * fi / k);
-            const hi = @min(quantile(starts.items, 0.5 + 0.5 * (fi + 1) / k), c.dev);
+            const b = c.fold(f + 1);
+            const lo = b.lo;
+            const hi = b.hi;
             wins.clearRetainingCapacity();
             try w.print("fold {d}: ", .{f + 1});
             try addUnits(gpa, &data, players, c, .{ .before = lo, .block = .{ lo, hi } }, &units, &wins, w);
@@ -240,9 +226,6 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     try w.flush();
     return 0;
 }
-
-/// Later than any game: the last fold runs to the dev cut
-const c_dev_sentinel = std.math.maxInt(i64);
 
 const Wins = std.AutoHashMapUnmanaged(u64, [2]f64);
 
@@ -266,7 +249,8 @@ fn addUnits(
     w: *Io.Writer,
 ) !void {
     // The training side: visible as dev's are, before src.before
-    const fit_cuts: harness.Cuts = .{ .dev = src.before, .select = src.before, .eu = c.eu };
+    var fit_cuts = c;
+    fit_cuts.dev = src.before;
     var prof: Profiles = .{};
     defer prof.deinit(gpa);
     var visible_rows: usize = 0;
@@ -388,7 +372,8 @@ pub fn offset(
         return;
     };
     // As harness.score: the same seeds, the same query
-    const fit_cuts: harness.Cuts = .{ .dev = src.before, .select = src.before, .eu = c.eu };
+    var fit_cuts = c;
+    fit_cuts.dev = src.before;
     var v = try harness.buildTrain(gpa, d, players, .dev, fit_cuts, 1, false);
     defer v.deinit();
     const n_seeds: u64 = if (@hasDecl(cand, "seeded") and cand.seeded) 3 else 1;
@@ -742,7 +727,7 @@ fn byPlatform(gpa: std.mem.Allocator, d: *const rows.Data, units: []const Unit, 
     const min_games = 2000;
     const ids = protocol.platformIds();
     const eu: u8 = for (ids, 0..) |id, i| {
-        if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
+        if (std.mem.eql(u8, id, protocol.home_platform)) break @intCast(i);
     } else unreachable;
     var games: [ids.len]usize = @splat(0);
     for (units) |u| if (u.side == 0) {

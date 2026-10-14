@@ -117,9 +117,10 @@ const usage =
     \\              report on stdout; docs/model.md)
     \\              --patch P        as for stats (default: every patch, pooled)
     \\              --platform P     as for stats
-    \\              --test-share F   newest share of games held out (default 0.2)
+    \\              --test-share F   newest share of played games held out, one time cut
+    \\                               over every platform (default 0.15)
     \\              --folds K        folds for tuning inside train (default 5)
-    \\              --test-platform P  test on P's games only; compares training on P
+    \\              --test-platform P  test on P's games from the cut only; compares training on P
     \\                               alone with every --platform pooled
     \\              --history FILE   append one TSV line (date, sizes, log loss and AUC
     \\                               per model) for the accuracy-vs-data curve
@@ -127,8 +128,9 @@ const usage =
     \\              and first item beyond champion and lane? (markdown on stdout)
     \\              --patch P        as for stats (default: every patch, pooled)
     \\              --platform P     as for stats (train uses every one given)
-    \\              --test-platform P  test on P's newest games (default EUW1)
-    \\              --test-share F   newest share of P's games held out (default 0.2)
+    \\              --test-platform P  test on P's games from the cut on (default EUW1)
+    \\              --test-share F   newest share of played games, every platform, held
+    \\                               out (default 0.2)
     \\              --preds DIR      one TSV of test predictions per model
     \\  legendaries write DATA/legendaries.tsv, the finished items of every patch in the
     \\              data (Data Dragon; outcomes and meiolol-lab's first_item read it)
@@ -144,30 +146,34 @@ const usage =
     \\              10-30 min (markdown on stdout; docs/model.md)
     \\              --patch P        as for stats (default: every patch, pooled)
     \\              --platform P     as for stats (train uses every one given)
-    \\              --test-platform P  test on P's newest games (default EUW1)
-    \\              --test-share F   newest share of P's games held out (default 0.2)
+    \\              --test-platform P  test on P's games from the cut on (default EUW1)
+    \\              --test-share F   newest share of played games, every platform, held
+    \\                               out (default 0.2)
     \\              --preds DIR      one TSV of test predictions per model
     \\  items       does the finished item change the win chance, given the state when it
     \\              was bought? (markdown on stdout; docs/model.md)
     \\              --patch P        as for stats (default: every patch, pooled)
     \\              --platform P     as for stats (train uses every one given)
-    \\              --test-platform P  test on P's newest games (default EUW1)
-    \\              --test-share F   newest share of P's games held out (default 0.2)
+    \\              --test-platform P  test on P's games from the cut on (default EUW1)
+    \\              --test-share F   newest share of played games, every platform, held
+    \\                               out (default 0.2)
     \\              --preds DIR      one TSV of test predictions per model
     \\  playstyle   does early style (roaming, fights, wards) change the win chance, beyond
     \\              the champion and the state at 14:00? (markdown on stdout; docs/model.md)
     \\              --patch P        as for stats (default: every patch, pooled)
     \\              --platform P     as for stats (train uses every one given)
-    \\              --test-platform P  test on P's newest games (default EUW1)
-    \\              --test-share F   newest share of P's games held out (default 0.2)
+    \\              --test-platform P  test on P's games from the cut on (default EUW1)
+    \\              --test-share F   newest share of played games, every platform, held
+    \\                               out (default 0.2)
     \\              --preds DIR      one TSV of test predictions per model
     \\  scaling     which champions win more than the gold and XP lead says, by minute
     \\              (scaling) and by the lead (converting it, coming back)? (markdown on
     \\              stdout; docs/model.md)
     \\              --patch P        as for stats (default: every patch, pooled)
     \\              --platform P     as for stats (train uses every one given)
-    \\              --test-platform P  test on P's newest games (default EUW1)
-    \\              --test-share F   newest share of P's games held out (default 0.2)
+    \\              --test-platform P  test on P's games from the cut on (default EUW1)
+    \\              --test-share F   newest share of played games, every platform, held
+    \\                               out (default 0.2)
     \\              --preds DIR      one TSV of test predictions per model
     \\              --table FILE     TSV of every champion-role's effect and slope by minute
     \\              --state S        baseline: lead (team gold, XP; default), roles (gold
@@ -177,9 +183,10 @@ const usage =
     \\  carry       which champions turn their own lead into wins, whose seat decides games,
     \\              which reward experience, which make games more decided? (markdown on
     \\              stdout; docs/model.md "Carry and impact")
-    \\              --cuts A,B,C,D,E,DEV,SELECT  ms: the lab's 5 fold block starts, dev
-    \\                               and select cuts (default: computed as the lab does)
-    \\              --patch P, --platform P, --test-platform P, --test-share F  as scaling
+    \\              --cuts A,B,C,D,E,DEV,TEST  ms: the lab's 5 fold block starts, dev
+    \\                               and test cuts (default: eval.split's, as the lab's)
+    \\              --patch P, --platform P, --test-share F  as scaling (default 0.15)
+    \\              --test-platform P  dev-val and test on P's games only (default: all)
     \\              --final          also score the test games (one look per model)
     \\              --table FILE     TSV of every champion-role's terms by minute
     \\              --type-table FILE  TSV of champion type x role x state terms by minute

@@ -157,7 +157,7 @@ const Action = struct { name: []const u8, argv: []const []const u8 };
 /// As deploy/web-loop.sh's daily eval, and under the same lock: two at once would both
 /// write eval-latest.md.new and append to eval-history.tsv
 const eval_command = "exec 9> data/eval.lock && flock -n 9 " ++
-    "&& nice -n 10 bin/meiolol eval --platform all --test-platform EUW1 " ++
+    "&& nice -n 10 bin/meiolol eval --platform all " ++
     "--history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log " ++
     "&& mv data/eval-latest.md.new data/eval-latest.md";
 

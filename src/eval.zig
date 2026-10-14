@@ -26,13 +26,13 @@ const score = core.score;
 const Role = core.Role;
 
 pub const Options = struct {
-    /// Newest share of games held out
-    test_share: f64 = 0.2,
+    /// Newest share of played games held out (cutsOf's test window)
+    test_share: f64 = test_share,
     folds: u32 = 5,
     /// Pick metric candidates: champions with at least this many train games in the role
     pick_min_games: u32 = 10,
-    /// Test only on this platform's games (train still uses every platform scanned),
-    /// and compare with training on this platform alone
+    /// Region filter: test only on this platform's games from the cut on (the cut and
+    /// train still span every platform scanned), and compare with training on it alone
     test_platform: ?[]const u8 = null,
 };
 
@@ -600,11 +600,59 @@ fn fitJoint(gpa: std.mem.Allocator, st: *const core.Stats, games: []const Game, 
     return logreg.fit(gpa, 1 + Role.count * st.n, rows, l2);
 }
 
+/// docs/model.md "Shared protocol": a game over before 15:00 is a remake, leaver forfeit
+/// or abort. Only played games set the cuts (and, in the lab, are fitted or scored)
+pub const min_duration_s = 900;
+/// Newest share of played games in test, and the next share in dev-val
+pub const test_share = 0.15;
+pub const dev_share = 0.10;
+pub const folds_n = 5;
+
+/// One time cut for every platform: test is start >= test_, dev-val dev <= start <
+/// test_, dev-visible start < dev, where fold k's block is [bounds[k - 1], bounds[k])
+/// and dev_old is below bounds[0]. A game at a cut goes to the newer window
+pub const Cuts = struct {
+    test_: i64,
+    dev: i64,
+    bounds: [folds_n + 1]i64,
+};
+
+/// Cuts from the played games' starts, sorted ascending, every platform. The start at
+/// sorted index n - round(share n); folds as win-comp's foldAblation: the newest half of
+/// the dev-visible starts in 5 blocks, b_k = s[floor(len (0.5 + 0.1 k))], b_5 = +inf
+pub fn cutsOf(starts: []const i64, shares: struct { test_: f64 = test_share, dev: f64 = dev_share }) !Cuts {
+    const n = starts.len;
+    if (n < 100) return error.TooFewGames;
+    const nf: f64 = @floatFromInt(n);
+    const n_test: usize = @intFromFloat(@round(nf * shares.test_));
+    const n_late: usize = @intFromFloat(@round(nf * (shares.test_ + shares.dev)));
+    if (n_test < 20 or n_late >= n) return error.TooFewGames;
+    var c: Cuts = .{ .test_ = starts[n - n_test], .dev = starts[n - n_late], .bounds = undefined };
+    const visible = std.sort.partitionPoint(i64, starts, c.dev, struct {
+        fn below(cut: i64, s: i64) bool {
+            return s < cut;
+        }
+    }.below);
+    if (visible == 0) return error.TooFewGames;
+    for (&c.bounds, 0..) |*b, k| {
+        if (k == folds_n) {
+            b.* = std.math.maxInt(i64);
+            continue;
+        }
+        const q = 0.5 + 0.5 * @as(f64, @floatFromInt(k)) / folds_n;
+        b.* = starts[@intFromFloat(@as(f64, @floatFromInt(visible)) * q)];
+    }
+    return c;
+}
+
 pub const Split = struct {
-    /// Every game older than the first test game, on any platform
+    /// Every game older than the test cut, on any platform
     train: []const Game,
+    /// From the test cut on: every platform, or the region's games only
     tests: []const Game,
-    /// Index into platforms; null tests on every platform
+    /// From the played games of every platform
+    cuts: Cuts,
+    /// Index into platforms of the region filter; null tests on every platform
     test_platform: ?u8,
     tests_list: std.ArrayList(Game),
 
@@ -613,31 +661,30 @@ pub const Split = struct {
     }
 };
 
-/// The held-out split (docs/model.md Method; meiolol-lab scores the same games): sorts
-/// games oldest first, tests on the newest test_share of the test platform's games
+/// The held-out split (docs/model.md "Shared protocol"; meiolol-lab scores the same
+/// games): sorts games oldest first; test = every game from the cut on, the cut set by
+/// the newest test_share of played games over every platform
 pub fn split(gpa: std.mem.Allocator, games: []Game, platforms: []const []const u8, opts: Options) !Split {
     std.mem.sort(Game, games, {}, olderFirst);
     const test_platform: ?u8 = if (opts.test_platform) |tp| for (platforms, 0..) |p, i| {
         if (std.mem.eql(u8, p, tp)) break @intCast(i);
     } else return error.TestPlatformNotScanned else null;
+    var starts: std.ArrayList(i64) = .empty;
+    defer starts.deinit(gpa);
+    for (games) |g| if (g.duration_s >= min_duration_s) try starts.append(gpa, g.start);
+    const cuts = try cutsOf(starts.items, .{ .test_ = opts.test_share });
+    var n_train: usize = 0;
+    while (games[n_train].start < cuts.test_) n_train += 1;
     var tests_list: std.ArrayList(Game) = .empty;
     errdefer tests_list.deinit(gpa);
-    var pool: usize = 0;
-    for (games) |g| pool += @intFromBool(test_platform == null or g.platform == test_platform.?);
-    const n_test: usize = @intFromFloat(@round(@as(f64, @floatFromInt(pool)) * opts.test_share));
-    if (games.len < 100 or n_test < 20) return error.TooFewGames;
-    var at = games.len;
-    while (tests_list.items.len < n_test) {
-        at -= 1;
-        const g = games[at];
+    for (games[n_train..]) |g| {
         if (test_platform == null or g.platform == test_platform.?) try tests_list.append(gpa, g);
     }
-    std.mem.reverse(Game, tests_list.items);
-    var n_train: usize = 0;
-    while (games[n_train].start < tests_list.items[0].start) n_train += 1;
+    if (tests_list.items.len == 0) return error.TooFewGames;
     return .{
         .train = games[0..n_train],
         .tests = tests_list.items,
+        .cuts = cuts,
         .test_platform = test_platform,
         .tests_list = tests_list,
     };
@@ -1257,4 +1304,52 @@ test "auc and logistic fit" {
     const b = fitLogistic(&xs, &ys, 1);
     try testing.expect(b[1] > 1);
     try testing.expect(@abs(b[0]) < 0.5);
+}
+
+test "split: one time cut over every platform from the played games, ties to the newer window" {
+    const gpa = std.testing.allocator;
+    var games: [1000]Game = undefined;
+    for (&games, 0..) |*g, i| g.* = .{
+        .id = i,
+        // Pairs share a start, so a cut can fall inside a tie
+        .start = @intCast((999 - i) / 2 * 60_000),
+        .patch = 16020,
+        .platform = @intCast(i % 3),
+        .teams = @splat(@splat(1)),
+        .winner = 0,
+        .duration_s = if (i % 10 == 0) 600 else 1800,
+    };
+    const platforms = [_][]const u8{ "EUW1", "KR", "NA1" };
+    var s = try split(gpa, &games, &platforms, .{});
+    defer s.deinit(gpa);
+    var starts: std.ArrayList(i64) = .empty;
+    defer starts.deinit(gpa);
+    for (games) |g| if (g.duration_s >= min_duration_s) try starts.append(gpa, g.start);
+    const n = starts.items.len;
+    try std.testing.expectEqual(starts.items[n - 135], s.cuts.test_);
+    try std.testing.expectEqual(starts.items[n - 225], s.cuts.dev);
+    try std.testing.expectEqual(games.len, s.train.len + s.tests.len);
+    for (s.train) |g| try std.testing.expect(g.start < s.cuts.test_);
+    var on: [3]bool = @splat(false);
+    for (s.tests) |g| {
+        try std.testing.expect(g.start >= s.cuts.test_);
+        on[g.platform] = true;
+    }
+    try std.testing.expectEqual([3]bool{ true, true, true }, on);
+    var played_tests: usize = 0;
+    for (s.tests) |g| played_tests += @intFromBool(g.duration_s >= min_duration_s);
+    try std.testing.expect(played_tests >= 135 and played_tests <= 136);
+    // Folds: the newest half of the dev-visible starts in 5 blocks, then +inf
+    var visible: usize = 0;
+    for (starts.items) |t| visible += @intFromBool(t < s.cuts.dev);
+    try std.testing.expectEqual(starts.items[visible / 2], s.cuts.bounds[0]);
+    try std.testing.expectEqual(std.math.maxInt(i64), s.cuts.bounds[5]);
+    for (s.cuts.bounds[0..5], s.cuts.bounds[1..]) |a, b| try std.testing.expect(a < b);
+
+    // A region filter keeps the cut and train, and tests that platform only
+    var r = try split(gpa, &games, &platforms, .{ .test_platform = "KR" });
+    defer r.deinit(gpa);
+    try std.testing.expectEqual(s.cuts, r.cuts);
+    try std.testing.expectEqual(s.train.len, r.train.len);
+    for (r.tests) |g| try std.testing.expectEqual(1, g.platform);
 }

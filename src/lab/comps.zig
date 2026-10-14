@@ -12,7 +12,7 @@
 //!
 //! Per game: blue's residual (won minus ratings' chance) against x = trait(blue) -
 //! trait(red); slope in win pp per team sd (flags: pp for having it), robust se, games
-//! independent. Folds are win-comp's blocks (nnexport.foldBounds); each refits ratings and
+//! independent. Folds are win-comp's blocks (harness.Cuts.bounds); each refits ratings and
 //! profiles on older games. --screen scores blocks 1-3 only: Benjamini-Hochberg over every
 //! candidate, shuffled residuals as a control, mechanism outcomes beside (gold at 14,
 //! objectives, win by game length). --confirm FILE opens the sealed blocks 4-5 and dev-val
@@ -1140,12 +1140,8 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     const d = &data;
     const players = try harness.gamePlayers(gpa, d);
     defer gpa.free(players);
-    const ids = protocol.platformIds();
-    const eu: u8 = for (ids, 0..) |id, k| {
-        if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(k);
-    } else return error.TestPlatformNotScanned;
-    const c = try harness.cuts(gpa, d, eu);
-    const bounds = try nnexport.foldBounds(gpa, d, c);
+    const c = try harness.cuts(gpa, d);
+    const bounds = c.bounds;
 
     // comp_stats per row, comp_teams per game
     const extra = try gpa.alloc(?compstats.Seat, d.rows.len);
@@ -1263,7 +1259,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     defer xs.deinit(gpa);
     for (blocks) |b| {
         const before = if (b == 5) c.dev else bounds[b];
-        const hi = if (b == 5) c.select else @min(bounds[b + 1], c.dev);
+        const hi = if (b == 5) c.test_ else @min(bounds[b + 1], c.dev);
         const fit: Fit = .{ .c = c, .before = before };
         var p = try buildProfiles(gpa, d, extra, fit, permute);
         defer p.deinit(gpa);
@@ -1371,7 +1367,7 @@ fn exportTeams(
     try t.writeAll("\n");
     for (0..6) |b| {
         const before = if (b == 5) c.dev else bounds[b];
-        const hi = if (b == 5) c.select else @min(bounds[b + 1], c.dev);
+        const hi = if (b == 5) c.test_ else @min(bounds[b + 1], c.dev);
         var p = try buildProfiles(gpa, d, extra, .{ .c = c, .before = before }, permute);
         defer p.deinit(gpa);
         var n: usize = 0;

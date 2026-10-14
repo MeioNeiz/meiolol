@@ -40,7 +40,7 @@ sync() {
 }
 
 # Draft model accuracy as data grows: the daily `meiolol eval` (web-loop.sh) scores held-out
-# EUW games and appends a line to data/eval-history.tsv. eval.log is truncated when a run
+# games and appends a line to data/eval-history.tsv. eval.log is truncated when a run
 # starts and eval-latest.md replaced when it succeeds, so their mtimes time the last run
 model() {
     local rows=$1 out state started finished
@@ -52,7 +52,7 @@ EOF
     )
     read -r state started finished <<< "$(head -n 1 <<< "$out")"
     local at='+%a %d %b %H:%M'
-    echo "Draft model, daily eval on held-out EUW games (docs/model.md), $(date +%H:%M:%S)"
+    echo "Draft model, daily eval on held-out games (docs/model.md), $(date +%H:%M:%S)"
     if [[ "$state" == running ]]; then
         echo "eval running for $(( ($(date +%s) - started) / 60 )) min, since $(date -r "$started" "$at")"
     elif (( finished >= started && started > 0 )); then

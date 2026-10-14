@@ -1,6 +1,6 @@
-//! The shared held-out split (docs/model.md "Shared protocol"): eval's own split over
-//! every platform, tested on EUW1, so meiolol-lab and meiolol eval score the same games.
-//! Writes split.tsv into the snapshot: one line per test game
+//! The shared held-out split (docs/model.md "Shared protocol"): eval's one time cut over
+//! every platform, so meiolol-lab and meiolol eval score the same games. Writes split.tsv
+//! into the snapshot: the cuts, then one line per test game
 
 const std = @import("std");
 const store = @import("store");
@@ -10,7 +10,8 @@ const riot = @import("../riot/root.zig");
 const Date = @import("../date.zig").Date;
 const timeline = @import("../riot/timeline.zig");
 
-pub const test_platform = "EUW1";
+/// The app's region (EUW first): the platform intercept shipped exports use. Never a split
+pub const home_platform = "EUW1";
 
 const GameList = struct {
     gpa: std.mem.Allocator,
@@ -40,8 +41,8 @@ pub fn platformIds() [riot.endpoints.platforms.len][]const u8 {
     return ids;
 }
 
-/// Prints the split and writes SNAP/split.tsv (match_id, game_start, timeline frames or 0,
-/// reached15 0/1)
+/// Prints the split and writes SNAP/split.tsv: a "# test_cut_ms T dev_cut_ms D" line, then
+/// match_id, game_start, timeline frames or 0, reached15 0/1
 pub fn writeSplit(gpa: std.mem.Allocator, io: std.Io, snap: []const u8, w: *std.Io.Writer) !void {
     const db = try store.schema.openReadOnly(gpa, snap);
     defer db.close();
@@ -52,7 +53,7 @@ pub fn writeSplit(gpa: std.mem.Allocator, io: std.Io, snap: []const u8, w: *std.
     var list: GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
     const summary = try stats.scan(gpa, db, patches, &ids, 0, &list);
-    var parts = try eval.split(gpa, list.items.items, &ids, .{ .test_platform = test_platform });
+    var parts = try eval.split(gpa, list.items.items, &ids, .{});
     defer parts.deinit(gpa);
 
     var keys: std.AutoHashMapUnmanaged(u64, void) = .empty;
@@ -65,16 +66,17 @@ pub fn writeSplit(gpa: std.mem.Allocator, io: std.Io, snap: []const u8, w: *std.
     defer file.close(io);
     var buf: [64 * 1024]u8 = undefined;
     var out = file.writer(io, &buf);
+    try out.interface.print("# test_cut_ms {d} dev_cut_ms {d}\n", .{ parts.cuts.test_, parts.cuts.dev });
     try out.interface.writeAll("match_id\tgame_start\tframes\treached15\n");
     var tl_arena: std.heap.ArenaAllocator = .init(gpa);
     defer tl_arena.deinit();
     var q = try db.prepare(
         \\SELECT m.match_id, m.game_start, coalesce(t.frames, 0), t.data
         \\FROM matches m LEFT JOIN timeline.timelines t USING (match_id)
-        \\WHERE m.platform = ? AND m.game_start >= ? ORDER BY m.game_start, m.match_id
+        \\WHERE m.game_start >= ? ORDER BY m.game_start, m.match_id
     );
     defer q.deinit();
-    try q.bind(.{ test_platform, parts.tests[0].start });
+    try q.bind(.{parts.cuts.test_});
     var written: usize = 0;
     var with_15: usize = 0;
     while (try q.step()) {
@@ -96,9 +98,10 @@ pub fn writeSplit(gpa: std.mem.Allocator, io: std.Io, snap: []const u8, w: *std.
     try w.print("train: {d} games, {f} to {f}, every platform older than the first test game\n", .{
         train.len, Date.fromMs(train[0].start), Date.fromMs(train[train.len - 1].start),
     });
-    try w.print("test: {d} {s} games, game_start >= {d} ({f} to {f}); {d} with a timeline reaching 15:00\n", .{
-        parts.tests.len,                   test_platform,                                       parts.tests[0].start,
-        Date.fromMs(parts.tests[0].start), Date.fromMs(parts.tests[parts.tests.len - 1].start), with_15,
+    try w.print("test: {d} games, every platform, game_start >= {d} ({f} to {f}); {d} with a timeline reaching 15:00\n", .{
+        parts.tests.len,                                     parts.cuts.test_, Date.fromMs(parts.tests[0].start),
+        Date.fromMs(parts.tests[parts.tests.len - 1].start), with_15,
     });
+    try w.print("dev cut: game_start >= {d} ({f}) is dev-val\n", .{ parts.cuts.dev, Date.fromMs(parts.cuts.dev) });
     try w.print("wrote {s}\n", .{path});
 }

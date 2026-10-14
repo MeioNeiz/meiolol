@@ -22,8 +22,8 @@ const Allocator = std.mem.Allocator;
 
 pub const dir_name = "nn";
 
-/// What a game is for. Fold f (1..5) fits on splits below f and scores split f; dev-val
-/// fits on 0..5; selection on 0..7; final on 0..9
+/// What a game is for, by harness.Cuts (one time cut over every platform). Fold f (1..5)
+/// fits on splits below f and scores split f; dev-val fits on 0..5; final on 0..9
 pub const Split = enum(u8) {
     /// Dev-visible, older than the folds' blocks: fit in every fold
     dev_old = 0,
@@ -32,20 +32,21 @@ pub const Split = enum(u8) {
     fold3 = 3,
     fold4 = 4,
     fold5 = 5,
-    /// EUW1 between the dev and selection cuts: the harness's dev scored games
+    /// Between the dev and test cuts: the harness's dev scored games
     dev_val = 6,
-    /// Other platforms in dev-val's period: fit from selection on
+    /// 7-9 hold no games since the one global cut (2253Z re-cut); kept so codes and
+    /// readers that index by code stay as they were
     dev_val_other = 7,
     selection = 8,
     selection_other = 9,
     test_ = 10,
 };
-pub const folds = 5;
+pub const folds = harness.folds;
 
 /// Fit sets for meta.json's norm: name, then the highest split fitted on
 const fit_sets = [_]struct { []const u8, u8 }{
-    .{ "fold1", 0 }, .{ "fold2", 1 },   .{ "fold3", 2 },     .{ "fold4", 3 },
-    .{ "fold5", 4 }, .{ "dev_val", 5 }, .{ "selection", 7 }, .{ "final", 9 },
+    .{ "fold1", 0 }, .{ "fold2", 1 },   .{ "fold3", 2 }, .{ "fold4", 3 },
+    .{ "fold5", 4 }, .{ "dev_val", 5 }, .{ "final", 9 },
 };
 
 const early = [_]rows.Outcome{ .gold14, .lanediff14, .cs10, .deaths15, .first_item };
@@ -72,7 +73,7 @@ pub const Export = struct {
     /// Index -> stats.patchKey
     patches: []u32,
     cut_dev: i64 = 0,
-    cut_select: i64 = 0,
+    cut_test: i64 = 0,
     /// Fold f's block is [bounds[f - 1], bounds[f]); dev_old is below bounds[0]
     bounds: [folds + 1]i64 = @splat(0),
 
@@ -85,30 +86,12 @@ pub const Export = struct {
     }
 };
 
-/// win-comp's foldAblation blocks: the newest half of the dev-visible games in `folds`
-/// blocks by start, s[floor(len * q)] at q = 0.5 + 0.5 * f / folds
-pub fn foldBounds(gpa: Allocator, d: *const rows.Data, c: harness.Cuts) ![folds + 1]i64 {
-    var starts: std.ArrayList(i64) = .empty;
-    defer starts.deinit(gpa);
-    for (d.games) |g| if (harness.visible(.dev, c, g)) try starts.append(gpa, g.start);
-    std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
-    if (starts.items.len == 0) return error.TooFewGames;
-    var out: [folds + 1]i64 = undefined;
-    for (&out, 0..) |*b, f| {
-        const q = 0.5 + 0.5 * @as(f64, @floatFromInt(f)) / folds;
-        b.* = if (q >= 1) std.math.maxInt(i64) else starts.items[@intFromFloat(@as(f64, @floatFromInt(starts.items.len)) * q)];
-    }
-    return out;
-}
-
-pub fn splitOf(g: rows.Game, c: harness.Cuts, bounds: [folds + 1]i64) Split {
+pub fn splitOf(g: rows.Game, c: harness.Cuts) Split {
     if (g.is_test) return .test_;
-    const eu = g.platform == c.eu;
-    if (g.start >= c.select) return if (eu) .selection else .selection_other;
-    if (g.start >= c.dev) return if (eu) .dev_val else .dev_val_other;
-    if (g.start < bounds[0]) return .dev_old;
+    if (g.start >= c.dev) return .dev_val;
+    if (g.start < c.bounds[0]) return .dev_old;
     var f: u8 = 1;
-    while (f < folds and g.start >= bounds[f]) f += 1;
+    while (f < folds and g.start >= c.bounds[f]) f += 1;
     return @fromBackingInt(f);
 }
 
@@ -132,8 +115,8 @@ pub fn build(gpa: Allocator, d: *const rows.Data, c: harness.Cuts) !Export {
     e.match_id = ids;
     @memset(e.aux, std.math.nan(f32));
     e.cut_dev = c.dev;
-    e.cut_select = c.select;
-    e.bounds = try foldBounds(gpa, d, c);
+    e.cut_test = c.test_;
+    e.bounds = c.bounds;
 
     var champs: std.AutoArrayHashMapUnmanaged(u32, void) = .empty;
     defer champs.deinit(gpa);
@@ -163,7 +146,7 @@ pub fn build(gpa: Allocator, d: *const rows.Data, c: harness.Cuts) !Export {
         e.start[gi] = g.start;
         e.duration[gi] = std.math.cast(u16, g.duration_s) orelse std.math.maxInt(u16);
         e.blue_win[gi] = @intFromBool(g.winner == 0);
-        e.split[gi] = @backingInt(splitOf(g, c, e.bounds));
+        e.split[gi] = @backingInt(splitOf(g, c));
         e.flags[gi] = (if (g.duration_s >= harness.min_duration_s) flag_played else 0) |
             (if (g.timeline15) flag_timeline15 else 0);
     }
@@ -242,7 +225,9 @@ fn meta(gpa: Allocator, e: *const Export, w: *Io.Writer) !void {
     for (e.patches, 0..) |p, i| try w.print("{s}\"{d}.{d}\"", .{ if (i == 0) "" else ",", p / 1000, p % 1000 });
     try w.writeAll("],\n\"platforms\":[");
     for (protocol.platformIds(), 0..) |p, i| try w.print("{s}\"{s}\"", .{ if (i == 0) "" else ",", p });
-    try w.print("],\n\"cuts\":{{\"dev\":{d},\"select\":{d}}},\n\"fold_bounds\":[", .{ e.cut_dev, e.cut_select });
+    try w.print("],\n\"test_cut\":{d},\"dev_cut\":{d},\n\"cuts\":{{\"dev\":{d},\"test\":{d}}},\n\"fold_bounds\":[", .{
+        e.cut_test, e.cut_dev, e.cut_dev, e.cut_test,
+    });
     for (e.bounds, 0..) |b, i| try w.print("{s}{d}", .{ if (i == 0) "" else ",", b });
     try w.writeAll("],\n\"norm\":{");
     const Acc = struct { n: [k]f64 = @splat(0), sum: [k]f64 = @splat(0), sumsq: [k]f64 = @splat(0) };
@@ -306,7 +291,7 @@ pub fn read(gpa: Allocator, io: Io, snap: []const u8) !Export {
         k: usize,
         champions: []u32,
         patches: [][]const u8,
-        cuts: struct { dev: i64, select: i64 },
+        cuts: struct { dev: i64, @"test": i64 },
         fold_bounds: [folds + 1]i64,
     };
     const m = try std.json.parseFromSliceLeaky(M, a, text, .{ .ignore_unknown_fields = true });
@@ -315,7 +300,7 @@ pub fn read(gpa: Allocator, io: Io, snap: []const u8) !Export {
     e.patches = try a.alloc(u32, m.patches.len);
     for (e.patches, m.patches) |*p, s| p.* = @import("../stats.zig").patchKey(s);
     e.cut_dev = m.cuts.dev;
-    e.cut_select = m.cuts.select;
+    e.cut_test = m.cuts.@"test";
     e.bounds = m.fold_bounds;
     inline for (files) |f| {
         const T = @typeInfo(@TypeOf(@field(e, f[0]))).pointer.child;
@@ -339,7 +324,7 @@ pub fn read(gpa: Allocator, io: Io, snap: []const u8) !Export {
 
 const testing = std.testing;
 
-test "split codes match the harness's phases and win-comp's fold blocks; files read back" {
+test "split codes match the harness's phases, the shared cuts and win-comp's fold blocks; files read back" {
     const gpa = testing.allocator;
     const io = testing.io;
     var f = try harness.Fixture.init(gpa, 3000, 11);
@@ -347,22 +332,23 @@ test "split codes match the harness's phases and win-comp's fold blocks; files r
     for (f.data.games, 0..) |*g, gi| if (gi % 7 == 0) {
         g.duration_s = 700;
     };
+    try harness.markTests(gpa, &f.data);
     for (f.data.rows, 0..) |*r, i| r.stats[@backingInt(seatstats.SeatStat.dmg_magic)] = @floatFromInt(i);
-    const c = try harness.cuts(gpa, &f.data, 0);
+    const c = try harness.cuts(gpa, &f.data);
     var e = try build(gpa, &f.data, c);
     defer e.deinit();
 
     var seen: [11]usize = @splat(0);
+    var played_n: usize = 0;
     for (f.data.games, 0..) |g, gi| {
         const s = e.split[gi];
         seen[s] += 1;
         const played = e.flags[gi] & flag_played != 0;
         try testing.expectEqual(g.duration_s >= harness.min_duration_s, played);
         if (!played) continue;
+        played_n += 1;
         try testing.expectEqual(harness.visible(.dev, c, g), s <= 5);
         try testing.expectEqual(harness.scored(.dev, c, g), s == 6);
-        try testing.expectEqual(harness.visible(.select, c, g), s <= 7);
-        try testing.expectEqual(harness.scored(.select, c, g), s == 8);
         try testing.expectEqual(harness.visible(.final, c, g), s <= 9);
         try testing.expectEqual(harness.scored(.final, c, g), s == 10);
         // win-comp: fold f scores lo <= start < hi among dev-visible games, fits on start < lo
@@ -374,7 +360,28 @@ test "split codes match the harness's phases and win-comp's fold blocks; files r
             try testing.expectEqual(g.start < lo, s < fold);
         }
     }
-    for (seen) |n| try testing.expect(n > 0);
+    for (seen, 0..) |n, code| try testing.expectEqual(code < 7 or code == 10, n > 0);
+    // Every platform in every window; test the newest 15% of played games, dev-val the
+    // next 10% (games under 15:00 keep their start's window)
+    var n_test: usize = 0;
+    var n_dev: usize = 0;
+    var platforms: [2][3]bool = @splat(@splat(false));
+    for (f.data.games, e.split) |g, sp| if (g.duration_s >= harness.min_duration_s) {
+        n_test += @intFromBool(sp == 10);
+        n_dev += @intFromBool(sp == 6);
+        if (sp == 10 or sp == 6) platforms[@intFromBool(sp == 10)][g.platform] = true;
+    };
+    const nf: f64 = @floatFromInt(played_n);
+    try testing.expectEqual(@as(usize, @intFromFloat(@round(nf * 0.15))), n_test);
+    try testing.expectEqual(@as(usize, @intFromFloat(@round(nf * 0.25))) - n_test, n_dev);
+    for (platforms) |w| for (w) |seen_on| try testing.expect(seen_on);
+    // A region filter scores that platform's games only, from the same cuts
+    var euw = c;
+    euw.region = 0;
+    for (f.data.games) |g| {
+        try testing.expectEqual(harness.scored(.dev, c, g) and g.platform == 0, harness.scored(.dev, euw, g));
+        try testing.expectEqual(harness.visible(.dev, c, g), harness.visible(.dev, euw, g));
+    }
 
     const players = try harness.gamePlayers(gpa, &f.data);
     defer gpa.free(players);

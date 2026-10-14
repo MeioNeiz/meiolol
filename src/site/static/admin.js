@@ -1400,7 +1400,7 @@ function winReadings() {
   const L = out.lines;
   if (best) {
     const share = Math.max(0, (LL_COIN - best.ll) / (LL_COIN - LL_PUBLISHED));
-    L.push(`From the draft alone the best model calls the winner of ${num(games)} new EUW games right ${pct(best.acc)} of the time (a coin flip: 50%). Published draft models trained on millions of games reach about 55 to 57%; by log loss we are ${Math.round(100 * share)}% of the way there.`);
+    L.push(`From the draft alone the best model calls the winner of ${num(games)} new games right ${pct(best.acc)} of the time (a coin flip: 50%). Published draft models trained on millions of games reach about 55 to 57%; by log loss we are ${Math.round(100 * share)}% of the way there.`);
   }
   if (base && current && base.d) {
     const b = base.d;
@@ -1475,7 +1475,7 @@ function winView(body) {
   const learnt = section(body, "What we learnt", "Final findings for predicting the winner (docs/learned.md).");
   learnedList(learnt, MODELS.learned.win);
   runFindings(learnt, "win");
-  const sec = section(body, "Best model against the baseline", ev.length ? `Daily eval (docs/model.md), newest ${ev[ev.length - 1].date}: models built from older games, scored on the newest EUW games they never saw.` : "Daily eval (docs/model.md).", head);
+  const sec = section(body, "Best model against the baseline", ev.length ? `Daily eval (docs/model.md), newest ${ev[ev.length - 1].date}: models built from older games, scored on the newest games they never saw.` : "Daily eval (docs/model.md).", head);
   if (!W) { sec.append(el("p", { class: "muted" }, "No eval report yet.")); return; }
   sec.append(el("ul", { class: "readings" }, ...W.lines.map(t => el("li", {}, t))));
   const g = grid(sec);

@@ -17,9 +17,9 @@ const store = @import("store");
 const Io = std.Io;
 
 pub const usage =
-    \\  exp run SNAP CAMPAIGN TARGET [--select] [--fraction F] [--hyp ID] [--desc TEXT]
-    \\          [--lab DIR] [--run ID]  score the compiled-in candidate on dev (and spend a
-    \\                                  selection look with --select); TARGET is one of
+    \\  exp run SNAP CAMPAIGN TARGET [--fraction F] [--hyp ID] [--desc TEXT]
+    \\          [--lab DIR] [--run ID]  score the compiled-in candidate on dev (no selection
+    \\                                  window since the one global cut); TARGET is one of
     \\                                  win gold14 lanediff14 cs10 deaths15 first_item;
     \\                                  --fraction fits dev on a nested share of games
     \\  exp screen|diagnose SNAP CAMPAIGN TARGET
@@ -38,7 +38,6 @@ const Args = struct {
     snap: []const u8,
     campaign: []const u8,
     target: api.Outcome,
-    select: bool = false,
     desc: []const u8 = "",
     /// Share of dev's training games (learning curves); dev only
     fraction: f64 = 1,
@@ -53,9 +52,9 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, home: ?[]c
         std.debug.print("exp: {t}\nusage:\n{s}", .{ err, usage });
         return 2;
     };
-    if (harness.afterGameRank(cand) and (args.select or args.cmd == .final or args.cmd == .preds)) {
+    if (harness.afterGameRank(cand) and (args.cmd == .final or args.cmd == .preds)) {
         std.debug.print("exp: an after_game_rank candidate is a dev-only leak diagnostic: " ++
-            "no --select, final or preds (src/lab/api.zig)\n", .{});
+            "no final or preds (src/lab/api.zig)\n", .{});
         return 2;
     }
     var legendaries = try rows.loadLegendaries(gpa, io, args.snap);
@@ -64,11 +63,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, home: ?[]c
     defer data.deinit();
     const players = try harness.gamePlayers(gpa, &data);
     defer gpa.free(players);
-    const ids = protocol.platformIds();
-    const eu: u8 = for (ids, 0..) |id, i| {
-        if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
-    } else return error.TestPlatformNotScanned;
-    const c = try harness.cuts(gpa, &data, eu);
+    const c = try harness.cuts(gpa, &data);
 
     const dir = try std.fs.path.join(arena, &.{ args.lab, std.fs.path.basename(args.snap) });
     try Io.Dir.cwd().createDirPath(io, dir);
@@ -101,10 +96,7 @@ fn parse(arena: std.mem.Allocator, io: Io, home: ?[]const u8, argv: []const []co
     var i: usize = 4;
     while (i < argv.len) : (i += 1) {
         const o = argv[i];
-        if (std.mem.eql(u8, o, "--select")) {
-            a.select = true;
-            continue;
-        }
+        if (std.mem.eql(u8, o, "--select")) return error.NoSelectionWindow;
         if (i + 1 >= argv.len) return error.MissingValue;
         i += 1;
         if (std.mem.eql(u8, o, "--desc")) a.desc = argv[i] //
@@ -114,10 +106,8 @@ fn parse(arena: std.mem.Allocator, io: Io, home: ?[]const u8, argv: []const []co
         else if (std.mem.eql(u8, o, "--fraction")) a.fraction = try std.fmt.parseFloat(f64, argv[i]) //
         else return error.UnknownOption;
     }
-    if (a.cmd != .run and (a.select or a.fraction != 1)) return error.UnknownOption;
+    if (a.cmd != .run and a.fraction != 1) return error.UnknownOption;
     if (!(a.fraction > 0 and a.fraction <= 1)) return error.BadFraction;
-    // A look on a model fitted to part of train would waste the budget
-    if (a.select and a.fraction != 1) return error.FractionWithSelect;
     // The run dir's name (deploy/lab-run.sh: <stamp>-<name>)
     if (a.run.len == 0) a.run = std.fs.path.basename(try std.process.currentPathAlloc(io, arena));
     const desc = try arena.dupe(u8, a.desc);
@@ -150,38 +140,9 @@ fn run(
     const h = try human(gpa, d, &dev, k, dev_target);
     const effect_files = try writeEffects(gpa, arena, io, args.snap, dev.effects);
 
-    var verdict: ?harness.Verdict = null;
-    var looks: usize = 0;
-    if (args.select) {
-        const lock_path = try std.fs.path.join(arena, &.{ dir, "lock" });
-        const lock = try Io.Dir.cwd().createFile(io, lock_path, .{ .truncate = false, .lock = .exclusive });
-        defer lock.close(io);
-        const looks_path = try std.fs.path.join(arena, &.{ dir, "looks.tsv" });
-        looks = try countLines(gpa, io, looks_path);
-        var sel = try harness.score(cand, gpa, d, players, c, .select, .{});
-        defer sel.deinit(gpa);
-        const best_path = try std.fs.path.join(arena, &.{ dir, try bestName(arena, args.target) });
-        const best_preds = try readBest(gpa, io, best_path, sel.row.len);
-        defer if (best_preds) |b| gpa.free(b);
-        const la = try sel.losses(gpa, d, k, null, .cand);
-        defer gpa.free(la);
-        const lb = try sel.losses(gpa, d, k, best_preds, .base);
-        defer gpa.free(lb);
-        verdict = harness.ladder(sel.game, la, lb, looks);
-        if (verdict.? != .budget_spent) {
-            looks += 1;
-            try appendLine(io, looks_path, "run\tcampaign\ttarget\tverdict\tdiff\thalf\n", try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{s}\t{d:.5}\t{d:.5}\n", .{
-                args.run,
-                args.campaign,
-                args.target,
-                verdictName(verdict),
-                if (verdict.? == .new_best) verdict.?.new_best.diff else std.math.nan(f64),
-                if (verdict.? == .new_best) verdict.?.new_best.half else std.math.nan(f64),
-            }));
-        }
-        if (verdict.? == .new_best) try writeBest(io, best_path, args.run, sel.cand, k);
-    }
-
+    // No selection window since the one global cut (2253Z): no ladder looks
+    const verdict: ?harness.Verdict = null;
+    const looks: usize = 0;
     const header = "run\tcampaign\ttarget\tscope\tdev_n\tdev_diff\tdev_half\tselect\tlooks\thyp\tfraction\tdesc" ++
         "\tcategory\tremoved_pct\tremoved_half\terr_base\terr_cand\tunit\teffects\n";
     const line = try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{t}\t{d}\t{d:.5}\t{d:.5}\t{s}\t{d}\t{s}\t{d}\t{s}\t{s}\t{d:.3}\t{d:.3}\t{s}\t{s}\t{s}\t{s}\n", .{

@@ -122,10 +122,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     defer data.deinit();
     const ids = protocol.platformIds();
     std.debug.assert(ids.len <= n_platforms);
-    const eu: u8 = for (ids, 0..) |id, i| {
-        if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
-    } else return error.TestPlatformNotScanned;
-    const c = try harness.cuts(gpa, &data, eu);
+    const c = try harness.cuts(gpa, &data);
     var e = try nnexport.build(gpa, &data, c);
     defer e.deinit();
     perMinute(e.aux);
@@ -1350,7 +1347,7 @@ fn fixtureExport(gpa: Allocator, n: usize) !struct { f: harness.Fixture, e: nnex
         r.stats[@backingInt(S.dmg_true)] = 0;
         r.stats[@backingInt(S.dmg_buildings)] = 30 * (100 + 10 * c + 50 * rnd.floatNorm(f32));
     }
-    const c = try harness.cuts(gpa, &f.data, 0);
+    const c = try harness.cuts(gpa, &f.data);
     const e = try nnexport.build(gpa, &f.data, c);
     perMinute(e.aux);
     return .{ .f = f, .e = e };

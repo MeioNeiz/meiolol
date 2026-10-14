@@ -132,8 +132,19 @@ outcomes and readings decided by Jacob the same day.
   outcomes), lab selection 84,820, lab dev-val 85,000; champion base rates call 51.2%
   of dev games right. snap-20261013T1954Z (13 Oct, 292,075 games): unpinned, learning
   curve only ("Data for nets" below)
-- Split: eval's. Test = newest 20% of EUW1 games by gameCreation; train = older games,
-  every platform. Tuning by folds inside train only; test touched once per model
+- Split (from snap-20261013T2253Z, Jacob 14 Oct; rules by meiolol-33): eval's, one time
+  cut over every platform, no EUW1 slice. Played = duration_s >= 900; only played games
+  set cuts, fit or score; shorter games keep their start's window. Order by game_start;
+  n played. Test cut T = start at sorted index n - round(0.15 n), dev cut D = at
+  n - round(0.25 n); test = start >= T, dev-val = D <= start < T, dev-visible below D;
+  ties go to the newer window. Folds: dev-visible played starts, b_k = s[floor(len (0.5 +
+  0.1 k))], k 0-4, b_5 = +inf; fold k scores [b_(k-1), b_k), fits below b_(k-1). Finals
+  fit below T; shipped exports on every played game. One function for all
+  (eval.cutsOf, harness.cuts); an optional region filter (harness.Cuts.region,
+  eval --test-platform) scores one platform's windows with the same cuts and fits.
+  Leak note: fits for a window never see games at or after its cut, same-patch games on
+  other platforms included. Before 2253Z: test = newest 20% of EUW1, train = older
+  games, selection and dev-val 20% windows of EUW1
 - Rows: ranked solo, non-remake, complete roles (stats.scan rules). Continuous outcomes
   also need a compact timeline that reached 15:00: frames[15].t_ms >= 900000 (frame 15
   exists is not enough: games ending 14:09-14:59 have it as their end frame). Win also

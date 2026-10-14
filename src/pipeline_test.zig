@@ -330,7 +330,7 @@ test "fixture games to lab rows, from SQLite and packed" {
     {
         const db = try store.schema.open(gpa, snap);
         defer db.close();
-        // The protocol's split wants 100 games, 20 of them EUW test games
+        // The protocol's split wants 100 games, 20 of them test games
         try fillGames(arena, db, 150, true);
         try db.exec("UPDATE participants SET tier = CASE slot % 3 WHEN 0 THEN 'GOLD' " ++
             "WHEN 1 THEN NULL ELSE 'DIAMOND' END, division = 'II'");
@@ -355,11 +355,13 @@ test "fixture games to lab rows, from SQLite and packed" {
     // The fixture covers what the pack must carry: both sides of the split, two
     // platforms, games with and without timeline outcomes, ranked and unranked rows,
     // players with and without earlier games
-    var seen: struct { tests: usize = 0, na: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0, exp: usize = 0, rates: usize = 0, offrole: usize = 0, days: usize = 0, start: [3]usize = @splat(0) } = .{};
+    var seen: struct { tests: usize = 0, na: usize = 0, na_tests: usize = 0, tl: usize = 0, unranked: usize = 0, items: usize = 0, exp: usize = 0, rates: usize = 0, offrole: usize = 0, days: usize = 0, start: [3]usize = @splat(0) } = .{};
     for (sql.games) |g| {
         try testing.expect(g.duration_s > 1000 and g.duration_s <= 1620);
         seen.tests += @intFromBool(g.is_test);
         seen.na += @intFromBool(g.platform != sql.games[sql.games.len - 1].platform);
+        // One time cut over every platform
+        seen.na_tests += @intFromBool(g.is_test and g.platform != sql.games[sql.games.len - 1].platform);
         seen.tl += @intFromBool(g.timeline15);
     }
     for (sql.rows) |r| {
@@ -381,7 +383,7 @@ test "fixture games to lab rows, from SQLite and packed" {
         try testing.expectEqual(r.slot == 9, r.player == lab_rows.no_player);
     }
     try testing.expect(sql.games.len >= 100);
-    try testing.expect(seen.tests > 0 and seen.tests < sql.games.len and seen.na > 0);
+    try testing.expect(seen.tests > 0 and seen.tests < sql.games.len and seen.na > 0 and seen.na_tests > 0);
     try testing.expect(seen.tl > 0 and seen.tl < sql.games.len and seen.unranked > 0 and seen.items > 0);
     try testing.expect(seen.exp > 0 and seen.exp < sql.rows.len);
     try testing.expect(seen.rates > 0 and seen.rates < sql.rows.len and seen.offrole > 0 and seen.days > 0);

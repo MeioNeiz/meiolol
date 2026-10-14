@@ -76,7 +76,7 @@ while true; do
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
     if [[ -z "${MEIOLOL_NO_EVAL:-}" ]] && (( now - last_eval >= 86400 )); then
         (flock -n 9 || exit 0
-            nice -n 10 bin/meiolol eval --platform all --test-platform EUW1 \
+            nice -n 10 bin/meiolol eval --platform all \
                 --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
                 && mv data/eval-latest.md.new data/eval-latest.md) 9> data/eval.lock &
         last_eval=$now

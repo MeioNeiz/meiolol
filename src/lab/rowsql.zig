@@ -1,6 +1,6 @@
 //! One row per player per game from an analysis snapshot, with the shared outcomes
 //! (docs/model.md "Shared protocol"). Games are stats.scan's (ranked solo, no remakes,
-//! roles complete); test games are protocol's split. pack.zig hashes this file, so what
+//! roles complete); test games are eval.split's (one time cut, every platform). pack.zig hashes this file, so what
 //! changes rows goes here; loading paths and hooks go in rows.zig
 
 const std = @import("std");
@@ -111,7 +111,7 @@ pub fn loadSql(
     var list: GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
     _ = try stats.scan(gpa, db, patches, &ids, 0, &list);
-    var parts = try eval.split(gpa, list.items.items, &ids, .{ .test_platform = protocol.test_platform });
+    var parts = try eval.split(gpa, list.items.items, &ids, .{});
     defer parts.deinit(gpa);
 
     // Scan order is by start; index by match key for the participant pass

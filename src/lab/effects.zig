@@ -63,7 +63,7 @@ const Options = struct {
 };
 
 const Block = enum { dev, f1, f2, f3, f4, f5 };
-const n_folds = 5;
+const n_folds = harness.folds;
 
 /// Fit on dev-visible games before `before`; score dev-val (dev) or dev-visible games in
 /// [lo, hi): netcheck's blocks (winnet.zig Spec), so games pair with its preds
@@ -81,7 +81,7 @@ const Spec = struct {
 
     fn scores(s: Spec, c: harness.Cuts, g: rows.Game) bool {
         if (s.dev) return harness.scored(.dev, c, g);
-        return harness.visible(.dev, c, g) and g.start >= s.lo and g.start < s.hi;
+        return harness.visible(.dev, c, g) and harness.inRegion(c, g) and g.start >= s.lo and g.start < s.hi;
     }
 };
 
@@ -148,11 +148,6 @@ fn summarise(arena: std.mem.Allocator, pick: Pick, sigma2: [A.n_groups]f64, boot
     std.mem.sort(f64, nsd, {}, std.sort.asc(f64));
     const q95 = if (nulls.len > 0) nsd[@min(nulls.len - 1, @as(usize, @intFromFloat(@ceil(0.95 * @as(f64, @floatFromInt(nulls.len))))) -| 1)] else 0;
     return .{ .sd = sd, .lo = lo, .hi = sd + 1.96 * se, .half_mean = hm, .null_ms = nv, .null_q95 = q95, .detected = sd > q95 and lo > q95 };
-}
-
-fn quantile(xs: []const i64, x: f64) i64 {
-    if (x >= 1) return std.math.maxInt(i64);
-    return xs[@intFromFloat(@as(f64, @floatFromInt(xs.len)) * x)];
 }
 
 fn blockName(b: Block) []const u8 {
@@ -1039,12 +1034,8 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     if (!anyStats(&data)) return error.NoSeatStats;
     const players = try harness.gamePlayers(gpa, &data);
     defer gpa.free(players);
-    const ids = protocol.platformIds();
-    std.debug.assert(ids.len <= A.n_platforms);
-    const eu: u8 = for (ids, 0..) |id, i| {
-        if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
-    } else return error.TestPlatformNotScanned;
-    const c = try harness.cuts(gpa, &data, eu);
+    std.debug.assert(protocol.platformIds().len <= A.n_platforms);
+    const c = try harness.cuts(gpa, &data);
     const in = try inputs(arena, &data);
     if (opts.shuffle) |seed| {
         var rng: std.Random.DefaultPrng = .init(seed);
@@ -1098,21 +1089,14 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         }
     }
 
-    var starts: std.ArrayList(i64) = .empty;
-    defer starts.deinit(gpa);
-    for (data.games) |g| if (harness.visible(.dev, c, g)) try starts.append(gpa, g.start);
-    std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
     var pooled: Pooled = .{};
     defer pooled.deinit(gpa);
     for (opts.blocks) |b| {
         const spec: Spec = switch (b) {
-            .dev => .{ .before = c.dev, .lo = c.dev, .hi = c.select, .dev = true, .resample = opts.resample },
+            .dev => .{ .before = c.dev, .lo = c.dev, .hi = c.test_, .dev = true, .resample = opts.resample },
             else => blk: {
-                const f: f64 = @floatFromInt(@backingInt(b) - 1);
-                const k: f64 = n_folds;
-                const lo = quantile(starts.items, 0.5 + 0.5 * f / k);
-                const hi = @min(quantile(starts.items, 0.5 + 0.5 * (f + 1) / k), c.dev);
-                break :blk .{ .before = lo, .lo = lo, .hi = hi, .dev = false, .resample = opts.resample };
+                const f = c.fold(@backingInt(b));
+                break :blk .{ .before = f.lo, .lo = f.lo, .hi = f.hi, .dev = false, .resample = opts.resample };
             },
         };
         var block_arena: std.heap.ArenaAllocator = .init(gpa);

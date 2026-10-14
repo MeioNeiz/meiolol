@@ -1,20 +1,20 @@
-//! The lab agent's harness (docs/lab-agent.md). Cuts train into dev and selection by
-//! time on EUW1, fits a candidate on the visible games only, builds each scored row's
+//! The lab agent's harness (docs/lab-agent.md). One time cut over every platform
+//! (eval.cutsOf): test, then dev-val, then the dev-visible games and their folds. Fits a candidate on the visible games only, builds each scored row's
 //! query (scope-masked, never an outcome), and scores it per outcome against the
-//! champion-role baseline, paired per row and clustered by game. Selection looks are a
-//! Ladder (Blum and Hardt): "new best" only when the paired interval beats the current
-//! best, otherwise no number, and at most `look_budget` looks per snapshot.
+//! champion-role baseline, paired per row and clustered by game. `ladder` (Blum and
+//! Hardt): "new best" only when the paired interval beats the current best, otherwise no
+//! number, and at most `look_budget` looks per snapshot.
 
 const std = @import("std");
 const api = @import("api");
 const core = @import("core");
 const rows = @import("rows.zig");
 const seatstats = @import("seatstats.zig");
+const eval = @import("../eval.zig");
 
-pub const Phase = enum { dev, select, final };
-
-/// Share of non-test EUW1 games in selection, and again in dev-val
-pub const share = 0.2;
+/// dev: fit on dev-visible games, score dev-val. final: fit on every game before the
+/// test cut, score test (one look per final model, ledgered)
+pub const Phase = enum { dev, final };
 
 /// Selection looks per snapshot, shared by every campaign (docs/lab-agent.md)
 pub const look_budget = 50;
@@ -133,21 +133,48 @@ fn statsPresent(rs: []const api.Row) !void {
     }
 }
 
-/// Scored games of a phase start at or after its cut; its visible games are older
+/// The protocol's windows (eval.Cuts, docs/model.md "Shared protocol"), every tool's
 pub const Cuts = struct {
+    test_: i64,
     dev: i64,
-    select: i64,
-    eu: u8,
-};
+    /// Fold k's block is [bounds[k - 1], bounds[k]) of the dev-visible games, k = 1..5;
+    /// dev_old is below bounds[0]; bounds[5] = +inf, so cap fold 5 at `dev`
+    bounds: [folds + 1]i64,
+    /// Region filter (a regional fine-tune): scores only this platform's games, while the
+    /// cuts and the fits stay on every platform. null: every platform
+    region: ?u8 = null,
 
-pub fn cuts(gpa: std.mem.Allocator, d: *const rows.Data, eu: u8) !Cuts {
+    /// Fold k's block, capped at the dev cut
+    pub fn fold(c: Cuts, k: usize) struct { lo: i64, hi: i64 } {
+        return .{ .lo = c.bounds[k - 1], .hi = @min(c.bounds[k], c.dev) };
+    }
+};
+pub const folds = eval.folds_n;
+
+/// From every played game: the same rule as eval.split, which set rows' is_test, so a
+/// test window that disagrees (a pack from older protocol code) is an error
+pub fn cuts(gpa: std.mem.Allocator, d: *const rows.Data) !Cuts {
     var starts: std.ArrayList(i64) = .empty;
     defer starts.deinit(gpa);
-    for (d.games) |g| if (!g.is_test and g.platform == eu) try starts.append(gpa, g.start);
-    std.mem.sort(i64, starts.items, {}, std.sort.desc(i64));
-    const n: usize = @intFromFloat(@round(@as(f64, @floatFromInt(starts.items.len)) * share));
-    if (n < 20) return error.TooFewGames;
-    return .{ .select = starts.items[n - 1], .dev = starts.items[2 * n - 1], .eu = eu };
+    for (d.games) |g| if (played(g)) try starts.append(gpa, g.start);
+    std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
+    const e = try eval.cutsOf(starts.items, .{});
+    for (d.games) |g| if (g.is_test != (g.start >= e.test_)) return error.TestWindowMismatch;
+    return .{ .test_ = e.test_, .dev = e.dev, .bounds = e.bounds };
+}
+
+/// Sets is_test by eval.split's rule (fixtures, and after editing games' durations)
+pub fn markTests(gpa: std.mem.Allocator, d: *rows.Data) !void {
+    var starts: std.ArrayList(i64) = .empty;
+    defer starts.deinit(gpa);
+    for (d.games) |g| if (played(g)) try starts.append(gpa, g.start);
+    std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
+    const e = try eval.cutsOf(starts.items, .{});
+    for (d.games) |*g| g.is_test = g.start >= e.test_;
+}
+
+pub fn inRegion(c: Cuts, g: rows.Game) bool {
+    return c.region == null or g.platform == c.region.?;
 }
 
 /// Keeps a fixed share of games, the same ones at every size (nested subsets for
@@ -176,9 +203,9 @@ const resample_share = 0.9;
 
 /// docs/model.md "Rows": a game over before 15:00 is a remake, leaver forfeit or abort,
 /// decided by the leaver, not the draft
-pub const min_duration_s = 900;
+pub const min_duration_s = eval.min_duration_s;
 
-fn played(g: rows.Game) bool {
+pub fn played(g: rows.Game) bool {
     return g.duration_s >= min_duration_s;
 }
 
@@ -186,16 +213,14 @@ pub fn visible(p: Phase, c: Cuts, g: rows.Game) bool {
     if (g.is_test or !played(g)) return false;
     return switch (p) {
         .dev => g.start < c.dev,
-        .select => g.start < c.select,
         .final => true,
     };
 }
 
 pub fn scored(p: Phase, c: Cuts, g: rows.Game) bool {
-    if (!played(g)) return false;
+    if (!played(g) or !inRegion(c, g)) return false;
     return switch (p) {
-        .dev => !g.is_test and g.platform == c.eu and g.start >= c.dev and g.start < c.select,
-        .select => !g.is_test and g.platform == c.eu and g.start >= c.select,
+        .dev => !g.is_test and g.start >= c.dev,
         .final => g.is_test,
     };
 }
@@ -267,8 +292,7 @@ pub const Visible = struct {
     }
 };
 
-/// fraction: share of the visible games kept (dev only: selection and test always fit
-/// on everything). after: fill rank_after (afterGameRank, dev only)
+/// fraction: share of the visible games kept (dev only: test always fits on everything). after: fill rank_after (afterGameRank, dev only)
 pub fn buildTrain(gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, p: Phase, c: Cuts, fraction: f64, after: bool) !Visible {
     std.debug.assert(p == .dev or fraction >= 1);
     std.debug.assert(p == .dev or !after);
@@ -580,7 +604,7 @@ pub fn ladder(game: []const u32, cand: []const f64, best: []const f64, looks: us
 pub const Fixture = struct {
     data: rows.Data,
 
-    /// n games a minute apart, a third EUW1 (platform 0); gold14 = 5000, +400 for champion
+    /// n games a minute apart over 3 platforms, test by eval.split's rule; gold14 = 5000, +400 for champion
     /// 1 in any role, -300 with champion 2 on the enemy team, + noise (sd 300); win a coin
     /// flip. +200 on champion 1 is below what the selection set can detect at 3000 games.
     /// Players from a pool of 200, so experience fills in
@@ -598,7 +622,6 @@ pub const Fixture = struct {
         defer players.deinit(gpa);
         var extras: std.ArrayList(rows.Extra) = .empty;
         defer extras.deinit(gpa);
-        const n_test = n / 15;
         for (games, 0..) |*g, gi| {
             var teams: [2][5]u32 = undefined;
             for (&teams) |*t| for (t) |*ch| {
@@ -609,8 +632,8 @@ pub const Fixture = struct {
                 .match_id = "",
                 .start = @intCast(gi * 60_000),
                 .patch = 16020,
-                .platform = if (gi >= n - n_test) 0 else @intCast(gi % 3),
-                .is_test = gi >= n - n_test,
+                .platform = @intCast(gi % 3),
+                .is_test = false,
                 .teams = teams,
                 .winner = winner,
                 .timeline15 = true,
@@ -642,6 +665,7 @@ pub const Fixture = struct {
         try rows.fillExperience(gpa, games, out.items, players.items, extras.items);
         data.games = games;
         data.rows = out.items;
+        try markTests(gpa, &data);
         return .{ .data = data };
     }
 };
@@ -749,8 +773,8 @@ test "a candidate that needs seat stats fails without them" {
     defer f.data.deinit();
     const players = try gamePlayers(gpa, &f.data);
     defer gpa.free(players);
-    const c = try cuts(gpa, &f.data, 0);
-    for ([_]Phase{ .dev, .select, .final }) |p| {
+    const c = try cuts(gpa, &f.data);
+    for ([_]Phase{ .dev, .final }) |p| {
         try std.testing.expectError(error.NoSeatStats, score(NeedsStats, gpa, &f.data, players, c, p, .{}));
     }
     // Each stat known somewhere in the fit set is enough; a stat NaN everywhere isn't
@@ -807,7 +831,7 @@ test "seat stats reach fit on visible games only, never a scored game's" {
     defer f.data.deinit();
     const players = try gamePlayers(gpa, &f.data);
     defer gpa.free(players);
-    const c = try cuts(gpa, &f.data, 0);
+    const c = try cuts(gpa, &f.data);
 
     // No seat_stats.tsv: every stat NaN
     StatsSpy.reset();
@@ -816,7 +840,7 @@ test "seat stats reach fit on visible games only, never a scored game's" {
     try std.testing.expectEqual(0, StatsSpy.with_stats);
 
     for (f.data.rows) |*r| r.stats[@backingInt(api.SeatStat.minutes)] = @floatFromInt(@divExact(f.data.games[r.game].start, 60_000));
-    for ([_]Phase{ .dev, .select, .final }) |p| {
+    for ([_]Phase{ .dev, .final }) |p| {
         StatsSpy.reset();
         var s = try score(StatsSpy, gpa, &f.data, players, c, p, .{});
         defer s.deinit(gpa);
@@ -893,8 +917,8 @@ test "candidates see no scored games and no other ranks in champ select" {
     defer f.data.deinit();
     const players = try gamePlayers(gpa, &f.data);
     defer gpa.free(players);
-    const c = try cuts(gpa, &f.data, 0);
-    for ([_]Phase{ .dev, .select, .final }) |p| {
+    const c = try cuts(gpa, &f.data);
+    for ([_]Phase{ .dev, .final }) |p| {
         Spy.reset();
         var v = try buildTrain(gpa, &f.data, players, p, c, 1, false);
         defer v.deinit();
@@ -918,10 +942,10 @@ test "others' experience only in internal scope, ranks in post-game and internal
     defer f.data.deinit();
     const players = try gamePlayers(gpa, &f.data);
     defer gpa.free(players);
-    const c = try cuts(gpa, &f.data, 0);
+    const c = try cuts(gpa, &f.data);
     inline for (.{ api.Scope.champ_select, .post_game, .internal }) |sc| {
         const S = SpyIn(sc);
-        for ([_]Phase{ .dev, .select, .final }) |p| {
+        for ([_]Phase{ .dev, .final }) |p| {
             S.reset();
             var s = try score(S, gpa, &f.data, players, c, p, .{});
             defer s.deinit(gpa);
@@ -949,12 +973,12 @@ test "the after-game rank reaches only candidates that ask, in dev runs only" {
     defer f.data.deinit();
     const players = try gamePlayers(gpa, &f.data);
     defer gpa.free(players);
-    const c = try cuts(gpa, &f.data, 0);
+    const c = try cuts(gpa, &f.data);
     Spy.reset();
     var s = try score(AfterSpy, gpa, &f.data, players, c, .dev, .{});
     s.deinit(gpa);
     try std.testing.expect(Spy.saw_after);
-    for ([_]Phase{ .select, .final }) |p| {
+    for ([_]Phase{.final}) |p| {
         try std.testing.expectError(error.AfterGameRankDevOnly, score(AfterSpy, gpa, &f.data, players, c, p, .{}));
     }
     // Everyone else's ranks are the pre-game ones
@@ -978,10 +1002,10 @@ test "ladder: noise never wins, a real gain does" {
     defer f.data.deinit();
     const players = try gamePlayers(gpa, &f.data);
     defer gpa.free(players);
-    const c = try cuts(gpa, &f.data, 0);
+    const c = try cuts(gpa, &f.data);
     const k = api.outcomeIndex(.gold14);
 
-    var noise = try score(Noise, gpa, &f.data, players, c, .select, .{});
+    var noise = try score(Noise, gpa, &f.data, players, c, .dev, .{});
     defer noise.deinit(gpa);
     const ln = try noise.losses(gpa, &f.data, k, null, .cand);
     defer gpa.free(ln);
@@ -991,7 +1015,7 @@ test "ladder: noise never wins, a real gain does" {
     try std.testing.expect(ladder(noise.game, ln, lb, look_budget) == .budget_spent);
 
     // The baseline knows champion 1's +400; a single mean doesn't
-    var flat = try score(RoleMean, gpa, &f.data, players, c, .select, .{});
+    var flat = try score(RoleMean, gpa, &f.data, players, c, .dev, .{});
     defer flat.deinit(gpa);
     const lf = try flat.losses(gpa, &f.data, k, null, .cand);
     defer gpa.free(lf);
@@ -1049,7 +1073,7 @@ test "effect tables come through on request only" {
     defer f.data.deinit();
     const players = try gamePlayers(gpa, &f.data);
     defer gpa.free(players);
-    const c = try cuts(gpa, &f.data, 0);
+    const c = try cuts(gpa, &f.data);
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
     var s = try score(Tables, gpa, &f.data, players, c, .dev, .{ .effects_for = .gold14, .effects_arena = arena.allocator() });
@@ -1066,8 +1090,7 @@ test "games over before 15:00 are neither fitted on nor scored" {
     const gpa = std.testing.allocator;
     var f = try Fixture.init(gpa, 3000, 5);
     defer f.data.deinit();
-    // Every fourth game a leaver forfeit at 12:00 (every third is EUW1, the scored
-    // platform): no timeline outcomes, as rows.zig
+    // Every fourth game a leaver forfeit at 12:00: no timeline outcomes, as rows.zig
     for (f.data.games, 0..) |*g, gi| if (gi % 4 == 0) {
         g.timeline15 = false;
         g.duration_s = 720;
@@ -1075,9 +1098,10 @@ test "games over before 15:00 are neither fitted on nor scored" {
     for (f.data.rows) |*r| if (!f.data.games[r.game].timeline15) {
         r.y[api.outcomeIndex(.gold14)] = std.math.nan(f32);
     };
+    try markTests(gpa, &f.data);
     const players = try gamePlayers(gpa, &f.data);
     defer gpa.free(players);
-    const c = try cuts(gpa, &f.data, 0);
+    const c = try cuts(gpa, &f.data);
     var s = try score(Spy, gpa, &f.data, players, c, .dev, .{});
     defer s.deinit(gpa);
     try std.testing.expect(s.row.len > 0);

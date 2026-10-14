@@ -26,7 +26,7 @@ pub const GameList = struct {
 pub const HeldOut = struct {
     list: GameList,
     split: eval.Split,
-    /// Start of the first test game
+    /// The test cut: test games start at or after it
     cutoff: i64,
 
     pub fn deinit(h: *HeldOut) void {
@@ -40,15 +40,16 @@ pub const HeldOut = struct {
     }
 };
 
-/// Scans the games on `patches` and `platforms` and splits them as the protocol does:
-/// test on the newest `test_share` of `test_platform`'s games, train on older ones
+/// Scans the games on `patches` and `platforms` and splits them as the protocol does: one
+/// time cut from the newest `test_share` of played games, test on every game from it on
+/// (only `test_platform`'s with one), train on older ones
 pub fn heldOut(
     gpa: std.mem.Allocator,
     db: store.Db,
     patches: []const []const u8,
     platforms: []const []const u8,
     test_share: f64,
-    test_platform: []const u8,
+    test_platform: ?[]const u8,
 ) !HeldOut {
     var list: GameList = .{ .gpa = gpa };
     errdefer list.items.deinit(gpa);
@@ -57,7 +58,7 @@ pub fn heldOut(
         .test_share = test_share,
         .test_platform = test_platform,
     });
-    return .{ .list = list, .split = split, .cutoff = split.tests[0].start };
+    return .{ .list = list, .split = split, .cutoff = split.cuts.test_ };
 }
 
 /// Participant ids (slot + 1) by side (blue, red) and role

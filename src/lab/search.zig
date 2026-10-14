@@ -326,7 +326,7 @@ test "screen finds a planted feature, diagnose runs" {
     defer f.data.deinit();
     const players = try harness.gamePlayers(gpa, &f.data);
     defer gpa.free(players);
-    const c = try harness.cuts(gpa, &f.data, 0);
+    const c = try harness.cuts(gpa, &f.data);
     const Cand = struct {
         pub const scope: api.Scope = .champ_select;
         pub const Model = struct {};

@@ -75,7 +75,7 @@ const usage =
     \\  nn-export SNAP                  every game as tensors for the draft nets: SNAP/nn/
     \\                                  (lab/nnexport.zig: champions, splits, folds, aux
     \\                                  targets, fit-only norms)
-    \\  split SNAP_DIR                  the shared held-out split (eval's, tested on EUW1):
+    \\  split SNAP_DIR                  the shared held-out split (eval's, one time cut):
     \\                                  prints it, writes SNAP_DIR/split.tsv
     \\  rows SNAP_DIR                   load the model rows, print outcome counts and means
     \\  pack SNAP_DIR                   write the model rows as column files in SNAP_DIR/pack,
@@ -199,9 +199,7 @@ pub fn main(init: std.process.Init) !u8 {
         defer legendaries.deinit(init.gpa);
         var data = try rows.load(init.gpa, argv[2], &legendaries);
         defer data.deinit();
-        const c = try harness.cuts(init.gpa, &data, for (protocol.platformIds(), 0..) |id, i| {
-            if (std.mem.eql(u8, id, protocol.test_platform)) break @intCast(i);
-        } else unreachable);
+        const c = try harness.cuts(init.gpa, &data);
         var e = try nnexport.build(init.gpa, &data, c);
         defer e.deinit();
         try nnexport.write(init.gpa, init.io, argv[2], &e);

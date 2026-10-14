@@ -23,6 +23,7 @@ const std = @import("std");
 const core = @import("core");
 const rows = @import("rows.zig");
 const seatstats = @import("seatstats.zig");
+const eval = @import("../eval.zig");
 
 const log = std.log.scoped(.plant);
 
@@ -353,8 +354,8 @@ pub fn plant(gpa: std.mem.Allocator, d: *rows.Data, spec: Spec) !void {
     });
 }
 
-/// Fully synthetic games for tests, no snapshot: n games a minute apart, the newest
-/// fifteenth EUW1 test games (platform 0), the rest over 3 platforms. 30 champions per role
+/// Fully synthetic games for tests, no snapshot: n games a minute apart over 3 platforms,
+/// test by eval.split's rule (the newest 15%, every platform). 30 champions per role
 /// (id % 5 its role, popularity falling as 1/rank), 1 in 8 picks a flex champion from
 /// another role; seat stats from a magic share and damage per minute per champion plus
 /// noise; earlier games on the champion log-uniform 0-54. Winners from `spec`
@@ -370,7 +371,7 @@ pub fn draft(gpa: std.mem.Allocator, n: usize, spec: Spec) !rows.Data {
 
     const games = try a.alloc(rows.Game, n);
     const out = try a.alloc(rows.Row, 10 * n);
-    const n_test = n / 15;
+    const n_test: usize = @intFromFloat(@round(@as(f64, @floatFromInt(n)) * eval.test_share));
     for (games, 0..) |*g, gi| {
         var teams: [2][5]u32 = undefined;
         var used: [10]u32 = @splat(0);
@@ -388,7 +389,7 @@ pub fn draft(gpa: std.mem.Allocator, n: usize, spec: Spec) !rows.Data {
             .match_id = try std.fmt.allocPrint(a, "SYN_{d}", .{gi}),
             .start = @intCast(gi * 60_000),
             .patch = 16020,
-            .platform = if (gi >= n - n_test) 0 else @intCast(gi % 3),
+            .platform = @intCast(gi % 3),
             .is_test = gi >= n - n_test,
             .teams = teams,
             .winner = 0,
