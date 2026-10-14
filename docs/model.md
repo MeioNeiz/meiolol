@@ -2117,6 +2117,22 @@ within each draw; the init-loss gate is ok on every fit; offset weights 0.81-0.9
 - Data check (meiolol-53's ask; py/player/overlap.py, run 20261014T013134Z-overlap-2253Z):
   no player has two games overlapping in time (0 pairs over 1,241,856 players, 372,640
   games)
+- History means as hand-made terms (meiolol-51, declared before any run and accepted by
+  53; build fd39d1e): win-exp-rates = win-exp plus each player's gold, CS and damage per
+  minute over earlier games, standardised by role on training rows and pulled to the
+  role mean by n / (n + 3), per-role weights on blue's minus red's (k and the
+  standardisation fixed before the runs). Not a fresh discovery test: the terms were
+  chosen after the leave-one-out on these folds, so this is an engineering result. Pass
+  (1.6x rule, both 90% resamples, 4+ of 5 blocks): win-exp-rates minus win-exp, folds
+  -0.00191 ± 0.00036 (1.6x bound -0.00133), 5/5 blocks (-0.00163 to -0.00216); resamples
+  -0.00177 and -0.00180 (5/5 each; spread across the three legs 0.00014); dev-val
+  -0.00267 ± 0.00072. Descriptive: the hand terms recover about all of the confirmed
+  net-on-net gain (-0.00191 vs B minus A -0.00195) and ~81% of B's whole gain over
+  win-exp's candidate (-0.00236); playernet B over win-exp-rates -0.00045 ± 0.00027, and
+  playernet on win-exp-rates over its candidate -0.00049 ± 0.00015 (seeds 1-3), both
+  under the ~0.0005 floor: a GLM with three averages per player captures the history
+  means. h-exp's candidate equals c-exp's per game (same win-exp, another build). Runs
+  data/runs/20261014T0344*-h-exp to 0352*-h-rates-net; playernet-20261014/hand.sh
 - Tuning (pn1, meiolol-fd/37; 73be9fe, seeds 10-14, 12 random trials over lr, hidden,
   dropout, wd, emb, emb-wd, batch, patience, min-games, picked on inner val only): no
   trial beats the default (val 0.68200; best trial 0.68208; all 12 within 0.0007). The
