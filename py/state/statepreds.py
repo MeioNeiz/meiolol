@@ -18,6 +18,8 @@ import nnsets
 import statecommon as sc
 from statemodels import MINUTES, Smooth, log
 
+FIT = MINUTES[::2]
+
 K = 5
 
 
@@ -51,14 +53,15 @@ def main():
                 y = data.y[g]
                 part = np.random.default_rng(11).integers(0, K, data.n)[g]
                 out = {k: np.zeros(len(y)) for k in ("wc", "wcd", "rich")}
+                fit_rows = np.isin(m, FIT)
                 for j in range(K):
-                    tr, te = part != j, part == j
+                    tr, te = (part != j) & fit_rows, part == j
                     for k, p in fit_three(X[tr], names, m[tr], y[tr], X[te], m[te]).items():
                         out[k][te] = p
             else:
                 sets = nnsets.sets(data, block)
                 logit, l2, _ = sc.draft_logits(data, sets)
-                Xf, names, gf, mf = sc.rows_for(state, sets.fit[has_tl[sets.fit]], MINUTES, logit)
+                Xf, names, gf, mf = sc.rows_for(state, sets.fit[has_tl[sets.fit]], FIT, logit)
                 X, _, g, m = sc.rows_for(state, sets.scored[has_tl[sets.scored]], MINUTES, logit)
                 y = data.y[g]
                 out = fit_three(Xf, names, mf, data.y[gf], X, m)

@@ -37,10 +37,10 @@ def team_leads(state, games, minute):
     return np.stack([side("gold") / 1000, side("xp") / 1000, S[:, c["b_kills"]] - S[:, c["r_kills"]], S[:, c["obj_towers"]], S[:, c["obj_dragons"]]], 1)
 
 
-def rows_with_momentum(state, games, logit):
+def rows_with_momentum(state, games, logit, minutes):
     Xs, Ms, gs, ms = [], [], [], []
     names = None
-    for m in MINUTES:
+    for m in minutes:
         S = state.block(m, games)
         going = ~np.isnan(S[:, 0])
         g = games[going]
@@ -83,8 +83,8 @@ def run_block(state, data, block):
     has_tl = state.game[:, state.gcols["has_timeline"]] == 1
     logit, _, _ = sc.draft_logits(data, sets)
     fit_g, sc_g = sets.fit[has_tl[sets.fit]], sets.scored[has_tl[sets.scored]]
-    Xf, names, Mf, gf, mf = rows_with_momentum(state, fit_g, logit)
-    Xs, _, Ms, gs, ms = rows_with_momentum(state, sc_g, logit)
+    Xf, names, Mf, gf, mf = rows_with_momentum(state, fit_g, logit, MINUTES[::2])
+    Xs, _, Ms, gs, ms = rows_with_momentum(state, sc_g, logit, MINUTES)
     yf, ys = data.y[gf], data.y[gs]
     idx = {n: i for i, n in enumerate(names)}
     wcd = [idx[f"obj_{f}"] for f in sc.WC] + [idx["draft"]]

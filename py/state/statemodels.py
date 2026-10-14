@@ -28,6 +28,8 @@ import nnsets
 import statecommon as sc
 
 MINUTES = list(range(1, 41))
+# Fit rows every Nth minute (memory on the shared gpu-box); scored rows every minute
+FIT_EVERY = [2]
 REPORT_MINUTES = [1, 5, 10, 15, 20, 25, 30, 35, 40]
 
 
@@ -129,7 +131,7 @@ def run_block(state, data, block, models, out):
     fit_g = sets.fit[has_tl[sets.fit]]
     sc_g = sets.scored[has_tl[sets.scored]]
     val_cut = nnsets.val_cut(data.start[sets.fit])
-    Xf, names, gf, mf = sc.rows_for(state, fit_g, MINUTES, logit)
+    Xf, names, gf, mf = sc.rows_for(state, fit_g, MINUTES[:: FIT_EVERY[0]], logit)
     Xs, _, gs, ms = sc.rows_for(state, sc_g, MINUTES, logit)
     yf, ys = data.y[gf], data.y[gs]
     log(f"  rows: fit {len(yf)}, scored {len(ys)}, {len(names)} features")
@@ -248,9 +250,11 @@ def main():
     ap.add_argument("--blocks", default="dev,1,2,3,4,5")
     ap.add_argument("--models", default="wc,wcd,rich,gbdt,gbdt_r")
     ap.add_argument("--coverage", action="store_true")
+    ap.add_argument("--fit-every", type=int, default=2)
     ap.add_argument("--report-from", help="preds.npz of an earlier run: report only")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
+    FIT_EVERY[0] = a.fit_every
     models = a.models.split(",")
     if a.report_from:
         z = np.load(a.report_from)
