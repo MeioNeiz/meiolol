@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Replaces the running renderer (meiolol-render@a or @b) without a gap: starts the other
 # instance with the current binary, both listening on the port (SO_REUSEPORT) while it
-# loads, and stops the old once the new one is serving. If the new one isn't ready within
-# 15 minutes, the old one stays. Run detached on the box by deploy/box.sh web start;
+# loads, and stops the old once the new one is serving. If the new one dies, or isn't ready
+# within 60 minutes (a load takes ~3.5 min on a quiet box, past 15 under a curves run and
+# an archive export), the old one stays. Run detached on the box by deploy/box.sh web start;
 # again if the binary changed meanwhile. Log in data/render.log
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit
@@ -23,10 +24,11 @@ while true; do
     systemctl --user restart "meiolol-render@$new"
     log "started meiolol-render@$new beside ${old[*]:-nothing}"
     start=$SECONDS
-    until [[ -e data/render-$new.ready ]] || (( SECONDS - start >= 900 )); do sleep 2; done
+    until [[ -e data/render-$new.ready ]] || (( SECONDS - start >= 3600 )) \
+        || ! systemctl --user -q is-active "meiolol-render@$new"; do sleep 2; done
     if [[ ! -e data/render-$new.ready ]]; then
         systemctl --user disable -q --now "meiolol-render@$new"
-        log "meiolol-render@$new not ready in 15 min: stopped it, kept ${old[*]:-nothing}"
+        log "meiolol-render@$new not ready after $(( (SECONDS - start) / 60 )) min: stopped it, kept ${old[*]:-nothing}"
         exit 1
     fi
     for u in "${old[@]}"; do systemctl --user disable -q --now "$u"; done
