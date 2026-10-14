@@ -2143,6 +2143,17 @@ within each draw; the init-loss gate is ok on every fit; offset weights 0.81-0.9
   log1p(games) misses a shape (a lead for a declared run: a games-count spline or
   buckets per role), and the played-the-champion gap remains (win-exp-first narrowed it
   on 1954Z)
+- Games-count shape (meiolol-51, declared before any run and accepted by 53, with
+  dev-val as an extra judged leg since the folds had already chosen two designs; build
+  6b997d2): win-exp-shape = win-exp-rates plus per-role one-hot buckets of earlier games
+  (1-19, 20-59, 60-149, 150+) and games on the champion (1-2, 3-9, 10+), cut points fixed
+  before the runs. FAILS: shape minus rates, folds +0.00016 ± 0.00021 (2/5 blocks
+  negative), resamples +0.00006 and -0.00010, dev-val -0.00040 ± 0.00035. The buckets
+  narrow calibration gaps (earlier games <= -30: -1.39 to -0.62 pp, >= 30: +0.91 to
+  +0.12; champion history <= -2: +1.01 to +0.45) without a log loss gain: these
+  buckets don't capture it, not "no effect". Counts are games in our crawl, so the
+  thresholds encode crawl depth; live lobbies would need them redefined. Runs
+  data/runs/20261014T0423*-s-rates to 0431*-s-shape-r2; playernet-20261014/shape.sh
 - Tuning (pn1, meiolol-fd/37; 73be9fe, seeds 10-14, 12 random trials over lr, hidden,
   dropout, wd, emb, emb-wd, batch, patience, min-games, picked on inner val only): no
   trial beats the default (val 0.68200; best trial 0.68208; all 12 within 0.0007). The
