@@ -302,4 +302,7 @@ match) gives 400 "Exception decrypting"; 81 players rows (36 ladder, 45 particip
 were first seen then. Matches outside the block give 200, and the block's edges follow
 players' seen_at. Effect: the participant mastery pass's ladder-gap batches never
 finished, so kr mastery stalled from 13 Oct 19Z (fixed in the crawler, e5aabc2).
-Cleanup as above (participant PUUIDs NULL, those players deleted): pending
+Cleanup as above (participant PUUIDs NULL, those players deleted): done 14 Oct 19:57Z,
+980 participant PUUIDs, 81 players. Until then the ladder mastery pass, its euw1 list
+down to such players, went round them back to back (~60k 400s a day, fixed in the
+crawler: the list wraps after the step's nap)

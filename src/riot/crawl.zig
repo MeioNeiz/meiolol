@@ -958,11 +958,10 @@ const PlatformCrawler = struct {
             \\ORDER BY p.puuid LIMIT ?
         ;
         const id = pc.platform.id;
-        var puuids = try column(pc.b.db, arena.allocator(), sql, .{ id, pc.masteryCursor(), n });
-        if (puuids.len == 0 and pc.mastery_cursor_len > 0) {
-            pc.mastery_cursor_len = 0;
-            puuids = try column(pc.b.db, arena.allocator(), sql, .{ id, "", n });
-        }
+        const puuids = try column(pc.b.db, arena.allocator(), sql, .{ id, pc.masteryCursor(), n });
+        // The end of the list wraps on the next step, after its nap: a list down to players
+        // whose calls fail went round back to back (14 Oct: 5 euw1 PUUIDs, 60k calls a day)
+        if (puuids.len == 0) pc.mastery_cursor_len = 0;
         for (puuids) |puuid| {
             try pc.b.check();
             // Players skipped here come round again when the cursor wraps
