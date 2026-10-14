@@ -2666,7 +2666,7 @@ The draft predicts gold at 14
 folds' scored games, against 0.405 for real gold at 14. Gold at 14 then to win through
 the state model (+0.018 vs ratings) is ruled out: drafts that win early gold give it back.
 
-#### Additive model on snap-20261013T2253Z: pre-declared test (audit pending meiolol-53)
+#### Additive model on snap-20261013T2253Z: pre-declared test (audited by meiolol-53)
 
 The 2055Z audit (meiolol-33) left two claims open, so they were declared with the verifier
 before any 2253Z score was seen (rule and both amendments in the verifier's notes): H1
@@ -2687,9 +2687,15 @@ A and B runs.
 | H0 full - ratings | -0.00163 ± 0.00028, 5 of 5 | -0.00171 | -0.00162 | -0.00219 ± 0.00057 | reported |
 | control, shuffled labels: full - strength | +0.00000 ± 0.00005 | | | | no gain, valid |
 
-So on 3x the fit games the additive model beats win-comp, and its role pairs add on top
-of the mix; the pair gain grew from -0.00033 (2055Z) to -0.00082, as thin cells fill.
-Strength + mix alone vs win-comp: -0.00034 ± 0.00015.
+So the additive model beats win-comp by 1.15 ± 0.22 milli-nats per game on the folds (1.7
+on dev-val, reported only; no test look), and its role pairs add 0.82 ± 0.17 on top of
+strength + mix. Strength + mix alone vs win-comp: -0.34 ± 0.15. The model was designed on
+2055Z, whose dev games overlap 2253Z's early folds; the gain is largest on fold 5 and
+dev-val, mostly games 2055Z never had, so no sign of design overfit. Against 2055Z (pairs
+-0.33, full vs ratings -1.29) the gains are larger, consistent with thin pair cells gaining
+from more games; the two pins score different games and times, so that is not a measured
+data effect (a same-games learning curve would be). Audit meiolol-53: every figure
+recomputed per game from the games files, blocks equal the nn split by match id.
 
 Per-block table (e53-T, 268,750 dev-visible games; corrected spreads [95%]; a value with an
 interval is detected, above the null's 95th, unless marked; as on 2055Z, pair sds are

@@ -25,6 +25,26 @@ How to write a line:
 
 ## Win
 
+- 2026-10-14 (2253Z): Who faces whom, and who plays beside whom, matters a little beyond
+  each champion's own strength. The lane matchups matter most: top vs top (typical
+  difference between matchups about 2.5 percentage points of win chance), mid vs mid
+  1.9, support vs support 1.3, bot vs bot 1.2, jungle vs jungle 1.1, mid vs the enemy bot
+  and bot vs the enemy support about 0.9. Among allies only the bot laner and support's
+  pairing shows (about 1.3 points); the other nine ally pairings show nothing. A
+  champion's own strength spreads 1.6-3.4 points by role (support most). Sure: one
+  pre-declared test on 134,375 held-out games (5 forward rounds, every platform): a
+  shrunk table of champion strength, every ally and enemy role pairing and the damage
+  mix predicts better than champion strength plus the damage mix (win-comp) by 1.15 ±
+  0.22 mnats per game, better in 5 of 5 rounds and in both 90% resamples; the pairings
+  alone add 0.82 ± 0.17 beyond strength and mix; dev-val (reported only) 1.7; no test
+  look. Designed on the older pin, whose games overlap the early rounds; the gain is
+  largest on the newest games. The sizes are typical spreads across pairs, and lower
+  bounds: planted pairs came back at 0.6-0.9x; single pairs have 1-3 games each and are
+  not reported. Other ally pairings and cross-role matchups not detected, at most about
+  0.4 and 0.7 points as fitted. Site: lane matchup and bot-lane synergy may become
+  reasons on the admin draft board once the shipped model switches to this table; no
+  numbers for single champion pairs. Evidence: docs/model.md "Effects and the CPU
+  model", "Additive model on snap-20261013T2253Z", audited by meiolol-53
 - 2026-10-14 (2253Z): Beyond which champions are picked, a comp's damage makes a small
   measurable difference, each about 1-2 percentage points for a comp clearly off in that
   way: damage far from half magic loses, magic-heavy teams (60%+ magic) lose about 2
@@ -273,7 +293,8 @@ How to write a line:
   than a coin: our best draft model ranks a winning team above a losing one 55% of the
   time (a coin 50%). It improved from 4.5k to 67k training games but not from 67k to
   90k, so whether more games keep helping is open. Counters and ally synergy added
-  nothing measurable; every region's games beat EUW's alone; weighting newer games
+  nothing measurable (superseded for counters and synergy by the 2026-10-14 (2253Z)
+  matchup line); every region's games beat EUW's alone; weighting newer games
   didn't help. Sure: dev games only, 90k training games, games ending before 15:00
   still in. Site: nothing yet. Evidence: docs/model.md "Win from the draft" (AUC 0.550,
   log loss 0.6897 vs a coin's 0.6931)
