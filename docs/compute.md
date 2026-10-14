@@ -222,6 +222,10 @@ builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps
   `--commit SHA` builds that commit once (as --head does HEAD); the rest reuse its key
 - `--python SCRIPT [--with PATH]...` sweeps a python net (lab-run's --python): one trial a
   job, no build; SCRIPT is copied at each start, so leave it alone until all are queued
+  (or point SCRIPT and --with at a frozen copy elsewhere: the run hash is the *.py contents)
+- `--live N`: at most N of the sweep's jobs queued or running at once; start waits (one
+  status poll a minute) before queuing the next, so run it in the background. For jobs
+  the slot count doesn't cap well (st1, 14 Oct: state nets take 6-8 GB, 2 of 3 gpu slots)
 - netcheck's `ens` rows (the seeds' averaged predictions) get their own column
 - A SPACE line `ref --flag V ...` (every flag) adds trial `ref`, run first with the same
   seeds: the table shows it on top as the bar, unnumbered and never the pick

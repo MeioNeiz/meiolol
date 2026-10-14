@@ -4,7 +4,8 @@
 #
 #   deploy/lab-sweep.sh start SWEEP SPACE [--trials N] [--rng S] [--pack K] [--serial]
 #                             [--head | --commit SHA] [--build-arg A]... [--res gpu|cpu]
-#                             [--python SCRIPT [--with PATH]...] [--skip N] [--dry-run]
+#                             [--python SCRIPT [--with PATH]...] [--skip N] [--live N]
+#                             [--dry-run]
 #                             -- CMD ARGS...
 #   deploy/lab-sweep.sh status SWEEP      its jobs, as deploy/lab-run.sh status shows them
 #   deploy/lab-sweep.sh table SWEEP       trials ranked by inner validation, to table.md
@@ -23,6 +24,9 @@
 # build; lab-run copies SCRIPT at each start, so don't edit it until every job is queued
 # --skip N: a start cut short after queuing jobs 1..N (jobs.tsv lists what it recorded):
 # the rest, with the same SPACE, --trials and --rng
+# --live N: at most N of the sweep's jobs queued or running at once; start waits here
+# (polling the gpu-box each minute) before queuing the next, so run it in the background.
+# For jobs whose memory or card share the slot count doesn't cap (state nets: 6-8 GB)
 #   deploy/lab-sweep.sh start big1 big.space --trials 40 --head \
 #       --build-arg -Dcand=src/lab/cand/win-ratings \
 #       -- netcheck "~/ml/snaps/snap-X" --net big --seeds 1,2,3
@@ -33,7 +37,7 @@ RUN=$ROOT/deploy/lab-run.sh
 HOST=gpu-box
 
 usage() {
-    sed -n '5,10p' "$0"
+    sed -n '5,11p' "$0"
     exit 2
 }
 
@@ -47,6 +51,7 @@ runs() { tail -n +2 "$1/jobs.tsv" | cut -f 2; }
 
 start() {
     local sweep=$1 space=$2 trials=32 rng=1 pack=1 dry=0 res=gpu skip=0 serial=0 py=""
+    local live=0
     local opts=()
     shift 2
     while (( $# )); do
@@ -63,6 +68,7 @@ start() {
             --with) opts+=(--with "$2"); shift ;;
             --dry-run) dry=1 ;;
             --skip) skip=$2; shift ;;
+            --live) live=$2; shift ;;
             --) shift; break ;;
             *) echo "unknown option $1"; exit 2 ;;
         esac
@@ -79,6 +85,7 @@ start() {
     local dir
     dir=$(sweep_dir "$sweep")
     [[ "$skip" =~ ^[0-9]+$ ]] || { echo "--skip: a number"; exit 2; }
+    [[ "$live" =~ ^[0-9]+$ ]] || { echo "--live: a number"; exit 2; }
     if (( skip )); then
         [[ -f "$dir/jobs.tsv" ]] || { echo "--skip: no $dir/jobs.tsv to add to"; exit 1; }
     elif [[ -e "$dir" ]] && (( ! dry )); then
@@ -138,6 +145,7 @@ start() {
     fi
     local k out run key o kept
     for (( k = skip; k < ${#jobs[@]}; k++ )); do
+        while (( live )) && (( $(live_jobs "$dir") >= live )); do sleep 60; done
         # Built once; the rest start that binary by its store key, whatever the tree
         # holds by then (lab-run.sh copies it into each run dir)
         if (( k == skip + 1 )) && [[ -z "$py" ]]; then
@@ -163,6 +171,12 @@ start() {
         echo "queued $run (${names[k]})"
     done
     echo "${#jobs[@]} jobs queued on $HOST/$res; deploy/lab-sweep.sh status|table $sweep"
+}
+
+# How many of the sweep's jobs are queued, running or paused (0 if the host can't say)
+live_jobs() {
+    "$RUN" status "$HOST" 2> /dev/null | grep -F -f <(runs "$1") \
+        | awk -F ' [|] ' '$2 ~ /^(running|paused|queued)/' | wc -l | tr -d ' '
 }
 
 status() {
