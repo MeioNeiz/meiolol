@@ -11,6 +11,7 @@
 //! Cheap at use time: ~80 table lookups per draft, no GPU
 
 const std = @import("std");
+const par = @import("../par.zig");
 
 pub const n_role = 5;
 pub const n_platforms = 16;
@@ -394,6 +395,81 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
     return .{ .theta = theta, .sigma2 = sigma2, .gamma = gamma, .h = h, .noise = noise };
 }
 
+/// Block variances corrected by simulation. Laplace-type estimates of a random effect's
+/// variance run low on win (binary) outcomes when cells have few games (test "planted
+/// pair sd"), and pure noise gives a spread too. So: plant every block at a trial sd on
+/// the same games (cells drawn afresh, the fit's fixed terms kept), draw outcomes, refit,
+/// and scale each trial sd by observed / mean simulated; repeated `iters` times. A block
+/// whose observed sd is no more than noise gives calibrates towards 0
+pub const Calibration = struct {
+    sigma2: [n_groups]f64,
+    /// Calibrated sd over the fit's own sd (1 for an unbiased block)
+    factor: [n_groups]f64,
+};
+
+pub fn calibrate(gpa: std.mem.Allocator, io: std.Io, p: *const Problem, obs: *const Fit, cfg: Config, sims: u32, iters: u32, seed: u64) !Calibration {
+    var s_true: [n_groups]f64 = undefined;
+    for (&s_true, obs.sigma2) |*t, v| t.* = @sqrt(@max(v, 0));
+    const sim_sd = try gpa.alloc([n_groups]f64, sims);
+    defer gpa.free(sim_sd);
+    const Ctx = struct {
+        gpa: std.mem.Allocator,
+        p: *const Problem,
+        obs: *const Fit,
+        cfg: Config,
+        s_true: [n_groups]f64,
+        seed: u64,
+        out: [][n_groups]f64,
+        fn one(x: @This(), i: usize) !void {
+            const np = x.p.n_params();
+            const cell = try x.gpa.alloc(f64, np);
+            defer x.gpa.free(cell);
+            var rng: std.Random.DefaultPrng = .init(x.seed +% i *% 0x9e3779b97f4a7c15);
+            const r = rng.random();
+            @memcpy(cell[0..fixed_params], x.obs.theta[0..fixed_params]);
+            for (1..n_groups) |g| for (x.p.param_start[g]..x.p.param_start[g + 1]) |j| {
+                cell[j] = r.floatNorm(f64) * x.s_true[g];
+            };
+            const games = try x.gpa.dupe(GameIn, x.p.games);
+            defer x.gpa.free(games);
+            const eta = try x.gpa.alloc(f64, games.len);
+            defer x.gpa.free(eta);
+            @memset(eta, 0);
+            for (x.p.entries) |e| eta[e.game] += e.x * cell[e.param];
+            const sd_noise = @sqrt(x.obs.noise);
+            for (games, eta) |*g, e| g.y = switch (x.p.kind) {
+                .logistic => if (r.float(f64) < sigmoid(e)) 1 else 0,
+                .gaussian => @floatCast(e + r.floatNorm(f64) * sd_noise),
+            };
+            var q = x.p.*;
+            q.games = games;
+            var f = try fit(x.gpa, &q, x.cfg, null, null);
+            defer f.deinit(x.gpa);
+            for (&x.out[i], f.sigma2) |*o, v| o.* = @sqrt(@max(v, 0));
+        }
+    };
+    for (0..iters) |it| {
+        try par.forEach(io, sims, Ctx{ .gpa = gpa, .p = p, .obs = obs, .cfg = cfg, .s_true = s_true, .seed = seed +% it *% 1000, .out = sim_sd }, Ctx.one);
+        for (1..n_groups) |g| {
+            var m: f64 = 0;
+            for (sim_sd) |sd| m += sd[g];
+            m /= @floatFromInt(@max(sims, 1));
+            const o = @sqrt(@max(obs.sigma2[g], 0));
+            // Multiplicative step, capped so one noisy round can't run away
+            if (m > 0 and s_true[g] > 0) s_true[g] *= std.math.clamp(o / m, 0.25, 4);
+        }
+    }
+    var out: Calibration = undefined;
+    for (0..n_groups) |g| {
+        out.sigma2[g] = s_true[g] * s_true[g];
+        const o = @sqrt(@max(obs.sigma2[g], 0));
+        out.factor[g] = if (o > 0) s_true[g] / o else 1;
+    }
+    out.sigma2[g_fixed] = obs.sigma2[g_fixed];
+    out.factor[g_fixed] = 1;
+    return out;
+}
+
 /// Blue's logit (win) or blue minus red (gaussian) for any game; cells not in the fit
 /// games count 0
 pub fn predict(p: *const Problem, f: *const Fit, g: *const GameIn) f64 {
@@ -534,4 +610,23 @@ test "planted pair sd: gaussian recovered at 6 games per cell, logistic biased l
     }
     try testing.expectApproxEqAbs(1.0, ratio[0], 0.15);
     try testing.expect(ratio[1] < 0.5);
+}
+
+test "calibration recovers a thin planted pair block on win" {
+    const gpa = testing.allocator;
+    const planted = allyGroup(3, 4);
+    const games = try synth(gpa, .logistic, 20_000, 40, 0.15, planted, 0.15, 7);
+    defer gpa.free(games);
+    var p = try build(gpa, .logistic, Variant.mains().with(planted).with(allyGroup(0, 1)), games);
+    defer p.deinit(gpa);
+    var f = try fit(gpa, &p, .{}, null, null);
+    defer f.deinit(gpa);
+    const cal = try calibrate(gpa, testing.io, &p, &f, .{}, 4, 4, 1);
+    // Raw ~0.67x at 25 games per cell; calibrated within ~20% of 0.15, the empty block ~0
+    try testing.expect(@sqrt(f.sigma2[planted]) < 0.12);
+    try testing.expectApproxEqAbs(0.15, @sqrt(cal.sigma2[planted]), 0.03);
+    try testing.expect(@sqrt(cal.sigma2[allyGroup(0, 1)]) < 0.04);
+    var m: f64 = 0;
+    for (g_main..g_ally) |g| m += @sqrt(cal.sigma2[g]) / n_role;
+    try testing.expectApproxEqAbs(0.15, m, 0.04);
 }
