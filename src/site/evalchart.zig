@@ -23,15 +23,18 @@ pub const series = [_]Series{
 
 /// The TSV's lines by its header's column names, sorted by games, one point per games
 /// count (the newest); lines with missing columns or values that aren't numbers (nan
-/// and inf parse) skipped
+/// and inf parse) skipped. Lines scored on one region (test_platform set, the runs
+/// before the all-platform cut of 14 Oct) are skipped: a different test set
 pub fn parse(arena: std.mem.Allocator, tsv: []const u8) ![]Point {
     var lines = std.mem.tokenizeScalar(u8, tsv, '\n');
     const header = lines.next() orelse return &.{};
     var at: [series.len + 1]?usize = @splat(null);
+    var region_at: ?usize = null;
     var cols = std.mem.splitScalar(u8, header, '\t');
     var i: usize = 0;
     while (cols.next()) |name| : (i += 1) {
         if (std.mem.eql(u8, name, "games")) at[0] = i;
+        if (std.mem.eql(u8, name, "test_platform")) region_at = i;
         for (series, 1..) |s, k| if (std.mem.eql(u8, name, s.column)) {
             at[k] = i;
         };
@@ -47,6 +50,7 @@ pub fn parse(arena: std.mem.Allocator, tsv: []const u8) ![]Point {
             fields[n] = f;
         }
         for (at) |a| if (a.? >= n) continue :lines;
+        if (region_at) |r| if (r < n and fields[r].len > 0) continue :lines;
         var p: Point = .{ .games = std.fmt.parseInt(u32, fields[at[0].?], 10) catch continue, .auc = undefined };
         for (&p.auc, 1..) |*v, k| {
             v.* = std.fmt.parseFloat(f64, fields[at[k].?]) catch continue :lines;
@@ -199,4 +203,12 @@ test "parse keeps the newest line per games count, sorted" {
     var w: Writer = .fixed(&buf);
     try section(&w, points);
     try std.testing.expect(std.mem.indexOf(u8, w.buffered(), "class=\"line s3\"") != null);
+
+    const regions =
+        "date\ttest_platform\tgames\tauc_base\tauc_current\tauc_joint\n" ++
+        "d\tEUW1\t8000\t0.50\t0.51\t0.52\n" ++
+        "d\t\t9000\t0.54\t0.55\t0.56\n";
+    const global = try parse(arena.allocator(), regions);
+    try std.testing.expectEqual(1, global.len);
+    try std.testing.expectEqual(9000, global[0].games);
 }
