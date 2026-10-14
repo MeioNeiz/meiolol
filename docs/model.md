@@ -2163,9 +2163,10 @@ at ec9224a/0c75817, `meiolol-lab compare`):
   new snapshot (pairs gain most from more games). Nothing for learned.md before 4b's
   audit
 - New pin (snap-20261013T2253Z after meiolol-73's seat_stats repack; meiolol-64),
-  declared before any run: E from pretrain at daa56a0 per block (dev, 1-5) on the
-  repacked snapshot. Development: win-embx all, E seeds 1-3, at 21412d3 (pairs with
-  meiolol-04's win-comp preds), plus shuffled E seeds 1-3; reported, not the decision.
+  declared before any run: E from pretrain (daa56a0 or later) per block (dev, 1-5) on
+  the repacked, re-cut snapshot. Development: win-embx all, E seeds 1-3, on meiolol-04's
+  post-repack commit (pairs with its win-comp preds), plus shuffled E seeds 1-3;
+  reported, not the decision.
   Pass needs all three on the 5 folds only, paired per game vs win-comp from the same
   build: (1) sealed E seeds 4-6 (seed_offset 3), mean below 0 by more than 1.6x its
   95% half-width; (2) sealed shuffled E seeds 4-6, all vs it below 0; (3) resample leg:
