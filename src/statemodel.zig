@@ -311,14 +311,16 @@ pub const Game = struct {
     }
 };
 
-/// Blue's chance by minute from 0 (0.5) while the game is going; empty unless the
-/// timeline has 10 participants
+/// Blue's chance by minute from 0 while the game is going; empty unless the timeline
+/// has 10 participants. 0:00 is the champions alone: the even opening frame, scored with
+/// the first fitted minute's weights (Jacob, 14 Oct: start from the draft, not 50%)
 pub fn chances(arena: Allocator, m: Model, g: Game) ![]f64 {
     if (g.t.participants != 10) return &.{};
     const d = m.draft(g.champions, g.platform);
     var walk: livestate.Walker = .init(g.t, g.seat_of, g.items);
     var out: std.ArrayList(f64) = .empty;
-    try out.append(arena, 0.5);
+    const open = walk.at(0) orelse return &.{};
+    try out.append(arena, 1 / (1 + @exp(-m.logit(d, &open, 0))));
     var minute: u8 = 1;
     while (minute < 255) : (minute += 1) {
         const s = walk.at(minute) orelse break;
@@ -389,7 +391,7 @@ test "seats need each side's five roles once" {
     try testing.expectEqual(@as(?[10]u8, null), Game.seats(teams, pos));
 }
 
-test "chances: a half at the start, then the model while the game is going" {
+test "chances: the champions alone at the start, then the model while the game is going" {
     var a: std.heap.ArenaAllocator = .init(testing.allocator);
     defer a.deinit();
     const arena = a.allocator();
@@ -402,9 +404,8 @@ test "chances: a half at the start, then the model while the game is going" {
     // Ahri and Jinx in their usual roles, so their terms are in any fit
     const champions = [10]u32{ 0, 0, 103, 222, 0, 0, 0, 103, 222, 0 };
     const p = try chances(arena, m, .{ .t = t, .seat_of = seat_of, .champions = champions, .platform = "EUW1", .items = .sorted(&ids) });
-    try testing.expectEqual(@as(f64, 0.5), p[0]);
     try testing.expect(p.len > 10);
-    for (p[1..]) |x| try testing.expect(x > 0 and x < 1);
+    for (p) |x| try testing.expect(x > 0 and x < 1);
     // Same champions on both sides in the same roles: the draft cancels but the intercept
     const d = m.draft(champions, "EUW1");
     try testing.expectApproxEqAbs(m.intercept("EUW1"), d.logit, 1e-12);

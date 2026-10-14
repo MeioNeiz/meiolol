@@ -417,9 +417,8 @@ fn wholeGame(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, platf
     }
     g.win_chance = chance.items;
 
-    // From 1:00 on: the first minute's move is the champions, not the game
     var best: ?u8 = null;
-    for (2..chance.items.len) |i| {
+    for (1..chance.items.len) |i| {
         const change = @abs(@as(i32, chance.items[i]) - chance.items[i - 1]);
         if (best == null or change > @abs(@as(i32, chance.items[best.?]) - chance.items[best.? - 1])) best = @intCast(i);
     }
@@ -786,7 +785,7 @@ test "win chance: statemodel with every role, winchance without" {
     const t = try timeline.fromJson(arena, raw);
     const s = try testSummary(arena);
     const full = try blueChances(arena, s, t, "EUW1", &.{});
-    try testing.expectEqual(@as(f64, 0.5), full[0]);
+    try testing.expect(full[0] > 0 and full[0] < 1 and full[0] != 0.5);
     try testing.expect(full.len > lane_end);
     const players = try arena.dupe(Summary.Player, s.players);
     players[3].position = "";

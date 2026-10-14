@@ -47,9 +47,10 @@ static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy b
   gold, XP, level, CS, items, death timer and deaths by role, objectives, buffs and
   vision, the draft logit and each champion's value by minute, fitted on ranked solo
   games by py/state/stateship.py into src/state_model.bin; games without each side's
-  five roles fall back to src/winchance.zig, team gold and objectives only), 50 at
-  0:00; the turning minute (biggest one-minute change from 1:00 on, so never the
-  champions' first move, with that minute's kills, deaths and objectives) and death cost
+  five roles fall back to src/winchance.zig, team gold and objectives only, 50 at
+  0:00). With the model, 0:00 is the champions alone (Jacob, 14 Oct: start from the
+  draft), so every later move is the game; the turning minute (biggest one-minute
+  change, with that minute's kills, deaths and objectives) and death cost
   per death (bounty and shutdown gold to the enemy, objectives the enemy took in the
   next minute, win chance before and after).
   Plate events after 14:00 are ignored (Riot sends them, worth nothing then)

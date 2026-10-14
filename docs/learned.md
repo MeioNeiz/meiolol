@@ -48,7 +48,8 @@ How to write a line:
   little after 35. Sure: snap-20261013T2253Z, 5 forward folds (100,848 games with a
   timeline) and dev-val (26,263), every fold better, intervals from resampling whole
   games; no test look; ranked solo games that reached 15 minutes. Site: Your games' win
-  chance by minute (post-game review only), no "this draft wins X%". Evidence:
+  chance by minute (post-game review only), starting at 0:00 from the champions alone
+  (Jacob, 14 Oct); never a draft win chance in champ select. Evidence:
   docs/model.md "Rich state and champions (richc)" (-0.0245 ± 0.0011 nats per
   game-minute vs the old form on the folds, audited)
 - 2026-10-14 (2253Z): Champion pairs help a tiny bit once each champion is described by
