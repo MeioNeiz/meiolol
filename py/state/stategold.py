@@ -8,10 +8,10 @@ point, soul, elder and baron buff active, barons taken, towers by tier (outer, i
 base, nexus), inhibitors down now, grubs, heralds, players dead now, kills, completed
 items, plates, control wards placed, the draft logit. Value of one more = weight /
 gold weight x 1000 (at an even game, where the curve term has no slope). 95% intervals
-from 200 Poisson bootstraps over games. Association: teams that take things differ in
+from 100 Poisson bootstraps over games. Association: teams that take things differ in
 ways the state misses (objectives.zig's caveat).
 
-usage: stategold.py SNAP [--out DIR] [--buckets 5,10,15,20,25,30] [--boot 200]
+usage: stategold.py SNAP [--out DIR] [--buckets 5,10,15,20,25,30] [--boot 100]
 """
 
 import argparse
@@ -68,8 +68,10 @@ def design(state, S, logit):
 
 
 def fit(X, y, w=None):
-    m = LogisticRegression(C=1e4, max_iter=2000, tol=1e-8).fit(X, y, sample_weight=w)
-    return m.coef_[0]
+    """Raw-unit weights; fitted on standardised columns, which lbfgs needs to converge"""
+    sd = X.std(0)
+    m = LogisticRegression(C=1e4, max_iter=1000, tol=1e-7).fit(X / sd, y, sample_weight=w)
+    return m.coef_[0] / sd
 
 
 def main():
@@ -77,7 +79,7 @@ def main():
     ap.add_argument("snap")
     ap.add_argument("--out", default="out")
     ap.add_argument("--buckets", default="5,10,15,20,25,30")
-    ap.add_argument("--boot", type=int, default=200)
+    ap.add_argument("--boot", type=int, default=100)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     threads = int(os.environ.get("OMP_NUM_THREADS", "8") or 8)
