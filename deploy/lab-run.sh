@@ -424,7 +424,7 @@ start() {
     # Python runs are told apart by script in placement's history (meta's bin)
     local shown=$bin
     [[ "$bin" == python ]] && shown=python/$(basename "$PY")
-    if placed=$(place "$host" "$RES" "$shown" "$*" "${BUILD_ARGS[*]-}" 2>&1); then
+    if placed=$(place "$host" "$RES" "$shown" "$*" "${BUILD_ARGS[*]-}" "$SHARE" 2>&1); then
         read -r p_host p_res predicted <<< "$(head -n 1 <<< "$placed")"
         why=$(sed -n 2p <<< "$placed")
         if (( auto )); then host=$p_host RES=$p_res; echo "placed: $why"
@@ -507,6 +507,7 @@ start() {
         if (( ${#BUILD_ARGS[@]} )); then echo "build ${BUILD_ARGS[*]}"; fi
         if [[ -n "$env" ]]; then echo "python $PY"; echo "pyenv $env"; fi
         if (( ${#WITH[@]} )); then echo "with ${WITH[*]}"; fi
+        if (( SHARE > 1 )); then echo "share $SHARE"; fi
     } > "$tmp/meta"
     # Run key: the same binary (or *.py and env), CPU target, snapshots, args and --with
     # files give the same results (seeds are in the args; thread counts don't matter,
@@ -774,6 +775,25 @@ listing() {
             printf "slots\t%s\t%s\n" $r "$(cat ~/ml/locks/$r.slots 2>/dev/null || echo 4)"
         done
         [[ -r /proc/meminfo ]] && awk "/^MemAvailable:/ { print \"mem\t\" \$2 }" /proc/meminfo
+        # What the memory gate also counts as taken (job.sh held_back): runs from the last
+        # 15 min not yet grown into their need
+        hb=""
+        for f in */memneed; do
+            e=${f%/memneed}
+            [[ -f $f && ! -f $e/exit && -f $e/job.pgid ]] || continue
+            hb+="$(cat $e/job.pgid) $(cat $f) $(stat -c %Y $f);"
+        done
+        [[ -r /proc/meminfo ]] && ps -eo pgid=,rss= | awk -v want="$hb" -v now="$(date +%s)" "
+            BEGIN {
+                n = split(want, w, \";\")
+                for (i = 1; i <= n; i++)
+                    if (split(w[i], f, \" \") == 3 && now - f[3] < 900) need[f[1]] = f[2]
+            }
+            \$1 in need { rss[\$1] += \$2 }
+            END {
+                for (g in rss) if (need[g] > rss[g]) t += need[g] - rss[g]
+                print \"memheld\t\" t + 0
+            }"
         for d in */; do
             d=${d%/}; [[ -f $d/job.sh ]] || continue
             pg=$(cat $d/job.pgid 2>/dev/null)
@@ -785,12 +805,12 @@ listing() {
                 else s=running; fi
             else s=died; fi
             m() { sed -n "s/^$1 //p" $d/meta 2>/dev/null | tr "\t" " "; }
-            printf "run\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$d" "$s" \
+            printf "run\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$d" "$s" \
                 "$(cat $d/started 2>/dev/null)" "$(cat $d/ended 2>/dev/null)" \
                 "$(m res)" "$(m bin | cut -d " " -f 1)" "$(m args)" \
                 "$(tr "\n" , 2>/dev/null < $d/pauses.log)" "$(cut -f 1 $d/predicted 2>/dev/null)" \
                 "$(m build)" "$(head -n 1 $d/slot 2>/dev/null | cut -d " " -f 1)" \
-                "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80 | tr "\t" " ")"
+                "$(tail -n 1 $d/log 2>/dev/null | cut -c1-80 | tr "\t" " ")" "$(m share)"
             # The memory gate reads these peaks (usage.sh), by meta bin and first arg
             pk=$(sed -n "s/^peak_rss_gb //p" $d/usage 2>/dev/null)
             [[ -n $pk && $pk != - ]] && printf "peak\t%s\t%s\n" "$d" "$pk"
