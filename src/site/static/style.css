@@ -480,6 +480,8 @@ svg.wc .hit { fill: transparent; cursor: crosshair; }
 .moments .empty { display: block; color: var(--muted); cursor: default; }
 .rv-lane .chart { padding: 10px 12px 0; }
 .rv-lane .chart svg { background: none; border: 0; border-radius: 0; }
+/* ~330 px wide in the review's side column: bigger units keep the text near 8 px */
+.rv-lane .chart text, .rv-lane .chart .side { font-size: 16px; }
 .rv-lane .chart figcaption { font-size: 11.5px; color: var(--faint); }
 .rv-seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; }
 .rv-seg button { background: none; border: 0; color: var(--muted); font-size: 12px; padding: 3px 9px; border-radius: 5px; }
