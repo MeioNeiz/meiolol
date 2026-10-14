@@ -25,6 +25,18 @@ How to write a line:
 
 ## Win
 
+- 2026-10-14 (2253Z): Champion pairs help a tiny bit once each champion is described by
+  how it usually plays (its damage, gold and early-game numbers) rather than by name: how
+  every two champions in a game combine predicts the winner slightly
+  better than the champions and their comp's damage mix alone. The gain is real but
+  tiny, about half of what the damage mix itself adds, and the same champions with
+  shuffled descriptions gain nothing. Sure: detected by a rule declared before the
+  runs, at its margin (a slightly stricter floor would miss), on snap-20261013T2253Z,
+  134,375 games in 5 forward folds with sealed seeds and one 90% resample (5 of 5 folds
+  each), audited by the verifier; the earlier snapshot showed the same sign with half
+  the games and missed; dev-val not judged (covers no gain). Site: nothing; too small to
+  claim a better prediction or to name pairs. Evidence: docs/model.md "Interactions on
+  pretrained embeddings" (-0.00026 ± 0.00014 nats/game vs win-comp)
 - 2026-10-14 (early, 2253Z): The champions tell you far more about who wins once you know
   how the game stands than before it starts: with each team's gold, kills and objectives
   at 15 minutes known, the draft adds four to five times as much as it does in champ

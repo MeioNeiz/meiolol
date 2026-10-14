@@ -2425,6 +2425,30 @@ at ec9224a/0c75817, `meiolol-lab compare`):
   netcheck --resample 1 for win-embx all and win-comp, mean below 0. Fold sign count
   beside each. Pass = detected, read as "sealed seeds and one resample draw agree" (one
   draw, not a resample spread); anything else = not detected, and the line closes
+- New-pin result (snap-20261013T2253Z re-cut, 134,375 fold games, gate passed and audited
+  by meiolol-53, who ran the legs from the per-game files; embx-2253-cmp reproduces them):
+  detected by the pre-declared rule, at its margin. Runs on gpu-box: pretrain at 44ca8ee
+  (20261014T004122Z-pt-2253-s123, 004141Z-pt-2253-s456, 004200Z-pt-2253-rs1); win-comp
+  nc-2253-comp (= nc-2253-sealed-comp = rb-ref-wc, identical files); win-embx nc-2253-all,
+  -shuf (ba9a21a), -sealed-all (e108ca6), -sealed-shuf (9f2b179), -all-rs1. Folds only:
+
+  | leg | diff | folds negative |
+  | --- | --- | --- |
+  | (a) sealed E 4-6 vs win-comp | -0.00026 ± 0.00014 | 5 of 5 |
+  | (b) sealed vs sealed shuffled E | -0.00032 ± 0.00014 | 5 of 5 |
+  | (c) resample leg vs win-comp on the same 90% | -0.00052 ± 0.00018 | 5 of 5 |
+  | development: E 1-3 vs win-comp | -0.00040 ± 0.00015 | 5 of 5 |
+  | shuffled E vs win-comp (E 1-3; sealed) | -0.00000 ± 0.00007; +0.00006 ± 0.00009 | |
+  | sealed vs ratings (win-comp vs ratings -0.00048 ± 0.00016) | -0.00074 ± 0.00021 | |
+
+  (a) clears 1.6x by 0.04 milli-nats (mean + 1.6 x 0.00014 = -0.00004). The 1.6x came from
+  2055Z's small-net A/A; on 2253Z meiolol-04 measured 2.1x for small nets, and at 2.1x
+  (a) would miss (+0.00003). That doesn't change the declared rule's reading, but the
+  pass is at its edge. Dev-val is not judged and covers 0 (sealed -0.00020 ± 0.00021).
+  Reading: real but tiny, ~0.3 milli-nats/game beyond win-comp (sealed), under the nets'
+  A/A floor on this pin (~0.35); the content is in E (shuffled E ties). No prediction
+  gain claimed for the site. Consistent with 2055Z's sealed -0.00037 ± 0.00024 (same
+  sign, which missed there), now confirmed with ~2x the fit games; it did not grow
 
 #### Set net: DeepSets on champion profiles (meiolol-35 [397394], was meiolol-0d)
 
