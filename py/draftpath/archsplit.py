@@ -8,7 +8,7 @@ dragon/herald/tower/grubs, length, win; win by length band (<25, 25-32, 32+ min)
 the draft-only model's chance for that team (D in info-raw): observed minus expected
 says when an archetype wins beyond its champions.
 
-usage: archsplit.py SNAP --info info-raw.npy --teams teams.tsv [--out .]
+usage: archsplit.py SNAP --info info-raw.npy --teams teams.tsv [--names a,b,...] [--out .]
 """
 
 import argparse
@@ -19,7 +19,8 @@ import pandas as pd
 
 import dp
 
-NAMES = {0: "range/siege", 1: "tank/engage", 2: "AD dive", 3: "late scaling", 4: "early dive/roam", 5: "enchanter/peel"}
+# labels for 2055Z's k-means (c1); each export's centres differ, so pass --names for others
+NAMES_2055Z = "range/siege,tank/engage,AD dive,late scaling,early dive/roam,enchanter/peel"
 
 
 def p_blue(loss, y):
@@ -32,8 +33,11 @@ def main():
     ap.add_argument("snap")
     ap.add_argument("--info", required=True)
     ap.add_argument("--teams", required=True)
+    ap.add_argument("--names", default=NAMES_2055Z, help="archetype labels 0-5, from the run's archetypes.tsv")
     ap.add_argument("--out", default=".")
     a = ap.parse_args()
+    global NAMES
+    NAMES = dict(enumerate(a.names.split(",")))
     nn = dp.load_nn(a.snap)
     st = dp.load_state(a.snap, nn)
     by = np.load(os.path.expanduser(a.info), allow_pickle=True).item()
