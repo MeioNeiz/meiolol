@@ -34,6 +34,8 @@ const Point = struct {
     n_fit: f64,
     games: []u32,
     loss: []f64,
+    /// Per game: 1 when the side given over 50% won, 0.5 at exactly 50%
+    hit: []f64,
     mean: f64 = 0,
 };
 
@@ -117,7 +119,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &buf);
     const w = &stdout.interface;
-    try report(arena, &c, shared, fits, gaps, reps, ref_id, sizes.items, w);
+    try report(arena, &c, shared, fits, gaps, reps, ref_id, sizes.items, min_fit, w);
     try w.flush();
     if (tsv) |path| {
         var f = try Io.Dir.cwd().createFile(io, path, .{});
@@ -194,7 +196,7 @@ const Corpus = struct {
         var pl = std.mem.tokenizeScalar(u8, preds, '\n');
         const header = pl.next() orelse return error.Empty;
         const at_col = try column(header, col);
-        const Rows = struct { games: std.ArrayList(u32) = .empty, loss: std.ArrayList(f64) = .empty, key: u64 = 0 };
+        const Rows = struct { games: std.ArrayList(u32) = .empty, loss: std.ArrayList(f64) = .empty, hit: std.ArrayList(f64) = .empty, key: u64 = 0 };
         var by_fold: std.StringArrayHashMapUnmanaged(Rows) = .empty;
         defer by_fold.deinit(gpa);
         var cols: [16][]const u8 = undefined;
@@ -217,6 +219,7 @@ const Corpus = struct {
             if (!r.found_existing) r.value_ptr.* = .{};
             try r.value_ptr.games.append(arena, e.value_ptr.*);
             try r.value_ptr.loss.append(arena, -(y * @log(p) + (1 - y) * @log(1 - p)));
+            try r.value_ptr.hit.append(arena, if (p == 0.5) 0.5 else if ((p > 0.5) == (y > 0.5)) 1 else 0);
             // Order-free set hash of the block's games
             r.value_ptr.key +%= std.hash.Wyhash.hash(0xb10c, cols[1]);
         }
@@ -227,7 +230,7 @@ const Corpus = struct {
                 if (q.model == m and q.block == b and q.n_fit == n_fit) break true;
             } else false;
             if (dup) continue;
-            try c.points.append(arena, .{ .model = m, .block = b, .label = label, .n_fit = n_fit, .games = rows.games.items, .loss = rows.loss.items });
+            try c.points.append(arena, .{ .model = m, .block = b, .label = label, .n_fit = n_fit, .games = rows.games.items, .loss = rows.loss.items, .hit = rows.hit.items });
         }
     }
 
@@ -351,34 +354,29 @@ fn interval(arena: std.mem.Allocator, est: f64, reps: []const f64) !Interval {
 /// holds what the game bootstrap leaves out (seed noise, which fit games a share kept)
 const Gap = struct { alpha: f64, beta: f64, n_max: f64, se_points: f64 };
 
-fn gapFit(arena: std.mem.Allocator, points: []const Point, m: u32, ref: u32, shared: []const u32, min_fit: f64) !Gap {
-    const Pair = struct { block: u32, x: f64, d: f64, w: f64 };
-    var pairs: std.ArrayList(Pair) = .empty;
+/// One value per block and fit size: x = log2(N), y, weight = scored games
+const Pair = struct { block: u32, x: f64, d: f64, w: f64 };
+
+const Slope = struct { beta: f64, se_points: f64, sw: []f64, sx: []f64, sd: []f64 };
+
+/// Weighted least squares of d on c[block] + beta * x
+fn slopeFit(arena: std.mem.Allocator, pairs: []const Pair) !Slope {
     var nb: usize = 0;
-    var n_max: f64 = 0;
-    for (points) |p| {
-        if (p.model != m or p.n_fit < min_fit) continue;
-        const q = for (points) |q| {
-            if (q.model == ref and q.block == p.block and q.n_fit == p.n_fit) break q;
-        } else continue;
-        try pairs.append(arena, .{ .block = p.block, .x = std.math.log2(p.n_fit), .d = p.mean - q.mean, .w = @floatFromInt(p.games.len) });
-        nb = @max(nb, p.block + 1);
-        n_max = @max(n_max, p.n_fit);
-    }
+    for (pairs) |p| nb = @max(nb, p.block + 1);
     const sw = try arena.alloc(f64, nb);
     const sx = try arena.alloc(f64, nb);
     const sd = try arena.alloc(f64, nb);
     @memset(sw, 0);
     @memset(sx, 0);
     @memset(sd, 0);
-    for (pairs.items) |p| {
+    for (pairs) |p| {
         sw[p.block] += p.w;
         sx[p.block] += p.w * p.x;
         sd[p.block] += p.w * p.d;
     }
     var num: f64 = 0;
     var den: f64 = 0;
-    for (pairs.items) |p| {
+    for (pairs) |p| {
         const dx = p.x - sx[p.block] / sw[p.block];
         num += p.w * dx * (p.d - sd[p.block] / sw[p.block]);
         den += p.w * dx * dx;
@@ -391,22 +389,48 @@ fn gapFit(arena: std.mem.Allocator, points: []const Point, m: u32, ref: u32, sha
     for (sw) |s| if (s > 0) {
         used += 1;
     };
-    for (pairs.items) |p| wsum += p.w;
-    const np: f64 = @floatFromInt(pairs.items.len);
+    for (pairs) |p| wsum += p.w;
+    const np: f64 = @floatFromInt(pairs.len);
     var rss: f64 = 0;
-    for (pairs.items) |p| {
+    for (pairs) |p| {
         const r = p.d - (sd[p.block] - beta * sx[p.block]) / sw[p.block] - beta * p.x;
         rss += p.w * np / wsum * r * r;
     }
     const dof = np - used - 1;
-    const se_points = if (dof > 0 and den > 0) @sqrt(rss / dof / (den * np / wsum)) else std.math.nan(f64);
+    const se = if (dof > 0 and den > 0) @sqrt(rss / dof / (den * np / wsum)) else std.math.nan(f64);
+    return .{ .beta = beta, .se_points = se, .sw = sw, .sx = sx, .sd = sd };
+}
+
+fn gapFit(arena: std.mem.Allocator, points: []const Point, m: u32, ref: u32, shared: []const u32, min_fit: f64) !Gap {
+    var pairs: std.ArrayList(Pair) = .empty;
+    var n_max: f64 = 0;
+    for (points) |p| {
+        if (p.model != m or p.n_fit < min_fit) continue;
+        const q = for (points) |q| {
+            if (q.model == ref and q.block == p.block and q.n_fit == p.n_fit) break q;
+        } else continue;
+        try pairs.append(arena, .{ .block = p.block, .x = std.math.log2(p.n_fit), .d = p.mean - q.mean, .w = @floatFromInt(p.games.len) });
+        n_max = @max(n_max, p.n_fit);
+    }
+    const s = try slopeFit(arena, pairs.items);
     var as: f64 = 0;
     var aw: f64 = 0;
-    for (shared) |k| if (k < nb and sw[k] > 0) {
-        as += sd[k] - beta * sx[k];
-        aw += sw[k];
+    for (shared) |k| if (k < s.sw.len and s.sw[k] > 0) {
+        as += s.sd[k] - s.beta * s.sx[k];
+        aw += s.sw[k];
     };
-    return .{ .alpha = as / @max(aw, 1e-12), .beta = beta, .n_max = n_max, .se_points = se_points };
+    return .{ .alpha = as / @max(aw, 1e-12), .beta = s.beta, .n_max = n_max, .se_points = s.se_points };
+}
+
+/// A model's own change per doubling of fit games, log loss or accuracy (full data only)
+fn trend(arena: std.mem.Allocator, points: []const Point, m: u32, min_fit: f64, acc: bool) !Slope {
+    var pairs: std.ArrayList(Pair) = .empty;
+    for (points) |p| {
+        if (p.model != m or p.n_fit < min_fit) continue;
+        const v = if (acc) sum(p.hit) / @as(f64, @floatFromInt(p.hit.len)) else sum(p.loss) / @as(f64, @floatFromInt(p.loss.len));
+        try pairs.append(arena, .{ .block = p.block, .x = std.math.log2(p.n_fit), .d = v, .w = @floatFromInt(p.games.len) });
+    }
+    return slopeFit(arena, pairs.items);
 }
 
 fn gapAt(g: Gap, n: f64) f64 {
@@ -423,7 +447,7 @@ fn crossing(g: Gap) f64 {
 
 /// Pooled over a model's points with one label: games-weighted mean log loss, and the
 /// same for ref on the same blocks and fit sizes (null when ref lacks one of them)
-const Pool = struct { blocks: usize, games: usize, n_fit: f64, model: f64, ref: ?f64 };
+const Pool = struct { blocks: usize, games: usize, n_fit: f64, model: f64, ref: ?f64, acc: f64 = 0, acc_ref: f64 = 0 };
 
 fn poolLabel(c: *const Corpus, m: u32, ref: u32, label: []const u8, dev: bool) Pool {
     var out: Pool = .{ .blocks = 0, .games = 0, .n_fit = 0, .model = 0, .ref = 0 };
@@ -436,13 +460,19 @@ fn poolLabel(c: *const Corpus, m: u32, ref: u32, label: []const u8, dev: bool) P
         out.games += p.games.len;
         out.n_fit += p.n_fit;
         out.model += sum(p.loss);
+        out.acc += sum(p.hit);
         const rp = for (c.points.items) |q| {
             if (q.model == ref and q.block == p.block and q.n_fit == p.n_fit) break q;
         } else null;
-        if (rp) |q| rs += sum(q.loss) else has_ref = false;
+        if (rp) |q| {
+            rs += sum(q.loss);
+            out.acc_ref += sum(q.hit);
+        } else has_ref = false;
     }
     const g: f64 = @floatFromInt(@max(out.games, 1));
     out.model /= g;
+    out.acc /= g;
+    out.acc_ref /= g;
     out.n_fit /= @floatFromInt(@max(out.blocks, 1));
     out.ref = if (has_ref) rs / g else null;
     return out;
@@ -454,8 +484,8 @@ fn sum(xs: []const f64) f64 {
     return s;
 }
 
-/// Paired 95% half-width of model minus ref over the pooled games
-fn pairedHalf(c: *const Corpus, m: u32, ref: u32, label: []const u8, dev: bool) ?f64 {
+/// Paired 95% half-width of model minus ref over the pooled games, log loss or hits
+fn pairedHalf(c: *const Corpus, m: u32, ref: u32, label: []const u8, dev: bool, hits: bool) ?f64 {
     var n: f64 = 0;
     var s: f64 = 0;
     var ss: f64 = 0;
@@ -467,7 +497,7 @@ fn pairedHalf(c: *const Corpus, m: u32, ref: u32, label: []const u8, dev: bool) 
         } else return null;
         // Same run's games in the same order
         if (q.games.len != p.games.len) return null;
-        for (p.loss, q.loss) |a, b| {
+        for (if (hits) p.hit else p.loss, if (hits) q.hit else q.loss) |a, b| {
             n += 1;
             s += a - b;
             ss += (a - b) * (a - b);
@@ -489,19 +519,24 @@ fn labels(arena: std.mem.Allocator, c: *const Corpus) ![]const []const u8 {
     return out.items;
 }
 
-fn report(arena: std.mem.Allocator, c: *const Corpus, shared: []const u32, fits: []const Fit, gaps: []const Gap, reps: u32, ref: u32, ns: []const f64, w: *Io.Writer) !void {
+fn report(arena: std.mem.Allocator, c: *const Corpus, shared: []const u32, fits: []const Fit, gaps: []const Gap, reps: u32, ref: u32, ns: []const f64, min_fit: f64, w: *Io.Writer) !void {
     const nm = c.models.items.len;
     try w.print("# curve: {d} models, {d} blocks ({d} shared by all), {d} points, {d} games, {d} bootstrap replicates\n\n", .{ nm, c.block_keys.items.len, shared.len, c.points.items.len, c.n_games, reps });
     try w.writeAll("Blocks: ");
     for (c.block_names.items, c.block_games.items, 0..) |name, n, b| try w.print("{s}{d}={s} ({d} games)", .{ if (b > 0) ", " else "", b, name, n });
     try w.writeAll("\n\n## Points pooled by label (folds = non-dev blocks; ± paired per game vs ref)\n\n");
-    try w.print("| model | label | blocks | mean fit games | scored games | log loss | vs {s} |\n| --- | --- | --- | --- | --- | --- | --- |\n", .{c.models.items[ref]});
+    try w.print("| model | label | blocks | mean fit games | scored games | accuracy, 95% | acc vs {s}, pp | log loss | vs {s} |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n", .{ c.models.items[ref], c.models.items[ref] });
     for (try labels(arena, c)) |l| for (0..nm) |m| for ([_]bool{ false, true }) |dev| {
         const p = poolLabel(c, @intCast(m), ref, l, dev);
         if (p.blocks == 0) continue;
-        try w.print("| {s} | {s}{s} | {d} | {d:.0} | {d} | {d:.5} |", .{ c.models.items[m], l, if (dev) " dev" else "", p.blocks, p.n_fit, p.games, p.model });
+        const half_acc = 1.96 * @sqrt(p.acc * (1 - p.acc) / @as(f64, @floatFromInt(p.games)));
+        try w.print("| {s} | {s}{s} | {d} | {d:.0} | {d} | {d:.2}% ± {d:.2} |", .{ c.models.items[m], l, if (dev) " dev" else "", p.blocks, p.n_fit, p.games, 100 * p.acc, 100 * half_acc });
         if (p.ref != null and m != ref) {
-            try w.print(" {d:.5} ± {d:.5} |\n", .{ p.model - p.ref.?, pairedHalf(c, @intCast(m), ref, l, dev) orelse std.math.nan(f64) });
+            try w.print(" {d:.2} ± {d:.2} |", .{ 100 * (p.acc - p.acc_ref), 100 * (pairedHalf(c, @intCast(m), ref, l, dev, true) orelse std.math.nan(f64)) });
+        } else try w.writeAll(" |");
+        try w.print(" {d:.5} |", .{p.model});
+        if (p.ref != null and m != ref) {
+            try w.print(" {d:.5} ± {d:.5} |\n", .{ p.model - p.ref.?, pairedHalf(c, @intCast(m), ref, l, dev, false) orelse std.math.nan(f64) });
         } else try w.writeAll(" |\n");
     };
 
@@ -540,6 +575,13 @@ fn report(arena: std.mem.Allocator, c: *const Corpus, shared: []const u32, fits:
         try w.print("| {s} | {d:.5} [{d:.5}, {d:.5}] | ± {d:.5} | {d:.2} | {d:.5} [{d:.5}, {d:.5}] | {d:.0} | {e:.2} | [{e:.2}, {e:.2}] | {d}% |\n", .{ c.models.items[m], bi.est, bi.lo, bi.hi, 1.96 * g0.se_points, frac(neg, reps), gi.est, gi.lo, gi.hi, g0.n_max, xi.est, xi.lo, xi.hi, by * 100 / @max(reps, 1) });
     }
 
+    try w.writeAll("\n## Per doubling of fit games: each model's own points, offset per block (2x today = one doubling, 4x = two; ± 95% from the points' scatter)\n\n| model | log loss per doubling | accuracy per doubling, pp |\n| --- | --- | --- |\n");
+    for (0..nm) |m| {
+        const tl = try trend(arena, c.points.items, @intCast(m), min_fit, false);
+        const ta = try trend(arena, c.points.items, @intCast(m), min_fit, true);
+        try w.print("| {s} | {d:.5} ± {d:.5} | {d:.3} ± {d:.3} |\n", .{ c.models.items[m], tl.beta, 1.96 * tl.se_points, 100 * ta.beta, 196 * ta.se_points });
+    }
+
     try w.print("\n## Projection at N fit games: {s}'s power law; others {s} + their gap (95% bootstrap; P = share of replicates below {s})\n\n| model | N | log loss | vs {s} | P better |\n| --- | --- | --- | --- | --- |\n", .{ rn, rn, rn, rn });
     for (0..nm) |m| for (ns) |n| {
         const base = curveAt(fits[ref], n);
@@ -572,7 +614,7 @@ fn tsvRows(arena: std.mem.Allocator, c: *const Corpus, fits: []const Fit, gaps: 
         if (p.blocks == 0) continue;
         try w.print("{s}\t-\tfolds\t{d:.5}\t\t\t\t\t{d}\t{d:.0}\t\t{s}\n", .{ c.models.items[m], p.model, p.games, p.n_fit, l });
         if (m == ref or p.ref == null) continue;
-        const half = pairedHalf(c, @intCast(m), ref, l, false) orelse std.math.nan(f64);
+        const half = pairedHalf(c, @intCast(m), ref, l, false, false) orelse std.math.nan(f64);
         try w.print("{s}\t{s}\tfolds\t{d:.5}\t{d:.5}\t\t\t\t{d}\t{d:.0}\t\t{s}\n", .{ c.models.items[m], rname, p.model - p.ref.?, half, p.games, p.n_fit, l });
     };
     const tmp = try arena.alloc(f64, reps);
@@ -597,7 +639,7 @@ test "fitModel recovers a power law with block offsets" {
     const g = try arena.alloc(u32, 10);
     const l = try arena.alloc(f64, 10);
     for ([_]f64{ 0.69, 0.70 }, 0..) |c0, b| for ([_]f64{ 1e4, 3e4, 1e5, 3e5 }) |n| {
-        try points.append(arena, .{ .model = 0, .block = @intCast(b), .label = "x", .n_fit = n, .games = g, .loss = l, .mean = c0 + 2.0 * std.math.pow(f64, n, -0.5) });
+        try points.append(arena, .{ .model = 0, .block = @intCast(b), .label = "x", .n_fit = n, .games = g, .loss = l, .hit = l, .mean = c0 + 2.0 * std.math.pow(f64, n, -0.5) });
     };
     const f = try fitModel(arena, points.items, 0, &.{ 0, 1 });
     try std.testing.expect(f.ok);
@@ -614,10 +656,10 @@ test "gapFit: slope per doubling and crossing past the largest size" {
     const g = try arena.alloc(u32, 10);
     const l = try arena.alloc(f64, 10);
     for ([_]f64{ 0.69, 0.70 }, 0..) |c0, b| for ([_]f64{ 1e4, 2e4, 4e4 }, 0..) |n, k| {
-        try points.append(arena, .{ .model = 0, .block = @intCast(b), .label = "x", .n_fit = n, .games = g, .loss = l, .mean = c0 });
+        try points.append(arena, .{ .model = 0, .block = @intCast(b), .label = "x", .n_fit = n, .games = g, .loss = l, .hit = l, .mean = c0 });
         // Gap 0.003 at 1e4, 0.001 less per doubling: level at 8e4
         const gap = 0.003 - 0.001 * @as(f64, @floatFromInt(k));
-        try points.append(arena, .{ .model = 1, .block = @intCast(b), .label = "x", .n_fit = n, .games = g, .loss = l, .mean = c0 + gap });
+        try points.append(arena, .{ .model = 1, .block = @intCast(b), .label = "x", .n_fit = n, .games = g, .loss = l, .hit = l, .mean = c0 + gap });
     };
     const gf = try gapFit(arena, points.items, 1, 0, &.{ 0, 1 }, 0);
     try std.testing.expectApproxEqAbs(-0.001, gf.beta, 1e-9);
