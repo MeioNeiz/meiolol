@@ -17,6 +17,9 @@ export PATH="$HOME/bin:$PATH"
 awake=$HOME/ml/awake.d/archive-pull
 
 log() { echo "$(date -u +%FT%TZ) $*"; }
+# Keepalives: an export of a long backlog prints nothing for half an hour, and the home
+# router drops the idle connection, leaving the pull waiting for ever (14 Oct)
+box_ssh() { ssh -n -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "$box" "$@"; }
 
 mkdir -p "$work" "$HOME/ml/awake.d"
 exec 9> "$work/.lock"
@@ -32,11 +35,11 @@ mount=$(dirname "$archive")
 use() { df --output=pcent "$1" | tail -n 1 | tr -dc '0-9'; }
 arch=-
 mountpoint -q "$mount" && arch=$(use "$mount")
-ssh -n "$box" disk "c$(use /mnt/c),wsl$(use /),arch$arch" || log "disk report failed"
+box_ssh disk "c$(use /mnt/c),wsl$(use /),arch$arch" || log "disk report failed"
 [[ -d "$archive" ]] || { log "$archive missing: archive disk not attached"; exit 1; }
 touch "$awake"
 
-ssh -n "$box" forgotten > "$work/forgotten.txt"
+box_ssh forgotten > "$work/forgotten.txt"
 touch "$work/forgotten-applied.txt"
 comm -13 <(sort -u "$work/forgotten-applied.txt") <(sort -u "$work/forgotten.txt") \
     > "$work/forgotten-new.txt"
@@ -45,13 +48,13 @@ if [[ -s "$work/forgotten-new.txt" ]]; then
     sort -u "$work/forgotten.txt" > "$work/forgotten-applied.txt"
 fi
 
-made=$(ssh -n "$box" export)
+made=$(box_ssh export)
 [[ -n "$made" ]] && log "box export: $made"
-ssh -n "$box" list > "$work/list.txt"
+box_ssh list > "$work/list.txt"
 while read -r name size; do
     touch "$awake"
     if ! grep -q "^$name	" "$archive/index.tsv" 2> /dev/null; then
-        ssh -n "$box" send "$name" > "$work/$name.part"
+        box_ssh send "$name" > "$work/$name.part"
         got=$(stat -c %s "$work/$name.part")
         [[ "$got" == "$size" ]] || { log "$name: got $got of $size bytes"; exit 1; }
         mv "$work/$name.part" "$work/$name"
@@ -59,7 +62,7 @@ while read -r name size; do
     fi
     # One export the box won't ack must not stop the rest: the box's health check
     # reports an export left unacked
-    ssh -n "$box" ack "$name" || log "$name: ack failed"
+    box_ssh ack "$name" || log "$name: ack failed"
     rm -f "$work/$name"
 done < "$work/list.txt"
 
