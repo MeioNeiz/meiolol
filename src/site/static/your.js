@@ -28,6 +28,13 @@ let watchUntil = 0;
 let watchFrom = 0;
 let watchTimer = 0;
 let checkTimer = 0;
+// Preview: /api/ is behind basic auth until the production key. Asked without
+// credentials first, so visitors read why instead of getting the browser's sign-in
+// prompt; testers sign in from that note once per tab
+let signIn = false;
+try {
+  signIn = sessionStorage.getItem("api-sign-in") === "1";
+} catch {}
 
 // The example's dates are to the day in UTC; a looked-up player's are their own
 function date(g) {
@@ -38,6 +45,35 @@ function status(text) {
   const s = $("status");
   s.hidden = !text;
   s.textContent = text || "";
+}
+
+const apiFetch = (url, opts = {}) => fetch(url, { ...opts, credentials: signIn ? "same-origin" : "omit" });
+
+function previewNote() {
+  const example = el("a", "", "See the example review");
+  example.href = "your.html#example";
+  example.addEventListener("click", (e) => {
+    e.preventDefault();
+    showExample();
+  });
+  const testers = el("button", "", "Preview testers: sign in");
+  testers.type = "button";
+  testers.addEventListener("click", () => {
+    signIn = true;
+    try {
+      sessionStorage.setItem("api-sign-in", "1");
+    } catch {}
+    status("Looking up…");
+    poll();
+  });
+  const s = $("status");
+  s.hidden = false;
+  s.replaceChildren(
+    "Looking up Riot IDs opens once meiolol has its Riot Games production API key; the site is in review for it now. ",
+    example,
+    ". ",
+    testers,
+  );
 }
 
 // The Riot ID lives in the fragment, which never reaches the server or its logs
@@ -62,7 +98,11 @@ async function poll(refresh) {
   let res;
   let body;
   try {
-    res = await fetch(`${API}/games?id=${encodeURIComponent(id)}${refresh ? "&refresh=1" : ""}`);
+    res = await apiFetch(`${API}/games?id=${encodeURIComponent(id)}${refresh ? "&refresh=1" : ""}`);
+    if (res.status === 401 && !signIn) {
+      if (id === lookupId) previewNote();
+      return;
+    }
     body = await res.json();
   } catch {
     status("The games service is not reachable right now. Try again later.");
@@ -355,7 +395,11 @@ async function forget(check) {
   clearTimeout(forgetTimer);
   forgetShow("Contacting Riot…");
   try {
-    const r = await fetch(`${API}/forget?id=${encodeURIComponent(forgetId)}${check ? "&check=1" : ""}`, { method: "POST" });
+    const r = await apiFetch(`${API}/forget?id=${encodeURIComponent(forgetId)}${check ? "&check=1" : ""}`, { method: "POST" });
+    if (r.status === 401 && !signIn) {
+      forgetShow("Removing a Riot ID here opens with the production key, like lookups. Until then, email us (address on the privacy page) and we remove it by hand.");
+      return;
+    }
     forgetState(await r.json());
   } catch {
     forgetShow("Could not reach the service just now. Try again, or email us (see the privacy page).");
@@ -364,7 +408,7 @@ async function forget(check) {
 
 async function forgetPoll() {
   try {
-    const r = await fetch(`${API}/forget?id=${encodeURIComponent(forgetId)}`);
+    const r = await apiFetch(`${API}/forget?id=${encodeURIComponent(forgetId)}`);
     forgetState(await r.json());
   } catch {
     forgetShow("Could not reach the service just now. Try again in a moment.");
