@@ -55,6 +55,9 @@ pub const Options = struct {
     /// often than players are rescanned to see who has played
     active_first: bool = true,
     mastery: bool = true,
+    /// The participant pass's first pass after start covers games from this many days
+    /// back, not one week (a one-time sweep); refreshes stay weekly. 0: one week
+    mastery_sweep_days: u32 = 0,
     hours: ?f64 = null,
     regions: []const ep.Region = all_regions,
     /// Share of non-priority platforms' matches that also get a timeline, chosen by
@@ -815,6 +818,8 @@ const PlatformCrawler = struct {
     /// by its deadline resumes instead of retrying its failures first
     batch_cursor: [128]u8 = undefined,
     batch_cursor_len: usize = 0,
+    /// The participant pass has reached the newest stored match once (ends a sweep)
+    swept: bool = false,
     /// When this thread last fetched a ladder page (--ladder-per-hour)
     last_ladder: i64 = 0,
 
@@ -975,14 +980,21 @@ const PlatformCrawler = struct {
         defer arena.deinit();
         const db = pc.b.db;
         const now = pc.b.now();
-        const week_ago_ms = (now - participant_refresh_s) * 1000;
-        const from = pc.match_cursor orelse try db.scalar(match_cursor_start, .{week_ago_ms}) orelse 0;
+        const sweep_s = @as(i64, pc.b.c.opts.mastery_sweep_days) * std.time.s_per_day;
+        const horizon_ms = (now - if (pc.swept) participant_refresh_s else @max(sweep_s, participant_refresh_s)) * 1000;
+        const from = pc.match_cursor orelse try db.scalar(match_cursor_start, .{horizon_ms}) orelse 0;
         pc.match_cursor = from;
         // max() of no rows is NULL, read as 0
         const to = try db.scalar(match_batch_end, .{ from, pc.platform.id, n }) orelse 0;
-        if (to <= from) return false;
+        if (to <= from) {
+            if (!pc.swept and sweep_s > participant_refresh_s) log.info("{s} mastery: sweep of {d} days done", .{
+                pc.platform.host, pc.b.c.opts.mastery_sweep_days,
+            });
+            pc.swept = true;
+            return false;
+        }
         const puuids = try column(db, arena.allocator(), participant_masteries, .{
-            from, to, pc.platform.id, week_ago_ms, now - participant_refresh_s, pc.batch_cursor[0..pc.batch_cursor_len],
+            from, to, pc.platform.id, horizon_ms, now - participant_refresh_s, pc.batch_cursor[0..pc.batch_cursor_len],
         });
         for (puuids) |puuid| {
             try pc.b.check();

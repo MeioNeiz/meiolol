@@ -10,7 +10,7 @@ on this list. Field names as Riot sends them.
 | --- | --- | --- | --- |
 | match summary | 1 | 41 of 156 participant fields, bans; raw 3 days (~1.9 days in practice) | participants, bans, drafts; raw.db raw_docs |
 | timeline | 1, EUW all, others 50% (`--timelines 50`) | compact form forever; raw 0 days | timeline.db; raw.db timeline_docs |
-| mastery | per player, platform bucket | off (`--no-mastery`) | mastery |
+| mastery | per player, platform bucket | on (participants weekly, then ladder sample) | mastery |
 | ladder | platform bucket | rank per player, history per change | ranks, rank_history |
 
 Sizes: summary 79 KB JSON / 12.8 KB gz; timeline ~730 KB / ~60 KB gz; compact timeline
@@ -154,7 +154,10 @@ crawl.args.bak-20261012):
   matches, again once their snapshot is over 7 days old, then sampled ladder players
   (1 in 16) with spare budget; dropped after 30 days. The box keeps each player's latest
   fetch (fetched_at); the archive keeps each one, so pre-game mastery is the latest
-  archived fetch before game start
+  archived fetch before game start. `--mastery-sweep-days N`: the first participant
+  pass after start reaches N days back (one-time sweep, then remove it from crawl.args);
+  a fetch only serves games after it. A player whose call fails (bad PUUID) is skipped;
+  5 failures in a row and the last good player failing too = outage, pause 60s
 - Ranked flex sample (Jacob, 2026-10-13, test only): `--flex-calls-per-day 500`, one
   page of flex ids per scanned EUW1 player until the day's lookups are used; stored,
   timelined and archived like solo. Every stats, site and model reader keeps to queue
