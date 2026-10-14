@@ -1,6 +1,6 @@
 # title: How much does one shrunk additive model (synergy, counters, comp) add, CPU only?
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note	learned
-additive v2 (identified matchups): champion strength, ally pairs, matchups, damage mix (2253Z)	win-comp	folds	-0.00124	0.00026	1			134375		20261014T041809Z-e53v2-V0	5 of 5; v2 vs v1 -0.00009 ± 0.00005 (H4 pass, pre-declared); calibrated variances +0.00001 ± 0.00010 (H5 fail, not shipped)	
+additive v2 (identified matchups): champion strength, ally pairs, matchups, damage mix (2253Z)	win-comp	folds	-0.00124	0.00026	1			134375		20261014T041809Z-e53v2-V0	5 of 5; v2 vs v1 -0.00009 ± 0.00005 (H4 pass, pre-declared); calibrated variances +0.00001 ± 0.00010 (H5 fail, not shipped)	2026-10-14 (2253Z, v2): Who faces whom
 additive v2 (identified matchups): champion strength, ally pairs, matchups, damage mix (2253Z)	ratings	folds	-0.00172	0.00030	1			134375		20261014T041809Z-e53v2-V0	5 of 5	
 additive v2 (identified matchups): champion strength, ally pairs, matchups, damage mix (2253Z)	win-comp	dev-val	-0.00190	0.00054	1			35834		20261014T041809Z-e53v2-V0		
 additive: champion strength, ally and enemy pairs, damage mix (2253Z)	win-comp	folds	-0.00115	0.00022	1			134375		20261014T003704Z-e53-B0	pre-declared H1, pass: 5 of 5, resamples -0.00126 / -0.00116; pairs over strength + mix -0.00082 ± 0.00017 (H2, pass); audited by meiolol-53	2026-10-14 (2253Z): Who faces whom
