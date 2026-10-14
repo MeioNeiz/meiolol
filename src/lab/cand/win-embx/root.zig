@@ -97,10 +97,10 @@ fn variantCfg(v: Variant) Cfg {
 
 /// The variant scored (exp, netcheck's per-game blocks); folds = 5 adds the in-candidate
 /// fold table of every variant (deecc3f's run 20261013T215827Z-embx-all)
-const variant: Variant = .shuffled;
+const variant: Variant = .all;
 const cfg: Cfg = variantCfg(variant);
 /// Sealed confirmation seeds: 3 maps the harness's seeds 1-3 to E (and fit) seeds 4-6
-const seed_offset: u64 = 3;
+const seed_offset: u64 = 0;
 
 pub const name = "win-embx";
 
