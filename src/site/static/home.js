@@ -55,7 +55,7 @@
     turn.hidden = false;
   }
   const deaths = document.getElementById("v-death");
-  const worst = (g.death_costs ?? []).filter((d) => d.before !== undefined).sort((a, b) => (a.after - a.before) - (b.after - b.before)).slice(0, 3).sort((a, b) => a.t_s - b.t_s);
+  const worst = (g.death_costs ?? []).filter((d) => d.after < d.before).sort((a, b) => (a.after - a.before) - (b.after - b.before)).slice(0, 3).sort((a, b) => a.t_s - b.t_s);
   if (deaths && worst.length) {
     deaths.replaceChildren(...worst.map((d) => {
       const li = el("li");

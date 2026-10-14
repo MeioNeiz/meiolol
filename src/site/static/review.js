@@ -11,7 +11,8 @@ const Review = (() => {
   const SOLO = 420;
   // Minutes that moved win chance at least this much are key moments
   const SWING = 10;
-  // Deaths costing at least this much win chance, or followed by an objective, are costly
+  // Deaths costing at least this much win chance, or followed by an objective while the
+  // team's chance did not rise, are costly
   const COSTLY = 5;
 
   let champs = new Map();
@@ -94,7 +95,7 @@ const Review = (() => {
     }
     for (const x of g.death_costs ?? []) {
       const d = x.before !== undefined && x.after !== undefined ? x.after - x.before : 0;
-      const costly = d <= -COSTLY || x.lost?.length > 0;
+      const costly = d <= -COSTLY || (x.lost?.length > 0 && d <= 0);
       let text = `${x.killer !== undefined ? champName(x.killer) : "Executed"}${x.assists ? ` and ${plural(x.assists, "other")}` : ""}: ${x.gold} kill gold`;
       if (x.lost?.length) text += `, then the enemy took ${list(x.lost)}`;
       out.push({ kind: costly ? "cost" : "death", minute: x.t_s / 60, t_s: x.t_s, title: costly ? "Costly death" : "Death", text: `${text}.`, d, killer: x.killer });
