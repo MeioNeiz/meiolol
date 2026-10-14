@@ -10,6 +10,8 @@ games only:
 - rich: every feature (statecommon.features), same smooth logistic form
 - gbdt: LightGBM on every feature + minute, rounds by early stopping on the fit's
   newest 10%, refitted on all fit games
+- richc: rich + a champion-role effect by minute beyond the state (ridge, picked on
+  the fit's newest 10%): the explainable form of what champions are worth given the state
 - gbdt_r: the same boosted from rich's logit (init score): what trees add beyond the
   smooth logistic; the offset is cross-fitted on fit games (3 parts by game)
 Writes OUT/preds.npz (block, game, minute, y, one column per model) and OUT/report.md.
@@ -74,6 +76,70 @@ class Smooth:
 
     def predict(self, X, minute):
         return 1 / (1 + np.exp(-self.logit(X, minute)))
+
+
+class SmoothChamp(Smooth):
+    """Smooth plus a champion-role effect by minute (hat basis over the same knots),
+    blue's ten minus red's: what each champion is worth beyond the state, minute by
+    minute; ridge on those effects, chosen on the fit's newest games"""
+
+    def __init__(self, l2_champ=1e-4, **kw):
+        super().__init__(**kw)
+        self.l2_champ = l2_champ
+
+    def _z(self, Xt, H, ids, W, b, E):
+        sign = torch.tensor([1.0] * 5 + [-1.0] * 5)
+        c = sum(sign[s] * (E[ids[:, s]] * H).sum(1) for s in range(10))
+        return ((Xt @ W) * H).sum(1) + H @ b + c
+
+    def fit(self, X, minute, y, ids, n_ids, max_iter=300):
+        X = X.astype(np.float32)
+        self.mu = X.mean(0)
+        self.sd = X.std(0) + 1e-6
+        Xt = torch.from_numpy((X - self.mu) / self.sd)
+        H = torch.from_numpy(sc.hat(minute, self.knots))
+        it = torch.from_numpy(ids.astype(np.int64))
+        yt = torch.from_numpy(y.astype(np.float32))
+        F, K = X.shape[1], len(self.knots)
+        W = torch.zeros(F, K, requires_grad=True)
+        b = torch.zeros(K, requires_grad=True)
+        E = torch.zeros(n_ids, K, requires_grad=True)
+        opt = torch.optim.LBFGS([W, b, E], lr=1, max_iter=max_iter, history_size=20, line_search_fn="strong_wolfe", tolerance_grad=1e-7, tolerance_change=1e-10)
+
+        def closure():
+            opt.zero_grad()
+            z = self._z(Xt, H, it, W, b, E)
+            loss = torch.nn.functional.binary_cross_entropy_with_logits(z, yt) + self.l2 * (W**2).sum() + self.l2_champ * (E**2).sum()
+            loss.backward()
+            return loss
+
+        opt.step(closure)
+        self.W, self.b, self.E = W.detach().numpy(), b.detach().numpy(), E.detach().numpy()
+        return self
+
+    def logit(self, X, minute, ids):
+        H = sc.hat(minute, self.knots)
+        z = super().logit(X, minute)
+        for s in range(10):
+            z = z + (1 if s < 5 else -1) * (self.E[ids[:, s]] * H).sum(1)
+        return z
+
+    def predict(self, X, minute, ids):
+        return 1 / (1 + np.exp(-self.logit(X, minute, ids)))
+
+
+CHAMP_L2 = [1e-5, 3e-5, 1e-4, 3e-4]
+
+
+def fit_richc(Xf, mf, yf, ids_f, n_ids, is_val):
+    """l2 on the champion effects picked on the fit's newest 10%, then refit on all"""
+    losses = {}
+    for l2 in CHAMP_L2:
+        m = SmoothChamp(l2_champ=l2).fit(Xf[~is_val], mf[~is_val], yf[~is_val], ids_f[~is_val], n_ids)
+        losses[l2] = sc.ll(yf[is_val], m.predict(Xf[is_val], mf[is_val], ids_f[is_val])).mean()
+    best = min(losses, key=losses.get)
+    log("  richc l2 on val: " + ", ".join(f"{k}: {v:.5f}" for k, v in losses.items()))
+    return SmoothChamp(l2_champ=best).fit(Xf, mf, yf, ids_f, n_ids), best
 
 
 GBDT_PARAMS = dict(
@@ -160,6 +226,12 @@ def run_block(state, data, block, models, out):
             res[name] = gbdt_predict(model, Xs, ms)
             model.save_model(os.path.join(out, f"gbdt-{block}.txt"))
             log(f"  gbdt best round {best}")
+        elif name == "richc":
+            table, n_ids = nnsets.rating_vocab(data, sets.fit)
+            m, l2c = fit_richc(Xf, mf, yf, nnsets.ids(data, gf, table), n_ids, data.start[gf] >= val_cut)
+            res[name] = m.predict(Xs, ms, nnsets.ids(data, gs, table))
+            np.save(os.path.join(out, f"richc-E-{block}.npy"), m.E)
+            log(f"  richc l2 {l2c}; champion effect sd by knot " + ", ".join(f"{v:.3f}" for v in m.E[1:].std(0)))
         elif name == "gbdt_r":
             off = crossfit_rich(Xf, mf, yf, gf)
             model, best = fit_gbdt(Xf, mf, yf, data.start[gf] >= val_cut, init=off)
