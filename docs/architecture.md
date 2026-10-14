@@ -20,6 +20,12 @@ src/
                      shrinkage priors and backfitting, prediction files
   api/               "Your games" service (`meiolol api`, docs/your-games.md): cache.zig
                      (api.db), fetch.zig (the one Riot caller), game.zig (lane vs curve)
+  livestate.zig      the game state by minute from a timeline, per seat and team (shared
+                     by lab/stateexport.zig and statemodel.zig)
+  statemodel.zig     in-game win chance (richc) for Your games; model file
+                     state_model.bin embedded (py/state/stateship.py writes it; format:
+                     docs/model.md "In-game model file"). winchance.zig: the fallback
+                     when a game lacks full roles
   admin.zig          `meiolol admin`: private ops page (/admin/, static/admin.js charts)
   admin_api.zig      /admin/api/ in `meiolol render`: live data, logs, actions (hosting.md)
   backup.zig         `meiolol backup|restore`: state snapshots + append-only segments

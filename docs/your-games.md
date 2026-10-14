@@ -43,12 +43,15 @@ static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy b
   weekly games, wins, mean gold difference at 14 and mean against typical; per matchup
   the gold difference at 10 oldest to newest and the older vs newer half's mean
 - Whole game (any role, lane opponent or not): the team's win chance per minute
-  (src/winchance.zig: objectives.zig's "+ objectives held" state model fitted over all
-  minutes at once by `meiolol winchance`, each weight linear in minute between knots
-  every 5 minutes (docs/model.md "Win chance by minute"); weights per minute in
-  src/winchance_weights.zig, refit when the game changes), the turning minute (biggest one-minute change, with that minute's
-  kills, deaths and objectives) and death cost per death (bounty and shutdown gold to
-  the enemy, objectives the enemy took in the next minute, win chance before and after).
+  (src/statemodel.zig, docs/model.md "Rich state and champions (richc)": every player's
+  gold, XP, level, CS, items, death timer and deaths by role, objectives, buffs and
+  vision, the draft logit and each champion's value by minute, fitted on ranked solo
+  games by py/state/stateship.py into src/state_model.bin; games without each side's
+  five roles fall back to src/winchance.zig, team gold and objectives only), 50 at
+  0:00; the turning minute (biggest one-minute change from 1:00 on, so never the
+  champions' first move, with that minute's kills, deaths and objectives) and death cost
+  per death (bounty and shutdown gold to the enemy, objectives the enemy took in the
+  next minute, win chance before and after).
   Plate events after 14:00 are ignored (Riot sends them, worth nothing then)
 - Tier is the visible rank (league-v4), never inferred MMR. It is the rank now, not at
   game time; the curves bracket games by the median visible rank of their players

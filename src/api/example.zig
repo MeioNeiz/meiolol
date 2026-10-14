@@ -98,6 +98,7 @@ pub fn build(arena: Allocator, db: store.Db, set: game.CurveSet, o: Options) !?a
             },
             .slot = g.slot,
             .timeline = t,
+            .platform = o.platform,
         });
     }
     if (inputs.items.len == 0) return null;

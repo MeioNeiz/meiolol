@@ -9,18 +9,21 @@
 //!   match_id.txt          one line per game (a check on the join)
 //!   meta.json             minutes, column names in order, n, snapshot
 //! Minute columns: going, t_ms; per seat s0..s9 (side * 5 + role, as champ.u8) the
-//! `Seat` fields; obj_<objectives.Feat> from objectives.stateBefore (blue minus red, so
-//! winchance's state is exactly reproducible); then per team b_/r_ the `Team` fields,
-//! counted for the team that took it. Approximate: respawn_s uses the wiki's death timer
-//! (level base x game-time factor), not the server's
+//! livestate.Seat fields; obj_<objectives.Feat> from objectives.stateBefore (blue minus
+//! red, so winchance's state is exactly reproducible); then per team b_/r_ the
+//! livestate.Team fields, counted for the team that took it. Values come from
+//! livestate.Walker, the code Your games' win chance (statemodel.zig) runs.
 //! Readers go by column name: append fields to the enums, never reorder
 
 const std = @import("std");
 const store = @import("store");
 const timeline = @import("../riot/timeline.zig");
 const objectives = @import("../objectives.zig");
+const livestate = @import("../livestate.zig");
 const stats = @import("../stats.zig");
 const rows = @import("rows.zig");
+const protocol = @import("protocol.zig");
+const statemodel = @import("../statemodel.zig");
 
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
@@ -32,6 +35,10 @@ pub const usage =
     \\                                  game state by minute (0, N, .., M; default 5, 40)
     \\                                  per seat and team, firsts, shape targets: SNAP/state/
     \\                                  (lab/stateexport.zig)
+    \\  state-export SNAP --check MODEL CHECK
+    \\                                  statemodel.zig's win chance with MODEL (stateship.py's
+    \\                                  state-model.bin) from the timelines against CHECK
+    \\                                  (its state-check.tsv): max |diff|, exit 1 over 1e-4
     \\
 ;
 
@@ -42,64 +49,8 @@ pub const Options = struct {
     max: u8 = 40,
 };
 
-/// Per seat, values at the minute's frame or from events before it
-pub const Seat = enum {
-    gold,
-    xp,
-    cs,
-    level,
-    kills,
-    deaths,
-    assists,
-    dmg_champ,
-    /// current_gold: earned, not yet spent
-    unspent,
-    /// Seconds until respawn, 0 alive
-    respawn_s,
-    /// Completed items of the patch's finished set (legendaries.tsv): bought, minus undone
-    /// and sold
-    legendaries,
-    /// Placed, not counting UNDEFINED and Teemo's mushrooms
-    wards,
-    ctrl_wards,
-    wards_killed,
-};
-
-/// Per team, counted for the team that took it
-pub const Team = enum {
-    kills,
-    tower_top_outer,
-    tower_top_inner,
-    tower_top_base,
-    tower_mid_outer,
-    tower_mid_inner,
-    tower_mid_base,
-    tower_bot_outer,
-    tower_bot_inner,
-    tower_bot_base,
-    tower_nexus,
-    /// Seconds until the enemy inhibitor in this lane respawns, 0 up
-    inhib_top_s,
-    inhib_mid_s,
-    inhib_bot_s,
-    /// Inhibitors destroyed, ever
-    inhibs,
-    plates,
-    infernal,
-    ocean,
-    mountain,
-    cloud,
-    hextech,
-    chemtech,
-    /// Soul taken: 1 + element index (infernal .. chemtech), 0 none
-    soul,
-    elders,
-    elder_s,
-    barons,
-    baron_s,
-    grubs,
-    heralds,
-};
+pub const Seat = livestate.Seat;
+pub const Team = livestate.Team;
 
 pub const GameCol = enum {
     has_timeline,
@@ -138,8 +89,8 @@ pub const GameCol = enum {
     kills_per_min,
 };
 
-const n_seat = @typeInfo(Seat).@"enum".field_names.len;
-const n_team = @typeInfo(Team).@"enum".field_names.len;
+const n_seat = livestate.n_seat;
+const n_team = livestate.n_team;
 const n_feat = @typeInfo(Feat).@"enum".field_names.len;
 const seat_base = 2;
 const obj_base = seat_base + 10 * n_seat;
@@ -157,36 +108,7 @@ fn objCol(f: Feat) usize {
     return obj_base + @backingInt(f);
 }
 
-const minute_ms = 60_000;
-const inhib_respawn_ms = 300_000;
-const baron_buff_ms = 180_000;
-const elder_buff_ms = 150_000;
-
-const elements = [_][]const u8{ "FIRE_DRAGON", "WATER_DRAGON", "EARTH_DRAGON", "AIR_DRAGON", "HEXTECH_DRAGON", "CHEMTECH_DRAGON" };
-const soul_names = [_][]const u8{ "Infernal", "Ocean", "Mountain", "Cloud", "Hextech", "Chemtech" };
-const lanes = [_][]const u8{ "TOP_LANE", "MID_LANE", "BOT_LANE" };
-const tiers = [_][]const u8{ "OUTER_TURRET", "INNER_TURRET", "BASE_TURRET" };
-
-/// Base death timer by level (1..18), seconds (League wiki, "Death")
-const base_respawn = [18]f32{ 10, 10, 12, 12, 14, 16, 20, 25, 28, 32.5, 35, 37.5, 40, 42.5, 45, 47.5, 50, 52.5 };
-
-/// Death timer in seconds for a death at `level` and `t_ms`: base x (1 + time factor),
-/// the factor rising in half-minute steps from 15:00, capped at 50%
-pub fn respawnSeconds(level: u8, t_ms: i64) f32 {
-    const l = std.math.clamp(level, 1, 18);
-    const t = @as(f32, @floatFromInt(t_ms)) / minute_ms;
-    const tif: f32 = if (t < 15)
-        0
-    else if (t < 30)
-        @ceil(2 * (t - 15)) * 0.425
-    else if (t < 45)
-        12.75 + @ceil(2 * (t - 30)) * 0.30
-    else if (t < 55)
-        21.75 + @ceil(2 * (t - 45)) * 1.45
-    else
-        50;
-    return base_respawn[l - 1] * (1 + @min(tif, 50) / 100);
-}
+const minute_ms = livestate.minute_ms;
 
 pub fn minuteList(gpa: Allocator, o: Options) ![]u8 {
     if (o.every == 0) return error.BadEvery;
@@ -197,23 +119,8 @@ pub fn minuteList(gpa: Allocator, o: Options) ![]u8 {
     return list.toOwnedSlice(gpa);
 }
 
-fn indexOf(list: []const []const u8, s: []const u8) ?usize {
-    for (list, 0..) |x, i| if (std.mem.eql(u8, x, s)) return i;
-    return null;
-}
-
-/// Team side (0 blue, 1 red) of participant ids 1..10, null otherwise
-fn sideOf(p: u8) ?usize {
-    return if (p >= 1 and p <= 5) 0 else if (p >= 6 and p <= 10) 1 else null;
-}
-
-fn ownerSide(team: u16) ?usize {
-    return switch (team) {
-        100 => 0,
-        200 => 1,
-        else => null,
-    };
-}
+const sideOf = livestate.sideOf;
+const ownerSide = livestate.ownerSide;
 
 /// One game's timeline into its minute rows and game columns
 pub const Game = struct {
@@ -224,175 +131,38 @@ pub const Game = struct {
     legendaries: *const std.AutoHashMapUnmanaged(u64, void),
 };
 
-const Acc = struct {
-    kills: [10]f32 = @splat(0),
-    deaths: [10]f32 = @splat(0),
-    assists: [10]f32 = @splat(0),
-    legendaries: [10]f32 = @splat(0),
-    wards: [10]f32 = @splat(0),
-    ctrl: [10]f32 = @splat(0),
-    wards_killed: [10]f32 = @splat(0),
-    level: [10]u8 = @splat(1),
-    /// ms when the last death's timer ends
-    alive_at: [10]i64 = @splat(0),
-    team: [2][n_team]f32 = @splat(@splat(0)),
-    inhib_down: [2][3]?i64 = @splat(@splat(null)),
-    elder_at: [2]?i64 = @splat(null),
-    baron_at: [2]?i64 = @splat(null),
+const Legendaries = struct {
+    set: *const std.AutoHashMapUnmanaged(u64, void),
+    patch: u32,
 
-    fn add(a: *Acc, g: Game, e: timeline.Event) void {
-        switch (e.data) {
-            .champion_kill => |k| {
-                if (k.victim >= 1 and k.victim <= 10) {
-                    const v = k.victim - 1;
-                    a.deaths[v] += 1;
-                    a.alive_at[v] = e.t_ms + @as(i64, @intFromFloat(respawnSeconds(a.level[v], e.t_ms) * 1000));
-                }
-                if (k.killer >= 1 and k.killer <= 10) a.kills[k.killer - 1] += 1;
-                for (k.assists) |p| if (p >= 1 and p <= 10) {
-                    a.assists[p - 1] += 1;
-                };
-                const side = sideOf(k.killer) orelse if (sideOf(k.victim)) |vs| 1 - vs else return;
-                a.team[side][@backingInt(Team.kills)] += 1;
-            },
-            .level_up => |l| if (l.participant >= 1 and l.participant <= 10) {
-                a.level[l.participant - 1] = @max(a.level[l.participant - 1], l.level);
-            },
-            .item_purchased => |p| if (p.participant >= 1 and p.participant <= 10 and
-                g.legendaries.contains(rows.legendaryKey(g.patch, p.item)))
-            {
-                a.legendaries[p.participant - 1] += 1;
-            },
-            .item_sold => |p| if (p.participant >= 1 and p.participant <= 10 and
-                g.legendaries.contains(rows.legendaryKey(g.patch, p.item)))
-            {
-                a.legendaries[p.participant - 1] -= 1;
-            },
-            .item_undo => |u| if (u.participant >= 1 and u.participant <= 10 and u.after == 0 and
-                g.legendaries.contains(rows.legendaryKey(g.patch, u.before)))
-            {
-                a.legendaries[u.participant - 1] -= 1;
-            },
-            .ward_placed => |w| if (w.participant >= 1 and w.participant <= 10 and
-                !std.mem.eql(u8, w.ward, "UNDEFINED") and !std.mem.eql(u8, w.ward, "TEEMO_MUSHROOM"))
-            {
-                a.wards[w.participant - 1] += 1;
-                if (std.mem.eql(u8, w.ward, "CONTROL_WARD")) a.ctrl[w.participant - 1] += 1;
-            },
-            .ward_kill => |w| if (w.participant >= 1 and w.participant <= 10) {
-                a.wards_killed[w.participant - 1] += 1;
-            },
-            .building_kill => |b| {
-                const owner = ownerSide(b.team) orelse return;
-                const taker = 1 - owner;
-                if (std.mem.eql(u8, b.building, "TOWER_BUILDING")) {
-                    if (std.mem.eql(u8, b.tower, "NEXUS_TURRET")) {
-                        a.team[taker][@backingInt(Team.tower_nexus)] += 1;
-                        return;
-                    }
-                    const lane = indexOf(&lanes, b.lane) orelse return;
-                    const tier = indexOf(&tiers, b.tower) orelse return;
-                    a.team[taker][@backingInt(Team.tower_top_outer) + lane * 3 + tier] += 1;
-                } else if (std.mem.eql(u8, b.building, "INHIBITOR_BUILDING")) {
-                    a.team[taker][@backingInt(Team.inhibs)] += 1;
-                    const lane = indexOf(&lanes, b.lane) orelse return;
-                    a.inhib_down[taker][lane] = e.t_ms;
-                }
-            },
-            // team owns the plate
-            .turret_plate => |p| if (ownerSide(p.team)) |owner| {
-                a.team[1 - owner][@backingInt(Team.plates)] += 1;
-            },
-            .elite_monster => |m| {
-                const side = ownerSide(m.team) orelse return;
-                const t = &a.team[side];
-                if (std.mem.eql(u8, m.monster, "DRAGON")) {
-                    if (std.mem.eql(u8, m.subtype, "ELDER_DRAGON")) {
-                        t[@backingInt(Team.elders)] += 1;
-                        a.elder_at[side] = e.t_ms;
-                    } else if (indexOf(&elements, m.subtype)) |el| {
-                        t[@backingInt(Team.infernal) + el] += 1;
-                    }
-                } else if (std.mem.eql(u8, m.monster, "BARON_NASHOR")) {
-                    t[@backingInt(Team.barons)] += 1;
-                    a.baron_at[side] = e.t_ms;
-                } else if (std.mem.eql(u8, m.monster, "HORDE")) {
-                    t[@backingInt(Team.grubs)] += 1;
-                } else if (std.mem.eql(u8, m.monster, "RIFTHERALD")) {
-                    t[@backingInt(Team.heralds)] += 1;
-                }
-            },
-            // Team 0: the element announced, not a soul taken (objectives.stateBefore)
-            .dragon_soul => |d| if (ownerSide(d.team)) |side| {
-                const el = indexOf(&soul_names, d.name) orelse 6;
-                a.team[side][@backingInt(Team.soul)] = @floatFromInt(1 + el);
-            },
-            else => {},
-        }
-    }
-
-    fn left(start: ?i64, len_ms: i64, at: i64) f32 {
-        const s = start orelse return 0;
-        return @as(f32, @floatFromInt(@max(0, s + len_ms - at))) / 1000;
-    }
-
-    fn write(a: *const Acc, g: Game, frame: timeline.Frame, at: i64, out: []f32) void {
-        out[0] = 1;
-        out[1] = @floatFromInt(frame.t_ms);
-        for (0..10) |i| {
-            const pid: u8 = @intCast(i + 1);
-            const s = g.seat_of[i];
-            const v = struct {
-                fn f(x: i32) f32 {
-                    return @floatFromInt(x);
-                }
-            }.f;
-            out[seatCol(s, .gold)] = v(frame.get(pid, .total_gold));
-            out[seatCol(s, .xp)] = v(frame.get(pid, .xp));
-            out[seatCol(s, .cs)] = v(frame.get(pid, .minions) + frame.get(pid, .jungle_minions));
-            out[seatCol(s, .level)] = v(frame.get(pid, .level));
-            out[seatCol(s, .kills)] = a.kills[i];
-            out[seatCol(s, .deaths)] = a.deaths[i];
-            out[seatCol(s, .assists)] = a.assists[i];
-            out[seatCol(s, .dmg_champ)] = v(frame.get(pid, .damage_to_champions));
-            out[seatCol(s, .unspent)] = v(frame.get(pid, .current_gold));
-            out[seatCol(s, .respawn_s)] = @as(f32, @floatFromInt(@max(0, a.alive_at[i] - at))) / 1000;
-            out[seatCol(s, .legendaries)] = a.legendaries[i];
-            out[seatCol(s, .wards)] = a.wards[i];
-            out[seatCol(s, .ctrl_wards)] = a.ctrl[i];
-            out[seatCol(s, .wards_killed)] = a.wards_killed[i];
-        }
-        const state = objectives.stateBefore(g.t, frame, at);
-        for (state, 0..) |x, f| out[obj_base + f] = x;
-        for (0..2) |side| {
-            const o = out[team_base + side * n_team ..][0..n_team];
-            o.* = a.team[side];
-            for (0..3) |lane| o[@backingInt(Team.inhib_top_s) + lane] = left(a.inhib_down[side][lane], inhib_respawn_ms, at);
-            o[@backingInt(Team.elder_s)] = left(a.elder_at[side], elder_buff_ms, at);
-            o[@backingInt(Team.baron_s)] = left(a.baron_at[side], baron_buff_ms, at);
-        }
+    fn items(l: *const Legendaries) livestate.Items {
+        return .{ .ctx = l, .legendary = struct {
+            fn f(ctx: *const anyopaque, item: u32) bool {
+                const self: *const Legendaries = @ptrCast(@alignCast(ctx));
+                return self.set.contains(rows.legendaryKey(self.patch, item));
+            }
+        }.f };
     }
 };
 
-/// The frame for minute m when the game is still going then (objectives.stateAt's rule)
-fn frameAt(t: timeline.Timeline, m: u8) ?timeline.Frame {
-    if (t.frames.len < @as(usize, m) + 2) return null;
-    const f = t.frames[m];
-    if (f.t_ms < @as(i64, m) * minute_ms) return null;
-    return f;
+fn write(m: livestate.Minute, out: []f32) void {
+    out[0] = 1;
+    out[1] = @floatFromInt(m.t_ms);
+    for (0..10) |s| {
+        for (0..n_seat) |c| out[seat_base + s * n_seat + c] = m.seat[s][c];
+    }
+    for (m.obj, 0..) |x, f| out[obj_base + f] = x;
+    for (0..2) |side| @memcpy(out[team_base + side * n_team ..][0..n_team], &m.team[side]);
 }
+
+const frameAt = livestate.frameAt;
 
 /// Fills `out[mi]` (C floats each, NaN on entry) for each of `minutes` the game is going,
 /// and the timeline's game columns
 pub fn fill(g: Game, minutes: []const u8, out: [][]f32, game_out: *[n_game_col]f32) void {
-    var a: Acc = .{};
-    var next: usize = 0;
-    for (minutes, out) |m, row| {
-        const frame = frameAt(g.t, m) orelse break;
-        const at = frame.t_ms;
-        while (next < g.t.events.len and g.t.events[next].t_ms < at) : (next += 1) a.add(g, g.t.events[next]);
-        a.write(g, frame, at, row);
-    }
+    const legs: Legendaries = .{ .set = g.legendaries, .patch = g.patch };
+    var walk: livestate.Walker = .init(g.t, g.seat_of, legs.items());
+    for (minutes, out) |m, row| write(walk.at(m) orelse break, row);
 
     game_out[@backingInt(GameCol.has_timeline)] = 1;
     const First = struct { team: GameCol, min: GameCol };
@@ -488,6 +258,7 @@ pub fn main(gpa: Allocator, io: Io, argv: []const []const u8) !u8 {
         std.debug.print("usage:\n{s}", .{usage});
         return 2;
     }
+    if (argv.len == 4 and std.mem.eql(u8, argv[1], "--check")) return check(gpa, io, argv[0], argv[2], argv[3]);
     var o: Options = .{};
     var i: usize = 1;
     while (i + 1 < argv.len) : (i += 2) {
@@ -609,6 +380,94 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, o: Options) !Summary {
     return sum;
 }
 
+/// Largest difference allowed between statemodel.zig and the Python fit's chances
+const check_tolerance = 1e-4;
+
+/// statemodel.chances from SNAP's timelines with the model file at `model_path`, against
+/// stateship.py's chances by minute in `check_path` (match_id, minute, p)
+fn check(gpa: Allocator, io: Io, snap: []const u8, model_path: []const u8, check_path: []const u8) !u8 {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const cwd = Io.Dir.cwd();
+    const model = try statemodel.Model.parse(try cwd.readFileAlloc(io, model_path, arena, .limited(64 << 20)));
+    std.log.info("model {s}: {s} ({s}), {d} games, {d} champion-role terms", .{
+        model_path, model.snapshot, model.run, model.training_games, model.n_terms,
+    });
+
+    const Want = struct { minute: u8, p: f64 };
+    var want: std.StringArrayHashMapUnmanaged(std.ArrayList(Want)) = .empty;
+    var lines = std.mem.tokenizeScalar(u8, try cwd.readFileAlloc(io, check_path, arena, .limited(256 << 20)), '\n');
+    _ = lines.next();
+    while (lines.next()) |line| {
+        var f = std.mem.tokenizeScalar(u8, line, '\t');
+        const id = f.next() orelse return error.BadCheckFile;
+        const minute = try std.fmt.parseInt(u8, f.next() orelse return error.BadCheckFile, 10);
+        const p = try std.fmt.parseFloat(f64, f.next() orelse return error.BadCheckFile);
+        const e = try want.getOrPut(arena, id);
+        if (!e.found_existing) e.value_ptr.* = .empty;
+        try e.value_ptr.append(arena, .{ .minute = minute, .p = p });
+    }
+
+    var legendaries = try rows.loadLegendaries(gpa, io, snap);
+    defer legendaries.deinit(gpa);
+    var data = try rows.load(gpa, snap, &legendaries);
+    defer data.deinit();
+    var index: std.AutoHashMapUnmanaged(u64, u32) = .empty;
+    defer index.deinit(gpa);
+    for (data.games, 0..) |g, gi| try index.put(gpa, stats.matchKey(g.match_id), @intCast(gi));
+    const seat_of = try arena.alloc([10]u8, data.games.len);
+    for (data.rows) |r| if (r.slot < 10) {
+        seat_of[r.game][r.slot] = @as(u8, r.side) * 5 + @backingInt(r.role);
+    };
+    const platforms = protocol.platformIds();
+
+    const db = try store.sqlite.Db.openReadOnly(try std.fs.path.joinZ(arena, &.{ snap, "timeline.db" }));
+    defer db.close();
+    var q = try db.prepare("SELECT data FROM timelines WHERE match_id = ?");
+    defer q.deinit();
+    var worst: f64 = 0;
+    var worst_at: struct { id: []const u8 = "", minute: u8 = 0 } = .{};
+    var games: usize = 0;
+    var minutes: usize = 0;
+    var tl_arena: std.heap.ArenaAllocator = .init(gpa);
+    defer tl_arena.deinit();
+    var it = want.iterator();
+    while (it.next()) |e| {
+        _ = tl_arena.reset(.retain_capacity);
+        const ta = tl_arena.allocator();
+        const gi = index.get(stats.matchKey(e.key_ptr.*)) orelse return error.CheckGameNotInSnapshot;
+        const g = data.games[gi];
+        q.reset();
+        try q.bind(.{e.key_ptr.*});
+        if (!try q.step()) return error.CheckGameHasNoTimeline;
+        const t = try timeline.decode(ta, try store.raw.decompress(ta, q.bytes(0)));
+        var champions: [10]u32 = undefined;
+        for (0..10) |s| champions[s] = g.teams[s / 5][s % 5];
+        const legs: Legendaries = .{ .set = &legendaries, .patch = g.patch };
+        const got = try statemodel.chances(ta, model, .{
+            .t = t,
+            .seat_of = seat_of[gi],
+            .champions = champions,
+            .platform = platforms[g.platform],
+            .items = legs.items(),
+        });
+        games += 1;
+        for (e.value_ptr.items) |w| {
+            if (w.minute >= got.len) return error.CheckMinuteNotGoing;
+            minutes += 1;
+            const d = @abs(got[w.minute] - w.p);
+            if (d > worst) {
+                worst = d;
+                worst_at = .{ .id = e.key_ptr.*, .minute = w.minute };
+            }
+        }
+    }
+    std.log.info("state-export --check: statemodel.zig vs the Python fit on {d} games, {d} game-minutes: " ++
+        "max |diff| {e:.2} ({s} at {d}:00), tolerance {e:.0}", .{ games, minutes, worst, worst_at.id, worst_at.minute, check_tolerance });
+    return if (worst <= check_tolerance) 0 else 1;
+}
+
 fn meta(w: *Io.Writer, snap: []const u8, n: usize, minutes: []const u8) !void {
     try w.print("{{\"format\":\"meiolol-state\",\"version\":1,\"snapshot\":\"{s}\",\"n\":{d},\"c\":{d},\"g\":{d},\n", .{
         std.fs.path.basename(snap), n, n_col, n_game_col,
@@ -627,14 +486,6 @@ fn meta(w: *Io.Writer, snap: []const u8, n: usize, minutes: []const u8) !void {
 }
 
 const testing = std.testing;
-
-test respawnSeconds {
-    try testing.expectEqual(@as(f32, 10), respawnSeconds(1, 5 * minute_ms));
-    try testing.expectEqual(@as(f32, 52.5), respawnSeconds(18, 14 * minute_ms));
-    // 20:00: 10 half-minute steps of 0.425%
-    try testing.expectApproxEqAbs(@as(f32, 40 * 1.0425), respawnSeconds(13, 20 * minute_ms), 1e-4);
-    try testing.expectApproxEqAbs(@as(f32, 52.5 * 1.5), respawnSeconds(18, 70 * minute_ms), 1e-4);
-}
 
 test "fill: seats, team objectives, buffs and timers, firsts; agrees with stateBefore" {
     const E = timeline.Event;

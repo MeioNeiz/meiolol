@@ -431,7 +431,8 @@ fn report(ctx: *Context, arena: Allocator, db: store.Db, puuid: []const u8, rank
             log.warn("{s}: timeline {t}", .{ r.match_id, err });
             break :blk null;
         } else null;
-        try inputs.append(arena, .{ .summary = summary, .slot = r.slot, .timeline = t });
+        const platform = r.match_id[0 .. std.mem.indexOfScalar(u8, r.match_id, '_') orelse 0];
+        try inputs.append(arena, .{ .summary = summary, .slot = r.slot, .timeline = t, .platform = try arena.dupe(u8, platform) });
     }
     return game.report(arena, inputs.items, rank, ctx.curves);
 }

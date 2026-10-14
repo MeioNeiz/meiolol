@@ -7,6 +7,8 @@ const core = @import("core");
 const riot = @import("../riot/root.zig");
 const curves_build = @import("../curves.zig");
 const winchance = @import("../winchance.zig");
+const statemodel = @import("../statemodel.zig");
+const livestate = @import("../livestate.zig");
 const Date = @import("../date.zig").Date;
 
 const Allocator = std.mem.Allocator;
@@ -292,6 +294,8 @@ pub const Input = struct {
     slot: u8,
     /// Compact timeline (decoded); null when Riot had none
     timeline: ?timeline.Timeline,
+    /// Match id prefix ("EUW1") for the win chance's platform term; "" unknown
+    platform: []const u8 = "",
 };
 
 /// `games` newest first
@@ -324,7 +328,7 @@ pub fn analyse(arena: Allocator, in: Input, rank: Rank, set: CurveSet) !Game {
         .assists = me.assists,
         .lane = null,
     };
-    if (!s.remake) if (in.timeline) |t| try wholeGame(arena, s, in.slot, t, &g);
+    if (!s.remake) if (in.timeline) |t| try wholeGame(arena, s, in.slot, t, in.platform, set.legendaries, &g);
     const r = role orelse return g;
     const opp_slot = for (s.players, 0..) |p, i| {
         if (p.team != me.team and std.mem.eql(u8, p.position, me.position)) break i;
@@ -374,22 +378,48 @@ pub fn analyse(arena: Allocator, in: Input, rank: Rank, set: CurveSet) !Game {
     return g;
 }
 
+/// Blue's win chance by minute from 0: statemodel (state, items, timers and champions)
+/// when each side has its five roles, else winchance (team gold and objectives)
+fn blueChances(arena: Allocator, s: Summary, t: timeline.Timeline, platform: []const u8, legendaries: []const u32) ![]const f64 {
+    if (t.participants == 10 and s.players.len == 10) seats: {
+        var teams: [10]i64 = undefined;
+        var positions: [10][]const u8 = undefined;
+        var champions: [10]u32 = undefined;
+        for (s.players, &teams, &positions) |p, *team, *pos| {
+            team.* = p.team;
+            pos.* = p.position;
+        }
+        const seat_of = statemodel.Game.seats(teams, positions) orelse break :seats;
+        for (s.players, seat_of) |p, seat| champions[seat] = p.champion;
+        return statemodel.chances(arena, statemodel.shipped(), .{
+            .t = t,
+            .seat_of = seat_of,
+            .champions = champions,
+            .platform = platform,
+            .items = .sorted(&legendaries),
+        });
+    }
+    var out: std.ArrayList(f64) = .empty;
+    var m: u8 = 0;
+    while (m < 255) : (m += 1) try out.append(arena, winchance.blue(t, m) orelse break);
+    return out.items;
+}
+
 /// Win chance, turning minute and death cost: the whole game, not only the lane
-fn wholeGame(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, g: *Game) !void {
+fn wholeGame(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, platform: []const u8, legendaries: []const u32, g: *Game) !void {
     if (t.participants != s.players.len) return;
     const team = s.players[slot].team;
     const me: u8 = slot + 1;
     var chance: std.ArrayList(u16) = .empty;
-    var m: u8 = 0;
-    while (m < 255) : (m += 1) {
-        const p = winchance.blue(t, m) orelse break;
+    for (try blueChances(arena, s, t, platform, legendaries)) |p| {
         const mine_p = if (team == 100) p else 1 - p;
         try chance.append(arena, @intFromFloat(@round(100 * mine_p)));
     }
     g.win_chance = chance.items;
 
+    // From 1:00 on: the first minute's move is the champions, not the game
     var best: ?u8 = null;
-    for (1..chance.items.len) |i| {
+    for (2..chance.items.len) |i| {
         const change = @abs(@as(i32, chance.items[i]) - chance.items[i - 1]);
         if (best == null or change > @abs(@as(i32, chance.items[best.?]) - chance.items[best.? - 1])) best = @intCast(i);
     }
@@ -457,6 +487,8 @@ fn objectivesBy(arena: Allocator, t: timeline.Timeline, team: i64, from_ms: i64,
             .elite_monster => |em| .{ em.team, monsterLabel(em.monster, em.subtype) orelse continue },
             else => continue,
         };
+        // Only a side's own takes: a monster with no killing team (300, 0) is nobody's
+        if (taker != 100 and taker != 200) continue;
         if ((taker == team) != ours) continue;
         for (labels.items, counts.items) |l, *n| {
             if (std.mem.eql(u8, l, label)) {
@@ -705,6 +737,10 @@ fn matchups(arena: Allocator, games: []const Game) ![]Matchup {
 
 const testing = std.testing;
 
+test {
+    _ = statemodel;
+}
+
 test weekStart {
     var buf: [10]u8 = undefined;
     // Sunday 11 October 2026 12:00 UTC -> Monday 5 October
@@ -740,6 +776,26 @@ fn testSummary(arena: Allocator) !Summary {
         .assists = 0,
     };
     return .{ .patch = "16.20", .queue = 420, .start_ms = 1791720000000, .duration_s = 1800, .remake = false, .players = players };
+}
+
+test "win chance: statemodel with every role, winchance without" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const raw = try @import("store").raw.decompress(arena, @embedFile("../riot/testdata/timeline.json.gz"));
+    const t = try timeline.fromJson(arena, raw);
+    const s = try testSummary(arena);
+    const full = try blueChances(arena, s, t, "EUW1", &.{});
+    try testing.expectEqual(@as(f64, 0.5), full[0]);
+    try testing.expect(full.len > lane_end);
+    const players = try arena.dupe(Summary.Player, s.players);
+    players[3].position = "";
+    var partial = s;
+    partial.players = players;
+    const old = try blueChances(arena, partial, t, "EUW1", &.{});
+    try testing.expectEqual(full.len, old.len);
+    for (old, 0..) |p, m| try testing.expectEqual(winchance.blue(t, @intCast(m)).?, p);
+    try testing.expect(full[10] != old[10]);
 }
 
 test "a real timeline from both sides, with and without a curve" {

@@ -3857,6 +3857,64 @@ lane-ref.json: per role the 4 most played pairs, a champion into an opponent wit
 pair cell and an unknown champion (id 0), each with value, lo, hi, champ_games and
 pair_games from Scorer.value; the page's JS must match them to 0.01.
 
+### In-game model file (py/state/stateship.py)
+
+Your games' win chance by minute (src/statemodel.zig) is richc ("Rich state and
+champions (richc)"). `deploy/lab-run.sh start gpu-box state-ship --python
+py/state/stateship.py --with py/xcheck/nnsets.py -- '$HOME/ml/snaps/SNAP' --out out`
+fits it on every played game with a timeline (test included, as shipped exports do),
+the same procedure as one statemodels.py block: win-ratings L2 and richc's ridge
+picked on the newest 10% of games, the fit rows' draft logit cross-fitted in 5 parts,
+rows every other minute 1-40. It writes out/state-model.bin, copied to
+src/state_model.bin (embedded in the binary), and out/state-check.tsv (match_id,
+minute, p: blue's chance for 500 random fitted games from the file's numbers, which
+stateship checks against the fit's own predict, max |diff| under 1e-5). Then
+`meiolol-lab state-export SNAP --check state-model.bin state-check.tsv` recomputes
+those chances in Zig from the timelines (livestate.zig, the code state-export uses)
+and exits 1 when any differs by more than 1e-4.
+
+state-model.bin, little-endian, version 1:
+- header (180 bytes): magic "meiolol-state" padded with zeros to 16 bytes; u32
+  version, F (features, 91), K (knots), P (platforms), C (champion-role terms),
+  training games, 0; i64 newest game start (ms); snapshot and run names, 64 bytes each,
+  zero-padded
+- K f32 knots (minutes 1, 5, ..., 40)
+- F names, 24 bytes each, zero-padded: statecommon.features' order, which
+  statemodel.zig's `names` must equal (parse refuses the file otherwise)
+- F f32 mu, F f32 sd (standardisation from the fit rows), F x K f32 W (feature-major),
+  K f32 b (intercept by knot)
+- f32 default platform intercept (fit games' mean), then P x (8-byte platform id, f32
+  intercept): win-ratings' platform term
+- C x (u32 Riot champion id, u32 role 0-4 as core.Role, f32 rating, K f32 effect): the
+  champion-role's win-ratings term and its richc effect by knot; a champion-role not in
+  the file counts 0
+
+Scoring (statemodel.zig; seats s = side x 5 + role, blue 0-4):
+
+```
+draft  = intercept[platform] + sum_{s<5} rating(s) - sum_{s>=5} rating(s)
+x      = features(state at minute m, draft)       (91, blue minus red, units as statecommon)
+h      = hat(m): weights linear between knots, m clipped to [first, last] knot
+logit  = sum_k h_k (b_k + sum_f (x_f - mu_f) / sd_f W[f,k]
+                    + sum_{s<5} effect(s)_k - sum_{s>=5} effect(s)_k)
+blue   = 1 / (1 + exp(-logit)); 0.5 at minute 0; none once the game has ended
+```
+
+Shipped file: run 20261014T211923Z-state-ship-2253Zr (snap-20261013T2253Z re-cut, 6dd6bfe):
+286,721 played games with a timeline (358,334 played; test included), 4,160,946 fit
+rows, ratings L2 1e-3, ridge 1e-5 (newest 10%: 0.50797 at 1e-5, 0.51191 at 3e-4: the
+grid's edge again), champion effect sd by knot 0.09, 0.14, 0.16, 0.16, 0.16, 0.15,
+0.12, 0.09, 0.05; 863 champion-role terms, 48,048 bytes, default intercept 0.023; the
+file against the fit's predict on 500 games (14,087 game-minutes): max |diff| 2.2e-7.
+Rare champion-roles are shrunk hard (under 30 games: largest effect at any knot 0.10;
+1,000+ games: median 0.19, largest 0.77, Kayle middle late), so effects are those of
+picks seen often.
+
+Your games: every side's five teamPositions once, else winchance.zig; the platform
+from the match id; completed items from the newest curves patch's legendaries
+(ddragon), as the lab uses its patch's legendaries.tsv. Ranked solo fit, shown for
+flex, draft and Swiftplay too (as winchance was).
+
 ### PyTorch cross-check, 2026-10-14 (meiolol-58)
 
 Question: does each Zig model train as written? A second implementation in Python
