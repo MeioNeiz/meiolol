@@ -159,8 +159,9 @@ outcomes and readings decided by Jacob the same day.
   in test). Rule: every --final reports two numbers from the same predictions, the full
   test and the test minus test-exclude.tsv; a look on a snapshot without the file says
   so (looks.record prints either). Leak note: fits for a window never see games at or
-  after its cut, same-patch games on other platforms included. Seat stats: 2253Z's own plus 1954Z's and 2055Z's lines for games the box had
-  pruned (0 of 5,179,830 shared seats differ), 372,317 games covered
+  after its cut, same-patch games on other platforms included. Seat stats: 2253Z's own
+  plus 1954Z's and 2055Z's lines for games the box had pruned (0 of 5,179,830 shared
+  seats differ), 372,317 games covered
 - Rows: ranked solo, non-remake, complete roles (stats.scan rules). Continuous outcomes
   also need a compact timeline that reached 15:00: frames[15].t_ms >= 900000 (frame 15
   exists is not enough: games ending 14:09-14:59 have it as their end frame). Win also
