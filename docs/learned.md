@@ -25,6 +25,24 @@ How to write a line:
 
 ## Win
 
+- 2026-10-14 (2253Z): How players did in their earlier games (gold, CS and damage per
+  minute, how often they played off their role, days since their last game) predicts
+  the winner beyond how much they have played: the ten champions alone pick the winner
+  53.7% of the time, adding each player's games and wins on their champion and recent
+  form lifts it to 55.5%, and adding these earlier-game averages lifts it to 56.1%
+  (ranking a winning team above a losing one 58.6% of the time instead of 57.7%). The
+  gain is bigger when more of the ten have earlier games, about twice as big with all
+  ten as with four or fewer. Whether players have queued together before adds nothing
+  we can detect. Sure: snap-20261013T2253Z, 134,375 games in 5 forward folds, a sealed
+  pre-declared check (3 new seeds, two 90% resamples, every fold better, a shuffled-
+  feature control at zero); the first player term past the noise floor beyond the
+  experience terms; premade not detected (at most ~0.1 milli-nats per game). "Earlier
+  games" means games our crawl holds, so how much history a player has follows crawl
+  depth, not what a live lobby would know. Dev folds only, no test look. Site: nothing;
+  internal only, other players' history is never for the app. Evidence: docs/model.md
+  "Prior and premade, sealed confirmation" (history means -0.00195 ± 0.00031 nats/game
+  beyond the net on win-exp; win-exp -0.00507 vs ratings), audited by meiolol-53
+
 - 2026-10-14 (2253Z): Who faces whom, and who plays beside whom, matters a little beyond
   each champion's own strength. The lane matchups matter most: top vs top (typical
   difference between matchups about 2.5 percentage points of win chance), mid vs mid

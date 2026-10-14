@@ -2095,14 +2095,20 @@ within each draw; the init-loss gate is ok on every fit; offset weights 0.81-0.9
 | 10 | 14,732 | -0.00301 ± 0.00108 |
 
 - The gain is the history means (gold, CS, damage per minute, off-role share, days since
-  the last game), not premade: duo alone ties A, and prior alone is as big as both
+  the last game): prior alone is as big as both; premade is not detected (duo alone
+  -0.00007 ± 0.00012, so at most ~0.0001 nats/game), not shown to be zero
+- "History" is what the crawl holds: having it follows crawl depth, not what a live
+  lobby would know (as for the games-before terms). No leak unless coverage tracked
+  outcomes, and nothing suggests that
 - It grows with history, as a player effect should, and the hand-made experience terms
   keep growing with data: -0.0026 (2055Z), -0.0038 (1954Z), -0.0051 (2253Z) vs ratings
 - Coverage grows with crawl depth, so later blocks have more history; per-block gains
   are flat (-0.0017 to -0.0022), so the pooled number isn't one late block
 - The 1954Z first look used seeds 1-3 only; 4-6 were first run here
-- Awaiting the verifier's audit before a learned.md line (internal scope: other players'
-  history is never for the app). Next: the prior as hand-made terms in win-exp (what an
+- Audited by meiolol-53 (recomputed per game from the ten runs, blocks equal the nn
+  split by match id, code read of abb57f3, cb19e68, d43fa92: no leak); learned.md line
+  2026-10-14, internal scope (other players' history is never for the app). Folds: pick
+  the winner 53.7% (ratings), 55.5% (win-exp), 56.1% (B); AUC 0.551, 0.577, 0.586. Next: the prior as hand-made terms in win-exp (what an
   explainable CPU model would ship internally), which feature carries it, and averaging
   the cross-fitted training offsets over partitions (58: two valid implementations'
   training offsets correlate only 0.81-0.91 per game)
