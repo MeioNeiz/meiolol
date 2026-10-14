@@ -482,12 +482,14 @@ in-game state model) and to the production review list.
 - Site polish: reviewer walk 2026-10-14 (desktop and phone, every section): fixed
   38b940f, 145a898, bbda65c (padding under the preview bar, chart text size, matchup
   index default 50+ games, build index 404, thousands, lookup note instead of the
-  browser's sign-in prompt). Screenshots: docs/review-shots/. Left: unknown URLs get a
-  plain-text "not found" from meiolol-render (a site 404 page needs nginx error_page);
-  Daily Draft numbers freeze when a puzzle is made (#4 says 7,776 games, every lane
-  "more data needed"); review lists a "Costly death" at +8% win chance; Learn shows
-  lesson 1 "Started" to a first visit; docs/your-games.md "The browser asks once" is
-  now a note with a sign-in button (145a898). GIFs and a short demo video still to do
+  browser's sign-in prompt); b37dd02 (Daily Draft numbers follow the stats while the
+  puzzle's patch is current, answers never change), 74d6cdb (no "Costly death" when the
+  team's chance rose; the live example refreshes with the pushed binary's daily
+  your-example run), ab7d4cc (Learn: "Not started" on a first visit). Screenshots:
+  docs/review-shots/. Left: unknown URLs get a plain-text "not found" from
+  meiolol-render (a site 404 page needs nginx error_page); docs/your-games.md "The
+  browser asks once" is now a note with a sign-in button (145a898). GIFs and a short
+  demo video still to do
 - Desktop: lane card built (docs/architecture.md "Desktop window"; `zig build
   desktop-shot` for PNGs). First Windows run 2026-10-14 on the gpu-box (Windows 11 Pro,
   two 1080p screens at 100%; docs/review-shots/windows-desktop-window.png): opens, per
