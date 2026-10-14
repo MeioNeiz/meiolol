@@ -7,7 +7,7 @@ written to be shown. Jacob should check it, sign it off and date it.
 
 ## Decisions for Jacob
 
-- Same list as docs/legal/privacy.md: controller name, ICO fee, EEA representative,
+- Same list as docs/legal/privacy.md: controller name, EEA representative,
   24-month PUUID retention, 30-day refresh, children
 - Review date: proposed every 12 months and whenever a feature changes what is shown
   about a player (Your games, Squads, RSO)

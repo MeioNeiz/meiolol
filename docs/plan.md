@@ -577,7 +577,7 @@ flashcards with spaced repetition; season "lane story" share cards.
 
 - Legal: EEA representative, retention periods (docs/legal/privacy.md top). Decided 14
   Oct: controller "Jacob Maschler, trading as meiolol", contact privacy@jomify.lol
-  (Namecheap forward to add), ICO fee paid (number not shown on the site)
+  (Namecheap forward to add)
 - Alerts and backups: an ntfy topic for phone alerts (NTFY_TOPIC in .env; the health loop
   only logs until then); install the Mac job (`deploy/box.sh watch install`: notifications
   + backup mirror); ok to delete de's pre-deploy copies in ml/meiolol/backup (1.8 GB)

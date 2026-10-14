@@ -10,8 +10,6 @@ Decided 2026-10-14: controller "Jacob Maschler, trading as meiolol"; contact
 privacy@jomify.lol, a forward to jombirds@gmail.com (jomify.lol already uses Namecheap
 email forwarding: add the alias there before publishing).
 
-- **ICO fee.** Paid (Jacob, 2026-10-14). The registration number is not shown on the
-  site: a privacy notice needs the controller's identity and contact, not the number
 - **EEA representative.** EU GDPR requires one for a UK controller that monitors EU
   players, unless the processing is "occasional" and low risk. A 24/7 crawler is hard to
   call occasional. Paid services cost roughly £100 to £300 a year (not researched). Until
