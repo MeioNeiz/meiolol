@@ -21,7 +21,6 @@ pub const dvui_app: dvui.App = .{
     .deinitFn = stop,
     .frameFn = frame,
 };
-pub const main = dvui.App.main;
 pub const panic = dvui.App.panic;
 // The poller retries every second; Debug builds would print a stack trace for each
 // error.Unexpected from the network layer
@@ -36,12 +35,72 @@ const Shared = struct {
     quit: std.atomic.Value(bool) = .init(false),
 };
 
+const backend = dvui.backend;
+const win32 = backend.win32;
+
 var shared: Shared = .{};
+/// For the poller to wake the UI thread: the backend's refresh() does nothing
+var hwnd: win32.HWND = undefined;
+
+/// dvui's Direct3D 11 App main draws every vsync and never sleeps (10% of a core and 6%
+/// of the GPU with nothing changing, gpu-box 2026-10-14). Same setup, but between frames
+/// it waits for a message or dvui's next deadline
+pub fn main(init: std.process.Init) !void {
+    dvui.App.main_init = init;
+    // Logs reach the console when started from one
+    dvui.Backend.Common.windowsAttachConsole() catch {};
+    const class = win32.L("DvuiWindow");
+    backend.RegisterClass(class, .{}) catch win32.panicWin32("RegisterClass", win32.GetLastError());
+    const opts = dvui_app.config.get();
+    dvui.io = init.io;
+
+    var state: backend.WindowState = undefined;
+    const b = try backend.initWindow(&state, .{
+        .registered_class = class,
+        .dvui_gpa = init.gpa,
+        .dvui_window_init_options = opts.window_init_options,
+        .allocator = init.gpa,
+        .size = opts.size,
+        .min_size = opts.min_size,
+        .max_size = opts.max_size,
+        .vsync = opts.vsync,
+        .title = opts.title,
+        .icon = opts.icon,
+    });
+    defer b.deinit();
+    hwnd = backend.hwndFromContext(b);
+    const win = b.getWindow();
+    var open = true;
+    win.open_flag = &open;
+
+    try win.begin(win.frame_time_ns);
+    try start(win);
+    _ = try win.end(.{});
+    defer stop(win);
+
+    var woken = false;
+    while (open) {
+        if (backend.serviceMessageQueue() == .quit) break;
+        try win.begin(win.beginWait(woken));
+        const res = try frame();
+        const end_micros = try win.end(.{});
+        if (res != .ok) break;
+        woken = waitMessage(win.waitTime(end_micros));
+    }
+}
+
+/// Sleeps until a message arrives or `micros` pass (maxInt: no deadline). True if woken
+fn waitMessage(micros: u32) bool {
+    if (micros == 0) return false;
+    const ms = if (micros == std.math.maxInt(u32)) win32.INFINITE else micros / 1000 + 1;
+    const wait_timeout = 0x102;
+    return win32.MsgWaitForMultipleObjectsEx(0, null, ms, win32.QS_ALLINPUT, win32.MWMO_INPUTAVAILABLE) != wait_timeout;
+}
 var io: std.Io = undefined;
 var stats: ?core.Stats = null;
 var curves: ?core.curvesfile.Curves = null;
 
-fn start(win: *dvui.Window) !void {
+fn start(_: *dvui.Window) !void {
     const init = dvui.App.main_init orelse return error.NoProcessInit;
     io = init.io;
     const gpa = init.gpa;
@@ -67,7 +126,7 @@ fn start(win: *dvui.Window) !void {
     }
     // Detached: a request to a hung client cannot be interrupted (no network timeouts
     // in Threaded IO), so quitting must not wait for it
-    const thread = try std.Thread.spawn(.{}, poll, .{ win, gpa });
+    const thread = try std.Thread.spawn(.{}, poll, .{gpa});
     thread.detach();
 }
 
@@ -82,17 +141,17 @@ fn frame() !dvui.App.Result {
     return .ok;
 }
 
-fn publish(win: *dvui.Window, status: ui.Status, arena: std.heap.ArenaAllocator) void {
+fn publish(status: ui.Status, arena: std.heap.ArenaAllocator) void {
     shared.mutex.lockUncancelable(io);
     const old = shared.arena;
     shared.status = status;
     shared.arena = arena;
     shared.mutex.unlock(io);
     if (old) |o| o.deinit();
-    dvui.refresh(win, @src(), null);
+    _ = win32.PostMessageW(hwnd, win32.WM_NULL, 0, 0);
 }
 
-fn poll(win: *dvui.Window, gpa: std.mem.Allocator) void {
+fn poll(gpa: std.mem.Allocator) void {
     var p: Poller = .{ .gpa = gpa, .own_arena = .init(gpa) };
     defer p.deinit();
     var shown: u64 = 0;
@@ -105,7 +164,7 @@ fn poll(win: *dvui.Window, gpa: std.mem.Allocator) void {
         const key = p.key(status);
         if (key != shown) {
             shown = key;
-            publish(win, status, arena);
+            publish(status, arena);
         } else arena.deinit();
         std.Io.sleep(io, .fromSeconds(1), .awake) catch {};
     }

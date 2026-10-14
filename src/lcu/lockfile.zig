@@ -79,6 +79,10 @@ pub fn discover(arena: std.mem.Allocator, io: std.Io, override: ?[]const u8) !Fo
         const creds = parse(content) catch continue;
         return .{ .credentials = creds, .source = .lockfile, .path = path };
     }
+    // The process list costs ~1.5 s of CPU on Windows (PowerShell); pollers call this
+    // every second while the client is closed
+    if (builtin.os.tag == .windows and !windowsProcessRunning("LeagueClientUx.exe"))
+        return error.ClientNotRunning;
     const listing = processList(arena, io) catch return error.ClientNotRunning;
     const creds = parseCommandLine(listing) orelse return error.ClientNotRunning;
     return .{ .credentials = creds, .source = .process_list };
@@ -86,6 +90,42 @@ pub fn discover(arena: std.mem.Allocator, io: std.Io, override: ?[]const u8) !Fo
 
 fn readSmall(arena: std.mem.Allocator, io: std.Io, path: []const u8) ![]u8 {
     return std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(4096));
+}
+
+const ProcessEntry = extern struct {
+    size: u32 = @sizeOf(ProcessEntry),
+    usage: u32 = 0,
+    pid: u32 = 0,
+    heap_id: usize = 0,
+    module_id: u32 = 0,
+    threads: u32 = 0,
+    parent_pid: u32 = 0,
+    priority: i32 = 0,
+    flags: u32 = 0,
+    exe: [260]u16 = undefined,
+};
+extern "kernel32" fn CreateToolhelp32Snapshot(flags: u32, pid: u32) callconv(.winapi) std.os.windows.HANDLE;
+extern "kernel32" fn Process32FirstW(snap: std.os.windows.HANDLE, entry: *ProcessEntry) callconv(.winapi) c_int;
+extern "kernel32" fn Process32NextW(snap: std.os.windows.HANDLE, entry: *ProcessEntry) callconv(.winapi) c_int;
+
+/// Whether a process with this exe name runs (Toolhelp snapshot, well under a millisecond).
+/// True when the snapshot fails, so the caller falls back to the full process list
+fn windowsProcessRunning(comptime exe: []const u8) bool {
+    const snapshot_process = 2;
+    const snap = CreateToolhelp32Snapshot(snapshot_process, 0);
+    if (snap == std.os.windows.INVALID_HANDLE_VALUE) return true;
+    defer std.os.windows.CloseHandle(snap);
+    const want = std.unicode.utf8ToUtf16LeStringLiteral(exe);
+    var entry: ProcessEntry = .{};
+    var ok = Process32FirstW(snap, &entry);
+    while (ok != 0) : (ok = Process32NextW(snap, &entry)) {
+        const name = std.mem.sliceTo(&entry.exe, 0);
+        if (name.len == want.len and std.ascii.eqlIgnoreCase(
+            std.mem.sliceAsBytes(name),
+            std.mem.sliceAsBytes(want[0..]),
+        )) return true;
+    }
+    return false;
 }
 
 /// Command lines of running processes, for parseCommandLine

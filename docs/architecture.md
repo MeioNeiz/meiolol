@@ -580,9 +580,10 @@ and a three-question check, then unlimited practice drafts. No streaks or timers
   stats-*.bin and recent-curves.bin (else curves-<patch>.bin) from data/export or next
   to the exe (src/datafiles.zig, shared with `meiolol-app`)
 - A detached poller thread does what `watch` does once a second and publishes a
-  ui.Status (with the lane card) under a mutex, waking the window with dvui.refresh;
-  the UI thread only draws. Detached because a request to a hung client cannot be
-  interrupted. Per champ select it also reads pickable and owned champions, the
+  ui.Status (with the lane card) under a mutex, waking the window with a WM_NULL; the
+  UI thread only draws, and sleeps between messages (own main loop: dvui's dx11 App
+  main draws every vsync, ~10% of a core idle). Detached because a request to a hung
+  client cannot be interrupted. Per champ select it also reads pickable and owned champions, the
   player's own mastery and visible solo tier (lcu/me.zig)
 - Lane card (lanecard.zig, docs/concept.md part 6): the enemy shown in my position, else
   the one core.score.inferRoles puts there (labelled a guess); gold at 14 min one
