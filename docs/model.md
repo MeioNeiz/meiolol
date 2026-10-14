@@ -3316,7 +3316,11 @@ and no comp):
   pin on that pin's fold preds: snap-20261013T2253Z before its global re-cut, 78,036 fold
   games, 0.89 ± 0.04, folds 0.71-1.30, dev-val 1.02 ± 0.10, so with ~2x the fit games
   ratings is less over-confident; the shipped fit has more games than any fold, so the
-  folds' T may shrink slightly too much). Every shown chance, slot list and comp reason
+  folds' T may shrink slightly too much; after the all-platform re-cut, 134,375 fold
+  games: 0.965 ± 0.029, folds 0.86-1.11, dev-val 1.07 ± 0.06, top tenth said 59.8% and
+  won 59.3%. Export 20261014T004029Z-draft-export-2253Z (0c3e486, --temperature 0.965)
+  fits on all 363,472 played games, test and every platform included, as shipped models
+  now do). Every shown chance, slot list and comp reason
   uses it; ratings, comp parts and the debug trace's
   terms stay in the model's own logit; u, v, s are length dim (empty for rates and ratings); w and z
   row-major 5 x 5; p the champion-role's profile (k numbers, z-scored within the role;
