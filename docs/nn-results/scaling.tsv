@@ -1,6 +1,6 @@
 # title: Does the gap close with more games?
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note
-big net, 106k fit games	ratings	folds	0.00053	0.00039	3			76041	106456	curve-fit-two (48a6b33)	largest size (1954Z): no net passes ratings; gap per doubling small +0.03, big +0.24, resid -0.14, win-comp -0.04 mnats; ratings gains +0.58 pp accuracy and -0.90 mnats a doubling
+big net, 106k fit games	ratings	folds	0.00053	0.00039	3			76041	106456	curve-fit-two (48a6b33)	largest size (1954Z); nets don't close on ratings over 4k-152k fit games, above 40k their gap slopes point toward it, none established; ratings gains +0.58 pp accuracy and -0.90 mnats a doubling (dev, two overlapping snapshots)
 ratings, 2055Z	-	folds	0.69376		1			44353	6133	curve-fit-two (48a6b33)	10% of fit games
 small net, 2055Z	-	folds	0.69459		3			44353	6133	curve-fit-two (48a6b33)	10% of fit games
 small net, 2055Z	ratings	folds	0.00083	0.00035	3			44353	6133	curve-fit-two (48a6b33)	10% of fit games
