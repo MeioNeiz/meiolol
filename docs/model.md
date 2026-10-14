@@ -2861,7 +2861,7 @@ until meiolol-tests' crossed-only plant (lanes=2) settles it.
 Damage mix: -1.89 ± 0.19 pp per sd of the term (-2.75 per sd of blue minus red), on gold
 at 14 -21 ± 15. Single cells: not reported.
 
-#### Additive model v2: identified matchups (2253Z re-cut, pre-declared, cf4762d; audit pending meiolol-53)
+#### Additive model v2: identified matchups (2253Z re-cut, pre-declared, cf4762d; audited by meiolol-53)
 
 v1's enemy blocks weren't identified: a same-role matchup had two cells, cell(a, b) and
 cell(b, a), of which only the difference enters a game, and "r vs their q" and "q vs
@@ -2880,7 +2880,9 @@ resample index, ships if mean + 1.6 x half < +0.0002 and both resamples < +0.000
 full-cal minus full, ships if mean + 1.6 x half < 0 and both resamples < 0). Runs
 20261014T041809Z-e53v2-V0, 041843Z-V1, 041920Z-V2 (resample none, 1, 2), 042003Z-T2
 (table); v1 from e53-A0..A2. Checks: in-run ratings identical to e53-A0's; v2's full preds
-differ from v1's on 170,176 of 170,209 games (strength + mix is the same model in both).
+differ from v1's on 170,176 of 170,209 games. The declaration also asked for v2's
+strength + mix preds to differ, a slip: that variant has no matchup blocks and is the same
+model in both (identical, as it must be).
 
 | statistic | folds (134,375 games) | resample 1 / 2 | dev-val | verdict |
 | --- | --- | --- | --- | --- |
@@ -2909,9 +2911,13 @@ the plant is under 1, i.e. thin blocks; calibrated ones are 0.91x in the plant):
 | top vs middle | 0.52 [0.40, 0.64] | 0.96 [0.81, 1.11] | not detected |
 | ally bottom-support | 1.28 [1.07, 1.48] | 1.55 [1.31, 1.80] | 84 [68, 99] |
 
-The other 7 cross-role matchups and 9 ally pairs are not detected as fitted (calibration
-puts the matchups at 0.2-1.1, the ally pairs mostly near 0); champion strength and the
-damage mix as in e53-T.
+H5 failed, so calibrated sizes have no out-of-sample support (only the unit plant, 0.91x):
+read the table's ranges as fitted (a lower bound) to plant-calibrated (not confirmed by
+prediction). The other 7 cross-role matchups are not detected as fitted (0.2-0.6) but
+calibrate up to ~1.1 (jungle vs support 0.74 -> 1.10). Ally calibrations other than
+bottom-support didn't converge (last-round misfit 1.72 top-bottom, 1.87 middle-bottom;
+factors 0.16-2.2), so no calibrated value is quoted for them; bottom-support's misfit was
+0.99. Champion strength and the damage mix as in e53-T.
 
 #### In-game events
 
