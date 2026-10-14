@@ -4,6 +4,7 @@
 #
 #   deploy/lab-sweep.sh start SWEEP SPACE [--trials N] [--rng S] [--pack K] [--serial]
 #                             [--head | --commit SHA] [--build-arg A]... [--res gpu|cpu]
+#                             [--gpu-share N]
 #                             [--python SCRIPT [--with PATH]...] [--skip N] [--live N]
 #                             [--dry-run]
 #                             -- CMD ARGS...
@@ -37,7 +38,7 @@ RUN=$ROOT/deploy/lab-run.sh
 HOST=gpu-box
 
 usage() {
-    sed -n '5,11p' "$0"
+    sed -n '5,12p' "$0"
     exit 2
 }
 
@@ -66,6 +67,7 @@ start() {
             --build-arg) opts+=(--build-arg "$2"); shift ;;
             --python) py=$2; opts+=(--python "$2"); shift ;;
             --with) opts+=(--with "$2"); shift ;;
+            --gpu-share) opts+=(--gpu-share "$2"); shift ;;
             --dry-run) dry=1 ;;
             --skip) skip=$2; shift ;;
             --live) live=$2; shift ;;

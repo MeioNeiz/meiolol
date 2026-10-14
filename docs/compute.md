@@ -181,6 +181,8 @@ run time.
   fifth of their time so far), queued ones take the first slot to free up in lab-run's
   ticket order: fast ones (predicted <= 60 s) first, then the rest, each oldest first. A
   fast new run waits only for queued fast ones. Whole-machine history: see the ratio above
+  A --gpu-share N run holds N slots and, as queue head, waits until N are free at once
+  (listing field SHARE after LOGLINE; place's optional SHARE argument)
 - Memory (lab-run's gate, 0723d43 and edd4d90; the listing's mem and peak lines): each
   run starts once a slot is free and MemAvailable covers its need (max peak of earlier
   runs with the same bin and first arg, python by script; 4 GB with none); 20 min after
@@ -228,6 +230,8 @@ builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps
 - `--python SCRIPT [--with PATH]...` sweeps a python net (lab-run's --python): one trial a
   job, no build; SCRIPT is copied at each start, so leave it alone until all are queued
   (or point SCRIPT and --with at a frozen copy elsewhere: the run hash is the *.py contents)
+- `--gpu-share N` passes to lab-run: each job holds N gpu slots and 0.95 N/slots of the
+  card (st1: statenet needed more than one slot's 3.16 GiB)
 - `--live N`: at most N of the sweep's jobs queued or running at once; start waits (one
   status poll a minute) before queuing the next, so run it in the background. For jobs
   the slot count doesn't cap well (st1, 14 Oct: state nets take 6-8 GB, 2 of 3 gpu slots)

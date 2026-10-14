@@ -5,9 +5,10 @@
 #   HOST slots RES N (lab-run.sh's locks per resource) | HOST mem KB (MemAvailable)
 #   HOST peak DIR GB (a run's peak RSS, after its run line)
 #   HOST run DIR STATE STARTED ENDED RES BIN ARGS PAUSES PREDICTED BUILD SLOT LOGLINE
+#     [SHARE] (gpu slots it holds at once, lab-run --gpu-share; 1 if absent)
 #
 #   lab-place.pl inputs ARGS                 input paths to check on each host
-#   lab-place.pl place HOST|auto RES|auto BIN ARGS [BUILD_ARGS]
+#   lab-place.pl place HOST|auto RES|auto BIN ARGS [BUILD_ARGS [SHARE]]
 #                                            "HOST RES SECONDS" (- if unknown), then why
 #   lab-place.pl status HOST                 status lines, predicted vs actual run time
 #
@@ -72,7 +73,9 @@ while (my $line = <STDIN>) {
     elsif ($kind eq 'peak') { $peak{$host}{$f[0]} = $f[1] if $f[1] =~ /^[\d.]+$/ }
     elsif ($kind eq 'run') {
         my %r;
-        @r{qw(dir state started ended res bin args pauses pred build slot log)} = @f;
+        @r{qw(dir state started ended res bin args pauses pred build slot log held)}
+            = @f;
+        $r{held} = ($r{held} // '') =~ /^([1-9])$/ ? $1 : 1;
         $r{host} = $host;
         $r{$_} = ts($r{$_}) for qw(started ended);
         $r{pred} = $r{pred} =~ /^(\d+)/ ? $1 : undef;
@@ -369,9 +372,11 @@ sub need {
 }
 
 sub wait_for {
-    my ($host, $res, $fast, $need_new) = @_;
+    my ($host, $res, $fast, $need_new, $share_new) = @_;
     my $n_slots = $slots{$host}{$res} // 1;
     $n_slots = 1 unless $n_slots =~ /^\d+$/ && $n_slots > 0;
+    # A share-N run holds N slots, at most all of them (lab-run caps it the same way)
+    my $width = sub { my $k = $_[0] // 1; return $k < $n_slots ? $k : $n_slots };
     my $gated = defined $mem{$host};
     # @hold: [start, end] of runs holding a cpu or gpu slot, for the gate's late rule
     my (@free, @queued, @ev, @hold, $n);
@@ -386,12 +391,12 @@ sub wait_for {
         if (defined $r->{started} && $r->{state} !~ /^queued/) {
             my $done = $now{$host} - $r->{started} - paused($r, $r->{started}, $now{$host});
             my $left = $pred - $done > $done / 5 ? $pred - $done : $done / 5;
-            push @free, $left;
+            push @free, ($left) x $width->($r->{held});
             push @ev, [$left, $need];
             push @hold, [0, $left] if $res =~ /^(cpu|gpu)$/;
         } else {
             # A start without a prediction is normal, whatever we estimate for it
-            push @queued, [fast($r->{pred}) ? 0 : 1, $pred, $need];
+            push @queued, [fast($r->{pred}) ? 0 : 1, $pred, $need, $width->($r->{held})];
         }
     }
     # Running runs of the other resources give their memory back too
@@ -405,7 +410,7 @@ sub wait_for {
         push @hold, [0, $left] if $r->{res} =~ /^(cpu|gpu)$/;
     }
     push @free, 0 while @free < $n_slots;
-    @free = sort { $a <=> $b } @free;
+    @free = (sort { $a <=> $b } @free)[0 .. $n_slots - 1];
     # Memory at T: now's, plus what has come back by then, less what has been taken
     my $mem_at = sub {
         my $m = $mem{$host};
@@ -438,17 +443,20 @@ sub wait_for {
         my $late = defined $since ? $since + $GATE_MAX_WAIT : $t0;
         return $late > $t0 ? $late : $t0;
     };
+    # The head holds the queue until K slots are free at once (all or none)
     my $prev = 0;
     for my $q (sort { $a->[0] <=> $b->[0] } grep { !$fast || $_->[0] == 0 } @queued) {
-        my $t0 = $free[0] > $prev ? $free[0] : $prev;
+        my $k = $q->[3];
+        my $t0 = $free[$k - 1] > $prev ? $free[$k - 1] : $prev;
         my $at = $start->($prev, $t0, $q->[2]);
-        shift @free;
-        @free = sort { $a <=> $b } @free, $at + $q->[1];
+        splice @free, 0, $k;
+        @free = sort { $a <=> $b } @free, ($at + $q->[1]) x $k;
         push @ev, [$at, -$q->[2]], [$at + $q->[1], $q->[2]];
         push @hold, [$at, $at + $q->[1]];
         $prev = $at;
     }
-    my $t0 = $free[0] > $prev ? $free[0] : $prev;
+    my $k = $width->($share_new);
+    my $t0 = $free[$k - 1] > $prev ? $free[$k - 1] : $prev;
     my $at = $start->($prev, $t0, $need_new // $GATE_DEFAULT_GB);
     return ($at, $n // 0, $n_slots, $at - $t0);
 }
@@ -505,7 +513,8 @@ sub fmt {
 }
 
 sub place {
-    my ($want_host, $want_res, $bin, $args, $build) = @_;
+    my ($want_host, $want_res, $bin, $args, $build, $share) = @_;
+    $share = ($share // '') =~ /^([1-9])$/ ? $1 : 1;
     my $cuda = cuda_use($bin, $args);
     my (@cands, @out);
     for my $h ($want_host eq 'auto' ? @AUTO : $want_host) {
@@ -522,7 +531,7 @@ sub place {
             my ($run, $why) = estimate($h, $bin, $args, $build);
             my $need = need($h, $bin, $args);
             my ($wait, $live, $n_slots, $mwait) =
-                $res eq 'none' ? (0, 0, 0, 0) : wait_for($h, $res, 0, $need);
+                $res eq 'none' ? (0, 0, 0, 0) : wait_for($h, $res, 0, $need, $share);
             if (defined $run && $SHARED{$res}) {
                 my $share = $live + 1 < $n_slots ? $live + 1 : $n_slots;
                 $run *= $share**$beta;
@@ -530,7 +539,7 @@ sub place {
                     $beta_why) if $share > 1;
             }
             if ($res ne 'none' && fast($run)) {
-                ($wait, undef, undef, $mwait) = wait_for($h, $res, 1, $need);
+                ($wait, undef, undef, $mwait) = wait_for($h, $res, 1, $need, $share);
                 $why .= ', fast lane';
             }
             $why = ($why // 'no history')
