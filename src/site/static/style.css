@@ -216,6 +216,7 @@ td.thin { color: var(--muted); opacity: 0.6; }
   border-radius: 50%; background: var(--bg); border: 1px solid var(--line); font-weight: 600;
 }
 .lesson-done { color: var(--good); font-size: 14px; white-space: nowrap; }
+.lesson-done.todo { color: var(--muted); }
 .lesson-body { padding: 0 16px 16px; max-width: 760px; }
 .lesson-body ul.roles { padding-left: 18px; }
 .lesson-body ul.roles li, .hint-list li { display: list-item; }

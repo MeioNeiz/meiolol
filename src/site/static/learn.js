@@ -173,7 +173,8 @@ function renderLessonMarks() {
   for (const d of document.querySelectorAll(".lesson")) {
     const key = d.dataset.lesson;
     const mark = d.querySelector(".lesson-done");
-    mark.textContent = lessonDone(key) ? "✓ Done" : state.lessons[key] ? "Started" : "";
+    mark.textContent = lessonDone(key) ? "✓ Done" : state.lessons[key] ? "Started" : "Not started";
+    mark.classList.toggle("todo", !state.lessons[key]);
   }
 }
 
@@ -181,6 +182,11 @@ function setupLessons() {
   for (const d of document.querySelectorAll(".lesson")) {
     d.addEventListener("toggle", () => {
       if (!d.open) return;
+      // Opened for the reader below, not by them: a first visit has started nothing
+      if ("auto" in d.dataset) {
+        delete d.dataset.auto;
+        return;
+      }
       const key = d.dataset.lesson;
       state.lessons[key] ||= { seen: true, answers: [] };
       save();
@@ -192,7 +198,10 @@ function setupLessons() {
   renderLessonMarks();
   // Open the first lesson not yet done, so a returning reader carries on there
   const next = [...document.querySelectorAll(".lesson")].find((d) => !lessonDone(d.dataset.lesson));
-  if (next && !location.hash) next.open = true;
+  if (next && !location.hash) {
+    next.dataset.auto = "";
+    next.open = true;
+  }
 }
 
 // ---- Practice ----
