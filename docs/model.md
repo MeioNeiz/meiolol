@@ -2716,6 +2716,15 @@ lower bounds, planted pairs came out 0.6-0.9x):
 | matchup top vs middle | 0.61 [0.46, 0.74] | 26 [0, 42], not detected |
 | other 7 cross-role matchups | not detected, 0-0.71 (upper 0.94) | at most 26 (upper 40) |
 
+Cross-role matchup rows sum the two blocks' sds. Only the difference c = cell(r vs
+q)(X, Y) - cell(q vs r)(Y, X) is identified, and the fit splits each c between the two
+blocks in one proportion, so the fitted cells move together and their sds add (at the
+variance estimate's fixed points the split is 0, 1/2 or 1, and the sum equals c's sd while
+the root sum of squares understates it by up to sqrt 2). The verifier (meiolol-53) asks
+for the root sum of squares if the blocks were independent, so learned.md gives the
+cross-role sizes as the range between the two (mid vs bot 0.7-0.9, top vs mid 0.4-0.6)
+until meiolol-tests' crossed-only plant (lanes=2) settles it.
+
 Damage mix: -1.89 ± 0.19 pp per sd of the term (-2.75 per sd of blue minus red), on gold
 at 14 -21 ± 15. Single cells: not reported.
 

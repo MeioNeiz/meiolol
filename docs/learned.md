@@ -29,7 +29,9 @@ How to write a line:
   each champion's own strength. The lane matchups matter most: top vs top (typical
   difference between matchups about 2.5 percentage points of win chance), mid vs mid
   1.9, support vs support 1.3, bot vs bot 1.2, jungle vs jungle 1.1, mid vs the enemy bot
-  and bot vs the enemy support about 0.9. Among allies only the bot laner and support's
+  0.7-0.9, bot vs the enemy support 0.8-0.9 and top vs the enemy mid 0.4-0.6 (cross-role
+  sizes as a range until a planted check settles how to combine the two sides). Among
+  allies only the bot laner and support's
   pairing shows (about 1.3 points); the other nine ally pairings show nothing. A
   champion's own strength spreads 1.6-3.4 points by role (support most). Sure: one
   pre-declared test on 134,375 held-out games (5 forward rounds, every platform): a
@@ -40,8 +42,8 @@ How to write a line:
   look. Designed on the older pin, whose games overlap the early rounds; the gain is
   largest on the newest games. The sizes are typical spreads across pairs, and lower
   bounds: planted pairs came back at 0.6-0.9x; single pairs have 1-3 games each and are
-  not reported. Other ally pairings and cross-role matchups not detected, at most about
-  0.4 and 0.7 points as fitted. Site: lane matchup and bot-lane synergy may become
+  not reported. Other ally pairings and the other cross-role matchups not detected, at
+  most about 0.3 and 0.7 points as fitted. Site: lane matchup and bot-lane synergy may become
   reasons on the admin draft board once the shipped model switches to this table; no
   numbers for single champion pairs. Evidence: docs/model.md "Effects and the CPU
   model", "Additive model on snap-20261013T2253Z", audited by meiolol-53
