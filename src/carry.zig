@@ -46,6 +46,9 @@ pub const Options = struct {
     /// block and the dev cut (meiolol-c1's comp screen joins it per fold)
     fold_table: ?[]const u8 = null,
     plant: ?Plant = null,
+    /// With final: test games (stats.matchKey) an earlier snapshot's looks saw; the test
+    /// rows are also reported without them (SNAP/test-exclude.tsv, lab/looks.zig)
+    exclude: ?*const std.AutoHashMapUnmanaged(u64, void) = null,
 };
 
 /// Winners redrawn from the baseline plus a planted slope per champion-role, normal with
@@ -659,7 +662,7 @@ const Minute = struct {
     truth: []f64 = &.{},
 };
 
-const GameInfo = struct { start: i64, platform: u8 };
+const GameInfo = struct { start: i64, platform: u8, excluded: bool = false };
 
 const Job = struct {
     mi: usize,
@@ -867,7 +870,11 @@ pub fn run(
     for (split.parts(), [_]bool{ false, true }) |part, is_test| for (part) |g| {
         const gm = map.get(g.id) orelse continue;
         const game: u32 = @intCast(games.items.len);
-        try games.append(gpa, .{ .start = g.start, .platform = g.platform });
+        try games.append(gpa, .{
+            .start = g.start,
+            .platform = g.platform,
+            .excluded = if (opts.exclude) |e| e.contains(g.id) else false,
+        });
         n_games[@intFromBool(is_test)] += 1;
         const earlier: [10]u16 = exp.get(g.id) orelse @splat(0);
         for (0..2) |side| for (0..Role.count) |ri| {
@@ -1013,20 +1020,22 @@ pub fn run(
             const d = analysis.pairedGain(dj.scored, dj.sq[0], dj.sq[1]);
             try w.print("| {d} | decided: champion vs role mean (MSE, pp^2) | {d:.3} ± {d:.3} | {d}/5 | {d:.3} ± {d:.3} |\n", .{ minute, g.mean, g.half_width, better, d.mean, d.half_width });
         }
-        if (opts.final) {
+        // The test, then the test minus test-exclude.tsv's games, from the same fits
+        if (opts.final) for ([_]?[]const GameInfo{ null, if (opts.exclude != null) games.items else null }, 0..) |skip, pass| {
+            if (pass == 1 and skip == null) continue;
             const tj = job(jobs, nb, mi, nb - 1);
             for (1..labels.len) |k| {
                 const roles: []const ?u8 = if (k == slope_step) &.{ null, 0, 1, 2, 3, 4 } else &.{null};
                 for (roles) |role| {
                     var t: analysis.PairedSums = .{};
-                    addGames(&t, tj.scored, tj.loss[k - 1], tj.loss[k], role);
+                    addKept(&t, tj.scored, tj.loss[k - 1], tj.loss[k], role, skip);
                     const g = t.gain();
-                    try w.print("| {d} | TEST {s}", .{ minute, labels[k] });
+                    try w.print("| {d} | TEST{s} {s}", .{ minute, if (pass == 1) " minus test-exclude" else "", labels[k] });
                     if (role) |r| try w.print(", {t} rows", .{@as(Role, @fromBackingInt(@intCast(r)))});
                     try w.print(" | {d:.5} ± {d:.5} | | |\n", .{ g.mean, g.half_width });
                 }
             }
-        }
+        };
     }
 
     // Whose seat decides: the every-train fit's weights by role
@@ -1202,6 +1211,11 @@ fn mi_of(minute: u8) usize {
 /// Adds a block's per-game paired sums (rows sorted by game) to pooled sums; with
 /// `role`, only that role's rows
 fn addGames(s: *analysis.PairedSums, rows: []const Row, before: []const f64, after: []const f64, role: ?u8) void {
+    addKept(s, rows, before, after, role, null);
+}
+
+/// addGames without the games `skip` marks excluded
+fn addKept(s: *analysis.PairedSums, rows: []const Row, before: []const f64, after: []const f64, role: ?u8, skip: ?[]const GameInfo) void {
     var i: usize = 0;
     while (i < rows.len) {
         var d: f64 = 0;
@@ -1209,6 +1223,7 @@ fn addGames(s: *analysis.PairedSums, rows: []const Row, before: []const f64, aft
         const g = rows[i].game;
         while (i < rows.len and rows[i].game == g) : (i += 1) {
             if (role) |r| if (rows[i].role != r) continue;
+            if (skip) |gs| if (gs[g].excluded) continue;
             d += before[i] - after[i];
             n += 1;
         }
@@ -1382,4 +1397,20 @@ test "solve" {
     try solve(&a, 2, &x);
     try testing.expectApproxEqAbs(1.0 / 11.0, x[0], 1e-12);
     try testing.expectApproxEqAbs(7.0 / 11.0, x[1], 1e-12);
+}
+
+test "addKept leaves excluded games out of the test sums" {
+    const games = [_]GameInfo{ .{ .start = 0, .platform = 0 }, .{ .start = 1, .platform = 0, .excluded = true }, .{ .start = 2, .platform = 0 } };
+    var rows: [6]Row = undefined;
+    for (&rows, 0..) |*r, i| r.* = .{ .game = @intCast(i / 2), .side = 0, .role = @intCast(i % 2), .champ = 0, .won = true, .exp = 0, .x = @splat(0) };
+    const before = [_]f64{ 0.7, 0.6, 0.9, 0.8, 0.5, 0.7 };
+    const after = [_]f64{ 0.6, 0.6, 0.5, 0.4, 0.6, 0.5 };
+    var all: analysis.PairedSums = .{};
+    addGames(&all, &rows, &before, &after, null);
+    try testing.expectEqual(3, all.games);
+    var kept: analysis.PairedSums = .{};
+    addKept(&kept, &rows, &before, &after, null, &games);
+    try testing.expectEqual(2, kept.games);
+    try testing.expectEqual(4, kept.rows);
+    try testing.expectApproxEqAbs(0.1 + 0.0 - 0.1 + 0.2, kept.total, 1e-12);
 }

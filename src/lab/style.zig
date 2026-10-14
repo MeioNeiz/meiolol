@@ -1014,7 +1014,9 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         f.* = try fitModel(gpa, arena, &ctx, m, fit_idx.items, scored_idx.items, fit_games.items);
         log.info("{s}: {d:.5}", .{ m.name, analysis.mean(f.loss) });
     }
-    if (net_list) |list| try runNets(gpa, arena, io, list, phase, out_dir, &ctx, specs.items[@intFromBool(net_on_b0)], fitted[@intFromBool(net_on_b0)], net_x, fit_idx.items, scored_idx.items, scored_games.items, l.match_ids);
+    // Final: the same predictions on the test minus the games an earlier snapshot's looks saw
+    const keep: ?[]const bool = if (phase == .final) try keepMask(gpa, arena, io, snap, seats, scored_idx.items, l.match_ids) else null;
+    if (net_list) |list| try runNets(gpa, arena, io, list, phase, out_dir, &ctx, specs.items[@intFromBool(net_on_b0)], fitted[@intFromBool(net_on_b0)], net_x, fit_idx.items, scored_idx.items, scored_games.items, keep, l.match_ids);
 
     const stem = if (phase == .final) "final" else "dev";
     const path = try std.fs.path.join(arena, &.{ out_dir, try std.fmt.allocPrint(arena, "{s}-report.md", .{stem}) });
@@ -1035,12 +1037,12 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         stem, n_fit_games, n_scored_games, if (phase == .final) "test" else "dev cut", missing, until_minute - 1, until_minute,
     });
     try w.writeAll("Win log loss per row; gain = drop from b0 (or from champion + state where named), " ++
-        "± 95% clustered by game.\n\n| model | log loss | gain vs b0 | gain vs champion + state |\n| --- | --- | --- | --- |\n");
-    for (specs.items, fitted) |m, f| {
-        const g = analysis.pairedGain(scored_games.items, fitted[1].loss, f.loss);
-        const g0 = analysis.pairedGain(scored_games.items, fitted[0].loss, f.loss);
-        try w.print("| {s} | {d:.5} | {d:.5} ± {d:.5} | {d:.5} ± {d:.5} |\n", .{ m.name, analysis.mean(f.loss), g.mean, g.half_width, g0.mean, g0.half_width });
-    }
+        "± 95% clustered by game.\n\n");
+    try specTable(arena, w, specs.items, fitted, scored_games.items, null);
+    if (keep) |kp| {
+        try w.print("\nTest minus {s}:\n\n", .{looks.exclude_name});
+        try specTable(arena, w, specs.items, fitted, scored_games.items, kp);
+    } else if (phase == .final) try w.print("\nNo {s}: the test numbers above are the only ones.\n", .{looks.exclude_name});
 
     try w.writeAll("\nResidual variance share of the first components, by role:\n\n| role |");
     for (0..n_pc) |j| try w.print(" pc{d} |", .{j + 1});
@@ -1090,6 +1092,49 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     return 0;
 }
 
+fn specTable(arena: std.mem.Allocator, w: *Io.Writer, specs: []const Spec, fitted: []const Fitted, games: []const GameRow, keep: ?[]const bool) !void {
+    try w.writeAll("| model | log loss | gain vs b0 | gain vs champion + state |\n| --- | --- | --- | --- |\n");
+    for (specs, fitted) |m, f| {
+        const g = try keptGain(arena, games, keep, fitted[1].loss, f.loss);
+        const g0 = try keptGain(arena, games, keep, fitted[0].loss, f.loss);
+        try w.print("| {s} | {d:.5} | {d:.5} ± {d:.5} | {d:.5} ± {d:.5} |\n", .{ m.name, keptMean(f.loss, keep), g.mean, g.half_width, g0.mean, g0.half_width });
+    }
+}
+
+/// Per scored row: false when its game is in SNAP/test-exclude.tsv; null when there is none
+fn keepMask(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, snap: []const u8, seats: []const Seat, scored_idx: []const u32, match_ids: []const []const u8) !?[]const bool {
+    var exclude = try looks.Exclude.load(gpa, io, Io.Dir.cwd(), snap) orelse return null;
+    defer exclude.deinit(gpa);
+    const keep = try arena.alloc(bool, scored_idx.len);
+    for (keep, scored_idx) |*k, si| k.* = !exclude.has(match_ids[seats[si].game]);
+    return keep;
+}
+
+/// pairedGain over the kept rows only, so a dropped game doesn't count as a zero
+fn keptGain(arena: std.mem.Allocator, games: []const GameRow, keep: ?[]const bool, before: []const f64, after: []const f64) !analysis.Gain {
+    const kp = keep orelse return analysis.pairedGain(games, before, after);
+    var g: std.ArrayList(GameRow) = .empty;
+    var b: std.ArrayList(f64) = .empty;
+    var a: std.ArrayList(f64) = .empty;
+    for (kp, games, before, after) |k, gr, x, y| if (k) {
+        try g.append(arena, gr);
+        try b.append(arena, x);
+        try a.append(arena, y);
+    };
+    return analysis.pairedGain(g.items, b.items, a.items);
+}
+
+fn keptMean(xs: []const f64, keep: ?[]const bool) f64 {
+    const kp = keep orelse return analysis.mean(xs);
+    var sum: f64 = 0;
+    var n: f64 = 0;
+    for (xs, kp) |x, k| if (k) {
+        sum += x;
+        n += 1;
+    };
+    return sum / n;
+}
+
 /// Residual nets over b0's model (its log-odds as the offset; champion + state for the
 /// positive control), each config in `list`
 /// ("all" or 1-based numbers): inner validation = the latest tenth of fit games
@@ -1107,6 +1152,7 @@ fn runNets(
     fit_idx: []const u32,
     scored_idx: []const u32,
     scored_games: []const GameRow,
+    keep: ?[]const bool,
     match_ids: []const []const u8,
 ) !void {
     const seats = ctx.seats;
@@ -1189,6 +1235,19 @@ fn runNets(
         log.info("net {d}: {d:.5} ± {d:.5} vs b0", .{ n, g.mean, g.half_width });
         try preds.append(arena, p);
         try names.append(arena, n);
+    }
+    if (keep) |kp| {
+        try w.print("\nTest minus {s}, same predictions:\n\n| config | log loss | gain vs offset |\n| --- | --- | --- |\n", .{looks.exclude_name});
+        for (names.items, preds.items) |n, p| {
+            const loss = try arena.alloc(f64, scored_idx.len);
+            for (loss, p, scored_idx) |*l, pp, i| l.* = analysis.logLoss(pp, y[i]);
+            const g = try keptGain(arena, scored_games, kp, base, loss);
+            try w.print("| {d} | {d:.5} | {d:.5} ± {d:.5} |\n", .{ n, keptMean(loss, kp), g.mean, g.half_width });
+        }
+        try w.flush();
+    } else if (phase == .final) {
+        try w.print("\nNo {s}: the test numbers above are the only ones.\n", .{looks.exclude_name});
+        try w.flush();
     }
     log.info("wrote {s}", .{path});
 
@@ -1540,4 +1599,20 @@ test "jacobi eigenvectors" {
 
 test {
     _ = stylenet;
+}
+
+test "kept gain: the test minus excluded games equals the gain on the kept games alone" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const games = [_]GameRow{ .{ .game = 0 }, .{ .game = 0 }, .{ .game = 1 }, .{ .game = 1 }, .{ .game = 2 }, .{ .game = 2 } };
+    const before = [_]f64{ 0.7, 0.6, 0.9, 0.8, 0.5, 0.7 };
+    const after = [_]f64{ 0.6, 0.6, 0.5, 0.4, 0.6, 0.5 };
+    const keep = [_]bool{ true, true, false, false, true, true };
+    const g = try keptGain(arena.allocator(), &games, &keep, &before, &after);
+    const kg = [_]GameRow{ .{ .game = 0 }, .{ .game = 0 }, .{ .game = 2 }, .{ .game = 2 } };
+    const want = analysis.pairedGain(&kg, &.{ 0.7, 0.6, 0.5, 0.7 }, &.{ 0.6, 0.6, 0.6, 0.5 });
+    try testing.expectEqual(want.mean, g.mean);
+    try testing.expectEqual(want.half_width, g.half_width);
+    try testing.expectApproxEqAbs(0.6, keptMean(&after, &keep) + 0.025, 1e-12);
+    try testing.expectEqual(analysis.pairedGain(&games, &before, &after).mean, (try keptGain(arena.allocator(), &games, null, &before, &after)).mean);
 }

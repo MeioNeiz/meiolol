@@ -81,6 +81,7 @@ pub const exclude_name = "test-exclude.tsv";
 /// snapshot's test looks saw. Every --final reports the full test and the test minus
 /// these (docs/model.md, the 2253Z pin), from the same predictions
 pub const Exclude = struct {
+    /// stats.matchKey of each match id
     keys: std.AutoHashMapUnmanaged(u64, void) = .empty,
 
     /// null when SNAP has none

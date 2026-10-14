@@ -222,7 +222,9 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             try addUnits(gpa, &data, players, c, .{ .before = lo, .block = .{ lo, hi } }, &units, &wins, w);
         }
     }
-    try analyse(gpa, arena, io, &data, units.items, if (folds == 0 and !final) &wins else null, final, w);
+    var exclude = if (final) try looks.Exclude.load(gpa, io, Io.Dir.cwd(), snap) else null;
+    defer if (exclude) |*e| e.deinit(gpa);
+    try analyse(gpa, arena, io, &data, units.items, if (folds == 0 and !final) &wins else null, final, if (exclude) |*e| e else null, w);
     try w.flush();
     return 0;
 }
@@ -398,6 +400,10 @@ pub fn offset(
     }
 }
 
+fn keep(d: *const rows.Data, exclude: ?*const looks.Exclude, u: Unit) bool {
+    return if (exclude) |e| !e.has(d.games[u.game].match_id) else true;
+}
+
 fn inBlock(c: harness.Cuts, block: [2]i64, g: rows.Game) bool {
     return harness.visible(.dev, c, g) and g.start >= block[0] and g.start < block[1];
 }
@@ -410,6 +416,7 @@ fn analyse(
     unit_list: []const Unit,
     plumbing: ?*const Wins,
     final: bool,
+    exclude: ?*const looks.Exclude,
     w: *Io.Writer,
 ) !void {
     const n_units = unit_list.len;
@@ -434,22 +441,31 @@ fn analyse(
     try strengthControl(gpa, arena, units.items, resid, in_a, w);
     if (plumbing) |wins| try control(gpa, d, wins, units.items, resid, in_a, w);
     if (final) {
-        // The pre-declared contrast and its two sides, nothing else
-        try tableHead(w, "magic share");
-        for ([_][]const u8{ "lopsided (<20% or 60%+)", "<20%", "60%+", "balanced (20-60%)" }, 0..) |label, b| {
-            for (in_a, units.items) |*a, u| a.* = switch (b) {
-                0 => lopsided(u),
-                1 => u.magic_share < 0.2,
-                2 => u.magic_share >= 0.6,
-                else => !lopsided(u),
-            };
-            try binRow(w, label, units.items, res, in_a);
+        // The pre-declared contrast and its two sides, nothing else: on the test, then on
+        // the test minus the games an earlier snapshot's looks saw (same predictions)
+        for (0..2) |pass| {
+            if (pass == 1 and exclude == null) {
+                try w.print("\nno {s}: the test numbers above are the only ones\n", .{looks.exclude_name});
+                break;
+            }
+            const ex = if (pass == 1) exclude else null;
+            if (pass == 1) try w.print("\n## test minus {s}\n\n", .{looks.exclude_name});
+            try tableHead(w, "magic share");
+            for ([_][]const u8{ "lopsided (<20% or 60%+)", "<20%", "60%+", "balanced (20-60%)" }, 0..) |label, b| {
+                for (in_a, units.items) |*a, u| a.* = keep(d, ex, u) and switch (b) {
+                    0 => lopsided(u),
+                    1 => u.magic_share < 0.2,
+                    2 => u.magic_share >= 0.6,
+                    else => !lopsided(u),
+                };
+                try binRow(w, label, units.items, res, in_a);
+            }
+            for (in_a, in_b, units.items) |*a, *b, u| {
+                a.* = keep(d, ex, u) and lopsided(u);
+                b.* = keep(d, ex, u) and !lopsided(u);
+            }
+            try contrastLine(w, "PRE-DECLARED lopsided minus balanced", units.items, res, in_a, in_b);
         }
-        for (in_a, in_b, units.items) |*a, *b, u| {
-            a.* = lopsided(u);
-            b.* = !a.*;
-        }
-        try contrastLine(w, "PRE-DECLARED lopsided minus balanced", units.items, res, in_a, in_b);
         return;
     }
 

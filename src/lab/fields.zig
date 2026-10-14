@@ -30,7 +30,8 @@ pub const usage =
     \\                                  draft-time and post-game value on the dev cut
     \\                                  (lab/fields.zig), tables in OUT; --final scores
     \\                                  LIST's lines (a1|a2|b TAB field) once on test,
-    \\                                  A1 also over PREDS (3c-team2.tsv) when given
+    \\                                  A1 also over PREDS (3c-team2.tsv) when given;
+    \\                                  final-excl-*.tsv: the test minus test-exclude.tsv
     \\
 ;
 
@@ -1400,18 +1401,10 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             },
         };
     }
-    const stem = if (phase == .final) "final" else "dev";
-
-    const b = try lensB(gpa, io, &t, b_fields.items);
-    defer gpa.free(b);
-    std.mem.sort(BResult, b, {}, byGainB);
-    try writeFile(gpa, io, out_dir, try std.fmt.allocPrint(arena, "{s}-b.tsv", .{stem}), writeB, .{ &t, b });
-
-    const a2 = try lensA2(gpa, io, &t, a2_fields.items);
-    defer gpa.free(a2);
-    std.mem.sort(A2Result, a2, {}, byGainA2);
-    try writeFile(gpa, io, out_dir, try std.fmt.allocPrint(arena, "{s}-a2.tsv", .{stem}), writeA2, .{ &t, a2 });
-
+    // Final: the test, then the test minus the games an earlier snapshot's looks saw. Fits
+    // read fit seats only, so the second pass rescoring fewer seats keeps the same models
+    var exclude = if (phase == .final) try looks.Exclude.load(gpa, io, Io.Dir.cwd(), snap) else null;
+    defer if (exclude) |*e| e.deinit(gpa);
     var ref_arena: std.heap.ArenaAllocator = .init(gpa);
     defer ref_arena.deinit();
     var ref: ?Ref = null;
@@ -1420,9 +1413,35 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         if (phase != .final) return error.RefIsTestOnly;
         ref = try loadRef(gpa, ref_arena.allocator(), io, p);
     }
-    const a1 = try lensA1(gpa, &t, &data, a1_fields.items, if (ref) |*r| r else null);
-    defer gpa.free(a1);
-    try writeFile(gpa, io, out_dir, try std.fmt.allocPrint(arena, "{s}-a1.tsv", .{stem}), writeA1, .{ &t, a1 });
+    for (0..2) |pass| {
+        if (pass == 1) {
+            const e = if (exclude) |*e| e else {
+                if (phase == .final) log.info("no {s}: {s}'s final tables are the only ones", .{ looks.exclude_name, out_dir });
+                break;
+            };
+            var dropped: usize = 0;
+            for (t.seats) |*s| if (s.scored and e.has(data.games[s.game].match_id)) {
+                s.scored = false;
+                dropped += 1;
+            };
+            log.info("test minus {s}: {d} scored seats dropped", .{ looks.exclude_name, dropped });
+        }
+        const stem = if (phase == .dev) "dev" else if (pass == 0) "final" else "final-excl";
+
+        const b = try lensB(gpa, io, &t, b_fields.items);
+        defer gpa.free(b);
+        std.mem.sort(BResult, b, {}, byGainB);
+        try writeFile(gpa, io, out_dir, try std.fmt.allocPrint(arena, "{s}-b.tsv", .{stem}), writeB, .{ &t, b });
+
+        const a2 = try lensA2(gpa, io, &t, a2_fields.items);
+        defer gpa.free(a2);
+        std.mem.sort(A2Result, a2, {}, byGainA2);
+        try writeFile(gpa, io, out_dir, try std.fmt.allocPrint(arena, "{s}-a2.tsv", .{stem}), writeA2, .{ &t, a2 });
+
+        const a1 = try lensA1(gpa, &t, &data, a1_fields.items, if (ref) |*r| r else null);
+        defer gpa.free(a1);
+        try writeFile(gpa, io, out_dir, try std.fmt.allocPrint(arena, "{s}-a1.tsv", .{stem}), writeA1, .{ &t, a1 });
+    }
     return 0;
 }
 

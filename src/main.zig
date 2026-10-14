@@ -1018,6 +1018,9 @@ fn cmdCarry(c: *Cmd) !u8 {
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
     if (o.final) _ = try test_looks.record(c.init.gpa, io, std.Io.Dir.cwd(), c.data_dir, "meiolol carry", c.args, &stdout.interface);
+    var exclude = if (o.final) try test_looks.Exclude.load(c.init.gpa, io, std.Io.Dir.cwd(), c.data_dir) else null;
+    defer if (exclude) |*e| e.deinit(c.init.gpa);
+    if (exclude) |*e| o.exclude = &e.keys;
     try carry.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
     try stdout.interface.flush();
     return 0;
