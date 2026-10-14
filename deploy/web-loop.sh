@@ -78,6 +78,10 @@ storage_scan() {
 last_patch='' last_games=0 last_upload=0
 patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0 last_example=0
 last_builds=0 builds_patch='' builds_pid='' storage_pid='' last_lean=0 lean_pid=''
+# The patch otherwise comes from the round's site build, after curves: without it a
+# restart's first curves pass reads every patch (~50 min) and leaves curves-<patch>.bin
+# alone, so start from the newest of those
+patch=$(ls -t data/export/curves-*.bin 2> /dev/null | head -n 1 | sed -E 's#.*/curves-(.*)\.bin$#\1#')
 while true; do
     now=$(date +%s)
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
