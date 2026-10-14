@@ -64,6 +64,8 @@ pub const Matchup = struct {
     games: u32,
     /// Estimated gold difference at lane_minute, me minus them
     gold: curvesfile.Estimate,
+    /// 10th and 90th percentile of the games' gold difference then: 8 games in 10
+    range: [2]i16,
     lane_games: u32,
     ahead: u32,
     thin: bool,
@@ -178,10 +180,12 @@ fn matchup(arena: std.mem.Allocator, v: View, bracket: Bracket) !Matchup {
         });
     }
     const lane = v.lane();
+    const at = v.minute(curvesfile.lane_minute - 1).gold;
     return .{
         .bracket = bracket,
         .games = v.games(),
         .gold = v.estimate(.gold, curvesfile.lane_minute - 1),
+        .range = .{ at.p10, at.p90 },
         .lane_games = lane.games,
         .ahead = lane.ahead,
         .thin = v.games() < thin_games or v.own() < 0.5,
@@ -189,19 +193,22 @@ fn matchup(arena: std.mem.Allocator, v: View, bracket: Bracket) !Matchup {
     };
 }
 
-/// "At 14 min Ahri is typically 250 gold behind Syndra (±80) and ahead in 44% of
-/// 1234 games (Gold to Emerald, last 30 days)."
+/// "At 14 min Ahri is typically 250 gold behind Syndra (8 games in 10 between -1400 and
+/// +900) and ahead in 44% of 1234 games (Gold to Emerald, last 30 days)."
 fn sentence(arena: std.mem.Allocator, m: Matchup, me: []const u8, them: []const u8, when: []const u8) ![]const u8 {
     var aw: std.Io.Writer.Allocating = .init(arena);
     const w = &aw.writer;
     try w.print("At {d} min {s} is typically ", .{ curvesfile.lane_minute, me });
     try gold(w, m.gold.mean);
-    try w.print(" {s} (±{d})", .{ them, 2 * @as(u32, m.gold.se) });
+    try w.print(" {s}", .{them});
     if (m.thin) {
         try w.print(", mostly from how both champions do against everyone: {d} game{s}", .{
             m.games, if (m.games == 1) "" else "s",
         });
     } else if (m.lane_games > 0) {
+        try w.print(" (8 games in 10 between {s}{d} and {s}{d})", .{
+            if (m.range[0] > 0) "+" else "", m.range[0], if (m.range[1] > 0) "+" else "", m.range[1],
+        });
         try w.print(" and ahead in {d}% of {d} games", .{ percent(m.ahead, m.lane_games), m.games });
     }
     try w.print(" ({s}, {s}).", .{ m.bracket.label(), when });
@@ -421,9 +428,10 @@ test "known opponent: sentence and curve" {
     try testing.expectEqual(20, m.points.len);
     try testing.expect(m.gold.mean > 0);
     try testing.expectEqual(225, m.ahead);
+    try testing.expect(m.range[0] < m.gold.mean and m.gold.mean < m.range[1]);
     try testing.expectEqualStrings("last 30 days", card.period);
     try testing.expect(std.mem.startsWith(u8, card.sentence, "At 14 min Darius is typically "));
-    try testing.expect(std.mem.indexOf(u8, card.sentence, " gold ahead of Garen (±") != null);
+    try testing.expect(std.mem.indexOf(u8, card.sentence, " gold ahead of Garen (8 games in 10 between ") != null);
     try testing.expect(std.mem.endsWith(u8, card.sentence, "% of 300 games (Gold to Emerald, last 30 days)."));
 }
 

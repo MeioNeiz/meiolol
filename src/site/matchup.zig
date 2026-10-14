@@ -337,22 +337,21 @@ fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
         const e = v.estimate(.gold, i);
         // The share in the thin case is raw and can disagree with a line that leans on the
         // baseline
-        break :blk tpl.t("At {minute} minutes {x} is on average {amount} against {y} (±{se}{thin}{own}", .{
+        break :blk tpl.t("At {minute} minutes {x} is on average {amount} against {y}{thin}{own}", .{
             .minute = curvesfile.lane_minute,
             .x = x.name,
             .amount = tpl.call(amount, .{ e.mean, "gold" }),
             .y = y.name,
-            .se = 2 * @as(u32, e.se),
-            .thin = tpl.when(thin(v), tpl.t("), mostly from how both champions do against everyone. In these {games} game{s} {x} led in gold at {minute} minutes in {ahead}. ", .{
+            .thin = tpl.when(thin(v), tpl.t(", mostly from how both champions do against everyone. In these {games} game{s} {x} led in gold at {minute} minutes in {ahead}. ", .{
                 .games = v.games(),
                 .s = plural(v.games()),
                 .x = x.name,
                 .minute = curvesfile.lane_minute,
                 .ahead = ahead,
             })),
-            .own = tpl.when(!thin(v), tpl.t("; middle half of games: {p25} to {p75}), and leads in gold in {ahead} of games. ", .{
-                .p25 = m.gold.p25,
-                .p75 = m.gold.p75,
+            .own = tpl.when(!thin(v), tpl.t(" (8 games in 10 between {p10} and {p90}), and leads in gold in {ahead} of games. ", .{
+                .p10 = tpl.call(signed, .{m.gold.p10}),
+                .p90 = tpl.call(signed, .{m.gold.p90}),
                 .ahead = ahead,
             })),
         });
@@ -381,6 +380,10 @@ fn amount(w: *Writer, value: i16, unit: []const u8) !void {
     });
 }
 
+fn signed(w: *Writer, value: i32) !void {
+    try tpl.render(w, "{sign}{value}", .{ .sign = if (value > 0) "+" else "", .value = value });
+}
+
 /// Minutes drawn: while at least minuteFloor games are still going
 fn reach(v: View) usize {
     var last: usize = 0;
@@ -391,17 +394,27 @@ fn reach(v: View) usize {
 /// The band at minute i: the curve's own middle half of games once it has thin_games,
 /// else the role's middle half (both sides, centred on 0) around the estimate
 fn band(v: View, base: ?View, metric: curvesfile.Metric, i: usize) [2]i32 {
-    const m = v.minute(i);
-    if (v.games() >= thin_games or base == null) {
-        const q = quartile(m, metric);
-        return .{ q.p25, q.p75 };
-    }
-    const e: i32 = m.est[@backingInt(metric)].mean;
-    const q = quartile(base.?.minute(i), metric);
-    return .{ e + q.p25, e + q.p75 };
+    const q = spreadAt(v, base, metric, i);
+    return .{ q.p25, q.p75 };
 }
 
-fn quartile(m: curvesfile.Minute, metric: curvesfile.Metric) curvesfile.Quartiles {
+/// Where 8 games in 10 end at minute i, from the same games as band
+pub fn range(v: View, base: ?View, metric: curvesfile.Metric, i: usize) [2]i32 {
+    const q = spreadAt(v, base, metric, i);
+    return .{ q.p10, q.p90 };
+}
+
+const Spread32 = struct { p10: i32, p25: i32, p75: i32, p90: i32 };
+
+fn spreadAt(v: View, base: ?View, metric: curvesfile.Metric, i: usize) Spread32 {
+    const m = v.minute(i);
+    const own = v.games() >= thin_games or base == null;
+    const q = spreadOf(if (own) m else base.?.minute(i), metric);
+    const e: i32 = if (own) 0 else m.est[@backingInt(metric)].mean;
+    return .{ .p10 = e + q.p10, .p25 = e + q.p25, .p75 = e + q.p75, .p90 = e + q.p90 };
+}
+
+fn spreadOf(m: curvesfile.Minute, metric: curvesfile.Metric) curvesfile.Spread {
     return switch (metric) {
         .gold => m.gold,
         .xp => m.xp,
@@ -490,11 +503,12 @@ fn caption(w: *Writer, v: View, base: ?View, metric: curvesfile.Metric, x: Champ
     });
     if (last >= curvesfile.lane_minute) {
         const e = v.estimate(metric, curvesfile.lane_minute - 1);
-        try tpl.renderPart(w, ". At {minute} min: {sign}{mean} ±{se} (2 standard errors of the average)", .{
+        const r = range(v, base, metric, curvesfile.lane_minute - 1);
+        try tpl.renderPart(w, ". At {minute} min: average {mean}, 8 games in 10 between {p10} and {p90}", .{
             .minute = curvesfile.lane_minute,
-            .sign = if (e.mean > 0) "+" else "",
-            .mean = e.mean,
-            .se = 2 * @as(u32, e.se),
+            .mean = tpl.call(signed, .{e.mean}),
+            .p10 = tpl.call(signed, .{r[0]}),
+            .p90 = tpl.call(signed, .{r[1]}),
         });
     }
     try ended(w, if (own) v else base.?, last);
@@ -593,10 +607,11 @@ fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
         const has_gold = v.minute(i).n >= minuteFloor(v);
         const gold = if (has_gold) blk: {
             const e = v.estimate(.gold, i);
-            break :blk tpl.t("{sign}{mean} ±{se}", .{
-                .sign = if (e.mean > 0) "+" else "",
-                .mean = e.mean,
-                .se = 2 * @as(u32, e.se),
+            const g = range(v, curves.baseline(r, b), .gold, i);
+            break :blk tpl.t("{mean} <small>{p10} to {p90}</small>", .{
+                .mean = tpl.call(signed, .{e.mean}),
+                .p10 = tpl.call(signed, .{g[0]}),
+                .p90 = tpl.call(signed, .{g[1]}),
             });
         } else null;
         try tpl.render(w,
@@ -614,7 +629,7 @@ fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
     }
     try tpl.renderPart(w,
         \\</tbody></table></div>
-        \\<p class="muted">Rank is the median visible tier of the players in each game. Gold is the estimated average ±2 standard errors; a rank's estimate leans on the all-ranks one until it has games of its own. Rows under {thin} games, or mostly baseline, are greyed out.</p>
+        \\<p class="muted">Rank is the median visible tier of the players in each game. Gold is the estimated average, then where 8 games in 10 end (the 10th to 90th percentile); a rank's estimate leans on the all-ranks one until it has games of its own. Rows under {thin} games, or mostly baseline, are greyed out.</p>
         \\
     , .{ .thin = thin_games });
 }

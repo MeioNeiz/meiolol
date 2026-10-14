@@ -1,7 +1,7 @@
 //! Curves file: how each lane matchup unfolds, minute by minute, for one patch (or
 //! patch range). Written beside the model file by `meiolol curves`.
 //!
-//! Format v4, little-endian:
+//! Format v5, little-endian:
 //!   magic "MEIOCURV", version u32, minutes u32 (m), games u32, curves u32 (k),
 //!   patch [16]u8 zero padded
 //!   Fit: per role the estimation's variance parameters and smoothing (curvefit.zig)
@@ -19,7 +19,7 @@ pub const curvefit = @import("curvefit.zig");
 const log = std.log.scoped(.curves);
 
 pub const magic = "MEIOCURV";
-pub const version: u32 = 4;
+pub const version: u32 = 5;
 pub const patch_len = 16;
 /// Lane phase and the early mid game; later minutes mostly measure who is still playing
 pub const max_minutes = 25;
@@ -112,7 +112,8 @@ pub fn medianRank(ranks: []usize) ?usize {
     return ranks[ranks.len / 2];
 }
 
-pub const Quartiles = extern struct { p25: i16 = 0, p50: i16 = 0, p75: i16 = 0 };
+/// Percentiles of the games' differences: p10 to p90 is where 8 games in 10 end up
+pub const Spread = extern struct { p10: i16 = 0, p25: i16 = 0, p50: i16 = 0, p75: i16 = 0, p90: i16 = 0 };
 
 /// Gold, XP, CS: the order of Minute.est and the fit's metric index
 pub const Metric = enum(u2) { gold, xp, cs };
@@ -125,11 +126,11 @@ pub const Estimate = extern struct { mean: i16 = 0, se: u16 = 0 };
 pub const Minute = extern struct {
     /// Games still going at this minute
     n: u32,
-    /// Raw quartiles of the games' differences: the spread band
-    gold: Quartiles,
-    xp: Quartiles,
+    /// Raw percentiles of the games' differences: the spread band
+    gold: Spread,
+    xp: Spread,
     /// Lane minions plus jungle monsters
-    cs: Quartiles,
+    cs: Spread,
     est: [metrics]Estimate = @splat(.{}),
     _pad: u16 = 0,
 };
@@ -381,7 +382,7 @@ fn logFit(role: Role, rf: *const curvefit.RoleFit) void {
 
 /// The role's baseline per bracket: each lane from both sides, so the buckets are
 /// symmetric and games count every laner. Minutes hold the role's spread: n lanes
-/// times two and quartiles of the differences from both sides (median 0)
+/// times two and percentiles of the differences from both sides (median 0)
 fn baselines(
     gpa: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -421,9 +422,12 @@ fn baselines(
         for (0..max_minutes) |i| {
             var m: Minute = .{ .n = 2 * going[i], .gold = .{}, .xp = .{}, .cs = .{} };
             inline for (.{ "gold", "xp", "cs" }, 0..) |field, mi| {
-                // Both sides: the 75th percentile is the median of |difference|
-                const p75 = medianOfCounts(&hist[mi * max_minutes + i], going[i]);
-                @field(m, field) = .{ .p25 = -p75, .p50 = 0, .p75 = p75 };
+                // Both sides: the 75th percentile is the median of |difference|, the 90th
+                // its 80th percentile
+                const counts = &hist[mi * max_minutes + i];
+                const p75 = rankOfCounts(counts, (going[i] + 1) / 2);
+                const p90 = rankOfCounts(counts, (4 * going[i] + 4) / 5);
+                @field(m, field) = .{ .p10 = -p90, .p25 = -p75, .p50 = 0, .p75 = p75, .p90 = p90 };
             }
             try out.appendSlice(gpa, std.mem.asBytes(&m));
         }
@@ -432,10 +436,9 @@ fn baselines(
     return n;
 }
 
-/// Nearest-rank median of `total` values counted by value
-fn medianOfCounts(counts: *const [1 << 15]u32, total: u32) i16 {
-    if (total == 0) return 0;
-    const rank = (total + 1) / 2;
+/// The value at nearest rank `rank` (1-based) of the values counted by value; 0 when none
+fn rankOfCounts(counts: *const [1 << 15]u32, rank: u32) i16 {
+    if (rank == 0) return 0;
     var seen: u32 = 0;
     for (counts, 0..) |c, v| {
         seen += c;
@@ -522,7 +525,7 @@ fn curve(
         inline for (.{ "gold", "xp", "cs" }) |field| {
             scratch.clearRetainingCapacity();
             for (lanes) |l| if (l.minutes > i) try scratch.append(gpa, @field(l, field)[i]);
-            @field(m, field) = quartiles(scratch.items);
+            @field(m, field) = spread(scratch.items);
         }
         m.n = @intCast(scratch.items.len);
         if (m.n > 0) for (&m.est, est) |*e, points| {
@@ -549,14 +552,16 @@ fn medianSeconds(gpa: std.mem.Allocator, lanes: []const Lane, comptime field: []
 }
 
 /// Nearest rank (the value at rank ceil(q n)); sorts `values`. Zeros when empty
-fn quartiles(values: []i16) Quartiles {
+fn spread(values: []i16) Spread {
     const n = values.len;
-    if (n == 0) return .{ .p25 = 0, .p50 = 0, .p75 = 0 };
+    if (n == 0) return .{};
     std.mem.sort(i16, values, {}, std.sort.asc(i16));
     return .{
+        .p10 = values[(n + 9) / 10 - 1],
         .p25 = values[(n + 3) / 4 - 1],
         .p50 = values[(n + 1) / 2 - 1],
         .p75 = values[(3 * n + 3) / 4 - 1],
+        .p90 = values[(9 * n + 9) / 10 - 1],
     };
 }
 
@@ -781,8 +786,8 @@ pub const View = struct {
         return @as(f64, @floatFromInt(v.curve.header.own)) / 1000;
     }
 
-    fn neg(q: Quartiles) Quartiles {
-        return .{ .p25 = -q.p75, .p50 = -q.p50, .p75 = -q.p25 };
+    fn neg(q: Spread) Spread {
+        return .{ .p10 = -q.p90, .p25 = -q.p75, .p50 = -q.p50, .p75 = -q.p25, .p90 = -q.p10 };
     }
 };
 
@@ -849,13 +854,13 @@ test "round trip, sides and brackets" {
     try testing.expectEqual([2]u16{ 360, 420 }, darius.level6());
     const m14 = darius.minute(lane_minute - 1);
     try testing.expectEqual(4, m14.n);
-    try testing.expectEqual(Quartiles{ .p25 = 100, .p50 = 300, .p75 = 700 }, m14.gold);
+    try testing.expectEqual(Spread{ .p10 = -500, .p25 = 100, .p50 = 300, .p75 = 700, .p90 = 700 }, m14.gold);
     try testing.expectEqual(0, darius.minute(20).n);
 
     const garen = c.get(.top, .all, 86, 122).?;
     try testing.expect(!garen.flipped);
     try testing.expectEqual(1, garen.wins());
-    const garen_gold: Quartiles = .{ .p25 = -700, .p50 = -300, .p75 = -100 };
+    const garen_gold: Spread = .{ .p10 = -700, .p25 = -700, .p50 = -300, .p75 = -100, .p90 = 500 };
     try testing.expectEqual(garen_gold, garen.minute(lane_minute - 1).gold);
     try testing.expectEqual(1, garen.lane().ahead);
     try testing.expectEqual([2]u16{ 420, 360 }, garen.level6());
@@ -870,11 +875,13 @@ test "round trip, sides and brackets" {
     try testing.expectEqual(Counts{ .games = 6, .wins = 3 }, base.comeback(.fifteen, 2));
     try testing.expectEqual(Counts{ .games = 2, .wins = 1 }, base.comeback(.fifteen, 1));
     try testing.expect(c.baseline(.jungle, .all) == null);
-    // Baseline minutes: every lane from both sides, quartiles symmetric
+    // Baseline minutes: every lane from both sides, percentiles symmetric
     const bm = base.minute(lane_minute - 1);
     try testing.expectEqual(10, bm.n);
     try testing.expectEqual(0, bm.gold.p50);
     try testing.expectEqual(-bm.gold.p25, bm.gold.p75);
+    try testing.expectEqual(-bm.gold.p10, bm.gold.p90);
+    try testing.expect(bm.gold.p90 >= bm.gold.p75);
 
     // Estimates flip with the side; the fit is in the file
     const de = darius.estimate(.gold, lane_minute - 1);

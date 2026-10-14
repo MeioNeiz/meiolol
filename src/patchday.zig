@@ -64,7 +64,7 @@ pub fn twoProportionZ(a: Counts, b: Counts) f64 {
 
 /// Standard error of a median from the interquartile range, assuming a roughly normal
 /// spread: sd = IQR / 1.349, se = 1.2533 sd / sqrt(n)
-pub fn medianSe(q: curvesfile.Quartiles, n: u32) f64 {
+pub fn medianSe(q: curvesfile.Spread, n: u32) f64 {
     const iqr: f64 = @floatFromInt(@as(i32, q.p75) - q.p25);
     return 1.2533 * (iqr / 1.349) / @sqrt(@as(f64, @floatFromInt(@max(n, 1))));
 }

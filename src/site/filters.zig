@@ -11,6 +11,7 @@ const store = @import("store");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
+const matchup = @import("matchup.zig");
 const stats = @import("../stats.zig");
 
 const Role = core.Role;
@@ -352,10 +353,12 @@ fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches
             var n: usize = 0;
             for (Role.all) |r| for (site.champs) |other| {
                 const view = curves.get(r, cr[0], ch.id, other.id) orelse continue;
-                const e = view.estimate(.gold, core.curvesfile.lane_minute - 1);
+                const i = core.curvesfile.lane_minute - 1;
+                const e = view.estimate(.gold, i);
+                const g = matchup.range(view, curves.baseline(r, cr[0]), .gold, i);
                 if (n > 0) try w.writeByte(',');
                 n += 1;
-                try w.print("[{d},{d},{d},{d}]", .{ @backingInt(r), other.id, e.mean, e.se });
+                try w.print("[{d},{d},{d},{d},{d},{d}]", .{ @backingInt(r), other.id, e.mean, e.se, g[0], g[1] });
             };
             try w.writeByte(']');
         }

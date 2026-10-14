@@ -92,9 +92,10 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\bracket, or games by experienced players, start from the all-ranks, all-games line
         \\in the same way. Finally each line is smoothed across minutes, with a strength
         \\chosen by fitting on half of the games and checking against the other half.</li>
-        \\<li><b>Uncertainty</b>: the "±" after an average is two standard errors of that
-        \\average: how far it may be from the truth. The band is something else: how much
-        \\single games differ.</li>
+        \\<li><b>Spread</b>: after an average, "8 games in 10" is where single games end up,
+        \\the 10th to 90th percentile of this matchup's games (the role's spread around
+        \\the line while it has few of its own); the band is the middle half. A lead is
+        \\coloured only when the average is more than two standard errors from even.</li>
         \\<li><b>Games still going</b>: surrender opens at 15 minutes, so before it nearly
         \\every game is still running. Right of the dotted line at 15 minutes a curve counts
         \\only games still going, which tilts it toward closer games; each chart says what
