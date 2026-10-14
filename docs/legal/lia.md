@@ -16,7 +16,7 @@ written to be shown. Jacob should check it, sign it off and date it.
 
 # Legitimate interests assessment: meiolol
 
-Controller: [CONTROLLER]. Assessed: [DATE]. Next review: [DATE + 12 months].
+Controller: Jacob Maschler, trading as meiolol. Assessed: [DATE]. Next review: [DATE + 12 months].
 
 ## Processing covered
 
@@ -110,4 +110,4 @@ Revisit when: Your games launches, Squads launch, RSO becomes available (conside
 requiring it for Your games), a feature starts showing players to anyone other than the
 person who looked them up, or a complaint or regulator view suggests a different balance.
 
-Signed: [CONTROLLER], [DATE]
+Signed: Jacob Maschler, trading as meiolol, [DATE]

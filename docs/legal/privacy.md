@@ -6,10 +6,10 @@ goes live or into the production application.
 
 ## Decisions for Jacob (fill before publishing)
 
-- **Controller name.** A person's name, or a trading name for a sole trader? Shown below
-  as `[CONTROLLER]`
-- **Contact address.** jombirds@gmail.com is used below. A dedicated address
-  (privacy@jomify.lol forwarding to it) reads better and survives a mailbox change
+Decided 2026-10-14: controller "Jacob Maschler, trading as meiolol"; contact
+privacy@jomify.lol, a forward to jombirds@gmail.com (jomify.lol already uses Namecheap
+email forwarding: add the alias there before publishing).
+
 - **ICO fee.** £52 a year (tier 1, micro organisation), or £47 by direct debit. Register
   at ico.org.uk, then put the registration number in `[ICO REG]`. If you don't register,
   the ICO assumes tier 3 (£3,763). No exemption fits a public site that stores match
@@ -47,9 +47,9 @@ what you can ask us to do.
 
 ## Who we are
 
-meiolol is run by [CONTROLLER], an individual in the United Kingdom, who is the
-controller of the data described here. Contact: jombirds@gmail.com. Registered with the
-UK Information Commissioner's Office as [ICO REG].
+meiolol is run by Jacob Maschler, trading as meiolol, an individual in the United Kingdom,
+who is the controller of the data described here. Contact: privacy@jomify.lol. Registered
+with the UK Information Commissioner's Office as [ICO REG].
 
 <!-- EEA representative (if appointed):
 Our representative in the European Economic Area is [NAME, ADDRESS, EMAIL]. You can
@@ -62,7 +62,7 @@ contact them instead of us about anything in this policy. -->
 - To build those statistics we collect ranked match data from the official Riot Games
   API, which includes encrypted player identifiers. We never sell it or share it
 - You can object and have your data removed at any time by emailing us at
-  jombirds@gmail.com, or using "Remove a Riot ID" on the Your games page
+  privacy@jomify.lol, or using "Remove a Riot ID" on the Your games page
 
 ## Data from Riot Games
 
@@ -160,7 +160,7 @@ You can ask us to:
 - **Correct** it, though match data comes from Riot as it happened
 - **Restrict** our use of it while a request is considered
 
-Email jombirds@gmail.com for anything the form doesn't cover. We'll ask you to prove you
+Email privacy@jomify.lol for anything the form doesn't cover. We'll ask you to prove you
 own the Riot ID (the same profile icon check) and reply within one month. If you're
 unhappy with our answer, you can complain to the UK Information Commissioner's Office
 (ico.org.uk) or, in the EU, to your local data protection authority.

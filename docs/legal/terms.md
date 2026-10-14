@@ -5,7 +5,6 @@ src/site/prose.zig. Jacob should read it before it goes live.
 
 ## Decisions for Jacob
 
-- **Operator name.** Same as the privacy policy: `[CONTROLLER]`
 - **Governing law.** England and Wales is assumed. Consumers in the EU keep their own
   country's mandatory protections whatever this says
 - **Fair use limit for scraping.** None is stated. Add a number if the site gets
@@ -23,8 +22,9 @@ Sections marked *(when live)* go up with their feature.
 Last updated [DATE].
 
 These terms cover the meiolol website (meiolol.jomify.lol) and the meiolol desktop app.
-By using either, you agree to them. meiolol is run by [CONTROLLER] in the United Kingdom.
-Contact: jombirds@gmail.com.
+By using either, you agree to them. meiolol is run by Jacob Maschler, trading as
+meiolol, in the United Kingdom.
+Contact: privacy@jomify.lol.
 
 ## What meiolol is
 
