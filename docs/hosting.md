@@ -55,8 +55,21 @@ accounts may use Always Free only in the home region).
 
 ## Rendering on request
 
-The static upload leaves out matchup pages under 200 games (`meiolol site
---static-min-games 200`, deploy/web-loop.sh); meiolol-render on the box serves them.
+The static upload is only what nginx must serve itself (`meiolol site --static core`,
+deploy/web-loop.sh; the list is core_static in src/site/root.zig): the home page,
+robots.txt, riot.txt, the root sitemap, CSS, JS, wasm, font and icon, ~30 files with
+their .gz twins, all at the site root; the build loads only two views' stats.
+meiolol-render on the box serves every other page and file (champion, role, matchup,
+build, Daily Draft, Learn, legal and method pages, the patch/ and all/ views, data/
+files, the views' sitemaps, data/your-example.json).
+The home page stays static because the root directory always exists, and nginx's
+try_files answers an existing directory's URL with its index.html or 403, never
+@render; for the same reason nothing is uploaded into a subdirectory. Before 14 Oct
+everything but thin matchups was static (13.5k files, 408 MB, a 4-13 min site pass
+on the box). The renderer gzips what it sends when the client accepts it (nginx
+compresses only HTML itself; stats.bin is ~12 MB raw), with Vary: Accept-Encoding so
+nginx caches each encoding apart, and answers a directory URL without its slash with a
+301, as nginx did for uploaded directories.
 - `meiolol render` (systemd meiolol-render@a or @b) on the box's private address
   10.0.0.3:8091, all views loaded up front (~3.5 min, ~600 MB); deploy/web-loop.sh
   touches data/render.reload after each upload and it loads the new data in the
@@ -66,8 +79,8 @@ The static upload leaves out matchup pages under 200 games (`meiolol site
   stopping one move to the new one (sysctl net.ipv4.tcp_migrate_req=1,
   /etc/sysctl.d/60-meiolol-render.conf) and nginx retries a dropped one once. Alone (a
   boot) it listens at once and serves each view as it loads (the root view after ~40 s,
-  all ~3 min); until then 503, so nginx serves its cached copy where it has one. Log
-  data/render.log
+  all ~3 min, longer while the disk is busy); until then 503, so nginx serves its
+  cached copy where it has one, and pages not in its cache are down. Log data/render.log
 - Network: jomify (10.0.0.214) and the box share subnet 10.0.0.0/24. Security list rule
   "meiolol-render: jomify nginx to the box" (TCP 8091 from 10.0.0.214/32; the list as it
   was is in .git/oci-ingress-before-render.json on the Mac) and an iptables ACCEPT on the
@@ -78,6 +91,13 @@ The static upload leaves out matchup pages under 200 games (`meiolol site
   try_files, then `@render` (upstream meiolol_render: the box twice, for the retry): proxy cache /var/cache/nginx/meiolol (2 GB, key $uri), 200s
   10 min, 404s 1 min, stale copies while the box is down or refreshing, one render per
   page under a burst. Header X-Meiolol-Render: HIT, MISS, STALE, UPDATING
+- Outages (the renderer is the main path since `--static core`): any page nginx cached
+  in the last 7 days (inactive=7d) is served stale on error, timeout or 503; a page not
+  in its cache is 503 until the renderer is back. Proposal, not applied (needs Jacob's
+  OK): in @render `proxy_set_header Accept-Encoding gzip;` and `gunzip on;` (one cached
+  copy per page instead of one per browser's Accept-Encoding), inactive=30d, and a
+  warm-up from the box after each reload (every sitemap URL through nginx, a few per
+  second) so every page has a copy to fall back on
 - Training view (/admin/training/, same basic auth as /admin/; data for the admin Models
   tab): lab runs of the Mac and the gpu-box (staged over ssh, home network only), learned.md,
   model.md, campaigns, uploaded by deploy/lab-push.sh (launchd, every 30 s when changed). Served from

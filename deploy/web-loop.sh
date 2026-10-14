@@ -2,7 +2,10 @@
 # Runs on the box (deploy/box.sh web start): every 15 min, build the site and upload it to
 # the jomove server when the patch changed, the current patch's game count grew 20% since
 # the last upload, or there are any new games and an hour passed. So early in a patch (few
-# games) it pushes every 15 min, later hourly. A build takes well under a second. The
+# games) it pushes every 15 min, later hourly. The build is `--static core`: the home
+# page, robots.txt, riot.txt, the root sitemap and the front-end files (~30 files, two
+# views loaded); meiolol-render serves every other page and file, and loads the new data
+# after each upload (data/render.reload; docs/hosting.md "Rendering on request"). The
 # meiolol-web ssh alias is user meiolol with a key limited to rsync into /var/www/meiolol
 # (rrsync); nginx there serves meiolol.jomify.lol. Riot's verification string, if any,
 # lives in riot.txt beside bin/.
@@ -20,9 +23,10 @@
 # Daily, `meiolol lean` (every region, last 30 days; docs/model.md "Early and late
 # champions") the same way: data/lean.tsv, the champion pages' early or late line.
 # Daily, `meiolol your-example` (read-only, background) leaves one anonymised player's
-# games in data/your-example.json; each site build gets a copy for your.html's example.
-# A failed run removes the file, so a stale example (perhaps a player forgotten since)
-# never ships; the page then offers none until the next success.
+# games in data/your-example.json, which meiolol-render serves at the same path from its
+# next load, for your.html's and the home page's example. A failed run removes the file,
+# so a stale example (perhaps a player forgotten since) never ships; the pages then offer
+# none until the next success.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
 # behind basic auth there; the site's rsync leaves that directory alone. Daily, a dbstat
 # scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
@@ -33,7 +37,8 @@
 # timers. A restart reruns all of those, minutes on the box.
 # Upload: the new build is copied into data/site by checksum without times, so only
 # files whose content changed get a new mtime, and the upload's quick check sends just
-# those (a template change still sends every page).
+# those. --delete removes what the build no longer writes; nginx then hands those paths
+# to meiolol-render.
 set -u
 contact=$1
 cd "$(dirname "$0")/.." || exit 1
@@ -122,12 +127,10 @@ while true; do
     riot=()
     [[ -s riot.txt ]] && riot=(--riot-txt "$(<riot.txt)")
     site_start=$SECONDS
-    # Thin matchup pages: meiolol-render serves them (docs/hosting.md)
-    if out=$(bin/meiolol site --contact "$contact" --out data/site.new --static-min-games 200 \
+    if out=$(bin/meiolol site --contact "$contact" --out data/site.new --static core \
         --origin https://meiolol.jomify.lol \
         "${riot[@]}" 2>&1); then
         site_s=$(( SECONDS - site_start ))
-        [[ -s data/your-example.json ]] && cp data/your-example.json data/site.new/data/
         # First patch line, EUW: "data/site.new/patch/: patch 16.20, 1054 games, ..."
         read -r patch games < <(sed -nE 's/.*: patch ([^,]+), ([0-9]+) games.*/\1 \2/p' \
             <<< "$out")

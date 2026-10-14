@@ -550,6 +550,18 @@ Done:
 - gzip measured: level 1, 4 or 6 make no difference to pass time now; kept at 6
 - `box.sh preview` builds HEAD plus the working tree's src/site edits (other paths as
   arguments), not the whole working tree; EUW preview build ~40 s
+- Every page on request (Jacob 14 Oct: a refresh or deploy must not rebuild and
+  re-upload the site): the web loop builds `--static core` (core_static in
+  src/site/root.zig: home, robots.txt, riot.txt, root sitemap, CSS/JS/wasm/font/icon;
+  ~30 files with .gz, all at the root; two views' stats and champions loaded, one page
+  rendered) and meiolol-render serves everything else, data/ and your-example.json
+  included; Daily Draft puzzles are made by its loads only. Before: 13.5k files, 408 MB,
+  site pass 150-770 s on the box (web.log, 14 Oct). Mac snapshot: 4.2 s and 1,965 files
+  to 0.23 s and 30; box 252 s with the disk saturated (raw-export, curves and a
+  renderer load at ~90% iowait), the two views' stats reads being the rest. Root
+  sitemap now lists learn.html (it never did). The renderer gzips for nginx (Vary) and
+  301s a bare directory URL. pipeline_test: core files are the renderer's bytes, every
+  full-build file is still served, sitemaps list rendered pages
 
 Direction (Jacob 2026-10-12, via meiolol-88: "build both"): stay static for the pages
 search sees, plain JS on top, no framework; plus option B from the research: a renderer
@@ -581,8 +593,17 @@ Site UI pass (2026-10-12, meiolol-a0, from research/questions/site-design.md):
 
 Next:
 1. Screenshots or a short video for the application (Riot accepts them, research C1);
-   meiolol-render's flags still lack --origin and --index-min-games
-2. Cached data load (Jacob: later): probably not worth it now that a load takes ~5 s on
+   meiolol-render's flags still lack --origin, --index-min-games and --riot-txt: they
+   must match the web loop's (one shared args file) before `--public`, or rendered pages
+   lose their canonical links and the views' sitemaps differ
+2. Renderer as the main path: uncached pages are 503 while it boots (~3.5 min, more
+   with a busy disk) or is down. Proposal for Jacob (nginx on jomify): one cached copy
+   per page (`gunzip on`, Accept-Encoding gzip to the box), inactive=30d, and a cache
+   warm-up from the box after each reload; docs/hosting.md "Rendering on request". The
+   box is disk bound (7.3 GB meiolol.db, ~4 GB page cache): three render-swaps on 14 Oct
+   were not ready in 15 min, so the old binary kept serving. The core build could need
+   no DB at all if the home page came from the renderer
+3. Cached data load (Jacob: later): probably not worth it now that a load takes ~5 s on
    the Mac snapshot and ~44 s for every view on the box. Left of a pass: filters.make
    ~1 s, stats per view ~0.2 s (Mac). Renderer boot after a box reboot never verified
    on the box (only locally)

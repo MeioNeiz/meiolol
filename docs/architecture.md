@@ -7,7 +7,7 @@ src/
   ddragon.zig        Data Dragon: champion ids/names; item classes, rune and spell names
   date.zig           UTC dates (Date: format, parse, epoch days)
   pipeline_test.zig  fixture games through stats, curves and the site
-  daily.zig          Daily Draft puzzles (data/daily), published by `meiolol site`
+  daily.zig          Daily Draft puzzles (data/daily), made by site loads (meiolol render)
   learn.zig          Learn page data: champion facts, practice draft pack
   curves.zig         lane matchup curves from timelines (`meiolol curves`)
   builds.zig         builds per champion and role (`meiolol builds`, JSON for the site)
@@ -505,11 +505,15 @@ browser, for pages that score drafts). Champion icons hotlink Data Dragon. Edges
 same maths as the app (score.matchupPp, duoPp). Preview mode by default (noindex,
 robots.txt disallow, banner): Riot forbids serving the public on a personal key;
 `--public` only once the production key is granted. `deploy/box.sh site EMAIL` builds
-it on the box and rsyncs it to data/site. `meiolol render` serves the pages the static
-build leaves out (--static-min-games: thin matchups) from the same code, its data swapped
-whole on reload (serve.Rendered; docs/hosting.md "Rendering on request"). `meiolol
-serve` (src/serve.zig) serves a site
-directory over HTTP with .gz siblings; handy for local previews.
+it on the box and rsyncs it to data/site. `meiolol render` serves the pages and files
+the static build leaves out from the same code, its data swapped whole on reload
+(serve.Rendered; docs/hosting.md "Rendering on request"). `--static core` (the web
+loop's) writes only core_static (root.zig: home, robots.txt, riot.txt, root sitemap)
+and the front-end assets, loading only the root and shared views' stats and champions
+(no pool tallies, filters, Daily Draft or Learn) and rendering one page;
+`--static-min-games N` (Static.all) leaves out thin matchups only. `meiolol serve`
+(src/serve.zig) serves a site directory over HTTP with .gz siblings; handy for local
+previews.
 
 Code shape (root.zig): `load` reads one view's data from the DB into a `Site` (stats,
 champions, pool, learning, Learn facts, data and script files); pages are functions of
@@ -517,7 +521,9 @@ champions, pool, learning, Learn facts, data and script files); pages are functi
 `renderShared` the site-root pages (shared_pages), `pagePaths` lists every page. The
 static build writes each listed path through the router (one arena per page), so a page
 rendered on request is the same bytes: `Loaded` holds every view (loaded on first
-request) and answers any path from the site root (pipeline_test checks every file).
+request) and answers any path from the site root (pipeline_test checks every file of
+the full build, and that `--static core` writes only its list, each the renderer's
+bytes).
 `meiolol dev` (deploy/dev.sh) serves `Loaded` from data/snap (`deploy/box.sh snapshot`:
 the tables the site reads, PUUIDs replaced, no raw docs) with CSS and JS from
 src/site/static, and reloads the open page on an edit: `zig build --watch` rebuilds,
@@ -526,9 +532,10 @@ Debug, sqlite at -O2): CSS/JS edit visible at once, a Zig edit in ~20 s (9 s bui
 load), pages render in 1-40 ms.
 
 Hosting:
-meiolol.jomify.lol, static nginx on the jomove server, uploaded from the box by
+meiolol.jomify.lol, nginx on the jomove server: the static core uploaded from the box by
 deploy/web-loop.sh (every 15 min early in a patch, then hourly; docs/plan.md step 2),
-and at once on each push to main (deploy/on-push.sh).
+and at once on each push to main (deploy/on-push.sh); every other page from
+meiolol-render on the box, which loads the new data after each upload.
 
 Known gaps: stats.bin is dense (~12 MB raw; brotli helps while sparse), no rank
 brackets (statsfile has none), no per-patch history.
@@ -542,7 +549,8 @@ then guess the winner. Pick order is not in match-v5, so "which was picked last"
 result, length, team kills and gold, blue's estimated win chance, the five same-role lane
 edges with games (greyed under 200), and each option's points with reasons.
 
-- Made by `meiolol site` (every web-loop build): puzzles for today to today+2 (UTC) that
+- Made by every full site load (meiolol-render's, after each upload; the web loop's
+  `--static core` build skips it): puzzles for today to today+2 (UTC) that
   do not exist yet, from the site's patches and platforms. Puzzle #1 = 2026-10-11
 - data/daily/<n>.json is the public puzzle, written once and never remade (the numbers
   are frozen at that day's data); data/daily/used.txt holds the match ids behind them so
