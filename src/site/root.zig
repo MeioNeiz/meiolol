@@ -19,6 +19,8 @@ const learning_page = @import("learning.zig");
 const learning = @import("../learning.zig");
 const builds_page = @import("builds.zig");
 const builds = @import("../builds.zig");
+const lean = @import("../lean.zig");
+const lean_line = @import("lean.zig");
 const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
 
@@ -70,6 +72,8 @@ pub const Options = struct {
     index_min_games: u32 = 0,
     /// The daily eval's TSV (`meiolol eval --history`) for the method page's chart
     eval_history: ?[]const u8 = null,
+    /// `meiolol lean`'s file: the champion pages' early or late line where set
+    lean: ?[]const u8 = null,
 };
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
@@ -123,6 +127,8 @@ pub const Site = struct {
     view_curves: *const [html.View.count]?core.curvesfile.Curves,
     /// Every view's builds (html.View.index); the 30-day views link to their patch view's
     view_builds: *const [html.View.count]?builds.File,
+    /// One file for every view: its scope is its own, every region
+    lean: ?*const lean.File = null,
     pool: pool.Pool = .{},
     learning: learning.Learning = .{},
     /// Data and script files in the view's directory
@@ -256,6 +262,7 @@ pub const shared_pages = [_][]const u8{
 pub const Extras = struct {
     curves: [html.View.count]?core.curvesfile.Curves = @splat(null),
     builds: [html.View.count]?builds.File = @splat(null),
+    lean: ?lean.File = null,
     /// Pool and learning tallies by html.Region, on the first view's load: all patches,
     /// so both periods share them, and one pass over the database serves every view
     people: ?People = null,
@@ -268,6 +275,7 @@ pub const Extras = struct {
         for (opts.builds, &e.builds) |path, *b| {
             if (path) |p| b.* = loadBuilds(arena, io, p);
         }
+        if (opts.lean) |p| e.lean = loadLean(arena, io, p);
         return e;
     }
 
@@ -580,6 +588,7 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
         .curves = extras.curves[view.index()],
         .view_curves = &extras.curves,
         .view_builds = &extras.builds,
+        .lean = if (extras.lean) |*l| l else null,
     };
     try loadChamps(site, db);
 
@@ -745,6 +754,21 @@ fn loadBuilds(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?builds.Fi
     };
     return builds.File.parse(arena, bytes) catch |err| {
         log.warn("builds at {s}: {t}", .{ path, err });
+        return null;
+    };
+}
+
+/// Optional, as builds: a bad or missing file leaves out the champion pages' line
+fn loadLean(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?lean.File {
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 24)) catch |err| {
+        switch (err) {
+            error.FileNotFound => log.info("no lean file at {s}", .{path}),
+            else => log.warn("lean file at {s}: {t}", .{ path, err }),
+        }
+        return null;
+    };
+    return lean.File.parse(arena, bytes) catch |err| {
+        log.warn("lean file at {s}: {t}", .{ path, err });
         return null;
     };
 }
@@ -1309,6 +1333,7 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             if (e.games == 0) continue;
             try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins, .iv = wilson(e.wins, e.games) });
         }
+        if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean");
         try builds_page.link(site, w, ch, r, path);
         try opponentTable(site, w, ch, r, opps.items);
         try tpl.renderPart(w, "</section>\n", .{});

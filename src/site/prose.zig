@@ -11,6 +11,7 @@ const curvesfile = core.curvesfile;
 const Curves = curvesfile.Curves;
 const Role = core.Role;
 const roleName = @import("root.zig").roleName;
+const lean = @import("../lean.zig");
 
 pub const Info = struct {
     contact: []const u8,
@@ -140,6 +141,43 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\if it is hard even at the best the games allow, so a few unlucky games can't put
         \\it there. Those with under 10 games are faded and listed last.</li>
         \\</ul>
+        \\
+    );
+    try tpl.render(w,
+        \\<h2 id="lean">Early or late</h2>
+        \\<p>Each role on a champion page has a line on whether the champion leans early or
+        \\late, from ranked solo games in every region over the last 30 days that lasted 15
+        \\minutes or more and have a match timeline. Two numbers, each against an average
+        \\pick in the same role:</p>
+        \\<ul>
+        \\<li><b>Gold at {gm} minutes</b>: how far ahead or behind its team is on average,
+        \\as a team gold lead.</li>
+        \\<li><b>From an even game at {wm} minutes</b>: how much more or less often its team
+        \\wins than the game state then says. The state is each team's gold, experience,
+        \\towers, inhibitors, dragons, soul, elder, grubs, herald and baron, so "even" means
+        \\even on all of those. A percentage point is the change in a game that would
+        \\otherwise be 50:50.</li>
+        \\</ul>
+        \\<p>All ten champions of a game are fitted together, one row per game, so a
+        \\champion is not credited with what its usual teammates do. Each number is pulled
+        \\toward the role's average by how much champions in that role really differ,
+        \\estimated from the data, so one with few games stays near average. A number is
+        \\shown only when it is at least twice its uncertainty and the champion has {min} or
+        \\more games in the role still going at {wm} minutes; the ± is a 95% range.
+        \\"Early" means both: ahead at {gm} and winning less often from an even game at
+        \\{wm}. "Late" is the reverse.</p>
+        \\<p>Why both: champions that put their team ahead early win less from the same gold
+        \\and objectives, and champions that fall behind win more from them. The two mostly
+        \\cancel, which is why a champion's overall win rate says little about either.
+        \\Before this went on the site it was checked on newer games than the ones it was
+        \\fitted on: the numbers shown predicted those games' gold and results better than
+        \\leaving them out, at the sizes shown, and about nine in ten kept their sign.</p>
+        \\<p>What it is not: a reason to pick or avoid a champion. It describes games in
+        \\general. Who plays a champion and the rest of the draft are not held fixed, and
+        \\"even" is even by the measures above only.</p>
+        \\
+    , .{ .gm = lean.gold_minute, .wm = lean.win_minute, .min = lean.min_games });
+    try w.writeAll(
         \\<h2 id="builds">Builds</h2>
         \\<ul>
         \\<li><b>What is counted</b>: per champion and role on the current patch, the choices

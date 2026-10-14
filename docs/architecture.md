@@ -408,6 +408,28 @@ rune and spell icons hotlink Data Dragon like champion icons. Method page sectio
 `#builds`. Not yet: a builds index or nav entry, first-three skill levels, item timing,
 builds by rank or matchup.
 
+## Early or late (src/lean.zig, src/site/lean.zig)
+
+`meiolol lean` (--platform default every region, --days 30, --patch instead of days)
+writes data/lean.tsv: per champion-role its team gold lead at 14 min and its team's win
+from an even game at 20 min (state: team gold, XP, held objectives), both additive over
+the ten picks of a game and shrunk per role (docs/model.md "Early and late champions").
+Played games (900 s+) reaching 15:00 with a compact timeline; one stats.scan and one
+pass over the timelines (TimelineGames.initSince). TSV, versioned: a `meiolol-lean`
+header line (version, games, oldest and newest start ms, scope text), a column line,
+then champion id, role, games at 20, gold, gold sd, win pp, win sd. A format change
+bumps `lean.version`; the site's parse rejects other versions and leaves the line out,
+so roll out like curves: binary first, then the new file. On 2253Z (287k games, all
+regions, 30 days): 34 s on the gpu-box, ~860 rows. deploy/web-loop.sh runs it daily in
+the background at nice 10 (log data/lean.log); the next site build reads it.
+
+`meiolol site` (Options.lean, from DATA/lean.tsv) puts one line per role section on the
+champion pages, after the tiles: "Early lean" / "Late lean" when both numbers are clear
+(|effect| >= 2 posterior sd, 200+ games at 20) and opposite, each clear number alone
+otherwise, "no clear early or late lean" when neither, "too few games" under 200. Its
+own scope ("every region, last 30 days"), not the filters'. Method page `#lean`.
+`meiolol lean --check` is the lab check (folds and dev-val, never the test window).
+
 ## Pool (src/pool.zig, src/site/pool.zig, static/pool.js)
 
 A player's main is their top champion; they play another when it has at least 10% of

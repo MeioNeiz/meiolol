@@ -9,6 +9,7 @@ const riot = @import("riot/root.zig");
 const stats = @import("stats.zig");
 const curves = @import("curves.zig");
 const builds = @import("builds.zig");
+const lean = @import("lean.zig");
 const ddragon = @import("ddragon.zig");
 const site = @import("site/root.zig");
 const admin = @import("admin.zig");
@@ -86,6 +87,19 @@ test "fixture games to stats, curves and the website" {
     try tmp.dir.writeFile(io, .{ .sub_path = "builds.json", .data = builds_json });
     const builds_path = try std.fs.path.join(arena, &.{ dir, "builds.json" });
 
+    // Early or late (`meiolol lean`): every fixture game counts, too few for any line
+    var ln = try lean.load(gpa, db, &.{patch}, &.{"EUW1"}, 0, std.math.maxInt(i64));
+    defer ln.deinit(gpa);
+    try testing.expectEqual(games, ln.list.items.len);
+    const lf = try lean.fit(gpa, ln.list.items, ln.champs.ids.items.len);
+    defer lf.deinit(gpa);
+    var lean_bytes: std.Io.Writer.Allocating = .init(arena);
+    try lean.write(&lean_bytes.writer, &lf, ln.champs.ids.items, ln.list.items, "every region, last 30 days");
+    const lean_file = try lean.File.parse(arena, lean_bytes.written());
+    try testing.expectEqual(games, lean_file.get(122, .top).?.games);
+    try tmp.dir.writeFile(io, .{ .sub_path = "lean.tsv", .data = lean_bytes.written() });
+    const lean_path = try std.fs.path.join(arena, &.{ dir, "lean.tsv" });
+
     // Your games example (`meiolol your-example`): one player's games as the API
     // answers, with the lane over the curve, and nothing that names the player or match
     const set: api.game.CurveSet = .{ .files = &.{.{
@@ -117,6 +131,7 @@ test "fixture games to stats, curves and the website" {
         // No daily: puzzles need three other options for a slot, more than 10 champions
         .curves = @splat(curves_path),
         .builds = .{ null, builds_path, null, builds_path },
+        .lean = lean_path,
     };
     try site.generate(gpa, io, db, opts);
     try expectSiteFiles(arena, io, out);
@@ -161,7 +176,9 @@ test "fixture games to stats, curves and the website" {
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
         // Lane curves: the estimate (curvefit.zig) on the page, k on the method page
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "estimated average", "First finished item", "More data needed" } },
-        .{ "method.html", &.{"Games to stabilise"} },
+        .{ "method.html", &.{ "Games to stabilise", "<h2 id=\"lean\">Early or late</h2>" } },
+        // Early or late: three games, so no numbers, only that it can't tell yet
+        .{ "champion/darius.html", &.{ "<b>Early or late:</b> too few games yet to tell.", "Games still going at 20 min: 3 (every region, last 30 days)", "href=\"../method.html#lean\"" } },
     };
     for (pages) |pg| {
         const path = try std.fs.path.join(arena, &.{ out, pg[0] });

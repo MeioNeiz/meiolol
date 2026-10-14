@@ -25,6 +25,20 @@ How to write a line:
 
 ## Win
 
+- 2026-10-14 (early, 2253Z): Most champions lean early or late, and the lean holds up
+  champion by champion: Draven's team is on average about 900 gold ahead at 14 minutes
+  but from an even game at 20 minutes wins about 8 percentage points less often than
+  with an average bot laner; Kayle top's team is about 800 gold behind and wins about 14
+  points more often from an even game. About a third of champion-roles with 200+ games
+  (153 of 429) are clearly one or the other; the two parts mostly cancel in their win
+  rates. Sure: snap-20261013T2253Z, 5 forward folds and dev-val (dev only, no test
+  look), 236k games; fitted on older games, the numbers predicted newer games' gold and
+  results better than without them in every fold, at the sizes fitted (calibration 1.02
+  ± 0.03), and 9 in 10 clear ones kept their sign, as many as expected from the noise;
+  matches draftpath's per-champion mediation (r 0.94-0.98). Site: one line per role on
+  champion pages, numbers only where clear, as a fact about games, never a pick reason
+  (meiolol lean, daily on the box). Evidence: docs/model.md "Early and late champions"
+
 - 2026-10-14 (early, 2253Z): During a game, who wins is read much better from every
   player's gold, XP, items and death timers plus which champions are playing than from
   team gold and objectives alone: at 15 minutes the better read ranks the eventual

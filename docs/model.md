@@ -3702,6 +3702,76 @@ costs nothing measurable, and lane counters move lane gold with at most a tiny w
 and audited (meiolol-53), the rest replication of 2055Z, every reading repeated. Dev
 only, no test look.
 
+### Early and late champions, 2026-10-14 (meiolol-lean)
+
+Ships "How drafts win" Q3 per champion as a champion page line, computed on the box.
+`meiolol lean` (src/lean.zig): played games (900 s+) reaching 15:00 with a compact
+timeline, one row per game. Gold: team gold lead at 14 min (blue minus red) = fit mean
++ sum of blue champion-role effects - red's, Gaussian backfitting. Win: logistic of the
+state at 20 min (objectives.zig's lead and held: team gold, gold curve, XP, towers,
+inhibitors, dragons, soul point, soul, elder, grubs, herald, baron) + the same additive
+champion-role effects in log-odds, IRLS backfitting; games still going at 20. Both
+shrunk toward the role's average pick by a method-of-moments prior per role, one role at
+a time (Gauss-Seidel), 12 passes. Clear: 200+ games at 20 and |effect| >= 2 posterior
+sd. Early: gold clear > 0 and win clear < 0; late the reverse. Shown in pp (log-odds x
+25) and gold, ± 1.96 sd. Check: `meiolol lean --check --prior-rows 100 --cuts
+1791526007256,1791574830751,1791628507185,1791670472926,1791711141905,1791741249959,1791795719197`
+on snap-20261013T2253Z, games before T only (236,227), folds 1-5 fit before their block,
+dev-val before D. No test look.
+
+Prior floor: with analysis.Prior's own floor (cells of 10+ games) the jungle and bottom
+spreads came out 0 (the many rare off-role picks' noise swamps the moment estimate;
+run 20261014T212022Z-lean-check-2253Z) and support's was inflated (10.7 pp). Chosen on
+the dev fit's spreads alone, before any held-out score of it: cells of 100+ games set
+the prior (20261014T213205Z-lean-check-prior-2253Z: spreads top / jungle / mid / bottom
+/ support 4.6 / 3.7 / 5.3 / 4.2 / 7.2 pp at 100+, 4.0 / 4.2 / 5.8 / 4.8 / 6.3 at 500+).
+The 500 floor (20261014T213648Z-lean-check-p500-2253Z) matches 100 within 0.0001 nats
+everywhere below.
+
+Run 20261014T213709Z-lean-check-p100-2253Z. Gains over the state alone (win, nats per
+game) and over the mean (gold, % of its MSE), ± 95%; calibration = slope of each
+block's own per-cell estimate (one Newton step from the fit) on the fitted effect,
+information-weighted (1: the shrunk sizes hold); same sign = clear cells whose block
+estimate has the fitted sign, against the count expected if the fit were the truth:
+
+| | folds 1-5 (92,188 games at 20) | dev-val (24,135) |
+| --- | --- | --- |
+| win, every effect | 0.02203 ± 0.00131 (5/5) | 0.02443 ± 0.00259 |
+| win, clear effects only (what the site shows) | 0.02110 ± 0.00128 (5/5) | 0.02364 ± 0.00254 |
+| win, cost of hiding the unclear | -0.00092 ± 0.00027 | -0.00078 ± 0.00047 |
+| gold, every effect / clear only | 6.15% ± 0.30 / 5.94% ± 0.30 (5/5) | 6.27% / 6.04% ± 0.60 |
+| calibration, win / gold | 1.02 ± 0.03 / 0.99 ± 0.02 | 1.05 ± 0.06 / 0.99 ± 0.05 |
+| clear win effects, same sign | 815 / 907 (819 expected) | 197 / 212 (191.5) |
+| clear gold effects, same sign | 1031 / 1132 (1033.5) | 233 / 258 (235.6) |
+| early or late, both parts same sign | 583 / 656 (567 expected) | 138 / 153 (132.9) |
+
+Dev fit (209,964 games before D): 429 champion-roles with 200+ games at 20; gold clear
+253, win clear 212, early 77, late 76 (top 14 / 16, jungle 16 / 17, mid 18 / 19, bottom
+7 / 9, support 22 / 15). Gold spread 276-372 by role. Against draftpath's per-champion
+g-computation (20261014T011323Z-dp-gmed-champ-2253Z, 327 champion-roles with 500+
+games): win vs its direct part r 0.94 at 15, 0.96 at 20; gold vs its gold shift r 0.98,
+0.93; our early/late classes have its sign pattern (indirect +, direct - for early) in
+93% and 90%. Across champion-roles gold and win correlate -0.74 (-0.71 to -0.82 by
+role). Examples (dev fit, ± 95%): Draven bottom +897 ± 74 gold, -7.6 ± 1.5 pp; Pyke
+support +747 ± 63, -10.8 ± 1.2; Irelia mid +643, -10.7 ± 1.7; Hecarim jungle +425, -6.4
+± 1.4; Kayle top -824 ± 102, +14.1 ± 1.9; Bel'Veth -941, +14.3 ± 1.8; Aurelion Sol mid
+-827, +13.2 ± 2.0; Smolder bottom -703, +9.3 ± 1.2; Jinx -243 ± 37, +6.5 ± 0.7.
+
+Site-mode run on the snapshot (20261014T214444Z-lean-site-2253Z): 286,721 games (every
+region, its last 30 days), 34 s, peak RSS 2.7 GB (SQLite's mmap of the DB files; the
+fit itself is tens of MB), 859 rows.
+
+Reading:
+- Each champion-role's early lean (team gold at 14) and its win from an even game at 20
+  replicate on newer games at the sizes fitted, and the numbers the site shows (clear
+  ones only) carry nearly all of the gain. The two parts are opposite for most
+  champions, as Q3 found; 153 of 429 champion-roles are clearly early or late
+- Description, not cause: who picks a champion and the rest of the draft beyond the
+  additive terms are not held fixed, and "even" is even by these measures (kit gold such
+  as Pyke's and Draven's reads as "ahead"). The site says so and never makes it a pick
+  reason (docs/production-key.md)
+- No test look; the site fits on the box's last 30 days, every region
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

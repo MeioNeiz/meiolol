@@ -24,6 +24,8 @@ pub const items = @import("items.zig");
 pub const playstyle = @import("playstyle.zig");
 pub const scaling = @import("scaling.zig");
 pub const carry = @import("carry.zig");
+pub const lean = @import("lean.zig");
+const analysis = @import("analysis.zig");
 const test_looks = @import("lab/looks.zig");
 pub const archive = @import("archive.zig");
 pub const api = @import("api/root.zig");
@@ -210,6 +212,13 @@ const usage =
     \\                               champion-role fitted before the block
     \\              --plant COV:SD[:SEED]  redraw winners with a planted champion slope on
     \\                               lane, kd, dmg or exp, sd SD win pp per unit
+    \\  lean        early or late: each champion-role's team gold lead at 14 min and its
+    \\              win from an even game at 20 min, shrunk (docs/model.md "Early and late
+    \\              champions"); the champion pages' line. Writes DATA/lean.tsv
+    \\              --platform P     default all; --days N  games of the last N (30)
+    \\              --out FILE       instead of DATA/lean.tsv
+    \\              --check          lab: folds and dev-val (markdown on stdout), no test
+    \\              --cuts A,B,C,D,E,DEV,TEST  as carry's; --table FILE  dev fit's rows
     \\  raw-export  raw archive, box side (archive.zig): write raw summaries, raw timelines
     \\              and mastery fetched since the last export to DIR/raw-FROM-TO.db and
     \\              print its name and counts (nothing when there is nothing new)
@@ -357,6 +366,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "playstyle", cmdPlaystyle },
     .{ "scaling", cmdScaling },
     .{ "carry", cmdCarry },
+    .{ "lean", cmdLean },
     .{ "raw-export", cmdRawExport },
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
@@ -1031,6 +1041,79 @@ fn cmdCarry(c: *Cmd) !u8 {
     return 0;
 }
 
+fn cmdLean(c: *Cmd) !u8 {
+    var g: Games = .{};
+    var out: ?[]const u8 = null;
+    var days: u32 = 30;
+    var check = false;
+    var cuts: ?lean.Cuts = null;
+    var table: ?[]const u8 = null;
+    var prior_rows: f64 = lean.default_prior_rows;
+    while (c.next()) |_| {
+        if (try g.parse(c)) continue;
+        if (c.is("--out")) {
+            out = try c.value();
+        } else if (c.is("--prior-rows")) {
+            prior_rows = try c.float();
+        } else if (c.is("--days")) {
+            days = try c.int(u32);
+        } else if (c.is("--check")) {
+            check = true;
+        } else if (c.is("--cuts")) {
+            var x: lean.Cuts = undefined;
+            var it = std.mem.splitScalar(u8, try c.value(), ',');
+            for (&x) |*v| v.* = std.fmt.parseInt(i64, it.next() orelse return error.Usage, 10) catch return error.Usage;
+            if (it.next() != null) return error.Usage;
+            cuts = x;
+        } else if (c.is("--table")) {
+            table = try c.value();
+        } else return error.Usage;
+    }
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    var every: std.ArrayList([]const u8) = .empty;
+    for (riot.endpoints.platforms) |pl| try every.append(c.arena, pl.id);
+    const platforms = if (g.platforms.items.len > 0) g.platforms.items else every.items;
+    const all_regions = g.platforms.items.len == 0 or g.every_platform;
+    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
+    if (check) {
+        const x = cuts orelse lean.labCuts(try analysis.protocolCuts(gpa, db));
+        var buf: [64 * 1024]u8 = undefined;
+        var stdout = std.Io.File.stdout().writer(io, &buf);
+        try lean.check(gpa, io, db, chosen, platforms, x, table, prior_rows, &stdout.interface);
+        try stdout.interface.flush();
+        return 0;
+    }
+    const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
+    const since_ms = if (g.patches.items.len > 0) 0 else now_ms - @as(i64, days) * std.time.ms_per_day;
+    var games = try lean.load(gpa, db, chosen, platforms, since_ms, std.math.maxInt(i64));
+    defer games.deinit(gpa);
+    if (games.list.items.len == 0) {
+        std.log.err("lean: no games with a timeline", .{});
+        return error.NoMatches;
+    }
+    var f = try lean.fit(gpa, games.list.items, games.champs.ids.items.len);
+    defer f.deinit(gpa);
+    const path = out orelse try std.fs.path.join(c.arena, &.{ c.data_dir, "lean.tsv" });
+    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+    defer file.deinit(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var w = file.file.writer(io, &buf);
+    const where = if (all_regions) "every region" else try std.mem.join(c.arena, ", ", platforms);
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    const scope = if (g.patches.items.len > 0)
+        try c.arena.print("{s}, patch {s}", .{ where, try stats.label(&label_buf, chosen) })
+    else
+        try c.arena.print("{s}, last {d} days", .{ where, days });
+    try lean.write(&w.interface, &f, games.champs.ids.items, games.list.items, scope);
+    try w.interface.flush();
+    try file.replace(io);
+    std.log.info("{s}: {d} games, {s}", .{ path, games.list.items.len, scope });
+    return 0;
+}
+
 fn cmdScaling(c: *Cmd) !u8 {
     var g: Games = .{};
     var o: scaling.Options = .{};
@@ -1154,6 +1237,7 @@ const SiteFlags = struct {
             .static_min_games = f.static_min_games,
             .origin = f.origin,
             .eval_history = try std.fs.path.join(arena, &.{ c.data_dir, "eval-history.tsv" }),
+            .lean = try std.fs.path.join(arena, &.{ c.data_dir, "lean.tsv" }),
             .index_min_games = f.index_min_games,
             .daily_dir = try std.fs.path.join(arena, &.{ c.data_dir, "daily" }),
             // Indexed by site.html.View.index: EUW 30 days, EUW patch, all 30 days, all patch

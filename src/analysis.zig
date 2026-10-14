@@ -104,6 +104,17 @@ pub const TimelineGames = struct {
         patches: []const []const u8,
         platforms: []const []const u8,
     ) !TimelineGames {
+        return initSince(gpa, db, patches, platforms, 0);
+    }
+
+    /// As init, games started from `since_ms` on (Riot ms timestamp)
+    pub fn initSince(
+        gpa: std.mem.Allocator,
+        db: store.Db,
+        patches: []const []const u8,
+        platforms: []const []const u8,
+        since_ms: i64,
+    ) !TimelineGames {
         const patch_json = try std.json.Stringify.valueAlloc(gpa, patches, .{});
         errdefer gpa.free(patch_json);
         const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
@@ -113,10 +124,10 @@ pub const TimelineGames = struct {
             \\FROM matches m JOIN timeline.timelines t USING (match_id)
             \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
             \\  AND m.platform IN (SELECT value FROM json_each(?))
-            \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
+            \\  AND m.remake = 0 AND m.winning_team IS NOT NULL AND m.game_start >= ?
         );
         errdefer q.deinit();
-        try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
+        try q.bind(.{ patch_json, stats.ranked_solo, platform_json, since_ms });
         const players = try db.prepare("SELECT slot, team_id, position FROM participants WHERE match_id = ?");
         return .{
             .gpa = gpa,

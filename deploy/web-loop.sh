@@ -17,6 +17,8 @@
 # time with the admin page's Run eval (src/admin_api.zig): both flock data/eval.lock.
 # Builds (`meiolol builds`, EUW and every region, current patch) the same way: daily and
 # on a new patch, in the background; the next site build picks the files up.
+# Daily, `meiolol lean` (every region, last 30 days; docs/model.md "Early and late
+# champions") the same way: data/lean.tsv, the champion pages' early or late line.
 # Daily, `meiolol your-example` (read-only, background) leaves one anonymised player's
 # games in data/your-example.json; each site build gets a copy for your.html's example.
 # A failed run removes the file, so a stale example (perhaps a player forgotten since)
@@ -70,7 +72,7 @@ storage_scan() {
 
 last_patch='' last_games=0 last_upload=0
 patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0 last_example=0
-last_builds=0 builds_patch='' builds_pid='' storage_pid=''
+last_builds=0 builds_patch='' builds_pid='' storage_pid='' last_lean=0 lean_pid=''
 while true; do
     now=$(date +%s)
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
@@ -103,6 +105,11 @@ while true; do
             && nice -n 10 bin/meiolol builds --patch "$patch" --platform all) \
             > data/builds.log 2>&1 &
         builds_pid=$! last_builds=$now builds_patch=$patch
+    fi
+    if (( now - last_lean >= 86400 )) \
+        && { [[ -z "$lean_pid" ]] || ! kill -0 "$lean_pid" 2> /dev/null; }; then
+        nice -n 10 bin/meiolol lean > data/lean.log 2>&1 &
+        lean_pid=$! last_lean=$now
     fi
     if (( now - last_curves >= 3600 )) || [[ "$patch" != "$curves_patch" ]]; then
         # Fails harmlessly (logged) until there are timelines
