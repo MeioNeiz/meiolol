@@ -74,7 +74,9 @@ Coordinator: meiolol-bd (from meiolol-76, from meiolol-2c, from meiolol-78, 2026
 | meiolol-61 (closed 14 Oct: carry done, test look confirmed role gold; types on 2253Z) | carry and impact: which champions and roles carry (leverage of a seat's lead, skill sensitivity, outcome spread), src/carry.zig |
 
 Two sessions can share a name: message by the `from=` socket or the `[ref]` ListAgents
-shows. When an agent hands over, get the successor's name and tell the others.
+shows. Current clashes (14 Oct): meiolol-04 [79f90e] lead NN (pane 1002) vs
+meiolol-04 [904e99] lab tooling (pane 1011, renaming to meiolol-tooling); meiolol-41
+[701543] state (pane 1000) vs meiolol-41 [36c2ab] draftpath (pane 1001). When an agent hands over, get the successor's name and tell the others.
 
 ## Rules given to every model agent
 
