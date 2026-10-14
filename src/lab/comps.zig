@@ -1342,7 +1342,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
 const nan32 = std.math.nan(f32);
 
 /// Traits written per team by --export-teams (Agg values)
-const export_aggs = [_]Agg{ .magic_share, .early, .scaling, .engage, .peel, .dive, .tank, .range, .siege, .pick, .wave, .roam, .front };
+const export_aggs = [_]Agg{ .magic_share, .early, .scaling, .engage, .peel, .dive, .tank, .range, .siege, .pick, .wave, .roam, .front, .phys_share, .armour_lean, .pen };
 
 fn exportTeams(
     gpa: Allocator,
