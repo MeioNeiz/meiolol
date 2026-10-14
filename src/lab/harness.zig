@@ -256,6 +256,10 @@ pub fn experience(r: rows.Row) api.Experience {
         .perf_games = r.perf_games,
         .lanediff14 = r.lanediff14_before,
         .deaths15 = r.deaths15_before,
+        .rate_games = if (std.math.isNan(r.dpm_before)) 0 else r.games_before,
+        .gpm = if (std.math.isNan(r.gpm_before)) 0 else r.gpm_before,
+        .cspm = if (std.math.isNan(r.cspm_before)) 0 else r.cspm_before,
+        .dpm = if (std.math.isNan(r.dpm_before)) 0 else r.dpm_before,
     };
 }
 
@@ -935,6 +939,21 @@ test "candidates see no scored games and no other ranks in champ select" {
         // No opinion everywhere: scored exactly as the baseline
         try std.testing.expectEqual(s.row.len, s.no_opinion[0]);
     }
+}
+
+test "experience carries the history means, 0 and no rate games when unknown" {
+    var r: rows.Row = .{ .game = 0, .slot = 0, .side = 0, .role = .top, .champion = 1, .y = @splat(0), .games_before = 4 };
+    var e = experience(r);
+    try std.testing.expectEqual(@as(u16, 0), e.rate_games);
+    try std.testing.expectEqual(@as(f32, 0), e.dpm);
+    r.gpm_before = 400;
+    r.cspm_before = 6;
+    r.dpm_before = 700;
+    e = experience(r);
+    try std.testing.expectEqual(@as(u16, 4), e.rate_games);
+    try std.testing.expectEqual(@as(f32, 400), e.gpm);
+    try std.testing.expectEqual(@as(f32, 6), e.cspm);
+    try std.testing.expectEqual(@as(f32, 700), e.dpm);
 }
 
 test "others' experience only in internal scope, ranks in post-game and internal" {

@@ -37,6 +37,10 @@ const Cfg = struct {
     /// showed log1p alone under-reacts to who has and hasn't)
     champ_played: bool = false,
     form: bool = false,
+    /// Gold, CS and damage per minute over earlier games, each standardised by role on
+    /// training rows and pulled to the role mean by n / (n + 3) (the prior group that
+    /// carried playernet's gain, as hand-made terms)
+    rates: bool = false,
     skill: bool = false,
     /// Only games of this platform index (protocol.platformIds order); null for all
     platform: ?u8 = null,
@@ -49,7 +53,7 @@ const cfg: Cfg = .{ .kind = .ratings, .champ_exp = true, .form = true, .champ_pl
 /// For exported files; variants differ by cfg.kind
 pub const name = "win-exp-first";
 
-const experience = cfg.champ_exp or cfg.form;
+const experience = cfg.champ_exp or cfg.form or cfg.rates;
 
 pub const scope: api.Scope = if (experience) .internal else if (cfg.all_ranks) .post_game else .champ_select;
 
@@ -65,8 +69,10 @@ const rank_scale = 1.0 / 4.0;
 
 const rate_prior = 1000;
 
-/// Per player: champ_exp's 2 then form's 5 (expFeatures), then champ_played's 1
-const n_exp = if (cfg.champ_played) 8 else 7;
+/// Per player: champ_exp's 2 then form's 5 (expFeatures), then champ_played's 1, then
+/// rates' 3
+const n_played: usize = @intFromBool(cfg.champ_played);
+const n_exp = 7 + n_played + if (cfg.rates) 3 else 0;
 /// Pseudo-games at 50% in an experience win rate
 const exp_prior = 5;
 
@@ -345,6 +351,9 @@ pub const Model = struct {
     prior_precision: f32 = 0,
     /// form: training rows' mean KDA and deaths before 15, where known
     form_mean: [2]f32 = @splat(0),
+    /// rates: training rows' mean and sd by role of gold, CS and damage per minute
+    rate_mean: [n_role][3]f32 = @splat(@splat(0)),
+    rate_sd: [n_role][3]f32 = @splat(@splat(1)),
 };
 
 fn key(champion: u32, role: usize) u64 {
@@ -371,7 +380,7 @@ fn trust(n: u16) f32 {
     return x / (x + 3);
 }
 
-fn expFeatures(m: *const Model, e: api.Experience) [n_exp]f32 {
+fn expFeatures(m: *const Model, e: api.Experience, role: usize) [n_exp]f32 {
     var out: [n_exp]f32 = @splat(0);
     if (cfg.champ_exp) {
         out[0] = std.math.log1p(@as(f32, @floatFromInt(e.champ_games)));
@@ -387,6 +396,9 @@ fn expFeatures(m: *const Model, e: api.Experience) [n_exp]f32 {
         }
     }
     if (cfg.champ_played) out[7] = @floatFromInt(@intFromBool(e.champ_games > 0));
+    if (cfg.rates and e.rate_games > 0) for ([_]f32{ e.gpm, e.cspm, e.dpm }, 0..) |x, k| {
+        out[7 + n_played + k] = (x - m.rate_mean[role][k]) / m.rate_sd[role][k] * trust(e.rate_games);
+    };
     return out;
 }
 
@@ -399,8 +411,8 @@ fn gameOf(m: *const Model, g: *const api.Game, ranks: ?[2][n_role]?u8, exps: ?[2
         out.rank_diff[r] = centred(rk[0][r], m.rank_mean) - centred(rk[1][r], m.rank_mean);
     };
     if (exps) |e| for (0..n_role) |r| {
-        const blue = expFeatures(m, e[0][r]);
-        const red = expFeatures(m, e[1][r]);
+        const blue = expFeatures(m, e[0][r], r);
+        const red = expFeatures(m, e[1][r], r);
         for (&out.exp_diff[r], blue, red) |*x, b, rd| x.* = b - rd;
         if (cfg.skill) for (0..2) |side| {
             out.skill_x[side][r] = std.math.log1p(@as(f32, @floatFromInt(e[side][r].champ_games)));
@@ -441,6 +453,25 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
         }
     }
     for (&m.form_mean, form_sum, form_n) |*x, sm, n| x.* = @floatCast(sm / @max(n, 1));
+    if (cfg.rates) {
+        var s1: [n_role][3]f64 = @splat(@splat(0));
+        var s2: [n_role][3]f64 = @splat(@splat(0));
+        var cnt: [n_role]f64 = @splat(0);
+        for (t.rows) |r| if (r.exp.rate_games > 0) {
+            const ro = @backingInt(r.role);
+            cnt[ro] += 1;
+            for ([_]f32{ r.exp.gpm, r.exp.cspm, r.exp.dpm }, 0..) |x, k| {
+                s1[ro][k] += x;
+                s2[ro][k] += x * x;
+            }
+        };
+        for (0..n_role) |ro| for (0..3) |k| {
+            if (cnt[ro] < 2) continue;
+            const mean = s1[ro][k] / cnt[ro];
+            m.rate_mean[ro][k] = @floatCast(mean);
+            m.rate_sd[ro][k] = @floatCast(@max(@sqrt(@max(s2[ro][k] / cnt[ro] - mean * mean, 0)), 1e-3));
+        };
+    }
 
     var newest: i64 = std.math.minInt(i64);
     for (t.games) |g| newest = @max(newest, g.start);
@@ -514,7 +545,7 @@ pub fn fit(gpa: std.mem.Allocator, t: *const api.Train, opts: api.Options) !Mode
     const refit = try train(gpa, m.sp, best.l2, games.items, null, @max(1, best.epochs + best.epochs / 10), opts.seed);
     m.p = refit.p;
     std.debug.print("win-model: kind {t} dim {d} l2 {d} epochs {d} val {d:.5} on {d} games\n", .{ cfg.kind, best.dim, best.l2, best.epochs, best.loss, games.items.len });
-    if (experience) std.debug.print("win-model: experience weights by role (champ games, champ rate, games, rate, kda, lanediff, deaths15{s}) {any}\n", .{ if (cfg.champ_played) ", played" else "", m.p[m.sp.e..][0 .. n_role * n_exp] });
+    if (experience) std.debug.print("win-model: experience weights by role (champ games, champ rate, games, rate, kda, lanediff, deaths15{s}{s}) {any}\n", .{ if (cfg.champ_played) ", played" else "", if (cfg.rates) ", gpm, cspm, dpm" else "", m.p[m.sp.e..][0 .. n_role * n_exp] });
 
     if (cfg.own_rank) fitOwnRank(&m, t, won);
     return m;

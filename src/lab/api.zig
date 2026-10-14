@@ -50,6 +50,13 @@ pub const Experience = struct {
     perf_games: u16 = 0,
     lanediff14: f32 = 0,
     deaths15: f32 = 0,
+    /// Gold, CS and damage to champions per minute, means over earlier games with
+    /// end-of-game totals, 0 when none; rate_games counts them (approximately: games when
+    /// known, as rows keep the means only)
+    rate_games: u16 = 0,
+    gpm: f32 = 0,
+    cspm: f32 = 0,
+    dpm: f32 = 0,
 };
 
 pub const Game = struct {
