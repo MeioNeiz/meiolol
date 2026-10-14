@@ -8,7 +8,10 @@ apart from the blue-side intercept c (hat basis over minute).
   may depend on how strong the draft is but not on which champions
 - netd: g also sees champion-role embeddings of both teams (concatenated by role): the
   state's value may depend on the champions themselves
-netd minus nets is what champion-specific draft x state terms add. Early stopping on the
+- neta: g(x, minute) + h(champions, minute), each antisymmetric: champions by minute
+  (scaling) but no champion x state term
+netd minus nets is what champion-specific draft x state terms add; netd minus neta the
+part that needs the state (champions change what a state is worth). Early stopping on the
 fit's newest 10% of games; mean of seeds reported, seeds kept. Writes OUT/preds-net.npz
 and, for lab-sweep (netcheck's contract), OUT/folds.tsv for the first of --kind (others
 OUT/folds-KIND.tsv): reference = the rich smooth logistic (statemodels.py) on the same
@@ -41,13 +44,19 @@ def log(*a):
 
 
 class Net(torch.nn.Module):
-    def __init__(self, n_feat, n_ids, dim, hidden=128, dropout=0.1, use_champs=True):
+    def __init__(self, n_feat, n_ids, dim, hidden=128, dropout=0.1, use_champs=True, additive=False):
         super().__init__()
         self.use_champs = use_champs
+        self.additive = additive
         self.emb = torch.nn.Embedding(n_ids, dim) if use_champs else None
         if use_champs:
             torch.nn.init.normal_(self.emb.weight, std=0.05)
-        n_in = n_feat + len(sc.KNOTS) + (10 * dim if use_champs else 0)
+        n_in = n_feat + len(sc.KNOTS) + (10 * dim if use_champs and not additive else 0)
+        if additive:
+            self.h = torch.nn.Sequential(
+                torch.nn.Linear(10 * dim + len(sc.KNOTS), hidden), torch.nn.GELU(), torch.nn.Dropout(dropout),
+                torch.nn.Linear(hidden, 1),
+            )
         self.g = torch.nn.Sequential(
             torch.nn.Linear(n_in, hidden), torch.nn.GELU(), torch.nn.Dropout(dropout),
             torch.nn.Linear(hidden, hidden), torch.nn.GELU(), torch.nn.Dropout(dropout),
@@ -57,6 +66,9 @@ class Net(torch.nn.Module):
 
     def half(self, x, H, blue, red):
         parts = [x, H]
+        if self.use_champs and self.additive:
+            e = torch.cat([self.emb(blue).flatten(1), self.emb(red).flatten(1), H], 1)
+            return (self.g(torch.cat(parts, 1)) + self.h(e)).squeeze(1)
         if self.use_champs:
             parts += [self.emb(blue).flatten(1), self.emb(red).flatten(1)]
         return self.g(torch.cat(parts, 1)).squeeze(1)
@@ -166,7 +178,7 @@ def run_block(state, data, block, seeds, hp, dev, folds):
         for s in seeds:
             t0 = time.time()
             torch.manual_seed(1000 * s + 7)
-            net = Net(len(names), n_ids, hp.dim, hp.hidden, hp.dropout, use_champs=kind == "netd").to(dev)
+            net = Net(len(names), n_ids, hp.dim, hp.hidden, hp.dropout, use_champs=kind != "nets", additive=kind == "neta").to(dev)
             vl, ep = train(net, tf, flip, tr, va, s, hp, dev)
             net.eval()
             with torch.no_grad():
