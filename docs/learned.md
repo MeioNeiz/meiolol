@@ -80,7 +80,28 @@ How to write a line:
   hand-made rate terms: "History means as hand-made terms" (win-exp-rates -0.00191 ±
   0.00036 vs win-exp, pre-declared, audited by meiolol-53)
 
-- 2026-10-14 (2253Z): Who faces whom, and who plays beside whom, matters a little beyond
+- 2026-10-14 (2253Z, v2): Who faces whom, and who plays beside whom, matters a little
+  beyond each champion's own strength. The lane matchups matter most: top vs top (typical
+  difference between matchups about 2.2-2.5 percentage points of win chance), mid vs mid
+  1.7-2.1, support vs support 1.2-1.5, bot vs bot 1.1-1.3, jungle vs jungle 1.0-1.4, mid
+  vs the enemy bot and bot vs the enemy support 0.8-1.1, top vs the enemy mid 0.5-1.0.
+  Among allies only the bot laner and support's pairing shows (1.3-1.6 points); the other
+  nine ally pairings show nothing. A champion's own strength spreads 1.6-3.4 points by
+  role (support most). Sure: pre-declared tests on 134,375 held-out games (5 forward
+  rounds, every platform): a shrunk table of champion strength, every ally pairing, each
+  matchup and the damage mix predicts better than champion strength plus the damage mix
+  (win-comp) by 1.24 ± 0.26 mnats per game, better in 5 of 5 rounds; the pairings add
+  0.91 ± 0.21 beyond strength and mix; dev-val (reported only) 1.9; no test look. Each
+  range runs from the model's own estimate (low on win with thin data: a planted pair
+  came back at 0.63x) to a simulation-calibrated one (0.91x in the same plant), so the
+  upper end is the better guess; single pairs have few games and are not reported.
+  Other ally pairings and cross-role matchups not detected as fitted. Designed on the
+  older pin, whose games overlap the early rounds; the gain is largest on the newest
+  games. Site: lane matchup and bot-lane synergy may become reasons on the admin draft
+  board once the shipped model switches to this table; no numbers for single champion
+  pairs. Evidence: docs/model.md "Additive model v2: identified matchups" and
+  "Additive model on snap-20261013T2253Z", audited by meiolol-53
+- ~~2026-10-14 (2253Z): Who faces whom, and who plays beside whom, matters a little beyond
   each champion's own strength. The lane matchups matter most: top vs top (typical
   difference between matchups about 2.5 percentage points of win chance), mid vs mid
   1.9, support vs support 1.3, bot vs bot 1.2, jungle vs jungle 1.1, mid vs the enemy bot
@@ -101,7 +122,7 @@ How to write a line:
   most about 0.3 and 0.7 points as fitted. Site: lane matchup and bot-lane synergy may become
   reasons on the admin draft board once the shipped model switches to this table; no
   numbers for single champion pairs. Evidence: docs/model.md "Effects and the CPU
-  model", "Additive model on snap-20261013T2253Z", audited by meiolol-53
+  model", "Additive model on snap-20261013T2253Z", audited by meiolol-53~~ (superseded by the v2 line above: identified matchups)
 - 2026-10-14 (2253Z): Beyond which champions are picked, a comp's damage makes a small
   measurable difference, each about 1-2 percentage points for a comp clearly off in that
   way: damage far from half magic loses, magic-heavy teams (60%+ magic) lose about 2

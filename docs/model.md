@@ -2861,6 +2861,58 @@ until meiolol-tests' crossed-only plant (lanes=2) settles it.
 Damage mix: -1.89 ± 0.19 pp per sd of the term (-2.75 per sd of blue minus red), on gold
 at 14 -21 ± 15. Single cells: not reported.
 
+#### Additive model v2: identified matchups (2253Z re-cut, pre-declared, cf4762d)
+
+v1's enemy blocks weren't identified: a same-role matchup had two cells, cell(a, b) and
+cell(b, a), of which only the difference enters a game, and "r vs their q" and "q vs
+their r" held the same matchups twice with opposite signs. So a block's sd was not the
+matchup's spread (hence the sum rule above), and simulation calibration had no target
+(even gold-at-14 blocks calibrated up ~sqrt 2). v2 (additive.Variant.matchupGroups): one
+signed cell per unordered same-role pair, cross-role the r <= q block only; 15 matchup
+blocks whose sds are the matchups' spreads. On 2055Z block 1, v2's top vs top block was
+2.35 pp against v1's summed 2.47 (the sum held). Also tried: block variances calibrated
+by simulation (additive.calibrate, 8 sims x 8 damped rounds per block, fit games only;
+plant: thin pair block 0.63x raw, 0.91x calibrated), refitted with them fixed
+("full-cal"). `effects --param v1` reproduces the audited e53 runs.
+
+Declared with meiolol-53 before any 2253Z v2 run (H4: v2 full minus v1 full at the same
+resample index, ships if mean + 1.6 x half < +0.0002 and both resamples < +0.0002; H5:
+full-cal minus full, ships if mean + 1.6 x half < 0 and both resamples < 0). Runs
+20261014T041809Z-e53v2-V0, 041843Z-V1, 041920Z-V2 (resample none, 1, 2), 042003Z-T2
+(table); v1 from e53-A0..A2. Checks: in-run ratings identical to e53-A0's; v2's full preds
+differ from v1's on 170,176 of 170,209 games (strength + mix is the same model in both).
+
+| statistic | folds (134,375 games) | resample 1 / 2 | dev-val | verdict |
+| --- | --- | --- | --- | --- |
+| H4 v2 full - v1 full | -0.09 ± 0.05 mnats, 5 of 5 | -0.08 / -0.09 | -0.22 ± 0.10 | pass: v2 replaces v1 |
+| H5 full-cal - full | +0.01 ± 0.10, 3 of 5 | +0.07 / +0.09 | -0.04 ± 0.18 | fail: calibrated variances don't ship |
+| v2 full - win-comp (reported) | -1.24 ± 0.26, 5 of 5 | | -1.90 ± 0.54 | |
+| v2 full - ratings (reported) | -1.72 ± 0.30, 5 of 5 | | -2.41 ± 0.62 | |
+| v2 pairs over strength + mix | -0.91 ± 0.21, 5 of 5 | | -1.53 ± 0.45 | |
+
+So the shipped additive model is v2 with its own (uncalibrated) variances: identified and a
+little better than v1. Calibration stays for reporting sizes only.
+
+Matchup and ally spreads, v2 (T2, 268,750 games), win pp: fitted, null-corrected [95%] /
+calibrated [95%]; all detected above the null's 95th (fitted values are lower bounds where
+the plant is under 1, i.e. thin blocks; calibrated ones are 0.91x in the plant):
+
+| block | fitted | calibrated | gold at 14 (fitted) |
+| --- | --- | --- | --- |
+| top vs top | 2.23 [1.96, 2.50] | 2.47 [2.19, 2.75] | 277 [262, 293] |
+| middle vs middle | 1.69 [1.41, 1.97] | 2.05 [1.73, 2.38] | 172 [149, 195] |
+| support vs support | 1.15 [0.88, 1.40] | 1.47 [1.17, 1.78] | 121 [95, 147] |
+| bottom vs bottom | 1.05 [0.87, 1.24] | 1.34 [1.11, 1.56] | 76 [61, 90] |
+| jungle vs jungle | 1.04 [0.86, 1.21] | 1.42 [1.21, 1.63] | not detected |
+| middle vs bottom | 0.79 [0.61, 0.97] | 1.14 [0.91, 1.38] | not detected |
+| bottom vs support | 0.80 [0.60, 0.99] | 1.10 [0.86, 1.34] | 83 [71, 96] |
+| top vs middle | 0.52 [0.40, 0.64] | 0.96 [0.81, 1.11] | not detected |
+| ally bottom-support | 1.28 [1.07, 1.48] | 1.55 [1.31, 1.80] | 84 [68, 99] |
+
+The other 7 cross-role matchups and 9 ally pairs are not detected as fitted (calibration
+puts the matchups at 0.2-1.1, the ally pairs mostly near 0); champion strength and the
+damage mix as in e53-T.
+
 #### In-game events
 
 `meiolol-lab eventvalue SNAP` (src/lab/eventvalue.zig, 706b2c4, on meiolol-4a's
