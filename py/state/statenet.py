@@ -17,7 +17,9 @@ clustered by game.
 
 usage: statenet.py SNAP [--out DIR] [--blocks dev,1,2,3,4,5] [--seeds 3] [--kind netd,nets]
        [--dim 8] [--hidden 128] [--dropout 0.1] [--lr 1e-3] [--wd 1e-4] [--patience 3]
-       [--epochs 30] [--batch 4096]
+       [--epochs 30] [--batch 4096] [--control permute]
+--control permute: training rows get another fit game's champions (whole drafts
+permuted across fit games; scored rows real), so any netd gain must vanish
 """
 
 import argparse
@@ -64,24 +66,32 @@ class Net(torch.nn.Module):
         return self.half(x, H, blue, red) - self.half(x * flip, H, red, blue) + H @ self.c
 
 
-def train(net, tensors, tr, va, seed, hp):
+def batches(tensors, idx, dev):
+    """The rows idx of CPU tensors (x, H, ids, y), on the device"""
+    return [t[idx].to(dev, non_blocking=True) for t in tensors]
+
+
+def train(net, tensors, flip, tr, va, seed, hp, dev):
     epochs, batch, patience, lr = hp.epochs, hp.batch, hp.patience, hp.lr
-    x, flip, H, ids, y = tensors
     opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=hp.wd)
     g = torch.Generator(device="cpu").manual_seed(seed)
     best, best_loss, bad = None, float("inf"), 0
     lossf = torch.nn.functional.binary_cross_entropy_with_logits
     for ep in range(epochs):
         net.train()
-        perm = tr[torch.randperm(len(tr), generator=g).to(tr.device)]
+        perm = tr[torch.randperm(len(tr), generator=g)]
         for i in range(0, len(perm), batch):
-            b = perm[i : i + batch]
+            x, H, ids, y = batches(tensors, perm[i : i + batch], dev)
             opt.zero_grad()
-            lossf(net(x[b], flip, H[b], ids[b]), y[b]).backward()
+            lossf(net(x, flip, H, ids), y).backward()
             opt.step()
         net.eval()
+        vl = 0.0
         with torch.no_grad():
-            vl = sum(lossf(net(x[b], flip, H[b], ids[b]), y[b], reduction="sum").item() for b in va.split(65536)) / len(va)
+            for b in va.split(65536):
+                x, H, ids, y = batches(tensors, b, dev)
+                vl += lossf(net(x, flip, H, ids), y, reduction="sum").item()
+        vl /= len(va)
         if vl < best_loss - 1e-6:
             best_loss, bad = vl, 0
             best = {k: v.detach().clone() for k, v in net.state_dict().items()}
@@ -110,8 +120,15 @@ def run_block(state, data, block, seeds, hp, dev, folds):
     has_tl = state.game[:, state.gcols["has_timeline"]] == 1
     logit, l2, _ = sc.draft_logits(data, sets)
     fit_g, sc_g = sets.fit[has_tl[sets.fit]], sets.scored[has_tl[sets.scored]]
-    Xf, names, gf, mf = sc.rows_for(state, fit_g, MINUTES, logit)
+    # Fit rows every other minute (RAM on the shared gpu-box), scored every minute
+    Xf, names, gf, mf = sc.rows_for(state, fit_g, MINUTES[::2], logit)
     Xs, _, gs, ms = sc.rows_for(state, sc_g, MINUTES, logit)
+    ys = data.y[gs]
+    res = {"block": np.full(len(gs), block), "game": gs, "minute": ms, "y": ys}
+    t0 = time.time()
+    res["rich"] = Smooth().fit(Xf, mf, data.y[gf]).predict(Xs, ms)
+    ref_ll, ref_auc = sc.ll(ys, res["rich"]).mean(), auc(ys, res["rich"])
+    log(f"  rich (reference): {ref_ll:.5f}, {time.time() - t0:.0f} s")
     mu, sd = Xf.mean(0), Xf.std(0) + 1e-6
     flip = torch.tensor([1.0 if n == "gold_total" else -1.0 for n in names], device=dev)
     # Symmetric features keep their mean; antisymmetric ones are scaled only, so flip
@@ -119,26 +136,30 @@ def run_block(state, data, block, seeds, hp, dev, folds):
     mu = np.where(flip.cpu().numpy() > 0, mu, 0)
     table, n_ids = nnsets.rating_vocab(data, sets.fit)
 
-    def tens(X, g, m):
+    # Kept on the CPU (standardised in place, no copies); batches go to the card, so a
+    # job fits any per-slot GPU memory cap
+    def tens(X, g, m, id_games):
+        X -= mu.astype(np.float32)
+        X /= sd.astype(np.float32)
         return (
-            torch.from_numpy(((X - mu) / sd).astype(np.float32)).to(dev),
-            flip,
-            torch.from_numpy(sc.hat(m, sc.KNOTS)).to(dev),
-            torch.from_numpy(nnsets.ids(data, g, table)).to(dev),
-            torch.from_numpy(data.y[g].astype(np.float32)).to(dev),
+            torch.from_numpy(X),
+            torch.from_numpy(sc.hat(m, sc.KNOTS)),
+            torch.from_numpy(nnsets.ids(data, id_games, table)),
+            torch.from_numpy(data.y[g].astype(np.float32)),
         )
 
-    tf, ts = tens(Xf, gf, mf), tens(Xs, gs, ms)
+    # Control: each fit game's whole draft (champion ids only; its draft logit, state and
+    # result stay) from another fit game, so champion x state terms learnt from it are noise
+    id_gf = gf
+    if hp.control == "permute":
+        u = np.unique(gf)
+        swap = dict(zip(u, np.random.default_rng(99).permutation(u)))
+        id_gf = np.array([swap[g] for g in gf])
+    tf, ts = tens(Xf, gf, mf, id_gf), tens(Xs, gs, ms, gs)
     val_cut = nnsets.val_cut(data.start[sets.fit])
-    is_val = torch.from_numpy(data.start[gf] >= val_cut).to(dev)
+    is_val = torch.from_numpy(data.start[gf] >= val_cut)
     tr, va = torch.nonzero(~is_val).squeeze(1), torch.nonzero(is_val).squeeze(1)
     log(f"block {block}: fit rows {len(gf)} (val {len(va)}), scored {len(gs)}, ids {n_ids}")
-    ys = data.y[gs]
-    res = {"block": np.full(len(gs), block), "game": gs, "minute": ms, "y": ys}
-    t0 = time.time()
-    res["rich"] = Smooth().fit(Xf, mf, data.y[gf]).predict(Xs, ms)
-    ref_ll, ref_auc = sc.ll(ys, res["rich"]).mean(), auc(ys, res["rich"])
-    log(f"  rich (reference): {ref_ll:.5f}, {time.time() - t0:.0f} s")
     n_fit, n_sc = len(np.unique(gf)), len(np.unique(gs))
     for kind in hp.kind.split(","):
         vls, eps, secs = [], [], []
@@ -146,10 +167,10 @@ def run_block(state, data, block, seeds, hp, dev, folds):
             t0 = time.time()
             torch.manual_seed(1000 * s + 7)
             net = Net(len(names), n_ids, hp.dim, hp.hidden, hp.dropout, use_champs=kind == "netd").to(dev)
-            vl, ep = train(net, tf, tr, va, s, hp)
+            vl, ep = train(net, tf, flip, tr, va, s, hp, dev)
             net.eval()
             with torch.no_grad():
-                z = torch.cat([net(ts[0][b], flip, ts[2][b], ts[3][b]) for b in torch.arange(len(gs), device=dev).split(65536)])
+                z = torch.cat([net(x, flip, H, ids) for x, H, ids, _ in (batches(ts, b, dev) for b in torch.arange(len(gs)).split(65536))])
             p = torch.sigmoid(z).cpu().numpy()
             res[f"{kind}_s{s}"] = p
             vls.append(vl), eps.append(ep + 1), secs.append(time.time() - t0)
@@ -181,6 +202,7 @@ def main():
     ap.add_argument("--patience", type=int, default=3)
     ap.add_argument("--epochs", type=int, default=30)
     ap.add_argument("--batch", type=int, default=4096)
+    ap.add_argument("--control", choices=["none", "permute"], default="none")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
