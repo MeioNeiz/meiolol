@@ -5,7 +5,7 @@ all/data/pool.json c49c24af4a83207c
 all/data/stats.bin bffab0c56008909d
 all/index.html a7bd9f645d02c9c3
 all/matchup/bot/twitch-vs-kaisa.html a7058270c8ab54e1
-all/matchup/index.html 16ce9374d43b8dea
+all/matchup/index.html c83ea5cfbaa7e7d0
 all/matchup/jungle/amumu-vs-leesin.html 8a6dc51af043db37
 all/matchup/mid/orianna-vs-ahri.html a5614e8eb3c86d20
 all/matchup/support/rakan-vs-pyke.html 6abc9c13a661ef4b
@@ -13,7 +13,7 @@ all/matchup/top/mordekaiser-vs-darius.html 4b32b7d8ab36b7ff
 all/patch/build/ahri-mid.html 9cd7f9cffffe2238
 all/patch/build/amumu-jungle.html cb626a110f0eca64
 all/patch/build/darius-top.html 22b655c615e5b390
-all/patch/build/index.html a688d041ba19f1aa
+all/patch/build/index.html c492a45f29efbbb8
 all/patch/build/kaisa-bot.html bb420647c10489c3
 all/patch/build/leesin-jungle.html c8a96379bcb22c08
 all/patch/build/orianna-mid.html e21b72b802589720
@@ -27,7 +27,7 @@ all/patch/data/pool.json 7d1d4f7e19454d8f
 all/patch/data/stats.bin e8331f5e09d9aebc
 all/patch/index.html c0793d7398f36ad0
 all/patch/matchup/bot/twitch-vs-kaisa.html 3e824ed7d47a7a91
-all/patch/matchup/index.html f1a5dca95ef603bc
+all/patch/matchup/index.html ce2d1e9b9a6c98f7
 all/patch/matchup/jungle/amumu-vs-leesin.html 5bc5188fd53dd39a
 all/patch/matchup/mid/orianna-vs-ahri.html 31b67f2975024556
 all/patch/matchup/support/rakan-vs-pyke.html 693dc8abd6e1d65e
@@ -77,7 +77,7 @@ learn.html b241d4e82efafa16
 learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c
 matchup/bot/twitch-vs-kaisa.html e0907fc43ff4ddad
-matchup/index.html 68dbf62ad127c034
+matchup/index.html 6e914cd4a99b2bc7
 matchup/jungle/amumu-vs-leesin.html 885d2b3c4b4f23c4
 matchup/mid/orianna-vs-ahri.html e76fa83ba9cff04d
 matchup/support/rakan-vs-pyke.html 3362d0123f833ade
@@ -86,7 +86,7 @@ method.html 5f5e7f2690a90ced
 patch/build/ahri-mid.html 25f854f1d055758f
 patch/build/amumu-jungle.html 718e50a4b3d59ced
 patch/build/darius-top.html bf35c0566565b10a
-patch/build/index.html 452c07520971b1af
+patch/build/index.html 79cda271313001fc
 patch/build/kaisa-bot.html 203c860dc744b0ce
 patch/build/leesin-jungle.html 2b6fe91afb6e3a02
 patch/build/orianna-mid.html cdfa8f976fc58770
@@ -100,7 +100,7 @@ patch/data/pool.json 7d1d4f7e19454d8f
 patch/data/stats.bin e8331f5e09d9aebc
 patch/index.html ecb74db4b35f984c
 patch/matchup/bot/twitch-vs-kaisa.html fb560ec44bb59b9e
-patch/matchup/index.html 91c2ff41d9afadd1
+patch/matchup/index.html 1dcdadf28507a547
 patch/matchup/jungle/amumu-vs-leesin.html b687126281e036f2
 patch/matchup/mid/orianna-vs-ahri.html 15f5dbd0f3f5ed3c
 patch/matchup/support/rakan-vs-pyke.html c87212b48f5d6ac7

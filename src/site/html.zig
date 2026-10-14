@@ -105,7 +105,7 @@ pub const Page = struct {
     nav: Nav = .none,
     /// Current patch, for the period switch
     patch: []const u8,
-    /// Footer: "in EUW, last 30 days, 5123 games"
+    /// Footer: "in EUW, last 30 days, 5,123 games"
     data: []const u8,
     /// Preview: unlisted for search engines, with a banner saying so
     public: bool,

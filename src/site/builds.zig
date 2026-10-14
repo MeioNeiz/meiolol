@@ -64,7 +64,12 @@ pub fn writeIndex(site: *const Site, w: *Writer, f: *const File) !void {
     const a = site.arena;
     const title = try a.print("Builds, patch {s} | meiolol", .{f.label});
     const desc = try a.print("Runes, items and skill order per champion and role in ranked solo/duo {s}, patch {s}.", .{ site.view.region.in(), f.label });
-    const p = site.page(title, desc, index_path, .champions);
+    var p = site.page(title, desc, index_path, .champions);
+    // Builds are per patch: a view without them switches to its champions list
+    for (html.View.all, &p.counterparts.?) |v, *there| {
+        if (v.period != .patch or site.view_builds[v.index()] == null)
+            there.* = try std.mem.concat(a, u8, &.{ v.dir(), "champions.html" });
+    }
     try html.head(w, p);
     try tpl.render(w,
         \\<h1>Builds, patch {patch}</h1>

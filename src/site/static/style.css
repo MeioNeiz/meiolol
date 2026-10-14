@@ -80,7 +80,8 @@ nav.switch {
 nav.switch a { padding: 3px 11px; color: var(--muted); }
 nav.switch a:hover { text-decoration: none; color: var(--text); }
 nav.switch a[aria-current="page"] { background: var(--panel-3); color: var(--text); }
-main { padding: 24px 20px 56px; }
+/* main.wrap: .wrap's padding shorthand would win over a plain main rule */
+main.wrap { padding-top: 24px; padding-bottom: 32px; }
 h1 { font-size: 26px; line-height: 1.2; margin: 6px 0 8px; letter-spacing: -0.025em; font-weight: 650; }
 h2 { font-size: 18px; margin: 32px 0 12px; letter-spacing: -0.015em; font-weight: 600; }
 h3 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
@@ -135,7 +136,7 @@ input, select {
 .notes li > div:first-child { display: flex; align-items: center; gap: 10px; font-weight: 600; }
 .notes li > div:first-child .muted { font-weight: 400; font-size: 14px; }
 .preview { background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
-.preview .wrap { padding: 8px 16px; }
+.preview .wrap { padding-top: 8px; padding-bottom: 8px; }
 button {
   font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line-2);
   border-radius: 8px; padding: 8px 14px; cursor: pointer;
@@ -165,7 +166,9 @@ tr.thin td { color: var(--muted); opacity: 0.6; }
 .archive { list-style: none; padding: 0; }
 .archive li { display: flex; gap: 12px; padding: 2px 0; }
 .hero img + img { margin-left: -12px; }
-.chart { margin: 0; }
+/* SVG text scales with the chart: capped width keeps it near 15px on desktop, and phones
+   get bigger units so it stays near 8.5px */
+.chart { margin: 0; max-width: 800px; }
 .chart svg { width: 100%; height: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
 .chart text { fill: var(--muted); font-size: 12px; }
 .chart .side { font-size: 12px; }
@@ -186,6 +189,7 @@ body:has(#exp-y:checked) .exp:not(.exp-y) { display: none; }
 .matchup-list { columns: 2 260px; padding-left: 18px; }
 .matchup-list li { margin: 2px 0; }
 .matchup-list li.thin a { color: var(--muted); }
+.matchup-list li.empty { list-style: none; color: var(--muted); }
 .pool-form { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0; }
 .pool-form label { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; }
 .pool-form label span { color: var(--muted); font-size: 14px; }
@@ -497,7 +501,7 @@ table.lane td.you { font-weight: 600; }
 .your-start h1 { font-size: 30px; }
 .your-start .lead { margin: 0 0 22px; }
 .your-start.compact { padding: 4px 0 4px; }
-td.wrap { white-space: normal; min-width: 140px; }
+td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 10px; }
 .your-start.compact h1, .your-start.compact .lead, .your-start.compact .sub-links { display: none; }
 .banner { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 32px; padding: 8px 0 4px; }
 .banner h1 { font-size: 30px; margin: 0; }
@@ -582,7 +586,8 @@ td.wrap { white-space: normal; min-width: 140px; }
 }
 @media (max-width: 640px) {
   .wrap { padding: 0 16px; }
-  main { padding: 18px 16px 48px; }
+  .chart text, .chart .side { font-size: 15px; }
+  main.wrap { padding-top: 18px; padding-bottom: 28px; }
   header.top .wrap { gap: 10px; }
   .brand span { display: none; }
   header .look { display: none; }

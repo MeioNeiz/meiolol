@@ -30,6 +30,8 @@ const min_minute_games = 10;
 const min_experienced = 10;
 /// Minimum games choices on the matchup index; shows everything by default
 const index_floors = [_]u32{ 1, 5, 10, 20, 50, 100, thin_games };
+/// 23k matchups at 1 (a 140,000 px list per role); 50 keeps ~3k
+const index_default = 50;
 
 /// A thinner matchup (greyed out anyway) draws minutes while all its games are going
 fn minuteFloor(v: View) u32 {
@@ -103,7 +105,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         , .{});
         return html.foot(w, p);
     };
-    try html.minGames(w, "../", "matchups", &index_floors, index_floors[0], 0);
+    try html.minGames(w, "../", "matchups", &index_floors, index_default, 0);
     for (Role.all) |r| {
         var list: std.ArrayList(IndexEntry) = .empty;
         for (c.curves) |cv| {
@@ -119,19 +121,26 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
             }
         }.f);
         const slug = root.roleSlug(r);
+        var shown: usize = 0;
+        for (list.items) |e| shown += @intFromBool(e.games >= index_default);
         try tpl.render(w,
             \\<h2>{role} <span class="muted"><span id="n-{slug}">{n}</span> matchups</span></h2>
             \\
-        , .{ .role = root.roleName(r), .slug = slug, .n = list.items.len });
+        , .{ .role = root.roleName(r), .slug = slug, .n = shown });
         if (list.items.len == 0) {
             try tpl.render(w, "<p class=\"muted\">More data needed.</p>\n", .{});
             continue;
         }
         try tpl.render(w,
             \\<ul class="matchup-list" data-min-list data-count="n-{slug}">
-            \\{items}</ul>
+            \\{items}<li class="empty"{hidden}>None with this many games yet: lower Min games.</li>
+            \\</ul>
             \\
-        , .{ .slug = slug, .items = tpl.each(list.items, .{ a, r }, indexItem) });
+        , .{
+            .slug = slug,
+            .items = tpl.each(list.items, .{ a, r }, indexItem),
+            .hidden = tpl.flag(shown > 0, "hidden"),
+        });
     }
     try html.foot(w, p);
 }
@@ -140,11 +149,12 @@ const IndexEntry = struct { x: Champ, y: Champ, games: u32, thin: bool };
 
 fn indexItem(ctx: struct { std.mem.Allocator, Role }, w: *Writer, e: IndexEntry) !void {
     try tpl.render(w,
-        \\<li data-games="{games}"{thin}><a href="{href}">{x} vs {y}</a> <span class="muted">{games} game{s}</span></li>
+        \\<li data-games="{games}"{thin}{hidden}><a href="{href}">{x} vs {y}</a> <span class="muted">{games} game{s}</span></li>
         \\
     , .{
         .games = e.games,
         .thin = tpl.flag(e.thin, "class=\"thin\""),
+        .hidden = tpl.flag(e.games < index_default, "hidden"),
         .href = (try path(ctx[0], ctx[1], e.x, e.y))["matchup/".len..],
         .x = e.x.name,
         .y = e.y.name,

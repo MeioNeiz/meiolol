@@ -162,7 +162,7 @@ pub const Site = struct {
             .description = description,
             .nav = nav,
             .patch = s.patch,
-            .data = s.arena.print("{s}, {s}, {d} games", .{ s.view.region.in(), s.when, s.games }) catch "",
+            .data = s.arena.print("{s}, {s}, {s} games", .{ s.view.region.in(), s.when, thousands(s.arena, s.games) catch "" }) catch "",
             .public = s.opts.public,
         };
     }
@@ -1124,7 +1124,7 @@ fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
         \\<p class="muted"><b>{games}</b> ranked solo/duo games {in}, {when}, all ranks.{builds}</p>
         \\
     , .{
-        .games = site.games,
+        .games = try thousands(a, site.games),
         .in = site.view.region.in(),
         .when = site.when,
         .builds = if (site.view_builds[patch_view.index()] != null) tpl.t(" <a href=\"{href}\">Builds for patch {patch}</a>.", .{
@@ -1138,7 +1138,7 @@ fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
 }
 
 /// 26568 as "26,568"
-fn thousands(a: std.mem.Allocator, n: u64) ![]const u8 {
+pub fn thousands(a: std.mem.Allocator, n: u64) ![]const u8 {
     const digits = try std.fmt.allocPrint(a, "{d}", .{n});
     var out: std.ArrayList(u8) = .empty;
     for (digits, 0..) |c, i| {
