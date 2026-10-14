@@ -12,12 +12,12 @@ hand-made experience terms (2253Z)	ratings	folds	-0.00507	0.00055	1			134375		20
 control: history-means net, player features permuted (2253Z)	hand-made experience terms	folds	0.00005	0.00004	3			134375		20261014T003910Z-c-full-pfeat	no leak	
 player net on ratings + experience terms	ratings	folds	-0.00263	0.00076	3	-0.00261	-0.00228	44353		playernet-20261013	ties the hand-made experience terms: -0.00002 ± 0.00020 beyond them	
 player net on ratings + experience terms	hand-made experience terms	folds	-0.00002	0.00020	3	0.00000	0.00033	44353		playernet-20261013	what the net adds beyond the hand-made terms	
-player net on ratings + experience terms	hand-made experience terms	dev-val	-0.00024	0.00034	3	-0.00033	0.00001	8500		playernet-20261013	
+player net on ratings + experience terms	hand-made experience terms	dev-val	-0.00024	0.00034	3	-0.00033	0.00001	8500		playernet-20261013		
 player net on ratings + experience terms	ratings	dev-val	-0.00213	0.00186	3	-0.00221	-0.00187	8500		playernet-20261013	-0.00024 ± 0.00034 beyond the hand-made terms	
 hand-made experience terms (ratings + experience)	ratings	folds	-0.00261	0.00069	1			44353		playernet-20261013	win-ratings with champ_exp and form, linear per role	
-hand-made experience terms (ratings + experience)	ratings	dev-val	-0.00189	0.00184	1			8500		playernet-20261013	
+hand-made experience terms (ratings + experience)	ratings	dev-val	-0.00189	0.00184	1			8500		playernet-20261013		
 player net on ratings alone	ratings	folds	-0.00254	0.00065	3	-0.00237	-0.00193	44353		playernet-20261013	finds the experience gain by itself, no more: +0.00007 ± 0.00037 vs the hand-made terms	
-player net on ratings alone	ratings	dev-val	-0.00143	0.00184	3	-0.00175	-0.00094	8500		playernet-20261013	
+player net on ratings alone	ratings	dev-val	-0.00143	0.00184	3	-0.00175	-0.00094	8500		playernet-20261013		
 player net without champion embedding, on ratings + experience	ratings	folds	-0.00267	0.00079	3	-0.00258	-0.00222	44353		playernet-20261013	no champion x experience interaction found: same as with the embedding	
 control: per-slot net without player features	ratings	folds	-0.00004	0.00007	3	-0.00001	0.00001	44353		playernet-20261013	the gain comes from the player features	
 hand-made experience terms (1954Z, unpinned)	ratings	folds	-0.00378	0.00064	1			76041		playernet 1954Z (Mac)	more history per player, bigger gain (2055Z: -0.00261)	
