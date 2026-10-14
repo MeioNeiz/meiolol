@@ -1,8 +1,14 @@
 //! One shrunk additive draft model (docs/model.md "Effects and the CPU model"): blue's
 //! logit (win) or blue-minus-red outcome (team gold at 14) as
 //!   platform side + sum over roles of champion strength (blue minus red)
-//!   + 10 ally role-pair blocks + 25 enemy role-pair blocks (one cell per champion pair)
+//!   + 10 ally role-pair blocks + 15 matchup blocks (one cell per champion pair)
 //!   + continuous comp features (blue minus red)
+//! A matchup (role r vs role q, r <= q) is one cell per pair of champions, from the r
+//! side: blue gains it when blue has the r champion, loses it when red has; a same-role
+//! matchup is one cell per unordered pair, signed. The older parametrisation (25 enemy
+//! blocks, "my role r vs their role q" from both sides, Variant.matchup false) has two
+//! cells per matchup of which only the difference is identified, so its block sds are
+//! not the matchup's spread and simulation calibration can't target them
 //! Every champion-role and pair block is a random effect with its own variance, estimated
 //! from the fit games (MacKay's fixed point, diagonal posterior: sigma^2 = sum theta^2 /
 //! effective parameters), so sigma per block is "how much this kind of pair matters". The
@@ -65,6 +71,9 @@ pub const Kind = enum { logistic, gaussian };
 pub const Variant = struct {
     groups: u64 = 1,
     cont: u8 = 0,
+    /// Identified matchups: same-role enemy blocks one signed cell per unordered pair;
+    /// use with enemy groups r <= q only (matchupGroups)
+    matchup: bool = false,
 
     pub fn with(v: Variant, g: usize) Variant {
         var o = v;
@@ -84,6 +93,19 @@ pub const Variant = struct {
 
     pub fn all() Variant {
         return .{ .groups = (@as(u64, 1) << n_groups) - 1, .cont = (1 << n_cont) - 1 };
+    }
+
+    /// Every ally block and the 15 matchup blocks (enemy r <= q), identified
+    pub fn matchupGroups(v: Variant) Variant {
+        var o = v;
+        for (0..n_role) |r| for (r + 1..n_role) |q| {
+            o = o.with(allyGroup(r, q));
+        };
+        for (0..n_role) |r| for (r..n_role) |q| {
+            o = o.with(enemyGroup(r, q));
+        };
+        o.matchup = true;
+        return o;
     }
 };
 
@@ -105,8 +127,9 @@ fn key(g: usize, a: u32, b: u32) u64 {
 }
 
 /// The cells a game side touches in group g, as (key, sign); at most 2 for every group
-/// but fixed
-fn cells(g: usize, t: *const [2][n_role]u32, out: *[2]struct { u64, f32 }) usize {
+/// but fixed. matchup: a same-role enemy block has one signed cell per unordered pair
+/// (none for a mirror)
+fn cells(g: usize, t: *const [2][n_role]u32, out: *[2]struct { u64, f32 }, matchup: bool) usize {
     if (g < g_ally) {
         const r = g - g_main;
         out[0] = .{ key(g, t[0][r], 0), 1 };
@@ -128,6 +151,13 @@ fn cells(g: usize, t: *const [2][n_role]u32, out: *[2]struct { u64, f32 }) usize
     const e = g - g_enemy;
     const r = e / n_role;
     const q = e % n_role;
+    if (matchup and r == q) {
+        const a = t[0][r];
+        const b = t[1][r];
+        if (a == b) return 0;
+        out[0] = .{ key(g, @min(a, b), @max(a, b)), if (a < b) 1 else -1 };
+        return 1;
+    }
     out[0] = .{ key(g, t[0][r], t[1][q]), 1 };
     out[1] = .{ key(g, t[1][r], t[0][q]), -1 };
     return 2;
@@ -183,7 +213,7 @@ pub fn build(gpa: std.mem.Allocator, kind: Kind, variant: Variant, games: []cons
         group_start[g] = @intCast(n_entries);
         if (!variant.has(g)) continue;
         for (games) |*gm| {
-            const n = cells(g, &gm.teams, &buf);
+            const n = cells(g, &gm.teams, &buf, variant.matchup);
             for (buf[0..n]) |c| {
                 const e = try keys.getOrPut(gpa, c[0]);
                 if (!e.found_existing) {
@@ -219,7 +249,7 @@ pub fn build(gpa: std.mem.Allocator, kind: Kind, variant: Variant, games: []cons
         std.debug.assert(at == group_start[g]);
         if (!variant.has(g)) continue;
         for (games, 0..) |*gm, gi| {
-            const n = cells(g, &gm.teams, &buf);
+            const n = cells(g, &gm.teams, &buf, variant.matchup);
             for (buf[0..n]) |c| {
                 const pi = keys.get(c[0]).?;
                 entries[at] = .{ .game = @intCast(gi), .param = pi, .x = c[1] };
@@ -399,12 +429,17 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
 /// variance run low on win (binary) outcomes when cells have few games (test "planted
 /// pair sd"), and pure noise gives a spread too. So: plant every block at a trial sd on
 /// the same games (cells drawn afresh, the fit's fixed terms kept), draw outcomes, refit,
-/// and scale each trial sd by observed / mean simulated; repeated `iters` times. A block
-/// whose observed sd is no more than noise gives calibrates towards 0
+/// and scale each trial sd by sqrt(observed / mean simulated) (damped: blocks trade
+/// variance, so undamped steps overshoot); repeated `iters` times. Pair blocks only:
+/// champion strength has hundreds of games per cell and stays at the fit's own sd (an
+/// undamped joint update ran it up 4-5x). A block whose observed sd is no more than noise
+/// gives calibrates towards 0
 pub const Calibration = struct {
     sigma2: [n_groups]f64,
     /// Calibrated sd over the fit's own sd (1 for an unbiased block)
     factor: [n_groups]f64,
+    /// Last round: observed sd over the simulations' mean sd (1 when converged)
+    misfit: [n_groups]f64,
 };
 
 pub fn calibrate(gpa: std.mem.Allocator, io: std.Io, p: *const Problem, obs: *const Fit, cfg: Config, sims: u32, iters: u32, seed: u64) !Calibration {
@@ -412,6 +447,7 @@ pub fn calibrate(gpa: std.mem.Allocator, io: std.Io, p: *const Problem, obs: *co
     for (&s_true, obs.sigma2) |*t, v| t.* = @sqrt(@max(v, 0));
     const sim_sd = try gpa.alloc([n_groups]f64, sims);
     defer gpa.free(sim_sd);
+    var misfit: [n_groups]f64 = @splat(1);
     const Ctx = struct {
         gpa: std.mem.Allocator,
         p: *const Problem,
@@ -450,16 +486,18 @@ pub fn calibrate(gpa: std.mem.Allocator, io: std.Io, p: *const Problem, obs: *co
     };
     for (0..iters) |it| {
         try par.forEach(io, sims, Ctx{ .gpa = gpa, .p = p, .obs = obs, .cfg = cfg, .s_true = s_true, .seed = seed +% it *% 1000, .out = sim_sd }, Ctx.one);
-        for (1..n_groups) |g| {
+        for (g_ally..n_groups) |g| {
             var m: f64 = 0;
             for (sim_sd) |sd| m += sd[g];
             m /= @floatFromInt(@max(sims, 1));
             const o = @sqrt(@max(obs.sigma2[g], 0));
-            // Multiplicative step, capped so one noisy round can't run away
-            if (m > 0 and s_true[g] > 0) s_true[g] *= std.math.clamp(o / m, 0.25, 4);
+            misfit[g] = if (m > 0) o / m else 1;
+            // Damped multiplicative step, capped so one noisy round can't run away
+            if (m > 0 and s_true[g] > 0) s_true[g] *= @sqrt(std.math.clamp(o / m, 0.25, 4));
         }
     }
     var out: Calibration = undefined;
+    out.misfit = misfit;
     for (0..n_groups) |g| {
         out.sigma2[g] = s_true[g] * s_true[g];
         const o = @sqrt(@max(obs.sigma2[g], 0));
@@ -480,7 +518,7 @@ pub fn predict(p: *const Problem, f: *const Fit, g: *const GameIn) f64 {
     var buf: [2]struct { u64, f32 } = undefined;
     for (1..n_groups) |gr| {
         if (!p.variant.has(gr)) continue;
-        const n = cells(gr, &g.teams, &buf);
+        const n = cells(gr, &g.teams, &buf, p.variant.matchup);
         for (buf[0..n]) |cl| {
             if (p.keys.get(cl[0])) |j| x += cl[1] * f.theta[j];
         }
@@ -520,8 +558,8 @@ fn synth(gpa: std.mem.Allocator, kind: Kind, n_games: usize, n_champ: u32, s_mai
             eta -= mains[r * n_champ + (g.teams[1][r] - 1 - r * 1000)];
         }
         var buf: [2]struct { u64, f32 } = undefined;
-        _ = cells(planted, &g.teams, &buf);
-        for (buf) |cl| {
+        const nc = cells(planted, &g.teams, &buf, false);
+        for (buf[0..nc]) |cl| {
             const a: u32 = @intCast(cl[0] >> 24 & 0xffffff);
             const b: u32 = @intCast(cl[0] & 0xffffff);
             eta += cl[1] * pairs[((a - 1) % 1000) * n_champ + (b - 1) % 1000];
@@ -621,7 +659,7 @@ test "calibration recovers a thin planted pair block on win" {
     defer p.deinit(gpa);
     var f = try fit(gpa, &p, .{}, null, null);
     defer f.deinit(gpa);
-    const cal = try calibrate(gpa, testing.io, &p, &f, .{}, 4, 4, 1);
+    const cal = try calibrate(gpa, testing.io, &p, &f, .{}, 4, 8, 1);
     // Raw ~0.67x at 25 games per cell; calibrated within ~20% of 0.15, the empty block ~0
     try testing.expect(@sqrt(f.sigma2[planted]) < 0.12);
     try testing.expectApproxEqAbs(0.15, @sqrt(cal.sigma2[planted]), 0.03);
@@ -629,4 +667,29 @@ test "calibration recovers a thin planted pair block on win" {
     var m: f64 = 0;
     for (g_main..g_ally) |g| m += @sqrt(cal.sigma2[g]) / n_role;
     try testing.expectApproxEqAbs(0.15, m, 0.04);
+}
+
+test "identified matchups: a planted matchup's sd comes back as the block sd" {
+    const gpa = testing.allocator;
+    // Crossed: synth plants cell(1 vs 3) only, so the matchup sd is 0.2
+    const cross = try synth(gpa, .gaussian, 20_000, 10, 0.3, enemyGroup(1, 3), 0.2, 3);
+    defer gpa.free(cross);
+    var p = try build(gpa, .gaussian, Variant.mains().matchupGroups(), cross);
+    defer p.deinit(gpa);
+    var f = try fit(gpa, &p, .{}, null, null);
+    defer f.deinit(gpa);
+    try testing.expectApproxEqAbs(0.2, @sqrt(f.sigma2[enemyGroup(1, 3)]), 0.04);
+    try testing.expect(@sqrt(f.sigma2[enemyGroup(1, 1)]) < 0.05);
+    try testing.expectEqual(0, p.param_start[enemyGroup(3, 1) + 1] - p.param_start[enemyGroup(3, 1)]);
+    // Same role: synth plants cell(a, b) and cell(b, a) independently, a matchup of sd
+    // 0.2 sqrt 2 as one signed cell
+    const same = try synth(gpa, .gaussian, 20_000, 10, 0.3, enemyGroup(2, 2), 0.2, 4);
+    defer gpa.free(same);
+    var q = try build(gpa, .gaussian, Variant.mains().matchupGroups(), same);
+    defer q.deinit(gpa);
+    var g = try fit(gpa, &q, .{}, null, null);
+    defer g.deinit(gpa);
+    try testing.expectApproxEqAbs(0.2 * @sqrt(2.0), @sqrt(g.sigma2[enemyGroup(2, 2)]), 0.05);
+    // 10 champions: 45 unordered pairs
+    try testing.expectEqual(45, q.param_start[enemyGroup(2, 2) + 1] - q.param_start[enemyGroup(2, 2)]);
 }

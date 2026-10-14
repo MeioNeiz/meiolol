@@ -34,6 +34,12 @@ pub const usage =
     \\                                  [--shuffle SEED] (labels permuted: a control)
     \\                                  [--resample N] (fold fits on netcheck's seeded
     \\                                  90% of fit games, the candidate's too)
+    \\                                  [--param v1|v2] (v2, default: 15 identified
+    \\                                  matchup blocks; v1: 25 enemy blocks, two cells
+    \\                                  per matchup, as runs before 14 Oct 03Z)
+    \\                                  [--calibrate SIMS] (block variances corrected by
+    \\                                  simulation: calibrated table, and full-cal, the
+    \\                                  full model refitted with them fixed)
     \\                                  shrunk additive model (champion strength, ally
     \\                                  and enemy role-pair blocks, damage mix) vs the
     \\                                  -Dcand candidate on dev-val and the 5 forward
@@ -60,7 +66,27 @@ const Options = struct {
     /// Noise-floor refits: every block's fit games (the candidate's too) on netcheck's
     /// seeded 90% (winnet.inResample), so a gain's refit spread shows
     resample: ?u32 = null,
+    /// Simulations per calibration round (additive.calibrate); 0 off
+    calibrate: u32 = 0,
+    param: Param = .v2,
 };
+
+/// v2: identified matchups (additive.Variant.matchupGroups); v1: the 25 enemy blocks
+const Param = enum { v1, v2 };
+
+/// The full model's groups: every block, comp features from `cont`
+fn fullVariant(param: Param, cont: u8) A.Variant {
+    var v: A.Variant = .{ .cont = cont };
+    for (A.g_main..A.g_ally) |g| v = v.with(g);
+    if (param == .v2) return v.matchupGroups();
+    var all = A.Variant.all();
+    all.cont = cont;
+    return all;
+}
+
+/// Calibration rounds (additive.calibrate's iters)
+const cal_rounds = 8;
+const cal_seed = 0xca1;
 
 const Block = enum { dev, f1, f2, f3, f4, f5 };
 const n_folds = harness.folds;
@@ -185,8 +211,9 @@ fn lanePair(r: usize, q: usize) bool {
     return r == q or (r == 3 and q == 4) or (r == 4 and q == 3);
 }
 
-fn models(arena: std.mem.Allocator) ![]Model {
-    const mains = A.Variant.mains();
+fn models(arena: std.mem.Allocator, param: Param) ![]Model {
+    var mains = A.Variant.mains();
+    mains.matchup = param == .v2;
     var mix = mains;
     mix.cont = 1;
     var ally = mix;
@@ -196,11 +223,12 @@ fn models(arena: std.mem.Allocator) ![]Model {
     var lane = mix;
     var enemy = mix;
     for (0..A.n_role) |r| for (0..A.n_role) |q| {
+        // v2: the r <= q block holds the matchup from both sides
+        if (param == .v2 and q < r) continue;
         if (lanePair(r, q)) lane = lane.with(A.enemyGroup(r, q));
         enemy = enemy.with(A.enemyGroup(r, q));
     };
-    var full = A.Variant.all();
-    full.cont = 1;
+    const full = fullVariant(param, 1);
     var nomix = full;
     nomix.cont = 0;
     var out: std.ArrayList(Model) = .empty;
@@ -419,6 +447,8 @@ const Task = struct {
     model: Model,
     /// Fit without this group (--drop); 0 none
     without: usize = 0,
+    /// Refit with the variances calibrated by simulation (--calibrate)
+    calibrate: bool = false,
     label: []const u8,
 };
 
@@ -551,6 +581,8 @@ fn runBlock(
     const results = try arena.alloc(Result, tasks.len);
     const Ctx = struct {
         gpa: std.mem.Allocator,
+        io: Io,
+        sims: u32,
         tasks: []const Task,
         results: []Result,
         fit_win: []const A.GameIn,
@@ -573,6 +605,14 @@ fn runBlock(
             defer p.deinit(x.gpa);
             var f = try A.fit(x.gpa, &p, .{}, null, null);
             defer f.deinit(x.gpa);
+            if (t.calibrate) {
+                const cal = try A.calibrate(x.gpa, x.io, &p, &f, .{}, x.sims, cal_rounds, cal_seed);
+                var start = f;
+                start.sigma2 = cal.sigma2;
+                const fc = try A.fit(x.gpa, &p, .{ .estimate = false }, null, &start);
+                f.deinit(x.gpa);
+                f = fc;
+            }
             const pred = try x.gpa.alloc(f64, x.scored.len);
             for (x.scored, pred) |*g, *o| {
                 const e = A.predict(&p, &f, g);
@@ -591,6 +631,8 @@ fn runBlock(
         const n = @min(opts.threads, tasks.len - at);
         try par.forEach(io, n, Ctx{
             .gpa = gpa,
+            .io = io,
+            .sims = opts.calibrate,
             .tasks = tasks[at..][0..n],
             .results = results[at..][0..n],
             .fit_win = fit_win,
@@ -787,8 +829,7 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
     var lw = lf.writer(io, &lbuf);
     try lw.interface.writeAll("outcome\tblock\tchampion_a\tchampion_b\tgames\teffect\tci\tunit\n");
 
-    var full = A.Variant.all();
-    full.cont = 1;
+    const full = fullVariant(opts.param, 1);
     if (soft != null and teacher_games.items.len < win_games.items.len) {
         try w.print("teacher covers {d} of {d} dev games: no student table\n", .{ teacher_games.items.len, win_games.items.len });
         teacher_games.clearRetainingCapacity();
@@ -911,8 +952,8 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
         // splits its effect between the two blocks by their variances (half each when
         // r == q, the same block twice), so the matchup's spread is the two cell sds
         // summed (planted lane matchups: one block's sd is half the planted spread)
-        try w.print("{s}: enemy matchups, spread of X-facing-Y's effect (both blocks' cell sds summed; a same-role block twice), [half-sample mean]\n", .{outcome});
-        for (0..A.n_role) |r| for (r..A.n_role) |q| {
+        if (opts.param == .v1) try w.print("{s}: enemy matchups, spread of X-facing-Y's effect (both blocks' cell sds summed; a same-role block twice), [half-sample mean]\n", .{outcome});
+        if (opts.param == .v1) for (0..A.n_role) |r| for (r..A.n_role) |q| {
             const ga = A.enemyGroup(r, q);
             const gb = A.enemyGroup(q, r);
             if (p.param_start[ga + 1] == p.param_start[ga] or p.param_start[gb + 1] == p.param_start[gb]) continue;
@@ -937,6 +978,26 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
             });
             try w.print("  {s:<26} {d:>6} cells  sd {d:.2} [{d:.2}, {d:.2}] [{d:.2}]  null {d:.2} (95th {d:.2})  corrected {d:.2} [{d:.2}, {d:.2}] {s} {s}\n", .{ label, n_cells, sm.sd * to_unit, sm.lo * to_unit, sm.hi * to_unit, sm.half_mean * to_unit, @sqrt(sm.null_ms) * to_unit, sm.null_q95 * to_unit, corr(sm.sd, sm.null_ms) * to_unit, corr(sm.lo, sm.null_ms) * to_unit, corr(sm.hi, sm.null_ms) * to_unit, if (in_gold) "gold" else "pp", if (sm.detected) "DETECTED" else "" });
         };
+        if (opts.calibrate > 0) {
+            // Laplace-type variances run low on win with thin cells: corrected by
+            // simulation; the half-sample interval scaled by the same factor
+            const cal = try A.calibrate(gpa, io, &p, &f, .{}, opts.calibrate, cal_rounds, cal_seed);
+            try w.print("{s}: calibrated by simulation ({d} sims x {d} rounds; interval = the half-sample one x the factor)\n", .{ outcome, opts.calibrate, cal_rounds });
+            for (1..A.n_groups) |g| {
+                if (p.param_start[g + 1] == p.param_start[g]) continue;
+                const sm = try summarise(arena, .{ .a = g }, f.sigma2, boots, nulls);
+                const k = cal.factor[g];
+                try w.print("  {s:<26} sd {d:.2} -> {d:.2} [{d:.2}, {d:.2}] {s}, factor {d:.2}, last-round misfit {d:.2}\n", .{ A.groupName(&nbuf, g), sm.sd * to_unit, sm.sd * k * to_unit, sm.lo * k * to_unit, sm.hi * k * to_unit, if (in_gold) "gold" else "pp", k, cal.misfit[g] });
+                try cw.interface.print("{s}\tcal {s}\t\t\t\t{d:.5}\t{d:.5}\t{d:.5}\t{d:.3}\t{d:.3}\t{d:.3}\t{d}\t\t\t\t\t\t\n", .{ outcome, A.groupName(&nbuf, g), sm.sd * k, sm.lo * k, sm.hi * k, sm.sd * k * to_pp, sm.lo * k * to_pp, sm.hi * k * to_pp, opts.boot });
+            }
+            if (opts.param == .v1) for (0..A.n_role) |r| for (r..A.n_role) |q| {
+                const ga = A.enemyGroup(r, q);
+                const gb = A.enemyGroup(q, r);
+                if (p.param_start[ga + 1] == p.param_start[ga] or p.param_start[gb + 1] == p.param_start[gb]) continue;
+                const sd = @sqrt(cal.sigma2[ga]) + @sqrt(cal.sigma2[gb]);
+                try w.print("  matchup {s}-{s}{s} sd {d:.2} {s}\n", .{ A.role_names[r], A.role_names[q], "               "[0 .. 15 - @min(15, A.role_names[r].len + A.role_names[q].len)], sd * to_unit, if (in_gold) "gold" else "pp" });
+            };
+        }
         // Comp: the damage mix, per sd of the blue-minus-red term
         var s: f64 = 0;
         var s2: f64 = 0;
@@ -1010,6 +1071,10 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.shuffle = try std.fmt.parseInt(u64, v, 10);
         } else if (std.mem.eql(u8, k, "--resample")) {
             o.resample = try std.fmt.parseInt(u32, v, 10);
+        } else if (std.mem.eql(u8, k, "--param")) {
+            o.param = std.meta.stringToEnum(Param, v) orelse return error.BadParam;
+        } else if (std.mem.eql(u8, k, "--calibrate")) {
+            o.calibrate = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--alpha")) {
             o.alpha = try std.fmt.parseFloat(f32, v);
         } else return error.UnknownOption;
@@ -1063,11 +1128,11 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
-    try w.print("# effects vs {s}: blocks {any}, drop {}, half-samples {d}, soft {s} alpha {d}, shuffle {?d}, resample {?d}\n\n", .{ cand_name, opts.blocks, opts.drop, opts.boot, opts.soft orelse "-", opts.alpha, opts.shuffle, opts.resample });
+    try w.print("# effects vs {s}: blocks {any}, drop {}, half-samples {d}, soft {s} alpha {d}, shuffle {?d}, resample {?d}, calibrate {d}, param {s}\n\n", .{ cand_name, opts.blocks, opts.drop, opts.boot, opts.soft orelse "-", opts.alpha, opts.shuffle, opts.resample, opts.calibrate, @tagName(opts.param) });
     if (opts.shuffle != null) try w.writeAll("SHUFFLED LABELS: a control, every gain and sd must be ~0 (the candidate fits the real labels: its rows' y)\n\n");
     try w.flush();
 
-    const ms = try models(arena);
+    const ms = try models(arena, opts.param);
     var tasks: std.ArrayList(Task) = .empty;
     for (ms) |m| try tasks.append(arena, .{ .model = m, .label = m.name });
     if (soft != null) {
@@ -1088,6 +1153,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             try tasks.append(arena, .{ .model = ms[full_model], .without = g, .label = label });
         }
     }
+    if (opts.calibrate > 0) try tasks.append(arena, .{ .model = ms[full_model], .calibrate = true, .label = "full-cal" });
 
     var pooled: Pooled = .{};
     defer pooled.deinit(gpa);
@@ -1123,7 +1189,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         try w.print("\nfolds pooled, paired between variants (folds of 5 better):\n", .{});
         for (tasks.items, pooled.preds, 0..) |t, x, ti| {
             if (ti == 0) continue;
-            const base: usize = if (t.without != 0) full_model else 0;
+            const base: usize = if (t.without != 0 or t.calibrate) full_model else 0;
             const g = pairedFolds(pooled, pooled.preds[base].items, x.items);
             try w.print("  {s:<40} vs {s:<5} {d:.5} +- {d:.5}  better in {d} of 5\n", .{ t.label, tasks.items[base].label, g.mean, 1.96 * g.se, g.better });
             try fw.interface.print("folds\t{s} vs {s}\t\t{d}\t\t\t{d:.6}\t{d:.6}\n", .{ t.label, tasks.items[base].label, pooled.y.items.len, g.mean, g.se });
