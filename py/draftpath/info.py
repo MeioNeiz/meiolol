@@ -13,6 +13,7 @@ L2 on the draft columns from inner val per block and minute. Per-game log loss p
 pooled over the 5 folds (better in k of 5) and dev-val apart.
 
 usage: info.py SNAP [--minutes 0,5,...,30] [--procs 6] [--out .] [--shuffle-draft SEED]
+       [--shuffle-within]
 """
 
 import argparse
@@ -90,13 +91,26 @@ def pick(nn, S_all, inner, val, n_state, draft_kw):
     return best
 
 
+def shuffled(nn, seed, within):
+    """whole drafts permuted across games; within: only inside patch x platform, so the
+    draft keeps what its patch and platform imply and says nothing about the game"""
+    rng = np.random.default_rng(seed)
+    if not within:
+        return nn.champ[rng.permutation(nn.n)]
+    out = nn.champ.copy()
+    stratum = nn.patch.astype(np.int64) * 256 + nn.platform
+    for v in np.unique(stratum):
+        idx = np.flatnonzero(stratum == v)
+        out[idx] = nn.champ[idx[rng.permutation(len(idx))]]
+    return out
+
+
 def run_block(args):
-    snap, block, minutes, shuffle = args
+    snap, block, minutes, shuffle, within = args
     t0 = time.time()
     nn = dp.load_nn(snap)
     if shuffle is not None:
-        # control: whole drafts permuted across games, so the draft says nothing
-        nn.champ = nn.champ[np.random.default_rng(shuffle).permutation(nn.n)]
+        nn.champ = shuffled(nn, shuffle, within)
     st = dp.load_state(snap, nn)
     rng = np.random.default_rng(7)
     s = dp.sets(nn, block)
@@ -155,11 +169,12 @@ def main():
     ap.add_argument("--blocks", default=",".join(dp.BLOCKS))
     ap.add_argument("--out", default=".")
     ap.add_argument("--shuffle-draft", type=int, help="control: permute drafts across games (seed)")
+    ap.add_argument("--shuffle-within", action="store_true", help="permute only inside patch x platform")
     a = ap.parse_args()
     minutes = [int(m) for m in a.minutes.split(",")]
     blocks = a.blocks.split(",")
     with ProcessPoolExecutor(a.procs) as ex:
-        outs = list(ex.map(run_block, [(a.snap, b, minutes, a.shuffle_draft) for b in blocks]))
+        outs = list(ex.map(run_block, [(a.snap, b, minutes, a.shuffle_draft, a.shuffle_within) for b in blocks]))
     by = {o["block"]: o for o in outs}
     np.save(os.path.join(a.out, "info-raw.npy"), by, allow_pickle=True)
 

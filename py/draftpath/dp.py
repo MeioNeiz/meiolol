@@ -29,6 +29,7 @@ class Nn:
     meta: dict
     champ: np.ndarray  # [n, 10] dense champion index, slot = side * 5 + role
     platform: np.ndarray
+    patch: np.ndarray
     start: np.ndarray
     duration: np.ndarray  # seconds
     y: np.ndarray  # blue won, float64
@@ -66,6 +67,7 @@ def load_nn(snap):
         meta=meta,
         champ=col("champ.u8", np.uint8, (n, 10)),
         platform=col("platform.u8", np.uint8),
+        patch=col("patch.u8", np.uint8),
         start=col("start.i64", "<i8"),
         duration=col("duration.u16", "<u2").astype(np.float64),
         y=col("blue_win.u8", np.uint8).astype(np.float64),
