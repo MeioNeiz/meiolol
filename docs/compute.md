@@ -173,6 +173,11 @@ run time.
   fifth of their time so far), queued ones take the first slot to free up in lab-run's
   ticket order: fast ones (predicted <= 60 s) first, then the rest, each oldest first. A
   fast new run waits only for queued fast ones. Whole-machine history: see the ratio above
+- Memory (lab-run's gate, 0723d43; the listing's mem and peak lines): each run starts
+  once a slot is free and MemAvailable covers its need (max peak of earlier runs with the
+  same bin and first arg, python by script; 4 GB with none), at most 20 min late, takes
+  it and gives it back at its end; running runs give back their peak. The why says how
+  much of the wait is memory
 - Feasible: the GPU only for CUDA commands (gpu-smoke; bench and draftbench when
   --devices has gpu; with CPU devices too they take the cpu lock, as their timings need
   it); the Mac never for CUDA; a host only if the args' snapshot paths (any `~/...snap-X`

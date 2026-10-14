@@ -2,7 +2,8 @@
 # Run-time estimates and placement for deploy/lab-run.sh, from the runs on both hosts
 # (docs/compute.md "Placement"). Reads lab-run.sh's listing on stdin, tab-separated:
 #   HOST now TIME | HOST league LINE (watcher.log, oldest first) | HOST have PATH
-#   HOST slots RES N (lab-run.sh's locks per resource)
+#   HOST slots RES N (lab-run.sh's locks per resource) | HOST mem KB (MemAvailable)
+#   HOST peak DIR GB (a run's peak RSS, after its run line)
 #   HOST run DIR STATE STARTED ENDED RES BIN ARGS PAUSES PREDICTED BUILD SLOT LOGLINE
 #
 #   lab-place.pl inputs ARGS                 input paths to check on each host
@@ -39,6 +40,9 @@ my @AUTO = $ENV{LAB_AUTO_MAC} ? @HOSTS : ('gpu-box');
 # reserved cores the limit). cpu slots are pinned to their own cores: no slowdown seen
 my %SHARED = (gpu => 1);
 my $BETA_ASSUMED = 0.7;
+# lab-run's memory gate (0723d43): the queue head waits while MemAvailable is under its
+# need (max peak of earlier runs with its key, else 4 GB), at most 20 min
+my ($GATE_DEFAULT_GB, $GATE_MAX_WAIT) = (4, 1200);
 # Flags whose value scales a run's work: time x new/old when history differs (dp-shape-a,
 # 13 Oct: --boot 40 ran 22 m, predicted 1.9 m from a --boot 2 smoke). A list counts items
 my %LINEAR = map { $_ => 1 } qw(--boot --seeds);
@@ -54,7 +58,7 @@ if ($mode eq 'inputs') {
     exit 0;
 }
 
-my (%now, %league, %have, %slots, @runs);
+my (%now, %league, %have, %slots, %mem, %peak, @runs);
 while (my $line = <STDIN>) {
     chomp $line;
     my ($host, $kind, @f) = split /\t/, $line, -1;
@@ -63,6 +67,8 @@ while (my $line = <STDIN>) {
     elsif ($kind eq 'league') { push @{$league{$host}}, $f[0] }
     elsif ($kind eq 'have') { $have{$host}{$f[0]} = 1 }
     elsif ($kind eq 'slots') { $slots{$host}{$f[0]} = $f[1] }
+    elsif ($kind eq 'mem') { $mem{$host} = $f[0] / 1048576 if $f[0] =~ /^\d+$/ }
+    elsif ($kind eq 'peak') { $peak{$host}{$f[0]} = $f[1] if $f[1] =~ /^[\d.]+$/ }
     elsif ($kind eq 'run') {
         my %r;
         @r{qw(dir state started ended res bin args pauses pred build slot log)} = @f;
@@ -75,6 +81,7 @@ while (my $line = <STDIN>) {
         push @runs, \%r;
     }
 }
+$_->{peak} = $peak{$_->{host}}{$_->{dir}} for @runs;
 $_->{share} = sharing($_) for @runs;
 my ($beta, $beta_why) = beta();
 $_->{solo} = defined $_->{ran} ? $_->{ran} / $_->{share}**$beta : undef for @runs;
@@ -335,11 +342,34 @@ sub live { return $_[0]{state} =~ /^(running|paused|queued)/ }
 # fast ones, the rest for every queued run
 sub fast { return defined $_[0] && int($_[0]) <= 60 }
 
+#
+# With the host's MemAvailable known, memory is a second resource: a run starts once a
+# slot is free and memory covers its need (or after the gate's 20 min), takes its need
+# and gives it back when it ends; running runs give back theirs (peak, else need) as they
+# end. Upper bounds both ways (peaks count shared pages per process)
+sub mem_key {
+    my ($bin, $args) = @_;
+    return $bin if $bin =~ /^python/;
+    my ($w) = split ' ', $args // '';
+    return join ' ', $bin, ($w // '') =~ s/[[:punct:]]//gr;
+}
+
+sub need {
+    my ($host, $bin, $args) = @_;
+    my $k = mem_key($bin, $args);
+    my @p = map { $_->{peak} } grep {
+        $_->{host} eq $host && defined $_->{peak} && mem_key($_->{bin}, $_->{args}) eq $k
+    } @runs;
+    my ($max) = sort { $b <=> $a } @p;
+    return $max // $GATE_DEFAULT_GB;
+}
+
 sub wait_for {
-    my ($host, $res, $fast) = @_;
+    my ($host, $res, $fast, $need_new) = @_;
     my $n_slots = $slots{$host}{$res} // 1;
     $n_slots = 1 unless $n_slots =~ /^\d+$/ && $n_slots > 0;
-    my (@free, @queued, $n);
+    my $gated = defined $mem{$host};
+    my (@free, @queued, @ev, $n);
     for my $r (sort { $a->{dir} cmp $b->{dir} }
         grep { $_->{host} eq $host && $_->{res} eq $res && live($_) } @runs) {
         my $pred = $r->{pred} // (estimate($host, $r->{bin}, $r->{args}, $r->{build}))[0]
@@ -347,22 +377,56 @@ sub wait_for {
                 grep { $_->{host} eq $host && defined $_->{ran} } @runs)
             // 60;
         $n++;
+        my $need = $r->{peak} // need($host, $r->{bin}, $r->{args});
         if (defined $r->{started} && $r->{state} !~ /^queued/) {
             my $done = $now{$host} - $r->{started} - paused($r, $r->{started}, $now{$host});
-            push @free, $pred - $done > $done / 5 ? $pred - $done : $done / 5;
+            my $left = $pred - $done > $done / 5 ? $pred - $done : $done / 5;
+            push @free, $left;
+            push @ev, [$left, $need];
         } else {
             # A start without a prediction is normal, whatever we estimate for it
-            push @queued, [fast($r->{pred}) ? 0 : 1, $pred];
+            push @queued, [fast($r->{pred}) ? 0 : 1, $pred, $need];
         }
+    }
+    # Running runs of the other resources give their memory back too
+    for my $r (grep { $_->{host} eq $host && ($_->{res} // '') ne $res && live($_)
+        && defined $_->{started} && $_->{state} !~ /^queued/ } @runs) {
+        my $pred = $r->{pred} // (estimate($host, $r->{bin}, $r->{args}, $r->{build}))[0]
+            // 60;
+        my $done = $now{$host} - $r->{started} - paused($r, $r->{started}, $now{$host});
+        push @ev, [$pred - $done > $done / 5 ? $pred - $done : $done / 5,
+            $r->{peak} // need($host, $r->{bin}, $r->{args})];
     }
     push @free, 0 while @free < $n_slots;
     @free = sort { $a <=> $b } @free;
-    for my $q (map { $_->[1] } sort { $a->[0] <=> $b->[0] }
-        grep { !$fast || $_->[0] == 0 } @queued) {
-        my $at = shift @free;
-        @free = sort { $a <=> $b } @free, $at + $q;
+    # Memory at T: now's, plus what has come back by then, less what has been taken
+    my $mem_at = sub {
+        my $m = $mem{$host};
+        $m += $_->[1] for grep { $_->[0] <= $_[0] } @ev;
+        return $m;
+    };
+    # When a run needing NEED can start, a slot being free at T0
+    my $start = sub {
+        my ($t0, $need) = @_;
+        return $t0 unless $gated;
+        for my $t (sort { $a <=> $b } $t0, grep { $_ > $t0 } map { $_->[0] } @ev) {
+            return $t0 + $GATE_MAX_WAIT if $t > $t0 + $GATE_MAX_WAIT;
+            return $t if $mem_at->($t) >= $need;
+        }
+        return $t0 + $GATE_MAX_WAIT;
+    };
+    my $prev = 0;
+    for my $q (sort { $a->[0] <=> $b->[0] } grep { !$fast || $_->[0] == 0 } @queued) {
+        my $t0 = $free[0] > $prev ? $free[0] : $prev;
+        my $at = $start->($t0, $q->[2]);
+        shift @free;
+        @free = sort { $a <=> $b } @free, $at + $q->[1];
+        push @ev, [$at, -$q->[2]], [$at + $q->[1], $q->[2]];
+        $prev = $at;
     }
-    return ($free[0], $n // 0, $n_slots);
+    my $t0 = $free[0] > $prev ? $free[0] : $prev;
+    my $at = $start->($t0, $need_new // $GATE_DEFAULT_GB);
+    return ($at, $n // 0, $n_slots, $at - $t0);
 }
 
 # What League costs a gpu-box run now: nothing while it's down. While it's up (or the
@@ -432,7 +496,9 @@ sub place {
             $why_not = '' if $want_host ne 'auto' && $why_not ne 'unreachable';
             if ($why_not) { push @out, "$name: $why_not"; next }
             my ($run, $why) = estimate($h, $bin, $args, $build);
-            my ($wait, $live, $n_slots) = $res eq 'none' ? (0, 0, 0) : wait_for($h, $res);
+            my $need = need($h, $bin, $args);
+            my ($wait, $live, $n_slots, $mwait) =
+                $res eq 'none' ? (0, 0, 0, 0) : wait_for($h, $res, 0, $need);
             if (defined $run && $SHARED{$res}) {
                 my $share = $live + 1 < $n_slots ? $live + 1 : $n_slots;
                 $run *= $share**$beta;
@@ -440,9 +506,13 @@ sub place {
                     $beta_why) if $share > 1;
             }
             if ($res ne 'none' && fast($run)) {
-                ($wait) = wait_for($h, $res, 1);
+                ($wait, undef, undef, $mwait) = wait_for($h, $res, 1, $need);
                 $why .= ', fast lane';
             }
+            $why = ($why // 'no history')
+                . sprintf(', %s of it for memory (needs %.1f GB, %.1f free)',
+                    fmt($mwait), $need, $mem{$h})
+                if $mwait && $mwait > 0;
             my ($pen, $pen_why) = league_penalty($h);
             push @cands, {host => $h, res => $res, run => $run, wait => $wait + $pen,
                 total => defined $run ? $wait + $pen + $run : undef,
