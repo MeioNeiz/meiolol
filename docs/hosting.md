@@ -92,12 +92,13 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   10 min, 404s 1 min, stale copies while the box is down or refreshing, one render per
   page under a burst. Header X-Meiolol-Render: HIT, MISS, STALE, UPDATING
 - Outages (the renderer is the main path since `--static core`): any page nginx cached
-  in the last 7 days (inactive=7d) is served stale on error, timeout or 503; a page not
-  in its cache is 503 until the renderer is back. Proposal, not applied (needs Jacob's
-  OK): in @render `proxy_set_header Accept-Encoding gzip;` and `gunzip on;` (one cached
-  copy per page instead of one per browser's Accept-Encoding), inactive=30d, and a
-  warm-up from the box after each reload (every sitemap URL through nginx, a few per
-  second) so every page has a copy to fall back on
+  in the last 30 days (inactive=30d) is served stale on error, timeout or 503; a page
+  not in its cache is 503 until the renderer is back. @render asks the box for gzip
+  (`proxy_set_header Accept-Encoding gzip;`, `gunzip on;` for clients without it), so
+  one cached copy per page. Applied 2026-10-14 (Jacob's OK; before:
+  /etc/nginx/meiolol.conf.bak-2026-10-14-cache). Not built: a warm-up from the box
+  after each reload (every sitemap URL through nginx, a few per second) so every page
+  has a copy to fall back on
 - Training view (/admin/training/, same basic auth as /admin/; data for the admin Models
   tab): lab runs of the Mac and the gpu-box (staged over ssh, home network only), learned.md,
   model.md, campaigns, uploaded by deploy/lab-push.sh (launchd, every 30 s when changed). Served from
