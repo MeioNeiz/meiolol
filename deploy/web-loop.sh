@@ -82,6 +82,26 @@ last_builds=0 builds_patch='' builds_pid='' storage_pid='' last_lean=0 lean_pid=
 # restart's first curves pass reads every patch (~50 min) and leaves curves-<patch>.bin
 # alone, so start from the newest of those
 patch=$(ls -t data/export/curves-*.bin 2> /dev/null | head -n 1 | sed -E 's#.*/curves-(.*)\.bin$#\1#')
+# A restart (deploy, reboot) skips the first curves pass while the site's four curves
+# files are under an hour old and in this binary's format: rebuilding them on a busy box
+# took 35-50 min, with patch matchup pages 404 meanwhile (14 Oct). A format bump fails
+# the check, so it still rebuilds first (u32 version after the 8-byte magic)
+format=$(bin/meiolol curves --format-version 2> /dev/null)
+if [[ -n "$patch" && -n "$format" ]]; then
+    fresh=1 oldest=$(date +%s)
+    for f in data/export/{,all-}recent-curves.bin data/export/{,all-}curves-"$patch".bin; do
+        if [[ -s $f ]] && (( $(date +%s) - $(stat -c %Y "$f") < 3600 )) \
+            && [[ $(od -An -t u4 -j 8 -N 4 "$f" | tr -d ' ') == "$format" ]]; then
+            (( $(stat -c %Y "$f") < oldest )) && oldest=$(stat -c %Y "$f")
+        else
+            fresh=0
+        fi
+    done
+    if (( fresh )); then
+        last_curves=$oldest curves_patch=$patch fresh_curves=1
+        echo "$(date -u +%FT%TZ) curves under an hour old and format $format: first pass skipped"
+    fi
+fi
 while true; do
     now=$(date +%s)
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it

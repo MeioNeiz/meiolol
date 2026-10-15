@@ -104,6 +104,8 @@ const usage =
     \\              --site           the files the site reads, in one pass over the
     \\                               timelines: EUW and every platform, last --days
     \\                               and (with --patch) that patch, default paths
+    \\              --format-version print the file format version this binary writes
+    \\                               and reads, then exit (deploy/web-loop.sh)
     \\  builds      write what players build per champion and role (builds.zig): runes,
     \\              summoner spells, starting items, boots, first items, skill order;
     \\              JSON the site reads (needs Data Dragon)
@@ -631,6 +633,12 @@ fn cmdCurves(c: *Cmd) !u8 {
             min_games = try c.int(u32);
         } else if (c.is("--site")) {
             site_files = true;
+        } else if (c.is("--format-version")) {
+            var buf: [16]u8 = undefined;
+            var stdout = std.Io.File.stdout().writer(c.init.io, &buf);
+            try stdout.interface.print("{d}\n", .{core.curvesfile.version});
+            try stdout.interface.flush();
+            return 0;
         } else return error.Usage;
     }
     if (site_files and (out != null or g.platforms.items.len > 0)) return error.Usage;
