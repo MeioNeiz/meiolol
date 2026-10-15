@@ -591,22 +591,48 @@ Site UI pass (2026-10-12, meiolol-a0, from research/questions/site-design.md):
 - Every HTML page on tpl (root.zig, matchup.zig last; byte-identical); phone width:
   every page type fits 360 to 412px, tables included, no sideways scrolling
 
+Deploys and rendering, decided 2026-10-15 (Jacob's brief via meiolol-d4: fast, reliable
+deploys, simple while there are no users; research/questions/fast-deploy-data-servers.md
+and render-cache-invalidation.md). Why: 190c5b9 never went live; every render-swap from
+21:04 on 14 Oct timed out, each renderer load rebuilding every view from meiolol.db
+(2-13 min, up to 105 min on a busy disk) beside the old one's reload, the restarted
+web loop's batch jobs and the crawler, at 90% IO pressure.
+- Rendering stays as built: static core uploaded, every other page from meiolol-render
+  behind jomify's nginx cache (10 min, stale while updating or down). No prerender
+  tiers or purging yet: nginx keeps what gets requested, which is caching by
+  popularity for free, and with no users nearly every page is cold anyway
+- The data is built once per refresh, outside the server: after each upload the web
+  loop's `meiolol site --views data/views.bin` (the core build's flags) loads every view
+  and writes one file; the renderer reads it at start and on reload, so a deploy is a
+  code swap of seconds. A fingerprint of the types in its header guards it; a mismatch
+  (a deploy that changed ViewData's types) or no file means the old database load.
+  Data code changes show after the deploy's forced round. docs/hosting.md "Rendering
+  on request"
+- The web loop's daily jobs (eval, your-example, builds, lean) run one at a time
+  (data/batch.lock) and their timers start from the files they leave, so a restart no
+  longer starts them all at once
+- Later, in order, once there are users: (1) warm nginx's cache after each reload from
+  the sitemaps, most visited first (traffic.json); (2) invalidate by version instead of
+  waiting out the 10 min: open-source nginx has no purge, so a version (views file and
+  binary) in proxy_cache_key, as Next.js keys by deployment id; (3) prerender the most visited pages into the static upload
+  if render latency shows. Each from traffic, not guessed
+- Not done, Jacob's call (server-wide or open): disk scheduler `none` on the box, so
+  nice/ionice do nothing for disk (mq-deadline or bfq would honour it); why the crawler
+  reads 5-11 MB/s around the clock
+
 Next:
-1. Screenshots or a short video for the application (Riot accepts them, research C1);
-   meiolol-render's flags still lack --origin, --index-min-games and --riot-txt: they
-   must match the web loop's (one shared args file) before `--public`, or rendered pages
-   lose their canonical links and the views' sitemaps differ
-2. Renderer as the main path: uncached pages are 503 while it boots (~3.5 min, more
-   with a busy disk) or is down. Proposal for Jacob (nginx on jomify): one cached copy
+1. Screenshots or a short video for the application (Riot accepts them, research C1).
+   Rendered pages now take the web loop's --origin and --riot-txt through the views
+   file; --index-min-games is in neither yet and must be before `--public`
+2. Renderer as the main path: uncached pages are 503 while it is down, or boots
+   without a usable views file (a database load: minutes). Proposal for Jacob (nginx on jomify): one cached copy
    per page (`gunzip on`, Accept-Encoding gzip to the box), inactive=30d, and a cache
    warm-up from the box after each reload; docs/hosting.md "Rendering on request". The
    box is disk bound (7.3 GB meiolol.db, ~4 GB page cache): three render-swaps on 14 Oct
    were not ready in 15 min, so the old binary kept serving. The core build could need
    no DB at all if the home page came from the renderer
-3. Cached data load (Jacob: later): probably not worth it now that a load takes ~5 s on
-   the Mac snapshot and ~44 s for every view on the box. Left of a pass: filters.make
-   ~1 s, stats per view ~0.2 s (Mac). Renderer boot after a box reboot never verified
-   on the box (only locally)
+3. Renderer boot after a box reboot never verified on the box (only locally); with
+   data/views.bin it should listen and serve within seconds
 
 ### Ideas not started (concept extensions, 2026-10-11)
 
