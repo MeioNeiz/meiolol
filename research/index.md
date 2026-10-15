@@ -14,7 +14,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 119 | 279 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 14 | 225 | 1783 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 4 | 74 | 272 |
-| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 6 | 88 | 378 |
+| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 98 | 452 |
 
 ## Questions
 
@@ -74,6 +74,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
+| answered | now | [How should a small cloud VM prioritise IO between a latency-sensitive writer, a web renderer and heavy batch readers: scheduler, ionice, cgroup io controls, or memory?](questions/box-io-priority.md): How should a small cloud VM prioritise IO between a latency-sensitive writer, a web renderer and heavy batch readers: scheduler, ionice, cgroup io controls, or memory? | 6 strong, 2 moderate, 1 contested | 10 | 5 (growing) | 2 |
 | answered | now | [What free or very cheap hosting and storage fits meiolol's site, API and data?](questions/free-hosting-storage.md): What free or very cheap hosting and storage fits meiolol's site, API and data? | 13 strong, 4 moderate, 2 unsupported | 34 | 7 (growing) | 4 |
 | answered | now | [Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines?](questions/hybrid-rendering-seo.md): Can meiolol prerender some matchup pages statically and render the rest on demand, and what does that need for search engines? | 12 strong, 9 moderate | 16 | 9 (growing) | 2 |
 | answered | now | [Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box?](questions/oci-payg-upgrade.md): Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box? | 8 strong, 2 moderate, 1 contested | 7 | 2 (thin) |  |
@@ -83,6 +84,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 33 questions, 462 sources, 3337 findings
-- Open leads: 146 (`josearch leads`)
+- 34 questions, 472 sources, 3411 findings
+- Open leads: 148 (`josearch leads`)
 - Lint: 0 errors, 1 warnings (`josearch lint`)
