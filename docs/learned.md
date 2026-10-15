@@ -25,6 +25,20 @@ How to write a line:
 
 ## Win
 
+- 2026-10-14: Rammus jungle does not clearly win less against teams with more melee
+  champions: on fresh games his win rate moved about half a percentage point per step
+  towards a melee-heavy enemy team, well inside the noise, so the earlier 1.3-point dip
+  was most likely chance. He may do better into physical-damage teams (about 1.8 points
+  in the fresh games), but that was not the declared test and is a lead only. Sure: not
+  detected; one pre-declared look (declared 2026-10-14T22:23Z) on the 125k ranked games
+  in snap-20261014T2137Z-raw not in snap-20261013T2253Z, 3,030 Rammus jungle games:
+  -0.56 ± 0.95 pp per sd of enemy melee share (one-sided 5% test, power about 1 in 3 at
+  -1.3); the data still allow about -2.4 pp per sd. CC +0.41 ± 0.91, AP -1.81 ± 0.95,
+  reported only. Site: nothing. Evidence: exploratory run on 2253Z (8.3k Rammus jungle
+  games) gave -1.27 ± 0.58; confirmation GLM win ~ ratings offset + enemy melee, CC and
+  AP z + Rammus interactions over all jungle team-games, profiles, ratings and scaling
+  fixed from 2253Z. A clean Rammus-into-AD check needs games after 14 Oct (~60 Rammus
+  jungle games a day)
 - 2026-10-14 (early, 2253Z): Most champions lean early or late, and the lean holds up
   champion by champion: Draven's team is on average about 900 gold ahead at 14 minutes
   but from an even game at 20 minutes wins about 8 percentage points less often than
