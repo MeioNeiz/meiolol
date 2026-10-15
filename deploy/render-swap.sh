@@ -2,17 +2,30 @@
 # Replaces the running renderer (meiolol-render@a or @b) without a gap: starts the other
 # instance with the current binary, both listening on the port (SO_REUSEPORT) while it
 # loads, and stops the old once the new one is serving. The new one reads data/views.bin
-# in seconds; only when it can't (none yet, or a deploy changed its types) does it load
-# from the database: 4 min on a quiet box, over an hour on a busy one (14 Oct). If it
-# dies, or isn't ready within 60 minutes, the old one stays. Run detached on the box by deploy/box.sh web start;
+# in seconds. When a deploy changed the file's types (`meiolol site --views-format`
+# differs from the file's), it first waits up to 3 h for the web loop's round to write
+# one in the new format, the old renderer serving meanwhile, rather than load from the
+# database beside it (4 min on a quiet box, over an hour on a busy one, 14 Oct). If the
+# new one dies, or isn't ready within 60 minutes, the old one stays. Run detached on the box by deploy/box.sh web start;
 # again if the binary changed meanwhile. Log in data/render.log
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit
 
 log() { echo "$(date -u +%FT%TZ) render-swap: $*" >> data/render.log; }
 
+views_fits() {
+    [[ -s data/views.bin ]] \
+        && [[ $(od -An -t u8 -j 8 -N 8 data/views.bin | tr -d ' ') == "$(bin/meiolol site --views-format)" ]]
+}
+
 while true; do
     binary=$(stat -c %Y bin/meiolol)
+    if [[ -s data/views.bin ]] && ! views_fits; then
+        log "data/views.bin is another format: waiting for the web loop's"
+        start=$SECONDS
+        until views_fits || (( SECONDS - start >= 3 * 3600 )); do sleep 30; done
+        views_fits || log "no views file in this format after 3 h: loading from the database"
+    fi
     new=a
     systemctl --user -q is-active meiolol-render@a && new=b
     old=()

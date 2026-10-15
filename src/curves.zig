@@ -102,12 +102,12 @@ pub fn buildMany(
     // tier is the rank snapshot stored with the match (players is emptied on a rekey);
     // mastery is a later snapshot of each player, absent after a rekey
     var players = try db.prepare(
-        \\SELECT pa.slot, pa.team_id, pa.position, pa.champion_id, pa.tier,
-        \\  ms.data, ms.fetched_at
-        \\FROM participants pa LEFT JOIN mastery ms USING (puuid)
-        \\WHERE pa.match_id = ?
+        \\SELECT slot, team_id, position, champion_id, tier, puuid
+        \\FROM participants WHERE match_id = ?
     );
     defer players.deinit();
+    var experienced: Experienced = try .load(gpa, db);
+    defer experienced.deinit(gpa);
 
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -136,7 +136,7 @@ pub fn buildMany(
             continue;
         };
         try players.bind(.{m.match_id});
-        const game = try readGame(arena, &players) orelse {
+        const game = try readGame(&players, &experienced) orelse {
             for (takers.items) |i| summaries[i].skipped += 1;
             continue;
         };
@@ -164,8 +164,47 @@ pub const Game = struct {
     experienced: [2][5]bool = @splat(@splat(false)),
 };
 
+/// (puuid, champion) pairs with at least curvesfile.experienced_points, from one pass over
+/// mastery: a lookup per player per game was ~4.8M random reads, 45-60 min of the box's
+/// curves pass (15 Oct). Keyed by a hash of both, so a collision (odds ~1e-7 at 2M
+/// players) would mark one player wrongly
+const Experienced = struct {
+    set: std.AutoHashMapUnmanaged(u64, void) = .empty,
+
+    fn load(gpa: std.mem.Allocator, db: store.Db) !Experienced {
+        var e: Experienced = .{};
+        errdefer e.deinit(gpa);
+        var q = try db.prepare("SELECT puuid, data, fetched_at FROM mastery");
+        defer q.deinit();
+        try q.bind(.{});
+        var arena_state: std.heap.ArenaAllocator = .init(gpa);
+        defer arena_state.deinit();
+        while (try q.step()) {
+            _ = arena_state.reset(.retain_capacity);
+            const r = q.row(struct { puuid: []const u8, data: []const u8, fetched_at: i64 });
+            const entries = mastery.decode(arena_state.allocator(), r.data, r.fetched_at) catch continue;
+            for (entries) |en| {
+                if (en.points >= curvesfile.experienced_points) try e.set.put(gpa, key(r.puuid, en.champion), {});
+            }
+        }
+        return e;
+    }
+
+    fn deinit(e: *Experienced, gpa: std.mem.Allocator) void {
+        e.set.deinit(gpa);
+    }
+
+    fn has(e: *const Experienced, puuid: []const u8, champion: u32) bool {
+        return e.set.contains(key(puuid, champion));
+    }
+
+    fn key(puuid: []const u8, champion: u32) u64 {
+        return std.hash.Wyhash.hash(champion, puuid);
+    }
+};
+
 /// Null unless every position is filled exactly once per side
-fn readGame(arena: std.mem.Allocator, players: *store.sqlite.Stmt) !?Game {
+fn readGame(players: *store.sqlite.Stmt, experienced: *const Experienced) !?Game {
     var g: Game = .{ .ids = undefined, .champions = undefined, .bracket = null };
     var seen: [2][5]bool = @splat(@splat(false));
     var ranks: [10]usize = undefined;
@@ -178,8 +217,7 @@ fn readGame(arena: std.mem.Allocator, players: *store.sqlite.Stmt) !?Game {
             position: []const u8,
             champion: u32,
             tier: ?[]const u8,
-            mastery: ?[]const u8,
-            fetched_at: i64,
+            puuid: ?[]const u8,
         });
         const side: usize = if (p.team == 100) 0 else 1;
         const r = @backingInt(Role.fromLcu(p.position) orelse return null);
@@ -189,15 +227,7 @@ fn readGame(arena: std.mem.Allocator, players: *store.sqlite.Stmt) !?Game {
         g.ids[side][r] = @intCast(slot + 1);
         const champion = p.champion;
         g.champions[side][r] = champion;
-        if (p.mastery) |data| {
-            const entries = mastery.decode(arena, data, p.fetched_at) catch &.{};
-            const i = std.sort.binarySearch(mastery.Entry, entries, champion, struct {
-                fn order(c: u32, e: mastery.Entry) std.math.Order {
-                    return std.math.order(c, e.champion);
-                }
-            }.order);
-            if (i) |at| g.experienced[side][r] = entries[at].points >= curvesfile.experienced_points;
-        }
+        if (p.puuid) |id| g.experienced[side][r] = experienced.has(id, champion);
         if (p.tier != null and n_ranks < ranks.len) {
             if (curvesfile.tierRank(p.tier.?)) |rank| {
                 ranks[n_ranks] = rank;

@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Runs on the box (deploy/box.sh web start): every 15 min, build the site and upload it to
-# the jomove server when the patch changed, the current patch's game count grew 20% since
-# the last upload, or there are any new games and an hour passed. So early in a patch (few
-# games) it pushes every 15 min, later hourly. The build is `--static core`: the home
+# Runs on the box (deploy/box.sh web start): hourly rounds. Each builds the static core
+# and uploads it to the jomove server when the patch changed, a deploy asked, curves are
+# fresh, or there are new games and `interval` passed: 6 h, or 1 h for a patch's first
+# day (data/patch-<patch>.seen). Heavy work runs one job at a time, the loop's first
+# (curves, views file), then at most one daily job per round, which the loop waits for:
+# on 14-15 Oct several at once held the disk at its 70 MB/s cap and a curves pass took
+# 45-60 min every hour (research/questions/box-io-priority.md). The build is
+# `--static core`: the home
 # page, robots.txt, riot.txt, the root sitemap and the front-end files (~30 files, two
 # views loaded); meiolol-render serves every other page and file. After each upload,
 # `meiolol site --views` loads every view from the database into data/views.bin and
@@ -11,17 +15,16 @@
 # meiolol-web ssh alias is user meiolol with a key limited to rsync into /var/www/meiolol
 # (rrsync); nginx there serves meiolol.jomify.lol. Riot's verification string, if any,
 # lives in riot.txt beside bin/.
-# Lane curves are rebuilt hourly and when the patch changes, one file per site view (EUW
+# Lane curves are rebuilt every `interval` and when the patch changes, one file per site view (EUW
 # and every region, by last 30 days and current patch; the EUW patch file is also the
 # Your games service's), all four in one pass over the timelines (`meiolol curves
 # --site`); fresh site curves force an upload. The upload rules count EUW
 # games on the current patch only.
 # Daily, `meiolol eval` (docs/model.md) appends a line to data/eval-history.tsv (model
 # accuracy vs data volume) and leaves its report in data/eval-latest.md. Read-only on the
-# DB; in the background at low priority, so a slow run never delays uploads. One at a
-# time with the admin page's Run eval (src/admin_api.zig): both flock data/eval.lock.
-# Builds (`meiolol builds`, EUW and every region, current patch) the same way: daily and
-# on a new patch, in the background; the next site build picks the files up.
+# DB. One at a time with the admin page's Run eval (src/admin_api.zig): both flock
+# data/eval.lock. Builds (`meiolol builds`, EUW and every region, current patch) the same
+# way: daily and on a new patch; the next site build picks the files up.
 # Daily, `meiolol lean` (every region, last 30 days; docs/model.md "Early and late
 # champions") the same way: data/lean.tsv, the champion pages' early or late line.
 # Daily, `meiolol your-example` (read-only, background) leaves one anonymised player's
@@ -33,14 +36,14 @@
 # behind basic auth there; the site's rsync leaves that directory alone. Daily, a dbstat
 # scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
 # for it.
-# The daily jobs (eval, your-example, builds, lean) queue on data/batch.lock, one at a
-# time: together they and a renderer load held the disk at 90% pressure for hours (14
-# Oct). Their timers start from the files each leaves, so a restart doesn't run them
-# all again.
+# The daily jobs' timers start from the files each leaves, and curves' from their files,
+# so a restart doesn't run them all again. Batch work runs under ionice -c 3, which the
+# disk honours only under mq-deadline or bfq (not `none`).
 # A deploy (deploy/box.sh web start) sends SIGUSR1 rather than restarting, unless this
-# script, its unit or the contact changed (data/web-loop.sum): the loop then builds and
-# uploads the site at once with the new binary, keeping its curves, eval and builds
-# timers. A restart reruns all of those, minutes on the box.
+# script, its unit or the contact changed (data/web-loop.sum). Either way the next round
+# (at once) builds, uploads and writes the views file with the new binary before any
+# curves pass, so data code changes reach the site within one views write; a daily job
+# already running carries on beside it.
 # Upload: the new build is copied into data/site by checksum without times, so only
 # files whose content changed get a new mtime, and the upload's quick check sends just
 # those. --delete removes what the build no longer writes; nginx then hands those paths
@@ -81,86 +84,98 @@ storage_scan() {
     mv data/storage.tsv.new data/storage.tsv
 }
 
-last_patch='' last_games=0 last_upload=0
-patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0 last_example=0
-last_builds=0 builds_patch='' builds_pid='' storage_pid='' last_lean=0 lean_pid=''
+last_patch='' last_games=0
+patch='' curves_patch='' last_curves=0 fresh_curves=0
+builds_patch='' daily_pid=''
+# A start (deploy, reboot) uploads and writes the views file in its first round
+force=1
 mtime() { stat -c %Y "$1" 2> /dev/null || echo 0; }
 # eval.log is truncated as a run starts, the other logs written as each runs
 last_eval=$(mtime data/eval.log) last_example=$(mtime data/your-example.log)
 last_builds=$(mtime data/builds.log) last_lean=$(mtime data/lean.log)
+last_upload=$(mtime data/views.bin)
+# 1 h for the first day of a patch, else 6 h
+interval_for() {
+    [[ -n "$1" ]] || { echo 3600; return; }
+    [[ -e data/patch-$1.seen ]] || touch "data/patch-$1.seen"
+    if (( $(date +%s) - $(mtime "data/patch-$1.seen") < 86400 )); then echo 3600; else echo 21600; fi
+}
 # The patch otherwise comes from the round's site build, after curves: without it a
 # restart's first curves pass reads every patch (~50 min) and leaves curves-<patch>.bin
 # alone, so start from the newest of those
 patch=$(ls -t data/export/curves-*.bin 2> /dev/null | head -n 1 | sed -E 's#.*/curves-(.*)\.bin$#\1#')
-# A restart (deploy, reboot) skips the first curves pass while the site's four curves
-# files are under an hour old and in this binary's format: rebuilding them on a busy box
-# took 35-50 min, with patch matchup pages 404 meanwhile (14 Oct). A format bump fails
-# the check, so it still rebuilds first (u32 version after the 8-byte magic)
+# A restart (deploy, reboot) keeps the curves timer while the site's four curves files
+# are in this binary's format: rebuilding them on a busy box took 35-50 min, with patch
+# matchup pages 404 meanwhile (14 Oct). A format bump fails the check, so it still
+# rebuilds first (u32 version after the 8-byte magic)
 format=$(bin/meiolol curves --format-version 2> /dev/null)
 [[ -n "$patch" && -s data/export/builds-$patch.json ]] && builds_patch=$patch
 if [[ -n "$patch" && -n "$format" ]]; then
     fresh=1 oldest=$(date +%s)
     for f in data/export/{,all-}recent-curves.bin data/export/{,all-}curves-"$patch".bin; do
-        if [[ -s $f ]] && (( $(date +%s) - $(stat -c %Y "$f") < 3600 )) \
-            && [[ $(od -An -t u4 -j 8 -N 4 "$f" | tr -d ' ') == "$format" ]]; then
+        if [[ -s $f ]] && [[ $(od -An -t u4 -j 8 -N 4 "$f" | tr -d ' ') == "$format" ]]; then
             (( $(stat -c %Y "$f") < oldest )) && oldest=$(stat -c %Y "$f")
         else
             fresh=0
         fi
     done
     if (( fresh )); then
-        last_curves=$oldest curves_patch=$patch fresh_curves=1
-        echo "$(date -u +%FT%TZ) curves under an hour old and format $format: first pass skipped"
+        last_curves=$oldest curves_patch=$patch
+        echo "$(date -u +%FT%TZ) curves in format $format from $(date -u -d "@$oldest" +%FT%TZ): kept"
     fi
 fi
-while true; do
-    now=$(date +%s)
+batch() { nice -n 10 ionice -c 3 "$@"; }
+last_storage=$(mtime data/storage.tsv)
+# The first due daily job, in the background (daily_pid); 1 when none is due. Builds
+# first on a new patch: the site's build pages wait on them
+run_daily() {
+    local now=$1
+    # One left running by a deploy's round
+    [[ -n "$daily_pid" ]] && kill -0 "$daily_pid" 2> /dev/null && return 1
+    if [[ -n "$patch" ]] && { [[ "$patch" != "$builds_patch" ]] || (( now - last_builds >= 86400 )); }; then
+        last_builds=$now builds_patch=$patch
+        (batch bin/meiolol builds --patch "$patch" \
+            && batch bin/meiolol builds --patch "$patch" --platform all) > data/builds.log 2>&1 &
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
-    if [[ -z "${MEIOLOL_NO_EVAL:-}" ]] && (( now - last_eval >= 86400 )); then
-        (flock -n 9 || exit 0
-            flock 8
-            nice -n 10 bin/meiolol eval --platform all \
-                --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
-                && mv data/eval-latest.md.new data/eval-latest.md) 9> data/eval.lock 8> data/batch.lock &
+    elif [[ -z "${MEIOLOL_NO_EVAL:-}" ]] && (( now - last_eval >= 86400 )); then
         last_eval=$now
-    fi
-    # Space by table and index, for the admin page; the file's age, not a timer, so a
-    # restart does not rescan
-    if [[ ! -f data/storage.tsv || -n $(find data/storage.tsv -mmin +1380) ]] \
-        && { [[ -z "$storage_pid" ]] || ! kill -0 "$storage_pid" 2> /dev/null; }; then
-        storage_scan &
-        storage_pid=$!
-    fi
-    if (( now - last_example >= 86400 )); then
-        (flock 8
-        if nice -n 10 bin/meiolol your-example --out data/your-example.json.new \
+        (flock -n 9 || exit 0
+            batch bin/meiolol eval --platform all \
+                --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
+                && mv data/eval-latest.md.new data/eval-latest.md) 9> data/eval.lock &
+    elif (( now - last_example >= 86400 )); then
+        last_example=$now
+        (if batch bin/meiolol your-example --out data/your-example.json.new \
             > data/your-example.log 2>&1; then
             mv data/your-example.json.new data/your-example.json
         else
             rm -f data/your-example.json data/your-example.json.new
-        fi) 8> data/batch.lock &
-        last_example=$now
+        fi) &
+    elif (( now - last_lean >= 86400 )); then
+        last_lean=$now
+        batch bin/meiolol lean > data/lean.log 2>&1 &
+    # Space by table and index, for the admin page: reads every page of every database
+    elif (( now - last_storage >= 82800 )); then
+        last_storage=$now
+        storage_scan &
+    else
+        return 1
     fi
-    if [[ -n "$patch" ]] && { [[ -z "$builds_pid" ]] || ! kill -0 "$builds_pid" 2> /dev/null; } \
-        && { (( now - last_builds >= 86400 )) || [[ "$patch" != "$builds_patch" ]]; }; then
-        (flock 8
-            nice -n 10 bin/meiolol builds --patch "$patch" \
-            && nice -n 10 bin/meiolol builds --patch "$patch" --platform all) \
-            > data/builds.log 2>&1 8> data/batch.lock &
-        builds_pid=$! last_builds=$now builds_patch=$patch
-    fi
-    if (( now - last_lean >= 86400 )) \
-        && { [[ -z "$lean_pid" ]] || ! kill -0 "$lean_pid" 2> /dev/null; }; then
-        flock data/batch.lock nice -n 10 bin/meiolol lean > data/lean.log 2>&1 &
-        lean_pid=$! last_lean=$now
-    fi
-    if (( now - last_curves >= 3600 )) || [[ "$patch" != "$curves_patch" ]]; then
+    daily_pid=$!
+}
+
+while true; do
+    now=$(date +%s)
+    forced=$force force=0
+    interval=$(interval_for "$patch")
+    # A deploy's or start's round leaves a due pass to the next round, so the views file
+    # comes first; a new patch or curves format can't wait
+    if [[ "$patch" != "$curves_patch" ]] || { (( ! forced )) && (( now - last_curves >= interval )); }; then
         # Fails harmlessly (logged) until there are timelines
-        if bin/meiolol curves --site ${patch:+--patch "$patch"} 2>&1; then fresh_curves=1; fi
+        if batch bin/meiolol curves --site ${patch:+--patch "$patch"} 2>&1; then fresh_curves=1; fi
         last_curves=$now curves_patch=$patch
         push_curves
     fi
-    forced=$force force=0
     rm -rf data/site.new
     # The core build's and the views file's, so rendered pages match the uploaded ones
     site_args=(--contact "$contact" --origin https://meiolol.jomify.lol)
@@ -172,9 +187,8 @@ while true; do
         read -r patch games < <(sed -nE 's/.*: patch ([^,]+), ([0-9]+) games.*/\1 \2/p' \
             <<< "$out")
         now=$(date +%s)
-        if [[ "$patch" != "$last_patch" ]] || (( games * 5 >= last_games * 6 )) \
-            || (( games > last_games && now - last_upload >= 3600 )) \
-            || (( fresh_curves || forced )); then
+        if [[ "$patch" != "$last_patch" ]] || (( fresh_curves || forced )) \
+            || (( games > last_games && now - last_upload >= interval )); then
             echo "$out"
             t=$SECONDS
             changed=$(rsync -rlpD --checksum --delete --stats data/site.new/ data/site/ \
@@ -188,7 +202,7 @@ while true; do
                 echo "$(date -u +%FT%TZ) uploaded"
                 # For meiolol-render: every view, which it reads on the touch
                 t=$SECONDS
-                if bin/meiolol site --views data/views.bin "${site_args[@]}" \
+                if batch bin/meiolol site --views data/views.bin "${site_args[@]}" \
                     > data/views.log 2>&1; then
                     echo "$(date -u +%FT%TZ) views file $(( SECONDS - t ))s" \
                         "($(stat -c %s data/views.bin) bytes)"
@@ -209,10 +223,15 @@ while true; do
         rm -rf data/admin && mv data/admin.new data/admin
         rsync -a --delete data/admin/ meiolol-web:admin/ || echo "$(date -u +%FT%TZ) admin upload FAILED"
     fi
-    # SIGUSR1 interrupts the wait; one during the round skips it
+    run_daily "$(date +%s)" || true
+    # Hourly; SIGUSR1 interrupts the wait, and one during the round skips it. A daily job
+    # longer than the hour holds the next round back rather than run beside it
     if (( ! force )); then
-        sleep 900 &
+        sleep 3600 &
         wait $!
         kill $! 2> /dev/null
+    fi
+    if (( ! force )) && [[ -n "$daily_pid" ]] && kill -0 "$daily_pid" 2> /dev/null; then
+        wait "$daily_pid"
     fi
 done

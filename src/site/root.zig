@@ -591,7 +591,9 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
     const shared = std.meta.eql(view, html.View.shared);
     if (!shared) opts.daily_dir = null;
 
+    var phases: Phases = .init(io);
     var built = try stats.buildSince(gpa, db, opts.patches, opts.platforms, since_ms);
+    phases.mark("stats");
     defer built.builder.deinit();
     if (built.summary.games == 0) return error.NoMatches;
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
@@ -625,6 +627,7 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
         .lean = if (extras.lean) |*l| l else null,
     };
     try loadChamps(site, db);
+    phases.mark("champions");
 
     var files: std.ArrayList(File) = .empty;
     var shared_files: std.ArrayList(File) = .empty;
@@ -647,11 +650,13 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
     // The root view's directory is the site root, where champion pages are
     if (view.index() == 0) {
         site.filter = try filters.make(site, db, all_opts);
+        phases.mark("filters");
         try files.appendSlice(arena, site.filter.files);
     }
     try files.append(arena, .{ .path = stats_path, .data = model_bytes });
     try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
     const people = try extras.tallies(gpa, db, &site.stats, all_opts);
+    phases.mark("people");
     const set = @backingInt(view.region);
     if (set >= people.learning.len) return error.NoView;
     site.pool = try pool.make(arena, &people.pool, set, &site.stats, .{});
@@ -694,6 +699,7 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
             site.eval = try evalchart.parse(arena, tsv);
         } else |err| log.info("no eval history at {s}: {t}", .{ path, err });
     };
+    phases.mark("daily");
     // After the Daily Draft, so practice leaves out the games behind its puzzles
     if (shared) {
         const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
@@ -707,10 +713,37 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
             site.learn = l.facts;
         } else |err| log.warn("learn: {t}", .{err});
     }
+    phases.mark("learn");
+    log.info("view {d} ({s}) load:{s}", .{ view.index(), site.when, phases.text() });
     site.files = files.items;
     site.shared_files = shared_files.items;
     return site;
 }
+
+/// Seconds per step of a view's load, for its log line: on the box a load runs minutes
+/// to an hour depending on the disk, and this says where
+const Phases = struct {
+    io: std.Io,
+    last_ms: i64,
+    buf: [192]u8 = undefined,
+    len: usize = 0,
+
+    fn init(io: std.Io) Phases {
+        return .{ .io = io, .last_ms = std.Io.Clock.awake.now(io).toMilliseconds() };
+    }
+
+    fn mark(p: *Phases, name: []const u8) void {
+        const now = std.Io.Clock.awake.now(p.io).toMilliseconds();
+        const ms: f64 = @floatFromInt(now - p.last_ms);
+        p.last_ms = now;
+        const s = std.fmt.bufPrint(p.buf[p.len..], " {s} {d:.1}s", .{ name, ms / 1000 }) catch return;
+        p.len += s.len;
+    }
+
+    fn text(p: *const Phases) []const u8 {
+        return p.buf[0..p.len];
+    }
+};
 
 pub fn unload(site: *Site) void {
     const owner = site.owner;
@@ -794,6 +827,10 @@ pub const Loaded = struct {
         return null;
     }
 
+    /// What writeViews puts after the magic; a file with another came from a binary
+    /// whose types differ
+    pub const views_fingerprint = flat.fingerprint(ViewsShape);
+
     /// Every loaded view and the options to `path`, for readViews: `meiolol site
     /// --views` does the database work once, and `meiolol render` reads the result
     /// in seconds (docs/hosting.md "Rendering on request")
@@ -805,7 +842,7 @@ pub const Loaded = struct {
         var fw = file.file.writer(io, &buf);
         const w = &fw.interface;
         try w.writeAll(views_magic);
-        try w.writeInt(u64, flat.fingerprint(ViewsShape), .little);
+        try w.writeInt(u64, views_fingerprint, .little);
         try flat.write(w, l.opts);
         for (l.sites) |s| try flat.write(w, if (s) |v| @as(?ViewData, viewData(v)) else null);
         try w.flush();
@@ -822,7 +859,7 @@ pub const Loaded = struct {
         var fr = file.reader(io, &buf);
         const r = &fr.interface;
         if (!std.mem.eql(u8, try r.takeArray(views_magic.len), views_magic)) return error.ViewsMismatch;
-        if (try r.takeInt(u64, .little) != flat.fingerprint(ViewsShape)) return error.ViewsMismatch;
+        if (try r.takeInt(u64, .little) != views_fingerprint) return error.ViewsMismatch;
         const l = try Loaded.init(gpa, io, db, try flat.read(Options, r, arena));
         errdefer l.deinit();
         l.lazy = false;
@@ -972,14 +1009,18 @@ fn biggestCurves(all: *const [html.View.count]?core.curvesfile.Curves) ?*const c
     return best;
 }
 
+/// The file is read outside `arena`: parse copies what it keeps, and the four site files
+/// are ~940 MB that stayed for the process's life (15 Oct)
 fn loadCurves(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?core.curvesfile.Curves {
-    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 30)) catch |err| {
+    const gpa = std.heap.page_allocator;
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, gpa, .limited(1 << 30)) catch |err| {
         switch (err) {
             error.FileNotFound => log.info("no lane curves at {s}", .{path}),
             else => log.warn("lane curves at {s}: {t}", .{ path, err }),
         }
         return null;
     };
+    defer gpa.free(bytes);
     return core.curvesfile.Curves.parse(arena, bytes) catch |err| {
         log.warn("lane curves at {s}: {t}", .{ path, err });
         return null;

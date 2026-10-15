@@ -250,6 +250,8 @@ const usage =
     \\                               the sitemaps
     \\              --views FILE     load every view and write it to FILE for
     \\                               `render --views` instead of the site
+    \\              --views-format   print the fingerprint a views file from this
+    \\                               binary has (u64 after the 8-byte magic)
     \\  dev        work on the site: pages rendered on request from DIR (data loaded
     \\              once), CSS and JS from src/site/static, live reload; run by
     \\              deploy/dev.sh, which rebuilds on edits. Takes site's flags
@@ -1211,6 +1213,7 @@ const SiteFlags = struct {
     origin: ?[]const u8 = null,
     index_min_games: u32 = 0,
     views: ?[]const u8 = null,
+    views_format: bool = false,
 
     /// False for a flag that isn't one of these
     fn parse(f: *SiteFlags, c: *Cmd) !bool {
@@ -1236,6 +1239,8 @@ const SiteFlags = struct {
             f.index_min_games = try c.int(u32);
         } else if (c.is("--views")) {
             f.views = try c.value();
+        } else if (c.is("--views-format")) {
+            f.views_format = true;
         } else return false;
         return true;
     }
@@ -1285,6 +1290,13 @@ fn cmdSite(c: *Cmd) !u8 {
     var f: SiteFlags = .{};
     while (c.next()) |_| {
         if (!try f.parse(c)) return error.Usage;
+    }
+    if (f.views_format) {
+        var buf: [32]u8 = undefined;
+        var w = std.Io.File.stdout().writer(c.init.io, &buf);
+        try w.interface.print("{d}\n", .{site.Loaded.views_fingerprint});
+        try w.interface.flush();
+        return 0;
     }
     const email = try c.required(f.contact, "--contact");
     const db = try c.open();
@@ -1442,11 +1454,6 @@ fn loadViews(loaded: *site.Loaded) !void {
     }
 }
 
-/// From --views when this binary reads it (seconds), else from the database (minutes)
-fn loadBest(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !LoadedAll {
-    return fromViewsFile(c, f, db) orelse loadAll(c, f, db, contact);
-}
-
 /// Every view from the --views file; null without one, or when it can't be read
 /// (missing, or another binary's types wrote it: a deploy that changed them)
 fn fromViewsFile(c: *Cmd, f: *const SiteFlags, db: store.Db) ?LoadedAll {
@@ -1479,7 +1486,9 @@ fn loadAll(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !Loa
 }
 
 /// Swaps in freshly loaded data whenever `path`'s mtime moves (deploy/web-loop.sh touches
-/// it after each upload); on a failed load the old data stays
+/// it after each upload); on a failed load the old data stays. With --views only from
+/// that file: a database load here would run beside the web loop's (an old renderer
+/// seeing a newer binary's file during a swap)
 fn reloadOnChange(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8, rendered: *serve.Rendered, path: []const u8) void {
     const io = c.init.io;
     var seen = fileMtime(io, path);
@@ -1489,7 +1498,7 @@ fn reloadOnChange(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u
         if (now == seen) continue;
         seen = now;
         const start = std.Io.Clock.real.now(io).toMilliseconds();
-        const next = loadBest(c, f, db, contact) catch |err| {
+        const next = (if (f.views != null) fromViewsFile(c, f, db) orelse continue else loadAll(c, f, db, contact)) catch |err| {
             std.log.warn("render reload: {t}", .{err});
             continue;
         };
