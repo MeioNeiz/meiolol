@@ -80,6 +80,9 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   them: src/site/flat.zig) or a missing one makes the renderer load from the
   database instead, as before 15 Oct; a deploy's forced round writes a new one within
   minutes. Data code changes show after that round, render code changes at the swap.
+  First deploy (15 Oct, disk at ~80% pressure): views.bin 148 MB, written in 72 min,
+  read in 14 s; the swap took 16 s; the renderer holds ~2.0 GB (curves files ~940 MB
+  of it)
   Why (15 Oct): every swap from 21:04 on 14 Oct timed out; each load read the 8.4 GB
   DB at random beside the crawler, a second renderer and the batch jobs, 10 to 105 min,
   and a renderer kept 2.3-2.6 GB (the pool tallies of 1.9M players). Research:

@@ -48,7 +48,8 @@ the file into the heap.
 
 ## Open
 
-- Read time of data/views.bin on the box under load (measure after the first deploy).
+- Measured 15 Oct on the busy box: views.bin 148 MB, written in 72 min, read in 14 s,
+  swap 16 s. The write is still the old load's cost; making it cheaper is separate.
 - Whether a data-code change should also bump the fingerprint (RTB keys by commit
   hash); today the next web loop round refreshes it within minutes of a deploy.
 - Leads: LinkedIn Venice (why build-and-push was replaced), Glean's code reload.
