@@ -71,9 +71,20 @@ compresses only HTML itself; stats.bin is ~12 MB raw), with Vary: Accept-Encodin
 nginx caches each encoding apart, and answers a directory URL without its slash with a
 301, as nginx did for uploaded directories.
 - `meiolol render` (systemd meiolol-render@a or @b) on the box's private address
-  10.0.0.3:8091, all views loaded up front (~3.5 min, ~600 MB); deploy/web-loop.sh
-  touches data/render.reload after each upload and it loads the new data in the
-  background, swapping when done. A deploy runs deploy/render-swap.sh: it starts the idle
+  10.0.0.3:8091, every view loaded up front from data/views.bin. The database work
+  happens once per data refresh, in the web loop: after each upload `meiolol site
+  --views data/views.bin` (same flags as the core build) loads every view (what a
+  renderer load did: 2-13 min, longer on a busy disk) and writes them to one file, then
+  touches data/render.reload; the renderer reads the file in seconds and swaps it in. A
+  views file written by a binary with other types (its header holds a fingerprint of
+  them: src/site/flat.zig) or a missing one makes the renderer load from the
+  database instead, as before 15 Oct; a deploy's forced round writes a new one within
+  minutes. Data code changes show after that round, render code changes at the swap.
+  Why (15 Oct): every swap from 21:04 on 14 Oct timed out; each load read the 8.4 GB
+  DB at random beside the crawler, a second renderer and the batch jobs, 10 to 105 min,
+  and a renderer kept 2.3-2.6 GB (the pool tallies of 1.9M players). Research:
+  research/questions/fast-deploy-data-servers.md. A deploy runs
+  deploy/render-swap.sh: it starts the idle
   instance beside the running one (both listen, SO_REUSEPORT), and stops the old once the
   new one writes data/render-<a|b>.ready, so there is no gap. Connections queued on the
   stopping one move to the new one (sysctl net.ipv4.tcp_migrate_req=1,

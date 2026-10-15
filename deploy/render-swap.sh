@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Replaces the running renderer (meiolol-render@a or @b) without a gap: starts the other
 # instance with the current binary, both listening on the port (SO_REUSEPORT) while it
-# loads, and stops the old once the new one is serving. If the new one dies, or isn't ready
-# within 60 minutes (a load takes ~3.5 min on a quiet box, past 15 under a curves run and
-# an archive export), the old one stays. Run detached on the box by deploy/box.sh web start;
+# loads, and stops the old once the new one is serving. The new one reads data/views.bin
+# in seconds; only when it can't (none yet, or a deploy changed its types) does it load
+# from the database: 4 min on a quiet box, over an hour on a busy one (14 Oct). If it
+# dies, or isn't ready within 60 minutes, the old one stays. Run detached on the box by deploy/box.sh web start;
 # again if the binary changed meanwhile. Log in data/render.log
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit

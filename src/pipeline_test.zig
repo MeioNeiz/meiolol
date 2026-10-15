@@ -209,6 +209,31 @@ test "fixture games to stats, curves and the website" {
         checked += 1;
     }
     try testing.expect(checked > 50);
+    // `meiolol site --views` and `render` reading it: the same bytes for every file
+    {
+        for (site.html.View.all) |v| try loaded.loadView(v);
+        const views_path = try std.fs.path.join(arena, &.{ dir, "views.bin" });
+        try loaded.writeViews(views_path);
+        const from_file = try site.Loaded.readViews(gpa, io, db, views_path, arena);
+        defer from_file.deinit();
+        try testing.expectEqualDeep(loaded.opts, from_file.opts);
+        walker.deinit();
+        walker = try out_dir.walk(gpa);
+        var same: usize = 0;
+        while (try walker.next(io)) |e| {
+            if (e.kind != .file or std.mem.endsWith(u8, e.path, ".gz")) continue;
+            const want = try out_dir.readFileAlloc(io, e.path, arena, .limited(1 << 24));
+            try testing.expectEqualStrings(want, (try from_file.get(arena, e.path)).?);
+            same += 1;
+        }
+        try testing.expectEqual(checked, same);
+        // Another binary's types: refused, for the database load instead
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, views_path, arena, .limited(1 << 30));
+        // The fingerprint follows the 8-byte magic
+        bytes[8] ^= 1;
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = views_path, .data = bytes });
+        try testing.expectError(error.ViewsMismatch, site.Loaded.readViews(gpa, io, db, views_path, arena));
+    }
     // `meiolol render` serving while it loads: a view not loaded yet says so at once
     {
         const early = try site.Loaded.init(gpa, io, db, opts);

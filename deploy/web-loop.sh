@@ -4,8 +4,10 @@
 # the last upload, or there are any new games and an hour passed. So early in a patch (few
 # games) it pushes every 15 min, later hourly. The build is `--static core`: the home
 # page, robots.txt, riot.txt, the root sitemap and the front-end files (~30 files, two
-# views loaded); meiolol-render serves every other page and file, and loads the new data
-# after each upload (data/render.reload; docs/hosting.md "Rendering on request"). The
+# views loaded); meiolol-render serves every other page and file. After each upload,
+# `meiolol site --views` loads every view from the database into data/views.bin and
+# touches data/render.reload: the renderer reads that file in seconds, so the
+# database work happens once, here (docs/hosting.md "Rendering on request"). The
 # meiolol-web ssh alias is user meiolol with a key limited to rsync into /var/www/meiolol
 # (rrsync); nginx there serves meiolol.jomify.lol. Riot's verification string, if any,
 # lives in riot.txt beside bin/.
@@ -31,6 +33,10 @@
 # behind basic auth there; the site's rsync leaves that directory alone. Daily, a dbstat
 # scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
 # for it.
+# The daily jobs (eval, your-example, builds, lean) queue on data/batch.lock, one at a
+# time: together they and a renderer load held the disk at 90% pressure for hours (14
+# Oct). Their timers start from the files each leaves, so a restart doesn't run them
+# all again.
 # A deploy (deploy/box.sh web start) sends SIGUSR1 rather than restarting, unless this
 # script, its unit or the contact changed (data/web-loop.sum): the loop then builds and
 # uploads the site at once with the new binary, keeping its curves, eval and builds
@@ -78,6 +84,10 @@ storage_scan() {
 last_patch='' last_games=0 last_upload=0
 patch='' curves_patch='' last_curves=0 fresh_curves=0 last_eval=0 last_example=0
 last_builds=0 builds_patch='' builds_pid='' storage_pid='' last_lean=0 lean_pid=''
+mtime() { stat -c %Y "$1" 2> /dev/null || echo 0; }
+# eval.log is truncated as a run starts, the other logs written as each runs
+last_eval=$(mtime data/eval.log) last_example=$(mtime data/your-example.log)
+last_builds=$(mtime data/builds.log) last_lean=$(mtime data/lean.log)
 # The patch otherwise comes from the round's site build, after curves: without it a
 # restart's first curves pass reads every patch (~50 min) and leaves curves-<patch>.bin
 # alone, so start from the newest of those
@@ -87,6 +97,7 @@ patch=$(ls -t data/export/curves-*.bin 2> /dev/null | head -n 1 | sed -E 's#.*/c
 # took 35-50 min, with patch matchup pages 404 meanwhile (14 Oct). A format bump fails
 # the check, so it still rebuilds first (u32 version after the 8-byte magic)
 format=$(bin/meiolol curves --format-version 2> /dev/null)
+[[ -n "$patch" && -s data/export/builds-$patch.json ]] && builds_patch=$patch
 if [[ -n "$patch" && -n "$format" ]]; then
     fresh=1 oldest=$(date +%s)
     for f in data/export/{,all-}recent-curves.bin data/export/{,all-}curves-"$patch".bin; do
@@ -107,9 +118,10 @@ while true; do
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
     if [[ -z "${MEIOLOL_NO_EVAL:-}" ]] && (( now - last_eval >= 86400 )); then
         (flock -n 9 || exit 0
+            flock 8
             nice -n 10 bin/meiolol eval --platform all \
                 --history data/eval-history.tsv > data/eval-latest.md.new 2> data/eval.log \
-                && mv data/eval-latest.md.new data/eval-latest.md) 9> data/eval.lock &
+                && mv data/eval-latest.md.new data/eval-latest.md) 9> data/eval.lock 8> data/batch.lock &
         last_eval=$now
     fi
     # Space by table and index, for the admin page; the file's age, not a timer, so a
@@ -120,24 +132,26 @@ while true; do
         storage_pid=$!
     fi
     if (( now - last_example >= 86400 )); then
-        (if nice -n 10 bin/meiolol your-example --out data/your-example.json.new \
+        (flock 8
+        if nice -n 10 bin/meiolol your-example --out data/your-example.json.new \
             > data/your-example.log 2>&1; then
             mv data/your-example.json.new data/your-example.json
         else
             rm -f data/your-example.json data/your-example.json.new
-        fi) &
+        fi) 8> data/batch.lock &
         last_example=$now
     fi
     if [[ -n "$patch" ]] && { [[ -z "$builds_pid" ]] || ! kill -0 "$builds_pid" 2> /dev/null; } \
         && { (( now - last_builds >= 86400 )) || [[ "$patch" != "$builds_patch" ]]; }; then
-        (nice -n 10 bin/meiolol builds --patch "$patch" \
+        (flock 8
+            nice -n 10 bin/meiolol builds --patch "$patch" \
             && nice -n 10 bin/meiolol builds --patch "$patch" --platform all) \
-            > data/builds.log 2>&1 &
+            > data/builds.log 2>&1 8> data/batch.lock &
         builds_pid=$! last_builds=$now builds_patch=$patch
     fi
     if (( now - last_lean >= 86400 )) \
         && { [[ -z "$lean_pid" ]] || ! kill -0 "$lean_pid" 2> /dev/null; }; then
-        nice -n 10 bin/meiolol lean > data/lean.log 2>&1 &
+        flock data/batch.lock nice -n 10 bin/meiolol lean > data/lean.log 2>&1 &
         lean_pid=$! last_lean=$now
     fi
     if (( now - last_curves >= 3600 )) || [[ "$patch" != "$curves_patch" ]]; then
@@ -148,12 +162,11 @@ while true; do
     fi
     forced=$force force=0
     rm -rf data/site.new
-    riot=()
-    [[ -s riot.txt ]] && riot=(--riot-txt "$(<riot.txt)")
+    # The core build's and the views file's, so rendered pages match the uploaded ones
+    site_args=(--contact "$contact" --origin https://meiolol.jomify.lol)
+    [[ -s riot.txt ]] && site_args+=(--riot-txt "$(<riot.txt)")
     site_start=$SECONDS
-    if out=$(bin/meiolol site --contact "$contact" --out data/site.new --static core \
-        --origin https://meiolol.jomify.lol \
-        "${riot[@]}" 2>&1); then
+    if out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core 2>&1); then
         site_s=$(( SECONDS - site_start ))
         # First patch line, EUW: "data/site.new/patch/: patch 16.20, 1054 games, ..."
         read -r patch games < <(sed -nE 's/.*: patch ([^,]+), ([0-9]+) games.*/\1 \2/p' \
@@ -173,7 +186,16 @@ while true; do
                 echo "$(date -u +%FT%TZ) upload: site ${site_s}s, copy ${copy_s}s" \
                     "(${changed:-?} files changed), send $(( SECONDS - t ))s (${sent:-?} bytes)"
                 echo "$(date -u +%FT%TZ) uploaded"
-                # meiolol-render loads the same data again for the pages left out
+                # For meiolol-render: every view, which it reads on the touch
+                t=$SECONDS
+                if bin/meiolol site --views data/views.bin "${site_args[@]}" \
+                    > data/views.log 2>&1; then
+                    echo "$(date -u +%FT%TZ) views file $(( SECONDS - t ))s" \
+                        "($(stat -c %s data/views.bin) bytes)"
+                else
+                    echo "$(date -u +%FT%TZ) views file FAILED after $(( SECONDS - t ))s:" \
+                        "$(tail -n 1 data/views.log)"
+                fi
                 touch data/render.reload
                 last_patch=$patch last_games=$games last_upload=$now fresh_curves=0
             fi

@@ -23,6 +23,7 @@ const lean = @import("../lean.zig");
 const lean_line = @import("lean.zig");
 const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
+const flat = @import("flat.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -448,6 +449,7 @@ fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
 
 test {
     _ = evalchart;
+    _ = flat;
 }
 
 test robots {
@@ -647,7 +649,7 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
         site.filter = try filters.make(site, db, all_opts);
         try files.appendSlice(arena, site.filter.files);
     }
-    try files.append(arena, .{ .path = "data/stats.bin", .data = model_bytes });
+    try files.append(arena, .{ .path = stats_path, .data = model_bytes });
     try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
     const people = try extras.tallies(gpa, db, &site.stats, all_opts);
     const set = @backingInt(view.region);
@@ -791,7 +793,144 @@ pub const Loaded = struct {
         for (shared.shared_files) |f| if (std.mem.eql(u8, f.path, rest)) return f.data;
         return null;
     }
+
+    /// Every loaded view and the options to `path`, for readViews: `meiolol site
+    /// --views` does the database work once, and `meiolol render` reads the result
+    /// in seconds (docs/hosting.md "Rendering on request")
+    pub fn writeViews(l: *Loaded, path: []const u8) !void {
+        const io = l.io;
+        var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+        defer file.deinit(io);
+        var buf: [64 * 1024]u8 = undefined;
+        var fw = file.file.writer(io, &buf);
+        const w = &fw.interface;
+        try w.writeAll(views_magic);
+        try w.writeInt(u64, flat.fingerprint(ViewsShape), .little);
+        try flat.write(w, l.opts);
+        for (l.sites) |s| try flat.write(w, if (s) |v| @as(?ViewData, viewData(v)) else null);
+        try w.flush();
+        try file.replace(io);
+    }
+
+    /// The views and options writeViews wrote, every one loaded (lazy off); options'
+    /// strings in `arena`, which must outlive it. error.ViewsMismatch when a binary
+    /// with other types wrote it
+    pub fn readViews(gpa: std.mem.Allocator, io: std.Io, db: store.Db, path: []const u8, arena: std.mem.Allocator) !*Loaded {
+        var file = try std.Io.Dir.cwd().openFile(io, path, .{});
+        defer file.close(io);
+        var buf: [64 * 1024]u8 = undefined;
+        var fr = file.reader(io, &buf);
+        const r = &fr.interface;
+        if (!std.mem.eql(u8, try r.takeArray(views_magic.len), views_magic)) return error.ViewsMismatch;
+        if (try r.takeInt(u64, .little) != flat.fingerprint(ViewsShape)) return error.ViewsMismatch;
+        const l = try Loaded.init(gpa, io, db, try flat.read(Options, r, arena));
+        errdefer l.deinit();
+        l.lazy = false;
+        for (&l.sites, html.View.all) |*slot, v| {
+            // ?ViewData as flat.write puts it: a presence byte, then the value
+            switch (try r.takeByte()) {
+                0 => {},
+                1 => slot.* = try l.siteFrom(v, r),
+                else => return error.Corrupt,
+            }
+        }
+        if (r.takeByte()) |_| return error.Corrupt else |err| switch (err) {
+            error.EndOfStream => {},
+            else => |e| return e,
+        }
+        return l;
+    }
+
+    fn siteFrom(l: *Loaded, v: html.View, r: *std.Io.Reader) !*Site {
+        const owner = try l.gpa.create(std.heap.ArenaAllocator);
+        owner.* = .init(l.gpa);
+        errdefer {
+            owner.deinit();
+            l.gpa.destroy(owner);
+        }
+        const arena = owner.allocator();
+        const d = try flat.read(ViewData, r, arena);
+        const model = for (d.files) |f| {
+            if (std.mem.eql(u8, f.path, stats_path)) break f.data;
+        } else return error.Corrupt;
+        const s = try arena.create(Site);
+        s.* = .{
+            .gpa = l.gpa,
+            .arena = arena,
+            .owner = owner,
+            .io = l.io,
+            .stats = try .parse(arena, model),
+            .champs = d.champs,
+            .by_c = &.{},
+            .games = d.games,
+            .patch = d.patch,
+            .when = d.when,
+            .ddragon_version = d.ddragon_version,
+            .view = v,
+            .since_ms = d.since_ms,
+            .opts = d.opts,
+            .curves = l.extras.curves[v.index()],
+            .view_curves = &l.extras.curves,
+            .view_builds = &l.extras.builds,
+            .lean = if (l.extras.lean) |*x| x else null,
+            .pool = d.pool,
+            .learning = d.learning,
+            .files = d.files,
+            .shared_files = d.shared_files,
+            .learn = d.learn,
+            .eval = d.eval,
+            .filter = d.filter,
+        };
+        try indexChamps(s);
+        return s;
+    }
 };
+
+const views_magic = "MEIOVIEW";
+/// The view's model file among its files, which a views file parses again
+const stats_path = "data/stats.bin";
+
+/// What a views file keeps of a loaded view; the rest of its Site is rebuilt from these
+/// (stats from stats_path, the champion index) or comes from the extras: the curves,
+/// builds and lean files, read again by the loading binary
+const ViewData = struct {
+    opts: Options,
+    champs: []Champ,
+    games: u32,
+    patch: []const u8,
+    when: []const u8,
+    ddragon_version: []const u8,
+    since_ms: i64,
+    pool: pool.Pool,
+    learning: learning.Learning,
+    files: []const File,
+    shared_files: []const File,
+    learn: ?learn.Facts,
+    eval: []const evalchart.Point,
+    filter: filters.Made,
+};
+
+/// The views file after its header, as writeViews writes it
+const ViewsShape = struct { opts: Options, views: [html.View.count]?ViewData };
+
+fn viewData(s: *const Site) ViewData {
+    return .{
+        .opts = s.opts,
+        .champs = s.champs,
+        .games = s.games,
+        .patch = s.patch,
+        .when = s.when,
+        .ddragon_version = s.ddragon_version,
+        .since_ms = s.since_ms,
+        .pool = s.pool,
+        .learning = s.learning,
+        .files = s.files,
+        .shared_files = s.shared_files,
+        .learn = s.learn,
+        .eval = s.eval,
+        .filter = s.filter,
+    };
+}
 
 /// Optional, as curves: a bad or missing file leaves out build pages
 fn loadBuilds(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?builds.File {
@@ -907,6 +1046,12 @@ fn loadChamps(site: *Site, db: store.Db) !void {
         if (site.ddragon_version.len == 0) site.ddragon_version = try a.dupe(u8, r.ddragon_version);
     }
     site.champs = try list.toOwnedSlice(a);
+    try indexChamps(site);
+}
+
+/// by_c and by_slug from champs
+fn indexChamps(site: *Site) !void {
+    const a = site.arena;
     site.by_c = try a.alloc(?usize, site.stats.n);
     @memset(site.by_c, null);
     for (site.champs, 0..) |ch, i| site.by_c[ch.c] = i;

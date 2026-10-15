@@ -248,6 +248,8 @@ const usage =
     \\              --origin URL     site URL for canonical links and sitemaps (public)
     \\              --index-min-games N  matchup pages under N games noindex and out of
     \\                               the sitemaps
+    \\              --views FILE     load every view and write it to FILE for
+    \\                               `render --views` instead of the site
     \\  dev        work on the site: pages rendered on request from DIR (data loaded
     \\              once), CSS and JS from src/site/static, live reload; run by
     \\              deploy/dev.sh, which rebuilds on edits. Takes site's flags
@@ -260,6 +262,9 @@ const usage =
     \\              --reload FILE    load the data again whenever FILE changes
     \\              --ready FILE     written once listening. Several may share the
     \\                               port (SO_REUSEPORT): deploy/render-swap.sh
+    \\              --views FILE     load from FILE (`site --views`), at start and
+    \\                               on --reload, in seconds; the database when it
+    \\                               is missing or another binary's types wrote it
     \\  serve       serve the website (default DIR/site) over HTTP, for the tunnel
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8080
@@ -1205,6 +1210,7 @@ const SiteFlags = struct {
     static_min_games: u32 = 0,
     origin: ?[]const u8 = null,
     index_min_games: u32 = 0,
+    views: ?[]const u8 = null,
 
     /// False for a flag that isn't one of these
     fn parse(f: *SiteFlags, c: *Cmd) !bool {
@@ -1228,6 +1234,8 @@ const SiteFlags = struct {
             f.origin = std.mem.trimEnd(u8, try c.value(), "/");
         } else if (c.is("--index-min-games")) {
             f.index_min_games = try c.int(u32);
+        } else if (c.is("--views")) {
+            f.views = try c.value();
         } else return false;
         return true;
     }
@@ -1281,6 +1289,13 @@ fn cmdSite(c: *Cmd) !u8 {
     const email = try c.required(f.contact, "--contact");
     const db = try c.open();
     defer db.close();
+    if (f.views) |path| {
+        const l = try loadAll(c, &f, db, email);
+        defer l.free(c.init.gpa);
+        try l.loaded.writeViews(path);
+        std.log.info("views: {s}", .{path});
+        return 0;
+    }
     try site.generate(c.init.gpa, c.init.io, db, try f.options(c, c.arena, db, email));
     return 0;
 }
@@ -1319,10 +1334,11 @@ fn cmdDev(c: *Cmd) !u8 {
 
 /// The pages and files the static build leaves out (--static, --static-min-games),
 /// rendered on request for the web server's nginx (docs/hosting.md "Rendering on
-/// request"), loaded again whenever the --reload file changes. Beside a running
-/// instance (a deploy: deploy/render-swap.sh) it loads every view, then listens too
-/// (SO_REUSEPORT) and is --ready for the old one to stop. Alone (a boot), it listens at
-/// once and serves each view as it loads, the rest answering 503
+/// request"), loaded again whenever the --reload file changes. From the --views file
+/// when this binary reads it: listening and --ready in seconds. Otherwise from the
+/// database: beside a running instance (a deploy: deploy/render-swap.sh) it loads every
+/// view, then listens too (SO_REUSEPORT) and is --ready for the old one to stop; alone
+/// (a boot) it listens at once and serves each view as it loads, the rest answering 503
 fn cmdRender(c: *Cmd) !u8 {
     var f: SiteFlags = .{};
     var host: []const u8 = "127.0.0.1";
@@ -1346,9 +1362,12 @@ fn cmdRender(c: *Cmd) !u8 {
     const db = try c.open();
     defer db.close();
     const alone = !listening(io, host, port);
-    const first = try prepare(c, &f, db, email);
+    const from_file = fromViewsFile(c, &f, db);
+    const first = from_file orelse try prepare(c, &f, db, email);
     first.loaded.lazy = false;
-    if (!alone) loadViews(first.loaded) catch |err| {
+    // From the database in the background once listening (alone), else before
+    const background_load = from_file == null and alone;
+    if (from_file == null and !alone) loadViews(first.loaded) catch |err| {
         first.free(gpa);
         return err;
     };
@@ -1359,10 +1378,10 @@ fn cmdRender(c: *Cmd) !u8 {
     defer rendered.deinit();
     var group: std.Io.Group = .init;
     defer group.cancel(io);
-    group.async(io, background, .{ c, &f, db, email, rendered, if (alone) first.loaded else null, if (alone) ready else null, reload });
+    group.async(io, background, .{ c, &f, db, email, rendered, if (background_load) first.loaded else null, if (background_load) ready else null, reload });
     var admin_api: serve.admin_api.Api = .{ .gpa = gpa, .io = io, .data_dir = c.data_dir };
     defer admin_api.deinit();
-    try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered, .ready = if (alone) null else ready, .admin = &admin_api });
+    try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered, .ready = if (background_load) null else ready, .admin = &admin_api });
     return 0;
 }
 
@@ -1423,6 +1442,33 @@ fn loadViews(loaded: *site.Loaded) !void {
     }
 }
 
+/// From --views when this binary reads it (seconds), else from the database (minutes)
+fn loadBest(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !LoadedAll {
+    return fromViewsFile(c, f, db) orelse loadAll(c, f, db, contact);
+}
+
+/// Every view from the --views file; null without one, or when it can't be read
+/// (missing, or another binary's types wrote it: a deploy that changed them)
+fn fromViewsFile(c: *Cmd, f: *const SiteFlags, db: store.Db) ?LoadedAll {
+    const path = f.views orelse return null;
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const start = std.Io.Clock.real.now(io).toMilliseconds();
+    const arena = gpa.create(std.heap.ArenaAllocator) catch return null;
+    arena.* = .init(gpa);
+    const loaded = site.Loaded.readViews(gpa, io, db, path, arena.allocator()) catch |err| {
+        std.log.warn("render: views file {s}: {t}; loading from the database", .{ path, err });
+        arena.deinit();
+        gpa.destroy(arena);
+        return null;
+    };
+    const age_s = @divTrunc(std.Io.Clock.real.now(io).toNanoseconds() - fileMtime(io, path), std.time.ns_per_s);
+    std.log.info("render: views file read in {d} ms, written {d} min ago", .{
+        std.Io.Clock.real.now(io).toMilliseconds() - start, @divTrunc(age_s, 60),
+    });
+    return .{ .loaded = loaded, .arena = arena };
+}
+
 /// prepare and loadViews: every view loaded, not on its first request
 fn loadAll(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !LoadedAll {
     const l = try prepare(c, f, db, contact);
@@ -1443,7 +1489,7 @@ fn reloadOnChange(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u
         if (now == seen) continue;
         seen = now;
         const start = std.Io.Clock.real.now(io).toMilliseconds();
-        const next = loadAll(c, f, db, contact) catch |err| {
+        const next = loadBest(c, f, db, contact) catch |err| {
             std.log.warn("render reload: {t}", .{err});
             continue;
         };

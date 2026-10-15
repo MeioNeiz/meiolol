@@ -7,8 +7,8 @@ EnvironmentFile=-%h/ml/meiolol/host.env
 # Instances a and b take turns (deploy/render-swap.sh): both listen on the port while the
 # new one takes over. On the private address only: the cloud firewall and iptables let
 # just the web server in (docs/hosting.md "Rendering on request"). deploy/web-loop.sh
-# touches data/render.reload after each upload
-ExecStart=/bin/sh -c 'exec bin/meiolol render --contact "$(cat contact)" --host "$(hostname -I | cut -d" " -f1)" --port 8091 --reload data/render.reload --ready data/render-%i.ready >> data/render.log 2>&1'
+# writes data/views.bin and touches data/render.reload after each upload
+ExecStart=/bin/sh -c 'exec bin/meiolol render --contact "$(cat contact)" --host "$(hostname -I | cut -d" " -f1)" --port 8091 --reload data/render.reload --views data/views.bin --ready data/render-%i.ready >> data/render.log 2>&1'
 Restart=always
 RestartSec=10
 

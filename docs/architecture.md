@@ -7,7 +7,7 @@ src/
   ddragon.zig        Data Dragon: champion ids/names; item classes, rune and spell names
   date.zig           UTC dates (Date: format, parse, epoch days)
   pipeline_test.zig  fixture games through stats, curves and the site
-  daily.zig          Daily Draft puzzles (data/daily), made by site loads (meiolol render)
+  daily.zig          Daily Draft puzzles (data/daily), made by full loads (site --views)
   learn.zig          Learn page data: champion facts, practice draft pack
   curves.zig         lane matchup curves from timelines (`meiolol curves`)
   builds.zig         builds per champion and role (`meiolol builds`, JSON for the site)
@@ -507,8 +507,9 @@ robots.txt disallow, banner): Riot forbids serving the public on a personal key;
 `--public` only once the production key is granted. `deploy/box.sh site EMAIL` builds
 it on the box and rsyncs it to data/site. `meiolol render` serves the pages and files
 the static build leaves out from the same code, its data swapped whole on reload
-(serve.Rendered; docs/hosting.md "Rendering on request"). `--static core` (the web
-loop's) writes only core_static (root.zig: home, robots.txt, riot.txt, root sitemap)
+(serve.Rendered; docs/hosting.md "Rendering on request"), read from the views file
+that `site --views` writes (below). `--static core` (the web loop's) writes only
+core_static (root.zig: home, robots.txt, riot.txt, root sitemap)
 and the front-end assets, loading only the root and shared views' stats and champions
 (no pool tallies, filters, Daily Draft or Learn) and rendering one page;
 `--static-min-games N` (Static.all) leaves out thin matchups only. `meiolol serve`
@@ -524,6 +525,16 @@ rendered on request is the same bytes: `Loaded` holds every view (loaded on firs
 request) and answers any path from the site root (pipeline_test checks every file of
 the full build, and that `--static core` writes only its list, each the renderer's
 bytes).
+Views file (data/views.bin; src/site/flat.zig, `Loaded.writeViews`/`readViews`): every
+loaded view's data (ViewData: options, champions, pool, learning, Learn facts, eval points,
+filters, data and script files; stats parsed again from data/stats.bin among them) and
+the site options in one little-endian file, slices length-prefixed. Header: magic
+MEIOVIEW, then a fingerprint of the types' shape (field names and types all the way
+down), so a binary whose types differ refuses it (error.ViewsMismatch) and loads
+from the database. It doesn't catch a change in how the data is computed: that shows
+once the web loop writes the next one (a deploy forces a round). Curves, builds
+and lean files are read by the loading binary as before. pipeline_test: a views file's
+Loaded serves every full-build file byte for byte.
 `meiolol dev` (deploy/dev.sh) serves `Loaded` from data/snap (`deploy/box.sh snapshot`:
 the tables the site reads, PUUIDs replaced, no raw docs) with CSS and JS from
 src/site/static, and reloads the open page on an edit: `zig build --watch` rebuilds,
@@ -535,7 +546,7 @@ Hosting:
 meiolol.jomify.lol, nginx on the jomove server: the static core uploaded from the box by
 deploy/web-loop.sh (every 15 min early in a patch, then hourly; docs/plan.md step 2),
 and at once on each push to main (deploy/on-push.sh); every other page from
-meiolol-render on the box, which loads the new data after each upload.
+meiolol-render on the box, which reads the new views file after each upload.
 
 Known gaps: stats.bin is dense (~12 MB raw; brotli helps while sparse), no rank
 brackets (statsfile has none), no per-patch history.
@@ -549,8 +560,8 @@ then guess the winner. Pick order is not in match-v5, so "which was picked last"
 result, length, team kills and gold, blue's estimated win chance, the five same-role lane
 edges with games (greyed under 200), and each option's points with reasons.
 
-- Made by every full site load (meiolol-render's, after each upload; the web loop's
-  `--static core` build skips it): puzzles for today to today+2 (UTC) that
+- Made by every full site load (the web loop's `site --views`, after each upload;
+  its `--static core` build skips it): puzzles for today to today+2 (UTC) that
   do not exist yet, from the site's patches and platforms. Puzzle #1 = 2026-10-11
 - data/daily/<n>.json is the public puzzle, written once and never remade (the numbers
   are frozen at that day's data); data/daily/used.txt holds the match ids behind them so
