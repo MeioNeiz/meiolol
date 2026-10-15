@@ -1,5 +1,6 @@
 ---
-status: answered
+status: decided
+decision: docs/plan.md#site-build-and-deploy-2026-10-12-owner-the-site-session
 priority: now
 area: ops
 tags: [ops]

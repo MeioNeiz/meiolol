@@ -616,9 +616,26 @@ web loop's batch jobs and the crawler, at 90% IO pressure.
   waiting out the 10 min: open-source nginx has no purge, so a version (views file and
   binary) in proxy_cache_key, as Next.js keys by deployment id; (3) prerender the most visited pages into the static upload
   if render latency shows. Each from traffic, not guessed
-- Not done, Jacob's call (server-wide or open): disk scheduler `none` on the box, so
-  nice/ionice do nothing for disk (mq-deadline or bfq would honour it); why the crawler
-  reads 5-11 MB/s around the clock
+- Box load, decided later that day (Jacob: balance and prioritise; research/questions/
+  box-io-priority.md). Measured: CPU ~10% busy, memory pressure 0; the disk does 7-15
+  MB/s of 4-8 KB reads at ~0.7 ms with ~1 in flight, 20% of the volume's 9,000 IOPS and
+  14% of its 72 MB/s; only stacked loads after deploys hit the cap. Jobs are slow on
+  page-cache misses read one at a time (the renderer stalls 0%, the crawler 4-5%, the
+  batch job ~50%); the crawler's constant reads are mostly re-reads of evicted pages
+  (207 GB in 14 h). The curves pass took 45-60 min of every hour (100 s on 12 Oct)
+- So (158a23c): hourly rounds; curves and uploads every 6 h, hourly for a patch's first
+  day (Jacob); heavy work one job at a time, the loop's first, then one daily job a
+  round (storage scan included); batch under ionice -c 3; a deploy writes the views
+  file before curves, and one that changes its types waits for it instead of a
+  database load; curves reads mastery in one scan instead of ~4.8M lookups; curves
+  files no longer held twice (~940 MB); per-phase load times in data/views.log
+- Scheduler: mq-deadline on trial at runtime from 15 Oct 11:35 UTC (Jacob's OK; not
+  persisted, a reboot returns to `none`); persist with a udev rule only if crawler and
+  batch do no worse
+- Next: parallel reads (3-4 in flight) for the phases the views log shows dominate; the
+  disk has 4-5x headroom. Longer term: incremental curves and stats so cost stops
+  growing with kept data, and refresh scaled by how much pages change or are visited
+  (Jacob)
 
 Next:
 1. Screenshots or a short video for the application (Riot accepts them, research C1).

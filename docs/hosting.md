@@ -46,6 +46,10 @@ accounts may use Always Free only in the home region).
   (MEIOLOL_BACKUPS, MEIOLOL_NO_EVAL=1 on the micro)
 - systemd --user services, lingering: meiolol-crawl, meiolol-web, meiolol-backup,
   meiolol-health (deploy/systemd). `systemctl --user status meiolol-crawl`; logs in data/
+- Disk scheduler: mq-deadline on trial since 15 Oct 11:35 UTC, set at runtime only
+  (`echo none | sudo tee /sys/block/sda/queue/scheduler` reverts; a reboot does too).
+  Under the image's `none`, ionice does nothing. Why and numbers:
+  research/questions/box-io-priority.md
 - crawl.args (2026-10-13): `--proxy 10.0.0.3:8092 --timelines 100 --raw-timeline-days 3650
   --raw-match-days 0 --keep-days 0 --ladder-per-hour 500 --ladder-refresh-hours 12
   --player-sample 16 --min-tier PLATINUM --cache-mb 512 --patch-only
