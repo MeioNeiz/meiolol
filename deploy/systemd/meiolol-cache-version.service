@@ -1,0 +1,10 @@
+[Unit]
+Description=meiolol renderer's data version into jomify's nginx cache key (deploy/cache-version.sh)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/ml/meiolol
+ExecStart=%h/ml/meiolol/bin/cache-version.sh
+# jomify unreachable: again until it is, or until the next reload
+Restart=on-failure
+RestartSec=60

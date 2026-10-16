@@ -26,9 +26,10 @@ sync() {
         _ "$target" "$ROOT" "$tree"
     ssh "$HOST" "mkdir -p $DIR/bin $DIR/data .config/systemd/user"
     scp -q "$tree/zig-out/box/bin/meiolol" "$HOST:$DIR/bin/meiolol.new"
-    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh render-swap.sh archive-serve.sh" s
+    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh render-swap.sh archive-serve.sh cache-version.sh" s
     for s in $scripts; do scp -q "$tree/deploy/$s" "$HOST:$DIR/bin/$s.new"; done
-    scp -q "$tree"/deploy/systemd/*.service "$HOST:.config/systemd/user/"
+    scp -q "$tree"/deploy/systemd/*.service "$tree"/deploy/systemd/meiolol-cache-version.path \
+        "$HOST:.config/systemd/user/"
     ssh "$HOST" "cd $DIR && mv bin/meiolol.new bin/meiolol \
         && for s in $scripts; do mv bin/\$s.new bin/\$s; done \
         && systemctl --user daemon-reload \
@@ -268,6 +269,7 @@ SQL
                 ssh "$HOST" "cd $DIR && { [ \"\$(cat contact 2>/dev/null)\" = '$contact' ] \
                         || echo '$contact' > contact; } \
                     && systemctl --user enable -q meiolol-web \
+                    && systemctl --user enable -q --now meiolol-cache-version.path \
                     && if systemctl --user -q is-active meiolol-web \
                         && sha256sum --status -c data/web-loop.sum 2> /dev/null; then \
                         systemctl --user kill -s USR1 --kill-whom=main meiolol-web \
@@ -282,7 +284,7 @@ SQL
                 ;;
             stop)
                 ssh "$HOST" "systemctl --user disable -q --now meiolol-web meiolol-render@a \
-                    meiolol-render@b"
+                    meiolol-render@b meiolol-cache-version.path"
                 ;;
             status)
                 ssh "$HOST" "systemctl --user is-active meiolol-web meiolol-render@a \

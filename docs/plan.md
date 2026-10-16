@@ -614,7 +614,7 @@ web loop's batch jobs and the crawler, at 90% IO pressure.
 - Later, in order, once there are users: (1) warm nginx's cache after each reload from
   the sitemaps, most visited first (traffic.json); (2) invalidate by version instead of
   waiting out the 10 min: open-source nginx has no purge, so a version (views file and
-  binary) in proxy_cache_key, as Next.js keys by deployment id; (3) prerender the most visited pages into the static upload
+  binary) in proxy_cache_key, as Next.js keys by deployment id (done 16 Oct, below); (3) prerender the most visited pages into the static upload
   if render latency shows. Each from traffic, not guessed
 - Box load, decided later that day (Jacob: balance and prioritise; research/questions/
   box-io-priority.md). Measured: CPU ~10% busy, memory pressure 0; the disk does 7-15
@@ -639,8 +639,11 @@ web loop's batch jobs and the crawler, at 90% IO pressure.
   research/questions/fast-deploy-data-servers.md C3); a deploy's round writes with
   `--reuse`, keeping current parts and loading only the changed ones; a deploy stops an
   old-format write at once. docs/architecture.md "Views file", docs/hosting.md
-  "Rendering on request". Next: a version in jomify's proxy_cache_key, so a reload
-  shows at once rather than after nginx's 10 min (render-cache-invalidation C3)
+  "Rendering on request". The served data's version is in jomify's proxy_cache_key
+  (Jacob's OK, 16 Oct): the box sends it after each swap or reload, so a reload shows at
+  once rather than after nginx's 10 min (render-cache-invalidation C3; docs/hosting.md
+  "Cache version"). Each reload starts the cache cold: the warm-up above matters more once
+  there are users
 - Next: parallel reads (3-4 in flight) for the phases the views log shows dominate; the
   disk has 4-5x headroom. Longer term: incremental curves and stats so cost stops
   growing with kept data, and refresh scaled by how much pages change or are visited

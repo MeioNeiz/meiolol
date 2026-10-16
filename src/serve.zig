@@ -22,7 +22,8 @@ pub const Options = struct {
     port: u16 = 8080,
     render: ?*Rendered = null,
     dev: ?Dev = null,
-    /// Written (empty) once listening: deploy/render-swap.sh waits for it
+    /// Written once listening: deploy/render-swap.sh waits for it. With `render`, it holds
+    /// the served data's version (Rendered.writeReady)
     ready: ?[]const u8 = null,
     /// /admin/api/ (`meiolol render`), for requests nginx gave the admin token
     admin: ?*admin_api.Api = null,
@@ -40,6 +41,8 @@ pub const Rendered = struct {
         loaded: *site.Loaded,
         /// Holds what loaded's options point into; freed with it
         arena: ?*std.heap.ArenaAllocator,
+        /// Load time (ns): new at each start and swap
+        version: u64,
         users: usize = 0,
         retired: bool = false,
 
@@ -58,7 +61,7 @@ pub const Rendered = struct {
         const r = try gpa.create(Rendered);
         errdefer gpa.destroy(r);
         const e = try gpa.create(Entry);
-        e.* = .{ .loaded = loaded, .arena = arena };
+        e.* = .{ .loaded = loaded, .arena = arena, .version = loadVersion(io) };
         r.* = .{ .gpa = gpa, .io = io, .current = e };
         return r;
     }
@@ -72,7 +75,7 @@ pub const Rendered = struct {
     /// Replaces the site new requests render from, as `init`
     pub fn swap(r: *Rendered, loaded: *site.Loaded, arena: ?*std.heap.ArenaAllocator) !void {
         const e = try r.gpa.create(Entry);
-        e.* = .{ .loaded = loaded, .arena = arena };
+        e.* = .{ .loaded = loaded, .arena = arena, .version = loadVersion(r.io) };
         r.mutex.lockUncancelable(r.io);
         const old = r.current;
         r.current = e;
@@ -80,6 +83,21 @@ pub const Rendered = struct {
         const unused = old.users == 0;
         r.mutex.unlock(r.io);
         if (unused) old.free(r.gpa);
+    }
+
+    /// `path` holding the served data's version, 16 hex digits: jomify's nginx keeps its
+    /// cache by it (deploy/cache-version.sh), so a swap or reload shows at once
+    pub fn writeReady(r: *Rendered, path: []const u8) !void {
+        r.mutex.lockUncancelable(r.io);
+        const version = r.current.version;
+        r.mutex.unlock(r.io);
+        var buf: [16]u8 = undefined;
+        const hex = std.fmt.bufPrint(&buf, "{x:0>16}", .{version}) catch unreachable;
+        try Io.Dir.cwd().writeFile(r.io, .{ .sub_path = path, .data = hex });
+    }
+
+    fn loadVersion(io: Io) u64 {
+        return @intCast(Io.Clock.real.now(io).toNanoseconds());
     }
 
     fn acquire(r: *Rendered) *Entry {
@@ -136,7 +154,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, opts: Options) !void {
     var server = try address.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
     log.info("serving {s} on http://{s}:{d}/", .{ opts.root orelse "rendered pages", opts.host, opts.port });
-    if (opts.ready) |path| try Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = "" });
+    if (opts.ready) |path| if (opts.render) |r| try r.writeReady(path) else try Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = "" });
 
     var ctx: Context = .{ .gpa = gpa, .io = io, .opts = opts, .started = Io.Clock.real.now(io).toNanoseconds() };
     var group: Io.Group = .init;
@@ -406,6 +424,7 @@ test "Rendered: a swapped-out site is freed after its last request" {
     const first = r.acquire();
     try r.swap(try site.Loaded.init(gpa, io, db, opts), null);
     try std.testing.expect(first.retired and r.current != first);
+    try std.testing.expect(r.current.version != first.version);
     // Freed by this release, not by the swap: the testing allocator reports a double
     // free for one and a leak for none
     r.release(first);

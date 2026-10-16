@@ -266,8 +266,10 @@ const usage =
     \\              --host H         default 127.0.0.1 (local only)
     \\              --port P         default 8091
     \\              --reload FILE    load the data again whenever FILE changes
-    \\              --ready FILE     written once listening. Several may share the
-    \\                               port (SO_REUSEPORT): deploy/render-swap.sh
+    \\              --ready FILE     written once listening, holding the served
+    \\                               data's version (again at each reload) for
+    \\                               jomify's nginx cache key. Several may share
+    \\                               the port (SO_REUSEPORT): deploy/render-swap.sh
     \\              --views FILE     load from FILE (`site --views`), at start and
     \\                               on --reload, in seconds; the database when it
     \\                               is missing or another binary's types wrote it
@@ -1398,7 +1400,7 @@ fn cmdRender(c: *Cmd) !u8 {
     defer rendered.deinit();
     var group: std.Io.Group = .init;
     defer group.cancel(io);
-    group.async(io, background, .{ c, &f, db, email, rendered, if (background_load) first.loaded else null, if (background_load) ready else null, reload });
+    group.async(io, background, .{ c, &f, db, email, rendered, if (background_load) first.loaded else null, ready, reload });
     var admin_api: serve.admin_api.Api = .{ .gpa = gpa, .io = io, .data_dir = c.data_dir };
     defer admin_api.deinit();
     try serve.run(gpa, io, .{ .host = host, .port = port, .render = rendered, .ready = if (background_load) null else ready, .admin = &admin_api });
@@ -1414,19 +1416,18 @@ fn listening(io: std.Io, host: []const u8, port: u16) bool {
 }
 
 /// The database's only user once the server runs: the first load when serving early
-/// (exiting on failure, for systemd to start again), then reloads
+/// (exiting on failure, for systemd to start again; `ready` after it), then reloads
 fn background(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8, rendered: *serve.Rendered, first: ?*site.Loaded, ready: ?[]const u8, reload: ?[]const u8) void {
-    const io = c.init.io;
     if (first) |l| {
         loadViews(l) catch |err| {
             std.log.err("render load: {t}", .{err});
             std.process.exit(1);
         };
-        if (ready) |path| std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = "" }) catch |err| {
+        if (ready) |path| rendered.writeReady(path) catch |err| {
             std.log.warn("render ready file: {t}", .{err});
         };
     }
-    if (reload) |path| reloadOnChange(c, f, db, contact, rendered, path);
+    if (reload) |path| reloadOnChange(c, f, db, contact, rendered, path, ready);
 }
 
 const LoadedAll = struct {
@@ -1497,8 +1498,8 @@ fn loadAll(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !Loa
 /// Swaps in freshly loaded data whenever `path`'s mtime moves (deploy/web-loop.sh touches
 /// it after each upload); on a failed load the old data stays. With --views only from
 /// that file: a database load here would run beside the web loop's (an old renderer
-/// seeing a newer binary's file during a swap)
-fn reloadOnChange(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8, rendered: *serve.Rendered, path: []const u8) void {
+/// seeing a newer binary's file during a swap). `ready` gets the new data's version
+fn reloadOnChange(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8, rendered: *serve.Rendered, path: []const u8, ready: ?[]const u8) void {
     const io = c.init.io;
     var seen = fileMtime(io, path);
     while (true) {
@@ -1518,6 +1519,7 @@ fn reloadOnChange(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u
             continue;
         };
         std.log.info("render: reloaded in {d} s", .{@divTrunc(std.Io.Clock.real.now(io).toMilliseconds() - start, 1000)});
+        if (ready) |p| rendered.writeReady(p) catch |err| std.log.warn("render ready file: {t}", .{err});
     }
 }
 

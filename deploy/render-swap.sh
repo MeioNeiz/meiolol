@@ -7,7 +7,8 @@
 # web loop's round to write one in the new format, the old renderer serving meanwhile,
 # rather than load from the database beside it (4 min on a quiet box, over an hour on a
 # busy one, 14 Oct); that round loads only the parts the deploy changed. If the new one
-# dies, or isn't ready within 60 minutes, the old one stays. Run detached on the box by
+# dies, or isn't ready within 60 minutes, the old one stays. Then its data's version goes
+# into jomify's nginx cache key (cache-version.sh). Run detached on the box by
 # deploy/box.sh web start; again if the binary changed meanwhile. Log in data/render.log
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit
@@ -48,5 +49,7 @@ while true; do
     fi
     for u in "${old[@]}"; do systemctl --user disable -q --now "$u"; done
     log "meiolol-render@$new serving; stopped ${old[*]:-nothing}"
+    # Only now, with the old one gone: the new data's version into jomify's cache key
+    systemctl --user start meiolol-cache-version
     [[ $(stat -c %Y bin/meiolol) == "$binary" ]] && exit 0
 done

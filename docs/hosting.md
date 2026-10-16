@@ -110,9 +110,24 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   same for the crawler's Your games proxy: "meiolol-proxy: Your games service to the
   crawler", TCP 8092 from 10.0.0.214/32 (Jacob's OK 2026-10-13)
 - jomify nginx (/etc/nginx/conf.d/meiolol.conf; before: meiolol.conf.bak-2026-10-12-render):
-  try_files, then `@render` (upstream meiolol_render: the box twice, for the retry): proxy cache /var/cache/nginx/meiolol (2 GB, key $uri), 200s
+  try_files, then `@render` (upstream meiolol_render: the box twice, for the retry): proxy cache /var/cache/nginx/meiolol (2 GB, key `$uri|$meiolol_version`), 200s
   10 min, 404s 1 min, stale copies while the box is down or refreshing, one render per
   page under a burst. Header X-Meiolol-Render: HIT, MISS, STALE, UPDATING
+- Cache version (16 Oct, Jacob's OK; nginx before: /etc/nginx/meiolol.conf.bak-2026-10-16-version):
+  each renderer load (start or reload) gets a version, its load time in ns as 16 hex
+  digits, written to its --ready file. meiolol-cache-version.path on the box runs
+  deploy/cache-version.sh when a ready file changes, and render-swap.sh runs it once the
+  old renderer has stopped. With exactly one renderer serving, it sends that version over
+  ssh alias meiolol-cache (box key ~/.ssh/meiolol_cache, in jomify user meiolol's
+  authorized_keys with forced command `sudo -n /usr/local/bin/meiolol-cache-version`,
+  one line in /etc/sudoers.d/meiolol-cache-version). That script
+  (deploy/cache-version-receive.sh; reinstall by hand when it changes) checks the version
+  is 16 hex digits, writes /etc/nginx/meiolol-version.conf (a `map` setting
+  $meiolol_version), then runs `nginx -t` and reloads. So new data or code shows at once.
+  Copies under older versions are never read again and expire (inactive=30d); each
+  reload starts the cache cold, so after one, a page not yet requested again has no
+  stale copy if the box goes down. Last sent version: data/cache-version; log lines
+  `cache-version:` in data/render.log
 - Outages (the renderer is the main path since `--static core`): any page nginx cached
   in the last 30 days (inactive=30d) is served stale on error, timeout or 503; a page
   not in its cache is 503 until the renderer is back. @render asks the box for gzip

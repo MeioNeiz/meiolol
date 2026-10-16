@@ -1,0 +1,9 @@
+[Unit]
+Description=meiolol renderer's ready files, for meiolol-cache-version.service
+
+[Path]
+PathChanged=%h/ml/meiolol/data/render-a.ready
+PathChanged=%h/ml/meiolol/data/render-b.ready
+
+[Install]
+WantedBy=default.target
