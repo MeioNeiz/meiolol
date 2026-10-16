@@ -27,8 +27,9 @@ pub const bin_count = 11;
 /// every shape_step points from -shape_reach to +shape_reach. The table centres it on
 /// the champion's own win rate: players seen in 10+ games win more than the champion's
 /// games overall (the crawl follows climbing ladder players), so their mean would sit
-/// right of it
-pub const shape_reach = 24;
+/// right of it. Reach past the track's ends (25% to 75%) for champions from 39% to
+/// 61%, so the edge fade hides the shape's ends instead of them stopping on the track
+pub const shape_reach = 36;
 pub const shape_step = 2;
 pub const shape_points = 2 * shape_reach / shape_step + 1;
 /// Smoothing, in points of win rate: a 10-game player's rate is a multiple of 10%, so
@@ -174,9 +175,14 @@ test "bins, percentiles, players under min_games left out" {
     try testing.expectEqual(null, s.get(60));
     // Mean 39.75%: peak near +6 (45% to 50%), a bump at -24 (the 17% player), less at
     // +24 (64%, past the 60% player)
+    const at = struct {
+        fn k(off: i32) usize {
+            return @intCast(@divExact(off + shape_reach, shape_step));
+        }
+    }.k;
     try testing.expectEqual(255, std.mem.max(u8, &got.shape));
     const peak = std.mem.indexOfMax(u8, &got.shape);
-    try testing.expect(peak >= 14 and peak <= 17);
-    try testing.expect(got.shape[0] > 0 and got.shape[0] < 255);
-    try testing.expect(got.shape[shape_points - 1] < got.shape[0]);
+    try testing.expect(peak >= at(4) and peak <= at(10));
+    try testing.expect(got.shape[at(-24)] > 0 and got.shape[at(-24)] < 255);
+    try testing.expect(got.shape[at(24)] < got.shape[at(-24)]);
 }

@@ -1427,7 +1427,8 @@ fn trackX(rate: f64) f64 {
 }
 
 /// The shape's outline centred on `centre`% in a 100 x 10 box: along the top, back
-/// along the bottom; it fades out towards the track's ends (#wr-edge), past them clipped
+/// along the bottom, pointed at both ends; it fades out towards the track's ends
+/// (#wr-edge), past them clipped
 fn shapePath(a: std.mem.Allocator, shape: [spread.shape_points]u8, centre: f64) ![]const u8 {
     const Point = struct {
         fn x(c: f64, k: usize) f64 {
@@ -1439,9 +1440,11 @@ fn shapePath(a: std.mem.Allocator, shape: [spread.shape_points]u8, centre: f64) 
         }
     };
     var out: std.ArrayList(u8) = .empty;
+    try out.print(a, "M{d:.1} 5", .{Point.x(centre, 0)});
     for (shape, 0..) |v, k| {
-        try out.print(a, "{s}{d:.1} {d:.2}", .{ if (k == 0) "M" else "L", Point.x(centre, k), 5 - Point.half(v) });
+        try out.print(a, "L{d:.1} {d:.2}", .{ Point.x(centre, k), 5 - Point.half(v) });
     }
+    try out.print(a, "L{d:.1} 5", .{Point.x(centre, spread.shape_points - 1)});
     var k: usize = spread.shape_points;
     while (k > 0) {
         k -= 1;
