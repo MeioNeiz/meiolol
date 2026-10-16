@@ -63,6 +63,12 @@ pub const Db = struct {
         return .{ .handle = handle.? };
     }
 
+    /// The file behind schema `name` ("main"); empty for an in-memory or temporary one
+    pub fn filename(db: Db, name: [:0]const u8) []const u8 {
+        const p = c.sqlite3_db_filename(db.handle, name.ptr) orelse return "";
+        return std.mem.span(p);
+    }
+
     pub fn setBusyTimeout(db: Db, ms: c_int) void {
         _ = c.sqlite3_busy_timeout(db.handle, ms);
     }

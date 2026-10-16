@@ -15,6 +15,7 @@ const core = @import("core");
 const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
 const ep = @import("riot/endpoints.zig");
+const par = @import("par.zig");
 
 /// FROM and WHERE for the participant rows of the scan pool's players (matches_checked_at
 /// set), driven from players_region_check: ~15k players of 9M, where joining every
@@ -191,11 +192,28 @@ fn pairLanes(arena: Allocator, map: *GoldMap, match_id: []const u8, lanes: anyty
     }
 }
 
+/// Puuid ranges the history is read in, each on its own connection: its participant
+/// rows are found through the puuid index, a cold page each (on the box 16 Oct: 238 s,
+/// 14 s of it CPU). Lower bounds, by first character over Riot's base64url alphabet; a
+/// player's rows all fall in one range
+const ranges = blk: {
+    const alphabet = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+    const n = 4;
+    var lows: [n][]const u8 = undefined;
+    lows[0] = "";
+    for (1..n) |i| lows[i] = alphabet[alphabet.len * i / n ..][0..1];
+    break :blk lows;
+};
+
+/// Past every puuid character
+const puuid_end = "\x7f";
+
 /// Every ranked solo game of players whose match history was crawled, all patches
-/// (experience builds across patches), into out[i] for the platforms of sets[i], in one
-/// pass
+/// (experience builds across patches), into out[i] for the platforms of sets[i]: one
+/// pass per puuid range, summed (counts, so in any order)
 pub fn tallyHistory(
     gpa: Allocator,
+    io: std.Io,
     db: store.Db,
     st: *const Stats,
     sets: []const []const []const u8,
@@ -207,17 +225,80 @@ pub fn tallyHistory(
     const platform_json = try stats.setsJson(arena, sets);
     const gold = try goldMap(arena, db, platform_json);
 
+    const parts = try arena.alloc([]Tally, ranges.len);
+    for (parts) |*part| {
+        part.* = try arena.alloc(Tally, sets.len);
+        for (part.*) |*t| t.* = .{ .bins = try arena.alloc([bin_count]Bin, st.n) };
+        for (part.*) |*t| @memset(t.bins, @splat(.{}));
+    }
+    const reading: Reading = .{
+        .gpa = gpa,
+        .db = db,
+        .siblings = db.filename("main").len != 0,
+        .st = st,
+        .sets = sets,
+        .platform_json = platform_json,
+        .gold = &gold,
+        .parts = parts,
+    };
+    if (reading.siblings) {
+        try par.each(io, ranges.len, &reading, Reading.read);
+    } else for (0..ranges.len) |i| try reading.read(i);
+    for (parts) |part| for (out, part) |*into, from| {
+        into.players += from.players;
+        for (into.bins, from.bins) |*to, add| for (to, add) |*b, x| {
+            b.games += x.games;
+            b.wins += x.wins;
+            b.gold_games += x.gold_games;
+            b.gold_sum += x.gold_sum;
+        };
+    };
+}
+
+const Reading = struct {
+    gpa: Allocator,
+    db: store.Db,
+    /// Each range on its own connection; false for an in-memory db, whose ranges go in
+    /// turn on its one
+    siblings: bool,
+    st: *const Stats,
+    sets: []const []const []const u8,
+    platform_json: []const u8,
+    gold: *const GoldMap,
+    parts: []const []Tally,
+
+    fn read(r: *const Reading, i: usize) !void {
+        const db = if (r.siblings) (try store.schema.openSibling(r.gpa, r.db)).? else r.db;
+        defer if (r.siblings) db.close();
+        const high = if (i + 1 < ranges.len) ranges[i + 1] else puuid_end;
+        try historyRange(r.gpa, db, r.st, r.sets, r.platform_json, r.gold, ranges[i], high, r.parts[i]);
+    }
+};
+
+/// tallyHistory for the players with puuid in [low, high)
+fn historyRange(
+    gpa: Allocator,
+    db: store.Db,
+    st: *const Stats,
+    sets: []const []const []const u8,
+    platform_json: []const u8,
+    gold: *const GoldMap,
+    low: []const u8,
+    high: []const u8,
+    out: []Tally,
+) !void {
     var q = try db.prepare("SELECT pa.puuid, pa.champion_id, pa.match_id, pa.slot, pa.win, m.platform " ++
-        checked_players ++ " AND m.queue_id = ? AND m.remake = 0" ++
+        checked_players ++ " AND pl.puuid >= ? AND pl.puuid < ? AND m.queue_id = ? AND m.remake = 0" ++
         " AND m.platform IN (SELECT value FROM json_each(?))" ++
         " ORDER BY pa.puuid, pa.champion_id, m.game_start");
     defer q.deinit();
-    try q.bind(.{ stats.ranked_solo, platform_json });
+    try q.bind(.{ low, high, stats.ranked_solo, platform_json });
     var player: std.ArrayList(u8) = .empty;
     defer player.deinit(gpa);
     var champion: i64 = -1;
     // Per set: the game's number on the champion, and whether the player counted yet
-    const games = try arena.alloc(u32, sets.len);
+    const games = try gpa.alloc(u32, sets.len);
+    defer gpa.free(games);
     var seen: u32 = 0;
     while (try q.step()) {
         const r = q.row(struct {
@@ -259,12 +340,12 @@ pub fn tallyHistory(
 }
 
 /// Tallies for each of `sets` (platform lists) in one pass; free with freeTallies
-pub fn tally(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8) ![]Tally {
+pub fn tally(gpa: Allocator, io: std.Io, db: store.Db, st: *const Stats, sets: []const []const []const u8) ![]Tally {
     const out = try gpa.alloc(Tally, sets.len);
     var made: usize = 0;
     errdefer freeTallies(gpa, out[0..made]);
     while (made < sets.len) : (made += 1) out[made] = try .init(gpa, st.n);
-    try tallyHistory(gpa, db, st, sets, out);
+    try tallyHistory(gpa, io, db, st, sets, out);
     return out;
 }
 
@@ -376,11 +457,22 @@ test "history: game number per player and champion, lane gold from the gold colu
 
     const json = try store.raw.decompress(arena, @embedFile("riot/testdata/timeline.json.gz"));
     const tl = try timeline.fromJson(arena, json);
-    const db = try store.schema.memory();
-    defer db.close();
+    // In memory, the puuid ranges in turn; in a file, each on its own connection. The
+    // two players in different ranges
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const memory_db = try store.schema.memory();
+    defer memory_db.close();
+    const file_db = try store.schema.open(gpa, try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path }));
+    defer file_db.close();
+    for ([_]store.Db{ memory_db, file_db }) |db| try historyCase(arena, db, tl);
+}
+
+fn historyCase(arena: Allocator, db: store.Db, tl: anytype) !void {
+    const gpa = testing.allocator;
     try db.exec(
         \\INSERT INTO champions VALUES (10,'A','A','',''), (60,'B','B','',''), (99,'C','C','','');
-        \\INSERT INTO players (puuid, source, region, matches_checked_at) VALUES ('me','t','europe',1), ('you','t','europe',1);
+        \\INSERT INTO players (puuid, source, region, matches_checked_at) VALUES ('Bme','t','europe',1), ('Xyou','t','europe',1);
         \\INSERT INTO players (puuid, source) VALUES ('other','t');
     );
     const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
@@ -390,7 +482,7 @@ test "history: game number per player and champion, lane gold from the gold colu
         try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',?,1600,100,0)", .{ id, g });
         for (0..10) |slot| {
             const team: i64 = if (slot < 5) 100 else 200;
-            const who: []const u8 = if (slot == 0) "me" else if (slot == 5) "you" else "other";
+            const who: []const u8 = if (slot == 0) "Bme" else if (slot == 5) "Xyou" else "other";
             const champ: i64 = if (slot == 0) 10 else if (slot == 5) 60 else 99;
             try db.run(
                 \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position, win)
@@ -410,7 +502,7 @@ test "history: game number per player and champion, lane gold from the gold colu
     try b.write(&aw.writer, "16.20");
     const st: Stats = try .parse(arena, aw.written());
 
-    const both = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "KR", "EUW1" } });
+    const both = try tally(gpa, std.testing.io, db, &st, &.{ &.{"EUW1"}, &.{ "KR", "EUW1" } });
     defer freeTallies(gpa, both);
     try testing.expectEqualDeep(both[0].bins, both[1].bins);
     const t = both[0];

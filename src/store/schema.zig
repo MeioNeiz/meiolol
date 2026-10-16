@@ -319,6 +319,18 @@ pub fn openReadOnly(gpa: std.mem.Allocator, dir: []const u8) !sqlite.Db {
     return db;
 }
 
+/// Another read-only connection to db's files, as openReadOnly, for reads on another
+/// thread (each connection is one thread's); null for an in-memory database. A smaller
+/// cache: these stream a range once
+pub fn openSibling(gpa: std.mem.Allocator, db: sqlite.Db) !?sqlite.Db {
+    const path = db.filename("main");
+    if (path.len == 0) return null;
+    const sibling = try openReadOnly(gpa, std.fs.path.dirname(path) orelse ".");
+    errdefer sibling.close();
+    try sibling.exec("PRAGMA main.cache_size = -8192");
+    return sibling;
+}
+
 /// Reads map the files rather than copy pages into each connection's cache, so the
 /// crawler's 20 connections and a build share the OS page cache instead of holding 20
 /// private copies. Costs address space, not RAM. SQLite's compile-time cap

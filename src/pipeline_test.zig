@@ -260,6 +260,23 @@ test "fixture games to stats, curves and the website" {
             try again.writeViews(again_path);
             try testing.expectEqualSlices(u8, views_bytes, try std.Io.Dir.cwd().readFileAlloc(io, again_path, arena, .limited(1 << 30)));
         }
+        // From the database in files, as on the box: filters beside the people tallies,
+        // each on connections of its own and in runs at once. The same bytes
+        {
+            const files = try std.fs.path.join(arena, &.{ dir, "db" });
+            try std.Io.Dir.cwd().createDirPath(io, files);
+            for ([_][]const u8{ "main", "raw", "timeline" }, [_][]const u8{ "meiolol.db", "raw.db", "timeline.db" }) |schema, name| {
+                const sql = try std.fmt.allocPrintSentinel(arena, "VACUUM {s} INTO '{s}/{s}'", .{ schema, files, name }, 0);
+                try db.exec(sql);
+            }
+            const file_db = try store.schema.open(gpa, files);
+            defer file_db.close();
+            const again = try site.Loaded.init(gpa, io, file_db, opts);
+            defer again.deinit();
+            for (site.html.View.all) |v| try again.loadView(v);
+            try again.writeViews(again_path);
+            try testing.expectEqualSlices(u8, views_bytes, try std.Io.Dir.cwd().readFileAlloc(io, again_path, arena, .limited(1 << 30)));
+        }
         // Another binary's types: refused, for the database load instead
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, views_path, arena, .limited(1 << 30));
         // The fingerprint follows the 8-byte magic

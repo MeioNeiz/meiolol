@@ -17,6 +17,7 @@ const pool_page = @import("pool.zig");
 const pool = @import("../pool.zig");
 const learning_page = @import("learning.zig");
 const learning = @import("../learning.zig");
+const par = @import("../par.zig");
 const spread_page = @import("spread.zig");
 const spread = @import("../spread.zig");
 const builds_page = @import("builds.zig");
@@ -320,7 +321,7 @@ pub const Extras = struct {
         if (e.people) |*p| p.deinit(gpa);
     }
 
-    fn tallies(e: *Extras, gpa: std.mem.Allocator, db: store.Db, st: *const Stats, opts: Options) !*const People {
+    fn tallies(e: *Extras, gpa: std.mem.Allocator, io: std.Io, db: store.Db, st: *const Stats, opts: Options) !*const People {
         if (e.people) |*p| {
             if (std.mem.eql(u32, p.ids, st.ids)) return p;
             // A champion added since (a new release): tally again
@@ -333,10 +334,36 @@ pub const Extras = struct {
             &.{ opts.platforms, opts.all_platforms };
         const ids = try gpa.dupe(u32, st.ids);
         errdefer gpa.free(ids);
-        var p = try pool.tally(gpa, db, st, sets);
-        errdefer p.deinit(gpa);
-        e.people = .{ .ids = ids, .pool = p, .learning = try learning.tally(gpa, db, st, sets) };
+        // Pool on a connection of its own beside learning's: both wait on the disk
+        var t: Tallying = .{ .gpa = gpa, .io = io, .db = db, .sibling = try store.schema.openSibling(gpa, db), .st = st, .sets = sets };
+        defer if (t.sibling) |sibling| sibling.close();
+        errdefer {
+            if (t.pool) |*p| p.deinit(gpa);
+            if (t.learning) |l| learning.freeTallies(gpa, l);
+        }
+        if (t.sibling != null) {
+            try par.each(io, 2, &t, Tallying.run);
+        } else for (0..2) |i| try t.run(i);
+        e.people = .{ .ids = ids, .pool = t.pool.?, .learning = t.learning.? };
         return &e.people.?;
+    }
+};
+
+const Tallying = struct {
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    db: store.Db,
+    /// For pool, when db is in a file
+    sibling: ?store.Db,
+    st: *const Stats,
+    sets: []const []const []const u8,
+    pool: ?pool.Tallies = null,
+    learning: ?[]learning.Tally = null,
+
+    fn run(t: *Tallying, i: usize) !void {
+        if (i == 0) {
+            t.pool = try pool.tally(t.gpa, t.sibling orelse t.db, t.st, t.sets);
+        } else t.learning = try learning.tally(t.gpa, t.io, t.db, t.st, t.sets);
     }
 };
 
@@ -647,23 +674,40 @@ fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options
     // most of the build: the pool tallies alone take minutes on the box
     if (all_opts.static != .core) {
         // The root view's directory is the site root, where champion pages are
-        if (view.index() == 0) {
-            if (try Parts.ofFor(old, FilterPart, .filter, view, arena, champs_key)) |f| {
-                site.filter = f.filter;
-                phases.mark("filters kept");
-            } else {
-                site.filter = try filters.make(site, db, all_opts);
-                phases.mark("filters");
-            }
+        const kept_filter = if (view.index() == 0) try Parts.ofFor(old, FilterPart, .filter, view, arena, champs_key) else null;
+        const kept_people = try Parts.ofFor(old, PeoplePart, .people, view, arena, champs_key);
+        if (kept_filter) |f| {
+            site.filter = f.filter;
+            phases.mark("filters kept");
         }
-        if (try Parts.ofFor(old, PeoplePart, .people, view, arena, champs_key)) |p| {
+        var loading: Loading = .{
+            .site = site,
+            .db = db,
+            .extras = extras,
+            .opts = all_opts,
+            .want_filter = view.index() == 0 and kept_filter == null,
+            .want_people = kept_people == null,
+        };
+        if (loading.want_filter and loading.want_people) loading.sibling = try store.schema.openSibling(gpa, db);
+        defer if (loading.sibling) |sibling| sibling.close();
+        if (loading.sibling != null) {
+            try par.each(io, 2, &loading, Loading.run);
+            phases.add("filters", loading.ms[0]);
+            phases.add("people", loading.ms[1]);
+            phases.mark("at once");
+        } else for (0..2) |i| {
+            try loading.run(i);
+            if (i == 0 and loading.want_filter) phases.mark("filters");
+            if (i == 1 and loading.want_people) phases.mark("people");
+        }
+        if (loading.want_filter) site.filter = loading.filter;
+        if (kept_people) |p| {
             site.pool = p.pool;
             site.spread = p.spread;
             site.learning = p.learning;
             phases.mark("people kept");
         } else {
-            const people = try extras.tallies(gpa, db, &site.stats, all_opts);
-            phases.mark("people");
+            const people = loading.people.?;
             const set = @backingInt(view.region);
             if (set >= people.learning.len) return error.NoView;
             site.pool = try pool.make(arena, &people.pool, set, &site.stats, .{});
@@ -683,6 +727,34 @@ fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options
     if (old == null or !old.?.strict) log.info("view {d} ({s}) load:{s}", .{ view.index(), site.when, phases.text() });
     return site;
 }
+
+/// Filters and the people tallies, at once when both are wanted and db is in a file
+/// (sibling set): each waits on its own cold pages
+const Loading = struct {
+    site: *Site,
+    db: store.Db,
+    /// The people tallies' connection, beside filters' on db
+    sibling: ?store.Db = null,
+    extras: *Extras,
+    opts: Options,
+    want_filter: bool,
+    want_people: bool,
+    filter: filters.Made = .{},
+    people: ?*const People = null,
+    /// Each one's own time
+    ms: [2]i64 = .{ 0, 0 },
+
+    fn run(l: *Loading, i: usize) !void {
+        const io = l.site.io;
+        const start = std.Io.Clock.awake.now(io).toMilliseconds();
+        if (i == 0) {
+            if (l.want_filter) l.filter = try filters.make(l.site, l.db, l.opts);
+        } else if (l.want_people) {
+            l.people = try l.extras.tallies(l.site.gpa, io, l.sibling orelse l.db, &l.site.stats, l.opts);
+        }
+        l.ms[i] = std.Io.Clock.awake.now(io).toMilliseconds() - start;
+    }
+};
 
 /// The view's stats, patches and champions from the database
 fn loadBase(site: *Site, db: store.Db, all_opts: Options, phases: *Phases) !void {
@@ -804,22 +876,39 @@ fn eqlStrings(a: []const []const u8, b: []const []const u8) bool {
 
 /// Seconds per step of a view's load, for its log line: on the box a load runs minutes
 /// to an hour depending on the disk, and this says where
+/// Each phase's time and the process's CPU time in it: far less CPU than time is a
+/// phase waiting on the disk
 const Phases = struct {
     io: std.Io,
     last_ms: i64,
-    buf: [192]u8 = undefined,
+    last_cpu_ms: i64,
+    buf: [256]u8 = undefined,
     len: usize = 0,
 
     fn init(io: std.Io) Phases {
-        return .{ .io = io, .last_ms = std.Io.Clock.awake.now(io).toMilliseconds() };
+        return .{ .io = io, .last_ms = std.Io.Clock.awake.now(io).toMilliseconds(), .last_cpu_ms = cpuMs(io) };
     }
 
     fn mark(p: *Phases, name: []const u8) void {
         const now = std.Io.Clock.awake.now(p.io).toMilliseconds();
+        const cpu = cpuMs(p.io);
         const ms: f64 = @floatFromInt(now - p.last_ms);
+        const cpu_ms: f64 = @floatFromInt(cpu - p.last_cpu_ms);
         p.last_ms = now;
-        const s = std.fmt.bufPrint(p.buf[p.len..], " {s} {d:.1}s", .{ name, ms / 1000 }) catch return;
+        p.last_cpu_ms = cpu;
+        const s = std.fmt.bufPrint(p.buf[p.len..], " {s} {d:.1}s (cpu {d:.1}s)", .{ name, ms / 1000, cpu_ms / 1000 }) catch return;
         p.len += s.len;
+    }
+
+    /// A part of the coming phase that ran beside others, with its own time
+    fn add(p: *Phases, name: []const u8, ms: i64) void {
+        const sec: f64 = @floatFromInt(ms);
+        const s = std.fmt.bufPrint(p.buf[p.len..], " {s} {d:.1}s", .{ name, sec / 1000 }) catch return;
+        p.len += s.len;
+    }
+
+    fn cpuMs(io: std.Io) i64 {
+        return std.Io.Clock.cpu_process.now(io).toMilliseconds();
     }
 
     fn text(p: *const Phases) []const u8 {
