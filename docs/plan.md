@@ -644,10 +644,31 @@ web loop's batch jobs and the crawler, at 90% IO pressure.
   once rather than after nginx's 10 min (render-cache-invalidation C3; docs/hosting.md
   "Cache version"). Each reload starts the cache cold: the warm-up above matters more once
   there are users
-- Next: parallel reads (3-4 in flight) for the phases the views log shows dominate; the
-  disk has 4-5x headroom. Longer term: incremental curves and stats so cost stops
-  growing with kept data, and refresh scaled by how much pages change or are visited
-  (Jacob)
+- Parallel reads, 16 Oct (Jacob; 93dceba). Measured first (sqlite3 on the box, warm vs
+  cold): the loads wait on cold B-tree pages one at a time, not on work. learning's history
+  238 s with 14 s CPU (participants through the puuid index, a page a row); filters' SQL
+  work 7 s warm, 180-210 s cold (leaves in match_id order are scattered on disk); pool's
+  GROUP BY 28 s, all CPU; mastery 51 s, read throughput. Now filters walks its games in 4
+  runs at once, learning in 4 puuid ranges, each on its own read-only connection, merged
+  in order (same bytes, tested); filters beside the people tallies, pool beside learning.
+  A deploy changing both parts: filters 46 s (was 180-210), people 120 s (was 166-198),
+  both at once 120 s (cpu 142 s of 2 CPUs' 240; was ~400 s in turn); push to live 4 min
+  38 s. Measured with the crawler down (below), so a quiet disk; views write peak RSS
+  4.7 GB (mapped pages counted per connection, no memory pressure): watch on a full write
+- Next: counts stored, derived on reading. Each part's tally code moves to its own file
+  (the key covers only it); the views file keeps the raw tallies (pool's n x n mains, the
+  spread's 101 bins a champion, learning's bins, the filter cells: ~1 MB plus the cells),
+  and pool, spread, learning and filter JSON are made from them as the renderer reads it
+  (milliseconds). A change to how counts are turned into pages (aa23fdf's spread shape,
+  5 min 20 s, a 166 s people reload) then changes no part key: a 2 min code swap. Only a
+  change to what is counted reads the database, now in parallel. Then incremental counts
+  for the routine refresh (filters and stats by day, a sliding window; player-history
+  tallies would need per-player state, ~2.7M players), and refresh scaled by how much
+  pages change or are visited (Jacob)
+- Crawler down 08:33-11:59Z 16 Oct (~18k matches): Riot's Cloudflare edge answers one
+  TW2 PUUID's URLs with an HTML 403 page on every host, which the client took for a
+  rejected key (exit 3). Now only Riot's JSON 403 is KeyRejected; a block page is
+  error.Blocked, that request failing (90b2b94)
 
 Next:
 1. Screenshots or a short video for the application (Riot accepts them, research C1).
