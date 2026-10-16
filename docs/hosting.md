@@ -80,10 +80,14 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   --views data/views.bin` (same flags as the core build) loads every view (what a
   renderer load did: 2-13 min, longer on a busy disk) and writes them to one file, then
   touches data/render.reload; the renderer reads the file in seconds and swaps it in. A
-  views file written by a binary with other types (its header holds a fingerprint of
-  them: src/site/flat.zig) or a missing one makes the renderer load from the
-  database instead, as before 15 Oct; a deploy's forced round writes a new one within
-  minutes. Data code changes show after that round, render code changes at the swap.
+  views file written by a binary with other part keys (types or data code: docs/
+  architecture.md "Views file") or a missing one makes the renderer load from the
+  database instead, as before 15 Oct. Render code changes show at the swap, in seconds.
+  A deploy that changes a part waits for the forced round's `--reuse` write, which keeps
+  the parts still current and loads only the changed ones (16 Oct's spread change would
+  have loaded the people part, 511 s of a 1,085 s write); a write in the old format running at the deploy is
+  stopped then rather than finished (16 Oct it cost 11 min). Kept parts refresh at the
+  next upload's full write.
   First deploy (15 Oct, disk at ~80% pressure): views.bin 148 MB, written in 72 min,
   read in 14 s; the swap took 16 s; the renderer holds ~2.0 GB (curves files ~940 MB
   of it)

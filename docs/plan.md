@@ -632,6 +632,15 @@ web loop's batch jobs and the crawler, at 90% IO pressure.
 - Scheduler: mq-deadline on trial at runtime from 15 Oct 11:35 UTC (Jacob's OK; not
   persisted, a reboot returns to `none`); persist with a udev rule only if crawler and
   batch do no worse
+- Deploys that change the views data, 16 Oct (Jacob: a more advanced deploy, from the
+  research): 31 min from push to live for the spread change, 11 of them finishing an
+  old-format views write nobody could read. So the views file is in parts, each keyed by
+  its types and the source of the code that makes it (RTB House keys snapshots by code,
+  research/questions/fast-deploy-data-servers.md C3); a deploy's round writes with
+  `--reuse`, keeping current parts and loading only the changed ones; a deploy stops an
+  old-format write at once. docs/architecture.md "Views file", docs/hosting.md
+  "Rendering on request". Next: a version in jomify's proxy_cache_key, so a reload
+  shows at once rather than after nginx's 10 min (render-cache-invalidation C3)
 - Next: parallel reads (3-4 in flight) for the phases the views log shows dominate; the
   disk has 4-5x headroom. Longer term: incremental curves and stats so cost stops
   growing with kept data, and refresh scaled by how much pages change or are visited

@@ -2,12 +2,13 @@
 # Replaces the running renderer (meiolol-render@a or @b) without a gap: starts the other
 # instance with the current binary, both listening on the port (SO_REUSEPORT) while it
 # loads, and stops the old once the new one is serving. The new one reads data/views.bin
-# in seconds. When a deploy changed the file's types (`meiolol site --views-format`
-# differs from the file's), it first waits up to 3 h for the web loop's round to write
-# one in the new format, the old renderer serving meanwhile, rather than load from the
-# database beside it (4 min on a quiet box, over an hour on a busy one, 14 Oct). If the
-# new one dies, or isn't ready within 60 minutes, the old one stays. Run detached on the box by deploy/box.sh web start;
-# again if the binary changed meanwhile. Log in data/render.log
+# in seconds. When a deploy changed the file's format (`meiolol site --views-format`
+# differs from the file's: a part's types or sources), it first waits up to 3 h for the
+# web loop's round to write one in the new format, the old renderer serving meanwhile,
+# rather than load from the database beside it (4 min on a quiet box, over an hour on a
+# busy one, 14 Oct); that round loads only the parts the deploy changed. If the new one
+# dies, or isn't ready within 60 minutes, the old one stays. Run detached on the box by
+# deploy/box.sh web start; again if the binary changed meanwhile. Log in data/render.log
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit
 

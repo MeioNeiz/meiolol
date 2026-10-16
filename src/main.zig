@@ -253,6 +253,9 @@ const usage =
     \\                               `render --views` instead of the site
     \\              --views-format   print the fingerprint a views file from this
     \\                               binary has (u64 after the 8-byte magic)
+    \\              --reuse          with --views: keep the parts of the file already
+    \\                               there that this binary would make the same way
+    \\                               (a deploy's round), load only the rest
     \\  dev        work on the site: pages rendered on request from DIR (data loaded
     \\              once), CSS and JS from src/site/static, live reload; run by
     \\              deploy/dev.sh, which rebuilds on edits. Takes site's flags
@@ -1215,6 +1218,7 @@ const SiteFlags = struct {
     index_min_games: u32 = 0,
     views: ?[]const u8 = null,
     views_format: bool = false,
+    reuse: bool = false,
 
     /// False for a flag that isn't one of these
     fn parse(f: *SiteFlags, c: *Cmd) !bool {
@@ -1242,6 +1246,8 @@ const SiteFlags = struct {
             f.views = try c.value();
         } else if (c.is("--views-format")) {
             f.views_format = true;
+        } else if (c.is("--reuse")) {
+            f.reuse = true;
         } else return false;
         return true;
     }
@@ -1295,7 +1301,7 @@ fn cmdSite(c: *Cmd) !u8 {
     if (f.views_format) {
         var buf: [32]u8 = undefined;
         var w = std.Io.File.stdout().writer(c.init.io, &buf);
-        try w.interface.print("{d}\n", .{site.Loaded.views_fingerprint});
+        try w.interface.print("{d}\n", .{site.Loaded.viewsFormat()});
         try w.interface.flush();
         return 0;
     }
@@ -1376,6 +1382,7 @@ fn cmdRender(c: *Cmd) !u8 {
     defer db.close();
     const alone = !listening(io, host, port);
     const from_file = fromViewsFile(c, &f, db);
+    if (from_file == null and f.views != null) std.log.info("render: loading from the database", .{});
     const first = from_file orelse try prepare(c, &f, db, email);
     first.loaded.lazy = false;
     // From the database in the background once listening (alone), else before
@@ -1465,7 +1472,7 @@ fn fromViewsFile(c: *Cmd, f: *const SiteFlags, db: store.Db) ?LoadedAll {
     const arena = gpa.create(std.heap.ArenaAllocator) catch return null;
     arena.* = .init(gpa);
     const loaded = site.Loaded.readViews(gpa, io, db, path, arena.allocator()) catch |err| {
-        std.log.warn("render: views file {s}: {t}; loading from the database", .{ path, err });
+        std.log.warn("render: views file {s}: {t}", .{ path, err });
         arena.deinit();
         gpa.destroy(arena);
         return null;
@@ -1481,6 +1488,7 @@ fn fromViewsFile(c: *Cmd, f: *const SiteFlags, db: store.Db) ?LoadedAll {
 fn loadAll(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !LoadedAll {
     const l = try prepare(c, f, db, contact);
     errdefer l.free(c.init.gpa);
+    if (f.reuse) if (f.views) |path| try l.loaded.reuseViews(path);
     l.loaded.lazy = false;
     try loadViews(l.loaded);
     return l;
@@ -1499,6 +1507,7 @@ fn reloadOnChange(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u
         if (now == seen) continue;
         seen = now;
         const start = std.Io.Clock.real.now(io).toMilliseconds();
+        // A newer binary's file (a deploy, before the swap): the current data stays
         const next = (if (f.views != null) fromViewsFile(c, f, db) orelse continue else loadAll(c, f, db, contact)) catch |err| {
             std.log.warn("render reload: {t}", .{err});
             continue;

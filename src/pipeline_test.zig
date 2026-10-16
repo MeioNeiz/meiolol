@@ -228,6 +228,38 @@ test "fixture games to stats, curves and the website" {
             same += 1;
         }
         try testing.expectEqual(checked, same);
+        // A deploy's round (--reuse): every part kept, so no tallies, and the same file
+        const views_bytes = try std.Io.Dir.cwd().readFileAlloc(io, views_path, arena, .limited(1 << 30));
+        const again_path = try std.fs.path.join(arena, &.{ dir, "views-again.bin" });
+        {
+            const again = try site.Loaded.init(gpa, io, db, opts);
+            defer again.deinit();
+            try again.reuseViews(views_path);
+            for (site.html.View.all) |v| try again.loadView(v);
+            try testing.expect(again.extras.people == null);
+            try again.writeViews(again_path);
+            try testing.expectEqualSlices(u8, views_bytes, try std.Io.Dir.cwd().readFileAlloc(io, again_path, arena, .limited(1 << 30)));
+        }
+        // One part another binary's (the people part of the root view: its key flipped):
+        // loaded again, the same bytes
+        {
+            const stale = try arena.dupe(u8, views_bytes);
+            // After the magic and format: part tag, view, key, length, data
+            var at: usize = 16;
+            const people_tag = 3;
+            while (stale[at] != people_tag or stale[at + 1] != 0) {
+                at += 18 + std.mem.readInt(u64, stale[at + 10 ..][0..8], .little);
+            }
+            stale[at + 2] ^= 1;
+            try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = again_path, .data = stale });
+            const again = try site.Loaded.init(gpa, io, db, opts);
+            defer again.deinit();
+            try again.reuseViews(again_path);
+            for (site.html.View.all) |v| try again.loadView(v);
+            try testing.expect(again.extras.people != null);
+            try again.writeViews(again_path);
+            try testing.expectEqualSlices(u8, views_bytes, try std.Io.Dir.cwd().readFileAlloc(io, again_path, arena, .limited(1 << 30)));
+        }
         // Another binary's types: refused, for the database load instead
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, views_path, arena, .limited(1 << 30));
         // The fingerprint follows the 8-byte magic

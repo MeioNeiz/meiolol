@@ -525,16 +525,24 @@ rendered on request is the same bytes: `Loaded` holds every view (loaded on firs
 request) and answers any path from the site root (pipeline_test checks every file of
 the full build, and that `--static core` writes only its list, each the renderer's
 bytes).
-Views file (data/views.bin; src/site/flat.zig, `Loaded.writeViews`/`readViews`): every
-loaded view's data (ViewData: options, champions, pool, learning, Learn facts, eval points,
-filters, data and script files; stats parsed again from data/stats.bin among them) and
-the site options in one little-endian file, slices length-prefixed. Header: magic
-MEIOVIEW, then a fingerprint of the types' shape (field names and types all the way
-down), so a binary whose types differ refuses it (error.ViewsMismatch) and loads
-from the database. It doesn't catch a change in how the data is computed: that shows
-once the web loop writes the next one (a deploy forces a round). Curves, builds
-and lean files are read by the loading binary as before. pipeline_test: a views file's
-Loaded serves every full-build file byte for byte.
+Views file (data/views.bin; src/site/flat.zig, `Loaded.writeViews`/`readViews`): the
+site options and every loaded view's data in parts (Part in src/site/root.zig): base
+(stats file, champions, patches), filter (root view), people (pool, learning, spread),
+daily (shared view: Daily Draft, your example, Learn, eval points). Little-endian,
+slices length-prefixed; each part is tag, view, key, length, bytes. A part's key hashes
+its type's shape (field names and types all the way down) and the source of the code
+that makes it (partKeys: stats.zig for base, pool, learning and spread for people...),
+so a deploy that changes either loads that part again; parts after the base also keep
+the champion ids they were made with and are dropped when those change. A change
+elsewhere that alters a part's data (loadParts, core, store) bumps data_version. Header:
+magic MEIOVIE2, then a hash of every key: `render` reads the file only when it matches
+its own (else error.ViewsMismatch, and the database load at start), and
+`site --views --reuse` (a deploy's round) keeps the old file's parts with this binary's
+keys and loads only the rest. Files that come from the binary or options (wasm,
+robots.txt, sitemap, the JSON made from pool and learning) are made on reading, never
+stored. Curves, builds and lean files are read by the loading binary as before.
+pipeline_test: a views file's Loaded serves every full-build file byte for byte, and a
+--reuse write with every part kept, or one part stale, gives the same file.
 `meiolol dev` (deploy/dev.sh) serves `Loaded` from data/snap (`deploy/box.sh snapshot`:
 the tables the site reads, PUUIDs replaced, no raw docs) with CSS and JS from
 src/site/static, and reloads the open page on an edit: `zig build --watch` rebuilds,

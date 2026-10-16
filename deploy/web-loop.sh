@@ -42,8 +42,12 @@
 # A deploy (deploy/box.sh web start) sends SIGUSR1 rather than restarting, unless this
 # script, its unit or the contact changed (data/web-loop.sum). Either way the next round
 # (at once) builds, uploads and writes the views file with the new binary before any
-# curves pass, so data code changes reach the site within one views write; a daily job
-# already running carries on beside it.
+# curves pass; a daily job already running carries on beside it. That write keeps the
+# parts of the old file the new binary would make the same way (`--reuse`: same types
+# and sources, src/site/root.zig partKeys) and loads only the rest, so a deploy that
+# changed one part waits for that part alone; the next upload's write refreshes every
+# part (data/views.full: the last such write). A views write the deploy's binary can't
+# read (another format) is stopped at the signal rather than finished.
 # Upload: the new build is copied into data/site by checksum without times, so only
 # files whose content changed get a new mtime, and the upload's quick check sends just
 # those. --delete removes what the build no longer writes; nginx then hands those paths
@@ -93,7 +97,7 @@ mtime() { stat -c %Y "$1" 2> /dev/null || echo 0; }
 # eval.log is truncated as a run starts, the other logs written as each runs
 last_eval=$(mtime data/eval.log) last_example=$(mtime data/your-example.log)
 last_builds=$(mtime data/builds.log) last_lean=$(mtime data/lean.log)
-last_upload=$(mtime data/views.bin)
+last_upload=$(mtime data/views.full)
 # 1 h for the first day of a patch, else 6 h
 interval_for() {
     [[ -n "$1" ]] || { echo 3600; return; }
@@ -125,6 +129,31 @@ if [[ -n "$patch" && -n "$format" ]]; then
     fi
 fi
 batch() { nice -n 10 ionice -c 3 "$@"; }
+# `meiolol site --views data/views.bin` with these flags, in the background so a signal
+# ends the wait: when a deploy has changed the binary's views format meanwhile, the
+# write is stopped (views_stale=1, returns 1), as its file would be the old format. A
+# stopped write leaves its temporary file (createFileAtomic: 16 hex digits) in data/
+views_stale=0
+views_write() {
+    local format pid status start
+    views_stale=0
+    start=$(date +%s)
+    format=$(bin/meiolol site --views-format)
+    batch bin/meiolol site --views data/views.bin "$@" > data/views.log 2>&1 &
+    pid=$!
+    while true; do
+        wait "$pid"
+        status=$?
+        kill -0 "$pid" 2> /dev/null || return "$status"
+        if [[ $(bin/meiolol site --views-format 2> /dev/null) != "$format" ]]; then
+            kill "$pid"
+            wait "$pid"
+            find data -maxdepth 1 -type f -newermt "@$start" -regex '.*/[0-9a-f]\{16\}' -delete
+            views_stale=1
+            return 1
+        fi
+    done
+}
 last_storage=$(mtime data/storage.tsv)
 # The first due daily job, in the background (daily_pid); 1 when none is due. Builds
 # first on a new patch: the site's build pages wait on them
@@ -200,18 +229,26 @@ while true; do
                 echo "$(date -u +%FT%TZ) upload: site ${site_s}s, copy ${copy_s}s" \
                     "(${changed:-?} files changed), send $(( SECONDS - t ))s (${sent:-?} bytes)"
                 echo "$(date -u +%FT%TZ) uploaded"
-                # For meiolol-render: every view, which it reads on the touch
+                # For meiolol-render: every view, which it reads on the touch. A deploy's
+                # or start's round keeps the old file's current parts and leaves the
+                # refresh of the rest to the next upload (last_upload unchanged)
                 t=$SECONDS
-                if batch bin/meiolol site --views data/views.bin "${site_args[@]}" \
-                    > data/views.log 2>&1; then
+                reuse=()
+                (( forced )) && reuse=(--reuse)
+                if views_write "${reuse[@]}" "${site_args[@]}"; then
                     echo "$(date -u +%FT%TZ) views file $(( SECONDS - t ))s" \
-                        "($(stat -c %s data/views.bin) bytes)"
+                        "($(stat -c %s data/views.bin) bytes${reuse:+, current parts kept})"
+                    (( forced )) || { touch data/views.full; last_upload=$now; }
+                    touch data/render.reload
+                elif (( views_stale )); then
+                    echo "$(date -u +%FT%TZ) views file stopped after $(( SECONDS - t ))s:" \
+                        "a deploy changed its format"
                 else
                     echo "$(date -u +%FT%TZ) views file FAILED after $(( SECONDS - t ))s:" \
                         "$(tail -n 1 data/views.log)"
+                    touch data/render.reload
                 fi
-                touch data/render.reload
-                last_patch=$patch last_games=$games last_upload=$now fresh_curves=0
+                last_patch=$patch last_games=$games fresh_curves=0
             fi
         fi
     else
