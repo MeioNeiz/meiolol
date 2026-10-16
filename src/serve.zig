@@ -144,7 +144,12 @@ pub fn run(gpa: std.mem.Allocator, io: Io, opts: Options) !void {
     if (opts.dev) |d| group.async(io, watchBinary, .{ io, d });
     while (true) {
         const stream = try server.accept(io);
-        group.async(io, connection, .{ &ctx, stream });
+        // Its own thread: async may run it here when the pool is busy, and a browser's
+        // idle keep-alive connection then blocks every later one
+        group.concurrent(io, connection, .{ &ctx, stream }) catch |err| {
+            log.warn("connection: {t}", .{err});
+            stream.close(io);
+        };
     }
 }
 
@@ -171,7 +176,9 @@ fn watchBinary(io: Io, dev: Dev) void {
 fn connection(ctx: *Context, stream: Io.net.Stream) void {
     const io = ctx.io;
     defer stream.close(io);
-    var recv_buffer: [8192]u8 = undefined;
+    // Holds the whole request head: browsers send every localhost port's cookies, often
+    // over 8 KB from other dev servers, and a head that overflows is dropped unanswered
+    var recv_buffer: [64 * 1024]u8 = undefined;
     var send_buffer: [16 * 1024]u8 = undefined;
     var conn_reader = stream.reader(io, &recv_buffer);
     var conn_writer = stream.writer(io, &send_buffer);

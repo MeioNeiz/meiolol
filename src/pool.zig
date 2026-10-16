@@ -15,6 +15,7 @@ const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
 const riot_mastery = @import("riot/mastery.zig");
+const spread = @import("spread.zig");
 
 const Role = core.Role;
 const Stats = core.Stats;
@@ -25,7 +26,12 @@ const log = std.log.scoped(.pool);
 
 pub const Source = enum { games, mastery };
 
-pub const Play = struct { champion: u32, weight: u32 };
+pub const Play = struct {
+    champion: u32,
+    weight: u32,
+    /// Of the games, when weight is games
+    wins: u32 = 0,
+};
 
 /// When a player counts, and which of their champions they play
 pub const Rule = struct {
@@ -126,13 +132,14 @@ pub const Tally = struct {
 
 /// Every player's ranked solo champions, from the matches crawled so far (all patches: a
 /// pool changes more slowly than a patch), into out[i] for the platforms of sets[i], in
-/// one pass
+/// one pass; each player's win rate on each champion into spreads[i]
 pub fn tallyGames(
     gpa: Allocator,
     db: store.Db,
     st: *const Stats,
     sets: []const []const []const u8,
     out: []Tally,
+    spreads: []spread.Tally,
 ) !void {
     const platform_json = try stats.setsJson(gpa, sets);
     defer gpa.free(platform_json);
@@ -140,7 +147,7 @@ pub fn tallyGames(
     // participants pages at random, 6x slower. By champion within a player, as the old
     // GROUP BY puuid, champion gave: the first of tied top champions is the main
     var q = try db.prepare(
-        \\SELECT p.puuid, m.platform, p.champion_id, count(*)
+        \\SELECT p.puuid, m.platform, p.champion_id, count(*), sum(p.win)
         \\FROM matches m CROSS JOIN participants p USING (match_id)
         \\WHERE m.queue_id = ? AND m.remake = 0 AND p.puuid IS NOT NULL
         \\  AND m.platform IN (SELECT value FROM json_each(?))
@@ -162,29 +169,38 @@ pub fn tallyGames(
             platform: []const u8,
             champion_id: u32,
             games: u32,
+            wins: u32,
         });
         if (!std.mem.eql(u8, r.puuid, current.items)) {
-            for (out, plays) |*t, *p| {
-                t.add(st, p.items, .games);
+            for (out, spreads, plays) |*t, *s, *p| {
+                addPlayer(st, t, s, p.items);
                 p.clearRetainingCapacity();
             }
             current.clearRetainingCapacity();
             try current.appendSlice(gpa, r.puuid);
         }
         const in = stats.setsWith(sets, r.platform);
-        const play: Play = .{ .champion = r.champion_id, .weight = r.games };
+        const play: Play = .{ .champion = r.champion_id, .weight = r.games, .wins = r.wins };
         for (plays, 0..) |*p, i| {
             if (in & (@as(u32, 1) << @intCast(i)) == 0) continue;
             // The same champion on another of the set's platforms
             for (p.items) |*have| {
                 if (have.champion == play.champion) {
                     have.weight += play.weight;
+                    have.wins += play.wins;
                     break;
                 }
             } else try p.append(gpa, play);
         }
     }
-    for (out, plays) |*t, p| t.add(st, p.items, .games);
+    for (out, spreads, plays) |*t, *s, p| addPlayer(st, t, s, p.items);
+}
+
+fn addPlayer(st: *const Stats, t: *Tally, s: *spread.Tally, plays: []const Play) void {
+    t.add(st, plays, .games);
+    for (plays) |p| {
+        if (st.index(p.champion)) |c| s.add(c, p.weight, p.wins, .{});
+    }
 }
 
 /// Champions a player has not played for this long are not in their pool: mastery
@@ -232,10 +248,13 @@ pub fn tallyMastery(
 pub const Tallies = struct {
     games: []Tally,
     mastery: []Tally,
+    spread: []spread.Tally,
 
     pub fn deinit(t: *Tallies, gpa: Allocator) void {
         freeTallies(gpa, t.games);
         freeTallies(gpa, t.mastery);
+        for (t.spread) |*s| s.deinit(gpa);
+        gpa.free(t.spread);
     }
 };
 
@@ -258,9 +277,16 @@ pub fn tally(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []con
     errdefer freeTallies(gpa, games);
     const mastery = try initTallies(gpa, st.n, sets.len);
     errdefer freeTallies(gpa, mastery);
-    try tallyGames(gpa, db, st, sets, games);
+    const spreads = try gpa.alloc(spread.Tally, sets.len);
+    var made: usize = 0;
+    errdefer {
+        for (spreads[0..made]) |*s| s.deinit(gpa);
+        gpa.free(spreads);
+    }
+    while (made < sets.len) : (made += 1) spreads[made] = try .init(gpa, st.n);
+    try tallyGames(gpa, db, st, sets, games, spreads);
     try tallyMastery(gpa, db, st, sets, mastery);
-    return .{ .games = games, .mastery = mastery };
+    return .{ .games = games, .mastery = mastery, .spread = spreads };
 }
 
 /// Build for sets[set] from the source with more players (mastery once it fills), in

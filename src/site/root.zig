@@ -17,6 +17,8 @@ const pool_page = @import("pool.zig");
 const pool = @import("../pool.zig");
 const learning_page = @import("learning.zig");
 const learning = @import("../learning.zig");
+const spread_page = @import("spread.zig");
+const spread = @import("../spread.zig");
 const builds_page = @import("builds.zig");
 const builds = @import("../builds.zig");
 const lean = @import("../lean.zig");
@@ -160,6 +162,7 @@ pub const Site = struct {
     lean: ?*const lean.File = null,
     pool: pool.Pool = .{},
     learning: learning.Learning = .{},
+    spread: spread.Spread = .{},
     /// Data and script files in the view's directory
     files: []const File = &.{},
     /// The shared view's files at the site root (Daily Draft, Learn)
@@ -665,6 +668,7 @@ pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options,
         try pool.writeJson(&aw.writer, site.pool);
         try files.append(arena, .{ .path = "data/pool.json", .data = aw.written() });
     }
+    site.spread = try spread.make(arena, &people.pool.spread[set], &site.stats, .{});
     site.learning = try learning.make(arena, &people.learning[set], &site.stats, .{});
     {
         var aw: Writer.Allocating = .init(arena);
@@ -912,6 +916,7 @@ pub const Loaded = struct {
             .lean = if (l.extras.lean) |*x| x else null,
             .pool = d.pool,
             .learning = d.learning,
+            .spread = d.spread,
             .files = d.files,
             .shared_files = d.shared_files,
             .learn = d.learn,
@@ -940,6 +945,7 @@ const ViewData = struct {
     since_ms: i64,
     pool: pool.Pool,
     learning: learning.Learning,
+    spread: spread.Spread,
     files: []const File,
     shared_files: []const File,
     learn: ?learn.Facts,
@@ -961,6 +967,7 @@ fn viewData(s: *const Site) ViewData {
         .since_ms = s.since_ms,
         .pool = s.pool,
         .learning = s.learning,
+        .spread = s.spread,
         .files = s.files,
         .shared_files = s.shared_files,
         .learn = s.learn,
@@ -1213,6 +1220,80 @@ fn winRateCell(w: *Writer, wins: u32, games: u32, span: f64) !void {
     });
 }
 
+/// Champions table's win rate cell: winRateCell's track and dot (the champion's win
+/// rate), the bar the shape of its players' own win rates around it (spread.zig),
+/// mirrored about the track and coloured by win rate along it (shapeGradient); none
+/// under min_players. The shape doesn't narrow as games come in; only the rate fades
+fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32) !void {
+    const p = ratio(wins, games);
+    const s = &site.spread;
+    const players = if (s.get(ch.id)) |c| (if (c.players >= s.min_players) c else null) else null;
+    const title = if (players) |c|
+        try site.arena.print("{d} games; players with {d}+ games on {s}: middle half {d}% to {d}% ({d} players)", .{ games, s.min_games, ch.name, c.p25, c.p75, c.players })
+    else
+        try site.arena.print("{d} games", .{games});
+    try tpl.render(w, "<td data-v=\"{p:.4}\"><span class=\"wr\" style=\"--c:{colour}\" title=\"{title}\"><span class=\"ci\">" ++
+        "{shape}<i class=\"d\" style=\"left:{dot:.1}%\"></i></span>" ++
+        "<b style=\"opacity:{fade:.2}\">{rate:.1}%</b></span></td>", .{
+        .p = p,
+        .colour = wrColour(p, 0.12),
+        .title = title,
+        .shape = if (players) |c| tpl.t("<svg class=\"shape\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"{d}\"></path></svg>", .{
+            .d = try shapePath(site.arena, c.shape, 100 * p),
+        }) else null,
+        .dot = trackX(100 * p),
+        .fade = core.curvesfile.fade(games),
+        .rate = 100 * p,
+    });
+}
+
+/// The track's scale: 25% to 75% as 0 to 100
+const track_lo = 25.0;
+const track_width = 50.0;
+
+fn trackX(rate: f64) f64 {
+    return 100 * (std.math.clamp(rate, track_lo, track_lo + track_width) - track_lo) / track_width;
+}
+
+/// The shape's outline centred on `centre`% in a 100 x 10 box: along the top, back
+/// along the bottom; it fades out towards the track's ends (#wr-edge), past them clipped
+fn shapePath(a: std.mem.Allocator, shape: [spread.shape_points]u8, centre: f64) ![]const u8 {
+    const Point = struct {
+        fn x(c: f64, k: usize) f64 {
+            const off = @as(f64, @floatFromInt(spread.shape_step * k)) - spread.shape_reach;
+            return 100 * (c + off - track_lo) / track_width;
+        }
+        fn half(v: u8) f64 {
+            return 5 * @as(f64, @floatFromInt(v)) / 255;
+        }
+    };
+    var out: std.ArrayList(u8) = .empty;
+    for (shape, 0..) |v, k| {
+        try out.print(a, "{s}{d:.1} {d:.2}", .{ if (k == 0) "M" else "L", Point.x(centre, k), 5 - Point.half(v) });
+    }
+    var k: usize = spread.shape_points;
+    while (k > 0) {
+        k -= 1;
+        try out.print(a, "L{d:.1} {d:.2}", .{ Point.x(centre, k), 5 + Point.half(shape[k]) });
+    }
+    try out.append(a, 'Z');
+    return out.items;
+}
+
+/// One gradient and edge mask for every row's shape: orange at the track's low end
+/// through grey at 50% to blue at its high end, as win rates are coloured, fading out
+/// over the outer tenth at each end
+fn shapeGradient(w: *Writer) !void {
+    try w.writeAll("<svg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\"><defs>" ++
+        "<linearGradient id=\"wr-shape\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" x2=\"100\" y1=\"0\" y2=\"0\">" ++
+        "<stop offset=\"0\" class=\"lo\"></stop><stop offset=\"0.5\" class=\"mid\"></stop><stop offset=\"1\" class=\"hi\"></stop></linearGradient>" ++
+        "<linearGradient id=\"wr-fade\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" x2=\"100\" y1=\"0\" y2=\"0\">" ++
+        "<stop offset=\"0\" stop-color=\"#000\"></stop><stop offset=\"0.1\" stop-color=\"#fff\"></stop>" ++
+        "<stop offset=\"0.9\" stop-color=\"#fff\"></stop><stop offset=\"1\" stop-color=\"#000\"></stop></linearGradient>" ++
+        "<mask id=\"wr-edge\" maskUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"100\" height=\"10\">" ++
+        "<rect width=\"100\" height=\"10\" fill=\"url(#wr-fade)\"></rect></mask></defs></svg>\n");
+}
+
 /// Win rate colour, diverging: orange below 50%, blue above, grey at 50%; full at
 /// 50% ± 40% of the bar's `span` (±5 points on the champions table, ±10 against an
 /// opponent). Not red against green: the pair red-green colour blindness merges
@@ -1302,11 +1383,14 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     try roleTabs(w, role, root);
     try tpl.renderPart(w,
         \\<input type="search" placeholder="Search champion" data-filter aria-label="Search champion"></div>
-        \\<div class="tl-wrap"><table class="tl" data-sortable>
+        \\{gradient}<div class="tl-wrap"><table class="tl" data-sortable>
         \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
-    , .{ .role = tpl.when(role == null, tpl.t("<th class=\"l\" data-sort=\"text\">Role</th>", .{})) });
+    , .{
+        .gradient = tpl.call(shapeGradient, .{}),
+        .role = tpl.when(role == null, tpl.t("<th class=\"l\" data-sort=\"text\">Role</th>", .{})),
+    });
     const to_site = try std.mem.concat(site.arena, u8, &.{ root, site.view.up() });
     var rare: usize = 0;
     var n: usize = 0;
@@ -1321,7 +1405,7 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
             .n = n,
             .link = tpl.call(champLinkTo, .{ site, row.ch, to_site }),
             .role = tpl.when(role == null, tpl.t("<td class=\"l role\" data-v=\"{role}\">{role}</td>", .{ .role = roleName(row.role) })),
-            .wr = tpl.call(winRateCell, .{ row.wins, row.games, @as(f64, 0.12) }),
+            .wr = tpl.call(distCell, .{ site, row.ch, row.wins, row.games }),
             .games = row.games,
             .pick = tpl.call(pct, .{ row.games, site.games }),
             .banned = row.ch.banned,
@@ -1376,6 +1460,10 @@ fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     });
     try earlyNote(site, w, false);
     try tierTable(site, w, role, root);
+    try tpl.render(w,
+        \\<p class="muted small">Win rate: the champion's, the dot. Bar: how its players' own win rates spread around it, thicker where more players are, players with {min}+ games on it (every role and patch we have; none under {need} such players). On a scale from 25% to 75%, 50% marked. In 10 to 20 games luck alone moves a player's win rate by about 15 points, so much of the spread is luck.</p>
+        \\
+    , .{ .min = site.spread.min_games, .need = site.spread.min_players });
     try html.foot(w, p);
 }
 
@@ -1522,6 +1610,7 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     });
     try earlyNote(site, w, true);
     try filterBar(site, w, ch);
+    try spread_page.section(w, &site.spread, ch, site.view.region);
     if (n_roles == 0) try tpl.render(w, "<p>No games yet.</p>\n", .{});
 
     for (roles[0..n_roles]) |r| {

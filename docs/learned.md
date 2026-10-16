@@ -590,6 +590,16 @@ How to write a line:
 
 ## Player
 
+- 2026-10-15: How widely players' win rates on a champion spread (about 46% to 64% for
+  the middle half of players with 10+ games) is almost all luck: with 10 to 20 games a
+  player's rate swings by about 15 points by chance, and no real difference between
+  players on the same champion beyond that was detected; the largest the data allows
+  is a spread (sd) of about 3 points. Matchmaking pulls everyone towards 50%. Sure:
+  6,952 player-champion pairs with 10+ games, EUW, all patches in the crawl,
+  Platinum IV+; method of moments with a 95% upper bound. Site: the champion pages
+  show the spread with a luck note, never as "good players get X%". Evidence:
+  src/spread.zig; scratch check 2026-10-15 (per-pair excess variance over binomial,
+  1.8 pp² ± 3.2)
 - ~~2026-10-12 (early): Higher-ranked players have more gold at 14 in the same matchup,
   as you'd expect. Sure: partly measured with the post-game rank (see Data quality),
   so not yet trustworthy. Site: lesson material ("at your rank, expect X"), never a

@@ -162,9 +162,10 @@ test "fixture games to stats, curves and the website" {
         .{ "patch/build/darius-top.html", &.{ "Conqueror", "few games", "Doran&#39;s Shield", "More data needed", "href=\"../../champion/darius.html?period=patch\"" } },
         // Champion table and page: raw win rate with its interval, every lane opponent
         // (few games: shown, faded) with the curve's gold at 14 linking to the matchup page
-        .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "opacity:" } },
+        .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "opacity:" } },
         .{ "champion/darius.html", &.{ "Lane opponents", "href=\"../matchup/top/mordekaiser-vs-darius.html\"", "Gold at 14", "Search opponent", "data-name=\"Mordekaiser\" class=\"thin\">" } },
         .{ "champion/darius.html", &.{"href=\"../patch/build/darius-top.html\""} },
+        .{ "champion/darius.html", &.{"win rates on Darius: more data needed (0 players in EUW with 10+ games on it, 20 needed)."} },
         // Filters: the champion's counts by region, rank, patch, role and opponent, its
         // bans and each view's curve gold, the players per role for pick rates, and the
         // bar that sums them, written as the root view. One page per champion: the other

@@ -614,3 +614,19 @@ td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 1
   .demo .facts-inline { display: none; }
   .moments li { grid-template-columns: 38px 18px 1fr auto; gap: 8px; padding: 8px 12px; }
 }
+.spread { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 6px 0 14px; max-width: 420px; }
+.spread > span { display: block; color: var(--muted); font-size: 12px; }
+.spread svg { display: block; width: 100%; height: auto; margin: 6px 0 4px; }
+.spread rect.up { fill: var(--good); }
+.spread rect.down { fill: var(--bad); }
+.spread rect.even { fill: var(--muted); }
+.spread line.mid { stroke: var(--axis); stroke-dasharray: 2 2; }
+.spread line.half { stroke: var(--text); stroke-width: 2; stroke-linecap: round; }
+.spread circle { fill: var(--text); }
+.spread text { fill: var(--faint); font-size: 7px; text-anchor: middle; }
+.spread small { color: var(--faint); font-size: 12px; }
+.ci .shape { position: absolute; top: 4px; left: 0; width: 100%; height: 10px; overflow: hidden; }
+.ci .shape path { fill: url(#wr-shape); mask: url(#wr-edge); opacity: 0.85; }
+#wr-shape .lo { stop-color: var(--bad); }
+#wr-shape .mid { stop-color: var(--muted); }
+#wr-shape .hi { stop-color: var(--good); }

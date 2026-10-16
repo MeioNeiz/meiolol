@@ -15,6 +15,7 @@ pub const curves = @import("curves.zig");
 pub const builds = @import("builds.zig");
 pub const pool = @import("pool.zig");
 pub const learning = @import("learning.zig");
+pub const spread = @import("spread.zig");
 pub const patchday = @import("patchday.zig");
 pub const eval = @import("eval.zig");
 pub const outcomes = @import("outcomes.zig");
