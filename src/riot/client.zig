@@ -72,7 +72,11 @@ pub const Client = struct {
                     return null;
                 },
                 401, 403 => {
-                    c.gpa.free(res.body);
+                    defer c.gpa.free(res.body);
+                    if (res.status == 403 and !fromRiot(res.body)) {
+                        log.warn("403 on {s}: an HTML page, Riot's edge refusing this request, not the key", .{shown});
+                        return error.Blocked;
+                    }
                     log.err("{d} on {s}: key missing or expired", .{ res.status, shown });
                     return error.KeyRejected;
                 },
@@ -96,6 +100,14 @@ pub const Client = struct {
     }
 
     const tries = 6;
+
+    /// Riot's own error body, `{"status": {"message": ..., "status_code": ...}}`. Its
+    /// Cloudflare edge answers some URLs with an HTML block page instead (16 Oct: one TW2
+    /// PUUID, a 403 on every host, which stopped the crawler for hours as a rejected key)
+    fn fromRiot(body: []const u8) bool {
+        const t = std.mem.trimStart(u8, body, " \t\r\n");
+        return t.len > 0 and t[0] == '{' and std.mem.indexOf(u8, t, "\"status_code\"") != null;
+    }
 
     /// The proxy answers as Riot would, except: 503 when the crawler's tries ran out,
     /// 502 on an unexpected status. Unreachable (the crawler restarting) is retried for
@@ -207,3 +219,9 @@ pub const Client = struct {
         return .{ .status = status, .body = body };
     }
 };
+
+test "a 403 is the key's only when Riot says so" {
+    try std.testing.expect(Client.fromRiot("{\"status\":{\"message\":\"Forbidden\",\"status_code\":403}}"));
+    try std.testing.expect(!Client.fromRiot("<!DOCTYPE html>\n<html><head><title>Attention Required! | Cloudflare</title>"));
+    try std.testing.expect(!Client.fromRiot(""));
+}
