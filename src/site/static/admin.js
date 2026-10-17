@@ -23,7 +23,7 @@ const BAD = "#e66767";
 const TABS = [
   ["overview", "Overview"], ["crawler", "Crawler"], ["riot", "Riot API"], ["storage", "Storage"],
   ["ingest", "Ingest"], ["models", "Models"], ["traffic", "Traffic"],
-  ["deploys", "Deploys"], ["ops", "Controls"],
+  ["deploys", "Deploys"], ["logs", "Logs"], ["ops", "Controls"],
 ];
 // Tabs whose charts follow the time range switch
 const TIMED = new Set(["overview", "crawler", "riot"]);
@@ -706,7 +706,7 @@ function setZoom(z) {
 // Re-render the open tab when its data changed, keeping scroll and open details
 function refreshView(source) {
   const uses = {
-    live: ["overview", "crawler", "riot", "storage", "models", "deploys", "ops"],
+    live: ["overview", "crawler", "riot", "storage", "models", "deploys", "logs", "ops"],
     snapshot: TABS.map(t => t[0]).filter(t => t !== "traffic"),
     traffic: ["overview", "traffic"],
     training: ["overview", "models"],
@@ -996,7 +996,9 @@ VIEWS.crawler = body => {
     series: C.kinds.map((k, i) => ({ name: KIND_LABEL[k] || k, color: PALETTE[i], values: S.bs.map(b => b.warnings[i]) })),
   });
   if (C.messages && C.messages.length) {
-    const d = el("details", { open: true }, el("summary", {}, `Warning messages (${C.messages.length})`));
+    const raw = el("a", { href: "#logs", class: "sub" }, "raw log");
+    raw.addEventListener("click", e => { e.preventDefault(); ui.log.file = "crawl"; ui.log.filter = "warning"; setTab("logs"); });
+    const d = el("details", { open: true }, el("summary", {}, `Warning messages (${C.messages.length}) `, raw));
     sec.append(d);
     table(d, "messages", [
       { key: "kind", label: "Kind", fmt: k => el("span", { class: "kind" }, el("i", { class: "dot", style: "background:" + PALETTE[C.kinds.indexOf(k)] }), KIND_LABEL[k] || k) },
@@ -2053,8 +2055,6 @@ VIEWS.ops = body => {
     actionList(h, L.actions);
   }
 
-  logViewer(section(body, "Logs", "Box logs with player names, ids and match ids removed. Filter is case-insensitive."));
-
   const site = section(body, "Site and deploys");
   const og = grid(site);
   const upFrom = D.now - D.days * 86400;
@@ -2273,6 +2273,16 @@ function hourBins(times, from, counts) {
 }
 
 let logTimer = null;
+VIEWS.logs = body => logViewer(section(body, "Logs", "Box logs with player names, ids and match ids removed. Times in UK time (the box logs UTC). Filter is case-insensitive."));
+// The box logs UTC ("2026-10-17 18:52:27", "2026-10-17T18:52:14Z", Python's ",823"):
+// leading stamps to UK time, as the rest of the panel
+function ukLogLine(l) {
+  const m = l.match(/^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)(?:Z|,\d+)?/);
+  if (!m) return l;
+  const t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000;
+  const p = ukParts(t);
+  return `${dayDate(t)} ${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}` + l.slice(m[0].length);
+}
 function logViewer(parent) {
   const files = ["crawl", "web", "eval", "render", "health", "backup", "builds"];
   const out = el("pre", { class: "log big" }, L ? "Loading…" : "The live API is unavailable.");
@@ -2298,7 +2308,7 @@ function logViewer(parent) {
   const load = async () => {
     if (!L) return;
     try {
-      text = (await getText(`api/log?file=${encodeURIComponent(ui.log.file)}&lines=${ui.log.lines}`)).replace(/\n$/, "");
+      text = (await getText(`api/log?file=${encodeURIComponent(ui.log.file)}&lines=${ui.log.lines}`)).replace(/\n$/, "").split("\n").map(ukLogLine).join("\n");
     } catch (e) { text = "Could not load: " + e.message; }
     show();
   };
