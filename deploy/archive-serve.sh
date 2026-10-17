@@ -2,7 +2,8 @@
 # On the box: forced command of the gpu-box's archive key in ~/.ssh/authorized_keys
 # (docs/data-safety.md "Raw archive"), so that key can do only this. The gpu-box runs
 # deploy/archive-pull.sh, which calls: export, list, send NAME, ack NAME, forgotten,
-# disk USE (the gpu-box's disk use for deploy/health.sh)
+# disk USE (the gpu-box's disk use for deploy/health.sh), report ok|fail MESSAGE (each
+# round's outcome, so health.sh can say why acks stopped)
 set -euo pipefail
 cd "$HOME/ml/meiolol"
 out=data/archive-out
@@ -27,5 +28,24 @@ case "${cmd:-}" in
         [[ "$arg" =~ ^c[0-9]+,wsl[0-9]+,arch([0-9]+|-)$ ]] || { echo "bad disk use" >&2; exit 2; }
         echo "$(date +%s) $arg" > data/gpu-box.disk
         ;;
-    *) echo "archive-serve: export|list|send NAME|ack NAME|forgotten|status|disk USE" >&2; exit 2 ;;
+    report)
+        # data/gpu-box.pull: "<time> - ok" or "<time> <failing since> fail MESSAGE". Never
+        # evaluated, only shown; printable and short
+        msg=$(tr -cd '[:print:]' <<< "${SSH_ORIGINAL_COMMAND#report}" | cut -c1-200)
+        msg=${msg# }
+        state=data/gpu-box.pull
+        now=$(date +%s)
+        since=-
+        prev=
+        read -r _ since prev _ 2> /dev/null < "$state" || true
+        case "$msg" in
+            ok) echo "$now - ok" > "$state" ;;
+            "fail "*)
+                [[ "$prev" == fail && "$since" =~ ^[0-9]+$ ]] || since=$now
+                echo "$now $since $msg" > "$state"
+                ;;
+            *) echo "bad report" >&2; exit 2 ;;
+        esac
+        ;;
+    *) echo "archive-serve: export|list|send NAME|ack NAME|forgotten|status|disk USE|report ok|fail MSG" >&2; exit 2 ;;
 esac

@@ -86,9 +86,15 @@ if archive=$(bin/meiolol raw-export --data data --status 2>&1); then
 else
     problems+=("archive status failed: $(head -n 1 <<< "$archive")")
 fi
+# Each archive pull's outcome (archive-serve.sh report): the cause, where the ack check
+# above only sees that acks stopped. The line carries when it began, so it pushes once
+if read -r _ since outcome msg 2> /dev/null < data/gpu-box.pull && [[ "$outcome" == fail ]]; then
+    began=$(date -u -d "@$since" '+%F %H:%MZ' 2> /dev/null || echo "?")
+    problems+=("gpu-box archive failing since $began: ${msg:-no message}")
+fi
 # The gpu-box's disks, reported by each archive pull (deploy/archive-pull.sh). C: holds
 # the WSL disk next to Windows and games
-if read -r _ use < data/gpu-box.disk 2> /dev/null; then
+if read -r _ use 2> /dev/null < data/gpu-box.disk; then
     IFS=, read -r c wsl arch <<< "$use"
     (( ${c#c} >= 85 )) && problems+=("gpu-box C: at ${c#c}% (holds the WSL disk)")
     (( ${wsl#wsl} >= 85 )) && problems+=("gpu-box WSL disk at ${wsl#wsl}%")
