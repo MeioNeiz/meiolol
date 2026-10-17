@@ -713,8 +713,12 @@ function slotPicker(m, d, side, role) {
 
   const fill = () => {
     const s = champKey(input.value);
-    const hits = rows.filter(x => s ? champKey(x.c.name).includes(s) || champKey(x.c.alias).includes(s) : x.share >= PICK_MIN_SHARE || x.champion === cur)
-      .sort(sort === "played" ? (a, b) => b.share - a.share : sort === "lane" ? (a, b) => b.lane.lo[G] - a.lane.lo[G] : (a, b) => b.lo - a.lo);
+    const by = sort === "played" ? (a, b) => b.share - a.share : sort === "lane" ? (a, b) => b.lane.lo[G] - a.lane.lo[G] : (a, b) => b.lo - a.lo;
+    // Searching, the name typed comes first (Enter picks it: "vi" is Vi, not Viego), then
+    // names starting with it, then the rest, each in the sort's order
+    const match = x => Math.min(...[x.c.name, x.c.alias].map(champKey).map(k => k === s ? 0 : k.startsWith(s) ? 1 : k.includes(s) ? 2 : 3));
+    const hits = s ? rows.map(x => ({ x, k: match(x) })).filter(h => h.k < 3).sort((a, b) => a.k - b.k || by(a.x, b.x)).map(h => h.x)
+      : rows.filter(x => x.share >= PICK_MIN_SHARE || x.champion === cur).sort(by);
     list.replaceChildren(el("div", { class: "candhead" + (lm ? " lane" : "") }, el("span", {}, "Champion"), el("span", { title: `Change to ${side}'s win chance against an average ${roleName}` }, "Win"),
       lm ? el("span", { title: "Gold lead at 14 minutes" }, opp != null ? "Lane" : "Blind") : null, el("span", {}, "Played"), el("span", {}, "Why")));
     for (const x of hits) {
