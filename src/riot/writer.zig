@@ -13,6 +13,7 @@ const store = @import("store");
 const ep = @import("endpoints.zig");
 const match = @import("match.zig");
 const crawl = @import("crawl.zig");
+const archive = @import("../archive.zig");
 
 const log = std.log.scoped(.crawl);
 
@@ -35,6 +36,8 @@ const wal_truncate_retry_s = 10;
 /// commit rewrites the index pages it touched), unless a worker is waiting in wait()
 const linger_ms = 2000;
 const linger_jobs = 32;
+/// How often the raw valve (archive.valve) looks at free disk, when it is on
+const valve_check_s = 300;
 
 pub const Job = struct {
     arena: std.heap.ArenaAllocator,
@@ -196,6 +199,7 @@ pub const Writer = struct {
         var batch: std.ArrayList(*Job) = .empty;
         defer batch.deinit(gpa);
         var truncate_at: i64 = 0;
+        var valve_at: i64 = 0;
         while (true) {
             {
                 wr.mutex.lockUncancelable(wr.c.io);
@@ -247,7 +251,26 @@ pub const Writer = struct {
             wr.prune.step(db, wr.c.io, wr.c.opts) catch |err| {
                 if (err != error.Busy) return err;
             };
+            if (wr.c.opts.raw_valve_free_mb > 0 and now >= valve_at) {
+                valve_at = now + valve_check_s;
+                wr.valve(db, now) catch |err| log.warn("writer: raw valve: {t}", .{err});
+            }
         }
+    }
+
+    /// Drops one lot of raw the archive never got when the data disk is short of
+    /// --raw-valve-free-gb (archive.valve), so a full disk can't stop the crawler
+    fn valve(wr: *Writer, db: store.Db, now: i64) !void {
+        const gpa = wr.c.gpa;
+        const io = wr.c.io;
+        const data = wr.c.opts.data_dir;
+        const free = archive.freeMb(gpa, io, data) orelse return error.DfFailed;
+        var arena_state: std.heap.ArenaAllocator = .init(gpa);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+        const dir = try std.fs.path.join(arena, &.{ data, "archive-out" });
+        const log_path = try std.fs.path.join(arena, &.{ data, "raw-dropped.log" });
+        _ = try archive.valve(arena, io, db, dir, log_path, free, wr.c.opts.raw_valve_free_mb, now);
     }
 
     /// Called and returns with the mutex held. Sleeps in short steps so a worker that

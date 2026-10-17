@@ -199,6 +199,22 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   raw prune (`--raw-timeline-days`, `--raw-match-days`) also stops at the start of the
   oldest unacked export. A stopped pull shows in Health alerts: gpu-box (no ack for
   12h) and raw held (free disk under twice the raw held)
+- Raw timelines (most of the bytes) are the exception since 17 Oct: once an export file
+  holds them (file and directory fsynced first) they leave raw.db at once, matched on
+  id and fetch time, failed parses kept; the export file is their only box copy until
+  the ack deletes it. Before, a pull that ran but failed held every timeline twice
+  (raw.db and archive-out, ~12 GB a day). Raw summaries stay until acked and 2 days old
+  (`learn`'s damage split and `meiolol rebuild` read them)
+- Valve (`crawl --raw-valve-free-gb N`, 0 off): every 5 min the crawler's writer reads
+  the data disk's free space (`df`); under N GB it drops the oldest unacked export
+  (file deleted, row marked acked so pruning moves past it), or with no export file
+  left the oldest 2,000 raw timelines in raw.db (~180 MB of pages for new raw to
+  reuse; raw.db never shrinks). That raw is never archived: uptime of the crawler, site
+  builds and backups over a complete archive (Jacob, 17 Oct). Each drop: a warning in
+  crawl.log, a row in raw.archive_dropped, a line in data/raw-dropped.log (unix time,
+  kind export|raw, name, from_s, to_s, documents, bytes, free MB; tab-separated), and
+  `raw-export --status` adds `since_drop_s` (null: never) and `drops_24h`; its
+  `since_ack_s` counts only the gpu-box's acks
 - An export holds no lock the crawler waits on: each table is copied in one statement
   that reads its own snapshot. Windows go by fetched_at, which the crawler's writer sets
   when it begins the transaction that stores the document, and an export stops 300 s

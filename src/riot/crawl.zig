@@ -74,6 +74,9 @@ pub const Options = struct {
     /// Rolling window: matches, their rows and timelines go this long after game
     /// start; 0 = forever
     keep_days: u32 = 0,
+    /// Under this much free space on the data disk the writer drops raw the archive
+    /// never got, oldest first (archive.valve); 0: never
+    raw_valve_free_mb: u64 = 0,
     /// Every match participant also becomes a player to scan. The ladder already has
     /// every ranked player, so off saves ten upserts (random index pages) per match
     participant_players: bool = true,
