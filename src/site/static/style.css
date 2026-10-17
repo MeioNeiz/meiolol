@@ -414,6 +414,14 @@ h3.opp-h .muted { font-weight: 400; font-size: 13px; }
   table.tl .champ img { display: none; }
   .table-scroll td.num { white-space: normal; }
 }
+/* Daily lanes: icons only, so Edge and Games stay on screen; names stay for screen readers */
+@media (max-width: 480px) {
+  table.lanes .champ { gap: 0; }
+  table.lanes .champ .name {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 
 /* Shared surfaces */
 .panel {

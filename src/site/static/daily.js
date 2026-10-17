@@ -131,8 +131,13 @@ class Game {
       img.width = img.height = size;
       img.loading = "lazy";
       a.append(img);
+      a.title = c.name;
     }
-    a.append(this.name(id));
+    // A span so the phone lane table can hide it visually, leaving the icon
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = this.name(id);
+    a.append(name);
     return a;
   }
 
