@@ -827,11 +827,10 @@ VIEWS.overview = body => {
     const h = TRAFFIC.hours.filter(r => r[0] >= TRAFFIC.generated - 86400);
     tile(tiles, "Site views, 24 h", num(sumR(h.map(r => r[1]))), `${num(sumR(h.map(r => r[2])))} by bots`, null, () => setTab("traffic"));
   }
-  const ev = tsv(D.eval);
-  if (ev.length) {
-    const e = ev[ev.length - 1];
-    const best = ["base", "current", "eb", "joint"].reduce((a, k) => (e["auc_" + k] ?? 0) > (e["auc_" + a] ?? 0) ? k : a, "base");
-    tile(tiles, "Model AUC", (e["auc_" + best] ?? 0).toFixed(3), `best: ${best === "eb" ? "shrunk" : best}, ${num(e.games)} games`, null, () => { ui.cat = "win"; setTab("models"); });
+  // The Models tab's headline: best model by log loss, accuracy on held-out games
+  const W = winReadings();
+  if (W && W.best) {
+    tile(tiles, "Draft model", pct(W.best.acc), `right on ${num(W.games)} held-out games (coin flip 50%), best: ${W.best.label}`, null, () => { ui.cat = "win"; setTab("models"); });
   }
   if (TRAIN && TRAIN.runs.length) {
     const live = TRAIN.runs.filter(r => r.state === "running" || r.state === "paused");
@@ -1567,7 +1566,7 @@ function winView(body) {
       series: [["current", "site's model"], ["eb", "shrunk priors"], ["joint", "joint ratings"], ["tunedw", "tuned + weights"]]
         .map(([k, name], i) => ({ name, color: PALETTE[i], values: rel(k) })).filter(s => s.values.some(v => v != null)),
       ref: { value: 0, label: "champion win rates" },
-      caption: "Below the line beats champion win rates. Each run holds out a different, growing set of games, so raw scores across runs don't compare; differences on the same games do.",
+      caption: "Below the line beats champion win rates. Shrunk priors: empirical Bayes, a rare pair's effect pulled towards zero by how few games it has. Each run holds out a different, growing set of games, so raw scores across runs don't compare; differences on the same games do.",
     });
     const picks = ev.map(r => r.pick_top10_win ?? null);
     if (picks.some(v => v != null)) {
