@@ -34,7 +34,15 @@ In order:
    one pre-declared held-out look on a snapshot of games after 17 Oct 13:20Z (~24 Oct).
    Nothing public before that look passes. Admin Draft tester has them now (17 Oct); its
    draft and lane models refit daily on the box (`meiolol draft-model`, `lane-model`, 17
-   Oct); the comp terms come from the lab until they are ported the same way
+   Oct); the comp terms still come from the lab (`champcomp --export`, `lab-push.sh use`).
+   Blocker for porting them (and for step 2's nightly refit): their champion profiles
+   are means of per-player seat stats (damage split, CC, engage, dive, tank, sustain,
+   early power) from raw match summaries, which the box keeps ~2 days before the archive
+   moves them to the gpu-box; participants holds only the basic columns. Options (for
+   Jacob): a per-seat stats table in meiolol.db written at crawl time plus a one-off
+   backfill from the archive (recommended: steps 2 and 6 need it too), or profiles from
+   the weekly snapshot pushed to the box with the fit daily there (the Mac stays in the
+   loop)
 2. Champion pages: an "Into which teams" block beside early/late lean: only clear leans,
    plain lines with a range ("about 1 point worse per step towards a magic-damage enemy
    team"), refitted nightly on the box like `meiolol lean`
