@@ -888,10 +888,29 @@ function daysLeftText() {
 function healthBanner(parent) {
   const h = health();
   if (h == null) return;
-  const problems = h.trim().split("\n").filter(Boolean);
-  parent.append(el("div", { class: "health " + (problems.length ? "bad" : "good") },
-    el("b", {}, problems.length ? `⚠ ${problems.length} problem${problems.length > 1 ? "s" : ""}` : "✓ All checks pass"),
-    problems.length ? el("ul", {}, ...problems.map(p => el("li", {}, p))) : el("span", {}, " crawler, site loop, upload age, disk, backups")));
+  // health.sh's disk line says raw could no longer double; the rate says when it matters
+  const problems = h.trim().split("\n").filter(Boolean).map(p => /^box disk:/.test(p) && daysLeftText() ? p + daysLeftText() + " at the current rate" : p);
+  const spikes = warningSpikes();
+  const n = problems.length + spikes.length;
+  const plural = (k, w) => `${k} ${w}${k > 1 ? "s" : ""}`;
+  const head = [problems.length ? plural(problems.length, "problem") : "", spikes.length ? plural(spikes.length, "warning spike") : ""].filter(Boolean).join(", ");
+  parent.append(el("div", { class: "health " + (problems.length ? "bad" : spikes.length ? "warn" : "good") },
+    el("b", {}, n ? `⚠ ${head}` : "✓ All checks pass"),
+    n ? el("ul", {}, ...problems.concat(spikes).map(p => el("li", {}, p))) : el("span", {}, " crawler, site loop, upload age, disk, backups, warning rates")));
+}
+
+// Warning kinds whose last hour runs well above their rate over the log window
+function warningSpikes() {
+  const { C, now } = newestCrawl();
+  const W = D.crawl;
+  const covered = sumR(W.buckets.map(b => b.covered));
+  if (covered < 86400) return [];
+  return C.kinds.flatMap((k, i) => {
+    const hour = lastHour(C, b => b.warnings[i], now);
+    const wi = W.kinds.indexOf(k);
+    const normal = wi < 0 ? 0 : sumR(W.buckets.map(b => b.warnings[wi])) * 3600 / covered;
+    return hour != null && hour >= 30 && hour > 3 * normal ? [`warnings: ${KIND_LABEL[k] || k} ${num(hour)} in the last hour, usually ~${num(normal)} (Crawler, Warning messages)`] : [];
+  });
 }
 
 // What the crawl's counters say: rates now against the week, queue direction, retention

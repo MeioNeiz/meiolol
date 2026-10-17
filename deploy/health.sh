@@ -130,7 +130,7 @@ fi
 held=$(du -cb data/raw.db data/timeline.db data/archive-out 2>/dev/null | tail -n 1 | cut -f1)
 free=$(df --output=avail -B1 data | tail -n 1 | tr -dc '0-9')
 if (( ${free:-0} < 2 * ${held:-0} )); then
-    problems+=("box disk: $(( free >> 30 )) GB free for $(( held >> 30 )) GB of raw")
+    problems+=("box disk: $(( free >> 30 )) GB free, under twice the $(( held >> 30 )) GB of raw held for the gpu-box archive")
 fi
 
 (( ${#problems[@]} == 0 )) && exit 0
