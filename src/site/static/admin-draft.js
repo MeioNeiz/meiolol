@@ -570,7 +570,8 @@ function fillSlots(d, sides, pick, emptyOnly) {
 }
 
 function fillMenu(m, d) {
-  const legal = role => m.champs.filter(c => m.games(c.id, role) >= m.M.min_games && m.rate(c.id, role) > 0);
+  // The picks the picker lists: 1%+ of the role's games on the newest patch
+  const legal = role => m.champs.filter(c => m.games(c.id, role) >= m.M.min_games && m.rate(c.id, role) >= PICK_MIN_SHARE);
   const weighted = (list, role, taken) => {
     const pool = list.filter(c => !taken.has(String(c.id)));
     let x = Math.random() * sumR(pool.map(c => m.rate(c.id, role)));
@@ -593,9 +594,8 @@ function fillMenu(m, d) {
   const both = ["blue", "red"];
   const btn = (label, f, title) => el("button", { type: "button", class: "action", title, onclick: go(f) }, label);
   const groups = [
-    ["Realistic", [
-      btn("Random realistic", () => fillSlots(d, both, realistic), "Each slot drawn by its play share in the role on the newest patch"),
-      btn("Random generic", () => fillSlots(d, both, (r, t) => weighted(top(r, 15), r, t)), "Each slot from the role's 15 most played"),
+    ["More", [
+      btn("Random, top 15 only", () => fillSlots(d, both, (r, t) => weighted(top(r, 15), r, t)), "Each slot drawn by play share from the role's 15 most played"),
       btn("Swap sides", () => {
         [d.blue, d.red] = [d.red, d.blue];
         const flip = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.replace(/^(blue|red)/, x => x === "blue" ? "red" : "blue"), v]));
@@ -619,15 +619,16 @@ function fillMenu(m, d) {
       btn("All assassins", () => fillSlots(d, both, tagged([has("Assassin")], fighter))));
   }
   debug.push(
-    btn("Mirror", () => fillSlots(d, both, r => (top(r, 1)[0] || {}).id), "The most played champion in every role on both sides: only the intercept (blue side) should remain, about 50%"),
-    btn("Empty board", () => { d.blue = {}; d.red = {}; d.locks = {}; d.fb = {}; }, "Every slot the role average"));
+    btn("Mirror", () => fillSlots(d, both, r => (top(r, 1)[0] || {}).id), "The most played champion in every role on both sides: only the intercept (blue side) should remain, about 50%"));
   groups.push(["Debug", debug]);
   const menu = el("details", { class: "fillmenu" }, el("summary", {}, "Fill…"));
   for (const [title, buttons] of groups) menu.append(el("div", { class: "fillgroup" }, el("span", { class: "sub" }, title), el("div", { class: "actions" }, ...buttons)));
   if (!tags) menu.append(el("p", { class: "sub" }, DRAFT.tags === null ? "AD, AP, tank and assassin fills need Data Dragon, which didn't answer." : "Loading Data Dragon tags…"));
+  const drawn = "each slot drawn by its play share in the role on the newest patch, from the picks the picker lists (1%+ of the role's games); locked slots stay";
   return el("div", { class: "fillbar" },
-    el("button", { type: "button", class: "action", onclick: go(() => fillSlots(d, both, realistic)) }, "Random game"),
-    el("button", { type: "button", class: "action", onclick: go(() => fillSlots(d, both, realistic, true)) }, "Fill empty"),
+    btn("Random game", () => fillSlots(d, both, realistic), "Every slot: " + drawn),
+    btn("Fill empty", () => fillSlots(d, both, realistic, true), "Empty slots only: " + drawn),
+    btn("Empty board", () => { d.blue = {}; d.red = {}; d.locks = {}; d.fb = {}; }, "Every slot empty: each counts as the role's average pick"),
     menu);
 }
 
