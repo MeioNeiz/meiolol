@@ -37,18 +37,59 @@ if ! take_lock; then
 fi
 trap 'rm -rf "$lock"' EXIT
 trap 'exit 1' INT TERM HUP
+# Steps for the admin page's Deploys tab (deploy-events.sh: queued here, sent to the box
+# at each flush). box.sh's output lines mark the build's end and the web loop's signal;
+# the box's scripts add the rest (render-swap.sh, web-loop.sh, cache-version.sh)
+events=$ROOT/deploy/deploy-events.sh
+event() { "$events" add "$@"; }
+flush() { "$events" flush || echo "$(now) deploy events not sent: box unreachable, kept for the next deploy"; }
+# The deploy's commits after the one deployed before, newest first, at most 30
+commits() {
+    local range=("$2" --max-count=1)
+    [[ -n "$1" ]] && git -C "$ROOT" cat-file -e "$1^{commit}" 2> /dev/null && range=("$1..$2" --max-count=30)
+    git -C "$ROOT" log --format='%h %s' "${range[@]}" | cut -c1-200 \
+        | while IFS= read -r c; do event "$2" commit info "$c"; done
+}
 while [[ -e "$state.pending" ]]; do
     rm -f "$state.pending"
+    sha=$(git -C "$ROOT" rev-parse origin/main)
     # Docs and research pushes change nothing on the box: skip the build and site round
     deployed=$(ssh "${MEIOLOL_HOST:-meiolol-cloud}" "tail -n 1 ml/meiolol/DEPLOYED" 2> /dev/null \
         | cut -d' ' -f1)
     if [[ -n "$deployed" ]] && git -C "$ROOT" cat-file -e "$deployed^{commit}" 2> /dev/null \
-        && git -C "$ROOT" diff --quiet "$deployed" origin/main -- src deploy build.zig build.zig.zon; then
+        && git -C "$ROOT" diff --quiet "$deployed" "$sha" -- src deploy build.zig build.zig.zon; then
         echo "$(now) origin/main: nothing to deploy since ${deployed:0:7}"
+        if [[ "$sha" != "$deployed" ]]; then
+            commits "$deployed" "$sha"
+            event "$sha" deploy skipped "nothing to deploy since ${deployed:0:7}: no change in src, deploy or build files"
+            flush
+        fi
         continue
     fi
     echo "$(now) deploying origin/main"
-    REV=origin/main "$ROOT/deploy/box.sh" web start || echo "$(now) failed"
+    commits "$deployed" "$sha"
+    event "$sha" deploy start "deploy/box.sh web start on the Mac"
+    event "$sha" build start "clean checkout, cross-compile and copy to the box"
+    flush
+    out=$(mktemp)
+    REV=$sha "$ROOT/deploy/box.sh" web start 2>&1 | while IFS= read -r line; do
+        echo "$line"
+        echo "$line" >> "$out"
+        case $line in
+            "deployed "*) event "$sha" build ok "binary and scripts on the box"; flush ;;
+            "signalled meiolol-web"* | "restarted meiolol-web"*) event "$sha" web ok "${line% on *}" ;;
+        esac
+    done
+    rc=${PIPESTATUS[0]}
+    if (( rc == 0 )); then
+        event "$sha" deploy ok "box.sh done: the box takes it from here"
+    else
+        echo "$(now) failed"
+        grep -q '^deployed ' "$out" || event "$sha" build failed "$(grep -v '^ *$' "$out" | tail -n 1)"
+        event "$sha" deploy failed "$(grep -v '^ *$' "$out" | tail -n 1)"
+    fi
+    rm -f "$out"
+    flush
 done
 rm -rf "$lock"
 trap - EXIT

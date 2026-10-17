@@ -14,6 +14,15 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit
 
 log() { echo "$(date -u +%FT%TZ) render-swap: $*" >> data/render.log; }
+# One line in data/deploys.tsv (admin page's Deploys tab, docs/hosting.md "Deploy
+# events"): unix time, the commit, step, status, detail
+deploy_event() {
+    local f=data/deploys.tsv detail=${4:-}
+    [[ -s $f ]] || printf 'time\tsha\tstep\tstatus\tdetail\n' > "$f"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(date +%s)" "$1" "$2" "$3" "${detail//$'\t'/ }" >> "$f"
+}
+# The commit of the newest deploy (DEPLOYED: deploy/box.sh sync)
+deployed_sha() { tail -n 1 DEPLOYED 2> /dev/null | cut -d' ' -f1; }
 
 views_fits() {
     [[ -s data/views.bin ]] \
@@ -22,11 +31,16 @@ views_fits() {
 
 while true; do
     binary=$(stat -c %Y bin/meiolol)
+    sha=$(deployed_sha)
     if [[ -s data/views.bin ]] && ! views_fits; then
         log "data/views.bin is another format: waiting for the web loop's"
+        deploy_event "$sha" swap waiting "views file in another format: waiting for the web loop's write"
         start=$SECONDS
         until views_fits || (( SECONDS - start >= 3 * 3600 )); do sleep 30; done
-        views_fits || log "no views file in this format after 3 h: loading from the database"
+        if ! views_fits; then
+            log "no views file in this format after 3 h: loading from the database"
+            deploy_event "$sha" swap info "no views file in this format after 3 h: loading from the database"
+        fi
     fi
     new=a
     systemctl --user -q is-active meiolol-render@a && new=b
@@ -39,16 +53,19 @@ while true; do
     systemctl --user enable -q "meiolol-render@$new"
     systemctl --user restart "meiolol-render@$new"
     log "started meiolol-render@$new beside ${old[*]:-nothing}"
+    deploy_event "$sha" swap start "meiolol-render@$new beside ${old[*]:-nothing}"
     start=$SECONDS
     until [[ -e data/render-$new.ready ]] || (( SECONDS - start >= 3600 )) \
         || ! systemctl --user -q is-active "meiolol-render@$new"; do sleep 2; done
     if [[ ! -e data/render-$new.ready ]]; then
         systemctl --user disable -q --now "meiolol-render@$new"
         log "meiolol-render@$new not ready after $(( (SECONDS - start) / 60 )) min: stopped it, kept ${old[*]:-nothing}"
+        deploy_event "$sha" swap failed "meiolol-render@$new not ready after $(( (SECONDS - start) / 60 )) min: kept ${old[*]:-nothing}"
         exit 1
     fi
     for u in "${old[@]}"; do systemctl --user disable -q --now "$u"; done
     log "meiolol-render@$new serving; stopped ${old[*]:-nothing}"
+    deploy_event "$sha" swap ok "meiolol-render@$new serving; stopped ${old[*]:-nothing}"
     # Only now, with the old one gone: the new data's version into jomify's cache key
     systemctl --user start meiolol-cache-version
     [[ $(stat -c %Y bin/meiolol) == "$binary" ]] && exit 0

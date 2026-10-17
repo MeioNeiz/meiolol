@@ -48,6 +48,8 @@
 # changed one part waits for that part alone; the next upload's write refreshes every
 # part (data/views.full: the last such write). A views write the deploy's binary can't
 # read (another format) is stopped at the signal rather than finished.
+# A forced round's steps (site build, upload, views file, reload) go to data/deploys.tsv
+# for the admin page's Deploys tab, under the commit deployed when the round began.
 # Upload: the new build is copied into data/site by checksum without times, so only
 # files whose content changed get a new mtime, and the upload's quick check sends just
 # those. --delete removes what the build no longer writes; nginx then hands those paths
@@ -129,6 +131,24 @@ if [[ -n "$patch" && -n "$format" ]]; then
     fi
 fi
 batch() { nice -n 10 ionice -c 3 "$@"; }
+# One line in data/deploys.tsv (docs/hosting.md "Deploy events"): unix time, the commit,
+# step, status, detail. Forced rounds only (round_sha set)
+deploy_event() {
+    [[ -n "$round_sha" ]] || return 0
+    local f=data/deploys.tsv detail=${3:-}
+    [[ -s $f ]] || printf 'time\tsha\tstep\tstatus\tdetail\n' > "$f"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(date +%s)" "$round_sha" "$1" "$2" "${detail//$'\t'/ }" >> "$f"
+}
+# The views write's parts: each view's load line marks a part it took from the old file
+# "... kept" (src/site/root.zig loadParts); a part never kept was loaded again
+views_parts() {
+    local p kept='' loaded=''
+    for p in "stats and champions" filters people "daily and learn"; do
+        if grep -q "$p kept" data/views.log; then kept+=${kept:+, }$p; else loaded+=${loaded:+, }$p; fi
+    done
+    echo "loaded again: ${loaded:-none}; kept: ${kept:-none}"
+}
+round_sha=''
 # `meiolol site --views data/views.bin` with these flags, in the background so a signal
 # ends the wait: when a deploy has changed the binary's views format meanwhile, the
 # write is stopped (views_stale=1, returns 1), as its file would be the old format. A
@@ -139,7 +159,11 @@ views_write() {
     views_stale=0
     start=$(date +%s)
     format=$(bin/meiolol site --views-format)
-    batch bin/meiolol site --views data/views.bin "$@" > data/views.log 2>&1 &
+    # Not through batch: a function run with & is a subshell, so $! would be that and
+    # the kill below would leave the write running (17 Oct: one ran on for 55 min beside
+    # the deploy's, and would have put an old-format file back when done). nice and
+    # ionice exec, so $! is the write itself
+    nice -n 10 ionice -c 3 bin/meiolol site --views data/views.bin "$@" > data/views.log 2>&1 &
     pid=$!
     while true; do
         wait "$pid"
@@ -196,6 +220,11 @@ run_daily() {
 while true; do
     now=$(date +%s)
     forced=$force force=0
+    round_sha=''
+    if (( forced )); then
+        round_sha=$(tail -n 1 DEPLOYED 2> /dev/null | cut -d' ' -f1)
+        deploy_event round start "site build, upload and views file with the new binary"
+    fi
     interval=$(interval_for "$patch")
     # A deploy's or start's round leaves a due pass to the next round, so the views file
     # comes first; a new patch or curves format can't wait
@@ -212,6 +241,7 @@ while true; do
     site_start=$SECONDS
     if out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core 2>&1); then
         site_s=$(( SECONDS - site_start ))
+        deploy_event site ok "core build ${site_s}s"
         # First patch line, EUW: "data/site.new/patch/: patch 16.20, 1054 games, ..."
         read -r patch games < <(sed -nE 's/.*: patch ([^,]+), ([0-9]+) games.*/\1 \2/p' \
             <<< "$out")
@@ -223,36 +253,46 @@ while true; do
             changed=$(rsync -rlpD --checksum --delete --stats data/site.new/ data/site/ \
                 | sed -nE 's/^Number of regular files transferred: ([0-9,]+)/\1/p')
             copy_s=$(( SECONDS - t )) t=$SECONDS
-            if stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --stats \
+            if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --stats \
                 data/site/ meiolol-web:./); then
+                deploy_event upload failed "rsync to the web server failed"
+            else
                 sent=$(sed -nE 's/^Total bytes sent: ([0-9,]+)/\1/p' <<< "$stats")
                 echo "$(date -u +%FT%TZ) upload: site ${site_s}s, copy ${copy_s}s" \
                     "(${changed:-?} files changed), send $(( SECONDS - t ))s (${sent:-?} bytes)"
                 echo "$(date -u +%FT%TZ) uploaded"
+                deploy_event upload ok "${changed:-?} files changed, sent ${sent:-?} bytes"
                 # For meiolol-render: every view, which it reads on the touch. A deploy's
                 # or start's round keeps the old file's current parts and leaves the
                 # refresh of the rest to the next upload (last_upload unchanged)
                 t=$SECONDS
                 reuse=()
                 (( forced )) && reuse=(--reuse)
+                deploy_event views start "every view into data/views.bin${reuse:+, current parts kept}"
                 if views_write "${reuse[@]}" "${site_args[@]}"; then
                     echo "$(date -u +%FT%TZ) views file $(( SECONDS - t ))s" \
                         "($(stat -c %s data/views.bin) bytes${reuse:+, current parts kept})"
+                    deploy_event views ok "$(( SECONDS - t ))s, $(views_parts)"
                     (( forced )) || { touch data/views.full; last_upload=$now; }
                     touch data/render.reload
+                    deploy_event reload ok "renderer told to read the new views file"
                 elif (( views_stale )); then
                     echo "$(date -u +%FT%TZ) views file stopped after $(( SECONDS - t ))s:" \
                         "a deploy changed its format"
+                    deploy_event views failed "stopped after $(( SECONDS - t ))s: a newer deploy changed its format"
                 else
                     echo "$(date -u +%FT%TZ) views file FAILED after $(( SECONDS - t ))s:" \
                         "$(tail -n 1 data/views.log)"
+                    deploy_event views failed "after $(( SECONDS - t ))s: $(tail -n 1 data/views.log)"
                     touch data/render.reload
+                    deploy_event reload ok "renderer told to reload (from the database)"
                 fi
                 last_patch=$patch last_games=$games fresh_curves=0
             fi
         fi
     else
         echo "$out"
+        deploy_event site failed "$(tail -n 1 <<< "$out")"
     fi
     if nice -n 10 bin/meiolol admin --out data/admin.new \
         --disk "$(df -B1 --output=size,used,avail data | tail -n 1)" \

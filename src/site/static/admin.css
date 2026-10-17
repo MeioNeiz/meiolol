@@ -323,3 +323,18 @@ details.fillmenu { margin-top: 0; padding: 4px 12px; flex: 1 1 260px; }
 details.fillmenu summary { line-height: 26px; }
 .fillgroup { display: grid; gap: 4px; margin: 6px 0 10px; }
 details.debug .table-scroll { overflow-x: auto; }
+
+/* Deploys tab */
+.card.deploy { margin-top: 12px; }
+.card.deploy.running { border-color: var(--accent); }
+details.card.deploy { margin-top: 8px; }
+.deploy-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; cursor: pointer; list-style: none; }
+.deploy-head::-webkit-details-marker { display: none; }
+.deploy-head b { font-weight: 600; overflow-wrap: anywhere; flex: 1 1 320px; }
+.deploy-head .sub { flex-basis: 100%; font-size: 12px; }
+details.card.deploy[open] > .deploy-head { margin-bottom: 8px; }
+.card.deploy p.sub { margin: 4px 0 8px; }
+table.steps td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.steps tr.failed td { color: var(--bad); }
+ul.commits { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+ul.commits li { overflow-wrap: anywhere; }

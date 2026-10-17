@@ -4,10 +4,19 @@
 # tree: other sessions keep uncommitted work there. Skip once: git push --no-verify
 root=$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)
 zero=0000000000000000000000000000000000000000
+# Each check's start and result go to the admin page's Deploys tab (deploy-events.sh);
+# a refused push reaches the box in the background, a passed one with its deploy
+events=$root/deploy/deploy-events.sh
 while read -r _ sha remote_ref _; do
     [ "$remote_ref" = refs/heads/main ] && [ "$sha" != $zero ] || continue
     echo "pre-push: zig build ci on $(git -C "$root" rev-parse --short "$sha")"
-    "$root/deploy/build-tree.sh" ci "$sha" zig build ci --cache-dir "$root/.zig-cache" \
-        || { echo "pre-push: ci failed, push refused"; exit 1; }
+    "$events" add "$sha" ci start "zig build ci on the Mac"
+    if ! "$root/deploy/build-tree.sh" ci "$sha" zig build ci --cache-dir "$root/.zig-cache"; then
+        "$events" add "$sha" ci failed "zig build ci failed: push refused"
+        nohup "$events" flush > /dev/null 2>&1 < /dev/null &
+        echo "pre-push: ci failed, push refused"
+        exit 1
+    fi
+    "$events" add "$sha" ci ok "zig build ci passed"
 done
 exit 0

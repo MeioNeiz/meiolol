@@ -173,6 +173,38 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   header X-Meiolol-Action: 1, which a cross-site form cannot send. 8091 takes only the
   web server
 
+### Deploy events
+
+The admin page's Deploys tab shows every push from the check on the Mac until the site
+serves it. Its backbone is data/deploys.tsv on the box: one line per step, `time` (unix
+s), `sha` (full commit), `step`, `status` (start, ok, failed, skipped, waiting, info),
+`detail` (free text; redacted when served). live.json carries the last 3,000 lines as
+`deploys`, the 15 min snapshot as `deploy_events`.
+
+| step | written by | when |
+| --- | --- | --- |
+| ci | deploy/hooks/pre-push | `zig build ci` start and result, per pushed commit |
+| commit | deploy/on-push.sh | each commit since the deploy before (at most 30) |
+| deploy | on-push.sh | start, skipped (docs only), ok or failed with box.sh's last line |
+| build | on-push.sh | start; ok at box.sh's "deployed SHA" (binary and scripts copied) |
+| web | on-push.sh | meiolol-web signalled or restarted |
+| round, site, upload, views, reload | deploy/web-loop.sh | forced rounds only (a deploy's or a start's): views ok names the parts loaded again and kept (views.log's "... kept" marks) |
+| swap | deploy/render-swap.sh | waiting (views file in another format), start, ok, failed |
+| cache | deploy/cache-version.sh | each new nginx cache key (every swap and reload) |
+
+- Mac steps carry the pushed commit; the box's carry the newest DEPLOYED line when the
+  step (or forced round, or swap iteration) began. A deploy is live at the first cache
+  line after its swap, the page's "expected live" is the median of the last 12 live
+  deploys' start to live (those whose swap waited for a views file, or not, when two
+  or more match)
+- The Mac queues its lines in .git/meiolol-deploy-events.tsv (deploy/deploy-events.sh
+  add|flush) and appends them to the box on each flush that reaches it: on-push.sh
+  flushes at its start, at "deployed" and at its end; a refused push flushes in the
+  background. A deploy that failed before the box shows after the next flush
+- History before 17 Oct 14:55 BST was rebuilt once from .git/meiolol-deploy.log, the
+  origin/main reflog, DEPLOYED, render.log and web.log (no ci lines, views parts not
+  recorded)
+
 ## Known problems on the micro
 
 - Slow: ~11k matches/day vs ~135k on the PC with 19 writing threads (153 lock waits in

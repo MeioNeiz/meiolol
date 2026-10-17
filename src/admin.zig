@@ -136,6 +136,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
         .eval = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "eval-history.tsv" }), 400),
         .uploads = try uploads(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "web.log" }), window_start),
         .deploys = try tail(arena, io, "DEPLOYED", 15),
+        .deploy_events = try deployEvents(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, deploys_file })),
         .logs = .{
             .health = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "health.log" }), 12),
             .backup = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "backup.log" }), 6),
@@ -536,6 +537,7 @@ pub fn liveJson(arena: std.mem.Allocator, io: Io, db: store.Db, l: Live) ![]cons
         .disk = l.disk,
         .files = try fileSizes(arena, io, l.data_dir),
         .actions = try actionLog(arena, io, try std.fs.path.join(arena, &.{ l.data_dir, action_log })),
+        .deploys = try deployEvents(arena, io, try std.fs.path.join(arena, &.{ l.data_dir, deploys_file })),
         .running = .{ .eval = l.eval_since, .action = l.action },
     };
     return std.json.Stringify.valueAlloc(arena, live, .{});
@@ -557,6 +559,35 @@ fn actionLog(arena: std.mem.Allocator, io: Io, path: []const u8) ![]const Action
         const name = f.next() orelse continue;
         const result = f.next() orelse continue;
         try out.append(arena, .{ t, name, result, f.rest() });
+    }
+    return out.items;
+}
+
+/// Deploy steps, one per line (docs/hosting.md "Deploy events"): unix time, commit,
+/// step, status, detail. Written by deploy/deploy-events.sh (the Mac's pre-push check and
+/// on-push.sh), render-swap.sh, web-loop.sh and cache-version.sh on the box
+pub const deploys_file = "deploys.tsv";
+/// About a week of deploys and the hourly cache key lines beside them
+const deploy_event_lines = 3000;
+
+const DeployEvent = struct { i64, []const u8, []const u8, []const u8, []const u8 };
+
+/// The newest `deploy_event_lines`, oldest first; details redacted (commit subjects and
+/// error lines could name a game)
+fn deployEvents(arena: std.mem.Allocator, io: Io, path: []const u8) ![]const DeployEvent {
+    const text = try tail(arena, io, path, deploy_event_lines);
+    var out: std.ArrayList(DeployEvent) = .empty;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    next: while (lines.next()) |line| {
+        var f = std.mem.splitScalar(u8, line, '\t');
+        const t = std.fmt.parseInt(i64, f.next() orelse continue, 10) catch continue;
+        const sha = f.next() orelse continue;
+        if (sha.len > 40) continue;
+        for (sha) |c| if (!std.ascii.isHex(c)) continue :next;
+        const step = f.next() orelse continue;
+        const result = f.next() orelse continue;
+        if (step.len > 16 or result.len > 16) continue;
+        try out.append(arena, .{ t, sha, step, result, try redact(arena, f.rest()) });
     }
     return out.items;
 }

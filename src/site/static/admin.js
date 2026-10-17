@@ -22,7 +22,7 @@ const BAD = "#e66767";
 const TABS = [
   ["overview", "Overview"], ["crawler", "Crawler"], ["riot", "Riot API"], ["storage", "Storage"],
   ["ingest", "Ingest"], ["models", "Models"], ["traffic", "Traffic"],
-  ["ops", "Controls"],
+  ["deploys", "Deploys"], ["ops", "Controls"],
 ];
 // Tabs whose charts follow the time range switch
 const TIMED = new Set(["overview", "crawler", "riot"]);
@@ -705,7 +705,7 @@ function setZoom(z) {
 // Re-render the open tab when its data changed, keeping scroll and open details
 function refreshView(source) {
   const uses = {
-    live: ["overview", "crawler", "riot", "storage", "models", "ops"],
+    live: ["overview", "crawler", "riot", "storage", "models", "deploys", "ops"],
     snapshot: TABS.map(t => t[0]).filter(t => t !== "traffic"),
     traffic: ["overview", "traffic"],
     training: ["overview", "models"],
@@ -812,6 +812,11 @@ VIEWS.overview = body => {
   if (dk) {
     const used = dk[1] / dk[0];
     tile(tiles, "Disk", pct(used) + " used", `${bytes(dk[2])} free` + daysLeftText(), used > 0.8 ? "bad" : used > 0.65 ? "warn" : null, () => setTab("storage"));
+  }
+  const dl = deployList()[0];
+  if (dl) {
+    tile(tiles, "Last deploy", DEPLOY_STATE[dl.state][0], `${dl.short} ${dl.state === "live" ? "live " + ago(dl.live) : dl.state === "running" ? etaText(dl) : "pushed " + ago(dl.start)}`,
+      DEPLOY_STATE[dl.state][1] === "bad" ? "bad" : dl.state === "running" ? "warn" : null, () => setTab("deploys"));
   }
   const lastUp = D.uploads.length ? D.uploads[D.uploads.length - 1] : null;
   tile(tiles, "Site upload", ago(lastUp), `${D.uploads.filter(t => t >= D.now - 86400).length} in the last 24 h`, lastUp == null || D.now - lastUp > 26 * 3600 ? "bad" : null, () => setTab("ops"));
@@ -2020,6 +2025,195 @@ VIEWS.ops = body => {
       deploys.map(d => { const [commit, at] = d.split(" "); return { commit, at: at ? Date.parse(at) / 1000 : null }; }));
     og.append(c);
   }
+};
+
+// ---------- deploys ----------
+
+// data/deploys.tsv's events (docs/hosting.md "Deploy events"): [time, sha, step, status,
+// detail]. Mac steps carry the pushed commit, the box's the commit deployed at the time
+const DEPLOY_STEPS = [
+  ["ci", "Push check", "zig build ci on the Mac, before the push"],
+  ["deploy", "Deploy", "on-push.sh runs deploy/box.sh web start"],
+  ["build", "Build and copy", "clean checkout, cross-compile, binary and scripts to the box"],
+  ["web", "Web loop", "signalled (or restarted) for a round with the new binary"],
+  ["site", "Site build", "the deploy round's static core build"],
+  ["upload", "Upload", "static core to the web server: home page, CSS, JS, sitemap"],
+  ["views", "Views file", "every view into views.bin; only the parts the deploy changed load again"],
+  ["reload", "Renderer reload", "the running renderer reads the new views file"],
+  ["swap", "Renderer swap", "new renderer serving the new code, old one stopped"],
+  ["cache", "Live on site", "nginx cache key moved to the new renderer's data"],
+];
+// Label and pill class per deploy state
+const DEPLOY_STATE = {
+  live: ["Live", "good"], running: ["Deploying", "live"], failed: ["Failed", "bad"],
+  skipped: ["Skipped", ""], superseded: ["Superseded", ""], refused: ["Push refused", "bad"],
+};
+const STEP_STATE = {
+  done: ["done", "good"], running: ["running", "live"], waiting: ["waiting", "warn"],
+  failed: ["failed", "bad"], skipped: ["skipped", ""], pending: ["pending", ""], none: ["not reached", ""],
+  info: ["note", ""],
+};
+function hm(t) {
+  if (t == null) return "–";
+  const p = ukParts(t);
+  return `${pad(p.hour)}:${pad(p.minute)}`;
+}
+const median = xs => {
+  if (!xs.length) return null;
+  const a = xs.slice().sort((x, y) => x - y), m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+};
+
+// One deploy per commit that reached the push check or on-push.sh, newest first, each
+// with its steps: {status, start, end, detail}
+function deployList() {
+  const evs = ((L && L.deploys) || D.deploy_events || []).slice().sort((a, b) => a[0] - b[0]);
+  // Live meant the cache key from its first use (16 Oct), before that the renderer
+  // swap (14 Oct), before that the upload
+  const since = step => (evs.find(e => e[2] === step && e[3] === "ok") || [Infinity])[0];
+  const cacheFrom = since("cache"), swapFrom = since("swap");
+  const bySha = new Map();
+  for (const e of evs) {
+    if (!bySha.has(e[1])) bySha.set(e[1], []);
+    bySha.get(e[1]).push(e);
+  }
+  const out = [];
+  for (const [sha, list] of bySha) {
+    const first = (step, st) => list.find(e => e[2] === step && (!st || st.includes(e[3])));
+    const ci = list.filter(e => e[2] === "ci"), dep = first("deploy");
+    if (!dep && !ci.length) continue;
+    const start = (dep || ci[0])[0];
+    const steps = {};
+    const put = (k, status, s, e, detail) => { steps[k] = { status, start: s, end: e, detail: detail || "" }; };
+    // Start, end and result of a step from its events after `from`
+    const step = (k, from, startOf) => {
+      const xs = list.filter(e => e[2] === k && e[0] >= from);
+      const end = xs.find(e => ["ok", "failed", "skipped"].includes(e[3]));
+      const begin = xs.find(e => e[3] === "start" || e[3] === "waiting");
+      const s = begin ? begin[0] : startOf;
+      if (end) put(k, end[3] === "ok" ? "done" : end[3], s, end[0], end[4]);
+      else if (begin) put(k, begin[3] === "waiting" ? "waiting" : "running", s, null, xs[xs.length - 1][4]);
+      return steps[k];
+    };
+    if (ci.length) step("ci", ci[0][0]);
+    if (dep) {
+      step("deploy", start);
+      step("build", start, start);
+      step("web", start, steps.build && steps.build.end);
+      // The deploy's round: the first forced round after the deploy began
+      const round = list.find(e => e[2] === "round" && e[0] >= start);
+      if (round) {
+        step("site", round[0], round[0]);
+        step("upload", round[0], steps.site && steps.site.end);
+        step("views", round[0]);
+        step("reload", round[0], steps.views && steps.views.end);
+      }
+      const sw = step("swap", start);
+      if (sw && sw.status === "done") step("cache", sw.end, sw.end);
+    }
+    const commits = list.filter(e => e[2] === "commit").map(e => e[4]);
+    const failed = DEPLOY_STEPS.some(([k]) => steps[k] && steps[k].status === "failed" && k !== "cache");
+    const doneAt = k => steps[k] && steps[k].status === "done" ? steps[k].end : null;
+    let cache = doneAt("cache");
+    if (cache == null && start < cacheFrom) cache = start < swapFrom ? doneAt("upload") || null : doneAt("swap");
+    let state = "running";
+    if (!dep) state = ci.some(e => e[3] === "failed") ? "refused" : "running";
+    else if (steps.deploy && steps.deploy.status === "skipped") state = "skipped";
+    else if (failed) state = "failed";
+    else if (cache) state = "live";
+    // Known once the swap has begun: null until then
+    const waited = list.some(e => e[2] === "swap") ? list.some(e => e[2] === "swap" && e[3] === "waiting") : null;
+    out.push({ sha, short: sha.slice(0, 7), start, steps, commits, state, waited,
+      live: cache && Math.max(cache, steps.upload && steps.upload.end || 0), subject: commits.length ? commits[0].replace(/^\S+ /, "") : "" });
+  }
+  out.sort((a, b) => b.start - a.start);
+  // A newer deploy whose binary reached the box before this one went live replaced it
+  for (let i = 1; i < out.length; i++) {
+    if (out[i].state === "running" && out.slice(0, i).some(d => d.steps.build && d.steps.build.status === "done")) out[i].state = "superseded";
+  }
+  return out;
+}
+
+// Typical times from recent deploys that went live: start to live, and per step. Deploys
+// whose renderer waited for a new views file (a part's code changed) take longer, so
+// those are compared with their own kind when there are 2 or more
+function deployTimes(list, d) {
+  const done = list.filter(x => x.state === "live" && x !== d).slice(0, 12);
+  const same = d.waited == null ? [] : done.filter(x => x.waited === d.waited);
+  const pool = same.length >= 2 ? same : done;
+  const step = {};
+  for (const [k] of DEPLOY_STEPS) {
+    step[k] = median(pool.map(x => x.steps[k]).filter(s => s && s.status === "done" && s.start != null).map(s => s.end - s.start));
+  }
+  return { total: median(pool.map(x => x.live - x.start)), n: pool.length, kind: pool === same && same.length >= 2, step };
+}
+function etaText(d, list = deployList()) {
+  const t = deployTimes(list, d);
+  if (t.total == null) return "no finished deploy yet to time it by";
+  const at = d.start + t.total;
+  const basis = `median ${span(t.total)} over the last ${t.n} deploys${t.kind ? (d.waited ? " that changed a views part" : " that changed no views part") : ""}`;
+  return at > nowS() ? `expected live around ${hm(at)} (${basis})` : `taking longer than usual (${basis})`;
+}
+
+VIEWS.deploys = body => {
+  const list = deployList();
+  section(body, "Deploys", "Every push to main: the check on the Mac, the build and copy, the deploy round on the box and the renderer swap, until the site serves it. Times in UK time; steps from data/deploys.tsv on the box (docs/hosting.md, Deploy events).");
+  if (!list.length) {
+    body.append(el("p", { class: "sub" }, L ? "No deploy events yet: the next push records them." : "The live API is unavailable and the snapshot has no deploy events."));
+    return;
+  }
+  list.slice(0, 25).forEach((d, i) => {
+    const [label, cls] = DEPLOY_STATE[d.state];
+    // The newest and any still running open; the rest one line each until opened
+    const open = i === 0 || d.state === "running";
+    const c = el("details", { class: "card deploy" + (d.state === "running" ? " running" : ""), open });
+    // No "ago" here: render() keeps a details open by its summary's text
+    let when = `pushed ${uk(d.start)}`;
+    if (d.state === "live") when += `, live at ${hm(d.live)} after ${span(d.live - d.start)}`;
+    else if (d.state === "running") when += `, ${etaText(d, list)}`;
+    else if (d.state === "superseded") when += ", replaced by a newer deploy before it went live";
+    c.append(el("summary", { class: "deploy-head" },
+      el("span", { class: "pill " + cls }, label),
+      el("code", {}, d.short),
+      el("b", {}, d.subject ? d.subject.slice(0, 120) + (d.subject.length > 120 ? "…" : "") : d.state === "skipped" ? "docs or research only" : "(no commit message recorded)"),
+      el("span", { class: "sub" }, when)));
+    if (d.state === "skipped" || d.state === "refused") {
+      const s = d.steps.deploy || d.steps.ci;
+      if (s) c.append(el("p", { class: "sub" }, s.detail));
+    } else {
+      const times = d.state === "running" ? deployTimes(list, d).step : {};
+      const t = el("table", { class: "steps" }, el("thead", {}, el("tr", {},
+        ...["Step", "Status", "Started", "Ended", "Took", "Detail"].map(h => el("th", {}, h)))));
+      const tb = el("tbody");
+      for (const [k, name, what] of DEPLOY_STEPS) {
+        const s = d.steps[k];
+        let status = s ? s.status : d.state === "running" ? "pending" : d.state === "live" ? "skipped" : "none";
+        if (!s && k === "ci") status = "info";
+        const [sl, scls] = STEP_STATE[status];
+        let took = s && s.end != null && s.start != null ? span(s.end - s.start) : "";
+        if (s && s.end == null && s.start != null) {
+          took = span(nowS() - s.start) + " so far";
+          if (times[k] != null) took += `, usually ${span(times[k])}`;
+        }
+        const detail = s ? s.detail : k === "ci" ? "not recorded (pushed with --no-verify, or before 17 Oct)" : "";
+        tb.append(el("tr", { class: status === "failed" ? "failed" : null },
+          el("td", { title: what }, name),
+          el("td", {}, el("span", { class: "pill " + scls }, sl)),
+          el("td", { class: "num" }, s && s.start != null ? hm(s.start) : ""),
+          el("td", { class: "num" }, s && s.end != null ? hm(s.end) : ""),
+          el("td", { class: "num" }, took),
+          el("td", { class: "msg" }, detail)));
+      }
+      t.append(tb);
+      c.append(el("div", { class: "table-scroll" }, t));
+    }
+    if (d.commits.length > 1 || (d.commits.length === 1 && d.state !== "skipped")) {
+      const det = el("details", {}, el("summary", {}, `${d.commits.length} commit${d.commits.length > 1 ? "s" : ""}`));
+      det.append(el("ul", { class: "commits" }, ...d.commits.map(m => el("li", {}, el("code", {}, m.split(" ")[0]), " " + m.slice(m.indexOf(" ") + 1)))));
+      c.append(det);
+    }
+    body.append(c);
+  });
 };
 
 // Upload times binned per hour: the hours, or the counts

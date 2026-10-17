@@ -391,6 +391,11 @@ test "admin page from the fixture games and a crawl log" {
     try tmp.dir.createDirPath(io, "backups/segments");
     try tmp.dir.writeFile(io, .{ .sub_path = "backups/segments/a", .data = "12345" });
     try tmp.dir.writeFile(io, .{ .sub_path = "crawl.args", .data = "--proxy 10.0.0.3:8092\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "deploys.tsv", .data = "time\tsha\tstep\tstatus\tdetail\n" ++
+        "1760224000\tab12cd\tdeploy\tstart\tdeploy/box.sh web start on the Mac\n" ++
+        "1760224010\tab12cd\tcommit\tinfo\tab12cd fix EUW1_7123456's timeline\n" ++
+        "1760224020\tnot-a-sha\tdeploy\tok\tdropped\n" ++
+        "1760224030\tab12cd\tswap\tok\tmeiolol-render@a serving; stopped meiolol-render@b\n" });
 
     const out = try std.fs.path.join(arena, &.{ dir, "admin" });
     for (0..2) |_| try admin.generate(gpa, io, db, .{
@@ -422,6 +427,7 @@ test "admin page from the fixture games and a crawl log" {
         "\"storage\":{\"generated\":",
         "\"rows\":[[\"meiolol\",\"matches\",\"table\",4096,12]]",
         "\"backups\":{\"bytes\":5,\"files\":1,\"newest\":",
+        "\"deploy_events\":[[1760224000,\"ab12cd\",\"deploy\",\"start\",",
         "\"riot\":{\"app_limit\":\"20:1,100:120\",\"method_limits\":{},\"crawl_args\":\"--proxy 10.0.0.3:8092\"," ++
             "\"key_problems\":[[1760223780,\"error(riot): N on /lol/match/vN/matches/…: key missing or expired\"]," ++
             "[1760223780,\"KEY REJECTED\"]]}",
@@ -445,6 +451,9 @@ test "admin page from the fixture games and a crawl log" {
         "\"queues\":{\"match\":",
         "\"disk\":[100,40,60],\"files\":[{\"name\":\"meiolol.db\",",
         "\"actions\":[[1760223900,\"crawl-restart\",\"ok\",\"\"]]",
+        "\"deploys\":[[1760224000,\"ab12cd\",\"deploy\",\"start\",\"deploy/box.sh web start on the Mac\"]," ++
+            "[1760224010,\"ab12cd\",\"commit\",\"info\",\"ab12cd fix …'s timeline\"]," ++
+            "[1760224030,\"ab12cd\",\"swap\",\"ok\",\"meiolol-render@a serving; stopped meiolol-render@b\"]]",
         "\"running\":{\"eval\":null,\"action\":{\"name\":\"site-build\",\"since\":1760224190}}}",
     }) |want| if (std.mem.indexOf(u8, live, want) == null) {
         std.debug.print("live.json lacks {s}\n{s}\n", .{ want, live });
