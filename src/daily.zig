@@ -27,6 +27,9 @@ const log = std.log.scoped(.daily);
 pub const first_day = 20737;
 /// Shorter games are mostly early surrenders: little to explain
 const min_duration_s = 15 * 60;
+/// Each of the ten picks must be this share of its role's games: off-role and rare picks
+/// leave every lane row with too few games to say anything. ~37% of games pass (16.20)
+const min_role_share = 0.01;
 const tries = 64;
 
 pub const Options = struct {
@@ -242,6 +245,7 @@ fn make(
         const match_id = try arena.dupe(u8, q.bytes(0));
         if (isUsed(used.items, match_id)) continue;
         var puzzle = try load(arena, db, st, match_id, rand) orelse continue;
+        if (!usualPicks(st, puzzle.teams)) continue;
         puzzle.n = n;
         puzzle.date = try arena.print("{f}", .{Date.fromDay(day)});
         try used.appendSlice(arena, match_id);
@@ -249,6 +253,16 @@ fn make(
         return try std.json.Stringify.valueAlloc(arena, puzzle, .{});
     }
     return null;
+}
+
+fn usualPicks(st: *const Stats, teams: [2][5]u32) bool {
+    const games: f64 = @floatFromInt(st.games);
+    for (teams) |team| for (Role.all) |r| {
+        const c = st.index(team[@backingInt(r)]).?;
+        const role_games: f64 = @floatFromInt(st.champRole(r, c).games);
+        if (role_games < min_role_share * games) return false;
+    };
+    return true;
 }
 
 /// Null when the game is unusable: a position missing or doubled, a champion the
@@ -589,4 +603,10 @@ test "puzzles are made once, anonymised and published" {
     try testing.expectEqualStrings(old_data, third[1].data);
     const saved = try std.Io.Dir.cwd().readFileAlloc(io, four, arena, .unlimited);
     try testing.expectEqualStrings(files[0].data, saved);
+
+    // A top laner never seen in jungle makes the game unusable
+    try testing.expect(usualPicks(&st, p.teams));
+    var swapped = p.teams;
+    std.mem.swap(u32, &swapped[0][0], &swapped[0][1]);
+    try testing.expect(!usualPicks(&st, swapped));
 }
