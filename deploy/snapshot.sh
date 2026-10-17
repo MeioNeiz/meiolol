@@ -51,9 +51,12 @@ make_snap() {
     bin=$BIN
     [[ -e "$out" || -e "$raw" ]] && die "$out exists"
     [[ -f ~/.config/meiolol/snap-salt ]] || die "no salt at ~/.config/meiolol/snap-salt"
-    # Here: the real-id copy and the anonymised one side by side, ~2x the box's dbs
+    # Here: the real-id copy and the anonymised one side by side, ~2x what the box copies.
+    # The copy's size, not the files': raw.db goes without timeline_docs, most of it (17
+    # Oct: 3 GB of summaries in a 40 GB raw.db), which refused a box with room to spare
     local need
-    need=$(box "du -cb ~/ml/meiolol/data/{meiolol,timeline,raw}.db | tail -n 1 | cut -f1")
+    need=$(box 'cd ~/ml/meiolol/data && echo $(( $(du -cb meiolol.db timeline.db | tail -n 1 | cut -f1)
+        + $(sqlite3 "file:$PWD/raw.db?mode=ro" "SELECT coalesce(sum(length(body)), 0) FROM raw_docs") ))')
     (( $(df -k "$ROOT/data" | awk 'NR == 2 { print $4 }') * 1024 > 3 * need )) \
         || die "not enough space in data/ for 3x $need bytes"
 
@@ -72,9 +75,8 @@ make_snap() {
     box bash -s <<EOF
 set -euo pipefail
 cd ~/ml/meiolol/data
-need=\$(du -cb meiolol.db timeline.db raw.db | tail -n 1 | cut -f1)
 free=\$(df --output=avail -B1 ~ | tail -n 1)
-(( free > 2 * need )) || { echo "box: \$free bytes free for \$need"; exit 1; }
+(( free > 2 * $need )) || { echo "box: \$free bytes free for $need"; exit 1; }
 mkdir ~/$name
 for d in meiolol timeline; do
     nice -n 10 sqlite3 "file:\$PWD/\$d.db?mode=ro" "VACUUM INTO '\$HOME/$name/\$d.db'"
