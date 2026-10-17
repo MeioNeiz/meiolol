@@ -135,6 +135,110 @@ pub fn predict(m: *const Model, q: *const api.Query) api.Prediction {
     return out;
 }
 
+/// docs/model.md "Draft model file": the same shapes as draft.zig's Term and Pairs
+pub const Term = struct {
+    champion: u32,
+    role: u8,
+    games: u32,
+    /// Weighted base, logit
+    b: f32,
+    /// Its sd from the smoothed rate's binomial variance
+    sd: f32,
+    u: []const f32 = &.{},
+    v: []const f32 = &.{},
+    s: []const f32 = &.{},
+};
+pub const PairGroup = struct { name: []const u8, kind: []const u8, r: u8, q: u8, sd: f32, fitted: u32, shipped: u32 };
+pub const PairCell = struct { group: u32, a: u32, b: u32, theta: f64, games: u32 };
+pub const Pairs = struct { min_games: u32, groups: []const PairGroup, cells: []const PairCell };
+pub const Export = struct {
+    kind: []const u8,
+    dim: u32,
+    intercept: []const f32,
+    w: [25]f32,
+    z: [25]f32,
+    terms: []const Term,
+    pairs: ?Pairs,
+};
+
+const role_names = [_][]const u8{ "top", "jungle", "middle", "bottom", "support" };
+
+/// Every pair term as draft.zig's cells, weights folded in: allies r < q; matchups of role r
+/// against role q (r < q) from r's side, the scorer negating red's r against blue's q; lane
+/// opponents once per unordered pair, a < b, from a's side
+pub fn exportModel(m: *const Model, arena: std.mem.Allocator) !Export {
+    var terms: std.ArrayList(Term) = .empty;
+    var bit = m.base.iterator();
+    while (bit.next()) |e| {
+        const n = e.value_ptr.*;
+        const k = e.key_ptr.*;
+        const p = (n.wins + 0.5 * base_prior) / (n.games + base_prior);
+        try terms.append(arena, .{
+            .champion = @intCast(k & 0xffff),
+            .role = @intCast(k >> 16),
+            .games = @intFromFloat(n.games),
+            .b = @floatCast(w_base * base(m, k)),
+            .sd = @floatCast(w_base / @sqrt((n.games + base_prior) * p * (1 - p))),
+        });
+    }
+    var groups: std.ArrayList(PairGroup) = .empty;
+    // ally r<q, matchup r<q, lane r: group index by (kind, r, q)
+    var at: [3][5][5]u32 = undefined;
+    for (0..5) |r| for (r..5) |q| {
+        for ([_][]const u8{ "ally", "matchup", "lane" }, 0..) |kind, ki| {
+            if ((ki < 2 and r == q) or (ki == 2 and r != q)) continue;
+            at[ki][r][q] = @intCast(groups.items.len);
+            try groups.append(arena, .{
+                .name = try std.fmt.allocPrint(arena, "{s} {s}-{s}", .{ kind, role_names[r], role_names[q] }),
+                .kind = if (ki == 0) "ally" else "matchup",
+                .r = @intCast(r),
+                .q = @intCast(q),
+                .sd = 0,
+                .fitted = 0,
+                .shipped = 0,
+            });
+        }
+    };
+    var cells: std.ArrayList(PairCell) = .empty;
+    for ([_]*const Map{ &m.ally, &m.enemy }, 0..) |map, mi| {
+        var it = map.iterator();
+        while (it.next()) |e| {
+            const a = e.key_ptr.* >> 32;
+            const b = e.key_ptr.* & 0xffff_ffff;
+            const ca: u32 = @intCast(a & 0xffff);
+            const cb: u32 = @intCast(b & 0xffff);
+            const ra: usize = @intCast(a >> 16);
+            const rb: usize = @intCast(b >> 16);
+            const ba = base(m, a);
+            const bb = base(m, b);
+            const n = e.value_ptr.*;
+            const g: u32, const theta: f64 = if (mi == 0)
+                .{ at[0][ra][rb], w_duo * delta(n, ba + bb) }
+            else if (ra < rb)
+                .{ at[1][ra][rb], w_matchup * delta(n, ba - bb) }
+            else if (ra == rb and ca < cb)
+                .{ at[2][ra][rb], w_lane * delta(n, ba - bb) }
+            else
+                continue;
+            groups.items[g].fitted += 1;
+            groups.items[g].shipped += 1;
+            try cells.append(arena, .{ .group = g, .a = ca, .b = cb, .theta = theta, .games = @intFromFloat(n.games) });
+        }
+    }
+    // No side intercept, on any platform
+    const intercept = try arena.alloc(f32, 256);
+    @memset(intercept, 0);
+    return .{
+        .kind = "draft",
+        .dim = 0,
+        .intercept = intercept,
+        .w = @splat(0),
+        .z = @splat(0),
+        .terms = terms.items,
+        .pairs = .{ .min_games = 1, .groups = groups.items, .cells = cells.items },
+    };
+}
+
 pub fn deinit(m: *Model, gpa: std.mem.Allocator) void {
     m.base.deinit(gpa);
     m.ally.deinit(gpa);

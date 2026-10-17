@@ -4005,6 +4005,29 @@ src/lab/addinputs.zig builds its inputs for both, so the shipped model is the ev
 one) on every played game, -Dcand unused; needs seat stats.
 Admin only: the public site never shows "this draft wins X%" (docs/learned.md). Run it
 into a run dir on the Mac (~/ml/runs/<stamp>-draft-export); lab-push.sh sends the newest.
+Built with -Dcand=src/lab/cand/win-draft it exports the shipped model (kind "draft",
+17 Oct): b the weighted base, pairs every ally pair and matchup cell with the term weight
+folded into theta (min_games 1, nothing left out), intercept 0, temperature 1 (pass
+`--temperature 1`: the cand default is 0.80); the scorer check came out at 3e-8 on 500
+test games, so the tester scores drafts as the app and site do. Its companion,
+`meiolol-lab champcomp SNAP --export DIR` (same cand), writes DIR/draft-comp.json:
+
+- format meiolol-champcomp, version 1; meta {snapshot, offset "win-draft", fit_games
+  (dev-val's: dev games, no test look), what, folds and devval {mean, half, n} (nats a
+  game against the offset), better (of 5), clear, tests, bh}
+- traits [8 labels]; features [16 {name, label, mean, sd}]: the enemy's five, then the
+  seat's four allies; mean and sd standardise the raw set traits
+- seats [[champion, role, magic, dmg, v1..v7]] and role_seats [5][magic, dmg, v1..v7]
+  (an empty slot or a champion-role with no profile): a set's AP share is its summed
+  magic over summed dmg (0.5 with none), every other trait the sum of v
+- cells [{champion, role, games, centre[16], dev[16], sd[16], clear [feature indices]}],
+  champion-roles with any nonzero deviation only: a seat's term on its team's logit is
+  sum_f dev[f] * ((x[f] - mean[f]) / sd[f] - centre[f]); team terms left out
+  (-0.00001 ± 0.00005)
+- refs [{label, teams, blue}]: blue's part (blue's seat terms minus red's) on 6 dev-val
+  games; the tester checks itself against them (1e-6) and adds the part to the shipped
+  model's logit; draft-ref.json is still checked on the model alone
+
 
 draft-model.json (format meiolol-draft-model, version 4; 3 had no pairs, 2 no
 temperature, 1 no p and no comp):

@@ -42,7 +42,7 @@ const Allocator = std.mem.Allocator;
 const vi = comps.vi;
 
 pub const usage =
-    \\  champcomp SNAP [--permute-profiles SEED] [--shuffle-traits SEED]
+    \\  champcomp SNAP [--permute-profiles SEED] [--shuffle-traits SEED] [--export DIR]
     \\                                  champions into comps, dev only, built with
     \\                                  -Dcand=src/lab/cand/win-ratings (or win-comp, an
     \\                                  offset with the damage mix, or win-draft, the
@@ -51,7 +51,9 @@ pub const usage =
     \\                                  traits beyond ratings and its role's average,
     \\                                  shrunk, on comps' folds and dev-val
     \\                                  (lab/champcomp.zig); SNAP may be plant:SPEC:PATH
-    \\                                  (champ_melee, cell)
+    \\                                  (champ_melee, cell); --export writes
+    \\                                  DIR/draft-comp.json from the dev-val fit for the
+    \\                                  admin Draft tester (offset win-draft)
     \\
 ;
 
@@ -699,6 +701,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     const snap = argv[0];
     var permute: u64 = 0;
     var shuffle: u64 = 0;
+    var export_dir: ?[]const u8 = null;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const a = argv[i];
@@ -708,12 +711,20 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         } else if (std.mem.eql(u8, a, "--shuffle-traits") and i + 1 < argv.len) {
             i += 1;
             shuffle = try std.fmt.parseInt(u64, argv[i], 10);
+        } else if (std.mem.eql(u8, a, "--export") and i + 1 < argv.len) {
+            i += 1;
+            export_dir = argv[i];
         } else {
             std.debug.print("usage:\n{s}", .{usage});
             return 2;
         }
     }
     const data_path = if (try synth.parseArg(snap)) |pa| pa.path else snap;
+    // The tester lays these terms on the shipped model, so they must be fitted beyond it
+    if (export_dir != null and (permute != 0 or shuffle != 0 or !std.mem.eql(u8, cand.name, "win-draft"))) {
+        std.debug.print("champcomp --export: build with -Dcand=src/lab/cand/win-draft, no controls\n", .{});
+        return 2;
+    }
 
     var buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &buf);
@@ -823,6 +834,22 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         if (wi == harness.folds) {
             final_clear = cc;
             try writeOutputs(gpa, arena, io, d, &model, &p, seat_scale, &names, &score_u, cc);
+            if (export_dir) |dir| {
+                var better: u32 = 0;
+                for (gains[0..harness.folds]) |g| better += @intFromBool(g.mean < 0);
+                const meta: ExportMeta = .{
+                    .snapshot = std.fs.path.basename(data_path),
+                    .fit_games = @intCast(fit_games.items.len),
+                    .folds = gainOf(pooled.base.items, pooled.full.items),
+                    .better = better,
+                    .devval = gains[wi],
+                    .clear = cc.clear,
+                    .tests = cc.tests,
+                    .bh = cc.bh,
+                };
+                try writeExport(arena, io, d, &model, &p, seat_scale, &score_u, meta, dir);
+                try w.print("wrote {s}/draft-comp.json\n", .{dir});
+            }
         }
     }
 
@@ -842,6 +869,139 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     });
     try w.flush();
     return 0;
+}
+
+const ExportMeta = struct {
+    snapshot: []const u8,
+    fit_games: u32,
+    folds: Gain,
+    better: u32,
+    devval: Gain,
+    clear: usize,
+    tests: usize,
+    bh: usize,
+};
+
+/// draft-comp.json (format meiolol-champcomp, docs/model.md "Draft model file"): what the
+/// admin Draft tester needs to add each seat's term to the shipped model and split it by
+/// trait. A seat's term on its team's logit is sum_f dev[f] * ((x[f] - mean[f]) / sd[f] -
+/// centre[f]), x its 16 raw features (traitsOf the enemy's five, then of its four allies)
+/// from seat values; an empty slot or a champion-role with no profile is its role's seat.
+/// Team terms are left out (folds: -0.00001 ± 0.00005). Cells with every deviation 0 too
+fn writeExport(
+    arena: Allocator,
+    io: Io,
+    d: *const rows.Data,
+    m: *const Model,
+    p: *const comps.Profiles,
+    sc: Scale,
+    scored: *const Units,
+    meta: ExportMeta,
+    dir: []const u8,
+) !void {
+    const Feature = struct { name: []const u8, label: []const u8, mean: f64, sd: f64 };
+    const CellOut = struct {
+        champion: u32,
+        role: u8,
+        games: u32,
+        centre: [nf]f64,
+        dev: [nf]f64,
+        sd: [nf]f64,
+        /// Features whose posterior is clear (|mean| / sd at or above clear_z); u32, as
+        /// JSON writes a u8 slice as a string
+        clear: []const u32,
+    };
+    const Ref = struct { label: []const u8, teams: [2][5]u32, blue: f64 };
+    const SeatRow = [2 + 1 + nt]f64;
+    var features: [nf]Feature = undefined;
+    for (&features, 0..) |*f, fi| {
+        const label = try std.fmt.allocPrint(arena, "{s} {s}", .{ if (fi < nt) "enemy" else "allies'", trait_words[fi % nt] });
+        f.* = .{ .name = try arena.dupe(u8, featureName(try arena.alloc(u8, 32), fi)), .label = label, .mean = sc.mean[fi], .sd = sc.sd[fi] };
+    }
+    // [champion, role, magic, dmg, v[1..]]: v[0] (AP share) is the set's, not a seat's
+    var seats: std.ArrayList(SeatRow) = .empty;
+    var it = p.raw.iterator();
+    while (it.next()) |e| {
+        const role: usize = @intCast(e.key_ptr.* & 7);
+        const id: u32 = @intCast(e.key_ptr.* >> 3);
+        const st = seatOf(p, id, role);
+        var row: SeatRow = undefined;
+        row[0] = @floatFromInt(id);
+        row[1] = @floatFromInt(role);
+        row[2] = st.magic;
+        row[3] = st.dmg;
+        @memcpy(row[4..], st.v[1..]);
+        try seats.append(arena, row);
+    }
+    var role_seats: [5][1 + nt]f64 = undefined;
+    for (&role_seats, 0..) |*row, r| {
+        // No champion has id 0: raw_of falls back to the role's
+        const st = seatOf(p, 0, r);
+        row[0] = st.magic;
+        row[1] = st.dmg;
+        @memcpy(row[2..], st.v[1..]);
+    }
+    var cells: std.ArrayList(CellOut) = .empty;
+    for (m.cells, m.ests, m.post) |cell, e, post| {
+        if (!e.ok()) continue;
+        var any = false;
+        var out: CellOut = .{ .champion = @intCast(cell >> 3), .role = @intCast(cell & 7), .games = e.n, .centre = e.mean_x, .dev = undefined, .sd = undefined, .clear = &.{} };
+        var clear: std.ArrayList(u32) = .empty;
+        for (post, 0..) |q, f| {
+            out.dev[f] = q.mean;
+            out.sd[f] = q.sd;
+            any = any or q.mean != 0;
+            if (q.sd > 0 and @abs(q.mean) / q.sd >= clear_z) try clear.append(arena, @intCast(f));
+        }
+        out.clear = clear.items;
+        if (any) try cells.append(arena, out);
+    }
+    // Real scored games: blue's comp part, sum of blue's seat terms minus red's
+    var refs: std.ArrayList(Ref) = .empty;
+    for (0..@min(scored.teams.items.len / 2, 6)) |k| {
+        var blue: f64 = 0;
+        for (0..10) |j| {
+            const st = scored.seats.items[10 * k + j];
+            const t = m.seatTerm(st.cell, &st.x, null);
+            blue += if (j < 5) t else -t;
+        }
+        try refs.append(arena, .{ .label = "dev-val game", .teams = d.games[scored.teams.items[2 * k].game].teams, .blue = blue });
+    }
+    const File = struct {
+        format: []const u8 = "meiolol-champcomp",
+        version: u32 = 1,
+        meta: struct {
+            snapshot: []const u8,
+            offset: []const u8 = "win-draft",
+            fit_games: u32,
+            what: []const u8 = "champion-role deviations from their role's average slope on the enemy's and allies' traits, beyond the shipped model, shrunk; dev games, no test look",
+            folds: Gain,
+            better: u32,
+            devval: Gain,
+            clear: usize,
+            tests: usize,
+            bh: usize,
+        },
+        roles: []const []const u8 = &role_names,
+        traits: []const []const u8,
+        features: []const Feature,
+        seats: []const SeatRow,
+        role_seats: []const [1 + nt]f64,
+        cells: []const CellOut,
+        refs: []const Ref,
+    };
+    const file: File = .{
+        .meta = .{ .snapshot = meta.snapshot, .fit_games = meta.fit_games, .folds = meta.folds, .better = meta.better, .devval = meta.devval, .clear = meta.clear, .tests = meta.tests, .bh = meta.bh },
+        .traits = &trait_words,
+        .features = &features,
+        .seats = seats.items,
+        .role_seats = &role_seats,
+        .cells = cells.items,
+        .refs = refs.items,
+    };
+    try Io.Dir.cwd().createDirPath(io, dir);
+    const json = try std.json.Stringify.valueAlloc(arena, file, .{});
+    try Io.Dir.cwd().writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ dir, "draft-comp.json" }), .data = json });
 }
 
 /// Raw per-cell refits on the replication games, against the model's clear deviations

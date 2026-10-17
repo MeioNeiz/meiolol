@@ -257,6 +257,14 @@ fn paramsOf(arena: std.mem.Allocator, e: anytype) !Params {
         }
         out.comp = .{ .stats = stats, .S = c.S, .A = c.A, .S_sd = c.S_sd, .A_sd = c.A_sd, .team = team, .beta = c.beta };
     };
+    // A candidate's own pair cells (win-draft: the shipped model's duos and matchups)
+    if (@hasField(@TypeOf(e), "pairs")) if (e.pairs) |pr| {
+        const groups = try arena.alloc(PairGroup, pr.groups.len);
+        for (groups, pr.groups) |*g, x| g.* = .{ .name = x.name, .kind = x.kind, .r = x.r, .q = x.q, .sd = x.sd, .fitted = x.fitted, .shipped = x.shipped };
+        const cells = try arena.alloc(PairCell, pr.cells.len);
+        for (cells, pr.cells) |*c, x| c.* = .{ .group = x.group, .a = x.a, .b = x.b, .theta = x.theta, .games = x.games };
+        out.pairs = .{ .min_games = pr.min_games, .groups = groups, .cells = cells };
+    };
     return out;
 }
 

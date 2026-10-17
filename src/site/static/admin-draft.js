@@ -19,13 +19,21 @@ function draftState() {
 function saveDraft(d) { store("draft2", d); render(true); }
 
 async function loadDraftModel() {
+  // Champion-into-comp terms are optional: without them the model scores as exported
+  DRAFT.cc = null; DRAFT.ccErr = null;
+  try {
+    const C = await getJson("training/draft-comp.json");
+    DRAFT.cc = champComp(C);
+    if (!DRAFT.cc) throw new Error(`draft-comp.json is format "${C.format}" version ${C.version}; this page reads meiolol-champcomp version 1`);
+  } catch (e) { if (!/^404/.test(e.message)) DRAFT.ccErr = e.message; }
   try {
     DRAFT.model = await getJson("training/draft-model.json");
-    DRAFT.m = draftModel(DRAFT.model);
+    DRAFT.m = draftModel(DRAFT.model, DRAFT.cc);
     if (!DRAFT.m) throw new Error(`draft-model.json is format "${DRAFT.model.format}" version ${DRAFT.model.version}; this page reads meiolol-draft-model versions 1 to 4`);
     DRAFT.ref = await getJson("training/draft-ref.json").catch(() => null);
     DRAFT.err = null;
-    DRAFT.check = DRAFT.m && DRAFT.ref ? draftCheck(DRAFT.m, DRAFT.ref) : null;
+    // draft-ref.json is the exported model alone: checked without the comp terms
+    DRAFT.check = DRAFT.m && DRAFT.ref ? draftCheck(DRAFT.cc ? draftModel(DRAFT.model) : DRAFT.m, DRAFT.ref) : null;
   } catch (e) { DRAFT.model = null; DRAFT.m = null; DRAFT.err = e.message; }
   // The lane model is optional: without it the suggester shows only "Best for this draft"
   DRAFT.lane = null; DRAFT.laneErr = null; DRAFT.laneCheck = null;
@@ -39,6 +47,55 @@ async function loadDraftModel() {
   if (ui.tab === "models" && ui.cat === "draft") render(true);
 }
 
+// Champion-into-comp terms (draft-comp.json, `meiolol-lab champcomp --export`, docs/model.md
+// "Draft model file"): each seat's own lean into the enemy's five and its four allies, on
+// top of the shipped model (offset win-draft). A seat's term on its team's logit is
+// sum_f dev[f] * ((x[f] - mean[f]) / sd[f] - centre[f]), x from seat values: AP share of
+// the set's damage, then sums of the other traits; an empty slot or a champion-role with
+// no profile is the role's seat, and a champion-role with no cell adds nothing
+function champComp(C) {
+  if (!C || C.format !== "meiolol-champcomp" || C.version !== 1) return null;
+  const nt = C.traits.length, F = C.features;
+  const seats = new Map(C.seats.map(r => [r[0] + ":" + r[1], r.slice(2)]));
+  const cells = new Map(C.cells.map(c => [c.champion + ":" + c.role, c]));
+  const seatOf = (id, r) => (id && seats.get(id + ":" + r)) || C.role_seats[r];
+  const traits = set => {
+    const t = new Array(nt).fill(0);
+    let magic = 0, dmg = 0;
+    for (const s of set) { magic += s[0]; dmg += s[1]; for (let i = 1; i < nt; i++) t[i] += s[1 + i]; }
+    t[0] = dmg > 0 ? magic / dmg : 0.5;
+    return t;
+  };
+  // Seat (side, r)'s term and its parts by feature, null without a cell
+  const seat = (teams, side, r) => {
+    const cell = teams[side][r] && cells.get(teams[side][r] + ":" + r);
+    if (!cell) return null;
+    const S = teams.map(t => t.map((id, k) => seatOf(id, k)));
+    const x = [...traits(S[1 - side]), ...traits(S[side].filter((_, k) => k !== r))];
+    const parts = F.map((f, i) => cell.dev[i] * ((x[i] - f.mean) / f.sd - cell.centre[i]));
+    const lean = F.map((f, i) => (x[i] - f.mean) / f.sd - cell.centre[i]);
+    return { cell, parts, lean, term: parts.reduce((a, b) => a + b, 0) };
+  };
+  // Blue's part: blue's seat terms minus red's
+  const part = teams => {
+    let x = 0;
+    for (let side = 0; side < 2; side++) for (let r = 0; r < 5; r++) {
+      const s = seat(teams, side, r);
+      if (s) x += side ? -s.term : s.term;
+    }
+    return x;
+  };
+  const check = () => {
+    let worst = 0;
+    for (const ref of C.refs || []) worst = Math.max(worst, Math.abs(part(ref.teams) - ref.blue));
+    const n = (C.refs || []).length;
+    if (!n) return null;
+    return worst > 1e-6 ? { ok: false, text: `Champion-into-comp terms differ from meiolol-lab's reference (largest gap ${worst.toExponential(1)}): don't trust them.` }
+      : { ok: true, text: `Champion-into-comp terms match meiolol-lab on ${n} reference games (largest gap ${worst.toExponential(1)}).` };
+  };
+  return { C, F, seat, part, check };
+}
+
 // The exported model (docs/model.md "Draft model file"; Scorer in src/lab/draft.zig is the
 // reference): champions, play share per role on the newest patch, blue's win chance with a
 // 95% interval for a draft, and the candidates for a slot. A draft here is
@@ -47,8 +104,8 @@ async function loadDraftModel() {
 // each slot's profile p summed per team, P_b'S P_b - P_r'S P_r + P_b'A P_r. Version 3 adds
 // model.temperature: chances are sigmoid(temperature * logit) (calibration, draft.zig).
 // Version 4 adds model.pairs (null without): the additive model's pair cells, one number
-// per pair of champions (Scorer.pairLogit)
-function draftModel(M) {
+// per pair of champions (Scorer.pairLogit). cc (champComp, or null) adds its seat terms
+function draftModel(M, cc = null) {
   if (!M || M.format !== "meiolol-draft-model" || ![1, 2, 3, 4].includes(M.version)) return null;
   const terms = new Map(M.model.terms.map(t => [t.champion + ":" + t.role, t]));
   const cells = new Map(M.cells.map(c => [c.champion + ":" + c.role, c]));
@@ -106,7 +163,7 @@ function draftModel(M) {
   // teams[side][role]: champion id, 0 empty
   const score = teams => {
     const sl = slots(teams), [B, R] = sl;
-    let logit = intercept + compPart(sl) + pairPart(teams), v = 0;
+    let logit = intercept + compPart(sl) + pairPart(teams) + (cc ? cc.part(teams) : 0), v = 0;
     for (let r = 0; r < 5; r++) {
       logit += B[r].b - R[r].b;
       v += B[r].sd ** 2 + R[r].sd ** 2;
@@ -187,8 +244,42 @@ function draftModel(M) {
     });
     return out.sort((x, y) => Math.abs(y.pp) - Math.abs(x.pp));
   };
+  // Each champion-into-comp part of the picking side's logit when `id` fills its empty slot,
+  // in pp as pairReasons: the pick's own lean by trait, then each other seat's change (its
+  // largest trait named); a range from the deviation's sd on the pick's own parts
+  const ccReasons = (teams, side, r, id) => {
+    if (!cc) return [];
+    const t = teams.map(x => x.slice());
+    t[side][r] = 0;
+    const p0 = score(t).p, before = t.map((x, s) => x.map((_, k) => cc.seat(t, s, k)));
+    t[side][r] = id;
+    const p1 = score(t).p;
+    const l0 = Math.log(p0 / (1 - p0)) * (side ? -1 : 1), l1 = Math.log(p1 / (1 - p1)) * (side ? -1 : 1);
+    const slope = Math.abs(l1 - l0) > 1e-9 ? (sig(l1) - sig(l0)) / (l1 - l0) : sig(l1) * (1 - sig(l1));
+    const out = [], who = c => names.get(c) || "#" + c;
+    const own = cc.seat(t, side, r);
+    if (own) cc.F.forEach((f, i) => {
+      if (!own.parts[i]) return;
+      const clear = own.cell.clear.includes(i);
+      out.push({ pp: 100 * slope * temp * own.parts[i], half: 100 * slope * temp * 1.96 * own.cell.sd[i] * Math.abs(own.lean[i]),
+        note: clear ? null : "shrunk, not clear", what: `${f.label} ${own.lean[i] >= 0 ? "high" : "low"} for ${who(id)}` });
+    });
+    for (let s = 0; s < 2; s++) for (let k = 0; k < 5; k++) {
+      if (s === side && k === r) continue;
+      // A seat's cell doesn't depend on the slot, so it had a term before too
+      const a = before[s][k], b = cc.seat(t, s, k);
+      if (!b) continue;
+      const d = (b.term - a.term) * (s === side ? 1 : -1);
+      if (Math.abs(d) < 1e-9) continue;
+      const moved = j => b.parts[j] - a.parts[j];
+      const i = b.parts.reduce((best, _, j) => Math.abs(moved(j)) > Math.abs(moved(best)) ? j : best, 0);
+      out.push({ pp: 100 * slope * temp * d, half: 0, note: "their own lean",
+        what: `${s === side ? "your" : "their"} ${who(t[s][k])} (${ROLE[k]}) does ${moved(i) >= 0 ? "better" : "worse"} with ${cc.F[i].label} ${b.lean[i] >= a.lean[i] ? "higher" : "lower"}` });
+    }
+    return out.sort((x, y) => Math.abs(y.pp) - Math.abs(x.pp));
+  };
   const m = {
-    M, score, teamsOf, comp, compReasons, pairs, pairReasons,
+    M, score, teamsOf, comp, compReasons, pairs, pairReasons, cc, ccReasons,
     compPart: teams => compPart(slots(teams)),
     pairPart,
     champs: M.champions.slice().sort((a, b) => a.name.localeCompare(b.name)),
@@ -203,10 +294,10 @@ function draftModel(M) {
         const x = term || avg[r];
         rows.push({ side, role: r, champion: id || 0, average: !term, b: x.b, sd: x.sd, part: side === 0 ? x.b : -x.b });
       }));
-      const c = compPart(slots(teams));
-      const lin = intercept + c + sumR(rows.map(x => x.part));
+      const c = compPart(slots(teams)), ccx = cc ? cc.part(teams) : 0;
+      const lin = intercept + c + ccx + sumR(rows.map(x => x.part));
       const p = score(teams), logit = Math.log(p.p / (1 - p.p)) / temp;
-      return { intercept, rows, comp: c, pairs: logit - lin, logit, temp, p };
+      return { intercept, rows, comp: c, champcomp: ccx, pairs: logit - lin, logit, temp, p };
     },
     // A slot's candidates: games in the role >= min_games, not picked, not banned; win and
     // change for the side filling it, sorted by win then champion id (as draft-ref.json)
@@ -323,6 +414,9 @@ function draftView(body) {
   const dev = meta.dev || {};
   sec.append(el("p", { class: "sub", title: dev.what || "" }, [meta.name, meta.training_games != null ? `${num(meta.training_games)} training games to ${meta.newest_game}` : null, meta.patch ? `play rates from patch ${meta.patch}` : null, dev.accuracy != null ? `right ${pct(dev.accuracy)} of ${num(dev.games)} practice games (coin flip 50%)` : null].filter(Boolean).join(" · ")));
   if (DRAFT.check) sec.append(el("div", { class: "health " + (DRAFT.check.ok ? "good" : "bad") }, el("b", {}, DRAFT.check.ok ? "✓ " : "⚠ "), DRAFT.check.text));
+  if (DRAFT.ccErr) sec.append(el("div", { class: "health bad" }, el("b", {}, "The champion-into-comp terms didn't load: "), DRAFT.ccErr));
+  const ccCheck = m.cc && m.cc.check();
+  if (ccCheck) sec.append(el("div", { class: "health " + (ccCheck.ok ? "good" : "bad") }, el("b", {}, ccCheck.ok ? "✓ " : "⚠ "), ccCheck.text));
   if (DRAFT.laneErr) sec.append(el("div", { class: "health bad" }, el("b", {}, "The lane model didn't load: "), DRAFT.laneErr));
   if (DRAFT.laneCheck) sec.append(el("div", { class: "health " + (DRAFT.laneCheck.ok ? "good" : "bad") }, el("b", {}, DRAFT.laneCheck.ok ? "✓ " : "⚠ "), DRAFT.laneCheck.text));
   if (DRAFT.lane) {
@@ -330,8 +424,15 @@ function draftView(body) {
     sec.append(el("p", { class: "sub" }, `Lane suggestions: early-game model ${lm.name !== "candidate" ? lm.name + " " : ""}on ${num(lm.training_games)} games to ${lm.newest_game}.` +
       (dev ? ` It predicts the gold lead at 14 ${dev.removed_pct.toFixed(0)}% better than champion averages alone, so matchups nudge the numbers rather than decide them.` : "")));
   }
-  if (m.pairs) sec.append(el("p", { class: "sub" }, `Pair terms: one learnt number for each pair of allies and each matchup seen in at least ${num(m.pairs.min_games)} games (rarer pairs count as average), plus the team's mix of magic and physical damage. ` +
+  if (m.pairs && M.model.kind === "draft") sec.append(el("p", { class: "sub" }, "The shipped model, as the app and site score drafts: each champion's strength in its role plus every pair of allies and every matchup, each pulled towards what the two champions' strengths predict and weighted as the daily eval tuned them. " +
     "The range on a win chance covers the champion ratings only; each reason shows the games behind it."));
+  else if (m.pairs) sec.append(el("p", { class: "sub" }, `Pair terms: one learnt number for each pair of allies and each matchup seen in at least ${num(m.pairs.min_games)} games (rarer pairs count as average), plus the team's mix of magic and physical damage. ` +
+    "The range on a win chance covers the champion ratings only; each reason shows the games behind it."));
+  if (m.cc) {
+    const cm = m.cc.C.meta, g = x => `${x.mean >= 0 ? "+" : "−"}${Math.abs(1000 * x.mean).toFixed(2)} ± ${(1000 * x.half).toFixed(2)}`;
+    sec.append(el("p", { class: "sub", title: cm.what }, `Champion-into-comp terms on top: each champion's own lean into the enemy team's and its allies' ${m.cc.C.traits.join(", ")}, beyond the matchups and duos. ` +
+      `${cm.clear} of ${num(cm.tests)} leans are clear; they predicted newer games better in ${cm.better} of 5 rounds (${g(cm.folds)} milli-nats a game), on ${num(cm.fit_games)} games of ${cm.snapshot}, before any held-out look. Reasons marked "shrunk, not clear" are small leans the model keeps but can't vouch for.`));
+  }
   else if (m.comp) sec.append(el("p", { class: "sub" }, `Team comp terms: each champion in a role is described by ${m.comp.stats.length} numbers (${m.comp.stats.map(x => x.label).join(", ")}), summed per team, and the model weighs how they combine within a team and against the enemy. ` +
     "The range on a win chance covers the champion ratings only; each comp reason shows its own ± range."));
   else if (!M.has_pairs) sec.append(el("div", { class: "health warn" }, el("b", {}, "Caveat: "), "the model has no counter or synergy terms yet. It ranks by champion strength in the role; other picks shift the numbers, not the order."));
@@ -489,6 +590,7 @@ function draftDebug(m, d, name) {
     el("li", {}, `Intercept (blue side, ${m.M.meta.platform || "EUW1"}): ${x.intercept >= 0 ? "+" : ""}${x.intercept.toFixed(4)}.`),
     el("li", {}, `Pair terms: ${m.M.has_pairs ? (x.pairs >= 0 ? "+" : "") + x.pairs.toFixed(4) : "none in this model"}.`),
     el("li", {}, `Comp terms: ${m.comp ? (x.comp >= 0 ? "+" : "") + x.comp.toFixed(4) : "none in this model"}.`),
+    el("li", {}, `Champion-into-comp terms: ${m.cc ? (x.champcomp >= 0 ? "+" : "") + x.champcomp.toFixed(4) : "none loaded (draft-comp.json)"}.`),
     el("li", {}, `Logit ${x.logit.toFixed(4)}${x.temp !== 1 ? `, times the calibration temperature ${x.temp} = ${(x.temp * x.logit).toFixed(4)}` : ""}, so blue ${pct(x.p.p)} (range ${pct(x.p.lo)} to ${pct(x.p.hi)}).`),
     el("li", {}, `Sides swapped: blue would have ${pct(swapped)}; the two add up to ${pct(x.p.p + swapped)} (exactly 100% only without a side term).`)));
   return box;
@@ -541,11 +643,11 @@ const SUGGEST_MIN_SHARE = 0.01;
 // empty slot: "enemy magic damage high × your armour lean low: −1.2 pp (±0.8)", "against
 // their Darius (top): −1.4 pp (812 games)"; null without comp or pair terms
 function compWhy(m, d, si, ri, id) {
-  if (!m.comp && !m.pairs) return null;
+  if (!m.comp && !m.pairs && !m.cc) return null;
   const teams = m.teamsOf(d);
-  const top = [...m.compReasons(teams, si, ri, +id), ...m.pairReasons(teams, si, ri, +id)].sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp)).slice(0, 2);
+  const top = [...m.compReasons(teams, si, ri, +id), ...m.pairReasons(teams, si, ri, +id), ...m.ccReasons(teams, si, ri, +id)].sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp)).slice(0, 3);
   if (!top.length || Math.abs(top[0].pp) < 0.05) return m.pairs ? "the other picks change little" : "team comp changes little";
-  return top.map(x => `${x.what}: ${x.pp >= 0 ? "+" : "−"}${Math.abs(x.pp).toFixed(1)} pp (${x.note || (x.half > 0 ? "±" + x.half.toFixed(1) : "no range exported")})`).join("; ");
+  return top.map(x => `${x.what}: ${x.pp >= 0 ? "+" : "−"}${Math.abs(x.pp).toFixed(1)} pp (${[x.half > 0 ? "±" + x.half.toFixed(1) : null, x.note].filter(Boolean).join(", ") || "no range exported"})`).join("; ");
 }
 
 // Suggestions for the open slot, each with its reason as a plain sentence. Ranked by the
