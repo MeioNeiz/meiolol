@@ -1,6 +1,7 @@
 // Daily Draft: puzzles from src/daily.zig (daily/index.json lists them, daily/<n>.json
-// each). Guess the hidden champion, then the winner; the reveal explains with this
-// patch's numbers. Results, streak and archive stay in this browser (localStorage).
+// each). Guess the hidden champion, then the winner; the reveal explains in words from
+// this patch's games, never a win chance or points (production-key.md). Results, streak
+// and archive stay in this browser (localStorage). Reasons: reasons.js.
 "use strict";
 
 const ROLES = [
@@ -15,10 +16,9 @@ const SIDES = ["Blue", "Red"];
 const KEY = "meiolol.daily.v1";
 // Win-rate numbers are noise until there is a lot of data (draft model eval: level with
 // a coin flip on 6k games). A pair edge needs PAIR_GAMES games and must clear chance
-// (|pp| > 1.96 SE, SE = 50 / sqrt(n) points); a champion's role numbers need ROLE_GAMES;
-// whole-draft ratings need DRAFT_GAMES games on the patch
+// (|pp| > 1.96 SE, SE = 50 / sqrt(n) points); reading whole drafts needs DRAFT_GAMES
+// games on the patch
 const PAIR_GAMES = 400;
-const ROLE_GAMES = 300;
 const DRAFT_GAMES = 100000;
 const clear = (pp, n) => n >= PAIR_GAMES && Math.abs(pp) > 98 / Math.sqrt(n);
 
@@ -63,7 +63,6 @@ function longDate(iso) {
   });
 }
 
-const signed = (x) => `${x >= 0 ? "+" : ""}${x.toFixed(1)}`;
 
 // Tick and cross, not green and red squares: the shapes read without colour
 const glyphs = (marks) => [...marks].map((m) => (m === "1" ? "✅" : "❌")).join("");
@@ -167,7 +166,9 @@ class Game {
     $("number").textContent = `#${p.n}`;
     this.renderBack();
     const tier = p.tier ? `, mostly ${p.tier[0]}${p.tier.slice(1).toLowerCase()} players` : "";
-    $("about").textContent = `${longDate(p.date)}. Ranked solo/duo, patch ${p.patch}${tier}.`;
+    // The date is the puzzle's, not the game's (src/daily.zig min_age_days)
+    $("about").textContent =
+      `Puzzle for ${longDate(p.date)}: a ranked solo/duo game from patch ${p.patch}, at least a week old${tier}.`;
     this.renderBoard();
     this.renderPick();
     $("q-side").hidden = !this.picked;
@@ -251,20 +252,22 @@ class Game {
       `You guessed ${this.name(this.mine.pick)} and ${SIDES[this.mine.side].toLowerCase()} side.`;
 
     const enough = p.games >= DRAFT_GAMES;
-    const blue = Math.round(p.blue_win * 100);
-    const favoured = blue === 50 ? null : blue > 50 ? 0 : 1;
+    const from = p.numbers_patch ?? p.patch;
+    const games = `${p.games.toLocaleString("en-GB")} ranked solo games on patch ${from}`;
     let read;
-    if (Math.abs(blue - 50) < 3) {
-      read = "Close to even: the draft set up little, and the game was decided in play.";
-    } else if (favoured === p.winner) {
-      read = `${SIDES[favoured]} side had the better odds on paper and won.`;
+    if (!enough) {
+      read = `Patch ${from} has ${p.games.toLocaleString("en-GB")} ranked solo games so far: too few to read whole drafts, so lanes and reasons below show only where the games behind them are enough.`;
+    } else if (p.lean === "blue" || p.lean === "red") {
+      const side = p.lean === "blue" ? 0 : 1;
+      read = `On paper the draft leaned ${p.lean} (${games}). ` + (side === p.winner
+        ? `${SIDES[side]} side won.`
+        : `${SIDES[side]} side still lost: a draft sets the odds, not the result.`);
+    } else if (p.lean === "close") {
+      read = `On paper, close: the draft set up little, and the game was decided in play (${games}).`;
     } else {
-      read = `${SIDES[favoured]} side had the better odds on paper and still lost: a draft sets the odds, not the result.`;
+      read = `From ${games}:`;
     }
-    const games = `${p.games.toLocaleString("en-GB")} ranked solo games on patch ${p.patch}`;
-    $("estimate").textContent = enough
-      ? `By this patch's numbers (${games}), the two drafts rate about ${blue} to ${100 - blue} for blue side. ${read}`
-      : `This patch has ${games} so far: too few to rate whole drafts or picks, so the numbers below are only shown where the games behind them are enough.`;
+    $("estimate").textContent = read;
 
     const lanes = $("lanes");
     lanes.replaceChildren();
@@ -283,7 +286,7 @@ class Game {
       cell(this.champ(p.teams[0][r], 24));
       cell(this.champ(p.teams[1][r], 24));
       const edge = shown
-        ? `${signed(Math.abs(lane.pp))} ${lane.pp > 0 ? "blue" : "red"}`
+        ? lane.pp > 0 ? "blue" : "red"
         : lane.games < PAIR_GAMES ? "few games" : "no clear edge";
       cell(edge, "num");
       cell(String(lane.games), "num");
@@ -300,9 +303,7 @@ class Game {
       head.append(this.champ(o.id));
       const sub = document.createElement("span");
       sub.className = "muted";
-      sub.textContent = enough
-        ? ` ${signed(o.pp)} points in this draft, ${o.games} games in ${role}`
-        : ` ${o.games} games in ${role} this patch`;
+      sub.textContent = ` ${o.games} games in ${role} on patch ${from}`;
       head.append(sub);
       if (o.id === p.played) {
         const tag = document.createElement("span");
@@ -312,11 +313,12 @@ class Game {
       }
       li.append(head);
       const solid = o.reasons.filter((r) =>
-        r.kind === "base" ? enough && r.games >= ROLE_GAMES : clear(r.pp, r.games));
+        r.kind !== "base" && detectedReason(p.hidden_role, r) && clear(r.pp, r.games));
       for (const r of solid) {
         const why = document.createElement("div");
         why.className = "why";
-        why.textContent = this.describe(r);
+        why.textContent =
+          `${reasonWords(r, this.name(r.id))} (${roleName[r.role].toLowerCase()}, ${r.games} games).`;
         li.append(why);
       }
       notes.append(li);
@@ -350,14 +352,6 @@ class Game {
       back.append("Archive puzzle, not today's: it doesn't count towards days in a row. ", a);
       $("about").after(back);
     }
-  }
-
-  describe(r) {
-    const pts = signed(r.pp);
-    const role = roleName[r.role].toLowerCase();
-    const n = `${r.games} games`;
-    if (r.kind === "base") return `${pts} ${r.pp >= 0 ? "strong" : "weak"} in ${role} this patch (${n})`;
-    return `${pts} ${r.kind === "ally" ? "with" : "vs"} ${this.name(r.id)} (${role}, ${n})`;
   }
 
   // Days in a row: consecutive published puzzles each finished on its own day, ending with

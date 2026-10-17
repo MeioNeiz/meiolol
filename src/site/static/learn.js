@@ -31,19 +31,6 @@ const THIN = 200;
 const MIN_REASON_PP = 0.3;
 // Pairs with fewer games are mostly chance at today's volumes
 const MIN_REASON_GAMES = 50;
-// Role pairings the draft model detects (docs/learned.md, identified matchups): every
-// lane matchup, mid vs bot, bot vs support and top vs mid across the lanes, and among
-// allies bot with support. Reasons from any other pairing are noise, so never shown
-const pairKey = (a, b) => [a, b].sort().join(" ");
-const DETECTED = {
-  enemy: new Set([
-    ...ROLES.map(([r]) => pairKey(r, r)),
-    pairKey("middle", "bottom"),
-    pairKey("bottom", "utility"),
-    pairKey("top", "middle"),
-  ]),
-  ally: new Set([pairKey("bottom", "utility")]),
-};
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -663,11 +650,8 @@ class Practice {
       }
       for (const r of o.reasons) {
         if (r.kind === "base" || Math.abs(r.pp) < MIN_REASON_PP || r.games < MIN_REASON_GAMES) continue;
-        if (!DETECTED[r.kind]?.has(pairKey(d.hidden_role, r.role))) continue;
-        const other = this.name(r.id);
-        const text = r.kind === "enemy"
-          ? r.pp > 0 ? `Tends to do well against ${other}` : `Tends to struggle against ${other}`
-          : r.pp > 0 ? `Tends to win more with ${other}` : `Tends to win less with ${other}`;
+        if (!detectedReason(d.hidden_role, r)) continue;
+        const text = reasonWords(r, this.name(r.id));
         line(r.pp > 0 ? "good" : "bad", `${text} (${roleName[r.role].toLowerCase()}, ${r.games} games).`);
       }
       li.append(this.laneCurve(o, enemy));

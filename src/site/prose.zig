@@ -221,10 +221,11 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\</ul>
         \\<h2>Daily Draft</h2>
         \\<p>One complete ranked game a day, the same for everyone, with every player
-        \\identity removed: no names, Riot IDs, match ids or dates. One champion is hidden
-        \\among four that were plausible in that draft; the reveal shows what was played,
-        \\who won and what this patch's numbers say about the lanes. It describes the game,
-        \\it does not grade the pick.</p>
+        \\identity removed: no names, Riot IDs, match ids or dates, and the game is at least a
+        \\week old. One champion is hidden among four that were plausible in that draft; the
+        \\reveal shows what was played, who won and, in words, what this patch's games say
+        \\about the draft and its lanes. It describes the game, it does not grade the
+        \\pick.</p>
         \\<h2>What meiolol never does</h2>
         \\<ul>
         \\<li>Show other players' names, accounts or statistics.</li>
@@ -274,7 +275,8 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\clearing site data removes them.</p>
         \\<p>Daily Draft puzzles are real ranked games with every player identity removed:
         \\no names, Riot IDs, match ids or game dates, only champions, bans, patch, an
-        \\approximate rank tier and team totals.</p>
+        \\approximate rank tier and team totals. Each game is at least a week old; the date
+        \\shown is the puzzle's, not the game's.</p>
         \\<h2>Your games</h2>
         \\<p>When you enter a Riot ID on <a href="your.html">Your games</a>, we ask the Riot
         \\Games API for that player's recent Summoner's Rift games and show their own lane
@@ -288,6 +290,10 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\are kept only as one-way hashes of their identifiers. A player nobody has looked up
         \\for 30 days is deleted. We don't record who looked up whom, and lookups are not in
         \\our server logs.</p>
+        \\<p>Your games remembers the last five Riot IDs you looked up, and the newest game
+        \\it saw for each, in your own browser (local storage) to offer them again and count
+        \\new games; they are never sent to us. "Forget on this device" under the lookup,
+        \\or clearing site data, removes them.</p>
         \\<p>To remove your games and stop us collecting them again, use "Remove a Riot ID"
         \\on the Your games page. You prove the account is yours by setting a given free
         \\profile icon in the League client for a minute; we then delete everything about

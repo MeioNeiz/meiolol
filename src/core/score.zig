@@ -260,6 +260,43 @@ pub fn draftWin(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
     return sigmoid(draftTerms(stats, opts, teams).weighted(opts.weights));
 }
 
+/// Standard error of draftTerms' weighted log-odds under the model's own assumptions:
+/// each term's posterior variance is about 4 / (games + prior games) (a logit near 50%),
+/// summed as independent. Says how sure the model is given its priors, not how well it
+/// predicts games
+pub fn draftSe(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
+    const w = opts.weights;
+    const termVar = struct {
+        fn f(weight: f64, n: u32, k: f64) f64 {
+            return weight * weight * 4 / (@as(f64, @floatFromInt(n)) + k);
+        }
+    }.f;
+    var c: [2][5]?usize = undefined;
+    for (teams, &c) |team, *cs| for (team, cs) |id, *ci| {
+        ci.* = stats.index(id);
+    };
+    var v: f64 = 0;
+    for (c) |cs| for (cs, Role.all, 0..) |ca, ra, i| {
+        const a = ca orelse continue;
+        v += termVar(w.base, stats.champRole(ra, a).games, opts.base_prior_games);
+        for (cs[i + 1 ..], Role.all[i + 1 ..]) |cb, rb| if (cb) |b| {
+            const n = stats.ally(ra, rb, a, b).games;
+            v += termVar(w.duo, n, opts.duo_prior_games orelse opts.prior_games);
+        };
+    };
+    for (c[0], Role.all) |ca, ra| {
+        const a = ca orelse continue;
+        for (c[1], Role.all) |ce, re| if (ce) |e| {
+            const n = stats.enemy(ra, re, a, e).games;
+            v += if (ra == re)
+                termVar(w.lane, n, opts.lane_prior_games orelse opts.prior_games)
+            else
+                termVar(w.matchup, n, opts.matchup_prior_games orelse opts.prior_games);
+        };
+    }
+    return @sqrt(v);
+}
+
 /// The roles recommend infers for a team whose positions are hidden: `out[i]` for
 /// `picks[i]`, null when the stats file does not know the champion. Roles given in
 /// `picks` are kept
@@ -753,6 +790,15 @@ test "full draft agrees with recommend" {
     const terms = draftTerms(&t.stats, plain, teams);
     try testing.expectApproxEqAbs(sigmoid(terms.total()), draftWin(&t.stats, plain, teams), 1e-12);
     try testing.expect(@abs(p - draftWin(&t.stats, plain, teams)) > 1e-6);
+
+    // More games behind every term, a narrower range; the same either way round
+    const se = draftSe(&t.stats, test_opts, teams);
+    try testing.expectApproxEqAbs(se, draftSe(&t.stats, test_opts, .{ teams[1], teams[0] }), 1e-12);
+    var loose = test_opts;
+    loose.base_prior_games = 0;
+    loose.prior_games = 1;
+    try testing.expect(draftSe(&t.stats, loose, teams) > se);
+    try testing.expect(se > 0);
 
     var out: [4]Suggestion = undefined;
     const s = recommend(&t.stats, .{

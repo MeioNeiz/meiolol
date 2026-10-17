@@ -268,6 +268,7 @@ const shared_assets = [_]File{
     .{ .path = "style.css", .data = @embedFile("static/style.css") },
     .{ .path = "favicon.svg", .data = @embedFile("static/favicon.svg") },
     .{ .path = "daily.js", .data = @embedFile("static/daily.js") },
+    .{ .path = "reasons.js", .data = @embedFile("static/reasons.js") },
     .{ .path = "your.js", .data = @embedFile("static/your.js") },
     .{ .path = "review.js", .data = @embedFile("static/review.js") },
     .{ .path = "home.js", .data = @embedFile("static/home.js") },
@@ -580,7 +581,7 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
     }
     const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
         .{ "method.html", "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
-        .{ "daily.html", "Daily Draft", "Guess the hidden champion and the winner of a real ranked draft, then see what the numbers say.", .daily, daily_page.page },
+        .{ "daily.html", "Daily Draft", "Guess the hidden champion and the winner of a real ranked draft, then see what this patch's games say about it.", .daily, daily_page.page },
         .{ "download.html", "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, prose.download },
         .{ "your.html", "Your games", "Look yourself up: your lane in each recent ranked game against how the matchup typically goes, with your highlights, streaks and record per matchup.", .your, your_page.page },
         .{ "privacy.html", "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },

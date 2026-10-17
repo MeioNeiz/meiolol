@@ -5,9 +5,11 @@
 //! correct pick" (docs/concept.md).
 //!
 //! Anonymised: puzzles carry no Riot IDs, PUUIDs, match ids or game dates, only
-//! champions, bans, patch, a rank tier, game length and team totals. Each puzzle is made
-//! once and kept in DIR/daily/<n>.json (public content), its numbers refreshed while its
-//! patch is current; DIR/daily/used.txt lists the match ids behind them so none repeats,
+//! champions, bans, patch, a rank tier, game length and team totals, and the game is at
+//! least `min_age_days` old so a puzzle cannot point to one played that day (in a patch's
+//! first week, the previous patch's). Each puzzle is made once and kept in
+//! DIR/daily/<n>.json (public content), its numbers refreshed while the patch they come
+//! from is current; DIR/daily/used.txt lists the match ids behind them so none repeats,
 //! and is never published.
 
 const std = @import("std");
@@ -30,6 +32,8 @@ const min_duration_s = 15 * 60;
 /// Each of the ten picks must be this share of its role's games: off-role and rare picks
 /// leave every lane row with too few games to say anything. ~37% of games pass (16.20)
 const min_role_share = 0.01;
+/// The page says "at least a week old"
+pub const min_age_days = 7;
 const tries = 64;
 
 pub const Options = struct {
@@ -53,8 +57,6 @@ pub const Reason = struct {
 
 pub const Option = struct {
     id: u32,
-    /// Win chance points this champion adds over an average one, in this draft
-    pp: f64,
     /// Games on this champion in the hidden role
     games: u32,
     reasons: []const Reason,
@@ -66,6 +68,10 @@ pub const HiddenBy = enum {
     fit,
 };
 
+/// Which side the draft leaned to: blue or red only when the model's 95% range
+/// (score.draftSe) excludes even. The page shows no draft win chance (J1)
+pub const Lean = enum { close, blue, red };
+
 pub const Lane = struct {
     /// Blue's side, percentage points beyond the two champions' own ratings
     pp: f64,
@@ -76,7 +82,11 @@ pub const Puzzle = struct {
     n: u32,
     /// The puzzle's day, not the game's
     date: []const u8,
+    /// The game's
     patch: []const u8,
+    /// Patch whose games the numbers come from when not the game's own: a game from the
+    /// previous patch in a patch's first week
+    numbers_patch: ?[]const u8 = null,
     /// Median visible rank of the players whose rank we know; null when few are known
     tier: ?[]const u8,
     /// Games behind the numbers
@@ -95,8 +105,8 @@ pub const Puzzle = struct {
     minutes: u32,
     kills: [2]u32,
     gold: [2]u32,
-    /// Blue's win chance by this patch's numbers, 0..1
-    blue_win: f64,
+    /// Null on puzzles made before it, which kept a win chance instead
+    lean: ?Lean = null,
     /// Same-role matchups, indexed by role
     lanes: [5]Lane,
 };
@@ -168,13 +178,14 @@ fn refresh(
     name: []const u8,
     data: []const u8,
 ) ![]const u8 {
-    var p = std.json.parseFromSliceLeaky(Puzzle, arena, data, .{}) catch |err| {
+    // Older puzzles carry fields since dropped (blue_win, option pp)
+    var p = std.json.parseFromSliceLeaky(Puzzle, arena, data, .{
+        .ignore_unknown_fields = true,
+    }) catch |err| {
         log.info("{s} kept as made: {t}", .{ name, err });
         return data;
     };
-    for (opts.patches) |patch| {
-        if (std.mem.eql(u8, patch, p.patch)) break;
-    } else return data;
+    if (!isCurrent(opts.patches, p.numbers_patch orelse p.patch)) return data;
     var ids: [4]u32 = undefined;
     for (p.options, &ids) |o, *id| id.* = o.id;
     if (!try numbers(arena, st, &p, ids)) return data;
@@ -207,8 +218,9 @@ pub fn isUsed(used: []const u8, match_id: []const u8) bool {
     return false;
 }
 
-/// Puzzle JSON for day `day` from a random unused game, recording its match id in
-/// `used`. Null when no candidate works.
+/// Puzzle JSON for day `day` from a random unused game at least `min_age_days` old,
+/// recording its match id in `used`: from `opts.patches`, else (a patch's first week)
+/// the patch before. Null when no candidate works.
 fn make(
     arena: std.mem.Allocator,
     db: store.Db,
@@ -218,16 +230,33 @@ fn make(
     day: u32,
     used: *std.ArrayList(u8),
 ) !?[]const u8 {
-    const patch_json = try std.json.Stringify.valueAlloc(arena, opts.patches, .{});
+    if (try makeFrom(arena, db, st, opts, opts.patches, n, day, used)) |made| return made;
+    const previous = try previousPatch(arena, db, opts) orelse return null;
+    return makeFrom(arena, db, st, opts, &.{previous}, n, day, used);
+}
+
+fn makeFrom(
+    arena: std.mem.Allocator,
+    db: store.Db,
+    st: *const Stats,
+    opts: Options,
+    patches: []const []const u8,
+    n: u32,
+    day: u32,
+    used: *std.ArrayList(u8),
+) !?[]const u8 {
+    const patch_json = try std.json.Stringify.valueAlloc(arena, patches, .{});
     const platform_json = try std.json.Stringify.valueAlloc(arena, opts.platforms, .{});
     const where =
         \\FROM matches
         \\WHERE patch IN (SELECT value FROM json_each(?)) AND queue_id = ?
         \\  AND platform IN (SELECT value FROM json_each(?))
         \\  AND remake = 0 AND winning_team IS NOT NULL AND duration_s >= ?
+        \\  AND game_start <= ?
     ;
+    const cutoff_ms = (@as(i64, opts.today) - min_age_days) * std.time.ms_per_day;
     const total = try db.scalar("SELECT count(*) " ++ where, .{
-        patch_json, stats.ranked_solo, platform_json, min_duration_s,
+        patch_json, stats.ranked_solo, platform_json, min_duration_s, cutoff_ms,
     }) orelse 0;
     if (total == 0) return null;
 
@@ -239,7 +268,7 @@ fn make(
     for (0..tries) |_| {
         const offset = rand.uintLessThan(u64, @intCast(total));
         try q.bind(.{
-            patch_json, stats.ranked_solo, platform_json, min_duration_s, offset,
+            patch_json, stats.ranked_solo, platform_json, min_duration_s, cutoff_ms, offset,
         });
         if (!try q.step()) continue;
         const match_id = try arena.dupe(u8, q.bytes(0));
@@ -248,11 +277,35 @@ fn make(
         if (!usualPicks(st, puzzle.teams)) continue;
         puzzle.n = n;
         puzzle.date = try arena.print("{f}", .{Date.fromDay(day)});
+        if (!isCurrent(opts.patches, puzzle.patch)) puzzle.numbers_patch = newest(opts.patches);
         try used.appendSlice(arena, match_id);
         try used.append(arena, '\n');
         return try std.json.Stringify.valueAlloc(arena, puzzle, .{});
     }
     return null;
+}
+
+/// The newest patch older than all of `opts.patches` with ranked solo games
+fn previousPatch(arena: std.mem.Allocator, db: store.Db, opts: Options) !?[]const u8 {
+    for (try stats.patches(arena, db, opts.platforms)) |p| {
+        for (opts.patches) |current| {
+            if (stats.patchOrder(p, current) != .lt) break;
+        } else return p;
+    }
+    return null;
+}
+
+fn isCurrent(patches: []const []const u8, patch: []const u8) bool {
+    for (patches) |p| if (std.mem.eql(u8, p, patch)) return true;
+    return false;
+}
+
+fn newest(patches: []const []const u8) []const u8 {
+    var best = patches[0];
+    for (patches[1..]) |p| if (stats.patchOrder(p, best) == .gt) {
+        best = p;
+    };
+    return best;
 }
 
 pub fn usualPicks(st: *const Stats, teams: [2][5]u32) bool {
@@ -284,6 +337,7 @@ pub fn load(
         if (!try q.step()) return null;
         const m = q.row(struct { patch: []const u8, winning_team: i64, duration_s: i64 });
         p.patch = try arena.dupe(u8, m.patch);
+        p.numbers_patch = null;
         p.winner = if (m.winning_team == 100) 0 else 1;
         p.minutes = @intCast(@divFloor(m.duration_s + 30, 60));
     }
@@ -373,7 +427,7 @@ fn hideBestFit(arena: std.mem.Allocator, st: *const Stats, p: *Puzzle) !bool {
 }
 
 /// Fills what `st` says about the draft: games, the options (`ids`, in this order),
-/// blue's win chance and the lanes. False when `st` cannot score one of the champions.
+/// its lean and the lanes. False when `st` cannot score one of the champions.
 fn numbers(arena: std.mem.Allocator, st: *const Stats, p: *Puzzle, ids: [4]u32) !bool {
     for (p.teams) |team| for (team) |id| if (st.index(id) == null) return false;
     var draft = try hiddenDraft(arena, p.*);
@@ -394,10 +448,10 @@ fn numbers(arena: std.mem.Allocator, st: *const Stats, p: *Puzzle, ids: [4]u32) 
             .pp = round1(r.pp),
             .games = r.games,
         };
-        o.* = .{ .id = id, .pp = round1(s.pp), .games = s.games, .reasons = reasons };
+        o.* = .{ .id = id, .games = s.games, .reasons = reasons };
     }
     p.games = st.games;
-    p.blue_win = blueWin(st, p.teams);
+    p.lean = lean(st, p.teams);
     for (Role.all) |r| {
         const blue = st.index(p.teams[0][@backingInt(r)]).?;
         const red = st.index(p.teams[1][@backingInt(r)]).?;
@@ -466,25 +520,12 @@ fn options(arena: std.mem.Allocator, st: *const Stats, p: Puzzle, rand: std.Rand
     return ids;
 }
 
-/// Blue's win chance with every slot known: blue's top laner as "me", the rest as
-/// allies and enemies
-fn blueWin(st: *const Stats, teams: [2][5]u32) f64 {
-    var allies: [4]core.Pick = undefined;
-    var enemies: [5]core.Pick = undefined;
-    for (Role.all[1..], &allies) |r, *a| {
-        a.* = .{ .champion = teams[0][@backingInt(r)], .role = r };
-    }
-    for (Role.all, &enemies) |r, *e| {
-        e.* = .{ .champion = teams[1][@backingInt(r)], .role = r };
-    }
-    var out: [1]core.Suggestion = undefined;
-    const s = core.recommend(st, .{
-        .role = .top,
-        .allies = &allies,
-        .enemies = &enemies,
-        .pool = &.{teams[0][0]},
-    }, .{ .min_games = 0 }, &out);
-    return if (s.len == 1) @round(s[0].win * 1000) / 1000 else 0.5;
+/// A side only when the model's 95% range for the draft's log-odds excludes even
+fn lean(st: *const Stats, teams: [2][5]u32) Lean {
+    const opts: score.Options = .{ .min_games = 0 };
+    const x = score.draftTerms(st, opts, teams).weighted(opts.weights);
+    if (@abs(x) <= 1.96 * score.draftSe(st, opts, teams)) return .close;
+    return if (x > 0) .blue else .red;
 }
 
 pub fn round1(x: f64) f64 {
@@ -569,6 +610,8 @@ test "puzzles are made once, anonymised and published" {
     try testing.expect(found);
     try testing.expectEqual(p.played, p.teams[p.hidden_team][@backingInt(p.hidden_role)]);
     try testing.expectEqual(.fit, p.hidden_by);
+    try testing.expect(p.lean != null);
+    try testing.expectEqual(null, p.numbers_patch);
 
     // Kept, not remade; a new game for each new day, never one already used
     var next = opts;
@@ -603,6 +646,18 @@ test "puzzles are made once, anonymised and published" {
     try testing.expectEqualStrings(old_data, third[1].data);
     const saved = try std.Io.Dir.cwd().readFileAlloc(io, four, arena, .unlimited);
     try testing.expectEqualStrings(files[0].data, saved);
+
+    // Games under a week old are never drawn: in a patch's first week the previous
+    // patch's, scored with the current patch's numbers
+    const recent_ms = @as(i64, next.today) * std.time.ms_per_day;
+    try db.run("UPDATE matches SET game_start = ?", .{recent_ms});
+    try db.exec("UPDATE matches SET patch = '16.19', game_start = 0 WHERE match_id LIKE '%0'");
+    next.today += 1;
+    const fourth = try update(arena, io, db, &st, next);
+    const prev = try std.json.parseFromSliceLeaky(Puzzle, arena, fourth[4].data, .{});
+    try testing.expectEqual(8, prev.n);
+    try testing.expectEqualStrings("16.19", prev.patch);
+    try testing.expectEqualStrings("16.20", prev.numbers_patch.?);
 
     // A top laner never seen in jungle makes the game unusable
     try testing.expect(usualPicks(&st, p.teams));

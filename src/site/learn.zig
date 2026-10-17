@@ -180,6 +180,7 @@ pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
     try tpl.render(w,
         \\<script type="application/json" id="checks">{checks}</script>
         \\<script type="application/json" id="glossary">{terms}</script>
+        \\<script src="reasons.js" defer></script>
         \\<script src="learn.js" defer></script>
         \\
     , .{ .checks = tpl.json(checks), .terms = tpl.json(terms) });

@@ -9,9 +9,10 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
     _ = info;
     try w.writeAll(
         \\<h1>Daily Draft <span id="number" class="muted"></span></h1>
-        \\<p class="lead">A real ranked solo game, anonymised: the same one for everyone
-        \\today. One champion is hidden. Guess which of four was played, then which side won.
-        \\The reveal shows what happened and what this patch's numbers say about the draft.</p>
+        \\<p class="lead">A real ranked solo game, anonymised and at least a week old: the
+        \\same one for everyone today. One champion is hidden. Guess which of four was played,
+        \\then which side won. The reveal shows what happened and what this patch's games say
+        \\about the draft.</p>
         \\<p id="status" class="note">Loading…</p>
         \\<div id="daily" hidden>
         \\<p id="about" class="muted"></p>
@@ -35,22 +36,26 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<p id="happened"></p>
         \\<p id="share-row"><button type="button" id="share">Share result</button> <span id="share-note" class="muted"></span></p>
         \\<p id="record" class="muted"></p>
-        \\<h2>What the numbers say</h2>
+        \\<h2>On paper</h2>
         \\<p id="estimate"></p>
         \\<div class="table-scroll"><table class="lanes">
         \\<thead><tr><th>Lane</th><th>Blue</th><th>Red</th><th class="num">Edge</th><th class="num">Games</th></tr></thead>
         \\<tbody id="lanes"></tbody></table></div>
         \\<h3>The four options in this draft</h3>
         \\<ul id="option-notes" class="card notes"></ul>
-        \\<p class="muted">Points are percentage points of win chance, estimated from this
-        \\patch's games. A lane edge is shown only with 400+ games and when it is larger than
-        \\chance alone would give; the rest say "few games" (under 400) or "no clear edge". The numbers describe how
-        \\drafts like this tend to go; they are not a verdict on anyone's pick.
+        \\<p class="muted">From this patch's games. A draft leans to a side only when our
+        \\model is 95% sure it is not even, given how many games stand behind each lane, duo
+        \\and matchup in it; otherwise it reads "close". A lane shows the side ahead, and a
+        \\reason is listed, only with 400+ games and when the difference is larger than chance
+        \\alone would give; other lanes say "few games" (under 400) or "no clear edge". Reasons
+        \\come only from lane matchups and the few other pairings the data shows matter. This
+        \\describes how drafts like this tend to go, not a verdict on anyone's pick.
         \\<a href="method.html">Method</a>.</p>
         \\</section>
         \\<h2>Archive</h2>
         \\<ul id="archive" class="archive"></ul>
         \\</div>
+        \\<script src="reasons.js" defer></script>
         \\<script src="daily.js" defer></script>
         \\
     );
