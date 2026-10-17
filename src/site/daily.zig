@@ -1,5 +1,5 @@
 //! The Daily Draft page: a skeleton that static/daily.js fills from daily/<n>.json
-//! (made by src/daily.zig). Results, streak and archive stay in the browser.
+//! (made by src/daily.zig). Results, days in a row and archive stay in the browser.
 
 const std = @import("std");
 const Writer = std.Io.Writer;
@@ -44,7 +44,7 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<ul id="option-notes" class="card notes"></ul>
         \\<p class="muted">Points are percentage points of win chance, estimated from this
         \\patch's games. A lane edge is shown only with 400+ games and when it is larger than
-        \\chance alone would give; the rest say "more data needed". The numbers describe how
+        \\chance alone would give; the rest say "few games" (under 400) or "no clear edge". The numbers describe how
         \\drafts like this tend to go; they are not a verdict on anyone's pick.
         \\<a href="method.html">Method</a>.</p>
         \\</section>

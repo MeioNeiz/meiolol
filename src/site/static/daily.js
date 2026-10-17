@@ -70,6 +70,8 @@ const glyphs = (marks) => [...marks].map((m) => (m === "1" ? "✅" : "❌")).joi
 const marksText = (marks) =>
   ["pick", "winner"].map((q, i) => `${q} ${marks[i] === "1" ? "right" : "wrong"}`).join(", ");
 
+const guessTag = (right) => tag(right ? "your guess, right" : "your guess");
+
 function tag(text) {
   const t = document.createElement("span");
   t.className = "tag";
@@ -171,7 +173,7 @@ class Game {
       b.classList.toggle("played", this.done && p.winner === side);
       b.replaceChildren(`${SIDES[side]} side`);
       if (this.done && p.winner === side) b.append(" ", tag("won"));
-      else if (this.done && this.mine.side === side) b.append(" ", tag("your guess"));
+      if (this.done && this.mine.side === side) b.append(" ", guessTag(p.winner === side));
       b.onclick = () => this.answer("side", side);
     }
     $("reveal").hidden = !this.done;
@@ -227,7 +229,7 @@ class Game {
       b.classList.toggle("played", this.picked && o.id === p.played);
       // Labels as well as the border colour, which some can't tell apart
       if (this.picked && o.id === p.played) b.append(tag("played"));
-      else if (this.picked && this.mine.pick === o.id) b.append(tag("your guess"));
+      if (this.picked && this.mine.pick === o.id) b.append(guessTag(o.id === p.played));
       b.onclick = () => this.answer("pick", o.id);
       box.append(b);
     }
@@ -275,7 +277,9 @@ class Game {
       cell(label);
       cell(this.champ(p.teams[0][r], 24));
       cell(this.champ(p.teams[1][r], 24));
-      const edge = shown ? `${signed(Math.abs(lane.pp))} ${lane.pp > 0 ? "blue" : "red"}` : "more data needed";
+      const edge = shown
+        ? `${signed(Math.abs(lane.pp))} ${lane.pp > 0 ? "blue" : "red"}`
+        : lane.games < PAIR_GAMES ? "few games" : "no clear edge";
       cell(edge, "num");
       cell(String(lane.games), "num");
       lanes.append(tr);
@@ -315,7 +319,8 @@ class Game {
 
     const stats = this.record();
     $("record").textContent =
-      `Played ${stats.played} · streak ${stats.streak} · both guesses right ${stats.both}` +
+      `Played ${stats.played} · ${stats.streak} ${stats.streak === 1 ? "day" : "days"} in a row · ` +
+      `both guesses right ${stats.both}` +
       (this.isToday ? ` · next puzzle in ${untilMidnight()}` : "");
     $("share").onclick = () => this.share(stats.streak);
   }
@@ -337,7 +342,7 @@ class Game {
       const a = document.createElement("a");
       a.href = location.pathname;
       a.textContent = "Today's puzzle";
-      back.append("Archive puzzle, not today's: it doesn't count towards your streak. ", a);
+      back.append("Archive puzzle, not today's: it doesn't count towards days in a row. ", a);
       $("about").after(back);
     }
   }
@@ -350,7 +355,7 @@ class Game {
     return `${pts} ${r.kind === "ally" ? "with" : "vs"} ${this.name(r.id)} (${role}, ${n})`;
   }
 
-  // Streak: consecutive published puzzles each finished on its own day, ending with
+  // Days in a row: consecutive published puzzles each finished on its own day, ending with
   // today's or the one before (a day without a puzzle does not break it)
   record() {
     const done = (n) => {
@@ -385,7 +390,7 @@ class Game {
     const squares = glyphs(this.mine.marks);
     const url = `${location.origin}${location.pathname}?n=${this.p.n}`;
     const text = `meiolol Daily Draft #${this.p.n}\n${squares} (pick, winner)` +
-      (streak > 1 ? `\n🔥 ${streak} day streak` : "") + `\n${url}`;
+      (streak > 1 ? `\n🔥 ${streak} days in a row` : "") + `\n${url}`;
     const note = $("share-note");
     try {
       if (navigator.share) {
