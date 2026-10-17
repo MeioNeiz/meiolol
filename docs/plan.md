@@ -25,10 +25,9 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
    Oct (35 GB freed inside WSL; C: shrinks only after the compaction). Waits on Jacob:
    docs/compute.md "gpu-box storage" steps 1-2 (partition, wsl-mount.ps1), then an
    agent moves snaps and runs and compacts the WSL disk
-4. Box `contact` file to privacy@meio.lol (R34; decided 14 Oct): terms and privacy
-   still show a Gmail address. The mail worker is deployed but has kept no mail yet
-   (`deploy/mail.sh list` empty, 18 Oct): one test mail from Jacob, then
-   `deploy/box.sh web start privacy@meio.lol`
+4. Done 18 Oct: contact is privacy@meio.lol on terms and privacy (R34). Test mail kept
+   by the worker (`deploy/mail.sh list`); sent straight to Cloudflare's MX over IPv4
+   from the Mac (its IPv6 has no reverse DNS; both OCI hosts block port 25)
 5. Daily Draft's public whole-draft win chance and "+X points" (R16, A3): the item
    reviewers quoted first. In progress with A4 (meiolol-43, pane 1485)
 6. Application text to match the site (A2; Jacob writes, Q1), champ select screenshots,
