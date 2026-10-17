@@ -240,7 +240,7 @@ pub fn download(w: *Writer, info: Info) Writer.Error!void {
     _ = info;
     try w.writeAll(
         \\<div class="prose">
-        \\<h1>Desktop app</h1>
+        \\<h1>Champ select helper <span class="muted">(desktop app)</span></h1>
         \\<p class="lead">In development: a small Windows app that, once you have picked
         \\your champion in champ select, shows how your lane matchup usually unfolds and
         \\your own record in it.</p>
