@@ -1,8 +1,8 @@
 // Champion tables (root.zig tierTable, opponentTable). table[data-sortable]: a click on a
 // th[data-sort] sorts by that column, "num" by each cell's data-v (blank last), "text"
 // by its text; td.rank cells renumber the shown rows. input[data-filter=ID] hides rows
-// of table#ID whose data-name lacks the text. button[data-show-rare=ID] shows the rows
-// marked data-rare in table#ID. By id, not sibling order: markup between them moves.
+// of table#ID whose data-name lacks the text; a search also finds rows marked data-rare,
+// which stay hidden otherwise until button[data-show-rare=ID] shows them. By id, not sibling order: markup between them moves.
 "use strict";
 
 (() => {
@@ -61,14 +61,17 @@
 
   for (const input of document.querySelectorAll("input[data-filter]")) {
     const table = document.getElementById(input.dataset.filter);
-    input.addEventListener("input", () => {
+    const filter = () => {
       const q = input.value.trim().toLowerCase();
       for (const row of table.tBodies[0].rows) {
-        const rare = row.hasAttribute("data-rare") && !table.dataset.showRare;
+        const rare = row.hasAttribute("data-rare") && !table.dataset.showRare && !q;
         row.hidden = rare || !row.dataset.name.toLowerCase().includes(q);
       }
       table._renumber?.();
-    });
+    };
+    input.addEventListener("input", filter);
+    // Back restores the search text after this script ran, with no input event
+    addEventListener("pageshow", () => input.value && filter());
   }
 
   for (const button of document.querySelectorAll("button[data-show-rare]")) {

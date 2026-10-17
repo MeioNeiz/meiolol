@@ -137,18 +137,19 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         const slug = root.roleSlug(r);
         var shown: usize = 0;
         for (list.items) |e| shown += @intFromBool(e.games >= index_default);
-        try tpl.render(w,
-            \\<h2>{role} <span class="muted"><span id="n-{slug}">{n}</span> matchups</span></h2>
+        // One block per role, so a search can drop and reorder them (min-games.js)
+        try tpl.renderPart(w,
+            \\<section data-min-group><h2>{role} <span class="muted"><span id="n-{slug}">{n}</span> matchups</span></h2>
             \\
         , .{ .role = root.roleName(r), .slug = slug, .n = shown });
         if (list.items.len == 0) {
-            try tpl.render(w, "<p class=\"muted\">More data needed.</p>\n", .{});
+            try tpl.renderPart(w, "<p class=\"muted\">More data needed.</p></section>\n", .{});
             continue;
         }
-        try tpl.render(w,
+        try tpl.renderPart(w,
             \\<ul class="matchup-list" data-min-list data-count="n-{slug}">
             \\{items}<li class="empty"{hidden}>None with this many games yet: lower Min games.</li>
-            \\</ul>
+            \\</ul></section>
             \\
         , .{
             .slug = slug,
