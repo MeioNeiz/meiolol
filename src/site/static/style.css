@@ -206,6 +206,15 @@ body:has(#exp-any:checked) .exp:not(.exp-any),
 body:has(#exp-x:checked) .exp:not(.exp-x),
 body:has(#exp-y:checked) .exp:not(.exp-y) { display: none; }
 .chart figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
+/* Matchup pages on wide screens: each chart's caption beside it, not under, so the
+   charts don't leave the right third of the page empty */
+@media (min-width: 1100px) {
+  main:has(> .mu-nav) > figure.chart {
+    max-width: none; display: grid; grid-template-columns: minmax(0, 800px) minmax(240px, 340px);
+    gap: 0 24px; align-items: center;
+  }
+  main:has(> .mu-nav) > figure.chart figcaption { margin: 0 0 8px; }
+}
 .curves-links { font-size: 14px; }
 .matchup-list { columns: 2 260px; padding-left: 18px; }
 .matchup-list li { margin: 2px 0; }
@@ -340,6 +349,7 @@ table.tl .champ img { width: 28px; height: 28px; }
 table.tl .role { color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 table.tl .dim { color: var(--muted); }
 table.tl small { color: var(--faint); font-size: 12px; margin-left: 4px; }
+table.tl th small.sub { display: block; margin: 1px 0 0; font-size: 11px; }
 .wr { display: inline-flex; align-items: center; gap: 10px; }
 .wr b { width: 48px; text-align: right; font-weight: 600; }
 .wr small { width: 36px; text-align: left; margin-left: 0 !important; }
@@ -402,6 +412,8 @@ h3.opp-h .muted { font-weight: 400; font-size: 13px; }
   .table-scroll th, .table-scroll td:first-child, table.tl th { white-space: normal; }
   table.tl td, table.tl th { padding: 4px 3px; }
   table.tl small { margin-left: 2px; font-size: 11px; }
+  /* Gold's 8-in-10 range under the average, so the Games column stays on screen */
+  table.tl .gold + small { display: block; margin-left: 0; }
   table.tl .rank, table.tl .lo { display: none; }
   table.tl .champ { gap: 6px; }
   table.tl .champ img { width: 22px; height: 22px; }
