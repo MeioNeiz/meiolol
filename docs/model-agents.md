@@ -14,7 +14,7 @@ Where things live:
 - Lab tooling: docs/lab-tooling.md (what sessions lost, fixes, backlog)
 - Compute: docs/compute.md (gpu-box, lab-run, snapshots). Lab: docs/lab-agent.md,
   docs/lab-brief.md. Data fields and retention: docs/fields.md, docs/data-safety.md
-- Admin Models tab and Draft tester: https://meiolol.jomify.lol/admin/#models/all and
+- Admin Models tab and Draft tester: https://meio.lol/admin/#models/all and
   #models/draft (admin only)
 
 ## Goals (Jacob)

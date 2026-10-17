@@ -197,7 +197,7 @@ Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB
   crawl.args has it too. Security list rule "meiolol-proxy: Your games service to the
   crawler" (TCP 8092 from 10.0.0.214/32) and an iptables ACCEPT on the box before its
   REJECT (netfilter-persistent), as for render (docs/hosting.md)
-- Check: `curl -s -o /dev/null -w '%{http_code}' https://meiolol.jomify.lol/api/health`
+- Check: `curl -s -o /dev/null -w '%{http_code}' https://meio.lol/api/health`
   answers 401; with the password, {"ok":true,"jobs":N}. Live lookup tested through nginx
   on 2026-10-11 (10 games)
 

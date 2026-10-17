@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The lab runs of the Mac and the gpu-box (~/ml/runs on each, deploy/lab-run.sh) as a web
-# app at https://meiolol.jomify.lol/admin/training/ (basic auth, installable on Mac and
+# app at https://meio.lol/admin/training/ (basic auth, installable on Mac and
 # phone) and the admin page's Training tab. Each call stages the view (page from
 # deploy/training, runs.tsv, each run's metrics.tsv and log tail) and uploads it when it
 # changed, or every 5 min while a run is live so the page can tell a quiet run from a Mac

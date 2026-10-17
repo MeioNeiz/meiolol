@@ -7,8 +7,8 @@ goes live or into the production application.
 ## Decisions for Jacob (fill before publishing)
 
 Decided 2026-10-14: controller "Jacob Maschler, trading as meiolol"; contact
-privacy@jomify.lol, a forward to jombirds@gmail.com (jomify.lol already uses Namecheap
-email forwarding: add the alias there before publishing).
+privacy@meio.lol (Cloudflare Email Routing to Jacob's inbox, 17 Oct; the only address
+published: no personal email on the site).
 
 - **Retention of crawled match rows.** 24 months (Jacob, 2026-10-13): the crawler blanks
   PUUIDs 24 months after the game, as Counterwatch does. Not built yet, needed before
@@ -40,7 +40,7 @@ what you can ask us to do.
 ## Who we are
 
 meiolol is run by Jacob Maschler, trading as meiolol, an individual in the United Kingdom,
-who is the controller of the data described here. Contact: privacy@jomify.lol.
+who is the controller of the data described here. Contact: privacy@meio.lol.
 
 ## The short version
 
@@ -49,7 +49,7 @@ who is the controller of the data described here. Contact: privacy@jomify.lol.
 - To build those statistics we collect ranked match data from the official Riot Games
   API, which includes encrypted player identifiers. We never sell it or share it
 - You can object and have your data removed at any time by emailing us at
-  privacy@jomify.lol, or using "Remove a Riot ID" on the Your games page
+  privacy@meio.lol, or using "Remove a Riot ID" on the Your games page
 
 ## Data from Riot Games
 
@@ -147,7 +147,7 @@ You can ask us to:
 - **Correct** it, though match data comes from Riot as it happened
 - **Restrict** our use of it while a request is considered
 
-Email privacy@jomify.lol for anything the form doesn't cover. We'll ask you to prove you
+Email privacy@meio.lol for anything the form doesn't cover. We'll ask you to prove you
 own the Riot ID (the same profile icon check) and reply within one month. If you're
 unhappy with our answer, you can complain to the UK Information Commissioner's Office
 (ico.org.uk) or, in the EU, to your local data protection authority.

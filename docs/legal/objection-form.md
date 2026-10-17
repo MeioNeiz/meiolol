@@ -55,7 +55,7 @@ to the new PUUID with the new key (built 2026-10-12: src/rekey.zig, runbook in
 docs/data-safety.md "Key switch").
 
 **Fallback:** someone who can't change their icon (banned, lost account, Riot ID
-changed) emails privacy@jomify.lol with what they can show; handled by hand within one
+changed) emails privacy@meio.lol with what they can show; handled by hand within one
 month.
 
 **Abuse:** removing someone requires control of their League account, so nobody can
@@ -111,10 +111,10 @@ You're removed. Reference: [REF]
 You can change your profile icon back now.
 
 Changed your mind, or need something else (a copy of your data, a correction)? Email
-privacy@jomify.lol. More in our [privacy policy](privacy.html).
+privacy@meio.lol. More in our [privacy policy](privacy.html).
 
 ### Can't use this form?
 
 If you can't change your icon (for example, your account is banned), email
-privacy@jomify.lol with your Riot ID and server, and anything that shows it's yours.
+privacy@meio.lol with your Riot ID and server, and anything that shows it's yours.
 We'll reply within one month.

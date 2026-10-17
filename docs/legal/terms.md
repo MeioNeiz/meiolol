@@ -21,10 +21,10 @@ Sections marked *(when live)* go up with their feature.
 
 Last updated [DATE].
 
-These terms cover the meiolol website (meiolol.jomify.lol) and the meiolol desktop app.
+These terms cover the meiolol website (meio.lol) and the meiolol desktop app.
 By using either, you agree to them. meiolol is run by Jacob Maschler, trading as
 meiolol, in the United Kingdom.
-Contact: privacy@jomify.lol.
+Contact: privacy@meio.lol.
 
 ## What meiolol is
 

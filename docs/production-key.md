@@ -90,6 +90,6 @@ stored by match ID. Matchups without enough games are marked on the site.
 
 Data is stored privately and deletion requests will be honoured.
 
-The site is meiolol.jomify.lol.
+The site is meio.lol.
 
 App note: please link PUUID encryption to my personal app MEIOLOL (890240).

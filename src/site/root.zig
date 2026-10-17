@@ -71,7 +71,7 @@ pub const Options = struct {
     static: Static = .all,
     /// Matchup pages with fewer games are left out of the static build (Static.all)
     static_min_games: u32 = 0,
-    /// "https://meiolol.jomify.lol": canonical links and sitemaps, when public
+    /// "https://meio.lol": canonical links and sitemaps, when public
     origin: ?[]const u8 = null,
     /// Matchup pages with fewer games are noindex and left out of the sitemaps
     index_min_games: u32 = 0,

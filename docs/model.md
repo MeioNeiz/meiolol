@@ -15,7 +15,7 @@ Copy of the box DB without touching the live one (python3 on the box, read-only 
 The box runs it daily (deploy/web-loop.sh, ~9 min) into data/eval-history.tsv. Watch it
 from here: `deploy/box.sh model [ROWS] [-f]` (run state, AUC sparklines per model, last
 runs with the best log loss vs coin flip; -f redraws every minute). Charts and the latest
-report: the admin page's Models tab (https://meiolol.jomify.lol/admin/#models/win).
+report: the admin page's Models tab (https://meio.lol/admin/#models/win).
 
 Models tab: one category per docs/learned.md heading, each with what we learnt, the best
 model against its baseline, run cards (plain sentence from meiolol-lab's RESULT line or

@@ -71,7 +71,7 @@ in-game state model) and to the production review list.
   mastery, participants with items/runes/rank snapshot/gold10/14/15. Privacy in the
   crawler: 30-day unseen expiry, players Riot 404s deleted, PUUIDs blanked after 24
   months, plain-PUUID `forgotten` honoured. Per-match errors non-fatal
-- Site (https://meiolol.jomify.lol, preview mode, riot.txt served): "Learn your lane"
+- Site (https://meio.lol, preview mode, riot.txt served): "Learn your lane"
   landing, matchup curve pages (empty until timelines accumulate), Daily Draft, Learn
   (lessons + practice drafts), Pool, learning curves, comeback odds, method page. Win-rate
   edges gated by game counts (draft-model thresholds)
@@ -698,7 +698,7 @@ the real order. Never stage a made-up order meanwhile (Jacob ruled it out).
 ## Open decisions (Jacob)
 
 - Legal: retention periods (docs/legal/privacy.md top). Decided 14
-  Oct: controller "Jacob Maschler, trading as meiolol", contact privacy@jomify.lol
+  Oct: controller "Jacob Maschler, trading as meiolol", contact privacy@meio.lol
   (Namecheap forward to add)
 - Alerts and backups: an ntfy topic for phone alerts (NTFY_TOPIC in .env; the health loop
   only logs until then); install the Mac job (`deploy/box.sh watch install`: notifications
@@ -727,7 +727,7 @@ the real order. Never stage a made-up order meanwhile (Jacob ruled it out).
   `meiolol-cloud`). deploy/web-loop.sh on the box builds and
   uploads (often early in a patch, then hourly on new games); riot.txt from
   ml/meiolol/riot.txt
-- Admin page: https://meiolol.jomify.lol/admin/ (/api/ basic auth; src/admin.zig).
+- Admin page: https://meio.lol/admin/ (/api/ basic auth; src/admin.zig).
   Crawl rates by region from crawl.log report lines, storage growth
   (data/admin-history.tsv), ingest mix, queues, eval, uploads, deploys; rebuilt every
   15 min by the web loop

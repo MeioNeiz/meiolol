@@ -61,7 +61,7 @@ reduce (inputs | fromjson? | select(type == "object" and (.t | type) == "number"
          else .hours[$h].h += 1
             | .hours[$h].pg[$r.u] += 1
             | ($r | domain) as $d
-            | if $d != "" and $d != "meiolol.jomify.lol" then .hours[$h].rf[$d] += 1 else . end
+            | if $d != "" and ($d | IN("meio.lol", "www.meio.lol", "meiolol.jomify.lol") | not) then .hours[$h].rf[$d] += 1 else . end
          end)
         | .hours[$h].ag[$r | family] += 1
         | .hours[$h].rc[if ($r.c // "") == "" then "static" else $r.c end] += 1

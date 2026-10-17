@@ -13,7 +13,7 @@
 # touches data/render.reload: the renderer reads that file in seconds, so the
 # database work happens once, here (docs/hosting.md "Rendering on request"). The
 # meiolol-web ssh alias is user meiolol with a key limited to rsync into /var/www/meiolol
-# (rrsync); nginx there serves meiolol.jomify.lol. Riot's verification string, if any,
+# (rrsync); nginx there serves meio.lol. Riot's verification string, if any,
 # lives in riot.txt beside bin/.
 # Lane curves are rebuilt every `interval` and when the patch changes, one file per site view (EUW
 # and every region, by last 30 days and current patch; the EUW patch file is also the
@@ -236,7 +236,7 @@ while true; do
     fi
     rm -rf data/site.new
     # The core build's and the views file's, so rendered pages match the uploaded ones
-    site_args=(--contact "$contact" --origin https://meiolol.jomify.lol)
+    site_args=(--contact "$contact" --origin https://meio.lol)
     [[ -s riot.txt ]] && site_args+=(--riot-txt "$(<riot.txt)")
     site_start=$SECONDS
     if out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core 2>&1); then
