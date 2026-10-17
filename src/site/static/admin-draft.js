@@ -470,7 +470,8 @@ function draftView(body) {
   if (m.cc) {
     const cm = m.cc.C.meta, g = x => `${x.mean >= 0 ? "+" : "−"}${Math.abs(1000 * x.mean).toFixed(2)} ± ${(1000 * x.half).toFixed(2)}`;
     about.push(el("p", { class: "sub", title: cm.what }, `Champion-into-comp terms on top: each champion's own lean into the enemy team's and its allies' ${m.cc.C.traits.join(", ")}, beyond the matchups and duos. ` +
-      `${cm.clear} of ${num(cm.tests)} leans are clear; they predicted newer games better in ${cm.better} of 5 rounds (${g(cm.folds)} milli-nats a game), on ${num(cm.fit_games)} games of ${cm.snapshot}, before any held-out look. Only clear leans are named as reasons.`));
+      `${cm.clear} of ${num(cm.tests)} leans are clear; with them the model predicted newer games better in ${cm.better} of 5 rounds, on ${num(cm.fit_games)} games, before looking at the games kept back for the final test. Only clear leans are named as reasons.`,
+      el("span", { class: "muted", title: `Log loss change per game in milli-nats (negative is better), ${cm.snapshot}` }, ` (${g(cm.folds)})`)));
   }
   if (DRAFT.lane) {
     const lm = DRAFT.lane.L.meta, dev = (lm.dev || []).find(x => x.outcome === "lanediff14");
@@ -479,8 +480,12 @@ function draftView(body) {
   }
   const from = [["draft", "draft model"], ["comp", "comp terms"], ["lane", "lane model"]].filter(([k]) => DRAFT.from[k]).map(([k, label]) => `${label} ${MODEL_DIRS[DRAFT.from[k]]}`);
   about.push(el("p", { class: "sub" }, `Files: ${from.join(", ")}.`));
-  sec.append(el("details", { class: "about" }, el("summary", { class: "sub" }, [meta.name, meta.training_games != null ? `${num(meta.training_games)} games to ${meta.newest_game}` : null,
-    dev.accuracy != null ? `right ${pct(dev.accuracy)} of ${num(dev.games)} practice games` : null, bad.length ? null : "checks pass"].filter(Boolean).join(" · ")), ...about));
+  // The crawl's scope (docs/learned.md, docs/data.md): ranked solo, Platinum IV and up, nearly
+  // all EUW
+  sec.append(el("details", { class: "about" }, el("summary", { class: "sub" }, [meta.name, "ranked solo, Platinum IV and up, mostly EUW",
+    meta.training_games != null ? `${num(meta.training_games)} games to ${meta.newest_game}` : null,
+    dev.accuracy != null ? `picks the winner in ${pct(dev.accuracy)} of ${num(dev.games)} games it wasn't fitted on (a coin: 50%)` : null,
+    bad.length || !(DRAFT.check || ccCheck || DRAFT.laneCheck) ? null : "page matches the exported files"].filter(Boolean).join(" · ")), ...about));
 
   const w = m.win(d);
   sec.append(el("div", { class: "winbar", role: "img", "aria-label": `Blue ${pct(w.p)}, range ${pct(w.lo)} to ${pct(w.hi)}` },
