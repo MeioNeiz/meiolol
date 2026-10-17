@@ -115,6 +115,10 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         , .{});
         return html.foot(w, p);
     };
+    try w.writeAll(
+        \\<div class="tl-bar" hidden><input type="search" placeholder="Search champion" data-min-search aria-label="Search champion"></div>
+        \\
+    );
     try html.minGames(w, "../", "matchups", &index_floors, index_default, 0);
     for (Role.all) |r| {
         var list: std.ArrayList(IndexEntry) = .empty;
@@ -159,7 +163,7 @@ const IndexEntry = struct { x: Champ, y: Champ, games: u32, thin: bool };
 
 fn indexItem(ctx: struct { std.mem.Allocator, Role }, w: *Writer, e: IndexEntry) !void {
     try tpl.render(w,
-        \\<li data-games="{games}"{thin}{hidden}><a href="{href}">{x} vs {y}</a> <span class="muted">{games} game{s}</span></li>
+        \\<li data-games="{games}" data-name="{x}|{y}"{thin}{hidden}><a href="{href}">{x} vs {y}</a> <span class="muted">{games} game{s}</span></li>
         \\
     , .{
         .games = e.games,
@@ -230,7 +234,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     const swap = try file(a, y, x);
     try tpl.render(w,
         \\<div class="hero"><img src="{x_icon}" alt="" width="72" height="72"><a class="swap" href="{swap}" title="Swap sides: {y} vs {x}" aria-label="Swap sides: {y} vs {x}">⇄</a><img src="{y_icon}" alt="" width="72" height="72"><div><h1>{x} vs {y}</h1>
-        \\<p class="muted">From {x}'s side: {lane} lane, ranked solo/duo {region}, {when}, all ranks, {games} game{s}.</p></div></div>
+        \\<p class="muted">From {x}'s side: {lane} lane, ranked solo/duo {region}, {when}, {games} Platinum+ game{s}.</p></div></div>
         \\<nav class="mu-nav" aria-label="Other matchups"><a class="btn" href="{swap}">⇄ From {y}'s side</a>
         \\{opponents}{champions}</nav>
         \\
@@ -569,7 +573,7 @@ fn caption(w: *Writer, v: View, base: ?View, metric: curvesfile.Metric, x: Champ
     const games = v.games();
     const own = games >= thin_games or base == null;
     try tpl.renderPart(w,
-        \\<figcaption>{x} minus {y}: line = estimated average; band = {own}{baseline}; {when}, all ranks, n = {games} game{s} ({going} still going at {last} min)
+        \\<figcaption>{x} minus {y}: line = estimated average; band = {own}{baseline}; {when}, Platinum+ games, n = {games} game{s} ({going} still going at {last} min)
     , .{
         .x = x.name,
         .y = y.name,
@@ -680,7 +684,7 @@ fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
             try tpl.render(w,
                 \\<tr class="thin"><td>{rank}</td><td class="num" colspan="4">more data needed</td></tr>
                 \\
-            , .{ .rank = b.label() });
+            , .{ .rank = bracketLabel(b) });
             continue;
         };
         const i = curvesfile.lane_minute - 1;
@@ -699,7 +703,7 @@ fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
             \\
         , .{
             .thin = tpl.flag(thin(v), "class=\"thin\""),
-            .rank = b.label(),
+            .rank = bracketLabel(b),
             .games = v.games(),
             .gold = gold,
             .dash = tpl.when(!has_gold, "-"),
@@ -709,9 +713,15 @@ fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
     }
     try tpl.renderPart(w,
         \\</tbody></table></div>
-        \\<p class="muted">Rank is the median visible tier of the players in each game. Gold is the estimated average, then where 8 games in 10 end (the 10th to 90th percentile); a rank's estimate leans on the all-ranks one until it has games of its own. Rows under {thin} games, or mostly baseline, are greyed out.</p>
+        \\<p class="muted">Rank is the median visible tier of the players in each game. Gold is the estimated average, then where 8 games in 10 end (the 10th to 90th percentile); a rank's estimate leans on the one for all games until it has games of its own. Rows under {thin} games, or mostly baseline, are greyed out.</p>
         \\
     , .{ .thin = thin_games });
+}
+
+/// The brackets table's rows; "All ranks" read as every tier, but these are Platinum+
+/// games
+fn bracketLabel(b: Bracket) []const u8 {
+    return if (b == .all) "All games" else b.label();
 }
 
 test "nice scale" {
