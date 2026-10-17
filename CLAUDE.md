@@ -46,15 +46,21 @@ docs/plan.md "Now". Read it first.
   the box, an Oracle Cloud server) and `meiolol-app` (player tool: suggest, watch,
   session, get). `zig build lab`: `meiolol-lab`, modelling experiments on the gpu-box
   (CUDA via libcuda, kernels in src/gpu compiled to PTX)
-- The box: `ssh meiolol-cloud`. Crawler 24/7: `deploy/box.sh start|stop|status|logs|run`;
-  deploys don't restart it, so restart it after a crawl change. Data lives only there
-  (~/ml/meiolol/data); the gpu-box keeps a copy as a restore point. Hosts, limits:
-  docs/hosting.md
+- The box: `ssh meiolol-cloud`. Crawler 24/7: `deploy/box.sh start|stop|restart|status|
+  logs|run`; a deploy restarts it only when src/riot or src/store changed. Data lives
+  only there (~/ml/meiolol/data); the gpu-box keeps a copy as a restore point. Hosts,
+  limits: docs/hosting.md
+- Box jobs over a minute: `deploy/box.sh job run NAME 'CMD'` (a user unit, outlives
+  ssh), `job status|wait NAME`. Waiting for a push: `deploy/box.sh wait-deployed [REV]
+  [--live]` (exits 0, 1 failed, 3 timeout), not a sleep loop. Hand-edited Daily or Learn
+  files: `deploy/box.sh web rebuild` (a forced round keeps the old ones)
 - Website: https://meio.lol (DNS on Cloudflare: docs/architecture.md; mail to @meio.lol:
   deploy/mail.sh), static nginx and the Your games API on the jomove server (`ssh
   jomove`; jomove's own site runs there too, leave its config alone). The box builds
   and uploads on new data: `deploy/box.sh web start [privacy@meio.lol]|stop|status`.
-  Preview mode until prod key
+  jomove's pieces are installed by hand: `deploy/jomove.sh drift`, `install
+  api|traffic|...`. Admin pages: `deploy/admin-get.sh PATH` (keeps the login off
+  screen). Preview mode until prod key
 - Heavy model work on the gpu-box (`ssh gpu-box`; 3080, 20 threads) or Mac CPU, never
   the box: deploy/lab-run.sh; League pauses gpu-box runs; warn sessions using it before
   restarting WSL. Parallel loops: src/par.zig. docs/compute.md
