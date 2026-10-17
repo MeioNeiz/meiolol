@@ -284,7 +284,7 @@ function drawChart(box, tip, o, id) {
     if (m < x0 || m > x1) continue;
     const l = svg("line", { class: "marker", x1: px(m), x2: px(m), y1: T, y2: H - B });
     const title = svg("title");
-    title.textContent = (o.markerLabel || "crawler started") + " " + uk(m);
+    title.textContent = o.markerLabel ? o.markerLabel + " " + uk(m) : restartLabel(m);
     l.append(title);
     s.append(l);
   }
@@ -875,6 +875,19 @@ function storedPerDay() {
   const all = sumR(C.buckets.map(b => sumR(b.m)));
   const spanS = D.now - at(first);
   return { day, avg: spanS >= 2 * 86400 ? all / spanS * 86400 : null, span: spanS };
+}
+
+// Why the crawler started at t. Deploys don't restart it (box.sh web start restarts the
+// site loop only), but a deploy that changes the crawler is followed by `box.sh start` to
+// run the new binary, so a deploy shortly before is the likely cause
+function restartLabel(t) {
+  const head = `crawler started ${uk(t)}`;
+  const acts = (L && L.actions) || [];
+  if (acts.some(([at, name]) => name === "crawl-restart" && at <= t && t - at < 120)) return `${head}: restarted from Controls`;
+  const d = deployList().find(d => d.steps.build && d.steps.build.end != null && d.steps.build.end <= t + 60 && t - d.steps.build.end < 1800);
+  const subject = d && d.subject.length > 80 ? d.subject.slice(0, 79) + "…" : d && d.subject;
+  if (d) return `${head}, ${span(Math.max(0, t - d.steps.build.end))} after deploy ${d.short} reached the box: very likely restarted to run it ("${subject}")`;
+  return `${head}: manual restart or crash, no deploy in the 30 min before (Logs, crawl.log)`;
 }
 
 function daysLeftText() {
