@@ -7,7 +7,7 @@ description: How do we build the most accurate pre-game draft win predictor for 
 ---
 # How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games?
 
-Feeds: docs/plan.md Draft model (Jacob's goal: the best League draft predictor; owner
+Feeds: docs/backlog.md Draft model (Jacob's goal: the best League draft predictor; owner
 meiolol-88); docs/model.md win results. Ours today: 53.3-53.5% accuracy, AUC 0.550,
 log loss 0.6897 at 90k Plat+ games (time split, dev), -0.0008 log loss per doubling, no
 plateau; LoLDraftAI reports 55-56% ([[loldraftai#^f6]]).

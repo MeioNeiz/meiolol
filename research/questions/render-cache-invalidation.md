@@ -11,7 +11,7 @@ decision: docs/plan.md#site-build-and-deploy-2026-10-12-owner-the-site-session
 Feeds: Jacob's long-term direction (15 Oct): prerender pages by how popular they are,
 invalidate cached pages when a new version or new data affects them. Today: jomify's
 open-source nginx caches meiolol-render's pages (key $uri, 10 min, stale on error and
-while updating); docs/hosting.md "Rendering on request", docs/plan.md "Site build and
+while updating); docs/hosting.md "Rendering on request", docs/backlog.md "Site build and
 deploy".
 
 ## Answer

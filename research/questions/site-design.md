@@ -7,7 +7,7 @@ description: What the site leads with and how it shows numbers, spread and thin 
 ---
 # What should meiolol's site show first and how should it present numbers so players and Riot reviewers trust and use it?
 
-Feeds: docs/plan.md "Site build and deploy" and "Before the production review"; the UI
+Feeds: docs/backlog.md "Site build and deploy", docs/plan.md "Before the production review"; the UI
 pass order (Your games example, landing page, matchup pages, champion pages, nav,
 Squads)
 

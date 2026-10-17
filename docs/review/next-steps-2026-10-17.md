@@ -69,7 +69,7 @@ list.** (M; needs Jacob in a real champ select)
   desktop app "the most policy-sensitive item, and the application doesn't mention it"
   (r3); XP and cs curves and rank tiers not seen; Learn, builds, flex and Swiftplay
   unmentioned.
-  plan.md "Identity draft four" already lists the new text as owed before Verify
+  backlog.md "Identity draft four" already lists the new text as owed before Verify
   (identity, Platinum+ scope, data kept, desktop app and LCU endpoints, PUUID link)
 - Do: rewrite around "game review of your own games" with lane curves as the benchmark;
   name the win chance by minute (own games, after the game) and say it is never shown in
@@ -146,7 +146,7 @@ list.** (M; needs Jacob in a real champ select)
 **B4. What changed this patch.** (M; the code is mostly there)
 - Evidence: return whats-new 3/3 partial: no "what's new", only a Patch 16.20 toggle; all
   three expected a patch page or banner. LoLalytics and Blitz lead with patch deltas
-  (competitors.md gap 4). plan.md "Patch day": src/patchday.zig built, not wired (main.zig
+  (competitors.md gap 4). backlog.md "Patch day": src/patchday.zig built, not wired (main.zig
   and root.zig steps listed there); newchamp r1 also asked how a nerf moved their main
 - Do: plan.md's Patch day list as written (patch.html of clear movers, "since patch X"
   on champion pages, dashed previous-patch median on matchup charts), plus a link on home
@@ -180,7 +180,7 @@ list.** (M; needs Jacob in a real champ select)
   them; still unread)
 - Do: a matchup page headline ("Behind from the start, about 800 gold by 14" or "Even
   until 14, then decided by who is ahead"), from the curve and the win-when-ahead split;
-  champion shape labels (plan.md "Curves next"); in the review, the turning minute's
+  champion shape labels (backlog.md "Curves next"); in the review, the turning minute's
   sentence first. Facts, not advice (player-tool-needs C1)
 - Key: none directly; it is what "learning tool" in the application means
 
@@ -195,7 +195,7 @@ list.** (M; needs Jacob in a real champ select)
 **B8. Squads, if the application keeps them.** (M to L)
 - Evidence: return r3 (flex friends): a shared score or small group board is the one
   thing that brings him back tomorrow; first visit r3 (duo) asked for a duo review.
-  U.GG's squad bot is paid (competitors.md gap 5). Design agreed in plan.md "Your games and
+  U.GG's squad bot is paid (competitors.md gap 5). Design agreed in backlog.md "Your games and
   Squads"; the application text promises it
 - Do: start with the cheapest loop: a squad page with the Daily Draft results of members
   and games played together; recaps later
@@ -208,9 +208,9 @@ list.** (M; needs Jacob in a real champ select)
   is unclear, I'm Gold 3" (first visit r1), "I wanted the numbers for Silver" (newchamp
   r2), "built on Platinum IV and up, can't tell if it's right for my elo" (champ select
   r1), "Platinum+ win chance would puzzle a Silver player" (return r1). The identity
-  targets Silver to Emerald; the crawl is Platinum IV+ (plan.md "Tier floor", Jacob "for
+  targets Silver to Emerald; the crawl is Platinum IV+ (backlog.md "Tier floor", Jacob "for
   now"). Every competitor has rank filters
-- Do: lower the floor when the key allows, rank brackets as plan.md "Curves next"
+- Do: lower the floor when the key allows, rank brackets as backlog.md "Curves next"
 - Key: the application's "per rank tier" claim. Needs Q4
 
 **C2. The desktop app public, filling the board itself.** (L)

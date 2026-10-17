@@ -318,7 +318,7 @@ reads) and the scan.
 What we know now: model work is CPU-parallel folds and grids (par.zig, done) plus GPU
 embeddings and interactions (meiolol-2a), on snapshots of ~7-9 GB that grow with the
 crawl; an overnight lab agent is designed (docs/lab-agent.md); and from ~3 weeks out the
-gpu-box also holds the raw archive the box can no longer keep (plan.md "Retention").
+gpu-box also holds the raw archive the box can no longer keep (backlog.md "Retention").
 That last one turns the PC from a nice-to-have into infrastructure, so reliability comes
 first.
 

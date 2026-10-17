@@ -94,7 +94,7 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   The heavy loads read in parallel (16 Oct): filters in 4 runs of games, learning in 4
   puuid ranges, each on its own read-only connection (schema.openSibling), and filters
   beside the people tallies; the box waits on cold pages, one read in flight each.
-  docs/plan.md "Parallel reads". views.log gives each phase's CPU time beside its time
+  docs/backlog.md "Parallel reads". views.log gives each phase's CPU time beside its time
   First deploy (15 Oct, disk at ~80% pressure): views.bin 148 MB, written in 72 min,
   read in 14 s; the swap took 16 s; the renderer holds ~2.0 GB (curves files ~940 MB
   of it)

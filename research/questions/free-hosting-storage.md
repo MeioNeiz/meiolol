@@ -7,7 +7,7 @@ description: What free or very cheap hosting and storage fits meiolol's site, AP
 ---
 # What free or very cheap hosting and storage fits meiolol's site, API and data?
 
-Feeds: docs/plan.md Ops and data (off-site backups, disk runway, site hosting);
+Feeds: docs/backlog.md Ops and data (off-site backups, disk runway, site hosting);
 docs/data-safety.md Backups. Oracle compute is covered elsewhere
 
 ## Answer

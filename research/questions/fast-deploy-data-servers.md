@@ -9,7 +9,7 @@ decision: docs/plan.md#site-build-and-deploy-2026-10-12-owner-the-site-session
 # How do servers that hold large in-memory data built from a database deploy new code quickly, without rebuilding that data on every restart?
 
 Feeds: how meiolol-render loads its data and how a deploy swaps it (docs/hosting.md
-"Rendering on request", docs/plan.md "Site build and deploy"). On 14-15 Oct every
+"Rendering on request", docs/backlog.md "Site build and deploy"). On 14-15 Oct every
 render-swap timed out: each load rebuilt every view from the 8.4 GB meiolol.db (2-13
 min, up to 105 min on a busy disk) beside the old renderer's own reload.
 
