@@ -971,6 +971,16 @@ case "${1:-}" in
         # nothing else syncs it. Its unit's environment drop-ins on the host are kept
         scp -q "$ROOT/deploy/archive-pull.sh" gpu-box:ml/bin/
         scp -q "$ROOT/deploy/systemd/meiolol-archive-pull".{service,timer} gpu-box:.config/systemd/user/
+        # And the backup mirror (docs/data-safety.md "Backups"), with the meiolol it tends
+        # the mirror with (backup --mirror)
+        scp -q "$ROOT/deploy/backup-mirror.sh" gpu-box:ml/bin/
+        scp -q "$ROOT/deploy/systemd/meiolol-backup-mirror".{service,timer} gpu-box:.config/systemd/user/
+        mirror_bin=$(mktemp -d)
+        (cd "$ROOT" && zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-linux-musl -Dcpu=x86_64_v3 \
+            --prefix "$mirror_bin")
+        scp -q "$mirror_bin/bin/meiolol" gpu-box:ml/bin/meiolol.new
+        on gpu-box "mv ml/bin/meiolol.new ml/bin/meiolol"
+        rm -rf "$mirror_bin"
         # Windows side (deploy/windows) to %USERPROFILE%\.meiolol, CRLF for Windows. WSL
         # can write there, so nothing there runs elevated: the archive mount (admin) is
         # installed once, by hand, by install-watchdog.ps1 (docs/compute.md). cmd.exe
@@ -983,9 +993,10 @@ case "${1:-}" in
             sed 's/$/\r/' "$f" | on gpu-box "cat > '$win/$(basename "$f")'"
         done
         on gpu-box "loginctl enable-linger \$USER; systemctl --user daemon-reload \
-            && systemctl --user enable -q $WATCH meiolol-archive-pull.timer \
-            && systemctl --user restart $WATCH && systemctl --user start meiolol-archive-pull.timer \
-            && systemctl --user is-active $WATCH meiolol-archive-pull.timer"
+            && systemctl --user enable -q $WATCH meiolol-archive-pull.timer meiolol-backup-mirror.timer \
+            && systemctl --user restart $WATCH \
+            && systemctl --user start meiolol-archive-pull.timer meiolol-backup-mirror.timer \
+            && systemctl --user is-active $WATCH meiolol-archive-pull.timer meiolol-backup-mirror.timer"
         ;;
     *) sed -n '8,20p' "$0"; exit 2 ;;
 esac

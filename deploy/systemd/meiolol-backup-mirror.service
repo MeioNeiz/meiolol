@@ -1,0 +1,9 @@
+[Unit]
+Description=meiolol backup mirror from the box (deploy/backup-mirror.sh, gpu-box)
+# Without the archive partition the mirror would land on the WSL disk
+ConditionPathIsMountPoint=/mnt/wsl/archive
+
+[Service]
+Type=oneshot
+Nice=10
+ExecStart=/bin/sh -c 'exec %h/ml/bin/backup-mirror.sh gpu-box /mnt/wsl/archive/meiolol-backups %h/ml/bin/meiolol meiolol-backup >> %h/ml/backup-mirror.log 2>&1'

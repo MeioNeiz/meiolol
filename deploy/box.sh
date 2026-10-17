@@ -26,7 +26,7 @@ sync() {
         _ "$target" "$ROOT" "$tree"
     ssh "$HOST" "mkdir -p $DIR/bin $DIR/data .config/systemd/user"
     scp -q "$tree/zig-out/box/bin/meiolol" "$HOST:$DIR/bin/meiolol.new"
-    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh render-swap.sh archive-serve.sh cache-version.sh" s
+    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh render-swap.sh archive-serve.sh cache-version.sh" s
     for s in $scripts; do scp -q "$tree/deploy/$s" "$HOST:$DIR/bin/$s.new"; done
     scp -q "$tree"/deploy/systemd/*.service "$tree"/deploy/systemd/meiolol-cache-version.path \
         "$HOST:.config/systemd/user/"
@@ -317,6 +317,10 @@ SQL
         plist=net.jacob.meiolol-watch.plist
         case "${2:-}" in
             install)
+                # The mirror's meiolol (backup --mirror), apart from zig-out, which other
+                # sessions rebuild
+                (cd "$ROOT" && zig build -Doptimize=ReleaseSafe --prefix "$HOME/.cache/meiolol-watch")
+                launchctl bootout "gui/$(id -u)/${plist%.plist}" 2> /dev/null || true
                 cp "$ROOT/deploy/$plist" ~/Library/LaunchAgents/
                 launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/$plist
                 echo "installed $plist"

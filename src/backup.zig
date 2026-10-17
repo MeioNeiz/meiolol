@@ -10,6 +10,9 @@
 //!   `--full` writes one segment with everything and drops the older ones (after a
 //!   rebuild or rekey, which rewrite stored rows)
 //! Raw JSON is not backed up: raw.db is a 30-day buffer and the tables hold what it gives.
+//! Mirrors (the Mac, the gpu-box: deploy/backup-mirror.sh) keep every segment and their
+//! own rotation of state; `--mirror DIR` tends one: scrubs PUUIDs the box has forgotten
+//! since, then rotates. The box prunes what a mirror has acked (deploy/backup-serve.sh).
 //! Each file is written as *.tmp in one read transaction (a consistent snapshot while the
 //! crawler writes) and renamed when complete.
 
@@ -260,6 +263,14 @@ fn readRange(arena: std.mem.Allocator, path: []const u8) !Range {
     return s.row(Range);
 }
 
+fn isFull(arena: std.mem.Allocator, path: []const u8) !bool {
+    const db = try Db.open(try arena.dupeSentinel(u8, path, 0));
+    defer db.close();
+    const after = try db.scalar("SELECT matches_after + timelines_after FROM segment", .{}) orelse
+        return error.BadSegment;
+    return after == 0;
+}
+
 fn segmentColumn(db: Db, name: []const u8) ![]const u8 {
     const n = try db.scalar("SELECT count(*) FROM pragma_table_info('segment') WHERE name = ?", .{name});
     return if ((n orelse 0) > 0) name else "0";
@@ -340,7 +351,14 @@ pub fn restore(arena: std.mem.Allocator, io: Io, from_dir: []const u8, data_dir:
     try load(arena, db, state);
     r.files += 1;
     const seg_dir = try std.fs.path.join(arena, &.{ from_dir, "segments" });
-    for (try listSegments(arena, io, seg_dir)) |s| {
+    const segs = try listSegments(arena, io, seg_dir);
+    // A mirror keeps the segments a --full backup replaced on the box: start at the
+    // newest one that copied from the beginning
+    var first: usize = 0;
+    for (segs, 0..) |s, i| {
+        if (try isFull(arena, try std.fs.path.join(arena, &.{ seg_dir, s.name }))) first = i;
+    }
+    for (segs[first..]) |s| {
         try load(arena, db, try std.fs.path.join(arena, &.{ seg_dir, s.name }));
         r.files += 1;
     }
@@ -391,7 +409,13 @@ fn load(arena: std.mem.Allocator, db: Db, path: []const u8) !void {
 
 /// Erase `puuid` from every backup file under `dir` (forget --backups)
 pub fn scrub(arena: std.mem.Allocator, io: Io, dir: []const u8, puuid: []const u8, now: i64) !forget.Removed {
+    return scrubMany(arena, io, dir, &.{puuid}, now);
+}
+
+/// As scrub, every file opened once for all of `puuids`
+pub fn scrubMany(arena: std.mem.Allocator, io: Io, dir: []const u8, puuids: []const []const u8, now: i64) !forget.Removed {
     var total: forget.Removed = .{};
+    if (puuids.len == 0) return total;
     for ([_][]const u8{ "state", "segments" }) |sub| {
         const path = try std.fs.path.join(arena, &.{ dir, sub });
         var d = Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch |err| switch (err) {
@@ -405,10 +429,60 @@ pub fn scrub(arena: std.mem.Allocator, io: Io, dir: []const u8, puuid: []const u
             const file = try arena.printSentinel("{s}/{s}", .{ path, e.name }, 0);
             const db = try Db.open(file);
             defer db.close();
-            total.add(try forget.forget(db, puuid, now, .scrub));
+            for (puuids) |p| total.add(try forget.forget(db, p, now, .scrub));
         }
     }
     return total;
+}
+
+pub const Tended = struct { new_forgotten: usize, removed: forget.Removed, rotated: usize };
+
+/// A mirror's upkeep: PUUIDs in `forgotten_path` (the box's complete list) not yet in
+/// DIR/forgotten-applied.txt are scrubbed from every file, then state rotates as on the
+/// box. Segments are never deleted here: the box may have pruned its copy
+pub fn tendMirror(
+    arena: std.mem.Allocator,
+    io: Io,
+    dir: []const u8,
+    forgotten_path: []const u8,
+    keep_daily: usize,
+    keep_weekly: usize,
+    now: i64,
+) !Tended {
+    const cwd = Io.Dir.cwd();
+    const applied_path = try std.fs.path.join(arena, &.{ dir, "forgotten-applied.txt" });
+    var applied: std.StringHashMapUnmanaged(void) = .empty;
+    const old = cwd.readFileAlloc(io, applied_path, arena, .limited(256 << 20)) catch |err| switch (err) {
+        error.FileNotFound => "",
+        else => return err,
+    };
+    var lines = std.mem.tokenizeAny(u8, old, "\r\n");
+    while (lines.next()) |l| try applied.put(arena, l, {});
+
+    const listed = try cwd.readFileAlloc(io, forgotten_path, arena, .limited(256 << 20));
+    var fresh: std.ArrayList([]const u8) = .empty;
+    lines = std.mem.tokenizeAny(u8, listed, "\r\n");
+    while (lines.next()) |line| {
+        const p = std.mem.trim(u8, line, " \t");
+        if (p.len == 0 or applied.contains(p)) continue;
+        try applied.put(arena, p, {});
+        try fresh.append(arena, p);
+    }
+    const removed = try scrubMany(arena, io, dir, fresh.items, now);
+    if (fresh.items.len > 0) {
+        // Only once every file is scrubbed: a crash before this repeats the scrub
+        var out: std.Io.Writer.Allocating = .init(arena);
+        try out.writer.writeAll(old);
+        if (old.len > 0 and old[old.len - 1] != '\n') try out.writer.writeByte('\n');
+        for (fresh.items) |p| try out.writer.print("{s}\n", .{p});
+        const tmp = try arena.print("{s}.tmp", .{applied_path});
+        try cwd.writeFile(io, .{ .sub_path = tmp, .data = out.written() });
+        try cwd.rename(tmp, cwd, applied_path, io);
+    }
+    const state_dir = try std.fs.path.join(arena, &.{ dir, "state" });
+    try cwd.createDirPath(io, state_dir);
+    const rotated = try rotate(arena, io, state_dir, keep_daily, keep_weekly);
+    return .{ .new_forgotten = fresh.items.len, .removed = removed, .rotated = rotated };
 }
 
 const testing = std.testing;
@@ -521,8 +595,38 @@ test "backup then restore round trip, incremental segments, scrub" {
     }
     try testing.expectError(error.TargetNotEmpty, restore(arena, io, out, restored_dir, null, day));
 
+    // A mirror copies the segments before --full replaces them on the box
+    const mirror = try arena.print("{s}/mirror", .{base});
+    const cwd = Io.Dir.cwd();
+    for ([_][]const u8{ "state", "segments" }) |sub| {
+        const from = try arena.print("{s}/{s}", .{ out, sub });
+        try cwd.createDirPath(io, try arena.print("{s}/{s}", .{ mirror, sub }));
+        var d = try cwd.openDir(io, from, .{ .iterate = true });
+        defer d.close(io);
+        var it = d.iterate();
+        while (try it.next(io)) |e| try Io.Dir.copyFile(d, e.name, cwd, try arena.print("{s}/{s}/{s}", .{ mirror, sub, e.name }), io, .{});
+    }
+
     // --full replaces the segments with one
     const full = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day + 4 * 86400, .full = true });
     try testing.expectEqual(2, full.matches);
     try testing.expectEqual(3, full.removed); // the third holds p2's day-20739 rank row
+
+    // The mirror gets the full segment too and keeps the old ones; restore starts at it
+    const newest = (try listSegments(arena, io, try arena.print("{s}/segments", .{out})))[0].name;
+    try Io.Dir.copyFile(cwd, try arena.print("{s}/segments/{s}", .{ out, newest }), cwd, try arena.print("{s}/segments/{s}", .{ mirror, newest }), io, .{});
+    try testing.expectEqual(4, (try listSegments(arena, io, try arena.print("{s}/segments", .{mirror}))).len);
+    const from_mirror = try restore(arena, io, mirror, try arena.print("{s}/restored-mirror", .{base}), null, day);
+    try testing.expectEqual(2, from_mirror.matches);
+    try testing.expectEqual(2, from_mirror.files); // newest state + the full segment
+
+    // Tending: p2 newly forgotten on the box is scrubbed from every mirror file once
+    const list = try arena.print("{s}/forgotten.txt", .{base});
+    try cwd.writeFile(io, .{ .sub_path = list, .data = "p1\np2\n" });
+    const t1 = try tendMirror(arena, io, mirror, list, 7, 4, day);
+    try testing.expectEqual(2, t1.new_forgotten);
+    try testing.expect(t1.removed.participants > 0);
+    const t2 = try tendMirror(arena, io, mirror, list, 7, 4, day);
+    try testing.expectEqual(0, t2.new_forgotten);
+    try testing.expectEqual(4, (try listSegments(arena, io, try arena.print("{s}/segments", .{mirror}))).len);
 }

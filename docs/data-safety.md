@@ -16,7 +16,7 @@ The box moved to Oracle Cloud on 2026-10-11 (docs/hosting.md): one 50 GB boot vo
   run with small raw windows (eg 3 and 1) until there is more disk
 - Open (Jacob): the free tier has ~106 GB more block storage, still only ~2 months of
   kept data; ~570 GB/year needs paid storage, less crawling, or the PC as bulk store
-- Off-host backups still to set up: the gpu-box pulling into D: and/or the Mac mirror
+- Off-host backups: mirrored to the Mac and the gpu-box since 2026-10-17 (Backups)
 - The gpu-box (before the move) keeps its data and the 2026-10-11 backup in
   /mnt/d/meiolol-backups (restore-tested) as the restore point. Its WSL disk image lives
   on C: (~252 GB free); its 2 TB NVMe has 673 GB unallocated, if it becomes the bulk store
@@ -44,13 +44,27 @@ under the write lock they starve the crawler on a slow host.
   buffer and the tables hold what it gives
 - After `meiolol rebuild` or `rekey` (they rewrite stored rows) run `meiolol backup
   --full`: one segment with everything, replacing the others
-- The Mac mirrors the directory daily to `~/Backups/meiolol` (deploy/mac-watch.sh,
-  `rsync --delete`, so rotation and erasure scrubs follow)
+- Mirrors (2026-10-17), deploy/backup-mirror.sh: the Mac into `~/Backups/meiolol` (from
+  deploy/mac-watch.sh, every ~20 h while it is awake; meiolol for the mirror in
+  ~/.cache/meiolol-watch/bin, built by `deploy/box.sh watch install`) and the gpu-box
+  into /mnt/wsl/archive/meiolol-backups (systemd user timer meiolol-backup-mirror,
+  hourly, only while the archive partition is mounted; installed by `deploy/lab-run.sh
+  watch-install`; key ~/.ssh/meiolol_backup, alias meiolol-backup, forced command
+  deploy/backup-serve.sh on the box). Both 700: tables hold real PUUIDs. Never in git
+- A mirror fetches each file the box lists that is new or changed there (a scrub),
+  checks size and SHA-256 and acks it (backups/acks/MIRROR.tsv on the box: file, sum,
+  time). After each backup the box deletes files some mirror acked at their current sum,
+  except its newest state snapshot and newest segment (the next segment starts where
+  that one ends). So the box holds ~2 files plus whatever no mirror has fetched yet
+- Mirrors keep every segment (the box may hold only the newest) and rotate state
+  themselves, 7 daily + 4 weekly (`meiolol backup --mirror DIR --forgotten FILE`).
+  A `--full` segment on the box leaves older ones on the mirrors: restore starts at the
+  newest segment that copies from the beginning, so they are ignored
 
-Covers: a corrupt WSL image, a WSL reinstall, C: failing, a bad migration or DELETE (state
-up to 4 weeks back). Not covered: losing the PC and the Mac together (nothing off-site).
-D: holds ~85 days of full-rate growth; before then move backups to the 2 TB NVMe or paid
-object storage (~$6/TB/month). The health check warns at 90% on D:.
+Covers: the box's disk or VM lost, a bad migration or DELETE (state up to 4 weeks back).
+Not covered: losing the box, the PC and the Mac together (nothing off-site yet;
+Hetzner Storage Box proposed, Jacob's call). The archive partition holds years of
+backups at today's rate (~1.7 GB/day of segments).
 
 Measured 2026-10-11 (8,117 matches, 1.13M players): state 146 MB, segment 23 MB, backup
 1 s, restore 2.6 s.
@@ -114,10 +128,10 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | drafts | nothing: no PUUID, Riot ID or match id, only platform, patch, day, median rank, result, length in minutes, champions, roles and bans, so no row can be found by player (see below) |
 | forgotten | PUUID and date added: the suppression list |
 | Daily Draft (daily/used.txt, puzzles) | nothing: match ids and anonymous puzzles only |
-| backup files | `--backups /mnt/d/meiolol-backups` scrubs every state and segment file at once |
+| backup files | `--backups DIR` scrubs every state and segment file on the box at once (deploy/backup-loop.sh) |
+| backup mirrors (Mac, gpu-box) | each mirror run fetches the box's forgotten list and `meiolol backup --mirror` scrubs the PUUIDs new to it from every file it holds, including segments the box has pruned (applied list: forgotten-applied.txt in the mirror) |
 | raw archive (gpu-box) | ingest leaves out documents naming a forgotten PUUID; each pull runs `meiolol-lab archive-forget` for PUUIDs new on the box's list, which drops every archived summary, timeline and mastery line naming them (hashed with the salt) |
 | raw exports (box, data/archive-out) | short-lived: deleted on ack; an export holds what raw.db held when it was made |
-| Mac mirror | follows on its next daily sync (rsync replaces the scrubbed files) |
 | Your games (api.db on the web server) | `forget --data /var/lib/meiolol-api` there: `api.cache.forget` deletes and adds to `blocked` |
 | analysis snapshots (Mac, gpu-box) | re-erased when made, hashed, deleted when replaced (Analysis snapshots, below) |
 

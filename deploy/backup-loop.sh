@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs on the box (deploy/box.sh backup start): once a day at ~04:00 UTC, swap forgotten
 # PUUIDs with the Your games service, then `meiolol backup` into $MEIOLOL_BACKUPS (set in
-# host.env on the cloud box; default /mnt/d/meiolol-backups, the gpu-box's D: drive).
-# docs/data-safety.md.
+# host.env on the cloud box; default /mnt/d/meiolol-backups, the gpu-box's D: drive),
+# then drop what a mirror has acked (deploy/backup-serve.sh prune). docs/data-safety.md.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 export MEIOLOL_BACKUPS=${MEIOLOL_BACKUPS:-/mnt/d/meiolol-backups}
@@ -19,5 +19,7 @@ while true; do
     if [[ ! -f "$MEIOLOL_BACKUPS/state/state-$(date -u +%F).db" ]]; then
         bin/meiolol backup --data data || echo "$(date -u +%FT%TZ) backup FAILED"
     fi
+    # Files a mirror (the Mac, the gpu-box: deploy/backup-mirror.sh) holds leave the box
+    bin/backup-serve.sh prune || echo "$(date -u +%FT%TZ) backup prune FAILED"
     sleep $(( $(date -u -d 'tomorrow 04:00' +%s) - $(date +%s) ))
 done
