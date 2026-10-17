@@ -120,7 +120,7 @@ in-game state model) and to the production review list.
   landing, matchup curve pages (empty until timelines accumulate), Daily Draft, Learn
   (lessons + practice drafts), Pool, learning curves, comeback odds, method page. Win-rate
   edges gated by game counts (draft-model thresholds)
-- Your games live on jomove in preview (`meiolol api`, /api/ behind basic auth, 30-day
+- Your games live on jomove in preview (`meiolol api`, /api/ open without login since 17 Oct for Riot's reviewers, 30-day
   retention; docs/your-games.md). Built, not wired: Patch day core (src/patchday.zig); data safety (`meiolol backup|restore|forget`,
   deploy/health.sh) running on the box (meiolol-backup, meiolol-health)
 - Draft model (docs/model.md): at ~8k games nothing beats champion base rates beyond

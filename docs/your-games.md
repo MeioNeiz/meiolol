@@ -4,7 +4,7 @@ The dynamic part of the site (docs/concept.md, product 1): enter a Riot ID, see 
 recent Summoner's Rift game's lane laid over the typical curve for that matchup at your rank,
 then a weekly roll-up and per-matchup trend. `meiolol api` (src/api) serves JSON at
 /api/ behind nginx on the jomove server; site/your.html + your.js (src/site/your.zig,
-static/your.js) is the page. Live in preview (/api/ behind basic auth): Deploy below.
+static/your.js) is the page. Live, /api/ open without login since 2026-10-17: Deploy below.
 
 ## How it works
 
@@ -146,10 +146,12 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
   below), since the query string holds the Riot ID
 - Privacy page: "Your games" section on the site (src/site/prose.zig) and in
   docs/legal/privacy.md, matching the above
-- Preview gating (Jacob left it to us, 2026-10-11): /api/ behind HTTP basic auth until
-  the production key, since a personal key may not serve the public. User `meiolol`,
-  password in vault (group meiolol/local, key MEIOLOL_API_BASIC_AUTH; also in .env). The
-  browser asks once; your.html itself is public and harmless without the API
+- Preview gating: /api/ was behind HTTP basic auth from 2026-10-11, since a personal key
+  may not serve the public. Opened 2026-10-17 by Jacob's call, knowing that policy, so
+  Riot's reviewers can run it without a login (research: they rarely use demo
+  credentials). your.js still shows the preview note on a 401. /admin/ keeps the login:
+  user `meiolol`, password in vault (group meiolol/local, key MEIOLOL_API_BASIC_AUTH;
+  also in .env)
 
 ## Deploy (live since 2026-10-11, jomove server)
 
@@ -182,14 +184,12 @@ MemoryMax 400M).
   -u meiolol-api`
 - nginx: /etc/nginx/conf.d/meiolol.conf only (jomove.conf untouched; the previous version
   is /etc/nginx/meiolol.conf.bak-2026-10-11). `limit_req_zone meiolol_api 60r/m` at the
-  top; `location /api/` in the 443 server: auth_basic (/etc/nginx/meiolol-api.htpasswd,
-  root:www-data 640), limit_req burst 30, access_log off, proxy_pass 127.0.0.1:8090,
-  client_max_body_size 1k. `location /admin/` (the ops page, src/admin.zig): same
-  htpasswd and realm, previous config /etc/nginx/meiolol.conf.bak-2026-10-12
-- Preview gating: basic auth on /api/ until the production key (a personal key may not
-  serve the public). User `meiolol`; password in vault (meiolol/local,
-  MEIOLOL_API_BASIC_AUTH) and in .env. Remove /api/'s two auth_basic lines once the
-  production key is granted; /admin/ keeps its own
+  top; `location /api/` in the 443 server: no login since 2026-10-17 (before:
+  /etc/nginx/meiolol.conf.bak-2026-10-17-api-open), limit_req burst 30, access_log off, proxy_pass 127.0.0.1:8090,
+  client_max_body_size 1k. `location /admin/` (the ops page, src/admin.zig): auth_basic
+  (/etc/nginx/meiolol-api.htpasswd, root:www-data 640), previous config /etc/nginx/meiolol.conf.bak-2026-10-12
+- Preview gating: /api/ open since 2026-10-17 (Preview gating above); /admin/ keeps its
+  basic auth
 - Box: ssh alias `meiolol-exchange` (key ~/.ssh/meiolol_exchange) is the rrsync user
   limited to the exchange dir (`command="/usr/bin/rrsync /var/lib/meiolol-api/exchange",
   restrict` in ~meiolol/.ssh/authorized_keys; the site key stays limited to
