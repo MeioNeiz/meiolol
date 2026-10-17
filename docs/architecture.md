@@ -553,10 +553,11 @@ load), pages render in 1-40 ms.
 Hosting:
 meio.lol (meiolol.jomify.lol and www.meio.lol 308 to it; DNS on Cloudflare, token in
 vault personal/cloudflare; mail to any @meio.lol kept in Cloudflare KV, read with
-deploy/mail.sh), nginx on the jomove server: the static core uploaded from
-the box by deploy/web-loop.sh (every 15 min early in a patch, then hourly; docs/plan.md
-step 2), and at once on each push to main (deploy/on-push.sh); every other page from
-meiolol-render on the box, which reads the new views file after each upload.
+deploy/mail.sh, and forwarded to Jacob's Gmail), nginx on the jomove server: the static
+core uploaded from the box by deploy/web-loop.sh (every 15 min early in a patch, then
+hourly; docs/plan.md step 2), and at once on each push to main (deploy/on-push.sh);
+every other page from meiolol-render on the box, which reads the new views file after
+each upload.
 
 Known gaps: stats.bin is dense (~12 MB raw; brotli helps while sparse), no rank
 brackets (statsfile has none), no per-patch history.

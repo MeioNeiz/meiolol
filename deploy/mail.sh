@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Mail for @meio.lol: Cloudflare Email Routing sends every address to the Email Worker in
-# deploy/mail-worker.js, which keeps each message in KV (namespace meio-mail). Needs the
+# deploy/mail-worker.js, which keeps each message in KV (namespace meio-mail) and forwards
+# it to FORWARD_TO (must be a verified Email Routing destination). Needs the
 # Cloudflare token: run as `vault run personal/cloudflare -- deploy/mail.sh ...`.
 #
 #   deploy/mail.sh deploy         KV namespace (once), the worker, the catch-all rule
@@ -9,12 +10,20 @@
 #   deploy/mail.sh delete KEY
 set -euo pipefail
 
+case ${1:-} in
+deploy | list | read | delete) ;;
+*)
+    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac
 : "${CLOUDFLARE_API_TOKEN:?run under: vault run personal/cloudflare -- deploy/mail.sh}"
 ACCT=${CLOUDFLARE_ACCOUNT_ID:?}
 API=https://api.cloudflare.com/client/v4
 DOMAIN=meio.lol
 NAME=meio-mail
 JS_MODULE=application/javascript+module
+FORWARD_TO=jombirds@gmail.com
 here=$(cd "$(dirname "$0")" && pwd)
 
 cf() {
@@ -45,9 +54,10 @@ deploy)
         ok "$r"
         ns=$(jq -r '.result.id' <<<"$r")
     fi
-    meta=$(jq -nc --arg ns "$ns" '{main_module: "worker.js",
+    meta=$(jq -nc --arg ns "$ns" --arg to "$FORWARD_TO" '{main_module: "worker.js",
         compatibility_date: "2026-10-01",
-        bindings: [{type: "kv_namespace", name: "MAIL", namespace_id: $ns}]}')
+        bindings: [{type: "kv_namespace", name: "MAIL", namespace_id: $ns},
+            {type: "plain_text", name: "FORWARD_TO", text: $to}]}')
     r=$(cf PUT "/accounts/$ACCT/workers/scripts/$NAME" \
         -F "metadata=$meta;type=application/json" \
         -F "worker.js=@$here/mail-worker.js;filename=worker.js;type=$JS_MODULE")
@@ -58,7 +68,8 @@ deploy)
         -d "{\"enabled\":true,\"matchers\":[{\"type\":\"all\"}],
             \"actions\":[{\"type\":\"worker\",\"value\":[\"$NAME\"]}]}")
     ok "$r"
-    echo "deployed: every @$DOMAIN address -> worker $NAME -> KV $ns"
+    echo "deployed: every @$DOMAIN address -> worker $NAME -> KV $ns," \
+        "forwarded to $FORWARD_TO"
     ;;
 list)
     cf GET "$(KV)/keys?prefix=msg/&limit=1000" \
@@ -87,9 +98,5 @@ for part in m.iter_attachments():
 delete)
     key=${2:?usage: deploy/mail.sh delete KEY}
     ok "$(cf DELETE "$(KV)/values/$(jq -rn --arg k "$key" '$k | @uri')")"
-    ;;
-*)
-    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
-    exit 2
     ;;
 esac
