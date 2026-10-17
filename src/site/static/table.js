@@ -1,8 +1,8 @@
 // Champion tables (root.zig tierTable, opponentTable). table[data-sortable]: a click on a
 // th[data-sort] sorts by that column, "num" by each cell's data-v (blank last), "text"
-// by its text; td.rank cells renumber the shown rows. input[data-filter] hides rows whose
-// data-name lacks the text. button[data-show-rare] shows the rows marked data-rare in
-// the table before it.
+// by its text; td.rank cells renumber the shown rows. input[data-filter=ID] hides rows
+// of table#ID whose data-name lacks the text. button[data-show-rare=ID] shows the rows
+// marked data-rare in table#ID. By id, not sibling order: markup between them moves.
 "use strict";
 
 (() => {
@@ -60,7 +60,7 @@
   }
 
   for (const input of document.querySelectorAll("input[data-filter]")) {
-    const table = input.parentElement.nextElementSibling.querySelector("table");
+    const table = document.getElementById(input.dataset.filter);
     input.addEventListener("input", () => {
       const q = input.value.trim().toLowerCase();
       for (const row of table.tBodies[0].rows) {
@@ -72,7 +72,7 @@
   }
 
   for (const button of document.querySelectorAll("button[data-show-rare]")) {
-    const table = button.parentElement.previousElementSibling.querySelector("table");
+    const table = document.getElementById(button.dataset.showRare);
     button.addEventListener("click", () => {
       table.dataset.showRare = "1";
       for (const row of table.tBodies[0].querySelectorAll("tr[data-rare]")) row.hidden = false;

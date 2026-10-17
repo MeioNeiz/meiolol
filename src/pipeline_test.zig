@@ -195,6 +195,29 @@ test "fixture games to stats, curves and the website" {
             return error.TestUnexpectedResult;
         };
     }
+    // table.js finds each search's and rare button's table by id: every target on the page
+    for ([_][]const u8{ "champions.html", "role/top.html", "champion/darius.html" }) |page| {
+        const path = try std.fs.path.join(arena, &.{ out, page });
+        const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
+        var found: usize = 0;
+        for ([_][]const u8{ "data-filter=\"", "data-show-rare=\"" }) |attr| {
+            var it = std.mem.splitSequence(u8, html, attr);
+            _ = it.next();
+            while (it.next()) |rest| {
+                const id = rest[0..std.mem.indexOfScalar(u8, rest, '"').?];
+                const want = try std.fmt.allocPrint(arena, "id=\"{s}\"", .{id});
+                if (std.mem.indexOf(u8, html, want) == null) {
+                    std.debug.print("{s}: {s}{s}\" has no table\n", .{ page, attr, id });
+                    return error.TestUnexpectedResult;
+                }
+                found += 1;
+            }
+        }
+        if (found == 0) {
+            std.debug.print("{s}: no table search\n", .{page});
+            return error.TestUnexpectedResult;
+        }
+    }
 
     // Rendered on request (site.Loaded, `meiolol serve --render` and `dev`): every file
     // the static build wrote, byte for byte, and nothing for paths it didn't

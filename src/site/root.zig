@@ -1645,8 +1645,8 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     try tpl.renderPart(w, "<div class=\"tl-bar\">", .{});
     try roleTabs(w, role, root);
     try tpl.renderPart(w,
-        \\<input type="search" placeholder="Search champion" data-filter aria-label="Search champion"></div>
-        \\{gradient}<div class="tl-wrap"><table class="tl" data-sortable>
+        \\<input type="search" placeholder="Search champion" data-filter="tiers" aria-label="Search champion"></div>
+        \\{gradient}<div class="tl-wrap"><table class="tl" id="tiers" data-sortable>
         \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
@@ -1681,7 +1681,7 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
         \\
     , .{
         .more = tpl.when(rare > 0, tpl.t(
-            \\<p class="tl-more">{rare} rare picks (under {min:.1}% pick rate, or a role the champion seldom plays) hidden. <button class="link" data-show-rare>Show them</button></p>
+            \\<p class="tl-more">{rare} rare picks (under {min:.1}% pick rate, or a role the champion seldom plays) hidden. <button class="link" data-show-rare="tiers">Show them</button></p>
             \\
         , .{ .rare = rare, .min = 100 * min_pick_rate })),
         .table_js = html.Link{ .root = root, .up = site.view.up(), .path = "table.js" },
@@ -2015,12 +2015,12 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Oppo
     }.f);
     try tpl.renderPart(w,
         \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{n}, hardest first</span></h3>
-        \\<input type="search" placeholder="Search opponent" data-filter aria-label="Search opponent"></div>
-        \\<div class="tl-wrap"><table class="tl" data-sortable>
+        \\<input type="search" placeholder="Search opponent" data-filter="opp-{slug}" aria-label="Search opponent"></div>
+        \\<div class="tl-wrap"><table class="tl" id="opp-{slug}" data-sortable>
         \\<thead><tr><th class="l" data-sort="text">Opponent</th><th data-sort="num">{name}'s win rate</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent">Gold at {minute}</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
-    , .{ .n = opps.len, .name = ch.name, .minute = core.curvesfile.lane_minute });
+    , .{ .n = opps.len, .name = ch.name, .minute = core.curvesfile.lane_minute, .slug = roleSlug(r) });
     var few: usize = 0;
     for (opps) |o| {
         const thin = o.games < min_opponent_games;
