@@ -44,7 +44,8 @@ const vi = comps.vi;
 pub const usage =
     \\  champcomp SNAP [--permute-profiles SEED] [--shuffle-traits SEED]
     \\                                  champions into comps, dev only, built with
-    \\                                  -Dcand=src/lab/cand/win-ratings: per champion-role,
+    \\                                  -Dcand=src/lab/cand/win-ratings (or win-comp, an
+    \\                                  offset with the damage mix): per champion-role,
     \\                                  win against the enemy team's and its allies'
     \\                                  traits beyond ratings and its role's average,
     \\                                  shrunk, on comps' folds and dev-val
@@ -682,8 +683,10 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         std.debug.print("usage:\n{s}", .{usage});
         return 2;
     }
-    if (!@hasDecl(cand, "name") or !std.mem.eql(u8, cand.name, "win-ratings")) {
-        std.debug.print("champcomp: build with -Dcand=src/lab/cand/win-ratings (its predictions are the offset)\n", .{});
+    // win-comp (ratings plus the damage mix): does a champion's ally AP share effect go
+    // beyond the team's mix?
+    if (!@hasDecl(cand, "name") or !(std.mem.eql(u8, cand.name, "win-ratings") or std.mem.eql(u8, cand.name, "win-comp"))) {
+        std.debug.print("champcomp: build with -Dcand=src/lab/cand/win-ratings (its predictions are the offset) or win-comp\n", .{});
         return 2;
     }
     const snap = argv[0];
@@ -726,8 +729,8 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     const placed = try comps.loadExtra(gpa, io, d, data_path, extra, team_obj);
     var with_stats: usize = 0;
     for (d.rows) |r| with_stats += @intFromBool(!std.math.isNan(r.stats[0]));
-    try w.print("# champcomp{s}{s}, {s}\nrows {d}: with seat stats {d}, comp_stats lines placed {d}\n", .{
-        if (permute != 0) ", PERMUTED profiles" else "", if (shuffle != 0) ", SHUFFLED traits" else "", snap, d.rows.len, with_stats, placed.seats,
+    try w.print("# champcomp, offset {s}{s}{s}, {s}\nrows {d}: with seat stats {d}, comp_stats lines placed {d}\n", .{
+        cand.name, if (permute != 0) ", PERMUTED profiles" else "", if (shuffle != 0) ", SHUFFLED traits" else "", snap, d.rows.len, with_stats, placed.seats,
     });
     if (with_stats == 0) return error.NoSeatStats;
     try w.print("fold bounds {any}, dev cut {d}, test cut {d}\n", .{ c.bounds[0..5], c.dev, c.test_ });
