@@ -1,6 +1,80 @@
 # Plan
 
-Updated 2026-10-11 (end of the first multi-session day).
+Updated 2026-10-18 (Now, after the 17 Oct reviews); the rest from 2026-10-11 on.
+
+## Now (18 Oct): fix before building
+
+Ranked by harm: outages and data risk, then what Riot's reviewers see before Jacob
+presses Verify, then what brings players back. Findings: docs/review/
+persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B/C, Q).
+
+1. Your games API dies at patch 16.21 (~22 Oct): it loads the two newest curves files
+   (16.20 is 226 MB, parsed ~1:1) under MemoryMax 400M; once 16.21's file passes ~150 MB
+   every start is OOM-killed. Fix: load newest first within a byte budget (src/api/root.zig
+   loadCurves), then the by-hand install on jomove (docs/your-games.md Deploy), which also
+   ships R17's "All games" label
+2. Box disk: used at the daily low 31, 46, 67, 67 GB (14-17 Oct) of 144, and each day
+   peaks ~30 GB higher (100 GB on 17 Oct; admin-history.tsv). Within ~a week a peak
+   fills the disk. Find what the peak is (backup segment, views write, curves temp)
+   and cap or move it; the lasting answer is Open decisions "Storage and hosting"
+3. gpu-box C: at 90% (holds the WSL disk; the archive is on the P3, safe). Plan with
+   steps: ~/.claude/fleet/handover/meiolol-ba-20261018-002940.md; waits on G1, G2
+4. Box `contact` file to privacy@meio.lol (R34; decided 14 Oct): terms and privacy
+   still show a Gmail address. The mail worker is deployed but has kept no mail yet
+   (`deploy/mail.sh list` empty, 18 Oct): one test mail from Jacob, then
+   `deploy/box.sh web start privacy@meio.lol`
+5. Daily Draft's public whole-draft win chance and "+X points" (R16, A3): the item
+   reviewers quoted first. Waits on J1
+6. Application text to match the site (A2; Jacob writes, Q1), champ select screenshots,
+   video and LCU endpoint list (A1; needs Jacob in a real champ select, steps under
+   "Before the production review"), Daily game age (A4, Q2)
+7. Renderer as the main path: uncached pages 503 while it is down (Site build Next 2-3)
+8. Remember the player without an account (B1): recent Riot IDs in localStorage, "N new
+   games since", a per-game link. No decision needed
+9. Plain one-line verdicts where the answer is one fact (B6, R57): matchup headline from
+   the curve, the turning minute's sentence first in the review
+10. Pool first in the picker (B2), then bans from the pool's hard lanes (B3, Q3); public
+    form waits on J2. Patch day (B4, z choice below), example review per role (B7)
+11. Admin polish (fix3 leftovers R48-R50, R60, R61; plans in docs/review/
+    fix3-notes-2026-10-17.md), R58; low while the panel is Jacob's only (J9)
+
+Others own: traffic.sh install and the TW2 mastery retry (meiolol-8f); neural nets vs
+today's model; the draft's "Rammus into high AD/AP" check.
+
+### Questions for Jacob (recommendation first)
+
+- J1 Daily Draft: drop the numbers; "on paper the draft leaned red" only when clear,
+  option reasons in words and only detected kinds (as Learn, R20)
+- J2 Public picker signal: tiers "strong fit / also fine / weaker here" with worded
+  reasons, "no clear difference" when ranges overlap; safe blind = best low end of win
+  against an average pick, lane gold as a reason, not the sort
+- J3 Name the three detected cross-role kinds in the tester; publicly the kind ("into
+  their bot laner"), never a single pair's number
+- J4 Unknown-role shelf: wait until B2's pool block exists
+- J5 Drop "116% of the way there"; the admin line cites our honest time-split ceiling
+  (53-54%, model.md), the 55-57% only with "random split"; nothing on the public site
+- J6 Public "my pool into their pick": a "yours vs theirs" jump on the Matchups index
+  now (cheap, aggregate); the pool block after J2
+- J7 Desktop app: no date, "after Riot's production review"; no notify list (it would
+  keep emails)
+- J8 Ops: gzip for /admin/training/ JSON in jomove's nginx (yes; nginx there needs your
+  OK); browser-tool's first commit is yours; "429 (server)" is Riot's side, count it
+  apart from our key's limit, no action. Password rotation skipped (your call)
+- J9 Admin is for you only: jargon stays low priority
+- Q1 Rewrite the application around game review of your own games, lane curves as the
+  benchmark; squads worded as planned, or out until built
+- Q2 Daily games at least 7 days old; the previous patch's in a patch's first week
+- Q3 Ban suggestions in scope: yes, several with games and range, never auto-ban
+- Q4 Crawl floor: Gold IV once the key's rate allows (the identity is Silver to Emerald),
+  Silver after
+- G1 gpu-box lab data: a new ext4 partition in the 673 GB unallocated (keeps your
+  Pop!_OS install untouched; you format it and add it to wsl-mount.ps1), not a
+  directory on the Pop!_OS partition
+- G2 Prune snapshots 2351Z, 1954Z, 2137Z (~36 GB; only cited in learned.md and
+  model.md): yes. meiolol-2a, who owned them, is gone, so this is yours
+- Patch day movers bar: z 2.58 (fewer, surer movers on a public page)
+- Storage and hosting (Open decisions): Hetzner BX11 for backups and old segments plus
+  a rolling window on the box; needed within ~a week (item 2)
 
 ## Goal now: production key
 
