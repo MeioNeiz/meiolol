@@ -8,7 +8,9 @@
 //!                                                 champions, compact blob (hex)
 //!   ARCHIVE/index.tsv                             one line per export archived
 //! (day = UTC day the export ends). Documents of forgotten players (FORGOTTEN: plain
-//! PUUIDs, one per line, the box's `forget --export`) are left out. zstd on PATH
+//! PUUIDs, one per line, the box's `forget --export`) are left out, and so are documents
+//! that are not a match (an empty body the crawler kept, 15 Oct), counted in `unreadable`
+//! so one cannot hold up every export after it. zstd on PATH
 //! compresses (-15 --long: a day is ~100 GB of JSON; -19 is 9x slower for 15% smaller)
 //! and tests each file. The caller acks the export on the box only after this exits 0
 //! (deploy/archive-pull.sh).
@@ -26,7 +28,13 @@ const log = std.log.scoped(.archive);
 
 const Forgotten = std.StringHashMapUnmanaged(void);
 
-pub const Counts = struct { summaries: usize = 0, timelines: usize = 0, mastery: usize = 0, forgotten: usize = 0 };
+pub const Counts = struct {
+    summaries: usize = 0,
+    timelines: usize = 0,
+    mastery: usize = 0,
+    forgotten: usize = 0,
+    unreadable: usize = 0,
+};
 
 pub fn run(
     gpa: std.mem.Allocator,
@@ -75,13 +83,25 @@ pub fn run(
         defer q.deinit();
         try q.bind(.{});
         while (try q.step()) {
-            const json = try store.raw.decompress(gpa, q.bytes(0));
+            const json = store.raw.decompress(gpa, q.bytes(0)) catch |err| switch (err) {
+                error.OutOfMemory => return err,
+                else => {
+                    counts.unreadable += 1;
+                    continue;
+                },
+            };
             defer gpa.free(json);
             if (mentionsForgotten(json, &forgotten)) {
                 counts.forgotten += 1;
                 continue;
             }
-            const anon = try anonymise.rewriteMatch(gpa, salt, json);
+            const anon = anonymise.rewriteMatch(gpa, salt, json) catch |err| switch (err) {
+                error.OutOfMemory => return err,
+                else => {
+                    counts.unreadable += 1;
+                    continue;
+                },
+            };
             defer gpa.free(anon);
             try fw.interface.writeAll(anon);
             try fw.interface.writeByte('\n');
@@ -396,6 +416,38 @@ test "a real timeline pseudonymises like a summary" {
         try anonymise.matchId(&salt, before.value.metadata.matchId, &buf),
         after.value.metadata.matchId,
     );
+}
+
+test "an unreadable document is left out, not fatal" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    zstd(gpa, io, &.{ "zstd", "--version" }) catch return error.SkipZigTest;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const path = try arena.print("{s}/raw-0-1791838800.db", .{base});
+    {
+        const db = try store.sqlite.Db.open(try arena.dupeSentinel(u8, path, 0));
+        defer db.close();
+        try db.exec(
+            \\CREATE TABLE raw_docs (key TEXT, fetched_at INTEGER, body BLOB);
+            \\CREATE TABLE timeline_docs (match_id TEXT, fetched_at INTEGER, body BLOB);
+            \\CREATE TABLE mastery (puuid TEXT, platform TEXT, fetched_at INTEGER,
+            \\  champions INTEGER, data BLOB);
+        );
+        const empty = try store.raw.compress(arena, "");
+        try db.run("INSERT INTO timeline_docs VALUES ('OC1_1', 1, ?), ('EUW1_2', 2, ?)", .{
+            store.Blob{ .bytes = empty },
+            store.Blob{ .bytes = @embedFile("../riot/testdata/timeline.json.gz") },
+        });
+    }
+    const salt: anonymise.Salt = @splat(7);
+    const n = try run(gpa, io, path, try std.fs.path.join(arena, &.{ base, "archive" }), &salt, null);
+    try testing.expectEqual(1, n.timelines);
+    try testing.expectEqual(1, n.unreadable);
 }
 
 test "day names" {

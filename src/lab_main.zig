@@ -142,8 +142,8 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "archive") and argv.len >= 4) {
         const salt = try readSalt(init, arena, if (argv.len >= 5) argv[4] else null) orelse return 1;
         const n = try archive.run(init.gpa, init.io, argv[2], argv[3], salt, if (argv.len >= 6) argv[5] else null);
-        std.log.info("archived {s}: {d} summaries, {d} timelines, {d} mastery, {d} forgotten left out", .{
-            argv[2], n.summaries, n.timelines, n.mastery, n.forgotten,
+        std.log.info("archived {s}: {d} summaries, {d} timelines, {d} mastery, {d} forgotten, {d} unreadable left out", .{
+            argv[2], n.summaries, n.timelines, n.mastery, n.forgotten, n.unreadable,
         });
         return 0;
     }

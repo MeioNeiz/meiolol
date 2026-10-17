@@ -208,6 +208,10 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   the newest record whose file never got its name (that window is exported again). An
   ack of a name with no record deletes the file and prunes nothing; a failed ack is
   logged and the pull carries on with the rest
+- A document that is not a match (empty, unparseable) is left out and counted
+  ("unreadable left out" in the pull log). Before 17 Oct one empty timeline the crawler
+  kept (OC1, 15 Oct) failed the whole archive step every hour and held 5 exports (~26
+  GB) unacked on the box for 40 h
 - 24 months: `meiolol-lab archive-age` (every pull) blanks every hashed PUUID in days
   older than 730 and deletes their mastery files, as the crawler blanks participants
 - ~6.6 GB/day at today's rate (first pull, 2026-10-12: summaries 4.3 KB, timelines
