@@ -40,6 +40,7 @@
     // Any pick stops the tour where the visitor is looking
     box.addEventListener("click", () => clearInterval(timer), { capture: true });
     box.addEventListener("keydown", () => clearInterval(timer), { capture: true });
+    box.addEventListener("focusin", () => clearInterval(timer));
   }
 
   // Previews: the turning minute, three deaths that cost most, the lane against typical
@@ -68,7 +69,9 @@
     deaths.closest(".viz").hidden = false;
   }
   const lane = document.getElementById("v-lane");
-  const lg = games.find((x) => x.lane?.curve && x.lane.gold.length >= Review.LANE_END && x.lane.curve.n[Review.LANE_END - 1] >= Review.MIN_N);
+  const hasCurve = (x) => x.lane?.curve && x.lane.gold.length >= Review.LANE_END && x.lane.curve.n[Review.LANE_END - 1] >= Review.MIN_N;
+  // The featured game's lane; another game's only when it has none, and then named
+  const lg = hasCurve(g) ? g : games.find(hasCurve);
   if (lane && lg) {
     const l = lg.lane, c = l.curve, i = Review.LANE_END - 1;
     const row = (label, value, diff, good, text) => {
@@ -83,6 +86,11 @@
     if (l.level6?.[0] != null && c.level6?.[0] != null) rows.push(row("Level 6", clock(l.level6[0]), l.level6[0] - c.level6[0], l.level6[0] <= c.level6[0], sec(l.level6[0] - c.level6[0])));
     if (l.first_item?.[0] != null && c.first_item?.[0] != null) rows.push(row("First item", clock(l.first_item[0]), l.first_item[0] - c.first_item[0], l.first_item[0] <= c.first_item[0], sec(l.first_item[0] - c.first_item[0])));
     lane.replaceChildren(...rows);
+    if (lg !== g) {
+      const vs = lg.opponent !== undefined ? ` vs ${Review.champName(lg.opponent)}` : "";
+      const note = el("li", "small muted", `From another game: ${Review.champName(lg.champion)}${vs}, ${date(lg)}`);
+      lane.append(note);
+    }
     lane.closest(".viz").hidden = false;
   }
 

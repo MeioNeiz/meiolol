@@ -175,7 +175,18 @@ const Review = (() => {
       const tip = svgEl("title", {});
       tip.textContent = `${clock(mo.t_s)} ${mo.title}`;
       c.append(tip);
-      if (pick) c.addEventListener("click", () => pick(Math.min(n, Math.ceil(mo.minute)), i));
+      if (pick) {
+        const go = () => pick(Math.min(n, Math.ceil(mo.minute)), i);
+        c.setAttribute("role", "button");
+        c.setAttribute("tabindex", "0");
+        c.setAttribute("aria-label", tip.textContent);
+        c.addEventListener("click", go);
+        c.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          go();
+        });
+      }
       svg.append(c);
     });
     svg.append(svgEl("line", { class: "cursor", x1: x(minute), x2: x(minute), y1: T, y2: H - B }));
@@ -453,8 +464,15 @@ const Review = (() => {
     const costs = games.filter((g) => g.death_costs);
     const deaths = costs.flatMap((g) => g.death_costs.map((d) => ({ g, d })));
     if (deaths.length) {
+      // Ranked by what followed first, so that is the headline; gold only when nothing did
       const worst = best(deaths, (x) => x.d.gold + 1000 * (x.d.lost?.length ?? 0));
-      add("costliest", `${worst.d.gold} gold`, "Most expensive death", `${clock(worst.d.t_s)}${worst.d.lost?.length ? `, then the enemy took ${list(worst.d.lost)}` : ""}: ${on(worst.g)}`, worst.d.killer, "cost");
+      const lost = worst.d.lost ?? [];
+      if (lost.length) {
+        const took = lost.length > 2 ? `${lost.length} objectives` : list(lost);
+        add("costliest", took, "Costliest death: what the enemy took next", `${clock(worst.d.t_s)}, ${worst.d.gold} gold, then ${list(lost)}: ${on(worst.g)}`, worst.d.killer, "cost");
+      } else {
+        add("costliest", `${worst.d.gold} gold`, "Costliest death: kill gold given", `${clock(worst.d.t_s)}: ${on(worst.g)}`, worst.d.killer, "cost");
+      }
     }
     const turns = games.filter((g) => g.turning);
     if (turns.length) {
@@ -533,7 +551,10 @@ const Review = (() => {
       panel.append(wrap, counts(M));
       const ml = momentList(M, (i) => set(Math.min(wc.length - 1, Math.ceil(M[i].minute)), i), opts.keep);
       set = (minute, i) => {
+        // The chart is redrawn: a keyboard user keeps their place on the same dot
+        const dot = [...holder.querySelectorAll(".mo")].indexOf(document.activeElement);
         holder.replaceChildren(winChart(g, M, minute, set, holder.clientWidth));
+        if (dot >= 0) holder.querySelectorAll(".mo")[dot]?.focus();
         fill.style.height = `${wc[minute]}%`;
         val.textContent = wc[minute];
         bar.setAttribute("aria-label", `Win chance at ${minute}:00: ${wc[minute]}%`);
