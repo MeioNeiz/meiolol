@@ -50,7 +50,13 @@ under the write lock they starve the crawler on a slow host.
   into /mnt/wsl/archive/meiolol-backups (systemd user timer meiolol-backup-mirror,
   hourly, only while the archive partition is mounted; installed by `deploy/lab-run.sh
   watch-install`; key ~/.ssh/meiolol_backup, alias meiolol-backup, forced command
-  deploy/backup-serve.sh on the box). Both 700: tables hold real PUUIDs. Never in git
+  deploy/backup-serve.sh on the box). Both 700: tables hold real PUUIDs. Never in git.
+  The partition's root is root's: once, on the gpu-box, `sudo install -d -o jmu -g jmu
+  -m 700 /mnt/wsl/archive/meiolol-backups` (until then each hourly run fails at mkdir)
+- First mirror 2026-10-17: the Mac fetched 15 files (19.5 GB) in ~9 min; restore from
+  it (12 min on the Mac) gave 9 files, 784,396 matches, 695,481 timelines, 3,136,005
+  mastery, match_queue 1,417, timeline_queue 57, the sums of the files; the box's prune
+  then freed 14.5 GB (kept state-2026-10-17 and segment 000008, 4.9 GB)
 - A mirror fetches each file the box lists that is new or changed there (a scrub),
   checks size and SHA-256 and acks it (backups/acks/MIRROR.tsv on the box: file, sum,
   time). After each backup the box deletes files some mirror acked at their current sum,
