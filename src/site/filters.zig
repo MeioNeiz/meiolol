@@ -20,16 +20,19 @@ const Bracket = core.curvesfile.Bracket;
 const Writer = std.Io.Writer;
 
 /// Ladder tiers, lowest first; a player off the ladder when the game was stored (tier
-/// NULL) gets index tiers.len, counted only under "All ranks"
+/// NULL) gets index tiers.len, counted only under "All (Platinum+ games)"
 pub const tiers = [_][]const u8{
     "IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER",
 };
+/// The Rank filter's lowest option, Platinum: the tier the crawl samples from
+pub const lowest_offered = 4;
 
 /// Rank filters a curves bracket matches: all ranks, and Diamond+ (the high bracket)
 const curve_ranks = [_]struct { Bracket, []const u8 }{ .{ .all, "" }, .{ .high, "6" } };
 
 comptime {
     std.debug.assert(std.mem.eql(u8, tiers[6], "DIAMOND") and Bracket.ofRank(6) == .high and Bracket.ofRank(5) != .high);
+    std.debug.assert(std.mem.eql(u8, tiers[lowest_offered], "PLATINUM"));
 }
 
 /// Where the games of a slice were played and when

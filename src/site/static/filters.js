@@ -8,7 +8,8 @@
 // the same keys (html.View.query).
 "use strict";
 
-// As root.zig opponentTable: by the bar's top end, so few games can't top the list
+// As root.zig opponentTable: by the win rate pulled toward the champion's own in the role
+// (table data-k games to stabilise), so few games can't top the list
 const HARDEST = "hardest first";
 
 (async () => {
@@ -30,7 +31,7 @@ const HARDEST = "hardest first";
   const current = meta.current.length === 1 ? meta.current[0] : null;
   const home = bar.dataset.region;
 
-  const defaults = { region: home, rank: "", period: "days30", min: "0" };
+  const defaults = { region: home, rank: "", period: "days30", min: "p1" };
   const selects = { region: field("region"), rank: field("rank"), period: field("period"), min: field("min") };
   // "period=patch" from the views' links: the current patch, whichever it is now
   const fromUrl = (k, v) => (k === "period" && v === "patch" && current ? `patch:${current}` : v);
@@ -62,7 +63,8 @@ const HARDEST = "hardest first";
           tiles: s.el.querySelector(".tiles")?.innerHTML,
           body: body?.innerHTML,
           count: s.el.querySelector(".opp-h .muted")?.textContent,
-          more: s.el.querySelector(".tl-more")?.textContent,
+          more: s.el.querySelector(".tl-more")?.innerHTML,
+          moreHidden: s.el.querySelector(".tl-more")?.hidden,
         },
       };
     });
@@ -137,7 +139,7 @@ const HARDEST = "hardest first";
 
   function scopeText(f) {
     const where = f.region === "all" ? "across all regions" : `in ${platformName(f.region)}`;
-    const ranks = f.rank === "" ? "all ranks" : `${titleCase(meta.tiers[Number(f.rank)])} and above`;
+    const ranks = f.rank === "" ? "Platinum+ games" : `${titleCase(meta.tiers[Number(f.rank)])}${Number(f.rank) + 1 < meta.tiers.length ? "+" : ""} players`;
     return `${where}, ${when(f)}, ${ranks}`;
   }
 
@@ -209,9 +211,11 @@ const HARDEST = "hardest first";
     if (count) count.textContent = s.original.count;
     const more = s.el.querySelector(".tl-more");
     if (more) {
-      more.textContent = s.original.more;
-      more.hidden = false;
+      more.innerHTML = s.original.more;
+      more.hidden = s.original.moreHidden;
     }
+    const table = s.el.querySelector("table.tl");
+    if (table) delete table.dataset.showRare;
   }
 
   function draw(s, sums, f, view) {
@@ -234,12 +238,16 @@ const HARDEST = "hardest first";
     if (!s.body) return;
     const floor = f.min.startsWith("p") ? (Number(f.min.slice(1)) / 100) * r.games : Number(f.min);
     const thin = 10;
-    const opps = [...r.opps.values()].filter((o) => o.games >= Math.max(1, floor));
+    const all = [...r.opps.values()];
+    const opps = all.filter((o) => o.games >= Math.max(1, floor));
+    const k = Number(s.el.querySelector("table.tl")?.dataset.k) || 0;
+    const base = r.games ? r.wins / r.games : 0.5;
+    const shrunk = (o) => (o.wins + k * base) / (o.games + k);
     opps.sort((x, y) => {
       const xt = x.games < thin, yt = y.games < thin;
       if (xt !== yt) return xt ? 1 : -1;
       if (xt) return y.games - x.games;
-      return x.wins / x.games - y.wins / y.games;
+      return shrunk(x) - shrunk(y);
     });
     const curve = view ? curveGold(`${view.key}|${f.rank}`) : null;
     const pages = view ? curveGold(`${view.key}|`) : null;
@@ -258,10 +266,19 @@ const HARDEST = "hardest first";
     const count = s.el.querySelector(".opp-h .muted");
     if (count) count.textContent = `${opps.length}, ${HARDEST}`;
     const few = opps.filter((o) => o.games < thin).length;
+    const hidden = all.length - opps.length;
     const more = s.el.querySelector(".tl-more");
     if (more) {
-      more.hidden = few === 0;
-      more.textContent = `Faded: the last ${few} opponents, under ${thin} games each, too few to read much into.`;
+      more.hidden = few === 0 && hidden === 0;
+      more.textContent = few ? `Faded: the last ${few} opponents, under ${thin} games each, too few to read much into. ` : "";
+      if (hidden) {
+        const under = f.min.startsWith("p") ? `under ${f.min.slice(1)}% of ${self ? `${self.name}'s` : "the"} games` : `under ${f.min} games`;
+        const button = document.createElement("button");
+        button.className = "link";
+        button.dataset.showAll = "";
+        button.textContent = "Show them";
+        more.append(`${hidden} rarer opponents (${under}) hidden. `, button);
+      }
     }
   }
 
@@ -367,6 +384,14 @@ const HARDEST = "hardest first";
     return td;
   }
 
+  // "Show them" under an opponent table: every opponent, through the Opponents filter
+  for (const s of sections) {
+    s.el.addEventListener("click", (e) => {
+      if (!e.target.closest?.("[data-show-all]")) return;
+      selects.min.value = "0";
+      apply();
+    });
+  }
   for (const s of Object.values(selects)) s.addEventListener("change", apply);
   bar.querySelector("[data-reset]").addEventListener("click", () => {
     for (const [k, s] of Object.entries(selects)) s.value = defaults[k];

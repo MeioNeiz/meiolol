@@ -166,7 +166,14 @@ test "fixture games to stats, curves and the website" {
         // (few games: shown, faded), it and the curve's gold at 14 linking to the matchup
         // page from the champion's side
         .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "opacity:" } },
-        .{ "champion/darius.html", &.{ "Lane opponents", "<a class=\"champ\" href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Darius vs Mordekaiser\">", "href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Lane curves", "Gold at 14", "Search opponent", "data-name=\"Mordekaiser\" class=\"thin\">" } },
+        .{ "champion/darius.html", &.{ "Lane opponents", "<a class=\"champ\" href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Darius vs Mordekaiser\">", "href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Lane curves", "Darius's gold lead at 14 min<small class=\"sub\">average, then 8 games in 10</small>", "Search opponent", "data-name=\"Mordekaiser\" class=\"thin\">" } },
+        // Hardest first by the rate shrunk with the role's k; opponents under 1% of the
+        // champion's games hidden by default (the Opponents filter's p1). Rank filter from
+        // Platinum, the tier the crawl samples
+        .{ "champion/darius.html", &.{ "data-sortable data-k=\"", "<option value=\"p1\" selected>", "<option value=\"\" selected>All (Platinum+ games)</option><option value=\"4\">Platinum+ players</option>", "Challenger players</option>", "last 30 days, Platinum+ games</span>" } },
+        .{ "champions.html", &.{"Platinum+ ranked solo/duo games in EUW, last 30 days."} },
+        .{ "index.html", &.{"<a href=\"download.html\">Coming: a champ select helper for Windows</a>"} },
+        .{ "matchup/index.html", &.{ "data-min-search", "<li data-games=\"3\" data-name=\"" } },
         .{ "champion/darius.html", &.{"href=\"../patch/build/darius-top.html\""} },
         .{ "champion/darius.html", &.{"win rates on Darius: more data needed (0 players in EUW with 10+ games on it, 20 needed)."} },
         // Filters: the champion's counts by region, rank, patch, role and opponent, its
@@ -192,6 +199,15 @@ test "fixture games to stats, curves and the website" {
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         for (pg[1]) |want| if (std.mem.indexOf(u8, html, want) == null) {
             std.debug.print("{s} lacks {s}\n", .{ pg[0], want });
+            return error.TestUnexpectedResult;
+        };
+    }
+    // Data is Platinum+ (the crawl's floor): no lower tier to filter by, no "all ranks"
+    for ([_][]const u8{ "champions.html", "champion/darius.html" }) |page| {
+        const path = try std.fs.path.join(arena, &.{ out, page });
+        const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
+        for ([_][]const u8{ "all ranks", "All ranks", ">Gold+" }) |bad| if (std.mem.indexOf(u8, html, bad) != null) {
+            std.debug.print("{s} has {s}\n", .{ page, bad });
             return error.TestUnexpectedResult;
         };
     }
