@@ -1467,7 +1467,7 @@ function winReadings() {
     let why = "";
     if (w.lane > 1.3) why += ` The tuning weighs lane matchups ${w.lane.toFixed(1)} times the default: lane matchups carry signal the shipped model shrinks away.`;
     if (w.duo != null && w.duo < 0.85) why += ` Duo terms are shrunk to ${w.duo.toFixed(2)}: mostly noise.`;
-    L.push(`Beats the shipped model beyond noise: ${winners.map(r => `${r.label} (${pmText(r.d)})`).join(", ")}. The eval runs several times a day, so check it holds run after run (chart below).${why}`);
+    L.push(`Beats the shipped model beyond noise: ${winners.map(r => `${r.label} (${pmText(r.d)})`).join(", ")}. The eval runs several times a day, so check it holds run after run (Run by run chart).${why}`);
   }
   const pick = ((R["Pick metric"] || [])[0] || { rows: [] }).rows.find(r => /^current/.test(r.model));
   if (pick) {
@@ -1523,35 +1523,12 @@ function winView(body) {
   const W = winReadings();
   const running = L && L.running && L.running.eval;
   const head = actionButton("eval-run", running ? `Eval running (${span(nowS() - running)})` : "Run eval now", { disabled: !!running || !L, confirm: "Run meiolol eval now? About 10 minutes at low priority on the box." });
-  const learnt = section(body, "What we learnt", "Final findings for predicting the winner (docs/learned.md).");
-  learnedList(learnt, MODELS.learned.win);
-  runFindings(learnt, "win");
   const sec = section(body, "Best model against the baseline", ev.length ? `Daily eval (docs/model.md), newest ${ev[ev.length - 1].date}: models built from older games, scored on the newest games they never saw.` : "Daily eval (docs/model.md).", head);
-  if (!W) { sec.append(el("p", { class: "muted" }, "No eval report yet.")); return; }
-  sec.append(el("ul", { class: "readings" }, ...W.lines.map(t => el("li", {}, t))));
+  if (!W) { sec.append(el("p", { class: "muted" }, "No eval report yet.")); winLearnt(body); return; }
+  // The headline reading and the run-by-run chart first, the other readings after
+  sec.append(el("ul", { class: "readings" }, ...W.lines.slice(0, 1).map(t => el("li", {}, t))));
   const g = grid(sec);
-  const cmp = W.rows.filter(r => r.d && r !== W.current);
-  if (cmp.length) {
-    intervalChart(g, {
-      title: "Each model against the one the site uses", left: "better", right: "worse",
-      fmt: v => (v > 0 ? "+" : "") + (+v.toFixed(4)).toString(),
-      rows: cmp.map(r => ({ label: r.label, value: r.d.mean, ci: r.d.ci, color: r.d.mean + r.d.ci < 0 ? PALETTE[2] : r.d.mean - r.d.ci > 0 ? PALETTE[1] : null })),
-      caption: `Log loss per game against the shipped model on the same ${num(W.games)} games, with 95% intervals. Green: better beyond noise.`,
-    });
-  }
-  const lc = learningCurve(reportTables(D.eval_report));
-  if (lc) {
-    const cols = lc.t.head.filter(h => !/train games|AUC/.test(h));
-    chart(g, {
-      id: "learning-curve", title: "Does more data help? Same test games, more training games", type: "line", fit: true,
-      x: lc.rows.map(x => Math.log2(x.n)), xFmt: v => num(Math.pow(2, v)) + " games",
-      xTicks: (a, b, w) => lc.rows.filter((_, i) => i % Math.max(1, Math.ceil(lc.rows.length / Math.max(2, Math.floor(w / 70)))) === 0).map(x => [Math.log2(x.n), num(x.n)]),
-      fmt: v => v == null ? "–" : v.toFixed(4),
-      series: cols.map((c, i) => ({ name: c, color: PALETTE[i % PALETTE.length], values: lc.rows.map(x => numIn(x.r[c])) })),
-      ref: { value: LL_COIN, label: "coin flip" },
-      caption: "Log loss, lower is better. Each point doubles the training games; the test games stay the same, so this is the honest accuracy-by-data curve.",
-    });
-  }
+  if (W.lines.length > 1) sec.append(el("h3", { class: "subhead" }, "More readings"), el("ul", { class: "readings" }, ...W.lines.slice(1).map(t => el("li", {}, t))));
   if (ev.length > 1) {
     const ex = ev.map((_, i) => i);
     const evFmt = i => ev[i] ? `${ev[i].date}, ${num(ev[i].games)} games` : "";
@@ -1577,6 +1554,28 @@ function winView(body) {
       });
     }
   }
+  const cmp = W.rows.filter(r => r.d && r !== W.current);
+  if (cmp.length) {
+    intervalChart(g, {
+      title: "Each model against the one the site uses", left: "better", right: "worse",
+      fmt: v => (v > 0 ? "+" : "") + (+v.toFixed(4)).toString(),
+      rows: cmp.map(r => ({ label: r.label, value: r.d.mean, ci: r.d.ci, color: r.d.mean + r.d.ci < 0 ? PALETTE[2] : r.d.mean - r.d.ci > 0 ? PALETTE[1] : null })),
+      caption: `Log loss per game against the shipped model on the same ${num(W.games)} games, with 95% intervals. Green: better beyond noise.`,
+    });
+  }
+  const lc = learningCurve(reportTables(D.eval_report));
+  if (lc) {
+    const cols = lc.t.head.filter(h => !/train games|AUC/.test(h));
+    chart(g, {
+      id: "learning-curve", title: "Does more data help? Same test games, more training games", type: "line", fit: true,
+      x: lc.rows.map(x => Math.log2(x.n)), xFmt: v => num(Math.pow(2, v)) + " games",
+      xTicks: (a, b, w) => lc.rows.filter((_, i) => i % Math.max(1, Math.ceil(lc.rows.length / Math.max(2, Math.floor(w / 70)))) === 0).map(x => [Math.log2(x.n), num(x.n)]),
+      fmt: v => v == null ? "–" : v.toFixed(4),
+      series: cols.map((c, i) => ({ name: c, color: PALETTE[i % PALETTE.length], values: lc.rows.map(x => numIn(x.r[c])) })),
+      ref: { value: LL_COIN, label: "coin flip" },
+      caption: "Log loss, lower is better. Each point doubles the training games; the test games stay the same, so this is the honest accuracy-by-data curve.",
+    });
+  }
   const d = el("details", {}, el("summary", {}, "Full eval report (for model work)"));
   if (D.eval_report) d.append(el("div", { class: "report" }, markdown(D.eval_report)));
   sec.append(d);
@@ -1588,6 +1587,20 @@ function winView(body) {
     { key: "ll_eb", label: "Shrunk", num: true, fmt: v => v == null ? "–" : v.toFixed(4) },
   ], ev.map((x, i) => ({ ...x, i })), { sort: { key: "i", dir: "desc" } });
   sec.append(r);
+  winLearnt(body);
+}
+
+// Newest two findings in view; the rest and the run findings (charts) one click away
+function winLearnt(body) {
+  const learnt = section(body, "What we learnt", "Final findings for predicting the winner (docs/learned.md), newest first.");
+  const items = MODELS.learned.win || [];
+  const top = items.filter(t => !/^~~/.test(t)).slice(0, 2);
+  const rest = items.filter(t => !top.includes(t));
+  learnedList(learnt, top);
+  const more = el("details", {}, el("summary", {}, "Older findings and recent runs" + (rest.length ? ` (${rest.length} findings)` : "")));
+  learnt.append(more);
+  if (rest.length) learnedList(more, rest);
+  runFindings(more, "win");
 }
 
 // ---------- models: early game ----------
