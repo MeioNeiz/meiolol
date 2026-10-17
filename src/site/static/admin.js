@@ -803,6 +803,8 @@ VIEWS.overview = body => {
     `last report ${ago(C.last_report)}`, silent || crawlUp === false ? "bad" : "good", () => setTab("crawler"));
   tile(tiles, "Matches / day", mHour == null ? "–" : num(mHour * 24), "rate over the last hour", silent ? "bad" : null, () => setTab("crawler"));
   tile(tiles, "Timelines / day", tHour == null ? "–" : num(tHour * 24), "rate over the last hour", null, () => setTab("crawler"));
+  const stored = storedPerDay();
+  tile(tiles, "Stored, last 24 h", stored ? num(stored.day) : "–", stored && stored.avg != null ? `matches; ${num(stored.avg)} / day over the last ${span(stored.span)}` : "matches", null, () => setTab("crawler"));
   const req = lastHour(C, b => sumR(b.req), now);
   const nReg = C.regions.length || 1;
   tile(tiles, "Riot key use", req == null ? "–" : pct(req / 60 / (KEY_PER_MIN * nReg)), `${num(req == null ? null : req / 60)} requests / min, all routes`, null, () => setTab("riot"));
@@ -860,6 +862,21 @@ VIEWS.overview = body => {
     actionList(s, L.actions.slice(-5));
   }
 };
+
+// Matches stored (crawler report lines): the last 24 h, and per day over the whole log
+// window from its first report
+function storedPerDay() {
+  const C = D.crawl;
+  if (!C.buckets.length) return null;
+  const at = i => C.start + i * C.step;
+  const first = C.buckets.findIndex(b => b.covered > 0);
+  if (first < 0) return null;
+  const m = (b, i) => at(i) >= D.now - 86400 ? sumR(b.m) : 0;
+  const day = sumR(C.buckets.map(m));
+  const all = sumR(C.buckets.map(b => sumR(b.m)));
+  const spanS = D.now - at(first);
+  return { day, avg: spanS >= 2 * 86400 ? all / spanS * 86400 : null, span: spanS };
+}
 
 function daysLeftText() {
   const g = growthPerDay("disk_used");
@@ -1178,14 +1195,20 @@ VIEWS.ingest = body => {
   const M = D.drafts;
   const regionIdx = Object.fromEntries(D.crawl.regions.map((r, i) => [r, i]));
   const regions = REGION_ORDER.filter(r => r in regionIdx && ui.regions.has(r));
-  const sec = section(body, "What we ingest", `Complete ranked games (draft rows): the newest ${num(M.rows)} stored.`);
+  const sec = section(body, "What we ingest", `Complete ranked games (draft rows): the newest ${num(M.rows)} stored, by the day each was played.`);
   const g = grid(sec);
   const days = M.days;
+  // The window's first day is cut by the row limit; the newest two still fill in as
+  // matches arrive after the game
+  const today = Math.floor(D.now / 86400);
+  const partial = days.map((d, i) => i === 0 || d.day >= today - 1);
   chart(g, {
     x: days.map(d => d.day * 86400), step: 86400, title: "Games by game day", type: "bars",
     xFmt: t => dayLabel(t / 86400), xMin: days.length ? days[0].day * 86400 : 0,
     xMax: days.length ? (days[days.length - 1].day + 1) * 86400 : 1,
-    series: regions.map(r => ({ name: r, color: REGION_COLOR[r], values: days.map(d => d.region[regionIdx[r]]) })),
+    series: regions.map(r => ({ name: r, color: REGION_COLOR[r], values: days.map((d, i) => partial[i] ? 0 : d.region[regionIdx[r]]) }))
+      .concat([{ name: "partial day", color: "#5b6478", values: days.map((d, i) => partial[i] ? sumR(regions.map(r => d.region[regionIdx[r]])) : 0) }]),
+    caption: "By the day the game was played, not the day it was stored. Grey: the first day is cut by the window, the last two still fill in. Games stored a day: Overview.",
   });
   chart(g, {
     x: M.minutes.map((_, i) => i * 5), step: 5, title: "Game length", type: "bars",
