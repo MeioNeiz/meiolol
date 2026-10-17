@@ -69,6 +69,9 @@ const usage =
     \\                                     0 none)
     \\              --raw-match-days N     keep raw match JSON N days (default 30,
     \\                                     0 forever)
+    \\              --raw-valve-free-gb N  under N GB free on the data disk, drop raw
+    \\                               the archive never got, oldest first, logged in
+    \\                               DATA/raw-dropped.log (default 0: never)
     \\              --keep-days N    rolling window: drop matches, their rows and
     \\                               timelines N days after game start (default 0,
     \\                               kept forever)
@@ -224,7 +227,8 @@ const usage =
     \\              --cuts A,B,C,D,E,DEV,TEST  as carry's; --table FILE  dev fit's rows
     \\  raw-export  raw archive, box side (archive.zig): write raw summaries, raw timelines
     \\              and mastery fetched since the last export to DIR/raw-FROM-TO.db and
-    \\              print its name and counts (nothing when there is nothing new)
+    \\              print its name and counts (nothing when there is nothing new);
+    \\              raw timelines it holds leave raw.db at once (the file is their copy)
     \\              --out DIR        default DATA/archive-out
     \\              --ack NAME       the gpu-box archived NAME: delete it, then drop raw
     \\                               documents acked and older than --keep-days
@@ -559,6 +563,8 @@ fn cmdCrawl(c: *Cmd) !u8 {
             o.raw_timeline_days = try c.int(u32);
         } else if (c.is("--raw-match-days")) {
             o.raw_match_days = try c.int(u32);
+        } else if (c.is("--raw-valve-free-gb")) {
+            o.raw_valve_free_mb = try c.int(u64) * 1024;
         } else if (c.is("--priority")) {
             var priority: std.ArrayList([]const u8) = .empty;
             for (try c.list()) |p| {
@@ -1188,19 +1194,22 @@ fn cmdRawExport(c: *Cmd) !u8 {
     }
     const io = c.init.io;
     const now = std.Io.Clock.real.now(io).toSeconds();
-    const db = try c.open();
+    // Status for the health check: read-only, so it never waits on an ack or the crawler
+    const db = if (show_status) try store.schema.openReadOnly(c.init.gpa, c.data_dir) else try c.open();
     defer db.close();
     var buf: [1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
     const w = &stdout.interface;
     if (show_status) {
         const s = try archive.status(db, now);
-        try w.print("since_ack_s {?d}\nunacked {d}\noldest_unacked_s {?d}\n", .{ s.since_ack_s, s.unacked, s.oldest_unacked_s });
+        try w.print("since_ack_s {?d}\nunacked {d}\noldest_unacked_s {?d}\nsince_drop_s {?d}\ndrops_24h {d}\n", .{
+            s.since_ack_s, s.unacked, s.oldest_unacked_s, s.since_drop_s, s.drops_24h,
+        });
     } else if (ack_name) |name| {
         const p = try archive.ack(io, db, dir, name, keep_days, now);
         try w.print("acked {s}; dropped {d} raw summaries, {d} raw timelines\n", .{ name, p.summaries, p.timelines });
     } else if (try archive.exportNew(c.arena, io, db, dir, now)) |e| {
-        try w.print("{s}\t{d}\t{d}\t{d}\n", .{ e.name, e.summaries, e.timelines, e.mastery });
+        try w.print("{s}\t{d}\t{d}\t{d}\t{d}\n", .{ e.name, e.summaries, e.timelines, e.mastery, e.pruned });
     }
     try w.flush();
     return 0;
@@ -1834,6 +1843,9 @@ fn cmdBackup(c: *Cmd) !u8 {
         .out_dir = c.init.environ_map.get("MEIOLOL_BACKUPS") orelse "backups",
         .now = std.Io.Clock.real.now(c.init.io).toSeconds(),
     };
+    // --mirror DIR --forgotten FILE: tend a mirror instead (backup.tendMirror)
+    var mirror: ?[]const u8 = null;
+    var forgotten: ?[]const u8 = null;
     while (c.next()) |_| {
         if (c.is("--out")) {
             o.out_dir = try c.value();
@@ -1843,7 +1855,18 @@ fn cmdBackup(c: *Cmd) !u8 {
             o.keep_weekly = try c.int(usize);
         } else if (c.is("--full")) {
             o.full = true;
+        } else if (c.is("--mirror")) {
+            mirror = try c.value();
+        } else if (c.is("--forgotten")) {
+            forgotten = try c.value();
         } else return error.Usage;
+    }
+    if (mirror) |dir| {
+        const t = try backup.tendMirror(c.arena, c.init.io, dir, try c.required(forgotten, "--forgotten"), o.keep_daily, o.keep_weekly, o.now);
+        std.log.info("{s}: {d} newly forgotten scrubbed ({d} rows), {d} old state snapshots removed", .{
+            dir, t.new_forgotten, t.removed.total(), t.rotated,
+        });
+        return 0;
     }
     const r = try backup.run(c.arena, c.init.io, o);
     std.log.info("{s}; segment {s}: {d} matches, {d} timelines, {d} drafts, {d} rank changes; " ++

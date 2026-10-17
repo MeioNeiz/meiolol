@@ -276,21 +276,33 @@ pub const Status = struct {
     drops_24h: i64,
 };
 
+/// Read-only (the health check runs it beside acks, exports and the crawler's prune):
+/// no DDL, so tables an older box never made read as nothing yet
 pub fn status(db: store.Db, now_s: i64) !Status {
-    try db.exec(ddl);
-    const last = try int(db,
-        \\SELECT coalesce(max(acked_at), -1) FROM raw.archive_exports
-        \\WHERE name NOT IN (SELECT name FROM raw.archive_dropped WHERE kind = 'export')
-    , .{});
+    var out: Status = .{ .since_ack_s = null, .unacked = 0, .oldest_unacked_s = null, .since_drop_s = null, .drops_24h = 0 };
+    if (!try hasTable(db, "archive_exports")) return out;
+    const drops = try hasTable(db, "archive_dropped");
+    const last = if (!drops)
+        try int(db, "SELECT coalesce(max(acked_at), -1) FROM raw.archive_exports", .{})
+    else
+        try int(db,
+            \\SELECT coalesce(max(acked_at), -1) FROM raw.archive_exports
+            \\WHERE name NOT IN (SELECT name FROM raw.archive_dropped WHERE kind = 'export')
+        , .{});
     const oldest = try int(db, "SELECT coalesce(min(made_at), -1) FROM raw.archive_exports WHERE acked_at IS NULL", .{});
-    const dropped = try int(db, "SELECT coalesce(max(at), -1) FROM raw.archive_dropped", .{});
-    return .{
-        .since_ack_s = if (last < 0) null else now_s - last,
-        .unacked = try int(db, "SELECT count(*) FROM raw.archive_exports WHERE acked_at IS NULL", .{}),
-        .oldest_unacked_s = if (oldest < 0) null else now_s - oldest,
-        .since_drop_s = if (dropped < 0) null else now_s - dropped,
-        .drops_24h = try int(db, "SELECT count(*) FROM raw.archive_dropped WHERE at > ?", .{now_s - std.time.s_per_day}),
-    };
+    out.since_ack_s = if (last < 0) null else now_s - last;
+    out.unacked = try int(db, "SELECT count(*) FROM raw.archive_exports WHERE acked_at IS NULL", .{});
+    out.oldest_unacked_s = if (oldest < 0) null else now_s - oldest;
+    if (drops) {
+        const dropped = try int(db, "SELECT coalesce(max(at), -1) FROM raw.archive_dropped", .{});
+        out.since_drop_s = if (dropped < 0) null else now_s - dropped;
+        out.drops_24h = try int(db, "SELECT count(*) FROM raw.archive_dropped WHERE at > ?", .{now_s - std.time.s_per_day});
+    }
+    return out;
+}
+
+fn hasTable(db: store.Db, name: []const u8) !bool {
+    return try db.scalar("SELECT 1 FROM raw.sqlite_master WHERE type = 'table' AND name = ?", .{name}) != null;
 }
 
 pub const Dropped = struct {
@@ -614,4 +626,23 @@ test "df's available column" {
         \\
     ));
     try testing.expectEqual(null, dfAvailableMb("df: /nope: No such file or directory\n"));
+}
+
+test "status reads only, on a box that never exported" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const data = try arena.print(".zig-cache/tmp/{s}/data", .{&tmp.sub_path});
+    try Io.Dir.cwd().createDirPath(io, data);
+    const db = try store.open(arena, data);
+    db.close();
+    const ro = try store.schema.openReadOnly(arena, data);
+    defer ro.close();
+    const st = try status(ro, 100);
+    try testing.expectEqual(null, st.since_ack_s);
+    try testing.expectEqual(0, st.unacked);
+    try testing.expectEqual(null, st.since_drop_s);
 }
