@@ -60,7 +60,7 @@ pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var ctx: Context = .{ .gpa = gpa, .io = io, .opts = opts, .curves = try loadCurveSet(gpa, arena, io, opts.curves_dir) };
+    var ctx: Context = .{ .gpa = gpa, .io = io, .opts = opts, .curves = try loadCurveSet(arena, io, opts.curves_dir) };
 
     const db = try cache.open(opts.db_path);
     defer db.close();
@@ -102,8 +102,8 @@ fn work(f: *fetch.Fetcher) void {
 
 /// curves-<label>.bin files, newest patch first, at most max_curve_files
 /// The newest curves files in `dir_path` with the legendary items for first-item timing
-pub fn loadCurveSet(gpa: Allocator, arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
-    var set = try loadCurves(gpa, arena, io, dir_path);
+pub fn loadCurveSet(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
+    var set = try loadCurves(arena, io, dir_path);
     // Item lists change little between patches: the newest curves patch's serves all
     if (set.files.len > 0) {
         const label = set.files[0].label;
@@ -115,7 +115,7 @@ pub fn loadCurveSet(gpa: Allocator, arena: Allocator, io: Io, dir_path: []const 
     return set;
 }
 
-fn loadCurves(gpa: Allocator, arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
+fn loadCurves(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
     var dir = Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => {
             log.warn("no curves directory {s}: games show without typical curves", .{dir_path});
@@ -138,11 +138,13 @@ fn loadCurves(gpa: Allocator, arena: Allocator, io: Io, dir_path: []const u8) !g
     var files: std.ArrayList(game.CurveSet.File) = .empty;
     for (names.items) |name| {
         if (files.items.len == max_curve_files) break;
-        // Parsed copies live on; the raw bytes go at once (the web server is small)
-        const bytes = try dir.readFileAlloc(io, name, gpa, .limited(1 << 30));
-        defer gpa.free(bytes);
-        const curves = core.curvesfile.Curves.parse(arena, bytes) catch |err| {
-            log.warn("{s}: {t}", .{ name, err });
+        // Read straight into the parsed copy: the web server is small
+        var file = try dir.openFile(io, name, .{});
+        defer file.close(io);
+        var buf: [64 * 1024]u8 = undefined;
+        var fr = file.reader(io, &buf);
+        const curves = core.curvesfile.Curves.read(arena, &fr.interface, try file.length(io)) catch |err| {
+            log.warn("{s}: {t}", .{ name, if (err == error.ReadFailed) fr.err.? else err });
             continue;
         };
         const label = name["curves-".len .. name.len - ".bin".len];

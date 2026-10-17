@@ -600,20 +600,45 @@ pub const Curves = struct {
     };
 
     pub fn parse(gpa: std.mem.Allocator, bytes: []const u8) ParseError!Curves {
-        if (bytes.len < header_len) return error.Truncated;
-        if (!std.mem.eql(u8, bytes[0..magic.len], magic)) return error.BadMagic;
-        var r: std.Io.Reader = .fixed(bytes[magic.len..]);
-        const ver = r.takeInt(u32, .little) catch unreachable;
+        var r: std.Io.Reader = .fixed(bytes);
+        return read(gpa, &r, bytes.len) catch |err| switch (err) {
+            error.ReadFailed => unreachable,
+            else => |e| e,
+        };
+    }
+
+    /// As parse, from a reader of `len` bytes: the Your games server has room for the
+    /// parsed curves but not for them and the file's bytes at once
+    pub fn read(gpa: std.mem.Allocator, r: *std.Io.Reader, len: u64) (ParseError || error{ReadFailed})!Curves {
+        const take = struct {
+            fn bytes(rr: *std.Io.Reader, out: []u8) error{ ReadFailed, Truncated }!void {
+                rr.readSliceAll(out) catch |err| return switch (err) {
+                    error.EndOfStream => error.Truncated,
+                    error.ReadFailed => error.ReadFailed,
+                };
+            }
+        };
+        if (len < header_len) return error.Truncated;
+        var head: [header_len]u8 = undefined;
+        try take.bytes(r, &head);
+        if (!std.mem.eql(u8, head[0..magic.len], magic)) return error.BadMagic;
+        const ints = head[magic.len..];
+        const ver = std.mem.readInt(u32, ints[0..4], .little);
         if (ver != version) return error.UnsupportedVersion;
-        const m = r.takeInt(u32, .little) catch unreachable;
+        const m = std.mem.readInt(u32, ints[4..8], .little);
         if (m != max_minutes) return error.UnsupportedVersion;
-        const games = r.takeInt(u32, .little) catch unreachable;
-        const k = r.takeInt(u32, .little) catch unreachable;
+        const games = std.mem.readInt(u32, ints[8..12], .little);
+        const k = std.mem.readInt(u32, ints[12..16], .little);
         if (k > max_curves) return error.TooManyCurves;
-        if (bytes.len < header_len + @sizeOf(Fit)) return error.Truncated;
+        if (len < header_len + @sizeOf(Fit)) return error.Truncated;
+        const per_curve = @sizeOf(Header) + m * @sizeOf(Minute);
+        const body = len - header_len - @sizeOf(Fit);
+        if (body < k * per_curve) return error.Truncated;
+        if (body > k * per_curve) return error.SizeMismatch;
+
         const fit = try gpa.create(Fit);
         errdefer gpa.destroy(fit);
-        fit.* = std.mem.bytesToValue(Fit, bytes[header_len..][0..@sizeOf(Fit)]);
+        try take.bytes(r, std.mem.asBytes(fit));
         var c: Curves = .{
             .patch_buf = undefined,
             .patch_len = 0,
@@ -622,21 +647,17 @@ pub const Curves = struct {
             .curves = &.{},
             .minutes = &.{},
         };
-        @memcpy(&c.patch_buf, bytes[header_len - patch_len ..][0..patch_len]);
+        @memcpy(&c.patch_buf, head[header_len - patch_len ..]);
         c.patch_len = std.mem.indexOfScalar(u8, &c.patch_buf, 0) orelse patch_len;
 
-        const per_curve = @sizeOf(Header) + m * @sizeOf(Minute);
-        const body = bytes[header_len + @sizeOf(Fit) ..];
-        if (body.len < k * per_curve) return error.Truncated;
-        if (body.len > k * per_curve) return error.SizeMismatch;
         c.curves = try gpa.alloc(Curve, k);
         errdefer gpa.free(c.curves);
         c.minutes = try gpa.alloc(Minute, k * m);
+        errdefer gpa.free(c.minutes);
         for (c.curves, 0..) |*cv, i| {
-            const at = body[i * per_curve ..];
-            cv.header = std.mem.bytesToValue(Header, at[0..@sizeOf(Header)]);
+            try take.bytes(r, std.mem.asBytes(&cv.header));
             const mins = c.minutes[i * m ..][0..m];
-            @memcpy(std.mem.sliceAsBytes(mins), at[@sizeOf(Header)..][0 .. m * @sizeOf(Minute)]);
+            try take.bytes(r, std.mem.sliceAsBytes(mins));
             cv.minutes = mins;
         }
         return c;
@@ -913,4 +934,8 @@ test "round trip, sides and brackets" {
 
     const bytes = aw.written();
     try testing.expectError(error.Truncated, Curves.parse(gpa, bytes[0 .. bytes.len - 1]));
+
+    // A reader shorter than its stated length, as a file cut while being read
+    var short: std.Io.Reader = .fixed(bytes[0 .. bytes.len - 1]);
+    try testing.expectError(error.Truncated, Curves.read(gpa, &short, bytes.len));
 }

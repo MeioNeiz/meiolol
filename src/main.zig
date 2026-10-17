@@ -1601,7 +1601,7 @@ fn cmdYourExample(c: *Cmd) !u8 {
     const io = c.init.io;
     const path = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "your-example.json" });
     const dir = curves_dir orelse try std.fs.path.join(arena, &.{ c.data_dir, "export" });
-    const set = try api.loadCurveSet(c.init.gpa, arena, io, dir);
+    const set = try api.loadCurveSet(arena, io, dir);
     const db = try store.schema.openReadOnly(c.init.gpa, c.data_dir);
     defer db.close();
     const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
