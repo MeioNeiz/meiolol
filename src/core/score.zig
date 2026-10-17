@@ -188,6 +188,25 @@ pub fn matchupPp(stats: *const Stats, opts: Options, r: Role, c: usize, er: Role
     return evenPp(ctx.matchup(ctx.place(c, r), ctx.place(e, er)));
 }
 
+/// The weighted log-odds draftWin adds for `c` in `r`; with duoLogit and matchupLogit,
+/// a draft's logit is the sum of its terms (the admin Draft tester's file, draftmodel.zig)
+pub fn baseLogit(stats: *const Stats, opts: Options, c: usize, r: Role) f64 {
+    const ctx: Context = .{ .stats = stats, .opts = opts };
+    return opts.weights.base * ctx.base(c, r);
+}
+
+/// Allies `c` in `r` and `a` in `ar` (different roles), as baseLogit
+pub fn duoLogit(stats: *const Stats, opts: Options, r: Role, c: usize, ar: Role, a: usize) f64 {
+    const ctx: Context = .{ .stats = stats, .opts = opts };
+    return ctx.duo(ctx.place(c, r), ctx.place(a, ar));
+}
+
+/// `c` in `r` against `e` in `er`, from `c`'s side, as baseLogit
+pub fn matchupLogit(stats: *const Stats, opts: Options, r: Role, c: usize, er: Role, e: usize) f64 {
+    const ctx: Context = .{ .stats = stats, .opts = opts };
+    return ctx.matchup(ctx.place(c, r), ctx.place(e, er));
+}
+
 /// A full draft's log-odds for side 0, by kind of term, unweighted
 pub const DraftTerms = struct {
     /// Side 0's base ratings minus side 1's

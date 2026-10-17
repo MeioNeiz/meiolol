@@ -9,7 +9,8 @@
 # (~/ml/agent/<campaign>, LAB_CANDS), and a run's result.tsv, findings.tsv and
 # effects-*.tsv (meiolol-lab); and the admin Draft tester's models (draft-model.json,
 # lane-model.json and their -ref.json) from the export a human chose with `use`, never
-# just the newest (a smoke or agent run may export one).
+# just the newest (a smoke or agent run may export one). The tester reads the box's daily
+# files (admin/models/, `meiolol draft-model`) before these unless "Prefer lab picks".
 # The gpu-box (home network only) is staged over ssh at most once a minute; when
 # unreachable its last staged copy is sent and hosts.tsv says when it was last reached.
 # launchd calls it every 30 s once installed. Upload: a gzipped tar over ssh with a key
@@ -217,5 +218,5 @@ case "${1:-}" in
         launchctl bootout "gui/$(id -u)/${PLIST%.plist}" || true
         rm -f ~/Library/LaunchAgents/$PLIST
         ;;
-    *) sed -n '17,22p' "$0"; exit 2 ;;
+    *) sed -n '19,24p' "$0"; exit 2 ;;
 esac

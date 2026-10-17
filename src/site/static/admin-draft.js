@@ -3,14 +3,27 @@
 // section, table, stored, store, getJson, render, ui, num, pct, sumR) only when called.
 //
 // Admin only: a draft board of two teams, the model's win chance for the whole draft, and
-// a picker per slot showing what each champion would change. The model comes from
-// meiolol-lab's `draft --export` (meiolol-88), sent by deploy/lab-push.sh as
-// training/draft-model.json with reference pairs in draft-ref.json, checked at load. Nothing
-// here reaches the public site, which must not claim "this draft wins X%"
+// a picker per slot showing what each champion would change. The model comes from the box's
+// daily `meiolol draft-model` (models/, deploy/web-loop.sh) or meiolol-lab's `draft --export`
+// sent by deploy/lab-push.sh (training/), as draft-model.json with reference pairs in
+// draft-ref.json, checked at load (modelFile). Nothing here reaches the public site, which
+// must not claim "this draft wins X%"
 
 const DRAFT_ROLES = [["top", "Top"], ["jungle", "Jungle"], ["mid", "Mid"], ["bot", "Bot"], ["support", "Support"]];
 const SIDES = [["blue", "Blue"], ["red", "Red"]];
-const DRAFT = { model: undefined, ref: null, err: null, check: null, m: null };
+const DRAFT = { model: undefined, ref: null, err: null, check: null, m: null, from: {} };
+const MODEL_DIRS = { models: "box daily", training: "lab pick" };
+
+// A model file from the box's daily export (models/) or the lab pick (training/, `lab-push.sh
+// use`): the preferred one first, the other when it has none; its references come from the
+// same directory
+async function modelFile(name) {
+  const dirs = stored("draftPrefer", "box") === "lab" ? ["training", "models"] : ["models", "training"];
+  for (const [i, dir] of dirs.entries()) {
+    try { return { json: await getJson(`${dir}/${name}`), dir }; }
+    catch (e) { if (i === dirs.length - 1 || !/^404/.test(e.message)) throw e; }
+  }
+}
 
 function draftState() {
   const d = stored("draft2", null) || {};
@@ -20,17 +33,19 @@ function saveDraft(d) { store("draft2", d); render(true); }
 
 async function loadDraftModel() {
   // Champion-into-comp terms are optional: without them the model scores as exported
-  DRAFT.cc = null; DRAFT.ccErr = null;
+  DRAFT.cc = null; DRAFT.ccErr = null; DRAFT.from = {};
   try {
-    const C = await getJson("training/draft-comp.json");
+    const { json: C, dir } = await modelFile("draft-comp.json");
+    DRAFT.from.comp = dir;
     DRAFT.cc = champComp(C);
     if (!DRAFT.cc) throw new Error(`draft-comp.json is format "${C.format}" version ${C.version}; this page reads meiolol-champcomp version 1`);
   } catch (e) { if (!/^404/.test(e.message)) DRAFT.ccErr = e.message; }
   try {
-    DRAFT.model = await getJson("training/draft-model.json");
+    const { json: M, dir } = await modelFile("draft-model.json");
+    DRAFT.model = M; DRAFT.from.draft = dir;
     DRAFT.m = draftModel(DRAFT.model, DRAFT.cc);
     if (!DRAFT.m) throw new Error(`draft-model.json is format "${DRAFT.model.format}" version ${DRAFT.model.version}; this page reads meiolol-draft-model versions 1 to 4`);
-    DRAFT.ref = await getJson("training/draft-ref.json").catch(() => null);
+    DRAFT.ref = await getJson(`${dir}/draft-ref.json`).catch(() => null);
     DRAFT.err = null;
     // draft-ref.json is the exported model alone: checked without the comp terms
     DRAFT.check = DRAFT.m && DRAFT.ref ? draftCheck(DRAFT.cc ? draftModel(DRAFT.model) : DRAFT.m, DRAFT.ref) : null;
@@ -38,10 +53,11 @@ async function loadDraftModel() {
   // The lane model is optional: without it the picker has no lane column
   DRAFT.lane = null; DRAFT.laneErr = null; DRAFT.laneCheck = null;
   try {
-    const L = await getJson("training/lane-model.json");
+    const { json: L, dir } = await modelFile("lane-model.json");
+    DRAFT.from.lane = dir;
     DRAFT.lane = laneModel(L);
     if (!DRAFT.lane) throw new Error(`lane-model.json is format "${L.format}" version ${L.version}; this page reads meiolol-lane-model version 1`);
-    const ref = await getJson("training/lane-ref.json").catch(() => null);
+    const ref = await getJson(`${dir}/lane-ref.json`).catch(() => null);
     DRAFT.laneCheck = ref ? laneCheck(DRAFT.lane, ref) : null;
   } catch (e) { if (!/^404/.test(e.message)) DRAFT.laneErr = e.message; }
   if (ui.tab === "models" && ui.cat === "draft") render(true);
@@ -340,7 +356,7 @@ function draftCheck(m, ref) {
     const s = m.slot(q.teams, q.bans || [], q.side, q.role, q.min_games);
     cmp(s.empty, q.empty, `${q.label}: empty`);
     cmp(s.average, q.average, `${q.label}: average`);
-    if (s.options.length !== q.options.length) { bad = `${q.label}: ${s.options.length} candidates, meiolol-lab has ${q.options.length}`; worst = Infinity; continue; }
+    if (s.options.length !== q.options.length) { bad = `${q.label}: ${s.options.length} candidates, the reference has ${q.options.length}`; worst = Infinity; continue; }
     q.options.forEach((o, i) => {
       const mine = s.options[i];
       if (mine.champion !== o.champion) { bad = `${q.label}: order differs at ${i + 1}`; worst = Infinity; return; }
@@ -348,8 +364,8 @@ function draftCheck(m, ref) {
     });
   }
   if (!n) return null;
-  return bad ? { ok: false, text: `Differs from meiolol-lab's reference (${bad}; largest gap ${isFinite(worst) ? worst.toExponential(1) : "order"}): don't trust these numbers.` }
-    : { ok: true, text: `Matches meiolol-lab on ${(ref.drafts || []).length} reference drafts and ${(ref.slots || []).length} slot lists (largest gap ${worst.toExponential(1)}).` };
+  return bad ? { ok: false, text: `Differs from its reference (${bad}; largest gap ${isFinite(worst) ? worst.toExponential(1) : "order"}): don't trust these numbers.` }
+    : { ok: true, text: `Matches its reference on ${(ref.drafts || []).length} reference drafts and ${(ref.slots || []).length} slot lists (largest gap ${worst.toExponential(1)}).` };
 }
 
 // The early-game lane model (docs/model.md "Lane model file"; Scorer in src/lab/lane.zig is
@@ -392,8 +408,8 @@ function laneCheck(lm, ref) {
     if (s.champ_games !== x.champ_games || s.pair_games !== x.pair_games) bad = `${x.label}, role ${x.role}: games`;
   }
   if (!n) return null;
-  return bad ? { ok: false, text: `Lane model differs from meiolol-lab's reference (${bad}; largest gap ${worst.toFixed(3)}): don't trust the lane suggestions.` }
-    : { ok: true, text: `Lane model matches meiolol-lab on ${ref.refs.length} reference matchups (largest gap ${worst.toExponential(1)}).` };
+  return bad ? { ok: false, text: `Lane model differs from its reference (${bad}; largest gap ${worst.toFixed(3)}): don't trust the lane suggestions.` }
+    : { ok: true, text: `Lane model matches its reference on ${ref.refs.length} reference matchups (largest gap ${worst.toExponential(1)}).` };
 }
 
 // Search key: letters and digits only, so "kaisa" finds Kai'Sa and "nunu" Nunu & Willump
@@ -403,11 +419,13 @@ const takenIn = d => new Set([...Object.values(d.blue), ...Object.values(d.red),
 function draftView(body) {
   if (DRAFT.model === undefined) { loadDraftModel(); body.append(el("p", { class: "muted" }, "Loading the draft model…")); return; }
   const m = DRAFT.m, M = DRAFT.model || {}, meta = M.meta || {};
+  const lab = stored("draftPrefer", "box") === "lab";
   const sec = section(body, "Draft tester", "Build two teams, swap champions in, see what the model thinks. Admin only: the public site never shows a draft's win chance.",
+    el("button", { type: "button", class: "ghost", title: "Where each model file comes from when both have one: the box's daily export or the lab's `lab-push.sh use` pick", onclick: () => { store("draftPrefer", lab ? "box" : "lab"); DRAFT.model = undefined; render(true); } }, lab ? "Prefer box daily" : "Prefer lab picks"),
     el("button", { type: "button", class: "ghost", onclick: () => { DRAFT.model = undefined; render(true); } }, "Reload model"));
   if (!m) {
     if (DRAFT.err && !/^404/.test(DRAFT.err)) sec.append(el("div", { class: "health bad" }, el("b", {}, "The draft model didn't load: "), DRAFT.err));
-    else sec.append(el("p", { class: "muted" }, "No draft model yet: meiolol-lab's `draft --export` writes it and deploy/lab-push.sh sends it."));
+    else sec.append(el("p", { class: "muted" }, "No draft model yet: the box writes one daily (`meiolol draft-model`), or meiolol-lab's `draft --export` and deploy/lab-push.sh send one."));
     return;
   }
   if (DRAFT.tags === undefined) loadTags();
@@ -439,6 +457,8 @@ function draftView(body) {
     about.push(el("p", { class: "sub" }, `Lane column: early-game model ${lm.name !== "candidate" ? lm.name + " " : ""}on ${num(lm.training_games)} games to ${lm.newest_game}.` +
       (dev ? ` It predicts the gold lead at 14 ${dev.removed_pct.toFixed(0)}% better than champion averages alone, so matchups nudge the numbers rather than decide them.` : "")));
   }
+  const from = [["draft", "draft model"], ["comp", "comp terms"], ["lane", "lane model"]].filter(([k]) => DRAFT.from[k]).map(([k, label]) => `${label} ${MODEL_DIRS[DRAFT.from[k]]}`);
+  about.push(el("p", { class: "sub" }, `Files: ${from.join(", ")}.`));
   sec.append(el("details", { class: "about" }, el("summary", { class: "sub" }, [meta.name, meta.training_games != null ? `${num(meta.training_games)} games to ${meta.newest_game}` : null,
     dev.accuracy != null ? `right ${pct(dev.accuracy)} of ${num(dev.games)} practice games` : null, bad.length ? null : "checks pass"].filter(Boolean).join(" · ")), ...about));
 

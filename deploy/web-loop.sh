@@ -27,6 +27,11 @@
 # way: daily and on a new patch; the next site build picks the files up.
 # Daily, `meiolol lean` (every region, last 30 days; docs/model.md "Early and late
 # champions") the same way: data/lean.tsv, the champion pages' early or late line.
+# Daily, `meiolol draft-model` (seconds after its scan) refits the shipped draft model on
+# every played game into data/tester/ (draft-model.json, draft-ref.json and .gz copies),
+# written beside it and swapped in whole; each round copies it into the admin upload at
+# admin/models/, where the Draft tester reads it before the lab's pick (admin-draft.js
+# modelFile; docs/model.md "Draft model file").
 # Daily, `meiolol your-example` (read-only, background) leaves one anonymised player's
 # games in data/your-example.json, which meiolol-render serves at the same path from its
 # next load, for your.html's and the home page's example. A failed run removes the file,
@@ -101,6 +106,7 @@ mtime() { stat -c %Y "$1" 2> /dev/null || echo 0; }
 # eval.log is truncated as a run starts, the other logs written as each runs
 last_eval=$(mtime data/eval.log) last_example=$(mtime data/your-example.log)
 last_builds=$(mtime data/builds.log) last_lean=$(mtime data/lean.log)
+last_tester=$(mtime data/tester.log)
 last_upload=$(mtime data/views.full)
 # 1 h for the first day of a patch, else 6 h
 interval_for() {
@@ -202,6 +208,15 @@ run_daily() {
     elif (( now - last_lean >= 86400 )); then
         last_lean=$now
         batch bin/meiolol lean > data/lean.log 2>&1 &
+    elif (( now - last_tester >= 86400 )); then
+        last_tester=$now
+        (rm -rf data/tester.new
+        if batch bin/meiolol draft-model --out data/tester.new > data/tester.log 2>&1 \
+            && batch gzip -kf data/tester.new/*.json; then
+            rm -rf data/tester.old
+            [[ -d data/tester ]] && mv data/tester data/tester.old
+            mv data/tester.new data/tester && rm -rf data/tester.old
+        fi) &
     # Space by table and index, for the admin page: reads every page of every database
     elif (( now - last_storage >= 82800 )); then
         last_storage=$now
@@ -288,6 +303,8 @@ while true; do
     if nice -n 10 bin/meiolol admin --out data/admin.new \
         --disk "$(df -B1 --output=size,used,avail data | tail -n 1)" \
         --health "$(bin/health.sh)" 2>&1; then
+        # Times kept, so the upload sends the tester's files only when the daily job changed them
+        [[ -d data/tester ]] && cp -pR data/tester data/admin.new/models
         rm -rf data/admin && mv data/admin.new data/admin
         rsync -a --delete data/admin/ meiolol-web:admin/ || echo "$(date -u +%FT%TZ) admin upload FAILED"
     fi

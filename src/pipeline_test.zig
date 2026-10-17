@@ -10,6 +10,7 @@ const stats = @import("stats.zig");
 const curves = @import("curves.zig");
 const builds = @import("builds.zig");
 const lean = @import("lean.zig");
+const draftmodel = @import("draftmodel.zig");
 const ddragon = @import("ddragon.zig");
 const site = @import("site/root.zig");
 const admin = @import("admin.zig");
@@ -469,6 +470,47 @@ test "admin page from the fixture games and a crawl log" {
     // One history line per build, under one header
     const history = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ dir, "admin-history.tsv" }), arena, .limited(1 << 20));
     try testing.expectEqual(3, std.mem.count(u8, history, "\n"));
+}
+
+test "fixture games to the Draft tester's draft model" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "tester" });
+    const db = try store.schema.memory();
+    defer db.close();
+    // The protocol's cuts want 100 played games
+    try fillGames(arena, db, 150, true);
+    var log: std.Io.Writer.Allocating = .init(arena);
+    try draftmodel.run(gpa, io, db, dir, &log.writer);
+    const File = struct {
+        format: []const u8,
+        version: u32,
+        meta: struct { training_games: usize, patch: []const u8 },
+        champions: []const struct { id: u32 },
+        model: struct { kind: []const u8, terms: []const struct { champion: u32 }, pairs: struct { cells: []const [5]f64 } },
+    };
+    const text = try tmp.dir.readFileAlloc(io, "tester/draft-model.json", arena, .limited(16 << 20));
+    const m = try std.json.parseFromSliceLeaky(File, arena, text, .{ .ignore_unknown_fields = true });
+    try testing.expectEqualStrings("meiolol-draft-model", m.format);
+    try testing.expectEqual(4, m.version);
+    try testing.expectEqualStrings("draft", m.model.kind);
+    try testing.expectEqual(150, m.meta.training_games);
+    try testing.expectEqualStrings("15.13", m.meta.patch);
+    // Every game the same ten champions: one term each; 10 ally pairs a team, 10 matchups
+    // across roles each way, 5 lane matchups
+    try testing.expectEqual(10, m.model.terms.len);
+    try testing.expectEqual(45, m.model.pairs.cells.len);
+    const Ref = struct { drafts: []const struct { label: []const u8 }, slots: []const struct { options: []const struct { champion: u32 } } };
+    const ref_text = try tmp.dir.readFileAlloc(io, "tester/draft-ref.json", arena, .limited(1 << 20));
+    const ref = try std.json.parseFromSliceLeaky(Ref, arena, ref_text, .{ .ignore_unknown_fields = true });
+    // Three test games whole and part open, the empty board, no terms (no Rammus)
+    try testing.expectEqual(8, ref.drafts.len);
+    try testing.expectEqual(2, ref.slots.len);
 }
 
 test "fixture games to lab rows, from SQLite and packed" {

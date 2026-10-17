@@ -704,12 +704,12 @@ fn olderFirst(_: void, a: Game, b: Game) bool {
 }
 
 /// A stats file built in memory from some games
-const Model = struct {
+pub const Model = struct {
     bytes: []u8,
     stats: core.Stats,
 
     /// From `games`, leaving out fold `skip.k` of `skip.folds` (game index mod folds)
-    fn build(
+    pub fn build(
         gpa: std.mem.Allocator,
         champs: []const core.statsfile.Champion,
         games: []const Game,
@@ -729,13 +729,13 @@ const Model = struct {
         return .{ .bytes = bytes, .stats = try .parse(gpa, bytes) };
     }
 
-    fn deinit(m: *Model, gpa: std.mem.Allocator) void {
+    pub fn deinit(m: *Model, gpa: std.mem.Allocator) void {
         m.stats.deinit(gpa);
         gpa.free(m.bytes);
     }
 };
 
-const Fold = struct { k: usize, folds: usize };
+pub const Fold = struct { k: usize, folds: usize };
 
 /// One model per fold, each leaving that fold out, built in parallel (freeModels)
 fn foldModels(

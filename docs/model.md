@@ -3994,7 +3994,20 @@ melee, CC and sustain effects (Lulu, Malzahar, Yasuo into dive, Lissandra and Sy
 melee), so those were specific matchups. The duo weight (0.765 under a 3200 prior) leaves
 ally pairs mostly unexplained, which is where the ally AP terms live
 
-### Draft model file (meiolol-lab draft --export)
+### Draft model file (meiolol draft-model, meiolol-lab draft --export)
+
+`meiolol draft-model [--out DIR]` (src/draftmodel.zig, default DATA/tester) writes the
+shipped model (core.score, Options defaults, as the site and app score drafts) fitted on
+every played game in the database, every platform and patch: kind "draft", the same file
+as the win-draft export below (17 Oct, snap-20261017T1320Z: every term and pair cell
+equal, 800,302 games, 6 s on the Mac; meta.snapshot "box database"). It stops unless
+the file's scorer matches core.score.draftWin on 500 test games within 1e-4 (5e-9
+measured); meta.dev refits on the played games older than dev-val and scores dev-val per
+game, baseline champion strength alone. Daily on the box (deploy/web-loop.sh), served at
+/admin/models/ with the admin upload; the tester reads each file (draft, comp, lane) from
+there and falls back to the lab pick in /admin/training/ (`lab-push.sh use`), or the other
+way round with "Prefer lab picks". The scorer and writer are src/draftfile.zig, shared
+with the lab.
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
 `exportModel`, today win-ratings) fits on every game in the snapshot and writes

@@ -26,6 +26,7 @@ pub const playstyle = @import("playstyle.zig");
 pub const scaling = @import("scaling.zig");
 pub const carry = @import("carry.zig");
 pub const lean = @import("lean.zig");
+pub const draftmodel = @import("draftmodel.zig");
 const analysis = @import("analysis.zig");
 const test_looks = @import("lab/looks.zig");
 pub const archive = @import("archive.zig");
@@ -225,6 +226,10 @@ const usage =
     \\              --out FILE       instead of DATA/lean.tsv
     \\              --check          lab: folds and dev-val (markdown on stdout), no test
     \\              --cuts A,B,C,D,E,DEV,TEST  as carry's; --table FILE  dev fit's rows
+    \\  draft-model the shipped draft model on every played game as the admin Draft
+    \\              tester's draft-model.json and draft-ref.json (docs/model.md "Draft model
+    \\              file"); daily on the box
+    \\              --out DIR        default DATA/tester
     \\  raw-export  raw archive, box side (archive.zig): write raw summaries, raw timelines
     \\              and mastery fetched since the last export to DIR/raw-FROM-TO.db and
     \\              print its name and counts (nothing when there is nothing new);
@@ -389,6 +394,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "scaling", cmdScaling },
     .{ "carry", cmdCarry },
     .{ "lean", cmdLean },
+    .{ "draft-model", cmdDraftModel },
     .{ "raw-export", cmdRawExport },
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
@@ -1141,6 +1147,23 @@ fn cmdLean(c: *Cmd) !u8 {
     try w.interface.flush();
     try file.replace(io);
     std.log.info("{s}: {d} games, {s}", .{ path, games.list.items.len, scope });
+    return 0;
+}
+
+fn cmdDraftModel(c: *Cmd) !u8 {
+    var out: ?[]const u8 = null;
+    while (c.next()) |_| {
+        if (c.is("--out")) {
+            out = try c.value();
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    var buf: [4096]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    defer stdout.interface.flush() catch {};
+    try draftmodel.run(c.init.gpa, io, db, out orelse try std.fs.path.join(c.arena, &.{ c.data_dir, "tester" }), &stdout.interface);
     return 0;
 }
 
