@@ -150,13 +150,8 @@ reasons; the app shows champion and aggregate stats only)
 ## How we work
 
 Several Claude sessions in parallel, all on main in the one checkout (Jacob,
-2026-10-11: no more branches or worktrees). Commit only by explicit path (`git commit -m
-... -- <paths>`): the index may hold another session's staged work. Every push to main
-deploys to the box (deploy/box.sh builds from a clean checkout of the commit; history in
-ml/meiolol/DEPLOYED), so the pre-push hook runs `zig build ci` on a clean checkout of the
-pushed commit first (CLAUDE.md). Push the tested commit by sha, `git push origin
-<sha>:main`, never `git push origin main`: over HTTPS git re-reads main after the hook,
-so a commit another session makes during CI goes out untested (055b97d, 2026-10-12).
+2026-10-11: no more branches or worktrees). Commit, push and deploy rules: CLAUDE.md
+"Git and deploys".
 
 Until the site goes public (Jacob, 2026-10-11): sessions merge, push and redeploy the
 preview site and box binary without asking. Still ask first: anything irreversible
@@ -174,6 +169,10 @@ once. Beyond that, coordination ate the gain: name clashes, a whole snapshot's r
 voided by a mid-night re-cut, the gpu-box at load 41-58 on 20 threads (jobs 5-10x
 slow), by-path commits sweeping in other sessions' hunks. Fix the split and pin before
 starting runs on a snapshot, not during.
+Unattended runs (17 Oct night): the Mac slept at 22:33 and killed the fix agent
+mid-turn, and a usage limit stopped two agents at 21:44. Start the coordinator under
+`caffeinate -i`, keep team notes in data/team/ (CLAUDE.md), and long box jobs in
+systemd units, not a foreground ssh.
 
 Neural nets paused (14 Oct): big, small, set and embedding nets only draw level with
 ratings at 2253Z, and research (draft-predictor-methods, gnn-match-outcome) puts the
@@ -248,8 +247,8 @@ docs/backlog.md. Some are done; check before acting, and move what you pick up i
 
 ## Reference
 
-- Hosting: jomove server (Oracle uk-london-1, `ssh -i ~/.ssh/oci_instance-20260714-1317
-  ubuntu@193.123.180.81`; jomove's own nginx config: leave alone).
+- Hosting: jomove server (Oracle uk-london-1, `ssh jomove`: alias in the Mac's
+  ~/.ssh/config for ubuntu@193.123.180.81; jomove's own nginx config: leave alone).
   /etc/nginx/conf.d/meiolol.conf, root /var/www/meiolol, user `meiolol` with an rrsync
   key from the box; Let's Encrypt via webroot. The box: docs/hosting.md (Oracle Cloud,
   `meiolol-cloud`). deploy/web-loop.sh on the box builds and
