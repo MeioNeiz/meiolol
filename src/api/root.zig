@@ -45,9 +45,11 @@ pub const Options = struct {
     max_games: u32 = 100,
 };
 
-/// Newest curves files kept in memory (tens of MB each at full crawl; the web server
-/// has ~1 GB)
+/// Newest curves files kept in memory
 const max_curve_files = 2;
+/// Curves parse to about their file size; jomove's unit has MemoryMax 400M, and a full
+/// patch's file is over 200 MB, so the previous patch's goes once the new one grows
+const max_curve_bytes = 320 << 20;
 
 const Context = struct {
     gpa: Allocator,
@@ -103,7 +105,7 @@ fn work(f: *fetch.Fetcher) void {
 /// curves-<label>.bin files, newest patch first, at most max_curve_files
 /// The newest curves files in `dir_path` with the legendary items for first-item timing
 pub fn loadCurveSet(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
-    var set = try loadCurves(arena, io, dir_path);
+    var set = try loadCurves(arena, io, dir_path, max_curve_bytes);
     // Item lists change little between patches: the newest curves patch's serves all
     if (set.files.len > 0) {
         const label = set.files[0].label;
@@ -115,7 +117,7 @@ pub fn loadCurveSet(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveS
     return set;
 }
 
-fn loadCurves(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
+fn loadCurves(arena: Allocator, io: Io, dir_path: []const u8, max_bytes: u64) !game.CurveSet {
     var dir = Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => {
             log.warn("no curves directory {s}: games show without typical curves", .{dir_path});
@@ -136,22 +138,57 @@ fn loadCurves(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
         }
     }.newer);
     var files: std.ArrayList(game.CurveSet.File) = .empty;
+    var bytes: u64 = 0;
     for (names.items) |name| {
         if (files.items.len == max_curve_files) break;
         // Read straight into the parsed copy: the web server is small
         var file = try dir.openFile(io, name, .{});
         defer file.close(io);
+        const len = try file.length(io);
+        // The newest always loads: without it no game has a curve
+        if (files.items.len > 0 and bytes + len > max_bytes) {
+            log.info("{s}: {d} MB left out, over the {d} MB curves budget", .{ name, len >> 20, max_bytes >> 20 });
+            continue;
+        }
         var buf: [64 * 1024]u8 = undefined;
         var fr = file.reader(io, &buf);
-        const curves = core.curvesfile.Curves.read(arena, &fr.interface, try file.length(io)) catch |err| {
+        const curves = core.curvesfile.Curves.read(arena, &fr.interface, len) catch |err| {
             log.warn("{s}: {t}", .{ name, if (err == error.ReadFailed) fr.err.? else err });
             continue;
         };
         const label = name["curves-".len .. name.len - ".bin".len];
         try files.append(arena, .{ .label = label, .curves = curves });
+        bytes += len;
         log.info("{s}: {d} curves", .{ name, curves.curves.len });
     }
     return .{ .files = files.items };
+}
+
+test "loadCurves: newest patch first; older files only within the byte budget" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    var b: core.curvesfile.Builder = .{ .gpa = std.testing.allocator };
+    defer b.deinit();
+    var aw: std.Io.Writer.Allocating = .init(arena);
+    try b.write(&aw.writer, "16.20", 1);
+    const len = aw.written().len;
+    for ([_][]const u8{ "curves-16.19.bin", "curves-16.21.bin", "curves-16.20.bin" }) |name| {
+        try tmp.dir.writeFile(io, .{ .sub_path = name, .data = aw.written() });
+    }
+
+    const two = try loadCurves(arena, io, dir, 2 * len);
+    try std.testing.expectEqual(2, two.files.len);
+    try std.testing.expectEqualStrings("16.21", two.files[0].label);
+    try std.testing.expectEqualStrings("16.20", two.files[1].label);
+    // Over budget even alone, the newest still loads
+    const one = try loadCurves(arena, io, dir, len - 1);
+    try std.testing.expectEqual(1, one.files.len);
+    try std.testing.expectEqualStrings("16.21", one.files[0].label);
 }
 
 /// "curves-16.19-16.20.bin" -> 1620; 0 when unreadable
