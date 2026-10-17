@@ -64,6 +64,22 @@ if [[ -z "$newest" ]] || (( now - $(stat -c %Y "$newest") > 26 * 3600 )); then
     problems+=("backup missing: newest ${newest:+$(basename "$newest")}${newest:-none}")
 fi
 
+# Backup mirrors (deploy/backup-serve.sh status): the box drops a backup only once a mirror
+# acked it, so unmirrored ones are both unsafe and filling the box. Lines carry times
+if [[ -x bin/backup-serve.sh ]] && mirrors=$(bin/backup-serve.sh status 2> /dev/null); then
+    while read -r what name last; do
+        [[ "$what" == mirror && "$last" =~ ^[0-9]+$ ]] || continue
+        if (( now - last > 48 * 3600 )); then
+            problems+=("backup mirror $name: last ack $(date -u -d "@$last" '+%F %H:%MZ')")
+        fi
+    done <<< "$mirrors"
+    read -r _ files bytes oldest <<< "$(grep '^unacked ' <<< "$mirrors")"
+    if [[ "$oldest" =~ ^[0-9]+$ ]] && (( ${files:-0} > 0 && now - oldest > 26 * 3600 )); then
+        since=$(date -u -d "@$oldest" '+%F %H:%MZ')
+        problems+=("backups not mirrored since $since ($files files, $(( ${bytes:-0} >> 20 )) MB)")
+    fi
+fi
+
 # Raw archive: the gpu-box pulls and acks (deploy/archive-pull.sh); the box can't reach the
 # PC, so a stale ack is how it sees the PC off or WSL down. Lines carry the last ack's time,
 # not an age, so health-loop.sh doesn't push again every hour. Never exported: not live yet
