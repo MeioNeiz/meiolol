@@ -499,7 +499,8 @@ function draftView(body) {
     }
     board.append(col);
   }
-  if (d.open) {
+  if (!d.open) DRAFT.pick = null;
+  else {
     const [side, role] = d.open.split(".");
     sec.append(el("div", { class: "card picker " + side }, el("div", { class: "pickertitle" },
       el("h3", {}, `${side === "blue" ? "Blue" : "Red"} ${DRAFT_ROLES.find(([r]) => r === role)[1].toLowerCase()}`),
@@ -673,9 +674,14 @@ function slotPicker(m, d, side, role) {
   const signed = (x, digits = 1) => (Math.abs(x) < 0.5 * 10 ** -digits ? "±" : x > 0 ? "+" : "−") + Math.abs(x).toFixed(digits);
   const tone = (x, eps) => x > eps ? "up" : x < -eps ? "down" : "";
   const gold = x => `${x >= 0 ? "+" : "−"}${Math.abs(Math.round(x)).toLocaleString("en-GB")}`;
-  let opened = null;
+  // The search and open row live in DRAFT, not here: the page re-renders (sort, a poll of the
+  // box's data) and a re-render must not close a breakdown or clear the search
+  const key = side + "." + role;
+  if (!DRAFT.pick || DRAFT.pick.key !== key) DRAFT.pick = { key, q: "", opened: null, fresh: true };
+  const P = DRAFT.pick;
 
   const input = el("input", { type: "search", placeholder: `Search all ${rows.length} ${roleName} picks`, "aria-label": "Search champions", autocomplete: "off", spellcheck: "false" });
+  input.value = P.q;
   const sorts = [["best", "Best for draft"], ...(lm ? [["lane", opp != null ? `Best into ${nameOf(opp)}` : "Best blind lane"]] : []), ["played", "Most played"]];
   const sort = sorts.some(([k]) => k === d.order) ? d.order : "best";
   const sortNav = el("nav", { class: "switch", "aria-label": "Sort" });
@@ -712,11 +718,11 @@ function slotPicker(m, d, side, role) {
     list.replaceChildren(el("div", { class: "candhead" + (lm ? " lane" : "") }, el("span", {}, "Champion"), el("span", { title: `Change to ${side}'s win chance against an average ${roleName}` }, "Win"),
       lm ? el("span", { title: "Gold lead at 14 minutes" }, opp != null ? "Lane" : "Blind") : null, el("span", {}, "Played"), el("span", {}, "Why")));
     for (const x of hits) {
-      const open = opened === x.champion;
+      const open = P.opened === x.champion;
       const w = m.why(teams, si, ri, x.champion);
       const row = el("div", { class: "cand" + (lm ? " lane" : "") + (x.champion === cur ? " cur" : "") + (open ? " open" : ""), role: "listitem" },
         el("button", { type: "button", class: "link", title: `Pick ${x.c.name}`, onclick: () => pick(x.champion) }, x.c.name),
-        el("button", { type: "button", class: "more", "aria-expanded": String(open), title: "Why: the whole breakdown", onclick: () => { opened = open ? null : x.champion; fill(); } },
+        el("button", { type: "button", class: "more", "aria-expanded": String(open), title: "Why: the whole breakdown", onclick: () => { P.opened = open ? null : x.champion; fill(); } },
           el("b", { class: tone(x.change, 0.0005), title: `${side} wins ${pct(x.win)} (likely ${pct(x.lo)} to ${pct(x.hi)})` }, signed(100 * x.change)),
           lm ? el("span", { class: "gold " + tone(x.lane.value[G], 50) }, gold(x.lane.value[G])) : null,
           el("span", { class: "rate" }, pct(x.share)),
@@ -726,7 +732,7 @@ function slotPicker(m, d, side, role) {
     }
     if (!hits.length) list.append(el("p", { class: "muted" }, "No pick matches."));
   };
-  input.addEventListener("input", fill);
+  input.addEventListener("input", () => { P.q = input.value; fill(); });
   input.addEventListener("keydown", ev => {
     if (ev.key === "Enter") { const b = list.querySelector(".cand button.link"); if (b) b.click(); }
     if (ev.key === "Escape") { d.open = null; saveDraft(d); }
@@ -736,6 +742,18 @@ function slotPicker(m, d, side, role) {
       (lm ? `. ${opp != null ? "Lane" : "Blind"}: gold ahead at 14 ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents"}` : "") + ". Open a row for why."),
     list);
   fill();
-  setTimeout(() => input.focus({ preventScroll: true }), 0);
+  setTimeout(() => {
+    input.focus({ preventScroll: true });
+    // On opening, bring the picker up when it starts below the fold (a phone, where it sits
+    // under both team cards)
+    if (!P.fresh) return;
+    P.fresh = false;
+    const card = box.closest(".picker"), top = card && card.getBoundingClientRect().top;
+    if (!card || top < 0.6 * window.innerHeight) return;
+    // Clear of the sticky header and tabs
+    const cover = Math.max(0, ...[...document.querySelectorAll("header.top, nav.tabs")]
+      .filter(e => ["sticky", "fixed"].includes(getComputedStyle(e).position)).map(e => e.getBoundingClientRect().bottom));
+    window.scrollTo({ top: window.scrollY + top - cover - 8, behavior: "smooth" });
+  }, 0);
   return box;
 }
