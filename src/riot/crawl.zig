@@ -769,6 +769,10 @@ const RegionCrawler = struct {
         };
         const fetched = got orelse return rc.b.queueStatus(.match, id, .missing);
         defer gpa.free(fetched);
+        if (!wholeDoc(fetched)) {
+            log.warn("match {s}: not a whole document ({d} bytes), tried again later", .{ id, fetched.len });
+            return rc.b.queueStatus(.match, id, .attempt);
+        }
 
         const job = try Job.create(gpa, .none);
         errdefer job.destroy(gpa);
@@ -807,6 +811,12 @@ const RegionCrawler = struct {
         };
         const body = got orelse return rc.b.queueStatus(.timeline, id, .missing);
         defer gpa.free(body);
+        // Kept raw it would be a document no parser can redo, and it stopped the raw
+        // archive for 40 h (an empty 200, OC1, 15 Oct)
+        if (!wholeDoc(body)) {
+            log.warn("timeline {s}: not a whole document ({d} bytes), tried again later", .{ id, body.len });
+            return rc.b.queueStatus(.timeline, id, .attempt);
+        }
 
         const job = try Job.create(gpa, .none);
         errdefer job.destroy(gpa);
@@ -1128,6 +1138,14 @@ pub const Compact = struct {
 };
 
 /// Timeline JSON -> gzipped compact blob, allocated with `gpa`
+/// A match-v5 summary or timeline as Riot sends one: a JSON object naming its match.
+/// Not a parse: a body that passes can still fail extraction and be kept raw
+fn wholeDoc(body: []const u8) bool {
+    const t = std.mem.trim(u8, body, " \t\r\n");
+    if (t.len < 2 or t[0] != '{' or t[t.len - 1] != '}') return false;
+    return std.mem.indexOf(u8, t, "\"matchId\":\"") != null;
+}
+
 pub fn compactTimeline(gpa: std.mem.Allocator, body: []const u8) !Compact {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
@@ -1356,6 +1374,19 @@ test "timelines: every priority match, a share of the rest" {
     c.opts.timeline_percent = 0;
     try std.testing.expect(!c.wantTimeline("NA1_1"));
     try std.testing.expect(c.wantTimeline("EUW1_1"));
+}
+
+test "whole documents: empty, cut short or not a match is a failed fetch" {
+    try std.testing.expect(wholeDoc("{\"metadata\":{\"matchId\":\"OC1_1\"},\"info\":{}}\n"));
+    try std.testing.expect(!wholeDoc(""));
+    try std.testing.expect(!wholeDoc("  \n"));
+    try std.testing.expect(!wholeDoc("{\"metadata\":{\"matchId\":\"OC1_1\"},\"info\":{"));
+    try std.testing.expect(!wholeDoc("{\"status\":{\"status_code\":503}}"));
+    try std.testing.expect(!wholeDoc("<html>busy</html>"));
+    try std.testing.expect(wholeDoc(@embedFile("testdata/match.json")));
+    const tl = try store.raw.decompress(std.testing.allocator, @embedFile("testdata/timeline.json.gz"));
+    defer std.testing.allocator.free(tl);
+    try std.testing.expect(wholeDoc(tl));
 }
 
 test "gold at 10, 14 and 15 minutes" {
