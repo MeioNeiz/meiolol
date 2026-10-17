@@ -351,7 +351,11 @@ details.debug .table-scroll { overflow-x: auto; }
 details.card.deploy { margin-top: 8px; }
 .deploy-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; cursor: pointer; list-style: none; }
 .deploy-head::-webkit-details-marker { display: none; }
-.deploy-head b { font-weight: 600; overflow-wrap: anywhere; flex: 1 1 320px; }
+.deploy-head::before { content: "▸"; color: var(--muted); }
+details[open] > .deploy-head::before { content: "▾"; }
+/* Subjects run to a paragraph: two lines closed, all of it open */
+.deploy-head b { font-weight: 600; overflow-wrap: anywhere; flex: 1 1 320px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+details[open] > .deploy-head b { -webkit-line-clamp: unset; line-clamp: unset; }
 .deploy-head .sub { flex-basis: 100%; font-size: 12px; }
 details.card.deploy[open] > .deploy-head { margin-bottom: 8px; }
 .card.deploy p.sub { margin: 4px 0 8px; }

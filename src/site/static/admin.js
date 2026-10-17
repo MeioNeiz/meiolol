@@ -2191,7 +2191,8 @@ function deployList() {
       const sw = step("swap", start);
       if (sw && sw.status === "done") step("cache", sw.end, sw.end);
     }
-    const commits = list.filter(e => e[2] === "commit").map(e => e[4]);
+    // on-push.sh keeps the first 200 characters of "sha subject"
+    const commits = list.filter(e => e[2] === "commit").map(e => e[4].length >= 200 ? e[4] + "…" : e[4]);
     const failed = DEPLOY_STEPS.some(([k]) => steps[k] && steps[k].status === "failed" && k !== "cache");
     const doneAt = k => steps[k] && steps[k].status === "done" ? steps[k].end : null;
     let cache = doneAt("cache");
@@ -2249,13 +2250,17 @@ VIEWS.deploys = body => {
     const c = el("details", { class: "card deploy" + (d.state === "running" ? " running" : ""), open });
     // No "ago" here: render() keeps a details open by its summary's text
     let when = `pushed ${uk(d.start)}`;
-    if (d.state === "live") when += `, live at ${hm(d.live)} after ${span(d.live - d.start)}`;
+    if (d.state === "live") {
+      // Live is the later of the two tracks: the static upload and the renderer's cache key
+      const up = d.steps.upload && d.steps.upload.end, ren = d.steps.cache && d.steps.cache.end;
+      when += `, live at ${hm(d.live)} after ${span(d.live - d.start)}` + (up && ren ? ` (static upload ${hm(up)}, renderer ${hm(ren)})` : "");
+    }
     else if (d.state === "running") when += `, ${etaText(d, list)}`;
     else if (d.state === "superseded") when += ", replaced by a newer deploy before it went live";
     c.append(el("summary", { class: "deploy-head" },
       el("span", { class: "pill " + cls }, label),
       el("code", {}, d.short),
-      el("b", {}, d.subject ? d.subject.slice(0, 120) + (d.subject.length > 120 ? "…" : "") : d.state === "skipped" ? "docs or research only" : "(no commit message recorded)"),
+      el("b", { title: d.subject || null }, d.subject || (d.state === "skipped" ? "docs or research only" : "(no commit message recorded)")),
       el("span", { class: "sub" }, when)));
     if (d.state === "skipped" || d.state === "refused") {
       const s = d.steps.deploy || d.steps.ci;
@@ -2265,7 +2270,10 @@ VIEWS.deploys = body => {
       const t = el("table", { class: "steps" }, el("thead", {}, el("tr", {},
         ...["Step", "Status", "Started", "Ended", "Took", "Detail"].map(h => el("th", {}, h)))));
       const tb = el("tbody");
-      for (const [k, name, what] of DEPLOY_STEPS) {
+      // In the order they ran; steps not begun keep the pipeline's order after them
+      const order = DEPLOY_STEPS.map((x, i) => ({ x, i, t: d.steps[x[0]] && d.steps[x[0]].start != null ? d.steps[x[0]].start : Infinity }))
+        .sort((a, b) => a.t - b.t || a.i - b.i).map(o => o.x);
+      for (const [k, name, what] of order) {
         const s = d.steps[k];
         let status = s ? s.status : d.state === "running" ? "pending" : d.state === "live" ? "skipped" : "none";
         if (!s && k === "ci") status = "info";
