@@ -70,9 +70,10 @@ pub const Bracket = enum(u8) {
 
     pub const count = 4;
 
+    /// .all is "All games": "All ranks" read as every tier, but the crawl is Platinum+
     pub fn label(b: Bracket) []const u8 {
         return switch (b) {
-            .all => "All ranks",
+            .all => "All games",
             .low => "Iron to Silver",
             .mid => "Gold to Emerald",
             .high => "Diamond+",

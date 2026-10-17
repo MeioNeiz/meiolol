@@ -685,7 +685,7 @@ fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
             try tpl.render(w,
                 \\<tr class="thin"><td>{rank}</td><td class="num" colspan="4">more data needed</td></tr>
                 \\
-            , .{ .rank = bracketLabel(b) });
+            , .{ .rank = b.label() });
             continue;
         };
         const i = curvesfile.lane_minute - 1;
@@ -704,7 +704,7 @@ fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
             \\
         , .{
             .thin = tpl.flag(thin(v), "class=\"thin\""),
-            .rank = bracketLabel(b),
+            .rank = b.label(),
             .games = v.games(),
             .gold = gold,
             .dash = tpl.when(!has_gold, "-"),
@@ -717,12 +717,6 @@ fn brackets(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
         \\<p class="muted">Rank is the median visible tier of the players in each game. Gold is the estimated average, then where 8 games in 10 end (the 10th to 90th percentile); a rank's estimate leans on the one for all games until it has games of its own. Rows under {thin} games, or mostly baseline, are greyed out.</p>
         \\
     , .{ .thin = thin_games });
-}
-
-/// The brackets table's rows; "All ranks" read as every tier, but these are Platinum+
-/// games
-fn bracketLabel(b: Bracket) []const u8 {
-    return if (b == .all) "All games" else b.label();
 }
 
 test "nice scale" {

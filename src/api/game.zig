@@ -857,7 +857,7 @@ test "a real timeline from both sides, with and without a curve" {
     for (blue.death_costs) |d| try testing.expect(d.killer == null or d.killer.? > 5);
 
     const unranked = try analyse(arena, .{ .summary = s, .slot = 5, .timeline = t }, .{}, set);
-    try testing.expectEqualStrings("All ranks", unranked.lane.?.curve.?.bracket);
+    try testing.expectEqualStrings("All games", unranked.lane.?.curve.?.bracket);
 
     const r = try report(arena, &.{ .{ .summary = s, .slot = 0, .timeline = t }, .{ .summary = s, .slot = 0, .timeline = null } }, .{}, .{});
     try testing.expectEqual(@as(usize, 1), r.weeks.len);
