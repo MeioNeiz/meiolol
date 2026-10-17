@@ -58,7 +58,7 @@ pub const usage =
 ;
 
 /// Profile values per champion-role
-const V = enum {
+pub const V = enum {
     phys_dpm,
     magic_dpm,
     true_dpm,
@@ -124,10 +124,10 @@ const V = enum {
     /// Win rate in long games (32 min+) minus short ones (under 25), from fit games
     scaling,
 };
-const nv = @typeInfo(V).@"enum".field_names.len;
+pub const nv = @typeInfo(V).@"enum".field_names.len;
 const v_names = @typeInfo(V).@"enum".field_names;
 
-fn vi(v: V) usize {
+pub fn vi(v: V) usize {
     return @backingInt(v);
 }
 
@@ -236,7 +236,7 @@ const shrink_games = 50;
 /// A pick "has" a trait when its profile is in the top share of fit picks (all roles)
 const top_share = 0.2;
 
-fn cellKey(champion: u32, role: usize) u64 {
+pub fn cellKey(champion: u32, role: usize) u64 {
     return (@as(u64, champion) << 3) | role;
 }
 
@@ -250,7 +250,7 @@ const Cell = struct {
 };
 
 /// Profiles of one fold, from its fit games
-const Profiles = struct {
+pub const Profiles = struct {
     raw: std.AutoHashMapUnmanaged(u64, [nv]f64) = .empty,
     role_raw: [5][nv]f64 = undefined,
     role_mean: [5][nv]f64 = undefined,
@@ -260,16 +260,16 @@ const Profiles = struct {
     /// Optional carry columns (meiolol-61), z within role; [cell] -> values
     carry: std.AutoHashMapUnmanaged(u64, []const f64) = .empty,
 
-    fn deinit(p: *Profiles, gpa: Allocator) void {
+    pub fn deinit(p: *Profiles, gpa: Allocator) void {
         p.raw.deinit(gpa);
         p.carry.deinit(gpa);
     }
 
-    fn raw_of(p: *const Profiles, champion: u32, role: usize) [nv]f64 {
+    pub fn raw_of(p: *const Profiles, champion: u32, role: usize) [nv]f64 {
         return p.raw.get(cellKey(champion, role)) orelse p.role_raw[role];
     }
 
-    fn z(p: *const Profiles, role: usize, x: [nv]f64) [nv]f64 {
+    pub fn z(p: *const Profiles, role: usize, x: [nv]f64) [nv]f64 {
         var out: [nv]f64 = undefined;
         for (&out, x, p.role_mean[role], p.role_sd[role]) |*o, a, m, s| o.* = if (s > 0) (a - m) / s else 0;
         return out;
@@ -278,7 +278,7 @@ const Profiles = struct {
 
 /// permute: nonzero shuffles the profiles among champion-roles of a role (a control:
 /// traits become arbitrary functions of the champions)
-fn buildProfiles(gpa: Allocator, d: *const rows.Data, extra: []const ?compstats.Seat, fit: Fit, permute: u64) !Profiles {
+pub fn buildProfiles(gpa: Allocator, d: *const rows.Data, extra: []const ?compstats.Seat, fit: Fit, permute: u64) !Profiles {
     var cells: std.AutoHashMapUnmanaged(u64, Cell) = .empty;
     defer cells.deinit(gpa);
     var roles: [5]Cell = @splat(.{});
@@ -379,11 +379,11 @@ fn profileOf(c: Cell, prior: ?[nv]f64) [nv]f64 {
 }
 
 /// Fit games of a fold: visible in .dev and older than `before`
-const Fit = struct {
+pub const Fit = struct {
     c: harness.Cuts,
     before: i64,
 
-    fn has(f: Fit, g: rows.Game) bool {
+    pub fn has(f: Fit, g: rows.Game) bool {
         return harness.visible(.dev, f.c, g) and g.start < f.before;
     }
 };
@@ -1037,7 +1037,7 @@ fn slope(x: []const f64, r: []const f64, keep: ?[]const bool) Slope {
 }
 
 /// Two-sided normal p
-fn pOf(z: f64) f64 {
+pub fn pOf(z: f64) f64 {
     return erfc(@abs(z) / std.math.sqrt2);
 }
 
@@ -1068,7 +1068,7 @@ fn bhCount(gpa: Allocator, p: []const f64, q: f64) !usize {
 }
 
 /// BH threshold p at level q (pass when p <= it), 0 when none pass
-fn bhThreshold(gpa: Allocator, p: []const f64, q: f64) !f64 {
+pub fn bhThreshold(gpa: Allocator, p: []const f64, q: f64) !f64 {
     const k = try bhCount(gpa, p, q);
     if (k == 0) return 0;
     const m: f64 = @floatFromInt(p.len);
@@ -1146,50 +1146,14 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     // comp_stats per row, comp_teams per game
     const extra = try gpa.alloc(?compstats.Seat, d.rows.len);
     defer gpa.free(extra);
-    @memset(extra, null);
     const team_obj = try gpa.alloc(?[2]compstats.Team, d.games.len);
     defer gpa.free(team_obj);
-    @memset(team_obj, null);
     {
-        var index: std.AutoHashMapUnmanaged(u64, u32) = .empty;
-        defer index.deinit(gpa);
-        for (d.games, 0..) |g, gi| try index.put(gpa, std.hash.Wyhash.hash(0, g.match_id), @intCast(gi));
-        const by_slot = try gpa.alloc([10]u32, d.games.len);
-        defer gpa.free(by_slot);
-        @memset(by_slot, @splat(std.math.maxInt(u32)));
-        for (d.rows, 0..) |r, ri| if (r.slot < 10) {
-            by_slot[r.game][r.slot] = @intCast(ri);
-        };
-        const SeatSink = struct {
-            index: *const std.AutoHashMapUnmanaged(u64, u32),
-            by_slot: []const [10]u32,
-            extra: []?compstats.Seat,
-            pub fn at(s: @This(), match_id: []const u8, slot: u8) ?*compstats.Seat {
-                const gi = s.index.get(std.hash.Wyhash.hash(0, match_id)) orelse return null;
-                if (slot >= 10 or s.by_slot[gi][slot] == std.math.maxInt(u32)) return null;
-                const e = &s.extra[s.by_slot[gi][slot]];
-                e.* = @splat(nan32);
-                return &e.*.?;
-            }
-        };
-        const placed = try compstats.fill(io, data_path, .seat, SeatSink{ .index = &index, .by_slot = by_slot, .extra = extra }) orelse
-            return error.NoCompStats;
-        const TeamSink = struct {
-            index: *const std.AutoHashMapUnmanaged(u64, u32),
-            teams: []?[2]compstats.Team,
-            pub fn at(s: @This(), match_id: []const u8, side: u8) ?*compstats.Team {
-                const gi = s.index.get(std.hash.Wyhash.hash(0, match_id)) orelse return null;
-                if (side > 1) return null;
-                if (s.teams[gi] == null) s.teams[gi] = .{ @splat(nan32), @splat(nan32) };
-                return &s.teams[gi].?[side];
-            }
-        };
-        const placed_t = try compstats.fill(io, data_path, .team, TeamSink{ .index = &index, .teams = team_obj }) orelse
-            return error.NoCompStats;
+        const placed = try loadExtra(gpa, io, d, data_path, extra, team_obj);
         var with_stats: usize = 0;
         for (d.rows) |r| with_stats += @intFromBool(!std.math.isNan(r.stats[0]));
         try w.print("# comps ({s}{s}), {s}\nrows {d}: with seat stats {d}, comp_stats lines placed {d}; team lines {d}\n", .{
-            @tagName(m), if (permute != 0) ", PERMUTED profiles" else "", snap, d.rows.len, with_stats, placed, placed_t,
+            @tagName(m), if (permute != 0) ", PERMUTED profiles" else "", snap, d.rows.len, with_stats, placed.seats, placed.teams,
         });
         if (with_stats == 0) return error.NoSeatStats;
     }
@@ -1340,6 +1304,56 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
 }
 
 const nan32 = std.math.nan(f32);
+
+/// SNAP's comp_stats.tsv into extra (by row) and comp_teams.tsv into teams (by game);
+/// NaN where a line has no value, null where there is no line
+pub fn loadExtra(
+    gpa: Allocator,
+    io: Io,
+    d: *const rows.Data,
+    data_path: []const u8,
+    extra: []?compstats.Seat,
+    team_obj: []?[2]compstats.Team,
+) !struct { seats: usize, teams: usize } {
+    @memset(extra, null);
+    @memset(team_obj, null);
+    var index: std.AutoHashMapUnmanaged(u64, u32) = .empty;
+    defer index.deinit(gpa);
+    for (d.games, 0..) |g, gi| try index.put(gpa, std.hash.Wyhash.hash(0, g.match_id), @intCast(gi));
+    const by_slot = try gpa.alloc([10]u32, d.games.len);
+    defer gpa.free(by_slot);
+    @memset(by_slot, @splat(std.math.maxInt(u32)));
+    for (d.rows, 0..) |r, ri| if (r.slot < 10) {
+        by_slot[r.game][r.slot] = @intCast(ri);
+    };
+    const SeatSink = struct {
+        index: *const std.AutoHashMapUnmanaged(u64, u32),
+        by_slot: []const [10]u32,
+        extra: []?compstats.Seat,
+        pub fn at(s: @This(), match_id: []const u8, slot: u8) ?*compstats.Seat {
+            const gi = s.index.get(std.hash.Wyhash.hash(0, match_id)) orelse return null;
+            if (slot >= 10 or s.by_slot[gi][slot] == std.math.maxInt(u32)) return null;
+            const e = &s.extra[s.by_slot[gi][slot]];
+            e.* = @splat(nan32);
+            return &e.*.?;
+        }
+    };
+    const seats = try compstats.fill(io, data_path, .seat, SeatSink{ .index = &index, .by_slot = by_slot, .extra = extra }) orelse
+        return error.NoCompStats;
+    const TeamSink = struct {
+        index: *const std.AutoHashMapUnmanaged(u64, u32),
+        teams: []?[2]compstats.Team,
+        pub fn at(s: @This(), match_id: []const u8, side: u8) ?*compstats.Team {
+            const gi = s.index.get(std.hash.Wyhash.hash(0, match_id)) orelse return null;
+            if (side > 1) return null;
+            if (s.teams[gi] == null) s.teams[gi] = .{ @splat(nan32), @splat(nan32) };
+            return &s.teams[gi].?[side];
+        }
+    };
+    const teams = try compstats.fill(io, data_path, .team, TeamSink{ .index = &index, .teams = team_obj }) orelse
+        return error.NoCompStats;
+    return .{ .seats = seats, .teams = teams };
+}
 
 /// Traits written per team by --export-teams (Agg values)
 const export_aggs = [_]Agg{ .magic_share, .early, .scaling, .engage, .peel, .dive, .tank, .range, .siege, .pick, .wave, .roam, .front, .phys_share, .armour_lean, .pen };
@@ -1924,7 +1938,7 @@ fn rowOf(xcol: []const f64, nu: usize, idx: []const usize, u: usize, row: []f64)
 }
 
 /// Gauss-Jordan inverse of a k x k matrix (small, well conditioned by construction)
-fn invert(gpa: Allocator, a_in: []const f64, k: usize) ![]f64 {
+pub fn invert(gpa: Allocator, a_in: []const f64, k: usize) ![]f64 {
     const a = try gpa.dupe(f64, a_in);
     defer gpa.free(a);
     const inv = try gpa.alloc(f64, k * k);

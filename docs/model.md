@@ -3772,6 +3772,93 @@ Reading:
   reason (docs/production-key.md)
 - No test look; the site fits on the box's last 30 days, every region
 
+### Champions into comps, 2026-10-17 (champcomp)
+
+Question (Jacob, 17 Oct): beyond each champion's own strength, does a champion win more
+or less into some enemy comps (more melee, more CC, more AP) or beside some allies, and
+can we say why for a given draft? Comp discovery (above) asked it of whole teams and
+found only the damage mix; the Rammus check asked it of one champion and one trait and
+missed. This asks it of every champion-role at once, with ~3x the games.
+
+Data: snap-20261017T1320Z (made 17 Oct, every game on the box then). Seat stats and comp
+stats come from raw summaries, which the box keeps only since 15 Oct 12:25Z, so lines
+for older games are merged in from snap-20261014T2137Z (seat and comp stats),
+snap-20261013T2253Z and snap-20261012T2055Z (comp stats), first source wins per seat;
+14 Oct 21:37Z to 15 Oct 12:25Z has none (in the raw archive only). Profiles need only
+enough rows per champion-role, so missing seats thin them, they do not bias them.
+
+Method: `meiolol-lab champcomp SNAP` (src/lab/champcomp.zig), built with
+-Dcand=src/lab/cand/win-ratings (its chance is the offset). Profiles are comps' (fit
+games only, won and lost halves averaged, shrunk to the role by 20 rows, z within role).
+Eight traits of a set of seats: AP share of its damage (magic damage over all), melee
+count (base attack range under 300), CC (cc and immobilisations per minute), engage
+(immobilise and knock-up kills), dive (dive kills, outnumbered kills), tankiness (tank
+share, damage taken), sustain (own and ally healing), early power (gold and lane gold at
+14, early takedowns). Effects in win pp per sd at 50%.
+- Team terms: each team's enemy five and own five (16 features, standardised on fit
+  teams), one logistic step from the offset over every team. Sums of profiles are linear
+  in the champions, so ratings should hold most of this (comps); it is here so that a
+  team-wide slope is counted once, not once per seat
+- Champion terms: each seat sees the enemy's five and its four allies (16 features).
+  Every seat of a team shares the enemy's traits, so per seat only a champion's
+  difference from its role's average is identifiable (a constant added to every top
+  laner and taken from every jungler predicts the same). Per champion-role with 300+ fit
+  games: one logistic step from the offset (ratings plus team terms), features centred
+  on the cell's own mean (its overall win rate stays with ratings), model-based se; per
+  role and feature the precision-weighted mean comes off and the deviations are shrunk
+  to 0 by empirical Bayes, spread by DerSimonian-Laird and 0 unless its Q test passes at
+  1% (chi-squared, k - 1). Smaller cells get no terms. Two passes (the second's offset
+  adds the other nine seats' terms). A normal prior shrinks a lone true effect hard (a
+  single planted cell came out with no spread to borrow), so detection also has a raw
+  count: deviation z = (slope - role mean) / se, Benjamini-Hochberg at 5% over every
+  cell and feature
+- Breakdown of a seat in a draft: its 16 parts, deviation x (feature - cell centre), in
+  pp: what the champion gains or loses into this comp beyond its role's average
+- Smoke runs on planted data (snap-20261014T2137Z, winners re-drawn): a first version
+  shrank each cell to its role's mean and so counted a team-wide slope five times (log
+  loss 0.06 worse than ratings); a second used sandwich se and an unweighted moment
+  spread, which came out positive with no spread planted (champion terms 0.0011 worse).
+  A third (model-based se, DerSimonian-Laird) still cost 0.00021 ± 0.00011 on the folds
+  with nothing but one cell planted: chance-positive spreads let noise through, hence
+  the Q gate. The planted cell (Milio support, 2 pp per sd of enemy melee, 21k games)
+  came back raw at 1.17 ± 0.47, shrunk to 0. With the gate (run
+  20261017T135009Z-champcomp-plant-smoke4): folds +0.00007 ± 0.00006 (team terms about
+  half of it), dev-val -0.00000 ± 0.00008, 0 clear and 0 BH passes of 7,456. All before
+  any run on real outcomes
+
+Splits: comps' (harness.Cuts). Fold k fits on dev games before its block (ratings
+in-sample there, fitted on those games) and scores the block with ratings fitted on the
+same older games; dev-val fits on every dev game. Paired per-game log loss against
+ratings alone. Reported effects: the dev-val fit. No test look.
+
+Pre-declared (17 Oct, before any run on real outcomes; plants re-draw the winners, so
+they don't count as looks):
+- H1, the terms predict: pooled over folds 1-5, the per-game log loss difference vs
+  ratings has its 95% interval below 0 and is below 0 in at least 4 of 5 folds.
+  Confirmed if dev-val's mean is also below 0; "folds only" otherwise
+- H2, more clear effects than noise: clear = |posterior deviation| / posterior sd >=
+  2.58 on the dev-val fit, cells with 300+ fit games. Detected if the real count is more
+  than twice the larger of two controls' counts, for the posterior count and for the BH
+  count (H2b) each: --permute-profiles 1 (profiles shuffled among a role's champions:
+  traits become arbitrary champion groupings, so this also absorbs plain matchup effects
+  ratings miss) and --shuffle-traits 1 (each seat's features from another seat of its
+  role: no link left)
+- H3 for BH passes too (H3b): same rule
+- H3, clear effects replicate: of the cell-features clear in fold 3's fit (games before
+  bounds[2]), more than half have the same sign in a raw refit on the newer dev games
+  ([bounds[2], D); slope minus that refit's role mean), one-sided binomial at 5%; mean
+  signed z reported
+- H1 is reported split as well: team terms over ratings, then champion terms over that
+- Power: plants champ_melee 2 and 4 pp per sd on the 50th most common champion-role and
+  2 on the 5th (synth.zig) on this snapshot, read as the recovered deviation, raw z and
+  BH pass (the role mean takes a share of a single champion's plant, about 1 / the
+  role's cells). Raw se per
+  cell is about 50 / sqrt(games) pp per sd for one feature alone (more beside the other
+  15): ~0.5 at 10,000 games, ~1 at 2,500
+- Reported only: Rammus jungle into enemy melee and AP share (fresh games since 14 Oct
+  are now in the fit), and the role means (team-level trait effects, as comps tested)
+- Site: nothing from this until read; what it could show goes in the reading
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

@@ -17,6 +17,9 @@
 //!   mix       per sd of win-comp's mix form (f - 0.5)^2, blue minus red; f the team's
 //!             damage-weighted magic share from champion-role profiles over all rows
 //!   skill     per player per log1p(earlier games on the champion), blue minus red
+//!   champ_melee  for the `cell`-th most common champion-role, per sd of the enemy team's
+//!             melee count (base attack range under champcomp.melee_range, from seat
+//!             stats), its team's view: a positive control for lab/champcomp.zig
 //! Experience wins (champ_wins, wins_before) stay the real ones: noise to the truth
 
 const std = @import("std");
@@ -46,6 +49,9 @@ pub const Spec = struct {
     lanes: u32 = 0,
     mix: f64 = 0,
     skill: f64 = 0,
+    champ_melee: f64 = 0,
+    /// Which champion-role champ_melee plants, by games: 1 the most common
+    cell: u32 = 1,
 
     pub fn parse(text: []const u8) !Spec {
         var s: Spec = .{};
@@ -65,7 +71,7 @@ pub const Spec = struct {
             }
             if (!found) return error.BadPlantSpec;
         }
-        if (s.pair == 0 or s.lanes > 2) return error.BadPlantSpec;
+        if (s.pair == 0 or s.cell == 0 or s.lanes > 2) return error.BadPlantSpec;
         return s;
     }
 };
@@ -80,7 +86,7 @@ pub fn parseArg(snap: []const u8) !?Arg {
     return .{ .spec = try Spec.parse(rest[0..colon]), .path = rest[colon + 1 ..] };
 }
 
-pub const Term = enum { base, synergy, counter, pairs, counters, mix, skill };
+pub const Term = enum { base, synergy, counter, pairs, counters, mix, skill, champ_melee };
 pub const n_term = @typeInfo(Term).@"enum".field_names.len;
 
 pub const Slot = struct { champion: u32, role: u3 };
@@ -96,6 +102,9 @@ pub const Truth = struct {
     matchup_games: u32,
     /// sd of the unscaled mix form over games; 0 without seat stats
     mix_sd: f64,
+    /// champ_melee's champion-role and the teams holding it
+    cell: Slot = .{ .champion = 0, .role = 0 },
+    cell_teams: u32 = 0,
 
     pub fn logit(t: *const Truth, game: usize) f32 {
         var z: f32 = 0;
@@ -242,6 +251,42 @@ pub fn truth(gpa: std.mem.Allocator, d: *const rows.Data, spec: Spec) !Truth {
     }
     const have_stats = prof.role[0][1] > 0;
     if (spec.mix != 0 and !have_stats) return error.NoSeatStats;
+    if (spec.champ_melee != 0 and !have_stats) return error.NoSeatStats;
+
+    // champ_melee: each champion-role's base range (mean over its rows), the k-th most
+    // common champion-role, and the sd of a team's melee count
+    var range: std.AutoHashMapUnmanaged(u64, [2]f64) = .empty;
+    defer range.deinit(gpa);
+    var cells: std.AutoHashMapUnmanaged(u64, u32) = .empty;
+    defer cells.deinit(gpa);
+    var cell: Slot = .{ .champion = 0, .role = 0 };
+    var melee_mean: f64 = 0;
+    var melee_sd: f64 = 1;
+    if (spec.champ_melee != 0) {
+        for (d.rows) |r| {
+            const v = r.stats[@backingInt(seatstats.SeatStat.attack_range)];
+            if (std.math.isNan(v)) continue;
+            const e = try range.getOrPutValue(gpa, key(r.champion, @backingInt(r.role)), .{ 0, 0 });
+            e.value_ptr[0] += v;
+            e.value_ptr[1] += 1;
+        }
+        for (d.games) |g| for (g.teams) |t| for (t, 0..) |ch, r| {
+            const e = try cells.getOrPutValue(gpa, key(ch, r), 0);
+            e.value_ptr.* += 1;
+        };
+        cell = slotOf((try kth(gpa, &cells, spec.cell)).key);
+        var s1: f64 = 0;
+        var s2: f64 = 0;
+        for (d.games) |g| for (g.teams) |t| {
+            const x = meleeCount(&range, t);
+            s1 += x;
+            s2 += x * x;
+        };
+        const n: f64 = @floatFromInt(@max(2 * d.games.len, 1));
+        melee_mean = s1 / n;
+        melee_sd = @sqrt(@max(s2 / n - melee_mean * melee_mean, 1e-12));
+    }
+    var cell_teams: u32 = 0;
 
     var mix_x: []f64 = &.{};
     defer gpa.free(mix_x);
@@ -315,6 +360,15 @@ pub fn truth(gpa: std.mem.Allocator, d: *const rows.Data, spec: Spec) !Truth {
         var sk: f64 = 0;
         for (skill_x[gi][0], skill_x[gi][1]) |b, rd| sk += b - rd;
         p[@backingInt(Term.skill)] = @floatCast(spec.skill * sk * pp);
+        if (spec.champ_melee != 0) {
+            var cm: f64 = 0;
+            for (g.teams, 0..) |t, s| if (t[cell.role] == cell.champion) {
+                const x = (meleeCount(&range, g.teams[1 - s]) - melee_mean) / melee_sd;
+                cm += if (s == 0) x else -x;
+                cell_teams += 1;
+            };
+            p[@backingInt(Term.champ_melee)] = @floatCast(spec.champ_melee * cm * pp);
+        }
     }
     return .{
         .parts = parts,
@@ -323,8 +377,22 @@ pub fn truth(gpa: std.mem.Allocator, d: *const rows.Data, spec: Spec) !Truth {
         .matchup = matchup,
         .matchup_games = matchup_games,
         .mix_sd = mix_sd,
+        .cell = cell,
+        .cell_teams = cell_teams,
     };
 }
+
+fn meleeCount(range: *const std.AutoHashMapUnmanaged(u64, [2]f64), team: [5]u32) f64 {
+    var n: f64 = 0;
+    for (team, 0..) |ch, r| {
+        const e = range.get(key(ch, r)) orelse continue;
+        if (e[1] > 0 and e[0] / e[1] < champcomp_melee_range) n += 1;
+    }
+    return n;
+}
+
+/// champcomp.melee_range (not imported: champcomp imports this file)
+const champcomp_melee_range = 300;
 
 pub fn sigmoid(z: f64) f64 {
     return 1 / (1 + @exp(-z));
@@ -347,10 +415,11 @@ pub fn plant(gpa: std.mem.Allocator, d: *rows.Data, spec: Spec) !void {
     relabel(d, &t, spec.seed);
     var blue: usize = 0;
     for (d.games) |g| blue += @intFromBool(g.winner == 0);
-    log.info("planted on {d} games (blue won {d}): pair #{d} {t} + #{d} {t} in {d} team-games, matchup #{d} over #{d} {t} in {d} games, mix sd {d:.5}", .{
-        d.games.len,           blue,                                               t.pair[0].champion, @as(core.Role, @fromBackingInt(t.pair[0].role)),
-        t.pair[1].champion,    @as(core.Role, @fromBackingInt(t.pair[1].role)),    t.pair_games,       t.matchup[0].champion,
-        t.matchup[1].champion, @as(core.Role, @fromBackingInt(t.matchup[0].role)), t.matchup_games,    t.mix_sd,
+    log.info("planted on {d} games (blue won {d}): pair #{d} {t} + #{d} {t} in {d} team-games, matchup #{d} over #{d} {t} in {d} games, mix sd {d:.5}, champ_melee #{d} {d} {t} in {d} teams", .{
+        d.games.len,           blue,                                               t.pair[0].champion,                           @as(core.Role, @fromBackingInt(t.pair[0].role)),
+        t.pair[1].champion,    @as(core.Role, @fromBackingInt(t.pair[1].role)),    t.pair_games,                                 t.matchup[0].champion,
+        t.matchup[1].champion, @as(core.Role, @fromBackingInt(t.matchup[0].role)), t.matchup_games,                              t.mix_sd,
+        spec.cell,             t.cell.champion,                                    @as(core.Role, @fromBackingInt(t.cell.role)), t.cell_teams,
     });
 }
 
@@ -816,7 +885,8 @@ test "winners follow the planted logit: each term comes back at its size" {
     var t = try truth(gpa, &d, spec);
     defer t.deinit(gpa);
     try std.testing.expect(t.pair_games > 500 and t.matchup_games > 100);
-    const terms = std.enums.values(Term);
+    // champ_melee needs attack ranges, which draft's seat stats lack: its own test
+    const terms = std.enums.values(Term)[0..@backingInt(Term.champ_melee)];
     const x = try design(gpa, &t, terms);
     defer gpa.free(x);
     const y = try blueWins(gpa, &d);
@@ -839,7 +909,7 @@ test "nothing planted: the terms' features carry no signal" {
     var base = try truth(gpa, &d, none);
     defer base.deinit(gpa);
     for (t.parts, base.parts) |*p, b| p[@backingInt(Term.base)] = b[@backingInt(Term.base)];
-    const terms = std.enums.values(Term);
+    const terms = std.enums.values(Term)[0..@backingInt(Term.champ_melee)];
     const x = try design(gpa, &t, terms);
     defer gpa.free(x);
     const y = try blueWins(gpa, &d);
@@ -848,6 +918,33 @@ test "nothing planted: the terms' features carry no signal" {
     defer f.deinit(gpa);
     try std.testing.expect(@abs(f.w[0] - 1) < 3.5 * f.se[0]);
     for (f.w[1..terms.len], f.se[1..terms.len]) |w, se| try std.testing.expect(@abs(w) < 3.5 * se);
+}
+
+test "champ_melee: the planted champion-role's team gains per sd of enemy melee" {
+    const gpa = std.testing.allocator;
+    var d = try draft(gpa, 20_000, .{ .seed = 4 });
+    defer d.deinit();
+    for (d.rows) |*r| r.stats[@backingInt(seatstats.SeatStat.attack_range)] = if (r.champion % 3 == 0) 125 else 550;
+    const spec: Spec = .{ .seed = 4, .champ_melee = 10, .cell = 2 };
+    var t = try truth(gpa, &d, spec);
+    defer t.deinit(gpa);
+    try std.testing.expect(t.cell_teams > 1000);
+    var s1: f64 = 0;
+    var s2: f64 = 0;
+    var n: f64 = 0;
+    for (d.games, t.parts) |g, p| {
+        const part = p[@backingInt(Term.champ_melee)];
+        const has = g.teams[0][t.cell.role] == t.cell.champion or g.teams[1][t.cell.role] == t.cell.champion;
+        if (!has) {
+            try std.testing.expectEqual(0, part);
+            continue;
+        }
+        s1 += @abs(part);
+        s2 += part * part;
+        n += 1;
+    }
+    // A unit-sd feature at 10 pp: |part| about 0.4 logit on average, not 0
+    try std.testing.expect(s1 / n > 0.2 and s1 / n < 0.6);
 }
 
 test "same seed, same winners; another seed, others" {
