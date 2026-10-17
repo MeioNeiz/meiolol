@@ -4153,6 +4153,16 @@ opponent. Champion-only inputs; admin only. Run it through deploy/lab-run.sh wit
 `-- lane "~/ml/snaps/SNAP" --export .` (first run 20261012T2326Z-lane-export: 182,748
 games, 849 champion terms, 48,194 pairs, 2.8 MB).
 
+`meiolol lane-model [--out DIR]` (src/lanemodel.zig, default DATA/tester) fits the same
+candidate (team2's fitLane: its fit on compact rows, lane outcomes only) on every played
+game in the database and writes the same files, daily on the box beside `meiolol
+draft-model` (served at /admin/models/). Its rows are the lab's (gold14 from
+participants, else the timeline's; the rest from timelines that reached 15:00; one
+participants pass and one timelines pass), 0.9 GB peak for 800k games where the lab's
+full rows take 4.8 GB. On snap-20261017T1320Z (17 Oct) every term, pair cell, intercept
+and dev figure equals the lab export's; 137 s on the Mac. The scorer and writer are
+src/lanefile.zig, shared with lab/lane.zig.
+
 lane-model.json (format meiolol-lane-model, version 1); every number rounded to 0.01:
 - meta: name, run, snapshot, newest_game, training_games, patch (newest), platform
   (EUW1), dev [{outcome, unit, rows, err_base, err_cand, removed_pct, removed_half}]: a

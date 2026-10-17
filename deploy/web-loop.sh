@@ -27,11 +27,13 @@
 # way: daily and on a new patch; the next site build picks the files up.
 # Daily, `meiolol lean` (every region, last 30 days; docs/model.md "Early and late
 # champions") the same way: data/lean.tsv, the champion pages' early or late line.
-# Daily, `meiolol draft-model` (seconds after its scan) refits the shipped draft model on
-# every played game into data/tester/ (draft-model.json, draft-ref.json and .gz copies),
-# written beside it and swapped in whole; each round copies it into the admin upload at
-# admin/models/, where the Draft tester reads it before the lab's pick (admin-draft.js
-# modelFile; docs/model.md "Draft model file").
+# Daily, the admin Draft tester's models refit on every played game into data/tester/:
+# `meiolol draft-model` (the shipped draft model, seconds after its scan) and `meiolol
+# lane-model` (team2's lane outcomes, every timeline read once; 0.9 GB, ~2 min of CPU on
+# the Mac for 800k games), each file with a .gz copy, written beside it and swapped in
+# whole. Each round copies it into the admin upload at admin/models/, where the tester
+# reads it before the lab's pick (admin-draft.js modelFile; docs/model.md "Draft model
+# file").
 # Daily, `meiolol your-example` (read-only, background) leaves one anonymised player's
 # games in data/your-example.json, which meiolol-render serves at the same path from its
 # next load, for your.html's and the home page's example. A failed run removes the file,
@@ -212,6 +214,7 @@ run_daily() {
         last_tester=$now
         (rm -rf data/tester.new
         if batch bin/meiolol draft-model --out data/tester.new > data/tester.log 2>&1 \
+            && batch bin/meiolol lane-model --out data/tester.new >> data/tester.log 2>&1 \
             && batch gzip -kf data/tester.new/*.json; then
             rm -rf data/tester.old
             [[ -d data/tester ]] && mv data/tester data/tester.old

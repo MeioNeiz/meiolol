@@ -11,6 +11,7 @@ const curves = @import("curves.zig");
 const builds = @import("builds.zig");
 const lean = @import("lean.zig");
 const draftmodel = @import("draftmodel.zig");
+const lanemodel = @import("lanemodel.zig");
 const ddragon = @import("ddragon.zig");
 const site = @import("site/root.zig");
 const admin = @import("admin.zig");
@@ -472,7 +473,7 @@ test "admin page from the fixture games and a crawl log" {
     try testing.expectEqual(3, std.mem.count(u8, history, "\n"));
 }
 
-test "fixture games to the Draft tester's draft model" {
+test "fixture games to the Draft tester's draft and lane models" {
     const gpa = testing.allocator;
     const io = testing.io;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
@@ -511,6 +512,27 @@ test "fixture games to the Draft tester's draft model" {
     // Three test games whole and part open, the empty board, no terms (no Rammus)
     try testing.expectEqual(8, ref.drafts.len);
     try testing.expectEqual(2, ref.slots.len);
+
+    try lanemodel.run(gpa, io, db, dir, &log.writer);
+    const Lane = struct {
+        format: []const u8,
+        meta: struct { training_games: usize, dev: []const struct { outcome: []const u8 } },
+        outcomes: []const []const u8,
+        champ: []const struct { champion: u32, n: u32, b: [4]f64 },
+        pairs: []const [12]f64,
+    };
+    const lane_text = try tmp.dir.readFileAlloc(io, "tester/lane-model.json", arena, .limited(16 << 20));
+    const lane = try std.json.parseFromSliceLeaky(Lane, arena, lane_text, .{ .ignore_unknown_fields = true });
+    try testing.expectEqualStrings("meiolol-lane-model", lane.format);
+    try testing.expectEqual(150, lane.meta.training_games);
+    try testing.expectEqual(4, lane.meta.dev.len);
+    try testing.expectEqualStrings("lanediff14", lane.outcomes[1]);
+    // Both sides' laners in every role; rows only from the two thirds of games whose
+    // timeline reached 15:00 (fillGames leaves every third without one)
+    try testing.expectEqual(10, lane.champ.len);
+    try testing.expectEqual(10, lane.pairs.len);
+    for (lane.champ) |t| try testing.expectEqual(100, t.n);
+    _ = try tmp.dir.readFileAlloc(io, "tester/lane-ref.json", arena, .limited(1 << 20));
 }
 
 test "fixture games to lab rows, from SQLite and packed" {

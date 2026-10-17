@@ -145,6 +145,16 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         },
         .link_libc = true,
     });
+    // A lab candidate whose model the box exports daily for the admin Draft tester
+    // (src/lanemodel.zig): it sees only std and the lab api, as in the lab
+    const lab_api = b.createModule(.{ .root_source_file = b.path("src/lab/api.zig"), .target = target, .optimize = optimize });
+    backend.addImport("api", lab_api);
+    backend.addImport("team2", b.createModule(.{
+        .root_source_file = b.path("src/lab/cand/team2/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "api", .module = lab_api }},
+    }));
     const app = b.createModule(.{
         .root_source_file = b.path("src/app_main.zig"),
         .target = target,

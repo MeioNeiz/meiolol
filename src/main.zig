@@ -27,6 +27,7 @@ pub const scaling = @import("scaling.zig");
 pub const carry = @import("carry.zig");
 pub const lean = @import("lean.zig");
 pub const draftmodel = @import("draftmodel.zig");
+pub const lanemodel = @import("lanemodel.zig");
 const analysis = @import("analysis.zig");
 const test_looks = @import("lab/looks.zig");
 pub const archive = @import("archive.zig");
@@ -230,6 +231,10 @@ const usage =
     \\              tester's draft-model.json and draft-ref.json (docs/model.md "Draft model
     \\              file"); daily on the box
     \\              --out DIR        default DATA/tester
+    \\  lane-model  the Draft tester's lane model (lab candidate team2: gold at 14, lane gold,
+    \\              CS at 10, deaths before 15 for a champion into a lane opponent) on every
+    \\              played game, as lane-model.json and lane-ref.json; daily on the box
+    \\              --out DIR        default DATA/tester
     \\  raw-export  raw archive, box side (archive.zig): write raw summaries, raw timelines
     \\              and mastery fetched since the last export to DIR/raw-FROM-TO.db and
     \\              print its name and counts (nothing when there is nothing new);
@@ -395,6 +400,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "carry", cmdCarry },
     .{ "lean", cmdLean },
     .{ "draft-model", cmdDraftModel },
+    .{ "lane-model", cmdLaneModel },
     .{ "raw-export", cmdRawExport },
     .{ "site", cmdSite },
     .{ "serve", cmdServe },
@@ -1151,6 +1157,15 @@ fn cmdLean(c: *Cmd) !u8 {
 }
 
 fn cmdDraftModel(c: *Cmd) !u8 {
+    return testerModel(c, draftmodel.run);
+}
+
+fn cmdLaneModel(c: *Cmd) !u8 {
+    return testerModel(c, lanemodel.run);
+}
+
+/// `draft-model` and `lane-model`: --out DIR (default DATA/tester), a log on stdout
+fn testerModel(c: *Cmd, comptime run: anytype) !u8 {
     var out: ?[]const u8 = null;
     while (c.next()) |_| {
         if (c.is("--out")) {
@@ -1161,9 +1176,11 @@ fn cmdDraftModel(c: *Cmd) !u8 {
     const db = try c.open();
     defer db.close();
     var buf: [4096]u8 = undefined;
-    var stdout = std.Io.File.stdout().writer(io, &buf);
+    // Streaming: the web loop logs both commands to one file, which positional writes
+    // would overwrite from the start
+    var stdout = std.Io.File.stdout().writerStreaming(io, &buf);
     defer stdout.interface.flush() catch {};
-    try draftmodel.run(c.init.gpa, io, db, out orelse try std.fs.path.join(c.arena, &.{ c.data_dir, "tester" }), &stdout.interface);
+    try run(c.init.gpa, io, db, out orelse try std.fs.path.join(c.arena, &.{ c.data_dir, "tester" }), &stdout.interface);
     return 0;
 }
 

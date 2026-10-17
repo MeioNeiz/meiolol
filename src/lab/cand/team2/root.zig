@@ -143,31 +143,69 @@ fn row(m: *const Model, teams: [2][5]u32, side: u1, role: api.Role, platform: u8
 }
 
 pub fn fit(gpa: std.mem.Allocator, train: *const api.Train, _: api.Options) !Model {
+    const outcomes = comptime blk: {
+        var out: [api.outcome_count - 1]api.Outcome = undefined;
+        var n: usize = 0;
+        for (std.enums.values(api.Outcome)) |o| if (o != .win) {
+            out[n] = o;
+            n += 1;
+        };
+        break :blk out;
+    };
+    return fitFrom(gpa, train.games, train.rows, &outcomes, struct {
+        fn y(r: api.Row, o: api.Outcome) f32 {
+            return r.y[api.outcomeIndex(o)];
+        }
+    }.y);
+}
+
+/// fit on compact inputs, the lane outcomes only: the box's daily lane export
+/// (src/lanemodel.zig) holds every game's rows without api.Row's other fields
+pub const LaneGame = struct { teams: [2][5]u32, patch: u32, platform: u8 };
+pub const LaneRow = struct {
+    /// Index into the games
+    game: u32,
+    side: u1,
+    role: api.Role,
+    /// lane_outcomes order; NaN unknown
+    y: [n_lane]f32,
+};
+
+pub fn fitLane(gpa: std.mem.Allocator, games: []const LaneGame, rows: []const LaneRow) !Model {
+    return fitFrom(gpa, games, rows, &lane_outcomes, struct {
+        fn y(r: LaneRow, o: api.Outcome) f32 {
+            return r.y[std.mem.indexOfScalar(api.Outcome, &lane_outcomes, o).?];
+        }
+    }.y);
+}
+
+/// games: teams, patch, platform; rows: game, side, role and yOf(row, outcome)
+fn fitFrom(gpa: std.mem.Allocator, games: anytype, train_rows: anytype, outcomes: []const api.Outcome, comptime yOf: anytype) !Model {
     var m: Model = .{};
     errdefer deinit(&m, gpa);
-    for (train.games) |g| for (g.teams) |team| for (team) |id| {
+    for (games) |g| for (g.teams) |team| for (team) |id| {
         const e = try m.index.getOrPut(gpa, id);
         if (!e.found_existing) e.value_ptr.* = @intCast(m.index.count() - 1);
     };
-    for (train.games) |g| try m.patch_index.put(gpa, g.patch, {});
+    for (games) |g| try m.patch_index.put(gpa, g.patch, {});
     m.space = .{ .champs = m.index.count() + 1, .patches = @intCast(m.patch_index.count() + 1) };
 
-    const rs = try gpa.alloc(Row, train.rows.len);
+    const rs = try gpa.alloc(Row, train_rows.len);
     defer gpa.free(rs);
-    for (rs, train.rows) |*r, tr| {
-        const g = train.games[tr.game];
+    for (rs, train_rows) |*r, tr| {
+        const g = games[tr.game];
         r.* = row(&m, g.teams, tr.side, tr.role, g.platform, g.patch);
     }
     const z = try gpa.alloc(f32, rs.len);
     defer gpa.free(z);
-    for (0..api.outcome_count) |k| {
-        if (k == api.outcomeIndex(.win)) continue;
+    for (outcomes) |o| {
+        const k = api.outcomeIndex(o);
         // Standardise per role on train
         var sum: [n_role]f64 = @splat(0);
         var sum_sq: [n_role]f64 = @splat(0);
         var count: [n_role]f64 = @splat(0);
-        for (train.rows, rs) |tr, r| {
-            const y = tr.y[k];
+        for (train_rows, rs) |tr, r| {
+            const y = yOf(tr, o);
             if (std.math.isNan(y)) continue;
             sum[r.role] += y;
             sum_sq[r.role] += y * y;
@@ -178,7 +216,7 @@ pub fn fit(gpa: std.mem.Allocator, train: *const api.Train, _: api.Options) !Mod
             f.mean[ri] = sum[ri] / @max(count[ri], 1);
             f.sd[ri] = @sqrt(@max(sum_sq[ri] / @max(count[ri], 1) - f.mean[ri] * f.mean[ri], 1e-9));
         }
-        for (train.rows, rs, z) |tr, r, *x| x.* = @floatCast((tr.y[k] - f.mean[r.role]) / f.sd[r.role]);
+        for (train_rows, rs, z) |tr, r, *x| x.* = @floatCast((yOf(tr, o) - f.mean[r.role]) / f.sd[r.role]);
         try backfit(gpa, m.space, rs, z, &f);
         m.fits[k] = f;
     }

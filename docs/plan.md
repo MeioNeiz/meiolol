@@ -33,8 +33,8 @@ In order:
    daily `meiolol eval` (ported out of the lab into src/, offset the shipped model), then
    one pre-declared held-out look on a snapshot of games after 17 Oct 13:20Z (~24 Oct).
    Nothing public before that look passes. Admin Draft tester has them now (17 Oct); its
-   draft model refits daily on the box (`meiolol draft-model`, 17 Oct), the lane model and
-   comp terms come from the lab until they are ported the same way
+   draft and lane models refit daily on the box (`meiolol draft-model`, `lane-model`, 17
+   Oct); the comp terms come from the lab until they are ported the same way
 2. Champion pages: an "Into which teams" block beside early/late lean: only clear leans,
    plain lines with a range ("about 1 point worse per step towards a magic-damage enemy
    team"), refitted nightly on the box like `meiolol lean`
