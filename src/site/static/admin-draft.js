@@ -480,13 +480,15 @@ function draftView(body) {
     about.push(el("p", { class: "sub" }, `Lane column: early-game model ${lm.name !== "candidate" ? lm.name + " " : ""}on ${num(lm.training_games)} games to ${lm.newest_game}.` +
       (dev ? ` It predicts the gold lead at 14 ${dev.removed_pct.toFixed(0)}% better than champion averages alone, so matchups nudge the numbers rather than decide them.` : "")));
   }
+  if (dev.accuracy != null) about.push(el("p", { class: "sub" }, `Accuracy above: this page's model, refitted on older games and scored on the ${num(dev.games)} played games just before the final test cut (the 10% of games before the newest 15%). ` +
+    "The Models tab's headline is a different reading: the best of the daily eval's models on the final test games, so the two numbers differ. Published draft-only models reach about 55 to 57%."));
   const from = [["draft", "draft model"], ["comp", "comp terms"], ["lane", "lane model"]].filter(([k]) => DRAFT.from[k]).map(([k, label]) => `${label} ${MODEL_DIRS[DRAFT.from[k]]}`);
   about.push(el("p", { class: "sub" }, `Files: ${from.join(", ")}.`));
   // The crawl's scope (docs/learned.md, docs/data.md): ranked solo, Platinum IV and up, nearly
   // all EUW
   sec.append(el("details", { class: "about" }, el("summary", { class: "sub" }, [meta.name, "ranked solo, Platinum IV and up, mostly EUW",
     meta.training_games != null ? `${num(meta.training_games)} games to ${meta.newest_game}` : null,
-    dev.accuracy != null ? `picks the winner in ${pct(dev.accuracy)} of ${num(dev.games)} games it wasn't fitted on (a coin: 50%)` : null,
+    dev.accuracy != null ? `picks the winner in ${pct(dev.accuracy)} of ${num(dev.games)} recent games it wasn't fitted on (a coin: 50%; not the Models tab's test reading)` : null,
     bad.length || !(DRAFT.check || ccCheck || DRAFT.laneCheck) ? null : "page matches the exported files"].filter(Boolean).join(" · ")), ...about));
 
   const w = m.win(d), none = !Object.keys(d.blue).length && !Object.keys(d.red).length;
