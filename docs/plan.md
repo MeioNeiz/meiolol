@@ -8,11 +8,10 @@ Ranked by harm: outages and data risk, then what Riot's reviewers see before Jac
 presses Verify, then what brings players back. Findings: docs/review/
 persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B/C, Q).
 
-1. Your games API dies at patch 16.21 (~22 Oct): it loads the two newest curves files
-   (16.20 is 226 MB, parsed ~1:1) under MemoryMax 400M; once 16.21's file passes ~150 MB
-   every start is OOM-killed. Fix: load newest first within a byte budget (src/api/root.zig
-   loadCurves), then the by-hand install on jomove (docs/your-games.md Deploy), which also
-   ships R17's "All games" label
+1. Done 18 Oct (76d691f, installed on jomove): the Your games API would have died at
+   16.21 (two newest curves files, 226 MB each parsed, MemoryMax 400M). Now newest patch
+   first within 320 MB; the install also shipped R17's "All games" label. Check after
+   the 16.21 push: `journalctl -u meiolol-api` names the file left out
 2. Box disk: used at the daily low 31, 46, 67, 67 GB (14-17 Oct) of 144, and each day
    peaks ~30 GB higher (100 GB on 17 Oct; admin-history.tsv). Within ~a week a peak
    fills the disk. Find what the peak is (backup segment, views write, curves temp)
