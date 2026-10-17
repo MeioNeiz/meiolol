@@ -25,6 +25,13 @@ How to write a line:
 
 ## Win
 
+- 2026-10-17: With about 786k games the suggestions predict who wins a little better
+  when a champion's own win rate is trusted more and ally pairings less: the drafts'
+  winner is picked 54.8% of the time instead of 54.4%. Lane matchups carry the most
+  weight of the pair effects. Sure: held-out newest 117,908 games (15 to 17 Oct), every
+  platform, -0.0017 ± 0.0004 nats a game against the previous settings. Site: shipped
+  as the default (suggest, draft tester, Daily Draft, pool, matchup numbers). Evidence:
+  docs/model.md "Shipped model, 2026-10-17"
 - 2026-10-14: Rammus jungle does not clearly win less against teams with more melee
   champions: on fresh games his win rate moved about half a percentage point per step
   towards a melee-heavy enemy team, well inside the noise, so the earlier 1.3-point dip

@@ -645,7 +645,9 @@ test "options cover the main's hard lanes; fallbacks share its good ones" {
     for (0..60) |_| t.add(&st, &.{ .{ .champion = 4, .weight = 30 }, .{ .champion = 5, .weight = 3 } }, .games);
     for (0..10) |_| t.add(&st, &.{.{ .champion = 2, .weight = 30 }}, .games); // under min_players
 
-    const p = try build(arena, &t, &st, .games, .{});
+    // Fixture sized for the pre-17 Oct priors: its lanes sit near the thresholds
+    const old_priors: score.Options = .{ .base_prior_games = 1000, .prior_games = 1000, .weights = .{} };
+    const p = try build(arena, &t, &st, .games, .{ .score = old_priors });
     try testing.expectEqual(110, p.players);
     const m = p.mains[1];
     try testing.expectEqual(1, m.id);

@@ -43,6 +43,10 @@ const Game = stats.Row;
 /// Prior strengths tried by the tuning grid; the last means "no pair terms"
 const prior_grid = [_]f64{ 50, 100, 200, 400, 800, 1600, 3200, 6400, 1e9 };
 
+/// Every model but the current one sums its terms plainly, as it did before term weights
+/// became the default (17 Oct), so their history stays comparable
+const unweighted: score.Options = .{ .weights = .{} };
+
 /// Cells with fewer games are left out of the empirical-Bayes estimate
 const eb_min_games = 30;
 
@@ -89,8 +93,10 @@ pub fn run(
     const blue_rate = blue_wins / @as(f64, @floatFromInt(train.len));
 
     const current: score.Options = .{};
-    const base_only: Predictor = .{ .label = "champion base only", .kind = .{ .base = current } };
+    const previous: score.Options = .{ .base_prior_games = 1000, .prior_games = 1000, .weights = .{} };
+    const base_only: Predictor = .{ .label = "champion base only", .kind = .{ .base = previous } };
     const model: Predictor = .{ .label = "current model", .kind = .{ .model = current } };
+    const before: Predictor = .{ .label = "previous model (1000/1000)", .kind = .{ .model = previous } };
     const tuned_priors: Predictor = .{ .label = "tuned priors", .kind = .{ .model = tuned.opts } };
     const weighted: Predictor = .{ .label = "tuned + term weights", .kind = .{ .weighted = .{
         .opts = tuned.opts,
@@ -105,6 +111,7 @@ pub fn run(
         .{ .label = "blue side rate", .kind = .{ .side = blue_rate } },
         base_only,
         model,
+        before,
         tuned_priors,
         weighted,
         empirical,
@@ -339,7 +346,7 @@ fn laneGoldSection(
             defer m.deinit(c.gpa);
             var gm: lanegold.Model = try .build(c.gpa, &m.stats, c.train, c.map, .{ .k = k, .folds = c.folds });
             defer gm.deinit(c.gpa);
-            const o = score.empiricalPriors(&m.stats, eb_min_games).apply(.{});
+            const o = score.empiricalPriors(&m.stats, eb_min_games).apply(unweighted);
             for (c.train, c.feats, 0..) |g, *x, i| if (i % c.folds == k and c.map.contains(g.id)) {
                 x.* = goldFeatures(&m.stats, o, &gm, g);
             };
@@ -365,7 +372,7 @@ fn laneGoldSection(
 
     var gm: lanegold.Model = try .build(gpa, full, train, &map, null);
     defer gm.deinit(gpa);
-    const o = score.empiricalPriors(full, eb_min_games).apply(.{});
+    const o = score.empiricalPriors(full, eb_min_games).apply(unweighted);
     try w.print(" Gold sd by role (top..support):", .{});
     for (gm.sd) |sd| try w.print(" {d:.0}", .{sd});
     try w.writeAll("; prior games, champion:");
@@ -438,7 +445,7 @@ fn experienceSection(
 
     const oof = try oofTerms(gpa, io, champs, train, folds);
     defer gpa.free(oof);
-    const eb = score.empiricalPriors(full, eb_min_games).apply(.{});
+    const eb = score.empiricalPriors(full, eb_min_games).apply(unweighted);
 
     try w.writeAll("| source | players | train | test | log loss without | with | difference | " ++
         "AUC with | effect per bin (pp) |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
@@ -525,7 +532,7 @@ fn oofTerms(
         fn fold(c: @This(), k: usize) !void {
             var m: Model = try .build(c.gpa, c.champs, c.train, .{ .k = k, .folds = c.folds });
             defer m.deinit(c.gpa);
-            const o = score.empiricalPriors(&m.stats, eb_min_games).apply(.{});
+            const o = score.empiricalPriors(&m.stats, eb_min_games).apply(unweighted);
             for (c.train, c.out, 0..) |g, *t, i| if (i % c.folds == k) {
                 t.* = score.draftTerms(&m.stats, o, g.teams);
             };
@@ -790,7 +797,7 @@ const Predictor = struct {
     fn on(p: Predictor, st: *const core.Stats) Predictor {
         if (p.kind != .empirical) return p;
         const priors = score.empiricalPriors(st, eb_min_games);
-        return .{ .label = p.label, .kind = .{ .model = priors.apply(.{}) } };
+        return .{ .label = p.label, .kind = .{ .model = priors.apply(unweighted) } };
     }
 
     fn predict(p: Predictor, st: *const core.Stats, g: Game) f64 {
@@ -959,7 +966,9 @@ fn tune(
         fn cell(c: @This(), at: usize) !void {
             const i = at / prior_grid.len;
             const j = at % prior_grid.len;
-            const o: score.Options = .{ .base_prior_games = prior_grid[i], .prior_games = prior_grid[j] };
+            var o = unweighted;
+            o.base_prior_games = prior_grid[i];
+            o.prior_games = prior_grid[j];
             var sum: f64 = 0;
             for (c.train, 0..) |g, gi| {
                 sum += analysis.logLoss(score.draftWin(&c.models[gi % c.models.len].stats, o, g.teams), blueWon(g));
@@ -972,12 +981,13 @@ fn tune(
         .train = train,
         .losses = &losses,
     }, Grid.cell);
-    var best: score.Options = .{};
+    var best = unweighted;
     var best_loss = std.math.inf(f64);
     for (prior_grid, 0..) |bp, i| for (prior_grid, 0..) |pp, j| {
         if (losses[i][j] < best_loss) {
             best_loss = losses[i][j];
-            best = .{ .base_prior_games = bp, .prior_games = pp };
+            best.base_prior_games = bp;
+            best.prior_games = pp;
         }
     };
 

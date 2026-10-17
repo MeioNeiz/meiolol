@@ -35,19 +35,30 @@ pub const Draft = struct {
     pool: ?[]const u32 = null,
 };
 
+/// Multipliers on each kind of term's log-odds; .{} is the plain sum
+pub const TermWeights = struct {
+    base: f64 = 1,
+    duo: f64 = 1,
+    lane: f64 = 1,
+    matchup: f64 = 1,
+};
+
+/// Defaults are `meiolol eval`'s "tuned + term weights" of 2026-10-17 (786k games, 15
+/// platforms): -0.0017 ± 0.0004 nats a game against the old 1000/1000 priors. Lane above
+/// 1 because one pair prior serves every pair kind and is too strong for lane opponents
 pub const Options = struct {
     /// Fewer games than this in the role and a champion is not suggested
     min_games: u32 = 200,
     /// Pseudo-games pulling a champion's role winrate toward 50%
-    base_prior_games: f64 = 1000,
-    /// Pseudo-games pulling a duo or matchup toward the base-rating prediction;
-    /// DraftGap's "medium risk" default
-    prior_games: f64 = 1000,
+    base_prior_games: f64 = 50,
+    /// Pseudo-games pulling a duo or matchup toward the base-rating prediction
+    prior_games: f64 = 3200,
     /// Overrides prior_games for ally duos, for matchups between lane opponents (same
     /// role) and for other matchups; see empiricalPriors
     duo_prior_games: ?f64 = null,
     lane_prior_games: ?f64 = null,
     matchup_prior_games: ?f64 = null,
+    weights: TermWeights = .{ .base = 0.943, .duo = 0.765, .lane = 2.025, .matchup = 1.009 },
     /// Reasons worth less than this many percentage points are left out
     min_reason_pp: f64 = 0.1,
 };
@@ -100,13 +111,14 @@ pub fn recommend(
 
     // Everything that does not involve my pick
     var fixed: f64 = 0;
+    const wb = opts.weights.base;
     for (allies, 0..) |a, i| {
-        fixed += a.base;
+        fixed += wb * a.base;
         for (allies[i + 1 ..]) |b| fixed += ctx.duo(a, b);
         for (enemies) |e| fixed += ctx.matchup(a, e);
     }
     for (enemies, 0..) |e, i| {
-        fixed -= e.base;
+        fixed -= wb * e.base;
         for (enemies[i + 1 ..]) |f| fixed -= ctx.duo(e, f);
     }
 
@@ -176,7 +188,7 @@ pub fn matchupPp(stats: *const Stats, opts: Options, r: Role, c: usize, er: Role
     return evenPp(ctx.matchup(ctx.place(c, r), ctx.place(e, er)));
 }
 
-/// A full draft's log-odds for side 0, by kind of term
+/// A full draft's log-odds for side 0, by kind of term, unweighted
 pub const DraftTerms = struct {
     /// Side 0's base ratings minus side 1's
     base: f64 = 0,
@@ -189,6 +201,10 @@ pub const DraftTerms = struct {
 
     pub fn total(t: DraftTerms) f64 {
         return t.base + t.duo + t.lane + t.matchup;
+    }
+
+    pub fn weighted(t: DraftTerms, w: TermWeights) f64 {
+        return w.base * t.base + w.duo * t.duo + w.lane * t.lane + w.matchup * t.matchup;
     }
 };
 
@@ -207,14 +223,14 @@ pub fn draftTerms(stats: *const Stats, opts: Options, teams: [2][5]u32) DraftTer
             const a = pa orelse continue;
             t.base += sign * a.base;
             for (placed[s][i + 1 ..]) |pb| if (pb) |b| {
-                t.duo += sign * ctx.duo(a, b);
+                t.duo += sign * ctx.duoDelta(a, b);
             };
         }
     }
     for (placed[0]) |pa| {
         const a = pa orelse continue;
         for (placed[1]) |pe| if (pe) |e| {
-            if (a.role == e.role) t.lane += ctx.matchup(a, e) else t.matchup += ctx.matchup(a, e);
+            if (a.role == e.role) t.lane += ctx.matchupDelta(a, e) else t.matchup += ctx.matchupDelta(a, e);
         };
     }
     return t;
@@ -222,7 +238,7 @@ pub fn draftTerms(stats: *const Stats, opts: Options, teams: [2][5]u32) DraftTer
 
 /// Side 0's win chance for a full draft, 0..1 (see draftTerms)
 pub fn draftWin(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
-    return sigmoid(draftTerms(stats, opts, teams).total());
+    return sigmoid(draftTerms(stats, opts, teams).weighted(opts.weights));
 }
 
 /// The roles recommend infers for a team whose positions are hidden: `out[i]` for
@@ -370,17 +386,26 @@ const Context = struct {
         };
     }
 
-    fn duo(ctx: *const Context, a: Placed, b: Placed) f64 {
+    fn duoDelta(ctx: *const Context, a: Placed, b: Placed) f64 {
         if (a.role == b.role) return 0;
         const pair = ctx.stats.ally(a.role, b.role, a.c, b.c);
         return pairDelta(pair, a.base + b.base, ctx.opts.duo_prior_games orelse ctx.opts.prior_games);
     }
 
     /// From `a`'s side
-    fn matchup(ctx: *const Context, a: Placed, e: Placed) f64 {
+    fn matchupDelta(ctx: *const Context, a: Placed, e: Placed) f64 {
         const pair = ctx.stats.enemy(a.role, e.role, a.c, e.c);
         const k = if (a.role == e.role) ctx.opts.lane_prior_games else ctx.opts.matchup_prior_games;
         return pairDelta(pair, a.base - e.base, k orelse ctx.opts.prior_games);
+    }
+
+    fn duo(ctx: *const Context, a: Placed, b: Placed) f64 {
+        return ctx.opts.weights.duo * ctx.duoDelta(a, b);
+    }
+
+    fn matchup(ctx: *const Context, a: Placed, e: Placed) f64 {
+        const w = if (a.role == e.role) ctx.opts.weights.lane else ctx.opts.weights.matchup;
+        return w * ctx.matchupDelta(a, e);
     }
 
     /// Known champions with roles: given ones kept (unless clashing), the rest the
@@ -488,7 +513,7 @@ const Context = struct {
         const Term = struct { reason: Reason, x: f64 };
         var terms: [1 + 4 + 5]Term = undefined;
         var n: usize = 0;
-        terms[n] = .{ .x = me.base, .reason = .{
+        terms[n] = .{ .x = ctx.opts.weights.base * me.base, .reason = .{
             .kind = .base,
             .champion = me.id,
             .role = role,
@@ -704,6 +729,11 @@ test "full draft agrees with recommend" {
     const p = draftWin(&t.stats, test_opts, teams);
     const swapped = draftWin(&t.stats, test_opts, .{ teams[1], teams[0] });
     try testing.expectApproxEqAbs(1, p + swapped, 1e-12);
+    var plain = test_opts;
+    plain.weights = .{};
+    const terms = draftTerms(&t.stats, plain, teams);
+    try testing.expectApproxEqAbs(sigmoid(terms.total()), draftWin(&t.stats, plain, teams), 1e-12);
+    try testing.expect(@abs(p - draftWin(&t.stats, plain, teams)) > 1e-6);
 
     var out: [4]Suggestion = undefined;
     const s = recommend(&t.stats, .{

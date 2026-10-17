@@ -4164,6 +4164,30 @@ by m games has se ~50/sqrt(m) pp, MDE ~140/sqrt(m) pp (a pair in 5,000 games: ~2
 500: ~6 pp); a per-sd term on n games has se ~50/sqrt(n) pp (matches win-comp's -1.50 ±
 0.33 at 89k). As a log-loss gain the bar is far higher (above).
 
+## Shipped model, 2026-10-17
+
+`score.Options` defaults (app suggest, site draft tester, Daily Draft, pool, matchup and
+duo numbers on pages) moved from priors 1000/1000 with plain sums to the daily eval's
+"tuned + term weights" of 17 Oct: base prior 50, pair prior 3200, term weights base
+0.943, duo 0.765, lane 2.025, matchup 1.009 (no blue side intercept: suggestions are
+side-free). Eval that day (785,843 games, 15 platforms, test 117,908 newest, 15 to 17
+Oct): log loss 0.6860 against 0.6878, -0.0017 ± 0.0004, AUC 0.567 against 0.562,
+accuracy 54.8% against 54.4%.
+
+- What changes on screen: ally duos shrink most (0.765 under a 3200 prior: a 1000-game
+  duo keeps ~18% of its raw delta, was 50%); lane matchups move little at typical sizes
+  (1000 games: 48% kept, was 50%; 3000: 98%, was 75%) and exceed the raw delta above
+  ~3,100 games; other matchups shrink more. Base ratings shrink less (50 pseudo-games)
+- Lane above 1 is one shared pair prior being too strong for lane opponents (EB says
+  ~1000 for lanes, ~33k for other matchups). Next: tune duo, lane and matchup priors
+  separately in eval; weights near 1 would keep shown numbers close to the data
+- From 18 Oct eval-history's ll_current and the report's "current model" are this
+  model; "previous model (1000/1000)" keeps the old one in the report, and "champion
+  base only" stays at the old base prior 1000 so its column continues. Every other row
+  (tuned priors, empirical Bayes, the tuning grid) sums its terms plainly as before
+- Values are fixed, not retuned daily: prior strengths reflect the real spread between
+  champions, not the sample size. Revisit when the daily tuning drifts from them
+
 ## Next steps
 
 - Patch and rank context (meiolol-48, 2026-10-13; cand/win-context, model.md "Patch
