@@ -50,7 +50,7 @@ function nnVerdict(r) {
 const nnDiff = r => signed(r.diff, 5) + (r.ci != null ? " ± " + r.ci.toFixed(5) : "");
 // How big, for the All view's pill: a clear gain or loss against today's model, as a share
 // of its edge
-const nnSize = r => r.vs === "ratings" && r.ci != null && Math.abs(r.diff) > r.ci ? `log loss ${Math.abs(r.diff).toFixed(4)} ${r.diff < 0 ? "lower" : "higher"} a game than today's model, ${Math.round(100 * Math.abs(r.diff) / NN_EDGE)}% of its edge over a coin flip` : null;
+const nnSize = r => r.vs === "ratings" && r.ci != null && Math.abs(r.diff) > r.ci ? `log loss ${Math.abs(r.diff).toFixed(4)} ${r.diff < 0 ? "lower" : "higher"} a game, ${Math.round(100 * Math.abs(r.diff) / NN_EDGE)}% of its edge over a coin flip` : null;
 const nnBlock = r => NN_BLOCK[r.block] || r.block || "–";
 
 // The row that best answers a question: a test look first, then the folds, then dev-val;
