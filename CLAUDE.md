@@ -29,9 +29,10 @@ docs/plan.md. Read it first.
 - Heavy model work on the gpu-box (3080, 20 threads) or Mac CPU, never the box:
   deploy/lab-run.sh; League pauses gpu-box runs; warn sessions using it before restarting
   WSL. Parallel loops: src/par.zig. docs/compute.md
-- Website: https://meio.lol (DNS on Cloudflare: docs/architecture.md), static nginx on
-  the jomove server (`ssh -i ~/.ssh/oci_instance-20260714-1317 ubuntu@193.123.180.81`;
-  jomove's own site runs there too, leave its config alone). Box builds and uploads on new data;
+- Website: https://meio.lol (DNS on Cloudflare: docs/architecture.md; mail to @meio.lol:
+  deploy/mail.sh), static nginx on the jomove server
+  (`ssh -i ~/.ssh/oci_instance-20260714-1317 ubuntu@193.123.180.81`; jomove's own site
+  runs there too, leave its config alone). Box builds and uploads on new data;
   every push to main deploys (git hook, deploy/on-push.sh, log .git/meiolol-deploy.log).
   `deploy/box.sh web start [privacy@meio.lol]|stop|status`. Preview mode until prod key
 - Layout, modules, storage, model file format: docs/architecture.md
