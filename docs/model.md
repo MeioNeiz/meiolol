@@ -3970,6 +3970,30 @@ total is clear, beside the existing matchup reasons. Both need the deviations to
 refitted on the box (or shipped as a file) and an eval-side check against the shipped
 pair terms first
 
+#### Beyond the shipped model (declared 2026-10-17 ~16:20Z, before the run)
+
+Same champcomp, snapshot and folds; offset win-draft (src/lab/cand/win-draft: the
+shipped score.zig model, base prior 50, pair prior 3200, term weights, every ally pair
+and cross-team matchup counted on the fit games). Reading: folds pooled champion terms.
+Comp terms add beyond the shipped model when the pooled interval excludes 0 and they are
+better in at least 4 of 5 folds; dev-val reported only. Also reported: clear and BH
+counts, and how many of the 47 clear effects over ratings stay clear (same sign, z over
+2.58) here. Ship nothing on a miss
+
+Result (run 20261017T160236Z-champcomp-1320Z-windraft, Mac): pass. Folds pooled
+-0.00068 ± 0.00012 nats/game, better in 5 of 5 (team terms -0.00001 ± 0.00005); dev-val
+-0.00072 ± 0.00025; clear 22 of 8352, BH 9; replication 8/8, BH 3/3. About half the gain
+over ratings (-0.00139) is in the shipped pairs and matchups. All 22 clear effects were
+among the 48 clear over ratings, same sign, at 60-90% of their size; none new. Kept:
+enemy AP share (Malphite top -1.14 ± 0.21, mid -1.16; Galio mid +1.04; Kassadin +0.94;
+Vex -0.82), enemy tankiness (Lillia jungle +0.96, Brand support +0.93, Senna +0.91,
+Nautilus -0.81) and ally AP share (Yone mid +1.04, Qiyana +1.03, Yasuo +0.97, Rengar
++0.97, Viego +0.79, Master Yi +0.77, Yone top +0.72, Zed +0.69, Graves +0.67; Malphite
+jungle -1.38, Zac jungle -1.11, Viktor bottom -0.96, Mordekaiser top -0.71). Gone: dive,
+melee, CC and sustain effects (Lulu, Malzahar, Yasuo into dive, Lissandra and Syndra into
+melee), so those were specific matchups. The duo weight (0.765 under a 3200 prior) leaves
+ally pairs mostly unexplained, which is where the ally AP terms live
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

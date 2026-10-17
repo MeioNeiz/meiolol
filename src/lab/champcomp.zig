@@ -45,7 +45,8 @@ pub const usage =
     \\  champcomp SNAP [--permute-profiles SEED] [--shuffle-traits SEED]
     \\                                  champions into comps, dev only, built with
     \\                                  -Dcand=src/lab/cand/win-ratings (or win-comp, an
-    \\                                  offset with the damage mix): per champion-role,
+    \\                                  offset with the damage mix, or win-draft, the
+    \\                                  shipped model): per champion-role,
     \\                                  win against the enemy team's and its allies'
     \\                                  traits beyond ratings and its role's average,
     \\                                  shrunk, on comps' folds and dev-val
@@ -685,8 +686,14 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     }
     // win-comp (ratings plus the damage mix): does a champion's ally AP share effect go
     // beyond the team's mix?
-    if (!@hasDecl(cand, "name") or !(std.mem.eql(u8, cand.name, "win-ratings") or std.mem.eql(u8, cand.name, "win-comp"))) {
-        std.debug.print("champcomp: build with -Dcand=src/lab/cand/win-ratings (its predictions are the offset) or win-comp\n", .{});
+    // win-draft (the shipped model, score.zig): do comps add beyond the site's own pairs
+    // and matchups?
+    const offsets = [_][]const u8{ "win-ratings", "win-comp", "win-draft" };
+    const known = @hasDecl(cand, "name") and for (offsets) |o| {
+        if (std.mem.eql(u8, cand.name, o)) break true;
+    } else false;
+    if (!known) {
+        std.debug.print("champcomp: build with -Dcand=src/lab/cand/win-ratings (its predictions are the offset), win-comp or win-draft\n", .{});
         return 2;
     }
     const snap = argv[0];

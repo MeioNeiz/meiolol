@@ -25,7 +25,22 @@ How to write a line:
 
 ## Win
 
-- 2026-10-17 (early): Some champions do clearly better or worse depending on what the
+- 2026-10-17 (early): Beyond the matchups and duos the site already uses, about half
+  of the team-comp effects remain, and the ones that remain are about magic damage and
+  tankiness: Malphite (top, mid) still wins about 1.1 points less per step towards a
+  magic-damage enemy team, Galio and Kassadin mid about 1 more; Lillia jungle, Brand and
+  Senna support about 1 more into tanky teams, Nautilus about 0.8 less; AD carries
+  (Yone, Yasuo, Qiyana, Zed, Viego, Master Yi, Graves, Rengar) about 0.7-1 more with
+  magic-damage allies, Malphite and Zac jungle, Viktor bot and Mordekaiser top about 1
+  less. The dive and melee effects were matchups already counted. Sure: same
+  snapshot and folds, offset the shipped model (win-draft): -0.00068 ± 0.00012 nats a
+  game, better in 5 of 5 folds (declared rule: pass), dev-val -0.00072 ± 0.00025; 22
+  effects clear (9 at a 5% false discovery rate), all 22 among the earlier 48 with the
+  same sign, 8 of 8 replicated on newer games; dev only, no test look. Site: the admin
+  draft picker first (shipped model plus these terms), champion pages after a held-out
+  look. Evidence: docs/model.md "Champions into comps", "Beyond the shipped model"
+- 2026-10-17 (early, before the check against the shipped model below): Some champions
+  do clearly better or worse depending on what the
   enemy team is made of, beyond how strong they are: Malphite top wins about 2
   percentage points less than an average top laner for each step towards a
   magic-damage enemy team, Galio and Kassadin mid about 1.5 and 1 more; Lillia jungle,
@@ -41,7 +56,7 @@ How to write a line:
   strength in every fold (-0.0014 ± 0.0002 nats a game, dev-val -0.0019 ± 0.0004).
   Effects are a step of one sd of the trait, a typical draft moves less; a single
   champion's effect is found from about 3 points at 10,000 games, 1.6 at 35,000, 1 at
-  90,000; not yet checked against the pair and matchup terms the site uses; dev only,
+  90,000; dev only,
   no test look. Site: nothing yet; candidate champion-page lines and suggest reasons
   (docs/model.md reading). Evidence: docs/model.md "Champions into comps"
 
