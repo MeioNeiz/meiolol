@@ -166,6 +166,27 @@ tr.thin td { color: var(--muted); opacity: 0.6; }
 .archive { list-style: none; padding: 0; }
 .archive li { display: flex; gap: 12px; padding: 2px 0; }
 .hero img + img { margin-left: -12px; }
+.hero .swap {
+  display: grid; place-items: center; width: 36px; height: 36px; margin: 0 -14px; z-index: 1;
+  border-radius: 50%; background: var(--panel); border: 1px solid var(--line-2);
+  color: var(--text); font-size: 18px; text-decoration: none;
+}
+.hero .swap:hover { border-color: var(--accent); color: var(--accent); }
+.mu-nav { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin: 14px 0 4px; }
+.mu-nav .btn, .mu-nav summary {
+  display: inline-block; border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 12px;
+  background: var(--panel); color: var(--text); text-decoration: none; cursor: pointer;
+}
+.mu-nav .btn:hover, .mu-nav summary:hover { border-color: var(--accent); }
+.mu-nav details[open] { flex-basis: 100%; }
+.pick-list {
+  list-style: none; margin: 8px 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 12px;
+}
+.pick-list li { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.pick-list a { display: inline-flex; align-items: center; gap: 6px; color: var(--text); min-width: 0; }
+.pick-list img { width: 24px; height: 24px; border-radius: 5px; }
+.pick-list .current a { color: var(--accent); font-weight: 600; }
 /* SVG text scales with the chart: capped width keeps it near 15px on desktop, and phones
    get bigger units so it stays near 8.5px */
 .chart { margin: 0; max-width: 800px; }

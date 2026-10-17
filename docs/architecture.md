@@ -352,8 +352,11 @@ per game): ~2.7 GB at 30 days of all regions at ~100k games/day, beyond the micr
 GB; the A1 (12 GB) holds it.
 
 `meiolol site` reads recent-curves.bin when present (curves-<patch>.bin with --patch;
-the rest of the site stays on the newest patch): a page per matchup
-with an all-ranks curve (matchup/<role>/<a>-vs-<b>.html, lower id first), three SVG
+the rest of the site stays on the newest patch): two pages per matchup with an
+all-ranks curve, one from each side (matchup/<role>/<a>-vs-<b>.html, a's numbers
+first), as lolalytics' /vs/ pages: ⇄ swaps sides, Change opponent / Change champion
+list the other matchups with a page, and a champion page's opponent names link to the
+matchup from that champion's side; three SVG
 charts (line = estimated mean; band = the matchup's middle half of games from 200 games,
 below that the role's middle half drawn around the line, said in the caption; ±2 SE at
 14 min, period, tier and n in every caption; a dotted line at 15 min, surrender, and the

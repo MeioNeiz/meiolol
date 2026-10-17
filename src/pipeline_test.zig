@@ -161,9 +161,10 @@ test "fixture games to stats, curves and the website" {
     const pages = [_]struct { []const u8, []const []const u8 }{
         .{ "patch/build/darius-top.html", &.{ "Conqueror", "few games", "Doran&#39;s Shield", "More data needed", "href=\"../../champion/darius.html?period=patch\"" } },
         // Champion table and page: raw win rate with its interval, every lane opponent
-        // (few games: shown, faded) with the curve's gold at 14 linking to the matchup page
+        // (few games: shown, faded), it and the curve's gold at 14 linking to the matchup
+        // page from the champion's side
         .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "opacity:" } },
-        .{ "champion/darius.html", &.{ "Lane opponents", "href=\"../matchup/top/mordekaiser-vs-darius.html\"", "Gold at 14", "Search opponent", "data-name=\"Mordekaiser\" class=\"thin\">" } },
+        .{ "champion/darius.html", &.{ "Lane opponents", "<a class=\"champ\" href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Darius vs Mordekaiser\">", "href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Lane curves", "Gold at 14", "Search opponent", "data-name=\"Mordekaiser\" class=\"thin\">" } },
         .{ "champion/darius.html", &.{"href=\"../patch/build/darius-top.html\""} },
         .{ "champion/darius.html", &.{"win rates on Darius: more data needed (0 players in EUW with 10+ games on it, 20 needed)."} },
         // Filters: the champion's counts by region, rank, patch, role and opponent, its
@@ -177,6 +178,9 @@ test "fixture games to stats, curves and the website" {
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
         // Lane curves: the estimate (curvefit.zig) on the page, k on the method page
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "estimated average", "First finished item", "More data needed" } },
+        // Either side's page, each swapping to the other
+        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<h1>Mordekaiser vs Darius</h1>", "class=\"swap\" href=\"darius-vs-mordekaiser.html\"" } },
+        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side" } },
         .{ "method.html", &.{ "Games to stabilise", "<h2 id=\"lean\">Early or late</h2>" } },
         // Early or late: three games, so no numbers, only that it can't tell yet
         .{ "champion/darius.html", &.{ "<b>Early or late:</b> too few games yet to tell.", "Games still going at 20 min: 3 (every region, last 30 days)", "href=\"../method.html#lean\"" } },
@@ -302,7 +306,7 @@ test "fixture games to stats, curves and the website" {
         for (try site.pagePaths(&s)) |p| try testing.expect(!std.mem.startsWith(u8, p, "matchup/") or std.mem.eql(u8, p, "matchup/index.html"));
         try testing.expect(try loaded.get(arena, "matchup/top/mordekaiser-vs-darius.html") != null);
     }
-    for ([_][]const u8{ "champion/nobody.html", "all/champion/darius.html", "matchup/top/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html", "patch/", "nosuch/index.html", "data/filters/nobody.json", "data/your-example.json" }) |path| {
+    for ([_][]const u8{ "champion/nobody.html", "all/champion/darius.html", "matchup/top/darius-vs-darius.html", "matchup/mid/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html", "patch/", "nosuch/index.html", "data/filters/nobody.json", "data/your-example.json" }) |path| {
         try testing.expectEqual(null, try loaded.get(arena, path));
     }
 

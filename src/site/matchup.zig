@@ -45,8 +45,14 @@ fn period(a: std.mem.Allocator, curves: *const Curves) ![]const u8 {
     return label;
 }
 
+/// From x's side: x's gold, wins and timings first
 pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
-    return a.print("matchup/{s}/{s}-vs-{s}.html", .{ root.roleSlug(r), x.slug, y.slug });
+    return a.print("matchup/{s}/{s}", .{ root.roleSlug(r), try file(a, x, y) });
+}
+
+/// path within its role's directory
+fn file(a: std.mem.Allocator, x: Champ, y: Champ) ![]const u8 {
+    return a.print("{s}-vs-{s}.html", .{ x.slug, y.slug });
 }
 
 /// A matchup's page curve: all ranks, all games. The file has one per bracket and
@@ -55,8 +61,8 @@ fn isPage(h: curvesfile.Header) bool {
     return h.bracket == @backingInt(Bracket.all) and h.experience == @backingInt(curvesfile.Experience.any);
 }
 
-/// A page per lane matchup with an all-ranks curve of `min_games` or more, from the lower
-/// champion id's side
+/// Two pages per lane matchup with an all-ranks curve of `min_games` or more, one from
+/// each champion's side
 pub fn paths(site: *const Site, curves: *const Curves, list: *std.ArrayList([]const u8), min_games: u32) !void {
     for (curves.curves) |c| {
         const h = c.header;
@@ -65,6 +71,7 @@ pub fn paths(site: *const Site, curves: *const Curves, list: *std.ArrayList([]co
         const y = champ(site, h.b) orelse continue;
         const r: Role = @fromBackingInt(@intCast(h.role));
         try list.append(site.arena, try path(site.arena, r, x, y));
+        try list.append(site.arena, try path(site.arena, r, y, x));
     }
 }
 
@@ -75,7 +82,7 @@ pub fn route(site: *const Site, w: *Writer, curves: *const Curves, rest: []const
     var it = std.mem.splitSequence(u8, rest[slash + 1 ..], "-vs-");
     const x = site.champBySlug(it.next().?) orelse return false;
     const y = site.champBySlug(it.next() orelse return false) orelse return false;
-    if (it.next() != null or x.id >= y.id) return false;
+    if (it.next() != null or x.id == y.id) return false;
     if (curves.get(r, .all, x.id, y.id) == null) return false;
     try writePage(site, w, curves, r, x, y);
     return true;
@@ -96,6 +103,9 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         \\<p class="lead">How each lane matchup unfolds, minute by minute: the typical gold,
         \\experience and CS difference with its spread, who tends to lead at 14 minutes and
         \\whether that side then wins the game.</p>
+        \\<p>Each matchup reads from either side: ⇄ on its page swaps them, and Change
+        \\opponent or Change champion moves to another. From a champion's page, every lane
+        \\opponent links to its matchup from that champion's side.</p>
         \\
     , .{});
     const c = curves orelse {
@@ -217,13 +227,17 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         if (!has) there.* = try std.mem.concat(a, u8, &.{ view.dir(), "matchup/index.html" });
     }
     try html.head(w, p);
+    const swap = try file(a, y, x);
     try tpl.render(w,
-        \\<div class="hero"><img src="{x_icon}" alt="" width="72" height="72"><img src="{y_icon}" alt="" width="72" height="72"><div><h1>{x} vs {y}</h1>
-        \\<p class="muted">{lane} lane, ranked solo/duo {region}, {when}, all ranks, {games} game{s}.</p></div></div>
+        \\<div class="hero"><img src="{x_icon}" alt="" width="72" height="72"><a class="swap" href="{swap}" title="Swap sides: {y} vs {x}" aria-label="Swap sides: {y} vs {x}">⇄</a><img src="{y_icon}" alt="" width="72" height="72"><div><h1>{x} vs {y}</h1>
+        \\<p class="muted">From {x}'s side: {lane} lane, ranked solo/duo {region}, {when}, all ranks, {games} game{s}.</p></div></div>
+        \\<nav class="mu-nav" aria-label="Other matchups"><a class="btn" href="{swap}">⇄ From {y}'s side</a>
+        \\{opponents}{champions}</nav>
         \\
     , .{
         .x_icon = site.icon(x),
         .y_icon = site.icon(y),
+        .swap = swap,
         .x = x.name,
         .y = y.name,
         .lane = lane,
@@ -231,6 +245,8 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         .when = when,
         .games = v.games(),
         .s = plural(v.games()),
+        .opponents = tpl.call(picker, .{ site, curves, r, x, y, Pick.opponent }),
+        .champions = tpl.call(picker, .{ site, curves, r, y, x, Pick.champion }),
     });
     if (v.games() < thin_games) {
         try tpl.render(w,
@@ -296,6 +312,60 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     try html.foot(w, p);
 }
 
+const Pick = enum { opponent, champion };
+
+/// A closed list of `fixed`'s other lane matchups with a page, most games first, each
+/// keeping fixed's side as on this page: "Change opponent" swaps y (fixed is x),
+/// "Change champion" swaps x (fixed is y)
+fn picker(w: *Writer, site: *const Site, curves: *const Curves, r: Role, fixed: Champ, current: Champ, pick: Pick) !void {
+    const a = site.arena;
+    var list: std.ArrayList(Other) = .empty;
+    for (curves.curves) |c| {
+        const h = c.header;
+        if (h.role != @backingInt(r) or !isPage(h)) continue;
+        const id = if (h.a == fixed.id) h.b else if (h.b == fixed.id) h.a else continue;
+        try list.append(a, .{ .ch = champ(site, id) orelse continue, .games = h.games });
+    }
+    if (list.items.len < 2) return;
+    std.mem.sort(Other, list.items, {}, struct {
+        fn f(_: void, p_: Other, q: Other) bool {
+            return p_.games > q.games;
+        }
+    }.f);
+    try tpl.render(w,
+        \\<details class="pick"><summary>{label} <span class="muted">{n}</span></summary><ul class="pick-list">
+        \\{items}</ul></details>
+        \\
+    , .{
+        .label = switch (pick) {
+            .opponent => "Change opponent",
+            .champion => "Change champion",
+        },
+        .n = list.items.len,
+        .items = tpl.each(list.items, PickCtx{ .site = site, .fixed = fixed, .current = current, .pick = pick }, pickItem),
+    });
+}
+
+const Other = struct { ch: Champ, games: u32 };
+const PickCtx = struct { site: *const Site, fixed: Champ, current: Champ, pick: Pick };
+
+fn pickItem(ctx: PickCtx, w: *Writer, o: Other) !void {
+    const x, const y = switch (ctx.pick) {
+        .opponent => .{ ctx.fixed, o.ch },
+        .champion => .{ o.ch, ctx.fixed },
+    };
+    try tpl.render(w,
+        \\<li{current}><a href="{href}"><img src="{icon}" alt="" loading="lazy" width="32" height="32">{name}</a> <span class="muted">{games}</span></li>
+        \\
+    , .{
+        .current = tpl.flag(o.ch.id == ctx.current.id, "class=\"current\" aria-current=\"page\""),
+        .href = try file(ctx.site.arena, x, y),
+        .icon = ctx.site.icon(o.ch),
+        .name = o.ch.name,
+        .games = o.games,
+    });
+}
+
 /// The landing page's lead: one matchup's gold curve, the clearest lane among those
 /// out of "more data needed" (the most games while none is)
 pub fn featured(site: *const Site, w: *Writer, curves: *const Curves, matchups: usize) !void {
@@ -320,7 +390,7 @@ pub fn featured(site: *const Site, w: *Writer, curves: *const Curves, matchups: 
     const v = curves.get(b.r, .all, x.id, y.id).?;
     const lane = root.roleName(b.r);
     const when = try period(site.arena, curves);
-    const page_path = try path(site.arena, b.r, b.x, b.y);
+    const page_path = try path(site.arena, b.r, x, y);
     try tpl.renderPart(w,
         \\<section class="featured"><h2>{x} vs {y}, {lane} lane: gold difference by minute</h2>
         \\

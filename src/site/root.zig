@@ -2000,7 +2000,7 @@ fn platformName(p: []const u8) []const u8 {
 }
 
 /// Every lane opponent: win rate with its interval and the lane curve's gold difference at
-/// lane_minute, linking to the matchup page. Hardest first; under min_opponent_games faded
+/// lane_minute, the opponent and the gold linking to the matchup page from ch's side. Hardest first; under min_opponent_games faded
 /// and last, by games, so a few lucky games don't top the list
 fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Opponent) !void {
     if (opps.len == 0) return;
@@ -2032,7 +2032,7 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Oppo
             .id = o.other.id,
             .name = o.other.name,
             .thin = tpl.flag(thin, "class=\"thin\""),
-            .link = tpl.call(champLinkTo, .{ site, o.other, "../" }),
+            .link = tpl.call(opponentLink, .{ site, ch, o.other, r }),
             .wr = tpl.call(winRateCell, .{ o.wins, o.games, @as(f64, 0.25) }),
             .gold = tpl.call(goldCell, .{ site, ch, o.other, r }),
             .games = o.games,
@@ -2047,6 +2047,18 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, opps: []Oppo
     , .{ .few = few, .min = min_opponent_games })) });
 }
 
+/// To the matchup page from ch's side, or the opponent's own page where there is none
+fn opponentLink(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !void {
+    const has = if (site.curves) |*c| c.get(r, .all, ch.id, other.id) != null else false;
+    if (!has) return site.champLink(w, other, "../");
+    try tpl.render(w, "<a class=\"champ\" href=\"../{path}\" title=\"{ch} vs {name}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
+        .path = try matchup.path(site.arena, r, ch, other),
+        .ch = ch.name,
+        .icon = site.icon(other),
+        .name = other.name,
+    });
+}
+
 fn goldCell(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !void {
     const none = "<td class=\"dim\" data-v=\"\"></td>";
     const curves = if (site.curves) |*c| c else return tpl.render(w, none, .{});
@@ -2054,13 +2066,12 @@ fn goldCell(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !vo
     const i = core.curvesfile.lane_minute - 1;
     const e = v.estimate(.gold, i);
     const g = matchup.range(v, curves.baseline(r, .all), .gold, i);
-    const x, const y = if (ch.id < other.id) .{ ch, other } else .{ other, ch };
     try tpl.render(w, "<td data-v=\"{mean}\"><a class=\"gold {side}\" style=\"opacity:{fade:.2}\" href=\"../{path}\" title=\"Lane curves, {games} games\">{sign}{mean}</a><small title=\"8 games in 10\">{p10s}{p10} to {p90s}{p90}</small></td>", .{
         .mean = e.mean,
         .side = if (e.mean > 0) "up" else if (e.mean < 0) "down" else "even",
         .fade = core.curvesfile.fade(v.games()),
         .games = v.games(),
-        .path = try matchup.path(site.arena, r, x, y),
+        .path = try matchup.path(site.arena, r, ch, other),
         .sign = if (e.mean > 0) "+" else "",
         .p10s = if (g[0] > 0) "+" else "",
         .p10 = g[0],

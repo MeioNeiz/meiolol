@@ -594,7 +594,6 @@ fn laneExample(ctx: Ctx, w: *Writer, c: *const curvesfile.Curves) !void {
     }
     const b = best orelse return;
     const ahead, const behind = if (b.gold >= 0) .{ b.x, b.y } else .{ b.y, b.x };
-    const lo, const hi = if (b.x.id < b.y.id) .{ b.x, b.y } else .{ b.y, b.x };
     const x_wins: Counts = .{ .games = b.v.games(), .wins = b.v.wins() };
     const ahead_win = if (b.gold >= 0) rate(x_wins) else 1 - rate(x_wins);
     try tpl.render(w,
@@ -610,7 +609,7 @@ fn laneExample(ctx: Ctx, w: *Writer, c: *const curvesfile.Curves) !void {
         .lane = root.roleName(b.r),
         .win = 100 * ahead_win,
         .games = b.v.games(),
-        .href = try matchup.path(ctx.a, b.r, lo, hi),
+        .href = try matchup.path(ctx.a, b.r, ahead, behind),
     });
 }
 

@@ -265,12 +265,11 @@ const HARDEST = "hardest first";
     }
   }
 
-  // As matchup.zig path: from the lower champion id's side
+  // As matchup.zig path, from this champion's side
   function matchupHref(dir, role, opp) {
     const other = byId.get(opp);
     if (!self || !other) return null;
-    const [x, y] = self.id < other.id ? [self, other] : [other, self];
-    return `../${dir}matchup/${role}/${x.slug}-vs-${y.slug}.html`;
+    return `../${dir}matchup/${role}/${self.slug}-vs-${other.slug}.html`;
   }
 
   function row(o, thin, curve, href, q) {
@@ -279,18 +278,20 @@ const HARDEST = "hardest first";
     tr.dataset.id = o.id;
     tr.dataset.name = ch?.name ?? String(o.id);
     if (thin) tr.className = "thin";
-    tr.append(nameCell(ch, q), winRateCell(o.wins, o.games, 0.25), goldCell(o, curve, href), gamesCell(o.games));
+    tr.append(nameCell(ch, q, href), winRateCell(o.wins, o.games, 0.25), goldCell(o, curve, href), gamesCell(o.games));
     return tr;
   }
 
-  // To the opponent's own page with the same filters
-  function nameCell(ch, q) {
+  // To the matchup page, as root.zig opponentLink, else the opponent's own page with the
+  // same filters
+  function nameCell(ch, q, href) {
     const td = document.createElement("td");
     td.className = "l";
     if (!ch) return td;
     const a = document.createElement("a");
     a.className = "champ";
-    a.href = `${ch.slug}.html${q}`;
+    a.href = href ?? `${ch.slug}.html${q}`;
+    if (href && self) a.title = `${self.name} vs ${ch.name}`;
     const img = document.createElement("img");
     img.src = `https://ddragon.leagueoflegends.com/cdn/${bar.dataset.ddragon}/img/champion/${ch.key}.png`;
     img.alt = "";
