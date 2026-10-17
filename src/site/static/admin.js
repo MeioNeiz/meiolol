@@ -2113,6 +2113,7 @@ const DEPLOY_STEPS = [
   ["deploy", "Deploy", "on-push.sh runs deploy/box.sh web start"],
   ["build", "Build and copy", "clean checkout, cross-compile, binary and scripts to the box"],
   ["web", "Web loop", "signalled (or restarted) for a round with the new binary"],
+  ["crawl", "Crawler restart", "only when the deploy changed src/riot or src/store"],
   ["site", "Site build", "the deploy round's static core build"],
   ["upload", "Upload", "static core to the web server: home page, CSS, JS, sitemap"],
   ["views", "Views file", "every view into views.bin; only the parts the deploy changed load again"],
@@ -2180,6 +2181,7 @@ function deployList() {
       step("deploy", start);
       step("build", start, start);
       step("web", start, steps.build && steps.build.end);
+      step("crawl", start);
       // The deploy's round: the first forced round after the deploy began
       const round = list.find(e => e[2] === "round" && e[0] >= start);
       if (round) {

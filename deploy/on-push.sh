@@ -84,6 +84,21 @@ while [[ -e "$state.pending" ]]; do
     rc=${PIPESTATUS[0]}
     if (( rc == 0 )); then
         event "$sha" deploy ok "box.sh done: the box takes it from here"
+        # box.sh copies the binary but the crawler keeps the one it started with: a change
+        # to its code goes live only on a restart (17 Oct: a crawl fix sat unused)
+        crawl_paths=(src/riot src/store)
+        if [[ -z "$deployed" ]] || ! git -C "$ROOT" diff --quiet "$deployed" "$sha" -- "${crawl_paths[@]}"; then
+            if "$ROOT/deploy/box.sh" restart > /dev/null 2>&1; then
+                echo "$(now) restarted meiolol-crawl (${crawl_paths[*]} changed)"
+                event "$sha" crawl ok "crawler restarted: ${crawl_paths[*]} changed"
+            else
+                echo "$(now) meiolol-crawl restart FAILED"
+                event "$sha" crawl failed "crawler restart failed: deploy/box.sh restart"
+            fi
+        else
+            echo "$(now) meiolol-crawl keeps running (no change in ${crawl_paths[*]})"
+            event "$sha" crawl skipped "no change in ${crawl_paths[*]}: the crawler keeps running"
+        fi
     else
         echo "$(now) failed"
         grep -q '^deployed ' "$out" || event "$sha" build failed "$(grep -v '^ *$' "$out" | tail -n 1)"

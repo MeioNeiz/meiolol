@@ -95,6 +95,7 @@ pub fn build(b: *std.Build) void {
     const lab_check = labModule(b, b.resolveTargetQuery(gpu_box), .Debug, cand);
     ci.dependOn(&b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_check }).step);
     ci.dependOn(lint(b, "shellcheck", "shellcheck -S warning deploy/*.sh deploy/hooks/*"));
+    ci.dependOn(lint(b, "git", "deploy/check-deploy.sh"));
     ci.dependOn(lint(b, "node", "for f in src/site/static/*.js; do node --check \"$f\" || exit 1; done"));
 }
 

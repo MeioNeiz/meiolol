@@ -57,6 +57,8 @@
 # changes the format finishes first: its parts the deploy left alone keep their keys, so
 # the deploy's --reuse write takes them from it. Stopping it (until 17 Oct) threw that
 # work away: two deploys that day cost a 10 and a 72 min write, and the swap waited 1 h 43
+# `deploy/box.sh web rebuild` (data/views.full-request, then SIGUSR1) makes the next
+# round a forced one without --reuse: every part fresh, Daily Draft and Learn included.
 # A forced round's steps (site build, upload, views file, reload) go to data/deploys.tsv
 # for the admin page's Deploys tab, under the commit deployed when the round began.
 # Upload: the new build is copied into data/site by checksum without times, so only
@@ -233,10 +235,16 @@ run_daily() {
 while true; do
     now=$(date +%s)
     forced=$force force=0
+    # deploy/box.sh web rebuild: a forced round that writes every views part fresh
+    full=0
+    if (( forced )) && [[ -e data/views.full-request ]]; then
+        full=1
+        rm -f data/views.full-request
+    fi
     round_sha=''
     if (( forced )); then
         round_sha=$(tail -n 1 DEPLOYED 2> /dev/null | cut -d' ' -f1)
-        deploy_event round start "site build, upload and views file with the new binary"
+        deploy_event round start "site build, upload and views file with the new binary$( (( full )) && echo ', every part fresh (web rebuild)')"
     fi
     interval=$(interval_for "$patch")
     # A deploy's or start's round leaves a due pass to the next round, so the views file
@@ -280,13 +288,13 @@ while true; do
                 # refresh of the rest to the next upload (last_upload unchanged)
                 t=$SECONDS
                 reuse=()
-                (( forced )) && reuse=(--reuse)
+                (( forced && ! full )) && reuse=(--reuse)
                 deploy_event views start "every view into data/views.bin${reuse:+, current parts kept}"
                 if views_write "${reuse[@]}" "${site_args[@]}"; then
                     echo "$(date -u +%FT%TZ) views file $(( SECONDS - t ))s" \
                         "($(stat -c %s data/views.bin) bytes${reuse:+, current parts kept})"
                     deploy_event views ok "$(( SECONDS - t ))s, $(views_parts)"
-                    (( forced )) || { touch data/views.full; last_upload=$now; }
+                    (( forced && ! full )) || { touch data/views.full; last_upload=$now; }
                     touch data/render.reload
                     deploy_event reload ok "renderer told to read the new views file"
                 else

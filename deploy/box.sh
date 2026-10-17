@@ -109,16 +109,99 @@ EOF
 case "${1:-}" in
     sync) sync ;;
     start)
-        # Extra arguments go to `meiolol crawl` (kept in crawl.args on the box). Default
-        # --proxy on the private address: the Your games service on the web server makes
-        # its Riot calls through the crawler (docs/your-games.md). The crawler stops on
-        # exit 3 (key rejected) rather than hammer Riot
+        # Extra arguments go to `meiolol crawl` (kept in crawl.args on the box); none keeps
+        # the box's crawl.args, or on a new box --proxy on the private address: the Your
+        # games service on the web server makes its Riot calls through the crawler
+        # (docs/your-games.md). The crawler stops on exit 3 (key rejected) rather than
+        # hammer Riot
         shift
-        (( $# )) || set -- --proxy 10.0.0.3:8092
         sync
-        ssh "$HOST" "cd $DIR && echo '$*' > crawl.args \
-            && systemctl --user enable -q meiolol-crawl && systemctl --user restart meiolol-crawl"
+        if (( $# )); then
+            ssh "$HOST" "cd $DIR && echo '$*' > crawl.args"
+        else
+            ssh "$HOST" "cd $DIR && [ -s crawl.args ] || echo '--proxy 10.0.0.3:8092' > crawl.args"
+        fi
+        ssh "$HOST" "systemctl --user enable -q meiolol-crawl && systemctl --user restart meiolol-crawl"
         echo "started meiolol-crawl on $HOST"
+        ;;
+    restart)
+        # The deployed binary with the box's crawl.args, no build: a deploy restarts the
+        # crawler only when src/riot or src/store changed (on-push.sh)
+        ssh "$HOST" "systemctl --user restart meiolol-crawl && systemctl --user is-active meiolol-crawl"
+        ;;
+    wait-deployed)
+        # deploy/box.sh wait-deployed [REV] [--live] [--timeout S]: until REV (default
+        # origin/main) is on the box (DEPLOYED), or with --live until a site round that
+        # includes it has told the renderer to reload. A push the deploy skipped (no
+        # change in src, deploy or build files) counts as there. Exit 0 there, 1 the
+        # round's views write failed, 3 timeout (default 900 s; --live 5400 s)
+        rev=origin/main live=0 timeout=''
+        for a in "${@:2}"; do
+            case $a in
+                --live) live=1 ;;
+                --timeout=*) timeout=${a#--timeout=} ;;
+                --timeout) timeout=next ;;
+                *) if [[ $timeout == next ]]; then timeout=$a; else rev=$a; fi ;;
+            esac
+        done
+        [[ -n $timeout && $timeout != next ]] || timeout=$(( live ? 5400 : 900 ))
+        sha=$(git -C "$ROOT" rev-parse "$rev^{commit}")
+        end=$(( SECONDS + timeout ))
+        while (( SECONDS < end )); do
+            got=$(ssh "$HOST" "cd $DIR && tail -n 20 DEPLOYED; echo ---; \
+                grep -P '\t(deploy\tskipped|reload\t)' data/deploys.tsv | tail -n 50" 2> /dev/null) \
+                || { sleep 10; continue; }
+            if grep -q "^$sha.*deploy.skipped" <<< "$(cut -f2- <<< "${got#*---}")"; then
+                echo "${sha:0:7}: nothing to deploy (no change in src, deploy or build files)"
+                exit 0
+            fi
+            if (( ! live )); then
+                if grep -q "^$sha " <<< "${got%%---*}"; then echo "${sha:0:7} on $HOST"; exit 0; fi
+            else
+                while IFS=$'\t' read -r _ round step _ detail; do
+                    [[ $step == reload ]] || continue
+                    git -C "$ROOT" merge-base --is-ancestor "$sha" "$round" 2> /dev/null || continue
+                    echo "${sha:0:7} live in round ${round:0:7}: $detail"
+                    grep -q 'database' <<< "$detail" && exit 1
+                    exit 0
+                done <<< "${got#*---}"
+            fi
+            sleep 10
+        done
+        echo "${sha:0:7}: not there after ${timeout}s"
+        exit 3
+        ;;
+    job)
+        # Long work on the box that outlives the ssh session (17 Oct: two hand-run jobs died
+        # with a dropped ssh): deploy/box.sh job run NAME 'CMD' runs CMD (bash, in
+        # ml/meiolol) as user unit meiolol-job-NAME, output in data/job-NAME.log and its
+        # exit status in data/job-NAME.rc; `job status NAME`; `job wait NAME [S]` until it
+        # ends (default 3600 s), exit its status, 3 timeout
+        name=${3:-}
+        [[ $name =~ ^[a-z0-9-]+$ ]] || { echo "usage: deploy/box.sh job run NAME 'CMD'|status NAME|wait NAME [S]"; exit 2; }
+        unit=meiolol-job-$name log=data/job-$name.log rc=data/job-$name.rc
+        status_job="cd $DIR; if systemctl --user -q is-active $unit; then echo '$unit running'; \
+            elif [ -f $rc ]; then echo \"$unit ended, exit \$(cat $rc)\"; else echo '$unit not run'; fi; \
+            tail -n 5 $log 2> /dev/null"
+        case "${2:-}" in
+            run)
+                [[ -n "${4:-}" ]] || { echo "usage: deploy/box.sh job run NAME 'CMD'"; exit 2; }
+                # A subshell, so an exit in CMD still leaves its status
+                body=$(printf '( %s\n) > %s 2>&1; echo $? > %s' "$4" "$log" "$rc")
+                ssh "$HOST" "cd $DIR && if systemctl --user -q is-active $unit; then \
+                    echo '$unit already running'; exit 1; fi; rm -f $rc \
+                    && systemd-run --user -q --collect --unit $unit --working-directory=\$HOME/$DIR \
+                        /bin/bash -c $(printf %q "$body") && echo 'started $unit ($log)'"
+                ;;
+            status) ssh "$HOST" "$status_job" ;;
+            wait)
+                limit=${4:-3600}
+                ssh "$HOST" "for i in \$(seq $(( (limit + 4) / 5 ))); do \
+                    systemctl --user -q is-active $unit || break; sleep 5; done; $status_job; \
+                    cd; systemctl --user -q is-active $unit && exit 3; exit \$(cat $DIR/$rc 2> /dev/null || echo 1)"
+                ;;
+            *) echo "usage: deploy/box.sh job run NAME 'CMD'|status NAME|wait NAME [S]"; exit 2 ;;
+        esac
         ;;
     stop) ssh "$HOST" "systemctl --user disable -q --now meiolol-crawl" ;;
     status)
@@ -282,6 +365,14 @@ SQL
                         --working-directory=\$HOME/$DIR \$HOME/$DIR/bin/render-swap.sh \
                         && echo 'swapping meiolol-render on $HOST (data/render.log)'; fi"
                 ;;
+            rebuild)
+                # The next round at once, writing every views part fresh (Daily Draft and
+                # Learn included) rather than a deploy's --reuse, which keeps them: a
+                # puzzle file changed by hand goes live this way (~20 min more)
+                ssh "$HOST" "cd $DIR && touch data/views.full-request \
+                    && systemctl --user kill -s USR1 --kill-whom=main meiolol-web"
+                echo "meiolol-web: full round requested (data/web.log; deploy/box.sh wait-deployed --live)"
+                ;;
             stop)
                 ssh "$HOST" "systemctl --user disable -q --now meiolol-web meiolol-render@a \
                     meiolol-render@b meiolol-cache-version.path"
@@ -291,7 +382,7 @@ SQL
                     meiolol-render@b; \
                     tail -n 3 $DIR/data/web.log; tail -n 2 $DIR/data/render.log"
                 ;;
-            *) echo "usage: deploy/box.sh web start [contact]|stop|status"; exit 2 ;;
+            *) echo "usage: deploy/box.sh web start [contact]|rebuild|stop|status"; exit 2 ;;
         esac
         ;;
     backup | health)
@@ -332,6 +423,6 @@ SQL
             *) echo "usage: deploy/box.sh watch install|uninstall"; exit 2 ;;
         esac
         ;;
-    *) echo "usage: deploy/box.sh sync|start|stop|status|logs [n]|model [rows] [-f]|run <meiolol args>|snapshot|preview [static|stop]|site <contact>|web start [contact]|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
+    *) echo "usage: deploy/box.sh sync|start [crawl args]|restart|stop|status|wait-deployed [rev] [--live] [--timeout S]|job run|status|wait NAME|logs [n]|model [rows] [-f]|run <meiolol args>|snapshot|preview [static|stop]|site <contact>|web start [contact]|rebuild|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
        exit 2 ;;
 esac
