@@ -1,8 +1,21 @@
 # Draft model: how good is it?
 
-Measured with `meiolol eval` (src/eval.zig) on a read-only copy of the box DB. Rerun as
-data grows; add a dated section, keep the old ones (the curve over training size is
-evidence for the production key).
+The lab record: every measured model and experiment since 11 Oct, dated sections, never
+rewritten (the curve over training size is evidence for the production key). 4.5k
+lines: never read it whole. Start here, then read only the section you need:
+`grep -n '^#' docs/model.md` for the map, `sed -n '/^## Shipped model/,/^## /p'
+docs/model.md` for one section. Source comments cite sections by name, so keep
+headings when editing.
+
+- What the results mean, in plain words: docs/learned.md (read that first)
+- The model the site and app use now: "Shipped model, 2026-10-17"
+- Split, rows and outcomes every tool shares: "Shared protocol, 2026-10-12"
+- File formats: "Draft model file", "Lane model file", "In-game model file"
+- Planted-effect and regression tests: "Model tests"
+- Open work: "Next steps" (end of file). New results: a dated `###` section above
+  "Shipped model", a line in learned.md when final
+
+Measured with `meiolol eval` (src/eval.zig) on a read-only copy of the box DB.
 
 ```
 meiolol eval --data DIR [--patch P] [--platform P] [--test-platform P]
@@ -16,19 +29,6 @@ The box runs it daily (deploy/web-loop.sh, ~9 min) into data/eval-history.tsv. W
 from here: `deploy/box.sh model [ROWS] [-f]` (run state, AUC sparklines per model, last
 runs with the best log loss vs coin flip; -f redraws every minute). Charts and the latest
 report: the admin page's Models tab (https://meio.lol/admin/#models/win).
-
-Models tab: one category per docs/learned.md heading, each with what we learnt, the best
-model against its baseline, run cards (plain sentence from meiolol-lab's RESULT line or
-the run's findings.tsv) and run health. Runs of the Mac and the gpu-box (deploy/lab-run.sh)
-show live there via deploy/lab-push.sh (docs/hosting.md), which also sends learned.md,
-model.md (the team effects table), lab campaigns and meiolol-lab's per-run result.tsv
-(category, % of error removed, typical miss), findings.tsv (one sentence per line) and
-effects-*.tsv (`# title | unit | what higher means`, then label, effect, ci, n).
-A run reports progress by appending to metrics.tsv in its run directory
-(the working directory): a header, then a row per evaluation, first column the x axis
-(step, epoch, games), the rest numbers.
-Columns sharing the part after the last `_` share a chart (`train_loss`, `test_loss`),
-and each prefix keeps its colour across charts. Flush each row as it is written.
 
 ## Method
 
@@ -724,7 +724,7 @@ winchance.zig fails if adjacent minutes' weights differ by 0.3 or more.
 
 #### Rich state and champions (richc), snap-20261013T2253Z re-cut, 2026-10-14
 
-Owner meiolol-state (progress: docs/agent-state/2026-10-14/progress-state.md; research:
+Owner meiolol-state (progress: docs/archive/2026-10-14-model-team/agent-state/progress-state.md; research:
 research/questions/live-win-probability.md, correlated-importance.md); audited from the
 run dir by the state shipping session. Run 20261014T032052Z-state-richc-2253Zr
 (py/state/statemodels.py at 8e264cd, `--models wc,rich,richc`, gpu-box CPU, exit 0,
@@ -788,7 +788,7 @@ Champion effects (sd across champion-roles, logit, by knot 1 ... 40, dev-val fit
 late, as draftpath's Q1 found (draft given state at 15 adds about 4x what it adds
 before the game; "How drafts win").
 
-Audit (the verifier's checklist, docs/agent-state/2026-10-14/split-rules.md):
+Audit (the verifier's checklist, docs/archive/2026-10-14-model-team/agent-state/split-rules.md):
 - Snapshot: snap-20261013T2253Z after the all-platform re-cut (85fd62a): nn/ written
   00:24Z with test_cut 1791795719197 and dev_cut 1791741249959, state/ 01:10Z, run
   03:39Z. Played games by code: dev_old 134,375, folds 26,875 each, dev_val 35,834, test
@@ -1111,7 +1111,7 @@ Reading:
 
 Champion-role profiles (damage type mix, tankiness, armour vs MR, CC, utility, range,
 split push) averaged from api.Row.stats on training rows, feeding win-comp's profile
-prior, within-team and cross-team terms. Sessions: docs/model-agents.md.
+prior, within-team and cross-team terms. Sessions: docs/archive/2026-10-14-model-team/model-agents.md.
 
 #### Data: seat_stats.tsv (meiolol-ea)
 
@@ -1712,7 +1712,7 @@ plus dev-val, log loss paired per game vs ratings and win-comp from one build, m
 seeds with their spread; hyperparameters chosen on inner validation, never on fold gains;
 one test look per final model. The learning curve (25/50/100% of fit games, then the
 ~350k-game unpinned snapshot) says whether the gap to ratings closes with data. Sessions:
-docs/model-agents.md. Read every table as log loss vs ratings, negative is better.
+docs/archive/2026-10-14-model-team/model-agents.md. Read every table as log loss vs ratings, negative is better.
 
 #### Big, small and residual nets (meiolol-f1)
 
@@ -4455,6 +4455,21 @@ accuracy 54.8% against 54.4%.
   (tuned priors, empirical Bayes, the tuning grid) sums its terms plainly as before
 - Values are fixed, not retuned daily: prior strengths reflect the real spread between
   champions, not the sample size. Revisit when the daily tuning drifts from them
+
+## Where results show (admin Models tab)
+
+Models tab: one category per docs/learned.md heading, each with what we learnt, the best
+model against its baseline, run cards (plain sentence from meiolol-lab's RESULT line or
+the run's findings.tsv) and run health. Runs of the Mac and the gpu-box (deploy/lab-run.sh)
+show live there via deploy/lab-push.sh (docs/hosting.md), which also sends learned.md,
+model.md (the team effects table), lab campaigns and meiolol-lab's per-run result.tsv
+(category, % of error removed, typical miss), findings.tsv (one sentence per line) and
+effects-*.tsv (`# title | unit | what higher means`, then label, effect, ci, n).
+A run reports progress by appending to metrics.tsv in its run directory
+(the working directory): a header, then a row per evaluation, first column the x axis
+(step, epoch, games), the rest numbers.
+Columns sharing the part after the last `_` share a chart (`train_loss`, `test_loss`),
+and each prefix keeps its colour across charts. Flush each row as it is written.
 
 ## Next steps
 

@@ -1,6 +1,7 @@
 //! The test looks ledger: every command that scores the test games (exp final,
-//! compcheck/fields/style --final, meiolol carry --final) appends a line to SNAP/test-looks.tsv before scoring,
-//! so looks are counted per snapshot by the harness, not by hand (docs/lab-tooling.md).
+//! compcheck/fields/style --final, meiolol carry --final) appends a line to
+//! SNAP/test-looks.tsv before scoring, so looks are counted per snapshot by the harness,
+//! not by hand (docs/archive/2026-10-14-model-team/lab-tooling.md).
 //! A look that crashes still counts: the test games were read. `meiolol-lab looks SNAP`
 //! prints the ledger
 
