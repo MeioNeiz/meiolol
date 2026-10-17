@@ -160,9 +160,24 @@ pub const Client = struct {
         errdefer dropConnection(&req);
         try req.sendBodiless();
         var response = try req.receiveHead(&.{});
+        const want = response.head.content_length;
         var transfer: [64]u8 = undefined;
-        const body = try response.reader(&transfer).allocRemaining(c.gpa, .limited(16 << 20));
+        const body = try readBody(c.gpa, response.reader(&transfer), want);
         return .{ .status = @backingInt(response.head.status), .body = body };
+    }
+
+    /// The whole body, or error.ShortBody. std.http passes the connection's end of
+    /// stream through when it comes before Content-Length, and allocRemaining takes that
+    /// for the body's end, so a dropped connection gave a cut body as a 200 (11 to 17
+    /// Oct: 11 timelines and a summary, some cut at exactly 96 or 144 KiB). A chunked
+    /// body cut short is already an error there (HttpChunkTruncated)
+    fn readBody(gpa: Allocator, r: *std.Io.Reader, content_length: ?u64) ![]u8 {
+        const body = try r.allocRemaining(gpa, .limited(16 << 20));
+        if (content_length) |n| if (body.len != n) {
+            gpa.free(body);
+            return error.ShortBody;
+        };
+        return body;
     }
 
     const Response = struct { status: u16, body: []u8 };
@@ -214,11 +229,37 @@ pub const Client = struct {
             try limiter.block(scope, method, wait);
         }
 
+        const want = response.head.content_length;
         var transfer: [64]u8 = undefined;
-        const body = try response.reader(&transfer).allocRemaining(c.gpa, .limited(16 << 20));
+        const body = try readBody(c.gpa, response.reader(&transfer), want);
         return .{ .status = status, .body = body };
     }
 };
+
+/// A response's body as once() and proxied() read it, from raw bytes
+fn testBody(gpa: Allocator, bytes: []const u8) ![]u8 {
+    var in: std.Io.Reader = .fixed(bytes);
+    var r: std.http.Reader = .{ .in = &in, .interface = undefined, .state = .ready, .max_head_len = 4096 };
+    const head = try std.http.Client.Response.Head.parse(try r.receiveHead());
+    var transfer: [64]u8 = undefined;
+    return Client.readBody(gpa, r.bodyReader(&transfer, head.transfer_encoding, head.content_length), head.content_length);
+}
+
+test "a body cut short is an error, not a shorter 200" {
+    const gpa = std.testing.allocator;
+    const doc = "{\"metadata\":{\"matchId\":\"OC1_1\"}}";
+    const head = std.fmt.comptimePrint("HTTP/1.1 200 OK\r\nContent-Length: {d}\r\n\r\n", .{doc.len});
+    const whole = try testBody(gpa, head ++ doc);
+    defer gpa.free(whole);
+    try std.testing.expectEqualStrings(doc, whole);
+    try std.testing.expectError(error.ShortBody, testBody(gpa, head ++ doc[0..20]));
+    try std.testing.expectError(error.ShortBody, testBody(gpa, head));
+    const chunked = std.fmt.comptimePrint("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{x}\r\n", .{doc.len}) ++ doc;
+    const all = try testBody(gpa, chunked ++ "\r\n0\r\n\r\n");
+    defer gpa.free(all);
+    try std.testing.expectEqualStrings(doc, all);
+    try std.testing.expectError(error.ReadFailed, testBody(gpa, chunked[0 .. chunked.len - 10]));
+}
 
 test "a 403 is the key's only when Riot says so" {
     try std.testing.expect(Client.fromRiot("{\"status\":{\"message\":\"Forbidden\",\"status_code\":403}}"));
