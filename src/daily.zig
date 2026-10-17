@@ -255,7 +255,7 @@ fn make(
     return null;
 }
 
-fn usualPicks(st: *const Stats, teams: [2][5]u32) bool {
+pub fn usualPicks(st: *const Stats, teams: [2][5]u32) bool {
     const games: f64 = @floatFromInt(st.games);
     for (teams) |team| for (Role.all) |r| {
         const c = st.index(team[@backingInt(r)]).?;

@@ -4,7 +4,8 @@
 //!
 //! Practice drafts are real ranked solo games anonymised as in src/daily.zig: champions,
 //! bans, patch, a rank tier and game length only. The pack is remade each day from a
-//! seed of the day, and leaves out games behind Daily Draft puzzles so none is spoiled.
+//! seed of the day, and leaves out games behind Daily Draft puzzles so none is spoiled,
+//! and games with an off-role or rare pick (daily.usualPicks).
 //! Options are explained, never marked as "the correct pick" (docs/concept.md).
 
 const std = @import("std");
@@ -34,7 +35,8 @@ const damage_sample = 3000;
 const min_damage_games = 10;
 /// Practice drafts per role and difficulty
 const per_cell = 16;
-const tries_per_cell = 120;
+/// Games tried per cell; ~40% have only usual picks, and only those reach draftFor
+const tries_per_cell = 320;
 
 /// Graded on facts that do not depend on the draft model, whose pair terms are still
 /// noise at a few thousand games: the team's damage mix (measured: one-sided teams win
@@ -391,6 +393,7 @@ fn practice(
                 const match_id = ids.items[@intCast(rand.uintLessThan(u64, ids.items.len))];
                 if (daily.isUsed(used.items, match_id)) continue;
                 const p = try daily.load(arena, db, st, match_id, rand) orelse continue;
+                if (!daily.usualPicks(st, p.teams)) continue;
                 const drill = try draftFor(arena, st, facts, curves, p, role, want, rand) orelse continue;
                 try pack.append(arena, drill);
                 try used.appendSlice(arena, match_id);
@@ -688,6 +691,7 @@ test "facts and practice drafts" {
             .hard => try testing.expect(p.need == null),
         }
         try testing.expectEqual(p.played, p.teams[p.hidden_team][@backingInt(p.hidden_role)]);
+        try testing.expect(daily.usualPicks(&st, p.teams));
     }
     for (seen) |n| try testing.expect(n > 0);
 }
