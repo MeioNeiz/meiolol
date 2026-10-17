@@ -65,7 +65,7 @@ champion/pyke.html 833d93a47ec646b3
 champion/rakan.html f934d1b50ea2befd
 champion/twitch.html ce4e03ad4cd36b4f
 champions.html f3f90b42add045fb
-daily.html 4f448de9e947a9a2
+daily.html b6aa176e6d4d775e
 data/champions.json 00926860dfeebe26
 data/filters.json 406e23555894da4c
 data/filters/ahri.json 3ae6e09eadd8da20
@@ -83,7 +83,7 @@ data/pool.json c49c24af4a83207c
 data/stats.bin bffab0c56008909d
 download.html 444bbde01bb87f43
 index.html cb9b0c1a1a9c41cf
-learn.html b241d4e82efafa16
+learn.html 2d502164c476ce4c
 learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c
 matchup/bot/kaisa-vs-twitch.html 7451fea37ae6dece
@@ -97,7 +97,7 @@ matchup/support/pyke-vs-rakan.html 8d2e930fae8d4047
 matchup/support/rakan-vs-pyke.html 74d8ebd9dda59a52
 matchup/top/darius-vs-mordekaiser.html 9130b7ad3853eaec
 matchup/top/mordekaiser-vs-darius.html 5707673f415059f4
-method.html a284f009d3af853c
+method.html edf72039d78858e2
 patch/build/ahri-mid.html 25f854f1d055758f
 patch/build/amumu-jungle.html 718e50a4b3d59ced
 patch/build/darius-top.html bf35c0566565b10a
@@ -132,7 +132,7 @@ patch/role/mid.html 4fcecf413c7132b7
 patch/role/support.html 65aa917656561f8e
 patch/role/top.html 29e79a327646ea93
 pool.html e501fccf63cb5656
-privacy.html 58b6e7e1a2323060
+privacy.html cb2028ebb5b719c6
 robots.txt 331ea9090db0c9f6
 role/bot.html 8156b562d61975e0
 role/jungle.html fe7a8e25c9373b35
