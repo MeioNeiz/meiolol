@@ -2191,8 +2191,9 @@ function deployList() {
       const sw = step("swap", start);
       if (sw && sw.status === "done") step("cache", sw.end, sw.end);
     }
-    // on-push.sh keeps the first 200 characters of "sha subject"
-    const commits = list.filter(e => e[2] === "commit").map(e => e[4].length >= 200 ? e[4] + "…" : e[4]);
+    // on-push.sh keeps the first 2,000 characters of "sha subject" (200 before 17 Oct 2026)
+    const cut = s => s.length >= 2000 || s.length === 200;
+    const commits = list.filter(e => e[2] === "commit").map(e => cut(e[4]) ? e[4] + "…" : e[4]);
     const failed = DEPLOY_STEPS.some(([k]) => steps[k] && steps[k].status === "failed" && k !== "cache");
     const doneAt = k => steps[k] && steps[k].status === "done" ? steps[k].end : null;
     let cache = doneAt("cache");

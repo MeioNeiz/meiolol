@@ -43,11 +43,12 @@ trap 'exit 1' INT TERM HUP
 events=$ROOT/deploy/deploy-events.sh
 event() { "$events" add "$@"; }
 flush() { "$events" flush || echo "$(now) deploy events not sent: box unreachable, kept for the next deploy"; }
-# The deploy's commits after the one deployed before, newest first, at most 30
+# The deploy's commits after the one deployed before, newest first, at most 30; subjects
+# run to 1,300 characters, so the cap only guards live.json against a runaway one
 commits() {
     local range=("$2" --max-count=1)
     [[ -n "$1" ]] && git -C "$ROOT" cat-file -e "$1^{commit}" 2> /dev/null && range=("$1..$2" --max-count=30)
-    git -C "$ROOT" log --format='%h %s' "${range[@]}" | cut -c1-200 \
+    git -C "$ROOT" log --format='%h %s' "${range[@]}" | cut -c1-2000 \
         | while IFS= read -r c; do event "$2" commit info "$c"; done
 }
 while [[ -e "$state.pending" ]]; do
