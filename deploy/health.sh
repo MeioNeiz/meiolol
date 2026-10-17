@@ -72,6 +72,14 @@ if archive=$(bin/meiolol raw-export --data data --status 2>&1); then
     since=$(awk '$1 == "since_ack_s" { print $2 }' <<< "$archive")
     oldest=$(awk '$1 == "oldest_unacked_s" { print $2 }' <<< "$archive")
     unacked=$(awk '$1 == "unacked" { print $2 }' <<< "$archive")
+    # The disk valve (archive.valve) dropped raw the archive never got: data lost on
+    # purpose to keep the box up. Keyed on the last drop's time, so each new drop pushes
+    drops=$(awk '$1 == "drops_24h" { print $2 }' <<< "$archive")
+    since_drop=$(awk '$1 == "since_drop_s" { print $2 }' <<< "$archive")
+    if [[ "$drops" =~ ^[0-9]+$ ]] && (( drops > 0 )) && [[ "$since_drop" =~ ^[0-9]+$ ]]; then
+        at=$(date -u -d "@$(( now - since_drop ))" '+%F %H:%MZ')
+        problems+=("box disk low: raw not yet archived dropped, last at $at (data/raw-dropped.log)")
+    fi
     if [[ "$since" =~ ^[0-9]+$ ]] && (( since > ACK_H * 3600 )); then
         last=$(date -u -d "@$(( now - since ))" '+%F %H:%MZ')
         problems+=("gpu-box: no archive ack since $last ($unacked exports waiting)")
