@@ -2085,14 +2085,17 @@ function deployList() {
     const start = (dep || ci[0])[0];
     const steps = {};
     const put = (k, status, s, e, detail) => { steps[k] = { status, start: s, end: e, detail: detail || "" }; };
-    // Start, end and result of a step from its events after `from`
-    const step = (k, from, startOf) => {
+    // Start, end and result of a step from its events after `from`; one with no events
+    // yet that `startOf` says has begun (the round's site build, the upload after it)
+    // is running from then when `begun`
+    const step = (k, from, startOf, begun) => {
       const xs = list.filter(e => e[2] === k && e[0] >= from);
       const end = xs.find(e => ["ok", "failed", "skipped"].includes(e[3]));
       const begin = xs.find(e => e[3] === "start" || e[3] === "waiting");
       const s = begin ? begin[0] : startOf;
       if (end) put(k, end[3] === "ok" ? "done" : end[3], s, end[0], end[4]);
       else if (begin) put(k, begin[3] === "waiting" ? "waiting" : "running", s, null, xs[xs.length - 1][4]);
+      else if (begun && startOf != null) put(k, "running", startOf, null, "");
       return steps[k];
     };
     if (ci.length) step("ci", ci[0][0]);
@@ -2103,8 +2106,8 @@ function deployList() {
       // The deploy's round: the first forced round after the deploy began
       const round = list.find(e => e[2] === "round" && e[0] >= start);
       if (round) {
-        step("site", round[0], round[0]);
-        step("upload", round[0], steps.site && steps.site.end);
+        step("site", round[0], round[0], true);
+        step("upload", round[0], steps.site && steps.site.end, true);
         step("views", round[0]);
         step("reload", round[0], steps.views && steps.views.end);
       }
