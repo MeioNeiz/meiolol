@@ -304,12 +304,16 @@ function draftModel(M, cc = null) {
     const rest = (l1 - l0) / temp - named - lumped.leans - comp;
     if (Math.abs(rest) > 1e-12) {
       const big = others.sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp)).slice(0, 3).filter(x => Math.abs(x.pp) >= 0.2);
-      parts.push({ pp: pp(rest), kind: "rest", chip: "other pairings", text: "Other matchups and duos, summed (each pair too thin to name alone)",
+      parts.push({ pp: pp(rest), kind: "rest", text: "Other matchups and duos, summed (each pair too thin to name alone)",
         note: big.length ? "largest: " + big.map(x => `${x.text} ${x.pp >= 0 ? "+" : "−"}${Math.abs(x.pp).toFixed(1)}`).join(", ") : null });
     }
-    if (Math.abs(lumped.leans) > 1e-12) parts.push({ pp: pp(lumped.leans), kind: "rest", text: "Small comp leans (shrunk, or not clear)" });
+    if (Math.abs(lumped.leans) > 1e-12) parts.push({ pp: pp(lumped.leans), kind: "rest", text: "Other comp leans, summed (each shrunk or not clear)" });
     if (Math.abs(comp) > 1e-12) parts.push({ pp: pp(comp), kind: "rest", text: "Team comp terms" });
-    const chips = parts.filter(x => x.chip && Math.abs(x.pp) >= (x.kind === "rest" ? 1 : 0.5)).sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp)).slice(0, 3);
+    const chips = parts.filter(x => x.chip && Math.abs(x.pp) >= 0.5).sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp)).slice(0, 3);
+    // The unnamed parts as one muted chip when they matter, so a row's chips come close to
+    // its number
+    const unnamed = sumR(parts.filter(x => x.kind === "rest").map(x => x.pp));
+    if (Math.abs(unnamed) >= 1) chips.push({ pp: unnamed, kind: "rest", chip: "unnamed, summed" });
     return { total: 100 * (q1 - q0), parts, chips };
   };
   const m = {
@@ -695,7 +699,7 @@ function slotPicker(m, d, side, role) {
     const line = p => el("li", { class: p.kind === "rest" ? "muted" : null }, el("b", { class: tone(p.pp, 0.05) }, signed(p.pp)), " ", p.text, p.note ? el("span", { class: "sub" }, ` (${p.note})`) : null);
     const out = el("div", { class: "breakdown" },
       el("ul", {}, ...named.map(line), ...w.parts.filter(p => p.kind === "rest").map(line)),
-      el("p", { class: "sub" }, `= ${signed(w.total)} points: ${side} wins ${pct(x.win)} (likely ${pct(x.lo)} to ${pct(x.hi)}) against ${pct(q.empty)} with an average ${roleName}; ${num(x.games)} games of ${x.c.name} ${roleName}.`));
+      el("p", { class: "sub" }, `= ${signed(w.total)} points (lines rounded): ${side} wins ${pct(x.win)} (likely ${pct(x.lo)} to ${pct(x.hi)}) against ${pct(q.empty)} with an average ${roleName}; ${num(x.games)} games of ${x.c.name} ${roleName}.`));
     const L = x.lane;
     if (L) {
       const { cs10: C, deaths15: D } = lm.at;
@@ -730,7 +734,7 @@ function slotPicker(m, d, side, role) {
           el("b", { class: tone(x.change, 0.0005), title: `${side} wins ${pct(x.win)} (likely ${pct(x.lo)} to ${pct(x.hi)})` }, signed(100 * x.change)),
           lm ? el("span", { class: "gold " + tone(x.lane.value[G], 50) }, gold(x.lane.value[G])) : null,
           el("span", { class: "rate" }, pct(x.share)),
-          el("span", { class: "why" }, ...w.chips.map(c => el("span", { class: "chip " + tone(c.pp, 0) }, `${c.chip} ${signed(c.pp)}`)))));
+          el("span", { class: "why" }, ...w.chips.map(c => el("span", c.kind === "rest" ? { class: "chip", title: "Parts too thin or unclear to name one by one: open the row" } : { class: "chip " + tone(c.pp, 0) }, `${c.chip} ${signed(c.pp)}`)))));
       list.append(row);
       if (open) list.append(breakdown(x));
     }
