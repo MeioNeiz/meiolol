@@ -21,6 +21,9 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\</div>
         \\<section id="q-pick" class="card question">
         \\<h2 id="q-pick-title">Which champion was played in the hidden slot?</h2>
+        \\<p id="q-pick-hint" class="muted" hidden>Hidden: the pick our numbers say the rest
+        \\of the draft explains best, by its matchups and teammates more than its strength
+        \\this patch.</p>
         \\<div id="options" class="choices"></div>
         \\</section>
         \\<section id="q-side" class="card question" hidden>

@@ -563,7 +563,10 @@ brackets (statsfile has none), no per-patch history.
 
 One real ranked solo game a day, same for everyone: one slot hidden behind four options
 (the played champion plus three from the 20 core.recommend rates highest in that draft),
-then guess the winner. Pick order is not in match-v5, so "which was picked last" became
+then guess the winner. The hidden slot is the one with the best fit: its ally and enemy
+points plus a quarter of its points in the draft (`hideBestFit`), so the guess is about
+the draft, not the meta (`hidden_by`: "fit"; puzzles before 18 Oct 2026 hid a random
+slot). Pick order is not in match-v5, so "which was picked last" became
 "which was played here". The reveal is facts plus numbers, never "the correct pick":
 result, length, team kills and gold, blue's estimated win chance, the five same-role lane
 edges with games (greyed under 200), and each option's points with reasons.

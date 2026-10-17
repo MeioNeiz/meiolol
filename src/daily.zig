@@ -1,5 +1,6 @@
 //! Daily Draft: one real ranked solo draft a day, the same for everyone. One slot is
 //! hidden behind four options (which was played?), then the guess is the winner. The
+//! hidden slot is the pick the rest of the draft explains best (`hideBestFit`). The
 //! reveal is what happened and what this patch's numbers say about it, never "the
 //! correct pick" (docs/concept.md).
 //!
@@ -56,6 +57,12 @@ pub const Option = struct {
     reasons: []const Reason,
 };
 
+pub const HiddenBy = enum {
+    /// Puzzles made before `hideBestFit`
+    random,
+    fit,
+};
+
 pub const Lane = struct {
     /// Blue's side, percentage points beyond the two champions' own ratings
     pp: f64,
@@ -77,6 +84,7 @@ pub const Puzzle = struct {
     /// 0 blue, 1 red
     hidden_team: u1,
     hidden_role: Role,
+    hidden_by: HiddenBy = .random,
     played: u32,
     /// In display order; one of them is `played`
     options: [4]Option,
@@ -312,12 +320,42 @@ pub fn load(
     }
     p.tier = try medianTier(db, match_id);
 
-    p.hidden_team = rand.int(u1);
-    p.hidden_role = Role.all[rand.uintLessThan(usize, Role.count)];
+    if (!try hideBestFit(arena, st, &p)) return null;
     p.played = p.teams[p.hidden_team][@backingInt(p.hidden_role)];
     const ids = (try options(arena, st, p, rand)) orelse return null;
     if (!try numbers(arena, st, &p, ids)) return null;
     return p;
+}
+
+/// Hides the slot whose champion its allies and enemies explain best, not its own strength
+/// in the role (meta picks would make the guess "the strongest champion"). Fit: its ally
+/// and enemy points plus a quarter of its points in the draft, so a pick weak this patch
+/// with one good matchup does not win. Few pairs clear chance alone (static/daily.js), so
+/// it takes the points as they are. False when no slot scores
+fn hideBestFit(arena: std.mem.Allocator, st: *const Stats, p: *Puzzle) !bool {
+    const Fit = struct { team: u1, role: Role, fit: f64 };
+    var best: ?Fit = null;
+    for ([_]u1{ 0, 1 }) |t| for (Role.all) |r| {
+        p.hidden_team = t;
+        p.hidden_role = r;
+        var draft = try hiddenDraft(arena, p.*);
+        const pool = [1]u32{p.teams[t][@backingInt(r)]};
+        draft.pool = &pool;
+        var out: [1]core.Suggestion = undefined;
+        const scored = core.recommend(st, draft, .{ .min_games = 0 }, &out);
+        if (scored.len != 1) continue;
+        var fit: Fit = .{ .team = t, .role = r, .fit = scored[0].pp / 4 };
+        for (scored[0].reasons()) |reason| {
+            if (reason.kind != .base) fit.fit += reason.pp;
+        }
+        if (best) |b| if (fit.fit <= b.fit) continue;
+        best = fit;
+    };
+    const b = best orelse return false;
+    p.hidden_team = b.team;
+    p.hidden_role = b.role;
+    p.hidden_by = .fit;
+    return true;
 }
 
 /// Fills what `st` says about the draft: games, the options (`ids`, in this order),
@@ -516,6 +554,7 @@ test "puzzles are made once, anonymised and published" {
     for (p.options) |o| found = found or o.id == p.played;
     try testing.expect(found);
     try testing.expectEqual(p.played, p.teams[p.hidden_team][@backingInt(p.hidden_role)]);
+    try testing.expectEqual(.fit, p.hidden_by);
 
     // Kept, not remade; a new game for each new day, never one already used
     var next = opts;

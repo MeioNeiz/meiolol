@@ -690,6 +690,11 @@ Jungle routes and gank timing from positions; region styles (KR vs EUW per match
 Daily Draft modes ("which line is Darius?", "did the lane winner win?"); matchup
 flashcards with spaced repetition; season "lane story" share cards.
 
+Daily Draft with real pick order (Jacob, 17 Oct): match-v5 has none, but the app's champ
+select watch sees the LCU session's real turns. With consent, keep the order (anonymised)
+for app users' ranked games and draw puzzles from them: hide the real last pick, replay
+the real order. Never stage a made-up order meanwhile (Jacob ruled it out).
+
 ## Open decisions (Jacob)
 
 - Legal: retention periods (docs/legal/privacy.md top). Decided 14

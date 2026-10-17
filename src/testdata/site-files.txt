@@ -55,7 +55,7 @@ champion/pyke.html bfe43995b4559790
 champion/rakan.html e40e0acccdd7ef2a
 champion/twitch.html c7cafba33bc7cda2
 champions.html 442999d7e50c36a1
-daily.html 013b0af89b0c8da2
+daily.html f86939284dd07401
 data/champions.json 00926860dfeebe26
 data/filters.json 406e23555894da4c
 data/filters/ahri.json 3ae6e09eadd8da20

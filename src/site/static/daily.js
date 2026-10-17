@@ -212,6 +212,8 @@ class Game {
     const p = this.p;
     $("q-pick-title").textContent =
       `Which champion was played ${roleName[p.hidden_role].toLowerCase()} for ${SIDES[p.hidden_team].toLowerCase()} side?`;
+    // Older puzzles hid a random slot
+    $("q-pick-hint").hidden = p.hidden_by !== "fit";
     const box = $("options");
     box.replaceChildren();
     for (const o of p.options) {
