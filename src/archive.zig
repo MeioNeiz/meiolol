@@ -109,7 +109,9 @@ fn syncPath(io: Io, path: []const u8, kind: enum { file, directory }) !void {
             try f.sync(io);
         },
         .directory => {
-            var d = try cwd.openDir(io, path, .{});
+            // iterate: without it Linux opens O_PATH, and fsync on that fails (EBADF,
+            // error.Unexpected: every export on the box, 17 Oct 14:43Z)
+            var d = try cwd.openDir(io, path, .{ .iterate = true });
             defer d.close(io);
             const f: Io.File = .{ .handle = d.handle, .flags = .{ .nonblocking = false } };
             try f.sync(io);
