@@ -670,8 +670,9 @@ function draftDebug(m, d, name) {
 
 // Picks for one slot, a row each: the change to this side's win chance against an average
 // pick, the lane lead at 14 (top, mid and bot: for junglers and supports gold says more about
-// farming than winning), play share and the main reasons; a row opens to the whole
-// breakdown, which adds up to the change. Regular picks only (1%+ of the role's games this
+// farming than winning), draft fit (the change less the champion's own strength: an off-meta
+// pick that suits this draft) and the main reasons; a row opens to the whole breakdown,
+// which adds up to the change. Regular picks only (1%+ of the role's games this
 // patch: off-role picks farm more and top lists on a few hundred games) unless searched
 const PICK_MIN_SHARE = 0.01;
 
@@ -696,6 +697,10 @@ function slotPicker(m, d, side, role) {
     return lm.blind(id, ri, f.map(o => ({ id: o.id, w: o.w / t })));
   };
   const rows = q.options.map(o => ({ ...o, c: byId.get(o.champion) || { id: o.champion, name: "#" + o.champion }, lane: laneOf(o.champion) }));
+  // why() scores the draft a few dozen times; the fit sort needs it for every listed row
+  const whys = new Map();
+  const whyOf = x => whys.get(x.champion) || whys.set(x.champion, m.why(teams, si, ri, x.champion)).get(x.champion);
+  const fitOf = x => { const w = whyOf(x); return w.total - sumR(w.parts.filter(p => p.kind === "strength").map(p => p.pp)); };
   const signed = (x, digits = 1) => (Math.abs(x) < 0.5 * 10 ** -digits ? "±" : x > 0 ? "+" : "−") + Math.abs(x).toFixed(digits);
   const tone = (x, eps) => x > eps ? "up" : x < -eps ? "down" : "";
   const gold = x => `${x >= 0 ? "+" : "−"}${Math.abs(Math.round(x)).toLocaleString("en-GB")}`;
@@ -707,7 +712,7 @@ function slotPicker(m, d, side, role) {
 
   const input = el("input", { type: "search", placeholder: `Search all ${rows.length} ${roleName} picks`, "aria-label": "Search champions", autocomplete: "off", spellcheck: "false" });
   input.value = P.q;
-  const sorts = [["best", "Surest win"], ...(lm ? [["lane", opp != null ? `Most gold into ${nameOf(opp)}` : "Most lane gold, blind"]] : []), ["played", "Most played"]];
+  const sorts = [["best", "Surest win"], ["fit", "Best draft fit"], ...(lm ? [["lane", opp != null ? `Most gold into ${nameOf(opp)}` : "Most lane gold, blind"]] : [])];
   const sort = sorts.some(([k]) => k === d.order) ? d.order : "best";
   const sortNav = el("nav", { class: "switch", "aria-label": "Sort" });
   for (const [k, label] of sorts) sortNav.append(el("button", { type: "button", "aria-pressed": String(sort === k), onclick: () => { d.order = k; saveDraft(d); } }, label));
@@ -715,12 +720,12 @@ function slotPicker(m, d, side, role) {
   const list = el("div", { class: "cands", role: "list" });
 
   const breakdown = x => {
-    const w = m.why(teams, si, ri, x.champion);
+    const w = whyOf(x);
     const named = w.parts.filter(p => p.kind !== "rest").sort((a, b) => Math.abs(b.pp) - Math.abs(a.pp));
     const line = p => el("li", { class: p.kind === "rest" ? "muted" : null }, el("b", { class: tone(p.pp, 0.05) }, signed(p.pp)), " ", p.text, p.note ? el("span", { class: "sub" }, ` (${p.note})`) : null);
     const out = el("div", { class: "breakdown" },
       el("ul", {}, ...named.map(line), ...w.parts.filter(p => p.kind === "rest").map(line)),
-      el("p", { class: "sub" }, `= ${signed(w.total)} points (lines rounded): ${side} wins ${pct(x.win)} (95% range ${pct(x.lo)} to ${pct(x.hi)}) against ${pct(q.empty)} with an average ${roleName}; ${num(x.games)} games of ${x.c.name} ${roleName}.`));
+      el("p", { class: "sub" }, `= ${signed(w.total)} points (lines rounded): ${side} wins ${pct(x.win)} (95% range ${pct(x.lo)} to ${pct(x.hi)}) against ${pct(q.empty)} with an average ${roleName}; ${num(x.games)} games of ${x.c.name} ${roleName}, ${pct(x.share)} of the role's games on the newest patch.`));
     const L = x.lane;
     if (L) {
       const { cs10: C, deaths15: D } = lm.at;
@@ -738,24 +743,24 @@ function slotPicker(m, d, side, role) {
 
   const fill = () => {
     const s = champKey(input.value);
-    const by = sort === "played" ? (a, b) => b.share - a.share : sort === "lane" ? (a, b) => b.lane.lo[G] - a.lane.lo[G] : (a, b) => b.lo - a.lo;
+    const by = sort === "fit" ? (a, b) => fitOf(b) - fitOf(a) : sort === "lane" ? (a, b) => b.lane.lo[G] - a.lane.lo[G] : (a, b) => b.lo - a.lo;
     // Searching, the name typed comes first (Enter picks it: "vi" is Vi, not Viego), then
     // names starting with it, then the rest, each in the sort's order
     const match = x => Math.min(...[x.c.name, x.c.alias].map(champKey).map(k => k === s ? 0 : k.startsWith(s) ? 1 : k.includes(s) ? 2 : 3));
     const hits = s ? rows.map(x => ({ x, k: match(x) })).filter(h => h.k < 3).sort((a, b) => a.k - b.k || by(a.x, b.x)).map(h => h.x)
       : rows.filter(x => x.share >= PICK_MIN_SHARE || x.champion === cur).sort(by);
-    const head = (k, label, title) => el("span", { title: title + (sort === k ? ". Sorted by this" + (k === "played" ? "" : ", by the low end of its range") : "") }, label + (sort === k ? " ▾" : ""));
+    const head = (k, label, title) => el("span", { title: title + (sort === k ? ". Sorted by this" + (k === "fit" ? "" : ", by the low end of its range") : "") }, label + (sort === k ? " ▾" : ""));
     list.replaceChildren(el("div", { class: "candhead" + (lm ? " lane" : "") }, el("span", {}, "Champion"), head("best", "Win", `Change to ${side}'s win chance against an average ${roleName}`),
-      lm ? head("lane", "Gold", `Gold lead at 14 minutes ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents (blind)"}, lane model`) : null, head("played", "Played", "Play share in the role on the newest patch"), el("span", {}, "Why")));
+      lm ? head("lane", "Gold", `Gold lead at 14 minutes ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents (blind)"}, lane model`) : null, head("fit", "Fit", `Win less the champion's own strength as a ${roleName}: what this draft adds (matchups, duos, comp)`), el("span", {}, "Why")));
     for (const x of hits) {
       const open = P.opened === x.champion;
-      const w = m.why(teams, si, ri, x.champion);
+      const w = whyOf(x), fit = fitOf(x);
       const row = el("div", { class: "cand" + (lm ? " lane" : "") + (x.champion === cur ? " cur" : "") + (open ? " open" : ""), role: "listitem" },
         el("button", { type: "button", class: "link", title: `Pick ${x.c.name}`, onclick: () => pick(x.champion) }, x.c.name),
         el("button", { type: "button", class: "more", "aria-expanded": String(open), title: "Why: the whole breakdown", onclick: () => { P.opened = open ? null : x.champion; fill(); } },
           el("b", { class: tone(x.change, 0.0005), title: `${side} wins ${pct(x.win)} (95% range ${pct(x.lo)} to ${pct(x.hi)})` }, signed(100 * x.change)),
           lm ? el("span", { class: "gold " + tone(x.lane.value[G], 50) }, gold(x.lane.value[G])) : null,
-          el("span", { class: "rate" }, pct(x.share)),
+          el("span", { class: "fit " + tone(fit, 0.05), title: `${signed(w.total)} less ${signed(w.total - fit)} for ${x.c.name}'s strength as a ${roleName}` }, signed(fit)),
           el("span", { class: "why" }, ...w.chips.map(c => el("span", c.kind === "rest" ? { class: "chip", title: "Parts too thin or unclear to name one by one: open the row" } : { class: "chip " + tone(c.pp, 0) }, `${c.chip} ${signed(c.pp)}`)))));
       list.append(row);
       if (open) list.append(breakdown(x));
@@ -771,7 +776,9 @@ function slotPicker(m, d, side, role) {
     el("p", { class: "sub" }, `Win: change in ${side}'s win chance for the whole game, in percentage points, against an average ${roleName} (${pct(q.empty)})` +
       (lm ? `. Gold: gold ahead at 14 ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents"}, from the lane model; ` +
         "it can disagree with Win (lane bullies against late scalers)" : "") +
-      (sort === "played" ? "" : `. Sorted surest first: by the low end of the ${sort === "lane" ? "gold" : "win"} range, so a sure small gain can top an unsure bigger one`) + ". Open a row for why."),
+      `. Fit: Win less the champion's own strength as a ${roleName}, so what this draft adds (matchups, duos, comp)` +
+      (sort === "fit" ? ". Sorted by fit: an off-meta pick that suits this draft tops a strong meta one"
+        : `. Sorted surest first: by the low end of the ${sort === "lane" ? "gold" : "win"} range, so a sure small gain can top an unsure bigger one`) + ". Open a row for why."),
     list);
   fill();
   setTimeout(() => {

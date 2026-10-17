@@ -309,9 +309,9 @@ button.ghost.icon[aria-pressed="true"] { color: var(--warn); border-color: var(-
   display: grid; grid-template-columns: 44px 46px minmax(0, 1fr); gap: 8px; align-items: center;
 }
 .cand.lane button.more { grid-template-columns: 44px 50px 46px minmax(0, 1fr); }
-.cand b, .cand .gold, .cand .rate { text-align: right; }
+.cand b, .cand .gold, .cand .fit { text-align: right; }
 .cand b { font-weight: 600; color: var(--muted); }
-.cand .rate { color: var(--muted); }
+.cand .fit { color: var(--muted); }
 .cand .gold { color: var(--muted); }
 .cand .up, .breakdown b.up { color: var(--good); }
 .cand .down, .breakdown b.down { color: var(--bad); }
