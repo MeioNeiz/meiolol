@@ -46,8 +46,9 @@ const draft_tail = 1_000_000;
 const history_lines = 2880;
 const eval_report_max = 256 << 10;
 
-/// Crawl log lines that are not report lines, by what they say
-const Kind = enum { rate_limit, riot_server, db_busy, network, other };
+/// Crawl log lines that are not report lines, by what they say. riot_busy: 429s with
+/// limit type "server", from Riot's side rather than our key's limits
+const Kind = enum { rate_limit, riot_busy, riot_server, riot_blocked, db_busy, network, other };
 
 const Bucket = struct {
     /// Seconds of crawler reports in this bucket; 0 = not running
@@ -621,9 +622,14 @@ fn scrub(arena: std.mem.Allocator, line: []const u8, digits: bool) ![]const u8 {
         while (e < stop and isWordChar(line[e])) e += 1;
         const word = line[i..e];
         const has_digit = std.mem.indexOfAny(u8, word, "0123456789") != null;
-        if (word.len >= 20 or (has_digit and std.mem.indexOfScalar(u8, word, '_') != null)) {
+        // Error names such as HttpConnectionClosing stay: letters only, shorter than any
+        // PUUID or encrypted id
+        const error_name = word.len < 32 and for (word) |c| {
+            if (!std.ascii.isAlphabetic(c)) break false;
+        } else true;
+        if ((word.len >= 20 and !error_name) or (has_digit and std.mem.indexOfScalar(u8, word, '_') != null)) {
             try out.appendSlice(arena, "…");
-        } else if (!digits) {
+        } else if (!digits or isStatus(line, i, e)) {
             try out.appendSlice(arena, word);
         } else for (word) |c| {
             if (!std.ascii.isDigit(c)) {
@@ -635,6 +641,15 @@ fn scrub(arena: std.mem.Allocator, line: []const u8, digits: bool) ![]const u8 {
         i = e;
     }
     return out.items;
+}
+
+/// An HTTP status as the Riot client logs it ("503 on ...", "429 (server) on ..."): kept
+/// through normalise, so a 5xx and a 429 still read apart
+fn isStatus(line: []const u8, start: usize, end: usize) bool {
+    if (end - start != 3 or (line[start] != '4' and line[start] != '5')) return false;
+    for (line[start..end]) |c| if (!std.ascii.isDigit(c)) return false;
+    const after = line[end..];
+    return std.mem.startsWith(u8, after, " on ") or std.mem.startsWith(u8, after, " (");
 }
 
 fn isWordChar(c: u8) bool {
@@ -877,11 +892,22 @@ fn classify(msg: []const u8) Kind {
             return std.mem.indexOf(u8, s, needle) != null;
         }
     }.f;
-    if (has(msg, "N (application)") or has(msg, "N (method)") or has(msg, "N (service)") or has(msg, "rate limit")) return .rate_limit;
-    if (has(msg, "(server)")) return .riot_server;
-    if (has(msg, "locked") or has(msg, "busy")) return .db_busy;
-    if (has(msg, "Connection") or has(msg, "Timeout") or has(msg, "Tls") or has(msg, "Unreachable") or has(msg, "Reset")) return .network;
+    if (has(msg, "429 (server)")) return .riot_busy;
+    if (has(msg, "429 (") or has(msg, "rate limit")) return .rate_limit;
+    if (has(msg, "Riot's edge refusing") or std.mem.endsWith(u8, msg, ": Blocked")) return .riot_blocked;
+    if (serverError(msg)) return .riot_server;
+    if (has(msg, "database is locked") or has(msg, "database busy")) return .db_busy;
+    if (has(msg, "Connection") or has(msg, "Timeout") or has(msg, "Tls") or has(msg, "Unreachable") or has(msg, "Reset") or has(msg, "ReadFailed")) return .network;
     return .other;
+}
+
+/// A 5xx status kept by normalise, as a word of its own
+fn serverError(msg: []const u8) bool {
+    var words = std.mem.tokenizeAny(u8, msg, " :");
+    while (words.next()) |w| {
+        if (w.len == 3 and w[0] == '5' and std.ascii.isDigit(w[1]) and std.ascii.isDigit(w[2])) return true;
+    }
+    return false;
 }
 
 /// Upload times from deploy/web-loop.sh's log ("2026-10-11T22:51:02Z uploaded")
@@ -921,13 +947,29 @@ test "normalise log messages" {
     var arena_state: std.heap.ArenaAllocator = .init(a);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const m = try normalise(arena, "warning(riot): 503 (server) on /lol/match/v5/matches/EUW1_7123456/timeline, waiting 5s");
-    try std.testing.expectEqualStrings("warning(riot): N (server) on /lol/match/vN/matches/…/timeline, waiting Ns", m);
-    try std.testing.expectEqual(Kind.riot_server, classify(m));
-    const p = try normalise(arena, "warning(riot): 500 (server) on /lol/match/v5/matches/by-puuid/-3uog-_IosuG5ssbfFVk1cyKUZg0/ids, waiting 1s");
+    const m = try normalise(arena, "warning(riot): 503 on /lol/match/v5/matches/EUW1_7123456/timeline, retrying");
+    try std.testing.expectEqualStrings("warning(riot): 503 on /lol/match/vN/matches/…/timeline, retrying", m);
+    const p = try normalise(arena, "warning(riot): 504 on /lol/match/v5/matches/by-puuid/-3uog-_IosuG5ssbfFVk1cyKUZg0/ids, retrying");
     try std.testing.expect(std.mem.indexOf(u8, p, "IosuG") == null);
-    try std.testing.expectEqual(Kind.db_busy, classify(try normalise(arena, "warning(crawl): kr: database busy, pausing")));
-    try std.testing.expectEqual(Kind.rate_limit, classify(try normalise(arena, "warning(riot): 429 (application) on /x, waiting 65s")));
+    try std.testing.expectEqualStrings("warning(crawl): writer: database busy, retrying N jobs", try normalise(arena, "warning(crawl): writer: database busy, retrying 500 jobs"));
+    // Lines as the crawler logs them on 17 Oct
+    const cases = [_]struct { []const u8, Kind }{
+        .{ "warning(riot): 503 on /lol/match/v5/matches/EUW1_7123456/timeline, retrying", .riot_server },
+        .{ "warning(riot): 504 on /lol/champion-mastery/v4/champion-masteries/by-puuid/x, retrying", .riot_server },
+        .{ "warning(riot): 429 (server) on /lol/match/v5/matches/EUW1_7123456, waiting 5s", .riot_busy },
+        .{ "warning(riot): 429 (application) on /x, waiting 65s", .rate_limit },
+        .{ "warning(riot): 429 (method) on /x, waiting 10s", .rate_limit },
+        .{ "warning(riot): 403 on /lol/champion-mastery/v4/x: an HTML page, Riot's edge refusing this request, not the key", .riot_blocked },
+        .{ "warning(crawl): tw2 mastery: Blocked", .riot_blocked },
+        .{ "warning(crawl): kr: database busy, pausing", .db_busy },
+        .{ "warning(crawl): writer: database busy, retrying 24 jobs", .db_busy },
+        .{ "warning(sqlite): exec: database is locked", .db_busy },
+        .{ "warning(riot): HttpConnectionClosing on /lol/match/v5/matches/EUW1_1, retrying", .network },
+        .{ "warning(riot): ReadFailed on /lol/match/v5/matches/EUW1_1, retrying", .network },
+        .{ "warning(crawl): euw1 mastery: UnexpectedStatus", .other },
+        .{ "warning(riot): 400 on /x", .other },
+    };
+    for (cases) |c| try std.testing.expectEqual(c[1], classify(try normalise(arena, c[0])));
 }
 
 test "redact Riot IDs" {
@@ -945,7 +987,7 @@ test "redact Riot IDs" {
         .{ "puzzle #1, issue#22, colour #fff", "puzzle #1, issue#22, colour #fff" },
     };
     for (cases) |c| try std.testing.expectEqualStrings(c[1], try redact(arena, c[0]));
-    try std.testing.expectEqualStrings("warning(api): …: N (server)", try normalise(arena, "warning(api): Some One#EUW1: 503 (server)"));
+    try std.testing.expectEqualStrings("warning(api): …: 503 (server)", try normalise(arena, "warning(api): Some One#EUW1: 503 (server)"));
 }
 
 test "log stamps" {

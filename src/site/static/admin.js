@@ -9,12 +9,13 @@
 let D = JSON.parse(document.getElementById("data").textContent);
 const NS = "http://www.w3.org/2000/svg";
 // Fixed per entity, never by rank (validated on the dark panel, adjacent pairs)
-const PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"];
+const PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9", "#8a8f98"];
 const REGION_ORDER = ["europe", "americas", "asia", "sea"];
 const REGION_COLOR = { europe: PALETTE[0], americas: PALETTE[1], asia: PALETTE[2], sea: PALETTE[3] };
 const KIND_LABEL = {
-  rate_limit: "Rate limited (429)", riot_server: "Riot 5xx", db_busy: "DB busy/locked",
-  network: "Network", other: "Other",
+  rate_limit: "Rate limited (429, our key)", riot_busy: "Riot 429 (server)", riot_server: "Riot 5xx",
+  riot_blocked: "Riot edge 403 (blocked)", db_busy: "DB busy/locked", network: "Network",
+  other: "Other",
 };
 const TIERS = ["CHALLENGER", "GRANDMASTER", "MASTER", "DIAMOND", "EMERALD", "PLATINUM", "GOLD",
   "SILVER", "BRONZE", "IRON"];
@@ -1004,10 +1005,11 @@ VIEWS.riot = body => {
     const use = perMin == null ? null : perMin / 60 / KEY_PER_MIN;
     tile(tiles, r, perMin == null ? "–" : pct(use), `${num(perMin == null ? null : perMin / 60)} / min of ${KEY_PER_MIN}`, use > 0.98 ? "warn" : null);
   }
-  const rlIdx = NC.kinds.indexOf("rate_limit"), srvIdx = NC.kinds.indexOf("riot_server");
   const day = D.crawl.buckets.filter((_, i) => D.crawl.start + i * D.crawl.step >= D.now - 86400);
-  tile(tiles, "429s, 24 h", num(sumR(day.map(b => b.warnings[rlIdx]))), "rate limited answers", sumR(day.map(b => b.warnings[rlIdx])) > 50 ? "warn" : null);
-  tile(tiles, "Riot 5xx, 24 h", num(sumR(day.map(b => b.warnings[srvIdx]))), "server errors");
+  const dayCount = kind => sumR(day.map(b => b.warnings[NC.kinds.indexOf(kind)]));
+  tile(tiles, "429s, 24 h", num(dayCount("rate_limit")), "our key's limits", dayCount("rate_limit") > 50 ? "warn" : null);
+  tile(tiles, "Riot 429 (server), 24 h", num(dayCount("riot_busy")), "limit type server: Riot's side");
+  tile(tiles, "Riot 5xx, 24 h", num(dayCount("riot_server")), "server errors");
   const kp = R.key_problems || [];
   tile(tiles, "Key problems", kp.length ? num(kp.length) : "none", kp.length ? `last ${ago(kp[kp.length - 1][0])}` : "no 401/403 in the window", kp.length ? "bad" : "good");
   tile(tiles, "Your games", proxy == null ? "–" : proxy ? "first in line" : "no proxy", proxy === false ? "the crawler runs without --proxy: lookups cannot fetch" : "its calls take the crawler's next free slot", proxy === false ? "bad" : null);
@@ -1023,7 +1025,8 @@ VIEWS.riot = body => {
   chart(g, {
     ...common, title: "Rate limited and server errors", type: "bars",
     series: [
-      { name: "429", color: PALETTE[3], values: S.bs.map(b => b.warnings[C.kinds.indexOf("rate_limit")]) },
+      { name: "429 (our key)", color: PALETTE[3], values: S.bs.map(b => b.warnings[C.kinds.indexOf("rate_limit")]) },
+      { name: "429 (server)", color: PALETTE[5], values: S.bs.map(b => b.warnings[C.kinds.indexOf("riot_busy")]) },
       { name: "Riot 5xx", color: PALETTE[1], values: S.bs.map(b => b.warnings[C.kinds.indexOf("riot_server")]) },
     ],
   });

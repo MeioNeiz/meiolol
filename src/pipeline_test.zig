@@ -410,7 +410,7 @@ test "admin page from the fixture games and a crawl log" {
     try log.writer.writeAll("2025-10-11 23:00:00 info(crawl): 19 workers for 4 regions\n");
     try log.writer.print("2025-10-11 23:01:00" ++ report, .{ 10, 50, 10 });
     try log.writer.print("2025-10-11 23:02:00" ++ report, .{ 25, 90, 30 });
-    try log.writer.writeAll("2025-10-11 23:02:30 warning(riot): 503 (server) on /lol/match/v5/matches/EUW1_7123456, waiting 5s\n");
+    try log.writer.writeAll("2025-10-11 23:02:30 warning(riot): 429 (server) on /lol/match/v5/matches/EUW1_7123456, waiting 5s\n");
     try log.writer.writeAll("2025-10-11 23:03:00 error(riot): 403 on /lol/match/v5/matches/EUW1_7123457: key missing or expired\n");
     try log.writer.writeAll("KEY REJECTED\n");
     try tmp.dir.writeFile(io, .{ .sub_path = "crawl.log", .data = log.written() });
@@ -442,7 +442,7 @@ test "admin page from the fixture games and a crawl log" {
         "\"name\":\"matches\",\"rows\":3",
         "\"restarts\":[1760223600]",
         "\"m\":[0,0,25,0]",
-        "\"text\":\"warning(riot): N (server) on /lol/match/vN/matches/…, waiting Ns\"",
+        "\"text\":\"warning(riot): 429 (server) on /lol/match/vN/matches/…, waiting Ns\"",
         "\"rows\":3,\"days\":[{\"day\":",
     }) |want| if (std.mem.indexOf(u8, html, want) == null) {
         std.debug.print("admin page lacks {s}\n", .{want});
@@ -458,7 +458,7 @@ test "admin page from the fixture games and a crawl log" {
         "\"backups\":{\"bytes\":5,\"files\":1,\"newest\":",
         "\"deploy_events\":[[1760224000,\"ab12cd\",\"deploy\",\"start\",",
         "\"riot\":{\"app_limit\":\"20:1,100:120\",\"method_limits\":{},\"crawl_args\":\"--proxy 10.0.0.3:8092\"," ++
-            "\"key_problems\":[[1760223780,\"error(riot): N on /lol/match/vN/matches/…: key missing or expired\"]," ++
+            "\"key_problems\":[[1760223780,\"error(riot): 403 on /lol/match/vN/matches/…: key missing or expired\"]," ++
             "[1760223780,\"KEY REJECTED\"]]}",
     }) |want| if (std.mem.indexOf(u8, json, want) == null) {
         std.debug.print("data.json lacks {s}\n", .{want});
