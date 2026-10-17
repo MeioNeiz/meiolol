@@ -130,9 +130,9 @@ pub fn link(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8)
     });
 }
 
-/// "PLATINUM" -> "Platinum IV and up"; "" -> "all ranks"
+/// "PLATINUM" -> "Platinum IV and up"; "" -> "every player in Platinum+ games"
 pub fn rankLabel(a: std.mem.Allocator, tier: []const u8) ![]const u8 {
-    if (tier.len == 0) return "all ranks";
+    if (tier.len == 0) return "every player in Platinum+ games";
     const name = try std.ascii.allocLowerString(a, tier);
     name[0] = std.ascii.toUpper(name[0]);
     const apex = std.mem.eql(u8, tier, "MASTER") or std.mem.eql(u8, tier, "GRANDMASTER") or std.mem.eql(u8, tier, "CHALLENGER");
@@ -313,5 +313,5 @@ test "rank label" {
     const a = arena.allocator();
     try std.testing.expectEqualStrings("Platinum IV and up", try rankLabel(a, "PLATINUM"));
     try std.testing.expectEqualStrings("Master and up", try rankLabel(a, "MASTER"));
-    try std.testing.expectEqualStrings("all ranks", try rankLabel(a, ""));
+    try std.testing.expectEqualStrings("every player in Platinum+ games", try rankLabel(a, ""));
 }

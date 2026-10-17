@@ -21,13 +21,14 @@ pub const Info = struct {
     curves: ?*const Curves = null,
 };
 
-/// k by role and minute, all ranks: how many games a matchup needs before its own
+/// k by role and minute, every bracket: how many games a matchup needs before its own
 /// average counts as much as the champions' baseline
 fn gamesToStabilise(w: *Writer, c: *const Curves) Writer.Error!void {
     const shown = [_]usize{ 5, 10, 14, 20 };
     try tpl.renderPart(w,
         \\<h3>Games to stabilise</h3>
-        \\<p>k by role and minute, all ranks, from the {games} games of the biggest view. Under k
+        \\<p>k by role and minute, every rank bracket together, from the {games} games with
+        \\a timeline in the biggest view (every region, last 30 days). Under k
         \\games a matchup's line is mostly its champions' baseline. "Gold at 14" is the
         \\gold difference at 14 minutes.</p>
         \\<div class="table-scroll"><table>
@@ -62,16 +63,33 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\their own lane with the typical curve. Everything here is champion and aggregate
         \\data from ranked games. It never shows other players and never names a "best
         \\pick".</p>
+        \\<div class="note"><b>In short</b>
+        \\<ul>
+        \\<li>Ranked solo/duo games from Riot's official API, of players picked at random
+        \\from Platinum IV and above in every region.</li>
+        \\<li>Each page says its region, period (last 30 days or this patch) and number of
+        \\games.</li>
+        \\<li>Win rates are plain shares of games won, fainter when games are few.</li>
+        \\<li>A matchup with few games leans on how its two champions usually do, and moves
+        \\toward its own games as they come in.</li>
+        \\</ul></div>
         \\<h2>The data</h2>
         \\<ul>
-        \\<li>Ranked Solo/Duo games collected through the official Riot Games API, players
-        \\chosen at random from every rank tier rather than only the top of the ladder.</li>
+        \\<li>Ranked Solo/Duo games collected through the official Riot Games API, from
+        \\players chosen at random from Platinum IV and above on the ladder, in every
+        \\region. Their teammates and opponents are matched to them, so nearly every player
+        \\is Platinum or higher: these are the "Platinum+ games" the pages count.</li>
         \\<li>Only complete games: no remakes, a winner, all ten positions known.</li>
         \\<li>Each game's match timeline: every player's gold, experience and CS once a
         \\minute, plus kills, level ups and item purchases. Timelines are stored once per
         \\match, compactly, and never fetched twice.</li>
         \\<li>Grouped per patch and updated daily. Nothing identifying a player is
         \\published.</li>
+        \\<li><b>Game counts</b> differ between pages for three reasons. The view: EUW or
+        \\every region, the last 30 days or this patch (pages without a switch, like this
+        \\one, count EUW's current patch). Lane curves need the game's full match timeline,
+        \\so a matchup's curves count slightly fewer games than its win rate. And pages are
+        \\refreshed at different times, so one can be a few hours behind another.</li>
         \\</ul>
         \\<h2>Lane curves</h2>
         \\<ul>
@@ -90,7 +108,7 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\average gets the weight n / (n + k). k, the "games to stabilise", is the
         \\game-to-game variance divided by how much true matchups differ from their
         \\baselines, both measured from the games at every update (table below). A rank
-        \\bracket, or games by experienced players, start from the all-ranks, all-games line
+        \\bracket, or games by experienced players, start from the line of every game
         \\in the same way. Finally each line is smoothed across minutes, with a strength
         \\chosen by fitting on half of the games and checking against the other half.</li>
         \\<li><b>Spread</b>: after an average, "8 games in 10" is where single games end up,
@@ -113,9 +131,14 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\points on their champion, from the mastery we last fetched for them (so it can be
         \\later than the game). Offered on a matchup page once there are 10 such
         \\games.</li>
-        \\<li><b>Rank</b>: the median visible rank tier of the game's players when the game
-        \\was collected, in three brackets (Iron to Silver, Gold to Emerald, Diamond and
-        \\above). Never hidden matchmaking rating.</li>
+        \\<li><b>Rank</b>: visible rank tiers when the game was collected, never hidden
+        \\matchmaking rating. A matchup page splits its games by the median tier of the
+        \\game's ten players, in three brackets (Iron to Silver, Gold to Emerald, Diamond
+        \\and above); with Platinum+ games Iron to Silver is nearly empty and Gold to
+        \\Emerald is mostly Platinum and Emerald. A champion page's Rank filter uses the
+        \\player's own tier and counts that tier and above (Gold+ includes Platinum and
+        \\higher); below Platinum it only adds the few lower-ranked players in these
+        \\games.</li>
         \\<li><b>Sample size</b>: every chart states patch, rank and the number of games.
         \\Every matchup gets a page; under 200 games, or while less than half of the line
         \\comes from the matchup's own games, it is greyed out: thin curves still move as
@@ -271,10 +294,10 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\you, and keep only your encrypted identifier on a "do not collect" list so we
         \\never fetch your games again.</p>
         \\<h2>The desktop app</h2>
-        \\<p>The app reads champ select from the League client running on your own PC and
-        \\shows lane information on screen. It does not send your games, account or any other
-        \\personal data anywhere. It downloads updated champion statistics from this
-        \\site.</p>
+        \\<p>The desktop app is not released yet. When it is, it will read champ select from
+        \\the League client running on your own PC and show lane information on screen. It
+        \\will not send your games, account or any other personal data anywhere, and will
+        \\download updated champion statistics from this site.</p>
         \\<h2>Game data from Riot Games</h2>
         \\<p>The statistics are computed from ranked match data provided by the Riot Games
         \\API. Raw match records, which include Riot's per-application encrypted player
