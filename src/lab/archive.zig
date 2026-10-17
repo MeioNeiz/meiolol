@@ -72,9 +72,13 @@ pub fn run(
         .{ .file = "summaries", .sql = "SELECT body FROM raw_docs ORDER BY fetched_at, key", .count = &counts.summaries },
         .{ .file = "timelines", .sql = "SELECT body FROM timeline_docs ORDER BY fetched_at, match_id", .count = &counts.timelines },
     };
+    // A failed run must not leave its uncompressed JSON behind: the pull retries every
+    // hour, and the 15 Oct export's was 43 GB
     var written: std.ArrayList([]const u8) = .empty;
+    errdefer for (written.items) |p| cwd.deleteFile(io, p) catch {};
     for (kinds) |k| {
         const path = try std.fmt.allocPrint(arena, "{s}/{s}-{s}.jsonl", .{ day_dir, k.file, name });
+        try written.append(arena, path);
         var file = try cwd.createFile(io, path, .{});
         defer file.close(io);
         var buf: [64 * 1024]u8 = undefined;
@@ -108,10 +112,10 @@ pub fn run(
             k.count.* += 1;
         }
         try fw.interface.flush();
-        try written.append(arena, path);
     }
     {
         const path = try std.fmt.allocPrint(arena, "{s}/mastery-{s}.tsv", .{ day_dir, name });
+        try written.append(arena, path);
         var file = try cwd.createFile(io, path, .{});
         defer file.close(io);
         var buf: [64 * 1024]u8 = undefined;
@@ -131,7 +135,6 @@ pub fn run(
             counts.mastery += 1;
         }
         try fw.interface.flush();
-        try written.append(arena, path);
     }
 
     for (written.items) |path| {
