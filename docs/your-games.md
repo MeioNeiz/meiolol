@@ -154,14 +154,17 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
 ## Deploy (live since 2026-10-11, jomove server)
 
 Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB RAM,
-~540 MB free; the service uses ~11 MB plus up to 2 curves files).
+~540 MB free; the service uses ~11 MB plus its curves files, parsed at about their
+file size: curves-16.20.bin was 220 MB on 17 Oct, so two full-patch files will not fit
+MemoryMax 400M).
 
 - Binary: /usr/local/bin/meiolol (root 755), built on the Mac from a clean commit with
   `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's
   push deploy: after a change to src/api or the curves file format (curvesfile.zig
   version), rebuild, `scp` to /tmp, `sudo install`, then `sudo systemctl restart
-  meiolol-api`. Installed: 8dd457b (curves format v5), 2026-10-14 20:41Z; previous
-  binary (12b3bd7, 5 min visit refresh, Check for new games) kept as
+  meiolol-api`. Installed: 809669c (curves read straight into the parsed copy; raw
+  plus parsed passed 400M and OOM-killed every start from 17 Oct 00:49Z), 2026-10-17
+  16:05Z; 8dd457b kept as /usr/local/bin/meiolol.bak-pre-809669c, 12b3bd7 as
   /usr/local/bin/meiolol.bak-pre-8dd457b, the one before (bfea7b8) as
   /usr/local/bin/meiolol.bak-pre-12b3bd7, the unit before the proxy as
   /etc/meiolol-api.service.bak-pre-proxy; /etc/meiolol-api.env (the key) shredded.
