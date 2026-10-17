@@ -28,6 +28,10 @@ let watchUntil = 0;
 let watchFrom = 0;
 let watchTimer = 0;
 let checkTimer = 0;
+// From a game link (#id=...&game=start_ms): that game opens once the lookup lists it
+let wantGame = 0;
+// The newest game this device saw for the ID before this visit, 0 for none
+let since = 0;
 // Preview: /api/ is behind basic auth until the production key. Asked without
 // credentials first, so visitors read why instead of getting the browser's sign-in
 // prompt; testers sign in from that note once per tab
@@ -84,11 +88,68 @@ function setUrl(hash) {
   history.replaceState(null, "", url);
 }
 
-async function lookup(id) {
+const idHash = (id, game) => `id=${encodeURIComponent(id)}${game ? `&game=${game}` : ""}`;
+const playerId = (p) => `${p.name}#${p.tag}`;
+const sameId = (a, b) => a.toLowerCase() === b.toLowerCase();
+
+// Recent Riot IDs on this device only, newest first, each with the newest game seen.
+// Never sent anywhere; without storage the page just doesn't offer them
+const RECENT = "your-recent";
+
+function recentRead() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT) ?? "[]");
+    return Array.isArray(list) ? list.filter((r) => typeof r?.id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function recentWrite(list) {
+  try {
+    if (list.length) localStorage.setItem(RECENT, JSON.stringify(list.slice(0, 5)));
+    else localStorage.removeItem(RECENT);
+  } catch {}
+  renderRecent();
+}
+
+function remember(id, newest) {
+  const list = recentRead();
+  const prev = list.find((r) => sameId(r.id, id));
+  recentWrite([{ id, newest: Math.max(newest, prev?.newest ?? 0) }, ...list.filter((r) => r !== prev)]);
+}
+
+function renderRecent() {
+  const box = $("recent");
+  const list = recentRead();
+  box.hidden = !list.length;
+  box.replaceChildren();
+  if (!list.length) return;
+  box.append(el("span", "", "On this device:"));
+  for (const r of list) {
+    const a = el("a", "", r.id);
+    a.href = `your.html#${idHash(r.id)}`;
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      $("riot-id").value = r.id;
+      lookup(r.id);
+    });
+    box.append(a);
+  }
+  const forget = el("button", "link", "Forget on this device");
+  forget.type = "button";
+  forget.addEventListener("click", () => recentWrite([]));
+  box.append(forget);
+}
+
+async function lookup(id, game = 0) {
   clearTimeout(pollTimer);
   stopWatch();
   lookupId = id;
-  setUrl(`id=${encodeURIComponent(id)}`);
+  shown = 0;
+  wantGame = game;
+  since = recentRead().find((r) => sameId(r.id, id))?.newest ?? 0;
+  setUrl(idHash(id, game));
   status("Looking up…");
   await poll();
 }
@@ -134,7 +195,16 @@ async function poll(refresh) {
     status(`Fetching games from Riot: ${done} of ${body.total ?? "?"}…`);
   } else {
     const p = body.player;
-    status(p?.error ? `Last update failed (${p.error}); showing what is stored.` : "");
+    const games = body.report?.games ?? [];
+    const fresh = since ? games.filter((g) => g.start_ms > since).length : 0;
+    since = 0;
+    status(p?.error ? `Last update failed (${p.error}); showing what is stored.` : fresh ? `${plural(fresh, "new game")} since your last visit.` : "");
+    if (wantGame) {
+      wantGame = 0;
+      setUrl(idHash(lookupId));
+      if (games.length) status("That game is no longer among this player's recent games, so here is the newest.");
+    }
+    if (p) remember(playerId(p), newest(body));
     if (watchUntil) watchStep(body);
     renderCheck(body);
     return;
@@ -236,6 +306,11 @@ function render(body, first) {
   const r = body.report ?? { games: [], weeks: [], matchups: [] };
   if (first) shown = 0;
   shown = Math.min(shown, Math.max(0, r.games.length - 1));
+  const want = wantGame ? r.games.findIndex((g) => g.start_ms === wantGame) : -1;
+  if (want >= 0) {
+    shown = want;
+    wantGame = 0;
+  }
   renderRecord(r.games);
   renderFilm(r.games);
   renderReview(r.games);
@@ -292,6 +367,8 @@ function show(i) {
   if (i < 0 || i >= games.length) return;
   shown = i;
   for (const [k, b] of [...$("film").children].entries()) b.setAttribute("aria-current", String(k === i));
+  // Without game= the link opens whatever is newest then
+  if (!current.example) setUrl(idHash(playerId(current.player), i ? games[i].start_ms : 0));
   renderReview(games);
 }
 
@@ -301,7 +378,9 @@ function renderReview(games) {
     box.replaceChildren();
     return;
   }
-  Review.render(box, games[shown], { date, pager: { index: shown, count: games.length, go: show } });
+  const g = games[shown];
+  const link = current.example ? undefined : `${location.origin}${location.pathname}#${idHash(playerId(current.player), g.start_ms)}`;
+  Review.render(box, g, { date, pager: { index: shown, count: games.length, go: show }, link });
 }
 
 function renderHighlights(games) {
@@ -438,7 +517,8 @@ function forgetState(j) {
     case "mismatch":
       return forgetShow(`Riot doesn't show that icon on ${forgetId} yet (it can take a minute after you change it). ${steps}`, j.icon, true);
     case "done":
-      if (forgetId.toLowerCase() === lookupId.toLowerCase()) {
+      recentWrite(recentRead().filter((r) => !sameId(r.id, forgetId)));
+      if (sameId(forgetId, lookupId)) {
         clearTimeout(pollTimer);
         stopWatch();
         current = null;
@@ -452,6 +532,19 @@ function forgetState(j) {
       return forgetShow("That check expired. Press \"Remove a Riot ID\" to get a new icon.");
     default:
       return forgetShow(j.error || "Something went wrong. Try again, or email us (see the privacy page).");
+  }
+}
+
+// ?id= from the lookup forms on other pages and old links; lookup() moves it to #id=
+function fromUrl() {
+  const params = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const id = hash.get("id") ?? params.get("id");
+  if (id) {
+    $("riot-id").value = id;
+    lookup(id, Number(hash.get("game")) || 0);
+  } else if (hash.has("example") || params.has("example")) {
+    showExample();
   }
 }
 
@@ -484,16 +577,13 @@ async function start() {
     e.preventDefault();
     showExample();
   });
-  // ?id= from the lookup forms on other pages and old links; lookup() moves it to #id=
-  const params = new URLSearchParams(location.search);
-  const hash = new URLSearchParams(location.hash.slice(1));
-  const id = hash.get("id") ?? params.get("id");
-  if (id) {
-    $("riot-id").value = id;
-    lookup(id);
-  } else if (hash.has("example") || params.has("example")) {
-    showExample();
-  }
+  const recent = el("p", "recent");
+  recent.id = "recent";
+  $("lookup").after(recent);
+  renderRecent();
+  fromUrl();
+  // A link to another game pasted into this tab changes only the fragment
+  addEventListener("hashchange", fromUrl);
   try {
     $("example-offer").hidden = !(await fetch(EXAMPLE, { method: "HEAD" })).ok;
   } catch {

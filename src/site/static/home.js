@@ -7,6 +7,37 @@
 (async () => {
   const root = document.currentScript?.dataset.root ?? "";
   const { el, clock, signed, pct, icon } = Review;
+
+  // Riot IDs Your games remembered on this device (your.js), to reopen in one click
+  const form = document.querySelector("form.search");
+  const recent = (() => {
+    try {
+      const list = JSON.parse(localStorage.getItem("your-recent") ?? "[]");
+      return Array.isArray(list) ? list.filter((r) => typeof r?.id === "string") : [];
+    } catch {
+      return [];
+    }
+  })();
+  if (form && recent.length) {
+    const box = el("p", "recent");
+    box.append(el("span", "", "On this device:"));
+    for (const r of recent) {
+      const a = el("a", "", r.id);
+      a.href = `${root}your.html#id=${encodeURIComponent(r.id)}`;
+      box.append(a);
+    }
+    const forget = el("button", "link", "Forget on this device");
+    forget.type = "button";
+    forget.addEventListener("click", () => {
+      try {
+        localStorage.removeItem("your-recent");
+      } catch {}
+      box.remove();
+    });
+    box.append(forget);
+    form.after(box);
+  }
+
   let body;
   try {
     [, body] = await Promise.all([Review.init(root), fetch(`${root}data/your-example.json`).then((r) => r.json())]);

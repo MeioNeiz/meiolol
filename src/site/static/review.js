@@ -245,7 +245,35 @@ const Review = (() => {
       p.append(prev, `Game ${index + 1} of ${count}`, next);
       s.append(p);
     }
+    if (opts.link) (s.querySelector(".pager") ?? s).append(share(opts.link));
     return s;
+  }
+
+  // Phones get the share sheet, the rest a copy, and a prompt to copy from without
+  // clipboard access
+  function share(url) {
+    const sheet = !!navigator.share && matchMedia("(pointer: coarse)").matches;
+    const label = sheet ? "Share" : "Copy link";
+    const b = el("button", "link share", label);
+    b.type = "button";
+    b.setAttribute("aria-label", `${label} to this game`);
+    b.addEventListener("click", async () => {
+      if (sheet) {
+        try {
+          await navigator.share({ url });
+        } catch {}
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        prompt("Link to this game:", url);
+        return;
+      }
+      b.textContent = "Link copied";
+      setTimeout(() => (b.textContent = label), 2000);
+    });
+    return b;
   }
 
   // A death's change is the team's whole minute, which can rise while you die: only a
@@ -527,7 +555,8 @@ const Review = (() => {
   }
 
   // The whole review into `box`. opts: pager {index, count, go}, date(g) for the strip,
-  // lane: false for no lane panel, keep: moment indexes to list (default all)
+  // lane: false for no lane panel, keep: moment indexes to list (default all), link: this
+  // game's URL for a share button
   function render(box, g, opts = {}) {
     box.replaceChildren(strip(g, opts));
     if (g.remake) {

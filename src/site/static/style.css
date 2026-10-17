@@ -478,6 +478,8 @@ button.primary { background: var(--text); color: var(--bg); border-color: var(--
 .facts-inline b { color: var(--t2); font-weight: 500; }
 .pager { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .pager button { width: 28px; height: 28px; padding: 0; border-radius: 7px; color: var(--t2); }
+.rv-strip .share { width: auto; height: auto; margin-left: 8px; padding: 0; font-size: 12px; color: var(--accent); }
+.rv-strip > .share { margin-left: auto; }
 .rv-cols { display: grid; grid-template-columns: 1fr 360px; gap: 14px; margin-top: 14px; align-items: start; }
 .wc-wrap { display: grid; grid-template-columns: 18px 1fr; gap: 12px; padding: 14px 14px 6px; }
 .evalbar { position: relative; border-radius: 4px; overflow: hidden; background: #2a2c31; box-shadow: 0 0 0 1px var(--line-2); min-height: 120px; }
@@ -547,6 +549,9 @@ table.lane td.you { font-weight: 600; }
 .your-start.compact { padding: 4px 0 4px; }
 td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 10px; }
 .your-start.compact h1, .your-start.compact .lead, .your-start.compact .sub-links { display: none; }
+.recent { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.recent a { color: var(--t2); }
+.recent button.link { padding: 0; font-size: 13px; color: var(--muted); }
 .banner { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 32px; padding: 8px 0 4px; }
 .banner h1 { font-size: 30px; margin: 0; }
 .banner .who > span { color: var(--muted); font-size: 13px; }
