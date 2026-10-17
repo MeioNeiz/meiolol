@@ -190,7 +190,10 @@ MB, src/api/root.zig max_curve_bytes).
   top; `location /api/` in the 443 server: no login since 2026-10-17 (before:
   /etc/nginx/meiolol.conf.bak-2026-10-17-api-open), limit_req burst 30, access_log off, proxy_pass 127.0.0.1:8090,
   client_max_body_size 1k. `location /admin/` (the ops page, src/admin.zig): auth_basic
-  (/etc/nginx/meiolol-api.htpasswd, root:www-data 640), previous config /etc/nginx/meiolol.conf.bak-2026-10-12
+  (/etc/nginx/meiolol-api.htpasswd, root:www-data 640), previous config /etc/nginx/meiolol.conf.bak-2026-10-12.
+  `location /admin/training/`: gzip on, gzip_vary, gzip_types application/json
+  text/plain since 2026-10-18 (draft-model.json 12.1 MB to 5.6 MB on the wire; before:
+  /etc/nginx/meiolol.conf.bak-2026-10-18-training-gzip)
 - Preview gating: /api/ open since 2026-10-17 (Preview gating above); /admin/ keeps its
   basic auth
 - Box: ssh alias `meiolol-exchange` (key ~/.ssh/meiolol_exchange) is the rrsync user

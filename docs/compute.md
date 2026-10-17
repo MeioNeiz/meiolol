@@ -296,6 +296,29 @@ and src/lab is busy. Design:
   train.rows' end; a harness test (Linux only) asserts the child is killed or the call
   fails, and that scores match an unsandboxed run bit for bit
 
+## gpu-box storage (Jacob's steps, chosen 2026-10-18)
+
+C: was 89% full (alert at 85%): the WSL disk on C: is 159 GB, of it ~/ml/snaps and
+~/ml/runs. Snapshots 2351Z, 1954Z and 2137Z were deleted on 18 Oct (~36 GB inside WSL;
+C: gets it back only at step 4). Lab data moves to a new ext4 partition in the ~673 GB
+unallocated on the 2 TB P3, not the 1 TB Pop!_OS one (kept untouched).
+
+1. Partition (WSL, sudo; the whole P3 is passed to WSL: check `lsblk`, sde on 18 Oct;
+   the free space follows sde5): `sudo parted /dev/sde -- mkpart lab ext4 2495612928s
+   100%`, then `sudo mkfs.ext4 -L meiolol-lab /dev/sde6`
+2. Attach at boot (elevated): in C:\ProgramData\meiolol\wsl-mount.ps1 and its source
+   deploy/windows/install-watchdog.ps1, after the archive line: `wsl.exe --mount $drive
+   --partition 6 --name lab` (shows at /mnt/wsl/lab); then `sudo chown jmu:jmu
+   /mnt/wsl/lab`
+3. Move (no runs live, `deploy/lab-run.sh list`): time a read of one snapshot first;
+   `mv ~/ml/snaps ~/ml/runs /mnt/wsl/lab/`, `ln -s /mnt/wsl/lab/snaps ~/ml/snaps`, same
+   for runs; time the read again. Paths stay ~/ml/snaps/X, no script changes. Then
+   lab-run.sh (owned by the neural-net agent) gets a check: stop with a clear message if
+   /mnt/wsl/lab is not mounted
+4. Compact the WSL disk (warn the sessions using the gpu-box first; this stops WSL):
+   `wsl --shutdown`, then `wsl --manage <distro from wsl -l -v> --set-sparse true` (or diskpart `select
+   vdisk file=<ext4.vhdx>`, `compact vdisk`). Expect ~120 GB back, C: to ~77%
+
 ## WSL memory
 
 WSL2 takes half the PC's memory by default (15 GB). C:\Users\jacob\.wslconfig sets
