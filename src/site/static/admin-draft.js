@@ -253,7 +253,7 @@ function draftModel(M, cc = null) {
       const o = who((ally ? mine : theirs)[other]);
       if (!(a === b || botLane(a, b))) { others.push({ pp: pp(sign * c[0]), text: `${ally ? "with" : "into"} ${o} (${ROLE[other]})` }); return; }
       add(sign * c[0], { kind: ally ? "duo" : "lane", chip: ally ? `with ${o}` : `into ${o}`,
-        text: ally ? `With your ${o} (${ROLE[other]})` : `Into their ${o} (${ROLE[other]})`, note: `${num(c[1])} games of the pair` });
+        text: ally ? `With your ${o} (${ROLE[other]})` : `Into their ${o} (${ROLE[other]})`, note: `${num(c[1])} games of the pair in the draft model` });
     });
     if (cc) {
       const { F, nt } = cc;
@@ -686,7 +686,7 @@ function slotPicker(m, d, side, role) {
 
   const input = el("input", { type: "search", placeholder: `Search all ${rows.length} ${roleName} picks`, "aria-label": "Search champions", autocomplete: "off", spellcheck: "false" });
   input.value = P.q;
-  const sorts = [["best", "Best for draft"], ...(lm ? [["lane", opp != null ? `Best into ${nameOf(opp)}` : "Best blind lane"]] : []), ["played", "Most played"]];
+  const sorts = [["best", "Surest win"], ...(lm ? [["lane", opp != null ? `Most gold into ${nameOf(opp)}` : "Most lane gold, blind"]] : []), ["played", "Most played"]];
   const sort = sorts.some(([k]) => k === d.order) ? d.order : "best";
   const sortNav = el("nav", { class: "switch", "aria-label": "Sort" });
   for (const [k, label] of sorts) sortNav.append(el("button", { type: "button", "aria-pressed": String(sort === k), onclick: () => { d.order = k; saveDraft(d); } }, label));
@@ -704,7 +704,7 @@ function slotPicker(m, d, side, role) {
     if (L) {
       const { cs10: C, deaths15: D } = lm.at;
       if (opp != null) out.append(el("p", { class: "sub" }, `Lane into ${nameOf(opp)}: ${gold(L.value[G])} gold at 14 (likely ${gold(L.lo[G])} to ${gold(L.hi[G])}), ${L.value[C].toFixed(0)} CS at 10, ${L.value[D].toFixed(1)} deaths before 15; ` +
-        (L.pair_games ? `${num(L.pair_games)} games of the matchup.` : "no games of the matchup yet, champion averages only.")));
+        (L.pair_games ? `${num(L.pair_games)} games of the matchup in the lane model.` : "no games of the matchup in the lane model yet, champion averages only.")));
       else {
         const worst = L.each.slice().sort((a, b) => b.w - a.w).slice(0, 10).sort((a, b) => a.value[G] - b.value[G])[0];
         out.append(el("p", { class: "sub" }, `Blind lane: ${gold(L.value[G])} gold at 14 on average over likely opponents (likely ${gold(L.lo[G])} to ${gold(L.hi[G])})` +
@@ -723,8 +723,9 @@ function slotPicker(m, d, side, role) {
     const match = x => Math.min(...[x.c.name, x.c.alias].map(champKey).map(k => k === s ? 0 : k.startsWith(s) ? 1 : k.includes(s) ? 2 : 3));
     const hits = s ? rows.map(x => ({ x, k: match(x) })).filter(h => h.k < 3).sort((a, b) => a.k - b.k || by(a.x, b.x)).map(h => h.x)
       : rows.filter(x => x.share >= PICK_MIN_SHARE || x.champion === cur).sort(by);
-    list.replaceChildren(el("div", { class: "candhead" + (lm ? " lane" : "") }, el("span", {}, "Champion"), el("span", { title: `Change to ${side}'s win chance against an average ${roleName}` }, "Win"),
-      lm ? el("span", { title: "Gold lead at 14 minutes" }, opp != null ? "Lane" : "Blind") : null, el("span", {}, "Played"), el("span", {}, "Why")));
+    const head = (k, label, title) => el("span", { title: title + (sort === k ? ". Sorted by this" + (k === "played" ? "" : ", by the low end of its range") : "") }, label + (sort === k ? " ▾" : ""));
+    list.replaceChildren(el("div", { class: "candhead" + (lm ? " lane" : "") }, el("span", {}, "Champion"), head("best", "Win", `Change to ${side}'s win chance against an average ${roleName}`),
+      lm ? head("lane", opp != null ? "Lane" : "Blind", "Gold lead at 14 minutes, lane model") : null, head("played", "Played", "Play share in the role on the newest patch"), el("span", {}, "Why")));
     for (const x of hits) {
       const open = P.opened === x.champion;
       const w = m.why(teams, si, ri, x.champion);
@@ -746,8 +747,10 @@ function slotPicker(m, d, side, role) {
     if (ev.key === "Escape") { d.open = null; saveDraft(d); }
   });
   box.append(el("div", { class: "pickhead" }, input, sortNav),
-    el("p", { class: "sub" }, `Win: points of ${side}'s win chance against an average ${roleName} (${pct(q.empty)})${sort === "best" ? ", best first by the low end of its range" : ""}` +
-      (lm ? `. ${opp != null ? "Lane" : "Blind"}: gold ahead at 14 ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents"}` : "") + ". Open a row for why."),
+    el("p", { class: "sub" }, `Win: points of ${side}'s win chance for the whole game against an average ${roleName} (${pct(q.empty)})` +
+      (lm ? `. ${opp != null ? "Lane" : "Blind"}: gold ahead at 14 ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents"}, from the lane model; ` +
+        "it can disagree with Win (lane bullies against late scalers)" : "") +
+      (sort === "played" ? "" : `. Sorted surest first: by the low end of the ${sort === "lane" ? "gold" : "win"} range, so a sure small gain can top an unsure bigger one`) + ". Open a row for why."),
     list);
   fill();
   setTimeout(() => {
