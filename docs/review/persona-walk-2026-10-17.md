@@ -1,11 +1,106 @@
 # meio.lol as it stands, 17 Oct 2026
 
+**Status 17 Oct 20:40 (main b0ed63a):** 37 of the first 47 findings fixed (31 confirmed
+by re-walk or script), 4 partly (R4, R25, R45, R47); open are the 6 that wait on Jacob
+(R3, R12, R13, R16, R18, R34; decisions J1 to J9) and the re-walks' new findings R48 to
+R62, of which 3 are fixed and a polish round (fix3) is on 8 more. No known bug left in
+code; R45 waits on an install on jomove. Next steps for normal ranked players:
+docs/review/next-steps-2026-10-17.md (Q1 to Q4).
+
 Persona walks and an expert review of the live site (deploy 0fa7732 to 6c6631c), merged
 into one list of findings with stable ids (R1, R2, ...). Source ids in brackets point into
 the team's notes: D, P, A = expert review; T = Draft tester walk; S = public site walk;
-M = admin walk. Fix agents update Status; the report agent folds results in.
+M = admin walk; draft N, site N, AN = re-walks after the fixes. Fix agents update Status;
+the report agent folds results in.
 
-## 1. Summary
+## After the fixes
+
+Three fix rounds (17 Oct 19:48 to 20:37, 0406809 to 921520c), then the same studies,
+personas and model re-walked on the live site (draft 20:18, site 20:16, admin 20:35):
+runs meiolol-draft/20261017-201851, meiolol-draft-extra/20261017-201853,
+meiolol-site/20261017-201656, meiolol-site-phone/20261017-201659,
+meiolol-admin/20261017-203531. Only the studies' hidden check texts changed (the trust
+checks expect Platinum IV+ and the new model line; persona-walk c2d7c42, b0d385c,
+7447230), so runs compare. Times vary with model and server speed: read them loosely.
+
+Success, median steps, median time (before / after):
+
+| area | task | success | steps | time |
+| --- | --- | --- | --- | --- |
+| draft | best-pick | 3/3 / 3/3 | 21 / 19 | 75 / 45 s |
+| draft | why-top | 3/3 / 3/3 | 4 / 4 | 21 / 18 s |
+| draft | compare-two | 3/3 / 3/3 | 8 / 7 | 30 / 20 s |
+| draft | blind-pick | 3/3 / 3/3 | 2 / 1 | 18 / 9 s |
+| draft | counter | 3/3 / 3/3 | 4 / 4 | 19 / 16 s |
+| draft | trust | 1/3 / 3/3 | 1 / 1 | 15 / 13 s |
+| draft | presets | 3/3 / 3/3 | 2 / 2 | 16 / 12 s |
+| draft | bans | 1/3 / 3/3 | 7 / 6 | 29 / 23 s |
+| draft | flex (roles unknown) | 2/3 / 2/3 | 16 / 17 | 57 / 64 s |
+| draft | deep-read | 3/3 / 3/3 | 5 / 4 | 30 / 23 s |
+| site d | pick-into | 1/3 / 1/3 (check 3/3) | 15 / 12 | 49 / 52 s |
+| site d | matchup-why | 3/3 / 3/3 | 8 / 5 | 23 / 25 s |
+| site d | daily-draft | 3/3 / 3/3 | 4 / 4 | 13 / 15 s |
+| site d | learn | 3/3 / 3/3 | 4 / 4 | 12 / 12 s |
+| site d | trust | 3/3 misled / 3/3 right | 2 / 2 | 14 / 8 s |
+| site d | desktop-app | 3/3 / 3/3 | 3 / 1 | 14 / 6 s |
+| site d | privacy | 3/3 / 3/3 | 3 / 3 | 11 / 10 s |
+| site p | pick-into | 2/3 / 1/3 (check 3/3) | 13 / 14 | 50 / 61 s |
+| site p | daily-draft | 3/3 / 3/3 | 5 / 5 | 20 / 15 s |
+| site p | trust | 3/3 misled / 3/3 right | 2 / 2 | 12 / 8 s |
+| site p | desktop-app | 2/3 / 3/3 | 5 / 1 | 19 / 7 s |
+| admin | crawler-health | 3/3 / 3/3 | 0 / 0 | 6 / 6 s |
+| admin | games-today | 0/3 / 3/3 | 1 / 0 | 9 / 3 s |
+| admin | last-deploy | 3/3 / 3/3 | 1 / 1 | 7 / 7 s |
+| admin | model-quality | 3/3 / 3/3 | 2 / 2 | 11 / 10 s |
+| admin | log-errors | 1/3 / 2/3 | 3 / 2 | 15 / 12 s |
+| admin | lab-results | 3/3 adequate / 3/3 (self-rated 0/3) | 2 / 2 | 13 / 11 s |
+
+Success is self-report read against the study's check; site and admin rows give the
+judged result, with self-rating in brackets where they differ.
+
+What moved:
+- Trust, everywhere: Draft tester trust 1/3 to 3/3 (all quote Platinum IV+, 825k games,
+  54.8% against a coin's 50%); 6/6 site trust answers now say Platinum IV and above, none
+  "every rank"; admin model answers lead with one accuracy, no AUC.
+- Draft tester: bans 1/3 to 3/3 (R7 sort names); no false lane error in 6 runs (R1);
+  "Vi" gives Vi (R5); breakdown and search survive the poll, picker in view on a phone
+  (R2, R6, by script).
+- Site: desktop app one click from home on every run (was 3 to 5, one gave up);
+  matchup-why 8 to 5 steps (index search); Daily words, guess tags and phone tables read
+  cleanly.
+- Admin: games-today 0/3 to 3/3 with no click; Logs found first click 3/3; restart
+  markers, spike lines and UK times landed where personas looked first.
+
+What did not:
+- Pick-into still spends its budget: the route moved to the matchup index search, and
+  the cost moved to Back losing the filter and one-name search (R54, R55, both since
+  fixed in 9f5fe61, not re-walked). The real gap is R18 (J6).
+- Flex is unchanged (R12, J4); every tester persona still reads +X points and the win
+  bar as the answer (R13, J2); the top pick's lump is still unexplained (R3, J3).
+- Lab results self-rated partial 3/3 for a new reason: nothing says what to act on (R58).
+- Not reached by any task: R19, R20, R30, R31, R35, R45.
+
+New findings from the re-walks, R48 to R62 (sections 3.1 to 3.3 hold the details):
+
+| id | finding | source | sev | type | status |
+| --- | --- | --- | --- | --- | --- |
+| R48 | Tester: name click picks; nothing shows the row opens the why | draft N1 | minor | Design | open (fix3) |
+| R49 | Tester: model line's open fold is jargon; ticks read as quality | draft N2 | minor | Design | open (fix3) |
+| R50 | Tester: no "too close to call" when top ranges overlap | draft N3 | minor | Design | open (fix3; rule J2) |
+| R51 | Tester: random drafts at 58 to 65% look broken; the spread is right | draft N4 | polish | Design | open (not a bug) |
+| R52 | Tester: "points" and "±0.4" never say what they are | draft N5 | polish | Design | open (fix3) |
+| R53 | Tester: "lock" explained only in a tooltip | draft N6 | polish | Design | open (fix3) |
+| R54 | Site: Back restores the search text but not the filter | site N1 | major | Bug | fixed (9f5fe61) |
+| R55 | Site: matchup index search takes one champion; Mid below Top and Jungle | site N2 | minor | Design | fixed (9f5fe61) |
+| R56 | Site: "Desktop app" page vs "champ select helper" link | site N3 | polish | Design | fixed (07ab3c2) |
+| R57 | Site: matchup pages give no plain even / ahead / behind verdict | site N4 | minor | Design | open (next steps) |
+| R58 | Admin: Models and Lab don't say what to act on | AN1 | minor | Design | open |
+| R59 | Admin: "116% of the way there" beside 54.8% vs published 55 to 57% | AN2 | minor | Design | needs Jacob (J5) |
+| R60 | Admin: 429/403 spikes and 97% key use without saying if they matter | AN3 | minor | Design | open (fix3) |
+| R61 | Admin: logs one file at a time; no per-file error counts | AN4 | minor | Design | open (fix3) |
+| R62 | Admin: "better than today's model (-0.0003 a game)" reads backwards | AN5 | polish | Design | open (fix3) |
+
+## 1. Summary (first walk, before the fixes)
 
 For a normal ranked player on today's patch, the public site is fast, honest about its
 limits and good at "how sure is this" (matchup pages, ranges, game counts, Learn's
@@ -41,7 +136,8 @@ Top ten issues, all sources:
 10. R20 Learn's practice reveal names single cross-role pairs the data says are not
     detectable (major Design)
 
-Already fixed: R15 champion search (0406809, live).
+Since then: all of these but R16, R3, R13 and R18 (Jacob's) are fixed; see "After the
+fixes" and the status columns.
 
 ## 2. Method
 
@@ -103,20 +199,26 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
 
 | id | finding | sources | sev | type | status |
 | --- | --- | --- | --- | --- | --- |
-| R1 | Models load up to 3 times at once; race shows a false "lane model didn't load" error | T1, D2 | major | Bug | open |
-| R2 | 30 s poll closes the open breakdown and clears the search | D1 | major | Bug | open |
-| R3 | Top pick's only reason is "other pairings"; detected cross-role groups lumped | T2, D3 | major | Design | open (Jacob J3) |
-| R4 | Unnamed buckets are large and chips do not add up to the row | T7, D8 | minor | Design | open |
-| R5 | Search + Enter picks the best-ranked hit, not the name typed (Vi gives Viego) | T3 | minor (major public) | Bug | open |
-| R6 | Opening a slot on a phone shows nothing (picker below the fold) | D5 | major on phone | Bug | open |
-| R7 | "Best blind lane" tops with picks the Win column calls losing | T4 | minor (major public) | Design | open |
-| R8 | "Best for draft" sorts by the low end, shows the middle | D6 | minor | Design | open |
-| R9 | Lane gold and matchup line disagree, two game counts for one pair, no word why | T9, D7 | minor | Design | open |
-| R10 | Model line: no baseline, no source, jargon; "checks pass" read as quality | T6 | minor (major public) | Design | open |
-| R11 | "Random game" and "Random realistic" are the same; random drafts include off-role picks | T8 | minor | Design | open |
-| R12 | No "role unknown" for enemy picks; ranges hide the role uncertainty | T5, D9 | major public | Design | open (Jacob J4) |
-| R13 | Primary signal (+X points, win bar) is what the public product may not show | D4 | major roadmap | Design | open (Jacob J2) |
-| R14 | Copy and small things (a/an, empty board range, button place, 95%, units, bans) | D8, D9, T10 | polish | Bug/Design | open |
+| R1 | Models load up to 3 times at once; race shows a false "lane model didn't load" error | T1, D2 | major | Bug | fixed, verified by re-walk (7b4e07e); gzip on jomove J8 |
+| R2 | 30 s poll closes the open breakdown and clears the search | D1 | major | Bug | fixed, verified by script (c7f4003) |
+| R3 | Top pick's only reason is "other pairings"; detected cross-role groups lumped | T2, D3 | major | Design | needs Jacob (J3); still seen 3/3 |
+| R4 | Unnamed buckets are large and chips do not add up to the row | T7, D8 | minor | Design | partly fixed (c8df953): lumps still carry most of some scores |
+| R5 | Search + Enter picks the best-ranked hit, not the name typed (Vi gives Viego) | T3 | minor (major public) | Bug | fixed, verified by re-walk (66ce721) |
+| R6 | Opening a slot on a phone shows nothing (picker below the fold) | D5 | major on phone | Bug | fixed, verified by script (c7f4003) |
+| R7 | "Best blind lane" tops with picks the Win column calls losing | T4 | minor (major public) | Design | fixed, verified by re-walk (7314d73) |
+| R8 | "Best for draft" sorts by the low end, shows the middle | D6 | minor | Design | fixed (7314d73); 2 of 6 only half follow it |
+| R9 | Lane gold and matchup line disagree, two game counts for one pair, no word why | T9, D7 | minor | Design | fixed, verified by re-walk (7314d73) |
+| R10 | Model line: no baseline, no source, jargon; "checks pass" read as quality | T6 | minor (major public) | Design | fixed, verified by re-walk (99b8785, 2e63f08, 5c8936a); fold: R49 |
+| R11 | "Random game" and "Random realistic" are the same; random drafts include off-role picks | T8 | minor | Design | fixed (a24b4b1); the Fill… menu now confuses 2 of 3 |
+| R12 | No "role unknown" for enemy picks; ranges hide the role uncertainty | T5, D9 | major public | Design | needs Jacob (J4); still seen |
+| R13 | Primary signal (+X points, win bar) is what the public product may not show | D4 | major roadmap | Design | needs Jacob (J2); still seen |
+| R14 | Copy and small things (a/an, empty board range, button place, 95%, units, bans) | D8, D9, T10 | polish | Bug/Design | fixed, verified by re-walk (eaa0e9e); ± and lock: R52, R53 |
+| R48 | Name click picks; nothing shows the row opens the why | draft N1 | minor | Design | open (fix3) |
+| R49 | Model line's open fold is jargon; ticks read as quality | draft N2 | minor | Design | open (fix3) |
+| R50 | No "too close to call" when the top rows' ranges overlap | draft N3 | minor | Design | open (fix3; a "safe" rule is J2) |
+| R51 | Random drafts at 58 to 65% look broken; the spread is right | draft N4 | polish | Design | open (not a bug) |
+| R52 | "points" and "±0.4" never say what they are | draft N5 | polish | Design | open (fix3) |
+| R53 | "lock" on each slot explained only in a tooltip | draft N6 | polish | Design | open (fix3) |
 
 **R1. Concurrent model loads, false lane error** [T1, D2]
 - Evidence: red banner "The lane model didn't load: Cannot read properties of null
@@ -132,6 +234,8 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
 - Fix: one in-flight load (`DRAFT.loading ||= loadDraftModel()`), build each model in
   locals and assign DRAFT.* once at the end; fetch the fallback without logging the
   expected 404 as an error. gzip for /admin/training/ in nginx is on jomove (J8).
+- After (7b4e07e): each model file fetched once, draft-comp.json asked of training/ only
+  (no 404); re-walk: lane error banner in 0 of 6 runs (was 3 of 3). gzip is still J8.
 
 **R2. Poll wipes the open breakdown and search** [D1]
 - Evidence: expert, scripted: opened Blue mid, typed "a", opened a row; at 30 s the
@@ -154,6 +258,9 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
   mid" on purpose. Hence J3.
 - Fix (after J3): name the detected groups from one shared list (also used by Learn,
   R20); never use the lump as a chip; describe it in plain words.
+- After: still seen 3/3 in best-pick (Malzahar +3.8, sole chip "unnamed, summed +3.6").
+  Its largest part is "into Kai'Sa (bot) +1.5", mid into the enemy bot: a detected
+  pairing (learned.md) still lumped. Waits on J3.
 
 **R4. Unnamed buckets and chips that do not add up** [T7, D8]
 - Evidence: why-top r2: Yone +5.0 with "Small comp leans (shrunk, or not clear)" +2.2
@@ -162,6 +269,10 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
   miss the row's number by 1 pp or more on 30%. Lines summing to 3.8 shown as 3.7.
 - Fix: rename ("other comp leans, summed"); when unnamed parts reach 1 pp, one muted chip
   for them; footnote "lines rounded".
+- After (c8df953): one muted "unnamed, summed" chip from 1 pp, "lines rounded"; chips
+  miss the row by 1 pp+ on 6% of top-5 rows (was 23% on that sample). Re-walk: the
+  chip is used by name in 4 answers, but lumps still carry most of some scores (+2.3 of
+  +4.6) and sub-1 pp parts are left out, so chips can still miss the row. Partly fixed.
 
 **R5. Enter picks by rank, not by match** [T3]
 - Evidence: 3/3 typed "Vi", Enter, got Viego (r1 steps/005.jpg, 007.jpg) and had to
@@ -193,6 +304,8 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
   personas noticed, no wrong answer.
 - Code: admin-draft.js:695 sorts by `lo`, :704 shows `change`.
 - Fix: say "ordered by how sure" in the column header, or show what is sorted by.
+- After (7314d73): "Surest win" with a header marker; 6 of 6 answers say it sorts by
+  the low end, 2 only half follow why.
 
 **R9. Lane gold vs matchup line** [T9, D7]
 - Evidence: deep-read: Lux +607 gold into Kassadin but "Into their Kassadin -0.3"; Vex
@@ -210,6 +323,10 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
   "games it wasn't fitted on" for practice games, "page matches the box's export" for
   checks, jargon behind a details fold. The yardstick figure (55 to 57% published
   ceiling) is J5.
+- After (99b8785, 2e63f08, 5c8936a): "ranked solo, Platinum IV and up, mostly EUW",
+  "54.8% of 82k games it wasn't fitted on (a coin: 50%)", labelled as not the Models
+  tab's test set; the 55 to 57% figure removed until J5. Trust 3/3 (was 1/3). The open
+  fold is still jargon: R49.
 
 **R11. Random presets** [T8]
 - Evidence: r2, r3 asked how Random game, Random realistic and Random generic differ;
@@ -219,6 +336,10 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
   `legal` (:547) takes any share > 0, the picker hides under 1% (PICK_MIN_SHARE, :634).
 - Fix: one "Random game" button with the realistic tooltip as text; draw from the 1%
   floor; move "Empty board" out of Debug.
+- After (a24b4b1): one Random game, 1% floor, Empty board in the fill bar; nobody asked
+  how presets differ. New: 2 of 3 flag the Fill… menu (collapsed, no hint, a "Debug"
+  group: All tanks, All assassins, Mirror); one called Random game unrealistic (Ambessa,
+  Locke, Zyra; not checked per champion, the draw uses the 1% floor).
 
 **R12. Enemy role unknown** [T5, D9]
 - Evidence: flex 3/3: Yasuo and Yone locked, lanes unknown; personas built both layouts by
@@ -243,6 +364,51 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
   Blind/Lane unit (gold at 14) only in caption and tooltip; one shared ban list, no side;
   Enter in the ban box takes the first prefix match silently (show the match first);
   Random game overwrites the board with no undo.
+- After (eaa0e9e): a/an, "no picks yet: the blue side alone", 95% on every range, Gold
+  header with unit, Prefer and Reload together, shared ban list said, ban box shows
+  what Enter bans, Undo after a fill; seen in the re-walk. Left: R52, R53.
+
+**R48. Name picks, row opens, no cue** [draft N1]
+- Evidence: draft r1 clicked Galio's name to see why, the pick landed on the board ("I
+  never found an 'open the row' detail view"); r2: "a plain table row with no expand
+  cue".
+- Code: admin-draft.js:752 the name is a link-styled button that picks; :753 the rest
+  of the row opens the breakdown, no marker; the breakdown ends in "Pick X" (:735).
+- Fix: name opens the row; pick from the breakdown or a small pick button; or a ▸/▾
+  marker. Inside a 30 s timer a mis-click pick costs more than a missed breakdown.
+
+**R49. Model line fold: jargon, ticks read as quality** [draft N2]
+- Evidence: 3/3 trust runs opened the fold and named "reference drafts", "largest gap
+  1.1e-16", "(-0.68 ± 0.12)", "3c-team2"; r3: the ticks "only show the page matches its
+  own exported files". All worked out "gaps of 1 to 2 points are noise" themselves.
+- Code: admin-draft.js:126, :389, :433 check texts; :473 to :475 comp-lean line.
+- Fix: open on one plain sentence (54.8% against a coin's 50%: a 1 or 2 point gap is
+  within noise); ticks as "page matches the model files (a software check)"; the rest
+  behind Details.
+
+**R50. No "too close to call"** [draft N3]
+- Evidence: every compare-two and deep-read answer judged "tie" by checking range overlap
+  by hand; best-pick: Malzahar and Twisted Fate both +3.8. Win against Gold disagreeing
+  is the other half.
+- Fix: when the top rows sit within the top row's range, say so above the list, worded
+  as a hint (the picks share the board, so overlap is a loose test). Grouping as "strong
+  fits" / "also fine" is the public form, J2.
+
+**R51. Random drafts at 58 to 65% look broken** [draft N4]
+- Evidence: personas saw blue 59.2%, 64.9%, 36.5% and called them "extreme".
+- Check: live admin-draft.js in Node, 3,000 random drafts as Random game draws them:
+  median 50.0%, 5th to 95th percentile 39.8% to 59.9%, 10% beyond 40/60, consistent with
+  54.8% accuracy for a calibrated model. Not a bug.
+- Fix (optional): a line under the win bar, "1 random draft in 10 lands beyond 40/60".
+
+**R52. Units: "points", "±"** [draft N5]
+- Evidence: "'points' is never explained as win-chance percentage points"; 3 runs did not
+  know what ± means. Code: :241 and :276 (95% half-widths).
+- Fix: "percentage points" once in the sub-line; "±0.4 (95%)".
+
+**R53. "lock" unexplained** [draft N6]
+- Code: admin-draft.js:510, meaning only in the title "Lock (random keeps it)". Fix:
+  visible text ("keep", or "locked slots stay" on the Random game line).
 
 ### 3.2 Public site
 
@@ -266,27 +432,31 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
 
 | id | finding | sources | sev | type | status |
 | --- | --- | --- | --- | --- | --- |
-| R15 | Champion search on Champions, role and champion pages did nothing | S1 | major | Bug | fixed (0406809) |
-| R16 | Daily Draft reveal shows a whole-draft win chance and "+X points" per option | P1, S4 | blocker | Design | open (Jacob J1) |
-| R17 | "Every rank tier" / "all ranks" while data is Platinum IV+; bracket sentence vs filter | P3, S5 | major | Bug | open |
-| R18 | No direct "my pool into their pick" view | S2 | major | Design | open (Jacob J6) |
-| R19 | Champion pages: "hardest first" by raw win rate on tiny samples; default shows 1-game rows | P2 | major | Design | open |
-| R20 | Learn names single pairs of kinds the data says are not detected | P4 | major | Design | open |
-| R21 | Daily lane Edge says "more data needed" when it means "no clear edge" | S4 | minor | Bug | open |
-| R22 | Daily: right/wrong guess and "streak" unclear | S8 | minor | Design | open |
-| R23 | Daily puzzles draw off-role games, so lane rows teach nothing | P7 | minor | Design | open |
-| R24 | Matchups index has no champion search or picker | S3 | minor | Design | open |
-| R25 | Game totals differ across pages with no reason given | S6, P8 | minor | Design | open |
-| R26 | "Gold at 14": whose lead and what the range is are not on screen | S7, P8 | minor | Design | open |
-| R27 | Phone: tables push the answer column off screen | S9 | minor | Design | open |
-| R28 | Desktop app reachable only from the footer | S10 | minor | Design | open |
-| R29 | Method page has no plain-language summary | S11 | minor | Design | open |
-| R30 | Home: lane preview is from a different game than the featured review | P5 | minor | Bug | open |
-| R31 | Home: turning minute undone a minute later; "most expensive death" headlined by gold | P6 | minor | Design | open |
-| R32 | Home review moment dots are mouse-only | S12 | polish | Bug | open |
-| R33 | Privacy page describes the unreleased desktop app in the present tense | S13 | polish | Design | open |
-| R34 | Terms/privacy contact is a personal Gmail, not privacy@meio.lol | P8, S13 | polish | Bug (ops) | open (J8) |
-| R35 | Matchup pages use ~940 of 1,300 px; icons vanish on long lists (lazy load) | P8 | polish | Design | open |
+| R15 | Champion search on Champions, role and champion pages did nothing | S1 | major | Bug | fixed, verified by re-walk (0406809, 9f5fe61) |
+| R16 | Daily Draft reveal shows a whole-draft win chance and "+X points" per option | P1, S4 | blocker | Design | needs Jacob (J1); still quoted 6/6 |
+| R17 | "Every rank tier" / "all ranks" while data is Platinum IV+; bracket sentence vs filter | P3, S5 | major | Bug | fixed, verified by re-walk (f8f3060, 8b5014f, 921520c); Your games label on jomove's next api install |
+| R18 | No direct "my pool into their pick" view | S2 | major | Design | needs Jacob (J6); still 11 to 15 steps |
+| R19 | Champion pages: "hardest first" by raw win rate on tiny samples; default shows 1-game rows | P2 | major | Design | fixed (8b5014f); not reached by the re-walk |
+| R20 | Learn names single pairs of kinds the data says are not detected | P4 | major | Design | fixed (2f349ca, 82c22cd); not reached; Daily reveal reasons wait on J1 |
+| R21 | Daily lane Edge says "more data needed" when it means "no clear edge" | S4 | minor | Bug | fixed, verified by re-walk (d88f6c6) |
+| R22 | Daily: right/wrong guess and "streak" unclear | S8 | minor | Design | fixed, verified by re-walk (d88f6c6) |
+| R23 | Daily puzzles draw off-role games, so lane rows teach nothing | P7 | minor | Design | fixed (3d21f70); live #7 predates it, shows on new puzzles |
+| R24 | Matchups index has no champion search or picker | S3 | minor | Design | fixed, verified by re-walk (6bf848d); then R54, R55 |
+| R25 | Game totals differ across pages with no reason given | S6, P8 | minor | Design | partly fixed (f8f3060): Method bullet unread, per-page period unclear |
+| R26 | "Gold at 14": whose lead and what the range is are not on screen | S7, P8 | minor | Design | fixed, verified by re-walk on phone (8b5014f) |
+| R27 | Phone: tables push the answer column off screen | S9 | minor | Design | fixed, verified by re-walk (1911314, 7ef3a20) |
+| R28 | Desktop app reachable only from the footer | S10 | minor | Design | fixed, verified by re-walk (8b5014f, 07ab3c2) |
+| R29 | Method page has no plain-language summary | S11 | minor | Design | fixed, verified by re-walk (f8f3060) |
+| R30 | Home: lane preview is from a different game than the featured review | P5 | minor | Bug | fixed (31bf94c); not reached |
+| R31 | Home: turning minute undone a minute later; "most expensive death" headlined by gold | P6 | minor | Design | death headline fixed (31bf94c), not reached; turning minute open (needs a measurement) |
+| R32 | Home review moment dots are mouse-only | S12 | polish | Bug | fixed, verified by re-walk (31bf94c) |
+| R33 | Privacy page describes the unreleased desktop app in the present tense | S13 | polish | Design | fixed, verified by re-walk (f8f3060) |
+| R34 | Terms/privacy contact is a personal Gmail, not privacy@meio.lol | P8, S13 | polish | Bug (ops) | needs Jacob (J8) |
+| R35 | Matchup pages use ~940 of 1,300 px; icons vanish on long lists (lazy load) | P8 | polish | Design | fixed (7ef3a20); icons not reproduced (capture artefact); not reached |
+| R54 | Back to the matchup index restores the search text but not the filter | site N1 | major | Bug | fixed (9f5fe61), not re-walked |
+| R55 | Matchup index search takes one champion; Mid rows sit below Top and Jungle | site N2 | minor | Design | fixed (9f5fe61), not re-walked |
+| R56 | "Desktop app" page vs "champ select helper" link | site N3 | polish | Design | fixed (07ab3c2) |
+| R57 | Matchup pages give no plain "even / ahead / behind" verdict | site N4 | minor | Design | open (product call; next steps) |
 
 **R15. Champion search** [S1] fixed (0406809)
 - 6/6 pick-into runs typed in it and got an unfiltered table, losing 3 to 4 steps each;
@@ -303,6 +473,8 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
 - Against docs/plan.md "no public draft win chance" and production-key.md wording. J1.
   Suggestion: drop the number; "on paper the draft leaned red" only when clear; options
   as reasons without points.
+- After: unchanged (J1). Re-walk: 6/6 Daily answers still quote "39 to 61"; 3 now add it
+  "rests on thin data" because the lanes say "few games".
 
 **R17. Rank wording** [P3, S5]
 - Evidence: method.html "chosen at random from every rank tier"; champion and matchup
@@ -318,6 +490,11 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
   "Platinum+ games"; bracket sentence matching the filter; drop or grey Iron to Gold
   options (their slices are lower-ranked teammates in Platinum-area games). Also the
   persona study's trust check text (persona-walk repo).
+- After (f8f3060, 8b5014f): Method, headers and Rank filter say Platinum+ (filter from
+  Platinum, default "All (Platinum+ games)"); 6/6 trust answers say Platinum IV and
+  above. Your games and the app's lane card said "All ranks" from core
+  curvesfile Bracket.label: "All games" in 921520c, live on Your games only after the
+  next by-hand api install on jomove (docs/your-games.md).
 
 **R18. "My pool into their pick"** [S2]
 - Evidence: every pick-into run used the full budget via Champions, role, enemy's page,
@@ -325,6 +502,8 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
   shows Zed's win rate, not mine"; "no page where I could just enter 'me Ahri vs Zed'").
 - Ideas: a "compare your pool" box on champion pages pinning up to three opponents; a
   "your champion / their champion" jump on the Matchups index. Product call: J6.
+- After: still 11 to 15 steps, 2 of 6 never compared all three. Fastest route seen: a
+  matchup page's "Change champion". The index search helps (R24) but is not the answer.
 
 **R19. Hardest-first by raw rate** [P2]
 - Evidence: champion/malphite.html "164, hardest first": Qiyana 27.8% (18 games), Zed
@@ -336,6 +515,9 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
   (src/site/root.zig:1986).
 - Fix: sort by a shrunk estimate (the n/(n+k) the curves use, or the model's matchup
   cell), show the raw rate with its games; default floor e.g. 50+ games or 1%+ seen.
+- After (8b5014f): sorted by n/(n+k) toward the champion's own rate, k per role by
+  method of moments; default 1%+ of the champion's games, rarer behind "Show them";
+  table search also finds hidden rows (9f5fe61). Malphite top: Mundo, Sion, Nasus first.
 
 **R20. Learn names undetected single pairs** [P4]
 - Evidence: learn.html practice reveal for mid: "Tends to struggle against Soraka
@@ -347,6 +529,9 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
 - Fix: keep only lane matchups and the detected kinds (one list, shared idea with R3);
   drop the rest. Whether single detected cross-role pairs are named publicly at all is
   part of J3.
+- After (2f349ca): reasons name only lane matchups and the detected kinds; 82c22cd
+  also draws practice games only where all ten picks are 1%+ of their role. Left: the
+  Daily reveal's option reasons still list any pairing (part of J1's rework).
 
 **R21. "More data needed"** [S4]
 - Evidence: all 9 Daily answers saw it on every lane; Top Garen vs Darius has 769 games.
@@ -366,6 +551,8 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
   row "more data needed"; d2 and d3 noticed Bot on 2 games.
 - Code: puzzle choice in src/daily.zig.
 - Fix: draw puzzles whose ten champion-roles each have 1%+ play share.
+- After (3d21f70): done (smallest pick share 1.2 to 2.0% on remade puzzles). Live #7
+  predates it, so the re-walk still saw Rengar bot; new puzzles carry it.
 
 **R24. Matchups index search** [S3]
 - Evidence: all 6 pick-into runs opened /matchup/index.html and left the next step; the
@@ -379,6 +566,10 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
   hover titles. 3 desktop runs could not reconcile them.
 - Fix: one line on Method (and a short note where totals show): "30 days: ...; this
   patch: ...; lane curves need a full timeline, so slightly fewer".
+- After (f8f3060): Method has a Game counts bullet, but personas read only its top
+  ("I only read the top half"); d1 still "numbers differ slightly between pages", d2
+  "can't see which patch each page's count covers". Partly fixed: a short note where
+  the totals show is left.
 
 **R26. Gold at 14 column** [S7, P8]
 - Evidence: 4 of 6 pick-into runs: "whether it shows Zed's gold lead or mine"; "+836 next
@@ -401,6 +592,8 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
   five asked for a date or a way to be told.
 - Fix: a line on home or in Learn ("Coming: a champ select helper") linking to
   download.html. Date or notify: J7.
+- After (8b5014f, 07ab3c2): home link "Coming: a champ select helper for Windows"; the
+  page heading is now "Champ select helper (desktop app)" (R56). 6/6 in one step.
 
 **R29. Method summary** [S11]
 - Evidence: 5 trust answers called the estimate section unreadable ("n/(n+k)", "games to
@@ -421,6 +614,8 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
 - Fix: headline the costliest death by what followed ("then Baron and 3 towers"). A
   "largest lasting change" turning minute changes Your games output: measure first
   (winchance.zig already reports how often definitions differ); not packaged.
+- After (31bf94c): the death card leads with what followed (objectives). Turning minute
+  unchanged, still needs the measurement.
 
 **R32. Moment dots** [S12]
 - Code: src/site/static/review.js:174-178 click listener on `<circle class="mo">`; no role
@@ -439,6 +634,34 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
 - Matchup pages leave the right third empty at 1,300 px; icons disappear partway down
   long opponent lists in full-page captures (check they load on scroll on slow phones).
   src/site/static/style.css.
+- After (7ef3a20): captions beside charts from 1,100 px; icons all load when scrolled
+  into view (the gaps were a full-page capture artefact).
+
+**R54. Back loses the search filter** [site N1]
+- Evidence: 4 of 6 pick-into runs went Ahri vs Zed, then Back, and found all 4,029
+  matchup links under a box still reading "Zed" (p1 009.yaml, p3 008.yaml); 2 to 4
+  steps each to retype. Most of why pick-into did not get shorter.
+- Code: min-games.js and table.js filtered at load and on `input`; the browser restores
+  the value after the script ran, with no event.
+- Fixed in 9f5fe61: both filter again on `pageshow`. Checked in headless Chrome on live
+  pages with the local JS routed in; not re-walked.
+
+**R55. One-name index search** [site N2]
+- Evidence: personas type "Zed" for "Ahri vs Zed", then scroll past Top 2 and Jungle 27
+  rows to Mid's 51; p3 wrongly concluded Annie vs Zed has no page (it has 162 games).
+- Fixed in 9f5fe61: each word must match one side ("ahri zed", "Ahri vs Zed"); while
+  searching, roles with no match hide and the role with most matches comes first.
+
+**R56. Desktop app naming** [site N3]
+- Fixed in 07ab3c2: page heading "Champ select helper (desktop app)", title "Champ
+  select helper"; the footer keeps "Desktop app".
+
+**R57. No matchup verdict** [site N4; seen in the first walk too]
+- Evidence: 3/3 matchup-why answers: "no verdict label, so I judged 'even' myself"; all
+  still read it right.
+- Idea: one generated line over the chart ("About even at 14 min ...; drifts toward
+  Syndra after 15"). Product call, close to telling players what to expect;
+  next-steps doc.
 
 ### 3.3 Admin panel (rest)
 
@@ -458,18 +681,23 @@ actions per task), so this walk tests first screens, not deep navigation.
 
 | id | finding | sources | sev | type | status |
 | --- | --- | --- | --- | --- | --- |
-| R36 | Warning classifier: "mastery: Blocked" as DB busy/locked, 429s as Riot 5xx, real 5xx as Other | M1 | major | Bug | open |
-| R37 | Logs sit under "Controls"; 2 of 3 never found them | M2 | major | Design | open |
-| R38 | No "games stored today / 24 h"; game-day chart reads as intake | M4 | major | Design | open |
-| R39 | Problems banner: cryptic disk line, misses "full in ~6 days" and warning spikes | A1, M9 | major (ops) | Design | open |
-| R40 | Log lines in UTC, unlabelled; rest of panel UK time | M3 | minor | Bug | open |
-| R41 | Three headline accuracies (AUC 0.564, 54.8%, 54.7%) unreconciled | A2, M6 | minor | Design | open |
-| R42 | Win (draft) opens on screens of prose; trend chart far below | M5 | minor | Design | open |
-| R43 | Crawler restarts unexplained (deploys, very likely) | M7 | minor | Design | open |
-| R44 | Lab campaign "0 runs, 0 confirmed" above confirmed pills | M8 | minor | Bug | open |
-| R45 | Site views count automated Chrome as people | A3 | minor | Bug | open |
-| R46 | Deploys: subject cut off, steps out of time order, header vs step time | A4, M10 | polish | Design | open |
-| R47 | Model and lab copy assumes the reader is the modeller | M11 | polish | Design | open |
+| R36 | Warning classifier: "mastery: Blocked" as DB busy/locked, 429s as Riot 5xx, real 5xx as Other | M1 | major | Bug | fixed, verified by re-walk (9ae1f49); crawl questions J8 |
+| R37 | Logs sit under "Controls"; 2 of 3 never found them | M2 | major | Design | fixed, verified by re-walk (0f708c4) |
+| R38 | No "games stored today / 24 h"; game-day chart reads as intake | M4 | major | Design | fixed, verified by re-walk (53f3db6) |
+| R39 | Problems banner: cryptic disk line, misses "full in ~6 days" and warning spikes | A1, M9 | major (ops) | Design | fixed, verified by re-walk (d880ace); the rate J8 |
+| R40 | Log lines in UTC, unlabelled; rest of panel UK time | M3 | minor | Bug | fixed, verified by re-walk (0f708c4) |
+| R41 | Three headline accuracies (AUC 0.564, 54.8%, 54.7%) unreconciled | A2, M6 | minor | Design | fixed, verified by re-walk (f730089, 2e63f08); see R59 |
+| R42 | Win (draft) opens on screens of prose; trend chart far below | M5 | minor | Design | fixed, verified by re-walk (bfd3f1a) |
+| R43 | Crawler restarts unexplained | M7 | minor | Design | fixed, verified by re-walk (2039880) |
+| R44 | Lab campaign "0 runs, 0 confirmed" above confirmed pills | M8 | minor | Bug | fixed, verified by re-walk (6340ec9) |
+| R45 | Site views count automated Chrome as people | A3 | minor | Bug | partly fixed (804d85f): install on jomove and browser-tool commit, J8 |
+| R46 | Deploys: subject cut off, steps out of time order, header vs step time | A4, M10 | polish | Design | fixed, verified by re-walk (ef2247c, 37fbf1c) |
+| R47 | Model and lab copy assumes the reader is the modeller | M11 | polish | Design | partly fixed (b738323): glosses wait on J9; R62 |
+| R58 | Models and Lab don't say what to act on | AN1 | minor | Design | open |
+| R59 | "116% of the way there" beside 54.8% vs published 55 to 57% | AN2 | minor | Design | needs Jacob (J5) |
+| R60 | 429/403 spikes and 97% key use flagged without saying if they matter | AN3 | minor | Design | open (fix3) |
+| R61 | Logs one file at a time; personas check only crawl.log | AN4 | minor | Design | open (fix3) |
+| R62 | Neural nets "better than today's model (-0.0003 a game)" reads backwards | AN5 | polish | Design | open (fix3) |
 
 **R36. Warning classifier** [M1]
 - Evidence: Crawler > Warning messages (r1 steps/012.jpg): `twN mastery: Blocked` (281 in
@@ -483,6 +711,10 @@ actions per task), so this walk tests first screens, not deep navigation.
 - Fix: match whole phrases ("database is locked", "database busy"); kinds "Riot edge 403
   (blocked)" and "Riot 429 (server)"; keep the status class through normalise; tests in
   today's format. Whether 429 (server) counts as rate limiting: J8.
+- After (9ae1f49): statuses survive normalise; kinds Riot 429 (server), Riot 5xx, Riot
+  edge 403 (blocked), DB busy only on "database is locked/busy", Network for connection
+  errors; tests from the box's last 24 h of log. Re-walk: 3/3 name the 429 and 403
+  counts right, no "DB busy".
 
 **R37. Logs tab** [M2]
 - Code: TABS admin.js:22-26 (`["ops", "Controls"]`); `logViewer` admin.js:2231.
@@ -515,15 +747,23 @@ actions per task), so this walk tests first screens, not deep navigation.
 - Overview "Model AUC 0.564, best: shrunk, 786k games"; Models "right 54.8%"; tester
   "right 54.7% of 82k practice games". Fix: one headline metric and definition across
   the panel; "shrunk" explained once.
+- After (f730089, 2e63f08): Overview shows the Models headline (54.8% of 118k, coin
+  50%); the tester's line says its 82k test set is not the Models tab's. Re-walk: no AUC
+  quoted. The "116%" beside it is R59.
 
 **R42. Win (draft) layout** [M5]
 - Code: winView admin.js:1480-1532 (prose first). Fix: readings line and "Run by run"
   chart first; "What we learnt" collapsed to its newest two items.
 
 **R43. Restarts** [M7]
-- Code: markers admin.js:282-288 carry only "crawler started <time>"; pushes at 14:59,
-  15:05, 15:07 explain them. Fix: label with the deploy (sha, subject) when one started
-  shortly before, else "manual or crash".
+- Code: markers admin.js:282-288 carry only "crawler started <time>". Fix: label with
+  the cause.
+- Correction (fix agent): deploys do not restart the crawler; they restart only the
+  site loop. A deploy that changes the crawler is followed by a by-hand `box.sh start`.
+  Today's 15:02 and 15:19 starts were those: 29 s after 39dd00d (raw valve) and 9 min
+  after 2bbe2ed (riot client), clean systemd restarts, no crash.
+- After (2039880): markers say "restarted from Controls", or how long after which deploy
+  (sha, subject), else "manual restart or crash". Re-walk 3/3 explain the dips.
 
 **R44. Lab "0 runs"** [M8]
 - Code: header counts training/runs.tsv rows tagged with the campaign (admin.js:1623-1626);
@@ -533,20 +773,62 @@ actions per task), so this walk tests first screens, not deep navigation.
 
 **R45. Site views** [A3]
 - 600 "people" views at 06:00 and ~400 at 15:00 on 17 Oct, almost certainly agents
-  (headless Chrome with a normal UA). People/bots split shown at admin.js:854, 1877;
-  where it is decided was not located. Fix: tag own traffic (header or IP list) or mark
-  bursts from one IP. Not tested by the walk.
+  (headless Chrome with a normal UA). People/bots split shown at admin.js:854, 1877.
+  Not tested by the walk.
+- Correction (fix agent): the split is decided by deploy/traffic.sh on jomove. The
+  persona-walk tool's HeadlessChrome already counted as a bot; the people were the
+  `browse` tool (~/personal/browser-tool), which sends a normal Chrome UA.
+- After (804d85f): traffic.sh counts the token "browser-tool" as a bot, and browser-tool
+  now appends it to its UA on meio.lol. Not live: traffic.sh is not installed on jomove
+  and the browser-tool change is uncommitted (that repo has no commits). Both J8.
 
 **R46. Deploys** [A4, M10]
 - 3/3 quoted a truncated subject; "Renderer swap" and "Live on site" listed after "Site
   build"; header "live at 19:14" while "Live on site" ended 19:13; cards are `<details>`
   with the marker hidden. Code admin.js:2129-2130, 2213-2215. Fix: sort steps by start,
   wrap subject to two lines, say which track "live at" means, show the disclosure marker.
+- After (ef2247c, 37fbf1c): steps in run order, subject wraps; on-push.sh kept only 200
+  characters of a subject, now 2,000. Re-walk 3/3 quote the whole subject.
 
 **R47. Jargon** [M11]
 - mde, nats, folds, dev-val, H7/H9, "shrunk"; Neural nets card "better than today's
   model" with no size (src/site/static/admin-nn.js:41-46, 90-104). Fix: one plain gloss
   per finding and the size on the card's pill. Priority depends on J9.
+- After (b738323): pills give the gain's size. 3/3 lab answers still list mde,
+  H-numbers, diagnose and dev-val as unexplained; the negative gain reads backwards
+  (R62). Partly fixed; glosses wait on J9.
+
+**R58. Nothing says what to act on** [AN1]
+- Evidence: 3/3 lab answers recommend shipping "tuned + term weights" (beats the site's
+  model by 0.0017 log loss) and the confirmed rank term, and cannot tell if either is
+  live or planned; self-rated partial 3/3 for this.
+- Code: Models > Win (draft) charts the site's model beside "tuned + weights"
+  (admin.js:1556) with no shipped/next line; Lab lists confirmed ideas with no status.
+- Fix: one status per confirmed idea and per better-than-site model: shipped, next, or
+  not worth shipping (why).
+
+**R59. "116% of the way there"** [AN2]
+- Evidence: r2, r3: "published models reach about 55 to 57%, and the page says we are
+  116% of the way there by log loss", next to our 54.8%. Reads as a contradiction.
+- Code: admin.js:1467 builds the share from log loss after a sentence on accuracy.
+- Fix: drop it or name the yardstick. J5.
+
+**R60. Spikes and key use without a verdict** [AN3]
+- Evidence: r2, r3 "can't tell whether the 429 and 403 spikes are harmful"; r3 "key use
+  98.5%, right at the limit". All still judge the crawler fine.
+- Code: banner spike line admin.js:924; key tile admin.js:810.
+- Fix: the effect beside the spike ("matches still stored at the usual rate"); on the
+  key tile whether near 100% is by design, with the threshold used.
+
+**R61. Logs one file at a time** [AN4]
+- Evidence: 3/3 checked only crawl.log of seven; r2, r3 filtered "error" there and got 0.
+- Code: logViewer admin.js:2328-2364. Fix: error and warning counts per file in the
+  picker, or an "all logs" choice. Also polish: a "since midnight" figure beside "last
+  24 h".
+
+**R62. Negative gain reads backwards** [AN5; part of R47]
+- Evidence: r1, r2: "-0.0003 a game" better is "confusing because the number is
+  negative". Fix: "log loss 0.0003 lower a game (better)".
 
 ## 4. Decisions for Jacob
 
@@ -554,7 +836,8 @@ Fix agents must not make these.
 
 - **J1 (R16) Daily Draft public win chance.** The reveal shows "about 39 to 61 for blue"
   and "+X points" per option, against plan.md and production-key.md. Keep, drop, or turn
-  into words ("on paper the draft leaned red", reasons without points)?
+  into words ("on paper the draft leaned red", reasons without points)? The rework would
+  also limit the option reasons to detected pairings, as Learn now does (R20).
 - **J2 (R13, R7) Public picker's primary signal.** What replaces +X points: tiers ("strong
   fits", "also fine") with worded reasons? And what does "safe blind pick" optimise: win
   against an average pick, lane gold at 14, or a floor on both?
@@ -564,23 +847,39 @@ Fix agents must not make these.
   named (learned.md: "no numbers for single champion pairs")?
 - **J4 (R12) Unknown-role enemy shelf** in the admin tester now, as the testbed for the
   public picker's role guess?
-- **J5 (R10) Yardstick.** May the model line cite the published 55 to 57% draft-only
-  ceiling (docs/model.md Ceiling), and on the public site too?
+- **J5 (R10, R59) Yardstick.** May the model line cite the published 55 to 57% draft-only
+  ceiling (docs/model.md Ceiling), and on the public site too? The tester's line no longer
+  cites it (5c8936a). Admin Models' "116% of the way there" (log loss) beside 54.8%
+  against 55 to 57% (accuracy) reads as a contradiction: drop it or name the yardstick?
 - **J6 (R18) "My pool into their pick"** on the public site now, or wait for the app?
 - **J7 (R28) Desktop app date** or a way to be told?
 - **J8 Ops.**
-  - Admin basic-auth password was echoed into one agent's transcript (port agent,
-    18:55); not rotated: htpasswd on jomove plus `vault set meiolol/local
+  - Admin basic-auth password was echoed into two agents' transcripts (port agent
+    18:55, fix agent around 20:00, both via a curl prompt); not rotated. Rotation
+    recommended: htpasswd on jomove plus `vault set meiolol/local
     MEIOLOL_API_BASIC_AUTH`.
+  - R45 install: scp deploy/traffic.sh to jomove, then `sudo install -m 755 traffic.sh
+    /usr/local/bin/meiolol-traffic` (units unchanged); summaries already cached keep
+    their old counts.
+  - ~/personal/browser-tool has no commits; its UA token change (R45) waits on your
+    initial commit.
+  - Your games API on jomove runs an 809669c-era build: the "All games" label (921520c,
+    R17) shows after the next by-hand api install (docs/your-games.md). Label only, not
+    worth a restart on the 1 GB box by itself.
   - gzip for /admin/training/ JSON in nginx on jomove (R1).
   - Box `contact` file to privacy@meio.lol (R34).
-  - Disk "full in ~6 days" at the current rate (R39).
+  - Disk "full in ~6 days" at the current rate (R39); 77 GB free of 145 at 19:2x and the
+    raw valve stops raw at 10 GB free, so not an outage risk, but the rate wants a look.
   - TW2 champion mastery refused by Riot's edge ~once a minute since ~12:00 (281 in
     24 h): expected, or stop asking?
   - "429 (server)" on match-v5 every few minutes: accepted, and should it count as rate
     limiting (R36)?
 - **J9 (R47) Admin audience.** Is the panel for anyone but you (e.g. Riot's reviewers)?
   If not, admin jargon is low priority.
+
+The next-steps review adds Q1 (application text and squads), Q2 (Daily game age), Q3
+(ban suggestions in scope) and Q4 (crawl floor below Platinum):
+docs/review/next-steps-2026-10-17.md.
 
 ## 5. What works well (keep)
 
@@ -604,6 +903,10 @@ Fix agents must not make these.
 - Preview banner and footer boilerplate on every page.
 
 ## 6. Work packages
+
+All five packages are done (17 Oct 20:00 to 20:37; statuses above). Round 3 (fix3) takes
+the re-walks' polish: R48, R49, R50, R52, R53 (admin-draft.js) and R60, R61, R62
+(admin.zig, admin.js). As planned:
 
 Open Bug and clear Design findings, Jacob decisions left out. Each package owns its
 files; a fix agent needing a file outside its list asks the coordinator first. Shared:
