@@ -1695,12 +1695,19 @@ function labView(body) {
     sec.append(card);
     const runs = MODELS.runs.filter(r => r.campaign === c.name);
     const newBest = runs.filter(r => r.res && r.res.select === "new-best");
-    card.append(el("p", { class: "sub" }, `${runs.length} runs, ${newBest.length} confirmed improvement${newBest.length === 1 ? "" : "s"} on held-back games.`));
-    if (c.hyp && c.hyp.length) {
+    // Runs as runs.tsv tags them or as the hypotheses name them (older campaigns' runs
+    // are untagged); the reference run is the baseline, not a finding
+    const hyps = (c.hyp || []).map(h => ({ ...h, st: /^reference\b/i.test(h.hypothesis || "") ? "reference" : (h.status || "").toLowerCase() }));
+    const runIds = new Set(runs.map(r => r.run).concat(hyps.flatMap(h => (h.runs || "").split(",").map(x => x.trim()).filter(x => x && x !== "-"))));
+    const by = st => hyps.filter(h => h.st === st).length;
+    const counts = [["confirmed", "confirmed"], ["refuted", "refuted"], ["parked", "parked"], ["superseded", "superseded"]].filter(([k]) => by(k)).map(([k, w]) => `${by(k)} ${w}`);
+    card.append(el("p", { class: "sub" }, `${runIds.size} run${runIds.size === 1 ? "" : "s"}` + (hyps.length ? `, ${hyps.length - by("reference")} ideas: ${counts.join(", ") || "none decided"}` : "") +
+      (newBest.length ? `; ${newBest.length} new best on held-back games` : "") + "."));
+    if (hyps.length) {
       const ul = el("ul", { class: "hyps" });
-      for (const h of c.hyp) {
-        const st = (h.status || "").toLowerCase();
-        ul.append(el("li", {}, el("span", { class: "pill " + (st === "confirmed" ? "good" : st === "rejected" || st === "parked" ? "warn" : "") }, h.status || "?"), " ", h.hypothesis || ""));
+      for (const h of hyps) {
+        const st = h.st;
+        ul.append(el("li", {}, el("span", { class: "pill " + (st === "confirmed" ? "good" : st === "rejected" || st === "parked" ? "warn" : "") }, st === "reference" ? "reference" : h.status || "?"), " ", h.hypothesis || ""));
       }
       card.append(ul);
     }
