@@ -46,8 +46,10 @@
 # parts of the old file the new binary would make the same way (`--reuse`: same types
 # and sources, src/site/root.zig partKeys) and loads only the rest, so a deploy that
 # changed one part waits for that part alone; the next upload's write refreshes every
-# part (data/views.full: the last such write). A views write the deploy's binary can't
-# read (another format) is stopped at the signal rather than finished.
+# part (data/views.full: the last such write). A views write running when a deploy
+# changes the format finishes first: its parts the deploy left alone keep their keys, so
+# the deploy's --reuse write takes them from it. Stopping it (until 17 Oct) threw that
+# work away: two deploys that day cost a 10 and a 72 min write, and the swap waited 1 h 43
 # A forced round's steps (site build, upload, views file, reload) go to data/deploys.tsv
 # for the admin page's Deploys tab, under the commit deployed when the round began.
 # Upload: the new build is copied into data/site by checksum without times, so only
@@ -149,32 +151,25 @@ views_parts() {
     echo "loaded again: ${loaded:-none}; kept: ${kept:-none}"
 }
 round_sha=''
-# `meiolol site --views data/views.bin` with these flags, in the background so a signal
-# ends the wait: when a deploy has changed the binary's views format meanwhile, the
-# write is stopped (views_stale=1, returns 1), as its file would be the old format. A
-# stopped write leaves its temporary file (createFileAtomic: 16 hex digits) in data/
-views_stale=0
+# `meiolol site --views data/views.bin` with these flags, in the background so a
+# deploy's signal (force=1) lands during the wait; the write always finishes, and the
+# deploy's round follows at once. Never two at a time, so the older format can't land
+# after the newer
 views_write() {
-    local format pid status start
-    views_stale=0
-    start=$(date +%s)
+    local format pid status noted=0
     format=$(bin/meiolol site --views-format)
-    # Not through batch: a function run with & is a subshell, so $! would be that and
-    # the kill below would leave the write running (17 Oct: one ran on for 55 min beside
-    # the deploy's, and would have put an old-format file back when done). nice and
-    # ionice exec, so $! is the write itself
+    # Not through batch: a function run with & is a subshell, so $! would be that, not the
+    # write; nice and ionice exec, so $! is the write itself
     nice -n 10 ionice -c 3 bin/meiolol site --views data/views.bin "$@" > data/views.log 2>&1 &
     pid=$!
     while true; do
         wait "$pid"
         status=$?
         kill -0 "$pid" 2> /dev/null || return "$status"
-        if [[ $(bin/meiolol site --views-format 2> /dev/null) != "$format" ]]; then
-            kill "$pid"
-            wait "$pid"
-            find data -maxdepth 1 -type f -newermt "@$start" -regex '.*/[0-9a-f]\{16\}' -delete
-            views_stale=1
-            return 1
+        if (( ! noted )) && [[ $(bin/meiolol site --views-format 2> /dev/null) != "$format" ]]; then
+            noted=1
+            echo "$(date -u +%FT%TZ) views file: a deploy changed its format; finishing" \
+                "this write first, the deploy's reuses its unchanged parts"
         fi
     done
 }
@@ -276,10 +271,6 @@ while true; do
                     (( forced )) || { touch data/views.full; last_upload=$now; }
                     touch data/render.reload
                     deploy_event reload ok "renderer told to read the new views file"
-                elif (( views_stale )); then
-                    echo "$(date -u +%FT%TZ) views file stopped after $(( SECONDS - t ))s:" \
-                        "a deploy changed its format"
-                    deploy_event views failed "stopped after $(( SECONDS - t ))s: a newer deploy changed its format"
                 else
                     echo "$(date -u +%FT%TZ) views file FAILED after $(( SECONDS - t ))s:" \
                         "$(tail -n 1 data/views.log)"

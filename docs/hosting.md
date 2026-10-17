@@ -87,8 +87,9 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   database instead, as before 15 Oct. Render code changes show at the swap, in seconds.
   A deploy that changes a part waits for the forced round's `--reuse` write, which keeps
   the parts still current and loads only the changed ones (16 Oct's spread change would
-  have loaded the people part, 511 s of a 1,085 s write); a write in the old format running at the deploy is
-  stopped then rather than finished (16 Oct it cost 11 min). Kept parts refresh at the
+  have loaded the people part, 511 s of a 1,085 s write); a write running at the deploy finishes first and the
+  deploy's write reuses its unchanged parts (from 17 Oct; stopping it instead cost a
+  10 and a 72 min write that day, the swap waiting 1 h 43). Kept parts refresh at the
   next upload's full write.
   The heavy loads read in parallel (16 Oct): filters in 4 runs of games, learning in 4
   puuid ranges, each on its own read-only connection (schema.openSibling), and filters
