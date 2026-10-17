@@ -33,7 +33,8 @@ function draftState() {
   const d = stored("draft2", null) || {};
   return { blue: d.blue || {}, red: d.red || {}, locks: d.locks || {}, fb: d.fb || {}, bans: d.bans || [], open: d.open || null, order: d.order || "best" };
 }
-function saveDraft(d) { store("draft2", d); render(true); }
+// undo: the board before a fill (JSON), for its Undo button; any other change drops it
+function saveDraft(d, undo = null) { DRAFT.undo = undo; store("draft2", d); render(true); }
 
 // One load at a time (draftView starts it); each builds in locals and sets DRAFT at the end,
 // and only the newest load does, so a reload while one is under way can't mix their files
@@ -271,7 +272,7 @@ function draftModel(M, cc = null) {
         if (!s1.cell.clear.includes(i) || Math.abs(z) < 0.5 || Math.sign(z) !== Math.sign(s1.lean[i])) { lumped.leans += s1.parts[i]; return; }
         const enemy = i < nt, words = TRAIT[i % nt][z > 0 ? 0 : 1], good = s1.parts[i] > 0;
         add(s1.parts[i], { kind: "lean", chip: `${good ? "good" : "weak"} ${enemy ? "into" : "with"} ${words}${enemy ? "" : " allies"}`,
-          text: `${who(id)} ${good ? "does better" : "does worse"} ${enemy ? "into a" : "with"} ${words} ${enemy ? "team" : "allies"} like this one`,
+          text: `${who(id)} ${good ? "does better" : "does worse"} ${enemy ? "into " + (/^(AD|[aeiou])/i.test(words) ? "an" : "a") : "with"} ${words} ${enemy ? "team" : "allies"} like this one`,
           note: `clear lean, ±${Math.abs(pp(1.96 * s1.cell.sd[i] * s1.lean[i])).toFixed(1)}` });
       });
       // The pick changes what the other seats see. Named when their lean is clear and the pick
@@ -441,8 +442,9 @@ function draftView(body) {
   const m = DRAFT.m, M = DRAFT.model || {}, meta = M.meta || {};
   const lab = stored("draftPrefer", "box") === "lab";
   const sec = section(body, "Draft tester", "Build two teams, swap champions in, see what the model thinks. Admin only: the public site never shows a draft's win chance.",
-    el("button", { type: "button", class: "ghost", title: "Where each model file comes from when both have one: the box's daily export or the lab's `lab-push.sh use` pick", onclick: () => { store("draftPrefer", lab ? "box" : "lab"); reloadDraft(); } }, lab ? "Prefer box daily" : "Prefer lab picks"),
-    el("button", { type: "button", class: "ghost", onclick: reloadDraft }, "Reload model"));
+    el("span", { class: "actions" },
+      el("button", { type: "button", class: "ghost", title: "Where each model file comes from when both have one: the box's daily export or the lab's `lab-push.sh use` pick", onclick: () => { store("draftPrefer", lab ? "box" : "lab"); reloadDraft(); } }, lab ? "Prefer box daily" : "Prefer lab picks"),
+      el("button", { type: "button", class: "ghost", onclick: reloadDraft }, "Reload model")));
   if (!m) {
     if (DRAFT.err && !/^404/.test(DRAFT.err)) sec.append(el("div", { class: "health bad" }, el("b", {}, "The draft model didn't load: "), DRAFT.err));
     else sec.append(el("p", { class: "muted" }, "No draft model yet: the box writes one daily (`meiolol draft-model`), or meiolol-lab's `draft --export` and deploy/lab-push.sh send one."));
@@ -487,9 +489,9 @@ function draftView(body) {
     dev.accuracy != null ? `picks the winner in ${pct(dev.accuracy)} of ${num(dev.games)} games it wasn't fitted on (a coin: 50%)` : null,
     bad.length || !(DRAFT.check || ccCheck || DRAFT.laneCheck) ? null : "page matches the exported files"].filter(Boolean).join(" · ")), ...about));
 
-  const w = m.win(d);
-  sec.append(el("div", { class: "winbar", role: "img", "aria-label": `Blue ${pct(w.p)}, range ${pct(w.lo)} to ${pct(w.hi)}` },
-    el("div", { class: "labels" }, el("b", { class: "blue" }, `Blue ${pct(w.p)}`), el("span", { class: "sub" }, `range ${pct(w.lo)} to ${pct(w.hi)}`), el("b", { class: "red" }, `Red ${pct(1 - w.p)}`)),
+  const w = m.win(d), none = !Object.keys(d.blue).length && !Object.keys(d.red).length;
+  sec.append(el("div", { class: "winbar", role: "img", "aria-label": `Blue ${pct(w.p)}, ${none ? "no picks yet" : `95% range ${pct(w.lo)} to ${pct(w.hi)}`}` },
+    el("div", { class: "labels" }, el("b", { class: "blue" }, `Blue ${pct(w.p)}`), el("span", { class: "sub" }, none ? "no picks yet: the blue side alone" : `95% range ${pct(w.lo)} to ${pct(w.hi)}`), el("b", { class: "red" }, `Red ${pct(1 - w.p)}`)),
     el("div", { class: "track" }, el("span", { class: "range", style: `left:${100 * w.lo}%;width:${100 * (w.hi - w.lo)}%` }), el("span", { class: "mark", style: `left:${100 * w.p}%` }), el("span", { class: "half" }))));
 
   sec.append(fillMenu(m, d));
@@ -515,19 +517,29 @@ function draftView(body) {
       el("h3", {}, `${side === "blue" ? "Blue" : "Red"} ${DRAFT_ROLES.find(([r]) => r === role)[1].toLowerCase()}`),
       el("button", { type: "button", class: "ghost icon", "aria-label": "Close", onclick: () => { d.open = null; saveDraft(d); } }, "×")), slotPicker(m, d, side, role)));
   }
-  const bans = el("div", { class: "card bans" }, el("h3", {}, `Bans (${d.bans.length}), left out of random games and pickers`));
+  const bans = el("div", { class: "card bans" }, el("h3", {}, `Bans (${d.bans.length}), both teams' in one list, left out of random games and pickers`));
   const chips = el("div", { class: "chips" });
   for (const b of d.bans) chips.append(el("button", { type: "button", title: "Remove ban", onclick: () => { d.bans = d.bans.filter(x => x !== b); saveDraft(d); } }, name(b), " ×"));
   bans.append(chips);
   if (d.bans.length < 10) {
     const input = el("input", { type: "search", class: "bansearch", placeholder: "Ban a champion: type, Enter", "aria-label": "Ban a champion", autocomplete: "off", spellcheck: "false" });
+    const hint = el("p", { class: "sub" });
+    // The name typed first, then names starting with it, then any containing it
+    const match = () => {
+      const q = champKey(input.value), free = m.champs.filter(c => !taken.has(String(c.id)));
+      return q ? free.find(c => champKey(c.name) === q) || free.find(c => champKey(c.name).startsWith(q)) || free.find(c => champKey(c.name).includes(q)) : null;
+    };
+    const taken = takenIn(d);
+    input.addEventListener("input", () => {
+      const c = match();
+      hint.textContent = input.value ? (c ? `Enter bans ${c.name}` : "No champion matches") : "";
+    });
     input.addEventListener("keydown", ev => {
       if (ev.key !== "Enter") return;
-      const q = champKey(input.value), taken = takenIn(d);
-      const c = m.champs.find(c => !taken.has(String(c.id)) && champKey(c.name).startsWith(q)) || m.champs.find(c => !taken.has(String(c.id)) && champKey(c.name).includes(q));
-      if (q && c) { d.bans.push(c.id); saveDraft(d); }
+      const c = match();
+      if (c) { d.bans.push(c.id); saveDraft(d); }
     });
-    bans.append(input);
+    bans.append(input, hint);
   }
   sec.append(bans);
   sec.append(draftDebug(m, d, name));
@@ -590,7 +602,7 @@ function fillMenu(m, d) {
   };
   const has = tag => t => t.tags.includes(tag);
   const fighter = [has("Fighter"), "fighter"];
-  const go = f => () => { f(); d.open = null; saveDraft(d); };
+  const go = f => () => { const before = JSON.stringify(d); f(); d.open = null; saveDraft(d, before); };
   const both = ["blue", "red"];
   const btn = (label, f, title) => el("button", { type: "button", class: "action", title, onclick: go(f) }, label);
   const groups = [
@@ -629,6 +641,7 @@ function fillMenu(m, d) {
     btn("Random game", () => fillSlots(d, both, realistic), "Every slot: " + drawn),
     btn("Fill empty", () => fillSlots(d, both, realistic, true), "Empty slots only: " + drawn),
     btn("Empty board", () => { d.blue = {}; d.red = {}; d.locks = {}; d.fb = {}; }, "Every slot empty: each counts as the role's average pick"),
+    DRAFT.undo ? el("button", { type: "button", class: "ghost", title: "The board as it was before the last fill", onclick: () => saveDraft(JSON.parse(DRAFT.undo)) }, "Undo") : null,
     menu);
 }
 
@@ -705,15 +718,15 @@ function slotPicker(m, d, side, role) {
     const line = p => el("li", { class: p.kind === "rest" ? "muted" : null }, el("b", { class: tone(p.pp, 0.05) }, signed(p.pp)), " ", p.text, p.note ? el("span", { class: "sub" }, ` (${p.note})`) : null);
     const out = el("div", { class: "breakdown" },
       el("ul", {}, ...named.map(line), ...w.parts.filter(p => p.kind === "rest").map(line)),
-      el("p", { class: "sub" }, `= ${signed(w.total)} points (lines rounded): ${side} wins ${pct(x.win)} (likely ${pct(x.lo)} to ${pct(x.hi)}) against ${pct(q.empty)} with an average ${roleName}; ${num(x.games)} games of ${x.c.name} ${roleName}.`));
+      el("p", { class: "sub" }, `= ${signed(w.total)} points (lines rounded): ${side} wins ${pct(x.win)} (95% range ${pct(x.lo)} to ${pct(x.hi)}) against ${pct(q.empty)} with an average ${roleName}; ${num(x.games)} games of ${x.c.name} ${roleName}.`));
     const L = x.lane;
     if (L) {
       const { cs10: C, deaths15: D } = lm.at;
-      if (opp != null) out.append(el("p", { class: "sub" }, `Lane into ${nameOf(opp)}: ${gold(L.value[G])} gold at 14 (likely ${gold(L.lo[G])} to ${gold(L.hi[G])}), ${L.value[C].toFixed(0)} CS at 10, ${L.value[D].toFixed(1)} deaths before 15; ` +
+      if (opp != null) out.append(el("p", { class: "sub" }, `Lane into ${nameOf(opp)}: ${gold(L.value[G])} gold at 14 (95% range ${gold(L.lo[G])} to ${gold(L.hi[G])}), ${L.value[C].toFixed(0)} CS at 10, ${L.value[D].toFixed(1)} deaths before 15; ` +
         (L.pair_games ? `${num(L.pair_games)} games of the matchup in the lane model.` : "no games of the matchup in the lane model yet, champion averages only.")));
       else {
         const worst = L.each.slice().sort((a, b) => b.w - a.w).slice(0, 10).sort((a, b) => a.value[G] - b.value[G])[0];
-        out.append(el("p", { class: "sub" }, `Blind lane: ${gold(L.value[G])} gold at 14 on average over likely opponents (likely ${gold(L.lo[G])} to ${gold(L.hi[G])})` +
+        out.append(el("p", { class: "sub" }, `Blind lane: ${gold(L.value[G])} gold at 14 on average over likely opponents (95% range ${gold(L.lo[G])} to ${gold(L.hi[G])})` +
           (worst ? `; hardest common one ${nameOf(worst.id)}, ${gold(worst.value[G])}.` : ".")));
       }
     }
@@ -731,14 +744,14 @@ function slotPicker(m, d, side, role) {
       : rows.filter(x => x.share >= PICK_MIN_SHARE || x.champion === cur).sort(by);
     const head = (k, label, title) => el("span", { title: title + (sort === k ? ". Sorted by this" + (k === "played" ? "" : ", by the low end of its range") : "") }, label + (sort === k ? " ▾" : ""));
     list.replaceChildren(el("div", { class: "candhead" + (lm ? " lane" : "") }, el("span", {}, "Champion"), head("best", "Win", `Change to ${side}'s win chance against an average ${roleName}`),
-      lm ? head("lane", opp != null ? "Lane" : "Blind", "Gold lead at 14 minutes, lane model") : null, head("played", "Played", "Play share in the role on the newest patch"), el("span", {}, "Why")));
+      lm ? head("lane", "Gold", `Gold lead at 14 minutes ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents (blind)"}, lane model`) : null, head("played", "Played", "Play share in the role on the newest patch"), el("span", {}, "Why")));
     for (const x of hits) {
       const open = P.opened === x.champion;
       const w = m.why(teams, si, ri, x.champion);
       const row = el("div", { class: "cand" + (lm ? " lane" : "") + (x.champion === cur ? " cur" : "") + (open ? " open" : ""), role: "listitem" },
         el("button", { type: "button", class: "link", title: `Pick ${x.c.name}`, onclick: () => pick(x.champion) }, x.c.name),
         el("button", { type: "button", class: "more", "aria-expanded": String(open), title: "Why: the whole breakdown", onclick: () => { P.opened = open ? null : x.champion; fill(); } },
-          el("b", { class: tone(x.change, 0.0005), title: `${side} wins ${pct(x.win)} (likely ${pct(x.lo)} to ${pct(x.hi)})` }, signed(100 * x.change)),
+          el("b", { class: tone(x.change, 0.0005), title: `${side} wins ${pct(x.win)} (95% range ${pct(x.lo)} to ${pct(x.hi)})` }, signed(100 * x.change)),
           lm ? el("span", { class: "gold " + tone(x.lane.value[G], 50) }, gold(x.lane.value[G])) : null,
           el("span", { class: "rate" }, pct(x.share)),
           el("span", { class: "why" }, ...w.chips.map(c => el("span", c.kind === "rest" ? { class: "chip", title: "Parts too thin or unclear to name one by one: open the row" } : { class: "chip " + tone(c.pp, 0) }, `${c.chip} ${signed(c.pp)}`)))));
@@ -754,7 +767,7 @@ function slotPicker(m, d, side, role) {
   });
   box.append(el("div", { class: "pickhead" }, input, sortNav),
     el("p", { class: "sub" }, `Win: points of ${side}'s win chance for the whole game against an average ${roleName} (${pct(q.empty)})` +
-      (lm ? `. ${opp != null ? "Lane" : "Blind"}: gold ahead at 14 ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents"}, from the lane model; ` +
+      (lm ? `. Gold: gold ahead at 14 ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents"}, from the lane model; ` +
         "it can disagree with Win (lane bullies against late scalers)" : "") +
       (sort === "played" ? "" : `. Sorted surest first: by the low end of the ${sort === "lane" ? "gold" : "win"} range, so a sure small gain can top an unsure bigger one`) + ". Open a row for why."),
     list);
