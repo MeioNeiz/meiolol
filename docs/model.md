@@ -3859,6 +3859,117 @@ they don't count as looks):
   are now in the fit), and the role means (team-level trait effects, as comps tested)
 - Site: nothing from this until read; what it could show goes in the reading
 
+Data as run: 832,841 games, 812,306 packed (ranked solo, roles complete), 15 platforms;
+seat stats on 607,805 of them after the merge (box's own 249,397), comp stats on
+731,618. Cuts (ms): b_0-b_4 1791646802503, 1791712005644, 1791767687406, 1791831702945,
+1791909023875, D 1791975252100, T 1792057078076. Folds score 60,022-60,023 games each
+(fits 300,113 to 540,203), dev-val 80,031 (fit 600,226). Built at b332b86 (0ad6bee for
+the win-comp offset), ~3 min a run.
+
+| run | folds 1-5 vs offset (nats/game) | better | dev-val | clear (posterior) | BH 5% | replicated (clear / BH) |
+| --- | --- | --- | --- | --- | --- | --- |
+| real, 20261017T144201Z-champcomp-1320Z-real | -0.00139 ± 0.00018 | 5/5 | -0.00194 ± 0.00040 | 47 of 8,352 | 28 | 25/25 (mean z 2.44) / 13/14 |
+| team terms alone (same run) | -0.00001 ± 0.00004 | | -0.00003 ± 0.00011 | | | |
+| permuted profiles, ...-permuted | +0.00012 ± 0.00006 | 0/5 | +0.00000 ± 0.00011 | 1 | 0 | 0/0 |
+| shuffled traits (Mac), 20261017T152101Z-...-shuffled | +0.00002 ± 0.00003 | 1/5 | -0.00002 ± 0.00005 | 0 | 0 | 0/0 |
+| post hoc: offset win-comp (mix), 20261017T152341Z-...-wincomp | -0.00094 ± 0.00019 | 5/5 | -0.00172 ± 0.00041 | 37 | 24 | 21/23 / 11/12 |
+
+Plants (winners re-drawn; recovered raw slope and z on the dev-val fit):
+
+| plant | champion-role (games) | raw | z | BH | shrunk deviation |
+| --- | --- | --- | --- | --- | --- |
+| 2 pp per sd enemy melee, cell 50 | Katarina middle (35,398) | +1.00 ± 0.37 | 2.6 | no | 0 |
+| 4, cell 50 | Katarina middle | +2.97 ± 0.37 | 7.9 | yes | 0 |
+| 2, cell 5 | Thresh support (89,044) | +1.89 ± 0.24 | 7.6 | yes | +1.54 ± 0.22 (clear) |
+
+So a single champion's effect is found by the BH count from about 4.3 raw se: raw se
+is about 69 / sqrt(games) pp per sd, so ~3 pp at 10,000 games, ~1.6 at 35,000, ~1.0 at
+90,000. The shrunk count is stricter: it needs its role and trait to show a spread over
+many champions (26 of 80 role and trait pairs passed the Q test on the real dev-val fit),
+so a lone effect in a role with none (Katarina at 4 pp) stays at 0.
+
+Pre-declared readings:
+- H1 confirmed: -0.00139 ± 0.00018 on the folds, every fold, dev-val -0.00194 ± 0.00040;
+  all of it is champion terms (team terms -0.00001 ± 0.00004). For scale, eval's tuned
+  pairs and matchups over champion base rates: -0.0024 ± 0.0004 (17 Oct)
+- H2 and H2b detected: 47 clear and 28 BH passes against at most 1 and 0 in the controls
+- H3 and H3b: 25 of 25 clear effects fitted before bounds[2] kept their sign on the
+  newer 180,068 dev games (one-sided binomial p < 1e-7), mean signed z 2.44; 13 of 14 BH
+  passes
+- Rammus jungle (14,213 games): enemy melee raw -0.56 ± 0.59 pp per sd, not detected
+  (the data still allow about -1.7); AP share +0.07 ± 0.46; tankiness -1.4 ± 0.6 raw
+  (shrunk -0.7 ± 0.4, not clear)
+- Role means and team terms: all within ±0.3 pp per sd (team.tsv, roles.tsv)
+
+Clear effects by feature (posterior / BH): ally AP share 15 / 6, enemy tankiness 11 / 6,
+enemy AP share 8 / 6, ally tankiness 4 / 0, enemy dive 4 / 3, enemy melee 3 / 3, ally
+dive 2 / 0, enemy early power 1 / 1. Largest (shrunk, pp per sd of the trait, ± 95%):
+
+| champion-role | trait | shrunk | raw | games |
+| --- | --- | --- | --- | --- |
+| Malphite top | enemy AP share | -1.87 ± 0.46 | -2.28 ± 0.51 | 44,091 |
+| Malphite middle | enemy AP share | -1.73 ± 0.87 | -3.92 | 5,816 |
+| Galio middle | enemy AP share | +1.49 ± 0.60 | +2.17 | 23,639 |
+| Kassadin middle | enemy AP share | +1.19 ± 0.71 | +2.04 | 14,119 |
+| Vex middle | enemy AP share | -1.13 ± 0.63 | -1.47 | 20,629 |
+| Nautilus support | enemy tankiness | -1.34 ± 0.52 | -1.55 | 61,274 |
+| Lillia jungle | enemy tankiness | +1.40 ± 0.64 | +2.02 | 31,129 |
+| Brand support | enemy tankiness | +1.46 ± 0.80 | +2.23 | 19,320 |
+| Senna support | enemy tankiness | +1.27 ± 0.67 | +1.69 | 31,536 |
+| Viktor middle | enemy tankiness | +1.02 ± 0.54 | +1.22 | 53,967 |
+| Rengar jungle | enemy tankiness | -1.10 ± 0.73 | -1.85 | 20,444 |
+| Lulu support | enemy dive | +1.48 ± 0.61 | +1.83 | 67,218 |
+| Malzahar middle | enemy dive | +1.10 ± 0.71 | +1.73 | 35,723 |
+| Yasuo middle | enemy dive | -1.02 ± 0.61 | -1.49 | 57,290 |
+| Syndra middle | enemy melee | -1.12 ± 0.57 | -1.54 | 40,151 |
+| Lissandra middle | enemy melee | +1.01 ± 0.63 | +1.64 | 30,354 |
+| Yone middle | ally AP share | +1.15 ± 0.44 | +1.16 | 54,803 |
+| Yasuo middle | ally AP share | +1.05 ± 0.44 | +1.05 | 57,290 |
+| Qiyana middle | ally AP share | +1.14 ± 0.71 | +1.55 | 15,944 |
+
+BH passes the shrinkage left at 0 (their role and trait show no spread): Wukong jungle
+into melee +1.44 ± 0.64 raw, Yasuo middle into early power +1.38 ± 0.64, Fiddlesticks
+jungle with ally CC -3.0 ± 1.5; and small cells (Rumble jungle into engage, 802 games;
+Lillia top, 468) that are likely noise at that size.
+
+Examples (examples.tsv, the scored game where the champion's own term is largest):
+Malphite top into Zac, Shyvana, Ahri, Swain, Alistar -7.7 pp beyond his role's average
+(enemy AP share -4.9, enemy tankiness -2.4); Galio middle into Rumble, Sejuani, Akali,
+Viktor, Xerath +5.8 (enemy AP share +5.1); Lulu support into Renekton, Master Yi, Locke,
+Kalista, Pantheon +7.9 (enemy dive +6.1); Nautilus support into Trundle, Sejuani, Yasuo,
+Sion, Swain -8.1 (enemy tankiness -8.4). Extreme comps by construction: typical drafts
+move a champion by a fraction of that.
+
+Reading:
+- A champion's fit with the comp predicts the winner beyond champion strength, on
+  newer games, in every fold, with both controls at zero. Most effects match the kits:
+  Malphite's armour is wasted into magic damage, Galio's and Kassadin's magic shields
+  pay off into it; percent-health and tank-shredding damage (Lillia, Brand, Senna,
+  Viktor) gains into tanky teams while Nautilus (another frontliner, little damage)
+  loses; Lulu's peel gains into divers, Yasuo loses to them; Lissandra's and Syndra's
+  answers to melee point opposite ways (Lissandra up, Syndra down)
+- Ally AP share is mostly the damage mix seen per champion: AD carries (Yone, Yasuo,
+  Qiyana, Viego, Graves, Master Yi, Zed) gain more from AP allies than their role's
+  average, AP junglers (Zac, Malphite) less. With win-comp's team mix in the offset these
+  shrink by about a third (Yone 1.15 to 0.71) and the gain is -0.00094 ± 0.00019 (5/5),
+  so most of it is not the mix
+- Not tested: whether this adds beyond pair and matchup terms (eval's tuned model, the
+  additive v2). Some of "Malphite into AP" is surely specific matchups; the permuted
+  control (arbitrary champion groupings) gained nothing, so the traits carry what
+  groupings don't, but the overlap with a full matchup table is open
+- Description, not cause: profiles come from end-of-game stats of who played the
+  champions; "into a tanky team" means into champions whose games look tanky
+- Dev only, no test look; one snapshot. The effects files feed the admin Models tab
+  (effects-champcomp-enemy.tsv, -ally.tsv)
+
+What the site could show (not done; production-key.md rules first): on a champion page,
+the clear effects as plain lines with their range ("Malphite top: about 2 points worse
+per step towards a magic-damage enemy team"); in the app's suggest reasons, a seat's
+breakdown into this draft (profiles.tsv and champcomp.tsv give every part) when its
+total is clear, beside the existing matchup reasons. Both need the deviations to be
+refitted on the box (or shipped as a file) and an eval-side check against the shipped
+pair terms first
+
 ### Draft model file (meiolol-lab draft --export)
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

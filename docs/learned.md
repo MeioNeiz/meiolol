@@ -25,6 +25,26 @@ How to write a line:
 
 ## Win
 
+- 2026-10-17 (early): Some champions do clearly better or worse depending on what the
+  enemy team is made of, beyond how strong they are: Malphite top wins about 2
+  percentage points less than an average top laner for each step towards a
+  magic-damage enemy team, Galio and Kassadin mid about 1.5 and 1 more; Lillia jungle,
+  Brand and Senna support and Viktor mid gain about 1-1.5 into tanky teams while
+  Nautilus loses about 1.3; Lulu gains about 1.5 into divers and Yasuo loses about 1;
+  Lissandra mid gains and Syndra loses about 1 into melee teams. AD carries like Yone,
+  Yasuo and Qiyana gain about 1 more than their role's average from magic-damage
+  allies (mostly the damage mix again). Rammus into melee: still not detected. Sure: 47
+  champion-role and trait effects clear (28 at a 5% false discovery rate) on
+  snap-20261017T1320Z's dev games (600k fit), against 1 and 0 when the traits are
+  shuffled or reassigned to other champions; all 25 effects clear on older games kept
+  their sign on 180k newer ones; together they predict the winner better than champion
+  strength in every fold (-0.0014 ± 0.0002 nats a game, dev-val -0.0019 ± 0.0004).
+  Effects are a step of one sd of the trait, a typical draft moves less; a single
+  champion's effect is found from about 3 points at 10,000 games, 1.6 at 35,000, 1 at
+  90,000; not yet checked against the pair and matchup terms the site uses; dev only,
+  no test look. Site: nothing yet; candidate champion-page lines and suggest reasons
+  (docs/model.md reading). Evidence: docs/model.md "Champions into comps"
+
 - 2026-10-17: With about 786k games the suggestions predict who wins a little better
   when a champion's own win rate is trusted more and ally pairings less: the drafts'
   winner is picked 54.8% of the time instead of 54.4%. Lane matchups carry the most
