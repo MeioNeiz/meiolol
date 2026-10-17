@@ -238,7 +238,7 @@ function draftModel(M, cc = null) {
     const mine = t[side], theirs = t[1 - side], cellAvg = cells.get(id + ":" + r);
     const own = sl[side][r];
     add(own.b - avg[r].b, { kind: "strength", chip: `${own.b >= avg[r].b ? "strong" : "weak"} ${ROLE[r]}`,
-      text: `${who(id)}'s strength as a ${ROLE[r]} pick`, note: `${num(cellAvg ? cellAvg.games : 0)} games, ±${Math.abs(pp(1.96 * own.sd)).toFixed(1)}` });
+      text: `${who(id)}'s strength as a ${ROLE[r]} pick`, note: `${num(cellAvg ? cellAvg.games : 0)} games, ±${Math.abs(pp(1.96 * own.sd)).toFixed(1)} (95% range)` });
     if (pairs) pairs.groups.forEach((g, i) => {
       const { r: a, q: b } = g;
       let c = null, sign = 1, other = 0, ally = g.kind === "ally";
@@ -273,7 +273,7 @@ function draftModel(M, cc = null) {
         const enemy = i < nt, words = TRAIT[i % nt][z > 0 ? 0 : 1], good = s1.parts[i] > 0;
         add(s1.parts[i], { kind: "lean", chip: `${good ? "good" : "weak"} ${enemy ? "into" : "with"} ${words}${enemy ? "" : " allies"}`,
           text: `${who(id)} ${good ? "does better" : "does worse"} ${enemy ? "into " + (/^(AD|[aeiou])/i.test(words) ? "an" : "a") : "with"} ${words} ${enemy ? "team" : "allies"} like this one`,
-          note: `clear lean, ±${Math.abs(pp(1.96 * s1.cell.sd[i] * s1.lean[i])).toFixed(1)}` });
+          note: `clear lean, ±${Math.abs(pp(1.96 * s1.cell.sd[i] * s1.lean[i])).toFixed(1)} (95% range)` });
       });
       // The pick changes what the other seats see. Named when their lean is clear and the pick
       // clearly brings that trait: magic damage only from a champion that mostly deals it
@@ -496,7 +496,7 @@ function draftView(body) {
     el("div", { class: "labels" }, el("b", { class: "blue" }, `Blue ${pct(w.p)}`), el("span", { class: "sub" }, none ? "no picks yet: the blue side alone" : `95% range ${pct(w.lo)} to ${pct(w.hi)}`), el("b", { class: "red" }, `Red ${pct(1 - w.p)}`)),
     el("div", { class: "track" }, el("span", { class: "range", style: `left:${100 * w.lo}%;width:${100 * (w.hi - w.lo)}%` }), el("span", { class: "mark", style: `left:${100 * w.p}%` }), el("span", { class: "half" }))));
 
-  sec.append(fillMenu(m, d));
+  sec.append(fillMenu(m, d), el("p", { class: "sub" }, "Random game and the fills redraw every slot not marked keep (Fill empty: only the empty ones)."));
   const board = el("div", { class: "draft" });
   sec.append(board);
   for (const [side, title] of SIDES) {
@@ -507,7 +507,7 @@ function draftView(body) {
         el("span", { class: "role" }, label),
         el("button", { type: "button", class: "slot", "aria-expanded": String(open), title: d.fb[key] ? `Fallback: ${d.fb[key]}` : null, onclick: () => { d.open = open ? null : key; saveDraft(d); } },
           id != null ? name(id) : el("span", { class: "muted" }, "empty"), d.fb[key] && id != null ? el("span", { class: "fb" }, ` (${d.fb[key]})`) : null),
-        el("button", { type: "button", class: "ghost icon", "aria-pressed": String(locked), title: locked ? "Unlock" : "Lock (random keeps it)", onclick: () => { d.locks[key] = !locked; saveDraft(d); } }, locked ? "locked" : "lock"),
+        el("button", { type: "button", class: "ghost icon", "aria-pressed": String(locked), title: locked ? "Kept: click to let Random game and the fills redraw it" : "Keep: Random game and the fills leave this slot as it is", onclick: () => { d.locks[key] = !locked; saveDraft(d); } }, locked ? "kept" : "keep"),
         id != null ? el("button", { type: "button", class: "ghost icon", title: "Clear", "aria-label": "Clear " + name(id), onclick: () => { delete d[side][role]; delete d.fb[key]; saveDraft(d); } }, "×") : null));
     }
     board.append(col);
@@ -768,7 +768,7 @@ function slotPicker(m, d, side, role) {
     if (ev.key === "Escape") { d.open = null; saveDraft(d); }
   });
   box.append(el("div", { class: "pickhead" }, input, sortNav),
-    el("p", { class: "sub" }, `Win: points of ${side}'s win chance for the whole game against an average ${roleName} (${pct(q.empty)})` +
+    el("p", { class: "sub" }, `Win: change in ${side}'s win chance for the whole game, in percentage points, against an average ${roleName} (${pct(q.empty)})` +
       (lm ? `. Gold: gold ahead at 14 ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents"}, from the lane model; ` +
         "it can disagree with Win (lane bullies against late scalers)" : "") +
       (sort === "played" ? "" : `. Sorted surest first: by the low end of the ${sort === "lane" ? "gold" : "win"} range, so a sure small gain can top an unsure bigger one`) + ". Open a row for why."),

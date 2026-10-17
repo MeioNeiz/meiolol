@@ -50,7 +50,7 @@ function nnVerdict(r) {
 const nnDiff = r => signed(r.diff, 5) + (r.ci != null ? " ± " + r.ci.toFixed(5) : "");
 // How big, for the All view's pill: a clear gain or loss against today's model, as a share
 // of its edge
-const nnSize = r => r.vs === "ratings" && r.ci != null && Math.abs(r.diff) > r.ci ? `${signed(r.diff, 4)} a game, ${Math.round(100 * Math.abs(r.diff) / NN_EDGE)}% of its edge over a coin flip` : null;
+const nnSize = r => r.vs === "ratings" && r.ci != null && Math.abs(r.diff) > r.ci ? `log loss ${Math.abs(r.diff).toFixed(4)} ${r.diff < 0 ? "lower" : "higher"} a game than today's model, ${Math.round(100 * Math.abs(r.diff) / NN_EDGE)}% of its edge over a coin flip` : null;
 const nnBlock = r => NN_BLOCK[r.block] || r.block || "–";
 
 // The row that best answers a question: a test look first, then the folds, then dev-val;
@@ -68,7 +68,7 @@ function nnView(body) {
   const intro = section(body, "Neural net programme",
     "Can a neural net call the winner from the draft better than today's model (ratings: each champion's strength in its role)? " +
     "Every number is the change in log loss per game against the model named, with its 95% range: below zero is better. " +
-    `For scale, today's model beats a coin flip by about ${NN_EDGE} a game, so -${NN_EDGE} would double its edge. ` +
+    `For scale, today's model beats a coin flip by about ${NN_EDGE} a game, so a log loss ${NN_EDGE} lower would double its edge. ` +
     "Dev results come from older games scored on newer ones; a test look is the one check on held-back games per model.");
   if (NN.err) intro.append(el("div", { class: "health bad" }, el("b", {}, "Could not load the results: "), NN.err));
   if (NN.at === undefined) { intro.append(el("p", { class: "muted" }, "Loading results…")); return; }
