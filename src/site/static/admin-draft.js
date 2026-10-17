@@ -11,14 +11,18 @@
 
 const DRAFT_ROLES = [["top", "Top"], ["jungle", "Jungle"], ["mid", "Mid"], ["bot", "Bot"], ["support", "Support"]];
 const SIDES = [["blue", "Blue"], ["red", "Red"]];
-const DRAFT = { model: undefined, ref: null, err: null, check: null, m: null, from: {} };
+const DRAFT = { model: undefined, err: null, check: null, m: null, from: {}, gen: 0, loading: null };
 const MODEL_DIRS = { models: "box daily", training: "lab pick" };
+// Files the box's daily export writes; the rest (draft-comp.json) come from the lab only, so
+// models/ isn't asked for them (a 404 there would only fill the console)
+const BOX_FILES = new Set(["draft-model.json", "lane-model.json"]);
 
 // A model file from the box's daily export (models/) or the lab pick (training/, `lab-push.sh
 // use`): the preferred one first, the other when it has none; its references come from the
 // same directory
 async function modelFile(name) {
-  const dirs = stored("draftPrefer", "box") === "lab" ? ["training", "models"] : ["models", "training"];
+  const order = stored("draftPrefer", "box") === "lab" ? ["training", "models"] : ["models", "training"];
+  const dirs = BOX_FILES.has(name) ? order : ["training"];
   for (const [i, dir] of dirs.entries()) {
     try { return { json: await getJson(`${dir}/${name}`), dir }; }
     catch (e) { if (i === dirs.length - 1 || !/^404/.test(e.message)) throw e; }
@@ -31,36 +35,48 @@ function draftState() {
 }
 function saveDraft(d) { store("draft2", d); render(true); }
 
+// One load at a time (draftView starts it); each builds in locals and sets DRAFT at the end,
+// and only the newest load does, so a reload while one is under way can't mix their files
+function startDraftLoad() {
+  const gen = ++DRAFT.gen;
+  DRAFT.loading = loadDraftModel().then(x => { if (gen === DRAFT.gen) Object.assign(DRAFT, x); })
+    .finally(() => {
+      if (gen !== DRAFT.gen) return;
+      DRAFT.loading = null;
+      if (ui.tab === "models" && ui.cat === "draft") render(true);
+    });
+}
+
+function reloadDraft() { DRAFT.model = undefined; DRAFT.loading = null; render(true); }
+
 async function loadDraftModel() {
+  const x = { model: null, m: null, err: null, check: null, from: {}, cc: null, ccErr: null, lane: null, laneErr: null, laneCheck: null };
   // Champion-into-comp terms are optional: without them the model scores as exported
-  DRAFT.cc = null; DRAFT.ccErr = null; DRAFT.from = {};
   try {
     const { json: C, dir } = await modelFile("draft-comp.json");
-    DRAFT.from.comp = dir;
-    DRAFT.cc = champComp(C);
-    if (!DRAFT.cc) throw new Error(`draft-comp.json is format "${C.format}" version ${C.version}; this page reads meiolol-champcomp version 1`);
-  } catch (e) { if (!/^404/.test(e.message)) DRAFT.ccErr = e.message; }
+    x.from.comp = dir;
+    x.cc = champComp(C);
+    if (!x.cc) throw new Error(`draft-comp.json is format "${C.format}" version ${C.version}; this page reads meiolol-champcomp version 1`);
+  } catch (e) { if (!/^404/.test(e.message)) x.ccErr = e.message; }
   try {
     const { json: M, dir } = await modelFile("draft-model.json");
-    DRAFT.model = M; DRAFT.from.draft = dir;
-    DRAFT.m = draftModel(DRAFT.model, DRAFT.cc);
-    if (!DRAFT.m) throw new Error(`draft-model.json is format "${DRAFT.model.format}" version ${DRAFT.model.version}; this page reads meiolol-draft-model versions 1 to 4`);
-    DRAFT.ref = await getJson(`${dir}/draft-ref.json`).catch(() => null);
-    DRAFT.err = null;
+    x.model = M; x.from.draft = dir;
+    x.m = draftModel(M, x.cc);
+    if (!x.m) throw new Error(`draft-model.json is format "${M.format}" version ${M.version}; this page reads meiolol-draft-model versions 1 to 4`);
+    const ref = await getJson(`${dir}/draft-ref.json`).catch(() => null);
     // draft-ref.json is the exported model alone: checked without the comp terms
-    DRAFT.check = DRAFT.m && DRAFT.ref ? draftCheck(DRAFT.cc ? draftModel(DRAFT.model) : DRAFT.m, DRAFT.ref) : null;
-  } catch (e) { DRAFT.model = null; DRAFT.m = null; DRAFT.err = e.message; }
+    x.check = ref ? draftCheck(x.cc ? draftModel(M) : x.m, ref) : null;
+  } catch (e) { x.model = null; x.m = null; x.err = e.message; }
   // The lane model is optional: without it the picker has no lane column
-  DRAFT.lane = null; DRAFT.laneErr = null; DRAFT.laneCheck = null;
   try {
     const { json: L, dir } = await modelFile("lane-model.json");
-    DRAFT.from.lane = dir;
-    DRAFT.lane = laneModel(L);
-    if (!DRAFT.lane) throw new Error(`lane-model.json is format "${L.format}" version ${L.version}; this page reads meiolol-lane-model version 1`);
+    x.from.lane = dir;
+    x.lane = laneModel(L);
+    if (!x.lane) throw new Error(`lane-model.json is format "${L.format}" version ${L.version}; this page reads meiolol-lane-model version 1`);
     const ref = await getJson(`${dir}/lane-ref.json`).catch(() => null);
-    DRAFT.laneCheck = ref ? laneCheck(DRAFT.lane, ref) : null;
-  } catch (e) { if (!/^404/.test(e.message)) DRAFT.laneErr = e.message; }
-  if (ui.tab === "models" && ui.cat === "draft") render(true);
+    x.laneCheck = ref ? laneCheck(x.lane, ref) : null;
+  } catch (e) { if (!/^404/.test(e.message)) x.laneErr = e.message; }
+  return x;
 }
 
 // Champion-into-comp terms (draft-comp.json, `meiolol-lab champcomp --export`, docs/model.md
@@ -417,12 +433,12 @@ const champKey = s => (s || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9
 const takenIn = d => new Set([...Object.values(d.blue), ...Object.values(d.red), ...d.bans].map(String));
 
 function draftView(body) {
-  if (DRAFT.model === undefined) { loadDraftModel(); body.append(el("p", { class: "muted" }, "Loading the draft model…")); return; }
+  if (DRAFT.model === undefined) { if (!DRAFT.loading) startDraftLoad(); body.append(el("p", { class: "muted" }, "Loading the draft model…")); return; }
   const m = DRAFT.m, M = DRAFT.model || {}, meta = M.meta || {};
   const lab = stored("draftPrefer", "box") === "lab";
   const sec = section(body, "Draft tester", "Build two teams, swap champions in, see what the model thinks. Admin only: the public site never shows a draft's win chance.",
-    el("button", { type: "button", class: "ghost", title: "Where each model file comes from when both have one: the box's daily export or the lab's `lab-push.sh use` pick", onclick: () => { store("draftPrefer", lab ? "box" : "lab"); DRAFT.model = undefined; render(true); } }, lab ? "Prefer box daily" : "Prefer lab picks"),
-    el("button", { type: "button", class: "ghost", onclick: () => { DRAFT.model = undefined; render(true); } }, "Reload model"));
+    el("button", { type: "button", class: "ghost", title: "Where each model file comes from when both have one: the box's daily export or the lab's `lab-push.sh use` pick", onclick: () => { store("draftPrefer", lab ? "box" : "lab"); reloadDraft(); } }, lab ? "Prefer box daily" : "Prefer lab picks"),
+    el("button", { type: "button", class: "ghost", onclick: reloadDraft }, "Reload model"));
   if (!m) {
     if (DRAFT.err && !/^404/.test(DRAFT.err)) sec.append(el("div", { class: "health bad" }, el("b", {}, "The draft model didn't load: "), DRAFT.err));
     else sec.append(el("p", { class: "muted" }, "No draft model yet: the box writes one daily (`meiolol draft-model`), or meiolol-lab's `draft --export` and deploy/lab-push.sh send one."));
