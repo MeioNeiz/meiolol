@@ -107,6 +107,9 @@ deploy/health.sh runs on the box and prints one line per problem:
 | gpu-box | no raw archive ack for 12h (ACK_H): PC off, asleep or WSL down; first export never acked; one export unacked for 12h while others are acked (see archive-pull.log on the gpu-box) |
 | gpu-box disks | C: (holds the WSL disk) or the WSL disk or the archive partition at 85%, or the partition not attached; reported by each archive pull |
 | raw held | free disk under twice raw.db + timeline.db + archive-out (raw stays until acked) |
+| gpu-box archive | last pull reported a failure (data/gpu-box.pull, written by archive-serve.sh report): cause and since when, pushed once per failure |
+| raw valve | the disk valve dropped raw the archive never got in the last 24 h (raw-export --status drops_24h, data/raw-dropped.log) |
+| backup mirrors | backups not mirrored for 26 h, or a mirror silent for 48 h (backup-serve.sh status) |
 
 - Box: tmux `meiolol-health` (deploy/health-loop.sh) every 15 min; pushes to the private
   ntfy.sh topic NTFY_TOPIC from .env when the problems change, every 12h while they last,
@@ -244,6 +247,10 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   the newest record whose file never got its name (that window is exported again). An
   ack of a name with no record deletes the file and prunes nothing; a failed ack is
   logged and the pull carries on with the rest
+- The crawler treats a body that is not a whole document (empty, cut short, not a
+  match) as a failed fetch, tried again later, never kept raw (crawl.zig wholeDoc), and
+  the riot client errors on a body shorter than its Content-Length (17 Oct: ~1 in 150k
+  bodies had come back cut short as a 200)
 - A document that is not a match (empty, unparseable) is left out and counted
   ("unreadable left out" in the pull log). Before 17 Oct one empty timeline the crawler
   kept (OC1, 15 Oct) failed the whole archive step every hour and held 5 exports (~26
