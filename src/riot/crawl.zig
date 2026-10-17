@@ -846,6 +846,13 @@ const PlatformCrawler = struct {
     /// Last PUUID given mastery, so each batch resumes instead of rescanning done players
     mastery_cursor: [128]u8 = undefined,
     mastery_cursor_len: usize = 0,
+    /// The ladder list's current pass stored a snapshot; a pass that stored none waits
+    /// `mastery_rewrap_s` to wrap
+    mastery_pass_stored: bool = false,
+    /// When the ladder list may wrap again (s)
+    mastery_wrap_at: i64 = 0,
+    /// The last fetchMastery got a snapshot, not a 404
+    mastery_got: bool = false,
     /// Mastery calls failed in a row; reset by a success
     mastery_failures: u32 = 0,
     /// During an outage, when the next mastery call may try (s)
@@ -961,7 +968,12 @@ const PlatformCrawler = struct {
         return entries.len;
     }
 
+    /// A list down to players whose calls always fail (17 Oct: one tw2 PUUID Riot's edge
+    /// refuses, after every other ladder player had mastery) still went round once a nap
+    const mastery_rewrap_s = 6 * 3600;
+
     fn fetchMasteries(pc: *PlatformCrawler, n: u32) !u32 {
+        if (pc.b.now() < pc.mastery_wrap_at) return 0;
         var arena: std.heap.ArenaAllocator = .init(pc.b.c.gpa);
         defer arena.deinit();
         const sql =
@@ -974,7 +986,16 @@ const PlatformCrawler = struct {
         const puuids = try column(pc.b.db, arena.allocator(), sql, .{ id, pc.masteryCursor(), n });
         // The end of the list wraps on the next step, after its nap: a list down to players
         // whose calls fail went round back to back (14 Oct: 5 euw1 PUUIDs, 60k calls a day)
-        if (puuids.len == 0) pc.mastery_cursor_len = 0;
+        if (puuids.len == 0) {
+            pc.mastery_cursor_len = 0;
+            if (!pc.mastery_pass_stored) {
+                log.info("{s} mastery: a ladder pass stored nothing, next pass in {d} h", .{
+                    pc.platform.host, mastery_rewrap_s / 3600,
+                });
+                pc.mastery_wrap_at = pc.b.now() + mastery_rewrap_s;
+            }
+            pc.mastery_pass_stored = false;
+        }
         for (puuids) |puuid| {
             try pc.b.check();
             // Players skipped here come round again when the cursor wraps
@@ -982,6 +1003,7 @@ const PlatformCrawler = struct {
                 try pc.masteryPause(null);
                 break;
             }
+            if (pc.mastery_failures == 0 and pc.mastery_got) pc.mastery_pass_stored = true;
             setCursor(&pc.mastery_cursor, &pc.mastery_cursor_len, puuid);
         }
         return @intCast(puuids.len);
@@ -1110,6 +1132,7 @@ const PlatformCrawler = struct {
         const gpa = pc.b.c.gpa;
         const got = try ep.masteries(&pc.b.client, pc.platform, puuid);
         defer if (got) |b| gpa.free(b);
+        pc.mastery_got = got != null;
         const job = try Job.create(gpa, .none);
         errdefer job.destroy(gpa);
         const a = job.allocator();
