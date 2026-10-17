@@ -12,10 +12,15 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
    16.21 (two newest curves files, 226 MB each parsed, MemoryMax 400M). Now newest patch
    first within 320 MB; the install also shipped R17's "All games" label. Check after
    the 16.21 push: `journalctl -u meiolol-api` names the file left out
-2. Box disk: used at the daily low 31, 46, 67, 67 GB (14-17 Oct) of 144, and each day
-   peaks ~30 GB higher (100 GB on 17 Oct; admin-history.tsv). Within ~a week a peak
-   fills the disk. Find what the peak is (backup segment, views write, curves temp)
-   and cap or move it; the lasting answer is Open decisions "Storage and hosting"
+2. Box disk (77 GB free of 144): the databases grow ~2.5 GB a day (~4 weeks to the raw
+   valve at 10 GB free), but the peaks are data/archive-out: each export copies raw as
+   stored until the gpu-box acks it, ~26 GB for a day of games (17 Oct: 33 GB held
+   01:00-14:40Z while acks failed with "Connection closed by remote host", 12:13-12:34Z,
+   and League paused pulls). So ~3 days without acks (gpu-box off, WSL down, C: full)
+   and the valve drops raw the archive never got. Next: why acks drop (box sshd or the
+   ack's prune running long); compress exports or stream them at send instead of a
+   copy. The admin "full in ~6 days" extrapolates a peak. Lasting answer: Open
+   decisions "Storage and hosting"
 3. gpu-box C: at 90% (holds the WSL disk; the archive is on the P3, safe). Plan with
    steps: ~/.claude/fleet/handover/meiolol-ba-20261018-002940.md; waits on G1, G2
 4. Box `contact` file to privacy@meio.lol (R34; decided 14 Oct): terms and privacy
