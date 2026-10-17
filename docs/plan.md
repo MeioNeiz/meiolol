@@ -17,18 +17,20 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
    stored until the gpu-box acks it, ~26 GB for a day of games (17 Oct: 33 GB held
    01:00-14:40Z while acks failed with "Connection closed by remote host", 12:13-12:34Z,
    and League paused pulls). So ~3 days without acks (gpu-box off, WSL down, C: full)
-   and the valve drops raw the archive never got. Next: why acks drop (box sshd or the
-   ack's prune running long); compress exports or stream them at send instead of a
-   copy. The admin "full in ~6 days" extrapolates a peak. Lasting answer: Open
-   decisions "Storage and hosting"
-3. gpu-box C: at 90% (holds the WSL disk; the archive is on the P3, safe). Plan with
-   steps: ~/.claude/fleet/handover/meiolol-ba-20261018-002940.md; waits on G1, G2
+   and the valve drops raw the archive never got. The admin "full in ~6 days"
+   extrapolates a peak. In progress (meiolol-74, pane 1484): why acks drop, exports
+   without a standing copy, the estimate. Lasting answer: Open decisions "Storage and
+   hosting"
+3. gpu-box C: at 90% (holds the WSL disk; the archive is on the P3, safe). G2 done 18
+   Oct (35 GB freed inside WSL; C: shrinks only after the compaction). Waits on Jacob:
+   docs/compute.md "gpu-box storage" steps 1-2 (partition, wsl-mount.ps1), then an
+   agent moves snaps and runs and compacts the WSL disk
 4. Box `contact` file to privacy@meio.lol (R34; decided 14 Oct): terms and privacy
    still show a Gmail address. The mail worker is deployed but has kept no mail yet
    (`deploy/mail.sh list` empty, 18 Oct): one test mail from Jacob, then
    `deploy/box.sh web start privacy@meio.lol`
 5. Daily Draft's public whole-draft win chance and "+X points" (R16, A3): the item
-   reviewers quoted first. Waits on J1
+   reviewers quoted first. In progress with A4 (meiolol-43, pane 1485)
 6. Application text to match the site (A2; Jacob writes, Q1), champ select screenshots,
    video and LCU endpoint list (A1; needs Jacob in a real champ select, steps under
    "Before the production review"), Daily game age (A4, Q2)
@@ -45,7 +47,10 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
 Others own: traffic.sh install and the TW2 mastery retry (meiolol-8f); neural nets vs
 today's model; the draft's "Rammus into high AD/AP" check.
 
-### Questions for Jacob (recommendation first)
+### Decisions (Jacob 18 Oct: "follow your recommendations")
+
+Each line was a question with a recommendation; Jacob approved them all. Storage and
+hosting still needs him to order. Done: J8 gzip (477a1ff, jomove nginx), G2.
 
 - J1 Daily Draft: drop the numbers; "on paper the draft leaned red" only when clear,
   option reasons in words and only detected kinds (as Learn, R20)
@@ -61,8 +66,8 @@ today's model; the draft's "Rammus into high AD/AP" check.
   now (cheap, aggregate); the pool block after J2
 - J7 Desktop app: no date, "after Riot's production review"; no notify list (it would
   keep emails)
-- J8 Ops: gzip for /admin/training/ JSON in jomove's nginx (yes; nginx there needs your
-  OK); browser-tool's first commit is yours; "429 (server)" is Riot's side, count it
+- J8 Ops: gzip for /admin/training/ JSON in jomove's nginx (done 18 Oct);
+  browser-tool's first commit is Jacob's; "429 (server)" is Riot's side, count it
   apart from our key's limit, no action. Password rotation skipped (your call)
 - J9 Admin is for you only: jargon stays low priority
 - Q1 Rewrite the application around game review of your own games, lane curves as the
