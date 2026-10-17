@@ -9,11 +9,11 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 4 | 115 | 440 |
-| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 2 | 112 | 460 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 119 | 279 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 5 | 128 | 476 |
+| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 2 | 115 | 463 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 122 | 282 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 14 | 225 | 1783 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 4 | 74 | 272 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 4 | 86 | 305 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 98 | 452 |
 
 ## Questions
@@ -22,6 +22,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
+| answered | soon | [What do the big League tools show a first-time visitor, and what brings players back (accounts, progress, habit, notifications)?](questions/competitor-first-visit-returning.md): What do the big League tools show a first-time visitor, and what brings players back (accounts, progress, habit, notifications)? | 5 strong, 6 moderate | 13 | 2 (thin) | 1 |
 | answered | soon | [What do League of Legends players search for most, and which of those searches could meiolol answer better than existing sites?](questions/search-demand.md): What do League of Legends players search for most, and which of those searches could meiolol answer better than existing sites? | 9 strong, 5 moderate, 3 weak | 24 | 14 (growing) | 1 |
 | decided | soon | [What League of Legends third-party tools exist, what do they do with match data, and where are the gaps?](questions/league-tools-landscape.md): What League of Legends third-party tools exist, what do they do with match data, and where are the gaps? | 8 strong, 6 moderate, 2 weak | 27 | 28 (saturated) | 12 |
 | decided | soon | [What do ranked and casual League players want from third-party tools that they don't get today?](questions/player-tool-needs.md): What do ranked and casual League players want from third-party tools that they don't get today? | 7 strong, 4 moderate, 2 contested | 13 | 33 (growing) | 8 |
@@ -84,6 +85,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 34 questions, 472 sources, 3411 findings
-- Open leads: 148 (`josearch leads`)
+- 35 questions, 485 sources, 3486 findings
+- Open leads: 149 (`josearch leads`)
 - Lint: 0 errors, 1 warnings (`josearch lint`)

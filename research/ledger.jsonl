@@ -1630,3 +1630,22 @@
 {"t": "skip", "date": "2026-10-15", "url": "https://stackharbor.com/en/knowledge-base/linux-io-scheduler-tuning/", "reason": "generic knowledge-base how-to, secondary", "key": "stackharbor.com/en/knowledge-base/linux-io-scheduler-tuning"}
 {"t": "fetch", "date": "2026-10-15", "url": "https://par.nsf.gov/servlets/purl/10332478", "slug": "iocost-asplos-2022", "file": "raw/iocost-asplos-2022.md", "sha": "a777d20ffca8", "key": "par.nsf.gov/servlets/purl/10332478"}
 {"t": "fetch", "date": "2026-10-15", "url": "https://par.nsf.gov/servlets/purl/10332478", "slug": "iocost-asplos-2022", "file": "raw/iocost-asplos-2022.txt", "sha": "abb459235eb5", "key": "par.nsf.gov/servlets/purl/10332478"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://lolalytics.com/", "slug": "lolalytics-home", "file": "raw/lolalytics-home.md", "sha": "cdc90790aead", "key": "lolalytics.com"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://u.gg/", "slug": "ugg-home", "file": "raw/ugg-home.md", "sha": "c914e0d9ce46", "key": "u.gg"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://mobalytics.gg/", "slug": "mobalytics-home", "file": "raw/mobalytics-home.md", "sha": "7bfbf51a26a6", "key": "mobalytics.gg"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://op.gg/", "slug": "opgg-home", "file": "raw/opgg-home.md", "sha": "f756d1f7e671", "key": "op.gg"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://draftgap.com/", "slug": "draftgap-site", "file": "raw/draftgap-site.md", "sha": "fe2e108a46b9", "key": "draftgap.com"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://www.leagueofgraphs.com/", "slug": "leagueofgraphs-home", "file": "raw/leagueofgraphs-home.md", "sha": "e9cec953dcd3", "key": "leagueofgraphs.com"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://porofessor.gg/", "slug": "porofessor-home", "file": "raw/porofessor-home.md", "sha": "8b3a22f2b73e", "key": "porofessor.gg"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://u.gg/plus", "slug": "ugg-plus", "file": "raw/ugg-plus.md", "sha": "03dbe0c00773", "key": "u.gg/plus"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://blitz.gg/", "slug": "blitz-home", "file": "raw/blitz-home.md", "sha": "3f81a4eff91b", "key": "blitz.gg"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://loldraftai.com/draft", "slug": "loldraftai-draft", "file": "raw/loldraftai-draft.md", "sha": "5971773f1eb6", "key": "loldraftai.com/draft"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://blitz.gg/lol", "slug": "blitz-lol", "file": "raw/blitz-lol.md", "sha": "b0215b9c15a2", "key": "blitz.gg/lol"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://member.op.gg/membership", "slug": "opgg-membership", "file": "raw/opgg-membership.md", "sha": "bee9c18e0dd2", "key": "member.op.gg/membership"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://mobalytics.gg/lol/glp/plus", "slug": "mobalytics-plus", "file": "raw/mobalytics-plus.md", "sha": "ce33474c131c", "key": "mobalytics.gg/lol/glp/plus"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://op.gg/ai", "slug": "opgg-ai", "file": "raw/opgg-ai.md", "sha": "815d62be50ac", "key": "op.gg/ai"}
+{"t": "fetch", "date": "2026-10-17", "url": "https://blitz.gg/lol", "slug": "blitz-lol", "file": "raw/blitz-lol.md", "sha": "bae6a23dd7dc", "key": "blitz.gg/lol"}
+{"t": "skip", "date": "2026-10-17", "url": "https://blitz.gg/", "reason": "homepage text is only the consent banner; read blitz.gg/lol instead", "key": "blitz.gg"}
+{"t": "lead", "date": "2026-10-17", "url": "https://porofessor.gg/arcade", "why": "Porofessor Arcade: daily guess-the-champion puzzle, daily quiz, leaderboards (WebFetch summary, 17 Oct); Cloudflare blocks fetch and browse, needs a snapshot", "for": "competitor-first-visit-returning", "key": "porofessor.gg/arcade"}
+{"t": "search", "date": "2026-10-17", "where": "web", "query": "competitor homepages and paid tiers: op.gg, u.gg, lolalytics, mobalytics, blitz, porofessor, leagueofgraphs, draftgap, loldraftai", "for": "competitor-first-visit-returning", "new": 13, "seen": 4}
+{"t": "search", "date": "2026-10-17", "where": "web", "query": "\"Porofessor Arcade\" daily puzzles League of Legends", "for": "competitor-first-visit-returning", "seen": 1}
