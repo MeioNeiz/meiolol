@@ -81,7 +81,7 @@ data/filters/twitch.json 33b2338d799e2cc7
 data/learning.json c0076574631dc78e
 data/pool.json c49c24af4a83207c
 data/stats.bin bffab0c56008909d
-download.html 210d7338f1f2a5ec
+download.html 444bbde01bb87f43
 index.html cb9b0c1a1a9c41cf
 learn.html b241d4e82efafa16
 learn/champs.json 7c5a77a4464faa98
