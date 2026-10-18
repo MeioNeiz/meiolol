@@ -9,6 +9,12 @@ const std = @import("std");
 /// CPU) and waits for all. After every call has finished, returns the error of the
 /// lowest failing index, if any
 pub fn forEach(io: std.Io, n: usize, ctx: anytype, comptime body: anytype) anyerror!void {
+    return forEachUpTo(io, n, std.math.maxInt(usize), ctx, body);
+}
+
+/// As forEach, with at most `max` calls at once: for bodies that each need more memory
+/// than the machine has for one per CPU
+pub fn forEachUpTo(io: std.Io, n: usize, max: usize, ctx: anytype, comptime body: anytype) anyerror!void {
     const Shared = struct {
         ctx: @TypeOf(ctx),
         n: usize,
@@ -27,7 +33,7 @@ pub fn forEach(io: std.Io, n: usize, ctx: anytype, comptime body: anytype) anyer
         }
     };
     var s: Shared = .{ .ctx = ctx, .n = n };
-    const workers = @min(n, std.Thread.getCpuCount() catch 1);
+    const workers = @min(n, max, std.Thread.getCpuCount() catch 1);
     var group: std.Io.Group = .init;
     for (0..workers) |_| group.async(io, Shared.work, .{&s});
     try group.await(io);

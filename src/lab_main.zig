@@ -446,6 +446,7 @@ fn gpuSmoke(gpa: std.mem.Allocator) !void {
 }
 
 test {
+    _ = @import("lab/snapcache.zig");
     _ = stack;
     _ = anonymise;
     _ = curve;

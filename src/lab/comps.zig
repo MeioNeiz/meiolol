@@ -27,6 +27,7 @@ const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const seatstats = @import("seatstats.zig");
 const compstats = @import("compstats.zig");
+const snapcache = @import("snapcache.zig");
 const compcheck = @import("compcheck.zig");
 const nnexport = @import("nnexport.zig");
 const synth = @import("synth.zig");
@@ -1305,8 +1306,15 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
 
 const nan32 = std.math.nan(f32);
 
+pub const Placed = struct { seats: usize, teams: usize };
+
+/// Bump when parseExtra's output changes through code outside compstats.zig
+const extra_version = 1;
+
 /// SNAP's comp_stats.tsv into extra (by row) and comp_teams.tsv into teams (by game);
-/// NaN where a line has no value, null where there is no line
+/// NaN where a line has no value, null where there is no line. Parsing the 1.3 GB of
+/// text took most of a minute: the result is cached beside the snapshot (snapcache
+/// "compstats"), keyed by both files' stamps, the rows' games and slots, compstats.zig
 pub fn loadExtra(
     gpa: Allocator,
     io: Io,
@@ -1314,7 +1322,73 @@ pub fn loadExtra(
     data_path: []const u8,
     extra: []?compstats.Seat,
     team_obj: []?[2]compstats.Team,
-) !struct { seats: usize, teams: usize } {
+) !Placed {
+    var h: std.hash.Wyhash = .init(extra_version);
+    h.update(@embedFile("compstats.zig"));
+    try snapcache.stamp(gpa, io, &h, data_path, compstats.seat_file);
+    try snapcache.stamp(gpa, io, &h, data_path, compstats.team_file);
+    for (d.games) |g| {
+        h.update(g.match_id);
+        h.update(std.mem.asBytes(&g.start));
+    }
+    for (d.rows) |r| {
+        h.update(std.mem.asBytes(&r.game));
+        h.update(std.mem.asBytes(&r.slot));
+    }
+    const key = h.final();
+    var c: ExtraCache = .{ .extra = extra, .teams = team_obj };
+    if (try snapcache.load(gpa, io, data_path, "compstats", key, &c, ExtraCache.read)) return c.placed;
+    c.placed = try parseExtra(gpa, io, d, data_path, extra, team_obj);
+    snapcache.save(gpa, io, data_path, "compstats", key, &c, ExtraCache.write);
+    return c.placed;
+}
+
+/// Counts, then per row and per game a present byte and, if 1, the values
+const ExtraCache = struct {
+    extra: []?compstats.Seat,
+    teams: []?[2]compstats.Team,
+    placed: Placed = .{ .seats = 0, .teams = 0 },
+
+    fn read(c: *ExtraCache, r: *Io.Reader) !void {
+        var counts: [2]u64 = undefined;
+        try r.readSliceAll(std.mem.sliceAsBytes(&counts));
+        c.placed = .{ .seats = counts[0], .teams = counts[1] };
+        for (c.extra) |*e| {
+            e.* = null;
+            if (try r.takeByte() == 0) continue;
+            e.* = undefined;
+            try r.readSliceAll(std.mem.asBytes(&e.*.?));
+        }
+        for (c.teams) |*t| {
+            t.* = null;
+            if (try r.takeByte() == 0) continue;
+            t.* = undefined;
+            try r.readSliceAll(std.mem.asBytes(&t.*.?));
+        }
+    }
+
+    fn write(c: *ExtraCache, w: *Io.Writer) !void {
+        const counts = [2]u64{ c.placed.seats, c.placed.teams };
+        try w.writeAll(std.mem.sliceAsBytes(&counts));
+        for (c.extra) |e| if (e) |v| {
+            try w.writeByte(1);
+            try w.writeAll(std.mem.asBytes(&v));
+        } else try w.writeByte(0);
+        for (c.teams) |t| if (t) |v| {
+            try w.writeByte(1);
+            try w.writeAll(std.mem.asBytes(&v));
+        } else try w.writeByte(0);
+    }
+};
+
+fn parseExtra(
+    gpa: Allocator,
+    io: Io,
+    d: *const rows.Data,
+    data_path: []const u8,
+    extra: []?compstats.Seat,
+    team_obj: []?[2]compstats.Team,
+) !Placed {
     @memset(extra, null);
     @memset(team_obj, null);
     var index: std.AutoHashMapUnmanaged(u64, u32) = .empty;

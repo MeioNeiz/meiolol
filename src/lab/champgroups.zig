@@ -302,7 +302,9 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     const fit_cfg: comps.Fit = .{ .c = c, .before = split };
     var p = try comps.buildProfiles(gpa, d, extra, fit_cfg, 0);
     defer p.deinit(gpa);
-    const blue = try champcomp.ratingsBlue(gpa, d, players, c, split, c.dev);
+    // champcomp's fold 3 window: one cached offset serves both
+    const offsets = try champcomp.Offsets.init(gpa, io, snap, data_path, d);
+    const blue = try offsets.get(gpa, io, d, players, c, split, c.dev);
     defer gpa.free(blue);
     try w.print("# champgroups, offset win-draft{s}, {s}\nsplit {d}, dev cut {d}\n", .{ if (shuffle != 0) ", SHUFFLED own profiles" else "", snap, split, c.dev });
     try w.flush();

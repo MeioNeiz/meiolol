@@ -41,6 +41,8 @@ const harness = @import("harness.zig");
 const compstats = @import("compstats.zig");
 const comps = @import("comps.zig");
 const synth = @import("synth.zig");
+const snapcache = @import("snapcache.zig");
+const par = @import("../par.zig");
 
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
@@ -224,6 +226,42 @@ pub fn ratingsBlue(gpa: Allocator, d: *const rows.Data, players: []const harness
     for (out, sum, cnt) |*o, s, n| o.* = if (n > 0) s / n else nan;
     return out;
 }
+
+/// ratingsBlue per window through snapcache (offsets-BEFORE-HI), keyed by this binary,
+/// the snapshot argument (plant: specs too) and the game count: champcomp's controls and
+/// champgroups (fold 3's window) refit the same offsets, 15-40 s each
+pub const Offsets = struct {
+    data_path: []const u8,
+    key: u64,
+
+    pub fn init(gpa: Allocator, io: Io, snap: []const u8, data_path: []const u8, d: *const rows.Data) !Offsets {
+        var h: std.hash.Wyhash = .init(try snapcache.exeHash(gpa, io));
+        h.update(snap);
+        h.update(std.mem.asBytes(&d.games.len));
+        return .{ .data_path = data_path, .key = h.final() };
+    }
+
+    pub fn get(o: *const Offsets, gpa: Allocator, io: Io, d: *const rows.Data, players: []const harness.Players, c: harness.Cuts, before: i64, hi: i64) ![]f64 {
+        var nb: [64]u8 = undefined;
+        const name = try std.fmt.bufPrint(&nb, "offsets-{d}-{d}", .{ before, hi });
+        const out = try gpa.alloc(f64, d.games.len);
+        errdefer gpa.free(out);
+        const io_ = struct {
+            fn read(v: []f64, r: *Io.Reader) !void {
+                try r.readSliceAll(std.mem.sliceAsBytes(v));
+            }
+            fn write(v: []const f64, w: *Io.Writer) !void {
+                try w.writeAll(std.mem.sliceAsBytes(v));
+            }
+        };
+        if (try snapcache.load(gpa, io, o.data_path, name, o.key, out, io_.read)) return out;
+        const blue = try ratingsBlue(gpa, d, players, c, before, hi);
+        defer gpa.free(blue);
+        @memcpy(out, blue);
+        snapcache.save(gpa, io, o.data_path, name, o.key, @as([]const f64, out), io_.write);
+        return out;
+    }
+};
 
 fn included(g: rows.Game, hi: i64) bool {
     return !g.is_test and harness.played(g) and g.start < hi;
@@ -794,6 +832,110 @@ const Replication = struct {
     games: usize = 0,
 };
 
+/// Windows fitted at once: each holds its fit units and profiles (~2 GB) beside the
+/// shared rows (~6 GB); the gpu-box's WSL has 24 GB
+const max_windows = 3;
+/// Fold 3 also scores the replication window: everything up to the dev cut
+const replicate_window = 2;
+
+/// One window's fit and scores, from WinJob.run; main reports them in window order
+const WinOut = struct {
+    p: ?comps.Profiles = null,
+    model: ?Model = null,
+    score_u: Units = .{},
+    seat_scale: Scale = undefined,
+    sc: Scores = .{},
+    /// --kit-prior: the plain terms' scores on the same games
+    psc: Scores = .{},
+    cc: Clear = .{},
+    rep: Replication = .{},
+    fit_n: usize = 0,
+    score_n: usize = 0,
+
+    fn deinit(o: *WinOut, gpa: Allocator) void {
+        if (o.p) |*p| p.deinit(gpa);
+        if (o.model) |*m| m.deinit(gpa);
+        o.score_u.deinit(gpa);
+        o.sc.deinit(gpa);
+        o.psc.deinit(gpa);
+    }
+};
+
+const WinJob = struct {
+    gpa: Allocator,
+    io: Io,
+    d: *const rows.Data,
+    extra: []const ?compstats.Seat,
+    players: []const harness.Players,
+    c: harness.Cuts,
+    offsets: *const Offsets,
+    windows: []const Window,
+    outs: []WinOut,
+    permute: u64,
+    shuffle: u64,
+    only: ?usize,
+    kit_on: bool,
+    kit_shuffle: u64,
+
+    fn run(j: *const WinJob, wi: usize) !void {
+        const gpa = j.gpa;
+        const d = j.d;
+        const c = j.c;
+        const win = j.windows[wi];
+        const o = &j.outs[wi];
+        const fit_cfg: comps.Fit = .{ .c = c, .before = win.before };
+        o.p = try comps.buildProfiles(gpa, d, j.extra, fit_cfg, j.permute);
+        const p = &o.p.?;
+        const replicate = wi == replicate_window;
+        const blue = try j.offsets.get(gpa, j.io, d, j.players, c, win.before, if (replicate) c.dev else win.hi);
+        defer gpa.free(blue);
+
+        var fit_games: std.ArrayList(u32) = .empty;
+        defer fit_games.deinit(gpa);
+        var score_games: std.ArrayList(u32) = .empty;
+        defer score_games.deinit(gpa);
+        var rep_games: std.ArrayList(u32) = .empty;
+        defer rep_games.deinit(gpa);
+        for (d.games, 0..) |g, gi| {
+            if (std.math.isNan(blue[gi])) continue;
+            if (fit_cfg.has(g)) try fit_games.append(gpa, @intCast(gi));
+            if (g.start >= win.lo and g.start < win.hi) try score_games.append(gpa, @intCast(gi));
+            if (replicate and g.start >= win.lo and g.start < c.dev) try rep_games.append(gpa, @intCast(gi));
+        }
+        o.fit_n = fit_games.items.len;
+        o.score_n = score_games.items.len;
+        var fit_u: Units = .{};
+        defer fit_u.deinit(gpa);
+        try unitsOf(gpa, d, p, fit_games.items, blue, &fit_u);
+        try unitsOf(gpa, d, p, score_games.items, blue, &o.score_u);
+        o.seat_scale = scaleOf(fit_u.seats.items);
+        const team_scale = scaleOf(fit_u.teams.items);
+        for ([_]*Units{ &fit_u, &o.score_u }) |u| {
+            standardise(u.seats.items, o.seat_scale);
+            standardise(u.teams.items, team_scale);
+        }
+        if (j.shuffle != 0) {
+            try shuffleTraits(gpa, &fit_u, j.shuffle);
+            try shuffleTraits(gpa, &o.score_u, j.shuffle +% 1);
+        }
+        if (j.only) |f| for ([_]*Units{ &fit_u, &o.score_u }) |u| keepOnly(u, f);
+
+        var kit: Kit = .empty;
+        defer kit.deinit(gpa);
+        if (j.kit_on) try kitOf(gpa, p, j.kit_shuffle, &kit);
+        o.model = try fitModel(gpa, &fit_u, if (j.kit_on) &kit else null);
+        const model = &o.model.?;
+        try scoreGames(gpa, model, &o.score_u, &o.sc);
+        if (j.kit_on) {
+            var plain = try fitModel(gpa, &fit_u, null);
+            defer plain.deinit(gpa);
+            try scoreGames(gpa, &plain, &o.score_u, &o.psc);
+        }
+        o.cc = try countClear(gpa, model);
+        if (replicate) o.rep = try replicateOn(gpa, d, p, model, o.cc, rep_games.items, blue, o.seat_scale, team_scale, j.shuffle, j.only);
+    }
+};
+
 pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) !u8 {
     if (argv.len < 1) {
         std.debug.print("usage:\n{s}", .{usage});
@@ -870,6 +1012,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     defer gpa.free(players);
     const c = try harness.cuts(gpa, d);
     const names = try loadNames(gpa, arena, data_path);
+    const offset_cache = try Offsets.init(gpa, io, snap, data_path, d);
 
     const extra = try gpa.alloc(?compstats.Seat, d.rows.len);
     defer gpa.free(extra);
@@ -908,98 +1051,69 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var pw = preds_file.writer(io, &pbuf);
     try pw.interface.writeAll("fold\tmatch_id\ty\tcand\tteam\tfull\n");
 
-    for (windows, 0..) |win, wi| {
-        const fit_cfg: comps.Fit = .{ .c = c, .before = win.before };
-        var p = try comps.buildProfiles(gpa, d, extra, fit_cfg, permute);
-        defer p.deinit(gpa);
-        // Fold 3 also scores the replication window: everything up to the dev cut
-        const replicate = wi == 2;
-        const blue = try ratingsBlue(gpa, d, players, c, win.before, if (replicate) c.dev else win.hi);
-        defer gpa.free(blue);
+    var outs: [harness.folds + 1]WinOut = @splat(.{});
+    defer for (&outs) |*o| o.deinit(gpa);
+    const job: WinJob = .{
+        .gpa = gpa,
+        .io = io,
+        .d = d,
+        .extra = extra,
+        .players = players,
+        .c = c,
+        .offsets = &offset_cache,
+        .windows = &windows,
+        .outs = &outs,
+        .permute = permute,
+        .shuffle = shuffle,
+        .only = only,
+        .kit_on = kit_on,
+        .kit_shuffle = kit_shuffle,
+    };
+    try par.forEachUpTo(io, windows.len, max_windows, &job, WinJob.run);
 
-        var fit_games: std.ArrayList(u32) = .empty;
-        defer fit_games.deinit(gpa);
-        var score_games: std.ArrayList(u32) = .empty;
-        defer score_games.deinit(gpa);
-        var rep_games: std.ArrayList(u32) = .empty;
-        defer rep_games.deinit(gpa);
-        for (d.games, 0..) |g, gi| {
-            if (std.math.isNan(blue[gi])) continue;
-            if (fit_cfg.has(g)) try fit_games.append(gpa, @intCast(gi));
-            if (g.start >= win.lo and g.start < win.hi) try score_games.append(gpa, @intCast(gi));
-            if (replicate and g.start >= win.lo and g.start < c.dev) try rep_games.append(gpa, @intCast(gi));
-        }
-        var fit_u: Units = .{};
-        defer fit_u.deinit(gpa);
-        try unitsOf(gpa, d, &p, fit_games.items, blue, &fit_u);
-        var score_u: Units = .{};
-        defer score_u.deinit(gpa);
-        try unitsOf(gpa, d, &p, score_games.items, blue, &score_u);
-        const seat_scale = scaleOf(fit_u.seats.items);
-        const team_scale = scaleOf(fit_u.teams.items);
-        for ([_]*Units{ &fit_u, &score_u }) |u| {
-            standardise(u.seats.items, seat_scale);
-            standardise(u.teams.items, team_scale);
-        }
-        if (shuffle != 0) {
-            try shuffleTraits(gpa, &fit_u, shuffle);
-            try shuffleTraits(gpa, &score_u, shuffle +% 1);
-        }
-        if (only) |f| for ([_]*Units{ &fit_u, &score_u }) |u| keepOnly(u, f);
-
-        var kit: Kit = .empty;
-        defer kit.deinit(gpa);
-        if (kit_on) try kitOf(gpa, &p, kit_shuffle, &kit);
-        var model = try fitModel(gpa, &fit_u, if (kit_on) &kit else null);
-        defer model.deinit(gpa);
-        var sc: Scores = .{};
-        defer sc.deinit(gpa);
-        try scoreGames(gpa, &model, &score_u, &sc);
+    for (windows, &outs, 0..) |win, *o, wi| {
+        const model = &o.model.?;
         var lb: [8]u8 = undefined;
         const block = if (wi == harness.folds) "dev" else try std.fmt.bufPrint(&lb, "{d}", .{wi + 1});
-        try writePreds(&pw.interface, d, &model, &score_u, block);
+        try writePreds(&pw.interface, d, model, &o.score_u, block);
         if (kit_on) {
-            var plain = try fitModel(gpa, &fit_u, null);
-            defer plain.deinit(gpa);
-            var psc: Scores = .{};
-            defer psc.deinit(gpa);
-            try scoreGames(gpa, &plain, &score_u, &psc);
-            kit_gains[wi] = gainOf(psc.full.items, sc.full.items);
-            if (wi < harness.folds) try pooled_plain.appendSlice(gpa, psc.full.items);
+            kit_gains[wi] = gainOf(o.psc.full.items, o.sc.full.items);
+            if (wi < harness.folds) try pooled_plain.appendSlice(gpa, o.psc.full.items);
             const g = model.rf.g[kit_feature] * pp_per_logit;
             const g_ci = 1.96 * model.rf.g_se[kit_feature] * pp_per_logit;
             try w.print("{s}: kit prior vs plain terms {d:.5} ± {d:.5}; AP share slope per sd of armour lean {d:.2} ± {d:.2} pp\n", .{ win.label, kit_gains[wi].mean, kit_gains[wi].half, g, g_ci });
         }
-        gains[wi] = gainOf(sc.base.items, sc.full.items);
-        const team_gain = gainOf(sc.base.items, sc.team.items);
-        const seat_gain = gainOf(sc.team.items, sc.full.items);
-        const cc = try countClear(gpa, &model);
+        gains[wi] = gainOf(o.sc.base.items, o.sc.full.items);
+        const team_gain = gainOf(o.sc.base.items, o.sc.team.items);
+        const seat_gain = gainOf(o.sc.team.items, o.sc.full.items);
+        const cc = o.cc;
         try w.print("{s}: fit {d} games, scored {d}; log loss vs ratings {d:.5} ± {d:.5} (team terms {d:.5} ± {d:.5}, then champion terms {d:.5} ± {d:.5}); clear {d} of {d}, BH {d}\n", .{
-            win.label,      fit_games.items.len, score_games.items.len, gains[wi].mean, gains[wi].half,
-            team_gain.mean, team_gain.half,      seat_gain.mean,        seat_gain.half, cc.clear,
+            win.label,      o.fit_n,        o.score_n,      gains[wi].mean, gains[wi].half,
+            team_gain.mean, team_gain.half, seat_gain.mean, seat_gain.half, cc.clear,
             cc.tests,       cc.bh,
         });
         try w.flush();
         if (wi < harness.folds) {
-            try pooled.base.appendSlice(gpa, sc.base.items);
-            try pooled.team.appendSlice(gpa, sc.team.items);
-            try pooled.full.appendSlice(gpa, sc.full.items);
+            try pooled.base.appendSlice(gpa, o.sc.base.items);
+            try pooled.team.appendSlice(gpa, o.sc.team.items);
+            try pooled.full.appendSlice(gpa, o.sc.full.items);
         }
-        if (replicate) {
-            rep = try replicateOn(gpa, d, &p, &model, cc, rep_games.items, blue, seat_scale, team_scale, shuffle, only);
+        if (wi == replicate_window) {
+            rep = o.rep;
             try w.print("replication: {d} deviations clear before bounds[2], same sign on the newer dev games ({d} games) {d}, mean signed z {d:.2}; BH passes {d}, same sign {d}\n", .{
                 rep.clear, rep.games, rep.agree, if (rep.clear > 0) rep.z_sum / @as(f64, @floatFromInt(rep.clear)) else 0, rep.bh, rep.bh_agree,
             });
         }
         if (wi == harness.folds) {
             final_clear = cc;
-            try writeOutputs(gpa, arena, io, d, &model, &p, seat_scale, &names, &score_u, cc);
+            const p = &o.p.?;
+            try writeOutputs(gpa, arena, io, d, model, p, o.seat_scale, &names, &o.score_u, cc);
             if (export_dir) |dir| {
                 var better: u32 = 0;
                 for (gains[0..harness.folds]) |g| better += @intFromBool(g.mean < 0);
                 const meta: ExportMeta = .{
                     .snapshot = std.fs.path.basename(data_path),
-                    .fit_games = @intCast(fit_games.items.len),
+                    .fit_games = @intCast(o.fit_n),
                     .folds = gainOf(pooled.base.items, pooled.full.items),
                     .better = better,
                     .devval = gains[wi],
@@ -1007,7 +1121,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
                     .tests = cc.tests,
                     .bh = cc.bh,
                 };
-                try writeExport(arena, io, d, &model, &p, seat_scale, &score_u, meta, dir);
+                try writeExport(arena, io, d, model, p, o.seat_scale, &o.score_u, meta, dir);
                 try w.print("wrote {s}/draft-comp.json\n", .{dir});
             }
         }
