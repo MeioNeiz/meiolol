@@ -14,11 +14,12 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
    the 16.21 push: `journalctl -u meiolol-api` names the file left out
 2. Box disk (77 GB free of 144): the databases grow ~2.5 GB a day (~4 weeks to the raw
    valve at 10 GB free), but the peaks are data/archive-out: each export copies raw as
-   stored until the gpu-box acks it, ~26 GB for a day of games (17 Oct: 33 GB held
-   01:00-14:40Z while acks failed with "Connection closed by remote host", 12:13-12:34Z,
-   and League paused pulls). So ~3 days without acks (gpu-box off, WSL down, C: full)
-   and the valve drops raw the archive never got. The admin "full in ~6 days"
-   extrapolates a peak. In progress (meiolol-74, pane 1484): why acks drop, exports
+   stored until the gpu-box acks it (17 Oct: 33 GB held 01:00-14:40Z while acks failed
+   with "Connection closed by remote host", 12:13-12:34Z, and League paused pulls). Since
+   b6764ba (17 Oct 13:36Z) an export moves timelines out of raw.db instead of copying
+   them: ~12 GB a day held (meiolol-b5, 18 Oct), so ~5 days without acks before the
+   valve drops raw the archive never got. The admin "full in ~6 days" extrapolates a
+   peak. In progress (meiolol-74, pane 1484): why acks drop, exports
    without a standing copy, the estimate. Lasting answer: Open decisions "Storage and
    hosting"
 3. gpu-box C: at 90% (holds the WSL disk; the archive is on the P3, safe). G2 done 18
