@@ -34,7 +34,11 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
    old, the previous patch's in a patch's first week (R16, A3, A4, J1, Q2)
 6. Application text to match the site (A2; Jacob writes, Q1), champ select screenshots,
    video and LCU endpoint list (A1; needs Jacob in a real champ select, steps under
-   "Before the production review"). Draft text for Jacob in progress
+   "Before the production review"). Draft text done 18 Oct (f1ea29c, production-key.md
+   "Application text (draft 2026-10-18)"; squads left out): Jacob checks its list and
+   pastes. Before going live, so the text is true: the 24-month sweep over backup
+   segments and deleting archive files (privacy.md notes; `archive-age` only blanks
+   hashed PUUIDs). First rows reach 24 months in Oct 2028
 7. Renderer as the main path: uncached pages 503 while it is down (docs/backlog.md "Site build and deploy", Next 2-3)
 8. Done 18 Oct (b966bd7): Your games remembers the last five Riot IDs on the device, "N
    new games since your last visit", per-game links (#id=...&game=<start_ms>), Copy link.
