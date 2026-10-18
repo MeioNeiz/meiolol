@@ -1,8 +1,9 @@
 //! Patch day: how champions and lane matchups moved from the previous patch to the
 //! current one. Win rates and lane shares are compared with a two-proportion z test;
 //! median gold with a standard error from the middle-half spread. A move counts only
-//! with enough games on both patches and |z| > 1.96, the gate the site uses for edges
-//! (src/site/root.zig). Facts with n, never tier grades or verdicts.
+//! with enough games on both patches and |z| > 2.58: stricter than the site's 1.96 for
+//! edges, as the patch page tests every champion and matchup at once. Facts with n,
+//! never tier grades or verdicts.
 
 const std = @import("std");
 const core = @import("core");
@@ -19,7 +20,7 @@ pub const Options = struct {
     min_role_games: u32 = 300,
     /// Games per patch for a matchup, or a minute of one (site: min_pair_games)
     min_pair_games: u32 = 400,
-    z: f64 = 1.96,
+    z: f64 = 2.58,
 };
 
 /// The same share on two patches
@@ -40,6 +41,16 @@ pub const Rate = struct {
     /// Percentage points, current minus previous
     pub fn delta(r: Rate) f64 {
         return 100 * (share(r.cur) - share(r.prev));
+    }
+
+    /// delta's range, `z` standard errors either side (unpooled)
+    pub fn range(r: Rate, z: f64) [2]f64 {
+        const pp = share(r.prev);
+        const pc = share(r.cur);
+        const np: f64 = @floatFromInt(@max(r.prev.games, 1));
+        const nc: f64 = @floatFromInt(@max(r.cur.games, 1));
+        const se = 100 * @sqrt(pp * (1 - pp) / np + pc * (1 - pc) / nc);
+        return .{ r.delta() - z * se, r.delta() + z * se };
     }
 
     pub fn enough(r: Rate, min_games: u32) bool {
@@ -102,6 +113,8 @@ pub const MatchupMove = struct {
 pub const PatchDay = struct {
     prev_patch: []const u8 = "",
     cur_patch: []const u8 = "",
+    prev_games: u32 = 0,
+    cur_games: u32 = 0,
     opts: Options = .{},
     /// Every champion-role played enough on both patches
     champions: []const ChampionMove = &.{},
@@ -157,22 +170,54 @@ pub fn build(
     cur_curves: ?*const Curves,
     opts: Options,
 ) !PatchDay {
+    return withCurves(arena, try championWins(arena, prev, cur, opts), prev_curves, cur_curves, opts);
+}
+
+/// The part made from stats, which the site keeps in its views file
+pub const Wins = struct {
+    prev_patch: []const u8 = "",
+    cur_patch: []const u8 = "",
+    prev_games: u32 = 0,
+    cur_games: u32 = 0,
+    /// Every champion-role played enough on both patches, win rates only
+    champions: []const ChampionMove = &.{},
+};
+
+pub fn championWins(arena: Allocator, prev: *const Stats, cur: *const Stats, opts: Options) !Wins {
     var champions: std.ArrayList(ChampionMove) = .empty;
     for (cur.ids, 0..) |id, c| {
         const pc = prev.index(id) orelse continue;
         for (Role.all) |r| {
             const win = Rate.of(counts(prev.champRole(r, pc)), counts(cur.champRole(r, c)));
             if (!win.enough(opts.min_role_games)) continue;
-            var move: ChampionMove = .{ .id = id, .role = r, .win = win };
-            if (prev_curves != null and cur_curves != null) {
-                const lp = laneTotals(prev_curves.?, id, r);
-                const lc = laneTotals(cur_curves.?, id, r);
-                move.ahead = Rate.of(lp.ahead, lc.ahead);
-                move.comeback = Rate.of(lp.comeback, lc.comeback);
-            }
-            try champions.append(arena, move);
+            try champions.append(arena, .{ .id = id, .role = r, .win = win });
         }
     }
+    return .{
+        .prev_patch = prev.patch,
+        .cur_patch = cur.patch,
+        .prev_games = prev.games,
+        .cur_games = cur.games,
+        .champions = champions.items,
+    };
+}
+
+/// championWins' moves with their lane numbers, and the matchups, from both patches'
+/// curves where there are both
+pub fn withCurves(
+    arena: Allocator,
+    wins: Wins,
+    prev_curves: ?*const Curves,
+    cur_curves: ?*const Curves,
+    opts: Options,
+) !PatchDay {
+    const champions = try arena.dupe(ChampionMove, wins.champions);
+    if (prev_curves != null and cur_curves != null) for (champions) |*move| {
+        const lp = laneTotals(prev_curves.?, move.id, move.role);
+        const lc = laneTotals(cur_curves.?, move.id, move.role);
+        move.ahead = Rate.of(lp.ahead, lc.ahead);
+        move.comeback = Rate.of(lp.comeback, lc.comeback);
+    };
 
     var matchups: std.ArrayList(MatchupMove) = .empty;
     if (prev_curves != null and cur_curves != null) {
@@ -193,10 +238,12 @@ pub fn build(
         }
     }
     return .{
-        .prev_patch = prev.patch,
-        .cur_patch = cur.patch,
+        .prev_patch = wins.prev_patch,
+        .cur_patch = wins.cur_patch,
+        .prev_games = wins.prev_games,
+        .cur_games = wins.cur_games,
         .opts = opts,
-        .champions = champions.items,
+        .champions = champions,
         .matchups = matchups.items,
     };
 }
@@ -306,9 +353,9 @@ test "champion and matchup moves between patches" {
     try testing.expectEqualStrings("16.20", p.prev_patch);
 
     const top = p.champion(1, .top).?;
-    try testing.expect(top.win.clear(300, 1.96));
+    try testing.expect(top.win.clear(300, p.opts.z));
     try testing.expectApproxEqAbs(6, top.win.delta(), 1e-9);
-    try testing.expect(top.ahead.?.clear(300, 1.96)); // led at 14 in won games only
+    try testing.expect(top.ahead.?.clear(300, p.opts.z)); // led at 14 in won games only
     try testing.expectEqual(null, p.champion(1, .jungle));
 
     const m = p.matchup(.top, 1, 2).?;

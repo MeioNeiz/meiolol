@@ -25,8 +25,10 @@ const objectives = @import("objectives.zig");
 const testing = std.testing;
 const games = 3;
 const patch = "15.13";
-/// Fixed game start; since_ms 0 keeps the games in the 30-day views
+/// Fixed game start; the 30-day views start there
 const start_ms = 1_752_000_000_000;
+/// The patch before, its games a day earlier: in the patch day only (patch.html)
+const prev_patch = "15.12";
 
 test "fixture games to stats, curves and the website" {
     const gpa = testing.allocator;
@@ -127,17 +129,28 @@ test "fixture games to stats, curves and the website" {
     try testing.expectEqual(null, try api.example.buildAll(arena, db, set, .{ .since_ms = 0, .min_games = 1 }));
     try db.exec("DELETE FROM forgotten");
 
+    try fillPrev(arena, db);
+    var prev_cv = try curves.build(gpa, db, &.{prev_patch}, 0, &.{"EUW1"}, &.{});
+    defer prev_cv.builder.deinit();
+    try testing.expectEqual(games, prev_cv.summary.games);
+    var prev_curves_bytes: std.Io.Writer.Allocating = .init(arena);
+    try prev_cv.builder.write(&prev_curves_bytes.writer, prev_patch, 1);
+    try tmp.dir.writeFile(io, .{ .sub_path = "curves-prev.bin", .data = prev_curves_bytes.written() });
+    const prev_curves_path = try std.fs.path.join(arena, &.{ dir, "curves-prev.bin" });
+
     const out = try std.fs.path.join(arena, &.{ dir, "site" });
     const opts: site.Options = .{
         .out_dir = out,
         .patches = &.{patch},
-        .since_ms = 0,
+        .since_ms = start_ms,
         .all_platforms = &.{"EUW1"},
         .contact = "test@example.com",
         .updated = "1 January 2026",
         // No daily: puzzles need three other options for a slot, more than 10 champions
         .curves = @splat(curves_path),
         .builds = .{ null, builds_path, null, builds_path },
+        .prev_patch = prev_patch,
+        .curves_prev = .{ null, prev_curves_path, null, prev_curves_path },
         .lean = lean_path,
     };
     try site.generate(gpa, io, db, opts);
@@ -168,6 +181,13 @@ test "fixture games to stats, curves and the website" {
     // into the patch view's
     const pages = [_]struct { []const u8, []const []const u8 }{
         .{ "patch/build/darius-top.html", &.{ "Conqueror", "few games", "Doran&#39;s Shield", "More data needed", "href=\"../../champion/darius.html?period=patch\"" } },
+        // Patch day: three games a patch is a patch's first day, too early to tell, in
+        // every view, the champion pages per role, and a tab after Matchups
+        .{ "patch/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "Too early to tell: 0 champion roles" } },
+        .{ "all/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "across all regions" } },
+        .{ "champion/darius.html", &.{"Patch 15.13 against 15.12: too early to tell, too few games on 15.13 so far. <a href=\"../patch.html\">Patch changes</a>"} },
+        .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
+        .{ "index.html", &.{"New patch: <a href=\"patch/patch.html\">what changed in 15.13 since 15.12</a>."} },
         // Champion table and page: raw win rate with its interval, every lane opponent
         // (few games: shown, faded), it and the curve's gold at 14 linking to the matchup
         // page from the champion's side
@@ -590,6 +610,37 @@ test "fixture games to the Draft tester's draft and lane models" {
     _ = try tmp.dir.readFileAlloc(io, "tester/lane-ref.json", arena, .limited(1 << 20));
 }
 
+test "fixture games to builds: EUW and every region from one pass, game counts" {
+    const gpa = testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const db = try store.schema.memory();
+    defer db.close();
+    // Every 4th game NA1, every 3rd without a timeline
+    try fillGames(arena, db, 40, true);
+    const both: []const []const u8 = &.{ "EUW1", "NA1" };
+    const o: builds.Options = .{ .patches = &.{patch}, .platforms = both, .min_tier = null };
+    var each: [2]builds.Builder = undefined;
+    try builds.buildEach(gpa, db, &build_data, o, &.{ &.{"EUW1"}, both }, &each);
+    defer for (&each) |*b| b.deinit();
+    try testing.expectEqual(30, each[0].games);
+    try testing.expectEqual(40, each[1].games);
+    try testing.expectEqual(27, each[1].timelines);
+    for (each, [_][]const []const u8{ &.{"EUW1"}, both }) |b, platforms| {
+        var alone = try builds.build(gpa, db, &build_data, .{ .patches = &.{patch}, .platforms = platforms, .min_tier = null });
+        defer alone.deinit();
+        try testing.expectEqual(alone.games, b.games);
+        try testing.expectEqual(alone.timelines, b.timelines);
+        const a = try std.json.Stringify.valueAlloc(arena, try alone.file(arena, &build_data, patch, "", 10), .{});
+        const e = try std.json.Stringify.valueAlloc(arena, try b.file(arena, &build_data, patch, "", 10), .{});
+        try testing.expectEqualStrings(a, e);
+    }
+    // `site --patch-games`, which the web loop decides on
+    try testing.expectEqual(30, try stats.countGames(db, &.{patch}, &.{"EUW1"}));
+    try testing.expectEqual(0, try stats.countGames(db, &.{"15.12"}, &.{"EUW1"}));
+}
+
 test "fixture games to lab rows, from SQLite and packed" {
     const gpa = testing.allocator;
     const io = testing.io;
@@ -936,6 +987,24 @@ fn fillGames(arena: std.mem.Allocator, db: store.Db, n_games: usize, varied: boo
     }
     for (fixture_champions) |c| {
         try db.run("INSERT INTO champions VALUES (?,?,?,'','15.13.1')", .{ c.id, c.key, c.key });
+    }
+}
+
+/// The fixture game `games` times on prev_patch, a day before start_ms
+fn fillPrev(arena: std.mem.Allocator, db: store.Db) !void {
+    const body = @embedFile("riot/testdata/match.json");
+    const json = try store.raw.decompress(arena, @embedFile("riot/testdata/timeline.json.gz"));
+    const ct = try riot.crawl.compactTimeline(arena, json);
+    for (0..games) |n| {
+        var doc = try riot.match.parse(arena, body);
+        doc.metadata.matchId = try arena.print("EUW1_{d}", .{2000 + n});
+        doc.info.platformId = "EUW1";
+        doc.info.gameVersion = prev_patch ++ ".1.1";
+        doc.info.gameStartTimestamp = start_ms - std.time.ms_per_day;
+        try riot.match.storeRows(db, doc, "riot");
+        try db.run("INSERT INTO timeline.timelines VALUES (?,?,?,?)", .{
+            doc.metadata.matchId, ct.frames, ct.events, store.Blob{ .bytes = ct.blob },
+        });
     }
 }
 

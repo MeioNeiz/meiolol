@@ -281,6 +281,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     }
 
     const base = curves.baseline(r, .all);
+    const prev = prevLine(site, r, x, y);
     const Chart = struct { title: []const u8, metric: curvesfile.Metric, unit: []const u8 };
     const charts = [_]Chart{
         .{ .title = "Gold difference", .metric = .gold, .unit = "gold" },
@@ -290,7 +291,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     for (charts) |c| {
         try tpl.render(w, "<h2>{title}</h2>\n", .{ .title = c.title });
         if (c.metric == .gold) for (vs) |s| try verdict(w, s, vs.len > 1, x);
-        try chart(w, vs, base, c.metric, c.unit, x, y, when, lane);
+        try chart(w, vs, base, prev, c.metric, c.unit, x, y, when, lane);
     }
 
     try tpl.render(w, "<h2>Lane and game</h2>\n", .{});
@@ -403,7 +404,7 @@ pub fn featured(site: *const Site, w: *Writer, curves: *const Curves, matchups: 
     , .{ .x = x.name, .y = y.name, .lane = lane });
     try summary(w, v, x, y);
     const one = [_]Variant{.{ .v = v, .key = "any", .label = "All games" }};
-    try chart(w, &one, curves.baseline(b.r, .all), .gold, "gold", x, y, when, lane);
+    try chart(w, &one, curves.baseline(b.r, .all), null, .gold, "gold", x, y, when, lane);
     try tpl.renderPart(w,
         \\<p><a href="{href}">Experience, CS, kills, item timings and ranks for this matchup</a> · <a href="{all}">All {n} matchups</a></p></section>
         \\
@@ -560,12 +561,25 @@ fn spreadOf(m: curvesfile.Minute, metric: curvesfile.Metric) curvesfile.Spread {
     };
 }
 
+/// The previous patch's estimated average, dashed on a patch view's charts: from
+/// Site.curves_prev, with the matchup's own games there (thin_games)
+const Prev = struct { v: View, patch: []const u8 };
+
+fn prevLine(site: *const Site, r: Role, x: Champ, y: Champ) ?Prev {
+    const c = if (site.curves_prev) |*c| c else return null;
+    const v = c.get(r, .all, x.id, y.id) orelse return null;
+    if (v.games() < thin_games) return null;
+    return .{ .v = v, .patch = c.patch() };
+}
+
 /// Estimated average line and middle-half band of `metric` by minute, an SVG per
-/// variant, each on its own scale (the experienced toggle shows one)
+/// variant, each on its own scale (the experienced toggle shows one); `prev` on the
+/// all-games one
 fn chart(
     w: *Writer,
     vs: []const Variant,
     base: ?View,
+    prev: ?Prev,
     metric: curvesfile.Metric,
     unit: []const u8,
     x: Champ,
@@ -573,7 +587,7 @@ fn chart(
     when: []const u8,
     lane: []const u8,
 ) !void {
-    for (vs) |s| try chartOne(w, s, vs.len > 1, base, metric, unit, x, y, when, lane);
+    for (vs, 0..) |s, i| try chartOne(w, s, vs.len > 1, base, if (i == 0) prev else null, metric, unit, x, y, when, lane);
 }
 
 fn chartOne(
@@ -581,6 +595,7 @@ fn chartOne(
     one: Variant,
     toggle: bool,
     base: ?View,
+    prev: ?Prev,
     metric: curvesfile.Metric,
     unit: []const u8,
     x: Champ,
@@ -603,10 +618,13 @@ fn chartOne(
     }
     var bands: [curvesfile.max_minutes][2]i32 = undefined;
     var line: [curvesfile.max_minutes]i32 = undefined;
+    var prev_line: [curvesfile.max_minutes]i32 = undefined;
     for (0..last) |i| {
         bands[i] = band(one.v, base, metric, i);
         line[i] = one.v.estimate(metric, i).mean;
     }
+    const prev_last = if (prev) |pv| @min(last, reach(pv.v)) else 0;
+    for (0..prev_last) |i| prev_line[i] = prev.?.v.estimate(metric, i).mean;
     var aria_buf: [160]u8 = undefined;
     const aria = std.fmt.bufPrint(&aria_buf, "{s} of {s} minus {s} by minute", .{ unit, x.name, y.name }) catch unit;
     try tpl.renderPart(w, "<figure class=\"chart{thin}{exp}{key}\">\n", figure);
@@ -616,12 +634,13 @@ fn chartOne(
         .b = y.name,
         .band = bands[0..last],
         .line = line[0..last],
+        .prev = prev_line[0..prev_last],
     });
-    try caption(w, one.v, base, metric, x, y, when, lane);
+    try caption(w, one.v, base, if (prev_last >= 2) prev else null, metric, x, y, when, lane);
     try tpl.renderPart(w, "</figure>\n", .{});
 }
 
-fn caption(w: *Writer, v: View, base: ?View, metric: curvesfile.Metric, x: Champ, y: Champ, when: []const u8, lane: []const u8) !void {
+fn caption(w: *Writer, v: View, base: ?View, prev: ?Prev, metric: curvesfile.Metric, x: Champ, y: Champ, when: []const u8, lane: []const u8) !void {
     const last = reach(v);
     if (last < 2) return tpl.render(w, "<figcaption>Not enough games yet.</figcaption>\n", .{});
     const games = v.games();
@@ -650,6 +669,7 @@ fn caption(w: *Writer, v: View, base: ?View, metric: curvesfile.Metric, x: Champ
         });
     }
     try ended(w, if (own) v else base.?, last);
+    if (prev) |pv| try tpl.renderPart(w, ". Dashed: patch {patch}, n = {games}", .{ .patch = pv.patch, .games = pv.v.games() });
     try tpl.renderPart(w, ".</figcaption>\n", .{});
 }
 

@@ -20,6 +20,8 @@ pub const Chart = struct {
     line: []const i32 = &.{},
     /// One game's own difference
     you: []const i32 = &.{},
+    /// The previous patch's line, dashed
+    prev: []const i32 = &.{},
 };
 
 /// Before this minute nearly every game is still running (no surrender vote yet)
@@ -37,6 +39,7 @@ pub fn render(w: *Writer, c: Chart) !void {
     for (c.band) |b| max_abs = @max(max_abs, @abs(b[0]), @abs(b[1]));
     for (c.line) |v| max_abs = @max(max_abs, @abs(v));
     for (c.you) |v| max_abs = @max(max_abs, @abs(v));
+    for (c.prev) |v| max_abs = @max(max_abs, @abs(v));
     const g: Geometry = .{ .scale = niceCeil(@intCast(max_abs)), .longest = n };
     try tpl.renderPart(w, "<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"{aria}\">\n", .{
         .width = Geometry.width,
@@ -85,6 +88,9 @@ pub fn render(w: *Writer, c: Chart) !void {
     });
     if (c.band.len >= 2) try tpl.render(w, "<polygon class=\"band\" points=\"{p}\"/>\n", .{
         .p = Points{ .g = g, .band = c.band },
+    });
+    if (c.prev.len >= 2) try tpl.render(w, "<polyline class=\"median prev\" points=\"{p}\"/>\n", .{
+        .p = Points{ .g = g, .line = c.prev },
     });
     if (c.line.len >= 2) try tpl.render(w, "<polyline class=\"median\" points=\"{p}\"/>\n", .{
         .p = Points{ .g = g, .line = c.line },
@@ -165,4 +171,12 @@ test "a band, its line and one game" {
     try std.testing.expect(std.mem.indexOf(u8, out, "<polyline class=\"you\"") != null);
     try std.testing.expect(std.mem.endsWith(u8, out, "</svg>\n"));
     try std.testing.expectEqual(@as(i32, 200), niceCeil(150));
+}
+
+test "previous patch line, dashed, inside the scale" {
+    var aw: Writer.Allocating = .init(std.testing.allocator);
+    defer aw.deinit();
+    try render(&aw.writer, .{ .aria = "gold", .a = "A", .b = "B", .line = &.{ 0, 100, 200 }, .prev = &.{ 0, -900, -1000 } });
+    try std.testing.expect(std.mem.indexOf(u8, aw.written(), "<polyline class=\"median prev\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, aw.written(), ">-1000</text>") != null);
 }

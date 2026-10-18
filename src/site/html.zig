@@ -23,6 +23,7 @@ pub const Nav = enum {
     home,
     your,
     matchups,
+    patch,
     daily,
     learn,
     pool,
@@ -32,7 +33,7 @@ pub const Nav = enum {
 
     /// Pages under Champions in the menu, with its tabs and the stats switches
     pub fn inChampions(n: Nav) bool {
-        return n == .champions or n == .matchups or n == .pool;
+        return n == .champions or n == .matchups or n == .patch or n == .pool;
     }
 };
 
@@ -220,6 +221,7 @@ const nav_items = [_]NavItem{
 const champion_tabs = [_]NavItem{
     .{ .nav = .champions, .path = "champions.html", .label = "Champions", .in_view = true },
     .{ .nav = .matchups, .path = "matchup/index.html", .label = "Matchups", .in_view = true },
+    .{ .nav = .patch, .path = "patch.html", .label = "Patch changes", .in_view = true },
     .{ .nav = .pool, .path = "pool.html", .label = "Champion pool", .in_view = true },
 };
 

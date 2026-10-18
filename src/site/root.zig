@@ -27,6 +27,8 @@ const lean_line = @import("lean.zig");
 const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
+const patchday = @import("../patchday.zig");
+const patch_page = @import("patch.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -59,6 +61,11 @@ pub const Options = struct {
     /// Lane curves file per view (html.View.index; `meiolol curves`): matchup pages
     /// where set
     curves: [html.View.count]?[]const u8 = @splat(null),
+    /// The patch before Options.patches (one patch) and its curves files, by view as
+    /// `curves`, the patch views' set: patch.html, the champion pages' line per role and
+    /// the matchup charts' dashed line
+    prev_patch: ?[]const u8 = null,
+    curves_prev: [html.View.count]?[]const u8 = @splat(null),
     /// Builds file per view (`meiolol builds`): build pages in the patch views where set
     builds: [html.View.count]?[]const u8 = @splat(null),
     /// Only the EUW views (the root and patch/; the shared pages come from patch/): a
@@ -158,6 +165,10 @@ pub const Site = struct {
     opts: Options,
     score_opts: score.Options = .{},
     curves: ?core.curvesfile.Curves = null,
+    /// The previous patch's, in the patch views (Options.curves_prev)
+    curves_prev: ?core.curvesfile.Curves = null,
+    /// The view's region, current patch against the previous one (Options.prev_patch)
+    patchday: ?patchday.PatchDay = null,
     /// Every view's (html.View.index), so the switches skip matchups without a page
     view_curves: *const [html.View.count]?core.curvesfile.Curves,
     /// Every view's builds (html.View.index); the 30-day views link to their patch view's
@@ -303,6 +314,7 @@ pub const shared_pages = [_][]const u8{
 /// Every view's curves and builds files, loaded once for all of them
 pub const Extras = struct {
     curves: [html.View.count]?core.curvesfile.Curves = @splat(null),
+    curves_prev: [html.View.count]?core.curvesfile.Curves = @splat(null),
     builds: [html.View.count]?builds.File = @splat(null),
     lean: ?lean.File = null,
     /// Pool and learning tallies by html.Region, on the first view's load: all patches,
@@ -312,6 +324,9 @@ pub const Extras = struct {
     pub fn load(arena: std.mem.Allocator, io: std.Io, opts: Options) Extras {
         var e: Extras = .{};
         for (opts.curves, &e.curves) |path, *c| {
+            if (path) |p| c.* = loadCurves(arena, io, p);
+        }
+        for (opts.curves_prev, &e.curves_prev) |path, *c| {
             if (path) |p| c.* = loadCurves(arena, io, p);
         }
         for (opts.builds, &e.builds) |path, *b| {
@@ -542,6 +557,7 @@ fn pagePathsMin(site: *const Site, min_games: u32) ![]const []const u8 {
     if (site.curves) |*c| try matchup.paths(site, c, &list, min_games);
     if (site.view.period == .patch) if (site.view_builds[site.view.index()]) |*b| try builds_page.paths(site, b, &list);
     try list.append(a, "pool.html");
+    try list.append(a, patch_page.path);
     return list.items;
 }
 
@@ -569,6 +585,8 @@ pub fn renderPage(site: *const Site, w: *Writer, path: []const u8) !bool {
         return builds_page.route(site, w, if (site.view_builds[site.view.index()]) |*b| b else return false, s);
     } else if (eql(u8, path, "pool.html")) {
         try pool_page.writePage(site, w, &site.pool, &site.learning);
+    } else if (eql(u8, path, patch_page.path)) {
+        try patch_page.writePage(site, w);
     } else return false;
     return true;
 }
@@ -648,6 +666,7 @@ fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options
         .since_ms = 0,
         .opts = opts,
         .curves = extras.curves[view.index()],
+        .curves_prev = extras.curves_prev[view.index()],
         .view_curves = &extras.curves,
         .view_builds = &extras.builds,
         .lean = if (extras.lean) |*l| l else null,
@@ -726,6 +745,7 @@ fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options
                 phases.mark("daily and learn kept");
             } else try loadDaily(site, db, &phases);
         }
+        try loadPatchDay(site, db, all_opts, extras, old, &phases);
     }
     try addFiles(site);
     if (old == null or !old.?.strict) log.info("view {d} ({s}) load:{s}", .{ view.index(), site.when, phases.text() });
@@ -786,6 +806,45 @@ fn loadBase(site: *Site, db: store.Db, all_opts: Options, phases: *Phases) !void
     };
     try loadChamps(site, db);
     phases.mark("champions");
+}
+
+/// The view's patch day (Options.prev_patch): its champions' win rates from both
+/// patches' stats, kept in the views file (Part.prev), with the lane numbers and
+/// matchups from its region's patch curves. A 30-day view builds its region's current
+/// patch stats for it
+fn loadPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, old: ?*const Parts, phases: *Phases) !void {
+    const prev = all_opts.prev_patch orelse return;
+    const arena = site.arena;
+    const view = site.view;
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    const cur = try stats.label(&label_buf, all_opts.patches);
+    const kept = try Parts.of(old, patchday.Wins, .prev, view, arena);
+    const keep = if (kept) |k| std.mem.eql(u8, k.prev_patch, prev) and std.mem.eql(u8, k.cur_patch, cur) else false;
+    const wins = if (keep) kept.? else blk: {
+        if (old) |o| if (o.strict) return error.ViewsMismatch;
+        const prev_stats = try patchStats(site, db, &.{prev});
+        const cur_stats = if (view.period == .patch) site.stats else try patchStats(site, db, all_opts.patches);
+        break :blk try patchday.championWins(arena, &prev_stats, &cur_stats, .{});
+    };
+    const pv = (html.View{ .region = view.region, .period = .patch }).index();
+    site.patchday = try patchday.withCurves(
+        arena,
+        wins,
+        if (extras.curves_prev[pv]) |*c| c else null,
+        if (extras.curves[pv]) |*c| c else null,
+        .{},
+    );
+    phases.mark(if (keep) "patch day kept" else "patch day");
+}
+
+/// The view's region's stats over `patches`, all of each
+fn patchStats(site: *Site, db: store.Db, patches: []const []const u8) !Stats {
+    var built = try stats.buildSince(site.gpa, db, patches, site.opts.platforms, 0);
+    defer built.builder.deinit();
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    var model: Writer.Allocating = .init(site.arena);
+    try built.builder.write(&model.writer, try site.arena.dupe(u8, try stats.label(&label_buf, patches)));
+    return .parse(site.arena, model.written());
 }
 
 /// The shared view's Daily Draft, your example, eval chart and Learn data
@@ -1050,6 +1109,13 @@ pub const Loaded = struct {
                 .learning = s.learning,
                 .spread = s.spread,
             });
+            if (s.patchday) |pd| try writePart(w, &aw, keys, .prev, v, patchday.Wins{
+                .prev_patch = pd.prev_patch,
+                .cur_patch = pd.cur_patch,
+                .prev_games = pd.prev_games,
+                .cur_games = pd.cur_games,
+                .champions = pd.champions,
+            });
             if (std.meta.eql(v, html.View.shared)) try writePart(w, &aw, keys, .daily, v, DailyPart{
                 .champs_key = champs_key,
                 .files = s.daily_files,
@@ -1117,7 +1183,7 @@ const stats_path = "data/stats.bin";
 
 /// A views file's parts. Each has its own key (partKeys), so a write after a deploy
 /// keeps those whose types and sources the deploy left alone and loads only the rest
-const Part = enum(u8) { opts, base, filter, people, daily };
+const Part = enum(u8) { opts, base, filter, people, daily, prev };
 const part_count = @typeInfo(Part).@"enum".field_names.len;
 
 /// A view's stats and champions; the parts after it are made from these. The rest of
@@ -1167,6 +1233,7 @@ fn partKeys() [part_count]u64 {
         partKey(FilterPart, &.{@embedFile("filters.zig")}),
         partKey(PeoplePart, &.{ @embedFile("../pool.zig"), @embedFile("../learning.zig"), @embedFile("../spread.zig") }),
         partKey(DailyPart, &.{ @embedFile("../daily.zig"), @embedFile("../learn.zig"), @embedFile("evalchart.zig") }),
+        partKey(patchday.Wins, &.{ @embedFile("../patchday.zig"), @embedFile("../stats.zig") }),
     };
 }
 
@@ -1445,7 +1512,7 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
     return rows.items;
 }
 
-fn pct(w: *Writer, part: u64, whole: u64) !void {
+pub fn pct(w: *Writer, part: u64, whole: u64) !void {
     if (whole == 0) return w.writeAll("-");
     try w.print("{d:.1}%", .{100 * @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole))});
 }
@@ -1813,7 +1880,7 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         \\<a class="panel" href="{learn}"><span class="ic"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3ccf91" stroke-width="1.6" aria-hidden="true"><path d="M2 4.5 9 2l7 2.5L9 7z"/><path d="M5 6v4.5c0 1.4 1.8 2.5 4 2.5s4-1.1 4-2.5V6"/></svg></span><span><b>Learn the draft</b><span>Five short lessons, then practice drafts.</span></span><span class="arrow">→</span></a>
         \\<a class="panel" href="champions.html"><span class="ic"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#6aa1ff" stroke-width="1.6" aria-hidden="true"><path d="M3 15V9M7 15V4M11 15V7M15 15V2"/></svg></span><span><b>Champions</b><span>Win rates, matchups and lane curves.</span></span><span class="arrow">→</span></a>
         \\</div>
-        \\</section>
+        \\{patch_day}</section>
         \\<script src="{review_js}" defer></script>
         \\<script src="{home_js}" data-root="{up}" defer></script>
         \\
@@ -1828,6 +1895,10 @@ fn writeIndex(site: *const Site, w: *Writer) !void {
         .when = site.when,
         .daily = html.Link{ .root = up, .path = "daily.html" },
         .learn = html.Link{ .root = up, .path = "learn.html" },
+        .patch_day = tpl.when(site.opts.prev_patch != null, tpl.t(
+            \\<p class="muted">New patch: <a href="{href}">what changed in {cur} since {prev}</a>.</p>
+            \\
+        , .{ .href = html.Link{ .root = up, .path = "patch/" ++ patch_page.path }, .cur = site.patch, .prev = site.opts.prev_patch orelse "" })),
         .review_js = html.Link{ .root = up, .path = "review.js" },
         .home_js = html.Link{ .root = up, .path = "home.js" },
         .up = up,
@@ -1907,6 +1978,7 @@ fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins });
         }
         if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean");
+        try patch_page.since(site, w, ch, r, "../");
         try builds_page.link(site, w, ch, r, path);
         try opponentTable(site, w, ch, r, cr, opponentK(st, r), opps.items);
         try tpl.renderPart(w, "</section>\n", .{});

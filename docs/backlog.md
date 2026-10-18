@@ -229,12 +229,10 @@ item into plan.md "Now" when you pick it up. "was meiolol-xx": the session that 
   day and merge. Site: 13.7k matchup pages, 252 MB with .gz, in the all-regions 30-day
   view at 19k games, growing with distinct pairs; a page floor (--min-games) if the
   upload gets too big
-- Patch day: wire patchday.zig (main.zig passes previous patch + curvesPath(prev);
-  root.zig builds previous Stats and curves); patch.html of the biggest clear movers;
-  "Since patch X" per role on champion pages; on matchup charts a dashed previous-patch
-  median (Site.curves_prev, chart() `prev: ?View`, `.median.prev`, caption "dashed:
-  patch X"); nav `.patch` after matchups; web loop runs `meiolol curves --patch <prev>`
-  once on patch change; multiple-comparisons note or stricter z
+- Patch day (done 18 Oct, src/site/patch.zig): patch.html in every view, champion page
+  line per role, dashed previous-patch line on patch-view matchup charts, home link, z
+  2.58. Next: old patches' curves files are never deleted (226 + 350 MB a patch on
+  the box); champion comeback rate (patchday.zig computes it) unused on the page
 - Learning curves: read participants.gold14 instead of their own timeline pass
 - Champion shape labels (lane bully / scaler / spikes at 6 / even) from curves, rule on
   the method page

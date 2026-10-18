@@ -73,12 +73,13 @@ sha256sum bin/web-loop.sh "$HOME/.config/systemd/user/meiolol-web.service" conta
 force=0
 trap 'force=1' USR1
 
-# The newest two curves files go to the Your games service on the web server (not the
-# public site; docs/your-games.md). meiolol-exchange: rrsync into its exchange dir; a
-# new file restarts the service there
+# The newest two patches' curves files go to the Your games service on the web server
+# (not the public site; docs/your-games.md); by version, as the previous patch's is
+# written again after the current one's (prev_patch). meiolol-exchange: rrsync into its
+# exchange dir; a new file restarts the service there
 push_curves() {
     local files
-    files=$(ls -t data/export/curves-*.bin 2> /dev/null | head -2)
+    files=$(printf '%s\n' data/export/curves-*.bin | grep -v '\*' | sort -V | tail -n 2)
     [[ -n "$files" ]] || return 0
     rm -rf data/curves-push && mkdir -p data/curves-push
     # shellcheck disable=SC2086
@@ -104,6 +105,9 @@ storage_scan() {
 last_patch='' last_games=0
 patch='' curves_patch='' last_curves=0 fresh_curves=0
 builds_patch='' daily_pid=''
+# The patch before the current one once it changes: its curves again, complete, for the
+# site's patch day (patch.html), one daily job
+prev_patch='' prev_curves_patch=''
 # A start (deploy, reboot) uploads and writes the views file in its first round
 force=1
 mtime() { stat -c %Y "$1" 2> /dev/null || echo 0; }
@@ -120,8 +124,9 @@ interval_for() {
 }
 # The patch otherwise comes from the round's site build, after curves: without it a
 # restart's first curves pass reads every patch (~50 min) and leaves curves-<patch>.bin
-# alone, so start from the newest of those
-patch=$(ls -t data/export/curves-*.bin 2> /dev/null | head -n 1 | sed -E 's#.*/curves-(.*)\.bin$#\1#')
+# alone, so start from the newest of those (by version: prev_patch's is written later)
+patch=$(printf '%s\n' data/export/curves-*.bin | grep -v '\*' | sort -V | tail -n 1 \
+    | sed -E 's#.*/curves-(.*)\.bin$#\1#')
 # A restart (deploy, reboot) keeps the curves timer while the site's four curves files
 # are in this binary's format: rebuilding them on a busy box took 35-50 min, with patch
 # matchup pages 404 meanwhile (14 Oct). A format bump fails the check, so it still
@@ -194,6 +199,10 @@ run_daily() {
         last_builds=$now builds_patch=$patch
         (batch bin/meiolol builds --patch "$patch" \
             && batch bin/meiolol builds --patch "$patch" --platform all) > data/builds.log 2>&1 &
+    elif [[ -n "$prev_patch" && "$prev_patch" != "$prev_curves_patch" ]]; then
+        prev_curves_patch=$prev_patch
+        (batch bin/meiolol curves --patch "$prev_patch" \
+            && batch bin/meiolol curves --patch "$prev_patch" --platform all) > data/prev-curves.log 2>&1 &
     # MEIOLOL_NO_EVAL (host.env): skipped on a box too small for it
     elif [[ -z "${MEIOLOL_NO_EVAL:-}" ]] && (( now - last_eval >= 86400 )); then
         last_eval=$now
@@ -252,6 +261,7 @@ while true; do
     if [[ "$patch" != "$curves_patch" ]] || { (( ! forced )) && (( now - last_curves >= interval )); }; then
         # Fails harmlessly (logged) until there are timelines
         if batch bin/meiolol curves --site ${patch:+--patch "$patch"} 2>&1; then fresh_curves=1; fi
+        [[ -n "$curves_patch" && -n "$patch" && "$patch" != "$curves_patch" ]] && prev_patch=$curves_patch
         last_curves=$now curves_patch=$patch
         push_curves
     fi
