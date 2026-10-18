@@ -7,6 +7,7 @@
 const std = @import("std");
 const Io = std.Io;
 const site = @import("site/root.zig");
+const matchup = @import("site/matchup.zig");
 const store = @import("store");
 pub const admin_api = @import("admin_api.zig");
 
@@ -215,7 +216,11 @@ fn connection(ctx: *Context, stream: Io.net.Stream) void {
 
 fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     // Without the token, /admin/api/ falls through to the answers any path gets
-    if (ctx.opts.admin) |api| if (try admin_api.handle(api, request)) return;
+    if (ctx.opts.admin) |api| {
+        if (ctx.opts.render) |r| if (std.mem.eql(u8, request.head.target, "/admin/api/pages.txt") and
+            request.head.method == .GET and admin_api.allowed(api, request)) return pages(ctx, r, request);
+        if (try admin_api.handle(api, request)) return;
+    }
     if (request.head.method != .GET and request.head.method != .HEAD) {
         // A bodyless POST has neither length nor encoding, and respond() asserts on one
         // when it discards the body
@@ -310,6 +315,39 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         if (try serveFile(ctx, request, name, gzip)) return;
     };
     return notFound(request);
+}
+
+/// The pages and files of the views loaded so far, a path from the site root a line,
+/// matchups from matchup.thin_games up; the shared ones with the view they take their
+/// numbers from. deploy/cache-warm.sh requests each through nginx after a reload, so each
+/// has a cached copy to fall back on while the box is down
+fn pages(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Request) !void {
+    const entry = rendered.acquire();
+    defer rendered.release(entry);
+    var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var out: std.ArrayList(u8) = .empty;
+    const l = entry.loaded;
+    for (site.html.View.all) |v| {
+        if (l.opts.euw_only and v.region != .euw) continue;
+        var s = (l.site(v) catch |err| switch (err) {
+            error.Loading => continue,
+            else => return err,
+        }).*;
+        s.arena = arena;
+        // Every thinner matchup would be ~54k pages a view
+        s.opts.static_min_games = matchup.thin_games;
+        for (try site.pagePaths(&s)) |p| try out.print(arena, "/{s}{s}\n", .{ v.dir(), p });
+        for (s.files) |f| try out.print(arena, "/{s}{s}\n", .{ v.dir(), f.path });
+        if (!std.meta.eql(v, site.html.View.shared)) continue;
+        for (site.shared_pages) |p| try out.print(arena, "/{s}\n", .{p});
+        for (s.shared_files) |f| try out.print(arena, "/{s}\n", .{f.path});
+    }
+    return request.respond(out.items, .{ .extra_headers = &.{
+        .{ .name = "content-type", .value = "text/plain; charset=utf-8" },
+        .{ .name = "cache-control", .value = "no-store" },
+    } });
 }
 
 /// Latest change among the static files, so CSS and JS edits reload the page too

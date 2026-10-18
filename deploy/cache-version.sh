@@ -27,10 +27,13 @@ for i in a b; do systemctl --user -q is-active "meiolol-render@$i" && serving+=(
 version=$(cat "data/render-${serving[0]}.ready" 2> /dev/null)
 [[ $version =~ ^[0-9a-f]{16}$ ]] || exit 0
 [[ $version == "$(cat data/cache-version 2> /dev/null)" ]] && exit 0
-if ssh -T -o BatchMode=yes -o ConnectTimeout=10 meiolol-cache <<< "$version"; then
+# It answers with the site's most visited paths, which cache-warm.sh requests first
+if top=$(ssh -T -o BatchMode=yes -o ConnectTimeout=10 meiolol-cache <<< "$version"); then
     echo "$version" > data/cache-version
     log "nginx cache key now $version (meiolol-render@${serving[0]})"
     deploy_event "$(deployed_sha)" cache ok "nginx cache key $version (meiolol-render@${serving[0]})"
+    [[ -n $top ]] && printf '%s\n' "$top" > data/cache-warm-top.txt
+    systemctl --user restart --no-block meiolol-cache-warm
 else
     log "sending $version to jomify FAILED: retrying in a minute"
     deploy_event "$(deployed_sha)" cache failed "sending $version to jomify failed: retrying in a minute"

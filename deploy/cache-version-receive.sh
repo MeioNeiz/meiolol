@@ -2,7 +2,8 @@
 # On the web server, as root through sudo: the forced command of the box's cache-version
 # key (user meiolol, authorized_keys; one sudoers line; docs/hosting.md). Reads the
 # renderer's data version (deploy/cache-version.sh) into meiolol-version.conf, which
-# meiolol.conf's proxy_cache_key uses, and reloads nginx
+# meiolol.conf's proxy_cache_key uses, reloads nginx, and answers with the site's most
+# visited paths (deploy/cache-warm.sh requests them first)
 set -eu
 read -r v
 case $v in *[!0-9a-f]*) exit 2 ;; esac
@@ -17,3 +18,4 @@ if ! nginx -t -q; then
     exit 1
 fi
 systemctl reload nginx
+jq -r '.top_pages["7d"][][0]' /var/www/meiolol-ops/traffic.json 2> /dev/null || true

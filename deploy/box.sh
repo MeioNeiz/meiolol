@@ -26,7 +26,7 @@ sync() {
         _ "$target" "$ROOT" "$tree"
     ssh "$HOST" "mkdir -p $DIR/bin $DIR/data .config/systemd/user"
     scp -q "$tree/zig-out/box/bin/meiolol" "$HOST:$DIR/bin/meiolol.new"
-    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh render-swap.sh archive-serve.sh cache-version.sh" s
+    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh" s
     for s in $scripts; do scp -q "$tree/deploy/$s" "$HOST:$DIR/bin/$s.new"; done
     scp -q "$tree"/deploy/systemd/*.service "$tree"/deploy/systemd/meiolol-cache-version.path \
         "$HOST:.config/systemd/user/"

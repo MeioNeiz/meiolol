@@ -43,9 +43,7 @@ pub const Api = struct {
 pub fn handle(api: *Api, request: *Request) !bool {
     const target = request.head.target;
     if (!std.mem.startsWith(u8, target, prefix)) return false;
-    var token_buf: [256]u8 = undefined;
-    const token = Io.Dir.cwd().readFile(api.io, token_file, &token_buf) catch null;
-    if (!authorised(token, header(request, "x-meiolol-admin"))) return false;
+    if (!allowed(api, request)) return false;
 
     const path = target[prefix.len .. std.mem.indexOfScalar(u8, target, '?') orelse target.len];
     const query = if (std.mem.indexOfScalar(u8, target, '?')) |q| target[q + 1 ..] else "";
@@ -89,6 +87,13 @@ fn reply(request: *Request, status: std.http.Status, content_type: []const u8, b
         .{ .name = "cache-control", .value = "no-store" },
     } });
     return true;
+}
+
+/// The request carries the admin token (nginx adds it to /admin/api/ only)
+pub fn allowed(api: *Api, request: *Request) bool {
+    var token_buf: [256]u8 = undefined;
+    const token = Io.Dir.cwd().readFile(api.io, token_file, &token_buf) catch null;
+    return authorised(token, header(request, "x-meiolol-admin"));
 }
 
 /// The header's value; null when absent or sent more than once

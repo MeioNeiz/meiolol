@@ -1,0 +1,8 @@
+[Unit]
+Description=meiolol pages into jomify's nginx cache after a new data version (deploy/cache-warm.sh)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/ml/meiolol
+ExecStart=%h/ml/meiolol/bin/cache-warm.sh
+Nice=10
