@@ -367,7 +367,7 @@ SQL
         exit 1
         ;;
     web)
-        # Site build and upload to the jomove server (deploy/web-loop.sh), and the
+        # Site build and upload to the jomify server (deploy/web-loop.sh), and the
         # renderer for the pages the static build leaves out (meiolol-render@a|b: each
         # new binary starts the idle one and stops the old once it serves, render-swap.sh)
         case "${2:-}" in

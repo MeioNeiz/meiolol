@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# The jomove web server's meiolol pieces, which the box's push deploy doesn't touch and
+# The jomify web server's meiolol pieces, which the box's push deploy doesn't touch and
 # were installed by hand (17 Oct: meiolol-traffic ran a copy 3 commits old, and two by-hand
-# scp's broke on zsh word splitting of "ssh -i ..." in a variable). Host alias jomove
-# (~/.ssh/config); jomove's own site shares the server, so this touches only meiolol's
-# files. Scripts install from HEAD's committed copy, never the working tree.
+# scp's broke on zsh word splitting of "ssh -i ..." in a variable). Host alias jomify
+# (~/.ssh/config); jomove, an unrelated house-moving app, shares the server, so this
+# touches only meiolol's files. Scripts install from HEAD's committed copy, never the
+# working tree.
 #
-#   deploy/jomove.sh drift                 installed vs HEAD, per piece
-#   deploy/jomove.sh install traffic|cache-version|training-receive
-#   deploy/jomove.sh install api [REV]     Your games API binary (docs/your-games.md)
+#   deploy/jomify.sh drift                 installed vs HEAD, per piece
+#   deploy/jomify.sh install traffic|cache-version|training-receive
+#   deploy/jomify.sh install api [REV]     Your games API binary (docs/your-games.md)
 #
 # api: built from a clean checkout of REV (default HEAD) for x86_64 musl, the old binary
 # kept as /usr/local/bin/meiolol.bak-pre-<short rev>, meiolol-api restarted and watched
@@ -15,7 +16,7 @@
 # /usr/local/share/meiolol/installed ("api SHA TIME"), which drift reads
 set -euo pipefail
 
-HOST=${JOMOVE_HOST:-jomove}
+HOST=${JOMIFY_HOST:-jomify}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 RECORD=/usr/local/share/meiolol/installed
 PIECES=(traffic cache-version training-receive)
@@ -41,7 +42,7 @@ drift() {
         if [[ "$(remote_hash "/usr/local/bin/meiolol-$p")" == "$(head_hash "$(src "$p")")" ]]; then
             echo "$p: same as HEAD"
         else
-            echo "$p: DIFFERS from HEAD's $(src "$p") (deploy/jomove.sh install $p)"
+            echo "$p: DIFFERS from HEAD's $(src "$p") (deploy/jomify.sh install $p)"
         fi
     done
     for f in "${UNITS[@]}"; do
@@ -58,7 +59,7 @@ drift() {
     elif git -C "$ROOT" diff --quiet "$api" HEAD -- "${API_PATHS[@]}"; then
         echo "api: ${api:0:7}, no change in ${API_PATHS[*]} since"
     else
-        echo "api: ${api:0:7}, HEAD changes ${API_PATHS[*]} in $(git -C "$ROOT" rev-list --count "$api..HEAD" -- "${API_PATHS[@]}") commits (deploy/jomove.sh install api):"
+        echo "api: ${api:0:7}, HEAD changes ${API_PATHS[*]} in $(git -C "$ROOT" rev-list --count "$api..HEAD" -- "${API_PATHS[@]}") commits (deploy/jomify.sh install api):"
         git -C "$ROOT" log --format='  %h %s' "$api..HEAD" -- "${API_PATHS[@]}" | cut -c1-110
     fi
 }
@@ -80,9 +81,9 @@ install_api() {
     out=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now
     trap "rm -rf '$out'" EXIT
-    "$ROOT/deploy/build-tree.sh" jomove "$rev" sh -c 'zig build backend -Dtarget=x86_64-linux-musl \
-        -Doptimize=ReleaseSafe --prefix zig-out/jomove --cache-dir "$1/.zig-cache" \
-        && cp zig-out/jomove/bin/meiolol "$2/meiolol"' _ "$ROOT" "$out"
+    "$ROOT/deploy/build-tree.sh" jomify "$rev" sh -c 'zig build backend -Dtarget=x86_64-linux-musl \
+        -Doptimize=ReleaseSafe --prefix zig-out/jomify --cache-dir "$1/.zig-cache" \
+        && cp zig-out/jomify/bin/meiolol "$2/meiolol"' _ "$ROOT" "$out"
     scp -q "$out/meiolol" "$HOST:/tmp/meiolol-api.new"
     ssh "$HOST" "bash -s" "$rev" "$short" "$RECORD" <<'EOF'
 set -u
@@ -121,8 +122,8 @@ case "${1:-}" in
         case "${2:-}" in
             traffic | cache-version | training-receive) install_script "$2" ;;
             api) install_api "${3:-}" ;;
-            *) echo "usage: deploy/jomove.sh install traffic|cache-version|training-receive|api [REV]"; exit 2 ;;
+            *) echo "usage: deploy/jomify.sh install traffic|cache-version|training-receive|api [REV]"; exit 2 ;;
         esac
         ;;
-    *) echo "usage: deploy/jomove.sh drift|install PIECE"; exit 2 ;;
+    *) echo "usage: deploy/jomify.sh drift|install PIECE"; exit 2 ;;
 esac

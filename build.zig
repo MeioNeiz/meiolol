@@ -37,8 +37,8 @@ pub fn build(b: *std.Build) void {
         .{ .name = "meiolol-app", .mod = m.app, .about = "player tool: suggest, watch" },
     };
     const test_step = b.step("test", "Run unit tests (-Dtest-filter=NAME for some)");
-    // The box and jomove get meiolol only: a plain install also builds meiolol-app (~25 s)
-    const backend_step = b.step("backend", "Install meiolol only (deploy/box.sh, jomove.sh)");
+    // The box and jomify get meiolol only: a plain install also builds meiolol-app (~25 s)
+    const backend_step = b.step("backend", "Install meiolol only (deploy/box.sh, jomify.sh)");
     for (exes) |e| {
         const exe = b.addExecutable(.{ .name = e.name, .root_module = e.mod });
         const install = b.addInstallArtifact(exe, .{});

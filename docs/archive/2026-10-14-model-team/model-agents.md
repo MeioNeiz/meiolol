@@ -135,7 +135,7 @@ meiolol-04 [904e99] lab tooling (pane 1011, renaming to meiolol-tooling); meiolo
 - Collected: GPU vs CPU (6f, ccfbd95, docs/compute.md): deep draft net on the 3080
   (3.9x at 175k games, ~11x from 2.8M); fm and additive models on the CPU (sweeps tie)
 - Collected: winchance smooth weights (ff, 6c7d50d; ties per-minute refit on test, jump
-  from weights 19.2 -> 4.4 pp; ff installs the jomove API binary); playstyle clustered
+  from weights 19.2 -> 4.4 pp; ff installs the jomify API binary); playstyle clustered
   intervals (8c84735, about the same width)
 - Collected: field ranking (48, d94c875): champ-select fields don't move win, do move
   early outcomes (association); early stats add <0.5% beyond 14:00 state; kit and

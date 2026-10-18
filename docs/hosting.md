@@ -9,7 +9,7 @@ accounts may use Always Free only in the home region).
 | alias | what | shape | disk |
 |---|---|---|---|
 | meiolol-cloud | the box: crawler, site build + upload, backups, health | A1 `meiolol`, VM.Standard.A1.Flex 2 OCPU / 12 GB (aarch64), AD-1, 140.238.101.20 | 150 GB boot |
-| (jomify) | nginx: site, Your games service, jomove | E2.1.Micro, 193.123.180.81 | 47 GB boot |
+| jomify | nginx: site, Your games service (also jomove, not meiolol's) | E2.1.Micro, 193.123.180.81 | 47 GB boot |
 
 - Box on the A1 since 2026-10-11 ~15:55Z (launched 12:29Z by the retry loop; free up
   to 1500 OCPU-h + 9000 GB-h a month = 2/12). Move: data rsynced micro -> A1 over the
@@ -34,7 +34,12 @@ accounts may use Always Free only in the home region).
   unattached April "Jomify (Boot Volume)" (47 GB, a terminated instance's) was deleted
   2026-10-11 after a full backup, "jomify-boot-2026-04 (kept before delete)" (1 of 5
   free backups; restore it as a volume to look inside)
-- Ssh: `meiolol-cloud` in ~/.ssh/config (user ubuntu, key oci_instance-20260714-1317).
+- jomify: the web server, first set up for Jacob's jomify.lol domain (OCI name
+  instance-20260714-1317). It serves meio.lol (meiolol.jomify.lol) and also runs jomove
+  (jomove.jomify.lol, jomove.service, ~/jomove, conf.d/jomove.conf): Jacob's house-moving
+  app for Southampton, nothing to do with meiolol. Leave jomove's files alone
+- Ssh: `meiolol-cloud` and `jomify` in ~/.ssh/config (user ubuntu, key
+  oci_instance-20260714-1317).
   On the box, ~/.ssh/config has meiolol-web and meiolol-exchange (rrsync users on jomify)
 - OCI CLI on the Mac: ~/.oci/config, API key ~/.oci/oci_api_key.pem (Jacob's user). The
   console login is in jodrive (`jodrive oracle login`, .env.oracle incl. the TOTP key)

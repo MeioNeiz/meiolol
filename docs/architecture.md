@@ -598,7 +598,7 @@ load), pages render in 1-40 ms.
 Hosting:
 meio.lol (meiolol.jomify.lol and www.meio.lol 308 to it; DNS on Cloudflare, token in
 vault personal/cloudflare; mail to any @meio.lol kept in Cloudflare KV, read with
-deploy/mail.sh, and forwarded to Jacob's Gmail), nginx on the jomove server: the static
+deploy/mail.sh, and forwarded to Jacob's Gmail), nginx on the jomify server: the static
 core uploaded from the box by deploy/web-loop.sh (every 15 min early in a patch, then
 hourly; docs/plan.md step 2), and at once on each push to main (deploy/on-push.sh);
 every other page from meiolol-render on the box, which reads the new views file after
@@ -637,7 +637,7 @@ edges with games (greyed under 200), and each option's points with reasons.
 
 ## Your games service (src/api, src/site/your.zig, static/your.js)
 
-`meiolol api` on the jomove server behind nginx at /api/; details, privacy decisions and
+`meiolol api` on the jomify server behind nginx at /api/; details, privacy decisions and
 deploy steps in docs/your-games.md. Requests answer from api.db (own SQLite file, not
 the crawler's) and queue jobs; one fetcher task makes every Riot call, through the
 crawler's proxy at priority. Matches cached by id (summary

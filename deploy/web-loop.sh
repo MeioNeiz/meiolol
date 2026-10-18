@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs on the box (deploy/box.sh web start): hourly rounds. Each reads EUW's newest patch
 # and its game count (`meiolol site --patch-games`, a count query: under a second), then
-# builds the static core and uploads it to the jomove server when the patch changed, a
+# builds the static core and uploads it to the jomify server when the patch changed, a
 # deploy asked, curves are fresh, or there are new games and `interval` passed: 6 h, or
 # 1 h for a patch's first day (data/patch-<patch>.seen). Only then: until 18 Oct every
 # round built it (17-265 s, mostly waiting on the disk) to read those two numbers, and a

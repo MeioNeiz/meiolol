@@ -5,7 +5,7 @@ by re-walk or script), 4 partly (R4, R25, R45, R47); open are the 6 that wait on
 (R3, R12, R13, R16, R18, R34; decisions J1 to J9) and the re-walks' new findings R48 to
 R62, of which 3 are fixed and the polish round (fix3, 18 Oct) did 8 more: R52, R53,
 R60, R61, R62 committed (b0de9a1, 7780e28), R48 to R50 committed (5608fbb). No known bug left in code; R45 waits on an install on
-jomove. Next steps for normal ranked players: docs/review/next-steps-2026-10-17.md (Q1 to
+jomify. Next steps for normal ranked players: docs/review/next-steps-2026-10-17.md (Q1 to
 Q4).
 
 Persona walks and an expert review of the live site (deploy 0fa7732 to 6c6631c), merged
@@ -200,7 +200,7 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
 
 | id | finding | sources | sev | type | status |
 | --- | --- | --- | --- | --- | --- |
-| R1 | Models load up to 3 times at once; race shows a false "lane model didn't load" error | T1, D2 | major | Bug | fixed, verified by re-walk (7b4e07e); gzip on jomove J8 |
+| R1 | Models load up to 3 times at once; race shows a false "lane model didn't load" error | T1, D2 | major | Bug | fixed, verified by re-walk (7b4e07e); gzip on jomify J8 |
 | R2 | 30 s poll closes the open breakdown and clears the search | D1 | major | Bug | fixed, verified by script (c7f4003) |
 | R3 | Top pick's only reason is "other pairings"; detected cross-role groups lumped | T2, D3 | major | Design | needs Jacob (J3); still seen 3/3 |
 | R4 | Unnamed buckets are large and chips do not add up to the row | T7, D8 | minor | Design | partly fixed (c8df953): lumps still carry most of some scores |
@@ -234,7 +234,7 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
   DRAFT.laneErr (:62). DRAFT.from and DRAFT.cc race the same way.
 - Fix: one in-flight load (`DRAFT.loading ||= loadDraftModel()`), build each model in
   locals and assign DRAFT.* once at the end; fetch the fallback without logging the
-  expected 404 as an error. gzip for /admin/training/ in nginx is on jomove (J8).
+  expected 404 as an error. gzip for /admin/training/ in nginx is on jomify (J8).
 - After (7b4e07e): each model file fetched once, draft-comp.json asked of training/ only
   (no 404); re-walk: lane error banner in 0 of 6 runs (was 3 of 3). gzip is still J8.
 
@@ -435,7 +435,7 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
 | --- | --- | --- | --- | --- | --- |
 | R15 | Champion search on Champions, role and champion pages did nothing | S1 | major | Bug | fixed, verified by re-walk (0406809, 9f5fe61) |
 | R16 | Daily Draft reveal shows a whole-draft win chance and "+X points" per option | P1, S4 | blocker | Design | needs Jacob (J1); still quoted 6/6 |
-| R17 | "Every rank tier" / "all ranks" while data is Platinum IV+; bracket sentence vs filter | P3, S5 | major | Bug | fixed, verified by re-walk (f8f3060, 8b5014f, 921520c); Your games label on jomove's next api install |
+| R17 | "Every rank tier" / "all ranks" while data is Platinum IV+; bracket sentence vs filter | P3, S5 | major | Bug | fixed, verified by re-walk (f8f3060, 8b5014f, 921520c); Your games label on jomify's next api install |
 | R18 | No direct "my pool into their pick" view | S2 | major | Design | needs Jacob (J6); still 11 to 15 steps |
 | R19 | Champion pages: "hardest first" by raw win rate on tiny samples; default shows 1-game rows | P2 | major | Design | fixed (8b5014f); not reached by the re-walk |
 | R20 | Learn names single pairs of kinds the data says are not detected | P4 | major | Design | fixed (2f349ca, 82c22cd); not reached; Daily reveal reasons wait on J1 |
@@ -495,7 +495,7 @@ Runs: meiolol-site/20261017-193101/rN (d), meiolol-site-phone/20261017-193103/rN
   Platinum, default "All (Platinum+ games)"); 6/6 trust answers say Platinum IV and
   above. Your games and the app's lane card said "All ranks" from core
   curvesfile Bracket.label: "All games" in 921520c, live on Your games only after the
-  next by-hand api install on jomove (docs/your-games.md).
+  next by-hand api install on jomify (docs/your-games.md).
 
 **R18. "My pool into their pick"** [S2]
 - Evidence: every pick-into run used the full budget via Champions, role, enemy's page,
@@ -691,7 +691,7 @@ actions per task), so this walk tests first screens, not deep navigation.
 | R42 | Win (draft) opens on screens of prose; trend chart far below | M5 | minor | Design | fixed, verified by re-walk (bfd3f1a) |
 | R43 | Crawler restarts unexplained | M7 | minor | Design | fixed, verified by re-walk (2039880) |
 | R44 | Lab campaign "0 runs, 0 confirmed" above confirmed pills | M8 | minor | Bug | fixed, verified by re-walk (6340ec9) |
-| R45 | Site views count automated Chrome as people | A3 | minor | Bug | partly fixed (804d85f): install on jomove and browser-tool commit, J8 |
+| R45 | Site views count automated Chrome as people | A3 | minor | Bug | partly fixed (804d85f): install on jomify and browser-tool commit, J8 |
 | R46 | Deploys: subject cut off, steps out of time order, header vs step time | A4, M10 | polish | Design | fixed, verified by re-walk (ef2247c, 37fbf1c) |
 | R47 | Model and lab copy assumes the reader is the modeller | M11 | polish | Design | partly fixed (b738323): glosses wait on J9; R62 |
 | R58 | Models and Lab don't say what to act on | AN1 | minor | Design | open |
@@ -776,11 +776,11 @@ actions per task), so this walk tests first screens, not deep navigation.
 - 600 "people" views at 06:00 and ~400 at 15:00 on 17 Oct, almost certainly agents
   (headless Chrome with a normal UA). People/bots split shown at admin.js:854, 1877.
   Not tested by the walk.
-- Correction (fix agent): the split is decided by deploy/traffic.sh on jomove. The
+- Correction (fix agent): the split is decided by deploy/traffic.sh on jomify. The
   persona-walk tool's HeadlessChrome already counted as a bot; the people were the
   `browse` tool (~/personal/browser-tool), which sends a normal Chrome UA.
 - After (804d85f): traffic.sh counts the token "browser-tool" as a bot, and browser-tool
-  now appends it to its UA on meio.lol. Not live: traffic.sh is not installed on jomove
+  now appends it to its UA on meio.lol. Not live: traffic.sh is not installed on jomify
   and the browser-tool change is uncommitted (that repo has no commits). Both J8.
 
 **R46. Deploys** [A4, M10]
@@ -857,17 +857,17 @@ Fix agents must not make these.
 - **J8 Ops.**
   - Admin basic-auth password was echoed into two agents' transcripts (port agent
     18:55, fix agent around 20:00, both via a curl prompt); not rotated. Rotation
-    recommended: htpasswd on jomove plus `vault set meiolol/local
+    recommended: htpasswd on jomify plus `vault set meiolol/local
     MEIOLOL_API_BASIC_AUTH`.
-  - R45 install: scp deploy/traffic.sh to jomove, then `sudo install -m 755 traffic.sh
+  - R45 install: scp deploy/traffic.sh to jomify, then `sudo install -m 755 traffic.sh
     /usr/local/bin/meiolol-traffic` (units unchanged); summaries already cached keep
     their old counts.
   - ~/personal/browser-tool has no commits; its UA token change (R45) waits on your
     initial commit.
-  - Your games API on jomove runs an 809669c-era build: the "All games" label (921520c,
+  - Your games API on jomify runs an 809669c-era build: the "All games" label (921520c,
     R17) shows after the next by-hand api install (docs/your-games.md). Label only, not
     worth a restart on the 1 GB box by itself.
-  - gzip for /admin/training/ JSON in nginx on jomove (R1).
+  - gzip for /admin/training/ JSON in nginx on jomify (R1).
   - Box `contact` file to privacy@meio.lol (R34).
   - Disk "full in ~6 days" at the current rate (R39); 77 GB free of 145 at 19:2x and the
     raw valve stops raw at 10 GB free, so not an outage risk, but the rate wants a look.

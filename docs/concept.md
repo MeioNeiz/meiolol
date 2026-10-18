@@ -155,7 +155,7 @@ Daily Draft and as the multi-option "from your pool" list.
 - `meiolol stats`: curve file per patch/bracket/lane pair/minute, beside the model file
 - Site: matchup pages, Daily Draft page (daily JSON from the box, state in localStorage)
 - New: a small dynamic service for Your games and Squads (Riot ID lookups need the key
-  server-side; the site is static today), on the jomove server behind the same nginx.
+  server-side; the site is static today), on the jomify server behind the same nginx.
   Preview mode until the production key
 - App: lane card replaces the pick list as the default view
 

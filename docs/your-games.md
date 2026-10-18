@@ -3,7 +3,7 @@
 The dynamic part of the site (docs/concept.md, product 1): enter a Riot ID, see each
 recent Summoner's Rift game's lane laid over the typical curve for that matchup at your rank,
 then a weekly roll-up and per-matchup trend. `meiolol api` (src/api) serves JSON at
-/api/ behind nginx on the jomove server; site/your.html + your.js (src/site/your.zig,
+/api/ behind nginx on the jomify server; site/your.html + your.js (src/site/your.zig,
 static/your.js) is the page. Live, /api/ open without login since 2026-10-17: Deploy below.
 
 ## How it works
@@ -159,9 +159,9 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
   user `meiolol`, password in vault (group meiolol/local, key MEIOLOL_API_BASIC_AUTH;
   also in .env)
 
-## Deploy (live since 2026-10-11, jomove server)
+## Deploy (live since 2026-10-11, jomify server)
 
-Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB RAM,
+Jacob left the deploy and the preview gating to us. Server: jomify (x86_64, 1 GB RAM,
 ~540 MB free; the service uses ~11 MB plus the curves array, 24 bytes a curve). The
 newest two curves files are mapped read-only (curvesfile.Curves.map): pages load as
 lookups touch them and count as reclaimable page cache under MemoryMax 400M, so both
@@ -172,7 +172,7 @@ for 16.20 on 17 Oct, and older patches were left out past 320 MB).
   `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's
   push deploy: after a change to src/api or the curves file format (curvesfile.zig
   version), rebuild, `scp` to /tmp, `sudo install`, then `sudo systemctl restart
-  meiolol-api` (or `deploy/jomove.sh install api`). Installed: 176909b (curves mapped,
+  meiolol-api` (or `deploy/jomify.sh install api`). Installed: 176909b (curves mapped,
   connections on their own threads), 2026-10-18 09:38Z: start-up 3 s -> 0.3 s, RSS 152 ->
   10 MB at start and 23 MB after a lookup, both patches' files (63 + 75 MB) mapped;
   76d691f kept as /usr/local/bin/meiolol.bak-pre-176909b. Before: 76d691f (curves byte
@@ -195,9 +195,9 @@ for 16.20 on 17 Oct, and older patches were left out past 320 MB).
   MemoryMax 400M, ProtectSystem=strict); meiolol-api-reload.path watches exchange/curves
   and restarts the service through meiolol-api-reload.service. Logs: `sudo journalctl
   -u meiolol-api`
-- nginx: /etc/nginx/conf.d/meiolol.conf only (jomove.conf untouched; the previous version
-  is /etc/nginx/meiolol.conf.bak-2026-10-11). `limit_req_zone meiolol_api 60r/m` at the
-  top; `location /api/` in the 443 server: no login since 2026-10-17 (before:
+- nginx: /etc/nginx/conf.d/meiolol.conf only (jomove.conf, the house-moving app's,
+  untouched; the previous version is /etc/nginx/meiolol.conf.bak-2026-10-11).
+  `limit_req_zone meiolol_api 60r/m` at the top; `location /api/` in the 443 server: no login since 2026-10-17 (before:
   /etc/nginx/meiolol.conf.bak-2026-10-17-api-open), limit_req burst 30, access_log off, proxy_pass 127.0.0.1:8090,
   client_max_body_size 1k. `location /admin/` (the ops page, src/admin.zig): auth_basic
   (/etc/nginx/meiolol-api.htpasswd, root:www-data 640), previous config /etc/nginx/meiolol.conf.bak-2026-10-12.

@@ -55,12 +55,12 @@ docs/plan.md "Now". Read it first.
   [--live]` (exits 0, 1 failed, 3 timeout), not a sleep loop. Hand-edited Daily or Learn
   files: `deploy/box.sh web rebuild` (a forced round keeps the old ones)
 - Website: https://meio.lol (DNS on Cloudflare: docs/architecture.md; mail to @meio.lol:
-  deploy/mail.sh), static nginx and the Your games API on the jomove server (`ssh
-  jomove`; jomove's own site runs there too, leave its config alone). The box builds
-  and uploads on new data: `deploy/box.sh web start [privacy@meio.lol]|stop|status`.
-  jomove's pieces are installed by hand: `deploy/jomove.sh drift`, `install
-  api|traffic|...`. Admin pages: `deploy/admin-get.sh PATH` (keeps the login off
-  screen). Preview mode until prod key
+  deploy/mail.sh), static nginx and the Your games API on the jomify server (`ssh
+  jomify`; it also runs jomove, an unrelated house-moving app: leave its config alone).
+  The box builds and uploads on new data: `deploy/box.sh web start
+  [privacy@meio.lol]|stop|status`. jomify's pieces are installed by hand:
+  `deploy/jomify.sh drift`, `install api|traffic|...`. Admin pages: `deploy/admin-get.sh
+  PATH` (keeps the login off screen). Preview mode until prod key
 - Heavy model work on the gpu-box (`ssh gpu-box`; 3080, 20 threads) or Mac CPU, never
   the box: deploy/lab-run.sh; League pauses gpu-box runs; warn sessions using it before
   restarting WSL. Parallel loops: src/par.zig. docs/compute.md

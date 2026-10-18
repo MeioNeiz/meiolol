@@ -8,7 +8,7 @@ Ranked by harm: outages and data risk, then what Riot's reviewers see before Jac
 presses Verify, then what brings players back. Findings: docs/review/
 persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B/C, Q).
 
-1. Done 18 Oct (76d691f, installed on jomove): the Your games API would have died at
+1. Done 18 Oct (76d691f, installed on jomify): the Your games API would have died at
    16.21 (two newest curves files, 226 MB each parsed, MemoryMax 400M). Since 176909b
    (installed 18 Oct) the API and renderer map curves files read-only instead of copying
    them: both newest patches load at any size, no 320 MB budget (API RSS 152 to 10 MB,
@@ -66,7 +66,7 @@ today's model; the draft's "Rammus into high AD/AP" check.
 ### Decisions (Jacob 18 Oct: "follow your recommendations")
 
 Each line was a question with a recommendation; Jacob approved them all. Storage and
-hosting still needs him to order. Done: J8 gzip (477a1ff, jomove nginx), G2.
+hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
 
 - J1 Daily Draft: drop the numbers; "on paper the draft leaned red" only when clear,
   option reasons in words and only detected kinds (as Learn, R20)
@@ -82,7 +82,7 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomove nginx), G2.
   now (cheap, aggregate); the pool block after J2
 - J7 Desktop app: no date, "after Riot's production review"; no notify list (it would
   keep emails)
-- J8 Ops: gzip for /admin/training/ JSON in jomove's nginx (done 18 Oct);
+- J8 Ops: gzip for /admin/training/ JSON in jomify's nginx (done 18 Oct);
   browser-tool's first commit is Jacob's; "429 (server)" is Riot's side, count it
   apart from our key's limit, no action. Password rotation skipped (your call)
 - J9 Admin is for you only: jargon stays low priority
@@ -180,7 +180,7 @@ Several Claude sessions in parallel, all on main in the one checkout (Jacob,
 Until the site goes public (Jacob, 2026-10-11): sessions merge, push and redeploy the
 preview site and box binary without asking. Still ask first: anything irreversible
 (deleting data, key or registration changes, Riot applications), nginx/systemd changes on
-the jomove server, changes to Jacob's Mac. Live DB migrations: backup and rehearsal on a
+the jomify server, changes to Jacob's Mac. Live DB migrations: backup and rehearsal on a
 copy first.
 
 Jacob's standing asks: the coordinator reviews regularly for gaps nobody owns (risks,
@@ -271,8 +271,9 @@ docs/backlog.md. Some are done; check before acting, and move what you pick up i
 
 ## Reference
 
-- Hosting: jomove server (Oracle uk-london-1, `ssh jomove`: alias in the Mac's
-  ~/.ssh/config for ubuntu@193.123.180.81; jomove's own nginx config: leave alone).
+- Hosting: jomify server (Oracle uk-london-1, `ssh jomify`: alias in the Mac's
+  ~/.ssh/config for ubuntu@193.123.180.81; jomove.conf is an unrelated house-moving
+  app's nginx config: leave alone).
   /etc/nginx/conf.d/meiolol.conf, root /var/www/meiolol, user `meiolol` with an rrsync
   key from the box; Let's Encrypt via webroot. The box: docs/hosting.md (Oracle Cloud,
   `meiolol-cloud`). deploy/web-loop.sh on the box builds and

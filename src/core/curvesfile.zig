@@ -619,7 +619,7 @@ pub const Curves = struct {
     }
 
     /// The file at `sub_path` mapped read-only and not read ahead: pages load on first
-    /// use and stay reclaimable (jomove's Your games service has MemoryMax 400M). Its
+    /// use and stay reclaimable (jomify's Your games service has MemoryMax 400M). Its
     /// writers replace it by rename, which leaves the mapped file intact; one cut short
     /// in place would fault (SIGBUS) on the lost pages
     pub fn map(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8) !Curves {

@@ -10,7 +10,7 @@ item into plan.md "Now" when you pick it up. "was meiolol-xx": the session that 
 - Data safety is on main (fad705a; docs/data-safety.md): start the box backup loop (D:)
   and health loop (ntfy): running on the box since ~04:20. Mac launchd notifier: Jacob's
   call
-- Backup loop: pull exchange/forgotten.txt from jomove, push box-forgotten.txt
+- Backup loop: pull exchange/forgotten.txt from jomify, push box-forgotten.txt
 - Measure real per-match sizes after a day; recheck disk runway
 - Rekey translation (done 2026-10-12, src/rekey.zig): `meiolol rekey` carries
   `forgotten` and Your games `blocked` over (old PUUID -> Riot ID -> new PUUID, both
@@ -159,7 +159,7 @@ item into plan.md "Now" when you pick it up. "was meiolol-xx": the session that 
 
 ## Your games and Squads (was your-games-e0)
 
-- Done 2026-10-11: jomove deploy, basic auth on /api/, crawler --reserve 20 default,
+- Done 2026-10-11: jomify deploy, basic auth on /api/, crawler --reserve 20 default,
   index link, privacy section, Riot IDs out of client logs
 - Extras: experienced-players curve, flex/normal once curves cover them, rank at game time
 - Squads (concept part 4), design agreed: join by profile-icon challenge (purpose=join),
@@ -175,7 +175,7 @@ item into plan.md "Now" when you pick it up. "was meiolol-xx": the session that 
 - Done: home page leads with the Riot ID lookup, six pillars marked live or coming;
   Highlights tiles on Your games (d24c299)
 - Done: Death Cost and the Turning Minute on Your games (win chance by minute,
-  src/winchance.zig; docs/your-games.md). The jomove API binary needs a rebuild and
+  src/winchance.zig; docs/your-games.md). The jomify API binary needs a rebuild and
   install for them to show for looked-up players (docs/your-games.md Deploy); the
   example page shows them after the box's next `your-example`
 - Short games (under 15:00, remake=0) are early surrenders after a leaver, real
@@ -202,7 +202,7 @@ item into plan.md "Now" when you pick it up. "was meiolol-xx": the session that 
   curves looked sane (Caitlyn vs Jhin, 359 games: lane gold within ±100, level 6 7:14 vs
   7:16, first item ~11 min); no bugs found in the curves step itself. Deployed f6bf5d6
   15:18Z (box v4 curves logged at 15:22-15:29Z: 27k games all regions in 6.3 min on the
-  micro); Your games API binary on jomove updated to read v4 (15:23Z; it has 0 curves
+  micro); Your games API binary on jomify updated to read v4 (15:23Z; it has 0 curves
   until the box pushes v4 per-patch files). Not yet checked: the live matchup pages
   after the first v4 upload (the box move to A1 started first)
 - Split-half on the box (27k games): for pairs with 50+ games in a half (bot 63,
