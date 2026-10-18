@@ -20,6 +20,18 @@ Researched 2026-10-11. Production key details: production-key.md.
   runs (18 Oct) `--timelines 50 --timelines-priority 100 --timeline-min-s 900`: 100% EUW
   timelines for the curves benchmark; 50% elsewhere (by match id hash) until the
   production key; games under 15 min skipped
+- Matchup-aware sample (`--timelines-sparse N`, sparse.zig, off): replayed in storage
+  order over 646k 16.20 games with timelines (backup of 17 Oct, all with the 900 s skip),
+  non-EUW calls saved | coverage (share of all lanes in a cell with 200+ timelines,
+  every game / Diamond+) | champion mix TVD | gold@14 shift: every game 1.6% | .798 /
+  .468; flat 50% 50.8% | .726 / .326 | .018 | 18 gold; any lane under 200 in its rank
+  cell 8.9% | .798 / .468 | .010 | 4 gold (nearly every game has one rare lane, so it
+  saves little); `--timelines 35 --timelines-sparse 200 --timelines-sparse-from
+  DIAMOND` 50.8% | .727 / .468 | .026 | 21 gold, median length 1739 s against 1749
+  (Diamond+ over-weighted in the every-game view). The last matches flat 50%'s cost and
+  every-game coverage and keeps Diamond+ whole; not on yet. Its start-up count reads
+  every newest-patch game's participants, untimed on the box. Replay:
+  data/team/2026-10-18-waste/mu*.py (gpu-box, backup segments)
 - ~33k matches/day is fetch throughput, not games played: 17 Oct the box fetched 33.3k
   EUW match docs (32.4k solo, 0.9k flex) whose games spread over 7-17 Oct (patch
   backfill). Per game day the DB has 17-24k EUW 16.20 solo games for 7-15 Oct, each day

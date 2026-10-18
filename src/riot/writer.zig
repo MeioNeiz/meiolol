@@ -13,6 +13,7 @@ const store = @import("store");
 const ep = @import("endpoints.zig");
 const match = @import("match.zig");
 const crawl = @import("crawl.zig");
+const sparse = @import("sparse.zig");
 const archive = @import("../archive.zig");
 
 const log = std.log.scoped(.crawl);
@@ -410,7 +411,9 @@ pub const Writer = struct {
         if (!any_forgotten) try s.raw_doc.exec(.{ "riot_match", id, wr.stamp, store.Blob{ .bytes = raw } });
         try s.rows.write(doc, "riot", existed);
         const platform = doc.info.platformId orelse if (ep.platformOf(id)) |p| p.id else null;
+        var game: sparse.Game = .{};
         for (doc.info.participants, 0..) |p, slot| {
+            game.lane(p.teamId, p.teamPosition, p.championId);
             const puuid = p.puuid orelse continue;
             if (any_forgotten and try s.isForgotten(puuid)) {
                 try s.blank_participant.exec(.{ id, slot });
@@ -421,6 +424,7 @@ pub const Writer = struct {
             // only the scan pool
             if (try s.rankOf(key)) |rank| {
                 try s.participant_rank.exec(.{ rank.tier, rank.division, id, slot });
+                game.rankTier(rank.tier);
             }
             if (wr.c.opts.participant_players and sampled(key, wr.c.opts.player_sample)) {
                 try s.participant_player.exec(.{ puuid, platform, @tagName(r), t });
@@ -430,8 +434,15 @@ pub const Writer = struct {
         // unless it still awaits the backfill
         if (!existed or try s.drafts.taken(id)) _ = try s.drafts.write(id);
         const long_enough = match.durationS(doc) >= wr.c.opts.timeline_min_s;
-        if (want_timeline and long_enough and !match.isRemake(doc) and wr.c.wantTimeline(id)) {
-            try s.timeline_queue.exec(.{ id, @tagName(r), t });
+        if (want_timeline and long_enough and !match.isRemake(doc)) {
+            const o = wr.c.opts;
+            const sparse_on = o.timeline_sparse > 0 and
+                wr.c.sparse.current(crawl.Patches.code(match.patchOf(doc.info.gameVersion)));
+            const ranked = if (game.rank()) |rk| rk >= o.timeline_sparse_min_rank else o.timeline_sparse_min_rank == 0;
+            if (wr.c.wantTimeline(id) or (sparse_on and ranked and wr.c.sparse.rare(&game, o.timeline_sparse))) {
+                try s.timeline_queue.exec(.{ id, @tagName(r), t });
+                if (sparse_on) try wr.c.sparse.add(wr.c.gpa, &game);
+            }
         }
         try s.match_done.exec(.{id});
         return true;
@@ -960,6 +971,31 @@ test "--timeline-min-s: a shorter match gets no timeline" {
     try std.testing.expect(try q.step());
     try std.testing.expectEqualStrings("EUW1_2", q.bytes(0));
     try std.testing.expect(!try q.step());
+}
+
+test "--timelines-sparse: a match the sample skips gets a timeline while a lane is rare" {
+    const gpa = std.testing.allocator;
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const db = try store.schema.memory();
+    defer db.close();
+    var c: crawl.Crawler = .{ .gpa = gpa, .io = std.testing.io, .opts = .{ .data_dir = "", .key = "", .timeline_percent = 0, .timeline_sparse = 2 } };
+    defer c.sparse.deinit(gpa);
+    var wr: Writer = .{ .c = &c };
+    defer wr.deinit();
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+    // The same ten champions each time: two timelines fill their cells
+    for ([_][]const u8{ "NA1_1", "NA1_2", "NA1_3" }) |id| {
+        var doc = try match.parse(arena.allocator(), @embedFile("testdata/match.json"));
+        doc.metadata.matchId = id;
+        var jobs = [_]*Job{try .create(gpa, .{ .match = .{ .region = .americas, .id = id, .doc = doc, .raw = "r", .t = 2 } })};
+        defer for (jobs) |job| job.destroy(gpa);
+        try wr.commit(db, &s, &jobs);
+    }
+    try std.testing.expectEqual(@as(?i64, 3), try db.scalar("SELECT count(*) FROM matches", .{}));
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM timeline_queue", .{}));
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM timeline_queue WHERE match_id = 'NA1_3'", .{}));
 }
 
 test "a match whose document names another id is failed, not counted as stored" {

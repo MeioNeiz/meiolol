@@ -10,6 +10,7 @@ pub const crawl = @import("crawl.zig");
 pub const proxy = @import("proxy.zig");
 pub const writer = @import("writer.zig");
 pub const fake = @import("fake.zig");
+pub const sparse = @import("sparse.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());

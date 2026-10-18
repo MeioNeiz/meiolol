@@ -21,6 +21,7 @@ const match = @import("match.zig");
 const timeline = @import("timeline.zig");
 const mastery = @import("mastery.zig");
 const writer = @import("writer.zig");
+const sparse = @import("sparse.zig");
 const Job = writer.Job;
 
 const log = std.log.scoped(.crawl);
@@ -67,6 +68,12 @@ pub const Options = struct {
     timeline_priority_percent: u8 = 100,
     /// Matches shorter than this get no timeline; 0: every length
     timeline_min_s: u32 = 0,
+    /// A match the sample skips still gets a timeline while a lane of it has fewer than
+    /// this many in its cell (sparse.zig); 0: off
+    timeline_sparse: u32 = 0,
+    /// --timelines-sparse only for games whose median rank is at least this
+    /// (sparse.rankOf: Iron 0); 0 every game, those of unknown rank too
+    timeline_sparse_min_rank: u8 = 0,
     /// Ranked flex (queue 440) id lookups a day, one page each, for scanned players of
     /// the --priority platforms: a small test sample (Jacob, 2026-10-13) stored like solo
     /// games; every stats, site and model reader keeps to queue 420. 0: none
@@ -138,6 +145,8 @@ pub const Crawler = struct {
     probe_lock: std.Io.Mutex = .init,
     /// When the probe last worked; a 401/403 soon after skips its request unasked
     key_ok_at: ?i64 = null,
+    /// --timelines-sparse counts: seeded by run(), then the writer's alone
+    sparse: sparse.Cells = .{},
 
     pub fn run(c: *Crawler) !void {
         c.limiters = try .init(c.gpa, c.io);
@@ -155,6 +164,8 @@ pub const Crawler = struct {
         defer db.close();
         try c.checkKey(db);
         try c.backfillTimelines(db);
+        defer c.sparse.deinit(c.gpa);
+        try c.seedSparse(db);
         try dropDoneRows(db);
         if (c.opts.patch_only) {
             c.patches = try .load(c.gpa, db);
@@ -343,6 +354,48 @@ pub const Crawler = struct {
         const priority = if (ep.platformOf(match_id)) |p| c.isPriority(p) else false;
         const pct = if (priority) c.opts.timeline_priority_percent else c.opts.timeline_percent;
         return pct >= 100 or std.hash.Wyhash.hash(0, match_id) % 100 < pct;
+    }
+
+    /// --timelines-sparse counts from the newest patch's stored and queued timelines
+    fn seedSparse(c: *Crawler, db: store.Db) !void {
+        if (c.opts.timeline_sparse == 0) return;
+        const started = c.nowS();
+        var arena: std.heap.ArenaAllocator = .init(c.gpa);
+        defer arena.deinit();
+        var newest: []const u8 = "";
+        for (try column(db, arena.allocator(), "SELECT DISTINCT patch FROM matches", .{})) |p| {
+            if (Patches.code(p) > Patches.code(newest)) newest = p;
+        }
+        if (!c.sparse.current(Patches.code(newest)) or newest.len == 0) return;
+        var q = try db.prepare(
+            \\SELECT m.match_id, p.team_id, p.position, p.champion_id, p.tier FROM matches m
+            \\JOIN participants p ON p.match_id = m.match_id
+            \\WHERE m.patch = ? AND m.queue_id = ? AND m.remake = 0 AND (
+            \\    EXISTS (SELECT 1 FROM timeline.timelines t WHERE t.match_id = m.match_id) OR
+            \\    EXISTS (SELECT 1 FROM timeline_queue t WHERE t.match_id = m.match_id))
+        );
+        defer q.deinit();
+        try q.bind(.{ newest, ep.ranked_solo });
+        var last: std.ArrayList(u8) = .empty;
+        defer last.deinit(c.gpa);
+        var game: sparse.Game = .{};
+        var games: usize = 0;
+        while (try q.step()) {
+            const r = q.row(struct { match_id: []const u8, team_id: i64, position: ?[]const u8, champion_id: i64, tier: ?[]const u8 });
+            if (!std.mem.eql(u8, r.match_id, last.items)) {
+                if (last.items.len > 0) try c.sparse.add(c.gpa, &game);
+                games += 1;
+                game = .{};
+                last.clearRetainingCapacity();
+                try last.appendSlice(c.gpa, r.match_id);
+            }
+            game.lane(r.team_id, r.position, r.champion_id);
+            if (r.tier) |t| game.rankTier(t);
+        }
+        if (last.items.len > 0) try c.sparse.add(c.gpa, &game);
+        log.info("--timelines-sparse: {d} games of {s} with a timeline, {d} cells, {d} s", .{
+            games, newest, c.sparse.counts.count(), c.nowS() - started,
+        });
     }
 
     /// Queue timelines for matches crawled before timelines existed. Runs while the
@@ -546,7 +599,7 @@ pub const Patches = struct {
     const Start = struct { patch: u32 = 0, start_s: i64 = 0 };
 
     /// "16.20" -> 16020; 0 when not a patch
-    fn code(patch: []const u8) u32 {
+    pub fn code(patch: []const u8) u32 {
         const dot = std.mem.indexOfScalar(u8, patch, '.') orelse return 0;
         const major = std.fmt.parseInt(u32, patch[0..dot], 10) catch return 0;
         const minor = std.fmt.parseInt(u32, patch[dot + 1 ..], 10) catch return 0;
