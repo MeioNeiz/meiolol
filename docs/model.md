@@ -4271,9 +4271,10 @@ equal, 800,302 games, 6 s on the Mac; meta.snapshot "box database"). It stops un
 the file's scorer matches core.score.draftWin on 500 test games within 1e-4 (5e-9
 measured); meta.dev refits on the played games older than dev-val and scores dev-val per
 game, baseline champion strength alone. Daily on the box (deploy/web-loop.sh), served at
-/admin/models/ with the admin upload; the tester reads each file (draft, comp, lane) from
-there and falls back to the lab pick in /admin/training/ (`lab-push.sh use`), or the other
-way round with "Prefer lab picks". The scorer and writer are src/draftfile.zig, shared
+/admin/models/ with the admin upload. The tester's Model switch picks the draft model:
+"Shipped model" (this file) or "Lab experiment" (/admin/training/, `lab-push.sh use`, with
+the set net when draft-setnet.json is there); the lane model is the box's, else the lab's;
+comp terms the lab's. The scorer and writer are src/draftfile.zig, shared
 with the lab.
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has

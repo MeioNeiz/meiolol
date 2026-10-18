@@ -13,16 +13,21 @@ const DRAFT_ROLES = [["top", "Top"], ["jungle", "Jungle"], ["mid", "Mid"], ["bot
 const SIDES = [["blue", "Blue"], ["red", "Red"]];
 const DRAFT = { model: undefined, err: null, check: null, m: null, from: {}, gen: 0, loading: null };
 const MODEL_DIRS = { models: "box daily", training: "lab pick" };
+// The draft model the board scores with: the shipped one (the box's daily export, models/)
+// or the lab experiment (whatever `lab-push.sh use draft` sent, training/); the old
+// draftPrefer setting carries over
+const DRAFT_SOURCES = [["shipped", "Shipped model"], ["lab", "Lab experiment"]];
+const draftSource = () => stored("draftModel", stored("draftPrefer", "box") === "lab" ? "lab" : "shipped");
 // Files the box's daily export writes; the rest (draft-comp.json) come from the lab only, so
 // models/ isn't asked for them (a 404 there would only fill the console)
 const BOX_FILES = new Set(["draft-model.json", "lane-model.json"]);
 
-// A model file from the box's daily export (models/) or the lab pick (training/, `lab-push.sh
-// use`): the preferred one first, the other when it has none; its references come from the
-// same directory
+// A model file: the draft model from the chosen source only; the lane model from the box's
+// daily export, else the lab's; the rest from the lab. References come from the same
+// directory
 async function modelFile(name) {
-  const order = stored("draftPrefer", "box") === "lab" ? ["training", "models"] : ["models", "training"];
-  const dirs = BOX_FILES.has(name) ? order : ["training"];
+  const dirs = name === "draft-model.json" ? [draftSource() === "lab" ? "training" : "models"]
+    : BOX_FILES.has(name) ? ["models", "training"] : ["training"];
   for (const [i, dir] of dirs.entries()) {
     try { return { json: await getJson(`${dir}/${name}`), dir }; }
     catch (e) { if (i === dirs.length - 1 || !/^404/.test(e.message)) throw e; }
@@ -70,7 +75,7 @@ async function loadDraftModel() {
   } catch (e) { x.model = null; x.m = null; x.err = e.message; }
   // The set net is optional and lab only (admin-setnet.js); shown only on the base it was
   // fitted on, so the draft model must match its reference games' offsets
-  if (x.m) try {
+  if (x.m && draftSource() === "lab") try {
     const { json: N } = await modelFile("draft-setnet.json");
     const net = setNets(N.nets || []);
     if (!net) throw new Error("draft-setnet.json has no meiolol-setnet version 1 nets");
@@ -79,7 +84,7 @@ async function loadDraftModel() {
     // Another draft model (the box's daily one by default) is expected, so only a note
     const same = base.games > 0 && base.worst < SETNET_BASE_TOL;
     x.netChecks.push({ ok: true, info: !same, text: same ? `set net base: the draft model against the offsets the nets were fitted on, ${base.games} EUW reference games, max |logit diff| ${base.worst.toFixed(4)}`
-      : "Set net not shown: it was fitted on another draft model than this one (Prefer lab picks, with the matching export sent by `lab-push.sh use draft`)" });
+      : "Set net not shown: the lab experiment's draft model isn't the one the net was fitted on (send the matching export with `lab-push.sh use draft`)" });
     if (same && x.netChecks.every(c => c.ok)) x.net = net;
   } catch (e) { if (!/^404/.test(e.message)) x.netErr = e.message; }
   // The lane model is optional: without it the picker has no lane column
@@ -469,14 +474,19 @@ const takenIn = d => new Set([...Object.values(d.blue), ...Object.values(d.red),
 function draftView(body) {
   if (DRAFT.model === undefined) { if (!DRAFT.loading) startDraftLoad(); body.append(el("p", { class: "muted" }, "Loading the draft model…")); return; }
   const m = DRAFT.m, M = DRAFT.model || {}, meta = M.meta || {};
-  const lab = stored("draftPrefer", "box") === "lab";
+  const lab = draftSource() === "lab";
   const sec = section(body, "Draft tester", "Build two teams, swap champions in, see what the model thinks. Admin only: the public site never shows a draft's win chance.",
-    el("span", { class: "actions" },
-      el("button", { type: "button", class: "ghost", title: "Where each model file comes from when both have one: the box's daily export or the lab's `lab-push.sh use` pick", onclick: () => { store("draftPrefer", lab ? "box" : "lab"); reloadDraft(); } }, lab ? "Prefer box daily" : "Prefer lab picks"),
-      el("button", { type: "button", class: "ghost", onclick: reloadDraft }, "Reload model")));
+    el("span", { class: "actions" }, el("button", { type: "button", class: "ghost", onclick: reloadDraft }, "Reload model")));
+  // Which model scores the board, in words; the lab's name comes from its file
+  const modelName = lab ? (meta.name ? `Lab: ${meta.name.split(":")[0]}` : "Lab experiment") : "Shipped model";
+  sec.append(el("div", { class: "modelpick" }, el("span", { class: "sub" }, "Model"),
+    switcher(DRAFT_SOURCES, lab ? "lab" : "shipped", k => { if (k !== draftSource()) { store("draftModel", k); reloadDraft(); } }, "Draft model"),
+    el("span", { class: "sub" }, !m ? "" : lab ? `${meta.name || "an export"}${DRAFT.net ? ", with the neural net on top" : ""}, sent from the lab (${meta.snapshot || "snapshot unknown"}); not used by the app or site.`
+      : "What the app and site use, refitted daily by the box on the newest games.")));
   if (!m) {
     if (DRAFT.err && !/^404/.test(DRAFT.err)) sec.append(el("div", { class: "health bad" }, el("b", {}, "The draft model didn't load: "), DRAFT.err));
-    else sec.append(el("p", { class: "muted" }, "No draft model yet: the box writes one daily (`meiolol draft-model`), or meiolol-lab's `draft --export` and deploy/lab-push.sh send one."));
+    else if (lab) sec.append(el("p", { class: "muted" }, "No lab experiment loaded: send one with `deploy/lab-push.sh use draft RUN|DIR` (meiolol-lab's `draft --export`), or switch to the shipped model."));
+    else sec.append(el("p", { class: "muted" }, "No shipped model yet: the box writes one daily (`meiolol draft-model`). The lab experiment may have one."));
     return;
   }
   if (DRAFT.tags === undefined) loadTags();
@@ -530,7 +540,7 @@ function draftView(body) {
 
   const w = m.win(d), none = !Object.keys(d.blue).length && !Object.keys(d.red).length;
   sec.append(el("div", { class: "winbar", role: "img", "aria-label": `Blue ${pct(w.p)}, ${none ? "no picks yet" : `95% range ${pct(w.lo)} to ${pct(w.hi)}`}` },
-    el("div", { class: "labels" }, el("b", { class: "blue" }, `Blue ${pct(w.p)}`), el("span", { class: "sub" }, none ? "no picks yet: the blue side alone" : `95% range ${pct(w.lo)} to ${pct(w.hi)}`), el("b", { class: "red" }, `Red ${pct(1 - w.p)}`)),
+    el("div", { class: "labels" }, el("b", { class: "blue" }, `Blue ${pct(w.p)}`), el("span", { class: "sub" }, `${modelName} · ${none ? "no picks yet: the blue side alone" : `95% range ${pct(w.lo)} to ${pct(w.hi)}`}`), el("b", { class: "red" }, `Red ${pct(1 - w.p)}`)),
     el("div", { class: "track" }, el("span", { class: "range", style: `left:${100 * w.lo}%;width:${100 * (w.hi - w.lo)}%` }), el("span", { class: "mark", style: `left:${100 * w.p}%` }), el("span", { class: "half" }))));
   if (DRAFT.net) sec.append(setNetView(DRAFT.net, m, m.teamsOf(d), name));
 
