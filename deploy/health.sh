@@ -125,12 +125,21 @@ if read -r _ use 2> /dev/null < data/gpu-box.disk; then
     if [[ "$arch" == arch- ]]; then problems+=("gpu-box: archive partition not attached")
     elif (( ${arch#arch} >= 85 )); then problems+=("gpu-box archive partition at ${arch#arch}%"); fi
 fi
-# Raw held on the box until acked: once it could no longer double, the disk fills before
-# a long gpu-box outage ends
-held=$(du -cb data/raw.db data/timeline.db data/archive-out 2>/dev/null | tail -n 1 | cut -f1)
+# While the gpu-box is away raw stays in raw.db, a day's worth (what it was sent over the
+# last 24 h, archive-serve.sh) a day: under 3 days of it above the raw valve, a long
+# outage ends with raw the archive never got dropped. Exports wait on the box only until
+# the gpu-box has them, ~1 GB each, so their files are shown apart
 free=$(df --output=avail -B1 data | tail -n 1 | tr -dc '0-9')
-if (( ${free:-0} < 2 * ${held:-0} )); then
-    problems+=("box disk: $(( free >> 30 )) GB free, under twice the $(( held >> 30 )) GB of raw held for the gpu-box archive")
+valve=$(grep -oE -- '--raw-valve-free-gb [0-9]+' crawl.args 2> /dev/null | tr -dc '0-9')
+day=$(awk -v since=$(( now - 86400 )) '$1 >= since { n += $3 } END { print n + 0 }' \
+    data/archive-sent.log 2> /dev/null || echo 0)
+waiting=$(du -sb data/archive-out 2> /dev/null | cut -f1)
+if (( day > 0 && ${free:-0} - ${valve:-0} * (1 << 30) < 3 * day )); then
+    days=$(awk -v f="$free" -v v="${valve:-0}" -v d="$day" 'BEGIN { printf "%.1f", (f - v * 2^30) / d }')
+    line="box disk: $(( free >> 30 )) GB free, $days days of raw ($(( day >> 30 )) GB a day)"
+    line+=" above the ${valve:-0} GB raw valve should the gpu-box stop archiving"
+    (( ${waiting:-0} >= 1 << 30 )) && line+=", $(( waiting >> 30 )) GB of it in exports waiting for the gpu-box"
+    problems+=("$line")
 fi
 
 (( ${#problems[@]} == 0 )) && exit 0

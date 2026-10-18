@@ -236,12 +236,15 @@ const usage =
     \\              played game, as lane-model.json and lane-ref.json; daily on the box
     \\              --out DIR        default DATA/tester
     \\  raw-export  raw archive, box side (archive.zig): write raw summaries, raw timelines
-    \\              and mastery fetched since the last export to DIR/raw-FROM-TO.db and
-    \\              print its name and counts (nothing when there is nothing new);
-    \\              raw timelines it holds leave raw.db at once (the file is their copy)
+    \\              and mastery fetched since the last export (at most 2 hours of it)
+    \\              to DIR/raw-FROM-TO.db and print its name, counts and 1 when more
+    \\              is waiting (nothing when there is nothing new); raw timelines it
+    \\              holds leave raw.db at once (the file is their copy)
     \\              --out DIR        default DATA/archive-out
-    \\              --ack NAME       the gpu-box archived NAME: delete it, then drop raw
-    \\                               documents acked and older than --keep-days
+    \\              --list           unacked exports: NAME SIZE|received|missing
+    \\              --received NAME  the gpu-box has NAME (checksum checked): delete it
+    \\              --ack NAME       the gpu-box archived NAME: mark it, delete it if left
+    \\              --prune          drop raw documents acked and older than --keep-days
     \\              --keep-days N    acked raw kept on the box this long (default 2)
     \\              --status         seconds since the last ack, unacked exports
     \\  site       write the public website (static files): EUW over the last 30 days
@@ -1219,13 +1222,22 @@ fn cmdScaling(c: *Cmd) !u8 {
 fn cmdRawExport(c: *Cmd) !u8 {
     var dir: []const u8 = try std.fs.path.join(c.arena, &.{ c.data_dir, "archive-out" });
     var ack_name: ?[]const u8 = null;
+    var received_name: ?[]const u8 = null;
     var keep_days: u32 = 2;
     var show_status = false;
+    var show_list = false;
+    var prune = false;
     while (c.next()) |_| {
         if (c.is("--out")) {
             dir = try c.value();
         } else if (c.is("--ack")) {
             ack_name = try c.value();
+        } else if (c.is("--received")) {
+            received_name = try c.value();
+        } else if (c.is("--list")) {
+            show_list = true;
+        } else if (c.is("--prune")) {
+            prune = true;
         } else if (c.is("--keep-days")) {
             keep_days = try c.int(u32);
         } else if (c.is("--status")) {
@@ -1245,11 +1257,18 @@ fn cmdRawExport(c: *Cmd) !u8 {
         try w.print("since_ack_s {?d}\nunacked {d}\noldest_unacked_s {?d}\nsince_drop_s {?d}\ndrops_24h {d}\n", .{
             s.since_ack_s, s.unacked, s.oldest_unacked_s, s.since_drop_s, s.drops_24h,
         });
+    } else if (show_list) {
+        try archive.list(c.arena, io, db, dir, w);
+    } else if (received_name) |name| {
+        try archive.received(io, db, dir, name, now);
     } else if (ack_name) |name| {
-        const p = try archive.ack(io, db, dir, name, keep_days, now);
-        try w.print("acked {s}; dropped {d} raw summaries, {d} raw timelines\n", .{ name, p.summaries, p.timelines });
+        try archive.ack(io, db, dir, name, now);
+        try w.print("acked {s}\n", .{name});
+    } else if (prune) {
+        const p = try archive.pruneAcked(db, keep_days, now);
+        try w.print("dropped {d} raw summaries, {d} raw timelines, acked and {d} days old\n", .{ p.summaries, p.timelines, keep_days });
     } else if (try archive.exportNew(c.arena, io, db, dir, now)) |e| {
-        try w.print("{s}\t{d}\t{d}\t{d}\t{d}\n", .{ e.name, e.summaries, e.timelines, e.mastery, e.pruned });
+        try w.print("{s}\t{d}\t{d}\t{d}\t{d}\t{d}\n", .{ e.name, e.summaries, e.timelines, e.mastery, e.pruned, @intFromBool(e.more) });
     }
     try w.flush();
     return 0;

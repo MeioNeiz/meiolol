@@ -4,13 +4,16 @@
 //! An export writes the raw summaries, raw timelines and mastery snapshots fetched since
 //! the previous export into one SQLite file, as stored: gzip bodies, real ids. The salt
 //! never comes to the box, so pseudonymising happens on the gpu-box (src/lab/archive.zig)
-//! before anything is archived. An ack deletes the export file and lets the box drop raw
-//! documents that are both acked and `keep_days` old. Unacked documents stay whatever
-//! their age, so a PC that is off for days loses nothing while the box has disk: once
-//! an export exists the crawler's own raw pruning (--raw-*-days) stops at the acked
-//! point too (writer.zig). Raw timelines (most of the bytes) are the exception: once an
-//! export file holds them they leave raw.db at once, so the box never keeps two copies
-//! while the gpu-box is away; the file is their copy until the ack deletes it.
+//! before anything is archived. An export covers at most `max_window_s` of fetches, so a
+//! backlog goes as a run of small files, not one copy of it. Once the gpu-box has a file
+//! (its sha256 checked against the box's, archive-serve.sh) the box deletes it
+//! (`received`); the ack, after the archive, lets the box drop raw documents that are both
+//! acked and `keep_days` old (`pruneAcked`). Unacked documents stay whatever their age, so
+//! a PC that is off for days loses nothing while the box has disk: once an export exists
+//! the crawler's own raw pruning (--raw-*-days) stops at the acked point too (writer.zig).
+//! Raw timelines (most of the bytes) are the exception: once an export file holds them
+//! they leave raw.db at once, so the box never keeps two copies; the file, then the
+//! gpu-box's received copy, is theirs until the archive.
 //!
 //! When the disk runs low regardless, `valve` drops raw the archive never got (oldest
 //! unacked export first, else the oldest raw timelines) so the crawler, site builds and
@@ -45,6 +48,11 @@ const ddl =
     \\    bytes INTEGER NOT NULL,
     \\    free_mb INTEGER NOT NULL
     \\);
+    \\-- Exports the gpu-box has (checksum checked), their files deleted; acked once archived
+    \\CREATE TABLE IF NOT EXISTS raw.archive_received (
+    \\    name TEXT PRIMARY KEY,
+    \\    at INTEGER NOT NULL
+    \\);
 ;
 
 /// The crawler's writer stamps raw documents and mastery with the time it began the
@@ -53,6 +61,11 @@ const ddl =
 /// next export
 const settle_s = 300;
 
+/// The most fetch time one export covers: ~1 GB at the crawler's rate (17 Oct: ~0.5 GB
+/// an hour), so a gpu-box back after days catches up file by file and the box holds one
+/// at a time instead of a copy of the whole backlog (33 GB on 17 Oct)
+const max_window_s = 2 * 3600;
+
 pub const Export = struct {
     name: []const u8,
     summaries: i64,
@@ -60,18 +73,30 @@ pub const Export = struct {
     mastery: i64,
     /// Raw timelines dropped from raw.db because the file now holds them
     pruned: i64,
+    /// Capped at `max_window_s`: more is waiting
+    more: bool,
 };
 
-/// Writes DIR/raw-FROM-TO.db with everything fetched since the last export; null when
-/// nothing new. The name is in `arena`. `now_s` must be read before the call: each copy
-/// then sees everything committed by then
+/// Writes DIR/raw-FROM-TO.db with what was fetched since the last export, up to
+/// `max_window_s` from the first document; null when nothing new. The name is in
+/// `arena`. `now_s` must be read before the call: each copy then sees everything
+/// committed by then
 pub fn exportNew(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8, now_s: i64) !?Export {
     try db.exec(ddl);
     try Io.Dir.cwd().createDirPath(io, dir);
     try cleanUp(arena, io, db, dir);
     const from = try int(db, "SELECT coalesce(max(to_s), 0) FROM raw.archive_exports", .{});
-    const to = now_s - settle_s;
-    if (to <= from) return null;
+    // From the first document, so a stretch with none (crawler stopped) costs no exports
+    const first = try int(db,
+        \\SELECT coalesce(min(t), -1) FROM (
+        \\    SELECT min(fetched_at) AS t FROM raw.raw_docs WHERE source = 'riot_match' AND fetched_at >= ?1
+        \\    UNION ALL SELECT min(fetched_at) FROM raw.timeline_docs WHERE fetched_at >= ?1
+        \\    UNION ALL SELECT min(fetched_at) FROM mastery WHERE fetched_at >= ?1)
+    , .{from});
+    if (first < 0) return null;
+    const more = first + max_window_s < now_s - settle_s;
+    const to = if (more) first + max_window_s else now_s - settle_s;
+    if (to <= first) return null;
     const name = try std.fmt.allocPrint(arena, "raw-{d}-{d}.db", .{ from, to });
     const tmp = try std.fmt.allocPrintSentinel(arena, "{s}/{s}.tmp", .{ dir, name }, 0);
     errdefer Io.Dir.cwd().deleteFile(io, tmp) catch {};
@@ -97,6 +122,7 @@ pub fn exportNew(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8
         .timelines = counts.timelines,
         .mastery = counts.mastery,
         .pruned = try pruneExported(db, path),
+        .more = more,
     };
 }
 
@@ -179,8 +205,9 @@ fn copy(db: store.Db, tmp: [:0]const u8, from: i64, to: i64) !Counts {
 
 /// Before an export: partial files of failed ones go (each run names its own, so none
 /// would be overwritten), and so does the newest export's row if its file never got its
-/// name, so its window is exported again. An older unacked row without a file is left
-/// alone: its documents are not archived, and dropping the row would let them be pruned
+/// name (and the gpu-box never received it), so its window is exported again. An older
+/// unacked row without a file is left alone: its documents are not archived, and
+/// dropping the row would let them be pruned
 fn cleanUp(arena: std.mem.Allocator, io: Io, db: store.Db, dir_path: []const u8) !void {
     var dir = try Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true });
     defer dir.close(io);
@@ -197,13 +224,15 @@ fn cleanUp(arena: std.mem.Allocator, io: Io, db: store.Db, dir_path: []const u8)
     }
 
     var s = try db.prepare(
-        \\SELECT name FROM raw.archive_exports WHERE acked_at IS NULL
-        \\ORDER BY to_s DESC LIMIT 1
+        \\SELECT name, name IN (SELECT name FROM raw.archive_received)
+        \\FROM raw.archive_exports WHERE acked_at IS NULL ORDER BY to_s DESC LIMIT 1
     );
     defer s.deinit();
     if (!try s.step()) return;
     const newest = try arena.dupe(u8, s.bytes(0));
+    const got = s.int(1) != 0;
     s.reset();
+    if (got) return;
     if (dir.access(io, newest, .{})) |_| return else |err| if (err != error.FileNotFound) return err;
     log.info("export {s} has no file: exporting its window again", .{newest});
     try db.run("DELETE FROM raw.archive_exports WHERE name = ?", .{newest});
@@ -211,11 +240,57 @@ fn cleanUp(arena: std.mem.Allocator, io: Io, db: store.Db, dir_path: []const u8)
 
 pub const Pruned = struct { summaries: i64, timelines: i64 };
 
-/// Marks `name` archived, deletes its file in `dir`, then drops raw documents that are
-/// acked (older than every unacked export) and older than `keep_days`. A name with no
-/// row (a file from an older binary's failed export) has its file deleted all the same:
-/// the gpu-box acks only what it archived, and an error here would stop its every pull
-pub fn ack(io: Io, db: store.Db, dir: []const u8, name: []const u8, keep_days: u32, now_s: i64) !Pruned {
+/// The gpu-box has `name`, the file's sha256 checked against its own copy: the box's file
+/// goes now, not at the ack after the archive. Again for a received name is a no-op (a
+/// retry whose first answer was lost)
+pub fn received(io: Io, db: store.Db, dir: []const u8, name: []const u8, now_s: i64) !void {
+    if (!isExportName(name)) return error.BadExportName;
+    try db.exec(ddl);
+    if (try int(db, "SELECT count(*) FROM raw.archive_exports WHERE name = ? AND acked_at IS NULL", .{name}) == 0)
+        return error.NotUnacked;
+    // The row first: a crash before the delete leaves a file the ack deletes later
+    try db.run("INSERT OR IGNORE INTO raw.archive_received VALUES (?, ?)", .{ name, now_s });
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const path = try std.fmt.bufPrint(&buf, "{s}/{s}", .{ dir, name });
+    Io.Dir.cwd().deleteFile(io, path) catch |err| if (err != error.FileNotFound) return err;
+}
+
+/// For the gpu-box, oldest first, one line per unacked export: "NAME SIZE" while the box
+/// has its file, "NAME received" once the gpu-box has it, "NAME missing" for a window the
+/// next export makes again (cleanUp)
+pub fn list(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8, w: *Io.Writer) !void {
+    try db.exec(ddl);
+    var s = try db.prepare(
+        \\SELECT name, name IN (SELECT name FROM raw.archive_received) FROM raw.archive_exports
+        \\WHERE acked_at IS NULL ORDER BY from_s
+    );
+    defer s.deinit();
+    const cwd = Io.Dir.cwd();
+    while (try s.step()) {
+        const name = s.bytes(0);
+        if (s.int(1) != 0) {
+            try w.print("{s} received\n", .{name});
+            continue;
+        }
+        const path = try std.fmt.allocPrint(arena, "{s}/{s}", .{ dir, name });
+        const f = cwd.openFile(io, path, .{}) catch |err| switch (err) {
+            error.FileNotFound => {
+                try w.print("{s} missing\n", .{name});
+                continue;
+            },
+            else => return err,
+        };
+        defer f.close(io);
+        try w.print("{s} {d}\n", .{ name, try f.length(io) });
+    }
+}
+
+/// Marks `name` archived and deletes its file in `dir` if the box still has it; quick, so
+/// the gpu-box's ssh is short (the prune, minutes after a backlog, is `pruneAcked`). A
+/// name with no row (a file from an older binary's failed export) has its file deleted
+/// all the same: the gpu-box acks only what it archived, and an error here would stop
+/// its every pull. Again for an acked name is a no-op
+pub fn ack(io: Io, db: store.Db, dir: []const u8, name: []const u8, now_s: i64) !void {
     if (!isExportName(name)) return error.BadExportName;
     try db.exec(ddl);
     try db.run("UPDATE raw.archive_exports SET acked_at = ? WHERE name = ? AND acked_at IS NULL", .{ now_s, name });
@@ -224,11 +299,7 @@ pub fn ack(io: Io, db: store.Db, dir: []const u8, name: []const u8, keep_days: u
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = try std.fmt.bufPrint(&buf, "{s}/{s}", .{ dir, name });
     Io.Dir.cwd().deleteFile(io, path) catch |err| if (err != error.FileNotFound) return err;
-    if (!known) {
-        log.warn("ack of {s}, which no export recorded: file deleted, nothing pruned", .{name});
-        return .{ .summaries = 0, .timelines = 0 };
-    }
-    return prune(db, keep_days, now_s);
+    if (!known) log.warn("ack of {s}, which no export recorded: file deleted", .{name});
 }
 
 /// raw-FROM-TO.db, the names exportNew makes
@@ -241,7 +312,9 @@ fn isExportName(name: []const u8) bool {
     return true;
 }
 
-fn prune(db: store.Db, keep_days: u32, now_s: i64) !Pruned {
+/// Drops raw documents that are acked (older than every unacked export) and older than
+/// `keep_days`
+pub fn pruneAcked(db: store.Db, keep_days: u32, now_s: i64) !Pruned {
     const acked_until = (try store.schema.archivedUntil(db)) orelse 0;
     const cutoff = @min(acked_until, now_s - @as(i64, keep_days) * std.time.s_per_day);
     var out: Pruned = .{ .summaries = 0, .timelines = 0 };
@@ -364,7 +437,8 @@ pub fn valve(
 fn dropExport(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8, now_s: i64) !?Dropped {
     var s = try db.prepare(
         \\SELECT name, from_s, to_s, summaries + timelines + mastery FROM raw.archive_exports
-        \\WHERE acked_at IS NULL ORDER BY from_s
+        \\WHERE acked_at IS NULL AND name NOT IN (SELECT name FROM raw.archive_received)
+        \\ORDER BY from_s
     );
     defer s.deinit();
     const cwd = Io.Dir.cwd();
@@ -486,10 +560,13 @@ test "export, ack, prune only what is acked and old enough" {
     try testing.expectEqual(null, try exportNew(arena, io, db, out, later));
 
     // Acking the newer export alone drops nothing: the older one still waits
-    try testing.expectEqual(Pruned{ .summaries = 0, .timelines = 0 }, try ack(io, db, out, second.name, 0, later));
+    try ack(io, db, out, second.name, later);
+    try testing.expectEqual(Pruned{ .summaries = 0, .timelines = 0 }, try pruneAcked(db, 0, later));
     try testing.expectEqual(1, (try status(db, later)).unacked);
     // Both acked: everything older than 2 days goes, the fresh summary stays
-    try testing.expectEqual(Pruned{ .summaries = 1, .timelines = 0 }, try ack(io, db, out, first.name, 2, later));
+    try ack(io, db, out, first.name, later);
+    try ack(io, db, out, first.name, later);
+    try testing.expectEqual(Pruned{ .summaries = 1, .timelines = 0 }, try pruneAcked(db, 2, later));
     try testing.expectEqual(1, try int(db, "SELECT count(*) FROM raw.raw_docs", .{}));
     try testing.expectEqual(0, (try status(db, later)).unacked);
     // The ack deleted the file
@@ -532,10 +609,70 @@ test "a failed export leaves nothing behind; an unknown ack deletes its file" {
     const saved = testing.log_level;
     defer testing.log_level = saved;
     testing.log_level = .err;
-    try testing.expectEqual(Pruned{ .summaries = 0, .timelines = 0 }, try ack(io, db, out, "raw-7-8.db", 0, now));
+    try ack(io, db, out, "raw-7-8.db", now);
     try testing.expectError(error.FileNotFound, cwd.access(io, stray, .{}));
-    try testing.expectError(error.BadExportName, ack(io, db, out, "../raw-7-8.db", 0, now));
+    try testing.expectError(error.BadExportName, ack(io, db, out, "../raw-7-8.db", now));
     try testing.expectEqual(1, (try status(db, now)).unacked);
+}
+
+test "a backlog goes in windows; a received file goes before the ack, and stays exported" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const data = try arena.print("{s}/data", .{base});
+    const out = try arena.print("{s}/out", .{base});
+    const cwd = Io.Dir.cwd();
+    try cwd.createDirPath(io, data);
+    const db = try store.open(arena, data);
+    defer db.close();
+    const hour = 3600;
+    const now = 100 * std.time.s_per_day;
+    // Five hours of backlog after a day with nothing
+    try db.run("INSERT INTO raw.raw_docs VALUES ('riot_match', 'EUW1_1', ?, x'01'), ('riot_match', 'EUW1_2', ?, x'02')", .{
+        now - 5 * hour, now - hour,
+    });
+    try db.run("INSERT INTO raw.timeline_docs VALUES ('EUW1_1', ?, x'03')", .{now - 5 * hour});
+
+    const a = (try exportNew(arena, io, db, out, now)).?;
+    try testing.expect(a.more);
+    try testing.expectEqual(1, a.summaries);
+    try testing.expectEqualStrings(try arena.print("raw-0-{d}.db", .{now - 3 * hour}), a.name);
+    // Empty window between the two documents: the next export starts at EUW1_2
+    const b = (try exportNew(arena, io, db, out, now)).?;
+    try testing.expect(!b.more);
+    try testing.expectEqual(1, b.summaries);
+    try testing.expectEqual(null, try exportNew(arena, io, db, out, now));
+
+    var buf: [256]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try list(arena, io, db, out, &w);
+    try testing.expectEqual(2, std.mem.count(u8, w.buffered(), "\n"));
+    try testing.expect(std.mem.startsWith(u8, w.buffered(), try arena.print("{s} ", .{a.name})));
+
+    // The newest export received: its file goes, and the next export doesn't redo it
+    try received(io, db, out, b.name, now);
+    try received(io, db, out, b.name, now);
+    try testing.expectError(error.FileNotFound, cwd.access(io, try arena.print("{s}/{s}", .{ out, b.name }), .{}));
+    try testing.expectEqual(null, try exportNew(arena, io, db, out, now + 60));
+    w = .fixed(&buf);
+    try list(arena, io, db, out, &w);
+    try testing.expect(std.mem.endsWith(u8, w.buffered(), try arena.print("{s} received\n", .{b.name})));
+    // Received yet unacked: summaries stay, and the valve passes it over
+    try testing.expectEqual(Pruned{ .summaries = 0, .timelines = 0 }, try pruneAcked(db, 0, now));
+    const saved = testing.log_level;
+    defer testing.log_level = saved;
+    testing.log_level = .err;
+    const log_path = try arena.print("{s}/raw-dropped.log", .{data});
+    try testing.expectEqualStrings(a.name, (try valve(arena, io, db, out, log_path, 1, 2, now)).?.name);
+    try testing.expectEqual(null, try valve(arena, io, db, out, log_path, 1, 2, now));
+
+    try ack(io, db, out, b.name, now);
+    try testing.expectError(error.NotUnacked, received(io, db, out, b.name, now));
+    try testing.expectEqual(Pruned{ .summaries = 2, .timelines = 0 }, try pruneAcked(db, 0, now));
 }
 
 test "an export prunes only the timelines it holds, never failed parses" {

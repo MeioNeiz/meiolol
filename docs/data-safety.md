@@ -106,7 +106,7 @@ deploy/health.sh runs on the box and prints one line per problem:
 | backup | tmux `meiolol-backup` gone, or newest state snapshot older than 26h |
 | gpu-box | no raw archive ack for 12h (ACK_H): PC off, asleep or WSL down; first export never acked; one export unacked for 12h while others are acked (see archive-pull.log on the gpu-box) |
 | gpu-box disks | C: (holds the WSL disk) or the WSL disk or the archive partition at 85%, or the partition not attached; reported by each archive pull |
-| raw held | free disk under twice raw.db + timeline.db + archive-out (raw stays until acked) |
+| raw held | free disk above the raw valve under 3 days of raw (bytes sent to the gpu-box over the last 24 h, data/archive-sent.log): what an outage of the gpu-box can last before the valve drops unarchived raw; exports waiting on the box shown apart |
 | gpu-box archive | last pull reported a failure (data/gpu-box.pull, written by archive-serve.sh report): cause and since when, pushed once per failure |
 | raw valve | the disk valve dropped raw the archive never got in the last 24 h (raw-export --status drops_24h, data/raw-dropped.log) |
 | backup mirrors | backups not mirrored for 26 h, or a mirror silent for 48 h (backup-serve.sh status) |
@@ -206,33 +206,52 @@ would be blanked anyway). Box side src/archive.zig (`meiolol raw-export`); gpu-b
 src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-pull
 (hourly, skipped while League is open).
 
-- Box: an export writes everything fetched since the last one to
-  data/archive-out/raw-FROM-TO.db, as stored (real ids: the salt never comes to the
-  box). The gpu-box's key in ~/.ssh/authorized_keys may only run
-  deploy/archive-serve.sh (export, list, send, ack, forgotten, status)
-- gpu-box: fetch, check the size, `meiolol-lab archive` (anonymise.rewriteMatch: PUUIDs
+- Box: an export writes what was fetched since the last one, at most 2 hours of it
+  from its first document (~1 GB), to data/archive-out/raw-FROM-TO.db, as stored (real
+  ids: the salt never comes to the box). The gpu-box's key in ~/.ssh/authorized_keys
+  may only run deploy/archive-serve.sh (export, list, send, got, ack, forgotten,
+  status)
+- gpu-box, per export until caught up (stopping when League opens): fetch to the archive
+  partition (ARCHIVE/../incoming), check the size, sha256 and fsync it, then `got NAME
+  SHA256`: the box deletes its file only if the sha256 matches its own, and records the
+  export as received (raw.archive_received; the next export won't redo its window).
+  From then the gpu-box's copy is the only one of its timelines. Then `meiolol-lab
+  archive` (anonymise.rewriteMatch: PUUIDs
   and match ids salted-hashed as in snapshots, so the ids match; Riot IDs, summoner ids
   and names blanked; profile icons 0), zstd -15 --long, test, then ack. Layout:
   ARCHIVE/YYYY-MM-DD/{summaries,timelines}-NAME.jsonl.zst, mastery-NAME.tsv.zst (hashed
-  PUUID, platform, fetched_at, champions, compact blob in hex), ARCHIVE/index.tsv
+  PUUID, platform, fetched_at, champions, compact blob in hex), ARCHIVE/index.tsv.
+  An export whose archive fails stays in incoming and no new one is asked for until it
+  is archived: the rest waits in raw.db, never as a second copy
+- Before 18 Oct an export held everything since the last ack and stayed on the box until
+  that ack, after the archive: a gpu-box back after a day wrote one file of the whole
+  backlog (33 GB on 17 Oct). zstd on an export saves 3% (bodies are gzip already)
 - The salt is on the gpu-box too (~/.config/meiolol/snap-salt, 600), never on the box
   or in git
-- The box drops raw documents only once acked and 2 days old (`--ack NAME --keep-days
-  2`); unacked ones stay whatever their age: once an export exists, the crawler's own
-  raw prune (`--raw-timeline-days`, `--raw-match-days`) also stops at the start of the
-  oldest unacked export. A stopped pull shows in Health alerts: gpu-box (no ack for
-  12h) and raw held (free disk under twice the raw held)
+- The box drops raw documents only once acked and 2 days old (`--prune --keep-days 2`,
+  which archive-serve.sh starts detached after each `--ack NAME`); unacked ones stay
+  whatever their age: once an export exists, the crawler's own raw prune
+  (`--raw-timeline-days`, `--raw-match-days`) also stops at the start of the oldest
+  unacked export. A stopped pull shows in Health alerts: gpu-box (no ack for 12h) and
+  raw held (days of raw above the valve)
+- Acks failed 14-17 Oct ("Connection ... closed by remote host" in the pull log): the
+  box's sshd logged "message authentication code incorrect" on each, a packet from home
+  corrupted in transit, on ssh sessions kept open minutes by the ack's prune. Now the
+  ack only marks and deletes (seconds) and the prune runs detached, one at a time
+  (data/archive-prune.log); every box command the pull makes is retried 3 times, and
+  is safe to repeat. A failed ack is retried next round: the export stays listed, and
+  is in index.tsv, so it is acked without a new fetch or archive
 - Raw timelines (most of the bytes) are the exception since 17 Oct: once an export file
   holds them (file and directory fsynced first) they leave raw.db at once, matched on
   id and fetch time, failed parses kept; the export file is their only box copy until
-  the ack deletes it. Before, a pull that ran but failed held every timeline twice
+  the gpu-box has it. Before, a pull that ran but failed held every timeline twice
   (raw.db and archive-out, ~12 GB a day). Raw summaries stay until acked and 2 days old
   (`learn`'s damage split and `meiolol rebuild` read them)
 - Valve (`crawl --raw-valve-free-gb N`, 0 off): every 5 min the crawler's writer reads
-  the data disk's free space (`df`); under N GB it drops the oldest unacked export
-  (file deleted, row marked acked so pruning moves past it), or with no export file
-  left the oldest 2,000 raw timelines in raw.db (~180 MB of pages for new raw to
-  reuse; raw.db never shrinks). That raw is never archived: uptime of the crawler, site
+  the data disk's free space (`df`); under N GB it drops the oldest unacked export not
+  yet received (file deleted, row marked acked so pruning moves past it), or with no
+  export file left the oldest 2,000 raw timelines in raw.db (~180 MB of pages for new
+  raw to reuse; raw.db never shrinks). That raw is never archived: uptime of the crawler, site
   builds and backups over a complete archive (Jacob, 17 Oct). Each drop: a warning in
   crawl.log, a row in raw.archive_dropped, a line in data/raw-dropped.log (unix time,
   kind export|raw, name, from_s, to_s, documents, bytes, free MB; tab-separated), and
@@ -244,9 +263,9 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   short of now, so a document still being written goes in the next one
 - Crash safety: an export is written as raw-FROM-TO.db.tmp, recorded in
   raw.archive_exports, then renamed. The next export deletes leftover .tmp files and
-  the newest record whose file never got its name (that window is exported again). An
-  ack of a name with no record deletes the file and prunes nothing; a failed ack is
-  logged and the pull carries on with the rest
+  the newest record whose file never got its name and was never received (that window
+  is exported again). An ack of a name with no record deletes the file; a failed ack
+  is logged and the pull carries on with the rest
 - The crawler treats a body that is not a whole document (empty, cut short, not a
   match) as a failed fetch, tried again later, never kept raw (crawl.zig wholeDoc), and
   the riot client errors on a body shorter than its Content-Length (17 Oct: ~1 in 150k
