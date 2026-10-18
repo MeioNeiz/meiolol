@@ -42,11 +42,26 @@ export fn fm_grad(
     for (e.enemies) |x| atomicAdd(&gr[l.a + x * 5 + e.role], r);
     for (e.allies) |x| atomicAdd(&gr[l.g + x * 5 + e.role], r);
     if (l.kind == 1) return;
-    // The row's own embedding u gets one atomic per k, summed here over its enemies: an
-    // atomic per enemy and k made fm_grad 85-89% of a pairwise dim 128 step (18 Oct)
-    var wr: [5]f32 = @splat(0);
+    if (l.kind == 2) {
+        // lane: one or two lane mates, so little to share between them
+        for (e.enemies, e.enemy_roles) |x, rx| {
+            if (!fm.laneMates(e.role, rx)) continue;
+            const wi = l.w + e.role * 5 + rx;
+            var dot: f32 = 0;
+            for (0..l.dim) |k| dot += p[l.u + e.me * l.dim + k] * p[l.v + x * l.dim + k];
+            atomicAdd(&gr[wi], r * dot);
+            const wr = r * p[wi];
+            for (0..l.dim) |k| {
+                atomicAdd(&gr[l.u + e.me * l.dim + k], wr * p[l.v + x * l.dim + k]);
+                atomicAdd(&gr[l.v + x * l.dim + k], wr * p[l.u + e.me * l.dim + k]);
+            }
+        }
+        return;
+    }
+    // pairwise: the row's own embedding u gets one atomic per k, summed here over its five
+    // enemies (an atomic per enemy and k made fm_grad 85-89% of a dim 128 step, 18 Oct)
+    var wr: [5]f32 = undefined;
     for (e.enemies, e.enemy_roles, &wr) |x, rx, *w| {
-        if (l.kind == 2 and !fm.laneMates(e.role, rx)) continue;
         const wi = l.w + e.role * 5 + rx;
         var dot: f32 = 0;
         for (0..l.dim) |k| dot += p[l.u + e.me * l.dim + k] * p[l.v + x * l.dim + k];
@@ -56,8 +71,7 @@ export fn fm_grad(
     for (0..l.dim) |k| {
         const u = p[l.u + e.me * l.dim + k];
         var du: f32 = 0;
-        for (e.enemies, e.enemy_roles, wr) |x, rx, w| {
-            if (l.kind == 2 and !fm.laneMates(e.role, rx)) continue;
+        for (e.enemies, wr) |x, w| {
             du += w * p[l.v + x * l.dim + k];
             atomicAdd(&gr[l.v + x * l.dim + k], w * u);
         }
