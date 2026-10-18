@@ -55,7 +55,10 @@ How to write a line:
   armour kits better into armour pen (which only means an AD team). A scan of every
   build and play stat pair finds a few more, all small (about 0.2 per step): tanky
   champions better into early, roaming and assassin teams, worse into objective-taking
-  ones; ranged champions worse into assassins. Sure: 13 kit groups declared before the
+  ones; ranged champions worse into assassins. What counts is the whole team's damage,
+  weighted by how much each champion usually deals: the enemy's single strongest AP or
+  auto-attack carry predicts less than the whole team's share, and adds nothing beyond
+  it (armour kits into the top AP threat -0.14 ± 0.35 with the share held). Sure: 13 kit groups declared before the
   run, 6 detected (5% false discovery rate, declared sign, same size in older and newer
   games), beyond the shipped model, snap-20261017T1320Z dev games; Rammus jungle +1.41 ±
   0.89 pp per sd with AP share held (held post hoc); scan 337 of 4,608 pairs replicated,
