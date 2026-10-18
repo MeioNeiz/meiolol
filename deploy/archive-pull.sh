@@ -20,8 +20,9 @@ salt=${SALT:-$HOME/.config/meiolol/snap-salt}
 export PATH="$HOME/bin:$PATH"
 awake=$HOME/ml/awake.d/archive-pull
 # Received exports wait here, on the archive disk (not C:), until archived and acked: the
-# box has deleted its copy
-incoming=$(dirname "$archive")/incoming
+# box has deleted its copy. Inside the archive (its mount point is root's); archive-age
+# and archive-forget walk only YYYY-MM-DD directories
+incoming=$archive/incoming
 
 log() { echo "$(date -u +%FT%TZ) $*"; }
 # Keepalives: an export of a long backlog prints nothing for half an hour, and the home

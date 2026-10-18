@@ -212,7 +212,7 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   may only run deploy/archive-serve.sh (export, list, send, got, ack, forgotten,
   status)
 - gpu-box, per export until caught up (stopping when League opens): fetch to the archive
-  partition (ARCHIVE/../incoming), check the size, sha256 and fsync it, then `got NAME
+  partition (ARCHIVE/incoming), check the size, sha256 and fsync it, then `got NAME
   SHA256`: the box deletes its file only if the sha256 matches its own, and records the
   export as received (raw.archive_received; the next export won't redo its window).
   From then the gpu-box's copy is the only one of its timelines. Then `meiolol-lab
