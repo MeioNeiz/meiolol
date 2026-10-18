@@ -342,7 +342,10 @@ pub const Extras = struct {
         return e;
     }
 
-    pub fn deinit(e: *Extras, gpa: std.mem.Allocator) void {
+    /// `arena` is load's
+    pub fn deinit(e: *Extras, gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) void {
+        for (&e.curves) |*c| if (c.*) |*x| x.unmap(arena, io);
+        for (&e.curves_prev) |*c| if (c.*) |*x| x.unmap(arena, io);
         if (e.people) |*p| p.deinit(gpa);
         if (e.games) |g| g.deinit();
     }
@@ -436,7 +439,7 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     var extras: Extras = .load(arena_state.allocator(), io, opts);
-    defer extras.deinit(gpa);
+    defer extras.deinit(gpa, arena_state.allocator(), io);
     const cwd = std.Io.Dir.cwd();
     try cwd.createDirPath(io, opts.out_dir);
     var root_dir = try cwd.openDir(io, opts.out_dir, .{});
@@ -1059,7 +1062,7 @@ pub const Loaded = struct {
 
     pub fn deinit(l: *Loaded) void {
         for (l.sites) |s| if (s) |loaded| unload(loaded);
-        l.extras.deinit(l.gpa);
+        l.extras.deinit(l.gpa, l.arena_state.allocator(), l.io);
         l.arena_state.deinit();
         l.gpa.destroy(l);
     }
@@ -1392,20 +1395,15 @@ fn biggestCurves(all: *const [html.View.count]?core.curvesfile.Curves) ?*const c
     return best;
 }
 
-/// The file is read outside `arena`: parse copies what it keeps, and the four site files
-/// are ~940 MB that stayed for the process's life (15 Oct)
+/// Mapped, not read: a file is ~70-230 MB, a renderer keeps up to eight for its life, and
+/// mapped pages are shared with the other renderer and the page cache (Extras.deinit
+/// unmaps them)
 fn loadCurves(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?core.curvesfile.Curves {
-    const gpa = std.heap.page_allocator;
-    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, gpa, .limited(1 << 30)) catch |err| {
+    return core.curvesfile.Curves.map(arena, io, std.Io.Dir.cwd(), path) catch |err| {
         switch (err) {
             error.FileNotFound => log.info("no lane curves at {s}", .{path}),
             else => log.warn("lane curves at {s}: {t}", .{ path, err }),
         }
-        return null;
-    };
-    defer gpa.free(bytes);
-    return core.curvesfile.Curves.parse(arena, bytes) catch |err| {
-        log.warn("lane curves at {s}: {t}", .{ path, err });
         return null;
     };
 }

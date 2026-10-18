@@ -162,10 +162,11 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
 ## Deploy (live since 2026-10-11, jomove server)
 
 Jacob left the deploy and the preview gating to us. Server: jomove (x86_64, 1 GB RAM,
-~540 MB free; the service uses ~11 MB plus its curves files, parsed at about their
-file size: curves-16.20.bin was 226 MB on 17 Oct, so two full-patch files will not fit
-MemoryMax 400M; the service loads the newest patch's file and older ones only within 320
-MB, src/api/root.zig max_curve_bytes).
+~540 MB free; the service uses ~11 MB plus the curves array, 24 bytes a curve). The
+newest two curves files are mapped read-only (curvesfile.Curves.map): pages load as
+lookups touch them and count as reclaimable page cache under MemoryMax 400M, so both
+patches load whatever their size (before 18 Oct they were copied to the heap, 226 MB
+for 16.20 on 17 Oct, and older patches were left out past 320 MB).
 
 - Binary: /usr/local/bin/meiolol (root 755), built on the Mac from a clean commit with
   `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's

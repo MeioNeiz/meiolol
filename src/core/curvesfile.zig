@@ -578,18 +578,28 @@ fn spread(values: []i16) Spread {
 }
 
 pub const Curve = struct {
-    header: Header,
+    header: *const Header,
     minutes: []const Minute,
 };
 
-/// A parsed curves file. Owns its arrays; does not borrow the bytes.
+/// What the file's bytes are aligned to, so its headers and minutes are read in place
+pub const file_align = @max(@alignOf(Fit), @alignOf(Header), @alignOf(Minute));
+const curve_len = @sizeOf(Header) + max_minutes * @sizeOf(Minute);
+comptime {
+    std.debug.assert(header_len % file_align == 0);
+    std.debug.assert(@sizeOf(Fit) % file_align == 0);
+    std.debug.assert(@sizeOf(Header) % file_align == 0);
+    std.debug.assert(@sizeOf(Minute) % file_align == 0);
+}
+
+/// A curves file read in place: fit and every curve point into `bytes`, which parse
+/// copies and map maps read-only
 pub const Curves = struct {
-    patch_buf: [patch_len]u8,
-    patch_len: usize,
     games: u32,
-    fit: *Fit,
-    curves: []Curve,
-    minutes: []Minute,
+    fit: *const Fit,
+    curves: []const Curve,
+    bytes: []align(file_align) const u8,
+    mapping: ?std.Io.File.MemoryMap = null,
 
     pub const ParseError = error{
         BadMagic,
@@ -600,79 +610,86 @@ pub const Curves = struct {
         OutOfMemory,
     };
 
+    /// A copy of `bytes`: does not borrow them
     pub fn parse(gpa: std.mem.Allocator, bytes: []const u8) ParseError!Curves {
-        var r: std.Io.Reader = .fixed(bytes);
-        return read(gpa, &r, bytes.len) catch |err| switch (err) {
-            error.ReadFailed => unreachable,
-            else => |e| e,
-        };
+        const own = try gpa.alignedAlloc(u8, .fromByteUnits(file_align), bytes.len);
+        errdefer gpa.free(own);
+        @memcpy(own, bytes);
+        return view(gpa, own);
     }
 
-    /// As parse, from a reader of `len` bytes: the Your games server has room for the
-    /// parsed curves but not for them and the file's bytes at once
-    pub fn read(gpa: std.mem.Allocator, r: *std.Io.Reader, len: u64) (ParseError || error{ReadFailed})!Curves {
-        const take = struct {
-            fn bytes(rr: *std.Io.Reader, out: []u8) error{ ReadFailed, Truncated }!void {
-                rr.readSliceAll(out) catch |err| return switch (err) {
-                    error.EndOfStream => error.Truncated,
-                    error.ReadFailed => error.ReadFailed,
-                };
-            }
-        };
-        if (len < header_len) return error.Truncated;
-        var head: [header_len]u8 = undefined;
-        try take.bytes(r, &head);
-        if (!std.mem.eql(u8, head[0..magic.len], magic)) return error.BadMagic;
-        const ints = head[magic.len..];
-        const ver = std.mem.readInt(u32, ints[0..4], .little);
-        if (ver != version) return error.UnsupportedVersion;
-        const m = std.mem.readInt(u32, ints[4..8], .little);
-        if (m != max_minutes) return error.UnsupportedVersion;
-        const games = std.mem.readInt(u32, ints[8..12], .little);
-        const k = std.mem.readInt(u32, ints[12..16], .little);
-        if (k > max_curves) return error.TooManyCurves;
+    /// The file at `sub_path` mapped read-only and not read ahead: pages load on first
+    /// use and stay reclaimable (jomove's Your games service has MemoryMax 400M). Its
+    /// writers replace it by rename, which leaves the mapped file intact; one cut short
+    /// in place would fault (SIGBUS) on the lost pages
+    pub fn map(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8) !Curves {
+        const file = try dir.openFile(io, sub_path, .{});
+        errdefer file.close(io);
+        const len = try file.length(io);
         if (len < header_len + @sizeOf(Fit)) return error.Truncated;
-        const per_curve = @sizeOf(Header) + m * @sizeOf(Minute);
-        const body = len - header_len - @sizeOf(Fit);
-        if (body < k * per_curve) return error.Truncated;
-        if (body > k * per_curve) return error.SizeMismatch;
-
-        const fit = try gpa.create(Fit);
-        errdefer gpa.destroy(fit);
-        try take.bytes(r, std.mem.asBytes(fit));
-        var c: Curves = .{
-            .patch_buf = undefined,
-            .patch_len = 0,
-            .games = games,
-            .fit = fit,
-            .curves = &.{},
-            .minutes = &.{},
-        };
-        @memcpy(&c.patch_buf, head[header_len - patch_len ..]);
-        c.patch_len = std.mem.indexOfScalar(u8, &c.patch_buf, 0) orelse patch_len;
-
-        c.curves = try gpa.alloc(Curve, k);
-        errdefer gpa.free(c.curves);
-        c.minutes = try gpa.alloc(Minute, k * m);
-        errdefer gpa.free(c.minutes);
-        for (c.curves, 0..) |*cv, i| {
-            try take.bytes(r, std.mem.asBytes(&cv.header));
-            const mins = c.minutes[i * m ..][0..m];
-            try take.bytes(r, std.mem.sliceAsBytes(mins));
-            cv.minutes = mins;
-        }
+        var mm = try file.createMemoryMap(io, .{
+            .len = std.math.cast(usize, len) orelse return error.SizeMismatch,
+            .protection = .{ .read = true },
+            .populate = false,
+        });
+        errdefer mm.destroy(io);
+        var c = try view(gpa, mm.memory);
+        c.mapping = mm;
         return c;
     }
 
+    /// Over `bytes`, which must outlive it. Checks the header and that the size is
+    /// exactly its curves, so every curve lies inside `bytes`; values are not checked
+    fn view(gpa: std.mem.Allocator, bytes: []align(file_align) const u8) ParseError!Curves {
+        if (bytes.len < header_len) return error.Truncated;
+        if (!std.mem.eql(u8, bytes[0..magic.len], magic)) return error.BadMagic;
+        const ints = bytes[magic.len..header_len];
+        if (std.mem.readInt(u32, ints[0..4], .little) != version) return error.UnsupportedVersion;
+        if (std.mem.readInt(u32, ints[4..8], .little) != max_minutes) return error.UnsupportedVersion;
+        const games = std.mem.readInt(u32, ints[8..12], .little);
+        const k = std.mem.readInt(u32, ints[12..16], .little);
+        if (k > max_curves) return error.TooManyCurves;
+        if (bytes.len < header_len + @sizeOf(Fit)) return error.Truncated;
+        const body = bytes.len - header_len - @sizeOf(Fit);
+        if (body < @as(u64, k) * curve_len) return error.Truncated;
+        if (body > @as(u64, k) * curve_len) return error.SizeMismatch;
+
+        const curves = try gpa.alloc(Curve, k);
+        var at: usize = header_len + @sizeOf(Fit);
+        for (curves) |*cv| {
+            cv.header = @ptrCast(@alignCast(bytes[at..].ptr));
+            const mins: [*]const Minute = @ptrCast(@alignCast(bytes[at + @sizeOf(Header) ..].ptr));
+            cv.minutes = mins[0..max_minutes];
+            at += curve_len;
+        }
+        return .{
+            .games = games,
+            .fit = @ptrCast(@alignCast(bytes[header_len..].ptr)),
+            .curves = curves,
+            .bytes = bytes,
+        };
+    }
+
+    /// For parse's; unmap for map's
     pub fn deinit(c: *Curves, gpa: std.mem.Allocator) void {
-        gpa.destroy(c.fit);
+        std.debug.assert(c.mapping == null);
         gpa.free(c.curves);
-        gpa.free(c.minutes);
+        gpa.free(c.bytes);
+        c.* = undefined;
+    }
+
+    pub fn unmap(c: *Curves, gpa: std.mem.Allocator, io: std.Io) void {
+        gpa.free(c.curves);
+        if (c.mapping) |*mm| {
+            const file = mm.file;
+            mm.destroy(io);
+            file.close(io);
+        }
         c.* = undefined;
     }
 
     pub fn patch(c: *const Curves) []const u8 {
-        return c.patch_buf[0..c.patch_len];
+        return std.mem.sliceTo(c.bytes[header_len - patch_len .. header_len], 0);
     }
 
     /// The estimation's variance parameters for `role`'s curves in `bracket`, all
@@ -936,9 +953,51 @@ test "round trip, sides and brackets" {
     const bytes = aw.written();
     try testing.expectError(error.Truncated, Curves.parse(gpa, bytes[0 .. bytes.len - 1]));
 
-    // A reader shorter than its stated length, as a file cut while being read
-    var short: std.Io.Reader = .fixed(bytes[0 .. bytes.len - 1]);
-    try testing.expectError(error.Truncated, Curves.read(gpa, &short, bytes.len));
+    const long = try std.mem.concat(gpa, u8, &.{ bytes, "x" });
+    defer gpa.free(long);
+    try testing.expectError(error.SizeMismatch, Curves.parse(gpa, long));
+    const bad = try gpa.dupe(u8, bytes);
+    defer gpa.free(bad);
+    bad[magic.len] += 1;
+    try testing.expectError(error.UnsupportedVersion, Curves.parse(gpa, bad));
+}
+
+test "map: the file in place, as parse reads it; a rename leaves the mapping intact" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var b: Builder = .{ .gpa = gpa };
+    defer b.deinit();
+    for ([_]i16{ 700, 300, -500 }) |g| try b.addLane(testLane(122, 86, g > 0, g, .low));
+    b.addGame();
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try b.write(&aw.writer, "16.20", 1);
+    const bytes = aw.written();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{ .sub_path = "c.bin", .data = bytes });
+    try tmp.dir.writeFile(io, .{ .sub_path = "short.bin", .data = bytes[0 .. bytes.len - 1] });
+    try tmp.dir.writeFile(io, .{ .sub_path = "empty.bin", .data = "" });
+
+    var parsed: Curves = try .parse(gpa, bytes);
+    defer parsed.deinit(gpa);
+    var mapped: Curves = try .map(gpa, io, tmp.dir, "c.bin");
+    defer mapped.unmap(gpa, io);
+    try testing.expectError(error.Truncated, Curves.map(gpa, io, tmp.dir, "short.bin"));
+    try testing.expectError(error.Truncated, Curves.map(gpa, io, tmp.dir, "empty.bin"));
+
+    // As curves replaces its files
+    try tmp.dir.writeFile(io, .{ .sub_path = "new.bin", .data = "replaced" });
+    try tmp.dir.rename("new.bin", tmp.dir, "c.bin", io);
+    try testing.expectEqualStrings("16.20", mapped.patch());
+    try testing.expectEqual(parsed.games, mapped.games);
+    try testing.expectEqual(parsed.fit.*, mapped.fit.*);
+    try testing.expectEqual(parsed.curves.len, mapped.curves.len);
+    for (parsed.curves, mapped.curves) |x, y| {
+        try testing.expectEqual(x.header.*, y.header.*);
+        try testing.expectEqualSlices(Minute, x.minutes, y.minutes);
+    }
+    try testing.expectEqual(parsed.get(.top, .low, 86, 122).?.wins(), mapped.get(.top, .low, 86, 122).?.wins());
 }
 
 test "min_games leaves thin curves out of the file, not the fit" {

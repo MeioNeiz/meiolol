@@ -57,7 +57,7 @@ fn file(a: std.mem.Allocator, x: Champ, y: Champ) ![]const u8 {
 
 /// A matchup's page curve: all ranks, all games. The file has one per bracket and
 /// experience (and role baselines, champion 0) for each pair
-fn isPage(h: curvesfile.Header) bool {
+fn isPage(h: *const curvesfile.Header) bool {
     return h.bracket == @backingInt(Bracket.all) and h.experience == @backingInt(curvesfile.Experience.any);
 }
 
@@ -848,7 +848,7 @@ test verdict {
     for (&minutes, 0..) |*m, i| m.est[0] = .{ .mean = @intCast(60 * i), .se = 20 };
     minutes[curvesfile.lane_minute - 1].est[0].mean = 846;
     const x: Champ = .{ .c = 0, .id = 1, .key = "", .name = "Ahri", .slug = "", .banned = 0, .games = 0 };
-    const cv: curvesfile.Curve = .{ .header = header, .minutes = &minutes };
+    const cv: curvesfile.Curve = .{ .header = &header, .minutes = &minutes };
     const Case = struct { flipped: bool, want: []const u8 };
     const ahead = [_]Case{
         .{ .flipped = false, .want = "<p class=\"verdict\">Ahri is ahead from the start, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.</p>\n" },
@@ -877,8 +877,9 @@ test verdict {
     }
 
     // Mostly baseline: the page's note says so, no verdict
-    var thin_cv = cv;
-    thin_cv.header.own = 300;
+    var thin_header = header;
+    thin_header.own = 300;
+    const thin_cv: curvesfile.Curve = .{ .header = &thin_header, .minutes = &minutes };
     aw.clearRetainingCapacity();
     try verdict(&aw.writer, .{ .v = .{ .curve = &thin_cv, .flipped = false }, .key = "any", .label = "" }, false, x);
     try std.testing.expectEqualStrings("", aw.written());

@@ -45,11 +45,8 @@ pub const Options = struct {
     max_games: u32 = 100,
 };
 
-/// Newest curves files kept in memory
+/// Newest curves files served: the box pushes two (web-loop.sh push_curves)
 const max_curve_files = 2;
-/// Curves parse to about their file size; jomove's unit has MemoryMax 400M, and a full
-/// patch's file is over 200 MB, so the previous patch's goes once the new one grows
-const max_curve_bytes = 320 << 20;
 
 const Context = struct {
     gpa: Allocator,
@@ -76,14 +73,50 @@ pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
         opts.host, opts.port, ctx.curves.files.len, opts.fetch.proxy orelse "this process's key",
     });
 
-    var group: Io.Group = .init;
-    defer group.cancel(io);
     var worker = try io.concurrent(work, .{&fetcher});
     defer worker.cancel(io);
+    try serve(&ctx, &server);
+}
+
+fn serve(ctx: *Context, server: *Io.net.Server) !void {
+    const io = ctx.io;
+    var group: Io.Group = .init;
+    defer group.cancel(io);
     while (true) {
         const stream = try server.accept(io);
-        group.async(io, connection, .{ &ctx, stream });
+        // Its own thread, as serve.zig: async may run it here when the pool is busy, and
+        // an idle keep-alive connection then blocks every later one
+        group.concurrent(io, connection, .{ ctx, stream }) catch |err| {
+            log.warn("connection: {t}", .{err});
+            stream.close(io);
+        };
     }
+}
+
+test "idle keep-alive connections do not hold up the next request" {
+    // No pool threads for async: what a 1-2 core host has once a request or two run
+    var threaded: Io.Threaded = .init(std.testing.allocator, .{ .async_limit = .nothing });
+    defer threaded.deinit();
+    const io = threaded.io();
+    var ctx: Context = .{ .gpa = std.testing.allocator, .io = io, .opts = .{ .db_path = "", .curves_dir = "" }, .curves = .{} };
+    const address = try Io.net.IpAddress.parse("127.0.0.1", 0);
+    var server = try address.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
+    var serving = try io.concurrent(serve, .{ &ctx, &server });
+    defer serving.cancel(io) catch {};
+
+    var idle: [4]Io.net.Stream = undefined;
+    for (&idle) |*c| c.* = try server.socket.address.connect(io, .{ .mode = .stream });
+    defer for (idle) |c| c.close(io);
+    const c = try server.socket.address.connect(io, .{ .mode = .stream });
+    defer c.close(io);
+    var buf: [256]u8 = undefined;
+    var w = c.writer(io, &buf);
+    try w.interface.writeAll("GET /api/none HTTP/1.1\r\nHost: x\r\n\r\n");
+    try w.interface.flush();
+    var got: [256]u8 = undefined;
+    const msg = try c.socket.receiveTimeout(io, &got, .{ .duration = .{ .raw = .fromSeconds(5), .clock = .awake } });
+    try std.testing.expectStringStartsWith(msg.data, "HTTP/1.1 404");
 }
 
 /// Without the fetcher the service only serves stale caches: exit, so systemd restarts
@@ -105,7 +138,7 @@ fn work(f: *fetch.Fetcher) void {
 /// curves-<label>.bin files, newest patch first, at most max_curve_files
 /// The newest curves files in `dir_path` with the legendary items for first-item timing
 pub fn loadCurveSet(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
-    var set = try loadCurves(arena, io, dir_path, max_curve_bytes);
+    var set = try loadCurves(arena, io, dir_path);
     // Item lists change little between patches: the newest curves patch's serves all
     if (set.files.len > 0) {
         const label = set.files[0].label;
@@ -117,7 +150,10 @@ pub fn loadCurveSet(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveS
     return set;
 }
 
-fn loadCurves(arena: Allocator, io: Io, dir_path: []const u8, max_bytes: u64) !game.CurveSet {
+/// Mapped, not read: pages load as lookups touch them and the kernel can drop them again,
+/// so files of any size fit the unit's MemoryMax. The mappings live as long as the process
+/// (a new curves file restarts it: meiolol-api-reload.path)
+fn loadCurves(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
     var dir = Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => {
             log.warn("no curves directory {s}: games show without typical curves", .{dir_path});
@@ -138,33 +174,20 @@ fn loadCurves(arena: Allocator, io: Io, dir_path: []const u8, max_bytes: u64) !g
         }
     }.newer);
     var files: std.ArrayList(game.CurveSet.File) = .empty;
-    var bytes: u64 = 0;
     for (names.items) |name| {
         if (files.items.len == max_curve_files) break;
-        // Read straight into the parsed copy: the web server is small
-        var file = try dir.openFile(io, name, .{});
-        defer file.close(io);
-        const len = try file.length(io);
-        // The newest always loads: without it no game has a curve
-        if (files.items.len > 0 and bytes + len > max_bytes) {
-            log.info("{s}: {d} MB left out, over the {d} MB curves budget", .{ name, len >> 20, max_bytes >> 20 });
-            continue;
-        }
-        var buf: [64 * 1024]u8 = undefined;
-        var fr = file.reader(io, &buf);
-        const curves = core.curvesfile.Curves.read(arena, &fr.interface, len) catch |err| {
-            log.warn("{s}: {t}", .{ name, if (err == error.ReadFailed) fr.err.? else err });
+        const curves = core.curvesfile.Curves.map(arena, io, dir, name) catch |err| {
+            log.warn("{s}: {t}", .{ name, err });
             continue;
         };
         const label = name["curves-".len .. name.len - ".bin".len];
         try files.append(arena, .{ .label = label, .curves = curves });
-        bytes += len;
-        log.info("{s}: {d} curves", .{ name, curves.curves.len });
+        log.info("{s}: {d} curves, {d} MB mapped", .{ name, curves.curves.len, curves.bytes.len >> 20 });
     }
     return .{ .files = files.items };
 }
 
-test "loadCurves: newest patch first; older files only within the byte budget" {
+test "loadCurves: the newest files, newest patch first" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -176,19 +199,19 @@ test "loadCurves: newest patch first; older files only within the byte budget" {
     defer b.deinit();
     var aw: std.Io.Writer.Allocating = .init(arena);
     try b.write(&aw.writer, "16.20", 1);
-    const len = aw.written().len;
     for ([_][]const u8{ "curves-16.19.bin", "curves-16.21.bin", "curves-16.20.bin" }) |name| {
         try tmp.dir.writeFile(io, .{ .sub_path = name, .data = aw.written() });
     }
 
-    const two = try loadCurves(arena, io, dir, 2 * len);
-    try std.testing.expectEqual(2, two.files.len);
-    try std.testing.expectEqualStrings("16.21", two.files[0].label);
-    try std.testing.expectEqualStrings("16.20", two.files[1].label);
-    // Over budget even alone, the newest still loads
-    const one = try loadCurves(arena, io, dir, len - 1);
-    try std.testing.expectEqual(1, one.files.len);
-    try std.testing.expectEqualStrings("16.21", one.files[0].label);
+    const set = try loadCurves(arena, io, dir);
+    defer for (set.files) |f| {
+        var c = f.curves;
+        c.unmap(arena, io);
+    };
+    try std.testing.expectEqual(2, set.files.len);
+    try std.testing.expectEqualStrings("16.21", set.files[0].label);
+    try std.testing.expectEqualStrings("16.20", set.files[1].label);
+    try std.testing.expectEqualStrings("16.20", set.files[0].curves.patch());
 }
 
 /// "curves-16.19-16.20.bin" -> 1620; 0 when unreadable
