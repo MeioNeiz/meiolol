@@ -27,6 +27,8 @@ permuted across fit games; scored rows real), so any netd gain must vanish
 
 import argparse
 import os
+import queue
+import threading
 import time
 
 import numpy as np
@@ -83,6 +85,36 @@ def batches(tensors, idx, dev):
     return [t[idx].to(dev, non_blocking=True) for t in tensors]
 
 
+def batches_ahead(tensors, chunks, dev, depth=3):
+    """batches() of each index chunk, gathered on a thread into pinned memory up to depth
+    ahead: gathering on the training thread left the card idle between steps. Pinned
+    blocks come from torch's caching host allocator, which holds each until its copy has
+    run, so none is overwritten in flight"""
+    if dev == "cpu":
+        yield from (batches(tensors, c, dev) for c in chunks)
+        return
+    q = queue.Queue(depth)
+    done = object()
+
+    def work():
+        try:
+            for c in chunks:
+                out = []
+                for t in tensors:
+                    b = torch.empty((len(c), *t.shape[1:]), dtype=t.dtype, pin_memory=True)
+                    out.append(torch.index_select(t, 0, c, out=b))
+                q.put(out)
+            q.put(done)
+        except BaseException as e:
+            q.put(e)
+
+    threading.Thread(target=work, daemon=True).start()
+    while (item := q.get()) is not done:
+        if isinstance(item, BaseException):
+            raise item
+        yield [t.to(dev, non_blocking=True) for t in item]
+
+
 def train(net, tensors, flip, tr, va, seed, hp, dev):
     epochs, batch, patience, lr = hp.epochs, hp.batch, hp.patience, hp.lr
     opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=hp.wd)
@@ -92,16 +124,14 @@ def train(net, tensors, flip, tr, va, seed, hp, dev):
     for ep in range(epochs):
         net.train()
         perm = tr[torch.randperm(len(tr), generator=g)]
-        for i in range(0, len(perm), batch):
-            x, H, ids, y = batches(tensors, perm[i : i + batch], dev)
+        for x, H, ids, y in batches_ahead(tensors, perm.split(batch), dev):
             opt.zero_grad()
             lossf(net(x, flip, H, ids), y).backward()
             opt.step()
         net.eval()
         vl = 0.0
         with torch.no_grad():
-            for b in va.split(65536):
-                x, H, ids, y = batches(tensors, b, dev)
+            for x, H, ids, y in batches_ahead(tensors, va.split(65536), dev):
                 vl += lossf(net(x, flip, H, ids), y, reduction="sum").item()
         vl /= len(va)
         if vl < best_loss - 1e-6:
@@ -182,7 +212,7 @@ def run_block(state, data, block, seeds, hp, dev, folds):
             vl, ep = train(net, tf, flip, tr, va, s, hp, dev)
             net.eval()
             with torch.no_grad():
-                z = torch.cat([net(x, flip, H, ids) for x, H, ids, _ in (batches(ts, b, dev) for b in torch.arange(len(gs)).split(65536))])
+                z = torch.cat([net(x, flip, H, ids) for x, H, ids, _ in batches_ahead(ts, torch.arange(len(gs)).split(65536), dev)])
             p = torch.sigmoid(z).cpu().numpy()
             res[f"{kind}_s{s}"] = p
             vls.append(vl), eps.append(ep + 1), secs.append(time.time() - t0)
