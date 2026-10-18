@@ -17,8 +17,13 @@ Researched 2026-10-11. Production key details: production-key.md.
   matches/day per region, ~135k/day total (was ~60k EUW summaries only). Stored compact
   (docs/architecture.md, Storage); raw kept 7 days, raw summaries 30 days
 - Summary-only alternative (`--timelines 0`): ~63k matches/day per region. The box
-  runs `--timelines 50`: EUW keeps every timeline (priority platforms always do), the
-  other regions get ~43k matches/day each, half with one
+  runs (18 Oct) `--timelines 50 --timelines-priority 100 --timeline-min-s 900`: 100% EUW
+  timelines for the curves benchmark; 50% elsewhere (by match id hash) until the
+  production key; games under 15 min skipped
+- ~33k matches/day is fetch throughput, not games played: 17 Oct the box fetched 33.3k
+  EUW match docs (32.4k solo, 0.9k flex) whose games spread over 7-17 Oct (patch
+  backfill). Per game day the DB has 17-24k EUW 16.20 solo games for 7-15 Oct, each day
+  still growing ~1.5k a day as players are rescanned
 - EUW is the priority (Jacob): the europe bucket scans EUW players first, so its ~33k
   matches/day are nearly all EUW (~20% of EUW's ~150-170k ranked solo games/day,
   lolalytics counts). EUNE, TR, RU and ME get only what EUW leaves (in practice a few
