@@ -49,7 +49,7 @@ fn loadPlain(
     legendaries: *const std.AutoHashMapUnmanaged(u64, void),
 ) !Data {
     if (try pack.read(gpa, io, snap, legendaries)) |d| return d;
-    return loadSql(gpa, snap, legendaries);
+    return pack.loadRepacking(gpa, io, snap, legendaries);
 }
 
 /// SNAP/legendaries.tsv (patch, item id; meiolol-3c writes it), empty when missing

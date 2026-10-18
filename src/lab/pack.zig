@@ -45,7 +45,41 @@ pub fn write(
     const after = try head(gpa, io, snap, legendaries);
     defer gpa.free(after);
     if (!std.mem.eql(u8, before, after)) return error.SnapshotChangedWhilePacking;
+    return writeData(gpa, io, snap, before, &data);
+}
 
+/// From SQLite, repacking SNAP/pack/ when one exists but is stale: an edit to `sources`
+/// (stats.zig changes for the site too) left every run loading from SQLite until someone
+/// ran `meiolol-lab pack` (1320Z, 18 Oct: 104 s a load at 8 GB). A failed repack only logs
+pub fn loadRepacking(
+    gpa: std.mem.Allocator,
+    io: Io,
+    snap: []const u8,
+    legendaries: *const std.AutoHashMapUnmanaged(u64, void),
+) !Data {
+    const pack_path = try std.fs.path.join(gpa, &.{ snap, dir_name });
+    defer gpa.free(pack_path);
+    const had = if (Io.Dir.cwd().statFile(io, pack_path, .{})) |_| true else |_| false;
+    if (!had) return rows.loadSql(gpa, snap, legendaries);
+    const before = try head(gpa, io, snap, legendaries);
+    defer gpa.free(before);
+    var data = try rows.loadSql(gpa, snap, legendaries);
+    errdefer data.deinit();
+    const after = try head(gpa, io, snap, legendaries);
+    defer gpa.free(after);
+    if (!std.mem.eql(u8, before, after)) {
+        log.info("{s} changed while loading: not repacked", .{snap});
+    } else if (writeData(gpa, io, snap, before, &data)) |n| {
+        log.info("repacked {s}/{s} ({d} games, {d} rows)", .{ snap, dir_name, n.games, n.rows });
+    } else |err| switch (err) {
+        error.OutOfMemory => return err,
+        else => log.info("{s}/{s}: not repacked ({t})", .{ snap, dir_name, err }),
+    }
+    return data;
+}
+
+/// DATA (loaded from SQLite while the manifest head was `before`) as SNAP/pack/
+fn writeData(gpa: std.mem.Allocator, io: Io, snap: []const u8, before: []const u8, data: *const Data) !Written {
     var tag: [8]u8 = undefined;
     io.random(&tag);
     const tmp_path = try std.fmt.allocPrint(gpa, "{s}/{s}.tmp-{x}", .{ snap, dir_name, tag });
@@ -73,7 +107,7 @@ pub fn write(
         var back = try readColumns(gpa, io, dir, data.games.len, data.rows.len);
         defer back.deinit();
         var buf: [256]u8 = undefined;
-        if (firstDiff(&data, &back, &buf)) |d| {
+        if (firstDiff(data, &back, &buf)) |d| {
             log.err("{s} reads back differently: {s}", .{ tmp_path, d });
             return error.PackRoundTrip;
         }
