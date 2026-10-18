@@ -61,8 +61,12 @@ pub const Options = struct {
     hours: ?f64 = null,
     regions: []const ep.Region = all_regions,
     /// Share of non-priority platforms' matches that also get a timeline, chosen by
-    /// match id hash; every priority platform match gets one
+    /// match id hash
     timeline_percent: u8 = 100,
+    /// The same for the --priority platforms' matches, by the same hash
+    timeline_priority_percent: u8 = 100,
+    /// Matches shorter than this get no timeline; 0: every length
+    timeline_min_s: u32 = 0,
     /// Ranked flex (queue 440) id lookups a day, one page each, for scanned players of
     /// the --priority platforms: a small test sample (Jacob, 2026-10-13) stored like solo
     /// games; every stats, site and model reader keeps to queue 420. 0: none
@@ -127,6 +131,13 @@ pub const Crawler = struct {
     patches: Patches = .{},
     /// Set up by run(): shared by the bucket threads and the proxy
     limiters: Limiters = undefined,
+    /// A stored player whose mastery this key fetched at start (checkKey), fetched
+    /// again when a call gets Riot's 401/403 to tell a rejected key from one refused
+    /// request. None: every 401/403 stops the crawler
+    probe: ?KeyProbe = null,
+    probe_lock: std.Io.Mutex = .init,
+    /// When the probe last worked; a 401/403 soon after skips its request unasked
+    key_ok_at: ?i64 = null,
 
     pub fn run(c: *Crawler) !void {
         c.limiters = try .init(c.gpa, c.io);
@@ -188,9 +199,9 @@ pub const Crawler = struct {
         if (!try q.step()) return;
         const r = q.row(struct { puuid: []const u8, platform: []const u8 });
         const p = ep.platform(r.platform) orelse return;
-        var client: Client = .init(c.gpa, c.io, c.opts.key, c.limiters.get(p.host).?);
-        defer client.deinit();
-        const got = ep.masteries(&client, p, r.puuid) catch |err| switch (err) {
+        const probe = KeyProbe.init(p, r.puuid) orelse return;
+        c.probe = probe;
+        c.probeKey(probe) catch |err| switch (err) {
             error.UnexpectedStatus => {
                 log.err("a stored {s} PUUID fails with this key: a key from another Riot app? Not crawling", .{p.id});
                 return error.KeyRejected;
@@ -202,9 +213,41 @@ pub const Crawler = struct {
                 return;
             },
         };
-        if (got) |b| c.gpa.free(b);
         log.info("key check: a stored {s} PUUID decrypts", .{p.id});
     }
+
+    fn probeKey(c: *Crawler, probe: KeyProbe) !void {
+        var client: Client = .init(c.gpa, c.io, c.opts.key, c.limiters.get(probe.platform.host).?);
+        defer client.deinit();
+        client.fake = c.opts.fake;
+        if (try ep.masteries(&client, probe.platform, probe.puuid())) |b| c.gpa.free(b);
+    }
+
+    /// After Riot's JSON 401/403: whether it was the key, so the crawler stops (exit 3),
+    /// or only that request, which is skipped. 16 Oct a refused TW2 player stopped all
+    /// 19 threads for 205 min as a rejected key
+    fn keyRejected(c: *Crawler) bool {
+        const probe = c.probe orelse return true;
+        c.probe_lock.lockUncancelable(c.io);
+        defer c.probe_lock.unlock(c.io);
+        const now = c.nowS();
+        if (c.key_ok_at) |t| if (now - t < key_recheck_s) return false;
+        c.probeKey(probe) catch |err| {
+            if (err == error.KeyRejected) {
+                log.warn("key recheck: the stored {s} player is refused too, the key is rejected", .{probe.platform.id});
+                return true;
+            }
+            // Riot down or slow, or that player gone: no answer, so not a rejection
+            log.warn("key recheck: {t}, skipping the refused request", .{err});
+            return false;
+        };
+        c.key_ok_at = now;
+        log.warn("key recheck: the key still works, skipping the refused request", .{});
+        return false;
+    }
+
+    /// One recheck answers for every thread's 401/403s this long
+    const key_recheck_s = 60;
 
     /// Bucket threads first: the writer then stores what they queued before stopping
     fn stopAll(c: *Crawler, threads: *std.ArrayList(std.Thread), writer_thread: std.Thread) void {
@@ -294,19 +337,18 @@ pub const Crawler = struct {
         c.writer.wake();
     }
 
-    /// Every priority platform match; of the rest `--timelines` percent, by match id hash
+    /// `--timelines-priority` percent of priority platform matches, `--timelines` of the
+    /// rest, by match id hash so a rerun picks the same games
     pub fn wantTimeline(c: *const Crawler, match_id: []const u8) bool {
-        if (ep.platformOf(match_id)) |p| {
-            if (c.isPriority(p)) return true;
-        }
-        const pct = c.opts.timeline_percent;
+        const priority = if (ep.platformOf(match_id)) |p| c.isPriority(p) else false;
+        const pct = if (priority) c.opts.timeline_priority_percent else c.opts.timeline_percent;
         return pct >= 100 or std.hash.Wyhash.hash(0, match_id) % 100 < pct;
     }
 
     /// Queue timelines for matches crawled before timelines existed. Runs while the
     /// queue is empty, so in practice once
     fn backfillTimelines(c: *Crawler, db: store.Db) !void {
-        if (c.opts.timeline_percent == 0 and c.opts.priority.len == 0) return;
+        if (c.opts.timeline_percent == 0 and (c.opts.priority.len == 0 or c.opts.timeline_priority_percent == 0)) return;
         if (try db.scalar("SELECT EXISTS (SELECT 1 FROM timeline_queue)", .{}) == 1) return;
         var q = try db.prepare(
             \\SELECT match_id FROM matches m WHERE remake = 0 AND queue_id = ?
@@ -349,14 +391,23 @@ fn dropDoneRows(db: store.Db) !void {
     }
 }
 
-/// Errors that stop the crawler; anything else is logged and the item skipped
-fn fatal(err: anyerror) bool {
-    return switch (err) {
-        // Busy too (a read, rare in WAL): the thread pauses and carries on
-        error.KeyRejected, error.OutOfMemory, error.Stopping, error.Sqlite, error.Busy => true,
-        else => false,
-    };
-}
+const KeyProbe = struct {
+    platform: ep.Platform,
+    buf: [96]u8 = undefined,
+    len: usize = 0,
+
+    fn init(platform: ep.Platform, id: []const u8) ?KeyProbe {
+        var p: KeyProbe = .{ .platform = platform };
+        if (id.len > p.buf.len) return null;
+        @memcpy(p.buf[0..id.len], id);
+        p.len = id.len;
+        return p;
+    }
+
+    fn puuid(p: *const KeyProbe) []const u8 {
+        return p.buf[0..p.len];
+    }
+};
 
 /// Thread body for a RegionCrawler or PlatformCrawler (`T`): connect, then `step` until
 /// stopped. Both have `b: Bucket`, `init(c, T.Of)` and `step()`
@@ -445,6 +496,16 @@ const Bucket = struct {
 
     fn check(b: *Bucket) !void {
         if (b.c.stop.load(.acquire)) return error.Stopping;
+    }
+
+    /// Errors that stop the crawler; anything else is logged and the item skipped
+    fn fatal(b: *Bucket, err: anyerror) bool {
+        return switch (err) {
+            error.KeyRejected => b.c.keyRejected(),
+            // Busy too (a read, rare in WAL): the thread pauses and carries on
+            error.OutOfMemory, error.Stopping, error.Sqlite, error.Busy => true,
+            else => false,
+        };
     }
 
     fn nap(b: *Bucket, seconds: u32) !void {
@@ -685,7 +746,7 @@ const RegionCrawler = struct {
         for (players.items) |p| {
             try rc.b.check();
             rc.scanPlayer(p.puuid, p.checked_at, p.platform) catch |err| {
-                if (fatal(err)) return err;
+                if (rc.b.fatal(err)) return err;
                 log.warn("{t} match ids: {t}", .{ rc.region, err });
                 // Marking them checked would skip their games since the last scan
                 if (err == error.RateLimited) continue;
@@ -761,7 +822,7 @@ const RegionCrawler = struct {
     fn fetchMatch(rc: *RegionCrawler, id: []const u8) !void {
         const gpa = rc.b.c.gpa;
         const got = ep.match(&rc.b.client, rc.region, id) catch |err| {
-            if (fatal(err)) return err;
+            if (rc.b.fatal(err)) return err;
             log.warn("match {s}: {t}", .{ id, err });
             // Left pending, so a 429 storm can't use up its tries
             if (err == error.RateLimited) return;
@@ -803,7 +864,7 @@ const RegionCrawler = struct {
     fn fetchTimeline(rc: *RegionCrawler, id: []const u8) !void {
         const gpa = rc.b.c.gpa;
         const got = ep.timeline(&rc.b.client, rc.region, id) catch |err| {
-            if (fatal(err)) return err;
+            if (rc.b.fatal(err)) return err;
             log.warn("timeline {s}: {t}", .{ id, err });
             // Left pending, so a 429 storm can't use up its tries
             if (err == error.RateLimited) return;
@@ -907,7 +968,7 @@ const PlatformCrawler = struct {
                     try pc.ladderGap();
                     // A bad page ends this division for now; the next pass retries it
                     const entries = pc.fetchLadderPage(tier, division, page) catch |err| {
-                        if (fatal(err)) return err;
+                        if (pc.b.fatal(err)) return err;
                         log.warn("{s} ladder {s} {s} page {d}: {t}", .{ p.host, tier, division, page, err });
                         break;
                     };
@@ -1089,7 +1150,7 @@ const PlatformCrawler = struct {
         if (pc.mastery_failures >= mastery_outage and good.len > 0) {
             if (pc.b.now() < pc.mastery_retry_at) return false;
             pc.fetchMastery(arena, good) catch |err| {
-                if (fatal(err)) return err;
+                if (pc.b.fatal(err)) return err;
                 pc.mastery_failures += 1;
                 if (pc.mastery_failures == mastery_outage + 1) log.warn("{s} mastery: {d} failures in a row " ++
                     "and the last good player fails too, trying again every {d}s", .{ pc.platform.host, mastery_outage, mastery_pause_s });
@@ -1100,7 +1161,7 @@ const PlatformCrawler = struct {
             pc.mastery_failures = 0;
         }
         pc.fetchMastery(arena, puuid) catch |err| {
-            if (fatal(err)) return err;
+            if (pc.b.fatal(err)) return err;
             pc.mastery_failures += 1;
             if (pc.mastery_failures <= mastery_outage) log.warn("{s} mastery: {t}", .{ pc.platform.host, err });
             return true;
@@ -1397,6 +1458,60 @@ test "timelines: every priority match, a share of the rest" {
     c.opts.timeline_percent = 0;
     try std.testing.expect(!c.wantTimeline("NA1_1"));
     try std.testing.expect(c.wantTimeline("EUW1_1"));
+}
+
+test "timelines: a share of priority matches too, the same games every time" {
+    var c: Crawler = .{
+        .gpa = std.testing.allocator,
+        .io = std.testing.io,
+        .opts = .{ .data_dir = "", .key = "", .timeline_priority_percent = 30 },
+    };
+    var buf: [32]u8 = undefined;
+    var euw: u32 = 0;
+    for (0..1000) |i| {
+        const id = try std.mem.print(&buf, "EUW1_{d}", .{i});
+        const want = c.wantTimeline(id);
+        try std.testing.expectEqual(want, c.wantTimeline(id));
+        if (want) euw += 1;
+        try std.testing.expect(c.wantTimeline(try std.mem.print(&buf, "EUN1_{d}", .{i})));
+    }
+    try std.testing.expect(euw > 230 and euw < 370);
+}
+
+test "a 401/403 stops the crawler only when the key check player is refused too" {
+    const gpa = std.testing.allocator;
+    const saved = std.testing.log_level;
+    defer std.testing.log_level = saved;
+    std.testing.log_level = .err;
+    var fake: @import("fake.zig").Fake = try .init(gpa, std.testing.io, 0);
+    defer fake.deinit(gpa);
+    var c: Crawler = .{ .gpa = gpa, .io = std.testing.io, .opts = .{ .data_dir = "", .key = "", .fake = &fake } };
+    c.limiters = try .init(gpa, std.testing.io);
+    defer c.limiters.deinit();
+    const db = try store.schema.memory();
+    defer db.close();
+    var counted: std.atomic.Value(u64) = .init(0);
+    var b: Bucket = .{ .c = &c, .name = "europe", .db = db, .client = .init(gpa, std.testing.io, "", c.limiters.get("europe").?), .priority = false, .requests = &counted };
+    defer b.client.deinit();
+    b.client.fake = &fake;
+
+    fake.refuse = "EUW1_refused";
+    const err = ep.match(&b.client, .europe, "EUW1_refused");
+    try std.testing.expectError(error.KeyRejected, err);
+    // No player to ask: every 401/403 stops, as before
+    try std.testing.expect(b.fatal(error.KeyRejected));
+
+    c.probe = KeyProbe.init(ep.platform("EUW1").?, "stored-puuid").?;
+    try std.testing.expect(!b.fatal(error.KeyRejected));
+    try std.testing.expect(c.key_ok_at != null);
+    // Riot refuses everything: within a minute of the last good check the request is
+    // only skipped, after it the crawler stops
+    fake.refuse = "";
+    try std.testing.expect(!b.fatal(error.KeyRejected));
+    c.key_ok_at = c.nowS() - Crawler.key_recheck_s;
+    try std.testing.expect(b.fatal(error.KeyRejected));
+    try std.testing.expect(!b.fatal(error.RateLimited));
+    try std.testing.expect(b.fatal(error.OutOfMemory));
 }
 
 test "whole documents: empty, cut short or not a match is a failed fetch" {

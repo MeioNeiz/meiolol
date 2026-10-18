@@ -429,7 +429,10 @@ pub const Writer = struct {
         // After the ranks above. Once per match: a re-stored one has its row already,
         // unless it still awaits the backfill
         if (!existed or try s.drafts.taken(id)) _ = try s.drafts.write(id);
-        if (want_timeline and !match.isRemake(doc) and wr.c.wantTimeline(id)) try s.timeline_queue.exec(.{ id, @tagName(r), t });
+        const long_enough = match.durationS(doc) >= wr.c.opts.timeline_min_s;
+        if (want_timeline and long_enough and !match.isRemake(doc) and wr.c.wantTimeline(id)) {
+            try s.timeline_queue.exec(.{ id, @tagName(r), t });
+        }
         try s.match_done.exec(.{id});
         return true;
     }
@@ -929,6 +932,34 @@ test "stored matches leave the queue and are not queued again" {
         .{ "SELECT count(*) FROM players WHERE source = 'participant'", 10 },
     };
     for (want) |w| try std.testing.expectEqual(@as(?i64, w[1]), try db.scalar(w[0], .{}));
+}
+
+test "--timeline-min-s: a shorter match gets no timeline" {
+    const gpa = std.testing.allocator;
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const db = try store.schema.memory();
+    defer db.close();
+    var c: crawl.Crawler = .{ .gpa = gpa, .io = std.testing.io, .opts = .{ .data_dir = "", .key = "" } };
+    var wr: Writer = .{ .c = &c };
+    defer wr.deinit();
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+    // The fixture lasts 1620 s
+    for ([_]u32{ 1621, 1620 }, [_][]const u8{ "EUW1_1", "EUW1_2" }) |min_s, id| {
+        c.opts.timeline_min_s = min_s;
+        var doc = try match.parse(arena.allocator(), @embedFile("testdata/match.json"));
+        doc.metadata.matchId = id;
+        var jobs = [_]*Job{try .create(gpa, .{ .match = .{ .region = .europe, .id = id, .doc = doc, .raw = "r", .t = 2 } })};
+        defer for (jobs) |job| job.destroy(gpa);
+        try wr.commit(db, &s, &jobs);
+    }
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM matches", .{}));
+    var q = try db.prepare("SELECT match_id FROM timeline_queue");
+    defer q.deinit();
+    try std.testing.expect(try q.step());
+    try std.testing.expectEqualStrings("EUW1_2", q.bytes(0));
+    try std.testing.expect(!try q.step());
 }
 
 test "a match whose document names another id is failed, not counted as stored" {

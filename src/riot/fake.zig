@@ -19,6 +19,9 @@ pub const Fake = struct {
     mastery_json: []u8,
     /// Which app's key this stands for: account-v1 PUUIDs differ per app (rekey.zig)
     encryption: u8 = 0,
+    /// Paths containing this get Riot's JSON 403 (error.KeyRejected); "" every path, a
+    /// rejected key
+    refuse: ?[]const u8 = null,
 
     pub fn init(gpa: std.mem.Allocator, io: std.Io, latency_ms: u32) !Fake {
         return .{
@@ -38,6 +41,7 @@ pub const Fake = struct {
     /// As Client.get: body (caller frees) or null for 404
     pub fn get(f: *const Fake, gpa: std.mem.Allocator, route: []const u8, path: []const u8) !?[]u8 {
         try f.io.sleep(.fromMilliseconds(f.latency_ms), .awake);
+        if (f.refuse) |r| if (std.mem.indexOf(u8, path, r) != null) return error.KeyRejected;
         if (std.mem.startsWith(u8, path, "/lol/league-exp/v4/entries/")) return try ladder(gpa, route, path);
         if (std.mem.startsWith(u8, path, "/lol/champion-mastery/")) return try gpa.dupe(u8, f.mastery_json);
         if (std.mem.startsWith(u8, path, "/riot/account/v1/accounts/")) return try f.account(gpa, path);

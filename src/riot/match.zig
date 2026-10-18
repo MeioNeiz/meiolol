@@ -110,6 +110,12 @@ fn nonEmpty(s: ?[]const u8) ?[]const u8 {
     return if (v.len == 0) null else v;
 }
 
+pub fn durationS(doc: Doc) i64 {
+    // Before Oct 2021 gameDuration was milliseconds and gameEndTimestamp absent
+    const info = doc.info;
+    return if (info.gameEndTimestamp == null) @divTrunc(info.gameDuration, 1000) else info.gameDuration;
+}
+
 pub fn isRemake(doc: Doc) bool {
     for (doc.info.participants) |p| if (p.gameEndedInEarlySurrender) return true;
     return false;
@@ -234,8 +240,7 @@ pub const Rows = struct {
     pub fn write(rows: *Rows, doc: Doc, source: []const u8, existed: bool) !void {
         const info = doc.info;
         const id = doc.metadata.matchId;
-        // Before Oct 2021 gameDuration was milliseconds and gameEndTimestamp absent
-        const duration = if (info.gameEndTimestamp == null) @divTrunc(info.gameDuration, 1000) else info.gameDuration;
+        const duration = durationS(doc);
 
         var winner: ?i64 = null;
         var winners: usize = 0;
