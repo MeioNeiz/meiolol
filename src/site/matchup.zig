@@ -481,21 +481,23 @@ fn verdict(w: *Writer, one: Variant, toggle: bool, x: Champ) !void {
 
 /// Minutes up to this read as "from the start": gold differences barely exist yet
 const start_minute = 4;
+/// A clear lead under this at lane_minute (after rounding to 100) still reads as even
+const min_lead_gold = 200;
 
 fn leadSince(w: *Writer, v: View, x: Champ) !void {
     const i = curvesfile.lane_minute - 1;
     const side = clearSide(v.estimate(.gold, i));
-    if (side == 0) return tpl.render(w, "About even in gold until {minute} minutes", .{ .minute = curvesfile.lane_minute });
+    const gold = @divTrunc(@abs(@as(i32, v.estimate(.gold, i).mean)) + 50, 100) * 100;
+    if (side == 0 or gold < min_lead_gold) return tpl.render(w, "About even in gold until {minute} minutes", .{ .minute = curvesfile.lane_minute });
     var from: usize = i;
     while (from > 0 and clearSide(v.estimate(.gold, from - 1)) == side) from -= 1;
-    const gold = @abs(@as(i32, v.estimate(.gold, i).mean));
     const early = from + 1 <= start_minute;
     try tpl.render(w, "{x} is {side} from {start}{from}, about {gold} gold by {minute} minutes", .{
         .x = x.name,
         .side = if (side > 0) "ahead" else "behind",
         .start = tpl.when(early, "the start"),
         .from = tpl.when(!early, tpl.t("minute {m}", .{ .m = from + 1 })),
-        .gold = @max(100, @divTrunc(gold + 50, 100) * 100),
+        .gold = gold,
         .minute = curvesfile.lane_minute,
     });
 }
@@ -846,11 +848,13 @@ test verdict {
     try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "x", .label = "" }, true, x);
     try std.testing.expectEqualStrings("<p class=\"verdict exp exp-x\">Ahri is ahead from minute 9, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.</p>\n", aw.written());
 
-    // Within 2 SE at 14: even
-    minutes[curvesfile.lane_minute - 1].est[0] = .{ .mean = 30, .se = 20 };
-    aw.clearRetainingCapacity();
-    try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "any", .label = "" }, false, x);
-    try std.testing.expectEqualStrings("<p class=\"verdict\">About even in gold until 14 minutes, then whoever is ahead wins 64% of games.</p>\n", aw.written());
+    // Within 2 SE at 14, or clear but about 100 gold: even
+    for ([_]curvesfile.Estimate{ .{ .mean = 30, .se = 20 }, .{ .mean = 140, .se = 20 } }) |e| {
+        minutes[curvesfile.lane_minute - 1].est[0] = e;
+        aw.clearRetainingCapacity();
+        try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "any", .label = "" }, false, x);
+        try std.testing.expectEqualStrings("<p class=\"verdict\">About even in gold until 14 minutes, then whoever is ahead wins 64% of games.</p>\n", aw.written());
+    }
 
     // Mostly baseline: the page's note says so, no verdict
     var thin_cv = cv;

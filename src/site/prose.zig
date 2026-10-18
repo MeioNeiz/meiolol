@@ -116,8 +116,9 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\the line while it has few of its own); the band is the middle half. In tables,
         \\colour says who is ahead on average and fades with fewer games, full from 200.</li>
         \\<li><b>Verdict</b>: the line above a gold chart says ahead or behind only while the
-        \\estimate is more than two standard errors from 0, else about even; "whoever is
-        \\ahead wins" counts both sides' games led at 14 minutes. Greyed-out curves get none.</li>
+        \\estimate is clear of noise (more than two standard errors from 0) and at least 200
+        \\gold at 14 minutes, else about even; "whoever is ahead wins" counts both sides'
+        \\games led at 14 minutes. Greyed-out curves get none.</li>
         \\<li><b>Games still going</b>: surrender opens at 15 minutes, so before it nearly
         \\every game is still running. Right of the dotted line at 15 minutes a curve counts
         \\only games still going, which tilts it toward closer games; each chart says what
