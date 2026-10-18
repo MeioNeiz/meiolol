@@ -47,11 +47,13 @@ pub const usage =
     \\                                  write DIR/draft-model.json and DIR/draft-ref.json for
     \\                                  the admin draft board (docs/model.md); T scales every
     \\                                  logit (calibration, default_temperature)
-    \\  draft SNAP --model additive [--pair-floor N] ...
+    \\  draft SNAP --model additive [--pair-floor N] [--fit all|dev] ...
     \\                                  either of the above with the additive model (pairs
     \\                                  and damage mix; needs seat stats, ignores -Dcand);
     \\                                  pair cells on fewer than N fit games are left out
-    \\                                  (default_pair_floor)
+    \\                                  (default_pair_floor); --fit dev fits on dev's
+    \\                                  visible games only, as netcheck's dev block
+    \\                                  (the base a set net export was fitted on)
     \\
 ;
 
@@ -70,6 +72,7 @@ pub const default_temperature_additive = 1.01;
 pub const default_pair_floor = 20;
 
 const ModelKind = enum { cand, additive };
+const FitGames = enum { all, dev };
 
 fn paramsOf(arena: std.mem.Allocator, e: anytype) !Params {
     const terms = try arena.alloc(Term, e.terms.len);
@@ -106,9 +109,10 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         return 2;
     }
     const snap = argv[0];
-    // --model and --pair-floor may sit anywhere after SNAP
+    // --model, --pair-floor and --fit may sit anywhere after SNAP
     var model: ModelKind = .cand;
     var floor: u32 = default_pair_floor;
+    var fit_games: FitGames = .all;
     var rest: std.ArrayList([]const u8) = .empty;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
@@ -117,6 +121,12 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             i += 1;
             model = std.meta.stringToEnum(ModelKind, argv[i]) orelse {
                 std.debug.print("draft: --model cand|additive\n", .{});
+                return 2;
+            };
+        } else if (i + 1 < argv.len and std.mem.eql(u8, flag, "--fit")) {
+            i += 1;
+            fit_games = std.meta.stringToEnum(FitGames, argv[i]) orelse {
+                std.debug.print("draft: --fit all|dev\n", .{});
                 return 2;
             };
         } else if (i + 1 < argv.len and std.mem.eql(u8, flag, "--pair-floor")) {
@@ -162,7 +172,11 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         },
         .additive => {
             const played = try arena.alloc(bool, data.games.len);
-            for (data.games, played) |g, *x| x.* = harness.played(g);
+            const c = try harness.cuts(gpa, &data);
+            for (data.games, played) |g, *x| x.* = switch (fit_games) {
+                .all => harness.played(g),
+                .dev => harness.visible(.dev, c, g),
+            };
             af = try fitAdditive(gpa, arena, &data, try addinputs.inputs(arena, &data), played, addinputs.fullVariant(true, 1));
             params = try paramsOfAdditive(arena, &af.?.p, &af.?.f, &af.?.mix, floor);
             training_games = af.?.p.games.len;

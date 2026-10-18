@@ -51,7 +51,7 @@ function startDraftLoad() {
 function reloadDraft() { DRAFT.model = undefined; DRAFT.loading = null; render(true); }
 
 async function loadDraftModel() {
-  const x = { model: null, m: null, err: null, check: null, from: {}, cc: null, ccErr: null, lane: null, laneErr: null, laneCheck: null };
+  const x = { model: null, m: null, err: null, check: null, from: {}, cc: null, ccErr: null, lane: null, laneErr: null, laneCheck: null, net: null, netErr: null, netChecks: [] };
   // Champion-into-comp terms are optional: without them the model scores as exported
   try {
     const { json: C, dir } = await modelFile("draft-comp.json");
@@ -68,6 +68,20 @@ async function loadDraftModel() {
     // draft-ref.json is the exported model alone: checked without the comp terms
     x.check = ref ? draftCheck(x.cc ? draftModel(M) : x.m, ref) : null;
   } catch (e) { x.model = null; x.m = null; x.err = e.message; }
+  // The set net is optional and lab only (admin-setnet.js); shown only on the base it was
+  // fitted on, so the draft model must match its reference games' offsets
+  if (x.m) try {
+    const { json: N } = await modelFile("draft-setnet.json");
+    const net = setNets(N.nets || []);
+    if (!net) throw new Error("draft-setnet.json has no meiolol-setnet version 1 nets");
+    const worst = Math.max(...net.checks.map(c => c.worst)), base = setNetBaseCheck(net, x.m);
+    x.netChecks.push({ ok: worst < 1e-4, text: `set net seeds ${net.seeds.join(", ")}: this page's forward pass against the export's ${net.checks[0].games} reference games, max |logit diff| ${worst.toExponential(1)}` });
+    // Another draft model (the box's daily one by default) is expected, so only a note
+    const same = base.games > 0 && base.worst < SETNET_BASE_TOL;
+    x.netChecks.push({ ok: true, info: !same, text: same ? `set net base: the draft model against the offsets the nets were fitted on, ${base.games} EUW reference games, max |logit diff| ${base.worst.toFixed(4)}`
+      : "Set net not shown: it was fitted on another draft model than this one (Prefer lab picks, with the matching export sent by `lab-push.sh use draft`)" });
+    if (same && x.netChecks.every(c => c.ok)) x.net = net;
+  } catch (e) { if (!/^404/.test(e.message)) x.netErr = e.message; }
   // The lane model is optional: without it the picker has no lane column
   try {
     const { json: L, dir } = await modelFile("lane-model.json");
@@ -478,6 +492,8 @@ function draftView(body) {
   if (ccCheck) health(ccCheck);
   if (DRAFT.laneErr) health({ ok: false, text: DRAFT.laneErr }, "The lane model didn't load: ");
   if (DRAFT.laneCheck) health(DRAFT.laneCheck);
+  if (DRAFT.netErr) health({ ok: false, text: DRAFT.netErr }, "The set net didn't load: ");
+  for (const c of DRAFT.netChecks || []) c.info ? checks.push(c.text) : health(c);
   sec.append(...bad);
   if (dev.accuracy != null) about.push(el("p", { class: "sub" }, `In plain words: on ${num(dev.games)} recent games it wasn't fitted on, the model picked the winner ${pct(dev.accuracy)} of the time; a coin manages 50%. ` +
     "The Models tab's headline is a different reading (the best of the daily eval's models on the final test games), so the two numbers differ."));
@@ -516,6 +532,7 @@ function draftView(body) {
   sec.append(el("div", { class: "winbar", role: "img", "aria-label": `Blue ${pct(w.p)}, ${none ? "no picks yet" : `95% range ${pct(w.lo)} to ${pct(w.hi)}`}` },
     el("div", { class: "labels" }, el("b", { class: "blue" }, `Blue ${pct(w.p)}`), el("span", { class: "sub" }, none ? "no picks yet: the blue side alone" : `95% range ${pct(w.lo)} to ${pct(w.hi)}`), el("b", { class: "red" }, `Red ${pct(1 - w.p)}`)),
     el("div", { class: "track" }, el("span", { class: "range", style: `left:${100 * w.lo}%;width:${100 * (w.hi - w.lo)}%` }), el("span", { class: "mark", style: `left:${100 * w.p}%` }), el("span", { class: "half" }))));
+  if (DRAFT.net) sec.append(setNetView(DRAFT.net, m, m.teamsOf(d), name));
 
   sec.append(fillMenu(m, d), el("p", { class: "sub" }, "Random game and the fills redraw every slot not marked keep (Fill empty: only the empty ones)."));
   const board = el("div", { class: "draft" });

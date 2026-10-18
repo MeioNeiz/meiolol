@@ -1,8 +1,8 @@
 //! `meiolol admin`: private ops page (crawl rates, storage growth, ingest mix, queues,
 //! model accuracy, site uploads) as one static page plus admin.js, which draws the
-//! charts, admin-draft.js, the Draft tester, and admin-nn.js, the neural net results. The
-//! box rebuilds it every 15 min with the site (deploy/web-loop.sh); nginx serves it at
-//! /admin/ behind the /api/ basic auth.
+//! charts, admin-draft.js, the Draft tester (admin-setnet.js: its set net), and admin-nn.js,
+//! the neural net results. The box rebuilds it every 15 min with the site
+//! (deploy/web-loop.sh); nginx serves it at /admin/ behind the /api/ basic auth.
 //! Aggregates only: no PUUIDs, Riot IDs or match ids (log messages are normalised before
 //! they are counted).
 
@@ -178,6 +178,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     try w.writeAll(safe);
     try w.writeAll(
         \\</script>
+        \\<script src="admin-setnet.js"></script>
         \\<script src="admin-draft.js"></script>
         \\<script src="admin-nn.js"></script>
         \\<script src="admin.js"></script>
@@ -191,6 +192,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     try writeGz(gpa, io, dir, "index.html", out.written());
     // The same data for the page to poll between rebuilds
     try writeGz(gpa, io, dir, "data.json", json);
+    try writeGz(gpa, io, dir, "admin-setnet.js", @embedFile("site/static/admin-setnet.js"));
     try writeGz(gpa, io, dir, "admin-draft.js", @embedFile("site/static/admin-draft.js"));
     try writeGz(gpa, io, dir, "admin-nn.js", @embedFile("site/static/admin-nn.js"));
     try writeGz(gpa, io, dir, "admin.js", @embedFile("site/static/admin.js"));
