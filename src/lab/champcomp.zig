@@ -195,7 +195,7 @@ fn sigmoid(z: f64) f64 {
 /// Ratings' chance for blue in every game with start < hi (not test, played), fitted on
 /// the dev games before `before`; NaN elsewhere. As compcheck.offset: the same seeds, the
 /// same query
-fn ratingsBlue(gpa: Allocator, d: *const rows.Data, players: []const harness.Players, c: harness.Cuts, before: i64, hi: i64) ![]f64 {
+pub fn ratingsBlue(gpa: Allocator, d: *const rows.Data, players: []const harness.Players, c: harness.Cuts, before: i64, hi: i64) ![]f64 {
     const k = api.outcomeIndex(.win);
     var fit_cuts = c;
     fit_cuts.dev = before;
@@ -764,7 +764,7 @@ fn featureName(buf: []u8, f: usize) []const u8 {
     return std.fmt.bufPrint(buf, "{s}:{s}", .{ if (f < nt) "enemy" else "ally", trait_names[f % nt] }) catch "?";
 }
 
-fn loadNames(gpa: Allocator, arena: Allocator, snap: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
+pub fn loadNames(gpa: Allocator, arena: Allocator, snap: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
     var names: std.AutoHashMapUnmanaged(u32, []const u8) = .empty;
     const db = try store.schema.openReadOnly(gpa, snap);
     defer db.close();

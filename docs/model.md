@@ -4041,6 +4041,112 @@ cell's posterior is g x its lean with sd from g's se alone, so "clear" there tes
 the champion; don't read `--kit-prior`'s clear counts as champion effects. Nothing
 shipped; the tester keeps the plain terms (Rammus: nothing to say)
 
+#### Kit groups and a property scan (champgroups; declared 2026-10-18 ~01:40 BST, before any run)
+
+Question (Jacob, 18 Oct, after the Rammus miss): which kinds of champion do better or
+worse into which kinds of enemy team? One champion is too thin (about 2 pp per sd at
+14k games); a group of champions sharing a kit trait, one slope for the group, can see
+about 0.5. Two parts: groups listed by hand from the kits (below, before any run), and
+a scan of every own profile stat against every enemy team stat for groups nobody named.
+
+Method (`meiolol-lab champgroups SNAP`, src/lab/champgroups.zig, offset win-draft, the
+shipped model; snap-20261017T1320Z dev games only, no test look):
+- Profiles: comps' champion-role profiles (buildProfiles) from dev games before
+  bounds[2] ("older"), z within role, plus aa_build: completed crit or attack-speed
+  items held at the end (Data Dragon item stats, legendaries.tsv), per champion-role mean
+  of its won and lost games' means, the same games, from participants (data/
+  champgroups/aa_build.tsv)
+- Enemy traits, per seat from the enemy five: the sum of their role z for every profile
+  stat and aa_build, AP share of their damage, melee count, and champcomp's composites
+  (cc, engage, dive, tank, sustain, early); standardised over older seats
+- Offset: win-draft fitted on older games, predicting older (in-sample) and the newer
+  dev games [bounds[2], D) (out of sample)
+- Per champion-role and enemy trait: one logistic step from the offset on the centred
+  trait alone (as `champcomp --only`), cells with 300+ games; deviation = slope minus its
+  role's precision-weighted mean; spread tau^2 by DerSimonian-Laird per role and trait
+- Group effect: weighted mean over the group's cells (any role, 300+ games) of slope
+  minus the mean of the role's other cells, weights 1 / (se^2 + tau^2); pp per sd of the
+  enemy trait at 50%
+- Scan: for every own stat V and enemy trait T, the weighted slope of deviations on the
+  cell's own z of V (centred within role), same weights: pp per sd of T per sd of V
+- Control: `--shuffle-own 1` shuffles cells' own profile vectors within role (scan and
+  group memberships keep their champions, so groups are not controlled by it)
+
+Groups (declared sign: + better into more of the trait):
+| # | champions (any role) | enemy trait | sign | seen before |
+| --- | --- | --- | --- | --- |
+| G1 | Rammus, Jax, Shen, Teemo, Fiora, Malphite (auto-attack punishers) | aa_build | + | no |
+| G2 | Aatrox, Vladimir, Dr. Mundo, Warwick, Sylas, Swain, Fiddlesticks, Soraka, Yuumi (self-heal) | antiheal | - | no |
+| G3 | Olaf, Gangplank, Sivir, Morgana, Nocturne, Malzahar, Fizz (CC answers) | cc | + | no |
+| G4 | Zed, Talon, Kha'Zix, Rengar, Qiyana, Naafiri (lethality assassins) | tank | - | Rengar |
+| G5 | Vayne, Fiora, Gwen, Kog'Maw, Vel'Koz, Brand, Lillia (true and %HP damage) | tank | + | Brand, Lillia |
+| G6 | Galio, Kassadin, Sivir, Malzahar, Morgana (MR kits, spell shields) | AP share | + | Galio, Kassadin |
+| G7 | Evelynn, Twitch, Shaco, Akali, Kha'Zix, Rengar, Pyke (stealth) | control_pm | - | no |
+| G8 | Xerath, Ziggs, Vel'Koz, Lux, Jayce, Varus (long-range poke) | engage | - | no |
+| G9 | Poppy, Janna, Gragas (dash stoppers, disengage) | dive | + | no |
+| G10 | Kayle, Kassadin, Veigar, Smolder, Vayne, Kog'Maw (hyper-scalers) | early | - | no |
+| G11 | Rammus, Malphite, Braum, Poppy (armour kits) | AP share | - | all |
+| G12 | Rammus, Malphite, Braum, Poppy, Ornn (armour kits) | armour_pen | - | no |
+| G13 | Darius, Garen, Mordekaiser, Nasus, Illaoi, Sion, Dr. Mundo, Trundle, Volibear (juggernauts, no dashes) | range | - | no |
+
+Pre-declared:
+- Groups: estimate on all dev games (older plus newer); a group is detected when its
+  two-sided p passes Benjamini-Hochberg at 5% over the 13 and the sign is the declared
+  one. Older and newer halves reported. Detected groups (G4, G5, G6 and G11 partly seen,
+  so weaker) go to the held-out look already planned on games after 17 Oct 13:20Z
+- Scan: discovery on older games, BH 5% over every V x T pair; replicated when the newer
+  games give the same sign at one-sided p < 0.05. Read: replicated count against the
+  shuffled control's discoveries; pairs that are the same stat (own V = enemy V) or plain
+  mirror effects are reported, not removed
+- Ship nothing from this; site lines only after the held-out look
+
+Result (runs 20261018T003617Z-champgroups-1320Z-real, control 20261018T003830Z-...-
+shuffled, and 20261018T004251Z-...-real-apheld, which adds the post-hoc AP-share-held
+column and otherwise reproduces the first; gpu-box, ~4 min each). Pp per sd of the enemy
+trait, all dev games, ± 95%; older and newer halves; "AP held" is post hoc (declared
+after the first run): the same slope with enemy AP share in the cell fit too.
+
+| group | effect | older / newer | p | read | AP held |
+| --- | --- | --- | --- | --- | --- |
+| G1 auto-attack punishers into aa_build | +0.89 ± 0.33 | 0.87 / 0.90 | 2e-7 | detected | +0.69 ± 0.34 |
+| G2 self-heal into antiheal | +0.34 ± 0.24 | 0.38 / 0.26 | 5e-3 | wrong sign | +0.33 |
+| G3 CC answers into CC | +0.58 ± 0.30 | 0.47 / 0.86 | 1e-4 | detected | +0.58 |
+| G4 lethality assassins into tank | -0.93 ± 0.41 | -0.93 / -0.85 | 1e-5 | detected (Rengar seen) | -0.90 |
+| G5 true and %HP damage into tank | +0.72 ± 0.37 | 0.83 / 0.46 | 1e-4 | detected (Brand, Lillia seen) | +0.75 |
+| G6 MR kits into AP share | +0.49 ± 0.37 | 0.48 / 0.62 | 9e-3 | detected (Galio, Kassadin seen) | |
+| G7 stealth into control wards | +0.16 ± 0.28 | | 0.26 | not detected | |
+| G8 long-range poke into engage | +0.13 ± 0.27 | | 0.33 | not detected | |
+| G9 dash stoppers into dive | +0.57 ± 0.55 | 0.57 / 0.51 | 0.04 | not past BH | |
+| G10 hyper-scalers into early | -0.24 ± 0.31 | | 0.12 | not detected | |
+| G11 armour kits into AP share | -1.51 ± 0.41 | -1.62 / -1.46 | 5e-13 | detected (seen) | |
+| G12 armour kits into armour pen | +0.99 ± 0.36 | 0.94 / 1.17 | 7e-8 | wrong sign | +0.36 ± 0.36 |
+| G13 juggernauts into range | -0.30 ± 0.29 | | 0.04 | not past BH | |
+
+- Six of 13 detected (BH 5% over the 13, declared sign), each the same size in both
+  halves. G2 and G12 pass BH the wrong way: self-healers do slightly better into teams
+  that build antiheal (those teams build it because the game goes long or against
+  healing they lose to? not tested), and armour kits do better into armour pen because
+  armour pen means an AD team: with AP share held it falls to +0.36 ± 0.36
+- G1 is not the AD share again: with AP share held it keeps +0.69 ± 0.34. Members (all
+  dev, AP held): Rammus jungle +1.41 ± 0.89 (raw +1.31 ± 0.79, 14,213 games), Jax top
+  +1.12 ± 0.57, Teemo top +1.12 ± 0.63, Shen top +0.72 ± 0.82, Malphite top +0.59 ± 0.51
+  (+1.30 raw: half of his was the AD share), Fiora top -0.70 ± 0.70 (the other way:
+  riposte is one parry, and she is an auto-attacker herself). So Jacob's Rammus question
+  was the right question with the wrong trait: Rammus answers auto-attackers, not AD
+  damage, and casters like Zed, Talon and Jayce are AD without being auto-attackers
+- Scan: 508 of 4,608 own x enemy pairs pass BH on older games and 337 replicate on newer
+  ones; the shuffled control finds 0 (so the se are honest enough for BH). The pairs are
+  a few families of correlated stats, each about 0.15-0.2 pp per sd per sd: tanky own
+  profiles (mitig_pm, tank_share, taken_pm) better into enemy early, roaming, lethality
+  and melee teams and worse into objective-taking ones (herald_td, dragon_td, baron_td);
+  armour lean better into physical damage and armour pen, worse into magic damage
+  (the kit prior's g again, about -0.2); ranged own profiles worse into lethality and
+  roaming teams. aa_build as an own stat finds nothing: the build stats don't know that
+  Rammus's W or Jax's E stop basic attacks, which is what the hand-made kit list adds
+- Dev only (one snapshot, no test look); G4, G5, G6, G11 partly seen. Next: the
+  detected groups and Rammus jungle into aa_build go into the held-out look on games
+  after 17 Oct 13:20Z, with these numbers as the predictions
+
 ### Draft model file (meiolol draft-model, meiolol-lab draft --export)
 
 `meiolol draft-model [--out DIR]` (src/draftmodel.zig, default DATA/tester) writes the
