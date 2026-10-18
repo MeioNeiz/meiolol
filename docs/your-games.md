@@ -172,9 +172,12 @@ for 16.20 on 17 Oct, and older patches were left out past 320 MB).
   `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's
   push deploy: after a change to src/api or the curves file format (curvesfile.zig
   version), rebuild, `scp` to /tmp, `sudo install`, then `sudo systemctl restart
-  meiolol-api`. Installed: 76d691f (curves byte budget, "All games" label), 2026-10-17
-  23:36Z, 236 MB with one curves file; 809669c kept as
-  /usr/local/bin/meiolol.bak-pre-76d691f. Before: 809669c (curves read straight into
+  meiolol-api` (or `deploy/jomove.sh install api`). Installed: 176909b (curves mapped,
+  connections on their own threads), 2026-10-18 09:38Z: start-up 3 s -> 0.3 s, RSS 152 ->
+  10 MB at start and 23 MB after a lookup, both patches' files (63 + 75 MB) mapped;
+  76d691f kept as /usr/local/bin/meiolol.bak-pre-176909b. Before: 76d691f (curves byte
+  budget, "All games" label), 2026-10-17 23:36Z, 236 MB with one curves file; 809669c
+  kept as /usr/local/bin/meiolol.bak-pre-76d691f. Before: 809669c (curves read straight into
   the parsed copy; raw plus parsed passed 400M and OOM-killed every start from 17 Oct
   00:49Z), 2026-10-17 16:05Z; 8dd457b kept as /usr/local/bin/meiolol.bak-pre-809669c, 12b3bd7 as
   /usr/local/bin/meiolol.bak-pre-8dd457b, the one before (bfea7b8) as
