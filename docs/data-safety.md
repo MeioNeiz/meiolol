@@ -233,6 +233,19 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   ids: the salt never comes to the box). The gpu-box's key in ~/.ssh/authorized_keys
   may only run deploy/archive-serve.sh (export, list, send, got, ack, forgotten,
   status)
+- Packed for the trip (18 Oct): right after each export, archive-serve.sh runs `raw-export
+  --pack NAME --level 9` (nice): NAME.zst, a rawpack stream (src/store/rawpack.zig: the
+  same rows, bodies gunzipped, counts and a hash at the end) through zstd -9 -T1. It is
+  read back whole (zstd's checksum, rawpack's hash, counts against the export) and
+  synced before NAME goes. list, send and got then use NAME.zst: the sha256 checked is
+  of the bytes sent. A failed pack leaves NAME to go as before (data/archive-pack.err);
+  the gpu-box tells the forms apart by magic bytes. Measured on a real 1 h export (398
+  MB, 18 Oct): zstd -3/-6/-9 on the stream 15/30/39% under the gzip bodies, for
+  12/40/60 s of one core per hour of exports; a trained dictionary gains nothing on a
+  stream (per document: summaries -33%, timelines -5%); crawler calls unchanged. The
+  real pack of that export: 240 MB, 83 s CPU; its archive on the gpu-box matched the
+  live archive of the same export byte for byte (summaries, timelines, mastery).
+  data/archive-sent.log: time, name, export bytes (raw held, for health.sh), bytes sent
 - gpu-box, per export until caught up (stopping when League opens): fetch to the archive
   partition (ARCHIVE/incoming), check the size, sha256 and fsync it, then `got NAME
   SHA256`: the box deletes its file only if the sha256 matches its own, and records the
@@ -247,7 +260,8 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   is archived: the rest waits in raw.db, never as a second copy
 - Before 18 Oct an export held everything since the last ack and stayed on the box until
   that ack, after the archive: a gpu-box back after a day wrote one file of the whole
-  backlog (33 GB on 17 Oct). zstd on an export saves 3% (bodies are gzip already)
+  backlog (33 GB on 17 Oct). zstd on an export's SQLite file saves 3% (bodies are gzip
+  already), hence the pack
 - The salt is on the gpu-box too (~/.config/meiolol/snap-salt, 600), never on the box
   or in git
 - The box drops raw documents only once acked and 2 days old (`--prune --keep-days 2`,

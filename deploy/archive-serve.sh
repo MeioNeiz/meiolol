@@ -9,23 +9,47 @@ cd "$HOME/ml/meiolol"
 out=data/archive-out
 read -r cmd arg arg2 _ <<< "${SSH_ORIGINAL_COMMAND:-}"
 name() { [[ "$arg" =~ ^raw-[0-9]+-[0-9]+\.db$ ]] || { echo "bad export name" >&2; exit 2; }; }
+# What goes to the gpu-box: the export's pack (NAME.zst, raw-export --pack) when there is
+# one, else NAME as written
+file() { if [[ -f "$out/$arg.zst" ]]; then echo "$out/$arg.zst"; else echo "$out/$arg"; fi; }
 case "${cmd:-}" in
-    export) exec nice -n 10 bin/meiolol raw-export --data data --out "$out" ;;
+    export)
+        made=$(nice -n 10 bin/meiolol raw-export --data data --out "$out")
+        echo "$made"
+        # Packed here, once: -9 is 39% under the export's gzip bodies for ~60 s of one
+        # core an hour of exports (docs/data-safety.md "Raw archive"); a failed pack
+        # leaves NAME to go as it is.
+        # data/archive-packed.log: unix time, name, export bytes, pack bytes, documents
+        [[ -n "$made" ]] || exit 0
+        if packed=$(nice -n 10 bin/meiolol raw-export --data data --out "$out" --pack "${made%%$'\t'*}" \
+            --level 9 2>> data/archive-pack.err); then
+            echo "$(date +%s)	$packed" >> data/archive-packed.log
+        else
+            echo "$(date -u +%FT%TZ) pack of ${made%%$'\t'*} failed: it goes unpacked" >> data/archive-pack.err
+        fi
+        ;;
     list) exec bin/meiolol raw-export --data data --out "$out" --list ;;
-    send) name; exec cat "$out/$arg" ;;
+    send) name; exec cat "$(file)" ;;
     got)
         # The gpu-box has NAME: the box's file goes once its sha256 matches. Gone already:
         # a retry, which raw-export settles (received before, or an error)
         name
         [[ "${arg2:-}" =~ ^[0-9a-f]{64}$ ]] || { echo "bad sha256" >&2; exit 2; }
-        if [[ -f "$out/$arg" ]]; then
-            sum=$(sha256sum < "$out/$arg")
+        f=$(file)
+        if [[ -f "$f" ]]; then
+            sum=$(sha256sum < "$f")
             [[ "${sum%% *}" == "$arg2" ]] || { echo "$arg: sha256 differs from the box's" >&2; exit 1; }
         fi
-        size=$(stat -c %s "$out/$arg" 2> /dev/null || echo -)
+        sent=$(stat -c %s "$f" 2> /dev/null || echo -)
+        # Raw held per day is the export's size, a pack's being about half
+        size=$sent
+        if [[ "$f" == *.zst ]]; then
+            size=$(awk -F '\t' -v n="$arg" '$2 == n { s = $3 } END { print s }' data/archive-packed.log 2> /dev/null)
+            [[ -n "$size" ]] || size=$sent
+        fi
         bin/meiolol raw-export --data data --out "$out" --received "$arg"
-        # Raw sent per day, for health.sh: how many days of it the disk takes
-        [[ "$size" == - ]] || echo "$(date +%s) $arg $size" >> data/archive-sent.log
+        # Raw per day, for health.sh: how many days of it the disk takes; then bytes sent
+        [[ "$sent" == - ]] || echo "$(date +%s) $arg $size $sent" >> data/archive-sent.log
         ;;
     ack)
         name
