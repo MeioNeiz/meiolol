@@ -124,6 +124,9 @@ In order:
 1. Measure the comp leans like the draft model: champcomp's terms as a row in the box's
    daily `meiolol eval` (ported out of the lab into src/, offset the shipped model), then
    one pre-declared held-out look on a snapshot of games after 17 Oct 13:20Z (~24 Oct).
+   The same look also takes champgroups' six detected kit groups and Rammus jungle into
+   auto-attackers (docs/model.md "Kit groups and a property scan", 18 Oct: their dev
+   numbers are the predictions; rerun `meiolol-lab champgroups` on the new snapshot).
    Nothing public before that look passes. Admin Draft tester has them now (17 Oct); its
    draft and lane models refit daily on the box (`meiolol draft-model`, `lane-model`, 17
    Oct); the comp terms still come from the lab (`champcomp --export`, `lab-push.sh use`).
