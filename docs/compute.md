@@ -435,7 +435,13 @@ first.
 - fm kernels (fe3520e): fm_grad (one thread per row, gradients into a dense buffer with
   atomics) and fm_adam (one thread per parameter). Host: src/lab/bench.zig uploads rows
   once as fm_layout.Example (72 bytes); the host shuffles each epoch so CPU and GPU see
-  identical batches; memset + fm_grad + fm_adam per batch
+  identical batches; memset + fm_grad + fm_adam per batch. `bench --profile 1` (ef4f611)
+  times each kernel: fm_grad was 26-31% of a step (additive), 39-73% (lane), 44-89%
+  (pairwise, dim 8-128) on 1320Z, 18 Oct. Pairwise now sums the row's own embedding
+  gradient over its five enemies before one atomic per k (9d3bd5d): fm_grad 744 -> 537
+  us a step at dim 128 (fit 1.89 -> 1.48 s 1x, 7.95 -> 5.98 s 4x), 213 -> 165 at dim 32,
+  test MSE equal to 8 digits; lane and additive unchanged. A per-block reduction was not
+  tried: only bench fits fm on the GPU (no lab job does; CPU ties, above)
 - Draft net kernels (3829314): a tiled GEMM (64x64 tiles in shared memory, 4x4 outputs
   per thread, FMA; strides give every transpose) and dn_* elementwise kernels; host
   src/lab/draftnet.zig. Dropout masks are a hash of (seed, step, layer, row, unit), so
