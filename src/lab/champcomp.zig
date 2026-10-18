@@ -28,7 +28,7 @@
 //! towards a line in the champion's own armour lean (build armour minus MR, z within
 //! role) instead of the role's mean, and scores against the plain terms paired;
 //! --kit-shuffle SEED does the same with armour leans shuffled within role (a control).
-//! Writes champcomp.tsv, roles.tsv, team.tsv, profiles.tsv, examples.tsv,
+//! Writes champcomp.tsv, roles.tsv, team.tsv, profiles.tsv, examples.tsv, preds.tsv,
 //! effects-champcomp-*.tsv and findings.tsv in the working directory; last stdout line
 //! RESULT
 
@@ -682,6 +682,18 @@ fn scoreGames(gpa: Allocator, m: *const Model, u: *const Units, out: *Scores) !v
     }
 }
 
+/// DIR/preds.tsv rows (netcheck's shape): blue's chance from the offset, + team terms, + all
+fn writePreds(w: *Io.Writer, d: *const rows.Data, m: *const Model, u: *const Units, block: []const u8) !void {
+    for (0..u.teams.items.len / 2) |k| {
+        const t = u.teams.items[2 * k];
+        const z0: f64 = t.off;
+        try w.print("{s}\t{s}\t{d}\t{d:.6}\t{d:.6}\t{d:.6}\n", .{
+            block,                                  d.games[t.game].match_id,                t.y, sigmoid(z0),
+            sigmoid(z0 + blueExtra(m, u, k, true)), sigmoid(z0 + blueExtra(m, u, k, false)),
+        });
+    }
+}
+
 fn logLoss(y: f64, p: f64) f64 {
     const q = std.math.clamp(p, 1e-12, 1 - 1e-12);
     return -(y * @log(q) + (1 - y) * @log(1 - q));
@@ -890,6 +902,12 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var final_clear: Clear = .{};
     var rep: Replication = .{};
 
+    var preds_file = try Io.Dir.cwd().createFile(io, "preds.tsv", .{});
+    defer preds_file.close(io);
+    var pbuf: [64 * 1024]u8 = undefined;
+    var pw = preds_file.writer(io, &pbuf);
+    try pw.interface.writeAll("fold\tmatch_id\ty\tcand\tteam\tfull\n");
+
     for (windows, 0..) |win, wi| {
         const fit_cfg: comps.Fit = .{ .c = c, .before = win.before };
         var p = try comps.buildProfiles(gpa, d, extra, fit_cfg, permute);
@@ -937,6 +955,9 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         var sc: Scores = .{};
         defer sc.deinit(gpa);
         try scoreGames(gpa, &model, &score_u, &sc);
+        var lb: [8]u8 = undefined;
+        const block = if (wi == harness.folds) "dev" else try std.fmt.bufPrint(&lb, "{d}", .{wi + 1});
+        try writePreds(&pw.interface, d, &model, &score_u, block);
         if (kit_on) {
             var plain = try fitModel(gpa, &fit_u, null);
             defer plain.deinit(gpa);
@@ -992,6 +1013,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         }
     }
 
+    try pw.interface.flush();
     const all = gainOf(pooled.base.items, pooled.full.items);
     const team_all = gainOf(pooled.base.items, pooled.team.items);
     const seat_all = gainOf(pooled.team.items, pooled.full.items);
