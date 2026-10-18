@@ -390,12 +390,16 @@ first.
 
 ### 2. Data for models (with meiolol-2a, who owns snapshots)
 
-- Snapshot cadence (done, 2026-10-13): `deploy/snapshot.sh make` on the Mac (box
-  VACUUM INTO, anonymise, checks, split, legendaries, pack, to the gpu-box; ~30 min),
-  weekly via an hourly launchd tick (due Sundays from 04:00; pushes to the gpu-box wait
-  until it's awake, then mastery-pre runs there); `prune KEEP` once LAB_SNAP
-  moves. Still from the live DB: meiolol.db and timeline.db need the box anyway, so
-  the archive would only save the raw step
+- Snapshot cadence (done, 2026-10-13; built on the gpu-box since 18 Oct): `deploy/
+  snapshot.sh make` on the Mac, weekly via an hourly launchd tick (due Sundays from
+  07:00, after the 04:00 UTC backup reaches the mirror; skipped while the gpu-box is
+  asleep or League is open), runs deploy/snapshot-gpu.sh there: restore from the
+  backup mirror plus what backups leave out from the box (backup-serve.sh
+  snapshot-extra: 4.3 GB sent, ~5 GB box temp, 34 min), checks, anonymise, split,
+  legendaries, pack, mastery-pre, then rsync to the Mac over the LAN. 18 Oct run
+  (snap-20261018T1007Z): 78 min end to end, 70 on the gpu-box. Before: box VACUUM INTO
+  ~23 GB streamed to the Mac, ~21 GB rsynced on to the gpu-box. `prune KEEP` once
+  LAB_SNAP moves
 - Packed rows (done, 2026-10-12): `meiolol-lab pack SNAP` writes rows.Data as
   fixed-width column files in SNAP/pack/ (docs/architecture.md "Packed rows"); rows.load
   reads them when they match the snapshot, else SQLite, so every lab command gets it.
