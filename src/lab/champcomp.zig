@@ -23,6 +23,11 @@
 //! deviations clear in fold 3's fit (games before bounds[2]) against raw deviations on the
 //! newer dev games. Controls: --permute-profiles SEED (profiles shuffled among a role's
 //! champions), --shuffle-traits SEED (each unit's features from another unit of its role).
+//! --only FEATURE (e.g. enemy:ap_share) zeroes every other feature: that trait's slope
+//! alone, not holding the other 15 fixed. --kit-prior shrinks enemy AP share slopes
+//! towards a line in the champion's own armour lean (build armour minus MR, z within
+//! role) instead of the role's mean, and scores against the plain terms paired;
+//! --kit-shuffle SEED does the same with armour leans shuffled within role (a control).
 //! Writes champcomp.tsv, roles.tsv, team.tsv, profiles.tsv, examples.tsv,
 //! effects-champcomp-*.tsv and findings.tsv in the working directory; last stdout line
 //! RESULT
@@ -43,6 +48,7 @@ const vi = comps.vi;
 
 pub const usage =
     \\  champcomp SNAP [--permute-profiles SEED] [--shuffle-traits SEED] [--export DIR]
+    \\                [--only FEATURE] [--kit-prior | --kit-shuffle SEED]
     \\                                  champions into comps, dev only, built with
     \\                                  -Dcand=src/lab/cand/win-ratings (or win-comp, an
     \\                                  offset with the damage mix, or win-draft, the
@@ -53,7 +59,11 @@ pub const usage =
     \\                                  (lab/champcomp.zig); SNAP may be plant:SPEC:PATH
     \\                                  (champ_melee, cell); --export writes
     \\                                  DIR/draft-comp.json from the dev-val fit for the
-    \\                                  admin Draft tester (offset win-draft)
+    \\                                  admin Draft tester (offset win-draft); --only
+    \\                                  enemy:ap_share fits that feature alone;
+    \\                                  --kit-prior: AP share slopes shrink towards
+    \\                                  the champion's armour lean, paired against
+    \\                                  the plain terms
     \\
 ;
 
@@ -83,6 +93,8 @@ pub const melee_range = 300;
 /// A clear effect: posterior |mean| / sd at or above this (two-sided 1%)
 const clear_z = 2.58;
 const passes = 2;
+/// --kit-prior's feature: armour into magic damage is the kit effect (Malphite, Galio)
+const kit_feature = @backingInt(Trait.ap_share);
 const pp_per_logit = synth.pp_per_logit;
 const nan = std.math.nan(f64);
 
@@ -271,6 +283,15 @@ fn standardise(units: []Unit, s: Scale) void {
     };
 }
 
+/// Every feature but f set to 0 (they then fit to 0 with a huge se and drop out)
+fn keepOnly(u: *Units, f: usize) void {
+    for ([_][]Unit{ u.seats.items, u.teams.items }) |list| for (list) |*x| {
+        for (&x.x, 0..) |*v, j| if (j != f) {
+            v.* = 0;
+        };
+    };
+}
+
 /// Each seat's features from another seat of the same role, each team's from another
 /// team (a control)
 fn shuffleTraits(gpa: Allocator, u: *Units, seed: u64) !void {
@@ -350,9 +371,20 @@ pub const RoleFit = struct {
     m_se: [5][nf]f64 = @splat(@splat(0)),
     tau2: [5][nf]f64 = @splat(@splat(0)),
     cells: [5]u32 = @splat(0),
+    /// --kit-prior: deviation per sd of centred armour lean (pooled over roles), its se,
+    /// and each role's weighted mean lean; 0 otherwise
+    g: [nf]f64 = @splat(0),
+    g_se: [nf]f64 = @splat(0),
+    k_mean: [5]f64 = @splat(0),
+
+    /// A cell's expected deviation from its role's mean, and that guess's variance
+    fn target(rf: *const RoleFit, role: usize, f: usize, k: f64) [2]f64 {
+        const kc = k - rf.k_mean[role];
+        return .{ rf.g[f] * kc, kc * kc * rf.g_se[f] * rf.g_se[f] };
+    }
 };
 
-pub fn roleFit(cells: []const u64, ests: []const Est) RoleFit {
+pub fn roleFit(cells: []const u64, ests: []const Est, kit: ?[]const f64) RoleFit {
     var rf: RoleFit = .{};
     var wsum: [5][nf]f64 = @splat(@splat(0));
     for (cells, ests) |c, e| {
@@ -370,18 +402,54 @@ pub fn roleFit(cells: []const u64, ests: []const Est) RoleFit {
         rf.m[role][f] /= wsum[role][f];
         rf.m_se[role][f] = 1 / @sqrt(wsum[role][f]);
     };
+    spreadOf(&rf, cells, ests, kit, wsum);
+    const k = kit orelse return rf;
+    var kw: [5]f64 = @splat(0);
+    for (cells, ests, k) |c, e, kc| {
+        if (!e.ok()) continue;
+        const w = 1 / (e.se[kit_feature] * e.se[kit_feature]);
+        rf.k_mean[c & 7] += w * kc;
+        kw[c & 7] += w;
+    }
+    for (&rf.k_mean, kw) |*m, w| m.* = if (w > 0) m.* / w else 0;
+    // Weighted slope through each role's mean, weights with the spread left around the
+    // line (twice: the spread depends on the line)
+    for (0..2) |_| {
+        var sxy: f64 = 0;
+        var sxx: f64 = 0;
+        for (cells, ests, k) |c, e, kc| {
+            if (!e.ok()) continue;
+            const role: usize = @intCast(c & 7);
+            const f = kit_feature;
+            const w = 1 / (e.se[f] * e.se[f] + rf.tau2[role][f]);
+            const x = kc - rf.k_mean[role];
+            sxy += w * x * (e.beta[f] - rf.m[role][f]);
+            sxx += w * x * x;
+        }
+        if (sxx == 0) break;
+        rf.g[kit_feature] = sxy / sxx;
+        rf.g_se[kit_feature] = 1 / @sqrt(sxx);
+        spreadOf(&rf, cells, ests, kit, wsum);
+    }
+    return rf;
+}
+
+/// DerSimonian-Laird spread of each role and feature's deviations around their target
+fn spreadOf(rf: *RoleFit, cells: []const u64, ests: []const Est, kit: ?[]const f64, wsum: [5][nf]f64) void {
     var q: [5][nf]f64 = @splat(@splat(0));
     var w2sum: [5][nf]f64 = @splat(@splat(0));
-    for (cells, ests) |c, e| {
+    for (cells, ests, 0..) |c, e, ci| {
         if (!e.ok()) continue;
         const role: usize = @intCast(c & 7);
         for (0..nf) |f| {
             const w = 1 / (e.se[f] * e.se[f]);
-            const dlt = e.beta[f] - rf.m[role][f];
+            const t = rf.target(role, f, if (kit) |k| k[ci] else 0)[0];
+            const dlt = e.beta[f] - rf.m[role][f] - t;
             q[role][f] += w * dlt * dlt;
             w2sum[role][f] += w * w;
         }
     }
+    rf.tau2 = @splat(@splat(0));
     for (0..5) |role| for (0..nf) |f| {
         const k: f64 = @floatFromInt(rf.cells[role]);
         if (k < 2) continue;
@@ -391,7 +459,6 @@ pub fn roleFit(cells: []const u64, ests: []const Est) RoleFit {
         const denom = wsum[role][f] - w2sum[role][f] / wsum[role][f];
         rf.tau2[role][f] = @max((q[role][f] - (k - 1)) / denom, 0);
     };
-    return rf;
 }
 
 /// One-sided normal quantile of the heterogeneity test (1%)
@@ -407,13 +474,15 @@ fn chi2Quantile(df: f64, z: f64) f64 {
 /// Posterior deviation of one cell and feature from its role's mean (logit per sd), sd
 pub const Post = struct { mean: f64 = 0, sd: f64 = 0 };
 
-pub fn posterior(rf: *const RoleFit, role: usize, e: Est, f: usize) Post {
+/// k: the cell's armour lean (--kit-prior; else unused)
+pub fn posterior(rf: *const RoleFit, role: usize, e: Est, f: usize, k: f64) Post {
     if (!e.ok()) return .{};
     const t2 = rf.tau2[role][f];
     const s2 = e.se[f] * e.se[f] + rf.m_se[role][f] * rf.m_se[role][f];
     if (t2 + s2 == 0) return .{};
     const b = t2 / (t2 + s2);
-    return .{ .mean = b * (e.beta[f] - rf.m[role][f]), .sd = @sqrt(b * s2) };
+    const t = rf.target(role, f, k);
+    return .{ .mean = t[0] + b * (e.beta[f] - rf.m[role][f] - t[0]), .sd = @sqrt(b * s2 + (1 - b) * (1 - b) * t[1]) };
 }
 
 /// A fitted model: team terms, and per cell the posterior deviations and centres
@@ -423,12 +492,15 @@ pub const Model = struct {
     ests: []Est,
     rf: RoleFit,
     post: [][nf]Post,
+    /// Per cell: its armour lean with --kit-prior, else 0
+    kit: []f64,
     index: std.AutoHashMapUnmanaged(u64, u32) = .empty,
 
     pub fn deinit(m: *Model, gpa: Allocator) void {
         gpa.free(m.cells);
         gpa.free(m.ests);
         gpa.free(m.post);
+        gpa.free(m.kit);
         m.index.deinit(gpa);
     }
 
@@ -496,7 +568,32 @@ fn groupByCell(gpa: Allocator, units: []const Unit) !Groups {
 
 /// Team terms over every team, then two passes of per-cell fits and deviation shrinkage
 /// on the seats (ten a game, in step with the teams, two a game)
-pub fn fitModel(gpa: Allocator, u: *const Units) !Model {
+/// Armour lean (build armour minus MR, z within role) per cell, for --kit-prior
+pub const Kit = std.AutoHashMapUnmanaged(u64, f64);
+
+/// Each profiled champion-role's armour lean; seed nonzero shuffles them within role
+fn kitOf(gpa: Allocator, p: *const comps.Profiles, seed: u64, out: *Kit) !void {
+    var keys: std.ArrayList(u64) = .empty;
+    defer keys.deinit(gpa);
+    var it = p.raw.keyIterator();
+    while (it.next()) |k| try keys.append(gpa, k.*);
+    std.mem.sort(u64, keys.items, {}, std.sort.asc(u64));
+    var rng: std.Random.DefaultPrng = .init(seed);
+    for (0..5) |role| {
+        var vals: std.ArrayList(f64) = .empty;
+        defer vals.deinit(gpa);
+        var mine: std.ArrayList(u64) = .empty;
+        defer mine.deinit(gpa);
+        for (keys.items) |k| if ((k & 7) == role) {
+            try mine.append(gpa, k);
+            try vals.append(gpa, p.z(role, p.raw.get(k).?)[vi(.armour_lean)]);
+        };
+        if (seed != 0) rng.random().shuffle(f64, vals.items);
+        for (mine.items, vals.items) |k, v| try out.put(gpa, k, v);
+    }
+}
+
+pub fn fitModel(gpa: Allocator, u: *const Units, kit: ?*const Kit) !Model {
     const seats = u.seats.items;
     const teams = u.teams.items;
     std.debug.assert(seats.len == 5 * teams.len);
@@ -512,18 +609,22 @@ pub fn fitModel(gpa: Allocator, u: *const Units) !Model {
         .ests = try gpa.alloc(Est, grp.cells.len),
         .rf = .{},
         .post = try gpa.alloc([nf]Post, grp.cells.len),
+        .kit = try gpa.alloc(f64, grp.cells.len),
     };
     errdefer m.deinit(gpa);
-    for (m.cells, 0..) |c, i| try m.index.put(gpa, c, @intCast(i));
+    for (m.cells, m.kit, 0..) |c, *k, i| {
+        try m.index.put(gpa, c, @intCast(i));
+        k.* = if (kit) |x| x.get(c) orelse 0 else 0;
+    }
     const extra = try gpa.alloc(f64, seats.len);
     defer gpa.free(extra);
     for (0..passes) |pass| {
         for (extra, 0..) |*e, i| e.* = m.teamTerm(&teams[i / 5].x);
         if (pass > 0) addOtherSeats(&m, seats, extra);
         for (m.ests, 0..) |*e, ci| e.* = try fitCell(gpa, seats, grp.of(ci), extra);
-        m.rf = roleFit(m.cells, m.ests);
-        for (m.cells, m.ests, m.post) |c, e, *p| {
-            for (0..nf) |f| p[f] = posterior(&m.rf, @intCast(c & 7), e, f);
+        m.rf = roleFit(m.cells, m.ests, if (kit != null) m.kit else null);
+        for (m.cells, m.ests, m.post, m.kit) |c, e, *p, k| {
+            for (0..nf) |f| p[f] = posterior(&m.rf, @intCast(c & 7), e, f, k);
         }
     }
     return m;
@@ -702,6 +803,9 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var permute: u64 = 0;
     var shuffle: u64 = 0;
     var export_dir: ?[]const u8 = null;
+    var only: ?usize = null;
+    var kit_on = false;
+    var kit_shuffle: u64 = 0;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const a = argv[i];
@@ -714,6 +818,21 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         } else if (std.mem.eql(u8, a, "--export") and i + 1 < argv.len) {
             i += 1;
             export_dir = argv[i];
+        } else if (std.mem.eql(u8, a, "--kit-prior")) {
+            kit_on = true;
+        } else if (std.mem.eql(u8, a, "--kit-shuffle") and i + 1 < argv.len) {
+            i += 1;
+            kit_on = true;
+            kit_shuffle = try std.fmt.parseInt(u64, argv[i], 10);
+        } else if (std.mem.eql(u8, a, "--only") and i + 1 < argv.len) {
+            i += 1;
+            var fb: [32]u8 = undefined;
+            only = for (0..nf) |f| {
+                if (std.mem.eql(u8, featureName(&fb, f), argv[i])) break f;
+            } else {
+                std.debug.print("champcomp --only: no feature {s}\n", .{argv[i]});
+                return 2;
+            };
         } else {
             std.debug.print("usage:\n{s}", .{usage});
             return 2;
@@ -721,7 +840,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     }
     const data_path = if (try synth.parseArg(snap)) |pa| pa.path else snap;
     // The tester lays these terms on the shipped model, so they must be fitted beyond it
-    if (export_dir != null and (permute != 0 or shuffle != 0 or !std.mem.eql(u8, cand.name, "win-draft"))) {
+    if (export_dir != null and (permute != 0 or shuffle != 0 or only != null or kit_shuffle != 0 or !std.mem.eql(u8, cand.name, "win-draft"))) {
         std.debug.print("champcomp --export: build with -Dcand=src/lab/cand/win-draft, no controls\n", .{});
         return 2;
     }
@@ -747,9 +866,9 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     const placed = try comps.loadExtra(gpa, io, d, data_path, extra, team_obj);
     var with_stats: usize = 0;
     for (d.rows) |r| with_stats += @intFromBool(!std.math.isNan(r.stats[0]));
-    try w.print("# champcomp, offset {s}{s}{s}, {s}\nrows {d}: with seat stats {d}, comp_stats lines placed {d}\n", .{
-        cand.name, if (permute != 0) ", PERMUTED profiles" else "", if (shuffle != 0) ", SHUFFLED traits" else "", snap, d.rows.len, with_stats, placed.seats,
-    });
+    var ob: [32]u8 = undefined;
+    const only_name = if (only) |f| featureName(&ob, f) else "";
+    try w.print("# champcomp, offset {s}{s}{s}{s}{s}, {s}\nrows {d}: with seat stats {d}, comp_stats lines placed {d}\n", .{ cand.name, if (permute != 0) ", PERMUTED profiles" else "", if (shuffle != 0) ", SHUFFLED traits" else "", if (only != null) ", ONLY " else "", only_name, snap, d.rows.len, with_stats, placed.seats });
     if (with_stats == 0) return error.NoSeatStats;
     try w.print("fold bounds {any}, dev cut {d}, test cut {d}\n", .{ c.bounds[0..5], c.dev, c.test_ });
     try w.flush();
@@ -764,6 +883,10 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var pooled: Scores = .{};
     defer pooled.deinit(gpa);
     var gains: [harness.folds + 1]Gain = undefined;
+    // --kit-prior against the plain terms on the same games
+    var kit_gains: [harness.folds + 1]Gain = undefined;
+    var pooled_plain: std.ArrayList(f64) = .empty;
+    defer pooled_plain.deinit(gpa);
     var final_clear: Clear = .{};
     var rep: Replication = .{};
 
@@ -804,12 +927,28 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
             try shuffleTraits(gpa, &fit_u, shuffle);
             try shuffleTraits(gpa, &score_u, shuffle +% 1);
         }
+        if (only) |f| for ([_]*Units{ &fit_u, &score_u }) |u| keepOnly(u, f);
 
-        var model = try fitModel(gpa, &fit_u);
+        var kit: Kit = .empty;
+        defer kit.deinit(gpa);
+        if (kit_on) try kitOf(gpa, &p, kit_shuffle, &kit);
+        var model = try fitModel(gpa, &fit_u, if (kit_on) &kit else null);
         defer model.deinit(gpa);
         var sc: Scores = .{};
         defer sc.deinit(gpa);
         try scoreGames(gpa, &model, &score_u, &sc);
+        if (kit_on) {
+            var plain = try fitModel(gpa, &fit_u, null);
+            defer plain.deinit(gpa);
+            var psc: Scores = .{};
+            defer psc.deinit(gpa);
+            try scoreGames(gpa, &plain, &score_u, &psc);
+            kit_gains[wi] = gainOf(psc.full.items, sc.full.items);
+            if (wi < harness.folds) try pooled_plain.appendSlice(gpa, psc.full.items);
+            const g = model.rf.g[kit_feature] * pp_per_logit;
+            const g_ci = 1.96 * model.rf.g_se[kit_feature] * pp_per_logit;
+            try w.print("{s}: kit prior vs plain terms {d:.5} ± {d:.5}; AP share slope per sd of armour lean {d:.2} ± {d:.2} pp\n", .{ win.label, kit_gains[wi].mean, kit_gains[wi].half, g, g_ci });
+        }
         gains[wi] = gainOf(sc.base.items, sc.full.items);
         const team_gain = gainOf(sc.base.items, sc.team.items);
         const seat_gain = gainOf(sc.team.items, sc.full.items);
@@ -826,7 +965,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
             try pooled.full.appendSlice(gpa, sc.full.items);
         }
         if (replicate) {
-            rep = try replicateOn(gpa, d, &p, &model, cc, rep_games.items, blue, seat_scale, team_scale, shuffle);
+            rep = try replicateOn(gpa, d, &p, &model, cc, rep_games.items, blue, seat_scale, team_scale, shuffle, only);
             try w.print("replication: {d} deviations clear before bounds[2], same sign on the newer dev games ({d} games) {d}, mean signed z {d:.2}; BH passes {d}, same sign {d}\n", .{
                 rep.clear, rep.games, rep.agree, if (rep.clear > 0) rep.z_sum / @as(f64, @floatFromInt(rep.clear)) else 0, rep.bh, rep.bh_agree,
             });
@@ -862,10 +1001,20 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     try w.print("folds pooled: {d:.5} ± {d:.5} nats/game over {d} games (team terms {d:.5} ± {d:.5}, champion terms {d:.5} ± {d:.5}), better in {d} of {d}; dev-val {d:.5} ± {d:.5}\n", .{
         all.mean, all.half, all.n, team_all.mean, team_all.half, seat_all.mean, seat_all.half, better, harness.folds, dv.mean, dv.half,
     });
-    try w.print("RESULT champcomp folds={d:.5}±{d:.5} better={d}/{d} devval={d:.5}±{d:.5} clear={d}/{d} bh={d} replicated={d}/{d} bh_replicated={d}/{d}{s}{s}\n", .{
+    var kit_buf: [160]u8 = undefined;
+    var kit_text: []const u8 = "";
+    if (kit_on) {
+        const kg = gainOf(pooled_plain.items, pooled.full.items);
+        var kb: usize = 0;
+        for (kit_gains[0..harness.folds]) |g| kb += @intFromBool(g.mean < 0);
+        const kd = kit_gains[harness.folds];
+        try w.print("kit prior vs plain terms, folds pooled: {d:.5} ± {d:.5} nats/game, better in {d} of {d}; dev-val {d:.5} ± {d:.5}\n", .{ kg.mean, kg.half, kb, harness.folds, kd.mean, kd.half });
+        kit_text = try std.fmt.bufPrint(&kit_buf, " kit={d:.5}±{d:.5} kit_better={d}/{d} kit_devval={d:.5}±{d:.5}{s}", .{ kg.mean, kg.half, kb, harness.folds, kd.mean, kd.half, if (kit_shuffle != 0) " KIT-SHUFFLED" else "" });
+    }
+    try w.print("RESULT champcomp folds={d:.5}±{d:.5} better={d}/{d} devval={d:.5}±{d:.5} clear={d}/{d} bh={d} replicated={d}/{d} bh_replicated={d}/{d}{s}{s}{s}\n", .{
         all.mean,          all.half,                              better,                                harness.folds, dv.mean,   dv.half,
         final_clear.clear, final_clear.tests,                     final_clear.bh,                        rep.agree,     rep.clear, rep.bh_agree,
-        rep.bh,            if (permute != 0) " PERMUTED" else "", if (shuffle != 0) " SHUFFLED" else "",
+        rep.bh,            if (permute != 0) " PERMUTED" else "", if (shuffle != 0) " SHUFFLED" else "", kit_text,
     });
     try w.flush();
     return 0;
@@ -910,6 +1059,9 @@ fn writeExport(
         /// Features whose posterior is clear (|mean| / sd at or above clear_z); u32, as
         /// JSON writes a u8 slice as a string
         clear: []const u32,
+        /// --kit-prior: the AP share deviation the champion's armour lean alone predicts
+        /// (logit per sd), 0 without
+        kit: f64,
     };
     const Ref = struct { label: []const u8, teams: [2][5]u32, blue: f64 };
     const SeatRow = [2 + 1 + nt]f64;
@@ -942,10 +1094,11 @@ fn writeExport(
         @memcpy(row[2..], st.v[1..]);
     }
     var cells: std.ArrayList(CellOut) = .empty;
-    for (m.cells, m.ests, m.post) |cell, e, post| {
+    for (m.cells, m.ests, m.post, m.kit) |cell, e, post, k| {
         if (!e.ok()) continue;
         var any = false;
-        var out: CellOut = .{ .champion = @intCast(cell >> 3), .role = @intCast(cell & 7), .games = e.n, .centre = e.mean_x, .dev = undefined, .sd = undefined, .clear = &.{} };
+        const kit = m.rf.target(@intCast(cell & 7), kit_feature, k)[0];
+        var out: CellOut = .{ .champion = @intCast(cell >> 3), .role = @intCast(cell & 7), .games = e.n, .centre = e.mean_x, .dev = undefined, .sd = undefined, .clear = &.{}, .kit = kit };
         var clear: std.ArrayList(u32) = .empty;
         for (post, 0..) |q, f| {
             out.dev[f] = q.mean;
@@ -1016,6 +1169,7 @@ fn replicateOn(
     seat_scale: Scale,
     team_scale: Scale,
     shuffle: u64,
+    only: ?usize,
 ) !Replication {
     var u: Units = .{};
     defer u.deinit(gpa);
@@ -1023,6 +1177,7 @@ fn replicateOn(
     standardise(u.seats.items, seat_scale);
     standardise(u.teams.items, team_scale);
     if (shuffle != 0) try shuffleTraits(gpa, &u, shuffle +% 2);
+    if (only) |f| keepOnly(&u, f);
     const extra = try gpa.alloc(f64, u.seats.items.len);
     defer gpa.free(extra);
     for (extra, 0..) |*e, i| e.* = m.teamTerm(&u.teams.items[i / 5].x);
@@ -1031,7 +1186,7 @@ fn replicateOn(
     const ests = try gpa.alloc(Est, grp.cells.len);
     defer gpa.free(ests);
     for (ests, 0..) |*e, gi| e.* = try fitCell(gpa, u.seats.items, grp.of(gi), extra);
-    const rf = roleFit(grp.cells, ests);
+    const rf = roleFit(grp.cells, ests, null);
     var r: Replication = .{ .games = games.len };
     for (grp.cells, ests) |cell, re| {
         if (!re.ok()) continue;
@@ -1315,7 +1470,7 @@ test "a planted champion's deviation comes back; a shared slope stays a role mea
             });
         }
     }
-    var m = try fitModel(gpa, &u);
+    var m = try fitModel(gpa, &u, null);
     defer m.deinit(gpa);
     const planted = m.index.get(comps.cellKey(11, 1)).?;
     const p = m.post[planted][melee];
@@ -1342,4 +1497,27 @@ test "traits of a set" {
     s[0].dmg = 0;
     s[1].dmg = 0;
     try testing.expectApproxEqAbs(0.5, traitsOf(&s)[@backingInt(Trait.ap_share)], 1e-12);
+}
+
+test "kit prior: slopes shrink towards the line in armour lean" {
+    // 40 jungle cells, AP share slope -0.02 per sd of armour lean, no other spread; one
+    // cell with a huge se ends near the line, not at the role mean
+    var cells: [40]u64 = undefined;
+    var ests: [40]Est = undefined;
+    var kit: [40]f64 = undefined;
+    for (&cells, &ests, &kit, 0..) |*c, *e, *k, i| {
+        c.* = comps.cellKey(@intCast(i + 1), 1);
+        k.* = @as(f64, @floatFromInt(i)) / 10 - 2;
+        e.* = .{ .n = 1000, .beta = @splat(0), .se = @splat(0.01) };
+        e.beta[kit_feature] = 0.03 - 0.02 * k.*;
+    }
+    ests[39].se[kit_feature] = 10;
+    ests[39].beta[kit_feature] = 1;
+    const rf = roleFit(&cells, &ests, &kit);
+    try testing.expectApproxEqAbs(-0.02, rf.g[kit_feature], 1e-3);
+    const p = posterior(&rf, 1, ests[39], kit_feature, kit[39]);
+    try testing.expectApproxEqAbs(-0.02 * (kit[39] - rf.k_mean[1]), p.mean, 2e-3);
+    // Without the kit the same cell stays at its role's mean
+    const plain = roleFit(&cells, &ests, null);
+    try testing.expectApproxEqAbs(0, posterior(&plain, 1, ests[39], kit_feature, 0).mean, 1e-3);
 }

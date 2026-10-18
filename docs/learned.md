@@ -25,6 +25,22 @@ How to write a line:
 
 ## Win
 
+- 2026-10-18: Rammus jungle does not clearly do better into physical-damage (AD-heavy)
+  teams or worse into magic-damage ones, beyond what the draft model already knows: about
+  0.5 points better per step towards an AD team, and the data allow anything from about
+  1.3 better to 0.4 worse per step (a 4-AD team is about 1.5-2 steps), so the Draft tester
+  rightly says nothing for him. Armour tanks as a group lean that way but only slightly:
+  champions that build more armour than magic resist do about 0.14 points better per step
+  of armour lean per step towards an AD team, too small to improve predictions. One by
+  one, only a few are clear: Malphite (top about 1.8 points worse per step towards an AP
+  team, mid and jungle 3-4), Wukong jungle 1.1, Jax top 0.9 and Braum 1.0; Galio and
+  Kassadin mid about 1.5-1.8 better towards AP. Sure: snap-20261017T1320Z dev games,
+  offset the shipped model, AP share alone per champion-role: Rammus jungle -0.45 ± 0.81
+  pp per sd of enemy AP share (14,213 games), +0.07 ± 0.89 holding the other 15 comp
+  traits fixed; a pre-declared kit prior (slopes shrunk towards the champion's armour
+  lean) missed its rule: -0.00002 ± 0.00004 nats a game against the plain terms, Rammus
+  still not clear (-0.47 ± 0.53). Site: nothing changes; the tester's Malphite, Galio and
+  Kassadin leans stay. Evidence: docs/model.md "Armour tanks into AD"
 - 2026-10-17 (early): Beyond the matchups and duos the site already uses, about half
   of the team-comp effects remain, and the ones that remain are about magic damage and
   tankiness: Malphite (top, mid) still wins about 1.1 points less per step towards a

@@ -3994,6 +3994,53 @@ melee, CC and sustain effects (Lulu, Malzahar, Yasuo into dive, Lissandra and Sy
 melee), so those were specific matchups. The duo weight (0.765 under a 3200 prior) leaves
 ally pairs mostly unexplained, which is where the ally AP terms live
 
+#### Armour tanks into AD (kit prior; declared 2026-10-18 ~00:55 BST, before the run)
+
+Question (Jacob, 18 Oct): Rammus and other armour tanks should do better into AD-heavy
+teams and worse into AP-heavy ones; the Draft tester never says so for Rammus. Already
+seen (exploratory, so the per-champion numbers below aren't a test): Rammus jungle's
+enemy AP share deviation is +0.07 ± 0.89 pp per sd in the 16-feature fit beyond the
+shipped model (shrunk -0.01, so the tester has nothing to say), and -0.45 ± 0.81 with
+AP share alone (`--only enemy:ap_share`, run 20261017T233658Z-champcomp-1320Z-windraft-
+onlyap: folds -0.00023 ± 0.00006, 5/5, 9 clear). In that one-trait fit armour tanks lean
+the same way, mostly unclear one by one: Malphite top -1.79 ± 0.46, Wukong jungle -1.08
+± 0.47, Braum -1.05 ± 0.59, Sejuani -1.05 ± 0.84, Amumu -0.95 ± 0.84, Jax top -0.86 ±
+0.52, Nautilus -0.49 ± 0.40; MR builders the other way (Galio mid +1.48, Kassadin +1.84,
+Mundo top +0.70 ± 0.71). Ratings as the offset gives the same within 0.2 (run
+20261017T233934Z-...-ratings-onlyap). A lone champion at 14k games is found from about 2
+pp per sd, so the question is whether the group carries it.
+
+Method (`champcomp --kit-prior`, 16 features as shipped, offset win-draft): enemy AP
+share deviations shrink towards g x the cell's armour lean (profile armor_end - mr_end,
+items and base stats at level 15, no ability resists; z within role, centred on its
+role's precision-weighted mean) instead of 0; g one weighted slope over all roles' cells,
+weights 1 / (se^2 + spread), spread by DerSimonian-Laird around the line, twice; the
+posterior sd counts g's se. Other features unchanged. Same run fits the plain terms and
+scores both on the same games.
+
+Pre-declared:
+- K1, the kit prior predicts: kit vs plain terms, folds pooled per-game log loss, 95%
+  interval below 0 and better in at least 4 of 5 folds; dev-val reported only
+- K2, control: `--kit-shuffle 1` (armour leans shuffled within role) must not pass K1;
+  if it does, K1 doesn't count
+- Reported: g with its 95% range, on dev-val; Rammus jungle's posterior, clear or not;
+  clear count; g without Malphite's cells is not run (post hoc if wanted)
+- Ship (draft-comp.json for the tester, tester reason for kit-driven leans) only on K1
+  with K2 clean; a miss is recorded in docs/learned.md and nothing changes
+
+Result (runs 20261017T235146Z-champcomp-1320Z-windraft-kit, control
+20261017T235411Z-...-kitshuffle, gpu-box): K1 missed. Kit vs plain terms, folds
+pooled -0.00002 ± 0.00004 nats/game, better in 4 of 5, dev-val 0.00000 ± 0.00006; the
+control 0.00000 ± 0.00000 (3/5; g near 0, as it should be). g is real but small: -0.14 ±
+0.05 pp of AP share slope per sd of armour lean (every fold -0.12 to -0.14), i.e. a
+champion 2 sd armour-heavy does about 0.3 pp better per sd towards an AD team than its
+role's average, so the group effect is too small to predict better. Rammus jungle under
+the kit prior: -0.47 ± 0.53 (95%), not clear (raw +0.03 ± 0.89). Clear count rose to 333
+(replication 114 of 199, mean z 0.29): in roles with no spread left (top, support) every
+cell's posterior is g x its lean with sd from g's se alone, so "clear" there tests g, not
+the champion; don't read `--kit-prior`'s clear counts as champion effects. Nothing
+shipped; the tester keeps the plain terms (Rammus: nothing to say)
+
 ### Draft model file (meiolol draft-model, meiolol-lab draft --export)
 
 `meiolol draft-model [--out DIR]` (src/draftmodel.zig, default DATA/tester) writes the
