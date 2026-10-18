@@ -38,15 +38,20 @@ pub const usage =
 
 /// Own stats: every profile stat, then aa_build
 const n_own = nv + 1;
-/// Enemy traits: summed role z of the own stats, then champcomp's set traits
-const n_en = n_own + nt;
+/// Enemy traits: summed role z of the own stats, champcomp's set traits, then the carry
+/// traits: the strongest single seat's magic damage and auto-attack build, and the
+/// five's total magic damage (a share averages one big AP carry with four AD picks)
+const n_carry = 3;
+const n_en = n_own + nt + n_carry;
+const carry_names = [n_carry][]const u8{ "carry:ap_max", "carry:ap_total", "carry:aa_max" };
 const aa_index = nv;
 const min_games = 300;
 const role_names = [_][]const u8{ "top", "jungle", "middle", "bottom", "support" };
 const bh_q = 0.05;
 const pp = synth.pp_per_logit;
 
-const Group = struct { label: []const u8, champions: []const []const u8, trait: []const u8, sign: f64 };
+/// family 0: the 13 declared first; 1: follow-ups (carry traits), their own BH
+const Group = struct { label: []const u8, champions: []const []const u8, trait: []const u8, sign: f64, family: u1 = 0 };
 
 /// Declared 2026-10-18 before any run (docs/model.md); trait names as traitName gives them
 const groups = [_]Group{
@@ -63,6 +68,12 @@ const groups = [_]Group{
     .{ .label = "G11 armour kits into AP", .champions = &.{ "Rammus", "Malphite", "Braum", "Poppy" }, .trait = "set:ap_share", .sign = -1 },
     .{ .label = "G12 armour kits into armour pen", .champions = &.{ "Rammus", "Malphite", "Braum", "Poppy", "Ornn" }, .trait = "armour_pen", .sign = -1 },
     .{ .label = "G13 juggernauts into range", .champions = &.{ "Darius", "Garen", "Mordekaiser", "Nasus", "Illaoi", "Sion", "Dr. Mundo", "Trundle", "Volibear" }, .trait = "range", .sign = -1 },
+    // Declared 18 Oct ~02:30 BST after the first runs (Jacob: a share is too broad)
+    .{ .label = "F1 armour kits into the top AP threat", .champions = &.{ "Rammus", "Malphite", "Braum", "Poppy" }, .trait = "carry:ap_max", .sign = -1, .family = 1 },
+    .{ .label = "F2 armour kits into total magic damage", .champions = &.{ "Rammus", "Malphite", "Braum", "Poppy" }, .trait = "carry:ap_total", .sign = -1, .family = 1 },
+    .{ .label = "F3 MR kits into the top AP threat", .champions = &.{ "Galio", "Kassadin", "Sivir", "Malzahar", "Morgana" }, .trait = "carry:ap_max", .sign = 1, .family = 1 },
+    .{ .label = "F4 MR kits into total magic damage", .champions = &.{ "Galio", "Kassadin", "Sivir", "Malzahar", "Morgana" }, .trait = "carry:ap_total", .sign = 1, .family = 1 },
+    .{ .label = "F5 auto-attack punishers into the top auto-attacker", .champions = &.{ "Rammus", "Jax", "Shen", "Teemo", "Fiora", "Malphite" }, .trait = "carry:aa_max", .sign = 1, .family = 1 },
 };
 
 fn ownName(i: usize) []const u8 {
@@ -71,6 +82,7 @@ fn ownName(i: usize) []const u8 {
 
 fn traitName(buf: []u8, i: usize) []const u8 {
     if (i < n_own) return ownName(i);
+    if (i >= n_own + nt) return carry_names[i - n_own - nt];
     return std.fmt.bufPrint(buf, "set:{s}", .{@typeInfo(champcomp.Trait).@"enum".field_names[i - n_own]}) catch "?";
 }
 
@@ -374,7 +386,16 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
                 seats[r] = champcomp.seatOf(&p, ch, r);
                 for (ownOf(&p, &aa, aa_m, aa_sd, ch, r), 0..) |v, j| tr[s][j] += v;
             }
-            @memcpy(tr[s][n_own..], &champcomp.traitsOf(&seats));
+            @memcpy(tr[s][n_own .. n_own + nt], &champcomp.traitsOf(&seats));
+            var ap_max: f64 = 0;
+            var ap_total: f64 = 0;
+            var aa_max: f64 = 0;
+            for (t, seats, 0..) |ch, st, r| {
+                ap_max = @max(ap_max, st.magic);
+                ap_total += st.magic;
+                aa_max = @max(aa_max, aa.get(comps.cellKey(ch, r)) orelse aa_m[r]);
+            }
+            tr[s][n_own + nt ..].* = .{ ap_max, ap_total, aa_max };
         }
         const lb = @log(blue[gi] / (1 - blue[gi]));
         for (g.teams, 0..) |t, s| {
@@ -495,14 +516,22 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
             try mout.writer.print("{s}\t{s}\t{s}\t{d}\t{d:.2}\t{d:.2}\t{d:.2}\t{d:.2}\n", .{ grp.label, names.get(@intCast(k >> 3)) orelse "?", role_names[k & 7], @as(u64, @intFromFloat(a.n)), (f.beta[ci] - f.m[k & 7]) * pp, 1.96 * f.se[ci] * pp, hd[0], hd[1] });
         }
     }
-    const g_bh = try comps.bhThreshold(gpa, &g_p, bh_q);
+    var g_bh: [2]f64 = undefined;
+    for (&g_bh, 0..) |*b, fam| {
+        var fp: std.ArrayList(f64) = .empty;
+        defer fp.deinit(gpa);
+        for (groups, g_p) |grp, pv| if (grp.family == fam) try fp.append(gpa, pv);
+        b.* = try comps.bhThreshold(gpa, fp.items, bh_q);
+    }
     var detected: usize = 0;
+    var followups: usize = 0;
     var det_names: std.ArrayList(u8) = .empty;
     for (groups, 0..) |grp, gi| {
         const e = g_est[gi];
-        const bh = g_bh > 0 and g_p[gi] <= g_bh;
+        const bh = g_bh[grp.family] > 0 and g_p[gi] <= g_bh[grp.family];
         const det = bh and std.math.sign(e[2].eff) == grp.sign;
-        if (det) {
+        if (det and grp.family == 1) followups += 1;
+        if (det and grp.family == 0) {
             detected += 1;
             try det_names.print(arena, "{s}{s}", .{ if (det_names.items.len > 0) "," else "", grp.label[0..std.mem.indexOfScalar(u8, grp.label, ' ').?] });
         }
@@ -561,8 +590,10 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     }
     try cwd.writeFile(io, .{ .sub_path = "scan.tsv", .data = sout.written() });
     try w.print("scan: {d} pairs, {d} found on older games (BH 5%), {d} replicated on newer\n", .{ pairs.len, found, replicated });
-    try w.print("RESULT champgroups groups_detected={d}/{d} [{s}] scan_found={d}/{d} scan_replicated={d}{s}\n", .{
-        detected, groups.len, det_names.items, found, pairs.len, replicated, if (shuffle != 0) " SHUFFLED" else "",
+    var n_first: usize = 0;
+    for (groups) |grp| n_first += @intFromBool(grp.family == 0);
+    try w.print("RESULT champgroups groups_detected={d}/{d} [{s}] followups_detected={d}/{d} scan_found={d}/{d} scan_replicated={d}{s}\n", .{
+        detected, n_first, det_names.items, followups, groups.len - n_first, found, pairs.len, replicated, if (shuffle != 0) " SHUFFLED" else "",
     });
     try w.flush();
     return 0;

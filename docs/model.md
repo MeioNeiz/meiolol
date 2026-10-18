@@ -4147,6 +4147,30 @@ after the first run): the same slope with enemy AP share in the cell fit too.
   detected groups and Rammus jungle into aa_build go into the held-out look on games
   after 17 Oct 13:20Z, with these numbers as the predictions
 
+Follow-up, carry traits (declared 18 Oct ~02:30 BST, before the run; Jacob: "adding a
+random AP champ to an otherwise all AD team might not help much, but a very high damage
+AP carry might"). AP share already weights each champion by its typical damage, but a
+share averages: one big AP carry with four AD picks and five lightly mixed picks can
+both be 30%. New enemy traits, from the profiles' raw per-minute numbers: carry:ap_max
+(the enemy seat with the most magic damage), carry:ap_total (the five's magic damage,
+not a share), carry:aa_max (the seat with the most crit and attack-speed items). Groups
+F1-F5, their own BH family: armour kits (G11's list) into ap_max and ap_total (-), MR
+kits (G6's) into ap_max and ap_total (+), auto-attack punishers (G1's) into aa_max (+).
+Read: each against its share or sum version by effect / se, and the AP-held column: for
+F1-F4, whether the strongest carry or the total adds beyond the share
+
+Result (run 20261018T005354Z-champgroups-1320Z-carry, gpu-box; the 13 groups as before;
+scan now 4,800 pairs, 520 found, 347 replicated): the whole team's mix beats its strongest
+carry. Armour kits: share -1.51 ± 0.41, total magic damage -1.52 ± 0.42, top AP threat
+-1.05 ± 0.37; with the share held the top AP threat is -0.14 ± 0.35 (nothing left) and
+the total is too collinear with the share to separate (± 1.9). MR kits: share +0.49 ±
+0.37, total +0.43, top AP threat +0.08 ± 0.35 (not detected). Auto-attack punishers: the
+five's summed auto-attack build +0.89 ± 0.33, the top auto-attacker +0.66 ± 0.29. So for
+these kits a team's damage counts as a whole, weighted by how much each champion
+usually deals (which AP share already does), and one big AP carry among four AD picks
+doesn't add beyond it. Profiles are typical damage, not who gets fed in a game, which a
+draft can't know. Nothing changes in the traits the tester uses
+
 ### Draft model file (meiolol draft-model, meiolol-lab draft --export)
 
 `meiolol draft-model [--out DIR]` (src/draftmodel.zig, default DATA/tester) writes the
