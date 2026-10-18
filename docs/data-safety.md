@@ -129,6 +129,19 @@ into backups/restore-test, `meiolol status` on both: every count equal (players
 mastery, champions) except raw.raw_docs and raw.timeline_docs (0, by design). Repeat on
 the first D: backup, then quarterly.
 
+Row-by-row rehearsal, 18 Oct (after participant_gold, e9092a5): a backup on the box
+(segment 000010: matches to rowid 976,546, timelines to 844,042, drafts to 885,378,
+rank days to 20743, mastery to 1792318023), the live tables digested at that point
+straight after (sha3 of every column per key: data/team/2026-10-18-waste/
+restore-digest.sh, restore-compare.sh), the Mac mirror restored (1,003 s) and digested
+alike. Every row the same in matches (960,568), bans, timelines (844,042), drafts
+(885,378), rank_history (6,319,758 players' histories) and mastery (3,841,620);
+participants differed in 49 matches whose timeline came after the backup point (as
+expected) and in 98 more: the 11 Oct wrong-key window, blanked by hand on 14 Oct after
+segment 000002 had copied it (Key switch, below). 000002 on both mirrors blanked the
+same way on 18 Oct (980 PUUIDs); a second restore then had no unexplained difference in
+any of the seven tables (participants: 49 exempt, the rest the same).
+
 ## Health alerts
 
 deploy/health.sh runs on the box and prints one line per problem:
@@ -437,6 +450,10 @@ were first seen then. Matches outside the block give 200, and the block's edges 
 players' seen_at. Effect: the participant mastery pass's ladder-gap batches never
 finished, so kr mastery stalled from 13 Oct 19Z (fixed in the crawler, e5aabc2).
 Cleanup as above (participant PUUIDs NULL, those players deleted): done 14 Oct 19:57Z,
-980 participant PUUIDs, 81 players. Until then the ladder mastery pass, its euw1 list
+980 participant PUUIDs, 81 players; the backup segment holding them (000002) only on
+18 Oct, on both mirrors, found by the restore rehearsal (Restore). A hand edit of
+stored rows needs the same edit in every mirror's segments: `backup --full` would make
+a restore right (newest copy wins) but leave the old segments holding the old rows.
+Until then the ladder mastery pass, its euw1 list
 down to such players, went round them back to back (~60k 400s a day, fixed in the
 crawler: the list wraps after the step's nap)
