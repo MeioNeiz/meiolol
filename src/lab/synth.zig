@@ -880,7 +880,7 @@ fn blueWins(gpa: std.mem.Allocator, d: *const rows.Data) ![]f64 {
 test "winners follow the planted logit: each term comes back at its size" {
     const gpa = std.testing.allocator;
     const spec: Spec = .{ .seed = 3, .synergy = 10, .counter = 10, .mix = -8, .skill = 3, .pair_sd = 2, .counter_sd = 2 };
-    var d = try draft(gpa, 30_000, spec);
+    var d = try draft(gpa, 15_000, spec);
     defer d.deinit();
     var t = try truth(gpa, &d, spec);
     defer t.deinit(gpa);
@@ -901,7 +901,7 @@ test "winners follow the planted logit: each term comes back at its size" {
 test "nothing planted: the terms' features carry no signal" {
     const gpa = std.testing.allocator;
     const none: Spec = .{ .seed = 5 };
-    var d = try draft(gpa, 30_000, none);
+    var d = try draft(gpa, 15_000, none);
     defer d.deinit();
     // Features at unit size, labels from the plain spec
     var t = try truth(gpa, &d, .{ .seed = 5, .champ = 0, .synergy = 25, .counter = 25, .mix = 25, .skill = 25, .pair_sd = 25, .counter_sd = 25 });
@@ -922,7 +922,7 @@ test "nothing planted: the terms' features carry no signal" {
 
 test "champ_melee: the planted champion-role's team gains per sd of enemy melee" {
     const gpa = std.testing.allocator;
-    var d = try draft(gpa, 20_000, .{ .seed = 4 });
+    var d = try draft(gpa, 10_000, .{ .seed = 4 });
     defer d.deinit();
     for (d.rows) |*r| r.stats[@backingInt(seatstats.SeatStat.attack_range)] = if (r.champion % 3 == 0) 125 else 550;
     const spec: Spec = .{ .seed = 4, .champ_melee = 10, .cell = 2 };

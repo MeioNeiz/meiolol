@@ -285,10 +285,14 @@ test "acquire waits once a window is full" {
     var l = try Limiter.init(testing.allocator, testing.io);
     defer l.deinit();
     try l.update("m", .{ .app_limit = "3:1" });
+    for (0..3) |_| try l.acquire("m", false);
+    // Back-dated so the window frees in 100 ms, not a real 1.75 s
+    const w = &l.app.windows.items[0];
     const start = l.now();
-    for (0..4) |_| try l.acquire("m", false);
+    for (0..3) |i| w.hits.atPtr(i).* = start - w.span() + 100 * std.time.ns_per_ms;
+    try l.acquire("m", false);
     const elapsed_ms = @divTrunc(l.now() - start, std.time.ns_per_ms);
-    try testing.expect(elapsed_ms >= 1000 and elapsed_ms < 2500);
+    try testing.expect(elapsed_ms >= 100 and elapsed_ms < 1000);
 }
 
 test "a priority caller takes the next slot, ahead of paced callers" {

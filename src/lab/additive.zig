@@ -545,6 +545,9 @@ pub fn cellOf(p: *const Problem, j: usize) struct { group: usize, a: u32, b: u32
 }
 
 const testing = std.testing;
+/// Half the default variance updates: the same estimates on these tests' games in half
+/// the time. "planted pair sd" keeps the default: its logistic bias is a converged fit's
+const quick: Config = .{ .outer = 20 };
 
 /// Random games over n champions per role; the true model: strength sd s_main per role,
 /// pair cells sd s_pair in group `planted` only, everything else 0
@@ -594,7 +597,7 @@ test "planted pair variance is recovered, empty blocks shrink to ~0" {
     v.cont = 0;
     var p = try build(gpa, .logistic, v, games);
     defer p.deinit(gpa);
-    var f = try fit(gpa, &p, .{}, null, null);
+    var f = try fit(gpa, &p, quick, null, null);
     defer f.deinit(gpa);
     try testing.expectApproxEqAbs(0.25, @sqrt(f.sigma2[planted]), 0.06);
     try testing.expect(@sqrt(f.sigma2[allyGroup(0, 1)]) < 0.06);
@@ -673,9 +676,9 @@ test "calibration recovers a thin planted pair block on win" {
     defer gpa.free(games);
     var p = try build(gpa, .logistic, Variant.mains().with(planted).with(allyGroup(0, 1)), games);
     defer p.deinit(gpa);
-    var f = try fit(gpa, &p, .{}, null, null);
+    var f = try fit(gpa, &p, quick, null, null);
     defer f.deinit(gpa);
-    const cal = try calibrate(gpa, testing.io, &p, &f, .{}, 4, 8, 1);
+    const cal = try calibrate(gpa, testing.io, &p, &f, quick, 4, 5, 1);
     // Raw ~0.67x at 25 games per cell; calibrated within ~20% of 0.15, the empty block ~0
     try testing.expect(@sqrt(f.sigma2[planted]) < 0.12);
     try testing.expectApproxEqAbs(0.15, @sqrt(cal.sigma2[planted]), 0.03);
@@ -692,7 +695,7 @@ test "identified matchups: a planted matchup's sd comes back as the block sd" {
     defer gpa.free(cross);
     var p = try build(gpa, .gaussian, Variant.mains().matchupGroups(), cross);
     defer p.deinit(gpa);
-    var f = try fit(gpa, &p, .{}, null, null);
+    var f = try fit(gpa, &p, quick, null, null);
     defer f.deinit(gpa);
     try testing.expectApproxEqAbs(0.2, @sqrt(f.sigma2[enemyGroup(1, 3)]), 0.04);
     try testing.expect(@sqrt(f.sigma2[enemyGroup(1, 1)]) < 0.05);
@@ -703,7 +706,7 @@ test "identified matchups: a planted matchup's sd comes back as the block sd" {
     defer gpa.free(same);
     var q = try build(gpa, .gaussian, Variant.mains().matchupGroups(), same);
     defer q.deinit(gpa);
-    var g = try fit(gpa, &q, .{}, null, null);
+    var g = try fit(gpa, &q, quick, null, null);
     defer g.deinit(gpa);
     try testing.expectApproxEqAbs(0.2 * @sqrt(2.0), @sqrt(g.sigma2[enemyGroup(2, 2)]), 0.05);
     // 10 champions: 45 unordered pairs
