@@ -34,8 +34,9 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
    video and LCU endpoint list (A1; needs Jacob in a real champ select, steps under
    "Before the production review"), Daily game age (A4, Q2)
 7. Renderer as the main path: uncached pages 503 while it is down (docs/backlog.md "Site build and deploy", Next 2-3)
-8. Remember the player without an account (B1): recent Riot IDs in localStorage, "N new
-   games since", a per-game link. No decision needed
+8. Done 18 Oct (b966bd7): Your games remembers the last five Riot IDs on the device, "N
+   new games since your last visit", per-game links (#id=...&game=<start_ms>), Copy link.
+   Next, small: mark the new games in the film strip (CSS)
 9. Plain one-line verdicts where the answer is one fact (B6, R57): matchup headline from
    the curve, the turning minute's sentence first in the review
 10. Pool first in the picker (B2), then bans from the pool's hard lanes (B3, Q3); public
