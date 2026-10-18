@@ -102,24 +102,29 @@ test "fixture games to stats, curves and the website" {
     try tmp.dir.writeFile(io, .{ .sub_path = "lean.tsv", .data = lean_bytes.written() });
     const lean_path = try std.fs.path.join(arena, &.{ dir, "lean.tsv" });
 
-    // Your games example (`meiolol your-example`): one player's games as the API
-    // answers, with the lane over the curve, and nothing that names the player or match
+    // Your games example (`meiolol your-example`): a player per role, their games as the
+    // API answers, with the lane over the curve, and nothing that names the player or match
     const set: api.game.CurveSet = .{ .files = &.{.{
         .label = patch,
         .curves = try core.curvesfile.Curves.parse(arena, curves_bytes.written()),
     }} };
-    const example = (try api.example.build(arena, db, set, .{ .since_ms = 0, .min_games = games })).?;
-    try testing.expectEqual(games, example.report.?.games.len);
-    const first = example.report.?.games[0];
-    try testing.expectEqual(@mod(start_ms, std.time.ms_per_day), start_ms - first.start_ms);
-    try testing.expect(first.lane.?.curve != null);
-    const example_json = try api.gamesJson(arena, example);
-    for ([_][]const u8{ "\"state\":\"ready\"", "\"name\":\"Example player\"", "\"lane\":{\"gold\":[" }) |want| {
+    const examples = (try api.example.buildAll(arena, db, set, .{ .since_ms = 0, .min_games = games })).?;
+    try testing.expectEqualStrings("mid", examples.default);
+    inline for (core.Role.all) |r| {
+        const ex = @field(examples, r.label()).?;
+        try testing.expectEqual(games, ex.report.?.games.len);
+        const first = ex.report.?.games[0];
+        try testing.expectEqualStrings(r.label(), first.role.?);
+        try testing.expectEqual(@mod(start_ms, std.time.ms_per_day), start_ms - first.start_ms);
+        try testing.expect(first.lane.?.curve != null and first.turning != null);
+    }
+    const example_json = try api.example.json(arena, examples);
+    for ([_][]const u8{ "\"default\":\"mid\"", "\"support\":{\"state\":\"ready\"", "\"name\":\"Example player\"", "\"lane\":{\"gold\":[" }) |want| {
         try testing.expect(std.mem.indexOf(u8, example_json, want) != null);
     }
     try testing.expect(std.mem.indexOf(u8, example_json, "EUW1_") == null);
     try db.run("INSERT INTO forgotten SELECT DISTINCT puuid, 0 FROM participants", .{});
-    try testing.expectEqual(null, try api.example.build(arena, db, set, .{ .since_ms = 0, .min_games = 1 }));
+    try testing.expectEqual(null, try api.example.buildAll(arena, db, set, .{ .since_ms = 0, .min_games = 1 }));
     try db.exec("DELETE FROM forgotten");
 
     const out = try std.fs.path.join(arena, &.{ dir, "site" });

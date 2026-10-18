@@ -7,9 +7,10 @@
 const API = ["localhost", "127.0.0.1"].includes(location.hostname) && location.port !== "8090"
   ? "http://127.0.0.1:8090/api"
   : "/api";
-// `meiolol your-example`: an anonymised player in the API's shape, for visitors (and
-// Riot's reviewers) without a Riot ID
+// `meiolol your-example`: an anonymised player per role in the API's shape, for visitors
+// (and Riot's reviewers) without a Riot ID
 const EXAMPLE = "data/your-example.json";
+const ROLES = [["top", "Top", "top laner"], ["jungle", "Jungle", "jungler"], ["mid", "Mid", "mid laner"], ["bot", "Bot", "bot laner"], ["support", "Support", "support"]];
 const POLL_MS = 3000;
 // Riot lists a game a few minutes after it ends: a check that finds nothing new repeats
 // every minute for a while. The service refuses checks closer than check_at
@@ -272,28 +273,58 @@ function watchStep(body) {
   }, next);
 }
 
-async function showExample() {
+let examples;
+
+// role: "" (or one not in the file) for the file's default. An older file is one
+// example of no role
+async function showExample(role = "") {
   clearTimeout(pollTimer);
   stopWatch();
   lookupId = "";
-  setUrl("example");
-  let body;
   try {
-    body = await (await fetch(EXAMPLE)).json();
+    examples ??= await (await fetch(EXAMPLE)).json();
   } catch {
     status("The example isn't available right now.");
     return;
   }
-  body.example = true;
+  const byRole = !examples.state;
+  if (!byRole) role = "";
+  else if (!examples[role]) role = examples.default;
+  setUrl(role ? `example=${role}` : "example");
+  const body = { ...(role ? examples[role] : examples), example: true, exampleRole: role };
   current = body;
   render(body, true);
   renderCheck(body);
-  status("An example: real ranked games of one player from our data, with their name left out and dates to the day. Enter your Riot ID above to review your own.");
+  const who = ROLES.find((r) => r[0] === role)?.[2] ?? "player";
+  status(`An example: real ranked games of one ${who} from our data, with their name left out and dates to the day. Enter your Riot ID above to review your own.`);
+}
+
+function renderRoles(body) {
+  let nav = $("example-roles");
+  if (!nav) {
+    nav = el("nav", "tabs");
+    nav.id = "example-roles";
+    nav.setAttribute("aria-label", "Example role");
+    $("player").prepend(nav);
+  }
+  nav.hidden = !body.exampleRole;
+  if (nav.hidden) return;
+  nav.replaceChildren(...ROLES.filter(([role]) => examples[role]).map(([role, label]) => {
+    const a = el("a", "", label);
+    a.href = `#example=${role}`;
+    if (role === body.exampleRole) a.setAttribute("aria-current", "page");
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      showExample(role);
+    });
+    return a;
+  }));
 }
 
 function render(body, first) {
   const p = body.player;
   $("player").hidden = false;
+  renderRoles(body);
   $("start").classList.add("compact");
   $("player-name").textContent = body.example ? p.name : `${p.name}#${p.tag}`;
   const tier = p.tier
@@ -544,7 +575,7 @@ function fromUrl() {
     $("riot-id").value = id;
     lookup(id, Number(hash.get("game")) || 0);
   } else if (hash.has("example") || params.has("example")) {
-    showExample();
+    showExample(hash.get("example") ?? params.get("example") ?? "");
   }
 }
 

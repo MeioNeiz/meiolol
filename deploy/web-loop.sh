@@ -34,11 +34,11 @@
 # whole. Each round copies it into the admin upload at admin/models/, where the tester
 # reads it before the lab's pick (admin-draft.js modelFile; docs/model.md "Draft model
 # file").
-# Daily, `meiolol your-example` (read-only, background) leaves one anonymised player's
-# games in data/your-example.json, which meiolol-render serves at the same path from its
-# next load, for your.html's and the home page's example. A failed run removes the file,
-# so a stale example (perhaps a player forgotten since) never ships; the pages then offer
-# none until the next success.
+# Daily, `meiolol your-example` (read-only, background) leaves an anonymised player's
+# games per role in data/your-example.json, which meiolol-render serves at the same path
+# from its next load, for your.html's and the home page's example. A failed run removes
+# the file, so a stale example (perhaps a player forgotten since) never ships; the pages
+# then offer none until the next success.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
 # behind basic auth there; the site's rsync leaves that directory alone. Daily, a dbstat
 # scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
