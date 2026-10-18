@@ -33,7 +33,8 @@ if top=$(ssh -T -o BatchMode=yes -o ConnectTimeout=10 meiolol-cache <<< "$versio
     log "nginx cache key now $version (meiolol-render@${serving[0]})"
     deploy_event "$(deployed_sha)" cache ok "nginx cache key $version (meiolol-render@${serving[0]})"
     [[ -n $top ]] && printf '%s\n' "$top" > data/cache-warm-top.txt
-    systemctl --user restart --no-block meiolol-cache-warm
+    # A run under way finishes, then runs again for this version
+    systemctl --user start --no-block meiolol-cache-warm
 else
     log "sending $version to jomify FAILED: retrying in a minute"
     deploy_event "$(deployed_sha)" cache failed "sending $version to jomify failed: retrying in a minute"

@@ -136,28 +136,34 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   reload starts the cache cold, which deploy/cache-warm.sh then fills (Outages, below). Last sent version: data/cache-version; log lines
   `cache-version:` in data/render.log
 - Outages (the renderer is the main path since `--static core`): a page with a copy
-  under the current cache version is served stale on error, timeout or 503; one without
-  is 503 until the renderer is back. Each version starts the cache cold (18 Oct, 00:06:
-  8 copies under the current version, 6.6k files in all; 30 versions on 17 Oct), so
-  deploy/cache-warm.sh (meiolol-cache-warm.service, restarted by cache-version.sh after
-  each version) requests every page and file through nginx over the private address
-  (10.0.0.214:443), one at a time at 20/s: the site's 7-day top 30 first (the receive
-  script answers with them from traffic.json), then the renderer's list
-  (/admin/api/pages.txt, admin token: every page of the loaded views, matchups only from
-  200 games, as thinner ones are ~54k pages a view; thin matchups stay render only).
-  Stops when the version changes. Pages render from memory, so no disk for the crawler
-  to wait on. Log `cache-warm:` in data/render.log. @render asks the box for gzip
-  (`proxy_set_header Accept-Encoding gzip;`, `gunzip on;` for clients without it) and
-  ignores Vary (18 Oct: before, nginx kept a copy per client Accept-Encoding string, up
-  to 3 a page, so a warmed copy served only clients sending the same header), so one
-  copy per page serves everyone. jomify's access log skips user agent
-  meiolol-cache-warm (map $meiolol_logged), so traffic.json counts visits only. Applied
-  2026-10-14 and 18 Oct (Jacob's OK; before: /etc/nginx/meiolol.conf.bak-2026-10-14-cache,
-  /etc/nginx/meiolol.conf.bak-2026-10-18-warm). Measured 18 Oct: no 5xx to visitors in
-  jomify's log since 12 Oct (6,200 misses, all 200 or 404; STALE there is the background
-  refresh of an expired copy, not an outage); a renderer start reads views.bin and
-  serves in 1.3 s (file in page cache) to 16.6 s (evicted, as after a boot); swaps
-  1.4-16.6 s
+  under the current cache version is served stale on error, timeout or 503; else
+  @render_any serves its warm-up copy (key `<uri>|any`, header X-Meiolol-Render:
+  ANY-HIT or ANY-STALE); with neither, 503 until the renderer is back. Each version
+  starts the versioned cache cold (18 Oct, 00:06: 8 copies under the current version;
+  30 versions on 17 Oct, every 3-6 min in deploy storms, faster than a warm-up run), so
+  the warm-up fills the unversioned key: deploy/cache-warm.sh (meiolol-cache-warm.service,
+  started by cache-version.sh after each version; a run under way finishes, then runs
+  again) requests every page and file through nginx over the private address
+  (10.0.0.214:443) with X-Meiolol-Warm: 1, which nginx honours only from 10.0.0.3 (geo
+  $meiolol_from_box): always fetched anew (proxy_cache_bypass) and stored under
+  `<uri>|any`. One at a time at 20/s: the site's 7-day top 30 first (the receive script
+  answers with them from traffic.json), then the renderer's list (/admin/api/pages.txt,
+  admin token: every page of the loaded views, matchups only from 200 games, as thinner
+  ones are ~54k pages a view; thin matchups stay render only). Pages render from memory,
+  so no disk for the crawler to wait on. Log `cache-warm:` in data/render.log. @render
+  asks the box for gzip (`proxy_set_header Accept-Encoding gzip;`, `gunzip on;` for
+  clients without it) and ignores Vary (18 Oct: before, nginx kept a copy per client
+  Accept-Encoding string, up to 3 a page), so one copy per page serves everyone; it
+  intercepts the box's 503 (proxy_intercept_errors) to reach @render_any. jomify's
+  access log skips user agent meiolol-cache-warm (map $meiolol_logged), so traffic.json
+  counts visits only. Applied 2026-10-14 and 18 Oct (Jacob's OK; before:
+  /etc/nginx/meiolol.conf.bak-2026-10-14-cache, meiolol.conf.bak-2026-10-18-warm (Vary,
+  log) and meiolol.conf.bak-2026-10-18-any (@render_any)). Measured 18 Oct: no 5xx to
+  visitors in jomify's log since 12 Oct (6,200 misses, all 200 or 404; STALE there is
+  the background refresh of an expired copy, not an outage); a renderer start reads
+  views.bin and serves in 1.3 s (file in page cache) to 16.6 s (evicted, as after a
+  boot); swaps 1.4-16.6 s; renderer stopped by hand: a warmed page ANY-HIT, an unwarmed
+  one 503
 - Training view (/admin/training/, same basic auth as /admin/; data for the admin Models
   tab): lab runs of the Mac and the gpu-box (staged over ssh, home network only), learned.md,
   model.md, campaigns, uploaded by deploy/lab-push.sh (launchd, every 30 s when changed). Served from
