@@ -216,6 +216,12 @@ test "fixture games to stats, curves and the website" {
             return error.TestUnexpectedResult;
         };
     }
+    // Three games: greyed out, so no plain verdict above the gold chart (matchup.verdict)
+    {
+        const path = try std.fs.path.join(arena, &.{ out, "matchup/top/mordekaiser-vs-darius.html" });
+        const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
+        try testing.expect(std.mem.indexOf(u8, html, "class=\"verdict") == null);
+    }
     // table.js finds each search's and rare button's table by id: every target on the page
     for ([_][]const u8{ "champions.html", "role/top.html", "champion/darius.html" }) |page| {
         const path = try std.fs.path.join(arena, &.{ out, page });

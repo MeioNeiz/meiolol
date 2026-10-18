@@ -565,6 +565,11 @@ const Review = (() => {
     }
     const wc = g.win_chance;
     const M = moments(g);
+    const turned = M.find((m) => m.kind === "turn");
+    if (turned && wc?.length > 1) {
+      const t = g.turning;
+      box.append(el("p", "verdict", `The game turned at ${clock(turned.t_s)}: your team's win chance went from ${t.from}% to ${t.to}%, with ${turned.text}`));
+    }
     const panel = el("div", "panel");
     const h = el("div", "panel-h");
     h.append(el("b", "", "Win chance"), el("span", "", "your team, minute by minute, from gold, XP and objectives as in Platinum+ games"));

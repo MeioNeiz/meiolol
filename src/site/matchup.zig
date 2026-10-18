@@ -289,6 +289,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     };
     for (charts) |c| {
         try tpl.render(w, "<h2>{title}</h2>\n", .{ .title = c.title });
+        if (c.metric == .gold) for (vs) |s| try verdict(w, s, vs.len > 1, x);
         try chart(w, vs, base, c.metric, c.unit, x, y, when, lane);
     }
 
@@ -454,6 +455,56 @@ fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
             .behind = tpl.call(percent, .{ lane.wins_behind, lane.behind }),
         })),
     });
+}
+
+/// One plain line above the gold chart: who is ahead by lane_minute and since when, only
+/// where the estimate is more than 2 SE from 0, then how often the side ahead wins.
+/// Greyed-out (thin) curves get none: their note says why
+fn verdict(w: *Writer, one: Variant, toggle: bool, x: Champ) !void {
+    const v = one.v;
+    const i = curvesfile.lane_minute - 1;
+    if (thin(v) or i >= v.minutes() or v.minute(i).n < minuteFloor(v)) return;
+    const lane = v.lane();
+    const split = lane.ahead >= min_minute_games and lane.behind >= min_minute_games;
+    try tpl.render(w,
+        \\<p class="verdict{exp}{key}">{gold}{wins}.</p>
+        \\
+    , .{
+        .exp = tpl.when(toggle, " exp exp-"),
+        .key = tpl.when(toggle, one.key),
+        .gold = tpl.call(leadSince, .{ v, x }),
+        .wins = tpl.when(split, tpl.t(", then whoever is ahead wins {share} of games", .{
+            .share = tpl.call(percent, .{ lane.wins_ahead + lane.behind - lane.wins_behind, lane.ahead + lane.behind }),
+        })),
+    });
+}
+
+/// Minutes up to this read as "from the start": gold differences barely exist yet
+const start_minute = 4;
+
+fn leadSince(w: *Writer, v: View, x: Champ) !void {
+    const i = curvesfile.lane_minute - 1;
+    const side = clearSide(v.estimate(.gold, i));
+    if (side == 0) return tpl.render(w, "About even in gold until {minute} minutes", .{ .minute = curvesfile.lane_minute });
+    var from: usize = i;
+    while (from > 0 and clearSide(v.estimate(.gold, from - 1)) == side) from -= 1;
+    const gold = @abs(@as(i32, v.estimate(.gold, i).mean));
+    const early = from + 1 <= start_minute;
+    try tpl.render(w, "{x} is {side} from {start}{from}, about {gold} gold by {minute} minutes", .{
+        .x = x.name,
+        .side = if (side > 0) "ahead" else "behind",
+        .start = tpl.when(early, "the start"),
+        .from = tpl.when(!early, tpl.t("minute {m}", .{ .m = from + 1 })),
+        .gold = @max(100, @divTrunc(gold + 50, 100) * 100),
+        .minute = curvesfile.lane_minute,
+    });
+}
+
+/// 1 or -1 when the estimate is more than 2 standard errors from 0, else 0
+fn clearSide(e: curvesfile.Estimate) i2 {
+    const mean: i32 = e.mean;
+    if (@abs(mean) <= 2 * @as(u32, e.se)) return 0;
+    return if (mean > 0) 1 else -1;
 }
 
 fn amount(w: *Writer, value: i16, unit: []const u8) !void {
@@ -758,4 +809,53 @@ test "one page per matchup, though experienced players' curves share its pair" {
     }
     try std.testing.expectEqual(3, all_ranks);
     try std.testing.expectEqual(1, pages);
+}
+
+test verdict {
+    const gpa = std.testing.allocator;
+    var minutes: [curvesfile.lane_minute]curvesfile.Minute = @splat(.{ .n = 400, .gold = .{}, .xp = .{}, .cs = .{} });
+    var header = std.mem.zeroes(curvesfile.Header);
+    header.games = 400;
+    header.own = 800;
+    header.lane_games = 400;
+    header.lane_a = 250;
+    header.lane_b = 150;
+    header.a_wins_lane_a = 160;
+    header.b_wins_lane_b = 96;
+    // Clear of 0 from minute 2, behind past 14: "from the start"
+    for (&minutes, 0..) |*m, i| m.est[0] = .{ .mean = @intCast(60 * i), .se = 20 };
+    minutes[curvesfile.lane_minute - 1].est[0].mean = 846;
+    const x: Champ = .{ .c = 0, .id = 1, .key = "", .name = "Ahri", .slug = "", .banned = 0, .games = 0 };
+    const cv: curvesfile.Curve = .{ .header = header, .minutes = &minutes };
+    const Case = struct { flipped: bool, want: []const u8 };
+    const ahead = [_]Case{
+        .{ .flipped = false, .want = "<p class=\"verdict\">Ahri is ahead from the start, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.</p>\n" },
+        .{ .flipped = true, .want = "<p class=\"verdict\">Ahri is behind from the start, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.</p>\n" },
+    };
+    for (ahead) |case| {
+        var aw: Writer.Allocating = .init(gpa);
+        defer aw.deinit();
+        try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = case.flipped }, .key = "any", .label = "" }, false, x);
+        try std.testing.expectEqualStrings(case.want, aw.written());
+    }
+
+    // Clear only from minute 9 on
+    for (minutes[0..8]) |*m| m.est[0].se = 1000;
+    var aw: Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "x", .label = "" }, true, x);
+    try std.testing.expectEqualStrings("<p class=\"verdict exp exp-x\">Ahri is ahead from minute 9, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.</p>\n", aw.written());
+
+    // Within 2 SE at 14: even
+    minutes[curvesfile.lane_minute - 1].est[0] = .{ .mean = 30, .se = 20 };
+    aw.clearRetainingCapacity();
+    try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "any", .label = "" }, false, x);
+    try std.testing.expectEqualStrings("<p class=\"verdict\">About even in gold until 14 minutes, then whoever is ahead wins 64% of games.</p>\n", aw.written());
+
+    // Mostly baseline: the page's note says so, no verdict
+    var thin_cv = cv;
+    thin_cv.header.own = 300;
+    aw.clearRetainingCapacity();
+    try verdict(&aw.writer, .{ .v = .{ .curve = &thin_cv, .flipped = false }, .key = "any", .label = "" }, false, x);
+    try std.testing.expectEqualStrings("", aw.written());
 }

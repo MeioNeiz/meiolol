@@ -86,6 +86,7 @@ h1 { font-size: 26px; line-height: 1.2; margin: 6px 0 8px; letter-spacing: -0.02
 h2 { font-size: 18px; margin: 32px 0 12px; letter-spacing: -0.015em; font-weight: 600; }
 h3 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
 p.lead { font-size: 16px; color: var(--t2); max-width: 680px; }
+p.verdict { font-size: 16px; font-weight: 600; max-width: 680px; margin: 0 0 8px; }
 .muted { color: var(--muted); }
 .note {
   border: 1px solid var(--line); background: var(--panel); border-radius: 10px;
@@ -597,6 +598,7 @@ td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 1
 .fine { color: var(--faint); font-size: 12px; max-width: 480px; margin: 14px 0 0; }
 .demo .panel { border: 0; border-radius: 0; background: none; box-shadow: none; }
 .demo .panel > .panel-h { display: none; }
+.demo .verdict { display: none; }
 .demo .rv-strip { padding: 12px 14px 0; gap: 8px 12px; }
 .demo .rv-matchup { font-size: 14px; }
 .demo .rv-matchup img { width: 24px; height: 24px; }
