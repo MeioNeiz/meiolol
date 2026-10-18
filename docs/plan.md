@@ -44,7 +44,7 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
    new games since your last visit", per-game links (#id=...&game=<start_ms>), Copy link.
    Next, small: mark the new games in the film strip (CSS)
 9. Done 18 Oct (b1ce15b): matchup pages say above the gold chart who is ahead from
-   when and by how much (only past 2 SE; a 200 gold floor in progress), then how often
+   when and by how much (past 2 SE and 200 gold: 2c8e5c1), then how often
    the side ahead at 14 wins; the review opens with the turning minute's sentence (B6,
    R57)
 10. Pool first in the picker (B2), then bans from the pool's hard lanes (B3, Q3); public
