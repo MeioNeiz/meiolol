@@ -411,8 +411,9 @@ totals never. Per game an arena reset, like curves. Measured on 3.8k EUW 16.20 g
 (1.7k timelines): 1 s, 29 MB RSS, 25k options, 1.1 MB JSON; ~0.25 ms per timeline, so
 a full EUW patch (~400k) is a couple of minutes on a fast disk; on the micro the
 first run took ~7.5 ms a game (docs/backlog.md "Builds"). deploy/web-loop.sh runs EUW and all
-regions for the current patch daily and on a new patch, in the background at nice 10
-(log data/builds.log); the next site build picks them up.
+regions for the current patch daily and on a new patch, both from one pass over the
+timelines (`builds --site`, builds.buildEach), in the background at nice 10 (log
+data/builds.log); the next site build picks them up.
 
 `meiolol site` reads the current patch's two files: a page per champion and role in the
 patch views (patch/build/<slug>-<role>.html, all/patch/...) when the role has 10%+ of

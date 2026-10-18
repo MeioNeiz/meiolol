@@ -66,7 +66,9 @@ accounts may use Always Free only in the home region).
 The static upload is only what nginx must serve itself (`meiolol site --static core`,
 deploy/web-loop.sh; the list is core_static in src/site/root.zig): the home page,
 robots.txt, riot.txt, the root sitemap, CSS, JS, wasm, font and icon, ~30 files with
-their .gz twins, all at the site root; the build loads only two views' stats.
+their .gz twins, all at the site root; the build loads only two views' stats (17-550 s on
+the box, mostly disk wait), so the web loop builds only in a round that uploads; the
+others read the patch and game count with `meiolol site --patch-games` (1-8 s, 18 Oct).
 meiolol-render on the box serves every other page and file (champion, role, matchup,
 build, Daily Draft, Learn, legal and method pages, the patch/ and all/ views, data/
 files, the views' sitemaps, data/your-example.json).
