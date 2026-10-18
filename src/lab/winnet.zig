@@ -66,6 +66,9 @@ pub const usage =
     \\                                  --resample N (A/A noise floor: fit on a seeded
     \\                                  random 90% of the fit games, the same for the
     \\                                  candidate; scored games unchanged)
+    \\                                  --export 1 (set net: the dev block's fit per
+    \\                                  seed as DIR/setnet-s<seed>.json, for the
+    \\                                  admin Draft tester)
     \\                                  --fit-preds 1 (teacher preds for distillation:
     \\                                  each block's fit games scored by nets fitted
     \\                                  without their hashed fifth, DIR/fit-preds.tsv)
@@ -126,6 +129,9 @@ pub const Options = struct {
     /// --fit-preds 1: also score every block's fit games, each from a fit without its
     /// cross-fit fifth (effects.zig --soft reads them)
     fit_preds: bool = false,
+    /// --export 1 (set net, dev block): each seed's fit as DIR/setnet-s<seed>.json
+    /// (setnet.writeExport), for the admin Draft tester
+    export_net: bool = false,
     /// --shuffle-ids SEED: a control for nets on fitted offsets; every training set's
     /// champion-id rows (all 10 seats together) permuted across its games, labels and
     /// offsets kept, scored games untouched: a residual net can then only recalibrate
@@ -325,6 +331,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.shuffle_ids = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--fit-preds")) {
             o.fit_preds = std.mem.eql(u8, v, "1");
+        } else if (std.mem.eql(u8, k, "--export")) {
+            o.export_net = std.mem.eql(u8, v, "1");
         } else if (std.mem.eql(u8, k, "--resample")) {
             o.resample = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--threads")) {
@@ -347,6 +355,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         for ([_][]const u8{ "--split", "--filter", "--fraction", "--resample", "--shuffle-ids", "--fit-preds" }) |k| if (set.contains(k)) return error.NotForTest;
     }
     if (o.emb_freeze and o.emb_init == null) return error.FreezeWithoutInit;
+    // An export is a model to use: the real profiles and labels, every fit game
+    if (o.export_net and (o.net != .set or o.set.control != .none or o.resample != null or o.fraction != 1 or o.shuffle_ids != null)) return error.ExportNeedsPlainSet;
     if (o.net == .set and o.emb_init != null) return error.EmbInitNotForSet;
     if (isBig(o.net)) {
         if (o.emb_init != null) return error.EmbInitNotForBig;

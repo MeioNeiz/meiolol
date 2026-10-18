@@ -17,6 +17,7 @@ const rows = @import("rows.zig");
 const seatstats = @import("seatstats.zig");
 const winnet = @import("winnet.zig");
 const gates = @import("gates.zig");
+const cand = @import("cand");
 
 const Io = std.Io;
 const NetGame = winnet.NetGame;
@@ -624,7 +625,74 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
     const pred = try gpa.alloc(f32, scored.len);
     predict(&full.net, scored, &w, pred);
     std.debug.print("netcheck: seed {d}: set net {d:.2} epochs, offset weight {d:.3}\n", .{ seed, tuned.epochs, full.net.p[full.net.l.a] });
+    if (opts.export_net and s.block == .dev) try writeExport(gpa, io, opts, seed, &full.net, &p_all, s, scored, &w);
     return .{ .pred = pred, .epochs = tuned.epochs, .val_loss = tuned.val_loss, .seconds = winnet.secondsSince(io, t0) };
+}
+
+/// --export 1: one seed's dev fit as DIR/setnet-s<seed>.json (format meiolol-setnet,
+/// version 1). A game's logit is gameLogit over forward: params are the flat Layout
+/// (offsets in `layout`); a slot's input is its champion-role's z profile (zeros when
+/// not in `profiles`), the role one-hot and, with emb > 0, the embedding row of its
+/// vocab id (`ids`, else the role's 0..4). `refs`: the first scored games' inputs and
+/// logits, for a reader to check itself against
+fn writeExport(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, n: *const Net, p: *const Profiles, s: winnet.Sets, scored: []const SetGame, w: *const Work) !void {
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const Id = struct { champion: u32, role: u8, id: u32 };
+    const Prof = struct { champion: u32, role: u8, z: [n_prof]f32 };
+    const Ref = struct { teams: [2][5]u32, platform: u8, offset: f32, logit: f32 };
+    var ids: std.ArrayList(Id) = .empty;
+    var vit = s.vocab_all.map.iterator();
+    while (vit.next()) |e| try ids.append(arena, .{ .champion = @intCast(e.key_ptr.* >> 3), .role = @intCast(e.key_ptr.* & 7), .id = e.value_ptr.* });
+    std.mem.sort(Id, ids.items, {}, struct {
+        fn lt(_: void, a: Id, b: Id) bool {
+            return a.id < b.id;
+        }
+    }.lt);
+    var profs: std.ArrayList(Prof) = .empty;
+    var pit = p.index.iterator();
+    while (pit.next()) |e| {
+        const role: usize = @intCast(e.key_ptr.* & 7);
+        var z: [n_prof]f32 = undefined;
+        for (&z, 0..) |*o, f| {
+            const sd = p.z_sd[role][f];
+            o.* = if (sd > 0) @floatCast((p.raw(e.value_ptr.*, role, f, null) - p.z_mean[role][f]) / sd) else 0;
+        }
+        try profs.append(arena, .{ .champion = @intCast(e.key_ptr.* >> 3), .role = @intCast(role), .z = z });
+    }
+    std.mem.sort(Prof, profs.items, {}, struct {
+        fn lt(_: void, a: Prof, b: Prof) bool {
+            return a.champion * 8 + a.role < b.champion * 8 + b.role;
+        }
+    }.lt);
+    const n_refs = @min(scored.len, 200);
+    const refs = try arena.alloc(Ref, n_refs);
+    for (refs, scored[0..n_refs], s.idx.scored[0..n_refs]) |*r, *g, gi| {
+        r.* = .{ .teams = s.d.games[gi].teams, .platform = g.g.platform, .offset = g.g.off, .logit = gameLogit(n, g, forward(n, g, w, 1, null)) };
+    }
+    const l = n.l;
+    const file = .{
+        .format = "meiolol-setnet",
+        .version = 1,
+        .candidate = if (@hasDecl(cand, "name")) cand.name else "cand",
+        .seed = seed,
+        .fit_games = s.idx.fit.len,
+        .phi = l.phi,
+        .rho = l.rho,
+        .emb = l.emb,
+        .cross = l.cross,
+        .n_prof = n_prof,
+        .features = std.enums.values(Feature),
+        .layout = .{ .in = l.in, .rin = l.rin, .c = l.c, .a = l.a, .b1 = l.b1, .cb = l.cb, .e = l.e, .w1 = l.w1, .v = l.v, .out = l.out, .len = l.len },
+        .params = n.p,
+        .ids = ids.items,
+        .profiles = profs.items,
+        .refs = refs,
+    };
+    const json = try std.json.Stringify.valueAlloc(arena, file, .{});
+    const name = try std.fmt.allocPrint(arena, "setnet-s{d}.json", .{seed});
+    try Io.Dir.cwd().writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ opts.out, name }), .data = json });
 }
 
 /// --dump 1 (meiolol-58's PyTorch cross-check): one set of a block as the net sees it.
