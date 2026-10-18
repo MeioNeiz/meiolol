@@ -16,7 +16,7 @@ docs/plan.md "Now". Read it first.
   (`GIT_INDEX_FILE`); both can commit a stale copy of another session's file
 - A new file goes in the same commit as its first use, scripts too (a deploy failed
   twice on 17 Oct: box.sh copied a script the commit lacked). Git only takes a path it
-  knows: `git add <new file>` first, then list it in `git commit -- <paths>`
+  knows: `deploy/commit.sh -m msg -- <paths>` adds new ones first, then commits by path
 - Every push to main deploys (deploy/on-push.sh, log .git/meiolol-deploy.log; docs and
   research-only pushes skip the build). Push the tested sha, `git push origin
   <sha>:main`: over HTTPS git re-reads main after the pre-push ci, so a commit another
@@ -36,9 +36,9 @@ docs/plan.md "Now". Read it first.
   never the working tree's mix of sessions), then commit the file
 - Local site: `deploy/dev.sh` (data/snap; `--exports` refreshes the box's curves and
   builds when it warns the curves are an old version)
-- Zig 0.16/0.17 std changed a lot (std.Io everywhere, renames): check APIs via LSP
-  hover/goToDefinition (ZLS) rather than guessing; std source at
-  `$(zig env | grep lib_dir)` as fallback
+- Zig 0.16/0.17 std changed a lot (std.Io everywhere, renames): LSP hover/goToDefinition
+  (ZLS; ToolSearch "select:LSP") first; grep the std source (`$(zig env | grep
+  lib_dir)`) only when LSP has no answer
 
 ## Hosts
 
@@ -70,6 +70,18 @@ docs/plan.md "Now". Read it first.
 - Bash runs zsh: quote globs (`grep --include='*.zig'`, else "no matches found") and
   never keep a command in a variable (`J="ssh -i k host"; $J` doesn't split): use the
   ssh aliases above
+
+## Working style
+
+- Batch reads: several files or line ranges in one Bash call (`sed -n 1,40p a; sed -n
+  80,120p b`), independent calls in parallel in one turn; never one read per turn
+- Waiting: run_in_background, then wait for the notification; never re-read task output
+  or sleep/poll (the sleep guard blocks it)
+- Tests: `zig build test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log;
+  re-run only after a change
+- Hand over at ~200k context (fleet skill), don't run on into compaction
+- Team runs: shared state in the run's common.md; messages are "done: <path>" or
+  "blocked: <why>, <path>", details in the file
 
 ## Docs (read the one you need, not all)
 
