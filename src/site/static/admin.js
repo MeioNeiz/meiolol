@@ -807,7 +807,13 @@ VIEWS.overview = body => {
   tile(tiles, "Stored, last 24 h", stored ? num(stored.day) : "–", stored && stored.avg != null ? `matches; ${num(stored.avg)} / day over the last ${span(stored.span)}` : "matches", null, () => setTab("crawler"));
   const req = lastHour(C, b => sumR(b.req), now);
   const nReg = C.regions.length || 1;
-  tile(tiles, "Riot key use", req == null ? "–" : pct(req / 60 / (KEY_PER_MIN * nReg)), `${num(req == null ? null : req / 60)} requests / min, all routes`, null, () => setTab("riot"));
+  // Near 100% is the crawler pacing to the key's limit (src/riot/ratelimit.zig); our key's
+  // own 429s are the sign of trouble, on the Riot tab's 24 h rule
+  const k429 = keyLimited24h();
+  tile(tiles, "Riot key use", req == null ? "–" : pct(req / 60 / (KEY_PER_MIN * nReg)),
+    `${num(req == null ? null : req / 60)} requests / min, all routes; near 100% is by design. ` +
+      (k429 == null ? "" : `${num(k429)} of our key's 429s in 24 h: ${k429 > 50 ? "over 50, look at the Riot tab" : "no action needed (action over 50)"}`),
+    k429 > 50 ? "warn" : null, () => setTab("riot"));
   const q = queues();
   const pending = rows => sumR(rows.filter(g => / ?pending$/.test(g.key) || g.key === "pending").map(g => g.n));
   tile(tiles, "Queues", num(pending(q.match) + pending(q.timeline)), `${num(pending(q.match))} matches, ${num(pending(q.timeline))} timelines pending`, null, () => setTab("crawler"));
@@ -918,17 +924,30 @@ function healthBanner(parent) {
     n ? el("ul", {}, ...problems.concat(spikes).map(p => el("li", {}, p))) : el("span", {}, " crawler, site loop, upload age, disk, backups, warning rates")));
 }
 
-// Warning kinds whose last hour runs well above their rate over the log window
+function keyLimited24h() {
+  const W = D.crawl, i = W && W.kinds ? W.kinds.indexOf("rate_limit") : -1;
+  if (i < 0) return null;
+  return sumR(W.buckets.filter((_, j) => W.start + j * W.step >= D.now - 86400).map(b => b.warnings[i]));
+}
+
+// Warning kinds whose last hour runs well above their rate over the log window (30+ and
+// over 3x usual). Each says whether it needs action: our key's 429s always do; others not
+// while the last hour still stored 80%+ of the usual matches
 function warningSpikes() {
   const { C, now } = newestCrawl();
   const W = D.crawl;
   const covered = sumR(W.buckets.map(b => b.covered));
   if (covered < 86400) return [];
+  const mHour = lastHour(C, b => sumR(b.m), now), mUsual = sumR(W.buckets.map(b => sumR(b.m))) * 3600 / covered;
+  const flowing = mHour != null && mUsual > 0 && mHour >= 0.8 * mUsual;
+  const verdict = k => k === "rate_limit" ? "look at the Riot tab: our key's own limit" : flowing
+    ? `no action needed: matches still at ${pct(mHour / mUsual)} of usual`
+    : `look at the Crawler tab: matches at ${mHour == null || !mUsual ? "–" : pct(mHour / mUsual)} of usual (under 80%)`;
   return C.kinds.flatMap((k, i) => {
     const hour = lastHour(C, b => b.warnings[i], now);
     const wi = W.kinds.indexOf(k);
     const normal = wi < 0 ? 0 : sumR(W.buckets.map(b => b.warnings[wi])) * 3600 / covered;
-    return hour != null && hour >= 30 && hour > 3 * normal ? [`warnings: ${KIND_LABEL[k] || k} ${num(hour)} in the last hour, usually ~${num(normal)} (Crawler, Warning messages)`] : [];
+    return hour != null && hour >= 30 && hour > 3 * normal ? [`warnings: ${KIND_LABEL[k] || k} ${num(hour)} in the last hour, usually ~${num(normal)} (a spike: 30+ and over 3x usual); ${verdict(k)}`] : [];
   });
 }
 
@@ -2331,12 +2350,33 @@ let logTimer = null;
 VIEWS.logs = body => logViewer(section(body, "Logs", "Box logs with player names, ids and match ids removed. Times in UK time (the box logs UTC). Filter is case-insensitive."));
 // The box logs UTC ("2026-10-17 18:52:27", "2026-10-17T18:52:14Z", Python's ",823"):
 // leading stamps to UK time, as the rest of the panel
-function ukLogLine(l) {
+function logStamp(l) {
   const m = l.match(/^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)(?:Z|,\d+)?/);
-  if (!m) return l;
-  const t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000;
-  const p = ukParts(t);
-  return `${dayDate(t)} ${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}` + l.slice(m[0].length);
+  return m ? { t: Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000, len: m[0].length } : null;
+}
+function ukLogLine(l) {
+  const s = logStamp(l);
+  if (!s) return l;
+  const p = ukParts(s.t);
+  return `${dayDate(s.t)} ${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}` + l.slice(s.len);
+}
+// Errors and warnings in the last 24 h of one log's text: the std.log level after the stamp,
+// backup's FAILED and health's "problem:" lines (an info line saying "rms error" is neither)
+const LOG_TAIL = 2000;
+function logCounts(text, now) {
+  const all = text.replace(/\n$/, "").split("\n");
+  let errors = 0, warnings = 0, oldest = null;
+  for (const l of all) {
+    const s = logStamp(l);
+    if (!s) continue;
+    if (oldest == null) oldest = s.t;
+    if (s.t < now - 86400) continue;
+    const rest = l.slice(s.len);
+    if (/^\s*error[(:]/.test(rest) || /\bFAILED\b/.test(rest)) errors++;
+    else if (/^\s*warning[(:]/.test(rest) || / problem:/.test(rest)) warnings++;
+  }
+  // A full tail starting inside the day covers only part of it
+  return { errors, warnings, empty: !text.trim(), since: all.length >= LOG_TAIL && oldest != null && oldest > now - 86400 ? oldest : null };
 }
 function logViewer(parent) {
   const files = ["crawl", "web", "eval", "render", "health", "backup", "builds"];
@@ -2346,6 +2386,22 @@ function logViewer(parent) {
   const file = el("select", { "aria-label": "Log file" }, ...files.map(f => el("option", { value: f, selected: f === ui.log.file }, f + ".log")));
   const lines = el("select", { "aria-label": "Lines" }, ...[100, 300, 1000, 2000].map(n => el("option", { value: n, selected: n === ui.log.lines }, n + " lines")));
   const follow = el("input", { type: "checkbox", checked: ui.log.follow });
+  const counts = el("p", { class: "sub logcounts" });
+  const pickFile = f => { ui.log.file = f; file.value = f; load(); };
+  const countAll = async () => {
+    if (!L) return;
+    counts.textContent = "Counting errors and warnings in the last 24 h…";
+    const now = nowS();
+    const each = await Promise.all(files.map(async f => {
+      try { return { f, ...logCounts(await getText(`api/log?file=${f}&lines=${LOG_TAIL}`), now) }; } catch (e) { return { f, err: e.message }; }
+    }));
+    const plural = (k, w) => `${num(k)} ${w}${k === 1 ? "" : "s"}`;
+    const say = c => c.err ? "could not load" : c.empty ? "empty" : !c.errors && !c.warnings ? "none" :
+      [c.errors ? plural(c.errors, "error") : "", c.warnings ? plural(c.warnings, "warning") : ""].filter(Boolean).join(", ");
+    counts.replaceChildren("Last 24 h: ", ...each.flatMap((c, i) => [i ? " · " : "",
+      el("button", { type: "button", class: "link" + (c.errors ? " bad" : c.warnings ? " warn" : ""), title: `Show ${c.f}.log`, onclick: () => pickFile(c.f) }, `${c.f} ${say(c)}`),
+      c.since ? ` (since ${hm(c.since)} UK, the last ${LOG_TAIL} lines)` : ""]));
+  };
   let text = "";
   const show = () => {
     const f = ui.log.filter.toLowerCase();
@@ -2376,8 +2432,9 @@ function logViewer(parent) {
   };
   follow.addEventListener("change", () => { ui.log.follow = follow.checked; arm(); follow.blur(); });
   parent.append(el("div", { class: "log-bar" }, file, lines, filter, el("label", {}, follow, " follow"),
-    el("button", { type: "button", class: "ghost", onclick: load }, "Reload"), info), out);
+    el("button", { type: "button", class: "ghost", onclick: load }, "Reload"), info), counts, out);
   load();
+  countAll();
   arm();
 }
 
