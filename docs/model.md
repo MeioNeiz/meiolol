@@ -4705,6 +4705,30 @@ Reading (dev, no test look):
   -1.55): not a newer-games effect
 - Against additive v2, the best non-net model, it is only -0.39 ± 0.17: a test look
   should compare with both
+- The `--ids 1` net runs with cross-team on (setnet's default); the within-team rows
+  are `--cross 0`
+
+On additive v2 as the base (src/lab/cand/win-additive, d968495: additive v2's full model
+as a candidate, a copy of lab/additive.zig and addinputs' mix; reproduces `effects --param
+v2` within 1e-6 on all 60,022 fold 1 games, fit 8.8 s on 300k games). Declared before any
+run on it: same rule as above (sealed seeds 4-6 with 2.1x, resamples 1 and 2, permuted
+control). Development (seeds 1-3, run 20261018T014345Z-nd-setid-wa, Mac; reported, not
+the decision):
+- set net + embedding on additive v2: -0.82 ± 0.14 on the folds vs additive v2, better in
+  5 of 5 (-1.03, -0.80, -0.72, -1.03, -0.53), dev-val -1.01 ± 0.27; single seeds -0.57 to
+  -0.45 (averaging matters more on this base than on win-draft's)
+- all blocks pooled: 0.68470 against additive's 0.68556 (accuracy 55.1% vs 54.8%, AUC
+  0.572 vs 0.569); against the same net on win-draft (seeds 1-3) -0.58 ± 0.16: the better
+  base carries into the net
+- Confirmation legs started on the gpu-box 18 Oct ~05:00Z were lost when it went off the
+  network; to rerun: `nd-setid-wa-s456`, `-r1`, `-r2`, `-perm` (and reported-only
+  `nd-set-wa`, `nd-bigres-wa`), --commit d968495, -Dcand=src/lab/cand/win-additive
+
+Export for the Draft tester (e8a2e2f): `netcheck --net set ... --blocks dev --export 1`
+writes each seed's dev-block fit as setnet-s<seed>.json (format meiolol-setnet v1, in
+setnet.writeExport's doc comment). An independent forward pass from the file matches its
+200 reference logits within 6e-8 and netcheck's preds within 5e-7 (win-draft, seed 1:
+14,353 params, 823 vocab ids, 865 profiles). Not yet read by the tester
 - Not yet: a test look (needs Jacob's go; rule to declare first), the exporter for the
   Draft tester (set net format agreed in "Next steps"), and `meiolol eval`'s view
 
