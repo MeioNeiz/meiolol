@@ -21,6 +21,12 @@ DBS="meiolol timeline raw"
 log() { echo "$(date -u +%FT%TZ) $*"; }
 die() { log "$*"; exit 1; }
 count() { sqlite3 "file:$1?mode=ro" "SELECT count(*) FROM \"$2\""; }
+box_ssh() { ssh -n -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "$box" "$@"; }
+# The box's copy of the extra (real ids) goes on any exit too
+cleanup() {
+    rm -rf "$work"
+    [[ -n "${SNAP_EXTRA:-}" ]] || box_ssh snapshot-done > /dev/null 2>&1 || true
+}
 
 mountpoint -q /mnt/wsl/lab || die "/mnt/wsl/lab not mounted"
 [[ -f "$salt" ]] || die "no salt at $salt"
@@ -40,21 +46,43 @@ mkdir -p "$raw" "$extra"
 
 # The mirror's own lock (backup-mirror.sh): no scrub or rotation under the restore
 mkdir "$mirror/.lock" 2> /dev/null || die "backup mirror busy: try again later"
-trap 'rm -rf "$work"; rmdir "$mirror/.lock" 2> /dev/null || true' EXIT
+trap 'cleanup; rmdir "$mirror/.lock" 2> /dev/null || true' EXIT
 log "restore from $mirror (mirrored $(date -u -r "$mirror/.mirrored" +%FT%TZ))"
 nice -n 10 "$bin/meiolol-snapshot" restore --from "$mirror" --data "$restored" > "$work/restore.log" 2>&1 \
     || { tail -n 5 "$work/restore.log"; die "restore failed"; }
 rmdir "$mirror/.lock"
-trap 'rm -rf "$work"' EXIT
+trap cleanup EXIT
 day=$(sqlite3 "file:$restored/meiolol.db?mode=ro" "SELECT coalesce(max(day), 0) FROM rank_history")
 
 log "box: what backups leave out (rank_history after day $day)"
-# SNAP_EXTRA: a file of that stream fetched before (a rehearsal; its day may be older)
-if [[ -n "${SNAP_EXTRA:-}" ]]; then zstd -dc -q "$SNAP_EXTRA" | tar x -C "$extra"
+# SNAP_EXTRA: a file of that stream fetched before (a rehearsal; its day may be older).
+# Else the box builds it detached and it comes in pieces, each ssh retried: a long one
+# from home dies now and then ("message authentication code incorrect")
+if [[ -n "${SNAP_EXTRA:-}" ]]; then file=$SNAP_EXTRA
 else
-    ssh -n -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "$box" snapshot-extra "$day" \
-        | zstd -d -q | tar x -C "$extra"
+    box_ssh snapshot-extra "$day" > /dev/null || die "box: snapshot-extra failed"
+    state=
+    for _ in $(seq 240); do
+        sleep 30
+        state=$(box_ssh snapshot-state) || continue
+        [[ "$state" == running* ]] || break
+    done
+    read -r what size sum _ <<< "$state"
+    [[ "$what" == ready ]] || die "box: snapshot-extra $state"
+    file=$work/extra.tar.zst
+    : > "$file"
+    for _ in $(seq 20); do
+        have=$(stat -c %s "$file")
+        (( have < size )) || break
+        box_ssh snapshot-send "$have" >> "$file" || log "piece from $have cut short: again"
+    done
+    [[ "$(stat -c %s "$file")" == "$size" ]] || die "box: got $(stat -c %s "$file") of $size bytes"
+    [[ "$(sha256sum < "$file" | cut -d' ' -f1)" == "$sum" ]] || die "box: sha256 differs"
+    box_ssh snapshot-done || true
+    log "box: $(( size >> 20 )) MB"
 fi
+zstd -dc -q "$file" | tar x -C "$extra"
+[[ "$file" == "$work/extra.tar.zst" ]] && rm -f "$file"
 for d in $DBS; do [[ -s "$extra/$d.sql" && -f "$extra/$d.db" ]] || die "box sent no $d"; done
 
 # The box's schema; rows from the box's file where it sent them, else from the restore

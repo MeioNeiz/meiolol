@@ -12,16 +12,23 @@
 #               (backups/acks/MIRROR.mastery: time bytes files)
 #   status      "mirror NAME LAST_ACK" per mirror, then "unacked FILES BYTES OLDEST_MTIME"
 #   snapshot-extra DAY   for an analysis snapshot built on the gpu-box from its mirror
-#               (deploy/snapshot-gpu.sh): what backups leave out, as tar | zstd: every
-#               database's schema (*.sql), row counts of every table (counts.tsv), and
-#               the rows of tables no backup holds, rank_history after DAY too, and
-#               participants' columns that change after a backup copies them (*.db)
+#               (deploy/snapshot-gpu.sh): starts, detached, data/snapx/extra.tar.zst of
+#               what backups leave out: every database's schema (*.sql), row counts of
+#               every table (counts.tsv), the rows of tables no backup holds,
+#               rank_history after DAY too, and participants' columns that change after
+#               a backup copies them (*.db). Detached and fetched in pieces: one ssh
+#               streaming it for half an hour died ("message authentication code
+#               incorrect", 18 Oct, as archive-pull.sh's did)
+#   snapshot-state       running SINCE | ready SIZE SHA256 | failed MESSAGE | none
+#   snapshot-send OFFSET the file from byte OFFSET
+#   snapshot-done        deletes it
 set -euo pipefail
 cd "$HOME/ml/meiolol"
 # shellcheck disable=SC1091 # host-specific, on the box only
 if [[ -f host.env ]]; then set -a; . ./host.env; set +a; fi
 dir=${MEIOLOL_BACKUPS:-$HOME/ml/meiolol/backups}
 acks=$dir/acks sums=$dir/.sums
+snapx=$HOME/ml/meiolol/data/snapx
 mkdir -p "$acks" "$sums"
 read -r cmd arg _ <<< "${SSH_ORIGINAL_COMMAND:-$*}"
 
@@ -127,8 +134,26 @@ case "${cmd:-}" in
         ;;
     snapshot-extra)
         [[ "$arg" =~ ^[0-9]+$ ]] || { echo "bad day" >&2; exit 2; }
-        tmp=$(mktemp -d "$HOME/snapx.XXXXXX")
-        trap 'rm -rf "$tmp"' EXIT
+        mkdir -p "$snapx"
+        # One at a time; SSH_ORIGINAL_COMMAND would make the child read this command again
+        echo "running $(date +%s)" > "$snapx/state"
+        rm -f "$snapx/extra.tar.zst"
+        setsid -f flock -n "$snapx/.lock" env -u SSH_ORIGINAL_COMMAND "$0" snapshot-build "$arg" \
+            >> "$snapx/build.log" 2>&1 < /dev/null
+        echo started
+        ;;
+    snapshot-state) cat "$snapx/state" 2> /dev/null || echo none ;;
+    snapshot-send)
+        [[ "$arg" =~ ^[0-9]+$ ]] || { echo "bad offset" >&2; exit 2; }
+        exec tail -c +$(( arg + 1 )) "$snapx/extra.tar.zst"
+        ;;
+    snapshot-done) rm -rf "$snapx/extra.tar.zst" "$snapx/work"; echo none > "$snapx/state" ;;
+    snapshot-build)
+        tmp=$snapx/work
+        rm -rf "$tmp"
+        mkdir -p "$tmp"
+        # shellcheck disable=SC2154 # rc is set in the trap
+        trap 'rc=$?; rm -rf "$tmp"; grep -q "^running" "$snapx/state" && echo "failed exit $rc" > "$snapx/state"' EXIT
         # What backups hold (src/backup.zig: state_tables, segments, mastery); the rest
         # comes from here. raw.db's timeline_docs: snapshots leave raw timelines out
         declare -A held=([meiolol]="match_queue timeline_queue champions forgotten matches participants bans drafts mastery rank_history"
@@ -136,7 +161,7 @@ case "${cmd:-}" in
         need=$(( $(sqlite3 "file:$PWD/data/raw.db?mode=ro" "SELECT coalesce(sum(length(body)), 0) FROM raw_docs")
             + $(stat -c %s data/meiolol.db) / 8 ))
         free=$(df --output=avail -B1 "$tmp" | tail -n 1)
-        (( free > 2 * need + (12 << 30) )) || { echo "box: $free bytes free for $need" >&2; exit 1; }
+        (( free > 2 * need + (12 << 30) )) || { echo "failed box: $free bytes free for $need" > "$snapx/state"; exit 1; }
         for d in meiolol timeline raw; do
             src="file:$PWD/data/$d.db?mode=ro"
             sqlite3 "$src" "SELECT sql || ';' FROM sqlite_schema WHERE sql IS NOT NULL
@@ -168,7 +193,10 @@ case "${cmd:-}" in
             sqlite3 -separator $'\t' "$tmp/$d.db" "SELECT * FROM counts" >> "$tmp/counts.tsv"
             sqlite3 "$tmp/$d.db" "DROP TABLE counts"
         done
-        tar cf - -C "$tmp" . | nice -n 10 zstd -3 -T1 -q
+        tar cf - -C "$tmp" . | nice -n 10 zstd -3 -T1 -q > "$snapx/extra.tar.zst.tmp"
+        mv "$snapx/extra.tar.zst.tmp" "$snapx/extra.tar.zst"
+        echo "ready $(stat -c %s "$snapx/extra.tar.zst") $(sha256sum < "$snapx/extra.tar.zst" | cut -d' ' -f1)" \
+            > "$snapx/state"
         ;;
-    *) echo "backup-serve: list|send FILE|acks MIRROR|forgotten|prune|status|snapshot-extra DAY" >&2; exit 2 ;;
+    *) echo "backup-serve: list|send FILE|acks MIRROR|forgotten|prune|status|snapshot-extra DAY|snapshot-state|snapshot-send OFFSET|snapshot-done" >&2; exit 2 ;;
 esac
