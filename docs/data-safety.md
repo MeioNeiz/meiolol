@@ -115,7 +115,8 @@ Measured 2026-10-11 (8,117 matches, 1.13M players): state 146 MB, segment 23 MB,
 2. `bin/meiolol status --exact --data data.restored`: compare with what you expect
    (without --exact some counts are estimates)
 3. Stop the crawler and loops, `mv data data.broken && mv data.restored data`, copy back
-   anything outside the databases (daily/, export/, site/), start again
+   anything outside the databases (daily/, export/, site/; not partials/, which the next
+   views write rebuilds from the restored tables), start again
 
 Raw tables, players and ladder_pages come back empty; the crawler refills them. Restore re-applies `forgotten`.
 
@@ -170,6 +171,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | drafts | nothing: no PUUID, Riot ID or match id, only platform, patch, day, median rank, result, length in minutes, champions, roles and bans, so no row can be found by player (see below) |
 | forgotten | PUUID and date added: the suppression list |
 | Daily Draft (daily/used.txt, puzzles) | nothing: match ids and anonymous puzzles only |
+| views partials (data/partials on the box) | their PUUID hash (Wyhash, 128 bits) blanked in every day file and their mastery entry dropped, at once under the directory's lock (a views write running finishes first); each views write also blanks every hash on `forgotten`, and drops keys from days past 24 months. Never backed up |
 | backup files | `--backups DIR` scrubs every state and segment file on the box at once (deploy/backup-loop.sh) |
 | backup mirrors (Mac, gpu-box) | each mirror run fetches the box's forgotten list and `meiolol backup --mirror` scrubs the PUUIDs new to it from every file it holds, including segments the box has pruned (applied list: forgotten-applied.txt in the mirror) |
 | raw archive (gpu-box) | ingest leaves out documents naming a forgotten PUUID; each pull runs `meiolol-lab archive-forget` for PUUIDs new on the box's list, which drops every archived summary, timeline and mastery line naming them (hashed with the salt) |
@@ -209,28 +211,18 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 
 Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
 
-- Made on the gpu-box (18 Oct; deploy/snapshot.sh, weekly from launchd on the Mac,
-  runs deploy/snapshot-gpu.sh there): `meiolol restore` from its backup mirror (the
-  mirror's lock held), plus what backups leave out, from the box over the gpu-box's
-  backup key (backup-serve.sh snapshot-extra, nice + ionice, ~5 GB of temp files and
-  4.2 GB sent): every database's schema and row counts, players, ladder_pages, ranks,
-  draft_backfill, raw summaries and the small raw tables, rank_history after the
-  mirror's last day, and participants' columns updated after a backup copies them
-  (gold10/14/15, tier, division, a blanked PUUID). Put together in the box's schema in
-  a 700 directory on /mnt/wsl/lab, checked against the box's counts, then `meiolol-lab
-  anonymise SRC DST` (src/lab/anonymise.zig): PUUIDs and match ids replaced by salted
-  hashes (HMAC-SHA256), Riot IDs, summoner ids and names blanked, profile icons zeroed,
-  raw timelines and the forgotten list left out (it refuses a snapshot still holding a
-  forgotten player's rows). Match ids are hashed too: a real one gives back the ten
-  players through the API. The real-id copy is deleted on any exit; the result is
-  checked (row counts against the source, fewer only in puuidKey tables, whose keys
-  without a PUUID are left out; every PUUID hashed; a real match id absent), then
-  split, legendaries, seat stats, pack and mastery-pre, in ~/ml/snaps/STAMP. The Mac
-  then rsyncs it over the LAN (data/snap-STAMP) for Mac lab runs. Before 18 Oct the box
-  made a ~23 GB VACUUM INTO, streamed it to the Mac, which anonymised it and rsynced
-  ~21 GB to the gpu-box. Tables come from the mirror as of its last daily backup and
-  the rest from the box at build time: hours apart
-- The salt is ~/.config/meiolol/snap-salt on the Mac and the gpu-box: never in git, never on the box.
+- Made by deploy/snapshot.sh (weekly, launchd on the Mac): `VACUUM INTO` on the box,
+  streamed to the Mac (data/snap-STAMP/, gitignored) and the box copy deleted at once. Before anyone models on it, `meiolol-lab anonymise
+  SRC DST` (src/lab/anonymise.zig) on the Mac writes a fresh copy: PUUIDs and match ids
+  replaced by salted hashes (HMAC-SHA256), Riot IDs, summoner ids and names blanked,
+  profile icons zeroed, raw timelines and the forgotten list left out (it refuses a
+  snapshot still holding a forgotten player's rows). Then SRC is deleted. Match ids are
+  hashed too: a real one gives back the ten players through the API. Only the hashed
+  copy goes to the gpu-box (~/ml/snaps/STAMP/). The script deletes both real-id copies
+  on any exit and checks the result: row counts against the source (fewer only in
+  puuidKey tables, whose keys without a PUUID are left out), every PUUID hashed, a real
+  match id absent
+- The salt is ~/.config/meiolol/snap-salt on the Mac: never in git, never on the box.
   Without it a hash can't be linked back to a PUUID; with it only by hashing candidates
 - Disposable: a snapshot is deleted from the Mac and the gpu-box when a newer one
   replaces it, so an erasure reaches analysis copies within one snapshot cycle. Not in
