@@ -1,0 +1,2007 @@
+                                            Scalable logistic regression with crossed random
+                                                                  effects
+
+
+
+
+arXiv:2105.13747v2 [stat.ME] 29 Dec 2021
+                                                         Swarnadip Ghosh                    Trevor Hastie
+                                                        Stanford University              Stanford University
+                                                                           Art B. Owen
+                                                                        Stanford University
+                                                                           December 2021
+
+                                                                                Abstract
+                                                    The cost of both generalized least squares (GLS) and Gibbs sampling
+                                                in a crossed random effects model can easily grow faster than N 3/2 for
+                                                N observations. Ghosh et al. (2021) develop a backfitting algorithm that
+                                                reduces the cost to O(N ). Here we extend that method to a generalized
+                                                linear mixed model for logistic regression. We use backfitting within an
+                                                iteratively reweighted penalized least squares algorithm. The specific ap-
+                                                proach is a version of penalized quasi-likelihood due to Schall (1991). A
+                                                straightforward version of Schall’s algorithm would also cost more than
+                                                N 3/2 because it requires the trace of the inverse of a large matrix. We
+                                                approximate that quantity at cost O(N ) and prove that this substitution
+                                                makes an asymptotically negligible difference. Our backfitting algorithm
+                                                also collapses the fixed effect with one random effect at a time in a way
+                                                that is analogous to the collapsed Gibbs sampler of Papaspiliopoulos et al.
+                                                (2020). We use a symmetric operator that facilitates efficient covariance
+                                                computation. We illustrate our method on a real dataset from Stitch Fix.
+                                                By properly accounting for crossed random effects we show that a naive
+                                                logistic regression could underestimate sampling variances by several hun-
+                                                dred fold.
+
+
+                                           1    Introduction
+                                           Crossed random effects structures are ubiquitous in science, engineering and
+                                           commerce. A biologist might study a response across many genotypes and
+                                           environments (Bolker et al., 2009). A social scientist might study test scores
+                                           by question and by student (Baayen et al., 2008). A web store might study
+                                           responses of customers to various products. In all of these cases we have a pair
+                                           of categorical variables with a potentially large number of levels. When those
+                                           levels are a subset of a much larger set of potential levels then it is natural to
+                                           model them as random effects. The problems we are interested in are large and
+
+
+                                                                                    1
+sparse. There are R (for rows) levels of one factor crossed with C (for columns)
+of another factor. The total number of observations is N and sparsity means
+that N  RC. The pattern of observations is also unstructured.
+    While large online commerce data sets have the crossed random effects struc-
+ture, it is exceedingly difficult to analyze such data that way. Even for regression
+problems, the cost of computing the Gauss-Markov generalized least squares
+estimator grows as fast as N 3/2 or worse. The same holds for the cost of evalu-
+ating a Gaussian likelihood even once. The fundamental cause is that a linear
+equation of size R + C must be solved. The usual algorithms solve it at √          cost
+proportional to (R + C)3 and then because RC ⩾ N we have max(R, C) ⩾ N
+and now (R + C)3 = Ω(N 3/2 ). See Gao and Owen (2020) for details.
+    A cost of N 3/2 is infeasible in big data settings where N is very large and
+growing. It is only recently that algorithms with an O(N ) cost have been
+produced. Ghosh et al. (2021) develop a backfitting algorithm based on the work
+of Buja et al. (1989). That algorithm computes the generalized least squares
+estimate and they give conditions where only O(1) iterations are needed, with
+each iteration taking O(N ) work. A plain Gibbs sampler has the same Ω(N 3/2 )
+cost as naive linear modeling (Gao and Owen, 2017). A collapsed Gibbs sampler
+Papaspiliopoulos et al. (2020) can attain a cost of O(N ) under a strong balance
+condition that Ghosh and Zhong (2021) show can be weakened.
+    The response in an electronic commerce setting is usually categorical and
+very often binary, instead of the real valued responses that are common in other
+settings, such as agriculture. In a fixed effects setting, extending from least
+squares to generalized least squares is often done by a straightforward iteratively
+reweighted least squares approach. In a random effects setting, this path is not
+so simple because there is a very high dimensional integration problem that
+complicates it. Our main contribution is to find a way to adapt a penalized
+quasi-likelihood algorithm of Schall (1991) to mixed effects logistic regression
+models where there are crossed random effects. Schall’s algorithm as written
+would cost Ω(N 3/2 ) making it infeasible. We have adapted it by ignoring some
+off diagonal blocks in an (R + C) × (R + C) matrix and then showing that
+the effect of this simplification is asymptotically negligible. A second part of
+this adaptation comes from the fact that many of the feature variables in the
+commerce problem are functions of the product alone or of the customer alone.
+That brings a linear dependence that can slow convergence of iterative methods
+that alternate between updating random effects and fixed effects. We have
+devised a ‘clubbing’ algorithm that makes simultaneous updates to avoid this
+problem as described in more detail below.
+    We model a binary variable Yij ∈ {0, 1} in terms of covariates xij ∈ Rp
+and row and column random effects ai and bj . We assume that p does not
+grow with N . We leave p out of our cost estimates, giving the complexity
+in N . Conditionally on a = (a1 , . . . , aR )T and b = (b1 , . . . , bC )T the Yij are
+independent with
+
+                                                          exp(xT
+                                                               ij β + ai + bj )
+        Pr(Yij = 1 | a, b) = Pr(Yij = 1 | ai , bj ) =                               .   (1)
+                                                        1 + exp(xT
+                                                                 ij β + ai + bj )
+
+
+                                            2
+                                    2                                  2
+The random effects are a ∼ N (0, σA   IR ) independently of b ∼ N (0, σB IC ). In
+this model the xij are nonrandom, either because they were designed, or more
+usually because our analysis is conditional on their observed values.
+    We can also write (1) as
+                            (
+                              1, xTij β + ai + bj + eij > 0
+                     Yij =                                                    (2)
+                              0, else
+
+for independent random variables eij with the logistic CDF,
+
+                                                         ew
+                              Pr(eij ⩽ w) = π(w) ≡            .                 (3)
+                                                       1 + ew
+The model (1) is a generalized linear mixed model (GLMM) owing to the ap-
+pearance of both fixed effects xT   ij β and random effects ai , bj .
+    While the linear model Yij = xT       ij β + ai + bj + eij can be handled by the
+method of moments without assuming a distributional form for ai , bj and eij ,
+estimation for the model (2) depends on the shape of the distributions for ai and
+bj as well as eij . There is a near consensus in the literature that GLMM models
+are robust to mild departures from Gaussianity and correspondingly that such
+departures are hard to detect. See McCulloch and Neuhaus (2011) for references
+and also some contrary points of view. It is our view that the Gaussian model is
+of central importance and the problem is already hard enough under Gaussianity
+to motivate using that assumption.
+    The conditional likelihood of β given a and b is
+                      Y
+        L(β | a, b) =      π(xTij β + ai + bj )
+                                                Yij
+                                                    (1 − π(xT
+                                                            ij β + ai + bj ))
+                                                                              1−Yij
+
+                      (i,j)
+
+                      Y e(xTij β+ai +bj )Yij
+                  =                 xT
+                                                                                (4)
+                                     ij β+ai +bj
+                      (i,j) 1 + e
+
+
+where the product is taken over pairs (i, j) for which (xij , Yij ) is observed. The
+full likelihood incorporating random effect parameters is
+                      Z                      R           C
+          2    2
+                                             Y 1     a Y
+                                                       i     1  bj 
+    L(β, σA , σB )=            L(β | a, b)         ϕ           ϕ      da db     (5)
+                       RR+C                     σ
+                                             i=1 A
+                                                     σA j=1 σB   σB
+
+where a ∈ RR and b ∈ RC are vectors with components ai and bj respectively
+and ϕ(·) is the N (0, 1) probability density function.
+    The high dimensional integral in (5) presents a major difficulty to finding
+estimates and confidence intervals for β, making the generalized linear mixed
+model (1) much harder to work with than Gaussian linear mixed models for
+regression studied in Ghosh et al. (2021). The integral is daunting not only be-
+cause of its dimension but also because L(β | a, b) is a product of N probabilities
+and so it may easily underflow numerically.
+
+
+                                                   3
+    The most popular way to handle the integral is via Laplace’s method, which
+uses a single point in RR+C to represent the integral, as Breslow and Clayton
+(1993) do in their penalized quasi-likelihood approach. Higher order Laplace in-
+tegration methods cost k R+C for an integer k ⩾ 1, which is completely infeasible
+for any k > 1 in our context.
+    We have chosen to work with the quasi-likelihood formulation of Schall
+(1991). That algorithm is an iteratively reweighted penalized least squares
+solution that uses some weighted least squares fits to a working response vector
+in order to optimize the Laplace approximation of the integral. The estimand
+in Schall’s setup is a posterior mode of β under a diffuse prior that we describe
+below. It is thought to be close to the MLE except when some Pr(Yij = 1 | ai , bj )
+are very close to zero or one. Schall’s algorithm is an iterative procedure with
+each iteration having two steps. Both of the steps have a cost that grows like
+(R + C)3 = Ω(N 3/2 ). To get around this we use backfitting for the first step
+and an approximation to the trace of the inverse of an (R + C) × (R + C) matrix
+getting an algorithm that is O(N ) per iteration. We then study the impact of
+this approximation and find conditions under which is asymptotically negligible.
+    One of the main difficulties in random effects estimation arises from the fact
+that the intercept is hard to estimate. The easiest way to see this is to consider
+a balanced Gaussian model with Yij = µ + ai + bj + eij . We would estimate
+µ by the average of all RC observations getting variance O(1/R + 1/C + 1/N )
+which is much larger than the 1/N rate from settings with N IID observations.
+    The intercept remains difficult in the unbalanced setting with a binary re-
+sponse. The intercept contributes µ1N to the N -vector of logits of Pr(Yij = 1 |
+a, b). The vector space spanned by indicators of the ai includes µ1N . So does
+the one spanned by the indicators of bj . This overlap among spaces slows the
+convergence of iterative algorithms to solve the quasi-likelihood equations. That
+motivated Ghosh et al. (2021) to develop a generalized least squares algorithm
+that alternates between updating ai along with the intercept and updating bj
+also with the intercept.
+    A related issue arises when one of the predictor variables in xij , say xij`
+is a binary variable whose value depends on only the row index i. That is
+xij` = xi•` for all j. For instance one of the features in e-commerce might
+be a property of the customer or of the product while a feature in agriculture
+might be a property of the cultivar of wheat or a property of the environment
+in which it is grown. In such cases there is an overlap of vector spaces like
+the one described above for the intercept. The penalized likelhood estimate for
+the corresponding subset of a must sum to zero. This is true for every such
+partially aliased column xij` , so there can be many different such summation
+constraints. Similarly to the way the intercept is handled, the coefficient β`
+can then be efficiently updated together with ai , a procedure we call clubbing.
+Clearly the same problem can happen with variables xij` that are categorical
+with more than two levels or with variables whose level is defined by the index
+j. Our algorithm clubs together all p variables in β with a when updating a,
+and also clubs β with b when updating b. The algorithm analyzed in Ghosh
+et al. (2021) only clubs the intercept together with the random effects. The
+
+                                        4
+impetus for clubbing is that we found it made a much greater difference in the
+binary regression case than we saw in the generalized least squares setting.
+     An outline of this paper is as follows. Section 2 introduces our notation
+and describes the missingness mechanism. Section 3 presents a penalized quasi-
+likelihood method based on a Laplace approximation. The optimization is done
+using Schall’s method after incorporating backfitting and the matrix approxi-
+mation referred to above. We then give conditions under which that approx-
+imation makes an asymptotically negligible difference. Section 4 describes in
+detail our clubbing strategy where we alternate between updating (β̂, â) and
+(β̂, b̂). Section 5 uses some simulated data to verify that the cost of a stan-
+dard algorithm (glmer from Bates et al. (2015)) has a cost growing faster than
+N 3/2 . Two versions of that algorithm show the expected superlinear cost and
+that superlinearity applies even to a single iteration. Our iteratively reweighted
+backfitting algorithm converges in O(N ) cost there. This holds in our exam-
+ple even though weighting will ordinarily violate the sufficient conditions that
+Ghosh et al. (2021) give for backfitting to cost O(N ). We also include a sim-
+ulation that compares the accuracy of glmer, and our proposal and a naive
+logistic regression that ignores the random effects. Our algorithm’s accuracy
+lies between that of two glmer algorithms, both of which have superlinear cost.
+A naive logistic regression is seen to be typically inconsistent. For glmer and
+our algorithm the error in the intercept coefficient decreases much more slowly
+than that of the other coefficients, in line with our earlier remarks. Section 6
+illustrates our algorithm on a data set provided by Stitch Fix. Section 7 has a
+discussion about the Bayesian and frequentist perspectives. In Appendix A, we
+give details about the proofs and tabulate the results for the Stitch Fix data.
+     We conclude this section by describing some alternative approaches. Quasi-
+Monte Carlo (QMC) sampling (Niederreiter, 1992; Dick et al., 2013) is very well
+suited to many high dimensional integration problems but the integrand in (5)
+does not appear to be one of them. This integrand is very ‘spiky’ making it
+difficult for QMC. See Kuo et al. (2008) for some work in this area. Composite
+likelihoods (Varin et al., 2011) lower the dimension of the integration problem
+by multiplying likelihoods based on selected pairs or k-tuples of observations
+instead of all N of them at once. A comparison with composite likelihood
+would require consideration of precisely how to choose the k-tuples as well as
+the resulting efficiency. That would require an investigation of its own and
+is outside the scope of this paper. We have opted to build upon the penalized
+quasi-likelihood method of Breslow and Clayton (1993). It is the most commonly
+used algorithm and there is well tested code in Bates et al. (2015) to use in
+comparisons.
+     It would be of great interest to handle mixed and generalized linear mixed
+models that incorporate SVD-like latent variable interactions. For the present
+we note that even without those interactions it is a significant challenge to get
+an efficient estimate of β and also quantify the uncertainty in β whether by
+Bayesian or frequentist methods while remaining within an O(N ) cost limit.
+
+
+
+
+                                        5
+2    Notation and sampling models
+We speak of rows and columns for our two factors. The rows are indexed by
+i = 1, . . . , R and the columns by j = 1, . . . , C. Most of the RC possible (i, j)
+combinations are not observed in our motivating problems. We let Zij ∈ {0, 1}
+take the value 1 if and only if (xij , Yij ) has been observed. In our motivating
+problems we either never have the same (i, j) combination observed twice, or
+we only keep the most recent such observation, or it happens so rarely that we
+can neglect it.
+    Sums over i are from 1 to R and sums    Pover j are from 1 to C. The number of
+times row i has beenP   observed is N i • =  j Zij and similarly, column j has been
+observed N•j = i Zij times. We suppose that the data are ordered so that all
+                                                              PR          PC
+Ni• ⩾ 1 and all N•j ⩾ 1. The total sample size is N = i=1 Ni• = j=1 N•j .
+The sparsity condition implies that N  RC.
+    Sometimes we have to make a vector of length N with an element for each
+observation or a matrix with N rows, one per observation. We assume that some
+consistent ordering of the observations is used in all of these cases and we use a
+calligraphic font for most such quantities. The vector Y ∈ {0, 1}N contains all
+the observed responses Yij . The matrix ZA ∈ {0, 1}N ×R has R columns of which
+the i’th column contains ones for observations in row i and zeros everywhere
+else. The matrix ZB ∈ {0, 1}N ×C is the corresponding incidence matrix for
+                                                      T
+the columns of our observations. The product ZA         ZB is our observation matrix
+              R×C
+Z ∈ {0, 1}        .
+    While the analyst considers Zij to be fixed, we will study random Zij in
+order to model the difficulties that the analyst will face and to prove that certain
+difficulties have vanishing probability in large samples. The model we use comes
+from Ghosh et al. (2021). For a problem size parameter S, the number of rows
+and columns are R = bS ρ c and C = bS κ c respectively. Those values become
+very large in cases of interest and, to avoid uninteresting complications, we use
+R = S ρ and C = S κ in our formulas without taking integer parts. Then for
+some Υ > 1, we suppose that
+                     ind                         S            S
+                 Zij ∼ Bern(pij )       where      ⩽ pij ⩽ Υ    .               (6)
+                                                RC           RC
+The actual problem size N satisfies S ⩽ E(N ) ⩽ ΥS. The model (6) allows
+unequal observation probabilities but remains more restrictive than we would
+like. Numerical results in Ghosh et al. (2021) show that their generalized least
+squares algorithm converges in O(N ) cost much more generally than their as-
+sumptions imply.
+    The relevant values of ρ and κ are positive so that R and C grow with N but
+below 1 because neither R nor C can be larger than N . We also have ρ + κ > 1
+to model sparsity, that is N  RC.
+    Under the model (6), Ghosh et al. (2021) show that if 2ρ + κ < 2 then all
+rows get an adequate sample size and no single row dominates the data:
+
+         lim Pr (1 − )S 1−ρ ⩽ min Ni• ⩽ max Ni• ⩽ (Υ + )S 1−ρ = 1
+                                                                   
+                                                                             (7)
+        S→∞                         i           i
+
+
+                                           6
+for any  > 0. By symmetry, if ρ + 2κ < 2, then
+
+         lim Pr (1 − )S 1−κ ⩽ min N•j ⩽ max N•j ⩽ (Υ + )S 1−κ = 1
+                                                               
+                                                                                  (8)
+        S→∞                        j             j
+
+holds for any  > 0.
+    Many settings can be expected to have informative missingness, where Zij
+is related to Yij . We do not account for this because to do so would require
+problem specific assumptions from outside the data at hand. Also, the problems
+we face are already unsolved in the event that Zij are not informative about Yij .
+
+
+3     Likelihood approach
+We will use an iterative approach of Schall (1991). Breslow and Clayton (1993)
+showed the resulting estimators obtained by this way jointly maximize (under
+very mild assumptions) the penalized quasi-likelihood of Green (1987) and also
+maximize the Bayesian posterior probability density function. It alternates be-
+                                        2      2
+tween estimating a, b and β given σA      , σB    and an overdispersion quantity φ and
+estimating the variances and overdispersion given a, b and β. For the optimiza-
+tion over a and b and β we use weighted least squares for a working response,
+following the approach in Schall (1991). His approach requires the trace of the
+inverse of an (R + C) × (R + C) matrix and this is too expensive so we replace it
+by an approximation. We then give conditions where the approximation makes
+an asymptotically negligible difference.
+    We observe Yij together with predictor variables xij . There are also un-
+observed random effects (ai , bj ) associated with this observation. We assumed
+that given a and b, the Yij are conditionally independent. Adapting some no-
+tation from Breslow and Clayton (1993) we let µa,b ∈ RN have components
+µa,b                          T
+  ij ≡ E(Yij | ai , bj ) = π(xij β + ai + bj ). The model of Breslow and Clayton
+(1993) includes
+                              var(Yij | ai , bj ) = φv(µij )
+for a function v(·) and an overdispersion parameter φ > 0. In our case v(µ) =
+µ(1 − µ). While Bernoulli random variables cannot be overdispersed or under-
+dispersed we include φ because values φ 6= 1 may signify a lack of fit.
+                                           2    2
+    The integrated quasi-likelihood ql(β, σA , σB , φ) from Breslow and Clayton
+(1993) is
+                                      Z Z
+                   2   2
+                                −R −C
+            eql(β,σA ,σB ,φ) ∝ σA σB          e−γ(a,b) da db, where
+                                          RC    RR
+                              1 X                              kak2   kbk2
+                  γ(a, b) =            Zij dev(yij , µa,b
+                                                      ij ) +     2  +   2         (9)
+                              2φ ij                            2σA    2σB
+
+for a Bernoulli deviance
+
+                   dev(y, µ) = −2y log(µ) − 2(1 − y) log(1 − µ)
+
+
+                                            7
+taking 0 log 0 = 0. The variables xij , Yij , Zij , σA , σB , φ and β are absorbed
+into the definition of γ so that we can focus on the variables a and b over which
+we integrate.
+    We are going to use Laplace’s method of approximate integration. For that
+we need the Hessian γ 00 of γ at the point (ã, b̃) where its gradient γ 0 vanishes.
+Applying Laplace’s method of integral approximation we get
+                                                  1
+           2
+    ql(β, σA    2
+             , σB , φ) ≈ −R log σA − C log σB −     log det(γ 00 (ã, b̃)) − γ(ã, b̃).
+                                                  2
+The gradient in equation (8) of Breslow and Clayton (1993) involves the quantity
+v(µ)π 0 (µ) which equals 1 in our context. After translating their random effects
+model into our context we find that
+                                                      !
+                 0
+                           −ZA T
+                                 (Y − µa,b )/φ + a/σA
+                                                    2
+               γ (a, b) =                                 and
+                           −ZB T
+                                 (Y − µa,b )/φ + b/σB
+                                                    2
+
+                                        −2
+                                                                   !
+                             T                        T
+                00
+                           ZA  WZA + σA     IR       ZA WZB
+              γ (a, b) =          T               T          −2
+                                ZB  WZA         ZB  WZB + σB    IC
+
+where W = diag(µa,b (1 − µa,b ))/φ ∈ [0, 1/(4φ)]N ×N .
+   Using the expressions above,
+                       1              1
+        2
+ ql(β, σA    2
+          , σB , φ) ≈ − log det(D) − log det(Z T W(µã,b̃ )Z + D−1 ) − γ(ã, b̃)
+                       2              2
+                       1
+                    ≈ − log det(I + Z W(µã,b̃ )ZD) − γ(ã, b̃)
+                                      T
+                       2
+                       1
+                    ≈ − log det(I + Z T W(µã,b̃ )ZD)
+                       2
+                               1 X                           kãk2   kb̃k2
+                           −        Zij dev(Yij , µã,
+                                                   ij
+                                                      b̃
+                                                         ) −    2  −    2
+                              2φ ij                          2σA     2σB
+                                                                                          (10)
+                                   2       2
+for Z = [ZA : ZB ] and D = diag(σA   IR , σB IC ).
+        2    2                                         2    2              2    2
+    If σA , σB and φ are known, we can find β̂, â(β, σA , σB , φ), b̂(β, σA , σB , φ)
+to maximize negative γ in (9), the penalized quasi-likelihood of Green (1987).
+Following Breslow and Clayton (1993) we assume that the GLM iterative weights
+vary at most slowly as a function of the mean, and so we ignore the first term
+in the expression (10) and choose parameters to maximize the rest. We obtain
+the score equation upon differentiating with respect to (β, a, b) which gives us
+the following three equations:
+
+                           X T (Y − µa,b ) = 0,
+                             T                1
+                           ZA  (Y − µa,b ) = 2 a,     and
+                                             σA                                           (11)
+                             T                1
+                           ZB  (Y − µa,b ) = 2 b.
+                                             σB
+
+                                          8
+    We solve for β̂ using an iterative reweighted least squares approach. Letting
+          2    2
+θ = (β, σA  , σB , φ), the regression coefficient β̂ (k+1) is obtained by solving a
+weighted least squares problem with weights depending on θ̂(k) . In the following
+section, we give a detailed description of the procedure.
+    Using the Hessian, we obtain (after a bit of rearrangement) the following
+three equations involving a working response z:
+
+               X β̂ = X (X T WX )−1 X T W(z − ZA â − ZB b̂),
+                                    −2
+                           T
+              ZA â = ZA (ZA WZA + σA  IR )−1 ZA
+                                               T
+                                                 W(z − X β̂ − ZB b̂),               (12)
+                                    −2
+                           T
+              ZB b̂ = ZB (ZB WZB + σB  IC )−1 ZB
+                                               T
+                                                 W(z − X β̂ − ZA â).
+
+Here the working response z is defined
+                                                             Yij − µ̂ij
+                              zij = xT
+                                     ij β̂ + âi + b̂j +                            (13)
+                                                           µ̂ij (1 − µ̂ij )
+
+with µ̂ij = π(xTij β̂ + âi + b̂j ) for the logistic CDF π(·) from equation (3). A
+straightforward solution of equation (13) costs O((R+C +p)3 ) which is infeasible
+and so we develop a backfitting iteration for it.
+
+3.1     Schall’s approach
+Schall (1991) considers an iterative procedure to estimate the fixed effect, ran-
+dom effects and the variance component. The iterative procedure is based on
+the quasi-likelihood from the prior subsection. At iteration k we have estimates
+                         2(k)  2(k)
+β̂ (k) , a(k) , b(k) , σ̂A , σ̂B and φ̂(k) . For k = 0, we initialize them all to ze-
+ros except the overdispersion and variance parameters start at one. To obtain
+                            (k+1)
+β̂ (k+1) , â(k+1) and b̂           we solve the penalized weighted least squares problem
+                   X
+                          c (k) z (k) − xT
+                                                        2 kak2      kbk2
+             min      Zij W ij   ij      ij β − ai − bj   +   2(k)
+                                                                   +   2(k)
+                                                                            ,       (14)
+             β,a,b                                          σ̂A      σ̂B
+                   ij
+
+
+with weights W c (k) = µ̂(k) (1 − µ̂(k) )/φ̂(k) . This optimization problem leads to
+                 ij       ij         ij
+exactly the same estimating equations (12), since the quadratic approximation
+is based on the same gradients and Hessian.
+    It remains to update the overdispersion and variance parameters. Consider
+the following (R + C) × (R + C) matrix
+                      (k)      (k)
+                                   !
+                    T11      T12
+          T (k) =     (k)      (k)
+                    T21 T22
+                                                                            !   (15)
+                      T c(k)            −2(k)             T c(k)
+                    ZA  W ZA + σ̂A            IR        ZA W ZB
+                =
+                            ZTW c(k) ZA            ZTWc(k) ZB + σ̂ −2(k) IC
+                                    B                       B                 B
+
+
+
+
+                                                 9
+                             (k)
+                 c ) ∈ RN ×N . Let
+     c(k) = diag(W
+with W             ij
+
+                                                                ∗(k)      ∗(k)
+                                                                                  !
+                               ∗(k)          (k) −1
+                                                              T11       T12
+                           T           = T                =     ∗(k)      ∗(k)
+                                                                                      .
+                                                               T21       T22
+
+Schall’s update evaluates
+               (k+1)                 ∗(k)    2(k)                (k+1)                ∗(k)           2(k)
+             νA        = tr(T11 )/σ̂A                 and νB             = tr(T22 )/σ̂B
+
+and then sets
+                                                                                     (k+1) 2
+                  2(k+1)             kâ(k+1) k2                2(k+1)         kb̂               k
+                σ̂A          =          (k+1)
+                                                     and σ̂B             =          (k+1)
+                                                                                                     .      (16)
+                                   R − νA                                      C − νB
+From these formulas it is clear that the ν parameters function as degrees of
+freedom estimates. Finally, we let
+                        (k+1)        (k+1)    (k+1)                        (k+1)     (k+1) 2
+                                                     − xT       (k+1)
+              P
+      (k+1)    ij Zij µ̂ij    (1 − µ̂ij    ) zij          ij β̂        − âi     − b̂j
+   φ̂       =                                    (k+1)                (k+1)
+                              N − p − (R − νA          ) − (C − νB           )
+                                                                                            (17)
+
+where p is the number of parameters in β including the intercept.
+    The quantity Schall computes is almost but not quite the maximum like-
+lihood estimate of β. Schall (1991) shows that it is a quantity studied by
+Stiratelli et al. (1984), namely the posterior mode of β under a diffuse prior on
+β independent of a zero-mean Gaussian prior for (a, b). Stiratelli et al. (1984)
+mentioned different approaches like empirical Bayes for the estimation of vari-
+ance components of the prior distribution (See Leonard (1975), Laird (1978)).
+The update (14) for β, a and b is a Fisher scoring iteration to maximize their
+                                                      2    2
+posterior density. The updates (16) and (17) for σA     , σB and φ are from an
+EM iteration to compute these dispersion components, after approximating the
+posterior distribution of (a, b) by a multivariate normal distribution with the
+same mode and curvature as the true posterior. In small data sets where we are
+able to compute the MLE we find the estimate from Schall’s algorithm is very
+close to the MLE.
+
+3.2     Modified Schall Approach
+We want to solve the equation (14). It is instructive to begin with the case of
+just one factor. Then we obtain the following optimization problem:
+                              X             (k)     (k)                  2       kak2
+                       min           Zij W
+                                         c
+                                           ij      zij − xT
+                                                          ij β − ai           +      2(k)
+                                                                                             .              (18)
+                       β,a                                                        σ̂A
+                               i,j
+
+The normal equations from (18) yield
+
+                       0 = X TW
+                              c(k) (z (k) − X β̂ − ZA â),                    and                           (19)
+
+
+                                                          10
+                          T c(k) (k)                                         2(k)
+                     0 = ZA W (z − X β̂ − ZA â) − â/σ̂A .                                     (20)
+
+   Solving (20) for â and multiplying the solution by ZA yields
+                      T c(k)                   −2(k)         −1    T c(k) (k)
+          ZA â = ZA ZA W ZA + σ̂A                      IR         ZA W (z − X β̂)
+                       (k)
+                   ≡ SA (z (k) − X β̂)
+                                                                     (k)
+for an N × N ridge regression “smoother matrix” SA . (We have rederived one
+of the estimating equations in (12).) This smoother matrix implements weighted
+shrunken within-group means. Substituting ZA â into equation (19) yields
+                                     (k)         −1                             (k)
+            β̂ = X T W
+                     c(k) (IN − S )X
+                                 A                      X TW
+                                                           c(k) (IN − S )z (k) .
+                                                                       A                        (21)
+
+None of these steps takes superlinear time since weighted shrunken within-group
+means cost O(N ) time. Also observe that W   c(k) S (k) is symmetric. We can use
+                                                   A
+this fact to efficiently compute an estimated (asymptotic) covariance of β̂. With
+c(k) = W
+W        c(k) (IN − S (k) ), we have
+  SA                    A
+
+                             (k)
+                         c X )−1 X T W           (k) c X )−1 ,     (k)              (k)
+           ov(β̂) = (X T W
+          cd              SA
+                                     c ·Σ
+                                      SA
+                                            c X (X T W
+                                         b ·W
+                                             SA       SA                                        (22)
+           −2(k)    T   c(k) )−1 the covariance of the working response. Since
+with Σ
+     b = σ̂
+           A   ZA ZA  +(W
+Σ
+b has the form low-rank plus diagonal, we can compute this covariance with
+O(N ) computations.
+   With two factors we do not enjoy the same computational simplifications.
+The counterpart to equation (21) is
+                                         (k)
+                      c(k) (IN − S )X )−1 X T W                                  (k)
+            β̂ = (X T W           AB
+                                              c(k) (IN − S )z (k)
+                                                          AB                                    (23)
+
+where
+                         (k)        c(k) Z + (D(k) )−1 )−1 Z
+                        SAB = Z(Z T W
+                                                     2(k)       2(k)
+for Z = [ZA : ZB ] and D(k) = diag(σ̂A IR , σ̂B IC ). Hence we would need
+                                                                  (k)
+to invert an (R + C) × (R + C) matrix T (k) in (15) to apply SAB and thereby
+solve (23), incurring a cost far greater than O(N ).
+                                                                              (k)
+    However, in order to solve (23), all we need to do is apply the operator SAB
+to each column of X , and this can be done more efficiently. Consider a generic
+response vector r (such as a column of X ) and the optimization problem
+                                                        −2(k)                −2(k)
+            min kr − ZA a − ZB bk2W
+                                  c(k) + σ̂A                    kak2 + σ̂B             kbk2 .   (24)
+             a,b
+
+                                                                           (k)
+    It is clear that the fitted values are given by rb = SAB r. Solving (24) leads
+to the following two blocks of estimating equations:
+                                               (k)
+                                ZA â = SA (r − ZB b̂),
+                                               (k)
+                                                                                                (25)
+                                ZB b̂ = SB (r − ZA â).
+
+                                                11
+We can solve these equations iteratively by block coordinate descent (backfit-
+ting). This is done in parallel with r being each column of X (separately)
+            (k)
+obtaining SAB X at convergence.
+    Similar to (22), we obtain the covariance estimate for the two factor case.
+
+                     c(k) X )−1 X T W
+       ov(β̂) = (X T W
+      cd                            c(k) · Σ  c(k) X (X T W
+                                           b ·W           c(k) X )−1 ,              (26)
+                      SAB            SAB       SAB         SAB
+
+     b = σ̂ −2(k) ZA Z T + σ̂ −2(k) ZB Z T + (W
+with Σ                                        c(k) )−1 the covariance of the working
+           A           A     B          B
+response. Again, because of the low-rank-plus-diagonal nature of b        Σ, we can
+compute the covariance with O(N ) computations.
+   In practice, we will need to repeatedly minimize (14) for each step k as the
+        c(k) and σ̂ −2(k) and σ̂ −2(k) vary, and only compute the covariance esti-
+weights W            A            B
+mate after convergence. We develop a more efficient algorithm for this purpose
+which we describe in Section 4.
+   Now we consider the second step of Schall’s method. Recall that T (k) is a
+(R + C) × (R + C) matrix without any special structure.
+   Although the diagonal blocks in T (k) are diagonal matrices, the off diagonal
+block have no special structure. Inverting T (k) would have a cost of N 3/2 or
+worse. Our approximation to Schall’s algorithm uses
+          (k+1)          (k)         2(k)           (k+1)          (k)       2(k)
+        νA        = tr((T11 )−1 )/σ̂A       and νB          = tr((T22 )−1 )/σ̂B
+
+simply ignoring the off diagonal blocks of T (k) . These can be computed in O(N )
+                              (k)            (k)
+time. Getting the trace of (T11 )−1 and (T22 )−1 costs O(R + C) because those
+                                                        (k)   P
+matrices are diagonal. The i’th diagonal element of T11 is j Zij W  c (k) + σ̂ −2(k)
+                                                                      ij      A
+                               (k)           (k)
+and so all elements of (T11 )−1 and (T22 )−1 can be computed in O(N ) work.
+We show in the following subsection that this approximation ignoring the off
+diagonal blocks makes an asymptotically negligible difference.
+   Schall’s approach requires the trace for each of two blocks of the inverse of
+the partitioned matrix
+                                    −2           T
+                      T                                      
+                       ZA WZA + σA     IR       ZA WZB
+                T =          T               T          −2                  (27)
+                           ZB  WZA         ZB  WZB + σB    IC
+
+with a diagonal weight matrix W ∈ (0, 1/(4φ)]N ×N . Computing those traces
+directly costs O((R + C)3 ) because of the inversion step and this is infeasible
+in our applications. Instead ignoring the off-diagonal blocks of T as mentioned
+above leads to our use of
+                        −2                                       −2
+               T
+          tr((ZA WZA + σA  IR )−1 )         and         T
+                                                   tr((ZB WZB + σB  IC )−1 )        (28)
+
+for the two traces of blocks of T −1 .
+    We justify this approximation in two steps. First we give a representation
+for the error incurred in ignoring off diagonal blocks when taking the trace of
+the inverse. Then we show that error formula is asymptotically negligible under
+
+
+                                            12
+a sampling model for Zij . We work with the true weights Wij and comment
+later on the implications for estimated weights W
+                                                cij .
+    We define the weight sums
+                         X                        X
+                  W i• =     Zij Wij and W•j =        Zij Wij .
+                                 j                      i
+
+Then writing
+                                           −2
+                                                                  
+                               diag(Wi• + σA  )       W
+                    T =                T                    −2
+                                     W          diag(W•j + σB  )
+we see that the traces in (28) involve diagonal matrices and so they can be
+computed in O(R + C) work after O(N ) work to compute their elements.
+   For 0 ⩽ η ⩽ 1 let
+                                              
+                                       A    ηB
+                            T (η) =                                    (29)
+                                      ηB T C
+
+where matrices A, B and C are defined so that T (1) is Schall’s matrix T
+from (27). There should be no confusion between the matrix C here and our
+number of columns. Blocks A and C are diagonal in our problem and T (η) is
+diagonally dominant for all 0 ⩽ η ⩽ 1. Therefore T = T (1) is invertible. In
+the proof of Lemma 1 we will see that tr(T (η)−1 ) − tr(T (0)−1 ) = O(η 2 ) so that
+small perturbations ηB do not bring a large approximation error. However we
+need to study η = 1 so a small η analysis is not quite enough, so the following
+Lemma 2 shows that η = 1 is within the radius of convergence.
+Lemma 1. Let T (η) ∈ R(R+C)×(R+C) have the form (29) for positive definite
+diagonal matrices A and C. Define B∗ = A−1/2 BC −1/2 and let ρ be the spectral
+radius of                              
+                                  0 B∗
+                                          .
+                                 B∗T 0
+Then for 0 ⩽ η < 1/ρ,
+                                       X                    X             
+       −1              −1            −1     2    T k        −1     2 T     k
+tr(T (η)    ) = tr(T (0)    ) + tr A      (η B∗ B∗ ) + tr C      (η B∗ B∗ ) .
+                                         k⩾1                           k⩾1
+
+Proof. See Appendix A.1.
+   The above Lemma gives the error in the trace. From the proof we see that
+the two specific error terms that we need to bound are
+                      X                         X             
+              tr A−1      (B∗ B∗T )k   and tr C −1    (B∗T B∗ )k       (30)
+                           k⩾1                          k⩾1
+
+after setting η = 1. To use Lemma 1 with η = 1 we need to verify that the
+given spectral radius ρ is below 1 for our setting. We use Lemma 2 to control
+the spectral radius.
+
+
+                                            13
+Lemma 2. In the notation of Lemma 1, let B have nonnegative entries. Then
+the spectral radius ρ satisfies
+                          X Bij 1/2     X Bij 1/2
+                   ρ ⩽ max             max            .
+                        i
+                           j
+                             Cjj        j
+                                           i
+                                             Aii
+
+Proof. See Appendix A.2.
+                                            −2                     −2
+   In our present context A = diag(Wi• + σA    ), C = diag(W•j + σB   ) and
+B = W . Then
+              X Bij          X      Wij                W i•
+          max          = max             −2 = max           −2 < 1
+           i
+                j
+                  C jj    i
+                             j
+                                W i• + σ A
+                                                 i W i• + σ A
+
+
+and we get
+                                                          1/2
+                                W i•            W•j
+                ρ<       max         −2 × max         −2          <1
+                          i  Wi• + σA      j  W•j + σ B
+
+as required.
+    Now Wij = pij (1 − pij )/φ ∈ (0, 1/(4φ)] for all (i, j) in the data. We will
+need a strictly positive lower bound Wij ⩾ ω > 0. In many applications, we
+can reasonably assume that |xT  ij β| is bounded away from infinity for all (i, j),
+even the unobserved (i, j) pairs. However, our model uses xT     ij β + ai + bj where
+both ai and bj are unbounded
+                    p          Gaussian     random   variables. Now   max1⩽i⩽R ai is
+asymptotically like 2 log(R)σA and the bj satisfy a similar bound. Thus we
+will assume that
+                                                                 
+              lim Pr max max |xT       ij β + ai + bj | > α log(S) = 0
+             S→∞         1⩽i⩽R 1⩽j⩽C
+
+holds for any α > 0. Then for any ψ > 0,
+                                             
+                     lim Pr min min Wij < S −ψ = 0.                             (31)
+                       S→∞      1⩽i⩽R 1⩽j⩽C
+
+
+   We need to bound the largest eigenvalue of B∗ B∗T from equation (30). In
+our context that matrix equals
+                −2 −1/2               −2 −1               −2 −1/2
+    diag(Wi• + σA )     W diag(W•j + σB ) W T diag(Wi• + σA )     .             (32)
+
+Proposition 1. Let R, C and Zij for 1 ⩽ i ⩽ R and 1 ⩽ j ⩽ C be sampled as
+in Section 2 with ρ, κ ∈ (0, 1) and max(2ρ + κ, ρ + 2κ) < 2. Let λ1 be the largest
+eigenvalue of the matrix at (32). Then if Wij ⩽ ω̄ < ∞
+                                                                          
+                                  1                         1
+       lim Pr λ1 ⩽                          2 ] 1 + S κ−1 /[(Υ + )ω̄σ 2 ]   =1
+      S→∞             1 + S ρ−1 /[(Υ + )ω̄σA                         B
+
+holds for any  > 0.
+
+
+                                         14
+Proof. By equations (7) and (8) both
+
+          max Wi• ⩽ (Υ + )ω̄S 1−ρ        and      max W•j ⩽ (Υ + )ω̄S 1−κ
+            i                                       j
+
+hold with probability tending to 1 as S → ∞ for any  > 0. Now
+                                     W i•            W•j
+                    λ1 ⩽ max              −2 × max         −2 .
+                             i    Wi• + σA      j  W•j + σ B
+
+Hence, for any  > 0
+                                                                        
+                                1                         1
+     lim Pr λ1 ⩽                          2 ] 1 + S κ−1 /[(Υ + )ω̄σ 2 ]   = 1.
+    S→∞             1 + S ρ−1 /[(Υ + )ω̄σA                         B
+
+
+
+
+Theorem 1. Let R = S ρ , C = S κ and Zij follow the sampling model from
+Section 2 for some Υ < ∞. Assume that ρ, κ ∈ (0, 1) with max(2ρ+κ, ρ+ 2κ) <
+2 and that Pr(minij Wij > S −ψ ) → 1 for all ψ > 0 as described prior to
+equation (31). Let the matrix B∗ B∗T in (32) have eigenvalues λ1 ⩾ λ2 ⩾ · · · ⩾
+λR ⩾ 0. Then there exists α < 1 such that for any δ > 0
+                                   R
+                                  X                      
+                        lim Pr           1{λi > δ} > Rα       = 0.                (33)
+                       S→∞
+                                   i=1
+
+Proof. See Appendix A.3.
+Theorem 2. Let R = S ρ , C = S κ and Zij for 1 ⩽ i ⩽ R and 1 ⩽ j ⩽ C be sam-
+pled as in Section 2. Assume that ρ, κ ∈ (0, 1) and that Pr(minij Wij > S −ψ ) →
+1 for all ψ > 0 as described prior to equation (31). Then our approximation
+error from (30) is                                     
+                                        X
+                          Err ≡ tr A−1       (B∗ B∗T )k
+                                             k⩾1
+
+and for any γ > 0
+                                 lim Pr(Err > γR) = 0.
+                                 S→∞
+
+Proof. See Appendix A.4.
+
+3.3    Error with W
+                  c versus W
+Our algorithm makes a trace approximation to give Schall’s algorithm a feasible
+cost. We have proved that this approximation brings a negligible error when
+the true Wij = µij (1 − µij )/φ are used. In practice the algorithm uses estimates
+cij , σ̂ 2 , σ̂ 2 and φ̂. The principle difference is that estimates W
+W                                                                    cij might be
+        A      B
+closer to zero than the true Wij . We actually do not expect this to happen.
+The process of estimating β and a and b biases them towards the origin and
+consequently away from very small weights. We could in principle choose a small
+
+
+                                           15
+value ψ and impose a minimum W        cij ⩾ N −ψ in each stage of the algorithm but
+this has not been necessary.
+                                                                     2    2
+     We have also studied the algorithm assuming that the true σA      , σB and φ are
+                                                    2     2
+used, while the algorithm runs with estimates σ̂A     , σ̂B and φ̂. The value of φ̂ is
+not consequential for Theorem 1 because it scales all the weights W    cij = µ̂ij (1 −
+µ̂ij )/φ̂ by the same factor leaving the weight ratios in the proof unchanged.
+            2        2
+Smaller σ̂A    and σ̂B  reduce the bound on λ1 so they pose no difficulty. Larger
+             2        2
+values of σ̂A and σ̂B   imply smaller ridge penalties on the weighted least squares
+problems and thereby increase the upper bound on the largest eigenvalue λ1 in
+Proposition 1. Very large values are a priori implausible for our target setting.
+                              2
+For instance, enormous σA         would tend to make Yij equal 0 or 1 depending
+almost entirely on the row index i. In practice one could impose a constraint
+like max(σ̂A , σ̂B ) ⩽ 10 but we have not had to do that. For Theorem 2, we only
+         2       2
+need σ̂A   and σ̂B  to be o(S δ ) for any δ > 0.
+
+
+4     Clubbed backfitting
+The iterative method in Section 3.2 to solve (14) might suffer from slow con-
+vergence because of confounding of a factor with one of the variables xij` . Let
+us consider the following optimization problem motivated by the single factor
+problem (18):
+                                                −2
+                      min kz − X β − ZA ak2w + σA  kak2 .                   (34)
+                         β,a
+
+It may happen that a column of X is exactly equal to the sum of k columns of
+ZA , e.g., columns `1 , `2 , . . . , `k . For example if the rows in the data represent
+customers, this column of X could represent all male customers older than 50.
+This linear dependence has consequences for the solution a to (34).
+Lemma 3. Suppose that column q of X in problem (34) equals the sum of k ⩾ 1
+                                                         −2
+distinct columns I = {i1 , i2 , . . . , ik } of ZA . If σA  > 0 then the solution for a
+         Pk
+satisfies `=1 ai` = 0.
+Proof. For any a ∈ RR , β ∈ Rp and c ∈ R, define a(c) and β (c) via
+              (                                     (
+         (c)    ai ,     if i ∈ I             (c)     β` + c, if ` = q
+        ai =                        and     β` =
+                ai − c, else                          β` ,      else.
+
+If we evaluate the quadratic in (34) at (β (c) , a(c) ) then the first term P
+                                                                            does not
+depend on c and the second term has a unique minimum at c = (1/k) i∈I ai .
+                                                            Pk
+As a result (β, a) can only be the solution if c = (1/k) `=1 ai` = 0.
+    Lemma 3 imposes a constraint on a for every column of X that equals a sum
+of columns of ZA . Backfitting will eventually converge to a solution satisfying
+those constraints, but it could take a long time to get there. We can speed
+things up by enforcing any known constraints. When as usual, X includes a
+
+
+                                          16
+                                                        PR
+column of ones for an intercept we get the constraint i=1 ai = 0, as a special
+case.
+    With two factors we can also have such aliasing with sums of columns of ZB
+as well, with particular columns of X . For example a column of X might repre-
+sent a particular category of clothing, corresponding to a number of levels of the
+column factor. Furthermore there may be other non-trivial constraints that are
+implied by X . As we saw in equation (14), we want to obtain arg min pl(β, a, b)
+                                                                       β,a,b
+for the penalized least squares problem
+                 X                                2     −2          −2
+   pl(β, a, b) =        cij zij − xT
+                    Zij W          ij β − ai − bj    + σ̂A  kak2 + σ̂B  kbk2 .        (35)
+                    i,j
+
+We use the following iterative “clubbing” strategy to enforce all of these con-
+straints automatically. Given (β (k) , a(k) , b(k) ) we first optimize pl(·) over β and
+                                                                               1
+a with b = b(k) fixed to get a(k+1) and an intermediate quantity β (k+ 2 ) . Then
+                                                                    (k+1)
+we optimize pl(·) over β and b with a = a(k+1) fixed to get b             and the next
+iterate β (k+1) of the regression vector.
+    It is convenient to describe the updates in terms of fitted quantities in RN .
+The needed parts β (k) , a(k) and b(k) are easily obtained in the process. For the
+first part of the iteration we set
+            1
+                     W(IN − SA )X )−1 X T c
+   X β (k+ 2 ) = (X T c                  W(IN − SA )(z − ZB b(k) ),            and
+                                                                                      (36)
+                                 (k+ 21 )
+  ZA a(k+1) = SA (z − X β                   − ZB b(k) )
+
+                                                  −2
+for a smoother matrix SA = ZA (ZA    Tc
+                                       WZA + σ̂A     IR )−1 ZA
+                                                             Tc
+                                                               W that simply com-
+putes weighted group means. This gets applied to each column of X in the first
+equation, and to the residual in the second. The matrix inversion in the formula
+is handled by solving a p × p system of equations which adds a cost that is of
+constant order in N .
+    The equations (36) solve the following minimization problem,
+                                                       2
+                          cij zij − b(k) − xT
+                  X
+                                                              −2
+              min     Zij W           j      ij β − ai    + σ̂A  kak2 .       (37)
+                   β,a
+                          i,j
+
+                  (k)
+If we absorb bj into zij we see that (37) has the form (34) and so by Lemma 3
+                    1
+the solution (β (k+ 2 ) , a(k+1) ) satisfies any constraint that is intrinsic to the de-
+sign.
+    To complete the iteration we fix a = a(k+1) and optimize over β and b, via
+
+                      c N − SB )X )−1 X T W(I
+   X β (k+1) = X (X T W(I                 c N − SB )(z − ZA a(k+1) ),                and
+         (k+1)                   (k+1)            (k+1)
+  ZB b           = SB (z − X β           − ZA a           )
+
+                                          −2
+for a smoother matrix SB = ZB (ZBTc
+                                  WZB + σ̂B  IC )−1 ZB
+                                                     Tc
+                                                       W.                  Once again
+Lemma 3 applies to the solution.
+
+
+                                                   17
+                                               2     2
+Lemma 4. If X is of full rank, and max(σ̂A       , σ̂B ) < ∞ and the weights W
+                                                                             cij
+are positive, then the iterative algorithm converges to a global minimum of the
+equation (35).
+Proof. See Appendix A.5.
+    We can compute these single factor operators in O(N ) computation and use
+them for each iteration of the inner (solving the weighted least squares problem
+for a fixed weight vector) backfitting loop rather than computing it every time
+we run this iteration. The iterative algorithm stops when the relative change
+in ζ ≡ X β + ZA a + ZB b is below a certain threshold. At convergence of the
+clubbed backfitting, we obtain β̂, â, b̂ for a particular set of weights.
+    Next we update the weights using the new set of parameters and solve a new
+optimization problem until convergence. We stop when the relative change in
+the fitted values ζ obtained with a different set of weights is negligible. Not only
+does this clubbed variant of block-coordinate descent automatically satisfy the
+implicit constraints, but we expect (and indeed observe) faster convergence than
+other variants that do not enforce the constraints. Here is a concise description
+of the modified Schall algorithm with clubbed backfitting:
+                                                            (`)
+  1) Stage ` of the algorithm provides β̂ (`) , â(`) , b̂ using the weights obtained
+     in the (` − 1)’st iteration and clubbing method described earlier. Obtain
+                                     (`)
+     ζ̂ (`) = X β̂ (`) + ZA â(`) + ZB b̂ .
+                 2(`)    2(`)
+  2) Obtain σ̂A , σ̂B , and φ̂(`) using the trace approximation.
+  3) Recompute the weights with new parameters.
+   We iterate until
+                               kζ̂ (`) − ζ̂ (`−1) k2
+                                                       <
+                                   kζ̂ (`−1) k2
+                                                   (∞)            (`)   2(∞)   2(`)   2(∞)
+and then deliver β̂ (∞) = β̂ (`) , â(∞) = â(`) , b̂ = b̂ , σ̂A   = σ̂A , σ̂B   =
+  2(`)
+σ̂B and φ̂(∞) = φ̂(`) . Our generalized linear mixed model coefficient estimate
+is then β̂GLMM = β̂ (∞) . Once we obtain the weights and parameter estimates at
+convergence we can compute cd       ov(β̂GLMM ) by backfitting on each column of X
+        2(∞)   2(∞) c(∞)
+using σ̂A , σ̂B , W          at (26). As a consequence of Lemma 3, if X contains
+the intercept the penalized least squares problem in (14) is equivalent to solving
+                                                                   PR
+a constrained penalized least squares problem with constraint i=1 ai = 0 and
+PC
+   j=1 bj = 0. We can make the algorithm more efficient if we use centered
+                                           (k)         (k)                            (k)
+operators (See Ghosh et al. (2021)) S̃A and S̃B in (25) instead of SA and
+ (k)
+SB .
+   Our numerical results in the Section 5 use  = 10−8 . Open-source R code
+at https://github.com/G28Sw/backfitting_binary_regression does these
+computations.
+
+
+
+
+                                           18
+5     Timing and accuracy comparisons
+In this section we simulate the data from a crossed random effects model with
+a binary response. A simulated setting with known β lets us compare accuracy
+of the methods. We also can verify linear costs for backfitting and superlinear
+costs for a state of the art algorithm, glmer from Bates et al. (2015). We assume
+that the observation pattern follows the probability model from Section 2. We
+look at timings and we also consider accuracy. These experiments were carried
+out in R on a computer with the macOS operating system, 16 GB of memory
+and an Intel i7 processor.
+
+5.1    Timings
+To study how the computation time varies with N we generated data over a
+                                                                     iid
+range of sample sizes using ρ = κ = 0.56. Our predictors were xij ∼ N (0, Σ) in
+seven dimensions, plus an intercept, making p = 8. The covariance matrix had
+Σk` = γ |k−`| with autoregression parameter γ = 1/2. We took β = 0, σA = 0.8
+and σB = 0.4.
+     We included our backfit iteratively reweighted least squares algorithm, a
+naive logistic regression ignoring random effects and two versions of the glmer
+R code. One version of glmer is the default using 1 Gaussian quadrature point.
+The other uses no such points and is obtained by calling glmer with the option
+nAGQ = 0. Not surprisingly, we will see that this version of glmer is faster than
+the default, but less accurate.
+     Theory suggests the computation time for glmer should be of the order
+N max(3ρ,3κ) . So we expect the order of computation to be N 1.68 in this case,
+whereas Schall backfitting with the trace approximation should have a cost that
+is linear in N .
+     Figure 1 shows our timings. The left panel shows the time required for a
+single iteration. We see that for the largest values of N in our simulation, the
+cost of one single iteration of glmer starts to follow a trend close to N 1.68 . As
+expected the default algorithm is slower. It appears to be slower by a constant
+factor. The cost of backfitting appears to grow more slowly than O(N ) over the
+given range but we believe this is because of startup costs and we see that by
+the end of the range of N values that cost is growing nearly proportionally to
+N as expected.
+     The cost of an algorithm depends on not just the cost per iteration but
+also on the number of iterations. The second panel of Figure 1 shows times to
+convergence. At the largest values of N , the timings follow the same asymptotic
+rates, approximately O(N 1.68 ) and O(N ), as we saw for individual iterations.
+The costs tend to approach these asymptotes from above. That could be startup
+costs or it might arise because the number of iterations tends to decrease with N .
+
+
+
+
+                                        19
+                                             Computation Time Per Iteration                                                                   Computation Time
+
+                    2
+                                   MLE (by LME4)                                                                          MLE (by LME4)
+                           ●       Backfitting                                                                    ●       Backfitting
+                           ●       MLE (by LME4, nAGQ=0)                                                          ●       MLE (by LME4, nAGQ=0)
+                                   Line with slope 1
+                                                                                                            4             Line with slope 1
+                                   Line with slope 1.68                                                                   Line with slope 1.68
+                    1
+                                                                                    ●                       3
+
+
+
+
+ log10(time(sec))                                                                        log10(time(sec))
+                                                                                                                                                                         ●
+                                                                              ●
+                                                                                                                                                                   ●
+                                                                                    ●
+
+                    0                                                         ●                             2
+                                                                        ●                                                                                      ●
+                                                                        ●
+                                                                                                                                                     ●
+                                                              ●
+                                                   ●                                                                                      ●
+                                         ●         ●                                                        1
+                               ●
+                                                                                                                                ●                                        ●
+                    −1                                                                                                                                             ●
+                                         ●                                                                            ●                                        ●
+
+                                                                                                                                                     ●
+                               ●                                                                                                          ●
+                                                                                                            0         ●         ●
+
+
+
+
+                    −2
+                         4.0                   4.5                    5.0         5.5                           4.0                   4.5                    5.0       5.5
+                                                           log10(N)                                                                               log10(N)
+
+
+
+Figure 1: Time for one iteration and total time versus N at (ρ, κ) = (0.56, 0.56).
+The cost for glmer is roughly O(N max(3ρ,3κ) ). Costs for backfitting is O(N ).
+
+
+5.2                                Accuracy
+It is also important to compare the accuracy of these algorithms. We also
+compute the β̂GLMER , β̂Backfitting Schall and β̂Logistic and compute the MSE.
+We used two different set of β:
+   a) β` = 0 for ` = 1, . . . , 7 and β0 = −2, and
+   b) β` = −2 + 0.5 × ` for ` = 1, . . . , 7 and β0 = −2.
+The choice of negative β0 was made to simulate a setting where Yij = 1 is a
+somewhat rare event. Some consequences for naive logistic regression of nonzero
+β are described in Section 5.3. We ran 100 replicates for each value of S and
+then computed the MSE of the estimators β̂, σ̂A and σ̂B . For accuracy we chose
+S to get log10 (N ) in the range from 3 to 4.5 for glmer algorithms. Because naive
+logistic regression and backfitting are O(N ) we studied them over a range up
+to log10 (N ) ≈ 5.5.
+    Figure 2 handles case a) above with all β` = 0 except for the intercept.
+The left panel shows the MSE for all β` except the intercept. The right panel
+shows the intercept. The intercept error in naive logistic regression does not
+decrease with N although the error for the other coefficients does. The RMSE
+for non-intercept components is close to a reference line parallel to O(1/N ) and
+this holds for backfitting, naive logistic regression√ and both glmer algorithms.
+The RMSE for the intercept follows close to O(1/ N ) for backfitting and glmer
+with √nAGQ=0. The RMSE for default glmer appears to get a rate in between
+O(1/ N ) and O(1/N ). We had expected the intercept coefficient to show slow
+convergence based on its partial confounding with the random effects described
+in the introduction. If the true MSE rate for the intercept really is o(N −1/2 )
+for default glmer, then we are unable to explain that.
+    Figure 3 shows case b) with nonzero β` . Plain logistic regression appears
+to be inconsistent for both intercept and non-intercept parameters. Once again
+
+
+                                                                                        20
+                           log10(MSE) with log10(sample size) without intercept                                   log10(MSE) with log10(sample size) only intercept
+
+
+              −1.5                                                                                  −1.0
+
+
+                       ●
+
+                                                                                                    −1.5
+                       ●
+              −2.0
+                                                                                                             ●
+                                                                                                                    ●
+                                                                                                                    ●
+                              ●
+                              ●                                                                                            ●
+                                                                                                                           ●
+                                    ●                                                                                             ●
+                                    ●
+
+              −2.5                                                                                  −2.0                                   ●
+                                          ●
+                                          ●                                                                                       ●
+
+                                                                                                                                           ●      ●
+
+
+
+
+ log10(MSE)                                                                            log10(MSE)
+                                                                                                                                                          ●
+
+                                                                                                    −2.5
+                                                  ●
+                                                  ●
+              −3.0
+                                                                                                                                                  ●
+                                                                                                                                                          ●
+                                                         ●
+                                                         ●
+
+
+
+                                                                                                    −3.0
+                                                                 ●
+                                                                 ●
+
+              −3.5
+
+                                                                                                                 Schall MSE
+                           Schall MSE                                                               −3.5     ●   GLMER MSE
+              −4.0     ●   GLMER MSE                                                                         ●   GLMER nAGQ 0 MSE
+                       ●   GLMER nAGQ 0 MSE                                                                      Logistic MSE
+                           Logistic MSE                                                                          Line with Slope = −1
+                           Line with Slope = −1                                                     −4.0         Line with Slope = −0.56
+              −4.5
+                     3.0          3.5         4.0            4.5      5.0       5.5                        3.0          3.5           4.0             4.5     5.0     5.5
+
+                                                      log10(N)                                                                                 log10(N)
+
+
+
+
+Figure 2: MSE of β̂ vs N at (ρ, κ) = (0.56, 0.56) for the choice of β in a).
+MSE for glmer, backfitting and Schall seems to scale at O(1/N ) for non inter-
+cept regression coefficients. MSE for intercept seems to scale at a slower rate
+compared to O(1/N ), whereas logistic shows no improvement with increasing
+problem size.
+
+
+backfitting is less accurate than the default glmer but more accurate than the
+other glmer choice. The default glmer has an RMSE close to O(N −1 ) for non-
+intercept parameters. Backfitting and the faster glmer show evidence of having
+a worse than O(N −1 ) convergence rate for non-intercept terms.
+
+5.3                        About naive logistic regression
+This section provides an explanation for some of the biases we see for naive
+logistic regression. This analysis preceded the simulations and influenced our
+choice of simulation settings.
+    Suppose we have a mixed effects model with one random effect (no crossing).
+The responses Yij satisfy Pr(Yij = 1 | xij , ai ) = π(xTij β + ai ) for i = 1, . . . , R.
+Since the columns are not linked we let j = 1, . . . , Ni• The random effects are
+   iid
+ai ∼ N (0, σ 2 ). The xij are fixed either by design or by running a conditional
+analysis. We will suppose at first that σ is ‘small’.
+    If an analyst ignores the random effects and uses likelihood
+
+                                                                 YN
+                                                                 R Yi•
+
+                                                      L̃ =                  π(xT
+                                                                               ij β)
+                                                                                    Yij
+                                                                                        (1 − π(xT
+                                                                                                ij β))
+                                                                                                       1−Yij
+
+                                                                 i=1 j=1
+
+then their log likelihood function is
+                                                                   Ni•
+                                                                 R X
+                                                                 X
+                                                      `˜ =                  Yij xT                   T
+                                                                                 ij β − log(1 + exp(xij β)).
+                                                                 i=1 j=1
+
+
+                                                                                      21
+                           log10(MSE) with log10(sample size) without intercept                                 log10(MSE) with log10(sample size) only intercept
+
+
+              −1.5                                                                                −1.0
+                       ●
+                       ●
+
+                              ●                                                                            ●
+                                                                                                  −1.5
+                                                                                                           ●
+              −2.0
+                                    ●                                                                             ●
+                                    ●                                                                                    ●
+                                                                                                                                ●
+                                          ●
+
+
+              −2.5                                                                                −2.0
+                                          ●                                                                                     ●
+                                                  ●                                                                                      ●
+                                                                                                                                         ●
+                                                                                                                                                ●
+                                                  ●
+
+
+
+
+ log10(MSE)                                                                          log10(MSE)
+                                                         ●
+                                                                                                                                                ●       ●
+
+
+              −3.0
+                                                         ●       ●
+                                                                                                  −2.5                                                  ●
+
+
+                                                                 ●
+
+
+
+                                                                                                  −3.0
+              −3.5
+
+                                                                                                               Schall MSE
+                           Schall MSE                                                             −3.5     ●   GLMER MSE
+              −4.0     ●   GLMER MSE                                                                       ●   GLMER nAGQ 0 MSE
+                       ●   GLMER nAGQ 0 MSE                                                                    Logistic MSE
+                           Logistic MSE                                                                        Line with Slope = −1
+                           Line with Slope = −1                                                   −4.0         Line with Slope = −0.56
+              −4.5
+                     3.0          3.5         4.0            4.5      5.0     5.5                        3.0          3.5           4.0             4.5     5.0     5.5
+
+                                                      log10(N)                                                                               log10(N)
+
+
+
+
+Figure 3: MSE of β̂ vs N at (ρ, κ) = (0.56, 0.56) for the choice of β in b). MSE
+for glmer and backfitting seems to scale at ≈ O(1/N ) whereas logistic shows no
+improvement with increasing problem size. MSE for intercept seems to scale at
+a slower rate compared to O(1/N ).
+
+
+Their naive score function is
+                                                                        R Ni•
+                                                                 ∂ `˜ X X
+                                                                               Yij − π(xT
+                                                                                             
+                                                                     =                  ij β) xij .
+                                                                 ∂β    i=1 j=1
+
+Their MLE will be consistent if and only if the expected score (under the random
+effects model) is zero at the true β. Randomness enters that expectation via
+Yij which includes randomness from ai .
+    Now
+      ˜ X    R XNi•  Z ∞
+                             exp(−a2i /(2σ 2 ))
+                                                                             
+       ∂`
+   E       =                      √             π(xT
+                                                   ij β + ai ) dai − π(xT
+                                                                        ij β)  xij .
+       ∂β     i=1 j=1    −∞         2πσ
+
+For small σ, we anticipate that small a will dominate, so we make a Taylor
+approximation
+
+                                                                        0         1 2 00 T
+                                        π(xT                T              T
+                                           ij β + ai ) ≈ π(xij β) + ai π (xij β) + ai π (xij β)
+                                                                                  2
+and using this approximation
+                                                               ˜      R Ni•
+                                                               ∂`    σ2 X X
+                                                             E     ≈           π 00 (xT
+                                                                                      ij β)xij .                                                                          (38)
+                                                               ∂β    2 i=1 j=1
+
+    In light of equation (38), the analyst needs each variable xij` to be nearly
+orthogonal to π 00 (xT
+                     ij β) with the true unknown β. This is virtually impossible
+to arrange.
+
+
+                                                                                    22
+    In one special case we could have β equal to zero apart from a negative
+intercept component. Then π 00 (xT
+                                 ij β) is a positive constant and for any centered
+variables xij` the `’th component of (38) will vanish. Of course the intercept
+variable is all ones and cannot be centered and it will therefore have a non
+vanishing score component and hence a bias.
+
+
+6     Stitch Fix data example
+Stitch Fix is an online personal styling service. One of their business models
+involves sending customers a sample of clothing items. The customer may keep
+and purchase any of those items and return the others. They have provided
+us with some of their client ratings data. That data was anonymized, void of
+personally identifying information, and as a sample it does not reflect their total
+numbers of clients or items at the time they provided it. It is also from 2015.
+While it does not describe their current business, it is a valuable data set for
+illustrative purposes. The binary response of interest was whether the customer
+thought an item was a top rated fit. There were N = 5,000,000 ratings from
+744,482 clients on 3,547 items. We want to treat both clients and items as
+random effects. The data are not dominated by a single row or column because
+               .                                    .
+maxi Ni• /N = 1.24 × 10−5 and maxj N•j /N = 0.0276. The data are sparse
+                    .
+because N/(RC) = 0.0018.
+    One of the predictors was the primary material of which an item was made
+with 20 levels such as ‘linen’ or ‘wool’. The material is a property of the item or
+to put it another way, the item factor is nested within the levels of the material
+predictor. The other predictors for this response were ‘client dress size’, ‘client
+chest size’, ‘client fit profile’ (later abbreviated as cfp), ‘item fit profile’ (later
+abbreviated as ifp), ‘client edgy’ and ‘client boho’. For instance the fit profiles
+had these levels: ‘Fitted’, ‘Loose’, ‘Oversize’, ‘Straight’ and ‘Tight’ as well as
+‘Missing’. Some clients indicated that they like ‘edgy’ styles and some that they
+like ‘boho’ styles.
+    In a business setting one would fit and compare a wide variety of different
+binary regression models in order to understand the data. Our purpose here
+is to understand large scale generalized linear mixed effects models and so we
+choose just one model for illustration. That model has
+
+    logit(Pr(Yij = 1 | ai , bj )) = β0 + β1 client fit profilei + β2 I{client edgy}i
+                                  + β3 I{client boho}i + β4 client chest sizei
+                                  + β5 client dress sizei + β6 materialj
+                                  + β7 item fit profilej + ai + bj + eij .
+
+   The categorical variables were incorporated using a one-hot encoding with a
+binary indicator variable for each level other than the most common level. The
+model has p = 34 parameters. Our backfitting algorithm took 14 iterations to
+convergence with a tolerance of 10−8 .
+
+
+
+                                          23
+                             Naivete of Logistic by Coefficient                                Inefficiency of Logistic by Coefficient
+
+
+
+                    25
+
+                                                                                      15
+
+                    20
+
+
+
+
+        Frequency                                                         Frequency
+                    15                                                                10
+
+
+
+
+                    10
+
+                                                                                      5
+
+                    5
+
+
+
+
+                    0                                                                 0
+
+
+                         0       500               1000           1500                     2        4          6          8         10   12
+
+
+
+
+Figure 4: The left panel is a histogram of naivete of logistic regression quantified
+by cd
+    ovGLMM (β̂LR,` c)/dovLR (β̂LR,` ) for coefficients β` in the Stitch Fix data. The
+right panel is the inefficiency cd
+                                 ovGLMM (β̂LR,` c  )/dovGLMM (β̂GLMM,` ).
+
+
+    Let β̂LR and β̂GLMM be the logistic regression and GLMM estimates of β
+obtained by clubbed backfitting, respectively. We can compute their corre-
+sponding variance estimates cd   ovLR (β̂LR ) and cdovGLMM (β̂GLMM ). We can also
+find cdovGLMM (β̂LR ), the variance under our GLMM model of the β̂LR . The
+estimated coefficients β̂LR , β̂GLMM and their standard errors are presented in
+Appendix A.6.
+    We can quantify the naivete of logistic regression, coefficient by coefficient,
+via the ratio cdovGLMM (β̂LR,j c)/dovLR (β̂LR,j ). The left panel of Figure 4 plots
+these values. They range from 2.72 to 1467.05 and can be interpreted as factors
+by which logistic regression naively overestimates its sample size. The largest
+and second largest ratios are for material indicators corresponding to ‘Modal’
+and ‘Rayon’, respectively. Not only is logistic regression estimating β with
+significant bias, it greatly underestimates its sampling uncertainty. We can also
+identify the linear combination of β̂LR for which LR is most naive. We maximize
+the ratio
+                        xT cd
+                            ovGLMM (β̂LR )x/xT cd ovLR (β̂LR )x
+over x 6= 0. The resulting maximal ratio is the largest eigenvalue of
+
+                                                ovLR (β̂LR )−1 cd
+                                               cd               ovGLMM (β̂LR )
+
+and it is about 1507 for the Stitch Fix data.
+    We can also quantify the inefficiency of logistic regression, coefficient by
+coefficient, via the ratio cd
+                            ovGLMM (β̂LR,` c
+                                          )/dovGLMM (β̂GLMM,` ). The right panel
+in Figure 4 plots these values. They range from just over 1 to 11.42 and can
+be interpreted as factors by which using logistic regression reduces the effective
+sample size. The two largest inefficiencies corresponds to item material ‘Rayon’
+and ‘Modal’ respectively. The most inefficient linear combination of β̂ reaches
+a variance ratio of 15.50.
+
+
+                                                                         24
+                             Flaws of Logistic Regression by coefficient
+
+                                                                                                                  ●
+                                                                                                                      ●
+                        10                                                                                ●
+
+                                                                                                              ●
+
+
+
+
+                        5
+
+
+         Inefficiency
+                                                                                                    ●
+                                                         ●
+
+                                                                                            ●   ●
+
+
+                                                    ●●                                          ●
+
+
+                                                                                    ●   ●
+                                                                                    ●
+                                                                                    ●
+                        2                   ●
+                                             ●                                  ●
+                                             ●
+                                                                                        ●
+                                                                            ●
+                                        ●                                       ●
+                                                                  ●●
+                                       ●
+                                   ●                                    ● ●
+                               ●                                         ●
+                                            ●
+                                                                        ●
+                                                              ●
+                        1
+
+                                                5        10       20   50 100                           500
+
+                                                                       Naivete
+
+
+Figure 5: Inefficiency vs naivete for logistic regression coefficients in the Stitch
+Fix data.
+
+
+   Figure 5 plots inefficiency versus naivete for the 34 coefficients in our logistic
+regression model. The very worst coefficients by one measure tend to be worst
+by the other as well.
+
+
+7    Discussion
+The most critical inference problems are at the margins where we can just barely
+resolve real effects from noise. Ignoring a crossed random effects correlation
+structure can be very naive, underestimating the true sampling variance of a
+parameter by several hundred-fold, leading to very unreliable findings lacking
+reproducibility and even internal validity much less external validity.
+    The crossed random effects setting makes many of our standard methods
+going back to Searle et al. (2006) and Henderson (1953) computationally pro-
+hibitive. A cost that grows faster than N 3/2 is not possible for somebody with
+big data.
+    There has been recent progress in speeding up these computations includ-
+ing frequentist approaches for least squares problems with crossed effects in Gao
+
+
+
+                                                                       25
+(2017), Gao and Owen (2020), and Ghosh et al. (2021) as well as Gibbs sampling
+in Papaspiliopoulos et al. (2020). Our contribution is to extend the backfitting
+approach to logistic regression. A critical step was our clubbing of β̂ with one
+random effect at a time. This can be viewed as a frequentist counterpart to the
+collapsed Gibbs sampler in Papaspiliopoulos et al. (2020). There remains a the-
+oretical gap between what the Bayesian and frequentist algorithms accomplish
+in practice and what can be proved about them.
+    Our goal remains partly achieved. There are several places in generalized
+linear mixed effects models where usual algorithms impose a cost that is  N 3/2
+per iteration making them completely infeasible. We have removed all of those
+costs so that iterations cost O(N ) each. In our numerical examples we see a total
+cost of O(N ) so that the number of iterations has scaled as O(1). What remains
+is to find more explanations of this phenomenon and sufficient conditions to
+bound the iteration count.
+
+
+Acknowledgment
+We thank Stitch Fix for sharing some data with us and are especially grateful
+to Bradley Klingenberg and Sven Schmit. This work was supported in part by
+a National Science Foundation BIGDATA grant IIS-1837931.
+
+
+References
+Baayen, R. H., D. J. Davidson, and D. M. Bates (2008). Mixed-effects modeling
+  with crossed random effects for subjects and items. Journal of memory and
+  language 59 (4), 390–412.
+
+Bates, D., M. Mächler, B. Bolker, and S. Walker (2015). Fitting linear mixed-
+  effects models using lme4. Journal of Statistical Software 67 (1), 1–48.
+Bolker, B. M., M. E. Brooks, C. J. Clark, S. W. Geange, J. R. Poulsen, M. H.
+  Stevens, and J. S. White (2009). Generalized linear mixed models: a practical
+  guide for ecology and evolution. Trends in Ecology & Evolution 24 (3), 127–
+  135.
+Breslow, N. E. and D. G. Clayton (1993). Approximate inference in generalized
+  linear models. Journal of the American Statistical Association 88 (421), 9–25.
+Buja, A., T. Hastie, and R. Tibshirani (1989). Linear smoothers and additive
+  models (with discussion). The Annals of Statistics 17 (2), 453–510.
+Dick, J., F. Y. Kuo, and I. H. Sloan (2013). High-dimensional integration: the
+  quasi-Monte Carlo way. Acta Numerica 22, 133–288.
+Gao, K. (2017). Scalable Estimation and Inference for Massive Linear Mixed
+ Models with Crossed Random Effects. Ph. D. thesis, Stanford University.
+
+
+                                       26
+Gao, K. and A. B. Owen (2017). Efficient moment calculations for variance
+ components in large unbalanced crossed random effects designs. Electronic
+ Journal of Statistics 11 (1), 1235–1296.
+Gao, K. and A. B. Owen (2020). Estimation and inference for very large linear
+ mixed effects models. Statistica Sinica 30, 1741––1771.
+Ghosh, S., T. Hastie, and A. B. Owen (2021). Backfitting for large scale crossed
+ random effects regressions. The Annals of Statistics. To appear.
+Ghosh, S. and C. Zhong (2021). Convergence rate of a collapsed gibbs sampler
+ for crossed random effects models. Technical report, arxiv:2109.02849.
+Green, P. (1987). Penalized likelihood for general semi-parametric regression
+  models. International Statistical Review 55 (3), 245–259.
+Henderson, C. R. (1953). Estimation of variance and covariance components.
+  Biometrics 9 (2), 226–252.
+Kuo, F. Y., W. T. M. Dunsmuir, I. H. Sloan, M. P. Wand, and R. S. Womersley
+ (2008). Quasi-Monte Carlo for highly structured generalised response models.
+ Methodology and Computing in Applied Probability 10 (2), 239–275.
+Laird, N. M. (1978, December). Empirical bayes methods for two-way contin-
+  gency tables. Biometrika 65 (3), 581–590.
+Leonard, T. (1975). Bayesian estimation methods for two-way contingency ta-
+  bles. Journal of the Royal Statistical Society, Series B, Methodological 37,
+  23–37.
+McCulloch, C. E. and J. M. Neuhaus (2011). Prediction of random effects in
+ linear and generalized linear models under model misspecification. Biomet-
+ rics 67 (1), 270–279.
+Niederreiter, H. (1992). Random Number Generation and Quasi-Monte Carlo
+  Methods. Philadelphia, PA: SIAM.
+Papaspiliopoulos, O., G. O. Roberts, and G. Zanella (2020). Scalable inference
+  for crossed random effects models. Biometrika 107 (1), 25–40.
+Schall, R. (1991). Estimation in generalized linear models with random effects.
+  Biometrika 78 (4), 719–727.
+Searle, S. R., G. Casella, and C. E. McCulloch (2006). Variance components.
+  John Wiley & Sons.
+Stiratelli, R., N. Laird, and J. H. Ware (1984). Random-effects models for serial
+  observations with binary response. Biometrics 40, 961–971.
+Varin, C., N. Reid, and D. Firth (2011). An overview of composite likelihood
+  methods. Statistica Sinica 21, 5–42.
+
+
+                                       27
+A      Some proofs
+A.1     Proof of Lemma 1
+The first derivative of T −1 with respect to η is
+                                                                                       
+    d                                                     d                   0       B
+       T (η)−1 = −T (η)−1 T 0 (η)T (η)−1                0
+                                              for T (η) =    T (η) =                      .
+    dη                                                    dη                 BT       0
+
+Higher order derivatives of T (η)−1 simplify greatly because T 00 (η) = 0. For
+integers k ⩾ 1 we find by induction that
+
+      dk                                     k
+           T (η)−1 = (−1)k k! T (η)−1 T 0 (η) T (η)−1
+      dη k
+                                                                k
+                   = (−1)k k!T (η)−1/2 T (η)−1/2 T 0 (η)T (η)−1/2 T (η)−1/2 .
+
+Next, for B∗ = A−1/2 BC −1/2 , we find that
+                                                                  
+                                                      0      −B∗
+                     T (0)−1/2 T 0 (0)T (0)−1/2 =
+                                                     −B∗T     0
+
+and then taking a Taylor series around η = 0 we have
+
+                                             X                    k
+              −1           −1         −1/2           0      −ηB∗
+         T (η)     = T (0)      + T (0)                                 T (0)−1/2 .       (39)
+                                                   −ηB∗T     0
+                                             k⩾1
+
+This Taylor series converges for |η| < 1/ρ.
+   Therefore, for 0 ⩽ η < 1/ρ,
+
+             tr(T (η)−1 ) = tr(T (0)−1 ) + tr T (0)−1/2 E(η)T (0)−1/2
+                                                                             
+
+                          = tr T (0)−1 (I + E(η) , for
+                                                  
+
+                            X 0                  k
+                                           −ηB∗
+                    E(η) =                           .
+                                  −ηB∗T       0
+                                k⩾1
+
+Recalling that T (0) is diagonal, the k = 1 term does not contribute to the trace
+of the inverse. That is also true for any every odd integer k ⩾ 1. It follows that
+
+      tr(T (η)−1 ) = tr T (0)−1 (I + E2 (η) , for
+                                           
+                                          2k X  2                       k
+                     X 0           −ηB∗             η B∗ B∗T       0
+            E2 (η) =                          =                              .
+                           −ηB∗T      0                 0      η 2 B∗T B∗
+                     k⩾1                            k⩾1
+
+
+Now we can write the difference tr(T (η)−1 ) − tr(T (0)−1 ) as
+              X                                               
+                  η 2k tr A−1 (B∗ B∗T )k + tr C −1 (B∗T B∗ )k .
+                                        
+
+                   k⩾1
+
+
+                                             28
+A.2      Proof of Lemma 2
+First ρ2 is no larger than the spectral radius of
+                                 2 
+                                         B∗ B∗T
+                                                        
+                          0 B∗                      0
+                                     =                     .
+                          B∗ 0             0      B∗T B∗
+
+The eigenvalues of this matrix are the same as those of B∗T B∗ and of
+
+                               B∗ B∗T = A−1/2 BC −1 B T A−1/2
+
+which has by similarity, the same eigenvalues as BC −1 B T A−1 .
+    Now BC −1 is a nonnegative matrix and so its largest eigenvalue isPa real num-
+ber no larger than its largest row sum, which in this case is maxi j Bij /Cjj .
+Applying the same to B T A−1 gives us a bound on ρ2 that is the square of the
+claimed bound for ρ.
+
+A.3      Proof of Theorem 1
+The is element of B∗ B∗T is
+                      X          Zij Wij                  Zsj Wsj
+      (B∗ B∗T )is =       q          q            q           q            .
+                                  −2           −2          −2           −2
+                      j    Wi• + σA    W•j + σ B    Ws• + σA    W•j + σ B
+
+Therefore the i’th diagonal element of B∗ B∗T is
+                          X              Zij Wij2              1 X Zij Wij2
+          (B∗ B∗T )ii =                −2          −2     ⩽                 .
+                           j
+                               (Wi• + σA  )(W•j + σB  )       W i• j W•j
+
+With probability tending to 1
+                                   1 X Zij                                X
+        (B∗ B∗T )ii ⩽ S 2ψ ω̄ 2             ⩽ S 2ψ ω̄ 2 (1 − )−2 S ρ+κ−2   Zij
+                                  Ni• j N•j                               j
+
+by equations (7) and (8). Now j Zij = Ni• ⩽ (Υ + )S 1−ρ by equation (7).
+                               P
+Therefore with probability approaching one,
+
+                tr(B∗ B∗T ) ⩽ ω̄ 2 (1 − )−2 (Υ + )S 2ψ+ρ+κ−1 = o(R)
+
+because R = S ρ and κ < 1 and we can choose any ψ > 0. Now none of the
+eigenvalues of B∗ B∗T can be negative. If there are Rα = S αρ eigenvalues larger
+than δ then
+                               tr(B∗ B∗T ) > δS αρ .
+That cannot hold for large S if
+                                              2ψ + κ − 1
+                               α>α≡1+                    <1
+                                                  ρ
+for small enough ψ. Therefore any α ∈ (α, 1) satisfies the condition in (33).
+
+
+                                              29
+A.4     Proof of Theorem 2
+Let B∗ B∗T have eigenvalues λ1 ⩾ λ2 ⩾ · · · ⩾ λR ⩾ 0 with corresponding unit
+norm eigenvectors vi . Then
+                          R
+                          XX              R
+                                        XX
+             Err = tr A−1    λki vi viT =   λki tr(viT A−1 vi ).
+                            k⩾1 i=1                  k⩾1 i=1
+
+Now with probability tending to 1 as S → ∞,
+                                                 −2 −1
+      tr(viT A−1 vi ) ⩽ λmax (A−1 ) = max(Ws• + σA ) ⩽ S ψ (1 − )−1 S ρ−1
+                                        s
+
+because Ws• ⩾ S −ψ mini Ni• ⩾ S −ψ (1 − )S 1−ρ with overwhelming probability.
+Therefore with probability tending to 1 as S → ∞
+                                                       R
+                                   ψ+ρ−1          −1
+                                                       X     λi
+                         Err ⩽ S           (1 − )                .
+                                                       i=1
+                                                           1 − λi
+
+Now choose the α < 1 provided by Theorem 1 and suppose that for δ > 0
+that fewer than Rα of the λi are larger than δ. Under this event which has
+probability tending to one,
+                                            δλ1 Rα
+                                                        
+                                                      R
+                  Err ⩽ S ψ+ρ−1 (1 − )−1          +      .
+                                            1 − λ1   1−δ
+
+The second term above is O(S ψ+ρ−1 R) = o(R) because ρ < 1 and we can choose
+any ψ > 0.
+   To control the first term, we use Proposition 1 to bound 1/(1 − λ1 ). The
+bound there takes the form λ1 ⩽ (1 + a)−1 (1 + b)−1 for a = S ρ−1 /[(Υ + )ω̄σA
+                                                                              2
+                                                                                ]
+          κ−1             2
+and b = S     /[(Υ + )ω̄σB ]. Therefore
+                      1             1           1 1
+                              ⩽            ⩽ min ,
+                 (1/λ1 − 1)     a + b + ab       a b
+                               = min(S 1−ρ σA
+                                            2
+                                              , S 1−κ σB
+                                                       2
+                                                         )ω̄(Υ + ).
+
+It now follows that the first term in Err is O(S ψ Rα ) = o(R) because α < 1 and
+we can choose any ψ > 0.
+
+A.5     Proof of Lemma 4
+Our iterative algorithm is designed to minimize
+                  X
+    pl(β, a, b) =         cij (zij − xT β − ai − bj )2 + σ̂ −2 kak2 + σ̂ −2 kbk2 ,
+                      Zij W           ij                   A            B
+                    ij
+
+          cij > 0, min(σ̂ −2 , σ̂ −2 ) > 0, the matrix X with rows xT has full
+where all W                A     B                                   ij
+rank, and zij are fixed numbers. This quadratic function has a positive definite
+Hessian and a unique global minimum (β∗ , a∗ , b∗ ).
+
+
+                                             30
+    We introduce pl(β, a; b) which for any b ∈ RC gives us a function of β ∈ Rp
+and a ∈ RC . Similarly, we introduce pl(β, b; a) where this time a is the param-
+eter while β and b are the function’s arguments. Given β (k) , a(k) and b(k) we
+                                                    1
+minimize pl(β, a; b(k) ) over β and a to get β (k+ 2 ) and a(k+1) . Then we mini-
+mize pl(β, b; a(k+1) ) over β and b to get β (k+1) and b(k+1) . Both minimizations
+choose arguments that make their respective gradients equal to zero. Therefore
+                                          1
+        pl(β (k) , a(k) ; b(k) ) − pl(β (k+ 2 ) , a(k+1) ; b(k) )
+                                1 T                               (k)       1 
+           1 β (k) − β (k+ 2 )              (k+ 21 )   (k+1) (k)    β − β (k+ 2 )
+         =                            H(β            ,a       ;b )
+           2 a(k) − a(k+1)                                          a(k) − a(k+1)
+
+using H to denote the Hessian of the parameterized function. Considering both
+steps at once we get
+
+∆(k+1) ≡ pl(β (k) , a(k) , b(k) ) − pl(β (k+1) , a(k+1) , b(k+1) )
+                             1 T                                   (k)          1 
+         1 β (k) − β (k+ 2 )              (k+ 21 )     (k+1) (k)     β − β (k+ 2 )
+       =                            H(β            , a      ; b   )
+         2 a(k) − a(k+1)                                             a(k) − a(k+1)
+                    1              T                                     (k+ 1 )
+         1 β (k+ 2 ) − β (k+1)                                                 2 − β (k+1)
+                                                                                          
+                                            (k+1) (k+1)          (k+1)    β
+       +                               H(β           , b      ; a      )                     .
+         2     b(k) − b(k+1)                                                b(k) − b(k+1)
+
+   Now ∆(k+1) ⩾ 0 and
+               ∞
+               X
+                     ∆(k+1) ⩽ pl(β (0) , a(0) , b(0) ) − pl(β∗ , a∗ , b∗ ) < ∞
+               k=0
+
+and so this sum converges. Noting that H(β, a; b) and H(β, b; a) are indepen-
+dent of (β, a, b) and strictly positive definite, we conclude that (β (k) , a(k) , b(k) )
+converges. At the limit point, the gradients of both pl(β, a; b) and pl(β, b; a)
+must vanish and so therefore the gradient of pl(β, a, b) also vanishes there.
+
+A.6     Results of the binary regression in Section 6
+Table 1 shows coefficient estimates and standard errors for plain logistic re-
+gression and a generalized linear mixed model logistic regression for the Stitch
+Fix data in Section 6. Logistic is estimated to be naive when SE  c LR (β̂LR ) <
+SEGLMM (β̂LR ) and inefficient when c
+c                                    SEGLMM (β̂LR ) > c SEGLMM (β̂GLMM ). Es-
+timates that are more than double their corresponding standard error get an
+asterisk.
+                                           2                          2
+    For the Stitch Fix data we obtained σ̂A  = 0.68 (customers), σ̂B     = 0.21
+(items).
+
+
+
+
+                                              31
+                Table 1: Stitch Fix Binary Regression Results
+
+                                 β̂Logistic c
+                                            SELogistic (β̂Logistic ) c
+                                                                     SEGLMM (β̂Logistic ) β̂GLMM   SEGLMM (β̂GLMM )
+                                                                                                   c
+Intercept                         0.677∗         0.022                 0.048            0.584∗        0.036
+I{client fit profile missing}     0.099∗         0.015                 0.025            0.127∗        0.023
+I{client fit profile loose}       0.0155∗        0.002                 0.006            0.208∗        0.004
+I{client fit profile oversize}   −0.0940∗        0.010                 0.019           −0.0477∗       0.015
+I{client fit profile straight}    0.125∗         0.003                 0.005            0.154∗        0.004
+I{client fit profile tight}      −0.229∗         0.011                 0.1297          −0.250∗        0.009
+I{client edgy}                   −0.042∗         0.002                 0.005           −0.044∗        0.003
+I{client boho}                    0.147∗         0.002                 0.006            0.194∗        0.003
+I{client chest size}             −0.008∗         0.0006                0.001           −0.011∗        0.001
+I{client dress size}             −0.002∗         0.0003                0.0007          −0.0002        0.0005
+I{item fit profile missing}      −0.281∗         0.024                 0.188           −0.079         0.151
+I{item fit profile fitted}        0.061∗         0.004                 0.089            0.277∗        0.029
+I{item fit profile loose}         0.209∗         0.003                 0.082            0.038         0.029
+I{item fit profile oversize}     −0.066∗         0.016                 0.135           −0.020         0.111
+I{item fit profile tight}         0.186          0.0098                0.431            0.251         0.359
+I{material missing}              −0.203∗         0.022                 0.190           −0.227         0.135
+Acrylic                          −0.187∗         0.005                 0.060           −0.206∗        0.031
+Angora                           −0.305∗         0.024                 0.222           −0.279         0.151
+Cashmere                          0.367∗         0.057                 0.462           −0.744         0.399
+Cotton                           −0.246∗         0.004                 0.060           −0.245∗        0.028
+Faux Fur                          0.321          0.250                 0.516            0.547         0.479
+Fur                              −0.459∗         0.128                 0.489           −0.619         0.480
+Linen                            −0.494∗         0.025                 0.182           −0.374∗        0.163
+Modal                             0.035∗         0.007                 0.262           −0.057         0.080
+Nylon                             0.096∗         0.013                 0.188            0.070         0.108
+Patent Leather                   −0.789∗         0.110                 0.454           −0.531         0.379
+Pleather                         −0.215∗         0.020                 0.194           −0.121         0.130
+PU                                0.390∗         0.042                 0.0462           0.509         0.0351
+Rayon                            −0.033∗         0.002                 0.068           −0.013         0.020
+Silk                             −0.041∗         0.009                 0.133            0.053         0.068
+Spandex                           0.025          0.050                 0.355            0.210         0.335
+Tencel                           −0.107∗         0.025                 0.181           −0.041         0.158
+Viscose                          −0.081∗         0.008                 0.086           −0.084         0.054
+Wool                             −0.217∗         0.024                 0.235           −0.194         0.150
+
+
+
+
+                                          32
+

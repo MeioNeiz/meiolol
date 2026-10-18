@@ -1,0 +1,2916 @@
+Purifying Interaction Effects with the Functional ANOVA:
+An Efficient Algorithm for Recovering Identifiable Additive Models
+Benjamin Lengerich∗1,2 , Sarah Tan3 , Chun-Hao Chang2,4 , Giles Hooker3 , and Rich Caruana†2
+
+arXiv:1911.04974v3 [stat.ML] 1 May 2020
+
+1
+
+Carnegie Mellon University
+2
+Microsoft Research
+3
+Cornell University
+4
+University of Toronto
+May 5, 2020
+
+Abstract
+Models which estimate main effects of individual variables alongside interaction effects have an identifiability
+challenge: effects can be freely moved between main effects and interaction effects without changing the model
+prediction. This is a critical problem for interpretability because it permits “contradictory" models to represent the
+same function. To solve this problem, we propose pure interaction effects: variance in the outcome which cannot
+be represented by any smaller subset of features. This definition has an equivalence with the Functional ANOVA
+decomposition. To compute this decomposition, we present a fast, exact algorithm that transforms any piecewiseconstant function (such as a tree-based model) into a purified, canonical representation. We apply this algorithm
+to Generalized Additive Models with interactions trained on several datasets and show large disparity, including
+contradictions, between the effects before and after purification. These results underscore the need to specify data
+distributions and ensure identifiability before interpreting model parameters.
+
+1
+
+Motivation
+
+An important question in data analysis is whether two variables act in concert to affect an outcome. This question is
+often approached by estimating an additive model with interactions of the form:
+Y ≈ f0 + f1 (X1 ) + f2 (X2 ) + f3 (X1 , X2 )
+
+(1)
+
+and then examining f1 , f2 , f3 [17, 30]. But this unconstrained additive model has fundamental flaws. We examine two
+common forms of this model and show that both have problems of identifiability and interpretability.
+
+1.1
+
+Interactions between Boolean Variables
+
+First, let us consider the simple case of Boolean variables X1 and X2 that take on values {0, 1}. As depicted in Fig. 1,
+we can represent the additive model with interaction by 3 tables and an intercept. The tables represent the main effect
+of X1 , the main effect of X2 , and the effect of the interaction between X1 and X2 . As shown in Fig. 1, we can realize
+different bitwise operations between X1 and X2 through different values in the interaction table.
+Naïvely, we may believe that the bitwise operations AN D (Fig. 1a) and OR (Fig. 1b) represent distinct forms
+of interaction effect. However, we can equivalently write the AN D operation as X1 ∧ X2 = −0.25(X1 ⊕ X2 ) +
+∗ blengeri@cs.cmu.edu
+† rcaruana@microsoft.com
+
+1
+
+f0
+
+f1
+
+f2
+
+1 +0.25
+
+(a)
+
+0.25
+
+X1
+
+f3
+
+1 +0.25
+
+0 -0.25
+
+1
+
+0
+
+-1
+
+0
+
+0
+
+0
+
+X1
+
+X2
+0 -0.25
+
+0
+
+1 -0.25
+
+(b)
+
+−0.75 X1
+
+1 -0.25
+
+1
+
++1
+
++1
+
+0 +0.25
+
+0
+
+0
+
++1
+
+0
+
+1
+
+(c)
+
+0
+
+−0.25 X1
+
+1
+
+0
+
+0
+
+1
+
+0
+
+(d)
+
+0
+
+0
+
+0
+
+1
+
++0.5
+
+0
+
+0
+
+0
+
++0.5
+
+0
+
+X2
+
+1
+
+1 +0.25 -0.25
+
+0
+X1
+
+X2
+0
+
+1
+
+1
+
+0
+
+X1
+
+X2
+
+X1
+
+X2
+0
+
+1
+
+X1
+
+X2
+0 +0.25
+
+X2
+
+0
+
+0
+
+0 -0.25 +0.25
+0
+
+X2
+
+1
+
+Figure 1: Four realizations of Eq. (1) on Boolean variables X1 and X2 . In each row, we have an overall intercept f0 ,
+main effects f1 and f2 , and an interaction effect f3 . Red indicates a positive and blue a negative effect. While the four
+models appear to be different and to yield contradictory interpretations, all four models represent the same function
+and produce identical outputs. The fourth model (d) is the purified canonical form returned by our algorithm.
+0.5(X1 − 0.5) + 0.5(X2 − 0.5) + 0.251 . Similarly, we can write the OR operation as X1 ∨ X2 = 0.25(X1 ⊕ X2 ) +
+0.5(X1 − 0.5) + 0.5(X2 − 0.5) + 0.75. These equivalences make it clear that the interaction effect of AN D is identical
+to the interaction effect of OR, and both interactions are actually XOR modified with main effects. Thus, the four
+additive models depicted in Fig. 1 are identical in their outputs, but generate contradictory interpretations. Since the
+main reason for using additive models is to understand the impact of variables and their interactions on the outcome
+[18], this representational degeneracy is problematic.
+In this paper, we define interaction effects as variance which cannot be explained by main effects. Because both
+AN D and OR are the XOR modified with main effects, our definition implies that additive models with interaction
+effects can always be purified to a weighted XOR interaction. This preference has connections to the effect coding
+representation of inputs [1], discussed in Section 4.1.
+
+1.2
+
+Multiplicative Model
+
+Now let us consider the case where X1 and X2 are continuous. A common interaction model in statistics [17] is the
+linear model augmented with multiplicative features:
+Y ≈ a + bX1 + cX2 + dX1 X2 .
+1 ⊕ represents the centered XOR depicted in Fig. 1d.
+
+2
+
+(2)
+
+2.00
+
+1.50
+
+80
+= 1.0
+= 0.5
+= 0.0
+= 0.5
+= 1.0
+
+70
+60
+50
+
+Main Effect Strength
+
+1.75
+
+90
+
+% Variance Interaction
+
+100
+
+= 0, = 0
+= 1, = X1, X2
+= 1, = X1, X2
+= | X1, X2|, = | X1, X2|
+= | X1, X2|, = | X1, X2|
+
+1.25
+1.00
+0.75
+0.50
+
+40
+
+0.25
+
+30
+
+0.00
+
+20
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+0.25
+
+0.50
+
+0.75
+
+1.00 0.75 0.50 0.250.00 0.25 0.50 0.75 1.00
+
+1.00
+
+X1 , X2
+
+(b) Strength of the main effect of X1 implied by the coefficients of the multiplication model (3) for various settings of α, β. For X1 , X2 with E[X1 ] = E[X2 ] = 0,
+setting α = β = 0 mean-centers the main effects, but only
+mean-centers the interaction effect if X1 and X2 are uncorrelated. In contrast, the four settings with αβ = −ρX1 ,X2
+also mean-center (X1 − α)(X2 − β). Strength of the main
+effect of X1 is measured as b + dβ. In all cases, a = 0 and
+b = c = d = 1.
+
+(a) Strength of the interaction effect implied by different
+parameter choices for model (3). The vertical axis is the
+proportion of variance explained by the interaction effect
+for IID X1 , X2 ∼ N (0, 1). In all cases, a = 0 and
+b = c = d = 1, but choice of α and β values changes the
+model’s interpretation. In an extreme case, α = β = −1
+makes the main effects disappear entirely. Recall that all of
+these represent the same function and make the same predictions, only the interpretations vary from form to form.
+
+Figure 2: Interpretations of the multiplicative model (3) change for different settings of α and β.
+While this model is identifiable, the coefficients, unfortunately, are not necessarily meaningful. For any α, β, the
+following model is equivalent to (2):
+Y ≈ (a − dαβ) + (b + dβ)X1 + (c + dα)X2
++ (d)(X1 − α)(X2 − β),
+
+(3)
+
+The algebraic form of (2) and its identifiability are a consequence of choosing α = β = 0 in (3); however for any α
+and β, forms (2) and (3) make the same predictions. As shown in Fig. 2a, changing the values of α and β changes the
+interpretations of a, b, c, d.
+This challenge of selecting α, β is not overcome by simply mean-centering all of the effects. We can center X1 , X2
+such that E[X1 ] = 0, E[X2 ] = 0, which results in E[(X1 − α)(X2 − β)] = ρX1 ,X2 + αβ. Thus, if we would want
+the intercept a to represent E[Y ], we must select α, β such that αβ = −ρX1 ,X2 . This selection process has a degree
+of freedom. As shown in Fig. 2b, different choices of α, β lead to very different conclusions about the strengths of the
+main effects. Thus, we need rules governing the selection of values for α, β. In this paper, we propose to follow the
+functional ANOVA decomposition, which implicitly sets α, β such that the variance of interaction terms is minimized.
+
+1.3
+
+Contributions
+
+In this paper, our major contributions are threefold:
+• We study the problem of non-identifiability of additive models with interactions, and show that the functional
+ANOVA decomposition repairs this flaw. We argue that the functional ANOVA decomposition should be preferred to other representations of interaction.
+• We propose a fast, exact algorithm to recover the functional ANOVA decomposition from piece-wise constant
+functions such as tree-based models.
+• We show that naïve inspection of popular models for training GAMs with interactions can produce contradictory
+conclusions on real datasets. These contradictions are corrected by our purification algorithm.
+3
+
+2
+
+Related Work
+
+Generalized additive models (GAMs) have long been used to model individual features flexibly [17], using functional
+forms such as splines, trees, wavelets, etc. [13, 26, 43]. GAMs are claimed to be interpretable [3, 17] and have been
+leveraged for interpretability tasks, such as identifying unexpected relationships between features and predictions.
+For example, using GAMs, [3] found an unexpected relationship between having asthma and decreased likelihood of
+pneumonia mortality in a medical records dataset.
+While vanilla GAMs describe nonlinear relationships between each feature and the label, interactions are sometimes added to further capture relationships between multiple features and the label [6, 27]. However, the resulting
+models are overparametrized if the parameters are not regularized or constrained [8, 15, 28, 35, 41] – the interactions
+can hence be non-identifiable and non-unique. The interpretability of GAMs may be misleading if the relationship
+between a feature and the prediction changes after adding an interaction with that feature to the model. To address this,
+constraints such as the “sum-to-zero” restriction [17] – where parameters are constrained to sum to zero – or effect
+coding [1] – a certain type of one-hot-encoding with fewer degrees of freedom – have been proposed.
+The functional ANOVA decomposition, which we study in this paper, also addresses this issue using “integrate-tozero” restrictions [21]. Interestingly, the functional ANOVA has also been used to isolate effects of individual features
+in settings where many features are changing at a time, such as in hyperparameter tuning [23]. However the connection
+between the functional ANOVA and isolating effects of individual features in interactions has not been studied.
+Our definition of interactions as variance which cannot be explained by main effects is similar to [45]’s “reluctance”
+principle: that a main effect should be preferred over an interaction if both have similar prediction performance. Our
+definition of interactions is also related to Sobol indices [36], that measure how important a feature or interaction is in
+terms of the amount of prediction variance explained.
+Due to the computational cost of finding interactions, the search space of possible interactions is typically restricted. For example, the popular hierarchy restriction [2] only considers a potential interaction if its component
+features are already present in the model as main effects. We briefly mention a few interaction detection methods, and
+refer the reader to a recent review by [2] for more. They can be roughly divided into two types: hypothesis-testing for
+interactions [38], or model-based methods [33, 42], including methods that use tree-based models to detect interactions
+[12, 37].
+Instead of restricting the model class for estimation, our proposed method of purifying interactions is designed
+to be applied post-hoc after estimation. Other post-hoc optimizers include decision tree pruning [29], which aims to
+remove spurious interactions, and local models to approximate large models [25, 34].
+In this paper we focus on tree-based models. In contrast to other recent works on generating post-hoc explanations
+from tree-based models, such as feature importance, rules, etc. [9, 10, 16], in this work we focus on defining what
+purified interactions for tree-based models look like.
+
+3
+
+Functional ANOVA
+
+The Functional ANOVA (fANOVA) [7, 19, 21, 22, 39] seeks to decompose a function F (X) into:
+F (X) = f0 +
+
+d
+X
+
+fi (Xi ) +
+
+i=1
+
+X
+
+fij (Xi , Xj ) + . . . ,
+
+(4)
+
+i6=j
+
+where X = (X1 , . . . , Xd ). By the uniqueness of fANOVA under non-degenerate feature distributions [4], this set of
+functions uniquely defines an orthogonal decomposition of F with minimum variance in higher-order functions. From
+this decomposition, we can uniquely define interaction effects.
+
+4
+
+3.1
+
+fANOVA for Continuous Functions
+
+Given a density w(X) and F u ⊂ L2 (Ru ) the family of allowable functions for variable set u, the weighted fANOVA
+[20, 21] seeks:
+Z  X
+2
+{fu (Xu )|u ⊆ [d]} = argmin
+gu (Xu ) − F (X) w(X)dX,
+(5a)
+{gu ∈F u }u∈[d]
+
+u⊆[d]
+
+where [d] indicates the power set of d features, such that
+Z
+∀ v ⊆ u,
+fu (Xu )gv (Xv )w(X)dX = 0
+
+∀ gv ,
+
+(5b)
+
+i.e., each member fu is orthogonal to the members which operate on a subset of the variables in u. By Lemma 4.1 of
+[21], these orthogonality conditions are equivalent to the integral conditions
+Z
+∀ u ⊆ [d], ∀ i ∈ u,
+fu (Xu )w(X)dXi dX−u = 0.
+(5c)
+where the subscript −u indicates the set of variables not in u. Thus, we seek a set of functions fu which jointly satisfy
+(5c) with respect to a density w.
+
+3.2
+
+fANOVA of Piecewise-Constant Functions
+
+For F which is piecewise-constant, we have a set of bins Ωj for feature j. Let us assume that each Ωj is finite and
+each bin is summarized by a single value, e.g. Ωj = {xj,1 , . . . , xj,nj }. Then, the conditions (5c) become:
+X
+
+∀ u ⊆ [d],∀ i ∈ u, ∀ Xu\i ,
+
+fu (Xu\i , Xi = xi )
+
+xi ∈Ωi
+
+X
+
+w(X) = 0.
+
+(6a)
+
+X−u
+
+That is, if we represent each fu as a tensor of effect sizes, the fANOVA is recovered when every slice has mean zero
+with respect to a density w.
+
+4
+
+Pure Interaction Effects
+
+We define pure interaction effect as variance in the outcome which cannot be described by fewer variables:
+Definition 1. Pure interaction effects of X on Y are:
+{fu (Xu )|u ⊆ [d]} =
+
+argmin
+
+Z  X
+
+{gu ∈F u }u∈[d]
+
+2
+gu (Xu ) − E[Y |X] p(X)dX,
+
+u⊆[d]
+
+such that ∀ u ∈ [d], E[fu (Xu )|Xv ] = 0 ∀ v ⊂ u.
+This is equivalent to the fANOVA decomposition of E[Y |X] = F (X) under w(X) = p(X).
+
+4.1
+
+A Connection to Effect Coding
+
+In the context of discrete features (e.g., Fig. 1), fANOVA is equivalent to effect coding [1]. This unfolds the feature
+values into indicators, referred to as dummy variables or one-hot encoding. In linear regression with X1 taking values
+in {0, 1} this translates to
+Y = β0 + β1 I(X1 = 0) + β2 I(X1 = 1) + .
+
+5
+
+(8)
+
+For identifiability, we must drop a parameter. One common strategy is to remove the indicator for a “reference” value
+(e.g., setting β1 = 0), in which case β0 becomes the predictor for examples with the reference value. An alternative
+“effect” coding seeks to ensure that β0 represents the average outcome by:
+Y = β0 + β1 I(X1 = 1) − β1 I(X1 = 0) + .
+
+(9)
+
+For Boolean X1 , doing this translates to representing X1 as a single column taking values in {−1, 1}. For X1 with
+values {v1 , . . . , vk }, the effects are given by k − 1 columns with the jth having values I(X1 = vj+1 ) − I(X1 = v1 ).
+When interactions are employed between discrete features, the interaction is then represented by the elementwise
+product of each pair of columns in the individual effects. For two Boolean features this exactly produces the XOR
+representation of Fig. 1d. More generally, the use of effect coding exactly corresponds to the fANOVA representation
+under a uniform weight function.
+A natural question is how to extend effect coding to continuous features. In this paper, we propose to recover
+the fANOVA by purifying tree-based models. This exploits the power of tree-based models to partition continuous
+variables into discrete bins, providing a data-driven method of extending effect coding to continuous variables.
+
+5
+
+Calculating fANOVA of Tree-Based Models
+
+For tree-based models, we have a tensor Tu representing the effect sizes of each set of variables u. According to (6a),
+if these tensors can be “purified" such that each 1-dimensional slice has mean zero, we recover exactly the fANOVA
+decomposition. Let
+X
+X
+m(Tu , i, Xu\i ) =
+fu (Xu\i , xi )
+w(X)
+(10)
+xi ∈Ωi
+
+X−u
+
+be the weighted mean of the slice of Tu representing effect sizes for different values of Xi when Xu\i = xu\i .
+For any (u, i), we also have a corresponding Tu\i (letting T∅ be the tensor representing the overall model intercept).
+Because the model predictions are generated by summing the effects across all T , we can move any value from Tu
+into Tu\i without changing the model predictions. In particular, we can move m(Tu , i, xu\i ) into Tu\i to generate
+a 1-dimensional slice of Tu with mean zero without adjusting the output of the overall model. We refer to this as
+“mass-moving" between Tu and Tu\i .
+Algorithm 1 Purify-Matrix
+Require: T, w, u, Ω
+. Will purify Tu so that every slice has zero-mean according to weighting w
+1: end ← False
+2: while pure 6= True do
+3:
+pure ← True
+4:
+for i ∈ u do
+5:
+for xu\i ∈ Ωu\i do
+6:
+m0 ← m(Tu , i, xu\i )
+. Calculate according to Eq. (10)
+7:
+if m0 6= 0 then
+. There is still mass to move.
+8:
+pure ← False
+9:
+Tu [xu\i , :] ← Tu [xu\i , :] − m0
+10:
+Tu\i [xu\i ] ← Tu\i [xu\i ] + m0
+11:
+end if
+12:
+end for
+13:
+end for
+14: end while
+15: return T
+This suggests an algorithm for calculating the fANOVA for tree-based models. By iteratively removing the means
+of slices of Tu , we can generate a Tu which satisfies (6a) without changing the model’s outputs. We can iteratively
+purify all Tu ∈ T by this procedure, cascading effects from high-order interactions into low-order interactions, from
+6
+
+Algorithm 2 Purify
+Require: T, w, Ω
+1: order ←sort_descending([|T |])
+2: for u ∈ order do
+3:
+T ←Purify-Matrix(T, w, u, Ω)
+4: end for
+5: return T
+
+. T is the set of tensors, Ω is the values, w is the weighting
+. Arrange all potential sets u in order of decreasing size
+
+low-order interactions into main effects, and finally from main effects into the global intercept. We call this algorithm
+“mass-moving" (Alg. 2) because it iteratively moves mass from higher-order interactions to lower-order interactions
+until no mass remains to be moved. At convergence, it exactly recovers the fANOVA decomposition. This algorithm
+can be implemented in under 100 lines of Python. An implementation is available at https://github.com/
+microsoft/interpret.
+In contrast to other algorithms for calculating the fANOVA which rely on optimization of orthogonal basis functions [e.g. 4, 21], our algorithm uses the tree structure to recover the exact decomposition. This avoids challenges of
+optimizing functions on correlated variables. While this paper is focused on the implications of the decomposition,
+and thus we study the results of decomposing tree-based models, in principle we could apply this algorithm to any F
+by first estimating a piecewise-constant F̂ (e.g. with an adaptive tree-based model).
+
+5.1
+
+Convergence and Correctness
+
+By the uniqueness of the fANOVA, Alg. 2 is correct if and only if it converges to produce tensors with zero-mean
+slices. Since Alg. 2 operates on the tensors in order of decreasing dimension, it suffices to check that Alg. 1 converges
+to produce a tensor with zero-mean slices for any input. To see that this is indeed the case, let us examine the means
+of slices over a run of Alg. 1 for a matrix Ta,b representing the effect of the interaction of two variables Xa ∈ Ωa
+and Xb ∈ Ωb . For simplicity, we are considering only a matrix representing an interaction between two variables;
+this proof extends to tensors as well since the fANOVA is defined over one-dimensional slices. In the following, we
+use
+shorthand notation wi,j = w(i, j) (for i ∈ Ωa and j ∈ Ωb ), and assume that w has been normalized so that
+P the P
+i∈Ωa
+j∈Ωb wi,j = 1.
+Let t be an iteration counter which alternates between zeroing row and columns (i.e., the number of times line 4 of
+t
+Alg. 1 has been passed). At each t we have a matrix Ta,b
+and can define:
+ctj =
+
+X
+
+t
+wi,j Ta,b
+[i, j]
+
+(11a)
+
+t
+wi,j Ta,b
+[i, j]
+
+(11b)
+
+i∈Ωa
+
+rit =
+
+X
+j∈Ωb
+
+Mt =
+
+X X
+
+wi,j ( rit + ctj )
+
+(11c)
+
+i∈Ωa j∈Ωb
+
+That is, M t is the unpurified mass at iteration t; when M t = 0 the algorithm has converged to a matrix with zeromean at every slice with non-zero probability. Then, for any w which has equal weighting along the row or column
+dimensions, the algorithm converges in a single iteration:
+Theorem 1. For any Ta,b , Ω, if wi,j = wi,j 0 ∀ i, j 0 :
+Mt = 0 ∀ t ≥ 2
+
+(12)
+
+This means the algorithm converges in a single pass for many simple distributions, a fact familiar to data scientists
+who often “double-center" design matrices with uniform weighting over samples and features. We also have rapid
+convergence of Alg. 1 for generic non-degenerate w:
+
+7
+
+Theorem 2. For any Ta,b , w, Ω, for any  > 0
+M t ≤  ∀ t ≥ τ ()
+where τ () = log2
+
+0
+
+
+M
+
+
+(13)
+
+.
+
+That is, Alg. 2 converges to the fANOVA decomposition with tolerance  in O log(M 0 ) − log()) iterations for each
+interaction tensor. This theorem is proved in Sec A of the Supplement. Empirically, we observe that most of the mass
+is moved in very few iterations (Section 5.3 and Section B of the Supplement).
+5.1.1
+
+fANOVA Properties
+
+Since we have shown that Alg. 2 converges to the fANOVA decomposition, the uniqueness of the decomposition
+provides several useful corollaries. First, permutation of the rows and columns does not change the purified interaction
+effect:
+Corollary 2.1. For any permutation P with inverse P 0 ,
+Purify-Matrix({Ta , Tb , Ta,b }, w, {a, b}, Ω) = P 0 (Purify-Matrix(P (Ta , Tb , Ta,b ), w, {a, b}, Ω)).
+
+(14)
+
+This gives two convenient conditions: (1) re-encoding the order of nominal variables does not change the interaction
+effects, and (2) Alg. 1 can iterate over the slices of a tensor in any order.
+Second, interaction purification is a linear operator:
+Pn
+Corollary 2.2. For any interaction matrix Ta,b = α1 A1 + . . . + αn An , where i=1 αi = 1:
+Purify-Matrix({Ta , Tb , Ta,b }, w, {a, b}, Ω)
+= α1 Purify-Matrix({Ta , Tb , A1 }, w, {a, b}, Ω)
++ . . . + αn Purify-Matrix({Ta , Tb , An }, w, {a, b}, Ω).
+
+(15)
+
+This means that purification can be run equivalently before or after bootstrap aggregation.
+
+Estimating w
+
+5.2
+
+Defining interaction effects via weighted fANOVA makes it clear that effects can only be understood in conjunction
+with a data distribution. The correct w(x) under which to understand effects is the true data distribution p(x); however
+a fundamental challenge of machine learning is to estimate p(x) from limited data. In this paper, we use three simple
+estimators of piecewise-constant densities:
+• Uniform: ŵunif (x−u ) ∝ 1
+• Empirical: ŵemp (x−u ) ∝
+
+P
+
+xi ∈Xtrain I {xi−u =x−u }
+
+• Laplace: ŵlap (x−u ) ∝ ŵunif (x−u ) + ŵemp (x−u )
+As we see in the experiments, the choice of distribution can change (sometimes dramatically) the purified effects.
+Thus, selection of ŵ(x) is a critical step in model interpretation and we look forward to future work which improves
+estimation of p(x).
+
+5.3
+
+Measuring Convergence of the Purification Algorithm
+
+Purification by the mass-moving algorithm converges in a very small number of iterations. We examine this behavior
+empirically by generating tensors T ∼ N (0, σI) with weight values either: (1) uniform distribution: w ∝ 1 or (2)
+drawn from a multivariate normal distribution: w ∼ N (0, σI) of dimension P . Representative results are shown
+in Figure 3; results for a variety of settings of σ and P are shown in Figures 10 and 11 in the Supplement. In all
+cases, we see that the mass-moving algorithm moves almost all of the mass in the first iteration. In the case of the
+uniform weight distribution, we confirm that the mass-moving algorithm takes only a single iteration (per row/column)
+to convergence. These results show that the mass-moving algorithm can scale to purify large models.
+8
+
+80
+60
+40
+20
+0
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+8
+
+10
+
+Cum. Mass Moved (%)
+
+Cum. Mass Moved (%)
+
+100
+
+100
+80
+60
+40
+20
+0
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+8
+
+10
+
+(b) Density drawn from multivariate normal σ = 10, P = 100
+
+(a) Uniform density, σ = 1, P = 100
+
+Figure 3: Convergence of Algorithm 1. Errorbars indicate (mean ± std) over 100 experiments of drawing tensor and
+weight values. The mass-moving algorithm converges in a very small number of iterations for both the uniform and
+the random weighting.
+
+6
+
+Experiments
+
+We examine the implications of purification on models trained from several datasets. To do so, we use two types of
+additive models with interactions. Both of these models are tree-based ensembles, from which we recover the set of
+effect tensors T by summing the effect tensors of each tree in the forest.
+The first model is a constrained form of Extreme Gradient Boosted (XGB) Forests [5], an extremely popular model
+for tabular data. By limiting the depth of each tree to a single split (boosted stumps, referred hereafter as XGB), this
+is a GAM without interactions. If we allow the trees to have depth 2, this model (XGB2) is a GAM with pairwise
+interactions. The XGB2 model was not designed to prefer main effects over interactions. As we see in the experiments,
+this means that purification induces large changes in the interpretation of XGB/XGB2 models.
+The second model we use is the GA2M model [27] implemented in Nori et al. 31. The GA2M algorithm allows
+users to specify the number of interactions to estimate; when this value is set to 0 we refer to this algorithm as GAM.
+GA2M was designed with a two-stage estimation procedure to fit main effects before fitting interactions in order to
+make mains as strong as possible and prevent main effect from leaking into interactions. This two-stage training
+procedure reduces the mass that needs to be moved by purification; nevertheless on average the purification process
+also improves the main effects learned by GA2M models.
+Our results show that model interpretations change significantly from purification and that the choice of data
+distribution used for purification is important to understand model implications.
+
+6.1
+
+COMPAS
+
+The Correctional Offender Management Profiling for Alternative Sanctions (COMPAS) system is a model for predicting recidivism risk that is used to guide bail decisions. The high stakes of this system make it crucial to ensure that the
+algorithm treats individuals fairly – understanding how COMPAS makes predictions is of societal importance.
+In 2016, the investigative journalism firm Propublica organized and released recidivism data on defendants in
+Broward County, Florida along with the correponsding predictions from the COMPAS model2 . Analyses of this
+dataset have sparked controversy, with different investigations coming to different conclusions about algorithmic bias
+[11, 14, 40]. Here, we ask whether the conclusions regarding algorithmic bias are changed by purification, and how
+much the choice of sample distribution changes the interpretation of the model.
+To answer this question, we train an additive model with interactions to mimic the COMPAS model, as in [40]. As
+shown in Fig. 4, the interpretations of main effects in the COMPAS dataset are changed significantly by the purification
+process. The magnitude – and occasionally the sign – of the effects are changed by the selection of data distribution.
+In particular, the sign of many mains learned by XGB (gray bars) are opposite the signs for those mains learned
+by GAMs, or GA2Ms and XGB2 after purification: the use of purification with XGB2 yields mains that are much
+2 https://github.com/propublica/compas-analysis/
+
+9
+
+4
+
+3
+
+3
+
+0
+
+Age_
+Abov
+
+(a) Prediction of Recidivism
+
+r
+mean
+o
+
+Fema
+
+Fema
+
+mean
+o
+Misde
+
+Hispa
+
+Nativ
+
+r
+
+3
+
+le
+
+3
+
+nic
+e_Am
+erica
+n
+Othe
+r
+
+2
+
+le
+
+1
+
+2
+
+Misde
+
+1
+
+GAM
+GA2M
+GA2M-Uniform
+GA2M-Empirical
+GA2M-Laplace
+XGB
+XGB-2
+XGB2-Uniform
+XGB2-Empirical
+XGB2-Laplace
+
+1
+
+Hispa
+nic
+e_Am
+erica
+n
+Othe
+r
+
+0
+
+2
+
+Nativ
+
+1
+
+Addition to Score
+
+GAM
+GA2M
+GA2M-Uniform
+GA2M-Empirical
+GA2M-Laplace
+XGB
+XGB-2
+XGB2-Uniform
+XGB2-Empirical
+XGB2-Laplace
+
+e_Fou
+rtyFiv
+Age_
+e
+Below
+_Twe
+ntyFiv
+e
+Africa
+n_Am
+erica
+n
+Asian
+
+2
+
+Age_
+Abov
+e_Fou
+rtyFiv
+Age_
+e
+Below
+_Twe
+ntyFiv
+e
+Africa
+n_Am
+erica
+n
+Asian
+
+Addition to Score
+
+4
+
+(b) Prediction of COMPAS Score
+
+Latitude
+
+Figure 4: Main effects of additive models with interactions trained to predict the (a) ground-truth recidivism and (b)
+COMPAS risk score. The implications of the main effects depend on the model class, the use of purification, and the
+distribution used for purification.
+
+40
+38
+36
+34
+120
+
+Longitude
+
+115
+
+120
+
+Longitude
+
+115
+
+0.4
+0.2
+0.0
+0.2
+0.4
+
+40
+38
+36
+34
+122.5 120.0 117.5 115.0
+
+Figure 5: Interaction of the Latitude/Longitude features in an XGB2 model trained on the California housing data. The
+left pane is the unpurified interaction, the middle pane is the purified interaction, and the right is the map of California
+from which samples were drawn. Purification sorts out the influence from the Los Angeles and the San Francisco
+metro areas.
+more consistent with what other models learn compared to mains learned directly by XGB. Also, there is significant
+variation in the strength of the mains (though not the signs) depending on the data distribution used for the purification
+process. Both the learning algorithm and purification distribution are important for meaningful audits of the COMPAS
+model.
+
+6.2
+
+California Housing
+
+A canonical machine learning dataset, and the task used in the original development of weighted fANOVA [21], is
+the California Housing dataset [32]. This dataset was derived from the 1990 U.S. census to understand the influence
+of community characteristics on housing prices. The task is regression to predict the median price of houses in each
+district in California.
+In Fig. 5, we see the interaction of latitude and longitude on housing prices. The unpurified effects indicate that the
+most expensive real estate lies in the Pacific Ocean; after purification this problem goes away and we see that it arose
+from the influence of the Los Angeles and San Francisco metropolitan areas. This result is similar to the fANOVA
+decomposition in [21] (see Fig.5 within); however, our approach is able to recover these pure interaction effects from
+
+10
+
+0.6
+
+0.2
+
+0.0
+
+0.2
+
+0.4
+
+XGB
+XGB2-Uniform
+XGB2-Empirical
+XGB2-Laplace
+
+0.4
+
+Addition to Score
+
+0.4
+
+Addition to Score
+
+0.6
+
+GAM
+GA2M-Uniform
+GA2M-Empirical
+GA2M-Laplace
+
+0.2
+
+0.0
+
+0.2
+
+20
+
+30
+
+40
+
+50
+
+Age
+
+60
+
+70
+
+80
+
+0.4
+
+90
+
+20
+
+30
+
+40
+
+50
+
+Age
+
+60
+
+70
+
+80
+
+90
+
+(a) Age
+0.6
+
+GAM
+GA2M-Uniform
+GA2M-Empirical
+GA2M-Laplace
+
+0.4
+
+Addition to Score
+
+Addition to Score
+
+0.4
+
+0.2
+
+0.0
+
+0.2
+
+0.4
+
+0.6 0
+
+XGB
+XGB2-Uniform
+XGB2-Empirical
+XGB2-Laplace
+
+0.6
+
+0.2
+
+0.0
+
+0.2
+
+0.4
+
+50
+
+100
+
+150
+
+BUN Level
+
+200
+
+0.6 0
+
+250
+
+50
+
+100
+
+150
+
+BUN Level
+
+200
+
+250
+
+(b) Blood Urea Nitrogen (BUN) level
+
+Figure 6: Main effects of models trained to predict mortality in MIMIC-III before and after purification.
+any model, rather than constrained to orthogonal basis functions. This enables our approach to use methods which
+adaptively split variables (such as the gradient-boosted trees of XGB2), leading to more refined density estimation
+than the grid used in [21].
+
+6.3
+
+MIMIC-III
+
+MIMIC-III [24] is a medical dataset of lab tests and outcomes for patients in the intensive care unit (ICU). The
+classification task is to predict mortality in the current hospital stay. In this experiment, we investigate the reliability
+of risk curves by examining their consistency after purification with different sample distributions.
+A representative sample of main effect curves are shown in Fig. 6. The upper left graph (the main effect of Age
+for GAM/GA2Ms) shows imperceptible change due to purification. As a result, the selection of distribution used for
+purification does not make a large difference in this case. For the XGB/XGB2 models, however, this story is more
+complex (upper right graph). The XGB2 model is not designed to prioritize main effects over interaction effects, so
+purification makes non-negligible impact and the selection of a distribution can change model interpretation.
+These differences are magnified for the variable blood urea nitrogen (BUN) which participates in a large number
+of interactions. Even though the GA2M algorithm was designed to estimate interactions based only on residuals after
+estimating the main effects, it is apparent that the interaction terms still capture some main effects because massmoving significantly alters the main effect of this variable. As a result, the purified risk curves can produce different
+interpretations for different distributions (e.g., the curve of the risk graph at BUN near 50).
+Purification does not change the overall model, so any excessive granularity in the purified main effects must have
+been hiding in the interaction effects. This leads us to believe that tree-based models tend to estimate high-variance
+interaction effects, and that regularizing these interaction effects could improve predictive accuracy.
+
+11
+
+7
+
+Discussion
+
+7.1
+
+The Mystery of log(X1 X2 )
+
+In this section we use the notion of pure interaction effects to revisit a classic interaction puzzle: the log function.
+A classic way of representing an interaction between X1 and X2 is Y = X1 X2 . If we sample data for X1 and X2
+uniformly on the the interval (0, 1], the mass-moving purification algorithm shows that Y = X1 X2 has the following
+XOR-like interaction and linear main effects:
+1
+
+X2
+
+0.2
+
+0.2
+
+0.1
+
+0.1
+
+Addition to Score
+
+0
+
+Addition to Score
+
+1
+
+0.0
+
+0.1
+
+0.2
+
+0
+
+X1
+
+0.0
+
+0.1
+
+0.2
+0.0
+
+0.2
+
+0.4
+
+X1
+
+0.6
+
+0.8
+
+1.0
+
+0.0
+
+0.2
+
+0.4
+
+X2
+
+0.6
+
+0.8
+
+1.0
+
+Figure 7: The pure interaction and main effect of Y = X1 X2 .
+However, if we model the logarithm of Y , we get log(Y ) = log(X1 X2 ) = log(X1 ) + log(X2 ). That is, applying
+log(·) to the interaction X1 X2 appears to break the interaction and yield a model that is purely additive in the log(X1 )
+and log(X2 ). It is surprising that applying a simple monotone function to the product X1 X2 can make the interaction
+between X1 and X2 disappear.
+Does purification by mass-moving account for this? Yes – according to our definition of pure interaction effects as
+satisfying the fANOVA, log(X1 X2 ) is not an interaction effect at all. To test that our mass-moving procedure recovers
+the correct decomposition, we generate data according to the model:
+Y = (1 − λ) log(X1 X2 ) + λ(X1 X2 ),
+
+(16)
+
+0
+
+0.2
+
+2
+
+1
+
+0.1
+
+4
+6
+
+2
+3
+
+8
+
+4
+
+10
+
+5
+0.0
+
+0.2
+
+0.4
+
+X1
+
+0.6
+
+(a) λ = 0.0
+
+0.8
+
+1.0
+
+Addition to Score
+
+0
+
+Addition to Score
+
+Addition to Score
+
+which allows us to control how much the function applied to X1 X2 behaves like log() for λ ≈ 0 vs. multiplicative
+interaction for λ ≈ 1. By varying λ ∈ [0, 1], we can examine the ability of Alg. 2 to distinguish these effects.
+
+0.0
+
+0.1
+
+0.2
+0.0
+
+0.2
+
+0.4
+
+X1
+
+0.6
+
+(b) λ = 0.5
+
+0.8
+
+1.0
+
+0.0
+
+0.2
+
+0.4
+
+X1
+
+0.6
+
+0.8
+
+1.0
+
+(c) λ = 1.0
+
+Figure 8: Pure Main Effects of the log model (16). The purification algorithm recovers the transition from logarithmic
+to linear main effects.
+As shown in Fig. 8, the main effects recovered at λ = 0 are logarithmic, and the interaction effect completely
+disappears. As λ increases, the main effects transition toward linearity, and the interaction effect returns, becoming
+the continuous variant of XOR. In fact, for any λ 6= 0, the pattern of the pure interaction effect is the same, and the
+overall strength of the interaction effect increases as λ → 1.3
+3 The base of the logarithm does not alter the shape of the interaction, but does affect how rapidly C varies with λ.
+
+12
+
+7.2
+
+Purification Explains the Results of Prior Work
+
+Our work suggests that interactions can properly be understood only after purification. This problem has confounded
+prior work studying the ability of machine learning to identify interactions. For example, [44] studied the ability of
+random forests to learn interaction effects. The authors generated data from five different data generators designed to
+reflect interactions of genetic single nucleotide polymorphisms (SNPs). Their results appeared to lead to a pessimistic
+conclusion that random forests are not adept at learning interaction effects.
+Model
+Interaction Only
+Modifier SNP
+No Interaction
+Redundant
+Synergistic
+
+SNP1
+
+SNP2
+
+SNP1xSNP2
+
+0
+0
+1
+1
+1
+
+0
+1
+1
+1
+1
+
+1
+1
+0
+−1
+1
+
+Table 1: Data Generator Coefficients, Unpurified
+
+Model
+
+SNP1
+
+SNP2
+
+SNP1⊕SNP2
+
+Interaction Only
+Modifier SNP
+No Interaction
+Redundant
+Synergistic
+
+0.5
+0.5
+1
+0.5
+1.5
+
+0.5
+1.5
+1
+0.5
+1.5
+
+0.25
+0.25
+0
+−0.25
+0.25
+
+Table 2: Data Generator Coefficients, Purified
+
+However, as shown in Tables 1,2 (and visualized in Fig. 9 of the Supplement), these data generators look very
+different before and after purification. In particular, the data generation schemes differ dramatically in the strength
+of the pure main effects: the “synergistic" model has main effects three times as strong as the main effects in the
+“interaction only" model. In contrast, the interaction effect is the same strength for all data generation schemes (except
+for the “No Interaction" setting). In light of the purified data generators, the results of Figs. 3 and 4 of [44] suggest
+a more optimistic conclusion: in the case of interaction effects of equal strength, the random forest preferentially
+recovers interactions of variables with stronger main effects. This result underscores the necessity of purifying data
+generation schemes before studying the inductive biases of machine learning models.
+
+7.3
+
+Purification Reveals Noisy Estimates
+
+As we saw in experiments (Section 6), purification can produce main effects that are less smooth than the main effects
+of the original model. Purification does not change the model, so the mass that made a main effect less smooth was
+hidden in the interactions prior to mass moving. High variance in terms can hurt interpretability and likely should be
+regularized out for more robust estimation.
+We are currently investigating post-hoc regularization methods that simplify the main effects to reduce the variance
+induced when estimating interaction effects, and revealed by the purification process. Preliminary results suggest that
+main effects often can be simplified, which not only makes them easier to interpret, but, in some cases, makes them
+modestly more accurate on test data.
+
+8
+
+Conclusions and Future Work
+
+We have shown that the non-identifiability of interaction effects in additive models is a problem for model interpretability – equivalent models can produce contradictory interpretations. We have proposed to use the fANOVA
+decomposition to recover meaningful interaction effects, and have presented an efficient algorithm to exactly recover
+this decomposition for piecewise-constant functions such as tree-based estimators. In the past, algorithms such as
+GA2M have been designed to prioritize main effects over interactions during estimation; our method of post-hoc purification returns an identifiable form of any tree-based model, and thus frees model designers to separate estimation
+procedures from purification procedures. Finally, we have applied this approach to learn pure interaction effects from
+several datasets, and seen that the interpretation of these effects changes in response to the data distribution. This
+underscores the importance of specifying the data distribution before attempting to interpret any estimated effects.
+The true density p(x) is the correct data distribution for model interpretation, but p(x) is seldom known, so we are
+interested in future work to improve estimators of p(x) in order to improve model interpretability.
+
+13
+
+Acknowledgements
+This work was created during an internship at Microsoft Research, and completed under the support of a fellowship
+from the Center for Machine Learning and Healthcare.
+We would like to thank the anonymous reviewers, whose feedback greatly assisted in the presentation of this work.
+
+References
+[1] M. Bech and D. Gyrd-Hansen. Effects coding in discrete choice experiments. Health economics, 14(10):1079–
+1083, 2005.
+[2] J. Bien, J. Taylor, and R. Tibshirani. A lasso for hierarchical interactions. Annals of statistics, 41(3):1111, 2013.
+[3] R. Caruana, Y. Lou, J. Gehrke, P. Koch, M. Sturm, and N. Elhadad. Intelligible models for healthcare: Predicting pneumonia risk and hospital 30-day readmission. In Proceedings of the 21th ACM SIGKDD International
+Conference on Knowledge Discovery and Data Mining, pages 1721–1730. ACM, 2015.
+[4] G. Chastaing, F. Gamboa, and C. Prieur. Generalized hoeffding-sobol decomposition for dependent variables
+- application to sensitivity analysis. Electron. J. Statist., 6:2420–2448, 2012. doi: 10.1214/12-EJS749. URL
+https://doi.org/10.1214/12-EJS749.
+[5] T. Chen and C. Guestrin. Xgboost: A scalable tree boosting system. In Proceedings of the 22nd acm sigkdd
+international conference on knowledge discovery and data mining, pages 785–794. ACM, 2016.
+[6] B. A. Coull, D. Ruppert, and M. Wand. Simple incorporation of interactions into additive models. Biometrics,
+57(2):539–545, 2001.
+[7] A. Cuevas, M. Febrero, and R. Fraiman. An anova test for functional data. Computational statistics & data
+analysis, 47(1):111–122, 2004.
+[8] P. Davies. Interactions in the analysis of variance. Journal of the American Statistical Association, 107(500):
+1502–1509, 2012.
+[9] H. Deng. Interpreting tree ensembles with intrees. International Journal of Data Science and Analytics, 7(4):
+277–287, 2019.
+[10] S. Devlin, C. Singh, W. J. Murdoch, and B. Yu. Disentangled attribution curves for interpreting random forests
+and boosted trees. arXiv preprint arXiv:1905.07631, 2019.
+[11] W. Dieterich, C. Mendoza, and T. Brennan. Compas risk scales: Demonstrating accuracy equity and predictive
+parity. Northpoint Inc, 2016.
+[12] J. Du and A. R. Linero. Interaction detection with bayesian decision tree ensembles. In The 22nd International
+Conference on Artificial Intelligence and Statistics, pages 108–117, 2019.
+[13] P. H. Eilers and B. D. Marx. Flexible smoothing with b-splines and penalties. Statistical science, pages 89–102,
+1996.
+[14] A. Feller, E. Pierson, S. Corbett-Davies, and S. Goel. A computer program used for bail and sentencing decisions
+was labeled biased against blacks. it’s actually not that clear. The Washington Post, 2016.
+[15] S. B. Green, J. G. Marquis, S. L. Hershberger, M. S. Thompson, and K. M. McCollam. The overparameterized
+analysis of variance model. Psychological Methods, 4(2):214, 1999.
+
+14
+
+[16] S. Hara and K. Hayashi. Making tree ensembles interpretable: A bayesian model selection approach. In
+A. Storkey and F. Perez-Cruz, editors, Proceedings of the Twenty-First International Conference on Artificial Intelligence and Statistics, volume 84 of Proceedings of Machine Learning Research, pages 77–85, Playa Blanca,
+Lanzarote, Canary Islands, 09–11 Apr 2018. PMLR. URL http://proceedings.mlr.press/v84/
+hara18a.html.
+[17] T. Hastie and R. Tibshirani. Generalized Additive Models. Chapman and Hall/CRC, 1990.
+[18] T. J. Hastie. Generalized additive models. In Statistical models in S, pages 249–307. Routledge, 2017.
+[19] W. Hoeffding, H. Robbins, et al. The central limit theorem for dependent random variables. Duke Mathematical
+Journal, 15(3):773–780, 1948.
+[20] G. Hooker. Diagnostics and Extrapolation in Machine Learning. Stanford University, 2004.
+[21] G. Hooker. Generalized functional anova diagnostics for high-dimensional functions of dependent variables.
+Journal of Computational and Graphical Statistics, 16(3):709–732, 2007.
+[22] J. Z. Huang. Projection estimation in multiple regression with application to functional anova models. The annals
+of statistics, 26(1):242–272, 1998.
+[23] F. Hutter, H. Hoos, and K. Leyton-Brown. An efficient approach for assessing hyperparameter importance.
+In E. P. Xing and T. Jebara, editors, Proceedings of the 31st International Conference on Machine Learning,
+volume 32 of Proceedings of Machine Learning Research, pages 754–762, Bejing, China, 22–24 Jun 2014.
+PMLR. URL http://proceedings.mlr.press/v32/hutter14.html.
+[24] A. E. Johnson, T. J. Pollard, L. Shen, H. L. Li-wei, M. Feng, M. Ghassemi, B. Moody, P. Szolovits, L. A. Celi,
+and R. G. Mark. Mimic-iii, a freely accessible critical care database. Scientific data, 3:160035, 2016.
+[25] B. Lengerich, B. Aragam, and E. P. Xing. Learning sample-specific models with low-rank personalized regression. In Advances in Neural Information Processing Systems, pages 3570–3580, 2019.
+[26] Y. Lou, R. Caruana, and J. Gehrke. Intelligible models for classification and regression. In Proceedings of the
+18th ACM SIGKDD international conference on Knowledge discovery and data mining, pages 150–158. ACM,
+2012.
+[27] Y. Lou, R. Caruana, J. Gehrke, and G. Hooker. Accurate intelligible models with pairwise interactions. In
+Proceedings of the 19th ACM SIGKDD international conference on Knowledge discovery and data mining,
+pages 623–631. ACM, 2013.
+[28] L. A. Marascuilo and J. R. Levin. Appropriate post hoc comparisons for interaction and nested hypotheses in
+analysis of variance designs: The elimination of type iv errors. American Educational Research Journal, 7(3):
+397–421, 1970.
+[29] J. Mingers. An empirical comparison of pruning methods for decision tree induction. Machine learning, 4(2):
+227–243, 1989.
+[30] J. Neter, W. Wasserman, and M. H. Kutner. Applied linear statistical models. richard d. irwin. Inc., Homewood,
+IL, 842, 1974.
+[31] H. Nori, S. Jenkins, P. Koch, and R. Caruana. Interpretml: A unified framework for machine learning interpretability. arXiv preprint arXiv:1909.09223, 2019.
+[32] R. K. Pace and R. Barry. Sparse spatial autoregressions. Statistics & Probability Letters, 33(3):291–297, 1997.
+[33] S. Purushotham, M. R. Min, C.-C. J. Kuo, and R. Ostroff. Factorized sparse learning models with interpretable
+high order feature interactions. In Proceedings of the 20th ACM SIGKDD international conference on Knowledge
+discovery and data mining, pages 552–561. ACM, 2014.
+15
+
+[34] M. T. Ribeiro, S. Singh, and C. Guestrin. Why should i trust you?: Explaining the predictions of any classifier.
+In Proceedings of the 22nd ACM SIGKDD international conference on knowledge discovery and data mining,
+pages 1135–1144. ACM, 2016.
+[35] R. L. Rosnow and R. Rosenthal. Definition and interpretation of interaction effects. Psychological Bulletin, 105
+(1):143, 1989.
+[36] I. M. Sobol. Global sensitivity indices for nonlinear mathematical models and their monte carlo estimates.
+Mathematics and computers in simulation, 55(1-3):271–280, 2001.
+[37] D. Sorokina, R. Caruana, M. Riedewald, and D. Fink. Detecting statistical interactions with additive groves of
+trees. In Proceedings of the 25th international conference on Machine learning, pages 1000–1007. ACM, 2008.
+[38] S. Sperlich, D. Tjøstheim, and L. Yang. Nonparametric estimation and testing of interaction in additive models.
+Econometric Theory, 18(2):197–251, 2002.
+[39] C. J. Stone et al. The use of polynomial splines and their tensor products in multivariate function estimation. The
+Annals of Statistics, 22(1):118–171, 1994.
+[40] S. Tan, R. Caruana, G. Hooker, and Y. Lou. Distill-and-compare: Auditing black-box models using transparent
+model distillation. In AAAI/ACM Artificial Intelligence, Ethics, and Society, 2018.
+[41] W. Terbeck and P. L. Davies. Interactions and outliers in the two-way analysis of variance. The Annals of
+Statistics, 26(4):1279–1305, 1998.
+[42] M. Tsang, D. Cheng, and Y. Liu. Detecting statistical interactions from neural network weights. arXiv preprint
+arXiv:1705.04977, 2017.
+[43] M. Wand and J. T. Ormerod. Penalized wavelets: Embedding wavelets into semiparametric regression. Electronic
+Journal of Statistics, 5:1654–1717, 2011.
+[44] M. N. Wright, A. Ziegler, and I. R. König. Do little interactions get lost in dark random forests? BMC bioinformatics, 17(1):145, 2016.
+[45] G. Yu, J. Bien, and R. Tibshirani. Reluctant interaction modeling. arXiv preprint arXiv:1907.08414, 2019.
+
+16
+
+1
+
+0
+
++1
+
+X1
+0
+
+1
+
+0
+
+X1
+0
+0
+
+0
+X2
+
+0
+
+0
+
+0
+0
+
+0
+X2
+
+1
+
+1 -0.25 +0.25
+
+X1
+=
+
+0 +0.25 -0.25
+0
+
+1
+
+(a) “Interaction Only", unpurified
+
+1
+
+0
+
++1
+
+X1
+0
+
+1
+
+0
+
+X1
+0
+
+0
+
+0
+
+1
+
+X2
+
+0
+
+0
+
++1
+
+0
+
+0
+
+0
+
+1
+
+1 -0.25 +0.25
+
+=
+
+0
+
+0
+
+X1
+0
+
++1
+
+X1
+0
+
+X2
+
+0
+
+0
+
+0
+0
+
+0 +0.25 -0.25
+
+0
+
+1
+
+1
+
+=
+
+0
+
+0
+
+X1
+0
+
+1
+
++1
+
+X1
+0
+
+0
+
+0
+
+1
+
+X2
+
+0
+
+0
+
+0
+0
+
+0
+
++1
+
+0
+
+0
+
+X2
+
+X1
+0
+
++1
+
+X1
+0
+
+0
+
+0
+
+1
+
+X2
+
+0
+
+0
+
+1
+
+0
+
++1
+
+0
+
+1
+
+X2
+
+0
+
+X2
+
+1
+
+1 +0.5
+0 -0.5
+
+-0.5 +0.5
+0
+
+X2
+
+1
+
+1
+
+1 +0.25 -0.25
+
+X1
+=
+
+0 -0.25 +0.25
+
+X2
+
+1 +0.75
+
+X1
+
+0 +0.25 -0.25
+0
+
+X2
+
+0
+
+X2
+
+1
+
+(h) “Redundant", purified
+
+1 -0.25 +0.25
+
+(i) “Synergistic", unpurified
+
+0 -0.25
+
+-0.25 +0.25
+
+1
+
+X1
+=
+
+1 +0.25
+
+X1
+0
+
+1
+
+-0.75 +0.75
+
+1
+
+0
+
+(g) “Redundant", unpurified
+
+1
+
+1
+
+(f) “No Interaction", purified
+
++1
+X2
+
+0 -0.25
+
+X1
+0
+
+1
+
+-1
+
+X2
+
+X1
+
+(e) “No Interaction", unpurified
+
+1
+
+X2
+
+(d) “Modifier SNP", purified
+
++1
+X2
+
+1 +0.25
+
+X1
+0
+
+1
+
+0
+
+1
+
+X1
+
+(c) “Modifier SNP", unpurified
+
+1
+
+X2
+
+0 -0.25
+
+-0.25 +0.25
+
+(b) “Interaction Only", purified
+
+0
+X2
+
+1 +0.25
+
+X1
+
+0 -0.75
+
+-0.75 +0.75
+0
+
+X2
+
+1
+
+1
+(j) “Synergistic", purified
+
+Figure 9: The models of genetic interaction effects presented in [44]. (Left) Representation presented in [44] (Right)
+Representations purified according to a uniform distribution. For visual clarity, we have removed the overall intercept.
+
+17
+
+A
+
+Analysis
+
+We will prove the rate of convergence by setting an upper-bound on M t :
+Lemma 3. For any Ta,b , w, Ω, if iteration t set the column means to be zero, then
+M t+1 ≤ =
+
+X
+j∈Ωb
+
+A.1
+
+min
+φj
+
+X wi,j
+X
+
+(
+− φj ) min
+(wi,k − ψi w·,k )ct−1
+k
+ψi
+wi,·
+
+i∈Ωa
+
+(17)
+
+k∈Ωb
+
+Proof of Lemma 3
+
+Proof. Let us consider a matrix T representing the interaction effect of variables Xa and Xb . Let Xa take on values
+from the set Ωa ,, and Xb takeP
+on values
+P from the set Ωb , with m = |Ωa |, n = |Ωb |. Let w be a density defined on Ωa
+and Ωb , normalized
+such
+that
+i∈Ω
+j∈Ωb wi,j = 1. Without loss of generality, we assume that T is mean-centered
+a
+P
+P
+such that i∈Ωa j∈Ωb wi,j Ti,j = 0. For clarity, we also use the shorthand:
+X
+
+w·,j =
+
+wi,j
+
+(18a)
+
+wi,j
+
+(18b)
+
+i∈Ωa
+
+X
+
+wi,· =
+
+j∈Ωb
+
+Without loss of generality, we can assume that iteration t set all of the column-means to zero. Then iteration t + 1 will
+set the row means to zero, and:
+X
+M t+1 =
+w·,j ct+1
+(19a)
+j
+j∈Ωb
+
+=
+
+X
+
+w·,j
+
+(19b)
+
+wi,j rit
+
+(19c)
+
+i∈Ωa
+
+j∈Ωb
+
+=
+
+1 X
+wi,j rit
+w·,j
+
+X X
+j∈Ωb i∈Ωa
+
+=
+
+X X
+
+wi,j
+
+j∈Ωb i∈Ωa
+
+=
+
+X
+j∈Ωb
+
+=
+
+X
+j∈Ωb
+
+=
+
+X
+j∈Ωb
+
+where (19e) holds because
+
+P
+
+i∈Ωa
+
+P
+
+min
+φj
+
+min
+φj
+
+min
+φj
+
+X
+
+1
+wi,·
+
+X
+
+wi,k ct−1
+k
+
+
+
+(19d)
+
+k∈Ωb
+
+(wi,j − φj wi,· )
+
+i∈Ωa
+
+1
+wi,·
+
+X
+
+wi,k ct−1
+k
+
+
+
+(19e)
+
+k∈Ωb
+
+X
+X wi,j
+
+(
+− φj )
+wi,k ct−1
+k
+wi,·
+
+(19f)
+
+X wi,j
+X
+
+− φj ) min
+(wi,k − ψi w·,k )ct−1
+(
+k
+ψi
+wi,·
+
+(19g)
+
+i∈Ωa
+
+k∈Ωb
+
+i∈Ωa
+
+k∈Ωb
+
+t−1
+is the overall mean of the matrix, which is zero.
+k∈Ωb wi,k ck
+
+18
+
+A.2
+
+Proof of Theorem 1
+
+Proof. Under the assumptions of Lemma 3,
+X
+
+M t+1 ≤
+
+X
+X wi,j
+
+(
+− φj ) min
+(wi,k − ψi w·,k )ct−1
+k
+ψi
+wi,·
+
+min
+
+j∈Ωb
+
+φj
+
+i∈Ωa
+
+X X wi,j
+X
+
+1
+(
+− ) min
+(wi,k − ψi w·,k )ckt−1
+ψi
+wi,·
+n
+
+=
+
+j∈Ωb i∈Ωa
+
+X X
+
+=
+
+(20a)
+
+(20b)
+
+k∈Ωb
+
+(0) min
+
+j∈Ωb i∈Ωa
+
+ψi
+
+X
+
+(wi,k − ψi w·,k )ct−1
+k
+
+
+
+for uniform w
+
+(20c)
+
+k∈Ωb
+
+=0
+
+A.3
+
+by Lemma 3
+
+k∈Ωb
+
+(20d)
+
+Proof of Theorem 2
+
+Proof. For any normalized w,
+M t+1 =
+
+X
+j∈Ωb
+
+=
+
+X
+j∈Ωb
+
+=
+
+X
+j∈Ωb
+
+≤
+
+X
+j∈Ωb
+
+≤
+
+X
+j∈Ωb
+
+≤
+
+φj
+
+i∈Ωa
+
+min
+φj
+
+φj
+
+X wi,j
+X wi,k
+ψi,j
+(
+− φj ) min wi,·
+(
+−
+w·,k )ct−1
+k
+ψi,j
+wi,·
+wi,·
+wi,·
+
+(21b)
+
+X wi,j
+X X
+(
+− φj )
+wl,k ckt−1
+wi,·
+
+(21c)
+
+X wi,j
+X
+(
+− φj )
+w·,k ct−1
+k
+wi,·
+
+(21d)
+
+X wi,j
+X
+(
+− φj )
+w·,k ct−1
+k
+wi,·
++
+
+K + = {k ∈ Ωb : ckt−1 > 0} (21e)
+
+φj
+
+k∈Ωb l6=i
+
+i∈Ωa
+
+min
+
+k∈Ωb
+
+i∈Ωa
+
+k∈K
+
+(21f)
+
+X wi,j
+1 t−1 X
+M
+min
+− φj )
+(
+φj
+2
+wi,·
+
+(21g)
+
+1 t−1 X X
+wi,j
+M
+min
+− φj
+φj
+2
+wi,·
+
+(21h)
+
+1 t−1 X
+M
+wi,·
+2
+
+(21i)
+
+1 t−1
+M
+2
+
+(21j)
+
+i∈Ωa
+
+j∈Ωb
+
+≤
+
+k∈Ωb
+
+i∈Ωa
+
+min
+
+by Lemma 3 (21a)
+
+k∈Ωb
+
+i∈Ωa
+
+min
+
+φj
+
+X wi,j
+X
+
+(
+(wi,k − ψi,j w·,k )ct−1
+− φj ) min
+k
+ψi,j
+wi,·
+
+X wi,j
+1
+(
+− φj ) M t−1
+min
+φj
+wi,·
+2
+
+X
+j∈Ωb
+
+≤
+
+min
+
+i∈Ωa
+
+i∈Ωa j∈Ωb
+
+≤
+
+i∈Ωa
+
+=
+
+So the divergence from the fANOVA decomposition is cut in half each iteration. This is a loose bound which could be
+tightened by examining the dispersion of the density.
+
+19
+
+B
+
+Empirically Measuring Purification Convergence
+
+80
+60
+40
+20
+2
+
+4
+
+6
+
+Iteration
+
+8
+
+10
+
+60
+40
+20
+0
+
+0
+
+100
+80
+60
+40
+20
+0
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+8
+
+10
+
+60
+40
+20
+4
+
+6
+
+Iteration
+
+(g) σ = 100, P = 2
+
+8
+
+10
+
+Cum. Mass Moved (%)
+
+Cum. Mass Moved (%)
+
+80
+
+2
+
+Iteration
+
+8
+
+10
+
+80
+60
+40
+20
+0
+
+0
+
+80
+60
+40
+20
+0
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+8
+
+10
+
+80
+60
+40
+20
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+(h) σ = 100, P = 25
+
+4
+
+6
+
+Iteration
+
+8
+
+10
+
+8
+
+10
+
+8
+
+10
+
+100
+80
+60
+40
+20
+0
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+(f) σ = 10, P = 100
+
+100
+
+0
+
+2
+
+(c) σ = 1, P = 100
+
+(e) σ = 10, P = 25
+
+100
+
+0
+
+6
+
+100
+
+(d) σ = 10, P = 2
+
+0
+
+4
+
+100
+
+(b) σ = 1, P = 25
+
+Cum. Mass Moved (%)
+
+Cum. Mass Moved (%)
+
+(a) σ = 1, P = 2
+
+2
+
+Cum. Mass Moved (%)
+
+0
+
+80
+
+8
+
+10
+
+Cum. Mass Moved (%)
+
+0
+
+100
+
+Cum. Mass Moved (%)
+
+100
+
+Cum. Mass Moved (%)
+
+Cum. Mass Moved (%)
+
+Here we show a variety of convergence plots for Algorithm 1 on data generated according to the setups described in
+Section 5.3.
+
+100
+80
+60
+40
+20
+0
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+(i) σ = 100, P = 100
+
+Figure 10: Convergence of the mass-moving algorithm under uniform weight distributions. In all settings, the unpurified effect matrix is drawn from N (0, σI) of dimension P while the weighting is uniform. In all settings, the algorithm
+converges in a single iteration.
+
+20
+
+6
+
+8
+
+10
+
+0
+
+100
+80
+60
+40
+20
+0
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+8
+
+10
+
+100
+80
+60
+40
+20
+0
+
+0
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+(g) σ = 100, P = 2
+
+6
+
+8
+
+10
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+8
+
+10
+
+100
+80
+60
+40
+20
+0
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+(h) σ = 100, P = 25
+
+2
+
+4
+
+6
+
+Iteration
+
+8
+
+10
+
+8
+
+10
+
+8
+
+10
+
+(c) σ = 1, P = 100
+
+8
+
+10
+
+100
+80
+60
+40
+20
+0
+
+0
+
+(e) σ = 10, P = 25
+
+Cum. Mass Moved (%)
+
+Cum. Mass Moved (%)
+
+(d) σ = 10, P = 2
+100
+80
+60
+40
+20
+0
+
+4
+
+Iteration
+
+100
+80
+60
+40
+20
+0
+
+(b) σ = 1, P = 25
+
+Cum. Mass Moved (%)
+
+Cum. Mass Moved (%)
+
+(a) σ = 1, P = 2
+
+2
+
+Cum. Mass Moved (%)
+
+4
+
+Iteration
+
+Cum. Mass Moved (%)
+
+2
+
+100
+80
+60
+40
+20
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+(f) σ = 10, P = 100
+
+8
+
+10
+
+Cum. Mass Moved (%)
+
+0
+
+Cum. Mass Moved (%)
+
+Cum. Mass Moved (%)
+
+100
+80
+60
+40
+20
+0
+
+100
+80
+60
+40
+20
+0
+
+0
+
+2
+
+4
+
+6
+
+Iteration
+
+(i) σ = 100, P = 100
+
+Figure 11: Convergence of the mass-moving algorithm under random weight distributions. In all settings, In all
+settings, the unpurified effect matrix is drawn from N (0, σI) of dimension P while the weighting is drawn from a
+P -dimensional normal distribution N (0, σI). Errorbars indicate the mean ± stddev. over 100 experiments. In all
+settings, the algorithm converges in a small number of iterations.
+
+21
+
+

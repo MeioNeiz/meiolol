@@ -1,0 +1,1615 @@
+12.6 Group-level predictors
+Adding a group-level predictor to improve inference for group coeﬃcients αj
+We continue with the radon example from Sections 12.2–12.3 to illustrate how a
+multilevel model handles predictors at the group as well as the individual levels.
+
+MULTILEVEL LINEAR MODELS: THE BASICS
+
+−
+
+DOUGLAS
+
+−
+
+RAMSEY
+
+−
+
+STEARNS
+
+−
+
+CLAY
+
+−
+
+KOOCHICHING
+
+−
+
+AITKIN
+
+−
+
+LAC QUI PARLE
+
+ST LOUIS
+
+−
+
+266
+
+Figure 12.5 Multilevel (partial pooling) regression lines y = αj + βx ﬁt to radon data,
+displayed for eight counties, including uranium as a county-level predictor. Light-colored
+lines show the multilevel estimates, without uranium as a predictor, from Figure 12.4.
+
+−
+
+−
+
+Figure 12.6 Estimated county coeﬃcients αj (±1 standard error) plotted versus countylevel uranium measurement uj , along with the estimated multilevel regression line αj =
+γ0 + γ1 uj . The county coeﬃcients roughly follow the line but not exactly; the deviation of
+the coeﬃcients from the line is captured in σα , the standard deviation of the errors in the
+county-level regression.
+
+We use the formulation
+yi
+
+∼ N(αj[i] + βxi , σy2 ), for i = 1, . . . , n
+
+αj
+
+∼ N(γ0 + γ1 uj , σα2 ), for j = 1, . . . , J,
+
+(12.15)
+
+where xi is the house-level ﬁrst-ﬂoor indicator and uj is the county-level uranium
+measure.
+R code
+
+u.full <- u[county]
+M2 <- lmer (y ~ x + u.full + (1 | county))
+display (M2)
+
+This model includes ﬂoor, uranium, and intercepts that vary by county. The lmer()
+function only accepts predictors at the individual level, so we have converted uj to
+ufull
+= uj[i] (with the variable county playing the role of the indexing j[i]), to pull
+i
+out the uranium level of the county where house i is located.
+The display of the lmer() ﬁt shows coeﬃcients and standard errors, along with
+estimated residual variation at the county and individual (“residual”) level:
+
+GROUP-LEVEL PREDICTORS
+
+267
+
+lmer(formula = y ~ x + u.full + (1 | county))
+coef.est coef.se
+(Intercept) 1.47
+0.04
+x
+-0.67
+0.07
+u.full
+0.72
+0.09
+Error terms:
+Groups
+Name
+Std.Dev.
+county
+(Intercept) 0.16
+Residual
+0.76
+# of obs: 919, groups: county, 85
+deviance = 2122.9
+
+R output
+
+As in our earlier example on page 261, we use coef() to pull out the estimated
+coeﬃcients,
+R code
+
+coef (M2)
+
+yielding
+R output
+
+$county
+(Intercept)
+x u.full
+1
+1.45 -0.67
+0.72
+2
+1.48 -0.67
+0.72
+. . .
+85
+1.42 -0.67
+0.72
+
+Only the intercept varies, so the coeﬃcients for x and u.full are the same for all 85
+counties. (Actually, u.full is constant within counties so it cannot have a varying
+coeﬃcient here.) On page 280 we shall see a similar display for a model in which
+the coeﬃcient for x varies by county.
+As before, we can also examine the estimated model averaging over the counties:
+R code
+
+fixef (M2)
+
+yielding
+(Intercept)
+1.47
+
+x
+-0.67
+
+u.full
+0.72
+
+R output
+
+and the county-level errors:
+ranef (M2)
+
+R code
+
+yielding
+(Intercept)
+1
+-0.02
+2
+0.01
+. . .
+85
+-0.04
+
+The results of fixef() and ranef() add up to the coeﬃcients in coef(): for
+county 1, 1.47 − 0.02 = 1.45, for county 2, 1.47 + 0.01 = 1.48, . . . , and for county
+85, 1.47 − 0.04 = 1.42 (up to rounding error).
+
+R output
+
+268
+
+MULTILEVEL LINEAR MODELS: THE BASICS
+
+Interpreting the coeﬃcients within counties
+We can add the unmodeled coeﬃcients (the “ﬁxed eﬀects”) to the county-level errors
+to get an intercept and slope for each county. We start with the model that averages
+over all counties, yi = 1.47 − 0.67xi + 0.72uj[i] (as obtained from display(M2) or
+fixef(M2).
+Now consider a particular county, for example county 85. We can determine its
+ﬁtted regression line in two ways from the lmer() output, in each case using the
+log uranium level in county 85, u85 = 0.36.
+First, using the the last line of the display of coef(M2), the ﬁtted model for county
+85 is yi = 1.42 − 0.67xi + 0.72u85 = (1.42 + 0.72 · 0.36) − 0.67xi = 1.68 − 0.67xi ,
+that is, 1.68 for a house with a basement and 1.01 for a house with no basement.
+Exponentiating gives estimated geometric mean predictions of 5.4 pCi/L and 2.7
+pCi/L for houses in county 85 with and without basements.
+Alternatively, we can construct the ﬁtted line for county 85 by starting with the
+results from fixef(M2)—that is, yi = 1.47 − 0.67xi + 0.72uj[i] , setting uj[i] = u85 =
+0.36—and adding the group-level error from ranef(M2), which for county 85 is
+−0.04. The resulting model is yi = 1.47 − 0.67xi + 0.72 · 0.36 − 0.04 = 1.68 − 0.67xi,
+the same as in the other calculation (up to rounding error in the last digit of the
+intercept).
+Figure 12.5 shows the ﬁtted line for each of a selection of counties, and Figure
+12.6 shows the county-level regression, plotting the estimated coeﬃcients αj versus
+the county-level predictor uj . These two ﬁgures represent the two levels of the
+multilevel model.
+The group-level predictor has increased the precision of our estimates of the
+county intercepts αj : the ±1 standard-error bounds are narrower in Figure 12.6
+than in Figure 12.3b, which showed αj ’s estimated without the uranium predictor
+(note the diﬀerent scales on the y-axes of the two plots and the diﬀerent county
+variables plotted on the x-axes).
+The estimated individual- and county-level standard deviations in this model are
+σ̂y = 0.76 and σ̂α = 0.16. In comparison, these residual standard deviations were
+0.76 and 0.33 without the uranium predictor. This predictor has left the withincounty variation unchanged—which makes sense, since it is a county-level predictor
+which has no hope of explaining variation within any county—but has drastically
+reduced the unexplained variation between counties. In fact, the variance ratio is
+now only σα2 /σy2 = 0.162 /0.762 = 0.044, so that the county-level model is as good
+as 1/0.044 = 23 observations within any county. The multilevel estimates under
+this new model will be close to the complete-pooling estimates (with county-level
+uranium included as a predictor) for many of the smaller counties in the dataset
+because a county would have to have more than 23 observations to be pulled closer
+to the no-pooling estimate than the complete-pooling estimate.
+Interpreting the coeﬃcient of the group-level predictor
+The line in Figure 12.6 shows the prediction of average log radon in a county
+(for homes with basements—that is, xi = 0—since these are the intercepts αj ),
+as a function of the log uranium level in the county. This estimated group-level
+regression line has an estimated slope of about 0.7. Coeﬃcients between 0 and 1
+are typical in a log-log regression: in this case, each increase of 1% in uranium level
+corresponds to a 0.7% predicted increase in radon.
+It makes sense that counties higher in uranium have higher radon levels, and it
+also makes sense that the slope is less than 1. Radon is aﬀected by factors other
+
+GROUP-LEVEL PREDICTORS
+
+269
+
+than soil uranium, and the “uranium” variable in the dataset is itself an imprecise
+measure of actual soil uranium in the county, and so we would expect a 1% increase
+in the uranium variable to match to something less than a 1% increase in radon.
+Compared to classical regression, the estimation of this coeﬃcient is trickier (since
+the αj ’s—the “data” for the county-level regression—are not themselves observed)
+but the principles of interpretation do not change.
+A multilevel model can include county indicators along with a county-level
+predictor
+Users of multilevel models are often confused by the idea of including county indicators along with a county-level predictor. Is this possible? With 85 counties in
+the dataset, how can a regression ﬁt 85 coeﬃcients for counties, plus a coeﬃcient
+for county-level uranium? This would seem to induce perfect collinearity into the
+regression or, to put it more bluntly, to attempt to learn more than the data can
+tell us. Is it really possible to estimate 86 coeﬃcients from 85 data points?
+The short answer is that we really have more than 85 data points. There are
+hundreds of houses with which to estimate the 85 county-level intercepts, and 85
+counties with which to estimate the coeﬃcient of county-level uranium. In a classical
+regression, however, the 85 county indicators and the county-level predictor would
+indeed be collinear. This problem is avoided in a multilevel model because of the
+partial pooling of the αj ’s toward the group-level linear model. This is illustrated in
+Figure 12.6, which shows the estimates of all these 86 parameters—the 85 separate
+points and the slope of the line. In this model that includes a group-level predictor,
+the estimated intercepts are pulled toward this group-level regression line (rather
+than toward a constant, as in Figure 12.3b). The county-level uranium predictor
+uj thus helps us estimate the county intercepts αj but without overwhelming the
+information in individual counties.
+Partial pooling of group coeﬃcients αj in the presence of group-level predictors
+Equation (12.4) on page 258 gives the formula for partial pooling in the simple
+model with no group-level predictors. Once we add a group-level regression, αj ∼
+N(Uj γ, σα2 ), the parameters αj are shrunk toward their regression estimates α̂j =
+Uj γ. Equivalently, we can say that the group-level errors ηj (in the model αj =
+Uj γ + ηj ) are shrunk toward 0. As always, there is more pooling when the grouplevel standard deviation σα is small, and more smoothing for groups with fewer
+observations. The multilevel estimate of αj is a weighted average of the no-pooling
+estimate for its group (ȳj − X j β) and the regression prediction α̂j :
+estimate of αj
+
+≈
+
+nj
+σy2
+nj
+1
+2
+σy2 + σα
+
+· (estimate from group j) +
+
++ nj
+
+1
+2
+σα
+
+1
+σy2 + σ2
+α
+
+· (estimate from regression).
+
+Equivalently, the group-level errors ηj are partially pooled toward zero:
+nj
+σy2
+
+1
+2
+σα
+1 (ȳj − X j β − Uj γ) + nj
+1
++
++
+2
+2
+2
+2
+σy
+σα
+σy
+σα
+
+estimate of ηj ≈ nj
+
+· 0.
+
+(12.16)
+
+270
+
+MULTILEVEL LINEAR MODELS: THE BASICS
+
+12.7 Model building and statistical signiﬁcance
+From classical to multilevel regression
+When confronted with a multilevel data structure, such as the radon measurements
+considered here or the examples in the previous chapter, we typically start by ﬁtting
+some simple classical regressions and then work our way up to a full multilevel
+model. The four natural starting points are:
+• Complete-pooling model: a single classical regression completely ignoring the
+group information—that is, a single model ﬁt to all the data, perhaps including
+group-level predictors but with no coeﬃcients for group indicators.
+• No-pooling model: a single classical regression that includes group indicators
+(but no group-level predictors) but with no model for the group coeﬃcients.
+• Separate models: a separate classical regression in each group. This approach is
+not always possible if there are groups with small sample sizes. (For example,
+in Figure 12.4 on page 257, Aitkin County has three measurements in homes
+with basements and one in a home with no basement. If the sample from Aitkin
+County had happened to contain only houses with basements, then it would be
+impossible to estimate the slope β from this county alone.)
+• Two-step analysis: starting with either the no-pooling or separate models, then
+ﬁtting a classical group-level regression using, as “data,” the estimated coeﬃcients for each group.
+Each of these simpler models can be informative in its own right, and they also set
+us up for understanding the partial pooling in a multilevel model, as in Figure 12.4.
+For large datasets, ﬁtting a model separately in each group can be computationally eﬃcient as well. One might imagine an iterative procedure that starts by
+ﬁtting separate models, continues with the two-step analysis, and then returns to
+ﬁtting separate models, but using the resulting group-level regression to guide the
+estimates of the varying coeﬃcients. Such a procedure, if formalized appropriately,
+is in fact the usual algorithm used to ﬁt multilevel models, as we discuss in Chapter
+17.
+When is multilevel modeling most eﬀective?
+Multilevel model is most important when it is close to complete pooling, at least
+for some of the groups (as for Lac Qui Parle County in Figure 12.4 on page 257).
+In this setting we can allow estimates to vary by group while still estimating them
+precisely. As can be seen from formula (12.16), estimates are more pooled when the
+group-level standard deviation σα is small, that is, when the groups are similar to
+each other. In contrast, when σα is large, so that groups vary greatly, multilevel
+modeling is not much better than simple no-pooling estimation.
+At this point, it might seem that we are contradicting ourselves. Earlier we motivated multilevel modeling as a compromise between no pooling and complete
+pooling, but now we are saying that multilevel modeling is eﬀective when it is close
+to complete pooling, and ineﬀective when it is close to no pooling. If this is so, why
+not just always use the complete-pooling estimate?
+We answer this question in two ways. First, when the multilevel estimate is close
+to complete pooling, it still allows variation between groups, which can be important, in fact can be one of the goals of the study. Second, as in the radon example,
+the multilevel estimate can be close to complete pooling for groups with small sam-
+
+MODEL BUILDING AND STATISTICAL SIGNIFICANCE
+
+271
+
+ple size and close to no pooling for groups with large sample size, automatically
+performing well for both sorts of group.
+
+Using group-level predictors to make partial pooling more eﬀective
+In addition to being themselves of interest, group-level predictors play a special
+role in multilevel modeling by reducing the unexplained group-level variation and
+thus reducing the group-level standard deviation σα . This in turn increases the
+amount of pooling done by the multilevel estimate (see formula (12.16)), giving more
+precise estimates of the αj ’s, especially for groups for which the sample size nj is
+small. Following the template of classical regression, multilevel modeling typically
+proceeds by adding predictors at the individual and group levels and reducing
+the unexplained variance at each level. (However, as discussed in Section 21.7,
+adding a group-level predictor can actually increase the unexplained variance in
+some situations.)
+
+Statistical signiﬁcance
+It is not appropriate to use statistical signiﬁcance as a criterion for including particular group indicators in a multilevel model. For example, consider the simple
+varying-intercept radon model with no group-level predictor, in which the average
+intercept μα is estimated at 1.46, and the within-group intercepts αj are estimated
+at 1.46 − 0.27 ± 0.25 for county 1, 1.46 − 0.53 ± 0.10 for county 2, 1.46 + 0.02 ± 0.28
+for county 3, and so forth (see page 261).
+County 1 is thus approximately 1 standard error away from the average intercept
+of 1.46, county 2 is more than 4 standard errors away, . . . and county 85 is less than
+1 standard error away. Of these three counties, only county 2 would be considered
+“statistically signiﬁcantly” diﬀerent from the average.
+However, we should include all 85 counties in the model, and nothing is lost by
+doing so. The purpose of the multilevel model is not to see whether the radon levels
+in county 1 are statistically signiﬁcantly diﬀerent from those in county 2, or from
+the Minnesota average. Rather, we seek the best possible estimate in each county,
+with appropriate accounting for uncertainty. Rather than make some signiﬁcance
+threshold, we allow all the intercepts to vary and recognize that we may not have
+much precision in many of the individual groups. We illustrate this point in another
+example in Section 21.8.
+The same principle holds for the models discussed in the following chapters, which
+include varying slopes, non-nested levels, discrete data, and other complexities.
+Once we have included a source of variation, we do not use statistical signiﬁcance
+to pick and choose indicators to include or exclude from the model.
+In practice, our biggest constraints—the main reasons we do not use extremely
+elaborate models in which all coeﬃcients can vary with respect to all grouping
+factors—are ﬁtting and understanding complex models. The lmer() function works
+well when it works, but it can break down for models with many grouping factors.
+Bugs is more general (see Part 2B of this book) but can be slow with large datasets
+or complex models. In the meantime we need to start simple and build up gradually,
+a process during which we can also build understanding of the models being ﬁt.
+
+272
+
+MULTILEVEL LINEAR MODELS: THE BASICS
+
+12.8 Predictions for new observations and new groups
+Predictions for multilevel models can be more complicated than for classical regression because we can apply the model to existing groups or new groups. After
+a brief review of classical regression prediction, we explain in the context of the
+radon model.
+Review of prediction for classical regression
+In classical regression, prediction is simple: specify the predictor matrix X̃ for a set
+of new observations5 and then compute the linear predictor X̃β, then simulate the
+predictive data:
+• For linear regression, simulate independent normal errors ˜i with mean 0 and
+standard deviation σ, and compute ỹ = X̃β + ˜; see Section 7.2.
+• For logistic regression, simulate the predictive binary data: Pr(ỹi ) = logit−1 (X̃i β)
+for each new data point i; see Section 7.4.
+• With binomial logistic regression, specify the number of tries ñi for each new
+unit i, and simulate ỹi from the binomial distribution with parameters ñi and
+logit−1 (X̃i β); see Section 7.4.
+• With Poisson regression, specify the exposures ũi for the new units, and simulate
+ỹi ∼ Poisson(ũi eX̃i β ) for each new i; see Section 7.4.
+As discussed in Section 7.2, the estimation for a regression in R gives a set of nsims
+simulation draws. Each of these is used to simulate the predictive data vector ỹ,
+yielding a set of nsims simulated predictions. For example, in the election forecasting
+example of Figure 7.5 on page 146:
+R code
+
+model.1 <- lm (vote.88 ~ vote.86 + party.88 + inc.88)
+display (model.1)
+n.sims <- 1000
+sim.1 <- sim (model.1, n.sims)
+beta.sim <- sim.1$beta
+sigma.sim <- sim.1$sigma
+n.tilde <- length (vote.88)
+X.tilde <- cbind (rep(1,n.tilde), vote.88, party.90, inc.90)
+y.tilde <- array (NA, c(n.sims, n.tilde))
+for (s in 1:n.sims) {
+y.tilde[s,] <- rnorm (n.tilde, X.tilde%*%beta.sim[s,], sigma.sim[s])
+}
+
+This matrix of simulations can be used to get point predictions (for example,
+median(y.tilde[,3]) gives the median estimate for ỹ3 ) or predictive intervals
+(for example, quantile(y.tilde[,3],c(.025,.975))) for individual data points
+or for more elaborate derived quantities, such as the predicted number of seats
+won by the Democrats in 1990 (see the end of Section 7.3). For many applications,
+the predict() function in R is a good way to quickly get point predictions and
+intervals (see page 48); here we emphasize the more elaborate simulation approach
+which allows inferences for arbitrary quantities.
+5 Predictions are more complicated for time-series models: even when parameters are ﬁt by clas-
+
+sical regression, predictions must be made sequentially. See Sections 8.4 and 24.2 for examples.
+
+PREDICTIONS FOR NEW OBSERVATIONS AND NEW GROUPS
+
+273
+
+Prediction for a new observation in an existing group
+We can make two sorts of predictions for the radon example: predicting the radon
+level for a new house within one of the counties in the dataset, and for a new house
+in a new county. We shall work with model (12.15) on page 266, with ﬂoor as an
+individual-level predictor and uranium as a group-level predictor
+For example, suppose we wish to predict ỹ, the log radon level for a house with no
+basement (thus, with radon measured on the ﬁrst ﬂoor, so that x̃ = 1) in Hennepin
+County (j = 26 of our Minnesota dataset). Conditional on the model parameters,
+the predicted value has a mean of α26 + β and a standard deviation of σy . That is,
+ỹ|θ ∼ N(α26 + β x̃, σy2 ),
+where we are using θ to represent the entire vector of model parameters.
+Given estimates of α, β, and σy , we can create a predictive simulation for ỹ using
+R code such as
+x.tilde <- 1
+sigma.y.hat <- sigma.hat(M2)$sigma$data
+coef.hat <- as.matrix(coef(M2)$county)[26,]
+y.tilde <- rnorm (1, coef.hat %*% c(1, x.tilde, u[26]), sigma.y.hat)
+
+R code
+
+More generally, we can create a vector of n.sims simulations to represent the predictive uncertainty in ỹ:
+n.sims <- 1000
+coef.hat <- as.matrix(coef(M2)$county)[26,]
+y.tilde <- rnorm (1000, coef.hat %*% c(1, x.tilde, u[26]), sigma.y.hat)
+
+R code
+
+Still more generally, we can add in the inferential uncertainty in the estimated
+parameters, α, β, and σ. For our purposes here, however, we shall ignore inferential
+uncertainty and just treat the parameters α, β, σy , σα as if they were estimated
+perfectly from the data.6 In that case, the computation gives us 1000 simulation
+draws of ỹ, which we can summarize in various ways. For example,
+quantile (y.tilde, c(.25,.5,.75))
+
+R code
+
+gives us a predictive median of 0.76 and a 50% predictive interval of [0.26, 1.27].
+Exponentiating gives us a prediction on the original (unlogged) scale of exp(0.76) =
+2.1, with a 50% interval of [1.3, 3.6].
+For some applications we want the average, rather than the median, of the predictive distribution. For example, the expected risk from radon exposure is proportional to the predictive average or mean, which we can compute directly from the
+simulations:
+unlogged <- exp(y.tilde)
+mean (unlogged)
+
+In this example, the predictive mean is 2.9, which is a bit higher than the median
+of 2.1. This makes sense: on the unlogged scale, this predictive distribution is skewed
+to the right.
+6 One reason we picked Hennepin County (j = 26) for this example is that, with a sample size
+
+of 105, its average radon level is accurately estimated from the available data.
+
+R code
+
+274
+
+MULTILEVEL LINEAR MODELS: THE BASICS
+
+Prediction for a new observation in a new group
+Now suppose we want to predict the radon level for a house, once again with no
+basement, but this time in a county not included in our analysis. We then must
+generate a new county-level error term, α̃, which we sample from its N(γ0 +γ1 ũj , σα2 )
+distribution. We shall assume the new county has a uranium level equal to the
+average of the uranium levels in the observed counties:
+R code
+
+u.tilde <- mean (u)
+
+grab the estimated γ0 , γ1 , σα from the ﬁtted model:
+R code
+
+g.0.hat <- fixef(M2)["(Intercept)"]
+g.1.hat <- fixef(M2)["u.full"]
+sigma.a.hat <- sigma.hat(M2)$sigma$county
+
+and simulate possible intercepts for the new county:
+R code
+
+a.tilde <- rnorm (n.sims, g.0.hat + g.1.hat*u.tilde, sigma.a.hat)
+
+We can then simulate possible values of the radon level for the new house in this
+county:
+R code
+
+y.tilde <- rnorm (n.sims, a.tilde + b.hat*x.tilde, sigma.y.hat)
+
+Each simulation draw of ỹ uses a diﬀerent simulation of α̃, thus propagating the
+uncertainty about the new county into the uncertainty about the new house in this
+county.
+Comparison of within-group and between-group predictions. The resulting prediction will be more uncertain than for a house in a known county, since we have no
+information about α̃. Indeed, the predictive 50% interval of this new ỹ is [0.28, 1.34],
+which is slightly wider than the predictive interval of [0.26, 1.27] for the new house
+in county 26. The interval is only slightly wider because the within-county variation
+in this particular example is much higher than the between-county variation.
+More speciﬁcally, from the ﬁtted model on page 266, the within-county (residual)
+standard deviation σy is estimated at 0.76, and the between-county standard deviation σα is estimated at 0.16. The log radon level for a new house in an alreadymeasured county can then be measured to an accuracy of about ±0.76. The log
+radon level
+√ for a new house in a new county can be predicted to an accuracy of
+about ± 0.762 + 0.162 = ±0.78. The ratio 0.78/0.76 is 1.03, so we would expect
+the predictive interval for a new house in a new county to be about 3% wider
+than for a new house in an already-measured county. The change in interval width
+is small here because the unexplained between-county variance is so small in this
+dataset.
+For another example, the 50% interval for the log radon level of a house with no
+basement in county 2 is [0.28, 1.30], which is centered in a diﬀerent place but also
+is narrower than the predictive interval for a new county.
+Nonlinear predictions
+Section 7.3 illustrated the use of simulation for nonlinear predictions from classical
+regression. We can perform similar calculations in multilevel models. For example,
+suppose we are interested in the average radon level among all the houses in Hennepin County (j = 26). We can perform this inference using poststratiﬁcation, ﬁrst
+estimating the average radon level of the houses with and without basements in the
+county, then weighting these by the proportion of houses in the county that have
+
+HOW MANY GROUPS AND OBSERVATIONS ARE NEEDED?
+
+275
+
+basements. We can look up this proportion from other data sources on homes, or
+we can estimate it from the available sample data.
+For our purposes here, we shall assume that 90% of all the houses in Hennepin
+County have basements. The average radon level of all the houses in the county is
+then 0.1 times the average for the houses in Hennepin County without basements,
+plus 0.9 times the average for those with basements. To simulate in R:
+y.tilde.basement <- rnorm (n.sims, a.hat[26], sigma.y.hat)
+y.tilde.nobasement <- rnorm (n.sims, a.hat[26] + b.hat, sigma.y.hat)
+
+R code
+
+We then compute the estimated mean for 1000 houses of each type in the county
+(ﬁrst exponentiating since our model was on the log scale):
+mean.radon.basement <- mean (exp (y.tilde.basement))
+mean.radon.nobasement <- mean (exp (y.tilde.nobasement))
+
+R code
+
+and ﬁnally poststratify given the proportion of houses of each type in the county:
+mean.radon <- .9*mean.radon.basement + .1*mean.radon.basement
+
+In Section 16.6 we return to the topic of predictions, using simulations from Bugs
+to capture the uncertainty in parameter estimates and then propagating inferential
+uncertainty into the predictions, rather than simply using point estimates a.hat,
+b.hat, and so forth.
+12.9 How many groups and how many observations per group are
+needed to ﬁt a multilevel model?
+Advice is sometimes given that multilevel models can only be used if the number of
+groups is higher than some threshold, or if there is some minimum number of observations per groups. Such advice is misguided. Multilevel modeling includes classical
+regression as a limiting case (complete pooling when group-level variances are zero,
+no pooling when group-level variances are large). When sample sizes are small, the
+key concern with multilevel modeling is the estimation of variance parameters, but
+it should still work at least as well as classical regression.
+How many groups?
+When J, the number of groups, is small, it is diﬃcult to estimate the between-group
+variation and, as a result, multilevel modeling often adds little in such situations,
+beyond classical no-pooling models. The diﬃculty of estimating variance parameters
+is a technical issue to which we return in Section 19.6; to simplify, when σα cannot
+be estimated well, it tends to be overestimated, and so the partially pooled estimates
+are close to no pooling (this is what happens when σα has a high value in (12.16)
+on page 269).
+At the same time, multilevel modeling should not do any worse than no-pooling
+regression and sometimes can be easier to interpret, for example because one can
+include indicators for all J groups rather than have to select one group as a baseline
+category.
+One or two groups
+With only one or two groups, however, multilevel modeling reduces to classical
+regression (unless “prior information” is explicitly included in the model; see Section
+18.3). Here we usually express the model in classical form (for example, including
+
+R code
+
+276
+
+MULTILEVEL LINEAR MODELS: THE BASICS
+
+a single predictor for female, rather than a multilevel model for the two levels of
+the sex factor).
+Even with only one or two groups in the data, however, multilevel models can
+be useful for making predictions about new groups. See also Sections 21.2–22.5 for
+further connections between classical and multilevel models, and Section 22.6 for
+hierarchical models for improving estimates of variance parameters in settings with
+many grouping factors but few levels per factor.
+How many observations per group?
+Even two observations per group is enough to ﬁt a multilevel model. It is even
+acceptable to have one observation in many of the groups. When groups have few
+observations, their αj ’s won’t be estimated precisely, but they can still provide partial information that allows estimation of the coeﬃcients and variance parameters
+of the individual- and group-level regressions.
+Larger datasets and more complex models
+As more data arise, it makes sense to add parameters to a model. For example,
+consider a simple medical study, then separate estimates for men and women, other
+demographic breakdowns, diﬀerent regions of the country, states, smaller geographic
+areas, interactions between demographic and geographic categories, and so forth.
+As more data become available it makes sense to estimate more. These complexities
+are latent everywhere, but in small datasets it is not possible to learn so much, and
+it is not necessarily worth the eﬀort to ﬁt a complex model when the resulting
+uncertainties will be so large.
+12.10 Bibliographic note
+Multilevel models have been used for decades in agriculture (Henderson, 1950,
+1984, Henderson et al., 1959, Robinson, 1991) and educational statistics (Novick
+et al., 1972, 1973, Bock, 1989), where it is natural to model animals in groups
+and students in classrooms. More recently, multilevel models have become popular in many social sciences and have been reviewed in books by Longford (1993),
+Goldstein (1995), Kreft and De Leeuw (1998), Snijders and Bosker (1999), Verbeke
+and Molenberghs (2000), Leyland and Goldstein (2001), Hox (2002), and Raudenbush and Bryk (2002). We do not attempt to trace here the many applications of
+multilevel models in various scientiﬁc ﬁelds.
+It might also be useful to read up on Bayesian inference to understand the theoretical background behind multilevel models.7 Box and Tiao (1973) is a classic
+reference that focuses on linear models. It predates modern computational methods but might be useful for understanding the fundamentals. Gelman et al. (2003)
+and Carlin and Louis (2000) cover applied Bayesian inference including the basics of
+multilevel modeling, with detailed discussions of computational algorithms. Berger
+7 As we discuss in Section 18.3, multilevel inferences can be formulated non-Bayesianly; however,
+
+understanding the Bayesian derivations should help with the other approaches too. All multilevel models are Bayesian in the sense of assigning probability distributions to the varying
+regression coeﬃcients. The distinction between Bayesian and non-Bayesian multilevel models arises only for the question of modeling the other parameters—the nonvarying coeﬃcients
+and the variance parameters—and this is typically a less important issue, especially when the
+number of groups is large.
+
+EXERCISES
+
+277
+
+(1985) and Bernardo and Smith (1994) cover Bayesian inference from two diﬀerent
+theoretical perspectives.
+The R function lmer() is described by Bates (2005a, b) and was developed from
+the linear and nonlinear mixed eﬀects software described in Pinheiro and Bates
+(2000).
+Multilevel modeling used to be controversial in statistics; see, for example, the
+discussions of the papers by Lindley and Smith (1972) and Rubin (1980) for some
+sense of the controversy.
+The Minnesota radon data were analyzed by Price, Nero, and Gelman (1996);
+see also Price and Gelman (2004) for more on home radon modeling.
+Statistical researchers have studied partial pooling in many ways; see James and
+Stein (1960), Efron and Morris (1979), DuMouchel and Harris (1983), Morris (1983),
+and Stigler (1983). Louis (1984), Shen and Louis (1998), Louis and Shen (1999), and
+Gelman and Price (1999) discuss some diﬃculties in the interpretation of partially
+pooled estimates. Zaslavsky (1993) discusses adjustments for undercount in the
+U.S. Census from a partial-pooling perspective. Normand, Glickman, and Gatsonis
+(1997) discuss the use of multilevel models for evaluating health-care providers.
+12.11 Exercises
+1. Using data of your own that are appropriate for a multilevel model, write the
+model in the ﬁve ways discussed in Section 12.5.
+2. Continuing with the analysis of the CD4 data from Exercise 11.4:
+(a) Write a model predicting CD4 percentage as a function of time with varying
+intercepts across children. Fit using lmer() and interpret the coeﬃcient for
+time.
+(b) Extend the model in (a) to include child-level predictors (that is, group-level
+predictors) for treatment and age at baseline. Fit using lmer() and interpret
+the coeﬃcients on time, treatment, and age at baseline.
+(c) Investigate the change in partial pooling from (a) to (b) both graphically and
+numerically.
+(d) Compare results in (b) to those obtained in part (c).
+3. Predictions for new observations and new groups:
+(a) Use the model ﬁt from Exercise 12.2(b) to generate simulation of predicted
+CD4 percentages for each child in the dataset at a hypothetical next time
+point.
+(b) Use the same model ﬁt to generate simulations of CD4 percentages at each of
+the time periods for a new child who was 4 years old at baseline.
+4. Posterior predictive checking: continuing the previous exercise, use the ﬁtted
+model from Exercise 12.2(b) to simulate a new dataset of CD4 percentages (with
+the same sample size and ages of the original dataset) for the ﬁnal time point of
+the study, and record the average CD4 percentage in this sample. Repeat this
+process 1000 times and compare the simulated distribution to the observed CD4
+percentage at the ﬁnal time point for the actual data.
+5. Using the radon data, include county sample size as a group-level predictor and
+write the varying-intercept model. Fit this model using lmer().
+6. Return to the beauty and teaching evaluations introduced in Exercise 3.5 and
+4.8.
+
+278
+
+MULTILEVEL LINEAR MODELS: THE BASICS
+
+(a) Write a varying-intercept model for these data with no group-level predictors.
+Fit this model using lmer() and interpret the results.
+(b) Write a varying-intercept model that you would like to ﬁt including three
+group-level predictors. Fit this model using lmer() and interpret the results.
+(c) How does the variation in average ratings across instructors compare to the
+variation in ratings across evaluators for the same instructor?
+7. This exercise will use the data you found for Exercise 4.7. This time, rather than
+repeating the same analysis across each year, or country (or whatever group the
+data varies across), ﬁt a multilevel model using lmer() instead. Compare the
+results to those obtained in your earlier analysis.
+8. Simulate data (outcome, individual-level predictor, group indicator, and grouplevel predictor) that would be appropriate for a multilevel model. See how partial
+pooling changes as you vary the sample size in each group and the number of
+groups.
+9. Number of observations and number of groups:
+(a) Take a simple random sample of one-ﬁfth of the radon data. (You can create this subset using the sample() function in R.) Fit the varying-intercept
+model with ﬂoor as an individual-level predictor and log uranium as a countylevel predictor, and compare your inferences to what was obtained by ﬁtting
+the model to the entire dataset. (Compare inferences for the individual- and
+group-level standard deviations, the slopes for ﬂoor and log uranium, the average intercept, and the county-level intercepts.)
+(b) Repeat step (a) a few times, with a diﬀerent random sample each time, and
+summarize how the estimates vary.
+(c) Repeat step (a), but this time taking a cluster sample: a random sample of
+one-ﬁfth of the counties, but then all the houses within each sampled county.
+
+CHAPTER 13
+
+Multilevel linear models: varying slopes,
+non-nested models, and other
+complexities
+This chapter considers some generalizations of the basic multilevel regression. Models in which slopes and intercepts can vary by group (for example, yi = αj[i] +
+βj[i] xi + · · · , where α and β both vary by group j; see Figure 11.1c on page 238)
+can also be interpreted as interactions of the group index with individual-level predictors.
+Another direction is non-nested models, in which a given dataset can be structured into groups in more than one way. For example, persons in a national survey
+can be divided by demographics or by states. Responses in a psychological experiment might be classiﬁed by person (experimental subject), experimental condition,
+and time.
+The chapter concludes with some examples of models with nonexchangeable multivariate structures. We continue with generalized linear models in Chapters 14–15
+and discuss how to ﬁt all these models in Chapters 16–19.
+13.1 Varying intercepts and slopes
+The next step in multilevel modeling is to allow more than one regression coeﬃcient
+to vary by group. We shall illustrate with the radon model from the previous chapter, which is relatively simple because it only has a single individual-level predictor,
+x (the indicator for whether the measurement was taken on the ﬁrst ﬂoor).
+We begin with a varying-intercept, varying-slope model including x but without
+the county-level uranium predictor; thus,
+
+
+yi ∼
+
+αj
+∼
+βj
+
+N(αj[i] + βj[i] xi , σy2 ), for i = 1, . . . , n
+
+ 
+
+ρσα σβ
+σα2
+μα
+N
+,
+, for j = 1, . . . , J,
+ρσα σβ
+σβ2
+μβ
+
+(13.1)
+
+with variation in the αj ’s and the βj ’s and also a between-group correlation parameter ρ. In R:
+M3 <- lmer (y ~ x + (1 + x | county))
+display (M3)
+
+R code
+
+which yields
+lmer(formula = y ~ x + (1 + x | county))
+coef.est coef.se
+(Intercept) 1.46
+0.05
+x
+-0.68
+0.09
+Error terms:
+Groups
+Name
+Std.Dev. Corr
+county
+(Intercept) 0.35
+x
+0.34
+-0.34
+279
+
+R output
+
+280
+
+VARYING SLOPES AND NON-NESTED MODELS
+
+Residual
+0.75
+# of obs: 919, groups: county, 85
+deviance = 2161.1
+
+In this model, the unexplained within-county variation has an estimated standard
+deviation of σ̂y = 0.75; the estimated standard deviation of the county intercepts
+is σ̂α = 0.35; the estimated standard deviation of the county slopes is σ̂β = 0.34;
+and the estimated correlation between intercepts and slopes is −0.34.
+We then can type
+R code
+
+coef (M3)
+
+to yield
+R output
+
+$county
+(Intercept)
+x
+1
+1.14 -0.54
+2
+0.93 -0.77
+3
+1.47 -0.67
+. . .
+85
+1.38 -0.65
+
+Or we can separately look at the estimated population mean coeﬃcients μα , μβ and
+then the estimated errors for each county. First, we type
+R code
+
+fixef (M3)
+
+to see the estimated average coeﬃcients (“ﬁxed eﬀects”):
+R output
+
+(Intercept)
+1.46
+
+x
+-0.68
+
+Then, we type
+R code
+
+ranef (M3)
+
+to see the estimated group-level errors (“random eﬀects”):
+R output
+
+(Intercept)
+x
+1
+-0.32 0.14
+2
+-0.53 -0.09
+3
+0.01 0.01
+. . .
+85
+-0.08 0.03
+
+We can regain the estimated intercept and slope αj , βj for each county by simply
+adding the errors to μα and μβ ; thus, the estimated regression line for county 1 is
+(1.46 − 0.32) + (−0.68 + 0.14)x = 1.14 − 0.54x, and so forth.
+The group-level model for the parameters (αj , βj ) allows for partial pooling in
+the estimated intercepts and slopes. Figure 13.1 shows the results—the estimated
+lines y = αj + βj x—for the radon data in eight diﬀerent counties.
+Including group-level predictors
+We can expand the model of (α, β) in (13.1) by including a group-level predictor
+(in this case, soil uranium):
+ 
+ α
+ 
+
+γ0 + γ1α uj
+ρσα σβ
+σα2
+αj
+∼N
+,
+, for j = 1, . . . , J.
+(13.2)
+ρσα σβ
+σβ2
+βj
+γ0β + γ1β uj
+The resulting estimates for the αj ’s and βj ’s are changed slightly from what is
+displayed in Figure 13.1, but more interesting are the second-level models themselves, whose estimates are shown in Figure 13.2. Here is the result of ﬁtting the
+model in R:
+
+VARYING INTERCEPTS AND SLOPES
+
+−
+
+DOUGLAS
+
+ST LOUIS
+
+−
+
+RAMSEY
+
+−
+
+−
+
+STEARNS
+
+−
+
+CLAY
+
+KOOCHICHING
+
+−
+
+−
+
+AITKIN
+
+−
+
+LAC QUI PARLE
+
+281
+
+−
+
+−
+
+−
+
+−
+
+−
+
+−
+
+−
+
+−
+
+Figure 13.1 Multilevel (partial pooling) regression lines y = αj + βj x, displayed for eight
+counties j. In this model, both the intercept and the slope vary by county. The light solid
+and dashed lines show the no-pooling and complete pooling regression lines. Compare to
+Figure 12.4, in which only the intercept varies.
+
+−
+
+−
+
+−
+
+−
+
+−
+
+Figure 13.2 (a) Estimates ± standard errors for the county intercepts αj , plotted versus
+county-level uranium measurement uj , along with the estimated multilevel regression line,
+α = γ0α + γ1α u. (b) Estimates ± standard errors for the county slopes βj , plotted versus
+county-level uranium measurement uj , along with the estimated multilevel regression line,
+β = γ0β + γ1β u. Estimates and standard errors are the posterior medians and standard
+deviations, respectively. For each graph, the county coeﬃcients roughly follow the line
+but not exactly; the discrepancies of the coeﬃcients from the line are summarized by the
+county-level standard-deviation parameters σα , σβ .
+
+lmer(formula = y ~ x + u.full + x:u.full + (1 + x | county))
+coef.est coef.se
+(Intercept) 1.47
+0.04
+x
+-0.67
+0.08
+u.full
+0.81
+0.09
+x:u.full
+-0.42
+0.23
+Error terms:
+Groups
+Name
+Std.Dev. Corr
+county
+(Intercept) 0.12
+x
+0.31
+0.41
+Residual
+0.75
+# of obs: 919, groups: county, 85
+deviance = 2114.3
+
+The parameters γ0α , γ0β , γ1α , γ1β in model (13.2) are the coeﬃcients for the intercept,
+
+R output
+
+282
+
+VARYING SLOPES AND NON-NESTED MODELS
+
+x, u.full, and x:u.full, respectively, in the regression. In particular, the interaction corresponds to allowing uranium to be a predictor in the regression for the
+slopes.
+The estimated coeﬃcients in each group (from coef(M4)) are:
+R output
+
+$county
+(Intercept)
+x u.full x:u.full
+1
+1.46 -0.65
+0.81
+-0.42
+2
+1.50 -0.89
+0.81
+-0.42
+. . .
+85
+1.44 -0.70
+0.81
+-0.42
+
+Or we can display the average coeﬃcients (using fixef(M4)):
+R output
+
+(Intercept)
+1.47
+
+x
+-0.67
+
+u.full
+0.81
+
+x:u.full
+-0.42
+
+and the group-level errors for the intercepts and slopes (using ranef(M4)):
+R output
+
+(Intercept)
+x
+1
+-0.01 0.02
+2
+0.03 -0.21
+. . .
+85
+-0.02 -0.03
+
+The coeﬃcients for the intercept and x vary, as speciﬁed in the model. This can be
+compared to the model on page 267 in which only the intercept varies.
+Going from lmer output to intercepts and slopes
+As before, we can combine the average coeﬃcients with the group-level errors to
+compute the intercepts αj and slopes βj of model (13.2). For example, the ﬁtted
+regression model in county 85 is yi = 1.47 − 0.67xi + 0.81u85 − 0.42xi u85 − 0.02 −
+0.03xi . The log uranium level in county 85, u85 , is 0.36, and so the ﬁtted regression
+line in county 85 is yi = 1.73 − 0.85xi . More generally, we can compute a vector of
+county intercepts α and slopes β:
+R code
+
+a.hat.M4 <- coef(M4)[,1] + coef(M4)[,3]*u
+b.hat.M4 <- coef(M4)[,2] + coef(M4)[,4]*u
+
+Here it is actually useful to have the variable u deﬁned at the county level (as
+compared to u.full = u[county] which was used in the lmer() call). We next
+consider these linear transformations algebraically.
+Varying slopes as interactions
+Section 12.5 gave multiple ways of writing the basic multilevel model. These same
+ideas apply to models with varying slopes, which can be considered as interactions
+between group indicators and an individual-level predictor. For example, consider
+the model with an individual-level predictor xi and a group-level predictor uj ,
+yi
+αj
+
+= αj[i] + βj[i] xi + i
+= γ0α + γ1α uj + ηjα
+
+βj
+
+= γ0β + γ1β uj + ηjβ .
+
+We can re-express this as a single model by substituting the formulas for αj and
+βj into the equation for yi :
+
+ 
+
+β
+α
+(13.3)
++ γ0β + γ1β uj[i] + ηj[i]
+xi + i .
+yi = γ0α + γ1α uj[i] + ηj[i]
+
+VARYING SLOPES WITHOUT VARYING INTERCEPTS
+
+283
+
+This expression looks messy but it is really just a regression including various
+interactions. If we deﬁne a new individual-level predictor vi = uj[i] (in the radon
+example, this is the uranium level in the county where your house is located), we
+can re-express (13.3) term by term as
+yi = a + bvi + cj[i] + dxi + evi xi + fj[i] xi + i .
+This can be thought of in several ways:
+• A varying-intercept, varying-slope model with four individual-level predictors
+(the constant term, vi , xi , and the interaction vi xi ) and varying intercepts and
+slopes that are centered at zero.
+• A regression model with 4 + 2J predictors: the constant term, vi , xi , vi xi , indicators for the J groups, and interactions between x and the J group indicators.
+• A regression model with four predictors and three error terms.
+• Or, to go back to the original formulation, a varying-intercept, varying-slope
+model with one group-level predictor.
+Which of these expressions is most useful depends on the context. In the radon
+analysis, where the goal is to predict radon levels in individual counties, the varyingintercept, varying-slope formulation, as pictured in Figure 13.2, seems most appropriate. But in a problem where interest lies in the regression coeﬃcients for xi ,
+uj , and their interaction, it can be more helpful to focus on these predictors and
+consider the unexplained variation in intercepts and slopes merely as error terms.
+13.2 Varying slopes without varying intercepts
+Figure 11.1 on page 238 displays a varying-intercept model, a varying-slope model,
+and a varying-intercept, varying-slope model. Almost always, when a slope is allowed to vary, it makes sense for the intercept to vary also. That is, the graph in
+the center of Figure 11.1b usually does not make sense. For example, if the coeﬃcient of ﬂoor varies with county, then it makes sense to allow the intercept of the
+regression to vary also. It would be an implausible scenario in which the counties
+were all identical in radon levels for houses without basements, but diﬀered in their
+coeﬃcients for x.
+A situation in which a constant-intercept, varying-slope model is appropriate
+Occasionally it is reasonable to allow the slope but not the intercept to vary by
+group. For example, consider a study in which J separate experiments are performed
+on samples from a common population, with each experiment randomly assigning
+a control condition to half its subjects and a treatment to the other half. Further
+suppose that the “control” conditions are the same for each experiment but the
+“treatments” vary. In that case, it would make sense to ﬁx the intercept and allow
+the slope to vary—thus, a basic model of:
+yi
+
+∼
+
+N(α + θj[i] Ti , σy2 )
+
+θj
+
+∼
+
+N(μθ , σθ2 ),
+
+(13.4)
+
+where Ti = 1 for treated units and 0 for controls. Individual-level predictors could
+be added to the regression for y, and any interactions with treatment could also
+
+284
+
+VARYING SLOPES AND NON-NESTED MODELS
+
+have varying slopes; for example,
+
+
+yi ∼
+
+θ1,j
+∼
+θ2,j
+
+N (α + βxi + θ1,j[i] Ti + β2,j[i] xi Ti , σy2 )
+  
+
+μ1
+σ12
+ρσ1 σ2
+N
+, for j = 1, . . . , J,
+,
+μ2
+ρσ1 σ2
+σ22
+
+(13.5)
+
+The multilevel model could be further extended with group-level predictors characterizing the treatments.
+Fitting in R
+To ﬁt such a model in lmer(), we must explicitly remove the intercept from the
+group of coeﬃcients that vary by group; for example, here is model (13.4) including
+the treatment indicator T as a predictor:
+R code
+
+lmer (y ~ T + (T - 1 | group))
+
+The varying slope allows a diﬀerent treatment eﬀect for each group.
+And here is model (13.5) with an individual-level predictor x:
+R code
+
+lmer (y ~ x + T + (T + x:T - 1 | group))
+
+Here, the treatment eﬀect and its interaction with x vary by group.
+13.3 Modeling multiple varying coeﬃcients using the scaled
+inverse-Wishart distribution
+When more than two coeﬃcients vary (for example, yi ∼ N(β0 +β1 Xi1 +β2 Xi2 , σ 2 ),
+with β0 , β1 , and β2 varying by group), it is helpful to move to matrix notation in
+modeling the coeﬃcients and their group-level regression model and covariance
+matrix.
+Simple model with two varying coeﬃcients and no group-level predictors
+Starting with the model that begins this chapter, we can rewrite the basic varyingintercept, varying-slope model (13.1) in matrix notation as
+yi
+Bj
+
+∼ N(Xi Bj[i] , σy2 ), for i = 1, . . . , n
+∼ N(MB , ΣB ), for j = 1, . . . , J,
+
+(13.6)
+
+where
+• X is the n × 2 matrix of predictors: the ﬁrst column of X is a column of 1’s (that
+is, the constant term in the regression), and the second column is the predictor
+x. Xi is then the vector of length 2 representing the ith row of X, and Xi Bj[i] is
+simply αj[i] + βj[i] xi from the top line of (13.1).
+• B = (α, β) is the J × 2 matrix of individual-level regression coeﬃcients. For any
+group j, Bj is a vector of length 2 corresponding to the j th row of B (although
+for convenience we consider Bj as a column vector in the product Xi Bj[i] in
+model (13.6)). The two elements of Bj correspond to the intercept and slope,
+respectively, for the regression model in group j. Bj[i] in the ﬁrst line of (13.6)
+is the j[i]th row of B, that is, the vector representing the intercept and slope for
+the group that includes unit i.
+• MB = (μα , μβ ) is a vector of length 2, representing the mean of the distribution
+of the intercepts and the mean of the distribution of the slopes.
+
+INVERSE-WISHART MODEL FOR VARYING INTERCEPTS AND SLOPES 285
+• ΣB is the 2 × 2 covariance matrix representing the variation of the intercepts
+and slopes in the population of groups, as in the second line of (13.1).
+We are following our general notation in which uppercase letters represent matrices:
+thus, the vectors α and β are combined into the matrix B.
+In the ﬁtted radon model on page 279, the parameters
+of the group-level
+model are
+
+
+ρ̂σ̂a σ̂b
+σ̂a2
+
+
+estimated at MB = (1.46, −0.68) and ΣB =
+, where σˆa = 0.35,
+ρ̂σ̂a σ̂b
+σ̂b2
+
+σ̂b = 0.34, and ρ̂ = −0.34. The estimated coeﬃcient matrix B is given by the 85 × 2
+array at the end of the display of coef(M3) on page 280.
+More than two varying coeﬃcients
+The same expression as above holds, except that the 2’s are replaced by K’s, where
+K is the number of individual-level predictors (including the intercept) that vary by
+group. As we discuss shortly in the context of the inverse-Wishart model, estimation
+becomes more diﬃcult when K > 2 because of constraints among the correlation
+parameters of the covariance matrix ΣB .
+Including group-level predictors
+More generally, we can have J groups, K individual-level predictors, and L predictors in the group-level regression (including the constant term as a predictor in
+both cases). For example, K = L = 2 in the radon model that has ﬂoor as an
+individual predictor and uranium as a county-level predictor.
+We can extend model (13.6) to include group-level predictors:
+yi
+Bj
+
+∼
+∼
+
+N(Xi Bj[i] , σy2 ), for i = 1, . . . , n
+N(Uj G, ΣB ), for j = 1, . . . , J,
+
+(13.7)
+
+where B is the J × K matrix of individual-level coeﬃcients, U is the J × L matrix
+of group-level predictors (including the constant term), and G is the L × K matrix
+of coeﬃcients for the group-level regression. Uj is the j th row of U , the vector of
+predictors for group j, and so Uj G is a vector of length K.
+Model (13.1) is a special case with K = L = 2, and the coeﬃcients in G are
+then γ0α , γ0β , γ1α , γ1β . For the ﬁtted radon model on page 279, the γ’s are the four
+unmodeled coeﬃcients (for the intercept, x, u.full, and x:u.full, respectively),
+ are estimated by a.hat
+and the two columns of the estimated coeﬃcient matrix B
+and b.hat, as deﬁned by the R code on page 282.
+Including individual-level predictors whose coeﬃcients do not vary by group
+The model can be further expanded by adding unmodeled individual-level coeﬃcients, so that the top line of (13.7) becomes
+yi ∼ N(Xi0 β 0 + Xi Bj[i] , σy2 ), for i = 1, . . . , n,
+
+(13.8)
+
+where X 0 is a matrix of these additional predictors and β 0 is the vector of their
+regression coeﬃcients (which, by assumption, are common to all the groups).
+Model (13.8) is sometimes called a mixed-eﬀects regression, where the β 0 ’s and
+the B’s are the ﬁxed and random eﬀects, respectively. As noted on pages 2 and
+245, we avoid these terms because of their ambiguity in the statistical literature.
+For example, sometimes unvarying coeﬃcients such as the β 0 ’s in model (13.8) are
+called “ﬁxed,” but sometimes the term “ﬁxed eﬀects” refers to intercepts that vary
+
+286
+
+VARYING SLOPES AND NON-NESTED MODELS
+
+by groups but are not given a multilevel model (this is what we call the “no-pooling
+model,” as pictured, for example, by the solid lines in Figure 12.2 on page 255).
+Equivalently, model (13.8) can be written by folding X 0 and X into a common
+predictor matrix X, folding β 0 and B into a common coeﬃcient matrix B, and
+using model (13.1), with the appropriate elements in ΣB set to zero, implying no
+variation among groups for certain coeﬃcients.
+Modeling the group-level covariance matrix using the scaled inverse-Wishart
+distribution
+When the number K of varying coeﬃcients per group is more than two, modeling
+the correlation parameters ρ is a challenge. In addition to each of the correlations
+being restricted to fall between −1 and 1, the correlations are jointly constrained in
+a complicated way—technically, the covariance matrix Σβ must be positive deﬁnite.
+(An example of the constraint is: if ρ12 = 0.9 and ρ13 = 0.9, then ρ23 must be at
+least 0.62.)
+Modeling and estimation are more complicated in this jointly constrained space.
+We ﬁrst introduce the inverse-Wishart model, then generalize to the scaled inverseWishart, which is what we recommend for modeling the covariance matrix of the
+distribution of varying coeﬃcients.
+Inverse-Wishart model. One model that has been proposed for the covariance
+matrix Σβ is the inverse-Wishart distribution, which has the advantage of being
+computationally convenient (especially when using Bugs, as we illustrate in Section
+17.1) but the disadvantage of being diﬃcult to interpret.
+In the model ΣB ∼ Inv-WishartK+1 (I), the two parameters of the inverseWishart distribution are the degrees of freedom (here set to K + 1, where K is
+the dimension of B, that is, the number of coeﬃcients in the model that vary by
+group) and the scale (here set to the K × K identity matrix).
+To understand this model, we consider its implications for the standard deviation
+and correlations. Recall that if there are K varying coeﬃcients, then ΣB is a K × K
+matrix, with diagonal elements Σkk = σk2 and oﬀ-diagonal-elements Σkl = ρkl σk σl
+(generalizing models (13.1) and (13.2) to K > 2).
+Setting the degrees-of-freedom parameter to K + 1 has the eﬀect of setting a
+uniform distribution on the individual correlation parameters (that is, they are
+assumed equally likely to take on any value between −1 and 1).
+Scaled inverse-Wishart model. When the degrees of freedom parameter of the
+inverse-Wishart distribution is set to K+1, the resulting model is reasonable for the
+correlations but is quite constraining on the scale parameters σk . This is a problem because we would like to estimate σk from the data. Changing the degrees of
+freedom allows the σk ’s to be estimated more freely, but at the cost of constraining
+the correlation parameters.
+We get around this problem by expanding the inverse-Wishart model with a new
+vector of scale parameters ξk :
+ΣB = Diag(ξ)QDiag(ξ),
+with the unscaled covariance matrix Q being given the inverse-Wishart model:
+Q ∼ Inv-WishartK+1 (I).
+The variances then correspond to the diagonal elements of the unscaled covariance
+
+UNDERSTANDING GROUP-LEVEL CORRELATIONS
+blacks
+
+hispanics
+
+whites
+
+287
+others
+
+β
+
+Figure 13.3 Multilevel regression lines y = αj +βj x for log earnings on height (among those
+with positive earnings), in four ethnic categories j. The gray lines indicate uncertainty in
+the ﬁtted regressions.
+
+α
+
+Figure 13.4 Scatterplot of estimated intercepts and slopes (for whites, hispanics, blacks,
+and others), (αj , βj ), for the earnings-height regressions shown in Figure 13.3. The extreme negative correlation arises because the center of the range of height is far from zero.
+Compare to the coeﬃcients in the rescaled model, as displayed in Figure 13.7.
+
+matrix Q, multiplied by the appropriate scaling factors ξ:
+σk2 = Σkk = ξk2 Qkk , for k = 1, . . . , K,
+and the covariances are
+Σkl = ξk ξl Qkl , for k, l = 1, . . . , K,
+We prefer to express in terms of the standard deviations,
+
+σk = |ξk | Qkk ,
+and correlations
+ρkl = Σkl /(σk σl ).
+The parameters in ξ and Q cannot be interpreted separately: they are a convenient
+way to set up the model, but it is the standard deviations σk and the correlations ρkl
+that are of interest (and which are relevant for producing partially pooled estimates
+for the coeﬃcients in B).
+As with the unscaled Wishart, the model implies a uniform distribution on the
+correlation parameters. As we discuss next, it can make sense to transform the data
+to remove any large correlations that could be expected simply from the structure
+of the data.
+13.4 Understanding correlations between group-level intercepts and
+slopes
+Recall that varying slopes can be interpreted as interactions between an individuallevel predictor and group indicators. As with classical regression models with interactions, the intercepts can often be more clearly interpreted if the continuous
+
+288
+
+VARYING SLOPES AND NON-NESTED MODELS
+
+Figure 13.5 Sketch illustrating the diﬃculty of simultaneously estimating α and β. The
+lines show the regressions for the four ethnic groups as displayed in Figure 13.3: the center
+of the range of x values is far from zero, and so small changes in the slope induce large
+changes in the intercept.
+
+blacks
+
+−
+
+hispanics
+
+−
+
+whites
+
+−
+
+others
+
+−
+
+Figure 13.6 Multilevel regression lines y = αj + βj z, for log earnings given mean-adjusted
+height (zi = xi − x̄), in four ethnic groups j. The gray lines indicate uncertainty in the
+ﬁtted regressions.
+
+predictor is appropriately centered. We illustrate with the height and earnings example from Chapter 4.
+We begin by ﬁtting a multilevel model of log earnings given height, allowing the
+coeﬃcients to vary by ethnicity. The data and ﬁtted model are displayed in Figure
+13.3. (Little is gained by ﬁtting a multilevel model here—with only four groups,
+a classical no-pooling model would work nearly as well, as discussed in Section
+12.9—but this is a convenient example to illustrate a general point.)
+Figure 13.4 displays the estimates of (αj , βj ) for the four ethnic groups, and they
+have a strong negative correlation: the groups with high values of α have relatively
+low values of β, and vice versa. This correlation occurs because the center of the
+x-values of the data is far from zero. The regression lines have to go roughly through
+the center of the data, and then changes in the slope induce opposite changes in
+the intercept, as illustrated in Figure 13.5.
+There is nothing wrong with a high correlation between the α’s and β’s, but
+it makes the estimated intercepts more diﬃcult to interpret. As with interaction
+models in classical regression, it can be helpful to subtract the average value of the
+continuous x before including it in the regression; thus, yi ∼ N(αj[i] + βj[i] zi , σy2 ),
+where zi = xi − x̄. Figures 13.6 and 13.7 show the results for the earnings regression:
+the correlation has pretty much disappeared. Centering the predictor x will not
+necessarily remove correlations between intercepts and slopes—but any correlation
+that remains can then be more easily interpreted. In addition, centering can speed
+convergence of the Gibbs sampling algorithm used by Bugs and other software.
+We ﬁt this model, and the subsequent models in this chapter, in Bugs (see Chap-
+
+289
+
+β
+
+NON-NESTED MODELS
+
+α
+
+Figure 13.7 Scatterplot of estimated intercepts and slopes, (αj , βj ), for the regression of
+earnings on mean-adjusted height z, for the four groups j displayed in Figure 13.6. The
+coeﬃcients are no longer strongly correlated (compare to Figure 13.4).
+
+ter 17 for examples of code) because, as discussed in Section 12.4, the current
+version of lmer() does not work so well when the number of groups is small—and,
+conversely, with these small datasets, Bugs is not too slow.
+13.5 Non-nested models
+So far we have considered the simplest hierarchical structure of individuals i in
+groups j. We now discuss models for more complicated grouping structures such as
+introduced in Section 11.3.
+Example: a psychological experiment with two potentially interacting factors
+Figure 13.8 displays data from a psychological experiment of pilots on ﬂight simulators, with n = 40 data points corresponding to J = 5 treatment conditions and
+K = 8 diﬀerent airports. The responses can be ﬁt to a non-nested multilevel model
+of the form
+yi
+
+∼ N(μ + γj[i] + δk[i] , σy2 ), for i = 1, . . . , n
+
+γj
+
+∼ N(0, σγ2 ), for j = 1, . . . , J
+
+δk
+
+∼ N(0, σδ2 ), for k = 1, . . . , K.
+
+(13.9)
+
+The parameters γj and δk represent treatment eﬀects and airport eﬀects. Their
+distributions are centered at zero (rather than given mean levels μγ , μδ ) because
+the regression model for y already has an intercept, μ, and any nonzero mean for
+the γ and δ distributions could be folded into μ. As we shall see in Section 19.4,
+it can sometimes be eﬀective for computational purposes to add extra mean-level
+parameters into the model, but the coeﬃcients in this expanded model must be
+interpreted with care.
+We can perform a quick ﬁt as follows:
+lmer (y ~ 1 + (1 | group.id) + (1 | scenario.id))
+
+where group.id and scenario.id are the index variables for the ﬁve treatment
+conditions and eight airports, respectively.
+When ﬁt to the data in Figure 13.8, the estimated residual standard deviations
+at the individual, treatment, and airport levels are σ̂y = 0.23, σ̂γ = 0.04, and
+σ̂δ = 0.32. Thus, the variation among airports is huge—even larger than that among
+individual measurements—but the treatments vary almost not at all. This general
+pattern can be seen in Figure 13.8.
+
+R code
+
+290
+
+VARYING SLOPES AND NON-NESTED MODELS
+
+Figure 13.8 Success rates of pilots training on a ﬂight simulator with ﬁve diﬀerent treatments and eight diﬀerent airports. Shadings in the 40 cells i represent diﬀerent success
+rates yi , with black and white corresponding to 0 and 100%, respectively. For convenience
+in reading the display, the treatments and airports have each been sorted in increasing order
+of average success. These 40 data points have two groupings—treatments and airports—
+which are not nested.
+Data in vector form
+Data in matrix form
+airport
+1
+2
+3
+4
+5
+6
+7
+8
+
+treatment conditions
+0.38
+0.00
+0.38
+0.00
+0.33
+1.00
+0.12
+1.00
+
+0.25
+0.00
+0.50
+0.12
+0.50
+1.00
+0.12
+0.86
+
+0.50
+0.67
+0.33
+0.00
+0.14
+1.00
+0.00
+1.00
+
+0.14
+0.00
+0.71
+0.00
+0.29
+1.00
+0.14
+1.00
+
+0.43
+0.00
+0.29
+0.86
+0.86
+0.86
+0.14
+0.75
+
+y
+
+j
+
+k
+
+0.38
+0.00
+0.38
+0.00
+0.33
+1.00
+0.12
+1.00
+0.25
+...
+
+1
+1
+1
+1
+1
+1
+1

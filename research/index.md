@@ -12,7 +12,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 5 | 128 | 476 |
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 2 | 115 | 463 |
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 122 | 282 |
-| [stats](areas/stats.md) | estimation and recommendation methods | 14 | 225 | 1783 |
+| [stats](areas/stats.md) | estimation and recommendation methods | 15 | 234 | 1875 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 4 | 86 | 305 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 98 | 452 |
 
@@ -49,7 +49,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | --- | --- | --- | --- | --- | --- | --- |
 | answered | now | [What practices and tools make AI coding agents run, train and analyse ML experiments faster and more reliably?](questions/agent-ml-practice.md): What practices and tools make AI coding agents run, train and analyse ML experiments faster and more reliably? | 14 strong, 7 moderate, 1 weak | 29 | 15 (growing) | 16 |
 | answered | now | [Which feature importance and attribution methods hold up under correlated features, for saying how much each thing matters to win prediction?](questions/correlated-importance.md): Which feature importance and attribution methods hold up under correlated features, for saying how much each thing matters to win prediction? | 6 strong, 1 moderate | 10 | 7 (growing) | 9 |
-| answered | now | [How do you distil GPU-trained models into small CPU models that stay explainable?](questions/distil-explainable.md): How do you distil GPU-trained models into small CPU models that stay explainable? | 5 strong, 8 moderate, 1 contested | 12 | 6 (growing) | 3 |
+| answered | now | [How do you distil GPU-trained models into small CPU models that stay explainable?](questions/distil-explainable.md): How do you distil GPU-trained models into small CPU models that stay explainable? | 5 strong, 8 moderate, 1 contested | 13 | 6 (growing) | 2 |
 | answered | now | [How do you measure how much of the draft's effect on winning runs through the early-game state, and what are the pitfalls?](questions/draft-mediation.md): How do you measure how much of the draft's effect on winning runs through the early-game state, and what are the pitfalls? | 7 strong, 2 moderate | 7 | 12 (growing) | 9 |
 | answered | now | [How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games?](questions/draft-predictor-methods.md): How do we build the most accurate pre-game draft win predictor for ranked League, and what methods, data handling and features got the best published results in LoL, Dota 2 and similar games? | 11 strong, 4 moderate, 4 weak, 2 contested | 45 | 48 (growing) | 16 |
 | answered | now | [How do sports and esports analytics isolate the value of in-game events and of pairwise synergy and counters?](questions/effect-isolation.md): How do sports and esports analytics isolate the value of in-game events and of pairwise synergy and counters? | 9 strong, 4 moderate, 2 weak | 16 | 28 (growing) | 7 |
@@ -58,6 +58,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | answered | now | [How do the best systems model a player's pre-game skill?](questions/pregame-player-skill.md): How do the best systems model a player's pre-game skill? | 5 strong, 5 moderate | 10 | 12 (growing) | 4 |
 | answered | soon | [Which team-composition features built from champion attributes (damage type mix and balance, frontline/tankiness, crowd control, range/poke vs engage, healing vs anti-heal, scaling) have measured, non-additive effects on win in LoL or Dota 2 data, how big, and how were they built?](questions/comp-attribute-features.md): Which team-composition features built from champion attributes (damage type mix and balance, frontline/tankiness, crowd control, range/poke vs engage, healing vs anti-heal, scaling) have measured, non-additive effects on win in LoL or Dota 2 data, how big, and how were they built? | 2 strong, 3 moderate, 6 weak | 12 | 25 (slowing) | 5 |
 | answered | soon | [Have graph neural nets helped match outcome prediction, and where?](questions/gnn-match-outcome.md): Have graph neural nets helped match outcome prediction, and where? | 1 strong, 6 moderate, 1 contested | 10 | 17 (saturated) | 2 |
+| answered | soon | [How should champion-into-comp effects at several levels (team damage mix, kit groups, per-champion leans, pair and matchup terms) be combined in one additive draft model without double counting, so each part stays a nameable reason?](questions/hierarchical-comp-terms.md): How should champion-into-comp effects at several levels (team damage mix, kit groups, per-champion leans, pair and matchup terms) be combined in one additive draft model without double counting, so each part stays a nameable reason? | 8 strong, 2 moderate | 10 | 13 (slowing) | 3 |
 | answered | soon | [How should an LLM agent run meiolol's modelling experiments, and which tools should it get?](questions/llm-experiment-agent.md): How should an LLM agent run meiolol's modelling experiments, and which tools should it get? | 14 strong, 6 moderate, 1 contested | 22 | 11 (growing) | 7 |
 | answered | soon | [How should an experiment agent choose what to try next, instead of brute-forcing many runs?](questions/smart-experiment-search.md): How should an experiment agent choose what to try next, instead of brute-forcing many runs? | 7 strong, 5 moderate | 12 | 7 (growing) | 5 |
 | decided | now | [How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin?](questions/curve-statistics-method.md): How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin? | 9 strong, 2 moderate | 14 | 21 (growing) | 2 |
@@ -85,6 +86,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 35 questions, 485 sources, 3486 findings
-- Open leads: 149 (`josearch leads`)
+- 36 questions, 494 sources, 3578 findings
+- Open leads: 151 (`josearch leads`)
 - Lint: 0 errors, 1 warnings (`josearch lint`)

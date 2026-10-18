@@ -1,0 +1,209 @@
+Multilevel (Hierarchical) Modeling:
+What It Can and Cannot Do
+                                                                 Andrew G ELMAN
+                                      Department of Statistics and Department of Political Science
+                                                          Columbia University
+                                                         New York, NY 10027
+                                                    (gelman@stat.columbia.edu )
+
+                       Multilevel (hierarchical) modeling is a generalization of linear and generalized linear modeling in which
+                       regression coefficients are themselves given a model, whose parameters are also estimated from data.
+                       We illustrate the strengths and limitations of multilevel modeling through an example of the prediction of
+                       home radon levels in U.S. counties. The multilevel model is highly effective for predictions at both levels
+                       of the model, but could easily be misinterpreted for causal inference.
+
+                       KEY WORDS: Contextual effects; Hierarchical model; Multilevel regression.
+
+                    1. INTRODUCTION                                           comes from underground and can enter more easily when a
+                                                                              house is built into the ground.) We also had an important
+   Multilevel modeling is a generalization of regression meth-
+                                                                              county-level predictor—a measurement of soil uranium that
+ods, and as such can be used for a variety of purposes, including
+                                                                              was available at the county level. We fit a model of the form
+prediction, data reduction, and causal inference from experi-
+ments and observational studies (for recent reviews, see Kreft                   yij ∼ N(αj + βxij , σy2 ),       for i = 1, . . . , nj , j = 1, . . . , J,
+and De Leeuw 1998; Snijders and Bosker 1999; Raudenbush                                                                                                       (1)
+and Bryk 2002; Hox 2002). Compared with classical regres-                        αj ∼ N(γ0 + γ1 uj , σα2 ),        for j = 1, . . . , J,
+sion, multilevel modeling is almost always an improvement,
+but to varying degrees; for prediction multilevel modeling can                where yij is the logarithm of the radon measurement in house i
+be essential, for data reduction it can be useful, and for causal             within county j, xij is an indicator for whether the measure-
+inference it can be helpful.                                                  ment was taken in a basement, and uj is the log uranium level
+   We illustrate the strengths and limitations of multilevel mod-             in county j. The errors with variance σy2 in the first line of (1)
+eling through an example of the prediction of home radon levels               represent “within-county variation,” which in this case includes
+in U.S. counties.                                                             measurement error, natural variation in radon levels within a
+                                                                              house over time, and variation between houses (beyond what
+   2.   MULTILEVEL MODELING FOR ESTIMATING                                    is explained by the basement indicator). The errors with vari-
+              HOME RADON LEVELS                                               ance σα2 in the second line represent variation between counties
+                                                                              beyond what is explained by the county-level uranium predic-
+2.1 Background and Model                                                      tor. The hierarchical model allows us to fit a regression model
+   Radon is a carcinogen—a naturally occurring radioactive gas                to the individual measurements while accounting for systematic
+whose decay products are also radioactive—known to cause                      unexplained variation among the 3,000 counties.
+lung cancer in high concentrations and estimated to cause                        Equivalently, the model can be written as a single-level re-
+several thousand lung cancer deaths per year in the United                    gression with correlated errors
+States. The distribution of radon levels in U.S. homes varies
+greatly, with some houses having dangerously high concentra-                               y ∼ N(γ0 1 + γ1 Gu + βx, σy2 I + σα2 GGT ),
+tions. To identify areas of high radon exposure, the Environ-                 where G is the n × J matrix of county indicators.
+mental Protection Agency coordinated radon measurements in
+                                                                                 The model can be expanded in many ways, most naturally
+a random sample of more than 80,000 houses throughout the
+                                                                              by adding more predictors at the individual and county lev-
+country.
+                                                                              els and by allowing the slope β and the intercept α to vary
+   To simplify the problem somewhat, our goal in analyzing
+                                                                              by county. For the purposes of this article, however, model
+these data was to estimate the distribution of radon levels in
+each of the approximately 3,000 U.S. counties, so that home-                  (1) is general enough. We further simplify by focusing on a
+owners could make decisions about measuring or remediating                    subset of our data—the 919 houses from the state radon sur-
+the radon in their houses based on the best available knowledge               vey of the 85 counties of Minnesota (Price, Nero, and Gelman
+of local conditions. For the purpose of this analysis, the data               1996). We fit the model using hierarchical Bayes methods (e.g.,
+were structured hierarchically: houses within counties. (If we                Gelman, Carlin, Stern, and Rubin 2003). The posterior density
+were to analyze multiple measurements within houses, then
+there would be a three-level hierarchy of measurements, houses,
+                                                                                                        © 2006 American Statistical Association and
+and counties.)                                                                                                    the American Society for Quality
+   In performing the analysis, we had an important predictor—                                      TECHNOMETRICS, AUGUST 2006, VOL. 48, NO. 3
+whether the measurement was taken in a basement. (Radon                                                        DOI 10.1198/004017005000000661
+
+                                                                          432
+                                                             MULTILEVEL (HIERARCHICAL) MODELING                                                             433
+
+is simply,
+p(α, β, γ , σy , σα |y, x, u)
+          nj
+        
+        J                                    
+                                              J
+    ∝             N( yij |αj + βxij , σj2 )         N(αj |γ0 + γ1 uj , σα2 ),   (2)
+        j=1 i=1                               j=1
+
+where N(·|M, S2 ) represents the normal density function with
+mean M and standard deviation S and assuming a uniform prior
+distribution on γ , σy , and σα , which is reasonable given that the
+number of counties, J, is large (Gelman 2006).
+
+2.2 Data Reduction: Estimating Associations
+
+   Figure 1 displays the estimated multilevel model for a selec-                          Figure 2. Estimated County Coefficients αj (±1 standard error) Plot-
+tion of 8 of the 85 counties in Minnesota, along with the com-                        ted versus County-Level Log Uranium Measurement uj , Along With the
+pletely pooled and unpooled regression line for each county.                          Estimated Multilevel Regression Line α = γ0 + γ1 u. The county coef-
+                                                                                      ficients roughly follow the line but not exactly; the deviation of the co-
+(The completely pooled line is y = α + βx, with a common line
+                                                                                      efficients from the line is captured in σα , the standard deviation of the
+for all counties, and the unpooled lines are y = αj + βx, with                        errors in the county-level regression.
+the 85 αj ’s estimated by least squares.)
+   Compared with the two classical estimates (no pooling and
+complete pooling), the inferences from the multilevel models                          to estimate this second-level relation using classical regression,
+are more reasonable. At one extreme, the complete-pooling                             first fitting the no-pooling model to estimate the αj ’s and then
+method gives identical estimates for all counties, which is par-                      fitting county-level regression to the α̂j ’s. The multilevel model
+ticularly inappropriate for this application, whose goal is to                        has the appeal of fitting the two levels together and actually can
+identify the locations in which residents are at high risk of                         be implemented using a Gibbs sampler alternating between the
+radon. At the other extreme, the no-pooling model overfits the                        data-level and county-level regression steps. So the point here
+data; for example, it gave an implausibly high estimate of the                        is not whether the estimates are identified as “multilevel,” but
+                                                                                      whether they take into account the estimation uncertainty of the
+average radon levels in Lac Qui Parle County, in which only
+                                                                                      αj ’s, as is done in Figure 1 by shrinking toward the complete-
+two observations were available.
+                                                                                      pooling estimate.
+   Although the specific assumptions of model (1) could be
+questioned or improved, it would be difficult to argue against
+                                                                                      2.3 Prediction
+the use of multilevel modeling for the purpose of estimating
+radon levels within counties.                                                           Perhaps the clearest advantage of multilevel models comes in
+   Another advantage of multilevel modeling for this applica-                         prediction. In our example we can predict the radon levels for
+tion is that it allows us to study the relation of the county pa-                     new houses in an existing county or a new county. (Because we
+rameters to county-level predictors—in this case, the uranium                         actually have data on all 85 counties in Minnesota, that would
+measurement, as displayed in Figure 2. It would be possible                           be a new county in a neighboring state.)
+
+
+
+
+    Figure 1. Multilevel (partial pooling) Regression Lines y = aj + β x Fit to Radon Data From Minnesota, Displayed for Eight Counties j With a
+Range of Sample Sizes. Light-colored dotted and solid lines show the complete-pooling and no-pooling estimates. The x -positions of the points are
+jittered slightly to improve visibility.
+
+                                                                                                         TECHNOMETRICS, AUGUST 2006, VOL. 48, NO. 3
+434                                                              ANDREW GELMAN
+
+   We can use cross-validation to formally demonstrate the ben-         The new group-level coefficient γ2 is estimated at −.39 (with
+efits of multilevel modeling. We perform two cross-validation           standard error .20), implying that, all other things being equal,
+tests: first removing single data points and checking the pre-          counties with more basements tend to have lower baseline
+diction from the model fit to the rest of the data, then remov-         radon levels. For the radon problem, the county-level basement
+ing single counties and performing the same procedure. For              proportion is difficult to interpret directly as a predictor, and we
+each cross-validation step, we compare complete-pooling, no-            consider it a proxy for underlying variables (e.g., the type of
+pooling, and multilevel estimates. Other cross-validation tests         soil prevalent in the county).
+for this example were performed by Price et al. (1996).                    In other settings, especially in social science, individual av-
+   When removing individual data points and refitting each              erages used as group-level predictors are often interpreted as
+model, the root mean squared cross-validation prediction errors         “contextual effects.” For example, the presence of more base-
+are .84 for complete pooling, .86 for no pooling, and .79 for           ments in a county would somehow have a radon-lowering ef-
+multilevel modeling. (In making this comparison, we exclude             fect. This makes no sense here, but it serves as a warning that,
+measurements that, when removed, make the no-pooling model              with identical data of a social nature (e.g., consider substituting
+impossible to fit. See Fig. 1, for example; if either of the houses     “income” for “radon level” and “ethnic minority” for “base-
+in Lac Qui Parle County or the no-basement house in Aitkin              ment” in our study), it would be easy to leap to a misleading
+County were removed, then it would not be possible to estimate          conclusion and find contextual effects where none necessarily
+the regression slope from that county’s data alone.)                    exist.
+   When removing entire counties one at a time, we summarize               This is related to the “ecological fallacy” studied in ge-
+by the errors of the predicted county mean responses (given             ography (see Wakefield 2003 for a recent review with many
+the county-level uranium and the basement information for the           references), in which group-level correlations can be mistak-
+houses in the excluded county). The root mean squared pre-              enly attributed to individual-level causes, but our setting is
+dictive errors at the county level are .50 for complete pooling         slightly different in that both individual- and group-level data
+and .40 for multilevel modeling. (Cross-validation cannot be            are available. The available data are modeled correctly but the
+performed at the county level for the no-pooling model because          group-level coefficient γ2 can be misinterpreted causally. This
+it is does not allow estimation of a county’s radon level using         is related to the problem in meta-analysis that between-study
+data from other counties.)                                              variation is typically observational even if individual studies are
+   The multilevel model gives more accurate predictions than            randomized experiments (see Rubin 1989; Gelman, Stevens,
+the no-pooling and complete-pooling regressions, especially             and Chan 2003).
+when predicting group averages.
+                                                                                                  3. DISCUSSION
+2.4 Causal Inference
+                                                                           Multilevel modeling is an increasingly popular approach to
+   We now consider our model as an observational study of the           modeling hierarchically structured data, outperforming classi-
+effect of basements on home radon levels. The study includes            cal regression in predictive accuracy. This is no surprise, given
+houses with and without basements throughout Minnesota. The             that multilevel modeling includes least squares regression as a
+proportion of homes with basements varies by county (see                special case. One intriguing feature of multilevel models is their
+Fig. 1), but a regression model should address that lack of             ability to separately estimate the predictive effects of an indi-
+balance by estimating county and basement effects separately.           vidual predictor and its group-level mean, which are sometimes
+(As noted earlier, we set aside the possibility that basement           interpreted as “direct” and “contextual” effects of the predictor.
+effects might vary by county.) The estimated coefficient β in           As we have illustrated in this article, these effects cannot nec-
+model (1) is .67 (with a standard error of .06), implying that          essarily be interpreted causally for observational data, even if
+within any given county, houses with basements have typical             these data are a random sample from the population of interest.
+radon levels exp(.67) = 2.0 times higher than houses without            Our analysis arose in a real research problem (Price et al. 1996)
+basements. (Measurements are made in the lowest living area             and is not a “trick” example. The houses in the study were sam-
+of the house. The “basement effect” on living-area radon levels         pled at random from Minnesota counties, and there were no
+thus includes differences between houses explainable by having          problems of selection bias.
+a basement, as well as differing radon concentrations among
+levels of a particular house. For our purposes here, we combine                               ACKNOWLEDGMENTS
+these effects.)
+   So far, so good. However, a complication arises if we con-             The authors thank Phillip Price for collaboration with the
+sider the possibility of correlation between the individual-level       radon example, Jan de Leeuw and a reviewer for helpful
+predictor, x, and the county-level error, αj − γ0 − γ1 uj (see, e.g.,   comments, and the National Science Foundation for financial
+Woolridge 2001 for a discussion of this sort of correlation in          support.
+multilevel models). By simply multiplying the likelihood and
+                                                                                       [Received June 2005. Revised September 2005.]
+prior densities in (1), the posterior density (2) implicitly as-
+sumes that the county errors are independent of x. We can al-
+low for possible correlation by including x̄j , the average of x                                    REFERENCES
+within county j (i.e., the proportion of basements in the houses        Gelman, A. (2006), “Prior Distributions for Variance Parameters in Hierarchical
+in county j in the dataset) into the group-level regression,              Models,” Bayesian Analysis, to appear.
+                                                                        Gelman, A., Carlin, J. B., Stern, H. S., and Rubin, D. B. (2003), Bayesian Data
+       αj ∼ N(γ0 + γ1 uj + γ2 x̄j , σα2 ),   for j = 1, . . . , J.        Analysis (2nd ed.), London: CRC Press.
+
+TECHNOMETRICS, AUGUST 2006, VOL. 48, NO. 3
+                                                       MULTILEVEL (HIERARCHICAL) MODELING                                                                  435
+
+Gelman, A., Stevens, M., and Chan, V. (2003), “Regression Modeling and           Raudenbush, S. W., and Bryk, A. S. (2002), Hierarchical Linear Models
+  Meta-Analysis for Decision Making: A Cost-Benefit Analysis of a Incen-           (2nd ed.), Thousand Oaks, CA: Sage.
+  tives in Telephone Surveys,” Journal of Business & Economic Statistics, 21,    Rubin, D. B. (1989), “A New Perspective on Meta-Analysis,” in The Future of
+  213–225.                                                                         Meta-Analysis, eds. K. W. Wachter and M. L. Straf, New York: Russell Sage
+Hox, J. (2002), Multilevel Analysis: Techniques and Applications, Mahwah, NJ:      Foundation, pp. 155–166.
+  Lawrence Erlbaum Associates.                                                   Snijders, T. A. B., and Bosker, R. J. (1999), Multilevel Analysis, London:
+Kreft, I., and De Leeuw, J. (1998), Introducing Multilevel Modeling, London:       Sage.
+  Sage.                                                                          Wakefield, J. (2003), “Sensitivity Analyses for Ecological Regression,” Biomet-
+Price, P. N., Nero, A. V., and Gelman, A. (1996), “Bayesian Prediction of Mean     rics, 59, 9–17.
+  Indoor Radon Concentrations for Minnesota Counties,” Health Physics, 71,       Woolridge, J. M. (2001), Econometric Analysis of Cross-Sectional and Panel
+  922–936.                                                                         Data, Cambridge, MA: MIT Press.
+
+
+
+
+                                                                                                     TECHNOMETRICS, AUGUST 2006, VOL. 48, NO. 3
+
