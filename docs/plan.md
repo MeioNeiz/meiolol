@@ -22,10 +22,11 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
    (~26 days on 18 Oct). Left: VACUUM of raw.db's 21 GB of free pages (meiolol-b5,
    after a rehearsal on a copy); NIC offload on the gpu-box if other home ssh dies.
    Lasting answer: Open decisions "Storage and hosting"
-3. gpu-box C: at 90% (holds the WSL disk; the archive is on the P3, safe). G2 done 18
-   Oct (35 GB freed inside WSL; C: shrinks only after the compaction). Waits on Jacob:
-   docs/compute.md "gpu-box storage" steps 1-2 (partition, wsl-mount.ps1), then an
-   agent moves snaps and runs and compacts the WSL disk
+3. gpu-box C: at 90% (holds the WSL disk; the archive is on the P3, safe). Done 18 Oct:
+   G2 prune (35 GB inside WSL), the lab partition sde6 and the move of snaps and runs
+   onto it (docs/compute.md "gpu-box storage" 1-3, 33ef202). Left: step 4, compacting
+   the WSL disk (~120 GB back, C: to ~77%); it stops WSL, so when the gpu-box is idle,
+   after warning its sessions
 4. Done 18 Oct: contact is privacy@meio.lol on terms and privacy (R34). Test mail kept
    by the worker (`deploy/mail.sh list`); sent straight to Cloudflare's MX over IPv4
    from the Mac (its IPv6 has no reverse DNS; both OCI hosts block port 25)
