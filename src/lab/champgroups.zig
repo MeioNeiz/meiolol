@@ -26,7 +26,11 @@ const cand = @import("cand");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const nv = comps.nv;
-const nt = champcomp.nt;
+/// champcomp's set traits but its last, aa (summed as an own stat here already)
+const nt = champcomp.nt - 1;
+comptime {
+    std.debug.assert(@backingInt(champcomp.Trait.aa) == nt);
+}
 
 pub const usage =
     \\  champgroups SNAP --aa FILE [--shuffle-own SEED]
@@ -229,24 +233,6 @@ fn scanEffect(f: *const Fits, cells: []const u64, own: []const [n_own]f64, v: us
     return .{ .eff = sxy / sxx, .se = 1 / @sqrt(sxx), .cells = n };
 }
 
-/// FILE: header line, then champion id, role index, aa_build
-fn loadAa(gpa: Allocator, io: Io, path: []const u8) !std.AutoHashMapUnmanaged(u64, f64) {
-    const text = try Io.Dir.cwd().readFileAlloc(io, path, gpa, .unlimited);
-    defer gpa.free(text);
-    var out: std.AutoHashMapUnmanaged(u64, f64) = .empty;
-    errdefer out.deinit(gpa);
-    var lines = std.mem.tokenizeScalar(u8, text, '\n');
-    _ = lines.next();
-    while (lines.next()) |line| {
-        var it = std.mem.tokenizeScalar(u8, line, '\t');
-        const c = try std.fmt.parseInt(u32, it.next() orelse return error.BadAaFile, 10);
-        const r = try std.fmt.parseInt(usize, it.next() orelse return error.BadAaFile, 10);
-        const v = try std.fmt.parseFloat(f64, it.next() orelse return error.BadAaFile);
-        try out.put(gpa, comps.cellKey(c, r), v);
-    }
-    return out;
-}
-
 pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) !u8 {
     if (argv.len < 1) {
         std.debug.print("usage:\n{s}", .{usage});
@@ -272,7 +258,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
             return 2;
         }
     }
-    var aa = try loadAa(gpa, io, aa_path orelse {
+    var aa = try champcomp.loadAa(gpa, io, aa_path orelse {
         std.debug.print("champgroups: --aa FILE is required (deploy/aa-build.sh)\n", .{});
         return 2;
     });
@@ -388,7 +374,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
                 seats[r] = champcomp.seatOf(&p, ch, r);
                 for (ownOf(&p, &aa, aa_m, aa_sd, ch, r), 0..) |v, j| tr[s][j] += v;
             }
-            @memcpy(tr[s][n_own .. n_own + nt], &champcomp.traitsOf(&seats));
+            @memcpy(tr[s][n_own .. n_own + nt], champcomp.traitsOf(&seats)[0..nt]);
             var ap_max: f64 = 0;
             var ap_total: f64 = 0;
             var aa_max: f64 = 0;

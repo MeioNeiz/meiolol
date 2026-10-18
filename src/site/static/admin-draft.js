@@ -57,7 +57,7 @@ async function loadDraftModel() {
     const { json: C, dir } = await modelFile("draft-comp.json");
     x.from.comp = dir;
     x.cc = champComp(C);
-    if (!x.cc) throw new Error(`draft-comp.json is format "${C.format}" version ${C.version}; this page reads meiolol-champcomp version 1`);
+    if (!x.cc) throw new Error(`draft-comp.json is format "${C.format}" version ${C.version}; this page reads meiolol-champcomp versions 1 and 2`);
   } catch (e) { if (!/^404/.test(e.message)) x.ccErr = e.message; }
   try {
     const { json: M, dir } = await modelFile("draft-model.json");
@@ -85,9 +85,11 @@ async function loadDraftModel() {
 // top of the shipped model (offset win-draft). A seat's term on its team's logit is
 // sum_f dev[f] * ((x[f] - mean[f]) / sd[f] - centre[f]), x from seat values: AP share of
 // the set's damage, then sums of the other traits; an empty slot or a champion-role with
-// no profile is the role's seat, and a champion-role with no cell adds nothing
+// no profile is the role's seat, and a champion-role with no cell adds nothing. Version 2
+// adds the auto-attack trait and, from `--groups`, kit groups: cell.group[f] is the part of
+// dev[f] its groups predict, dev[f] - group[f] the champion's own
 function champComp(C) {
-  if (!C || C.format !== "meiolol-champcomp" || C.version !== 1) return null;
+  if (!C || C.format !== "meiolol-champcomp" || ![1, 2].includes(C.version)) return null;
   const nt = C.traits.length, F = C.features;
   const seats = new Map(C.seats.map(r => [r[0] + ":" + r[1], r.slice(2)]));
   const cells = new Map(C.cells.map(c => [c.champion + ":" + c.role, c]));
@@ -260,19 +262,32 @@ function draftModel(M, cc = null) {
       const { F, nt } = cc;
       // Words for a team high or low in trait i (draft-comp.json traits, in order)
       const TRAIT = [["magic-heavy", "AD-heavy"], ["melee-heavy", "ranged-heavy"], ["high-CC", "low-CC"], ["engage-heavy", "low-engage"],
-        ["dive-heavy", "low-dive"], ["tanky", "squishy"], ["high-sustain", "low-sustain"], ["early-game", "late-game"]];
+        ["dive-heavy", "low-dive"], ["tanky", "squishy"], ["high-sustain", "low-sustain"], ["early-game", "late-game"], ["auto-attack-heavy", "spell-heavy"]];
       const ADDS = [["magic damage", "physical damage"], ["a melee champion", "a ranged champion"], ["crowd control", "less crowd control"], ["engage", "less engage"],
-        ["dive", "less dive"], ["tankiness", "squishiness"], ["sustain", "less sustain"], ["early power", "late-game power"]];
-      const s1 = cc.seat(t, side, r);
+        ["dive", "less dive"], ["tankiness", "squishiness"], ["sustain", "less sustain"], ["early power", "late-game power"], ["auto-attacks", "fewer auto-attacks"]];
+      const s1 = cc.seat(t, side, r), groups = cc.C.groups || [];
       if (s1) F.forEach((f, i) => {
         if (!s1.parts[i]) return;
         // Named only when clear and the team really is that way (its z, not just the lean
         // from this champion's usual opponents, points the same way)
-        const z = s1.lean[i] + s1.cell.centre[i];
-        if (!s1.cell.clear.includes(i) || Math.abs(z) < 0.5 || Math.sign(z) !== Math.sign(s1.lean[i])) { lumped.leans += s1.parts[i]; return; }
-        const enemy = i < nt, words = TRAIT[i % nt][z > 0 ? 0 : 1], good = s1.parts[i] > 0;
-        add(s1.parts[i], { kind: "lean", chip: `${good ? "good" : "weak"} ${enemy ? "into" : "with"} ${words}${enemy ? "" : " allies"}`,
-          text: `${who(id)} ${good ? "does better" : "does worse"} ${enemy ? "into " + (/^(AD|[aeiou])/i.test(words) ? "an" : "a") : "with"} ${words} ${enemy ? "team" : "allies"} like this one`,
+        const z = s1.lean[i] + s1.cell.centre[i], real = Math.abs(z) >= 0.5 && Math.sign(z) === Math.sign(s1.lean[i]);
+        const enemy = i < nt, words = TRAIT[i % nt][z > 0 ? 0 : 1];
+        const like = `${enemy ? "into " + (/^(AD|[aeiou])/i.test(words) ? "an" : "a") : "with"} ${words} ${enemy ? "team" : "allies"} like this one`;
+        const chip = good => `${good ? "good" : "weak"} ${enemy ? "into" : "with"} ${words}${enemy ? "" : " allies"}`;
+        // A clear kit group's part is named apart from the champion's own lean beyond it
+        const mine = (s1.cell.member || []).map(g => groups[g]).filter(g => g.feature === i && g.sd > 0 && Math.abs(g.gamma) / g.sd >= 2.58);
+        let rest = s1.parts[i];
+        if (mine.length && real) {
+          const x = s1.cell.group[i] * s1.lean[i], kin = mine.map(g => g.words).join(" and "), g0 = mine[0];
+          add(x, { kind: "lean", chip: chip(x > 0), text: `${who(id)} ${x > 0 ? "does better" : "does worse"} ${like}, like other ${kin}`,
+            note: `kit group lean, not yet confirmed on fresh games, ±${Math.abs(pp(1.96 * g0.sd * s1.cell.group[i] / g0.gamma * s1.lean[i])).toFixed(1)} (95% range)` });
+          rest -= x;
+          if (!s1.cell.clear.includes(i) || Math.abs(pp(rest)) < 0.5) { lumped.leans += rest; return; }
+          add(rest, { kind: "lean", text: `${who(id)}'s own lean beyond other ${kin}`, note: "clear lean, its part beyond its group" });
+          return;
+        }
+        if (!s1.cell.clear.includes(i) || !real) { lumped.leans += rest; return; }
+        add(rest, { kind: "lean", chip: chip(rest > 0), text: `${who(id)} ${rest > 0 ? "does better" : "does worse"} ${like}`,
           note: `clear lean, ±${Math.abs(pp(1.96 * s1.cell.sd[i] * s1.lean[i])).toFixed(1)} (95% range)` });
       });
       // The pick changes what the other seats see. Named when their lean is clear and the pick
@@ -472,7 +487,8 @@ function draftView(body) {
   if (m.cc) {
     const cm = m.cc.C.meta, g = x => `${x.mean >= 0 ? "+" : "−"}${Math.abs(1000 * x.mean).toFixed(2)} ± ${(1000 * x.half).toFixed(2)}`;
     about.push(el("p", { class: "sub", title: cm.what }, `Champion-into-comp terms on top: each champion's own lean into the enemy team's and its allies' ${m.cc.C.traits.join(", ")}, beyond the matchups and duos. ` +
-      `${cm.clear} of ${num(cm.tests)} leans are clear; with them the model predicted newer games better in ${cm.better} of 5 rounds, on ${num(cm.fit_games)} games, before looking at the games kept back for the final test. Only clear leans are named as reasons.`,
+      `${cm.clear} of ${num(cm.tests)} leans are clear; with them the model predicted newer games better in ${cm.better} of 5 rounds, on ${num(cm.fit_games)} games, before looking at the games kept back for the final test. Only clear leans are named as reasons.` +
+      ((m.cc.C.groups || []).length ? ` Kit groups (${m.cc.C.groups.map(g => g.words).join(", ")}) set each member's starting guess, which its own games then move; a group's lean is named "like other ..." and is not yet confirmed on fresh games.` : ""),
       el("span", { class: "muted", title: `Log loss change per game in milli-nats (negative is better), ${cm.snapshot}` }, ` (${g(cm.folds)})`)));
   }
   if (DRAFT.lane) {

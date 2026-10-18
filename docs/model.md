@@ -4171,6 +4171,96 @@ usually deals (which AP share already does), and one big AP carry among four AD 
 doesn't add beyond it. Profiles are typical damage, not who gets fed in a game, which a
 draft can't know. Nothing changes in the traits the tester uses
 
+#### Kit groups into champcomp (multilevel prior; declared 2026-10-18 ~02:45 BST, before any run)
+
+Question (Jacob): the Draft tester should be able to say "Rammus does better into an
+auto-attack team like this one, like other auto-attack punishers", counting nothing
+twice. Recipe: research/questions/hierarchical-comp-terms.md.
+
+Method (`champcomp SNAP --aa aa_build.tsv --groups`, offset win-draft, snap-20261017T1320Z
+dev games, comps' folds):
+- A ninth trait, auto-attack build (data/champgroups/aa_build.tsv, games before
+  bounds[2]; z within role over each window's fit seats; a set's value is the sum), enemy
+  and allies: 18 features. Folds 1 and 2 take it from games after their fit games: a
+  build habit with won and lost halves averaged, so the leak is small
+- Groups: champgroups' detected six on their declared enemy traits: G1 auto-attack
+  punishers (Rammus, Jax, Shen, Teemo, Malphite; Fiora dropped post hoc) into aa, G3 CC
+  answers into cc, G4 lethality assassins and G5 true and %HP damage into tank, G6 MR kits
+  and G11 armour kits into AP share. A champion counts in every group it is in, any role
+- Prior: a cell's deviation on a group's feature ~ N(sum_g gamma_g (member_g - share_rg),
+  tau_r^2), share_rg the role's precision-weighted member share, so a role's deviations
+  still average 0 (nothing moves into team terms). gamma: weighted least squares per
+  feature over every role's cells, weights 1 / (se^2 + tau^2), tau^2 by DerSimonian-Laird
+  around it, twice (two-stage form of the joint fit); gamma's covariance enters each
+  posterior sd. Posterior = group part (gamma x centred membership) + own part, summing
+  to the total by construction. The same run fits the plain 18-feature terms on the same
+  games
+
+Pre-declared:
+- P1, log loss: groups vs plain, folds pooled, on games with a member in either team:
+  95% interval below 0 and better in at least 4 of 5 folds; every game and dev-val
+  reported
+- P2, leave one member out (fit before bounds[2], raw refit on [bounds[2], D)): each
+  member's group guess with its own cell left out of gamma against its newer raw
+  deviation; pass when the weighted squared error sum is below the role mean's (sse < 0)
+  and the newer deviations' slope on the guesses is above 0 at one-sided p < 0.05
+- C: `--group-shuffle 1` (memberships shuffled within role) must pass neither, else that
+  check doesn't count
+- Reported: gamma per group (dev-val, pp per sd, 95%), tau per role and group feature
+  plain and with groups, Rammus jungle's group and own parts, the plain 18-feature fit
+  against the shipped 16 (folds -0.00068)
+- Planted: unit tests "kit groups" and "a planted kit group" (champcomp.zig) recover a
+  planted coefficient, parts sum back, the role stays centred
+- Ship draft-comp.json version 2 and the tester's "like other ..." reasons (admin only,
+  marked not yet confirmed) when P2 passes with C clean and P1's every-game interval is
+  not above 0. Caveat: the six were picked on all dev games, so P2 holds the member and
+  newer games out of the fit, not out of the group's choice
+
+Result (runs data/runs/20261018T0915Z-champcomp-1320Z-groups, -groupshuffle and
+-plain-noaa, Mac, a scratch build of 6ebb450 plus this change; ~5 min each; the first
+lab-run on 277661c's comp_stats cache is void, and the groups numbers came out the same):
+pass, shipped to the admin tester.
+- P1: groups vs plain 18-feature terms, games with a member, folds pooled -0.00021 ±
+  0.00010 nats/game over 250,399 games, better in 5 of 5; every game -0.00017 ± 0.00008
+  (5/5); dev-val -0.00010 ± 0.00016 (member games), -0.00011 ± 0.00013 (all). Per fold
+  the gain shrinks with more fit games (fold 1 -0.00030, fold 5 -0.00004), as expected
+  where the group helps thin champion-roles most
+- P2: leave one member out, 82 member cells: weighted squared error -35.9 against the
+  role mean, newer deviations' slope on the guesses 0.86 ± 0.28 (z about 6); closer for
+  41 of 82. By group: G1 -11.5 (slope 0.95 ± 0.55), G11 -17.9 (1.23 ± 0.56), G4 -7.1
+  (0.85 ± 0.61); G3 -0.7, G6 +0.3, G5 +1.0 (no help on their own)
+- C: shuffled memberships fail both (member games -0.00003 ± 0.00004, dev-val +0.00001;
+  sse +8.6, slope -0.00 ± 0.67); gammas near 0 (G1 0.25 ± 0.24, G11 0.28 ± 0.36)
+- gamma, dev-val, pp per sd of the enemy trait: G1 auto-attack punishers into aa +0.93 ±
+  0.28; G3 CC answers into cc +0.26 ± 0.34 (not clear here, unlike champgroups' +0.58,
+  which had no other traits held); G4 lethality assassins into tank -0.80 ± 0.32; G5
+  true and %HP damage into tank +0.70 ± 0.33; G6 MR kits into AP share +0.38 ± 0.37 (not
+  clear); G11 armour kits into AP share -1.20 ± 0.36. Steady across folds
+- tau: aa and cc have no spread left in any role, plain or with groups, so every member's
+  lean on them is its group's alone (Rammus jungle into aa: +0.90 group, 0 own; raw +1.15
+  ± 0.97). Tank: jungle 0.44 -> 0 pp, middle 0.57 -> 0.49, support 0.50 -> 0.44 (the
+  groups explain jungle's spread). AP share: middle 0.48 -> 0.42, others unchanged.
+  Rammus jungle into AP share: -0.62 (group -1.18, own +0.56, z 1.87)
+- Clear counts now test the champion's own part (`zOf`: the shrunk residual over its sd;
+  plain fits unchanged): 10 of 9,396 clear with groups (the first run counted 1,064 by
+  the posterior, where a non-member's small centring term -gamma x share is as clear as
+  its group in a role with no spread); replication 3/3
+- Beyond the plan, the aa trait costs the plain terms: 18 features about -0.00056 over the
+  offset (the groups run's -0.00073 less its -0.00017) against 16 (no aa file, which
+  reproduces the shipped run: -0.00068 ± 0.00012, clear 22, replicated 8/8). Top's AP
+  share spread goes from 0.36 pp to 0 with aa in (Malphite top's -1.14 lean was the
+  clearest there), so the groups model mostly wins back what the
+  trait costs. Paired by game against the shipped 16-feature terms: folds -0.00005 ±
+  0.00009, better in 4 of 5; dev-val -0.00001 ± 0.00014. So the tester's numbers barely
+  move; what it gains is the named reasons. Next (post hoc, not run): the enemy's aa
+  only (17 features), or aa only in the group prior
+- Exported (draft-comp.json version 2, groups, dev-val fit) to ~/ml/runs/
+  20261018T0950Z-draft-windraft-1320Z-groups with the same draft-model.json, chosen with
+  `deploy/lab-push.sh use draft`. The tester names a group's part ("does better into an
+  auto-attack-heavy team like this one, like other auto-attack punishers", marked not
+  yet confirmed on fresh games) when its gamma is clear (G1, G4, G5, G11) and the team is
+  that way, and the champion's own part beyond it only when that is clear
+
 ### Draft model file (meiolol draft-model, meiolol-lab draft --export)
 
 `meiolol draft-model [--out DIR]` (src/draftmodel.zig, default DATA/tester) writes the
@@ -4202,15 +4292,21 @@ folded into theta (min_games 1, nothing left out), intercept 0, temperature 1 (p
 test games, so the tester scores drafts as the app and site do. Its companion,
 `meiolol-lab champcomp SNAP --export DIR` (same cand), writes DIR/draft-comp.json:
 
-- format meiolol-champcomp, version 1; meta {snapshot, offset "win-draft", fit_games
+- format meiolol-champcomp, version 2 (1: 16 features, no groups; the tester reads both);
+  meta {snapshot, offset "win-draft", fit_games
   (dev-val's: dev games, no test look), what, folds and devval {mean, half, n} (nats a
   game against the offset), better (of 5), clear, tests, bh}
-- traits [8 labels]; features [16 {name, label, mean, sd}]: the enemy's five, then the
-  seat's four allies; mean and sd standardise the raw set traits
-- seats [[champion, role, magic, dmg, v1..v7]] and role_seats [5][magic, dmg, v1..v7]
+- traits [9 labels, the last auto-attack build: `--aa`, 0 without]; features [18 {name,
+  label, mean, sd}]: the enemy's five, then the seat's four allies; mean and sd
+  standardise the raw set traits
+- seats [[champion, role, magic, dmg, v1..v8]] and role_seats [5][magic, dmg, v1..v8]
   (an empty slot or a champion-role with no profile): a set's AP share is its summed
   magic over summed dmg (0.5 with none), every other trait the sum of v
-- cells [{champion, role, games, centre[16], dev[16], sd[16], clear [feature indices]}],
+- cells [{champion, role, games, centre[18], dev[18], sd[18], clear [feature indices],
+  group[18], member [group indices]}]: group[f] is the part of dev[f] its kit groups
+  predict (centred memberships, so a non-member's is small and the other way), dev[f] -
+  group[f] the champion's own; groups [{label, words, feature, gamma, sd, members}]
+  (`--groups`, else empty; gamma in logit per sd of the enemy feature);
   champion-roles with any nonzero deviation only: a seat's term on its team's logit is
   sum_f dev[f] * ((x[f] - mean[f]) / sd[f] - centre[f]); team terms left out
   (-0.00001 ± 0.00005)
@@ -4720,17 +4816,32 @@ the decision):
 - all blocks pooled: 0.68470 against additive's 0.68556 (accuracy 55.1% vs 54.8%, AUC
   0.572 vs 0.569); against the same net on win-draft (seeds 1-3) -0.58 ± 0.16: the better
   base carries into the net
-- Confirmation legs started on the gpu-box 18 Oct ~05:00Z were lost when it went off the
-  network; to rerun: `nd-setid-wa-s456`, `-r1`, `-r2`, `-perm` (and reported-only
-  `nd-set-wa`, `nd-bigres-wa`), --commit d968495, -Dcand=src/lab/cand/win-additive
+- Confirmation (gpu-box, d968495, 18 Oct): **passed**. Sealed seeds 4-6 -0.78 ± 0.12
+  (2.1x bound -0.53), better in 5 of 5 folds (-0.81, -0.59, -0.72, -1.20, -0.58), single
+  seeds -0.28 to -0.66 (run 20261018T050921Z-nd-setid-wa-s456); resamples -0.58 ± 0.11
+  and -0.62 ± 0.10 (-r1, 20261018T082526Z-nd-setid-wa-r2); permuted-profile control
+  -0.00 ± 0.01 (20261018T082543Z-nd-setid-wa-perm), real minus control -0.77 ± 0.12
+  paired. Accuracy 55.0% against additive's 54.7% (folds); dev-val -0.50 ± 0.10,
+  reported
+- Reported only: the within-team set net without embedding on additive v2 -0.07 ± 0.03
+  (20261018T060117Z-nd-set-wa), the big net as a residual -0.27 ± 0.07 (10 seeds, single
+  seeds +0.08 to +1.71; 20261018T060136Z-nd-bigres-wa). On this base nearly all of the
+  gain needs the embedding and the enemy team; within-team profiles alone add little
+  beyond additive v2's damage mix
+- How far the net moves a draft (sealed run, folds, 3-seed mean vs additive v2): mean
+  |change| 1.24 pp, median 0.91, 90th percentile 2.79, 99th 5.16; 20% of drafts move
+  over 2 pp. Additive v2's own mean distance from 50% is 4.66 pp: about a fifth of a
+  typical draft's lean would come from the part with no named terms
 
 Export for the Draft tester (e8a2e2f): `netcheck --net set ... --blocks dev --export 1`
 writes each seed's dev-block fit as setnet-s<seed>.json (format meiolol-setnet v1, in
 setnet.writeExport's doc comment). An independent forward pass from the file matches its
 200 reference logits within 6e-8 and netcheck's preds within 5e-7 (win-draft, seed 1:
-14,353 params, 823 vocab ids, 865 profiles). Not yet read by the tester
-- Not yet: a test look (needs Jacob's go; rule to declare first), the exporter for the
-  Draft tester (set net format agreed in "Next steps"), and `meiolol eval`'s view
+14,353 params, 823 vocab ids, 865 profiles). The tester reads it through
+src/site/static/admin-setnet.js, on additive v2 fitted on the same games (`draft
+--model additive --fit dev --export`); its parts are swaps (a pick for its role's
+average, a trait zeroed across a team, every embedding row for its role's), not terms
+- Not yet: a test look (needs Jacob's go; rule to declare first) and `meiolol eval`'s view
 
 ## Shipped model, 2026-10-17
 

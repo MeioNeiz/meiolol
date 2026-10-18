@@ -37,9 +37,15 @@ How to write a line:
   nats per game on 300,113 held-out games (5 rounds, 300-540k training games a round),
   better in every round, with fresh seeds and on two resamples, and shuffling which
   champion has which profile leaves -0.00014; the comp terms alone give -0.00068. Against
-  the best model without a net (additive v2, itself -0.00108 better than today's) it
-  is -0.00039 ± 0.00017, under the noise floor. Dev only, no test look. Site: nothing yet; next a test look on Jacob's go, then the net in
-  the admin Draft tester. Evidence: docs/model.md "Nets on the shipped model, 2026-10-18"
+  the best model without a net (additive v2, itself -0.00108 better than today's) that
+  net is -0.00039 ± 0.00017, under the noise floor; trained on top of additive v2
+  instead, it passes the same pre-declared rule: -0.00078 ± 0.00012 on the 300,113 games
+  (sealed seeds, 5 of 5 rounds, resamples -0.00058 and -0.00062, permuted profiles
+  -0.00000), accuracy 54.7% to 55.0%. It moves a typical draft by about 1 point (mean
+  1.2, 1 in 5 drafts over 2), against additive's own lean of 4.7 from 50%. Dev only, no
+  test look. Site: nothing; the admin Draft tester shows it beside additive v2, broken
+  down by swapping picks and traits. Evidence: docs/model.md "Nets on the shipped model,
+  2026-10-18"
 - 2026-10-18: Rammus does do better into teams of auto-attackers (champions who build
   crit and attack speed, like Master Yi, Tryndamere and marksmen), about 1.4 points per
   step towards such a team, even with their damage type held fixed: it was never about AD
@@ -66,6 +72,22 @@ How to write a line:
   0 with shuffled profiles; dev only, no test look, four groups partly seen before.
   Site: nothing yet; the detected groups and Rammus go into the held-out look on games
   after 17 Oct. Evidence: docs/model.md "Kit groups and a property scan"
+- 2026-10-18: Kit groups make a good starting guess for each member: a champion's lean
+  into a kind of team is best guessed as its group's lean, with its own games moving it
+  from there. Leaving each member out, its group predicted its lean on newer games
+  (slope 0.86 ± 0.28, 82 members), and the comp terms predicted winners better on games
+  with a member (-0.00021 ± 0.00010 nats a game, 5 of 5 folds); with shuffled groups
+  neither. Clear groups, pp per step of the enemy trait: auto-attack punishers +0.9 into
+  auto-attack teams, armour kits -1.2 into magic damage, lethality assassins -0.8 and
+  true or %HP damage +0.7 into tanky teams; CC answers and magic shield kits not clear
+  once the other traits are held. Most members' leans are their group's alone (Rammus
+  jungle into auto-attackers: +0.9, nothing of his own on top). Overall prediction
+  barely moves against the shipped comp terms (-0.00005 ± 0.00009), because the
+  auto-attack trait the groups need makes the plain terms worse by about as much. Sure:
+  declared before the run, snap-20261017T1320Z dev games, the six groups picked on the
+  same dev games (so not yet a fresh test). Site: admin Draft tester only, reasons "like
+  other ..." marked not yet confirmed; nothing public before the held-out look.
+  Evidence: docs/model.md "Kit groups into champcomp"
 - 2026-10-18: A whole draft rarely leans clearly to one side: none of the 9 published
   Daily Draft puzzles on 16.20 is clear of even at 95%, including the one the page had
   shown as "39 to 61 for blue" (1.4 SE from even). A lean needs about 38/62 or wider to
