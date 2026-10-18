@@ -62,14 +62,20 @@ static/your.js) is the page. Live, /api/ open without login since 2026-10-17: De
 
 ## Example
 
-your.html offers "See an example" (and `your.html?example`) when data/your-example.json
-exists, so a visitor or Riot reviewer sees the page without a Riot ID (/api/ sits behind
-basic auth in preview). `meiolol your-example` (src/api/example.zig, read-only, ~25 s on
-the box) picks one EUW player with the most lane games with timelines in the last 7
-days, Gold to Emerald first, never a `forgotten` one, and writes their 10 newest ranked
-solo games through the same report() as the API. No name, PUUID or match id; game starts
-cut to the day (UTC). The web loop runs it daily and copies the file into each site build;
-a failed run deletes it, so no stale example ships (the page then offers none).
+your.html offers "See an example" (and `your.html#example`, `#example=jungle`) when
+data/your-example.json exists, so a visitor or Riot reviewer sees the page without a Riot
+ID (/api/ sits behind basic auth in preview). `meiolol your-example` (src/api/example.zig,
+read-only, under a minute on the box) keeps one EUW player per role (top, jungle, mid,
+bot, support): of the 10 with the most games of that role with timelines in the last 7
+days, Gold to Emerald first, never a `forgotten` one nor another role's pick, the first
+whose games include one with a turning minute and a lane curve. It writes their 10 newest
+ranked solo games of that role through the same report() as the API, as
+`{default, top, jungle, mid, bot, support}` (default mid; a role missing when nobody
+qualifies). The page and the home page's featured review switch role; a bare #example
+opens the default, and an older one-player file still shows, without the switch. No name,
+PUUID or match id; game starts cut to the day (UTC). The web loop runs it daily and
+copies the file into each site build; a failed run deletes it, so no stale example ships
+(the page then offers none).
 
 ## API
 
