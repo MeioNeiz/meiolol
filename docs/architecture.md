@@ -95,7 +95,11 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   ~5.0 KB uncompressed, decoded 11x faster than the full blob), keyed by the timelines
   rowid. Made by `meiolol digest` (src/digests.zig) each web loop round, not by the
   crawler; a game without a current digest is read in full and cut, so outputs never
-  depend on it. Not backed up: rebuilt
+  depend on it. Not backed up: rebuilt.
+  On the box (18 Oct, niced, crawler running), wall/CPU s before -> after: curves --site
+  2003/709 -> 1551/494, lean 1945/682 -> 1764/165, lane-model 1685/719 -> 1202/414,
+  builds 1462/366 -> 1323/230; the box is disk-bound, so CPU falls more than wall.
+  Catch-up from empty 1203 s; 4.8 GB for 878k timelines
 - `meiolol.db`: crawl state (players, ladder_pages, match_queue and timeline_queue:
   pending, missing and failed only; stored ones leave) and tables kept forever (or
   `--keep-days` after game start: a rolling window): matches, participants (incl. final items, full rune page, and
