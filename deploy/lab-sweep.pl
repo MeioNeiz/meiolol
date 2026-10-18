@@ -3,6 +3,10 @@
 #
 #   lab-sweep.pl sample SPACE TRIALS RNG     trials.tsv: trial, then the sampled flags
 #   lab-sweep.pl table TRIALS_TSV            markdown table from the trials' folds.tsv
+#   lab-sweep.pl verdict TRIALS_TSV K        the stopping rule on finished trials' folds:
+#                                            `stop ...` when K or more are scored and
+#                                            every one loses by over 2 se, `pass ...`
+#                                            when K are scored and one doesn't, else `wait`
 #
 # SPACE: one flag per line, `--name DIST ARGS`; # comments. DIST: choice V..., uniform LO
 # HI, loguniform LO HI, int LO HI, logint LO HI. Values reach a shell on the gpu-box, so
@@ -22,7 +26,10 @@ use warnings;
 my $mode = shift @ARGV // '';
 if ($mode eq 'sample') { sample(@ARGV) }
 elsif ($mode eq 'table') { table(@ARGV) }
-else { die "lab-sweep.pl sample SPACE TRIALS RNG | table TRIALS_TSV\n" }
+elsif ($mode eq 'verdict') { verdict(@ARGV) }
+else {
+    die "lab-sweep.pl sample SPACE TRIALS RNG | table TRIALS_TSV | verdict TRIALS_TSV K\n";
+}
 
 sub sample {
     my ($space, $n, $rng) = @_;
@@ -95,7 +102,8 @@ sub sd {
     return sqrt($s / (@_ - 1));
 }
 
-sub table {
+# Trials' order and configs from trials.tsv, and a summary per trial with folds on stdin
+sub summarise {
     my ($trials_tsv) = @_;
     open my $f, '<', $trials_tsv or die "$trials_tsv: $!\n";
     my @head = split /\t/, scalar(<$f>) =~ s/\n//r;
@@ -163,6 +171,31 @@ sub table {
             secs => $secs, better => $better, rows => scalar(@val),
             ens => $en ? $esum / $en : undef};
     }
+    return (\%config, \@order, \%rows, @done);
+}
+
+# big1, big1b, big1c (17 Oct): 23 trials, every one behind ratings in 0 of 5 folds.
+# Losing = pooled fold gain below -2 se; ref is the bar, not counted
+sub verdict {
+    my ($trials_tsv, $k) = @_;
+    die "K: a number\n" unless defined $k && $k =~ /^[1-9]\d*$/;
+    my (undef, undef, undef, @done) = summarise($trials_tsv);
+    my @scored = grep { $_->{t} ne 'ref' && defined $_->{gain} && defined $_->{se} } @done;
+    my @lost = grep { $_->{gain} < -2 * $_->{se} } @scored;
+    my $n = @scored;
+    if ($n < $k) { print "wait $n of $k scored\n" }
+    elsif (@lost == $n) {
+        my ($best) = sort { $b->{gain} <=> $a->{gain} } @scored;
+        printf "stop all %d scored trials lose by > 2 se (best %s %+.2f ± %.2f mnats)\n",
+            $n, $best->{t}, 1000 * $best->{gain}, 1000 * $best->{se};
+    } else { printf "pass %d of %d scored trials within 2 se or better\n", $n - @lost, $n }
+}
+
+sub table {
+    my ($config, $order, $rows, @done) = summarise(@_);
+    my %config = %$config;
+    my @order = @$order;
+    my %rows = %$rows;
     my $m = sub { defined $_[0] ? sprintf('%+.2f', 1000 * $_[0]) : '-' };
     my $p = sub { defined $_[0] ? sprintf('%.2f', 1000 * $_[0]) : '-' };
     print "Ranked by inner-validation log loss (fit games only). Gains vs the command's\n";

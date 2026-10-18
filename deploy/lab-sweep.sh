@@ -6,11 +6,12 @@
 #                             [--head | --commit SHA] [--build-arg A]... [--res gpu|cpu]
 #                             [--gpu-share N]
 #                             [--python SCRIPT [--with PATH]...] [--skip N] [--live N]
-#                             [--dry-run]
+#                             [--stop-after K | --no-stop] [--dry-run]
 #                             -- CMD ARGS...
 #   deploy/lab-sweep.sh status SWEEP      its jobs, as deploy/lab-run.sh status shows them
 #   deploy/lab-sweep.sh table SWEEP       trials ranked by inner validation, to table.md
 #   deploy/lab-sweep.sh stop SWEEP        stops its queued and running jobs
+#   deploy/lab-sweep.sh watch SWEEP K     the stopping rule, as start runs it
 #
 # start samples N trials (default 32, --rng 1) from SPACE (deploy/lab-sweep.pl says the
 # format), builds meiolol-lab once and queues one lab-run job per K trials (--pack,
@@ -28,6 +29,10 @@
 # --live N: at most N of the sweep's jobs queued or running at once; start waits here
 # (polling the gpu-box each minute) before queuing the next, so run it in the background.
 # For jobs whose memory or card share the slot count doesn't cap (state nets: 6-8 GB)
+# Stopping rule (default K 8; --no-stop: off): once K trials of finished jobs are scored,
+# if every one loses to the reference by more than 2 se (lab-sweep.pl verdict), the sweep
+# stops: queued and running jobs, and start queues no more. Any that doesn't: the rest
+# run. start leaves `watch` checking each minute in the background, log watch.log
 #   deploy/lab-sweep.sh start big1 big.space --trials 40 --head \
 #       --build-arg -Dcand=src/lab/cand/win-ratings \
 #       -- netcheck "~/ml/snaps/snap-X" --net big --seeds 1,2,3
@@ -38,7 +43,7 @@ RUN=$ROOT/deploy/lab-run.sh
 HOST=gpu-box
 
 usage() {
-    sed -n '5,12p' "$0"
+    sed -n '5,14p' "$0"
     exit 2
 }
 
@@ -52,7 +57,7 @@ runs() { tail -n +2 "$1/jobs.tsv" | cut -f 2; }
 
 start() {
     local sweep=$1 space=$2 trials=32 rng=1 pack=1 dry=0 res=gpu skip=0 serial=0 py=""
-    local live=0
+    local live=0 stop_k=8
     local opts=()
     shift 2
     while (( $# )); do
@@ -71,6 +76,8 @@ start() {
             --dry-run) dry=1 ;;
             --skip) skip=$2; shift ;;
             --live) live=$2; shift ;;
+            --stop-after) stop_k=$2; shift ;;
+            --no-stop) stop_k=0 ;;
             --) shift; break ;;
             *) echo "unknown option $1"; exit 2 ;;
         esac
@@ -88,6 +95,8 @@ start() {
     dir=$(sweep_dir "$sweep")
     [[ "$skip" =~ ^[0-9]+$ ]] || { echo "--skip: a number"; exit 2; }
     [[ "$live" =~ ^[0-9]+$ ]] || { echo "--live: a number"; exit 2; }
+    [[ "$stop_k" =~ ^[0-9]+$ ]] || { echo "--stop-after: a number"; exit 2; }
+    (( stop_k < trials )) || stop_k=0
     if (( skip )); then
         [[ -f "$dir/jobs.tsv" ]] || { echo "--skip: no $dir/jobs.tsv to add to"; exit 1; }
     elif [[ -e "$dir" ]] && (( ! dry )); then
@@ -146,8 +155,10 @@ start() {
         printf 'job\trun\ttrials\tcmd\n' > "$dir/jobs.tsv"
     fi
     local k out run key o kept
+    rm -f "$dir/stopped"
     for (( k = skip; k < ${#jobs[@]}; k++ )); do
         while (( live )) && (( $(live_jobs "$dir") >= live )); do sleep 60; done
+        [[ -f "$dir/stopped" ]] && { echo "stopping rule: $(cat "$dir/stopped")"; return; }
         # Built once; the rest start that binary by its store key, whatever the tree
         # holds by then (lab-run.sh copies it into each run dir)
         if (( k == skip + 1 )) && [[ -z "$py" ]]; then
@@ -171,6 +182,10 @@ start() {
         (( k == skip )) && grep '^predicted' <<< "$out" || true
         printf 'j%02d\t%s\t%s\t%s\n' $((k + 1)) "$run" "${names[k]}" "$*" >> "$dir/jobs.tsv"
         echo "queued $run (${names[k]})"
+        if (( k == skip && stop_k )); then
+            nohup "$0" watch "$sweep" "$stop_k" >> "$dir/watch.log" 2>&1 < /dev/null &
+            echo "stopping rule: after $stop_k trials, log $dir/watch.log"
+        fi
     done
     echo "${#jobs[@]} jobs queued on $HOST/$res; deploy/lab-sweep.sh status|table $sweep"
 }
@@ -186,10 +201,18 @@ status() {
     "$RUN" status "$HOST" | grep -F -f <(runs "$dir") || echo "no jobs listed"
 }
 
-table() {
-    local dir=$1 script="" run t f
-    # tNN<tab>line for each line of each trial's folds.tsv
+# Run dirs of the sweep's jobs in state STATE (a regex on lab-run status's second field)
+runs_in() {
+    "$RUN" status "$HOST" 2> /dev/null | grep -F -f <(runs "$1") \
+        | awk -F ' [|] ' -v s="$2" '$2 ~ s { print $1 }'
+}
+
+# tNN<tab>line for each line of each trial's folds.tsv; with RUNS (a file of run dirs),
+# only those jobs' trials
+folds() {
+    local dir=$1 only=${2:-} script="" run ids t f
     while IFS=$'\t' read -r _ run ids _; do
+        [[ -z "$only" ]] || grep -qxF "$run" "$only" || continue
         for t in ${ids//,/ }; do
             f=ml/runs/$run/$t/folds.tsv
             script+="[[ -f $f ]] && sed 's/^/$t\t/' $f
@@ -198,14 +221,38 @@ table() {
     done < <(tail -n +2 "$dir/jobs.tsv")
     script+="true"
     # shellcheck disable=SC2029 # run dirs and trial names from our own jobs.tsv
-    ssh "$HOST" "$script" | perl "$ROOT/deploy/lab-sweep.pl" table "$dir/trials.tsv" \
-        | tee "$dir/table.md"
+    ssh "$HOST" "$script"
+}
+
+table() {
+    folds "$1" | perl "$ROOT/deploy/lab-sweep.pl" table "$1/trials.tsv" | tee "$1/table.md"
+}
+
+# The stopping rule: each minute, verdict on the trials of jobs that exited 0, until it
+# says stop (stops the sweep, reason in DIR/stopped) or pass, or no job is left
+watch() {
+    local dir=$1 k=$2 v
+    [[ "$k" =~ ^[1-9][0-9]*$ ]] || { echo "K: a number"; exit 2; }
+    # Global: the EXIT trap runs after this function's locals are gone
+    ended=$(mktemp)
+    trap 'rm -f "$ended"' EXIT
+    while :; do
+        runs_in "$dir" '^exit 0' > "$ended" || true
+        v=$(folds "$dir" "$ended" | perl "$ROOT/deploy/lab-sweep.pl" verdict \
+            "$dir/trials.tsv" "$k") || v="wait"
+        echo "$(date -u +%FT%TZ) $v"
+        case $v in
+            stop*) echo "${v#stop }" > "$dir/stopped"; stop "$dir"; return ;;
+            pass*) return ;;
+        esac
+        [[ -n "$(runs_in "$dir" '^(running|paused|queued)')" ]] || return
+        sleep 60
+    done
 }
 
 stop() {
-    local dir=$1 run
-    for run in $("$RUN" status "$HOST" | grep -F -f <(runs "$dir") \
-        | awk -F ' [|] ' '$2 ~ /^(running|paused|queued)/ { print $1 }'); do
+    local run
+    for run in $(runs_in "$1" '^(running|paused|queued)'); do
         "$RUN" stop "$HOST" "$run" && echo "stopped $run"
     done
 }
@@ -213,11 +260,11 @@ stop() {
 cmd=${1:-}
 case "$cmd" in
     start) (( $# >= 4 )) || usage; start "${@:2}" ;;
-    status|table|stop)
-        (( $# == 2 )) || usage
+    status|table|stop|watch)
+        [[ $# == 2 || ( $cmd == watch && $# == 3 ) ]] || usage
         dir=$(sweep_dir "$2")
         [[ -f "$dir/jobs.tsv" ]] || { echo "no sweep $2 (no $dir/jobs.tsv)"; exit 1; }
-        "$cmd" "$dir"
+        "$cmd" "$dir" "${@:3}"
         ;;
     *) usage ;;
 esac
