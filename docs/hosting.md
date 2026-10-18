@@ -100,6 +100,12 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   deploy's write reuses its unchanged parts (from 17 Oct; stopping it instead cost a
   10 and a 72 min write that day, the swap waiting 1 h 43). Kept parts refresh at the
   next upload's full write.
+  From 18 Oct a full write reads only new, REPLACEd or newly timelined games from
+  data/partials (docs/architecture.md "Views partials"): the first build 1,038 s
+  (partials 685 s, all 952k games), then 322 s (21k games read: partials 56 s, people
+  100 s, learn 152 s from the database) and 468 s (59k read as whole tables, 331 s,
+  hence the 150k threshold), against 1,119-1,706 s before. Learn (from the database)
+  is the biggest part left.
   The heavy loads read in parallel (16 Oct): filters in 4 runs of games, learning in 4
   puuid ranges, each on its own read-only connection (schema.openSibling), and filters
   beside the people tallies; the box waits on cold pages, one read in flight each.

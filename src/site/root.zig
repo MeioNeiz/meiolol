@@ -357,7 +357,13 @@ pub const Extras = struct {
         if (e.games) |g| return g;
         // A write from the tables beats none: each file is replaced whole and the state
         // last, so what a failed refresh left is read again next time
-        const g = partials.Store.open(gpa, io, db, dir, .{ .now_ms = std.Io.Clock.real.now(io).toMilliseconds() }) catch |err| switch (err) {
+        // Box, 18 Oct: whole-table scans 331-685 s whatever the count, lookups under
+        // 2.7 ms a match; 6-8 h between full writes (~7k matches an hour) passed the
+        // default 50k. Here, not in partials.zig, whose source change starts them again
+        const g = partials.Store.open(gpa, io, db, dir, .{
+            .now_ms = std.Io.Clock.real.now(io).toMilliseconds(),
+            .bulk_after = 150_000,
+        }) catch |err| switch (err) {
             error.OutOfMemory => return err,
             else => {
                 log.warn("partials at {s}: {t}; reading the database", .{ dir, err });

@@ -588,7 +588,8 @@ rowid) its pool contribution (main, one-trick, champions also played) for one ch
 list. One read transaction diffs (match_id, rowid) of matches and timeline.timelines
 (read first: an attached file's snapshot starts at its first read, and the writer
 commits main first) against the files, then reads only new, REPLACEd (new rowid) or
-newly timelined matches, by key, or whole tables past 50k (the first build); mastery
+newly timelined matches, by key, or whole tables past 150k (the first build;
+the views write sets it in root.zig); mastery
 rows likewise by rowid. In-place changes the diff can't see: forgotten PUUIDs (scrubbed
 each write from `forgotten`, and at once by `meiolol forget` under the directory's
 lock), PUUIDs blanked at 24 months (days near the cutoff read again each write, older
