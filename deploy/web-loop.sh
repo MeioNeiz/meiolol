@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Runs on the box (deploy/box.sh web start): hourly rounds. Each builds the static core
-# and uploads it to the jomove server when the patch changed, a deploy asked, curves are
-# fresh, or there are new games and `interval` passed: 6 h, or 1 h for a patch's first
-# day (data/patch-<patch>.seen). Heavy work runs one job at a time, the loop's first
+# Runs on the box (deploy/box.sh web start): hourly rounds. Each reads EUW's newest patch
+# and its game count (`meiolol site --patch-games`, a count query: under a second), then
+# builds the static core and uploads it to the jomove server when the patch changed, a
+# deploy asked, curves are fresh, or there are new games and `interval` passed: 6 h, or
+# 1 h for a patch's first day (data/patch-<patch>.seen). Only then: until 18 Oct every
+# round built it (17-265 s, mostly waiting on the disk) to read those two numbers, and a
+# build changes only the home page (index.html), which the upload ships. Heavy work runs
+# one job at a time, the loop's first
 # (curves, views file), then at most one daily job per round, which the loop waits for:
 # on 14-15 Oct several at once held the disk at its 70 MB/s cap and a curves pass took
 # 45-60 min every hour (research/questions/box-io-priority.md). The build is
@@ -82,8 +86,10 @@ push_curves() {
     files=$(printf '%s\n' data/export/curves-*.bin | grep -v '\*' | sort -V | tail -n 2)
     [[ -n "$files" ]] || return 0
     rm -rf data/curves-push && mkdir -p data/curves-push
+    # Hard links, not a copy (226 MB a pass): curves replaces its files by rename, so a
+    # link keeps the version pushed
     # shellcheck disable=SC2086
-    cp -p $files data/curves-push/
+    ln $files data/curves-push/
     rsync -a --delete data/curves-push/ meiolol-exchange:curves/ \
         || echo "$(date -u +%FT%TZ) curves push to the service FAILED"
 }
@@ -122,9 +128,10 @@ interval_for() {
     [[ -e data/patch-$1.seen ]] || touch "data/patch-$1.seen"
     if (( $(date +%s) - $(mtime "data/patch-$1.seen") < 86400 )); then echo 3600; else echo 21600; fi
 }
-# The patch otherwise comes from the round's site build, after curves: without it a
-# restart's first curves pass reads every patch (~50 min) and leaves curves-<patch>.bin
-# alone, so start from the newest of those (by version: prev_patch's is written later)
+# The rounds read the patch from the database, but the check below needs it first:
+# without it a restart's first round redoes the curves (35-50 min) though they are
+# current, so start from the newest of those files (by version: prev_patch's is
+# written later)
 patch=$(printf '%s\n' data/export/curves-*.bin | grep -v '\*' | sort -V | tail -n 1 \
     | sed -E 's#.*/curves-(.*)\.bin$#\1#')
 # A restart (deploy, reboot) keeps the curves timer while the site's four curves files
@@ -197,8 +204,9 @@ run_daily() {
     [[ -n "$daily_pid" ]] && kill -0 "$daily_pid" 2> /dev/null && return 1
     if [[ -n "$patch" ]] && { [[ "$patch" != "$builds_patch" ]] || (( now - last_builds >= 86400 )); }; then
         last_builds=$now builds_patch=$patch
-        (batch bin/meiolol builds --patch "$patch" \
-            && batch bin/meiolol builds --patch "$patch" --platform all) > data/builds.log 2>&1 &
+        # EUW's and every region's files from one read of the timelines (two passes until
+        # 18 Oct, the second 15 min)
+        batch bin/meiolol builds --patch "$patch" --site > data/builds.log 2>&1 &
     elif [[ -n "$prev_patch" && "$prev_patch" != "$prev_curves_patch" ]]; then
         prev_curves_patch=$prev_patch
         (batch bin/meiolol curves --patch "$prev_patch" \
@@ -255,6 +263,13 @@ while true; do
         round_sha=$(tail -n 1 DEPLOYED 2> /dev/null | cut -d' ' -f1)
         deploy_event round start "site build, upload and views file with the new binary$( (( full )) && echo ', every part fresh (web rebuild)')"
     fi
+    # Fails (logged) until there are games; the patch then stays as it was
+    if peek=$(bin/meiolol site --patch-games 2>&1) && [[ $peek =~ ^([^ ]+)\ ([0-9]+)$ ]]; then
+        patch=${BASH_REMATCH[1]} games=${BASH_REMATCH[2]}
+    else
+        echo "$(date -u +%FT%TZ) patch and games: $peek"
+        games=0
+    fi
     interval=$(interval_for "$patch")
     # A deploy's or start's round leaves a due pass to the next round, so the views file
     # comes first; a new patch or curves format can't wait
@@ -265,20 +280,20 @@ while true; do
         last_curves=$now curves_patch=$patch
         push_curves
     fi
-    rm -rf data/site.new
     # The core build's and the views file's, so rendered pages match the uploaded ones
     site_args=(--contact "$contact" --origin https://meio.lol)
     [[ -s riot.txt ]] && site_args+=(--riot-txt "$(<riot.txt)")
-    site_start=$SECONDS
-    if out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core 2>&1); then
-        site_s=$(( SECONDS - site_start ))
-        deploy_event site ok "core build ${site_s}s"
-        # First patch line, EUW: "data/site.new/patch/: patch 16.20, 1054 games, ..."
-        read -r patch games < <(sed -nE 's/.*: patch ([^,]+), ([0-9]+) games.*/\1 \2/p' \
-            <<< "$out")
-        now=$(date +%s)
-        if [[ "$patch" != "$last_patch" ]] || (( fresh_curves || forced )) \
-            || (( games > last_games && now - last_upload >= interval )); then
+    now=$(date +%s)
+    if [[ -n "$patch" ]] && { [[ "$patch" != "$last_patch" ]] || (( fresh_curves || forced )) \
+        || (( games > last_games && now - last_upload >= interval )); }; then
+        rm -rf data/site.new
+        site_start=$SECONDS
+        if ! out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core 2>&1); then
+            echo "$out"
+            deploy_event site failed "$(tail -n 1 <<< "$out")"
+        else
+            site_s=$(( SECONDS - site_start ))
+            deploy_event site ok "core build ${site_s}s"
             echo "$out"
             t=$SECONDS
             changed=$(rsync -rlpD --checksum --delete --stats data/site.new/ data/site/ \
@@ -317,9 +332,6 @@ while true; do
                 last_patch=$patch last_games=$games fresh_curves=0
             fi
         fi
-    else
-        echo "$out"
-        deploy_event site failed "$(tail -n 1 <<< "$out")"
     fi
     if nice -n 10 bin/meiolol admin --out data/admin.new \
         --disk "$(df -B1 --output=size,used,avail data | tail -n 1)" \

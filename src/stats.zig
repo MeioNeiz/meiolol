@@ -172,6 +172,25 @@ pub fn scan(
     return summary;
 }
 
+/// Games of `chosen` from `platforms` as scan's query picks them, without reading them
+/// (scan's count also drops a game missing a player or role)
+pub fn countGames(db: store.Db, chosen: []const []const u8, platforms: []const []const u8) !u64 {
+    var buf: [1024]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&buf);
+    const patch_json = try std.json.Stringify.valueAlloc(fba.allocator(), chosen, .{});
+    const platform_json = try std.json.Stringify.valueAlloc(fba.allocator(), platforms, .{});
+    var q = try db.prepare(
+        \\SELECT count(*) FROM matches
+        \\WHERE patch IN (SELECT value FROM json_each(?)) AND queue_id = ?
+        \\  AND platform IN (SELECT value FROM json_each(?))
+        \\  AND remake = 0 AND winning_team IS NOT NULL
+    );
+    defer q.deinit();
+    try q.bind(.{ patch_json, ranked_solo, platform_json });
+    _ = try q.step();
+    return @intCast(q.int(0));
+}
+
 /// The champions table, by name. Free with freeChampions
 pub fn champions(gpa: std.mem.Allocator, db: store.Db) ![]statsfile.Champion {
     var list: std.ArrayList(statsfile.Champion) = .empty;

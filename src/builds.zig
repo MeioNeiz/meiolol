@@ -401,8 +401,24 @@ fn at(out: []Picks, participant: u8) ?*Picks {
 /// Every ranked solo game (no remake, a winner) of `o.patches` from `o.platforms`, with
 /// its timeline where there is one. Caller owns the builder
 pub fn build(gpa: std.mem.Allocator, db: store.Db, d: *const ddragon.BuildData, o: Options) !Builder {
-    var b: Builder = .{ .gpa = gpa, .max_keys = @max(o.max_keys, 2) };
-    errdefer b.deinit();
+    var b: [1]Builder = undefined;
+    try buildEach(gpa, db, d, o, &.{o.platforms}, &b);
+    return b[0];
+}
+
+/// As build, one builder per platform set in `sets` (each within o.platforms), every
+/// timeline read once: EUW's and every region's files in one pass. Caller owns `out`
+pub fn buildEach(
+    gpa: std.mem.Allocator,
+    db: store.Db,
+    d: *const ddragon.BuildData,
+    o: Options,
+    sets: []const []const []const u8,
+    out: []Builder,
+) !void {
+    std.debug.assert(sets.len == out.len and sets.len <= max_sets);
+    for (out) |*b| b.* = .{ .gpa = gpa, .max_keys = @max(o.max_keys, 2) };
+    errdefer for (out) |*b| b.deinit();
     const patch_json = try std.json.Stringify.valueAlloc(gpa, o.patches, .{});
     defer gpa.free(patch_json);
     const platform_json = try std.json.Stringify.valueAlloc(gpa, o.platforms, .{});
@@ -410,7 +426,7 @@ pub fn build(gpa: std.mem.Allocator, db: store.Db, d: *const ddragon.BuildData, 
     const floor: ?usize = if (o.min_tier) |t| tierIndex(t) orelse return error.UnknownTier else null;
 
     var q = try db.prepare(
-        \\SELECT m.match_id, t.data
+        \\SELECT m.match_id, m.platform, t.data
         \\FROM matches m LEFT JOIN timeline.timelines t USING (match_id)
         \\WHERE (? = 0 OR m.patch IN (SELECT value FROM json_each(?)))
         \\  AND m.game_start >= ? AND m.queue_id = ?
@@ -433,16 +449,25 @@ pub fn build(gpa: std.mem.Allocator, db: store.Db, d: *const ddragon.BuildData, 
     while (try q.step()) {
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
-        b.games += 1;
-        const m = q.row(struct { match_id: []const u8, data: ?[]const u8 });
+        const m = q.row(struct { match_id: []const u8, platform: []const u8, data: ?[]const u8 });
+        var in: [max_sets]bool = @splat(false);
+        for (sets, 0..) |set, i| {
+            for (set) |p| if (std.mem.eql(u8, p, m.platform)) {
+                in[i] = true;
+            };
+        }
+        if (std.mem.indexOfScalar(bool, in[0..out.len], true) == null) continue;
         var have_picks = false;
         if (m.data) |data| {
             if (decode(arena, data)) |t| {
                 picks(t, d, all[0..t.participants]);
                 have_picks = true;
-                b.timelines += 1;
             } else |err| log.warn("{s}: {t}", .{ m.match_id, err });
         }
+        for (out, in[0..out.len]) |*b, yes| if (yes) {
+            b.games += 1;
+            b.timelines += @intFromBool(have_picks);
+        };
         try players.bind(.{m.match_id});
         while (try players.step()) {
             const r = players.row(struct {
@@ -482,11 +507,13 @@ pub fn build(gpa: std.mem.Allocator, db: store.Db, d: *const ddragon.BuildData, 
                 .shards = .{ idOf(r.shard_offense), idOf(r.shard_flex), idOf(r.shard_defense) },
             };
             const k: ?Picks = if (have_picks and r.slot < timeline.max_participants) all[r.slot] else null;
-            try b.addPlayer(p, k, d);
+            for (out, in[0..out.len]) |*b, yes| if (yes) try b.addPlayer(p, k, d);
         }
     }
-    return b;
 }
+
+/// Platform sets one buildEach pass feeds
+const max_sets = 4;
 
 /// NULL or out of range: 0, none
 fn idOf(v: ?i64) u32 {

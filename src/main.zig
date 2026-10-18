@@ -62,8 +62,12 @@ const usage =
     \\              --ladder-per-hour N  ladder pages per platform per hour at most
     \\                               (default 0: no cap)
     \\              --regions R      americas,asia,europe,sea (default all)
-    \\              --timelines PCT  share of matches that also get a timeline; every
-    \\                               --priority match gets one (default 100)
+    \\              --timelines PCT  share of non-priority matches that also get a
+    \\                               timeline, the same games on a rerun (default 100)
+    \\              --timelines-priority PCT  the same for --priority matches (default
+    \\                               100)
+    \\              --timeline-min-s S  no timeline for matches shorter than S seconds
+    \\                               (default 0: every length)
     \\              --flex-calls-per-day N  ranked flex id lookups a day for --priority
     \\                               players, a test sample (default 0; queue 420 only on
     \\                               the site and in models)
@@ -106,7 +110,8 @@ const usage =
     \\              --platform P     as for stats
     \\              --out FILE       default DIR/export/curves-<patch>.bin (all-curves-...
     \\                               and all-recent-curves.bin with --platform all)
-    \\              --min-games N    leave out matchups with fewer games (default 1: all)
+    \\              --min-games N    leave out matchups with fewer games (default 10;
+    \\                               the fit still uses every game)
     \\              --site           the files the site reads, in one pass over the
     \\                               timelines: EUW and every platform, last --days
     \\                               and (with --patch) that patch, default paths
@@ -122,6 +127,8 @@ const usage =
     \\              --max-keys N     distinct options held in memory (default 524288)
     \\              --out FILE       default DIR/export/builds-<patch>.json
     \\                               (all-builds-... with --platform all)
+    \\              --site           the files the site reads, in one pass over the
+    \\                               timelines: EUW and every platform, default paths
     \\  pool        write what players of each champion also play (pool.zig), as JSON
     \\              --patch P        as for stats (matchups); pools use every patch
     \\              --platform P     as for stats
@@ -250,7 +257,8 @@ const usage =
     \\  site       write the public website (static files): EUW over the last 30 days
     \\              at the root, the patch under patch/, every region under all/ and
     \\              all/patch/ (lane curves and builds: the curves and builds
-    \\              commands' default files)
+    \\              commands' default files); patch.html compares the patch with
+    \\              the one before (its curves too, where `curves --patch` wrote them)
     \\              --patch P        the patch views' (default: EUW's newest patch)
     \\              --out DIR        default DIR/site
     \\              --contact EMAIL  shown on the privacy and terms pages (required)
@@ -273,6 +281,8 @@ const usage =
     \\              --reuse          with --views: keep the parts of the file already
     \\                               there that this binary would make the same way
     \\                               (a deploy's round), load only the rest
+    \\              --patch-games    print the EUW patch the site would show and its
+    \\                               game count (no site; deploy/web-loop.sh)
     \\  dev        work on the site: pages rendered on request from DIR (data loaded
     \\              once), CSS and JS from src/site/static, live reload; run by
     \\              deploy/dev.sh, which rebuilds on edits. Takes site's flags
@@ -572,6 +582,11 @@ fn cmdCrawl(c: *Cmd) !u8 {
         } else if (c.is("--timelines")) {
             o.timeline_percent = try c.int(u8);
             if (o.timeline_percent > 100) return error.Usage;
+        } else if (c.is("--timelines-priority")) {
+            o.timeline_priority_percent = try c.int(u8);
+            if (o.timeline_priority_percent > 100) return error.Usage;
+        } else if (c.is("--timeline-min-s")) {
+            o.timeline_min_s = try c.int(u32);
         } else if (c.is("--flex-calls-per-day")) {
             o.flex_calls_per_day = try c.int(u32);
         } else if (c.is("--raw-timeline-days")) {
@@ -655,7 +670,9 @@ fn cmdCurves(c: *Cmd) !u8 {
     var g: Games = .{};
     var out: ?[]const u8 = null;
     var days: u32 = 30;
-    var min_games: u32 = 1;
+    // Thinner curves were 71% of the file (16.20) and their spreads are noise; readers
+    // need 10 games at a minute anyway, and fall back to all ranks or the plain average
+    var min_games: u32 = 10;
     var site_files = false;
     while (c.next()) |_| {
         if (try g.parse(c)) continue;
@@ -766,6 +783,7 @@ fn cmdCurves(c: *Cmd) !u8 {
 fn cmdBuilds(c: *Cmd) !u8 {
     var g: Games = .{};
     var out: ?[]const u8 = null;
+    var site_files = false;
     var o: builds.Options = .{ .patches = &.{}, .platforms = &.{} };
     while (c.next()) |_| {
         if (try g.parse(c)) continue;
@@ -776,36 +794,52 @@ fn cmdBuilds(c: *Cmd) !u8 {
             o.min_tier = if (std.mem.eql(u8, t, "any")) null else t;
         } else if (c.is("--max-keys")) {
             o.max_keys = try c.int(usize);
+        } else if (c.is("--site")) {
+            site_files = true;
         } else return error.Usage;
     }
+    if (site_files and (out != null or g.platforms.items.len > 0)) return error.Usage;
     const gpa = c.init.gpa;
     const io = c.init.io;
     const db = try c.open();
     defer db.close();
-    o.platforms = g.platformIds();
-    o.patches = if (g.patches.items.len > 0) g.patches.items else try newestPatch(c.arena, db, o.platforms);
+    var every: std.ArrayList([]const u8) = .empty;
+    for (riot.endpoints.platforms) |pl| try every.append(c.arena, pl.id);
+    o.platforms = if (site_files) every.items else g.platformIds();
+    o.patches = if (g.patches.items.len > 0) g.patches.items else try newestPatch(c.arena, db, if (site_files) &.{"EUW1"} else o.platforms);
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = try stats.label(&label_buf, o.patches);
-    const path = out orelse try buildsPath(c.arena, c.data_dir, o.patches, g.every_platform);
+    const Target = struct { platforms: []const []const u8, path: []const u8 };
+    const targets: []const Target = if (site_files) &.{
+        .{ .platforms = &.{"EUW1"}, .path = try buildsPath(c.arena, c.data_dir, o.patches, false) },
+        .{ .platforms = every.items, .path = try buildsPath(c.arena, c.data_dir, o.patches, true) },
+    } else &.{
+        .{ .platforms = o.platforms, .path = out orelse try buildsPath(c.arena, c.data_dir, o.patches, g.every_platform) },
+    };
     const data = try ddragon.buildData(gpa, c.arena, io, o.patches[0]);
 
-    var b = try builds.build(gpa, db, &data, o);
-    defer b.deinit();
-    if (b.games == 0) {
-        std.log.err("no ranked solo games on patch {s}", .{label});
-        return error.NoMatches;
+    var sets: [2][]const []const u8 = undefined;
+    for (targets, 0..) |t, i| sets[i] = t.platforms;
+    var bs: [2]builds.Builder = undefined;
+    try builds.buildEach(gpa, db, &data, o, sets[0..targets.len], bs[0..targets.len]);
+    defer for (bs[0..targets.len]) |*b| b.deinit();
+    for (targets, bs[0..targets.len]) |t, *b| {
+        if (b.games == 0) {
+            std.log.err("{s}: no ranked solo games on patch {s}", .{ t.path, label });
+            return error.NoMatches;
+        }
+        const f = try b.file(c.arena, &data, label, o.min_tier orelse "", o.rows);
+        var file = try std.Io.Dir.cwd().createFileAtomic(io, t.path, .{ .make_path = true, .replace = true });
+        defer file.deinit(io);
+        var buf: [64 * 1024]u8 = undefined;
+        var w = file.file.writer(io, &buf);
+        try std.json.Stringify.value(f, .{}, &w.interface);
+        try w.interface.flush();
+        try file.replace(io);
+        std.log.info("{s}: patch {s}, {d} games ({d} with timelines), {d} champion roles, {d} options held", .{
+            t.path, label, b.games, b.timelines, f.builds.len, b.options.count(),
+        });
     }
-    const f = try b.file(c.arena, &data, label, o.min_tier orelse "", o.rows);
-    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
-    defer file.deinit(io);
-    var buf: [64 * 1024]u8 = undefined;
-    var w = file.file.writer(io, &buf);
-    try std.json.Stringify.value(f, .{}, &w.interface);
-    try w.interface.flush();
-    try file.replace(io);
-    std.log.info("{s}: patch {s}, {d} games ({d} with timelines), {d} champion roles, {d} options held", .{
-        path, label, b.games, b.timelines, f.builds.len, b.options.count(),
-    });
     return 0;
 }
 
@@ -1325,6 +1359,7 @@ const SiteFlags = struct {
     /// Allocated in `arena`, which must outlive the options
     fn options(f: *const SiteFlags, c: *Cmd, arena: std.mem.Allocator, db: store.Db, contact: []const u8) !site.Options {
         const chosen = if (f.patches.items.len > 0) f.patches.items else try newestPatch(arena, db, &.{"EUW1"});
+        const prev = try previousPatch(arena, db, chosen);
         var every: std.ArrayList([]const u8) = .empty;
         for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
         const now_ms = std.Io.Clock.real.now(c.init.io).toMilliseconds();
@@ -1359,14 +1394,36 @@ const SiteFlags = struct {
                 null,
                 try buildsPath(arena, c.data_dir, chosen, true),
             },
+            .prev_patch = if (prev) |p| p[0] else null,
+            .curves_prev = if (prev) |p| .{
+                null,
+                try curvesPath(arena, c.data_dir, p, false),
+                null,
+                try curvesPath(arena, c.data_dir, p, true),
+            } else @splat(null),
         };
     }
 };
 
 fn cmdSite(c: *Cmd) !u8 {
     var f: SiteFlags = .{};
+    var patch_games = false;
     while (c.next()) |_| {
-        if (!try f.parse(c)) return error.Usage;
+        if (c.is("--patch-games")) {
+            patch_games = true;
+        } else if (!try f.parse(c)) return error.Usage;
+    }
+    // A fraction of a second: the web loop asks every round whether to build and upload
+    if (patch_games) {
+        const db = try c.open();
+        defer db.close();
+        const chosen = if (f.patches.items.len > 0) f.patches.items else try newestPatch(c.arena, db, &.{"EUW1"});
+        var label_buf: [core.statsfile.patch_len]u8 = undefined;
+        var buf: [64]u8 = undefined;
+        var w = std.Io.File.stdout().writer(c.init.io, &buf);
+        try w.interface.print("{s} {d}\n", .{ try stats.label(&label_buf, chosen), try stats.countGames(db, chosen, &.{"EUW1"}) });
+        try w.interface.flush();
+        return 0;
     }
     if (f.views_format) {
         var buf: [32]u8 = undefined;
@@ -2099,6 +2156,16 @@ fn newestPatch(arena: std.mem.Allocator, db: store.Db, platforms: []const []cons
     const all = try stats.patches(arena, db, platforms);
     if (all.len == 0) return error.NoMatches;
     return all[0..1];
+}
+
+/// The EUW patch before `chosen` when it is one patch, for the site's patch day
+fn previousPatch(arena: std.mem.Allocator, db: store.Db, chosen: []const []const u8) !?[]const []const u8 {
+    if (chosen.len != 1) return null;
+    const all = try stats.patches(arena, db, &.{"EUW1"});
+    for (all, 0..) |p, i| {
+        if (std.mem.eql(u8, p, chosen[0])) return if (i + 1 < all.len) all[i + 1 .. i + 2] else null;
+    }
+    return null;
 }
 
 /// Default log format plus a UTC timestamp, for the crawl log on the box
