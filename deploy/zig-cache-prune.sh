@@ -12,8 +12,9 @@ max=${1:-40}
 [[ -d $cache/o ]] || exit 0
 kb=$(du -sk "$cache" | cut -f1)
 (( kb > max * 1024 * 1024 )) || exit 0
-# The compiler, and the build runners it compiles into a cache's o/
-if pgrep -x zig > /dev/null || pgrep -f '\.zig-cache/o/[0-9a-f]+/build ' > /dev/null; then
+# zig, its build runner (maker) and test binaries name this cache in their arguments;
+# builds with another cache don't count
+if pgrep -f "$cache" > /dev/null; then
     echo "zig-cache-prune: $((kb / 1048576)) GB, but a zig build is running: left for next time"
     exit 0
 fi
