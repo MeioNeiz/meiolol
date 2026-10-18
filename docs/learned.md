@@ -36,8 +36,9 @@ How to write a line:
   model). Sure: -0.00145 ± 0.00018
   nats per game on 300,113 held-out games (5 rounds, 300-540k training games a round),
   better in every round, with fresh seeds and on two resamples, and shuffling which
-  champion has which profile leaves -0.00014; the comp terms alone give -0.00068; dev
-  only, no test look. Site: nothing yet; next a test look on Jacob's go, then the net in
+  champion has which profile leaves -0.00014; the comp terms alone give -0.00068. Against
+  the best model without a net (additive v2, itself -0.00108 better than today's) it
+  is -0.00039 ± 0.00017, under the noise floor. Dev only, no test look. Site: nothing yet; next a test look on Jacob's go, then the net in
   the admin Draft tester. Evidence: docs/model.md "Nets on the shipped model, 2026-10-18"
 - 2026-10-18: Rammus does do better into teams of auto-attackers (champions who build
   crit and attack speed, like Master Yi, Tryndamere and marksmen), about 1.4 points per

@@ -4672,6 +4672,18 @@ nets, descriptive):
 
 Set net + embedding and bigres averaged: -1.28 ± 0.13, no better than the set net alone.
 
+Against the best non-net model, additive v2 ("Additive model v2"; run
+20261018T010025Z-add-v2-1320Z, Mac, same 380,144 games and blocks by match id; its
+strength-only variant is -0.29 ± 0.07 vs netcheck's ratings, as on 2253Z; dev-val and
+folds pooled, descriptive):
+- additive v2 vs win-draft: -1.08 ± 0.18, better in all 6 blocks (-0.59 to -1.59): the
+  model the site ships is ~1.1 milli-nats behind the one the Draft tester used before 17
+  Oct, more than champcomp adds to it (-0.68)
+- set net + embedding (sealed) vs additive v2: -0.39 ± 0.17; blocks -0.49, -0.25, -0.24,
+  -0.78, +0.07, dev-val -0.59 (3 of 6 detected). Under the nets' A/A floor (~0.35-0.5):
+  not established. Next: the set net on additive v2's offset (additive is not a netcheck
+  candidate yet), and why win-draft trails it (eval's tuned priors vs per-block variances)
+
 Reading (dev, no test look):
 - A net now beats today's model. The set net with champion-role embeddings, on top of
   win-draft, is 1.45 ± 0.18 milli-nats a game better on 300k held-out games, in every
@@ -4691,6 +4703,8 @@ Reading (dev, no test look):
   10-seed average is the gain. As a residual on win-draft it passes (-0.58)
 - The gain does not grow with block (set + embedding -1.25 to -1.45 in each fold, dev-val
   -1.55): not a newer-games effect
+- Against additive v2, the best non-net model, it is only -0.39 ± 0.17: a test look
+  should compare with both
 - Not yet: a test look (needs Jacob's go; rule to declare first), the exporter for the
   Draft tester (set net format agreed in "Next steps"), and `meiolol eval`'s view
 
