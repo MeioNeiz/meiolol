@@ -473,7 +473,11 @@ fn storage(arena: std.mem.Allocator, io: Io, path: []const u8) !?Storage {
     return .{ .generated = st.mtime.toSeconds(), .rows = rows.items };
 }
 
-const Backups = struct { bytes: u64, files: u64, newest: i64 };
+const Backups = struct { bytes: u64, files: u64, newest: i64, mastery: []const MirrorMastery = &.{} };
+
+/// A mirror's mastery history (backups/acks/NAME.mastery: "time bytes files", sent by
+/// deploy/backup-mirror.sh after each round)
+const MirrorMastery = struct { mirror: []const u8, time: i64, bytes: u64, files: u64 };
 
 /// Every file under the backups directory; null when there is none
 fn backups(arena: std.mem.Allocator, io: Io, path: []const u8) !?Backups {
@@ -492,7 +496,28 @@ fn backups(arena: std.mem.Allocator, io: Io, path: []const u8) !?Backups {
         b.files += 1;
         b.newest = @max(b.newest, st.mtime.toSeconds());
     }
+    var mastery: std.ArrayList(MirrorMastery) = .empty;
+    for ([_][]const u8{ "gpu-box", "mac" }) |name| {
+        const text = dir.readFileAlloc(io, try arena.print("acks/{s}.mastery", .{name}), arena, .limited(256)) catch continue;
+        if (parseMirrorMastery(name, text)) |m| try mastery.append(arena, m);
+    }
+    b.mastery = mastery.items;
     return b;
+}
+
+fn parseMirrorMastery(name: []const u8, text: []const u8) ?MirrorMastery {
+    var f = std.mem.tokenizeAny(u8, text, " \t\r\n");
+    const time = std.fmt.parseInt(i64, f.next() orelse return null, 10) catch return null;
+    const bytes = std.fmt.parseInt(u64, f.next() orelse return null, 10) catch return null;
+    const files = std.fmt.parseInt(u64, f.next() orelse return null, 10) catch return null;
+    return .{ .mirror = name, .time = time, .bytes = bytes, .files = files };
+}
+
+test "a mirror's mastery history line" {
+    const m = parseMirrorMastery("gpu-box", "1792312149 12345 7\n").?;
+    try std.testing.expectEqual(@as(u64, 12345), m.bytes);
+    try std.testing.expectEqual(@as(u64, 7), m.files);
+    try std.testing.expectEqual(@as(?MirrorMastery, null), parseMirrorMastery("mac", "garbage"));
 }
 
 /// systemctl --user is-active, by unit (deploy/systemd)

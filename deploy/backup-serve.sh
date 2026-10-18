@@ -5,9 +5,11 @@
 # (lines "FILE SHA256" on stdin) and forgotten; deploy/backup-loop.sh runs prune after
 # each backup; deploy/health.sh reads status.
 #   list        one line per file: FILE SIZE SHA256 (sums cached by size and mtime)
-#   prune       delete files a mirror acked at their current sum, except the newest
-#               state snapshot, segment and mastery file (the next backup starts after
-#               them)
+#   prune       delete files a mirror acked at their current sum (mastery files: both
+#               mirrors, as they keep them as history), except the newest state
+#               snapshot, segment and mastery file (the next backup starts after them)
+#   mastery-size MIRROR:BYTES:FILES   a mirror's mastery history, for the admin page
+#               (backups/acks/MIRROR.mastery: time bytes files)
 #   status      "mirror NAME LAST_ACK" per mirror, then "unacked FILES BYTES OLDEST_MTIME"
 set -euo pipefail
 cd "$HOME/ml/meiolol"
@@ -42,14 +44,20 @@ sum() {
     echo "$csha"
 }
 
-# Files acked by some mirror at their current sum
+# Files acked by some mirror at their current sum; `acked prune`: mastery files only once
+# both mirrors acked them (the Mac keeps 32 days, the gpu-box 24 months: neither alone
+# may be the only copy of a file the box drops)
 acked() {
     shopt -s nullglob
-    local rel s tsv=("$acks"/*.tsv)
+    local rel s need tsv=("$acks"/*.tsv)
     (( ${#tsv[@]} > 0 )) || return 0
     while read -r rel; do
         s=$(sum "$rel")
-        if awk -F'\t' -v r="$rel" -v s="$s" '$1 == r && $2 == s { f = 1 } END { exit !f }' "${tsv[@]}"; then
+        need=1
+        [[ ${1:-} == prune && $rel == mastery/* ]] && need=2
+        if awk -F'\t' -v r="$rel" -v s="$s" -v need="$need" \
+            '$1 == r && $2 == s && !(FILENAME in by) { by[FILENAME]; n++ } END { exit n < need }' \
+            "${tsv[@]}"; then
             echo "$rel"
         fi
     done < <(files)
@@ -88,8 +96,14 @@ case "${cmd:-}" in
             bytes=$(( bytes + $(stat -c %s "$dir/$rel") ))
             rm -f "$dir/$rel" "$sums/${rel//\//_}"
             n=$(( n + 1 ))
-        done < <(acked)
+        done < <(acked prune)
         echo "$(date -u +%FT%TZ) backup prune: $n files mirrored, $(( bytes >> 20 )) MB freed"
+        ;;
+    mastery-size)
+        [[ "$arg" =~ ^(mac|gpu-box):([0-9]+):([0-9]+)$ ]] || { echo "bad size" >&2; exit 2; }
+        out=$acks/${BASH_REMATCH[1]}.mastery
+        echo "$(date +%s) ${BASH_REMATCH[2]} ${BASH_REMATCH[3]}" > "$out.tmp"
+        mv "$out.tmp" "$out"
         ;;
     status)
         shopt -s nullglob

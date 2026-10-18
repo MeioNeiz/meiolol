@@ -820,7 +820,10 @@ VIEWS.overview = body => {
   const dk = disk();
   if (dk) {
     const used = dk[1] / dk[0];
-    tile(tiles, "Disk", pct(used) + " used", `${bytes(dk[2])} free` + daysLeftText(), used > 0.8 ? "bad" : used > 0.65 ? "warn" : null, () => setTab("storage"));
+    // The gpu-box mirror keeps mastery files 24 months (deploy/backup-mirror.sh): its size, to decide on cleanup
+    const mh = D.backups && (D.backups.mastery || []).find(m => m.mirror === "gpu-box");
+    const mhText = mh ? `; gpu-box mastery history ${bytes(mh.bytes)} (${num(mh.files)} files, ${ago(mh.time)})` : "";
+    tile(tiles, "Disk", pct(used) + " used", `${bytes(dk[2])} free` + daysLeftText() + mhText, used > 0.8 ? "bad" : used > 0.65 ? "warn" : null, () => setTab("storage"));
   }
   const dl = deployList()[0];
   if (dl) {

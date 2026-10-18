@@ -40,15 +40,21 @@ under the write lock they starve the crawler on a slow host.
   is not backed up: a restore from backups taken before `meiolol draft-backfill`
   finished lacks the draft rows of matches it had not reached
 - `mastery/NNNNNN.db` (18 Oct): mastery rows fetched since the last one, by fetched_at
-  up to 300 s before the backup (table mastery_range: after_s, to_s); restore loads them
-  in order from the newest full one (after_s 0), so each player's newest fetch wins.
-  A file goes (box and mirrors) once its to_s is 32 days old: the crawler drops mastery
-  after 30, so it holds nothing live; never the newest. Before, every state snapshot
-  held the whole table (3.4 GB of 3.6 at 3.1M rows on 17 Oct, ~0.8M fetched a day): 11
-  copies a mirror, ~40 GB and growing with the table. Now ~1 copy (~0.8 GB a day of
-  files, 30 days kept). `--full` writes one with everything and drops the older ones.
-  Restoring an older `--state` still takes the newest mastery (crawl data, refetched
-  monthly anyway)
+  up to 300 s before the backup (table mastery_range: after_s, to_s, full, base_at), and
+  weekly (and on `--full`) a base: the whole table, after_s 0. Restore loads the newest
+  base and the files after it, so each player's newest fetch wins. Before, every state
+  snapshot held the whole table (3.4 GB of 3.6 at 3.1M rows on 17 Oct, ~0.8M fetched a
+  day): 11 copies a mirror, ~40 GB and growing with the table
+- Mastery retention (Jacob, 18 Oct: keep the deltas as history). Only files before a
+  mirror's newest base go, so no file holding a player's newest row ever does (that row
+  is in the base or after it). Before it, bases written beside the deltas go at once
+  (their rows are in the deltas) and the rest by their window's age: the gpu-box after
+  730 days (privacy.md's cap for mastery), the Mac after 32 (backup-mirror.sh writes
+  DIR/mastery-keep-days). The box deletes none by age: a mastery file leaves it once
+  both mirrors acked it, never its newest. `forget` scrubs every kept file on all three.
+  The admin Disk tile shows the gpu-box's mastery history size (backups/acks/NAME.mastery,
+  sent after each mirror round). Restoring an older `--state` still takes the newest
+  mastery (crawl data, refetched monthly anyway)
 - Each file is plain SQLite, written as *.tmp inside one read transaction (consistent
   while the crawler writes) and renamed when complete. Not raw JSON: raw.db is a 30-day
   buffer and the tables hold what it gives
@@ -71,7 +77,8 @@ under the write lock they starve the crawler on a slow host.
   checks size and SHA-256 and acks it (backups/acks/MIRROR.tsv on the box: file, sum,
   time). After each backup the box deletes files some mirror acked at their current sum,
   except its newest state snapshot, segment and mastery file (the next ones start where
-  they end). So the box holds ~3 files plus whatever no mirror has fetched yet
+  they end); mastery files only once both mirrors acked them. So the box holds ~3 files
+  plus whatever the mirrors have not fetched yet
 - Mirrors keep every segment (the box may hold only the newest) and rotate state (7
   daily + 4 weekly) and mastery files themselves (`meiolol backup --mirror DIR
   --forgotten FILE`). A `--full` segment on the box leaves older ones on the mirrors:

@@ -3,7 +3,8 @@
 # daily) and the gpu-box (systemd user timer meiolol-backup-mirror, hourly). Fetches every
 # file the box lists that is new here or changed there (a scrub), checks size and
 # SHA-256, then acks it so the box may drop its copy. Then `meiolol backup --mirror`
-# scrubs players the box has forgotten since and rotates state and mastery files. Never
+# scrubs players the box has forgotten since and rotates state and mastery files (kept
+# as history: the gpu-box 730 days, the privacy policy's cap, the Mac 32). Never
 # deletes a segment: the box keeps only its newest, so this copy may be the only one.
 #   backup-mirror.sh NAME DIR MEIOLOL HOST [REMOTE]
 # NAME: mac or gpu-box; REMOTE: the command on HOST before the verb (the Mac's full-shell
@@ -58,6 +59,10 @@ grep -xFf <(awk '{ print $1 " " $3 }' "$dir/.list") "$manifest" \
 
 serve forgotten > "$dir/forgotten.txt.tmp"
 mv "$dir/forgotten.txt.tmp" "$dir/forgotten.txt"
+if [[ $name == gpu-box ]]; then echo 730 > "$dir/mastery-keep-days"; else echo 32 > "$dir/mastery-keep-days"; fi
 "$bin" backup --mirror "$dir" --forgotten "$dir/forgotten.txt"
+kb=$(du -sk "$dir/mastery" | cut -f1)
+n=$(find "$dir/mastery" -name '[0-9]*.db' | wc -l | tr -d ' ')
+serve mastery-size "$name:$(( kb * 1024 )):$n" || log "mastery-size failed"
 touch "$dir/.mirrored"
 log "$fetched files fetched ($(( bytes >> 20 )) MB), $(wc -l < "$dir/.list" | tr -d ' ') on the box"
