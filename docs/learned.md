@@ -25,6 +25,29 @@ How to write a line:
 
 ## Win
 
+- 2026-10-18: Rammus does do better into teams of auto-attackers (champions who build
+  crit and attack speed, like Master Yi, Tryndamere and marksmen), about 1.4 points per
+  step towards such a team, even with their damage type held fixed: it was never about AD
+  damage, which is why the AD check below found nothing. Champions whose kits punish
+  basic attacks (Rammus, Jax, Teemo, Shen, Malphite) do about 0.7-0.9 better per step as
+  a group; Fiora does not. Five more kit groups lean as their kits say: champions that
+  dodge or cleanse crowd control (Olaf, Gangplank, Sivir, Morgana, Nocturne, Malzahar,
+  Fizz) about 0.6 better per step into high-CC teams; lethality assassins about 0.9
+  worse into tanky teams and true or %HP damage dealers about 0.7 better; magic shield
+  kits about 0.5 better into magic damage; armour kits about 1.5 worse into it. Not
+  detected: stealth into control wards, long-range poke into engage, dash stoppers into
+  dive, hyper-scalers into early teams, juggernauts into long-range teams. Two came out
+  the opposite way: self-healers slightly better into teams that build antiheal, and
+  armour kits better into armour pen (which only means an AD team). A scan of every
+  build and play stat pair finds a few more, all small (about 0.2 per step): tanky
+  champions better into early, roaming and assassin teams, worse into objective-taking
+  ones; ranged champions worse into assassins. Sure: 13 kit groups declared before the
+  run, 6 detected (5% false discovery rate, declared sign, same size in older and newer
+  games), beyond the shipped model, snap-20261017T1320Z dev games; Rammus jungle +1.41 ±
+  0.89 pp per sd with AP share held (held post hoc); scan 337 of 4,608 pairs replicated,
+  0 with shuffled profiles; dev only, no test look, four groups partly seen before.
+  Site: nothing yet; the detected groups and Rammus go into the held-out look on games
+  after 17 Oct. Evidence: docs/model.md "Kit groups and a property scan"
 - 2026-10-18: A whole draft rarely leans clearly to one side: none of the 9 published
   Daily Draft puzzles on 16.20 is clear of even at 95%, including the one the page had
   shown as "39 to 61 for blue" (1.4 SE from even). A lean needs about 38/62 or wider to
@@ -700,3 +723,8 @@ How to write a line:
 - 2026-10-12: Nearly everyone finishes an item before the game ends (only 1.1% of top
   laners and 1.3% of supports in games past 15:00 never do), so first-item time works
   for every role. Sure. Evidence: docs/model.md "Team effects"
+- 2026-10-18: Most lane matchups seen in a patch have only a handful of games: of
+  166.5k matchup curves on EUW 16.20 (every rank bracket and mastery split), 32% had 1
+  game, 58% under 5 and 71% under 10; only 9% had 50+. Sure: 190k games, every curve in
+  curves-16.20.bin counted. Site: `meiolol curves` writes matchups from 10 games
+  (docs/architecture.md "Lane curves"); thinner ones show the plain average or nothing
