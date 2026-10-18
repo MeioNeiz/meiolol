@@ -31,6 +31,11 @@ experiments run on:
 - ~/ml/meiolol on the gpu-box is the restore point from before the move to Oracle: leave
   it alone. Snapshots go in ~/ml/snaps/<stamp>/ (meiolol-2a: anonymised, salted PUUID
   hashes), runs in ~/ml/runs/
+- Derived arrays that cost minutes go in ~/ml/snaps/.cache/<snap>/ (src/lab/snapcache.zig;
+  hidden, outside the snapshot's hash): comps.loadExtra's comp_stats by row
+  (`compstats`, 1.4 GB, keyed by the tsv stamps, row order and compstats.zig) and
+  champcomp's ratings offsets per window (`offsets-BEFORE-HI`, keyed by the binary),
+  which champgroups shares (fold 3's). Safe to delete: the next run rebuilds them
 
 ## Runs (deploy/lab-run.sh)
 
@@ -124,7 +129,8 @@ deploy/lab-run.sh watch-install
   its state and RESULT lines: exit 0 when all exited 0, 3 on --timeout, else 1. Use it
   instead of until-loops over status
 - Run dir ~/ml/runs/<UTC stamp>-<name> on the host: the binary (gpu-box: a hardlink to
-  ~/ml/runs/.bin/SHA256, one copy per build; a copy each was 14 GB, 18 Oct), job.sh,
+  ~/ml/runs/.bin/SHA256, one copy per build, a copy each was 14 GB, 18 Oct; one no run
+  links to goes at the next start an hour on), job.sh,
   log, meta (host, binary hash, src KEY, harness (KEY without the candidate:
   src/lab/cand and -Dcand),
   snap PATH HASH per snapshot dir in the args (input files' names and sizes, equal on

@@ -773,14 +773,17 @@ EOF
         files+=("$(dirname "$PY")"/*.py "$ROOT/py/labpy.py" "$ROOT/py/pyproject.toml" \
             "$ROOT/py/uv.lock")
     # One copy of each binary in RUNS/.bin by sha256, on the runs' filesystem, and the run
-    # dir's a hardlink to it: a copy each was 14 GB of 26 (521 runs, 18 Oct)
+    # dir's a hardlink to it: a copy each was 14 GB of 26 (521 runs, 18 Oct). A copy no
+    # run links to any more (link count 1) goes after an hour (a start links its new
+    # copy within seconds)
     elif [[ "$host" == gpu-box ]]; then
         local dst=$RUNS/$run/${path##*/}
         # shellcheck disable=SC2016 # expands on the host
         on gpu-box 'h=$(sha256sum '"$path"' | cut -c1-64); [[ ${#h} == 64 ]] || exit 1
             b='"$RUNS"'/.bin/$h; mkdir -p '"$RUNS"'/.bin || exit 1
             [[ -f $b ]] || { cp '"$path"' $b.$$ && mv $b.$$ $b; } || exit 1
-            ln $b '"$dst"' 2> /dev/null || cp $b '"$dst"
+            ln $b '"$dst"' 2> /dev/null || cp $b '"$dst"' || exit 1
+            find '"$RUNS"'/.bin -maxdepth 1 -type f -links 1 -mmin +60 -delete'
     else files+=("$path"); fi
     copy "$host" "$RUNS/$run" "${files[@]}"
     [[ -f "$tmp/predicted" ]] && copy "$host" "$RUNS/$run" "$tmp/predicted"
