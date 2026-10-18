@@ -40,7 +40,12 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
    pastes. Before going live, so the text is true: the 24-month sweep over backup
    segments and deleting archive files (privacy.md notes; `archive-age` only blanks
    hashed PUUIDs). First rows reach 24 months in Oct 2028
-7. Renderer as the main path: uncached pages 503 while it is down (docs/backlog.md "Site build and deploy", Next 2-3)
+7. Done 18 Oct (656b3da, 107265a): every page but thin matchups (<200 games) has a cached
+   copy for outages (warm-up after each version into an unversioned fallback key, ~20
+   min a run, 21k pages); one copy per page (Vary ignored); renderer cold start 1.3-16.6
+   s from views.bin. Notes: data/team/2026-10-18-cleanup/renderer-done.md. Left: home
+   page from the renderer (core build without the DB), a pipeline test for
+   /admin/api/pages.txt
 8. Done 18 Oct (b966bd7): Your games remembers the last five Riot IDs on the device, "N
    new games since your last visit", per-game links (#id=...&game=<start_ms>), Copy link.
    Next, small: mark the new games in the film strip (CSS)
