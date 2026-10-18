@@ -23,7 +23,8 @@ icacls $dir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI
     '*S-1-5-32-545:(OI)(CI)RX' /T /C | Out-Null
 
 $mount = @'
-# Attaches the archive partition at /mnt/wsl/archive: the 1 TB ext4 one on the 2 TB NVMe
+# Attaches the archive partition at /mnt/wsl/archive (the 1 TB ext4 one on the 2 TB NVMe)
+# and the lab one at /mnt/wsl/lab
 # (wsl --mount takes the whole disk from Windows; it has no Windows volumes). Task
 # wsl-mount runs it elevated at boot and every 2 min; it fails harmlessly when attached.
 # Installed by deploy/windows/install-watchdog.ps1, which holds the source
@@ -38,6 +39,14 @@ if ($disk) {
     $out = wsl.exe --mount $drive --partition 4 --name archive 2>&1
     if ($LASTEXITCODE -eq 0) { Log "archive attached ($drive)" }
 } else { Log 'archive disk not found' }
+# Lab data at /mnt/wsl/lab (~/ml/snaps, ~/ml/runs link here): partition 6, 673 GB ext4.
+# wsl --mount refuses a second partition of an attached disk, so mount it inside WSL
+if ($disk) {
+    $sh = 'mountpoint -q /mnt/wsl/lab || ' +
+        '{ mkdir -p /mnt/wsl/lab && mount -L meiolol-lab /mnt/wsl/lab && echo mounted; }'
+    $out = wsl.exe -u root -e sh -c $sh 2>&1
+    if ("$out" -match 'mounted') { Log 'lab mounted' }
+}
 '@
 Set-Content -Path (Join-Path $dir wsl-mount.ps1) -Value $mount -Encoding UTF8
 
