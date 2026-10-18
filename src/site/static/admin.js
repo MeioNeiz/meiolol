@@ -724,7 +724,7 @@ function render(keep) {
   const open = new Set([...app.querySelectorAll("details[open] > summary")].map(s => s.textContent));
   app.replaceChildren();
   const top = el("header", { class: "top" },
-    el("h1", {}, "meiolol ", el("span", {}, "admin")),
+    el("h1", {}, el("a", { href: "/" }, "meiolol"), " ", el("span", {}, "admin")),
     el("span", { id: "status", class: "status" }));
   const controls = el("div", { class: "controls" });
   if (TIMED.has(ui.tab)) {
