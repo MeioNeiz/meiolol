@@ -12,16 +12,16 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
    16.21 (two newest curves files, 226 MB each parsed, MemoryMax 400M). Now newest patch
    first within 320 MB; the install also shipped R17's "All games" label. Check after
    the 16.21 push: `journalctl -u meiolol-api` names the file left out
-2. Box disk (77 GB free of 144): the databases grow ~2.5 GB a day (~4 weeks to the raw
-   valve at 10 GB free), but the peaks are data/archive-out: each export copies raw as
-   stored until the gpu-box acks it (17 Oct: 33 GB held 01:00-14:40Z while acks failed
-   with "Connection closed by remote host", 12:13-12:34Z, and League paused pulls). Since
-   b6764ba (17 Oct 13:36Z) an export moves timelines out of raw.db instead of copying
-   them: ~12 GB a day held (meiolol-b5, 18 Oct), so ~5 days without acks before the
-   valve drops raw the archive never got. The admin "full in ~6 days" extrapolates a
-   peak. In progress (meiolol-74, pane 1484): why acks drop, exports
-   without a standing copy, the estimate. Lasting answer: Open decisions "Storage and
-   hosting"
+2. Done 18 Oct (3f8882f, 47f2764, a490a73): the box no longer holds a backlog copy of raw.
+   The 14-17 Oct acks died on ssh corrupted in transit from home ("message
+   authentication code incorrect") while the ack's prune held the session open; acks
+   now only mark and delete, the prune runs detached, every box command is retried.
+   Exports cover at most 2 h (~1 GB) and leave the box once the gpu-box confirms the
+   sha256 (they wait on the archive disk until archived). Health's disk line is days
+   of raw above the valve; admin's "full in ~N days" uses the database files' growth
+   (~26 days on 18 Oct). Left: VACUUM of raw.db's 21 GB of free pages (meiolol-b5,
+   after a rehearsal on a copy); NIC offload on the gpu-box if other home ssh dies.
+   Lasting answer: Open decisions "Storage and hosting"
 3. gpu-box C: at 90% (holds the WSL disk; the archive is on the P3, safe). G2 done 18
    Oct (35 GB freed inside WSL; C: shrinks only after the compaction). Waits on Jacob:
    docs/compute.md "gpu-box storage" steps 1-2 (partition, wsl-mount.ps1), then an
