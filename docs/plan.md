@@ -28,11 +28,13 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
 4. Done 18 Oct: contact is privacy@meio.lol on terms and privacy (R34). Test mail kept
    by the worker (`deploy/mail.sh list`); sent straight to Cloudflare's MX over IPv4
    from the Mac (its IPv6 has no reverse DNS; both OCI hosts block port 25)
-5. Daily Draft's public whole-draft win chance and "+X points" (R16, A3): the item
-   reviewers quoted first. In progress with A4 (meiolol-43, pane 1485)
+5. Done 18 Oct (231a458): Daily Draft has no win chance or points; "on paper the draft
+   leaned blue/red" only when the 95% range excludes even (none of 9 puzzles on 16.20);
+   reasons in words from static/reasons.js (shared with Learn); games at least a week
+   old, the previous patch's in a patch's first week (R16, A3, A4, J1, Q2)
 6. Application text to match the site (A2; Jacob writes, Q1), champ select screenshots,
    video and LCU endpoint list (A1; needs Jacob in a real champ select, steps under
-   "Before the production review"), Daily game age (A4, Q2)
+   "Before the production review"). Draft text for Jacob in progress
 7. Renderer as the main path: uncached pages 503 while it is down (docs/backlog.md "Site build and deploy", Next 2-3)
 8. Done 18 Oct (b966bd7): Your games remembers the last five Riot IDs on the device, "N
    new games since your last visit", per-game links (#id=...&game=<start_ms>), Copy link.

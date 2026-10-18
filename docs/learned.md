@@ -25,6 +25,13 @@ How to write a line:
 
 ## Win
 
+- 2026-10-18: A whole draft rarely leans clearly to one side: none of the 9 published
+  Daily Draft puzzles on 16.20 is clear of even at 95%, including the one the page had
+  shown as "39 to 61 for blue" (1.4 SE from even). A lean needs about 38/62 or wider to
+  be clear. Sure: shipped draft model on 191k 16.20 games, SE of the draft's log-odds
+  ~0.25 (score.draftSe: each term's posterior variance 4/(games + prior games), summed).
+  Site: Daily Draft says "on paper, close" unless the range excludes even (231a458)
+
 - 2026-10-18: Rammus jungle does not clearly do better into physical-damage (AD-heavy)
   teams or worse into magic-damage ones, beyond what the draft model already knows: about
   0.5 points better per step towards an AD team, and the data allow anything from about
