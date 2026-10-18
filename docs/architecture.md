@@ -297,7 +297,7 @@ role, the aux mean, sd and count over played fit games only. nn.tmp, then rename
 
 ## Lane curves (src/curves.zig, src/core/curvesfile.zig, curvefit.zig, src/site/matchup.zig)
 
-`meiolol curves` (--platform as stats, --min-games default 1: all) reads every ranked
+`meiolol curves` (--platform as stats, --min-games default 10) reads every ranked
 solo game with a timeline: by default every patch of the last --days (30) to
 data/export/recent-curves.bin (label "last 30 days"); with --patch, those patches to
 data/export/curves-<patch>.bin (the Your games service reads these per patch). `--site`
@@ -322,6 +322,14 @@ any change. Rolling a bump out: stop meiolol-web on the box before the push, so 
 deploy restarts the loop, which rebuilds curves before the site (a running loop is only
 signalled and would build the site on old-format curves, dropping the lane pages); then
 the Your games binary (docs/your-games.md, Deploy)
+
+Curves under --min-games are left out of the file, not the fit: every lane still goes
+into the champion effects and tau^2, so the written estimates do not change. On 16.20
+(190k EUW games) 71% of 166.5k curves had under 10 games: 226 MB, about 65 MB at 10.
+Without a pair's curve, readers do as for an unseen pair: Your games and the lane card
+fall back from the player's bracket to all ranks, then to no curve (Your games compares
+with an even lane); filters.js shows the plain average of the games picked; no matchup
+page. The matchup index's 1 and 5 floors then show the same as 10
 
 Estimation (src/core/curvefit.zig, research/questions/curve-statistics-method.md), per
 role, metric and minute, closed form: champion effects by ridge least squares on the
@@ -376,7 +384,7 @@ script. Every matchup gets a page, as on lolalytics; under 200 games or with own
 with at least min(10, games) still going. The method page shows k by role and minute
 from the view with the most games. Size: 13.7k pages in the all-regions 30-day view at
 18.8k games, 252 MB with .gz; raise --min-games if the upload grows too big. The index
-has a min games selector (html.minGames, static/min-games.js; default 1). Not yet:
+has a min games selector (html.minGames, static/min-games.js; default 50). Not yet:
 core-item split, older patches, rank filter. deploy/web-loop.sh rebuilds the four
 curves files hourly and on a new patch.
 

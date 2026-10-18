@@ -940,3 +940,32 @@ test "round trip, sides and brackets" {
     var short: std.Io.Reader = .fixed(bytes[0 .. bytes.len - 1]);
     try testing.expectError(error.Truncated, Curves.read(gpa, &short, bytes.len));
 }
+
+test "min_games leaves thin curves out of the file, not the fit" {
+    const gpa = testing.allocator;
+    var b: Builder = .{ .gpa = gpa };
+    defer b.deinit();
+    for ([_]i16{ 700, 300, 100, -500 }) |g| try b.addLane(testLane(122, 86, g > 0, g, .low));
+    try b.addLane(testLane(122, 1, true, 900, .low));
+    try b.addLane(testLane(86, 1, false, -200, .low));
+    for (0..6) |_| b.addGame();
+
+    var all: std.Io.Writer.Allocating = .init(gpa);
+    defer all.deinit();
+    try b.write(&all.writer, "16.20", 1);
+    var thick: std.Io.Writer.Allocating = .init(gpa);
+    defer thick.deinit();
+    try b.write(&thick.writer, "16.20", 4);
+    var c1: Curves = try .parse(gpa, all.written());
+    defer c1.deinit(gpa);
+    var c4: Curves = try .parse(gpa, thick.written());
+    defer c4.deinit(gpa);
+
+    try testing.expect(c1.get(.top, .all, 122, 1) != null);
+    try testing.expect(c4.get(.top, .all, 122, 1) == null);
+    try testing.expect(c4.curves.len < c1.curves.len);
+    const x = c1.get(.top, .all, 122, 86).?;
+    const y = c4.get(.top, .all, 122, 86).?;
+    for (0..max_minutes) |i| try testing.expectEqual(x.minute(i), y.minute(i));
+    try testing.expectEqual(c1.fit.*, c4.fit.*);
+}
