@@ -1311,6 +1311,25 @@ pub const Placed = struct { seats: usize, teams: usize };
 /// Bump when parseExtra's output changes through code outside compstats.zig
 const extra_version = 1;
 
+test "comp_stats cache round trip keeps present and absent values" {
+    var extra = [_]?compstats.Seat{ null, @splat(1.5), null };
+    extra[1].?[0] = std.math.nan(f32);
+    var teams = [_]?[2]compstats.Team{ .{ @splat(2), @splat(3) }, null };
+    var c: ExtraCache = .{ .extra = &extra, .teams = &teams, .placed = .{ .seats = 1, .teams = 1 } };
+    var buf: [4096]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try ExtraCache.write(&c, &w);
+    var extra2: [3]?compstats.Seat = @splat(@splat(9));
+    var teams2: [2]?[2]compstats.Team = @splat(null);
+    var c2: ExtraCache = .{ .extra = &extra2, .teams = &teams2 };
+    var r: Io.Reader = .fixed(w.buffered());
+    try ExtraCache.read(&c2, &r);
+    try testing.expectEqual(c.placed, c2.placed);
+    try testing.expect(extra2[0] == null and extra2[2] == null and teams2[1] == null);
+    try testing.expectEqualSlices(u8, std.mem.asBytes(&extra[1].?), std.mem.asBytes(&extra2[1].?));
+    try testing.expectEqualSlices(u8, std.mem.asBytes(&teams[0].?), std.mem.asBytes(&teams2[0].?));
+}
+
 /// SNAP's comp_stats.tsv into extra (by row) and comp_teams.tsv into teams (by game);
 /// NaN where a line has no value, null where there is no line. Parsing the 1.3 GB of
 /// text took most of a minute: the result is cached beside the snapshot (snapcache
@@ -1356,14 +1375,17 @@ const ExtraCache = struct {
         for (c.extra) |*e| {
             e.* = null;
             if (try r.takeByte() == 0) continue;
-            e.* = undefined;
-            try r.readSliceAll(std.mem.asBytes(&e.*.?));
+            // A value, not `undefined`: that leaves the optional's flag unset too
+            var v: compstats.Seat = undefined;
+            try r.readSliceAll(std.mem.asBytes(&v));
+            e.* = v;
         }
         for (c.teams) |*t| {
             t.* = null;
             if (try r.takeByte() == 0) continue;
-            t.* = undefined;
-            try r.readSliceAll(std.mem.asBytes(&t.*.?));
+            var v: [2]compstats.Team = undefined;
+            try r.readSliceAll(std.mem.asBytes(&v));
+            t.* = v;
         }
     }
 
