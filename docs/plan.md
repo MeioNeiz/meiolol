@@ -9,9 +9,10 @@ presses Verify, then what brings players back. Findings: docs/review/
 persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B/C, Q).
 
 1. Done 18 Oct (76d691f, installed on jomove): the Your games API would have died at
-   16.21 (two newest curves files, 226 MB each parsed, MemoryMax 400M). Now newest patch
-   first within 320 MB; the install also shipped R17's "All games" label. Check after
-   the 16.21 push: `journalctl -u meiolol-api` names the file left out
+   16.21 (two newest curves files, 226 MB each parsed, MemoryMax 400M). Since 176909b
+   (installed 18 Oct) the API and renderer map curves files read-only instead of copying
+   them: both newest patches load at any size, no 320 MB budget (API RSS 152 to 10 MB,
+   start-up 3 to 0.3 s); also shipped R17's "All games" label
 2. Done 18 Oct (3f8882f, 47f2764, a490a73): the box no longer holds a backlog copy of raw.
    The 14-17 Oct acks died on ssh corrupted in transit from home ("message
    authentication code incorrect") while the ack's prune held the session open; acks
