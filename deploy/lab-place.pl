@@ -5,12 +5,15 @@
 #   HOST slots RES N (lab-run.sh's locks per resource) | HOST mem KB (MemAvailable)
 #   HOST memheld KB (what the gate counts as taken: runs <15 min old growing into memneed)
 #   HOST peak DIR GB (a run's peak RSS, after its run line)
+#   HOST used DIR CORES (a run's mean busy cores, usage cpu_cores, after its run line)
+#   HOST width RES K (cores a slot pins: cpu, only where lab-run pins with taskset)
 #   HOST run DIR STATE STARTED ENDED RES BIN ARGS PAUSES PREDICTED BUILD SLOT LOGLINE
-#     [SHARE] (gpu slots it holds at once, lab-run --gpu-share; 1 if absent)
+#     [SHARE] (slots it holds at once, lab-run --share; 1 if absent)
 #
 #   lab-place.pl inputs ARGS                 input paths to check on each host
 #   lab-place.pl place HOST|auto RES|auto BIN ARGS [BUILD_ARGS [SHARE]]
-#                                            "HOST RES SECONDS" (- if unknown), then why
+#                                            "HOST RES SECONDS SHARE" (- if unknown),
+#                                            then why
 #   lab-place.pl status HOST                 status lines, predicted vs actual run time
 #
 # Run time = ended - started - paused (League); on a shared resource (%SHARED) over
@@ -22,11 +25,16 @@
 # scale by flags whose work is linear (%LINEAR). A host with none borrows the other's,
 # scaled by the hosts' speed ratio (median over commands run on both). gpu-box cpu runs
 # from before slots (no SLOT) had every core: scaled by the slot/whole-machine ratio
+# Width: a cpu run without SHARE holds enough slots for $WIDE cores, or one slot when the
+# recent runs of its most specific key with usage kept under $NARROW cores busy (18 Oct:
+# 85 of 177 cpu runs used under 1.5 of their 4 cores)
 use strict;
 use warnings;
 use Time::Local qw(timegm);
 
 my $RECENT = 5;
+my $WIDE = 4;
+my $NARROW = 1.5;
 # Hosts' speed ratio before any command has run on both: eval was 13 s on the Mac, 7 s
 # on the gpu-box (docs/compute.md "Threads")
 my %ASSUMED = (mac => 2.0, 'gpu-box' => 0.5);
@@ -61,7 +69,7 @@ if ($mode eq 'inputs') {
     exit 0;
 }
 
-my (%now, %league, %have, %slots, %mem, %held, %peak, @runs);
+my (%now, %league, %have, %slots, %width, %mem, %held, %peak, %used, @runs);
 while (my $line = <STDIN>) {
     chomp $line;
     my ($host, $kind, @f) = split /\t/, $line, -1;
@@ -70,9 +78,11 @@ while (my $line = <STDIN>) {
     elsif ($kind eq 'league') { push @{$league{$host}}, $f[0] }
     elsif ($kind eq 'have') { $have{$host}{$f[0]} = 1 }
     elsif ($kind eq 'slots') { $slots{$host}{$f[0]} = $f[1] }
+    elsif ($kind eq 'width') { $width{$host}{$f[0]} = $f[1] if $f[1] =~ /^[1-9]\d*$/ }
     elsif ($kind eq 'mem') { $mem{$host} = $f[0] / 1048576 if $f[0] =~ /^\d+$/ }
     elsif ($kind eq 'memheld') { $held{$host} = $f[0] / 1048576 if $f[0] =~ /^\d+$/ }
     elsif ($kind eq 'peak') { $peak{$host}{$f[0]} = $f[1] if $f[1] =~ /^[\d.]+$/ }
+    elsif ($kind eq 'used') { $used{$host}{$f[0]} = $f[1] if $f[1] =~ /^[\d.]+$/ }
     elsif ($kind eq 'run') {
         my %r;
         @r{qw(dir state started ended res bin args pauses pred build slot log held)}
@@ -91,6 +101,7 @@ while (my $line = <STDIN>) {
 # comes back with the run's peak at its end
 $mem{$_} -= $held{$_} // 0 for keys %mem;
 $_->{peak} = $peak{$_->{host}}{$_->{dir}} for @runs;
+$_->{used} = $used{$_->{host}}{$_->{dir}} for @runs;
 $_->{share} = sharing($_) for @runs;
 my ($beta, $beta_why) = beta();
 $_->{solo} = defined $_->{ran} ? $_->{ran} / $_->{share}**$beta : undef for @runs;
@@ -525,9 +536,28 @@ sub fmt {
     return sprintf('%.1fh', $s / 3600);
 }
 
+# Slots a new run of RES on HOST holds when the caller gave no SHARE, and why
+sub width_for {
+    my ($host, $res, $bin, $args, $build) = @_;
+    my $k = $width{$host}{$res};
+    return (1, '') unless $k;
+    my $n = $slots{$host}{$res} // 1;
+    for my $key (keys_for($bin, $args, $build)) {
+        my @u = map { $_->{used} } recent(grep { defined $_->{used} }
+            runs_for($host, $key->[0]));
+        next unless @u;
+        my $m = median(@u);
+        last if $m >= $NARROW;
+        return (1, sprintf(', 1 slot: %.1f of its cores busy before', $m));
+    }
+    my $w = int(($WIDE + $k - 1) / $k);
+    $w = $n if $w > $n;
+    return ($w, $w > 1 ? sprintf(', %d slots (%d cores)', $w, $w * $k) : '');
+}
+
 sub place {
-    my ($want_host, $want_res, $bin, $args, $build, $share) = @_;
-    $share = ($share // '') =~ /^([1-9])$/ ? $1 : 1;
+    my ($want_host, $want_res, $bin, $args, $build, $given) = @_;
+    $given = ($given // '') =~ /^([1-9])$/ ? $1 : undef;
     my $cuda = cuda_use($bin, $args);
     my (@cands, @out);
     for my $h ($want_host eq 'auto' ? @AUTO : $want_host) {
@@ -542,14 +572,16 @@ sub place {
             $why_not = '' if $want_host ne 'auto' && $why_not ne 'unreachable';
             if ($why_not) { push @out, "$name: $why_not"; next }
             my ($run, $why) = estimate($h, $bin, $args, $build);
+            my ($share, $wide_why) = defined $given ? ($given, '')
+                : $res eq 'cpu' ? width_for($h, $res, $bin, $args, $build) : (1, '');
             my $need = need($h, $bin, $args);
             my ($wait, $live, $n_slots, $mwait) =
                 $res eq 'none' ? (0, 0, 0, 0) : wait_for($h, $res, 0, $need, $share);
             if (defined $run && $SHARED{$res}) {
-                my $share = $live + 1 < $n_slots ? $live + 1 : $n_slots;
-                $run *= $share**$beta;
-                $why .= sprintf(', x %d sharing %s ^%.2f (%s)', $share, $res, $beta,
-                    $beta_why) if $share > 1;
+                my $sharing = $live + 1 < $n_slots ? $live + 1 : $n_slots;
+                $run *= $sharing**$beta;
+                $why .= sprintf(', x %d sharing %s ^%.2f (%s)', $sharing, $res, $beta,
+                    $beta_why) if $sharing > 1;
             }
             if ($res ne 'none' && fast($run)) {
                 ($wait, undef, undef, $mwait) = wait_for($h, $res, 1, $need, $share);
@@ -560,8 +592,9 @@ sub place {
                     fmt($mwait), $need, $mem{$h})
                 if $mwait && $mwait > 0;
             my ($pen, $pen_why) = league_penalty($h);
+            $why = ($why // 'no history') . $wide_why if $wide_why;
             push @cands, {host => $h, res => $res, run => $run, wait => $wait + $pen,
-                total => defined $run ? $wait + $pen + $run : undef,
+                total => defined $run ? $wait + $pen + $run : undef, share => $share,
                 say => sprintf('%s: %swait %s (%d live, %d slots) + run %s (%s)', $name,
                     $pen ? $pen_why . fmt($pen) . ', ' : '', fmt($wait), $live, $n_slots,
                     fmt($run),
@@ -577,8 +610,8 @@ sub place {
         ($pick) = grep { $_->{host} eq 'gpu-box' && $_->{res} eq 'cpu' } @cands;
         $pick //= $cands[0];
     }
-    printf "%s %s %s\n", $pick->{host}, $pick->{res},
-        defined $pick->{run} ? int($pick->{run} + 0.5) : '-';
+    printf "%s %s %s %d\n", $pick->{host}, $pick->{res},
+        defined $pick->{run} ? int($pick->{run} + 0.5) : '-', $pick->{share};
     my @rest = grep { $_ != $pick } @cands;
     print join(' | ', (@known ? () : 'no history anywhere: the default'),
         "$pick->{say}, finish in " . fmt($pick->{total} // $pick->{wait}),

@@ -84,7 +84,14 @@ deploy/lab-run.sh watch-install
   threads floated over the cpu slots' cores; cpu slots split the other c - r. Set
   (2026-10-14, from usage files: half the cpu runs used ~1 of 5 cores, gpu runs 1-1.5
   cores and 20-35% of the card): r 4, cpu.slots 4 (4 cores each), gpu.slots 3. The files
-  are read when a job takes its slot, so tuning needs no code change
+  are read when a job takes its slot, so tuning needs no code change. 18 Oct (gpu jobs
+  used 6.3 of 23.5 reserved core-hours; 85 of 177 cpu runs under 1.5 of their 4 cores;
+  ~85 h queued 13-14 Oct): r 2, cpu.slots 9 (2 cores: one physical P or E core each)
+- cpu width: without --share a cpu run holds enough slots for ~4 cores (2), or one
+  when its most specific history key's recent runs kept under 1.5 cores busy (usage
+  cpu_cores; champcomp, champgroups, netcheck small: 1.0). lab-place.pl decides (listing
+  `width cpu K` and `used DIR CORES` lines, place's 4th field); job.sh pins to all its
+  slots' cores and sets OMP_NUM_THREADS to them. No prediction: ~4 cores
 - Memory gate: the queue head also waits while MemAvailable is below its kind's peak
   (max usage peak_rss_gb over earlier runs of its meta bin, plus first arg for Zig
   bins; 4 GB if none). After 20 min it goes with half that free (peaks are upper
@@ -92,9 +99,9 @@ deploy/lab-run.sh watch-install
   neighbour down. Waits are logged in the run's log and watcher.log. A run that took
   its slot in the last 15 min counts its need (run dir `memneed`) less its RSS now as
   taken, so a second head can't pass before the first has grown (st1 j03 OOM-killed)
-- `--gpu-share N` (--res gpu): the run holds N gpu slots at once (all or none, as queue
-  head) and torch gets 0.95 N/slots of the card, for jobs one slot's share can't fit;
-  `slot` reads "gpu.A of S (share A B)"
+- `--share N` (alias --gpu-share; gpu or cpu): the run holds N slots at once (all or
+  none, as queue head); on gpu torch gets 0.95 N/slots of the card, for jobs one slot's
+  share can't fit; `slot` reads "gpu.A of S (share A B)"
   State jobs peak at 6-8 GB of the gpu-box's 23. listing() gives `mem KB` (MemAvailable)
   and `peak DIR GB` lines for lab-place.pl
 - Slot queue: tickets in ~/ml/locks/RES.q, only the oldest live one tries the slots
@@ -116,8 +123,10 @@ deploy/lab-run.sh watch-install
 - `wait RUN...` blocks until each run has ended on whichever host has it, then prints
   its state and RESULT lines: exit 0 when all exited 0, 3 on --timeout, else 1. Use it
   instead of until-loops over status
-- Run dir ~/ml/runs/<UTC stamp>-<name> on the host: the binary, job.sh, log, meta (host,
-  binary hash, src KEY, harness (KEY without the candidate: src/lab/cand and -Dcand),
+- Run dir ~/ml/runs/<UTC stamp>-<name> on the host: the binary (gpu-box: a hardlink to
+  ~/ml/runs/.bin/SHA256, one copy per build; a copy each was 14 GB, 18 Oct), job.sh,
+  log, meta (host, binary hash, src KEY, harness (KEY without the candidate:
+  src/lab/cand and -Dcand),
   snap PATH HASH per snapshot dir in the args (input files' names and sizes, equal on
   both hosts' copies), HEAD, dirty count, args, runkey), src.diff (src and build.zig vs
   HEAD), started, ended, exit, pauses.log
@@ -181,7 +190,7 @@ run time.
   fifth of their time so far), queued ones take the first slot to free up in lab-run's
   ticket order: fast ones (predicted <= 60 s) first, then the rest, each oldest first. A
   fast new run waits only for queued fast ones. Whole-machine history: see the ratio above
-  A --gpu-share N run holds N slots and, as queue head, waits until N are free at once
+  A --share N run holds N slots and, as queue head, waits until N are free at once
   (listing field SHARE after LOGLINE; place's optional SHARE argument)
 - Memory (lab-run's gate, 0723d43 and edd4d90; the listing's mem and peak lines): each
   run starts once a slot is free and MemAvailable covers its need (max peak of earlier
@@ -241,6 +250,11 @@ builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps
 - A SPACE line `ref --flag V ...` (every flag) adds trial `ref`, run first with the same
   seeds: the table shows it on top as the bar, unnumbered and never the pick
 - Sweep jobs are lab-run runs, so their GPU times feed placement's history
+- Stopping rule (`--stop-after K`, default 8; `--no-stop` off): start leaves `watch SWEEP
+  K` running (log watch.log): each minute, lab-sweep.pl verdict on the trials of jobs that
+  exited 0; once K are scored, if every one's pooled fold gain is below -2 se the sweep
+  stops (queued and running jobs; reason in `stopped`), else the rest run. On big1,
+  big1b, big1c (8 + 32 + 19 trials, all losing) it would have stopped each at 8
 
 ## Lab agent limits
 

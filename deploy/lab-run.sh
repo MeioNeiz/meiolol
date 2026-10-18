@@ -7,7 +7,7 @@
 #
 #   deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --commit SHA | --bin KEY]
 #                           [--no-build] [--build-arg A]... [--with PATH]...
-#                           [--res cpu|gpu|none|auto] [--gpu-share N] [--literal]
+#                           [--res cpu|gpu|none|auto] [--share N] [--literal]
 #                           [--dry-run] -- ARGS...
 #   deploy/lab-run.sh start [gpu-box] NAME --python SCRIPT [--with PATH]... [--res R]
 #                           -- ARGS...
@@ -53,6 +53,9 @@
 # since every run uses all cores via par.zig), so runs go one after another, not over each
 # other. A GPU run takes gpu and can share the PC with a cpu one. Waiting runs are
 # "queued"; `started` is written once the lock is held
+# --share N (alias --gpu-share): hold N slots at once. Without it a gpu run holds one and
+# a cpu run as many as lab-place.pl says (its history: one slot for a single-thread
+# command, else ~4 cores), pinned to all their cores
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -60,7 +63,7 @@ RUNS=ml/runs
 BUILD_ARGS=()
 WITH=()
 RES=
-SHARE=1
+SHARE=
 DRY=0
 LITERAL=0
 WATCH=meiolol-lab-watch
@@ -82,6 +85,16 @@ check_host() {
     [[ "$1" == mac || "$1" == gpu-box ]] && return
     echo "HOST is gpu-box or mac, not $1"
     exit 2
+}
+
+# gpu-box: ~/ml/snaps and ~/ml/runs are symlinks into the lab partition, dangling until
+# wsl-mount.ps1 attaches it (at boot, then every 2 min)
+check_mount() {
+    [[ "$1" == gpu-box ]] || return 0
+    on gpu-box "mountpoint -q /mnt/wsl/lab" && return
+    echo "gpu-box: /mnt/wsl/lab is not mounted, so ~/ml/snaps and ~/ml/runs dangle;" \
+        "wsl-mount.ps1 attaches it within 2 min of WSL starting (docs/compute.md)"
+    exit 1
 }
 
 # RUN goes into shell commands on the host: a run dir name only
@@ -391,7 +404,7 @@ start() {
             --build-arg) BUILD_ARGS+=("$2"); shift ;;
             --with) WITH+=("$2"); shift ;;
             --res) RES=$2; shift ;;
-            --gpu-share) SHARE=$2; shift ;;
+            --share|--gpu-share) SHARE=$2; shift ;;
             --literal) LITERAL=1 ;;
             --dry-run) DRY=1 ;;
             --) shift; break ;;
@@ -407,9 +420,9 @@ start() {
     # Explicit HOST: cpu unless --res says otherwise, as before placement existed
     [[ -n "$RES" ]] || { if [[ "$host" == auto ]]; then RES=auto; else RES=cpu; fi; }
     [[ "$RES" =~ ^(cpu|gpu|none|auto)$ ]] || { echo "--res: cpu, gpu, none or auto"; exit 2; }
-    [[ "$SHARE" =~ ^[1-9]$ ]] || { echo "--gpu-share: 1-9 gpu slots"; exit 2; }
-    (( SHARE == 1 )) || [[ "$RES" == gpu ]] \
-        || { echo "--gpu-share needs --res gpu"; exit 2; }
+    [[ -z "$SHARE" || "$SHARE" =~ ^[1-9]$ ]] || { echo "--share: 1-9 slots"; exit 2; }
+    [[ -z "$SHARE" || "$RES" != none ]] \
+        || { echo "--share: no slots with --res none"; exit 2; }
     if (( LITERAL )); then
         local a quoted=()
         for a in "$@"; do
@@ -419,13 +432,13 @@ start() {
         set -- "${quoted[@]}"
     fi
     # Placement (auto) or just the prediction (explicit; a failure there changes nothing)
-    local placed p_host p_res predicted=- why="" auto=0
+    local placed p_host p_res p_share="" predicted=- why="" auto=0
     [[ "$host" == auto || "$RES" == auto ]] && auto=1
     # Python runs are told apart by script in placement's history (meta's bin)
     local shown=$bin
     [[ "$bin" == python ]] && shown=python/$(basename "$PY")
     if placed=$(place "$host" "$RES" "$shown" "$*" "${BUILD_ARGS[*]-}" "$SHARE" 2>&1); then
-        read -r p_host p_res predicted <<< "$(head -n 1 <<< "$placed")"
+        read -r p_host p_res predicted p_share <<< "$(head -n 1 <<< "$placed")"
         why=$(sed -n 2p <<< "$placed")
         if (( auto )); then host=$p_host RES=$p_res; echo "placed: $why"
         else echo "predicted: $why"; fi
@@ -433,7 +446,14 @@ start() {
         echo "not placed: $placed"
         exit 1
     fi
+    # No prediction: a cpu run gets the host's default width (0: ~4 cores), others 1 slot
+    if [[ -z "$SHARE" ]]; then
+        if [[ "$p_share" =~ ^[1-9]$ ]]; then SHARE=$p_share
+        elif [[ "$RES" == cpu ]]; then SHARE=0
+        else SHARE=1; fi
+    fi
     (( DRY )) && exit 0
+    check_mount "$host"
     local commit="" key=- dir path info env=""
     if [[ "$bin" == python ]]; then
         [[ "$host" == gpu-box ]] || { echo "--python runs on the gpu-box"; exit 2; }
@@ -570,7 +590,15 @@ need=$(cd ~/ml/runs 2> /dev/null && awk -v bin=@MBIN@ -v cmd=@MCMD@ '"'"'
     }'"'"' */meta */usage 2> /dev/null)
 need_kb=$(awk -v g="${need:-4}" '"'"'BEGIN { print int(g * 1048576) }'"'"')
 memsince= memlong=
+# Not nproc: it honours OMP_NUM_THREADS. The top r cores (~/ml/locks/reserve) are kept
+# for gpu jobs, whose host threads otherwise float over the cores of the cpu slots
+c=$(getconf _NPROCESSORS_ONLN)
+r=$(cat ~/ml/locks/reserve 2> /dev/null || echo 0)
+(( r > 0 && r < c )) || r=0
+k=$(( (c - r) / n ))
+(( k > 0 )) || k=1
 share=@SHARE@
+(( share > 0 )) || share=$(( (4 + k - 1) / k ))
 (( share <= n )) || share=$n
 say() {
     echo "$*"
@@ -584,7 +612,7 @@ held_back() {
     for m in ~/ml/runs/*/memneed; do
         d=${m%/memneed}
         [[ -f $m && ! -f $d/exit && -f $d/job.pgid ]] || continue
-        out+="$(cat $d/job.pgid) $(cat $m) $(stat -c %Y $m)"$'"'"'\n'"'"'
+        out+="$(cat $d/job.pgid) $(cat $m) $(stat -c %Y $m 2> /dev/null || stat -f %m $m)"$'"'"'\n'"'"'
     done
     [[ -n $out ]] || { echo 0; return; }
     ps -eo pgid=,rss= | awk -v want="$out" -v now="$(date +%s)" '"'"'
@@ -657,20 +685,18 @@ rm -f $q/$ticket queued
 if (( share > 1 )); then echo "@RES@.$slot of $n (share ${got[*]})" > slot
 else echo "@RES@.$slot of $n" > slot; fi
 [[ -n $need_kb ]] && echo $need_kb > memneed
-# Not nproc: it honours OMP_NUM_THREADS. The top r cores (~/ml/locks/reserve) are kept
-# for gpu jobs, whose host threads otherwise float over the cores of the cpu slots
-c=$(getconf _NPROCESSORS_ONLN)
-r=$(cat ~/ml/locks/reserve 2> /dev/null || echo 0)
-(( r > 0 && r < c )) || r=0
-export OMP_NUM_THREADS=$(( (c - r) / n ))
-cores=$OMP_NUM_THREADS'
+export OMP_NUM_THREADS=$k
+cores=$k'
     # shellcheck disable=SC2016 # expands on the host
     [[ "$RES" == cpu ]] && lock+='
+export OMP_NUM_THREADS=$(( k * share ))
+cores=$OMP_NUM_THREADS
 pin=
 if command -v taskset > /dev/null; then
-    k=$(( (c - r) / n )); lo=$(( slot * k ))
-    pin="taskset -c $lo-$(( lo + k - 1 ))"
-    echo "cores $lo-$(( lo + k - 1 ))" >> slot
+    list=
+    for i in "${got[@]}"; do list+="${list:+,}$(( i * k ))-$(( i * k + k - 1 ))"; done
+    pin="taskset -c $list"
+    echo "cores $list" >> slot
 fi' pin='$pin '
     # shellcheck disable=SC2016 # expands on the host
     [[ "$RES" == gpu ]] && lock+='
@@ -746,7 +772,15 @@ EOF
     if [[ -n "$env" ]]; then
         files+=("$(dirname "$PY")"/*.py "$ROOT/py/labpy.py" "$ROOT/py/pyproject.toml" \
             "$ROOT/py/uv.lock")
-    elif [[ "$host" == gpu-box ]]; then on gpu-box "cp $path $RUNS/$run/"
+    # One copy of each binary in RUNS/.bin by sha256, on the runs' filesystem, and the run
+    # dir's a hardlink to it: a copy each was 14 GB of 26 (521 runs, 18 Oct)
+    elif [[ "$host" == gpu-box ]]; then
+        local dst=$RUNS/$run/${path##*/}
+        # shellcheck disable=SC2016 # expands on the host
+        on gpu-box 'h=$(sha256sum '"$path"' | cut -c1-64); [[ ${#h} == 64 ]] || exit 1
+            b='"$RUNS"'/.bin/$h; mkdir -p '"$RUNS"'/.bin || exit 1
+            [[ -f $b ]] || { cp '"$path"' $b.$$ && mv $b.$$ $b; } || exit 1
+            ln $b '"$dst"' 2> /dev/null || cp $b '"$dst"
     else files+=("$path"); fi
     copy "$host" "$RUNS/$run" "${files[@]}"
     [[ -f "$tmp/predicted" ]] && copy "$host" "$RUNS/$run" "$tmp/predicted"
@@ -774,6 +808,14 @@ listing() {
         for r in cpu gpu; do
             printf "slots\t%s\t%s\n" $r "$(cat ~/ml/locks/$r.slots 2>/dev/null || echo 4)"
         done
+        # cpu slot width, as job.sh pins it
+        if command -v taskset > /dev/null; then
+            c=$(getconf _NPROCESSORS_ONLN)
+            r=$(cat ~/ml/locks/reserve 2>/dev/null || echo 0)
+            (( r > 0 && r < c )) || r=0
+            n=$(cat ~/ml/locks/cpu.slots 2>/dev/null || echo 4)
+            printf "width\tcpu\t%s\n" $(( (c - r) / n ))
+        fi
         [[ -r /proc/meminfo ]] && awk "/^MemAvailable:/ { print \"mem\t\" \$2 }" /proc/meminfo
         # What the memory gate also counts as taken (job.sh held_back): runs from the last
         # 15 min not yet grown into their need
@@ -781,7 +823,7 @@ listing() {
         for f in */memneed; do
             e=${f%/memneed}
             [[ -f $f && ! -f $e/exit && -f $e/job.pgid ]] || continue
-            hb+="$(cat $e/job.pgid) $(cat $f) $(stat -c %Y $f);"
+            hb+="$(cat $e/job.pgid) $(cat $f) $(stat -c %Y $f 2>/dev/null || stat -f %m $f);"
         done
         [[ -r /proc/meminfo ]] && ps -eo pgid=,rss= | awk -v want="$hb" -v now="$(date +%s)" "
             BEGIN {
@@ -814,6 +856,8 @@ listing() {
             # The memory gate reads these peaks (usage.sh), by meta bin and first arg
             pk=$(sed -n "s/^peak_rss_gb //p" $d/usage 2>/dev/null)
             [[ -n $pk && $pk != - ]] && printf "peak\t%s\t%s\n" "$d" "$pk"
+            u=$(sed -n "s/^cpu_cores //p" $d/usage 2>/dev/null)
+            [[ -n $u ]] && printf "used\t%s\t%s\n" "$d" "$u"
         done'
     if [[ "$host" == mac ]]; then on mac "$script"
     else ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" "$script"; fi | sed "s/^/$host	/"
@@ -938,6 +982,7 @@ case "${1:-}" in
     restart)
         check_host "$2"
         check_run "${3:-}"
+        check_mount "$2"
         # shellcheck disable=SC2016 # expands on the host
         on "$2" 'cd '"$RUNS/$3"' || exit 1
             pg=$(cat job.pgid 2>/dev/null)
