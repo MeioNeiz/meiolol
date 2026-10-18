@@ -50,7 +50,8 @@ accounts may use Always Free only in the home region).
   (`echo none | sudo tee /sys/block/sda/queue/scheduler` reverts; a reboot does too).
   Under the image's `none`, ionice does nothing. Why and numbers:
   research/questions/box-io-priority.md
-- crawl.args (2026-10-18): `--proxy 10.0.0.3:8092 --timelines 100 --raw-timeline-days 3650
+- crawl.args (2026-10-18): `--proxy 10.0.0.3:8092 --timelines 50 --timelines-priority 100
+  --timeline-min-s 900 --raw-timeline-days 3650
   --raw-match-days 0 --raw-valve-free-gb 10 --keep-days 0 --ladder-per-hour 500
   --ladder-refresh-hours 12 --player-sample 16 --min-tier PLATINUM --cache-mb 512
   --patch-only --flex-calls-per-day 0` (flex sample off 18 Oct: nothing read queue 440,
@@ -58,7 +59,7 @@ accounts may use Always Free only in the home region).
   raw leaves the box only through the archive: an export drops the raw timelines it
   holds, `raw-export --ack` prunes acked raw older than 2 days; under 10 GB free the
   valve drops unarchived raw, docs/data-safety.md "Raw archive"; Platinum IV and up
-  only). Previous copies crawl.args.bak-20261018 (flex 500), -20261017 (no valve)
+  only). Previous copies crawl.args.bak-20261018b (timelines 100), -20261018 (flex 500), -20261017 (no valve)
 
 ## Rendering on request
 
