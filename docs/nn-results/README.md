@@ -10,7 +10,8 @@ First line `# title: <the question in plain words>`; other `#` lines are ignored
 header and one row per comparison, tab-separated, blank cell for unknown:
 
 - model: plain name ("big net, 3 seeds" not "netcheck --net big")
-- vs: ratings (today's model), win-comp, base (champion win rates), or `-` for an
+- vs: win-draft (today's model since 17 Oct: src/lab/cand/win-draft), ratings (champion
+  strength only, today's model before), win-comp, base (champion win rates), or `-` for an
   absolute log loss (scaling curves)
 - block: folds (the 5 forward folds pooled), dev-val, test (a test look, one per model,
   only on the coordinator's go), random (LoLDraftAI-style random split), projection
@@ -28,7 +29,7 @@ header and one row per comparison, tab-separated, blank cell for unknown:
   you first use it
 
 The headline for a question (top of the page, All view card) is its first row compared
-with ratings on the best block there is (test, then folds, then dev-val): put the
+with win-draft on the best block there is (test, then folds, then dev-val): put the
 question's main answer first, a breakdown by subset after it.
 
 The page labels each row from diff and ci: below zero by more than ci "better", above by

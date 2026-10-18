@@ -4585,6 +4585,91 @@ by m games has se ~50/sqrt(m) pp, MDE ~140/sqrt(m) pp (a pair in 5,000 games: ~2
 500: ~6 pp); a per-sd term on n games has se ~50/sqrt(n) pp (matches win-comp's -1.50 ±
 0.33 at 89k). As a log-loss gain the bar is far higher (above).
 
+### Nets on the shipped model, 2026-10-18 (meiolol-2b)
+
+Question (Jacob): where do neural nets stand against the model the site and app use
+(win-draft: "Shipped model, 2026-10-17"), and can one beat it? Every earlier net table
+compares with ratings (champion strength only), which stopped being today's model on 17
+Oct. Read every table as log loss vs win-draft, milli-nats a game, negative is better.
+For scale: win-draft beats a coin by 6.3 milli-nats a game on these folds (ln 2 -
+0.68687), so -1.45 is about a quarter of its edge.
+
+Before the new runs, the 14 Oct reference reruns on snap-20261014T2137Z (361k games,
+folds 180,533 scored; runs 20261014T223405Z-big-wr-2137Z, -s11, 224148Z-big-wc-2137Z,
+224438Z-add-v2-2137Z; never written up, pulled to data/runs): big net, 10 seeds, vs
+ratings -1.06 ± 0.20 on the folds (dev-val -1.97 ± 0.56), vs win-comp -0.57 ± 0.24, and vs
+additive v2 (the model then in the Draft tester) +1.10 ± 0.26, worse in every block, the
+gap closing from +1.72 (fold 1) to +0.82 (fold 5) and +0.74 (dev-val).
+
+snap-20261017T1320Z (made 17 Oct, every game on the box then): folds 5 x ~60,000 scored
+games (300,113; fit 300k-540k), dev-val 80,031 (fit 600k). Built with
+-Dcand=src/lab/cand/win-draft at aca652b (dev runs at the HEAD of 23:35Z, same netcheck
+and candidate); win-draft's preds are identical in every run. gpu-box runs
+20261017T23*-nd-* and 20261018T00*-nd-*; champcomp per-game preds from
+20261018T003024Z-cc-windraft-preds (ddc5b49 adds preds.tsv). Nets at netcheck defaults;
+set = setnet's phi 16, rho 16, offset cross-fitted as resid's.
+
+Today's model against ratings on the same folds: win-draft 0.68687, ratings 0.68855
+(-1.68 milli-nats; with dev-val -1.94 ± 0.22), accuracy 54.5% against 53.8% (all blocks).
+
+| net vs win-draft | folds, dev seeds | sealed seeds | resample 1 / 2 | control | k/5 | single seeds (sealed) | dev-val (sealed seeds where run) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| set net + champion-role embedding 8 (`--ids 1`), seeds 1-3 / 4-6 | -1.36 ± 0.19 | -1.45 ± 0.18 | -1.33 / -1.33 | permuted profiles -0.14 ± 0.07; real minus it -1.30 ± 0.15 | 5 | -1.27 to -1.10 | -1.55 ± 0.33 |
+| same, offset weight fixed at 1 | | -1.48 ± 0.19 | | | | | -1.69 ± 0.35 |
+| set net, within-team (`--cross 0`) | -0.82 ± 0.13 | -0.77 ± 0.12 | -0.73 / -0.77 | permuted -0.13 ± 0.07; real minus it -0.61 ± 0.09 | 5 | -0.80 to -0.52 | -0.78 ± 0.26 |
+| same, offset fixed at 1 (seeds 1-3) | -0.81 ± 0.12 | | | | | | -0.79 ± 0.26 |
+| set net with the enemy team (`--cross 1`, seeds 1-3) | -0.92 ± 0.13 | | | | 5 | | -1.03 ± 0.28 |
+| big net as a residual on win-draft (bigres), seeds 1-10 / 11-20 | -0.64 ± 0.12 | -0.58 ± 0.11 | -0.45 / -0.50 | shuffled champions -0.06 ± 0.09; real minus it -0.60 ± 0.09 | 5 | -0.13 to +0.95 | -1.06 ± 0.25 |
+| big net from scratch, seeds 1-10 / 11-20 | -0.37 ± 0.20 | -0.38 ± 0.20 | -0.19 / -0.22 | | 4 (sealed 5) | +2.03 to +3.73 | -1.29 ± 0.45 |
+| big net from scratch vs ratings (seeds 1-10) | -2.10 ± 0.24 | | | | 5 | +0.32 to +2.71 vs ratings | -3.04 ± 0.42 |
+
+Declared before any 1320Z net result was read (two amendments, each before its runs): a
+net whose dev seeds are below 0 on the folds passes when (1) sealed seeds (big 11-20, set
+4-6) pooled over the folds have mean + 2.1 x paired 95% half-width < 0 (2.1x: 2253Z's
+measured A/A widening for nets), (2) netcheck --resample 1 and 2 means are both < 0,
+(3) real minus its control (bigres --shuffle-ids 1, set --control permute) < 0. Big from
+scratch: (1) and (2) only. `--ids 1` was an exploratory dev run after the declaration; it
+got the same rule before its confirmation ran.
+- Set net + embedding: pass (bound -1.45 + 2.1 x 0.18 = -1.07; resamples -1.33, -1.33;
+  control -1.30 ± 0.15)
+- Set net within-team: pass (bound -0.52; -0.73, -0.77; -0.61 ± 0.09)
+- bigres: pass (bound -0.35; -0.45, -0.50; -0.60 ± 0.09)
+- Big from scratch: not passed ((1) -0.38 + 0.42 = +0.04; resamples pass)
+
+Beside the comp terms in the admin Draft tester (champcomp on win-draft, same games,
+offsets equal to 1e-6; champcomp alone -0.68 ± 0.12 on the folds, sealed seeds for the
+nets, descriptive):
+
+| model vs win-draft, folds | alone | net minus champcomp | net and champcomp, mean chance | logit gains correlate |
+| --- | --- | --- | --- | --- |
+| set net + embedding | -1.45 ± 0.18 | -0.78 ± 0.16 | -1.32 ± 0.13 | 0.52 |
+| set net within-team | -0.77 ± 0.12 | -0.10 ± 0.13 | -0.89 ± 0.10 | 0.47 |
+| bigres | -0.58 ± 0.11 | +0.09 ± 0.15 | -0.85 ± 0.09 | 0.20 |
+
+Set net + embedding and bigres averaged: -1.28 ± 0.13, no better than the set net alone.
+
+Reading (dev, no test look):
+- A net now beats today's model. The set net with champion-role embeddings, on top of
+  win-draft, is 1.45 ± 0.18 milli-nats a game better on 300k held-out games, in every
+  fold, with sealed seeds, on both resamples, and against its control; the gain is the
+  profiles' content (permuted profiles give -0.14) and none of it recalibration (offset
+  fixed at 1: -1.48). About a quarter of today's model's edge over a coin; accuracy
+  54.5% to 55.0%, AUC 0.564 to 0.570 (all blocks, dev included). Single seeds are
+  already -1.1 to -1.3: unlike the big net, it does not need an ensemble
+- It contains the comp terms the Draft tester adds (champcomp): better than them by
+  -0.78 ± 0.16, and adding them makes it worse. Within-team only it is level with them
+- What changed from 2253Z (set net within-team on ratings -0.37, on win-comp -0.25, not
+  confirmed): 2-4x the fit games, the shipped pair terms in the offset, and the
+  embedding beside the profiles (on 2055Z the embedding added nothing)
+- The big net keeps gaining on ratings with data: -0.39 (2253Z, fit 134-242k), -1.06
+  (2137Z, 180-325k), -2.10 (1320Z, 300-540k). From scratch it is at the shipped model's
+  level (-0.38 sealed, not passed); every single big seed is 2-4 milli-nats worse, the
+  10-seed average is the gain. As a residual on win-draft it passes (-0.58)
+- The gain does not grow with block (set + embedding -1.25 to -1.45 in each fold, dev-val
+  -1.55): not a newer-games effect
+- Not yet: a test look (needs Jacob's go; rule to declare first), the exporter for the
+  Draft tester (set net format agreed in "Next steps"), and `meiolol eval`'s view
+
 ## Shipped model, 2026-10-17
 
 `score.Options` defaults (app suggest, site draft tester, Daily Draft, pool, matchup and
@@ -4633,9 +4718,12 @@ and each prefix keeps its colour across charts. Flush each row as it is written.
   16.21 rerun, report per fold the share of scored games on a patch the fit has seen
   (unseen patches get no offset, so a null there is not a test; verifier, meiolol-4b)
 
-- Net exporter for the tester (meiolol-ba/d8, 2026-10-13): on hold until a net beats
-  ratings (and win-comp) on the folds; none does yet (LoLDraftAI's evaluation, nets
-  tables). Formats agreed when one does: f1's concat-pool net (R[role] added,
+- Net exporter for the tester (meiolol-ba/d8, 2026-10-13): due. On 18 Oct the set net
+  with champion-role embeddings beat win-draft by -0.00145 ± 0.00018 on the folds, every
+  pre-declared leg passed ("Nets on the shipped model, 2026-10-18"). Next, in order:
+  declare a test-look rule and get Jacob's go (seeds 7-9, on win-draft); export
+  `--net set --ids 1` per the format below; the tester scores win-draft + net; port to
+  eval. Formats agreed: f1's concat-pool net (R[role] added,
   antisymmetric, residual, seed list, ReLU, empty slot = game-weighted mean input);
   35's set net (x = p(12) ++ role one-hot(5) ++ optional E, phi dense + ReLU, mean pool,
   rho on [t_own; t_other], f = w.h, antisymmetric, + a x candidate logit)

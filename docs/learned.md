@@ -25,6 +25,20 @@ How to write a line:
 
 ## Win
 
+- 2026-10-18 (early): A neural network now predicts the winner from the draft better
+  than the model the site and app use. It reads what each team's champions typically do
+  in games (damage type, tankiness, crowd control, healing, range) together with which
+  champions they are, on top of today's model, and adds about a quarter to its edge over
+  a coin flip (accuracy 54.5% to 55.0%). It covers the champion-into-comp effects the
+  Draft tester adds (Malphite into magic damage and the rest) and more. A large network
+  that reads only the picks is level with today's model now; it gains more from extra
+  games than the simple models do (on 14 Oct's games it was still behind the pair
+  model). Sure: -0.00145 ± 0.00018
+  nats per game on 300,113 held-out games (5 rounds, 300-540k training games a round),
+  better in every round, with fresh seeds and on two resamples, and shuffling which
+  champion has which profile leaves -0.00014; the comp terms alone give -0.00068; dev
+  only, no test look. Site: nothing yet; next a test look on Jacob's go, then the net in
+  the admin Draft tester. Evidence: docs/model.md "Nets on the shipped model, 2026-10-18"
 - 2026-10-18: Rammus does do better into teams of auto-attackers (champions who build
   crit and attack speed, like Master Yi, Tryndamere and marksmen), about 1.4 points per
   step towards such a team, even with their damage type held fixed: it was never about AD

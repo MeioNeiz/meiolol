@@ -9,7 +9,7 @@
 
 const NN = { at: undefined, files: [], err: null };
 const NN_ORDER = ["nets", "structured", "comp", "embx", "pretrain", "stack", "context", "player", "ldai", "gains", "scaling"];
-const NN_VS = { ratings: "today's model", "win-comp": "win-comp", base: "champion win rates" };
+const NN_VS = { "win-draft": "today's model", ratings: "ratings", "win-comp": "win-comp", base: "champion win rates" };
 const NN_BLOCK = {
   folds: "5 forward rounds", "dev-val": "newest dev games", test: "test look",
   random: "random split (LoLDraftAI-style)", projection: "projection",
@@ -36,7 +36,8 @@ function nnFile(key, text) {
   return { key, title: title || key, rows };
 }
 // Today's model's edge over a coin flip, log loss per game: the scale for a net's gain
-const NN_EDGE = 0.0023;
+// (win-draft on snap-20261017T1320Z's folds: ln 2 - 0.68687)
+const NN_EDGE = 0.0063;
 const nnNum = v => v == null || v === "" || !isFinite(+v) ? null : +v;
 
 // Better / tie / worse than the row's comparison model, from the 95% interval
@@ -50,7 +51,7 @@ function nnVerdict(r) {
 const nnDiff = r => signed(r.diff, 5) + (r.ci != null ? " ± " + r.ci.toFixed(5) : "");
 // How big, for the All view's pill: a clear gain or loss against today's model, as a share
 // of its edge
-const nnSize = r => r.vs === "ratings" && r.ci != null && Math.abs(r.diff) > r.ci ? `log loss ${Math.abs(r.diff).toFixed(4)} ${r.diff < 0 ? "lower" : "higher"} a game, ${Math.round(100 * Math.abs(r.diff) / NN_EDGE)}% of its edge over a coin flip` : null;
+const nnSize = r => r.vs === "win-draft" && r.ci != null && Math.abs(r.diff) > r.ci ? `log loss ${Math.abs(r.diff).toFixed(4)} ${r.diff < 0 ? "lower" : "higher"} a game, ${Math.round(100 * Math.abs(r.diff) / NN_EDGE)}% of its edge over a coin flip` : null;
 const nnBlock = r => NN_BLOCK[r.block] || r.block || "–";
 
 // The row that best answers a question: a test look first, then the folds, then dev-val;
@@ -59,14 +60,15 @@ const nnBlock = r => NN_BLOCK[r.block] || r.block || "–";
 function nnHeadline(f) {
   const rank = { test: 0, folds: 1, "dev-val": 2, random: 3 };
   const rows = f.rows.filter(r => r.vs !== "-" && r.block in rank);
-  rows.sort((a, b) => rank[a.block] - rank[b.block] || (a.vs === "ratings" ? 0 : 1) - (b.vs === "ratings" ? 0 : 1));
+  rows.sort((a, b) => rank[a.block] - rank[b.block] || (a.vs === "win-draft" ? 0 : 1) - (b.vs === "win-draft" ? 0 : 1));
   return rows[0] || null;
 }
 
 function nnView(body) {
   loadNn();
   const intro = section(body, "Neural net programme",
-    "Can a neural net call the winner from the draft better than today's model (ratings: each champion's strength in its role)? " +
+    "Can a neural net call the winner from the draft better than today's model (since 17 Oct: champion strength in its role plus ally duos and matchups, as the site and app score drafts)? " +
+    "Older rows compare with ratings (champion strength only), today's model before 17 Oct. " +
     "Every number is the change in log loss per game against the model named, with its 95% range: below zero is better. " +
     `For scale, today's model beats a coin flip by about ${NN_EDGE} a game, so a log loss ${NN_EDGE} lower would double its edge. ` +
     "Dev results come from older games scored on newer ones; a test look is the one check on held-back games per model.");
