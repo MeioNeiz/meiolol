@@ -300,17 +300,19 @@ button.ghost.icon[aria-pressed="true"] { color: var(--warn); border-color: var(-
 }
 .picker p.sub { margin: 6px 0; font-size: 12px; }
 .cands { display: grid; gap: 1px; max-height: 480px; overflow-y: auto; margin-top: 4px; font-size: 13px; font-variant-numeric: tabular-nums; }
-.cand, .candhead { display: grid; grid-template-columns: minmax(80px, 120px) minmax(0, 1fr); align-items: center; gap: 8px; border-radius: 6px; padding: 2px 6px; }
-.candhead { grid-template-columns: minmax(80px, 120px) 44px 46px minmax(0, 1fr); color: var(--muted); font-size: 12px; padding-top: 0; }
-.candhead.lane { grid-template-columns: minmax(80px, 120px) 44px 50px 46px minmax(0, 1fr); }
+.cand, .candhead { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 8px; border-radius: 6px; padding: 2px 6px; }
+.candhead { grid-template-columns: minmax(80px, 120px) 44px 46px minmax(0, 1fr) 44px; color: var(--muted); font-size: 12px; padding-top: 0; }
+.candhead.lane { grid-template-columns: minmax(80px, 120px) 44px 50px 46px minmax(0, 1fr) 44px; }
 .cand:hover, .cand.open { background: var(--panel-2); }
 .cand.cur { outline: 1px solid var(--accent); }
-.cand button.link { text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cand .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cand .caret { color: var(--muted); }
+.cand button.pick { justify-content: center; padding: 3px 0; }
 .cand button.more {
   font: inherit; color: var(--text); background: none; border: 0; padding: 3px 0; cursor: pointer; text-align: left;
-  display: grid; grid-template-columns: 44px 46px minmax(0, 1fr); gap: 8px; align-items: center;
+  display: grid; grid-template-columns: minmax(80px, 120px) 44px 46px minmax(0, 1fr); gap: 8px; align-items: center;
 }
-.cand.lane button.more { grid-template-columns: 44px 50px 46px minmax(0, 1fr); }
+.cand.lane button.more { grid-template-columns: minmax(80px, 120px) 44px 50px 46px minmax(0, 1fr); }
 .cand b, .cand .gold, .cand .fit { text-align: right; }
 .cand b { font-weight: 600; color: var(--muted); }
 .cand .fit { color: var(--muted); }
@@ -326,11 +328,13 @@ button.ghost.icon[aria-pressed="true"] { color: var(--warn); border-color: var(-
 .breakdown li b { display: inline-block; min-width: 40px; text-align: right; margin-right: 4px; color: var(--muted); }
 .breakdown p.sub { margin: 6px 0; }
 @media (max-width: 600px) {
-  .cand { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  .cand .why { grid-column: 1 / -1; }
+  .cand { gap: 0 6px; }
+  .cand button.more { grid-template-columns: 44px 46px minmax(0, 1fr); }
+  .cand.lane button.more { grid-template-columns: 44px 50px 46px minmax(0, 1fr); }
+  .cand .name, .cand .why { grid-column: 1 / -1; }
   .candhead, .candhead.lane { grid-template-columns: 44px 46px; }
   .candhead.lane { grid-template-columns: 44px 50px 46px; }
-  .candhead span:first-child, .candhead span:last-child { display: none; }
+  .candhead span:first-child, .candhead .whyh, .candhead .pickh { display: none; }
 }
 details.about { margin: 4px 0 8px; }
 details.about summary { cursor: pointer; }
@@ -365,3 +369,5 @@ table.steps td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
 table.steps tr.failed td { color: var(--bad); }
 ul.commits { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
 ul.commits li { overflow-wrap: anywhere; }
+.logcounts button.link.warn { color: var(--warn); }
+.logcounts button.link.bad { color: var(--bad); }

@@ -468,9 +468,10 @@ function draftView(body) {
   if (DRAFT.tags === undefined) loadTags();
   const d = draftState();
   const name = id => (m.champs.find(c => String(c.id) === String(id)) || { name: "#" + id }).name;
-  // Problems show; the models' description and passed checks fold into one line
-  const dev = meta.dev || {}, about = [], bad = [];
-  const health = (x, label) => (x.ok ? about : bad).push(el("div", { class: "health " + (x.ok ? "good" : "bad") }, el("b", {}, x.ok ? "✓ " : "⚠ "), label || "", x.text));
+  // Problems show; the models' description folds into one line, passed checks and model
+  // stats go under Debug
+  const dev = meta.dev || {}, about = [], bad = [], checks = [];
+  const health = (x, label) => x.ok ? checks.push(`✓ ${label || ""}${x.text}`) : bad.push(el("div", { class: "health bad" }, el("b", {}, "⚠ "), label || "", x.text));
   if (DRAFT.check) health(DRAFT.check);
   if (DRAFT.ccErr) health({ ok: false, text: DRAFT.ccErr }, "The champion-into-comp terms didn't load: ");
   const ccCheck = m.cc && m.cc.check();
@@ -478,6 +479,8 @@ function draftView(body) {
   if (DRAFT.laneErr) health({ ok: false, text: DRAFT.laneErr }, "The lane model didn't load: ");
   if (DRAFT.laneCheck) health(DRAFT.laneCheck);
   sec.append(...bad);
+  if (dev.accuracy != null) about.push(el("p", { class: "sub" }, `In plain words: on ${num(dev.games)} recent games it wasn't fitted on, the model picked the winner ${pct(dev.accuracy)} of the time; a coin manages 50%. ` +
+    "The Models tab's headline is a different reading (the best of the daily eval's models on the final test games), so the two numbers differ."));
   if (m.pairs && M.model.kind === "draft") about.push(el("p", { class: "sub" }, "The shipped model, as the app and site score drafts: each champion's strength in its role plus every pair of allies and every matchup, each pulled towards what the two champions' strengths predict and weighted as the daily eval tuned them. " +
     "The range on a win chance covers the champion ratings only."));
   else if (m.pairs) about.push(el("p", { class: "sub" }, `Pair terms: one learnt number for each pair of allies and each matchup seen in at least ${num(m.pairs.min_games)} games (rarer pairs count as average), plus the team's mix of magic and physical damage. ` +
@@ -487,25 +490,27 @@ function draftView(body) {
   if (m.cc) {
     const cm = m.cc.C.meta, g = x => `${x.mean >= 0 ? "+" : "−"}${Math.abs(1000 * x.mean).toFixed(2)} ± ${(1000 * x.half).toFixed(2)}`;
     about.push(el("p", { class: "sub", title: cm.what }, `Champion-into-comp terms on top: each champion's own lean into the enemy team's and its allies' ${m.cc.C.traits.join(", ")}, beyond the matchups and duos. ` +
-      `${cm.clear} of ${num(cm.tests)} leans are clear; with them the model predicted newer games better in ${cm.better} of 5 rounds, on ${num(cm.fit_games)} games, before looking at the games kept back for the final test. Only clear leans are named as reasons.` +
+      "Only leans that are clear on the numbers are named as reasons." +
       ((m.cc.C.groups || []).length ? ` Kit groups (${m.cc.C.groups.map(g => g.words).join(", ")}) set each member's starting guess, which its own games then move; a group's lean is named "like other ..." and is not yet confirmed on fresh games.` : ""),
-      el("span", { class: "muted", title: `Log loss change per game in milli-nats (negative is better), ${cm.snapshot}` }, ` (${g(cm.folds)})`)));
+    ));
+    checks.push(`Champion-into-comp: ${cm.clear} of ${num(cm.tests)} leans are clear; with them the model predicted newer games better in ${cm.better} of 5 rounds, on ${num(cm.fit_games)} games, before looking at the games kept back for the final test; log loss change per game ${g(cm.folds)} milli-nats (negative is better), ${cm.snapshot}.`);
   }
   if (DRAFT.lane) {
     const lm = DRAFT.lane.L.meta, dev = (lm.dev || []).find(x => x.outcome === "lanediff14");
-    about.push(el("p", { class: "sub" }, `Lane column: early-game model ${lm.name !== "candidate" ? lm.name + " " : ""}on ${num(lm.training_games)} games to ${lm.newest_game}.` +
+    checks.push(`Lane model: ${lm.name} on ${num(lm.training_games)} games to ${lm.newest_game}.`);
+    about.push(el("p", { class: "sub" }, `Lane column: an early-game model on ${num(lm.training_games)} games to ${lm.newest_game}.` +
       (dev ? ` It predicts the gold lead at 14 ${dev.removed_pct.toFixed(0)}% better than champion averages alone, so matchups nudge the numbers rather than decide them.` : "")));
   }
-  if (dev.accuracy != null) about.push(el("p", { class: "sub" }, `Accuracy above: this page's model, refitted on older games and scored on the ${num(dev.games)} played games just before the final test cut (the 10% of games before the newest 15%). ` +
-    "The Models tab's headline is a different reading: the best of the daily eval's models on the final test games, so the two numbers differ."));
+  if (dev.accuracy != null) checks.push(`Accuracy: this page's model, refitted on older games and scored on the ${num(dev.games)} played games just before the final test cut (the 10% of games before the newest 15%).`);
   const from = [["draft", "draft model"], ["comp", "comp terms"], ["lane", "lane model"]].filter(([k]) => DRAFT.from[k]).map(([k, label]) => `${label} ${MODEL_DIRS[DRAFT.from[k]]}`);
-  about.push(el("p", { class: "sub" }, `Files: ${from.join(", ")}.`));
+  checks.push(`Files: ${from.join(", ")}.`);
+  if (meta.name) checks.unshift(`Draft model: ${meta.name}.`);
   // The crawl's scope (docs/learned.md, docs/data.md): ranked solo, Platinum IV and up, nearly
   // all EUW
-  sec.append(el("details", { class: "about" }, el("summary", { class: "sub" }, [meta.name, "ranked solo, Platinum IV and up, mostly EUW",
+  sec.append(el("details", { class: "about" }, el("summary", { class: "sub" }, ["ranked solo, Platinum IV and up, mostly EUW",
     meta.training_games != null ? `${num(meta.training_games)} games to ${meta.newest_game}` : null,
     dev.accuracy != null ? `picks the winner in ${pct(dev.accuracy)} of ${num(dev.games)} recent games it wasn't fitted on (a coin: 50%; not the Models tab's test reading)` : null,
-    bad.length || !(DRAFT.check || ccCheck || DRAFT.laneCheck) ? null : "page matches the exported files"].filter(Boolean).join(" · ")), ...about));
+    bad.length || !(DRAFT.check || ccCheck || DRAFT.laneCheck) ? null : "page matches the model files (a software check, details under Debug)"].filter(Boolean).join(" · ")), ...about));
 
   const w = m.win(d), none = !Object.keys(d.blue).length && !Object.keys(d.red).length;
   sec.append(el("div", { class: "winbar", role: "img", "aria-label": `Blue ${pct(w.p)}, ${none ? "no picks yet" : `95% range ${pct(w.lo)} to ${pct(w.hi)}`}` },
@@ -560,7 +565,7 @@ function draftView(body) {
     bans.append(input, hint);
   }
   sec.append(bans);
-  sec.append(draftDebug(m, d, name));
+  sec.append(draftDebug(m, d, name, checks));
 }
 
 // Data Dragon's tags (Tank, Assassin, ...) and attack/magic ratings per champion id, cached
@@ -664,9 +669,9 @@ function fillMenu(m, d) {
 }
 
 // Blue's logit, slot by slot, so a number can be traced
-function draftDebug(m, d, name) {
+function draftDebug(m, d, name, checks = []) {
   const x = m.explain(m.teamsOf(d));
-  const box = el("details", { class: "debug" }, el("summary", {}, "Debug: how the win chance is built"));
+  const box = el("details", { class: "debug" }, el("summary", {}, "Debug: how the win chance is built, model files and checks"));
   const roles = DRAFT_ROLES.map(r => r[1]);
   table(box, "draft-debug", [
     { key: "side", label: "Side" }, { key: "role", label: "Role" }, { key: "champ", label: "Champion" },
@@ -681,6 +686,7 @@ function draftDebug(m, d, name) {
     el("li", {}, `Champion-into-comp terms: ${m.cc ? (x.champcomp >= 0 ? "+" : "") + x.champcomp.toFixed(4) : "none loaded (draft-comp.json)"}.`),
     el("li", {}, `Logit ${x.logit.toFixed(4)}${x.temp !== 1 ? `, times the calibration temperature ${x.temp} = ${(x.temp * x.logit).toFixed(4)}` : ""}, so blue ${pct(x.p.p)} (range ${pct(x.p.lo)} to ${pct(x.p.hi)}).`),
     el("li", {}, `Sides swapped: blue would have ${pct(swapped)}; the two add up to ${pct(x.p.p + swapped)} (exactly 100% only without a side term).`)));
+  if (checks.length) box.append(el("p", { class: "sub" }, el("b", {}, "Model files and checks")), el("ul", { class: "readings" }, ...checks.map(t => el("li", {}, t))));
   return box;
 }
 
@@ -765,19 +771,25 @@ function slotPicker(m, d, side, role) {
     const match = x => Math.min(...[x.c.name, x.c.alias].map(champKey).map(k => k === s ? 0 : k.startsWith(s) ? 1 : k.includes(s) ? 2 : 3));
     const hits = s ? rows.map(x => ({ x, k: match(x) })).filter(h => h.k < 3).sort((a, b) => a.k - b.k || by(a.x, b.x)).map(h => h.x)
       : rows.filter(x => x.share >= PICK_MIN_SHARE || x.champion === cur).sort(by);
+    // The top two's 95% ranges overlapping is said plainly; no rule for a safe pick
+    const range = sort === "best" ? x => [x.lo, x.hi] : sort === "lane" ? x => [x.lane.lo[G], x.lane.hi[G]] : null;
+    const tie = !s && range && hits.length > 1 && range(hits[1])[1] >= range(hits[0])[0]
+      ? el("p", { class: "sub tie" }, `The top two, ${hits[0].c.name} and ${hits[1].c.name}, have overlapping 95% ${sort === "lane" ? "gold " : ""}ranges: too close to call on these numbers.`) : null;
     const head = (k, label, title) => el("span", { title: title + (sort === k ? ". Sorted by this" + (k === "fit" ? "" : ", by the low end of its range") : "") }, label + (sort === k ? " ▾" : ""));
     list.replaceChildren(el("div", { class: "candhead" + (lm ? " lane" : "") }, el("span", {}, "Champion"), head("best", "Win", `Change to ${side}'s win chance against an average ${roleName}`),
-      lm ? head("lane", "Gold", `Gold lead at 14 minutes ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents (blind)"}, lane model`) : null, head("fit", "Fit", `Win less the champion's own strength as a ${roleName}: what this draft adds (matchups, duos, comp)`), el("span", {}, "Why")));
+      lm ? head("lane", "Gold", `Gold lead at 14 minutes ${opp != null ? "into " + nameOf(opp) : "on average over likely opponents (blind)"}, lane model`) : null, head("fit", "Fit", `Win less the champion's own strength as a ${roleName}: what this draft adds (matchups, duos, comp)`), el("span", { class: "whyh" }, "Why"), el("span", { class: "pickh" })));
+    if (tie) list.prepend(tie);
     for (const x of hits) {
       const open = P.opened === x.champion;
       const w = whyOf(x), fit = fitOf(x);
       const row = el("div", { class: "cand" + (lm ? " lane" : "") + (x.champion === cur ? " cur" : "") + (open ? " open" : ""), role: "listitem" },
-        el("button", { type: "button", class: "link", title: `Pick ${x.c.name}`, onclick: () => pick(x.champion) }, x.c.name),
-        el("button", { type: "button", class: "more", "aria-expanded": String(open), title: "Why: the whole breakdown", onclick: () => { P.opened = open ? null : x.champion; fill(); } },
+        el("button", { type: "button", class: "more", "aria-expanded": String(open), title: open ? "Close the breakdown" : "Why: the whole breakdown", onclick: () => { P.opened = open ? null : x.champion; fill(); } },
+          el("span", { class: "name" }, el("span", { class: "caret", "aria-hidden": "true" }, open ? "▾ " : "▸ "), x.c.name),
           el("b", { class: tone(x.change, 0.0005), title: `${side} wins ${pct(x.win)} (95% range ${pct(x.lo)} to ${pct(x.hi)})` }, signed(100 * x.change)),
           lm ? el("span", { class: "gold " + tone(x.lane.value[G], 50) }, gold(x.lane.value[G])) : null,
           el("span", { class: "fit " + tone(fit, 0.05), title: `${signed(w.total)} less ${signed(w.total - fit)} for ${x.c.name}'s strength as a ${roleName}` }, signed(fit)),
-          el("span", { class: "why" }, ...w.chips.map(c => el("span", c.kind === "rest" ? { class: "chip", title: "Parts too thin or unclear to name one by one: open the row" } : { class: "chip " + tone(c.pp, 0) }, `${c.chip} ${signed(c.pp)}`)))));
+          el("span", { class: "why" }, ...w.chips.map(c => el("span", c.kind === "rest" ? { class: "chip", title: "Parts too thin or unclear to name one by one: open the row" } : { class: "chip " + tone(c.pp, 0) }, `${c.chip} ${signed(c.pp)}`)))),
+        el("button", { type: "button", class: "ghost pick", title: `Put ${x.c.name} in the slot`, onclick: () => pick(x.champion) }, "Pick"));
       list.append(row);
       if (open) list.append(breakdown(x));
     }
@@ -785,7 +797,7 @@ function slotPicker(m, d, side, role) {
   };
   input.addEventListener("input", () => { P.q = input.value; fill(); });
   input.addEventListener("keydown", ev => {
-    if (ev.key === "Enter") { const b = list.querySelector(".cand button.link"); if (b) b.click(); }
+    if (ev.key === "Enter") { const b = list.querySelector(".cand button.pick"); if (b) b.click(); }
     if (ev.key === "Escape") { d.open = null; saveDraft(d); }
   });
   box.append(el("div", { class: "pickhead" }, input, sortNav),
@@ -794,7 +806,7 @@ function slotPicker(m, d, side, role) {
         "it can disagree with Win (lane bullies against late scalers)" : "") +
       `. Fit: Win less the champion's own strength as a ${roleName}, so what this draft adds (matchups, duos, comp)` +
       (sort === "fit" ? ". Sorted by fit: an off-meta pick that suits this draft tops a strong meta one"
-        : `. Sorted surest first: by the low end of the ${sort === "lane" ? "gold" : "win"} range, so a sure small gain can top an unsure bigger one`) + ". Open a row for why."),
+        : `. Sorted surest first: by the low end of the ${sort === "lane" ? "gold" : "win"} range, so a sure small gain can top an unsure bigger one`) + ". Click a row for why; Pick puts it in the slot."),
     list);
   fill();
   setTimeout(() => {
