@@ -5,6 +5,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
+const digest = @import("riot/digest.zig");
 const mastery = @import("riot/mastery.zig");
 const stats = @import("stats.zig");
 
@@ -12,6 +13,11 @@ const Role = core.Role;
 const curvesfile = core.curvesfile;
 const Lane = curvesfile.Lane;
 const max_minutes = curvesfile.max_minutes;
+
+comptime {
+    // lane() reads frames 1..max_minutes and the frame count up to max_minutes + 2
+    std.debug.assert(digest.max_frames >= max_minutes + 2);
+}
 
 const log = std.log.scoped(.curves);
 
@@ -90,8 +96,9 @@ pub fn buildMany(
     defer gpa.free(platform_json);
 
     var q = try db.prepare(
-        \\SELECT m.match_id, m.winning_team, t.data, m.patch, m.game_start, m.platform
+        \\SELECT m.match_id, m.winning_team, t.rowid, d.data, m.patch, m.game_start, m.platform
         \\FROM matches m JOIN timeline.timelines t USING (match_id)
+        \\LEFT JOIN timeline.digests d ON d.source = t.rowid AND d.match_id = m.match_id
         \\WHERE (m.game_start >= ? OR m.patch IN (SELECT value FROM json_each(?)))
         \\  AND m.queue_id = ?
         \\  AND m.platform IN (SELECT value FROM json_each(?))
@@ -108,6 +115,9 @@ pub fn buildMany(
     defer players.deinit();
     var experienced: Experienced = try .load(gpa, db);
     defer experienced.deinit(gpa);
+    var source: digest.Source = try .init(db);
+    defer source.deinit();
+    defer log.info("timelines from digests {d}, in full {d}", .{ source.digests, source.fulls });
 
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -117,7 +127,8 @@ pub fn buildMany(
         const m = q.row(struct {
             match_id: []const u8,
             winner: i64,
-            timeline: []const u8,
+            source: i64,
+            digest: ?[]const u8,
             patch: []const u8,
             start: i64,
             platform: []const u8,
@@ -130,7 +141,7 @@ pub fn buildMany(
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
         const blue_won = m.winner == 100;
-        const t = decode(arena, m.timeline) catch |err| {
+        const t = source.get(arena, m.source, m.digest) catch |err| {
             log.warn("{s}: {t}", .{ m.match_id, err });
             for (takers.items) |i| summaries[i].skipped += 1;
             continue;
@@ -149,10 +160,6 @@ pub fn buildMany(
             summaries[i].games += 1;
         }
     }
-}
-
-fn decode(arena: std.mem.Allocator, blob: []const u8) !timeline.Timeline {
-    return timeline.decode(arena, try store.raw.decompress(arena, blob));
 }
 
 pub const Game = struct {

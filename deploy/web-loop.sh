@@ -271,6 +271,9 @@ while true; do
         games=0
     fi
     interval=$(interval_for "$patch")
+    # Digests of the timelines stored since the last round, for this round's curves and
+    # daily jobs (a game without one is read in full, same output)
+    batch bin/meiolol digest 2>&1 || true
     # A deploy's or start's round leaves a due pass to the next round, so the views file
     # comes first; a new patch or curves format can't wait
     if [[ "$patch" != "$curves_patch" ]] || { (( ! forced )) && (( now - last_curves >= interval )); }; then

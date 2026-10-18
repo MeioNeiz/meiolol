@@ -17,6 +17,7 @@ const eval = @import("eval.zig");
 const analysis = @import("analysis.zig");
 const logreg = @import("logreg.zig");
 const objectives = @import("objectives.zig");
+const digest = @import("riot/digest.zig");
 const Date = @import("date.zig").Date;
 const Role = core.Role;
 const Io = std.Io;
@@ -34,6 +35,11 @@ const minute_ms = 60_000;
 
 /// The baseline's state at win_minute, blue minus red
 const state_feats = objectives.lead ++ objectives.held;
+
+comptime {
+    // stateAt(win_minute) needs win_minute + 2 frames
+    std.debug.assert(digest.max_frames >= win_minute + 2);
+}
 const n_state = state_feats.len;
 
 pub const Game = struct {
@@ -78,7 +84,7 @@ pub fn load(
     }
     var out: Games = .{};
     errdefer out.deinit(gpa);
-    var tg: analysis.TimelineGames = try .initSince(gpa, db, patches, platforms, since_ms);
+    var tg: analysis.TimelineGames = try .initDigests(gpa, db, patches, platforms, since_ms);
     defer tg.deinit();
     while (try tg.next()) |game| {
         const i = by_id.get(stats.matchKey(game.match_id)) orelse continue;

@@ -11,6 +11,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
+const digest = @import("riot/digest.zig");
 const ddragon = @import("ddragon.zig");
 const stats = @import("stats.zig");
 
@@ -426,8 +427,9 @@ pub fn buildEach(
     const floor: ?usize = if (o.min_tier) |t| tierIndex(t) orelse return error.UnknownTier else null;
 
     var q = try db.prepare(
-        \\SELECT m.match_id, m.platform, t.data
+        \\SELECT m.match_id, m.platform, t.rowid, d.data
         \\FROM matches m LEFT JOIN timeline.timelines t USING (match_id)
+        \\LEFT JOIN timeline.digests d ON d.source = t.rowid AND d.match_id = m.match_id
         \\WHERE (? = 0 OR m.patch IN (SELECT value FROM json_each(?)))
         \\  AND m.game_start >= ? AND m.queue_id = ?
         \\  AND m.platform IN (SELECT value FROM json_each(?))
@@ -442,6 +444,9 @@ pub fn buildEach(
         \\FROM participants WHERE match_id = ?
     );
     defer players.deinit();
+    var source: digest.Source = try .init(db);
+    defer source.deinit();
+    defer log.info("timelines from digests {d}, in full {d}", .{ source.digests, source.fulls });
 
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -449,7 +454,7 @@ pub fn buildEach(
     while (try q.step()) {
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
-        const m = q.row(struct { match_id: []const u8, platform: []const u8, data: ?[]const u8 });
+        const m = q.row(struct { match_id: []const u8, platform: []const u8, source: ?i64, digest: ?[]const u8 });
         var in: [max_sets]bool = @splat(false);
         for (sets, 0..) |set, i| {
             for (set) |p| if (std.mem.eql(u8, p, m.platform)) {
@@ -458,8 +463,8 @@ pub fn buildEach(
         }
         if (std.mem.indexOfScalar(bool, in[0..out.len], true) == null) continue;
         var have_picks = false;
-        if (m.data) |data| {
-            if (decode(arena, data)) |t| {
+        if (m.source) |src| {
+            if (source.get(arena, src, m.digest)) |t| {
                 picks(t, d, all[0..t.participants]);
                 have_picks = true;
             } else |err| log.warn("{s}: {t}", .{ m.match_id, err });
@@ -518,10 +523,6 @@ const max_sets = 4;
 /// NULL or out of range: 0, none
 fn idOf(v: ?i64) u32 {
     return std.math.cast(u32, v orelse 0) orelse 0;
-}
-
-fn decode(arena: std.mem.Allocator, blob: []const u8) !timeline.Timeline {
-    return timeline.decode(arena, try store.raw.decompress(arena, blob));
 }
 
 fn tierIndex(tier: []const u8) ?usize {

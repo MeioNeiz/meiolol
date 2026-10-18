@@ -125,6 +125,15 @@ pub const schema =
     \\    data BLOB NOT NULL
     \\);
     \\
+    \\-- What the batch jobs read of each timeline (riot/digest.zig), ~5 KB, made by
+    \\-- `meiolol digest`; source = the timelines rowid it was cut from. Rebuilt, never
+    \\-- backed up.
+    \\CREATE TABLE IF NOT EXISTS timeline.digests (
+    \\    source INTEGER PRIMARY KEY,
+    \\    match_id TEXT NOT NULL,
+    \\    data BLOB NOT NULL
+    \\);
+    \\
 ++ players_ddl ++
     \\
     \\CREATE TABLE IF NOT EXISTS ladder_pages (

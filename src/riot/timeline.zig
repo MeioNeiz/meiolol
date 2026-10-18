@@ -12,7 +12,9 @@
 //!     ints as z, `assists` as u8 count + ids, other strings as u8 index into `names`
 //!     or 255 + varint length + bytes (values Riot adds later survive)
 //! Participant id = slot + 1 in the match summary; 0 = none (minion, turret, monster).
-//! Append to `Stat`, `Event.Kind` and `names` only; any other change bumps version.
+//! Version 2 (encodeStats, for digests): as 1 with a varint `Stat` bit mask in place of
+//! s, and only those stats per participant. Append to `Stat`, `Event.Kind` and `names`
+//! only; any other change bumps version.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -35,6 +37,7 @@ pub const Stat = enum {
     cc_dealt_ms,
 };
 pub const stat_count = @typeInfo(Stat).@"enum".field_names.len;
+pub const StatSet = std.EnumSet(Stat);
 
 pub const Frame = struct {
     t_ms: i64,
@@ -333,17 +336,28 @@ fn eventData(e: JsonEvent) ?Event.Data {
 
 /// Uncompressed blob (caller frees)
 pub fn encode(gpa: Allocator, t: Timeline) ![]u8 {
+    return encodeAs(gpa, t, .full, false);
+}
+
+/// Version 2: only `stats` per participant (the rest decode as 0)
+pub fn encodeStats(gpa: Allocator, t: Timeline, stats: StatSet) ![]u8 {
+    return encodeAs(gpa, t, stats, true);
+}
+
+fn encodeAs(gpa: Allocator, t: Timeline, stats: StatSet, masked: bool) ![]u8 {
     var w: Writer = .{ .gpa = gpa };
     errdefer w.out.deinit(gpa);
-    try w.byte(version);
+    try w.byte(if (masked) 2 else version);
     try w.byte(t.participants);
-    try w.byte(stat_count);
+    if (masked) try w.varint(stats.bits.mask) else try w.byte(stat_count);
     try w.varint(t.frames.len);
     var prev: Frame = .{ .t_ms = 0 };
     for (t.frames) |f| {
         try w.z(f.t_ms - prev.t_ms);
         for (f.stats[0..t.participants], prev.stats[0..t.participants]) |now, before| {
-            for (now, before) |v, b| try w.z(@as(i64, v) - b);
+            for (now, before, std.enums.values(Stat)) |v, b, s| {
+                if (stats.contains(s)) try w.z(@as(i64, v) - b);
+            }
         }
         prev = f;
     }
@@ -364,9 +378,22 @@ pub fn encode(gpa: Allocator, t: Timeline) ![]u8 {
 
 pub fn decode(arena: Allocator, bytes: []const u8) !Timeline {
     var r: Reader = .{ .bytes = bytes };
-    if (try r.byte() != version) return error.UnknownTimelineVersion;
+    const v = try r.byte();
+    if (v != version and v != 2) return error.UnknownTimelineVersion;
     const n = try r.byte();
-    const stats = try r.byte();
+    // Stat ids present, in order; ids from a newer build (>= stat_count) are skipped
+    var ids: [256]u8 = undefined;
+    var stats: usize = 0;
+    if (v == version) {
+        stats = try r.byte();
+        for (0..stats) |i| ids[i] = @intCast(i);
+    } else {
+        const mask = try r.varint();
+        for (0..64) |i| if (mask >> @intCast(i) & 1 == 1) {
+            ids[stats] = @intCast(i);
+            stats += 1;
+        };
+    }
     if (n == 0 or n > max_participants) return error.BadTimeline;
     const frames = try arena.alloc(Frame, try r.count());
     var prev: Frame = .{ .t_ms = 0 };
@@ -374,7 +401,7 @@ pub fn decode(arena: Allocator, bytes: []const u8) !Timeline {
         f.* = .{ .t_ms = prev.t_ms + try r.z() };
         for (f.stats[0..n], prev.stats[0..n]) |*now, before| {
             // Blobs from a newer build may carry more stats: skip them
-            for (0..stats) |s| {
+            for (ids[0..stats]) |s| {
                 const d = try r.z();
                 if (s >= stat_count) continue;
                 now[s] = std.math.cast(i32, before[s] + d) orelse return error.BadTimeline;

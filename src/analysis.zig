@@ -7,6 +7,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const timeline = @import("riot/timeline.zig");
+const digest = @import("riot/digest.zig");
 const stats = @import("stats.zig");
 const eval = @import("eval.zig");
 const endpoints = @import("riot/endpoints.zig");
@@ -94,6 +95,8 @@ pub const TimelineGames = struct {
     q: store.Stmt,
     players: store.Stmt,
     scratch: std.heap.ArenaAllocator,
+    /// Digests, for passes that read only what they keep (riot/digest.zig)
+    source: ?digest.Source = null,
 
     /// Valid until the next call to next
     pub const Game = struct { match_id: []const u8, patch: []const u8, t: timeline.Timeline };
@@ -115,20 +118,53 @@ pub const TimelineGames = struct {
         platforms: []const []const u8,
         since_ms: i64,
     ) !TimelineGames {
+        return initWith(gpa, db, patches, platforms, since_ms, false);
+    }
+
+    /// As initSince, each game's timeline as its digest gives it (riot/digest.zig cut):
+    /// for a pass that reads nothing a digest leaves out
+    pub fn initDigests(
+        gpa: std.mem.Allocator,
+        db: store.Db,
+        patches: []const []const u8,
+        platforms: []const []const u8,
+        since_ms: i64,
+    ) !TimelineGames {
+        return initWith(gpa, db, patches, platforms, since_ms, true);
+    }
+
+    fn initWith(
+        gpa: std.mem.Allocator,
+        db: store.Db,
+        patches: []const []const u8,
+        platforms: []const []const u8,
+        since_ms: i64,
+        digests: bool,
+    ) !TimelineGames {
         const patch_json = try std.json.Stringify.valueAlloc(gpa, patches, .{});
         errdefer gpa.free(patch_json);
         const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
         errdefer gpa.free(platform_json);
-        var q = try db.prepare(
-            \\SELECT m.match_id, t.data, m.patch
-            \\FROM matches m JOIN timeline.timelines t USING (match_id)
+        const where =
             \\WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
             \\  AND m.platform IN (SELECT value FROM json_each(?))
             \\  AND m.remake = 0 AND m.winning_team IS NOT NULL AND m.game_start >= ?
-        );
+        ;
+        var q = try db.prepare(if (digests)
+            \\SELECT m.match_id, t.rowid, m.patch, d.data
+            \\FROM matches m JOIN timeline.timelines t USING (match_id)
+            \\LEFT JOIN timeline.digests d ON d.source = t.rowid AND d.match_id = m.match_id
+            \\
+        ++ where
+        else
+            \\SELECT m.match_id, t.data, m.patch
+            \\FROM matches m JOIN timeline.timelines t USING (match_id)
+            \\
+        ++ where);
         errdefer q.deinit();
         try q.bind(.{ patch_json, stats.ranked_solo, platform_json, since_ms });
-        const players = try db.prepare("SELECT slot, team_id, position FROM participants WHERE match_id = ?");
+        var players = try db.prepare("SELECT slot, team_id, position FROM participants WHERE match_id = ?");
+        errdefer players.deinit();
         return .{
             .gpa = gpa,
             .patch_json = patch_json,
@@ -136,12 +172,14 @@ pub const TimelineGames = struct {
             .q = q,
             .players = players,
             .scratch = .init(gpa),
+            .source = if (digests) try .init(db) else null,
         };
     }
 
     pub fn deinit(s: *TimelineGames) void {
         s.q.deinit();
         s.players.deinit();
+        if (s.source) |*src| src.deinit();
         s.scratch.deinit();
         s.gpa.free(s.patch_json);
         s.gpa.free(s.platform_json);
@@ -151,8 +189,10 @@ pub const TimelineGames = struct {
         while (try s.q.step()) {
             _ = s.scratch.reset(.retain_capacity);
             const scratch = s.scratch.allocator();
-            const raw = store.raw.decompress(scratch, s.q.bytes(1)) catch continue;
-            const t = timeline.decode(scratch, raw) catch continue;
+            const t = if (s.source) |*src|
+                src.get(scratch, s.q.int(1), if (s.q.isNull(3)) null else s.q.bytes(3)) catch continue
+            else
+                timeline.decode(scratch, store.raw.decompress(scratch, s.q.bytes(1)) catch continue) catch continue;
             return .{ .match_id = s.q.bytes(0), .patch = s.q.bytes(2), .t = t };
         }
         return null;

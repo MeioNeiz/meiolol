@@ -50,6 +50,9 @@ under the write lock they starve the crawler on a slow host.
   newest row is, across every segment, as the crawler does live. `draft_backfill`
   is not backed up: a restore from backups taken before `meiolol draft-backfill`
   finished lacks the draft rows of matches it had not reached
+- `timeline.digests` (18 Oct) is not backed up: a restore leaves it empty and `meiolol
+  digest` (the web loop's, each round) remakes it from the timelines; until then readers
+  take the full timelines, with the same outputs
 - `mastery/NNNNNN.db` (18 Oct): mastery rows fetched since the last one, by fetched_at
   up to 300 s before the backup (table mastery_range: after_s, to_s, full, base_at), and
   weekly (and on `--full`) a base: the whole table, after_s 0. Restore loads the newest
@@ -168,6 +171,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | raw.raw_docs (riot_match) | summaries of their games deleted (they name all ten players) |
 | raw.timeline_docs | raw timelines of their games deleted (they hold PUUIDs) |
 | timeline.timelines | nothing: compact timelines hold slots 1-10 only |
+| timeline.digests | nothing: cut from the compact timelines, slots 1-10 only (test in src/digests.zig) |
 | drafts | nothing: no PUUID, Riot ID or match id, only platform, patch, day, median rank, result, length in minutes, champions, roles and bans, so no row can be found by player (see below) |
 | forgotten | PUUID and date added: the suppression list |
 | Daily Draft (daily/used.txt, puzzles) | nothing: match ids and anonymous puzzles only |

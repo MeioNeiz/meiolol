@@ -90,6 +90,12 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   with position, items, skills, wards, buildings, plates, monsters, transforms). ~8.6
   KB vs ~60 KB raw gz, lossless for those fields; `timeline.decode` reads it.
   Participant id = slot + 1. Kept forever unless `--keep-days`
+  `digests` (18 Oct): per timeline the part curves, lean, lane-model and builds read
+  (src/riot/digest.zig: 27 frames of gold, XP and CS, kills, items, skills, objectives;
+  ~5.0 KB uncompressed, decoded 11x faster than the full blob), keyed by the timelines
+  rowid. Made by `meiolol digest` (src/digests.zig) each web loop round, not by the
+  crawler; a game without a current digest is read in full and cut, so outputs never
+  depend on it. Not backed up: rebuilt
 - `meiolol.db`: crawl state (players, ladder_pages, match_queue and timeline_queue:
   pending, missing and failed only; stored ones leave) and tables kept forever (or
   `--keep-days` after game start: a rolling window): matches, participants (incl. final items, full rune page, and

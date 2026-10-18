@@ -15,7 +15,7 @@ const team2 = @import("team2");
 const stats = @import("stats.zig");
 const eval = @import("eval.zig");
 const analysis = @import("analysis.zig");
-const timeline = @import("riot/timeline.zig");
+const digest = @import("riot/digest.zig");
 const protocol = @import("lab/protocol.zig");
 const harness = @import("lab/harness.zig");
 const lf = @import("lanefile.zig");
@@ -148,15 +148,31 @@ fn load(gpa: std.mem.Allocator, arena: std.mem.Allocator, db: store.Db, ids: []c
     var tl_arena: std.heap.ArenaAllocator = .init(gpa);
     defer tl_arena.deinit();
     {
-        var q = try db.prepare("SELECT match_id, data FROM timeline.timelines");
-        defer q.deinit();
-        try q.bind(.{});
-        while (try q.step()) {
-            const gi = index.get(stats.matchKey(q.bytes(0))) orelse continue;
+        // The played games' timelines, then read in rowid order: their digests' order
+        const Stored = struct { source: i64, game: u32, match_id: []const u8 };
+        var stored: std.ArrayList(Stored) = .empty;
+        defer stored.deinit(gpa);
+        {
+            var q = try db.prepare("SELECT match_id, rowid FROM timeline.timelines");
+            defer q.deinit();
+            try q.bind(.{});
+            while (try q.step()) {
+                const gi = index.get(stats.matchKey(q.bytes(0))) orelse continue;
+                try stored.append(gpa, .{ .source = q.int(1), .game = gi, .match_id = try arena.dupe(u8, q.bytes(0)) });
+            }
+        }
+        std.mem.sortUnstable(Stored, stored.items, {}, struct {
+            fn f(_: void, a: Stored, b: Stored) bool {
+                return a.source < b.source;
+            }
+        }.f);
+        var source: digest.Source = try .init(db);
+        defer source.deinit();
+        for (stored.items) |st| {
+            const gi = st.game;
             _ = tl_arena.reset(.retain_capacity);
             const ta = tl_arena.allocator();
-            const raw = try store.raw.decompress(ta, q.bytes(1));
-            const t = timeline.decode(ta, raw) catch continue;
+            const t = source.lookup(ta, st.source, st.match_id) catch continue;
             if (!protocol.reached15Timeline(t)) continue;
             reached[gi] = true;
             var deaths: [10]f32 = @splat(0);

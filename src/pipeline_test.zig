@@ -12,6 +12,7 @@ const builds = @import("builds.zig");
 const lean = @import("lean.zig");
 const draftmodel = @import("draftmodel.zig");
 const lanemodel = @import("lanemodel.zig");
+const digests = @import("digests.zig");
 const ddragon = @import("ddragon.zig");
 const site = @import("site/root.zig");
 const admin = @import("admin.zig");
@@ -610,6 +611,66 @@ test "fixture games to the Draft tester's draft and lane models" {
     try testing.expectEqual(10, lane.pairs.len);
     for (lane.champ) |t| try testing.expectEqual(100, t.n);
     _ = try tmp.dir.readFileAlloc(io, "tester/lane-ref.json", arena, .limited(1 << 20));
+}
+
+test "curves, lean, lane-model and builds: the same files with digests, without, old ones" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const db = try store.schema.memory();
+    defer db.close();
+    try fillGames(arena, db, 150, true);
+    try db.exec("UPDATE participants SET tier = 'PLATINUM'");
+
+    const want = try timelineOutputs(arena, io, db, tmp, "none");
+    try testing.expectEqual(0, try db.scalar("SELECT count(*) FROM timeline.digests", .{}));
+    const s = try digests.catchUp(gpa, io, db, .{});
+    try testing.expectEqual(100, s.made);
+    const with = try timelineOutputs(arena, io, db, tmp, "all");
+    // Every other one another version: those games' readers take the full timeline
+    try db.exec("UPDATE timeline.digests SET data = x'00' || substr(data, 2) WHERE source % 2 = 0");
+    const mixed = try timelineOutputs(arena, io, db, tmp, "mixed");
+    for (want, with, mixed) |a, b, c| {
+        try testing.expect(a.len > 0);
+        try testing.expectEqualStrings(a, b);
+        try testing.expectEqualStrings(a, c);
+    }
+}
+
+/// curves.bin, builds.json, lean.tsv and the lane model's two files
+fn timelineOutputs(arena: std.mem.Allocator, io: std.Io, db: store.Db, tmp: std.testing.TmpDir, tag: []const u8) ![5][]const u8 {
+    const gpa = testing.allocator;
+    const both: []const []const u8 = &.{ "EUW1", "NA1" };
+    var out: [5][]const u8 = undefined;
+
+    var cv = try curves.build(gpa, db, &.{patch}, 0, both, &.{});
+    defer cv.builder.deinit();
+    var curves_bytes: std.Io.Writer.Allocating = .init(arena);
+    try cv.builder.write(&curves_bytes.writer, patch, 1);
+    out[0] = curves_bytes.written();
+
+    var bd = try builds.build(gpa, db, &build_data, .{ .patches = &.{patch}, .platforms = both });
+    defer bd.deinit();
+    out[1] = try std.json.Stringify.valueAlloc(arena, try bd.file(arena, &build_data, patch, "PLATINUM", 10), .{});
+
+    var ln = try lean.load(gpa, db, &.{patch}, both, 0, std.math.maxInt(i64));
+    defer ln.deinit(gpa);
+    const lf = try lean.fit(gpa, ln.list.items, ln.champs.ids.items.len);
+    defer lf.deinit(gpa);
+    var lean_bytes: std.Io.Writer.Allocating = .init(arena);
+    try lean.write(&lean_bytes.writer, &lf, ln.champs.ids.items, ln.list.items, "every region");
+    out[2] = lean_bytes.written();
+
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, tag });
+    var log: std.Io.Writer.Allocating = .init(arena);
+    try lanemodel.run(gpa, io, db, dir, &log.writer);
+    out[3] = try tmp.dir.readFileAlloc(io, try arena.print("{s}/lane-model.json", .{tag}), arena, .limited(16 << 20));
+    out[4] = try tmp.dir.readFileAlloc(io, try arena.print("{s}/lane-ref.json", .{tag}), arena, .limited(1 << 20));
+    return out;
 }
 
 test "fixture games to builds: EUW and every region from one pass, game counts" {

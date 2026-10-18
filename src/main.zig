@@ -28,6 +28,7 @@ pub const carry = @import("carry.zig");
 pub const lean = @import("lean.zig");
 pub const draftmodel = @import("draftmodel.zig");
 pub const lanemodel = @import("lanemodel.zig");
+pub const digests = @import("digests.zig");
 const analysis = @import("analysis.zig");
 const test_looks = @import("lab/looks.zig");
 pub const archive = @import("archive.zig");
@@ -358,6 +359,10 @@ const usage =
     \\              --chunk N        matches per transaction (default 200)
     \\              --pause-ms MS    between chunks, so the crawler gets the lock
     \\                               (default 1000)
+    \\  digest      timeline digests (what curves, lean, lane-model and builds read) for
+    \\              timelines stored since the last run; all again on a new version
+    \\              --full           remake every digest
+    \\              --pause-ms MS    between chunks of 2,000 (default 0)
     \\  backup      consistent copy of tables and compact timelines (docs/data-safety.md)
     \\              --out DIR        default $MEIOLOL_BACKUPS or ./backups
     \\              --keep-daily N   state snapshots kept (default 7)
@@ -440,6 +445,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "rekey", cmdRekey },
     .{ "champions", cmdChampions },
     .{ "draft-backfill", cmdDraftBackfill },
+    .{ "digest", cmdDigest },
     .{ "backup", cmdBackup },
     .{ "restore", cmdRestore },
     .{ "forget", cmdForget },
@@ -1950,6 +1956,33 @@ fn cmdChampions(c: *Cmd) !u8 {
     const db = try c.open();
     defer db.close();
     std.log.info("{d} champions", .{try ddragon.refresh(c.init.gpa, c.init.io, db)});
+    return 0;
+}
+
+fn cmdDigest(c: *Cmd) !u8 {
+    var o: digests.Options = .{};
+    while (c.next()) |_| {
+        if (c.is("--full")) {
+            o.full = true;
+        } else if (c.is("--pause-ms")) {
+            o.pause_ms = try c.int(u32);
+        } else return error.Usage;
+    }
+    const io = c.init.io;
+    const db = try c.open();
+    defer db.close();
+    const start = std.Io.Clock.awake.now(io).toMilliseconds();
+    const s = try digests.catchUp(c.init.gpa, io, db, o);
+    const n: f64 = @floatFromInt(@max(s.made, 1));
+    std.log.info("{d} digests made ({d} timelines did not decode) in {d} s: {d:.0} B each against {d:.0} B gzipped; decode {d:.0} us against {d:.0} us", .{
+        s.made,
+        s.failed,
+        @divTrunc(std.Io.Clock.awake.now(io).toMilliseconds() - start, 1000),
+        @as(f64, @floatFromInt(s.bytes)) / n,
+        @as(f64, @floatFromInt(s.full_bytes)) / n,
+        @as(f64, @floatFromInt(s.digest_ns)) / n / 1000,
+        @as(f64, @floatFromInt(s.full_ns)) / n / 1000,
+    });
     return 0;
 }
 
