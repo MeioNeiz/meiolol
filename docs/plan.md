@@ -43,8 +43,10 @@ persona-walk-2026-10-17.md (R, J ids), docs/review/next-steps-2026-10-17.md (A/B
 8. Done 18 Oct (b966bd7): Your games remembers the last five Riot IDs on the device, "N
    new games since your last visit", per-game links (#id=...&game=<start_ms>), Copy link.
    Next, small: mark the new games in the film strip (CSS)
-9. Plain one-line verdicts where the answer is one fact (B6, R57): matchup headline from
-   the curve, the turning minute's sentence first in the review
+9. Done 18 Oct (b1ce15b): matchup pages say above the gold chart who is ahead from
+   when and by how much (only past 2 SE; a 200 gold floor in progress), then how often
+   the side ahead at 14 wins; the review opens with the turning minute's sentence (B6,
+   R57)
 10. Pool first in the picker (B2), then bans from the pool's hard lanes (B3, Q3); public
     form waits on J2. Patch day (B4, z choice below), example review per role (B7)
 11. Admin polish (fix3 leftovers R48-R50, R60, R61; plans in docs/review/
