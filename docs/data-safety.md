@@ -35,8 +35,19 @@ under the write lock they starve the crawler on a slow host.
   segment (by matches rowid), and compact timelines likewise (timelines rowid), and
   draft rows (drafts id; the first segment after an older one copies them all), and
   rank_history rows by day (whole days up to yesterday: a day's rows change until it
-  ends; the first segment after an older one copies them all). Stored
-  rows never change, so segments are append-only and never rotated. `draft_backfill`
+  ends; the first segment after an older one copies them all), and participant_gold:
+  gold10/14/15 of the participants of its timelines' matches. Those columns are the only
+  late update of a backed-up row (writer.storeTimeline sets them when the timeline comes,
+  minutes to days after the match's segment, in the same transaction as the timeline);
+  restore applies each file's after its participants. Tier and division are set when the
+  match is stored; a re-stored match or re-extracted timeline takes a new rowid and goes
+  in the next segment; forget is re-applied on restore; `rebuild`, `rekey` and
+  crawl.rebuildGold rewrite rows, so `--full` after them. Before 18 Oct (segments up to
+  000009) a restore lost the gold of timelines that came after their match's segment;
+  the first segment with the table carries every timeline's. Segments are append-only
+  and never rotated. 24 months on, `sweepAged` (each backup, each mirror tend) blanks the
+  PUUIDs of matches over 730 days old and deletes the rank history of players whose
+  newest row is, across every segment, as the crawler does live. `draft_backfill`
   is not backed up: a restore from backups taken before `meiolol draft-backfill`
   finished lacks the draft rows of matches it had not reached
 - `mastery/NNNNNN.db` (18 Oct): mastery rows fetched since the last one, by fetched_at

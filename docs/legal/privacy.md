@@ -11,10 +11,11 @@ privacy@meio.lol (Cloudflare Email Routing to Jacob's inbox, 17 Oct; the only ad
 published: no personal email on the site).
 
 - **Retention of crawled match rows.** 24 months (Jacob, 2026-10-13): the crawler blanks
-  PUUIDs 24 months after the game, as Counterwatch does. Not built yet, needed before
-  going live: deleting archive files at 24 months (gpu-box), and the same sweep over
-  backup segments, which are append-only and never rotated, so their PUUIDs and rank
-  history outlive 24 months today
+  PUUIDs 24 months after the game, as Counterwatch does. Backup segments get the same
+  sweep (18 Oct, backup.sweepAged on the box and both mirrors: PUUIDs of games over 24
+  months old, rank history whose newest row is), and the gpu-box's mastery history
+  files go 24 months after their window. Check before going live: the raw archive's
+  24-month step (meiolol-lab archive-age) covers deleting its files
 - **30-day refresh.** Riot recommends refreshing stored players every 30 days and
   dropping accounts it has erased. Implemented by meiolol-de: ladders refresh daily,
   mastery at least every 30 days, and a 404 for a PUUID deletes the player at once

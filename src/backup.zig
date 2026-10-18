@@ -10,9 +10,12 @@
 //!   hold it, a mirror only what comes before its newest base (rotateMastery). Out of
 //!   state: a full copy a day was 3.4 GB at 3.1M rows (17 Oct)
 //! - segments/NNNNNN.db: matches, participants and bans of matches stored since the last
-//!   segment, and compact timelines and draft rows (store/draft.zig) likewise. These
-//!   rows never change once stored, so segments are append-only and kept; the `segment`
-//!   table holds each one's rowid range.
+//!   segment, and compact timelines and draft rows (store/draft.zig) likewise, and the
+//!   gold columns of their timelines' participants (participant_gold: the crawler sets
+//!   them when the timeline comes, after the match's segment). Re-stored matches and
+//!   timelines take new rowids, so segments are append-only and kept; the `segment`
+//!   table holds each one's rowid range. 24 months on, sweepAged blanks their PUUIDs
+//!   and rank history as the crawler does live.
 //!   `--full` writes one segment with everything and drops the older ones (after a
 //!   rebuild or rekey, which rewrite stored rows)
 //! Raw JSON is not backed up: raw.db is a 30-day buffer and the tables hold what it gives.
@@ -55,6 +58,8 @@ pub const Summary = struct {
     state: []const u8,
     segment: ?[]const u8,
     mastery: i64,
+    /// Segment rows sweepAged changed
+    aged: i64,
     matches: i64,
     timelines: i64,
     drafts: i64,
@@ -126,6 +131,7 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
         .state = state_path,
         .segment = if (wrote.rows > 0) seg_path else null,
         .mastery = m_wrote.rows,
+        .aged = try sweepAged(arena, io, opts.out_dir, opts.now),
         .matches = wrote.matches,
         .timelines = wrote.timelines,
         .drafts = wrote.drafts,
@@ -222,6 +228,21 @@ fn writeFile(
                     .{ after.timelines_to, to_t },
                 ));
                 w.timelines = db.changes();
+                // In the writer's transaction that stores the timeline, so exact for these
+                // timelines. After a segment without the table: every timeline's
+                const gold_of = if (after.gold) " WHERE match_id IN (SELECT match_id FROM main.timelines)" else try arena.print(
+                    " WHERE match_id IN (SELECT match_id FROM livet.timelines WHERE rowid <= {d})",
+                    .{to_t},
+                );
+                try db.exec(
+                    \\CREATE TABLE participant_gold (match_id TEXT NOT NULL, slot INTEGER NOT NULL,
+                    \\    gold10 INTEGER, gold14 INTEGER, gold15 INTEGER, PRIMARY KEY (match_id, slot));
+                );
+                try db.exec(try arena.printSentinel(
+                    "INSERT INTO participant_gold SELECT match_id, slot, gold10, gold14, gold15 FROM live.participants{s}",
+                    .{gold_of},
+                    0,
+                ));
                 if (drafts) {
                     try copyRows(arena, db, "live", "drafts", try arena.print(
                         " WHERE id > {d} AND id <= {d}",
@@ -321,6 +342,8 @@ const Range = struct {
     history_to: i64 = 0,
     mastery_to: i64 = 0,
     mastery_base_at: i64 = 0,
+    /// The segment holds participant_gold
+    gold: bool = false,
 };
 
 const MasteryRange = struct { after_s: i64, to_s: i64, made_at: i64, full: bool, base_at: i64 };
@@ -377,16 +400,22 @@ fn masteryKeepDays(arena: std.mem.Allocator, io: Io, dir: []const u8) !i64 {
 fn readRange(arena: std.mem.Allocator, path: []const u8) !Range {
     const db = try Db.open(try arena.dupeSentinel(u8, path, 0));
     defer db.close();
-    // Segments from before drafts or rank_history lack those columns: the next one
-    // copies them all
+    // Segments from before drafts, rank_history or participant_gold lack them: the next
+    // one copies them all
     var s = try db.prepare(try arena.printSentinel(
-        "SELECT matches_to, timelines_to, {s}, {s}, 0, 0 FROM segment",
+        "SELECT matches_to, timelines_to, {s}, {s} FROM segment",
         .{ try segmentColumn(db, "drafts_to"), try segmentColumn(db, "history_to") },
         0,
     ));
     defer s.deinit();
     if (!try s.step()) return error.BadSegment;
-    return s.row(Range);
+    return .{
+        .matches_to = s.int(0),
+        .timelines_to = s.int(1),
+        .drafts_to = s.int(2),
+        .history_to = s.int(3),
+        .gold = (try db.scalar("SELECT count(*) FROM sqlite_master WHERE name = 'participant_gold'", .{}) orelse 0) > 0,
+    };
 }
 
 fn isFull(arena: std.mem.Allocator, path: []const u8) !bool {
@@ -519,7 +548,7 @@ fn load(arena: std.mem.Allocator, db: Db, path: []const u8) !void {
     {
         var s = try db.prepare(
             \\SELECT name FROM b.sqlite_master
-            \\WHERE type = 'table' AND name NOT IN ('segment', 'mastery_range')
+            \\WHERE type = 'table' AND name NOT IN ('segment', 'mastery_range', 'participant_gold')
         );
         defer s.deinit();
         while (try s.step()) try tables.append(arena, try arena.dupe(u8, s.bytes(0)));
@@ -549,7 +578,74 @@ fn load(arena: std.mem.Allocator, db: Db, path: []const u8) !void {
             0,
         ));
     }
+    // After this file's participants: the gold its timelines brought, maybe to matches
+    // an earlier segment holds
+    if ((try db.scalar("SELECT count(*) FROM b.sqlite_master WHERE name = 'participant_gold'", .{}) orelse 0) > 0) {
+        try db.exec(
+            \\UPDATE participants SET gold10 = g.gold10, gold14 = g.gold14, gold15 = g.gold15
+            \\FROM b.participant_gold g WHERE participants.match_id = g.match_id AND participants.slot = g.slot
+        );
+    }
     try db.commit();
+}
+
+/// riot/writer.zig's privacy rules, over backup segments: PUUIDs of matches over 730
+/// days old blanked, and the rank history of players whose newest row is that old
+/// deleted (their newest across every segment). Returns rows changed.
+pub fn sweepAged(arena: std.mem.Allocator, io: Io, dir: []const u8, now: i64) !i64 {
+    const seg_dir = try std.fs.path.join(arena, &.{ dir, "segments" });
+    const segs = listSegments(arena, io, seg_dir) catch |err| switch (err) {
+        error.FileNotFound => return 0,
+        else => return err,
+    };
+    const cutoff = now - aged_days * std.time.s_per_day;
+    const cutoff_day = @divFloor(cutoff, std.time.s_per_day);
+    var changed: i64 = 0;
+    var old_history: std.ArrayList([:0]const u8) = .empty;
+    for (segs) |sg| {
+        const path = try arena.printSentinel("{s}/{s}", .{ seg_dir, sg.name }, 0);
+        const db = try Db.open(path);
+        defer db.close();
+        if (try hasTableIn(db, "participants") and try hasTableIn(db, "matches")) {
+            try db.run(
+                \\UPDATE participants SET puuid = NULL WHERE puuid IS NOT NULL AND match_id IN
+                \\    (SELECT match_id FROM matches WHERE game_start < ? * 1000)
+            , .{cutoff});
+            changed += db.changes();
+        }
+        if (try hasTableIn(db, "rank_history") and
+            try db.scalar("SELECT 1 FROM rank_history WHERE day < ? LIMIT 1", .{cutoff_day}) != null)
+            try old_history.append(arena, path);
+    }
+    if (old_history.items.len == 0) return changed;
+    // Keys with a row since the cutoff, in any segment, keep all their rows
+    const recent = try arena.printSentinel("{s}/.sweep-recent.db", .{dir}, 0);
+    Io.Dir.cwd().deleteFile(io, recent) catch |err| if (err != error.FileNotFound) return err;
+    defer Io.Dir.cwd().deleteFile(io, recent) catch {};
+    const db = try Db.open(recent);
+    defer db.close();
+    try db.exec("PRAGMA journal_mode = OFF; CREATE TABLE recent (key INTEGER PRIMARY KEY)");
+    for (segs) |sg| {
+        try db.run("ATTACH DATABASE ? AS s", .{try arena.print("{s}/{s}", .{ seg_dir, sg.name })});
+        defer db.exec("DETACH DATABASE s") catch {};
+        if ((try db.scalar("SELECT count(*) FROM s.sqlite_master WHERE name = 'rank_history'", .{}) orelse 0) == 0) continue;
+        try db.run("INSERT OR IGNORE INTO recent SELECT key FROM s.rank_history WHERE day >= ?", .{cutoff_day});
+    }
+    for (old_history.items) |path| {
+        try db.run("ATTACH DATABASE ? AS s", .{path});
+        defer db.exec("DETACH DATABASE s") catch {};
+        try db.run("DELETE FROM s.rank_history WHERE day < ? AND key NOT IN (SELECT key FROM recent)", .{cutoff_day});
+        changed += db.changes();
+    }
+    return changed;
+}
+
+/// riot/writer.zig blanks PUUIDs of matches this old, and rank history whose newest row
+/// is (the privacy policy's 24 months)
+const aged_days = 730;
+
+fn hasTableIn(db: Db, name: []const u8) !bool {
+    return (try db.scalar("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", .{name}) orelse 0) > 0;
 }
 
 /// Erase `puuid` from every backup file under `dir` (forget --backups)
@@ -629,6 +725,8 @@ pub fn tendMirror(
     const rotated = try rotate(arena, io, state_dir, keep_daily, keep_weekly);
     const m_rotated = try rotateMastery(arena, io, try std.fs.path.join(arena, &.{ dir, "mastery" }), now, try masteryKeepDays(arena, io, dir));
     if (m_rotated > 0) log.info("{s}: {d} old mastery files removed", .{ dir, m_rotated });
+    const aged = try sweepAged(arena, io, dir, now);
+    if (aged > 0) log.info("{s}: {d} segment rows past 24 months blanked or deleted", .{ dir, aged });
     return .{ .new_forgotten = fresh.items.len, .removed = removed, .rotated = rotated };
 }
 
@@ -669,7 +767,7 @@ test "backup then restore round trip, incremental segments, scrub" {
         defer db.close();
         try db.exec(
             \\INSERT INTO players (puuid, source) VALUES ('p1', 'ladder'), ('p2', 'ladder');
-            \\INSERT INTO matches VALUES ('EUW1_1', 'riot', 'EUW1', 420, '16.20', '16.20.1', 1, 1800, 100, 0);
+            \\INSERT INTO matches VALUES ('EUW1_1', 'riot', 'EUW1', 420, '16.20', '16.20.1', 1791590400000, 1800, 100, 0);
             \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, win)
             \\    VALUES ('EUW1_1', 0, 100, 'p1', 1, 1), ('EUW1_1', 1, 200, 'p2', 2, 0);
             \\INSERT INTO bans VALUES ('EUW1_1', 100, 1, 9);
@@ -706,7 +804,7 @@ test "backup then restore round trip, incremental segments, scrub" {
         const db = try store.open(arena, data);
         defer db.close();
         try db.exec(
-            \\INSERT INTO matches VALUES ('EUW1_2', 'riot', 'EUW1', 420, '16.20', '16.20.1', 2, 1700, 200, 0);
+            \\INSERT INTO matches VALUES ('EUW1_2', 'riot', 'EUW1', 420, '16.20', '16.20.1', 1791590400001, 1700, 200, 0);
             \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, win)
             \\    VALUES ('EUW1_2', 0, 100, 'p1', 3, 0);
         );
@@ -888,4 +986,70 @@ test "mastery files: history kept, never a player's newest row lost" {
     try testing.expectEqual(2, try Mirror.count(arena, io, late)); // base 3, then 4
     const r = try restore(arena, io, late, try arena.print("{s}/restored", .{base}), null, t0 + 200 * d);
     try testing.expectEqual(3, r.mastery);
+}
+
+test "late gold reaches a restore; 24 months on, segments lose PUUIDs and old rank history" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const data = try arena.print("{s}/data", .{base});
+    const out = try arena.print("{s}/backups", .{base});
+    try Io.Dir.cwd().createDirPath(io, data);
+    const d = std.time.s_per_day;
+    const today = 20737;
+    const now = today * d;
+    const old_ms = (today - 800) * d * 1000;
+    {
+        const db = try store.open(arena, data);
+        defer db.close();
+        try db.run(
+            \\INSERT INTO matches VALUES ('EUW1_1', 'riot', 'EUW1', 420, '16.20', '16.20.1', ?1, 1800, 100, 0),
+            \\    ('EUW1_OLD', 'riot', 'EUW1', 420, '14.1', '14.1.1', ?2, 1800, 100, 0)
+        , .{ now * 1000 - 3600_000, old_ms });
+        try db.exec(
+            \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, win)
+            \\    VALUES ('EUW1_1', 0, 100, 'p1', 1, 1), ('EUW1_OLD', 0, 100, 'p1', 1, 1);
+        );
+        try db.run("INSERT INTO rank_history VALUES (?1, ?3, 20, 0, 1, 0), (?2, ?3, 20, 0, 1, 0), (?2, ?4, 20, 0, 2, 0)", .{
+            store.schema.puuidKey("gone"), store.schema.puuidKey("kept"), today - 800, today - 2,
+        });
+    }
+    // The match's segment, before its timeline
+    _ = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = now });
+    {
+        const db = try store.open(arena, data);
+        defer db.close();
+        // As writer.storeTimeline: the timeline and its gold in one transaction
+        try db.exec(
+            \\INSERT INTO timeline.timelines VALUES ('EUW1_1', 30, 100, x'01');
+            \\UPDATE participants SET gold10 = 3000, gold14 = 5000, gold15 = 5500 WHERE match_id = 'EUW1_1';
+        );
+    }
+    const second = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = now + d });
+    try testing.expectEqual(1, second.timelines);
+    try testing.expectEqual(0, second.matches);
+
+    // The segments: the old match's PUUID blanked, "gone"'s only rank row deleted, "kept"
+    // (a row in the last 24 months) keeps its old one
+    {
+        const seg = try Db.open(try arena.printSentinel("{s}/segments/000001.db", .{out}, 0));
+        defer seg.close();
+        try testing.expectEqual(@as(?i64, 1), try seg.scalar("SELECT count(*) FROM participants WHERE puuid IS NULL", .{}));
+        try testing.expectEqual(@as(?i64, null), try seg.scalar("SELECT puuid IS NULL FROM participants WHERE match_id = 'EUW1_OLD' AND puuid IS NOT NULL", .{}));
+        try testing.expectEqual(@as(?i64, 2), try seg.scalar("SELECT count(*) FROM rank_history", .{}));
+        try testing.expectEqual(@as(?i64, 0), try seg.scalar("SELECT count(*) FROM rank_history WHERE key = ?", .{store.schema.puuidKey("gone")}));
+    }
+    try testing.expectEqual(0, try sweepAged(arena, io, out, now + d)); // done once
+
+    const restored = try arena.print("{s}/restored", .{base});
+    _ = try restore(arena, io, out, restored, null, now + d);
+    const db = try store.open(arena, restored);
+    defer db.close();
+    try testing.expectEqual(@as(?i64, 5000), try db.scalar("SELECT gold14 FROM participants WHERE match_id = 'EUW1_1'", .{}));
+    try testing.expectEqual(@as(?i64, 3000), try db.scalar("SELECT gold10 FROM participants WHERE match_id = 'EUW1_1'", .{}));
+    try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM participants WHERE puuid = 'p1'", .{}));
 }
