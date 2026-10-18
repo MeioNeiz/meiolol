@@ -102,9 +102,10 @@ What changed from 11 Oct and what to check:
   endpoints (src/lcu/session.zig, me.zig), data kept and for how long (privacy.md)
 - Squads left out: not on the site, and "squads promised but not found" was the first
   mismatch reviewers flagged (A2). Once built, a support ticket or edit can add them
-- Check: privacy.md's 24-month PUUID and archive deletion is "not built yet" (its notes);
-  build it or soften that sentence before pasting. Deletion lists: `meiolol forget
-  --list FILE` exists (docs/data-safety.md)
+- 24-month PUUID blanking is built live (writer prune) and over backup segments on the
+  box and both mirrors (backup.sweepAged, 18 Oct, tested); still check privacy.md's note
+  on the raw archive's step before pasting. Deletion lists: `meiolol forget --list FILE`
+  exists (docs/data-safety.md)
 - Check: the download page doesn't yet say queues or before/after lock-in (A1); the app
   text matches it as is. Update both together after the real champ select run
 - Check: the game count (about 210,000) against the home page on the day you paste

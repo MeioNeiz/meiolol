@@ -1052,4 +1052,21 @@ test "late gold reaches a restore; 24 months on, segments lose PUUIDs and old ra
     try testing.expectEqual(@as(?i64, 5000), try db.scalar("SELECT gold14 FROM participants WHERE match_id = 'EUW1_1'", .{}));
     try testing.expectEqual(@as(?i64, 3000), try db.scalar("SELECT gold10 FROM participants WHERE match_id = 'EUW1_1'", .{}));
     try testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM participants WHERE puuid = 'p1'", .{}));
+
+    // A mirror keeps segments after the box drops them: its own tend ages them out
+    const forgotten = try arena.print("{s}/forgotten.txt", .{base});
+    try Io.Dir.cwd().writeFile(io, .{ .sub_path = forgotten, .data = "" });
+    _ = try tendMirror(arena, io, out, forgotten, 7, 4, now + 727 * d);
+    const seg_path = try arena.printSentinel("{s}/segments/000001.db", .{out}, 0);
+    {
+        const seg = try Db.open(seg_path);
+        defer seg.close();
+        try testing.expectEqual(@as(?i64, 1), try seg.scalar("SELECT count(*) FROM participants WHERE puuid = 'p1'", .{}));
+        try testing.expectEqual(@as(?i64, 2), try seg.scalar("SELECT count(*) FROM rank_history", .{}));
+    }
+    _ = try tendMirror(arena, io, out, forgotten, 7, 4, now + 733 * d);
+    const seg = try Db.open(seg_path);
+    defer seg.close();
+    try testing.expectEqual(@as(?i64, 0), try seg.scalar("SELECT count(*) FROM participants WHERE puuid IS NOT NULL", .{}));
+    try testing.expectEqual(@as(?i64, 0), try seg.scalar("SELECT count(*) FROM rank_history", .{}));
 }
