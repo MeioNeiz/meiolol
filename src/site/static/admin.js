@@ -890,8 +890,15 @@ function restartLabel(t) {
   return `${head}: manual restart or crash, no deploy in the 30 min before (Logs, crawl.log)`;
 }
 
+// Base growth: the database files; disk_used also swings with archive exports waiting
+// for the gpu-box (docs/data-safety.md "Raw archive")
+function baseGrowthPerDay(days = 7) {
+  const gs = ["meiolol_db", "timeline_db", "raw_db"].map(c => growthPerDay(c, days));
+  return gs.every(g => g == null) ? null : sumR(gs.map(g => g || 0));
+}
+
 function daysLeftText() {
-  const g = growthPerDay("disk_used");
+  const g = baseGrowthPerDay();
   const dk = disk();
   if (!dk || !(g > 0)) return "";
   return `, full in ~${Math.round(dk[2] / g)} days`;
