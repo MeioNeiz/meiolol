@@ -303,18 +303,16 @@ C: was 89% full (alert at 85%): the WSL disk on C: is 159 GB, of it ~/ml/snaps a
 C: gets it back only at step 4). Lab data moves to a new ext4 partition in the ~673 GB
 unallocated on the 2 TB P3, not the 1 TB Pop!_OS one (kept untouched).
 
-1. Partition (WSL, sudo; the whole P3 is passed to WSL: check `lsblk`, sde on 18 Oct;
-   the free space follows sde5): `sudo parted /dev/sde -- mkpart lab ext4 2495612928s
-   100%`, then `sudo mkfs.ext4 -L meiolol-lab /dev/sde6`
-2. Attach at boot (elevated): in C:\ProgramData\meiolol\wsl-mount.ps1 and its source
-   deploy/windows/install-watchdog.ps1, after the archive line: `wsl.exe --mount $drive
-   --partition 6 --name lab` (shows at /mnt/wsl/lab); then `sudo chown jmu:jmu
-   /mnt/wsl/lab`
-3. Move (no runs live, `deploy/lab-run.sh list`): time a read of one snapshot first;
-   `mv ~/ml/snaps ~/ml/runs /mnt/wsl/lab/`, `ln -s /mnt/wsl/lab/snaps ~/ml/snaps`, same
-   for runs; time the read again. Paths stay ~/ml/snaps/X, no script changes. Then
-   lab-run.sh (owned by the neural-net agent) gets a check: stop with a clear message if
-   /mnt/wsl/lab is not mounted
+1. Partition (done 18 Oct): sde6, 673 GB ext4, label meiolol-lab, made with sgdisk from
+   sector 2495612928 (after sde5)
+2. Mount (done 18 Oct): `wsl --mount --partition 6` fails (ERROR_FILE_NOT_FOUND: the P3
+   is already attached for the archive, and WSL sees all its partitions), so
+   wsl-mount.ps1 runs `mount -L meiolol-lab /mnt/wsl/lab` inside WSL as root when not
+   mounted (deploy/windows/install-watchdog.ps1). The fs root is owned by jmu
+3. Move (done 18 Oct): rsync -aH, checksum check, then ~/ml/snaps and ~/ml/runs became
+   symlinks to /mnt/wsl/lab/snaps and runs (84 GB, 16637 files); old copies deleted.
+   Uncached read of a 3.5 GB snapshot db 2.6 GB/s before, 2.4 after. Paths unchanged.
+   lab-run.sh gets a `mountpoint -q /mnt/wsl/lab` check (meiolol-b5's team)
 4. Compact the WSL disk (warn the sessions using the gpu-box first; this stops WSL):
    `wsl --shutdown`, then `wsl --manage <distro from wsl -l -v> --set-sparse true` (or diskpart `select
    vdisk file=<ext4.vhdx>`, `compact vdisk`). Expect ~120 GB back, C: to ~77%
