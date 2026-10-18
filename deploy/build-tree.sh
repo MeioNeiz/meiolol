@@ -12,7 +12,8 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_PREFIX
 # Zig through the ~/.local/bin shim (build.zig.zon's pinned version): a plain PATH can
 # find Homebrew's older zig first
 export PATH="$HOME/.local/bin:$PATH"
-repo=$(dirname "$0")
+# MEIOLOL_ROOT: the repo when this runs from on-push.sh's snapshot of deploy/
+repo=${MEIOLOL_ROOT:-$(dirname "$0")}
 common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir) || exit 1
 tree="$common/meiolol-build/$name"
 lock="$tree.lock"

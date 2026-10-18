@@ -2164,9 +2164,14 @@ function deployList() {
   }
   const out = [];
   for (const [sha, list] of bySha) {
-    const first = (step, st) => list.find(e => e[2] === step && (!st || st.includes(e[3])));
-    const ci = list.filter(e => e[2] === "ci"), dep = first("deploy");
+    // A re-run of the same commit (by hand, or a retry after a failure) starts its own
+    // attempt: the steps and commits are the latest attempt's
+    const deps = list.filter(e => e[2] === "deploy");
+    const starts = deps.filter(e => e[3] === "start");
+    const ci = list.filter(e => e[2] === "ci"), dep = starts[starts.length - 1] || deps[0];
     if (!dep && !ci.length) continue;
+    // on-push.sh sends the commits just before its deploy start
+    const after = starts.length > 1 ? starts[starts.length - 2][0] : -Infinity;
     const start = (dep || ci[0])[0];
     const steps = {};
     const put = (k, status, s, e, detail) => { steps[k] = { status, start: s, end: e, detail: detail || "" }; };
@@ -2202,7 +2207,7 @@ function deployList() {
     }
     // on-push.sh keeps the first 2,000 characters of "sha subject" (200 before 17 Oct 2026)
     const cut = s => s.length >= 2000 || s.length === 200;
-    const commits = list.filter(e => e[2] === "commit").map(e => cut(e[4]) ? e[4] + "…" : e[4]);
+    const commits = list.filter(e => e[2] === "commit" && e[0] > after).map(e => cut(e[4]) ? e[4] + "…" : e[4]);
     const failed = DEPLOY_STEPS.some(([k]) => steps[k] && steps[k].status === "failed" && k !== "cache");
     const doneAt = k => steps[k] && steps[k].status === "done" ? steps[k].end : null;
     let cache = doneAt("cache");

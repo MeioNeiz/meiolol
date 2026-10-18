@@ -209,8 +209,8 @@ s), `sha` (full commit), `step`, `status` (start, ok, failed, skipped, waiting, 
 | --- | --- | --- |
 | ci | deploy/hooks/pre-push | `zig build ci` start and result, per pushed commit |
 | commit | deploy/on-push.sh | each commit since the deploy before (at most 30) |
-| deploy | on-push.sh | start, skipped (docs only), ok or failed with box.sh's last line |
-| build | on-push.sh | start; ok at box.sh's "deployed SHA" (binary and scripts copied) |
+| deploy | on-push.sh | start, skipped (docs only, or box.sh found the binary, scripts and units already on the box: no copy, no round), ok or failed with box.sh's last line; a re-run of a commit is a new attempt, and the admin page shows the latest |
+| build | on-push.sh | start; ok at box.sh's "deployed SHA" (binary and scripts copied, or unchanged) |
 | web | on-push.sh | meiolol-web signalled or restarted |
 | round, site, upload, views, reload | deploy/web-loop.sh | forced rounds only (a deploy's or a start's): views ok names the parts loaded again and kept (views.log's "... kept" marks) |
 | swap | deploy/render-swap.sh | waiting (views file in another format), start, ok, failed |

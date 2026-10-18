@@ -80,7 +80,7 @@ install_api() {
     out=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now
     trap "rm -rf '$out'" EXIT
-    "$ROOT/deploy/build-tree.sh" jomove "$rev" sh -c 'zig build -Dtarget=x86_64-linux-musl \
+    "$ROOT/deploy/build-tree.sh" jomove "$rev" sh -c 'zig build backend -Dtarget=x86_64-linux-musl \
         -Doptimize=ReleaseSafe --prefix zig-out/jomove --cache-dir "$1/.zig-cache" \
         && cp zig-out/jomove/bin/meiolol "$2/meiolol"' _ "$ROOT" "$out"
     scp -q "$out/meiolol" "$HOST:/tmp/meiolol-api.new"

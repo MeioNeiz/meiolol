@@ -331,6 +331,12 @@ unallocated on the 2 TB P3, not the 1 TB Pop!_OS one (kept untouched).
    `wsl --shutdown`, then `wsl --manage <distro from wsl -l -v> --set-sparse true` (or diskpart `select
    vdisk file=<ext4.vhdx>`, `compact vdisk`). Expect ~120 GB back, C: to ~77%
 
+## Mac build cache
+
+The repo's .zig-cache (shared by the working tree and the ci and box build trees) grows
+~17 GB a day (126 GB on 18 Oct). on-push.sh empties it after a deploy once past 40 GB and
+no zig runs (deploy/zig-cache-prune.sh); the next builds start cold.
+
 ## WSL memory
 
 WSL2 takes half the PC's memory by default (15 GB). C:\Users\jacob\.wslconfig sets

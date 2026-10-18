@@ -8,11 +8,23 @@ set -euo pipefail
 
 HOST=${MEIOLOL_HOST:-meiolol-cloud}
 DIR=ml/meiolol
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# MEIOLOL_ROOT: the repo when this runs from on-push.sh's snapshot of deploy/
+ROOT=${MEIOLOL_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
+HERE=$(cd "$(dirname "$0")" && pwd)
+# 15 Oct: a hung connect held the deploy lock for 3 h 25 min. Keepalives end a dead link
+# within a minute; sshd answers them while a long remote command runs
+ssh_opts=(-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+ssh() { command ssh "${ssh_opts[@]}" "$@"; }
+scp() { command scp "${ssh_opts[@]}" "$@"; }
+export RSYNC_RSH="ssh ${ssh_opts[*]}"
+# sync sets it when the box already had this build's binary, scripts and units
+unchanged=0
 
 # Builds a clean checkout of REV (default HEAD) in deploy/build-tree.sh's tree, never the
 # working tree: other sessions keep uncommitted work there. The binary and scripts are
-# staged so the tree is free again before the copy. The box logs each deploy in DEPLOYED
+# staged so the tree is free again before the copy. The box logs each deploy in DEPLOYED.
+# Nothing is copied when the box has every file already: a change to src/lab code the
+# backend doesn't use, or to Mac-side scripts (16 of 137 deploys to 17 Oct)
 sync() {
     local rev tree target
     rev=$(git -C "$ROOT" rev-parse "${REV:-HEAD}")
@@ -20,21 +32,37 @@ sync() {
     tree=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now: tree is local to sync
     trap "rm -rf '$tree'" EXIT
-    "$ROOT/deploy/build-tree.sh" box "$rev" sh -c 'zig build -Dtarget="$1" \
+    "$HERE/build-tree.sh" box "$rev" sh -c 'zig build backend -Dtarget="$1" \
         -Doptimize=ReleaseSafe --prefix zig-out/box --cache-dir "$2/.zig-cache" \
         && mkdir "$3/zig-out" && cp -R zig-out/box "$3/zig-out/" && cp -R deploy "$3/"' \
         _ "$target" "$ROOT" "$tree"
-    ssh "$HOST" "mkdir -p $DIR/bin $DIR/data .config/systemd/user"
-    scp -q "$tree/zig-out/box/bin/meiolol" "$HOST:$DIR/bin/meiolol.new"
     local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh" s
-    for s in $scripts; do scp -q "$tree/deploy/$s" "$HOST:$DIR/bin/$s.new"; done
-    scp -q "$tree"/deploy/systemd/*.service "$tree"/deploy/systemd/meiolol-cache-version.path \
-        "$HOST:.config/systemd/user/"
-    ssh "$HOST" "cd $DIR && mv bin/meiolol.new bin/meiolol \
-        && for s in $scripts; do mv bin/\$s.new bin/\$s; done \
-        && systemctl --user daemon-reload \
-        && echo \"$rev $(date -u +%FT%TZ)\" >> DEPLOYED"
-    echo "deployed $rev"
+    local files=("$tree/zig-out/box/bin/meiolol") on_box=("$DIR/bin/meiolol") want=() f i
+    local have stamp
+    for s in $scripts; do files+=("$tree/deploy/$s"); on_box+=("$DIR/bin/$s"); done
+    for f in "$tree"/deploy/systemd/*.service "$tree"/deploy/systemd/meiolol-cache-version.path; do
+        files+=("$f")
+        on_box+=(".config/systemd/user/${f##*/}")
+    done
+    for i in "${!files[@]}"; do
+        want+=("$(shasum -a 256 < "${files[i]}" | cut -d' ' -f1)  ${on_box[i]}")
+    done
+    stamp="$rev $(date -u +%FT%TZ)"
+    have=$(ssh "$HOST" "sha256sum ${on_box[*]} 2> /dev/null || true")
+    if [[ "$have" == "$(printf '%s\n' "${want[@]}")" ]]; then
+        ssh "$HOST" "echo '$stamp' >> $DIR/DEPLOYED"
+        unchanged=1
+        echo "deployed $rev: unchanged on the box (binary, scripts, units), nothing copied"
+    else
+        ssh "$HOST" "mkdir -p $DIR/bin/new $DIR/data .config/systemd/user"
+        scp -q "${files[@]}" "$HOST:$DIR/bin/new/"
+        ssh "$HOST" "cd $DIR && mv bin/new/meiolol bin/meiolol \
+            && for s in $scripts; do mv bin/new/\$s bin/\$s; done \
+            && mv bin/new/*.service bin/new/*.path \$HOME/.config/systemd/user/ \
+            && systemctl --user daemon-reload \
+            && echo '$stamp' >> DEPLOYED"
+        echo "deployed $rev"
+    fi
     if [[ -f "$ROOT/.env" ]]; then
         ssh "$HOST" "umask 077 && cat > $DIR/.env" < "$ROOT/.env"
     fi
@@ -315,7 +343,7 @@ SQL
         git -C "$ROOT" diff --binary HEAD -- "${paths[@]}" | git -C "$tree" apply --allow-empty
         git -C "$ROOT" ls-files -z --others --exclude-standard -- "${paths[@]}" \
             | (cd "$ROOT" && xargs -0 -I{} rsync -R {} "$tree/")
-        (cd "$tree" && zig build -Dtarget="$target" -Doptimize=ReleaseSafe \
+        (cd "$tree" && zig build backend -Dtarget="$target" -Doptimize=ReleaseSafe \
             --prefix zig-out/preview --cache-dir "$ROOT/.zig-cache")
         stop_preview
         scp -q "$tree/zig-out/preview/bin/meiolol" "$HOST:$DIR/bin/meiolol-preview"
@@ -325,7 +353,8 @@ SQL
         ssh "$HOST" "systemd-run --user -q --collect --unit meiolol-preview \
             --working-directory=\$HOME/$DIR \$HOME/$DIR/bin/meiolol-preview serve \
             --out data/preview --port 8081"
-        ssh -fN -o ExitOnForwardFailure=yes -L $tunnel
+        # Without the ssh() options: stop_preview's pkill matches this command line
+        command ssh -fN -o ExitOnForwardFailure=yes -L $tunnel
         for _ in $(seq 30); do
             if curl -sf -o /dev/null http://localhost:8081/; then
                 echo "preview at http://localhost:8081 (deploy/box.sh preview stop)"
@@ -349,6 +378,11 @@ SQL
                 contact=${3:-$(ssh "$HOST" "cat $DIR/contact 2>/dev/null" || true)}
                 [[ -n "$contact" ]] || { echo "usage: deploy/box.sh web start <contact email>"; exit 2; }
                 sync
+                if (( unchanged )) && [[ -z "${3:-}" ]] \
+                    && ssh "$HOST" "systemctl --user -q is-active meiolol-web"; then
+                    echo "meiolol-web keeps running on $HOST: nothing it runs changed"
+                    exit 0
+                fi
                 ssh "$HOST" "cd $DIR && { [ \"\$(cat contact 2>/dev/null)\" = '$contact' ] \
                         || echo '$contact' > contact; } \
                     && systemctl --user enable -q meiolol-web \
@@ -410,7 +444,7 @@ SQL
             install)
                 # The mirror's meiolol (backup --mirror), apart from zig-out, which other
                 # sessions rebuild
-                (cd "$ROOT" && zig build -Doptimize=ReleaseSafe --prefix "$HOME/.cache/meiolol-watch")
+                (cd "$ROOT" && zig build backend -Doptimize=ReleaseSafe --prefix "$HOME/.cache/meiolol-watch")
                 launchctl bootout "gui/$(id -u)/${plist%.plist}" 2> /dev/null || true
                 cp "$ROOT/deploy/$plist" ~/Library/LaunchAgents/
                 launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/$plist

@@ -6,7 +6,7 @@
 #   deploy/deploy-events.sh add SHA STEP STATUS [DETAIL]
 #   deploy/deploy-events.sh flush
 set -u
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
+ROOT=${MEIOLOL_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 common=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)
 queue=$common/meiolol-deploy-events.tsv
 lock=$common/meiolol-deploy-events.lock

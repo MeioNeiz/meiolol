@@ -32,8 +32,8 @@ docs/plan.md "Now". Read it first.
   Windows and Linux builds, shellcheck, JS syntax
 - src/pipeline_test.zig: fixture games through stats, curves and the whole site; extend
   it when adding a pipeline step or page. A page change moves src/testdata/site-files.txt:
-  commit the change, then `deploy/site-hashes.sh` (hashes from a clean checkout of HEAD,
-  never the working tree's mix of sessions), then commit the file
+  `deploy/site-hashes.sh <your changed paths>` (HEAD plus those files, never others'
+  edits), then commit your paths and site-files.txt together
 - Local site: `deploy/dev.sh` (data/snap; `--exports` refreshes the box's curves and
   builds when it warns the curves are an old version)
 - Zig 0.16/0.17 std changed a lot (std.Io everywhere, renames): LSP hover/goToDefinition
