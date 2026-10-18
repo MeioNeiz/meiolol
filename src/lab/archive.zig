@@ -64,77 +64,45 @@ pub fn run(
     const day_dir = try std.fs.path.join(arena, &.{ archive_dir, day });
     try cwd.createDirPath(io, day_dir);
 
-    const db = try store.sqlite.Db.openReadOnly(try arena.dupeSentinel(u8, export_path, 0));
-    defer db.close();
-    var counts: Counts = .{};
-
-    const kinds = [_]struct { file: []const u8, sql: []const u8, count: *usize }{
-        .{ .file = "summaries", .sql = "SELECT body FROM raw_docs ORDER BY fetched_at, key", .count = &counts.summaries },
-        .{ .file = "timelines", .sql = "SELECT body FROM timeline_docs ORDER BY fetched_at, match_id", .count = &counts.timelines },
-    };
     // A failed run must not leave its uncompressed JSON behind: the pull retries every
     // hour, and the 15 Oct export's was 43 GB
     var written: std.ArrayList([]const u8) = .empty;
     errdefer for (written.items) |p| cwd.deleteFile(io, p) catch {};
-    for (kinds) |k| {
-        const path = try std.fmt.allocPrint(arena, "{s}/{s}-{s}.jsonl", .{ day_dir, k.file, name });
-        try written.append(arena, path);
-        var file = try cwd.createFile(io, path, .{});
-        defer file.close(io);
-        var buf: [64 * 1024]u8 = undefined;
-        var fw = file.writer(io, &buf);
-        var q = try db.prepare(k.sql);
-        defer q.deinit();
-        try q.bind(.{});
-        while (try q.step()) {
-            const json = store.raw.decompress(gpa, q.bytes(0)) catch |err| switch (err) {
-                error.OutOfMemory => return err,
-                else => {
-                    counts.unreadable += 1;
-                    continue;
-                },
-            };
-            defer gpa.free(json);
-            if (mentionsForgotten(json, &forgotten)) {
-                counts.forgotten += 1;
-                continue;
-            }
-            const anon = anonymise.rewriteMatch(gpa, salt, json) catch |err| switch (err) {
-                error.OutOfMemory => return err,
-                else => {
-                    counts.unreadable += 1;
-                    continue;
-                },
-            };
-            defer gpa.free(anon);
-            try fw.interface.writeAll(anon);
-            try fw.interface.writeByte('\n');
-            k.count.* += 1;
-        }
-        try fw.interface.flush();
-    }
+    var counts: Counts = .{};
     {
-        const path = try std.fmt.allocPrint(arena, "{s}/mastery-{s}.tsv", .{ day_dir, name });
-        try written.append(arena, path);
-        var file = try cwd.createFile(io, path, .{});
-        defer file.close(io);
-        var buf: [64 * 1024]u8 = undefined;
-        var fw = file.writer(io, &buf);
-        var q = try db.prepare("SELECT puuid, platform, fetched_at, champions, data FROM mastery ORDER BY fetched_at, puuid");
-        defer q.deinit();
-        try q.bind(.{});
-        while (try q.step()) {
-            if (forgotten.contains(q.bytes(0))) {
-                counts.forgotten += 1;
-                continue;
-            }
-            const hashed = anonymise.puuid(salt, q.bytes(0));
-            try fw.interface.print("{s}\t{s}\t{d}\t{d}\t{x}\n", .{
-                &hashed, q.bytes(1), q.int(2), q.int(3), q.bytes(4),
-            });
-            counts.mastery += 1;
+        var outs: [3]Out = undefined;
+        var opened: usize = 0;
+        defer for (outs[0..opened]) |*o| o.file.close(io);
+        const files = [_][2][]const u8{ .{ "summaries", "jsonl" }, .{ "timelines", "jsonl" }, .{ "mastery", "tsv" } };
+        for (files, &outs) |f, *o| {
+            const path = try std.fmt.allocPrint(arena, "{s}/{s}-{s}.{s}", .{ day_dir, f[0], name, f[1] });
+            try written.append(arena, path);
+            o.file = try cwd.createFile(io, path, .{});
+            opened += 1;
+            o.fw = o.file.writer(io, &o.buf);
         }
-        try fw.interface.flush();
+        const sink: Sink = .{ .gpa = gpa, .salt = salt, .forgotten = &forgotten, .counts = &counts };
+        if (try isPack(io, export_path)) {
+            try readPack(gpa, io, export_path, sink, &outs);
+        } else {
+            const db = try store.sqlite.Db.openReadOnly(try arena.dupeSentinel(u8, export_path, 0));
+            defer db.close();
+            const kinds = [_]struct { DocKind, []const u8 }{
+                .{ .summary, "SELECT body FROM raw_docs ORDER BY fetched_at, key" },
+                .{ .timeline, "SELECT body FROM timeline_docs ORDER BY fetched_at, match_id" },
+            };
+            for (kinds, outs[0..2]) |k, *o| {
+                var q = try db.prepare(k[1]);
+                defer q.deinit();
+                try q.bind(.{});
+                while (try q.step()) try sink.doc(&o.fw.interface, k[0], .stored, q.bytes(0));
+            }
+            var q = try db.prepare("SELECT puuid, platform, fetched_at, champions, data FROM mastery ORDER BY fetched_at, puuid");
+            defer q.deinit();
+            try q.bind(.{});
+            while (try q.step()) try sink.mastery(&outs[2].fw.interface, q.bytes(0), q.bytes(1), q.int(2), q.int(3), q.bytes(4));
+        }
+        for (&outs) |*o| try o.fw.interface.flush();
     }
 
     for (written.items) |path| {
@@ -155,6 +123,92 @@ pub fn run(
     });
     try iw.interface.flush();
     return counts;
+}
+
+const Out = struct { file: Io.File, fw: Io.File.Writer, buf: [64 * 1024]u8 };
+const DocKind = enum { summary, timeline };
+
+/// Where each export row goes: left out (forgotten, unreadable), or pseudonymised to its
+/// file, counted
+const Sink = struct {
+    gpa: std.mem.Allocator,
+    salt: *const anonymise.Salt,
+    forgotten: *const Forgotten,
+    counts: *Counts,
+
+    fn doc(s: Sink, w: *Io.Writer, kind: DocKind, enc: store.rawpack.Encoding, body: []const u8) !void {
+        const unpacked: ?[]u8 = switch (enc) {
+            .plain => null,
+            .stored => store.raw.decompress(s.gpa, body) catch |err| switch (err) {
+                error.OutOfMemory => return err,
+                else => {
+                    s.counts.unreadable += 1;
+                    return;
+                },
+            },
+        };
+        defer if (unpacked) |u| s.gpa.free(u);
+        const json = unpacked orelse body;
+        if (mentionsForgotten(json, s.forgotten)) {
+            s.counts.forgotten += 1;
+            return;
+        }
+        const anon = anonymise.rewriteMatch(s.gpa, s.salt, json) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => {
+                s.counts.unreadable += 1;
+                return;
+            },
+        };
+        defer s.gpa.free(anon);
+        try w.writeAll(anon);
+        try w.writeByte('\n');
+        switch (kind) {
+            .summary => s.counts.summaries += 1,
+            .timeline => s.counts.timelines += 1,
+        }
+    }
+
+    fn mastery(s: Sink, w: *Io.Writer, puuid: []const u8, platform: []const u8, fetched_at: i64, champions: i64, data: []const u8) !void {
+        if (s.forgotten.contains(puuid)) {
+            s.counts.forgotten += 1;
+            return;
+        }
+        const hashed = anonymise.puuid(s.salt, puuid);
+        try w.print("{s}\t{s}\t{d}\t{d}\t{x}\n", .{ &hashed, platform, fetched_at, champions, data });
+        s.counts.mastery += 1;
+    }
+};
+
+/// The box's packed form (src/store/rawpack.zig through zstd) rather than SQLite
+fn isPack(io: Io, path: []const u8) !bool {
+    const f = try Io.Dir.cwd().openFile(io, path, .{});
+    defer f.close(io);
+    var head: [4]u8 = undefined;
+    var buf: [16]u8 = undefined;
+    var r = f.reader(io, &buf);
+    r.interface.readSliceAll(&head) catch return false;
+    return std.mem.eql(u8, &head, "\x28\xb5\x2f\xfd");
+}
+
+fn readPack(gpa: std.mem.Allocator, io: Io, path: []const u8, sink: Sink, outs: *[3]Out) !void {
+    var child = try std.process.spawn(io, .{
+        .argv = &.{ "zstd", "-dc", "-q", path },
+        .stdout = .pipe,
+    });
+    var ok = false;
+    defer if (!ok) child.kill(io);
+    var rbuf: [256 * 1024]u8 = undefined;
+    var fr = child.stdout.?.readerStreaming(io, &rbuf);
+    var r = try store.rawpack.Reader.init(gpa, &fr.interface);
+    defer r.deinit();
+    while (try r.next()) |rec| switch (rec) {
+        .summary => |d| try sink.doc(&outs[0].fw.interface, .summary, d.encoding, d.body),
+        .timeline => |d| try sink.doc(&outs[1].fw.interface, .timeline, d.encoding, d.body),
+        .mastery => |m| try sink.mastery(&outs[2].fw.interface, m.puuid, m.platform orelse "", m.fetched_at, m.champions, m.data),
+    };
+    ok = true;
+    if (!(try child.wait(io)).success()) return error.ZstdFailed;
 }
 
 /// "raw-FROM-TO" -> the UTC day of TO, "YYYY-MM-DD"
@@ -514,4 +568,71 @@ test "forget and age rewrite archived files" {
     const aged = try cwd.readFileAlloc(io, plain, arena, .limited(1 << 20));
     try testing.expect(std.mem.indexOf(u8, aged, &b) == null);
     try testing.expectError(error.FileNotFound, cwd.access(io, try arena.print("{s}.zst", .{mastery}), .{}));
+}
+
+test "a packed export archives as its SQLite form does" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    zstd(gpa, io, &.{ "zstd", "--version" }) catch return error.SkipZigTest;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const name = "raw-0-1791838800.db";
+    const db_path = try arena.print("{s}/db/{s}", .{ base, name });
+    const pack_path = try arena.print("{s}/pack/{s}", .{ base, name });
+    try Io.Dir.cwd().createDirPath(io, try arena.print("{s}/db", .{base}));
+    try Io.Dir.cwd().createDirPath(io, try arena.print("{s}/pack", .{base}));
+    const timeline = @embedFile("../riot/testdata/timeline.json.gz");
+    const summary = "{\"metadata\":{\"matchId\":\"EUW1_2\",\"participants\":[\"p1\"]},\"info\":{\"participants\":[{\"puuid\":\"p1\"}]}}";
+    {
+        const db = try store.sqlite.Db.open(try arena.dupeSentinel(u8, db_path, 0));
+        defer db.close();
+        try db.exec(
+            \\CREATE TABLE raw_docs (key TEXT, fetched_at INTEGER, body BLOB);
+            \\CREATE TABLE timeline_docs (match_id TEXT, fetched_at INTEGER, body BLOB);
+            \\CREATE TABLE mastery (puuid TEXT, platform TEXT, fetched_at INTEGER,
+            \\  champions INTEGER, data BLOB);
+            \\INSERT INTO mastery VALUES ('p1', 'EUW1', 5, 2, x'0a0b'), ('p2', NULL, 4, 0, x'');
+        );
+        try db.run("INSERT INTO raw_docs VALUES ('EUW1_2', 3, ?), ('EUW1_3', 1, x'00')", .{
+            store.Blob{ .bytes = try store.raw.compress(arena, summary) },
+        });
+        try db.run("INSERT INTO timeline_docs VALUES ('EUW1_2', 2, ?)", .{store.Blob{ .bytes = timeline }});
+    }
+    {
+        var file = try Io.Dir.cwd().createFile(io, try arena.print("{s}.plain", .{pack_path}), .{});
+        defer file.close(io);
+        var buf: [4096]u8 = undefined;
+        var fw = file.writer(io, &buf);
+        var w = try store.rawpack.Writer.begin(&fw.interface);
+        try w.doc(.summary, .{ .key = "EUW1_3", .fetched_at = 1, .encoding = .stored, .body = "\x00" });
+        try w.doc(.summary, .{ .key = "EUW1_2", .fetched_at = 3, .encoding = .plain, .body = summary });
+        const tl = try store.raw.decompress(arena, timeline);
+        try w.doc(.timeline, .{ .key = "EUW1_2", .fetched_at = 2, .encoding = .plain, .body = tl });
+        try w.mastery(.{ .puuid = "p2", .platform = null, .fetched_at = 4, .champions = 0, .data = "" });
+        try w.mastery(.{ .puuid = "p1", .platform = "EUW1", .fetched_at = 5, .champions = 2, .data = "\x0a\x0b" });
+        try w.end();
+        try fw.interface.flush();
+    }
+    try zstd(gpa, io, &.{ "zstd", "-q", try arena.print("{s}.plain", .{pack_path}), "-o", pack_path });
+    const salt: anonymise.Salt = @splat(7);
+    const a = try run(gpa, io, db_path, try arena.print("{s}/a", .{base}), &salt, null);
+    const b = try run(gpa, io, pack_path, try arena.print("{s}/b", .{base}), &salt, null);
+    try testing.expectEqual(a, b);
+    try testing.expectEqual(Counts{ .summaries = 1, .timelines = 1, .mastery = 2, .unreadable = 1 }, a);
+    for ([_][]const u8{ "summaries", "timelines", "mastery" }) |kind| {
+        const ext = if (std.mem.eql(u8, kind, "mastery")) "tsv" else "jsonl";
+        var got: [2][]const u8 = undefined;
+        for ([_][]const u8{ "a", "b" }, &got) |side, *g| {
+            const z = try arena.print("{s}/{s}/2026-10-12/{s}-raw-0-1791838800.{s}.zst", .{ base, side, kind, ext });
+            const r = try std.process.run(gpa, io, .{ .argv = &.{ "zstd", "-dc", "-q", "--long=27", z }, .stdout_limit = .unlimited });
+            defer gpa.free(r.stderr);
+            g.* = try arena.dupe(u8, r.stdout);
+            gpa.free(r.stdout);
+        }
+        try testing.expectEqualStrings(got[0], got[1]);
+    }
 }

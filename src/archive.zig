@@ -214,7 +214,9 @@ fn cleanUp(arena: std.mem.Allocator, io: Io, db: store.Db, dir_path: []const u8)
     var stale: std.ArrayList([]const u8) = .empty;
     var it = dir.iterate();
     while (try it.next(io)) |e| {
-        if (e.kind == .file and std.mem.startsWith(u8, e.name, "raw-") and std.mem.endsWith(u8, e.name, ".db.tmp")) {
+        if (e.kind == .file and std.mem.startsWith(u8, e.name, "raw-") and
+            (std.mem.endsWith(u8, e.name, ".db.tmp") or std.mem.endsWith(u8, e.name, ".db.zst.tmp")))
+        {
             try stale.append(arena, try arena.dupe(u8, e.name));
         }
     }
@@ -233,7 +235,7 @@ fn cleanUp(arena: std.mem.Allocator, io: Io, db: store.Db, dir_path: []const u8)
     const got = s.int(1) != 0;
     s.reset();
     if (got) return;
-    if (dir.access(io, newest, .{})) |_| return else |err| if (err != error.FileNotFound) return err;
+    if (try exportFile(arena, io, dir_path, newest) != null) return;
     log.info("export {s} has no file: exporting its window again", .{newest});
     try db.run("DELETE FROM raw.archive_exports WHERE name = ?", .{newest});
 }
@@ -250,9 +252,7 @@ pub fn received(io: Io, db: store.Db, dir: []const u8, name: []const u8, now_s: 
         return error.NotUnacked;
     // The row first: a crash before the delete leaves a file the ack deletes later
     try db.run("INSERT OR IGNORE INTO raw.archive_received VALUES (?, ?)", .{ name, now_s });
-    var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try std.fmt.bufPrint(&buf, "{s}/{s}", .{ dir, name });
-    Io.Dir.cwd().deleteFile(io, path) catch |err| if (err != error.FileNotFound) return err;
+    try deleteExportFiles(io, dir, name);
 }
 
 /// For the gpu-box, oldest first, one line per unacked export: "NAME SIZE" while the box
@@ -272,14 +272,11 @@ pub fn list(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8, w: 
             try w.print("{s} received\n", .{name});
             continue;
         }
-        const path = try std.fmt.allocPrint(arena, "{s}/{s}", .{ dir, name });
-        const f = cwd.openFile(io, path, .{}) catch |err| switch (err) {
-            error.FileNotFound => {
-                try w.print("{s} missing\n", .{name});
-                continue;
-            },
-            else => return err,
+        const path = try exportFile(arena, io, dir, name) orelse {
+            try w.print("{s} missing\n", .{name});
+            continue;
         };
+        const f = try cwd.openFile(io, path, .{});
         defer f.close(io);
         try w.print("{s} {d}\n", .{ name, try f.length(io) });
     }
@@ -296,10 +293,172 @@ pub fn ack(io: Io, db: store.Db, dir: []const u8, name: []const u8, now_s: i64) 
     try db.run("UPDATE raw.archive_exports SET acked_at = ? WHERE name = ? AND acked_at IS NULL", .{ now_s, name });
     const known = db.changes() > 0 or
         try int(db, "SELECT count(*) FROM raw.archive_exports WHERE name = ?", .{name}) > 0;
-    var buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try std.fmt.bufPrint(&buf, "{s}/{s}", .{ dir, name });
-    Io.Dir.cwd().deleteFile(io, path) catch |err| if (err != error.FileNotFound) return err;
+    try deleteExportFiles(io, dir, name);
     if (!known) log.warn("ack of {s}, which no export recorded: file deleted", .{name});
+}
+
+/// The export's file: its pack (NAME.zst) once `pack` made one, else NAME; null with
+/// neither
+fn exportFile(arena: std.mem.Allocator, io: Io, dir: []const u8, name: []const u8) !?[]const u8 {
+    const cwd = Io.Dir.cwd();
+    for ([_][]const u8{ ".zst", "" }) |ext| {
+        const path = try std.fmt.allocPrint(arena, "{s}/{s}{s}", .{ dir, name, ext });
+        if (cwd.access(io, path, .{})) |_| return path else |err| if (err != error.FileNotFound) return err;
+    }
+    return null;
+}
+
+fn deleteExportFiles(io: Io, dir: []const u8, name: []const u8) !void {
+    for ([_][]const u8{ ".zst", "" }) |ext| {
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        const path = try std.fmt.bufPrint(&buf, "{s}/{s}{s}", .{ dir, name, ext });
+        Io.Dir.cwd().deleteFile(io, path) catch |err| if (err != error.FileNotFound) return err;
+    }
+}
+
+pub const Packed = struct { db_bytes: u64, zst_bytes: u64, docs: u64 };
+
+/// DIR/NAME (an export) as DIR/NAME.zst: its rows as a rawpack stream (bodies gunzipped),
+/// through `zstd -LEVEL -T1` on PATH, so ~half the bytes go to the gpu-box. NAME goes
+/// only once the pack has been read back whole (the zstd frame's checksum, rawpack's own
+/// hash and the counts against NAME's) and synced. Again for a packed name is a no-op
+pub fn pack(gpa: std.mem.Allocator, io: Io, dir: []const u8, name: []const u8, level: u8) !?Packed {
+    if (!isExportName(name)) return error.BadExportName;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const cwd = Io.Dir.cwd();
+    const path = try std.fmt.allocPrintSentinel(arena, "{s}/{s}", .{ dir, name }, 0);
+    const zst = try std.fmt.allocPrint(arena, "{s}.zst", .{path});
+    const tmp = try std.fmt.allocPrint(arena, "{s}.zst.tmp", .{path});
+    if (cwd.access(io, path, .{})) |_| {} else |err| {
+        if (err != error.FileNotFound) return err;
+        if (cwd.access(io, zst, .{})) |_| return null else |e| return e;
+    }
+    // A pack whose rename was done but not the delete: NAME's pack is whole
+    if (cwd.access(io, zst, .{})) |_| {
+        try cwd.deleteFile(io, path);
+        return null;
+    } else |err| if (err != error.FileNotFound) return err;
+    errdefer cwd.deleteFile(io, tmp) catch {};
+
+    const db_bytes = blk: {
+        const f = try cwd.openFile(io, path, .{});
+        defer f.close(io);
+        break :blk try f.length(io);
+    };
+    const db = try store.sqlite.Db.openReadOnly(path);
+    defer db.close();
+    const want: store.rawpack.Counts = .{
+        .summaries = @intCast(try int(db, "SELECT count(*) FROM raw_docs", .{})),
+        .timelines = @intCast(try int(db, "SELECT count(*) FROM timeline_docs", .{})),
+        .mastery = @intCast(try int(db, "SELECT count(*) FROM mastery", .{})),
+    };
+    {
+        const lvl = try std.fmt.allocPrint(arena, "-{d}", .{level});
+        var child = try std.process.spawn(io, .{
+            .argv = &.{ "zstd", "-q", "-f", lvl, "-T1", "-", "-o", tmp },
+            .stdin = .pipe,
+        });
+        var ok = false;
+        defer if (!ok) child.kill(io);
+        var wbuf: [256 * 1024]u8 = undefined;
+        var fw = child.stdin.?.writerStreaming(io, &wbuf);
+        var w = try store.rawpack.Writer.begin(&fw.interface);
+        try packDocs(gpa, arena, db, &w, .summary, "raw_docs", "key");
+        try packDocs(gpa, arena, db, &w, .timeline, "timeline_docs", "match_id");
+        var q = try db.prepare("SELECT puuid, platform, fetched_at, champions, data FROM mastery ORDER BY fetched_at, puuid");
+        defer q.deinit();
+        try q.bind(.{});
+        while (try q.step()) try w.mastery(.{
+            .puuid = q.bytes(0),
+            .platform = if (q.isNull(1)) null else q.bytes(1),
+            .fetched_at = q.int(2),
+            .champions = q.int(3),
+            .data = q.bytes(4),
+        });
+        try w.end();
+        try fw.interface.flush();
+        child.stdin.?.close(io);
+        child.stdin = null;
+        ok = true;
+        if (!(try child.wait(io)).success()) return error.ZstdFailed;
+    }
+    const got = try readPack(gpa, io, tmp);
+    if (!std.meta.eql(got, want)) {
+        log.err("{s}: pack read back {any}, export holds {any}", .{ name, got, want });
+        return error.PackCountsDiffer;
+    }
+    try syncPath(io, tmp, .file);
+    try cwd.rename(tmp, cwd, zst, io);
+    try syncPath(io, dir, .directory);
+    cwd.deleteFile(io, path) catch |err| {
+        // The valve dropped the export meanwhile: its pack goes too
+        if (err == error.FileNotFound) cwd.deleteFile(io, zst) catch {};
+        return err;
+    };
+    try syncPath(io, dir, .directory);
+    const f = try cwd.openFile(io, zst, .{});
+    defer f.close(io);
+    return .{ .db_bytes = db_bytes, .zst_bytes = try f.length(io), .docs = want.summaries + want.timelines + want.mastery };
+}
+
+/// In fetched_at, key order (the archive's), sorting ids only: an ORDER BY over the rows
+/// would spill the export's bodies to a temp file on the box's busy disk
+fn packDocs(
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    db: store.Db,
+    w: *store.rawpack.Writer,
+    kind: store.rawpack.Kind,
+    comptime table: []const u8,
+    comptime key: []const u8,
+) !void {
+    var ids: std.ArrayList(i64) = .empty;
+    {
+        var q = try db.prepare("SELECT rowid FROM " ++ table ++ " ORDER BY fetched_at, " ++ key);
+        defer q.deinit();
+        try q.bind(.{});
+        while (try q.step()) try ids.append(arena, q.int(0));
+    }
+    var q = try db.prepare("SELECT " ++ key ++ ", fetched_at, body FROM " ++ table ++ " WHERE rowid = ?");
+    defer q.deinit();
+    for (ids.items) |id| {
+        try q.bind(.{id});
+        if (!try q.step()) return error.RowGone;
+        const body = q.bytes(2);
+        const plain: ?[]u8 = store.raw.decompress(gpa, body) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => null,
+        };
+        defer if (plain) |p| gpa.free(p);
+        try w.doc(kind, .{
+            .key = q.bytes(0),
+            .fetched_at = q.int(1),
+            .encoding = if (plain == null) .stored else .plain,
+            .body = plain orelse body,
+        });
+        q.reset();
+    }
+}
+
+/// A pack's counts, read whole through `zstd -dc` (rawpack checks its order, hash and
+/// end record)
+pub fn readPack(gpa: std.mem.Allocator, io: Io, path: []const u8) !store.rawpack.Counts {
+    var child = try std.process.spawn(io, .{
+        .argv = &.{ "zstd", "-dc", "-q", path },
+        .stdout = .pipe,
+    });
+    var ok = false;
+    defer if (!ok) child.kill(io);
+    var rbuf: [256 * 1024]u8 = undefined;
+    var fr = child.stdout.?.readerStreaming(io, &rbuf);
+    var r = try store.rawpack.Reader.init(gpa, &fr.interface);
+    defer r.deinit();
+    while (try r.next()) |_| {}
+    ok = true;
+    if (!(try child.wait(io)).success()) return error.ZstdFailed;
+    return r.counts;
 }
 
 /// raw-FROM-TO.db, the names exportNew makes
@@ -466,12 +625,9 @@ fn dropExport(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8, n
     defer s.deinit();
     const cwd = Io.Dir.cwd();
     while (try s.step()) {
-        const path = try std.fmt.allocPrint(arena, "{s}/{s}", .{ dir, s.bytes(0) });
-        const f = cwd.openFile(io, path, .{}) catch |err| switch (err) {
-            // Its window is lost already; a newer one may still free space
-            error.FileNotFound => continue,
-            else => return err,
-        };
+        // No file: its window is lost already; a newer one may still free space
+        const path = try exportFile(arena, io, dir, s.bytes(0)) orelse continue;
+        const f = try cwd.openFile(io, path, .{});
         const bytes = f.length(io);
         f.close(io);
         const d: Dropped = .{
@@ -483,7 +639,7 @@ fn dropExport(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8, n
             .bytes = @intCast(try bytes),
         };
         s.reset();
-        try cwd.deleteFile(io, path);
+        try deleteExportFiles(io, dir, d.name);
         try db.run("UPDATE raw.archive_exports SET acked_at = ? WHERE name = ?", .{ now_s, d.name });
         return d;
     }
@@ -832,4 +988,65 @@ test "freed raw pages go back to the disk once auto_vacuum is incremental" {
     try testing.expect(try returnFree(db) > 4000 * 1000);
     try testing.expectEqual(0, try int(db, "PRAGMA raw.freelist_count", .{}));
     try testing.expect(try int(db, "PRAGMA raw.page_count", .{}) < @divFloor(pages, 10));
+}
+
+test "a packed export lists, sends and goes as its pack; the window stays exported" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = testing.io;
+    const gpa = testing.allocator;
+    const r = std.process.run(gpa, io, .{ .argv = &.{ "zstd", "--version" } }) catch return error.SkipZigTest;
+    gpa.free(r.stdout);
+    gpa.free(r.stderr);
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const data = try arena.print("{s}/data", .{base});
+    const out = try arena.print("{s}/out", .{base});
+    const cwd = Io.Dir.cwd();
+    try cwd.createDirPath(io, data);
+    const db = try store.open(arena, data);
+    defer db.close();
+    const now = 100 * std.time.s_per_day;
+    const json = "{\"metadata\":{\"matchId\":\"EUW1_1\",\"participants\":[]},\"info\":{}}";
+    const body = try store.raw.compress(arena, json);
+    try db.run("INSERT INTO raw.raw_docs VALUES ('riot_match', 'EUW1_1', ?, ?), ('riot_match', 'EUW1_2', ?, x'00')", .{
+        now - 3600, store.Blob{ .bytes = body }, now - 3601,
+    });
+    try db.run("INSERT INTO raw.timeline_docs VALUES ('EUW1_1', ?, ?)", .{ now - 3600, store.Blob{ .bytes = body } });
+    try db.run("INSERT INTO mastery VALUES ('p1', NULL, ?, 3, x'0102')", .{now - 3600});
+
+    const e = (try exportNew(arena, io, db, out, now)).?;
+    const p = (try pack(gpa, io, out, e.name, 3)).?;
+    try testing.expectEqual(4, p.docs);
+    try testing.expectEqual(null, try pack(gpa, io, out, e.name, 3));
+    const db_path = try arena.print("{s}/{s}", .{ out, e.name });
+    const zst_path = try arena.print("{s}.zst", .{db_path});
+    try testing.expectError(error.FileNotFound, cwd.access(io, db_path, .{}));
+    try testing.expectEqual(store.rawpack.Counts{ .summaries = 2, .timelines = 1, .mastery = 1 }, try readPack(gpa, io, zst_path));
+
+    // Bodies plain, in fetched_at order; the one that isn't gzip as stored
+    const plain = try std.process.run(gpa, io, .{ .argv = &.{ "zstd", "-dc", "-q", zst_path }, .stdout_limit = .unlimited });
+    defer gpa.free(plain.stdout);
+    defer gpa.free(plain.stderr);
+    var in: Io.Reader = .fixed(plain.stdout);
+    var rd = try store.rawpack.Reader.init(gpa, &in);
+    defer rd.deinit();
+    const first = (try rd.next()).?.summary;
+    try testing.expectEqualStrings("EUW1_2", first.key);
+    try testing.expectEqual(store.rawpack.Encoding.stored, first.encoding);
+    try testing.expectEqualStrings(json, (try rd.next()).?.summary.body);
+    try testing.expectEqualStrings(json, (try rd.next()).?.timeline.body);
+    try testing.expectEqual(@as(?[]const u8, null), (try rd.next()).?.mastery.platform);
+
+    var buf: [256]u8 = undefined;
+    var w: Io.Writer = .fixed(&buf);
+    try list(arena, io, db, out, &w);
+    try testing.expectEqualStrings(try arena.print("{s} {d}\n", .{ e.name, p.zst_bytes }), w.buffered());
+    // A later export must not take the pack's window for a lost file
+    try testing.expectEqual(null, try exportNew(arena, io, db, out, now + 60));
+    try testing.expectEqual(1, try int(db, "SELECT count(*) FROM raw.archive_exports", .{}));
+    try received(io, db, out, e.name, now);
+    try testing.expectError(error.FileNotFound, cwd.access(io, zst_path, .{}));
 }

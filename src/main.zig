@@ -68,6 +68,12 @@ const usage =
     \\                               100)
     \\              --timeline-min-s S  no timeline for matches shorter than S seconds
     \\                               (default 0: every length)
+    \\              --timelines-sparse N  a match the sample skips still gets a
+    \\                               timeline while a lane of it has under N in its
+    \\                               champion pair and rank cell this patch (default
+    \\                               0: off; docs/data.md)
+    \\              --timelines-sparse-from TIER  --timelines-sparse only for games of
+    \\                               median rank TIER and up
     \\              --flex-calls-per-day N  ranked flex id lookups a day for --priority
     \\                               players, a test sample (default 0; queue 420 only on
     \\                               the site and in models)
@@ -250,6 +256,9 @@ const usage =
     \\              --out DIR        default DATA/archive-out
     \\              --list           unacked exports: NAME SIZE|received|missing
     \\              --received NAME  the gpu-box has NAME (checksum checked): delete it
+    \\              --pack NAME      NAME as NAME.zst (bodies gunzipped, zstd on PATH), what
+    \\                               list, send and got then use; prints NAME, both sizes, docs
+    \\              --level N        zstd level for --pack (default 9)
     \\              --ack NAME       the gpu-box archived NAME: mark it, delete it if left
     \\              --prune          drop raw documents acked and older than --keep-days
     \\              --keep-days N    acked raw kept on the box this long (default 2)
@@ -587,6 +596,10 @@ fn cmdCrawl(c: *Cmd) !u8 {
             if (o.timeline_priority_percent > 100) return error.Usage;
         } else if (c.is("--timeline-min-s")) {
             o.timeline_min_s = try c.int(u32);
+        } else if (c.is("--timelines-sparse")) {
+            o.timeline_sparse = try c.int(u32);
+        } else if (c.is("--timelines-sparse-from")) {
+            o.timeline_sparse_min_rank = riot.sparse.rankOf(try c.value()) orelse return error.Usage;
         } else if (c.is("--flex-calls-per-day")) {
             o.flex_calls_per_day = try c.int(u32);
         } else if (c.is("--raw-timeline-days")) {
@@ -1257,6 +1270,8 @@ fn cmdRawExport(c: *Cmd) !u8 {
     var dir: []const u8 = try std.fs.path.join(c.arena, &.{ c.data_dir, "archive-out" });
     var ack_name: ?[]const u8 = null;
     var received_name: ?[]const u8 = null;
+    var pack_name: ?[]const u8 = null;
+    var level: u8 = 9;
     var keep_days: u32 = 2;
     var show_status = false;
     var show_list = false;
@@ -1268,6 +1283,10 @@ fn cmdRawExport(c: *Cmd) !u8 {
             ack_name = try c.value();
         } else if (c.is("--received")) {
             received_name = try c.value();
+        } else if (c.is("--pack")) {
+            pack_name = try c.value();
+        } else if (c.is("--level")) {
+            level = try c.int(u8);
         } else if (c.is("--list")) {
             show_list = true;
         } else if (c.is("--prune")) {
@@ -1280,12 +1299,20 @@ fn cmdRawExport(c: *Cmd) !u8 {
     }
     const io = c.init.io;
     const now = std.Io.Clock.real.now(io).toSeconds();
-    // Status for the health check: read-only, so it never waits on an ack or the crawler
-    const db = if (show_status) try store.schema.openReadOnly(c.init.gpa, c.data_dir) else try c.open();
-    defer db.close();
     var buf: [1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
     const w = &stdout.interface;
+    // The export file only: raw.db stays closed
+    if (pack_name) |name| {
+        if (try archive.pack(c.init.gpa, io, dir, name, level)) |p| {
+            try w.print("{s}\t{d}\t{d}\t{d}\n", .{ name, p.db_bytes, p.zst_bytes, p.docs });
+        } else try w.print("{s}\tpacked already\n", .{name});
+        try w.flush();
+        return 0;
+    }
+    // Status for the health check: read-only, so it never waits on an ack or the crawler
+    const db = if (show_status) try store.schema.openReadOnly(c.init.gpa, c.data_dir) else try c.open();
+    defer db.close();
     if (show_status) {
         const s = try archive.status(db, now);
         try w.print("since_ack_s {?d}\nunacked {d}\noldest_unacked_s {?d}\nsince_drop_s {?d}\ndrops_24h {d}\n", .{
