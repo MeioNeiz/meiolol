@@ -29,6 +29,7 @@ const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
 const patchday = @import("../patchday.zig");
 const patch_page = @import("patch.zig");
+const partials = @import("../partials.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -320,6 +321,11 @@ pub const Extras = struct {
     /// Pool and learning tallies by html.Region, on the first view's load: all patches,
     /// so both periods share them, and one pass over the database serves every view
     people: ?People = null,
+    /// `site --views`: the views partials' directory (data/partials), whose games the
+    /// loads read instead of the database's tables; null: the database
+    partials_dir: ?[]const u8 = null,
+    /// Opened (and brought up to date) on the first load that reads games
+    games: ?*partials.Store = null,
 
     pub fn load(arena: std.mem.Allocator, io: std.Io, opts: Options) Extras {
         var e: Extras = .{};
@@ -338,6 +344,31 @@ pub const Extras = struct {
 
     pub fn deinit(e: *Extras, gpa: std.mem.Allocator) void {
         if (e.people) |*p| p.deinit(gpa);
+        if (e.games) |g| g.deinit();
+    }
+
+    /// The partials, opened on the first call; null without partials_dir or when they
+    /// fail. On the loading thread, before any reader of them starts
+    fn partialsFor(e: *Extras, gpa: std.mem.Allocator, io: std.Io, db: store.Db, phases: *Phases) !?*partials.Store {
+        const dir = e.partials_dir orelse return null;
+        if (e.games) |g| return g;
+        // A write from the tables beats none: each file is replaced whole and the state
+        // last, so what a failed refresh left is read again next time
+        const g = partials.Store.open(gpa, io, db, dir, .{ .now_ms = std.Io.Clock.real.now(io).toMilliseconds() }) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => {
+                log.warn("partials at {s}: {t}; reading the database", .{ dir, err });
+                e.partials_dir = null;
+                return null;
+            },
+        };
+        e.games = g;
+        const n = g.counts;
+        log.info("partials: {d} games, {d} matches read{s}, {d} gone, {d} day files written", .{
+            n.games, n.read, if (n.bulk) " (whole tables)" else "", n.dropped, n.days_written,
+        });
+        phases.mark("partials");
+        return g;
     }
 
     fn tallies(e: *Extras, gpa: std.mem.Allocator, io: std.Io, db: store.Db, st: *const Stats, opts: Options) !*const People {
@@ -354,7 +385,7 @@ pub const Extras = struct {
         const ids = try gpa.dupe(u32, st.ids);
         errdefer gpa.free(ids);
         // Pool on a connection of its own beside learning's: both wait on the disk
-        var t: Tallying = .{ .gpa = gpa, .io = io, .db = db, .sibling = try store.schema.openSibling(gpa, db), .st = st, .sets = sets };
+        var t: Tallying = .{ .gpa = gpa, .io = io, .db = db, .sibling = try store.schema.openSibling(gpa, db), .st = st, .sets = sets, .games = e.games };
         defer if (t.sibling) |sibling| sibling.close();
         errdefer {
             if (t.pool) |*p| p.deinit(gpa);
@@ -364,6 +395,7 @@ pub const Extras = struct {
             try par.each(io, 2, &t, Tallying.run);
         } else for (0..2) |i| try t.run(i);
         e.people = .{ .ids = ids, .pool = t.pool.?, .learning = t.learning.? };
+        if (e.games) |g| log.info("partials: {d} mastery rows, {d} read", .{ g.counts.mastery, g.counts.mastery_read });
         return &e.people.?;
     }
 };
@@ -376,13 +408,14 @@ const Tallying = struct {
     sibling: ?store.Db,
     st: *const Stats,
     sets: []const []const []const u8,
+    games: ?*partials.Store,
     pool: ?pool.Tallies = null,
     learning: ?[]learning.Tally = null,
 
     fn run(t: *Tallying, i: usize) !void {
         if (i == 0) {
-            t.pool = try pool.tally(t.gpa, t.sibling orelse t.db, t.st, t.sets);
-        } else t.learning = try learning.tally(t.gpa, t.io, t.db, t.st, t.sets);
+            t.pool = try pool.tallyWith(t.gpa, t.sibling orelse t.db, t.st, t.sets, t.games);
+        } else t.learning = try learning.tallyWith(t.gpa, t.io, t.db, t.st, t.sets, t.games);
     }
 };
 
@@ -689,7 +722,7 @@ fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options
         phases.mark("stats and champions kept");
     } else {
         if (old) |o| if (o.strict) return error.ViewsMismatch;
-        try loadBase(site, db, all_opts, &phases);
+        try loadBase(site, db, all_opts, &phases, try extras.partialsFor(gpa, io, db, &phases));
     }
     const champs_key = champsKey(site.champs);
 
@@ -711,6 +744,7 @@ fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options
             .want_filter = view.index() == 0 and kept_filter == null,
             .want_people = kept_people == null,
         };
+        if (loading.want_filter or loading.want_people) loading.games = try extras.partialsFor(gpa, io, db, &phases);
         if (loading.want_filter and loading.want_people) loading.sibling = try store.schema.openSibling(gpa, db);
         defer if (loading.sibling) |sibling| sibling.close();
         if (loading.sibling != null) {
@@ -763,6 +797,7 @@ const Loading = struct {
     opts: Options,
     want_filter: bool,
     want_people: bool,
+    games: ?*partials.Store = null,
     filter: filters.Made = .{},
     people: ?*const People = null,
     /// Each one's own time
@@ -772,7 +807,7 @@ const Loading = struct {
         const io = l.site.io;
         const start = std.Io.Clock.awake.now(io).toMilliseconds();
         if (i == 0) {
-            if (l.want_filter) l.filter = try filters.make(l.site, l.db, l.opts);
+            if (l.want_filter) l.filter = if (l.games) |g| try filters.makeFrom(l.site, g, l.opts) else try filters.make(l.site, l.db, l.opts);
         } else if (l.want_people) {
             l.people = try l.extras.tallies(l.site.gpa, io, l.sibling orelse l.db, &l.site.stats, l.opts);
         }
@@ -781,15 +816,21 @@ const Loading = struct {
 };
 
 /// The view's stats, patches and champions from the database
-fn loadBase(site: *Site, db: store.Db, all_opts: Options, phases: *Phases) !void {
+fn loadBase(site: *Site, db: store.Db, all_opts: Options, phases: *Phases, games: ?*const partials.Store) !void {
     const arena = site.arena;
     const view = site.view;
     site.since_ms = switch (view.period) {
         .patch => 0,
         .days30 => all_opts.since_ms,
     };
-    if (view.period == .days30) site.opts.patches = try stats.patches(arena, db, site.opts.platforms);
-    var built = try stats.buildSince(site.gpa, db, site.opts.patches, site.opts.platforms, site.since_ms);
+    if (view.period == .days30) site.opts.patches = if (games) |g|
+        try g.patches(arena, site.opts.platforms)
+    else
+        try stats.patches(arena, db, site.opts.platforms);
+    var built = if (games) |g|
+        try stats.buildFrom(site.gpa, db, g, site.opts.patches, site.opts.platforms, site.since_ms)
+    else
+        try stats.buildSince(site.gpa, db, site.opts.patches, site.opts.platforms, site.since_ms);
     phases.mark("stats");
     defer built.builder.deinit();
     if (built.summary.games == 0) return error.NoMatches;
@@ -804,7 +845,7 @@ fn loadBase(site: *Site, db: store.Db, all_opts: Options, phases: *Phases) !void
         .patch => try arena.print("patch {s}", .{site.patch}),
         .days30 => "last 30 days",
     };
-    try loadChamps(site, db);
+    try loadChamps(site, db, games);
     phases.mark("champions");
 }
 
@@ -822,8 +863,9 @@ fn loadPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, o
     const keep = if (kept) |k| std.mem.eql(u8, k.prev_patch, prev) and std.mem.eql(u8, k.cur_patch, cur) else false;
     const wins = if (keep) kept.? else blk: {
         if (old) |o| if (o.strict) return error.ViewsMismatch;
-        const prev_stats = try patchStats(site, db, &.{prev});
-        const cur_stats = if (view.period == .patch) site.stats else try patchStats(site, db, all_opts.patches);
+        const games = try extras.partialsFor(site.gpa, site.io, db, phases);
+        const prev_stats = try patchStats(site, db, &.{prev}, games);
+        const cur_stats = if (view.period == .patch) site.stats else try patchStats(site, db, all_opts.patches, games);
         break :blk try patchday.championWins(arena, &prev_stats, &cur_stats, .{});
     };
     const pv = (html.View{ .region = view.region, .period = .patch }).index();
@@ -838,8 +880,11 @@ fn loadPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, o
 }
 
 /// The view's region's stats over `patches`, all of each
-fn patchStats(site: *Site, db: store.Db, patches: []const []const u8) !Stats {
-    var built = try stats.buildSince(site.gpa, db, patches, site.opts.platforms, 0);
+fn patchStats(site: *Site, db: store.Db, patches: []const []const u8, games: ?*const partials.Store) !Stats {
+    var built = if (games) |g|
+        try stats.buildFrom(site.gpa, db, g, patches, site.opts.platforms, 0)
+    else
+        try stats.buildSince(site.gpa, db, patches, site.opts.platforms, 0);
     defer built.builder.deinit();
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     var model: Writer.Allocating = .init(site.arena);
@@ -1229,11 +1274,11 @@ const data_version: u64 = 1;
 fn partKeys() [part_count]u64 {
     return .{
         partKey(Options, &.{}),
-        partKey(BasePart, &.{@embedFile("../stats.zig")}),
-        partKey(FilterPart, &.{@embedFile("filters.zig")}),
-        partKey(PeoplePart, &.{ @embedFile("../pool.zig"), @embedFile("../learning.zig"), @embedFile("../spread.zig") }),
+        partKey(BasePart, &.{ @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
+        partKey(FilterPart, &.{ @embedFile("filters.zig"), @embedFile("../partials.zig") }),
+        partKey(PeoplePart, &.{ @embedFile("../pool.zig"), @embedFile("../learning.zig"), @embedFile("../spread.zig"), @embedFile("../partials.zig") }),
         partKey(DailyPart, &.{ @embedFile("../daily.zig"), @embedFile("../learn.zig"), @embedFile("evalchart.zig") }),
-        partKey(patchday.Wins, &.{ @embedFile("../patchday.zig"), @embedFile("../stats.zig") }),
+        partKey(patchday.Wins, &.{ @embedFile("../patchday.zig"), @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
     };
 }
 
@@ -1365,10 +1410,10 @@ fn loadCurves(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?core.curv
     };
 }
 
-fn loadChamps(site: *Site, db: store.Db) !void {
+fn loadChamps(site: *Site, db: store.Db, games: ?*const partials.Store) !void {
     const a = site.arena;
     var banned: std.AutoHashMapUnmanaged(u32, u32) = .empty;
-    {
+    if (games) |g| try g.bansIn(a, &banned, site.opts.patches, site.opts.platforms, site.since_ms) else {
         const patch_json = try std.json.Stringify.valueAlloc(a, site.opts.patches, .{});
         const platform_json = try std.json.Stringify.valueAlloc(a, site.opts.platforms, .{});
         // Games each champion was banned in, counted here: count(DISTINCT) with GROUP BY
@@ -1394,8 +1439,7 @@ fn loadChamps(site: *Site, db: store.Db) !void {
             }
             if (std.mem.indexOfScalar(u32, seen.items, r.champion) != null) continue;
             try seen.append(a, r.champion);
-            const games = try banned.getOrPutValue(a, r.champion, 0);
-            games.value_ptr.* += 1;
+            (try banned.getOrPutValue(a, r.champion, 0)).value_ptr.* += 1;
         }
     }
 

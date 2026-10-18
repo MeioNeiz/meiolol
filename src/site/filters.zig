@@ -14,6 +14,7 @@ const html = @import("html.zig");
 const matchup = @import("matchup.zig");
 const stats = @import("../stats.zig");
 const par = @import("../par.zig");
+const partials = @import("../partials.zig");
 
 const Role = core.Role;
 const Bracket = core.curvesfile.Bracket;
@@ -112,6 +113,8 @@ const Match = struct {
     start: i64,
     patch: []const u8,
     platform: []const u8,
+    /// Its players and bans, from the views partials; null: read from db
+    game: ?*const partials.Game = null,
 };
 
 /// What a run of games adds up to; its patch indexes are its own, in the order it met
@@ -127,7 +130,9 @@ const Run = struct {
 
 const Counting = struct {
     gpa: std.mem.Allocator,
-    db: store.Db,
+    /// Null: every match has its game (partials)
+    db: ?store.Db,
+    strings: ?*const partials.Store,
     /// Each run on its own connection; false for an in-memory db, whose runs go in turn
     /// on its one
     siblings: bool,
@@ -140,11 +145,13 @@ const Counting = struct {
 
     fn count(c: *const Counting, i: usize) !void {
         const run = &c.runs[i];
-        const db = if (c.siblings) (try store.schema.openSibling(c.gpa, c.db)).? else c.db;
-        defer if (c.siblings) db.close();
         const lo = c.matches.len * i / c.runs.len;
         const hi = c.matches.len * (i + 1) / c.runs.len;
-        try countRun(run, db, c.matches[lo..hi], c.index_of, c.champs, c.since_ms, c.all_platforms);
+        const matches = c.matches[lo..hi];
+        const db = c.db orelse return countGames(run, c.strings.?, matches, c.index_of, c.champs, c.since_ms, c.all_platforms);
+        const own = if (c.siblings) (try store.schema.openSibling(c.gpa, db)).? else db;
+        defer if (c.siblings) own.close();
+        try countRun(run, own, matches, c.index_of, c.champs, c.since_ms, c.all_platforms);
     }
 };
 
@@ -152,10 +159,15 @@ const Counting = struct {
 /// stats.scan (ten players, one per team and role, a winner), for every champion. In
 /// runs of games at once, merged in game order, so the files match a single walk's
 pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
-    return makeIn(site, db, opts, runs);
+    return makeIn(site, db, opts, runs, null);
 }
 
-fn makeIn(site: *const root.Site, db: store.Db, opts: root.Options, run_count: usize) !Made {
+/// As make, the games from the views partials
+pub fn makeFrom(site: *const root.Site, games: *const partials.Store, opts: root.Options) !Made {
+    return makeIn(site, null, opts, runs, games);
+}
+
+fn makeIn(site: *const root.Site, maybe_db: ?store.Db, opts: root.Options, run_count: usize, games_from: ?*const partials.Store) !Made {
     const a = site.arena;
     const index_of = try a.alloc(?u16, std.math.maxInt(u16) + 1);
     @memset(index_of, null);
@@ -166,7 +178,25 @@ fn makeIn(site: *const root.Site, db: store.Db, opts: root.Options, run_count: u
     const platform_json = try std.json.Stringify.valueAlloc(a, opts.all_platforms, .{});
     const patch_json = try std.json.Stringify.valueAlloc(a, opts.patches, .{});
     var matches: std.ArrayList(Match) = .empty;
-    {
+    if (games_from) |games| {
+        // As games_sql picks them, in its order
+        const platform_in = try games.codesIn(a, opts.all_platforms);
+        const patch_in = try games.codesIn(a, opts.patches);
+        for (games.sorted) |g| {
+            if (!platform_in[g.platform]) continue;
+            const winner = g.winning_team orelse continue;
+            if (g.start < opts.since_ms and !patch_in[g.patch]) continue;
+            try matches.append(a, .{
+                .id = g.id,
+                .winner = winner,
+                .start = g.start,
+                .patch = games.string(g.patch).?,
+                .platform = games.string(g.platform).?,
+                .game = g,
+            });
+        }
+    } else {
+        const db = maybe_db.?;
         var q = try db.prepare(games_sql);
         defer q.deinit();
         try q.bind(.{ stats.ranked_solo, platform_json, opts.since_ms, patch_json });
@@ -188,8 +218,9 @@ fn makeIn(site: *const root.Site, db: store.Db, opts: root.Options, run_count: u
     defer for (parts) |*r| r.arena.deinit();
     const counting: Counting = .{
         .gpa = gpa,
-        .db = db,
-        .siblings = db.filename("main").len != 0,
+        .db = maybe_db,
+        .strings = games_from,
+        .siblings = if (maybe_db) |db| db.filename("main").len != 0 else true,
         .matches = matches.items,
         .runs = parts,
         .index_of = index_of,
@@ -255,8 +286,7 @@ fn makeIn(site: *const root.Site, db: store.Db, opts: root.Options, run_count: u
 
 /// Each of `matches`' players and bans by primary key, into `run`
 fn countRun(run: *Run, db: store.Db, matches: []const Match, index_of: []const ?u16, champs: usize, since_ms: i64, all_platforms: []const []const u8) !void {
-    const a = run.arena.allocator();
-    run.cells = try a.alloc(Cells, champs);
+    run.cells = try run.arena.allocator().alloc(Cells, champs);
     @memset(run.cells, .empty);
     var pq = try db.prepare(
         \\SELECT team_id, position, champion_id, tier,
@@ -267,13 +297,12 @@ fn countRun(run: *Run, db: store.Db, matches: []const Match, index_of: []const ?
     var bq = try db.prepare("SELECT champion_id FROM bans WHERE match_id = ? ORDER BY team_id, pick_turn");
     defer bq.deinit();
 
-    var players: [10]Player = undefined;
+    var bans: std.ArrayList(u32) = .empty;
+    defer bans.deinit(run.arena.child_allocator);
     for (matches) |m| {
-        var n: usize = 0;
-        var rows: usize = 0;
-        var bad = false;
+        var game: Game = .{};
         try pq.bind(.{m.id});
-        while (try pq.step()) : (rows += 1) {
+        while (try pq.step()) {
             const r = pq.row(struct {
                 team: i64,
                 position: ?[]const u8,
@@ -281,76 +310,115 @@ fn countRun(run: *Run, db: store.Db, matches: []const Match, index_of: []const ?
                 tier: ?[]const u8,
                 gold14: ?i64,
             });
-            if (n == 10) {
-                bad = true;
-                continue;
-            }
-            const team: u1 = switch (r.team) {
-                100 => 0,
-                200 => 1,
-                else => {
-                    bad = true;
-                    continue;
-                },
-            };
-            const role = Role.fromLcu(r.position orelse "") orelse {
-                bad = true;
-                continue;
-            };
-            if (r.champion <= 0 or r.champion > std.math.maxInt(u16)) bad = true;
-            for (players[0..n]) |p| {
-                if (p.team == team and p.role == role) bad = true;
-            }
-            players[n] = .{
-                .team = team,
-                .role = role,
-                .champion = @intCast(std.math.clamp(r.champion, 0, std.math.maxInt(u16))),
-                .tier = @intCast(if (r.tier) |t| indexOf(&tiers, t) orelse tiers.len else tiers.len),
-                .gold14 = r.gold14,
-            };
-            n += 1;
+            game.add(r.team, r.position, r.champion, r.tier, r.gold14);
         }
-        if (rows == 0) continue;
-        const slice: Slice = .{
-            .recent = m.start >= since_ms,
-            .platform = @intCast(indexOf(all_platforms, m.platform) orelse 0),
-            .patch = try patchIndex(a, &run.patches, m.patch),
-        };
-        if (bad or n < 10) continue;
-        const winner = winnerSide(m.winner) orelse continue;
-        const gk: GameKey = .{ .slice = slice, .tier = gameTier(&players) };
-        (try run.games.getOrPutValue(a, gk, 0)).value_ptr.* += 1;
-        for (players) |p| {
-            const sl = try run.slots.getOrPutValue(a, .{ .slice = slice, .tier = p.tier, .role = p.role }, 0);
-            sl.value_ptr.* += 1;
-            const c = &run.cells[index_of[p.champion] orelse continue];
-            const opp = opponent(&players, p) orelse continue;
-            const e = try c.getOrPutValue(a, .{
-                .slice = slice,
-                .tier = p.tier,
-                .role = p.role,
-                .opponent = opp.champion,
-            }, .{});
-            e.value_ptr.games += 1;
-            if (p.team == winner) e.value_ptr.wins += 1;
-            if (p.gold14 != null and opp.gold14 != null) {
-                const d = p.gold14.? - opp.gold14.?;
-                e.value_ptr.gold_n += 1;
-                e.value_ptr.gold_sum += d;
-                e.value_ptr.gold_sq += d * d;
-            }
-        }
-        // Once per game: both teams may ban the same champion
-        var banned: [10]u32 = undefined;
-        var nb: usize = 0;
+        bans.clearRetainingCapacity();
         try bq.bind(.{m.id});
-        while (try bq.step()) {
-            const champion = bq.row(struct { champion: u32 }).champion;
-            if (std.mem.indexOfScalar(u32, banned[0..nb], champion) != null or nb == banned.len) continue;
-            banned[nb] = champion;
-            nb += 1;
-            (try run.bans.getOrPutValue(a, .{ .game = gk, .champion = champion }, 0)).value_ptr.* += 1;
+        while (try bq.step()) try bans.append(run.arena.child_allocator, bq.row(struct { champion: u32 }).champion);
+        try countGame(run, &game, m, bans.items, index_of, since_ms, all_platforms);
+    }
+}
+
+/// countRun from the views partials: each match's game
+fn countGames(run: *Run, games: *const partials.Store, matches: []const Match, index_of: []const ?u16, champs: usize, since_ms: i64, all_platforms: []const []const u8) !void {
+    run.cells = try run.arena.allocator().alloc(Cells, champs);
+    @memset(run.cells, .empty);
+    var bans: std.ArrayList(u32) = .empty;
+    defer bans.deinit(run.arena.child_allocator);
+    for (matches) |m| {
+        const g = m.game.?;
+        var game: Game = .{};
+        for (g.players) |p| {
+            game.add(p.team, games.string(p.position), p.champion, games.string(p.tier), if (p.gold15) if (p.gold14) |g14| @as(i64, g14) else null else null);
         }
+        bans.clearRetainingCapacity();
+        for (g.bans) |b| try bans.append(run.arena.child_allocator, std.math.cast(u32, b.champion) orelse return error.Unrepresentable);
+        try countGame(run, &game, m, bans.items, index_of, since_ms, all_platforms);
+    }
+}
+
+/// A match's participant rows as they arrive, in slot order
+const Game = struct {
+    players: [10]Player = undefined,
+    n: usize = 0,
+    rows: usize = 0,
+    bad: bool = false,
+
+    fn add(g: *Game, team_id: i64, position: ?[]const u8, champion: i64, tier: ?[]const u8, gold14: ?i64) void {
+        g.rows += 1;
+        if (g.n == 10) {
+            g.bad = true;
+            return;
+        }
+        const team: u1 = switch (team_id) {
+            100 => 0,
+            200 => 1,
+            else => {
+                g.bad = true;
+                return;
+            },
+        };
+        const role = Role.fromLcu(position orelse "") orelse {
+            g.bad = true;
+            return;
+        };
+        if (champion <= 0 or champion > std.math.maxInt(u16)) g.bad = true;
+        for (g.players[0..g.n]) |p| {
+            if (p.team == team and p.role == role) g.bad = true;
+        }
+        g.players[g.n] = .{
+            .team = team,
+            .role = role,
+            .champion = @intCast(std.math.clamp(champion, 0, std.math.maxInt(u16))),
+            .tier = @intCast(if (tier) |t| indexOf(&tiers, t) orelse tiers.len else tiers.len),
+            .gold14 = gold14,
+        };
+        g.n += 1;
+    }
+};
+
+/// One match's game and bans (in key order) into `run`
+fn countGame(run: *Run, game: *const Game, m: Match, bans: []const u32, index_of: []const ?u16, since_ms: i64, all_platforms: []const []const u8) !void {
+    const a = run.arena.allocator();
+    if (game.rows == 0) return;
+    const slice: Slice = .{
+        .recent = m.start >= since_ms,
+        .platform = @intCast(indexOf(all_platforms, m.platform) orelse 0),
+        .patch = try patchIndex(a, &run.patches, m.patch),
+    };
+    if (game.bad or game.n < 10) return;
+    const winner = winnerSide(m.winner) orelse return;
+    const players = &game.players;
+    const gk: GameKey = .{ .slice = slice, .tier = gameTier(players) };
+    (try run.games.getOrPutValue(a, gk, 0)).value_ptr.* += 1;
+    for (players) |p| {
+        const sl = try run.slots.getOrPutValue(a, .{ .slice = slice, .tier = p.tier, .role = p.role }, 0);
+        sl.value_ptr.* += 1;
+        const c = &run.cells[index_of[p.champion] orelse continue];
+        const opp = opponent(players, p) orelse continue;
+        const e = try c.getOrPutValue(a, .{
+            .slice = slice,
+            .tier = p.tier,
+            .role = p.role,
+            .opponent = opp.champion,
+        }, .{});
+        e.value_ptr.games += 1;
+        if (p.team == winner) e.value_ptr.wins += 1;
+        if (p.gold14 != null and opp.gold14 != null) {
+            const d = p.gold14.? - opp.gold14.?;
+            e.value_ptr.gold_n += 1;
+            e.value_ptr.gold_sum += d;
+            e.value_ptr.gold_sq += d * d;
+        }
+    }
+    // Once per game: both teams may ban the same champion
+    var banned: [10]u32 = undefined;
+    var nb: usize = 0;
+    for (bans) |champion| {
+        if (std.mem.indexOfScalar(u32, banned[0..nb], champion) != null or nb == banned.len) continue;
+        banned[nb] = champion;
+        nb += 1;
+        (try run.bans.getOrPutValue(a, .{ .game = gk, .champion = champion }, 0)).value_ptr.* += 1;
     }
 }
 
@@ -668,8 +736,8 @@ test "runs on their own connections make the files one walk makes" {
     site.arena = a;
     site.champs = &champs;
     site.view_curves = &no_curves;
-    const one = try makeIn(&site, memory_db, opts, 1);
-    const several = try makeIn(&site, file_db, opts, runs);
+    const one = try makeIn(&site, memory_db, opts, 1, null);
+    const several = try makeIn(&site, file_db, opts, runs, null);
     try std.testing.expectEqual(one.files.len, several.files.len);
     for (one.files, several.files) |x, y| {
         try std.testing.expectEqualStrings(x.path, y.path);

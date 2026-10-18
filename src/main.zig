@@ -35,6 +35,7 @@ pub const api = @import("api/root.zig");
 pub const backup = @import("backup.zig");
 pub const forget = @import("forget.zig");
 pub const rekey = @import("rekey.zig");
+const partials = @import("partials.zig");
 pub const admin = @import("admin.zig");
 pub const status = @import("status.zig");
 const Date = @import("date.zig").Date;
@@ -290,6 +291,9 @@ const usage =
     \\              --reuse          with --views: keep the parts of the file already
     \\                               there that this binary would make the same way
     \\                               (a deploy's round), load only the rest
+    \\              --no-partials    with --views: read every game from the database,
+    \\                               not data/partials (docs/architecture.md "Views
+    \\                               partials"), which is left alone
     \\              --patch-games    print the EUW patch the site would show and its
     \\                               game count (no site; deploy/web-loop.sh)
     \\  dev        work on the site: pages rendered on request from DIR (data loaded
@@ -1350,6 +1354,9 @@ const SiteFlags = struct {
     views: ?[]const u8 = null,
     views_format: bool = false,
     reuse: bool = false,
+    no_partials: bool = false,
+    /// The views partials, for `site --views` only: the renderer never writes them
+    partials_dir: ?[]const u8 = null,
 
     /// False for a flag that isn't one of these
     fn parse(f: *SiteFlags, c: *Cmd) !bool {
@@ -1379,6 +1386,8 @@ const SiteFlags = struct {
             f.views_format = true;
         } else if (c.is("--reuse")) {
             f.reuse = true;
+        } else if (c.is("--no-partials")) {
+            f.no_partials = true;
         } else return false;
         return true;
     }
@@ -1463,6 +1472,7 @@ fn cmdSite(c: *Cmd) !u8 {
     const db = try c.open();
     defer db.close();
     if (f.views) |path| {
+        if (!f.no_partials) f.partials_dir = try partials.dirIn(c.arena, c.data_dir);
         const l = try loadAll(c, &f, db, email);
         defer l.free(c.init.gpa);
         try l.loaded.writeViews(path);
@@ -1642,6 +1652,7 @@ fn loadAll(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !Loa
     const l = try prepare(c, f, db, contact);
     errdefer l.free(c.init.gpa);
     if (f.reuse) if (f.views) |path| try l.loaded.reuseViews(path);
+    l.loaded.extras.partials_dir = f.partials_dir;
     l.loaded.lazy = false;
     try loadViews(l.loaded);
     return l;
@@ -1812,6 +1823,7 @@ fn cmdRebuild(c: *Cmd) !u8 {
     defer db.close();
     std.log.info("{d} matches rebuilt", .{try riot.match.rebuild(c.init.gpa, db)});
     std.log.info("{d} timelines gave gold columns", .{try riot.crawl.rebuildGold(c.init.gpa, db)});
+    try partials.drop(c.init.gpa, c.init.io, try partials.dirIn(c.arena, c.data_dir));
     return 0;
 }
 
@@ -1918,6 +1930,7 @@ fn rekeyApply(c: *Cmd, db: ?store.Db, api_db: ?store.Db, plan: *const rekey.Plan
             else => return err,
         };
         std.log.info("forgotten carried over; players, ladder and mastery cleared; matches kept", .{});
+        try partials.drop(c.init.gpa, c.init.io, try partials.dirIn(c.arena, c.data_dir));
     }
     if (api_db) |d| {
         rekey.applyApi(c.init.gpa, d, plan) catch |err| switch (err) {
@@ -2042,6 +2055,7 @@ fn cmdRestore(c: *Cmd) !u8 {
     std.log.info("{s}: {d} files, {d} matches, {d} timelines; {d} rows re-erased", .{
         c.data_dir, r.files, r.matches, r.timelines, r.removed.total(),
     });
+    try partials.drop(c.init.gpa, c.init.io, try partials.dirIn(c.arena, c.data_dir));
     return 0;
 }
 
@@ -2098,6 +2112,7 @@ fn cmdForget(c: *Cmd) !u8 {
     }
     var live: forget.Removed = .{};
     var scrubbed: forget.Removed = .{};
+    var erased: std.ArrayList([]const u8) = .empty;
     var unresolved: usize = 0;
     var already: usize = 0;
     for (ids) |id| {
@@ -2115,6 +2130,7 @@ fn cmdForget(c: *Cmd) !u8 {
             continue;
         }
         live.add(try forget.forget(d, puuid, now, .record));
+        try erased.append(arena, puuid);
         if (backups) |dir| scrubbed.add(try backup.scrub(arena, io, dir, puuid, now));
     }
     if (ids.len > 0) {
@@ -2131,6 +2147,11 @@ fn cmdForget(c: *Cmd) !u8 {
             live.raw_timelines,
             live.rank_history,
         });
+    }
+    // Their PUUID hashes out of the views partials now, not at the next views write
+    if (erased.items.len > 0) {
+        const n = try partials.forget(c.init.gpa, io, try partials.dirIn(arena, c.data_dir), erased.items);
+        std.log.info("views partials: {d} rows blanked", .{n});
     }
     if (api_db != null and ids.len > 0) std.log.info("Your games cache: erased and blocked", .{});
     if (backups != null) std.log.info("backup rows: {d}", .{scrubbed.total()});

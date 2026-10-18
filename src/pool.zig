@@ -16,6 +16,7 @@ const core = @import("core");
 const stats = @import("stats.zig");
 const riot_mastery = @import("riot/mastery.zig");
 const spread = @import("spread.zig");
+const partials = @import("partials.zig");
 
 const Role = core.Role;
 const Stats = core.Stats;
@@ -95,27 +96,25 @@ pub const Tally = struct {
 
     /// One player's champions; ids missing from `st` are ignored
     pub fn add(t: *Tally, st: *const Stats, plays: []const Play, rule: Rule) void {
-        var total: u64 = 0;
-        var top: ?Play = null;
-        for (plays) |p| {
-            if (st.index(p.champion) == null) continue;
-            total += p.weight;
-            if (top == null or p.weight > top.?.weight) top = p;
-        }
-        const main = top orelse return;
-        if (total < rule.min_total) return;
-        const m = st.index(main.champion).?;
+        const c = contribution(st, plays, rule) orelse return;
+        t.players += 1;
+        t.mains[c.m] += 1;
+        if (c.one_trick) t.one_tricks[c.m] += 1;
+        for (plays) |p| if (c.plays(st, p)) t.also(c.m, st.index(p.champion).?);
+    }
+
+    /// A player as `contribution` gave them, by champion ids (partials' mastery.bin)
+    pub fn addContribution(t: *Tally, st: *const Stats, main: u32, one_trick: bool, others: []const u16) void {
+        const m = st.index(main).?;
         t.players += 1;
         t.mains[m] += 1;
-        const top_w: f64 = @floatFromInt(main.weight);
-        if (top_w >= rule.one_trick_share * @as(f64, @floatFromInt(total))) t.one_tricks[m] += 1;
-        for (plays) |p| {
-            const o = st.index(p.champion) orelse continue;
-            if (o == m or p.weight < rule.min_weight) continue;
-            if (@as(f64, @floatFromInt(p.weight)) < rule.min_share * top_w) continue;
-            t.plays[o] += 1;
-            t.together[m * t.n + o] += 1;
-        }
+        if (one_trick) t.one_tricks[m] += 1;
+        for (others) |o| t.also(m, st.index(o).?);
+    }
+
+    fn also(t: *Tally, m: usize, o: usize) void {
+        t.plays[o] += 1;
+        t.together[m * t.n + o] += 1;
     }
 
     /// How much more often `main`'s players play `other` than players of other mains
@@ -129,6 +128,44 @@ pub const Tally = struct {
         return (k + prior * base) / ((n + prior) * base);
     }
 };
+
+/// How a player counts in a Tally: their main and whether a one-trick
+pub const Contribution = struct {
+    main: u32,
+    /// Stats index of main
+    m: usize,
+    one_trick: bool,
+    top_w: f64,
+    rule: Rule,
+
+    /// Whether `p` counts as a champion they also play
+    pub fn plays(c: Contribution, st: *const Stats, p: Play) bool {
+        const o = st.index(p.champion) orelse return false;
+        if (o == c.m or p.weight < c.rule.min_weight) return false;
+        return @as(f64, @floatFromInt(p.weight)) >= c.rule.min_share * c.top_w;
+    }
+};
+
+/// Null when the player does not count: no champion in `st`, or too little weight
+pub fn contribution(st: *const Stats, plays: []const Play, rule: Rule) ?Contribution {
+    var total: u64 = 0;
+    var top: ?Play = null;
+    for (plays) |p| {
+        if (st.index(p.champion) == null) continue;
+        total += p.weight;
+        if (top == null or p.weight > top.?.weight) top = p;
+    }
+    const main = top orelse return null;
+    if (total < rule.min_total) return null;
+    const top_w: f64 = @floatFromInt(main.weight);
+    return .{
+        .main = main.champion,
+        .m = st.index(main.champion).?,
+        .one_trick = top_w >= rule.one_trick_share * @as(f64, @floatFromInt(total)),
+        .top_w = top_w,
+        .rule = rule,
+    };
+}
 
 /// Every player's ranked solo champions, from the matches crawled so far (all patches: a
 /// pool changes more slowly than a patch), into out[i] for the platforms of sets[i], in
@@ -196,6 +233,68 @@ pub fn tallyGames(
     for (out, spreads, plays) |*t, *s, p| addPlayer(st, t, s, p.items);
 }
 
+/// tallyGames from the views partials: the same players and plays, grouped by PUUID key
+/// instead of PUUID (the tallies are sums, so in any player order)
+pub fn tallyGamesFrom(
+    gpa: Allocator,
+    games: *const partials.Store,
+    st: *const Stats,
+    sets: []const []const []const u8,
+    out: []Tally,
+    spreads: []spread.Tally,
+) !void {
+    const masks = try games.setMasks(gpa, sets);
+    defer gpa.free(masks);
+    const Row = struct { key: partials.Key, champion: u32, platform: partials.Code, win: bool };
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    for (games.sorted) |g| {
+        if (masks[g.platform] == 0) continue;
+        for (g.players) |p| {
+            const k = p.puuid orelse continue;
+            try rows.append(gpa, .{
+                .key = k,
+                .champion = std.math.cast(u32, p.champion) orelse return error.Unrepresentable,
+                .platform = g.platform,
+                .win = p.win,
+            });
+        }
+    }
+    std.mem.sort(Row, rows.items, {}, struct {
+        fn f(_: void, a: Row, b: Row) bool {
+            if (!a.key.eql(b.key)) return a.key.lessThan(b.key);
+            return a.champion < b.champion;
+        }
+    }.f);
+    const plays = try gpa.alloc(std.ArrayList(Play), sets.len);
+    @memset(plays, .empty);
+    defer {
+        for (plays) |*p| p.deinit(gpa);
+        gpa.free(plays);
+    }
+    var at: usize = 0;
+    while (at < rows.items.len) {
+        const k = rows.items[at].key;
+        var end = at;
+        while (end < rows.items.len and rows.items[end].key.eql(k)) end += 1;
+        for (plays) |*p| p.clearRetainingCapacity();
+        for (rows.items[at..end]) |r| {
+            const in = masks[r.platform];
+            for (plays, 0..) |*p, i| {
+                if (in & (@as(u32, 1) << @intCast(i)) == 0) continue;
+                // By champion, so the same champion on another platform is the last one
+                if (p.items.len > 0 and p.items[p.items.len - 1].champion == r.champion) {
+                    const have = &p.items[p.items.len - 1];
+                    have.weight += 1;
+                    have.wins += @intFromBool(r.win);
+                } else try p.append(gpa, .{ .champion = r.champion, .weight = 1, .wins = @intFromBool(r.win) });
+            }
+        }
+        for (out, spreads, plays) |*t, *s, p| addPlayer(st, t, s, p.items);
+        at = end;
+    }
+}
+
 fn addPlayer(st: *const Stats, t: *Tally, s: *spread.Tally, plays: []const Play) void {
     t.add(st, plays, .games);
     for (plays) |p| {
@@ -231,17 +330,24 @@ pub fn tallyMastery(
     while (try q.step()) {
         _ = arena_state.reset(.retain_capacity);
         const r = q.row(struct { data: []const u8, fetched_at: i64, platform: []const u8 });
-        const entries = riot_mastery.decode(arena_state.allocator(), r.data, r.fetched_at) catch continue;
         plays.clearRetainingCapacity();
-        for (entries) |e| {
-            if (e.last_play < r.fetched_at - mastery_recent_s) continue;
-            try plays.append(gpa, .{ .champion = e.champion, .weight = e.points });
-        }
+        if (!try masteryPlays(arena_state.allocator(), gpa, r.data, r.fetched_at, &plays)) continue;
         const in = stats.setsWith(sets, r.platform);
         for (out, 0..) |*t, i| {
             if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(st, plays.items, .mastery);
         }
     }
+}
+
+/// A mastery row's champions played within mastery_recent_s, by points, into `plays`;
+/// false when the blob doesn't decode (the row is left out)
+pub fn masteryPlays(scratch: Allocator, gpa: Allocator, data: []const u8, fetched_at: i64, plays: *std.ArrayList(Play)) !bool {
+    const entries = riot_mastery.decode(scratch, data, fetched_at) catch return false;
+    for (entries) |e| {
+        if (e.last_play < fetched_at - mastery_recent_s) continue;
+        try plays.append(gpa, .{ .champion = e.champion, .weight = e.points });
+    }
+    return true;
 }
 
 /// Both sources' tallies, one per platform set
@@ -273,6 +379,12 @@ fn freeTallies(gpa: Allocator, ts: []Tally) void {
 
 /// Tallies for each of `sets` (platform lists), two passes over the database in all
 pub fn tally(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8) !Tallies {
+    return tallyWith(gpa, db, st, sets, null);
+}
+
+/// As tally; with `from`, games from the views partials and only the mastery rows
+/// changed since they were read
+pub fn tallyWith(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8, from: ?*partials.Store) !Tallies {
     const games = try initTallies(gpa, st.n, sets.len);
     errdefer freeTallies(gpa, games);
     const mastery = try initTallies(gpa, st.n, sets.len);
@@ -284,8 +396,13 @@ pub fn tally(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []con
         gpa.free(spreads);
     }
     while (made < sets.len) : (made += 1) spreads[made] = try .init(gpa, st.n);
-    try tallyGames(gpa, db, st, sets, games, spreads);
-    try tallyMastery(gpa, db, st, sets, mastery);
+    if (from) |p| {
+        try tallyGamesFrom(gpa, p, st, sets, games, spreads);
+        try p.masteryTallies(db, st, sets, mastery);
+    } else {
+        try tallyGames(gpa, db, st, sets, games, spreads);
+        try tallyMastery(gpa, db, st, sets, mastery);
+    }
     return .{ .games = games, .mastery = mastery, .spread = spreads };
 }
 

@@ -21,6 +21,8 @@ const lab_pack = @import("lab/pack.zig");
 const lab_seatstats = @import("lab/seatstats.zig");
 const lab_events = @import("lab/events.zig");
 const objectives = @import("objectives.zig");
+const partials = @import("partials.zig");
+const forget = @import("forget.zig");
 
 const testing = std.testing;
 const games = 3;
@@ -946,6 +948,143 @@ test "fixture games to events.tsv" {
     try testing.expectEqual(with_tl, seen.first_blood);
     try testing.expectEqual(@as(usize, 1), seen.steal);
     try testing.expect(seen.baron);
+}
+
+test "views partials: the database's views file, after late, replaced, timelined, forgotten and gone games" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path });
+
+    const db = try store.schema.memory();
+    defer db.close();
+    try fillGames(arena, db, 12, true);
+    try fillPrev(arena, db);
+    try fillFlex(arena, db);
+    try db.exec("UPDATE participants SET tier = CASE slot % 3 WHEN 0 THEN 'GOLD' WHEN 1 THEN 'DIAMOND' END");
+    _ = try riot.crawl.rebuildGold(gpa, db);
+    try db.exec("INSERT INTO players (puuid, source, region, matches_checked_at) SELECT DISTINCT puuid, 'ladder', 'europe', 1 FROM participants WHERE puuid IS NOT NULL");
+    const now_s = @divFloor(start_ms, 1000) + 3600;
+    const puuids = try readStrings(arena, db, "SELECT DISTINCT puuid FROM participants WHERE puuid IS NOT NULL ORDER BY puuid");
+    try testing.expectEqual(10, puuids.len);
+    for (puuids, 0..) |p, i| try putMastery(arena, db, p, if (i % 4 == 3) "NA1" else "EUW1", now_s, i);
+
+    const opts: site.Options = .{
+        .out_dir = try std.fs.path.join(arena, &.{ dir, "site" }),
+        .patches = &.{patch},
+        .since_ms = start_ms,
+        .all_platforms = &.{ "EUW1", "NA1" },
+        .contact = "test@example.com",
+        .updated = "1 January 2026",
+        .prev_patch = prev_patch,
+    };
+    const pdir = try std.fs.path.join(arena, &.{ dir, "partials" });
+    const views_path = try std.fs.path.join(arena, &.{ dir, "views.bin" });
+    const before = try viewsFile(arena, io, db, opts, null, views_path, null);
+    try testing.expectEqualSlices(u8, before, try viewsFile(arena, io, db, opts, pdir, views_path, null));
+
+    // The first build of a big store reads whole tables: the same games
+    {
+        const bulk_dir = try std.fs.path.join(arena, &.{ dir, "bulk" });
+        const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
+        const bulk = try partials.Store.open(gpa, io, db, bulk_dir, .{ .now_ms = now_ms, .bulk_after = 0 });
+        defer bulk.deinit();
+        try testing.expect(bulk.counts.bulk);
+        const each = try partials.Store.open(gpa, io, db, pdir, .{ .now_ms = now_ms });
+        defer each.deinit();
+        try testing.expectEqual(0, each.counts.read);
+        var a: std.Io.Writer.Allocating = .init(arena);
+        try partials.dump(bulk, &a.writer);
+        var b: std.Io.Writer.Allocating = .init(arena);
+        try partials.dump(each, &b.writer);
+        try testing.expectEqualStrings(a.written(), b.written());
+        // Flex copies listed as others
+        try testing.expectEqual(12 + games, bulk.counts.games);
+    }
+
+    // `meiolol forget`: the player's key out of every file at once, and gone for good
+    const gone = puuids[3];
+    try testing.expect(try partials.mentions(gpa, io, pdir, gone) > 1);
+    _ = try forget.forget(db, gone, now_s, .record);
+    try testing.expect(try partials.forget(gpa, io, pdir, &.{gone}) > 1);
+    try testing.expectEqual(0, try partials.mentions(gpa, io, pdir, gone));
+
+    // A late game on an old day, a re-stored (REPLACE) one, a timeline arriving, a game
+    // pruned and a mastery row fetched again: those read, the rest kept
+    {
+        const body = @embedFile("riot/testdata/match.json");
+        var doc = try riot.match.parse(arena, body);
+        doc.metadata.matchId = "EUW1_100";
+        doc.info.platformId = "EUW1";
+        doc.info.gameVersion = patch ++ ".1.1";
+        doc.info.gameStartTimestamp = start_ms - 3 * std.time.ms_per_day;
+        try riot.match.storeRows(db, doc, "riot");
+    }
+    // As the crawler stores a forgotten player's game
+    try db.run("UPDATE participants SET puuid = NULL WHERE match_id = 'EUW1_100' AND puuid = ?", .{gone});
+    try db.exec(
+        \\INSERT OR REPLACE INTO matches SELECT match_id, source, platform, queue_id, patch,
+        \\  game_version, game_start, duration_s, 300 - winning_team, remake
+        \\FROM matches WHERE match_id = 'EUW1_2';
+        \\UPDATE participants SET win = 1 - win WHERE match_id = 'EUW1_2';
+        \\INSERT INTO timeline.timelines SELECT 'EUW1_3', frames, events, data FROM timeline.timelines WHERE match_id = 'EUW1_1';
+        \\UPDATE participants SET gold14 = 5000 + 37 * slot, gold15 = 5600 WHERE match_id = 'EUW1_3';
+        \\DELETE FROM participants WHERE match_id = 'EUW1_5';
+        \\DELETE FROM bans WHERE match_id = 'EUW1_5';
+        \\DELETE FROM matches WHERE match_id = 'EUW1_5';
+    );
+    try putMastery(arena, db, puuids[0], "EUW1", now_s, 7);
+    var counts: partials.Counts = .{};
+    const after = try viewsFile(arena, io, db, opts, null, views_path, null);
+    try testing.expect(!std.mem.eql(u8, before, after));
+    try testing.expectEqualSlices(u8, after, try viewsFile(arena, io, db, opts, pdir, views_path, &counts));
+    try testing.expectEqual(3, counts.read);
+    try testing.expectEqual(1, counts.dropped);
+    try testing.expectEqual(9, counts.mastery);
+    try testing.expectEqual(1, counts.mastery_read);
+    try testing.expectEqual(0, try partials.mentions(gpa, io, pdir, gone));
+}
+
+/// `site --views` from db (from the partials in `partials_dir` when given), its bytes
+fn viewsFile(arena: std.mem.Allocator, io: std.Io, db: store.Db, opts: site.Options, partials_dir: ?[]const u8, path: []const u8, counts: ?*partials.Counts) ![]const u8 {
+    const loaded = try site.Loaded.init(testing.allocator, io, db, opts);
+    defer loaded.deinit();
+    loaded.extras.partials_dir = partials_dir;
+    for (site.html.View.all) |v| try loaded.loadView(v);
+    if (counts) |c| c.* = loaded.extras.games.?.counts;
+    try loaded.writeViews(path);
+    return std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 30));
+}
+
+fn readStrings(arena: std.mem.Allocator, db: store.Db, sql: []const u8) ![]const []const u8 {
+    var q = try db.prepare(sql);
+    defer q.deinit();
+    try q.bind(.{});
+    var out: std.ArrayList([]const u8) = .empty;
+    while (try q.step()) try out.append(arena, try arena.dupe(u8, q.bytes(0)));
+    return out.items;
+}
+
+/// A mastery row over the fixture champions, points varied by `seed`
+fn putMastery(arena: std.mem.Allocator, db: store.Db, puuid: []const u8, platform: []const u8, now_s: i64, seed: usize) !void {
+    var entries: [fixture_champions.len]riot.mastery.Entry = undefined;
+    for (&entries, fixture_champions) |*e, c| e.* = .{
+        .champion = c.id,
+        .level = 5,
+        .points = @intCast((c.id * 7919 + seed * 104_729) % 90_000 + 1000),
+        .last_play = now_s - @as(i64, @intCast((c.id + seed) % 3)) * 200 * std.time.s_per_day,
+    };
+    std.mem.sort(riot.mastery.Entry, &entries, {}, struct {
+        fn f(_: void, a: riot.mastery.Entry, b: riot.mastery.Entry) bool {
+            return a.champion < b.champion;
+        }
+    }.f);
+    const blob = try riot.mastery.encode(arena, &entries, now_s);
+    try db.run("INSERT OR REPLACE INTO mastery VALUES (?,?,?,?,?)", .{ puuid, platform, now_s, entries.len, store.Blob{ .bytes = blob } });
 }
 
 /// Data Dragon's classes for the fixture timeline's purchases (16.20): its finished

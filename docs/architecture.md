@@ -14,6 +14,8 @@ src/
   pool.zig           Pool: who mains X also plays Y, hard-lane options, ban fallback
   learning.zig       learning curves: results by games played on a champion
   stats.zig          model file from the matches table (`meiolol stats`)
+  partials.zig       views partials (data/partials): the views write's games and mastery
+                     contributions kept between writes ("Views partials")
   eval.zig           draft model on held-out newer games (`meiolol eval`, docs/model.md)
   draftfile.zig      the admin Draft tester's model file: shapes, reference scorer,
                      writer (shared with lab/draft.zig; docs/model.md "Draft model file")
@@ -141,6 +143,9 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   can exchange them; written by `meiolol forget`, src/forget.zig)
   is honoured: never stored as players or mastery, blanked in participants, and no
   raw summary or raw timeline kept for their matches
+- `partials/` (views partials, ~0.6 GB for 835k matches): the views write's copy of the
+  games and mastery contributions it reads ("Views partials" under Website); derived,
+  never backed up, safe to delete (the next write rebuilds it)
 - Schema changes: `schema.zig` migrate() alters or rebuilds tables in place (checks
   inside the write lock, so concurrent opens are safe). Back up before a first run
 - Scale at full rate (4 regions, ~135k matches/day): kept forever ~8.6 KB timeline +
@@ -561,6 +566,28 @@ robots.txt, sitemap, the JSON made from pool and learning) are made on reading, 
 stored. Curves, builds and lean files are read by the loading binary as before.
 pipeline_test: a views file's Loaded serves every full-build file byte for byte, and a
 --reuse write with every part kept, or one part stale, gives the same file.
+Views partials (data/partials, src/partials.zig; `site --views` only, `--no-partials`
+reads the tables as before): the games and mastery the views write reads, kept between
+writes so a write reads only what changed. days/<unix day>.bin: every ranked solo game
+(420, no remake) started that UTC day as the views read it (match row, participants by
+slot with a 128-bit Wyhash of the PUUID, never the PUUID, bans in key order), other
+matches by id, queue, platform and patch; per game, not per-day sums, because the
+30-day window starts mid-day, pool mains and learning game numbers need each player's
+games, and filters' byte order follows match ids. mastery.bin: per mastery row (key,
+rowid) its pool contribution (main, one-trick, champions also played) for one champion
+list. One read transaction diffs (match_id, rowid) of matches and timeline.timelines
+(read first: an attached file's snapshot starts at its first read, and the writer
+commits main first) against the files, then reads only new, REPLACEd (new rowid) or
+newly timelined matches, by key, or whole tables past 50k (the first build); mastery
+rows likewise by rowid. In-place changes the diff can't see: forgotten PUUIDs (scrubbed
+each write from `forgotten`, and at once by `meiolol forget` under the directory's
+lock), PUUIDs blanked at 24 months (days near the cutoff read again each write, older
+ones keep no keys), and rebuild, rekey and restore, which drop the files (under the
+lock). A migration that rewrites participants or bans in place must drop them too. A
+change to partials.zig, pool.zig or riot/mastery.zig, or to the file types, starts them
+again. pipeline_test checks the views file from the partials against the tables', also
+after a late, a REPLACEd, a newly timelined, a forgotten and a pruned game and a mastery
+refetch, and that forget leaves no row with the player's key.
 `meiolol dev` (deploy/dev.sh) serves `Loaded` from data/snap (`deploy/box.sh snapshot`:
 the tables the site reads, PUUIDs replaced, no raw docs) with CSS and JS from
 src/site/static, and reloads the open page on an edit: `zig build --watch` rebuilds,

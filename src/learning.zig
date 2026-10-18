@@ -16,6 +16,7 @@ const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
 const ep = @import("riot/endpoints.zig");
 const par = @import("par.zig");
+const partials = @import("partials.zig");
 
 /// FROM and WHERE for the participant rows of the scan pool's players (matches_checked_at
 /// set), driven from players_region_check: ~15k players of 9M, where joining every
@@ -339,13 +340,138 @@ fn historyRange(
     }
 }
 
+/// tallyHistory from the views partials: the same rows, with the checked players read
+/// from db, grouped by PUUID key instead of PUUID (sums, so in any player order)
+pub fn tallyHistoryFrom(
+    gpa: Allocator,
+    db: store.Db,
+    games: *const partials.Store,
+    st: *const Stats,
+    sets: []const []const []const u8,
+    out: []Tally,
+) !void {
+    var checked: std.AutoHashMapUnmanaged(partials.Key, void) = .empty;
+    defer checked.deinit(gpa);
+    {
+        var q = try db.prepare("SELECT puuid FROM players WHERE region IN (" ++ region_list ++ ") AND matches_checked_at IS NOT NULL" ++
+            // As the puuid ranges
+            " AND puuid < '" ++ puuid_end ++ "'");
+        defer q.deinit();
+        try q.bind(.{});
+        while (try q.step()) try checked.put(gpa, partials.key(q.row(struct { p: []const u8 }).p), {});
+    }
+    const masks = try games.setMasks(gpa, sets);
+    defer gpa.free(masks);
+    const lanes = blk: {
+        var lane = try gpa.alloc(bool, games.strings.count() + 1);
+        @memset(lane, false);
+        for (games.strings.keys(), 1..) |k, code| {
+            for ([_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" }) |l| if (std.mem.eql(u8, k, l)) {
+                lane[code] = true;
+            };
+        }
+        break :blk lane;
+    };
+    defer gpa.free(lanes);
+    const Row = struct {
+        key: partials.Key,
+        champion: i64,
+        start: i64,
+        id: []const u8,
+        platform: partials.Code,
+        win: bool,
+        gold: ?i32,
+    };
+    var rows: std.ArrayList(Row) = .empty;
+    defer rows.deinit(gpa);
+    for (games.sorted) |g| {
+        if (masks[g.platform] == 0) continue;
+        for (g.players) |p| {
+            const k = p.puuid orelse continue;
+            if (!checked.contains(k)) continue;
+            try rows.append(gpa, .{
+                .key = k,
+                .champion = p.champion,
+                .start = g.start,
+                .id = g.id,
+                .platform = g.platform,
+                .win = p.win,
+                .gold = laneGold(g, lanes, p.slot),
+            });
+        }
+    }
+    // Games on a champion in start order; a tie (never seen) by match id
+    std.mem.sort(Row, rows.items, {}, struct {
+        fn f(_: void, a: Row, b: Row) bool {
+            if (!a.key.eql(b.key)) return a.key.lessThan(b.key);
+            if (a.champion != b.champion) return a.champion < b.champion;
+            if (a.start != b.start) return a.start < b.start;
+            return std.mem.lessThan(u8, a.id, b.id);
+        }
+    }.f);
+    const counts = try gpa.alloc(u32, sets.len);
+    defer gpa.free(counts);
+    var player: ?partials.Key = null;
+    var champion: i64 = -1;
+    var seen: u32 = 0;
+    for (rows.items) |r| {
+        if (player == null or !player.?.eql(r.key)) {
+            player = r.key;
+            seen = 0;
+            champion = -1;
+        }
+        if (r.champion != champion) {
+            champion = r.champion;
+            @memset(counts, 0);
+        }
+        const in = masks[r.platform];
+        for (out, counts, 0..) |*t, *game, i| {
+            const bit = @as(u32, 1) << @intCast(i);
+            if (in & bit == 0) continue;
+            game.* += 1;
+            if (seen & bit == 0) t.players += 1;
+            seen |= bit;
+        }
+        const c = st.index(@intCast(champion)) orelse continue;
+        for (out, counts, 0..) |*t, game, i| {
+            if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(c, game, r.win, r.gold);
+        }
+    }
+}
+
+/// goldMap's value for the player at `slot`: the difference to the last lane opponent
+/// by slot (same position, other team, both with gold15), 0 when either lacks gold14;
+/// null without one
+fn laneGold(g: *const partials.Game, lanes: []const bool, slot: i8) ?i32 {
+    if (slot < 0 or slot >= 10) return null;
+    var diff: ?i32 = null;
+    for (g.players) |p| {
+        if (p.slot != slot) continue;
+        if (!lanes[p.position] or !p.gold15) return null;
+        for (g.players) |o| {
+            if (!lanes[o.position] or !o.gold15) continue;
+            if (o.team == p.team or o.position != p.position) continue;
+            diff = if (p.gold14 != null and o.gold14 != null) p.gold14.? - o.gold14.? else 0;
+        }
+        return diff;
+    }
+    return null;
+}
+
 /// Tallies for each of `sets` (platform lists) in one pass; free with freeTallies
 pub fn tally(gpa: Allocator, io: std.Io, db: store.Db, st: *const Stats, sets: []const []const []const u8) ![]Tally {
+    return tallyWith(gpa, io, db, st, sets, null);
+}
+
+/// As tally; with `from`, the games from the views partials
+pub fn tallyWith(gpa: Allocator, io: std.Io, db: store.Db, st: *const Stats, sets: []const []const []const u8, from: ?*const partials.Store) ![]Tally {
     const out = try gpa.alloc(Tally, sets.len);
     var made: usize = 0;
     errdefer freeTallies(gpa, out[0..made]);
     while (made < sets.len) : (made += 1) out[made] = try .init(gpa, st.n);
-    try tallyHistory(gpa, io, db, st, sets, out);
+    if (from) |p| {
+        try tallyHistoryFrom(gpa, db, p, st, sets, out);
+    } else try tallyHistory(gpa, io, db, st, sets, out);
     return out;
 }
 

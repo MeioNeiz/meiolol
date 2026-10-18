@@ -4,6 +4,7 @@ const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const statsfile = core.statsfile;
+const partials = @import("partials.zig");
 const Role = core.Role;
 
 const log = std.log.scoped(.stats);
@@ -41,6 +42,23 @@ pub fn buildSince(
     var b: statsfile.Builder = try .init(gpa, champs);
     errdefer b.deinit();
     const summary = try scan(gpa, db, chosen, platforms, since_ms, BuilderSink{ .b = &b });
+    return .{ .builder = b, .summary = summary };
+}
+
+/// As buildSince, from the views partials (champions still from db)
+pub fn buildFrom(
+    gpa: std.mem.Allocator,
+    db: store.Db,
+    games: *const partials.Store,
+    chosen: []const []const u8,
+    platforms: []const []const u8,
+    since_ms: i64,
+) !Built {
+    const champs = try champions(gpa, db);
+    defer freeChampions(gpa, champs);
+    var b: statsfile.Builder = try .init(gpa, champs);
+    errdefer b.deinit();
+    const summary = try scanFrom(gpa, games, chosen, platforms, since_ms, BuilderSink{ .b = &b });
     return .{ .builder = b, .summary = summary };
 }
 
@@ -172,6 +190,39 @@ pub fn scan(
     return summary;
 }
 
+/// As scan, from the views partials: the same games in the same order
+pub fn scanFrom(
+    gpa: std.mem.Allocator,
+    games: *const partials.Store,
+    chosen: []const []const u8,
+    platforms: []const []const u8,
+    since_ms: i64,
+    sink: anytype,
+) !Summary {
+    const patch_in = try games.codesIn(gpa, chosen);
+    defer gpa.free(patch_in);
+    const platform_in = try games.codesIn(gpa, platforms);
+    defer gpa.free(platform_in);
+    var summary: Summary = .{ .games = 0, .skipped = 0 };
+    for (games.sorted) |g| {
+        if (!patch_in[g.patch] or !platform_in[g.platform]) continue;
+        const winning_team = g.winning_team orelse continue;
+        if (g.start < since_ms) continue;
+        var game: Game = .{
+            .id = matchKey(g.id),
+            .winning_team = winning_team,
+            .start = g.start,
+            .patch = patchKey(games.string(g.patch).?),
+            .platform = platformIndex(platforms, games.string(g.platform).?),
+            .duration_s = @intCast(g.duration_s),
+        };
+        // A NULL position reads as "" from SQLite
+        for (g.players) |p| game.add(p.team, games.string(p.position) orelse "", p.champion);
+        try game.finish(sink, &summary);
+    }
+    return summary;
+}
+
 /// Games of `chosen` from `platforms` as scan's query picks them, without reading them
 /// (scan's count also drops a game missing a player or role)
 pub fn countGames(db: store.Db, chosen: []const []const u8, platforms: []const []const u8) !u64 {
@@ -286,8 +337,13 @@ pub fn patches(gpa: std.mem.Allocator, db: store.Db, platforms: []const []const 
     defer q.deinit();
     try q.bind(.{ ranked_solo, platform_json });
     while (try q.step()) try list.append(gpa, try gpa.dupe(u8, q.bytes(0)));
-    std.mem.sort([]const u8, list.items, {}, newerPatch);
+    sortPatches(list.items);
     return list.toOwnedSlice(gpa);
+}
+
+/// Newest first ("16.20" before "16.9")
+pub fn sortPatches(list: [][]const u8) void {
+    std.mem.sort([]const u8, list, {}, newerPatch);
 }
 
 fn newerPatch(_: void, a: []const u8, b: []const u8) bool {
