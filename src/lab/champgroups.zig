@@ -240,7 +240,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         std.debug.print("usage:\n{s}", .{usage});
         return 2;
     }
-    if (!std.mem.eql(u8, cand.name, "win-draft")) {
+    if (!@hasDecl(cand, "name") or !std.mem.eql(u8, cand.name, "win-draft")) {
         std.debug.print("champgroups: build with -Dcand=src/lab/cand/win-draft (the shipped model is the offset)\n", .{});
         return 2;
     }
