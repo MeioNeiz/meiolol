@@ -3,9 +3,11 @@
 **Status 17 Oct 20:40 (main b0ed63a):** 37 of the first 47 findings fixed (31 confirmed
 by re-walk or script), 4 partly (R4, R25, R45, R47); open are the 6 that wait on Jacob
 (R3, R12, R13, R16, R18, R34; decisions J1 to J9) and the re-walks' new findings R48 to
-R62, of which 3 are fixed and a polish round (fix3) is on 8 more. No known bug left in
-code; R45 waits on an install on jomove. Next steps for normal ranked players:
-docs/review/next-steps-2026-10-17.md (Q1 to Q4).
+R62, of which 3 are fixed and the polish round (fix3, 18 Oct) did 8 more: R52, R53,
+R60, R61, R62 committed (b0de9a1, 7780e28), R48 to R50 done but uncommitted (their file
+holds another session's edits). No known bug left in code; R45 waits on an install on
+jomove. Next steps for normal ranked players: docs/review/next-steps-2026-10-17.md (Q1 to
+Q4).
 
 Persona walks and an expert review of the live site (deploy 0fa7732 to 6c6631c), merged
 into one list of findings with stable ids (R1, R2, ...). Source ids in brackets point into
@@ -84,21 +86,21 @@ New findings from the re-walks, R48 to R62 (sections 3.1 to 3.3 hold the details
 
 | id | finding | source | sev | type | status |
 | --- | --- | --- | --- | --- | --- |
-| R48 | Tester: name click picks; nothing shows the row opens the why | draft N1 | minor | Design | open (fix3) |
-| R49 | Tester: model line's open fold is jargon; ticks read as quality | draft N2 | minor | Design | open (fix3) |
-| R50 | Tester: no "too close to call" when top ranges overlap | draft N3 | minor | Design | open (fix3; rule J2) |
+| R48 | Tester: name click picks; nothing shows the row opens the why | draft N1 | minor | Design | fixed, row opens the why, separate Pick button (done, uncommitted: admin-draft.js also holds another session's champcomp v2 edits) |
+| R49 | Tester: model line's open fold is jargon; ticks read as quality | draft N2 | minor | Design | fixed, plain fold, stats under Debug (done, uncommitted: admin-draft.js also holds another session's champcomp v2 edits) |
+| R50 | Tester: no "too close to call" when top ranges overlap | draft N3 | minor | Design | fixed as a hint only: top two's 95% ranges overlap (done, uncommitted: admin-draft.js also holds another session's champcomp v2 edits; no safe rule, J2) |
 | R51 | Tester: random drafts at 58 to 65% look broken; the spread is right | draft N4 | polish | Design | open (not a bug) |
-| R52 | Tester: "points" and "±0.4" never say what they are | draft N5 | polish | Design | open (fix3) |
-| R53 | Tester: "lock" explained only in a tooltip | draft N6 | polish | Design | open (fix3) |
+| R52 | Tester: "points" and "±0.4" never say what they are | draft N5 | polish | Design | fixed b0de9a1 (browser-checked 18 Oct) |
+| R53 | Tester: "lock" explained only in a tooltip | draft N6 | polish | Design | fixed b0de9a1 (browser-checked 18 Oct) |
 | R54 | Site: Back restores the search text but not the filter | site N1 | major | Bug | fixed (9f5fe61) |
 | R55 | Site: matchup index search takes one champion; Mid below Top and Jungle | site N2 | minor | Design | fixed (9f5fe61) |
 | R56 | Site: "Desktop app" page vs "champ select helper" link | site N3 | polish | Design | fixed (07ab3c2) |
 | R57 | Site: matchup pages give no plain even / ahead / behind verdict | site N4 | minor | Design | open (next steps) |
 | R58 | Admin: Models and Lab don't say what to act on | AN1 | minor | Design | open |
 | R59 | Admin: "116% of the way there" beside 54.8% vs published 55 to 57% | AN2 | minor | Design | needs Jacob (J5) |
-| R60 | Admin: 429/403 spikes and 97% key use without saying if they matter | AN3 | minor | Design | open (fix3) |
-| R61 | Admin: logs one file at a time; no per-file error counts | AN4 | minor | Design | open (fix3) |
-| R62 | Admin: "better than today's model (-0.0003 a game)" reads backwards | AN5 | polish | Design | open (fix3) |
+| R60 | Admin: 429/403 spikes and 97% key use without saying if they matter | AN3 | minor | Design | fixed 7780e28 |
+| R61 | Admin: logs one file at a time; no per-file error counts | AN4 | minor | Design | fixed 7780e28 |
+| R62 | Admin: "better than today's model (-0.0003 a game)" reads backwards | AN5 | polish | Design | fixed b0de9a1 (verdict line still shows the bare signed figure) |
 
 ## 1. Summary (first walk, before the fixes)
 
@@ -213,12 +215,12 @@ Code: `admin-draft.js` = src/site/static/admin-draft.js, `admin.js` likewise.
 | R12 | No "role unknown" for enemy picks; ranges hide the role uncertainty | T5, D9 | major public | Design | needs Jacob (J4); still seen |
 | R13 | Primary signal (+X points, win bar) is what the public product may not show | D4 | major roadmap | Design | needs Jacob (J2); still seen |
 | R14 | Copy and small things (a/an, empty board range, button place, 95%, units, bans) | D8, D9, T10 | polish | Bug/Design | fixed, verified by re-walk (eaa0e9e); ± and lock: R52, R53 |
-| R48 | Name click picks; nothing shows the row opens the why | draft N1 | minor | Design | open (fix3) |
-| R49 | Model line's open fold is jargon; ticks read as quality | draft N2 | minor | Design | open (fix3) |
-| R50 | No "too close to call" when the top rows' ranges overlap | draft N3 | minor | Design | open (fix3; a "safe" rule is J2) |
+| R48 | Name click picks; nothing shows the row opens the why | draft N1 | minor | Design | fixed, row opens the why, separate Pick button (done, uncommitted: admin-draft.js also holds another session's champcomp v2 edits) |
+| R49 | Model line's open fold is jargon; ticks read as quality | draft N2 | minor | Design | fixed, plain fold, stats under Debug (done, uncommitted: admin-draft.js also holds another session's champcomp v2 edits) |
+| R50 | No "too close to call" when the top rows' ranges overlap | draft N3 | minor | Design | fixed as a hint only: top two's 95% ranges overlap (done, uncommitted: admin-draft.js also holds another session's champcomp v2 edits; no safe rule, J2) |
 | R51 | Random drafts at 58 to 65% look broken; the spread is right | draft N4 | polish | Design | open (not a bug) |
-| R52 | "points" and "±0.4" never say what they are | draft N5 | polish | Design | open (fix3) |
-| R53 | "lock" on each slot explained only in a tooltip | draft N6 | polish | Design | open (fix3) |
+| R52 | "points" and "±0.4" never say what they are | draft N5 | polish | Design | fixed b0de9a1 (browser-checked 18 Oct) |
+| R53 | "lock" on each slot explained only in a tooltip | draft N6 | polish | Design | fixed b0de9a1 (browser-checked 18 Oct) |
 
 **R1. Concurrent model loads, false lane error** [T1, D2]
 - Evidence: red banner "The lane model didn't load: Cannot read properties of null
@@ -695,9 +697,9 @@ actions per task), so this walk tests first screens, not deep navigation.
 | R47 | Model and lab copy assumes the reader is the modeller | M11 | polish | Design | partly fixed (b738323): glosses wait on J9; R62 |
 | R58 | Models and Lab don't say what to act on | AN1 | minor | Design | open |
 | R59 | "116% of the way there" beside 54.8% vs published 55 to 57% | AN2 | minor | Design | needs Jacob (J5) |
-| R60 | 429/403 spikes and 97% key use flagged without saying if they matter | AN3 | minor | Design | open (fix3) |
-| R61 | Logs one file at a time; personas check only crawl.log | AN4 | minor | Design | open (fix3) |
-| R62 | Neural nets "better than today's model (-0.0003 a game)" reads backwards | AN5 | polish | Design | open (fix3) |
+| R60 | 429/403 spikes and 97% key use flagged without saying if they matter | AN3 | minor | Design | fixed 7780e28 |
+| R61 | Logs one file at a time; personas check only crawl.log | AN4 | minor | Design | fixed 7780e28 |
+| R62 | Neural nets "better than today's model (-0.0003 a game)" reads backwards | AN5 | polish | Design | fixed b0de9a1 (verdict line still shows the bare signed figure) |
 
 **R36. Warning classifier** [M1]
 - Evidence: Crawler > Warning messages (r1 steps/012.jpg): `twN mastery: Blocked` (281 in
@@ -904,9 +906,9 @@ docs/review/next-steps-2026-10-17.md.
 
 ## 6. Work packages
 
-All five packages are done (17 Oct 20:00 to 20:37; statuses above). Round 3 (fix3) takes
+All five packages are done (17 Oct 20:00 to 20:37; statuses above). Round 3 (fix3) took
 the re-walks' polish: R48, R49, R50, R52, R53 (admin-draft.js) and R60, R61, R62
-(admin.zig, admin.js). As planned:
+(admin.js, admin-nn.js). As planned:
 
 Open Bug and clear Design findings, Jacob decisions left out. Each package owns its
 files; a fix agent needing a file outside its list asks the coordinator first. Shared:
