@@ -11,6 +11,11 @@
 #   mastery-size MIRROR:BYTES:FILES   a mirror's mastery history, for the admin page
 #               (backups/acks/MIRROR.mastery: time bytes files)
 #   status      "mirror NAME LAST_ACK" per mirror, then "unacked FILES BYTES OLDEST_MTIME"
+#   snapshot-extra DAY   for an analysis snapshot built on the gpu-box from its mirror
+#               (deploy/snapshot-gpu.sh): what backups leave out, as tar | zstd: every
+#               database's schema (*.sql), row counts of every table (counts.tsv), and
+#               the rows of tables no backup holds, rank_history after DAY too, and
+#               participants' columns that change after a backup copies them (*.db)
 set -euo pipefail
 cd "$HOME/ml/meiolol"
 # shellcheck disable=SC1091 # host-specific, on the box only
@@ -120,5 +125,50 @@ case "${cmd:-}" in
         done < <(files)
         echo "unacked $n $bytes $oldest"
         ;;
-    *) echo "backup-serve: list|send FILE|acks MIRROR|forgotten|prune|status" >&2; exit 2 ;;
+    snapshot-extra)
+        [[ "$arg" =~ ^[0-9]+$ ]] || { echo "bad day" >&2; exit 2; }
+        tmp=$(mktemp -d "$HOME/snapx.XXXXXX")
+        trap 'rm -rf "$tmp"' EXIT
+        # What backups hold (src/backup.zig: state_tables, segments, mastery); the rest
+        # comes from here. raw.db's timeline_docs: snapshots leave raw timelines out
+        declare -A held=([meiolol]="match_queue timeline_queue champions forgotten matches participants bans drafts mastery rank_history"
+            [timeline]="timelines" [raw]="timeline_docs")
+        need=$(( $(sqlite3 "file:$PWD/data/raw.db?mode=ro" "SELECT coalesce(sum(length(body)), 0) FROM raw_docs")
+            + $(stat -c %s data/meiolol.db) / 8 ))
+        free=$(df --output=avail -B1 "$tmp" | tail -n 1)
+        (( free > 2 * need + (12 << 30) )) || { echo "box: $free bytes free for $need" >&2; exit 1; }
+        for d in meiolol timeline raw; do
+            src="file:$PWD/data/$d.db?mode=ro"
+            sqlite3 "$src" "SELECT sql || ';' FROM sqlite_schema WHERE sql IS NOT NULL
+                AND name NOT LIKE 'sqlite_%' ORDER BY type = 'index', rowid" > "$tmp/$d.sql"
+            mapfile -t tables < <(sqlite3 "$src" "SELECT name FROM sqlite_schema WHERE type = 'table'
+                AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL")
+            # One read transaction: counts and rows of one moment
+            {
+                sqlite3 "$src" "SELECT sql || ';' FROM sqlite_schema WHERE type = 'table'
+                    AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL"
+                echo "ATTACH '$src' AS s; CREATE TABLE counts (db TEXT, name TEXT, n INTEGER); BEGIN;"
+                for t in "${tables[@]}"; do
+                    echo "INSERT INTO counts SELECT '$d', '$t', count(*) FROM s.\"$t\";"
+                    # Participants change after a backup copies them (gold from the
+                    # timeline, tier, a PUUID blanked: riot/writer.zig): their late columns
+                    if [[ "$d $t" == "meiolol participants" ]]; then
+                        echo "CREATE TABLE main.participants_late AS SELECT match_id, slot,
+                            puuid IS NULL AS no_puuid, tier, division, gold10, gold14, gold15
+                            FROM s.participants;"
+                    fi
+                    if [[ "$d $t" == "meiolol rank_history" ]]; then
+                        echo "INSERT INTO main.rank_history SELECT * FROM s.rank_history WHERE day > $arg;"
+                    elif [[ " ${held[$d]} " != *" $t "* ]]; then
+                        echo "INSERT INTO main.\"$t\" SELECT * FROM s.\"$t\";"
+                    fi
+                done
+                echo "COMMIT;"
+            } | nice -n 10 ionice -c 2 -n 7 sqlite3 "$tmp/$d.db"
+            sqlite3 -separator $'\t' "$tmp/$d.db" "SELECT * FROM counts" >> "$tmp/counts.tsv"
+            sqlite3 "$tmp/$d.db" "DROP TABLE counts"
+        done
+        tar cf - -C "$tmp" . | nice -n 10 zstd -3 -T1 -q
+        ;;
+    *) echo "backup-serve: list|send FILE|acks MIRROR|forgotten|prune|status|snapshot-extra DAY" >&2; exit 2 ;;
 esac
