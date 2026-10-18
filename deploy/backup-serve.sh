@@ -6,7 +6,8 @@
 # each backup; deploy/health.sh reads status.
 #   list        one line per file: FILE SIZE SHA256 (sums cached by size and mtime)
 #   prune       delete files a mirror acked at their current sum, except the newest
-#               state snapshot and the newest segment (the next backup starts after it)
+#               state snapshot, segment and mastery file (the next backup starts after
+#               them)
 #   status      "mirror NAME LAST_ACK" per mirror, then "unacked FILES BYTES OLDEST_MTIME"
 set -euo pipefail
 cd "$HOME/ml/meiolol"
@@ -17,13 +18,15 @@ acks=$dir/acks sums=$dir/.sums
 mkdir -p "$acks" "$sums"
 read -r cmd arg _ <<< "${SSH_ORIGINAL_COMMAND:-$*}"
 
-file_ok() { [[ "$1" =~ ^(state/state-[0-9]{4}-[0-9]{2}-[0-9]{2}|segments/[0-9]{6})\.db$ ]]; }
+file_ok() { [[ "$1" =~ ^(state/state-[0-9]{4}-[0-9]{2}-[0-9]{2}|(segments|mastery)/[0-9]{6})\.db$ ]]; }
 mirror_ok() { [[ "$1" =~ ^(mac|gpu-box)$ ]]; }
 
 files() {
     shopt -s nullglob
     local f
-    for f in "$dir"/state/state-*.db "$dir"/segments/[0-9]*.db; do echo "${f#"$dir"/}"; done
+    for f in "$dir"/state/state-*.db "$dir"/segments/[0-9]*.db "$dir"/mastery/[0-9]*.db; do
+        echo "${f#"$dir"/}"
+    done
 }
 
 # SHA-256 of FILE, recomputed only when its size or mtime changed (a scrub rewrites it)
@@ -77,9 +80,11 @@ case "${cmd:-}" in
     prune)
         newest_state=$(files | grep '^state/' | tail -n 1)
         newest_seg=$(files | grep '^segments/' | tail -n 1)
+        newest_mastery=$(files | grep '^mastery/' | tail -n 1)
         n=0 bytes=0
         while read -r rel; do
-            [[ "$rel" == "$newest_state" || "$rel" == "$newest_seg" ]] && continue
+            [[ "$rel" == "$newest_state" || "$rel" == "$newest_seg" || "$rel" == "$newest_mastery" ]] \
+                && continue
             bytes=$(( bytes + $(stat -c %s "$dir/$rel") ))
             rm -f "$dir/$rel" "$sums/${rel//\//_}"
             n=$(( n + 1 ))

@@ -27,8 +27,8 @@ The box moved to Oracle Cloud on 2026-10-11 (docs/hosting.md): one 50 GB boot vo
 (deploy/backup-loop.sh), into $MEIOLOL_BACKUPS (host.env). It never runs migrations:
 under the write lock they starve the crawler on a slow host.
 
-- `state/state-YYYY-MM-DD.db`: match_queue, timeline_queue, mastery, champions,
-  forgotten. 7 daily + the newest of 4 weeks. Not players or ladder_pages (2026-10-11):
+- `state/state-YYYY-MM-DD.db`: match_queue, timeline_queue, champions, forgotten. 7
+  daily + the newest of 4 weeks. Not players or ladder_pages (2026-10-11):
   crawl state, ~3 GB at ~9M players, re-seeded from the ladders within a day of a
   restore, which then rescans everyone's match ids
 - `segments/NNNNNN.db`: matches, participants and bans of matches stored since the last
@@ -39,6 +39,16 @@ under the write lock they starve the crawler on a slow host.
   rows never change, so segments are append-only and never rotated. `draft_backfill`
   is not backed up: a restore from backups taken before `meiolol draft-backfill`
   finished lacks the draft rows of matches it had not reached
+- `mastery/NNNNNN.db` (18 Oct): mastery rows fetched since the last one, by fetched_at
+  up to 300 s before the backup (table mastery_range: after_s, to_s); restore loads them
+  in order from the newest full one (after_s 0), so each player's newest fetch wins.
+  A file goes (box and mirrors) once its to_s is 32 days old: the crawler drops mastery
+  after 30, so it holds nothing live; never the newest. Before, every state snapshot
+  held the whole table (3.4 GB of 3.6 at 3.1M rows on 17 Oct, ~0.8M fetched a day): 11
+  copies a mirror, ~40 GB and growing with the table. Now ~1 copy (~0.8 GB a day of
+  files, 30 days kept). `--full` writes one with everything and drops the older ones.
+  Restoring an older `--state` still takes the newest mastery (crawl data, refetched
+  monthly anyway)
 - Each file is plain SQLite, written as *.tmp inside one read transaction (consistent
   while the crawler writes) and renamed when complete. Not raw JSON: raw.db is a 30-day
   buffer and the tables hold what it gives
@@ -60,12 +70,17 @@ under the write lock they starve the crawler on a slow host.
 - A mirror fetches each file the box lists that is new or changed there (a scrub),
   checks size and SHA-256 and acks it (backups/acks/MIRROR.tsv on the box: file, sum,
   time). After each backup the box deletes files some mirror acked at their current sum,
-  except its newest state snapshot and newest segment (the next segment starts where
-  that one ends). So the box holds ~2 files plus whatever no mirror has fetched yet
-- Mirrors keep every segment (the box may hold only the newest) and rotate state
-  themselves, 7 daily + 4 weekly (`meiolol backup --mirror DIR --forgotten FILE`).
-  A `--full` segment on the box leaves older ones on the mirrors: restore starts at the
-  newest segment that copies from the beginning, so they are ignored
+  except its newest state snapshot, segment and mastery file (the next ones start where
+  they end). So the box holds ~3 files plus whatever no mirror has fetched yet
+- Mirrors keep every segment (the box may hold only the newest) and rotate state (7
+  daily + 4 weekly) and mastery files themselves (`meiolol backup --mirror DIR
+  --forgotten FILE`). A `--full` segment on the box leaves older ones on the mirrors:
+  restore starts at the newest segment that copies from the beginning, so they are
+  ignored
+- Not compressed (measured 18 Oct, zstd -3 on the Mac): a segment 1.57 GB to 1.29 (18%),
+  a state snapshot 3.65 to 2.69 (26%; -19 29%). Compressed mirror files would need
+  unpacking for every scrub and restore; open, for when segments (~1.6 GB a day, kept)
+  outgrow a mirror
 
 Covers: the box's disk or VM lost, a bad migration or DELETE (state up to 4 weeks back).
 Not covered: losing the box, the PC and the Mac together (nothing off-site yet;

@@ -3,8 +3,8 @@
 # daily) and the gpu-box (systemd user timer meiolol-backup-mirror, hourly). Fetches every
 # file the box lists that is new here or changed there (a scrub), checks size and
 # SHA-256, then acks it so the box may drop its copy. Then `meiolol backup --mirror`
-# scrubs players the box has forgotten since and rotates state. Never deletes a segment:
-# the box keeps only its newest, so this copy may be the only one.
+# scrubs players the box has forgotten since and rotates state and mastery files. Never
+# deletes a segment: the box keeps only its newest, so this copy may be the only one.
 #   backup-mirror.sh NAME DIR MEIOLOL HOST [REMOTE]
 # NAME: mac or gpu-box; REMOTE: the command on HOST before the verb (the Mac's full-shell
 # key: ml/meiolol/bin/backup-serve.sh; the gpu-box's forced-command key: none)
@@ -22,7 +22,7 @@ sha() {
 
 # Real PUUIDs in here: owner only
 umask 077
-mkdir -p "$dir/state" "$dir/segments"
+mkdir -p "$dir/state" "$dir/segments" "$dir/mastery"
 chmod 700 "$dir"
 # No flock on macOS; a lock left by a killed run expires after 6 h
 lock=$dir/.lock
@@ -37,7 +37,7 @@ manifest=$dir/.manifest
 touch "$manifest"
 fetched=0 bytes=0
 while read -r rel size want; do
-    [[ "$rel" =~ ^(state/state-[0-9]{4}-[0-9]{2}-[0-9]{2}|segments/[0-9]{6})\.db$ ]] \
+    [[ "$rel" =~ ^(state/state-[0-9]{4}-[0-9]{2}-[0-9]{2}|(segments|mastery)/[0-9]{6})\.db$ ]] \
         || { log "box listed a bad name: $rel"; exit 1; }
     # The box's sum at fetch time: a local scrub or rotation since does not refetch
     grep -qxF "$rel $want" "$manifest" && continue

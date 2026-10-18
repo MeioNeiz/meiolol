@@ -1,8 +1,12 @@
 //! Backups (`meiolol backup`, `meiolol restore`). docs/data-safety.md has the why.
 //!
 //! Two kinds of file, both plain SQLite, so `meiolol forget --backups` can scrub them:
-//! - state/state-YYYY-MM-DD.db: the mutable tables (queues, mastery, forgotten, ...),
-//!   rotated (7 daily + 4 weekly by default)
+//! - state/state-YYYY-MM-DD.db: the mutable tables (queues, forgotten, ...), rotated
+//!   (7 daily + 4 weekly by default)
+//! - mastery/NNNNNN.db: mastery rows fetched since the last one (by fetched_at), the
+//!   `mastery_range` table holding its window. Restore loads them in order, so each
+//!   player's newest wins; a file goes once its window is past the crawler's 30-day
+//!   mastery prune. Out of state: a full copy a day was 3.4 GB at 3.1M rows (17 Oct)
 //! - segments/NNNNNN.db: matches, participants and bans of matches stored since the last
 //!   segment, and compact timelines and draft rows (store/draft.zig) likewise. These
 //!   rows never change once stored, so segments are append-only and kept; the `segment`
@@ -32,7 +36,6 @@ const log = std.log.scoped(.backup);
 pub const state_tables = [_][]const u8{
     "match_queue",
     "timeline_queue",
-    "mastery",
     "champions",
     "forgotten",
 };
@@ -49,6 +52,7 @@ pub const Options = struct {
 pub const Summary = struct {
     state: []const u8,
     segment: ?[]const u8,
+    mastery: i64,
     matches: i64,
     timelines: i64,
     drafts: i64,
@@ -76,6 +80,25 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
 
     var removed = try rotate(arena, io, state_dir, opts.keep_daily, opts.keep_weekly);
 
+    const m_dir = try std.fs.path.join(arena, &.{ opts.out_dir, "mastery" });
+    try cwd.createDirPath(io, m_dir);
+    const ms = try listSegments(arena, io, m_dir);
+    var m_after: Range = .{};
+    if (!opts.full and ms.len > 0) {
+        m_after = try readMasteryRange(arena, try std.fs.path.join(arena, &.{ m_dir, ms[ms.len - 1].name }));
+    }
+    const m_next = if (ms.len > 0) ms[ms.len - 1].seq + 1 else 1;
+    const m_path = try arena.print("{s}/{d:0>6}.db", .{ m_dir, m_next });
+    const m_wrote = try writeFile(arena, io, m_path, main_db, timeline_db, .mastery, m_after, opts.now);
+    if (m_wrote.rows > 0 and opts.full) {
+        for (ms) |s| {
+            try cwd.deleteFile(io, try std.fs.path.join(arena, &.{ m_dir, s.name }));
+            removed += 1;
+        }
+    }
+    removed += try rotateMastery(arena, io, m_dir, opts.now);
+    log.info("mastery: {d} rows fetched since the last backup", .{m_wrote.rows});
+
     const segs = try listSegments(arena, io, seg_dir);
     var after: Range = .{};
     if (!opts.full and segs.len > 0) {
@@ -94,6 +117,7 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
     return .{
         .state = state_path,
         .segment = if (wrote.rows > 0) seg_path else null,
+        .mastery = m_wrote.rows,
         .matches = wrote.matches,
         .timelines = wrote.timelines,
         .drafts = wrote.drafts,
@@ -102,7 +126,16 @@ pub fn run(arena: std.mem.Allocator, io: Io, opts: Options) !Summary {
     };
 }
 
-const Kind = enum { state, segment };
+const Kind = enum { state, segment, mastery };
+
+/// The crawler's writer stamps fetched_at when its transaction begins: a mastery file
+/// stops this short of now, so a row still being written goes in the next one
+/// (archive.zig's exports likewise)
+const mastery_margin_s = 300;
+
+/// riot/writer.zig drops mastery fetched over 30 days ago: a file whose whole window is
+/// older than that (and a margin) holds nothing the live table still has
+const mastery_keep_s = 32 * std.time.s_per_day;
 
 const Written = struct { rows: i64 = 0, matches: i64 = 0, timelines: i64 = 0, drafts: i64 = 0, rank_history: i64 = 0 };
 
@@ -192,10 +225,25 @@ fn writeFile(
                 }
                 w.rows = w.matches + w.timelines + w.drafts + w.rank_history;
             },
+            .mastery => {
+                try db.exec(
+                    \\CREATE TABLE mastery_range (after_s INTEGER NOT NULL, to_s INTEGER NOT NULL,
+                    \\    made_at INTEGER NOT NULL);
+                );
+                const to = now - mastery_margin_s;
+                try db.run("INSERT INTO mastery_range VALUES (?, ?, ?)", .{ after.mastery_to, to, now });
+                if (try copyDdl(arena, db, "live", "mastery")) {
+                    try copyRows(arena, db, "live", "mastery", try arena.print(
+                        " WHERE fetched_at > {d} AND fetched_at <= {d}",
+                        .{ after.mastery_to, to },
+                    ));
+                    w.rows = db.changes();
+                }
+            },
         }
         try db.exec("COMMIT");
     }
-    if (kind == .segment and w.rows == 0) {
+    if (kind != .state and w.rows == 0) {
         try cwd.deleteFile(io, tmp);
         return w;
     }
@@ -245,8 +293,47 @@ pub fn listSegments(arena: std.mem.Allocator, io: Io, seg_dir: []const u8) ![]Se
     return out.items;
 }
 
-/// Last rowid (drafts: id; rank_history: day) each segment copied up to
-const Range = struct { matches_to: i64 = 0, timelines_to: i64 = 0, drafts_to: i64 = 0, history_to: i64 = 0 };
+/// Last rowid (drafts: id; rank_history: day; mastery: fetched_at) each file copied up to
+const Range = struct {
+    matches_to: i64 = 0,
+    timelines_to: i64 = 0,
+    drafts_to: i64 = 0,
+    history_to: i64 = 0,
+    mastery_to: i64 = 0,
+};
+
+const MasteryRange = struct { after_s: i64, to_s: i64 };
+
+fn masteryRange(arena: std.mem.Allocator, path: []const u8) !MasteryRange {
+    const db = try Db.open(try arena.dupeSentinel(u8, path, 0));
+    defer db.close();
+    var s = try db.prepare("SELECT after_s, to_s FROM mastery_range");
+    defer s.deinit();
+    if (!try s.step()) return error.BadSegment;
+    return s.row(MasteryRange);
+}
+
+fn readMasteryRange(arena: std.mem.Allocator, path: []const u8) !Range {
+    return .{ .mastery_to = (try masteryRange(arena, path)).to_s };
+}
+
+/// Delete mastery files whose window is past `mastery_keep_s`, never the newest (the
+/// next backup starts where it ends). Returns how many were deleted.
+fn rotateMastery(arena: std.mem.Allocator, io: Io, dir: []const u8, now: i64) !usize {
+    const files = listSegments(arena, io, dir) catch |err| switch (err) {
+        error.FileNotFound => return 0,
+        else => return err,
+    };
+    if (files.len < 2) return 0;
+    var n: usize = 0;
+    for (files[0 .. files.len - 1]) |f| {
+        const path = try std.fs.path.join(arena, &.{ dir, f.name });
+        if ((try masteryRange(arena, path)).to_s >= now - mastery_keep_s) continue;
+        try Io.Dir.cwd().deleteFile(io, path);
+        n += 1;
+    }
+    return n;
+}
 
 fn readRange(arena: std.mem.Allocator, path: []const u8) !Range {
     const db = try Db.open(try arena.dupeSentinel(u8, path, 0));
@@ -254,7 +341,7 @@ fn readRange(arena: std.mem.Allocator, path: []const u8) !Range {
     // Segments from before drafts or rank_history lack those columns: the next one
     // copies them all
     var s = try db.prepare(try arena.printSentinel(
-        "SELECT matches_to, timelines_to, {s}, {s} FROM segment",
+        "SELECT matches_to, timelines_to, {s}, {s}, 0 FROM segment",
         .{ try segmentColumn(db, "drafts_to"), try segmentColumn(db, "history_to") },
         0,
     ));
@@ -317,7 +404,7 @@ fn dateOf(name: []const u8) ?i64 {
     return d.toDay();
 }
 
-pub const Restored = struct { files: usize, matches: i64, timelines: i64, removed: forget.Removed };
+pub const Restored = struct { files: usize, matches: i64, timelines: i64, mastery: i64, removed: forget.Removed };
 
 /// Rebuild `data_dir` (which must not hold a database yet) from the newest state
 /// snapshot (or `state_file`) and every segment in order, then re-apply erasures
@@ -347,9 +434,24 @@ pub fn restore(arena: std.mem.Allocator, io: Io, from_dir: []const u8, data_dir:
     const db = try store.open(arena, data_dir);
     defer db.close();
     try forget.ensure(db);
-    var r: Restored = .{ .files = 0, .matches = 0, .timelines = 0, .removed = .{} };
+    var r: Restored = .{ .files = 0, .matches = 0, .timelines = 0, .mastery = 0, .removed = .{} };
     try load(arena, db, state);
     r.files += 1;
+    const m_dir = try std.fs.path.join(arena, &.{ from_dir, "mastery" });
+    const ms = listSegments(arena, io, m_dir) catch |err| switch (err) {
+        error.FileNotFound => &.{},
+        else => return err,
+    };
+    // As for segments: a --full mastery file starts from the beginning
+    var m_first: usize = 0;
+    for (ms, 0..) |s, i| {
+        if ((try masteryRange(arena, try std.fs.path.join(arena, &.{ m_dir, s.name }))).after_s == 0) m_first = i;
+    }
+    for (ms[m_first..]) |s| {
+        try load(arena, db, try std.fs.path.join(arena, &.{ m_dir, s.name }));
+        r.files += 1;
+    }
+    r.mastery = try db.scalar("SELECT count(*) FROM mastery", .{}) orelse 0;
     const seg_dir = try std.fs.path.join(arena, &.{ from_dir, "segments" });
     const segs = try listSegments(arena, io, seg_dir);
     // A mirror keeps the segments a --full backup replaced on the box: start at the
@@ -369,13 +471,17 @@ pub fn restore(arena: std.mem.Allocator, io: Io, from_dir: []const u8, data_dir:
 }
 
 /// Copy every table of a backup file into the live schema, by column name. Later files
-/// win (INSERT OR REPLACE), so a `--full` segment or a re-extracted timeline overrides.
+/// win (INSERT OR REPLACE), so a `--full` segment, a re-extracted timeline or a newer
+/// mastery fetch overrides.
 fn load(arena: std.mem.Allocator, db: Db, path: []const u8) !void {
     try db.run("ATTACH DATABASE ? AS b", .{path});
     defer db.exec("DETACH DATABASE b") catch {};
     var tables: std.ArrayList([]const u8) = .empty;
     {
-        var s = try db.prepare("SELECT name FROM b.sqlite_master WHERE type = 'table' AND name != 'segment'");
+        var s = try db.prepare(
+            \\SELECT name FROM b.sqlite_master
+            \\WHERE type = 'table' AND name NOT IN ('segment', 'mastery_range')
+        );
         defer s.deinit();
         while (try s.step()) try tables.append(arena, try arena.dupe(u8, s.bytes(0)));
     }
@@ -416,7 +522,7 @@ pub fn scrub(arena: std.mem.Allocator, io: Io, dir: []const u8, puuid: []const u
 pub fn scrubMany(arena: std.mem.Allocator, io: Io, dir: []const u8, puuids: []const []const u8, now: i64) !forget.Removed {
     var total: forget.Removed = .{};
     if (puuids.len == 0) return total;
-    for ([_][]const u8{ "state", "segments" }) |sub| {
+    for ([_][]const u8{ "state", "segments", "mastery" }) |sub| {
         const path = try std.fs.path.join(arena, &.{ dir, sub });
         var d = Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch |err| switch (err) {
             error.FileNotFound => continue,
@@ -482,6 +588,8 @@ pub fn tendMirror(
     const state_dir = try std.fs.path.join(arena, &.{ dir, "state" });
     try cwd.createDirPath(io, state_dir);
     const rotated = try rotate(arena, io, state_dir, keep_daily, keep_weekly);
+    const m_rotated = try rotateMastery(arena, io, try std.fs.path.join(arena, &.{ dir, "mastery" }), now);
+    if (m_rotated > 0) log.info("{s}: {d} old mastery files removed", .{ dir, m_rotated });
     return .{ .new_forgotten = fresh.items.len, .removed = removed, .rotated = rotated };
 }
 
@@ -535,14 +643,26 @@ test "backup then restore round trip, incremental segments, scrub" {
         });
     }
     const day = 86400 * 20737;
+    {
+        const db = try store.open(arena, data);
+        defer db.close();
+        try db.run("INSERT INTO mastery VALUES ('p1', 'EUW1', ?1, 1, x'01'), ('p2', 'EUW1', ?1, 1, x'02')", .{day - 1000});
+    }
     const first = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day });
     try testing.expectEqual(1, first.matches);
     try testing.expectEqual(1, first.timelines);
     try testing.expectEqual(1, first.drafts);
     try testing.expectEqual(2, first.rank_history);
-    // Nothing new: no segment
+    try testing.expectEqual(2, first.mastery);
+    {
+        const st = try Db.open(try arena.printSentinel("{s}", .{first.state}, 0));
+        defer st.close();
+        try testing.expectEqual(@as(?i64, 0), try st.scalar("SELECT count(*) FROM sqlite_master WHERE name = 'mastery'", .{}));
+    }
+    // Nothing new: no segment, no mastery file
     const idle = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day + 86400 });
     try testing.expectEqual(null, idle.segment);
+    try testing.expectEqual(0, idle.mastery);
     {
         const db = try store.open(arena, data);
         defer db.close();
@@ -555,13 +675,16 @@ test "backup then restore round trip, incremental segments, scrub" {
         try db.run("INSERT INTO rank_history VALUES (?, 20738, 20, 9, 2, 0), (?, 20739, 20, 9, 2, 0)", .{
             store.schema.puuidKey("p1"), store.schema.puuidKey("p2"),
         });
+        try db.run("INSERT OR REPLACE INTO mastery VALUES ('p2', 'EUW1', ?, 2, x'03')", .{day + 2 * 86400 - 1000});
     }
     const second = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day + 2 * 86400 });
     try testing.expectEqual(1, second.matches);
     try testing.expectEqual(0, second.timelines);
     try testing.expectEqual(0, second.drafts);
     try testing.expectEqual(1, second.rank_history);
+    try testing.expectEqual(1, second.mastery);
     try testing.expectEqual(2, (try listSegments(arena, io, try arena.print("{s}/segments", .{out}))).len);
+    try testing.expectEqual(2, (try listSegments(arena, io, try arena.print("{s}/mastery", .{out}))).len);
 
     // p1 objects after the backups were taken: live forget records it, scrub cleans files
     {
@@ -572,6 +695,7 @@ test "backup then restore round trip, incremental segments, scrub" {
     const scrubbed = try scrub(arena, io, out, "p1", day);
     try testing.expectEqual(2, scrubbed.participants);
     try testing.expectEqual(2, scrubbed.rank_history);
+    try testing.expectEqual(1, scrubbed.mastery);
     try testing.expectEqual(0, scrubbed.players); // not backed up
 
     // A restore from the older state still ends without p1: forgotten comes from the
@@ -581,6 +705,7 @@ test "backup then restore round trip, incremental segments, scrub" {
     const r = try restore(arena, io, out, restored_dir, null, day);
     try testing.expectEqual(2, r.matches);
     try testing.expectEqual(1, r.timelines);
+    try testing.expectEqual(1, r.mastery);
     {
         const db = try store.open(arena, restored_dir);
         defer db.close();
@@ -592,13 +717,15 @@ test "backup then restore round trip, incremental segments, scrub" {
         try testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM rank_history WHERE key = ?", .{store.schema.puuidKey("p2")}));
         try testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM rank_history", .{}));
         try testing.expect(try forget.isForgotten(db, "p1"));
+        // The newest fetch wins
+        try testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT champions FROM mastery WHERE puuid = 'p2'", .{}));
     }
     try testing.expectError(error.TargetNotEmpty, restore(arena, io, out, restored_dir, null, day));
 
     // A mirror copies the segments before --full replaces them on the box
     const mirror = try arena.print("{s}/mirror", .{base});
     const cwd = Io.Dir.cwd();
-    for ([_][]const u8{ "state", "segments" }) |sub| {
+    for ([_][]const u8{ "state", "segments", "mastery" }) |sub| {
         const from = try arena.print("{s}/{s}", .{ out, sub });
         try cwd.createDirPath(io, try arena.print("{s}/{s}", .{ mirror, sub }));
         var d = try cwd.openDir(io, from, .{ .iterate = true });
@@ -610,15 +737,20 @@ test "backup then restore round trip, incremental segments, scrub" {
     // --full replaces the segments with one
     const full = try run(arena, io, .{ .data_dir = data, .out_dir = out, .now = day + 4 * 86400, .full = true });
     try testing.expectEqual(2, full.matches);
-    try testing.expectEqual(3, full.removed); // the third holds p2's day-20739 rank row
+    // 3 segments (the third holds p2's day-20739 rank row) and 2 mastery files
+    try testing.expectEqual(5, full.removed);
+    try testing.expectEqual(1, full.mastery);
 
     // The mirror gets the full segment too and keeps the old ones; restore starts at it
     const newest = (try listSegments(arena, io, try arena.print("{s}/segments", .{out})))[0].name;
     try Io.Dir.copyFile(cwd, try arena.print("{s}/segments/{s}", .{ out, newest }), cwd, try arena.print("{s}/segments/{s}", .{ mirror, newest }), io, .{});
     try testing.expectEqual(4, (try listSegments(arena, io, try arena.print("{s}/segments", .{mirror}))).len);
+    const full_m = (try listSegments(arena, io, try arena.print("{s}/mastery", .{out})))[0].name;
+    try Io.Dir.copyFile(cwd, try arena.print("{s}/mastery/{s}", .{ out, full_m }), cwd, try arena.print("{s}/mastery/{s}", .{ mirror, full_m }), io, .{});
     const from_mirror = try restore(arena, io, mirror, try arena.print("{s}/restored-mirror", .{base}), null, day);
     try testing.expectEqual(2, from_mirror.matches);
-    try testing.expectEqual(2, from_mirror.files); // newest state + the full segment
+    try testing.expectEqual(3, from_mirror.files); // newest state + the full mastery and segment
+    try testing.expectEqual(1, from_mirror.mastery);
 
     // Tending: p2 newly forgotten on the box is scrubbed from every mirror file once
     const list = try arena.print("{s}/forgotten.txt", .{base});
@@ -628,5 +760,11 @@ test "backup then restore round trip, incremental segments, scrub" {
     try testing.expect(t1.removed.participants > 0);
     const t2 = try tendMirror(arena, io, mirror, list, 7, 4, day);
     try testing.expectEqual(0, t2.new_forgotten);
+    try testing.expectEqual(4, (try listSegments(arena, io, try arena.print("{s}/segments", .{mirror}))).len);
+    // Past the mastery prune's window every mastery file goes but the newest
+    const mirror_m = try arena.print("{s}/mastery", .{mirror});
+    try testing.expectEqual(3, (try listSegments(arena, io, mirror_m)).len);
+    _ = try tendMirror(arena, io, mirror, list, 7, 4, day + 40 * 86400);
+    try testing.expectEqual(1, (try listSegments(arena, io, mirror_m)).len);
     try testing.expectEqual(4, (try listSegments(arena, io, try arena.print("{s}/segments", .{mirror}))).len);
 }
