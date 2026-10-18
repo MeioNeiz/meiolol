@@ -97,7 +97,7 @@ matchup/support/pyke-vs-rakan.html 8d2e930fae8d4047
 matchup/support/rakan-vs-pyke.html 74d8ebd9dda59a52
 matchup/top/darius-vs-mordekaiser.html 9130b7ad3853eaec
 matchup/top/mordekaiser-vs-darius.html 5707673f415059f4
-method.html 4e470942747f4158
+method.html 80e3ee856171dd84
 patch/build/ahri-mid.html 25f854f1d055758f
 patch/build/amumu-jungle.html 718e50a4b3d59ced
 patch/build/darius-top.html bf35c0566565b10a
