@@ -91,6 +91,7 @@ const usage =
     \\                                  (lab/bench.zig): --devices cpu1,cpu,gpu --kinds
     \\                                  additive,lane,pairwise --dims 8,32,128 --scales
     \\                                  1,4,16 --epochs 10 --sweep 0 (fits per sweep)
+    \\                                  --profile 1 (GPU: fm_grad, fm_adam shares)
     \\  draftbench SNAP [OPT VALUE]...  the deep draft model (lab/draftnet.zig) timed the
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
@@ -245,6 +246,8 @@ pub fn main(init: std.process.Init) !u8 {
                 opts.epochs = try std.fmt.parseInt(u32, v, 10);
             } else if (std.mem.eql(u8, argv[i], "--sweep")) {
                 opts.sweep = try std.fmt.parseInt(u32, v, 10);
+            } else if (std.mem.eql(u8, argv[i], "--profile")) {
+                opts.profile = !std.mem.eql(u8, v, "0");
             } else {
                 std.debug.print("bench: unknown option {s}\n{s}", .{ argv[i], usage });
                 return 2;

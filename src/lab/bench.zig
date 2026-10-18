@@ -26,6 +26,9 @@ pub const Options = struct {
     /// Fits per sweep; 0 skips sweeps
     sweep: u32 = 0,
     outcome: rows.Outcome = .gold14,
+    /// GPU fits sync after each kernel and log fm_grad's and fm_adam's share of the
+    /// time (slower: for profiling, not for timings)
+    profile: bool = false,
 };
 
 pub fn run(gpa: std.mem.Allocator, io: std.Io, d: *const rows.Data, opts: Options, gpu: ?*const cuda.Gpu, w: *std.Io.Writer) !void {
@@ -64,7 +67,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, d: *const rows.Data, opts: Option
                 for (opts.devices, 0..) |dev, di| {
                     if (dev == .gpu and gpu == null) continue;
                     const t0 = std.Io.Clock.awake.now(io);
-                    var m = try fitOn(dev, gpa, io, gpu, if (dev_ex) |*x| x else null, cfg, ids.n, train, opts.epochs);
+                    var m = try fitOn(dev, gpa, io, gpu, if (dev_ex) |*x| x else null, cfg, ids.n, train, opts.epochs, opts.profile);
                     defer m.deinit(gpa);
                     const secs = seconds(io, t0);
                     var se: f64 = 0;
@@ -119,7 +122,7 @@ fn sweeps(gpa: std.mem.Allocator, io: std.Io, gpu: ?*const cuda.Gpu, dev_ex: ?*D
                 .gpu => for (0..opts.sweep) |i| {
                     var cfg_i = cfg;
                     cfg_i.seed = i + 1;
-                    var m = try fitGpu(gpa, gpu.?, dev_ex.?, cfg_i, n, train, opts.epochs);
+                    var m = try fitGpu(gpa, io, gpu.?, dev_ex.?, cfg_i, n, train, opts.epochs, opts.profile);
                     m.deinit(gpa);
                 },
             }
@@ -138,11 +141,11 @@ fn seconds(io: std.Io, t0: std.Io.Timestamp) f64 {
     return @as(f64, @floatFromInt(ns)) / 1e9;
 }
 
-fn fitOn(dev: Device, gpa: std.mem.Allocator, io: std.Io, gpu: ?*const cuda.Gpu, dev_ex: ?*DeviceRows, cfg: fm.Config, n: usize, train: []const fm.Example, epochs: u32) !fm.Model {
+fn fitOn(dev: Device, gpa: std.mem.Allocator, io: std.Io, gpu: ?*const cuda.Gpu, dev_ex: ?*DeviceRows, cfg: fm.Config, n: usize, train: []const fm.Example, epochs: u32, profile: bool) !fm.Model {
     return switch (dev) {
         .cpu1 => fm.fitEpochs(gpa, cfg, n, train, epochs),
         .cpu => fitThreads(gpa, io, cfg, n, train, epochs),
-        .gpu => fitGpu(gpa, gpu.?, dev_ex.?, cfg, n, train, epochs),
+        .gpu => fitGpu(gpa, io, gpu.?, dev_ex.?, cfg, n, train, epochs, profile),
     };
 }
 
@@ -250,7 +253,7 @@ const DeviceRows = struct {
 
 /// fm.fitEpochs on the GPU: the host draws the same shuffles, the device holds rows,
 /// parameters and Adam state; gradients sum with float atomics (order varies by run)
-pub fn fitGpu(gpa: std.mem.Allocator, gpu: *const cuda.Gpu, rows_dev: *DeviceRows, cfg: fm.Config, n: usize, train: []const fm.Example, epochs: u32) !fm.Model {
+pub fn fitGpu(gpa: std.mem.Allocator, io: std.Io, gpu: *const cuda.Gpu, rows_dev: *DeviceRows, cfg: fm.Config, n: usize, train: []const fm.Example, epochs: u32, profile: bool) !fm.Model {
     var m = try fm.start(gpa, cfg, n, train);
     errdefer m.deinit(gpa);
     const off = struct {
@@ -295,6 +298,9 @@ pub fn fitGpu(gpa: std.mem.Allocator, gpu: *const cuda.Gpu, rows_dev: *DeviceRow
     var ex = rows_dev.ex;
     var dorder = rows_dev.order;
     var step: u32 = 0;
+    var grad_ns: i96 = 0;
+    var adam_ns: i96 = 0;
+    const t_fit = std.Io.Clock.awake.now(io);
     for (0..epochs) |_| {
         rng.random().shuffle(u32, order);
         try gpu.upload(u32, dorder, order);
@@ -303,7 +309,14 @@ pub fn fitGpu(gpa: std.mem.Allocator, gpu: *const cuda.Gpu, rows_dev: *DeviceRow
             var count: u32 = @intCast(@min(cfg.batch, order.len - at));
             var start = at;
             try gpu.memset32(gr, 0, len);
+            if (profile) try gpu.sync();
+            const t_grad = std.Io.Clock.awake.now(io);
             try gpu.launch(grad_fn, count, &.{ @ptrCast(&p), @ptrCast(&gr), @ptrCast(&ex), @ptrCast(&dorder), @ptrCast(&start), @ptrCast(&count), @ptrCast(&l) });
+            if (profile) {
+                try gpu.sync();
+                grad_ns += t_grad.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
+            }
+            const t_adam = std.Io.Clock.awake.now(io);
             step += 1;
             const a: fm.Adam = .init(&cfg, step, count);
             var n_ = len;
@@ -313,9 +326,22 @@ pub fn fitGpu(gpa: std.mem.Allocator, gpu: *const cuda.Gpu, rows_dev: *DeviceRow
             var c1 = a.c1;
             var c2 = a.c2;
             try gpu.launch(adam_fn, len, &.{ @ptrCast(&p), @ptrCast(&gr), @ptrCast(&m1), @ptrCast(&m2), @ptrCast(&n_), @ptrCast(&lr), @ptrCast(&l2), @ptrCast(&scale), @ptrCast(&c1), @ptrCast(&c2) });
+            if (profile) {
+                try gpu.sync();
+                adam_ns += t_adam.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
+            }
         }
     }
     try gpu.sync();
+    if (profile) {
+        const all: f64 = @floatFromInt(t_fit.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds());
+        const g: f64 = @floatFromInt(grad_ns);
+        const ad: f64 = @floatFromInt(adam_ns);
+        const steps: f64 = @floatFromInt(step);
+        std.log.info("fm {t} dim {d}: {d} steps, fm_grad {d:.1}% ({d:.1} us a step), fm_adam {d:.1}%, rest (memset, uploads, launches) {d:.1}%", .{
+            cfg.kind, cfg.dim, step, 100 * g / all, g / 1000 / steps, 100 * ad / all, 100 * (all - g - ad) / all,
+        });
+    }
     try gpu.download(f32, m.p, p);
     return m;
 }
