@@ -10,6 +10,8 @@ ROOT=${MEIOLOL_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 cache=$ROOT/.zig-cache
 max=${1:-40}
 [[ -d $cache/o ]] || exit 0
+# Left by a prune killed mid-rm; no build reads them
+rm -rf "$cache"/prune.*
 kb=$(du -sk "$cache" | cut -f1)
 (( kb > max * 1024 * 1024 )) || exit 0
 # zig, its build runner (maker) and test binaries name this cache in their arguments;
@@ -20,5 +22,5 @@ if pgrep -f "$cache" > /dev/null; then
 fi
 old=$(mktemp -d "$cache/prune.XXXXXX")
 for d in o h z tmp; do [[ -e $cache/$d ]] && mv "$cache/$d" "$old/"; done
-rm -rf "$old"
+rm -rf "$old" || { echo "zig-cache-prune: $old not fully removed"; exit 1; }
 echo "zig-cache-prune: freed $((kb / 1048576)) GB"
