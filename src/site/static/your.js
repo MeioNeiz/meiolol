@@ -25,6 +25,13 @@ let current = null;
 let pollTimer = 0;
 let lookupId = "";
 let shown = 0;
+// The game in the review by start, so games a fetch adds before it don't move it
+let shownMs = 0;
+// What is on screen: a poll every few seconds while fetching re-renders only what changed,
+// so the minute or lane stat picked in the review stays
+let rendered = "";
+let reviewed = "";
+let pager = null;
 let watchUntil = 0;
 let watchFrom = 0;
 let watchTimer = 0;
@@ -147,7 +154,7 @@ async function lookup(id, game = 0) {
   clearTimeout(pollTimer);
   stopWatch();
   lookupId = id;
-  shown = 0;
+  fresh();
   wantGame = game;
   since = recentRead().find((r) => sameId(r.id, id))?.newest ?? 0;
   setUrl(idHash(id, game));
@@ -186,9 +193,8 @@ async function poll(refresh) {
     status(body.error || "Something went wrong. Try again in a few minutes.");
     return;
   }
-  const first = current?.player?.name !== body.player?.name;
   current = body;
-  if (body.player) render(body, first);
+  if (body.player) render(body);
   if (body.state === "queued") {
     status(body.ahead ? `Queued behind ${plural(body.ahead, "lookup")}…` : "Queued…");
   } else if (body.state === "fetching") {
@@ -293,7 +299,8 @@ async function showExample(role = "") {
   setUrl(role ? `example=${role}` : "example");
   const body = { ...(role ? examples[role] : examples), example: true, exampleRole: role };
   current = body;
-  render(body, true);
+  fresh();
+  render(body);
   renderCheck(body);
   const who = ROLES.find((r) => r[0] === role)?.[2] ?? "player";
   status(`An example: real ranked games of one ${who} from our data, with their name left out and dates to the day. Enter your Riot ID above to review your own.`);
@@ -321,7 +328,13 @@ function renderRoles(body) {
   }));
 }
 
-function render(body, first) {
+function fresh() {
+  shownMs = 0;
+  rendered = "";
+  reviewed = "";
+}
+
+function render(body) {
   const p = body.player;
   $("player").hidden = false;
   renderRoles(body);
@@ -335,13 +348,14 @@ function render(body, first) {
     ? `${p.platform} · ${tier} at the newest game`
     : `${p.platform} · ${p.tier ? `${tier}, ${p.lp ?? 0} LP` : tier}${updated}`;
   const r = body.report ?? { games: [], weeks: [], matchups: [] };
-  if (first) shown = 0;
-  shown = Math.min(shown, Math.max(0, r.games.length - 1));
-  const want = wantGame ? r.games.findIndex((g) => g.start_ms === wantGame) : -1;
-  if (want >= 0) {
-    shown = want;
-    wantGame = 0;
-  }
+  const json = JSON.stringify(r);
+  if (json === rendered) return;
+  rendered = json;
+  const want = wantGame || shownMs;
+  shown = Math.max(0, want ? r.games.findIndex((g) => g.start_ms === want) : 0);
+  if (wantGame && r.games[shown]?.start_ms === wantGame) wantGame = 0;
+  shownMs = r.games[shown]?.start_ms ?? 0;
+  if (!body.example && !wantGame) setUrl(idHash(playerId(p), shown ? shownMs : 0));
   renderRecord(r.games);
   renderFilm(r.games);
   renderReview(r.games);
@@ -397,6 +411,7 @@ function show(i) {
   const games = current?.report?.games ?? [];
   if (i < 0 || i >= games.length) return;
   shown = i;
+  shownMs = games[i].start_ms;
   for (const [k, b] of [...$("film").children].entries()) b.setAttribute("aria-current", String(k === i));
   // Without game= the link opens whatever is newest then
   if (!current.example) setUrl(idHash(playerId(current.player), i ? games[i].start_ms : 0));
@@ -405,13 +420,20 @@ function show(i) {
 
 function renderReview(games) {
   const box = $("review");
-  if (!games.length) {
+  const g = games[shown];
+  const json = JSON.stringify(g ?? null);
+  if (json === reviewed) {
+    pager?.move(shown, games.length);
+    return;
+  }
+  reviewed = json;
+  if (!g) {
     box.replaceChildren();
     return;
   }
-  const g = games[shown];
   const link = current.example ? undefined : `${location.origin}${location.pathname}#${idHash(playerId(current.player), g.start_ms)}`;
-  Review.render(box, g, { date, pager: { index: shown, count: games.length, go: show }, link });
+  pager = { index: shown, count: games.length, go: show };
+  Review.render(box, g, { date, pager, link });
 }
 
 function renderHighlights(games) {

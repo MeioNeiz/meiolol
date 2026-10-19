@@ -230,19 +230,26 @@ const Review = (() => {
     fact(opts.date ? opts.date(g) : "", `patch ${g.patch}`);
     s.append(facts);
     if (opts.pager) {
-      const { index, count, go } = opts.pager;
+      const pager = opts.pager;
+      let at = 0;
       const p = el("span", "pager");
       const prev = el("button", "", "‹");
       prev.type = "button";
       prev.setAttribute("aria-label", "Newer game");
-      prev.disabled = index === 0;
-      prev.addEventListener("click", () => go(index - 1));
+      prev.addEventListener("click", () => pager.go(at - 1));
       const next = el("button", "", "›");
       next.type = "button";
       next.setAttribute("aria-label", "Older game");
-      next.disabled = index === count - 1;
-      next.addEventListener("click", () => go(index + 1));
-      p.append(prev, `Game ${index + 1} of ${count}`, next);
+      next.addEventListener("click", () => pager.go(at + 1));
+      const label = document.createTextNode("");
+      pager.move = (index, count) => {
+        at = index;
+        prev.disabled = index === 0;
+        next.disabled = index === count - 1;
+        label.textContent = `Game ${index + 1} of ${count}`;
+      };
+      pager.move(pager.index, pager.count);
+      p.append(prev, label, next);
       s.append(p);
     }
     if (opts.link) (s.querySelector(".pager") ?? s).append(share(opts.link));
@@ -554,7 +561,8 @@ const Review = (() => {
     return c;
   }
 
-  // The whole review into `box`. opts: pager {index, count, go}, date(g) for the strip,
+  // The whole review into `box`. opts: pager {index, count, go}, to which render adds
+  // move(index, count) for games added around this one, date(g) for the strip,
   // lane: false for no lane panel, keep: moment indexes to list (default all), link: this
   // game's URL for a share button
   function render(box, g, opts = {}) {
