@@ -40,6 +40,8 @@ let checkTimer = 0;
 let wantGame = 0;
 // The newest game this device saw for the ID before this visit, 0 for none
 let since = 0;
+// Newer games are marked new in the film strip: since, or the newest before a check
+let newAfter = 0;
 // Preview: /api/ is behind basic auth until the production key. Asked without
 // credentials first, so visitors read why instead of getting the browser's sign-in
 // prompt; testers sign in from that note once per tab
@@ -157,6 +159,7 @@ async function lookup(id, game = 0) {
   fresh();
   wantGame = game;
   since = recentRead().find((r) => sameId(r.id, id))?.newest ?? 0;
+  newAfter = since;
   setUrl(idHash(id, game));
   status("Looking up…");
   await poll();
@@ -261,6 +264,8 @@ function watchStep(body) {
   if (newest(body) > watchFrom) {
     const fresh = body.report.games.filter((g) => g.start_ms > watchFrom).length;
     stopWatch();
+    newAfter ||= watchFrom;
+    markNew();
     show(0);
     status(`${plural(fresh, "new game")} added.`);
     return;
@@ -287,6 +292,7 @@ async function showExample(role = "") {
   clearTimeout(pollTimer);
   stopWatch();
   lookupId = "";
+  newAfter = 0;
   try {
     examples ??= await (await fetch(EXAMPLE)).json();
   } catch {
@@ -397,7 +403,6 @@ function renderFilm(games) {
     b.type = "button";
     b.setAttribute("role", "listitem");
     b.setAttribute("aria-current", String(i === shown));
-    b.setAttribute("aria-label", `${g.remake ? "Remake" : g.win ? "Win" : "Loss"}, ${Review.champName(g.champion)}, ${date(g)}`);
     const top = el("span", "top");
     top.append(Review.icon(g.champion), el("span", g.remake ? "" : g.win ? "w" : "l", g.remake ? "R" : g.win ? "W" : "L"), el("span", "num", clock(g.duration_s)));
     b.append(top, Review.spark(g));
@@ -405,6 +410,18 @@ function renderFilm(games) {
     box.append(b);
   });
   if (!games.length) box.append(el("p", "muted", "No solo/duo, flex, draft or Swiftplay games in the last 60 days."));
+  markNew();
+}
+
+function markNew() {
+  const games = current?.report?.games ?? [];
+  for (const [k, b] of [...$("film").children].entries()) {
+    const g = games[k];
+    if (!g) continue;
+    const isNew = newAfter > 0 && g.start_ms > newAfter;
+    b.classList.toggle("new", isNew);
+    b.setAttribute("aria-label", `${isNew ? "New: " : ""}${g.remake ? "Remake" : g.win ? "Win" : "Loss"}, ${Review.champName(g.champion)}, ${date(g)}`);
+  }
 }
 
 function show(i) {
