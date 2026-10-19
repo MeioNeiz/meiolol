@@ -24,6 +24,7 @@ const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const nnexport = @import("nnexport.zig");
 const seatstats = @import("seatstats.zig");
+const nn = @import("nn");
 const par = @import("../par.zig");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
@@ -332,38 +333,25 @@ fn keyCounts(gpa: Allocator, e: *const nnexport.Export, games: []const u32) ![]u
     return counts;
 }
 
-fn dot(a: []const f32, b: []const f32) f32 {
-    const V = @Vector(8, f32);
-    var acc: V = @splat(0);
-    var i: usize = 0;
-    while (i + 8 <= a.len) : (i += 8) acc += @as(V, a[i..][0..8].*) * @as(V, b[i..][0..8].*);
-    var s = @reduce(.Add, acc);
-    while (i < a.len) : (i += 1) s += a[i] * b[i];
-    return s;
-}
-
-fn axpy(y: []f32, s: f32, x: []const f32) void {
-    for (y, x) |*a, b| a.* += s * b;
-}
-
-/// Aux model's flat parameters: E [nv][d] and W [5][k][4d] (L2), b and u [5][k] (none)
-const AuxLayout = struct {
+/// Aux model's parameters: E [nv][d] first (embPrior and the export read it from offset
+/// 0), W [5 k][4d] (row r k + j: role r, target j), both with L2 l2; b and u [5 k], none
+const AuxShape = struct {
+    ps: nn.Params,
     d: usize,
-    nv: usize,
-    w: usize,
-    b: usize,
-    u: usize,
-    len: usize,
+    e: nn.Param,
+    w: nn.Param,
+    b: nn.Param,
+    u: nn.Param,
 
-    fn init(nv: usize, d: usize) AuxLayout {
-        const w = nv * d;
-        const b = w + 5 * k * 4 * d;
-        const u = b + 5 * k;
-        return .{ .d = d, .nv = nv, .w = w, .b = b, .u = u, .len = u + 5 * k };
-    }
-
-    fn wAt(l: AuxLayout, r: usize, j: usize) usize {
-        return l.w + (r * k + j) * 4 * l.d;
+    fn init(gpa: Allocator, nv: usize, d: usize, l2: f32) !AuxShape {
+        var m: AuxShape = .{ .ps = .empty, .d = d, .e = undefined, .w = undefined, .b = undefined, .u = undefined };
+        errdefer m.ps.deinit(gpa);
+        m.e = try m.ps.table(gpa, "champion_role", nv, d, .{ .init = .{ .uniform = 0.1 }, .decay = l2 });
+        const bound = @sqrt(6.0 / @as(f32, @floatFromInt(4 * d + k)));
+        m.w = try m.ps.matrix(gpa, "w", 5 * k, 4 * d, .{ .init = .{ .uniform = bound }, .decay = l2 });
+        m.b = try m.ps.vector(gpa, "b", 5 * k, .{});
+        m.u = try m.ps.vector(gpa, "u", 5 * k, .{});
+        return m;
     }
 };
 
@@ -408,19 +396,19 @@ const Sse = struct {
 
 /// One game's ten seats: adds the gradient of 0.5 * squared error times scale to gr
 /// (when given) and the squared errors to sse (when given)
-fn auxGame(l: AuxLayout, p: []const f32, ad: *const AuxData, gi: usize, gr: ?[]f32, scale: f32, sse: ?*Sse) void {
-    const d = l.d;
+fn auxGame(m: *const AuxShape, p: []const f32, ad: *const AuxData, gi: usize, gr: ?[]f32, scale: f32, sse: ?*Sse) void {
+    const d = m.d;
     const in = 4 * d;
     var ids: [10]u32 = undefined;
     for (&ids, 0..) |*id, slot| id.* = ad.vocab[keyOf(ad.e, gi, slot)];
     var sum: [2][max_dim]f32 = @splat(@splat(0));
-    for (ids, 0..) |id, slot| axpy(sum[slot / 5][0..d], 1, p[id * d ..][0..d]);
+    for (ids, 0..) |id, slot| nn.axpy(sum[slot / 5][0..d], 1, m.e.row(p, id));
     for (0..10) |slot| {
         const side = slot / 5;
         const r = slot % 5;
         const t = ad.e.aux[(gi * 10 + slot) * k ..][0..k];
-        const own = p[ids[slot] * d ..][0..d];
-        const opp = p[ids[(slot + 5) % 10] * d ..][0..d];
+        const own = m.e.row(p, ids[slot]);
+        const opp = m.e.row(p, ids[(slot + 5) % 10]);
         var x: [4 * max_dim]f32 = undefined;
         @memcpy(x[0..d], own);
         @memcpy(x[d .. 2 * d], opp);
@@ -434,8 +422,9 @@ fn auxGame(l: AuxLayout, p: []const f32, ad: *const AuxData, gi: usize, gr: ?[]f
         for (0..k) |j| {
             if (!ad.use[j]) continue;
             const z = ad.norm.z(r, j, t[j]) orelse continue;
-            const wj = p[l.wAt(r, j)..][0..in];
-            const err = dot(wj, x[0..in]) + p[l.b + r * k + j] + p[l.u + r * k + j] * sgn - z;
+            const rj = r * k + j;
+            const wj = m.w.row(p, rj);
+            const err = nn.dot(wj, x[0..in]) + m.b.at(p, rj).* + m.u.at(p, rj).* * sgn - z;
             if (sse) |s| {
                 const bz = z - ad.base[r][@intFromBool(won)][j];
                 s.model[j] += err * err;
@@ -444,18 +433,18 @@ fn auxGame(l: AuxLayout, p: []const f32, ad: *const AuxData, gi: usize, gr: ?[]f
             }
             if (gr) |g| {
                 const ge = err * scale;
-                axpy(g[l.wAt(r, j)..][0..in], ge, x[0..in]);
-                g[l.b + r * k + j] += ge;
-                g[l.u + r * k + j] += ge * sgn;
-                axpy(dx[0..in], ge, wj);
+                nn.axpy(m.w.row(g, rj), ge, x[0..in]);
+                m.b.at(g, rj).* += ge;
+                m.u.at(g, rj).* += ge * sgn;
+                nn.axpy(dx[0..in], ge, wj);
             }
         }
         const g = gr orelse continue;
-        axpy(g[ids[slot] * d ..][0..d], 1, dx[0..d]);
-        axpy(g[ids[(slot + 5) % 10] * d ..][0..d], 1, dx[d .. 2 * d]);
+        nn.axpy(m.e.row(g, ids[slot]), 1, dx[0..d]);
+        nn.axpy(m.e.row(g, ids[(slot + 5) % 10]), 1, dx[d .. 2 * d]);
         for (0..10) |o| {
             if (o == slot) continue;
-            if (o / 5 == side) axpy(g[ids[o] * d ..][0..d], 0.25, dx[2 * d .. 3 * d]) else axpy(g[ids[o] * d ..][0..d], 0.2, dx[3 * d .. 4 * d]);
+            if (o / 5 == side) nn.axpy(m.e.row(g, ids[o]), 0.25, dx[2 * d .. 3 * d]) else nn.axpy(m.e.row(g, ids[o]), 0.2, dx[3 * d .. 4 * d]);
         }
     }
 }
@@ -478,85 +467,67 @@ fn baseMeans(e: *const nnexport.Export, norm: *const Norm, games: []const u32) [
     return out;
 }
 
-fn sseOf(l: AuxLayout, p: []const f32, ad: *const AuxData, games: []const u32) Sse {
+fn sseOf(m: *const AuxShape, p: []const f32, ad: *const AuxData, games: []const u32) Sse {
     var s: Sse = .{};
-    for (games) |gi| auxGame(l, p, ad, gi, null, 0, &s);
+    for (games) |gi| auxGame(m, p, ad, gi, null, 0, &s);
     return s;
-}
-
-fn stepsPerEpoch(n: usize, batch: u32) u64 {
-    return @max(1, (n + batch - 1) / batch);
 }
 
 const AuxTrained = struct { p: []f32, steps: u64, epochs: f64, val: Sse };
 
-/// Adam over shuffled game batches for at most max_steps; with val, evaluated
-/// opts.evals times an epoch, stopping after `patience` evaluations without a new best
-/// and keeping the best one's parameters
-fn trainAux(gpa: Allocator, opts: Options, l2: f32, seed: u32, l: AuxLayout, ad: *const AuxData, train: []const u32, val: ?[]const u32, max_steps: u64) !AuxTrained {
+/// trainAux's side of nn.fit
+const AuxFit = struct {
+    m: *const AuxShape,
+    ad: *const AuxData,
+    train: []const u32,
+    val: []const u32,
+    p: []f32,
+    gr: []f32,
+    opt: *nn.Adam,
+    segs: []const nn.Segment,
+
+    pub fn step(f: *AuxFit, part: []const u32) !void {
+        @memset(f.gr, 0);
+        const scale = 1 / @as(f32, @floatFromInt(10 * part.len));
+        for (part) |i| auxGame(f.m, f.p, f.ad, f.train[i], f.gr, scale, null);
+        f.opt.step(f.p, f.gr, f.segs);
+    }
+
+    pub fn valLoss(f: *AuxFit) !f64 {
+        return sseOf(f.m, f.p, f.ad, f.val).loss();
+    }
+};
+
+/// Adam (L2 in the gradient) over shuffled game batches for at most max_steps; with val,
+/// evaluated opts.evals times an epoch, stopping after `patience` evaluations without a
+/// new best and keeping the best one's parameters. E has nv rows
+fn trainAux(gpa: Allocator, opts: Options, l2: f32, seed: u32, nv: usize, ad: *const AuxData, train: []const u32, val: ?[]const u32, max_steps: u64) !AuxTrained {
     var rng: std.Random.DefaultPrng = .init(seed);
     const rnd = rng.random();
-    const p = try gpa.alloc(f32, l.len);
+    var m: AuxShape = try .init(gpa, nv, opts.dim, l2);
+    defer m.ps.deinit(gpa);
+    const p = try m.ps.alloc(gpa);
     errdefer gpa.free(p);
-    @memset(p, 0);
-    for (p[0..l.w]) |*x| x.* = (rnd.float(f32) * 2 - 1) * 0.1;
-    const bound = @sqrt(6.0 / @as(f32, @floatFromInt(4 * l.d + k)));
-    for (p[l.w..l.b]) |*x| x.* = (rnd.float(f32) * 2 - 1) * bound;
-    const scratch = try gpa.alloc(f32, 4 * l.len);
-    defer gpa.free(scratch);
-    const gr = scratch[0..l.len];
-    const m1 = scratch[l.len..][0..l.len];
-    const m2 = scratch[2 * l.len ..][0..l.len];
-    const best = scratch[3 * l.len ..][0..l.len];
-    @memset(m1, 0);
-    @memset(m2, 0);
-    const order = try gpa.dupe(u32, train);
-    defer gpa.free(order);
-    const per_epoch = stepsPerEpoch(train.len, opts.batch);
-    const eval_every = @max(1, per_epoch / opts.evals);
-
-    var best_loss = std.math.inf(f64);
-    var best_step: u64 = 0;
-    var best_sse: Sse = .{};
-    var since_best: u32 = 0;
-    var step: u64 = 0;
-    var at: usize = order.len;
-    while (step < max_steps) {
-        if (at >= order.len) {
-            rnd.shuffle(u32, order);
-            at = 0;
-        }
-        const part = order[at..@min(at + opts.batch, order.len)];
-        at += part.len;
-        @memset(gr, 0);
-        const scale = 1 / @as(f32, @floatFromInt(10 * part.len));
-        for (part) |gi| auxGame(l, p, ad, gi, gr, scale, null);
-        step += 1;
-        const c1 = 1 - std.math.pow(f32, 0.9, @floatFromInt(step));
-        const c2 = 1 - std.math.pow(f32, 0.999, @floatFromInt(step));
-        for (p, gr, m1, m2, 0..) |*x, g0, *s1, *s2, i| {
-            const g = g0 + if (i < l.b) l2 * x.* else 0;
-            s1.* = 0.9 * s1.* + 0.1 * g;
-            s2.* = 0.999 * s2.* + 0.001 * g * g;
-            x.* -= opts.lr * (s1.* / c1) / (@sqrt(s2.* / c2) + 1e-8);
-        }
-        const v = val orelse continue;
-        if (step % eval_every != 0 and step != max_steps) continue;
-        const s = sseOf(l, p, ad, v);
-        const loss = s.loss();
-        if (loss < best_loss - 1e-7) {
-            best_loss = loss;
-            best_step = step;
-            best_sse = s;
-            since_best = 0;
-            @memcpy(best, p);
-        } else {
-            since_best += 1;
-            if (since_best >= opts.patience) break;
-        }
-    }
-    if (val == null) best_step = step else if (best_step > 0) @memcpy(p, best);
-    return .{ .p = p, .steps = best_step, .epochs = @as(f64, @floatFromInt(best_step)) / @as(f64, @floatFromInt(per_epoch)), .val = best_sse };
+    m.ps.initValues(p, rnd);
+    const gr = try m.ps.alloc(gpa);
+    defer gpa.free(gr);
+    const best = try m.ps.alloc(gpa);
+    defer gpa.free(best);
+    const segs = try m.ps.segments(gpa);
+    defer gpa.free(segs);
+    var opt: nn.Adam = try .init(gpa, m.ps.len, .{ .lr = opts.lr, .decay = .coupled });
+    defer opt.deinit(gpa);
+    var f: AuxFit = .{ .m = &m, .ad = ad, .train = train, .val = val orelse &.{}, .p = p, .gr = gr, .opt = &opt, .segs = segs };
+    const r = try nn.fit(gpa, &f, .{
+        .batch = opts.batch,
+        .max_steps = max_steps,
+        .evals_per_epoch = opts.evals,
+        .patience = opts.patience,
+        .validate = val != null,
+    }, train.len, rnd, p, best);
+    // The best validation's errors: p is back at its parameters
+    const sse: Sse = if (val != null and r.steps > 0) sseOf(&m, p, ad, val.?) else .{};
+    return .{ .p = p, .steps = r.steps, .epochs = r.epochs, .val = sse };
 }
 
 /// Hand profile features from a seat's (per minute) aux, NaN unknown: win-comp's 12
@@ -705,11 +676,16 @@ const RModel = struct {
         return m.delta() + m.n;
     }
 
+    /// c and w unshrunk, delta with L2 l2
+    fn segments(m: RModel, l2: f32) [2]nn.Segment {
+        return .{ .{ .len = m.delta() }, .{ .len = m.n, .decay = l2 } };
+    }
+
     fn ratings(m: RModel, p: []const f32, out: []f32) void {
         const dl = m.delta();
         for (out, 0..) |*b, id| {
             b.* = p[dl + id];
-            if (m.dp > 0) b.* += dot(p[m.w() + @as(usize, m.role[id]) * m.dp ..][0..m.dp], m.prior[id * m.dp ..][0..m.dp]);
+            if (m.dp > 0) b.* += nn.dot(p[m.w() + @as(usize, m.role[id]) * m.dp ..][0..m.dp], m.prior[id * m.dp ..][0..m.dp]);
         }
     }
 
@@ -720,14 +696,8 @@ const RModel = struct {
     }
 };
 
-fn sigmoid(x: f32) f32 {
-    return 1 / (1 + @exp(-x));
-}
-
-fn loss1(y: f32, p: f32) f64 {
-    const q: f64 = std.math.clamp(p, 1e-6, 1 - 1e-6);
-    return -(y * @log(q) + (1 - y) * @log(1 - q));
-}
+const sigmoid = nn.sigmoid;
+const loss1 = nn.logLoss;
 
 fn rLoss(m: RModel, p: []const f32, b: []f32, set: []const RGame) f64 {
     m.ratings(p, b);
@@ -738,7 +708,54 @@ fn rLoss(m: RModel, p: []const f32, b: []f32, set: []const RGame) f64 {
 
 const RTrained = struct { p: []f32, epochs: u32, val_loss: f64 };
 
-/// win-ratings' train: Adam on batches of 2048 games, an epoch at a time; with val,
+/// gr = the summed log-loss gradient of the games set[i], i in part; b and gb: m.n of
+/// scratch
+fn rGrad(m: RModel, p: []const f32, b: []f32, gb: []f32, gr: []f32, set: []const RGame, part: []const u32) void {
+    m.ratings(p, b);
+    @memset(gr, 0);
+    @memset(gb, 0);
+    for (part) |i| {
+        const g = &set[i];
+        const r = sigmoid(m.logit(p, b, g)) - g.y;
+        gr[g.platform] += r;
+        for (0..5) |ro| {
+            gb[g.ids[ro]] += r;
+            gb[g.ids[5 + ro]] -= r;
+        }
+    }
+    const dl = m.delta();
+    for (gb, 0..) |x, id| {
+        if (x == 0) continue;
+        gr[dl + id] += x;
+        if (m.dp > 0) nn.axpy(gr[m.w() + @as(usize, m.role[id]) * m.dp ..][0..m.dp], x, m.prior[id * m.dp ..][0..m.dp]);
+    }
+}
+
+/// trainRatings' side of nn.fit
+const RatingsFit = struct {
+    m: RModel,
+    set: []const RGame,
+    val: []const RGame,
+    p: []f32,
+    b: []f32,
+    gb: []f32,
+    gr: []f32,
+    opt: *nn.Adam,
+    segs: []const nn.Segment,
+
+    pub fn step(f: *RatingsFit, part: []const u32) !void {
+        rGrad(f.m, f.p, f.b, f.gb, f.gr, f.set, part);
+        const scale = 1 / @as(f32, @floatFromInt(part.len));
+        for (f.gr) |*g| g.* *= scale;
+        f.opt.step(f.p, f.gr, f.segs);
+    }
+
+    pub fn valLoss(f: *RatingsFit) !f64 {
+        return rLoss(f.m, f.p, f.b, f.val);
+    }
+};
+
+/// win-ratings' train: Adam (L2 in the gradient) on batches of 2048 games; with val,
 /// stops on it after `r_patience` epochs without a new best and keeps the best
 fn trainRatings(gpa: Allocator, m: RModel, l2: f32, set: []const RGame, val: ?[]const RGame, epochs_cap: u32, seed: u64) !RTrained {
     const len = m.len();
@@ -746,72 +763,30 @@ fn trainRatings(gpa: Allocator, m: RModel, l2: f32, set: []const RGame, val: ?[]
     errdefer gpa.free(p);
     @memset(p, 0);
     var rng: std.Random.DefaultPrng = .init(seed);
-    const rnd = rng.random();
-    const scratch = try gpa.alloc(f32, 4 * len + 2 * m.n);
+    const scratch = try gpa.alloc(f32, 2 * len + 2 * m.n);
     defer gpa.free(scratch);
-    const gr = scratch[0..len];
-    const m1 = scratch[len..][0..len];
-    const m2 = scratch[2 * len ..][0..len];
-    const best = scratch[3 * len ..][0..len];
-    const b = scratch[4 * len ..][0..m.n];
-    const gb = scratch[4 * len + m.n ..][0..m.n];
-    @memset(m1, 0);
-    @memset(m2, 0);
-    const order = try gpa.alloc(u32, set.len);
-    defer gpa.free(order);
-    for (order, 0..) |*o, i| o.* = @intCast(i);
-
-    var best_loss = std.math.inf(f64);
-    var best_epoch: u32 = 0;
-    var step: u32 = 0;
-    var epoch: u32 = 0;
-    const dl = m.delta();
-    while (epoch < epochs_cap) : (epoch += 1) {
-        rnd.shuffle(u32, order);
-        var at: usize = 0;
-        while (at < order.len) : (at += r_batch) {
-            const part = order[at..@min(at + r_batch, order.len)];
-            m.ratings(p, b);
-            @memset(gr, 0);
-            @memset(gb, 0);
-            for (part) |i| {
-                const g = &set[i];
-                const r = sigmoid(m.logit(p, b, g)) - g.y;
-                gr[g.platform] += r;
-                for (0..5) |ro| {
-                    gb[g.ids[ro]] += r;
-                    gb[g.ids[5 + ro]] -= r;
-                }
-            }
-            for (gb, 0..) |x, id| {
-                if (x == 0) continue;
-                gr[dl + id] += x;
-                if (m.dp > 0) axpy(gr[m.w() + @as(usize, m.role[id]) * m.dp ..][0..m.dp], x, m.prior[id * m.dp ..][0..m.dp]);
-            }
-            const scale = 1 / @as(f32, @floatFromInt(part.len));
-            step += 1;
-            const c1 = 1 - std.math.pow(f32, 0.9, @floatFromInt(step));
-            const c2 = 1 - std.math.pow(f32, 0.999, @floatFromInt(step));
-            for (p, gr, m1, m2, 0..) |*x, g0, *s1, *s2, i| {
-                const g = g0 * scale + if (i >= dl) l2 * x.* else 0;
-                s1.* = 0.9 * s1.* + 0.1 * g;
-                s2.* = 0.999 * s2.* + 0.001 * g * g;
-                x.* -= r_lr * (s1.* / c1) / (@sqrt(s2.* / c2) + 1e-8);
-            }
-        }
-        const v = val orelse {
-            best_epoch = epoch + 1;
-            continue;
-        };
-        const loss = rLoss(m, p, b, v);
-        if (loss < best_loss - 1e-7) {
-            best_loss = loss;
-            best_epoch = epoch + 1;
-            @memcpy(best, p);
-        } else if (epoch + 1 - best_epoch >= r_patience) break;
-    }
-    if (val != null) @memcpy(p, best);
-    return .{ .p = p, .epochs = best_epoch, .val_loss = best_loss };
+    var opt: nn.Adam = try .init(gpa, len, .{ .lr = r_lr, .decay = .coupled });
+    defer opt.deinit(gpa);
+    const segs = m.segments(l2);
+    var f: RatingsFit = .{
+        .m = m,
+        .set = set,
+        .val = val orelse &.{},
+        .p = p,
+        .gr = scratch[0..len],
+        .b = scratch[2 * len ..][0..m.n],
+        .gb = scratch[2 * len + m.n ..][0..m.n],
+        .opt = &opt,
+        .segs = &segs,
+    };
+    const per_epoch = nn.stepsPerEpoch(set.len, r_batch);
+    const r = try nn.fit(gpa, &f, .{
+        .batch = r_batch,
+        .max_steps = epochs_cap * per_epoch,
+        .patience = r_patience,
+        .validate = val != null,
+    }, set.len, rng.random(), p, scratch[len..][0..len]);
+    return .{ .p = p, .epochs = @intCast(r.steps / per_epoch), .val_loss = r.loss };
 }
 
 const RFit = struct { pred: []f32, l2: f32, epochs: u32, val_loss: f64 };
@@ -1002,12 +977,11 @@ fn job(gpa: Allocator, io: Io, e: *const nnexport.Export, opts: Options, block: 
     defer vocab_inner.deinit(gpa);
     const base_inner = baseMeans(e, &norm_inner, inner.items);
     const ad_inner: AuxData = .{ .e = e, .norm = &norm_inner, .vocab = vocab_inner.id, .use = use, .win_adjust = opts.win_adjust, .base = &base_inner };
-    const l_inner: AuxLayout = .init(vocab_inner.n, d);
     var tuned: ?AuxTrained = null;
     var tuned_l2: f32 = 0;
     defer if (tuned) |t| gpa.free(t.p);
     for (opts.l2) |l2| {
-        const t = try trainAux(gpa, opts, l2, seed, l_inner, &ad_inner, inner.items, val.items, opts.max_epochs * stepsPerEpoch(inner.items.len, opts.batch));
+        const t = try trainAux(gpa, opts, l2, seed, vocab_inner.n, &ad_inner, inner.items, val.items, opts.max_epochs * nn.stepsPerEpoch(inner.items.len, opts.batch));
         if (tuned == null or t.val.loss() < tuned.?.val.loss()) {
             if (tuned) |old| gpa.free(old.p);
             tuned = t;
@@ -1019,9 +993,8 @@ fn job(gpa: Allocator, io: Io, e: *const nnexport.Export, opts: Options, block: 
     errdefer vocab_all.deinit(gpa);
     const base_all = baseMeans(e, &norm, fit.items);
     const ad_all: AuxData = .{ .e = e, .norm = &norm, .vocab = vocab_all.id, .use = use, .win_adjust = opts.win_adjust, .base = &base_all };
-    const l_all: AuxLayout = .init(vocab_all.n, d);
-    const steps: u64 = @max(1, @as(u64, @intFromFloat(@round(tn.epochs * 1.1 * @as(f64, @floatFromInt(stepsPerEpoch(fit.items.len, opts.batch)))))));
-    const full = try trainAux(gpa, opts, tuned_l2, seed, l_all, &ad_all, fit.items, null, steps);
+    const steps = nn.refitSteps(tn.epochs, 1.1, fit.items.len, opts.batch);
+    const full = try trainAux(gpa, opts, tuned_l2, seed, vocab_all.n, &ad_all, fit.items, null, steps);
     defer gpa.free(full.p);
 
     // 3: ratings with each prior
@@ -1364,29 +1337,29 @@ test "aux model: gradient matches finite differences" {
     var vocab: Vocab = try .init(gpa, &fx.e, &games, 1);
     defer vocab.deinit(gpa);
     const ad: AuxData = .{ .e = &fx.e, .norm = &norm, .vocab = vocab.id, .use = @splat(true), .win_adjust = true, .base = &base };
-    const l: AuxLayout = .init(vocab.n, 3);
-    const p = try gpa.alloc(f32, l.len);
+    var m: AuxShape = try .init(gpa, vocab.n, 3, 0);
+    defer m.ps.deinit(gpa);
+    const p = try m.ps.alloc(gpa);
     defer gpa.free(p);
     var rng: std.Random.DefaultPrng = .init(2);
     for (p) |*x| x.* = rng.random().floatNorm(f32) * 0.3;
-    const gr = try gpa.alloc(f32, l.len);
+    const gr = try m.ps.alloc(gpa);
     defer gpa.free(gr);
-    @memset(gr, 0);
-    for (games) |gi| auxGame(l, p, &ad, gi, gr, 1, null);
-    const own = vocab.id[keyOf(&fx.e, 3, 0)];
-    const j = n_early + @as(usize, @backingInt(seatstats.SeatStat.dmg_magic));
-    for ([_]usize{ own * 3 + 1, l.wAt(0, j) + 2, l.wAt(2, j) + 7, l.b + 2 * k + j, l.u + 1 * k + j }) |i| {
-        const old = p[i];
-        p[i] = old + 1e-2;
-        const up = sseOf(l, p, &ad, &games);
-        p[i] = old - 1e-2;
-        const down = sseOf(l, p, &ad, &games);
-        p[i] = old;
-        var a: f64 = 0;
-        for (up.model, down.model) |x, y| a += x - y;
-        // sse is twice the loss
-        try testing.expectApproxEqRel(a / 4e-2, gr[i], 1e-2);
-    }
+    for (games) |gi| auxGame(&m, p, &ad, gi, gr, 1, null);
+    const Loss = struct {
+        m: *const AuxShape,
+        p: []const f32,
+        ad: *const AuxData,
+        games: []const u32,
+        // Half the squared errors: auxGame's loss
+        fn loss(c: *const @This()) f64 {
+            var a: f64 = 0;
+            for (sseOf(c.m, c.p, c.ad, c.games).model) |x| a += x;
+            return a / 2;
+        }
+    };
+    // Quadratic in each parameter, so a wide step is exact but for rounding
+    try nn.expectGradient(&Loss{ .m = &m, .p = p, .ad = &ad, .games = &games }, Loss.loss, p, gr, null, .{ .h = 0.1 });
 }
 
 test "ratings with a prior: gradient matches finite differences; no prior is plain ratings" {
@@ -1408,30 +1381,20 @@ test "ratings with a prior: gradient matches finite differences; no prior is pla
     const b = try gpa.alloc(f32, n);
     defer gpa.free(b);
     m.ratings(p, b);
-    // The training step's gradient, written out
-    var gr: [n_platforms + 5 * dp + n]f32 = @splat(0);
-    var gb: [n]f32 = @splat(0);
-    for (&set) |*g| {
-        const r = sigmoid(m.logit(p, b, g)) - g.y;
-        gr[g.platform] += r;
-        for (0..5) |ro| {
-            gb[g.ids[ro]] += r;
-            gb[g.ids[5 + ro]] -= r;
+    var gr: [n_platforms + 5 * dp + n]f32 = undefined;
+    var gb: [n]f32 = undefined;
+    rGrad(m, p, b, &gb, &gr, &set, &.{ 0, 1 });
+    for (&gr) |*g| g.* /= set.len;
+    const Loss = struct {
+        m: RModel,
+        p: []const f32,
+        b: []f32,
+        set: []const RGame,
+        fn loss(c: *const @This()) f64 {
+            return rLoss(c.m, c.p, c.b, c.set);
         }
-    }
-    for (gb, 0..) |x, id| {
-        gr[m.delta() + id] += x;
-        axpy(gr[m.w() + @as(usize, role[id]) * dp ..][0..dp], x, prior[id * dp ..][0..dp]);
-    }
-    for ([_]usize{ 1, m.w() + 1, m.w() + 3 * dp, m.delta() + 6, m.delta() + 0 }) |i| {
-        const old = p[i];
-        p[i] = old + 1e-3;
-        const up = rLoss(m, p, b, &set);
-        p[i] = old - 1e-3;
-        const down = rLoss(m, p, b, &set);
-        p[i] = old;
-        try testing.expectApproxEqAbs((up - down) / 2e-3, gr[i] / 2, 1e-3);
-    }
+    };
+    try nn.expectGradient(&Loss{ .m = m, .p = p, .b = b, .set = &set }, Loss.loss, p, &gr, null, .{});
 }
 
 test "pretrain on the fixture: E carries the planted stats, every variant scores" {
