@@ -18,14 +18,16 @@ its requests from ~2,000 to ~1,170 (box io pressure full avg300 60%). Fixed in 1
 
 ## Traffic looks inflated (Jacob 19 Oct: "def mostly bots, it's not proper")
 
-deploy/traffic.sh counts a page view as human unless the user agent is empty or names a
-bot (bot, crawl, spider, curl, python, headless, preview, ...); bots with a browser's
-user agent count as people. No IPs are logged (privacy), so per-IP rate checks are out.
-Ideas, cheapest first: count as human only pages whose CSS or JS was also fetched
-within a minute with the same referer; a tiny beacon from the page's JS (a fetch with
-no identifiers; bots that do not run JS never send it); look at the top user agents and
-paths in "human" views for scanners (wp-admin, .env, .php); compare with Cloudflare's
-analytics if the zone is proxied. Owner of traffic.sh install: meiolol-8f.
+Done 20 Oct (traffic agent): deploy/traffic.sh counts a browser-agent page view as a
+person only when the same agent fetched /style.css within 60 s (pages revalidate it on
+every load; they link with no-referrer, so the match is by agent, one fetch per view).
+12-19 Oct: 20,832 "people" by the old count, 506 by the new; 13.2k on 18 Oct were one
+crawler with a 2015 Edge 12 agent in one hour, 5.5k on 12 Oct likewise. Scanners
+(.env, .php, wp-) were already out: all 404s, never page views. Admin traffic tab shows
+people, unconfirmed and bots. Next, only if needed:
+- Headless bots that load CSS still count. A JS beacon (nginx location, Jacob installs)
+  would add little over the CSS match: proposal in data/team/2026-10-19-night/traffic.md
+- Cloudflare analytics comparison if the zone gets proxied
 
 ## Storage and hosts
 

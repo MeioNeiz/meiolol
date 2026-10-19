@@ -834,7 +834,7 @@ VIEWS.overview = body => {
   tile(tiles, "Site upload", ago(lastUp), `${D.uploads.filter(t => t >= D.now - 86400).length} in the last 24 h`, lastUp == null || D.now - lastUp > 26 * 3600 ? "bad" : null, () => setTab("ops"));
   if (TRAFFIC) {
     const h = TRAFFIC.hours.filter(r => r[0] >= TRAFFIC.generated - 86400);
-    tile(tiles, "Site views, 24 h", num(sumR(h.map(r => r[1]))), `${num(sumR(h.map(r => r[2])))} by bots`, null, () => setTab("traffic"));
+    tile(tiles, "Site views, 24 h", num(sumR(h.map(r => r[1]))), `${num(sumR(h.map(r => r[2] + (r[6] || 0))))} by bots or unconfirmed`, null, () => setTab("traffic"));
   }
   // The Models tab's headline: best model by log loss, accuracy on held-out games
   const W = winReadings();
@@ -862,7 +862,7 @@ VIEWS.overview = body => {
     chart(g, {
       id: "ov-traffic", title: "Site page views per hour", type: "bars", step: 3600, time: true,
       x: hrs.map(r => r[0]), xMin: TRAFFIC.generated - 2 * 86400, xMax: TRAFFIC.generated,
-      series: [{ name: "people", color: PALETTE[0], values: hrs.map(r => r[1]) }, { name: "bots", color: PALETTE[5], values: hrs.map(r => r[2]) }],
+      series: [{ name: "people", color: PALETTE[0], values: hrs.map(r => r[1]) }, { name: "unconfirmed", color: PALETTE[3], values: hrs.map(r => r[6] || 0) }, { name: "bots", color: PALETTE[5], values: hrs.map(r => r[2]) }],
     });
   }
   if (L && L.actions && L.actions.length) {
@@ -1974,7 +1974,7 @@ async function runDetail(box, r) {
 // ---------- traffic ----------
 
 VIEWS.traffic = body => {
-  const sec = section(body, "Site traffic", TRAFFIC ? `nginx log on the web server, no IP addresses; updated ${ago(TRAFFIC.generated)}. People and bots told apart by user agent.` : "",
+  const sec = section(body, "Site traffic", TRAFFIC ? `nginx log on the web server, no IP addresses; updated ${ago(TRAFFIC.generated)}. A person is a browser user agent that also fetched the stylesheet; unconfirmed: a browser user agent with no stylesheet fetch, mostly bots; bots: named by their user agent.` : "",
     switcher([["24h", "24 hours"], ["7d", "7 days"], ["30d", "30 days"]], ui.trafficRange, r => { ui.trafficRange = r; store("traffic-range", r); render(true); }, "Traffic range"));
   if (!TRAFFIC) { sec.append(el("p", { class: "muted" }, trafficErr ? `Could not load ops/traffic.json: ${trafficErr}` : "Loading…")); return; }
   const T = TRAFFIC;
@@ -1983,31 +1983,31 @@ VIEWS.traffic = body => {
   const tiles = grid(sec, "tiles");
   const day = T.hours.filter(r => r[0] >= T.generated - 86400);
   tile(tiles, "Views, 24 h", num(sumR(day.map(r => r[1]))), "pages by people");
-  tile(tiles, `Views, ${ui.trafficRange}`, num(sumR(hrs.map(r => r[1]))), `${num(sumR(hrs.map(r => r[2])))} by bots`);
+  tile(tiles, `Views, ${ui.trafficRange}`, num(sumR(hrs.map(r => r[1]))), `${num(sumR(hrs.map(r => r[6] || 0)))} unconfirmed, ${num(sumR(hrs.map(r => r[2])))} by bots`);
   tile(tiles, "Server errors, 24 h", num(sumR(day.map(r => r[4]))), "5xx answers", sumR(day.map(r => r[4])) > 0 ? "warn" : null);
   const lat = (T.latency_ms || {})["24h"];
   const ms = v => v == null ? "–" : num(v) + " ms";
   if (lat) tile(tiles, "Page time, p95", ms(lat.p95), `p50 ${ms(lat.p50)}, p99 ${ms(lat.p99)} (bucket bounds)`);
   tile(tiles, "Sent, 24 h", bytes(sumR(day.map(r => r[5]))), `${num(sumR(day.map(r => r[3])))} asset requests`);
   const daily = spanS > 2 * 86400;
-  let xs = hrs.map(r => r[0]), people = hrs.map(r => r[1]), bots = hrs.map(r => r[2]), errs = hrs.map(r => r[4]);
+  let xs = hrs.map(r => r[0]), people = hrs.map(r => r[1]), bots = hrs.map(r => r[2]), errs = hrs.map(r => r[4]), unconf = hrs.map(r => r[6] || 0);
   if (daily) {
     const by = new Map();
     for (const r of hrs) {
       const d = Math.floor((r[0] + ukOffset(r[0])) / 86400) * 86400 - ukOffset(r[0]);
-      const a = by.get(d) || [0, 0, 0];
-      a[0] += r[1]; a[1] += r[2]; a[2] += r[4];
+      const a = by.get(d) || [0, 0, 0, 0];
+      a[0] += r[1]; a[1] += r[2]; a[2] += r[4]; a[3] += r[6] || 0;
       by.set(d, a);
     }
     xs = [...by.keys()].sort((a, b) => a - b);
-    people = xs.map(d => by.get(d)[0]); bots = xs.map(d => by.get(d)[1]); errs = xs.map(d => by.get(d)[2]);
+    people = xs.map(d => by.get(d)[0]); bots = xs.map(d => by.get(d)[1]); errs = xs.map(d => by.get(d)[2]); unconf = xs.map(d => by.get(d)[3]);
   }
   const step = daily ? 86400 : 3600;
   const g = grid(sec);
   chart(g, {
     id: "traffic-views", title: `Page views per ${daily ? "day" : "hour"}`, type: "bars", step, time: true, x: xs,
     xMin: T.generated - spanS, xMax: T.generated, xFmt: daily ? t => uk(t).replace(/ \d\d:\d\d$/, "") : uk,
-    series: [{ name: "people", color: PALETTE[0], values: people }, { name: "bots", color: PALETTE[5], values: bots }],
+    series: [{ name: "people", color: PALETTE[0], values: people }, { name: "unconfirmed", color: PALETTE[3], values: unconf }, { name: "bots", color: PALETTE[5], values: bots }],
   });
   chart(g, {
     id: "traffic-errors", title: `Server errors per ${daily ? "day" : "hour"}`, type: "bars", step, time: true, x: xs,

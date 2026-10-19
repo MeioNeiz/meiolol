@@ -194,7 +194,10 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   aggregates it every 5 min (meiolol-traffic.timer, system unit, user meiolol-traffic,
   sandboxed: sees only /var/log/nginx, no network) into /var/www/meiolol-ops. State in
   /var/lib/meiolol-traffic: per log file summaries cached by inode with the offset read
-  (files/), hourly totals kept 90 days (hourly.tsv). Update by hand: scp the script and
+  (files2/), hourly totals kept 90 days (hourly.tsv). A person is a browser user agent
+  whose page view is matched to a /style.css fetch by the same agent within 60 s (every
+  page revalidates it); browser agents with no such fetch are "unconfirmed" (hours
+  column 6), 97% of 12-19 Oct's old "people" count. Update by hand: scp the script and
   units, `sudo install -m 755 traffic.sh /usr/local/bin/meiolol-traffic`, units into
   /etc/systemd/system, `daemon-reload`. nginx before: /home/ubuntu/meiolol.conf.bak-dashboard
 - Admin API (/admin/api/, src/admin_api.zig): `meiolol render` on the box answers

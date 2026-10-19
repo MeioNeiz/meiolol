@@ -5,13 +5,20 @@
 # /admin/ops/. Each log file is summarised once per hour bucket and cached by inode with
 # the offset read, so a run reads only new lines (a rotation keeps the inode; a .gz is
 # read once). Hourly totals go to hourly.tsv, kept 90 days, past the 14 days of logs.
+# A browser-agent page view counts as a person only when the same agent also fetched
+# /style.css within PAIR_S: every page links it with Cache-Control no-cache, so a browser
+# asks for it (200 or 304) on each load, and most bots with a browser's agent never do.
+# Pages link with no-referrer, so the CSS request can't name its page: matched by agent,
+# one fetch per view. The rest are "unconfirmed" (hours column 6)
 # Shape of traffic.json: section 3 of the admin dashboard contract (admin.js reads it)
 set -euo pipefail
 
 LOG=${MEIOLOL_TRAFFIC_LOG:-/var/log/nginx/meiolol.access.log}
 STATE=${STATE_DIRECTORY:-/var/lib/meiolol-traffic}
 OUT=${MEIOLOL_TRAFFIC_OUT:-/var/www/meiolol-ops/traffic.json}
-CACHE=$STATE/files
+# files2: summaries with the unconfirmed count; files held the older shape
+CACHE=$STATE/files2
+rm -rf "$STATE/files"
 HOURLY=$STATE/hourly.tsv
 mkdir -p "$CACHE"
 touch "$HOURLY"
@@ -21,9 +28,13 @@ trap 'rm -rf "$tmp"' EXIT
 TOP='def top($n): to_entries | sort_by(-.value) | .[:$n] | from_entries;'
 # Lines per jq run: its maps of paths (404s are any path a scanner tries) stay small
 PIECE_LINES=50000
+PAIR_S=60
 
-# Per hour: human and bot page views, assets, 5xx, bytes, then counts by status, 404 uri,
-# page uri, referrer domain, agent family, render cache status, latency bucket (ms)
+# Per hour: people's and bot page views, assets, 5xx, bytes, unconfirmed views (browser
+# agent, no stylesheet), then counts by status, 404 uri, page uri, referrer domain, agent
+# family, render cache status, latency bucket (ms). Page uri and referrer count people only.
+# pend: per agent, views waiting for a stylesheet fetch and fetches waiting for a view (a
+# big page can be logged after its CSS); a view still waiting at the end stays unconfirmed
 SUMMARY=$TOP'
 def page: .m == "GET" and (.s == 200 or .s == 304)
     and (.u | test("(/|\\.html)$") or (split("/") | last | contains(".") | not));
@@ -43,32 +54,44 @@ def family: (.a // "") as $a |
     elif ($a | test("Safari/")) then "Safari"
     else "Other" end;
 def domain: first(((.r // "") | capture("^[A-Za-z][A-Za-z0-9+.-]*://(?<d>[^/:?#@]+)").d | ascii_downcase), "");
+def person($h; $u; $d): .hours[$h].u -= 1 | .hours[$h].h += 1 | .hours[$h].pg[$u] += 1
+    | if $d != "" and ($d | IN("meio.lol", "www.meio.lol", "meiolol.jomify.lol") | not)
+      then .hours[$h].rf[$d] += 1 else . end;
 def bucket: (.rt * 1000) as $ms
     | (([1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000]
         | map(select(. >= $ms)) | first) // 60000) | tostring;
 reduce (inputs | fromjson? | select(type == "object" and (.t | type) == "number"
         and (.s | type) == "number" and (.u | type) == "string")
     | select(.u | startswith("/admin/") | not)) as $r
-  ({from: null, hours: {}};
+  ({from: null, hours: {}, pend: {}};
     ($r.t / 3600 | floor * 3600 | tostring) as $h
     | .from = ([.from, ($r.t | floor)] | map(select(. != null)) | min)
-    | .hours[$h] |= (. // {h: 0, b: 0, a: 0, e: 0, by: 0, st: {}, nf: {}, pg: {}, rf: {}, ag: {}, rc: {}, lt: {}})
+    | .hours[$h] |= (. // {h: 0, b: 0, a: 0, e: 0, by: 0, u: 0, st: {}, nf: {}, pg: {}, rf: {}, ag: {}, rc: {}, lt: {}})
     | .hours[$h].by += ($r.b // 0)
     | .hours[$h].st[$r.s | tostring] += 1
     | if $r.s >= 500 then .hours[$h].e += 1 else . end
     | if $r.s == 404 then .hours[$h].nf[$r.u] += 1 else . end
     | if ($r | page) then
         (if ($r | bot) then .hours[$h].b += 1
-         else .hours[$h].h += 1
-            | .hours[$h].pg[$r.u] += 1
-            | ($r | domain) as $d
-            | if $d != "" and ($d | IN("meio.lol", "www.meio.lol", "meiolol.jomify.lol") | not) then .hours[$h].rf[$d] += 1 else . end
+         else .hours[$h].u += 1
+            | ($r | domain) as $d | ($r.a // "") as $a
+            | .pend[$a] |= ((. // {p: [], c: []}) | .c |= map(select(. >= $r.t - $pair)))
+            | if (.pend[$a].c | length) > 0 then .pend[$a].c |= .[1:] | person($h; $r.u; $d)
+              else .pend[$a].p += [[$r.t, $h, $r.u, $d]] end
          end)
         | .hours[$h].ag[$r | family] += 1
         | .hours[$h].rc[if ($r.c // "") == "" then "static" else $r.c end] += 1
         | .hours[$h].lt[$r | bucket] += 1
       elif $r.s < 400 then .hours[$h].a += 1
+        | if $r.u == "/style.css" and ($r | bot | not) then
+            ($r.a // "") as $a
+            | .pend[$a] |= ((. // {p: [], c: []}) | .p |= map(select(.[0] >= $r.t - $pair)))
+            | if (.pend[$a].p | length) > 0 then
+                .pend[$a].p[0] as $v | .pend[$a].p |= .[1:] | person($v[1]; $v[2]; $v[3])
+              else .pend[$a].c += [$r.t] end
+          else . end
       else . end)
+| del(.pend)
 | .hours |= map_values(.nf |= top(200) | .pg |= top(200) | .rf |= top(200))
 '
 
@@ -77,6 +100,7 @@ MERGE=$TOP'
 def addmap($a; $b): reduce ($b | to_entries[]) as $e ($a // {}; .[$e.key] += $e.value);
 def mergeh($a; $b): if $a == null then $b else
     {h: ($a.h + $b.h), b: ($a.b + $b.b), a: ($a.a + $b.a), e: ($a.e + $b.e), by: ($a.by + $b.by),
+     u: ($a.u + $b.u),
      st: addmap($a.st; $b.st), nf: (addmap($a.nf; $b.nf) | top(200)),
      pg: (addmap($a.pg; $b.pg) | top(200)), rf: (addmap($a.rf; $b.rf) | top(200)),
      ag: addmap($a.ag; $b.ag), rc: addmap($a.rc; $b.rc),
@@ -96,7 +120,7 @@ summary() {
     split -a 4 -l "$PIECE_LINES" - "$tmp/piece."
     for piece in "$tmp"/piece.*; do
         [[ -f "$piece" ]] || continue
-        if jq -R -n -c "$SUMMARY" < "$piece" > "$tmp/piece.json"; then
+        if jq -R -n -c --argjson pair "$PAIR_S" "$SUMMARY" < "$piece" > "$tmp/piece.json"; then
             cat "$tmp/piece.json" >> "$tmp/pieces.json"
         else
             echo "skipped $(wc -l < "$piece") lines: summary failed" >&2
@@ -163,7 +187,7 @@ fi
 now=$(date +%s)
 jq -n -r --slurpfile all "$tmp/all.json" --rawfile tsv "$HOURLY" --argjson now "$now" '
     ($all[0].hours | to_entries | map([(.key | tonumber), .value.h, .value.b, .value.a,
-        .value.e, .value.by])) as $fresh
+        .value.e, .value.by, .value.u])) as $fresh
     | ($fresh | map(.[0])) as $have
     | ($tsv | split("\n") | map(select(length > 0) | split("\t") | map(tonumber))
         | map(select(.[0] as $h | $have | index($h) | not))) + $fresh
