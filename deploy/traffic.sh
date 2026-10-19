@@ -168,7 +168,8 @@ for f in "$LOG" "$LOG".1 "$LOG".*.gz; do
     key=$(stat -c %i "$f")
     [[ "$f" == *.gz ]] && key=gz-$key
     summarise "$f" "$key"
-    keys+=("$key")
+    # A log just rotated is empty and gets no entry until its first line
+    [[ -f "$CACHE/$key.json" ]] && keys+=("$key")
 done
 for entry in "$CACHE"/*.json; do
     [[ -f "$entry" ]] || continue
