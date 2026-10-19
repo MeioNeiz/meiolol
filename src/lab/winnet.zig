@@ -36,6 +36,7 @@ const draftnet = @import("draftnet.zig");
 const gates = @import("gates.zig");
 const setnet = @import("setnet.zig");
 const looks = @import("looks.zig");
+const nn = @import("nn");
 const par = @import("../par.zig");
 const cuda = @import("../gpu/cuda.zig");
 const dn = @import("../gpu/draftnet_layout.zig");
@@ -571,10 +572,7 @@ fn key(champion: u32, role: usize) u64 {
     return (@as(u64, champion) << 3) | role;
 }
 
-pub fn logit(p: f32) f32 {
-    const q = std.math.clamp(p, 1e-6, 1 - 1e-6);
-    return @log(q / (1 - q));
-}
+pub const logit = nn.logit;
 
 fn netGames(gpa: std.mem.Allocator, d: *const rows.Data, games: []const u32, vocab: *const Vocab, off: ?[]const f32) ![]NetGame {
     const out = try gpa.alloc(NetGame, games.len);
@@ -845,15 +843,10 @@ fn summaryRow(gpa: std.mem.Allocator, w: *Io.Writer, label: []const u8, ys: []co
     if (f) |x| try w.print(" {d:.2} | {d:.5} |\n", .{ x.epochs, x.val_loss }) else try w.writeAll(" | |\n");
 }
 
-pub fn loss1(y: f32, p: f32) f64 {
-    const q: f64 = std.math.clamp(p, 1e-6, 1 - 1e-6);
-    return -(y * @log(q) + (1 - y) * @log(1 - q));
-}
+pub const loss1 = nn.logLoss;
 
 fn meanLoss(ys: []const f32, p: []const f32) f64 {
-    var s: f64 = 0;
-    for (ys, p) |y, q| s += loss1(y, q);
-    return s / @as(f64, @floatFromInt(@max(ys.len, 1)));
+    return nn.meanLogLoss(f32, ys, p);
 }
 
 const Gain = struct { mean: f64, se: f64 };
@@ -876,34 +869,17 @@ fn pairedGain(ys: []const f32, pc: []const f32, pn: []const f32) Gain {
 /// Over both sides' rows, as the harness scores rows: each game counts once as (p, y)
 /// and once as (1 - p, 1 - y). Ties share their rank
 fn auc(gpa: std.mem.Allocator, ys: []const f32, p: []const f32) !f64 {
-    const Item = struct { p: f32, y: bool };
-    const items = try gpa.alloc(Item, 2 * ys.len);
-    defer gpa.free(items);
+    const both = try gpa.alloc(f32, 4 * ys.len);
+    defer gpa.free(both);
+    const y2 = both[0 .. 2 * ys.len];
+    const p2 = both[2 * ys.len ..];
     for (ys, p, 0..) |y, q, i| {
-        items[2 * i] = .{ .p = q, .y = y > 0.5 };
-        items[2 * i + 1] = .{ .p = 1 - q, .y = y <= 0.5 };
+        y2[2 * i] = y;
+        p2[2 * i] = q;
+        y2[2 * i + 1] = 1 - y;
+        p2[2 * i + 1] = 1 - q;
     }
-    std.mem.sort(Item, items, {}, struct {
-        fn lt(_: void, a: Item, b: Item) bool {
-            return a.p < b.p;
-        }
-    }.lt);
-    var rank_sum: f64 = 0;
-    var pos: f64 = 0;
-    var i: usize = 0;
-    while (i < items.len) {
-        var j = i;
-        while (j < items.len and items[j].p == items[i].p) j += 1;
-        const mid = (@as(f64, @floatFromInt(i + 1)) + @as(f64, @floatFromInt(j))) / 2;
-        for (items[i..j]) |it| if (it.y) {
-            rank_sum += mid;
-            pos += 1;
-        };
-        i = j;
-    }
-    const neg = @as(f64, @floatFromInt(items.len)) - pos;
-    if (pos == 0 or neg == 0) return 0.5;
-    return (rank_sum - pos * (pos + 1) / 2) / (pos * neg);
+    return nn.auc(f32, gpa, y2, p2);
 }
 
 pub const Sets = struct {
@@ -958,15 +934,15 @@ const EmbTable = struct {
     }
 
     /// Each vocab id's vector: its champion-role's, else its role's shared one
-    fn apply(t: *const EmbTable, v: *const Vocab, l: Layout, p: []f32) !void {
+    fn apply(t: *const EmbTable, v: *const Vocab, s: *const Small, p: []f32) !void {
         for (0..5) |role| {
             const x = t.map.get(key(0, role)) orelse return error.EmbMissingRole;
-            @memcpy(p[l.e + role * l.emb ..][0..l.emb], x);
+            @memcpy(s.e.row(p, role), x);
         }
         var it = v.map.iterator();
         while (it.next()) |e| {
             const x = t.map.get(e.key_ptr.*) orelse t.map.get(key(0, e.key_ptr.* & 7)).?;
-            @memcpy(p[l.e + e.value_ptr.* * l.emb ..][0..l.emb], x);
+            @memcpy(s.e.row(p, e.value_ptr.*), x);
         }
     }
 };
@@ -976,8 +952,7 @@ const EmbInit = struct { table: *const EmbTable, vocab: *const Vocab };
 /// Steps for the refit on n games: a tenth more games, a tenth more epochs (as
 /// win-ratings and win-comp)
 pub fn refitSteps(epochs: f64, n: usize, batch: u32) u64 {
-    const per: f64 = @floatFromInt(stepsPerEpoch(n, batch));
-    return @max(1, @as(u64, @intFromFloat(@round(epochs * 1.1 * per))));
+    return nn.refitSteps(epochs, 1.1, n, batch);
 }
 
 fn fitBig(gpa: std.mem.Allocator, io: Io, gpu: ?*const cuda.Gpu, opts: Options, seed: u32, s: Sets) !Fitted {
@@ -1014,67 +989,71 @@ fn fitBigOn(gpa: std.mem.Allocator, io: Io, gpu: ?*const cuda.Gpu, cfg: draftnet
 /// The small net's flat parameters: platform intercepts, the offset's weight (resid) and
 /// hidden biases (no decay); champion-role and role embeddings (emb_wd); hidden weights
 /// (layer k: hidden x its input) and output weights (wd)
-const Layout = struct {
+const max_depth = 4;
+
+/// The small net's parameters. Decay as torch's twin (py/xcheck/xnets.py): none on the
+/// platform intercepts, the offset weight and biases; emb_wd on the embeddings; wd on the
+/// weights
+const Small = struct {
+    ps: nn.Params,
     emb: usize,
     hidden: usize,
     depth: usize,
+    /// 10 slots' vectors side by side
     input: usize,
-    c: usize,
-    a: usize,
-    b: usize,
-    e: usize,
-    r: usize,
-    w: usize,
-    out: usize,
-    len: usize,
+    /// Blue's intercept per platform
+    c: nn.Param,
+    /// The offset's weight (resid)
+    a: nn.Param,
+    b: [max_depth]nn.Param,
+    /// Champion-role vectors by vocab id
+    e: nn.Param,
+    /// Role vectors, added to each slot's champion-role one
+    r: nn.Param,
+    /// Layer k's weights, hidden x (input or hidden)
+    w: [max_depth]nn.Param,
+    out: nn.Param,
 
-    fn init(n_ids: usize, emb: usize, hidden: usize, depth: usize) Layout {
-        var l: Layout = undefined;
-        l.emb = emb;
-        l.hidden = hidden;
-        l.depth = depth;
-        l.input = 10 * emb;
-        l.c = 0;
-        l.a = n_platforms;
-        l.b = l.a + 1;
-        l.e = l.b + depth * hidden;
-        l.r = l.e + n_ids * emb;
-        l.w = l.r + 5 * emb;
-        l.out = l.w + hidden * l.input + (depth - 1) * hidden * hidden;
-        l.len = l.out + hidden;
-        return l;
+    /// resid nets' output weights start at 0 (drawn and zeroed, as before); frozen_emb
+    /// keeps the champion-role vectors as initialised
+    fn init(gpa: std.mem.Allocator, n_ids: usize, opts: Options, frozen_emb: bool) !Small {
+        std.debug.assert(opts.depth >= 1 and opts.depth <= max_depth);
+        var s: Small = .{ .ps = .empty, .emb = opts.emb, .hidden = opts.hidden, .depth = opts.depth, .input = 10 * opts.emb, .c = undefined, .a = undefined, .b = undefined, .e = undefined, .r = undefined, .w = undefined, .out = undefined };
+        errdefer s.ps.deinit(gpa);
+        const ps = &s.ps;
+        const emb_wd = opts.emb_wd orelse opts.wd;
+        const names = [max_depth][2][]const u8{ .{ "b0", "w0" }, .{ "b1", "w1" }, .{ "b2", "w2" }, .{ "b3", "w3" } };
+        s.c = try ps.vector(gpa, "platform", n_platforms, .{});
+        s.a = try ps.scalar(gpa, "offset", .{ .init = .{ .constant = 1 }, .frozen = opts.fix_offset });
+        for (0..s.depth) |k| s.b[k] = try ps.vector(gpa, names[k][0], s.hidden, .{});
+        s.e = try ps.table(gpa, "champion_role", n_ids, s.emb, .{ .init = .{ .uniform = 0.1 }, .decay = emb_wd, .frozen = frozen_emb });
+        s.r = try ps.table(gpa, "role", 5, s.emb, .{ .init = .{ .uniform = 0.1 }, .decay = emb_wd });
+        for (0..s.depth) |k| s.w[k] = try ps.matrix(gpa, names[k][1], s.hidden, s.fanIn(k), .{ .init = .kaiming(s.fanIn(k)), .decay = opts.wd });
+        const out_bound: f32 = if (opts.net == .resid) 0 else @sqrt(3.0 / @as(f32, @floatFromInt(s.hidden)));
+        s.out = try ps.vector(gpa, "out", s.hidden, .{ .init = .{ .uniform = out_bound }, .decay = opts.wd });
+        return s;
     }
 
-    fn fanIn(l: Layout, k: usize) usize {
-        return if (k == 0) l.input else l.hidden;
-    }
-
-    /// Layer k's weights, hidden x fanIn(k), row-major
-    fn weights(l: Layout, k: usize) usize {
-        return if (k == 0) l.w else l.w + l.hidden * l.input + (k - 1) * l.hidden * l.hidden;
+    fn fanIn(s: *const Small, k: usize) usize {
+        return if (k == 0) s.input else s.hidden;
     }
 };
 
 const SmallNet = struct {
-    l: Layout,
+    s: Small,
     p: []f32,
 
-    fn init(gpa: std.mem.Allocator, l: Layout, zero_out: bool, rnd: std.Random) !SmallNet {
-        const p = try gpa.alloc(f32, l.len);
-        @memset(p, 0);
-        p[l.a] = 1;
-        for (p[l.e..l.w]) |*x| x.* = (rnd.float(f32) * 2 - 1) * 0.1;
-        for (0..l.depth) |k| {
-            const bound = @sqrt(6.0 / @as(f32, @floatFromInt(l.fanIn(k))));
-            for (p[l.weights(k)..][0 .. l.hidden * l.fanIn(k)]) |*x| x.* = (rnd.float(f32) * 2 - 1) * bound;
-        }
-        const out_bound: f32 = if (zero_out) 0 else @sqrt(3.0 / @as(f32, @floatFromInt(l.hidden)));
-        for (p[l.out..l.len]) |*x| x.* = (rnd.float(f32) * 2 - 1) * out_bound;
-        return .{ .l = l, .p = p };
+    fn init(gpa: std.mem.Allocator, s: Small, rnd: std.Random) !SmallNet {
+        const p = try s.ps.alloc(gpa);
+        s.ps.initValues(p, rnd);
+        return .{ .s = s, .p = p };
+    }
+
+    fn deinit(n: *SmallNet, gpa: std.mem.Allocator) void {
+        gpa.free(n.p);
+        n.s.ps.deinit(gpa);
     }
 };
-
-const max_depth = 4;
 
 /// One side order's activations: x input; per layer z pre-activation, h after ReLU and
 /// dropout
@@ -1084,81 +1063,58 @@ const View = struct {
     h: [max_depth][]f32,
 };
 
-pub fn dot(a: []const f32, b: []const f32) f32 {
-    const V = @Vector(8, f32);
-    var acc: V = @splat(0);
-    var i: usize = 0;
-    while (i + 8 <= a.len) : (i += 8) acc += @as(V, a[i..][0..8].*) * @as(V, b[i..][0..8].*);
-    var s = @reduce(.Add, acc);
-    while (i < a.len) : (i += 1) s += a[i] * b[i];
-    return s;
-}
-
-pub fn axpy(y: []f32, s: f32, x: []const f32) void {
-    for (y, x) |*a, b| a.* += s * b;
-}
+pub const dot = nn.dot;
+pub const axpy = nn.axpy;
 
 /// f for one side order (swap: red's slots first); with rnd, units drop at 1 - keep
 fn forward(n: *const SmallNet, g: *const NetGame, swap: bool, v: *const View, keep: f32, rnd: ?std.Random) f32 {
-    const l = n.l;
+    const s = &n.s;
     for (0..10) |slot| {
         const src = if (swap) (slot + 5) % 10 else slot;
-        const e = n.p[l.e + g.ids[src] * l.emb ..][0..l.emb];
-        const r = n.p[l.r + (slot % 5) * l.emb ..][0..l.emb];
-        for (v.x[slot * l.emb ..][0..l.emb], e, r) |*x, a, b| x.* = a + b;
+        const e = s.e.row(n.p, g.ids[src]);
+        const r = s.r.row(n.p, slot % 5);
+        for (v.x[slot * s.emb ..][0..s.emb], e, r) |*x, a, b| x.* = a + b;
     }
-    for (0..l.depth) |k| {
+    for (0..s.depth) |k| {
         const in = if (k == 0) v.x else v.h[k - 1];
-        const wk = n.p[l.weights(k)..];
-        for (v.z[k], v.h[k], 0..) |*z, *h, j| {
-            z.* = dot(wk[j * in.len ..][0..in.len], in) + n.p[l.b + k * l.hidden + j];
-            const kept = if (rnd) |rr| rr.float(f32) < keep else true;
-            h.* = if (z.* > 0 and kept) (if (rnd != null) z.* / keep else z.*) else 0;
-        }
+        nn.linear.forward(s.w[k].of(n.p), s.b[k].of(n.p), in, v.z[k]);
+        nn.relu.forward(v.z[k], v.h[k], keep, rnd);
     }
-    return dot(n.p[l.out..l.len], v.h[l.depth - 1]);
+    return dot(s.out.of(n.p), v.h[s.depth - 1]);
 }
 
 /// Adds df's gradient to gr; d0 and d1 scratch of at least max(input, hidden)
 fn backward(n: *const SmallNet, g: *const NetGame, swap: bool, v: *const View, df: f32, keep: f32, gr: []f32, d0: []f32, d1: []f32) void {
-    const l = n.l;
-    const top = v.h[l.depth - 1];
-    axpy(gr[l.out..l.len], df, top);
-    var dh = d0[0..l.hidden];
-    for (dh, n.p[l.out..l.len]) |*d, wv| d.* = df * wv;
+    const s = &n.s;
+    axpy(s.out.of(gr), df, v.h[s.depth - 1]);
+    var dh = d0[0..s.hidden];
+    for (dh, s.out.of(n.p)) |*d, wv| d.* = df * wv;
     var dn_buf = d1;
-    var k = l.depth;
+    var k = s.depth;
     while (k > 0) {
         k -= 1;
         const in = if (k == 0) v.x else v.h[k - 1];
         const din = dn_buf[0..in.len];
         @memset(din, 0);
-        const wk = n.p[l.weights(k)..];
-        const gwk = gr[l.weights(k)..];
-        for (dh, v.h[k], 0..) |d, h, j| {
-            if (h == 0) continue;
-            const dz = d / keep;
-            gr[l.b + k * l.hidden + j] += dz;
-            axpy(gwk[j * in.len ..][0..in.len], dz, in);
-            axpy(din, dz, wk[j * in.len ..][0..in.len]);
-        }
-        dn_buf = dh.ptr[0..@max(l.input, l.hidden)];
+        nn.relu.backward(v.h[k], dh, keep, dh);
+        nn.linear.backward(s.w[k].of(n.p), in, dh, s.w[k].of(gr), s.b[k].of(gr), din);
+        dn_buf = dh.ptr[0..@max(s.input, s.hidden)];
         dh = din;
     }
     for (0..10) |slot| {
         const src = if (swap) (slot + 5) % 10 else slot;
-        const d = dh[slot * l.emb ..][0..l.emb];
-        axpy(gr[l.e + g.ids[src] * l.emb ..][0..l.emb], 1, d);
-        axpy(gr[l.r + (slot % 5) * l.emb ..][0..l.emb], 1, d);
+        const d = dh[slot * s.emb ..][0..s.emb];
+        axpy(s.e.row(gr, g.ids[src]), 1, d);
+        axpy(s.r.row(gr, slot % 5), 1, d);
     }
 }
 
 pub fn sigmoid(x: f32) f32 {
-    return 1 / (1 + @exp(-x));
+    return nn.sigmoid(x);
 }
 
 fn gameLogit(n: *const SmallNet, g: *const NetGame, fb: f32, fr: f32) f32 {
-    return (fb - fr) / 2 + n.p[n.l.c + g.platform] + n.p[n.l.a] * g.off;
+    return (fb - fr) / 2 + n.s.c.at(n.p, g.platform).* + n.s.a.at(n.p, 0).* * g.off;
 }
 
 fn predictSmall(n: *const SmallNet, games: []const NetGame, w: *const Work, out: []f32) void {
@@ -1169,26 +1125,36 @@ fn predictSmall(n: *const SmallNet, games: []const NetGame, w: *const Work, out:
     }
 }
 
+/// Adds game g's loss gradient, scaled by 1 / count, to gr (dropout with rnd)
+fn gameGrad(n: *const SmallNet, g: *const NetGame, w: *const Work, count: f32, keep: f32, rnd: ?std.Random, gr: []f32) void {
+    const fb = forward(n, g, false, &w.v[0], keep, rnd);
+    const fr = forward(n, g, true, &w.v[1], keep, rnd);
+    const dl = (sigmoid(gameLogit(n, g, fb, fr)) - g.y) / count;
+    n.s.c.at(gr, g.platform).* += dl;
+    n.s.a.at(gr, 0).* += dl * g.off;
+    backward(n, g, false, &w.v[0], dl / 2, keep, gr, w.d0, w.d1);
+    backward(n, g, true, &w.v[1], -dl / 2, keep, gr, w.d0, w.d1);
+}
+
 const Work = struct {
     buf: []f32,
     v: [2]View,
     d0: []f32,
     d1: []f32,
 
-    fn init(gpa: std.mem.Allocator, l: Layout) !Work {
-        std.debug.assert(l.depth >= 1 and l.depth <= max_depth);
-        const per = l.input + 2 * l.depth * l.hidden;
-        const wide = @max(l.input, l.hidden);
+    fn init(gpa: std.mem.Allocator, s: *const Small) !Work {
+        const per = s.input + 2 * s.depth * s.hidden;
+        const wide = @max(s.input, s.hidden);
         const buf = try gpa.alloc(f32, 2 * per + 2 * wide);
         var w: Work = .{ .buf = buf, .v = undefined, .d0 = buf[2 * per ..][0..wide], .d1 = buf[2 * per + wide ..][0..wide] };
         for (&w.v, 0..) |*v, i| {
             var b = buf[i * per ..][0..per];
-            v.x = b[0..l.input];
-            b = b[l.input..];
-            for (0..l.depth) |k| {
-                v.z[k] = b[0..l.hidden];
-                v.h[k] = b[l.hidden..][0..l.hidden];
-                b = b[2 * l.hidden ..];
+            v.x = b[0..s.input];
+            b = b[s.input..];
+            for (0..s.depth) |k| {
+                v.z[k] = b[0..s.hidden];
+                v.h[k] = b[s.hidden..][0..s.hidden];
+                b = b[2 * s.hidden ..];
             }
         }
         return w;
@@ -1201,7 +1167,38 @@ const Work = struct {
 
 const Trained = struct { net: SmallNet, steps: u64, epochs: f64, val_loss: f64 };
 
-pub const stepsPerEpoch = draftnet.stepsPerEpoch;
+pub const stepsPerEpoch = nn.stepsPerEpoch;
+
+/// trainSmall's side of nn.fit: a batch's gradients, clipped, one AdamW step; the
+/// validation games' mean loss
+const SmallFit = struct {
+    n: *SmallNet,
+    w: *const Work,
+    train: []const NetGame,
+    val: []const NetGame,
+    vpred: []f32,
+    gr: []f32,
+    opt: *nn.Adam,
+    segs: []const nn.Segment,
+    keep: f32,
+    drop: ?std.Random,
+    clip: f32,
+
+    pub fn step(f: *SmallFit, part: []const u32) !void {
+        @memset(f.gr, 0);
+        const count: f32 = @floatFromInt(part.len);
+        for (part) |gi| gameGrad(f.n, &f.train[gi], f.w, count, f.keep, f.drop, f.gr);
+        if (f.clip > 0) _ = nn.clipGradNorm(f.gr, f.clip);
+        f.opt.step(f.n.p, f.gr, f.segs);
+    }
+
+    pub fn valLoss(f: *SmallFit) !f64 {
+        predictSmall(f.n, f.val, f.w, f.vpred);
+        var loss: f64 = 0;
+        for (f.val, f.vpred) |g, q| loss += loss1(g.y, q);
+        return loss / @as(f64, @floatFromInt(@max(f.val.len, 1)));
+    }
+};
 
 /// AdamW over shuffled batches for at most max_steps; with val, evaluated opts.evals
 /// times an epoch, stopping after `patience` evaluations without a new best and keeping
@@ -1209,95 +1206,49 @@ pub const stepsPerEpoch = draftnet.stepsPerEpoch;
 fn trainSmall(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, train: []const NetGame, val: ?[]const NetGame, max_steps: u64, emb_init: ?EmbInit) !Trained {
     var rng: std.Random.DefaultPrng = .init(seed);
     const rnd = rng.random();
-    const l: Layout = .init(n_ids, opts.emb, opts.hidden, opts.depth);
-    var n = try SmallNet.init(gpa, l, opts.net == .resid, rnd);
-    errdefer gpa.free(n.p);
-    if (emb_init) |ei| try ei.table.apply(ei.vocab, l, n.p);
-    const frozen = emb_init != null and opts.emb_freeze;
-    const w: Work = try .init(gpa, l);
+    const sm: Small = try .init(gpa, n_ids, opts, emb_init != null and opts.emb_freeze);
+    var n: SmallNet = SmallNet.init(gpa, sm, rnd) catch |e| {
+        var x = sm;
+        x.ps.deinit(gpa);
+        return e;
+    };
+    errdefer n.deinit(gpa);
+    if (emb_init) |ei| try ei.table.apply(ei.vocab, &n.s, n.p);
+    const w: Work = try .init(gpa, &n.s);
     defer w.deinit(gpa);
-    const scratch = try gpa.alloc(f32, 4 * l.len);
-    defer gpa.free(scratch);
-    const gr = scratch[0..l.len];
-    const m1 = scratch[l.len..][0..l.len];
-    const m2 = scratch[2 * l.len ..][0..l.len];
-    const best = scratch[3 * l.len ..][0..l.len];
-    @memset(m1, 0);
-    @memset(m2, 0);
-    const order = try gpa.alloc(u32, train.len);
-    defer gpa.free(order);
-    for (order, 0..) |*o, i| o.* = @intCast(i);
+    const gr = try n.s.ps.alloc(gpa);
+    defer gpa.free(gr);
+    const best = try n.s.ps.alloc(gpa);
+    defer gpa.free(best);
+    var opt: nn.Adam = try .init(gpa, n.s.ps.len, .{ .lr = opts.lr });
+    defer opt.deinit(gpa);
+    const segs = try n.s.ps.segments(gpa);
+    defer gpa.free(segs);
     const vpred = try gpa.alloc(f32, if (val) |v| v.len else 0);
     defer gpa.free(vpred);
-    const keep = 1 - opts.dropout;
-    const drop: ?std.Random = if (opts.dropout > 0) rnd else null;
-    const emb_wd = opts.emb_wd orelse opts.wd;
-    const per_epoch = stepsPerEpoch(train.len, opts.batch);
-    const eval_every = @max(1, per_epoch / @max(opts.evals, 1));
     if (val) |v| initGate(&n, v, &w, vpred, opts.net == .resid);
 
-    var best_loss = std.math.inf(f64);
-    var best_step: u64 = 0;
-    var since_best: u32 = 0;
-    var step: u64 = 0;
-    var at: usize = order.len;
-    while (step < max_steps) {
-        if (at >= order.len) {
-            rnd.shuffle(u32, order);
-            at = 0;
-        }
-        const part = order[at..@min(at + opts.batch, order.len)];
-        at += part.len;
-        @memset(gr, 0);
-        const count: f32 = @floatFromInt(part.len);
-        for (part) |gi| {
-            const g = &train[gi];
-            const fb = forward(&n, g, false, &w.v[0], keep, drop);
-            const fr = forward(&n, g, true, &w.v[1], keep, drop);
-            const dl = (sigmoid(gameLogit(&n, g, fb, fr)) - g.y) / count;
-            gr[l.c + g.platform] += dl;
-            gr[l.a] += dl * g.off;
-            backward(&n, g, false, &w.v[0], dl / 2, keep, gr, w.d0, w.d1);
-            backward(&n, g, true, &w.v[1], -dl / 2, keep, gr, w.d0, w.d1);
-        }
-        if (opts.clip > 0) {
-            var norm: f32 = 0;
-            for (gr) |x| norm += x * x;
-            norm = @sqrt(norm);
-            if (norm > opts.clip) for (gr) |*x| {
-                x.* *= opts.clip / norm;
-            };
-        }
-        step += 1;
-        const c1 = 1 - std.math.pow(f32, 0.9, @floatFromInt(step));
-        const c2 = 1 - std.math.pow(f32, 0.999, @floatFromInt(step));
-        for (n.p, gr, m1, m2, 0..) |*x, g, *s1, *s2, i| {
-            s1.* = 0.9 * s1.* + 0.1 * g;
-            s2.* = 0.999 * s2.* + 0.001 * g * g;
-            if (i == l.a and opts.fix_offset) continue;
-            if (frozen and i >= l.e and i < l.r) continue;
-            const decay: f32 = if (i < l.e) 0 else if (i < l.w) emb_wd * x.* else opts.wd * x.*;
-            x.* -= opts.lr * ((s1.* / c1) / (@sqrt(s2.* / c2) + 1e-8) + decay);
-        }
-        const v = val orelse continue;
-        if (step % eval_every != 0 and step != max_steps) continue;
-        predictSmall(&n, v, &w, vpred);
-        var loss: f64 = 0;
-        for (v, vpred) |g, q| loss += loss1(g.y, q);
-        loss /= @floatFromInt(@max(v.len, 1));
-        if (loss < best_loss - 1e-7) {
-            best_loss = loss;
-            best_step = step;
-            since_best = 0;
-            @memcpy(best, n.p);
-        } else {
-            since_best += 1;
-            if (since_best >= opts.patience) break;
-        }
-    }
-    if (val == null) best_step = step else if (best_step > 0) @memcpy(n.p, best);
-    const epochs = @as(f64, @floatFromInt(best_step)) / @as(f64, @floatFromInt(per_epoch));
-    return .{ .net = n, .steps = best_step, .epochs = epochs, .val_loss = best_loss };
+    var f: SmallFit = .{
+        .n = &n,
+        .w = &w,
+        .train = train,
+        .val = val orelse &.{},
+        .vpred = vpred,
+        .gr = gr,
+        .opt = &opt,
+        .segs = segs,
+        .keep = 1 - opts.dropout,
+        .drop = if (opts.dropout > 0) rnd else null,
+        .clip = opts.clip,
+    };
+    const r = try nn.fit(gpa, &f, .{
+        .batch = opts.batch,
+        .max_steps = max_steps,
+        .evals_per_epoch = opts.evals,
+        .patience = opts.patience,
+        .validate = val != null,
+    }, train.len, rnd, n.p, best);
+    return .{ .net = n, .steps = r.steps, .epochs = r.epochs, .val_loss = r.loss };
 }
 
 /// gates.initLoss on val before the first step: the base rate's loss, or the offsets'
@@ -1321,9 +1272,10 @@ fn initGate(n: *const SmallNet, val: []const NetGame, w: *const Work, pred: []f3
 /// init, no validation), then blue's chance on `scored` into pred; returns the parameters
 /// (caller frees)
 pub fn healthFit(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, train: []const NetGame, steps: u64, scored: []const NetGame, pred: []f32) ![]f32 {
-    const t = try trainSmall(gpa, opts, seed, n_ids, train, null, steps, null);
+    var t = try trainSmall(gpa, opts, seed, n_ids, train, null, steps, null);
+    defer t.net.s.ps.deinit(gpa);
     errdefer gpa.free(t.net.p);
-    const w: Work = try .init(gpa, t.net.l);
+    const w: Work = try .init(gpa, &t.net.s);
     defer w.deinit(gpa);
     predictSmall(&t.net, scored, &w, pred);
     return t.net.p;
@@ -1335,15 +1287,15 @@ fn fitSmall(gpa: std.mem.Allocator, io: Io, opts: Options, seed: u32, s: Sets) !
     defer if (table) |*t| t.deinit();
     const init_inner: ?EmbInit = if (table) |*t| .{ .table = t, .vocab = s.vocab_inner } else null;
     const init_all: ?EmbInit = if (table) |*t| .{ .table = t, .vocab = s.vocab_all } else null;
-    const tuned = try trainSmall(gpa, opts, seed, s.n_inner, s.inner, s.val, opts.max_epochs * stepsPerEpoch(s.inner.len, opts.batch), init_inner);
-    gpa.free(tuned.net.p);
-    const full = try trainSmall(gpa, opts, seed, s.n_all, s.fit, null, refitSteps(tuned.epochs, s.fit.len, opts.batch), init_all);
-    defer gpa.free(full.net.p);
-    const w: Work = try .init(gpa, full.net.l);
+    var tuned = try trainSmall(gpa, opts, seed, s.n_inner, s.inner, s.val, opts.max_epochs * stepsPerEpoch(s.inner.len, opts.batch), init_inner);
+    tuned.net.deinit(gpa);
+    var full = try trainSmall(gpa, opts, seed, s.n_all, s.fit, null, refitSteps(tuned.epochs, s.fit.len, opts.batch), init_all);
+    defer full.net.deinit(gpa);
+    const w: Work = try .init(gpa, &full.net.s);
     defer w.deinit(gpa);
     const pred = try gpa.alloc(f32, s.scored.len);
     predictSmall(&full.net, s.scored, &w, pred);
-    if (opts.net == .resid) std.debug.print("netcheck: seed {d}: offset weight {d:.3}\n", .{ seed, full.net.p[full.net.l.a] });
+    if (opts.net == .resid) std.debug.print("netcheck: seed {d}: offset weight {d:.3}\n", .{ seed, full.net.s.a.at(full.net.p, 0).* });
     return .{ .pred = pred, .epochs = tuned.epochs, .val_loss = tuned.val_loss, .seconds = secondsSince(io, t0) };
 }
 
@@ -1351,40 +1303,27 @@ const testing = std.testing;
 
 test "small net: gradient matches finite differences at every depth" {
     const gpa = testing.allocator;
+    const GameLoss = struct {
+        n: *const SmallNet,
+        w: *const Work,
+        g: *const NetGame,
+        fn loss(c: *const @This()) f64 {
+            var p: [1]f32 = undefined;
+            predictSmall(c.n, c.g[0..1], c.w, &p);
+            return loss1(c.g.y, p[0]);
+        }
+    };
     for (1..4) |depth| {
-        const l: Layout = .init(8, 4, 6, depth);
         var rng: std.Random.DefaultPrng = .init(5);
-        var n = try SmallNet.init(gpa, l, false, rng.random());
-        defer gpa.free(n.p);
-        const w: Work = try .init(gpa, l);
+        var n: SmallNet = try .init(gpa, try .init(gpa, 8, .{ .emb = 4, .hidden = 6, .depth = @intCast(depth) }, false), rng.random());
+        defer n.deinit(gpa);
+        const w: Work = try .init(gpa, &n.s);
         defer w.deinit(gpa);
         const g: NetGame = .{ .ids = .{ 5, 6, 7, 3, 4, 0, 1, 2, 5, 6 }, .platform = 2, .y = 1, .off = 0.3 };
-        const gr = try gpa.alloc(f32, l.len);
+        const gr = try n.s.ps.alloc(gpa);
         defer gpa.free(gr);
-        @memset(gr, 0);
-        const fb = forward(&n, &g, false, &w.v[0], 1, null);
-        const fr = forward(&n, &g, true, &w.v[1], 1, null);
-        const dl = sigmoid(gameLogit(&n, &g, fb, fr)) - g.y;
-        gr[l.c + g.platform] += dl;
-        gr[l.a] += dl * g.off;
-        backward(&n, &g, false, &w.v[0], dl / 2, 1, gr, w.d0, w.d1);
-        backward(&n, &g, true, &w.v[1], -dl / 2, 1, gr, w.d0, w.d1);
-        var checks: std.ArrayList(usize) = .empty;
-        defer checks.deinit(gpa);
-        try checks.appendSlice(gpa, &.{ l.c + 2, l.a, l.b + 1, l.e + 5 * 4 + 2, l.r + 3, l.w + 7, l.out + 4 });
-        if (depth > 1) try checks.appendSlice(gpa, &.{ l.weights(depth - 1) + 9, l.b + (depth - 1) * l.hidden + 2 });
-        for (checks.items) |i| {
-            const old = n.p[i];
-            var p: [1]f32 = undefined;
-            n.p[i] = old + 1e-3;
-            predictSmall(&n, (&g)[0..1], &w, &p);
-            const up = loss1(g.y, p[0]);
-            n.p[i] = old - 1e-3;
-            predictSmall(&n, (&g)[0..1], &w, &p);
-            const down = loss1(g.y, p[0]);
-            n.p[i] = old;
-            try testing.expectApproxEqAbs((up - down) / 2e-3, gr[i], 2e-3);
-        }
+        gameGrad(&n, &g, &w, 1, 1, null, gr);
+        try nn.expectGradient(&GameLoss{ .n = &n, .w = &w, .g = &g }, GameLoss.loss, n.p, gr, null, .{});
     }
 }
 
@@ -1406,9 +1345,9 @@ test "small net: antisymmetric, learns a planted champion edge, resid starts at 
         g.y = if (r.float(f32) < sigmoid(edge)) 1 else 0;
     }
     const opts: Options = .{ .emb = 8, .hidden = 16, .depth = 2, .dropout = 0, .wd = 0, .lr = 3e-3, .batch = 64 };
-    const t = try trainSmall(gpa, opts, 1, n_ids, train, null, 8 * stepsPerEpoch(train.len, opts.batch), null);
-    defer gpa.free(t.net.p);
-    const w: Work = try .init(gpa, t.net.l);
+    var t = try trainSmall(gpa, opts, 1, n_ids, train, null, 8 * stepsPerEpoch(train.len, opts.batch), null);
+    defer t.net.deinit(gpa);
+    const w: Work = try .init(gpa, &t.net.s);
     defer w.deinit(gpa);
     var a = train[0];
     a.ids[0] = 5;
@@ -1418,13 +1357,13 @@ test "small net: antisymmetric, learns a planted champion edge, resid starts at 
     var p: [2]f32 = undefined;
     predictSmall(&t.net, &.{ a, b }, &w, &p);
     // Swapping the teams flips the net's part; blue's side intercept stays
-    try testing.expectApproxEqAbs(2 * t.net.p[t.net.l.c], logit(p[0]) + logit(p[1]), 1e-4);
+    try testing.expectApproxEqAbs(2 * t.net.s.c.at(t.net.p, 0).*, logit(p[0]) + logit(p[1]), 1e-4);
     try testing.expect(p[0] > 0.62);
 
     var ro = opts;
     ro.net = .resid;
-    const t0 = try trainSmall(gpa, ro, 1, n_ids, train, null, 0, null);
-    defer gpa.free(t0.net.p);
+    var t0 = try trainSmall(gpa, ro, 1, n_ids, train, null, 0, null);
+    defer t0.net.deinit(gpa);
     a.off = 0.7;
     predictSmall(&t0.net, &.{a}, &w, p[0..1]);
     try testing.expectApproxEqAbs(sigmoid(0.7), p[0], 1e-6);
@@ -1453,20 +1392,19 @@ test "emb init: a table's vectors by champion-role, the role's shared one otherw
     defer v.deinit(gpa);
     try v.map.put(gpa, key(7, 0), 5);
     try v.map.put(gpa, key(9, 1), 6);
-    const l: Layout = .init(7, 2, 4, 1);
     var rng: std.Random.DefaultPrng = .init(1);
-    var n = try SmallNet.init(gpa, l, false, rng.random());
-    defer gpa.free(n.p);
-    try t.apply(&v, l, n.p);
-    try testing.expectEqualSlices(f32, &.{ 0.1, 0.2 }, n.p[l.e..][0..2]);
-    try testing.expectEqualSlices(f32, &.{ 1.5, -2 }, n.p[l.e + 5 * 2 ..][0..2]);
-    try testing.expectEqualSlices(f32, &.{ 0.3, 0.4 }, n.p[l.e + 6 * 2 ..][0..2]);
+    var n: SmallNet = try .init(gpa, try .init(gpa, 7, .{ .emb = 2, .hidden = 4 }, false), rng.random());
+    defer n.deinit(gpa);
+    try t.apply(&v, &n.s, n.p);
+    try testing.expectEqualSlices(f32, &.{ 0.1, 0.2 }, n.s.e.row(n.p, 0));
+    try testing.expectEqualSlices(f32, &.{ 1.5, -2 }, n.s.e.row(n.p, 5));
+    try testing.expectEqualSlices(f32, &.{ 0.3, 0.4 }, n.s.e.row(n.p, 6));
 
     const games: [64]NetGame = @splat(.{ .ids = .{ 5, 6, 2, 3, 4, 0, 1, 2, 3, 4 }, .platform = 0, .y = 1, .off = 0 });
     const opts: Options = .{ .emb = 2, .hidden = 4, .dropout = 0, .wd = 0, .lr = 1e-2, .batch = 8, .emb_init = dir, .emb_freeze = true };
-    const tr = try trainSmall(gpa, opts, 1, 7, &games, null, 20, .{ .table = &t, .vocab = &v });
-    defer gpa.free(tr.net.p);
-    try testing.expectEqualSlices(f32, n.p[l.e..l.r], tr.net.p[l.e..l.r]);
+    var tr = try trainSmall(gpa, opts, 1, 7, &games, null, 20, .{ .table = &t, .vocab = &v });
+    defer tr.net.deinit(gpa);
+    try testing.expectEqualSlices(f32, n.s.e.of(n.p), tr.net.s.e.of(tr.net.p));
 }
 
 test "cross-fit: a game's offset never comes from a fit that holds it" {
