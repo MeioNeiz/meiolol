@@ -45,6 +45,13 @@ from comp leans and lane matchups (data-and-model.md step 5).
 Jacob 19 Oct: the champions index search is good; the same search on more of the site
 (matchups index, builds, opponent lists; maybe one box in the header that takes a
 champion, "Ahri vs Zed" or a Riot ID).
+- Done 20 Oct (ba2f07e): one header search on every page, champion, "Ahri vs Zed" ("ahri
+  zed", "ahri v zed") or Name#TAG, aliases and typos, keyboard and phone
+  (static/search.js, data/search.json from src/site/search.zig). The matchups index
+  already had its filter (min-games.js)
+- Next: the same matching (aliases, typos) in table.js filters (champions index,
+  opponents) and a filter on build/index.html; "Ahri build", "Ahri top" queries;
+  pipeline_test checks for the header script and search.json
 
 ## Champion page
 
