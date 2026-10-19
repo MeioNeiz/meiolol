@@ -95,7 +95,7 @@ deploy/gpu-box.sh drift | install  # watcher, archive pull, backup mirror, Windo
   ~85 h queued 13-14 Oct): r 2, cpu.slots 9 (2 cores: one physical P or E core each)
 - cpu width: without --share a cpu run holds enough slots for ~4 cores (2), or one
   when its most specific history key's recent runs kept under 1.5 cores busy (usage
-  cpu_cores; champcomp, champgroups, netcheck small: 1.0). lab-place.pl decides (listing
+  cpu_cores; champcomp, champgroups, netcheck small: 1.0). lab-place decides (listing
   `width cpu K` and `used DIR CORES` lines, place's 4th field); job.sh pins to all its
   slots' cores and sets OMP_NUM_THREADS to them. No prediction: ~4 cores
 - Memory gate: the queue head also waits while MemAvailable is below its kind's peak
@@ -109,7 +109,7 @@ deploy/gpu-box.sh drift | install  # watcher, archive pull, backup mirror, Windo
   none, as queue head); on gpu torch gets 0.95 N/slots of the card, for jobs one slot's
   share can't fit; `slot` reads "gpu.A of S (share A B)"
   State jobs peak at 6-8 GB of the gpu-box's 23. listing() gives `mem KB` (MemAvailable)
-  and `peak DIR GB` lines for lab-place.pl
+  and `peak DIR GB` lines for lab-place
 - Slot queue: tickets in ~/ml/locks/RES.q, only the oldest live one tries the slots
   (first come, first served; polling let newcomers win); runs predicted <= 60 s sort
   ahead (fast lane); a dead waiter's ticket is dropped
@@ -158,7 +158,13 @@ deploy/gpu-box.sh drift | install  # watcher, archive pull, backup mirror, Windo
   was live when WSL went down; `restart` does it by hand. A run over ~1 h should keep
   checkpoints in its run dir and resume from them (none does yet: runs take minutes)
 
-### Placement (deploy/lab-place.pl)
+### Placement (meiolol lab-place)
+
+`meiolol lab-place` (src/labtools/place.zig, std only; deploy/lab-place.pl until 19 Oct,
+whose output it keeps byte for byte) reads lab-run.sh's listing of both hosts. lab-run.sh
+and lab-sweep.sh run a `meiolol` built from committed HEAD (deploy/lib.sh lab_tools,
+zig-out/lab-tools), rebuilt (~30 s) only when src/labtools, src/cmd/lab.zig or
+src/main.zig change, so an edit is live once committed.
 
 Jacob, 2026-10-13: model runs on the gpu-box only, never the Mac (they slow it down).
 Auto places on the gpu-box only (LAB_AUTO_MAC=1 lets it consider the Mac again); don't
@@ -225,7 +231,7 @@ run time.
 Random search over one model family (30-64 trials beat picking among families, research
 C19) on the 3080, one lab-run job per trial on the gpu lock, so sweeps and other GPU work
 take turns. `start SWEEP SPACE [--trials N] [--pack K] [--head] [--build-arg A]... --
-CMD ARGS` samples the trials (SPACE: `--flag DIST ARGS` lines, deploy/lab-sweep.pl),
+CMD ARGS` samples the trials (SPACE: `--flag DIST ARGS` lines, `meiolol lab-sweep`),
 builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps/SWEEP.
 
 - Contract (meiolol-f1's `netcheck`): the sweeper appends the sampled `--flag value`
@@ -258,7 +264,7 @@ builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps
   seeds: the table shows it on top as the bar, unnumbered and never the pick
 - Sweep jobs are lab-run runs, so their GPU times feed placement's history
 - Stopping rule (`--stop-after K`, default 8; `--no-stop` off): start leaves `watch SWEEP
-  K` running (log watch.log): each minute, lab-sweep.pl verdict on the trials of jobs that
+  K` running (log watch.log): each minute, lab-sweep verdict on the trials of jobs that
   exited 0; once K are scored, if every one's pooled fold gain is below -2 se the sweep
   stops (queued and running jobs; reason in `stopped`), else the rest run. On big1,
   big1b, big1c (8 + 32 + 19 trials, all losing) it would have stopped each at 8

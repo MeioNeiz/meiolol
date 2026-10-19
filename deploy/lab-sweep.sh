@@ -13,13 +13,13 @@
 #   deploy/lab-sweep.sh stop SWEEP        stops its queued and running jobs
 #   deploy/lab-sweep.sh watch SWEEP K     the stopping rule, as start runs it
 #
-# start samples N trials (default 32, --rng 1) from SPACE (deploy/lab-sweep.pl says the
+# start samples N trials (default 32, --rng 1) from SPACE (meiolol lab-sweep, src/labtools/sweep.zig, says the
 # format), builds meiolol-lab once and queues one lab-run job per K trials (--pack,
 # default 1; K > 1 runs K processes at once, if the GPU's memory allows; --serial runs
 # them one after another, so a CPU sweep holds few slots). --res cpu for
 # nets on CPU threads (netcheck --net small or resid; only big uses the GPU). Trial tNN
 # runs `meiolol-lab CMD ARGS <its flags> --out tNN` in its job's run dir, output in tNN.log;
-# CMD writes tNN/folds.tsv (meiolol-f1's netcheck contract, lab-sweep.pl). State here, in
+# CMD writes tNN/folds.tsv (meiolol-f1's netcheck contract, lab-sweep). State here, in
 # data/sweeps/SWEEP: space, trials.tsv, jobs.tsv (job, run dir, trials), table.md
 # --python SCRIPT (--with PATH: lab-run's): trials run `python SCRIPT ARGS <flags> --out
 # tNN` instead, one trial a job (no --pack: lab-run knows the interpreter's path), no
@@ -30,7 +30,7 @@
 # (polling the gpu-box each minute) before queuing the next, so run it in the background.
 # For jobs whose memory or card share the slot count doesn't cap (state nets: 6-8 GB)
 # Stopping rule (default K 8; --no-stop: off): once K trials of finished jobs are scored,
-# if every one loses to the reference by more than 2 se (lab-sweep.pl verdict), the sweep
+# if every one loses to the reference by more than 2 se (lab-sweep verdict), the sweep
 # stops: queued and running jobs, and start queues no more. Any that doesn't: the rest
 # run. start leaves `watch` checking each minute in the background, log watch.log
 #   deploy/lab-sweep.sh start big1 big.space --trials 40 --head \
@@ -104,7 +104,9 @@ start() {
         echo "$dir exists: another SWEEP name"; exit 1
     fi
     local plan
-    plan=$(perl "$ROOT/deploy/lab-sweep.pl" sample "$space" "$trials" "$rng") || exit 2
+    local tools
+    tools=$(lab_tools) || exit 1
+    plan=$("$tools" lab-sweep sample "$space" "$trials" "$rng") || exit 2
 
     # One job's ARGS per line: its trials, each `CMD ARGS flags --out tNN > tNN.log 2>&1`,
     # joined by `&` when packed, `;` when --serial (lab-run.sh puts `$pin nice -n 10
@@ -226,20 +228,23 @@ folds() {
 }
 
 table() {
-    folds "$1" | perl "$ROOT/deploy/lab-sweep.pl" table "$1/trials.tsv" | tee "$1/table.md"
+    local tools
+    tools=$(lab_tools) || exit 1
+    folds "$1" | "$tools" lab-sweep table "$1/trials.tsv" | tee "$1/table.md"
 }
 
 # The stopping rule: each minute, verdict on the trials of jobs that exited 0, until it
 # says stop (stops the sweep, reason in DIR/stopped) or pass, or no job is left
 watch() {
-    local dir=$1 k=$2 v
+    local dir=$1 k=$2 v tools
     [[ "$k" =~ ^[1-9][0-9]*$ ]] || { echo "K: a number"; exit 2; }
+    tools=$(lab_tools) || exit 1
     # Global: the EXIT trap runs after this function's locals are gone
     ended=$(mktemp)
     trap 'rm -f "$ended"' EXIT
     while :; do
         runs_in "$dir" '^exit 0' > "$ended" || true
-        v=$(folds "$dir" "$ended" | perl "$ROOT/deploy/lab-sweep.pl" verdict \
+        v=$(folds "$dir" "$ended" | "$tools" lab-sweep verdict \
             "$dir/trials.tsv" "$k") || v="wait"
         echo "$(date -u +%FT%TZ) $v"
         case $v in

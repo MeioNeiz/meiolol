@@ -22,7 +22,8 @@
 #                                            and the gpu-box's other standing pieces
 #
 # HOST: gpu-box, or auto (also when left out): host and resource by predicted
-# finish, deploy/lab-place.pl (wait for the lock + run time from past runs; it says why).
+# finish, meiolol lab-place (src/labtools/place.zig: wait for the lock + run time from
+# past runs; it says why).
 # mac only with LAB_ALLOW_MAC=1 (runs slow the Mac down).
 # --res auto with a named HOST picks the resource only; a named HOST without --res is cpu.
 # --dry-run: the placement or prediction only. ARGS go to meiolol-lab (or meiolol with
@@ -55,7 +56,7 @@
 # other. A GPU run takes gpu and can share the PC with a cpu one. Waiting runs are
 # "queued"; `started` is written once the lock is held
 # --share N (alias --gpu-share): hold N slots at once. Without it a gpu run holds one and
-# a cpu run as many as lab-place.pl says (its history: one slot for a single-thread
+# a cpu run as many as lab-place says (its history: one slot for a single-thread
 # command, else ~4 cores), pinned to all their cores
 set -euo pipefail
 
@@ -548,7 +549,7 @@ start() {
             [[ -f $d/stopped ]] && s=stopped; printf "%s (%s), " "$d" "$s"
         done' 2> /dev/null || true)
     [[ -z "$same" ]] || echo "same as ${same%, } (run key $runkey)"
-    # Seconds of running time expected (deploy/lab-place.pl), and why: status checks it
+    # Seconds of running time expected (meiolol lab-place), and why: status checks it
     [[ "$predicted" == - ]] || printf "%s\t%s\n" "$predicted" "$why" > "$tmp/predicted"
     : > "$tmp/src.diff"
     [[ -n "$commit$PIN$env" ]] || git -C "$ROOT" diff HEAD -- src build.zig > "$tmp/src.diff"
@@ -683,7 +684,7 @@ while [[ -z $slot ]]; do
     [[ -n $slot ]] || sleep 2
 done
 rm -f $q/$ticket queued
-# First field one slot as before (lab-place.pl reads it); a share names the others after
+# First field one slot as before (lab-place reads it); a share names the others after
 if (( share > 1 )); then echo "@RES@.$slot of $n (share ${got[*]})" > slot
 else echo "@RES@.$slot of $n" > slot; fi
 [[ -n $need_kb ]] && echo $need_kb > memneed
@@ -798,9 +799,9 @@ EOF
 # to the background, so nothing keeps ssh's output open. deploy/lab-watch.sh has a copy
 LAUNCH="{ nohup perl -e 'setpgrp(0,0); exec @ARGV' ./job.sh >> log 2>&1 < /dev/null & }"
 
-# What deploy/lab-place.pl reads about HOST, tab-separated, each line led by HOST: its
+# What meiolol lab-place reads about HOST, tab-separated, each line led by HOST: its
 # clock, the watcher's last League line, which of PATHS exist (~/ paths, checked by
-# lab-place.pl inputs), and one line per run. Fails if the host can't be reached
+# lab-place inputs), and one line per run. Fails if the host can't be reached
 listing() {
     local host=$1 have="" p
     shift
@@ -868,22 +869,24 @@ listing() {
     else ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" "$script"; fi | sed "s/^/$host	/"
 }
 
-# Prints "HOST RES SECONDS" (- if unknown), then why: deploy/lab-place.pl from both hosts'
+# Prints "HOST RES SECONDS" (- if unknown), then why: meiolol lab-place from both hosts'
 # runs. HOST and RES may be auto
 place() {
-    local paths h
-    paths=$(perl "$ROOT/deploy/lab-place.pl" inputs "$4" | tr '\n' ' ')
-    # shellcheck disable=SC2086 # plain ~/ paths, no spaces (lab-place.pl inputs)
+    local paths h tools
+    tools=$(lab_tools) || return 1
+    paths=$("$tools" lab-place inputs "$4" | tr '\n' ' ')
+    # shellcheck disable=SC2086 # plain ~/ paths, no spaces (lab-place inputs)
     for h in gpu-box mac; do listing "$h" $paths || true; done \
-        | perl "$ROOT/deploy/lab-place.pl" place "$@"
+        | "$tools" lab-place place "$@"
 }
 
 # One line per run: name, state, start, run time (so far) against its prediction, last
 # log line
 status() {
-    local out
+    local out tools
+    tools=$(lab_tools) || return 1
     out=$(listing "$1") || return 1
-    perl "$ROOT/deploy/lab-place.pl" status "$1" <<< "$out"
+    "$tools" lab-place status "$1" <<< "$out"
     if [[ "$1" == gpu-box ]]; then
 
         echo "watcher: $(on gpu-box "systemctl --user is-active $WATCH" || true)," \
