@@ -875,8 +875,10 @@ place() {
     local paths h tools
     tools=$(lab_tools) || return 1
     paths=$("$tools" lab-place inputs "$4" | tr '\n' ' ')
+    # A host it can't reach has no `now` line, which lab-place reports; ssh's own error
+    # would come first in start's capture and be read as the placement
     # shellcheck disable=SC2086 # plain ~/ paths, no spaces (lab-place inputs)
-    for h in gpu-box mac; do listing "$h" $paths || true; done \
+    for h in gpu-box mac; do listing "$h" $paths 2> /dev/null || true; done \
         | "$tools" lab-place place "$@"
 }
 
