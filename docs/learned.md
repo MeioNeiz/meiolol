@@ -32,10 +32,12 @@ How to write a line:
   support. Sure: method of moments on the live site's lane opponent tables (269k EUW
   games, last 30 days, 1.5-4k matchups a role), no held-out look; sizes agree with the
   2253Z v2 line below except jungle (lower here). Site: the champion page's "vs usual"
-  pulls each matchup toward usual by this, about 650-700 games in top and mid, 1,750 in
-  bot, the 2,500 cap in jungle and support. Evidence: champion.zig usualK (the same sums
-  as the page's data-ka), cross-checked in Python on the pages (raw k for mid 390 vs the
-  page's 371)
+  pulls each matchup toward usual by this: the page's own usualK (data-ka, 20 Oct, 279k
+  games) is about 750-770 games in top and mid and the 2,500 cap in bot, jungle and
+  support. Evidence: champion.zig usualK; re-derived in Python from the live pages' rows
+  (raw k for mid 391 vs the page's opponentK 370), which gives 680-710 top and mid and
+  1,900 bot: a 10% gap (bot more) not yet explained, likely role totals vs lane-opponent
+  sums for the champions' own rates
 
 - 2026-10-18 (early): A neural network now predicts the winner from the draft better
   than the model the site and app use. It reads what each team's champions typically do
