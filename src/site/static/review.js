@@ -422,7 +422,9 @@ const Review = (() => {
   function lanePanel(g) {
     const p = el("div", "panel rv-lane");
     const h = el("div", "panel-h");
-    h.append(el("b", "", `Lane, first ${LANE_END} min`));
+    // The curves run past the lane phase (up to curvesfile.max_minutes), the table's
+    // rows stop at LANE_END
+    h.append(el("b", "", `Lane, first ${g.lane.gold.length || LANE_END} min`));
     const box = el("div");
     if (chartWasm) {
       const seg = el("span", "rv-seg");
