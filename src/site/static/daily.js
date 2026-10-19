@@ -185,7 +185,7 @@ class Game {
     this.renderBack();
     const tier = p.tier ? ` · ${p.tier[0]}${p.tier.slice(1).toLowerCase()}` : "";
     // The date is the puzzle's, not the game's (src/daily.zig min_age_days)
-    $("about").textContent = `${longDate(p.date)} · patch ${p.patch}${tier}`;
+    $("about").textContent = `${longDate(p.date)} · EUW ranked solo/duo · patch ${p.patch}${tier}`;
     this.renderBoard();
     this.renderPick();
     this.renderSide();
@@ -213,11 +213,13 @@ class Game {
         list.append(li);
       });
       const bans = $(`bans-${t}`);
-      bans.replaceChildren(p.bans[t].length ? "Bans: " : "No bans");
-      p.bans[t].forEach((id, i) => {
-        if (i > 0) bans.append(", ");
-        bans.append(this.name(id));
-      });
+      // Per side in ban order: match data has no seat for a ban
+      bans.replaceChildren(el("span", "", p.bans[t].length ? "Bans" : "No bans"));
+      for (const id of p.bans[t]) {
+        const b = this.champ(id, 24);
+        b.removeAttribute("href");
+        bans.append(b);
+      }
     }
   }
 
@@ -247,7 +249,7 @@ class Game {
     const p = this.p;
     $("q-pick-title").textContent = this.picked
       ? `${this.name(p.played)} was played`
-      : `Who played ${roleName[p.hidden_role].toLowerCase()} for ${SIDES[p.hidden_team].toLowerCase()} side?`;
+      : `Last pick: ${SIDES[p.hidden_team].toLowerCase()} ${roleName[p.hidden_role].toLowerCase()}. Who did they lock in?`;
     const box = $("options");
     box.replaceChildren();
     const flip = this.picked && this.fresh === "pick" && !reduceMotion();

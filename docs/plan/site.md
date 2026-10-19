@@ -46,6 +46,11 @@ facts with counts are not that, but check the line with Jacob before numbers com
   the puzzle JSON also carries the gold amount and lane lead counts, unshown (J1)
 - Jacob: may numbers come back, e.g. "ahead at 14 in 58% of 1,220 games" or "+300
   gold at 14"? Learn and matchup pages already show both
+- Done 20 Oct: framed as the last pick (match data has no pick order: "treat it as"),
+  EUW in the context line, bans as icons per side (no seat in match-v5)
+- Jacob 20 Oct 00:36-00:41 asked for pick verdicts (J2 form), per-player ranks, a
+  scoreboard and no week delay: plan and the privacy questions in
+  data/team/2026-10-19-night/daily.md (Q2 and the privacy page set the week delay)
 - Next: a hint before the guess (e.g. reveal one lane fact for a smaller streak?);
   share text with the facts; small leads (+100 gold) read "ahead" when clear: maybe a
   floor (200 gold) so "ahead" means something to a player

@@ -866,6 +866,11 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
 .dd-was-hidden .champ img { box-shadow: 0 0 0 2px var(--accent); }
 .dd-how summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .dd-how p { font-size: 13px; max-width: 760px; }
+.dd .bans { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dd .bans > span { margin-right: 4px; }
+.dd .bans .champ img { width: 24px; height: 24px; filter: grayscale(0.7); opacity: 0.8; }
+.dd .bans .champ .name { display: none; }
+.dd-q-note { margin: -6px 0 12px; font-size: 13px; }
 @media (max-width: 640px) {
   .dd-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dd-lanes li { grid-template-columns: 52px auto minmax(0, 1fr) auto; gap: 8px; }

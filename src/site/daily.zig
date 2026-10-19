@@ -10,7 +10,7 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
     try w.writeAll(
         \\<h1>Daily Draft <span id="number" class="muted"></span></h1>
         \\<p class="lead">One real ranked game a day, at least a week old and the same for
-        \\everyone. Guess the hidden pick, then the winner.</p>
+        \\everyone. Guess the last pick, then the winner.</p>
         \\<p id="status" class="note">Loading…</p>
         \\<div id="daily" class="dd" hidden>
         \\<p id="about" class="muted"></p>
@@ -19,7 +19,9 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<div class="card side-1"><h3>Red side</h3><ol id="team-1" class="team"></ol><p class="bans" id="bans-1"></p></div>
         \\</div>
         \\<section id="q-pick" class="card question">
-        \\<h2 id="q-pick-title">Who was in the hidden slot?</h2>
+        \\<h2 id="q-pick-title">Last pick: who did they lock in?</h2>
+        \\<p class="muted dd-q-note">Treat it as the last pick: the other nine are locked in
+        \\and the bans are done. (Match data has no pick order, so it may not have been.)</p>
         \\<div id="options" class="dd-options"></div>
         \\</section>
         \\<section id="q-side" class="card question" hidden>
