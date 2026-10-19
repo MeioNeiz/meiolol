@@ -129,10 +129,11 @@ const Review = (() => {
     const y = (p) => T + ((H - T - B) * (100 - p)) / 100;
     const svg = svgEl("svg", { class: "wc", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Your team's win chance by minute" });
     const id = `wc${Math.random().toString(36).slice(2, 8)}`;
-    const stop = (at, team, a) => `<stop offset="${at}" style="stop-color: var(--${team}); stop-opacity: ${a}"/>`;
-    svg.innerHTML = `<defs><linearGradient id="${id}u" x1="0" y1="0" x2="0" y2="1">${stop(0, "us", 0.5)}${stop(1, "us", 0.08)}</linearGradient>
-      <linearGradient id="${id}d" x1="0" y1="0" x2="0" y2="1">${stop(0, "them", 0.08)}${stop(1, "them", 0.5)}</linearGradient>
-      <clipPath id="${id}cu"><rect x="0" y="0" width="${W}" height="${y(50)}"/></clipPath><clipPath id="${id}cd"><rect x="0" y="${y(50)}" width="${W}" height="${H}"/></clipPath></defs>`;
+    // Your team's share fills below the line and the enemy's above, as the bar beside it;
+    // each brightens towards a vivid colour past 80% (20% for the enemy)
+    const stop = (at, colour, a) => `<stop offset="${at}" style="stop-color: var(--${colour}); stop-opacity: ${a}"/>`;
+    const ramp = (dir, team, from, to) => `<linearGradient id="${id}${dir}" gradientUnits="userSpaceOnUse" x1="0" y1="${y(from)}" x2="0" y2="${y(to)}">${stop(0, team, 0.22)}${stop(0.5, team, 0.32)}${stop(0.75, team, 0.45)}${stop(0.9, `${team}-hot`, 0.8)}${stop(1, `${team}-hot`, 1)}</linearGradient>`;
+    svg.innerHTML = `<defs>${ramp("u", "us", 0, 100)}${ramp("d", "them", 100, 0)}</defs>`;
     for (const p of [100, 75, 25, 0]) svg.append(svgEl("line", { class: "gl", x1: L, x2: W - R, y1: y(p), y2: y(p) }));
     for (const p of [100, 50, 0]) {
       const t = svgEl("text", { x: 0, y: y(p) + 3.5 });
@@ -145,11 +146,11 @@ const Review = (() => {
       t.textContent = `${m}:00`;
       svg.append(t);
     }
-    svg.append(svgEl("line", { class: "mid", x1: L, x2: W - R, y1: y(50), y2: y(50) }));
     const pts = wc.map((p, m) => `${x(m).toFixed(1)},${y(p).toFixed(1)}`);
-    const area = `M${x(0)},${y(50)} L${pts.join(" L")} L${x(n)},${y(50)} Z`;
-    svg.append(svgEl("path", { d: area, fill: `url(#${id}u)`, "clip-path": `url(#${id}cu)` }));
-    svg.append(svgEl("path", { d: area, fill: `url(#${id}d)`, "clip-path": `url(#${id}cd)` }));
+    const area = (p) => `M${x(0)},${y(p)} L${pts.join(" L")} L${x(n)},${y(p)} Z`;
+    svg.append(svgEl("path", { d: area(0), fill: `url(#${id}u)` }));
+    svg.append(svgEl("path", { d: area(100), fill: `url(#${id}d)` }));
+    svg.append(svgEl("line", { class: "mid", x1: L, x2: W - R, y1: y(50), y2: y(50) }));
     const t = g.turning;
     if (t) {
       const mx = x(t.minute - 0.5);
@@ -622,6 +623,7 @@ const Review = (() => {
         holder.replaceChildren(winChart(g, M, minute, set, holder.clientWidth));
         if (dot >= 0) holder.querySelectorAll(".mo")[dot]?.focus();
         fill.style.height = `${wc[minute]}%`;
+        bar.dataset.hot = wc[minute] >= 80 ? "us" : wc[minute] <= 20 ? "them" : "";
         val.textContent = wc[minute];
         bar.setAttribute("aria-label", `Win chance at ${minute}:00: ${wc[minute]}%`);
         for (const li of ml.children) li.classList.toggle("on", Number(li.dataset.i) === i);
