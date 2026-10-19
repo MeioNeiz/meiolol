@@ -780,3 +780,88 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
   .mu-tiles b { font-size: 18px; }
   .mu-tiles span, .mu-tiles small { font-size: 11px; }
 }
+/* Daily Draft: option cards that flip to their fact, side buttons, score, lanes */
+.dd-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.dd-opt { padding: 0; border: none; background: none; perspective: 900px; text-align: center; border-radius: 10px; }
+.dd-card {
+  display: grid; height: 100%; transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.3, 0.7, 0.3, 1); transition-delay: calc(var(--i, 0) * 90ms);
+}
+.dd-opt.flipped .dd-card { transform: rotateY(180deg); }
+.dd-face {
+  grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; min-height: 132px; padding: 10px 8px; border: 1px solid var(--line-2); border-radius: 10px;
+  background: var(--panel-2); backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+.dd-face .champ { pointer-events: none; font-weight: 600; }
+.dd-front .champ { flex-direction: column; gap: 6px; }
+.dd-front .champ img { width: 56px; height: 56px; border-radius: 10px; }
+.dd-opt:hover:not(:disabled) .dd-front { border-color: var(--accent); background: var(--panel-3); }
+.dd-back { transform: rotateY(180deg); }
+.dd-back .champ { gap: 8px; }
+.dd-mark { font-size: 12px; font-weight: 600; color: var(--muted); }
+.dd-fact { font-size: 14px; line-height: 1.3; margin-top: 2px; }
+.dd-fact.up { color: var(--good); }
+.dd-fact.down { color: var(--bad); }
+.dd-sub { color: var(--muted); font-size: 12px; line-height: 1.3; }
+.dd-opt.played .dd-back { border: 2px solid var(--good); background: color-mix(in srgb, var(--good) 14%, var(--panel)); }
+.dd-opt.played .dd-mark { color: var(--good); }
+.dd-opt.missed .dd-back { border: 2px solid var(--bad); }
+.dd-opt.missed .dd-mark { color: var(--bad); }
+.dd-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dd-side { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px; font-size: 16px; font-weight: 600; border-width: 2px; }
+.dd-side.dd-blue { border-color: color-mix(in srgb, var(--us) 45%, transparent); }
+.dd-side.dd-red { border-color: color-mix(in srgb, var(--them) 45%, transparent); }
+.dd-side.dd-blue:hover:not(:disabled), .dd-side.dd-blue.won { border-color: var(--us); background: color-mix(in srgb, var(--us) 18%, var(--panel)); }
+.dd-side.dd-red:hover:not(:disabled), .dd-side.dd-red.won { border-color: var(--them); background: color-mix(in srgb, var(--them) 18%, var(--panel)); }
+.dd-side:disabled:not(.won) { opacity: 0.55; }
+.dd-side .dd-mark { color: var(--text); }
+@keyframes dd-pop { 0% { transform: scale(0.94); } 60% { transform: scale(1.03); } 100% { transform: none; } }
+.dd-side.pop, .dd-score.pop { animation: dd-pop 0.45s ease-out; }
+.dd-score {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px;
+  margin: 20px 0 12px; padding: 14px 18px; border: 1px solid var(--line-2); border-radius: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 16%, var(--panel)), var(--panel));
+}
+.dd-result > b { display: block; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.dd-marks { display: flex; gap: 8px; margin-top: 6px; }
+.dd-marks span { font-size: 13px; font-weight: 600; border: 1px solid; border-radius: 999px; padding: 1px 10px; }
+.dd-marks .ok { color: var(--good); }
+.dd-marks .no { color: var(--bad); }
+.dd-streak { text-align: right; }
+.dd-streak b { font-size: 30px; font-weight: 750; line-height: 1; }
+.dd-streak b.hot { color: var(--turn); }
+.dd-streak small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.dd-win.dd-blue { color: var(--us); }
+.dd-win.dd-red { color: var(--them); }
+.dd-paper { color: var(--t2); margin: 4px 0 10px; }
+.dd-lanes { list-style: none; max-width: 760px; margin: 0 0 14px; padding: 0; border-top: 1px solid var(--line); }
+.dd-lanes li {
+  display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr);
+  align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+.dd-lanes .role { color: var(--muted); font-size: 13px; }
+.dd-lanes .champ img { width: 28px; height: 28px; }
+.dd-lanes li > .champ:last-child { flex-direction: row-reverse; justify-self: end; }
+.dd-lanes li.thin .champ { opacity: 0.6; }
+.dd-lane-fact { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; text-align: center; }
+.dd-lane-fact small { width: 100%; color: var(--faint); font-size: 12px; }
+.dd-chip { font-size: 12.5px; font-weight: 600; color: var(--muted); border: 1px solid var(--line-2); border-radius: 999px; padding: 1px 10px; }
+.dd-chip.dd-blue { color: var(--us); border-color: color-mix(in srgb, var(--us) 50%, transparent); background: color-mix(in srgb, var(--us) 12%, var(--panel)); }
+.dd-chip.dd-red { color: var(--them); border-color: color-mix(in srgb, var(--them) 50%, transparent); background: color-mix(in srgb, var(--them) 12%, var(--panel)); }
+.dd-was-hidden .champ img { box-shadow: 0 0 0 2px var(--accent); }
+.dd-how summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.dd-how p { font-size: 13px; max-width: 760px; }
+@media (max-width: 640px) {
+  .dd-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dd-lanes li { grid-template-columns: 52px auto minmax(0, 1fr) auto; gap: 8px; }
+  .dd-lanes .champ .name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .dd-streak { text-align: left; }
+  .dd-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .dd-tiles > div { min-width: 0; padding: 7px 9px; }
+  .dd-tiles b { font-size: 15px; white-space: nowrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dd-card { transition: none; }
+  .dd-side.pop, .dd-score.pop { animation: none; }
+}

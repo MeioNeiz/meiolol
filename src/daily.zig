@@ -45,6 +45,8 @@ pub const Options = struct {
     today: u32,
     /// Puzzles made in advance, so a viewer whose date is ahead of UTC finds theirs
     ahead: u32 = 2,
+    /// The lane curves behind the gold facts; without them puzzles have none
+    curves: ?*const curvesfile.Curves = null,
 };
 
 pub const Reason = struct {
@@ -60,7 +62,47 @@ pub const Option = struct {
     /// Games on this champion in the hidden role
     games: u32,
     reasons: []const Reason,
+    /// Against the enemy in the hidden role
+    lane: ?LaneGold = null,
 };
+
+/// Gold at lane_minute in a lane matchup, from the lane curves, from the first
+/// champion's side (the option's, or blue's)
+pub const LaneGold = struct {
+    /// Games in the curve
+    games: u32,
+    /// 1 ahead, -1 behind, 0 no clear lead: the estimate is within 2 standard errors of
+    /// even, or the curve is thin (as the matchup page greys it out)
+    side: i8,
+    /// Estimated difference, to the nearest 100; the page shows only `side` (J1)
+    gold: i32,
+    /// Games with a lane result, and how many of them the first champion led in gold
+    lane_games: u32,
+    ahead: u32,
+};
+
+/// As matchup.zig's thin(): fewer games, or most of the estimate the champions' baselines
+const lane_thin_games = 200;
+const lane_min_own = 0.5;
+
+fn laneGold(curves: ?*const curvesfile.Curves, role: Role, me: u32, them: u32) ?LaneGold {
+    const c = curves orelse return null;
+    const v = c.get(role, .all, me, them) orelse return null;
+    const i = curvesfile.lane_minute - 1;
+    if (i >= v.minutes()) return null;
+    const e = v.estimate(.gold, i);
+    const mean: i32 = e.mean;
+    const thin = v.games() < lane_thin_games or v.own() < lane_min_own;
+    const clear = !thin and @abs(mean) > 2 * @as(u32, e.se);
+    const lane = v.lane();
+    return .{
+        .games = v.games(),
+        .side = if (!clear) 0 else if (mean > 0) 1 else -1,
+        .gold = @divTrunc(mean + @as(i32, if (mean < 0) -50 else 50), 100) * 100,
+        .lane_games = lane.games,
+        .ahead = lane.ahead,
+    };
+}
 
 pub const HiddenBy = enum {
     /// Puzzles made before `hideBestFit`
@@ -76,6 +118,8 @@ pub const Lane = struct {
     /// Blue's side, percentage points beyond the two champions' own ratings
     pp: f64,
     games: u32,
+    /// Blue's side
+    gold: ?LaneGold = null,
 };
 
 pub const Puzzle = struct {
@@ -188,7 +232,7 @@ fn refresh(
     if (!isCurrent(opts.patches, p.numbers_patch orelse p.patch)) return data;
     var ids: [4]u32 = undefined;
     for (p.options, &ids) |o, *id| id.* = o.id;
-    if (!try numbers(arena, st, &p, ids)) return data;
+    if (!try numbers(arena, st, opts.curves, &p, ids)) return data;
     const fresh = try std.json.Stringify.valueAlloc(arena, p, .{});
     if (std.mem.eql(u8, fresh, data)) return data;
     // The web loop and the renderer both build the shared view: never a half-written file
@@ -273,7 +317,7 @@ fn makeFrom(
         if (!try q.step()) continue;
         const match_id = try arena.dupe(u8, q.bytes(0));
         if (isUsed(used.items, match_id)) continue;
-        var puzzle = try load(arena, db, st, match_id, rand) orelse continue;
+        var puzzle = try load(arena, db, st, opts.curves, match_id, rand) orelse continue;
         if (!usualPicks(st, puzzle.teams)) continue;
         puzzle.n = n;
         puzzle.date = try arena.print("{f}", .{Date.fromDay(day)});
@@ -324,6 +368,7 @@ pub fn load(
     arena: std.mem.Allocator,
     db: store.Db,
     st: *const Stats,
+    curves: ?*const curvesfile.Curves,
     match_id: []const u8,
     rand: std.Random,
 ) !?Puzzle {
@@ -391,7 +436,7 @@ pub fn load(
     if (!try hideBestFit(arena, st, &p)) return null;
     p.played = p.teams[p.hidden_team][@backingInt(p.hidden_role)];
     const ids = (try options(arena, st, p, rand)) orelse return null;
-    if (!try numbers(arena, st, &p, ids)) return null;
+    if (!try numbers(arena, st, curves, &p, ids)) return null;
     return p;
 }
 
@@ -426,9 +471,15 @@ fn hideBestFit(arena: std.mem.Allocator, st: *const Stats, p: *Puzzle) !bool {
     return true;
 }
 
-/// Fills what `st` says about the draft: games, the options (`ids`, in this order),
-/// its lean and the lanes. False when `st` cannot score one of the champions.
-fn numbers(arena: std.mem.Allocator, st: *const Stats, p: *Puzzle, ids: [4]u32) !bool {
+/// Fills what `st` and `curves` say about the draft: games, the options (`ids`, in this
+/// order), its lean and the lanes. False when `st` cannot score one of the champions.
+fn numbers(
+    arena: std.mem.Allocator,
+    st: *const Stats,
+    curves: ?*const curvesfile.Curves,
+    p: *Puzzle,
+    ids: [4]u32,
+) !bool {
     for (p.teams) |team| for (team) |id| if (st.index(id) == null) return false;
     var draft = try hiddenDraft(arena, p.*);
     draft.pool = &ids;
@@ -448,7 +499,13 @@ fn numbers(arena: std.mem.Allocator, st: *const Stats, p: *Puzzle, ids: [4]u32) 
             .pp = round1(r.pp),
             .games = r.games,
         };
-        o.* = .{ .id = id, .games = s.games, .reasons = reasons };
+        const enemy = p.teams[1 - p.hidden_team][@backingInt(p.hidden_role)];
+        o.* = .{
+            .id = id,
+            .games = s.games,
+            .reasons = reasons,
+            .lane = laneGold(curves, p.hidden_role, id, enemy),
+        };
     }
     p.games = st.games;
     p.lean = lean(st, p.teams);
@@ -458,6 +515,7 @@ fn numbers(arena: std.mem.Allocator, st: *const Stats, p: *Puzzle, ids: [4]u32) 
         p.lanes[@backingInt(r)] = .{
             .pp = round1(score.matchupPp(st, .{}, r, blue, r, red)),
             .games = st.enemy(r, r, blue, red).games,
+            .gold = laneGold(curves, r, p.teams[0][@backingInt(r)], p.teams[1][@backingInt(r)]),
         };
     }
     return true;
@@ -664,4 +722,48 @@ test "puzzles are made once, anonymised and published" {
     var swapped = p.teams;
     std.mem.swap(u32, &swapped[0][0], &swapped[0][1]);
     try testing.expect(!usualPicks(&st, swapped));
+}
+
+/// `games` top lanes of `a` against `b`, a's gold lead at lane_minute about `lead`
+fn addTestLanes(b: *curvesfile.Builder, a: u32, other: u32, games: usize, lead: i16) !void {
+    for (0..games) |g| {
+        var l: curvesfile.Lane = .{ .role = .top, .bracket = null, .a = a, .b = other, .a_won = g % 2 == 0, .minutes = 20 };
+        const noise: i16 = @intCast(@as(i32, @intCast(g % 7)) * 100 - 300);
+        for (0..20) |i| {
+            const t: i16 = @intCast(i + 1);
+            l.gold[i] = @divTrunc((lead + noise) * t, curvesfile.lane_minute);
+            l.xp[i] = t * 10;
+            l.cs[i] = 1;
+        }
+        try b.addLane(l);
+        b.addGame();
+    }
+}
+
+test "lane gold: a side only for a clear lead on a curve that is not thin" {
+    const gpa = testing.allocator;
+    var b: curvesfile.Builder = .{ .gpa = gpa };
+    defer b.deinit();
+    try addTestLanes(&b, 1, 2, 300, 800);
+    try addTestLanes(&b, 1, 3, 300, 0);
+    try addTestLanes(&b, 2, 3, 300, -800);
+    try addTestLanes(&b, 1, 4, 20, 800);
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try b.write(&aw.writer, "16.20", 1);
+    var c: curvesfile.Curves = try .parse(gpa, aw.written());
+    defer c.deinit(gpa);
+
+    const ahead = laneGold(&c, .top, 1, 2).?;
+    try testing.expectEqual(1, ahead.side);
+    try testing.expectEqual(300, ahead.games);
+    try testing.expectEqual(0, @mod(ahead.gold, 100));
+    try testing.expect(ahead.gold > 0);
+    try testing.expect(ahead.ahead > ahead.lane_games / 2);
+    try testing.expectEqual(-1, laneGold(&c, .top, 2, 1).?.side);
+    try testing.expectEqual(0, laneGold(&c, .top, 1, 3).?.side);
+    // 20 games: thin, however big the lead
+    if (laneGold(&c, .top, 1, 4)) |thin| try testing.expectEqual(0, thin.side);
+    try testing.expectEqual(null, laneGold(&c, .jungle, 1, 2));
+    try testing.expectEqual(null, laneGold(null, .top, 1, 2));
 }

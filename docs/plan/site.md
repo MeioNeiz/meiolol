@@ -36,6 +36,19 @@ Jacob 19 Oct: more engaging, more interesting things, fewer words, clearer facts
 Ideas: one short fact per option with the games behind it instead of sentences, a
 visual answer reveal, streaks. J1 (decisions.md) dropped win chance and points; lane
 facts with counts are not that, but check the line with Jacob before numbers come back.
+- Done 20 Oct (night run, daily): the four options flip after the guess, each to one
+  fact and its games ("Good into Zed" when a detected reason clears chance, else "Ahead
+  / Behind at 14 min, gold vs X", "No clear lane lead", "Rare matchup"), played one
+  marked; side buttons colour, winner marked; a score card (both right / one of two,
+  days in a row, best, played); tiles (winner, kills, gold); lanes as rows with "Blue
+  ahead at 14" chips and games. Copy cut to one line, method in a closed details. Gold
+  sides from the lane curves (src/daily.zig LaneGold: 2 SE, 200+ games, own >= 0.5);
+  the puzzle JSON also carries the gold amount and lane lead counts, unshown (J1)
+- Jacob: may numbers come back, e.g. "ahead at 14 in 58% of 1,220 games" or "+300
+  gold at 14"? Learn and matchup pages already show both
+- Next: a hint before the guess (e.g. reveal one lane fact for a smaller streak?);
+  share text with the facts; small leads (+100 gold) read "ahead" when clear: maybe a
+  floor (200 gold) so "ahead" means something to a player
 Later: puzzles from clear comp leans (data-and-model.md step 5).
 
 ## Learn

@@ -203,9 +203,10 @@ test "fixture games to stats, curves and the website" {
         .{ "champion/darius.html", &.{ "data-sortable data-k=\"", "<option value=\"p1\" selected>", "<option value=\"\" selected>All (Platinum+ games)</option><option value=\"4\">Platinum+ players</option>", "Challenger players</option>", "last 30 days, Platinum+ games</span>" } },
         .{ "champions.html", &.{"Platinum+ ranked solo/duo games in EUW, last 30 days."} },
         .{ "index.html", &.{"<a href=\"download.html\">Coming: a champ select helper for Windows</a>"} },
-        // Daily Draft: a game at least a week old, read in words (no draft win chance or
-        // points); reasons from the list Learn uses
-        .{ "daily.html", &.{ "at least a week old", "95% sure it is not even", "<script src=\"reasons.js\" defer></script>" } },
+        // Daily Draft: a game at least a week old, read in words (no draft win chance,
+        // points or gold amounts); reasons from the list Learn uses; option cards and lane
+        // rows that static/daily.js fills
+        .{ "daily.html", &.{ "at least a week old", "95% sure it is not even", "two standard errors on 200+ games", "<div id=\"options\" class=\"dd-options\"></div>", "<ul id=\"lanes\" class=\"dd-lanes\"></ul>", "<script src=\"reasons.js\" defer></script>" } },
         .{ "privacy.html", &.{"the date\nshown is the puzzle's, not the game's"} },
         .{ "matchup/index.html", &.{ "data-min-search", "<li data-games=\"3\" data-name=\"", "<section data-min-group><h2>Top ", "</ul></section>" } },
         .{ "champion/darius.html", &.{"href=\"../patch/build/darius-top.html\""} },

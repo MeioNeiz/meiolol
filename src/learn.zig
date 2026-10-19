@@ -459,7 +459,7 @@ fn practice(
             while (made < per_cell and tries < tries_per_cell) : (tries += 1) {
                 const match_id = ids.items[@intCast(rand.uintLessThan(u64, ids.items.len))];
                 if (daily.isUsed(used.items, match_id)) continue;
-                const p = try daily.load(arena, db, st, match_id, rand) orelse continue;
+                const p = try daily.load(arena, db, st, null, match_id, rand) orelse continue;
                 if (!daily.usualPicks(st, p.teams)) continue;
                 const drill = try draftFor(arena, st, facts, curves, p, role, want, rand) orelse continue;
                 try pack.append(arena, drill);

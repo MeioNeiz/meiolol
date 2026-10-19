@@ -288,6 +288,7 @@ fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *
             .patches = opts.patches,
             .platforms = opts.platforms,
             .today = day,
+            .curves = if (site.curves) |*c| c else null,
         }) catch |err| blk: {
             log.warn("daily draft: {t}", .{err});
             break :blk &.{};
