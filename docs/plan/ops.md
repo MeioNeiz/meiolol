@@ -9,9 +9,10 @@ Known cause, 19 Oct: the gpu-box woke to a ~30 h raw backlog and its back-to-bac
 exports with their prunes took the crawler from ~1,180 to ~650 matches per 10 min and
 its requests from ~2,000 to ~1,170 (box io pressure full avg300 60%). Fixed in 1037318
 (idle IO priority for export, pack, ack and prune; rests between catch-up passes).
-- First: check on the admin matches chart whether the rate is back near ~1,180 per 10
-  min once the backlog is gone
-- If not, or if it was already sliding before 19 Oct: requests per match, 429s ours vs
+- Checked 19 Oct 23:55 from crawl.log: recovered. 10-min rate 1,100-1,200 through 19
+  Oct (one dip to ~1,040 at 21:00), 24 h rate ~165k matches/day, up from ~136k on 16-17
+  Oct, so no slide before 19 Oct either. Recheck only if the admin chart drops again
+- If it drops: requests per match, 429s ours vs
   Riot's (J8), time per request, SQLite write and fsync time, the rolling-window and
   VACUUM work below; then whether the key's rate is the ceiling (production key)
 

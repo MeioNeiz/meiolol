@@ -22,7 +22,7 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
 
 1. Storage: Hetzner BX11 and the rolling window (Jacob orders, needed within ~a week
    of 18 Oct), raw.db VACUUM, gpu-box WSL compaction: ops.md "Storage and hosts"
-2. Crawler slower (Jacob 19 Oct): check recovery after 1037318, then dig: ops.md
+2. Crawler slower (Jacob 19 Oct): recovered after 1037318 (checked 19 Oct), ops.md
 3. Traffic looks inflated by bots (Jacob 19 Oct): ops.md "Traffic"
 4. Application: Jacob checks the 18 Oct draft text and pastes (production-key.md);
    screenshots, video and LCU list need his real champ select run (app.md "Next").
