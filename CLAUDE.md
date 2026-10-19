@@ -64,6 +64,9 @@ docs/plan.md "Now". Read it first.
   [privacy@meio.lol]|stop|status`. jomify's pieces are installed by hand:
   `deploy/jomify.sh drift`, `install api|traffic|...`. Admin pages: `deploy/admin-get.sh
   PATH` (keeps the login off screen). Preview mode until prod key
+- Visiting meio.lol counts as a bot only when tagged: `browse`, persona-walk, curl,
+  WebFetch and headless Chrome already are; a scripted headed browser appends
+  `meiolol-agent` to its user agent (deploy/traffic.sh)
 - Heavy model work on the gpu-box (`ssh gpu-box`; 3080, 20 threads) or Mac CPU, never
   the box: deploy/lab-run.sh; League pauses gpu-box runs; warn sessions using it before
   restarting WSL. Parallel loops: src/par.zig. docs/compute.md

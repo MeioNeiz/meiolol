@@ -38,14 +38,15 @@ PAIR_S=60
 SUMMARY=$TOP'
 def page: .m == "GET" and (.s == 200 or .s == 304)
     and (.u | test("(/|\\.html)$") or (split("/") | last | contains(".") | not));
-# browser-tool: our own `browse` runs, which tag their Chrome UA on meio.lol
+# Our own runs: `browse` (browser-tool) and persona-walk tag their Chrome UA, other
+# scripted browsers of Claude agents add meiolol-agent (CLAUDE.md), WebFetch says Claude
 def bot: (.a // "") as $a | $a == ""
-    or ($a | test("bot|crawl|spider|slurp|curl|wget|python|go-http|httpclient|headless|preview|monitor|browser-tool"; "i"));
+    or ($a | test("bot|crawl|spider|slurp|curl|wget|python|go-http|httpclient|headless|preview|monitor|browser-tool|persona-walk|meiolol-agent|claude"; "i"));
 def family: (.a // "") as $a |
     if $a == "" then "Empty agent"
     elif bot then
         ([$a | match("[A-Za-z][A-Za-z0-9_.-]*(bot|crawl|crawler|spider|slurp)[A-Za-z0-9_.-]*"; "i")] | first | .string)
-        // ([$a | match("browser-tool|curl|wget|python[A-Za-z-]*|go-http-client|[A-Za-z]*httpclient|headless[A-Za-z]*|[A-Za-z]*preview|[A-Za-z]*monitor[A-Za-z]*"; "i")] | first | .string)
+        // ([$a | match("browser-tool|persona-walk|meiolol-agent|claude[A-Za-z-]*|curl|wget|python[A-Za-z-]*|go-http-client|[A-Za-z]*httpclient|headless[A-Za-z]*|[A-Za-z]*preview|[A-Za-z]*monitor[A-Za-z]*"; "i")] | first | .string)
         // "Other bot"
     elif ($a | test("Edg/|EdgA/|EdgiOS/")) then "Edge"
     elif ($a | test("OPR/|SamsungBrowser/")) then "Other"
