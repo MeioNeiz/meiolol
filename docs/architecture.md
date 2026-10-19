@@ -99,7 +99,14 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   On the box (18 Oct, niced, crawler running), wall/CPU s before -> after: curves --site
   2003/709 -> 1551/494, lean 1945/682 -> 1764/165, lane-model 1685/719 -> 1202/414,
   builds 1462/366 -> 1323/230; the box is disk-bound, so CPU falls more than wall.
-  Catch-up from empty 1203 s; 4.8 GB for 878k timelines
+  Catch-up from empty 1203 s; 4.8 GB for 878k timelines.
+  Reads in flight (19 Oct, src/store/ahead.zig): a lister and 8 readers, each on its own
+  read-only connection, read each game's digest and participants up to 4,096 games ahead
+  of the pass (and stats.scanAhead's participants), so its own reads hit the page cache;
+  its order and output are unchanged. Box, wall/CPU s before -> after: curves --site
+  1315/517 -> 842/622, builds 1375/212 -> 266/228, lean 1356/154 -> 263/170, lane-model
+  1186/448 -> 517/454; ~1 read in flight (~1,500/s at ~1 ms) -> 3,200-5,200/s, 6-12
+  queued. curves and lane-model are CPU-bound now
 - `meiolol.db`: crawl state (players, ladder_pages, match_queue and timeline_queue:
   pending, missing and failed only; stored ones leave) and tables kept forever (or
   `--keep-days` after game start: a rolling window): matches, participants (incl. final items, full rune page, and
