@@ -452,13 +452,14 @@ data/builds.log); the next site build picks them up.
 
 `meiolol site` reads the current patch's two files: a page per champion and role in the
 patch views (patch/build/<slug>-<role>.html, all/patch/...) when the role has 10%+ of
-the champion's games in the file; champion pages link to it from each role section (the
+the champion's games in the file; champion pages show the most played choice per kind
+in each role section (builds.strip) and link to it (the
 30-day views into their region's patch view; switches fall back to the champion page).
 Rows most played first, never by win rate, no "best" or "recommended": games and share
 on every row, a win rate only from 100 games and always with its 95% range (±1.96 SE),
 rows under 400 greyed, a "more data needed" note under 400 for the champion-role. Item,
 rune and spell icons hotlink Data Dragon like champion icons. Method page section
-`#builds`. Not yet: a builds index or nav entry, first-three skill levels, item timing,
+`#builds`. Levels 1-3: kind skill_start. Not yet: item timing, full skill sequence,
 builds by rank or matchup.
 
 ## Early or late (src/lean.zig, src/site/lean.zig)

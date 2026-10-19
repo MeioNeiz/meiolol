@@ -104,17 +104,18 @@ than lolalytics: our own edge is the lane curves, early/late lean, "Into which t
   usualK; learned.md 2026-10-20), its 8-in-10 range on hover. Left: under a filter
   other than the root view, filters.js reuses the root view's opponent strengths (the
   filter data has only this champion's games); the matchup page's delta (below)
-- Builds, runes and skill order on the first screen, data check 20 Oct: no per-seat
-  table needed (that blocker is the comp profiles'). The patch view's builds file
-  (`meiolol builds`, daily; 246k games on 16.20, 857 champion roles) already holds per
-  champion and role the rune pages, summoner spells, starting items, boots, first
-  finished items in order and skill priority with games and wins each; the build page
-  (builds.zig) draws them. The champion page needs only a compact top option per kind
-  in each role section (keystone and runes, spells, start, core 3, skill priority) in
-  place of the "Build:" link line, from site.view_builds[patch view] as builds.link
-  finds it. Limits: builds follow the patch view, so the Region/Rank/Period filters
-  don't move them (say so, or grey them when filtered); per-matchup builds for the
-  matchup page would need builds counted by lane opponent, a new builds file key
+- Done 20 Oct (night run, builds, 3d2d7e6): builds on the first screen. Each role
+  section's "Build:" link line is now a strip of the most played choice per kind from
+  the patch view's builds file (no per-seat table needed): rune page, shards, spells,
+  start, boots, first 3 items, levels 1-3, skill priority; each with games, share and,
+  from 100 games, "% won" (past-games fact, most played not ranked, no pick wording);
+  greyed under 400 games; says its scope and that the page's filters don't change it;
+  links the full build page. New builds kind skill_start (first three skill-ups), on
+  the build page too. Next: grey or hide the strip when a filter moves away from the
+  patch view's region (filters.js); full 1-18 skill sequence (a packed u32 key, 2 bits
+  a level, would fit the builds Key); shard icons (ddragon has none; CommunityDragon
+  StatMods); per-matchup builds for the matchup page need builds counted by lane
+  opponent, a new builds file key
 - Pick and ban rate like lolalytics (Jacob wrote "pbr": confirm whether he means PR
   and BR, or lolalytics' PBI, pick/ban influence)
 
