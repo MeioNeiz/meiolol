@@ -109,6 +109,9 @@ What changed from 11 Oct and what to check:
 - Check: the download page doesn't yet say queues or before/after lock-in (A1); the app
   text matches it as is. Update both together after the real champ select run
 - Check: the game count (about 210,000) against the home page on the day you paste
+- Daily Draft from 20 Oct (J10): recent games, per seat rank and scoreboard, still no
+  names; "with no player names" above stays true. Privacy rules audit:
+  docs/privacy-rules.md
 
 ## Application text (draft 2026-10-11, Jacob's voice; application started same day)
 

@@ -24,8 +24,9 @@ Controller: Jacob Maschler, trading as meiolol. Assessed: [DATE]. Next review: [
    API (match summaries, timelines, visible rank, champion mastery) for players chosen at
    random from every tier and region, identified by Riot's per-app encrypted PUUID
 2. **Statistics.** Turning that data into champion level and aggregate statistics
-   (matchup curves, win rates, the anonymised Daily Draft), published without any player
-   identity
+   (matchup curves, win rates) and the Daily Draft (one real game a day: per seat rank
+   and scoreboard, no names, Riot IDs, match ids or dates), published without player
+   names or identifiers
 3. **Your games** *(planned)*. Showing a player's own recent games, against those
    statistics, when anyone enters their Riot ID
 
@@ -85,8 +86,10 @@ seeing a player's recent games, which those sites already show. Children: the sa
 low-impact processing, no profiling or tracking, and the same right to object.
 
 **Safeguards.**
-- Aggregates only on public pages; the Daily Draft strips all identity (no names, Riot
-  IDs, match ids or dates)
+- Public pages show aggregates, and the Daily Draft shows one game a day with players
+  only as seats (no names, Riot IDs, match ids or dates). Its per-seat ranks and
+  scoreboard could be matched to the same game on lookup sites, which already show it
+  with names, so it adds no exposure beyond what those sites publish
 - Riot IDs kept 30 days at most; PUUIDs are per-app encrypted and meaningless outside
   meiolol; PUUIDs dropped from match rows after 24 months
 - Riot's erasure lists honoured, and stored players refreshed every 30 days (C7)

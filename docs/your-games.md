@@ -117,7 +117,8 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
 - Any Riot ID may be looked up, on legitimate interests: League policy has no consent
   rule for ranked history (C1), and that is how lookup sites work (C8). The page shows
   only the looked-up player's own lane: their champion, the lane opponent's champion and
-  the numbers. No other player's name or Riot ID, anywhere. Why the opponent's
+  the numbers. No other player's name or Riot ID, anywhere (self-imposed, not Riot or
+  law: J10 allows names, docs/privacy-rules.md). Why the opponent's
   champion: the comparison is a champion matchup, and the curves are champion level.
   Teammates and the other eight players do not appear at all
 - Stored per looked-up player: PUUID, Riot ID as Riot spells it, platform, visible rank,

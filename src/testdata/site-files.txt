@@ -102,7 +102,7 @@ matchup/support/pyke-vs-rakan.html 004336447f1a8ecf
 matchup/support/rakan-vs-pyke.html bb0a3a032a79cf8b
 matchup/top/darius-vs-mordekaiser.html 6db6133aa74cfe15
 matchup/top/mordekaiser-vs-darius.html cfa502520b034003
-method.html 2d2b7908ca26fb1a
+method.html 350c2ceb4fcaf593
 patch.html 110d927a1eddf25a
 patch/build/ahri-mid.html 45865821d12289d7
 patch/build/amumu-jungle.html 0bf3e42ad3fc98d4
@@ -140,7 +140,7 @@ patch/role/mid.html d042b6f43c5dbd9c
 patch/role/support.html 494b6131c1377b29
 patch/role/top.html c84fc2690a78b0b7
 pool.html 6113f7fc50494bdc
-privacy.html 6ac9fe162f50591f
+privacy.html 6a537102cb5a15a7
 robots.txt 331ea9090db0c9f6
 role/bot.html 160a104c52368f12
 role/jungle.html d1421cd72a3a8de2

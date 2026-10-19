@@ -60,9 +60,8 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\<div class="prose">
         \\<h1>Method</h1>
         \\<p class="lead">meiolol helps players understand how lane matchups unfold and compare
-        \\their own lane with the typical curve. Everything here is champion and aggregate
-        \\data from ranked games. It never shows other players and never names a "best
-        \\pick".</p>
+        \\their own lane with the typical curve. The statistics are champion and aggregate
+        \\data from ranked games, and it never names a "best pick".</p>
         \\<div class="note"><b>In short</b>
         \\<ul>
         \\<li>Ranked solo/duo games from Riot's official API, of players picked at random
@@ -232,7 +231,8 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\pick.</p>
         \\<h2>What meiolol never does</h2>
         \\<ul>
-        \\<li>Show other players' names, accounts or statistics.</li>
+        \\<li>Show other players' names or statistics in champ select, or anyone the game
+        \\hides (streamer mode).</li>
         \\<li>Pick, ban, lock or dodge for anyone, or name a single "best" champion.</li>
         \\<li>Infer hidden ranks or matchmaking rating.</li>
         \\</ul>
@@ -278,9 +278,9 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\and archive in your own browser (local storage); they are never sent to us, and
         \\clearing site data removes them. Pages also keep your view settings there, such
         \\as filters, sort orders and tabs.</p>
-        \\<p>Daily Draft puzzles are real ranked games with every player identity removed:
-        \\no names, Riot IDs, match ids or game dates, only champions, bans, patch, an
-        \\approximate rank tier and team totals. Each game is at least a week old; the date
+        \\<p>Daily Draft puzzles are real ranked games shown without names, Riot IDs, player
+        \\identifiers, match ids or game dates: at most champions, bans, patch, game length,
+        \\and each player's rank and game statistics (kills, gold and the like). The date
         \\shown is the puzzle's, not the game's.</p>
         \\<h2>Your games</h2>
         \\<p>When you enter a Riot ID on <a href="your.html">Your games</a>, we ask the Riot
@@ -314,11 +314,12 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\<h2>Game data from Riot Games</h2>
         \\<p>The statistics are computed from ranked match data provided by the Riot Games
         \\API. Raw match records, which include Riot's per-application encrypted player
-        \\identifiers, are stored privately and used only to compute and improve
-        \\champion level and aggregate statistics. Nothing identifying a player is
-        \\published. Riot IDs in raw records are removed within days, when the records are
-        \\archived, and player identifiers are removed from stored games 24 months after
-        \\the game. Deletion requests passed on by Riot Games are honoured, and you can ask
+        \\identifiers, are stored privately and used to compute the statistics and the
+        \\Daily Draft. We publish no Riot IDs or player identifiers from them; Daily Draft
+        \\shows players only as seats, and Your games shows a player's own games when their
+        \\Riot ID is looked up. Riot IDs in raw records are removed within days, when the
+        \\records are archived, and player identifiers are removed from stored games 24
+        \\months after the game. Deletion requests passed on by Riot Games are honoured, and you can ask
         \\us directly to delete any data about your account.</p>
         \\<h2>Contact</h2>
         \\<p>Questions or requests: <a href="mailto:{contact}">{contact}</a>.</p>

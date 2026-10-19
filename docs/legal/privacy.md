@@ -46,7 +46,9 @@ who is the controller of the data described here. Contact: privacy@meio.lol.
 ## The short version
 
 - No accounts, no cookies, no advertising, no analytics trackers
-- The public pages show champion and aggregate statistics only, never other players
+- The public pages show champion and aggregate statistics, and Daily Draft games with
+  players shown only as seats (no names); a player's games appear only when someone
+  looks up their Riot ID
 - To build those statistics we collect ranked match data from the official Riot Games
   API, which includes encrypted player identifiers. We never sell it or share it
 - You can object and have your data removed at any time by emailing us at
@@ -71,8 +73,9 @@ their Riot ID.
 in our data have never visited this site, so we can't ask for consent; instead we have
 weighed our interest against theirs in a written legitimate interests assessment,
 available on request. In short: the data is already visible in game and on many
-statistics sites, we collect only what the game exposes, we publish only aggregates, we
-never contact players, build advertising profiles or sell data, and anyone can object.
+statistics sites, we collect only what the game exposes, we publish no names or player
+identifiers outside a looked-up player's own games, we never contact players, build
+advertising profiles or sell data, and anyone can object.
 
 **Where.** On a computer in the United Kingdom run by us. The public website is served
 from Oracle Cloud in London. Backups and the archive are kept on our own machines, and
@@ -94,10 +97,11 @@ erasures are applied to them at the same time as to the live data.
 
 ## Daily Draft
 
-Each puzzle is a real ranked game with every player identity removed: no names, Riot
-IDs, match ids or dates; only champions, bans, patch, an approximate rank tier and team
-totals. Your guesses, streak and archive stay in your own browser (local storage). They
-are never sent to us; clearing this site's data removes them.
+Each puzzle is a real ranked game shown without names, Riot IDs, player identifiers,
+match ids or game dates: at most champions, bans, patch, game length, and each player's
+rank and game statistics (kills, gold and the like). The date shown is the puzzle's, not
+the game's. Your guesses, streak and archive stay in your own browser (local storage).
+They are never sent to us; clearing this site's data removes them.
 
 ## Your games
 
