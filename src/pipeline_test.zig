@@ -221,6 +221,9 @@ test "fixture games to stats, curves and the website" {
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
         // Lane curves: the estimate (curvefit.zig) on the page, k on the method page
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "estimated average", "First finished item", "More data needed" } },
+        // First screen: tiles with vs usual (champion.VsUsual), leads by minute and where
+        // the lead comes from beside one chart, XP and CS behind tabs
+        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<div class=\"tiles mu-tiles\">", "<span>Vs usual</span>", "Mordekaiser usually wins about", "<table class=\"mu-leads thin\">", "<th class=\"num\">14 min</th>", "Where the lead comes from", "from CS (", "Kills or assists on the lane opponent before 6 min", "<input type=\"radio\" name=\"metric\" id=\"m-xp\">", "<div class=\"mu-m mu-m-cs\">" } },
         // Either side's page, each swapping to the other
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<h1>Mordekaiser vs Darius</h1>", "class=\"swap\" href=\"darius-vs-mordekaiser.html\"" } },
         .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side" } },

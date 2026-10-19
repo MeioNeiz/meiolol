@@ -90,6 +90,14 @@ the champion pool block much more useful. More specifics on why a champion does 
 here (where the lead comes from: level 2/6 spikes, kills vs cs, first item timing, the
 leans and kit kinds that apply), not only that it does; the same normalised delta as
 the champion page.
+Done 20 Oct: first screen is tiles (win rate, vs usual as the champion page's, games,
+gold at 14, share ahead), a Gold/XP/CS table at 5/10/14/20 min and "Where the lead comes
+from" facts (gold at 14 split into CS at ~20 gold each and the rest, when half the gap
+is there, early kills, level 6 and first item timing, win share ahead/behind) beside one
+chart with Gold/Experience/CS tabs. Next: level 2 timing (curves format: a header field
+and a box rebuild of the curves), builds and runes that do well here (the patch view's
+builds file), the leans and kit kinds that apply, the champion pool block, then maybe
+fold the Lane and game table, which now repeats the facts.
 Already planned: pool first in the picker (B2), then bans from the pool's hard lanes
 (B3, Q3); public form waits on J2 (decisions.md). Patch day (B4, z 2.58).
 

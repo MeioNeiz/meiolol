@@ -9,6 +9,8 @@ const html = @import("html.zig");
 const comeback = @import("comeback.zig");
 const lanechart = @import("lanechart.zig");
 const text = @import("text.zig");
+const champion = @import("champion.zig");
+const tierlist = @import("tierlist.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -264,7 +266,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
             \\
         , .{});
     }
-    try summary(w, v, x, y);
+    try tiles(site, w, v, curves.baseline(r, .all), r, x, y);
 
     const vs = try variants(a, curves, r, x, y);
     if (vs.len > 1) {
@@ -284,15 +286,32 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     const prev = prevLine(site, r, x, y);
     const Chart = struct { title: []const u8, metric: curvesfile.Metric, unit: []const u8 };
     const charts = [_]Chart{
-        .{ .title = "Gold difference", .metric = .gold, .unit = "gold" },
-        .{ .title = "Experience difference", .metric = .xp, .unit = "XP" },
-        .{ .title = "CS difference", .metric = .cs, .unit = "CS" },
+        .{ .title = "Gold", .metric = .gold, .unit = "gold" },
+        .{ .title = "Experience", .metric = .xp, .unit = "XP" },
+        .{ .title = "CS", .metric = .cs, .unit = "CS" },
     };
+    // First screen: the stat block beside one chart, XP and CS behind tabs
+    try tpl.renderPart(w, "<div class=\"mu-top\"><div class=\"mu-stats\">\n", .{});
+    for (vs) |s| {
+        if (vs.len > 1) try tpl.renderPart(w, "<div class=\"exp exp-{key}\">\n", .{ .key = s.key });
+        try leads(w, s.v, x, y);
+        try why(w, s.v, r, x, y);
+        if (vs.len > 1) try tpl.renderPart(w, "</div>\n", .{});
+    }
+    try tpl.renderPart(w,
+        \\</div><div class="mu-curves"><div class="mu-tabs" role="radiogroup" aria-label="Curve">
+    , .{});
+    for (charts, 0..) |c, i| try tpl.renderPart(w,
+        \\<label><input type="radio" name="metric" id="m-{metric}"{checked}> {title}</label>
+    , .{ .metric = @tagName(c.metric), .checked = tpl.flag(i == 0, "checked"), .title = c.title });
+    try tpl.renderPart(w, "</div>\n", .{});
     for (charts) |c| {
-        try tpl.render(w, "<h2>{title}</h2>\n", .{ .title = c.title });
+        try tpl.renderPart(w, "<div class=\"mu-m mu-m-{metric}\">\n", .{ .metric = @tagName(c.metric) });
         if (c.metric == .gold) for (vs) |s| try verdict(w, s, vs.len > 1, x);
         try chart(w, vs, base, prev, c.metric, c.unit, x, y, when, lane);
+        try tpl.renderPart(w, "</div>\n", .{});
     }
+    try tpl.renderPart(w, "</div></div>\n", .{});
 
     try tpl.render(w, "<h2>Lane and game</h2>\n", .{});
     for (vs) |s| {
@@ -456,6 +475,202 @@ fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
             .behind = tpl.call(percent, .{ lane.wins_behind, lane.behind }),
         })),
     });
+}
+
+/// The first screen's numbers, as the champion page's tiles: x's win rate against y and
+/// against usual (champion.VsUsual, as the champion page's opponent grid) from the
+/// view's stats, games, then the lane curve's gold at lane_minute and how often x leads
+fn tiles(site: *const Site, w: *Writer, v: View, base: ?View, r: Role, x: Champ, y: Champ) !void {
+    const st = &site.stats;
+    const e = st.enemy(r, r, x.c, y.c);
+    const xr = st.champRole(r, x.c);
+    const yr = st.champRole(r, y.c);
+    const u = champion.usual(root.ratio(xr.wins, xr.games), root.ratio(yr.wins, yr.games));
+    const d = champion.VsUsual.of(e.wins, e.games, u, champion.usualK(st, r));
+    const z = 1.2816;
+    const i = curvesfile.lane_minute - 1;
+    const has_gold = i < v.minutes() and v.minute(i).n >= minuteFloor(v);
+    const g = v.estimate(.gold, i);
+    const g_range = if (has_gold) range(v, base, .gold, i) else .{ 0, 0 };
+    const lane = v.lane();
+    try tpl.render(w,
+        \\<div class="tiles mu-tiles"><div><span>Win rate</span><b class="{side}" style="opacity:{fade:.2}">{wr}</b><small>{x} against {y}</small></div><div title="{title}"><span>Vs usual</span><b class="vs" style="--c:{colour}">{pts}</b><small>usually {usual:.1}%</small></div><div><span>Games</span><b>{games}</b><small>{curve_games} in the lane curves</small></div>{gold}<div{lane_thin}><span>Ahead at {minute} min</span><b>{ahead}</b><small>in gold, of {lane_games}</small></div></div>
+        \\
+    , .{
+        .side = root.side(root.ratio(e.wins, e.games)),
+        .fade = curvesfile.fade(e.games),
+        .wr = tpl.call(pct1, .{ e.wins, e.games }),
+        .x = x.name,
+        .y = y.name,
+        .title = try site.arena.print("Against an opponent winning {d:.1}% in {s}, {s} usually wins about {d:.1}%; against {s} {d:.1}% in {d} games. Vs usual {f} points, pulled toward 0 the fewer the games; 8 in 10 between {f} and {f}", .{
+            100 * root.ratio(yr.wins, yr.games),       root.roleName(r),               x.name,
+            100 * u,                                   y.name,                         100 * root.ratio(e.wins, e.games),
+            e.games,                                   champion.Points{ .v = d.mean }, champion.Points{ .v = d.mean - z * d.sd },
+            champion.Points{ .v = d.mean + z * d.sd },
+        }),
+        .colour = tierlist.wrColour(0.5 + d.mean, tierlist.table_span),
+        .pts = champion.Points{ .v = d.mean },
+        .usual = 100 * u,
+        .games = e.games,
+        .curve_games = v.games(),
+        .gold = tpl.when(has_gold, tpl.t(
+            \\<div{thin}><span>Gold at {minute} min</span><b class="{side}">{mean}</b><small>8 in 10: {p10} to {p90}</small></div>
+        , .{
+            .thin = tpl.flag(thin(v), "class=\"stale\""),
+            .minute = curvesfile.lane_minute,
+            .side = if (clearSide(g) > 0) "up" else if (clearSide(g) < 0) "down" else "even",
+            .mean = tpl.call(signed, .{g.mean}),
+            .p10 = tpl.call(signed, .{g_range[0]}),
+            .p90 = tpl.call(signed, .{g_range[1]}),
+        })),
+        .lane_thin = tpl.flag(lane.games < thin_games, "class=\"stale\""),
+        .minute = curvesfile.lane_minute,
+        .ahead = tpl.call(percent, .{ lane.ahead, lane.games }),
+        .lane_games = lane.games,
+    });
+}
+
+/// "50.3%"; "-" without games
+fn pct1(w: *Writer, part: u32, whole: u32) !void {
+    if (whole == 0) return w.writeAll("-");
+    try w.print("{d:.1}%", .{100 * root.ratio(part, whole)});
+}
+
+/// Minutes the leads table shows, while games are still going
+const lead_minutes = [_]usize{ 5, 10, curvesfile.lane_minute, 20 };
+
+/// Gold, XP and CS difference at lead_minutes: the curve's estimated average, from x's
+/// side; faint within 2 standard errors of 0
+fn leads(w: *Writer, v: View, x: Champ, y: Champ) !void {
+    const last = reach(v);
+    try tpl.renderPart(w,
+        \\<table class="mu-leads{thin}"><thead><tr><th>{x} minus {y}</th>
+    , .{ .thin = tpl.when(thin(v), " thin"), .x = x.name, .y = y.name });
+    for (lead_minutes) |m| try tpl.renderPart(w, "<th class=\"num\">{m} min</th>", .{ .m = m });
+    try tpl.renderPart(w, "</tr></thead><tbody>\n", .{});
+    const rows = [_]struct { []const u8, curvesfile.Metric }{ .{ "Gold", .gold }, .{ "Experience", .xp }, .{ "CS", .cs } };
+    for (rows) |row| {
+        try tpl.renderPart(w, "<tr><td>{label}</td>", .{ .label = row[0] });
+        for (lead_minutes) |m| {
+            if (m > last) {
+                try tpl.renderPart(w, "<td class=\"num\">-</td>", .{});
+                continue;
+            }
+            const e = v.estimate(row[1], m - 1);
+            const s = clearSide(e);
+            try tpl.renderPart(w, "<td class=\"num {side}\">{v}</td>", .{
+                .side = if (s > 0) "up" else if (s < 0) "down" else "even",
+                .v = tpl.call(signed, .{e.mean}),
+            });
+        }
+        try tpl.renderPart(w, "</tr>\n", .{});
+    }
+    try tpl.renderPart(w, "<tr class=\"n\"><td>Games still going</td>", .{});
+    for (lead_minutes) |m| try tpl.renderPart(w, "<td class=\"num\">{n}</td>", .{ .n = if (m > last) 0 else v.minute(m - 1).n });
+    try tpl.renderPart(w, "</tr>\n</tbody></table>\n", .{});
+}
+
+/// Lane minion gold per CS before 14 minutes: 3 melee (21), 3 casters (14) a wave and a
+/// cannon (60 to 70) every third, 381 gold over 19 minions. Jungle camps and support
+/// CS differ, so those roles get no split
+const gold_per_cs = 20;
+
+/// Short facts from the lane curve on where x's lead or deficit at lane_minute comes
+/// from: CS against the rest, when half of it is there, early kills, level 6 and first
+/// item timing, and how often the side ahead goes on to win. Counts, no advice
+fn why(w: *Writer, v: View, r: Role, x: Champ, y: Champ) !void {
+    const i = curvesfile.lane_minute - 1;
+    if (i >= v.minutes() or v.minute(i).n < minuteFloor(v)) return;
+    try tpl.renderPart(w,
+        \\<h3 class="mu-h">Where the lead comes from</h3><ul class="mu-why{thin}">
+        \\
+    , .{ .thin = tpl.when(thin(v), " thin") });
+    const gold = v.estimate(.gold, i).mean;
+    const cs = v.estimate(.cs, i).mean;
+    const split = r != .jungle and r != .utility;
+    const cs_gold = round10(@as(i32, cs) * gold_per_cs);
+    try tpl.renderPart(w, "<li><b>{gold} gold</b> at {minute} min{cs_only}{split}{half}</li>\n", .{
+        .gold = tpl.call(signed, .{gold}),
+        .minute = curvesfile.lane_minute,
+        .cs_only = tpl.when(!split, tpl.t(" with {cs} CS", .{ .cs = tpl.call(signed, .{cs}) })),
+        .split = tpl.when(split, tpl.t(": about {cs_gold} from CS ({cs} CS at about {per} gold), {rest} from kills, assists, plates and the rest", .{
+            .cs_gold = tpl.call(signed, .{cs_gold}),
+            .cs = tpl.call(signed, .{cs}),
+            .per = gold_per_cs,
+            .rest = tpl.call(signed, .{round10(@as(i32, gold) - cs_gold)}),
+        })),
+        .half = if (halfBy(v)) |m| tpl.t("; half of it is there by {m} min", .{ .m = m }) else null,
+    });
+    if (v.games() > 0) try tpl.renderPart(w,
+        \\<li>Kills or assists on the lane opponent before 6 min: {x} in {k0} of games, {y} in {d0}; 6 to {minute} min: {k1} against {d1}</li>
+        \\
+    , .{
+        .x = x.name,
+        .y = y.name,
+        .minute = curvesfile.lane_minute,
+        .k0 = tpl.call(percent, .{ v.kills(0), v.games() }),
+        .d0 = tpl.call(percent, .{ v.deaths(0), v.games() }),
+        .k1 = tpl.call(percent, .{ v.kills(1), v.games() }),
+        .d1 = tpl.call(percent, .{ v.deaths(1), v.games() }),
+    });
+    try timingFact(w, "Level 6", v.level6());
+    try timingFact(w, "First finished item", v.firstItem());
+    const lane = v.lane();
+    if (lane.ahead >= min_minute_games and lane.behind >= min_minute_games) try tpl.renderPart(w,
+        \\<li>Ahead in gold at {minute} min, {x} won {wa} of {ahead} games; behind, {wb} of {behind}</li>
+        \\
+    , .{
+        .minute = curvesfile.lane_minute,
+        .x = x.name,
+        .wa = tpl.call(percent, .{ lane.wins_ahead, lane.ahead }),
+        .ahead = lane.ahead,
+        .wb = tpl.call(percent, .{ lane.wins_behind, lane.behind }),
+        .behind = lane.behind,
+    });
+    try tpl.renderPart(w, "</ul>\n", .{});
+}
+
+fn round10(v: i32) i32 {
+    return @divTrunc(v + if (v < 0) @as(i32, -5) else 5, 10) * 10;
+}
+
+/// The first minute x's estimated gold difference reaches half of its lane_minute one,
+/// on the same side; null while that is about even (min_lead_gold)
+fn halfBy(v: View) ?usize {
+    const i = curvesfile.lane_minute - 1;
+    const g: i32 = v.estimate(.gold, i).mean;
+    if (@abs(g) < min_lead_gold) return null;
+    for (0..i) |m| {
+        const e: i32 = v.estimate(.gold, m).mean;
+        if ((g > 0 and 2 * e >= g) or (g < 0 and 2 * e <= g)) return m + 1;
+    }
+    return curvesfile.lane_minute;
+}
+
+/// "Level 6 at 5:30 against 5:18 (medians), 12 s later"; none unless both sides got
+/// there in most games
+fn timingFact(w: *Writer, label: []const u8, both: [2]u16) !void {
+    if (both[0] == 0 or both[1] == 0) return;
+    const diff = @as(i32, both[0]) - @as(i32, both[1]);
+    try tpl.renderPart(w, "<li>{label} at {a} against {b} (medians){gap}</li>\n", .{
+        .label = label,
+        .a = tpl.call(clock, .{both[0]}),
+        .b = tpl.call(clock, .{both[1]}),
+        .gap = tpl.when(diff != 0, tpl.t(", {d} {side}", .{
+            .d = tpl.call(duration, .{@abs(diff)}),
+            .side = if (diff < 0) "earlier" else "later",
+        })),
+    });
+}
+
+fn clock(w: *Writer, secs: u16) !void {
+    try w.print("{d}:{d:0>2}", .{ secs / 60, secs % 60 });
+}
+
+/// "12 s", "2:21"
+fn duration(w: *Writer, secs: u32) !void {
+    if (secs < 60) return w.print("{d} s", .{secs});
+    try w.print("{d}:{d:0>2}", .{ secs / 60, secs % 60 });
 }
 
 /// One plain line above the gold chart: who is ahead by lane_minute and since when, only
@@ -883,4 +1098,53 @@ test verdict {
     aw.clearRetainingCapacity();
     try verdict(&aw.writer, .{ .v = .{ .curve = &thin_cv, .flipped = false }, .key = "any", .label = "" }, false, x);
     try std.testing.expectEqualStrings("", aw.written());
+}
+
+test why {
+    const gpa = std.testing.allocator;
+    var minutes: [curvesfile.lane_minute]curvesfile.Minute = @splat(.{ .n = 400, .gold = .{}, .xp = .{}, .cs = .{} });
+    var header = std.mem.zeroes(curvesfile.Header);
+    header.games = 400;
+    header.own = 800;
+    header.lane_games = 400;
+    header.lane_a = 250;
+    header.lane_b = 150;
+    header.a_wins_lane_a = 160;
+    header.b_wins_lane_b = 96;
+    header.a_kills_b = .{ 120, 200, 0 };
+    header.b_kills_a = .{ 80, 220, 0 };
+    header.level6_a = 330;
+    header.level6_b = 342;
+    header.first_item_a = 853;
+    header.first_item_b = 712;
+    for (&minutes, 0..) |*m, i| {
+        m.est[0] = .{ .mean = @intCast(60 * i), .se = 20 };
+        m.est[2] = .{ .mean = @intCast(i), .se = 1 };
+    }
+    const x: Champ = .{ .c = 0, .id = 1, .key = "", .name = "Ahri", .slug = "", .banned = 0, .games = 0 };
+    const y: Champ = .{ .c = 1, .id = 2, .key = "", .name = "Zed", .slug = "", .banned = 0, .games = 0 };
+    const cv: curvesfile.Curve = .{ .header = &header, .minutes = &minutes };
+    var aw: Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try why(&aw.writer, .{ .curve = &cv, .flipped = false }, .middle, x, y);
+    // 780 gold and 13 CS at 14: 260 of it from CS; half (390) first reached at minute 8
+    try std.testing.expectEqualStrings(
+        \\<h3 class="mu-h">Where the lead comes from</h3><ul class="mu-why">
+        \\<li><b>+780 gold</b> at 14 min: about +260 from CS (+13 CS at about 20 gold), +520 from kills, assists, plates and the rest; half of it is there by 8 min</li>
+        \\<li>Kills or assists on the lane opponent before 6 min: Ahri in 30% of games, Zed in 20%; 6 to 14 min: 50% against 55%</li>
+        \\<li>Level 6 at 5:30 against 5:42 (medians), 12 s earlier</li>
+        \\<li>First finished item at 14:13 against 11:52 (medians), 2:21 later</li>
+        \\<li>Ahead in gold at 14 min, Ahri won 64% of 250 games; behind, 36% of 150</li>
+        \\</ul>
+        \\
+    , aw.written());
+
+    // From Zed's side in the jungle: no CS split, the deficit's half by minute 8 too
+    aw.clearRetainingCapacity();
+    try why(&aw.writer, .{ .curve = &cv, .flipped = true }, .jungle, y, x);
+    try std.testing.expect(std.mem.startsWith(u8, aw.written(),
+        \\<h3 class="mu-h">Where the lead comes from</h3><ul class="mu-why">
+        \\<li><b>-780 gold</b> at 14 min with -13 CS; half of it is there by 8 min</li>
+        \\<li>Kills or assists on the lane opponent before 6 min: Zed in 20% of games, Ahri in 30%
+    ));
 }
