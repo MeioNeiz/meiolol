@@ -7,6 +7,7 @@ pub const https = @import("https.zig");
 pub const session = @import("session.zig");
 pub const me = @import("me.zig");
 pub const Watch = @import("watch.zig").Watch;
+pub const mock = @import("mock.zig");
 
 pub const Response = https.Response;
 
@@ -18,7 +19,9 @@ pub const Client = struct {
 
     /// Body allocated with `gpa`
     pub fn get(c: Client, path: []const u8) !Response {
-        return https.get(c.gpa, c.io, c.credentials.port, c.credentials.password, path);
+        const creds = c.credentials;
+        if (creds.plain) return https.getPlain(c.gpa, c.io, creds.port, creds.password, path);
+        return https.get(c.gpa, c.io, creds.port, creds.password, path);
     }
 
     /// Body of a 2xx reply, else error.HttpStatus

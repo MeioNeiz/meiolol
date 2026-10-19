@@ -1,0 +1,18 @@
+{
+  "_comment": "Ranked solo/duo: the first pick (cell 0, top) locks Ahri for me (cell 2, mid), I lock Darius for them, and we trade in finalisation. The client changes championId and leaves the pick actions as they were",
+  "queue": 420,
+  "local_cell": 2,
+  "steps": [
+    {"wait": 1, "phase": "ChampSelect", "timer": "PLANNING", "intent": {"2": "Ahri"}},
+    {"wait": 2, "timer": "BAN_PICK", "ban": {"0": "Yasuo", "2": "Zed", "5": "Samira"}, "expect": {"bans": 3}},
+    {"wait": 2, "lock": {"0": "Ahri"}, "note": "first pick takes Ahri for mid",
+     "expect": {"allies": ["Ahri"], "me": "Ahri", "locked": false}},
+    {"wait": 2, "lock": {"5": "Graves", "6": "Gnar"}},
+    {"wait": 2, "lock": {"1": "Vi", "2": "Darius"}, "expect": {"me": "Darius", "locked": true, "allies": ["Ahri", "Vi"]}},
+    {"wait": 2, "lock": {"7": "Syndra", "8": "Ashe"}},
+    {"wait": 2, "lock": {"3": "Jinx", "4": "Lulu"}},
+    {"wait": 2, "lock": {"9": "Braum"}},
+    {"wait": 2, "timer": "FINALIZATION", "swap": [0, 2], "note": "traded: Ahri mine, Darius to top",
+     "expect": {"me": "Ahri", "locked": true, "allies": ["Darius", "Vi", "Jinx", "Lulu"]}}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "_comment": "Ranked solo/duo: a moment without a session between phases, then someone dodges mid-picks; back to the lobby and the queue, a fresh champ select, then the client goes home",
+  "queue": 420,
+  "local_cell": 1,
+  "steps": [
+    {"wait": 1, "phase": "ChampSelect", "timer": "PLANNING", "intent": {"1": "Lee Sin"},
+     "expect": {"role": "jungle", "me": "Lee Sin"}},
+    {"wait": 1, "session": false, "note": "session gone for a moment", "expect": {"between": true}},
+    {"wait": 1, "session": true, "timer": "BAN_PICK", "ban": {"0": "Zed"}, "expect": {"bans": 1}},
+    {"wait": 2, "lock": {"0": "Garen"}},
+    {"wait": 2, "lock": {"5": "Ahri", "6": "Viego"}, "expect": {"enemies": ["Ahri", "Viego"]}},
+    {"wait": 2, "phase": "Lobby", "note": "someone dodged", "expect": {"phase": "Lobby"}},
+    {"wait": 2, "phase": "Matchmaking", "expect": {"phase": "Matchmaking"}},
+    {"wait": 2, "phase": "ChampSelect", "timer": "PLANNING", "note": "a fresh champ select",
+     "expect": {"role": "jungle", "me": "", "enemies": [], "allies": [], "bans": 0}},
+    {"wait": 2, "phase": "None", "note": "left for the home screen", "expect": {"phase": "None"}}
+  ]
+}

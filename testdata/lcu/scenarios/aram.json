@@ -1,0 +1,14 @@
+{
+  "_comment": "ARAM: no positions, a random champion each and a bench; the app has no lane to show",
+  "queue": 450,
+  "local_cell": 2,
+  "positions": ["", "", "", "", "", "", "", "", "", ""],
+  "pick_order": [],
+  "steps": [
+    {"wait": 1, "phase": "ChampSelect", "timer": "FINALIZATION",
+     "hover": {"0": "Ashe", "1": "Sion", "2": "Lux", "3": "Draven", "4": "Nami"},
+     "expect": {"role": null, "me": "Lux", "locked": false}},
+    {"wait": 3, "swap": [2, 4], "note": "swapped with a teammate", "expect": {"role": null, "me": "Nami"}},
+    {"wait": 3, "phase": "GameStart", "expect": {"phase": "GameStart"}}
+  ]
+}

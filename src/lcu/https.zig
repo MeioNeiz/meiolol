@@ -79,15 +79,8 @@ pub fn getTrusting(
         else => return err,
     };
 
-    var auth_buf: [512]u8 = undefined;
-    const auth = try basicAuth(&auth_buf, password);
-    const w = &client.writer;
-    try w.print(
-        "GET {s} HTTP/1.1\r\nHost: 127.0.0.1:{d}\r\nAuthorization: Basic {s}\r\n" ++
-            "Accept: application/json\r\nConnection: close\r\n\r\n",
-        .{ path, port, auth },
-    );
-    try w.flush();
+    try writeRequest(&client.writer, port, password, path);
+    try client.writer.flush();
     try stream_writer.interface.flush();
 
     return readResponse(gpa, &client.reader) catch |err| switch (err) {
@@ -96,6 +89,42 @@ pub fn getTrusting(
             if (stream_reader.err) |e| return e;
             return err;
         },
+        else => return err,
+    };
+}
+
+fn writeRequest(w: *std.Io.Writer, port: u16, password: []const u8, path: []const u8) !void {
+    var auth_buf: [512]u8 = undefined;
+    const auth = try basicAuth(&auth_buf, password);
+    try w.print(
+        "GET {s} HTTP/1.1\r\nHost: 127.0.0.1:{d}\r\nAuthorization: Basic {s}\r\n" ++
+            "Accept: application/json\r\nConnection: close\r\n\r\n",
+        .{ path, port, auth },
+    );
+}
+
+/// `get` without TLS, for the mock client (lcu/mock.zig) only: lockfile.Credentials.plain
+pub fn getPlain(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    port: u16,
+    password: []const u8,
+    path: []const u8,
+) !Response {
+    const address: std.Io.net.IpAddress = .{ .ip4 = .loopback(port) };
+    const stream = address.connect(io, .{ .mode = .stream }) catch |err| switch (err) {
+        error.ConnectionRefused => return error.ClientNotRunning,
+        else => return err,
+    };
+    defer stream.close(io);
+    var read_buf: [16 * 1024]u8 = undefined;
+    var write_buf: [4096]u8 = undefined;
+    var reader = stream.reader(io, &read_buf);
+    var writer = stream.writer(io, &write_buf);
+    try writeRequest(&writer.interface, port, password, path);
+    try writer.interface.flush();
+    return readResponse(gpa, &reader.interface) catch |err| switch (err) {
+        error.ReadFailed => return reader.err orelse err,
         else => return err,
     };
 }

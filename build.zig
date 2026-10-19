@@ -72,6 +72,19 @@ pub fn build(b: *std.Build) void {
         shot_step.dependOn(&run.step);
     }
 
+    // A mock League client for trying the app without League (deploy/mock-cs.sh)
+    const mock_exe = b.addExecutable(.{ .name = "meiolol-mock-lcu", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/mocklcu_main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "core", .module = m.core }},
+    }) });
+    const mock_install = b.addInstallArtifact(mock_exe, .{});
+    const mock_run = b.addRunArtifact(mock_exe);
+    mock_run.addPassthruArgs();
+    b.step("mock-lcu", "Run a mock League client (-- SCENARIO [--speed X] [--manual])").dependOn(&mock_run.step);
+    b.step("mock-lcu-install", "Install meiolol-mock-lcu only").dependOn(&mock_install.step);
+
     // Host build for Mac CPU jobs in zig-out/bin, gpu-box build in zig-out/gpu-box
     const cand = b.option([]const u8, "cand", "Lab agent candidate dir (docs/lab-agent.md)") orelse "src/lab/cand/base";
     const lab_mod = labModule(b, target, optimize, cand);
@@ -119,6 +132,7 @@ pub fn build(b: *std.Build) void {
     }
     if (desktopExe(b, windows, .Debug)) |exe| ci.dependOn(&exe.step);
     if (shot) |exe| ci.dependOn(&exe.step);
+    ci.dependOn(&mock_exe.step);
     // Debug: ci only needs it to compile, and ReleaseFast spends up to a minute in LLVM
     const lab_check = labModule(b, b.resolveTargetQuery(gpu_box), .Debug, cand);
     ci.dependOn(&b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_check }).step);

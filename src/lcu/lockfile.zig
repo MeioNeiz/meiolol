@@ -8,6 +8,9 @@ pub const Credentials = struct {
     password: []const u8,
     /// From the lockfile; the process list does not give it
     pid: ?u32 = null,
+    /// Plain HTTP, no certificate: only a mock client (deploy/mock-cs.sh) through an
+    /// override lockfile ending `:http`. The real client always speaks HTTPS
+    plain: bool = false,
 };
 
 pub const default_paths: []const []const u8 = switch (builtin.os.tag) {
@@ -24,10 +27,12 @@ pub fn parse(content: []const u8) !Credentials {
     const port = it.next() orelse return error.BadLockfile;
     const password = it.next() orelse return error.BadLockfile;
     if (password.len == 0) return error.BadLockfile;
+    const protocol = it.next() orelse "https";
     return .{
         .port = std.fmt.parseInt(u16, port, 10) catch return error.BadLockfile,
         .password = password,
         .pid = std.fmt.parseInt(u32, pid, 10) catch null,
+        .plain = std.mem.eql(u8, protocol, "http"),
     };
 }
 
@@ -77,6 +82,7 @@ pub fn discover(arena: std.mem.Allocator, io: std.Io, override: ?[]const u8) !Fo
     for (default_paths) |path| {
         const content = readSmall(arena, io, path) catch continue;
         const creds = parse(content) catch continue;
+        if (creds.plain) continue;
         return .{ .credentials = creds, .source = .lockfile, .path = path };
     }
     // The process list costs ~1.5 s of CPU on Windows (PowerShell); pollers call this
@@ -158,6 +164,8 @@ test "parse lockfile" {
     try testing.expectEqual(54321, c.port);
     try testing.expectEqualStrings("AbC-dEf_123", c.password);
     try testing.expectEqual(21876, c.pid.?);
+    try testing.expect(!c.plain);
+    try testing.expect((try parse("LeagueClient:1:2:pw:http")).plain);
     try testing.expectError(error.BadLockfile, parse(""));
     try testing.expectError(error.BadLockfile, parse("LeagueClient:1:notaport:pw:https"));
     try testing.expectError(error.BadLockfile, parse("LeagueClient:1:123"));

@@ -1,0 +1,23 @@
+{
+  "_comment": "Ranked solo/duo, me top in cell 3 (picks fourth), the enemy top (cell 5) locks Darius first. Enemy positions hidden, so the app guesses who is top",
+  "queue": 420,
+  "local_cell": 3,
+  "positions": ["jungle", "middle", "bottom", "top", "utility", "", "", "", "", ""],
+  "tier": "SILVER",
+  "mastery": {"Garen": 150000, "Sett": 80000, "Malphite": 20000, "Ornn": 9000},
+  "steps": [
+    {"wait": 1, "phase": "ChampSelect", "timer": "PLANNING", "intent": {"3": "Garen", "2": "Jinx"},
+     "expect": {"role": "top", "me": "Garen", "enemies": []}},
+    {"wait": 2, "timer": "BAN_PICK", "ban": {"0": "Yasuo", "1": "Zed", "2": "Pyke", "3": "Teemo", "4": "Blitzcrank", "5": "Samira", "6": "Akali", "7": "Kai'Sa", "8": "Lux", "9": "Viego"},
+     "expect": {"bans": 10}},
+    {"wait": 2, "lock": {"0": "Vi"}},
+    {"wait": 2, "lock": {"5": "Darius", "6": "Ahri"}, "note": "their top is in: counters now",
+     "expect": {"enemies": ["Darius", "Ahri"], "me": "Garen", "locked": false}},
+    {"wait": 2, "lock": {"1": "Orianna", "2": "Jinx"}},
+    {"wait": 2, "lock": {"7": "Lee Sin", "8": "Ezreal"}},
+    {"wait": 2, "hover": {"3": "Malphite"}, "expect": {"me": "Malphite", "locked": false, "allies": ["Vi", "Orianna", "Jinx"]}},
+    {"wait": 2, "lock": {"3": "Malphite", "4": "Nautilus"}, "expect": {"me": "Malphite", "locked": true}},
+    {"wait": 2, "lock": {"9": "Karma"}, "expect": {"enemies": ["Darius", "Ahri", "Lee Sin", "Ezreal", "Karma"]}},
+    {"wait": 2, "timer": "FINALIZATION"}
+  ]
+}

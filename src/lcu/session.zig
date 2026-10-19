@@ -112,7 +112,7 @@ pub fn parse(arena: std.mem.Allocator, json: []const u8) !ChampSelect {
         // championId is the lock or the hover during the player's own turn; before
         // that only the pick intent shows
         const champion = id(m.championId) orelse id(m.championPickIntent);
-        const locked = champion != null and lockedBy(s.actions, m.cellId, champion.?);
+        const locked = champion != null and lockedBy(s.actions, m.cellId);
         const role = Role.fromLcu(m.assignedPosition orelse "");
         if (m.cellId == s.localPlayerCellId) {
             cs.my_role = role;
@@ -158,10 +158,11 @@ fn id(maybe: ?i64) ?u32 {
     return if (raw > 0 and raw <= std.math.maxInt(u32)) @intCast(raw) else null;
 }
 
-fn lockedBy(actions: []const []const Action, cell: i64, champion: u32) bool {
+/// Any completed pick: after a trade the action still holds the champion first locked
+fn lockedBy(actions: []const []const Action, cell: i64) bool {
     for (actions) |turn| for (turn) |a| {
         if (a.actorCellId == cell and a.completed and std.mem.eql(u8, a.type, "pick") and
-            id(a.championId) == champion) return true;
+            id(a.championId) != null) return true;
     };
     return false;
 }
