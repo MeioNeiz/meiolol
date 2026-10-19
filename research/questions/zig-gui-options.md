@@ -7,7 +7,7 @@ description: Which GUI library fits a small Windows desktop window built in Zig 
 ---
 # Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS?
 
-Feeds: docs/plan.md "Open decisions" GUI library; next step 4 (desktop app)
+Feeds: docs/plan/decisions.md "Open decisions" GUI library; next step 4 (desktop app)
 
 ## Answer
 

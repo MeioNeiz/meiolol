@@ -9,8 +9,8 @@ description: How should champion-into-comp effects at several levels (team damag
 
 Feeds: how champgroups' kit groups (docs/model.md "Kit groups and a property scan") get
 into the admin Draft tester's champion-into-comp terms (draft-comp.json, docs/model.md
-"Champions into comps"), and later the champion-page and suggest reasons (docs/plan.md
-"Where the app goes next" steps 2-3).
+"Champions into comps"), and later the champion-page and suggest reasons
+(docs/plan/data-and-model.md "Where the app goes next" steps 2-3).
 
 Context (18 Oct): the shipped model (score.zig) has champion strength, ally pairs,
 matchups and a team damage-mix term; champcomp adds per-champion-role slopes on 16

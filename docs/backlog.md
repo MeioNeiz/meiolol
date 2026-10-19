@@ -3,7 +3,8 @@
 Next steps by area, written 11-17 Oct by the sessions that owned each area, moved out of
 docs/plan.md on 18 Oct. plan.md "Now" ranks what matters; this is the pool it draws on.
 Some items are done or overtaken: check the code and git log before acting, and move an
-item into plan.md "Now" when you pick it up. "was meiolol-xx": the session that wrote it.
+item into its docs/plan/ area file when you pick it up. "was meiolol-xx": the session
+that wrote it.
 
 ## Ops and data (was meiolol-de, data-safety-af)
 

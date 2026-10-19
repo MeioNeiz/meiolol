@@ -7,7 +7,7 @@ description: What in Zig 0.17 breaks meiolol, and how much work is the move from
 ---
 # What in Zig 0.17 breaks meiolol, and how much work is the move from 0.16?
 
-Feeds: docs/zig-0.17.md; docs/plan.md "Open decisions" Zig 0.17 move
+Feeds: docs/zig-0.17.md; docs/plan/decisions.md "Open decisions" Zig 0.17 move
 
 ## Answer
 

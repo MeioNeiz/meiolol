@@ -7,7 +7,7 @@ description: Is upgrading the Oracle account to Pay As You Go safe (no surprise 
 ---
 # Is upgrading the Oracle account to Pay As You Go safe (no surprise charges) and does it get a faster box?
 
-Feeds: docs/hosting.md (A1 target), docs/plan.md storage and hosting options (3)
+Feeds: docs/hosting.md (A1 target), docs/plan/decisions.md storage and hosting options (3)
 
 ## Answer
 
