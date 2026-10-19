@@ -13,11 +13,19 @@ const ROLES = [
 ];
 const roleName = Object.fromEntries(ROLES);
 const roleIndex = Object.fromEntries(ROLES.map(([r], i) => [r, i]));
+// Practice levels, by how clear the draft is (src/learn.zig Difficulty): one option
+// brings the damage type the team lacks, then two, then a balanced team
 const LEVELS = [
-  ["easy", "Easy"],
-  ["medium", "Medium"],
-  ["hard", "Hard"],
+  ["easy", "Level 1", "Clear-cut"],
+  ["medium", "Level 2", "Two fit"],
+  ["hard", "Level 3", "Close call"],
 ];
+const LEVEL_NEXT = {
+  medium: "Two options now bring what your team lacks: the lane and the patch decide.",
+  hard: "Balanced teams: nothing in the draft separates the options clearly.",
+};
+// Drills a level, then the next one is offered
+const LEVEL_SIZE = 5;
 const KEY = "meiolol.learn.v1";
 // A champion counts as playing a role from this many games there (champions.json)
 const POOL_MIN_GAMES = 15;
@@ -31,6 +39,8 @@ const THIN = 200;
 const MIN_REASON_PP = 0.3;
 // Pairs with fewer games are mostly chance at today's volumes
 const MIN_REASON_GAMES = 50;
+// Reason lines per option in the reveal
+const MAX_REASONS = 2;
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -40,17 +50,32 @@ const el = (tag, cls, text) => {
   return e;
 };
 const pct = (part, whole) => Math.round((100 * part) / whole);
+const button = (cls, text, onclick) => {
+  const b = el("button", cls, text);
+  b.type = "button";
+  b.onclick = onclick;
+  return b;
+};
+
+const fresh = () => ({
+  lessons: {},
+  practice: 0,
+  role: "",
+  level: "",
+  pool: [],
+  levels: {},
+  view: "",
+  lesson: "",
+});
 
 function loadState() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && typeof s === "object" && !Array.isArray(s)) {
-      return { lessons: {}, practice: 0, role: "", level: "easy", pool: [], ...s };
-    }
+    if (s && typeof s === "object" && !Array.isArray(s)) return { ...fresh(), ...s };
   } catch {
     // Unreadable: start afresh
   }
-  return { lessons: {}, practice: 0, role: "", level: "easy", pool: [] };
+  return fresh();
 }
 
 const state = loadState();
@@ -73,17 +98,49 @@ function term(key, text) {
   return d;
 }
 
-function renderProgress() {
-  const keys = [...document.querySelectorAll(".lesson")].map((l) => l.dataset.lesson);
-  const done = keys.filter((k) => lessonDone(k)).length;
-  const n = state.practice;
-  $("progress").textContent =
-    `Lessons done: ${done} of ${keys.length} · Practice drafts played: ${n}`;
+const levelDone = (l) => (state.levels[l] || 0) >= LEVEL_SIZE;
+const levelIndex = (l) => LEVELS.findIndex(([k]) => k === l);
+// The chosen level, else the first not yet done
+function currentLevel() {
+  if (levelIndex(state.level) >= 0) return state.level;
+  const open = LEVELS.find(([l]) => !levelDone(l));
+  return (open || LEVELS[0])[0];
 }
 
-// ---- Lessons ----
+function renderTabs() {
+  const done = lessonEls.filter((l) => lessonDone(l.dataset.lesson)).length;
+  $("t-lessons").textContent = `${done}/${lessonEls.length}`;
+  $("t-practice").textContent = LEVELS[levelIndex(currentLevel())][1];
+}
+
+function showView(view, focus = false) {
+  state.view = view;
+  save();
+  for (const t of document.querySelectorAll(".learn-tabs button")) {
+    t.setAttribute("aria-selected", t.dataset.view === view);
+  }
+  for (const s of document.querySelectorAll("section[data-view]")) s.hidden = s.dataset.view !== view;
+  if (focus) document.querySelector(`.learn-tabs [data-view="${view}"]`).focus();
+}
+
+function setupTabs() {
+  document.body.classList.add("learn-js");
+  const tabs = document.querySelector(".learn-tabs");
+  tabs.hidden = false;
+  for (const t of tabs.querySelectorAll("button")) t.onclick = () => showView(t.dataset.view);
+  const hash = location.hash.slice(1);
+  const allDone = lessonEls.every((l) => lessonDone(l.dataset.lesson));
+  const view =
+    hash === "practice" || hash === "lessons"
+      ? hash
+      : state.view || (allDone ? "practice" : "lessons");
+  showView(view);
+}
+
+// ---- Lessons: one at a time, the text then each question on its own screen ----
 
 const checks = JSON.parse($("checks").textContent);
+const lessonEls = [...document.querySelectorAll(".lesson")];
 
 function lessonDone(key) {
   const l = state.lessons[key];
@@ -104,104 +161,180 @@ function icon(id, size) {
   return img;
 }
 
-// `focus`: after a re-render the clicked button is gone, so keyboard focus moves to the
-// answer's explanation ({why: i}) or the first choice ({first: true})
-function renderCheck(box, focus = null) {
-  const key = box.dataset.lesson;
-  const qs = checks[key] || [];
-  // Kept in state only once answered or opened, so rendering marks nothing as started
+// Screen within the current lesson: 0 the text, i the i-th question
+let step = 0;
+
+function currentLessonEl() {
+  return (
+    lessonEls.find((l) => l.dataset.lesson === state.lesson) ||
+    lessonEls.find((l) => !lessonDone(l.dataset.lesson)) ||
+    lessonEls[0]
+  );
+}
+
+function lessonMine(key) {
   const mine = state.lessons[key] || { seen: true, answers: [] };
   mine.answers ||= [];
-  box.querySelectorAll(".q").forEach((q) => q.remove());
-  // Focused once in the document; focus() on a detached element does nothing
-  let focusAfter = null;
-  qs.forEach((q, i) => {
+  return mine;
+}
+
+function openLesson(key, at = 0, focus = false) {
+  state.lesson = key;
+  state.lessons[key] = lessonMine(key);
+  save();
+  step = at;
+  renderLesson(focus ? "head" : null);
+}
+
+function renderDots() {
+  const dots = $("lesson-dots");
+  dots.hidden = false;
+  dots.replaceChildren();
+  const cur = currentLessonEl();
+  lessonEls.forEach((l, i) => {
+    const key = l.dataset.lesson;
+    const li = el("li");
+    const title = l.querySelector(".lesson-head > span:nth-child(2)").firstChild.textContent.trim();
+    const b = button(lessonDone(key) ? "done" : "", `${i + 1}`, () => openLesson(key, 0, true));
+    b.title = title;
+    b.setAttribute("aria-label", `Lesson ${i + 1}: ${title}${lessonDone(key) ? ", done" : ""}`);
+    if (l === cur) b.setAttribute("aria-current", "step");
+    li.append(b, el("span", "dot-label", title));
+    dots.append(li);
+  });
+}
+
+function stepBar(box, total, filled, at) {
+  box.replaceChildren();
+  for (let i = 0; i < total; i++) {
+    const seg = el("i");
+    if (i < filled) seg.className = "on";
+    if (i === at) seg.classList.add("here");
+    box.append(seg);
+  }
+}
+
+// `focus`: "head" (a new lesson), "why" (an answer just given) or "first" (a question)
+function renderLesson(focus = null) {
+  const art = currentLessonEl();
+  const key = art.dataset.lesson;
+  const qs = checks[key] || [];
+  const mine = lessonMine(key);
+  for (const l of lessonEls) l.hidden = l !== art;
+  step = Math.min(step, qs.length);
+  let bar = art.querySelector(".stepbar");
+  if (!bar) {
+    bar = el("div", "stepbar");
+    bar.setAttribute("aria-hidden", "true");
+    art.querySelector(".lesson-head").after(bar);
+  }
+  const answered = qs.filter((_, i) => mine.answers[i] !== undefined).length;
+  stepBar(bar, qs.length + 1, 1 + answered, step);
+  art.querySelector(".lesson-body").hidden = step !== 0;
+  const box = art.querySelector(".check");
+  box.replaceChildren();
+  let focusAfter = focus === "head" ? art.querySelector(".lesson-head") : null;
+  if (step > 0) {
+    const i = step - 1;
+    const q = qs[i];
     const wrap = el("div", "q");
-    wrap.append(el("p", "q-text", `${i + 1}. ${q.q}`));
+    wrap.append(el("p", "q-n muted small", `Question ${step} of ${qs.length}`));
+    wrap.append(el("p", "q-text", q.q));
     const row = el("div", "choices");
-    const answered = mine.answers[i] !== undefined;
+    const done = mine.answers[i] !== undefined;
     q.choices.forEach((c, j) => {
-      const b = el("button");
-      b.type = "button";
-      const img = c.id !== undefined && c.id !== null ? icon(c.id, 28) : null;
-      if (img) b.append(img);
-      b.append(c.t);
-      b.disabled = answered;
-      if (answered) {
-        b.classList.toggle("chosen", mine.answers[i] === j);
-        b.classList.toggle("played", j === q.answer);
-      }
-      b.onclick = () => {
+      const b = button("", undefined, () => {
         mine.answers[i] = j;
         state.lessons[key] = mine;
         save();
-        renderCheck(box, { why: i });
-        renderLessonMarks();
-        renderProgress();
-      };
+        renderLesson("why");
+      });
+      const img = c.id !== undefined && c.id !== null ? icon(c.id, 28) : null;
+      if (img) b.append(img);
+      b.append(c.t);
+      b.disabled = done;
+      if (done) {
+        b.classList.toggle("chosen", mine.answers[i] === j);
+        b.classList.toggle("played", j === q.answer);
+      }
       row.append(b);
     });
     wrap.append(row);
-    if (answered) {
+    if (done) {
       const right = mine.answers[i] === q.answer;
       const why = el("p", `why ${right ? "good" : "bad"}`);
       why.tabIndex = -1;
       why.append(el("b", "", right ? "Right. " : "Not quite. "), q.why);
       wrap.append(why);
-      if (focus && focus.why === i) focusAfter = why;
+      if (focus === "why") focusAfter = why;
     }
     box.append(wrap);
-  });
-  if (qs.length === 0) box.append(el("p", "q muted", "Not enough games yet for questions."));
-  else if (qs.every((_, i) => mine.answers[i] !== undefined)) {
-    const again = el("button", "q link", "Try these again");
-    again.type = "button";
-    again.onclick = () => {
-      mine.answers = [];
-      save();
-      renderCheck(box, { first: true });
-      renderLessonMarks();
-      renderProgress();
-    };
-    box.append(again);
+    if (focus === "first") focusAfter = row.querySelector("button");
   }
-  if (focus && focus.first) focusAfter = box.querySelector(".q button");
+  renderLessonNav(art, qs, mine);
+  if (!focusAfter && focus === "why") focusAfter = art.querySelector(".lesson-nav button");
+  renderDots();
+  renderTabs();
   if (focusAfter) focusAfter.focus();
 }
 
-function renderLessonMarks() {
-  for (const d of document.querySelectorAll(".lesson")) {
-    const key = d.dataset.lesson;
-    const mark = d.querySelector(".lesson-done");
-    mark.textContent = lessonDone(key) ? "✓ Done" : state.lessons[key] ? "Started" : "Not started";
-    mark.classList.toggle("todo", !state.lessons[key]);
+function renderLessonNav(art, qs, mine) {
+  const nav = art.querySelector(".lesson-nav");
+  nav.replaceChildren();
+  const idx = lessonEls.indexOf(art);
+  const nextLesson = lessonEls[idx + 1];
+  const onward = () =>
+    nextLesson
+      ? button("primary", "Next lesson", () => openLesson(nextLesson.dataset.lesson, 0, true))
+      : button("primary", "Practice drafts", () => showView("practice", true));
+  const go = (at) => {
+    step = at;
+    renderLesson(at === 0 ? "head" : "first");
+  };
+  if (step === 0) {
+    if (qs.length === 0) {
+      nav.append(el("span", "muted small", "Not enough games yet for questions."), onward());
+    } else if (lessonDone(art.dataset.lesson)) {
+      nav.append(
+        onward(),
+        button("link", "Questions again", () => {
+          mine.answers = [];
+          save();
+          go(1);
+        }),
+      );
+    } else {
+      const first = qs.findIndex((_, i) => mine.answers[i] === undefined);
+      nav.append(button("primary", `Check yourself (${qs.length})`, () => go(first + 1)));
+    }
+    return;
   }
+  const i = step - 1;
+  if (mine.answers[i] === undefined) {
+    nav.append(button("link", "Read again", () => go(0)));
+    return;
+  }
+  if (step < qs.length) {
+    nav.append(button("primary", "Next question", () => go(step + 1)));
+    return;
+  }
+  const right = qs.filter((q, j) => mine.answers[j] === q.answer).length;
+  nav.append(el("span", "score", `${right} of ${qs.length} right`), onward());
 }
 
 function setupLessons() {
-  for (const d of document.querySelectorAll(".lesson")) {
-    d.addEventListener("toggle", () => {
-      if (!d.open) return;
-      // Opened for the reader below, not by them: a first visit has started nothing
-      if ("auto" in d.dataset) {
-        delete d.dataset.auto;
-        return;
-      }
-      const key = d.dataset.lesson;
-      state.lessons[key] ||= { seen: true, answers: [] };
-      save();
-      renderLessonMarks();
-      renderProgress();
-    });
+  step = 0;
+  const cur = currentLessonEl();
+  // Pinned, so finishing it does not jump to the next one before the reader asks
+  state.lesson = cur.dataset.lesson;
+  if (!lessonDone(cur.dataset.lesson) && state.lessons[cur.dataset.lesson]) {
+    // Carry on at the first question not yet answered
+    const qs = checks[cur.dataset.lesson] || [];
+    const mine = lessonMine(cur.dataset.lesson);
+    const first = qs.findIndex((_, i) => mine.answers[i] === undefined);
+    if (first > 0) step = first + 1;
   }
-  for (const box of document.querySelectorAll(".check")) renderCheck(box);
-  renderLessonMarks();
-  // Open the first lesson not yet done, so a returning reader carries on there
-  const next = [...document.querySelectorAll(".lesson")].find((d) => !lessonDone(d.dataset.lesson));
-  if (next && !location.hash) {
-    next.dataset.auto = "";
-    next.open = true;
-  }
+  renderLesson();
 }
 
 // ---- Practice ----
@@ -303,17 +436,10 @@ class Practice {
       roles.append(b);
     }
     const levels = $("p-levels");
-    for (const [l, label] of LEVELS) {
-      const b = el("button", "", label);
-      b.type = "button";
+    for (const [l, label, what] of LEVELS) {
+      const b = button("level", undefined, () => this.goLevel(l));
       b.dataset.level = l;
-      b.onclick = () => {
-        state.level = l;
-        save();
-        this.queue = [];
-        this.renderSetup();
-        this.next();
-      };
+      b.append(el("b", "", label), el("span", "", what), el("span", "level-n"));
       levels.append(b);
     }
     const list = $("p-champions");
@@ -336,18 +462,43 @@ class Practice {
       if (e.key === "Enter") add();
     });
     $("p-next").onclick = async () => {
+      const after = LEVELS[levelIndex(this.current.d.difficulty) + 1];
+      // A level just finished: on to the next one
+      if (this.finished && after) {
+        state.level = after[0];
+        save();
+        this.queue = [];
+        this.renderSetup();
+      }
       // May wait for the recommender to load; focus the question once it is drawn
       await this.next();
-      $("drill").scrollIntoView({ behavior: "smooth", block: "start" });
+      $("p-levels").scrollIntoView({ behavior: "smooth", block: "start" });
       $("p-question").focus({ preventScroll: true });
     };
     this.renderSetup();
     this.next();
   }
 
+  goLevel(l) {
+    state.level = l;
+    save();
+    this.queue = [];
+    this.renderSetup();
+    this.next();
+  }
+
   renderSetup() {
     for (const b of $("p-roles").children) b.setAttribute("aria-pressed", b.dataset.role === state.role);
-    for (const b of $("p-levels").children) b.setAttribute("aria-pressed", b.dataset.level === state.level);
+    const lvl = currentLevel();
+    for (const b of $("p-levels").children) {
+      const l = b.dataset.level;
+      const n = Math.min(state.levels[l] || 0, LEVEL_SIZE);
+      b.setAttribute("aria-pressed", l === lvl);
+      b.classList.toggle("done", levelDone(l));
+      b.querySelector(".level-n").textContent = levelDone(l) ? "✓" : `${n}/${LEVEL_SIZE}`;
+    }
+    stepBar($("p-bar"), LEVEL_SIZE, Math.min(state.levels[lvl] || 0, LEVEL_SIZE), -1);
+    renderTabs();
     const chips = $("p-pool");
     chips.replaceChildren();
     for (const id of state.pool) {
@@ -371,7 +522,7 @@ class Practice {
     const status = $("p-status");
     if (this.queue.length === 0) {
       const fits = this.pack.filter(
-        (d) => (!state.role || d.hidden_role === state.role) && d.difficulty === state.level,
+        (d) => (!state.role || d.hidden_role === state.role) && d.difficulty === currentLevel(),
       );
       if (fits.length === 0) {
         status.hidden = false;
@@ -383,6 +534,7 @@ class Practice {
       if (this.current) status.textContent = "";
     }
     status.hidden = true;
+    this.finished = false;
     const d = this.queue.pop();
     this.current = { d, options: d.options, mine: null, pool: null };
     await this.withPool();
@@ -468,8 +620,10 @@ class Practice {
   render() {
     const { d, mine } = this.current;
     const tier = d.tier ? `, mostly ${d.tier[0]}${d.tier.slice(1).toLowerCase()} players` : "";
-    const level = LEVELS.find(([l]) => l === d.difficulty)[1];
-    $("p-about").textContent = `${level} · Ranked solo/duo, patch ${d.patch}${tier}.`;
+    const [, level, what] = LEVELS[levelIndex(d.difficulty)];
+    const n = (state.levels[d.difficulty] || 0) + (mine === null ? 1 : 0);
+    const drill = n <= LEVEL_SIZE ? `: drill ${n} of ${LEVEL_SIZE}` : "";
+    $("p-about").textContent = `${level}, ${what.toLowerCase()}${drill} · patch ${d.patch}${tier}`;
     for (const t of [0, 1]) {
       const yours = t === d.hidden_team;
       $(`p-side-${t}`).textContent =
@@ -499,8 +653,9 @@ class Practice {
       });
     }
     $("p-question").textContent =
-      `You are ${roleName[d.hidden_role].toLowerCase()} for your team. Which of these would you pick?`;
-    this.renderHints();
+      `You are ${roleName[d.hidden_role].toLowerCase()}. Which would you pick?`;
+    $("p-hints").hidden = mine !== null;
+    if (mine === null) this.renderHints();
     this.renderOptions();
     $("p-reveal").hidden = mine === null;
     if (mine !== null) this.renderReveal();
@@ -509,23 +664,22 @@ class Practice {
   hints() {
     const { d, pool } = this.current;
     const out = [];
-    const role = roleName[d.hidden_role].toLowerCase();
-    const enemy = this.enemyLaner(d);
-    const lane = [`You will face ${this.name(enemy)} in your `, term("lane", "lane"), "."];
-    const t = this.timing(enemy, d.hidden_role);
-    if (t) lane.push(` ${this.name(enemy)} does better in ${t.long ? "long" : "short"} games this patch.`);
-    out.push(lane);
     const ally = (r) => d.teams[d.hidden_team][roleIndex[r]];
     if (d.need === "magic") {
-      out.push(["Your team so far deals mostly ", term("physical", "physical damage"), ": the enemy can answer all of it with ", term("armour", "armour"), "."]);
+      out.push(["Your team is mostly ", term("physical", "physical damage"), "."]);
     } else if (d.need === "physical") {
-      out.push(["Your team so far deals mostly ", term("magic", "magic damage"), ": the enemy can answer all of it with magic resist."]);
+      out.push(["Your team is mostly ", term("magic", "magic damage"), "."]);
     } else {
-      out.push(["Your team's damage is already a mix of magic and physical, so damage type does not separate these options much."]);
+      out.push(["Your team's damage is already mixed."]);
     }
-    if (d.hidden_role === "bottom") out.push([`Your support is ${this.name(ally("utility"))}: you share the lane.`]);
-    if (d.hidden_role === "utility") out.push([`Your bot laner is ${this.name(ally("bottom"))}: you share the lane.`]);
-    if (pool !== null) out.push([`You play ${this.name(pool)}, and it is one of the options.`]);
+    const enemy = this.enemyLaner(d);
+    const lane = [`You face ${this.name(enemy)} in `, term("lane", "lane"), "."];
+    const t = this.timing(enemy, d.hidden_role);
+    if (t) lane.push(` It does better in ${t.long ? "long" : "short"} games.`);
+    out.push(lane);
+    if (d.hidden_role === "bottom") out.push([`Your support: ${this.name(ally("utility"))}.`]);
+    if (d.hidden_role === "utility") out.push([`Your bot laner: ${this.name(ally("bottom"))}.`]);
+    if (pool !== null) out.push([`You play ${this.name(pool)}: it is an option.`]);
     return out;
   }
 
@@ -568,11 +722,22 @@ class Practice {
       b.append(this.champ(o.id, 40, false));
       b.disabled = cur.mine !== null;
       b.classList.toggle("chosen", cur.mine === o.id);
+      if (cur.mine !== null) {
+        const fit = this.brings(cur.d, o.id) ? "good" : this.lacks(cur.d, o.id) ? "bad" : "";
+        if (fit) b.classList.add(fit);
+        if (fit) b.append(el("span", `fit ${fit}`, fit === "good" ? `adds ${cur.d.need}` : "more of the same"));
+      }
       b.onclick = () => {
         cur.mine = o.id;
         state.practice += 1;
+        const l = cur.d.difficulty;
+        // Stays on this level until the reader moves on, even once it is done
+        state.level = l;
+        const was = state.levels[l] || 0;
+        state.levels[l] = was + 1;
+        this.finished = was + 1 === LEVEL_SIZE;
         save();
-        renderProgress();
+        this.renderSetup();
         this.render();
         $("p-reveal").scrollIntoView({ behavior: "smooth", block: "nearest" });
         // The chosen button is now disabled: carry keyboard focus to the explanations
@@ -599,13 +764,11 @@ class Practice {
     const names = (list) => list.map((o) => this.name(o.id)).join(" and ");
     const kind = d.need === "magic" ? "magic" : "physical";
     const bring = options.filter((o) => this.brings(d, o.id));
-    if (d.need && bring.length === 1) {
-      return `The clearest thing in this draft: your team lacks ${kind} damage, and ${names(bring)} is the only option that brings it.`;
-    }
+    if (d.need && bring.length === 1) return `Only ${names(bring)} adds the ${kind} damage your team lacks.`;
     if (d.need && bring.length > 1) {
-      return `Your team lacks ${kind} damage, and ${names(bring)} both bring it. Between those two, the lane and how each does this patch are what is left to compare.`;
+      return `${names(bring)} both add the ${kind} damage your team lacks: the lane and the patch decide between them.`;
     }
-    return "This one is close: nothing in the draft separates these four clearly. When it is this close, the champion you know best tends to matter more than any of the differences below.";
+    return "Close: nothing here separates the four. The champion you know best matters more.";
   }
 
   renderReveal() {
@@ -613,9 +776,7 @@ class Practice {
     const { d, options, mine, pool } = cur;
     const notes = $("p-notes");
     notes.replaceChildren();
-    const intro = el("li", "reveal-summary");
-    intro.textContent = this.summary();
-    notes.append(intro);
+    $("p-reveal-title").textContent = this.summary();
     const role = roleName[d.hidden_role].toLowerCase();
     const enemy = this.enemyLaner(d);
     for (const o of options) {
@@ -623,8 +784,8 @@ class Practice {
       const head = el("div");
       head.append(this.champ(o.id));
       if (o.id === mine) head.append(el("span", "tag", "your pick"));
-      if (o.id === pool) head.append(el("span", "tag", "you play this"));
-      if (o.id === d.played) head.append(el("span", "tag muted-tag", "in the real game"));
+      if (o.id === pool) head.append(el("span", "tag", "you play it"));
+      if (o.id === d.played) head.append(el("span", "tag muted-tag", "real game"));
       li.append(head);
       const line = (cls, ...parts) => {
         const why = el("div", `why ${cls}`);
@@ -634,45 +795,49 @@ class Practice {
       if (o.magic !== null && o.magic !== undefined) {
         const type = o.magic >= 50 ? "magic" : "physical";
         const share = type === "magic" ? o.magic : 100 - o.magic;
-        const parts = [`Deals mostly `, term(type, `${type} damage`), ` (${share}%)`];
-        if (this.brings(d, o.id)) line("good", ...parts, `: adds the ${d.need} damage your team lacks.`);
-        else if (this.lacks(d, o.id)) line("bad", ...parts, `: more of what your team already has.`);
-        else line("", ...parts, ".");
+        const parts = [`${share}% `, term(type, type)];
+        if (this.brings(d, o.id)) line("good", ...parts, ": adds what your team lacks");
+        else if (this.lacks(d, o.id)) line("bad", ...parts, ": more of the same");
+        else line("", ...parts);
       }
       if (o.games > 0) {
-        const few = o.games < 100 ? " (few games so far)" : "";
-        line("", `Wins ${pct(o.wins, o.games)}% of its ${o.games} ${role} games this patch${few}.`);
+        const few = o.games < 100 ? ", few so far" : "";
+        line("", `Wins ${pct(o.wins, o.games)}% of ${o.games} ${role} games${few}`);
       }
       const t = this.timing(o.id, d.hidden_role);
       if (t) {
         const b = this.length(o.id, d.hidden_role);
-        line("", `Does better in ${t.long ? "long" : "short"} games: ${pct(b[0].wins, b[0].games)}% under ${this.lengths[0]} minutes, ${pct(b[2].wins, b[2].games)}% from ${this.lengths[1]}.`);
+        line("", `Better in ${t.long ? "long" : "short"} games: ${pct(b[0].wins, b[0].games)}% under ${this.lengths[0]} min, ${pct(b[2].wins, b[2].games)}% from ${this.lengths[1]}`);
       }
+      let shown = 0;
       for (const r of o.reasons) {
         if (r.kind === "base" || Math.abs(r.pp) < MIN_REASON_PP || r.games < MIN_REASON_GAMES) continue;
-        if (!detectedReason(d.hidden_role, r)) continue;
+        if (!detectedReason(d.hidden_role, r) || shown++ >= MAX_REASONS) continue;
         const text = reasonWords(r, this.name(r.id));
-        line(r.pp > 0 ? "good" : "bad", `${text} (${roleName[r.role].toLowerCase()}, ${r.games} games).`);
+        line(r.pp > 0 ? "good" : "bad", `${text} (${r.games} games)`);
       }
       li.append(this.laneCurve(o, enemy));
       notes.append(li);
     }
-    const real = d.won ? "won" : "lost";
     $("p-real").textContent =
-      `In the real game this slot was ${this.name(d.played)}, and that team ${real} in ${d.minutes} minutes. One game says little; the reasons above come from all of this patch's games.`;
-    const c3 = $("p-c3");
-    c3.hidden = pool === null;
-    if (pool !== null) {
-      c3.textContent =
-        `You play ${this.name(pool)}. Players who know their champion win about 7 points more often than players new to theirs, more than most counters are worth (see the Counters lesson).`;
+      `Real game: ${this.name(d.played)}, ${d.won ? "won" : "lost"} in ${d.minutes} min. One game says little.`;
+    const done = $("p-done");
+    const after = LEVELS[levelIndex(d.difficulty) + 1];
+    done.hidden = !this.finished;
+    if (this.finished) {
+      const [, level] = LEVELS[levelIndex(d.difficulty)];
+      done.textContent = after
+        ? `${level} done. ${after[1]}: ${LEVEL_NEXT[after[0]]}`
+        : `${level} done: all three levels. Drafts change every day.`;
     }
+    $("p-next").textContent = this.finished && after ? `Start ${after[1].toLowerCase()}` : "Next draft";
   }
 
   // Gold difference against the lane opponent by minute, as a small inline chart
   laneCurve(o, enemy) {
     const box = el("div", "why lane-mini");
     if (!o.lane) {
-      box.textContent = `Lane against ${this.name(enemy)}: not enough games yet for a curve.`;
+      box.textContent = `vs ${this.name(enemy)}: too few games for a lane curve`;
       return box;
     }
     const g = o.lane.gold;
@@ -701,14 +866,14 @@ class Practice {
     const lead = v === 0 ? "even" : `${Math.abs(v)} ${v > 0 ? "ahead" : "behind"}`;
     svg.setAttribute("aria-label", `Gold difference against ${this.name(enemy)} by minute`);
     const text = el("span");
-    text.append(`Lane against ${this.name(enemy)}: typically ${lead} in `, term("gold", "gold"), ` at ${at + 1} minutes (${o.lane.games} games).`);
+    text.append(`vs ${this.name(enemy)}: typically ${lead} in `, term("gold", "gold"), ` at ${at + 1} min (${o.lane.games} games)`);
     box.append(svg, text);
     return box;
   }
 }
 
 async function start() {
-  renderProgress();
+  setupTabs();
   setupLessons();
   const status = $("p-status");
   try {
@@ -720,7 +885,7 @@ async function start() {
     champs = new Map(meta.champions.map((c) => [c.id, c]));
     ddragon = meta.ddragon;
     // Icons in the checks need the champion list
-    for (const box of document.querySelectorAll(".check")) renderCheck(box);
+    renderLesson();
     new Practice(pack, facts, meta).setup();
   } catch (e) {
     status.textContent = "Could not load practice drafts: " + e.message;

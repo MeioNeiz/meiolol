@@ -88,7 +88,7 @@ data/search.json bfd236184c673343
 data/stats.bin bffab0c56008909d
 download.html 309b18691d19c3a1
 index.html ad0b8a2a1d67812a
-learn.html 79b2c5db51892e34
+learn.html 4f230916f1f3f772
 learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c
 matchup/bot/kaisa-vs-twitch.html b585379b88b9a7e8

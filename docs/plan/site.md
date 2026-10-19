@@ -56,6 +56,19 @@ Later: puzzles from clear comp leans (data-and-model.md step 5).
 Jacob 19 Oct: harder and easier at once (an easy start, harder levels later), more
 engaging, much fewer words, less overwhelming (one thing per screen). Later: lessons
 from comp leans and lane matchups (data-and-model.md step 5).
+- Done 20 Oct (night run, learn): Lessons and Practice as tabs, a lesson a screen (text,
+  then each question alone, "2 of 3 right" at the end), practice in three levels of
+  five drills from the generator's Difficulty (clear-cut: one option brings the damage
+  type the team lacks; two fit; close call: balanced team), next level offered when one
+  is done; role and own champions folded into a closed "Role and your champions"; copy
+  cut about in half (lessons, hints, reveal: summary as the heading, one line a fact, two
+  reasons an option at most); after the pick each option button says "adds magic" or
+  "more of the same". Progress in localStorage only. No win chance or points: Learn
+  never showed them (raw win rates with games only), checked in learn.js and the reveal
+- Next: levels inside a Difficulty by clarity (easy drills whose one bringer also leads
+  its lane before ones whose doesn't; hard ones sorted by how close the four sit);
+  lesson examples as tiles, not sentences; a lesson from lane curves (who is ahead at 14)
+  as Level 2's primer
 
 ## Search
 

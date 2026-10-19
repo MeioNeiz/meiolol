@@ -208,6 +208,9 @@ test "fixture games to stats, curves and the website" {
         // rows that static/daily.js fills
         .{ "daily.html", &.{ "at least a week old", "95% sure it is not even", "two standard errors on 200+ games", "<div id=\"options\" class=\"dd-options\"></div>", "<ul id=\"lanes\" class=\"dd-lanes\"></ul>", "<script src=\"reasons.js\" defer></script>" } },
         .{ "privacy.html", &.{"the date\nshown is the puzzle's, not the game's"} },
+        // Learn: lessons and practice as tabs, a lesson a screen with its own nav, practice
+        // levels (learn.js draws them)
+        .{ "learn.html", &.{ "<section id=\"practice\" data-view=\"practice\">", "<div class=\"lesson-nav\"></div>", "id=\"p-levels\"", "<article class=\"card lesson\" id=\"lesson-roles\"" } },
         .{ "matchup/index.html", &.{ "data-min-search", "<li data-games=\"3\" data-name=\"", "<section data-min-group><h2>Top ", "</ul></section>" } },
         .{ "champion/darius.html", &.{"href=\"../patch/build/darius-top.html\""} },
         .{ "champion/darius.html", &.{"win rates on Darius: more data needed (0 players in EUW with 10+ games on it, 20 needed)."} },

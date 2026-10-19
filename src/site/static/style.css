@@ -865,3 +865,50 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
   .dd-card { transition: none; }
   .dd-side.pop, .dd-score.pop { animation: none; }
 }
+/* Learn: one step per screen (learn.js), tabs, lesson dots, step bars, levels */
+.learn-js .nojs { display: none; }
+.learn-tabs { display: flex; gap: 6px; margin: 14px 0 18px; }
+.learn-tabs button { padding: 7px 14px; border-radius: 999px; font-weight: 600; }
+.learn-tabs button span { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.learn-tabs button[aria-selected="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.learn-tabs button[aria-selected="true"] span { color: var(--bg); opacity: 0.7; }
+.dots { display: flex; gap: 8px; list-style: none; padding: 0; margin: 0 0 14px; flex-wrap: wrap; }
+.dots li { display: flex; align-items: center; gap: 6px; }
+.dots button { width: 32px; height: 32px; padding: 0; border-radius: 50%; font-weight: 600; }
+.dots button.done { border-color: var(--gain); color: var(--gain); }
+.dots button[aria-current="step"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.dots .dot-label { display: none; color: var(--muted); font-size: 13px; }
+.dots button[aria-current="step"] + .dot-label { display: inline; color: var(--text); }
+.learn-js .lesson { padding: 16px 18px; max-width: 760px; }
+.lesson-head { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; font-size: 20px; }
+.lesson-head .muted { display: block; font-size: 14px; font-weight: 400; }
+.learn-js .lesson-body { padding: 0; }
+.learn-js .check { border-top: 0; margin-top: 0; padding-top: 0; }
+.learn-js .check .q-text { font-size: 17px; margin-bottom: 12px; }
+.check .q-n { margin: 0 0 4px; }
+.lesson-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 16px; }
+.lesson-nav .score { color: var(--muted); }
+.stepbar { display: flex; gap: 4px; margin: 0 0 14px; max-width: 760px; }
+.stepbar i { flex: 1; height: 5px; border-radius: 3px; background: var(--line-2); }
+.stepbar i.on { background: var(--gain); }
+.stepbar i.here { outline: 1px solid var(--text); outline-offset: 1px; }
+.levels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 8px; max-width: 760px; }
+.levels .level { display: grid; justify-items: start; gap: 2px; padding: 9px 12px; border-radius: 10px; text-align: left; }
+.levels .level span { color: var(--muted); font-size: 13px; }
+.levels .level .level-n { font-variant-numeric: tabular-nums; }
+.levels .level.done .level-n { color: var(--gain); }
+.levels .level[aria-pressed="true"] { border-color: var(--text); background: var(--panel-3); }
+.p-settings { margin: 0 0 12px; font-size: 14px; }
+.p-settings summary { color: var(--muted); cursor: pointer; padding: 4px 0; }
+.p-settings .practice-setup { margin-top: 8px; }
+.choices button.good { border-color: var(--gain); }
+.choices button.bad { opacity: 0.75; }
+.choices .fit { display: block; font-size: 12px; font-weight: 600; margin-top: 2px; }
+.choices .fit.good { color: var(--gain); }
+.choices .fit.bad { color: var(--muted); }
+#p-reveal-title { font-size: 18px; }
+.level-done { border-color: var(--gain); }
+@media (max-width: 640px) {
+  .levels .level { padding: 8px; }
+  .lesson-head { font-size: 18px; }
+}

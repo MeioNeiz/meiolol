@@ -686,7 +686,12 @@ are pruned.
 
 For new players: five lessons (roles, counters and why your own champion matters more,
 early vs late, mixing damage, synergy), each with examples picked from the patch's games
-and a three-question check, then unlimited practice drafts. No streaks or timers.
+and a three-question check, then unlimited practice drafts. No streaks or timers. One
+thing per screen (learn.js): Lessons and Practice as two tabs; a lesson at a time (dots
+1 to 5), its text then each question on its own screen; practice a drill at a time in
+three levels of five drills (Level 1 clear-cut = easy, 2 two fit = medium, 3 close call
+= hard, the generator's Difficulty below), the next level offered once one is done, any
+level still pickable.
 
 - Facts, made per site build: magic share of each champion's damage to champions (raw
   match JSON of the newest 3000 games), wins by game length (<25, 25-32, 32+ min) per
@@ -704,7 +709,8 @@ and a three-question check, then unlimited practice drafts. No streaks or timers
   correct pick". Champions the player adds join the options (meiolol.wasm scores them,
   request field `pool`)
 - Site: learn.html (checks and glossary as embedded JSON), learn.js, learn/champs.json,
-  learn/practice.json. Progress in localStorage (key meiolol.learn.v1)
+  learn/practice.json. Progress in localStorage (key meiolol.learn.v1: answers per
+  lesson, drills done per level, current lesson, level and tab; nothing sent anywhere)
 
 ## App (src/app_main.zig, src/lcu)
 
