@@ -9,6 +9,7 @@
 //! the result as a docs/nn-results row. Log loss clamps p to [1e-6, 1 - 1e-6] (gains')
 
 const std = @import("std");
+const nn = @import("nn");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
@@ -364,34 +365,6 @@ fn meanCi(d: []const f64) Diff {
     return .{ .mean = mean, .half = 1.96 * @sqrt(ss / (n - 1)) / @sqrt(n) };
 }
 
-/// Mann-Whitney: the chance a random blue win scores above a random blue loss, ties half
-fn auc(arena: Allocator, y: []const f64, p: []const f64) !f64 {
-    const idx = try arena.alloc(usize, p.len);
-    for (idx, 0..) |*x, i| x.* = i;
-    std.mem.sort(usize, idx, p, struct {
-        fn lt(ps: []const f64, a: usize, b: usize) bool {
-            return ps[a] < ps[b];
-        }
-    }.lt);
-    var pos_ranks: f64 = 0;
-    var n_pos: f64 = 0;
-    var i: usize = 0;
-    while (i < idx.len) {
-        var j = i;
-        while (j < idx.len and p[idx[j]] == p[idx[i]]) j += 1;
-        // Ranks i+1..j averaged over the tie
-        const rank = @as(f64, @floatFromInt(i + 1 + j)) / 2;
-        for (idx[i..j]) |k| if (y[k] == 1) {
-            pos_ranks += rank;
-            n_pos += 1;
-        };
-        i = j;
-    }
-    const n_neg = @as(f64, @floatFromInt(idx.len)) - n_pos;
-    if (n_pos == 0 or n_neg == 0) return std.math.nan(f64);
-    return (pos_ranks - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg);
-}
-
 fn accuracy(y: []const f64, p: []const f64) f64 {
     var right: f64 = 0;
     for (y, p) |yy, pp| {
@@ -523,7 +496,7 @@ fn run(c: *Ctx, args: Args, w: *Io.Writer) !void {
 
     try w.print("{s:<12}{s:<11}{s:<9}{s}\n", .{ "", "logloss", "auc", "acc" });
     for ([_][]const u8{ "A", "B" }, [_]f64{ la, lb }, [_][]const f64{ pa, pb }) |side, l, p| {
-        const area = try auc(c.arena, ys, p);
+        const area = try nn.auc(f64, c.arena, ys, p);
         const acc = accuracy(ys, p) * 100;
         try w.print("{s:<12}{d:<11.5}{d:<9.4}{d:.1}%\n", .{ side, l, area, acc });
     }
@@ -724,15 +697,6 @@ test "refuses different labels and game sets; --intersect counts" {
     try t.cmp(&.{ "a.tsv", "s.tsv", "--intersect" });
     try testing.expect(t.has("games 3 (blocks: 1 2, 2 1)  [intersect: dropped A-only 1, " ++
         "B-only 1]"));
-}
-
-test "auc averages ties" {
-    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
-    // Pairs (pos, neg): (0.8, 0.2) 1, (0.8, 0.5) 1, (0.5, 0.2) 1, (0.5, 0.5) 0.5 => 3.5 / 4
-    const y = [_]f64{ 1, 1, 0, 0 };
-    const p = [_]f64{ 0.8, 0.5, 0.5, 0.2 };
-    try testing.expectApproxEqAbs(0.875, try auc(arena.allocator(), &y, &p), 1e-12);
 }
 
 test "B strictly better: negative difference, B better" {

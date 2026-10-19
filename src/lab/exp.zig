@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const api = @import("api");
+const nn = @import("nn");
 const cand = @import("cand");
 const rows = @import("rows.zig");
 const test_looks = @import("looks.zig");
@@ -557,31 +558,17 @@ fn final(
 }
 
 /// Rank AUC of predictions p for 0/1 outcomes y (NaN rows skipped), ties averaged
+/// nn.auc over the rows with a win label (y NaN: none)
 fn auc(gpa: std.mem.Allocator, y: []const f32, p: []const f64) !f64 {
-    const Pair = struct { p: f64, y: f32 };
-    var xs: std.ArrayList(Pair) = .empty;
-    defer xs.deinit(gpa);
-    for (y, p) |yy, pp| if (!std.math.isNan(yy)) try xs.append(gpa, .{ .p = pp, .y = yy });
-    std.mem.sort(Pair, xs.items, {}, struct {
-        fn less(_: void, a: Pair, b: Pair) bool {
-            return a.p < b.p;
-        }
-    }.less);
-    var rank_sum: f64 = 0;
-    var pos: f64 = 0;
-    var i: usize = 0;
-    while (i < xs.items.len) {
-        var j = i;
-        while (j + 1 < xs.items.len and xs.items[j + 1].p == xs.items[i].p) j += 1;
-        const mid = @as(f64, @floatFromInt(i + j)) / 2 + 1;
-        for (xs.items[i .. j + 1]) |x| if (x.y > 0.5) {
-            rank_sum += mid;
-            pos += 1;
-        };
-        i = j + 1;
-    }
-    const neg = @as(f64, @floatFromInt(xs.items.len)) - pos;
-    return (rank_sum - pos * (pos + 1) / 2) / (pos * neg);
+    var ys: std.ArrayList(f64) = .empty;
+    defer ys.deinit(gpa);
+    var ps: std.ArrayList(f64) = .empty;
+    defer ps.deinit(gpa);
+    for (y, p) |yy, pp| if (!std.math.isNan(yy)) {
+        try ys.append(gpa, yy);
+        try ps.append(gpa, pp);
+    };
+    return nn.auc(f64, gpa, ys.items, ps.items);
 }
 
 /// The final's per-row test file: writePreds' columns (meiolol-lab pairs reads them) with
