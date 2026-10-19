@@ -111,6 +111,7 @@ pending() {
 # One round per export: export (when asked), list, then every unacked export in order
 failed=
 while :; do
+    pass_start=$(date +%s)
     made=""
     held=""
     if [[ -n "$failed" ]]; then :
@@ -153,6 +154,12 @@ while :; do
         log "League is open: rest of the backlog next round"
         break
     fi
+    # Catching up: rest as long as the pass took (at most 10 min, inside awake.d's 15), so
+    # the box's crawler has its disk back half the time; back to back, a 30 h backlog's
+    # passes halved its matches for two hours (19 Oct)
+    touch "$awake"
+    rest=$(( $(date +%s) - pass_start ))
+    sleep $(( rest > 600 ? 600 : rest ))
 done
 # Archived and acked in an earlier round whose ack answer was lost
 for f in "$incoming"/raw-*.db; do
