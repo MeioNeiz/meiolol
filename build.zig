@@ -82,6 +82,8 @@ pub fn build(b: *std.Build) void {
     b.step("lab-native", "Build meiolol-lab for this machine only").dependOn(lab_native);
     b.step("lab-gpu-box", "Build meiolol-lab for the gpu-box only").dependOn(lab_gpu_box);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = lab_mod, .filters = test_filters })).step);
+    const nn_test = b.addTest(.{ .root_module = nnModule(b, target, optimize), .filters = test_filters });
+    test_step.dependOn(&b.addRunArtifact(nn_test).step);
     // win-draft copies the shipped draft model, as a candidate sees only std and api
     const lab_api = b.createModule(.{ .root_source_file = b.path("src/lab/api.zig"), .target = target, .optimize = optimize });
     const win_draft = b.createModule(.{
@@ -302,6 +304,11 @@ fn lint(b: *std.Build, tool: []const u8, script: []const u8) *std.Build.Step {
     return &run.step;
 }
 
+/// Training nets on the CPU: std only, library-grade (src/nn/root.zig)
+fn nnModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) *std.Build.Module {
+    return b.createModule(.{ .root_source_file = b.path("src/nn/root.zig"), .target = target, .optimize = optimize });
+}
+
 /// glibc, not musl: libcuda is a glibc library loaded with dlopen. x86_64_v3: the
 /// i5-13600KF has AVX2 and FMA (baseline x86-64 has neither); deploy/lab-run.sh's meta
 /// records it, since float results differ in the last bits from a baseline build
@@ -342,6 +349,7 @@ fn labModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang
     });
     const api = b.createModule(.{ .root_source_file = b.path("src/lab/api.zig"), .target = target, .optimize = optimize });
     mod.addImport("api", api);
+    mod.addImport("nn", nnModule(b, target, optimize));
     mod.addImport("cand", b.createModule(.{
         .root_source_file = b.path(b.fmt("{s}/root.zig", .{cand})),
         .target = target,
