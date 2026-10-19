@@ -19,6 +19,9 @@ Jacob 19 Oct:
 - Bug, quick: the gold curve runs past 14 minutes but its label still says 14 min
 - More interesting stats of the game (record-book style: firsts, biggest swing, your
   best minute)
+- More specifics in the analysis (what happened, who, where, what it cost)
+- Win chance chart colours: the grey and light blue are not clear; stronger contrast
+  between the two teams, ahead/behind readable at a glance
 
 Already planned: mark the new games in the film strip (CSS, small); example review per
 role (B7); "what your draft was up against" from comp leans (data-and-model.md step 4).
@@ -53,13 +56,25 @@ than lolalytics: our own edge is the lane curves, early/late lean, "Into which t
   runes and skill order on the page may need the per-seat table (data-and-model.md
   step 1 blocker)
 - Opponents: one dense grid (icon, win rate, games, gold at 14) all visible, sortable
+- Matchup win rates shown like the champions index shows win rates (same style)
+- Normalised matchup win rate (Jacob 19 Oct): side by side, the champion's own win rate,
+  the matchup's, and the delta, so a matchup reads as better or worse than this
+  champion usually does, adjusted for the opponent's own strength. lolalytics has
+  Delta 1 and Delta 2 for this, but Jacob finds them unclear: show it more
+  intuitively (e.g. a bar from the champion's average, or "+2.1 vs usual" coloured,
+  with a range so thin matchups don't shout)
+- Pick and ban rate like lolalytics (Jacob wrote "pbr": confirm whether he means PR
+  and BR, or lolalytics' PBI, pick/ban influence)
 
 ## Matchup page
 
 Jacob 19 Oct: a stat screen like lolalytics' matchup view, laid out as the champion
 page but matchup focused (win rate, games, leads at set minutes, builds and runes that
 do well here); the curves take far too much space (one compact chart, the rest folded);
-the champion pool block much more useful.
+the champion pool block much more useful. More specifics on why a champion does well
+here (where the lead comes from: level 2/6 spikes, kills vs cs, first item timing, the
+leans and kit kinds that apply), not only that it does; the same normalised delta as
+the champion page.
 Already planned: pool first in the picker (B2), then bans from the pool's hard lanes
 (B3, Q3); public form waits on J2 (decisions.md). Patch day (B4, z 2.58).
 
