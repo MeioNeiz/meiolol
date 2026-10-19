@@ -48,7 +48,7 @@ pub fn build(b: *std.Build) void {
         run.addPassthruArgs();
         b.step(e.name, b.fmt("Run {s} ({s})", .{ e.name, e.about })).dependOn(&run.step);
     }
-    for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store }) |mod| {
+    for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store, m.tpl }) |mod| {
         const t = b.addTest(.{ .root_module = mod, .filters = test_filters });
         test_step.dependOn(&b.addRunArtifact(t).step);
     }
@@ -124,6 +124,7 @@ pub fn build(b: *std.Build) void {
 
 const Modules = struct {
     core: *std.Build.Module,
+    tpl: *std.Build.Module,
     store: *std.Build.Module,
     backend: *std.Build.Module,
     app: *std.Build.Module,
@@ -135,6 +136,13 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
     // Pure: std only, shared by backend and app (draft model, stats file, scoring)
     const core = b.createModule(.{
         .root_source_file = b.path("src/core/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // HTML templates checked at compile time: std only, library-grade (src/tpl/root.zig)
+    const tpl = b.createModule(.{
+        .root_source_file = b.path("src/tpl/root.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -166,6 +174,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         .imports = &.{
             .{ .name = "core", .module = core },
             .{ .name = "store", .module = store },
+            .{ .name = "tpl", .module = tpl },
         },
         .link_libc = true,
     });
@@ -209,13 +218,16 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
             .root_source_file = b.path("src/site/chart_wasm.zig"),
             .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
             .optimize = .ReleaseSmall,
+            .imports = &.{.{ .name = "tpl", .module = b.createModule(.{
+                .root_source_file = b.path("src/tpl/root.zig"),
+            }) }},
         }),
     });
     chart_wasm.entry = .disabled;
     chart_wasm.rdynamic = true;
     backend.addAnonymousImport("chart.wasm", .{ .root_source_file = chart_wasm.getEmittedBin() });
 
-    return .{ .core = core, .store = store, .backend = backend, .app = app };
+    return .{ .core = core, .tpl = tpl, .store = store, .backend = backend, .app = app };
 }
 
 /// The desktop window (src/desktop_main.zig): dvui with its Direct3D 11 backend, tree-sitter

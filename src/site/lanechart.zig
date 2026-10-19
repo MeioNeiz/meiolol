@@ -4,7 +4,7 @@
 //! the same chart. No allocator or I/O.
 
 const std = @import("std");
-const tpl = @import("tpl.zig");
+const tpl = @import("tpl");
 
 const Writer = std.Io.Writer;
 

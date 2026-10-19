@@ -3,7 +3,7 @@
 const std = @import("std");
 const core = @import("core");
 const Writer = std.Io.Writer;
-pub const tpl = @import("tpl.zig");
+pub const tpl = @import("tpl");
 
 pub const product = "meiolol";
 

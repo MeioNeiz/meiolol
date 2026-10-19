@@ -3,7 +3,7 @@
 //! Shows honestly how close to a coin flip draft prediction still is.
 
 const std = @import("std");
-const tpl = @import("tpl.zig");
+const tpl = @import("tpl");
 
 const Writer = std.Io.Writer;
 

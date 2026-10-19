@@ -5,7 +5,7 @@ area: ui
 tags: [web, web/template]
 parent: zig-web-ui
 description: Syntax, escaping, composition and checks for our own small Zig HTML layer, shared by the static site and wasm
-decision: src/site/tpl.zig
+decision: src/tpl/root.zig
 ---
 # How should meiolol's own Zig HTML template and component layer look?
 

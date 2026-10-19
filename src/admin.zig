@@ -12,7 +12,7 @@ const date = @import("date.zig");
 const ep = @import("riot/endpoints.zig");
 const Limiter = @import("riot/ratelimit.zig").Limiter;
 const tsvlog = @import("tsvlog.zig");
-const tpl = @import("site/tpl.zig");
+const tpl = @import("tpl");
 const status = @import("status.zig");
 
 const Io = std.Io;

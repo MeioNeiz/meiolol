@@ -47,15 +47,16 @@ src/
                      (both: docs/data-safety.md)
   status.zig         `meiolol status`: read-only counts, estimates for big tables
   site/              public website generator (`meiolol site`): html.zig layout and
-                     boilerplate, tpl.zig templates (named holes, escaping by position,
-                     compile-time checks; new markup goes through it, usage in its
-                     header), lanechart.zig the lane chart (matchup pages, and Your
+                     boilerplate (all markup goes through tpl/), lanechart.zig the lane chart (matchup pages, and Your
                      games through chart_wasm.zig: chart.wasm, 12 KB), prose.zig fixed pages, static/ (css, draft.js)
   wasm.zig           recommender in the browser (wasm32-freestanding),
                      embedded into the backend binary by build.zig
   riot/              Riot API: ratelimit, client (std.http), endpoints (platforms and
                      regions), match parser, timeline (compact format), crawl
   store/             sqlite.zig (thin wrapper), schema.zig, raw.zig (compression)
+  tpl/               HTML templates (module "tpl", std only, library-grade): named holes,
+                     escaping by position, compile-time checks; usage in root.zig's
+                     header
   core/              pure, std only, shared: roles, statsfile (model file format),
                      score (recommender), curvesfile (lane curves format)
   lcu/               League client: lockfile/process discovery, https (TLS to
