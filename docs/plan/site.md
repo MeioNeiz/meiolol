@@ -41,6 +41,16 @@ kill", "-13% died"). Next: 15 to 30 moments a game is long (fold the small ones 
 biggest-only view? ask Jacob); a minute's win chance change is the whole minute, not
 the fight alone; map areas are rough, check a few against real positions
 
+Done 20 Oct (night run, persist; Jacob 00:42 "go to Learn then back to Your games it
+should still show me ... maintain filters"): views kept in this browser, URL picks
+always win (721f3aa). Your games with no Riot ID in the URL opens this tab's last place,
+else the last player looked up, from the report as last shown (shows with the service
+down), then looks up as usual; "Not you?" by the name, tab kept. Champion page rank and
+opponents picks, table sorts, matchup curve tabs kept. Privacy page says so. Next: Daily
+Draft and Learn keep their own state already; the pool page's mains are not kept (ask
+Jacob); a champion page opened mid-browse with ?period=patch takes the kept rank (a
+shared link only stays exact in a fresh tab)
+
 Already planned: example review per role (B7); "what your draft was up against" from
 comp leans (data-and-model.md step 4).
 
