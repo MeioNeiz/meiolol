@@ -29,6 +29,16 @@ game's firsts as team-coloured chips (3a84be0, f82221f; fields from review's API
 Next: check firsts on a real report once the API serves them and the example file is
 regenerated; more records (biggest fight, longest time ahead)
 
+Done 20 Oct (night run, review): the review's moments are yours (a985fc8, 7733ac4; API
+installed on jomify): fights you were in (who fell on each side, whom you took down,
+who killed you, kill gold swung, where on the map, objectives each team took within a
+minute, win chance moved), objectives you took part in, towers in your lane and every
+Baron, Elder and Atakhan; team swings without you are gone (old reports keep them).
+Dots on the chart by kind, the biggest five labelled with what they moved ("+12%
+kill", "-13% died"). Next: 15 to 30 moments a game is long (fold the small ones or a
+biggest-only view? ask Jacob); a minute's win chance change is the whole minute, not
+the fight alone; map areas are rough, check a few against real positions
+
 Already planned: example review per role (B7); "what your draft was up against" from
 comp leans (data-and-model.md step 4).
 
