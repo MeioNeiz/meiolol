@@ -38,10 +38,9 @@ people, unconfirmed and bots. Next, only if needed:
 - gpu-box C: at 90% (the archive is on the P3, safe). Left: step 4 of docs/compute.md
   "gpu-box storage", compacting the WSL disk (~120 GB back, C: to ~77%); it stops WSL,
   so when the gpu-box is idle, after warning its sessions
-- jomify logs never rotate (checked 20 Oct): logrotate is not installed, so
-  /etc/logrotate.d/nginx never runs; meiolol.access.log 40 MB and access.log 69 MB since
-  12 Oct, 40 GB free, not urgent. `apt install logrotate` is a system change on the
-  shared server: Jacob's call. traffic.sh already reads .1 and .gz once they exist
+- jomify logs rotate since 20 Oct: logrotate was not installed (Jacob approved the
+  install), so /etc/logrotate.d/nginx (daily, 14 kept, delaycompress) never ran; first
+  forced rotation 20 Oct 00:05. traffic.sh skips a just-rotated empty log (eb5aac1)
 - NIC offload on the gpu-box if other home ssh dies ("message authentication code
   incorrect", 14-17 Oct)
 - Alerts and backups: decisions.md "Open decisions" (ntfy topic, Mac watch job)
