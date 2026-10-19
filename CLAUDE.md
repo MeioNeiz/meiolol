@@ -21,6 +21,9 @@ docs/plan.md "Now". Read it first.
   research-only pushes skip the build). Push the tested sha, `git push origin
   <sha>:main`: over HTTPS git re-reads main after the pre-push ci, so a commit another
   session made meanwhile goes out untested
+- Solid, tested change (a fix checked working, tests pass): commit and push it without
+  asking, then `deploy/box.sh wait-deployed`. Ask first only when unfinished, risky or
+  hard to undo
 - Hooks in deploy/hooks (`git config core.hooksPath deploy/hooks`): pre-commit fmt,
   pre-push `zig build ci` on a clean checkout of the pushed commit
 
