@@ -42,6 +42,8 @@ const cmd_analysis = @import("cmd/analysis.zig");
 const cmd_site = @import("cmd/site.zig");
 const cmd_ops = @import("cmd/ops.zig");
 const cmd_data = @import("cmd/data.zig");
+const cmd_lab = @import("cmd/lab.zig");
+pub const labtools = @import("labtools/root.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
 
@@ -97,6 +99,8 @@ const usage = usage_head ++
     cmd_data.usage_backup ++
     cmd_data.usage_restore ++
     cmd_data.usage_forget ++
+    cmd_lab.usage_lab_place ++
+    cmd_lab.usage_lab_sweep ++
     usage_tail;
 
 pub fn main(init: std.process.Init) !u8 {
@@ -119,7 +123,8 @@ pub fn main(init: std.process.Init) !u8 {
         } else try flags.append(arena, argv[i]);
     }
     c.args = flags.items;
-    try std.Io.Dir.cwd().createDirPath(init.io, c.data_dir);
+    // The lab tools run from deploy/ scripts in any directory
+    if (!std.mem.startsWith(u8, argv[1], "lab-")) try std.Io.Dir.cwd().createDirPath(init.io, c.data_dir);
     return run(&c) catch |err| switch (err) {
         error.Usage => usageError(c.flag),
         // Logged where it happened
@@ -163,6 +168,8 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "backup", cmd_data.cmdBackup },
     .{ "restore", cmd_data.cmdRestore },
     .{ "forget", cmd_data.cmdForget },
+    .{ "lab-place", cmd_lab.cmdLabPlace },
+    .{ "lab-sweep", cmd_lab.cmdLabSweep },
 });
 
 /// What a command gets: the process, the data directory and a cursor over its own

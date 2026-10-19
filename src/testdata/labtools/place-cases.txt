@@ -1,0 +1,212 @@
+$ status	gpu-box
+20261012T2203Z-enemy6 | exit 0 | 2026-10-12T22:03:41Z | ran 3.6m | info: first_item pairwise dim 16 l2 1e-4: val 0.74286 at epoch 15 (3862 ms)
+20261013T191005Z-compcheck2 | exit 0 | 2026-10-13T19:10:06Z | ran 1s | 
+20261013T192745Z-compcheck-folds5 | exit 0 | 2026-10-13T19:27:47Z | ran 2s, predicted 1s | 
+20261013T201048Z-ldai-ratings-dev-none | exit 0 | 2026-10-13T20:36:52Z | ran 8s | 
+20261013T202904Z-ldai-ratings-r3-ldai | exit 0 | 2026-10-13T20:37:33Z | ran 6s | 
+20261013T205649Z-0a-pscr | exit 0 | 2026-10-13T20:56:49Z | ran 53s, predicted 9s | | folds | 44353 | 0.69111 | 0.69090 | 0.00022 ± 0.00025 | 0.5386 | 0.5397 | | |
+20261013T211948Z-ldai-comp-r2-none | exit 0 | 2026-10-13T21:19:52Z | ran 6s, predicted 5s | 
+20261013T212143Z-ldai-comp-r2-ldai | exit 0 | 2026-10-13T21:21:47Z | ran 8s, predicted 5s | 
+20261013T212239Z-0a-pinit | exit 0 | 2026-10-13T21:24:36Z | ran 84s, predicted 59s (+42%) | | folds | 44353 | 0.69085 | 0.69090 | -0.00004 ± 0.00054 | 0.5399 | 0.5397 | | |
+20261013T212430Z-ldai-comp-r3-ldai | exit 0 | 2026-10-13T21:24:39Z | ran 5s, predicted 6s | 
+20261013T213554Z-0a-pfrz | exit 0 | 2026-10-13T21:35:58Z | ran 29s, predicted 6s | | folds | 44353 | 0.69139 | 0.69090 | 0.00049 ± 0.00068 | 0.5326 | 0.5397 | | |
+20261013T214152Z-set-wr | exit 0 | 2026-10-13T21:41:54Z | ran 50s, predicted 30s (+67%) | | folds | 44353 | 0.69048 | 0.69090 | -0.00042 ± 0.00023 | 0.5419 | 0.5397 | | |
+20261013T214559Z-ldaiall-ratings-r1-none | exit 0 | 2026-10-13T21:46:02Z | ran 39s, predicted 5s | 
+20261013T215044Z-stk-all2 | exit 0 | 2026-10-13T21:51:14Z | ran 0s, predicted 0s | 
+20261013T215158Z-stk-seed1 | exit 0 | 2026-10-13T21:52:01Z | ran 0s, predicted 0s | 
+20261013T220126Z-stk-gb-shy1 | exit 0 | 2026-10-13T22:01:35Z | ran 6s, predicted 0s | 
+20261013T220241Z-set-wr-shuffle | exit 0 (cpu.1) | 2026-10-13T22:02:44Z | ran 50s, predicted 50s (+0%) | | folds | 44353 | 0.69106 | 0.69090 | 0.00016 ± 0.00023 | 0.5371 | 0.5397 | | |
+20261013T220512Z-ldaiall-ratings-r2-none | exit 0 (cpu.0) | 2026-10-13T22:05:14Z | ran 25s, predicted 4s | 
+20261013T220521Z-ldaiall-ratings-r3-none | exit 0 (cpu.2) | 2026-10-13T22:05:23Z | ran 27s, predicted 6s | 
+20261013T220526Z-ldaiall-ratings-r3-ldai | exit 0 (cpu.3) | 2026-10-13T22:05:28Z | ran 25s, predicted 6s | 
+20261013T221051Z-0a-big-def10 | exit 0 (gpu.0) | 2026-10-13T22:10:55Z | ran 42s, predicted 1.8m (-61%) | | folds | 44353 | 0.69050 | 0.69090 | -0.00039 ± 0.00033 | 0.5419 | 0.5397 | | |
+20261013T221207Z-ldaiall-comp-r1-ldai | exit 0 (cpu.3) | 2026-10-13T22:12:38Z | ran 30s, predicted 4s | 
+20261013T221241Z-ldaiall-comp-r3-ldai | exit 0 (cpu.1) | 2026-10-13T22:12:49Z | ran 29s, predicted 5s | 
+20261013T221814Z-set-wr-permute | exit 0 (cpu.1) | 2026-10-13T22:18:17Z | ran 31s, predicted 50s (-38%) | | folds | 44353 | 0.69086 | 0.69090 | -0.00003 ± 0.00005 | 0.5397 | 0.5397 | | |
+20261013T221815Z-aa-big4 | exit 0 (gpu.0) | 2026-10-13T22:18:43Z | ran 3.4m, predicted 73s (+181%) | win-model: kind ratings dim 0 l2 0.001 epochs 11 val 0.68912 on 71794 games
+20261013T222221Z-set-wr-nocross | exit 0 (cpu.3) | 2026-10-13T22:22:24Z | ran 71s, predicted 49s (+45%) | | folds | 44353 | 0.69041 | 0.69090 | -0.00049 ± 0.00023 | 0.5424 | 0.5397 | | |
+20261013T222320Z-player-exp-cal-20261013T1954Z | exit 0 (cpu.1) | 2026-10-13T22:23:32Z | ran 2.2m, predicted 1.9m (+13%) | | folds | 76041 | 0.68557 | 0.68584 | -0.00027 ± 0.00015 | 0.5690 | 0.5681 | | |
+20261013T222327Z-ldaiall-ratings-r2-size | exit 0 (cpu.3) | 2026-10-13T22:24:23Z | ran 35s, predicted 15s | 
+20261013T222654Z-0a-big-def-s11-20 | exit 0 (gpu.0) | 2026-10-13T22:26:57Z | ran 47s, predicted 5.6m (-86%) | | folds | 44353 | 0.69078 | 0.69090 | -0.00012 ± 0.00036 | 0.5411 | 0.5397 | | |
+20261013T223153Z-0a-t23-10-win-ratings | exit 0 (gpu.0) | 2026-10-13T22:31:55Z | ran 61s, predicted 5.6m (-82%) | | folds | 44353 | 0.69081 | 0.69090 | -0.00009 ± 0.00046 | 0.5425 | 0.5397 | | |
+20261013T223512Z-0a-big-def10-rs1 | exit 0 (gpu.0) | 2026-10-13T22:35:16Z | ran 82s, predicted 5.6m (-75%) | | folds | 44353 | 0.69071 | 0.69081 | -0.00010 ± 0.00035 | 0.5408 | 0.5393 | | |
+20261013T223656Z-carry-plant-lane1 | exit 0 (cpu.3) | 2026-10-13T22:39:16Z | ran 74s, predicted 42s (+76%) | 
+20261013T223720Z-carry-plant-lane4 | exit 0 (cpu.2) | 2026-10-13T22:39:35Z | ran 76s, predicted 42s (+81%) | 
+20261013T223745Z-carry-plant-exp4 | exit 0 (cpu.2) | 2026-10-13T22:42:35Z | ran 65s, predicted 42s (+55%) | 
+20261013T224037Z-pn9-exp-pfeat | exit 0 (cpu.2) | 2026-10-13T22:40:54Z | ran 1.7m, predicted 2.4m (-30%) | | folds | 76041 | 0.68605 | 0.68584 | 0.00021 ± 0.00012 | 0.5671 | 0.5681 | | | 
+20261013T224722Z-0a-bigres-t23-wc | exit 0 (gpu.0) | 2026-10-13T22:49:35Z | ran 2.3m, predicted 46s (+200%) | | folds | 44353 | 0.68999 | 0.69033 | -0.00034 ± 0.00035 | 0.5458 | 0.5438 | | |
+20261013T224731Z-0a-bigres-t23-wc-shuf | exit 0 (gpu.1) | 2026-10-13T22:48:56Z | ran 2.1m, predicted 46s (+170%) | | folds | 44353 | 0.69075 | 0.69033 | 0.00042 ± 0.00034 | 0.5400 | 0.5438 | | |
+20261013T225815Z-dp-shape-a | exit 0 (cpu.3) | 2026-10-13T22:58:32Z | ran 47.2m, predicted 1.9m (+2384%) | done, 2829 s
+20261013T233827Z-carry-types-2055 | exit 0 (cpu.0) | 2026-10-13T23:38:36Z | ran 2.2m, predicted 65s (+105%) | 
+20261013T233834Z-comps-confirm | exit 0 (cpu.0) | 2026-10-13T23:40:51Z | ran 32s, predicted 26s | | ratings + survivors + mix | ratings + mix | 0.00067 ± 0.00058 | 0.00067 ± 0.00
+20261013T234038Z-dp-infogbdt | exit 0 (cpu.0) | 2026-10-13T23:41:30Z | ran 8.6m | 25 top GBDT features (dev): ['obj_gold', 'obj_gold_curve', 'obj_xp', 'obj_dragon
+20261013T234946Z-rb-ref-wr | exit 0 (cpu.1) | 2026-10-13T23:52:21Z | ran 5.0m, predicted 5.0m (-1%) | GATE ok small/preds.tsv: 91833 rows, 7 prediction columns
+20261013T235130Z-dp-gmed-gold | exit 0 (cpu.2) | 2026-10-13T23:54:08Z | ran 1.8m | USAGE cpu 4.9 of 5 cores over 108 s, 1.0 runnable threads per core, card 1% busy
+20261013T235144Z-dp-gmed-champ | exit 0 (cpu.0) | 2026-10-13T23:55:11Z | ran 4.4m | USAGE cpu 4.5 of 5 cores over 263 s, 0.9 runnable threads per core, card 35% bus
+20261014T003419Z-rb-big-wr | exit 0 (gpu.0) | 2026-10-14T00:34:20Z | ran 6.9m, predicted 1.9m (+259%) | GATE ok big/preds.tsv: 170209 rows, 12 prediction columns
+20261014T003438Z-rb-aa-small | exit 0 (cpu.3) | 2026-10-14T00:44:51Z | ran 19.3m, predicted 30.0m (-36%) | GATE ok r9/preds.tsv: 134375 rows, 5 prediction columns
+20261014T003501Z-rb-aa-big | exit 0 (gpu.1) | 2026-10-14T00:35:03Z | ran 6.0m, predicted 3.8m (+60%) | GATE ok r4/preds.tsv: 134375 rows, 5 prediction columns
+20261014T003523Z-rb-big-wr-s11 | exit 0 (gpu.2) | 2026-10-14T00:35:25Z | ran 7.2m, predicted 4.1m (+75%) | GATE ok big/preds.tsv: 170209 rows, 12 prediction columns
+20261014T003848Z-c-full | exit 0 (cpu.0) | 2026-10-14T01:02:35Z | ran 4.8m, predicted 3.0m (+63%) | GATE ok out/preds.tsv: 170209 rows, 17 prediction columns
+20261014T003935Z-c-exp-r1 | exit 0 (cpu.3) | 2026-10-14T01:04:12Z | ran 3.0m, predicted 3.0m (+3%) | GATE ok out/preds.tsv: 170209 rows, 17 prediction columns
+20261014T004022Z-c-exp-r2 | exit 0 (cpu.1) | 2026-10-14T01:06:24Z | ran 3.5m, predicted 3.0m (+18%) | GATE ok out/preds.tsv: 170209 rows, 17 prediction columns
+20261014T004103Z-c-prior | exit 0 (cpu.0) | 2026-10-14T01:07:29Z | ran 4.7m, predicted 3.0m (+60%) | GATE ok out/preds.tsv: 170209 rows, 17 prediction columns
+20261014T004122Z-c-duo | exit 0 (cpu.2) | 2026-10-14T01:10:19Z | ran 6.3m, predicted 3.0m (+112%) | GATE ok out/preds.tsv: 170209 rows, 17 prediction columns
+20261014T005906Z-comps-confirm-2253Z | exit 0 (cpu.0) | 2026-10-14T01:00:53Z | ran 1.7m, predicted 44s (+127%) | USAGE cpu 1.0 of 4 cores over 100 s, 0.2 runnable threads per core, card 0% busy
+20261014T011132Z-dp-info-shufwithin-2253Z | exit 0 (cpu.1) | 2026-10-14T01:14:07Z | ran 2.7m, predicted 23s | USAGE cpu 3.1 of 4 cores over 162 s, 0.8 runnable threads per core, card 1% busy
+20261014T011216Z-dp-shape-2253Z | exit 0 (cpu.0) | 2026-10-14T01:24:01Z | ran 47.8m | USAGE cpu 2.2 of 4 cores over 2866 s, 0.6 runnable threads per core, card 1% bus
+20261014T011238Z-dp-infogbdt-2253Z | exit 0 (cpu.1) | 2026-10-14T01:48:45Z | ran 38.6m, predicted 8.6m (+349%) | USAGE cpu 2.3 of 4 cores over 2319 s, 0.8 runnable threads per core, card 1% bus
+20261014T011301Z-dp-gmed-gold-2253Z | exit 0 (cpu.2) | 2026-10-14T02:00:07Z | ran 3.2m, predicted 5.3m (-39%) | USAGE cpu 3.0 of 4 cores over 192 s, 0.7 runnable threads per core, card 1% busy
+20261014T012247Z-dp-gmed-hist-2253Z | exit 0 (cpu.1) | 2026-10-14T02:31:28Z | ran 13.8m | USAGE cpu 3.5 of 4 cores over 828 s, 0.9 runnable threads per core, card 22% bus
+20261014T013243Z-ab-full | exit 0 (cpu.1) | 2026-10-14T03:10:06Z | ran 4.5m, predicted 4.4m (+2%) | GATE ok out/preds.tsv: 170209 rows, 17 prediction columns
+20261014T013347Z-ab-no-dpm | exit 0 (cpu.1) | 2026-10-14T03:24:10Z | ran 4.5m, predicted 4.4m (+3%) | GATE ok out/preds.tsv: 170209 rows, 17 prediction columns
+20261014T013356Z-dp-arch-2253Z | exit 0 (cpu.1) | 2026-10-14T01:39:20Z | ran 3s, predicted 1s | USAGE cpu 2.1 of 4 cores over 3 s
+20261014T035109Z-h-exp-r1 | exit 0 (cpu.1) | 2026-10-14T03:55:59Z | ran 4.5m, predicted 93s (+192%) | GATE ok out/preds.tsv: 170209 rows, 15 prediction columns
+20261014T035228Z-h-rates-r2 | exit 0 (cpu.3) | 2026-10-14T04:05:31Z | ran 3.7m, predicted 93s (+138%) | GATE ok out/preds.tsv: 170209 rows, 15 prediction columns
+20261014T035255Z-h-rates-net | exit 0 (cpu.1) | 2026-10-14T04:06:36Z | ran 6.0m, predicted 4.7m (+28%) | GATE ok out/preds.tsv: 170209 rows, 17 prediction columns
+20261014T043024Z-s-rates-r1 | exit 0 (cpu.0) | 2026-10-14T05:44:42Z | ran 5.2m, predicted 4.6m (+14%) | GATE ok out/preds.tsv: 170209 rows, 15 prediction columns
+20261014T043124Z-s-rates-r2 | exit 0 (cpu.0) | 2026-10-14T05:49:58Z | ran 4.3m, predicted 3.7m (+18%) | GATE ok out/preds.tsv: 170209 rows, 15 prediction columns
+20261014T212022Z-lean-check-2253Z | exit 0 (cpu.1) | 2026-10-14T21:20:23Z | ran 46s | USAGE cpu 0.8 of 4 cores over 46 s, 0.2 runnable threads per core, card 8% busy,
+20261014T212645Z-lean-check-gs-2253Z | exit 0 (cpu.1) | 2026-10-14T21:26:47Z | ran 39s, predicted 46s (-15%) | USAGE cpu 1.0 of 4 cores over 39 s, 0.2 runnable threads per core, card 8% busy,
+20261014T213205Z-lean-check-prior-2253Z | exit 0 (cpu.1) | 2026-10-14T21:32:07Z | ran 39s, predicted 43s (-9%) | USAGE cpu 1.0 of 4 cores over 39 s, 0.2 runnable threads per core, card 8% busy,
+20261014T214444Z-lean-site-2253Z | exit 0 (cpu.0) | 2026-10-14T21:44:45Z | ran 35s, predicted 39s (-10%) | USAGE cpu 1.0 of 4 cores over 35 s, 0.2 runnable threads per core, card 0% busy,
+20261014T223405Z-big-wr-2137Z | exit 0 (gpu.0) | 2026-10-14T22:34:07Z | ran 3.8m, predicted 2.7m (+41%) | GATE ok big/preds.tsv: 228676 rows, 12 prediction columns
+20261014T223420Z-small-wr-2137Z | exit 0 (cpu.0) | 2026-10-14T22:34:22Z | ran 4.5m, predicted 4.3m (+5%) | GATE ok small/preds.tsv: 228676 rows, 7 prediction columns
+20261014T223952Z-big-wr-2137Z-s11 | exit 0 (gpu.0) | 2026-10-14T22:39:54Z | ran 5.0m, predicted 3.8m (+32%) | GATE ok big/preds.tsv: 228676 rows, 12 prediction columns
+20261014T224148Z-big-wc-2137Z | exit 0 (gpu.1) | 2026-10-14T22:41:49Z | ran 5.5m, predicted 6.3m (-13%) | GATE ok big/preds.tsv: 228676 rows, 12 prediction columns
+20261017T233526Z-nd-big-wd | exit 0 (gpu.0) | 2026-10-17T23:35:28Z | ran 14.8m, predicted 3.5m (+316%) | GATE ok big/preds.tsv: 380144 rows, 12 prediction columns
+20261017T233544Z-nd-bigres-wd | exit 0 (gpu.1) | 2026-10-17T23:35:46Z | ran 19.5m, predicted 4.5m (+333%) | GATE ok big/preds.tsv: 380144 rows, 12 prediction columns
+20261017T233803Z-nd-big-wr | exit 0 (gpu.2) | 2026-10-17T23:38:05Z | ran 15.2m, predicted 7.8m (+94%) | GATE ok big/preds.tsv: 380144 rows, 12 prediction columns
+20261017T233823Z-nd-set-wd | exit 0 (cpu.1) | 2026-10-17T23:38:25Z | ran 5.7m, predicted 68s (+404%) | GATE ok set/preds.tsv: 380144 rows, 5 prediction columns
+20261017T235146Z-champcomp-1320Z-windraft-kit | exit 0 (cpu.0) | 2026-10-17T23:51:48Z | ran 4.6m, predicted 4.2m (+10%) | USAGE cpu 1.0 of 4 cores over 274 s, 0.2 runnable threads per core, card 59% bus
+20261017T235344Z-nd-set-wd-s456 | exit 0 (cpu.1) | 2026-10-17T23:53:46Z | ran 6.2m, predicted 5.7m (+8%) | GATE ok set/preds.tsv: 380144 rows, 5 prediction columns
+20261017T235440Z-nd-set-wd-r2 | exit 0 (cpu.0) | 2026-10-17T23:56:23Z | ran 6.1m, predicted 5.7m (+7%) | GATE ok set/preds.tsv: 380144 rows, 5 prediction columns
+20261017T235505Z-nd-set-wd-perm | exit 0 (cpu.2) | 2026-10-17T23:58:51Z | ran 5.1m, predicted 5.7m (-11%) | GATE ok set/preds.tsv: 380144 rows, 5 prediction columns
+20261017T235548Z-nd-big-wd-s11 | exit 0 (gpu.0) | 2026-10-17T23:56:23Z | ran 14.9m, predicted 7.0m (+112%) | GATE ok big/preds.tsv: 380144 rows, 12 prediction columns
+20261017T235606Z-nd-big-wd-r1 | exit 0 (gpu.1) | 2026-10-17T23:58:51Z | ran 15.8m, predicted 11.6m (+36%) | GATE ok big/preds.tsv: 380144 rows, 12 prediction columns
+20261017T235625Z-nd-big-wd-r2 | exit 0 (gpu.2) | 2026-10-17T23:59:59Z | ran 15.9m, predicted 15.5m (+3%) | GATE ok big/preds.tsv: 380144 rows, 12 prediction columns
+20261017T235717Z-nd-bigres-wd-s11 | exit 0 (gpu.0) | 2026-10-18T00:11:19Z | ran 20.8m, predicted 22.1m (-6%) | GATE ok big/preds.tsv: 380144 rows, 12 prediction columns
+20261017T235741Z-nd-bigres-wd-r1 | exit 0 (gpu.1) | 2026-10-18T00:15:54Z | ran 17.3m, predicted 22.1m (-21%) | GATE ok big/preds.tsv: 380144 rows, 12 prediction columns
+20261017T235805Z-nd-bigres-wd-r2 | exit 0 (gpu.2) | 2026-10-18T00:20:14Z | ran 17.5m, predicted 22.1m (-21%) | GATE ok big/preds.tsv: 380144 rows, 12 prediction columns
+20261017T235827Z-nd-bigres-wd-shuf | exit 0 (gpu.0) | 2026-10-18T00:32:04Z | ran 10.1m, predicted 22.1m (-54%) | GATE ok big/preds.tsv: 380144 rows, 12 prediction columns
+20261018T003024Z-cc-windraft-preds | exit 0 (cpu.0) | 2026-10-18T00:30:26Z | ran 3.7m, predicted 2.9m (+28%) | GATE ok preds.tsv: 380144 rows, 3 prediction columns
+20261018T003830Z-champgroups-1320Z-shuffled | exit 0 (cpu.0) | 2026-10-18T00:38:32Z | ran 38s | USAGE cpu 1.0 of 4 cores over 38 s, 0.2 runnable threads per core, card 61% busy
+20261018T005354Z-champgroups-1320Z-carry | exit 0 (cpu.0) | 2026-10-18T00:53:57Z | ran 2.4m, predicted 40s (+262%) | USAGE cpu 1.0 of 4 cores over 145 s, 0.2 runnable threads per core, card 1% busy
+20261019T090000Z-live-a | running (gpu.0) | 2026-10-19T09:00:00Z | so far 50.0m, predicted 50.0m | epoch 3
+20261019T093000Z-live-b | paused (cpu.1) | 2026-10-19T09:30:00Z | so far 15.0m, predicted 10.0m | epoch 3
+20261019T094000Z-live-c | queued cpu |  | predicted 45s | epoch 3
+20261019T094500Z-live-d | queued cpu |  |  | epoch 3
+20261019T095000Z-live-e | queued gpu |  | predicted 15.0m | epoch 3
+? 0
+$ status	mac
+20261012T2122Z-demo | exit 0 | 2026-10-12T21:22:33Z | ran 3.0m | step 6000: 6000 0.67544 0.69048 0.5502
+20261013T002915Z-repack-2055Z | exit 0 | 2026-10-13T00:29:16Z | ran 26s | info: packed 185334 games, 1853340 rows into /Users/me/personal/meiol
+20261013T190438Z-compcheck-control | exit 0 | 2026-10-13T19:04:38Z | ran 27s | 
+20261013T202023Z-pack-mac-snap | exit 0 | 2026-10-13T20:20:24Z | ran 30s, predicted 26s | info: packed 185334 games, 1853340 rows into /Users/me/personal/meiol
+20261013T205545Z-ctx-folds5 | exit 0 | 2026-10-13T20:55:46Z | ran 7s, predicted 3s | | +bracket | 0 | 0.00000 ± 0.00000 | 0.00000 ± 0.00000 |
+20261013T205649Z-0a-pscr | exit 0 | 2026-10-13T20:56:49Z | ran 53s, predicted 9s | | folds | 44353 | 0.69111 | 0.69090 | 0.00022 ± 0.00025 | 0.5386 | 0.5397 | | |
+20261013T205856Z-ctx-wr-ref | exit 0 | 2026-10-13T20:59:01Z | ran 4s, predicted 2s | RESULT run=20261013T205856Z-ctx-wr-ref scope=champ_select target=win dev=-0.0031
+20261013T210641Z-curve-small-ratings-f1 | exit 0 | 2026-10-13T21:06:42Z | ran 65s, predicted 53s (+23%) | | folds | 44353 | 0.69156 | 0.69090 | 0.00066 ± 0.00029 | 0.5372 | 0.5397 | | |
+20261013T211052Z-pt-nowin | exit 0 | 2026-10-13T21:10:53Z | ran 1.9m | 
+20261013T211322Z-ctx-patch-folds5 | exit 0 | 2026-10-13T21:13:23Z | ran 6s, predicted 7s | | +patch | 0 | 0.00000 ± 0.00000 | 0.00000 ± 0.00000 |
+20261013T211837Z-ctx-patch-folds5b | exit 0 | 2026-10-13T21:23:17Z | ran 79s, predicted 7s | | +patch | 44353 | 0.69076 | -0.00014 ± 0.00020 | -0.00014 ± 0.00020 |
+20261013T212239Z-0a-pinit | exit 0 | 2026-10-13T21:24:36Z | ran 84s, predicted 59s (+42%) | | folds | 44353 | 0.69085 | 0.69090 | -0.00004 ± 0.00054 | 0.5399 | 0.5397 | | |
+20261017T152101Z-champcomp-1320Z-shuffled | exit 0 (cpu.0) | 2026-10-17T15:21:01Z | ran 3.9m, predicted 5.6m (-31%) | USAGE cpu 0.8 of 2 cores over 234 s
+20261017T152115Z-champcomp-1320Z-plant-c50-2 | exit 0 (cpu.1) | 2026-10-17T15:21:15Z | ran 4.4m | USAGE cpu 0.7 of 2 cores over 266 s
+20261017T152129Z-champcomp-1320Z-plant-c50-4 | exit 0 (cpu.2) | 2026-10-17T15:21:29Z | ran 4.2m | USAGE cpu 0.7 of 2 cores over 249 s
+20261017T152142Z-champcomp-1320Z-plant-c5-2 | exit 0 (cpu.3) | 2026-10-17T15:21:43Z | ran 3.8m | USAGE cpu 0.8 of 2 cores over 230 s
+20261017T152341Z-champcomp-1320Z-wincomp | exit 0 (cpu.0) | 2026-10-17T15:24:56Z | ran 2.6m | USAGE cpu 1.0 of 2 cores over 154 s
+20261017T160236Z-champcomp-1320Z-windraft | exit 0 (cpu.0) | 2026-10-17T16:02:36Z | ran 3.1m, predicted 3.9m (-20%) | USAGE cpu 1.0 of 2 cores over 188 s
+20261017T164405Z-lane-export-1320Z | exit 0 (cpu.0) | 2026-10-17T16:44:06Z | ran 50s, predicted 1.7m (-50%) | USAGE cpu 1.0 of 2 cores over 50 s
+20261018T005650Z-add-v2-1320Z | exit 0 (cpu.0) | 2026-10-18T00:56:51Z | ran 4.1m, predicted 84.8m (-95%) | USAGE cpu 2.3 of 2 cores over 244 s
+20261018T010025Z-add-v2-1320Z | exit 0 (cpu.1) | 2026-10-18T01:00:26Z | ran 6.0m | USAGE cpu 1.8 of 4 cores over 357 s
+20261018T014345Z-nd-setid-wa | exit 0 (cpu.0) | 2026-10-18T01:43:46Z | ran 6.6h, predicted 8.9m (+4320%) | GATE ok set/preds.tsv: 380144 rows, 5 prediction columns
+20261018T081256Z-champcomp-1320Z-groups | exit 0 (cpu.1) | 2026-10-18T08:12:57Z | ran 4.9m | GATE ok preds.tsv: 380144 rows, 3 prediction columns
+20261018T090954Z-b5-repack-mac | exit 0 (cpu.0) | 2026-10-18T09:09:54Z | ran 2.0m, predicted 2.8m (-25%) | USAGE cpu 0.9 of 2 cores over 123 s
+? 0
+$ status	nowhere
+? 0
+$ place	auto	auto	meiolol-lab	champcomp $HOME/ml/snaps/snap-20261017T1320Z	-Dcand=src/lab/cand/win-comp	
+gpu-box cpu 64 1
+gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 3.0m (3 live, 4 slots) + run 64s (mac median of 1 x 0.42 (7 commands on both), same args, 1 slot: 1.0 of its cores busy before), finish in 44.1m
+? 0
+$ place	auto	auto	meiolol-lab	enemy ~/ml/snaps/snap-20261012T2055Z preds > enemy.md		
+gpu-box cpu 756 1
+gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 3.0m (3 live, 4 slots) + run 12.6m (median of 1 here, same args), finish in 55.6m
+? 0
+$ place	auto	auto	meiolol-lab	netcheck ~/ml/snaps/snap-20261012T2055Z --net small --seeds 1,2,3 --out . --split random:2 --filter ldai	-Dcand=src/lab/cand/win-comp	
+gpu-box cpu 28 1
+gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 2.3m (3 live, 4 slots) + run 28s (median of 1 here, same args, fast lane, 2.3m of it for memory (needs 6.5 GB, 8.0 free)), finish in 42.7m
+? 0
+$ place	auto	auto	meiolol-lab	netcheck /Users/me/personal/meiolol/data/snap-20261012T2055Z --net small --emb 12 --seeds 1,2,3 --out out	-Dcand=src/lab/cand/win-ratings	
+nowhere to run | gpu-box/cpu: no /Users/me/personal/meiolol/data/snap-20261012T2055Z
+? 1
+$ place	auto	auto	meiolol-lab	compcheck ~/ml/snaps/snap-20261012T2055Z	-Dcand=src/lab/cand/win-ratings	
+gpu-box cpu 4 1
+gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 2.3m (3 live, 4 slots) + run 4s (median of 1 here, same args, fast lane, 2.3m of it for memory (needs 4.0 GB, 8.0 free)), finish in 42.3m
+? 0
+$ place	auto	auto	meiolol-lab	playernet ~/ml/snaps/snap-20261013T2253Z --seeds 4,5,6 --threads 3 --out out --feats champ,any,form,rank	-Dcand=src/lab/cand/win-exp	
+nowhere to run | gpu-box/cpu: no ~/ml/snaps/snap-20261013T2253Z
+? 1
+$ place	auto	auto	meiolol-lab	playernet ~/ml/snaps/snap-20261013T1954Z --seeds 1,2,3 --threads 3 --out out --feats champ,any,form,rank	-Dcand=src/lab/cand/win-exp	
+nowhere to run | gpu-box/cpu: no ~/ml/snaps/snap-20261013T1954Z
+? 1
+$ place	auto	auto	meiolol-lab	netcheck ~/ml/snaps/snap-20261013T2253Z --net big --seeds 1,2,3,4,5,6,7,8,9,10 --out big	-Dcand=src/lab/cand/win-ratings	
+nowhere to run | gpu-box/gpu: no ~/ml/snaps/snap-20261013T2253Z
+? 1
+$ place	auto	auto	meiolol-lab	netcheck ~/ml/snaps/snap-20261012T2055Z --net small --seeds 1,2,3 --out . --split random:3 --filter ldai	-Dcand=src/lab/cand/win-comp	
+gpu-box cpu 23 1
+gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 2.3m (3 live, 4 slots) + run 23s (median of 2 here, same args, fast lane, 2.3m of it for memory (needs 6.5 GB, 8.0 free)), finish in 42.7m
+? 0
+$ place	auto	auto	meiolol-lab	netcheck ~/ml/snaps/snap-20261014T2137Z --net small --seeds 1,2,3,4,5 --out small > small.md	-Dcand=src/lab/cand/win-ratings	
+nowhere to run | gpu-box/cpu: no ~/ml/snaps/snap-20261014T2137Z
+? 1
+$ place	auto	auto	meiolol-lab	netcheck ~/ml/snaps/snap-20261017T1320Z --net big --seeds 1,2,3,4,5,6,7,8,9,10 --out big	-Dcand=src/lab/cand/win-draft	
+nowhere to run | gpu-box/gpu: no ~/ml/snaps/snap-20261017T1320Z
+? 1
+$ place	auto	auto	meiolol	lean --check --data ~/ml/snaps/snap-20261013T2253Z --cuts 1791526007256,1791574830751,1791628507185,1791670472926,1791711141905,1791741249959,1791795719197 --table lean-dev.tsv > lean-check.md		
+nowhere to run | gpu-box/cpu: no ~/ml/snaps/snap-20261013T2253Z
+? 1
+$ place	auto	auto	meiolol-lab	playernet ~/ml/snaps/snap-20261012T2055Z --seeds 1,2,3 --threads 3 --feats champ,any,form,rank --out out	-Dcand=src/lab/cand/win-exp	
+gpu-box cpu 780 1
+gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 3.0m (3 live, 4 slots) + run 13.0m (median of 5 here, meiolol-lab playernet, scaled by --seeds, 1 slot: 1.1 of its cores busy before), finish in 56.0m
+? 0
+$ place	auto	auto	meiolol-lab	pretrain ~/ml/snaps/snap-20261012T2055Z --dim 8 --out out		
+gpu-box cpu 48 1
+gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 2.3m (3 live, 4 slots) + run 48s (mac median of 1 x 0.42 (7 commands on both), meiolol-lab pretrain, fast lane, 2.3m of it for memory (needs 4.0 GB, 8.0 free)), finish in 43.1m
+? 0
+$ place	gpu-box	gpu	meiolol-lab	netcheck ~/ml/snaps/snap-20261012T2055Z --net big --seeds 1,2,3,4,5		
+gpu-box gpu 61 1
+gpu-box/gpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 10.0m (2 live, 2 slots) + run 61s (median of 5 here, meiolol-lab netcheck --net big on snap-20261012T2055Z, scaled by --seeds trials, x 2 sharing gpu ^1.00 (17 runs)), finish in 51.0m
+? 0
+$ place	gpu-box	cpu	meiolol-lab	netcheck ~/ml/snaps/snap-20261012T2055Z --net small --seeds 1,2,3 --out t01 > t01.log 2>&1 ; ./meiolol-lab netcheck x --out t02	-Dcand=src/lab/cand/win-ratings	2
+gpu-box cpu 54 2
+gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 2.3m (3 live, 4 slots) + run 54s (median of 5 here, meiolol-lab netcheck --net small, candidate win-ratings on snap-20261012T2055Z, scaled by trials, fast lane), finish in 43.2m
+? 0
+$ place	auto	auto	meiolol-lab	bench --devices cpu1,gpu ~/ml/snaps/snap-20261012T2055Z		
+gpu-box cpu - 1
+no history anywhere: the default | gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 3.0m (3 live, 4 slots) + run ? (no history), finish in 43.0m
+? 0
+$+ place	auto	auto	meiolol-lab	bench --devices cpu1,gpu ~/ml/snaps/snap-20261012T2055Z		
+gpu-box cpu - 1
+no history anywhere: the default | gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 3.0m (3 live, 4 slots) + run ? (no history), finish in 43.0m | mac/cpu: no CUDA
+? 0
+$ place	mac	auto	meiolol-lab	gpu-smoke		
+mac gpu - 1
+no history anywhere: the default | mac/gpu: wait 0s (0 live, 4 slots) + run ? (no history), finish in 0s
+? 0
+$ place	auto	auto	meiolol-lab	eval ~/ml/snaps/snap-20990101T0000Z		
+nowhere to run | gpu-box/cpu: no ~/ml/snaps/snap-20990101T0000Z
+? 1
+$ place	gpu-box	none	meiolol	eval --data "~/ml/snaps/snap-20261012T2055Z" ">" eval.md		
+gpu-box none - 1
+no history anywhere: the default | gpu-box/none: League up 15.0m (median session 55.0m of 2): +40.0m, wait 0s (0 live, 0 slots) + run ? (no history), finish in 40.0m
+? 0
+$ place	auto	cpu	python/x.py	never seen		
+gpu-box cpu - 1
+no history anywhere: the default | gpu-box/cpu: League up 15.0m (median session 55.0m of 2): +40.0m, wait 3.0m (3 live, 4 slots) + run ? (no history), finish in 43.0m
+? 0
+$ inputs	uptime; ./meiolol-lab eval "~/ml/snaps/snap-1/x" /abs/snap-2 ~/a/../snap-3 ~/snap-
+~/ml/snaps/snap-1
+/abs/snap-2
+? 0

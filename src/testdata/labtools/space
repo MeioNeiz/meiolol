@@ -1,0 +1,7 @@
+# every DIST, and the reference trial
+ref --lr 0.001 --wd 0.01 --batch 512 --layers 2 --emb 32
+--lr loguniform 1e-4 3e-3
+--wd uniform 0 0.05
+--batch choice 256 512 2048
+--layers int 1 4
+--emb logint 8 256
