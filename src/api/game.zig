@@ -71,12 +71,11 @@ pub fn summarise(arena: Allocator, body: []const u8) !Summary {
             .assists = p.assists orelse 0,
         };
     }
-    const duration = if (info.gameEndTimestamp == null) @divTrunc(info.gameDuration, 1000) else info.gameDuration;
     return .{
         .patch = riot.match.patchOf(info.gameVersion),
         .queue = info.queueId,
         .start_ms = info.gameStartTimestamp orelse info.gameCreation,
-        .duration_s = duration,
+        .duration_s = riot.match.durationS(doc),
         .remake = riot.match.isRemake(doc),
         .players = players,
     };

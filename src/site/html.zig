@@ -1,16 +1,13 @@
 //! HTML helpers: escaping and the layout every page shares.
 
 const std = @import("std");
+const core = @import("core");
 const Writer = std.Io.Writer;
 pub const tpl = @import("tpl.zig");
 
 pub const product = "meiolol";
 
-/// Riot requires this on every page (docs/production-key.md)
-pub const boilerplate = product ++ " isn't endorsed by Riot Games and doesn't reflect the " ++
-    "views or opinions of Riot Games or anyone officially involved in producing or " ++
-    "managing Riot Games properties. Riot Games, and all associated properties are " ++
-    "trademarks or registered trademarks of Riot Games, Inc.";
+pub const boilerplate = core.boilerplate;
 
 /// Riot: a personal key may not serve the public while a production key is in review
 const preview_banner =

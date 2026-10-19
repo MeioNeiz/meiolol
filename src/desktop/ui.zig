@@ -30,11 +30,6 @@ pub const View = struct {
     stats: ?*const core.Stats,
 };
 
-const boilerplate = "meiolol isn't endorsed by Riot Games and doesn't reflect the views or " ++
-    "opinions of Riot Games or anyone officially involved in producing or managing Riot " ++
-    "Games properties. Riot Games, and all associated properties are trademarks or " ++
-    "registered trademarks of Riot Games, Inc.";
-
 const ahead_color: dvui.Color = .fromHex("#4fb37a");
 const behind_color: dvui.Color = .fromHex("#d0605e");
 
@@ -254,5 +249,5 @@ fn footer() void {
     defer tl.deinit();
     const color = dvui.themeGet().color(.content, .text).opacity(0.45);
     const font = dvui.themeGet().font_body;
-    tl.addText(boilerplate, .{ .font = font.withSize(font.size - 3), .color_text = .{ .color = color } });
+    tl.addText(core.boilerplate, .{ .font = font.withSize(font.size - 3), .color_text = .{ .color = color } });
 }

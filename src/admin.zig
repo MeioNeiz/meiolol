@@ -12,6 +12,7 @@ const date = @import("date.zig");
 const ep = @import("riot/endpoints.zig");
 const Limiter = @import("riot/ratelimit.zig").Limiter;
 const tsvlog = @import("tsvlog.zig");
+const tpl = @import("site/tpl.zig");
 const status = @import("status.zig");
 
 const Io = std.Io;
@@ -156,8 +157,6 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
         },
     };
     const json = try std.json.Stringify.valueAlloc(arena, page, .{});
-    // Inside <script>: "</" would end it early
-    const safe = try std.mem.replaceOwned(u8, arena, json, "</", "<\\/");
 
     var out: Io.Writer.Allocating = .init(arena);
     const w = &out.writer;
@@ -175,7 +174,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
         \\<main id="app"><p>Loading…</p></main>
         \\<script id="data" type="application/json">
     );
-    try w.writeAll(safe);
+    try tpl.json(page).render(w);
     try w.writeAll(
         \\</script>
         \\<script src="admin-setnet.js"></script>
