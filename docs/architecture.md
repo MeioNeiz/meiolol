@@ -596,6 +596,9 @@ lock), PUUIDs blanked at 24 months (days near the cutoff read again each write, 
 ones keep no keys), and rebuild, rekey and restore, which drop the files (under the
 lock). A migration that rewrites participants or bans in place must drop them too. A
 change to partials.zig, pool.zig or riot/mastery.zig, or to the file types, starts them
+again. Readers: stats, bans, patches, patch day, filters, pool, spread, learning, and
+learn's length and team mix tallies and practice match ids; learn's damage split (raw
+JSON) and practice games (kills, gold) stay on the database.
 again. pipeline_test checks the views file from the partials against the tables', also
 after a late, a REPLACEd, a newly timelined, a forgotten and a pruned game and a mastery
 refetch, and that forget leaves no row with the player's key.

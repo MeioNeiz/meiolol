@@ -13,6 +13,7 @@ const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
 const daily = @import("daily.zig");
+const partials = @import("partials.zig");
 
 const Role = core.Role;
 const Stats = core.Stats;
@@ -127,18 +128,23 @@ pub const Learn = struct {
     files: []File,
 };
 
+/// Games, wins, lengths, team mixes and practice match ids from `games` when given (the
+/// views partials), else the database; the damage split (raw match JSON) and the
+/// practice games (kills, gold) always from the database
 pub fn build(
     arena: std.mem.Allocator,
     io: std.Io,
     db: store.Db,
+    games: ?*const partials.Store,
     st: *const Stats,
     curves: ?*const curvesfile.Curves,
     opts: Options,
 ) !Learn {
-    const facts = try champFacts(arena, db, st, opts);
+    const chosen = if (games) |g| try chosenGames(arena, g, opts) else null;
+    const facts = try champFacts(arena, db, chosen, st, opts);
     var files: std.ArrayList(File) = .empty;
     try files.append(arena, .{ .path = "learn/champs.json", .data = try champsJson(arena, st, facts) });
-    const pack = try practice(arena, io, db, st, facts, curves, opts);
+    const pack = try practice(arena, io, db, chosen, st, facts, curves, opts);
     try files.append(arena, .{
         .path = "learn/practice.json",
         .data = try std.json.Stringify.valueAlloc(arena, pack, .{}),
@@ -166,11 +172,43 @@ pub fn mixBucket(magic: f64) usize {
     return b;
 }
 
-fn champFacts(arena: std.mem.Allocator, db: store.Db, st: *const Stats, opts: Options) !Facts {
+/// The partials' games on the chosen patches and platforms with a winner, by match id;
+/// each Game.position code's role in `roles`
+const Chosen = struct {
+    games: []const *const partials.Game,
+    roles: []const ?Role,
+};
+
+fn chosenGames(arena: std.mem.Allocator, g: *const partials.Store, opts: Options) !Chosen {
+    const patch_on = try g.codesIn(arena, opts.patches);
+    const platform_on = try g.codesIn(arena, opts.platforms);
+    var games: std.ArrayList(*const partials.Game) = .empty;
+    for (g.sorted) |game| {
+        if (patch_on[game.patch] and platform_on[game.platform] and game.winning_team != null)
+            try games.append(arena, game);
+    }
+    const roles = try arena.alloc(?Role, g.strings.count() + 1);
+    roles[0] = null;
+    for (g.strings.keys(), roles[1..]) |text, *r| r.* = Role.fromLcu(text);
+    return .{ .games = games.items, .roles = roles };
+}
+
+fn champFacts(arena: std.mem.Allocator, db: store.Db, chosen: ?Chosen, st: *const Stats, opts: Options) !Facts {
     const champs = try arena.alloc(Champ, st.n);
     @memset(champs, .{});
     const patch_json, const platform_json = try patchWhere(arena, opts);
-    {
+    if (chosen) |ch| {
+        for (ch.games) |g| {
+            const minutes: u32 = @intCast(@divFloor(@max(0, g.duration_s), 60));
+            for (g.players) |p| {
+                const c = st.index(std.math.cast(u32, p.champion) orelse continue) orelse continue;
+                const r = ch.roles[p.position] orelse continue;
+                const n = &champs[c].length[@backingInt(r)][lengthBucket(minutes)];
+                n.games += 1;
+                if (p.win) n.wins += 1;
+            }
+        }
+    } else {
         var q = try db.prepare(
             \\SELECT p.champion_id, p.position, p.win, m.duration_s
             \\FROM matches m JOIN participants p USING (match_id)
@@ -199,7 +237,31 @@ fn champFacts(arena: std.mem.Allocator, db: store.Db, st: *const Stats, opts: Op
     const damage_games = try damageSplit(arena, db, st, opts, champs);
 
     var mix: [mixes]Counts = @splat(.{ .games = 0, .wins = 0 });
-    {
+    if (chosen) |ch| {
+        for (ch.games) |g| {
+            for (g.players, 0..) |p, i| {
+                const first = for (g.players[0..i]) |o| {
+                    if (o.team == p.team) break false;
+                } else true;
+                if (!first) continue;
+                var sum: f64 = 0;
+                var known: u32 = 0;
+                var members: u32 = 0;
+                for (g.players[i..]) |o| {
+                    if (o.team != p.team) continue;
+                    members += 1;
+                    const c = st.index(std.math.cast(u32, o.champion) orelse continue) orelse continue;
+                    sum += champs[c].magic orelse continue;
+                    known += 1;
+                }
+                if (members == 5 and known == 5) {
+                    const n = &mix[mixBucket(sum / 5)];
+                    n.games += 1;
+                    if (p.win) n.wins += 1;
+                }
+            }
+        }
+    } else {
         var q = try db.prepare(
             \\SELECT p.match_id, p.team_id, p.champion_id, p.win
             \\FROM matches m JOIN participants p USING (match_id)
@@ -352,6 +414,7 @@ fn practice(
     arena: std.mem.Allocator,
     io: std.Io,
     db: store.Db,
+    chosen: ?Chosen,
     st: *const Stats,
     facts: Facts,
     curves: ?*const curvesfile.Curves,
@@ -374,7 +437,11 @@ fn practice(
     ;
     // Once, not a query per try: OFFSET walks the rows before it every time
     var ids: std.ArrayList([]const u8) = .empty;
-    {
+    if (chosen) |ch| {
+        for (ch.games) |g| {
+            if (g.duration_s >= 900) try ids.append(arena, g.id);
+        }
+    } else {
         var q = try db.prepare("SELECT match_id " ++ where ++ " ORDER BY match_id");
         defer q.deinit();
         try q.bind(.{ patch_json, stats.ranked_solo, platform_json });
@@ -640,7 +707,7 @@ test "facts and practice drafts" {
     try built.builder.write(&model.writer, "16.20");
     var st: Stats = try .parse(arena, model.written());
 
-    const l = try build(arena, testing.io, db, &st, null, .{
+    const l = try build(arena, testing.io, db, null, &st, null, .{
         .patches = &.{"16.20"},
         .platforms = &.{"EUW1"},
         .today = 20740,
@@ -694,6 +761,38 @@ test "facts and practice drafts" {
         try testing.expect(daily.usualPicks(&st, p.teams));
     }
     for (seen) |n| try testing.expect(n > 0);
+}
+
+test "from the views partials: the same files" {
+    const gpa = testing.allocator;
+    const io = testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path });
+
+    const db = try testDb();
+    defer db.close();
+    // Not one of the chosen games
+    try db.exec("UPDATE matches SET winning_team = NULL WHERE match_id = 'EUW1_7'");
+    var built = try stats.build(gpa, db, &.{"16.20"}, &.{"EUW1"});
+    defer built.builder.deinit();
+    var model: std.Io.Writer.Allocating = .init(arena);
+    try built.builder.write(&model.writer, "16.20");
+    var st: Stats = try .parse(arena, model.written());
+    const games = try partials.Store.open(gpa, io, db, dir, .{ .now_ms = 0 });
+    defer games.deinit();
+
+    const opts: Options = .{ .patches = &.{"16.20"}, .platforms = &.{"EUW1"}, .today = 20740 };
+    const want = try build(arena, io, db, null, &st, null, opts);
+    const got = try build(arena, io, db, games, &st, null, opts);
+    var teams: u32 = 0;
+    for (want.facts.mix) |m| teams += m.games;
+    try testing.expectEqual(798, teams);
+    try testing.expectEqual(want.files.len, got.files.len);
+    for (want.files, got.files) |w, g| try testing.expectEqualStrings(w.data, g.data);
 }
 
 test "buckets" {

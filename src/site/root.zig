@@ -786,7 +786,7 @@ fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options
                 site.learn = d.learn;
                 site.eval = d.eval;
                 phases.mark("daily and learn kept");
-            } else try loadDaily(site, db, &phases);
+            } else try loadDaily(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
         }
         try loadPatchDay(site, db, all_opts, extras, old, &phases);
     }
@@ -902,7 +902,7 @@ fn patchStats(site: *Site, db: store.Db, patches: []const []const u8, games: ?*c
 }
 
 /// The shared view's Daily Draft, your example, eval chart and Learn data
-fn loadDaily(site: *Site, db: store.Db, phases: *Phases) !void {
+fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *Phases) !void {
     const arena = site.arena;
     const io = site.io;
     const opts = site.opts;
@@ -937,7 +937,7 @@ fn loadDaily(site: *Site, db: store.Db, phases: *Phases) !void {
     phases.mark("daily");
     // After the Daily Draft, so practice leaves out the games behind its puzzles
     const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
-    if (learn.build(arena, io, db, &site.stats, if (site.curves) |*c| c else null, .{
+    if (learn.build(arena, io, db, games, &site.stats, if (site.curves) |*c| c else null, .{
         .patches = opts.patches,
         .platforms = opts.platforms,
         .today = day,
@@ -1286,7 +1286,7 @@ fn partKeys() [part_count]u64 {
         partKey(BasePart, &.{ @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
         partKey(FilterPart, &.{ @embedFile("filters.zig"), @embedFile("../partials.zig") }),
         partKey(PeoplePart, &.{ @embedFile("../pool.zig"), @embedFile("../learning.zig"), @embedFile("../spread.zig"), @embedFile("../partials.zig") }),
-        partKey(DailyPart, &.{ @embedFile("../daily.zig"), @embedFile("../learn.zig"), @embedFile("evalchart.zig") }),
+        partKey(DailyPart, &.{ @embedFile("../daily.zig"), @embedFile("../learn.zig"), @embedFile("evalchart.zig"), @embedFile("../partials.zig") }),
         partKey(patchday.Wins, &.{ @embedFile("../patchday.zig"), @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
     };
 }
