@@ -170,11 +170,17 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
             .name = product,
         }),
         .items = tpl.each(&nav_items, p, navItem),
-        // Home and Your games have their own, bigger lookup
-        .look = tpl.when(p.nav != .your and p.nav != .home, tpl.t(
-            \\<form class="look" action="{your}" method="get" role="search"{submit}><input name="id" placeholder="Look up a Riot ID" aria-label="Riot ID, as Name#TAG" autocomplete="off" spellcheck="false" required></form>
+        // static/search.js; without JS a Riot ID lookup
+        .look = tpl.t(
+            \\<form class="look" action="{your}" method="get" role="search"><input name="id" placeholder="Champion, matchup or Riot ID" aria-label="Search a champion, a matchup (Ahri vs Zed) or a Riot ID (Name#TAG)" autocomplete="off" spellcheck="false" required></form>
+            \\<script src="{js}" data-site="{site}"{view} defer></script>
             \\
-        , .{ .your = toSite(p, "your.html"), .submit = tpl.trusted(lookup_submit) })),
+        , .{
+            .your = toSite(p, "your.html"),
+            .js = toSite(p, "search.js"),
+            .site = toSite(p, ""),
+            .view = if (p.view) |v| tpl.attr("data-view", v.dir()) else null,
+        }),
         .subbar = tpl.when(p.nav.inChampions() or p.counterparts != null, tpl.call(subbar, .{p})),
         // Remembered so shared pages link back into this view
         .remember = if (p.view) |v| tpl.t(

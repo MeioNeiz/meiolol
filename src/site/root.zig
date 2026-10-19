@@ -279,6 +279,7 @@ pub const shared_assets = [_]File{
     .{ .path = "learn.js", .data = @embedFile("static/learn.js") },
     .{ .path = "table.js", .data = @embedFile("static/table.js") },
     .{ .path = "filters.js", .data = @embedFile("static/filters.js") },
+    .{ .path = "search.js", .data = @embedFile("static/search.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{

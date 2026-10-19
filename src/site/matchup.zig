@@ -57,7 +57,7 @@ fn file(a: std.mem.Allocator, x: Champ, y: Champ) ![]const u8 {
 
 /// A matchup's page curve: all ranks, all games. The file has one per bracket and
 /// experience (and role baselines, champion 0) for each pair
-fn isPage(h: *const curvesfile.Header) bool {
+pub fn isPage(h: *const curvesfile.Header) bool {
     return h.bracket == @backingInt(Bracket.all) and h.experience == @backingInt(curvesfile.Experience.any);
 }
 

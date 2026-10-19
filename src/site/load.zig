@@ -32,6 +32,7 @@ const People = @import("extras.zig").People;
 const loadChamps = @import("champs.zig").loadChamps;
 const indexChamps = @import("champs.zig").indexChamps;
 const championsJson = @import("champs.zig").championsJson;
+const search = @import("search.zig");
 const BasePart = @import("views.zig").BasePart;
 const FilterPart = @import("views.zig").FilterPart;
 const PeoplePart = @import("views.zig").PeoplePart;
@@ -345,6 +346,7 @@ fn addFiles(site: *Site) !void {
         try files.appendSlice(arena, site.filter.files);
         try files.append(arena, .{ .path = stats_path, .data = site.model });
         try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
+        try files.append(arena, .{ .path = search.path, .data = try search.json(site) });
         {
             var aw: Writer.Allocating = .init(arena);
             try pool.writeJson(&aw.writer, site.pool);
