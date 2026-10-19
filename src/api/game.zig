@@ -176,7 +176,68 @@ pub const Game = struct {
     win_chance: []const u16 = &.{},
     turning: ?Turn = null,
     death_costs: []const Death = &.{},
+    /// Fights and objectives you were in, in time order
+    moments: []const Moment = &.{},
+    /// First blood, tower, dragon and Baron of the game, whoever took them
+    firsts: []const First = &.{},
+    /// The minute you earned most gold
+    best_minute: ?BestMinute = null,
 };
+
+/// A fight (champion kills close in time and place, one of them yours: a kill, an
+/// assist or your death) or an objective you took part in or one in your lane
+pub const Moment = struct {
+    kind: enum { fight, objective },
+    t_s: u32,
+    end_s: u32,
+    /// "top", "mid", "bot", "river", "your jungle", "enemy jungle", "your base",
+    /// "enemy base"
+    where: []const u8,
+    /// Champions of each team that died in the fight
+    kills: u32 = 0,
+    deaths: u32 = 0,
+    /// Enemy champions you killed or helped kill
+    your_kills: []const u32 = &.{},
+    died: bool = false,
+    /// Champion that killed you; null for a turret, minion or monster
+    killer: ?u32 = null,
+    /// Kill gold (bounty and shutdown) to your team minus to the enemy
+    gold: i32 = 0,
+    /// Objective moments: what was taken ("Voidgrub x3"), by your team or not, and
+    /// whether you took part
+    objective: ?[]const u8 = null,
+    ours: bool = false,
+    with_you: bool = false,
+    /// Objectives each team took from the start to `death_window_ms` after the end
+    taken: []const []const u8 = &.{},
+    lost: []const []const u8 = &.{},
+    /// Your team's win chance at the frames before and after, percent
+    before: ?u16 = null,
+    after: ?u16 = null,
+};
+
+pub const First = struct {
+    what: []const u8,
+    t_s: u32,
+    ours: bool,
+    /// You got it, helped or (first blood) died
+    you: bool,
+    died: bool = false,
+};
+
+pub const BestMinute = struct {
+    /// Between frames minute - 1 and minute
+    minute: u8,
+    gold: i32,
+    kills: u32,
+    deaths: u32,
+    taken: []const []const u8,
+};
+
+/// Kills further apart in time or place are separate fights (map units, about 15k a
+/// side)
+const fight_gap_ms = 15_000;
+const fight_range = 3000;
 
 /// The minute your team's win chance moved most
 pub const Turn = struct {
@@ -466,6 +527,221 @@ fn wholeGame(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, platf
         else => {},
     };
     g.death_costs = deaths.items;
+    g.moments = try yourMoments(arena, s, slot, t, chance.items);
+    g.firsts = try firsts(arena, s, slot, t);
+    g.best_minute = try bestMinute(arena, s, slot, t);
+}
+
+const Fight = struct {
+    first: usize,
+    last_ms: i64,
+    x: i32,
+    y: i32,
+    mine: bool,
+    kills: std.ArrayList(usize) = .empty,
+};
+
+fn involved(me: u8, killer: u8, assists: []const u8) bool {
+    return killer == me or std.mem.indexOfScalar(u8, assists, me) != null;
+}
+
+fn yourMoments(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, chance: []const u16) ![]const Moment {
+    const team = s.players[slot].team;
+    const me: u8 = slot + 1;
+    const blue = team == 100;
+    var fights: std.ArrayList(Fight) = .empty;
+    for (t.events, 0..) |e, i| switch (e.data) {
+        .champion_kill => |k| {
+            if (k.victim == 0 or k.victim > s.players.len) continue;
+            const yours = k.victim == me or involved(me, k.killer, k.assists);
+            const open = for (fights.items) |*f| {
+                if (e.t_ms - f.last_ms > fight_gap_ms) continue;
+                const dx: i64 = k.x - f.x;
+                const dy: i64 = k.y - f.y;
+                if (dx * dx + dy * dy <= fight_range * fight_range) break f;
+            } else null;
+            const f = open orelse blk: {
+                try fights.append(arena, .{ .first = i, .last_ms = e.t_ms, .x = k.x, .y = k.y, .mine = false });
+                break :blk &fights.items[fights.items.len - 1];
+            };
+            f.last_ms = e.t_ms;
+            f.mine = f.mine or yours;
+            try f.kills.append(arena, i);
+        },
+        else => {},
+    };
+
+    var out: std.ArrayList(Moment) = .empty;
+    for (fights.items) |f| {
+        if (!f.mine) continue;
+        const start_ms = t.events[f.first].t_ms;
+        var m: Moment = .{ .kind = .fight, .t_s = seconds(start_ms), .end_s = seconds(f.last_ms), .where = "" };
+        var mine_k: std.ArrayList(u32) = .empty;
+        var at_me: ?timeline.Event = null;
+        for (f.kills.items) |i| {
+            const k = t.events[i].data.champion_kill;
+            const gold: i32 = @intCast(k.bounty + k.shutdown);
+            if (s.players[k.victim - 1].team != team) {
+                m.kills += 1;
+                m.gold += gold;
+                if (involved(me, k.killer, k.assists)) {
+                    try mine_k.append(arena, s.players[k.victim - 1].champion);
+                    at_me = at_me orelse t.events[i];
+                }
+            } else {
+                m.deaths += 1;
+                m.gold -= gold;
+                if (k.victim == me) {
+                    m.died = true;
+                    m.killer = if (k.killer >= 1 and k.killer <= s.players.len) s.players[k.killer - 1].champion else null;
+                    at_me = at_me orelse t.events[i];
+                }
+            }
+        }
+        m.your_kills = mine_k.items;
+        const pos = (at_me orelse t.events[f.first]).data.champion_kill;
+        m.where = area(pos.x, pos.y, blue);
+        m.taken = try objectivesBy(arena, t, team, start_ms, f.last_ms + death_window_ms, true);
+        m.lost = try objectivesBy(arena, t, team, start_ms, f.last_ms + death_window_ms, false);
+        m.before, m.after = around(chance, start_ms, f.last_ms);
+        try out.append(arena, m);
+    }
+
+    const fight_moments = out.items.len;
+    const lane = laneOf(s.players[slot].position);
+    for (t.events) |e| {
+        const label: []const u8, const taker: i64, const with_you: bool, const where: []const u8 = switch (e.data) {
+            .building_kill => |b| blk: {
+                const near = lane.len > 0 and std.mem.eql(u8, b.lane, lane);
+                const you = involved(me, b.killer, b.assists);
+                if (!near and !you) continue;
+                break :blk .{ try buildingLabel(arena, b.building, b.lane, b.tower), 300 - @as(i64, b.team), you, laneWhere(b.lane, b.team == team) };
+            },
+            .elite_monster => |em| blk: {
+                const name = monsterLabel(em.monster, em.subtype) orelse continue;
+                const you = involved(me, em.killer, em.assists);
+                const big = std.mem.eql(u8, name, "Baron") or std.mem.eql(u8, name, "Elder dragon") or std.mem.eql(u8, name, "Atakhan");
+                if (!you and !big) continue;
+                break :blk .{ name, @as(i64, em.team), you, "river" };
+            },
+            else => continue,
+        };
+        if (taker != 100 and taker != 200) continue;
+        const ours = taker == team;
+        // Taken during or right after one of your fights: that fight's outcome
+        const covered = for (out.items[0..fight_moments]) |f| {
+            const end_ms = @as(i64, f.end_s) * 1000 + death_window_ms;
+            if (e.t_ms >= @as(i64, f.t_s) * 1000 and e.t_ms < end_ms) break true;
+        } else false;
+        if (covered) continue;
+        if (out.items.len > fight_moments) {
+            // Voidgrubs a few seconds apart are one moment
+            const last = &out.items[out.items.len - 1];
+            if (last.ours == ours and e.t_ms - @as(i64, last.end_s) * 1000 < death_window_ms and std.mem.startsWith(u8, last.objective.?, label)) {
+                const n = if (std.mem.indexOf(u8, last.objective.?, " x")) |x| try std.fmt.parseInt(u32, last.objective.?[x + 2 ..], 10) else 1;
+                last.objective = try std.fmt.allocPrint(arena, "{s} x{d}", .{ label, n + 1 });
+                last.end_s = seconds(e.t_ms);
+                last.with_you = last.with_you or with_you;
+                last.after = around(chance, e.t_ms, e.t_ms)[1];
+                continue;
+            }
+        }
+        var m: Moment = .{ .kind = .objective, .t_s = seconds(e.t_ms), .end_s = seconds(e.t_ms), .where = where, .objective = label, .ours = ours, .with_you = with_you };
+        m.before, m.after = around(chance, e.t_ms, e.t_ms);
+        try out.append(arena, m);
+    }
+    std.mem.sort(Moment, out.items, {}, struct {
+        fn earlier(_: void, a: Moment, b: Moment) bool {
+            return a.t_s < b.t_s;
+        }
+    }.earlier);
+    return out.items;
+}
+
+fn seconds(t_ms: i64) u32 {
+    return @intCast(@divFloor(@max(t_ms, 0), 1000));
+}
+
+/// Win chance at the frame before `from_ms` and the one after `to_ms`
+fn around(chance: []const u16, from_ms: i64, to_ms: i64) struct { ?u16, ?u16 } {
+    const a: usize = @intCast(@divFloor(@max(from_ms, 0), 60_000));
+    const b: usize = @as(usize, @intCast(@divFloor(@max(to_ms, 0), 60_000))) + 1;
+    return .{ if (a < chance.len) chance[a] else null, if (b < chance.len) chance[b] else if (chance.len > 0) chance[chance.len - 1] else null };
+}
+
+fn laneOf(position: []const u8) []const u8 {
+    const eql = std.mem.eql;
+    if (eql(u8, position, "TOP")) return "TOP_LANE";
+    if (eql(u8, position, "MIDDLE")) return "MID_LANE";
+    if (eql(u8, position, "BOTTOM") or eql(u8, position, "UTILITY")) return "BOT_LANE";
+    return "";
+}
+
+fn laneWhere(lane: []const u8, own_building: bool) []const u8 {
+    const eql = std.mem.eql;
+    if (eql(u8, lane, "TOP_LANE")) return "top";
+    if (eql(u8, lane, "MID_LANE")) return "mid";
+    if (eql(u8, lane, "BOT_LANE")) return "bot";
+    return if (own_building) "your base" else "enemy base";
+}
+
+/// Rough Summoner's Rift areas: blue's base at (0, 0), red's at the far corner, top
+/// lane up the left and along the top, bot along the bottom and up the right, mid on
+/// the diagonal, the river across it
+fn area(x: i32, y: i32, blue: bool) []const u8 {
+    const in_blue_base = x < 4500 and y < 4500;
+    const in_red_base = x > 10400 and y > 10400;
+    if (in_blue_base or in_red_base) return if (in_blue_base == blue) "your base" else "enemy base";
+    if (x < 2200 or y > 12600 or (x < 4000 and y > 10900)) return "top";
+    if (y < 2200 or x > 12600 or (x > 10900 and y < 4000)) return "bot";
+    if (@abs(x - y) < 1300) return "mid";
+    if (@abs(x + y - 14800) < 1200) return "river";
+    return if ((x + y < 14800) == blue) "your jungle" else "enemy jungle";
+}
+
+fn firsts(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline) ![]const First {
+    const team = s.players[slot].team;
+    const me: u8 = slot + 1;
+    var out: std.ArrayList(First) = .empty;
+    var seen: [4]bool = @splat(false);
+    for (t.events) |e| {
+        const which: usize, const f: First = switch (e.data) {
+            .champion_kill => |k| blk: {
+                if (k.victim == 0 or k.victim > s.players.len) continue;
+                const ours = s.players[k.victim - 1].team != team;
+                break :blk .{ 0, .{ .what = "First blood", .t_s = seconds(e.t_ms), .ours = ours, .you = k.victim == me or involved(me, k.killer, k.assists), .died = k.victim == me } };
+            },
+            .building_kill => |b| blk: {
+                if (!std.mem.eql(u8, b.building, "TOWER_BUILDING")) continue;
+                break :blk .{ 1, .{ .what = "First tower", .t_s = seconds(e.t_ms), .ours = b.team != team, .you = involved(me, b.killer, b.assists) } };
+            },
+            .elite_monster => |em| blk: {
+                if (em.team != 100 and em.team != 200) continue;
+                const i: usize, const what: []const u8 = if (std.mem.eql(u8, em.monster, "DRAGON")) .{ 2, "First dragon" } else if (std.mem.eql(u8, em.monster, "BARON_NASHOR")) .{ 3, "First Baron" } else continue;
+                break :blk .{ i, .{ .what = what, .t_s = seconds(e.t_ms), .ours = em.team == team, .you = involved(me, em.killer, em.assists) } };
+            },
+            else => continue,
+        };
+        if (seen[which]) continue;
+        seen[which] = true;
+        try out.append(arena, f);
+    }
+    return out.items;
+}
+
+fn bestMinute(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline) !?BestMinute {
+    const me: u8 = slot + 1;
+    var best: ?BestMinute = null;
+    for (1..t.frames.len) |m| {
+        const gold = t.frames[m].get(me, .total_gold) - t.frames[m - 1].get(me, .total_gold);
+        if (best == null or gold > best.?.gold) best = .{ .minute = @intCast(m), .gold = gold, .kills = 0, .deaths = 0, .taken = &.{} };
+    }
+    var b = best orelse return null;
+    const from_ms = @as(i64, b.minute - 1) * 60_000;
+    b.kills = countKills(t, me, b.minute - 1, b.minute);
+    b.deaths = countDeaths(t, me, b.minute - 1, b.minute);
+    b.taken = try objectivesBy(arena, t, s.players[slot].team, from_ms, from_ms + 60_000, true);
+    return b;
 }
 
 /// Objectives taken in [from_ms, to_ms) by `team` (`ours`) or by the other team, as
@@ -854,6 +1130,24 @@ test "a real timeline from both sides, with and without a curve" {
     for (blue.death_costs) |d| early += @intFromBool(d.t_s < lane_end * 60);
     try testing.expectEqual(bl.lane_deaths, early);
     for (blue.death_costs) |d| try testing.expect(d.killer == null or d.killer.? > 5);
+
+    // Your moments: in time order, each fight with you in it; firsts are the same events
+    // from both sides
+    try testing.expect(blue.moments.len > 0);
+    var your_deaths: u32 = 0;
+    for (blue.moments, 0..) |m, i| {
+        if (i > 0) try testing.expect(m.t_s >= blue.moments[i - 1].t_s);
+        try testing.expect(m.end_s >= m.t_s and m.where.len > 0);
+        if (m.kind == .fight) try testing.expect(m.kills + m.deaths > 0 and (m.died or m.your_kills.len > 0));
+        your_deaths += @intFromBool(m.died);
+    }
+    try testing.expectEqual(blue.death_costs.len, your_deaths);
+    try testing.expectEqual(blue.firsts.len, red.firsts.len);
+    for (blue.firsts, red.firsts) |a, z| {
+        try testing.expectEqualStrings(a.what, z.what);
+        try testing.expect(a.ours != z.ours);
+    }
+    try testing.expect(blue.best_minute.?.gold > 0);
 
     const unranked = try analyse(arena, .{ .summary = s, .slot = 5, .timeline = t }, .{}, set);
     try testing.expectEqualStrings("All games", unranked.lane.?.curve.?.bracket);

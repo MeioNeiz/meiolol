@@ -946,3 +946,12 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
   .bks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bk.runes { grid-column: 1 / -1; }
 }
+
+/* Game review: your moments (fights, objectives) and their marks on the win chance */
+.c-kill { background: var(--gain); }
+.c-lost { background: var(--drop); }
+.c-obj { background: var(--us); }
+.c-objl { background: var(--them); }
+svg.wc .mo-note { font-size: 10.5px; font-weight: 700; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+svg.wc .mo-note.t-gain { fill: var(--gain); }
+svg.wc .mo-note.t-cost { fill: var(--cost); }

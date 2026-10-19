@@ -68,19 +68,18 @@ const Review = (() => {
     return img;
   }
 
-  // The minutes and deaths that moved the team's win chance, in time order
+  // The turning minute, then your fights and objectives (g.moments) or, from an older
+  // service, every big team minute and your deaths; in time order
   function moments(g) {
     const out = [];
     const wc = g.win_chance ?? [];
     const t = g.turning;
-    if (t) {
-      const what = [`${plural(t.kills, "kill")} and ${plural(t.deaths, "death")} for your team`];
-      if (t.your_deaths) what.push(t.your_deaths > 1 ? `you died ${t.your_deaths} times` : "you died");
-      else if (t.your_kills) what.push(`you took part in ${plural(t.your_kills, "kill")}`);
-      if (t.taken?.length) what.push(`your team took ${list(t.taken)}`);
-      if (t.lost?.length) what.push(`the enemy took ${list(t.lost)}`);
-      out.push({ kind: "turn", minute: t.minute, t_s: (t.minute - 1) * 60, title: "Turning minute", text: `${list(what)}.`, d: t.to - t.from });
+    if (g.moments) {
+      if (t) out.push(turnMoment(t));
+      for (const m of g.moments) out.push(m.kind === "fight" ? fightMoment(g, m) : objectiveMoment(m));
+      return out.sort((a, b) => a.t_s - b.t_s);
     }
+    if (t) out.push(turnMoment(t));
     for (let m = 1; m < wc.length; m++) {
       const d = wc[m] - wc[m - 1];
       if (Math.abs(d) < SWING || (t && m === t.minute)) continue;
@@ -103,12 +102,58 @@ const Review = (() => {
     return out.sort((a, b) => a.t_s - b.t_s);
   }
 
+  function turnMoment(t) {
+    const what = [`${plural(t.kills, "kill")} and ${plural(t.deaths, "death")} for your team`];
+    if (t.your_deaths) what.push(t.your_deaths > 1 ? `you died ${t.your_deaths} times` : "you died");
+    else if (t.your_kills) what.push(`you took part in ${plural(t.your_kills, "kill")}`);
+    if (t.taken?.length) what.push(`your team took ${list(t.taken)}`);
+    if (t.lost?.length) what.push(`the enemy took ${list(t.lost)}`);
+    return { kind: "turn", minute: t.minute, t_s: (t.minute - 1) * 60, title: "Turning minute", text: `${list(what)}.`, d: t.to - t.from, mark: `${t.from}% → ${t.to}%` };
+  }
+
+  const change = (m) => (m.before !== undefined && m.after !== undefined ? m.after - m.before : 0);
+  const names = (g, ids) => list(ids.map((id) => `${champName(id)}${id === g.opponent ? " (lane)" : ""}`));
+  const plates = (xs) => (xs ?? []).filter((x) => !x.startsWith("Turret plate"));
+
+  // A fight you were in: who fell on each side, your part, the kill gold it swung and
+  // what each team took straight after
+  function fightMoment(g, m) {
+    const d = change(m);
+    const taken = plates(m.taken), lost = plates(m.lost);
+    const big = (m.kills > 0 && m.deaths > 0) || m.kills + m.deaths >= 3;
+    const killer = m.killer !== undefined ? names(g, [m.killer]) : "a turret or minion";
+    let title;
+    if (big) title = `${m.kills + m.deaths > 2 ? "Fight" : "Trade"} in ${m.where}: ${m.kills} for ${m.deaths}`;
+    else if (m.died) title = `Died to ${killer}, ${m.where}`;
+    else title = `Took down ${names(g, m.your_kills)}, ${m.where}`;
+    const what = [];
+    if (big && m.your_kills.length) what.push(`You took down ${names(g, m.your_kills)}`);
+    if (big && m.died) what.push(`${what.length ? "died" : "You died"} to ${killer}`);
+    if (!big && m.died && m.your_kills.length) what.push(`You took down ${names(g, m.your_kills)} first`);
+    if (m.gold) what.push(`${signed(m.gold)} kill gold`);
+    if (taken.length) what.push(`your team took ${list(taken)}`);
+    if (lost.length) what.push(`the enemy took ${list(lost)}`);
+    let kind = m.kills >= m.deaths ? "kill" : "lost";
+    if (m.died) kind = d <= -COSTLY || lost.length ? "cost" : "death";
+    const mark = big ? `${m.kills} for ${m.deaths}` : m.died ? "died" : "kill";
+    return { kind, minute: m.t_s / 60, t_s: m.t_s, title, text: what.length ? `${what.join(", ")}.` : "", d, killer: m.died ? m.killer : m.your_kills[0], mark };
+  }
+
+  function objectiveMoment(m) {
+    const by = m.ours ? (m.with_you ? "You took" : "Your team took") : "The enemy took";
+    return { kind: m.ours ? "obj" : "objl", minute: m.t_s / 60, t_s: m.t_s, title: `${by} ${m.objective}`, text: "", d: change(m), mark: m.objective.replace(/ tower$/, "") };
+  }
+
   const KINDS = {
     turn: { icon: "★", colour: "var(--turn)" },
     gain: { icon: "↑", colour: "var(--gain)" },
     drop: { icon: "↓", colour: "var(--drop)" },
     cost: { icon: "✕", colour: "var(--cost)" },
     death: { icon: "✕", colour: "var(--death)" },
+    kill: { icon: "⚔", colour: "var(--gain)" },
+    lost: { icon: "⚔", colour: "var(--drop)" },
+    obj: { icon: "◆", colour: "var(--us)" },
+    objl: { icon: "◆", colour: "var(--them)" },
   };
   const badge = (kind) => el("span", `badge c-${kind}`, KINDS[kind].icon);
 
@@ -129,11 +174,10 @@ const Review = (() => {
     const y = (p) => T + ((H - T - B) * (100 - p)) / 100;
     const svg = svgEl("svg", { class: "wc", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Your team's win chance by minute" });
     const id = `wc${Math.random().toString(36).slice(2, 8)}`;
-    // Your team's share fills below the line and the enemy's above, as the bar beside it;
-    // each brightens towards a vivid colour past 80% (20% for the enemy)
-    const stop = (at, colour, a) => `<stop offset="${at}" style="stop-color: var(--${colour}); stop-opacity: ${a}"/>`;
-    const ramp = (dir, team, from, to) => `<linearGradient id="${id}${dir}" gradientUnits="userSpaceOnUse" x1="0" y1="${y(from)}" x2="0" y2="${y(to)}">${stop(0, team, 0.22)}${stop(0.5, team, 0.32)}${stop(0.75, team, 0.45)}${stop(0.9, `${team}-hot`, 0.8)}${stop(1, `${team}-hot`, 1)}</linearGradient>`;
-    svg.innerHTML = `<defs>${ramp("u", "us", 0, 100)}${ramp("d", "them", 100, 0)}</defs>`;
+    const stop = (at, team, a) => `<stop offset="${at}" style="stop-color: var(--${team}); stop-opacity: ${a}"/>`;
+    svg.innerHTML = `<defs><linearGradient id="${id}u" x1="0" y1="0" x2="0" y2="1">${stop(0, "us", 0.5)}${stop(1, "us", 0.08)}</linearGradient>
+      <linearGradient id="${id}d" x1="0" y1="0" x2="0" y2="1">${stop(0, "them", 0.08)}${stop(1, "them", 0.5)}</linearGradient>
+      <clipPath id="${id}cu"><rect x="0" y="0" width="${W}" height="${y(50)}"/></clipPath><clipPath id="${id}cd"><rect x="0" y="${y(50)}" width="${W}" height="${H}"/></clipPath></defs>`;
     for (const p of [100, 75, 25, 0]) svg.append(svgEl("line", { class: "gl", x1: L, x2: W - R, y1: y(p), y2: y(p) }));
     for (const p of [100, 50, 0]) {
       const t = svgEl("text", { x: 0, y: y(p) + 3.5 });
@@ -146,11 +190,11 @@ const Review = (() => {
       t.textContent = `${m}:00`;
       svg.append(t);
     }
-    const pts = wc.map((p, m) => `${x(m).toFixed(1)},${y(p).toFixed(1)}`);
-    const area = (p) => `M${x(0)},${y(p)} L${pts.join(" L")} L${x(n)},${y(p)} Z`;
-    svg.append(svgEl("path", { d: area(0), fill: `url(#${id}u)` }));
-    svg.append(svgEl("path", { d: area(100), fill: `url(#${id}d)` }));
     svg.append(svgEl("line", { class: "mid", x1: L, x2: W - R, y1: y(50), y2: y(50) }));
+    const pts = wc.map((p, m) => `${x(m).toFixed(1)},${y(p).toFixed(1)}`);
+    const area = `M${x(0)},${y(50)} L${pts.join(" L")} L${x(n)},${y(50)} Z`;
+    svg.append(svgEl("path", { d: area, fill: `url(#${id}u)`, "clip-path": `url(#${id}cu)` }));
+    svg.append(svgEl("path", { d: area, fill: `url(#${id}d)`, "clip-path": `url(#${id}cd)` }));
     const t = g.turning;
     if (t) {
       const mx = x(t.minute - 0.5);
@@ -170,10 +214,28 @@ const Review = (() => {
       });
       svg.append(hit);
     }
+    // What the moments that moved win chance most cost, written beside their dots; one
+    // label per 70 px so they never overlap. A minute's change holds more than the
+    // moment, so a kill in a falling minute (or a death in a rising one) gets no label
+    const labelled = [];
+    const fits = (mo) => (["kill", "obj"].includes(mo.kind) ? mo.d > 0 : ["cost", "death", "lost", "objl"].includes(mo.kind) ? mo.d < 0 : !!mo.mark);
+    M.map((mo, i) => [Math.abs(mo.d), i]).filter(([d, i]) => d >= COSTLY && M[i].mark && M[i].kind !== "turn" && fits(M[i])).sort((a, b) => b[0] - a[0]).forEach(([, i]) => {
+      const mx = x(Math.min(M[i].minute, n));
+      if (labelled.length < 5 && labelled.every((j) => Math.abs(x(Math.min(M[j].minute, n)) - mx) >= 70)) labelled.push(i);
+    });
+    for (const i of labelled) {
+      const mo = M[i];
+      const m = Math.min(mo.minute, n), p = at(wc, m);
+      const below = p > 80 || (mo.d < 0 && p > 22);
+      const label = svgEl("text", { class: `mo-note ${mo.d > 0 ? "t-gain" : "t-cost"}`, x: Math.min(W - R, Math.max(L, x(m))), y: y(p) + (below ? 19 : -11), "text-anchor": x(m) < L + 40 ? "start" : x(m) > W - 40 ? "end" : "middle" });
+      label.textContent = `${pct(mo.d)} ${mo.mark}`;
+      svg.append(label);
+    }
     M.forEach((mo, i) => {
       const m = Math.min(mo.minute, n);
-      const p = mo.kind === "death" || mo.kind === "cost" ? at(wc, m) : wc[m];
-      const c = svgEl("circle", { class: "mo", cx: x(m), cy: y(p), r: mo.kind === "death" ? 3.5 : 5, fill: KINDS[mo.kind].colour });
+      const p = at(wc, m);
+      const r = mo.kind === "death" ? 3.5 : mo.kind === "obj" || mo.kind === "objl" ? 4 : 5;
+      const c = svgEl("circle", { class: "mo", cx: x(m), cy: y(p), r, fill: KINDS[mo.kind].colour });
       const tip = svgEl("title", {});
       tip.textContent = `${clock(mo.t_s)} ${mo.title}`;
       c.append(tip);
@@ -287,7 +349,7 @@ const Review = (() => {
 
   // A death's change is the team's whole minute, which can rise while you die: only a
   // costly death gets a colour
-  const tone = (m) => (m.kind === "cost" ? "t-cost" : m.kind === "death" ? "" : m.d > 0 ? "t-gain" : "t-cost");
+  const tone = (m) => (m.kind === "cost" ? "t-cost" : m.kind === "death" || !m.d ? "" : m.d > 0 ? "t-gain" : "t-cost");
 
   function momentList(M, onPick, keep) {
     const ul = el("ul", "moments");
@@ -300,7 +362,7 @@ const Review = (() => {
       what.append(el("b", "", m.title));
       const sub = el("div");
       if (m.killer !== undefined) sub.append(icon(m.killer));
-      sub.append(m.text);
+      if (m.text) sub.append(m.text);
       what.append(sub);
       li.append(el("span", "t num", clock(m.t_s)), badge(m.kind), what, el("span", `d num ${tone(m)}`, pct(m.d)));
       const go = () => onPick(i);
@@ -314,62 +376,46 @@ const Review = (() => {
       ul.append(li);
     });
     if (!ul.children.length) {
-      const li = el("li", "empty", "No minute moved your team's win chance by 10 points or more, and no deaths.");
+      const li = el("li", "empty", "Nothing to show: no fights or objectives with you in them.");
       ul.append(li);
     }
     return ul;
   }
 
-  function counts(M) {
+  function counts(M, yours) {
     const box = el("div", "counts");
-    const n = (k) => M.filter((m) => m.kind === k).length;
-    for (const [k, label] of [["turn", "Turning minute"], ["gain", "Big minutes"], ["drop", "Swings against you"], ["cost", "Costly deaths"]]) {
+    const n = (...ks) => M.filter((m) => ks.includes(m.kind)).length;
+    const tiles = yours
+      ? [[["turn"], "Turning minute"], [["kill"], "Fights won"], [["lost", "cost", "death"], "Fights lost or died"], [["obj"], "Objectives taken"]]
+      : [[["turn"], "Turning minute"], [["gain"], "Big minutes"], [["drop"], "Swings against you"], [["cost"], "Costly deaths"]];
+    for (const [ks, label] of tiles) {
       const d = el("div");
       const b = el("b");
-      b.append(badge(k), String(n(k)));
+      b.append(badge(ks[0]), String(n(...ks)));
       d.append(b, el("span", "", label));
       box.append(d);
     }
     return box;
   }
 
-  // Record-book facts of the game: your best minute by your own gold, the win chance's
-  // biggest rise, high, low and minutes ahead (a start at 0:00 is no record), then the
-  // game's firsts in team colours. Older reports lack best_minute and firsts
-  function records(g) {
-    const wc = g.win_chance;
-    const out = el("div", "rv-records");
-    const box = el("div", "facts-inline");
+  // Record-book facts of the game's win chance: its best minute, high, low and minutes
+  // ahead. A start at 0:00 is no record, so a high or low there is left out
+  function records(wc) {
+    const box = el("div", "rv-records facts-inline");
     const fact = (value, rest) => {
       const f = el("span");
       f.append(el("b", "num", value), ` ${rest}`);
       box.append(f);
     };
-    const b = g.best_minute;
-    if (b) {
-      const what = [b.kills ? `${plural(b.kills, "kill")} with you` : "", b.deaths ? plural(b.deaths, "death") : "", ...(b.taken ?? [])].filter(Boolean);
-      fact(`${signed(b.gold)} gold`, `your best minute, ${b.minute - 1}-${b.minute} min${what.length ? `: ${list(what)}` : ""}`);
-    }
     const n = wc.length - 1;
     let best = 0;
     for (let m = 1; m <= n; m++) if (wc[m] - wc[m - 1] > (best ? wc[best] - wc[best - 1] : 0)) best = m;
-    if (best) fact(pct(wc[best] - wc[best - 1]), `biggest rise, ${best - 1}-${best} min`);
+    if (best) fact(pct(wc[best] - wc[best - 1]), `best minute, ${best - 1}-${best} min`);
     const hi = wc.indexOf(Math.max(...wc)), lo = wc.indexOf(Math.min(...wc));
     if (hi > 0) fact(`${wc[hi]}%`, `highest, at ${hi}:00`);
     if (lo > 0) fact(`${wc[lo]}%`, `lowest, at ${lo}:00`);
     fact(`${wc.slice(1).filter((p) => p > 50).length} of ${n}`, "minutes ahead");
-    out.append(box);
-    if (g.firsts?.length) {
-      const fs = el("div", "rv-firsts");
-      for (const f of g.firsts) {
-        const c = el("span", `first ${f.ours ? "us" : "them"}`);
-        c.append(el("b", "", f.what), ` ${clock(f.t_s)} ${f.ours ? "yours" : "theirs"}`);
-        if (f.you || f.died) c.append(el("i", "", f.died ? "you died" : "with you"));
-        fs.append(c);
-      }
-      out.append(fs);
-    }
-    return out;
+    return box;
   }
 
   // The lane chart (src/site/lanechart.zig) through chart_wasm.zig, whose header has the
@@ -633,8 +679,8 @@ const Review = (() => {
       bar.append(fill, val);
       const holder = el("div");
       wrap.append(bar, holder);
-      panel.append(wrap, counts(M));
-      if (opts.lane !== false) panel.append(records(g));
+      panel.append(wrap, counts(M, !!g.moments));
+      if (opts.lane !== false) panel.append(records(wc));
       const ml = momentList(M, (i) => set(Math.min(wc.length - 1, Math.ceil(M[i].minute)), i), opts.keep);
       set = (minute, i) => {
         // The chart is redrawn: a keyboard user keeps their place on the same dot
@@ -642,7 +688,6 @@ const Review = (() => {
         holder.replaceChildren(winChart(g, M, minute, set, holder.clientWidth));
         if (dot >= 0) holder.querySelectorAll(".mo")[dot]?.focus();
         fill.style.height = `${wc[minute]}%`;
-        bar.dataset.hot = wc[minute] >= 80 ? "us" : wc[minute] <= 20 ? "them" : "";
         val.textContent = wc[minute];
         bar.setAttribute("aria-label", `Win chance at ${minute}:00: ${wc[minute]}%`);
         for (const li of ml.children) li.classList.toggle("on", Number(li.dataset.i) === i);
@@ -655,7 +700,7 @@ const Review = (() => {
         const cols = el("div", "rv-cols");
         const mp = el("div", "panel");
         const mh = el("div", "panel-h");
-        mh.append(el("b", "", "Key moments"), el("span", "", "pick one to see it on the chart"));
+        mh.append(el("b", "", g.moments ? "Your moments" : "Key moments"), el("span", "", g.moments ? "fights and objectives you were in, and what each moved; pick one to see it on the chart" : "pick one to see it on the chart"));
         mp.append(mh, ml);
         cols.append(mp);
         if (g.lane) cols.append(lanePanel(g));
